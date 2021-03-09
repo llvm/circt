@@ -153,14 +153,10 @@ private:
 } // end anonymous namespace
 
 void TypeLoweringVisitor::lowerModule(Operation *op) {
-  if (auto module = dyn_cast<FModuleOp>(op)) {
-    visitDecl(module);
-    return;
-  }
-  if (auto extModule = dyn_cast<FExtModuleOp>(op)) {
-    visitDecl(extModule);
-    return;
-  }
+  if (auto module = dyn_cast<FModuleOp>(op))
+    return visitDecl(module);
+  if (auto extModule = dyn_cast<FExtModuleOp>(op))
+    return visitDecl(extModule);
 }
 
 void TypeLoweringVisitor::visitDecl(FModuleOp module) {
@@ -183,16 +179,16 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
     dispatchVisitor(&op);
   }
 
-  // Remove ops that have been lowered.
-  while (!opsToRemove.empty())
-    opsToRemove.pop_back_val()->erase();
+  // Remove ops that have been lowered. Erasing in reverse order so we don't
+  // have to worry about calling dropAllUses before deleting an operation.
+  for (auto *op : llvm::reverse(opsToRemove))
+    op->erase();
 
   if (argsToRemove.empty())
     return;
 
   // Remove block args that have been lowered.
   body->eraseArguments(argsToRemove);
-  argsToRemove.clear();
 
   // Remember the original argument attributess.
   SmallVector<NamedAttribute, 8> originalArgAttrs;
@@ -216,9 +212,6 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   // Keep the module's type up-to-date.
   auto moduleType = builder->getFunctionType(body->getArgumentTypes(), {});
   module->setAttr(module.getTypeAttrName(), TypeAttr::get(moduleType));
-
-  // Reset lowered state.
-  loweredBundleValues.clear();
 }
 
 //===----------------------------------------------------------------------===//
@@ -270,15 +263,15 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   // Get the modules port information.
   SmallVector<ModulePortInfo, 8> ports;
   extModule.getPortInfo(ports);
-  for (size_t i = 0, e = ports.size(); i != e; ++i) {
+  for (auto &port : ports) {
     // Flatten the port type
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-    flattenType(ports[i].type, ports[i].getName(), false, fieldTypes);
+    flattenType(port.type, port.getName(), false, fieldTypes);
 
     // For each field, add record its name and type
     for (auto field : fieldTypes) {
       inputTypes.push_back(field.getPortType());
-      if (ports[i].name) {
+      if (port.name) {
         auto argAttr = builder.getDictionaryAttr(
             NamedAttribute(argNameId, builder.getStringAttr(field.suffix)));
         attributes.push_back(argAttr);
@@ -290,7 +283,7 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   }
 
   // Set the type and then bulk set all the names.
-  extModule.setType(FunctionType::get(context, inputTypes, {}));
+  extModule.setType(builder.getFunctionType(inputTypes, {}));
   extModule.setAllArgAttrs(attributes);
 }
 
@@ -841,53 +834,32 @@ struct LowerTypesPass : public LowerFIRRTLTypesBase<LowerTypesPass> {
 private:
   void runAsync();
   void runSync();
-  // A list of visitors, one for each thread.  These are cached by the pass.
-  std::vector<TypeLoweringVisitor> visitors;
 };
 } // end anonymous namespace
 
 void LowerTypesPass::runAsync() {
-  // Create a TypeLoweringVisitor for each thread to use.
-  size_t numThreads = llvm::hardware_concurrency().compute_thread_count();
-  visitors.resize(numThreads, &getContext());
+  // Collect the operations to iterate in a vector. We can't use parallelFor
+  // with the regular op list, since it requires a RandomAccessIterator. This
+  // also lets us use parallelForEachN, which means we don't have to
+  // llvm::enumerate the ops with their index. TODO(mlir): There should really
+  // be a way to do this without collecting the operations first.
+  auto &body = getOperation().getBody()->getOperations();
+  std::vector<Operation *> ops;
+  llvm::for_each(body, [&](Operation &op) { ops.push_back(&op); });
 
-  // Used to divide up the work, first come first serve.
-  std::atomic<unsigned> opIt(0);
-
-  // Process the operations in parallel, with one runner for each hardware
-  // thread.  Each thread will get an operation index to process, and walk the
-  // list of operations until it finds that operation. It will repeat this until
-  // there are no more operations in the list.
   mlir::ParallelDiagnosticHandler diagHandler(&getContext());
-  auto &ops = getOperation().getBody()->getOperations();
-  auto perThread = [&](TypeLoweringVisitor &visitor) {
-    // This is the operation index that this thread should process.
-    auto nextId = opIt++;
-    // This is the current operation index.
-    unsigned curId = 0;
-    for (auto &op : ops) {
-      // Skip forward until we are at operation this thread should process.
-      if (curId++ != nextId) {
-        continue;
-      }
-
-      // Notify the handler the op index and then perform lowering.
-      diagHandler.setOrderIDForThread(curId);
-      visitor.lowerModule(&op);
-      diagHandler.eraseOrderIDForThread();
-
-      // Get the next op to process.
-      nextId = opIt++;
-    }
-  };
-  llvm::parallelForEach(visitors.begin(), visitors.end(), perThread);
+  llvm::parallelForEachN(0, ops.size(), [&](auto index) {
+    // Notify the handler the op index and then perform lowering.
+    diagHandler.setOrderIDForThread(index);
+    TypeLoweringVisitor(&getContext()).lowerModule(ops[index]);
+    diagHandler.eraseOrderIDForThread();
+  });
 }
 
 void LowerTypesPass::runSync() {
   auto circuit = getOperation();
-  TypeLoweringVisitor visitor(&getContext());
   for (auto &op : circuit.getBody()->getOperations()) {
-    visitor.lowerModule(&op);
+    TypeLoweringVisitor(&getContext()).lowerModule(&op);
   }
 }
 
