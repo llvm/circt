@@ -19,7 +19,10 @@
 #include "mlir/IR/FunctionSupport.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/Support/Parallel.h"
+#include "llvm/Support/Threading.h"
 #include <algorithm>
+#include <vector>
 
 using namespace circt;
 using namespace firrtl;
@@ -90,21 +93,24 @@ static FIRRTLType getCanonicalAggregateType(Type originalType) {
 }
 
 //===----------------------------------------------------------------------===//
-// Pass Infrastructure
+// Module Type Lowering
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct FIRRTLTypesLowering : public LowerFIRRTLTypesBase<FIRRTLTypesLowering>,
-                             public FIRRTLVisitor<FIRRTLTypesLowering> {
-
+class TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
+public:
+  TypeLoweringVisitor(MLIRContext *context) : context(context) {}
   using ValueIdentifier = std::pair<Value, Identifier>;
-  using FIRRTLVisitor<FIRRTLTypesLowering>::visitDecl;
-  using FIRRTLVisitor<FIRRTLTypesLowering>::visitExpr;
-  using FIRRTLVisitor<FIRRTLTypesLowering>::visitStmt;
+  using FIRRTLVisitor<TypeLoweringVisitor>::visitDecl;
+  using FIRRTLVisitor<TypeLoweringVisitor>::visitExpr;
+  using FIRRTLVisitor<TypeLoweringVisitor>::visitStmt;
 
-  void runOnOperation() override;
+  // If the referenced operation is a FModuleOp or an FExtModuleOp, perform type
+  // lowering on all operations.
+  void lowerModule(Operation *op);
 
-  // Lowering operations.
+  void visitDecl(FExtModuleOp op);
+  void visitDecl(FModuleOp op);
   void visitDecl(InstanceOp op);
   void visitDecl(MemOp op);
   void visitDecl(RegOp op);
@@ -116,16 +122,19 @@ struct FIRRTLTypesLowering : public LowerFIRRTLTypesBase<FIRRTLTypesLowering>,
 
 private:
   // Lowering module block arguments.
-  void lowerArg(BlockArgument arg, FIRRTLType type);
+  void lowerArg(FModuleOp module, BlockArgument arg, FIRRTLType type);
 
   // Helpers to manage state.
-  Value addArg(Type type, unsigned oldArgNumber, StringRef nameSuffix = "");
+  Value addArg(FModuleOp module, Type type, unsigned oldArgNumber,
+               StringRef nameSuffix = "");
 
   void setBundleLowering(Value oldValue, StringRef flatField, Value newValue);
   Value getBundleLowering(Value oldValue, StringRef flatField);
   void getAllBundleLowerings(Value oldValue, SmallVectorImpl<Value> &results);
 
   Identifier getArgAttrName(unsigned newArgNumber);
+
+  MLIRContext *context;
 
   // The builder is set and maintained in the main loop.
   ImplicitLocOpBuilder *builder;
@@ -143,17 +152,21 @@ private:
 };
 } // end anonymous namespace
 
-/// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLTypesPass() {
-  return std::make_unique<FIRRTLTypesLowering>();
+void TypeLoweringVisitor::lowerModule(Operation *op) {
+  if (auto module = dyn_cast<FModuleOp>(op)) {
+    visitDecl(module);
+    return;
+  }
+  if (auto extModule = dyn_cast<FExtModuleOp>(op)) {
+    visitDecl(extModule);
+    return;
+  }
 }
 
-// This is the main entrypoint for the lowering pass.
-void FIRRTLTypesLowering::runOnOperation() {
-  auto module = getOperation();
+void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   auto *body = module.getBodyBlock();
 
-  ImplicitLocOpBuilder theBuilder(module.getLoc(), &getContext());
+  ImplicitLocOpBuilder theBuilder(module.getLoc(), context);
   builder = &theBuilder;
 
   // Lower the module block arguments.
@@ -161,7 +174,7 @@ void FIRRTLTypesLowering::runOnOperation() {
   originalNumModuleArgs = args.size();
   for (auto arg : args)
     if (auto type = arg.getType().dyn_cast<FIRRTLType>())
-      lowerArg(arg, type);
+      lowerArg(module, arg, type);
 
   // Lower the operations.
   for (auto &op : body->getOperations()) {
@@ -213,7 +226,8 @@ void FIRRTLTypesLowering::runOnOperation() {
 //===----------------------------------------------------------------------===//
 
 // Lower arguments with bundle type by flattening them.
-void FIRRTLTypesLowering::lowerArg(BlockArgument arg, FIRRTLType type) {
+void TypeLoweringVisitor::lowerArg(FModuleOp module, BlockArgument arg,
+                                   FIRRTLType type) {
   unsigned argNumber = arg.getArgNumber();
 
   // Flatten any bundle types.
@@ -224,7 +238,7 @@ void FIRRTLTypesLowering::lowerArg(BlockArgument arg, FIRRTLType type) {
 
     // Create new block arguments.
     auto type = field.getPortType();
-    auto newValue = addArg(type, argNumber, field.suffix);
+    auto newValue = addArg(module, type, argNumber, field.suffix);
 
     // If this field was flattened from a bundle.
     if (!field.suffix.empty()) {
@@ -243,6 +257,43 @@ void FIRRTLTypesLowering::lowerArg(BlockArgument arg, FIRRTLType type) {
   argsToRemove.push_back(argNumber);
 }
 
+void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
+  OpBuilder builder(context);
+
+  // Cache the named identifer for argument names.
+  auto argNameId = builder.getIdentifier("firrtl.name");
+
+  // Create an array of the result types and results names
+  SmallVector<Type, 8> inputTypes;
+  SmallVector<DictionaryAttr, 8> attributes;
+
+  // Get the modules port information.
+  SmallVector<ModulePortInfo, 8> ports;
+  extModule.getPortInfo(ports);
+  for (size_t i = 0, e = ports.size(); i != e; ++i) {
+    // Flatten the port type
+    SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
+    flattenType(ports[i].type, ports[i].getName(), false, fieldTypes);
+
+    // For each field, add record its name and type
+    for (auto field : fieldTypes) {
+      inputTypes.push_back(field.getPortType());
+      if (ports[i].name) {
+        auto argAttr = builder.getDictionaryAttr(
+            NamedAttribute(argNameId, builder.getStringAttr(field.suffix)));
+        attributes.push_back(argAttr);
+      } else {
+        // If the port didn't have a name, push back an empty name.
+        attributes.push_back({});
+      }
+    }
+  }
+
+  // Set the type and then bulk set all the names.
+  extModule.setType(FunctionType::get(context, inputTypes, {}));
+  extModule.setAllArgAttrs(attributes);
+}
+
 //===----------------------------------------------------------------------===//
 // Lowering operations.
 //===----------------------------------------------------------------------===//
@@ -251,7 +302,7 @@ void FIRRTLTypesLowering::lowerArg(BlockArgument arg, FIRRTLType type) {
 // are flattened, and other arguments are copied to keep the relative order. By
 // ensuring both lowerings are the same, we can process every module in the
 // circuit in parallel, and every instance will have the correct ports.
-void FIRRTLTypesLowering::visitDecl(InstanceOp op) {
+void TypeLoweringVisitor::visitDecl(InstanceOp op) {
   // Create a new, flat bundle type for the new result
   SmallVector<Type, 8> resultTypes;
   SmallVector<Attribute, 8> resultNames;
@@ -305,7 +356,7 @@ void FIRRTLTypesLowering::visitDecl(InstanceOp op) {
 
 /// Lower memory operations. A new memory is created for every leaf
 /// element in a memory's data type.
-void FIRRTLTypesLowering::visitDecl(MemOp op) {
+void TypeLoweringVisitor::visitDecl(MemOp op) {
   auto type = op.getDataType();
   auto depth = op.depth();
 
@@ -476,7 +527,7 @@ void FIRRTLTypesLowering::visitDecl(MemOp op) {
 }
 
 /// Lower a wire op with a bundle to mutliple non-bundled wires.
-void FIRRTLTypesLowering::visitDecl(WireOp op) {
+void TypeLoweringVisitor::visitDecl(WireOp op) {
   Value result = op.result();
 
   // Attempt to get the bundle types, potentially unwrapping an outer flip type
@@ -510,7 +561,7 @@ void FIRRTLTypesLowering::visitDecl(WireOp op) {
 }
 
 /// Lower a reg op with a bundle to multiple non-bundled regs.
-void FIRRTLTypesLowering::visitDecl(RegOp op) {
+void TypeLoweringVisitor::visitDecl(RegOp op) {
   Value result = op.result();
 
   // Attempt to get the bundle types, potentially unwrapping an outer flip type
@@ -549,7 +600,7 @@ void FIRRTLTypesLowering::visitDecl(RegOp op) {
 // it replaces all uses with the flattened value. Otherwise, it flattens the
 // rest of the bundle and adds the flattened values to the mapping for each
 // partial suffix.
-void FIRRTLTypesLowering::visitExpr(SubfieldOp op) {
+void TypeLoweringVisitor::visitExpr(SubfieldOp op) {
   Value input = op.input();
   StringRef fieldname = op.fieldname();
   FIRRTLType resultType = op.getType();
@@ -587,7 +638,7 @@ void FIRRTLTypesLowering::visitExpr(SubfieldOp op) {
 // derived from the fixed index.
 //
 // TODO: Unify this and SubfieldOp handling.
-void FIRRTLTypesLowering::visitExpr(SubindexOp op) {
+void TypeLoweringVisitor::visitExpr(SubindexOp op) {
   Value input = op.input();
   std::string fieldname = std::to_string(op.index());
   FIRRTLType resultType = op.getType();
@@ -630,7 +681,7 @@ void FIRRTLTypesLowering::visitExpr(SubindexOp op) {
 // When two such bundles are connected, none of the subfield visits have a
 // chance to lower them, so we must ensure they have the same number of
 // flattened values and flatten out this connect into multiple connects.
-void FIRRTLTypesLowering::visitStmt(ConnectOp op) {
+void TypeLoweringVisitor::visitStmt(ConnectOp op) {
   Value dest = op.dest();
   Value src = op.src();
 
@@ -668,7 +719,7 @@ void FIRRTLTypesLowering::visitStmt(ConnectOp op) {
 }
 
 // Lowering invalid may need to create a new invalid for each field
-void FIRRTLTypesLowering::visitExpr(InvalidValuePrimOp op) {
+void TypeLoweringVisitor::visitExpr(InvalidValuePrimOp op) {
   Value result = op.result();
 
   // Attempt to get the bundle types, potentially unwrapping an outer flip type
@@ -710,9 +761,8 @@ static DictionaryAttr getArgAttrs(StringAttr nameAttr, StringRef suffix,
 // Creates and returns a new block argument of the specified type to the module.
 // This also maintains the name attribute for the new argument, possibly with a
 // new suffix appended.
-Value FIRRTLTypesLowering::addArg(Type type, unsigned oldArgNumber,
-                                  StringRef nameSuffix) {
-  FModuleOp module = getOperation();
+Value TypeLoweringVisitor::addArg(FModuleOp module, Type type,
+                                  unsigned oldArgNumber, StringRef nameSuffix) {
   Block *body = module.getBodyBlock();
 
   // Append the new argument.
@@ -732,7 +782,7 @@ Value FIRRTLTypesLowering::addArg(Type type, unsigned oldArgNumber,
 
 // Store the mapping from a bundle typed value to a mapping from its field names
 // to flat values.
-void FIRRTLTypesLowering::setBundleLowering(Value oldValue, StringRef flatField,
+void TypeLoweringVisitor::setBundleLowering(Value oldValue, StringRef flatField,
                                             Value newValue) {
   auto flatFieldId = builder->getIdentifier(flatField);
   auto &entry = loweredBundleValues[ValueIdentifier(oldValue, flatFieldId)];
@@ -744,7 +794,7 @@ void FIRRTLTypesLowering::setBundleLowering(Value oldValue, StringRef flatField,
 
 // For a mapped bundle typed value and a flat subfield name, retrieve and return
 // the flat value if it exists.
-Value FIRRTLTypesLowering::getBundleLowering(Value oldValue,
+Value TypeLoweringVisitor::getBundleLowering(Value oldValue,
                                              StringRef flatField) {
   auto flatFieldId = builder->getIdentifier(flatField);
   auto &entry = loweredBundleValues[ValueIdentifier(oldValue, flatFieldId)];
@@ -754,7 +804,7 @@ Value FIRRTLTypesLowering::getBundleLowering(Value oldValue,
 
 // For a mapped aggregate typed value, retrieve and return the flat values for
 // each field.
-void FIRRTLTypesLowering::getAllBundleLowerings(
+void TypeLoweringVisitor::getAllBundleLowerings(
     Value value, SmallVectorImpl<Value> &results) {
 
   TypeSwitch<FIRRTLType>(getCanonicalAggregateType(value.getType()))
@@ -774,8 +824,83 @@ void FIRRTLTypesLowering::getAllBundleLowerings(
       .Default([&](auto) {});
 }
 
-Identifier FIRRTLTypesLowering::getArgAttrName(unsigned newArgNumber) {
+Identifier TypeLoweringVisitor::getArgAttrName(unsigned newArgNumber) {
   SmallString<16> argNameBuffer;
   mlir::impl::getArgAttrName(newArgNumber, argNameBuffer);
-  return Identifier::get(argNameBuffer, &getContext());
+  return Identifier::get(argNameBuffer, context);
+}
+
+//===----------------------------------------------------------------------===//
+// Pass Infrastructure
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct LowerTypesPass : public LowerFIRRTLTypesBase<LowerTypesPass> {
+  void runOnOperation() override;
+
+private:
+  void runAsync();
+  void runSync();
+  // A list of visitors, one for each thread.  These are cached by the pass.
+  std::vector<TypeLoweringVisitor> visitors;
+};
+} // end anonymous namespace
+
+void LowerTypesPass::runAsync() {
+  // Create a TypeLoweringVisitor for each thread to use.
+  size_t numThreads = llvm::hardware_concurrency().compute_thread_count();
+  visitors.resize(numThreads, &getContext());
+
+  // Used to divide up the work, first come first serve.
+  std::atomic<unsigned> opIt(0);
+
+  // Process the operations in parallel, with one runner for each hardware
+  // thread.  Each thread will get an operation index to process, and walk the
+  // list of operations until it finds that operation. It will repeat this until
+  // there are no more operations in the list.
+  mlir::ParallelDiagnosticHandler diagHandler(&getContext());
+  auto &ops = getOperation().getBody()->getOperations();
+  auto perThread = [&](TypeLoweringVisitor &visitor) {
+    // This is the operation index that this thread should process.
+    auto nextId = opIt++;
+    // This is the current operation index.
+    unsigned curId = 0;
+    for (auto &op : ops) {
+      // Skip forward until we are at operation this thread should process.
+      if (curId++ != nextId) {
+        continue;
+      }
+
+      // Notify the handler the op index and then perform lowering.
+      diagHandler.setOrderIDForThread(curId);
+      visitor.lowerModule(&op);
+      diagHandler.eraseOrderIDForThread();
+
+      // Get the next op to process.
+      nextId = opIt++;
+    }
+  };
+  llvm::parallelForEach(visitors.begin(), visitors.end(), perThread);
+}
+
+void LowerTypesPass::runSync() {
+  auto circuit = getOperation();
+  TypeLoweringVisitor visitor(&getContext());
+  for (auto &op : circuit.getBody()->getOperations()) {
+    visitor.lowerModule(&op);
+  }
+}
+
+// This is the main entrypoint for the lowering pass.
+void LowerTypesPass::runOnOperation() {
+  if (getContext().isMultithreadingEnabled()) {
+    runAsync();
+  } else {
+    runSync();
+  }
+}
+
+/// This is the pass constructor.
+std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLTypesPass() {
+  return std::make_unique<LowerTypesPass>();
 }

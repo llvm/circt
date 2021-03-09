@@ -142,8 +142,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (lowerToRTL || outputFormat == OutputVerilog) {
     if (enableLowerTypes)
-      pm.nest<firrtl::CircuitOp>().addNestedPass<firrtl::FModuleOp>(
-          firrtl::createLowerFIRRTLTypesPass());
+      pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass());
     pm.addPass(createLowerFIRRTLToRTLModulePass());
     pm.addNestedPass<rtl::RTLModuleOp>(createLowerFIRRTLToRTLPass());
 
