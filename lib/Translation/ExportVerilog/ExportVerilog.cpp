@@ -1032,9 +1032,18 @@ SubExprInfo ExprEmitter::visitComb(SExtOp op) {
   }
 
   // Otherwise, this is a sign extension of a general expression.
-  os << "{{" << (destWidth - inWidth) << '{';
-  emitSubExpr(op.getOperand(), Unary, OOLUnary);
-  os << '[' << (inWidth - 1) << "]}}, ";
+  os << '{';
+  if (destWidth - inWidth == 1) {
+    // Special pattern for single bit extension, where we just need the bit.
+    emitSubExpr(op.getOperand(), Unary, OOLUnary);
+    os << '[' << (inWidth - 1) << ']';
+  } else {
+    // General pattern for multi-bit extension: splat the bit.
+    os << '{' << (destWidth - inWidth) << '{';
+    emitSubExpr(op.getOperand(), Unary, OOLUnary);
+    os << '[' << (inWidth - 1) << "]}}";
+  }
+  os << ", ";
   emitSubExpr(op.getOperand(), LowestPrecedence, OOLUnary);
   os << '}';
   return {Unary, IsUnsigned};
