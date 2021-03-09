@@ -39,11 +39,11 @@ three operands and one attribute:
 - **input**: The value to be captured at 'clock'. Generally called 'q'.
 Accepts any type, results in the same type.
 - **clock**: Capture 'value' on the positive edge of this signal.
-- **reset**: Signal to set the state to 'resetValue'.
-- **resetValue**: A constant which the state is set to upon reset.
+- **reset**: Signal to set the state to 'resetValue'. Optional.
+- **resetValue**: A constant which the state is set to upon reset. Optional.
 
 ```mlir
-%d = seq.reg %input, %clk, %reset { resetValue = <constant> } : $type(input)
+%d = seq.reg %input, %clk [, %reset [<resetValue>] ] : $type(input)
 ```
 
 ### Rationale
