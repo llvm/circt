@@ -22,10 +22,7 @@ config.name = 'CIRCT'
 config.test_format = lit.formats.ShTest(not llvm_config.use_lit_shell)
 
 # suffixes: A list of file extensions to treat as test files.
-config.suffixes = ['.td', '.mlir', '.ll', '.fir', '.sv']
-
-if config.bindings_python_enabled:
-  config.suffixes.append('.py')
+config.suffixes = ['.td', '.mlir', '.ll', '.fir', '.sv', '.py']
 
 # test_source_root: The root path where tests are located.
 config.test_source_root = os.path.dirname(__file__)
@@ -83,5 +80,9 @@ if config.verilator_path != "":
 # Enable ESI's Capnp tests if they're supported.
 if config.esi_capnp != "":
   config.available_features.add('capnp')
+
+# Enable Python bindings tests if they're supported.
+if config.bindings_python_enabled:
+  config.available_features.add('bindings_python')
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)
