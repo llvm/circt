@@ -1546,6 +1546,8 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   struct ReadPipeElement {
     Value en;
     Value addr;
+    Value rd_en;
+    Value rd_addr;
   };
 
   // A store of values associated with a delayed write.
@@ -1554,6 +1556,10 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     Value addr;
     Value mask;
     Value data;
+    Value rd_en;
+    Value rd_addr;
+    Value rd_mask;
+    Value rd_data;
   };
 
   // Create a register for the memory.
@@ -1615,11 +1621,6 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       return a;
     };
 
-    // Read an inout type
-    auto readInOut = [&](Value a) -> Value {
-      return builder->create<sv::ReadInOutOp>(a);
-    };
-
     auto i1Type = IntegerType::get(builder->getContext(), 1);
     auto clk = getPortFieldValue("clk");
 
@@ -1634,8 +1635,10 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     case MemOp::PortKind::Read: {
       // Add delays for non-zero read latency
       SmallVector<ReadPipeElement> readPipe;
-      readPipe.push_back({portWires["en"], portWires["addr"]});
-      Value enReg, addrReg;
+      auto rden = builder->create<sv::ReadInOutOp>(portWires["en"]);
+      auto rdaddr = builder->create<sv::ReadInOutOp>(portWires["addr"]);
+      readPipe.push_back({portWires["en"], portWires["addr"], rden, rdaddr});
+      Value enReg, addrReg, enRegRd, addRegRd;
       for (size_t j = 0; j < readLatency; ++j) {
         if (j == 0) {
           enReg = arrayReg("_en_pipe", i1Type, readLatency);
@@ -1645,28 +1648,23 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
             builder->create<rtl::ConstantOp>(APInt(log2(readLatency + 1), j));
         auto enJ = builder->create<sv::ArrayIndexInOutOp>(enReg, jIdx);
         auto addrJ = builder->create<sv::ArrayIndexInOutOp>(addrReg, jIdx);
-        readPipe.push_back({enJ, addrJ});
+        auto rdEnJ = builder->create<sv::ReadInOutOp>(enJ);
+        auto rdAddrJ = builder->create<sv::ReadInOutOp>(addrJ);
+        readPipe.push_back({enJ, addrJ, rdEnJ, rdAddrJ});
       }
       if (readLatency != 0) {
         addToAlwaysFFBlock(EventControl::AtPosEdge, clk, [&]() {
-          auto lastEn = readPipe[0].en;
-          auto lastAddr = readPipe[0].addr;
           for (size_t j = 1; j < readLatency + 1; ++j) {
-            auto thisEn = readPipe[j].en;
-            auto thisAddr = readPipe[j].addr;
-
-            auto readLastEn = builder->create<sv::ReadInOutOp>(lastEn);
-            builder->create<sv::PAssignOp>(thisEn, readLastEn);
-            addIfProceduralBlock(readLastEn, [&]() {
-              builder->create<sv::PAssignOp>(
-                  thisAddr, builder->create<sv::ReadInOutOp>(lastAddr));
+            builder->create<sv::PAssignOp>(readPipe[j].en,
+                                           readPipe[j - 1].rd_en);
+            addIfProceduralBlock(readPipe[j - 1].rd_en, [&]() {
+              builder->create<sv::PAssignOp>(readPipe[j].addr,
+                                             readPipe[j - 1].rd_addr);
             });
-            lastEn = thisEn;
-            lastAddr = thisAddr;
           }
         });
       }
-      Value addr = builder->create<sv::ReadInOutOp>(readPipe.back().addr);
+      Value addr = readPipe.back().rd_addr;
       Value value = builder->create<sv::ArrayIndexInOutOp>(reg, addr);
       value = builder->create<sv::ReadInOutOp>(value);
 
@@ -1696,58 +1694,65 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       continue;
     case MemOp::PortKind::Write: {
       SmallVector<WritePipeElement> writePipe;
+      auto rdEn = builder->create<sv::ReadInOutOp>(portWires["en"]);
+      auto rdAddr = builder->create<sv::ReadInOutOp>(portWires["addr"]);
+      auto rdMask = builder->create<sv::ReadInOutOp>(portWires["mask"]);
+      auto rdData = builder->create<sv::ReadInOutOp>(portWires["data"]);
       writePipe.push_back({portWires["en"], portWires["addr"],
-                           portWires["mask"], portWires["data"]});
+                           portWires["mask"], portWires["data"], rdEn, rdAddr,
+                           rdMask, rdData});
 
       // Construct wripe pipe registers for non-unary write latency
-      WritePipeElement wReg;
+      Value wRegEn, wRegAddr, wRegMask, wRegData;
       for (size_t j = 0; j < writeLatency - 1; ++j) {
         if (j == 0) {
-          wReg = {arrayReg("_en_pipe", i1Type, writeLatency - 1),
-                  arrayReg("_addr_pipe", lowerType(addrType), writeLatency - 1),
-                  arrayReg("_mask_pipe", i1Type, writeLatency - 1),
-                  arrayReg("_data_pipe", lowerType(op.getDataType()),
-                           writeLatency - 1)};
+          wRegEn = arrayReg("_en_pipe", i1Type, writeLatency - 1);
+          wRegAddr =
+              arrayReg("_addr_pipe", lowerType(addrType), writeLatency - 1);
+          wRegMask = arrayReg("_mask_pipe", i1Type, writeLatency - 1);
+          wRegData = arrayReg("_data_pipe", lowerType(op.getDataType()),
+                              writeLatency - 1);
         }
         auto jIdx =
             builder->create<rtl::ConstantOp>(APInt(log2(writeLatency), j));
-        writePipe.push_back(
-            {builder->create<sv::ArrayIndexInOutOp>(wReg.en, jIdx),
-             builder->create<sv::ArrayIndexInOutOp>(wReg.addr, jIdx),
-             builder->create<sv::ArrayIndexInOutOp>(wReg.mask, jIdx),
-             builder->create<sv::ArrayIndexInOutOp>(wReg.data, jIdx)});
+        auto arEn = builder->create<sv::ArrayIndexInOutOp>(wRegEn, jIdx);
+        auto arAddr = builder->create<sv::ArrayIndexInOutOp>(wRegAddr, jIdx);
+        auto arMask = builder->create<sv::ArrayIndexInOutOp>(wRegMask, jIdx);
+        auto arData = builder->create<sv::ArrayIndexInOutOp>(wRegData, jIdx);
+        writePipe.push_back({arEn, arAddr, arMask, arData,
+                             builder->create<sv::ReadInOutOp>(arEn),
+                             builder->create<sv::ReadInOutOp>(arAddr),
+                             builder->create<sv::ReadInOutOp>(arMask),
+                             builder->create<sv::ReadInOutOp>(arData)});
       }
 
       // Build the write pipe for non-unary write latency
       if (writeLatency != 1) {
         addToAlwaysFFBlock(EventControl::AtPosEdge, clk, [&]() {
-          auto right = writePipe[0];
           for (size_t j = 1; j < writeLatency; ++j) {
-            auto left = writePipe[j];
-            auto readEn = readInOut(right.en);
-            builder->create<sv::PAssignOp>(left.en, readEn);
-            addIfProceduralBlock(readEn, [&]() {
-              builder->create<sv::PAssignOp>(left.addr, readInOut(right.addr));
-              builder->create<sv::PAssignOp>(left.mask, readInOut(right.mask));
-              builder->create<sv::PAssignOp>(left.data, readInOut(right.data));
+            builder->create<sv::PAssignOp>(writePipe[j].en,
+                                           writePipe[j - 1].rd_en);
+            addIfProceduralBlock(writePipe[j - 1].rd_en, [&]() {
+              builder->create<sv::PAssignOp>(writePipe[j].addr,
+                                             writePipe[j - 1].rd_addr);
+              builder->create<sv::PAssignOp>(writePipe[j].mask,
+                                             writePipe[j - 1].rd_mask);
+              builder->create<sv::PAssignOp>(writePipe[j].data,
+                                             writePipe[j - 1].rd_data);
             });
-            right = left;
           }
         });
       }
 
       // Attach the write port
       auto last = writePipe.back();
+      auto enable = last.rd_en;
+      auto cond = builder->create<comb::AndOp>(enable, last.rd_mask);
+      auto slot = builder->create<sv::ArrayIndexInOutOp>(reg, last.rd_addr);
+      auto rd_lastdata = last.rd_data;
       addToAlwaysFFBlock(EventControl::AtPosEdge, clk, [&]() {
-        auto enable = builder->create<sv::ReadInOutOp>(last.en);
-        auto cond = builder->create<comb::AndOp>(
-            enable, builder->create<sv::ReadInOutOp>(last.mask));
-        addIfProceduralBlock(cond, [&]() {
-          auto slot = builder->create<sv::ArrayIndexInOutOp>(
-              reg, builder->create<sv::ReadInOutOp>(last.addr));
-          builder->create<sv::PAssignOp>(
-              slot, builder->create<sv::ReadInOutOp>(last.data));
-        });
+        addIfProceduralBlock(
+            cond, [&]() { builder->create<sv::PAssignOp>(slot, rd_lastdata); });
       });
     }
       continue;
