@@ -1694,12 +1694,13 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       continue;
     case MemOp::PortKind::Write: {
       SmallVector<WritePipeElement> writePipe;
+      auto rdEn = builder->create<sv::ReadInOutOp>(portWires["en"]);
+      auto rdAddr = builder->create<sv::ReadInOutOp>(portWires["addr"]);
+      auto rdMask = builder->create<sv::ReadInOutOp>(portWires["mask"]);
+      auto rdData = builder->create<sv::ReadInOutOp>(portWires["data"]);
       writePipe.push_back(
           {portWires["en"], portWires["addr"], portWires["mask"],
-           portWires["data"], builder->create<sv::ReadInOutOp>(portWires["en"]),
-           builder->create<sv::ReadInOutOp>(portWires["addr"]),
-           builder->create<sv::ReadInOutOp>(portWires["mask"]),
-           builder->create<sv::ReadInOutOp>(portWires["data"])});
+           portWires["data"], rdEn, rdAddr, rdMask, rdData});
 
       // Construct wripe pipe registers for non-unary write latency
       Value wRegEn, wRegAddr, wRegMask, wRegData;
