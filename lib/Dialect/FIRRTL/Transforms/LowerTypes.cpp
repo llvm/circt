@@ -622,41 +622,47 @@ void FIRRTLTypesLowering::visitExpr(SubindexOp op) {
   opsToRemove.push_back(op);
 }
 
-// This is currently the same lowering as SubfieldOp, but using a fieldname
-// derived from the fixed index.
-//
-// TODO: Unify this and SubfieldOp handling.
+static IntegerAttr getIntAttr(const APInt &value, MLIRContext *context) {
+  return IntegerAttr::get(IntegerType::get(context, value.getBitWidth()),
+                          value);
+}
+
+// This generates a mux tree for selecting the corresponding element from the
+// flattened vector based on the index. x = a[index] is lowered to :: x = index
+// == 3 ? a_3 : index == 2 ? a_2 : index == 1 ? a_1:a_0
+// TODO: This currently does not handle vector of bundles.
 void FIRRTLTypesLowering::visitExpr(SubaccessOp op) {
   Value input = op.input();
-  std::string fieldname = std::to_string(op.index());
+  Value index = op.index();
   FIRRTLType resultType = op.getType();
-
-  // Flatten any nested bundle types the usual way.
-  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  flattenType(resultType, fieldname, false, fieldTypes);
-
-  for (auto field : fieldTypes) {
-    // Look up the mapping for this suffix.
-    auto newValue = getBundleLowering(input, field.suffix);
-
-    // The prefix is the field name and possibly field separator.
-    auto prefixSize = fieldname.size();
-    if (field.suffix.size() > fieldname.size())
-      prefixSize += 1;
-
-    // Get the remaining field suffix by removing the prefix.
-    auto partialSuffix = StringRef(field.suffix).drop_front(prefixSize);
-
-    // If we are at the leaf of a bundle.
-    if (partialSuffix.empty())
-      // Replace the result with the flattened value.
-      op.replaceAllUsesWith(newValue);
-    else
-      // Map the partial suffix for the result value to the flattened value.
-      setBundleLowering(op, partialSuffix, newValue);
+  FIRRTLType indexType = index.getType().cast<FIRRTLType>();
+  FVectorType inputType =
+      input.getType().cast<FIRRTLType>().cast<FVectorType>();
+  llvm::dbgs() << "\n resultType::" << resultType
+               << " and index type:" << (1 << indexType.getBitWidthOrSentinel())
+               << " and vector type :" << inputType.getNumElements() << "\n";
+  auto selectWidth = indexType.getBitWidthOrSentinel();
+  SmallVector<Value, 8> vecVaclues;
+  getAllBundleLowerings(input, vecVaclues);
+  // TODO: Add message here, when can this happen ?
+  assert( vecVaclues.size() == inputType.getNumElements());
+  Value elem0 = vecVaclues[0];
+  size_t maxElems = (1 << indexType.getBitWidthOrSentinel());
+  ;
+  // Make sure, we donot perform out of bounds access here ?
+  if (maxElems < inputType.getNumElements())
+    maxElems = inputType.getNumElements();
+  for (size_t indexVec = 1; indexVec < maxElems; indexVec++) {
+    auto isIndexEq = builder->create<EQPrimOp>(
+        op.getLoc(), UIntType::get(op.getContext(), 1), index,
+        builder->create<ConstantOp>(
+            op.getLoc(), indexType,
+            getIntAttr(APInt(selectWidth, indexVec), op.getContext())));
+    elem0 = builder->create<MuxPrimOp>(op.getLoc(), resultType, isIndexEq,
+                                       vecVaclues[indexVec], elem0);
+    elem0.dump();
   }
-
-  // Remember to remove the original op.
+  op.replaceAllUsesWith(elem0);
   opsToRemove.push_back(op);
 }
 

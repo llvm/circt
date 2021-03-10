@@ -454,3 +454,25 @@ firrtl.circuit "LowerVectors" {
   // CHECK: firrtl.connect %b_0, %a_0
   // CHECK: firrtl.connect %b_1, %a_1
 }
+
+// https://github.com/llvm/circt/issues/656
+// Test lowering of SubAccessOp
+firrtl.circuit "LowerSubacessOp" {
+  firrtl.module @LowerSubacessOp(%a: !firrtl.vector<uint<1>, 4>, %sel: !firrtl.uint<2>, %b: !firrtl.flip<uint<1>>) {
+    %0 = firrtl.subaccess %a[%sel] : !firrtl.vector<uint<1>, 4>, !firrtl.uint<2>
+    firrtl.connect %b, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  }
+  // CHECK: firrtl.module @LowerSubacessOp(%a_0: !firrtl.uint<1>, %a_1: !firrtl.uint<1>, %a_2: !firrtl.uint<1>, %a_3: !firrtl.uint<1>, %sel: !firrtl.uint<2>, %b: !firrtl.flip<uint<1>>) {
+  // CHECK:   %c1_ui2 = firrtl.constant(1 : i2) : !firrtl.uint<2>
+  // CHECK:   %0 = firrtl.eq %sel, %c1_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+  // CHECK:   %1 = firrtl.mux(%0, %a_1, %a_0) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK:   %c2_ui2 = firrtl.constant(-2 : i2) : !firrtl.uint<2>
+  // CHECK:   %2 = firrtl.eq %sel, %c2_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+  // CHECK:   %3 = firrtl.mux(%2, %a_2, %1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK:   %c3_ui2 = firrtl.constant(-1 : i2) : !firrtl.uint<2>
+  // CHECK:   %4 = firrtl.eq %sel, %c3_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+  // CHECK:   %5 = firrtl.mux(%4, %a_3, %3) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK:   firrtl.connect %b, %5 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  // CHECK: }
+}
+
