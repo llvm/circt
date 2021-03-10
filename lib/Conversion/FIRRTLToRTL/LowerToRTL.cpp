@@ -2489,9 +2489,17 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
               builder->create<sv::ConnectOp>(inoutValues[i1], values[i2]);
         }
       },
-
       // In the non-synthesis case, we emit a SystemVerilog alias statement.
-      [&]() { builder->create<sv::AliasOp>(inoutValues); });
+      [&]() {
+        builder->create<sv::IfDefOp>(
+            "verilator",
+            [&]() {
+              builder->create<sv::VerbatimOp>(
+                  "`error \"Verilator does not support alias and thus cannot "
+                  "arbitrarily connect bidirectional wires and ports\"");
+            },
+            [&]() { builder->create<sv::AliasOp>(inoutValues); });
+      });
 
   return success();
 }
