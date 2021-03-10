@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl.module(firrtl-lower-types))' -split-input-file %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-lower-types)' -split-input-file %s | FileCheck %s
 
 firrtl.circuit "TopLevel" {
 
@@ -453,4 +453,15 @@ firrtl.circuit "LowerVectors" {
   // CHECK: firrtl.module @LowerVectors(%a_0: !firrtl.uint<1>, %a_1: !firrtl.uint<1>, %b_0: !firrtl.flip<uint<1>>, %b_1: !firrtl.flip<uint<1>>)
   // CHECK: firrtl.connect %b_0, %a_0
   // CHECK: firrtl.connect %b_1, %a_1
+}
+
+// ----
+
+firrtl.circuit "ExternalModule" {
+  // CHECK: firrtl.extmodule @ExternalModule(!firrtl.uint<1> {firrtl.name = "source_valid"}, !firrtl.flip<uint<1>> {firrtl.name = "source_ready"}, !firrtl.uint<64> {firrtl.name = "source_data"})
+  firrtl.extmodule @ExternalModule(!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>> {firrtl.name = "source"})
+  firrtl.module @Test() {
+    // CHECK:  %inst_source_valid, %inst_source_ready, %inst_source_data = firrtl.instance @ExternalModule {name = "", portNames = ["source_valid", "source_ready", "source_data"]} : !firrtl.flip<uint<1>>, !firrtl.uint<1>, !firrtl.flip<uint<64>>
+    %inst_source = firrtl.instance @ExternalModule {name = "", portNames = ["source"]} : !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>
+  }
 }
