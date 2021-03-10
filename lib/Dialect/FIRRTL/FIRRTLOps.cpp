@@ -71,9 +71,16 @@ bool firrtl::isDuplexValue(Value val) {
 //===----------------------------------------------------------------------===//
 
 void CircuitOp::build(OpBuilder &builder, OperationState &result,
-                      StringAttr name) {
+                      StringAttr name, ArrayRef<DictionaryAttr> annotations) {
   // Add an attribute for the name.
   result.addAttribute(builder.getIdentifier("name"), name);
+
+  if (!annotations.empty()) {
+    SmallVector<Attribute> annotationArray;
+    for (auto annotation : annotations)
+      annotationArray.push_back(annotation);
+    result.addAttribute("annotations", builder.getArrayAttr(annotationArray));
+  }
 
   // Create a region and a block for the body.  The argument of the region is
   // the loop induction variable.
@@ -294,7 +301,8 @@ static void buildModule(OpBuilder &builder, OperationState &result,
 }
 
 void FModuleOp::build(OpBuilder &builder, OperationState &result,
-                      StringAttr name, ArrayRef<ModulePortInfo> ports) {
+                      StringAttr name, ArrayRef<ModulePortInfo> ports,
+                      ArrayRef<DictionaryAttr> annotations) {
   buildModule(builder, result, name, ports);
 
   // Create a region and a block for the body.
@@ -305,6 +313,13 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
   // Add arguments to the body block.
   for (auto elt : ports)
     body->addArgument(elt.type);
+
+  if (!annotations.empty()) {
+    SmallVector<Attribute> annotationArray;
+    for (auto annotation : annotations)
+      annotationArray.push_back(annotation);
+    result.addAttribute("annotations", builder.getArrayAttr(annotationArray));
+  }
 
   FModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
 }

@@ -25,6 +25,9 @@
 #include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/StringMap.h"
+#include "llvm/ADT/StringSwitch.h"
+#include "llvm/Support/JSON.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -68,16 +71,21 @@ namespace {
 /// such as the current lexer position.  This is separated out from the parser
 /// so that individual subparsers can refer to the same state.
 struct GlobalFIRParserState {
-  GlobalFIRParserState(const llvm::SourceMgr &sourceMgr, MLIRContext *context,
-                       FIRParserOptions options)
-      : context(context), options(options), lex(sourceMgr, context),
-        curToken(lex.lexToken()) {}
+  GlobalFIRParserState(
+      const llvm::SourceMgr &sourceMgr, MLIRContext *context,
+      FIRParserOptions options,
+      llvm::StringMap<llvm::SmallVector<DictionaryAttr>> &annotationMap)
+      : context(context), options(options), annotationMap(annotationMap),
+        lex(sourceMgr, context), curToken(lex.lexToken()) {}
 
   /// The context we're parsing into.
   MLIRContext *const context;
 
   // Options that control the behavior of the parser.
   const FIRParserOptions options;
+
+  /// A mapping of targets to annotations
+  llvm::StringMap<llvm::SmallVector<DictionaryAttr>> &annotationMap;
 
   /// The lexer for the source file we're parsing.
   FIRLexer lex;
@@ -163,6 +171,14 @@ struct FIRParser {
                                 ArrayRef<Operation *> subOps = {});
 
   //===--------------------------------------------------------------------===//
+  // Annotation Parsing
+  //===--------------------------------------------------------------------===//
+
+  /// Parse a non-standard inline Annotation JSON blob if present.  This uses
+  /// the info-like encoding of %[<JSON Blob>].
+  ParseResult parseOptionalAnnotations(StringRef &result);
+
+  //===--------------------------------------------------------------------===//
   // Token Parsing
   //===--------------------------------------------------------------------===//
 
@@ -223,6 +239,13 @@ struct FIRParser {
   ParseResult parseType(FIRRTLType &result, const Twine &message);
 
   ParseResult parseOptionalRUW(RUWAttr &result);
+
+  //===--------------------------------------------------------------------===//
+  // Annotation Utilities
+  //===--------------------------------------------------------------------===//
+  void getAnnotations(StringRef target,
+                      SmallVector<DictionaryAttr> &annotations);
+  void addAnnotation(StringRef target, DictionaryAttr annotation);
 
 private:
   FIRParser(const FIRParser &) = delete;
@@ -421,6 +444,174 @@ ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result,
 
   return success();
 }
+
+//===--------------------------------------------------------------------===//
+// Annotation Handling
+//===--------------------------------------------------------------------===//
+
+/// Parse a non-standard inline Annotation JSON blob if present.  This uses
+/// the info-like encoding of %[<JSON Blob>].
+ParseResult FIRParser::parseOptionalAnnotations(StringRef &result) {
+
+  if (getToken().isNot(FIRToken::inlineannotation))
+    return success();
+
+  auto loc = getToken().getLoc();
+
+  result = getTokenSpelling().drop_front(2).drop_back(1);
+  consumeToken(FIRToken::inlineannotation);
+
+  return success();
+}
+
+LogicalResult
+fromJSON(llvm::json::Value &value,
+         llvm::StringMap<llvm::SmallVector<DictionaryAttr>> &annotationMap,
+         llvm::json::Path path, MLIRContext *context) {
+
+  /// Exampine an Annotation JSON object and return an optional string
+  /// indicating the target associated with this annotation.  Erase the target
+  /// from the JSON object if a target was found.  Automatically convert any
+  /// legacy Named targets to actual Targets.  Note: it is expected that a
+  /// target may not exist, e.g., any subclass of
+  /// firrtl.annotations.NoTargetAnnotation will not have a target.
+  auto findAndEraseTarget =
+      [](llvm::json::Object *object) -> llvm::Optional<std::string> {
+    // If a "targets" field exists, then this is likely a subclass of
+    // firrtl.annotations.MultiTargetAnnotation.  We don't handle this yet, so
+    // print an error and return none.
+    if (object->get("targets")) {
+      llvm::errs()
+          << "Found a multitarget annotation. These are not yet supported.\n";
+      return llvm::Optional<std::string>();
+    }
+
+    // If no "target" field exists, then exit, returning none.
+    auto target = object->get("target");
+    if (!target)
+      return llvm::Optional<std::string>();
+
+    // Find the target.
+    auto maybeTarget = object->get("target")->getAsString();
+
+    // If this is a normal Target (not a Named), erase that field in the JSON
+    // object and return that Target.
+    std::string newTarget;
+    if (maybeTarget.getValue()[0] == '~') {
+      newTarget = maybeTarget->str();
+    } else {
+      // This is a legacy target using the firrtl.annotations.Named type.  This
+      // can be trivially canonicalized to a non-legacy target, so we do it with
+      // the following thre mappings:
+      //   1. CircuitName => CircuitTarget, e.g., A -> ~A
+      //   2. ModuleName => ModuleTarget, e.g., A.B -> ~A|B
+      //   3. ComponentName => ReferenceTarget, e.g., A.B.C -> ~A|B>C
+      newTarget = "~";
+      llvm::raw_string_ostream s(newTarget);
+      bool isModule = true;
+      for (auto a : maybeTarget.getValue()) {
+        switch (a) {
+        case '.':
+          if (isModule) {
+            s << "|";
+            isModule = false;
+            break;
+          }
+          s << ">";
+          break;
+        default:
+          s << a;
+        }
+      }
+    }
+
+    // If the target is something that we know we don't support, then print an
+    // error, promote the annotation to a Circuit annotation, and leave the
+    // original target intact.  Otherwise, remove the target from the
+    // annotation.
+    bool unsupported =
+        std::any_of(newTarget.begin(), newTarget.end(), [](char a) {
+          return a == '/' || a == ':' || a == '>' || a == '.' || a == '[';
+        });
+    if (unsupported) {
+      llvm::errs()
+          << "Unsupported Annotation Target " << *target
+          << ". (Only CircuitTarget and ModuleTarget are currently supported!) "
+             "This will be promoted to a CircuitAnnotation.\n";
+      newTarget = "~";
+    } else {
+      object->erase("target");
+    }
+
+    return llvm::Optional<std::string>(newTarget);
+  };
+
+  /// Convert arbitrary JSON to an MLIR Attribute.
+  std::function<Attribute(llvm::json::Value &)> JSONToAttribute =
+      [&](llvm::json::Value &value) -> Attribute {
+    // String
+    if (auto a = value.getAsString())
+      return StringAttr::get(context, a.getValue());
+
+    // Integer
+    if (auto a = value.getAsInteger())
+      return IntegerAttr::get(IntegerType::get(context, 64), a.getValue());
+
+    // Float
+    if (auto a = value.getAsNumber())
+      return FloatAttr::get(mlir::FloatType::getF64(context), a.getValue());
+
+    // Boolean
+    if (auto a = value.getAsBoolean())
+      return BoolAttr::get(context, a.getValue());
+
+    // Null
+    if (auto a = value.getAsNull()) {
+      llvm::errs() << "Found a null in the JSON, returning 'nullptr'\n";
+      return nullptr;
+    }
+
+    // Object
+    if (auto a = value.getAsObject()) {
+      NamedAttrList metadata;
+      for (auto b : *a)
+        metadata.append(b.first, JSONToAttribute(b.second));
+      return DictionaryAttr::get(context, metadata);
+    }
+
+    // Array
+    if (auto a = value.getAsArray()) {
+      SmallVector<Attribute> metadata;
+      for (auto b : *a)
+        metadata.push_back(JSONToAttribute(b));
+      return ArrayAttr::get(context, metadata);
+    }
+
+    llvm::errs() << "Unhandled JSON value: " << value << "\n";
+    return nullptr;
+  };
+
+  // The JSON must be an object by definition of what an Annotation is.  Error
+  // on anything else.
+  auto object = value.getAsObject();
+  if (!object)
+    return failure();
+
+  // Extra the "target" field from the Annotation object if it exists.  Remove
+  // it so it isn't included in the Attribute.
+  auto target = findAndEraseTarget(object);
+  if (!target)
+    target = llvm::Optional<std::string>("~");
+
+  // Build up the Attribute to represent the Annotation and store it in the
+  // global Target -> Attribute mapping.
+  NamedAttrList metadata;
+  for (auto field : *object)
+    metadata.append(field.first, JSONToAttribute(field.second));
+  annotationMap[target.getValue()].push_back(
+      DictionaryAttr::get(context, metadata));
+  return success();
+};
 
 //===--------------------------------------------------------------------===//
 // Common Parser Rules
@@ -721,6 +912,17 @@ ParseResult FIRParser::parseOptionalRUW(RUWAttr &result) {
   }
 
   return success();
+}
+
+void FIRParser::getAnnotations(StringRef target,
+                               SmallVector<DictionaryAttr> &annotations) {
+  for (auto a : state.annotationMap.lookup(target)) {
+    annotations.push_back(a);
+  }
+}
+
+void FIRParser::addAnnotation(StringRef target, DictionaryAttr annotation) {
+  state.annotationMap[target].push_back(annotation);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2593,7 +2795,11 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
   portList.reserve(portListAndLoc.size());
   for (auto &elt : portListAndLoc)
     portList.push_back(elt.first);
-  auto fmodule = builder.create<FModuleOp>(info.getLoc(), name, portList);
+  SmallVector<DictionaryAttr> annotations;
+  getAnnotations("~" + circuit.name().str() + "|" + name.getValue().str(),
+                 annotations);
+  auto fmodule =
+      builder.create<FModuleOp>(info.getLoc(), name, portList, annotations);
 
   // Install all of the ports into the symbol table, associated with their
   // block arguments.
@@ -2641,18 +2847,50 @@ ParseResult FIRCircuitParser::parseCircuit() {
 
   LocWithInfo info(getToken().getLoc(), this);
   StringAttr name;
+  StringRef inlineAnnotations;
 
   // A file must contain a top level `circuit` definition.
   if (parseToken(FIRToken::kw_circuit,
                  "expected a top-level 'circuit' definition") ||
       parseId(name, "expected circuit name") ||
       parseToken(FIRToken::colon, "expected ':' in circuit definition") ||
-      parseOptionalInfo(info))
+      parseOptionalAnnotations(inlineAnnotations) || parseOptionalInfo(info))
     return failure();
 
-  // Create the top-level circuit op in the MLIR module.
   OpBuilder b(mlirModule.getBodyRegion());
-  auto circuit = b.create<CircuitOp>(info.getLoc(), name);
+
+  if (!inlineAnnotations.empty()) {
+    auto annotations = llvm::json::parse(inlineAnnotations);
+    if (auto err = annotations.takeError()) {
+      emitError("Failed to parse inline JSON annotations...\n");
+      return failure();
+    }
+
+    llvm::json::Path::Root root;
+    llvm::StringMap<llvm::SmallVector<DictionaryAttr>> annotationMap;
+    if (annotations) {
+      for (auto a : *annotations->getAsArray()) {
+        if (failed(fromJSON(a, annotationMap, root, b.getContext()))) {
+          llvm::errs() << "Failed to parse annotation file...\n";
+          return {};
+        }
+      }
+    }
+
+    for (auto a = annotationMap.begin(), e = annotationMap.end(); a != e; ++a)
+      for (auto b : a->getValue())
+        addAnnotation(a->getKey(), b);
+  }
+
+  // Get annotations associated with this circuit. These are either:
+  //   1. Annotations with no target (which we use "~" to identify)
+  //   2. Annotations targeting the circuit, e.g., "~Foo"
+  SmallVector<DictionaryAttr> annotationVec;
+  getAnnotations("~", annotationVec);
+  getAnnotations("~" + name.getValue().str(), annotationVec);
+
+  // Create the top-level circuit op in the MLIR module.
+  auto circuit = b.create<CircuitOp>(info.getLoc(), name, annotationVec);
 
   // Parse any contained modules.
   while (true) {
@@ -2700,6 +2938,30 @@ OwningModuleRef circt::firrtl::importFIRRTL(SourceMgr &sourceMgr,
                                             MLIRContext *context,
                                             FIRParserOptions options) {
   auto sourceBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
+  const llvm::MemoryBuffer *annotationsBuf = nullptr;
+  if (sourceMgr.getNumBuffers() > 1)
+    annotationsBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID() + 1);
+
+  llvm::Optional<llvm::json::Value> annotations;
+  if (annotationsBuf) {
+    auto foo = llvm::json::parse((*annotationsBuf).getBuffer());
+    if (auto err = foo.takeError()) {
+      llvm::errs() << "Failed to parse JSON...\n";
+      return {};
+    }
+    annotations.emplace(foo.get());
+  }
+
+  llvm::json::Path::Root root;
+  llvm::StringMap<llvm::SmallVector<DictionaryAttr>> annotationMap;
+  if (annotations) {
+    for (auto a : *annotations.getValue().getAsArray()) {
+      if (failed(fromJSON(a, annotationMap, root, context))) {
+        llvm::errs() << "Failed to parse annotation file...\n";
+        return {};
+      }
+    }
+  }
 
   context->loadDialect<FIRRTLDialect>();
 
@@ -2708,7 +2970,7 @@ OwningModuleRef circt::firrtl::importFIRRTL(SourceMgr &sourceMgr,
       FileLineColLoc::get(context, sourceBuf->getBufferIdentifier(), /*line=*/0,
                           /*column=*/0)));
 
-  GlobalFIRParserState state(sourceMgr, context, options);
+  GlobalFIRParserState state(sourceMgr, context, options, annotationMap);
   if (FIRCircuitParser(state, *module).parseCircuit())
     return nullptr;
 

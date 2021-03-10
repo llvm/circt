@@ -18,13 +18,13 @@ def CircuitOp : FIRRTLOp<"circuit",
     The "firrtl.circuit" operation represents an overall Verilog circuit,
     containing a list of modules.
   }];
-  let arguments = (ins StrAttr:$name);
+  let arguments = (ins StrAttr:$name, OptionalAttr<ArrayAttr>:$annotations);
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<(ins "StringAttr":$name)>
+    OpBuilder<(ins "StringAttr":$name, CArg<"ArrayRef<DictionaryAttr>", "ArrayRef<DictionaryAttr>()">:$annotations)>
   ];
 
   let extraClassDeclaration = [{
@@ -54,13 +54,13 @@ def FModuleOp : FIRRTLOp<"module",
     name, a list of ports, and a body that represents the connections within
     the module.
   }];
-  let arguments = (ins);
+  let arguments = (ins OptionalAttr<ArrayAttr>:$annotations);
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports)>
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports, CArg<"ArrayRef<DictionaryAttr>", "ArrayRef<DictionaryAttr>()">:$annotations)>
   ];
 
   let extraClassDeclaration = [{

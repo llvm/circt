@@ -14,6 +14,8 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRPARSER_H
 #define CIRCT_DIALECT_FIRRTL_FIRPARSER_H
 
+#include "llvm/Support/JSON.h"
+
 namespace llvm {
 class SourceMgr;
 }
