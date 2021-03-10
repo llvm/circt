@@ -1,9 +1,5 @@
 add_subdirectory(CAPI)
 
-llvm_canonicalize_cmake_booleans(
-  CIRCT_BINDINGS_PYTHON_ENABLED
-  )
-
 configure_lit_site_cfg(
   ${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.py.in
   ${CMAKE_CURRENT_BINARY_DIR}/lit.site.cfg.py
@@ -24,10 +20,6 @@ set(CIRCT_TEST_DEPENDS
 
 if(NOT WIN32)
   list(APPEND CIRCT_TEST_DEPENDS llhd-sim)
-endif()
-
-if(CIRCT_BINDINGS_PYTHON_ENABLED)
-  list(APPEND CIRCT_TEST_DEPENDS CIRCTBindingsPython)
 endif()
 
 add_lit_testsuite(check-circt "Running the CIRCT regression tests"

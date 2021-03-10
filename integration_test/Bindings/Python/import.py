@@ -1,4 +1,4 @@
 # REQUIRES: bindings_python
-# RUN: %PYTHON %s
+# RUN: %PYTHON% %s
 
 import circt

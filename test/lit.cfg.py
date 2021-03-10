@@ -22,7 +22,7 @@ config.name = 'CIRCT'
 config.test_format = lit.formats.ShTest(not llvm_config.use_lit_shell)
 
 # suffixes: A list of file extensions to treat as test files.
-config.suffixes = ['.td', '.mlir', '.ll', '.fir', '.sv', '.py']
+config.suffixes = ['.td', '.mlir', '.ll', '.fir', '.sv']
 
 # test_source_root: The root path where tests are located.
 config.test_source_root = os.path.dirname(__file__)
@@ -32,7 +32,6 @@ config.test_exec_root = os.path.join(config.circt_obj_root, 'test')
 
 config.substitutions.append(('%PATH%', config.environment['PATH']))
 config.substitutions.append(('%shlibext', config.llvm_shlib_ext))
-config.substitutions.append(('%PYTHON', config.python_executable))
 
 llvm_config.with_system_environment(
     ['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP'])
@@ -42,9 +41,7 @@ llvm_config.use_default_substitutions()
 # excludes: A list of directories to exclude from the testsuite. The 'Inputs'
 # subdirectories contain auxiliary inputs for various tests in their parent
 # directories.
-config.excludes = [
-  'lit.cfg.py', 'Inputs', 'CMakeLists.txt', 'README.txt', 'LICENSE.txt'
-]
+config.excludes = ['Inputs', 'CMakeLists.txt', 'README.txt', 'LICENSE.txt']
 
 # test_source_root: The root path where tests are located.
 config.test_source_root = os.path.dirname(__file__)
@@ -54,11 +51,6 @@ config.test_exec_root = os.path.join(config.circt_obj_root, 'test')
 
 # Tweak the PATH to include the tools dir.
 llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
-
-# Tweak the PYTHONPATH to include the binary dir.
-if config.bindings_python_enabled:
-  llvm_config.with_environment('PYTHONPATH',
-      os.path.join(config.llvm_obj_root, 'python'), append_path=True)
 
 tool_dirs = [config.circt_tools_dir,
              config.mlir_tools_dir, config.llvm_tools_dir]
@@ -80,9 +72,5 @@ if config.verilator_path != "":
 # Enable ESI's Capnp tests if they're supported.
 if config.esi_capnp != "":
   config.available_features.add('capnp')
-
-# Enable Python bindings tests if they're supported.
-if config.bindings_python_enabled:
-  config.available_features.add('bindings_python')
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)
