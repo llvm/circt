@@ -76,8 +76,10 @@ Type ESIDialect::parseType(DialectAsmParser &parser) const {
   llvm::StringRef mnemonic;
   if (parser.parseKeyword(&mnemonic))
     return Type();
-  auto genType = generatedTypeParser(getContext(), parser, mnemonic);
-  if (genType != Type())
+  Type genType;
+  auto parseResult =
+      generatedTypeParser(getContext(), parser, mnemonic, genType);
+  if (parseResult.hasValue())
     return genType;
   parser.emitError(parser.getCurrentLocation(), "Could not parse esi.")
       << mnemonic << "!\n";

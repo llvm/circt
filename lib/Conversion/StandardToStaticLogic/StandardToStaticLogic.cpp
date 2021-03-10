@@ -26,7 +26,7 @@ valueVector getPipelineArgs(Block &block) {
   for (auto &op : block) {
     if (!op.mightHaveTrait<OpTrait::IsTerminator>()) {
       for (auto operand : op.getOperands()) {
-        if (operand.getKind() == Value::Kind::BlockArgument) {
+        if (operand.isa<BlockArgument>()) {
           // Add only unique uses
           if (std::find(arguments.begin(), arguments.end(), operand) ==
               arguments.end())

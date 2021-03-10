@@ -27,7 +27,7 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
   let assemblyFormat = "`(` $value `)` attr-dict `:` type($result)";
 
   let builders = [
-    OpBuilderDAG<(ins "IntType":$type, "const APInt &":$value)>
+    OpBuilder<(ins "IntType":$type, "const APInt &":$value)>
   ];
   let hasFolder = 1;
   let verifier = "return ::verifyConstantOp(*this);";
@@ -316,7 +316,7 @@ def BitsPrimOp : PrimOp<"bits"> {
   let hasFolder = 1;
 
   let builders = [
-    OpBuilderDAG<(ins "Value":$input, "unsigned":$high, "unsigned":$low)>
+    OpBuilder<(ins "Value":$input, "unsigned":$high, "unsigned":$low)>
   ];
 
   let extraClassDeclaration = [{
@@ -603,7 +603,7 @@ def AsPassivePrimOp : FIRRTLOp<"asPassive", [NoSideEffect,
   let assemblyFormat = "$input attr-dict `:` type($input)";
 
   let builders = [
-    OpBuilderDAG<(ins "Value":$input)>
+    OpBuilder<(ins "Value":$input)>
   ];
 }
 

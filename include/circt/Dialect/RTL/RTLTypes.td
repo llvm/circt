@@ -49,7 +49,7 @@ def ArrayType : RTLType<"Array"> {
 
   let mnemonic = "array";
   let parameters = (ins "::mlir::Type":$elementType, "size_t":$size);
-  let genVerifyInvariantsDecl = 1;
+  let genVerifyDecl = 1;
 
   let extraClassDeclaration = [{
     static ArrayType get(Type elementType, size_t size) {
@@ -68,7 +68,7 @@ def UnpackedArrayType : RTLType<"UnpackedArray"> {
 
   let mnemonic = "uarray";
   let parameters = (ins "::mlir::Type":$elementType, "size_t":$size);
-  let genVerifyInvariantsDecl = 1;
+  let genVerifyDecl = 1;
 
   let extraClassDeclaration = [{
     static UnpackedArrayType get(Type elementType, size_t size) {
@@ -87,7 +87,7 @@ def InOutType : RTLType<"InOut"> {
 
   let mnemonic = "inout";
   let parameters = (ins "::mlir::Type":$elementType);
-  let genVerifyInvariantsDecl = 1;
+  let genVerifyDecl = 1;
 
   let extraClassDeclaration = [{
     static InOutType get(Type elementType) {

@@ -14,6 +14,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/OperationSupport.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/Hashing.h"
@@ -35,7 +36,7 @@ llvm::hash_code computeHash(MemOp op) {
   hash = llvm::hash_combine(hash, op.ruwAttr());
 
   // Result Types
-  ArrayRef<Type> resultTypes = op->getResultTypes();
+  TypeRange resultTypes = op->getResultTypes();
   switch (resultTypes.size()) {
   case 0:
     // We don't need to add anything to the hash.
@@ -45,10 +46,10 @@ llvm::hash_code computeHash(MemOp op) {
     hash = llvm::hash_combine(hash, resultTypes.front());
     break;
   default:
-    // Use the type buffer as the hash, as we can guarantee it is the same for
+    // Use the type range as the hash, as we can guarantee it is the same for
     // any given range of result types. This takes advantage of the fact the
     // result types >1 are stored in a TupleType and uniqued.
-    hash = llvm::hash_combine(hash, resultTypes.data());
+    hash = llvm::hash_combine(hash, resultTypes);
     break;
   }
   return hash;
@@ -69,8 +70,8 @@ static bool isEquivalentTo(MemOp lhs, MemOp rhs) {
   if (lhs.ruwAttr() != rhs.ruwAttr())
     return false;
   // Compare result types.  Taken from operation equivalence.
-  ArrayRef<Type> lhsResultTypes = lhs->getResultTypes();
-  ArrayRef<Type> rhsResultTypes = rhs->getResultTypes();
+  TypeRange lhsResultTypes = lhs->getResultTypes();
+  TypeRange rhsResultTypes = rhs->getResultTypes();
   if (lhsResultTypes.size() != rhsResultTypes.size())
     return false;
   switch (lhsResultTypes.size()) {
@@ -85,7 +86,7 @@ static bool isEquivalentTo(MemOp lhs, MemOp rhs) {
     // Use the type buffer for the comparison, as we can guarantee it is the
     // same for any given range of result types. This takes advantage of the
     // fact the result types >1 are stored in a TupleType and uniqued.
-    if (lhsResultTypes.data() != rhsResultTypes.data())
+    if (lhsResultTypes != rhsResultTypes)
       return false;
     break;
   }

@@ -413,8 +413,8 @@ ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result,
 
     // On success, remember what we already parsed (Bar.Scala / 309:14), and
     // move on to the next chunk.
-    auto loc = FileLineColLoc::get(filename.drop_front(spaceLoc + 1), lineNo,
-                                   columnNo, getContext());
+    auto loc = FileLineColLoc::get(
+        getContext(), filename.drop_front(spaceLoc + 1), lineNo, columnNo);
     extraLocs.push_back(loc);
     filename = nextFilename;
     lineNo = nextLineNo;
@@ -423,11 +423,11 @@ ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result,
   }
 
   Location resultLoc =
-      FileLineColLoc::get(filename, lineNo, columnNo, getContext());
+      FileLineColLoc::get(getContext(), filename, lineNo, columnNo);
   if (!extraLocs.empty()) {
     extraLocs.push_back(resultLoc);
     std::reverse(extraLocs.begin(), extraLocs.end());
-    resultLoc = FusedLoc::get(extraLocs, getContext());
+    resultLoc = FusedLoc::get(getContext(), extraLocs);
   }
   result.setInfoLocation(resultLoc);
 
@@ -2720,8 +2720,8 @@ OwningModuleRef circt::firrtl::importFIRRTL(SourceMgr &sourceMgr,
 
   // This is the result module we are parsing into.
   OwningModuleRef module(ModuleOp::create(
-      FileLineColLoc::get(sourceBuf->getBufferIdentifier(), /*line=*/0,
-                          /*column=*/0, context)));
+      FileLineColLoc::get(context, sourceBuf->getBufferIdentifier(), /*line=*/0,
+                          /*column=*/0)));
 
   GlobalFIRParserState state(sourceMgr, context, options);
   if (FIRCircuitParser(state, *module).parseCircuit())
