@@ -142,6 +142,8 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
 
   let assemblyFormat =
     "operands attr-dict `:` functional-type(operands, $result)";
+
+  let hasCanonicalizer = 1;
 }
 
 def RegResetOp : FIRRTLOp<"regreset", [/*MemAlloc*/]> {
