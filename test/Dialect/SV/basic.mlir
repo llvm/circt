@@ -12,10 +12,12 @@ rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   //    end // always @(posedge)
 
   sv.always posedge  %arg0 {
-    sv.ifdef "SYNTHESIS" {
+    sv.ifdef.procedural "SYNTHESIS" {
     } else {
       %tmp = sv.textual_value "PRINTF_COND_" : i1
-      %tmp2 = comb.and %tmp, %arg1 : i1
+      %tmpx = sv.constantX : i1
+      %tmpz = sv.constantZ : i1
+      %tmp2 = comb.and %tmp, %tmpx, %tmpz, %arg1 : i1
       sv.if %tmp2 {
         sv.fwrite "Hi\n" 
       }
@@ -29,15 +31,17 @@ rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   }
 
   // CHECK-NEXT: sv.always posedge %arg0 {
-  // CHECK-NEXT:   sv.ifdef "SYNTHESIS" {
+  // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
   // CHECK-NEXT:   } else {
   // CHECK-NEXT:     %0 = sv.textual_value "PRINTF_COND_" : i1
-  // CHECK-NEXT:     %1 = comb.and %0, %arg1 : i1
-  // CHECK-NEXT:     sv.if %1 {
+  // CHECK-NEXT:     %1 = sv.constantX : i1
+  // CHECK-NEXT:     %2 = sv.constantZ : i1
+  // CHECK-NEXT:     %3 = comb.and %0, %1, %2, %arg1 : i1
+  // CHECK-NEXT:     sv.if %3 {
   // CHECK-NEXT:       sv.fwrite "Hi\0A" 
   // CHECK-NEXT:     }
-  // CHECK-NEXT:     sv.if %1 {
-  // CHECK-NEXT:       sv.fwrite "%x"(%1) : i1
+  // CHECK-NEXT:     sv.if %3 {
+  // CHECK-NEXT:       sv.fwrite "%x"(%3) : i1
   // CHECK-NEXT:     } else {
   // CHECK-NEXT:       sv.fwrite "There\0A" 
   // CHECK-NEXT:     }
@@ -77,53 +81,66 @@ rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   // CHECK-NEXT: } 
 
 // Smoke test generic syntax.
-   "sv.if"(%arg0) ( {
+  sv.initial {
+    "sv.if"(%arg0) ( {
       "sv.yield"() : () -> ()
-   }, {
-     "sv.yield"() : () -> ()
-   }) : (i1) -> ()
+    }, {
+      "sv.yield"() : () -> ()
+    }) : (i1) -> ()
+  }
 
-  // CHECK-NEXT:     sv.if %arg0 {
-  // CHECK-NEXT:     } else {
+  // CHECK-NEXT:     sv.initial {
+  // CHECK-NEXT:       sv.if %arg0 {
+  // CHECK-NEXT:       } else {
+  // CHECK-NEXT:       }
   // CHECK-NEXT:     }
 
-  // CHECK-NEXT: sv.casez %arg8 : i8
-  // CHECK-NEXT: case b0000001x: {
-  // CHECK-NEXT:   sv.fwrite "x"
-  // CHECK-NEXT: }
-  // CHECK-NEXT: case b000000x1: {
-  // CHECK-NEXT:   sv.fwrite "y"
-  // CHECK-NEXT: }
-  // CHECK-NEXT: default: {
-  // CHECK-NEXT:   sv.fwrite "z"
+  // CHECK-NEXT: sv.initial { 
+  // CHECK-NEXT:   sv.casez %arg8 : i8
+  // CHECK-NEXT:   case b0000001x: {
+  // CHECK-NEXT:     sv.fwrite "x"
+  // CHECK-NEXT:   }
+  // CHECK-NEXT:   case b000000x1: {
+  // CHECK-NEXT:     sv.fwrite "y"
+  // CHECK-NEXT:   }
+  // CHECK-NEXT:   default: {
+  // CHECK-NEXT:     sv.fwrite "z"
+  // CHECK-NEXT:   }
   // CHECK-NEXT: }
 
-  sv.casez %arg8 : i8
-  case b0000001x: {
-    sv.fwrite "x"
-    sv.yield
-  }
-  case b000000x1: {
-    sv.fwrite "y"
-  }  // implicit yield is ok.
-  default: {
-    sv.fwrite "z"
-    sv.yield
+
+  sv.initial {
+    sv.casez %arg8 : i8
+    case b0000001x: {
+      sv.fwrite "x"
+      sv.yield
+    }
+    case b000000x1: {
+      sv.fwrite "y"
+    }  // implicit yield is ok.
+    default: {
+      sv.fwrite "z"
+      sv.yield
+    }
   }
 
-  // CHECK-NEXT: sv.casez %arg1 : i1
-  // CHECK-NEXT: case b0: {
-  // CHECK-NEXT:   sv.fwrite "zero"
+  // CHECK-NEXT: sv.initial {
+  // CHECK-NEXT:   sv.casez %arg1 : i1
+  // CHECK-NEXT:   case b0: {
+  // CHECK-NEXT:     sv.fwrite "zero"
+  // CHECK-NEXT:   }
+  // CHECK-NEXT:   case b1: {
+  // CHECK-NEXT:     sv.fwrite "one"
+  // CHECK-NEXT:   }
   // CHECK-NEXT: }
-  // CHECK-NEXT: case b1: {
-  // CHECK-NEXT:   sv.fwrite "one"
-  // CHECK-NEXT: }
-  sv.casez %arg1 : i1
-  case b0: {
-    sv.fwrite "zero"
-  }
-  case b1: {
-    sv.fwrite "one"
+  sv.initial {
+    sv.casez %arg1 : i1
+    case b0: {
+      sv.fwrite "zero"
+    }
+    case b1: {
+      sv.fwrite "one"
+    }
   }
 
   // CHECK-NEXT: rtl.output

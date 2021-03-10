@@ -170,6 +170,10 @@ def StructExtractOp : RTLOp<"struct_extract", [NoSideEffect]> {
 
   let parser = "return ::parse$cppClass(parser, result);";
   let printer = "return ::print(p, *this);";
+
+  let builders = [
+    OpBuilderDAG<(ins "Value":$input, "StructType::FieldInfo":$field)>
+  ];
 }
 
 // Extract a range of bits from the specified input.
@@ -231,4 +235,32 @@ def ConstantOp
   }];
   let hasFolder = true;
   let verifier = "return ::verifyConstantOp(*this);";
+}
+
+def KnownBitWidthType : Type<CPred<[{getBitWidth($_self) != -1}]>,
+  "Type wherein the bitwidth in hardware is known">;
+
+def BitcastOp: RTLOp<"bitcast", [NoSideEffect]> {
+  let summary = [{
+    Reinterpret one value to another value of the same size and
+    potentially different type.
+  }];
+
+  let description = [{
+    See the RTL-SV rationale document for a longer description, including an
+    example.
+  }];
+
+  let arguments = (ins KnownBitWidthType:$input);
+  let results = (outs KnownBitWidthType:$result);
+  let verifier = [{
+    if (getBitWidth(input().getType()) !=
+        getBitWidth(result().getType()))
+      return this->emitOpError("Bitwidth of input must match result");
+    return success();
+  }];
+
+  let assemblyFormat = [{
+    $input attr-dict `:` functional-type($input, $result)
+  }];
 }

@@ -34,9 +34,9 @@ func @shr_op(%a: i7, %b: i7) -> i7 {
 
 // CHECK-LABEL: func @casts(%arg0: i7) -> !rtl.struct<int: i7>
 func @casts(%in1: i7) -> !rtl.struct<int: i7> {
-  // CHECK-NEXT: %0 = comb.bitcast %arg0 : (i7) -> !rtl.array<7xi1>
-  // CHECK-NEXT: %1 = comb.bitcast %0 : (!rtl.array<7xi1>) -> !rtl.struct<int: i7>
-  %bits = comb.bitcast %in1 : (i7) -> !rtl.array<7xi1>
-  %backToInt = comb.bitcast %bits : (!rtl.array<7xi1>) -> !rtl.struct<int: i7>
+  // CHECK-NEXT: %0 = rtl.bitcast %arg0 : (i7) -> !rtl.array<7xi1>
+  // CHECK-NEXT: %1 = rtl.bitcast %0 : (!rtl.array<7xi1>) -> !rtl.struct<int: i7>
+  %bits = rtl.bitcast %in1 : (i7) -> !rtl.array<7xi1>
+  %backToInt = rtl.bitcast %bits : (!rtl.array<7xi1>) -> !rtl.struct<int: i7>
   return %backToInt : !rtl.struct<int: i7>
 }

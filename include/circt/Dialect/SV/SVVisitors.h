@@ -28,21 +28,24 @@ public:
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<
             // Expressions
-            ReadInOutOp, ArrayIndexInOutOp, TextualValueOp,
+            ReadInOutOp, ArrayIndexInOutOp, TextualValueOp, ConstantXOp,
+            ConstantZOp,
             // Declarations.
             RegOp, WireOp,
             // Control flow.
             IfDefOp, IfDefProceduralOp, IfOp, AlwaysOp, AlwaysFFOp, InitialOp,
             CaseZOp,
             // Other Statements.
-            ConnectOp, YieldOp, BPAssignOp, PAssignOp, AliasOp, FWriteOp,
-            FatalOp, FinishOp, VerbatimOp,
+            ConnectOp, BPAssignOp, PAssignOp, AliasOp, FWriteOp, FatalOp,
+            FinishOp, VerbatimOp,
             // Type declarations.
             InterfaceOp, InterfaceSignalOp, InterfaceModportOp,
             InterfaceInstanceOp, GetModportOp, AssignInterfaceSignalOp,
             ReadInterfaceSignalOp,
             // Verification statements.
-            AssertOp, AssumeOp, CoverOp>([&](auto expr) -> ResultType {
+            AssertOp, AssumeOp, CoverOp,
+            // Terminators.
+            YieldOp, TypeDeclTerminatorOp>([&](auto expr) -> ResultType {
           return thisCast->visitSV(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -72,9 +75,11 @@ public:
   HANDLE(WireOp, Unhandled);
 
   // Expressions
-  HANDLE(TextualValueOp, Unhandled)
   HANDLE(ReadInOutOp, Unhandled);
   HANDLE(ArrayIndexInOutOp, Unhandled);
+  HANDLE(TextualValueOp, Unhandled);
+  HANDLE(ConstantXOp, Unhandled);
+  HANDLE(ConstantZOp, Unhandled);
 
   // Control flow.
   HANDLE(IfDefOp, Unhandled);
@@ -87,7 +92,6 @@ public:
 
   // Other Statements.
   HANDLE(ConnectOp, Unhandled);
-  HANDLE(YieldOp, Unhandled);
   HANDLE(BPAssignOp, Unhandled);
   HANDLE(PAssignOp, Unhandled);
   HANDLE(AliasOp, Unhandled);
@@ -109,6 +113,10 @@ public:
   HANDLE(AssertOp, Unhandled);
   HANDLE(AssumeOp, Unhandled);
   HANDLE(CoverOp, Unhandled);
+
+  // Terminators.
+  HANDLE(YieldOp, Unhandled);
+  HANDLE(TypeDeclTerminatorOp, Unhandled);
 #undef HANDLE
 };
 

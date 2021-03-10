@@ -89,3 +89,31 @@ module IntArrSum (
   assign totalOut.data[0] = 24'($signed(arr.data[0])) + 24'($signed(arr.data[1]));
   assign totalOut.data[1] = 24'($signed(arr.data[2])) + 24'($signed(arr.data[3]));
 endmodule
+
+module Encryptor (
+  input clk,
+  input rstn,
+  IValidReady_Struct.source in,
+  IValidReady_Struct1.source cfg,
+  IValidReady_Struct.sink x
+);
+  logic [255:0] otp;
+  logic encrypt;
+  logic otpValid;
+
+  assign x.data.blob = encrypt ? (in.data.blob ^ otp) : in.data.blob;
+
+  assign x.valid = otpValid && in.valid;
+  assign in.ready = x.ready && otpValid;
+  assign x.data.encrypted = encrypt ? ~in.data.encrypted : in.data.encrypted;
+
+  always@(posedge clk) begin
+    if (cfg.valid) begin
+      otp <= cfg.data.otp;
+      encrypt <= cfg.data.encrypt;
+      otpValid <= 1;
+    end
+    if (~rstn)
+      otpValid <= 0;
+  end
+endmodule

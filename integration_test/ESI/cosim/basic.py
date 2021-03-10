@@ -38,3 +38,30 @@ class BasicSystemTester(cosim.CosimBase):
             print(f"Got {result}")
             assert (result.l[0] == arr[0] + arr[1])
             assert (result.l[1] == arr[2] + arr[3])
+
+    def testCrypto(self, num_msgs):
+        ep = self.openEP(3, sendType=self.schema.Struct12811887160382076992,
+                         recvType=self.schema.Struct12811887160382076992)
+        cfg = self.openEP(4, sendType=self.schema.I1,
+                          recvType=self.schema.Struct14590566522150786282)
+
+        cfgWritten = False
+        for _ in range(num_msgs):
+            blob = [random.randint(0, 255) for x in range(32)]
+            print(f"Sending data {blob}")
+            ep.send(self.schema.Struct12811887160382076992.new_message(
+                encrypted=False, blob=blob))
+
+            if not cfgWritten:
+                # Check that messages queue up properly waiting for the config.
+                otp = [random.randint(0, 255) for x in range(32)]
+                cfg.send(self.schema.Struct14590566522150786282.new_message(
+                    encrypt=True, otp=otp
+                ))
+                cfgWritten = True
+
+            result = self.readMsg(ep, self.schema.Struct12811887160382076992)
+            expectedResults = [x ^ y for (x, y) in zip(otp, blob)]
+            print(f"Got {blob}")
+            print(f"Exp {expectedResults}")
+            assert(list(result.blob) == expectedResults)

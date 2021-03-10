@@ -260,11 +260,11 @@ rtl.module @shl(%a: i1) -> (%b: i1) {
 // CHECK-NEXT: endmodule
 
 
-rtl.module @inout(%a: !rtl.inout<i42>) -> (%out: i42) {
+rtl.module @inout_0(%a: !rtl.inout<i42>) -> (%out: i42) {
   %aget = sv.read_inout %a: !rtl.inout<i42>
   rtl.output %aget : i42
 }
-// CHECK-LABEL:  module inout(
+// CHECK-LABEL:  module inout_0(
 // CHECK-NEXT:     inout  [41:0] a,
 // CHECK-NEXT:     output [41:0] out);
 // CHECK-EMPTY:
@@ -411,8 +411,8 @@ rtl.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
 // CHECK-NEXT: output [31:0]     r2);
 rtl.module @casts(%in1: i7, %in2: !rtl.array<8xi4>) -> (%r1: !rtl.array<7xi1>, %r2: i32) {
   // CHECK-EMPTY:
-  %r1 = comb.bitcast %in1 : (i7) -> !rtl.array<7xi1>
-  %r2 = comb.bitcast %in2 : (!rtl.array<8xi4>) -> i32
+  %r1 = rtl.bitcast %in1 : (i7) -> !rtl.array<7xi1>
+  %r2 = rtl.bitcast %in2 : (!rtl.array<8xi4>) -> i32
 
   // CHECK-NEXT: wire [31:0] {{.+}} = /*cast(bit[31:0])*/in2;
   // CHECK-NEXT: assign r1 = in1;
@@ -573,3 +573,25 @@ rtl.module @longvariadic(%a: i8) -> (%b: i8) {
                 %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a : i8
   rtl.output %1 : i8
 }
+
+// https://github.com/llvm/circt/issues/681
+// Rename keywords used in variable/module names
+// CHECK-LABEL: module inout_1(
+// CHECK-NEXT:  input  inout_0,
+// CHECK-NEXT:  output b);
+// CHECK-EMPTY:
+// CHECK-NEXT: assign b = inout_0;
+rtl.module @inout(%inout: i1) -> (%b: i1) {
+  rtl.output %inout : i1
+}   
+
+// https://github.com/llvm/circt/issues/681
+// Rename keywords used in variable/module names
+// CHECK-LABEL: module reg_1(
+// CHECK-NEXT:  input  inout_0,
+// CHECK-NEXT:  output b);
+// CHECK-EMPTY:
+// CHECK-NEXT: assign b = inout_0;
+rtl.module @reg(%inout: i1) -> (%b: i1) {
+  rtl.output %inout : i1
+}   

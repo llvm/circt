@@ -24,7 +24,22 @@ using namespace sv;
 /// Return true if the specified operation is an expression.
 bool sv::isExpression(Operation *op) {
   return isa<sv::TextualValueOp>(op) || isa<sv::GetModportOp>(op) ||
-         isa<sv::ReadInterfaceSignalOp>(op);
+         isa<sv::ReadInterfaceSignalOp>(op) || isa<sv::ConstantXOp>(op) ||
+         isa<sv::ConstantZOp>(op);
+}
+
+LogicalResult sv::verifyInProceduralRegion(Operation *op) {
+  if (op->getParentOp()->hasTrait<sv::ProceduralRegion>())
+    return success();
+  op->emitError() << op->getName() << " should be in a procedural region";
+  return failure();
+}
+
+LogicalResult sv::verifyInNonProceduralRegion(Operation *op) {
+  if (!op->getParentOp()->hasTrait<sv::ProceduralRegion>())
+    return success();
+  op->emitError() << op->getName() << " should be in a non-procedural region";
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
@@ -166,6 +181,31 @@ void IfDefOp::build(OpBuilder &odsBuilder, OperationState &result,
   }
 }
 
+static bool isEmptyBlockExceptForTerminator(Block *block) {
+  assert(block && "Blcok must be non-null");
+  return block->empty() || block->front().hasTrait<OpTrait::IsTerminator>();
+}
+
+void IfDefOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                          MLIRContext *context) {
+  // If both thenRegion and elseRegion are empty, erase op.
+  struct EraseEmptyOp final : public OpRewritePattern<IfDefOp> {
+    using OpRewritePattern::OpRewritePattern;
+    LogicalResult matchAndRewrite(IfDefOp op,
+                                  PatternRewriter &rewriter) const override {
+      if (!isEmptyBlockExceptForTerminator(op.getThenBlock()))
+        return failure();
+
+      if (op.hasElse() && !isEmptyBlockExceptForTerminator(op.getElseBlock()))
+        return failure();
+
+      rewriter.eraseOp(op);
+      return success();
+    }
+  };
+  results.insert<EraseEmptyOp>(context);
+}
+
 //===----------------------------------------------------------------------===//
 // IfDefProceduralOp
 
@@ -196,7 +236,7 @@ void IfOp::build(OpBuilder &odsBuilder, OperationState &result, Value cond,
 
   Region *elseRegion = result.addRegion();
   if (elseCtor) {
-    IfDefOp::ensureTerminator(*elseRegion, odsBuilder, result.location);
+    IfOp::ensureTerminator(*elseRegion, odsBuilder, result.location);
     auto oldIP = &*odsBuilder.getInsertionPoint();
     odsBuilder.setInsertionPointToStart(&*elseRegion->begin());
     elseCtor();
@@ -236,7 +276,24 @@ void IfOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       return success();
     }
   };
+
+  struct EraseEmptyOp final : public OpRewritePattern<IfOp> {
+    using OpRewritePattern::OpRewritePattern;
+    LogicalResult matchAndRewrite(IfOp op,
+                                  PatternRewriter &rewriter) const override {
+      if (!isEmptyBlockExceptForTerminator(op.getThenBlock()))
+        return failure();
+
+      if (op.hasElse() && !isEmptyBlockExceptForTerminator(op.getElseBlock()))
+        return failure();
+
+      rewriter.eraseOp(op);
+      return success();
+    }
+  };
+
   results.insert<RemoveStaticCondition>(context);
+  results.insert<EraseEmptyOp>(context);
 }
 //===----------------------------------------------------------------------===//
 // AlwaysOp
@@ -571,8 +628,8 @@ static LogicalResult verifyCaseZOp(CaseZOp op) {
 //===----------------------------------------------------------------------===//
 
 ModportType InterfaceOp::getModportType(StringRef modportName) {
-  InterfaceModportOp modportOp = lookupSymbol<InterfaceModportOp>(modportName);
-  assert(modportOp && "Modport symbol not found.");
+  assert(lookupSymbol<InterfaceModportOp>(modportName) &&
+         "Modport symbol not found.");
   auto *ctxt = getContext();
   return ModportType::get(
       getContext(),

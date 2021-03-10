@@ -71,13 +71,6 @@ static void mergeRegions(Region *region1, Region *region2) {
   }
 }
 
-/// Inline all regions from the second operation into the first.
-static void mergeOperationsIntoFrom(Operation *op1, Operation *op2) {
-  assert(op1 != op2 && "Cannot merge an op into itself");
-  for (size_t i = 0, e = op1->getNumRegions(); i != e; ++i)
-    mergeRegions(&op1->getRegion(i), &op2->getRegion(i));
-}
-
 //===----------------------------------------------------------------------===//
 // AlwaysFusionPass
 //===----------------------------------------------------------------------===//
@@ -91,6 +84,21 @@ struct RTLCleanupPass : public sv::RTLCleanupBase<RTLCleanupPass> {
   void runOnProceduralRegion(Region &region, bool shallow);
 
 private:
+  /// Inline all regions from the second operation into the first and delete the
+  /// second operation.
+  void mergeOperationsIntoFrom(Operation *op1, Operation *op2,
+                               DenseSet<Operation *> &opsToRevisitRegionsIn) {
+    assert(op1 != op2 && "Cannot merge an op into itself");
+    for (size_t i = 0, e = op1->getNumRegions(); i != e; ++i)
+      mergeRegions(&op1->getRegion(i), &op2->getRegion(i));
+
+    // Remember that we need to revisit op1 because it changed.
+    opsToRevisitRegionsIn.erase(op2);
+    opsToRevisitRegionsIn.insert(op1);
+    op2->erase();
+    anythingChanged = true;
+  }
+
   bool anythingChanged;
 };
 } // end anonymous namespace
@@ -133,6 +141,11 @@ void RTLCleanupPass::runOnGraphRegion(Region &region, bool shallow) {
   llvm::SmallDenseMap<Attribute, Operation *, 4> ifdefOps;
   sv::InitialOp initialOpSeen;
 
+  // As we merge operations with regions, we need to revisit the regions within
+  // them to see if merging the outer level allows simplifications in the inner
+  // level.  We do that after our pass so we only revisit each subregion once.
+  DenseSet<Operation *> opsToRevisitRegionsIn;
+
   for (Operation &op : llvm::make_early_inc_range(body)) {
     // Recursively process any regions in the op before we visit it.
     if (!shallow && op.getNumRegions() != 0)
@@ -145,17 +158,9 @@ void RTLCleanupPass::runOnGraphRegion(Region &region, bool shallow) {
       if (itAndInserted.second)
         continue;
       auto *existingAlways = *itAndInserted.first;
+      mergeOperationsIntoFrom(&op, existingAlways, opsToRevisitRegionsIn);
 
-      mergeOperationsIntoFrom(&op, existingAlways);
-      existingAlways->erase();
       *itAndInserted.first = &op;
-      anythingChanged = true;
-
-      // Reprocess the merged body because this may have uncovered other
-      // simplifications.
-      for (auto &reg : op.getRegions()) {
-        runOnGraphRegion(reg, /*shallow=*/true);
-      }
       continue;
     }
 
@@ -166,16 +171,8 @@ void RTLCleanupPass::runOnGraphRegion(Region &region, bool shallow) {
         entry = ifdefOp;
         continue;
       }
-
-      mergeOperationsIntoFrom(ifdefOp, entry);
-      entry->erase();
+      mergeOperationsIntoFrom(ifdefOp, entry, opsToRevisitRegionsIn);
       entry = ifdefOp;
-      anythingChanged = true;
-
-      // Reprocess the merged body because this may have uncovered other
-      // simplifications.
-      runOnGraphRegion(ifdefOp->getRegion(0), /*shallow=*/true);
-      runOnGraphRegion(ifdefOp->getRegion(1), /*shallow=*/true);
       continue;
     }
 
@@ -186,16 +183,20 @@ void RTLCleanupPass::runOnGraphRegion(Region &region, bool shallow) {
         continue;
       }
 
-      mergeOperationsIntoFrom(initialOp, initialOpSeen);
-      initialOpSeen->erase();
+      mergeOperationsIntoFrom(initialOp, initialOpSeen, opsToRevisitRegionsIn);
       initialOpSeen = initialOp;
-      anythingChanged = true;
-
-      // Reprocess the merged body because this may have uncovered other
-      // simplifications.
-      runOnGraphRegion(initialOp->getRegion(0), /*shallow=*/true);
       continue;
     }
+  }
+
+  // Reprocess the merged body because this may have uncovered other
+  // simplifications.  Note that iterating over a set is generally not a stable
+  // thing to do, but this is a parallel operation whose order of visitation
+  // doesn't matter.
+  // TODO: This could be a parallel for-each loop.
+  for (auto *op : opsToRevisitRegionsIn) {
+    for (auto &reg : op->getRegions())
+      runOnGraphRegion(reg, /*shallow=*/true);
   }
 }
 
@@ -205,6 +206,11 @@ void RTLCleanupPass::runOnProceduralRegion(Region &region, bool shallow) {
   if (region.getBlocks().size() != 1)
     return;
   Block &body = region.front();
+
+  // As we merge operations with regions, we need to revisit the regions within
+  // them to see if merging the outer level allows simplifications in the inner
+  // level.  We do that after our pass so we only revisit each subregion once.
+  DenseSet<Operation *> opsToRevisitRegionsIn;
 
   Operation *lastSideEffectingOp = nullptr;
   for (Operation &op : llvm::make_early_inc_range(body)) {
@@ -219,14 +225,7 @@ void RTLCleanupPass::runOnProceduralRegion(Region &region, bool shallow) {
         if (ifdef.cond() == prevIfDef.cond()) {
           // We know that there are no side effective operations between the
           // two, so merge the first one into this one.
-          mergeOperationsIntoFrom(ifdef, prevIfDef);
-          anythingChanged = true;
-          prevIfDef->erase();
-
-          // Reprocess the merged body because this may have uncovered other
-          // simplifications.
-          runOnProceduralRegion(ifdef->getRegion(0), /*shallow=*/true);
-          runOnProceduralRegion(ifdef->getRegion(1), /*shallow=*/true);
+          mergeOperationsIntoFrom(ifdef, prevIfDef, opsToRevisitRegionsIn);
         }
       }
     }
@@ -237,14 +236,7 @@ void RTLCleanupPass::runOnProceduralRegion(Region &region, bool shallow) {
         if (ifop.cond() == prevIf.cond()) {
           // We know that there are no side effective operations between the
           // two, so merge the first one into this one.
-          mergeOperationsIntoFrom(ifop, prevIf);
-          anythingChanged = true;
-          prevIf->erase();
-
-          // Reprocess the merged body because this may have uncovered other
-          // simplifications.
-          runOnProceduralRegion(ifop->getRegion(0), /*shallow=*/true);
-          runOnProceduralRegion(ifop->getRegion(1), /*shallow=*/true);
+          mergeOperationsIntoFrom(ifop, prevIf, opsToRevisitRegionsIn);
         }
       }
     }
@@ -252,6 +244,16 @@ void RTLCleanupPass::runOnProceduralRegion(Region &region, bool shallow) {
     // Keep track of the last side effecting operation we've seen.
     if (!mlir::MemoryEffectOpInterface::hasNoEffect(&op))
       lastSideEffectingOp = &op;
+  }
+
+  // Reprocess the merged body because this may have uncovered other
+  // simplifications.  Note that iterating over a set is generally not a stable
+  // thing to do, but this is a parallel operation whose order of visitation
+  // doesn't matter.
+  // TODO: This could be a parallel for-each loop.
+  for (auto *op : opsToRevisitRegionsIn) {
+    for (auto &region : op->getRegions())
+      runOnProceduralRegion(region, /*shallow=*/true);
   }
 }
 
