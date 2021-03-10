@@ -11,10 +11,20 @@
 # Cap'nProto is use by ESI cosim aka Elastic Silicon Interfaces cosimulation as
 # a message format and RPC client/server.
 #
+# It will also optionally install pycapnp.
+#
 ##===----------------------------------------------------------------------===##
+
+echo "Do you wish to install pycapnp? Cosim integration tests require pycapnp."
+read -p "Yes to confirm: " yn
+case $yn in
+    [Yy]* ) pip3 install pycapnp; break ;;
+    * ) echo "Skipping.";;
+esac
 
 EXT_DIR=$(cd "$(dirname "$BASH_SOURCE[0]")/../ext" && pwd)
 CAPNP_VER=0f1bf4fce79923fb4974aa55a53e26450f83f286
+echo "Installing capnproto..."
 
 echo $EXT_DIR
 cd $EXT_DIR
@@ -25,6 +35,8 @@ git checkout $CAPNP_VER
 cd c++
 autoreconf -i
 ./configure --prefix=$EXT_DIR
-make -j$(nprocs)
+make -j$(nproc)
 make install
 cd ../../
+
+echo "Done."

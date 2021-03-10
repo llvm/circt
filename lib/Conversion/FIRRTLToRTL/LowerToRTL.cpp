@@ -1232,8 +1232,8 @@ void FIRRTLLowering::addToAlwaysFFBlock(EventControl clockEdge, Value clock,
                                         EventControl resetEdge, Value reset,
                                         std::function<void(void)> body,
                                         std::function<void(void)> resetBody) {
-  auto &op = alwaysFFBlocks[{builder->getBlock(), clockEdge, clock, resetStyle,
-                             resetEdge, reset}];
+  auto &op = alwaysFFBlocks[std::make_tuple(
+      builder->getBlock(), clockEdge, clock, resetStyle, resetEdge, reset)];
   if (op) {
     runWithInsertionPointAtEndOfBlock(body, op.bodyBlk());
     runWithInsertionPointAtEndOfBlock(resetBody, op.resetBlk());
@@ -1527,7 +1527,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         "should have already been lowered from a ground type to an aggregate "
         "type using the LowerTypes pass. Use "
         "'firtool --enable-lower-types' or 'circt-opt "
-        "--pass-pipeline='firrtl.circuit(firrtl.module(firrtl-lower-types))' "
+        "--pass-pipeline='firrtl.circuit(firrtl-lower-types)' "
         "to run this.");
 
   uint64_t depth = op.depth();
@@ -2489,9 +2489,17 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
               builder->create<sv::ConnectOp>(inoutValues[i1], values[i2]);
         }
       },
-
       // In the non-synthesis case, we emit a SystemVerilog alias statement.
-      [&]() { builder->create<sv::AliasOp>(inoutValues); });
+      [&]() {
+        builder->create<sv::IfDefOp>(
+            "verilator",
+            [&]() {
+              builder->create<sv::VerbatimOp>(
+                  "`error \"Verilator does not support alias and thus cannot "
+                  "arbitrarily connect bidirectional wires and ports\"");
+            },
+            [&]() { builder->create<sv::AliasOp>(inoutValues); });
+      });
 
   return success();
 }
