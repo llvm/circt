@@ -426,9 +426,13 @@ module attributes {firrtl.mainModule = "Simple"} {
   // CHECK-NEXT:     sv.connect %b1, %3 : i1
   // CHECK-NEXT:     sv.connect %c1, %1 : i1
   // CHECK-NEXT:     sv.connect %c1, %2 : i1
-  // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     sv.alias %a1, %b1, %c1 : !rtl.inout<i1>
-  // CHECK-NEXT:   }
+  // CHECK-NEXT:    } else {
+  // CHECK-NEXT:     sv.ifdef "verilator" {
+  // CHECK-NEXT:       sv.verbatim "`error \22Verilator does not support alias and thus cannot arbitrarily connect bidirectional wires and ports\22"
+  // CHECK-NEXT:     } else {
+  // CHECK-NEXT:       sv.alias %a1, %b1, %c1 : !rtl.inout<i1>
+  // CHECK-NEXT:     }
+  // CHECK-NEXT:    }
   // CHECK-NEXT:    %0 = sv.read_inout %a1 : !rtl.inout<i1>
   // CHECK-NEXT:    rtl.output %0 : i1
   rtl.module @Analog(%a1: !rtl.inout<i1>, %b1: !rtl.inout<i1>,
@@ -903,7 +907,11 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:   sv.connect %a, %1 : i1
     // CHECK-NEXT:   sv.connect %.invalid_analog, %0 : i1
     // CHECK-NEXT: } else {
-    // CHECK-NEXT:   sv.alias %a, %.invalid_analog : !rtl.inout<i1>, !rtl.inout<i1>
+    // CHECK-NEXT:   sv.ifdef "verilator" {
+    // CHECK-NEXT:     sv.verbatim "`error \22Verilator does not support alias and thus cannot arbitrarily connect bidirectional wires and ports\22"
+    // CHECK-NEXT:   } else {
+    // CHECK-NEXT:     sv.alias %a, %.invalid_analog : !rtl.inout<i1>, !rtl.inout<i1>
+    // CHECK-NEXT:   }
     // CHECK-NEXT: }
     firrtl.attach %a1, %0 : !firrtl.analog<1>, !firrtl.analog<1>
   }
