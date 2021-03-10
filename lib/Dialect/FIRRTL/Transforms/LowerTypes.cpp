@@ -671,8 +671,8 @@ static IntegerAttr getIntAttr(const APInt &value, MLIRContext *context) {
 }
 
 // This generates a mux tree for selecting the corresponding element from the
-// flattened vector based on the index. 
-// x = a[index] is lowered to :: 
+// flattened vector based on the index.
+// x = a[index] is lowered to ::
 // x = index == 3 ? a_3 : index == 2 ? a_2 : index == 1 ? a_1:a_0
 // TODO: This currently does not handle vector of bundles.
 void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
@@ -689,7 +689,7 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   SmallVector<Value, 8> vecVaclues;
   getAllBundleLowerings(input, vecVaclues);
   // TODO: Add message here, when can this happen ?
-  assert( vecVaclues.size() == inputType.getNumElements());
+  assert(vecVaclues.size() == inputType.getNumElements());
   Value elem0 = vecVaclues[0];
   size_t maxElems = (1 << indexType.getBitWidthOrSentinel());
   ;
