@@ -1635,9 +1635,9 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     case MemOp::PortKind::Read: {
       // Add delays for non-zero read latency
       SmallVector<ReadPipeElement> readPipe;
-      readPipe.push_back({portWires["en"], portWires["addr"],
-                          builder->create<sv::ReadInOutOp>(portWires["en"]),
-                          builder->create<sv::ReadInOutOp>(portWires["addr"])});
+      auto rden = builder->create<sv::ReadInOutOp>(portWires["en"]);
+      auto rdaddr = builder->create<sv::ReadInOutOp>(portWires["addr"]);
+      readPipe.push_back({portWires["en"], portWires["addr"], rden, rdaddr});
       Value enReg, addrReg, enRegRd, addRegRd;
       for (size_t j = 0; j < readLatency; ++j) {
         if (j == 0) {
@@ -1698,9 +1698,9 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       auto rdAddr = builder->create<sv::ReadInOutOp>(portWires["addr"]);
       auto rdMask = builder->create<sv::ReadInOutOp>(portWires["mask"]);
       auto rdData = builder->create<sv::ReadInOutOp>(portWires["data"]);
-      writePipe.push_back(
-          {portWires["en"], portWires["addr"], portWires["mask"],
-           portWires["data"], rdEn, rdAddr, rdMask, rdData});
+      writePipe.push_back({portWires["en"], portWires["addr"],
+                           portWires["mask"], portWires["data"], rdEn, rdAddr,
+                           rdMask, rdData});
 
       // Construct wripe pipe registers for non-unary write latency
       Value wRegEn, wRegAddr, wRegMask, wRegData;
