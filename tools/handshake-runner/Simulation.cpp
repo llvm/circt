@@ -244,6 +244,7 @@ Any readValueWithType(mlir::Type type, std::string in) {
   } else {
     assert(0 && "unknown argument type!\n");
   }
+  return nullptr;
 }
 
 std::string printAnyValueWithType(mlir::Type type, Any &value) {
