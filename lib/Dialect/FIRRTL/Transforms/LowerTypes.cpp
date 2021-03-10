@@ -20,7 +20,6 @@
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/Parallel.h"
-#include "llvm/Support/Threading.h"
 #include <algorithm>
 #include <vector>
 
@@ -256,7 +255,7 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   // Cache the named identifer for argument names.
   auto argNameId = builder.getIdentifier("firrtl.name");
 
-  // Create an array of the result types and results names
+  // Create an array of the result types and results names.
   SmallVector<Type, 8> inputTypes;
   SmallVector<DictionaryAttr, 8> attributes;
 
@@ -264,11 +263,11 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   SmallVector<ModulePortInfo, 8> ports;
   extModule.getPortInfo(ports);
   for (auto &port : ports) {
-    // Flatten the port type
+    // Flatten the port type.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
     flattenType(port.type, port.getName(), false, fieldTypes);
 
-    // For each field, add record its name and type
+    // For each field, add record its name and type.
     for (auto field : fieldTypes) {
       inputTypes.push_back(field.getPortType());
       if (port.name) {
