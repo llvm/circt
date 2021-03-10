@@ -128,10 +128,12 @@ dependencies are installed on your system. They are:
 
 Some of the ESI dialect code requires [libcapnp](https://capnproto.org/).
 (Specifically, the [cosimulation](ESI/cosim.md) component.) That code
-requires a version of libcapnp which is not yet part of a release. The
-`utils/get-capnp.sh` script downloads, compiles, and installs a known good
-version to a directory within the circt source code. Alternatively, you can
-use a docker image we provide via `utils/run-docker.sh`.
+requires a version of libcapnp which is not yet part of a release. Most of
+the ESI cosim integration tests also require the python bindings: pycapnp.
+The `utils/get-capnp.sh` script downloads, compiles, and installs a known
+good version to a directory within the circt source code. It optionally
+installs pycapnp via 'pip3'. Alternatively, you can use a docker image we
+provide via `utils/run-docker.sh`.
 
 ## Submitting changes to CIRCT
 
