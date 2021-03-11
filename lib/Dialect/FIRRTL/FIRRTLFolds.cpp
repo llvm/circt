@@ -621,14 +621,14 @@ OpFoldResult AsNonPassivePrimOp::fold(ArrayRef<Attribute> operands) {
 // Connection like things
 ///////////////////////////////////////////////////////////////////////////////
 void PartialConnectOp::getCanonicalizationPatterns(
-    OwningRewritePatternList &results,
-    MLIRContext *context) {
+    OwningRewritePatternList &results, MLIRContext *context) {
   struct Truncater final : public OpRewritePattern<PartialConnectOp> {
     using OpRewritePattern::OpRewritePattern;
 
     LogicalResult matchAndRewrite(PartialConnectOp op,
                                   PatternRewriter &rewriter) const override {
-      auto destType = op.getOperand(0).getType().cast<FIRRTLType>().getPassiveType();
+      auto destType =
+          op.getOperand(0).getType().cast<FIRRTLType>().getPassiveType();
       auto srcType = op.getOperand(1).getType().cast<FIRRTLType>();
       if (destType == srcType)
         return failure();
@@ -636,13 +636,14 @@ void PartialConnectOp::getCanonicalizationPatterns(
       auto srcWidth = srcType.getBitWidthOrSentinel();
       auto destWidth = destType.getBitWidthOrSentinel();
 
-      if (destType.isa<IntType>() && srcType.isa<IntType>() &&
-      srcWidth > 0 && destWidth > 0 &&
-      destWidth < srcWidth) {
-          auto shortened = rewriter.createOrFold<TailPrimOp>(op->getLoc(), destType, op.getOperand(1), srcWidth - destWidth);
-          rewriter.createOrFold<ConnectOp>(op->getLoc(), op.getOperand(0), shortened);
-          rewriter.eraseOp(op);
-        }
+      if (destType.isa<IntType>() && srcType.isa<IntType>() && srcWidth > 0 &&
+          destWidth > 0 && destWidth < srcWidth) {
+        auto shortened = rewriter.createOrFold<TailPrimOp>(
+            op->getLoc(), destType, op.getOperand(1), srcWidth - destWidth);
+        rewriter.createOrFold<ConnectOp>(op->getLoc(), op.getOperand(0),
+                                         shortened);
+        rewriter.eraseOp(op);
+      }
       return failure();
     }
   };
