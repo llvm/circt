@@ -97,7 +97,7 @@ static cl::opt<bool>
 /// Process a single buffer of the input.
 static LogicalResult
 processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
-              raw_ostream &os) {
+              OwningModuleRef &module) {
   MLIRContext context;
 
   // Register our dialects.
@@ -116,7 +116,6 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   pm.enableVerifier(verifyPasses);
   applyPassManagerCLOptions(pm);
 
-  OwningModuleRef module;
   if (inputFormat == InputFIRFile) {
     firrtl::FIRParserOptions options;
     options.ignoreInfoLocators = ignoreFIRLocations;
@@ -154,8 +153,17 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     }
   }
 
-  if (failed(pm.run(module.get())))
+  return pm.run(module.get());
+}
+
+/// Process a single buffer of the input into a single output stream.
+static LogicalResult
+processBufferIntoSingleStream(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
+                              raw_ostream &os) {
+  OwningModuleRef module;
+  if (failed(processBuffer(std::move(ownedBuffer), module)))
     return failure();
+  assert(module);
 
   // Finally, emit the output.
   switch (outputFormat) {
@@ -208,7 +216,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  if (failed(processBuffer(std::move(input), output->os())))
+  if (failed(processBufferIntoSingleStream(std::move(input), output->os())))
     return 1;
 
   output->keep();
