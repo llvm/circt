@@ -97,7 +97,7 @@ static cl::opt<bool>
 /// Process a single buffer of the input.
 static LogicalResult
 processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
-              OwningModuleRef &module) {
+              std::function<LogicalResult(OwningModuleRef)> callback) {
   MLIRContext context;
 
   // Register our dialects.
@@ -116,6 +116,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   pm.enableVerifier(verifyPasses);
   applyPassManagerCLOptions(pm);
 
+  OwningModuleRef module;
   if (inputFormat == InputFIRFile) {
     firrtl::FIRParserOptions options;
     options.ignoreInfoLocators = ignoreFIRLocations;
@@ -153,29 +154,31 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     }
   }
 
-  return pm.run(module.get());
+  if (failed(pm.run(module.get())))
+    return failure();
+
+  return callback(std::move(module));
 }
 
 /// Process a single buffer of the input into a single output stream.
 static LogicalResult
 processBufferIntoSingleStream(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
                               raw_ostream &os) {
-  OwningModuleRef module;
-  if (failed(processBuffer(std::move(ownedBuffer), module)))
-    return failure();
-  assert(module);
-
-  // Finally, emit the output.
-  switch (outputFormat) {
-  case OutputMLIR:
-    module->print(os);
-    return success();
-  case OutputDisabled:
-    return success();
-  case OutputVerilog:
-    return exportVerilog(module.get(), os);
-  }
-  llvm_unreachable("invalid output format");
+  return processBuffer(std::move(ownedBuffer), [&](OwningModuleRef module) {
+    // Finally, emit the output.
+    switch (outputFormat) {
+    case OutputMLIR:
+      module->print(os);
+      return success();
+    case OutputDisabled:
+      return success();
+    case OutputVerilog:
+      return exportVerilog(module.get(), os);
+    case OutputSplitVerilog:
+      llvm_unreachable("multi-file format must be handled elsewhere");
+    }
+    llvm_unreachable("unknown output format");
+  });
 };
 
 int main(int argc, char **argv) {
