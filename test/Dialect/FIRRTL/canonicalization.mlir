@@ -443,5 +443,13 @@ firrtl.module @reg_cst_prop2(%clock: !firrtl.clock, %reset: !firrtl.uint<1>, %ou
   firrtl.connect %tmp_b, %tmp_a : !firrtl.uint<8>, !firrtl.uint<8>
 }
 
+// CHECK-LABEL: @pcon
+// CHECK-NEXT:   %0 = firrtl.bits %in 4 to 0 : (!firrtl.uint<9>) -> !firrtl.uint<5>
+// CHECK-NEXT:   firrtl.connect %out, %0 : !firrtl.flip<uint<5>>, !firrtl.uint<5>
+// CHECK-NEXT:  }
+firrtl.module @pcon(%in: !firrtl.uint<9>, %out: !firrtl.flip<uint<5>>) {
+  firrtl.partialconnect %out, %in : !firrtl.flip<uint<5>>, !firrtl.uint<9>
+}
+
 
 }
