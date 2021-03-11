@@ -25,7 +25,7 @@ def RTLModuleOp : RTLOp<"module",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports)>
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports)>
   ];
 
   let extraClassDeclaration = [{
@@ -100,7 +100,7 @@ def RTLModuleExternOp : RTLOp<"module.extern",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "StringAttr":$name,
+    OpBuilder<(ins "StringAttr":$name,
                       "ArrayRef<ModulePortInfo>":$ports,
                       CArg<"StringRef", "StringRef()">:$verilogName)>
   ];
@@ -198,7 +198,7 @@ def OutputOp : RTLOp<"output", [Terminator, HasParent<"RTLModuleOp">,
   let arguments = (ins Variadic<AnyType>:$operands);
 
   let builders = [
-    OpBuilderDAG<(ins), "build($_builder, $_state, llvm::None);">
+    OpBuilder<(ins), "build($_builder, $_state, llvm::None);">
   ];
 
   let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";

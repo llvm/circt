@@ -167,6 +167,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   case OutputVerilog:
     return exportVerilog(module.get(), os);
   }
+  llvm_unreachable("invalid output format");
 };
 
 int main(int argc, char **argv) {

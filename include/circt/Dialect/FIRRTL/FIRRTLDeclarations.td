@@ -176,7 +176,7 @@ def WireOp : FIRRTLOp<"wire", []> {
   let results = (outs FIRRTLType:$result);
 
   let builders = [
-    OpBuilderDAG<(ins "::mlir::Type":$elementType,
+    OpBuilder<(ins "::mlir::Type":$elementType,
                       CArg<"StringRef", "{}">:$name), [{
       return build($_builder, $_state, elementType,
                    $_builder.getStringAttr(name));

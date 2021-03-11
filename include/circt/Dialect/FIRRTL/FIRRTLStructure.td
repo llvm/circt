@@ -24,7 +24,7 @@ def CircuitOp : FIRRTLOp<"circuit",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "StringAttr":$name)>
+    OpBuilder<(ins "StringAttr":$name)>
   ];
 
   let extraClassDeclaration = [{
@@ -60,7 +60,7 @@ def FModuleOp : FIRRTLOp<"module",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports)>
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports)>
   ];
 
   let extraClassDeclaration = [{
@@ -125,7 +125,7 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "StringAttr":$name,
+    OpBuilder<(ins "StringAttr":$name,
                       "ArrayRef<ModulePortInfo>":$ports,
                       CArg<"StringRef", "StringRef()">:$defnamAttr)>
   ];

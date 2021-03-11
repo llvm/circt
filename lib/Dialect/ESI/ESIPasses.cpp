@@ -519,7 +519,7 @@ void ESIPortsPass::updateInstance(RTLModuleExternOp mod, InstanceOp inst) {
 
   // Create the new instance!
   InstanceOp newInst = instBuilder.create<InstanceOp>(
-      newResultTypes, newOperands, inst.getAttrs());
+      newResultTypes, newOperands, inst->getAttrs());
   // Go through the old list of non-ESI result values, and replace them with the
   // new non-ESI results.
   for (size_t resNum = 0, numRes = newResults.size(); resNum < numRes;

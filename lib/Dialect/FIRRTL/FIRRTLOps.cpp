@@ -69,7 +69,7 @@ static void print(OpAsmPrinter &p, CircuitOp op) {
   p << op.getOperationName() << " ";
   p.printAttribute(op.nameAttr());
 
-  p.printOptionalAttrDictWithKeyword(op.getAttrs(), {"name"});
+  p.printOptionalAttrDictWithKeyword(op->getAttrs(), {"name"});
 
   p.printRegion(op.body(),
                 /*printEntryBlockArgs=*/false,
