@@ -461,6 +461,7 @@ module attributes {firrtl.mainModule = "Simple"} {
  //   count <= mux(reset, UInt<2>("h0"), _GEN_0)
 
   // CHECK-LABEL: rtl.module @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
+
   rtl.module @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
     // CHECK-NEXT: %c0_i2 = rtl.constant 0 : i2
     %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
@@ -614,11 +615,13 @@ module attributes {firrtl.mainModule = "Simple"} {
 
     // COM: Read port.
     // COM: --------------------------------------------------------------------
-    // CHECK-DAG: %_M_read_addr = sv.wire : !rtl.inout<i4>
-    // CHECK-DAG: %_M_read_en = sv.wire : !rtl.inout<i1>
-    // CHECK-DAG: %_M_read_clk = sv.wire : !rtl.inout<i1>
-    // CHECK-DAG: %_M_read_data = sv.wire : !rtl.inout<i42>
-    // CHECK:      %[[addr:.+]] = sv.read_inout %_M_read_addr
+    // CHECK-NEXT: %_M_read_addr = sv.wire : !rtl.inout<i4>
+    // CHECK-NEXT: %_M_read_en = sv.wire : !rtl.inout<i1>
+    // CHECK-NEXT: %_M_read_clk = sv.wire : !rtl.inout<i1>
+    // CHECK-NEXT: %_M_read_data = sv.wire : !rtl.inout<i42>
+    // CHECK-NEXT: %[[clk:.+]] = sv.read_inout %_M_read_clk
+    // CHECK-NEXT: %[[en:.+]] = sv.read_inout %_M_read_en
+    // CHECK-NEXT: %[[addr:.+]] = sv.read_inout %_M_read_addr
     // CHECK-NEXT: %[[data_inout:.+]] = sv.array_index_inout %_M[%[[addr]]]
     // CHECK-NEXT: %[[data:.+]] = sv.read_inout %[[data_inout]]
     // CHECK-NEXT: sv.ifdef "RANDOMIZE_GARBAGE_ASSIGN"  {
@@ -633,22 +636,22 @@ module attributes {firrtl.mainModule = "Simple"} {
 
     // COM: Write port.
     // COM: --------------------------------------------------------------------
-    // CHECK-DAG: %_M_write_addr = sv.wire : !rtl.inout<i4>
-    // CHECK-DAG: %_M_write_en = sv.wire : !rtl.inout<i1>
-    // CHECK-DAG: %_M_write_clk = sv.wire : !rtl.inout<i1>
-    // CHECK-DAG: %_M_write_data = sv.wire : !rtl.inout<i42>
-    // CHECK-DAG: %_M_write_mask = sv.wire : !rtl.inout<i1>
+    // CHECK-NEXT: %_M_write_addr = sv.wire : !rtl.inout<i4>
+    // CHECK-NEXT: %_M_write_en = sv.wire : !rtl.inout<i1>
+    // CHECK-NEXT: %_M_write_clk = sv.wire : !rtl.inout<i1>
+    // CHECK-NEXT: %_M_write_data = sv.wire : !rtl.inout<i42>
+    // CHECK-NEXT: %_M_write_mask = sv.wire : !rtl.inout<i1>
 
-    // CHECK:      %[[clk:.+]] = sv.read_inout %_M_write_clk
-    // CHECK:      sv.alwaysff(posedge %[[clk]]) {
-    // CHECK-DAG:    %[[en:.+]] = sv.read_inout %_M_write_en : !rtl.inout<i1>
-    // CHECK-DAG:    %[[mask:.+]] = sv.read_inout %_M_write_mask : !rtl.inout<i1>
-    // CHECK:        %[[cond:.+]] = comb.and %[[en]], %[[mask]] : i1
+    // CHECK-NEXT: %[[clk:.+]] = sv.read_inout %_M_write_clk
+    // CHECK-NEXT: %[[en:.+]] = sv.read_inout %_M_write_en
+    // CHECK-NEXT: %[[addr:.+]] = sv.read_inout %_M_write_addr
+    // CHECK-NEXT: %[[mask:.+]] = sv.read_inout %_M_write_mask
+    // CHECK-NEXT: %[[data:.+]] = sv.read_inout %_M_write_data
+    // CHECK-NEXT: %[[cond:.+]] = comb.and %[[en]], %[[mask]]
+    // CHECK-NEXT: %[[mem:.+]] = sv.array_index_inout %_M[%[[addr]]] : !rtl.inout<uarray<12xi42>>, i4
+    // CHECK-NEXT: sv.alwaysff(posedge %[[clk]]) {
     // CHECK-NEXT:   sv.if %[[cond]]  {
-    // CHECK:          %[[addr:.+]] = sv.read_inout %_M_write_addr : !rtl.inout<i4>
-    // CHECK-DAG:      %[[mem:.+]] = sv.array_index_inout %_M[%[[addr]]] : !rtl.inout<uarray<12xi42>>, i4
-    // CHECK-DAG:      %[[data:.+]] = sv.read_inout %_M_write_data
-    // CHECK:          sv.passign %[[mem]], %[[data]] : i42
+    // CHECK-NEXT:     sv.passign %[[mem]], %[[data]] : i42
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
 
@@ -721,82 +724,84 @@ module attributes {firrtl.mainModule = "Simple"} {
     %16 = firrtl.stdIntCast %10 : (!firrtl.uint<8>) -> i8
     rtl.output %16 : i8
     // COM: --------------------------------------------------------------------
-    // CHECK-DAG: %memory = sv.reg  : !rtl.inout<uarray<16xi8>>
-    // CHECK-DAG: %memory_r_addr = sv.wire  : !rtl.inout<i4>
-    // CHECK-DAG: %memory_r_en = sv.wire  : !rtl.inout<i1>
-    // CHECK-DAG: %memory_r_clk = sv.wire  : !rtl.inout<i1>
-    // CHECK-DAG: %memory_r_data = sv.wire  : !rtl.inout<i8>
-    // CHECK: %[[clk:.+]] = sv.read_inout %memory_r_clk
+    // CHECK-NEXT: %memory = sv.reg  : !rtl.inout<uarray<16xi8>>
+    // CHECK-NEXT: %memory_r_addr = sv.wire  : !rtl.inout<i4>
+    // CHECK-NEXT: %memory_r_en = sv.wire  : !rtl.inout<i1>
+    // CHECK-NEXT: %memory_r_clk = sv.wire  : !rtl.inout<i1>
+    // CHECK-NEXT: %memory_r_data = sv.wire  : !rtl.inout<i8>
+    // CHECK-NEXT: %[[clk:.+]] = sv.read_inout %memory_r_clk
+    // CHECK-NEXT: %[[en:.+]] = sv.read_inout %memory_r_en : !rtl.inout<i1>
+    // CHECK-NEXT: %[[addr:.+]] = sv.read_inout %memory_r_addr : !rtl.inout<i4>
     // COM: --------------------------------------------------------------------
     // COM: Check that the read pipe is setup. This should delay the
     // COM: "en" and "addr" fields by two cycles.
     // COM: --------------------------------------------------------------------
-    // CHECK-DAG: %memory_r_en_pipe   = sv.reg : !rtl.inout<uarray<2xi1>>
-    // CHECK-DAG: %memory_r_addr_pipe = sv.reg : !rtl.inout<uarray<2xi4>>
-    // CHECK:     %[[zero:.+]] = rtl.constant false
-    // CHECK-DAG: %[[en_0:.+]] = sv.array_index_inout %memory_r_en_pipe[%[[zero]]]
-    // CHECK-DAG: %[[addr_0:.+]] = sv.array_index_inout %memory_r_addr_pipe[%[[zero]]]
-    // CHECK:     %[[one:.+]] = rtl.constant true
-    // CHECK-DAG: %[[en_1:.+]] = sv.array_index_inout %memory_r_en_pipe[%[[one]]]
-    // CHECK-DAG: %[[addr_1:.+]] = sv.array_index_inout %memory_r_addr_pipe[%[[one]]]
-    // CHECK:     sv.alwaysff(posedge %[[clk]]) {
-    // CHECK:       %[[en:.+]] = sv.read_inout %memory_r_en
-    // CHECK:       sv.passign %[[en_0]], %[[en]]
-    // CHECK:       sv.if %[[en]] {
-    // CHECK:         %[[addr:.+]] = sv.read_inout %memory_r_addr
-    // CHECK:         sv.passign %[[addr_0]], %[[addr]]
-    // CHECK:       }
-    // CHECK:       %[[en:.+]] = sv.read_inout %[[en_0]]
-    // CHECK:       sv.if %[[en]] {
-    // CHECK:         %[[addr:.+]] = sv.read_inout %[[addr_0]]
-    // CHECK:         sv.passign %[[addr_1]], %[[addr]]
-    // CHECK:       }
-    // CHECK:     }
-    // CHECK:     %[[addr:.+]] = sv.read_inout %[[addr_1]]
-    // CHECK:     %[[data_index:.+]] = sv.array_index_inout %memory[%[[addr]]]
-    // CHECK:     %[[data:.+]] = sv.read_inout %[[data_index]]
-    // CHECK:     sv.connect %memory_r_data, %[[data]]
+    // CHECK-NEXT: %memory_r_en_pipe   = sv.reg : !rtl.inout<uarray<2xi1>>
+    // CHECK-NEXT: %memory_r_addr_pipe = sv.reg : !rtl.inout<uarray<2xi4>>
+    // CHECK-NEXT: %[[zero:.+]] = rtl.constant false
+    // CHECK-NEXT: %[[en_0:.+]] = sv.array_index_inout %memory_r_en_pipe[%[[zero]]]
+    // CHECK-NEXT: %[[addr_0:.+]] = sv.array_index_inout %memory_r_addr_pipe[%[[zero]]]
+    // CHECK-NEXT: %[[rden_0:.+]] = sv.read_inout %[[en_0]]
+    // CHECK-NEXT: %[[rdaddr_0:.+]] = sv.read_inout %[[addr_0]]
+    // CHECK-NEXT: %[[one:.+]] = rtl.constant true
+    // CHECK-NEXT: %[[en_1:.+]] = sv.array_index_inout %memory_r_en_pipe[%[[one]]]
+    // CHECK-NEXT: %[[addr_1:.+]] = sv.array_index_inout %memory_r_addr_pipe[%[[one]]]
+    // CHECK-NEXT: %[[rden_1:.+]] = sv.read_inout %[[en_1]]
+    // CHECK-NEXT: %[[rdaddr_1:.+]] = sv.read_inout %[[addr_1]]
+    // CHECK-NEXT: sv.alwaysff(posedge %[[clk]]) {
+    // CHECK-NEXT:   sv.passign %[[en_0]], %[[en]]
+    // CHECK-NEXT:   sv.if %[[en]] {
+    // CHECK-NEXT:     sv.passign %[[addr_0]], %[[addr]]
+    // CHECK-NEXT:   }
+    // CHECK-NEXT:   sv.passign %[[en_1]], %[[rden_0]]
+    // CHECK-NEXT:   sv.if %[[rden_0]] {
+    // CHECK-NEXT:     sv.passign %[[addr_1]], %[[rdaddr_0]]
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+    // CHECK-NEXT: %[[data_index:.+]] = sv.array_index_inout %memory[%[[rdaddr_1]]]
+    // CHECK-NEXT: %[[data:.+]] = sv.read_inout %[[data_index]]
+    // CHECK-NEXT: sv.connect %memory_r_data, %[[data]]
     // COM: --------------------------------------------------------------------
-    // CHECK-DAG: %memory_w_addr = sv.wire  : !rtl.inout<i4>
-    // CHECK-DAG: %memory_w_en   = sv.wire  : !rtl.inout<i1>
-    // CHECK-DAG: %memory_w_clk  = sv.wire  : !rtl.inout<i1>
-    // CHECK-DAG: %memory_w_data = sv.wire  : !rtl.inout<i8>
-    // CHECK-DAG: %memory_w_mask = sv.wire  : !rtl.inout<i1>
-    // CHECK: %[[clk:.+]] = sv.read_inout %memory_w_clk
+    // CHECK-NEXT: %memory_w_addr = sv.wire  : !rtl.inout<i4>
+    // CHECK-NEXT: %memory_w_en   = sv.wire  : !rtl.inout<i1>
+    // CHECK-NEXT: %memory_w_clk  = sv.wire  : !rtl.inout<i1>
+    // CHECK-NEXT: %memory_w_data = sv.wire  : !rtl.inout<i8>
+    // CHECK-NEXT: %memory_w_mask = sv.wire  : !rtl.inout<i1>
+    // CHECK-NEXT: %[[clk:.+]] = sv.read_inout %memory_w_clk
+    // CHECK-NEXT: %[[en:.+]] = sv.read_inout %memory_w_en
+    // CHECK-NEXT: %[[addr:.+]] = sv.read_inout %memory_w_addr
+    // CHECK-NEXT: %[[mask:.+]] = sv.read_inout %memory_w_mask
+    // CHECK-NEXT: %[[data:.+]] = sv.read_inout %memory_w_data
     // COM: --------------------------------------------------------------------
     // COM: Check that the write pipe is setup. This should delay the
     // COM: "en", "addr", "mask", and "data" fields by one cycle.
     // COM: --------------------------------------------------------------------
-    // CHECK-DAG: %memory_w_addr_pipe = sv.reg : !rtl.inout<uarray<1xi4>>
-    // CHECK-DAG: %memory_w_en_pipe   = sv.reg : !rtl.inout<uarray<1xi1>>
-    // CHECK-DAG: %memory_w_data_pipe = sv.reg : !rtl.inout<uarray<1xi8>>
-    // CHECK-DAG: %memory_w_mask_pipe = sv.reg : !rtl.inout<uarray<1xi1>>
-    // CHECK:     %[[zero:.+]] = rtl.constant false
-    // CHECK-DAG: %[[addr_0:.+]] = sv.array_index_inout %memory_w_addr_pipe[%[[zero]]]
-    // CHECK-DAG: %[[en_0:.+]]   = sv.array_index_inout %memory_w_en_pipe[%[[zero]]]
-    // CHECK-DAG: %[[data_0:.+]] = sv.array_index_inout %memory_w_data_pipe[%[[zero]]]
-    // CHECK-DAG: %[[mask_0:.+]] = sv.array_index_inout %memory_w_mask_pipe[%[[zero]]]
-    // CHECK:     sv.alwaysff(posedge %[[clk]]) {
-    // CHECK:       %[[en:.+]] = sv.read_inout %memory_w_en
-    // CHECK:       sv.passign %[[en_0]], %[[en]]
-    // CHECK:       sv.if %[[en]] {
-    // CHECK:         %[[addr:.+]] = sv.read_inout %memory_w_addr
-    // CHECK:         sv.passign %[[addr_0]], %[[addr]]
-    // CHECK:         %[[mask:.+]] = sv.read_inout %memory_w_mask
-    // CHECK:         sv.passign %[[mask_0]], %[[mask]]
-    // CHECK:         %[[data:.+]] = sv.read_inout %memory_w_data
-    // CHECK:         sv.passign %[[data_0]], %[[data]]
-    // CHECK:       }
-    // CHECK:       %[[en:.+]] = sv.read_inout %[[en_0]]
-    // CHECK:       %[[mask:.+]] = sv.read_inout %[[mask_0]]
-    // CHECK:       %[[cond:.+]] = comb.and %[[en]], %[[mask]]
-    // CHECK:       sv.if %[[cond]] {
-    // CHECK:         %[[addr:.+]] = sv.read_inout %[[addr_0]]
-    // CHECK:         %[[memory_index:.+]] = sv.array_index_inout %memory[%[[addr]]]
-    // CHECK:         %[[data:.+]] = sv.read_inout %[[data_0]]
-    // CHECK:         sv.passign %[[memory_index]], %[[data]]
-    // CHECK:       }
-    // CHECK:     }
+    // CHECK-NEXT: %memory_w_en_pipe   = sv.reg : !rtl.inout<uarray<1xi1>>
+    // CHECK-NEXT: %memory_w_addr_pipe = sv.reg : !rtl.inout<uarray<1xi4>>
+    // CHECK-NEXT: %memory_w_mask_pipe = sv.reg : !rtl.inout<uarray<1xi1>>
+    // CHECK-NEXT: %memory_w_data_pipe = sv.reg : !rtl.inout<uarray<1xi8>>
+    // CHECK-NEXT: %[[zero_0:.+]] = rtl.constant false
+    // CHECK-NEXT: %[[en_0:.+]]   = sv.array_index_inout %memory_w_en_pipe[%[[zero_0]]]
+    // CHECK-NEXT: %[[addr_0:.+]] = sv.array_index_inout %memory_w_addr_pipe[%[[zero_0]]]
+    // CHECK-NEXT: %[[mask_0:.+]] = sv.array_index_inout %memory_w_mask_pipe[%[[zero_0]]]
+    // CHECK-NEXT: %[[data_0:.+]] = sv.array_index_inout %memory_w_data_pipe[%[[zero_0]]]
+    // CHECK-NEXT: %[[rden_0:.+]] = sv.read_inout %[[en_0]]
+    // CHECK-NEXT: %[[rdaddr_0:.+]] = sv.read_inout %[[addr_0]]
+    // CHECK-NEXT: %[[rdmask_0:.+]] = sv.read_inout %[[mask_0]]
+    // CHECK-NEXT: %[[rddata_0:.+]] = sv.read_inout %[[data_0]]
+    // CHECK-NEXT: sv.alwaysff(posedge %[[clk]]) {
+    // CHECK-NEXT:   sv.passign %[[en_0]], %[[en]]
+    // CHECK-NEXT:   sv.if %[[en]] {
+    // CHECK-NEXT:     sv.passign %[[addr_0]], %[[addr]]
+    // CHECK-NEXT:     sv.passign %[[mask_0]], %[[mask]]
+    // CHECK-NEXT:     sv.passign %[[data_0]], %[[data]]
+    // CHECK-NEXT:   }
+    // CHECK-NEXT:   sv.if %[[cond:.+]] {
+    // CHECK-NEXT:     sv.passign %[[memory_index:.+]], %[[rddata_0]]
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+    // CHECK-NEXT: %[[cond]] = comb.and %[[rden_0]], %[[rdmask_0]]
+    // CHECK-NEXT: %[[memory_index]] = sv.array_index_inout %memory[%[[rdaddr_0]]]
     // COM: --------------------------------------------------------------------
     // COM: Check that the pipeline registers are randomly initialized.
     // COM: --------------------------------------------------------------------

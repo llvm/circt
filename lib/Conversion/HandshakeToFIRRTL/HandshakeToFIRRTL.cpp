@@ -59,6 +59,7 @@ static FIRRTLType getFIRRTLType(Type type) {
         case IntegerType::Signless:
           return UIntType::get(context, width);
         }
+        llvm_unreachable("invalid IntegerType");
       })
       .Case<IndexType>([&](IndexType indexType) -> FIRRTLType {
         // Currently we consider index type as 64-bits unsigned integer.
@@ -630,6 +631,7 @@ bool StdExprBuilder::visitStdExpr(CmpIOp op) {
   case CmpIPredicate::uge:
     return buildBinaryLogic<GEQPrimOp>(), true;
   }
+  llvm_unreachable("invalid CmpIOp");
 }
 
 /// Please refer to simple_addi.mlir test case.

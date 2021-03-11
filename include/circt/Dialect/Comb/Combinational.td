@@ -52,7 +52,7 @@ class UTVariadicOp<string mnemonic, list<OpTrait> traits = []> :
   let assemblyFormat = "$inputs attr-dict `:` type($result)";
 
   let builders = [
-    OpBuilderDAG<(ins "Value":$lhs, "Value":$rhs), [{
+    OpBuilder<(ins "Value":$lhs, "Value":$rhs), [{
       return build($_builder, $_state, lhs.getType(),
                    ValueRange{lhs, rhs}, ArrayRef<NamedAttribute>{});
     }]>
@@ -135,7 +135,7 @@ def ICmpOp : CombOp<"icmp", [NoSideEffect, SameTypeOperands]> {
   let hasCanonicalizer = true;
 
   let builders = [
-    OpBuilderDAG<(ins "ICmpPredicate":$pred, "Value":$lhs, "Value":$rhs), [{
+    OpBuilder<(ins "ICmpPredicate":$pred, "Value":$lhs, "Value":$rhs), [{
       return build($_builder, $_state, $_builder.getI1Type(), pred, lhs, rhs);
     }]>
   ];
@@ -208,8 +208,8 @@ def ConcatOp : VariadicOp<"concat"> {
   let hasCanonicalizer = true;
 
   let builders = [
-    OpBuilderDAG<(ins "ValueRange":$inputs)>,
-    OpBuilderDAG<(ins "Value":$lhs, "Value":$rhs), [{
+    OpBuilder<(ins "ValueRange":$inputs)>,
+    OpBuilder<(ins "Value":$lhs, "Value":$rhs), [{
       return build($_builder, $_state, ValueRange{lhs, rhs});
     }]>
   ];
@@ -236,7 +236,7 @@ def MuxOp : CombOp<"mux",
   let hasCanonicalizer = true;
 
   let builders = [
-    OpBuilderDAG<(ins "Value":$cond, "Value":$trueValue, "Value":$falseValue),
+    OpBuilder<(ins "Value":$cond, "Value":$trueValue, "Value":$falseValue),
     [{
       assert(trueValue.getType() == falseValue.getType() &&
              "mux requires matching true/false value types");

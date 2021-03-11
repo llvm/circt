@@ -187,7 +187,7 @@ BlockValues getBlockUses(handshake::FuncOp f) {
 
         Block *operandBlock;
 
-        if (op.getOperand(i).getKind() == Value::Kind::BlockArgument) {
+        if (op.getOperand(i).isa<BlockArgument>()) {
           // Operand is block argument, get its owner block
           operandBlock = op.getOperand(i).cast<BlockArgument>().getOwner();
         } else {
@@ -314,7 +314,7 @@ Operation *insertMerge(Block *block, Value val,
   unsigned numPredecessors = getBlockPredecessorCount(block);
 
   // Control-only path originates from StartOp
-  if (val.getKind() != Value::Kind::BlockArgument) {
+  if (!val.isa<BlockArgument>()) {
     if (isa<StartOp>(val.getDefiningOp())) {
       return rewriter.create<handshake::ControlMergeOp>(block->front().getLoc(),
                                                         val, numPredecessors);
@@ -362,7 +362,7 @@ BlockOps insertMergeOps(handshake::FuncOp f, BlockValues blockLiveIns,
 // Check if block contains operation which produces val
 bool blockHasSrcOp(Value val, Block *block) {
   // Arguments do not have an operation producer
-  if (val.getKind() == Value::Kind::BlockArgument)
+  if (val.isa<BlockArgument>())
     return false;
 
   auto *op = val.getDefiningOp();
@@ -1047,7 +1047,7 @@ Value getMemRefOperand(Value val) {
   assert(val != nullptr);
   // If memref is function argument, connect to memory through
   // its successor merge (all other arguments are connected like that)
-  if (val.getKind() == Value::Kind::BlockArgument) {
+  if (val.isa<BlockArgument>()) {
     assert(val.hasOneUse());
     for (auto &u : val.getUses()) {
       Operation *useOp = u.getOwner();
@@ -1422,7 +1422,7 @@ struct FuncOpLowering : public OpConversionPattern<mlir::FuncOp> {
 
     // Only retain those attributes that are not constructed by build.
     SmallVector<NamedAttribute, 4> attributes;
-    for (const auto &attr : funcOp.getAttrs()) {
+    for (const auto &attr : funcOp->getAttrs()) {
       if (attr.first == SymbolTable::getSymbolAttrName() ||
           attr.first == impl::getTypeAttrName())
         continue;

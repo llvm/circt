@@ -84,7 +84,9 @@ Type SVDialect::parseType(DialectAsmParser &parser) const {
   auto loc = parser.getCurrentLocation();
   if (parser.parseKeyword(&mnemonic))
     return Type();
-  if (auto type = generatedTypeParser(getContext(), parser, mnemonic))
+  Type type;
+  auto parseResult = generatedTypeParser(getContext(), parser, mnemonic, type);
+  if (parseResult.hasValue())
     return type;
   parser.emitError(loc, "Failed to parse type sv.") << mnemonic << "\n";
   return Type();

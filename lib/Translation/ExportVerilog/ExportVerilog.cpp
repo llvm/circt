@@ -1319,6 +1319,18 @@ static bool isOkToBitSelectFrom(Value v) {
   return true;
 }
 
+/// Return true for operations that are always inlined.
+static bool isExpressionAlwaysInline(Operation *op) {
+  if (isa<ConstantOp>(op) || isa<ArrayIndexInOutOp>(op))
+    return true;
+
+  // An SV interface modport is a symbolic name that is always inlined.
+  if (isa<GetModportOp>(op) || isa<ReadInterfaceSignalOp>(op))
+    return true;
+
+  return false;
+}
+
 /// Return true if we are unable to ever inline the specified operation.  This
 /// happens because not all Verilog expressions are composable, notably you
 /// can only use bit selects like x[4:6] on simple expressions, you cannot use
@@ -1340,9 +1352,10 @@ static bool isExpressionUnableToInline(Operation *op) {
   // Scan the users of the operation to see if any of them need this to be
   // emitted out-of-line.
   for (auto user : op->getUsers()) {
-    // If the user is in a different block, then we emit this as an
-    // out-of-line declaration into its block and the user can refer to it.
-    if (user->getBlock() != opBlock)
+    // If the user is in a different block and the op shouldn't be inlined, then
+    // we emit this as an out-of-line declaration into its block and the user
+    // can refer to it.
+    if (user->getBlock() != opBlock && !isExpressionAlwaysInline(op))
       return true;
 
     // Verilog bit selection is required by the standard to be:
@@ -1369,18 +1382,6 @@ static bool isExpressionUnableToInline(Operation *op) {
     if (isa<AlwaysOp>(user) || isa<AlwaysFFOp>(user))
       return true;
   }
-  return false;
-}
-
-/// Return true for operations that are always inlined.
-static bool isExpressionAlwaysInline(Operation *op) {
-  if (isa<ConstantOp>(op) || isa<ArrayIndexInOutOp>(op))
-    return true;
-
-  // An SV interface modport is a symbolic name that is always inlined.
-  if (isa<GetModportOp>(op) || isa<ReadInterfaceSignalOp>(op))
-    return true;
-
   return false;
 }
 
