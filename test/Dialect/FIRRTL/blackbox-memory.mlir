@@ -51,13 +51,13 @@ firrtl.circuit "Read" {
 // INLINE-NEXT:     %ReadMemory_R0_addr, %ReadMemory_R0_en, %ReadMemory_R0_clk, %ReadMemory_R0_data = firrtl.instance @ReadMemory_ext {name = "ReadMemory", portNames = ["R0_addr", "R0_en", "R0_clk", "R0_data"]} : !firrtl.flip<uint<4>>, !firrtl.flip<uint<1>>, !firrtl.flip<clock>, !firrtl.sint<8>
 // INLINE-NEXT:     %0 = firrtl.wire  {name = ""} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<8>>
 // INLINE-NEXT:     %1 = firrtl.subfield %0("addr") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<8>>) -> !firrtl.flip<uint<4>>
-// INLINE-NEXT:     firrtl.connect %1, %ReadMemory_R0_addr : !firrtl.flip<uint<4>>, !firrtl.flip<uint<4>>
+// INLINE-NEXT:     firrtl.connect %ReadMemory_R0_addr, %1 : !firrtl.flip<uint<4>>, !firrtl.flip<uint<4>>
 // INLINE-NEXT:     %2 = firrtl.subfield %0("en") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<8>>) -> !firrtl.flip<uint<1>>
-// INLINE-NEXT:     firrtl.connect %2, %ReadMemory_R0_en : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+// INLINE-NEXT:     firrtl.connect %ReadMemory_R0_en, %2 : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:     %3 = firrtl.subfield %0("clk") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<8>>) -> !firrtl.flip<clock>
-// INLINE-NEXT:     firrtl.connect %3, %ReadMemory_R0_clk : !firrtl.flip<clock>, !firrtl.flip<clock>
+// INLINE-NEXT:     firrtl.connect %ReadMemory_R0_clk, %3 : !firrtl.flip<clock>, !firrtl.flip<clock>
 // INLINE-NEXT:     %4 = firrtl.subfield %0("data") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<8>>) -> !firrtl.sint<8>
-// INLINE-NEXT:     firrtl.connect %ReadMemory_R0_data, %4 : !firrtl.sint<8>, !firrtl.sint<8>
+// INLINE-NEXT:     firrtl.connect %4, %ReadMemory_R0_data : !firrtl.sint<8>, !firrtl.sint<8>
 // INLINE-NEXT:     %5 = firrtl.subfield %0("data") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<8>>) -> !firrtl.sint<8>
 // INLINE-NEXT:     %6 = firrtl.subfield %0("addr") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<8>>) -> !firrtl.flip<uint<4>>
 // INLINE-NEXT:     firrtl.connect %6, %c0_ui1 : !firrtl.flip<uint<4>>, !firrtl.uint<1>
@@ -99,15 +99,15 @@ firrtl.circuit "Write" {
 // INLINE-NEXT:     %WriteMemory_W0_addr, %WriteMemory_W0_en, %WriteMemory_W0_clk, %WriteMemory_W0_data, %WriteMemory_W0_mask = firrtl.instance @WriteMemory_ext {name = "WriteMemory", portNames = ["W0_addr", "W0_en", "W0_clk", "W0_data", "W0_mask"]} : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>, !firrtl.flip<clock>, !firrtl.flip<sint<8>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:     %0 = firrtl.wire  {name = ""} : !firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>
 // INLINE-NEXT:     %1 = firrtl.subfield %0("addr") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
-// INLINE-NEXT:     firrtl.connect %1, %WriteMemory_W0_addr : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+// INLINE-NEXT:     firrtl.connect %WriteMemory_W0_addr, %1 : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:     %2 = firrtl.subfield %0("en") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
-// INLINE-NEXT:     firrtl.connect %2, %WriteMemory_W0_en : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+// INLINE-NEXT:     firrtl.connect %WriteMemory_W0_en, %2 : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:     %3 = firrtl.subfield %0("clk") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>) -> !firrtl.flip<clock>
-// INLINE-NEXT:     firrtl.connect %3, %WriteMemory_W0_clk : !firrtl.flip<clock>, !firrtl.flip<clock>
+// INLINE-NEXT:     firrtl.connect %WriteMemory_W0_clk, %3 : !firrtl.flip<clock>, !firrtl.flip<clock>
 // INLINE-NEXT:     %4 = firrtl.subfield %0("data") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>) -> !firrtl.flip<sint<8>>
-// INLINE-NEXT:     firrtl.connect %4, %WriteMemory_W0_data : !firrtl.flip<sint<8>>, !firrtl.flip<sint<8>>
+// INLINE-NEXT:     firrtl.connect %WriteMemory_W0_data, %4 : !firrtl.flip<sint<8>>, !firrtl.flip<sint<8>>
 // INLINE-NEXT:     %5 = firrtl.subfield %0("mask") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
-// INLINE-NEXT:     firrtl.connect %5, %WriteMemory_W0_mask : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+// INLINE-NEXT:     firrtl.connect %WriteMemory_W0_mask, %5 : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:   }
 // INLINE-NEXT: }
 
@@ -233,24 +233,24 @@ firrtl.circuit "MemSimple" {
 // INLINE-NEXT:     %_M_R0_addr, %_M_R0_en, %_M_R0_clk, %_M_R0_data, %_M_W0_addr, %_M_W0_en, %_M_W0_clk, %_M_W0_data, %_M_W0_mask = firrtl.instance @_M_ext {name = "_M", portNames = ["R0_addr", "R0_en", "R0_clk", "R0_data", "W0_addr", "W0_en", "W0_clk", "W0_data", "W0_mask"]} : !firrtl.flip<uint<4>>, !firrtl.flip<uint<1>>, !firrtl.flip<clock>, !firrtl.sint<42>, !firrtl.flip<uint<4>>, !firrtl.flip<uint<1>>, !firrtl.flip<clock>, !firrtl.flip<sint<42>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:     %0 = firrtl.wire  {name = ""} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>
 // INLINE-NEXT:     %1 = firrtl.subfield %0("addr") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<uint<4>>
-// INLINE-NEXT:     firrtl.connect %1, %_M_R0_addr : !firrtl.flip<uint<4>>, !firrtl.flip<uint<4>>
+// INLINE-NEXT:     firrtl.connect %_M_R0_addr, %1 : !firrtl.flip<uint<4>>, !firrtl.flip<uint<4>>
 // INLINE-NEXT:     %2 = firrtl.subfield %0("en") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<uint<1>>
-// INLINE-NEXT:     firrtl.connect %2, %_M_R0_en : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+// INLINE-NEXT:     firrtl.connect %_M_R0_en, %2 : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:     %3 = firrtl.subfield %0("clk") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<clock>
-// INLINE-NEXT:     firrtl.connect %3, %_M_R0_clk : !firrtl.flip<clock>, !firrtl.flip<clock>
+// INLINE-NEXT:     firrtl.connect %_M_R0_clk, %3 : !firrtl.flip<clock>, !firrtl.flip<clock>
 // INLINE-NEXT:     %4 = firrtl.subfield %0("data") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.sint<42>
-// INLINE-NEXT:     firrtl.connect %_M_R0_data, %4 : !firrtl.sint<42>, !firrtl.sint<42>
+// INLINE-NEXT:     firrtl.connect %4, %_M_R0_data : !firrtl.sint<42>, !firrtl.sint<42>
 // INLINE-NEXT:     %5 = firrtl.wire  {name = ""} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>
 // INLINE-NEXT:     %6 = firrtl.subfield %5("addr") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<uint<4>>
-// INLINE-NEXT:     firrtl.connect %6, %_M_W0_addr : !firrtl.flip<uint<4>>, !firrtl.flip<uint<4>>
+// INLINE-NEXT:     firrtl.connect %_M_W0_addr, %6 : !firrtl.flip<uint<4>>, !firrtl.flip<uint<4>>
 // INLINE-NEXT:     %7 = firrtl.subfield %5("en") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
-// INLINE-NEXT:     firrtl.connect %7, %_M_W0_en : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+// INLINE-NEXT:     firrtl.connect %_M_W0_en, %7 : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:     %8 = firrtl.subfield %5("clk") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<clock>
-// INLINE-NEXT:     firrtl.connect %8, %_M_W0_clk : !firrtl.flip<clock>, !firrtl.flip<clock>
+// INLINE-NEXT:     firrtl.connect %_M_W0_clk, %8 : !firrtl.flip<clock>, !firrtl.flip<clock>
 // INLINE-NEXT:     %9 = firrtl.subfield %5("data") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<sint<42>>
-// INLINE-NEXT:     firrtl.connect %9, %_M_W0_data : !firrtl.flip<sint<42>>, !firrtl.flip<sint<42>>
+// INLINE-NEXT:     firrtl.connect %_M_W0_data, %9 : !firrtl.flip<sint<42>>, !firrtl.flip<sint<42>>
 // INLINE-NEXT:     %10 = firrtl.subfield %5("mask") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
-// INLINE-NEXT:     firrtl.connect %10, %_M_W0_mask : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+// INLINE-NEXT:     firrtl.connect %_M_W0_mask, %10 : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:     %11 = firrtl.subfield %0("data") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.sint<42>
 // INLINE-NEXT:     firrtl.connect %result, %11 : !firrtl.flip<sint<42>>, !firrtl.sint<42>
 // INLINE-NEXT:     %12 = firrtl.subfield %0("addr") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<uint<4>>
@@ -328,30 +328,29 @@ firrtl.circuit "NameCollision" {
 // INLINE-NEXT:     %NameCollisionMemory_R0_addr, %NameCollisionMemory_R0_en, %NameCollisionMemory_R0_clk, %NameCollisionMemory_R0_data = firrtl.instance @NameCollisionMemory_ext_0 {name = "NameCollisionMemory", portNames = ["R0_addr", "R0_en", "R0_clk", "R0_data"]} : !firrtl.flip<uint<4>>, !firrtl.flip<uint<1>>, !firrtl.flip<clock>, !firrtl.sint<8>
 // INLINE-NEXT:     %0 = firrtl.wire  {name = ""} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<8>>
 // INLINE-NEXT:     %1 = firrtl.subfield %0("addr") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<8>>) -> !firrtl.flip<uint<4>>
-// INLINE-NEXT:     firrtl.connect %1, %NameCollisionMemory_R0_addr : !firrtl.flip<uint<4>>, !firrtl.flip<uint<4>>
+// INLINE-NEXT:     firrtl.connect %NameCollisionMemory_R0_addr, %1 : !firrtl.flip<uint<4>>, !firrtl.flip<uint<4>>
 // INLINE-NEXT:     %2 = firrtl.subfield %0("en") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<8>>) -> !firrtl.flip<uint<1>>
-// INLINE-NEXT:     firrtl.connect %2, %NameCollisionMemory_R0_en : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+// INLINE-NEXT:     firrtl.connect %NameCollisionMemory_R0_en, %2 : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:     %3 = firrtl.subfield %0("clk") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<8>>) -> !firrtl.flip<clock>
-// INLINE-NEXT:     firrtl.connect %3, %NameCollisionMemory_R0_clk : !firrtl.flip<clock>, !firrtl.flip<clock>
+// INLINE-NEXT:     firrtl.connect %NameCollisionMemory_R0_clk, %3 : !firrtl.flip<clock>, !firrtl.flip<clock>
 // INLINE-NEXT:     %4 = firrtl.subfield %0("data") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<8>>) -> !firrtl.sint<8>
-// INLINE-NEXT:     firrtl.connect %NameCollisionMemory_R0_data, %4 : !firrtl.sint<8>, !firrtl.sint<8>
+// INLINE-NEXT:     firrtl.connect %4, %NameCollisionMemory_R0_data : !firrtl.sint<8>, !firrtl.sint<8>
 // INLINE-NEXT:   }
 // INLINE-NEXT:   firrtl.module @NameCollision() {
 // INLINE-NEXT:     %NameCollisionMemory_W0_addr, %NameCollisionMemory_W0_en, %NameCollisionMemory_W0_clk, %NameCollisionMemory_W0_data, %NameCollisionMemory_W0_mask = firrtl.instance @NameCollisionMemory_ext_1 {name = "NameCollisionMemory", portNames = ["W0_addr", "W0_en", "W0_clk", "W0_data", "W0_mask"]} : !firrtl.flip<uint<4>>, !firrtl.flip<uint<1>>, !firrtl.flip<clock>, !firrtl.flip<sint<8>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:     %0 = firrtl.wire  {name = ""} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>
 // INLINE-NEXT:     %1 = firrtl.subfield %0("addr") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>) -> !firrtl.flip<uint<4>>
-// INLINE-NEXT:     firrtl.connect %1, %NameCollisionMemory_W0_addr : !firrtl.flip<uint<4>>, !firrtl.flip<uint<4>>
+// INLINE-NEXT:     firrtl.connect %NameCollisionMemory_W0_addr, %1 : !firrtl.flip<uint<4>>, !firrtl.flip<uint<4>>
 // INLINE-NEXT:     %2 = firrtl.subfield %0("en") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
-// INLINE-NEXT:     firrtl.connect %2, %NameCollisionMemory_W0_en : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+// INLINE-NEXT:     firrtl.connect %NameCollisionMemory_W0_en, %2 : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:     %3 = firrtl.subfield %0("clk") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>) -> !firrtl.flip<clock>
-// INLINE-NEXT:     firrtl.connect %3, %NameCollisionMemory_W0_clk : !firrtl.flip<clock>, !firrtl.flip<clock>
+// INLINE-NEXT:     firrtl.connect %NameCollisionMemory_W0_clk, %3 : !firrtl.flip<clock>, !firrtl.flip<clock>
 // INLINE-NEXT:     %4 = firrtl.subfield %0("data") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>) -> !firrtl.flip<sint<8>>
-// INLINE-NEXT:     firrtl.connect %4, %NameCollisionMemory_W0_data : !firrtl.flip<sint<8>>, !firrtl.flip<sint<8>>
+// INLINE-NEXT:     firrtl.connect %NameCollisionMemory_W0_data, %4 : !firrtl.flip<sint<8>>, !firrtl.flip<sint<8>>
 // INLINE-NEXT:     %5 = firrtl.subfield %0("mask") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
-// INLINE-NEXT:     firrtl.connect %5, %NameCollisionMemory_W0_mask : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+// INLINE-NEXT:     firrtl.connect %NameCollisionMemory_W0_mask, %5 : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:   }
 // INLINE-NEXT: }
-
 
 firrtl.circuit "Duplicate" {
   firrtl.module @Duplicate() {
@@ -408,68 +407,68 @@ firrtl.circuit "Duplicate" {
 // INLINE-NEXT:     %ReadMemory_R0_addr, %ReadMemory_R0_en, %ReadMemory_R0_clk, %ReadMemory_R0_data = firrtl.instance @ReadMemory_ext {name = "ReadMemory", portNames = ["R0_addr", "R0_en", "R0_clk", "R0_data"]} : !firrtl.flip<uint<4>>, !firrtl.flip<uint<1>>, !firrtl.flip<clock>, !firrtl.sint<8>
 // INLINE-NEXT:     %0 = firrtl.wire  {name = ""} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<8>>
 // INLINE-NEXT:     %1 = firrtl.subfield %0("addr") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<8>>) -> !firrtl.flip<uint<4>>
-// INLINE-NEXT:     firrtl.connect %1, %ReadMemory_R0_addr : !firrtl.flip<uint<4>>, !firrtl.flip<uint<4>>
+// INLINE-NEXT:     firrtl.connect %ReadMemory_R0_addr, %1 : !firrtl.flip<uint<4>>, !firrtl.flip<uint<4>>
 // INLINE-NEXT:     %2 = firrtl.subfield %0("en") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<8>>) -> !firrtl.flip<uint<1>>
-// INLINE-NEXT:     firrtl.connect %2, %ReadMemory_R0_en : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+// INLINE-NEXT:     firrtl.connect %ReadMemory_R0_en, %2 : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:     %3 = firrtl.subfield %0("clk") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<8>>) -> !firrtl.flip<clock>
-// INLINE-NEXT:     firrtl.connect %3, %ReadMemory_R0_clk : !firrtl.flip<clock>, !firrtl.flip<clock>
+// INLINE-NEXT:     firrtl.connect %ReadMemory_R0_clk, %3 : !firrtl.flip<clock>, !firrtl.flip<clock>
 // INLINE-NEXT:     %4 = firrtl.subfield %0("data") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<8>>) -> !firrtl.sint<8>
-// INLINE-NEXT:     firrtl.connect %ReadMemory_R0_data, %4 : !firrtl.sint<8>, !firrtl.sint<8>
+// INLINE-NEXT:     firrtl.connect %4, %ReadMemory_R0_data : !firrtl.sint<8>, !firrtl.sint<8>
 // INLINE-NEXT:     %WriteMemory_W0_addr, %WriteMemory_W0_en, %WriteMemory_W0_clk, %WriteMemory_W0_data, %WriteMemory_W0_mask = firrtl.instance @WriteMemory_ext {name = "WriteMemory", portNames = ["W0_addr", "W0_en", "W0_clk", "W0_data", "W0_mask"]} : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>, !firrtl.flip<clock>, !firrtl.flip<sint<8>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:     %5 = firrtl.wire  {name = ""} : !firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>
 // INLINE-NEXT:     %6 = firrtl.subfield %5("addr") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
-// INLINE-NEXT:     firrtl.connect %6, %WriteMemory_W0_addr : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+// INLINE-NEXT:     firrtl.connect %WriteMemory_W0_addr, %6 : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:     %7 = firrtl.subfield %5("en") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
-// INLINE-NEXT:     firrtl.connect %7, %WriteMemory_W0_en : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+// INLINE-NEXT:     firrtl.connect %WriteMemory_W0_en, %7 : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:     %8 = firrtl.subfield %5("clk") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>) -> !firrtl.flip<clock>
-// INLINE-NEXT:     firrtl.connect %8, %WriteMemory_W0_clk : !firrtl.flip<clock>, !firrtl.flip<clock>
+// INLINE-NEXT:     firrtl.connect %WriteMemory_W0_clk, %8 : !firrtl.flip<clock>, !firrtl.flip<clock>
 // INLINE-NEXT:     %9 = firrtl.subfield %5("data") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>) -> !firrtl.flip<sint<8>>
-// INLINE-NEXT:     firrtl.connect %9, %WriteMemory_W0_data : !firrtl.flip<sint<8>>, !firrtl.flip<sint<8>>
+// INLINE-NEXT:     firrtl.connect %WriteMemory_W0_data, %9 : !firrtl.flip<sint<8>>, !firrtl.flip<sint<8>>
 // INLINE-NEXT:     %10 = firrtl.subfield %5("mask") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
-// INLINE-NEXT:     firrtl.connect %10, %WriteMemory_W0_mask : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+// INLINE-NEXT:     firrtl.connect %WriteMemory_W0_mask, %10 : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:     %ReadMemory1_R0_addr, %ReadMemory1_R0_en, %ReadMemory1_R0_clk, %ReadMemory1_R0_data = firrtl.instance @ReadMemory_ext {name = "ReadMemory1", portNames = ["R0_addr", "R0_en", "R0_clk", "R0_data"]} : !firrtl.flip<uint<4>>, !firrtl.flip<uint<1>>, !firrtl.flip<clock>, !firrtl.sint<8>
 // INLINE-NEXT:     %11 = firrtl.wire  {name = ""} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<8>>
 // INLINE-NEXT:     %12 = firrtl.subfield %11("addr") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<8>>) -> !firrtl.flip<uint<4>>
-// INLINE-NEXT:     firrtl.connect %12, %ReadMemory1_R0_addr : !firrtl.flip<uint<4>>, !firrtl.flip<uint<4>>
+// INLINE-NEXT:     firrtl.connect %ReadMemory1_R0_addr, %12 : !firrtl.flip<uint<4>>, !firrtl.flip<uint<4>>
 // INLINE-NEXT:     %13 = firrtl.subfield %11("en") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<8>>) -> !firrtl.flip<uint<1>>
-// INLINE-NEXT:     firrtl.connect %13, %ReadMemory1_R0_en : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+// INLINE-NEXT:     firrtl.connect %ReadMemory1_R0_en, %13 : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:     %14 = firrtl.subfield %11("clk") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<8>>) -> !firrtl.flip<clock>
-// INLINE-NEXT:     firrtl.connect %14, %ReadMemory1_R0_clk : !firrtl.flip<clock>, !firrtl.flip<clock>
+// INLINE-NEXT:     firrtl.connect %ReadMemory1_R0_clk, %14 : !firrtl.flip<clock>, !firrtl.flip<clock>
 // INLINE-NEXT:     %15 = firrtl.subfield %11("data") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<8>>) -> !firrtl.sint<8>
-// INLINE-NEXT:     firrtl.connect %ReadMemory1_R0_data, %15 : !firrtl.sint<8>, !firrtl.sint<8>
+// INLINE-NEXT:     firrtl.connect %15, %ReadMemory1_R0_data : !firrtl.sint<8>, !firrtl.sint<8>
 // INLINE-NEXT:     %WriteMemory1_W0_addr, %WriteMemory1_W0_en, %WriteMemory1_W0_clk, %WriteMemory1_W0_data, %WriteMemory1_W0_mask = firrtl.instance @WriteMemory_ext {name = "WriteMemory1", portNames = ["W0_addr", "W0_en", "W0_clk", "W0_data", "W0_mask"]} : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>, !firrtl.flip<clock>, !firrtl.flip<sint<8>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:     %16 = firrtl.wire  {name = ""} : !firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>
 // INLINE-NEXT:     %17 = firrtl.subfield %16("addr") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
-// INLINE-NEXT:     firrtl.connect %17, %WriteMemory1_W0_addr : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+// INLINE-NEXT:     firrtl.connect %WriteMemory1_W0_addr, %17 : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:     %18 = firrtl.subfield %16("en") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
-// INLINE-NEXT:     firrtl.connect %18, %WriteMemory1_W0_en : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+// INLINE-NEXT:     firrtl.connect %WriteMemory1_W0_en, %18 : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:     %19 = firrtl.subfield %16("clk") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>) -> !firrtl.flip<clock>
-// INLINE-NEXT:     firrtl.connect %19, %WriteMemory1_W0_clk : !firrtl.flip<clock>, !firrtl.flip<clock>
+// INLINE-NEXT:     firrtl.connect %WriteMemory1_W0_clk, %19 : !firrtl.flip<clock>, !firrtl.flip<clock>
 // INLINE-NEXT:     %20 = firrtl.subfield %16("data") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>) -> !firrtl.flip<sint<8>>
-// INLINE-NEXT:     firrtl.connect %20, %WriteMemory1_W0_data : !firrtl.flip<sint<8>>, !firrtl.flip<sint<8>>
+// INLINE-NEXT:     firrtl.connect %WriteMemory1_W0_data, %20 : !firrtl.flip<sint<8>>, !firrtl.flip<sint<8>>
 // INLINE-NEXT:     %21 = firrtl.subfield %16("mask") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
-// INLINE-NEXT:     firrtl.connect %21, %WriteMemory1_W0_mask : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+// INLINE-NEXT:     firrtl.connect %WriteMemory1_W0_mask, %21 : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:     %ReadMemory2_R0_addr, %ReadMemory2_R0_en, %ReadMemory2_R0_clk, %ReadMemory2_R0_data = firrtl.instance @ReadMemory_ext {name = "ReadMemory2", portNames = ["R0_addr", "R0_en", "R0_clk", "R0_data"]} : !firrtl.flip<uint<4>>, !firrtl.flip<uint<1>>, !firrtl.flip<clock>, !firrtl.sint<8>
 // INLINE-NEXT:     %22 = firrtl.wire  {name = ""} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<8>>
 // INLINE-NEXT:     %23 = firrtl.subfield %22("addr") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<8>>) -> !firrtl.flip<uint<4>>
-// INLINE-NEXT:     firrtl.connect %23, %ReadMemory2_R0_addr : !firrtl.flip<uint<4>>, !firrtl.flip<uint<4>>
+// INLINE-NEXT:     firrtl.connect %ReadMemory2_R0_addr, %23 : !firrtl.flip<uint<4>>, !firrtl.flip<uint<4>>
 // INLINE-NEXT:     %24 = firrtl.subfield %22("en") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<8>>) -> !firrtl.flip<uint<1>>
-// INLINE-NEXT:     firrtl.connect %24, %ReadMemory2_R0_en : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+// INLINE-NEXT:     firrtl.connect %ReadMemory2_R0_en, %24 : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:     %25 = firrtl.subfield %22("clk") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<8>>) -> !firrtl.flip<clock>
-// INLINE-NEXT:     firrtl.connect %25, %ReadMemory2_R0_clk : !firrtl.flip<clock>, !firrtl.flip<clock>
+// INLINE-NEXT:     firrtl.connect %ReadMemory2_R0_clk, %25 : !firrtl.flip<clock>, !firrtl.flip<clock>
 // INLINE-NEXT:     %26 = firrtl.subfield %22("data") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<8>>) -> !firrtl.sint<8>
-// INLINE-NEXT:     firrtl.connect %ReadMemory2_R0_data, %26 : !firrtl.sint<8>, !firrtl.sint<8>
+// INLINE-NEXT:     firrtl.connect %26, %ReadMemory2_R0_data : !firrtl.sint<8>, !firrtl.sint<8>
 // INLINE-NEXT:     %WriteMemory2_W0_addr, %WriteMemory2_W0_en, %WriteMemory2_W0_clk, %WriteMemory2_W0_data, %WriteMemory2_W0_mask = firrtl.instance @WriteMemory_ext {name = "WriteMemory2", portNames = ["W0_addr", "W0_en", "W0_clk", "W0_data", "W0_mask"]} : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>, !firrtl.flip<clock>, !firrtl.flip<sint<8>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:     %27 = firrtl.wire  {name = ""} : !firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>
 // INLINE-NEXT:     %28 = firrtl.subfield %27("addr") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
-// INLINE-NEXT:     firrtl.connect %28, %WriteMemory2_W0_addr : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+// INLINE-NEXT:     firrtl.connect %WriteMemory2_W0_addr, %28 : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:     %29 = firrtl.subfield %27("en") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
-// INLINE-NEXT:     firrtl.connect %29, %WriteMemory2_W0_en : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+// INLINE-NEXT:     firrtl.connect %WriteMemory2_W0_en, %29 : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:     %30 = firrtl.subfield %27("clk") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>) -> !firrtl.flip<clock>
-// INLINE-NEXT:     firrtl.connect %30, %WriteMemory2_W0_clk : !firrtl.flip<clock>, !firrtl.flip<clock>
+// INLINE-NEXT:     firrtl.connect %WriteMemory2_W0_clk, %30 : !firrtl.flip<clock>, !firrtl.flip<clock>
 // INLINE-NEXT:     %31 = firrtl.subfield %27("data") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>) -> !firrtl.flip<sint<8>>
-// INLINE-NEXT:     firrtl.connect %31, %WriteMemory2_W0_data : !firrtl.flip<sint<8>>, !firrtl.flip<sint<8>>
+// INLINE-NEXT:     firrtl.connect %WriteMemory2_W0_data, %31 : !firrtl.flip<sint<8>>, !firrtl.flip<sint<8>>
 // INLINE-NEXT:     %32 = firrtl.subfield %27("mask") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
-// INLINE-NEXT:     firrtl.connect %32, %WriteMemory2_W0_mask : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+// INLINE-NEXT:     firrtl.connect %WriteMemory2_W0_mask, %32 : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:   }
 // INLINE-NEXT: }

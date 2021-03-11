@@ -320,10 +320,10 @@ createWiresForMemoryPorts(OpBuilder builder, Location loc, MemOp op,
           op.getLoc(), fieldType, wireOp, builder.getStringAttr(field.name));
       // Create the connection between module arguments and the external module,
       // making sure that sinks are on the LHS
-      if (fieldValue.getType().cast<FIRRTLType>().isPassive())
-        builder.create<ConnectOp>(op.getLoc(), *extResultIt, fieldValue);
-      else
+      if ((*extResultIt).getType().cast<FIRRTLType>().isPassive())
         builder.create<ConnectOp>(op.getLoc(), fieldValue, *extResultIt);
+      else
+        builder.create<ConnectOp>(op.getLoc(), *extResultIt, fieldValue);
       // advance the external module field iterator
       ++extResultIt;
     }
