@@ -1387,14 +1387,14 @@ static bool isExpressionAlwaysInline(Operation *op) {
 /// Return true if this expression should be emitted inline into any statement
 /// that uses it.
 static bool isExpressionEmittedInline(Operation *op) {
+  // These are always emitted inline even if multiply referenced.
+  if (isExpressionAlwaysInline(op))
+    return true;
+
   // If it isn't structurally possible to inline this expression, emit it out
   // of line.
   if (isExpressionUnableToInline(op))
     return false;
-
-  // These are always emitted inline even if multiply referenced.
-  if (isExpressionAlwaysInline(op))
-    return true;
 
   // Otherwise, if it has multiple uses, emit it out of line.
   return op->getResult(0).hasOneUse();
