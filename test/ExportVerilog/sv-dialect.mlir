@@ -152,13 +152,13 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
     // CHECK-NEXT: $fatal
     sv.fatal
   }
- 
+
   // CHECK-NEXT: initial begin
   sv.initial {
     // CHECK-NEXT: automatic logic [41:0] _T;
     // CHECK-NEXT: automatic logic        _T_0;
     // CHECK-EMPTY:
-    // CHECK-NEXT: assign _T = THING;
+    // CHECK-NEXT: _T = THING;
     %thing = sv.textual_value "THING" : i42
     // CHECK-NEXT: wire42 = _T;
     sv.bpassign %wire42, %thing : i42
@@ -166,7 +166,7 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
     sv.ifdef.procedural "FOO" {
       // CHECK-NEXT: `ifdef FOO
       %c1 = sv.textual_value "\"THING\"" : i1
-      // CHECK-NEXT: assign {{.+}} = "THING";
+      // CHECK-NEXT: {{.+}} = "THING";
       sv.fwrite "%d" (%c1) : i1
       // CHECK-NEXT: fwrite(32'h80000002, "%d", {{.+}});
       sv.fwrite "%d" (%c1) : i1
@@ -307,7 +307,7 @@ rtl.module @exprInlineTestIssue439(%clk: i1) {
   // CHECK: always @(posedge clk) begin
   sv.always posedge %clk {
     // CHECK: automatic logic [15:0] _T_0;
-    // CHECK: assign _T_0 = _T[15:0];
+    // CHECK: _T_0 = _T[15:0];
     %e = comb.extract %c from 0 : (i32) -> i16
     %f = comb.add %e, %e : i16
     sv.fwrite "%d"(%f) : i16
@@ -395,7 +395,7 @@ rtl.module @if_multi_line_expr1(%clock: i1, %reset: i1, %really_long_port: i11) 
   // CHECK-NEXT:   tmp6 <= 25'h0;
   // CHECK-NEXT: else begin
   // CHECK-NEXT:   automatic logic [24:0] _tmp;
-  // CHECK-NEXT:   assign _tmp = {{..}}14{really_long_port[10]}}, really_long_port};
+  // CHECK-NEXT:   _tmp = {{..}}14{really_long_port[10]}}, really_long_port};
   // CHECK-NEXT:   tmp6 <= _tmp & 25'h3039;
   // CHECK-NEXT: end
   sv.alwaysff(posedge %clock)  {
@@ -447,7 +447,7 @@ rtl.module @issue720(%clock: i1, %arg1: i1, %arg2: i1, %arg3: i1) {
       sv.fatal
     }
 
-  // CHECK:   assign _T = arg1 & arg2;
+  // CHECK:   _T = arg1 & arg2;
   // CHECK:   if (_T)
   // CHECK:     $fatal;
 
@@ -485,7 +485,7 @@ rtl.module @issue720ifdef(%clock: i1, %arg1: i1, %arg2: i1, %arg3: i1) {
     // CHECK:    `ifdef FUN_AND_GAMES
      sv.ifdef.procedural "FUN_AND_GAMES" {
       // This forces a common subexpression to be output out-of-line
-      // CHECK:      assign _T = arg1 & arg2;
+      // CHECK:      _T = arg1 & arg2;
       // CHECK:      if (_T)
       // CHECK:        $fatal;
       %610 = comb.and %arg1, %arg2 : i1
@@ -513,8 +513,8 @@ rtl.module @issue728(%clock: i1, %a: i1 {rtl.name = "asdfasdfasdfasdfafa"}, %b: 
   // CHECK:    automatic logic _tmp;
   // CHECK:    automatic logic _tmp_0;
   // CHECK:    $fwrite(32'h80000002, "force output");
-  // CHECK:    assign _tmp = asdfasdfasdfasdfafa & gasfdasafwjhijjafija & asdfasdfasdfasdfafa;
-  // CHECK:    assign _tmp_0 = gasfdasafwjhijjafija & asdfasdfasdfasdfafa & gasfdasafwjhijjafija;
+  // CHECK:    _tmp = asdfasdfasdfasdfafa & gasfdasafwjhijjafija & asdfasdfasdfasdfafa;
+  // CHECK:    _tmp_0 = gasfdasafwjhijjafija & asdfasdfasdfasdfafa & gasfdasafwjhijjafija;
   // CHECK:    if (_tmp & _tmp_0)
   // CHECK:      $fwrite(32'h80000002, "this cond is split");
   // CHECK:  end // always @(posedge)
@@ -535,8 +535,8 @@ rtl.module @issue728ifdef(%clock: i1, %a: i1 {rtl.name = "asdfasdfasdfasdfafa"},
   // CHECK:      automatic logic _tmp_0;
   // CHECK:    $fwrite(32'h80000002, "force output");
   // CHECK:    `ifdef FUN_AND_GAMES
-  // CHECK:      assign _tmp = asdfasdfasdfasdfafa & gasfdasafwjhijjafija & asdfasdfasdfasdfafa;
-  // CHECK:      assign _tmp_0 = gasfdasafwjhijjafija & asdfasdfasdfasdfafa & gasfdasafwjhijjafija;
+  // CHECK:      _tmp = asdfasdfasdfasdfafa & gasfdasafwjhijjafija & asdfasdfasdfasdfafa;
+  // CHECK:      _tmp_0 = gasfdasafwjhijjafija & asdfasdfasdfasdfafa & gasfdasafwjhijjafija;
   // CHECK:      if (_tmp & _tmp_0)
   // CHECK:        $fwrite(32'h80000002, "this cond is split");
   // CHECK:    `endif
