@@ -282,6 +282,7 @@ def CaseZOp : SVOp<"casez", [HasRegionTerminator, NoRegionArguments,
       case PatternOne: return '1';
       case PatternAny: return isVerilog ? '?' : 'x';
       }
+      llvm_unreachable("invalid casez PatternBit");
     }
 
     // This is provides convenient access to encode and decode a pattern.
