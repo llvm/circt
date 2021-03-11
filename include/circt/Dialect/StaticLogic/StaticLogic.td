@@ -43,7 +43,7 @@ def PipelineOp : Op<StaticLogic_Dialect, "pipeline", [NoSideEffect]> {
 
   let skipDefaultBuilders = 1;
 
-  let builders = [OpBuilderDAG<(ins "ValueRange":$operands, "ValueRange":$results), [{
+  let builders = [OpBuilder<(ins "ValueRange":$operands, "ValueRange":$results), [{
     SmallVector<Type, 4> argTypes;
     for (auto value : operands)
       argTypes.push_back(value.getType());

@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/Transforms/InliningUtils.h"
@@ -416,9 +417,10 @@ ArrayType ArrayType::get(unsigned length, Type elementType) {
   return Base::get(elementType.getContext(), length, elementType);
 }
 
-ArrayType ArrayType::getChecked(unsigned length, Type elementType,
-                                Location location) {
-  return Base::getChecked(location, length, elementType);
+ArrayType ArrayType::getChecked(function_ref<InFlightDiagnostic()> emitError,
+                                unsigned length, Type elementType) {
+  return Base::getChecked(emitError, elementType.getContext(), length,
+                          elementType);
 }
 
 LogicalResult ArrayType::verifyConstructionInvariants(Location loc,

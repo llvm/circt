@@ -35,10 +35,10 @@ def IfDefOp : SVOp<"ifdef", [HasRegionTerminator, NoRegionArguments,
   // implicitly installed.
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "StringRef":$cond,
+    OpBuilder<(ins "StringRef":$cond,
                       CArg<"std::function<void()>", "{}">:$thenCtor,
                       CArg<"std::function<void()>", "{}">:$elseCtor)>,
-    OpBuilderDAG<(ins "StringAttr":$cond,
+    OpBuilder<(ins "StringAttr":$cond,
                       CArg<"std::function<void()>", "{}">:$thenCtor,
                       CArg<"std::function<void()>", "{}">:$elseCtor)>
   ];
@@ -78,7 +78,7 @@ def IfDefProceduralOp
   // implicitly installed.
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "StringRef":$cond,
+    OpBuilder<(ins "StringRef":$cond,
                       CArg<"std::function<void()>", "{}">:$thenCtor,
                       CArg<"std::function<void()>", "{}">:$elseCtor)>
   ];
@@ -114,7 +114,7 @@ def IfOp : SVOp<"if", [HasRegionTerminator, NoRegionArguments,
   // implicitly installed.
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "Value":$cond,
+    OpBuilder<(ins "Value":$cond,
                       CArg<"std::function<void()>", "{}">:$thenCtor,
                       CArg<"std::function<void()>", "{}">:$elseCtor)>
   ];
@@ -163,7 +163,7 @@ def AlwaysOp : SVOp<"always", [HasRegionTerminator, NoRegionArguments,
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "ArrayRef<EventControl>":$event, "ArrayRef<Value>":$cond,
+    OpBuilder<(ins "ArrayRef<EventControl>":$event, "ArrayRef<Value>":$cond,
                       CArg<"std::function<void()>", "{}">:$bodyCtor)>
   ];
 
@@ -219,9 +219,9 @@ def AlwaysFFOp : SVOp<"alwaysff", [HasRegionTerminator, NoRegionArguments,
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "EventControl":$clockEdge, "Value":$clock,
+    OpBuilder<(ins "EventControl":$clockEdge, "Value":$clock,
                       CArg<"std::function<void()>", "{}">:$bodyCtor)>,
-    OpBuilderDAG<(ins "EventControl":$clockEdge, "Value":$clock, 
+    OpBuilder<(ins "EventControl":$clockEdge, "Value":$clock, 
                       "ResetType":$resetStyle,
                       "EventControl":$resetEdge, "Value":$reset,
                       CArg<"std::function<void()>", "{}">:$bodyCtor,
@@ -251,7 +251,7 @@ def InitialOp : SVOp<"initial", [HasRegionTerminator, NoRegionArguments,
   // implicitly installed.
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins CArg<"std::function<void()>", "{}">:$bodyCtor)>
+    OpBuilder<(ins CArg<"std::function<void()>", "{}">:$bodyCtor)>
   ];
 
   let extraClassDeclaration = [{
@@ -282,6 +282,7 @@ def CaseZOp : SVOp<"casez", [HasRegionTerminator, NoRegionArguments,
       case PatternOne: return '1';
       case PatternAny: return isVerilog ? '?' : 'x';
       }
+      llvm_unreachable("invalid casez PatternBit");
     }
 
     // This is provides convenient access to encode and decode a pattern.
@@ -419,7 +420,7 @@ def VerbatimOp : SVOp<"verbatim"> {
     "$string attr-dict (`(` $operands^ `)` `:` type($operands))?";
 
   let builders = [
-    OpBuilderDAG<(ins "StringRef":$string),
+    OpBuilder<(ins "StringRef":$string),
                  "build(odsBuilder, odsState, string, ValueRange{});">
   ];
 }
