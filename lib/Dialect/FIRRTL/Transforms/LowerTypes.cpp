@@ -682,9 +682,6 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   FIRRTLType indexType = index.getType().cast<FIRRTLType>();
   FVectorType inputType =
       input.getType().cast<FIRRTLType>().cast<FVectorType>();
-  llvm::dbgs() << "\n resultType::" << resultType
-               << " and index type:" << (1 << indexType.getBitWidthOrSentinel())
-               << " and vector type :" << inputType.getNumElements() << "\n";
   auto selectWidth = indexType.getBitWidthOrSentinel();
   SmallVector<Value, 8> vecVaclues;
   getAllBundleLowerings(input, vecVaclues);
@@ -692,7 +689,6 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   assert(vecVaclues.size() == inputType.getNumElements());
   Value elem0 = vecVaclues[0];
   size_t maxElems = (1 << indexType.getBitWidthOrSentinel());
-  ;
   // Make sure, we donot perform out of bounds access here ?
   if (maxElems < inputType.getNumElements())
     maxElems = inputType.getNumElements();
@@ -704,7 +700,6 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
             getIntAttr(APInt(selectWidth, indexVec), op.getContext())));
     elem0 = builder->create<MuxPrimOp>(op.getLoc(), resultType, isIndexEq,
                                        vecVaclues[indexVec], elem0);
-    elem0.dump();
   }
   op.replaceAllUsesWith(elem0);
   opsToRemove.push_back(op);
