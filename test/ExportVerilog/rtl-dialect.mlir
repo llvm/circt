@@ -595,3 +595,27 @@ rtl.module @inout(%inout: i1) -> (%b: i1) {
 rtl.module @reg(%inout: i1) -> (%b: i1) {
   rtl.output %inout : i1
 }   
+
+// https://github.com/llvm/circt/issues/750
+// Always get array indexes on the lhs
+// CHECK-LABEL: module ArrayLHS
+// CHECK-NEXT:    input clock);
+// CHECK-EMPTY:
+// CHECK-NEXT:   reg memory_r_en_pipe[0:0];
+// CHECK-EMPTY:
+// CHECK-NEXT:   always_ff @(posedge clock)
+// CHECK-NEXT:     memory_r_en_pipe[1'h0] <= 1'h0;
+// CHECK-NEXT:   initial
+// CHECK-NEXT:     memory_r_en_pipe[1'h0] = 1'h0;
+// CHECK-NEXT: endmodule
+rtl.module @ArrayLHS(%clock: i1) -> () {
+  %false = rtl.constant false
+  %memory_r_en_pipe = sv.reg  : !rtl.inout<uarray<1xi1>>
+  %3 = sv.array_index_inout %memory_r_en_pipe[%false] : !rtl.inout<uarray<1xi1>>, i1
+  sv.alwaysff(posedge %clock)  {
+    sv.passign %3, %false : i1
+  }
+  sv.initial  {
+    sv.bpassign %3, %false : i1
+  }
+}
