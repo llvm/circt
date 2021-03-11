@@ -88,7 +88,7 @@ def InterfaceSignalOp : SVOp<"interface.signal",
   let assemblyFormat = "attr-dict $sym_name `:` $type";
 
   let builders = [
-    OpBuilderDAG<(ins "::llvm::StringRef":$name, "::mlir::Type":$type)>
+    OpBuilder<(ins "::llvm::StringRef":$name, "::mlir::Type":$type)>
   ];
 }
 
@@ -136,7 +136,7 @@ def InterfaceModportOp : SVOp<"interface.modport",
   let assemblyFormat = "attr-dict $sym_name custom<ModportStructs>($ports)";
 
   let builders = [
-    OpBuilderDAG<(ins "::llvm::StringRef":$name,
+    OpBuilder<(ins "::llvm::StringRef":$name,
                       "ArrayRef<::llvm::StringRef>":$inputs,
                       "ArrayRef<::llvm::StringRef>":$outputs)>
   ];
@@ -217,7 +217,7 @@ def GetModportOp: SVOp<"modport.get", [NoSideEffect]> {
   let verifier = "return ::verifyGetModportOp(*this);";
 
   let builders = [
-    OpBuilderDAG<(ins "Value":$value, "::llvm::StringRef":$field)>
+    OpBuilder<(ins "Value":$value, "::llvm::StringRef":$field)>
   ];
 }
 
@@ -274,7 +274,7 @@ def ReadInterfaceSignalOp : SVOp<"interface.signal.read", [NoSideEffect]> {
   }];
 
   let builders = [
-    OpBuilderDAG<(ins "::mlir::Value":$iface, "::llvm::StringRef":$signalName)>
+    OpBuilder<(ins "::mlir::Value":$iface, "::llvm::StringRef":$signalName)>
   ];
 
   let verifier = "return ::verifySignalExists(iface(), signalNameAttr());";

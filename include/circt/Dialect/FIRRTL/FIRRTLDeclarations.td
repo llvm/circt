@@ -142,6 +142,8 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
 
   let assemblyFormat =
     "operands attr-dict `:` functional-type(operands, $result)";
+
+  let hasCanonicalizer = 1;
 }
 
 def RegResetOp : FIRRTLOp<"regreset", [/*MemAlloc*/]> {
@@ -174,7 +176,7 @@ def WireOp : FIRRTLOp<"wire", []> {
   let results = (outs FIRRTLType:$result);
 
   let builders = [
-    OpBuilderDAG<(ins "::mlir::Type":$elementType,
+    OpBuilder<(ins "::mlir::Type":$elementType,
                       CArg<"StringRef", "{}">:$name), [{
       return build($_builder, $_state, elementType,
                    $_builder.getStringAttr(name));

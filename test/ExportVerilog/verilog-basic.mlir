@@ -16,9 +16,11 @@ rtl.module @no_ports() {
 // CHECK-NEXT:    input         clock,
 // CHECK-NEXT:    output        out1,
 // CHECK-NEXT:    output [3:0]  out4, out4s,
-// CHECK-NEXT:    output [15:0] out16, out16s);
+// CHECK-NEXT:    output [15:0] out16, out16s,
+// CHECK-NEXT:    output [16:0] sext17);
 
-rtl.module @Expressions(%in4: i4, %clock: i1) -> (%out1: i1, %out4: i4, %out4s: i4, %out16: i16, %out16s: i16) {
+rtl.module @Expressions(%in4: i4, %clock: i1) ->
+  (%out1: i1, %out4: i4, %out4s: i4, %out16: i16, %out16s: i16, %sext17: i17) {
   %c1_i4 = rtl.constant 1 : i4
   %c2_i4 = rtl.constant 2 : i4
   %c3_i4 = rtl.constant 3 : i4
@@ -46,7 +48,7 @@ rtl.module @Expressions(%in4: i4, %clock: i1) -> (%out1: i1, %out4: i4, %out4s: 
   // CHECK: wire [1:0] _T_1 = in4[1:0];
   // CHECK: wire [1:0] _T_2 = in4[3:2];
   // CHECK: wire [8:0] _T_3 = {1'h0, in4, in4};
-  // CHECK: wire [4:0] _T_4 = 5'h0 - {{..}}1{in4[3]}}, in4};
+  // CHECK: wire [4:0] _T_4 = 5'h0 - {in4[3], in4};
 
   // CHECK: assign _T_5 = ~in4;
   %3 = comb.xor %in4, %c-1_i4 : i4
@@ -98,7 +100,9 @@ rtl.module @Expressions(%in4: i4, %clock: i1) -> (%out1: i1, %out4: i4, %out4s: 
   %34 = comb.merge %32, %33 : i16
 
   // CHECK: assign out4s = $signed(in4) >>> $signed(in4);
-  rtl.output %24, %28, %11, %31, %34 : i1, i4, i4, i16, i16
+  // CHECK: assign sext17 = {_T_7[15], _T_7};
+  %35 = comb.sext %34 : (i16) -> i17
+  rtl.output %24, %28, %11, %31, %34, %35 : i1, i4, i4, i16, i16, i17
 }
 
 // CHECK-LABEL: module Precedence(

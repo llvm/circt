@@ -39,9 +39,9 @@ def WireOp : SVOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>,
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "::mlir::Type":$elementType,
+    OpBuilder<(ins "::mlir::Type":$elementType,
                       CArg<"StringAttr", "StringAttr()">:$name)>,
-    OpBuilderDAG<(ins "::mlir::Type":$elementType, CArg<"StringRef">:$name), [{
+    OpBuilder<(ins "::mlir::Type":$elementType, CArg<"StringRef">:$name), [{
       return build($_builder, $_state, elementType,
                    $_builder.getStringAttr(name));
     }]>
@@ -69,7 +69,7 @@ def RegOp : SVOp<"reg", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "::mlir::Type":$elementType,
+    OpBuilder<(ins "::mlir::Type":$elementType,
                       CArg<"StringAttr", "StringAttr()">:$name)>
   ];
 
@@ -93,7 +93,7 @@ def ReadInOutOp
   let results = (outs RTLValueType:$result);
 
   let builders = [
-    OpBuilderDAG<(ins "Value":$input)>
+    OpBuilder<(ins "Value":$input)>
   ];
 
   let assemblyFormat = "$input attr-dict `:` type($input)";
@@ -119,7 +119,7 @@ def ArrayIndexInOutOp
   let results = (outs InOutType:$result);
 
   let builders = [
-    OpBuilderDAG<(ins "Value":$input, "Value":$index)>
+    OpBuilder<(ins "Value":$input, "Value":$index)>
   ];
 
   let assemblyFormat =

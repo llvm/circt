@@ -43,7 +43,7 @@ def ArrayCreateOp : RTLOp<"array_create", [NoSideEffect, SameTypeOperands]> {
   let parser = "return ::parse$cppClass(parser, result);";
   let builders = [
     // ArrayRef needs to contain at least one element.
-    OpBuilderDAG<(ins "ArrayRef<::mlir::Value>":$input)>
+    OpBuilder<(ins "ArrayRef<::mlir::Value>":$input)>
   ];
 }
 
@@ -71,7 +71,7 @@ def ArrayConcatOp : RTLOp<"array_concat", [NoSideEffect]> {
 
   let builders = [
     // ArrayRef needs to contain at least one element.
-    OpBuilderDAG<(ins "ArrayRef<::mlir::Value>":$inputs)>
+    OpBuilder<(ins "ArrayRef<::mlir::Value>":$inputs)>
   ];
 }
 
@@ -144,7 +144,7 @@ def ArrayGetOp : RTLOp<"array_get",
   }];
 
   let builders = [
-    OpBuilderDAG<(ins "Value":$input, "Value":$index)>
+    OpBuilder<(ins "Value":$input, "Value":$index)>
   ];
 }
 
@@ -172,7 +172,7 @@ def StructExtractOp : RTLOp<"struct_extract", [NoSideEffect]> {
   let printer = "return ::print(p, *this);";
 
   let builders = [
-    OpBuilderDAG<(ins "Value":$input, "StructType::FieldInfo":$field)>
+    OpBuilder<(ins "Value":$input, "StructType::FieldInfo":$field)>
   ];
 }
 
@@ -220,13 +220,13 @@ def ConstantOp
   let builders = [
     /// Build a ConstantOp from an APInt, infering the result type from the
     /// width of the APInt.
-    OpBuilderDAG<(ins "const APInt &":$value)>,
+    OpBuilder<(ins "const APInt &":$value)>,
 
     /// This builder allows construction of small signed integers like 0, 1, -1
     /// matching a specified MLIR IntegerType.  This shouldn't be used for
     /// general constant folding because it only works with values that can be
     /// expressed in an int64_t.  Use APInt's instead.
-    OpBuilderDAG<(ins "Type":$type, "int64_t":$value)>
+    OpBuilder<(ins "Type":$type, "int64_t":$value)>
   ];
   let extraClassDeclaration = [{
     APInt getValue() {

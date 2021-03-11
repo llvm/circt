@@ -1,3 +1,7 @@
+llvm_canonicalize_cmake_booleans(
+  CIRCT_BINDINGS_PYTHON_ENABLED
+  )
+
 set(CIRCT_INTEGRATION_TEST_DEPENDS
   FileCheck count not
   circt-opt
@@ -5,6 +9,11 @@ set(CIRCT_INTEGRATION_TEST_DEPENDS
   circt-rtl-sim
   esi-cosim-runner
   firtool)
+
+# If Python bindings are available to build then enable the tests.
+if(CIRCT_BINDINGS_PYTHON_ENABLED)
+  list(APPEND CIRCT_INTEGRATION_TEST_DEPENDS CIRCTBindingsPython)
+endif()
 
 # If ESI Cosim is available to build then enable its tests.
 if (TARGET EsiCosimDpiServer)

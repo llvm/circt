@@ -49,7 +49,7 @@ jobs:
     needs: build-llvm
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/circt/images/circt-integration-test:v4
+      image: ghcr.io/circt/images/circt-integration-test:v5
     strategy:
       matrix:
         build-assert: [ON, OFF]
@@ -125,7 +125,9 @@ jobs:
             -DCMAKE_C_COMPILER=$CC \
             -DCMAKE_CXX_COMPILER=$CXX \
             -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
+            -DPYTHON_EXECUTABLE=/usr/bin/python3
       - name: Build CIRCT
         run: |
           cd build

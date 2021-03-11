@@ -118,8 +118,8 @@ Location FIRLexer::translateLocation(llvm::SMLoc loc) {
   auto lineAndColumn = sourceMgr.getLineAndColumn(loc, mainFileID);
   auto *buffer = sourceMgr.getMemoryBuffer(mainFileID);
 
-  return FileLineColLoc::get(buffer->getBufferIdentifier(), lineAndColumn.first,
-                             lineAndColumn.second, context);
+  return FileLineColLoc::get(context, buffer->getBufferIdentifier(),
+                             lineAndColumn.first, lineAndColumn.second);
 }
 
 /// Emit an error message and return a FIRToken::error token.

@@ -591,7 +591,7 @@ static ParseResult parseCaseZOp(OpAsmParser &parser, OperationState &result) {
 
 static void printCaseZOp(OpAsmPrinter &p, CaseZOp op) {
   p << "sv.casez" << ' ' << op.cond() << " : " << op.cond().getType();
-  p.printOptionalAttrDict(op.getAttrs(), /*elidedAttrs=*/{"casePatterns"});
+  p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"casePatterns"});
 
   for (auto caseInfo : op.getCases()) {
     p.printNewline();

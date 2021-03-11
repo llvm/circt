@@ -15,7 +15,9 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/StorageUniquerSupport.h"
 #include "mlir/IR/Types.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -122,8 +124,9 @@ static ParseResult parseRTLElementType(Type &result, DialectAsmParser &p) {
     llvm::StringRef mnemonic;
     if (p.parseKeyword(&mnemonic))
       llvm_unreachable("should have an array or inout keyword here");
-    result = generatedTypeParser(p.getBuilder().getContext(), p, mnemonic);
-    return result ? success() : failure();
+    auto parseResult =
+        generatedTypeParser(p.getBuilder().getContext(), p, mnemonic, result);
+    return parseResult.hasValue() ? success() : failure();
   }
 
   return p.parseType(result);
@@ -204,7 +207,8 @@ Type ArrayType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
   }
 
   auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
-  if (failed(verifyConstructionInvariants(loc, inner, dims[0])))
+  if (failed(verify(mlir::detail::getDefaultDiagnosticEmitFn(loc), inner,
+                    dims[0])))
     return Type();
 
   return get(ctxt, inner, dims[0]);
@@ -216,11 +220,10 @@ void ArrayType::print(DialectAsmPrinter &p) const {
   p << '>';
 }
 
-LogicalResult ArrayType::verifyConstructionInvariants(Location loc,
-                                                      Type innerType,
-                                                      size_t size) {
+LogicalResult ArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
+                                Type innerType, size_t size) {
   if (hasRTLInOutType(innerType))
-    return emitError(loc, "rtl.array cannot contain InOut types");
+    return emitError() << "rtl.array cannot contain InOut types";
   return success();
 }
 
@@ -241,7 +244,8 @@ Type UnpackedArrayType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
   }
 
   auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
-  if (failed(verifyConstructionInvariants(loc, inner, dims[0])))
+  if (failed(verify(mlir::detail::getDefaultDiagnosticEmitFn(loc), inner,
+                    dims[0])))
     return Type();
 
   return get(ctxt, inner, dims[0]);
@@ -253,11 +257,11 @@ void UnpackedArrayType::print(DialectAsmPrinter &p) const {
   p << '>';
 }
 
-LogicalResult UnpackedArrayType::verifyConstructionInvariants(Location loc,
-                                                              Type innerType,
-                                                              size_t size) {
+LogicalResult
+UnpackedArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
+                          Type innerType, size_t size) {
   if (!isRTLValueType(innerType))
-    return emitError(loc, "invalid element for sv.uarray type");
+    return emitError() << "invalid element for sv.uarray type";
   return success();
 }
 
@@ -271,7 +275,7 @@ Type InOutType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
     return Type();
 
   auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
-  if (failed(verifyConstructionInvariants(loc, inner)))
+  if (failed(verify(mlir::detail::getDefaultDiagnosticEmitFn(loc), inner)))
     return Type();
 
   return get(ctxt, inner);
@@ -283,10 +287,10 @@ void InOutType::print(DialectAsmPrinter &p) const {
   p << '>';
 }
 
-LogicalResult InOutType::verifyConstructionInvariants(Location loc,
-                                                      Type innerType) {
+LogicalResult InOutType::verify(function_ref<InFlightDiagnostic()> emitError,
+                                Type innerType) {
   if (!isRTLValueType(innerType))
-    return emitError(loc, "invalid element for rtl.inout type");
+    return emitError() << "invalid element for rtl.inout type";
   return success();
 }
 
@@ -296,7 +300,11 @@ Type RTLDialect::parseType(DialectAsmParser &parser) const {
   llvm::StringRef mnemonic;
   if (parser.parseKeyword(&mnemonic))
     return Type();
-  return generatedTypeParser(getContext(), parser, mnemonic);
+  Type type;
+  auto parseResult = generatedTypeParser(getContext(), parser, mnemonic, type);
+  if (parseResult.hasValue())
+    return type;
+  return Type();
 }
 
 /// Print a type registered to this dialect. Try the tblgen'd type printer

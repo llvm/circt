@@ -503,6 +503,77 @@ void TailPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 }
 
 //===----------------------------------------------------------------------===//
+// Declarations
+//===----------------------------------------------------------------------===//
+
+/// Find all the users of the specified value categorizing them into connects
+/// that use the value, connects that set the value, and indicating whether
+/// there are other weird things.  This returns true if all the users are
+/// categorized, returning false if there were weird things.
+static bool findAllConnectUsers(Value value, SmallVectorImpl<ConnectOp> &uses,
+                                SmallVectorImpl<ConnectOp> &defs) {
+  bool hadWeirdThing = false;
+  for (Operation *user : value.getUsers()) {
+    auto connect = dyn_cast<ConnectOp>(user);
+    if (!connect) {
+      hadWeirdThing = true;
+      continue;
+    }
+    if (connect.src() == value) {
+      if (connect.dest() == value) {
+        hadWeirdThing = true;
+        continue;
+      }
+      uses.push_back(connect);
+    } else {
+      assert(connect.dest() == value);
+      defs.push_back(connect);
+    }
+  }
+
+  return hadWeirdThing;
+}
+
+void RegOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                        MLIRContext *context) {
+  struct Folder final : public OpRewritePattern<RegOp> {
+    using OpRewritePattern::OpRewritePattern;
+
+    LogicalResult matchAndRewrite(RegOp op,
+                                  PatternRewriter &rewriter) const override {
+      // Only fold cases where we can analyze all the uses.
+      SmallVector<ConnectOp> uses, defs;
+      if (findAllConnectUsers(op, uses, defs))
+        return failure();
+
+      // If the reg is only initialized with a constant or invalid, then we
+      // know that all the uses will always get that value.
+      if (defs.size() == 1) {
+        auto *srcValue = defs[0].src().getDefiningOp();
+        if (srcValue &&
+            (isa<ConstantOp>(srcValue) || isa<InvalidValuePrimOp>(srcValue)) &&
+            // TODO: We could handle constants at other level of when's etc.
+            srcValue->getParentOp() == op->getParentOp() &&
+            // TODO: Could handle extension some day if we want to.
+            srcValue->getResult(0).getType() == op.getType()) {
+          // Make sure the constant dominates all users.
+          if (!srcValue->isBeforeInBlock(op))
+            srcValue->moveBefore(op);
+          // Remove the set of register.
+          rewriter.eraseOp(defs[0]);
+          // Replace all connects using the register with the constant, and
+          // remove the reg.
+          rewriter.replaceOp(op, srcValue->getResult(0));
+        }
+      }
+      return failure();
+    }
+  };
+
+  results.insert<Folder>(context);
+}
+
+//===----------------------------------------------------------------------===//
 // Conversions
 //===----------------------------------------------------------------------===//
 

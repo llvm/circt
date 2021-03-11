@@ -67,8 +67,8 @@ endif ()
   set(CIRCT_BUILT_STANDALONE 1)
   set(BACKEND_PACKAGE_STRING "LLVM ${LLVM_PACKAGE_VERSION}")
 else()
-  set(MLIR_MAIN_SRC_DIR ${LLVM_MAIN_SRC_DIR}/../mlir/include ) # --src-root
-  set(MLIR_INCLUDE_DIR ${LLVM_MAIN_SRC_DIR}/../mlir/include ) # --includedir
+  set(MLIR_MAIN_SRC_DIR ${LLVM_MAIN_SRC_DIR}/../mlir ) # --src-root
+  set(MLIR_INCLUDE_DIR ${MLIR_MAIN_SRC_DIR}/include ) # --includedir
   set(MLIR_TABLEGEN_OUTPUT_DIR ${CMAKE_BINARY_DIR}/tools/mlir/include)
   set(MLIR_TABLEGEN_EXE $<TARGET_FILE:mlir-tblgen>)
   include_directories(SYSTEM ${MLIR_INCLUDE_DIR})
@@ -98,6 +98,7 @@ set(CIRCT_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
 set(CIRCT_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/include )
 set(CIRCT_TOOLS_DIR ${CMAKE_BINARY_DIR}/bin)
 
+list(APPEND CMAKE_MODULE_PATH "${MLIR_MAIN_SRC_DIR}/cmake/modules")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 include(AddCIRCT)
 
@@ -268,6 +269,30 @@ else()
     set(CMAKE_INSTALL_RPATH ${capnp_LIBDIR})
     set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
   endif()
+endif()
+
+#-------------------------------------------------------------------------------
+# Python Configuration
+#-------------------------------------------------------------------------------
+
+option(CIRCT_BINDINGS_PYTHON_ENABLED "Enables CIRCT Python bindings." OFF)
+
+if(CIRCT_BINDINGS_PYTHON_ENABLED)
+  message(STATUS "CIRCT Python bindings are enabled.")
+
+  include(MLIRDetectPythonEnv)
+  find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
+  message(STATUS "Found Python include dirs: ${Python3_INCLUDE_DIRS}")
+  message(STATUS "Found Python libraries: ${Python3_LIBRARIES}")
+
+  mlir_detect_pybind11_install()
+  find_package(pybind11 2.6 CONFIG REQUIRED)
+  message(STATUS "Found pybind11 v${pybind11_VERSION}: ${pybind11_INCLUDE_DIR}")
+  message(STATUS "Python prefix = '${PYTHON_MODULE_PREFIX}', "
+                 "suffix = '${PYTHON_MODULE_SUFFIX}', "
+                 "extension = '${PYTHON_MODULE_EXTENSION}'")
+else()
+  message(STATUS "CIRCT Python bindings are disabled.")
 endif()
 
 #-------------------------------------------------------------------------------
