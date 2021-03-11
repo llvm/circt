@@ -37,7 +37,7 @@ bool rtl::isCombinatorial(Operation *op) {
 static void printConstantOp(OpAsmPrinter &p, ConstantOp &op) {
   p << "rtl.constant ";
   p.printAttribute(op.valueAttr());
-  p.printOptionalAttrDict(op.getAttrs(), /*elidedAttrs=*/{"value"});
+  p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"value"});
 }
 
 static ParseResult parseConstantOp(OpAsmParser &parser,
@@ -812,7 +812,7 @@ static void print(OpAsmPrinter &printer, rtl::StructCreateOp op) {
   printer << op.getOperationName() << " (";
   printer.printOperands(op.input());
   printer << ")";
-  printer.printOptionalAttrDict(op.getAttrs());
+  printer.printOptionalAttrDict(op->getAttrs());
   printer << " : " << op.getType();
 }
 
@@ -842,7 +842,7 @@ static ParseResult parseStructExplodeOp(OpAsmParser &parser,
 static void print(OpAsmPrinter &printer, rtl::StructExplodeOp op) {
   printer << op.getOperationName() << " ";
   printer.printOperand(op.input());
-  printer.printOptionalAttrDict(op.getAttrs());
+  printer.printOptionalAttrDict(op->getAttrs());
   printer << " : " << op.input().getType();
 }
 
@@ -879,7 +879,7 @@ static void print(OpAsmPrinter &printer, rtl::StructExtractOp op) {
   printer << op.getOperationName() << " ";
   printer.printOperand(op.input());
   printer << "[\"" << op.field() << "\"]";
-  printer.printOptionalAttrDict(op.getAttrs(), {"field"});
+  printer.printOptionalAttrDict(op->getAttrs(), {"field"});
   printer << " : " << op.input().getType();
 }
 
@@ -926,7 +926,7 @@ static void print(OpAsmPrinter &printer, rtl::StructInjectOp op) {
   printer.printOperand(op.input());
   printer << "[\"" << op.field() << "\"], ";
   printer.printOperand(op.newValue());
-  printer.printOptionalAttrDict(op.getAttrs(), {"field"});
+  printer.printOptionalAttrDict(op->getAttrs(), {"field"});
   printer << " : " << op.input().getType();
 }
 
