@@ -36,23 +36,7 @@ llvm::hash_code computeHash(MemOp op) {
   hash = llvm::hash_combine(hash, op.ruwAttr());
 
   // Result Types
-  TypeRange resultTypes = op->getResultTypes();
-  switch (resultTypes.size()) {
-  case 0:
-    // We don't need to add anything to the hash.
-    break;
-  case 1:
-    // Add in the result type.
-    hash = llvm::hash_combine(hash, resultTypes.front());
-    break;
-  default:
-    // Use the type range as the hash, as we can guarantee it is the same for
-    // any given range of result types. This takes advantage of the fact the
-    // result types >1 are stored in a TupleType and uniqued.
-    hash = llvm::hash_combine(hash, resultTypes);
-    break;
-  }
-  return hash;
+  return llvm::hash_combine(hash, op->getResultTypes());
 }
 
 /// Compare memory operations for equivalence.  Only compares the types of the
@@ -70,26 +54,8 @@ static bool isEquivalentTo(MemOp lhs, MemOp rhs) {
   if (lhs.ruwAttr() != rhs.ruwAttr())
     return false;
   // Compare result types.  Taken from operation equivalence.
-  TypeRange lhsResultTypes = lhs->getResultTypes();
-  TypeRange rhsResultTypes = rhs->getResultTypes();
-  if (lhsResultTypes.size() != rhsResultTypes.size())
+  if (lhs->getResultTypes() != rhs->getResultTypes())
     return false;
-  switch (lhsResultTypes.size()) {
-  case 0:
-    break;
-  case 1:
-    // Compare the single result type.
-    if (lhsResultTypes.front() != rhsResultTypes.front())
-      return false;
-    break;
-  default:
-    // Use the type buffer for the comparison, as we can guarantee it is the
-    // same for any given range of result types. This takes advantage of the
-    // fact the result types >1 are stored in a TupleType and uniqued.
-    if (lhsResultTypes != rhsResultTypes)
-      return false;
-    break;
-  }
   return true;
 }
 
