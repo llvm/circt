@@ -13,6 +13,7 @@
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVTypes.h"
+#include "circt/Dialect/Comb/CombDialect.h"
 
 #include "mlir/IR/DialectImplementation.h"
 
@@ -25,7 +26,7 @@ using namespace circt::sv;
 SVDialect::SVDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context,
               ::mlir::TypeID::get<SVDialect>()) {
-
+  context->loadDialect<circt::comb::CombDialect>();
   // Register types.
   addTypes<
 #define GET_TYPEDEF_LIST
