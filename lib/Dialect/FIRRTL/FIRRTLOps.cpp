@@ -994,16 +994,28 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
   return build(builder, result, type, attr);
 }
 
+void SubfieldOp::build(OpBuilder &builder, OperationState &result, Value input,
+                       StringRef fieldName) {
+  return build(builder, result, input, builder.getStringAttr(fieldName));
+}
+
+void SubfieldOp::build(OpBuilder &builder, OperationState &result, Value input,
+                       StringAttr fieldName) {
+  auto resultType = getResultType(input.getType(), fieldName, input.getLoc());
+  assert(resultType && "invalid field name for bundle");
+  return build(builder, result, resultType, input, fieldName);
+}
+
 // Return the result of a subfield operation.
-FIRRTLType SubfieldOp::getResultType(FIRRTLType inType, StringRef fieldName,
+FIRRTLType SubfieldOp::getResultType(Type inType, StringAttr fieldName,
                                      Location loc) {
   if (auto bundleType = inType.dyn_cast<BundleType>()) {
     for (auto &elt : bundleType.getElements()) {
-      if (elt.name.getValue() == fieldName)
+      if (elt.name == fieldName)
         return elt.type;
     }
     mlir::emitError(loc, "unknown field '")
-        << fieldName << "' in bundle type " << inType;
+        << fieldName.getValue() << "' in bundle type " << inType;
     return {};
   }
 

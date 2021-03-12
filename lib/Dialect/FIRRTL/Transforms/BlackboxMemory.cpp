@@ -241,11 +241,8 @@ createWrapperModule(MemOp op, const MemoryPortList &memPorts,
     auto memPortType = memPort.getType().cast<FIRRTLType>();
     for (auto field :
          memPortType.getPassiveType().cast<BundleType>().getElements()) {
-
-      auto fieldType = SubfieldOp::getResultType(
-          memPortType, field.name.getValue(), op.getLoc());
-      auto fieldValue = builder.create<SubfieldOp>(op.getLoc(), fieldType,
-                                                   memPort, field.name);
+      auto fieldValue =
+          builder.create<SubfieldOp>(op.getLoc(), memPort, field.name);
       // Create the connection between module arguments and the external module,
       // making sure that sinks are on the LHS
       if (fieldValue.getType().cast<FIRRTLType>().isPassive())
@@ -281,10 +278,8 @@ createWiresForMemoryPorts(OpBuilder builder, Location loc, MemOp op,
     if (wireBundle.isa<FlipType>())
       wireBundle = wireBundle.cast<FlipType>().getElementType();
     for (auto field : wireBundle.cast<BundleType>().getElements()) {
-      auto fieldType = SubfieldOp::getResultType(
-          wireOp.getType(), field.name.getValue(), op.getLoc());
-      auto fieldValue = builder.create<SubfieldOp>(op.getLoc(), fieldType,
-                                                   wireOp, field.name);
+      auto fieldValue =
+          builder.create<SubfieldOp>(op.getLoc(), wireOp, field.name);
       // Create the connection between module arguments and the external module,
       // making sure that sinks are on the LHS
       if ((*extResultIt).getType().cast<FIRRTLType>().isPassive())
