@@ -715,10 +715,10 @@ void TypeLoweringVisitor::visitStmt(ConnectOp op) {
     // which side is left or right.
     if (isDestDuplex ? newSrc.getType().isa<FlipType>()
                      : !newDest.getType().isa<FlipType>()) {
-      builder->create<ConnectOp>(newSrc, newDest);
-    } else {
-      builder->create<ConnectOp>(newDest, newSrc);
+      std::swap(newSrc, newDest);
     }
+
+    builder->create<ConnectOp>(newDest, newSrc);
   }
 
   // Remember to remove the original op.
