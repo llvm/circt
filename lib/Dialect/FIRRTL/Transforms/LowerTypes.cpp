@@ -682,6 +682,9 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   FIRRTLType indexType = index.getType().cast<FIRRTLType>();
   FVectorType inputType =
       input.getType().cast<FIRRTLType>().cast<FVectorType>();
+  if (inputType.getElementType().isa<BundleType>()) {
+    builder->emitError("Lowering of vectors of bundle type not supported");
+  }
   auto selectWidth = indexType.getBitWidthOrSentinel();
   SmallVector<Value, 8> vecVaclues;
   getAllBundleLowerings(input, vecVaclues);
