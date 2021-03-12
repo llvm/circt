@@ -2585,7 +2585,6 @@ void ModuleEmitter::emitStatementBlock(Block &body) {
 //===----------------------------------------------------------------------===//
 
 void SplitModuleEmitter::emitMLIRModule(ModuleOp module) {
-  llvm::errs() << "writing into " << dirname << "\n";
   for (auto &op : *module.getBody()) {
     // TODO: Module uniquification happens in ModuleEmitter, but a new instance
     // of ModuleEmitter is created for each operation in the body. We could add
@@ -2607,7 +2606,6 @@ void SplitModuleEmitter::emitMLIRModule(ModuleOp module) {
       });
     else if (isa<VerbatimOp>(op) || isa<IfDefProceduralOp>(op))
       perFileOps.push_back(&op);
-    // ModuleEmitter(state).emitStatement(&op);
     else if (!isa<ModuleTerminatorOp>(op)) {
       op.emitError("unknown operation");
       encounteredError = true;
@@ -2622,7 +2620,6 @@ void SplitModuleEmitter::emitFile(
   SmallString<128> outputFilename(dirname);
   llvm::sys::path::append(outputFilename, fileStem);
   outputFilename.append(".v");
-  llvm::errs() << "creating output file " << outputFilename << "\n";
 
   std::string errorMessage;
   auto output = openOutputFile(outputFilename, &errorMessage);
