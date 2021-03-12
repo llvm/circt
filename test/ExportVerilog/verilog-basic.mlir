@@ -366,3 +366,15 @@ rtl.module @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
   }
   rtl.output
 }
+
+// https://github.com/llvm/circt/issues/755
+// CHECK-LABEL: module UnaryParensIssue755(
+// CHECK: assign b = |(~a);
+rtl.module @UnaryParensIssue755(%a: i8) -> (%b: i1) {
+  %c-1_i8 = rtl.constant -1 : i8
+  %c0_i8 = rtl.constant 0 : i8
+  %0 = comb.xor %a, %c-1_i8 : i8
+  %1 = comb.icmp ne %0, %c0_i8 : i8
+  rtl.output %1 : i1
+}
+
