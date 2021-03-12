@@ -1748,6 +1748,8 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
   } else if (!emitter.outOfLineExpressionDecls.count(op)) {
     emitDeclarationForTemporary(op);
     os << " = ";
+  } else if (op->getParentOp()->hasTrait<ProceduralRegion>()) {
+    indent() << emitter.getName(op->getResult(0)) << " = ";
   } else {
     indent() << "assign " << emitter.getName(op->getResult(0)) << " = ";
   }
