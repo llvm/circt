@@ -55,6 +55,17 @@ FunctionType getModuleType(Operation *op);
 /// extmodule.
 void getModulePortInfo(Operation *op, SmallVectorImpl<ModulePortInfo> &results);
 
+/// Returns true if the type is a bundle or a flip of a bundle.
+bool isBundleType(Type type);
+
+// Returns true if the operation is an expression with duplex flow. Duplex flow
+// has special treatment in bundle connect operations, and affects the
+// determination of the connect algorithm.
+bool isDuplexOp(Operation *op);
+
+/// Returns true if the value results from an expression with duplex flow.
+bool isDuplexValue(Value val);
+
 } // namespace firrtl
 } // namespace circt
 

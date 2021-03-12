@@ -132,6 +132,21 @@ means about left-hand-side and right-hand-side connections. CIRCT consequently
 accepts all permutations of `a <= b` and types which canonicalize to the same
 representation.
 
+### Flow
+
+The FIRRTL specification describes the concept of "flow" to track whether a
+value is a `sink`, `source`, or `duplex`. In the specification, module inputs
+are `source`, while module outputs are a `sink`. The `duplex` flow type is
+used for values which can be read and written to, such as registers and
+wires. In a connect statement, the LHS must be a `sink` or a `duplex` type,
+while the RHS must be `source` or a `duplex`.
+
+Due to the flip canonicalization in the MLIR implementation, the compiler no
+longer distinguishes between inputs and outputs. As a result, the only
+requirement of a connect statement is that the LHS side is a flip type or a
+`duplex` value. In the new compiler, you can always read from a flip type, so
+there is no verification of the RHS of a connect statement.
+
 ## Operations
 
 ### Multiple result `firrtl.instance` operation
