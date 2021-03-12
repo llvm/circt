@@ -852,13 +852,14 @@ private:
 SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
                                     const char *syntax,
                                     SubExprSignRequirement operandSignReq) {
-  auto lhsPrec = VerilogPrecedence(prec - 1);
   auto lhsInfo =
-      emitSubExpr(op->getOperand(0), lhsPrec, OOLBinary, operandSignReq);
+      emitSubExpr(op->getOperand(0), prec, OOLBinary, operandSignReq);
   os << ' ' << syntax << ' ';
 
+  // Right associative operators are already generally variadic, we need to
+  // handle things like: (a<4> == b<4>) == (c<3> == d<3>).
+  // When processing the top operation of the tree, the rhs needs parens.
   auto rhsPrec = VerilogPrecedence(prec - 1);
-
   auto rhsInfo =
       emitSubExpr(op->getOperand(1), rhsPrec, OOLBinary, operandSignReq);
 

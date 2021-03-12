@@ -603,7 +603,7 @@ rtl.module @reg(%inout: i1) -> (%b: i1) {
 // CHECK-NEXT: input  [3:0] d, e,
 // CHECK-NEXT: output       r);
 // CHECK-EMPTY:
-// CHECK-NEXT: assign r = (a == c) == (d == e);
+// CHECK-NEXT: assign r = a == c == (d == e);
   rtl.module @eqIssue(%a: i9, %c :i9, %d: i4, %e: i4) -> (%r : i1){
     %1 = comb.icmp eq %a, %c : i9
     %2 = comb.icmp eq %d, %e : i4
