@@ -611,14 +611,6 @@ StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
   if (name.empty())
     name = "_T";
 
-  // Check to see if this name is valid.  The first character cannot be a
-  // number of other weird thing.  If it is, start with an underscore.
-  if (!isalpha(name.front()) && name.front() != '_') {
-    SmallString<16> tmpName("_");
-    tmpName += name;
-    return addName(valueOrOp, tmpName);
-  }
-
   auto isValidVerilogCharacter = [](char ch) -> bool {
     return isalpha(ch) || isdigit(ch) || ch == '_';
   };
@@ -634,7 +626,7 @@ StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
     for (char ch : name) {
       if (isValidVerilogCharacter(ch))
         tmpName += ch;
-      else if (ch == ' ')
+      else if (ch == ' ' || ch == '.')
         tmpName += '_';
       else {
         tmpName += llvm::utohexstr((unsigned char)ch);
@@ -642,6 +634,16 @@ StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
     }
     return addName(valueOrOp, tmpName);
   }
+
+  // Check to see if this name is valid.  The first character cannot be a
+  // number or some other weird thing.  If it is, start with an underscore.
+  if (!isalpha(name.front()) && name.front() != '_') {
+    SmallString<16> tmpName("_");
+    tmpName += name;
+    return addName(valueOrOp, tmpName);
+  }
+
+  // Make sure the new valid name does not conflict with any existing names.
   auto updatedName =
       resolveKeywordConflict(name, usedNames, nextGeneratedNameID);
   if (valueOrOp)
