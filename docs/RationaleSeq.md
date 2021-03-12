@@ -13,20 +13,26 @@ discussed here. The intention of the `seq` dialect is to provide a set of
 stateful constructs which can be used to model sequential logic, independent
 of the output method (e.g. SystemVerilog).
 
+We have yet to flesh this dialect out to represent all common stateful
+components. We start with a register and will build from there.
+
 ## Definitions
 
 For the sake of precision, we use the following definitions:
 
-- **Latch:** A memory element which is only sensitive to the levels of its
-inputs. Has no clock. Example: SR Latch.
-- **Clocked (gated) latch:** A latch wherein the inputs are gated by a clock.
-Transparent the entire time the clock is high. Generally referred to as a
-"latch". Examples: "gated SR latch", "D latch".
-- **Flip-flop:** An edge-sensitive memory element. Captures the input value
-on one or both clock edges. Variants: posedge FF, negedge FF,
-"edge-sensitive" FF (captures the input value on both edges), resettable FF.
-- **Register:** A synchronous, resettable memory element. Can be implemented
-using any of the above "circuit level" elements.
+- Physical devices:
+  - **Unclocked Latch:** A memory element which is only sensitive to the
+  levels of its inputs. Has no clock. Example: SR Latch.
+  - Clocked (gated) **latch:** A latch wherein the inputs are gated by a
+  clock. Transparent the entire time the clock is high. Generally referred to
+  as a "latch". Examples: "gated SR latch", "D latch".
+  - Edge-triggered **flip-flop:** An edge-sensitive memory element. Captures
+  the input value on one or both clock edges. Variants: posedge FF, negedge
+  FF, "edge-sensitive" FF (captures the input value on both edges),
+  resettable FF.
+- Abstract models:
+  - **Register:** A synchronous, resettable memory element. Can be
+  implemented using any of the above "circuit level" elements.
 
 ## The register operation
 
@@ -40,10 +46,10 @@ three operands and one attribute:
 Accepts any type, results in the same type.
 - **clock**: Capture 'value' on the positive edge of this signal.
 - **reset**: Signal to set the state to 'resetValue'. Optional.
-- **resetValue**: A constant which the state is set to upon reset. Optional.
+- **resetValue**: A value which the state is set to upon reset. Optional.
 
 ```mlir
-%d = seq.reg %input, %clk [, %reset [<resetValue>] ] : $type(input)
+%d = seq.reg %input, %clk [, %reset [%resetValue] ] : $type(input)
 ```
 
 ### Rationale
@@ -68,3 +74,16 @@ clock value. (And be detected by a lowering step).
 - Omission of edge conditions on 'reset': The reset style is generally a
 design-wide choice and (if done correctly) shouldn't affect correctness. It
 should, therefore, be determined by a lowering pass.
+
+### Future considerations
+
+- Enable signal: if this proves difficult to detect (or non-performant if we
+do not detect and generate the SystemVerilog correctly), we can build it into
+the reg op.
+- Reset style and clock style: how should we model posedge vs negedge clocks?
+Async vs sync resets? There are some reasonble options here: attributes on
+the `reg` op or `clock` and `reset` types which are parameterized with that
+information.
+- Initial value: this register initializes to `x` (in SystemVerilog
+terminology). We will add an `initialValue` attribute if this proves
+insufficient.
