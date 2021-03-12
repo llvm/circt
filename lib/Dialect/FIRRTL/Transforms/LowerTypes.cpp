@@ -57,7 +57,7 @@ static void flattenType(FIRRTLType type, StringRef suffixSoFar, bool isFlipped,
           // Construct the suffix to pass down.
           tmpSuffix.resize(suffixSoFar.size());
           tmpSuffix.push_back('_');
-          tmpSuffix.append(elt.name.strref());
+          tmpSuffix.append(elt.name.getValue());
           // Recursively process subelements.
           flattenType(elt.type, tmpSuffix, isFlipped, results);
         }
@@ -435,7 +435,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
       // port, then this is linked against the old field.
       for (auto elt : underlying.getElements()) {
 
-        auto oldName = elt.name.str();
+        auto oldName = elt.name.getValue();
         if (oldKind == MemOp::PortKind::ReadWrite) {
           if (oldName == "mask")
             oldName = "wmask";
@@ -445,12 +445,13 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
             oldName = "wdata";
         }
 
-        auto getWire = [&](FIRRTLType type, StringRef wireName) -> Value {
+        auto getWire = [&](FIRRTLType type,
+                           const std::string &wireName) -> Value {
           auto wire = newWires[wireName];
           if (!wire) {
             wire = builder->create<WireOp>(type.getPassiveType(),
                                            newMem.name().getValue().str() +
-                                               "_" + wireName.str());
+                                               "_" + wireName);
             newWires[wireName] = wire;
           }
           return wire;
@@ -463,11 +464,12 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
         // creating a dummy wire, setting the dummy wire as the
         // lowering target, and then connecting every new port
         // subfield to that.
-        if ((elt.name == "clk") || (elt.name == "en") || (elt.name == "addr")) {
+        if (oldName == "clk" || oldName == "en" || oldName == "addr") {
           FIRRTLType theType = FlipType::get(elt.type);
 
           // Construct a new wire if needed.
-          auto wireName = op.getPortName(j).getValue().str() + "_" + oldName;
+          auto wireName =
+              (op.getPortName(j).getValue().str() + "_" + oldName).str();
           auto wire = getWire(theType, wireName);
 
           if (!(oldKind == MemOp::PortKind::ReadWrite &&
@@ -475,7 +477,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
             setBundleLowering(op.getResult(j), oldName, wire);
 
           // Handle "en" specially if this used to be a readwrite port.
-          if (oldKind == MemOp::PortKind::ReadWrite && elt.name == "en") {
+          if (oldKind == MemOp::PortKind::ReadWrite && oldName == "en") {
             auto wmode =
                 getWire(theType, op.getPortName(j).getValue().str() + "_wmode");
             if (!skip)
@@ -502,7 +504,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
         if (kind == MemOp::PortKind::Write)
           theType = FlipType::get(theType);
 
-        setBundleLowering(op.getResult(j), oldName + field.suffix,
+        setBundleLowering(op.getResult(j), (oldName + field.suffix).str(),
                           builder->create<SubfieldOp>(
                               theType, newMem.getResult(i), elt.name));
       }

@@ -770,8 +770,8 @@ BundleType MemOp::getTypeForPort(uint64_t depth, FIRRTLType dataType,
 
   auto *context = dataType.getContext();
 
-  auto getId = [&](StringRef name) -> Identifier {
-    return Identifier::get(name, context);
+  auto getId = [&](StringRef name) -> StringAttr {
+    return StringAttr::get(context, name);
   };
 
   SmallVector<BundleType::BundleElement, 7> portFields;
@@ -999,7 +999,7 @@ FIRRTLType SubfieldOp::getResultType(FIRRTLType inType, StringRef fieldName,
                                      Location loc) {
   if (auto bundleType = inType.dyn_cast<BundleType>()) {
     for (auto &elt : bundleType.getElements()) {
-      if (elt.name == fieldName)
+      if (elt.name.getValue() == fieldName)
         return elt.type;
     }
     mlir::emitError(loc, "unknown field '")
@@ -1632,10 +1632,10 @@ static LogicalResult verifyRTLStructCastOp(RTLStructCastOp cast) {
     return cast.emitError("bundle and struct have different number of fields");
 
   for (size_t findex = 0, fend = firFields.size(); findex < fend; ++findex) {
-    if (firFields[findex].name != rtlFields[findex].name)
+    if (firFields[findex].name.getValue() != rtlFields[findex].name)
       return cast.emitError("field names don't match '")
-             << firFields[findex].name << "', '" << rtlFields[findex].name
-             << "'";
+             << firFields[findex].name.getValue() << "', '"
+             << rtlFields[findex].name << "'";
     int64_t firWidth =
         FIRRTLType(firFields[findex].type).getBitWidthOrSentinel();
     int64_t rtlWidth = rtl::getBitWidth(rtlFields[findex].type);

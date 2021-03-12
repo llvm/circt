@@ -43,7 +43,9 @@ static Type lowerType(Type type) {
       Type etype = lowerType(element.type);
       if (!etype)
         return {};
-      rtlfields.push_back(rtl::StructType::FieldInfo{element.name, etype});
+      // TODO: make rtl::StructType contain StringAttrs.
+      auto name = Identifier::get(element.name.getValue(), type.getContext());
+      rtlfields.push_back(rtl::StructType::FieldInfo{name, etype});
     }
     return rtl::StructType::get(type.getContext(), rtlfields);
   }
@@ -1597,13 +1599,13 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     for (BundleType::BundleElement elt : portBundleType.getElements()) {
       auto fieldType = lowerType(elt.type);
       if (fieldType.isInteger(0)) {
-        portWires.insert({elt.name.strref(), Value()});
+        portWires.insert({elt.name.getValue(), Value()});
         continue;
       }
       auto name =
-          (Twine(memName) + "_" + portName + "_" + elt.name.str()).str();
+          (Twine(memName) + "_" + portName + "_" + elt.name.getValue()).str();
       auto fieldWire = builder->create<sv::WireOp>(fieldType, name);
-      portWires.insert({elt.name.strref(), fieldWire});
+      portWires.insert({elt.name.getValue(), fieldWire});
     }
 
     // Now that we have the wires for each element, rewrite any subfields to
