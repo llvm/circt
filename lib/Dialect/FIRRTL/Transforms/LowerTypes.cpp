@@ -713,18 +713,11 @@ void TypeLoweringVisitor::visitStmt(ConnectOp op) {
     // find the non-duplex value and make sure that it is the in the correct
     // position. Two duplex values cannot be connected, since it is unclear
     // which side is left or right.
-    if (isDestDuplex) {
-      if (newSrc.getType().isa<FlipType>()) {
-        builder->create<ConnectOp>(newSrc, newDest);
-      } else {
-        builder->create<ConnectOp>(newDest, newSrc);
-      }
+    if (isDestDuplex ? newSrc.getType().isa<FlipType>()
+                     : !newDest.getType().isa<FlipType>()) {
+      builder->create<ConnectOp>(newSrc, newDest);
     } else {
-      if (!newDest.getType().isa<FlipType>()) {
-        builder->create<ConnectOp>(newSrc, newDest);
-      } else {
-        builder->create<ConnectOp>(newDest, newSrc);
-      }
+      builder->create<ConnectOp>(newDest, newSrc);
     }
   }
 
