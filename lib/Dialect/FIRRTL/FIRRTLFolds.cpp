@@ -617,6 +617,8 @@ void PartialConnectOp::getCanonicalizationPatterns(
   struct Truncater final : public OpRewritePattern<PartialConnectOp> {
     using OpRewritePattern::OpRewritePattern;
 
+    // If a partial connect exists from a longer int to a shorter int, simplify
+    // to a truncation and connect
     LogicalResult matchAndRewrite(PartialConnectOp op,
                                   PatternRewriter &rewriter) const override {
       auto destType =
