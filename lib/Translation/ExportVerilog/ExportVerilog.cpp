@@ -856,16 +856,10 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
       emitSubExpr(op->getOperand(0), prec, OOLBinary, operandSignReq);
   os << ' ' << syntax << ' ';
 
-  // The precedence of the RHS operand must be tighter than this operator if
-  // they have a different opcode in order to handle things like "x-(a+b)".
-  // This isn't needed on the LHS, because the relevant Verilog operators are
-  // left-associative.
-  //
+  // Right associative operators are already generally variadic, we need to
+  // handle things like: (a<4> == b<4>) == (c<3> == d<3>).
+  // When processing the top operation of the tree, the rhs needs parens.
   auto rhsPrec = VerilogPrecedence(prec - 1);
-  if (auto *rhsOperandOp = op->getOperand(1).getDefiningOp())
-    if (op->getName() == rhsOperandOp->getName())
-      rhsPrec = prec;
-
   auto rhsInfo =
       emitSubExpr(op->getOperand(1), rhsPrec, OOLBinary, operandSignReq);
 
