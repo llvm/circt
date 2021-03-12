@@ -61,6 +61,7 @@ def PartialConnectOp : FIRRTLOp<"partialconnect", []> {
 
   let arguments = (ins FIRRTLType:$dest, FIRRTLType:$src);
   let results = (outs);
+  let hasCanonicalizer = 1;
 
   let assemblyFormat =
     "$dest `,` $src  attr-dict `:` type($dest) `,` type($src)";
