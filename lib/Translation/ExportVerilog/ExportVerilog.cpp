@@ -286,7 +286,7 @@ namespace {
 /// where a lower number binds tighter.
 enum VerilogPrecedence {
   // Normal precedence levels.
-  Symbol,          // Atomic symbol like "foo"
+  Symbol,          // Atomic symbol like "foo" and {a,b}
   Selection,       // () , [] , :: , .
   Unary,           // Unary operators like ~foo
   Multiply,        // * , / , %
@@ -896,7 +896,8 @@ SubExprInfo ExprEmitter::emitVariadic(Operation *op, VerilogPrecedence prec,
 SubExprInfo ExprEmitter::emitUnary(Operation *op, const char *syntax,
                                    bool resultAlwaysUnsigned) {
   os << syntax;
-  auto signedness = emitSubExpr(op->getOperand(0), Unary, OOLUnary).signedness;
+  auto signedness =
+      emitSubExpr(op->getOperand(0), Selection, OOLUnary).signedness;
   return {Unary, resultAlwaysUnsigned ? IsUnsigned : signedness};
 }
 
@@ -1028,7 +1029,7 @@ SubExprInfo ExprEmitter::visitComb(SExtOp op) {
     os << '{' << destWidth << '{';
     emitSubExpr(op.getOperand(), LowestPrecedence, OOLUnary);
     os << "}}";
-    return {Unary, IsUnsigned};
+    return {Symbol, IsUnsigned};
   }
 
   // Otherwise, this is a sign extension of a general expression.
@@ -1046,7 +1047,7 @@ SubExprInfo ExprEmitter::visitComb(SExtOp op) {
   os << ", ";
   emitSubExpr(op.getOperand(), LowestPrecedence, OOLUnary);
   os << '}';
-  return {Unary, IsUnsigned};
+  return {Symbol, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitComb(ConcatOp op) {
@@ -1061,7 +1062,7 @@ SubExprInfo ExprEmitter::visitComb(ConcatOp op) {
     os << '{' << op.getNumOperands() << '{';
     emitSubExpr(firstOperand, LowestPrecedence, OOLUnary);
     os << "}}";
-    return {Unary, IsUnsigned};
+    return {Symbol, IsUnsigned};
   }
 
   os << '{';
@@ -1070,7 +1071,7 @@ SubExprInfo ExprEmitter::visitComb(ConcatOp op) {
   });
 
   os << '}';
-  return {Unary, IsUnsigned};
+  return {Symbol, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(BitcastOp op) {
