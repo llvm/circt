@@ -691,7 +691,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
           if (isFlipped)
             type = FlipType::get(type);
 
-          elements.push_back({Identifier::get(fieldName, getContext()), type});
+          elements.push_back({StringAttr::get(getContext(), fieldName), type});
           return success();
         }))
       return failure();

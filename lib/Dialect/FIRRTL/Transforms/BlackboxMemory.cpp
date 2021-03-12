@@ -136,11 +136,11 @@ getBlackboxPortsForMemOp(MemOp op, const MemoryPortList &memPorts,
       shouldFlip = false;
     }
     for (auto bundleElement : type.cast<BundleType>().getElements()) {
-      auto name = builder.getStringAttr(prefix + bundleElement.name.str());
+      auto name = (prefix + bundleElement.name.getValue()).str();
       auto type = bundleElement.type;
       if (shouldFlip)
         type = FlipType::get(type);
-      extPorts.push_back({name, type});
+      extPorts.push_back({builder.getStringAttr(name), type});
     }
   }
 }
@@ -242,10 +242,10 @@ createWrapperModule(MemOp op, const MemoryPortList &memPorts,
     for (auto field :
          memPortType.getPassiveType().cast<BundleType>().getElements()) {
 
-      auto fieldType =
-          SubfieldOp::getResultType(memPortType, field.name, op.getLoc());
-      auto fieldValue = builder.create<SubfieldOp>(
-          op.getLoc(), fieldType, memPort, builder.getStringAttr(field.name));
+      auto fieldType = SubfieldOp::getResultType(
+          memPortType, field.name.getValue(), op.getLoc());
+      auto fieldValue = builder.create<SubfieldOp>(op.getLoc(), fieldType,
+                                                   memPort, field.name);
       // Create the connection between module arguments and the external module,
       // making sure that sinks are on the LHS
       if (fieldValue.getType().cast<FIRRTLType>().isPassive())
@@ -281,10 +281,10 @@ createWiresForMemoryPorts(OpBuilder builder, Location loc, MemOp op,
     if (wireBundle.isa<FlipType>())
       wireBundle = wireBundle.cast<FlipType>().getElementType();
     for (auto field : wireBundle.cast<BundleType>().getElements()) {
-      auto fieldType =
-          SubfieldOp::getResultType(wireOp.getType(), field.name, op.getLoc());
-      auto fieldValue = builder.create<SubfieldOp>(
-          op.getLoc(), fieldType, wireOp, builder.getStringAttr(field.name));
+      auto fieldType = SubfieldOp::getResultType(
+          wireOp.getType(), field.name.getValue(), op.getLoc());
+      auto fieldValue = builder.create<SubfieldOp>(op.getLoc(), fieldType,
+                                                   wireOp, field.name);
       // Create the connection between module arguments and the external module,
       // making sure that sinks are on the LHS
       if ((*extResultIt).getType().cast<FIRRTLType>().isPassive())
