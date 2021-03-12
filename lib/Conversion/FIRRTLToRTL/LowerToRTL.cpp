@@ -1533,14 +1533,14 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   uint64_t depth = op.depth();
   uint64_t readLatency = op.readLatency();
   uint64_t writeLatency = op.writeLatency();
-
-  FIRRTLType addrType = op.getResult(0)
-                            .getType()
-                            .cast<FIRRTLType>()
-                            .getPassiveType()
-                            .cast<BundleType>()
-                            .getElement("addr")
-                            ->type;
+  auto addrType = lowerType(op.getResult(0)
+                                .getType()
+                                .cast<FIRRTLType>()
+                                .getPassiveType()
+                                .cast<BundleType>()
+                                .getElement("addr")
+                                ->type);
+  auto dataType = lowerType(op.getDataType());
 
   // A store of values associated with a delayed read.
   struct ReadPipeElement {
@@ -1563,19 +1563,27 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   };
 
   // Create a register for the memory.
-  Value reg = builder->create<sv::RegOp>(
-      rtl::UnpackedArrayType::get(lowerType(op.getDataType()), depth),
-      builder->getStringAttr(memName.str()));
+  Value reg =
+      builder->create<sv::RegOp>(rtl::UnpackedArrayType::get(dataType, depth),
+                                 builder->getStringAttr(memName.str()));
+
+  // Some helpers.
+  auto buildPAssign = [&](Value dest, Value value) {
+    builder->create<sv::PAssignOp>(dest, value);
+  };
 
   // Track pipeline registers that were added. These need to be
   // randomly initialized later.
   SmallVector<Value> pipeRegs;
 
-  // Loop over each port
-  auto namesArray = op.portNames();
-  for (size_t i = 0, e = namesArray.size(); i != e; ++i) {
-    auto portName = namesArray[i].cast<StringAttr>().getValue().str();
-    auto port = op.getPortNamed(portName);
+  // Process each port in turn.
+  SmallVector<std::pair<Identifier, MemOp::PortKind>> ports;
+  op.getPorts(ports);
+  assert(op.getNumResults() == ports.size());
+
+  for (size_t i = 0, e = ports.size(); i != e; ++i) {
+    auto portName = ports[i].first.str();
+    auto port = op.getResult(i);
 
     // Do not lower ports if they aren't used.
     if (port.use_empty())
@@ -1607,12 +1615,13 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     }
 
     // Return the value corresponding to a port field.
-    auto getPortFieldValue = [&](StringRef portName) -> Value {
-      return builder->create<sv::ReadInOutOp>(portWires[portName]);
+    auto getPortFieldValue = [&](StringRef name) -> Value {
+      return builder->create<sv::ReadInOutOp>(portWires[name]);
     };
 
-    // Create an array register
-    auto arrayReg = [&](StringRef elementName, Type type, int depth) -> Value {
+    // Create an array register and keep track of it in pipeRegs.
+    auto createArrayReg = [&](StringRef elementName, Type type,
+                              uint64_t depth) -> Value {
       auto a = builder->create<sv::RegOp>(
           rtl::UnpackedArrayType::get(type, depth),
           builder->getStringAttr(memName.str() + "_" + portName +
@@ -1625,24 +1634,22 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     auto clk = getPortFieldValue("clk");
 
     // Loop over each element of the port
-    switch (op.getPortKind(portName).getValue()) {
-    case MemOp::PortKind::ReadWrite: {
-      // TODO: Handle readwriters properly
+    switch (ports[i].second) {
+    case MemOp::PortKind::ReadWrite:
       op.emitOpError("readwrite ports should be lowered into separate read and "
                      "write ports by previous passes");
-    }
       continue;
     case MemOp::PortKind::Read: {
       // Add delays for non-zero read latency
       SmallVector<ReadPipeElement> readPipe;
-      auto rden = builder->create<sv::ReadInOutOp>(portWires["en"]);
-      auto rdaddr = builder->create<sv::ReadInOutOp>(portWires["addr"]);
+      auto rden = getPortFieldValue("en");
+      auto rdaddr = getPortFieldValue("addr");
       readPipe.push_back({portWires["en"], portWires["addr"], rden, rdaddr});
       Value enReg, addrReg, enRegRd, addRegRd;
       for (size_t j = 0; j < readLatency; ++j) {
         if (j == 0) {
-          enReg = arrayReg("_en_pipe", i1Type, readLatency);
-          addrReg = arrayReg("_addr_pipe", lowerType(addrType), readLatency);
+          enReg = createArrayReg("_en_pipe", i1Type, readLatency);
+          addrReg = createArrayReg("_addr_pipe", addrType, readLatency);
         }
         auto jIdx =
             builder->create<rtl::ConstantOp>(APInt(log2(readLatency + 1), j));
@@ -1655,11 +1662,9 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       if (readLatency != 0) {
         addToAlwaysFFBlock(EventControl::AtPosEdge, clk, [&]() {
           for (size_t j = 1; j < readLatency + 1; ++j) {
-            builder->create<sv::PAssignOp>(readPipe[j].en,
-                                           readPipe[j - 1].rd_en);
+            buildPAssign(readPipe[j].en, readPipe[j - 1].rd_en);
             addIfProceduralBlock(readPipe[j - 1].rd_en, [&]() {
-              builder->create<sv::PAssignOp>(readPipe[j].addr,
-                                             readPipe[j - 1].rd_addr);
+              buildPAssign(readPipe[j].addr, readPipe[j - 1].rd_addr);
             });
           }
         });
@@ -1669,35 +1674,34 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       value = builder->create<sv::ReadInOutOp>(value);
 
       // If we're masking, emit "addr < Depth ? mem[addr] : `RANDOM".
-      if (!llvm::isPowerOf2_64(depth)) {
-        addToIfDefBlock(
-            "RANDOMIZE_GARBAGE_ASSIGN",
-            [&]() {
-              auto addrWidth = addr.getType().getIntOrFloatBitWidth();
-              auto depthCst =
-                  builder->create<rtl::ConstantOp>(APInt(addrWidth, depth));
-              auto cmp = builder->create<comb::ICmpOp>(ICmpPredicate::ult, addr,
-                                                       depthCst);
-              auto randomVal = builder->create<sv::TextualValueOp>(
-                  value.getType(), "`RANDOM");
-              auto randomOrVal =
-                  builder->create<comb::MuxOp>(cmp, value, randomVal);
-              builder->create<sv::ConnectOp>(portWires["data"], randomOrVal);
-            },
-            [&]() {
-              builder->create<sv::ConnectOp>(portWires["data"], value);
-            });
-      } else {
+      if (llvm::isPowerOf2_64(depth)) {
         builder->create<sv::ConnectOp>(portWires["data"], value);
+        continue;
       }
-    }
+
+      addToIfDefBlock(
+          "RANDOMIZE_GARBAGE_ASSIGN",
+          [&]() {
+            auto addrWidth = addr.getType().getIntOrFloatBitWidth();
+            auto depthCst =
+                builder->create<rtl::ConstantOp>(APInt(addrWidth, depth));
+            auto cmp = builder->create<comb::ICmpOp>(ICmpPredicate::ult, addr,
+                                                     depthCst);
+            auto randomVal =
+                builder->create<sv::TextualValueOp>(value.getType(), "`RANDOM");
+            auto randomOrVal =
+                builder->create<comb::MuxOp>(cmp, value, randomVal);
+            builder->create<sv::ConnectOp>(portWires["data"], randomOrVal);
+          },
+          [&]() { builder->create<sv::ConnectOp>(portWires["data"], value); });
       continue;
+    }
     case MemOp::PortKind::Write: {
       SmallVector<WritePipeElement> writePipe;
-      auto rdEn = builder->create<sv::ReadInOutOp>(portWires["en"]);
-      auto rdAddr = builder->create<sv::ReadInOutOp>(portWires["addr"]);
-      auto rdMask = builder->create<sv::ReadInOutOp>(portWires["mask"]);
-      auto rdData = builder->create<sv::ReadInOutOp>(portWires["data"]);
+      auto rdEn = getPortFieldValue("en");
+      auto rdAddr = getPortFieldValue("addr");
+      auto rdMask = getPortFieldValue("mask");
+      auto rdData = getPortFieldValue("data");
       writePipe.push_back({portWires["en"], portWires["addr"],
                            portWires["mask"], portWires["data"], rdEn, rdAddr,
                            rdMask, rdData});
@@ -1706,12 +1710,10 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       Value wRegEn, wRegAddr, wRegMask, wRegData;
       for (size_t j = 0; j < writeLatency - 1; ++j) {
         if (j == 0) {
-          wRegEn = arrayReg("_en_pipe", i1Type, writeLatency - 1);
-          wRegAddr =
-              arrayReg("_addr_pipe", lowerType(addrType), writeLatency - 1);
-          wRegMask = arrayReg("_mask_pipe", i1Type, writeLatency - 1);
-          wRegData = arrayReg("_data_pipe", lowerType(op.getDataType()),
-                              writeLatency - 1);
+          wRegEn = createArrayReg("_en_pipe", i1Type, writeLatency - 1);
+          wRegAddr = createArrayReg("_addr_pipe", addrType, writeLatency - 1);
+          wRegMask = createArrayReg("_mask_pipe", i1Type, writeLatency - 1);
+          wRegData = createArrayReg("_data_pipe", dataType, writeLatency - 1);
         }
         auto jIdx =
             builder->create<rtl::ConstantOp>(APInt(log2(writeLatency), j));
@@ -1730,15 +1732,11 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       if (writeLatency != 1) {
         addToAlwaysFFBlock(EventControl::AtPosEdge, clk, [&]() {
           for (size_t j = 1; j < writeLatency; ++j) {
-            builder->create<sv::PAssignOp>(writePipe[j].en,
-                                           writePipe[j - 1].rd_en);
+            buildPAssign(writePipe[j].en, writePipe[j - 1].rd_en);
             addIfProceduralBlock(writePipe[j - 1].rd_en, [&]() {
-              builder->create<sv::PAssignOp>(writePipe[j].addr,
-                                             writePipe[j - 1].rd_addr);
-              builder->create<sv::PAssignOp>(writePipe[j].mask,
-                                             writePipe[j - 1].rd_mask);
-              builder->create<sv::PAssignOp>(writePipe[j].data,
-                                             writePipe[j - 1].rd_data);
+              buildPAssign(writePipe[j].addr, writePipe[j - 1].rd_addr);
+              buildPAssign(writePipe[j].mask, writePipe[j - 1].rd_mask);
+              buildPAssign(writePipe[j].data, writePipe[j - 1].rd_data);
             });
           }
         });
@@ -1751,11 +1749,10 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       auto slot = builder->create<sv::ArrayIndexInOutOp>(reg, last.rd_addr);
       auto rd_lastdata = last.rd_data;
       addToAlwaysFFBlock(EventControl::AtPosEdge, clk, [&]() {
-        addIfProceduralBlock(
-            cond, [&]() { builder->create<sv::PAssignOp>(slot, rd_lastdata); });
+        addIfProceduralBlock(cond, [&]() { buildPAssign(slot, rd_lastdata); });
       });
-    }
       continue;
+    }
     }
   }
 
