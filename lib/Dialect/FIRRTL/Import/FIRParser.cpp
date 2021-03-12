@@ -1131,23 +1131,21 @@ ParseResult FIRStmtParser::parseOptionalExpPostscript(Value &result,
 ///
 ParseResult FIRStmtParser::parsePostFixFieldId(Value &result,
                                                SubOpVector &subOps) {
-  auto loc = getToken().getLoc();
+  auto loc = translateLocation(getToken().getLoc());
   StringRef fieldName;
   if (parseFieldId(fieldName, "expected field name"))
     return failure();
 
   // Make sure the field name matches up with the input value's type and
   // compute the result type for the expression.
+  auto fieldNameAttr = builder.getStringAttr(fieldName);
   auto resultType = result.getType().cast<FIRRTLType>();
-  resultType =
-      SubfieldOp::getResultType(resultType, fieldName, translateLocation(loc));
+  resultType = SubfieldOp::getResultType(resultType, fieldNameAttr, loc);
   if (!resultType)
     return failure();
 
   // Create the result operation.
-  auto op =
-      builder.create<SubfieldOp>(translateLocation(loc), resultType, result,
-                                 builder.getStringAttr(fieldName));
+  auto op = builder.create<SubfieldOp>(loc, resultType, result, fieldNameAttr);
   subOps.push_back(op);
   result = op.getResult();
   return success();

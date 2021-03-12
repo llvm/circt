@@ -50,16 +50,21 @@ def SubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
   let assemblyFormat =
     "$input `(` $fieldname `)` attr-dict `:` functional-type($input, $result)";
 
+  let builders = [
+    OpBuilder<(ins "Value":$input, "StringAttr":$fieldName)>,
+    OpBuilder<(ins "Value":$input, "StringRef":$fieldName)>
+  ];
+
   let extraClassDeclaration = [{
     /// Compute the result of a Subfield operation on a value of the specified
     /// type and extracting the specified field name.  If the request is
     /// invalid, then a null type is returned.
-    static FIRRTLType getResultType(FIRRTLType inType, StringRef fieldName,
+    static FIRRTLType getResultType(Type inType, StringAttr fieldName,
                                     Location loc);
   }];
 
   let verifier = [{
-    VERIFY_RESULT_TYPE_RET(input().getType().cast<FIRRTLType>(), fieldname());
+    VERIFY_RESULT_TYPE_RET(input().getType(), fieldnameAttr());
   }];
 }
 
