@@ -315,7 +315,7 @@ rtl.module @Stop(%clock: i1, %reset: i1) {
   sv.always posedge %clock  {
     sv.ifdef.procedural "SYNTHESIS"  {
     } else  {
-      %0 = sv.textual_value "`STOP_COND_" : i1
+      %0 = sv.textual_value "`STOP_COND_" : () -> i1
       %1 = comb.and %0, %reset : i1
       sv.if %1  {
         sv.fatal
@@ -338,7 +338,7 @@ rtl.module @Print(%clock: i1, %reset: i1, %a: i4, %b: i4) {
   %0 = comb.concat %false, %a : (i1, i4) -> i5
   %1 = comb.shl %0, %c1_i5 : i5
   sv.always posedge %clock  {
-    %2 = sv.textual_value "`PRINTF_COND_" : i1
+    %2 = sv.textual_value "`PRINTF_COND_" : () -> i1
     %3 = comb.and %2, %reset : i1
     sv.if %3  {
       sv.fwrite "Hi %x %x\0A"(%1, %b) : i5, i4

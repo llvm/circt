@@ -248,12 +248,12 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: sv.always posedge %clock {
     // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
     // CHECK-NEXT:   } else {
-    // CHECK-NEXT:     [[TV:%.+]] = sv.textual_value "`PRINTF_COND_" : i1
+    // CHECK-NEXT:     [[TV:%.+]] = sv.textual_value "`PRINTF_COND_" : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and [[TV]], %reset
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       sv.fwrite "No operands!\0A"
     // CHECK-NEXT:     }
-    // CHECK-NEXT:     %5 = sv.textual_value "`PRINTF_COND_" : i1
+    // CHECK-NEXT:     %5 = sv.textual_value "`PRINTF_COND_" : () -> i1
     // CHECK-NEXT:     %6 = comb.and %5, %reset : i1
     // CHECK-NEXT:     sv.if %6  {
     // CHECK-NEXT:       sv.fwrite "Hi %x %x\0A"(%2, %b) : i5, i4
@@ -287,7 +287,7 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: sv.always posedge %clock1 {
     // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
     // CHECK-NEXT:   } else {
-    // CHECK-NEXT:     %0 = sv.textual_value "`STOP_COND_" : i1
+    // CHECK-NEXT:     %0 = sv.textual_value "`STOP_COND_" : () -> i1
     // CHECK-NEXT:     %1 = comb.and %0, %reset : i1
     // CHECK-NEXT:     sv.if %1 {
     // CHECK-NEXT:       sv.fatal
@@ -299,7 +299,7 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: sv.always posedge %clock2 {
     // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
     // CHECK-NEXT:   } else {
-    // CHECK-NEXT:     %0 = sv.textual_value "`STOP_COND_" : i1
+    // CHECK-NEXT:     %0 = sv.textual_value "`STOP_COND_" : () -> i1
     // CHECK-NEXT:     %1 = comb.and %0, %reset : i1
     // CHECK-NEXT:     sv.if %1 {
     // CHECK-NEXT:       sv.finish
@@ -443,7 +443,7 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT:    sv.initial {
     // CHECK-NEXT:    sv.verbatim "`INIT_RANDOM_PROLOG_"
     // CHECK-NEXT:    sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-    // CHECK-NEXT:       %3 = sv.textual_value "`RANDOM" : i2
+    // CHECK-NEXT:       %3 = sv.textual_value "`RANDOM" : () -> i2
     // CHECK-NEXT:        sv.bpassign %count, %3 : i2
     // CHECK-NEXT:     }
     // CHECK-NEXT:    }
@@ -498,9 +498,9 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
     // CHECK-NEXT:       sv.if %reset  {
     // CHECK-NEXT:       } else {
-    // CHECK-NEXT:         %8 = sv.textual_value "`RANDOM" : i32
+    // CHECK-NEXT:         %8 = sv.textual_value "`RANDOM" : () -> i32
     // CHECK-NEXT:         sv.bpassign %reg, %8 : i32
-    // CHECK-NEXT:         %9 = sv.textual_value "`RANDOM" : i32
+    // CHECK-NEXT:         %9 = sv.textual_value "`RANDOM" : () -> i32
     // CHECK-NEXT:         sv.bpassign %reg2, %9 : i32
     // CHECK-NEXT:       }
     // CHECK-NEXT:     }
@@ -580,7 +580,7 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: sv.ifdef "RANDOMIZE_GARBAGE_ASSIGN"  {
     // CHECK-NEXT:   %c-4_i4 = rtl.constant -4 : i4
     // CHECK-NEXT:   %[[cond:.+]] = comb.icmp ult %c0_i4, %c-4_i4 : i4
-    // CHECK-NEXT:   %[[random:.+]] = sv.textual_value "`RANDOM" : i42
+    // CHECK-NEXT:   %[[random:.+]] = sv.textual_value "`RANDOM" : () -> i42
     // CHECK-NEXT:   %[[dataOrRandom:.+]] = comb.mux %[[cond]], %[[data]], %[[random]] : i42
     // CHECK-NEXT:   sv.connect %_M_read_data, %[[dataOrRandom]] : i42
     // CHECK-NEXT: } else  {
