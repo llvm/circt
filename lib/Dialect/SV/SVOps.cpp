@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/RTL/RTLOps.h"
 #include "circt/Dialect/RTL/RTLTypes.h"
 #include "mlir/IR/Builders.h"
@@ -284,8 +285,20 @@ void IfOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       if (!isEmptyBlockExceptForTerminator(op.getThenBlock()))
         return failure();
 
-      if (op.hasElse() && !isEmptyBlockExceptForTerminator(op.getElseBlock()))
-        return failure();
+      if (op.hasElse() && !isEmptyBlockExceptForTerminator(op.getElseBlock())) {
+
+        auto full = rewriter.create<rtl::ConstantOp>(op.getLoc(),
+                                                     op.cond().getType(), -1);
+        Value ops[] = {full, op.cond()};
+        auto cond = rewriter.createOrFold<comb::XorOp>(
+            op.getLoc(), op.cond().getType(), ops);
+
+        auto newIfOp =
+            rewriter.create<IfOp>(op.getLoc(), cond, nullptr, nullptr);
+        rewriter.cloneRegionBefore(op.elseRegion(), newIfOp.getThenBlock());
+        rewriter.replaceOp(op, newIfOp->getResults());
+        return success();
+      }
 
       rewriter.eraseOp(op);
       return success();

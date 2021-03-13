@@ -65,3 +65,23 @@ func @empy_op(%arg0: i1) {
   sv.initial {}
   return
 }
+
+// CHECK-LABEL: func @invert_if(%arg0: i1) {
+// CHECK-NEXT:    %true = rtl.constant true
+// CHECK-NEXT:    sv.initial  {
+// CHECK-NEXT:      %0 = comb.xor %arg0, %true : i1
+// CHECK-NEXT:      sv.if %0  {
+// CHECK-NEXT:        sv.fwrite "Foo"
+// CHECK-NEXT:      }
+// CHECK-NEXT:    }
+// CHECK-NEXT:    return
+// CHECK-NEXT:  }
+func @invert_if(%arg0: i1) {
+  sv.initial {
+    sv.if %arg0 {
+    } else {
+      sv.fwrite "Foo"
+    }
+  }
+  return
+}
