@@ -39,41 +39,52 @@ For the sake of precision, we use the following definitions:
 The `seq.reg` op models an abstract notion of a "register", independent of
 its implementation (e.g. latch, D flip-flop). It is intended to be 'lowered'
 to a specific implementation, which may be an `sv.always_ff` block, a device
-primitive instantiation, or even a feedback loop in all `comb` logic. It has
-three operands and one attribute:
+primitive instantiation, or even a feedback loop in all `comb` logic. Our
+intention is to allow analysis and optimization of sequential logic without
+having to reason about timing-dependent behavior. This makes it somewhat
+distinct from the SystemVerilog register wherein one has to worry about reset
+behavior and implementation (latch vs. flip-flop).
+
+`Reg` has four operands:
 
 - **input**: The value to be captured at 'clock'. Generally called 'q'.
 Accepts any type, results in the same type.
 - **clock**: Capture 'value' on the positive edge of this signal.
 - **reset**: Signal to set the state to 'resetValue'. Optional.
-- **resetValue**: A value which the state is set to upon reset. Optional.
+- **resetValue**: A value which the state is set to upon reset. Required iff
+'reset' is present.
 
 ```mlir
-%d = seq.reg %input, %clk [, %reset [%resetValue] ] : $type(input)
+%d = seq.reg %input, %clk [, %reset [, %resetValue] ] : $type(input)
 ```
 
 ### Rationale
 
-Several design decisions were made in defining this op:
+Several design decisions were made in defining this op. Mostly, they were
+made to simplify it while still providing the common case. Providing support
+for all flavors of registers is an anti-goal of this op. If an omitted
+feature is needed, it can be added or (if not common or precludes
+optimization) another op could be added.
 
-- Inclusion of 'reset' signal: the most common lowering case is expected to
-result in a SystemVerilog `always_ff`, which _should_ include an `if (rst)`
-block. This operand makes lowering to that form easier. Omission of if would
-require some (potentially complex) analysis to find the reset mux.
-- Inclusion of 'resetValue' attribute: if we have a 'reset' signal, we need
-to include a value to avoid complex inversion tricks.
-- Omission of 'enable': enables are easily modeled via a multiplexer on the
-input with one of the muxs inputs as the output of the register. This
-property makes 'enables' easier to detect than reset in the common case.
-- Omission of 'negedge' event on 'clock': this is easily modeled by inverting the
-clock value.
-- Omission of 'dual edge' event on 'clock': this is not terribly common. If
-we find a compelling use case, we could either create a new op for "dual
-edge" register, or create a "clock double" op which would interpose on the
-clock value. (And be detected by a lowering step).
-- Omission of edge conditions on 'reset': The reset style is generally a
-design-wide choice and (if done correctly) shouldn't affect correctness. It
-should, therefore, be determined by a lowering pass.
+- Logical features:
+  - Inclusion of optional 'reset' signal: This operand makes lowering to an
+  efficient implementation of reset easier. Omission of it would require some
+  (potentially complex) analysis to find the reset mux if required (which it
+  usually is to ensure efficient synthesis).
+  - Inclusion of 'resetValue': if we have a 'reset' signal, we need to
+  include a value.
+  - Omission of 'enable': enables are easily modeled via a multiplexer on the
+  input with one of the mux inputs as the output of the register. This
+  property makes 'enables' easier to detect than reset in the common case.
+
+- Timing / clocking:
+  - Omission of 'negedge' event on 'clock': this is easily modeled by
+  inverting the clock value.
+  - Omission of 'dual edge' event on 'clock': this is not expected to be
+  terribly common.
+  - Omission of edge conditions on 'reset': The reset style shouldn't affect
+  logical correctness. It should, therefore, be determined by a lowering
+  pass.
 
 ### Future considerations
 
@@ -82,7 +93,7 @@ do not detect and generate the SystemVerilog correctly), we can build it into
 the reg op.
 - Reset style and clock style: how should we model posedge vs negedge clocks?
 Async vs sync resets? There are some reasonble options here: attributes on
-the `reg` op or `clock` and `reset` types which are parameterized with that
+this op or `clock` and `reset` types which are parameterized with that
 information.
 - Initial value: this register initializes to `x` (in SystemVerilog
 terminology). We will add an `initialValue` attribute if this proves
