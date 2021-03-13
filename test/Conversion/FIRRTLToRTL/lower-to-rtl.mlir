@@ -574,18 +574,10 @@ firrtl.circuit "Simple" {
 
     // COM: Read port.
     // COM: --------------------------------------------------------------------
-    // CHECK-NEXT: %_M_read_data = sv.wire : !rtl.inout<i42>
-    // CHECK-NEXT: %[[data_inout:.+]] = sv.array_index_inout %_M[%c0_i4]
-    // CHECK-NEXT: %[[data:.+]] = sv.read_inout %[[data_inout]]
-    // CHECK-NEXT: sv.ifdef "RANDOMIZE_GARBAGE_ASSIGN"  {
-    // CHECK-NEXT:   %c-4_i4 = rtl.constant -4 : i4
-    // CHECK-NEXT:   %[[cond:.+]] = comb.icmp ult %c0_i4, %c-4_i4 : i4
-    // CHECK-NEXT:   %[[random:.+]] = sv.textual_value "`RANDOM" : () -> i42
-    // CHECK-NEXT:   %[[dataOrRandom:.+]] = comb.mux %[[cond]], %[[data]], %[[random]] : i42
-    // CHECK-NEXT:   sv.connect %_M_read_data, %[[dataOrRandom]] : i42
-    // CHECK-NEXT: } else  {
-    // CHECK-NEXT:   sv.connect %_M_read_data, %[[data]] : i42
-    // CHECK-NEXT: }
+    // CHECK-NEXT: [[data_inout:%.+]] = sv.array_index_inout %_M[%c0_i4]
+    // CHECK-NEXT: [[data:%.+]] = sv.read_inout [[data_inout]]
+    // CHECK-NEXT: %c-4_i4 = rtl.constant -4 : i4
+    // CHECK-NEXT:  = sv.textual_value "RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK({{.*}})"(%c0_i4, [[data]], %c-4_i4) : (i4, i42, i4) -> i42
 
     // COM: Write port.
     // COM: --------------------------------------------------------------------
@@ -766,8 +758,7 @@ firrtl.circuit "Simple" {
     // CHECK:  %_M = sv.reg : !rtl.inout<uarray<12xi42>>
     %_M_read = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>
     // Read port.
-    // CHECK-NEXT: %_M_read_data = sv.wire : !rtl.inout<i42>
-    // CHECK:      sv.ifdef "RANDOMIZE_GARBAGE_ASSIGN"  {
+    // CHECK:      sv.textual_value "RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK
     %6 = firrtl.subfield %_M_read("addr") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<uint<4>>
     firrtl.connect %6, %c0_ui1 : !firrtl.flip<uint<4>>, !firrtl.uint<1>
     %7 = firrtl.subfield %_M_read("en") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<uint<1>>
