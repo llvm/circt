@@ -23,6 +23,7 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TinyPtrVector.h"
+#include "llvm/Support/Parallel.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -161,11 +162,14 @@ void FIRRTLModuleLowering::runOnOperation() {
   // if lowering failed.
   DenseMap<Operation *, Operation *> oldToNewModuleMap;
 
+  SmallVector<FModuleOp, 32> modulesToProcess;
+
   // Iterate through each operation in the circuit body, transforming any
   // FModule's we come across.
   for (auto &op : circuitBody->getOperations()) {
     if (auto module = dyn_cast<FModuleOp>(op)) {
       oldToNewModuleMap[&op] = lowerModule(module, moduleBody);
+      modulesToProcess.push_back(module);
       continue;
     }
 
@@ -185,13 +189,14 @@ void FIRRTLModuleLowering::runOnOperation() {
   }
 
   // Now that we've lowered all of the modules, move the bodies over and update
-  // any instances that refer to the old modules.  Only rtl.instance can refer
-  // to an rtl.module, not a firrtl.instance.
-  //
-  // TODO: This is a trivially parallelizable for loop.  We should be able to
-  // process each module in parallel.
-  for (auto &op : circuitBody->getOperations()) {
-    if (auto module = dyn_cast<FModuleOp>(op))
+  // any instances that refer to the old modules.
+  if (getContext().isMultithreadingEnabled()) {
+    mlir::ParallelDiagnosticHandler diagHandler(&getContext());
+    llvm::parallelForEachN(0, modulesToProcess.size(), [&](auto index) {
+      lowerModuleBody(modulesToProcess[index], oldToNewModuleMap);
+    });
+  } else {
+    for (auto module : modulesToProcess)
       lowerModuleBody(module, oldToNewModuleMap);
   }
 
