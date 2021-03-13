@@ -21,7 +21,6 @@
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/Parallel.h"
 #include <algorithm>
-#include <vector>
 
 using namespace circt;
 using namespace firrtl;
