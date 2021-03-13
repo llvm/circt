@@ -596,6 +596,21 @@ rtl.module @reg(%inout: i1) -> (%b: i1) {
   rtl.output %inout : i1
 }   
 
+// https://github.com/llvm/circt/issues/736
+// Can't depend on left associativeness since ops can have args with different sizes
+// CHECK-LABEL: module eqIssue(
+// CHECK-NEXT: input  [8:0] a, c,
+// CHECK-NEXT: input  [3:0] d, e,
+// CHECK-NEXT: output       r);
+// CHECK-EMPTY:
+// CHECK-NEXT: assign r = a == c == (d == e);
+  rtl.module @eqIssue(%a: i9, %c :i9, %d: i4, %e: i4) -> (%r : i1){
+    %1 = comb.icmp eq %a, %c : i9
+    %2 = comb.icmp eq %d, %e : i4
+    %4 = comb.icmp eq %1, %2 : i1
+    rtl.output %4 : i1
+  }
+  
 // https://github.com/llvm/circt/issues/750
 // Always get array indexes on the lhs
 // CHECK-LABEL: module ArrayLHS

@@ -43,7 +43,9 @@ static Type lowerType(Type type) {
       Type etype = lowerType(element.type);
       if (!etype)
         return {};
-      rtlfields.push_back(rtl::StructType::FieldInfo{element.name, etype});
+      // TODO: make rtl::StructType contain StringAttrs.
+      auto name = Identifier::get(element.name.getValue(), type.getContext());
+      rtlfields.push_back(rtl::StructType::FieldInfo{name, etype});
     }
     return rtl::StructType::get(type.getContext(), rtlfields);
   }
@@ -403,9 +405,8 @@ collectOperationTreeBelowMarker(Value value, Operation *marker,
 /// to it, converted to an RTL type.  If this isn't a situation we can handle,
 /// just return null.
 ///
-/// This can happen when there are no connects to the value, or if
-/// firrtl.invalid is used.  The 'mergePoint' location is where a 'rtl.merge'
-/// operation should be inserted if needed.
+/// This can happen when there are no connects to the value.  The 'mergePoint'
+/// location is where a 'rtl.merge' operation should be inserted if needed.
 static Value tryEliminatingConnectsToValue(Value flipValue,
                                            Operation *insertPoint) {
   SmallVector<ConnectOp, 2> connects;
@@ -765,6 +766,8 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
 
   void runOnOperation() override;
 
+  void optimizeTemporaryWire(sv::WireOp wire);
+
   // Helpers.
   Value getPossiblyInoutLoweredValue(Value value);
   Value getLoweredValue(Value value);
@@ -796,6 +799,14 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
                                  std::function<void(void)> elseCtor = {});
   void addIfProceduralBlock(Value cond, std::function<void(void)> thenCtor,
                             std::function<void(void)> elseCtor = {});
+
+  // Create a temporary wire at the current insertion point, and try to
+  // eliminate it later as part of lowering post processing.
+  sv::WireOp createTmpWireOp(Type type, StringRef name) {
+    auto result = builder->create<sv::WireOp>(type, name);
+    tmpWiresToOptimize.push_back(result);
+    return result;
+  }
 
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitExpr;
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitDecl;
@@ -932,12 +943,16 @@ private:
   // We auto-unique graph-level blocks to reduce the amount of generated code
   // and ensure that side effects are properly ordered in FIRRTL.
   llvm::SmallDenseMap<Value, sv::AlwaysOp> alwaysBlocks;
-  llvm::SmallDenseMap<std::tuple<Block *, EventControl, Value, ::ResetType,
-                                 EventControl, Value>,
-                      sv::AlwaysFFOp>
-      alwaysFFBlocks;
+
+  using AlwaysFFKeyType = std::tuple<Block *, EventControl, Value, ::ResetType,
+                                     EventControl, Value>;
+  llvm::SmallDenseMap<AlwaysFFKeyType, sv::AlwaysFFOp> alwaysFFBlocks;
   llvm::SmallDenseMap<std::pair<Block *, Attribute>, sv::IfDefOp> ifdefBlocks;
   llvm::SmallDenseMap<Block *, sv::InitialOp> initialBlocks;
+
+  /// This is a set of wires that get inserted as an artifact of the lowering
+  /// process.  LowerToRTL should attempt to clean these up after lowering.
+  SmallVector<sv::WireOp> tmpWiresToOptimize;
 
   /// This is true if we've emitted `INIT_RANDOM_PROLOG_ into an initial block
   /// in this module already.
@@ -956,7 +971,6 @@ void FIRRTLLowering::runOnOperation() {
   // through each operation, lowering each in turn if we can, introducing casts
   // if we cannot.
   auto *body = getOperation().getBodyBlock();
-
   randomizePrologEmitted = false;
 
   SmallVector<Operation *, 16> opsToRemove;
@@ -996,12 +1010,59 @@ void FIRRTLLowering::runOnOperation() {
     opsToRemove.pop_back_val()->erase();
   }
 
+  // Now that the IR is in a stable form, try to eliminate temporary wires
+  // inserted by MemOp insertions.
+  for (auto wire : tmpWiresToOptimize)
+    optimizeTemporaryWire(wire);
+
   // Clear out the value mapping for next time, so we don't have dangling keys.
   valueMapping.clear();
   alwaysBlocks.clear();
   alwaysFFBlocks.clear();
   ifdefBlocks.clear();
   initialBlocks.clear();
+  tmpWiresToOptimize.clear();
+}
+
+// Try to optimize out temporary wires introduced during lowering.
+void FIRRTLLowering::optimizeTemporaryWire(sv::WireOp wire) {
+  // Wires have inout type, so they'll have connects and read_inout operations
+  // that work on them.  If anything unexpected is found then leave it alone.
+  SmallVector<sv::ReadInOutOp> reads;
+  sv::ConnectOp write;
+
+  for (auto *user : wire->getUsers()) {
+    if (auto read = dyn_cast<sv::ReadInOutOp>(user)) {
+      reads.push_back(read);
+      continue;
+    }
+
+    // Otherwise must be a connect, and we must not have seen a write yet.
+    auto connect = dyn_cast<sv::ConnectOp>(user);
+    if (!connect || write)
+      return;
+    write = connect;
+  }
+
+  // Must have found the write!
+  if (!write)
+    return;
+
+  // If the write is happening at the model level then we don't have any
+  // use-before-def checking to do, so we only handle that for now.
+  if (!isa<rtl::RTLModuleOp>(write->getParentOp()))
+    return;
+
+  auto connected = write.src();
+
+  // Ok, we can do this.  Replace all the reads with the connected value.
+  for (auto read : reads) {
+    read.replaceAllUsesWith(connected);
+    read.erase();
+  }
+  // And remove the write and wire itself.
+  write.erase();
+  wire.erase();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1533,14 +1594,14 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   uint64_t depth = op.depth();
   uint64_t readLatency = op.readLatency();
   uint64_t writeLatency = op.writeLatency();
-
-  FIRRTLType addrType = op.getResult(0)
-                            .getType()
-                            .cast<FIRRTLType>()
-                            .getPassiveType()
-                            .cast<BundleType>()
-                            .getElement("addr")
-                            ->type;
+  auto addrType = lowerType(op.getResult(0)
+                                .getType()
+                                .cast<FIRRTLType>()
+                                .getPassiveType()
+                                .cast<BundleType>()
+                                .getElement("addr")
+                                ->type);
+  auto dataType = lowerType(op.getDataType());
 
   // A store of values associated with a delayed read.
   struct ReadPipeElement {
@@ -1563,19 +1624,27 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   };
 
   // Create a register for the memory.
-  Value reg = builder->create<sv::RegOp>(
-      rtl::UnpackedArrayType::get(lowerType(op.getDataType()), depth),
-      builder->getStringAttr(memName.str()));
+  Value reg =
+      builder->create<sv::RegOp>(rtl::UnpackedArrayType::get(dataType, depth),
+                                 builder->getStringAttr(memName.str()));
+
+  // Some helpers.
+  auto buildPAssign = [&](Value dest, Value value) {
+    builder->create<sv::PAssignOp>(dest, value);
+  };
 
   // Track pipeline registers that were added. These need to be
   // randomly initialized later.
   SmallVector<Value> pipeRegs;
 
-  // Loop over each port
-  auto namesArray = op.portNames();
-  for (size_t i = 0, e = namesArray.size(); i != e; ++i) {
-    auto portName = namesArray[i].cast<StringAttr>().getValue().str();
-    auto port = op.getPortNamed(portName);
+  // Process each port in turn.
+  SmallVector<std::pair<Identifier, MemOp::PortKind>> ports;
+  op.getPorts(ports);
+  assert(op.getNumResults() == ports.size());
+
+  for (size_t i = 0, e = ports.size(); i != e; ++i) {
+    auto portName = ports[i].first.str();
+    auto port = op.getResult(i);
 
     // Do not lower ports if they aren't used.
     if (port.use_empty())
@@ -1589,13 +1658,13 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     for (BundleType::BundleElement elt : portBundleType.getElements()) {
       auto fieldType = lowerType(elt.type);
       if (fieldType.isInteger(0)) {
-        portWires.insert({elt.name.strref(), Value()});
+        portWires.insert({elt.name.getValue(), Value()});
         continue;
       }
       auto name =
-          (Twine(memName) + "_" + portName + "_" + elt.name.str()).str();
-      auto fieldWire = builder->create<sv::WireOp>(fieldType, name);
-      portWires.insert({elt.name.strref(), fieldWire});
+          (Twine(memName) + "_" + portName + "_" + elt.name.getValue()).str();
+      auto fieldWire = createTmpWireOp(fieldType, name);
+      portWires.insert({elt.name.getValue(), fieldWire});
     }
 
     // Now that we have the wires for each element, rewrite any subfields to
@@ -1607,12 +1676,13 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     }
 
     // Return the value corresponding to a port field.
-    auto getPortFieldValue = [&](StringRef portName) -> Value {
-      return builder->create<sv::ReadInOutOp>(portWires[portName]);
+    auto getPortFieldValue = [&](StringRef name) -> Value {
+      return builder->create<sv::ReadInOutOp>(portWires[name]);
     };
 
-    // Create an array register
-    auto arrayReg = [&](StringRef elementName, Type type, int depth) -> Value {
+    // Create an array register and keep track of it in pipeRegs.
+    auto createArrayReg = [&](StringRef elementName, Type type,
+                              uint64_t depth) -> Value {
       auto a = builder->create<sv::RegOp>(
           rtl::UnpackedArrayType::get(type, depth),
           builder->getStringAttr(memName.str() + "_" + portName +
@@ -1625,24 +1695,22 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     auto clk = getPortFieldValue("clk");
 
     // Loop over each element of the port
-    switch (op.getPortKind(portName).getValue()) {
-    case MemOp::PortKind::ReadWrite: {
-      // TODO: Handle readwriters properly
+    switch (ports[i].second) {
+    case MemOp::PortKind::ReadWrite:
       op.emitOpError("readwrite ports should be lowered into separate read and "
                      "write ports by previous passes");
-    }
       continue;
     case MemOp::PortKind::Read: {
       // Add delays for non-zero read latency
       SmallVector<ReadPipeElement> readPipe;
-      auto rden = builder->create<sv::ReadInOutOp>(portWires["en"]);
-      auto rdaddr = builder->create<sv::ReadInOutOp>(portWires["addr"]);
+      auto rden = getPortFieldValue("en");
+      auto rdaddr = getPortFieldValue("addr");
       readPipe.push_back({portWires["en"], portWires["addr"], rden, rdaddr});
       Value enReg, addrReg, enRegRd, addRegRd;
       for (size_t j = 0; j < readLatency; ++j) {
         if (j == 0) {
-          enReg = arrayReg("_en_pipe", i1Type, readLatency);
-          addrReg = arrayReg("_addr_pipe", lowerType(addrType), readLatency);
+          enReg = createArrayReg("_en_pipe", i1Type, readLatency);
+          addrReg = createArrayReg("_addr_pipe", addrType, readLatency);
         }
         auto jIdx =
             builder->create<rtl::ConstantOp>(APInt(log2(readLatency + 1), j));
@@ -1655,11 +1723,9 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       if (readLatency != 0) {
         addToAlwaysFFBlock(EventControl::AtPosEdge, clk, [&]() {
           for (size_t j = 1; j < readLatency + 1; ++j) {
-            builder->create<sv::PAssignOp>(readPipe[j].en,
-                                           readPipe[j - 1].rd_en);
+            buildPAssign(readPipe[j].en, readPipe[j - 1].rd_en);
             addIfProceduralBlock(readPipe[j - 1].rd_en, [&]() {
-              builder->create<sv::PAssignOp>(readPipe[j].addr,
-                                             readPipe[j - 1].rd_addr);
+              buildPAssign(readPipe[j].addr, readPipe[j - 1].rd_addr);
             });
           }
         });
@@ -1669,35 +1735,34 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       value = builder->create<sv::ReadInOutOp>(value);
 
       // If we're masking, emit "addr < Depth ? mem[addr] : `RANDOM".
-      if (!llvm::isPowerOf2_64(depth)) {
-        addToIfDefBlock(
-            "RANDOMIZE_GARBAGE_ASSIGN",
-            [&]() {
-              auto addrWidth = addr.getType().getIntOrFloatBitWidth();
-              auto depthCst =
-                  builder->create<rtl::ConstantOp>(APInt(addrWidth, depth));
-              auto cmp = builder->create<comb::ICmpOp>(ICmpPredicate::ult, addr,
-                                                       depthCst);
-              auto randomVal = builder->create<sv::TextualValueOp>(
-                  value.getType(), "`RANDOM");
-              auto randomOrVal =
-                  builder->create<comb::MuxOp>(cmp, value, randomVal);
-              builder->create<sv::ConnectOp>(portWires["data"], randomOrVal);
-            },
-            [&]() {
-              builder->create<sv::ConnectOp>(portWires["data"], value);
-            });
-      } else {
+      if (llvm::isPowerOf2_64(depth)) {
         builder->create<sv::ConnectOp>(portWires["data"], value);
+        continue;
       }
-    }
+
+      addToIfDefBlock(
+          "RANDOMIZE_GARBAGE_ASSIGN",
+          [&]() {
+            auto addrWidth = addr.getType().getIntOrFloatBitWidth();
+            auto depthCst =
+                builder->create<rtl::ConstantOp>(APInt(addrWidth, depth));
+            auto cmp = builder->create<comb::ICmpOp>(ICmpPredicate::ult, addr,
+                                                     depthCst);
+            auto randomVal =
+                builder->create<sv::TextualValueOp>(value.getType(), "`RANDOM");
+            auto randomOrVal =
+                builder->create<comb::MuxOp>(cmp, value, randomVal);
+            builder->create<sv::ConnectOp>(portWires["data"], randomOrVal);
+          },
+          [&]() { builder->create<sv::ConnectOp>(portWires["data"], value); });
       continue;
+    }
     case MemOp::PortKind::Write: {
       SmallVector<WritePipeElement> writePipe;
-      auto rdEn = builder->create<sv::ReadInOutOp>(portWires["en"]);
-      auto rdAddr = builder->create<sv::ReadInOutOp>(portWires["addr"]);
-      auto rdMask = builder->create<sv::ReadInOutOp>(portWires["mask"]);
-      auto rdData = builder->create<sv::ReadInOutOp>(portWires["data"]);
+      auto rdEn = getPortFieldValue("en");
+      auto rdAddr = getPortFieldValue("addr");
+      auto rdMask = getPortFieldValue("mask");
+      auto rdData = getPortFieldValue("data");
       writePipe.push_back({portWires["en"], portWires["addr"],
                            portWires["mask"], portWires["data"], rdEn, rdAddr,
                            rdMask, rdData});
@@ -1706,12 +1771,10 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       Value wRegEn, wRegAddr, wRegMask, wRegData;
       for (size_t j = 0; j < writeLatency - 1; ++j) {
         if (j == 0) {
-          wRegEn = arrayReg("_en_pipe", i1Type, writeLatency - 1);
-          wRegAddr =
-              arrayReg("_addr_pipe", lowerType(addrType), writeLatency - 1);
-          wRegMask = arrayReg("_mask_pipe", i1Type, writeLatency - 1);
-          wRegData = arrayReg("_data_pipe", lowerType(op.getDataType()),
-                              writeLatency - 1);
+          wRegEn = createArrayReg("_en_pipe", i1Type, writeLatency - 1);
+          wRegAddr = createArrayReg("_addr_pipe", addrType, writeLatency - 1);
+          wRegMask = createArrayReg("_mask_pipe", i1Type, writeLatency - 1);
+          wRegData = createArrayReg("_data_pipe", dataType, writeLatency - 1);
         }
         auto jIdx =
             builder->create<rtl::ConstantOp>(APInt(log2(writeLatency), j));
@@ -1730,15 +1793,11 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       if (writeLatency != 1) {
         addToAlwaysFFBlock(EventControl::AtPosEdge, clk, [&]() {
           for (size_t j = 1; j < writeLatency; ++j) {
-            builder->create<sv::PAssignOp>(writePipe[j].en,
-                                           writePipe[j - 1].rd_en);
+            buildPAssign(writePipe[j].en, writePipe[j - 1].rd_en);
             addIfProceduralBlock(writePipe[j - 1].rd_en, [&]() {
-              builder->create<sv::PAssignOp>(writePipe[j].addr,
-                                             writePipe[j - 1].rd_addr);
-              builder->create<sv::PAssignOp>(writePipe[j].mask,
-                                             writePipe[j - 1].rd_mask);
-              builder->create<sv::PAssignOp>(writePipe[j].data,
-                                             writePipe[j - 1].rd_data);
+              buildPAssign(writePipe[j].addr, writePipe[j - 1].rd_addr);
+              buildPAssign(writePipe[j].mask, writePipe[j - 1].rd_mask);
+              buildPAssign(writePipe[j].data, writePipe[j - 1].rd_data);
             });
           }
         });
@@ -1751,11 +1810,10 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       auto slot = builder->create<sv::ArrayIndexInOutOp>(reg, last.rd_addr);
       auto rd_lastdata = last.rd_data;
       addToAlwaysFFBlock(EventControl::AtPosEdge, clk, [&]() {
-        addIfProceduralBlock(
-            cond, [&]() { builder->create<sv::PAssignOp>(slot, rd_lastdata); });
+        addIfProceduralBlock(cond, [&]() { buildPAssign(slot, rd_lastdata); });
       });
-    }
       continue;
+    }
     }
   }
 

@@ -233,10 +233,10 @@ public:
 
   // Each element of a bundle, which is a name and type.
   struct BundleElement {
-    Identifier name;
+    StringAttr name;
     FIRRTLType type;
 
-    BundleElement(Identifier name, FIRRTLType type) : name(name), type(type) {}
+    BundleElement(StringAttr name, FIRRTLType type) : name(name), type(type) {}
 
     bool operator==(const BundleElement &rhs) const {
       return name == rhs.name && type == rhs.type;
