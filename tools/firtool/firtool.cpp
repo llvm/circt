@@ -143,8 +143,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   if (lowerToRTL || outputFormat == OutputVerilog) {
     if (enableLowerTypes)
       pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass());
-    pm.addPass(createLowerFIRRTLToRTLModulePass());
-    pm.addNestedPass<rtl::RTLModuleOp>(createLowerFIRRTLToRTLPass());
+    pm.addPass(createLowerFIRRTLToRTLPass());
 
     // If enabled, run the optimizer.
     if (!disableOptimization) {

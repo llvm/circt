@@ -110,7 +110,7 @@ static bool isZeroBitFIRRTLType(Type type) {
 
 namespace {
 struct FIRRTLModuleLowering
-    : public LowerFIRRTLToRTLModuleBase<FIRRTLModuleLowering> {
+    : public LowerFIRRTLToRTLBase<FIRRTLModuleLowering> {
 
   void runOnOperation() override;
 
@@ -125,6 +125,7 @@ private:
 
   void lowerModuleBody(FModuleOp oldModule,
                        DenseMap<Operation *, Operation *> &oldToNewModuleMap);
+  void lowerModuleOperations(rtl::RTLModuleOp module);
 
   void lowerInstance(InstanceOp instance, CircuitOp circuitOp,
                      DenseMap<Operation *, Operation *> &oldToNewModuleMap);
@@ -132,7 +133,7 @@ private:
 } // end anonymous namespace
 
 /// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::createLowerFIRRTLToRTLModulePass() {
+std::unique_ptr<mlir::Pass> circt::createLowerFIRRTLToRTLPass() {
   return std::make_unique<FIRRTLModuleLowering>();
 }
 
@@ -636,6 +637,9 @@ void FIRRTLModuleLowering::lowerModuleBody(
 
   // We are done with our cursor op.
   cursor.erase();
+
+  // Lower all of the other operations.
+  lowerModuleOperations(newModule);
 }
 
 /// Lower a firrtl.instance operation to an rtl.instance operation.  This is a
@@ -766,10 +770,9 @@ void FIRRTLModuleLowering::lowerInstance(
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
-                        public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
+struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
-  void runOnOperation() override;
+  void run(rtl::RTLModuleOp module);
 
   void optimizeTemporaryWire(sv::WireOp wire);
 
@@ -965,24 +968,23 @@ private:
 };
 } // end anonymous namespace
 
-/// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::createLowerFIRRTLToRTLPass() {
-  return std::make_unique<FIRRTLLowering>();
+void FIRRTLModuleLowering::lowerModuleOperations(rtl::RTLModuleOp module) {
+  FIRRTLLowering().run(module);
 }
 
 // This is the main entrypoint for the lowering pass.
-void FIRRTLLowering::runOnOperation() {
+void FIRRTLLowering::run(rtl::RTLModuleOp module) {
   // FIRRTL FModule is a single block because FIRRTL ops are a DAG.  Walk
   // through each operation, lowering each in turn if we can, introducing casts
   // if we cannot.
-  auto *body = getOperation().getBodyBlock();
+  auto *body = module.getBodyBlock();
   randomizePrologEmitted = false;
 
   SmallVector<Operation *, 16> opsToRemove;
 
   // Iterate through each operation in the module body, attempting to lower
   // each of them.  We maintain 'builder' for each invocation.
-  ImplicitLocOpBuilder theBuilder(getOperation().getLoc(), &getContext());
+  ImplicitLocOpBuilder theBuilder(module.getLoc(), module.getContext());
   builder = &theBuilder;
   for (auto &op : body->getOperations()) {
     builder->setInsertionPoint(&op);
@@ -1696,7 +1698,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       return a;
     };
 
-    auto i1Type = IntegerType::get(builder->getContext(), 1);
+    auto i1Type = builder->getI1Type();
     auto clk = getPortFieldValue("clk");
 
     // Loop over each element of the port
@@ -2077,7 +2079,7 @@ LogicalResult FIRRTLLowering::lowerCmpOp(Operation *op, ICmpPredicate signedOp,
 
   auto cmpType = getWidestIntType(lhsIntType, rhsIntType);
   if (cmpType.getWidth() == 0) // Handle 0-width inputs by promoting to 1 bit.
-    cmpType = UIntType::get(&getContext(), 1);
+    cmpType = UIntType::get(builder->getContext(), 1);
   auto lhs = getLoweredAndExtendedValue(op->getOperand(0), cmpType);
   auto rhs = getLoweredAndExtendedValue(op->getOperand(1), cmpType);
   if (!lhs || !rhs)

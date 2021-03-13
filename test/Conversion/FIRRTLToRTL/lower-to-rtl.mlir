@@ -1,21 +1,20 @@
 // RUN: circt-opt -lower-firrtl-to-rtl %s | FileCheck %s
 
-module attributes {firrtl.mainModule = "Simple"} {
+firrtl.circuit "Simple" {
 
   // CHECK-LABEL: rtl.module @Simple
-  rtl.module @Simple(%in1: i4, %in2: i2, %in3: i8) -> (%out4: i4, %out5: i4) {
-    %in1c = firrtl.stdIntCast %in1 : (i4) -> !firrtl.uint<4>
-    %in2c = firrtl.stdIntCast %in2 : (i2) -> !firrtl.uint<2>
-    %in3c = firrtl.stdIntCast %in3 : (i8) -> !firrtl.sint<8>
-    // CHECK-NEXT: [[OUT4:%.+]] = sv.wire : !rtl.inout<i4>
-    %out4 = firrtl.wire : !firrtl.flip<uint<4>>
-    // CHECK-NEXT:  [[OUT5:%.+]] = sv.wire : !rtl.inout<i4>
-    %out5 = firrtl.wire : !firrtl.flip<uint<4>>
+  firrtl.module @Simple(%in1: !firrtl.uint<4>,
+                        %in2: !firrtl.uint<2>,
+                        %in3: !firrtl.sint<8>) {
+    // CHECK: %out4 = sv.wire  : !rtl.inout<i4>
+    // CHECK: %out5 = sv.wire  : !rtl.inout<i4>
+    %out4 = firrtl.wire : !firrtl.uint<4>
+    %out5 = firrtl.wire : !firrtl.uint<4>
 
-    // CHECK: [[ZERO4:%.+]] = rtl.constant 0 : i4
-    // CHECK: sv.connect [[OUT5]], [[ZERO4]] : i4
+    // CHECK: %c0_i4 = rtl.constant 0 : i4
+    // CHECK: sv.connect %out5, %c0_i4 : i4
     %tmp1 = firrtl.invalidvalue : !firrtl.uint<4>
-    firrtl.connect %out5, %tmp1 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+    firrtl.connect %out5, %tmp1 : !firrtl.uint<4>, !firrtl.uint<4>
 
     // CHECK: rtl.constant -4 : i4
     %c12_ui4 = firrtl.constant(12 : ui4) : !firrtl.uint<4>
@@ -25,26 +24,26 @@ module attributes {firrtl.mainModule = "Simple"} {
 
     // CHECK: [[ZEXT:%.+]] = comb.concat %false_0, %in1 : (i1, i4) -> i5
     // CHECK: [[ADD:%.+]] = comb.add %c12_i5, [[ZEXT]] : i5
-    %0 = firrtl.add %c12_ui4, %in1c : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
+    %0 = firrtl.add %c12_ui4, %in1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
-    %1 = firrtl.asUInt %in1c : (!firrtl.uint<4>) -> !firrtl.uint<4>
+    %1 = firrtl.asUInt %in1 : (!firrtl.uint<4>) -> !firrtl.uint<4>
 
     // CHECK: [[ZEXT1:%.+]] = comb.concat %false_1, [[ADD]] : (i1, i5) -> i6
     // CHECK: [[ZEXT2:%.+]] = comb.concat %c0_i2, %in1 : (i2, i4) -> i6
     // CHECK-NEXT: [[SUB:%.+]] = comb.sub [[ZEXT1]], [[ZEXT2]] : i6
     %2 = firrtl.sub %0, %1 : (!firrtl.uint<5>, !firrtl.uint<4>) -> !firrtl.uint<6>
 
-    %in2s = firrtl.asSInt %in2c : (!firrtl.uint<2>) -> !firrtl.sint<2>
+    %in2s = firrtl.asSInt %in2 : (!firrtl.uint<2>) -> !firrtl.sint<2>
 
     // CHECK: [[PADRES:%.+]] = comb.sext %in2 : (i2) -> i3
     %3 = firrtl.pad %in2s, 3 : (!firrtl.sint<2>) -> !firrtl.sint<3>
 
     // CHECK: [[PADRES2:%.+]] = comb.concat %c0_i2_2, %in2 : (i2, i2) -> i4
-    %4 = firrtl.pad %in2c, 4 : (!firrtl.uint<2>) -> !firrtl.uint<4>
+    %4 = firrtl.pad %in2, 4 : (!firrtl.uint<2>) -> !firrtl.uint<4>
 
     // CHECK: [[IN2EXT:%.+]] = comb.concat %c0_i2_3, %in2 : (i2, i2) -> i4
     // CHECK: [[XOR:%.+]] = comb.xor [[IN2EXT]], [[PADRES2]] : i4
-    %5 = firrtl.xor %in2c, %4 : (!firrtl.uint<2>, !firrtl.uint<4>) -> !firrtl.uint<4>
+    %5 = firrtl.xor %in2, %4 : (!firrtl.uint<2>, !firrtl.uint<4>) -> !firrtl.uint<4>
 
     // CHECK: comb.and [[XOR]]
     %and = firrtl.and %5, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
@@ -56,18 +55,18 @@ module attributes {firrtl.mainModule = "Simple"} {
     %6 = firrtl.cat %4, %5 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<8>
 
     // CHECK: comb.concat %in1, %in2
-    %7 = firrtl.cat %in1c, %in2c : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<6>
+    %7 = firrtl.cat %in1, %in2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<6>
 
-    // CHECK-NEXT: sv.connect [[OUT5]], [[PADRES2]] : i4
-    firrtl.connect %out5, %4 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+    // CHECK-NEXT: sv.connect %out5, [[PADRES2]] : i4
+    firrtl.connect %out5, %4 : !firrtl.uint<4>, !firrtl.uint<4>
 
-    // CHECK-NEXT: sv.connect [[OUT4]], [[XOR]] : i4
-    firrtl.connect %out4, %5 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+    // CHECK-NEXT: sv.connect %out4, [[XOR]] : i4
+    firrtl.connect %out4, %5 : !firrtl.uint<4>, !firrtl.uint<4>
 
     // CHECK-NEXT: %c0_i2_4 = rtl.constant
     // CHECK-NEXT: [[ZEXT:%.+]] = comb.concat %c0_i2_4, %in2 : (i2, i2) -> i4
-    // CHECK-NEXT: sv.connect [[OUT4]], [[ZEXT]] : i4
-    firrtl.connect %out4, %in2c : !firrtl.flip<uint<4>>, !firrtl.uint<2>
+    // CHECK-NEXT: sv.connect %out4, [[ZEXT]] : i4
+    firrtl.connect %out4, %in2 : !firrtl.uint<4>, !firrtl.uint<2>
 
     // CHECK-NEXT: %test-name = sv.wire : !rtl.inout<i4>
     firrtl.wire {name = "test-name"} : !firrtl.uint<4>
@@ -97,7 +96,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     %12 = firrtl.shr %6, 8 : (!firrtl.uint<8>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: = comb.extract %in3 from 7 : (i8) -> i1
-    %13 = firrtl.shr %in3c, 8 : (!firrtl.sint<8>) -> !firrtl.sint<1>
+    %13 = firrtl.shr %in3, 8 : (!firrtl.sint<8>) -> !firrtl.sint<1>
 
     // CHECK-NEXT: [[ZERO:%.+]] = rtl.constant 0 : i3
     // CHECK-NEXT: = comb.concat [[CONCAT1]], [[ZERO]] : (i8, i3) -> i11
@@ -124,21 +123,21 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: [[IN3SEXT:%.+]] = comb.sext %in3 : (i8) -> i9
     // CHECK-NEXT: [[PADRESSEXT:%.+]] = comb.sext [[PADRES]] : (i3) -> i9
     // CHECK-NEXT: = comb.divs [[IN3SEXT]], [[PADRESSEXT]] : i9
-    %19 = firrtl.div %in3c, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.sint<9>
+    %19 = firrtl.div %in3, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.sint<9>
 
     // CHECK-NEXT: [[IN3EX:%.+]] = comb.sext [[PADRES]] : (i3) -> i8
     // CHECK-NEXT: [[MOD1:%.+]] = comb.mods %in3, [[IN3EX]] : i8
     // CHECK-NEXT: = comb.extract [[MOD1]] from 0 : (i8) -> i3
-    %20 = firrtl.rem %in3c, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.sint<3>
+    %20 = firrtl.rem %in3, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.sint<3>
 
     // CHECK-NEXT: [[IN4EX:%.+]] = comb.sext [[PADRES]] : (i3) -> i8
     // CHECK-NEXT: [[MOD2:%.+]] = comb.mods [[IN4EX]], %in3 : i8
     // CHECK-NEXT: = comb.extract [[MOD2]] from 0 : (i8) -> i3
-    %21 = firrtl.rem %3, %in3c : (!firrtl.sint<3>, !firrtl.sint<8>) -> !firrtl.sint<3>
+    %21 = firrtl.rem %3, %in3 : (!firrtl.sint<3>, !firrtl.sint<8>) -> !firrtl.sint<3>
 
     // CHECK-NEXT: [[WIRE:%n1]] = sv.wire : !rtl.inout<i2>
     // CHECK-NEXT: sv.connect [[WIRE]], %in2 : i2
-    %n1 = firrtl.node %in2c  {name = "n1"} : !firrtl.uint<2>
+    %n1 = firrtl.node %in2  {name = "n1"} : !firrtl.uint<2>
 
     // Nodes with no names are just dropped.
     %22 = firrtl.node %n1 : !firrtl.uint<2>
@@ -148,7 +147,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     %23 = firrtl.cvt %22 : (!firrtl.uint<2>) -> !firrtl.sint<3>
 
     // Will be dropped, here because this triggered a crash
-    %s23 = firrtl.cvt %in3c : (!firrtl.sint<8>) -> !firrtl.sint<8>
+    %s23 = firrtl.cvt %in3 : (!firrtl.sint<8>) -> !firrtl.sint<8>
 
     // CHECK-NEXT: %c-1_i3 = rtl.constant -1 : i3
     // CHECK-NEXT: [[XOR:%.+]] = comb.xor [[CVT]], %c-1_i3 : i3
@@ -180,13 +179,13 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: %c0_i5 = rtl.constant 0 : i5
     // CHECK-NEXT: = comb.concat %c0_i5, {{.*}} : (i5, i3) -> i8
     // CHECK-NEXT: [[SHIFT:%.+]] = comb.shrs %in3, {{.*}} : i8
-    %a29 = firrtl.dshr %in3c, %9 : (!firrtl.sint<8>, !firrtl.uint<3>) -> !firrtl.sint<8>
+    %a29 = firrtl.dshr %in3, %9 : (!firrtl.sint<8>, !firrtl.uint<3>) -> !firrtl.sint<8>
 
     // CHECK-NEXT: = comb.sext %in3 : (i8) -> i15
     // CHECK-NEXT: %c0_i12 = rtl.constant 0 : i12
     // CHECK-NEXT: = comb.concat %c0_i12, [[DSHR]]
     // CHECK-NEXT: [[SHIFT:%.+]] = comb.shl {{.*}}, {{.*}} : i15
-    %30 = firrtl.dshl %in3c, %29 : (!firrtl.sint<8>, !firrtl.uint<3>) -> !firrtl.sint<15>
+    %30 = firrtl.dshl %in3, %29 : (!firrtl.sint<8>, !firrtl.uint<3>) -> !firrtl.sint<15>
 
     // CHECK-NEXT: = comb.shru [[DSHR]], [[DSHR]] : i3
     %dshlw = firrtl.dshlw %29, %29 : (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
@@ -198,17 +197,17 @@ module attributes {firrtl.mainModule = "Simple"} {
     %31 = firrtl.dshr %25, %27 : (!firrtl.sint<4>, !firrtl.uint<14>) -> !firrtl.sint<4>
 
     // CHECK-NEXT: comb.icmp ule {{.*}}, {{.*}} : i4
-    %41 = firrtl.leq %in1c, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
+    %41 = firrtl.leq %in1, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
     // CHECK-NEXT: comb.icmp ult {{.*}}, {{.*}} : i4
-    %42 = firrtl.lt %in1c, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
+    %42 = firrtl.lt %in1, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
     // CHECK-NEXT: comb.icmp uge {{.*}}, {{.*}} : i4
-    %43 = firrtl.geq %in1c, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
+    %43 = firrtl.geq %in1, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
     // CHECK-NEXT: comb.icmp ugt {{.*}}, {{.*}} : i4
-    %44 = firrtl.gt %in1c, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
+    %44 = firrtl.gt %in1, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
     // CHECK-NEXT: comb.icmp eq {{.*}}, {{.*}} : i4
-    %45 = firrtl.eq %in1c, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
+    %45 = firrtl.eq %in1, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
     // CHECK-NEXT: comb.icmp ne {{.*}}, {{.*}} : i4
-    %46 = firrtl.neq %in1c, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
+    %46 = firrtl.neq %in1, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
 
     // Noop
     %47 = firrtl.asClock %44 : (!firrtl.uint<1>) -> !firrtl.clock
@@ -217,7 +216,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // Issue #353
     // CHECK: [[PADRES_EXT:%.+]] = comb.sext [[PADRES]] : (i3) -> i8
     // CHECK: = comb.and %in3, [[PADRES_EXT]] : i8
-    %49 = firrtl.and %in3c, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.uint<8>
+    %49 = firrtl.and %in3, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.uint<8>
 
     // Issue #355: https://github.com/llvm/circt/issues/355
     // CHECK: [[DIV:%.+]] = comb.divu %c104_i10, %c306_i10 : i10
@@ -232,12 +231,6 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: = comb.sub [[CONST]], %c-873_i12 : i12
     %c1175_ui11 = firrtl.constant(1175 : ui11) : !firrtl.uint<11>
     %51 = firrtl.neg %c1175_ui11 : (!firrtl.uint<11>) -> !firrtl.sint<12>
-
-    %out4c = firrtl.asPassive %out4 : !firrtl.flip<uint<4>>
-    %out4d = firrtl.stdIntCast %out4c : (!firrtl.uint<4>) -> i4
-    %out5c = firrtl.asPassive %out5 : !firrtl.flip<uint<4>>
-    %out5d = firrtl.stdIntCast %out5c : (!firrtl.uint<4>) -> i4
-    rtl.output %out4d, %out5d : i4, i4
   }
 
 //   module Print :
@@ -249,11 +242,8 @@ module attributes {firrtl.mainModule = "Simple"} {
 //    printf(clock, reset, "Hi %x %x\n", add(a, a), b)
 
   // CHECK-LABEL: rtl.module @Print
-  rtl.module @Print(%clock: i1, %reset: i1, %a: i4, %b: i4) {
-    %clock1 = firrtl.stdIntCast %clock : (i1) -> !firrtl.clock
-    %reset1 = firrtl.stdIntCast %reset : (i1) -> !firrtl.uint<1>
-    %a1 = firrtl.stdIntCast %a : (i4) -> !firrtl.uint<4>
-    %b1 = firrtl.stdIntCast %b : (i4) -> !firrtl.uint<4>
+  firrtl.module @Print(%clock: !firrtl.clock, %reset: !firrtl.uint<1>,
+                       %a: !firrtl.uint<4>, %b: !firrtl.uint<4>) {
 
     // CHECK-NEXT: sv.always posedge %clock {
     // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
@@ -270,17 +260,16 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
-   firrtl.printf %clock1, %reset1, "No operands!\0A"
+   firrtl.printf %clock, %reset, "No operands!\0A"
 
     // CHECK: [[ADD:%.+]] = comb.add
-    %0 = firrtl.add %a1, %a1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
+    %0 = firrtl.add %a, %a : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
-    firrtl.printf %clock1, %reset1, "Hi %x %x\0A"(%0, %b1) : !firrtl.uint<5>, !firrtl.uint<4>
+    firrtl.printf %clock, %reset, "Hi %x %x\0A"(%0, %b) : !firrtl.uint<5>, !firrtl.uint<4>
 
     firrtl.skip
 
     // CHECK: rtl.output
-    rtl.output
    }
 
 
@@ -293,10 +282,7 @@ module attributes {firrtl.mainModule = "Simple"} {
 //    stop(clock2, reset, 0)
 
   // CHECK-LABEL: rtl.module @Stop
-  rtl.module @Stop(%clock1: i1, %clock2: i1, %reset: i1) {
-    %clock1c = firrtl.stdIntCast %clock1 : (i1) -> !firrtl.clock
-    %clock2c = firrtl.stdIntCast %clock2 : (i1) -> !firrtl.clock
-    %resetc = firrtl.stdIntCast %reset : (i1) -> !firrtl.uint<1>
+  firrtl.module @Stop(%clock1: !firrtl.clock, %clock2: !firrtl.clock, %reset: !firrtl.uint<1>) {
 
     // CHECK-NEXT: sv.always posedge %clock1 {
     // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
@@ -308,7 +294,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
-    firrtl.stop %clock1c, %resetc, 42
+    firrtl.stop %clock1, %reset, 42
 
     // CHECK-NEXT: sv.always posedge %clock2 {
     // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
@@ -320,7 +306,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
-    firrtl.stop %clock2c, %resetc, 0
+    firrtl.stop %clock2, %reset, 0
   }
 
 // circuit Verification:
@@ -337,14 +323,9 @@ module attributes {firrtl.mainModule = "Simple"} {
 //     cover(clock,  cCond, cEn, "cover0")
 
   // CHECK-LABEL: rtl.module @Verification
-  rtl.module @Verification(%clock: i1, %aCond: i1, %aEn: i1, %bCond: i1, %bEn: i1, %cCond: i1, %cEn: i1) {
-    %clockC = firrtl.stdIntCast %clock : (i1) -> !firrtl.clock
-    %aCondC = firrtl.stdIntCast %aCond : (i1) -> !firrtl.uint<1>
-    %aEnC = firrtl.stdIntCast %aEn : (i1) -> !firrtl.uint<1>
-    %bCondC = firrtl.stdIntCast %bCond : (i1) -> !firrtl.uint<1>
-    %bEnC = firrtl.stdIntCast %bEn : (i1) -> !firrtl.uint<1>
-    %cCondC = firrtl.stdIntCast %cCond : (i1) -> !firrtl.uint<1>
-    %cEnC = firrtl.stdIntCast %cEn : (i1) -> !firrtl.uint<1>
+  firrtl.module @Verification(%clock: !firrtl.clock, %aCond: !firrtl.uint<1>,
+   %aEn: !firrtl.uint<1>, %bCond: !firrtl.uint<1>, %bEn: !firrtl.uint<1>,
+    %cCond: !firrtl.uint<1>, %cEn: !firrtl.uint<1>) {
 
     // CHECK-NEXT: sv.always posedge %clock {
     // CHECK-NEXT:   sv.if %aEn {
@@ -357,28 +338,26 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:     sv.cover %cCond : i1
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
-    firrtl.assert %clockC, %aCondC, %aEnC, "assert0"
-    firrtl.assume %clockC, %bCondC, %bEnC, "assume0"
-    firrtl.cover %clockC, %cCondC, %cEnC, "cover0"
+    firrtl.assert %clock, %aCond, %aEn, "assert0"
+    firrtl.assume %clock, %bCond, %bEn, "assume0"
+    firrtl.cover %clock, %cCond, %cEn, "cover0"
     // CHECK-NEXT: rtl.output
-    rtl.output
   }
 
-  rtl.module @bar(%io_cpu_flush: i1) {
-    rtl.output
+  firrtl.module @bar(%io_cpu_flush: !firrtl.uint<1>) {
   }
 
   // CHECK-LABEL: rtl.module @foo
-  rtl.module @foo() {
+  firrtl.module @foo() {
     // CHECK-NEXT:  %io_cpu_flush.wire = sv.wire : !rtl.inout<i1>
     // CHECK-NEXT:  [[IO:%.+]] = sv.read_inout %io_cpu_flush.wire
-    %io_cpu_flush.wire = sv.wire : !rtl.inout<i1>
-    %io_cpu_flush.wireV = sv.read_inout %io_cpu_flush.wire : !rtl.inout<i1>
+    %io_cpu_flush.wire = firrtl.wire : !firrtl.uint<1>
     // CHECK-NEXT: rtl.instance "fetch"
-    rtl.instance "fetch" @bar(%io_cpu_flush.wireV)  : (i1) -> ()
-    %0 = firrtl.stdIntCast %io_cpu_flush.wireV : (i1) -> !firrtl.uint<1>
+    %i = firrtl.instance @bar {name = "fetch", portNames=["io_cpu_flush"]} : !firrtl.flip<uint<1>>
+    firrtl.connect %i, %io_cpu_flush.wire : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 
-    %hits_1_7 = firrtl.node %0 {name = "hits_1_7"} : !firrtl.uint<1>
+    %hits_1_7 = firrtl.node %io_cpu_flush.wire {name = "hits_1_7"} : !firrtl.uint<1>
+    // CHECK-NEXT:  [[IO:%.+]] = sv.read_inout %io_cpu_flush.wire
     // CHECK-NEXT:  %hits_1_7 = sv.wire : !rtl.inout<i1>
     // CHECK-NEXT:  sv.connect %hits_1_7, [[IO]] : i1
     %1455 = firrtl.asPassive %hits_1_7 : !firrtl.uint<1>
@@ -386,17 +365,14 @@ module attributes {firrtl.mainModule = "Simple"} {
 
   // https://github.com/llvm/circt/issues/314
   // CHECK-LABEL: rtl.module @issue314
-  rtl.module @issue314(%inp2: i27, %inpi: i65) {
-    %inp_2 = firrtl.stdIntCast %inp2 : (i27) -> !firrtl.uint<27>
-    %inp_i = firrtl.stdIntCast %inpi : (i65) -> !firrtl.uint<65>
-
+  firrtl.module @issue314(%inp_2: !firrtl.uint<27>, %inpi: !firrtl.uint<65>) {
     // CHECK-NEXT: %tmp48 = sv.wire : !rtl.inout<i27>
     %tmp48 = firrtl.wire : !firrtl.uint<27>
 
     // CHECK-NEXT: %c0_i38 = rtl.constant 0 : i38
-    // CHECK-NEXT: %0 = comb.concat %c0_i38, %inp2 : (i38, i27) -> i65
+    // CHECK-NEXT: %0 = comb.concat %c0_i38, %inp_2 : (i38, i27) -> i65
     // CHECK-NEXT: %1 = comb.divu %0, %inpi : i65
-    %0 = firrtl.div %inp_2, %inp_i : (!firrtl.uint<27>, !firrtl.uint<65>) -> !firrtl.uint<27>
+    %0 = firrtl.div %inp_2, %inpi : (!firrtl.uint<27>, !firrtl.uint<65>) -> !firrtl.uint<27>
     // CHECK-NEXT: %2 = comb.extract %1 from 0 : (i65) -> i27
     // CHECK-NEXT: sv.connect %tmp48, %2 : i27
     firrtl.connect %tmp48, %0 : !firrtl.uint<27>, !firrtl.uint<27>
@@ -406,12 +382,10 @@ module attributes {firrtl.mainModule = "Simple"} {
   // CHECK-LABEL: rtl.module @test_rem
   // CHECK-NEXT:     %0 = comb.modu
   // CHECK-NEXT:     rtl.output %0
-  rtl.module @test_rem(%tmp85: i1, %tmp79: i1) -> (%tmp106: i1) {
-    %0 = firrtl.stdIntCast %tmp85 : (i1) -> !firrtl.uint<1>
-    %1 = firrtl.stdIntCast %tmp79 : (i1) -> !firrtl.uint<1>
-    %2 = firrtl.rem %1, %0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    %3 = firrtl.stdIntCast %2 : (!firrtl.uint<1>) -> i1
-    rtl.output %3 : i1
+  firrtl.module @test_rem(%tmp85: !firrtl.uint<1>, %tmp79: !firrtl.uint<1>,
+       %out: !firrtl.flip<uint<1>>) {
+    %2 = firrtl.rem %tmp79, %tmp85 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %out, %2 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
   }
 
   // CHECK-LABEL: rtl.module @Analog(%a1: !rtl.inout<i1>, %b1: !rtl.inout<i1>,
@@ -435,17 +409,12 @@ module attributes {firrtl.mainModule = "Simple"} {
   // CHECK-NEXT:    }
   // CHECK-NEXT:    %0 = sv.read_inout %a1 : !rtl.inout<i1>
   // CHECK-NEXT:    rtl.output %0 : i1
-  rtl.module @Analog(%a1: !rtl.inout<i1>, %b1: !rtl.inout<i1>,
-                     %c1: !rtl.inout<i1>) -> (%outClock: i1) {
-    %a = firrtl.analogInOutCast %a1 : (!rtl.inout<i1>) -> !firrtl.analog<1>
-    %b = firrtl.analogInOutCast %b1 : (!rtl.inout<i1>) -> !firrtl.analog<1>
-    %c = firrtl.analogInOutCast %c1 : (!rtl.inout<i1>) -> !firrtl.analog<1>
+  firrtl.module @Analog(%a1: !firrtl.analog<1>, %b1: !firrtl.analog<1>,
+                        %c1: !firrtl.analog<1>, %outClock: !firrtl.flip<clock>) {
+    firrtl.attach %a1, %b1, %c1 : !firrtl.analog<1>, !firrtl.analog<1>, !firrtl.analog<1>
 
-    firrtl.attach %a, %b, %c : !firrtl.analog<1>, !firrtl.analog<1>, !firrtl.analog<1>
-
-    %1 = firrtl.asClock %a : (!firrtl.analog<1>) -> !firrtl.clock
-    %2 = firrtl.stdIntCast %1 : (!firrtl.clock) -> i1
-    rtl.output %2 : i1
+    %1 = firrtl.asClock %a1 : (!firrtl.analog<1>) -> !firrtl.clock
+    firrtl.connect %outClock, %1 : !firrtl.flip<clock>, !firrtl.clock
   }
 
 
@@ -462,16 +431,12 @@ module attributes {firrtl.mainModule = "Simple"} {
 
   // CHECK-LABEL: rtl.module @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
 
-  rtl.module @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
+  firrtl.module @UninitReg1(%clock: !firrtl.clock, %reset: !firrtl.uint<1>,
+                            %cond: !firrtl.uint<1>, %value: !firrtl.uint<2>) {
     // CHECK-NEXT: %c0_i2 = rtl.constant 0 : i2
     %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
-
-    %0 = firrtl.stdIntCast %clock : (i1) -> !firrtl.clock
-    %1 = firrtl.stdIntCast %reset : (i1) -> !firrtl.uint<1>
-    %2 = firrtl.stdIntCast %cond : (i1) -> !firrtl.uint<1>
-    %3 = firrtl.stdIntCast %value : (i2) -> !firrtl.uint<2>
     // CHECK-NEXT: %count = sv.reg : !rtl.inout<i2>
-    %count = firrtl.reg %0 {name = "count"} : (!firrtl.clock) -> !firrtl.uint<2>
+    %count = firrtl.reg %clock {name = "count"} : (!firrtl.clock) -> !firrtl.uint<2>
 
     // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
     // CHECK-NEXT:   } else {
@@ -487,8 +452,8 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: %0 = sv.read_inout %count : !rtl.inout<i2>
     // CHECK-NEXT: %1 = comb.mux %cond, %value, %0 : i2
     // CHECK-NEXT: %2 = comb.mux %reset, %c0_i2, %1 : i2
-    %4 = firrtl.mux(%2, %3, %count) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-    %5 = firrtl.mux(%1, %c0_ui2, %4) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+    %4 = firrtl.mux(%cond, %value, %count) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+    %5 = firrtl.mux(%reset, %c0_ui2, %4) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
 
     // CHECK-NEXT: sv.alwaysff(posedge %clock)  {
     // CHECK-NEXT:   sv.passign %count, %2 : i2
@@ -496,7 +461,6 @@ module attributes {firrtl.mainModule = "Simple"} {
     firrtl.connect %count, %5 : !firrtl.uint<2>, !firrtl.uint<2>
 
     // CHECK-NEXT: rtl.output
-    rtl.output
   }
 
   // module InitReg1 :
@@ -513,15 +477,13 @@ module attributes {firrtl.mainModule = "Simple"} {
   //     reg <= mux(io_en, io_d, reg)
 
   // CHECK-LABEL: rtl.module @InitReg1(
-  rtl.module @InitReg1(%clock: i1, %reset: i1, %io_d: i32, %io_en: i1) -> (%io_q: i32) {
+  firrtl.module @InitReg1(%clock: !firrtl.clock, %reset: !firrtl.uint<1>,
+                          %io_d: !firrtl.uint<32>, %io_en: !firrtl.uint<1>,
+                          %io_q: !firrtl.flip<uint<32>>) {
     // CHECK-NEXT: %c0_i32 = rtl.constant 0 : i32
     %c0_ui32 = firrtl.constant(0 : ui32) : !firrtl.uint<32>
 
-    %0 = firrtl.stdIntCast %clock : (i1) -> !firrtl.clock
-    %1 = firrtl.stdIntCast %reset : (i1) -> !firrtl.uint<1>
-    %2 = firrtl.stdIntCast %io_d : (i32) -> !firrtl.uint<32>
-    %3 = firrtl.stdIntCast %io_en : (i1) -> !firrtl.uint<1>
-    %4 = firrtl.asAsyncReset %1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
+    %4 = firrtl.asAsyncReset %reset : (!firrtl.uint<1>) -> !firrtl.asyncreset
 
     // CHECK-NEXT: %reg = sv.reg : !rtl.inout<i32>
     // CHECK-NEXT: sv.alwaysff(posedge %clock) {
@@ -549,8 +511,8 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: }(syncreset : posedge %reset) {
     // CHECK-NEXT:    sv.passign %reg2, %c0_i32 : i32
     // CHECK-NEXT: }
-    %reg = firrtl.regreset %0, %4, %c0_ui32 {name = "reg"} : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<32>) -> !firrtl.uint<32>
-    %reg2 = firrtl.regreset %0, %1, %c0_ui32 {name = "reg2"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<32>) -> !firrtl.uint<32>
+    %reg = firrtl.regreset %clock, %4, %c0_ui32 {name = "reg"} : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<32>) -> !firrtl.uint<32>
+    %reg2 = firrtl.regreset %clock, %reset, %c0_ui32 {name = "reg2"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<32>) -> !firrtl.uint<32>
 
     // CHECK-NEXT: %0 = sv.read_inout %reg : !rtl.inout<i32>
     // CHECK-NEXT: %false = rtl.constant false
@@ -563,14 +525,13 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT: %6 = comb.mux %io_en, %io_d, %5 : i32
     %sum = firrtl.add %reg, %reg2 : (!firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<33>
     %shorten = firrtl.head %sum, 32 : (!firrtl.uint<33>) -> !firrtl.uint<32>
-    %5 = firrtl.mux(%3, %2, %shorten) : (!firrtl.uint<1>, !firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<32>
+    %5 = firrtl.mux(%io_en, %io_d, %shorten) : (!firrtl.uint<1>, !firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<32>
 
     firrtl.connect %reg, %5 : !firrtl.uint<32>, !firrtl.uint<32>
-    %6 = firrtl.stdIntCast %reg : (!firrtl.uint<32>) -> i32
+    firrtl.connect %io_q, %reg: !firrtl.flip<uint<32>>, !firrtl.uint<32>
 
     // CHECK-NEXT: %7 = sv.read_inout %reg : !rtl.inout<i32>
     // CHECK-NEXT: rtl.output %7 : i32
-    rtl.output %6 : i32
   }
 
   //  module MemSimple :
@@ -601,11 +562,9 @@ module attributes {firrtl.mainModule = "Simple"} {
   //     _M.write.mask <= validif(inpred, UInt<1>("h1"))
 
   // CHECK-LABEL: rtl.module @MemSimple(
-  rtl.module @MemSimple(%clock1: i1, %clock2: i1, %inpred: i1, %indata: i42) -> (%result: i42) {
-    %0 = firrtl.stdIntCast %clock1 : (i1) -> !firrtl.clock
-    %1 = firrtl.stdIntCast %clock2 : (i1) -> !firrtl.clock
-    %2 = firrtl.stdIntCast %inpred : (i1) -> !firrtl.uint<1>
-    %3 = firrtl.stdIntCast %indata : (i42) -> !firrtl.sint<42>
+  firrtl.module @MemSimple(%clock1: !firrtl.clock, %clock2: !firrtl.clock,
+                           %inpred: !firrtl.uint<1>, %indata: !firrtl.sint<42>,
+                           %result: !firrtl.flip<sint<42>>) {
     %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
     %c0_ui3 = firrtl.constant(0 : ui3) : !firrtl.uint<3>
@@ -654,58 +613,54 @@ module attributes {firrtl.mainModule = "Simple"} {
     %7 = firrtl.subfield %_M_read("en") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<uint<1>>
     firrtl.connect %7, %c1_ui1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
     %8 = firrtl.subfield %_M_read("clk") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<clock>
-    firrtl.connect %8, %0 : !firrtl.flip<clock>, !firrtl.clock
+    firrtl.connect %8, %clock1 : !firrtl.flip<clock>, !firrtl.clock
 
     %10 = firrtl.subfield %_M_write("addr") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<uint<4>>
-    %11 = firrtl.validif %2, %c0_ui3 : (!firrtl.uint<1>, !firrtl.uint<3>) -> !firrtl.uint<3>
+    %11 = firrtl.validif %inpred, %c0_ui3 : (!firrtl.uint<1>, !firrtl.uint<3>) -> !firrtl.uint<3>
     firrtl.connect %10, %11 : !firrtl.flip<uint<4>>, !firrtl.uint<3>
     %12 = firrtl.subfield %_M_write("en") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
-    firrtl.connect %12, %2 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    firrtl.connect %12, %inpred : !firrtl.flip<uint<1>>, !firrtl.uint<1>
     %13 = firrtl.subfield %_M_write("clk") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<clock>
-    %14 = firrtl.validif %2, %1 : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.clock
+    %14 = firrtl.validif %inpred, %clock2 : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.clock
     firrtl.connect %13, %14 : !firrtl.flip<clock>, !firrtl.clock
     %15 = firrtl.subfield %_M_write("data") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<sint<42>>
-    %16 = firrtl.validif %2, %3 : (!firrtl.uint<1>, !firrtl.sint<42>) -> !firrtl.sint<42>
+    %16 = firrtl.validif %inpred, %indata : (!firrtl.uint<1>, !firrtl.sint<42>) -> !firrtl.sint<42>
     firrtl.connect %15, %16 : !firrtl.flip<sint<42>>, !firrtl.sint<42>
     %17 = firrtl.subfield %_M_write("mask") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
-    %18 = firrtl.validif %2, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %18 = firrtl.validif %inpred, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.connect %17, %18 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
-    %19 = firrtl.stdIntCast %5 : (!firrtl.sint<42>) -> i42
-    rtl.output %19 : i42
+
+    firrtl.connect %result, %5: !firrtl.flip<sint<42>>, !firrtl.sint<42>
   }
 
   // CHECK-LABEL: rtl.module @MemoryWithNonZeroReadLatencyAndNonUnaryWriteLatency
 
   // COM: Check that a positive read latency and a non-unary write
   // COM: latency results in read and write pipes being created.
-  rtl.module @MemoryWithNonZeroReadLatencyAndNonUnaryWriteLatency(%clock: i1, %rAddr: i4, %rEn: i1, %wAddr: i4, %wEn: i1, %wMask: i1, %wData: i8) -> (%rData: i8) {
-    %0 = firrtl.stdIntCast %clock : (i1) -> !firrtl.clock
-    %1 = firrtl.stdIntCast %rAddr : (i4) -> !firrtl.uint<4>
-    %2 = firrtl.stdIntCast %rEn : (i1) -> !firrtl.uint<1>
-    %3 = firrtl.stdIntCast %wAddr : (i4) -> !firrtl.uint<4>
-    %4 = firrtl.stdIntCast %wEn : (i1) -> !firrtl.uint<1>
-    %5 = firrtl.stdIntCast %wMask : (i1) -> !firrtl.uint<1>
-    %6 = firrtl.stdIntCast %wData : (i8) -> !firrtl.uint<8>
+  firrtl.module @MemoryWithNonZeroReadLatencyAndNonUnaryWriteLatency(
+    %clock: !firrtl.clock, %rAddr: !firrtl.uint<4>, %rEn: !firrtl.uint<1>,
+    %wAddr: !firrtl.uint<4>, %wEn: !firrtl.uint<1>, %wMask: !firrtl.uint<1>,
+    %wData: !firrtl.uint<8>, %rData: !firrtl.flip<uint<8>>) {
+
     %memory_r, %memory_w = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r", "w"], readLatency = 2 : i32, writeLatency = 2 : i32} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<8>>, !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>>
     %7 = firrtl.subfield %memory_r("clk") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<8>>) -> !firrtl.flip<clock>
-    firrtl.connect %7, %0 : !firrtl.flip<clock>, !firrtl.clock
+    firrtl.connect %7, %clock : !firrtl.flip<clock>, !firrtl.clock
     %8 = firrtl.subfield %memory_r("en") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<8>>) -> !firrtl.flip<uint<1>>
-    firrtl.connect %8, %2 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    firrtl.connect %8, %rEn : !firrtl.flip<uint<1>>, !firrtl.uint<1>
     %9 = firrtl.subfield %memory_r("addr") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<8>>) -> !firrtl.flip<uint<4>>
-    firrtl.connect %9, %1 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+    firrtl.connect %9, %rAddr : !firrtl.flip<uint<4>>, !firrtl.uint<4>
     %10 = firrtl.subfield %memory_r("data") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<8>>) -> !firrtl.uint<8>
     %11 = firrtl.subfield %memory_w("clk") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>>) -> !firrtl.flip<clock>
-    firrtl.connect %11, %0 : !firrtl.flip<clock>, !firrtl.clock
+    firrtl.connect %11, %clock : !firrtl.flip<clock>, !firrtl.clock
     %12 = firrtl.subfield %memory_w("en") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
-    firrtl.connect %12, %4 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    firrtl.connect %12, %wEn : !firrtl.flip<uint<1>>, !firrtl.uint<1>
     %13 = firrtl.subfield %memory_w("addr") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>>) -> !firrtl.flip<uint<4>>
-    firrtl.connect %13, %3 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+    firrtl.connect %13, %wAddr : !firrtl.flip<uint<4>>, !firrtl.uint<4>
     %14 = firrtl.subfield %memory_w("mask") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
-    firrtl.connect %14, %5 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    firrtl.connect %14, %wMask : !firrtl.flip<uint<1>>, !firrtl.uint<1>
     %15 = firrtl.subfield %memory_w("data") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>>) -> !firrtl.flip<uint<8>>
-    firrtl.connect %15, %6 : !firrtl.flip<uint<8>>, !firrtl.uint<8>
-    %16 = firrtl.stdIntCast %10 : (!firrtl.uint<8>) -> i8
-    rtl.output %16 : i8
+    firrtl.connect %15, %wData : !firrtl.flip<uint<8>>, !firrtl.uint<8>
+    firrtl.connect %rData, %10: !firrtl.flip<uint<8>>, !firrtl.uint<8>
     // COM: --------------------------------------------------------------------
     // CHECK-NEXT: %memory = sv.reg  : !rtl.inout<uarray<16xi8>>
     // COM: --------------------------------------------------------------------
@@ -804,8 +759,7 @@ module attributes {firrtl.mainModule = "Simple"} {
 
   // CHECK-LABEL: rtl.module @IncompleteRead(
   // The read port has no use of the data field.
-  rtl.module @IncompleteRead(%clock1: i1) {
-    %0 = firrtl.stdIntCast %clock1 : (i1) -> !firrtl.clock
+  firrtl.module @IncompleteRead(%clock1: !firrtl.clock) {
     %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
 
@@ -819,8 +773,7 @@ module attributes {firrtl.mainModule = "Simple"} {
     %7 = firrtl.subfield %_M_read("en") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<uint<1>>
     firrtl.connect %7, %c1_ui1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
     %8 = firrtl.subfield %_M_read("clk") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<clock>
-    firrtl.connect %8, %0 : !firrtl.flip<clock>, !firrtl.clock
-    rtl.output
+    firrtl.connect %8, %clock1 : !firrtl.flip<clock>, !firrtl.clock
   }
 
   // CHECK-LABEL: rtl.module @top_mod() -> (%tmp27: i23) {
@@ -828,22 +781,20 @@ module attributes {firrtl.mainModule = "Simple"} {
   // CHECK-NEXT:    %c0_i23 = rtl.constant 0 : i23
   // CHECK-NEXT:    rtl.output %c0_i23 : i23
   // CHECK-NEXT:  }
-  rtl.module @top_mod() -> (%tmp27: i23) {
+  firrtl.module @top_mod(%tmp27: !firrtl.flip<uint<23>>) {
     %0 = firrtl.wire : !firrtl.flip<uint<0>>
     %c42_ui23 = firrtl.constant(42 : ui23) : !firrtl.uint<23>
     %1 = firrtl.tail %c42_ui23, 23 : (!firrtl.uint<23>) -> !firrtl.uint<0>
     firrtl.connect %0, %1 : !firrtl.flip<uint<0>>, !firrtl.uint<0>
     %2 = firrtl.head %c42_ui23, 0 : (!firrtl.uint<23>) -> !firrtl.uint<0>
     %3 = firrtl.pad %2, 23 : (!firrtl.uint<0>) -> !firrtl.uint<23>
-    %4 = firrtl.stdIntCast %3 : (!firrtl.uint<23>) -> i23
-    rtl.output %4 : i23
+    firrtl.connect %tmp27, %3 : !firrtl.flip<uint<23>>, !firrtl.uint<23>
   }
 
   //CHECK-LABEL: rtl.module @test_partialconnect(%clock: i1) {
   //CHECK: sv.alwaysff(posedge %clock)
-  rtl.module @test_partialconnect(%clock : i1) -> () {
-    %firclock = firrtl.stdIntCast %clock : (i1) -> !firrtl.clock
-    %b = firrtl.reg %firclock {name = "pcon"} : (!firrtl.clock) -> !firrtl.uint<1>
+  firrtl.module @test_partialconnect(%clock : !firrtl.clock) {
+    %b = firrtl.reg %clock {name = "pcon"} : (!firrtl.clock) -> !firrtl.uint<1>
     %a = firrtl.constant(0 : ui2) : !firrtl.uint<2>
     firrtl.partialconnect %b, %a : !firrtl.uint<1>, !firrtl.uint<2>
   }
@@ -852,18 +803,16 @@ module attributes {firrtl.mainModule = "Simple"} {
   // CHECK-NEXT:    %0 = rtl.struct_extract %source["data"] : !rtl.struct<valid: i1, ready: i1, data: i64>
   // CHECK-NEXT:    rtl.output %0 : i64
   // CHECK-NEXT:  }
-  rtl.module @SimpleStruct(%source: !rtl.struct<valid: i1, ready: i1, data: i64>) -> (%fldout: i64) {
-    %1 = firrtl.rtlStructCast %source : (!rtl.struct<valid: i1, ready: i1, data: i64>) -> !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
-    %2 = firrtl.subfield %1 ("data") : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
-    %3 = firrtl.stdIntCast %2 : (!firrtl.uint<64>) -> i64
-    rtl.output %3 : i64
+  firrtl.module @SimpleStruct(%source: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>,
+                              %fldout: !firrtl.flip<uint<64>>) {
+    %2 = firrtl.subfield %source ("data") : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
+    firrtl.connect %fldout, %2 : !firrtl.flip<uint<64>>, !firrtl.uint<64>
   }
 
   // CHECK-LABEL: IsInvalidIssue572
   // https://github.com/llvm/circt/issues/572
-  rtl.module @IsInvalidIssue572(%a: !rtl.inout<i1>) {
-    %a1 = firrtl.analogInOutCast %a : (!rtl.inout<i1>) -> !firrtl.analog<1>
-
+  firrtl.module @IsInvalidIssue572(%a: !firrtl.analog<1>) {
+    
     // CHECK-NEXT: %.invalid_analog = sv.wire : !rtl.inout<i1>
     %0 = firrtl.invalidvalue : !firrtl.analog<1>
 
@@ -879,12 +828,12 @@ module attributes {firrtl.mainModule = "Simple"} {
     // CHECK-NEXT:     sv.alias %a, %.invalid_analog : !rtl.inout<i1>, !rtl.inout<i1>
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
-    firrtl.attach %a1, %0 : !firrtl.analog<1>, !firrtl.analog<1>
+    firrtl.attach %a, %0 : !firrtl.analog<1>, !firrtl.analog<1>
   }
 
   // CHECK-LABEL: IsInvalidIssue654
   // https://github.com/llvm/circt/issues/654
-  rtl.module @IsInvalidIssue654() {
+  firrtl.module @IsInvalidIssue654() {
     %w = firrtl.wire : !firrtl.flip<uint<0>>
     %0 = firrtl.invalidvalue : !firrtl.uint<0>
     firrtl.connect %w, %0 : !firrtl.flip<uint<0>>, !firrtl.uint<0>
@@ -892,20 +841,15 @@ module attributes {firrtl.mainModule = "Simple"} {
 
   // CHECK-LABEL: ASQ
   // https://github.com/llvm/circt/issues/699
-  rtl.module @ASQ(%clock: i1, %reset: i1) {
-    %0 = firrtl.stdIntCast %clock : (i1) -> !firrtl.clock
-    %1 = firrtl.stdIntCast %reset : (i1) -> !firrtl.asyncreset
+  firrtl.module @ASQ(%clock: !firrtl.clock, %reset: !firrtl.asyncreset) {
     %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
-    %widx_widx_bin = firrtl.regreset %0, %1, %c0_ui1 {name = "widx_widx_bin"} : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>) -> !firrtl.uint<4>
-    rtl.output
+    %widx_widx_bin = firrtl.regreset %clock, %reset, %c0_ui1 {name = "widx_widx_bin"} : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>) -> !firrtl.uint<4>
   }
 
   // CHECK-LABEL: rtl.module @Struct0bits(%source: !rtl.struct<valid: i1, ready: i1, data: i0>) {
   // CHECK-NEXT:    rtl.output 
   // CHECK-NEXT:  }
-  rtl.module @Struct0bits(%source: !rtl.struct<valid: i1, ready: i1, data: i0>) {
-    %1 = firrtl.rtlStructCast %source : (!rtl.struct<valid: i1, ready: i1, data: i0>) -> !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<0>>
-    %2 = firrtl.subfield %1 ("data") : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<0>>) -> !firrtl.uint<0>
-    rtl.output
+  firrtl.module @Struct0bits(%source: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<0>>) {
+    %2 = firrtl.subfield %source ("data") : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<0>>) -> !firrtl.uint<0>
   }
 }
