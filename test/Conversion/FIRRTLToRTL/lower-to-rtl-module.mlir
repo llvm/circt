@@ -1,4 +1,4 @@
-// RUN: circt-opt -lower-firrtl-to-rtl-module %s -verify-diagnostics  | FileCheck %s
+// RUN: circt-opt -lower-firrtl-to-rtl %s -verify-diagnostics | FileCheck %s
 
 // The firrtl.circuit should be removed, the main module name moved to an
 // attribute on the module.
@@ -27,24 +27,21 @@ firrtl.circuit "Simple" {
                         %in3: !firrtl.sint<8>,
                         %out4: !firrtl.flip<uint<4>>) {
 
-   // CHECK-NEXT: %0 = firrtl.stdIntCast %in1 : (i4) -> !firrtl.uint<4>
-   // CHECK-NEXT: %1 = firrtl.stdIntCast %in2 : (i2) -> !firrtl.uint<2>
-   // CHECK-NEXT: %2 = firrtl.stdIntCast %in3 : (i8) -> !firrtl.sint<8>
-
-    // CHECK-NEXT: firrtl.asUInt %0
     %1 = firrtl.asUInt %in1 : (!firrtl.uint<4>) -> !firrtl.uint<4>
 
-    // CHECK-NEXT: firrtl.sub
+    // CHECK: comb.concat %false, %in1
+    // CHECK: comb.concat %false_0, %in1 
+
+    // CHECK: comb.sub
     %2 = firrtl.sub %1, %1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
-    // CHECK-NEXT: firrtl.pad %1, 3
+    // CHECK: %3 = comb.concat %false_1, %in2 : (i1, i2) -> i3
     %3 = firrtl.pad %in2, 3 : (!firrtl.uint<2>) -> !firrtl.uint<3>
-    // CHECK-NEXT: firrtl.pad
+    // CHECK: comb.concat %false_2, %3 : (i1, i3) -> i4
     %4 = firrtl.pad %3, 4 : (!firrtl.uint<3>) -> !firrtl.uint<4>
-    // CHECK-NEXT: [[XOR:%.+]] = firrtl.xor %1
+    // CHECK: [[RESULT:%.+]] = comb.xor
     %5 = firrtl.xor %in2, %4 : (!firrtl.uint<2>, !firrtl.uint<4>) -> !firrtl.uint<4>
 
-    // CHECK-NEXT: [[RESULT:%.+]] = firrtl.stdIntCast [[XOR]]
     firrtl.connect %out4, %5 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
     // CHECK-NEXT: rtl.output [[RESULT]] : i4
   }
@@ -53,90 +50,43 @@ firrtl.circuit "Simple" {
   firrtl.module @TestInstance(%u2: !firrtl.uint<2>, %s8: !firrtl.sint<8>,
                               %clock: !firrtl.clock,
                               %reset: !firrtl.uint<1>) {
-    // CHECK-NEXT: [[U2CAST:%.+]] = firrtl.stdIntCast %u2 : (i2) -> !firrtl.uint<2>
-    // CHECK-NEXT: [[S8CAST:%.+]] = firrtl.stdIntCast %s8 : (i8) -> !firrtl.sint<8>
-    // CHECK-NEXT: [[CLOCKCAST:%.+]] = firrtl.stdIntCast %clock : (i1) -> !firrtl.clock
-    // CHECK-NEXT: [[RESETCAST:%.+]] = firrtl.stdIntCast %reset : (i1) -> !firrtl.uint<1>
 
-    // CHECK: [[ARG1:%.+]] = firrtl.pad [[U2CAST]], 4
-    // CHECK-NEXT: [[ARG1CAST:%.+]] = firrtl.stdIntCast [[ARG1]] : (!firrtl.uint<4>) -> i4
-    // CHECK-NEXT: %xyz.out4 = rtl.instance "xyz" @Simple([[ARG1CAST]], %u2, %s8) : (i4, i2, i8) -> i4
+    // CHECK: [[ARG1:%.+]] = comb.concat %c0_i2, %u2 : (i2, i2) -> i4
+    // CHECK-NEXT: %xyz.out4 = rtl.instance "xyz" @Simple([[ARG1]], %u2, %s8) : (i4, i2, i8) -> i4
     %xyz:4 = firrtl.instance @Simple {name = "xyz", portNames=["in1", "in2", "in3", "out4"]}
      : !firrtl.flip<uint<4>>, !firrtl.flip<uint<2>>, !firrtl.flip<sint<8>>, !firrtl.uint<4>
 
-    // CHECK-NEXT: [[INSTOUTC1:%.+]] = firrtl.stdIntCast %xyz.out4 : (i4) -> !firrtl.uint<4>
-
     firrtl.connect %xyz#0, %u2 : !firrtl.flip<uint<4>>, !firrtl.uint<2>
 
-    // CHECK-NOT: firrtl.connect
+    // CHECK-NOT: rtl.connect
     firrtl.connect %xyz#1, %u2 : !firrtl.flip<uint<2>>, !firrtl.uint<2>
 
     firrtl.connect %xyz#2, %s8 : !firrtl.flip<sint<8>>, !firrtl.sint<8>
 
-    // CHECK: firrtl.printf {{.*}}"%x"([[INSTOUTC1]])
+    // CHECK: sv.fwrite "%x"(%xyz.out4) : i4
     firrtl.printf %clock, %reset, "%x"(%xyz#3) : !firrtl.uint<4>
  
+    // CHECK: sv.fwrite "Something interesting! %x"(%myext.out) : i8
 
     // Parameterized module reference.
     // rtl.instance carries the parameters, unlike at the FIRRTL layer.
 
-    // CHECK-NEXT: [[OUT:%.+]] = rtl.instance "myext" @MyParameterizedExtModule(%reset)  {parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i1) -> i8
+    // CHECK: %myext.out = rtl.instance "myext" @MyParameterizedExtModule(%reset)  {parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i1) -> i8
     %myext:2 = firrtl.instance @MyParameterizedExtModule {name = "myext", portNames=["in", "out"]}
       : !firrtl.flip<uint<1>>, !firrtl.uint<8>
 
-    // CHECK-NEXT: [[OUTC:%.+]] = firrtl.stdIntCast [[OUT]] : (i8) -> !firrtl.uint<8>
-
     firrtl.connect %myext#0, %reset : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 
-    // CHECK-NEXT: firrtl.printf {{.*}}, {{.*}}, "Something interesting! %x"([[OUTC]]) : !firrtl.uint<8>
     firrtl.printf %clock, %reset, "Something interesting! %x"(%myext#1) : !firrtl.uint<8>
-  }
-
-  // CHECK-LABEL: rtl.module @Print(%clock: i1, %reset: i1, %a: i4, %b: i4) {
-  firrtl.module @Print(%clock: !firrtl.clock, %reset: !firrtl.uint<1>,
-                       %a: !firrtl.uint<4>, %b: !firrtl.uint<4>) {
-    // CHECK-NEXT: %0 = firrtl.stdIntCast %clock : (i1) -> !firrtl.clock
-    // CHECK-NEXT: %1 = firrtl.stdIntCast %reset : (i1) -> !firrtl.uint<1>
-    // CHECK-NEXT: %2 = firrtl.stdIntCast %a : (i4) -> !firrtl.uint<4>
-    // CHECK-NEXT: %3 = firrtl.stdIntCast %b : (i4) -> !firrtl.uint<4>
-    
-    // CHECK-NEXT: firrtl.printf %0, %1, "No operands!\0A"
-    firrtl.printf %clock, %reset, "No operands!\0A"
-
-    // CHECK-NEXT: = firrtl.add %2, %2 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
-    %0 = firrtl.add %a, %a : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
-
-    // CHECK-NEXT: firrtl.printf %0, %1
-    firrtl.printf %clock, %reset, "Hi %x %x\0A"(%0, %b) : !firrtl.uint<5>, !firrtl.uint<4>
-    // CHECK-NEXT: rtl.output
-  }
-
-  // CHECK-LABEL: rtl.module @Stop(%clock1: i1, %clock2: i1, %reset: i1) {
-  firrtl.module @Stop(%clock1: !firrtl.clock,
-                      %clock2: !firrtl.clock,
-                      %reset: !firrtl.uint<1>) {
-    // CHECK-NEXT: %0 = firrtl.stdIntCast %clock1 : (i1) -> !firrtl.clock
-    // CHECK-NEXT: %1 = firrtl.stdIntCast %clock2 : (i1) -> !firrtl.clock
-    // CHECK-NEXT: %2 = firrtl.stdIntCast %reset : (i1) -> !firrtl.uint<1>
-
-    // CHECK-NEXT: firrtl.stop %0, %2, 42
-    firrtl.stop %clock1, %reset, 42
-
-    // CHECK-NEXT: firrtl.stop %1, %2, 0
-    firrtl.stop %clock2, %reset, 0
-    // CHECK-NEXT: rtl.output
   }
 
   // CHECK-LABEL: rtl.module @OutputFirst(%in1: i1, %in4: i4) -> (%out4: i4) {
   firrtl.module @OutputFirst(%out4: !firrtl.flip<uint<4>>,
                              %in1: !firrtl.uint<1>,
                              %in4: !firrtl.uint<4>) {
-    // CHECK-NEXT: %0 = firrtl.stdIntCast %in1 : (i1) -> !firrtl.uint<1>
-    // CHECK-NEXT: %1 = firrtl.stdIntCast %in4 : (i4) -> !firrtl.uint<4>
-    // CHECK-NEXT: %2 = firrtl.stdIntCast %1 : (!firrtl.uint<4>) -> i4
     firrtl.connect %out4, %in4 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
-    // CHECK-NEXT: rtl.output %2 : i4
+    // CHECK-NEXT: rtl.output %in4 : i4
   }
 
   // CHECK-LABEL: rtl.module @PortMadness(
@@ -155,8 +105,8 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: %1 = firrtl.stdIntCast %inB : (i4) -> !firrtl.uint<4>
     // CHECK-NEXT: %2 = firrtl.stdIntCast %inC : (i4) -> !firrtl.uint<4>
 
-    // CHECK: [[OUTC:%.+]] = firrtl.wire : !firrtl.flip<uint<4>>
-    // CHECK: [[OUTD:%.+]] = firrtl.wire : !firrtl.flip<uint<4>>
+    // CHECK: [[OUTC:%.+]] = firrtl.wire {{.*}} : !firrtl.flip<uint<4>>
+    // CHECK: [[OUTD:%.+]] = firrtl.wire {{.*}} : !firrtl.flip<uint<4>>
 
     // CHECK: [[INE:%.+]] = firrtl.stdIntCast %inE : (i3) -> !firrtl.uint<3>
 
@@ -175,6 +125,9 @@ firrtl.circuit "Simple" {
     // NOTE: This isn't valid but needs to be accepted until the verifier
     // rejects it.
     %tmp2 = firrtl.asNonPassive %inC : !firrtl.flip<uint<4>>
+
+    // expected-error @+2 {{'firrtl.connect' op LowerToRTL couldn't handle this operation}}
+    // expected-error @+1 {{destination isn't an inout type}}
     firrtl.connect %tmp2, %inA : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
     // No connections to outD.
@@ -182,23 +135,17 @@ firrtl.circuit "Simple" {
     firrtl.connect %outE, %inE : !firrtl.flip<uint<4>>, !firrtl.uint<3>
 
     // CHECK: [[OUTBY:%.+]] = comb.merge %inB, %inA : i4
-
-    // CHECK: [[OUTCX:%.+]] = firrtl.asPassive [[OUTC]]
-    // CHECK: [[OUTCY:%.+]] = firrtl.stdIntCast [[OUTCX]]
-    // CHECK: [[OUTDX:%.+]] = firrtl.asPassive [[OUTD]]
-    // CHECK: [[OUTDY:%.+]] = firrtl.stdIntCast [[OUTDX]]
+    // CHECK: [[OUTCR:%.+]] = sv.read_inout %.outC.output
+    // CHECK: [[OUTDR:%.+]] = sv.read_inout %.outD.output
 
     // Extension for outE
-    // CHECK: [[OUTE:%.+]] = firrtl.pad [[INE]], 4 : (!firrtl.uint<3>) -> !firrtl.uint<4>
-    // CHECK: [[OUTE_CAST:%.+]] = firrtl.stdIntCast [[OUTE]]
-    // CHECK: rtl.output %inA, [[OUTBY]], [[OUTCY]], [[OUTDY]], [[OUTE_CAST]]
+    // CHECK: [[OUTE:%.+]] = comb.concat %false_3, %inE : (i1, i3) -> i4
+    // CHECK: rtl.output %inA, [[OUTBY]], [[OUTCR]], [[OUTDR]], [[OUTE]]
   }
 
   // CHECK-LABEL: rtl.module @Analog(%a1: !rtl.inout<i1>) -> (%outClock: i1) {
-  // CHECK-NEXT:    %0 = firrtl.analogInOutCast %a1 : (!rtl.inout<i1>) -> !firrtl.analog<1>
-  // CHECK-NEXT:    %1 = firrtl.asClock %0 : (!firrtl.analog<1>) -> !firrtl.clock
-  // CHECK-NEXT:    %2 = firrtl.stdIntCast %1 : (!firrtl.clock) -> i1
-  // CHECK-NEXT:    rtl.output %2 : i1
+  // CHECK-NEXT:    %0 = sv.read_inout %a1 : !rtl.inout<i1>
+  // CHECK-NEXT:    rtl.output %0 : i1
   firrtl.module @Analog(%a1: !firrtl.analog<1>,
                         %outClock: !firrtl.flip<clock>) {
 
@@ -209,12 +156,12 @@ firrtl.circuit "Simple" {
   // Issue #373: https://github.com/llvm/circt/issues/373
   // CHECK-LABEL: rtl.module @instance_ooo
   firrtl.module @instance_ooo(%arg0: !firrtl.uint<2>, %arg1: !firrtl.uint<2>,
+                              %arg2: !firrtl.uint<3>,
                               %out0: !firrtl.flip<uint<8>>) {
     // The add and eq get hoisted.
-    // CHECK: firrtl.add
-    // CHECK-NEXT: [[ARG:%.+]] = firrtl.eq
-    // CHECK-NEXT: [[ARGC:%.+]] = firrtl.stdIntCast [[ARG]] : (!firrtl.uint<1>) -> i1
-    // CHECK-NEXT: rtl.instance "myext" @MyParameterizedExtModule([[ARGC]])
+    // CHECK: [[ADD:%.+]] = comb.add %0, %1
+    // CHECK-NEXT: [[ARG:%.+]] = comb.icmp eq [[ADD]], %arg2 : i3
+    // CHECK-NEXT: rtl.instance "myext" @MyParameterizedExtModule([[ARG]])
     %myext:2 = firrtl.instance @MyParameterizedExtModule {name = "myext", portNames=["in", "out"]}
       : !firrtl.flip<uint<1>>, !firrtl.uint<8>
 
@@ -223,21 +170,18 @@ firrtl.circuit "Simple" {
     %0 = firrtl.add %arg0, %arg0 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<3>
 
     // Multiple uses of the add.
-    %a = firrtl.eq %0, %0 : (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<1>
+    %a = firrtl.eq %0, %arg2 : (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<1>
     firrtl.connect %myext#0, %a : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 
     firrtl.connect %out0, %myext#1 : !firrtl.flip<uint<8>>, !firrtl.uint<8>
 
-    // Casts for the output.
-    // CHECK-NEXT: %5 = firrtl.stdIntCast %myext.out : (i8) -> !firrtl.uint<8>
-    // CHECK-NEXT: %6 = firrtl.stdIntCast %5 : (!firrtl.uint<8>) -> i8
-    // CHECK-NEXT: rtl.output %6
+    // CHECK-NEXT: rtl.output %myext.out
   }
 
   // CHECK-LABEL: rtl.module @instance_cyclic
   firrtl.module @instance_cyclic(%arg0: !firrtl.uint<2>, %arg1: !firrtl.uint<2>) {
     // This can't be hoisted so we end up with a wire.
-    // CHECK: %.in.wire = firrtl.wire : !firrtl.uint<1>
+    // CHECK: %.in.wire = sv.wire  : !rtl.inout<i1>
     // CHECK: rtl.instance
     %myext:2 = firrtl.instance @MyParameterizedExtModule {name = "myext", portNames=["in", "out"]}
       : !firrtl.flip<uint<1>>, !firrtl.uint<8>
@@ -246,26 +190,15 @@ firrtl.circuit "Simple" {
     %11 = firrtl.bits %myext#1 2 to 2 : (!firrtl.uint<8>) -> !firrtl.uint<1>
 
     firrtl.connect %myext#0, %11 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
-
-    // CHECK: firrtl.bits
-    // CHECK: firrtl.connect
   }
 
-  // CHECK-LABEL: rtl.module @ZeroWidthPorts(
-  // CHECK: %inA: i4) -> (%outa: i4) {
+  // CHECK-LABEL: rtl.module @ZeroWidthPorts(%inA: i4) -> (%outa: i4) {
   firrtl.module @ZeroWidthPorts(%inA: !firrtl.uint<4>,
                                 %inB: !firrtl.uint<0>,
                                 %inC: !firrtl.analog<0>,
                                 %outa: !firrtl.flip<uint<4>>,
                                 %outb: !firrtl.flip<uint<0>>) {
-    // CHECK-NEXT: %0 = firrtl.stdIntCast %inA : (i4) -> !firrtl.uint<4>
-    // CHECK-NEXT: %.inB.0width_input = firrtl.wire : !firrtl.flip<uint<0>>
-    // CHECK-NEXT: %1 = firrtl.asPassive %.inB.0width_input : !firrtl.flip<uint<0>>
-    // CHECK-NEXT: %.inC.output = firrtl.wire : !firrtl.analog<0>
-    // CHECK-NEXT: %.outb.output = firrtl.wire : !firrtl.flip<uint<0>>
-
-    // CHECK: [[OUTA:%.+]] = firrtl.mul %0, %1 : (!firrtl.uint<4>, !firrtl.uint<0>) -> !firrtl.uint<4>
-    %0 = firrtl.mul %inA, %inB : (!firrtl.uint<4>, !firrtl.uint<0>) -> !firrtl.uint<4>
+     %0 = firrtl.mul %inA, %inB : (!firrtl.uint<4>, !firrtl.uint<0>) -> !firrtl.uint<4>
     firrtl.connect %outa, %0 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
     %1 = firrtl.mul %inB, %inB : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<0>
@@ -273,7 +206,8 @@ firrtl.circuit "Simple" {
 
     firrtl.attach %inC, %inC : !firrtl.analog<0>, !firrtl.analog<0>
 
-    // CHECK: [[OUTAC:%.+]] = firrtl.stdIntCast [[OUTA]] : (!firrtl.uint<4>) -> i4
+    // CHECK:  = rtl.constant 0 : i4
+    // CHECK: [[OUTAC:%.+]] = rtl.constant 0 : i4
     // CHECK-NEXT: rtl.output [[OUTAC]] : i4
   }
 
@@ -285,7 +219,6 @@ firrtl.circuit "Simple" {
                                    %oB: !firrtl.flip<uint<0>>) {
 
     // CHECK: %myinst.outa = rtl.instance "myinst" @ZeroWidthPorts(%iA) : (i4) -> i4
-    // CHECK: [[OUTA:%.+]] = firrtl.stdIntCast %myinst.outa : (i4) -> !firrtl.uint<4>
     %myinst:5 = firrtl.instance @ZeroWidthPorts {name = "myinst", portNames=["inA", "inB", "inC", "outa", "outb"]}
       : !firrtl.flip<uint<4>>, !firrtl.flip<uint<0>>, !firrtl.analog<0>, !firrtl.uint<4>, !firrtl.uint<0>
 
@@ -296,15 +229,11 @@ firrtl.circuit "Simple" {
     firrtl.connect %oA, %myinst#3 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
     firrtl.connect %oB, %myinst#4 : !firrtl.flip<uint<0>>, !firrtl.uint<0>
 
-    // CHECK: [[OUTAC:%.+]] = firrtl.stdIntCast [[OUTA]] : (!firrtl.uint<4>) -> i4
-    // CHECK: rtl.output [[OUTAC]] : i4
+    // CHECK: rtl.output %myinst.outa
   }
 
   // CHECK-LABEL: rtl.module @SimpleStruct(%source: !rtl.struct<valid: i1, ready: i1, data: i64>) -> (%sink: !rtl.struct<valid: i1, ready: i1, data: i64>) {
-  // CHECK-NEXT:  [[st1:%.+]] = firrtl.rtlStructCast %source : (!rtl.struct<valid: i1, ready: i1, data: i64>) -> !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
-  // CHECK-NEXT:  [[st2:%.+]] = firrtl.rtlStructCast [[st1]] : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>) -> !rtl.struct<valid: i1, ready: i1, data: i64>
-  // CHECK-NEXT:  rtl.output [[st2]] : !rtl.struct<valid: i1, ready: i1, data: i64>
-  // CHECK-NEXT: }
+  // CHECK-NEXT:    rtl.output %source : !rtl.struct<valid: i1, ready: i1, data: i64>
   firrtl.module @SimpleStruct(%source: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>,
                               %sink: !firrtl.flip<bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>>) {
     firrtl.connect %sink, %source : !firrtl.flip<bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>>, !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
@@ -316,9 +245,8 @@ firrtl.circuit "Simple" {
   }
   // CHECK-LABEL: rtl.module @foo690()
   firrtl.module @foo690() {
-    // CHECK: %.led_0.wire = firrtl.wire  : !firrtl.analog<1>
-    // CHECK: %0 = firrtl.analogInOutCast %.led_0.wire
-    // CHECK: rtl.instance "fpga" @bar690(%0) : (!rtl.inout<i1>) -> ()
+    // CHECK: %.led_0.wire = sv.wire
+    // CHECK: rtl.instance "fpga" @bar690(%.led_0.wire) : (!rtl.inout<i1>) -> ()
     %result = firrtl.instance @bar690 {name = "fpga", portNames = ["led_0"]} : !firrtl.analog<1>
   }
   // CHECK-LABEL: rtl.module @foo690a(%a: !rtl.inout<i1>) {
