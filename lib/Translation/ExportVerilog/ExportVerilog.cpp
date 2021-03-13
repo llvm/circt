@@ -2423,9 +2423,9 @@ LogicalResult StmtEmitter::visitSV(InterfaceModportOp op) {
 LogicalResult StmtEmitter::visitSV(AssignInterfaceSignalOp op) {
   SmallPtrSet<Operation *, 8> emitted;
   indent() << "assign ";
-  emitExpression(op.iface(), emitted, ForceEmitMultiUse);
+  emitExpression(op.iface(), emitted);
   os << '.' << op.signalName() << " = ";
-  emitExpression(op.rhs(), emitted, ForceEmitMultiUse);
+  emitExpression(op.rhs(), emitted);
   os << ";\n";
   return success();
 }
