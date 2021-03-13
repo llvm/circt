@@ -17,13 +17,23 @@ def TextualValueOp : SVOp<"textual_value", [NoSideEffect]> {
     SystemVerilog.  This can be used to access macros and other values that are
     only sensible as Verilog text.
 
-    The text string is expected to have the highest precedence, so it should
-    be parenthesized if it isn't a single token.
+    The text string is expected to have the highest precedence, so you should
+    include parentheses in the string if it isn't a single token.
+
+    sv.textual_value allows operand substitutions with {{0}} syntax.
     }];
 
-  let arguments = (ins StrAttr:$string);
+  let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands);
   let results = (outs AnySignlessInteger:$result);
-  let assemblyFormat = "$string attr-dict `:` type($result)";
+  let assemblyFormat = [{
+    $string attr-dict (`(` $operands^ `)`)?
+      `:` functional-type($operands, $result)
+  }];
+
+  let builders = [
+    OpBuilder<(ins "Type":$resultType, "StringRef":$string),
+               "build(odsBuilder, odsState, resultType, string, ValueRange{});">
+  ];
 }
 
 def ConstantXOp : SVOp<"constantX", [NoSideEffect]> {

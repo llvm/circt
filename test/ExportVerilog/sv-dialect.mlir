@@ -10,7 +10,7 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
     sv.ifdef.procedural "SYNTHESIS" {
     } else {
   // CHECK-NEXT:     if (PRINTF_COND_ & 1'bx & 1'bz & cond)
-      %tmp = sv.textual_value "PRINTF_COND_" : i1
+      %tmp = sv.textual_value "PRINTF_COND_" : () -> i1
       %tmp1 = sv.constantX : i1
       %tmp2 = sv.constantZ : i1
       %tmp3 = comb.and %tmp, %tmp1, %tmp2, %cond : i1
@@ -141,6 +141,16 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
       // CHECK-NEXT: Emit some stuff in verilog
       // CHECK-NEXT: Great power and responsibility!
       sv.verbatim "Emit some stuff in verilog\nGreat power and responsibility!"
+
+      %c42 = rtl.constant 42 : i8
+      %add = comb.add %val, %c42 : i8
+      %c42_2 = rtl.constant 42 : i8
+      %xor = comb.xor %val, %c42_2 : i8
+      %text = sv.textual_value "MACRO({{0}}, {{1}})" (%add, %xor): (i8,i8) -> i8
+
+      // CHECK-NEXT: $fwrite(32'h80000002, "M: %x\n", MACRO(val + 8'h2A, val ^ 8'h2A));
+      sv.fwrite "M: %x\n"(%text) : i8
+
     }// CHECK-NEXT:   {{end$}}
   }
   // CHECK-NEXT:  end // initial
@@ -159,13 +169,13 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
     // CHECK-NEXT: automatic logic        _T_0;
     // CHECK-EMPTY:
     // CHECK-NEXT: _T = THING;
-    %thing = sv.textual_value "THING" : i42
+    %thing = sv.textual_value "THING" : () -> i42
     // CHECK-NEXT: wire42 = _T;
     sv.bpassign %wire42, %thing : i42
 
     sv.ifdef.procedural "FOO" {
       // CHECK-NEXT: `ifdef FOO
-      %c1 = sv.textual_value "\"THING\"" : i1
+      %c1 = sv.textual_value "\"THING\"" : () -> i1
       // CHECK-NEXT: {{.+}} = "THING";
       sv.fwrite "%d" (%c1) : i1
       // CHECK-NEXT: fwrite(32'h80000002, "%d", {{.+}});
@@ -230,7 +240,7 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
   // CHECK-NEXT: `ifdef FOO
   sv.ifdef "FOO" {
     // CHECK-NEXT: wire {{.+}} = "THING";
-    %c1 = sv.textual_value "\"THING\"" : i1
+    %c1 = sv.textual_value "\"THING\"" : () -> i1
 
     // CHECK-NEXT: initial begin
     sv.initial {
