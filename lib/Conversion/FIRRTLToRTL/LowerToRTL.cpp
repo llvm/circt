@@ -406,6 +406,39 @@ collectOperationTreeBelowMarker(Value value, Operation *marker,
   return false;
 }
 
+/// Given a value of analog type, check to see the only use of it is an attach.
+/// If so, remove the attach and return the value being attached to it,
+/// converted to an RTL inout type.  If this isn't a situation we can handle,
+/// just return null.
+static Value tryEliminatingAttachesToAnalogValue(Value value,
+                                                 Operation *insertPoint) {
+  if (!value.hasOneUse())
+    return {};
+
+  auto attach = dyn_cast<AttachOp>(*value.user_begin());
+  if (!attach || attach.getNumOperands() != 2)
+    return {};
+
+  // Don't optimize zero bit analogs.
+  auto loweredType = lowerType(value.getType());
+  if (loweredType.isInteger(0))
+    return {};
+
+  // Check to see if the attached value dominates the insertion point.  If not,
+  // just fail.
+  auto attachedValue = attach.getOperand(attach.getOperand(0) == value);
+  auto *op = attachedValue.getDefiningOp();
+  if (op && op->getBlock() == insertPoint->getBlock() &&
+      !op->isBeforeInBlock(insertPoint))
+    return {};
+
+  attach.erase();
+
+  ImplicitLocOpBuilder builder(insertPoint->getLoc(), insertPoint);
+  return castFromFIRRTLType(attachedValue, rtl::InOutType::get(loweredType),
+                            builder);
+}
+
 /// Given a value of flip type, check to see if all of the uses of it are
 /// connects.  If so, remove the connects and return the value being connected
 /// to it, converted to an RTL type.  If this isn't a situation we can handle,
@@ -415,6 +448,10 @@ collectOperationTreeBelowMarker(Value value, Operation *marker,
 /// location is where a 'rtl.merge' operation should be inserted if needed.
 static Value tryEliminatingConnectsToValue(Value flipValue,
                                            Operation *insertPoint) {
+  // Handle analog's separately.
+  if (flipValue.getType().isa<AnalogType>())
+    return tryEliminatingAttachesToAnalogValue(flipValue, insertPoint);
+
   SmallVector<ConnectOp, 2> connects;
   for (auto *use : flipValue.getUsers()) {
     // We only know about 'connect' uses, where this is the destination.
