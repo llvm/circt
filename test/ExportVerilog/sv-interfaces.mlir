@@ -99,4 +99,25 @@ module {
     // CHECK: );
     rtl.instance "rcvr2" @reg(%ifaceInPort) : (!sv.modport<@data_vr::@data_in>) -> ()
   }
+
+
+  // https://github.com/llvm/circt/issues/724
+  sv.interface @IValidReady_Struct  {
+    sv.interface.signal @data : !rtl.struct<foo: !rtl.array<384xi1>>
+  }
+  // CHECK-LABEL: module structs(
+  // CHECK: wire [383:0] _tmp = {
+  // CHECK-NOT: wire [383:0] _tmp =
+  // CHECK: endmodule
+  rtl.module @structs(%clk: i1, %rstn: i1) {
+    %0 = sv.interface.instance : !sv.interface<@IValidReady_Struct>
+    sv.interface.signal.assign %0(@IValidReady_Struct::@data) = %s : !rtl.struct<foo: !rtl.array<384xi1>>
+    %c0 = rtl.constant 0 : i8
+    %c64 = rtl.constant 100000 : i64
+    %16 = rtl.bitcast %c64 : (i64) -> !rtl.array<64xi1>
+    %58 = rtl.bitcast %c0 : (i8) -> !rtl.array<8xi1>
+    %90 = rtl.array_concat %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %58, %16, %16 : !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<8xi1>, !rtl.array<64xi1>, !rtl.array<64xi1>
+    %s = rtl.struct_create (%90) : !rtl.struct<foo: !rtl.array<384xi1>>
+  }
+
 }
