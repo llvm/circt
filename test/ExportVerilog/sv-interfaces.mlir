@@ -100,7 +100,6 @@ module {
     rtl.instance "rcvr2" @reg(%ifaceInPort) : (!sv.modport<@data_vr::@data_in>) -> ()
   }
 
-
   // https://github.com/llvm/circt/issues/724
   sv.interface @IValidReady_Struct  {
     sv.interface.signal @data : !rtl.struct<foo: !rtl.array<384xi1>>
