@@ -405,9 +405,8 @@ collectOperationTreeBelowMarker(Value value, Operation *marker,
 /// to it, converted to an RTL type.  If this isn't a situation we can handle,
 /// just return null.
 ///
-/// This can happen when there are no connects to the value, or if
-/// firrtl.invalid is used.  The 'mergePoint' location is where a 'rtl.merge'
-/// operation should be inserted if needed.
+/// This can happen when there are no connects to the value.  The 'mergePoint'
+/// location is where a 'rtl.merge' operation should be inserted if needed.
 static Value tryEliminatingConnectsToValue(Value flipValue,
                                            Operation *insertPoint) {
   SmallVector<ConnectOp, 2> connects;
@@ -767,6 +766,8 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
 
   void runOnOperation() override;
 
+  void optimizeTemporaryWire(sv::WireOp wire);
+
   // Helpers.
   Value getPossiblyInoutLoweredValue(Value value);
   Value getLoweredValue(Value value);
@@ -798,6 +799,14 @@ struct FIRRTLLowering : public LowerFIRRTLToRTLBase<FIRRTLLowering>,
                                  std::function<void(void)> elseCtor = {});
   void addIfProceduralBlock(Value cond, std::function<void(void)> thenCtor,
                             std::function<void(void)> elseCtor = {});
+
+  // Create a temporary wire at the current insertion point, and try to
+  // eliminate it later as part of lowering post processing.
+  sv::WireOp createTmpWireOp(Type type, StringRef name) {
+    auto result = builder->create<sv::WireOp>(type, name);
+    tmpWiresToOptimize.push_back(result);
+    return result;
+  }
 
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitExpr;
   using FIRRTLVisitor<FIRRTLLowering, LogicalResult>::visitDecl;
@@ -934,12 +943,16 @@ private:
   // We auto-unique graph-level blocks to reduce the amount of generated code
   // and ensure that side effects are properly ordered in FIRRTL.
   llvm::SmallDenseMap<Value, sv::AlwaysOp> alwaysBlocks;
-  llvm::SmallDenseMap<std::tuple<Block *, EventControl, Value, ::ResetType,
-                                 EventControl, Value>,
-                      sv::AlwaysFFOp>
-      alwaysFFBlocks;
+
+  using AlwaysFFKeyType = std::tuple<Block *, EventControl, Value, ::ResetType,
+                                     EventControl, Value>;
+  llvm::SmallDenseMap<AlwaysFFKeyType, sv::AlwaysFFOp> alwaysFFBlocks;
   llvm::SmallDenseMap<std::pair<Block *, Attribute>, sv::IfDefOp> ifdefBlocks;
   llvm::SmallDenseMap<Block *, sv::InitialOp> initialBlocks;
+
+  /// This is a set of wires that get inserted as an artifact of the lowering
+  /// process.  LowerToRTL should attempt to clean these up after lowering.
+  SmallVector<sv::WireOp> tmpWiresToOptimize;
 
   /// This is true if we've emitted `INIT_RANDOM_PROLOG_ into an initial block
   /// in this module already.
@@ -958,7 +971,6 @@ void FIRRTLLowering::runOnOperation() {
   // through each operation, lowering each in turn if we can, introducing casts
   // if we cannot.
   auto *body = getOperation().getBodyBlock();
-
   randomizePrologEmitted = false;
 
   SmallVector<Operation *, 16> opsToRemove;
@@ -998,12 +1010,59 @@ void FIRRTLLowering::runOnOperation() {
     opsToRemove.pop_back_val()->erase();
   }
 
+  // Now that the IR is in a stable form, try to eliminate temporary wires
+  // inserted by MemOp insertions.
+  for (auto wire : tmpWiresToOptimize)
+    optimizeTemporaryWire(wire);
+
   // Clear out the value mapping for next time, so we don't have dangling keys.
   valueMapping.clear();
   alwaysBlocks.clear();
   alwaysFFBlocks.clear();
   ifdefBlocks.clear();
   initialBlocks.clear();
+  tmpWiresToOptimize.clear();
+}
+
+// Try to optimize out temporary wires introduced during lowering.
+void FIRRTLLowering::optimizeTemporaryWire(sv::WireOp wire) {
+  // Wires have inout type, so they'll have connects and read_inout operations
+  // that work on them.  If anything unexpected is found then leave it alone.
+  SmallVector<sv::ReadInOutOp> reads;
+  sv::ConnectOp write;
+
+  for (auto *user : wire->getUsers()) {
+    if (auto read = dyn_cast<sv::ReadInOutOp>(user)) {
+      reads.push_back(read);
+      continue;
+    }
+
+    // Otherwise must be a connect, and we must not have seen a write yet.
+    auto connect = dyn_cast<sv::ConnectOp>(user);
+    if (!connect || write)
+      return;
+    write = connect;
+  }
+
+  // Must have found the write!
+  if (!write)
+    return;
+
+  // If the write is happening at the model level then we don't have any
+  // use-before-def checking to do, so we only handle that for now.
+  if (!isa<rtl::RTLModuleOp>(write->getParentOp()))
+    return;
+
+  auto connected = write.src();
+
+  // Ok, we can do this.  Replace all the reads with the connected value.
+  for (auto read : reads) {
+    read.replaceAllUsesWith(connected);
+    read.erase();
+  }
+  // And remove the write and wire itself.
+  write.erase();
+  wire.erase();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1604,7 +1663,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       }
       auto name =
           (Twine(memName) + "_" + portName + "_" + elt.name.getValue()).str();
-      auto fieldWire = builder->create<sv::WireOp>(fieldType, name);
+      auto fieldWire = createTmpWireOp(fieldType, name);
       portWires.insert({elt.name.getValue(), fieldWire});
     }
 
