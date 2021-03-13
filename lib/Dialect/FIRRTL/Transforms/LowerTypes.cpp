@@ -674,22 +674,29 @@ static IntegerAttr getIntAttr(const APInt &value, MLIRContext *context) {
 // flattened vector based on the index.
 // x = a[index] is lowered to ::
 // x = index == 3 ? a_3 : index == 2 ? a_2 : index == 1 ? a_1:a_0
-// TODO: This currently does not handle vector of bundles.
+// TODO: This currently does not handle vector of bundles, multi-dim vectors and
+// assignment to vectors.
 void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   Value input = op.input();
   Value index = op.index();
   FIRRTLType resultType = op.getType();
   FIRRTLType indexType = index.getType().cast<FIRRTLType>();
-  FVectorType inputType =
-      input.getType().cast<FIRRTLType>().cast<FVectorType>();
+  FVectorType inputType;
+  if (auto FlipV = input.getType().cast<FIRRTLType>().dyn_cast<FlipType>()) {
+    inputType = FlipV.getElementType().cast<FVectorType>();
+    builder->emitError(
+        "Lowering of dynamic assignment to vectors not supported");
+    assert("Lowering of dynamic assignment to vectors not supported");
+  } else
+    inputType = input.getType().cast<FIRRTLType>().cast<FVectorType>();
   if (inputType.getElementType().isa<BundleType>()) {
     builder->emitError("Lowering of vectors of bundle type not supported");
-    return;
+    assert("Lowering of vectors of bundle type not supported");
   }
   auto selectWidth = indexType.getBitWidthOrSentinel();
   SmallVector<Value, 8> vecVaclues;
   getAllBundleLowerings(input, vecVaclues);
-  // TODO: Add message here, when can this happen ?
+  // TODO: Add message here, Multidim vectors crash here.
   assert(vecVaclues.size() == inputType.getNumElements());
   Value elem0 = vecVaclues[0];
   size_t maxElems = (1 << indexType.getBitWidthOrSentinel());

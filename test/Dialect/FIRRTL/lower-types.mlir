@@ -513,8 +513,61 @@ firrtl.circuit "LowerSubacessOp2" {
   // CHECK: }
 }
 
-// ----
 
+// https://github.com/llvm/circt/issues/656
+// Test lowering of Bundle of vector types, SubAccessOp of SubAccessOp, b <= a[z[sel]]
+firrtl.circuit "LowerSubacessOp3" {
+  firrtl.module @LowerSubacessOp3(%a: !firrtl.vector<uint<2>, 4>, %sel: !firrtl.uint<2>, %b: !firrtl.flip<uint<2>>) {
+    %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
+    %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
+    %c2_ui2 = firrtl.constant(2 : ui2) : !firrtl.uint<2>
+    %z = firrtl.wire  : !firrtl.vector<uint<2>, 4>
+    %0 = firrtl.subindex %z[0] : !firrtl.vector<uint<2>, 4>
+    firrtl.connect %0, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+    %1 = firrtl.subindex %z[1] : !firrtl.vector<uint<2>, 4>
+    firrtl.connect %1, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+    %2 = firrtl.subindex %z[2] : !firrtl.vector<uint<2>, 4>
+    firrtl.connect %2, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+    %3 = firrtl.subindex %z[3] : !firrtl.vector<uint<2>, 4>
+    firrtl.connect %3, %c2_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+    %4 = firrtl.subaccess %z[%sel] : !firrtl.vector<uint<2>, 4>, !firrtl.uint<2>
+    %5 = firrtl.subaccess %a[%4] : !firrtl.vector<uint<2>, 4>, !firrtl.uint<2>
+    firrtl.connect %b, %5 : !firrtl.flip<uint<2>>, !firrtl.uint<2>
+  }
+  // CHECK: firrtl.module @LowerSubacessOp3(%a_0: !firrtl.uint<2>, %a_1: !firrtl.uint<2>, %a_2: !firrtl.uint<2>, %a_3: !firrtl.uint<2>, %sel: !firrtl.uint<2>, %b: !firrtl.flip<uint<2>>) {
+  // CHECK:   %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
+  // CHECK:   %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
+  // CHECK:   %c2_ui2 = firrtl.constant(2 : ui2) : !firrtl.uint<2>
+  // CHECK:   %z_0 = firrtl.wire  : !firrtl.uint<2>
+  // CHECK:   %z_1 = firrtl.wire  : !firrtl.uint<2>
+  // CHECK:   %z_2 = firrtl.wire  : !firrtl.uint<2>
+  // CHECK:   %z_3 = firrtl.wire  : !firrtl.uint<2>
+  // CHECK:   firrtl.connect %z_0, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  // CHECK:   firrtl.connect %z_1, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  // CHECK:   firrtl.connect %z_2, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  // CHECK:   firrtl.connect %z_3, %c2_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  // CHECK:   %c1_ui2_0 = firrtl.constant(1 : i2) : !firrtl.uint<2>
+  // CHECK:   %0 = firrtl.eq %sel, %c1_ui2_0 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+  // CHECK:   %1 = firrtl.mux(%0, %z_1, %z_0) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+  // CHECK:   %c2_ui2_1 = firrtl.constant(-2 : i2) : !firrtl.uint<2>
+  // CHECK:   %2 = firrtl.eq %sel, %c2_ui2_1 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+  // CHECK:   %3 = firrtl.mux(%2, %z_2, %1) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+  // CHECK:   %c3_ui2 = firrtl.constant(-1 : i2) : !firrtl.uint<2>
+  // CHECK:   %4 = firrtl.eq %sel, %c3_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+  // CHECK:   %5 = firrtl.mux(%4, %z_3, %3) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+  // CHECK:   %c1_ui2_2 = firrtl.constant(1 : i2) : !firrtl.uint<2>
+  // CHECK:   %6 = firrtl.eq %5, %c1_ui2_2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+  // CHECK:   %7 = firrtl.mux(%6, %a_1, %a_0) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+  // CHECK:   %c2_ui2_3 = firrtl.constant(-2 : i2) : !firrtl.uint<2>
+  // CHECK:   %8 = firrtl.eq %5, %c2_ui2_3 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+  // CHECK:   %9 = firrtl.mux(%8, %a_2, %7) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+  // CHECK:   %c3_ui2_4 = firrtl.constant(-1 : i2) : !firrtl.uint<2>
+  // CHECK:   %10 = firrtl.eq %5, %c3_ui2_4 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+  // CHECK:   %11 = firrtl.mux(%10, %a_3, %9) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+  // CHECK:   firrtl.connect %b, %11 : !firrtl.flip<uint<2>>, !firrtl.uint<2>
+}
+
+// ----
 firrtl.circuit "ExternalModule" {
   // CHECK: firrtl.extmodule @ExternalModule(!firrtl.uint<1> {firrtl.name = "source_valid"}, !firrtl.flip<uint<1>> {firrtl.name = "source_ready"}, !firrtl.uint<64> {firrtl.name = "source_data"})
   firrtl.extmodule @ExternalModule(!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>> {firrtl.name = "source"})
