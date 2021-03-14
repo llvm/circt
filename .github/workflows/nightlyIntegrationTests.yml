@@ -13,7 +13,7 @@ jobs:
     name: Build LLVM
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/circt/images/circt-integration-test:v3
+      image: ghcr.io/circt/images/circt-integration-test:v5
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
@@ -35,7 +35,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: llvm
-          key: ${{ runner.os }}-llvm-sharedlibs-${{ steps.get-llvm-hash.outputs.hash }}
+          key: ${{ runner.os }}-llvm-sharedlibs-python-${{ steps.get-llvm-hash.outputs.hash }}
 
       # Build LLVM if we didn't hit in the cache.
       - name: Rebuild and Install LLVM
