@@ -4,6 +4,7 @@
 
 include(AddMLIRPythonExtension)
 add_custom_target(CIRCTBindingsPython)
+add_dependencies(CIRCTBindingsPython MLIRBindingsPythonExtension)
 
 ################################################################################
 # Build native Python extension
