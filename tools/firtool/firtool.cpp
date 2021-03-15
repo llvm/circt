@@ -23,6 +23,7 @@
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Translation/ExportVerilog.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Parser.h"
 #include "mlir/Pass/Pass.h"
@@ -175,6 +176,7 @@ int main(int argc, char **argv) {
   // Register any pass manager command line options.
   registerMLIRContextCLOptions();
   registerPassManagerCLOptions();
+  registerAsmPrinterCLOptions();
 
   // Parse pass names in main to ensure static initialization completed.
   cl::ParseCommandLineOptions(argc, argv, "circt modular optimizer driver\n");
