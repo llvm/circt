@@ -429,7 +429,7 @@ def VerbatimOp : SVOp<"verbatim"> {
 // Verification Statements
 //===----------------------------------------------------------------------===//
 
-def AssertOp : SVOp<"assert"> {
+def AssertOp : SVOp<"assert", [ProceduralOp]> {
   let summary = "immediate assertion statement";
   let description = [{
     Assert that a specific condition is always true.
@@ -440,7 +440,7 @@ def AssertOp : SVOp<"assert"> {
   let assemblyFormat = "attr-dict $predicate `:` type($predicate)";
 }
 
-def AssumeOp : SVOp<"assume"> {
+def AssumeOp : SVOp<"assume", [ProceduralOp]> {
   let summary = "assume property statement";
   let description = [{
     Assume that a specific property is always true.
@@ -451,7 +451,7 @@ def AssumeOp : SVOp<"assume"> {
   let assemblyFormat = "attr-dict $property `:` type($property)";
 }
 
-def CoverOp : SVOp<"cover"> {
+def CoverOp : SVOp<"cover", [ProceduralOp]> {
   let summary = "functional coverage statement";
   let description = [{
     Assert that a specific property happens during the course of execution.
