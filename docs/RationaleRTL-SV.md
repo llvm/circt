@@ -299,7 +299,7 @@ The major classes of operations you'll find are:
 1) Access to verification constructs with `sv.assert`, `sv.assume`, and
    `sv.cover`.
 1) Escape hatches that allow direct integration of textual expressions
-   (`sv.textual_value`) and full statements (`sv.verbatim`).
+   (`sv.verbatim.expr`) and full statements (`sv.verbatim`).
 
 These operations are designed to directly model the syntax of the SystemVerilog
 language and to be easily printable by the ExportVerilog pass.  While there are
