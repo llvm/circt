@@ -1069,7 +1069,7 @@ private:
 
   /// This keeps track of constants that we have created so we can reuse them.
   /// This is populated by the getOrCreateIntConstant method.
-  DenseMap<APInt, Value> rtlConstantMap;
+  DenseMap<Attribute, Value> rtlConstantMap;
 
   // We auto-unique graph-level blocks to reduce the amount of generated
   // code and ensure that side effects are properly ordered in FIRRTL.
@@ -1193,12 +1193,15 @@ void FIRRTLLowering::optimizeTemporaryWire(sv::WireOp wire) {
 /// Check to see if we've already lowered the specified constant.  If so, return
 /// it.  Otherwise create it and put it in the entry block for reuse.
 Value FIRRTLLowering::getOrCreateIntConstant(const APInt &value) {
-  auto &entry = rtlConstantMap[value];
+  auto attr = builder.getIntegerAttr(
+      builder.getIntegerType(value.getBitWidth()), value);
+
+  auto &entry = rtlConstantMap[attr];
   if (entry)
     return entry;
 
   OpBuilder entryBuilder(&theModule.getBodyBlock()->front());
-  entry = entryBuilder.create<rtl::ConstantOp>(builder.getLoc(), value);
+  entry = entryBuilder.create<rtl::ConstantOp>(builder.getLoc(), attr);
   return entry;
 }
 
@@ -1380,7 +1383,7 @@ LogicalResult FIRRTLLowering::setPossiblyFoldedLowering(Value orig,
   // If this is a constant, check to see if we have it in our unique mapping:
   // it could have come from folding an operation.
   if (auto cst = dyn_cast_or_null<rtl::ConstantOp>(result.getDefiningOp())) {
-    auto &entry = rtlConstantMap[cst.value()];
+    auto &entry = rtlConstantMap[cst.valueAttr()];
     if (entry == cst) {
       // We're already using an entry in the constant map, nothing to do.
     } else if (entry) {
