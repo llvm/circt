@@ -683,8 +683,8 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   FIRRTLType resultType = op.getType();
   FIRRTLType indexType = index.getType().cast<FIRRTLType>();
   FVectorType inputType;
-  if (auto FlipV = input.getType().cast<FIRRTLType>().dyn_cast<FlipType>()) {
-    inputType = FlipV.getElementType().cast<FVectorType>();
+  if (auto flipV = input.getType().cast<FIRRTLType>().dyn_cast<FlipType>()) {
+    inputType = flipV.getElementType().cast<FVectorType>();
     builder->emitError(
         "Lowering of dynamic assignment to vectors not supported");
     return;
