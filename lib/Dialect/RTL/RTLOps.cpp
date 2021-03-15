@@ -101,6 +101,7 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> constants) {
   assert(constants.empty() && "constant has no operands");
   return valueAttr();
 }
+
 //===----------------------------------------------------------------------===//
 // RTLModuleOp
 //===----------------------------------------------------------------------===/

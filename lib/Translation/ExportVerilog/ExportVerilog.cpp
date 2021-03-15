@@ -20,11 +20,13 @@
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/Support/FileUtilities.h"
 #include "mlir/Translation.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/SaveAndRestore.h"
+#include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace circt;
@@ -512,11 +514,79 @@ public:
     os << '\n';
   }
 
+  void emitTextWithSubstitutions(StringRef string, Operation *op,
+                                 std::function<void(Value)> operandEmitter);
+
 private:
   void operator=(const EmitterBase &) = delete;
   EmitterBase(const EmitterBase &) = delete;
 };
 } // end anonymous namespace
+
+void EmitterBase::emitTextWithSubstitutions(
+    StringRef string, Operation *op,
+    std::function<void(Value)> operandEmitter) {
+  // Perform operand substitions as we emit the line string.  We turn {{42}}
+  // into the value of operand 42.
+
+  // Scan 'line' for a substitution, emitting any non-substitution prefix,
+  // then the mentioned operand, chopping the relevant text off 'line' and
+  // returning true.  This returns false if no substitution is found.
+  auto emitUntilSubstitution = [&](size_t next = 0) -> bool {
+    size_t start = 0;
+    while (1) {
+      next = string.find("{{", next);
+      if (next == StringRef::npos)
+        return false;
+
+      // Check to make sure we have a number followed by }}.  If not, we
+      // ignore the {{ sequence as something that could happen in Verilog.
+      next += 2;
+      start = next;
+      while (next < string.size() && isdigit(string[next]))
+        ++next;
+      // We need at least one digit.
+      if (start == next)
+        continue;
+
+      // We must have a }} right after the digits.
+      if (!string.substr(next).startswith("}}"))
+        continue;
+
+      // We must be able to decode the integer into an unsigned.
+      unsigned operandNo = 0;
+      if (string.drop_front(start)
+              .take_front(next - start)
+              .getAsInteger(10, operandNo)) {
+        emitError(op, "operand substitution too large");
+        continue;
+      }
+      next += 2;
+
+      if (operandNo >= op->getNumOperands()) {
+        emitError(op, "operand " + llvm::utostr(operandNo) + " isn't valid");
+        continue;
+      }
+
+      // Emit any text before the substitution.
+      os << string.take_front(start - 2);
+
+      // Emit the operand.
+      operandEmitter(op->getOperand(operandNo));
+
+      // Forget about the part we emitted.
+      string = string.drop_front(next);
+      return true;
+    }
+  };
+
+  // Emit all the substitutions.
+  while (emitUntilSubstitution())
+    ;
+
+  // Emit any text after the last substitution.
+  os << string;
+}
 
 //===----------------------------------------------------------------------===//
 // ModuleEmitter
@@ -650,6 +720,27 @@ StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
     nameTable[valueOrOp] = updatedName;
   return updatedName;
 }
+
+//===----------------------------------------------------------------------===//
+// SplitModuleEmitter
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+class SplitModuleEmitter {
+public:
+  explicit SplitModuleEmitter(StringRef dirname) : dirname(dirname) {}
+
+  bool encounteredError = false;
+  StringRef dirname;
+  SmallVector<Operation *, 8> perFileOps;
+
+  void emitMLIRModule(ModuleOp module);
+  void emitFile(StringRef filename,
+                std::function<void(VerilogEmitterState &)> callback);
+};
+
+} // namespace
 
 //===----------------------------------------------------------------------===//
 // Expression Emission
@@ -1150,7 +1241,10 @@ SubExprInfo ExprEmitter::visitSV(ReadInterfaceSignalOp op) {
 }
 
 SubExprInfo ExprEmitter::visitSV(TextualValueOp op) {
-  os << op.string();
+  emitTextWithSubstitutions(op.string(), op, [&](Value operand) {
+    emitSubExpr(operand, LowestPrecedence, OOLBinary);
+  });
+
   return {Unary, IsUnsigned};
 }
 
@@ -1913,68 +2007,9 @@ LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
       indent();
     }
 
-    StringRef line = lhsRhs.first;
-
-    // Perform operand substitions as we emit the line string.  We turn {{42}}
-    // into the value of operand 42.
-
-    // Scan 'line' for a substitution, emitting any non-substitution prefix,
-    // then the mentioned operand, chopping the relevant text off 'line' and
-    // returning true.  This returns false if no substitution is found.
-    auto emitUntilSubstitution = [&](size_t next = 0) -> bool {
-      size_t start = 0;
-      while (1) {
-        next = line.find("{{", next);
-        if (next == StringRef::npos)
-          return false;
-
-        // Check to make sure we have a number followed by }}.  If not, we
-        // ignore the {{ sequence as something that could happen in Verilog.
-        next += 2;
-        start = next;
-        while (next < line.size() && isdigit(line[next]))
-          ++next;
-        // We need at least one digit.
-        if (start == next)
-          continue;
-
-        // We must have a }} right after the digits.
-        if (!line.substr(next).startswith("}}"))
-          continue;
-
-        // We must be able to decode the integer into an unsigned.
-        unsigned operandNo = 0;
-        if (line.drop_front(start)
-                .take_front(next - start)
-                .getAsInteger(10, operandNo)) {
-          emitError(op, "operand substitution too large");
-          continue;
-        }
-        next += 2;
-
-        if (operandNo >= op.operands().size()) {
-          emitError(op, "operand " + llvm::utostr(operandNo) + " isn't valid");
-          continue;
-        }
-
-        // Emit any text before the substitution.
-        os << line.take_front(start - 2);
-
-        // Emit the operand.
-        emitExpression(op.operands()[operandNo], ops);
-
-        // Forget about the part we emitted.
-        line = line.drop_front(next);
-        return true;
-      }
-    };
-
-    // Emit all the substitutions.
-    while (emitUntilSubstitution())
-      ;
-
-    // Emit any text after the last substitution.
-    os << line;
+    // Emit each chunk of the line.
+    emitTextWithSubstitutions(
+        lhsRhs.first, op, [&](Value operand) { emitExpression(operand, ops); });
     string = lhsRhs.second;
   }
 
@@ -2423,9 +2458,9 @@ LogicalResult StmtEmitter::visitSV(InterfaceModportOp op) {
 LogicalResult StmtEmitter::visitSV(AssignInterfaceSignalOp op) {
   SmallPtrSet<Operation *, 8> emitted;
   indent() << "assign ";
-  emitExpression(op.iface(), emitted, ForceEmitMultiUse);
+  emitExpression(op.iface(), emitted);
   os << '.' << op.signalName() << " = ";
-  emitExpression(op.rhs(), emitted, ForceEmitMultiUse);
+  emitExpression(op.rhs(), emitted);
   os << ";\n";
   return success();
 }
@@ -2548,6 +2583,65 @@ void ModuleEmitter::emitStatementBlock(Block &body) {
 //===----------------------------------------------------------------------===//
 // Module Driver
 //===----------------------------------------------------------------------===//
+
+void SplitModuleEmitter::emitMLIRModule(ModuleOp module) {
+  for (auto &op : *module.getBody()) {
+    // TODO: Module uniquification happens in ModuleEmitter, but a new instance
+    // of ModuleEmitter is created for each operation in the body. This should
+    // be a prepass on the IR such that renaming is consistent regardless of
+    // what subset of the file the emitter is looking at (see #756).
+    if (auto module = dyn_cast<RTLModuleOp>(op))
+      emitFile(module.getNameAttr().getValue(),
+               [&](VerilogEmitterState &state) {
+                 ModuleEmitter(state).emitRTLModule(module);
+               });
+    else if (auto module = dyn_cast<RTLModuleExternOp>(op))
+      emitFile(module.getVerilogModuleNameAttr().getValue(),
+               [&](VerilogEmitterState &state) {
+                 ModuleEmitter(state).emitRTLExternModule(module);
+               });
+    else if (auto intfOp = dyn_cast<InterfaceOp>(op))
+      emitFile(intfOp.sym_name(), [&](VerilogEmitterState &state) {
+        ModuleEmitter(state).emitStatement(&op);
+      });
+    else if (isa<VerbatimOp>(op) || isa<IfDefProceduralOp>(op))
+      perFileOps.push_back(&op);
+    else if (!isa<ModuleTerminatorOp>(op)) {
+      op.emitError("unknown operation");
+      encounteredError = true;
+    }
+  }
+}
+
+void SplitModuleEmitter::emitFile(
+    StringRef fileStem, std::function<void(VerilogEmitterState &)> callback) {
+
+  // Determine the output file name and create it.
+  SmallString<128> outputFilename(dirname);
+  llvm::sys::path::append(outputFilename, fileStem);
+  outputFilename.append(".v");
+
+  std::string errorMessage;
+  auto output = openOutputFile(outputFilename, &errorMessage);
+  if (!output) {
+    encounteredError = true;
+    llvm::errs() << errorMessage << "\n";
+    return;
+  }
+
+  VerilogEmitterState state(output->os());
+
+  // Emit accumulated per-file operations and whatever the callback does.
+  for (auto op : perFileOps) {
+    ModuleEmitter(state).emitStatement(op);
+  }
+
+  callback(state);
+  if (state.encounteredError)
+    encounteredError = true;
+
+  output->keep();
+}
 
 void ModuleEmitter::emitMLIRModule(ModuleOp module) {
   for (auto &op : *module.getBody()) {
@@ -2764,6 +2858,12 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   VerilogEmitterState state(os);
   ModuleEmitter(state).emitMLIRModule(module);
   return failure(state.encounteredError);
+}
+
+LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
+  SplitModuleEmitter emitter(dirname);
+  emitter.emitMLIRModule(module);
+  return failure(emitter.encounteredError);
 }
 
 void circt::registerToVerilogTranslation() {

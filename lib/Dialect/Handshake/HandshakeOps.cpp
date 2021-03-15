@@ -347,17 +347,17 @@ LogicalResult EliminateSimpleControlMergesPattern::matchAndRewrite(
         user, [&]() { user->setOperand(use.getOperandNumber(), merge); });
   }
 
-  rewriter.eraseOp(op);
-
-  if (choiceUnused)
+  if (choiceUnused) {
+    rewriter.eraseOp(op);
     return success();
+  }
 
   auto *choiceUser = choiceResult.getUses().begin().getUser();
   if (!isa<SinkOp>(choiceUser))
     return failure();
 
   rewriter.eraseOp(choiceUser);
-
+  rewriter.eraseOp(op);
   return success();
 }
 

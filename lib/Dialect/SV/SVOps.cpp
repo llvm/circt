@@ -249,11 +249,12 @@ void IfOp::build(OpBuilder &odsBuilder, OperationState &result, Value cond,
 static void replaceOpWithRegion(PatternRewriter &rewriter, Operation *op,
                                 Region &region) {
   assert(llvm::hasSingleElement(region) && "expected single-region block");
-  Block *block = &region.front();
-  Operation *terminator = block->getTerminator();
-  rewriter.mergeBlockBefore(block, op);
-  rewriter.eraseOp(op);
-  rewriter.eraseOp(terminator);
+  Block *fromBlock = &region.front();
+  // Remove the terminator from the block.
+  rewriter.eraseOp(fromBlock->getTerminator());
+  // Merge it in above the specified operation.
+  op->getBlock()->getOperations().splice(Block::iterator(op),
+                                         fromBlock->getOperations());
 }
 
 void IfOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
@@ -271,8 +272,8 @@ void IfOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         replaceOpWithRegion(rewriter, op, op.thenRegion());
       else if (!op.elseRegion().empty())
         replaceOpWithRegion(rewriter, op, op.elseRegion());
-      else
-        rewriter.eraseOp(op);
+
+      rewriter.eraseOp(op);
 
       return success();
     }
@@ -282,25 +283,32 @@ void IfOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
     using OpRewritePattern::OpRewritePattern;
     LogicalResult matchAndRewrite(IfOp op,
                                   PatternRewriter &rewriter) const override {
+      // If there is stuff in the then block, leave this operation alone.
       if (!isEmptyBlockExceptForTerminator(op.getThenBlock()))
         return failure();
 
-      if (op.hasElse() && !isEmptyBlockExceptForTerminator(op.getElseBlock())) {
-
-        auto full = rewriter.create<rtl::ConstantOp>(op.getLoc(),
-                                                     op.cond().getType(), -1);
-        Value ops[] = {full, op.cond()};
-        auto cond = rewriter.createOrFold<comb::XorOp>(
-            op.getLoc(), op.cond().getType(), ops);
-
-        auto newIfOp =
-            rewriter.create<IfOp>(op.getLoc(), cond, nullptr, nullptr);
-        rewriter.cloneRegionBefore(op.elseRegion(), newIfOp.getThenBlock());
-        rewriter.replaceOp(op, newIfOp->getResults());
+      // If not and there is no else, then this operation is just useless.
+      if (!op.hasElse() || isEmptyBlockExceptForTerminator(op.getElseBlock())) {
+        rewriter.eraseOp(op);
         return success();
       }
 
-      rewriter.eraseOp(op);
+      // Otherwise, invert the condition and move the 'else' block to the 'then'
+      // region.
+      auto full = rewriter.create<rtl::ConstantOp>(op.getLoc(),
+                                                   op.cond().getType(), -1);
+      Value ops[] = {full, op.cond()};
+      auto cond = rewriter.createOrFold<comb::XorOp>(op.getLoc(),
+                                                     op.cond().getType(), ops);
+      op.setOperand(cond);
+
+      auto *thenBlock = op.getThenBlock(), *elseBlock = op.getElseBlock();
+
+      // Move the body of the then block over to the else.
+      thenBlock->clear(); // Drop the old terminator.
+      thenBlock->getOperations().splice(thenBlock->end(),
+                                        elseBlock->getOperations());
+      elseBlock->erase();
       return success();
     }
   };
