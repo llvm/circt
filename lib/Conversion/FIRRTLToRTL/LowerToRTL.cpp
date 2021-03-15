@@ -1586,7 +1586,7 @@ void FIRRTLLowering::emitRandomizePrologIfNeeded() {
 void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
   // Construct and return a new reference to `RANDOM.
   auto randomVal = [&](Type type) {
-    return builder.create<sv::TextualValueOp>(type, "`RANDOM");
+    return builder.create<sv::VerbatimExprOp>(type, "`RANDOM");
   };
 
   // Randomly initialize everything in the register. If the register
@@ -1838,7 +1838,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       if (!llvm::isPowerOf2_64(depth)) {
         auto addrWidth = addr.getType().getIntOrFloatBitWidth();
         auto depthCst = getOrCreateIntConstant(addrWidth, depth);
-        value = builder.create<sv::TextualValueOp>(
+        value = builder.create<sv::VerbatimExprOp>(
             value.getType(),
             "RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK({{0}}, {{1}}, {{2}})",
             ValueRange{addr, value, depthCst});
@@ -1916,7 +1916,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         if (depth == 1) { // Don't emit a for loop for one element.
           auto type = sv::getInOutElementType(reg.getType());
           type = sv::getAnyRTLArrayElementType(type);
-          auto randomVal = builder.create<sv::TextualValueOp>(type, "`RANDOM");
+          auto randomVal = builder.create<sv::VerbatimExprOp>(type, "`RANDOM");
           auto zero = getOrCreateIntConstant(1, 0);
           auto subscript = builder.create<sv::ArrayIndexInOutOp>(reg, zero);
           builder.create<sv::BPAssignOp>(subscript, randomVal);
@@ -2513,7 +2513,7 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
     addToIfDefProceduralBlock("SYNTHESIS", std::function<void()>(), [&]() {
       // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
       Value ifCond =
-          builder.create<sv::TextualValueOp>(cond.getType(), "`PRINTF_COND_");
+          builder.create<sv::VerbatimExprOp>(cond.getType(), "`PRINTF_COND_");
       ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond);
 
       addIfProceduralBlock(ifCond, [&]() {
@@ -2540,7 +2540,7 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
     addToIfDefProceduralBlock("SYNTHESIS", std::function<void()>(), [&]() {
       // Emit an "sv.if '`STOP_COND_ & cond' into the #ifndef.
       Value ifCond =
-          builder.create<sv::TextualValueOp>(cond.getType(), "`STOP_COND_");
+          builder.create<sv::VerbatimExprOp>(cond.getType(), "`STOP_COND_");
       ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond);
       addIfProceduralBlock(ifCond, [&]() {
         // Emit the sv.fatal or sv.finish.

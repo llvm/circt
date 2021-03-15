@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-def TextualValueOp : SVOp<"textual_value", [NoSideEffect]> {
+def VerbatimExprOp : SVOp<"verbatim.expr", [NoSideEffect]> {
   let summary = "Expression that expands to a value given SystemVerilog text";
   let description = [{
     This operation produces a typed value expressed by a string of
@@ -18,9 +18,10 @@ def TextualValueOp : SVOp<"textual_value", [NoSideEffect]> {
     only sensible as Verilog text.
 
     The text string is expected to have the highest precedence, so you should
-    include parentheses in the string if it isn't a single token.
+    include parentheses in the string if it isn't a single token.  This is also
+    assumed to not have side effects (use sv.verbatim) if you need them.
 
-    sv.textual_value allows operand substitutions with {{0}} syntax.
+    sv.verbatim.expr allows operand substitutions with {{0}} syntax.
     }];
 
   let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands);

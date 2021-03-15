@@ -233,12 +233,12 @@ firrtl.circuit "Simple" {
     // CHECK: sv.always posedge %clock {
     // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
     // CHECK-NEXT:   } else {
-    // CHECK-NEXT:     [[TV:%.+]] = sv.textual_value "`PRINTF_COND_" : () -> i1
+    // CHECK-NEXT:     [[TV:%.+]] = sv.verbatim.expr "`PRINTF_COND_" : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and [[TV]], %reset
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       sv.fwrite "No operands!\0A"
     // CHECK-NEXT:     }
-    // CHECK-NEXT:     %5 = sv.textual_value "`PRINTF_COND_" : () -> i1
+    // CHECK-NEXT:     %5 = sv.verbatim.expr "`PRINTF_COND_" : () -> i1
     // CHECK-NEXT:     %6 = comb.and %5, %reset : i1
     // CHECK-NEXT:     sv.if %6  {
     // CHECK-NEXT:       sv.fwrite "Hi %x %x\0A"(%2, %b) : i5, i4
@@ -272,7 +272,7 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: sv.always posedge %clock1 {
     // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
     // CHECK-NEXT:   } else {
-    // CHECK-NEXT:     %0 = sv.textual_value "`STOP_COND_" : () -> i1
+    // CHECK-NEXT:     %0 = sv.verbatim.expr "`STOP_COND_" : () -> i1
     // CHECK-NEXT:     %1 = comb.and %0, %reset : i1
     // CHECK-NEXT:     sv.if %1 {
     // CHECK-NEXT:       sv.fatal
@@ -284,7 +284,7 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: sv.always posedge %clock2 {
     // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
     // CHECK-NEXT:   } else {
-    // CHECK-NEXT:     %0 = sv.textual_value "`STOP_COND_" : () -> i1
+    // CHECK-NEXT:     %0 = sv.verbatim.expr "`STOP_COND_" : () -> i1
     // CHECK-NEXT:     %1 = comb.and %0, %reset : i1
     // CHECK-NEXT:     sv.if %1 {
     // CHECK-NEXT:       sv.finish
@@ -428,7 +428,7 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT:    sv.initial {
     // CHECK-NEXT:    sv.verbatim "`INIT_RANDOM_PROLOG_"
     // CHECK-NEXT:    sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-    // CHECK-NEXT:       %3 = sv.textual_value "`RANDOM" : () -> i2
+    // CHECK-NEXT:       %3 = sv.verbatim.expr "`RANDOM" : () -> i2
     // CHECK-NEXT:        sv.bpassign %count, %3 : i2
     // CHECK-NEXT:     }
     // CHECK-NEXT:    }
@@ -483,9 +483,9 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
     // CHECK-NEXT:       sv.if %reset  {
     // CHECK-NEXT:       } else {
-    // CHECK-NEXT:         %8 = sv.textual_value "`RANDOM" : () -> i32
+    // CHECK-NEXT:         %8 = sv.verbatim.expr "`RANDOM" : () -> i32
     // CHECK-NEXT:         sv.bpassign %reg, %8 : i32
-    // CHECK-NEXT:         %9 = sv.textual_value "`RANDOM" : () -> i32
+    // CHECK-NEXT:         %9 = sv.verbatim.expr "`RANDOM" : () -> i32
     // CHECK-NEXT:         sv.bpassign %reg2, %9 : i32
     // CHECK-NEXT:       }
     // CHECK-NEXT:     }
@@ -559,7 +559,7 @@ firrtl.circuit "Simple" {
     // COM: --------------------------------------------------------------------
     // CHECK-NEXT: [[data_inout:%.+]] = sv.array_index_inout %_M[%c0_i4]
     // CHECK-NEXT: [[data:%.+]] = sv.read_inout [[data_inout]]
-    // CHECK-NEXT:  = sv.textual_value "RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK({{.*}})"(%c0_i4, [[data]], %c-4_i4) : (i4, i42, i4) -> i42
+    // CHECK-NEXT:  = sv.verbatim.expr "RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK({{.*}})"(%c0_i4, [[data]], %c-4_i4) : (i4, i42, i4) -> i42
 
     // COM: Write port.
     // COM: --------------------------------------------------------------------
@@ -698,25 +698,25 @@ firrtl.circuit "Simple" {
     // CHECK:     sv.ifdef "SYNTHESIS" {
     // CHECK:     } else {
     // CHECK:       %[[r_en_0:.+]] = sv.array_index_inout %memory_r_en_pipe[%false]
-    // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
+    // CHECK:       %[[random:.+]] = sv.verbatim.expr "`RANDOM"
     // CHECK:       sv.bpassign %[[r_en_0]], %[[random]]
     // CHECK:       %[[r_addr_0:.+]] = sv.array_index_inout %memory_r_addr_pipe[%false]
-    // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
+    // CHECK:       %[[random:.+]] = sv.verbatim.expr "`RANDOM"
     // CHECK:       sv.bpassign %[[r_addr_0]], %[[random]]
     // CHECK:       %[[r_addr_1:.+]] = sv.array_index_inout %memory_r_addr_pipe[%true]
-    // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
+    // CHECK:       %[[random:.+]] = sv.verbatim.expr "`RANDOM"
     // CHECK:       sv.bpassign %[[r_addr_1]], %[[random]]
     // CHECK:       %[[w_en_0:.+]] = sv.array_index_inout %memory_w_en_pipe[%false]
-    // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
+    // CHECK:       %[[random:.+]] = sv.verbatim.expr "`RANDOM"
     // CHECK:       sv.bpassign %[[w_en_0]], %[[random]]
     // CHECK:       %[[w_addr_0:.+]] = sv.array_index_inout %memory_w_addr_pipe[%false]
-    // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
+    // CHECK:       %[[random:.+]] = sv.verbatim.expr "`RANDOM"
     // CHECK:       sv.bpassign %[[w_addr_0]], %[[random]]
     // CHECK:       %[[w_mask_0:.+]] = sv.array_index_inout %memory_w_mask_pipe[%false]
-    // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
+    // CHECK:       %[[random:.+]] = sv.verbatim.expr "`RANDOM"
     // CHECK:       sv.bpassign %[[w_mask_0]], %[[random]]
     // CHECK:       %[[w_data_0:.+]] = sv.array_index_inout %memory_w_data_pipe[%false]
-    // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
+    // CHECK:       %[[random:.+]] = sv.verbatim.expr "`RANDOM"
     // CHECK:       sv.bpassign %[[w_data_0]], %[[random]]
     // CHECK:     }
   }
@@ -730,7 +730,7 @@ firrtl.circuit "Simple" {
     // CHECK:  %_M = sv.reg : !rtl.inout<uarray<12xi42>>
     %_M_read = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>
     // Read port.
-    // CHECK:      sv.textual_value "RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK
+    // CHECK:      sv.verbatim.expr "RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK
     %6 = firrtl.subfield %_M_read("addr") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<uint<4>>
     firrtl.connect %6, %c0_ui1 : !firrtl.flip<uint<4>>, !firrtl.uint<1>
     %7 = firrtl.subfield %_M_read("en") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<uint<1>>

@@ -14,7 +14,7 @@ rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   sv.always posedge  %arg0 {
     sv.ifdef.procedural "SYNTHESIS" {
     } else {
-      %tmp = sv.textual_value "PRINTF_COND_" : () -> i1
+      %tmp = sv.verbatim.expr "PRINTF_COND_" : () -> i1
       %tmpx = sv.constantX : i1
       %tmpz = sv.constantZ : i1
       %tmp2 = comb.and %tmp, %tmpx, %tmpz, %arg1 : i1
@@ -33,7 +33,7 @@ rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   // CHECK-NEXT: sv.always posedge %arg0 {
   // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
   // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     %0 = sv.textual_value "PRINTF_COND_" : () -> i1
+  // CHECK-NEXT:     %0 = sv.verbatim.expr "PRINTF_COND_" : () -> i1
   // CHECK-NEXT:     %1 = sv.constantX : i1
   // CHECK-NEXT:     %2 = sv.constantZ : i1
   // CHECK-NEXT:     %3 = comb.and %0, %1, %2, %arg1 : i1
