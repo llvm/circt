@@ -1851,7 +1851,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       // Attach the write port
       auto last = writePipe.back();
       auto enable = last.rd_en;
-      auto cond = builder.create<comb::AndOp>(enable, last.rd_mask);
+      auto cond = builder.createOrFold<comb::AndOp>(enable, last.rd_mask);
       auto slot = builder.create<sv::ArrayIndexInOutOp>(reg, last.rd_addr);
       auto rd_lastdata = last.rd_data;
       addToAlwaysFFBlock(EventControl::AtPosEdge, clk, [&]() {
