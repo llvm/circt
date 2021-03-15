@@ -30,14 +30,14 @@ firrtl.circuit "Simple" {
     %1 = firrtl.asUInt %in1 : (!firrtl.uint<4>) -> !firrtl.uint<4>
 
     // CHECK: comb.concat %false, %in1
-    // CHECK: comb.concat %false_0, %in1 
+    // CHECK: comb.concat %false, %in1 
 
     // CHECK: comb.sub
     %2 = firrtl.sub %1, %1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
-    // CHECK: %3 = comb.concat %false_1, %in2 : (i1, i2) -> i3
+    // CHECK: %3 = comb.concat %false, %in2 : (i1, i2) -> i3
     %3 = firrtl.pad %in2, 3 : (!firrtl.uint<2>) -> !firrtl.uint<3>
-    // CHECK: comb.concat %false_2, %3 : (i1, i3) -> i4
+    // CHECK: comb.concat %false, %3 : (i1, i3) -> i4
     %4 = firrtl.pad %3, 4 : (!firrtl.uint<3>) -> !firrtl.uint<4>
     // CHECK: [[RESULT:%.+]] = comb.xor
     %5 = firrtl.xor %in2, %4 : (!firrtl.uint<2>, !firrtl.uint<4>) -> !firrtl.uint<4>
@@ -101,7 +101,7 @@ firrtl.circuit "Simple" {
                              %outD: !firrtl.flip<uint<4>>,
                              %inE: !firrtl.uint<3>,
                              %outE: !firrtl.flip<uint<4>>) {
-    // CHECK-NEXT: %0 = firrtl.stdIntCast %inA : (i4) -> !firrtl.uint<4>
+    // CHECK: %0 = firrtl.stdIntCast %inA : (i4) -> !firrtl.uint<4>
     // CHECK-NEXT: %1 = firrtl.stdIntCast %inB : (i4) -> !firrtl.uint<4>
     // CHECK-NEXT: %2 = firrtl.stdIntCast %inC : (i4) -> !firrtl.uint<4>
 
@@ -139,7 +139,7 @@ firrtl.circuit "Simple" {
     // CHECK: [[OUTDR:%.+]] = sv.read_inout %.outD.output
 
     // Extension for outE
-    // CHECK: [[OUTE:%.+]] = comb.concat %false_3, %inE : (i1, i3) -> i4
+    // CHECK: [[OUTE:%.+]] = comb.concat %false, %inE : (i1, i3) -> i4
     // CHECK: rtl.output %inA, [[OUTBY]], [[OUTCR]], [[OUTDR]], [[OUTE]]
   }
 
@@ -206,7 +206,6 @@ firrtl.circuit "Simple" {
 
     firrtl.attach %inC, %inC : !firrtl.analog<0>, !firrtl.analog<0>
 
-    // CHECK:  = rtl.constant 0 : i4
     // CHECK: [[OUTAC:%.+]] = rtl.constant 0 : i4
     // CHECK-NEXT: rtl.output [[OUTAC]] : i4
   }
