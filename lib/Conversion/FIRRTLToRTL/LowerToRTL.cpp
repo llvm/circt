@@ -107,6 +107,23 @@ static bool isZeroBitFIRRTLType(Type type) {
 //===----------------------------------------------------------------------===//
 // firrtl.module Lowering Pass
 //===----------------------------------------------------------------------===//
+namespace {
+
+struct FIRRTLModuleLowering;
+
+/// This is state shared across the parallel module lowering logic.
+struct ModuleLoweringState {
+  Operation *getNewModule(Operation *oldModule) {
+    auto it = oldToNewModuleMap.find(oldModule);
+    return it != oldToNewModuleMap.end() ? it->second : nullptr;
+  }
+
+private:
+  friend struct FIRRTLModuleLowering;
+  // This is information about
+  DenseMap<Operation *, Operation *> oldToNewModuleMap;
+};
+} // end anonymous namespace
 
 namespace {
 struct FIRRTLModuleLowering
@@ -123,13 +140,13 @@ private:
   rtl::RTLModuleExternOp lowerExtModule(FExtModuleOp oldModule,
                                         Block *topLevelModule);
 
-  void lowerModuleBody(FModuleOp oldModule,
-                       DenseMap<Operation *, Operation *> &oldToNewModuleMap);
+  void lowerModuleBody(FModuleOp oldModule, ModuleLoweringState &loweringState);
   void lowerModuleOperations(rtl::RTLModuleOp module);
 
   void lowerInstance(InstanceOp instance, CircuitOp circuitOp,
-                     DenseMap<Operation *, Operation *> &oldToNewModuleMap);
+                     ModuleLoweringState &loweringState);
 };
+
 } // end anonymous namespace
 
 /// This is the pass constructor.
@@ -142,11 +159,11 @@ std::unique_ptr<mlir::Pass> circt::createLowerFIRRTLToRTLPass() {
 void FIRRTLModuleLowering::runOnOperation() {
   // We run on the top level modules in the IR blob.  Start by finding the
   // firrtl.circuit within it.  If there is none, then there is nothing to do.
-  auto *moduleBody = getOperation().getBody();
+  auto *topLevelModule = getOperation().getBody();
 
   // Find the single firrtl.circuit in the module.
   CircuitOp circuit;
-  for (auto &op : *moduleBody) {
+  for (auto &op : *topLevelModule) {
     if ((circuit = dyn_cast<CircuitOp>(&op)))
       break;
   }
@@ -154,14 +171,11 @@ void FIRRTLModuleLowering::runOnOperation() {
   if (!circuit)
     return;
 
-  // Emit all the macros and preprocessor gunk at the start of the file.
-  lowerFileHeader(circuit);
-
   auto *circuitBody = circuit.getBody();
 
   // Keep track of the mapping from old to new modules.  The result may be null
   // if lowering failed.
-  DenseMap<Operation *, Operation *> oldToNewModuleMap;
+  ModuleLoweringState state;
 
   SmallVector<FModuleOp, 32> modulesToProcess;
 
@@ -169,13 +183,13 @@ void FIRRTLModuleLowering::runOnOperation() {
   // FModule's we come across.
   for (auto &op : circuitBody->getOperations()) {
     if (auto module = dyn_cast<FModuleOp>(op)) {
-      oldToNewModuleMap[&op] = lowerModule(module, moduleBody);
+      state.oldToNewModuleMap[&op] = lowerModule(module, topLevelModule);
       modulesToProcess.push_back(module);
       continue;
     }
 
     if (auto extModule = dyn_cast<FExtModuleOp>(op)) {
-      oldToNewModuleMap[&op] = lowerExtModule(extModule, moduleBody);
+      state.oldToNewModuleMap[&op] = lowerExtModule(extModule, topLevelModule);
       continue;
     }
 
@@ -194,15 +208,15 @@ void FIRRTLModuleLowering::runOnOperation() {
   if (getContext().isMultithreadingEnabled()) {
     mlir::ParallelDiagnosticHandler diagHandler(&getContext());
     llvm::parallelForEachN(0, modulesToProcess.size(), [&](auto index) {
-      lowerModuleBody(modulesToProcess[index], oldToNewModuleMap);
+      lowerModuleBody(modulesToProcess[index], state);
     });
   } else {
     for (auto module : modulesToProcess)
-      lowerModuleBody(module, oldToNewModuleMap);
+      lowerModuleBody(module, state);
   }
 
   // Finally delete all the old modules.
-  for (auto oldNew : oldToNewModuleMap)
+  for (auto oldNew : state.oldToNewModuleMap)
     oldNew.first->erase();
 
   // Now that the modules are moved over, remove the Circuit.  We pop the 'main
@@ -210,6 +224,10 @@ void FIRRTLModuleLowering::runOnOperation() {
   getOperation()->setAttr(
       "firrtl.mainModule",
       StringAttr::get(circuit.getContext(), circuit.name()));
+
+  // Emit all the macros and preprocessor gunk at the start of the file.
+  lowerFileHeader(circuit);
+
   circuit.erase();
 }
 
@@ -568,11 +586,10 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
 /// Now that we have the operations for the rtl.module's corresponding to the
 /// firrtl.module's, we can go through and move the bodies over, updating the
 /// ports and instances.
-void FIRRTLModuleLowering::lowerModuleBody(
-    FModuleOp oldModule,
-    DenseMap<Operation *, Operation *> &oldToNewModuleMap) {
+void FIRRTLModuleLowering::lowerModuleBody(FModuleOp oldModule,
+                                           ModuleLoweringState &loweringState) {
   auto newModule =
-      dyn_cast_or_null<rtl::RTLModuleOp>(oldToNewModuleMap[oldModule]);
+      dyn_cast_or_null<rtl::RTLModuleOp>(loweringState.getNewModule(oldModule));
   // Don't touch modules if we failed to lower ports.
   if (!newModule)
     return;
@@ -685,7 +702,7 @@ void FIRRTLModuleLowering::lowerModuleBody(
     // We found an instance - lower it.  On successful return there will be
     // zero uses and we can remove the operation.
     lowerInstance(instance, oldModule->getParentOfType<CircuitOp>(),
-                  oldToNewModuleMap);
+                  loweringState);
     opIt = Block::iterator(cursor);
   }
 
@@ -703,11 +720,11 @@ void FIRRTLModuleLowering::lowerModuleBody(
 ///
 /// On success, this returns with the firrtl.instance op having no users,
 /// letting the caller erase it.
-void FIRRTLModuleLowering::lowerInstance(
-    InstanceOp oldInstance, CircuitOp circuitOp,
-    DenseMap<Operation *, Operation *> &oldToNewModuleMap) {
+void FIRRTLModuleLowering::lowerInstance(InstanceOp oldInstance,
+                                         CircuitOp circuitOp,
+                                         ModuleLoweringState &loweringState) {
   auto *oldModule = circuitOp.lookupSymbol(oldInstance.moduleName());
-  auto newModule = oldToNewModuleMap[oldModule];
+  auto newModule = loweringState.getNewModule(oldModule);
   if (!newModule) {
     oldInstance->emitOpError("could not find module referenced by instance");
     return;
