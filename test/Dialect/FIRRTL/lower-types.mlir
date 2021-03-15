@@ -567,6 +567,37 @@ firrtl.circuit "LowerSubacessOp3" {
   // CHECK:   firrtl.connect %b, %11 : !firrtl.flip<uint<2>>, !firrtl.uint<2>
 }
 
+// https://github.com/llvm/circt/issues/656
+// Test lowering of Bundle of vector types, SubAccessOp of SubAccessOp, b <= a[z[sel]]
+firrtl.circuit "LowerSubacessOp4" {
+    firrtl.module @LowerSubacessOp4(%a: !firrtl.vector<bundle<wo: uint<1>, valid: uint<2>>, 4>, %sel: !firrtl.uint<2>, %b: !firrtl.flip<bundle<wo: uint<1>, valid: uint<2>>>) {
+      %0 = firrtl.subfield %b("wo") : (!firrtl.flip<bundle<wo: uint<1>, valid: uint<2>>>) -> !firrtl.flip<uint<1>>
+      %1 = firrtl.subaccess %a[%sel] : !firrtl.vector<bundle<wo: uint<1>, valid: uint<2>>, 4>, !firrtl.uint<2>
+      %2 = firrtl.subfield %1("wo") : (!firrtl.bundle<wo: uint<1>, valid: uint<2>>) -> !firrtl.uint<1>
+      firrtl.connect %0, %2 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+      %3 = firrtl.subfield %b("valid") : (!firrtl.flip<bundle<wo: uint<1>, valid: uint<2>>>) -> !firrtl.flip<uint<2>>
+      %4 = firrtl.subfield %1("valid") : (!firrtl.bundle<wo: uint<1>, valid: uint<2>>) -> !firrtl.uint<2>
+      firrtl.connect %3, %4 : !firrtl.flip<uint<2>>, !firrtl.uint<2>
+    }
+  
+  // CHECK: firrtl.module @LowerSubacessOp4(%a_0_wo: !firrtl.uint<1>, %a_0_valid: !firrtl.uint<2>, %a_1_wo: !firrtl.uint<1>, %a_1_valid: !firrtl.uint<2>, %a_2_wo: !firrtl.uint<1>, %a_2_valid: !firrtl.uint<2>, %a_3_wo: !firrtl.uint<1>, %a_3_valid: !firrtl.uint<2>, %sel: !firrtl.uint<2>, %b_wo: !firrtl.flip<uint<1>>, %b_valid: !firrtl.flip<uint<2>>) {
+  // CHECK:   %c1_ui2 = firrtl.constant(1 : i2) : !firrtl.uint<2>
+  // CHECK:   %0 = firrtl.eq %sel, %c1_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+  // CHECK:   %1 = firrtl.mux(%0, %a_1_wo, %a_0_wo) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK:   %2 = firrtl.mux(%0, %a_1_valid, %a_0_valid) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+  // CHECK:   %c2_ui2 = firrtl.constant(-2 : i2) : !firrtl.uint<2>
+  // CHECK:   %3 = firrtl.eq %sel, %c2_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+  // CHECK:   %4 = firrtl.mux(%3, %a_2_wo, %1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK:   %5 = firrtl.mux(%3, %a_2_valid, %2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+  // CHECK:   %c3_ui2 = firrtl.constant(-1 : i2) : !firrtl.uint<2>
+  // CHECK:   %6 = firrtl.eq %sel, %c3_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+  // CHECK:   %7 = firrtl.mux(%6, %a_3_wo, %4) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK:   %8 = firrtl.mux(%6, %a_3_valid, %5) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+  // CHECK:   firrtl.connect %b_wo, %7 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  // CHECK:   firrtl.connect %b_valid, %8 : !firrtl.flip<uint<2>>, !firrtl.uint<2>
+  // CHECK: }
+}
+
 // ----
 firrtl.circuit "ExternalModule" {
   // CHECK: firrtl.extmodule @ExternalModule(!firrtl.uint<1> {firrtl.name = "source_valid"}, !firrtl.flip<uint<1>> {firrtl.name = "source_ready"}, !firrtl.uint<64> {firrtl.name = "source_data"})
