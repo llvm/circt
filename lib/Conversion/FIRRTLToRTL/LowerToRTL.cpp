@@ -833,6 +833,11 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   void optimizeTemporaryWire(sv::WireOp wire);
 
   // Helpers.
+  Value getOrCreateIntConstant(const APInt &value);
+  Value getOrCreateIntConstant(unsigned numBits, uint64_t val,
+                               bool isSigned = false) {
+    return getOrCreateIntConstant(APInt(numBits, val, isSigned));
+  }
   Value getPossiblyInoutLoweredValue(Value value);
   Value getLoweredValue(Value value);
   Value getLoweredAndExtendedValue(Value value, Type destType);
@@ -1125,6 +1130,10 @@ void FIRRTLLowering::optimizeTemporaryWire(sv::WireOp wire) {
 // Helpers
 //===----------------------------------------------------------------------===//
 
+Value FIRRTLLowering::getOrCreateIntConstant(const APInt &value) {
+  return builder.create<rtl::ConstantOp>(value);
+}
+
 /// Zero bit operands end up looking like failures from getLoweredValue.  This
 /// helper function invokes the closure specified if the operand was actually
 /// zero bit, or returns failure() if it was some other kind of failure.
@@ -1191,7 +1200,7 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
       return {};
     // Otherwise, FIRRTL semantics is that an extension from a zero bit value
     // always produces a zero value in the destination width.
-    return builder.create<rtl::ConstantOp>(APInt(destWidth, 0));
+    return getOrCreateIntConstant(destWidth, 0);
   }
 
   auto srcWidth = result.getType().cast<IntegerType>().getWidth();
@@ -1210,7 +1219,7 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
   if (valueFIRType.cast<IntType>().isSigned())
     return builder.createOrFold<comb::SExtOp>(resultType, result);
 
-  auto zero = builder.create<rtl::ConstantOp>(APInt(destWidth - srcWidth, 0));
+  auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
   return builder.createOrFold<comb::ConcatOp>(zero, result);
 }
 
@@ -1240,7 +1249,7 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
       return {};
     // Otherwise, FIRRTL semantics is that an extension from a zero bit value
     // always produces a zero value in the destination width.
-    return builder.create<rtl::ConstantOp>(APInt(destWidth, 0));
+    return getOrCreateIntConstant(destWidth, 0);
   }
 
   auto srcWidth = result.getType().cast<IntegerType>().getWidth();
@@ -1258,7 +1267,7 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
     if (valueFIRType.cast<IntType>().isSigned())
       return builder.createOrFold<comb::SExtOp>(resultType, result);
 
-    auto zero = builder.create<rtl::ConstantOp>(APInt(destWidth - srcWidth, 0));
+    auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
     return builder.createOrFold<comb::ConcatOp>(zero, result);
   }
 }
@@ -1465,7 +1474,7 @@ FIRRTLLowering::handleUnloweredOp(Operation *op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(ConstantOp op) {
-  return setLoweringTo<rtl::ConstantOp>(op, op.value());
+  return setLowering(op, getOrCreateIntConstant(op.value()));
 }
 
 LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
@@ -1551,7 +1560,7 @@ void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
     TypeSwitch<Type>(type)
         .Case<rtl::UnpackedArrayType>([&](auto a) {
           for (size_t i = 0, e = a.getSize(); i != e; ++i) {
-            auto iIdx = builder.create<rtl::ConstantOp>(APInt(log2(e + 1), i));
+            auto iIdx = getOrCreateIntConstant(log2(e + 1), i);
             auto arrayIndex = builder.create<sv::ArrayIndexInOutOp>(reg, iIdx);
             builder.create<sv::BPAssignOp>(arrayIndex,
                                            randomVal(a.getElementType()));
@@ -1765,8 +1774,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
           enReg = createArrayReg("_en_pipe", i1Type, readLatency);
           addrReg = createArrayReg("_addr_pipe", addrType, readLatency);
         }
-        auto jIdx =
-            builder.create<rtl::ConstantOp>(APInt(log2(readLatency + 1), j));
+        auto jIdx = getOrCreateIntConstant(log2(readLatency + 1), j);
         auto enJ = builder.create<sv::ArrayIndexInOutOp>(enReg, jIdx);
         auto addrJ = builder.create<sv::ArrayIndexInOutOp>(addrReg, jIdx);
         auto rdEnJ = builder.create<sv::ReadInOutOp>(enJ);
@@ -1791,8 +1799,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       // "addr < Depth ? mem[addr] : `RANDOM" check conditionally.
       if (!llvm::isPowerOf2_64(depth)) {
         auto addrWidth = addr.getType().getIntOrFloatBitWidth();
-        auto depthCst =
-            builder.create<rtl::ConstantOp>(APInt(addrWidth, depth));
+        auto depthCst = getOrCreateIntConstant(addrWidth, depth);
         value = builder.create<sv::TextualValueOp>(
             value.getType(),
             "RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK({{0}}, {{1}}, {{2}})",
@@ -1821,8 +1828,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
           wRegMask = createArrayReg("_mask_pipe", i1Type, writeLatency - 1);
           wRegData = createArrayReg("_data_pipe", dataType, writeLatency - 1);
         }
-        auto jIdx =
-            builder.create<rtl::ConstantOp>(APInt(log2(writeLatency), j));
+        auto jIdx = getOrCreateIntConstant(log2(writeLatency), j);
         auto arEn = builder.create<sv::ArrayIndexInOutOp>(wRegEn, jIdx);
         auto arAddr = builder.create<sv::ArrayIndexInOutOp>(wRegAddr, jIdx);
         auto arMask = builder.create<sv::ArrayIndexInOutOp>(wRegMask, jIdx);
@@ -1873,7 +1879,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
           auto type = sv::getInOutElementType(reg.getType());
           type = sv::getAnyRTLArrayElementType(type);
           auto randomVal = builder.create<sv::TextualValueOp>(type, "`RANDOM");
-          auto zero = builder.create<rtl::ConstantOp>(APInt(1, 0));
+          auto zero = getOrCreateIntConstant(1, 0);
           auto subscript = builder.create<sv::ArrayIndexInOutOp>(reg, zero);
           builder.create<sv::BPAssignOp>(subscript, randomVal);
         } else {
@@ -1981,7 +1987,7 @@ LogicalResult FIRRTLLowering::visitExpr(CvtPrimOp op) {
     return handleZeroBit(op.getOperand(), [&]() {
       // Unsigned zero bit to Signed is 1b0.
       if (op.getOperand().getType().cast<IntType>().isUnsigned())
-        return setLoweringTo<rtl::ConstantOp>(op, APInt(1, 0));
+        return setLowering(op, getOrCreateIntConstant(1, 0));
       // Signed->Signed is a zero bit value.
       return setLowering(op, Value());
     });
@@ -1992,7 +1998,7 @@ LogicalResult FIRRTLLowering::visitExpr(CvtPrimOp op) {
     return setLowering(op, operand);
 
   // Otherwise prepend a zero bit.
-  auto zero = builder.create<rtl::ConstantOp>(APInt(1, 0));
+  auto zero = getOrCreateIntConstant(1, 0);
   return setLoweringTo<comb::ConcatOp>(op, zero, operand);
 }
 
@@ -2001,7 +2007,8 @@ LogicalResult FIRRTLLowering::visitExpr(NotPrimOp op) {
   if (!operand)
     return failure();
   // ~x  ---> x ^ 0xFF
-  auto allOnes = builder.create<rtl::ConstantOp>(operand.getType(), -1);
+  auto allOnes = getOrCreateIntConstant(
+      operand.getType().getIntOrFloatBitWidth(), -1, /*signed=*/true);
   return setLoweringTo<comb::XorOp>(op, operand, allOnes);
 }
 
@@ -2013,13 +2020,13 @@ LogicalResult FIRRTLLowering::visitExpr(NegPrimOp op) {
   if (!operand) {
     return handleZeroBit(op.getOperand(), [&]() {
       // Negate of a zero bit value is 1b0.
-      return setLoweringTo<rtl::ConstantOp>(op, APInt(1, 0));
+      return setLowering(op, getOrCreateIntConstant(1, 0));
     });
   }
   auto resultType = lowerType(op.getType());
   operand = builder.createOrFold<comb::SExtOp>(resultType, operand);
 
-  auto zero = builder.create<rtl::ConstantOp>(resultType, 0);
+  auto zero = getOrCreateIntConstant(resultType.getIntOrFloatBitWidth(), 0);
   return setLoweringTo<comb::SubOp>(op, zero, operand);
 }
 
@@ -2035,7 +2042,7 @@ LogicalResult FIRRTLLowering::visitExpr(XorRPrimOp op) {
   auto operand = getLoweredValue(op.input());
   if (!operand) {
     return handleZeroBit(op.input(), [&]() {
-      return setLoweringTo<rtl::ConstantOp>(op, APInt(1, 0));
+      return setLowering(op, getOrCreateIntConstant(1, 0));
     });
     return failure();
   }
@@ -2047,22 +2054,22 @@ LogicalResult FIRRTLLowering::visitExpr(AndRPrimOp op) {
   auto operand = getLoweredValue(op.input());
   if (!operand) {
     return handleZeroBit(op.input(), [&]() {
-      return setLoweringTo<rtl::ConstantOp>(op, APInt(1, 1));
+      return setLowering(op, getOrCreateIntConstant(1, 1));
     });
   }
 
   // Lower AndR to == -1
   return setLoweringTo<comb::ICmpOp>(
       op, ICmpPredicate::eq, operand,
-      builder.create<rtl::ConstantOp>(
-          APInt(operand.getType().getIntOrFloatBitWidth(), -1)));
+      getOrCreateIntConstant(operand.getType().getIntOrFloatBitWidth(), -1,
+                             /*signed*/ true));
 }
 
 LogicalResult FIRRTLLowering::visitExpr(OrRPrimOp op) {
   auto operand = getLoweredValue(op.input());
   if (!operand) {
     return handleZeroBit(op.input(), [&]() {
-      return setLoweringTo<rtl::ConstantOp>(op, APInt(1, 0));
+      return setLowering(op, getOrCreateIntConstant(1, 0));
     });
     return failure();
   }
@@ -2070,8 +2077,7 @@ LogicalResult FIRRTLLowering::visitExpr(OrRPrimOp op) {
   // Lower OrR to != 0
   return setLoweringTo<comb::ICmpOp>(
       op, ICmpPredicate::ne, operand,
-      builder.create<rtl::ConstantOp>(
-          APInt(operand.getType().getIntOrFloatBitWidth(), 0)));
+      getOrCreateIntConstant(operand.getType().getIntOrFloatBitWidth(), 0));
 }
 
 //===----------------------------------------------------------------------===//
@@ -2240,7 +2246,8 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValuePrimOp op) {
   if (auto intType = resultTy.dyn_cast<IntegerType>()) {
     if (intType.getWidth() == 0) // Let the caller handle zero width values.
       return failure();
-    return setLoweringTo<rtl::ConstantOp>(op, resultTy, 0);
+    return setLowering(
+        op, getOrCreateIntConstant(resultTy.getIntOrFloatBitWidth(), 0));
   }
 
   // Invalid for bundles isn't supported.
@@ -2266,7 +2273,7 @@ LogicalResult FIRRTLLowering::visitExpr(ShlPrimOp op) {
     return handleZeroBit(op.input(), [&]() {
       if (op.amount() == 0)
         return failure();
-      return setLoweringTo<rtl::ConstantOp>(op, APInt(op.amount(), 0));
+      return setLowering(op, getOrCreateIntConstant(op.amount(), 0));
     });
   }
 
@@ -2274,8 +2281,7 @@ LogicalResult FIRRTLLowering::visitExpr(ShlPrimOp op) {
   if (op.amount() == 0)
     return setLowering(op, input);
 
-  // TODO: We could keep track of zeros and implicitly CSE them.
-  auto zero = builder.create<rtl::ConstantOp>(APInt(op.amount(), 0));
+  auto zero = getOrCreateIntConstant(op.amount(), 0);
   return setLoweringTo<comb::ConcatOp>(op, input, zero);
 }
 
@@ -2290,7 +2296,7 @@ LogicalResult FIRRTLLowering::visitExpr(ShrPrimOp op) {
   if (shiftAmount == inWidth) {
     // Unsigned shift by full width returns a single-bit zero.
     if (op.input().getType().cast<IntType>().isUnsigned())
-      return setLoweringTo<rtl::ConstantOp>(op, APInt(1, 0));
+      return setLowering(op, getOrCreateIntConstant(1, 0));
 
     // Signed shift by full width is equivalent to extracting the sign bit.
     --shiftAmount;
@@ -2460,7 +2466,7 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
       // If this is a zero bit operand, just pass a one bit zero.
       if (!isZeroBitFIRRTLType(operand.getType()))
         return failure();
-      operands.back() = builder.create<rtl::ConstantOp>(APInt(1, 0));
+      operands.back() = getOrCreateIntConstant(1, 0);
     }
   }
 
