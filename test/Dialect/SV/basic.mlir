@@ -33,15 +33,15 @@ rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   // CHECK-NEXT: sv.always posedge %arg0 {
   // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
   // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     %0 = sv.verbatim.expr "PRINTF_COND_" : () -> i1
-  // CHECK-NEXT:     %1 = sv.constantX : i1
-  // CHECK-NEXT:     %2 = sv.constantZ : i1
-  // CHECK-NEXT:     %3 = comb.and %0, %1, %2, %arg1 : i1
-  // CHECK-NEXT:     sv.if %3 {
+  // CHECK-NEXT:     %PRINTF_COND_ = sv.verbatim.expr "PRINTF_COND_" : () -> i1
+  // CHECK-NEXT:     %x_i1 = sv.constantX : i1
+  // CHECK-NEXT:     %z_i1 = sv.constantZ : i1
+  // CHECK-NEXT:     %0 = comb.and %PRINTF_COND_, %x_i1, %z_i1, %arg1 : i1
+  // CHECK-NEXT:     sv.if %0 {
   // CHECK-NEXT:       sv.fwrite "Hi\0A" 
   // CHECK-NEXT:     }
-  // CHECK-NEXT:     sv.if %3 {
-  // CHECK-NEXT:       sv.fwrite "%x"(%3) : i1
+  // CHECK-NEXT:     sv.if %0 {
+  // CHECK-NEXT:       sv.fwrite "%x"(%0) : i1
   // CHECK-NEXT:     } else {
   // CHECK-NEXT:       sv.fwrite "There\0A" 
   // CHECK-NEXT:     }
