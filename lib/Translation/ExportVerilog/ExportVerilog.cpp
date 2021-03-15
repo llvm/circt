@@ -2587,9 +2587,9 @@ void ModuleEmitter::emitStatementBlock(Block &body) {
 void SplitModuleEmitter::emitMLIRModule(ModuleOp module) {
   for (auto &op : *module.getBody()) {
     // TODO: Module uniquification happens in ModuleEmitter, but a new instance
-    // of ModuleEmitter is created for each operation in the body. We could add
-    // uniquification across all operations by moving the renaming table into a
-    // separate state object that is passed around, like a VerilogEmitterState.
+    // of ModuleEmitter is created for each operation in the body. This should
+    // be a prepass on the IR such that renaming is consistent regardless of
+    // what subset of the file the emitter is looking at (see #756).
     if (auto module = dyn_cast<RTLModuleOp>(op))
       emitFile(module.getNameAttr().getValue(),
                [&](VerilogEmitterState &state) {
