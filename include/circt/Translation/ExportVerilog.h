@@ -15,6 +15,7 @@
 
 namespace llvm {
 class raw_ostream;
+class StringRef;
 } // namespace llvm
 
 namespace mlir {
@@ -26,6 +27,13 @@ namespace circt {
 
 /// Export a module containing RTL, and SV dialect code.
 mlir::LogicalResult exportVerilog(mlir::ModuleOp module, llvm::raw_ostream &os);
+
+/// Export a module containing RTL, and SV dialect code, as one file per SV
+/// module.
+///
+/// Files are created in the directory indicated by \c dirname.
+mlir::LogicalResult exportSplitVerilog(mlir::ModuleOp module,
+                                       llvm::StringRef dirname);
 
 /// Register a translation for exporting RTL, Comb and SV to SystemVerilog.
 void registerToVerilogTranslation();

@@ -54,9 +54,10 @@ static cl::opt<InputFormatKind> inputFormat(
 static cl::opt<std::string>
     inputFilename(cl::Positional, cl::desc("<input file>"), cl::init("-"));
 
-static cl::opt<std::string> outputFilename("o", cl::desc("Output filename"),
-                                           cl::value_desc("filename"),
-                                           cl::init("-"));
+static cl::opt<std::string>
+    outputFilename("o",
+                   cl::desc("Output filename, or directory for split output"),
+                   cl::value_desc("filename"), cl::init("-"));
 
 static cl::opt<bool> disableOptimization("disable-opt",
                                          cl::desc("disable optimizations"));
@@ -79,12 +80,20 @@ static cl::opt<bool>
                        cl::desc("ignore the @info locations in the .fir file"),
                        cl::init(false));
 
-enum OutputFormatKind { OutputMLIR, OutputVerilog, OutputDisabled };
+enum OutputFormatKind {
+  OutputMLIR,
+  OutputVerilog,
+  OutputSplitVerilog,
+  OutputDisabled
+};
 
 static cl::opt<OutputFormatKind> outputFormat(
     cl::desc("Specify output format:"),
     cl::values(clEnumValN(OutputMLIR, "mlir", "Emit MLIR dialect"),
                clEnumValN(OutputVerilog, "verilog", "Emit Verilog"),
+               clEnumValN(OutputSplitVerilog, "split-verilog",
+                          "Emit Verilog (one file per module; specify "
+                          "directory with -o=<dir>)"),
                clEnumValN(OutputDisabled, "disable-output",
                           "Do not output anything")),
     cl::init(OutputMLIR));
@@ -97,7 +106,7 @@ static cl::opt<bool>
 /// Process a single buffer of the input.
 static LogicalResult
 processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
-              raw_ostream &os) {
+              std::function<LogicalResult(OwningModuleRef)> callback) {
   MLIRContext context;
 
   // Register our dialects.
@@ -141,7 +150,8 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxMemoryPass());
 
   // Lower if we are going to verilog or if lowering was specifically requested.
-  if (lowerToRTL || outputFormat == OutputVerilog) {
+  if (lowerToRTL || outputFormat == OutputVerilog ||
+      outputFormat == OutputSplitVerilog) {
     if (enableLowerTypes)
       pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass());
     pm.addPass(createLowerFIRRTLToRTLPass());
@@ -157,18 +167,47 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   if (failed(pm.run(module.get())))
     return failure();
 
-  // Finally, emit the output.
-  switch (outputFormat) {
-  case OutputMLIR:
-    module->print(os);
-    return success();
-  case OutputDisabled:
-    return success();
-  case OutputVerilog:
-    return exportVerilog(module.get(), os);
-  }
-  llvm_unreachable("invalid output format");
+  return callback(std::move(module));
+}
+
+/// Process a single buffer of the input into a single output stream.
+static LogicalResult
+processBufferIntoSingleStream(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
+                              raw_ostream &os) {
+  return processBuffer(std::move(ownedBuffer), [&](OwningModuleRef module) {
+    // Finally, emit the output.
+    switch (outputFormat) {
+    case OutputMLIR:
+      module->print(os);
+      return success();
+    case OutputDisabled:
+      return success();
+    case OutputVerilog:
+      return exportVerilog(module.get(), os);
+    case OutputSplitVerilog:
+      llvm_unreachable("multi-file format must be handled elsewhere");
+    }
+    llvm_unreachable("unknown output format");
+  });
 };
+
+/// Process a single buffer of the input into multiple output files.
+static LogicalResult
+processBufferIntoMultipleFiles(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
+                               const std::string &outputDirectory) {
+  return processBuffer(std::move(ownedBuffer), [&](OwningModuleRef module) {
+    // Finally, emit the output.
+    switch (outputFormat) {
+    case OutputMLIR:
+    case OutputDisabled:
+    case OutputVerilog:
+      llvm_unreachable("single-stream format must be handled elsewhere");
+    case OutputSplitVerilog:
+      return exportSplitVerilog(module.get(), outputDirectory);
+    }
+    llvm_unreachable("unknown output format");
+  });
+}
 
 int main(int argc, char **argv) {
   InitLLVM y(argc, argv);
@@ -202,15 +241,42 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  auto output = openOutputFile(outputFilename, &errorMessage);
-  if (!output) {
-    llvm::errs() << errorMessage << "\n";
-    return 1;
+  // Emit a single file or multiple files depending on the output format.
+  switch (outputFormat) {
+  // Outputs into a single stream.
+  case OutputMLIR:
+  case OutputDisabled:
+  case OutputVerilog: {
+    auto output = openOutputFile(outputFilename, &errorMessage);
+    if (!output) {
+      llvm::errs() << errorMessage << "\n";
+      return 1;
+    }
+
+    if (failed(processBufferIntoSingleStream(std::move(input), output->os())))
+      return 1;
+
+    output->keep();
+    return 0;
   }
 
-  if (failed(processBuffer(std::move(input), output->os())))
-    return 1;
+  // Outputs into multiple files.
+  case OutputSplitVerilog:
+    if (outputFilename.isDefaultOption() || outputFilename == "-") {
+      llvm::errs() << "missing output directory: specify with -o=<dir>\n";
+      return 1;
+    }
 
-  output->keep();
-  return 0;
+    std::error_code error = llvm::sys::fs::create_directory(outputFilename);
+    if (error) {
+      llvm::errs() << "cannot create output directory '" << outputFilename
+                   << "': " << error.message() << "\n";
+      return 1;
+    }
+
+    if (failed(
+            processBufferIntoMultipleFiles(std::move(input), outputFilename)))
+      return 1;
+    return 0;
+  }
 }
