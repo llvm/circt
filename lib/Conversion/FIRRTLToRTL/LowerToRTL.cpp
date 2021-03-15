@@ -112,7 +112,15 @@ namespace {
 struct FIRRTLModuleLowering;
 
 /// This is state shared across the parallel module lowering logic.
-struct ModuleLoweringState {
+struct CircuitLoweringState {
+  std::atomic<bool> used_PRINTF_COND;
+  std::atomic<bool> used_STOP_COND;
+
+  std::atomic<bool> used_RANDOMIZE_REG_INIT, used_RANDOMIZE_MEM_INIT;
+  std::atomic<bool> used_RANDOMIZE_GARBAGE_ASSIGN;
+
+  CircuitLoweringState() {}
+
   Operation *getNewModule(Operation *oldModule) {
     auto it = oldToNewModuleMap.find(oldModule);
     return it != oldToNewModuleMap.end() ? it->second : nullptr;
@@ -120,7 +128,9 @@ struct ModuleLoweringState {
 
 private:
   friend struct FIRRTLModuleLowering;
-  // This is information about
+  CircuitLoweringState(const CircuitLoweringState &) = delete;
+  void operator=(const CircuitLoweringState &) = delete;
+
   DenseMap<Operation *, Operation *> oldToNewModuleMap;
 };
 } // end anonymous namespace
@@ -132,7 +142,7 @@ struct FIRRTLModuleLowering
   void runOnOperation() override;
 
 private:
-  void lowerFileHeader(CircuitOp op);
+  void lowerFileHeader(CircuitOp op, CircuitLoweringState &loweringState);
   LogicalResult lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
                            SmallVectorImpl<rtl::ModulePortInfo> &ports,
                            Operation *moduleOp);
@@ -140,11 +150,13 @@ private:
   rtl::RTLModuleExternOp lowerExtModule(FExtModuleOp oldModule,
                                         Block *topLevelModule);
 
-  void lowerModuleBody(FModuleOp oldModule, ModuleLoweringState &loweringState);
-  void lowerModuleOperations(rtl::RTLModuleOp module);
+  void lowerModuleBody(FModuleOp oldModule,
+                       CircuitLoweringState &loweringState);
+  void lowerModuleOperations(rtl::RTLModuleOp module,
+                             CircuitLoweringState &loweringState);
 
   void lowerInstance(InstanceOp instance, CircuitOp circuitOp,
-                     ModuleLoweringState &loweringState);
+                     CircuitLoweringState &loweringState);
 };
 
 } // end anonymous namespace
@@ -175,7 +187,7 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   // Keep track of the mapping from old to new modules.  The result may be null
   // if lowering failed.
-  ModuleLoweringState state;
+  CircuitLoweringState state;
 
   SmallVector<FModuleOp, 32> modulesToProcess;
 
@@ -226,13 +238,14 @@ void FIRRTLModuleLowering::runOnOperation() {
       StringAttr::get(circuit.getContext(), circuit.name()));
 
   // Emit all the macros and preprocessor gunk at the start of the file.
-  lowerFileHeader(circuit);
+  lowerFileHeader(circuit, state);
 
   circuit.erase();
 }
 
 /// Emit the file header that defines a bunch of macros.
-void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op) {
+void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
+                                           CircuitLoweringState &state) {
   // Intentionally pass an UnknownLoc here so we don't get line number comments
   // on the output of this boilerplate in generated Verilog.
   ImplicitLocOpBuilder b(UnknownLoc::get(&getContext()), op);
@@ -264,57 +277,76 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op) {
   };
 
   emitString("// Standard header to adapt well known macros to our needs.");
-  emitGuardedDefine("RANDOMIZE_GARBAGE_ASSIGN", "RANDOMIZE");
-  emitGuardedDefine("RANDOMIZE_INVALID_ASSIGN", "RANDOMIZE");
-  emitGuardedDefine("RANDOMIZE_REG_INIT", "RANDOMIZE");
-  emitGuardedDefine("RANDOMIZE_MEM_INIT", "RANDOMIZE");
-  emitGuardedDefine("RANDOM", nullptr, "RANDOM $random");
 
-  emitString(
-      "\n// Users can define 'PRINTF_COND' to add an extra gate to prints.");
+  bool needRandom = false;
+  if (state.used_RANDOMIZE_GARBAGE_ASSIGN) {
+    emitGuardedDefine("RANDOMIZE_GARBAGE_ASSIGN", "RANDOMIZE");
+    needRandom = true;
+  }
+  if (state.used_RANDOMIZE_REG_INIT) {
+    emitGuardedDefine("RANDOMIZE_REG_INIT", "RANDOMIZE");
+    needRandom = true;
+  }
+  if (state.used_RANDOMIZE_MEM_INIT) {
+    emitGuardedDefine("RANDOMIZE_MEM_INIT", "RANDOMIZE");
+    needRandom = true;
+  }
 
-  emitGuardedDefine("PRINTF_COND", "PRINTF_COND_ (`PRINTF_COND)",
-                    "PRINTF_COND_ 1");
+  if (needRandom)
+    emitGuardedDefine("RANDOM", nullptr, "RANDOM $random");
 
-  emitString("\n// Users can define 'STOP_COND' to add an extra gate "
-             "to stop conditions.");
-  emitGuardedDefine("STOP_COND", "STOP_COND_ (`STOP_COND)", "STOP_COND_ 1");
+  if (state.used_PRINTF_COND) {
+    emitString(
+        "\n// Users can define 'PRINTF_COND' to add an extra gate to prints.");
+    emitGuardedDefine("PRINTF_COND", "PRINTF_COND_ (`PRINTF_COND)",
+                      "PRINTF_COND_ 1");
+  }
 
-  emitString(
-      "\n// Users can define INIT_RANDOM as general code that gets injected "
-      "into the\n// initializer block for modules with registers.");
-  emitGuardedDefine("INIT_RANDOM", nullptr, "INIT_RANDOM");
+  if (state.used_STOP_COND) {
+    emitString("\n// Users can define 'STOP_COND' to add an extra gate "
+               "to stop conditions.");
+    emitGuardedDefine("STOP_COND", "STOP_COND_ (`STOP_COND)", "STOP_COND_ 1");
+  }
 
-  emitString("\n// If using random initialization, you can also define "
-             "RANDOMIZE_DELAY to\n// customize the delay used, otherwise 0.002 "
-             "is used.");
-  emitGuardedDefine("RANDOMIZE_DELAY", nullptr, "RANDOMIZE_DELAY 0.002");
+  if (needRandom) {
+    emitString(
+        "\n// Users can define INIT_RANDOM as general code that gets injected "
+        "into the\n// initializer block for modules with registers.");
+    emitGuardedDefine("INIT_RANDOM", nullptr, "INIT_RANDOM");
 
-  emitString("\n// Define INIT_RANDOM_PROLOG_ for use in our modules below.");
+    emitString(
+        "\n// If using random initialization, you can also define "
+        "RANDOMIZE_DELAY to\n// customize the delay used, otherwise 0.002 "
+        "is used.");
+    emitGuardedDefine("RANDOMIZE_DELAY", nullptr, "RANDOMIZE_DELAY 0.002");
 
-  b.create<sv::IfDefProceduralOp>(
-      "RANDOMIZE",
-      [&]() {
-        emitGuardedDefine(
-            "VERILATOR", "INIT_RANDOM_PROLOG_ `INIT_RANDOM",
-            "INIT_RANDOM_PROLOG_ `INIT_RANDOM #`RANDOMIZE_DELAY begin end");
-      },
-      [&]() { emitString("`define INIT_RANDOM_PROLOG_"); });
+    emitString("\n// Define INIT_RANDOM_PROLOG_ for use in our modules below.");
+    b.create<sv::IfDefProceduralOp>(
+        "RANDOMIZE",
+        [&]() {
+          emitGuardedDefine(
+              "VERILATOR", "INIT_RANDOM_PROLOG_ `INIT_RANDOM",
+              "INIT_RANDOM_PROLOG_ `INIT_RANDOM #`RANDOMIZE_DELAY begin end");
+        },
+        [&]() { emitString("`define INIT_RANDOM_PROLOG_"); });
+  }
 
-  emitString(
-      "\n// RANDOMIZE_GARBAGE_ASSIGN enable range checks for mem assignments.");
-  b.create<sv::IfDefProceduralOp>(
-      "RANDOMIZE_GARBAGE_ASSIGN",
-      [&]() {
-        emitString("`define RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK(INDEX, VALUE, "
-                   "SIZE) \\");
-        emitString("  ((INDEX) < (SIZE) ? (VALUE) : `RANDOM)");
-      },
-      [&]() {
-        emitString(
-            "`define RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK(INDEX, VALUE, SIZE) "
-            "(VALUE)");
-      });
+  if (state.used_RANDOMIZE_GARBAGE_ASSIGN) {
+    emitString("\n// RANDOMIZE_GARBAGE_ASSIGN enable range checks for mem "
+               "assignments.");
+    b.create<sv::IfDefProceduralOp>(
+        "RANDOMIZE_GARBAGE_ASSIGN",
+        [&]() {
+          emitString(
+              "`define RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK(INDEX, VALUE, "
+              "SIZE) \\");
+          emitString("  ((INDEX) < (SIZE) ? (VALUE) : `RANDOM)");
+        },
+        [&]() {
+          emitString("`define RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK(INDEX, "
+                     "VALUE, SIZE) (VALUE)");
+        });
+  }
 
   // Blank line to separate the header from the modules.
   emitString("");
@@ -586,8 +618,8 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
 /// Now that we have the operations for the rtl.module's corresponding to the
 /// firrtl.module's, we can go through and move the bodies over, updating the
 /// ports and instances.
-void FIRRTLModuleLowering::lowerModuleBody(FModuleOp oldModule,
-                                           ModuleLoweringState &loweringState) {
+void FIRRTLModuleLowering::lowerModuleBody(
+    FModuleOp oldModule, CircuitLoweringState &loweringState) {
   auto newModule =
       dyn_cast_or_null<rtl::RTLModuleOp>(loweringState.getNewModule(oldModule));
   // Don't touch modules if we failed to lower ports.
@@ -710,7 +742,7 @@ void FIRRTLModuleLowering::lowerModuleBody(FModuleOp oldModule,
   cursor.erase();
 
   // Lower all of the other operations.
-  lowerModuleOperations(newModule);
+  lowerModuleOperations(newModule, loweringState);
 }
 
 /// Lower a firrtl.instance operation to an rtl.instance operation.  This is a
@@ -722,7 +754,7 @@ void FIRRTLModuleLowering::lowerModuleBody(FModuleOp oldModule,
 /// letting the caller erase it.
 void FIRRTLModuleLowering::lowerInstance(InstanceOp oldInstance,
                                          CircuitOp circuitOp,
-                                         ModuleLoweringState &loweringState) {
+                                         CircuitLoweringState &loweringState) {
   auto *oldModule = circuitOp.lookupSymbol(oldInstance.moduleName());
   auto newModule = loweringState.getNewModule(oldModule);
   if (!newModule) {
@@ -842,8 +874,9 @@ void FIRRTLModuleLowering::lowerInstance(InstanceOp oldInstance,
 namespace {
 struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
-  FIRRTLLowering(rtl::RTLModuleOp module)
-      : theModule(module), builder(module.getLoc(), module.getContext()) {}
+  FIRRTLLowering(rtl::RTLModuleOp module, CircuitLoweringState &circuitState)
+      : theModule(module), circuitState(circuitState),
+        builder(module.getLoc(), module.getContext()) {}
 
   void run();
 
@@ -1020,7 +1053,11 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(AttachOp op);
 
 private:
+  /// The module we're lowering into.
   rtl::RTLModuleOp theModule;
+
+  /// Global state.
+  CircuitLoweringState &circuitState;
 
   /// This builder is set to the right location for each visit call.
   ImplicitLocOpBuilder builder;
@@ -1055,8 +1092,9 @@ private:
 };
 } // end anonymous namespace
 
-void FIRRTLModuleLowering::lowerModuleOperations(rtl::RTLModuleOp module) {
-  FIRRTLLowering(module).run();
+void FIRRTLModuleLowering::lowerModuleOperations(
+    rtl::RTLModuleOp module, CircuitLoweringState &loweringState) {
+  FIRRTLLowering(module, loweringState).run();
 }
 
 // This is the main entrypoint for the lowering pass.
@@ -1630,6 +1668,7 @@ void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
     addToInitialBlock([&]() {
       emitRandomizePrologIfNeeded();
+      circuitState.used_RANDOMIZE_REG_INIT = 1;
       addToIfDefProceduralBlock("RANDOMIZE_REG_INIT", [&]() {
         if (resetSignal) {
           addIfProceduralBlock(resetSignal, {}, [&]() { randomInit(); });
@@ -1859,6 +1898,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
             value.getType(),
             "RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK({{0}}, {{1}}, {{2}})",
             ValueRange{addr, value, depthCst});
+        circuitState.used_RANDOMIZE_GARBAGE_ASSIGN = 1;
       }
 
       builder.create<sv::ConnectOp>(portWires["data"], value);
@@ -1928,7 +1968,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   addToIfDefBlock("SYNTHESIS", {}, [&]() {
     addToInitialBlock([&]() {
       emitRandomizePrologIfNeeded();
-
+      circuitState.used_RANDOMIZE_MEM_INIT = 1;
       addToIfDefProceduralBlock("RANDOMIZE_MEM_INIT", [&]() {
         if (depth == 1) { // Don't emit a for loop for one element.
           auto type = sv::getInOutElementType(reg.getType());
@@ -2528,6 +2568,8 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
   addToAlwaysBlock(clock, [&]() {
     // Emit an "#ifndef SYNTHESIS" guard into the always block.
     addToIfDefProceduralBlock("SYNTHESIS", std::function<void()>(), [&]() {
+      circuitState.used_PRINTF_COND = true;
+
       // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
       Value ifCond =
           builder.create<sv::VerbatimExprOp>(cond.getType(), "`PRINTF_COND_");
@@ -2555,6 +2597,8 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
   addToAlwaysBlock(clock, [&]() {
     // Emit an "#ifndef SYNTHESIS" guard into the always block.
     addToIfDefProceduralBlock("SYNTHESIS", std::function<void()>(), [&]() {
+      circuitState.used_STOP_COND = true;
+
       // Emit an "sv.if '`STOP_COND_ & cond' into the #ifndef.
       Value ifCond =
           builder.create<sv::VerbatimExprOp>(cond.getType(), "`STOP_COND_");
