@@ -20,11 +20,13 @@
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/Support/FileUtilities.h"
 #include "mlir/Translation.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/SaveAndRestore.h"
+#include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace circt;
@@ -718,6 +720,27 @@ StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
     nameTable[valueOrOp] = updatedName;
   return updatedName;
 }
+
+//===----------------------------------------------------------------------===//
+// SplitModuleEmitter
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+class SplitModuleEmitter {
+public:
+  explicit SplitModuleEmitter(StringRef dirname) : dirname(dirname) {}
+
+  bool encounteredError = false;
+  StringRef dirname;
+  SmallVector<Operation *, 8> perFileOps;
+
+  void emitMLIRModule(ModuleOp module);
+  void emitFile(StringRef filename,
+                std::function<void(VerilogEmitterState &)> callback);
+};
+
+} // namespace
 
 //===----------------------------------------------------------------------===//
 // Expression Emission
@@ -2561,6 +2584,65 @@ void ModuleEmitter::emitStatementBlock(Block &body) {
 // Module Driver
 //===----------------------------------------------------------------------===//
 
+void SplitModuleEmitter::emitMLIRModule(ModuleOp module) {
+  for (auto &op : *module.getBody()) {
+    // TODO: Module uniquification happens in ModuleEmitter, but a new instance
+    // of ModuleEmitter is created for each operation in the body. This should
+    // be a prepass on the IR such that renaming is consistent regardless of
+    // what subset of the file the emitter is looking at (see #756).
+    if (auto module = dyn_cast<RTLModuleOp>(op))
+      emitFile(module.getNameAttr().getValue(),
+               [&](VerilogEmitterState &state) {
+                 ModuleEmitter(state).emitRTLModule(module);
+               });
+    else if (auto module = dyn_cast<RTLModuleExternOp>(op))
+      emitFile(module.getVerilogModuleNameAttr().getValue(),
+               [&](VerilogEmitterState &state) {
+                 ModuleEmitter(state).emitRTLExternModule(module);
+               });
+    else if (auto intfOp = dyn_cast<InterfaceOp>(op))
+      emitFile(intfOp.sym_name(), [&](VerilogEmitterState &state) {
+        ModuleEmitter(state).emitStatement(&op);
+      });
+    else if (isa<VerbatimOp>(op) || isa<IfDefProceduralOp>(op))
+      perFileOps.push_back(&op);
+    else if (!isa<ModuleTerminatorOp>(op)) {
+      op.emitError("unknown operation");
+      encounteredError = true;
+    }
+  }
+}
+
+void SplitModuleEmitter::emitFile(
+    StringRef fileStem, std::function<void(VerilogEmitterState &)> callback) {
+
+  // Determine the output file name and create it.
+  SmallString<128> outputFilename(dirname);
+  llvm::sys::path::append(outputFilename, fileStem);
+  outputFilename.append(".v");
+
+  std::string errorMessage;
+  auto output = openOutputFile(outputFilename, &errorMessage);
+  if (!output) {
+    encounteredError = true;
+    llvm::errs() << errorMessage << "\n";
+    return;
+  }
+
+  VerilogEmitterState state(output->os());
+
+  // Emit accumulated per-file operations and whatever the callback does.
+  for (auto op : perFileOps) {
+    ModuleEmitter(state).emitStatement(op);
+  }
+
+  callback(state);
+  if (state.encounteredError)
+    encounteredError = true;
+
+  output->keep();
+}
+
 void ModuleEmitter::emitMLIRModule(ModuleOp module) {
   for (auto &op : *module.getBody()) {
     if (auto module = dyn_cast<RTLModuleOp>(op))
@@ -2776,6 +2858,12 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   VerilogEmitterState state(os);
   ModuleEmitter(state).emitMLIRModule(module);
   return failure(state.encounteredError);
+}
+
+LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
+  SplitModuleEmitter emitter(dirname);
+  emitter.emitMLIRModule(module);
+  return failure(emitter.encounteredError);
 }
 
 void circt::registerToVerilogTranslation() {
