@@ -10,7 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-def VerbatimExprOp : SVOp<"verbatim.expr", [NoSideEffect]> {
+def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface>;
+
+def VerbatimExprOp : SVOp<"verbatim.expr", [NoSideEffect, HasCustomSSAName]> {
   let summary = "Expression that expands to a value given SystemVerilog text";
   let description = [{
     This operation produces a typed value expressed by a string of
@@ -37,7 +39,7 @@ def VerbatimExprOp : SVOp<"verbatim.expr", [NoSideEffect]> {
   ];
 }
 
-def ConstantXOp : SVOp<"constantX", [NoSideEffect]> {
+def ConstantXOp : SVOp<"constantX", [NoSideEffect, HasCustomSSAName]> {
   let summary = "A constant of value 'x'";
   let description = [{
     This operation produces a constant value of 'x'.  This 'x' follows the
@@ -49,7 +51,7 @@ def ConstantXOp : SVOp<"constantX", [NoSideEffect]> {
   let assemblyFormat = " attr-dict `:` type($result)";
 }
 
-def ConstantZOp : SVOp<"constantZ", [NoSideEffect]> {
+def ConstantZOp : SVOp<"constantZ", [NoSideEffect, HasCustomSSAName]> {
   let summary = "A constant of value 'z'";
   let description = [{
     This operation produces a constant value of 'z'.  This 'z' follows the
