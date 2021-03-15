@@ -634,8 +634,7 @@ void PartialConnectOp::getCanonicalizationPatterns(
           destWidth > 0 && destWidth < srcWidth) {
         auto shortened = rewriter.createOrFold<TailPrimOp>(
             op->getLoc(), destType, op.getOperand(1), srcWidth - destWidth);
-        rewriter.createOrFold<ConnectOp>(op->getLoc(), op.getOperand(0),
-                                         shortened);
+        rewriter.create<ConnectOp>(op->getLoc(), op.getOperand(0), shortened);
         rewriter.eraseOp(op);
       }
       return failure();
