@@ -6,29 +6,29 @@ firrtl.circuit "Simple" {
   firrtl.module @Simple(%in1: !firrtl.uint<4>,
                         %in2: !firrtl.uint<2>,
                         %in3: !firrtl.sint<8>) {
+    // CHECK-DAG: rtl.constant -4 : i4
+    %c12_ui4 = firrtl.constant(12 : ui4) : !firrtl.uint<4>
+
+    // CHECK-DAG: rtl.constant 2 : i3
+    %c2_si3 = firrtl.constant(2 : si3) : !firrtl.sint<3>
+
+
     // CHECK: %out4 = sv.wire  : !rtl.inout<i4>
     // CHECK: %out5 = sv.wire  : !rtl.inout<i4>
     %out4 = firrtl.wire : !firrtl.uint<4>
     %out5 = firrtl.wire : !firrtl.uint<4>
 
-    // CHECK: %c0_i4 = rtl.constant 0 : i4
     // CHECK: sv.connect %out5, %c0_i4 : i4
     %tmp1 = firrtl.invalidvalue : !firrtl.uint<4>
     firrtl.connect %out5, %tmp1 : !firrtl.uint<4>, !firrtl.uint<4>
 
-    // CHECK: rtl.constant -4 : i4
-    %c12_ui4 = firrtl.constant(12 : ui4) : !firrtl.uint<4>
-
-    // CHECK: rtl.constant 2 : i3
-    %c2_si3 = firrtl.constant(2 : si3) : !firrtl.sint<3>
-
-    // CHECK: [[ZEXT:%.+]] = comb.concat %false_0, %in1 : (i1, i4) -> i5
+    // CHECK: [[ZEXT:%.+]] = comb.concat %false, %in1 : (i1, i4) -> i5
     // CHECK: [[ADD:%.+]] = comb.add %c12_i5, [[ZEXT]] : i5
     %0 = firrtl.add %c12_ui4, %in1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
     %1 = firrtl.asUInt %in1 : (!firrtl.uint<4>) -> !firrtl.uint<4>
 
-    // CHECK: [[ZEXT1:%.+]] = comb.concat %false_1, [[ADD]] : (i1, i5) -> i6
+    // CHECK: [[ZEXT1:%.+]] = comb.concat %false, [[ADD]] : (i1, i5) -> i6
     // CHECK: [[ZEXT2:%.+]] = comb.concat %c0_i2, %in1 : (i2, i4) -> i6
     // CHECK-NEXT: [[SUB:%.+]] = comb.sub [[ZEXT1]], [[ZEXT2]] : i6
     %2 = firrtl.sub %0, %1 : (!firrtl.uint<5>, !firrtl.uint<4>) -> !firrtl.uint<6>
@@ -38,10 +38,10 @@ firrtl.circuit "Simple" {
     // CHECK: [[PADRES:%.+]] = comb.sext %in2 : (i2) -> i3
     %3 = firrtl.pad %in2s, 3 : (!firrtl.sint<2>) -> !firrtl.sint<3>
 
-    // CHECK: [[PADRES2:%.+]] = comb.concat %c0_i2_2, %in2 : (i2, i2) -> i4
+    // CHECK: [[PADRES2:%.+]] = comb.concat %c0_i2, %in2 : (i2, i2) -> i4
     %4 = firrtl.pad %in2, 4 : (!firrtl.uint<2>) -> !firrtl.uint<4>
 
-    // CHECK: [[IN2EXT:%.+]] = comb.concat %c0_i2_3, %in2 : (i2, i2) -> i4
+    // CHECK: [[IN2EXT:%.+]] = comb.concat %c0_i2, %in2 : (i2, i2) -> i4
     // CHECK: [[XOR:%.+]] = comb.xor [[IN2EXT]], [[PADRES2]] : i4
     %5 = firrtl.xor %in2, %4 : (!firrtl.uint<2>, !firrtl.uint<4>) -> !firrtl.uint<4>
 
@@ -63,8 +63,7 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: sv.connect %out4, [[XOR]] : i4
     firrtl.connect %out4, %5 : !firrtl.uint<4>, !firrtl.uint<4>
 
-    // CHECK-NEXT: %c0_i2_4 = rtl.constant
-    // CHECK-NEXT: [[ZEXT:%.+]] = comb.concat %c0_i2_4, %in2 : (i2, i2) -> i4
+    // CHECK-NEXT: [[ZEXT:%.+]] = comb.concat %c0_i2, %in2 : (i2, i2) -> i4
     // CHECK-NEXT: sv.connect %out4, [[ZEXT]] : i4
     firrtl.connect %out4, %in2 : !firrtl.uint<4>, !firrtl.uint<2>
 
@@ -92,31 +91,25 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: = comb.extract [[CONCAT1]] from 3 : (i8) -> i5
     %11 = firrtl.shr %6, 3 : (!firrtl.uint<8>) -> !firrtl.uint<5>
 
-    // CHECK-NEXT: = rtl.constant false
     %12 = firrtl.shr %6, 8 : (!firrtl.uint<8>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: = comb.extract %in3 from 7 : (i8) -> i1
     %13 = firrtl.shr %in3, 8 : (!firrtl.sint<8>) -> !firrtl.sint<1>
 
-    // CHECK-NEXT: [[ZERO:%.+]] = rtl.constant 0 : i3
-    // CHECK-NEXT: = comb.concat [[CONCAT1]], [[ZERO]] : (i8, i3) -> i11
+    // CHECK-NEXT: = comb.concat [[CONCAT1]], %c0_i3 : (i8, i3) -> i11
     %14 = firrtl.shl %6, 3 : (!firrtl.uint<8>) -> !firrtl.uint<11>
 
     // CHECK-NEXT: = comb.parity [[CONCAT1]] : i8
     %15 = firrtl.xorr %6 : (!firrtl.uint<8>) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: = rtl.constant -1 : i8
-    // CHECK-NEXT: = comb.icmp eq  {{.*}}, {{.*}} : i8
+    // CHECK-NEXT: = comb.icmp eq  {{.*}}, %c-1_i8 : i8
     %16 = firrtl.andr %6 : (!firrtl.uint<8>) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: = rtl.constant
-    // CHECK-NEXT: = comb.icmp ne {{.*}}, {{.*}} : i8
+    // CHECK-NEXT: = comb.icmp ne {{.*}}, %c0_i8 : i8
     %17 = firrtl.orr %6 : (!firrtl.uint<8>) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: %c0_i6 = rtl.constant
     // CHECK-NEXT: [[ZEXTC1:%.+]] = comb.concat %c0_i6, [[CONCAT1]] : (i6, i8) -> i14
-    // CHECK-NEXT: [[CONST:%.+]] = rtl.constant
-    // CHECK-NEXT: [[ZEXT2:%.+]] = comb.concat [[CONST]], [[SUB]] : (i8, i6) -> i14
+    // CHECK-NEXT: [[ZEXT2:%.+]] = comb.concat %c0_i8, [[SUB]] : (i8, i6) -> i14
     // CHECK-NEXT: [[VAL18:%.+]] = comb.mul  [[ZEXTC1]], [[ZEXT2]] : i14
     %18 = firrtl.mul %6, %2 : (!firrtl.uint<8>, !firrtl.uint<6>) -> !firrtl.uint<14>
 
@@ -142,22 +135,19 @@ firrtl.circuit "Simple" {
     // Nodes with no names are just dropped.
     %22 = firrtl.node %n1 : !firrtl.uint<2>
 
-    // CHECK-NEXT: %false_{{.*}} = rtl.constant false
-    // CHECK-NEXT: [[CVT:%.+]] = comb.concat %false_{{.*}}, %in2 : (i1, i2) -> i3
+    // CHECK-NEXT: [[CVT:%.+]] = comb.concat %false, %in2 : (i1, i2) -> i3
     %23 = firrtl.cvt %22 : (!firrtl.uint<2>) -> !firrtl.sint<3>
 
     // Will be dropped, here because this triggered a crash
     %s23 = firrtl.cvt %in3 : (!firrtl.sint<8>) -> !firrtl.sint<8>
 
-    // CHECK-NEXT: %c-1_i3 = rtl.constant -1 : i3
     // CHECK-NEXT: [[XOR:%.+]] = comb.xor [[CVT]], %c-1_i3 : i3
     %24 = firrtl.not %23 : (!firrtl.sint<3>) -> !firrtl.uint<3>
 
     %s24 = firrtl.asSInt %24 : (!firrtl.uint<3>) -> !firrtl.sint<3>
 
     // CHECK-NEXT: [[SEXT:%.+]] = comb.sext [[XOR]] : (i3) -> i4
-    // CHECK-NEXT: [[ZERO4b:%.+]] = rtl.constant 0 : i4
-    // CHECK-NEXT: [[SUB:%.+]] = comb.sub [[ZERO4b]], [[SEXT]] : i4
+    // CHECK-NEXT: [[SUB:%.+]] = comb.sub %c0_i4, [[SEXT]] : i4
     %25 = firrtl.neg %s24 : (!firrtl.sint<3>) -> !firrtl.sint<4>
 
     // CHECK-NEXT: [[CVT4:%.+]] = comb.sext [[CVT]] : (i3) -> i4
@@ -166,23 +156,20 @@ firrtl.circuit "Simple" {
 
     // Noop
     %27 = firrtl.validif %12, %18 : (!firrtl.uint<1>, !firrtl.uint<14>) -> !firrtl.uint<14>
-    // CHECK-NEXT: = rtl.constant -1 : i14
-    // CHECK-NEXT: = comb.icmp eq  {{.*}}, {{.*}} : i14
+
+    // CHECK-NEXT: = comb.icmp eq  {{.*}}, %c-1_i14 : i14
     %28 = firrtl.andr %27 : (!firrtl.uint<14>) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: %c0_i11 = rtl.constant 0 : i11
     // CHECK-NEXT: [[XOREXT:%.+]] = comb.concat %c0_i11, [[XOR]]
     // CHECK-NEXT: [[SHIFT:%.+]] = comb.shru [[XOREXT]], [[VAL18]] : i14
     // CHECK-NEXT: [[DSHR:%.+]] = comb.extract [[SHIFT]] from 0 : (i14) -> i3
     %29 = firrtl.dshr %24, %18 : (!firrtl.uint<3>, !firrtl.uint<14>) -> !firrtl.uint<3>
 
-    // CHECK-NEXT: %c0_i5 = rtl.constant 0 : i5
     // CHECK-NEXT: = comb.concat %c0_i5, {{.*}} : (i5, i3) -> i8
     // CHECK-NEXT: [[SHIFT:%.+]] = comb.shrs %in3, {{.*}} : i8
     %a29 = firrtl.dshr %in3, %9 : (!firrtl.sint<8>, !firrtl.uint<3>) -> !firrtl.sint<8>
 
     // CHECK-NEXT: = comb.sext %in3 : (i8) -> i15
-    // CHECK-NEXT: %c0_i12 = rtl.constant 0 : i12
     // CHECK-NEXT: = comb.concat %c0_i12, [[DSHR]]
     // CHECK-NEXT: [[SHIFT:%.+]] = comb.shl {{.*}}, {{.*}} : i15
     %30 = firrtl.dshl %in3, %29 : (!firrtl.sint<8>, !firrtl.uint<3>) -> !firrtl.sint<15>
@@ -226,9 +213,7 @@ firrtl.circuit "Simple" {
     %50 = firrtl.div %c104_ui8, %c306_ui10 : (!firrtl.uint<8>, !firrtl.uint<10>) -> !firrtl.uint<8>
 
     // Issue #364: https://github.com/llvm/circt/issues/364
-    // CHECK:      %c-873_i12 = rtl.constant -873 : i12
-    // CHECK-NEXT: [[CONST:%.+]] = rtl.constant 0 : i12
-    // CHECK-NEXT: = comb.sub [[CONST]], %c-873_i12 : i12
+    // CHECK: = comb.sub %c0_i12, %c-873_i12 : i12
     %c1175_ui11 = firrtl.constant(1175 : ui11) : !firrtl.uint<11>
     %51 = firrtl.neg %c1175_ui11 : (!firrtl.uint<11>) -> !firrtl.sint<12>
   }
@@ -245,7 +230,7 @@ firrtl.circuit "Simple" {
   firrtl.module @Print(%clock: !firrtl.clock, %reset: !firrtl.uint<1>,
                        %a: !firrtl.uint<4>, %b: !firrtl.uint<4>) {
 
-    // CHECK-NEXT: sv.always posedge %clock {
+    // CHECK: sv.always posedge %clock {
     // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
     // CHECK-NEXT:   } else {
     // CHECK-NEXT:     [[TV:%.+]] = sv.textual_value "`PRINTF_COND_" : () -> i1
@@ -366,10 +351,10 @@ firrtl.circuit "Simple" {
   // https://github.com/llvm/circt/issues/314
   // CHECK-LABEL: rtl.module @issue314
   firrtl.module @issue314(%inp_2: !firrtl.uint<27>, %inpi: !firrtl.uint<65>) {
-    // CHECK-NEXT: %tmp48 = sv.wire : !rtl.inout<i27>
+    // CHECK: %c0_i38 = rtl.constant 0 : i38
+    // CHECK: %tmp48 = sv.wire : !rtl.inout<i27>
     %tmp48 = firrtl.wire : !firrtl.uint<27>
 
-    // CHECK-NEXT: %c0_i38 = rtl.constant 0 : i38
     // CHECK-NEXT: %0 = comb.concat %c0_i38, %inp_2 : (i38, i27) -> i65
     // CHECK-NEXT: %1 = comb.divu %0, %inpi : i65
     %0 = firrtl.div %inp_2, %inpi : (!firrtl.uint<27>, !firrtl.uint<65>) -> !firrtl.uint<27>
@@ -480,7 +465,7 @@ firrtl.circuit "Simple" {
   firrtl.module @InitReg1(%clock: !firrtl.clock, %reset: !firrtl.uint<1>,
                           %io_d: !firrtl.uint<32>, %io_en: !firrtl.uint<1>,
                           %io_q: !firrtl.flip<uint<32>>) {
-    // CHECK-NEXT: %c0_i32 = rtl.constant 0 : i32
+    // CHECK: %c0_i32 = rtl.constant 0 : i32
     %c0_ui32 = firrtl.constant(0 : ui32) : !firrtl.uint<32>
 
     %4 = firrtl.asAsyncReset %reset : (!firrtl.uint<1>) -> !firrtl.asyncreset
@@ -515,11 +500,9 @@ firrtl.circuit "Simple" {
     %reg2 = firrtl.regreset %clock, %reset, %c0_ui32 {name = "reg2"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<32>) -> !firrtl.uint<32>
 
     // CHECK-NEXT: %0 = sv.read_inout %reg : !rtl.inout<i32>
-    // CHECK-NEXT: %false = rtl.constant false
     // CHECK-NEXT: %1 = comb.concat %false, %0 : (i1, i32) -> i33
     // CHECK-NEXT: %2 = sv.read_inout %reg2 : !rtl.inout<i32>
-    // CHECK-NEXT: %false_0 = rtl.constant false
-    // CHECK-NEXT: %3 = comb.concat %false_0, %2 : (i1, i32) -> i33
+    // CHECK-NEXT: %3 = comb.concat %false, %2 : (i1, i32) -> i33
     // CHECK-NEXT: %4 = comb.add %1, %3 : i33
     // CHECK-NEXT: %5 = comb.extract %4 from 1 : (i33) -> i32
     // CHECK-NEXT: %6 = comb.mux %io_en, %io_d, %5 : i32
@@ -576,13 +559,12 @@ firrtl.circuit "Simple" {
     // COM: --------------------------------------------------------------------
     // CHECK-NEXT: [[data_inout:%.+]] = sv.array_index_inout %_M[%c0_i4]
     // CHECK-NEXT: [[data:%.+]] = sv.read_inout [[data_inout]]
-    // CHECK-NEXT: %c-4_i4 = rtl.constant -4 : i4
     // CHECK-NEXT:  = sv.textual_value "RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK({{.*}})"(%c0_i4, [[data]], %c-4_i4) : (i4, i42, i4) -> i42
 
     // COM: Write port.
     // COM: --------------------------------------------------------------------
     // CHECK-NEXT: %[[cond:.+]] = comb.and %inpred, %true
-    // CHECK-NEXT: %[[mem:.+]] = sv.array_index_inout %_M[%c0_i4_2] : !rtl.inout<uarray<12xi42>>, i4
+    // CHECK-NEXT: %[[mem:.+]] = sv.array_index_inout %_M[%c0_i4_0] : !rtl.inout<uarray<12xi42>>, i4
     // CHECK-NEXT: sv.alwaysff(posedge %clock2) {
     // CHECK-NEXT:   sv.if %[[cond]]  {
     // CHECK-NEXT:     sv.passign %[[mem]], %indata : i42
@@ -654,21 +636,19 @@ firrtl.circuit "Simple" {
     firrtl.connect %15, %wData : !firrtl.flip<uint<8>>, !firrtl.uint<8>
     firrtl.connect %rData, %10: !firrtl.flip<uint<8>>, !firrtl.uint<8>
     // COM: --------------------------------------------------------------------
-    // CHECK-NEXT: %memory = sv.reg  : !rtl.inout<uarray<16xi8>>
+    // CHECK: %memory = sv.reg  : !rtl.inout<uarray<16xi8>>
     // COM: --------------------------------------------------------------------
     // COM: Check that the read pipe is setup. This should delay the
     // COM: "en" and "addr" fields by two cycles.
     // COM: --------------------------------------------------------------------
-    // CHECK-NEXT: %memory_r_en_pipe   = sv.reg : !rtl.inout<uarray<2xi1>>
+    // CHECK: %memory_r_en_pipe   = sv.reg : !rtl.inout<uarray<2xi1>>
     // CHECK-NEXT: %memory_r_addr_pipe = sv.reg : !rtl.inout<uarray<2xi4>>
-    // CHECK-NEXT: %[[zero:.+]] = rtl.constant false
-    // CHECK-NEXT: %[[en_0:.+]] = sv.array_index_inout %memory_r_en_pipe[%[[zero]]]
-    // CHECK-NEXT: %[[addr_0:.+]] = sv.array_index_inout %memory_r_addr_pipe[%[[zero]]]
+    // CHECK: %[[en_0:.+]] = sv.array_index_inout %memory_r_en_pipe[%false]
+    // CHECK-NEXT: %[[addr_0:.+]] = sv.array_index_inout %memory_r_addr_pipe[%false]
     // CHECK-NEXT: %[[rden_0:.+]] = sv.read_inout %[[en_0]]
     // CHECK-NEXT: %[[rdaddr_0:.+]] = sv.read_inout %[[addr_0]]
-    // CHECK-NEXT: %[[one:.+]] = rtl.constant true
-    // CHECK-NEXT: %[[en_1:.+]] = sv.array_index_inout %memory_r_en_pipe[%[[one]]]
-    // CHECK-NEXT: %[[addr_1:.+]] = sv.array_index_inout %memory_r_addr_pipe[%[[one]]]
+    // CHECK-NEXT: %[[en_1:.+]] = sv.array_index_inout %memory_r_en_pipe[%true]
+    // CHECK-NEXT: %[[addr_1:.+]] = sv.array_index_inout %memory_r_addr_pipe[%true]
     // CHECK-NEXT: %[[rden_1:.+]] = sv.read_inout %[[en_1]]
     // CHECK-NEXT: %[[rdaddr_1:.+]] = sv.read_inout %[[addr_1]]
     // CHECK-NEXT: sv.alwaysff(posedge %clock) {
@@ -691,11 +671,10 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: %memory_w_addr_pipe = sv.reg : !rtl.inout<uarray<1xi4>>
     // CHECK-NEXT: %memory_w_mask_pipe = sv.reg : !rtl.inout<uarray<1xi1>>
     // CHECK-NEXT: %memory_w_data_pipe = sv.reg : !rtl.inout<uarray<1xi8>>
-    // CHECK-NEXT: %[[zero_0:.+]] = rtl.constant false
-    // CHECK-NEXT: %[[en_0:.+]]   = sv.array_index_inout %memory_w_en_pipe[%[[zero_0]]]
-    // CHECK-NEXT: %[[addr_0:.+]] = sv.array_index_inout %memory_w_addr_pipe[%[[zero_0]]]
-    // CHECK-NEXT: %[[mask_0:.+]] = sv.array_index_inout %memory_w_mask_pipe[%[[zero_0]]]
-    // CHECK-NEXT: %[[data_0:.+]] = sv.array_index_inout %memory_w_data_pipe[%[[zero_0]]]
+    // CHECK-NEXT: %[[en_0:.+]]   = sv.array_index_inout %memory_w_en_pipe[%false]
+    // CHECK-NEXT: %[[addr_0:.+]] = sv.array_index_inout %memory_w_addr_pipe[%false]
+    // CHECK-NEXT: %[[mask_0:.+]] = sv.array_index_inout %memory_w_mask_pipe[%false]
+    // CHECK-NEXT: %[[data_0:.+]] = sv.array_index_inout %memory_w_data_pipe[%false]
     // CHECK-NEXT: %[[rden_0:.+]] = sv.read_inout %[[en_0]]
     // CHECK-NEXT: %[[rdaddr_0:.+]] = sv.read_inout %[[addr_0]]
     // CHECK-NEXT: %[[rdmask_0:.+]] = sv.read_inout %[[mask_0]]
@@ -718,32 +697,25 @@ firrtl.circuit "Simple" {
     // COM: --------------------------------------------------------------------
     // CHECK:     sv.ifdef "SYNTHESIS" {
     // CHECK:     } else {
-    // CHECK:       %[[zero:.+]] = rtl.constant false
-    // CHECK:       %[[r_en_0:.+]] = sv.array_index_inout %memory_r_en_pipe[%[[zero]]]
+    // CHECK:       %[[r_en_0:.+]] = sv.array_index_inout %memory_r_en_pipe[%false]
     // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[r_en_0]], %[[random]]
-    // CHECK:       %[[zero:.+]] = rtl.constant false
-    // CHECK:       %[[r_addr_0:.+]] = sv.array_index_inout %memory_r_addr_pipe[%[[zero]]]
+    // CHECK:       %[[r_addr_0:.+]] = sv.array_index_inout %memory_r_addr_pipe[%false]
     // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[r_addr_0]], %[[random]]
-    // CHECK:       %[[one:.+]] = rtl.constant true
-    // CHECK:       %[[r_addr_1:.+]] = sv.array_index_inout %memory_r_addr_pipe[%[[one]]]
+    // CHECK:       %[[r_addr_1:.+]] = sv.array_index_inout %memory_r_addr_pipe[%true]
     // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[r_addr_1]], %[[random]]
-    // CHECK:       %[[zero:.+]] = rtl.constant false
-    // CHECK:       %[[w_en_0:.+]] = sv.array_index_inout %memory_w_en_pipe[%[[zero]]]
+    // CHECK:       %[[w_en_0:.+]] = sv.array_index_inout %memory_w_en_pipe[%false]
     // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[w_en_0]], %[[random]]
-    // CHECK:       %[[zero:.+]] = rtl.constant false
-    // CHECK:       %[[w_addr_0:.+]] = sv.array_index_inout %memory_w_addr_pipe[%[[zero]]]
+    // CHECK:       %[[w_addr_0:.+]] = sv.array_index_inout %memory_w_addr_pipe[%false]
     // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[w_addr_0]], %[[random]]
-    // CHECK:       %[[zero:.+]] = rtl.constant false
-    // CHECK:       %[[w_mask_0:.+]] = sv.array_index_inout %memory_w_mask_pipe[%[[zero]]]
+    // CHECK:       %[[w_mask_0:.+]] = sv.array_index_inout %memory_w_mask_pipe[%false]
     // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[w_mask_0]], %[[random]]
-    // CHECK:       %[[zero:.+]] = rtl.constant false
-    // CHECK:       %[[w_data_0:.+]] = sv.array_index_inout %memory_w_data_pipe[%[[zero]]]
+    // CHECK:       %[[w_data_0:.+]] = sv.array_index_inout %memory_w_data_pipe[%false]
     // CHECK:       %[[random:.+]] = sv.textual_value "`RANDOM"
     // CHECK:       sv.bpassign %[[w_data_0]], %[[random]]
     // CHECK:     }
@@ -768,8 +740,8 @@ firrtl.circuit "Simple" {
   }
 
   // CHECK-LABEL: rtl.module @top_mod() -> (%tmp27: i23) {
-  // CHECK-NEXT:    %c42_i23 = rtl.constant 42 : i23
   // CHECK-NEXT:    %c0_i23 = rtl.constant 0 : i23
+  // CHECK-NEXT:    %c42_i23 = rtl.constant 42 : i23
   // CHECK-NEXT:    rtl.output %c0_i23 : i23
   // CHECK-NEXT:  }
   firrtl.module @top_mod(%tmp27: !firrtl.flip<uint<23>>) {

@@ -843,6 +843,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   Value getLoweredAndExtendedValue(Value value, Type destType);
   Value getLoweredAndExtOrTruncValue(Value value, Type destType);
   LogicalResult setLowering(Value orig, Value result);
+  LogicalResult setPossiblyFoldedLowering(Value orig, Value result);
   template <typename ResultOpType, typename... CtorArgTypes>
   LogicalResult setLoweringTo(Operation *orig, CtorArgTypes... args);
   void emitRandomizePrologIfNeeded();
@@ -1012,6 +1013,10 @@ private:
   /// type.
   DenseMap<Value, Value> valueMapping;
 
+  /// This keeps track of constants that we have created so we can reuse them.
+  /// This is populated by the getOrCreateIntConstant method.
+  DenseMap<APInt, Value> rtlConstantMap;
+
   // We auto-unique graph-level blocks to reduce the amount of generated
   // code and ensure that side effects are properly ordered in FIRRTL.
   llvm::SmallDenseMap<Value, sv::AlwaysOp> alwaysBlocks;
@@ -1130,8 +1135,16 @@ void FIRRTLLowering::optimizeTemporaryWire(sv::WireOp wire) {
 // Helpers
 //===----------------------------------------------------------------------===//
 
+/// Check to see if we've already lowered the specified constant.  If so, return
+/// it.  Otherwise create it and put it in the entry block for reuse.
 Value FIRRTLLowering::getOrCreateIntConstant(const APInt &value) {
-  return builder.create<rtl::ConstantOp>(value);
+  auto &entry = rtlConstantMap[value];
+  if (entry)
+    return entry;
+
+  OpBuilder entryBuilder(&theModule.getBodyBlock()->front());
+  entry = entryBuilder.create<rtl::ConstantOp>(builder.getLoc(), value);
+  return entry;
 }
 
 /// Zero bit operands end up looking like failures from getLoweredValue.  This
@@ -1305,13 +1318,38 @@ LogicalResult FIRRTLLowering::setLowering(Value orig, Value result) {
   return success();
 }
 
+/// Set the lowering for a value to the specified result.  This came from a
+/// possible folding, so check to see if we need to handle a constant.
+LogicalResult FIRRTLLowering::setPossiblyFoldedLowering(Value orig,
+                                                        Value result) {
+  // If this is a constant, check to see if we have it in our unique mapping:
+  // it could have come from folding an operation.
+  if (auto cst = dyn_cast_or_null<rtl::ConstantOp>(result.getDefiningOp())) {
+    auto &entry = rtlConstantMap[cst.value()];
+    if (entry == cst) {
+      // We're already using an entry in the constant map, nothing to do.
+    } else if (entry) {
+      // We already had this constant, reuse the one we have instead of the
+      // one we just folded.
+      result = entry;
+      cst->erase();
+    } else {
+      // This is a new constant.  Remember it!
+      entry = cst;
+      cst->moveBefore(&theModule.getBodyBlock()->front());
+    }
+  }
+
+  return setLowering(orig, result);
+}
+
 /// Create a new operation with type ResultOpType and arguments CtorArgTypes,
 /// then call setLowering with its result.
 template <typename ResultOpType, typename... CtorArgTypes>
 LogicalResult FIRRTLLowering::setLoweringTo(Operation *orig,
                                             CtorArgTypes... args) {
   auto result = builder.createOrFold<ResultOpType>(args...);
-  return setLowering(orig->getResult(0), result);
+  return setPossiblyFoldedLowering(orig->getResult(0), result);
 }
 
 /// Switch the insertion point of the current builder to the end of the
