@@ -107,7 +107,11 @@ void VerbatimExprOp::getAsmResultNames(
   // string up to a weird character (like a paren) and currently ignore
   // parenthesized expressions.
   auto isOkCharacter = [](char c) { return llvm::isAlnum(c) || c == '_'; };
-  auto name = string().take_while(isOkCharacter);
+  auto name = string();
+  // Ignore a leading ` in macro name.
+  if (name.startswith("`"))
+    name = name.drop_front();
+  name = name.take_while(isOkCharacter);
   if (!name.empty())
     setNameFn(getResult(), name);
 }

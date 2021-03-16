@@ -233,14 +233,14 @@ firrtl.circuit "Simple" {
     // CHECK: sv.always posedge %clock {
     // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
     // CHECK-NEXT:   } else {
-    // CHECK-NEXT:     [[TV:%.+]] = sv.verbatim.expr "`PRINTF_COND_" : () -> i1
-    // CHECK-NEXT:     [[AND:%.+]] = comb.and [[TV]], %reset
+    // CHECK-NEXT:     %PRINTF_COND_ = sv.verbatim.expr "`PRINTF_COND_" : () -> i1
+    // CHECK-NEXT:     [[AND:%.+]] = comb.and %PRINTF_COND_, %reset
     // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       sv.fwrite "No operands!\0A"
     // CHECK-NEXT:     }
-    // CHECK-NEXT:     %5 = sv.verbatim.expr "`PRINTF_COND_" : () -> i1
-    // CHECK-NEXT:     %6 = comb.and %5, %reset : i1
-    // CHECK-NEXT:     sv.if %6  {
+    // CHECK-NEXT:     %PRINTF_COND__0 = sv.verbatim.expr "`PRINTF_COND_" : () -> i1
+    // CHECK-NEXT:     [[AND:%.+]] = comb.and %PRINTF_COND__0, %reset : i1
+    // CHECK-NEXT:     sv.if [[AND]] {
     // CHECK-NEXT:       sv.fwrite "Hi %x %x\0A"(%2, %b) : i5, i4
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
@@ -272,9 +272,9 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: sv.always posedge %clock1 {
     // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
     // CHECK-NEXT:   } else {
-    // CHECK-NEXT:     %0 = sv.verbatim.expr "`STOP_COND_" : () -> i1
-    // CHECK-NEXT:     %1 = comb.and %0, %reset : i1
-    // CHECK-NEXT:     sv.if %1 {
+    // CHECK-NEXT:     %STOP_COND_ = sv.verbatim.expr "`STOP_COND_" : () -> i1
+    // CHECK-NEXT:     %0 = comb.and %STOP_COND_, %reset : i1
+    // CHECK-NEXT:     sv.if %0 {
     // CHECK-NEXT:       sv.fatal
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
@@ -284,9 +284,9 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: sv.always posedge %clock2 {
     // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
     // CHECK-NEXT:   } else {
-    // CHECK-NEXT:     %0 = sv.verbatim.expr "`STOP_COND_" : () -> i1
-    // CHECK-NEXT:     %1 = comb.and %0, %reset : i1
-    // CHECK-NEXT:     sv.if %1 {
+    // CHECK-NEXT:     %STOP_COND_ = sv.verbatim.expr "`STOP_COND_" : () -> i1
+    // CHECK-NEXT:     %0 = comb.and %STOP_COND_, %reset : i1
+    // CHECK-NEXT:     sv.if %0 {
     // CHECK-NEXT:       sv.finish
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
@@ -428,8 +428,8 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT:    sv.initial {
     // CHECK-NEXT:    sv.verbatim "`INIT_RANDOM_PROLOG_"
     // CHECK-NEXT:    sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-    // CHECK-NEXT:       %3 = sv.verbatim.expr "`RANDOM" : () -> i2
-    // CHECK-NEXT:        sv.bpassign %count, %3 : i2
+    // CHECK-NEXT:       %RANDOM = sv.verbatim.expr "`RANDOM" : () -> i2
+    // CHECK-NEXT:       sv.bpassign %count, %RANDOM : i2
     // CHECK-NEXT:     }
     // CHECK-NEXT:    }
     // CHECK-NEXT:  }
@@ -483,10 +483,10 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
     // CHECK-NEXT:       sv.if %reset  {
     // CHECK-NEXT:       } else {
-    // CHECK-NEXT:         %8 = sv.verbatim.expr "`RANDOM" : () -> i32
-    // CHECK-NEXT:         sv.bpassign %reg, %8 : i32
-    // CHECK-NEXT:         %9 = sv.verbatim.expr "`RANDOM" : () -> i32
-    // CHECK-NEXT:         sv.bpassign %reg2, %9 : i32
+    // CHECK-NEXT:         %RANDOM = sv.verbatim.expr "`RANDOM" : () -> i32
+    // CHECK-NEXT:         sv.bpassign %reg, %RANDOM : i32
+    // CHECK-NEXT:         %RANDOM_0 = sv.verbatim.expr "`RANDOM" : () -> i32
+    // CHECK-NEXT:         sv.bpassign %reg2, %RANDOM_0 : i32
     // CHECK-NEXT:       }
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
