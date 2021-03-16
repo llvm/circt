@@ -1899,7 +1899,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         auto depthCst = getOrCreateIntConstant(addrWidth, depth);
         value = builder.create<sv::VerbatimExprOp>(
             value.getType(),
-            "RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK({{0}}, {{1}}, {{2}})",
+            "`RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK({{0}}, {{1}}, {{2}})",
             ValueRange{addr, value, depthCst});
         circuitState.used_RANDOMIZE_GARBAGE_ASSIGN = 1;
       }
