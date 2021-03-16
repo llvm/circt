@@ -6,12 +6,12 @@ Rationale docs](https://mlir.llvm.org/docs/Rationale/).
 
 ## Introduction
 
-Digital logic is generally split into two orthogonal categories:
-combinational and sequential. CIRCT contains a `comb` dialect to model the
-basic combinational operations and the (future) `seq` dialect which is
-discussed here. The intention of the `seq` dialect is to provide a set of
-stateful constructs which can be used to model sequential logic, independent
-of the output method (e.g. SystemVerilog).
+Digital logic is generally split into two categories: combinational and
+sequential. CIRCT contains a `comb` dialect to model the basic combinational
+operations and the (future) `seq` dialect which is discussed here. The
+intention of the `seq` dialect is to provide a set of stateful constructs
+which can be used to model sequential logic, independent of the output method
+(e.g. SystemVerilog).
 
 We have yet to flesh this dialect out to represent all common stateful
 components. We start with a register and will build from there.
@@ -34,29 +34,37 @@ For the sake of precision, we use the following definitions:
   - **Register:** A synchronous, resettable memory element. Can be
   implemented using any of the above "circuit level" elements.
 
-## The register operation
+## The computational register operation
 
-The `seq.reg` op models an abstract notion of a "register", independent of
-its implementation (e.g. latch, D flip-flop). It is intended to be 'lowered'
-to a specific implementation, which may be an `sv.always_ff` block, a device
-primitive instantiation, or even a feedback loop in all `comb` logic. Our
-intention is to allow analysis and optimization of sequential logic without
-having to reason about timing-dependent behavior. This makes it somewhat
-distinct from the SystemVerilog register wherein one has to worry about reset
-behavior and implementation (latch vs. flip-flop).
+The `seq.compreg` op models an abstract notion of a "register", independent
+of its implementation (e.g. latch, D flip-flop). This specific register op is
+intended to support "computation support" or "reset-agnostic code" and thus
+it cannot be used to model all the behaviors of a SystemVerilog register.
+(E.g. FSM and pipeline registers.) It is intended to be 'lowered' to a
+specific implementation, which may be an `sv.always_ff` block, a device
+primitive instantiation, or even a feedback loop in all `comb` logic.
+
+Our intention is to allow analysis and optimization of sequential logic
+without having to reason about implementation-specific behavior. This makes
+it somewhat distinct from the SystemVerilog register wherein one has to
+account for details like reset behavior and implementation (latch vs.
+flip-flop).
 
 `Reg` has four operands:
 
-- **input**: The value to be captured at 'clock'. Generally called 'q'.
-Accepts any type, results in the same type.
+- **input**: The value to be captured at 'clock'. Generally called 'd'.
+Accepts any type, results in the same type. Does not support any notion of
+addressing, meaning that this operation sets / reads the entire value.
 - **clock**: Capture 'value' on the positive edge of this signal.
 - **reset**: Signal to set the state to 'resetValue'. Optional.
 - **resetValue**: A value which the state is set to upon reset. Required iff
 'reset' is present.
 
 ```mlir
-%d = seq.reg %input, %clk [, %reset [, %resetValue] ] : $type(input)
+%q = seq.compreg %input, %clk [, %reset, %resetValue ] : $type(input)
 ```
+
+Upon initialization, the state is defined to be uninitialized.
 
 ### Rationale
 
@@ -69,22 +77,22 @@ optimization) another op could be added.
 - Logical features:
   - Inclusion of optional 'reset' signal: This operand makes lowering to an
   efficient implementation of reset easier. Omission of it would require some
-  (potentially complex) analysis to find the reset mux if required (which it
-  usually is to ensure efficient synthesis).
+  (potentially complex) analysis to find the reset mux if required
   - Inclusion of 'resetValue': if we have a 'reset' signal, we need to
   include a value.
   - Omission of 'enable': enables are easily modeled via a multiplexer on the
-  input with one of the mux inputs as the output of the register. This
-  property makes 'enables' easier to detect than reset in the common case.
+  input with one of the mux inputs as the output of the register. This -- we
+  assume -- property makes 'enables' easier to detect than reset in the
+  common case.
 
 - Timing / clocking:
   - Omission of 'negedge' event on 'clock': this is easily modeled by
   inverting the clock value.
   - Omission of 'dual edge' event on 'clock': this is not expected to be
   terribly common.
-  - Omission of edge conditions on 'reset': The reset style shouldn't affect
-  logical correctness. It should, therefore, be determined by a lowering
-  pass.
+  - Omission of edge conditions on 'reset': Since this op specifically
+  targets "reset-agnostic code", the reset style shouldn't affect logical
+  correctness. It should, therefore, be determined by a lowering pass.
 
 ### Future considerations
 
@@ -95,6 +103,6 @@ the reg op.
 Async vs sync resets? There are some reasonble options here: attributes on
 this op or `clock` and `reset` types which are parameterized with that
 information.
-- Initial value: this register initializes to `x` (in SystemVerilog
-terminology). We will add an `initialValue` attribute if this proves
-insufficient.
+- Initial value: this register is uninitialized. Using an uninitialized value
+results in undefined behavior. We will add an `initialValue` attribute if
+this proves insufficient.
