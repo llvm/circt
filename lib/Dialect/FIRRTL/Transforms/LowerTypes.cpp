@@ -686,14 +686,13 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
     return;
 
   Value input = op.input();
-  FVectorType inputType;
   if (auto flipV = input.getType().cast<FIRRTLType>().dyn_cast<FlipType>()) {
-    inputType = flipV.getElementType().cast<FVectorType>();
     builder->emitError(
         "Lowering of dynamic assignment to vectors not supported");
     return;
-  } else
-    inputType = input.getType().cast<FIRRTLType>().cast<FVectorType>();
+  }
+  FVectorType inputType =
+      input.getType().cast<FIRRTLType>().cast<FVectorType>();
 
   // Record all the indices used for a multidim access.
   SmallVector<SubaccessOp, 8> indices(1, op);
