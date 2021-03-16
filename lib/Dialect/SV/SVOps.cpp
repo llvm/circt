@@ -18,13 +18,14 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/StringExtras.h"
 
 using namespace circt;
 using namespace sv;
 
 /// Return true if the specified operation is an expression.
 bool sv::isExpression(Operation *op) {
-  return isa<sv::TextualValueOp>(op) || isa<sv::GetModportOp>(op) ||
+  return isa<sv::VerbatimExprOp>(op) || isa<sv::GetModportOp>(op) ||
          isa<sv::ReadInterfaceSignalOp>(op) || isa<sv::ConstantXOp>(op) ||
          isa<sv::ConstantZOp>(op);
 }
@@ -94,6 +95,41 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
     p.printOptionalAttrDict(op->getAttrs());
   else
     p.printOptionalAttrDict(op->getAttrs(), {"name"});
+}
+
+//===----------------------------------------------------------------------===//
+// VerbatimExprOp
+//===----------------------------------------------------------------------===//
+
+void VerbatimExprOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  // If the string is macro like, then use a pretty name.  We only take the
+  // string up to a weird character (like a paren) and currently ignore
+  // parenthesized expressions.
+  auto isOkCharacter = [](char c) { return llvm::isAlnum(c) || c == '_'; };
+  auto name = string().take_while(isOkCharacter);
+  if (!name.empty())
+    setNameFn(getResult(), name);
+}
+
+//===----------------------------------------------------------------------===//
+// ConstantXOp / ConstantZOp
+//===----------------------------------------------------------------------===//
+
+void ConstantXOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  SmallVector<char, 32> specialNameBuffer;
+  llvm::raw_svector_ostream specialName(specialNameBuffer);
+  specialName << "x_" << getType();
+  setNameFn(getResult(), specialName.str());
+}
+
+void ConstantZOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  SmallVector<char, 32> specialNameBuffer;
+  llvm::raw_svector_ostream specialName(specialNameBuffer);
+  specialName << "z_" << getType();
+  setNameFn(getResult(), specialName.str());
 }
 
 //===----------------------------------------------------------------------===//

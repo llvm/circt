@@ -10,7 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-def TextualValueOp : SVOp<"textual_value", [NoSideEffect]> {
+def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface>;
+
+def VerbatimExprOp : SVOp<"verbatim.expr", [NoSideEffect, HasCustomSSAName]> {
   let summary = "Expression that expands to a value given SystemVerilog text";
   let description = [{
     This operation produces a typed value expressed by a string of
@@ -18,9 +20,10 @@ def TextualValueOp : SVOp<"textual_value", [NoSideEffect]> {
     only sensible as Verilog text.
 
     The text string is expected to have the highest precedence, so you should
-    include parentheses in the string if it isn't a single token.
+    include parentheses in the string if it isn't a single token.  This is also
+    assumed to not have side effects (use sv.verbatim) if you need them.
 
-    sv.textual_value allows operand substitutions with {{0}} syntax.
+    sv.verbatim.expr allows operand substitutions with {{0}} syntax.
     }];
 
   let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands);
@@ -36,7 +39,7 @@ def TextualValueOp : SVOp<"textual_value", [NoSideEffect]> {
   ];
 }
 
-def ConstantXOp : SVOp<"constantX", [NoSideEffect]> {
+def ConstantXOp : SVOp<"constantX", [NoSideEffect, HasCustomSSAName]> {
   let summary = "A constant of value 'x'";
   let description = [{
     This operation produces a constant value of 'x'.  This 'x' follows the
@@ -48,7 +51,7 @@ def ConstantXOp : SVOp<"constantX", [NoSideEffect]> {
   let assemblyFormat = " attr-dict `:` type($result)";
 }
 
-def ConstantZOp : SVOp<"constantZ", [NoSideEffect]> {
+def ConstantZOp : SVOp<"constantZ", [NoSideEffect, HasCustomSSAName]> {
   let summary = "A constant of value 'z'";
   let description = [{
     This operation produces a constant value of 'z'.  This 'z' follows the

@@ -226,7 +226,10 @@ def ConstantOp
     /// matching a specified MLIR IntegerType.  This shouldn't be used for
     /// general constant folding because it only works with values that can be
     /// expressed in an int64_t.  Use APInt's instead.
-    OpBuilder<(ins "Type":$type, "int64_t":$value)>
+    OpBuilder<(ins "Type":$type, "int64_t":$value)>,
+
+    /// Build a ConstantOp from a prebuilt attribute.
+    OpBuilder<(ins "IntegerAttr":$value)>
   ];
   let extraClassDeclaration = [{
     APInt getValue() {

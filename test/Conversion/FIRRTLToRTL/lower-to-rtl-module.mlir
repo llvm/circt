@@ -6,9 +6,9 @@
 // CHECK-NOT: firrtl.circuit
 
 // We should get a large header boilerplate.
-// CHECK:   sv.ifdef.procedural "RANDOMIZE_GARBAGE_ASSIGN"  {
-// CHECK-NEXT:   sv.verbatim "`define RANDOMIZE"
-// CHECK-NEXT:  }
+// CHECK:   sv.ifdef.procedural "PRINTF_COND" {
+// CHECK-NEXT:   sv.verbatim "`define PRINTF_COND_ (`PRINTF_COND)"
+// CHECK-NEXT:  } else  {
 firrtl.circuit "Simple" {
 
    // CHECK-LABEL: rtl.module.extern @MyParameterizedExtModule(

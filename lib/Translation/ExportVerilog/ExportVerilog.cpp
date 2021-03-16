@@ -849,7 +849,7 @@ private:
 
   SubExprInfo visitSV(GetModportOp op);
   SubExprInfo visitSV(ReadInterfaceSignalOp op);
-  SubExprInfo visitSV(TextualValueOp op);
+  SubExprInfo visitSV(VerbatimExprOp op);
   SubExprInfo visitSV(ConstantXOp op);
   SubExprInfo visitSV(ConstantZOp op);
 
@@ -1240,7 +1240,7 @@ SubExprInfo ExprEmitter::visitSV(ReadInterfaceSignalOp op) {
   return {Selection, IsUnsigned};
 }
 
-SubExprInfo ExprEmitter::visitSV(TextualValueOp op) {
+SubExprInfo ExprEmitter::visitSV(VerbatimExprOp op) {
   emitTextWithSubstitutions(op.string(), op, [&](Value operand) {
     emitSubExpr(operand, LowestPrecedence, OOLBinary);
   });
