@@ -141,6 +141,7 @@ private:
   // State to keep track of arguments and operations to clean up at the end.
   SmallVector<unsigned, 8> argsToRemove;
   SmallVector<Operation *, 16> opsToRemove;
+  DenseSet<Operation*> ignoreOps;
 
   // State to keep a mapping from (Value, Identifier) pairs to flattened values.
   DenseMap<ValueIdentifier, Value> loweredBundleValues;
@@ -675,13 +676,12 @@ static IntegerAttr getIntAttr(const APInt &value, MLIRContext *context) {
 // flattened vector based on the index.
 // x = a[index] is lowered to ::
 // x = index == 3 ? a_3 : index == 2 ? a_2 : index == 1 ? a_1:a_0
-// TODO: This currently does not handle multi-dim vectors and
-// assignment to vectors.
+// TODO: This currently does not handle assignment to vectors.
 void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
-  for (auto removed : opsToRemove)
-    if (removed == op)
-      return;
-  
+  // Ignore operations that are part of a multidim access, will be deleted later.
+  if (ignoreOps.count(op))
+    return;
+
   Value input = op.input();
   FVectorType inputType;
   if (auto flipV = input.getType().cast<FIRRTLType>().dyn_cast<FlipType>()) {
@@ -692,12 +692,16 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   } else
     inputType = input.getType().cast<FIRRTLType>().cast<FVectorType>();
 
-  SmallVector<SubaccessOp, 8> indices;
-  SmallVector<size_t, 8> indicesRange;
-  indices.push_back(op);
-  indicesRange.push_back(0);
+  // Record all the indices used for a multidim access.
+  SmallVector<SubaccessOp, 8> indices(1, op);
+  // This is used to check all possible values of the loop indices and select the appropriate vector element.
+  SmallVector<size_t, 8> indicesRange(1, 0);
   SubaccessOp multiDimAccess  = op;
+  // Iterate over all indirect references of a multidim vector to get the final element access.
+  // This loop iterates till the element type of the input vector is also a vector.
   while (inputType.getElementType().isa<FVectorType>()){
+    // The user of a multidim vector access is the next dimension reference.
+    // Assumptions: For any access y = a[i][j] -> x = a[i] and y = x[j] exists, where 'y = x[j]' is the user of x.
     multiDimAccess = dyn_cast<SubaccessOp>(*(multiDimAccess->getUsers().begin()));
     inputType = multiDimAccess.input().getType().cast<FIRRTLType>().cast<FVectorType>();
     llvm::dbgs()<<"\n users::";
@@ -759,7 +763,6 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   Value constTrue = builder->create<ConstantOp>(op.getLoc(), UIntType::get(op.getContext(), 1),getIntAttr(APInt(1,1), op.getContext()));
   size_t dim =indices.size()-1;
   // Iterate for each index into the vector.
-  //for (size_t indexInt = 1; indexInt < maxElems; indexInt++) {
   while (loweredVectorElem < loweredVector.size()){
 
     Value isIndexEq = constTrue;
@@ -824,13 +827,15 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   } 
   else {
     for (size_t i=0; i < indices.size()-1; i++){
-    llvm::dbgs()<<"\n erasing::";
+      llvm::dbgs()<<"\n erasing::";
       indices[i].dump();
+      ignoreOps.insert(indices[i]);
       opsToRemove.push_back(indices[i]);
     }
     op = indices[indices.size()-1];
     op.replaceAllUsesWith(muxTreeVec[0]);
   }
+  ignoreOps.insert(op);
   opsToRemove.push_back(op);
 }
 
