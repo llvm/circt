@@ -47,7 +47,7 @@ jobs:
   build-circt:
     name: Build and Test
     needs: build-llvm
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     container:
       image: ghcr.io/circt/images/circt-integration-test:v5
     strategy:
