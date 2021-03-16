@@ -141,7 +141,7 @@ private:
   // State to keep track of arguments and operations to clean up at the end.
   SmallVector<unsigned, 8> argsToRemove;
   SmallVector<Operation *, 16> opsToRemove;
-  DenseSet<Operation*> ignoreOps;
+  DenseSet<Operation *> ignoreOps;
 
   // State to keep a mapping from (Value, Identifier) pairs to flattened values.
   DenseMap<ValueIdentifier, Value> loweredBundleValues;
@@ -596,6 +596,8 @@ void TypeLoweringVisitor::visitDecl(RegOp op) {
 // rest of the bundle and adds the flattened values to the mapping for each
 // partial suffix.
 void TypeLoweringVisitor::visitExpr(SubfieldOp op) {
+  if (ignoreOps.count(op))
+    return;
   Value input = op.input();
   StringRef fieldname = op.fieldname();
   FIRRTLType resultType = op.getType();
@@ -678,7 +680,8 @@ static IntegerAttr getIntAttr(const APInt &value, MLIRContext *context) {
 // x = index == 3 ? a_3 : index == 2 ? a_2 : index == 1 ? a_1:a_0
 // TODO: This currently does not handle assignment to vectors.
 void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
-  // Ignore operations that are part of a multidim access, will be deleted later.
+  // Ignore operations that are part of a multidim access, will be deleted
+  // later.
   if (ignoreOps.count(op))
     return;
 
@@ -694,31 +697,30 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
 
   // Record all the indices used for a multidim access.
   SmallVector<SubaccessOp, 8> indices(1, op);
-  // This is used to check all possible values of the loop indices and select the appropriate vector element.
+  // This is used to build the loop index vector and check all possible values
+  // of the loop indices and select the appropriate vector element after
+  // flattening.
   SmallVector<size_t, 8> indicesRange(1, 0);
-  SubaccessOp multiDimAccess  = op;
-  // Iterate over all indirect references of a multidim vector to get the final element access.
-  // This loop iterates till the element type of the input vector is also a vector.
-  while (inputType.getElementType().isa<FVectorType>()){
+  SubaccessOp multiDimAccess = op;
+  // Iterate over all indirect references of a multidim vector to get the final
+  // element access. This loop iterates till the element type of the input
+  // vector is also a vector.
+  while (inputType.getElementType().isa<FVectorType>()) {
     // The user of a multidim vector access is the next dimension reference.
-    // Assumptions: For any access y = a[i][j] -> x = a[i] and y = x[j] exists, where 'y = x[j]' is the user of x.
-    multiDimAccess = dyn_cast<SubaccessOp>(*(multiDimAccess->getUsers().begin()));
-    inputType = multiDimAccess.input().getType().cast<FIRRTLType>().cast<FVectorType>();
-    llvm::dbgs()<<"\n users::";
-    multiDimAccess->dump();
+    // Assumptions: For any access y = a[i][j] -> x = a[i] and y = x[j] exists,
+    // where 'y = x[j]' is the user of x.
+    // TODO: Handle the case when a[i][j] and a[i][k] exists, currently multiple
+    // users of a[i] case is not handled.
+    multiDimAccess =
+        dyn_cast<SubaccessOp>(*(multiDimAccess->getUsers().begin()));
+    inputType =
+        multiDimAccess.input().getType().cast<FIRRTLType>().cast<FVectorType>();
     indices.push_back(multiDimAccess);
     indicesRange.push_back(0);
   }
+  // The mux tree starts selecting from 1st element, so update the range of the
+  // outermost dimension.
   indicesRange.back() = 1;
-  //while ( (multiDimAccess = dyn_cast<SubaccessOp>(*(multiDimAccess->getUsers().begin()))) ){
-  //  auto input = multiDimAccess.input();
-  //  if (input.getType().cast<FIRRTLType>().dyn_cast<FVectorType>())
-  //    break;
-  //  llvm::dbgs()<<"\n users::";
-  //  multiDimAccess->dump();
-  //  indices.push_back(multiDimAccess);
-  //  indicesRange.push_back(0);
-  //}
   FIRRTLType resultType = inputType.getElementType();
 
   DenseMap<StringRef, SubfieldOp> subfieldUsers;
@@ -730,6 +732,7 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   // tree according to the corresponding element type. Else the mux tree output
   // is simply the vector element type.
   if (vectorOfBundleType) {
+    // User of a vector of bundles is a SubfieldOp.
     for (auto u : op->getUsers())
       if (auto subField = dyn_cast<SubfieldOp>(u))
         subfieldUsers[subField.fieldname()] = subField;
@@ -760,45 +763,39 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
     muxTreeVec.push_back(loweredVector[loweredVectorElem]);
   }
 
-  Value constTrue = builder->create<ConstantOp>(op.getLoc(), UIntType::get(op.getContext(), 1),getIntAttr(APInt(1,1), op.getContext()));
-  size_t dim =indices.size()-1;
+  Value constTrue = builder->create<ConstantOp>(
+      op.getLoc(), UIntType::get(op.getContext(), 1),
+      getIntAttr(APInt(1, 1), op.getContext()));
+  size_t dim = indices.size() - 1;
   // Iterate for each index into the vector.
-  while (loweredVectorElem < loweredVector.size()){
+  while (loweredVectorElem < loweredVector.size()) {
 
     Value isIndexEq = constTrue;
-    llvm::dbgs() << "\n printing ::";
-    for (auto x:indicesRange)
-      llvm::dbgs()<< ","<< x;
-    for (size_t i= indices.size(); i >=1; ){
+    for (size_t i = indices.size(); i >= 1;) {
+      // Start from the outermost dimention index.
       i--;
-      llvm::dbgs()<< "\n i ="<< i;
       auto index = indices[i].index();
       auto indexInt = indicesRange[i];
       FIRRTLType indexType = index.getType().cast<FIRRTLType>();
-      size_t maxElems = (1 << indexType.getBitWidthOrSentinel());
-      // Make sure, we donot perform out of bounds access here ?
-      //if (maxElems < inputType.getNumElements())
-      //  maxElems = inputType.getNumElements();
 
       auto selectWidth = indexType.getBitWidthOrSentinel();
       // Create " && index == indexInt?"
-      isIndexEq = builder->create<AndPrimOp>(UIntType::get(op.getContext(), 1), isIndexEq,
+      isIndexEq = builder->create<AndPrimOp>(
+          UIntType::get(op.getContext(), 1), isIndexEq,
           builder->create<EQPrimOp>(
-            op.getLoc(), UIntType::get(op.getContext(), 1), index,
-            builder->create<ConstantOp>(
-              op.getLoc(), UIntType::get(op.getContext(), selectWidth),
-              getIntAttr(APInt(selectWidth, indexInt), op.getContext()))));
-      //if (i == 0) {
-      //  indicesRange[0] = (indicesRange[0] + 1 )% maxElems;
-      //  if (!indicesRange[0]) 
-      //    dim = 1;
-      //} else 
-      if (i == dim){
-        indicesRange[i] = (indicesRange[i] + 1 )% maxElems;
-        if (!indicesRange[i]) 
+              op.getLoc(), UIntType::get(op.getContext(), 1), index,
+              builder->create<ConstantOp>(
+                  op.getLoc(), UIntType::get(op.getContext(), selectWidth),
+                  getIntAttr(APInt(selectWidth, indexInt), op.getContext()))));
+      if (i == dim) {
+        // Generate the range of constants to compare with the index.
+        size_t maxElems = (1 << indexType.getBitWidthOrSentinel());
+        // Make sure, we donot perform out of bounds access here ?
+        indicesRange[i] = (indicesRange[i] + 1) % maxElems;
+        if (!indicesRange[i])
           dim--;
-        else 
-          dim = indices.size()-1;
+        else
+          dim = indices.size() - 1;
       }
     }
 
@@ -807,9 +804,6 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
       muxTreeVec[m] = builder->create<MuxPrimOp>(
           op.getLoc(), muxTreeOutputType[m], isIndexEq,
           loweredVector[loweredVectorElem++], muxTreeVec[m]);
-
-    llvm::dbgs()<<"\n muxtree::";
-    muxTreeVec[0].dump();
   }
 
   // If this is a vector of bundle then, replace each element access with the
@@ -821,18 +815,16 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
       if (iter == subfieldUsers.end())
         continue;
       iter->getSecond().replaceAllUsesWith(muxTreeVec[m]);
-      iter->getSecond().erase();
+      ignoreOps.insert(iter->getSecond());
+      opsToRemove.push_back(iter->getSecond());
       m++;
     }
-  } 
-  else {
-    for (size_t i=0; i < indices.size()-1; i++){
-      llvm::dbgs()<<"\n erasing::";
-      indices[i].dump();
+  } else {
+    for (size_t i = 0; i < indices.size() - 1; i++) {
       ignoreOps.insert(indices[i]);
       opsToRemove.push_back(indices[i]);
     }
-    op = indices[indices.size()-1];
+    op = indices[indices.size() - 1];
     op.replaceAllUsesWith(muxTreeVec[0]);
   }
   ignoreOps.insert(op);
