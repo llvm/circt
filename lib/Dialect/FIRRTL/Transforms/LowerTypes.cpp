@@ -678,10 +678,11 @@ static IntegerAttr getIntAttr(const APInt &value, MLIRContext *context) {
 // TODO: This currently does not handle multi-dim vectors and
 // assignment to vectors.
 void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
+  for (auto removed : opsToRemove)
+    if (removed == op)
+      return;
+  
   Value input = op.input();
-  Value index = op.index();
-  FIRRTLType resultType = op.getType();
-  FIRRTLType indexType = index.getType().cast<FIRRTLType>();
   FVectorType inputType;
   if (auto flipV = input.getType().cast<FIRRTLType>().dyn_cast<FlipType>()) {
     inputType = flipV.getElementType().cast<FVectorType>();
@@ -690,6 +691,32 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
     return;
   } else
     inputType = input.getType().cast<FIRRTLType>().cast<FVectorType>();
+
+  SmallVector<SubaccessOp, 8> indices;
+  SmallVector<size_t, 8> indicesRange;
+  indices.push_back(op);
+  indicesRange.push_back(0);
+  SubaccessOp multiDimAccess  = op;
+  while (inputType.getElementType().isa<FVectorType>()){
+    multiDimAccess = dyn_cast<SubaccessOp>(*(multiDimAccess->getUsers().begin()));
+    inputType = multiDimAccess.input().getType().cast<FIRRTLType>().cast<FVectorType>();
+    llvm::dbgs()<<"\n users::";
+    multiDimAccess->dump();
+    indices.push_back(multiDimAccess);
+    indicesRange.push_back(0);
+  }
+  indicesRange.back() = 1;
+  //while ( (multiDimAccess = dyn_cast<SubaccessOp>(*(multiDimAccess->getUsers().begin()))) ){
+  //  auto input = multiDimAccess.input();
+  //  if (input.getType().cast<FIRRTLType>().dyn_cast<FVectorType>())
+  //    break;
+  //  llvm::dbgs()<<"\n users::";
+  //  multiDimAccess->dump();
+  //  indices.push_back(multiDimAccess);
+  //  indicesRange.push_back(0);
+  //}
+  FIRRTLType resultType = inputType.getElementType();
+
   DenseMap<StringRef, SubfieldOp> subfieldUsers;
   // Get the bundle type, if op is a vector of bundle type.
   auto vectorOfBundleType = inputType.getElementType().dyn_cast<BundleType>();
@@ -728,26 +755,58 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   for (; loweredVectorElem < muxTreeOutputType.size(); loweredVectorElem++) {
     muxTreeVec.push_back(loweredVector[loweredVectorElem]);
   }
-  size_t maxElems = (1 << indexType.getBitWidthOrSentinel());
-  // Make sure, we donot perform out of bounds access here ?
-  if (maxElems < inputType.getNumElements())
-    maxElems = inputType.getNumElements();
-  auto selectWidth = indexType.getBitWidthOrSentinel();
 
+  Value constTrue = builder->create<ConstantOp>(op.getLoc(), UIntType::get(op.getContext(), 1),getIntAttr(APInt(1,1), op.getContext()));
+  size_t dim =indices.size()-1;
   // Iterate for each index into the vector.
-  for (size_t indexInt = 1; indexInt < maxElems; indexInt++) {
-    // Create "index == indexInt?"
-    auto isIndexEq = builder->create<EQPrimOp>(
-        op.getLoc(), UIntType::get(op.getContext(), 1), index,
-        builder->create<ConstantOp>(
-            op.getLoc(), UIntType::get(op.getContext(), selectWidth),
-            getIntAttr(APInt(selectWidth, indexInt), op.getContext())));
+  //for (size_t indexInt = 1; indexInt < maxElems; indexInt++) {
+  while (loweredVectorElem < loweredVector.size()){
+
+    Value isIndexEq = constTrue;
+    llvm::dbgs() << "\n printing ::";
+    for (auto x:indicesRange)
+      llvm::dbgs()<< ","<< x;
+    for (size_t i= indices.size(); i >=1; ){
+      i--;
+      llvm::dbgs()<< "\n i ="<< i;
+      auto index = indices[i].index();
+      auto indexInt = indicesRange[i];
+      FIRRTLType indexType = index.getType().cast<FIRRTLType>();
+      size_t maxElems = (1 << indexType.getBitWidthOrSentinel());
+      // Make sure, we donot perform out of bounds access here ?
+      //if (maxElems < inputType.getNumElements())
+      //  maxElems = inputType.getNumElements();
+
+      auto selectWidth = indexType.getBitWidthOrSentinel();
+      // Create " && index == indexInt?"
+      isIndexEq = builder->create<AndPrimOp>(UIntType::get(op.getContext(), 1), isIndexEq,
+          builder->create<EQPrimOp>(
+            op.getLoc(), UIntType::get(op.getContext(), 1), index,
+            builder->create<ConstantOp>(
+              op.getLoc(), UIntType::get(op.getContext(), selectWidth),
+              getIntAttr(APInt(selectWidth, indexInt), op.getContext()))));
+      //if (i == 0) {
+      //  indicesRange[0] = (indicesRange[0] + 1 )% maxElems;
+      //  if (!indicesRange[0]) 
+      //    dim = 1;
+      //} else 
+      if (i == dim){
+        indicesRange[i] = (indicesRange[i] + 1 )% maxElems;
+        if (!indicesRange[i]) 
+          dim--;
+        else 
+          dim = indices.size()-1;
+      }
+    }
 
     // Generate the mux tree for each element of the bundle.
     for (size_t m = 0; m < muxTreeVec.size(); m++)
       muxTreeVec[m] = builder->create<MuxPrimOp>(
           op.getLoc(), muxTreeOutputType[m], isIndexEq,
           loweredVector[loweredVectorElem++], muxTreeVec[m]);
+
+    llvm::dbgs()<<"\n muxtree::";
+    muxTreeVec[0].dump();
   }
 
   // If this is a vector of bundle then, replace each element access with the
@@ -762,8 +821,16 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
       iter->getSecond().erase();
       m++;
     }
-  } else
+  } 
+  else {
+    for (size_t i=0; i < indices.size()-1; i++){
+    llvm::dbgs()<<"\n erasing::";
+      indices[i].dump();
+      opsToRemove.push_back(indices[i]);
+    }
+    op = indices[indices.size()-1];
     op.replaceAllUsesWith(muxTreeVec[0]);
+  }
   opsToRemove.push_back(op);
 }
 
