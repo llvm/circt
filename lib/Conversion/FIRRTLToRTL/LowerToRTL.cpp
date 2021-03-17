@@ -113,11 +113,12 @@ struct FIRRTLModuleLowering;
 
 /// This is state shared across the parallel module lowering logic.
 struct CircuitLoweringState {
-  std::atomic<bool> used_PRINTF_COND;
-  std::atomic<bool> used_STOP_COND;
+  std::atomic<bool> used_PRINTF_COND{false};
+  std::atomic<bool> used_STOP_COND{false};
 
-  std::atomic<bool> used_RANDOMIZE_REG_INIT, used_RANDOMIZE_MEM_INIT;
-  std::atomic<bool> used_RANDOMIZE_GARBAGE_ASSIGN;
+  std::atomic<bool> used_RANDOMIZE_REG_INIT{false},
+      used_RANDOMIZE_MEM_INIT{false};
+  std::atomic<bool> used_RANDOMIZE_GARBAGE_ASSIGN{false};
 
   CircuitLoweringState() {}
 
