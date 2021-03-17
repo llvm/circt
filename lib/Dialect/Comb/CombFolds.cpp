@@ -416,8 +416,8 @@ OpFoldResult SubOp::fold(ArrayRef<Attribute> constants) {
                       getContext());
 
   // Constant fold
-  return constFoldBinaryOp<IntegerAttr>(
-      constants, [](APInt a, APInt b) { return a -= b; });
+  return constFoldBinaryOp<IntegerAttr>(constants,
+                                        [](APInt a, APInt b) { return a - b; });
 }
 
 OpFoldResult AddOp::fold(ArrayRef<Attribute> constants) {
