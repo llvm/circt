@@ -11,10 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "RTLPassDetail.h"
-#include "circt/Dialect/RTL/RTLOps.h"
-#include "circt/Dialect/SV/SVOps.h"
-#include "circt/Dialect/RTL/RTLPasses.h"
+#include "SVPassDetail.h"
+#include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Support/ImplicitLocOpBuilder.h"
 
 using namespace circt;
@@ -24,7 +22,7 @@ using namespace circt;
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct RTLGreyBoxerPass : public rtl::RTLGreyBoxerBase<RTLGreyBoxerPass> {
+struct RTLGreyBoxerPass : public sv::RTLGreyBoxerBase<RTLGreyBoxerPass> {
   void runOnOperation() override;
 };
 } // end anonymous namespace
@@ -61,6 +59,6 @@ void RTLGreyBoxerPass::runOnOperation() {
 
 }
 
-std::unique_ptr<Pass> circt::rtl::createRTLGreyBoxerPass() {
+std::unique_ptr<Pass> circt::sv::createRTLGreyBoxerPass() {
   return std::make_unique<RTLGreyBoxerPass>();
 }

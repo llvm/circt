@@ -18,7 +18,6 @@
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
-#include "circt/Dialect/RTL/RTLPasses.h"
 #include "circt/Dialect/SV/SVPasses.h"
 
 namespace circt {
@@ -31,7 +30,6 @@ inline void registerAllPasses() {
   esi::registerESIPasses();
   firrtl::registerPasses();
   llhd::initLLHDTransformationPasses();
-  rtl::registerPasses();
   sv::registerPasses();
 }
 

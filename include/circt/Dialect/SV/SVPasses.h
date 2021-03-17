@@ -25,6 +25,7 @@ namespace circt {
 namespace sv {
 
 std::unique_ptr<mlir::Pass> createRTLCleanupPass();
+std::unique_ptr<mlir::Pass> createRTLGreyBoxerPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
