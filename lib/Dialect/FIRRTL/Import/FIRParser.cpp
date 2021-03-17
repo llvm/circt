@@ -249,11 +249,18 @@ struct FIRParser {
   // Annotation Utilities
   //===--------------------------------------------------------------------===//
 
+  /// Add annotations from a string to the internal annotation map.  Report
+  /// errors using a provided source manager location and with a provided error
+  /// message
   ParseResult importAnnotations(const SMLoc &loc, StringRef annotationsStr,
                                 MLIRContext *context, StringRef errorMsgParse);
 
+
+  /// Add annotations from the source manager, if an annotation file was added.
   ParseResult importAnnotationFile(const SMLoc &loc, MLIRContext *context);
 
+
+  /// Populate a vector of annotations for a given Target.
   void getAnnotations(StringRef target,
                       SmallVector<DictionaryAttr> &annotations);
 
@@ -2773,8 +2780,9 @@ ParseResult FIRCircuitParser::parseCircuit() {
 
   // Deal with any inline annotations, if they exist
   if (!inlineAnnotations.empty())
-    if (importAnnotations(inlineAnnotationsLoc, inlineAnnotations, b.getContext(),
-                           "Failed to parse inline JSON annotations"))
+    if (importAnnotations(inlineAnnotationsLoc, inlineAnnotations,
+                          b.getContext(),
+                          "Failed to parse inline JSON annotations"))
       return failure();
 
   // Get annotations associated with this circuit. These are either:
