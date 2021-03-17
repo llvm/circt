@@ -26,7 +26,6 @@ struct RTLGreyBoxerPass : public sv::RTLGreyBoxerBase<RTLGreyBoxerPass> {
 };
 } // end anonymous namespace
 
-
 void RTLGreyBoxerPass::runOnOperation() {
   auto topModule = getOperation().getBody();
   SmallVector<rtl::RTLModuleExternOp, 8> toErase;
@@ -38,14 +37,16 @@ void RTLGreyBoxerPass::runOnOperation() {
       SmallVector<rtl::ModulePortInfo, 8> ports;
       module.getPortInfo(ports);
       auto nameAttr = builder.getStringAttr(module.getName());
-      auto newModule = builder.create<rtl::RTLModuleOp>(module.getLoc(), nameAttr, ports);
+      auto newModule =
+          builder.create<rtl::RTLModuleOp>(module.getLoc(), nameAttr, ports);
       auto outputOp = newModule.getBodyBlock()->getTerminator();
       OpBuilder innerBuilder(outputOp);
       SmallVector<Value, 8> outputs;
       // All output ports need values, use x
-      for (auto & p : ports) {
+      for (auto &p : ports) {
         if (p.isOutput())
-          outputs.push_back(innerBuilder.create<sv::ConstantXOp>(outputOp->getLoc(), p.type));
+          outputs.push_back(
+              innerBuilder.create<sv::ConstantXOp>(outputOp->getLoc(), p.type));
       }
       outputOp->setOperands(outputs);
       toErase.push_back(module);
@@ -54,9 +55,8 @@ void RTLGreyBoxerPass::runOnOperation() {
   // preserved.
   if (toErase.empty())
     markAllAnalysesPreserved();
-  for (auto&m : toErase)
+  for (auto &m : toErase)
     m->erase();
-
 }
 
 std::unique_ptr<Pass> circt::sv::createRTLGreyBoxerPass() {
