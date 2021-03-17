@@ -255,10 +255,8 @@ struct FIRParser {
   ParseResult importAnnotations(const SMLoc &loc, StringRef annotationsStr,
                                 MLIRContext *context, StringRef errorMsgParse);
 
-
   /// Add annotations from the source manager, if an annotation file was added.
   ParseResult importAnnotationFile(const SMLoc &loc, MLIRContext *context);
-
 
   /// Populate a vector of annotations for a given Target.
   void getAnnotations(StringRef target,
