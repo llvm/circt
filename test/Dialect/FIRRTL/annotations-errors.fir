@@ -37,3 +37,13 @@ circuit Foo: %[{"a":"a"}]
 circuit Foo: %[[{"a":"a"},[{"b":"b"}]]]
   module Foo:
     skip
+
+; // -----
+
+; COM: Annotations JSON is invalid. (There's a trailing comma.)
+
+; expected-error @+2 {{Failed to parse inline JSON annotations}}
+; expected-note @+1 {{}}
+circuit Foo: %[[{"a":"a"},]]]
+  module Foo:
+    skip
