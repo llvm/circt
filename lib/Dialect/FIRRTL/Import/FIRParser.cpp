@@ -256,7 +256,6 @@ struct FIRParser {
 
   void getAnnotations(StringRef target,
                       SmallVector<DictionaryAttr> &annotations);
-  void addAnnotation(StringRef target, DictionaryAttr annotation);
 
 private:
   FIRParser(const FIRParser &) = delete;
@@ -806,7 +805,7 @@ ParseResult FIRParser::importAnnotations(const SMLoc &loc,
 
   for (auto a = annotationMap.begin(), e = annotationMap.end(); a != e; ++a)
     for (auto b : a->getValue())
-      addAnnotation(a->getKey(), b);
+      state.annotationMap[a->getKey()].push_back(b);
 
   return success();
 }
@@ -830,10 +829,6 @@ void FIRParser::getAnnotations(StringRef target,
   for (auto a : state.annotationMap.lookup(target)) {
     annotations.push_back(a);
   }
-}
-
-void FIRParser::addAnnotation(StringRef target, DictionaryAttr annotation) {
-  state.annotationMap[target].push_back(annotation);
 }
 
 //===----------------------------------------------------------------------===//
