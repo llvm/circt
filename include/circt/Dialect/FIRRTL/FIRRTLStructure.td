@@ -24,7 +24,8 @@ def CircuitOp : FIRRTLOp<"circuit",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<(ins "StringAttr":$name, CArg<"ArrayRef<DictionaryAttr>", "ArrayRef<DictionaryAttr>()">:$annotations)>
+    OpBuilder<(ins "StringAttr":$name, CArg<"ArrayRef<DictionaryAttr>",
+               "ArrayRef<DictionaryAttr>()">:$annotations)>
   ];
 
   let extraClassDeclaration = [{
@@ -60,7 +61,9 @@ def FModuleOp : FIRRTLOp<"module",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports, CArg<"ArrayRef<DictionaryAttr>", "ArrayRef<DictionaryAttr>()">:$annotations)>
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports,
+               CArg<"ArrayRef<DictionaryAttr>",
+               "ArrayRef<DictionaryAttr>()">:$annotations)>
   ];
 
   let extraClassDeclaration = [{
