@@ -28,6 +28,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/Support/Error.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
@@ -72,12 +73,11 @@ namespace {
 /// such as the current lexer position.  This is separated out from the parser
 /// so that individual subparsers can refer to the same state.
 struct GlobalFIRParserState {
-  GlobalFIRParserState(
-      const llvm::SourceMgr &sourceMgr, MLIRContext *context,
-      FIRParserOptions options,
-      llvm::StringMap<llvm::SmallVector<DictionaryAttr>> &annotationMap)
-      : context(context), options(options), annotationMap(annotationMap),
-        lex(sourceMgr, context), curToken(lex.lexToken()) {}
+  GlobalFIRParserState(const llvm::SourceMgr &sourceMgr, MLIRContext *context,
+                       FIRParserOptions options,
+                       const llvm::MemoryBuffer *annotationsBuf)
+      : context(context), options(options), lex(sourceMgr, context),
+        curToken(lex.lexToken()), annotationsBuf(annotationsBuf) {}
 
   /// The context we're parsing into.
   MLIRContext *const context;
@@ -86,13 +86,17 @@ struct GlobalFIRParserState {
   const FIRParserOptions options;
 
   /// A mapping of targets to annotations
-  llvm::StringMap<llvm::SmallVector<DictionaryAttr>> &annotationMap;
+  llvm::StringMap<llvm::SmallVector<DictionaryAttr>> annotationMap;
 
   /// The lexer for the source file we're parsing.
   FIRLexer lex;
 
   /// This is the next token that hasn't been consumed yet.
   FIRToken curToken;
+
+  /// A pointer to a buffer of annotations (the contents of a JSON
+  /// file).  This is null if no annotations were provided.
+  const llvm::MemoryBuffer *annotationsBuf;
 
   class BacktraceState {
   public:
@@ -177,7 +181,7 @@ struct FIRParser {
 
   /// Parse a non-standard inline Annotation JSON blob if present.  This uses
   /// the info-like encoding of %[<JSON Blob>].
-  ParseResult parseOptionalAnnotations(StringRef &result);
+  ParseResult parseOptionalAnnotations(SMLoc &loc, StringRef &result);
 
   //===--------------------------------------------------------------------===//
   // Token Parsing
@@ -244,6 +248,12 @@ struct FIRParser {
   //===--------------------------------------------------------------------===//
   // Annotation Utilities
   //===--------------------------------------------------------------------===//
+
+  ParseResult importAnnotations(const SMLoc &loc, StringRef annotationsStr,
+                                MLIRContext *context, StringRef errorMsgParse);
+
+  ParseResult importAnnotationFile(const SMLoc &loc, MLIRContext *context);
+
   void getAnnotations(StringRef target,
                       SmallVector<DictionaryAttr> &annotations);
   void addAnnotation(StringRef target, DictionaryAttr annotation);
@@ -452,12 +462,12 @@ ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result,
 
 /// Parse a non-standard inline Annotation JSON blob if present.  This uses
 /// the info-like encoding of %[<JSON Blob>].
-ParseResult FIRParser::parseOptionalAnnotations(StringRef &result) {
+ParseResult FIRParser::parseOptionalAnnotations(SMLoc &loc, StringRef &result) {
 
   if (getToken().isNot(FIRToken::inlineannotation))
     return success();
 
-  auto loc = getToken().getLoc();
+  loc = getToken().getLoc();
 
   result = getTokenSpelling().drop_front(2).drop_back(1);
   consumeToken(FIRToken::inlineannotation);
@@ -762,6 +772,53 @@ ParseResult FIRParser::parseOptionalRUW(RUWAttr &result) {
     consumeToken(FIRToken::kw_undefined);
     break;
   }
+
+  return success();
+}
+
+ParseResult FIRParser::importAnnotations(const SMLoc &loc,
+                                         StringRef annotationsStr,
+                                         MLIRContext *context,
+                                         StringRef errorMsgParse) {
+
+  auto annotations = llvm::json::parse(annotationsStr);
+  if (auto err = annotations.takeError()) {
+    handleAllErrors(std::move(err), [&](const llvm::json::ParseError &a) {
+      auto diag = emitError(loc, errorMsgParse);
+      diag.attachNote() << a.message();
+    });
+    return failure();
+  }
+
+  llvm::json::Path::Root root;
+  llvm::StringMap<llvm::SmallVector<DictionaryAttr>> annotationMap;
+  if (annotations) {
+    if (!fromJSON(annotations.get(), annotationMap, root, context)) {
+      auto diag = emitError(loc, "Invalid/unsupported annotation format");
+      std::string jsonErrorMessage =
+          "See inline comments for problem area in JSON:\n";
+      llvm::raw_string_ostream s(jsonErrorMessage);
+      root.printErrorContext(annotations.get(), s);
+      diag.attachNote() << jsonErrorMessage;
+      return failure();
+    }
+  }
+
+  for (auto a = annotationMap.begin(), e = annotationMap.end(); a != e; ++a)
+    for (auto b : a->getValue())
+      addAnnotation(a->getKey(), b);
+
+  return success();
+}
+
+ParseResult FIRParser::importAnnotationFile(const SMLoc &loc,
+                                            MLIRContext *context) {
+
+  if (state.annotationsBuf)
+    importAnnotations(loc, (state.annotationsBuf)->getBuffer(), context,
+                      "Failed to parse JSON file");
+
+  state.annotationsBuf = nullptr;
 
   return success();
 }
@@ -2699,6 +2756,7 @@ ParseResult FIRCircuitParser::parseCircuit() {
 
   LocWithInfo info(getToken().getLoc(), this);
   StringAttr name;
+  SMLoc inlineAnnotationsLoc;
   StringRef inlineAnnotations;
 
   // A file must contain a top level `circuit` definition.
@@ -2706,33 +2764,19 @@ ParseResult FIRCircuitParser::parseCircuit() {
                  "expected a top-level 'circuit' definition") ||
       parseId(name, "expected circuit name") ||
       parseToken(FIRToken::colon, "expected ':' in circuit definition") ||
-      parseOptionalAnnotations(inlineAnnotations) || parseOptionalInfo(info))
+      parseOptionalAnnotations(inlineAnnotationsLoc, inlineAnnotations) ||
+      parseOptionalInfo(info))
     return failure();
 
   OpBuilder b(mlirModule.getBodyRegion());
 
-  if (!inlineAnnotations.empty()) {
-    auto annotations = llvm::json::parse(inlineAnnotations);
-    if (auto err = annotations.takeError()) {
-      emitError("Failed to parse inline JSON annotations...\n");
-      return failure();
-    }
+  // Deal with the annotation file if one was specified
+  importAnnotationFile(info.getFIRLoc(), b.getContext());
 
-    llvm::json::Path::Root root;
-    llvm::StringMap<llvm::SmallVector<DictionaryAttr>> annotationMap;
-    if (annotations) {
-      for (auto a : *annotations->getAsArray()) {
-        if (!fromJSON(a, annotationMap, root, b.getContext())) {
-          llvm::errs() << "Failed to parse annotation file...\n";
-          return {};
-        }
-      }
-    }
-
-    for (auto a = annotationMap.begin(), e = annotationMap.end(); a != e; ++a)
-      for (auto b : a->getValue())
-        addAnnotation(a->getKey(), b);
-  }
+  // Deal with any inline annotations, if they exist
+  if (!inlineAnnotations.empty())
+    importAnnotations(inlineAnnotationsLoc, inlineAnnotations, b.getContext(),
+                      "Failed to parse inline JSON annotations");
 
   // Get annotations associated with this circuit. These are either:
   //   1. Annotations with no target (which we use "~" to identify)
@@ -2794,27 +2838,6 @@ OwningModuleRef circt::firrtl::importFIRRTL(SourceMgr &sourceMgr,
   if (sourceMgr.getNumBuffers() > 1)
     annotationsBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID() + 1);
 
-  llvm::Optional<llvm::json::Value> annotations;
-  if (annotationsBuf) {
-    auto foo = llvm::json::parse((*annotationsBuf).getBuffer());
-    if (auto err = foo.takeError()) {
-      llvm::errs() << "Failed to parse JSON...\n";
-      return {};
-    }
-    annotations.emplace(foo.get());
-  }
-
-  llvm::json::Path::Root root;
-  llvm::StringMap<llvm::SmallVector<DictionaryAttr>> annotationMap;
-  if (annotations) {
-    for (auto a : *annotations.getValue().getAsArray()) {
-      if (!fromJSON(a, annotationMap, root, context)) {
-        llvm::errs() << "Failed to parse annotation file...\n";
-        return {};
-      }
-    }
-  }
-
   context->loadDialect<FIRRTLDialect>();
 
   // This is the result module we are parsing into.
@@ -2822,7 +2845,7 @@ OwningModuleRef circt::firrtl::importFIRRTL(SourceMgr &sourceMgr,
       FileLineColLoc::get(context, sourceBuf->getBufferIdentifier(), /*line=*/0,
                           /*column=*/0)));
 
-  GlobalFIRParserState state(sourceMgr, context, options, annotationMap);
+  GlobalFIRParserState state(sourceMgr, context, options, annotationsBuf);
   if (FIRCircuitParser(state, *module).parseCircuit())
     return nullptr;
 

@@ -34,20 +34,13 @@ bool fromJSON(llvm::json::Value &value,
   /// target may not exist, e.g., any subclass of
   /// firrtl.annotations.NoTargetAnnotation will not have a target.
   auto findAndEraseTarget =
-      [](llvm::json::Object *object) -> llvm::Optional<std::string> {
-    // If a "targets" field exists, then this is likely a subclass of
-    // firrtl.annotations.MultiTargetAnnotation.  We don't handle this yet, so
-    // print an error and return none.
-    if (object->get("targets")) {
-      llvm::errs()
-          << "Found a multitarget annotation. These are not yet supported.\n";
-      return llvm::Optional<std::string>();
-    }
-
-    // If no "target" field exists, then exit, returning none.
+      [](llvm::json::Object *object,
+         llvm::json::Path p) -> llvm::Optional<std::string> {
+    // If no "target" field exists, then promote the annotation to a
+    // CircuitTarget annotation by returning a target of "~".
     auto target = object->get("target");
     if (!target)
-      return llvm::Optional<std::string>();
+      return llvm::Optional<std::string>("~");
 
     // Find the target.
     auto maybeTarget = object->get("target")->getAsString();
@@ -83,30 +76,26 @@ bool fromJSON(llvm::json::Value &value,
       }
     }
 
-    // If the target is something that we know we don't support, then print an
-    // error, promote the annotation to a Circuit annotation, and leave the
-    // original target intact.  Otherwise, remove the target from the
-    // annotation.
+    // If the target is something that we know we don't support, then error.
     bool unsupported =
         std::any_of(newTarget.begin(), newTarget.end(), [](char a) {
           return a == '/' || a == ':' || a == '>' || a == '.' || a == '[';
         });
     if (unsupported) {
-      llvm::errs()
-          << "Unsupported Annotation Target " << *target
-          << ". (Only CircuitTarget and ModuleTarget are currently supported!) "
-             "This will be promoted to a CircuitAnnotation.\n";
-      newTarget = "~";
-    } else {
-      object->erase("target");
+      p.field("target").report(
+          "Unsupported target (not a CircuitTarget or ModuleTarget)");
+      return {};
     }
 
+    // Remove the target field from the annotation and return the target.
+    object->erase("target");
     return llvm::Optional<std::string>(newTarget);
   };
 
   /// Convert arbitrary JSON to an MLIR Attribute.
-  std::function<Attribute(llvm::json::Value &)> JSONToAttribute =
-      [&](llvm::json::Value &value) -> Attribute {
+  std::function<Attribute(llvm::json::Value &, llvm::json::Path)>
+      JSONToAttribute =
+          [&](llvm::json::Value &value, llvm::json::Path p) -> Attribute {
     // String
     if (auto a = value.getAsString())
       return StringAttr::get(context, a.getValue());
@@ -125,7 +114,7 @@ bool fromJSON(llvm::json::Value &value,
 
     // Null
     if (auto a = value.getAsNull()) {
-      llvm::errs() << "Found a null in the JSON, returning 'nullptr'\n";
+      p.report("Found a null in the JSON, returning 'nullptr'");
       return nullptr;
     }
 
@@ -133,43 +122,58 @@ bool fromJSON(llvm::json::Value &value,
     if (auto a = value.getAsObject()) {
       NamedAttrList metadata;
       for (auto b : *a)
-        metadata.append(b.first, JSONToAttribute(b.second));
+        metadata.append(b.first, JSONToAttribute(b.second, p.field(b.first)));
       return DictionaryAttr::get(context, metadata);
     }
 
     // Array
     if (auto a = value.getAsArray()) {
       SmallVector<Attribute> metadata;
-      for (auto b : *a)
-        metadata.push_back(JSONToAttribute(b));
+      for (size_t i = 0, e = (*a).size(); i != e; ++i)
+        metadata.push_back(JSONToAttribute((*a)[i], p.index(i)));
       return ArrayAttr::get(context, metadata);
     }
 
-    llvm::errs() << "Unhandled JSON value: " << value << "\n";
-    return nullptr;
+    llvm_unreachable("Impossible unhandled JSON type");
   };
 
-  // The JSON must be an object by definition of what an Annotation is.  Error
-  // on anything else.
-  auto object = value.getAsObject();
-  if (!object) {
-    path.report("Expected object");
+  // The JSON value must be an array of objects.  Anything else is reported as
+  // inavlid.
+  auto array = value.getAsArray();
+  if (!array) {
+    path.report(
+        "Expected annotations to be an array, but found something else.");
     return false;
   }
 
-  // Extra the "target" field from the Annotation object if it exists.  Remove
-  // it so it isn't included in the Attribute.
-  auto target = findAndEraseTarget(object);
-  if (!target)
-    target = llvm::Optional<std::string>("~");
+  for (size_t i = 0, e = (*array).size(); i != e; ++i) {
+    auto object = (*array)[i].getAsObject();
+    auto p = path.index(i);
+    if (!object) {
+      p.report("Expected annotations to be an array of objects, but found an "
+               "array of something else.");
+      return false;
+    }
+    // Extra the "target" field from the Annotation object if it exists.  Remove
+    // it so it isn't included in the Attribute.
+    auto target = findAndEraseTarget(object, p);
+    if (!target)
+      return false;
 
-  // Build up the Attribute to represent the Annotation and store it in the
-  // global Target -> Attribute mapping.
-  NamedAttrList metadata;
-  for (auto field : *object)
-    metadata.append(field.first, JSONToAttribute(field.second));
-  annotationMap[target.getValue()].push_back(
-      DictionaryAttr::get(context, metadata));
+    // Build up the Attribute to represent the Annotation and store it in the
+    // global Target -> Attribute mapping.
+    NamedAttrList metadata;
+    for (auto field : *object) {
+      if (auto value = JSONToAttribute(field.second, p)) {
+        metadata.append(field.first, value);
+        continue;
+      }
+      return false;
+    }
+    annotationMap[target.getValue()].push_back(
+        DictionaryAttr::get(context, metadata));
+  }
+
   return true;
 };
 
