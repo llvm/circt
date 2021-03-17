@@ -1328,20 +1328,23 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
   if (srcWidth == unsigned(destWidth))
     return result;
 
+  if (destWidth == 0)
+    return {};
+
   if (srcWidth > unsigned(destWidth)) {
     auto resultType = builder.getIntegerType(destWidth);
     return builder.createOrFold<comb::ExtractOp>(resultType, result, 0);
-  } else {
-    auto resultType = builder.getIntegerType(destWidth);
-
-    // Extension follows the sign of the source value, not the destination.
-    auto valueFIRType = value.getType().cast<FIRRTLType>().getPassiveType();
-    if (valueFIRType.cast<IntType>().isSigned())
-      return builder.createOrFold<comb::SExtOp>(resultType, result);
-
-    auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
-    return builder.createOrFold<comb::ConcatOp>(zero, result);
   }
+
+  auto resultType = builder.getIntegerType(destWidth);
+
+  // Extension follows the sign of the source value, not the destination.
+  auto valueFIRType = value.getType().cast<FIRRTLType>().getPassiveType();
+  if (valueFIRType.cast<IntType>().isSigned())
+    return builder.createOrFold<comb::SExtOp>(resultType, result);
+
+  auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
+  return builder.createOrFold<comb::ConcatOp>(zero, result);
 }
 
 /// Set the lowered value of 'orig' to 'result', remembering this in a map.
@@ -1834,6 +1837,10 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       portField->dropAllReferences();
       (void)setLowering(portField, portWires[portField.fieldname()]);
     }
+
+    // Don't emit anything more for zero bit data values.
+    if (dataType.isInteger(0))
+      continue;
 
     // Return the value corresponding to a port field.
     auto getPortFieldValue = [&](StringRef name) -> Value {
@@ -2506,7 +2513,8 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
   auto destType = dest.getType().cast<FIRRTLType>().getPassiveType();
   auto srcVal = getLoweredAndExtOrTruncValue(op.src(), destType);
   if (!srcVal)
-    return handleZeroBit(op.src(), []() { return success(); });
+    return success(isZeroBitFIRRTLType(op.src().getType()) ||
+                   isZeroBitFIRRTLType(destType));
 
   auto destVal = getPossiblyInoutLoweredValue(dest);
   if (!destVal)
