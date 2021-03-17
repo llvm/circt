@@ -814,13 +814,15 @@ ParseResult FIRParser::importAnnotations(const SMLoc &loc,
 ParseResult FIRParser::importAnnotationFile(const SMLoc &loc,
                                             MLIRContext *context) {
 
+  ParseResult result = success();
   if (state.annotationsBuf)
-    importAnnotations(loc, (state.annotationsBuf)->getBuffer(), context,
-                      "Failed to parse JSON file");
+    result = importAnnotations(loc, (state.annotationsBuf)->getBuffer(),
+                               context, "Failed to parse JSON file");
 
-  state.annotationsBuf = nullptr;
+  if (!result)
+    state.annotationsBuf = nullptr;
 
-  return success();
+  return result;
 }
 
 void FIRParser::getAnnotations(StringRef target,
@@ -2771,12 +2773,14 @@ ParseResult FIRCircuitParser::parseCircuit() {
   OpBuilder b(mlirModule.getBodyRegion());
 
   // Deal with the annotation file if one was specified
-  importAnnotationFile(info.getFIRLoc(), b.getContext());
+  if (importAnnotationFile(info.getFIRLoc(), b.getContext()))
+    return failure();
 
   // Deal with any inline annotations, if they exist
   if (!inlineAnnotations.empty())
-    importAnnotations(inlineAnnotationsLoc, inlineAnnotations, b.getContext(),
-                      "Failed to parse inline JSON annotations");
+    if (importAnnotations(inlineAnnotationsLoc, inlineAnnotations, b.getContext(),
+                           "Failed to parse inline JSON annotations"))
+      return failure();
 
   // Get annotations associated with this circuit. These are either:
   //   1. Annotations with no target (which we use "~" to identify)
