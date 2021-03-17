@@ -6,8 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This transformation pass performs various cleanups and canonicalization
-// transformations for rtl.module bodies.
+// This transformation pass converts external modules to empty normal modules.
 //
 //===----------------------------------------------------------------------===//
 
