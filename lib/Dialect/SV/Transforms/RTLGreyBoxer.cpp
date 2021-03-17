@@ -30,11 +30,11 @@ struct RTLGreyBoxerPass : public sv::RTLGreyBoxerBase<RTLGreyBoxerPass> {
 void RTLGreyBoxerPass::runOnOperation() {
   auto topModule = getOperation().getBody();
   SmallVector<rtl::RTLModuleExternOp, 8> toErase;
+  OpBuilder builder(topModule->getTerminator());
 
   for (auto &op : *topModule)
     if (auto module = dyn_cast<rtl::RTLModuleExternOp>(op)) {
       module.dump();
-      OpBuilder builder(topModule->getTerminator());
       SmallVector<rtl::ModulePortInfo, 8> ports;
       module.getPortInfo(ports);
       auto nameAttr = builder.getStringAttr(module.getName());
@@ -42,6 +42,7 @@ void RTLGreyBoxerPass::runOnOperation() {
       auto outputOp = newModule.getBodyBlock()->getTerminator();
       OpBuilder innerBuilder(outputOp);
       SmallVector<Value, 8> outputs;
+      // All output ports need values, use x
       for (auto & p : ports) {
         if (p.isOutput())
           outputs.push_back(innerBuilder.create<sv::ConstantXOp>(outputOp->getLoc(), p.type));
