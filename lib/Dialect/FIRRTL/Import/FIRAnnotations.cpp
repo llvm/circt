@@ -27,12 +27,12 @@ bool fromJSON(llvm::json::Value &value,
               llvm::StringMap<llvm::SmallVector<DictionaryAttr>> &annotationMap,
               llvm::json::Path path, MLIRContext *context) {
 
-  /// Exampine an Annotation JSON object and return an optional string
-  /// indicating the target associated with this annotation.  Erase the target
-  /// from the JSON object if a target was found.  Automatically convert any
-  /// legacy Named targets to actual Targets.  Note: it is expected that a
-  /// target may not exist, e.g., any subclass of
-  /// firrtl.annotations.NoTargetAnnotation will not have a target.
+  /// Examine an Annotation JSON object and return an optional string indicating
+  /// the target associated with this annotation.  Erase the target from the
+  /// JSON object if a target was found.  Automatically convert any legacy Named
+  /// targets to actual Targets.  Note: it is expected that a target may not
+  /// exist, e.g., any subclass of firrtl.annotations.NoTargetAnnotation will
+  /// not have a target.
   auto findAndEraseTarget =
       [](llvm::json::Object *object,
          llvm::json::Path p) -> llvm::Optional<std::string> {
