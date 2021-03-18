@@ -32,41 +32,41 @@ rtl.module @Expressions(%in4: i4, %clock: i1) ->
   %c0_i6 = rtl.constant 0 : i6
   %c0_i10 = rtl.constant 0 : i10
 
-  // CHECK: wire [3:0] _T = in4 >> in4;
+  // CHECK: wire [3:0] _T_3 = in4 >> in4;
   %7 = comb.extract %in4 from 2 : (i4) -> i1
 
   %10 = comb.shru %in4, %in4 : i4
 
-  // CHECK: assign _T_0 = ^in4;
+  // CHECK: assign _T_2 = ^in4;
   %0 = comb.parity %in4 : i4
-  // CHECK: assign _T_0 = &in4;   
+  // CHECK: assign _T_2 = &in4;
   %1 = comb.icmp eq %in4, %c-1_i4 : i4
-  // CHECK: assign _T_0 = |in4;   
+  // CHECK: assign _T_2 = |in4;
   %2 = comb.icmp ne %in4, %c0_i4 : i4
   %24 = comb.merge %0, %1, %2 : i1
 
-  // CHECK: wire [1:0] _T_1 = in4[1:0];
-  // CHECK: wire [1:0] _T_2 = in4[3:2];
-  // CHECK: wire [8:0] _T_3 = {1'h0, in4, in4};
-  // CHECK: wire [4:0] _T_4 = 5'h0 - {in4[3], in4};
+  // CHECK: wire [1:0] _T_4 = in4[1:0];
+  // CHECK: wire [1:0] _T_5 = in4[3:2];
+  // CHECK: wire [8:0] _T_6 = {1'h0, in4, in4};
+  // CHECK: wire [4:0] _T_7 = 5'h0 - {in4[3], in4};
 
-  // CHECK: assign _T_5 = ~in4;
+  // CHECK: assign _T_1 = ~in4;
   %3 = comb.xor %in4, %c-1_i4 : i4
 
-  // CHECK: assign _T_5 = in4 % 4'h1;
+  // CHECK: assign _T_1 = in4 % 4'h1;
   %4 = comb.modu %in4, %c1_i4 : i4
 
-  // CHECK: assign _T_5 = {2'h0, _T_1};
+  // CHECK: assign _T_1 = {2'h0, _T_4};
   %5 = comb.extract %in4 from 0 : (i4) -> i2
 
-  // CHECK: assign _T_5 = {2'h0, _T_2 | {in4[2], 1'h0}};
+  // CHECK: assign _T_1 = {2'h0, _T_5 | {in4[2], 1'h0}};
   %6 = comb.extract %in4 from 2 : (i4) -> i2
   %8 = comb.concat %7, %false : (i1, i1) -> i2
   %9 = comb.or %6, %8 : i2
   
-  // CHECK: assign _T_5 = _T;
-  // CHECK: assign _T_5 = clock ? (clock ? 4'h1 : 4'h2) : 4'h3;
-  // CHECK: assign _T_5 = clock ? 4'h1 : clock ? 4'h2 : 4'h3;
+  // CHECK: assign _T_1 = _T_3;
+  // CHECK: assign _T_1 = clock ? (clock ? 4'h1 : 4'h2) : 4'h3;
+  // CHECK: assign _T_1 = clock ? 4'h1 : clock ? 4'h2 : 4'h3;
   %11 = comb.shrs %in4, %in4 : i4
   %12 = comb.concat %false, %in4, %in4 : (i1, i4, i4) -> i9
   %13 = comb.mux %clock, %c1_i4, %c2_i4 : i4
@@ -74,12 +74,12 @@ rtl.module @Expressions(%in4: i4, %clock: i1) ->
   %15 = comb.mux %clock, %c2_i4, %c3_i4 : i4
   %16 = comb.mux %clock, %c1_i4, %15 : i4
 
-  // CHECK: assign _T_5 = {2'h0, _T_2 | _T_1};
+  // CHECK: assign _T_1 = {2'h0, _T_5 | _T_4};
   %17 = comb.or %6, %5 : i2
   %18 = comb.concat %c0_i2, %in4 : (i2, i4) -> i6
 
-  // CHECK: assign _T_6 = {6'h0, in4, clock, clock, in4};
-  // CHECK: assign _T_6 = {10'h0, {2'h0, in4} ^ {{..}}2{in4[3]}}, in4} ^ {6{clock}}};
+  // CHECK: assign _T_0 = {6'h0, in4, clock, clock, in4};
+  // CHECK: assign _T_0 = {10'h0, {2'h0, in4} ^ {{..}}2{in4[3]}}, in4} ^ {6{clock}}};
   %19 = comb.sext %in4 : (i4) -> i6
   %20 = comb.sext %clock : (i1) -> i6
   %21 = comb.xor %18, %19, %20 : i6
@@ -93,14 +93,14 @@ rtl.module @Expressions(%in4: i4, %clock: i1) ->
   %30 = comb.concat %c0_i10, %21 : (i10, i6) -> i16
   %31 = comb.merge %29, %30 : i16
 
-  // CHECK: assign _T_7 = {{..}}7{_T_3[8]}}, _T_3};
-  // CHECK: assign _T_7 = {{..}}11{_T_4[4]}}, _T_4};
+  // CHECK: assign _T = {{..}}7{_T_6[8]}}, _T_6};
+  // CHECK: assign _T = {{..}}11{_T_7[4]}}, _T_7};
   %32 = comb.sext %12 : (i9) -> i16
   %33 = comb.sext %23 : (i5) -> i16
   %34 = comb.merge %32, %33 : i16
 
   // CHECK: assign out4s = $signed(in4) >>> $signed(in4);
-  // CHECK: assign sext17 = {_T_7[15], _T_7};
+  // CHECK: assign sext17 = {_T_8[15], _T_8};
   %35 = comb.sext %34 : (i16) -> i17
   rtl.output %24, %28, %11, %31, %34, %35 : i1, i4, i4, i16, i16, i17
 }
@@ -251,20 +251,20 @@ rtl.module @MultiUseExpr(%a: i4) -> (%b: i1, %b2: i2) {
   %c-1_i5 = rtl.constant -1 : i5
   %c-1_i4 = rtl.constant -1 : i4
 
-  // CHECK: wire _T = ^a;
+  // CHECK: wire _T_0 = ^a;
    %0 = comb.parity %a : i4
-  // CHECK-NEXT: wire [4:0] _T_0 = {1'h0, a} << 5'h1;
+  // CHECK-NEXT: wire [4:0] _T_1 = {1'h0, a} << 5'h1;
   %1 = comb.concat %false, %a : (i1, i4) -> i5
   %2 = comb.shl %1, %c1_i5 : i5
 
-  // CHECK-NEXT: wire [3:0] _T_1 = ~a;
-  // CHECK-NEXT: assign _T_2 = _T;
-  // CHECK-NEXT: assign _T_2 = ^_T;
-  // CHECK-NEXT: assign _T_2 = &_T_0;
-  // CHECK-NEXT: assign _T_2 = ^_T_0;
-  // CHECK-NEXT: assign _T_2 = 1'h0;
-  // CHECK-NEXT: assign b = _T_2;
-  // CHECK-NEXT: assign b2 = _T_1[3:2];
+  // CHECK-NEXT: wire [3:0] _T_2 = ~a;
+  // CHECK-NEXT: assign _T = _T_0;
+  // CHECK-NEXT: assign _T = ^_T_0;
+  // CHECK-NEXT: assign _T = &_T_1;
+  // CHECK-NEXT: assign _T = ^_T_1;
+  // CHECK-NEXT: assign _T = 1'h0;
+  // CHECK-NEXT: assign b = _T;
+  // CHECK-NEXT: assign b2 = _T_2[3:2];
   %3 = comb.parity %0 : i1
   %4 = comb.icmp eq %2, %c-1_i5 : i5
   %5 = comb.parity %2 : i5
@@ -279,9 +279,9 @@ rtl.module.extern @MyParameterizedExtModule(i8 {rtl.name = "in"}) -> (%out: i1)
 
 // CHECK-LABEL: module UseInstances
 rtl.module @UseInstances(%a_in: i8) -> (%a_out: i1) {
+  // CHECK: wire _T;
   // CHECK: wire xyz_out; 
   // CHECK: wire xyz2_out;
-  // CHECK: wire _T;
   // CHECK: FooExtModule xyz (
   // CHECK:   .in  (a_in),
   // CHECK:   .out (xyz_out)

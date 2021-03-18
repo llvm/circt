@@ -404,6 +404,22 @@ OpFoldResult MergeOp::fold(ArrayRef<Attribute> constants) {
   return {};
 }
 
+OpFoldResult SubOp::fold(ArrayRef<Attribute> constants) {
+  APInt value;
+  // sub(x - 0) -> x
+  if (matchPattern(rhs(), m_RConstant(value)) && value.isNullValue())
+    return lhs();
+
+  // sub(x - x) -> 0
+  if (rhs() == lhs())
+    return getIntAttr(APInt(lhs().getType().getIntOrFloatBitWidth(), 0),
+                      getContext());
+
+  // Constant fold
+  return constFoldBinaryOp<IntegerAttr>(constants,
+                                        [](APInt a, APInt b) { return a - b; });
+}
+
 OpFoldResult AddOp::fold(ArrayRef<Attribute> constants) {
   auto size = inputs().size();
 
