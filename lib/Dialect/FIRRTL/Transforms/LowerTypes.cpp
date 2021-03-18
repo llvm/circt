@@ -583,7 +583,7 @@ void TypeLoweringVisitor::visitDecl(RegOp op) {
   opsToRemove.push_back(op);
 }
 
-/// Lower a RegReset op with a bundle to multiple non-bundled regs.
+/// Lower a RegReset op with a bundle to multiple non-bundled RegResets.
 void TypeLoweringVisitor::visitDecl(RegResetOp op) {
   Value result = op.result();
 
@@ -591,7 +591,7 @@ void TypeLoweringVisitor::visitDecl(RegResetOp op) {
   // that wraps the whole bundle.
   FIRRTLType resultType = getCanonicalAggregateType(result.getType());
 
-  // If the reg is not a bundle, there is nothing to do.
+  // If the RegReset is not a bundle, there is nothing to do.
   if (!resultType)
     return;
 
