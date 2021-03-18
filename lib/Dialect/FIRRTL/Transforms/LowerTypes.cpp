@@ -113,6 +113,7 @@ public:
   void visitDecl(MemOp op);
   void visitDecl(RegOp op);
   void visitDecl(WireOp op);
+  void visitDecl(RegResetOp op);
   void visitExpr(InvalidValuePrimOp op);
   void visitExpr(SubfieldOp op);
   void visitExpr(SubindexOp op);
@@ -555,6 +556,35 @@ void TypeLoweringVisitor::visitDecl(WireOp op) {
 
 /// Lower a reg op with a bundle to multiple non-bundled regs.
 void TypeLoweringVisitor::visitDecl(RegOp op) {
+  Value result = op.result();
+
+  // Attempt to get the bundle types, potentially unwrapping an outer flip type
+  // that wraps the whole bundle.
+  FIRRTLType resultType = getCanonicalAggregateType(result.getType());
+
+  // If the reg is not a bundle, there is nothing to do.
+  if (!resultType)
+    return;
+
+  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
+  flattenType(resultType, "", false, fieldTypes);
+
+  // Loop over the leaf aggregates.
+  for (auto field : fieldTypes) {
+    SmallString<16> loweredName(op.nameAttr().getValue());
+    loweredName += field.suffix;
+    setBundleLowering(
+        result, StringRef(field.suffix).drop_front(1),
+        builder->create<RegOp>(field.getPortType(), op.clockVal(),
+                               builder->getStringAttr(loweredName)));
+  }
+
+  // Remember to remove the original op.
+  opsToRemove.push_back(op);
+}
+
+/// Lower a RegReset op with a bundle to multiple non-bundled regs.
+void TypeLoweringVisitor::visitDecl(RegResetOp op) {
   Value result = op.result();
 
   // Attempt to get the bundle types, potentially unwrapping an outer flip type
