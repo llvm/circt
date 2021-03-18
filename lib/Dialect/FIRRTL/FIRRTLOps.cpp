@@ -26,24 +26,21 @@ using namespace circt;
 using namespace firrtl;
 
 bool firrtl::isBundleType(Type type) {
-  if (type.isa<FlipType>())
-    return type.cast<FlipType>().getElementType().isa<BundleType>();
+  if (auto flipType = type.dyn_cast<FlipType>())
+    return flipType.getElementType().isa<FlipType>();
   return type.isa<BundleType>();
 }
 
-bool firrtl::isDuplexOp(Operation *op) {
-  // Using typeswitch is a typesafe way to call input() on three different ops.
+bool firrtl::isDuplexValue(Value val) {
+  Operation *op = val.getDefiningOp();
+  // Block arguments are not duplex values.
+  if (!op)
+    return false;
   return TypeSwitch<Operation *, bool>(op)
       .Case<SubfieldOp, SubindexOp, SubaccessOp>(
           [](auto op) { return isDuplexValue(op.input()); })
       .Case<RegOp, RegResetOp, WireOp>([](auto) { return true; })
       .Default([](auto) { return false; });
-}
-
-bool firrtl::isDuplexValue(Value val) {
-  if (Operation *op = val.getDefiningOp())
-    return isDuplexOp(op);
-  return false;
 }
 
 //===----------------------------------------------------------------------===//
