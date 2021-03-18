@@ -21,6 +21,7 @@
 #include "circt/Dialect/RTL/RTLOps.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
+#include "circt/Support/LoweringOptions.h"
 #include "circt/Translation/ExportVerilog.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/AsmState.h"
@@ -211,6 +212,10 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     pm.addPass(sv::createRTLLegalizeNamesPass());
   }
 
+  // Load the emitter options from the command line. Command line options if
+  // specified will override any module options.
+  applyLoweringCLOptions(module.get());
+
   if (failed(pm.run(module.get())))
     return failure();
 
@@ -268,6 +273,7 @@ int main(int argc, char **argv) {
   registerMLIRContextCLOptions();
   registerPassManagerCLOptions();
   registerAsmPrinterCLOptions();
+  registerLoweringCLOptions();
 
   // Parse pass names in main to ensure static initialization completed.
   cl::ParseCommandLineOptions(argc, argv, "circt modular optimizer driver\n");

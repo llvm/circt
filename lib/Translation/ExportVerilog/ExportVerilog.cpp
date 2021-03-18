@@ -19,6 +19,7 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Support/LLVM.h"
+#include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Support/FileUtilities.h"
@@ -417,11 +418,15 @@ getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
 //===----------------------------------------------------------------------===//
 
 namespace {
+
 /// This class maintains the mutable state that cross-cuts and is shared by the
 /// various emitters.
 class VerilogEmitterState {
 public:
   explicit VerilogEmitterState(raw_ostream &os) : os(os) {}
+
+  /// The emitter options which control verilog emission.
+  LoweringOptions options;
 
   /// The stream to emit to.
   raw_ostream &os;
@@ -2011,7 +2016,11 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  indent() << "always_ff @(" << stringifyEventControl(op.clockEdge()) << " ";
+  StringRef opString = "always";
+  if (state.options.useAlwaysFF)
+    opString = "always_ff";
+
+  indent() << opString << " @(" << stringifyEventControl(op.clockEdge()) << " ";
   emitExpression(op.clock(), ops);
   if (op.resetStyle() == ResetType::AsyncReset) {
     os << " or " << stringifyEventControl(*op.resetEdge()) << " ";
@@ -2022,7 +2031,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
   // Build the comment string, leave out the signal expressions (since they
   // can be large).
   std::string comment;
-  comment = "always_ff @(";
+  comment += opString.str() + " @(";
   comment += stringifyEventControl(op.clockEdge());
   if (op.resetStyle() == ResetType::AsyncReset) {
     comment += " or ";
@@ -2777,6 +2786,10 @@ struct UnifiedEmitter : public RootEmitterBase {
 
 void UnifiedEmitter::emitMLIRModule() {
   VerilogEmitterState state(os);
+
+  // Read the emitter options out of the module.
+  state.options.parseFromAttribute(rootOp);
+
   for (auto &op : *rootOp.getBody()) {
     if (auto rootOp = dyn_cast<RTLModuleOp>(op))
       ModuleEmitter(state).emitRTLModule(rootOp);
@@ -2808,9 +2821,6 @@ struct SplitEmitter : public RootEmitterBase {
   explicit SplitEmitter(StringRef dirname, ModuleOp rootOp)
       : RootEmitterBase(rootOp), dirname(dirname) {}
 
-  /// The directory to emit files into.
-  StringRef dirname;
-
   /// A list of modules and their position within the per-file operations.
   struct EmittedModule {
     Operation *op;
@@ -2819,16 +2829,24 @@ struct SplitEmitter : public RootEmitterBase {
   };
   SmallVector<EmittedModule, 0> moduleOps;
 
+  void emitMLIRModule();
+
+private:
+  /// The directory to emit files into.
+  StringRef dirname;
+
   /// A list of per-file operations (e.g., `sv.verbatim` or `sv.ifdef`).
   SmallVector<Operation *, 0> perFileOps;
 
-  void emitMLIRModule();
-  void emitModule(EmittedModule &mod);
+  void emitModule(const LoweringOptions &options, EmittedModule &mod);
 };
 
 } // namespace
 
 void SplitEmitter::emitMLIRModule() {
+  // Load any emitter options from the top-level module.
+  LoweringOptions options(rootOp);
+
   // Partition the MLIR module into modules and interfaces for which we create
   // separate output files, and the remaining top-level verbatim SV/ifdef
   // business that needs to go into each file.
@@ -2847,10 +2865,11 @@ void SplitEmitter::emitMLIRModule() {
   // In parallel, emit each module into its separate file, embedded within the
   // per-file operations.
   llvm::parallelForEach(moduleOps.begin(), moduleOps.end(),
-                        [&](EmittedModule &mod) { emitModule(mod); });
+                        [&](EmittedModule &mod) { emitModule(options, mod); });
 }
 
-void SplitEmitter::emitModule(EmittedModule &mod) {
+void SplitEmitter::emitModule(const LoweringOptions &options,
+                              EmittedModule &mod) {
   auto op = mod.op;
 
   // Given the operation, determine the file stem name and how to emit it.
@@ -2893,6 +2912,9 @@ void SplitEmitter::emitModule(EmittedModule &mod) {
   // of per-file operations.
   VerilogEmitterState state(output->os());
 
+  // Copy the global options in to the individual module state.
+  state.options = options;
+
   for (size_t i = 0; i < std::min(mod.position, perFileOps.size()); ++i) {
     ModuleEmitter(state).emitStatement(perFileOps[i]);
   }
@@ -2930,8 +2952,16 @@ circt::exportSplitVerilog(ModuleOp module, StringRef dirname,
 }
 
 void circt::registerToVerilogTranslation() {
+  // Register the circt emitter command line options.
+  registerLoweringCLOptions();
+  // Register the circt emitter translation.
   mlir::TranslateFromMLIRRegistration toVerilog(
-      "export-verilog", exportVerilog, [](DialectRegistry &registry) {
+      "export-verilog",
+      [](ModuleOp module, llvm::raw_ostream &os) {
+        applyLoweringCLOptions(module);
+        return exportVerilog(module, os);
+      },
+      [](DialectRegistry &registry) {
         registry.insert<CombDialect, RTLDialect, SVDialect>();
       });
 }
