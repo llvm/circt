@@ -36,6 +36,9 @@ endif()
 if (ESI_CAPNP)
   list(APPEND srcs capnp/Schema.cpp)
   list(APPEND ESI_LinkLibs CapnProto::capnp CapnProto::capnpc)
+  install(FILES ${CapnProto_capnp_IMPORTED_LOCATION} DESTINATION lib)
+  install(FILES ${CapnProto_capnpc_IMPORTED_LOCATION} DESTINATION lib)
+  install(FILES ${CapnProto_kj_IMPORTED_LOCATION} DESTINATION lib)
 endif()
 
 add_circt_dialect_library(CIRCTESI
