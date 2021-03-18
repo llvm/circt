@@ -61,7 +61,6 @@ class UTVariadicOp<string mnemonic, list<OpTrait> traits = []> :
 
 // Arithmetic and Logical Operations.
 def AddOp : UTVariadicOp<"add", [Commutative]>;
-def SubOp : UTBinOp<"sub">;
 def MulOp : UTVariadicOp<"mul", [Commutative]>;
 def DivUOp : UTBinOp<"divu">;
 def DivSOp : UTBinOp<"divs">;
@@ -71,6 +70,7 @@ let hasFolder = true in {
   def ShlOp : UTBinOp<"shl">;
   def ShrUOp : UTBinOp<"shru">;
   def ShrSOp : UTBinOp<"shrs">;
+  def SubOp : UTBinOp<"sub">;
 }
 
 def AndOp : UTVariadicOp<"and", [Commutative]>;
