@@ -1,3 +1,4 @@
+// RUN: circt-opt %s
 !ty_buffer_r = type !hir.memref<256*i32, r>
 !ty_buffer_w = type !hir.memref<256*i32, w>
 !ty_reg_r = type !hir.memref<1*i32, packing=[], r>

@@ -1,3 +1,4 @@
+// RUN: circt-opt %s
 hir.func @stencil_1d at %t(
   %Ai :!hir.memref<64*i32, r>,
   %Bw : !hir.memref<64*i32, w>,

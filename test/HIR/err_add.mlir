@@ -1,3 +1,4 @@
+// RUN: circt-opt %s
 hir.func @Array_Add at %t (%A:!hir.memref<128*i32, r>, 
   %B : !hir.memref<128*i32, r>, 
   %C:!hir.memref<128*i32, w>){

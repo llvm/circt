@@ -1,3 +1,4 @@
+// RUN: circt-opt %s
 hir.func @histogram at %t(
   %A :!hir.memref<64*64*i8, r>,
   %B : !hir.memref<256*i32, w>){

@@ -1,3 +1,4 @@
+// RUN: circt-opt %s
 hir.func @mac at %t (%a :i32, %b :i32, %c :i32) -> (i32 delay 3){
   %1 = hir.constant 1
   %2 = hir.constant 2

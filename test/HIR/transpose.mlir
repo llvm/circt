@@ -1,3 +1,4 @@
+// RUN: circt-opt %s
 hir.func @transpose at %t(
   %Ai :!hir.memref<16*16*i32, r>,
   %Co : !hir.memref<16*16*i32, w>) {

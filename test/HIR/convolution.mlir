@@ -1,3 +1,4 @@
+// RUN: circt-opt %s
 hir.func @convolution at %t(
 %A :!hir.memref<16*16*i32, r>,
 %B :!hir.memref<16*16*i32, w>){
