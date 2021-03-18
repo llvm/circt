@@ -2597,7 +2597,7 @@ void SplitModuleEmitter::emitMLIRModule(ModuleOp module) {
       emitFile(intfOp.sym_name(), [&](VerilogEmitterState &state) {
         ModuleEmitter(state).emitStatement(&op);
       });
-    else if (isa<VerbatimOp>(op) || isa<IfDefProceduralOp>(op))
+    else if (isa<VerbatimOp>(op) || isa<IfDefOp>(op))
       perFileOps.push_back(&op);
     else if (!isa<ModuleTerminatorOp>(op)) {
       op.emitError("unknown operation");
