@@ -855,3 +855,29 @@ rtl.module @sext_identical(%a: i1) -> (i1) {
   %0 = comb.sext %a : (i1) -> (i1)
   rtl.output %0 : i1
 }
+
+// CHECK-LABEL:  rtl.module @sub_fold1(%arg0: i7) -> (i7) {
+// CHECK-NEXT:    %c-1_i7 = rtl.constant -1 : i7
+// CHECK-NEXT:    rtl.output %c-1_i7 : i7
+rtl.module @sub_fold1(%arg0: i7) -> (i7) {
+  %c11_i7 = rtl.constant 11 : i7
+  %c5_i7 = rtl.constant 12: i7
+  %0 = comb.sub %c11_i7, %c5_i7 : i7
+  rtl.output %0 : i7
+}
+
+// CHECK-LABEL: rtl.module @sub_fold2(%arg0: i7) -> (i7) {
+// CHECK-NEXT:    rtl.output %arg0 : i7
+rtl.module @sub_fold2(%arg0: i7) -> (i7) {
+  %c0_i7 = rtl.constant 0 : i7
+  %0 = comb.sub %arg0, %c0_i7 : i7
+  rtl.output %0 : i7
+}
+
+// CHECK-LABEL:  rtl.module @sub_fold3(%arg0: i7) -> (i7) {
+// CHECK-NEXT:     %c0_i7 = rtl.constant 0 : i7
+// CHECK-NEXT:     rtl.output %c0_i7 : i7
+rtl.module @sub_fold3(%arg0: i7) -> (i7) {
+  %0 = comb.sub %arg0, %arg0 : i7
+  rtl.output %0 : i7
+}
