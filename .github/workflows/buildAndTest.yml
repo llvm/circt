@@ -14,9 +14,7 @@ jobs:
   # cache.
   build-llvm:
     name: Build LLVM
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/circt/images/circt-ci-build:20210516180131
+    runs-on: self-hosted
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
