@@ -40,7 +40,7 @@ public:
       llvm::raw_ostream &out, ModuleOp module,
       llvm::function_ref<mlir::LogicalResult(mlir::ModuleOp)> mlirTransformer,
       llvm::function_ref<llvm::Error(llvm::Module *)> llvmTransformer,
-      std::string root, int mode);
+      std::string root, int mode, ArrayRef<StringRef> sharedLibPaths);
 
   /// Default destructor
   ~Engine();
