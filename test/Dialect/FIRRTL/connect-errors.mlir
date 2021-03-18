@@ -249,6 +249,17 @@ firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>>, %b : !firrtl.bundle<f1: fl
 }
 }
 
+// -----
+
+firrtl.circuit "test" {
+firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>>, %b : !firrtl.flip<bundle<f1: uint<1>>>) {
+  %0 = firrtl.subfield %a("f1") : (!firrtl.bundle<f1: uint<1>>) -> !firrtl.uint<1>
+  %1 = firrtl.subfield %b("f1") : (!firrtl.flip<bundle<f1: uint<1>>>) -> !firrtl.flip<uint<1>>
+  // expected-error @+1 {{connection destination must be a non-passive type or a duplex value}}
+  firrtl.connect %0, %1 : !firrtl.uint<1>, !firrtl.flip<uint<1>>
+}
+}
+
 /// Destination bitwidth must be greater than or equal to source bitwidth.
 
 // -----

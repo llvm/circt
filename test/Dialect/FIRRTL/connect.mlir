@@ -130,6 +130,15 @@ firrtl.module @wires4(%out : !firrtl.flip<uint<1>>) {
   firrtl.connect %wf, %out : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
 }
 
+firrtl.module @wires5(%in : !firrtl.uint<1>, %out : !firrtl.flip<uint<1>>) {
+  %w = firrtl.wire : !firrtl.bundle<a: uint<1>>
+  %0 = firrtl.subfield %w("a") : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
+  // CHECK: firrtl.connect %0, %in : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: firrtl.connect %out, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %0, %in : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.connect %out, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+}
+
 firrtl.module @registers0(%clock : !firrtl.clock, %in : !firrtl.uint<1>, %out : !firrtl.flip<uint<1>>) {
   %0 = firrtl.reg %clock : (!firrtl.clock) -> !firrtl.uint<1>
   // CHECK: firrtl.connect %0, %in : !firrtl.uint<1>, !firrtl.uint<1>
