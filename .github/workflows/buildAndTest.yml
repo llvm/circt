@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      -hir-dev
+      - hir-dev
   pull_request:
     types: [assigned, opened, synchronize, reopened]
   workflow_dispatch:
