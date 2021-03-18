@@ -20,6 +20,7 @@
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Translation.h"
 #include "llvm/ADT/STLExtras.h"
@@ -48,11 +49,6 @@ static llvm::ManagedStatic<StringSet<>> reservedWordCache;
 //===----------------------------------------------------------------------===//
 
 static bool isVerilogExpression(Operation *op) {
-  // Merge is an expression according to the RTL dialect, but we need it emitted
-  // as a statement with its own wire declaration.
-  if (isa<MergeOp>(op))
-    return false;
-
   // These are SV dialect expressions.
   if (isa<ReadInOutOp>(op) || isa<ArrayIndexInOutOp>(op))
     return true;
@@ -271,7 +267,7 @@ static bool isTemporaryInProceduralRegion(Operation *op) {
 static StringRef getVerilogDeclWord(Operation *op) {
   if (isa<RegOp>(op))
     return "reg";
-  if (isa<WireOp>(op) || isa<MergeOp>(op))
+  if (isa<WireOp>(op))
     return "wire";
 
   // Interfaces instances use the name of the declared interface.
@@ -2489,9 +2485,6 @@ void StmtEmitter::emitStatement(Operation *op) {
   if (succeeded(dispatchSVVisitor(op)))
     return;
 
-  if (auto merge = dyn_cast<MergeOp>(op))
-    return emitMergeOp(merge);
-
   emitOpError(op, "cannot emit this operation to Verilog");
   indent() << "unknown MLIR operation " << op->getName().getStringRef() << "\n";
 }
@@ -2662,6 +2655,29 @@ void ModuleEmitter::emitRTLExternModule(RTLModuleExternOp module) {
   os << "// external module " << getModuleName(verilogName) << "\n\n";
 }
 
+/// We lower the Merge operation to a wire at the top level along with connects
+/// to it and a ReadInOut.
+static Value lowerMergeOp(MergeOp merge) {
+  auto module = merge->getParentOfType<RTLModuleOp>();
+  assert(module && "merges should only be in a module");
+
+  // Start with the wire at the top level.
+  ImplicitLocOpBuilder b(merge.getLoc(), &module.getBodyBlock()->front());
+  auto wire = b.create<WireOp>(merge.getType());
+
+  // Each of the operands is a connect or passign into the wire.
+  b.setInsertionPoint(merge);
+  if (merge->getParentOp()->hasTrait<sv::ProceduralRegion>()) {
+    for (auto op : merge.getOperands())
+      b.create<PAssignOp>(wire, op);
+  } else {
+    for (auto op : merge.getOperands())
+      b.create<ConnectOp>(wire, op);
+  }
+
+  return b.create<ReadInOutOp>(wire);
+}
+
 static Value lowerVariadicCommutativeOp(Operation &op, OperandRange operands) {
   Value lhs, rhs;
   switch (operands.size()) {
@@ -2701,6 +2717,14 @@ void ModuleEmitter::prepareRTLModule(Block &block) {
         prepareRTLModule(region.front());
     }
 
+    // Lower 'merge' operations to wires and connects.
+    if (auto merge = dyn_cast<MergeOp>(op)) {
+      auto result = lowerMergeOp(merge);
+      op.getResult(0).replaceAllUsesWith(result);
+      op.erase();
+      continue;
+    }
+
     // Lower commutative variadic operations with more than two operands into
     // balanced operand trees so we can split long lines across multiple
     // statements.
@@ -2708,7 +2732,7 @@ void ModuleEmitter::prepareRTLModule(Block &block) {
         op.hasTrait<mlir::OpTrait::IsCommutative>() &&
         mlir::MemoryEffectOpInterface::hasNoEffect(&op) &&
         op.getNumRegions() == 0 && op.getNumSuccessors() == 0 &&
-        op.getAttrs().empty() && !isa<comb::MergeOp>(op)) {
+        op.getAttrs().empty()) {
       // Lower this operation to a balanced binary tree of the same operation.
       auto result = lowerVariadicCommutativeOp(op, op.getOperands());
       op.getResult(0).replaceAllUsesWith(result);
