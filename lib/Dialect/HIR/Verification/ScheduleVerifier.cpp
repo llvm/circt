@@ -103,6 +103,7 @@ public:
       }
     TimeInstant v_instant(t, delay);
     mapValueToTimeInstant[v] = v_instant;
+    return true;
   }
 
   TimeInstant getTimeInstantOrError(Value v) {

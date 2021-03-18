@@ -200,7 +200,7 @@ bool BitwidthReductionPass::inspectOp(Operation *inst) {
   } else if (auto op = dyn_cast<hir::YieldOp>(inst)) {
     return inspectOp(op);
   } else if (auto op = dyn_cast<hir::TerminatorOp>(inst)) {
-    // Do nothing.
+    return true;
   } else {
     emitError(inst->getLoc(), "Unsupported Operation for bitwidth reduction!");
     return false;
@@ -217,6 +217,7 @@ bool BitwidthReductionPass::inspectBody(Block &block) {
   for (auto operation : opsToErase) {
     operation->erase();
   }
+  return true;
 }
 } // end anonymous namespace
 
