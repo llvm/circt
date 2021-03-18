@@ -61,7 +61,7 @@ def IfDefOp : SVOp<"ifdef", [HasRegionTerminator, NoRegionArguments,
 
 def IfDefProceduralOp
   : SVOp<"ifdef.procedural", [HasRegionTerminator, NoRegionArguments,
-                              ProceduralRegion, ProceduralOp]> {
+                              ProceduralRegion]> {
   let summary = "'ifdef MACRO' block for procedural regions";
 
   let description = [{
