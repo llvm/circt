@@ -2925,9 +2925,16 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   return failure(state.encounteredError);
 }
 
-LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
+LogicalResult
+circt::exportSplitVerilog(ModuleOp module, StringRef dirname,
+                          std::function<void(llvm::StringRef)> emittedFile) {
   SplitModuleEmitter emitter(dirname);
   emitter.emitMLIRModule(module);
+  if (emittedFile) {
+    for (auto mod : std::move(emitter.moduleOps)) {
+      emittedFile(mod.filename);
+    }
+  }
   return failure(emitter.encounteredError);
 }
 
