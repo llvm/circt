@@ -7,7 +7,7 @@ module {
     %c0 = constant 0 : index
     %c1 = constant 1 : index
     %c4 = constant 4 : index
-    %0 = alloc() : memref<256xi32>
+    %0 = memref.alloc() : memref<256xi32>
     br ^bb1(%c0 : index)
   ^bb1(%1: index):	// 2 preds: ^bb0, ^bb11
     %2 = cmpi slt, %1, %c4 : index
@@ -28,17 +28,17 @@ module {
     %9 = addi %7, %5 : index
     %10 = addi %7, %1 : index
     %11 = addi %8, %5 : index
-    %12 = load %0[%9] : memref<256xi32>
-    %13 = load %0[%10] : memref<256xi32>
-    %14 = load %0[%11] : memref<256xi32>
+    %12 = memref.load %0[%9] : memref<256xi32>
+    %13 = memref.load %0[%10] : memref<256xi32>
+    %14 = memref.load %0[%11] : memref<256xi32>
     %15 = addi %13, %14 : i32
     %16 = cmpi ult, %12, %15 : i32
     cond_br %16, ^bb7, ^bb8
   ^bb7:	// pred: ^bb6
-    store %12, %0[%9] : memref<256xi32>
+    memref.store %12, %0[%9] : memref<256xi32>
     br ^bb9
   ^bb8:	// pred: ^bb6
-    store %15, %0[%9] : memref<256xi32>
+    memref.store %15, %0[%9] : memref<256xi32>
     br ^bb9
   ^bb9:	// 2 preds: ^bb7, ^bb8
     %17 = addi %5, %c1 : index

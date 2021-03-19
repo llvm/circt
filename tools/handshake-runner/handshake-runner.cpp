@@ -13,6 +13,7 @@
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/Parser.h"
@@ -62,7 +63,8 @@ int main(int argc, char **argv) {
 
   // Load the MLIR module.
   mlir::MLIRContext context;
-  context.loadDialect<StandardOpsDialect, handshake::HandshakeOpsDialect>();
+  context.loadDialect<StandardOpsDialect, memref::MemRefDialect,
+                      handshake::HandshakeOpsDialect>();
   SourceMgr source_mgr;
   source_mgr.AddNewSourceBuffer(std::move(*file_or_err), SMLoc());
   mlir::OwningModuleRef module(mlir::parseSourceFile(source_mgr, &context));

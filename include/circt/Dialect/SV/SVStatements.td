@@ -207,7 +207,8 @@ def AlwaysFFOp : SVOp<"alwaysff", [HasRegionTerminator, NoRegionArguments,
   
   let regions = (region SizedRegion<1>:$bodyBlk, AnyRegion:$resetBlk);
   let arguments = (ins EventControlAttr:$clockEdge, I1:$clock, 
-                       DefaultValuedAttr<ResetTypeAttr, "0">:$resetStyle,
+                       DefaultValuedAttr<ResetTypeAttr, 
+                                         "ResetType::NoReset">:$resetStyle,
                        OptionalAttr<EventControlAttr>:$resetEdge, 
                        Optional<I1>:$reset);
   let results = (outs);
