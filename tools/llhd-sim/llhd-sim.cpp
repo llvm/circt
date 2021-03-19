@@ -103,7 +103,10 @@ static cl::opt<TraceFormat> traceMode(
         clEnumValN(noTrace, "no-trace", "Don't dump a signal trace")));
 
 static cl::list<std::string>
-    sharedLibs("shared-libs", cl::desc("Libraries to link dynamically"),
+    sharedLibs("shared-libs",
+               cl::desc("Libraries to link dynamically. Specify absolute path "
+                        "to llhd-signals-runtime-wrappers for GCC or Windows. "
+                        "Optional otherwise."),
                cl::ZeroOrMore, cl::MiscFlags::CommaSeparated);
 
 static int dumpLLVM(ModuleOp module, MLIRContext &context) {
