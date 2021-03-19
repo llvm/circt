@@ -143,9 +143,3 @@ rtl.module @Cover(%arg0: i1) {
   // expected-error @+1 {{sv.cover should be in a procedural region}}
   sv.cover %arg0: i1
 }
-
-// -----
-rtl.module @IfDefProcedural() {
-  // expected-error @+1 {{sv.ifdef.procedural should be in a procedural region}}
-  sv.ifdef.procedural "Foo" {}
-}

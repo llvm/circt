@@ -1434,16 +1434,20 @@ FIRStmtParser::parseExpWithLeadingKeyword(StringRef keyword,
   // other ops.
   // Non '.' ops take the plain symbole path.
   if (resolveSymbolEntry(lhs, symtabEntry, info.getFIRLoc(), false)) {
+    // Ok if the base name didn't resolve by itself, it might be part of an
+    // expanded dot reference.  That doesn't work then we fail.
+    if (!consumeIf(FIRToken::period))
+      return ParseResult(failure());
+
     StringRef fieldName;
-    consumeToken(FIRToken::period);
     if (parseFieldId(fieldName, "expected field name") ||
         resolveSymbolEntry(lhs, symtabEntry, fieldName, info.getFIRLoc()))
       return ParseResult(failure());
-  } else {
-    // plain symbol
-    if (parseOptionalExpPostscript(lhs, subOps))
-      return ParseResult(failure());
   }
+
+  // Parse any further trailing things like "mem.x.y".
+  if (parseOptionalExpPostscript(lhs, subOps))
+    return ParseResult(failure());
 
   return parseLeadingExpStmt(lhs, subOps);
 }

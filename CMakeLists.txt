@@ -354,3 +354,21 @@ if (NOT LLVM_ENABLE_IDE)
 endif()
 
 add_subdirectory(cmake/modules)
+
+# Set RPATH to $ORIGIN on all targets.
+function(set_rpath_all_targets dir)
+  get_property(subdirectories DIRECTORY ${dir} PROPERTY SUBDIRECTORIES)
+  foreach(subdir ${subdirectories})
+    set_rpath_all_targets(${subdir})
+  endforeach()
+
+  get_directory_property(LCL_TARGETS DIRECTORY ${dir} BUILDSYSTEM_TARGETS)
+  set_property(TARGET ${LCL_TARGETS} PROPERTY INSTALL_RPATH "$ORIGIN/../lib")
+endfunction()
+
+option(STANDALONE_INSTALL "Create an 'install' for packaging which doesn't \
+         require installation" off)
+if (STANDALONE_INSTALL)
+  message(STATUS "Setting an $ORIGIN-based RPATH on all executables")
+  set_rpath_all_targets(${CMAKE_CURRENT_SOURCE_DIR})
+endif()
