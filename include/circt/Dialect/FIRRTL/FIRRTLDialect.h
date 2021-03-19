@@ -35,6 +35,10 @@ public:
                                  Location loc) override;
 
   static StringRef getDialectNamespace() { return "firrtl"; }
+
+private:
+  /// Register all FIRRTL types.
+  void registerTypes();
 };
 
 /// If the specified attribute list has a firrtl.name attribute, return its

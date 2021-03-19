@@ -27,11 +27,8 @@ SVDialect::SVDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context,
               ::mlir::TypeID::get<SVDialect>()) {
   context->loadDialect<circt::comb::CombDialect>();
-  // Register types.
-  addTypes<
-#define GET_TYPEDEF_LIST
-#include "circt/Dialect/SV/SVTypes.cpp.inc"
-      >();
+
+  registerTypes();
 
   // Register operations.
   addOperations<
