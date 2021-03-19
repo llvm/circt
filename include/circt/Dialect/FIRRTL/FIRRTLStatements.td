@@ -30,6 +30,8 @@ def AttachOp : FIRRTLOp<"attach"> {
   let results = (outs);
 
   let assemblyFormat = "$operands attr-dict `:` type($operands)";
+
+  let hasCanonicalizer = 1;
 }
 
 def ConnectOp : FIRRTLOp<"connect", []> {

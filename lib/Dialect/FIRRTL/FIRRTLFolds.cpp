@@ -609,9 +609,54 @@ OpFoldResult AsNonPassivePrimOp::fold(ArrayRef<Attribute> operands) {
   return {};
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Connection like things
-///////////////////////////////////////////////////////////////////////////////
+//===----------------------------------------------------------------------===//
+// Statements
+//===----------------------------------------------------------------------===//
+
+/// If the specified value has an AttachOp user strictly dominating by
+/// "dominatingAttach" then return it.
+static AttachOp getDominatingAttachUser(Value value, AttachOp dominatedAttach) {
+  for (auto *user : value.getUsers()) {
+    auto attach = dyn_cast<AttachOp>(user);
+    if (!attach || attach == dominatedAttach)
+      continue;
+    if (attach->isBeforeInBlock(dominatedAttach))
+      return attach;
+  }
+  return {};
+}
+
+void AttachOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                           MLIRContext *context) {
+  struct Folder final : public OpRewritePattern<AttachOp> {
+    using OpRewritePattern::OpRewritePattern;
+
+    // Check to see if any of our operands has other attaches to it:
+    //    attach x, y
+    //      ...
+    //    attach x, z
+    // If so, we can merge these into "attach x, y, z".
+    LogicalResult matchAndRewrite(AttachOp op,
+                                  PatternRewriter &rewriter) const override {
+      for (auto operand : op.getOperands()) {
+        if (auto attach = getDominatingAttachUser(operand, op)) {
+          SmallVector<Value> newOperands(op.getOperands());
+          for (auto newOperand : attach.getOperands())
+            if (newOperand != operand) // Don't add operand twice.
+              newOperands.push_back(newOperand);
+          rewriter.create<AttachOp>(op->getLoc(), newOperands);
+          rewriter.eraseOp(op);
+          rewriter.eraseOp(attach);
+          return success();
+        }
+      }
+      return failure();
+    }
+  };
+
+  results.insert<Folder>(context);
+}
+
 void PartialConnectOp::getCanonicalizationPatterns(
     OwningRewritePatternList &results, MLIRContext *context) {
   struct Truncater final : public OpRewritePattern<PartialConnectOp> {
