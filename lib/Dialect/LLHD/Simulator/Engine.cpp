@@ -53,9 +53,9 @@ Engine::Engine(
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
 
-  auto maybeEngine =
-      mlir::ExecutionEngine::create(this->module, nullptr, llvmTransformer,
-          /*jitCodeGenOptLevel=*/llvm::None, /*sharedLibPaths=*/sharedLibPaths);
+  auto maybeEngine = mlir::ExecutionEngine::create(
+      this->module, nullptr, llvmTransformer,
+      /*jitCodeGenOptLevel=*/llvm::None, /*sharedLibPaths=*/sharedLibPaths);
   assert(maybeEngine && "failed to create JIT");
   engine = std::move(*maybeEngine);
 }
