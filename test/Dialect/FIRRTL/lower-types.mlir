@@ -514,6 +514,7 @@ firrtl.circuit "ExternalModule" {
     %inst_source = firrtl.instance @ExternalModule {name = "", portNames = ["source"]} : !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>
   }
 }
+
 // -----
 
 // Test RegResetOp lowering
