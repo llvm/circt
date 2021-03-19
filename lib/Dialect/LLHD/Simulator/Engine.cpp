@@ -27,7 +27,7 @@ Engine::Engine(
     llvm::raw_ostream &out, ModuleOp module,
     llvm::function_ref<mlir::LogicalResult(mlir::ModuleOp)> mlirTransformer,
     llvm::function_ref<llvm::Error(llvm::Module *)> llvmTransformer,
-    std::string root, int mode)
+    std::string root, int mode, ArrayRef<StringRef> sharedLibPaths)
     : out(out), root(root), traceMode(mode) {
   state = std::make_unique<State>();
   state->root = root + '.' + root;
@@ -52,8 +52,10 @@ Engine::Engine(
 
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
-  auto maybeEngine =
-      mlir::ExecutionEngine::create(this->module, nullptr, llvmTransformer);
+
+  auto maybeEngine = mlir::ExecutionEngine::create(
+      this->module, nullptr, llvmTransformer,
+      /*jitCodeGenOptLevel=*/llvm::None, /*sharedLibPaths=*/sharedLibPaths);
   assert(maybeEngine && "failed to create JIT");
   engine = std::move(*maybeEngine);
 }
