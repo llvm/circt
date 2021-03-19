@@ -571,12 +571,17 @@ void TypeLoweringVisitor::visitDecl(RegOp op) {
 
   // Loop over the leaf aggregates.
   for (auto field : fieldTypes) {
-    SmallString<16> loweredName(op.nameAttr().getValue());
-    loweredName += field.suffix;
+    SmallString<16> loweredName("");
+    if (auto nameAttr = op.nameAttr()) {
+      loweredName = nameAttr.getValue();
+      loweredName += field.suffix;
+    }
     setBundleLowering(
         result, StringRef(field.suffix).drop_front(1),
         builder->create<RegOp>(field.getPortType(), op.clockVal(),
-                               builder->getStringAttr(loweredName)));
+                               loweredName.empty()
+                                   ? nullptr
+                                   : builder->getStringAttr(loweredName)));
   }
 
   // Remember to remove the original op.
@@ -600,15 +605,20 @@ void TypeLoweringVisitor::visitDecl(RegResetOp op) {
 
   // Loop over the leaf aggregates.
   for (auto field : fieldTypes) {
-    SmallString<16> loweredName(op.nameAttr().getValue());
-    loweredName += field.suffix;
+    SmallString<16> loweredName("");
+    if (auto nameAttr = op.nameAttr()) {
+      loweredName = nameAttr.getValue();
+      loweredName += field.suffix;
+    }
     auto suffix = StringRef(field.suffix).drop_front(1);
     auto resetValLowered = getBundleLowering(op.resetValue(), suffix);
     setBundleLowering(
         result, suffix,
         builder->create<RegResetOp>(field.getPortType(), op.clockVal(),
                                     op.resetSignal(), resetValLowered,
-                                    builder->getStringAttr(loweredName)));
+                                    loweredName.empty()
+                                        ? nullptr
+                                        : builder->getStringAttr(loweredName)));
   }
 
   // Remember to remove the original op.
