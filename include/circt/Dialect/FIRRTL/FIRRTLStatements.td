@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-def MemoryPortOp : FIRRTLOp<"memoryport", []> {
+def MemoryPortOp : FIRRTLOp<"memoryport"> {
   let summary = "Access a memory";
 
   let arguments = (ins FIRRTLType:$memory, IntType:$index, ClockType:$clock,
@@ -32,9 +32,13 @@ def AttachOp : FIRRTLOp<"attach"> {
   let assemblyFormat = "$operands attr-dict `:` type($operands)";
 
   let hasCanonicalizer = 1;
+
+  let extraClassDeclaration = [{
+    static LogicalResult canonicalize(AttachOp op, PatternRewriter &rewriter);
+  }];
 }
 
-def ConnectOp : FIRRTLOp<"connect", []> {
+def ConnectOp : FIRRTLOp<"connect"> {
   let summary = "Connect two signals";
   let description = [{
     Connect Operation:
@@ -52,7 +56,7 @@ def ConnectOp : FIRRTLOp<"connect", []> {
   let verifier = "return ::verifyConnectOp(*this);";
 }
 
-def PartialConnectOp : FIRRTLOp<"partialconnect", []> {
+def PartialConnectOp : FIRRTLOp<"partialconnect"> {
   let summary = "Connect two signals";
   let description = [{
     Connect two values with fewer constraints:
@@ -67,9 +71,14 @@ def PartialConnectOp : FIRRTLOp<"partialconnect", []> {
 
   let assemblyFormat =
     "$dest `,` $src  attr-dict `:` type($dest) `,` type($src)";
+
+  let extraClassDeclaration = [{
+    static LogicalResult canonicalize(PartialConnectOp op,
+                                      PatternRewriter &rewriter);
+  }];
 }
 
-def PrintFOp : FIRRTLOp<"printf", []> {
+def PrintFOp : FIRRTLOp<"printf"> {
   let summary = "Formatted Print Statement";
 
   let arguments = (ins ClockType:$clock, UInt1Type:$cond, StrAttr:$formatString,
@@ -99,7 +108,7 @@ def SkipOp : FIRRTLOp<"skip", [NoSideEffect]> {
   let assemblyFormat = "attr-dict";
 }
 
-def StopOp : FIRRTLOp<"stop", []> {
+def StopOp : FIRRTLOp<"stop"> {
   let summary = "Stop Statement";
 
   let arguments = (ins ClockType:$clock, UInt1Type:$cond, I32Attr:$exitCode);
@@ -108,7 +117,7 @@ def StopOp : FIRRTLOp<"stop", []> {
   let assemblyFormat = "$clock `,` $cond `,` $exitCode attr-dict";
 }
 
-def AssertOp : FIRRTLOp<"assert", []> {
+def AssertOp : FIRRTLOp<"assert"> {
   let summary = "Assert Verification Statement";
 
   let arguments = (ins ClockType:$clock, UInt1Type:$predicate, UInt1Type:$enable,
@@ -119,7 +128,7 @@ def AssertOp : FIRRTLOp<"assert", []> {
     "$clock `,` $predicate `,` $enable `,` $message attr-dict";
 }
 
-def AssumeOp : FIRRTLOp<"assume", []> {
+def AssumeOp : FIRRTLOp<"assume"> {
   let summary = "Assume Verification Statement";
 
   let arguments = (ins ClockType:$clock, UInt1Type:$predicate, UInt1Type:$enable,
@@ -130,7 +139,7 @@ def AssumeOp : FIRRTLOp<"assume", []> {
     "$clock `,` $predicate `,` $enable `,` $message attr-dict";
 }
 
-def CoverOp : FIRRTLOp<"cover", []> {
+def CoverOp : FIRRTLOp<"cover"> {
   let summary = "Cover Verification Statement";
 
   let arguments = (ins ClockType:$clock, UInt1Type:$predicate, UInt1Type:$enable,

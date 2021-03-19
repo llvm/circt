@@ -44,6 +44,42 @@ static inline ConstantIntMatcher m_FConstant(APInt &value) {
   return ConstantIntMatcher(value);
 }
 
+// TODO: Should move to MLIR upstream.
+template <typename OpType>
+static void
+addCanonicalizer(OwningRewritePatternList &results, MLIRContext *context,
+                 LogicalResult (*implFn)(OpType, PatternRewriter &rewriter)) {
+  // std::function<LogicalResult(OpType, PatternRewriter &rewriter)> implFn) {
+  struct Folder final : public OpRewritePattern<OpType> {
+    LogicalResult (*implFn)(OpType, PatternRewriter &rewriter);
+
+    Folder(LogicalResult (*implFn)(OpType, PatternRewriter &rewriter),
+           MLIRContext *context)
+        : OpRewritePattern<OpType>(context), implFn(implFn) {}
+
+    LogicalResult matchAndRewrite(OpType op,
+                                  PatternRewriter &rewriter) const override {
+      return implFn(op, rewriter);
+    }
+  };
+
+  results.insert(std::make_unique<Folder>(std::move(implFn), context));
+}
+
+template <typename OpType>
+static void addCanonicalizerMethod(OwningRewritePatternList &results,
+                                   MLIRContext *context) {
+  struct Folder final : public OpRewritePattern<OpType> {
+    using OpRewritePattern<OpType>::OpRewritePattern;
+
+    LogicalResult matchAndRewrite(OpType op,
+                                  PatternRewriter &rewriter) const override {
+      return OpType::canonicalize(op, rewriter);
+    }
+  };
+  results.insert<Folder>(context);
+}
+
 //===----------------------------------------------------------------------===//
 // Fold Hooks
 //===----------------------------------------------------------------------===//
@@ -216,32 +252,25 @@ OpFoldResult AsUIntPrimOp::fold(ArrayRef<Attribute> operands) {
 // Other Operators
 //===----------------------------------------------------------------------===//
 
+static LogicalResult canonicalize(CatPrimOp op, PatternRewriter &rewriter) {
+  // cat(bits(x, ...), bits(x, ...)) -> bits(x ...) when the two ...'s are
+  // consequtive in the input.
+  if (auto lhsBits = dyn_cast_or_null<BitsPrimOp>(op.lhs().getDefiningOp())) {
+    if (auto rhsBits = dyn_cast_or_null<BitsPrimOp>(op.rhs().getDefiningOp())) {
+      if (lhsBits.input() == rhsBits.input() &&
+          lhsBits.lo() - 1 == rhsBits.hi()) {
+        rewriter.replaceOpWithNewOp<BitsPrimOp>(
+            op, op.getType(), lhsBits.input(), lhsBits.hi(), rhsBits.lo());
+        return success();
+      }
+    }
+  }
+  return failure();
+}
+
 void CatPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                             MLIRContext *context) {
-  struct Folder final : public OpRewritePattern<CatPrimOp> {
-    using OpRewritePattern::OpRewritePattern;
-
-    LogicalResult matchAndRewrite(CatPrimOp op,
-                                  PatternRewriter &rewriter) const override {
-      // cat(bits(x, ...), bits(x, ...)) -> bits(x ...) when the two ...'s are
-      // consequtive in the input.
-      if (auto lhsBits =
-              dyn_cast_or_null<BitsPrimOp>(op.lhs().getDefiningOp())) {
-        if (auto rhsBits =
-                dyn_cast_or_null<BitsPrimOp>(op.rhs().getDefiningOp())) {
-          if (lhsBits.input() == rhsBits.input() &&
-              lhsBits.lo() - 1 == rhsBits.hi()) {
-            rewriter.replaceOpWithNewOp<BitsPrimOp>(
-                op, op.getType(), lhsBits.input(), lhsBits.hi(), rhsBits.lo());
-            return success();
-          }
-        }
-      }
-      return failure();
-    }
-  };
-
-  results.insert<Folder>(context);
+  addCanonicalizer<CatPrimOp>(results, context, canonicalize);
 }
 
 OpFoldResult BitsPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -261,28 +290,22 @@ OpFoldResult BitsPrimOp::fold(ArrayRef<Attribute> operands) {
   return {};
 }
 
+static LogicalResult canonicalize(BitsPrimOp op, PatternRewriter &rewriter) {
+  auto inputOp = op.input().getDefiningOp();
+  // bits(bits(x, ...), ...) -> bits(x, ...).
+  if (auto innerBits = dyn_cast_or_null<BitsPrimOp>(inputOp)) {
+    auto newLo = op.lo() + innerBits.lo();
+    auto newHi = newLo + op.hi() - op.lo();
+    rewriter.replaceOpWithNewOp<BitsPrimOp>(op, innerBits.input(), newHi,
+                                            newLo);
+    return success();
+  }
+  return failure();
+}
+
 void BitsPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                              MLIRContext *context) {
-  struct Folder final : public OpRewritePattern<BitsPrimOp> {
-    using OpRewritePattern::OpRewritePattern;
-
-    LogicalResult matchAndRewrite(BitsPrimOp op,
-                                  PatternRewriter &rewriter) const override {
-
-      auto inputOp = op.input().getDefiningOp();
-      // bits(bits(x, ...), ...) -> bits(x, ...).
-      if (auto innerBits = dyn_cast_or_null<BitsPrimOp>(inputOp)) {
-        auto newLo = op.lo() + innerBits.lo();
-        auto newHi = newLo + op.hi() - op.lo();
-        rewriter.replaceOpWithNewOp<BitsPrimOp>(op, innerBits.input(), newHi,
-                                                newLo);
-        return success();
-      }
-      return failure();
-    }
-  };
-
-  results.insert<Folder>(context);
+  addCanonicalizer<BitsPrimOp>(results, context, canonicalize);
 }
 
 /// Replace the specified operation with a 'bits' op from the specified hi/lo
@@ -303,28 +326,22 @@ static void replaceWithBits(Operation *op, Value value, unsigned hiBit,
   rewriter.replaceOp(op, value);
 }
 
+static LogicalResult canonicalize(HeadPrimOp op, PatternRewriter &rewriter) {
+  auto inputWidth = op.input().getType().cast<IntType>().getWidthOrSentinel();
+  if (inputWidth == -1)
+    return failure();
+
+  // If we know the input width, we can canonicalize this into a BitsPrimOp.
+  unsigned keepAmount = op.amount();
+  if (keepAmount)
+    replaceWithBits(op, op.input(), inputWidth - 1, inputWidth - keepAmount,
+                    rewriter);
+  return success();
+}
+
 void HeadPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                              MLIRContext *context) {
-  struct Folder final : public OpRewritePattern<HeadPrimOp> {
-    using OpRewritePattern::OpRewritePattern;
-
-    LogicalResult matchAndRewrite(HeadPrimOp op,
-                                  PatternRewriter &rewriter) const override {
-      auto inputWidth =
-          op.input().getType().cast<IntType>().getWidthOrSentinel();
-      if (inputWidth == -1)
-        return failure();
-
-      // If we know the input width, we can canonicalize this into a BitsPrimOp.
-      unsigned keepAmount = op.amount();
-      if (keepAmount)
-        replaceWithBits(op, op.input(), inputWidth - 1, inputWidth - keepAmount,
-                        rewriter);
-      return success();
-    }
-  };
-
-  results.insert<Folder>(context);
+  addCanonicalizer<HeadPrimOp>(results, context, canonicalize);
 }
 
 OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -444,62 +461,48 @@ OpFoldResult ShrPrimOp::fold(ArrayRef<Attribute> operands) {
   return {};
 }
 
+static LogicalResult canonicalize(ShrPrimOp op, PatternRewriter &rewriter) {
+  auto inputWidth = op.input().getType().cast<IntType>().getWidthOrSentinel();
+  if (inputWidth == -1)
+    return failure();
+
+  // If we know the input width, we can canonicalize this into a BitsPrimOp.
+  unsigned shiftAmount = op.amount();
+  if (int(shiftAmount) >= inputWidth) {
+    // shift(x, 32) => 0 when x has 32 bits.  This is handled by fold().
+    if (op.getType().isUnsigned())
+      return failure();
+
+    // Shifting a signed value by the full width is actually taking the
+    // sign bit. If the shift amount is greater than the input width, it
+    // is equivalent to shifting by the input width.
+    shiftAmount = inputWidth - 1;
+  }
+
+  replaceWithBits(op, op.input(), inputWidth - 1, shiftAmount, rewriter);
+  return success();
+}
+
 void ShrPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                             MLIRContext *context) {
-  struct Folder final : public OpRewritePattern<ShrPrimOp> {
-    using OpRewritePattern::OpRewritePattern;
+  addCanonicalizer<ShrPrimOp>(results, context, canonicalize);
+}
 
-    LogicalResult matchAndRewrite(ShrPrimOp op,
-                                  PatternRewriter &rewriter) const override {
-      auto inputWidth =
-          op.input().getType().cast<IntType>().getWidthOrSentinel();
-      if (inputWidth == -1)
-        return failure();
+static LogicalResult canonicalize(TailPrimOp op, PatternRewriter &rewriter) {
+  auto inputWidth = op.input().getType().cast<IntType>().getWidthOrSentinel();
+  if (inputWidth == -1)
+    return failure();
 
-      // If we know the input width, we can canonicalize this into a BitsPrimOp.
-      unsigned shiftAmount = op.amount();
-      if (int(shiftAmount) >= inputWidth) {
-        // shift(x, 32) => 0 when x has 32 bits.  This is handled by fold().
-        if (op.getType().isUnsigned())
-          return failure();
-
-        // Shifting a signed value by the full width is actually taking the sign
-        // bit. If the shift amount is greater than the input width, it is
-        // equivalent to shifting by the input width.
-        shiftAmount = inputWidth - 1;
-      }
-
-      replaceWithBits(op, op.input(), inputWidth - 1, shiftAmount, rewriter);
-      return success();
-    }
-  };
-
-  results.insert<Folder>(context);
+  // If we know the input width, we can canonicalize this into a BitsPrimOp.
+  unsigned dropAmount = op.amount();
+  if (dropAmount != unsigned(inputWidth))
+    replaceWithBits(op, op.input(), inputWidth - dropAmount - 1, 0, rewriter);
+  return success();
 }
 
 void TailPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                              MLIRContext *context) {
-  struct Folder final : public OpRewritePattern<TailPrimOp> {
-    using OpRewritePattern::OpRewritePattern;
-
-    LogicalResult matchAndRewrite(TailPrimOp op,
-                                  PatternRewriter &rewriter) const override {
-      auto inputWidth =
-          op.input().getType().cast<IntType>().getWidthOrSentinel();
-      if (inputWidth == -1)
-        return failure();
-
-      // If we know the input width, we can canonicalize this into a
-      // BitsPrimOp.
-      unsigned dropAmount = op.amount();
-      if (dropAmount != unsigned(inputWidth))
-        replaceWithBits(op, op.input(), inputWidth - dropAmount - 1, 0,
-                        rewriter);
-      return success();
-    }
-  };
-
-  results.insert<Folder>(context);
+  addCanonicalizer<TailPrimOp>(results, context, canonicalize);
 }
 
 //===----------------------------------------------------------------------===//
@@ -530,39 +533,34 @@ static ConnectOp findSingleConnectSet(Value value) {
   return set;
 }
 
+static LogicalResult canonicalize(RegOp op, PatternRewriter &rewriter) {
+  // If the reg is only initialized with a constant or invalid, then we
+  // know that all the uses will always get that value.
+  if (auto set = findSingleConnectSet(op)) {
+    auto *srcValue = set.src().getDefiningOp();
+    if (srcValue &&
+        (isa<ConstantOp>(srcValue) || isa<InvalidValuePrimOp>(srcValue)) &&
+        // TODO: We could handle constants at other level of when's etc.
+        srcValue->getParentOp() == op->getParentOp() &&
+        // TODO: Could handle extension some day if we want to.
+        srcValue->getResult(0).getType() == op.getType()) {
+
+      // Make sure the constant dominates all users.
+      if (!srcValue->isBeforeInBlock(op))
+        srcValue->moveBefore(op);
+      // Remove the set of register.
+      rewriter.eraseOp(set);
+      // Replace all connects using the register with the constant, and
+      // remove the reg.
+      rewriter.replaceOp(op, srcValue->getResult(0));
+    }
+  }
+  return failure();
+}
+
 void RegOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                         MLIRContext *context) {
-  struct Folder final : public OpRewritePattern<RegOp> {
-    using OpRewritePattern::OpRewritePattern;
-
-    LogicalResult matchAndRewrite(RegOp op,
-                                  PatternRewriter &rewriter) const override {
-      // If the reg is only initialized with a constant or invalid, then we
-      // know that all the uses will always get that value.
-      if (auto set = findSingleConnectSet(op)) {
-        auto *srcValue = set.src().getDefiningOp();
-        if (srcValue &&
-            (isa<ConstantOp>(srcValue) || isa<InvalidValuePrimOp>(srcValue)) &&
-            // TODO: We could handle constants at other level of when's etc.
-            srcValue->getParentOp() == op->getParentOp() &&
-            // TODO: Could handle extension some day if we want to.
-            srcValue->getResult(0).getType() == op.getType()) {
-
-          // Make sure the constant dominates all users.
-          if (!srcValue->isBeforeInBlock(op))
-            srcValue->moveBefore(op);
-          // Remove the set of register.
-          rewriter.eraseOp(set);
-          // Replace all connects using the register with the constant, and
-          // remove the reg.
-          rewriter.replaceOp(op, srcValue->getResult(0));
-        }
-      }
-      return failure();
-    }
-  };
-
-  results.insert<Folder>(context);
+  addCanonicalizer<RegOp>(results, context, canonicalize);
 }
 
 //===----------------------------------------------------------------------===//
@@ -626,87 +624,81 @@ static AttachOp getDominatingAttachUser(Value value, AttachOp dominatedAttach) {
   return {};
 }
 
-void AttachOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
-                                           MLIRContext *context) {
-  struct Folder final : public OpRewritePattern<AttachOp> {
-    using OpRewritePattern::OpRewritePattern;
+LogicalResult AttachOp::canonicalize(AttachOp op, PatternRewriter &rewriter) {
+  // Single operand attaches are a noop.
+  if (op.getNumOperands() <= 1) {
+    rewriter.eraseOp(op);
+    return success();
+  }
 
-    LogicalResult matchAndRewrite(AttachOp op,
-                                  PatternRewriter &rewriter) const override {
-      // Single operand attaches are a noop.
-      if (op.getNumOperands() <= 1) {
+  for (auto operand : op.getOperands()) {
+    // Check to see if any of our operands has other attaches to it:
+    //    attach x, y
+    //      ...
+    //    attach x, z
+    // If so, we can merge these into "attach x, y, z".
+    if (auto attach = getDominatingAttachUser(operand, op)) {
+      SmallVector<Value> newOperands(op.getOperands());
+      for (auto newOperand : attach.getOperands())
+        if (newOperand != operand) // Don't add operand twice.
+          newOperands.push_back(newOperand);
+      rewriter.create<AttachOp>(op->getLoc(), newOperands);
+      rewriter.eraseOp(attach);
+      rewriter.eraseOp(op);
+      return success();
+    }
+
+    // If this wire is *only* used by an attach then we can just delete
+    // it.
+    // TODO: May need to be sensitive to "don't touch" or other
+    // annotations.
+    if (auto wire = dyn_cast_or_null<WireOp>(operand.getDefiningOp())) {
+      if (wire->hasOneUse()) {
+        SmallVector<Value> newOperands;
+        for (auto newOperand : op.getOperands())
+          if (newOperand != operand) // Don't the add wire.
+            newOperands.push_back(newOperand);
+
+        rewriter.create<AttachOp>(op->getLoc(), newOperands);
         rewriter.eraseOp(op);
+        rewriter.eraseOp(wire);
         return success();
       }
-
-      for (auto operand : op.getOperands()) {
-        // Check to see if any of our operands has other attaches to it:
-        //    attach x, y
-        //      ...
-        //    attach x, z
-        // If so, we can merge these into "attach x, y, z".
-        if (auto attach = getDominatingAttachUser(operand, op)) {
-          SmallVector<Value> newOperands(op.getOperands());
-          for (auto newOperand : attach.getOperands())
-            if (newOperand != operand) // Don't add operand twice.
-              newOperands.push_back(newOperand);
-          rewriter.create<AttachOp>(op->getLoc(), newOperands);
-          rewriter.eraseOp(op);
-          rewriter.eraseOp(attach);
-          return success();
-        }
-
-        // If this wire is *only* used by an attach then we can just delete it.
-        // TODO: May need to be sensitive to "don't touch" or other annotations.
-        if (auto wire = dyn_cast_or_null<WireOp>(operand.getDefiningOp())) {
-          if (wire->hasOneUse()) {
-            SmallVector<Value> newOperands;
-            for (auto newOperand : op.getOperands())
-              if (newOperand != operand) // Don't add wire.
-                newOperands.push_back(newOperand);
-
-            rewriter.create<AttachOp>(op->getLoc(), newOperands);
-            rewriter.eraseOp(op);
-            rewriter.eraseOp(wire);
-            return success();
-          }
-        }
-      }
-      return failure();
     }
-  };
+  }
+  return failure();
+}
 
-  results.insert<Folder>(context);
+void AttachOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                           MLIRContext *context) {
+  addCanonicalizer<AttachOp>(results, context, canonicalize);
+}
+
+LogicalResult PartialConnectOp::canonicalize(PartialConnectOp op,
+                                             PatternRewriter &rewriter) {
+  // If a partial connect exists from a longer int to a shorter int, simplify
+  // to a truncation and connect.
+  auto destType =
+      op.getOperand(0).getType().cast<FIRRTLType>().getPassiveType();
+  auto srcType = op.getOperand(1).getType().cast<FIRRTLType>();
+  if (destType == srcType)
+    return failure();
+
+  auto srcWidth = srcType.getBitWidthOrSentinel();
+  auto destWidth = destType.getBitWidthOrSentinel();
+
+  if (destType.isa<IntType>() && srcType.isa<IntType>() && srcWidth > 0 &&
+      destWidth > 0 && destWidth < srcWidth) {
+    auto shortened = rewriter.createOrFold<TailPrimOp>(
+        op.getLoc(), destType, op.getOperand(1), srcWidth - destWidth);
+    rewriter.create<ConnectOp>(op.getLoc(), op.getOperand(0), shortened);
+    rewriter.eraseOp(op);
+    return success();
+  }
+  return failure();
 }
 
 void PartialConnectOp::getCanonicalizationPatterns(
     OwningRewritePatternList &results, MLIRContext *context) {
-  struct Truncater final : public OpRewritePattern<PartialConnectOp> {
-    using OpRewritePattern::OpRewritePattern;
-
-    // If a partial connect exists from a longer int to a shorter int, simplify
-    // to a truncation and connect
-    LogicalResult matchAndRewrite(PartialConnectOp op,
-                                  PatternRewriter &rewriter) const override {
-      auto destType =
-          op.getOperand(0).getType().cast<FIRRTLType>().getPassiveType();
-      auto srcType = op.getOperand(1).getType().cast<FIRRTLType>();
-      if (destType == srcType)
-        return failure();
-
-      auto srcWidth = srcType.getBitWidthOrSentinel();
-      auto destWidth = destType.getBitWidthOrSentinel();
-
-      if (destType.isa<IntType>() && srcType.isa<IntType>() && srcWidth > 0 &&
-          destWidth > 0 && destWidth < srcWidth) {
-        auto shortened = rewriter.createOrFold<TailPrimOp>(
-            op->getLoc(), destType, op.getOperand(1), srcWidth - destWidth);
-        rewriter.create<ConnectOp>(op->getLoc(), op.getOperand(0), shortened);
-        rewriter.eraseOp(op);
-      }
-      return failure();
-    }
-  };
-
-  results.insert<Truncater>(context);
+  addCanonicalizerMethod<PartialConnectOp>(results, context);
 }
