@@ -18,7 +18,7 @@ target_link_libraries(circt-opt
   CIRCTLLHD
   CIRCTLLHDToLLVM
   CIRCTLLHDTransforms
-  CIRCTPhysical
+  CIRCTMSFT
   CIRCTRTL
   CIRCTRTLToLLHD
   CIRCTStandardToHandshake

@@ -1,4 +1,4 @@
-##===- CMakeLists.txt - Physical dialect build definitions ----*- cmake -*-===//
+##===- CMakeLists.txt - MSFT dialect build definitions --------*- cmake -*-===//
 ##
 ## Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 ## See https://llvm.org/LICENSE.txt for license information.
@@ -9,7 +9,7 @@
 ##
 ##===----------------------------------------------------------------------===//
 
-add_circt_dialect(Physical physical)
-add_circt_doc(Physical -gen-dialect-doc Physical Dialects/)
+add_circt_dialect(MSFT msft)
+add_circt_doc(MSFT -gen-dialect-doc MSFT Dialects/)
 
-set(LLVM_TARGET_DEFINITIONS Physical.td)
+set(LLVM_TARGET_DEFINITIONS MSFT.td)

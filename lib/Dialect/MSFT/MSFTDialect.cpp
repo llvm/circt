@@ -1,4 +1,4 @@
-//===- PhysicalDialect.cpp - Implement the Physical dialect ---------------===//
+//===- MSFTDialect.cpp - Implement the MSFT dialect -----------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,27 +6,27 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implements the Seq dialect.
+// This file implements the MSFT dialect.
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/Physical/PhysicalDialect.h"
+#include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
 
 using namespace circt;
-using namespace physical;
+using namespace msft;
 
 //===----------------------------------------------------------------------===//
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
-PhysicalDialect::PhysicalDialect(MLIRContext *context)
+MSFTDialect::MSFTDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context,
-              ::mlir::TypeID::get<PhysicalDialect>()) {}
+              ::mlir::TypeID::get<MSFTDialect>()) {}
 
-PhysicalDialect::~PhysicalDialect() {}
+MSFTDialect::~MSFTDialect() {}
 
 /// Registered hook to materialize a single constant operation from a given
 /// attribute value with the desired resultant type. This method should use
@@ -35,9 +35,8 @@ PhysicalDialect::~PhysicalDialect() {}
 /// like, i.e. single result, zero operands, non side-effecting, etc. On
 /// success, this hook should return the value generated to represent the
 /// constant value. Otherwise, it should return null on failure.
-Operation *PhysicalDialect::materializeConstant(OpBuilder &builder,
-                                                Attribute value, Type type,
-                                                Location loc) {
+Operation *MSFTDialect::materializeConstant(OpBuilder &builder, Attribute value,
+                                            Type type, Location loc) {
   // Placeholder
   return nullptr;
 }

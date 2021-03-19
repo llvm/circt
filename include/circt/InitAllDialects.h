@@ -19,7 +19,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
-#include "circt/Dialect/Physical/PhysicalDialect.h"
+#include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "circt/Dialect/RTL/RTLDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
@@ -36,7 +36,7 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
     firrtl::FIRRTLDialect,
     handshake::HandshakeOpsDialect,
     llhd::LLHDDialect,
-    physical::PhysicalDialect,
+    msft::MSFTDialect,
     rtl::RTLDialect,
     staticlogic::StaticLogicDialect,
     sv::SVDialect

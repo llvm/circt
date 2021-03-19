@@ -1,4 +1,4 @@
-//===- PhysicalDialect.h - PD dialect declaration ---------------*- C++ -*-===//
+//===- MSFTDialect.h - PD dialect declaration -------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,31 +6,31 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines the Physical MLIR dialect.
+// This file defines the MSFT MLIR dialect.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_PHYSICAL_PHYSICALDIALECT_H
-#define CIRCT_DIALECT_PHYSICAL_PHYSICALDIALECT_H
+#ifndef CIRCT_DIALECT_MSFT_MSFTDIALECT_H
+#define CIRCT_DIALECT_MSFT_MSFTDIALECT_H
 
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Dialect.h"
 
 namespace circt {
-namespace physical {
+namespace msft {
 
-class PhysicalDialect : public Dialect {
+class MSFTDialect : public Dialect {
 public:
-  explicit PhysicalDialect(MLIRContext *context);
-  ~PhysicalDialect();
+  explicit MSFTDialect(MLIRContext *context);
+  ~MSFTDialect();
 
-  static StringRef getDialectNamespace() { return "physical"; }
+  static StringRef getDialectNamespace() { return "msft"; }
 
   Operation *materializeConstant(OpBuilder &builder, Attribute value, Type type,
                                  Location loc) override;
 };
 
-} // namespace physical
+} // namespace msft
 } // namespace circt
 
-#endif // CIRCT_DIALECT_SEQ_SEQDIALECT_H
+#endif // CIRCT_DIALECT_MSFT_MSFTDIALECT_H
