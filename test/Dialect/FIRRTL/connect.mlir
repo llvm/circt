@@ -93,4 +93,65 @@ firrtl.module @partial_bitwidth(%a : !firrtl.uint<2>, %b : !firrtl.flip<uint<1>>
   firrtl.partialconnect %b, %a : !firrtl.flip<uint<1>>, !firrtl.uint<2>
 }
 
+firrtl.module @wires0(%in : !firrtl.uint<1>, %out : !firrtl.flip<uint<1>>) {
+  %w = firrtl.wire : !firrtl.uint<1>
+  // CHECK: firrtl.connect %w, %in : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: firrtl.connect %out, %w : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %w, %in : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.connect %out, %w : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+}
+
+firrtl.module @wires1(%in : !firrtl.uint<1>, %out : !firrtl.flip<uint<1>>) {
+  %wf = firrtl.wire : !firrtl.flip<uint<1>>
+  // CHECK: firrtl.connect %wf, %in : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  // CHECK: firrtl.connect %out, %wf : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+  firrtl.connect %wf, %in : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %out, %wf : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+}
+
+firrtl.module @wires2() {
+  %w0 = firrtl.wire : !firrtl.uint<1>
+  %w1 = firrtl.wire : !firrtl.uint<1>
+  // CHECK: firrtl.connect %w0, %w1
+  firrtl.connect %w0, %w1 : !firrtl.uint<1>, !firrtl.uint<1>
+}
+
+firrtl.module @wires3() {
+  // CHECK: firrtl.connect %wf0, %wf1
+  %wf0 = firrtl.wire : !firrtl.flip<uint<1>>
+  %wf1 = firrtl.wire : !firrtl.flip<uint<1>>
+  firrtl.connect %wf0, %wf1 : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+}
+
+firrtl.module @wires4(%out : !firrtl.flip<uint<1>>) {
+  %wf = firrtl.wire : !firrtl.flip<uint<1>>
+  // check that we can read from an output port
+  // CHECK: firrtl.connect %wf, %out
+  firrtl.connect %wf, %out : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+}
+
+firrtl.module @wires5(%in : !firrtl.uint<1>, %out : !firrtl.flip<uint<1>>) {
+  %w = firrtl.wire : !firrtl.bundle<a: uint<1>>
+  %0 = firrtl.subfield %w("a") : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
+  // CHECK: firrtl.connect %0, %in : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: firrtl.connect %out, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %0, %in : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.connect %out, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+}
+
+firrtl.module @registers0(%clock : !firrtl.clock, %in : !firrtl.uint<1>, %out : !firrtl.flip<uint<1>>) {
+  %0 = firrtl.reg %clock : (!firrtl.clock) -> !firrtl.uint<1>
+  // CHECK: firrtl.connect %0, %in : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: firrtl.connect %out, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %0, %in : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.connect %out, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+}
+
+firrtl.module @registers1(%clock : !firrtl.clock) {
+  %0 = firrtl.reg %clock : (!firrtl.clock) -> !firrtl.uint<1>
+  %1 = firrtl.reg %clock : (!firrtl.clock) -> !firrtl.uint<1>
+  // CHECK: firrtl.connect %0, %1
+  firrtl.connect %0, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+}
+
 }
