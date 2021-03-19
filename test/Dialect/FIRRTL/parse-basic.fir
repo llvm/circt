@@ -653,3 +653,25 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.connect %0, %c0_ui1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
     io[0] <= UInt<1>("h00") 
 
+
+  ; https://github.com/llvm/circt/issues/782
+  ; CHECK-LABEL: mem_madness782
+  module mem_madness782:
+    input clock: Clock
+    input rAddr: UInt<4>
+    input rEn: UInt<1>
+    output rData: UInt<8>
+
+    ; CHECK: %mem_r = firrtl.mem Undefined {depth = 16 : i64, name = "mem", portNames = ["r"], readLatency = 2 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<8>> 
+    mem mem:
+      data-type => UInt<8>
+      depth => 16
+      reader => r
+      read-latency => 2
+      write-latency => 1
+      read-under-write => undefined
+
+    mem.r.clk <= clock
+    mem.r.en <= rEn
+    mem.r.addr <= rAddr
+    rData <= mem.r.data
