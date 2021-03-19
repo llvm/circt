@@ -59,7 +59,7 @@ jobs:
   # Configure CIRCT using LLVM's build system ("Unified" build). We do not actually build this configuration since it isn't as easy to cache LLVM artifacts in this mode.
   configure-circt-unified:
     name: Configure Unified Build
-    runs-on: ubuntu-18.04
+    runs-on: self-hosted
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
@@ -87,9 +87,7 @@ jobs:
   build-circt:
     name: Build and Test
     needs: build-llvm
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/circt/images/circt-ci-build:20210516180131
+    runs-on: self-hosted
     steps:
       - name: Configure Environment
         run: echo "$GITHUB_WORKSPACE/llvm/install/bin" >> $GITHUB_PATH
