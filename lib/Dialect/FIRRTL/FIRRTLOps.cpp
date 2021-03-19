@@ -25,6 +25,24 @@
 using namespace circt;
 using namespace firrtl;
 
+bool firrtl::isBundleType(Type type) {
+  if (auto flipType = type.dyn_cast<FlipType>())
+    return flipType.getElementType().isa<FlipType>();
+  return type.isa<BundleType>();
+}
+
+bool firrtl::isDuplexValue(Value val) {
+  Operation *op = val.getDefiningOp();
+  // Block arguments are not duplex values.
+  if (!op)
+    return false;
+  return TypeSwitch<Operation *, bool>(op)
+      .Case<SubfieldOp, SubindexOp, SubaccessOp>(
+          [](auto op) { return isDuplexValue(op.input()); })
+      .Case<RegOp, RegResetOp, WireOp>([](auto) { return true; })
+      .Default([](auto) { return false; });
+}
+
 //===----------------------------------------------------------------------===//
 // VERIFY_RESULT_TYPE / VERIFY_RESULT_TYPE_RET
 //===----------------------------------------------------------------------===//
@@ -891,10 +909,8 @@ Value MemOp::getPortNamed(StringAttr name) {
 //===----------------------------------------------------------------------===//
 
 static LogicalResult verifyConnectOp(ConnectOp connect) {
-  FIRRTLType destType =
-      connect.dest().getType().cast<FIRRTLType>().getPassiveType();
-  FIRRTLType srcType =
-      connect.src().getType().cast<FIRRTLType>().getPassiveType();
+  FIRRTLType destType = connect.dest().getType().cast<FIRRTLType>();
+  FIRRTLType srcType = connect.src().getType().cast<FIRRTLType>();
 
   // Analog types cannot be connected and must be attached.
   if (destType.isa<AnalogType>() || srcType.isa<AnalogType>())
@@ -903,18 +919,37 @@ static LogicalResult verifyConnectOp(ConnectOp connect) {
   // Destination and source types must be equivalent.
   if (!areTypesEquivalent(destType, srcType))
     return connect.emitError("type mismatch between destination ")
-           << destType << " and source " << srcType;
+           << destType.getPassiveType() << " and source "
+           << srcType.getPassiveType();
 
   // Destination bitwidth must be greater than or equal to source bitwidth.
-  int32_t destWidth = destType.getBitWidthOrSentinel();
-  int32_t srcWidth = srcType.getBitWidthOrSentinel();
+  int32_t destWidth = destType.getPassiveType().getBitWidthOrSentinel();
+  int32_t srcWidth = srcType.getPassiveType().getBitWidthOrSentinel();
   if (destWidth > -1 && srcWidth > -1 && destWidth < srcWidth)
     return connect.emitError("destination width ")
            << destWidth << " is not greater than or equal to source width "
            << srcWidth;
 
-  // TODO(mikeurbach): verify destination flow is sink or duplex.
-  // TODO(mikeurbach): verify source flow is source or duplex.
+  // Check that the LHS is a valid sink and RHS is a valid source.
+  if (isBundleType(destType)) {
+    // For bulk connections, we need to make sure that the connection is
+    // unambiguous by making sure that both sides are not duplex types. TODO: we
+    // are not checking that the connections are recursively well formed when
+    // neither is a duplex type.
+    if (isDuplexValue(connect.dest()) && isDuplexValue(connect.src())) {
+      return connect.emitOpError() << "ambiguous bulk connection between two "
+                                   << "duplex values of bundle type";
+    }
+  } else {
+    // This is a mono-connection. Check that the LHS side is a sink or duplex.
+    // Since we can read from a either a passive or flip type, we don't need to
+    // check anything on the RHS.
+    if (destType.isPassive() && !isDuplexValue(connect.dest())) {
+      return connect.emitOpError("connection destination must be a non-passive "
+                                 "type or a duplex value");
+    }
+  }
+
   return success();
 }
 

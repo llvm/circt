@@ -427,6 +427,22 @@ firrtl.circuit "RegBundle" {
     }
 }
 
+// -----
+
+firrtl.circuit "RegBundleWithBulkConnect" {
+    // CHECK-LABEL: firrtl.module @RegBundleWithBulkConnect(%a_a: !firrtl.uint<1>, %clk: !firrtl.clock, %b_a: !firrtl.flip<uint<1>>) {
+    firrtl.module @RegBundleWithBulkConnect(%a: !firrtl.bundle<a: uint<1>>, %clk: !firrtl.clock, %b: !firrtl.flip<bundle<a: uint<1>>>) {
+      // CHECK-NEXT: %x_a = firrtl.reg %clk {name = "x_a"} : (!firrtl.clock) -> !firrtl.uint<1>
+      // CHECK-NEXT: firrtl.connect %x_a, %a_a : !firrtl.uint<1>, !firrtl.uint<1>
+      // CHECK-NEXT: firrtl.connect %b_a, %x_a : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+      %x = firrtl.reg %clk {name = "x"} : (!firrtl.clock) -> !firrtl.bundle<a: uint<1>>
+      firrtl.connect %x, %a : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
+      firrtl.connect %b, %x : !firrtl.flip<bundle<a: uint<1>>>, !firrtl.bundle<a: uint<1>>
+    }
+}
+
+// -----
+
 firrtl.circuit "WireBundle" {
     // CHECK-LABEL: firrtl.module @WireBundle(%a_a: !firrtl.uint<1>,  %b_a: !firrtl.flip<uint<1>>) {
     firrtl.module @WireBundle(%a: !firrtl.bundle<a: uint<1>>,  %b: !firrtl.flip<bundle<a: uint<1>>>) {
@@ -444,19 +460,52 @@ firrtl.circuit "WireBundle" {
 }
 
 // -----
+
+firrtl.circuit "WireBundlesWithBulkConnect" {
+  firrtl.module @WireBundlesWithBulkConnect(%source: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>,
+                             %sink: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>) {
+    // CHECK: %w_valid = firrtl.wire  : !firrtl.uint<1>
+    // CHECK: %w_ready = firrtl.wire  : !firrtl.flip<uint<1>>
+    // CHECK: %w_data = firrtl.wire  : !firrtl.uint<64>
+    %w = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>
+    // CHECK: firrtl.connect %w_valid, %source_valid : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %source_ready, %w_ready : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+    // CHECK: firrtl.connect %w_data, %source_data : !firrtl.uint<64>, !firrtl.uint<64>
+    firrtl.connect %w, %source : !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>
+    // CHECK: firrtl.connect %sink_valid, %w_valid : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %w_ready, %sink_ready : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %sink_data, %w_data : !firrtl.flip<uint<64>>, !firrtl.uint<64>
+    firrtl.connect %sink, %w : !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>
+  }
+}
+
+// -----
 // COM: Test vector lowering
 firrtl.circuit "LowerVectors" {
   firrtl.module @LowerVectors(%a: !firrtl.vector<uint<1>, 2>, %b: !firrtl.flip<vector<uint<1>, 2>>) {
     firrtl.connect %b, %a: !firrtl.flip<vector<uint<1>, 2>>, !firrtl.vector<uint<1>, 2>
   }
-
   // CHECK: firrtl.module @LowerVectors(%a_0: !firrtl.uint<1>, %a_1: !firrtl.uint<1>, %b_0: !firrtl.flip<uint<1>>, %b_1: !firrtl.flip<uint<1>>)
   // CHECK: firrtl.connect %b_0, %a_0
   // CHECK: firrtl.connect %b_1, %a_1
 }
 
-// ----
+// -----
 
+// COM: Test vector of bundles lowering
+firrtl.circuit "LowerVectorsOfBundles" {
+  // CHECK: firrtl.module @LowerVectorsOfBundles(%in_0_a: !firrtl.uint<1>, %in_0_b: !firrtl.flip<uint<1>>, %in_1_a: !firrtl.uint<1>, %in_1_b: !firrtl.flip<uint<1>>, %out_0_a: !firrtl.flip<uint<1>>, %out_0_b: !firrtl.uint<1>, %out_1_a: !firrtl.flip<uint<1>>, %out_1_b: !firrtl.uint<1>) {
+  firrtl.module @LowerVectorsOfBundles(%in: !firrtl.vector<bundle<a : uint<1>, b : flip<uint<1>>>, 2>,
+                                       %out: !firrtl.flip<vector<bundle<a : uint<1>, b : flip<uint<1>>>, 2>>) {
+    // CHECK: firrtl.connect %out_0_a, %in_0_a : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %in_0_b, %out_0_b : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %out_1_a, %in_1_a : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %in_1_b, %out_1_b : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    firrtl.connect %out, %in: !firrtl.flip<vector<bundle<a : uint<1>, b : flip<uint<1>>>, 2>>, !firrtl.vector<bundle<a : uint<1>, b : flip<uint<1>>>, 2>
+  }
+}
+
+// -----
 firrtl.circuit "ExternalModule" {
   // CHECK: firrtl.extmodule @ExternalModule(!firrtl.uint<1> {firrtl.name = "source_valid"}, !firrtl.flip<uint<1>> {firrtl.name = "source_ready"}, !firrtl.uint<64> {firrtl.name = "source_data"})
   firrtl.extmodule @ExternalModule(!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>> {firrtl.name = "source"})
