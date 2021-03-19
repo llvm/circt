@@ -718,27 +718,6 @@ StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
 }
 
 //===----------------------------------------------------------------------===//
-// SplitModuleEmitter
-//===----------------------------------------------------------------------===//
-
-namespace {
-
-class SplitModuleEmitter {
-public:
-  explicit SplitModuleEmitter(StringRef dirname) : dirname(dirname) {}
-
-  bool encounteredError = false;
-  StringRef dirname;
-  SmallVector<Operation *, 8> perFileOps;
-
-  void emitMLIRModule(ModuleOp module);
-  void emitFile(StringRef filename,
-                std::function<void(VerilogEmitterState &)> callback);
-};
-
-} // namespace
-
-//===----------------------------------------------------------------------===//
 // Expression Emission
 //===----------------------------------------------------------------------===//
 
@@ -2584,8 +2563,25 @@ void ModuleEmitter::emitStatementBlock(Block &body) {
 }
 
 //===----------------------------------------------------------------------===//
-// Module Driver
+// SplitModuleEmitter
 //===----------------------------------------------------------------------===//
+
+namespace {
+
+class SplitModuleEmitter {
+public:
+  explicit SplitModuleEmitter(StringRef dirname) : dirname(dirname) {}
+
+  bool encounteredError = false;
+  StringRef dirname;
+  SmallVector<Operation *, 8> perFileOps;
+
+  void emitMLIRModule(ModuleOp module);
+  void emitFile(StringRef filename,
+                std::function<void(VerilogEmitterState &)> callback);
+};
+
+} // namespace
 
 void SplitModuleEmitter::emitMLIRModule(ModuleOp module) {
   for (auto &op : *module.getBody()) {
@@ -2645,6 +2641,10 @@ void SplitModuleEmitter::emitFile(
 
   output->keep();
 }
+
+//===----------------------------------------------------------------------===//
+// Module Driver
+//===----------------------------------------------------------------------===//
 
 void ModuleEmitter::emitMLIRModule(ModuleOp module) {
   for (auto &op : *module.getBody()) {
