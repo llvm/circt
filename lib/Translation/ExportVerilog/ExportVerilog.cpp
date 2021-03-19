@@ -39,11 +39,6 @@ using namespace sv;
 /// This is the preferred source width for the generated Verilog.
 static constexpr size_t preferredSourceWidth = 120;
 
-/// This is a set accessed through getReservedWords() that contains all of the
-/// Verilog names and other identifiers we need to avoid because of name
-/// conflicts.
-static llvm::ManagedStatic<StringSet<>> reservedWordCache;
-
 //===----------------------------------------------------------------------===//
 // Helper routines
 //===----------------------------------------------------------------------===//
@@ -305,17 +300,21 @@ enum VerilogPrecedence {
 
 /// Return a StringSet that contains all of the reserved names (e.g. Verilog
 /// keywords) that we need to avoid for fear of name conflicts.
-static const StringSet<> &getReservedWords() {
-  auto &set = *reservedWordCache;
-  if (set.empty()) {
+struct ReservedWordsCreator {
+  static void *call() {
+    auto set = std::make_unique<StringSet<>>();
     static const char *const reservedWords[] = {
 #include "ReservedWords.def"
     };
     for (auto *word : reservedWords)
-      set.insert(word);
+      set->insert(word);
+    return set.release();
   }
-  return set;
-}
+};
+
+/// A StringSet that contains all of the reserved names (e.g., Verilog and VHDL
+/// keywords) that we need to avoid to prevent naming conflicts.
+static llvm::ManagedStatic<StringSet<>, ReservedWordsCreator> reservedWords;
 
 /// Return the location information as a (potentially empty) string.
 static std::string
@@ -422,14 +421,13 @@ StringRef resolveKeywordConflict(StringRef origName,
   // Get the list of reserved words we need to avoid.  We could prepopulate this
   // into the used words cache, but it is large and immutable, so we just query
   // it when needed.
-  auto &reservedWords = getReservedWords();
   SmallVector<char, 16> nameBuffer(name.begin(), name.end());
   nameBuffer.push_back('_');
   auto baseSize = nameBuffer.size();
 
   while (1) {
     // Loop until we get a name that is not a keyword and is unique.
-    if (!reservedWords.count(name)) {
+    if (!reservedWords->count(name)) {
       auto itAndInserted = recordNames.insert(name);
       if (itAndInserted.second)
         return itAndInserted.first->getKey();
