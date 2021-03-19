@@ -11,6 +11,7 @@
 // DIALECT-NEXT: handshake
 // DIALECT-NEXT: llhd
 // DIALECT-NEXT: llvm
+// DIALECT-NEXT: memref
 // DIALECT-NEXT: rtl
 // DIALECT-NEXT: staticlogic
 // DIALECT-NEXT: std

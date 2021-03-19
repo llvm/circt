@@ -314,3 +314,10 @@ void RTLDialect::printType(Type type, DialectAsmPrinter &printer) const {
     return;
   llvm_unreachable("unexpected 'rtl' type");
 }
+
+void RTLDialect::registerTypes() {
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "circt/Dialect/RTL/RTLTypes.cpp.inc"
+      >();
+}

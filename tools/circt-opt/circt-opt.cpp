@@ -15,6 +15,7 @@
 #include "circt/InitAllPasses.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Pass/PassRegistry.h"
 #include "mlir/Support/MlirOptMain.h"
@@ -24,9 +25,10 @@ int main(int argc, char **argv) {
   mlir::DialectRegistry registry;
 
   // Register MLIR stuff
-  registry.insert<mlir::StandardOpsDialect>();
-  registry.insert<mlir::LLVM::LLVMDialect>();
   registry.insert<mlir::AffineDialect>();
+  registry.insert<mlir::LLVM::LLVMDialect>();
+  registry.insert<mlir::memref::MemRefDialect>();
+  registry.insert<mlir::StandardOpsDialect>();
 
   circt::registerAllDialects(registry);
   circt::registerAllPasses();
