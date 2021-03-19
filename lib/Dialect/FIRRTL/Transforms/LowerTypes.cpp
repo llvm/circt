@@ -602,10 +602,13 @@ void TypeLoweringVisitor::visitDecl(RegResetOp op) {
   for (auto field : fieldTypes) {
     SmallString<16> loweredName(op.nameAttr().getValue());
     loweredName += field.suffix;
+    auto suffix = StringRef(field.suffix).drop_front(1);
+    auto resetValLowered = getBundleLowering(op.resetValue(), suffix);
     setBundleLowering(
-        result, StringRef(field.suffix).drop_front(1),
-        builder->create<RegOp>(field.getPortType(), op.clockVal(),
-                               builder->getStringAttr(loweredName)));
+        result, suffix,
+        builder->create<RegResetOp>(field.getPortType(), op.clockVal(),
+                                    op.resetSignal(), resetValLowered,
+                                    builder->getStringAttr(loweredName)));
   }
 
   // Remember to remove the original op.
