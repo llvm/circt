@@ -631,14 +631,20 @@ void AttachOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
   struct Folder final : public OpRewritePattern<AttachOp> {
     using OpRewritePattern::OpRewritePattern;
 
-    // Check to see if any of our operands has other attaches to it:
-    //    attach x, y
-    //      ...
-    //    attach x, z
-    // If so, we can merge these into "attach x, y, z".
     LogicalResult matchAndRewrite(AttachOp op,
                                   PatternRewriter &rewriter) const override {
+      // Single operand attaches are a noop.
+      if (op.getNumOperands() <= 1) {
+        rewriter.eraseOp(op);
+        return success();
+      }
+
       for (auto operand : op.getOperands()) {
+        // Check to see if any of our operands has other attaches to it:
+        //    attach x, y
+        //      ...
+        //    attach x, z
+        // If so, we can merge these into "attach x, y, z".
         if (auto attach = getDominatingAttachUser(operand, op)) {
           SmallVector<Value> newOperands(op.getOperands());
           for (auto newOperand : attach.getOperands())
@@ -648,6 +654,22 @@ void AttachOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
           rewriter.eraseOp(op);
           rewriter.eraseOp(attach);
           return success();
+        }
+
+        // If this wire is *only* used by an attach then we can just delete it.
+        // TODO: May need to be sensitive to "don't touch" or other annotations.
+        if (auto wire = dyn_cast_or_null<WireOp>(operand.getDefiningOp())) {
+          if (wire->hasOneUse()) {
+            SmallVector<Value> newOperands;
+            for (auto newOperand : op.getOperands())
+              if (newOperand != operand) // Don't add wire.
+                newOperands.push_back(newOperand);
+
+            rewriter.create<AttachOp>(op->getLoc(), newOperands);
+            rewriter.eraseOp(op);
+            rewriter.eraseOp(wire);
+            return success();
+          }
         }
       }
       return failure();
