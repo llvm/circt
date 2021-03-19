@@ -1,5 +1,5 @@
 add_subdirectory(Verification)
-add_compile_options(-Werror -Wall -Wextra)
+#add_compile_options(-Wall -Wextra)
 add_circt_dialect_library(CIRCTHIR
   HIRDialect.cpp
   HIR.cpp
