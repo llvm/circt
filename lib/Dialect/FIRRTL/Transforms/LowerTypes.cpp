@@ -113,6 +113,7 @@ public:
   void visitDecl(MemOp op);
   void visitDecl(RegOp op);
   void visitDecl(WireOp op);
+  void visitDecl(RegResetOp op);
   void visitExpr(InvalidValuePrimOp op);
   void visitExpr(SubfieldOp op);
   void visitExpr(SubindexOp op);
@@ -576,6 +577,38 @@ void TypeLoweringVisitor::visitDecl(RegOp op) {
         result, StringRef(field.suffix).drop_front(1),
         builder->create<RegOp>(field.getPortType(), op.clockVal(),
                                builder->getStringAttr(loweredName)));
+  }
+
+  // Remember to remove the original op.
+  opsToRemove.push_back(op);
+}
+
+/// Lower a RegReset op with a bundle to multiple non-bundled RegResets.
+void TypeLoweringVisitor::visitDecl(RegResetOp op) {
+  Value result = op.result();
+
+  // Attempt to get the bundle types, potentially unwrapping an outer flip type
+  // that wraps the whole bundle.
+  FIRRTLType resultType = getCanonicalAggregateType(result.getType());
+
+  // If the RegReset is not a bundle, there is nothing to do.
+  if (!resultType)
+    return;
+
+  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
+  flattenType(resultType, "", false, fieldTypes);
+
+  // Loop over the leaf aggregates.
+  for (auto field : fieldTypes) {
+    SmallString<16> loweredName(op.nameAttr().getValue());
+    loweredName += field.suffix;
+    auto suffix = StringRef(field.suffix).drop_front(1);
+    auto resetValLowered = getBundleLowering(op.resetValue(), suffix);
+    setBundleLowering(
+        result, suffix,
+        builder->create<RegResetOp>(field.getPortType(), op.clockVal(),
+                                    op.resetSignal(), resetValLowered,
+                                    builder->getStringAttr(loweredName)));
   }
 
   // Remember to remove the original op.
