@@ -13,8 +13,8 @@
 #ifndef CIRCT_DIALECT_COMB_COMBDIALECT_H
 #define CIRCT_DIALECT_COMB_COMBDIALECT_H
 
-#include "mlir/IR/Dialect.h"
 #include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/Dialect.h"
 
 namespace circt {
 namespace comb {
