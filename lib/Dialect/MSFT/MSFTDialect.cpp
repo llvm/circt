@@ -11,9 +11,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/MSFT/MSFTDialect.h"
+
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
+
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace msft;
@@ -41,5 +44,55 @@ Operation *MSFTDialect::materializeConstant(OpBuilder &builder, Attribute value,
   return nullptr;
 }
 
-Attribute MSFTDialect::parseAttribute(DialectAsmParser &p, Type type) const {}
-void MSFTDialect::printAttribute(Attribute attr, DialectAsmPrinter &p) const {}
+Attribute parsePhysLocation(DialectAsmParser &p, Type type) {
+  // PhysLocationAttr loc;
+  // if (p.parseAttribute(loc))
+  //   return Attribute();
+  // return loc;
+
+  llvm::SMLoc loc = p.getCurrentLocation();
+  StringRef devTypeStr;
+  uint64_t x, y, num;
+  StringAttr entity;
+  if (p.parseLess() || p.parseKeyword(&devTypeStr) || p.parseComma() ||
+      p.parseInteger(x) || p.parseComma() || p.parseInteger(y) ||
+      p.parseComma() || p.parseInteger(num) || p.parseComma() ||
+      p.parseAttribute(entity) || p.parseGreater())
+    return Attribute();
+
+  auto *ctxt = p.getBuilder().getContext();
+  Optional<DeviceType> devType = symbolizeDeviceType(devTypeStr);
+  if (!devType) {
+    p.emitError(loc, "Unknown device type '" + devTypeStr + "'");
+    return Attribute();
+  }
+  DeviceTypeAttr devTypeAttr = DeviceTypeAttr::get(ctxt, *devType);
+  auto ui64 = p.getBuilder().getIntegerType(64, false);
+  auto phy = PhysLocationAttr::get(devTypeAttr, IntegerAttr::get(ui64, x),
+                                   IntegerAttr::get(ui64, y),
+                                   IntegerAttr::get(ui64, num), entity, ctxt);
+  return phy;
+}
+
+void print(DialectAsmPrinter &p, PhysLocationAttr a) {
+  p << "msft.physloc<" << a.Type() << ',' << a.X() << ',' << a.Y() << ','
+    << a.Num() << ',' << a.Entity() << '>';
+}
+
+Attribute MSFTDialect::parseAttribute(DialectAsmParser &p, Type type) const {
+  StringRef attrName;
+  if (p.parseKeyword(&attrName))
+    return Attribute();
+  if (attrName == "physloc")
+    return parsePhysLocation(p, type);
+  llvm_unreachable("Unexpected 'msft' attribute");
+}
+
+void MSFTDialect::printAttribute(Attribute attr, DialectAsmPrinter &p) const {
+  TypeSwitch<Attribute>(attr)
+      .Case([&p](PhysLocationAttr a) { print(p, a); })
+      .Default([](Attribute) { llvm_unreachable("Unexpected attribute"); });
+}
+
+#include "circt/Dialect/MSFT/MSFTAttrs.cpp.inc"
+#include "circt/Dialect/MSFT/MSFTEnums.cpp.inc"

@@ -35,12 +35,12 @@ class MSFTOp<string mnemonic, list<OpTrait> traits = []> :
 
 def DeviceType : I32EnumAttr<"DeviceType",
   "Type of device at physical location", [
-    I32EnumAttrCase<"M20K", 1, "">,
-    I32EnumAttrCase<"DSP", 2, "">,
-    I32EnumAttrCase<"EC", 3, "">,
+    I32EnumAttrCase<"M20K", 1>,
+    I32EnumAttrCase<"DSP", 2>,
+    I32EnumAttrCase<"EC", 3>,
   ]>;
 
-def PhysLocation : StructAttr<"PhysLocation", MSFTDialect, [
+def PhysLocationAttr : StructAttr<"PhysLocationAttr", MSFTDialect, [
   // Device type.
   StructFieldAttr<"Type", DeviceType>,
 
