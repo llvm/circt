@@ -571,17 +571,14 @@ void TypeLoweringVisitor::visitDecl(RegOp op) {
 
   // Loop over the leaf aggregates.
   for (auto field : fieldTypes) {
-    SmallString<16> loweredName("");
-    if (auto nameAttr = op.nameAttr()) {
-      loweredName = nameAttr.getValue();
-      loweredName += field.suffix;
-    }
-    setBundleLowering(
-        result, StringRef(field.suffix).drop_front(1),
-        builder->create<RegOp>(field.getPortType(), op.clockVal(),
-                               loweredName.empty()
-                                   ? nullptr
-                                   : builder->getStringAttr(loweredName)));
+    StringAttr loweredName;
+    if (auto nameAttr = op.nameAttr())
+      loweredName =
+          builder->getStringAttr(nameAttr.getValue().str() + field.suffix);
+
+    setBundleLowering(result, StringRef(field.suffix).drop_front(1),
+                      builder->create<RegOp>(field.getPortType(), op.clockVal(),
+                                             loweredName));
   }
 
   // Remember to remove the original op.
@@ -605,20 +602,16 @@ void TypeLoweringVisitor::visitDecl(RegResetOp op) {
 
   // Loop over the leaf aggregates.
   for (auto field : fieldTypes) {
-    SmallString<16> loweredName("");
-    if (auto nameAttr = op.nameAttr()) {
-      loweredName = nameAttr.getValue();
-      loweredName += field.suffix;
-    }
+    StringAttr loweredName;
+    if (auto nameAttr = op.nameAttr())
+      loweredName =
+          builder->getStringAttr(nameAttr.getValue().str() + field.suffix);
     auto suffix = StringRef(field.suffix).drop_front(1);
     auto resetValLowered = getBundleLowering(op.resetValue(), suffix);
-    setBundleLowering(
-        result, suffix,
-        builder->create<RegResetOp>(field.getPortType(), op.clockVal(),
-                                    op.resetSignal(), resetValLowered,
-                                    loweredName.empty()
-                                        ? nullptr
-                                        : builder->getStringAttr(loweredName)));
+    setBundleLowering(result, suffix,
+                      builder->create<RegResetOp>(
+                          field.getPortType(), op.clockVal(), op.resetSignal(),
+                          resetValLowered, loweredName));
   }
 
   // Remember to remove the original op.
