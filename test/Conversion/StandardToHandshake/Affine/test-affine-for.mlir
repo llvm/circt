@@ -64,7 +64,7 @@ func @empty_body () -> () {
 // Simple load store pair in the loop body. 
 
 func @load_store () -> () {
-  %A = alloc() : memref<10xf32>
+  %A = memref.alloc() : memref<10xf32>
   affine.for %i = 0 to 10 {
     %0 = affine.load %A[%i] : memref<10xf32>
     affine.store %0, %A[%i] : memref<10xf32>

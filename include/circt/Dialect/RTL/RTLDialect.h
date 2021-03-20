@@ -34,6 +34,10 @@ public:
 
   Operation *materializeConstant(OpBuilder &builder, Attribute value, Type type,
                                  Location loc) override;
+
+private:
+  /// Register all RTL types.
+  void registerTypes();
 };
 
 } // namespace rtl

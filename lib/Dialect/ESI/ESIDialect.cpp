@@ -22,10 +22,8 @@ namespace esi {
 
 ESIDialect::ESIDialect(MLIRContext *context)
     : Dialect("esi", context, TypeID::get<ESIDialect>()) {
-  addTypes<
-#define GET_TYPEDEF_LIST
-#include "circt/Dialect/ESI/ESITypes.cpp.inc"
-      >();
+
+  registerTypes();
 
   addOperations<
 #define GET_OP_LIST

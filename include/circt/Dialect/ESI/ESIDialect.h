@@ -37,6 +37,10 @@ public:
   /// Print a type registered to this dialect
   void printType(mlir::Type type,
                  mlir::DialectAsmPrinter &printer) const override;
+
+private:
+  /// Register all ESI types.
+  void registerTypes();
 };
 
 void registerESIPasses();

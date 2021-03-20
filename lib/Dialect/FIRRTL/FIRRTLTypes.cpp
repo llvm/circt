@@ -779,3 +779,9 @@ FIRRTLType FVectorType::getPassiveType() {
   impl->passiveContainsAnalogTypeInfo.setPointer(passiveType);
   return passiveType;
 }
+
+void FIRRTLDialect::registerTypes() {
+  addTypes<SIntType, UIntType, ClockType, ResetType, AsyncResetType, AnalogType,
+           // Derived Types
+           FlipType, BundleType, FVectorType>();
+}
