@@ -72,8 +72,8 @@ Attribute parsePhysLocation(DialectAsmParser &p, Type type) {
 }
 
 void print(DialectAsmPrinter &p, PhysLocationAttr a) {
-  p << "msft.physloc<" << a.Type() << ',' << a.X() << ',' << a.Y() << ','
-    << a.Num() << ',' << a.Entity() << '>';
+  p << "msft.physloc<" << stringifyDeviceType(a.Type().getValue()) << ','
+    << a.X() << ',' << a.Y() << ',' << a.Num() << ',' << a.Entity() << '>';
 }
 
 Attribute MSFTDialect::parseAttribute(DialectAsmParser &p, Type type) const {
