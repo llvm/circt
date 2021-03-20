@@ -19,8 +19,17 @@
 #ifndef CIRCT_DIALECT_ESI_ESIDIALECT_H
 #define CIRCT_DIALECT_ESI_ESIDIALECT_H
 
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
+
+namespace circt {
+namespace rtl {
+class RTLModuleOp;
+struct ModulePortInfo;
+} // namespace rtl
+} // namespace circt
+
 namespace circt {
 namespace esi {
 
@@ -45,6 +54,16 @@ private:
 
 void registerESIPasses();
 void registerESITranslations();
+
+/// Find all the port triples on a module which fit the
+/// <name>/<name>_valid/<name>_ready pattern. Ready must be the opposite
+/// direction of the other two.
+void findValidReadySignals(rtl::RTLModuleOp *mod,
+                           SmallVectorImpl<rtl::ModulePortInfo> &names);
+
+/// Convert a port triple (same pattern as above) to an ESI channel. Does not
+/// modify any instances which might exist.
+Value convertPortToChannel(rtl::RTLModuleOp *mod, StringRef name);
 
 } // namespace esi
 } // namespace circt
