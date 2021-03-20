@@ -251,3 +251,26 @@ rtl.module @always_basic(%arg0: i1, %arg1: i1) {
   }
   rtl.output
 }
+
+
+// CHECK-LABEL: rtl.module @alwayscomb_basic(
+rtl.module @alwayscomb_basic(%a: i1, %b: i1) -> (%x: i1, %y: i1) {
+  %w1 = sv.wire : !rtl.inout<i1>
+  %w2 = sv.wire : !rtl.inout<i1>
+  // CHECK: sv.alwayscomb {
+  sv.alwayscomb {
+    // CHECK-NEXT: sv.passign %w1, %a : i1
+    sv.passign %w1, %a : i1
+  }
+
+  %out1 = sv.read_inout %w1 : !rtl.inout<i1>
+
+  sv.alwayscomb {
+    // CHECK-NEXT: sv.passign %w2, %b : i1
+    sv.passign %w2, %b : i1
+  } // CHECK-NEXT: }
+
+  %out2 = sv.read_inout %w1 : !rtl.inout<i1>
+
+  rtl.output %out1, %out2 : i1, i1
+}

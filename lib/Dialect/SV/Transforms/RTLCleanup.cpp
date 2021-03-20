@@ -140,6 +140,7 @@ void RTLCleanupPass::runOnGraphRegion(Region &region, bool shallow) {
   DenseSet<Operation *, SimpleOperationInfo> alwaysFFOpsSeen;
   llvm::SmallDenseMap<Attribute, Operation *, 4> ifdefOps;
   sv::InitialOp initialOpSeen;
+  sv::AlwaysCombOp alwaysCombOpSeen;
 
   // As we merge operations with regions, we need to revisit the regions within
   // them to see if merging the outer level allows simplifications in the inner
@@ -167,24 +168,28 @@ void RTLCleanupPass::runOnGraphRegion(Region &region, bool shallow) {
     // Merge graph ifdefs anywhere in the module.
     if (auto ifdefOp = dyn_cast<sv::IfDefOp>(op)) {
       auto *&entry = ifdefOps[ifdefOp.condAttr()];
-      if (!entry) {
-        entry = ifdefOp;
-        continue;
-      }
-      mergeOperationsIntoFrom(ifdefOp, entry, opsToRevisitRegionsIn);
+      if (entry)
+        mergeOperationsIntoFrom(ifdefOp, entry, opsToRevisitRegionsIn);
+
       entry = ifdefOp;
       continue;
     }
 
     // Merge initial ops anywhere in the module.
     if (auto initialOp = dyn_cast<sv::InitialOp>(op)) {
-      if (!initialOpSeen) {
-        initialOpSeen = initialOp;
-        continue;
-      }
-
-      mergeOperationsIntoFrom(initialOp, initialOpSeen, opsToRevisitRegionsIn);
+      if (initialOpSeen)
+        mergeOperationsIntoFrom(initialOp, initialOpSeen,
+                                opsToRevisitRegionsIn);
       initialOpSeen = initialOp;
+      continue;
+    }
+
+    // Merge always_comb ops anywhere in the module.
+    if (auto alwaysComb = dyn_cast<sv::AlwaysCombOp>(op)) {
+      if (alwaysCombOpSeen)
+        mergeOperationsIntoFrom(alwaysComb, alwaysCombOpSeen,
+                                opsToRevisitRegionsIn);
+      alwaysCombOpSeen = alwaysComb;
       continue;
     }
   }
