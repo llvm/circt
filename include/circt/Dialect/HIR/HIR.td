@@ -27,18 +27,15 @@ def ConstType: Type<CPred<"$_self.isa<ConstType>()">
 , "HIR const type">,
   BuildableType<"ConstType::get($_builder.getContext())">;
 
-def MemrefType
-: Type<CPred<"$_self.isa<MemrefType>()">,
+def MemrefType: Type<CPred<"$_self.isa<MemrefType>()">,
   "HIR memref type ">,
   BuildableType<"MemrefType::get($_builder.getContext())">;
 
-def StreamType
-: Type<CPred<"$_self.isa<StreamType>()">,
-  "HIR stream type ">,
-  BuildableType<"StreamType::get($_builder.getContext())">;
+def InterfaceType: Type<CPred<"$_self.isa<VrefType>()">,
+  "HIR interface type ">,
+  BuildableType<"VrefType::get($_builder.getContext())">;
 
-def WireType
-: Type<CPred<"$_self.isa<WireType>()">,
+def WireType: Type<CPred<"$_self.isa<WireType>()">,
   "HIR wire type ">,
   BuildableType<"WireType::get($_builder.getContext())">;
 
@@ -476,20 +473,6 @@ def ReturnOp : HIR_Op<"return", [HasParent<"DefOp">,NoSideEffect,
 
       let assemblyFormat = "(`(`$operands^`)` `:` `(`type($operands)`)`)? attr-dict";
     }
-
-def PopOp :HIR_Op<"pop"> {
-  let summary = "pop from stream.";
-
-  let description = [{
-
-    ```mlir %w = hir.pop %S at %t : !hir.stream<i32,r> -> i32```
-  }];
-
-  let arguments = (ins StreamType:$input, TimeType:$tstart);
-  let results = (outs AnyType:$res);
-
-  let assemblyFormat = "$input `at` $tstart attr-dict `:` type($input) `->` type($res)";
-}
 
 def AllocOp :HIR_Op<"alloc", [NoSideEffect]> {
   let summary = "Instantiate new hardware.";

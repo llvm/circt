@@ -22,7 +22,7 @@ using namespace hir;
 
 HIRDialect::HIRDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context, TypeID::get<HIRDialect>()) {
-  addTypes<TimeType, StreamType, ConstType, MemrefType, WireType>();
+  addTypes<TimeType, ConstType, MemrefType, WireType>();
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/HIR/HIR.cpp.inc"
@@ -147,6 +147,40 @@ static Type parseMemrefType(DialectAsmParser &parser, MLIRContext *context) {
                          hasPacking.hasValue() ? packing : default_packing,
                          port);
 }
+static Type parseTupleType(DialectAsmParser &parser, MLIRContext *context) {}
+
+static Type parseVrefElementType(DialectAsmParser &parser,
+                                 MLIRContext *context) {
+  OptionalParseResult result = parser.parseOptionalKeyword("tuple");
+  if (result.hasValue()) {
+    if (failed(result.getValue()))
+      return Type();
+    else
+      return parseTupleType(parser, context);
+  }
+  Type elementType;
+  parser.parseType(elementType);
+  return elementType;
+}
+
+static Type parseVrefType(DialectAsmParser &parser, MLIRContext *context) {
+  SmallVector<Attribute> attrs;
+  if (parser.parseLess())
+    return Type();
+
+  Type elementType = parseVrefElementType(parser, context);
+  if (!elementType)
+    return Type();
+
+  Attribute attr;
+  if (!parser.parseOptionalColon()) {
+    if (parser.parseAttribute(attr))
+      return Type();
+  }
+  if (parser.parseGreater())
+    return Type();
+  return VrefType::get(context, elementType, attrs);
+}
 
 static void printMemrefType(MemrefType memrefTy, DialectAsmPrinter &printer) {
   printer << memrefTy.getKeyword();
@@ -175,47 +209,6 @@ static void printMemrefType(MemrefType memrefTy, DialectAsmPrinter &printer) {
   }
   printer << ">";
 }
-
-// Stream Type.
-static Type parseStreamType(DialectAsmParser &parser, MLIRContext *context) {
-  Type elementType;
-  hir::Details::PortKind port;
-  if (parser.parseLess())
-    return Type();
-
-  if (parser.parseType(elementType))
-    return Type();
-
-  if (parser.parseComma())
-    return Type();
-
-  if (Helpers::parsePortKind(parser, port))
-    return Type();
-  if (parser.parseGreater())
-    return Type();
-
-  return StreamType::get(context, elementType, port);
-}
-
-// static void printStreamType(StreamType streamType, DialectAsmPrinter
-// &printer) {
-//  auto elementType = streamType.getElementType();
-//  auto port = streamType.getPort();
-//  printer << streamType.getKeyword();
-//  printer << "<";
-//  printer << elementType << ", ";
-//
-//  if (port == Details::r) {
-//    printer << ", r";
-//  } else if (port == Details::w) {
-//    printer << ", w";
-//  } else if (port == Details::rw) {
-//    printer << "";
-//  } else {
-//    printer << ", unknown";
-//  }
-//  printer << ">";
-//}
 
 // WireType.
 static Type parseWireType(DialectAsmParser &parser, MLIRContext *context) {
@@ -282,14 +275,14 @@ Type HIRDialect::parseType(DialectAsmParser &parser) const {
   if (typeKeyword == MemrefType::getKeyword())
     return parseMemrefType(parser, getContext());
 
+  if (typeKeyword == VrefType::getKeyword())
+    return parseVrefType(parser, getContext());
+
   if (typeKeyword == WireType::getKeyword())
     return parseWireType(parser, getContext());
 
   if (typeKeyword == ConstType::getKeyword())
     return ConstType::get(getContext());
-
-  if (typeKeyword == StreamType::getKeyword())
-    return parseStreamType(parser, getContext());
 
   return parser.emitError(parser.getNameLoc(), "unknown hir type"), Type();
 }

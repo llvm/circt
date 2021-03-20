@@ -71,17 +71,16 @@ struct MemrefTypeStorage : public TypeStorage {
   PortKind port;
 };
 
-/// Storage class for StreamType.
-struct StreamTypeStorage : public TypeStorage {
-  StreamTypeStorage(Type elementType, PortKind port)
-      : elementType(elementType), port(port) {}
+struct VrefTypeStorage : public TypeStorage {
+  VrefTypeStorage(Type elementType, ArrayRef<Attribute> attrs)
+      : elementType(elementType), attrs(attrs) {}
 
   /// The hash key for this storage is a pair of the integer and type params.
-  using KeyTy = std::tuple<Type, PortKind>;
+  using KeyTy = std::tuple<Type, ArrayRef<Attribute>>;
 
   /// Define the comparison function for the key type.
   bool operator==(const KeyTy &key) const {
-    return key == KeyTy(elementType, port);
+    return key == KeyTy(elementType, attrs);
   }
 
   /// Define a hash function for the key type.
@@ -90,22 +89,21 @@ struct StreamTypeStorage : public TypeStorage {
   }
 
   /// Define a construction function for the key type.
-  static KeyTy getKey(ArrayRef<unsigned> shape, Type elementType,
-                      ArrayRef<unsigned> packing, PortKind port = rw) {
-    return KeyTy(elementType, port);
+  static KeyTy getKey(Type elementType, ArrayRef<Attribute> attrs) {
+    return KeyTy(elementType, attrs);
   }
 
   /// Define a construction method for creating a new instance of this storage.
-  static StreamTypeStorage *construct(TypeStorageAllocator &allocator,
-                                      const KeyTy &key) {
+  static VrefTypeStorage *construct(TypeStorageAllocator &allocator,
+                                    const KeyTy &key) {
     Type elementType = std::get<0>(key);
-    Details::PortKind port = std::get<1>(key);
-    return new (allocator.allocate<StreamTypeStorage>())
-        StreamTypeStorage(elementType, port);
+    ArrayRef<Attribute> attrs = allocator.copyInto(std::get<1>(key));
+    return new (allocator.allocate<VrefTypeStorage>())
+        VrefTypeStorage(elementType, attrs);
   }
 
   Type elementType;
-  PortKind port;
+  ArrayRef<Attribute> attrs;
 };
 
 struct WireTypeStorage : public TypeStorage {
@@ -189,22 +187,21 @@ public:
   Details::PortKind getPort() { return getImpl()->port; }
 };
 
-/// This class defines hir.stream type in the dialect.
-class StreamType
-    : public Type::TypeBase<StreamType, Type, Details::StreamTypeStorage> {
+/// This class defines hir.vref type in the dialect.
+class VrefType
+    : public Type::TypeBase<VrefType, Type, Details::VrefTypeStorage> {
 public:
   using Base::Base;
 
-  // static bool kindof(unsigned kind) { return kind == StreamKind; }
-  static StringRef getKeyword() { return "stream"; }
-  static StreamType get(MLIRContext *context, Type elementType,
-                        Details::PortKind port) {
-    return Base::get(context, elementType, port);
+  // static bool kindof(unsigned kind) { return kind == MemrefKind; }
+  static StringRef getKeyword() { return "memref"; }
+  static VrefType get(MLIRContext *context, Type elementType,
+                      ArrayRef<Attribute> attrs) {
+    return Base::get(context, elementType, attrs);
   }
   Type getElementType() { return getImpl()->elementType; }
-  Details::PortKind getPort() { return getImpl()->port; }
+  ArrayRef<Attribute> getAttributes() { return getImpl()->attrs; }
 };
-
 /// This class defines hir.wire type in the dialect.
 class WireType
     : public Type::TypeBase<WireType, Type, Details::WireTypeStorage> {
