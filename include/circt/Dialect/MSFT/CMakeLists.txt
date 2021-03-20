@@ -5,9 +5,6 @@
 ## SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 ##
 ##===----------------------------------------------------------------------===//
-##
-##
-##===----------------------------------------------------------------------===//
 
 add_circt_dialect(MSFT msft)
 add_circt_doc(MSFT -gen-dialect-doc MSFT Dialects/)

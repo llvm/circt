@@ -1,4 +1,4 @@
-//===- MSFTDialect.h - PD dialect declaration -------------------*- C++ -*-===//
+//===- MSFTDialect.h - Microsoft dialect declaration ------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -41,4 +41,4 @@ public:
 // Don't reorder.
 #include "circt/Dialect/MSFT/MSFTAttrs.h.inc"
 
-#endif // CIRCT_DIALECT_SEQ_SEQDIALECT_H
+#endif // CIRCT_DIALECT_MSFT_MSFTDIALECT_H

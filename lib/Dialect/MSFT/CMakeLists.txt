@@ -5,9 +5,6 @@
 ## SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 ##
 ##===----------------------------------------------------------------------===//
-##
-##
-##===----------------------------------------------------------------------===//
 
 file(GLOB globbed *.cpp)
 add_circt_dialect_library(CIRCTMSFT
