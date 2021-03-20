@@ -1,4 +1,4 @@
-//===- MSFTDialect.h - PD dialect declaration -------------------*- C++ -*-===//
+//===- MSFTDialect.h - Microsoft dialect declaration ------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
