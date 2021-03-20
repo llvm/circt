@@ -45,11 +45,6 @@ Operation *MSFTDialect::materializeConstant(OpBuilder &builder, Attribute value,
 }
 
 Attribute parsePhysLocation(DialectAsmParser &p, Type type) {
-  // PhysLocationAttr loc;
-  // if (p.parseAttribute(loc))
-  //   return Attribute();
-  // return loc;
-
   llvm::SMLoc loc = p.getCurrentLocation();
   StringRef devTypeStr;
   uint64_t x, y, num;
