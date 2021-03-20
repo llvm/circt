@@ -107,8 +107,6 @@ rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   // CHECK-NEXT:     sv.fwrite "z"
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
-
-
   sv.initial {
     sv.casez %arg8 : i8
     case b0000001x: {
@@ -141,6 +139,17 @@ rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
     case b1: {
       sv.fwrite "one"
     }
+  }
+
+  // CHECK-NEXT: %combWire = sv.wire : !rtl.inout<i1> 
+  %combWire = sv.wire : !rtl.inout<i1>
+  // CHECK-NEXT: sv.alwayscomb {
+  sv.alwayscomb {
+    // CHECK-NEXT: %x_i1 = sv.constantX : i1
+    %tmpx = sv.constantX : i1
+    // CHECK-NEXT: sv.passign %combWire, %x_i1 : i1
+    sv.passign %combWire, %tmpx : i1
+    // CHECK-NEXT: }
   }
 
   // CHECK-NEXT: rtl.output

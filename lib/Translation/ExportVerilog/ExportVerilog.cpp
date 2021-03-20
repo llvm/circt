@@ -1736,6 +1736,7 @@ private:
   }
   LogicalResult visitSV(IfOp op);
   LogicalResult visitSV(AlwaysOp op);
+  LogicalResult visitSV(AlwaysCombOp op);
   LogicalResult visitSV(AlwaysFFOp op);
   LogicalResult visitSV(InitialOp op);
   LogicalResult visitSV(CaseZOp op);
@@ -2203,6 +2204,15 @@ LogicalResult StmtEmitter::visitSV(AlwaysOp op) {
   }
 
   emitBlockAsStatement(op.getBodyBlock(), ops, comment);
+  return success();
+}
+
+LogicalResult StmtEmitter::visitSV(AlwaysCombOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  indent() << "always_comb";
+  emitBlockAsStatement(op.getBodyBlock(), ops, "always_comb");
   return success();
 }
 
