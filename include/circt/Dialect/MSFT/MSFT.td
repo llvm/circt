@@ -33,4 +33,27 @@ def MSFTDialect : Dialect {
 class MSFTOp<string mnemonic, list<OpTrait> traits = []> :
     Op<MSFTDialect, mnemonic, traits>;
 
+def DeviceType : I32EnumAttr<"DeviceType",
+  "Type of device at physical location", [
+    I32EnumAttrCase<"M20K", 1, "">,
+    I32EnumAttrCase<"DSP", 2, "">,
+    I32EnumAttrCase<"EC", 3, "">,
+  ]>;
+
+def PhysLocation : StructAttr<"PhysLocation", MSFTDialect, [
+  // Device type.
+  StructFieldAttr<"Type", DeviceType>,
+
+  // X/Y coordinate of device.
+  StructFieldAttr<"X", UI64Attr>,
+  StructFieldAttr<"Y", UI64Attr>,
+
+  // The resource number at the specified coordinates.
+  StructFieldAttr<"Num", UI64Attr>,
+
+  // The name of the entity within the op (to which this attribute is attached)
+  // which this location is specifying.
+  StructFieldAttr<"Entity", StrAttr>
+]>;
+
 #endif // MSFT_TD

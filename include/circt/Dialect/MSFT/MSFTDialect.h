@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_MSFT_MSFTDIALECT_H
 
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
 
 namespace circt {
@@ -26,11 +27,18 @@ public:
 
   static StringRef getDialectNamespace() { return "msft"; }
 
+  Attribute parseAttribute(DialectAsmParser &, Type type) const override;
+  void printAttribute(Attribute, DialectAsmPrinter &) const override;
+
   Operation *materializeConstant(OpBuilder &builder, Attribute value, Type type,
                                  Location loc) override;
 };
 
 } // namespace msft
 } // namespace circt
+
+#include "circt/Dialect/MSFT/MSFTEnums.h.inc"
+// Don't reorder.
+#include "circt/Dialect/MSFT/MSFTAttrs.h.inc"
 
 #endif // CIRCT_DIALECT_SEQ_SEQDIALECT_H

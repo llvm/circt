@@ -40,3 +40,6 @@ Operation *MSFTDialect::materializeConstant(OpBuilder &builder, Attribute value,
   // Placeholder
   return nullptr;
 }
+
+Attribute MSFTDialect::parseAttribute(DialectAsmParser &p, Type type) const {}
+void MSFTDialect::printAttribute(Attribute attr, DialectAsmPrinter &p) const {}
