@@ -44,6 +44,8 @@ Operation *MSFTDialect::materializeConstant(OpBuilder &builder, Attribute value,
   return nullptr;
 }
 
+/// Parse a PhysLocationAttr with the following syntax:
+/// #msft.physloc<DevType, X, Y, Num, "Entity">
 Attribute parsePhysLocation(DialectAsmParser &p, Type type) {
   llvm::SMLoc loc = p.getCurrentLocation();
   StringRef devTypeStr;
@@ -80,7 +82,8 @@ Attribute MSFTDialect::parseAttribute(DialectAsmParser &p, Type type) const {
     return Attribute();
   if (attrName == "physloc")
     return parsePhysLocation(p, type);
-  llvm_unreachable("Unexpected 'msft' attribute");
+  p.emitError(p.getNameLoc(), "Unexpected msft attribute '" + attrName + "'");
+  return Attribute();
 }
 
 void MSFTDialect::printAttribute(Attribute attr, DialectAsmPrinter &p) const {
