@@ -814,12 +814,12 @@ ParseResult FIRParser::importAnnotations(const SMLoc &loc,
       continue;
     }
 
-    SmallVector<Attribute> foo;
+    SmallVector<Attribute> annotationVec;
     for (auto a : state.annotationMap[a])
-      foo.push_back(a);
+      annotationVec.push_back(a);
     for (auto a : annotationMap[a])
-      foo.push_back(a);
-    state.annotationMap[a] = ArrayAttr::get(context, foo);
+      annotationVec.push_back(a);
+    state.annotationMap[a] = ArrayAttr::get(context, annotationVec);
   }
 
   return success();
