@@ -1,6 +1,6 @@
 add_circt_dialect_library(CIRCTSVTransforms
   RTLCleanup.cpp
-  RTLGreyBoxer.cpp
+  RTLStubExternalModules.cpp
 
   DEPENDS
   CIRCTSVTransformsIncGen

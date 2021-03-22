@@ -1,4 +1,4 @@
-// RUN: circt-opt -rtl-grey-boxer %s | FileCheck %s
+// RUN: circt-opt -rtl-stub-external-modules %s | FileCheck %s
 
 //CHECK-LABEL: rtl.module @remote(%arg0: i1, %arg1: i1) -> (%r: i3) {
 //CHECK-NEXT: %x_i3 = sv.constantX : i3 

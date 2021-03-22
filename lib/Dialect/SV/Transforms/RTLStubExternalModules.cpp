@@ -1,4 +1,4 @@
-//===- RTLCleanup.cpp - RTL Cleanup Pass ----------------------------------===//
+//===- RTLStubExternalModules.cpp - RTL Module Stubbing Pass --------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -17,26 +17,25 @@
 using namespace circt;
 
 //===----------------------------------------------------------------------===//
-// GreyBoxer Pass
+// StubExternalModules Pass
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct RTLGreyBoxerPass : public sv::RTLGreyBoxerBase<RTLGreyBoxerPass> {
+struct RTLStubExternalModulesPass
+    : public sv::RTLStubExternalModulesBase<RTLStubExternalModulesPass> {
   void runOnOperation() override;
 };
 } // end anonymous namespace
 
-void RTLGreyBoxerPass::runOnOperation() {
+void RTLStubExternalModulesPass::runOnOperation() {
   auto topModule = getOperation().getBody();
-  SmallVector<rtl::RTLModuleExternOp, 8> toErase;
   OpBuilder builder(topModule->getTerminator());
 
-  for (auto &op : *topModule)
+  for (auto &op : llvm::make_early_inc_range(*topModule))
     if (auto module = dyn_cast<rtl::RTLModuleExternOp>(op)) {
-      module.dump();
       SmallVector<rtl::ModulePortInfo, 8> ports;
       module.getPortInfo(ports);
-      auto nameAttr = builder.getStringAttr(module.getName());
+      auto nameAttr = module.getNameAttr();
       auto newModule =
           builder.create<rtl::RTLModuleOp>(module.getLoc(), nameAttr, ports);
       auto outputOp = newModule.getBodyBlock()->getTerminator();
@@ -49,16 +48,10 @@ void RTLGreyBoxerPass::runOnOperation() {
               innerBuilder.create<sv::ConstantXOp>(outputOp->getLoc(), p.type));
       }
       outputOp->setOperands(outputs);
-      toErase.push_back(module);
+      module.erase();
     }
-  // If we did not change anything in the graph mark all analysis as
-  // preserved.
-  if (toErase.empty())
-    markAllAnalysesPreserved();
-  for (auto &m : toErase)
-    m->erase();
 }
 
-std::unique_ptr<Pass> circt::sv::createRTLGreyBoxerPass() {
-  return std::make_unique<RTLGreyBoxerPass>();
+std::unique_ptr<Pass> circt::sv::createRTLStubExternalModulesPass() {
+  return std::make_unique<RTLStubExternalModulesPass>();
 }
