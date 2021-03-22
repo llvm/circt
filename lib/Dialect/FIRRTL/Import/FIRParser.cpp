@@ -86,7 +86,7 @@ struct GlobalFIRParserState {
   const FIRParserOptions options;
 
   /// A mapping of targets to annotations
-  llvm::StringMap<llvm::SmallVector<DictionaryAttr>> annotationMap;
+  llvm::StringMap<ArrayAttr> annotationMap;
 
   /// The lexer for the source file we're parsing.
   FIRLexer lex;
@@ -258,9 +258,9 @@ struct FIRParser {
   /// Add annotations from the source manager, if an annotation file was added.
   ParseResult importAnnotationFile(const SMLoc &loc, MLIRContext *context);
 
-  /// Populate a vector of annotations for a given Target.
-  void getAnnotations(StringRef target,
-                      SmallVector<DictionaryAttr> &annotations);
+  /// Populate a vector of annotations for a given Target.  If the annotations
+  /// parameter is non-empty, then this will be appended to.
+  void getAnnotations(StringRef target, ArrayAttr &annotations);
 
 private:
   FIRParser(const FIRParser &) = delete;
@@ -795,7 +795,7 @@ ParseResult FIRParser::importAnnotations(const SMLoc &loc,
   }
 
   llvm::json::Path::Root root;
-  llvm::StringMap<llvm::SmallVector<DictionaryAttr>> annotationMap;
+  llvm::StringMap<ArrayAttr> annotationMap;
   if (annotations) {
     if (!fromJSON(annotations.get(), annotationMap, root, context)) {
       auto diag = emitError(loc, "Invalid/unsupported annotation format");
@@ -808,9 +808,19 @@ ParseResult FIRParser::importAnnotations(const SMLoc &loc,
     }
   }
 
-  for (auto a = annotationMap.begin(), e = annotationMap.end(); a != e; ++a)
-    for (auto b : a->getValue())
-      state.annotationMap[a->getKey()].push_back(b);
+  for (auto a : annotationMap.keys()) {
+    if (!state.annotationMap[a]) {
+      state.annotationMap[a] = annotationMap[a];
+      continue;
+    }
+
+    SmallVector<Attribute> foo;
+    for (auto a : state.annotationMap[a])
+      foo.push_back(a);
+    for (auto a : annotationMap[a])
+      foo.push_back(a);
+    state.annotationMap[a] = ArrayAttr::get(context, foo);
+  }
 
   return success();
 }
@@ -829,11 +839,27 @@ ParseResult FIRParser::importAnnotationFile(const SMLoc &loc,
   return result;
 }
 
-void FIRParser::getAnnotations(StringRef target,
-                               SmallVector<DictionaryAttr> &annotations) {
-  for (auto a : state.annotationMap.lookup(target)) {
-    annotations.push_back(a);
+void FIRParser::getAnnotations(StringRef target, ArrayAttr &annotations) {
+  // Input annotations is empty.  Just do the lookup and return.
+  if (!annotations) {
+    annotations = state.annotationMap.lookup(target);
+    return;
   }
+
+  // Input annotations is non-empty.  Exit quickly if the target doesn't exist.
+  // Otherwise, construct anew ArrayAttr that includes existing and new
+  // annotations.
+  auto newAnnotations = state.annotationMap.lookup(target);
+  if (!newAnnotations)
+    return;
+
+  SmallVector<Attribute> annotationVec;
+  for (auto a : annotations)
+    annotationVec.push_back(a);
+  for (auto a : newAnnotations)
+    annotationVec.push_back(a);
+
+  annotations = ArrayAttr::get(state.context, annotationVec);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2706,7 +2732,7 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
   portList.reserve(portListAndLoc.size());
   for (auto &elt : portListAndLoc)
     portList.push_back(elt.first);
-  SmallVector<DictionaryAttr> annotations;
+  ArrayAttr annotations;
   getAnnotations("~" + circuit.name().str() + "|" + name.getValue().str(),
                  annotations);
   auto fmodule =
@@ -2786,7 +2812,7 @@ ParseResult FIRCircuitParser::parseCircuit() {
   // Get annotations associated with this circuit. These are either:
   //   1. Annotations with no target (which we use "~" to identify)
   //   2. Annotations targeting the circuit, e.g., "~Foo"
-  SmallVector<DictionaryAttr> annotationVec;
+  ArrayAttr annotationVec;
   getAnnotations("~", annotationVec);
   getAnnotations("~" + name.getValue().str(), annotationVec);
 

@@ -15,17 +15,13 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OperationSupport.h"
 
-using namespace circt;
-using namespace firrtl;
-
-namespace circt {
-namespace firrtl {
-
-/// Deserialize a JSON value into a Target-keyed array of Annotations
-/// (represented as DictionaryAttrs).
-bool fromJSON(llvm::json::Value &value,
-              llvm::StringMap<llvm::SmallVector<DictionaryAttr>> &annotationMap,
-              llvm::json::Path path, MLIRContext *context) {
+/// Deserialize a JSON value into FIRRTL Annotations.  Annotations are
+/// represented as a Target-keyed arrays of attributes.  The input JSON value is
+/// checked, at runtime, to be an array of objects.  Returns true if successful,
+/// false if unsuccessful.
+bool circt::firrtl::fromJSON(llvm::json::Value &value,
+                             llvm::StringMap<ArrayAttr> &annotationMap,
+                             llvm::json::Path path, MLIRContext *context) {
 
   /// Examine an Annotation JSON object and return an optional string indicating
   /// the target associated with this annotation.  Erase the target from the
@@ -53,7 +49,7 @@ bool fromJSON(llvm::json::Value &value,
     } else {
       // This is a legacy target using the firrtl.annotations.Named type.  This
       // can be trivially canonicalized to a non-legacy target, so we do it with
-      // the following thre mappings:
+      // the following three mappings:
       //   1. CircuitName => CircuitTarget, e.g., A -> ~A
       //   2. ModuleName => ModuleTarget, e.g., A.B -> ~A|B
       //   3. ComponentName => ReferenceTarget, e.g., A.B.C -> ~A|B>C
@@ -94,7 +90,7 @@ bool fromJSON(llvm::json::Value &value,
 
   /// Convert arbitrary JSON to an MLIR Attribute.
   std::function<Attribute(llvm::json::Value &, llvm::json::Path)>
-      JSONToAttribute =
+      convertJSONToAttribute =
           [&](llvm::json::Value &value, llvm::json::Path p) -> Attribute {
     // String
     if (auto a = value.getAsString())
@@ -115,14 +111,15 @@ bool fromJSON(llvm::json::Value &value,
     // Null
     if (auto a = value.getAsNull()) {
       p.report("Found a null in the JSON, returning 'nullptr'");
-      return nullptr;
+      return {};
     }
 
     // Object
     if (auto a = value.getAsObject()) {
       NamedAttrList metadata;
       for (auto b : *a)
-        metadata.append(b.first, JSONToAttribute(b.second, p.field(b.first)));
+        metadata.append(b.first,
+                        convertJSONToAttribute(b.second, p.field(b.first)));
       return DictionaryAttr::get(context, metadata);
     }
 
@@ -130,7 +127,7 @@ bool fromJSON(llvm::json::Value &value,
     if (auto a = value.getAsArray()) {
       SmallVector<Attribute> metadata;
       for (size_t i = 0, e = (*a).size(); i != e; ++i)
-        metadata.push_back(JSONToAttribute((*a)[i], p.index(i)));
+        metadata.push_back(convertJSONToAttribute((*a)[i], p.index(i)));
       return ArrayAttr::get(context, metadata);
     }
 
@@ -146,6 +143,8 @@ bool fromJSON(llvm::json::Value &value,
     return false;
   }
 
+  // Build a mutable map of Target to Annotation.
+  llvm::StringMap<llvm::SmallVector<Attribute>> mutableAnnotationMap;
   for (size_t i = 0, e = (*array).size(); i != e; ++i) {
     auto object = (*array)[i].getAsObject();
     auto p = path.index(i);
@@ -154,8 +153,9 @@ bool fromJSON(llvm::json::Value &value,
                "array of something else.");
       return false;
     }
-    // Extra the "target" field from the Annotation object if it exists.  Remove
-    // it so it isn't included in the Attribute.
+    // Find and remove the "target" field from the Annotation object if it
+    // exists.  In the FIRRTL Dialect, the target will be implicitly specified
+    // based on where the attribute is applied.
     auto target = findAndEraseTarget(object, p);
     if (!target)
       return false;
@@ -164,18 +164,19 @@ bool fromJSON(llvm::json::Value &value,
     // global Target -> Attribute mapping.
     NamedAttrList metadata;
     for (auto field : *object) {
-      if (auto value = JSONToAttribute(field.second, p)) {
+      if (auto value = convertJSONToAttribute(field.second, p)) {
         metadata.append(field.first, value);
         continue;
       }
       return false;
     }
-    annotationMap[target.getValue()].push_back(
+    mutableAnnotationMap[target.getValue()].push_back(
         DictionaryAttr::get(context, metadata));
   }
 
+  // Convert the mutable Annotation map to a SmallVector<ArrayAttr>.
+  for (auto a : mutableAnnotationMap.keys())
+    annotationMap[a] = ArrayAttr::get(context, mutableAnnotationMap[a]);
+
   return true;
 };
-
-} // namespace firrtl
-} // namespace circt

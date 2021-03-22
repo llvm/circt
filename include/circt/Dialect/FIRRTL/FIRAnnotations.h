@@ -22,7 +22,7 @@ namespace circt {
 namespace firrtl {
 
 bool fromJSON(llvm::json::Value &value,
-              llvm::StringMap<llvm::SmallVector<DictionaryAttr>> &annotationMap,
+              llvm::StringMap<ArrayAttr> &annotationMap,
               llvm::json::Path path, MLIRContext *context);
 
 } // namespace firrtl
