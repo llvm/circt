@@ -92,3 +92,10 @@ void ESIDialect::printType(Type type, DialectAsmPrinter &printer) const {
     return;
   llvm_unreachable("unexpected 'esi' type kind");
 }
+
+void ESIDialect::registerTypes() {
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "circt/Dialect/ESI/ESITypes.cpp.inc"
+      >();
+}

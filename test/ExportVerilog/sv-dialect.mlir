@@ -329,19 +329,30 @@ rtl.module @exprInlineTestIssue439(%clk: i1) {
 // CHECK-LABEL: module issue439(
 // https://github.com/llvm/circt/issues/439
 rtl.module @issue439(%in1: i1, %in2: i1) {
-  // CHECK: wire _T = in1 | in2;
+  // CHECK: wire _T;
+  // CHECK: wire _T_0 = in1 | in2;
   %clock = comb.or %in1, %in2 : i1
 
-  // CHECK-NEXT: always @(posedge _T)
+  // CHECK-NEXT: always @(posedge _T_0)
   sv.always posedge %clock {
-    // FIXME: https://github.com/llvm/circt/issues/726
-    // CHECK: wire _T_0;
-    // CHECK: assign _T_0 = in1;
-    // CHECK-NEXT: assign _T_0 = in2;
+    // CHECK-NEXT: _T <= in1;
+    // CHECK-NEXT: _T <= in2;
     %merged = comb.merge %in1, %in2 : i1
-    // CHECK-NEXT: $fwrite(32'h80000002, "Bye %x\n", _T_0);
+    // CHECK-NEXT: $fwrite(32'h80000002, "Bye %x\n", _T);
     sv.fwrite "Bye %x\n"(%merged) : i1
   }
+}
+
+// CHECK-LABEL: module issue726(
+// https://github.com/llvm/circt/issues/726
+rtl.module @issue726(%in1: i1, %in2: i1) -> (%out: i1) {
+  // CHECK: wire _T;
+  // CHECK: assign _T = in1;
+  // CHECK: assign _T = in2;
+  %merged = comb.merge %in1, %in2 : i1
+
+  // CHECK: assign out = _T;
+  rtl.output %merged : i1
 }
 
 // https://github.com/llvm/circt/issues/595
@@ -572,5 +583,19 @@ rtl.module @issue728ifdef(%clock: i1, %a: i1 {rtl.name = "asdfasdfasdfasdfafa"},
        }
      }
   }
-  rtl.output 
+}
+
+// CHECK-LABEL: module alwayscombTest(
+rtl.module @alwayscombTest(%a: i1) -> (%x: i1) {
+  // CHECK: wire combWire;
+  %combWire = sv.wire : !rtl.inout<i1>
+  // CHECK: always_comb
+  sv.alwayscomb {
+    // CHECK-NEXT: combWire <= a
+    sv.passign %combWire, %a : i1
+  }
+
+  // CHECK: assign x = combWire;
+  %out = sv.read_inout %combWire : !rtl.inout<i1>
+  rtl.output %out : i1
 }

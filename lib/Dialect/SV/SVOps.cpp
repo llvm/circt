@@ -107,7 +107,11 @@ void VerbatimExprOp::getAsmResultNames(
   // string up to a weird character (like a paren) and currently ignore
   // parenthesized expressions.
   auto isOkCharacter = [](char c) { return llvm::isAlnum(c) || c == '_'; };
-  auto name = string().take_while(isOkCharacter);
+  auto name = string();
+  // Ignore a leading ` in macro name.
+  if (name.startswith("`"))
+    name = name.drop_front();
+  name = name.take_while(isOkCharacter);
   if (!name.empty())
     setNameFn(getResult(), name);
 }
@@ -341,10 +345,10 @@ void IfOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       auto *thenBlock = op.getThenBlock(), *elseBlock = op.getElseBlock();
 
       // Move the body of the then block over to the else.
-      thenBlock->clear(); // Drop the old terminator.
+      rewriter.eraseOp(thenBlock->getTerminator());
       thenBlock->getOperations().splice(thenBlock->end(),
                                         elseBlock->getOperations());
-      elseBlock->erase();
+      rewriter.eraseBlock(elseBlock);
       return success();
     }
   };
@@ -889,7 +893,7 @@ void WireOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
           return failure();
 
       // Remove all uses of the wire.
-      for (auto &use : op.getResult().getUses())
+      for (auto &use : make_early_inc_range(op.getResult().getUses()))
         rewriter.eraseOp(use.getOwner());
 
       // Remove the wire.

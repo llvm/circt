@@ -20,11 +20,13 @@
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Translation.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/Parallel.h"
 #include "llvm/Support/SaveAndRestore.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/raw_ostream.h"
@@ -38,21 +40,11 @@ using namespace sv;
 /// This is the preferred source width for the generated Verilog.
 static constexpr size_t preferredSourceWidth = 120;
 
-/// This is a set accessed through getReservedWords() that contains all of the
-/// Verilog names and other identifiers we need to avoid because of name
-/// conflicts.
-static llvm::ManagedStatic<StringSet<>> reservedWordCache;
-
 //===----------------------------------------------------------------------===//
 // Helper routines
 //===----------------------------------------------------------------------===//
 
 static bool isVerilogExpression(Operation *op) {
-  // Merge is an expression according to the RTL dialect, but we need it emitted
-  // as a statement with its own wire declaration.
-  if (isa<MergeOp>(op))
-    return false;
-
   // These are SV dialect expressions.
   if (isa<ReadInOutOp>(op) || isa<ArrayIndexInOutOp>(op))
     return true;
@@ -271,7 +263,7 @@ static bool isTemporaryInProceduralRegion(Operation *op) {
 static StringRef getVerilogDeclWord(Operation *op) {
   if (isa<RegOp>(op))
     return "reg";
-  if (isa<WireOp>(op) || isa<MergeOp>(op))
+  if (isa<WireOp>(op))
     return "wire";
 
   // Interfaces instances use the name of the declared interface.
@@ -309,17 +301,21 @@ enum VerilogPrecedence {
 
 /// Return a StringSet that contains all of the reserved names (e.g. Verilog
 /// keywords) that we need to avoid for fear of name conflicts.
-static const StringSet<> &getReservedWords() {
-  auto &set = *reservedWordCache;
-  if (set.empty()) {
+struct ReservedWordsCreator {
+  static void *call() {
+    auto set = std::make_unique<StringSet<>>();
     static const char *const reservedWords[] = {
 #include "ReservedWords.def"
     };
     for (auto *word : reservedWords)
-      set.insert(word);
+      set->insert(word);
+    return set.release();
   }
-  return set;
-}
+};
+
+/// A StringSet that contains all of the reserved names (e.g., Verilog and VHDL
+/// keywords) that we need to avoid to prevent naming conflicts.
+static llvm::ManagedStatic<StringSet<>, ReservedWordsCreator> reservedWords;
 
 /// Return the location information as a (potentially empty) string.
 static std::string
@@ -426,14 +422,13 @@ StringRef resolveKeywordConflict(StringRef origName,
   // Get the list of reserved words we need to avoid.  We could prepopulate this
   // into the used words cache, but it is large and immutable, so we just query
   // it when needed.
-  auto &reservedWords = getReservedWords();
   SmallVector<char, 16> nameBuffer(name.begin(), name.end());
   nameBuffer.push_back('_');
   auto baseSize = nameBuffer.size();
 
   while (1) {
     // Loop until we get a name that is not a keyword and is unique.
-    if (!reservedWords.count(name)) {
+    if (!reservedWords->count(name)) {
       auto itAndInserted = recordNames.insert(name);
       if (itAndInserted.second)
         return itAndInserted.first->getKey();
@@ -720,27 +715,6 @@ StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
     nameTable[valueOrOp] = updatedName;
   return updatedName;
 }
-
-//===----------------------------------------------------------------------===//
-// SplitModuleEmitter
-//===----------------------------------------------------------------------===//
-
-namespace {
-
-class SplitModuleEmitter {
-public:
-  explicit SplitModuleEmitter(StringRef dirname) : dirname(dirname) {}
-
-  bool encounteredError = false;
-  StringRef dirname;
-  SmallVector<Operation *, 8> perFileOps;
-
-  void emitMLIRModule(ModuleOp module);
-  void emitFile(StringRef filename,
-                std::function<void(VerilogEmitterState &)> callback);
-};
-
-} // namespace
 
 //===----------------------------------------------------------------------===//
 // Expression Emission
@@ -1740,6 +1714,7 @@ private:
   }
   LogicalResult visitSV(IfOp op);
   LogicalResult visitSV(AlwaysOp op);
+  LogicalResult visitSV(AlwaysCombOp op);
   LogicalResult visitSV(AlwaysFFOp op);
   LogicalResult visitSV(InitialOp op);
   LogicalResult visitSV(CaseZOp op);
@@ -2210,6 +2185,15 @@ LogicalResult StmtEmitter::visitSV(AlwaysOp op) {
   return success();
 }
 
+LogicalResult StmtEmitter::visitSV(AlwaysCombOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  indent() << "always_comb";
+  emitBlockAsStatement(op.getBodyBlock(), ops, "always_comb");
+  return success();
+}
+
 LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
@@ -2489,9 +2473,6 @@ void StmtEmitter::emitStatement(Operation *op) {
   if (succeeded(dispatchSVVisitor(op)))
     return;
 
-  if (auto merge = dyn_cast<MergeOp>(op))
-    return emitMergeOp(merge);
-
   emitOpError(op, "cannot emit this operation to Verilog");
   indent() << "unknown MLIR operation " << op->getName().getStringRef() << "\n";
 }
@@ -2581,46 +2562,91 @@ void ModuleEmitter::emitStatementBlock(Block &body) {
 }
 
 //===----------------------------------------------------------------------===//
-// Module Driver
+// SplitModuleEmitter
 //===----------------------------------------------------------------------===//
 
+namespace {
+
+class SplitModuleEmitter {
+public:
+  explicit SplitModuleEmitter(StringRef dirname) : dirname(dirname) {}
+
+  /// Whether any error has been encountered during emission.
+  std::atomic<bool> encounteredError = {};
+
+  /// The directory to emit files into.
+  StringRef dirname;
+
+  /// A list of modules and their position within the per-file operations.
+  struct EmittedModule {
+    Operation *op;
+    size_t position;
+    SmallString<32> filename;
+  };
+  SmallVector<EmittedModule, 0> moduleOps;
+
+  /// A list of per-file operations (e.g., `sv.verbatim` or `sv.ifdef`).
+  SmallVector<Operation *, 0> perFileOps;
+
+  void emitMLIRModule(ModuleOp module);
+  void emitModule(EmittedModule &mod);
+};
+
+} // namespace
+
 void SplitModuleEmitter::emitMLIRModule(ModuleOp module) {
+  // Partition the MLIR module into modules and interfaces for which we create
+  // separate output files, and the remaining top-level verbatim SV/ifdef
+  // business that needs to go into each file.
   for (auto &op : *module.getBody()) {
-    // TODO: Module uniquification happens in ModuleEmitter, but a new instance
-    // of ModuleEmitter is created for each operation in the body. This should
-    // be a prepass on the IR such that renaming is consistent regardless of
-    // what subset of the file the emitter is looking at (see #756).
-    if (auto module = dyn_cast<RTLModuleOp>(op))
-      emitFile(module.getNameAttr().getValue(),
-               [&](VerilogEmitterState &state) {
-                 ModuleEmitter(state).emitRTLModule(module);
-               });
-    else if (auto module = dyn_cast<RTLModuleExternOp>(op))
-      emitFile(module.getVerilogModuleNameAttr().getValue(),
-               [&](VerilogEmitterState &state) {
-                 ModuleEmitter(state).emitRTLExternModule(module);
-               });
-    else if (auto intfOp = dyn_cast<InterfaceOp>(op))
-      emitFile(intfOp.sym_name(), [&](VerilogEmitterState &state) {
-        ModuleEmitter(state).emitStatement(&op);
-      });
-    else if (isa<VerbatimOp>(op) || isa<IfDefProceduralOp>(op))
+    if (isa<RTLModuleOp>(op) || isa<RTLModuleExternOp>(op) ||
+        isa<InterfaceOp>(op)) {
+      moduleOps.push_back({&op, perFileOps.size()});
+    } else if (isa<VerbatimOp>(op) || isa<IfDefProceduralOp>(op)) {
       perFileOps.push_back(&op);
-    else if (!isa<ModuleTerminatorOp>(op)) {
+    } else if (!isa<ModuleTerminatorOp>(op)) {
       op.emitError("unknown operation");
       encounteredError = true;
     }
   }
+
+  // In parallel, emit each module into its separate file, embedded within the
+  // per-file operations.
+  llvm::parallelForEach(moduleOps.begin(), moduleOps.end(),
+                        [&](EmittedModule &mod) { emitModule(mod); });
 }
 
-void SplitModuleEmitter::emitFile(
-    StringRef fileStem, std::function<void(VerilogEmitterState &)> callback) {
+void SplitModuleEmitter::emitModule(EmittedModule &mod) {
+  auto op = mod.op;
 
-  // Determine the output file name and create it.
+  // Given the operation, determine the file stem name and how to emit it.
+  std::function<void(VerilogEmitterState &)> emit;
+
+  if (auto module = dyn_cast<RTLModuleOp>(op)) {
+    mod.filename = module.getNameAttr().getValue();
+    emit = [module](VerilogEmitterState &state) {
+      ModuleEmitter(state).emitRTLModule(module);
+    };
+  } else if (auto module = dyn_cast<RTLModuleExternOp>(op)) {
+    mod.filename = module.getVerilogModuleNameAttr().getValue();
+    emit = [module](VerilogEmitterState &state) {
+      ModuleEmitter(state).emitRTLExternModule(module);
+    };
+  } else if (auto intfOp = dyn_cast<InterfaceOp>(op)) {
+    mod.filename = intfOp.sym_name();
+    emit = [op](VerilogEmitterState &state) {
+      ModuleEmitter(state).emitStatement(op);
+    };
+  } else {
+    llvm_unreachable("only emissible ops should be in moduleOps list");
+  }
+
+  // Determine the output file name.
+  mod.filename.append(".v");
   SmallString<128> outputFilename(dirname);
-  llvm::sys::path::append(outputFilename, fileStem);
-  outputFilename.append(".v");
+  llvm::sys::path::append(outputFilename, mod.filename);
 
+  // Open the output file.
   std::string errorMessage;
   auto output = openOutputFile(outputFilename, &errorMessage);
   if (!output) {
@@ -2629,19 +2655,26 @@ void SplitModuleEmitter::emitFile(
     return;
   }
 
+  // Emit the prolog of per-file operations, the module itself, and the epilog
+  // of per-file operations.
   VerilogEmitterState state(output->os());
 
-  // Emit accumulated per-file operations and whatever the callback does.
-  for (auto op : perFileOps) {
-    ModuleEmitter(state).emitStatement(op);
+  for (size_t i = 0; i < std::min(mod.position, perFileOps.size()); ++i) {
+    ModuleEmitter(state).emitStatement(perFileOps[i]);
+  }
+  emit(state);
+  for (size_t i = mod.position; i < perFileOps.size(); i++) {
+    ModuleEmitter(state).emitStatement(perFileOps[i]);
   }
 
-  callback(state);
   if (state.encounteredError)
     encounteredError = true;
-
   output->keep();
 }
+
+//===----------------------------------------------------------------------===//
+// Module Driver
+//===----------------------------------------------------------------------===//
 
 void ModuleEmitter::emitMLIRModule(ModuleOp module) {
   for (auto &op : *module.getBody()) {
@@ -2660,6 +2693,29 @@ void ModuleEmitter::emitMLIRModule(ModuleOp module) {
 void ModuleEmitter::emitRTLExternModule(RTLModuleExternOp module) {
   auto verilogName = module.getVerilogModuleNameAttr();
   os << "// external module " << getModuleName(verilogName) << "\n\n";
+}
+
+/// We lower the Merge operation to a wire at the top level along with connects
+/// to it and a ReadInOut.
+static Value lowerMergeOp(MergeOp merge) {
+  auto module = merge->getParentOfType<RTLModuleOp>();
+  assert(module && "merges should only be in a module");
+
+  // Start with the wire at the top level.
+  ImplicitLocOpBuilder b(merge.getLoc(), &module.getBodyBlock()->front());
+  auto wire = b.create<WireOp>(merge.getType());
+
+  // Each of the operands is a connect or passign into the wire.
+  b.setInsertionPoint(merge);
+  if (merge->getParentOp()->hasTrait<sv::ProceduralRegion>()) {
+    for (auto op : merge.getOperands())
+      b.create<PAssignOp>(wire, op);
+  } else {
+    for (auto op : merge.getOperands())
+      b.create<ConnectOp>(wire, op);
+  }
+
+  return b.create<ReadInOutOp>(wire);
 }
 
 static Value lowerVariadicCommutativeOp(Operation &op, OperandRange operands) {
@@ -2701,6 +2757,14 @@ void ModuleEmitter::prepareRTLModule(Block &block) {
         prepareRTLModule(region.front());
     }
 
+    // Lower 'merge' operations to wires and connects.
+    if (auto merge = dyn_cast<MergeOp>(op)) {
+      auto result = lowerMergeOp(merge);
+      op.getResult(0).replaceAllUsesWith(result);
+      op.erase();
+      continue;
+    }
+
     // Lower commutative variadic operations with more than two operands into
     // balanced operand trees so we can split long lines across multiple
     // statements.
@@ -2708,7 +2772,7 @@ void ModuleEmitter::prepareRTLModule(Block &block) {
         op.hasTrait<mlir::OpTrait::IsCommutative>() &&
         mlir::MemoryEffectOpInterface::hasNoEffect(&op) &&
         op.getNumRegions() == 0 && op.getNumSuccessors() == 0 &&
-        op.getAttrs().empty() && !isa<comb::MergeOp>(op)) {
+        op.getAttrs().empty()) {
       // Lower this operation to a balanced binary tree of the same operation.
       auto result = lowerVariadicCommutativeOp(op, op.getOperands());
       op.getResult(0).replaceAllUsesWith(result);
@@ -2860,9 +2924,16 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   return failure(state.encounteredError);
 }
 
-LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
+LogicalResult
+circt::exportSplitVerilog(ModuleOp module, StringRef dirname,
+                          std::function<void(llvm::StringRef)> emittedFile) {
   SplitModuleEmitter emitter(dirname);
   emitter.emitMLIRModule(module);
+  if (emittedFile) {
+    for (auto mod : std::move(emitter.moduleOps)) {
+      emittedFile(mod.filename);
+    }
+  }
   return failure(emitter.encounteredError);
 }
 

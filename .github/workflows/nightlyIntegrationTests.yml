@@ -60,12 +60,6 @@ jobs:
             cxx: clang++
           - cc: gcc
             cxx: g++
-        exclude:
-          # We can't build with GCC+sharedlibs and succesfully run the tests.
-          # See issue https://github.com/llvm/circt/issues/708
-          - build-shared: ON
-            compiler:
-              cc: gcc
 
     steps:
       - name: Configure Environment

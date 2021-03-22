@@ -165,7 +165,7 @@ class BinaryPrimOp<string mnemonic, Type lhsType, Type rhsType, Type resultType,
     /// type if the input types are invalid.
     static FIRRTLType getResultType(FIRRTLType lhs, FIRRTLType rhs, Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
-                                    ArrayRef<int32_t> integers, Location loc) {
+                                    ArrayRef<int64_t> integers, Location loc) {
       if (inputs.size() != 2 || !integers.empty()) {
         mlir::emitError(loc,"operation requires two operands and no constants");
         return {};
@@ -250,7 +250,7 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
     /// type if the input type is invalid.
     static FIRRTLType getResultType(FIRRTLType input, Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
-                                    ArrayRef<int32_t> integers, Location loc) {
+                                    ArrayRef<int64_t> integers, Location loc) {
       if (inputs.size() != 1 || !integers.empty()) {
         mlir::emitError(loc, "operation requires one operand and no constants");
         return {};
@@ -330,7 +330,7 @@ def BitsPrimOp : PrimOp<"bits"> {
     static FIRRTLType getResultType(FIRRTLType input, int32_t high,
                                     int32_t low, Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
-                                    ArrayRef<int32_t> integers, Location loc) {
+                                    ArrayRef<int64_t> integers, Location loc) {
       if (inputs.size() != 1 || integers.size() != 2) {
         mlir::emitError(loc,"operation requires one operand and two constants");
         return {};
@@ -359,7 +359,7 @@ def HeadPrimOp : PrimOp<"head"> {
     static FIRRTLType getResultType(FIRRTLType input, int32_t amount,
                                     Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
-                                    ArrayRef<int32_t> integers, Location loc) {
+                                    ArrayRef<int64_t> integers, Location loc) {
       if (inputs.size() != 1 || integers.size() != 1) {
         mlir::emitError(loc, "operation requires one operand and one constant");
         return {};
@@ -406,7 +406,7 @@ def MuxPrimOp : PrimOp<"mux"> {
     static FIRRTLType getResultType(FIRRTLType sel, FIRRTLType high,
                                     FIRRTLType low, Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
-                                    ArrayRef<int32_t> integers, Location loc) {
+                                    ArrayRef<int64_t> integers, Location loc) {
       if (inputs.size() != 3 || !integers.empty()) {
         mlir::emitError(loc,
                         "operation requires three operands and no constants");
@@ -445,7 +445,7 @@ def PadPrimOp : PrimOp<"pad"> {
     static FIRRTLType getResultType(FIRRTLType input, int32_t amount,
                                     Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
-                                    ArrayRef<int32_t> integers, Location loc) {
+                                    ArrayRef<int64_t> integers, Location loc) {
       if (inputs.size() != 1 || integers.size() != 1) {
         mlir::emitError(loc, "operation requires one operand and one constant");
         return {};
@@ -473,7 +473,7 @@ class ShiftPrimOp<string mnemonic> : PrimOp<mnemonic> {
     static FIRRTLType getResultType(FIRRTLType input, int32_t amount,
                                     Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
-                                    ArrayRef<int32_t> integers, Location loc) {
+                                    ArrayRef<int64_t> integers, Location loc) {
       if (inputs.size() != 1 || integers.size() != 1) {
         mlir::emitError(loc, "operation requires one operand and one constant");
         return {};
@@ -529,7 +529,7 @@ def TailPrimOp : PrimOp<"tail"> {
     static FIRRTLType getResultType(FIRRTLType input, int32_t amount,
                                     Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
-                                    ArrayRef<int32_t> integers, Location loc) {
+                                    ArrayRef<int64_t> integers, Location loc) {
       if (inputs.size() != 1 || integers.size() != 1) {
         mlir::emitError(loc, "operation requires one operand and one constant");
         return {};

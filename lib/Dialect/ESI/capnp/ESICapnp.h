@@ -61,7 +61,7 @@ public:
   llvm::StringRef name() const;
 
   /// Write out the name and ID in capnp schema format.
-  mlir::LogicalResult writeMetadata(llvm::raw_ostream &os) const;
+  void writeMetadata(llvm::raw_ostream &os) const;
 
   /// Write out the schema in its entirety.
   mlir::LogicalResult write(llvm::raw_ostream &os) const;

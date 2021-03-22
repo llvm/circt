@@ -98,3 +98,10 @@ void SVDialect::printType(Type type, DialectAsmPrinter &printer) const {
     return;
   llvm_unreachable("unexpected 'rtl' type kind");
 }
+
+void SVDialect::registerTypes() {
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "circt/Dialect/SV/SVTypes.cpp.inc"
+      >();
+}

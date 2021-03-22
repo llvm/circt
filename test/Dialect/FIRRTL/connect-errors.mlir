@@ -1,6 +1,13 @@
 
 // RUN: circt-opt %s -split-input-file -verify-diagnostics
 
+firrtl.circuit "test" {
+firrtl.module @test(%a : !firrtl.uint<1>, %b : !firrtl.flip<uint<1>>) {
+  // expected-error @+1 {{connection destination must be a non-passive type or a duplex value}}
+  firrtl.connect %a, %b : !firrtl.uint<1>, !firrtl.flip<uint<1>>
+}
+}
+
 /// Analog types cannot be connected and must be attached.
 
 // -----
@@ -242,6 +249,17 @@ firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>>, %b : !firrtl.bundle<f1: fl
 }
 }
 
+// -----
+
+firrtl.circuit "test" {
+firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>>, %b : !firrtl.flip<bundle<f1: uint<1>>>) {
+  %0 = firrtl.subfield %a("f1") : (!firrtl.bundle<f1: uint<1>>) -> !firrtl.uint<1>
+  %1 = firrtl.subfield %b("f1") : (!firrtl.flip<bundle<f1: uint<1>>>) -> !firrtl.flip<uint<1>>
+  // expected-error @+1 {{connection destination must be a non-passive type or a duplex value}}
+  firrtl.connect %0, %1 : !firrtl.uint<1>, !firrtl.flip<uint<1>>
+}
+}
+
 /// Destination bitwidth must be greater than or equal to source bitwidth.
 
 // -----
@@ -250,5 +268,17 @@ firrtl.circuit "test" {
 firrtl.module @test(%a : !firrtl.uint<2>, %b : !firrtl.flip<uint<1>>) {
   // expected-error @+1 {{destination width 1 is not greater than or equal to source width 2}}
   firrtl.connect %b, %a : !firrtl.flip<uint<1>>, !firrtl.uint<2>
+}
+}
+
+// -----
+
+// Two duplex values with bundle types can not be bulk connected.
+firrtl.circuit "test" {
+firrtl.module @test(%clock : !firrtl.clock) {
+  %w = firrtl.wire : !firrtl.bundle<a : uint<1>>
+  %r = firrtl.reg %clock : (!firrtl.clock) -> !firrtl.bundle<a: uint<1>>
+  // expected-error @+1 {{ambiguous bulk connection between two duplex values of bundle type}}
+  firrtl.connect %r, %w : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
 }
 }
