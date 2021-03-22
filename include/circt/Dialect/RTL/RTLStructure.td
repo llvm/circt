@@ -127,6 +127,17 @@ def RTLModuleExternOp : RTLOp<"module.extern",
           ::mlir::SymbolTable::getSymbolAttrName());
     }
 
+    // Get the module's symbolic name as StringAttr.
+    StringAttr getNameAttr() {
+      return (*this)->getAttrOfType<StringAttr>(
+        ::mlir::SymbolTable::getSymbolAttrName());
+    }
+
+    // Get the module's symbolic name.
+    StringRef getName() {
+      return getNameAttr().getValue();
+    }
+
   private:
     // This trait needs access to the hooks defined below.
     friend class OpTrait::FunctionLike<RTLModuleExternOp>;
