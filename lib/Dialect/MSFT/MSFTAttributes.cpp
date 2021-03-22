@@ -1,4 +1,4 @@
-//===- MSFTAttributescpp - Implement MSFT dialect attributes --------------===//
+//===- MSFTAttributes.cpp - Implement MSFT dialect attributes -------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -13,9 +13,7 @@
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
 
 #include "mlir/IR/Builders.h"
-#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
-
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;

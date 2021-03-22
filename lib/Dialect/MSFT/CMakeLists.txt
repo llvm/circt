@@ -24,6 +24,3 @@ add_circt_dialect_library(CIRCTMSFT
   LINK_LIBS PUBLIC
   MLIRIR
    )
-
-# add_dependencies(circt-headers MLIRMSFTIncGen)
-# add_dependencies(circt-headers MLIRMSFTExtraIncGen)

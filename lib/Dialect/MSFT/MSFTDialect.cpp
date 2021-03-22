@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/MSFT/MSFTDialect.h"
-#include "circt/Dialect/MSFT/MSFTAttributes.h"
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"

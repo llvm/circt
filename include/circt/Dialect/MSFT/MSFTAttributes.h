@@ -15,8 +15,8 @@
 
 #include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "circt/Support/LLVM.h"
+
 #include "mlir/IR/BuiltinAttributes.h"
-#include "mlir/IR/Dialect.h"
 
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/MSFT/MSFTAttributes.h.inc"
