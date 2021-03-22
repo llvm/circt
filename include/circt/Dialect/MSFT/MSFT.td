@@ -49,13 +49,11 @@ def PhysLocation : MSFT_Attr<"PhysLocation"> {
   let summary = "Descibes a physical location on a device";
   let description = [{
   }];
+  let mnemonic = "physloc";
   let parameters = (ins
     "DeviceTypeAttr":$devType,
     "uint64_t":$x, "uint64_t":$y, "uint64_t":$num,
     "::llvm::StringRef":$entity);
-
-  let parser = [{}];
-  let printer = [{}];
 }
 
 #endif // MSFT_TD

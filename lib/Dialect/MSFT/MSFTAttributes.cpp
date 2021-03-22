@@ -19,7 +19,11 @@
 using namespace circt;
 using namespace msft;
 
-static Attribute parsePhysLocation(DialectAsmParser &p) {
+#define GET_ATTRDEF_CLASSES
+#include "circt/Dialect/MSFT/MSFTAttributes.cpp.inc"
+
+Attribute PhysLocationAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
+                                  Type type) {
   llvm::SMLoc loc = p.getCurrentLocation();
   StringRef devTypeStr;
   uint64_t x, y, num;
@@ -30,38 +34,40 @@ static Attribute parsePhysLocation(DialectAsmParser &p) {
       p.parseAttribute(entity) || p.parseGreater())
     return Attribute();
 
-  auto *ctxt = p.getBuilder().getContext();
   Optional<DeviceType> devType = symbolizeDeviceType(devTypeStr);
   if (!devType) {
     p.emitError(loc, "Unknown device type '" + devTypeStr + "'");
     return Attribute();
   }
   DeviceTypeAttr devTypeAttr = DeviceTypeAttr::get(ctxt, *devType);
-  auto phy = PhysLocationAttr::get(p.getBuilder().getContext(), devTypeAttr, x,
-                                   y, num, entity.getValue());
+  auto phy =
+      PhysLocationAttr::get(ctxt, devTypeAttr, x, y, num, entity.getValue());
   return phy;
 }
 
-static void print(DialectAsmPrinter &p, PhysLocationAttr a) {
-  p << "physloc<" << stringifyDeviceType(a.getDevType().getValue()) << ", "
-    << a.getX() << ", " << a.getY() << ", " << a.getNum() << ", \""
-    << a.getEntity() << "\">";
+void PhysLocationAttr::print(DialectAsmPrinter &p) const {
+  p << "physloc<" << stringifyDeviceType(getDevType().getValue()) << ", "
+    << getX() << ", " << getY() << ", " << getNum() << ", \"" << getEntity()
+    << "\">";
 }
 
 Attribute MSFTDialect::parseAttribute(DialectAsmParser &p, Type type) const {
   StringRef attrName;
+  Attribute attr;
   if (p.parseKeyword(&attrName))
     return Attribute();
-  if (attrName == "physloc")
-    return parsePhysLocation(p);
+  auto parseResult =
+      generatedAttributeParser(getContext(), p, attrName, type, attr);
+  if (parseResult.hasValue())
+    return attr;
   p.emitError(p.getNameLoc(), "Unexpected msft attribute '" + attrName + "'");
-  return Attribute();
+  return {};
 }
 
 void MSFTDialect::printAttribute(Attribute attr, DialectAsmPrinter &p) const {
-  TypeSwitch<Attribute>(attr)
-      .Case([&p](PhysLocationAttr a) { print(p, a); })
-      .Default([](Attribute) { llvm_unreachable("Unexpected attribute"); });
+  if (succeeded(generatedAttributePrinter(attr, p)))
+    return;
+  llvm_unreachable("Unexpected attribute");
 }
 
 void MSFTDialect::registerAttributes() {
@@ -70,6 +76,3 @@ void MSFTDialect::registerAttributes() {
 #include "circt/Dialect/MSFT/MSFTAttributes.cpp.inc"
       >();
 }
-
-#define GET_ATTRDEF_CLASSES
-#include "circt/Dialect/MSFT/MSFTAttributes.cpp.inc"
