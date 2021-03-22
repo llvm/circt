@@ -52,3 +52,11 @@ add_mlir_dialect_python_bindings(CIRCTBindingsPythonRTLOps
   TD_FILE RTLOps.td
   DIALECT_NAME rtl)
 add_dependencies(CIRCTBindingsPythonSources CIRCTBindingsPythonRTLOps)
+set(PY_SRC_FILE "${PROJECT_BINARY_DIR}/python/mlir/dialects/_rtl_ops_gen.py")
+set(PY_DEST_FILE "${PROJECT_BINARY_DIR}/python/circt/dialects/_rtl_ops_gen.py")
+add_custom_command(
+  TARGET CIRCTBindingsPythonRTLOps POST_BUILD
+  COMMENT "Symlinking generated python Python ${PY_SRC_FILE} -> ${PY_DEST_FILE}"
+  DEPENDS "${PY_SRC_FILE}"
+  COMMAND "${CMAKE_COMMAND}" -E create_symlink "${PY_SRC_FILE}" "${PY_DEST_FILE}"
+)
