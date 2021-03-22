@@ -1,4 +1,4 @@
-// RUN: firtool %s --format=mlir -split-verilog -o=%t
+// RUN: firtool %s --format=mlir -split-verilog -o=%t | FileCheck %s --check-prefix=FIRTOOL
 // RUN: FileCheck %s --check-prefix=VERILOG-FOO < %t/foo.v
 // RUN: FileCheck %s --check-prefix=VERILOG-BAR < %t/bar.v
 // RUN: FileCheck %s --check-prefix=VERILOG-USB < %t/usb.v
@@ -23,6 +23,11 @@ sv.interface @usb {
   sv.interface.signal @ready : i1
 }
 rtl.module.extern @pll ()
+
+// FIRTOOL:      foo.v
+// FIRTOOL-NEXT: bar.v
+// FIRTOOL-NEXT: usb.v
+// FIRTOOL-NEXT: pll.v
 
 // VERILOG-FOO:       // I'm everywhere
 // VERILOG-FOO-NEXT:  `ifdef VERILATOR

@@ -183,6 +183,28 @@ def AlwaysOp : SVOp<"always", [HasRegionTerminator, NoRegionArguments,
   let verifier = "return ::verifyAlwaysOp(*this);";
 }
 
+def AlwaysCombOp : SVOp<"alwayscomb", [HasRegionTerminator, NoRegionArguments,
+                                       RecursiveSideEffects, ProceduralRegion,
+                                       NonProceduralOp]> {
+  let summary = "'alwayscomb block";
+  let description = "See SV Spec 9.2, and 9.2.2.2.";
+  
+  let regions = (region SizedRegion<1>:$body);
+  let arguments = (ins);
+  let results = (outs);
+  
+  let assemblyFormat = "$body attr-dict";
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins CArg<"std::function<void()>", "{}">:$bodyCtor)>
+  ];
+
+  let extraClassDeclaration = [{
+    Block *getBodyBlock() { return &body().front(); }
+  }];
+}
+
 def NoReset: I32EnumAttrCase<"NoReset", 0, "noreset">;
 def SyncReset: I32EnumAttrCase<"SyncReset", 1, "syncreset">;
 def AsyncReset: I32EnumAttrCase<"AsyncReset", 2, "asyncreset">;
@@ -327,7 +349,7 @@ def YieldOp
   : SVOp<"yield", [NoSideEffect, Terminator,
                    ParentOneOf<["IfDefOp", "IfDefProceduralOp", "IfOp",
                                 "AlwaysOp", "InitialOp", "AlwaysFFOp",
-                                "CaseZOp"]>]> {
+                                "AlwaysCombOp", "CaseZOp"]>]> {
   let summary = "terminator for control-flow operation regions";
   let arguments = (ins);
 

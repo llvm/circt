@@ -583,5 +583,19 @@ rtl.module @issue728ifdef(%clock: i1, %a: i1 {rtl.name = "asdfasdfasdfasdfafa"},
        }
      }
   }
-  rtl.output 
+}
+
+// CHECK-LABEL: module alwayscombTest(
+rtl.module @alwayscombTest(%a: i1) -> (%x: i1) {
+  // CHECK: wire combWire;
+  %combWire = sv.wire : !rtl.inout<i1>
+  // CHECK: always_comb
+  sv.alwayscomb {
+    // CHECK-NEXT: combWire <= a
+    sv.passign %combWire, %a : i1
+  }
+
+  // CHECK: assign x = combWire;
+  %out = sv.read_inout %combWire : !rtl.inout<i1>
+  rtl.output %out : i1
 }

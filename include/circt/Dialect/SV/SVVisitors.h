@@ -33,8 +33,8 @@ public:
             // Declarations.
             RegOp, WireOp,
             // Control flow.
-            IfDefOp, IfDefProceduralOp, IfOp, AlwaysOp, AlwaysFFOp, InitialOp,
-            CaseZOp,
+            IfDefOp, IfDefProceduralOp, IfOp, AlwaysOp, AlwaysCombOp,
+            AlwaysFFOp, InitialOp, CaseZOp,
             // Other Statements.
             ConnectOp, BPAssignOp, PAssignOp, AliasOp, FWriteOp, FatalOp,
             FinishOp, VerbatimOp,
@@ -86,6 +86,7 @@ public:
   HANDLE(IfDefProceduralOp, Unhandled);
   HANDLE(IfOp, Unhandled);
   HANDLE(AlwaysOp, Unhandled);
+  HANDLE(AlwaysCombOp, Unhandled);
   HANDLE(AlwaysFFOp, Unhandled);
   HANDLE(InitialOp, Unhandled);
   HANDLE(CaseZOp, Unhandled);

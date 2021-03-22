@@ -26,4 +26,17 @@ def RTLCleanup : Pass<"rtl-cleanup", "rtl::RTLModuleOp"> {
   let constructor = "circt::sv::createRTLCleanupPass()";
 }
 
+def RTLStubExternalModules : Pass<"rtl-stub-external-modules", 
+                                  "mlir::ModuleOp"> {
+  let summary = "transform external rtl modules to empty rtl modules";
+  let description = [{
+      This pass creates empty module bodies for external modules.  This is
+      useful for linting to eliminate missing file errors.
+  }];
+
+  let constructor = "circt::sv::createRTLStubExternalModulesPass()";
+  let dependentDialects = ["circt::sv::SVDialect"];
+
+}
+
 #endif // CIRCT_DIALECT_SV_SVPASSES
