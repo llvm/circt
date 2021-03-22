@@ -125,3 +125,21 @@ rtl.module @Wire() {
     %wire = sv.wire : !rtl.inout<i1>
   }
 }
+
+// -----
+rtl.module @Assert(%arg0: i1) {
+  // expected-error @+1 {{sv.assert should be in a procedural region}}
+  sv.assert %arg0: i1
+}
+
+// -----
+rtl.module @Assume(%arg0: i1) {
+  // expected-error @+1 {{sv.assume should be in a procedural region}}
+  sv.assume %arg0: i1
+}
+
+// -----
+rtl.module @Cover(%arg0: i1) {
+  // expected-error @+1 {{sv.cover should be in a procedural region}}
+  sv.cover %arg0: i1
+}

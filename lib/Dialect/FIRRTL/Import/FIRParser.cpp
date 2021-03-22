@@ -216,10 +216,10 @@ struct FIRParser {
 
   /// Parse 'intLit' into the specified value.
   ParseResult parseIntLit(APInt &result, const Twine &message);
-  ParseResult parseIntLit(int32_t &result, const Twine &message);
+  ParseResult parseIntLit(int64_t &result, const Twine &message);
 
   // Parse ('<' intLit '>')? setting result to -1 if not present.
-  ParseResult parseOptionalWidth(int32_t &result);
+  ParseResult parseOptionalWidth(int64_t &result);
 
   // Parse the 'id' grammar, which is an identifier or an allowed keyword.
   ParseResult parseId(StringRef &result, const Twine &message);
@@ -538,13 +538,13 @@ ParseResult FIRParser::parseIntLit(APInt &result, const Twine &message) {
   }
 }
 
-ParseResult FIRParser::parseIntLit(int32_t &result, const Twine &message) {
+ParseResult FIRParser::parseIntLit(int64_t &result, const Twine &message) {
   APInt value;
   auto loc = getToken().getLoc();
   if (parseIntLit(value, message))
     return failure();
 
-  result = (int32_t)value.getLimitedValue();
+  result = (int64_t)value.getLimitedValue();
   if (result != value)
     return emitError(loc, "value is too big to handle"), failure();
   return success();
@@ -553,7 +553,7 @@ ParseResult FIRParser::parseIntLit(int32_t &result, const Twine &message) {
 // optional-width ::= ('<' intLit '>')?
 //
 // This returns with result equal to -1 if not present.
-ParseResult FIRParser::parseOptionalWidth(int32_t &result) {
+ParseResult FIRParser::parseOptionalWidth(int64_t &result) {
   if (!consumeIf(FIRToken::less))
     return result = -1, success();
 
@@ -659,7 +659,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     consumeToken();
 
     // Parse a width specifier if present.
-    int32_t width;
+    int64_t width;
     if (parseOptionalWidth(width))
       return failure();
 
@@ -691,7 +691,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
           if (isFlipped)
             type = FlipType::get(type);
 
-          elements.push_back({Identifier::get(fieldName, getContext()), type});
+          elements.push_back({StringAttr::get(getContext(), fieldName), type});
           return success();
         }))
       return failure();
@@ -703,7 +703,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
   // Handle postfix vector sizes.
   while (consumeIf(FIRToken::l_square)) {
     auto sizeLoc = getToken().getLoc();
-    int32_t size;
+    int64_t size;
     if (parseIntLit(size, "expected width") ||
         parseToken(FIRToken::r_square, "expected ]"))
       return failure();
@@ -1131,23 +1131,21 @@ ParseResult FIRStmtParser::parseOptionalExpPostscript(Value &result,
 ///
 ParseResult FIRStmtParser::parsePostFixFieldId(Value &result,
                                                SubOpVector &subOps) {
-  auto loc = getToken().getLoc();
+  auto loc = translateLocation(getToken().getLoc());
   StringRef fieldName;
   if (parseFieldId(fieldName, "expected field name"))
     return failure();
 
   // Make sure the field name matches up with the input value's type and
   // compute the result type for the expression.
+  auto fieldNameAttr = builder.getStringAttr(fieldName);
   auto resultType = result.getType().cast<FIRRTLType>();
-  resultType =
-      SubfieldOp::getResultType(resultType, fieldName, translateLocation(loc));
+  resultType = SubfieldOp::getResultType(resultType, fieldNameAttr, loc);
   if (!resultType)
     return failure();
 
   // Create the result operation.
-  auto op =
-      builder.create<SubfieldOp>(translateLocation(loc), resultType, result,
-                                 builder.getStringAttr(fieldName));
+  auto op = builder.create<SubfieldOp>(loc, resultType, result, fieldNameAttr);
   subOps.push_back(op);
   result = op.getResult();
   return success();
@@ -1160,7 +1158,7 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result,
 ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result,
                                                     SubOpVector &subOps) {
   auto indexLoc = getToken().getLoc();
-  int32_t indexNo;
+  int64_t indexNo;
   if (parseIntLit(indexNo, "expected index") ||
       parseToken(FIRToken::r_square, "expected ']'"))
     return failure();
@@ -1226,7 +1224,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
 
   // Parse the operands and constant integer arguments.
   SmallVector<Value, 4> operands;
-  SmallVector<int32_t, 4> integers;
+  SmallVector<int64_t, 4> integers;
   if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
         // Handle the integer constant case if present.
         if (getToken().isAny(FIRToken::integer, FIRToken::signed_integer,
@@ -1316,7 +1314,7 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result,
   consumeToken();
 
   // Parse a width specifier if present.
-  int32_t width;
+  int64_t width;
   APInt value;
   if (parseOptionalWidth(width) ||
       parseToken(FIRToken::l_paren, "expected '(' in integer expression") ||
@@ -1436,16 +1434,20 @@ FIRStmtParser::parseExpWithLeadingKeyword(StringRef keyword,
   // other ops.
   // Non '.' ops take the plain symbole path.
   if (resolveSymbolEntry(lhs, symtabEntry, info.getFIRLoc(), false)) {
+    // Ok if the base name didn't resolve by itself, it might be part of an
+    // expanded dot reference.  That doesn't work then we fail.
+    if (!consumeIf(FIRToken::period))
+      return ParseResult(failure());
+
     StringRef fieldName;
-    consumeToken(FIRToken::period);
     if (parseFieldId(fieldName, "expected field name") ||
         resolveSymbolEntry(lhs, symtabEntry, fieldName, info.getFIRLoc()))
       return ParseResult(failure());
-  } else {
-    // plain symbol
-    if (parseOptionalExpPostscript(lhs, subOps))
-      return ParseResult(failure());
   }
+
+  // Parse any further trailing things like "mem.x.y".
+  if (parseOptionalExpPostscript(lhs, subOps))
+    return ParseResult(failure());
 
   return parseLeadingExpStmt(lhs, subOps);
 }
@@ -1731,7 +1733,7 @@ ParseResult FIRStmtParser::parseStop() {
   SmallVector<Operation *, 8> subOps;
 
   Value clock, condition;
-  int32_t exitCode;
+  int64_t exitCode;
   if (parseExp(clock, subOps, "expected clock expression in 'stop'") ||
       parseExp(condition, subOps, "expected condition in 'stop'") ||
       parseIntLit(exitCode, "expected exit code in 'stop'") ||
@@ -2109,7 +2111,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     return failure();
 
   FIRRTLType type;
-  int32_t depth = -1, readLatency = -1, writeLatency = -1;
+  int64_t depth = -1, readLatency = -1, writeLatency = -1;
   RUWAttr ruw = RUWAttr::Undefined;
 
   SmallVector<std::pair<StringAttr, BundleType>, 4> ports;

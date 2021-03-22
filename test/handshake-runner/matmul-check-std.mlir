@@ -13,17 +13,17 @@ module {
     %c64 = constant 64 : index
     %c0_i32 = constant 0 : i32
     %c5_i32 = constant 5 : i32
-    %0 = alloc() : memref<64xi32>
-    %1 = alloc() : memref<64xi32>
-    %2 = alloc() : memref<64xi32>
-    %3 = alloc() : memref<1xi32>
+    %0 = memref.alloc() : memref<64xi32>
+    %1 = memref.alloc() : memref<64xi32>
+    %2 = memref.alloc() : memref<64xi32>
+    %3 = memref.alloc() : memref<1xi32>
     br ^bb1(%c0 : index)
   ^bb1(%4: index):  // 2 preds: ^bb0, ^bb2
     %5 = cmpi slt, %4, %c64 : index
     cond_br %5, ^bb2, ^bb3
   ^bb2: // pred: ^bb1
-    store %c5_i32, %0[%4] : memref<64xi32>
-    store %c5_i32, %1[%4] : memref<64xi32>
+    memref.store %c5_i32, %0[%4] : memref<64xi32>
+    memref.store %c5_i32, %1[%4] : memref<64xi32>
     %6 = addi %4, %c1 : index
     br ^bb1(%6 : index)
   ^bb3: // pred: ^bb1
@@ -37,7 +37,7 @@ module {
     %10 = cmpi slt, %9, %c8 : index
     cond_br %10, ^bb7, ^bb11
   ^bb7: // pred: ^bb6
-    store %c0_i32, %3[%c0] : memref<1xi32>
+    memref.store %c0_i32, %3[%c0] : memref<1xi32>
     %11 = muli %7, %c8 : index
     br ^bb8(%c0 : index)
   ^bb8(%12: index): // 2 preds: ^bb7, ^bb9
@@ -45,27 +45,27 @@ module {
     cond_br %13, ^bb9, ^bb10
   ^bb9: // pred: ^bb8
     %14 = addi %11, %12 : index
-    %15 = load %0[%14] : memref<64xi32>
+    %15 = memref.load %0[%14] : memref<64xi32>
     %16 = muli %12, %c8 : index
     %17 = addi %16, %9 : index
-    %18 = load %1[%17] : memref<64xi32>
-    %19 = load %3[%c0] : memref<1xi32>
+    %18 = memref.load %1[%17] : memref<64xi32>
+    %19 = memref.load %3[%c0] : memref<1xi32>
     %20 = muli %15, %18 : i32
     %21 = addi %19, %20 : i32
-    store %21, %3[%c0] : memref<1xi32>
+    memref.store %21, %3[%c0] : memref<1xi32>
     %22 = addi %12, %c1 : index
     br ^bb8(%22 : index)
   ^bb10:  // pred: ^bb8
     %23 = addi %11, %9 : index
-    %24 = load %3[%c0] : memref<1xi32>
-    store %24, %2[%23] : memref<64xi32>
+    %24 = memref.load %3[%c0] : memref<1xi32>
+    memref.store %24, %2[%23] : memref<64xi32>
     %25 = addi %9, %c1 : index
     br ^bb6(%25 : index)
   ^bb11:  // pred: ^bb6
     %26 = addi %7, %c1 : index
     br ^bb4(%26 : index)
   ^bb12:  // pred: ^bb4
-    %27 = load %2[%c63] : memref<64xi32>
+    %27 = memref.load %2[%c63] : memref<64xi32>
     return %27 : i32
   }
 }

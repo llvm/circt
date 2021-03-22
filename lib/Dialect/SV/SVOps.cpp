@@ -11,19 +11,21 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/RTL/RTLOps.h"
 #include "circt/Dialect/RTL/RTLTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/StringExtras.h"
 
 using namespace circt;
 using namespace sv;
 
 /// Return true if the specified operation is an expression.
 bool sv::isExpression(Operation *op) {
-  return isa<sv::TextualValueOp>(op) || isa<sv::GetModportOp>(op) ||
+  return isa<sv::VerbatimExprOp>(op) || isa<sv::GetModportOp>(op) ||
          isa<sv::ReadInterfaceSignalOp>(op) || isa<sv::ConstantXOp>(op) ||
          isa<sv::ConstantZOp>(op);
 }
@@ -93,6 +95,45 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
     p.printOptionalAttrDict(op->getAttrs());
   else
     p.printOptionalAttrDict(op->getAttrs(), {"name"});
+}
+
+//===----------------------------------------------------------------------===//
+// VerbatimExprOp
+//===----------------------------------------------------------------------===//
+
+void VerbatimExprOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  // If the string is macro like, then use a pretty name.  We only take the
+  // string up to a weird character (like a paren) and currently ignore
+  // parenthesized expressions.
+  auto isOkCharacter = [](char c) { return llvm::isAlnum(c) || c == '_'; };
+  auto name = string();
+  // Ignore a leading ` in macro name.
+  if (name.startswith("`"))
+    name = name.drop_front();
+  name = name.take_while(isOkCharacter);
+  if (!name.empty())
+    setNameFn(getResult(), name);
+}
+
+//===----------------------------------------------------------------------===//
+// ConstantXOp / ConstantZOp
+//===----------------------------------------------------------------------===//
+
+void ConstantXOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  SmallVector<char, 32> specialNameBuffer;
+  llvm::raw_svector_ostream specialName(specialNameBuffer);
+  specialName << "x_" << getType();
+  setNameFn(getResult(), specialName.str());
+}
+
+void ConstantZOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  SmallVector<char, 32> specialNameBuffer;
+  llvm::raw_svector_ostream specialName(specialNameBuffer);
+  specialName << "z_" << getType();
+  setNameFn(getResult(), specialName.str());
 }
 
 //===----------------------------------------------------------------------===//
@@ -248,11 +289,12 @@ void IfOp::build(OpBuilder &odsBuilder, OperationState &result, Value cond,
 static void replaceOpWithRegion(PatternRewriter &rewriter, Operation *op,
                                 Region &region) {
   assert(llvm::hasSingleElement(region) && "expected single-region block");
-  Block *block = &region.front();
-  Operation *terminator = block->getTerminator();
-  rewriter.mergeBlockBefore(block, op);
-  rewriter.eraseOp(op);
-  rewriter.eraseOp(terminator);
+  Block *fromBlock = &region.front();
+  // Remove the terminator from the block.
+  rewriter.eraseOp(fromBlock->getTerminator());
+  // Merge it in above the specified operation.
+  op->getBlock()->getOperations().splice(Block::iterator(op),
+                                         fromBlock->getOperations());
 }
 
 void IfOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
@@ -270,8 +312,8 @@ void IfOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
         replaceOpWithRegion(rewriter, op, op.thenRegion());
       else if (!op.elseRegion().empty())
         replaceOpWithRegion(rewriter, op, op.elseRegion());
-      else
-        rewriter.eraseOp(op);
+
+      rewriter.eraseOp(op);
 
       return success();
     }
@@ -281,13 +323,32 @@ void IfOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
     using OpRewritePattern::OpRewritePattern;
     LogicalResult matchAndRewrite(IfOp op,
                                   PatternRewriter &rewriter) const override {
+      // If there is stuff in the then block, leave this operation alone.
       if (!isEmptyBlockExceptForTerminator(op.getThenBlock()))
         return failure();
 
-      if (op.hasElse() && !isEmptyBlockExceptForTerminator(op.getElseBlock()))
-        return failure();
+      // If not and there is no else, then this operation is just useless.
+      if (!op.hasElse() || isEmptyBlockExceptForTerminator(op.getElseBlock())) {
+        rewriter.eraseOp(op);
+        return success();
+      }
 
-      rewriter.eraseOp(op);
+      // Otherwise, invert the condition and move the 'else' block to the 'then'
+      // region.
+      auto full = rewriter.create<rtl::ConstantOp>(op.getLoc(),
+                                                   op.cond().getType(), -1);
+      Value ops[] = {full, op.cond()};
+      auto cond = rewriter.createOrFold<comb::XorOp>(op.getLoc(),
+                                                     op.cond().getType(), ops);
+      op.setOperand(cond);
+
+      auto *thenBlock = op.getThenBlock(), *elseBlock = op.getElseBlock();
+
+      // Move the body of the then block over to the else.
+      rewriter.eraseOp(thenBlock->getTerminator());
+      thenBlock->getOperations().splice(thenBlock->end(),
+                                        elseBlock->getOperations());
+      rewriter.eraseBlock(elseBlock);
       return success();
     }
   };
@@ -832,7 +893,7 @@ void WireOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
           return failure();
 
       // Remove all uses of the wire.
-      for (auto &use : op.getResult().getUses())
+      for (auto &use : make_early_inc_range(op.getResult().getUses()))
         rewriter.eraseOp(use.getOwner());
 
       // Remove the wire.

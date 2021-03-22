@@ -21,7 +21,6 @@
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/Parallel.h"
 #include <algorithm>
-#include <vector>
 
 using namespace circt;
 using namespace firrtl;
@@ -57,7 +56,7 @@ static void flattenType(FIRRTLType type, StringRef suffixSoFar, bool isFlipped,
           // Construct the suffix to pass down.
           tmpSuffix.resize(suffixSoFar.size());
           tmpSuffix.push_back('_');
-          tmpSuffix.append(elt.name.strref());
+          tmpSuffix.append(elt.name.getValue());
           // Recursively process subelements.
           flattenType(elt.type, tmpSuffix, isFlipped, results);
         }
@@ -114,6 +113,7 @@ public:
   void visitDecl(MemOp op);
   void visitDecl(RegOp op);
   void visitDecl(WireOp op);
+  void visitDecl(RegResetOp op);
   void visitExpr(InvalidValuePrimOp op);
   void visitExpr(SubfieldOp op);
   void visitExpr(SubindexOp op);
@@ -435,7 +435,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
       // port, then this is linked against the old field.
       for (auto elt : underlying.getElements()) {
 
-        auto oldName = elt.name.str();
+        auto oldName = elt.name.getValue();
         if (oldKind == MemOp::PortKind::ReadWrite) {
           if (oldName == "mask")
             oldName = "wmask";
@@ -445,12 +445,13 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
             oldName = "wdata";
         }
 
-        auto getWire = [&](FIRRTLType type, StringRef wireName) -> Value {
+        auto getWire = [&](FIRRTLType type,
+                           const std::string &wireName) -> Value {
           auto wire = newWires[wireName];
           if (!wire) {
             wire = builder->create<WireOp>(type.getPassiveType(),
                                            newMem.name().getValue().str() +
-                                               "_" + wireName.str());
+                                               "_" + wireName);
             newWires[wireName] = wire;
           }
           return wire;
@@ -463,11 +464,12 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
         // creating a dummy wire, setting the dummy wire as the
         // lowering target, and then connecting every new port
         // subfield to that.
-        if ((elt.name == "clk") || (elt.name == "en") || (elt.name == "addr")) {
+        if (oldName == "clk" || oldName == "en" || oldName == "addr") {
           FIRRTLType theType = FlipType::get(elt.type);
 
           // Construct a new wire if needed.
-          auto wireName = op.getPortName(j).getValue().str() + "_" + oldName;
+          auto wireName =
+              (op.getPortName(j).getValue().str() + "_" + oldName).str();
           auto wire = getWire(theType, wireName);
 
           if (!(oldKind == MemOp::PortKind::ReadWrite &&
@@ -475,7 +477,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
             setBundleLowering(op.getResult(j), oldName, wire);
 
           // Handle "en" specially if this used to be a readwrite port.
-          if (oldKind == MemOp::PortKind::ReadWrite && elt.name == "en") {
+          if (oldKind == MemOp::PortKind::ReadWrite && oldName == "en") {
             auto wmode =
                 getWire(theType, op.getPortName(j).getValue().str() + "_wmode");
             if (!skip)
@@ -502,7 +504,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
         if (kind == MemOp::PortKind::Write)
           theType = FlipType::get(theType);
 
-        setBundleLowering(op.getResult(j), oldName + field.suffix,
+        setBundleLowering(op.getResult(j), (oldName + field.suffix).str(),
                           builder->create<SubfieldOp>(
                               theType, newMem.getResult(i), elt.name));
       }
@@ -569,12 +571,47 @@ void TypeLoweringVisitor::visitDecl(RegOp op) {
 
   // Loop over the leaf aggregates.
   for (auto field : fieldTypes) {
-    SmallString<16> loweredName(op.nameAttr().getValue());
-    loweredName += field.suffix;
-    setBundleLowering(
-        result, StringRef(field.suffix).drop_front(1),
-        builder->create<RegOp>(field.getPortType(), op.clockVal(),
-                               builder->getStringAttr(loweredName)));
+    StringAttr loweredName;
+    if (auto nameAttr = op.nameAttr())
+      loweredName =
+          builder->getStringAttr(nameAttr.getValue().str() + field.suffix);
+
+    setBundleLowering(result, StringRef(field.suffix).drop_front(1),
+                      builder->create<RegOp>(field.getPortType(), op.clockVal(),
+                                             loweredName));
+  }
+
+  // Remember to remove the original op.
+  opsToRemove.push_back(op);
+}
+
+/// Lower a RegReset op with a bundle to multiple non-bundled RegResets.
+void TypeLoweringVisitor::visitDecl(RegResetOp op) {
+  Value result = op.result();
+
+  // Attempt to get the bundle types, potentially unwrapping an outer flip type
+  // that wraps the whole bundle.
+  FIRRTLType resultType = getCanonicalAggregateType(result.getType());
+
+  // If the RegReset is not a bundle, there is nothing to do.
+  if (!resultType)
+    return;
+
+  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
+  flattenType(resultType, "", false, fieldTypes);
+
+  // Loop over the leaf aggregates.
+  for (auto field : fieldTypes) {
+    StringAttr loweredName;
+    if (auto nameAttr = op.nameAttr())
+      loweredName =
+          builder->getStringAttr(nameAttr.getValue().str() + field.suffix);
+    auto suffix = StringRef(field.suffix).drop_front(1);
+    auto resetValLowered = getBundleLowering(op.resetValue(), suffix);
+    setBundleLowering(result, suffix,
+                      builder->create<RegResetOp>(
+                          field.getPortType(), op.clockVal(), op.resetSignal(),
+                          resetValLowered, loweredName));
   }
 
   // Remember to remove the original op.
@@ -585,7 +622,7 @@ void TypeLoweringVisitor::visitDecl(RegOp op) {
 //   a) the input value is from a module block argument
 //   b) the input value is from another subfield operation's result
 //   c) the input value is from an instance
-//   d) the input value is from a register
+//   d) the input value is from a duplex op, such as a wire or register
 //
 // This is accomplished by storing value and suffix mappings that point to the
 // flattened value. If the subfield op is accessing the leaf field of a bundle,
@@ -669,6 +706,7 @@ void TypeLoweringVisitor::visitExpr(SubindexOp op) {
 // bundle that was:
 //   a) originally a block argument
 //   b) originally an instance's port
+//   c) originally from a duplex operation, like a wire or register.
 //
 // When two such bundles are connected, none of the subfield visits have a
 // chance to lower them, so we must ensure they have the same number of
@@ -697,13 +735,26 @@ void TypeLoweringVisitor::visitStmt(ConnectOp op) {
   assert(destValues.size() == srcValues.size() &&
          "connected bundles don't match");
 
+  // Determine if the LHS expression is the duplex value.
+  auto isDestDuplex = isDuplexValue(destValues.front());
+
   for (auto tuple : llvm::zip_first(destValues, srcValues)) {
     Value newDest = std::get<0>(tuple);
     Value newSrc = std::get<1>(tuple);
-    if (newDest.getType().isa<FlipType>())
-      builder->create<ConnectOp>(newDest, newSrc);
-    else
-      builder->create<ConnectOp>(newSrc, newDest);
+
+    // When two bundles are bulk connected, the connect operation becomes a
+    // pair-wise connect of each field. The rules for flow state that a value
+    // from a duplex expression can be used as both a source and sink,
+    // regardless of the flip orientation of the type. To make this work, we
+    // find the non-duplex value and make sure that it is the in the correct
+    // position. Two duplex values cannot be connected, since it is unclear
+    // which side is left or right.
+    if (isDestDuplex ? newSrc.getType().isa<FlipType>()
+                     : !newDest.getType().isa<FlipType>()) {
+      std::swap(newSrc, newDest);
+    }
+
+    builder->create<ConnectOp>(newDest, newSrc);
   }
 
   // Remember to remove the original op.

@@ -72,3 +72,21 @@ circuit test_mod :
 ; MLIRLOWER-NEXT :   }
 
 ; MLIRLOWER: }
+
+  module flipFlop:
+    input clock: Clock
+    input a_d: UInt<1>
+    output a_q: UInt<1>
+
+    reg r: UInt<1>, clock
+
+    r <= a_d
+    a_q <= r
+
+; VERILOG-LABEL: module flipFlop(
+; VERILOG-NEXT:    input clock, a_d,
+; VERILOG-NEXT:    output a_q);
+; VERILOG:         always_ff @(posedge clock)
+; VERILOG-NEXT:      r <= a_d;
+; VERILOG-NEXT:    assign a_q = r;
+; VERILOG:       endmodule

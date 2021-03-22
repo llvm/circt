@@ -28,13 +28,13 @@ public:
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<
             // Expressions
-            ReadInOutOp, ArrayIndexInOutOp, TextualValueOp, ConstantXOp,
+            ReadInOutOp, ArrayIndexInOutOp, VerbatimExprOp, ConstantXOp,
             ConstantZOp,
             // Declarations.
             RegOp, WireOp,
             // Control flow.
-            IfDefOp, IfDefProceduralOp, IfOp, AlwaysOp, AlwaysFFOp, InitialOp,
-            CaseZOp,
+            IfDefOp, IfDefProceduralOp, IfOp, AlwaysOp, AlwaysCombOp,
+            AlwaysFFOp, InitialOp, CaseZOp,
             // Other Statements.
             ConnectOp, BPAssignOp, PAssignOp, AliasOp, FWriteOp, FatalOp,
             FinishOp, VerbatimOp,
@@ -77,7 +77,7 @@ public:
   // Expressions
   HANDLE(ReadInOutOp, Unhandled);
   HANDLE(ArrayIndexInOutOp, Unhandled);
-  HANDLE(TextualValueOp, Unhandled);
+  HANDLE(VerbatimExprOp, Unhandled);
   HANDLE(ConstantXOp, Unhandled);
   HANDLE(ConstantZOp, Unhandled);
 
@@ -86,6 +86,7 @@ public:
   HANDLE(IfDefProceduralOp, Unhandled);
   HANDLE(IfOp, Unhandled);
   HANDLE(AlwaysOp, Unhandled);
+  HANDLE(AlwaysCombOp, Unhandled);
   HANDLE(AlwaysFFOp, Unhandled);
   HANDLE(InitialOp, Unhandled);
   HANDLE(CaseZOp, Unhandled);

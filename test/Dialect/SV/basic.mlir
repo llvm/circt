@@ -14,7 +14,7 @@ rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   sv.always posedge  %arg0 {
     sv.ifdef.procedural "SYNTHESIS" {
     } else {
-      %tmp = sv.textual_value "PRINTF_COND_" : i1
+      %tmp = sv.verbatim.expr "PRINTF_COND_" : () -> i1
       %tmpx = sv.constantX : i1
       %tmpz = sv.constantZ : i1
       %tmp2 = comb.and %tmp, %tmpx, %tmpz, %arg1 : i1
@@ -33,15 +33,15 @@ rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   // CHECK-NEXT: sv.always posedge %arg0 {
   // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
   // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     %0 = sv.textual_value "PRINTF_COND_" : i1
-  // CHECK-NEXT:     %1 = sv.constantX : i1
-  // CHECK-NEXT:     %2 = sv.constantZ : i1
-  // CHECK-NEXT:     %3 = comb.and %0, %1, %2, %arg1 : i1
-  // CHECK-NEXT:     sv.if %3 {
+  // CHECK-NEXT:     %PRINTF_COND_ = sv.verbatim.expr "PRINTF_COND_" : () -> i1
+  // CHECK-NEXT:     %x_i1 = sv.constantX : i1
+  // CHECK-NEXT:     %z_i1 = sv.constantZ : i1
+  // CHECK-NEXT:     %0 = comb.and %PRINTF_COND_, %x_i1, %z_i1, %arg1 : i1
+  // CHECK-NEXT:     sv.if %0 {
   // CHECK-NEXT:       sv.fwrite "Hi\0A" 
   // CHECK-NEXT:     }
-  // CHECK-NEXT:     sv.if %3 {
-  // CHECK-NEXT:       sv.fwrite "%x"(%3) : i1
+  // CHECK-NEXT:     sv.if %0 {
+  // CHECK-NEXT:       sv.fwrite "%x"(%0) : i1
   // CHECK-NEXT:     } else {
   // CHECK-NEXT:       sv.fwrite "There\0A" 
   // CHECK-NEXT:     }
@@ -107,8 +107,6 @@ rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   // CHECK-NEXT:     sv.fwrite "z"
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
-
-
   sv.initial {
     sv.casez %arg8 : i8
     case b0000001x: {
@@ -141,6 +139,17 @@ rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
     case b1: {
       sv.fwrite "one"
     }
+  }
+
+  // CHECK-NEXT: %combWire = sv.wire : !rtl.inout<i1> 
+  %combWire = sv.wire : !rtl.inout<i1>
+  // CHECK-NEXT: sv.alwayscomb {
+  sv.alwayscomb {
+    // CHECK-NEXT: %x_i1 = sv.constantX : i1
+    %tmpx = sv.constantX : i1
+    // CHECK-NEXT: sv.passign %combWire, %x_i1 : i1
+    sv.passign %combWire, %tmpx : i1
+    // CHECK-NEXT: }
   }
 
   // CHECK-NEXT: rtl.output

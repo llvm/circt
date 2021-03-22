@@ -82,8 +82,8 @@ static FIRRTLType getBundleType(Type type, bool isFlip) {
   llvm::SmallVector<BundleElement, 3> elements;
 
   // Add valid and ready subfield to the bundle.
-  auto validId = Identifier::get("valid", context);
-  auto readyId = Identifier::get("ready", context);
+  auto validId = StringAttr::get(context, "valid");
+  auto readyId = StringAttr::get(context, "ready");
   auto signalType = UIntType::get(context, 1);
   if (isFlip) {
     elements.push_back(BundleElement(validId, FlipType::get(signalType)));
@@ -96,7 +96,7 @@ static FIRRTLType getBundleType(Type type, bool isFlip) {
   // Add data subfield to the bundle if dataType is not a null.
   auto dataType = getFIRRTLType(type);
   if (dataType) {
-    auto dataId = Identifier::get("data", context);
+    auto dataId = StringAttr::get(context, "data");
     if (isFlip)
       elements.push_back(BundleElement(dataId, FlipType::get(dataType)));
     else
@@ -552,10 +552,9 @@ static ValueVectorList extractSubfields(FModuleOp subModuleOp,
     if (auto argType = arg.getType().dyn_cast<BundleType>()) {
       // Extract all subfields of all bundle ports.
       for (auto &element : argType.getElements()) {
-        StringRef elementName = element.name.strref();
         FIRRTLType elementType = element.type;
-        subfields.push_back(rewriter.create<SubfieldOp>(
-            insertLoc, elementType, arg, rewriter.getStringAttr(elementName)));
+        subfields.push_back(rewriter.create<SubfieldOp>(insertLoc, elementType,
+                                                        arg, element.name));
       }
     } else if (arg.getType().isa<ClockType>() ||
                arg.getType().dyn_cast<UIntType>().getWidthOrSentinel() == 1) {

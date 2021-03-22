@@ -102,9 +102,12 @@ static cl::opt<TraceFormat> traceMode(
             "instance and signals not having the default name '(sig)?[0-9]*'"),
         clEnumValN(noTrace, "no-trace", "Don't dump a signal trace")));
 
-static cl::list<std::string> sharedLibs(
-    "shared-libs", cl::desc("Libraries to link dynamically"),
-    cl::ZeroOrMore, cl::MiscFlags::CommaSeparated);
+static cl::list<std::string>
+    sharedLibs("shared-libs",
+               cl::desc("Libraries to link dynamically. Specify absolute path "
+                        "to llhd-signals-runtime-wrappers for GCC or Windows. "
+                        "Optional otherwise."),
+               cl::ZeroOrMore, cl::MiscFlags::CommaSeparated);
 
 static int dumpLLVM(ModuleOp module, MLIRContext &context) {
   if (dumpLLVMDialect) {
@@ -179,12 +182,12 @@ int main(int argc, char **argv) {
   }
 
   SmallVector<StringRef, 1> sharedLibPaths(sharedLibs.begin(),
-					   sharedLibs.end());
+                                           sharedLibs.end());
 
   llhd::sim::Engine engine(
       output->os(), *module, &applyMLIRPasses,
-      makeOptimizingTransformer(optimizationLevel, 0, nullptr), root,
-      traceMode, sharedLibPaths);
+      makeOptimizingTransformer(optimizationLevel, 0, nullptr), root, traceMode,
+      sharedLibPaths);
 
   if (dumpLLVMDialect || dumpLLVMIR) {
     return dumpLLVM(engine.getModule(), context);

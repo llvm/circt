@@ -183,6 +183,28 @@ def AlwaysOp : SVOp<"always", [HasRegionTerminator, NoRegionArguments,
   let verifier = "return ::verifyAlwaysOp(*this);";
 }
 
+def AlwaysCombOp : SVOp<"alwayscomb", [HasRegionTerminator, NoRegionArguments,
+                                       RecursiveSideEffects, ProceduralRegion,
+                                       NonProceduralOp]> {
+  let summary = "'alwayscomb block";
+  let description = "See SV Spec 9.2, and 9.2.2.2.";
+  
+  let regions = (region SizedRegion<1>:$body);
+  let arguments = (ins);
+  let results = (outs);
+  
+  let assemblyFormat = "$body attr-dict";
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins CArg<"std::function<void()>", "{}">:$bodyCtor)>
+  ];
+
+  let extraClassDeclaration = [{
+    Block *getBodyBlock() { return &body().front(); }
+  }];
+}
+
 def NoReset: I32EnumAttrCase<"NoReset", 0, "noreset">;
 def SyncReset: I32EnumAttrCase<"SyncReset", 1, "syncreset">;
 def AsyncReset: I32EnumAttrCase<"AsyncReset", 2, "asyncreset">;
@@ -207,7 +229,8 @@ def AlwaysFFOp : SVOp<"alwaysff", [HasRegionTerminator, NoRegionArguments,
   
   let regions = (region SizedRegion<1>:$bodyBlk, AnyRegion:$resetBlk);
   let arguments = (ins EventControlAttr:$clockEdge, I1:$clock, 
-                       DefaultValuedAttr<ResetTypeAttr, "0">:$resetStyle,
+                       DefaultValuedAttr<ResetTypeAttr, 
+                                         "ResetType::NoReset">:$resetStyle,
                        OptionalAttr<EventControlAttr>:$resetEdge, 
                        Optional<I1>:$reset);
   let results = (outs);
@@ -326,7 +349,7 @@ def YieldOp
   : SVOp<"yield", [NoSideEffect, Terminator,
                    ParentOneOf<["IfDefOp", "IfDefProceduralOp", "IfOp",
                                 "AlwaysOp", "InitialOp", "AlwaysFFOp",
-                                "CaseZOp"]>]> {
+                                "AlwaysCombOp", "CaseZOp"]>]> {
   let summary = "terminator for control-flow operation regions";
   let arguments = (ins);
 
@@ -429,7 +452,7 @@ def VerbatimOp : SVOp<"verbatim"> {
 // Verification Statements
 //===----------------------------------------------------------------------===//
 
-def AssertOp : SVOp<"assert"> {
+def AssertOp : SVOp<"assert", [ProceduralOp]> {
   let summary = "immediate assertion statement";
   let description = [{
     Assert that a specific condition is always true.
@@ -440,7 +463,7 @@ def AssertOp : SVOp<"assert"> {
   let assemblyFormat = "attr-dict $predicate `:` type($predicate)";
 }
 
-def AssumeOp : SVOp<"assume"> {
+def AssumeOp : SVOp<"assume", [ProceduralOp]> {
   let summary = "assume property statement";
   let description = [{
     Assume that a specific property is always true.
@@ -451,7 +474,7 @@ def AssumeOp : SVOp<"assume"> {
   let assemblyFormat = "attr-dict $property `:` type($property)";
 }
 
-def CoverOp : SVOp<"cover"> {
+def CoverOp : SVOp<"cover", [ProceduralOp]> {
   let summary = "functional coverage statement";
   let description = [{
     Assert that a specific property happens during the course of execution.

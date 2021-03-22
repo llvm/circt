@@ -126,10 +126,7 @@ FIRRTLDialect::FIRRTLDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context,
               ::mlir::TypeID::get<FIRRTLDialect>()) {
 
-  // Register types.
-  addTypes<SIntType, UIntType, ClockType, ResetType, AsyncResetType, AnalogType,
-           // Derived Types
-           FlipType, BundleType, FVectorType>();
+  registerTypes();
 
   // Register operations.
   addOperations<

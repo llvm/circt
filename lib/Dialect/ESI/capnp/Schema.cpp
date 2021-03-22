@@ -98,7 +98,7 @@ public:
   size_t size() const;
   StringRef name() const;
   LogicalResult write(llvm::raw_ostream &os) const;
-  LogicalResult writeMetadata(llvm::raw_ostream &os) const;
+  void writeMetadata(llvm::raw_ostream &os) const;
 
   bool operator==(const TypeSchemaImpl &) const;
 
@@ -420,8 +420,7 @@ LogicalResult TypeSchemaImpl::write(llvm::raw_ostream &rawOS) const {
 
   // Since capnp requires messages to be structs, emit a wrapper struct.
   os.indent() << "struct ";
-  if (failed(writeMetadata(rawOS)))
-    return failure();
+  writeMetadata(rawOS);
   os << " {\n";
   os.addIndent();
 
@@ -443,10 +442,9 @@ LogicalResult TypeSchemaImpl::write(llvm::raw_ostream &rawOS) const {
   return success();
 }
 
-LogicalResult TypeSchemaImpl::writeMetadata(llvm::raw_ostream &os) const {
+void TypeSchemaImpl::writeMetadata(llvm::raw_ostream &os) const {
   os << name() << " ";
   emitId(os, capnpTypeID());
-  return success();
 }
 
 bool TypeSchemaImpl::operator==(const TypeSchemaImpl &that) const {
@@ -1154,9 +1152,8 @@ LogicalResult
 circt::esi::capnp::TypeSchema::write(llvm::raw_ostream &os) const {
   return s->write(os);
 }
-LogicalResult
-circt::esi::capnp::TypeSchema::writeMetadata(llvm::raw_ostream &os) const {
-  return s->writeMetadata(os);
+void circt::esi::capnp::TypeSchema::writeMetadata(llvm::raw_ostream &os) const {
+  s->writeMetadata(os);
 }
 bool circt::esi::capnp::TypeSchema::operator==(const TypeSchema &that) const {
   return *s == *that.s;

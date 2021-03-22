@@ -183,6 +183,11 @@ OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
       return getIntAttr(value, getContext());
   }
 
+  // and(x, -1) -> x
+  if (constants.size() == 2 && constants[1] &&
+      constants[1].cast<IntegerAttr>().getValue().isAllOnesValue())
+    return inputs()[0];
+
   // and(x, x, x) -> x -- noop
   if (llvm::all_of(inputs(), [&](auto in) { return in == this->inputs()[0]; }))
     return inputs()[0];
@@ -255,6 +260,11 @@ OpFoldResult OrOp::fold(ArrayRef<Attribute> constants) {
       return getIntAttr(value, getContext());
   }
 
+  // or(x, 0) -> x
+  if (constants.size() == 2 && constants[1] &&
+      constants[1].cast<IntegerAttr>().getValue().isNullValue())
+    return inputs()[0];
+
   // or(x, x, x) -> x
   if (llvm::all_of(inputs(), [&](auto in) { return in == this->inputs()[0]; }))
     return inputs()[0];
@@ -316,12 +326,17 @@ OpFoldResult XorOp::fold(ArrayRef<Attribute> constants) {
   auto size = inputs().size();
 
   // xor(x) -> x -- noop
-  if (size == 1u)
+  if (size == 1)
     return inputs()[0];
 
   // xor(x, x) -> 0 -- idempotent
-  if (size == 2u && inputs()[0] == inputs()[1])
+  if (size == 2 && inputs()[0] == inputs()[1])
     return IntegerAttr::get(getType(), 0);
+
+  // xor(x, 0) -> x
+  if (constants.size() == 2 && constants[1] &&
+      constants[1].cast<IntegerAttr>().getValue().isNullValue())
+    return inputs()[0];
 
   // Constant fold
   return constFoldVariadicOp<IntegerAttr>(
@@ -387,6 +402,22 @@ OpFoldResult MergeOp::fold(ArrayRef<Attribute> constants) {
     return inputs()[0];
 
   return {};
+}
+
+OpFoldResult SubOp::fold(ArrayRef<Attribute> constants) {
+  APInt value;
+  // sub(x - 0) -> x
+  if (matchPattern(rhs(), m_RConstant(value)) && value.isNullValue())
+    return lhs();
+
+  // sub(x - x) -> 0
+  if (rhs() == lhs())
+    return getIntAttr(APInt(lhs().getType().getIntOrFloatBitWidth(), 0),
+                      getContext());
+
+  // Constant fold
+  return constFoldBinaryOp<IntegerAttr>(constants,
+                                        [](APInt a, APInt b) { return a - b; });
 }
 
 OpFoldResult AddOp::fold(ArrayRef<Attribute> constants) {

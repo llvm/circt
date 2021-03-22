@@ -6,7 +6,7 @@
 
 func @load_store () -> () {
   %c0 = constant 0 : index
-  %A = alloc() : memref<10xf32>
+  %A = memref.alloc() : memref<10xf32>
   %0 = affine.load %A[%c0] : memref<10xf32>
   affine.store %0, %A[%c0] : memref<10xf32>
   return
@@ -32,7 +32,7 @@ func @load_store () -> () {
 
 func @affine_map_addr () -> () {
   %c5 = constant 5 : index
-  %A = alloc() : memref<10xf32>
+  %A = memref.alloc() : memref<10xf32>
   %0 = affine.load %A[%c5 + 1] : memref<10xf32>
   affine.store %0, %A[%c5 - 1] : memref<10xf32>
   return

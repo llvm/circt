@@ -10,7 +10,7 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
     sv.ifdef.procedural "SYNTHESIS" {
     } else {
   // CHECK-NEXT:     if (PRINTF_COND_ & 1'bx & 1'bz & cond)
-      %tmp = sv.textual_value "PRINTF_COND_" : i1
+      %tmp = sv.verbatim.expr "PRINTF_COND_" : () -> i1
       %tmp1 = sv.constantX : i1
       %tmp2 = sv.constantZ : i1
       %tmp3 = comb.and %tmp, %tmp1, %tmp2, %cond : i1
@@ -141,6 +141,16 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
       // CHECK-NEXT: Emit some stuff in verilog
       // CHECK-NEXT: Great power and responsibility!
       sv.verbatim "Emit some stuff in verilog\nGreat power and responsibility!"
+
+      %c42 = rtl.constant 42 : i8
+      %add = comb.add %val, %c42 : i8
+      %c42_2 = rtl.constant 42 : i8
+      %xor = comb.xor %val, %c42_2 : i8
+      %text = sv.verbatim.expr "MACRO({{0}}, {{1}})" (%add, %xor): (i8,i8) -> i8
+
+      // CHECK-NEXT: $fwrite(32'h80000002, "M: %x\n", MACRO(val + 8'h2A, val ^ 8'h2A));
+      sv.fwrite "M: %x\n"(%text) : i8
+
     }// CHECK-NEXT:   {{end$}}
   }
   // CHECK-NEXT:  end // initial
@@ -159,13 +169,13 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
     // CHECK-NEXT: automatic logic        _T_0;
     // CHECK-EMPTY:
     // CHECK-NEXT: _T = THING;
-    %thing = sv.textual_value "THING" : i42
+    %thing = sv.verbatim.expr "THING" : () -> i42
     // CHECK-NEXT: wire42 = _T;
     sv.bpassign %wire42, %thing : i42
 
     sv.ifdef.procedural "FOO" {
       // CHECK-NEXT: `ifdef FOO
-      %c1 = sv.textual_value "\"THING\"" : i1
+      %c1 = sv.verbatim.expr "\"THING\"" : () -> i1
       // CHECK-NEXT: {{.+}} = "THING";
       sv.fwrite "%d" (%c1) : i1
       // CHECK-NEXT: fwrite(32'h80000002, "%d", {{.+}});
@@ -230,7 +240,7 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
   // CHECK-NEXT: `ifdef FOO
   sv.ifdef "FOO" {
     // CHECK-NEXT: wire {{.+}} = "THING";
-    %c1 = sv.textual_value "\"THING\"" : i1
+    %c1 = sv.verbatim.expr "\"THING\"" : () -> i1
 
     // CHECK-NEXT: initial begin
     sv.initial {
@@ -319,33 +329,48 @@ rtl.module @exprInlineTestIssue439(%clk: i1) {
 // CHECK-LABEL: module issue439(
 // https://github.com/llvm/circt/issues/439
 rtl.module @issue439(%in1: i1, %in2: i1) {
-  // CHECK: wire _T = in1 | in2;
+  // CHECK: wire _T;
+  // CHECK: wire _T_0 = in1 | in2;
   %clock = comb.or %in1, %in2 : i1
 
-  // CHECK-NEXT: always @(posedge _T)
+  // CHECK-NEXT: always @(posedge _T_0)
   sv.always posedge %clock {
-    // FIXME: https://github.com/llvm/circt/issues/726
-    // CHECK: wire _T_0;
-    // CHECK: assign _T_0 = in1;
-    // CHECK-NEXT: assign _T_0 = in2;
+    // CHECK-NEXT: _T <= in1;
+    // CHECK-NEXT: _T <= in2;
     %merged = comb.merge %in1, %in2 : i1
-    // CHECK-NEXT: $fwrite(32'h80000002, "Bye %x\n", _T_0);
+    // CHECK-NEXT: $fwrite(32'h80000002, "Bye %x\n", _T);
     sv.fwrite "Bye %x\n"(%merged) : i1
   }
+}
+
+// CHECK-LABEL: module issue726(
+// https://github.com/llvm/circt/issues/726
+rtl.module @issue726(%in1: i1, %in2: i1) -> (%out: i1) {
+  // CHECK: wire _T;
+  // CHECK: assign _T = in1;
+  // CHECK: assign _T = in2;
+  %merged = comb.merge %in1, %in2 : i1
+
+  // CHECK: assign out = _T;
+  rtl.output %merged : i1
 }
 
 // https://github.com/llvm/circt/issues/595
 // CHECK-LABEL: module issue595
 rtl.module @issue595(%arr: !rtl.array<128xi1>) {
-  // CHECK: wire [63:0] _T;
+  // CHECK: wire [63:0] _T_0;
+  // CHECK: wire _T = _T_0[6'h0+:32] == 32'h0;
   %c0_i32 = rtl.constant 0 : i32
   %c0_i7 = rtl.constant 0 : i7
   %c0_i6 = rtl.constant 0 : i6
   %0 = comb.icmp eq %3, %c0_i32 : i32
-  // CHECK: assert(_T[6'h0+:32] == 32'h0);
-  sv.assert %0 : i1
 
-  // CHECK: assign _T = arr[7'h0+:64];
+  sv.initial {
+    // CHECK: assert(_T);
+    sv.assert %0 : i1
+  }
+
+  // CHECK: assign _T_0 = arr[7'h0+:64];
   %1 = rtl.array_slice %arr at %c0_i7 : (!rtl.array<128xi1>) -> !rtl.array<64xi1>
   %2 = rtl.array_slice %1 at %c0_i6 : (!rtl.array<64xi1>) -> !rtl.array<32xi1>
   %3 = rtl.bitcast %2 : (!rtl.array<32xi1>) -> i32
@@ -355,15 +380,19 @@ rtl.module @issue595(%arr: !rtl.array<128xi1>) {
 
 // CHECK-LABEL: module issue595_variant1
 rtl.module @issue595_variant1(%arr: !rtl.array<128xi1>) {
-  // CHECK: wire [63:0] _T;
+  // CHECK: wire [63:0] _T_0;
+  // CHECK: wire _T = |_T_0[6'h0+:32];
   %c0_i32 = rtl.constant 0 : i32
   %c0_i7 = rtl.constant 0 : i7
   %c0_i6 = rtl.constant 0 : i6
   %0 = comb.icmp ne %3, %c0_i32 : i32
-  // CHECK: assert(|_T[6'h0+:32]);
-  sv.assert %0 : i1
 
-  // CHECK: assign _T = arr[7'h0+:64];
+  sv.initial {
+    // CHECK: assert(_T);
+    sv.assert %0 : i1
+  }
+
+  // CHECK: assign _T_0 = arr[7'h0+:64];
   %1 = rtl.array_slice %arr at %c0_i7 : (!rtl.array<128xi1>) -> !rtl.array<64xi1>
   %2 = rtl.array_slice %1 at %c0_i6 : (!rtl.array<64xi1>) -> !rtl.array<32xi1>
   %3 = rtl.bitcast %2 : (!rtl.array<32xi1>) -> i32
@@ -372,15 +401,19 @@ rtl.module @issue595_variant1(%arr: !rtl.array<128xi1>) {
 
 // CHECK-LABEL: module issue595_variant2_checkRedunctionAnd
 rtl.module @issue595_variant2_checkRedunctionAnd(%arr: !rtl.array<128xi1>) {
-  // CHECK: wire [63:0] _T;
+  // CHECK: wire [63:0] _T_0;
+  // CHECK: wire _T = &_T_0[6'h0+:32]
   %c0_i32 = rtl.constant -1 : i32
   %c0_i7 = rtl.constant 0 : i7
   %c0_i6 = rtl.constant 0 : i6
   %0 = comb.icmp eq %3, %c0_i32 : i32
-  // CHECK: assert(&_T[6'h0+:32]);
-  sv.assert %0 : i1
 
-  // CHECK: assign _T = arr[7'h0+:64];
+  sv.initial {
+    // CHECK: assert(_T);
+    sv.assert %0 : i1
+  }
+
+  // CHECK: assign _T_0 = arr[7'h0+:64];
   %1 = rtl.array_slice %arr at %c0_i7 : (!rtl.array<128xi1>) -> !rtl.array<64xi1>
   %2 = rtl.array_slice %1 at %c0_i6 : (!rtl.array<64xi1>) -> !rtl.array<32xi1>
   %3 = rtl.bitcast %2 : (!rtl.array<32xi1>) -> i32
@@ -550,5 +583,19 @@ rtl.module @issue728ifdef(%clock: i1, %a: i1 {rtl.name = "asdfasdfasdfasdfafa"},
        }
      }
   }
-  rtl.output 
+}
+
+// CHECK-LABEL: module alwayscombTest(
+rtl.module @alwayscombTest(%a: i1) -> (%x: i1) {
+  // CHECK: wire combWire;
+  %combWire = sv.wire : !rtl.inout<i1>
+  // CHECK: always_comb
+  sv.alwayscomb {
+    // CHECK-NEXT: combWire <= a
+    sv.passign %combWire, %a : i1
+  }
+
+  // CHECK: assign x = combWire;
+  %out = sv.read_inout %combWire : !rtl.inout<i1>
+  rtl.output %out : i1
 }

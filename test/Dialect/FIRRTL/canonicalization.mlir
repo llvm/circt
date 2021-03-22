@@ -464,4 +464,30 @@ firrtl.module @pcon(%in: !firrtl.uint<9>, %out: !firrtl.flip<uint<5>>) {
   firrtl.partialconnect %out, %in : !firrtl.flip<uint<5>>, !firrtl.uint<9>
 }
 
+// https://github.com/llvm/circt/issues/788
+
+// CHECK-LABEL: @AttachMerge
+firrtl.module @AttachMerge(%a: !firrtl.analog<1>, %b: !firrtl.analog<1>,
+                           %c: !firrtl.analog<1>) {
+  // CHECK-NEXT: firrtl.attach %c, %b, %a :
+  // CHECK-NEXT: }
+  firrtl.attach %b, %a : !firrtl.analog<1>, !firrtl.analog<1>
+  firrtl.attach %c, %b : !firrtl.analog<1>, !firrtl.analog<1>
+}
+
+// CHECK-LABEL: @AttachDeadWire
+firrtl.module @AttachDeadWire(%a: !firrtl.analog<1>, %b: !firrtl.analog<1>) {
+  // CHECK-NEXT: firrtl.attach %a, %b :
+  // CHECK-NEXT: }
+  %c = firrtl.wire  : !firrtl.analog<1>
+  firrtl.attach %a, %b, %c : !firrtl.analog<1>, !firrtl.analog<1>, !firrtl.analog<1>
+}
+
+// CHECK-LABEL: @AttachOpts
+firrtl.module @AttachOpts(%a: !firrtl.analog<1>) {
+  // CHECK-NEXT: }
+  %b = firrtl.wire  : !firrtl.analog<1>
+  firrtl.attach %b, %a : !firrtl.analog<1>, !firrtl.analog<1>
+}
+
 }
