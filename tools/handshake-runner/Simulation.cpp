@@ -243,6 +243,7 @@ Any readValueWithType(mlir::Type type, std::string in) {
     return aparg;
   } else {
     assert(0 && "unknown argument type!\n");
+    return {};
   }
 }
 
