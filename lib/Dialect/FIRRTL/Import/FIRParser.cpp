@@ -2798,16 +2798,19 @@ ParseResult FIRCircuitParser::parseCircuit() {
 
   OpBuilder b(mlirModule.getBodyRegion());
 
-  // Deal with the annotation file if one was specified
-  if (importAnnotationFile(info.getFIRLoc(), b.getContext()))
-    return failure();
-
-  // Deal with any inline annotations, if they exist
+  // Deal with any inline annotations, if they exist.  These are processed first
+  // to place any annotations from an annotation file *after* the inline
+  // annotations.  While arbitrary, this makes the annotation file have "append"
+  // semantics.
   if (!inlineAnnotations.empty())
     if (importAnnotations(inlineAnnotationsLoc, inlineAnnotations,
                           b.getContext(),
                           "Failed to parse inline JSON annotations"))
       return failure();
+
+  // Deal with the annotation file if one was specified
+  if (importAnnotationFile(info.getFIRLoc(), b.getContext()))
+    return failure();
 
   // Get annotations associated with this circuit. These are either:
   //   1. Annotations with no target (which we use "~" to identify)
