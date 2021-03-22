@@ -2569,11 +2569,10 @@ namespace {
 
 class SplitModuleEmitter {
 public:
-  explicit SplitModuleEmitter(StringRef dirname)
-      : encounteredError(false), dirname(dirname) {}
+  explicit SplitModuleEmitter(StringRef dirname) : dirname(dirname) {}
 
   /// Whether any error has been encountered during emission.
-  std::atomic<bool> encounteredError;
+  std::atomic<bool> encounteredError = {};
 
   /// The directory to emit files into.
   StringRef dirname;
