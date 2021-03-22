@@ -48,6 +48,8 @@ class MSFT_Attr<string name, string baseCppClass = "::mlir::Attribute">
 def PhysLocation : MSFT_Attr<"PhysLocation"> {
   let summary = "Descibes a physical location on a device";
   let description = [{
+    Annotate a particular entity within an op with the location of the device
+    on an FPGA to which it should mapped.
   }];
   let mnemonic = "physloc";
   let parameters = (ins
