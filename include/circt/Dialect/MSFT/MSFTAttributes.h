@@ -18,34 +18,7 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
 
-namespace circt {
-namespace msft {
-
-namespace detail {
-struct PhysLocationAttrStorage;
-}
-
-class PhysLocationAttr
-    : public Attribute::AttrBase<PhysLocationAttr, Attribute,
-                                 detail::PhysLocationAttrStorage> {
-public:
-  using Base::Base;
-  static PhysLocationAttr get(DeviceTypeAttr Type, uint64_t X, uint64_t Y,
-                              uint64_t Num, StringRef Entity);
-
-  DeviceTypeAttr Type() const;
-  uint64_t X() const;
-  uint64_t Y() const;
-  uint64_t Num() const;
-  StringRef Entity() const;
-
-  /// Parse a PhysLocationAttr with the following syntax:
-  /// #msft.physloc<DevType, X, Y, Num, "Entity">
-  static Attribute parse(DialectAsmParser &p);
-  void print(DialectAsmPrinter &) const;
-};
-
-} // namespace msft
-} // namespace circt
+#define GET_ATTRDEF_CLASSES
+#include "circt/Dialect/MSFT/MSFTAttributes.h.inc"
 
 #endif // CIRCT_DIALECT_MSFT_MSFTATTRIBUTES_H

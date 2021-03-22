@@ -8,10 +8,13 @@
 
 add_circt_dialect(MSFT msft)
 add_circt_doc(MSFT -gen-dialect-doc MSFT Dialects/)
+add_circt_doc(MSFTAttributes -gen-attrdef-doc MSFTAttributes Dialects/)
 
 set(LLVM_TARGET_DEFINITIONS MSFT.td)
 mlir_tablegen(MSFTEnums.h.inc -gen-enum-decls)
 mlir_tablegen(MSFTEnums.cpp.inc -gen-enum-defs)
-add_public_tablegen_target(MLIRMSFTEnumsIncGen)
+mlir_tablegen(MSFTAttributes.h.inc -gen-attrdef-decls)
+mlir_tablegen(MSFTAttributes.cpp.inc -gen-attrdef-defs)
+add_public_tablegen_target(MLIRMSFTExtraIncGen)
 
-add_dependencies(circt-headers MLIRMSFTEnumsIncGen)
+add_dependencies(circt-headers MLIRMSFTExtraIncGen)

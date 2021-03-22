@@ -16,7 +16,7 @@ add_circt_dialect_library(CIRCTMSFT
   DEPENDS
   CIRCTRTL
   MLIRMSFTIncGen
-  MLIRMSFTEnumsIncGen
+  MLIRMSFTExtraIncGen
   
   LINK_COMPONENTS
   Support
@@ -25,4 +25,5 @@ add_circt_dialect_library(CIRCTMSFT
   MLIRIR
    )
 
-add_dependencies(circt-headers MLIRMSFTIncGen)
+# add_dependencies(circt-headers MLIRMSFTIncGen)
+# add_dependencies(circt-headers MLIRMSFTExtraIncGen)

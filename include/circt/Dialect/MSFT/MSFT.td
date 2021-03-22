@@ -40,4 +40,22 @@ def DeviceType : I32EnumAttr<"DeviceType",
     I32EnumAttrCase<"EC", 3>,
   ]>;
 
+class MSFT_Attr<string name, string baseCppClass = "::mlir::Attribute">
+    : AttrDef<MSFTDialect, name, baseCppClass> {
+  let mnemonic = ?;
+}
+
+def PhysLocation : MSFT_Attr<"PhysLocation"> {
+  let summary = "Descibes a physical location on a device";
+  let description = [{
+  }];
+  let parameters = (ins
+    "DeviceTypeAttr":$devType,
+    "uint64_t":$x, "uint64_t":$y, "uint64_t":$num,
+    "::llvm::StringRef":$entity);
+
+  let parser = [{}];
+  let printer = [{}];
+}
+
 #endif // MSFT_TD

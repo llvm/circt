@@ -17,8 +17,6 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
 
-#include "llvm/ADT/TypeSwitch.h"
-
 using namespace circt;
 using namespace msft;
 
@@ -45,22 +43,6 @@ Operation *MSFTDialect::materializeConstant(OpBuilder &builder, Attribute value,
                                             Type type, Location loc) {
   // Placeholder
   return nullptr;
-}
-
-Attribute MSFTDialect::parseAttribute(DialectAsmParser &p, Type type) const {
-  StringRef attrName;
-  if (p.parseKeyword(&attrName))
-    return Attribute();
-  if (attrName == "physloc")
-    return PhysLocationAttr::parse(p);
-  p.emitError(p.getNameLoc(), "Unexpected msft attribute '" + attrName + "'");
-  return Attribute();
-}
-
-void MSFTDialect::printAttribute(Attribute attr, DialectAsmPrinter &p) const {
-  TypeSwitch<Attribute>(attr)
-      .Case([&p](PhysLocationAttr a) { a.print(p); })
-      .Default([](Attribute) { llvm_unreachable("Unexpected attribute"); });
 }
 
 #include "circt/Dialect/MSFT/MSFTEnums.cpp.inc"
