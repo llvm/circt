@@ -32,13 +32,14 @@ public:
 
   Operation *materializeConstant(OpBuilder &builder, Attribute value, Type type,
                                  Location loc) override;
+
+private:
+  void registerAttributes();
 };
 
 } // namespace msft
 } // namespace circt
 
 #include "circt/Dialect/MSFT/MSFTEnums.h.inc"
-// Don't reorder.
-#include "circt/Dialect/MSFT/MSFTAttrs.h.inc"
 
 #endif // CIRCT_DIALECT_MSFT_MSFTDIALECT_H

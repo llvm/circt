@@ -40,20 +40,4 @@ def DeviceType : I32EnumAttr<"DeviceType",
     I32EnumAttrCase<"EC", 3>,
   ]>;
 
-def PhysLocationAttr : StructAttr<"PhysLocationAttr", MSFTDialect, [
-  // Device type.
-  StructFieldAttr<"Type", DeviceType>,
-
-  // X/Y coordinate of device.
-  StructFieldAttr<"X", UI64Attr>,
-  StructFieldAttr<"Y", UI64Attr>,
-
-  // The resource number at the specified coordinates.
-  StructFieldAttr<"Num", UI64Attr>,
-
-  // The name of the entity within the op (to which this attribute is attached)
-  // which this location is specifying.
-  StructFieldAttr<"Entity", StrAttr>
-]>;
-
 #endif // MSFT_TD
