@@ -5,8 +5,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/HIR/HIR.h"
 #include "circt/Dialect/HIR/HIRDialect.h"
+#include "circt/Dialect/HIR/HIR.h"
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
@@ -22,7 +22,8 @@ using namespace hir;
 
 HIRDialect::HIRDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context, TypeID::get<HIRDialect>()) {
-  addTypes<TimeType, GroupType, ArrayType, ConstType, MemrefType, WireType>();
+  addTypes<TimeType, GroupType, ArrayType, InterfaceType, ConstType, MemrefType,
+           WireType>();
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/HIR/HIR.cpp.inc"
@@ -190,6 +191,8 @@ parseInterfaceElementTypeWithOptionalAttr(DialectAsmParser &parser,
 static void printGroup(GroupType groupTy, DialectAsmPrinter &printer);
 static void printArray(ArrayType groupTy, DialectAsmPrinter &printer);
 void printInterfaceElementType(Type elementTy, DialectAsmPrinter &printer);
+void printInterfaceElementTypeWithOptionalAttr(DialectAsmPrinter &printer,
+                                               Type elementTy, Attribute attr);
 
 // Implementations.
 static Type parseOptionalGroup(DialectAsmParser &parser, MLIRContext *context) {
@@ -273,16 +276,16 @@ static void printGroup(GroupType groupTy, DialectAsmPrinter &printer) {
   for (unsigned i = 0; i < elementTypes.size(); i++) {
     auto attr = attrs[i];
     auto elementTy = elementTypes[i];
-    if (attr)
-      printer << attr;
-    printInterfaceElementType(elementTy, printer);
+    if (i > 0)
+      printer << ", ";
+    printInterfaceElementTypeWithOptionalAttr(printer, elementTy, attr);
   }
   printer << ")";
 }
 
 static void printArray(ArrayType arrayTy, DialectAsmPrinter &printer) {
   printer << "[";
-  ArrayRef<int64_t> dims;
+  ArrayRef<int64_t> dims = arrayTy.getDimensions();
   Type elementTy = arrayTy.getElementType();
   for (auto dim : dims) {
     printer << dim << "x";
@@ -298,6 +301,13 @@ void printInterfaceElementType(Type elementTy, DialectAsmPrinter &printer) {
     helper::printArray(arrayTy, printer);
   } else
     printer << elementTy;
+}
+
+void printInterfaceElementTypeWithOptionalAttr(DialectAsmPrinter &printer,
+                                               Type elementTy, Attribute attr) {
+  if (attr)
+    printer << attr << " ";
+  helper::printInterfaceElementType(elementTy, printer);
 }
 } // namespace helper
 
@@ -319,15 +329,14 @@ static Type parseInterfaceType(DialectAsmParser &parser, MLIRContext *context) {
 
   return InterfaceType::get(context, elementType, attr);
 }
+
 static void printInterfaceType(InterfaceType interfaceTy,
                                DialectAsmPrinter &printer) {
   printer << interfaceTy.getKeyword();
   printer << "<";
   Type elementTy = interfaceTy.getElementType();
   Attribute attr = interfaceTy.getAttribute();
-  if (attr)
-    printer << attr;
-  helper::printInterfaceElementType(elementTy, printer);
+  helper::printInterfaceElementTypeWithOptionalAttr(printer, elementTy, attr);
   printer << ">";
 }
 

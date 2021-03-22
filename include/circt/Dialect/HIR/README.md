@@ -31,7 +31,7 @@ The vref and memref container types can be cast to each other.
 ### vref type
 * vref types lower to a set of wires.
 * The writes to vrefs are volatile, i.e. reads must occur in the same cycle.
-* Operations: instantiate, cast, zip, slice, assign, read, write, call
+* Operations: instantiate, cast, concat, slice, assign, read, write, call
 * Attributes: read, write, call
 * Syntax: `hir.vref< element-type optional-attr-dict>`
 * element-type - IntType, FloatType, ComplexType, Tuple, Tensor
@@ -42,7 +42,9 @@ The vref and memref container types can be cast to each other.
 * Usecases:
   - Multi-dimensional array of wires: `hir.vref<tensor<3x4xi32> attr-dict>`
   - Array of interfaces:`hir.vref<tensor<4xtuple<...>>>`
-* slice op indices must be either constant or mlir index type.
+* slice op indices :
+  - Array indices must be either constant or mlir index type.
+  - Tuple indices must be constant.
   - Syntax: `hir.slice %a ([1,i,j], [0] attr-dict)`, i and j are of index type.
 
 ### memref type
@@ -63,9 +65,9 @@ The vref and memref container types can be cast to each other.
 * Convert read/write/call/assign op of more complex interfaces to a slice op 
     followed by read/write/call/assign of a simple vref (i.e. element type is 
     either IntType or FloatType).
-* Simplify slice of multiple elements to slice + zip.
+* Simplify slice of multiple elements to slice + concat.
 * If the slice is nested inside unroll_for loop then
-  - Check if the slice op accesses all elements.
+  - Check if the slice op accesses all elements. otherwise,
   - Create a new slice op at the outermost level where the interface is defined.
   - Use the output interface of the slice instead of the original interface
       inside unroll loop nest.

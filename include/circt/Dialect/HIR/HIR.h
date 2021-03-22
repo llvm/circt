@@ -275,6 +275,7 @@ public:
   }
   ArrayRef<int64_t> dims;
   Type getElementType() { return getImpl()->elementType; }
+  ArrayRef<int64_t> getDimensions() { return getImpl()->dims; }
 };
 
 /// This class defines group type which is only accessible inside hir.interface.
