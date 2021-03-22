@@ -48,6 +48,15 @@ void RTLStubExternalModulesPass::runOnOperation() {
               innerBuilder.create<sv::ConstantXOp>(outputOp->getLoc(), p.type));
       }
       outputOp->setOperands(outputs);
+
+      // Now update instances to drop parameters
+      auto useRange = SymbolTable::getSymbolUses(module, getOperation());
+      if (useRange)
+        for (auto& user : *useRange)
+          if (auto inst = dyn_cast<rtl::InstanceOp>(user.getUser()))
+            inst->removeAttr("parameters");
+
+      // Done with the old module.
       module.erase();
     }
 }
