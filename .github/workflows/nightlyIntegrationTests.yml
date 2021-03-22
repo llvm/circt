@@ -60,6 +60,9 @@ jobs:
             cxx: clang++
           - cc: gcc
             cxx: g++
+        include:
+          - build-shared: ON
+            bindings-python: ON
 
     steps:
       - name: Configure Environment
@@ -107,6 +110,7 @@ jobs:
           BUILD_ASSERT: ${{ matrix.build-assert }}
           BUILD_SHARED: ${{ matrix.build-shared }}
           BUILD_TYPE: ${{ matrix.build-type }}
+          BINDINGS_PYTHON: ${{matrix.bindings-python}}
         run: |
           mkdir build && cd build
           cmake .. \
@@ -120,7 +124,7 @@ jobs:
             -DCMAKE_CXX_COMPILER=$CXX \
             -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-            -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
+            -DCIRCT_BINDINGS_PYTHON_ENABLED=$BINDINGS_PYTHON \
             -DPYTHON_EXECUTABLE=/usr/bin/python3
       - name: Build CIRCT
         run: |
