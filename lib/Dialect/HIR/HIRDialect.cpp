@@ -5,8 +5,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/HIR/HIRDialect.h"
 #include "circt/Dialect/HIR/HIR.h"
+#include "circt/Dialect/HIR/HIRDialect.h"
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
@@ -22,7 +22,7 @@ using namespace hir;
 
 HIRDialect::HIRDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context, TypeID::get<HIRDialect>()) {
-  addTypes<TimeType, ConstType, MemrefType, WireType>();
+  addTypes<TimeType, GroupType, ArrayType, ConstType, MemrefType, WireType>();
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/HIR/HIR.cpp.inc"
@@ -105,22 +105,22 @@ static ParseResult parseShapedType(DialectAsmParser &parser,
 static Type parseMemrefType(DialectAsmParser &parser, MLIRContext *context) {
   SmallVector<unsigned, 4> shape;
   Type elementType;
-  hir::Details::PortKind default_port = hir::Details::rw;
+  hir::Details::PortKind defaultPort = hir::Details::rw;
   if (parser.parseLess())
     return Type();
 
   if (Helpers::parseShapedType(parser, shape, elementType))
     return Type();
 
-  SmallVector<unsigned, 4> default_packing;
+  SmallVector<unsigned, 4> defaultPacking;
   // default packing is [0,1,2,3] for shape = [d3,d2,d1,d0] i.e. d0 is fastest
   // changing dim in linear index and no distributed dimensions.
   for (size_t i = 0; i < shape.size(); i++)
-    default_packing.push_back(i);
+    defaultPacking.push_back(i);
 
   if (!parser.parseOptionalGreater())
-    return MemrefType::get(context, shape, elementType, default_packing,
-                           default_port);
+    return MemrefType::get(context, shape, elementType, defaultPacking,
+                           defaultPort);
 
   if (parser.parseComma())
     return Type();
@@ -133,8 +133,7 @@ static Type parseMemrefType(DialectAsmParser &parser, MLIRContext *context) {
     if (hasPacking.getValue())
       return Type();
     if (!parser.parseOptionalGreater())
-      return MemrefType::get(context, shape, elementType, packing,
-                             default_port);
+      return MemrefType::get(context, shape, elementType, packing, defaultPort);
     if (parser.parseComma())
       return Type();
   }
@@ -144,44 +143,9 @@ static Type parseMemrefType(DialectAsmParser &parser, MLIRContext *context) {
     return Type();
 
   return MemrefType::get(context, shape, elementType,
-                         hasPacking.hasValue() ? packing : default_packing,
+                         hasPacking.hasValue() ? packing : defaultPacking,
                          port);
 }
-static Type parseTupleType(DialectAsmParser &parser, MLIRContext *context) {}
-
-static Type parseVrefElementType(DialectAsmParser &parser,
-                                 MLIRContext *context) {
-  OptionalParseResult result = parser.parseOptionalKeyword("tuple");
-  if (result.hasValue()) {
-    if (failed(result.getValue()))
-      return Type();
-    else
-      return parseTupleType(parser, context);
-  }
-  Type elementType;
-  parser.parseType(elementType);
-  return elementType;
-}
-
-static Type parseVrefType(DialectAsmParser &parser, MLIRContext *context) {
-  SmallVector<Attribute> attrs;
-  if (parser.parseLess())
-    return Type();
-
-  Type elementType = parseVrefElementType(parser, context);
-  if (!elementType)
-    return Type();
-
-  Attribute attr;
-  if (!parser.parseOptionalColon()) {
-    if (parser.parseAttribute(attr))
-      return Type();
-  }
-  if (parser.parseGreater())
-    return Type();
-  return VrefType::get(context, elementType, attrs);
-}
-
 static void printMemrefType(MemrefType memrefTy, DialectAsmPrinter &printer) {
   printer << memrefTy.getKeyword();
   printer << "<";
@@ -210,25 +174,182 @@ static void printMemrefType(MemrefType memrefTy, DialectAsmPrinter &printer) {
   printer << ">";
 }
 
+// Interface Type
+// hir.interface< ((#in i32, #out f32,#call ()->i1),#in [4xi32], [2x(#in i1,
+// #out i1, #in i8)])>
+namespace helper {
+
+// forward declarations.
+static Type parseOptionalGroup(DialectAsmParser &parser, MLIRContext *context);
+static Type parseOptionalArray(DialectAsmParser &parser, MLIRContext *context);
+static Type parseOptionalInterfaceElementType(DialectAsmParser &parser,
+                                              MLIRContext *context);
+static std::pair<Type, Attribute>
+parseInterfaceElementTypeWithOptionalAttr(DialectAsmParser &parser,
+                                          MLIRContext *context);
+static void printGroup(GroupType groupTy, DialectAsmPrinter &printer);
+static void printArray(ArrayType groupTy, DialectAsmPrinter &printer);
+void printInterfaceElementType(Type elementTy, DialectAsmPrinter &printer);
+
+// Implementations.
+static Type parseOptionalGroup(DialectAsmParser &parser, MLIRContext *context) {
+  SmallVector<Type> elementTypes;
+  SmallVector<Attribute> attrs;
+
+  // if no starting LParen then this is not a group.
+  if (failed(parser.parseOptionalLParen()))
+    return Type();
+
+  // parse the group members.
+  do {
+    auto typeAndAttr =
+        parseInterfaceElementTypeWithOptionalAttr(parser, context);
+    Type elementTy = std::get<0>(typeAndAttr);
+    Attribute attr = std::get<1>(typeAndAttr);
+    elementTypes.push_back(elementTy);
+    attrs.push_back(attr);
+  } while (succeeded(parser.parseOptionalComma()));
+
+  // Finish parsing the group.
+  if (parser.parseRParen())
+    return Type();
+  return GroupType::get(context, elementTypes, attrs);
+}
+
+static Type parseOptionalArray(DialectAsmParser &parser, MLIRContext *context) {
+  SmallVector<int64_t, 4> dims;
+  Type elementType;
+
+  // if no starting LSquare then this is not an array.
+  if (failed(parser.parseOptionalLSquare()))
+    return Type();
+
+  // parse the dimensions.
+  if (parser.parseDimensionList(dims, false))
+    return Type();
+
+  // parse the element type.
+  elementType = parseOptionalInterfaceElementType(parser, context);
+  if (!elementType)
+    return Type();
+  // Finish parsing the array.
+  if (parser.parseRSquare())
+    return Type();
+  return ArrayType::get(context, dims, elementType);
+}
+
+static Type parseOptionalInterfaceElementType(DialectAsmParser &parser,
+                                              MLIRContext *context) {
+  Type builtinType;
+  Type groupTy = parseOptionalGroup(parser, context);
+  Type arrayTy = parseOptionalArray(parser, context);
+  OptionalParseResult result = parser.parseOptionalType(builtinType);
+  if (result.hasValue() && succeeded(result.getValue()))
+    return builtinType;
+  if (groupTy)
+    return groupTy;
+  if (arrayTy)
+    return arrayTy;
+  return Type();
+}
+
+static std::pair<Type, Attribute>
+parseInterfaceElementTypeWithOptionalAttr(DialectAsmParser &parser,
+                                          MLIRContext *context) {
+  Type elementType;
+  Attribute attr = nullptr;
+  elementType = parseOptionalInterfaceElementType(parser, context);
+  if (!elementType) {
+    parser.parseAttribute(attr);
+    elementType = parseOptionalInterfaceElementType(parser, context);
+  }
+  return std::make_pair(elementType, attr);
+}
+
+static void printGroup(GroupType groupTy, DialectAsmPrinter &printer) {
+  printer << "(";
+  ArrayRef<Type> elementTypes = groupTy.getElementTypes();
+  ArrayRef<Attribute> attrs = groupTy.getAttributes();
+  for (unsigned i = 0; i < elementTypes.size(); i++) {
+    auto attr = attrs[i];
+    auto elementTy = elementTypes[i];
+    if (attr)
+      printer << attr;
+    printInterfaceElementType(elementTy, printer);
+  }
+  printer << ")";
+}
+
+static void printArray(ArrayType arrayTy, DialectAsmPrinter &printer) {
+  printer << "[";
+  ArrayRef<int64_t> dims;
+  Type elementTy = arrayTy.getElementType();
+  for (auto dim : dims) {
+    printer << dim << "x";
+  }
+  printInterfaceElementType(elementTy, printer);
+  printer << "]";
+}
+
+void printInterfaceElementType(Type elementTy, DialectAsmPrinter &printer) {
+  if (GroupType groupTy = elementTy.dyn_cast<GroupType>()) {
+    helper::printGroup(groupTy, printer);
+  } else if (ArrayType arrayTy = elementTy.dyn_cast<ArrayType>()) {
+    helper::printArray(arrayTy, printer);
+  } else
+    printer << elementTy;
+}
+} // namespace helper
+
+static Type parseInterfaceType(DialectAsmParser &parser, MLIRContext *context) {
+  if (parser.parseLess())
+    return Type();
+
+  // Parse the element type and optional attribute.
+  auto typeAndAttr =
+      helper::parseInterfaceElementTypeWithOptionalAttr(parser, context);
+  Type elementType = std::get<0>(typeAndAttr);
+  Attribute attr = std::get<1>(typeAndAttr);
+  if (!elementType)
+    return Type();
+
+  // Finish parsing.
+  if (parser.parseGreater())
+    return Type();
+
+  return InterfaceType::get(context, elementType, attr);
+}
+static void printInterfaceType(InterfaceType interfaceTy,
+                               DialectAsmPrinter &printer) {
+  printer << interfaceTy.getKeyword();
+  printer << "<";
+  Type elementTy = interfaceTy.getElementType();
+  Attribute attr = interfaceTy.getAttribute();
+  if (attr)
+    printer << attr;
+  helper::printInterfaceElementType(elementTy, printer);
+  printer << ">";
+}
+
 // WireType.
 static Type parseWireType(DialectAsmParser &parser, MLIRContext *context) {
   SmallVector<unsigned, 4> shape;
   Type elementType;
-  hir::Details::PortKind default_port = hir::Details::rw;
+  hir::Details::PortKind defaultPort = hir::Details::rw;
   if (parser.parseLess())
     return Type();
 
   if (Helpers::parseShapedType(parser, shape, elementType))
     return Type();
 
-  SmallVector<unsigned, 4> default_packing;
+  SmallVector<unsigned, 4> defaultPacking;
   // default packing is [0,1,2,3] for shape = [d3,d2,d1,d0] i.e. d0 is fastest
   // changing dim in linear index and no distributed dimensions.
   for (size_t i = 0; i < shape.size(); i++)
-    default_packing.push_back(i);
+    defaultPacking.push_back(i);
 
   if (!parser.parseOptionalGreater())
-    return WireType::get(context, shape, elementType, default_port);
+    return WireType::get(context, shape, elementType, defaultPort);
 
   if (parser.parseComma())
     return Type();
@@ -275,8 +396,8 @@ Type HIRDialect::parseType(DialectAsmParser &parser) const {
   if (typeKeyword == MemrefType::getKeyword())
     return parseMemrefType(parser, getContext());
 
-  if (typeKeyword == VrefType::getKeyword())
-    return parseVrefType(parser, getContext());
+  if (typeKeyword == InterfaceType::getKeyword())
+    return parseInterfaceType(parser, getContext());
 
   if (typeKeyword == WireType::getKeyword())
     return parseWireType(parser, getContext());
@@ -294,6 +415,10 @@ void HIRDialect::printType(Type type, DialectAsmPrinter &printer) const {
   }
   if (MemrefType memrefTy = type.dyn_cast<MemrefType>()) {
     printMemrefType(memrefTy, printer);
+    return;
+  }
+  if (InterfaceType interfaceTy = type.dyn_cast<InterfaceType>()) {
+    printInterfaceType(interfaceTy, printer);
     return;
   }
   if (WireType wireTy = type.dyn_cast<WireType>()) {

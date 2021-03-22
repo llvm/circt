@@ -12,16 +12,6 @@
 
 namespace mlir {
 namespace hir {
-/// Defines the kind corresponding to the type. So MemrefType has Kind
-/// MemrefKind
-// enum Kinds {
-//  TimeKind = Type::FIRST_PRIVATE_EXPERIMENTAL_0_TYPE,
-//  ConstKind,
-//  MemrefKind,
-//  StreamKind,
-//  WireKind
-//};
-
 namespace Details {
 /// PortKind tells what type of port this is. r => read port, w => write port
 /// and rw => read-write port.
@@ -71,16 +61,16 @@ struct MemrefTypeStorage : public TypeStorage {
   PortKind port;
 };
 
-struct VrefTypeStorage : public TypeStorage {
-  VrefTypeStorage(Type elementType, ArrayRef<Attribute> attrs)
-      : elementType(elementType), attrs(attrs) {}
+struct InterfaceTypeStorage : public TypeStorage {
+  InterfaceTypeStorage(Type elementType, Attribute attr)
+      : elementType(elementType), attr(attr) {}
 
   /// The hash key for this storage is a pair of the integer and type params.
-  using KeyTy = std::tuple<Type, ArrayRef<Attribute>>;
+  using KeyTy = std::tuple<Type, Attribute>;
 
   /// Define the comparison function for the key type.
   bool operator==(const KeyTy &key) const {
-    return key == KeyTy(elementType, attrs);
+    return key == KeyTy(elementType, attr);
   }
 
   /// Define a hash function for the key type.
@@ -89,20 +79,90 @@ struct VrefTypeStorage : public TypeStorage {
   }
 
   /// Define a construction function for the key type.
-  static KeyTy getKey(Type elementType, ArrayRef<Attribute> attrs) {
-    return KeyTy(elementType, attrs);
+  static KeyTy getKey(Type elementType, Attribute attr) {
+    return KeyTy(elementType, attr);
   }
 
   /// Define a construction method for creating a new instance of this storage.
-  static VrefTypeStorage *construct(TypeStorageAllocator &allocator,
-                                    const KeyTy &key) {
+  static InterfaceTypeStorage *construct(TypeStorageAllocator &allocator,
+                                         const KeyTy &key) {
     Type elementType = std::get<0>(key);
-    ArrayRef<Attribute> attrs = allocator.copyInto(std::get<1>(key));
-    return new (allocator.allocate<VrefTypeStorage>())
-        VrefTypeStorage(elementType, attrs);
+    Attribute attr = std::get<1>(key);
+    return new (allocator.allocate<InterfaceTypeStorage>())
+        InterfaceTypeStorage(elementType, attr);
   }
 
   Type elementType;
+  Attribute attr;
+};
+
+struct ArrayTypeStorage : public TypeStorage {
+  ArrayTypeStorage(ArrayRef<int64_t> dims, Type elementType)
+      : dims(dims), elementType(elementType) {}
+
+  /// The hash key for this storage is a pair of the integer and type params.
+  using KeyTy = std::tuple<ArrayRef<int64_t>, Type>;
+
+  /// Define the comparison function for the key type.
+  bool operator==(const KeyTy &key) const {
+    return key == KeyTy(dims, elementType);
+  }
+
+  /// Define a hash function for the key type.
+  static llvm::hash_code hashKey(const KeyTy &key) {
+    return llvm::hash_combine(std::get<0>(key), std::get<1>(key));
+  }
+
+  /// Define a construction function for the key type.
+  static KeyTy getKey(ArrayRef<int64_t> dims, Type elementType) {
+    return KeyTy(dims, elementType);
+  }
+
+  /// Define a construction method for creating a new instance of this storage.
+  static ArrayTypeStorage *construct(TypeStorageAllocator &allocator,
+                                     const KeyTy &key) {
+    ArrayRef<int64_t> dims = allocator.copyInto(std::get<0>(key));
+    Type elementType = std::get<1>(key);
+    return new (allocator.allocate<ArrayTypeStorage>())
+        ArrayTypeStorage(dims, elementType);
+  }
+
+  ArrayRef<int64_t> dims;
+  Type elementType;
+};
+
+struct GroupTypeStorage : public TypeStorage {
+  GroupTypeStorage(ArrayRef<Type> elementTypes, ArrayRef<Attribute> attrs)
+      : elementTypes(elementTypes), attrs(attrs) {}
+
+  /// The hash key for this storage is a pair of the integer and type params.
+  using KeyTy = std::tuple<ArrayRef<Type>, ArrayRef<Attribute>>;
+
+  /// Define the comparison function for the key type.
+  bool operator==(const KeyTy &key) const {
+    return key == KeyTy(elementTypes, attrs);
+  }
+
+  /// Define a hash function for the key type.
+  static llvm::hash_code hashKey(const KeyTy &key) {
+    return llvm::hash_combine(std::get<0>(key), std::get<1>(key));
+  }
+
+  /// Define a construction function for the key type.
+  static KeyTy getKey(ArrayRef<Type> elementTypes, ArrayRef<Attribute> attrs) {
+    return KeyTy(elementTypes, attrs);
+  }
+
+  /// Define a construction method for creating a new instance of this storage.
+  static GroupTypeStorage *construct(TypeStorageAllocator &allocator,
+                                     const KeyTy &key) {
+    ArrayRef<Type> elementTypes = allocator.copyInto(std::get<0>(key));
+    ArrayRef<Attribute> attrs = allocator.copyInto(std::get<1>(key));
+    return new (allocator.allocate<GroupTypeStorage>())
+        GroupTypeStorage(elementTypes, attrs);
+  }
+
+  ArrayRef<Type> elementTypes;
   ArrayRef<Attribute> attrs;
 };
 
@@ -187,21 +247,51 @@ public:
   Details::PortKind getPort() { return getImpl()->port; }
 };
 
-/// This class defines hir.vref type in the dialect.
-class VrefType
-    : public Type::TypeBase<VrefType, Type, Details::VrefTypeStorage> {
+/// This class defines hir.interface type in the dialect.
+class InterfaceType : public Type::TypeBase<InterfaceType, Type,
+                                            Details::InterfaceTypeStorage> {
 public:
   using Base::Base;
 
-  // static bool kindof(unsigned kind) { return kind == MemrefKind; }
-  static StringRef getKeyword() { return "memref"; }
-  static VrefType get(MLIRContext *context, Type elementType,
-                      ArrayRef<Attribute> attrs) {
-    return Base::get(context, elementType, attrs);
+  static StringRef getKeyword() { return "interface"; }
+  static InterfaceType get(MLIRContext *context, Type elementType,
+                           Attribute attr) {
+    return Base::get(context, elementType, attr);
   }
   Type getElementType() { return getImpl()->elementType; }
+  Attribute getAttribute() { return getImpl()->attr; }
+};
+
+/// This class defines array type which is only accessible inside hir.interface.
+class ArrayType
+    : public Type::TypeBase<ArrayType, Type, Details::ArrayTypeStorage> {
+public:
+  using Base::Base;
+
+  static StringRef getKeyword() { return "array"; }
+  static ArrayType get(MLIRContext *context, ArrayRef<int64_t> dims,
+                       Type elementType) {
+    return Base::get(context, dims, elementType);
+  }
+  ArrayRef<int64_t> dims;
+  Type getElementType() { return getImpl()->elementType; }
+};
+
+/// This class defines group type which is only accessible inside hir.interface.
+class GroupType
+    : public Type::TypeBase<GroupType, Type, Details::GroupTypeStorage> {
+public:
+  using Base::Base;
+
+  static StringRef getKeyword() { return "group"; }
+  static GroupType get(MLIRContext *context, ArrayRef<Type> elementTypes,
+                       ArrayRef<Attribute> attrs) {
+    return Base::get(context, elementTypes, attrs);
+  }
+  ArrayRef<Type> getElementTypes() { return getImpl()->elementTypes; }
   ArrayRef<Attribute> getAttributes() { return getImpl()->attrs; }
 };
+
 /// This class defines hir.wire type in the dialect.
 class WireType
     : public Type::TypeBase<WireType, Type, Details::WireTypeStorage> {

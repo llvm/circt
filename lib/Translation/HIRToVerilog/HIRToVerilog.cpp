@@ -4,12 +4,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Translation/HIRToVerilog.h"
 #include "Generators.h"
 #include "Helpers.h"
 #include "VerilogValue.h"
 #include "circt/Dialect/HIR/HIR.h"
 #include "circt/Dialect/HIR/HIRDialect.h"
+#include "circt/Translation/HIRToVerilog.h"
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/MLIRContext.h"
@@ -170,7 +170,6 @@ private:
   void printAllocOp(hir::AllocOp op, unsigned indentAmount = 0);
   void printDelayOp(hir::DelayOp op, unsigned indentAmount = 0);
   void printCallOp(hir::CallOp op, unsigned indentAmount = 0);
-  void printPopOp(hir::PopOp op, unsigned indentAmount = 0);
 
   // Helpers.
   void printBody(Block &block, unsigned indentAmount = 0);
@@ -254,20 +253,6 @@ void VerilogPrinter::printMemReadOp(MemReadOp op, unsigned indentAmount) {
             << " = " << vTstart->strDelayedWire(delayValue) << ";\n\n";
 
   vMem->incMemrefNumReads(addr);
-}
-
-void VerilogPrinter::printPopOp(hir::PopOp op, unsigned indentAmount) {
-  Value result = op.res();
-  Value input = op.input();
-  VerilogValue v_input = verilogMapper.get(input);
-  verilogMapper.insert(result,
-                       VerilogValue(result, "v" + to_string(newValueNumber())));
-  VerilogValue *vResult = verilogMapper.getMutable(result);
-  VerilogValue *vTstart = verilogMapper.getMutable(op.tstart());
-  outBuffer << "assign " << v_input.strStreamPop() << " = "
-            << vTstart->strWire() << ";\n";
-  outBuffer << "wire " << vResult->strWireDecl() << " = "
-            << v_input.strStreamData() << ";\n";
 }
 
 void VerilogPrinter::printCallOp(hir::CallOp op, unsigned indentAmount) {
@@ -997,75 +982,93 @@ void VerilogPrinter::printOperation(Operation *inst, unsigned indentAmount) {
   if (auto op = dyn_cast<hir::ConstantOp>(inst)) {
     outBuffer << "\n//" << formattedOp(inst, "ConstantOp");
     return printConstantOp(op, indentAmount);
-  } else if (auto op = dyn_cast<hir::CallOp>(inst)) {
+  }
+  if (auto op = dyn_cast<hir::CallOp>(inst)) {
     outBuffer << "\n//" << formattedOp(inst, "CallOp");
     return printCallOp(op, indentAmount);
-  } else if (auto op = dyn_cast<hir::PopOp>(inst)) {
-    outBuffer << "\n//" << formattedOp(inst, "PopOp");
-    return printPopOp(op, indentAmount);
-  } else if (auto op = dyn_cast<hir::AllocOp>(inst)) {
+  }
+  if (auto op = dyn_cast<hir::AllocOp>(inst)) {
     outBuffer << "\n//" << formattedOp(inst, "AllocOp");
     return printAllocOp(op, indentAmount);
-  } else if (auto op = dyn_cast<hir::DelayOp>(inst)) {
+  }
+  if (auto op = dyn_cast<hir::DelayOp>(inst)) {
     outBuffer << "\n//" << formattedOp(inst, "DelayOp");
     return printDelayOp(op, indentAmount);
-  } else if (auto op = dyn_cast<hir::IfOp>(inst)) {
+  }
+  if (auto op = dyn_cast<hir::IfOp>(inst)) {
     outBuffer << "\n//" << formattedOp(inst, "IfOp");
     return printIfOp(op, indentAmount);
-  } else if (auto op = dyn_cast<hir::ForOp>(inst)) {
+  }
+  if (auto op = dyn_cast<hir::ForOp>(inst)) {
     outBuffer << "\n//" << formattedOp(inst, "ForOp");
     return printForOp(op, indentAmount);
-  } else if (auto op = dyn_cast<hir::UnrollForOp>(inst)) {
+  }
+  if (auto op = dyn_cast<hir::UnrollForOp>(inst)) {
     outBuffer << "\n//" << formattedOp(inst, "UnrollForOp");
     return printUnrollForOp(op, indentAmount);
-  } else if (auto op = dyn_cast<hir::ReturnOp>(inst)) {
+  }
+  if (auto op = dyn_cast<hir::ReturnOp>(inst)) {
     outBuffer << "\n//" << formattedOp(inst, "ReturnOp");
     return printReturnOp(op, indentAmount);
-  } else if (auto op = dyn_cast<hir::MemReadOp>(inst)) {
+  }
+  if (auto op = dyn_cast<hir::MemReadOp>(inst)) {
     outBuffer << "\n//" << formattedOp(inst, "MemReadOp");
     return printMemReadOp(op, indentAmount);
-  } else if (auto op = dyn_cast<hir::MemWriteOp>(inst)) {
+  }
+  if (auto op = dyn_cast<hir::MemWriteOp>(inst)) {
     outBuffer << "\n//" << formattedOp(inst, "MemWriteOp");
     return printMemWriteOp(op, indentAmount);
-  } else if (auto op = dyn_cast<hir::WireReadOp>(inst)) {
+  }
+  if (auto op = dyn_cast<hir::WireReadOp>(inst)) {
     outBuffer << "\n//" << formattedOp(inst, "WireReadOp");
     return printWireReadOp(op, indentAmount);
-  } else if (auto op = dyn_cast<hir::WireWriteOp>(inst)) {
+  }
+  if (auto op = dyn_cast<hir::WireWriteOp>(inst)) {
     outBuffer << "\n//" << formattedOp(inst, "WireWriteOp");
     return printWireWriteOp(op, indentAmount);
-  } else if (auto op = dyn_cast<hir::EQOp>(inst)) {
+  }
+  if (auto op = dyn_cast<hir::EQOp>(inst)) {
     outBuffer << "\n//" << formattedOp(inst, "EQOp");
     return printEQOp(op, indentAmount);
-  } else if (auto op = dyn_cast<hir::NEQOp>(inst)) {
+  }
+  if (auto op = dyn_cast<hir::NEQOp>(inst)) {
     outBuffer << "\n//" << formattedOp(inst, "NEqOp");
     return printNEQOp(op, indentAmount);
-  } else if (auto op = dyn_cast<hir::GTOp>(inst)) {
+  }
+  if (auto op = dyn_cast<hir::GTOp>(inst)) {
     outBuffer << "\n//" << formattedOp(inst, "GTOp");
     return printGTOp(op, indentAmount);
-  } else if (auto op = dyn_cast<hir::LTOp>(inst)) {
+  }
+  if (auto op = dyn_cast<hir::LTOp>(inst)) {
     outBuffer << "\n//" << formattedOp(inst, "LTOp");
     return printLTOp(op, indentAmount);
-  } else if (auto op = dyn_cast<hir::AndOp>(inst)) {
+  }
+  if (auto op = dyn_cast<hir::AndOp>(inst)) {
     outBuffer << "\n//" << formattedOp(inst, "AndOp");
     return printAndOp(op, indentAmount);
-  } else if (auto op = dyn_cast<hir::OrOp>(inst)) {
+  }
+  if (auto op = dyn_cast<hir::OrOp>(inst)) {
     outBuffer << "\n//" << formattedOp(inst, "OrOp");
     return printOrOp(op, indentAmount);
-  } else if (auto op = dyn_cast<hir::AddOp>(inst)) {
+  }
+  if (auto op = dyn_cast<hir::AddOp>(inst)) {
     outBuffer << "\n//" << formattedOp(inst, "AddOp");
     return printAddOp(op, indentAmount);
-  } else if (auto op = dyn_cast<hir::SubtractOp>(inst)) {
+  }
+  if (auto op = dyn_cast<hir::SubtractOp>(inst)) {
     outBuffer << "\n//" << formattedOp(inst, "SubtractOp");
     return printSubtractOp(op, indentAmount);
-  } else if (auto op = dyn_cast<hir::YieldOp>(inst)) {
+  }
+  if (auto op = dyn_cast<hir::YieldOp>(inst)) {
     outBuffer << "\n//" << formattedOp(inst, "YieldOp");
     return printYieldOp(op, indentAmount);
-  } else if (auto op = dyn_cast<hir::TerminatorOp>(inst)) {
-    outBuffer << "\n//TerminatorOp\n";
-  } else {
-    emitError(inst->getLoc(), "Unsupported Operation for codegen!");
-    assert(false);
   }
+  if (auto op = dyn_cast<hir::TerminatorOp>(inst)) {
+    outBuffer << "\n//TerminatorOp\n";
+    return;
+  }
+  emitError(inst->getLoc(), "Unsupported Operation for codegen!");
+  assert(false);
 }
 
 void VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {

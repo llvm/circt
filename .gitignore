@@ -18,3 +18,4 @@ out.sv
 *.log
 *.pb
 xsim.dir
+.cache

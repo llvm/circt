@@ -31,9 +31,9 @@ def MemrefType: Type<CPred<"$_self.isa<MemrefType>()">,
   "HIR memref type ">,
   BuildableType<"MemrefType::get($_builder.getContext())">;
 
-def InterfaceType: Type<CPred<"$_self.isa<VrefType>()">,
+def InterfaceType: Type<CPred<"$_self.isa<InterfaceType>()">,
   "HIR interface type ">,
-  BuildableType<"VrefType::get($_builder.getContext())">;
+  BuildableType<"InterfaceType::get($_builder.getContext())">;
 
 def WireType: Type<CPred<"$_self.isa<WireType>()">,
   "HIR wire type ">,

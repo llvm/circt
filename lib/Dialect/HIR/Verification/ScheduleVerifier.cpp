@@ -168,7 +168,6 @@ private:
   bool inspectOp(hir::AllocOp op);
   bool inspectOp(hir::DelayOp op);
   bool inspectOp(hir::CallOp op);
-  bool inspectOp(hir::PopOp op);
   bool inspectOp(Operation *op);
   bool inspectBody(Block &body);
 
@@ -436,14 +435,10 @@ bool ScheduleVerifier::inspectOp(hir::CallOp op) {
   return ok;
 }
 
-bool ScheduleVerifier::inspectOp(hir::PopOp op) { return true; }
-
 bool ScheduleVerifier::inspectOp(Operation *inst) {
   if (auto op = dyn_cast<hir::ConstantOp>(inst)) {
     return inspectOp(op);
   } else if (auto op = dyn_cast<hir::CallOp>(inst)) {
-    return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::PopOp>(inst)) {
     return inspectOp(op);
   } else if (auto op = dyn_cast<hir::AllocOp>(inst)) {
     return inspectOp(op);

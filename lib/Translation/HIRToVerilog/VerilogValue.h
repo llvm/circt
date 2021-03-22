@@ -128,7 +128,6 @@ public:
   }
 
   string strMemrefArgDecl();
-  string strStreamArgDecl();
   string strMemrefInstDecl() const;
   Type getType() { return type; }
   ArrayRef<unsigned> getShape() const {
@@ -434,7 +433,7 @@ public:
     if (numAccess == 0)
       return "//Unused memref " + strWire() + ".\n";
     stringstream output;
-    auto str_addr = strMemrefAddr();
+    auto strAddr = strMemrefAddr();
     // print addr bus selector.
     unsigned addrWidth = calcAddrWidth(type.dyn_cast<MemrefType>());
     if (addrWidth > 0) {
@@ -647,10 +646,6 @@ public:
     usageInfo.numWrites[pos]++;
   }
 
-  string strStreamPop() const { return name + "_pop"; }
-  string strStreamData() const { return name + "_data"; }
-  string strStreamPush() const { return name + "_push"; }
-
   int getMaxDelay() const {
     if (maxDelay < 0 || maxDelay > 64) {
       fprintf(stderr, "unexpected maxDelay %d\n", maxDelay);
@@ -677,9 +672,9 @@ string VerilogValue::strMemrefInstDecl() const {
   string out_decls;
   MemrefType memrefTy = type.dyn_cast<MemrefType>();
   hir::Details::PortKind port = memrefTy.getPort();
-  string portString =
-      ((port == hir::Details::r) ? "r"
-                                 : (port == hir::Details::w) ? "w" : "rw");
+  string portString = ((port == hir::Details::r)   ? "r"
+                       : (port == hir::Details::w) ? "w"
+                                                   : "rw");
   unsigned addrWidth = calcAddrWidth(memrefTy);
   string distDimsStr = strMemrefDistDims();
   unsigned dataWidth = ::getBitWidth(memrefTy.getElementType());
@@ -701,39 +696,13 @@ string VerilogValue::strMemrefInstDecl() const {
   return out_decls;
 }
 
-string VerilogValue::strStreamArgDecl() {
-  string out;
-  StreamType streamTy = type.dyn_cast<StreamType>();
-  assert(streamTy);
-  hir::Details::PortKind port = streamTy.getPort();
-  string portString =
-      ((port == hir::Details::r) ? "r"
-                                 : (port == hir::Details::w) ? "w" : "rw");
-  out += "//StreamType : port = " + portString + ".\n";
-  unsigned dataWidth = ::getBitWidth(streamTy.getElementType());
-
-  // Bidirectional streams do not make much sense.
-  assert(port != hir::Details::rw);
-
-  if (port == hir::Details::r) {
-    out += "output wire " + strStreamPop();
-    out +=
-        ",\ninput wire[" + to_string(dataWidth - 1) + ":0] " + strStreamData();
-  } else if (port == hir::Details::w) {
-    out += "output wire " + strStreamPush();
-    out +=
-        ",\noutput wire[" + to_string(dataWidth - 1) + ":0] " + strStreamData();
-  }
-  return out;
-}
-
 string VerilogValue::strMemrefArgDecl() {
   string out;
   MemrefType memrefTy = type.dyn_cast<MemrefType>();
   hir::Details::PortKind port = memrefTy.getPort();
-  string portString =
-      ((port == hir::Details::r) ? "r"
-                                 : (port == hir::Details::w) ? "w" : "rw");
+  string portString = ((port == hir::Details::r)   ? "r"
+                       : (port == hir::Details::w) ? "w"
+                                                   : "rw");
   out += "//MemrefType : port = " + portString + ".\n";
   unsigned addrWidth = calcAddrWidth(memrefTy);
   string distDimsStr = strMemrefDistDims();
