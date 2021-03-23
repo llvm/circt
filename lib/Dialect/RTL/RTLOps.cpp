@@ -739,7 +739,7 @@ static void print(OpAsmPrinter &p, ArrayCreateOp op) {
 }
 
 void ArrayCreateOp::build(OpBuilder &b, OperationState &state,
-                          ArrayRef<Value> values) {
+                          ValueRange values) {
   assert(values.size() > 0 && "Cannot build array of zero elements");
   Type elemType = values[0].getType();
   assert(llvm::all_of(
@@ -777,7 +777,7 @@ static void printArrayConcatTypes(OpAsmPrinter &p, Operation *,
 }
 
 void ArrayConcatOp::build(OpBuilder &b, OperationState &state,
-                          ArrayRef<Value> values) {
+                          ValueRange values) {
   assert(!values.empty() && "Cannot build array of zero elements");
   ArrayType arrayTy = values[0].getType().cast<ArrayType>();
   Type elemTy = arrayTy.getElementType();
