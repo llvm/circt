@@ -1,4 +1,4 @@
-##===- CMakeLists.txt - build definitions for MSFT ------------*- cmake -*-===//
+##===- CMakeLists.txt - build def for MSFT tcl export ---------*- cmake -*-===//
 ##
 ## Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 ## See https://llvm.org/LICENSE.txt for license information.
@@ -7,22 +7,14 @@
 ##===----------------------------------------------------------------------===//
 
 file(GLOB globbed *.cpp)
-add_circt_dialect_library(CIRCTMSFT
+
+add_circt_translation_library(CIRCTMSFTExportTcl
   ${globbed}
-
-  ADDITIONAL_HEADER_DIRS
-  ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/MSFT
-
-  DEPENDS
-  CIRCTRTL
-  MLIRMSFTIncGen
-  MLIRMSFTExtraIncGen
   
-  LINK_COMPONENTS
-  Support
+  ADDITIONAL_HEADER_DIRS
 
   LINK_LIBS PUBLIC
-  MLIRIR
-   )
-
-add_subdirectory(TclExport)
+  CIRCTMSFT
+  CIRCTRTL
+  MLIRTranslation
+  )
