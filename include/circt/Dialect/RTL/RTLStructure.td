@@ -188,8 +188,28 @@ def InstanceOp : RTLOp<"instance",
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
     Operation *getReferencedModule();
+
+    /// Get the instances's name as StringAttr.
+    StringAttr getNameAttr() {
+      return (*this)->getAttrOfType<StringAttr>("instanceName");
+    }
+
+    /// Set the instance's name as StringAttr.
+    void setNameAttr(StringAttr name) {
+      (*this)->setAttr("instanceName", name);
+    }
+
+    /// Get the instances's name.
+    StringRef getName() {
+      return getNameAttr().getValue();
+    }
+
+    /// Set the instance's name.
+    void setName(StringRef name) {
+      setNameAttr(StringAttr::get(getContext(), name));
+    }
   }];
-  
+
   let assemblyFormat = [{
     $instanceName $moduleName `(` $inputs `)` attr-dict
       `:` functional-type($inputs, results)

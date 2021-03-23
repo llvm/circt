@@ -54,6 +54,17 @@ def InterfaceOp : SVOp<"interface",
         ::mlir::SymbolRefAttr::get(getContext(), sym_name()));
     }
     Type getSignalType(StringRef signalName);
+
+    // Get the interface's symbolic name as StringAttr.
+    StringAttr getNameAttr() {
+      return (*this)->getAttrOfType<StringAttr>(
+        ::mlir::SymbolTable::getSymbolAttrName());
+    }
+
+    // Get the interface's symbolic name.
+    StringRef getName() {
+      return getNameAttr().getValue();
+    }
   }];
 }
 
