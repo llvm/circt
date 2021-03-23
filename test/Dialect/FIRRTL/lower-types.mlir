@@ -490,6 +490,8 @@ firrtl.circuit "LowerVectors" {
   // CHECK: firrtl.connect %b_1, %a_1
 }
 
+// -----
+
 // https://github.com/llvm/circt/issues/656
 // Test lowering of SubAccessOp
 firrtl.circuit "LowerSubacessOp" {
@@ -513,6 +515,8 @@ firrtl.circuit "LowerSubacessOp" {
   // CHECK:   %8 = firrtl.mux(%7, %a_3, %5) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   // CHECK:   firrtl.connect %b, %8 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 }
+
+// -----
 
 // https://github.com/llvm/circt/issues/656
 // Test lowering of Bundle of vector types, b.wo <= a.wo[sel], b.valid <= a.valid[sel]
@@ -558,6 +562,7 @@ firrtl.circuit "LowerSubacessOp2" {
     // CHECK:   firrtl.connect %b_valid, %17 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 }
 
+// -----
 
 // https://github.com/llvm/circt/issues/656
 // Test lowering of SubAccessOp of SubAccessOp, b <= a[z[sel]]
@@ -620,6 +625,8 @@ firrtl.circuit "LowerSubacessOp3" {
     // CHECK:   firrtl.connect %b, %17 : !firrtl.flip<uint<2>>, !firrtl.uint<2>
 }
 
+// -----
+
 // https://github.com/llvm/circt/issues/656
 // Test lowering of vector of bundles, b.wo <= a[sel].wo, b.valid <= a[sel].valid
 firrtl.circuit "LowerSubacessOp4" {
@@ -652,6 +659,8 @@ firrtl.circuit "LowerSubacessOp4" {
    // CHECK:    firrtl.connect %b_wo, %10 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
    // CHECK:    firrtl.connect %b_valid, %11 : !firrtl.flip<uint<2>>, !firrtl.uint<2>
 }
+
+// -----
 
 // https://github.com/llvm/circt/issues/656
 // Test lowering of multidim vector types, SubAccessOp of SubAccessOp, b <= a[sel1][sel2]
