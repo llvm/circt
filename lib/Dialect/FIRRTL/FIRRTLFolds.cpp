@@ -550,9 +550,10 @@ static LogicalResult canonicalize(RegOp op, PatternRewriter &rewriter) {
         srcValue->moveBefore(op);
       // Remove the set of register.
       rewriter.eraseOp(set);
-      // Replace all connects using the register with the constant, and
-      // remove the reg.
+      // Replace all things using the register with the constant, and remove
+      // the reg.
       rewriter.replaceOp(op, srcValue->getResult(0));
+      return success();
     }
   }
   return failure();
@@ -561,6 +562,37 @@ static LogicalResult canonicalize(RegOp op, PatternRewriter &rewriter) {
 void RegOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                         MLIRContext *context) {
   addCanonicalizer<RegOp>(results, context, canonicalize);
+}
+
+static LogicalResult canonicalize(WireOp op, PatternRewriter &rewriter) {
+  // If the reg is only initialized with a constant or invalid, then we
+  // know that all the uses will always get that value.
+  if (auto set = findSingleConnectSet(op)) {
+    auto *srcValue = set.src().getDefiningOp();
+    if (srcValue &&
+        (isa<ConstantOp>(srcValue) || isa<InvalidValuePrimOp>(srcValue)) &&
+        // TODO: We could handle constants at other level of when's etc.
+        srcValue->getParentOp() == op->getParentOp() &&
+        // TODO: Could handle extension some day if we want to.
+        srcValue->getResult(0).getType() == op.getType()) {
+
+      // Make sure the constant dominates all users.
+      if (!srcValue->isBeforeInBlock(op))
+        srcValue->moveBefore(op);
+      // Remove the set of wire.
+      rewriter.eraseOp(set);
+      // Replace all things *using* the wire with the constant, and
+      // remove the wire.
+      rewriter.replaceOp(op, srcValue->getResult(0));
+      return success();
+    }
+  }
+  return failure();
+}
+
+void WireOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                         MLIRContext *context) {
+  addCanonicalizer<WireOp>(results, context, canonicalize);
 }
 
 //===----------------------------------------------------------------------===//

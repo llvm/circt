@@ -184,4 +184,5 @@ def WireOp : FIRRTLOp<"wire", []> {
   ];
 
   let assemblyFormat = "custom<ImplicitSSAName>(attr-dict) `:` type($result)";
+  let hasCanonicalizer = 1;
 }
