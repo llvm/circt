@@ -15,6 +15,7 @@
 #include "circt/Dialect/RTL/RTLOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Translation.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -55,7 +56,8 @@ struct Entity {
   /// Return the entity inside this instance.
   Optional<Entity> enter(InstanceOp inst);
   /// Emit a physical location tcl command.
-  LogicalResult emit(Operation *, StringRef, PhysLocationAttr);
+  LogicalResult emit(Operation *, StringRef attrName, StringRef instName,
+                     PhysLocationAttr);
   /// Emit the entity hierarchy.
   void emitPath();
 
@@ -63,6 +65,8 @@ struct Entity {
   Entity *parent;
   StringRef name;
   bool insideEmittedModule;
+
+  StringSet<> emittedAttrKeys;
 };
 } // anonymous namespace
 
@@ -79,8 +83,13 @@ Optional<Entity> Entity::enter(InstanceOp inst) {
 
 /// Emit tcl in the form of:
 /// "set_location_assignment MPDSP_X34_Y285_N0 -to $parent|fooInst|entityName"
-LogicalResult Entity::emit(Operation *op, StringRef attrKey,
+LogicalResult Entity::emit(Operation *op, StringRef attrKey, StringRef instName,
                            PhysLocationAttr pla) {
+  if (insideEmittedModule)
+    op->emitWarning(
+        "The placement information for this module has already been emitted. "
+        "Modules are required to only be instantiated once.");
+
   if (!attrKey.startswith_lower("loc:"))
     return op->emitError("Error in '")
            << attrKey << "' PhysLocation attribute. Expected loc:<entityName>.";
@@ -101,7 +110,7 @@ LogicalResult Entity::emit(Operation *op, StringRef attrKey,
     numCharacter = 'N';
     break;
   case DeviceType::DSP:
-    s.os << "MSDSP";
+    s.os << "MPDSP";
     numCharacter = 'N';
     break;
   }
@@ -113,8 +122,13 @@ LogicalResult Entity::emit(Operation *op, StringRef attrKey,
   // To which entity does this apply?
   s.os << " -to ";
   emitPath();
+  // If instance name is specified, add it in between the parent entity path and
+  // the child entity patch.
+  if (!instName.empty())
+    s.os << instName << '|';
   s.os << childEntity << '\n';
 
+  emittedAttrKeys.insert(attrKey);
   return success();
 }
 
@@ -129,10 +143,12 @@ void Entity::emitPath() {
 /// recusively, assume that all descendants are in the same entity. When this is
 /// no longer a sound assuption, we'll have to refactor this code. For now, only
 /// RTLModule instances create a new entity.
-static LogicalResult exportTcl(Entity entity, Operation *op) {
+static LogicalResult exportTcl(Entity &entity, Operation *op) {
   // Instances require a new child entity and trigger a descent of the
   // instantiated module in the new entity.
+  StringRef instName;
   if (auto inst = dyn_cast<rtl::InstanceOp>(op)) {
+    instName = inst.instanceName();
     Optional<Entity> inModule = entity.enter(inst);
     if (inModule && failed(exportTcl(*inModule, inst.getReferencedModule())))
       return failure();
@@ -140,10 +156,15 @@ static LogicalResult exportTcl(Entity entity, Operation *op) {
 
   // Iterate through 'op's attributes, looking for attributes which we
   // recognize.
-  for (NamedAttribute attr : op->getAttrs())
+  for (NamedAttribute attr : op->getAttrs()) {
+    if (entity.emittedAttrKeys.find(attr.first) != entity.emittedAttrKeys.end())
+      op->emitWarning("Attribute has already been emitted: '")
+          << attr.first << "'";
+
     if (auto loc = attr.second.dyn_cast<PhysLocationAttr>())
-      if (failed(entity.emit(op, attr.first, loc)))
+      if (failed(entity.emit(op, attr.first, instName, loc)))
         return failure();
+  }
 
   auto result = op->walk([&](Operation *innerOp) {
     if (innerOp != op && failed(exportTcl(entity, innerOp)))
@@ -166,7 +187,8 @@ LogicalResult circt::msft::exportQuartusTCL(ModuleOp module,
     if (!rtlMod)
       continue;
     os << "proc " << rtlMod.getName() << "_config { parent } {\n";
-    if (failed(exportTcl(Entity(state), rtlMod)))
+    Entity entity(state);
+    if (failed(exportTcl(entity, rtlMod)))
       return failure();
     os << "}\n\n";
   }
