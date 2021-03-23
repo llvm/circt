@@ -2514,7 +2514,7 @@ void SplitModuleEmitter::emitMLIRModule(ModuleOp module) {
   for (auto &op : *module.getBody()) {
     if (isa<RTLModuleOp>(op) || isa<RTLModuleExternOp>(op) ||
         isa<InterfaceOp>(op)) {
-      moduleOps.push_back({&op, perFileOps.size()});
+      moduleOps.push_back({&op, perFileOps.size(), /*filename=*/{}});
     } else if (isa<VerbatimOp>(op) || isa<IfDefProceduralOp>(op)) {
       perFileOps.push_back(&op);
     } else if (!isa<ModuleTerminatorOp>(op)) {
