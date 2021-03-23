@@ -26,7 +26,18 @@ void printTimeAndOffset(OpAsmPrinter &printer, Operation *op, Value tstart,
                         Value varOffset, IntegerAttr constOffset);
 
 // parser and printer for array address types.
-ParseResult parseArrayAccessTypes(mlir::OpAsmParser &parser,
-                                  SmallVectorImpl<Type> &addrTypes);
-void printArrayAccessTypes(OpAsmPrinter &printer, Operation *op,
-                           TypeRange addrTypes);
+
+ParseResult parseOptionalArrayAccessTypes(mlir::OpAsmParser &parser,
+                                          ArrayAttr &constAddrs,
+                                          SmallVectorImpl<Type> &varAddrTypes);
+void printOptionalArrayAccessTypes(OpAsmPrinter &printer, Operation *op,
+                                   ArrayAttr constAddrs,
+                                   TypeRange varAddrTypes);
+
+// parser and printer for array address indices.
+void printOptionalArrayAccess(OpAsmPrinter &printer, Operation *op,
+                              OperandRange varAddrs, ArrayAttr constAddrs);
+ParseResult
+parseOptionalArrayAccess(OpAsmParser &parser,
+                         SmallVectorImpl<OpAsmParser::OperandType> &varAddrs,
+                         ArrayAttr &constAddrs);
