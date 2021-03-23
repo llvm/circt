@@ -3,7 +3,6 @@ name: Build and Test
 on:
   push:
     branches:
-      - main
       - hir-dev
   pull_request:
     types: [assigned, opened, synchronize, reopened]
