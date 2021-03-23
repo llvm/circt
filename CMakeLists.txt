@@ -372,5 +372,3 @@ if (STANDALONE_INSTALL)
   message(STATUS "Setting an $ORIGIN-based RPATH on all executables")
   set_rpath_all_targets(${CMAKE_CURRENT_SOURCE_DIR})
 endif()
-
-message(STATUS "Using LLVM_BINARY_DIR = ${LLVM_BINARY_DIR}, LLVM_TOOLS_DIR = ${LLVM_TOOLS_DIR}")

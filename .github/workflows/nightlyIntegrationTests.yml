@@ -112,15 +112,13 @@ jobs:
           BUILD_TYPE: ${{ matrix.build-type }}
           BINDINGS_PYTHON: ${{matrix.bindings-python}}
         run: |
-          ls -alR llvm/build
           mkdir build && cd build
           cmake .. \
             -DBUILD_SHARED_LIBS=$BUILD_SHARED \
             -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
             -DLLVM_ENABLE_ASSERTIONS=$BUILD_ASSERT \
-            -DMLIR_DIR=llvm/install/lib/cmake/mlir \
-            -DLLVM_DIR=llvm/install/lib/cmake/llvm \
-            -DCMAKE_FIND_DEBUG_MODE=ON \
+            -DMLIR_DIR=../llvm/install/lib/cmake/mlir \
+            -DLLVM_DIR=../llvm/install/lib/cmake/llvm \
             -DCMAKE_LINKER=lld \
             -DCMAKE_C_COMPILER=$CC \
             -DCMAKE_CXX_COMPILER=$CXX \
