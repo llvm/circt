@@ -54,8 +54,7 @@ def PhysLocation : MSFT_Attr<"PhysLocation"> {
   let mnemonic = "physloc";
   let parameters = (ins
     "DeviceTypeAttr":$devType,
-    "uint64_t":$x, "uint64_t":$y, "uint64_t":$num,
-    "::llvm::StringRef":$entity);
+    "uint64_t":$x, "uint64_t":$y, "uint64_t":$num);
 }
 
 #endif // MSFT_TD

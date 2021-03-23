@@ -27,11 +27,9 @@ Attribute PhysLocationAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
   llvm::SMLoc loc = p.getCurrentLocation();
   StringRef devTypeStr;
   uint64_t x, y, num;
-  StringAttr entity;
   if (p.parseLess() || p.parseKeyword(&devTypeStr) || p.parseComma() ||
       p.parseInteger(x) || p.parseComma() || p.parseInteger(y) ||
-      p.parseComma() || p.parseInteger(num) || p.parseComma() ||
-      p.parseAttribute(entity) || p.parseGreater())
+      p.parseComma() || p.parseInteger(num) || p.parseGreater())
     return Attribute();
 
   Optional<DeviceType> devType = symbolizeDeviceType(devTypeStr);
@@ -40,15 +38,13 @@ Attribute PhysLocationAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
     return Attribute();
   }
   DeviceTypeAttr devTypeAttr = DeviceTypeAttr::get(ctxt, *devType);
-  auto phy =
-      PhysLocationAttr::get(ctxt, devTypeAttr, x, y, num, entity.getValue());
+  auto phy = PhysLocationAttr::get(ctxt, devTypeAttr, x, y, num);
   return phy;
 }
 
 void PhysLocationAttr::print(DialectAsmPrinter &p) const {
   p << "physloc<" << stringifyDeviceType(getDevType().getValue()) << ", "
-    << getX() << ", " << getY() << ", " << getNum() << ", \"" << getEntity()
-    << "\">";
+    << getX() << ", " << getY() << ", " << getNum() << '>';
 }
 
 Attribute MSFTDialect::parseAttribute(DialectAsmParser &p, Type type) const {

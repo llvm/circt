@@ -3,6 +3,6 @@
 rtl.module.extern @Foo()
 
 rtl.module @Top() {
-  // CHECK: rtl.instance "foo1" @Foo() {loc1 = #msft.physloc<M20K, 0, 0, 0, "memBank1">}
-  rtl.instance "foo1" @Foo() {loc1 = #msft.physloc<M20K, 0, 0, 0, "memBank1"> } : () -> ()
+  // CHECK: rtl.instance "foo1" @Foo() {"loc:memBank1" = #msft.physloc<M20K, 0, 0, 0>}
+  rtl.instance "foo1" @Foo() {"loc:memBank1" = #msft.physloc<M20K, 0, 0, 0> } : () -> ()
 }
