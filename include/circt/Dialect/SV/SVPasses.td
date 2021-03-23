@@ -36,7 +36,17 @@ def RTLStubExternalModules : Pass<"rtl-stub-external-modules",
 
   let constructor = "circt::sv::createRTLStubExternalModulesPass()";
   let dependentDialects = ["circt::sv::SVDialect"];
+}
 
+def RTLLegalizeNames : Pass<"rtl-legalize-names", "ModuleOp"> {
+  let summary = "Legalize module/variable names in rtl.modules and their bodies";
+  let description = [{
+    This pass modifies the names of modules and names such that they do not
+    cause conflicts with SV keywords. This is a good thing to run before
+    Verilog emission.
+  }];
+
+  let constructor = "circt::sv::createRTLLegalizeNamesPass()";
 }
 
 #endif // CIRCT_DIALECT_SV_SVPASSES
