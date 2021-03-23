@@ -538,18 +538,21 @@ static LogicalResult canonicalize(RegOp op, PatternRewriter &rewriter) {
   // know that all the uses will always get that value.
   if (auto set = findSingleConnectSet(op)) {
     auto *srcValue = set.src().getDefiningOp();
+    auto *regBlock = op->getBlock();
     if (srcValue &&
         (isa<ConstantOp>(srcValue) || isa<InvalidValuePrimOp>(srcValue)) &&
         // TODO: We could handle constants at other level of when's etc.
-        srcValue->getParentOp() == op->getParentOp() &&
+        srcValue->getBlock() == regBlock &&
         // TODO: Could handle extension some day if we want to.
         srcValue->getResult(0).getType() == op.getType()) {
 
       // Make sure the constant dominates all users.
-      if (!srcValue->isBeforeInBlock(op))
-        srcValue->moveBefore(op);
+      if (srcValue != &regBlock->front())
+        srcValue->moveBefore(&regBlock->front());
+
       // Remove the set of register.
       rewriter.eraseOp(set);
+
       // Replace all things using the register with the constant, and remove
       // the reg.
       rewriter.replaceOp(op, srcValue->getResult(0));
@@ -569,16 +572,18 @@ static LogicalResult canonicalize(WireOp op, PatternRewriter &rewriter) {
   // know that all the uses will always get that value.
   if (auto set = findSingleConnectSet(op)) {
     auto *srcValue = set.src().getDefiningOp();
+    auto *wireBlock = op->getBlock();
     if (srcValue &&
         (isa<ConstantOp>(srcValue) || isa<InvalidValuePrimOp>(srcValue)) &&
         // TODO: We could handle constants at other level of when's etc.
-        srcValue->getParentOp() == op->getParentOp() &&
+        srcValue->getBlock() == wireBlock &&
         // TODO: Could handle extension some day if we want to.
         srcValue->getResult(0).getType() == op.getType()) {
 
       // Make sure the constant dominates all users.
-      if (!srcValue->isBeforeInBlock(op))
-        srcValue->moveBefore(op);
+      if (srcValue != &wireBlock->front())
+        srcValue->moveBefore(&wireBlock->front());
+
       // Remove the set of wire.
       rewriter.eraseOp(set);
       // Replace all things *using* the wire with the constant, and
