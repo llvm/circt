@@ -225,20 +225,21 @@ static LogicalResult
 processBufferIntoMultipleFiles(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
                                StringRef annotationFilename,
                                StringRef outputDirectory) {
-  return processBuffer(std::move(ownedBuffer), annotationFilename, [&](OwningModuleRef module) {
-    // Finally, emit the output.
-    switch (outputFormat) {
-    case OutputMLIR:
-    case OutputDisabled:
-    case OutputVerilog:
-      llvm_unreachable("single-stream format must be handled elsewhere");
-    case OutputSplitVerilog:
-      return exportSplitVerilog(
-          module.get(), outputDirectory,
-          [](StringRef filename) { llvm::outs() << filename << "\n"; });
-    }
-    llvm_unreachable("unknown output format");
-  });
+  return processBuffer(
+      std::move(ownedBuffer), annotationFilename, [&](OwningModuleRef module) {
+        // Finally, emit the output.
+        switch (outputFormat) {
+        case OutputMLIR:
+        case OutputDisabled:
+        case OutputVerilog:
+          llvm_unreachable("single-stream format must be handled elsewhere");
+        case OutputSplitVerilog:
+          return exportSplitVerilog(
+              module.get(), outputDirectory,
+              [](StringRef filename) { llvm::outs() << filename << "\n"; });
+        }
+        llvm_unreachable("unknown output format");
+      });
 }
 
 int main(int argc, char **argv) {

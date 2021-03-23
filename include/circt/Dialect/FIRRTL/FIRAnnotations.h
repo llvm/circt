@@ -22,8 +22,8 @@ namespace circt {
 namespace firrtl {
 
 bool fromJSON(llvm::json::Value &value,
-              llvm::StringMap<ArrayAttr> &annotationMap,
-              llvm::json::Path path, MLIRContext *context);
+              llvm::StringMap<ArrayAttr> &annotationMap, llvm::json::Path path,
+              MLIRContext *context);
 
 } // namespace firrtl
 } // namespace circt
