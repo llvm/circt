@@ -21,6 +21,12 @@ These commands can be used to setup CIRCT project:
   instructions](https://mlir.llvm.org/getting_started/), including cmake and 
 ninja.
 
+If you plan to use the Python bindings, you should start by reading [the
+ instructions](https://mlir.llvm.org/docs/Bindings/Python/#building) for building
+the MLIR Python bindings, which describe extra dependencies, CMake variables,
+and helpful Python development practices. Note the extra CMake variables, which
+you will need to specify in step 3) below.
+
 2) **Check out LLVM and CIRCT repos.**  CIRCT contains LLVM as a git
 submodule.  The LLVM repo here includes staged changes to MLIR which
 may be necessary to support CIRCT.  It also represents the version of
@@ -85,6 +91,8 @@ To get something that runs fast, use `-DCMAKE_BUILD_TYPE=Release` or
 you want debug info to go with it.  `Release` mode makes a very large difference
 in performance.
 
+If you plan to use the Python bindings, you should also specify
+`-DCIRCT_BINDINGS_PYTHON_ENABLED=ON`.
 
 5) **Optionally configure your environment**:
 
