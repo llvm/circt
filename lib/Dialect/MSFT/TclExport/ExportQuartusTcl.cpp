@@ -25,6 +25,8 @@ using namespace msft;
 // TODO: Currently assumes Stratix 10 and QuartusPro. Make more general.
 
 namespace {
+/// Utility struct to assist in output and track other relevent state which are
+/// not specific to the entity hierarchy (global WRT to the entity hierarchy).
 struct TclOutputState {
   TclOutputState(llvm::raw_ostream &os) : os(os) {}
 
@@ -34,9 +36,15 @@ struct TclOutputState {
     return os;
   };
 
+  /// Track which modules have been examined so we can issue warnings for
+  /// instance-specific annotations if we write out the same one twice.
   SmallPtrSet<Operation *, 32> modulesEmitted;
 };
+} // anonymous namespace
 
+namespace {
+/// Represents a Verilog 'entity' -- a unique identifier which locates a
+/// particular instance in the module-instance hierarchy.
 struct Entity {
   Entity(TclOutputState &s)
       : s(s), parent(nullptr), name("$parent"), insideEmittedModule(false) {}
@@ -44,9 +52,11 @@ struct Entity {
       : s(parent->s), parent(parent), name(name),
         insideEmittedModule(insideEmittedModule) {}
 
+  /// Return the entity inside this instance.
   Optional<Entity> enter(InstanceOp inst);
+  /// Emit a physical location tcl command.
   LogicalResult emit(Operation *, StringRef, PhysLocationAttr);
-
+  /// Emit the entity hierarchy.
   void emitPath();
 
   TclOutputState &s;
@@ -58,7 +68,7 @@ struct Entity {
 
 Optional<Entity> Entity::enter(InstanceOp inst) {
   auto mod = dyn_cast_or_null<rtl::RTLModuleOp>(inst.getReferencedModule());
-  if (!mod)
+  if (!mod) // Could be an extern module, which we should ignore.
     return {};
   bool modEmitted = insideEmittedModule ||
                     s.modulesEmitted.find(mod) != s.modulesEmitted.end();
@@ -67,16 +77,23 @@ Optional<Entity> Entity::enter(InstanceOp inst) {
   return Entity(this, inst.instanceName(), modEmitted);
 }
 
+/// Emit tcl in the form of:
+/// "set_location_assignment MPDSP_X34_Y285_N0 -to $parent|fooInst|entityName"
 LogicalResult Entity::emit(Operation *op, StringRef attrKey,
                            PhysLocationAttr pla) {
-  if (!attrKey.startswith_lower("loc:")) {
-    op->emitError("Error in '")
-        << attrKey << "' PhysLocation attribute. Expected loc:<entityName>.";
-    return failure();
-  }
+  if (!attrKey.startswith_lower("loc:"))
+    return op->emitError("Error in '")
+           << attrKey << "' PhysLocation attribute. Expected loc:<entityName>.";
+
   StringRef childEntity = attrKey.substr(4);
+  if (childEntity.empty())
+    return op->emitError("Entity name cannot be empty in 'loc:<entityName>'");
+
   s.indent() << "set_location_assignment ";
 
+  // Different devices have different 'number' letters (the 'N' in 'N0'). M20Ks
+  // and DSPs happen to have the same one, probably because they never co-exist
+  // at the same location.
   char numCharacter;
   switch (pla.getDevType().getValue()) {
   case DeviceType::M20K:
@@ -89,8 +106,11 @@ LogicalResult Entity::emit(Operation *op, StringRef attrKey,
     break;
   }
 
+  // Write out the rest of the location info.
   s.os << "_X" << pla.getX() << "_Y" << pla.getY() << "_" << numCharacter
        << pla.getNum();
+
+  // To which entity does this apply?
   s.os << " -to ";
   emitPath();
   s.os << childEntity << '\n';
@@ -101,16 +121,25 @@ LogicalResult Entity::emit(Operation *op, StringRef attrKey,
 void Entity::emitPath() {
   if (parent)
     parent->emitPath();
+  // Names are separated by '|'.
   s.os << name << "|";
 }
 
+/// Export the TCL for a particular entity, corresponding to op. Do this
+/// recusively, assume that all descendants are in the same entity. When this is
+/// no longer a sound assuption, we'll have to refactor this code. For now, only
+/// RTLModule instances create a new entity.
 static LogicalResult exportTcl(Entity entity, Operation *op) {
+  // Instances require a new child entity and trigger a descent of the
+  // instantiated module in the new entity.
   if (auto inst = dyn_cast<rtl::InstanceOp>(op)) {
     Optional<Entity> inModule = entity.enter(inst);
     if (inModule && failed(exportTcl(*inModule, inst.getReferencedModule())))
       return failure();
   }
 
+  // Iterate through 'op's attributes, looking for attributes which we
+  // recognize.
   for (NamedAttribute attr : op->getAttrs())
     if (auto loc = attr.second.dyn_cast<PhysLocationAttr>())
       if (failed(entity.emit(op, attr.first, loc)))
@@ -124,6 +153,10 @@ static LogicalResult exportTcl(Entity entity, Operation *op) {
   return failure(result.wasInterrupted());
 }
 
+/// Write out all the relevant tcl commands. Create one 'proc' per module (since
+/// we don't know which one will be the 'top' module). Said procedure takes the
+/// parent entity name since we don't assume that the created module is the top
+/// level for the entire design.
 LogicalResult circt::msft::exportQuartusTCL(ModuleOp module,
                                             llvm::raw_ostream &os) {
   TclOutputState state(os);
