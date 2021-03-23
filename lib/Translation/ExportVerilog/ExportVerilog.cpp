@@ -299,24 +299,6 @@ enum VerilogPrecedence {
 };
 } // end anonymous namespace
 
-/// Return a StringSet that contains all of the reserved names (e.g. Verilog
-/// keywords) that we need to avoid for fear of name conflicts.
-struct ReservedWordsCreator {
-  static void *call() {
-    auto set = std::make_unique<StringSet<>>();
-    static const char *const reservedWords[] = {
-#include "ReservedWords.def"
-    };
-    for (auto *word : reservedWords)
-      set->insert(word);
-    return set.release();
-  }
-};
-
-/// A StringSet that contains all of the reserved names (e.g., Verilog and VHDL
-/// keywords) that we need to avoid to prevent naming conflicts.
-static llvm::ManagedStatic<StringSet<>, ReservedWordsCreator> reservedWords;
-
 /// Return the location information as a (potentially empty) string.
 static std::string
 getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
@@ -409,38 +391,6 @@ getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
   }
 
   return sstr.str();
-}
-
-/// Given string \p origName, generate a new name if it conflicts with any
-/// keyword or any other name in the set \p recordNames. Use the int \p
-/// nextGeneratedNameID as a counter for suffix. Update the \p recordNames with
-/// the generated name and return the StringRef.
-StringRef resolveKeywordConflict(StringRef origName,
-                                 llvm::StringSet<> &recordNames,
-                                 size_t &nextGeneratedNameID) {
-  auto name = origName;
-  // Get the list of reserved words we need to avoid.  We could prepopulate this
-  // into the used words cache, but it is large and immutable, so we just query
-  // it when needed.
-  SmallVector<char, 16> nameBuffer(name.begin(), name.end());
-  nameBuffer.push_back('_');
-  auto baseSize = nameBuffer.size();
-
-  while (1) {
-    // Loop until we get a name that is not a keyword and is unique.
-    if (!reservedWords->count(name)) {
-      auto itAndInserted = recordNames.insert(name);
-      if (itAndInserted.second)
-        return itAndInserted.first->getKey();
-    }
-    // We need to auto-unique it.
-    auto suffix = llvm::utostr(nextGeneratedNameID++);
-    nameBuffer.append(suffix.begin(), suffix.end());
-    name = StringRef(nameBuffer.data(), nameBuffer.size());
-
-    // Chop off the suffix and try again until we get a unique name..
-    nameBuffer.resize(baseSize);
-  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -673,44 +623,7 @@ public:
 /// tracked.  It can also be null for things like outputs which are not tracked
 /// in the nameTable.
 StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
-  if (name.empty())
-    name = "_T";
-
-  auto isValidVerilogCharacter = [](char ch) -> bool {
-    return isalpha(ch) || isdigit(ch) || ch == '_';
-  };
-
-  // Check to see if the name consists of all-valid identifiers.  If not, we
-  // need to escape them.
-  for (char ch : name) {
-    if (isValidVerilogCharacter(ch))
-      continue;
-
-    // Otherwise, we need to escape it.
-    SmallString<16> tmpName;
-    for (char ch : name) {
-      if (isValidVerilogCharacter(ch))
-        tmpName += ch;
-      else if (ch == ' ' || ch == '.')
-        tmpName += '_';
-      else {
-        tmpName += llvm::utohexstr((unsigned char)ch);
-      }
-    }
-    return addName(valueOrOp, tmpName);
-  }
-
-  // Check to see if this name is valid.  The first character cannot be a
-  // number or some other weird thing.  If it is, start with an underscore.
-  if (!isalpha(name.front()) && name.front() != '_') {
-    SmallString<16> tmpName("_");
-    tmpName += name;
-    return addName(valueOrOp, tmpName);
-  }
-
-  // Make sure the new valid name does not conflict with any existing names.
-  auto updatedName =
-      resolveKeywordConflict(name, usedNames, nextGeneratedNameID);
+  auto updatedName = sanitizeName(name, usedNames, nextGeneratedNameID);
   if (valueOrOp)
     nameTable[valueOrOp] = updatedName;
   return updatedName;
