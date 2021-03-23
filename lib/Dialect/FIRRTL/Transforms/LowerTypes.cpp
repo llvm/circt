@@ -827,6 +827,8 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
     for (auto bundleElem : vectorOfBundleType.getElements()) {
       StringAttr fieldName = bundleElem.name;
       auto iter = subfieldUsers.find(fieldName);
+      // If one of the bundle elements has no use, we can ignore it, then there
+      // is no entry for the field name in the map
       if (iter != subfieldUsers.end()) {
         setBundleLowering(iter->getSecond().input(), fieldName.getValue(),
                           muxTreeVec[elemNum]);
