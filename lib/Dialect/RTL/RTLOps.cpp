@@ -125,8 +125,12 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   for (auto elt : ports) {
     if (elt.isOutput())
       resultTypes.push_back(elt.type);
-    else
+    else {
+      if (elt.direction == PortDirection::INOUT &&
+          !elt.type.isa<rtl::InOutType>())
+        elt.type = rtl::InOutType::get(elt.type);
       argTypes.push_back(elt.type);
+    }
   }
 
   // Record the argument and result types as an attribute.
