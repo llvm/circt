@@ -16,7 +16,6 @@ add_circt_dialect_library(CIRCTMSFT
   DEPENDS
   CIRCTRTL
   MLIRMSFTIncGen
-  MLIRMSFTExtraIncGen
   
   LINK_COMPONENTS
   Support
@@ -26,3 +25,4 @@ add_circt_dialect_library(CIRCTMSFT
    )
 
 add_subdirectory(TclExport)
+add_dependencies(circt-headers MLIRMSFTIncGen)

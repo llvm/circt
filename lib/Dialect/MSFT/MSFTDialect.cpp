@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/MSFT/MSFTDialect.h"
-
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -25,9 +24,7 @@ using namespace msft;
 
 MSFTDialect::MSFTDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context,
-              ::mlir::TypeID::get<MSFTDialect>()) {
-  registerAttributes();
-}
+              ::mlir::TypeID::get<MSFTDialect>()) {}
 
 MSFTDialect::~MSFTDialect() {}
 
@@ -43,5 +40,3 @@ Operation *MSFTDialect::materializeConstant(OpBuilder &builder, Attribute value,
   // Placeholder
   return nullptr;
 }
-
-#include "circt/Dialect/MSFT/MSFTEnums.cpp.inc"
