@@ -16,6 +16,7 @@ add_circt_dialect_library(CIRCTMSFT
   DEPENDS
   CIRCTRTL
   MLIRMSFTIncGen
+  MLIRMSFTExtraIncGen
   
   LINK_COMPONENTS
   Support
