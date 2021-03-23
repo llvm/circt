@@ -18,6 +18,7 @@
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Affine/IR/AffineValueMap.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -629,7 +630,7 @@ void addSinkOps(handshake::FuncOp f, OpBuilder &rewriter) {
       // later remove We have already replaced these ops with their handshake
       // equivalents
       // TODO: should we use other indicator for op that has been erased?
-      if (!isa<mlir::CondBranchOp, mlir::BranchOp, mlir::LoadOp,
+      if (!isa<mlir::CondBranchOp, mlir::BranchOp, memref::LoadOp,
                mlir::AffineReadOpInterface, mlir::AffineForOp>(op)) {
 
         if (op.getNumResults() > 0) {
@@ -806,7 +807,7 @@ void checkMergePredecessors(Operation *op) {
 void checkDataflowConversion(handshake::FuncOp f) {
   for (Block &block : f) {
     for (Operation &op : block) {
-      if (!isa<mlir::CondBranchOp, mlir::BranchOp, mlir::LoadOp,
+      if (!isa<mlir::CondBranchOp, mlir::BranchOp, memref::LoadOp,
                mlir::ConstantOp, mlir::AffineReadOpInterface,
                mlir::AffineForOp>(op)) {
         if (op.getNumResults() > 0) {
@@ -838,9 +839,9 @@ Value getBlockControlValue(Block *block) {
 }
 
 Value getOpMemRef(Operation *op) {
-  if (auto memOp = dyn_cast<mlir::LoadOp>(op))
+  if (auto memOp = dyn_cast<memref::LoadOp>(op))
     return memOp.getMemRef();
-  if (auto memOp = dyn_cast<mlir::StoreOp>(op))
+  if (auto memOp = dyn_cast<memref::StoreOp>(op))
     return memOp.getMemRef();
   if (isa<mlir::AffineReadOpInterface, mlir::AffineWriteOpInterface>(op)) {
     MemRefAccess access(op);
@@ -851,7 +852,7 @@ Value getOpMemRef(Operation *op) {
 }
 
 bool isMemoryOp(Operation *op) {
-  return isa<mlir::LoadOp, mlir::StoreOp, mlir::AffineReadOpInterface,
+  return isa<memref::LoadOp, memref::StoreOp, mlir::AffineReadOpInterface,
              mlir::AffineWriteOpInterface>(op);
 }
 
@@ -877,7 +878,7 @@ MemRefToMemoryAccessOp replaceMemoryOps(handshake::FuncOp f,
         Value memref = getOpMemRef(&op);
         Operation *newOp = nullptr;
 
-        if (mlir::LoadOp loadOp = dyn_cast<mlir::LoadOp>(op)) {
+        if (memref::LoadOp loadOp = dyn_cast<memref::LoadOp>(op)) {
           // Get operands which correspond to address indices
           // This will add all operands except alloc
           SmallVector<Value, 8> operands(loadOp.getIndices());
@@ -885,7 +886,7 @@ MemRefToMemoryAccessOp replaceMemoryOps(handshake::FuncOp f,
           newOp =
               rewriter.create<handshake::LoadOp>(op.getLoc(), memref, operands);
           op.getResult(0).replaceAllUsesWith(newOp->getResult(0));
-        } else if (mlir::StoreOp storeOp = dyn_cast<mlir::StoreOp>(op)) {
+        } else if (memref::StoreOp storeOp = dyn_cast<memref::StoreOp>(op)) {
           // Get operands which correspond to address indices
           // This will add all operands except alloc and data
           SmallVector<Value, 8> operands(storeOp.getIndices());
@@ -1010,7 +1011,7 @@ void removeAllocOps(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
 
   for (Block &block : f)
     for (Operation &op : block) {
-      if (isa<AllocOp>(op)) {
+      if (isa<memref::AllocOp>(op)) {
         assert(op.getResult(0).hasOneUse());
         for (auto &u : op.getResult(0).getUses()) {
           Operation *useOp = u.getOwner();
@@ -1033,7 +1034,7 @@ void removeRedundantSinks(handshake::FuncOp f,
     for (Operation &op : block) {
       if (isa<SinkOp>(op))
         if (!op.getOperand(0).hasOneUse() ||
-            isa<AllocOp>(op.getOperand(0).getDefiningOp()))
+            isa<memref::AllocOp>(op.getOperand(0).getDefiningOp()))
           redundantSinks.push_back(&op);
     }
   for (unsigned i = 0, e = redundantSinks.size(); i != e; ++i) {

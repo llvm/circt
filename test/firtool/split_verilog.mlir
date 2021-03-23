@@ -5,7 +5,7 @@
 // RUN: FileCheck %s --check-prefix=VERILOG-PLL < %t/pll.v
 
 sv.verbatim "// I'm everywhere"
-sv.ifdef "VERILATOR" {
+sv.ifdef.procedural "VERILATOR" {
   sv.verbatim "// Hello"
 } else {
   sv.verbatim "// World"

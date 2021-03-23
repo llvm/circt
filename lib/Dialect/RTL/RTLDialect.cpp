@@ -57,11 +57,7 @@ RTLDialect::RTLDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context,
               ::mlir::TypeID::get<RTLDialect>()) {
 
-  // Register types.
-  addTypes<
-#define GET_TYPEDEF_LIST
-#include "circt/Dialect/RTL/RTLTypes.cpp.inc"
-      >();
+  registerTypes();
 
   // Register operations.
   addOperations<

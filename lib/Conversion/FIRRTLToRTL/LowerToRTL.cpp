@@ -264,9 +264,10 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
     std::string define = "`define ";
     if (!defineFalse) {
       assert(defineTrue && "didn't define anything");
-      b.create<sv::IfDefOp>(guard, [&]() { emitString(define + defineTrue); });
+      b.create<sv::IfDefProceduralOp>(
+          guard, [&]() { emitString(define + defineTrue); });
     } else {
-      b.create<sv::IfDefOp>(
+      b.create<sv::IfDefProceduralOp>(
           guard,
           [&]() {
             if (defineTrue)
@@ -321,7 +322,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
     emitGuardedDefine("RANDOMIZE_DELAY", nullptr, "RANDOMIZE_DELAY 0.002");
 
     emitString("\n// Define INIT_RANDOM_PROLOG_ for use in our modules below.");
-    b.create<sv::IfDefOp>(
+    b.create<sv::IfDefProceduralOp>(
         "RANDOMIZE",
         [&]() {
           emitGuardedDefine(
@@ -334,7 +335,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
   if (state.used_RANDOMIZE_GARBAGE_ASSIGN) {
     emitString("\n// RANDOMIZE_GARBAGE_ASSIGN enable range checks for mem "
                "assignments.");
-    b.create<sv::IfDefOp>(
+    b.create<sv::IfDefProceduralOp>(
         "RANDOMIZE_GARBAGE_ASSIGN",
         [&]() {
           emitString(

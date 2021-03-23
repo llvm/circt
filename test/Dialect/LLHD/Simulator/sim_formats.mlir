@@ -1,8 +1,8 @@
-// RUN: llhd-sim %s -T 5000 --trace-format=full | FileCheck %s --check-prefix=FULL
-// RUN: llhd-sim %s -T 5000 --trace-format=reduced | FileCheck %s --check-prefix=REDUCED
-// RUN: llhd-sim %s -T 5000 --trace-format=merged | FileCheck %s --check-prefix=MERGED
-// RUN: llhd-sim %s -T 5000 --trace-format=merged-reduce | FileCheck %s --check-prefix=MERGEDRED
-// RUN: llhd-sim %s -T 5000 --trace-format=named-only | FileCheck %s --check-prefix=NAMED
+// RUN: llhd-sim %s -T 5000 --trace-format=full -shared-libs=%shlibdir/libcirct-llhd-signals-runtime-wrappers%shlibext | FileCheck %s --check-prefix=FULL
+// RUN: llhd-sim %s -T 5000 --trace-format=reduced -shared-libs=%shlibdir/libcirct-llhd-signals-runtime-wrappers%shlibext | FileCheck %s --check-prefix=REDUCED
+// RUN: llhd-sim %s -T 5000 --trace-format=merged -shared-libs=%shlibdir/libcirct-llhd-signals-runtime-wrappers%shlibext | FileCheck %s --check-prefix=MERGED
+// RUN: llhd-sim %s -T 5000 --trace-format=merged-reduce -shared-libs=%shlibdir/libcirct-llhd-signals-runtime-wrappers%shlibext | FileCheck %s --check-prefix=MERGEDRED
+// RUN: llhd-sim %s -T 5000 --trace-format=named-only -shared-libs=%shlibdir/libcirct-llhd-signals-runtime-wrappers%shlibext | FileCheck %s --check-prefix=NAMED
 
 // FULL: 0ps 0d 0e  root/1  0x01
 // FULL: 0ps 0d 0e  root/foo/s  0x01

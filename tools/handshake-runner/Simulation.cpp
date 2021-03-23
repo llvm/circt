@@ -17,6 +17,7 @@
 
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/Simulation.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 
 #define DEBUG_TYPE "runner"
 
@@ -148,8 +149,8 @@ unsigned allocateMemRef(mlir::MemRefType type, std::vector<Any> &in,
   return ptr;
 }
 
-void executeOp(mlir::LoadOp op, std::vector<Any> &in, std::vector<Any> &out,
-               std::vector<std::vector<Any>> &store) {
+void executeOp(mlir::memref::LoadOp op, std::vector<Any> &in,
+               std::vector<Any> &out, std::vector<std::vector<Any>> &store) {
   ArrayRef<int64_t> shape = op.getMemRefType().getShape();
   unsigned address = 0;
   for (unsigned i = 0; i < shape.size(); i++) {
@@ -165,8 +166,8 @@ void executeOp(mlir::LoadOp op, std::vector<Any> &in, std::vector<Any> &out,
   out[0] = result;
 }
 
-void executeOp(mlir::StoreOp op, std::vector<Any> &in, std::vector<Any> &out,
-               std::vector<std::vector<Any>> &store) {
+void executeOp(mlir::memref::StoreOp op, std::vector<Any> &in,
+               std::vector<Any> &out, std::vector<std::vector<Any>> &store) {
   ArrayRef<int64_t> shape = op.getMemRefType().getShape();
   unsigned address = 0;
   for (unsigned i = 0; i < shape.size(); i++) {
@@ -341,19 +342,19 @@ void executeFunction(mlir::FuncOp &toplevel,
       i++;
     }
     if (executeStdOp(op, inValues, outValues)) {
-    } else if (auto allocOp = dyn_cast<mlir::AllocOp>(op)) {
+    } else if (auto allocOp = dyn_cast<mlir::memref::AllocOp>(op)) {
       outValues[0] =
           allocateMemRef(allocOp.getType(), inValues, store, storeTimes);
       unsigned ptr = any_cast<unsigned>(outValues[0]);
       storeTimes[ptr] = time;
-    } else if (auto loadOp = dyn_cast<mlir::LoadOp>(op)) {
+    } else if (auto loadOp = dyn_cast<mlir::memref::LoadOp>(op)) {
       executeOp(loadOp, inValues, outValues, store);
       unsigned ptr = any_cast<unsigned>(inValues[0]);
       double storeTime = storeTimes[ptr];
       LLVM_DEBUG(dbgs() << "STORE: " << storeTime << "\n");
       time = std::max(time, storeTime);
       storeTimes[ptr] = time;
-    } else if (auto storeOp = dyn_cast<mlir::StoreOp>(op)) {
+    } else if (auto storeOp = dyn_cast<mlir::memref::StoreOp>(op)) {
       executeOp(storeOp, inValues, outValues, store);
       unsigned ptr = any_cast<unsigned>(inValues[1]);
       double storeTime = storeTimes[ptr];

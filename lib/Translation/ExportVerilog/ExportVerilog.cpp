@@ -1736,6 +1736,7 @@ private:
   }
   LogicalResult visitSV(IfOp op);
   LogicalResult visitSV(AlwaysOp op);
+  LogicalResult visitSV(AlwaysCombOp op);
   LogicalResult visitSV(AlwaysFFOp op);
   LogicalResult visitSV(InitialOp op);
   LogicalResult visitSV(CaseZOp op);
@@ -2206,6 +2207,15 @@ LogicalResult StmtEmitter::visitSV(AlwaysOp op) {
   return success();
 }
 
+LogicalResult StmtEmitter::visitSV(AlwaysCombOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  indent() << "always_comb";
+  emitBlockAsStatement(op.getBodyBlock(), ops, "always_comb");
+  return success();
+}
+
 LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
@@ -2597,7 +2607,7 @@ void SplitModuleEmitter::emitMLIRModule(ModuleOp module) {
       emitFile(intfOp.sym_name(), [&](VerilogEmitterState &state) {
         ModuleEmitter(state).emitStatement(&op);
       });
-    else if (isa<VerbatimOp>(op) || isa<IfDefOp>(op))
+    else if (isa<VerbatimOp>(op) || isa<IfDefProceduralOp>(op))
       perFileOps.push_back(&op);
     else if (!isa<ModuleTerminatorOp>(op)) {
       op.emitError("unknown operation");

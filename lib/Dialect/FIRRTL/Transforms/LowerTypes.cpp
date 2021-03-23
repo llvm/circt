@@ -113,10 +113,12 @@ public:
   void visitDecl(MemOp op);
   void visitDecl(RegOp op);
   void visitDecl(WireOp op);
+  void visitDecl(RegResetOp op);
   void visitExpr(InvalidValuePrimOp op);
   void visitExpr(SubfieldOp op);
   void visitExpr(SubindexOp op);
   void visitExpr(SubaccessOp op);
+  void visitExpr1(SubaccessOp op);
   void visitStmt(ConnectOp op);
 
 private:
@@ -572,12 +574,47 @@ void TypeLoweringVisitor::visitDecl(RegOp op) {
 
   // Loop over the leaf aggregates.
   for (auto field : fieldTypes) {
-    SmallString<16> loweredName(op.nameAttr().getValue());
-    loweredName += field.suffix;
-    setBundleLowering(
-        result, StringRef(field.suffix).drop_front(1),
-        builder->create<RegOp>(field.getPortType(), op.clockVal(),
-                               builder->getStringAttr(loweredName)));
+    StringAttr loweredName;
+    if (auto nameAttr = op.nameAttr())
+      loweredName =
+          builder->getStringAttr(nameAttr.getValue().str() + field.suffix);
+
+    setBundleLowering(result, StringRef(field.suffix).drop_front(1),
+                      builder->create<RegOp>(field.getPortType(), op.clockVal(),
+                                             loweredName));
+  }
+
+  // Remember to remove the original op.
+  opsToRemove.push_back(op);
+}
+
+/// Lower a RegReset op with a bundle to multiple non-bundled RegResets.
+void TypeLoweringVisitor::visitDecl(RegResetOp op) {
+  Value result = op.result();
+
+  // Attempt to get the bundle types, potentially unwrapping an outer flip type
+  // that wraps the whole bundle.
+  FIRRTLType resultType = getCanonicalAggregateType(result.getType());
+
+  // If the RegReset is not a bundle, there is nothing to do.
+  if (!resultType)
+    return;
+
+  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
+  flattenType(resultType, "", false, fieldTypes);
+
+  // Loop over the leaf aggregates.
+  for (auto field : fieldTypes) {
+    StringAttr loweredName;
+    if (auto nameAttr = op.nameAttr())
+      loweredName =
+          builder->getStringAttr(nameAttr.getValue().str() + field.suffix);
+    auto suffix = StringRef(field.suffix).drop_front(1);
+    auto resetValLowered = getBundleLowering(op.resetValue(), suffix);
+    setBundleLowering(result, suffix,
+                      builder->create<RegResetOp>(
+                          field.getPortType(), op.clockVal(), op.resetSignal(),
+                          resetValLowered, loweredName));
   }
 
   // Remember to remove the original op.
@@ -588,7 +625,7 @@ void TypeLoweringVisitor::visitDecl(RegOp op) {
 //   a) the input value is from a module block argument
 //   b) the input value is from another subfield operation's result
 //   c) the input value is from an instance
-//   d) the input value is from a register
+//   d) the input value is from a duplex op, such as a wire or register
 //
 // This is accomplished by storing value and suffix mappings that point to the
 // flattened value. If the subfield op is accessing the leaf field of a bundle,
@@ -608,6 +645,7 @@ void TypeLoweringVisitor::visitExpr(SubfieldOp op) {
 
   for (auto field : fieldTypes) {
     // Look up the mapping for this suffix.
+    llvm::dbgs()<<"\n get bundle lowering for ::"<<field.suffix<<":: input:"<< input;
     auto newValue = getBundleLowering(input, field.suffix);
 
     // The prefix is the field name and possibly field separator.
@@ -679,7 +717,115 @@ static IntegerAttr getIntAttr(const APInt &value, MLIRContext *context) {
 // x = a[index] is lowered to ::
 // x = index == 3 ? a_3 : index == 2 ? a_2 : index == 1 ? a_1:a_0
 // TODO: This currently does not handle assignment to vectors.
-void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
+void TypeLoweringVisitor::visitExpr(SubaccessOp op){
+  Value inputVector = op.input();
+  if (auto flipV = inputVector.getType().cast<FIRRTLType>().dyn_cast<FlipType>()) {
+    builder->emitError(
+        "Lowering of dynamic assignment to vectors not supported");
+    return;
+  }
+  FIRRTLType vectorElementType =
+    inputVector.getType().cast<FIRRTLType>().cast<FVectorType>().getElementType();
+  if (vectorElementType.isa<FVectorType>()) {
+    //setBundleLowering(op.result(), StringRef(""), inputVector);
+    opsToRemove.push_back(op);
+    return;
+  }
+  // Record all the indices used for a multidim access.
+  SmallVector<SubaccessOp, 8> allDims(1, op);
+  // This is used to build the loop index vector and check all possible values
+  // of the loop indices and select the appropriate vector element after
+  // flattening.
+  SmallVector<size_t, 8> indicesRange(1, 1);
+
+  while (auto multiDimOp = inputVector.getDefiningOp<SubaccessOp>()){
+    allDims.push_back(multiDimOp);
+    indicesRange.push_back(0);
+    inputVector = multiDimOp.input();
+  }
+  SmallVector<Value, 8> loweredVector;
+  // Flatten the vector and bundle type recursively and populate the
+  // loweredVector with individual elements after lowering. For example, a[2] is
+  // lowered to a_0,a_1 and  a: {data, valid}[2] is lowered to a_0_data,
+  // a_0_valid, a_1_data, a_1_valid, in that order and the order is important.
+  getAllBundleLowerings(inputVector, loweredVector);
+
+  llvm::dbgs() << "\n multidim::\n";
+  for (auto l : loweredVector)
+    l.dump();
+
+  // This records all the mux trees generated after lowering op.
+  SmallVector<Value, 8> muxTreeVec(1,loweredVector[0]);
+  DenseMap<StringRef, SubfieldOp> subfieldUsers;
+  BundleType vectorOfBundleType = vectorElementType.dyn_cast<BundleType>();
+  if (vectorOfBundleType ){
+    // If the vector element is not a bundle, then only one mux tree generated, else
+    // one mux tree for each bundle element. This loop initializes the mux tree
+    // with the first element of the vector (for each element of the bundle).
+    for (size_t elem = 1; elem < vectorOfBundleType.getNumElements(); elem++)
+      muxTreeVec.push_back(loweredVector[elem]);
+    // User of a vector of bundles is a SubfieldOp.
+    for (auto u : op->getUsers())
+      if (auto subField = dyn_cast<SubfieldOp>(u))
+        subfieldUsers[subField.fieldname()] = subField;
+  }
+
+  Value constTrue = builder->create<ConstantOp>(
+      op.getLoc(), UIntType::get(op.getContext(), 1),
+      getIntAttr(APInt(1, 1), op.getContext()));
+
+  size_t dimRange = 0; //indicesRange.size() - 1;
+  for (size_t elem = muxTreeVec.size() ; elem < loweredVector.size(); elem++){
+    Value isIndexEq = constTrue;
+    for (size_t ind = 0 ; ind < allDims.size() ; ind++){
+      auto index = allDims[ind].index();
+      auto indexInt = indicesRange[ind];
+      auto selectWidth = index.getType().cast<FIRRTLType>().getBitWidthOrSentinel();
+      // Create " && index == indexInt?"
+      isIndexEq = builder->create<AndPrimOp>(
+          UIntType::get(op.getContext(), 1), isIndexEq,
+          builder->create<EQPrimOp>(
+            op.getLoc(), UIntType::get(op.getContext(), 1), index,
+            builder->create<ConstantOp>(
+              op.getLoc(), UIntType::get(op.getContext(), selectWidth),
+              getIntAttr(APInt(selectWidth, indexInt), op.getContext()))));
+      if (ind == dimRange){
+        // Generate the range of constants to compare with the index.
+        size_t maxElems = 1 << selectWidth;
+        // Make sure, we donot perform out of bounds access here ?
+        indicesRange[ind] = (indicesRange[ind] + 1) % maxElems;
+        if (!indicesRange[ind])
+          dimRange++;
+        else
+          dimRange = 0; //indicesRange.size() - 1;
+      }
+    }
+    // Generate the mux tree for each element of the bundle.
+    for (size_t m = 0; m < muxTreeVec.size(); m++) {
+      muxTreeVec[m] = builder->create<MuxPrimOp>(
+          op.getLoc(), muxTreeVec[m].getType().cast<FIRRTLType>(), isIndexEq,
+          loweredVector[elem], muxTreeVec[m]);
+      muxTreeVec[m].dump();
+    }
+  }
+  if (vectorOfBundleType){
+    size_t elemNum = 0;
+    for (auto bundleElem : vectorOfBundleType.getElements()){
+      auto fieldName = bundleElem.name.getValue(); 
+      auto iter = subfieldUsers.find(fieldName);
+      llvm::dbgs()<<"\n replace ::"<< fieldName << ";;" << iter->getSecond();
+      if (iter != subfieldUsers.end()) {
+        setBundleLowering(iter->getSecond().input(), fieldName, muxTreeVec[elemNum]);
+      }
+      elemNum++;
+    }
+  }else {
+    op.replaceAllUsesWith(muxTreeVec[0]);
+    opsToRemove.push_back(op);
+  }
+}
+
+void TypeLoweringVisitor::visitExpr1(SubaccessOp op) {
   // Ignore operations that are part of a multidim access, will be deleted
   // later.
   if (ignoreOps.count(op))
@@ -835,6 +981,7 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
 // bundle that was:
 //   a) originally a block argument
 //   b) originally an instance's port
+//   c) originally from a duplex operation, like a wire or register.
 //
 // When two such bundles are connected, none of the subfield visits have a
 // chance to lower them, so we must ensure they have the same number of
@@ -863,13 +1010,26 @@ void TypeLoweringVisitor::visitStmt(ConnectOp op) {
   assert(destValues.size() == srcValues.size() &&
          "connected bundles don't match");
 
+  // Determine if the LHS expression is the duplex value.
+  auto isDestDuplex = isDuplexValue(destValues.front());
+
   for (auto tuple : llvm::zip_first(destValues, srcValues)) {
     Value newDest = std::get<0>(tuple);
     Value newSrc = std::get<1>(tuple);
-    if (newDest.getType().isa<FlipType>())
-      builder->create<ConnectOp>(newDest, newSrc);
-    else
-      builder->create<ConnectOp>(newSrc, newDest);
+
+    // When two bundles are bulk connected, the connect operation becomes a
+    // pair-wise connect of each field. The rules for flow state that a value
+    // from a duplex expression can be used as both a source and sink,
+    // regardless of the flip orientation of the type. To make this work, we
+    // find the non-duplex value and make sure that it is the in the correct
+    // position. Two duplex values cannot be connected, since it is unclear
+    // which side is left or right.
+    if (isDestDuplex ? newSrc.getType().isa<FlipType>()
+                     : !newDest.getType().isa<FlipType>()) {
+      std::swap(newSrc, newDest);
+    }
+
+    builder->create<ConnectOp>(newDest, newSrc);
   }
 
   // Remember to remove the original op.
