@@ -47,7 +47,7 @@ jobs:
   build-circt:
     name: Build and Test
     needs: build-llvm
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     container:
       image: ghcr.io/circt/images/circt-integration-test:v5
     strategy:
@@ -113,12 +113,12 @@ jobs:
             -DBUILD_SHARED_LIBS=$BUILD_SHARED \
             -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
             -DLLVM_ENABLE_ASSERTIONS=$BUILD_ASSERT \
-            -DMLIR_DIR=../llvm/install/lib/cmake/mlir/ \
-            -DLLVM_DIR=../llvm/install/lib/cmake/llvm/ \
+            -DMLIR_DIR=llvm/install/lib/cmake/mlir/ \
+            -DLLVM_DIR=llvm/install/lib/cmake/llvm/ \
             -DCMAKE_LINKER=lld \
             -DCMAKE_C_COMPILER=$CC \
             -DCMAKE_CXX_COMPILER=$CXX \
-            -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit \
+            -DLLVM_EXTERNAL_LIT=llvm/build/bin/llvm-lit \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
             -DPYTHON_EXECUTABLE=/usr/bin/python3

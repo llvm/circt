@@ -8,7 +8,7 @@ jobs:
   # JSON files in codeowners/.
   request_reviewer:
     name: "Request review from code owner"
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     steps:
       - name: Get CIRCT
         uses: actions/checkout@v2
