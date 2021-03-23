@@ -25,5 +25,6 @@ add_circt_dialect_library(CIRCTMSFT
   MLIRIR
    )
 
-add_subdirectory(TclExport)
 add_dependencies(circt-headers MLIRMSFTIncGen)
+
+add_subdirectory(TclExport)

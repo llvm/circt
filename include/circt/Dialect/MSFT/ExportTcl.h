@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Expose the TCL exporters.
+// Expose the Tcl exporters.
 //
 //===----------------------------------------------------------------------===//
 
@@ -25,10 +25,10 @@ class ModuleOp;
 namespace circt {
 namespace msft {
 /// Export TCL for a module.
-mlir::LogicalResult exportQuartusTCL(mlir::ModuleOp module,
+mlir::LogicalResult exportQuartusTcl(mlir::ModuleOp module,
                                      llvm::raw_ostream &os);
 
-/// Register the various TCL exports.
+/// Register the Tcl exports.
 void registerMSFTTclTranslation();
 
 } // namespace msft

@@ -1,4 +1,4 @@
-//===- ExportQuartusTcl.cpp - Emit Quartus-flavored TCL -------------------===//
+//===- ExportQuartusTcl.cpp - Emit Quartus-flavored Tcl -------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Write out TCL with the appropriate API calls for Quartus.
+// Write out Tcl with the appropriate API calls for Quartus.
 //
 //===----------------------------------------------------------------------===//
 
@@ -178,7 +178,7 @@ static LogicalResult exportTcl(Entity &entity, Operation *op) {
 /// we don't know which one will be the 'top' module). Said procedure takes the
 /// parent entity name since we don't assume that the created module is the top
 /// level for the entire design.
-LogicalResult circt::msft::exportQuartusTCL(ModuleOp module,
+LogicalResult circt::msft::exportQuartusTcl(ModuleOp module,
                                             llvm::raw_ostream &os) {
   TclOutputState state(os);
 
@@ -197,7 +197,7 @@ LogicalResult circt::msft::exportQuartusTCL(ModuleOp module,
 
 void circt::msft::registerMSFTTclTranslation() {
   mlir::TranslateFromMLIRRegistration toQuartusTcl(
-      "export-quartus-tcl", exportQuartusTCL,
+      "export-quartus-tcl", exportQuartusTcl,
       [](mlir::DialectRegistry &registry) {
         registry.insert<MSFTDialect, RTLDialect>();
       });
