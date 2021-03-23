@@ -420,7 +420,7 @@ firrtl.module @issue516(%inp_0: !firrtl.uint<0>, %tmp3: !firrtl.flip<uint<0>>) {
 // CHECK-NEXT:   %c5_ui8 = firrtl.constant(5 : ui8) : !firrtl.uint<8>
 // CHECK-NEXT:   firrtl.connect %out_b, %c5_ui8 : !firrtl.flip<uint<8>>, !firrtl.uint<8>
 // CHECK-NEXT:  }
-firrtl.module @reg_cst_prop1(%clock: !firrtl.clock, %reset: !firrtl.uint<1>, %out_b: !firrtl.flip<uint<8>>) {
+firrtl.module @reg_cst_prop1(%clock: !firrtl.clock, %out_b: !firrtl.flip<uint<8>>) {
   %c5_ui8 = firrtl.constant(5 : ui8) : !firrtl.uint<8>
   %tmp_a = firrtl.reg %clock {name = "tmp_a"} : (!firrtl.clock) -> !firrtl.uint<8>
   %tmp_b = firrtl.reg %clock {name = "tmp_b"} : (!firrtl.clock) -> !firrtl.uint<8>
@@ -433,7 +433,7 @@ firrtl.module @reg_cst_prop1(%clock: !firrtl.clock, %reset: !firrtl.uint<1>, %ou
 // CHECK-NEXT:   %c5_ui8 = firrtl.constant(5 : ui8) : !firrtl.uint<8>
 // CHECK-NEXT:   firrtl.connect %out_b, %c5_ui8 : !firrtl.flip<uint<8>>, !firrtl.uint<8>
 // CHECK-NEXT:  }
-firrtl.module @reg_cst_prop2(%clock: !firrtl.clock, %reset: !firrtl.uint<1>, %out_b: !firrtl.flip<uint<8>>) {
+firrtl.module @reg_cst_prop2(%clock: !firrtl.clock, %out_b: !firrtl.flip<uint<8>>) {
   %tmp_b = firrtl.reg %clock {name = "tmp_b"} : (!firrtl.clock) -> !firrtl.uint<8>
   firrtl.connect %out_b, %tmp_b : !firrtl.flip<uint<8>>, !firrtl.uint<8>
 
@@ -447,7 +447,7 @@ firrtl.module @reg_cst_prop2(%clock: !firrtl.clock, %reset: !firrtl.uint<1>, %ou
 // CHECK-NEXT:   %c0_ui8 = firrtl.constant(0 : i8) : !firrtl.uint<8>
 // CHECK-NEXT:   firrtl.connect %out_b, %c0_ui8 : !firrtl.flip<uint<8>>, !firrtl.uint<8>
 // CHECK-NEXT:  }
-firrtl.module @reg_cst_prop3(%clock: !firrtl.clock, %reset: !firrtl.uint<1>, %out_b: !firrtl.flip<uint<8>>) {
+firrtl.module @reg_cst_prop3(%clock: !firrtl.clock, %out_b: !firrtl.flip<uint<8>>) {
   %tmp_a = firrtl.reg %clock {name = "tmp_a"} : (!firrtl.clock) -> !firrtl.uint<8>
   %c5_ui8 = firrtl.constant(5 : ui8) : !firrtl.uint<8>
   firrtl.connect %tmp_a, %c5_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
@@ -488,6 +488,20 @@ firrtl.module @AttachOpts(%a: !firrtl.analog<1>) {
   // CHECK-NEXT: }
   %b = firrtl.wire  : !firrtl.analog<1>
   firrtl.attach %b, %a : !firrtl.analog<1>, !firrtl.analog<1>
+}
+
+// CHECK-LABEL: @wire_cst_prop1
+// CHECK-NEXT:   %c5_ui8 = firrtl.constant(5 : ui8) : !firrtl.uint<8>
+// CHECK-NEXT:   %0 = firrtl.add %c5_ui8, %c5_ui8
+// CHECK-NEXT:   firrtl.connect %out_b, %0 : !firrtl.flip<uint<9>>, !firrtl.uint<9>
+// CHECK-NEXT:  }
+firrtl.module @wire_cst_prop1(%out_b: !firrtl.flip<uint<9>>) {
+  %tmp_a = firrtl.wire : !firrtl.uint<8>
+  %c5_ui8 = firrtl.constant(5 : ui8) : !firrtl.uint<8>
+  firrtl.connect %tmp_a, %c5_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
+
+  %xor = firrtl.add %tmp_a, %c5_ui8 : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<9>
+  firrtl.connect %out_b, %xor : !firrtl.flip<uint<9>>, !firrtl.uint<9>
 }
 
 }
