@@ -42,8 +42,8 @@ def ArrayCreateOp : RTLOp<"array_create", [NoSideEffect, SameTypeOperands]> {
   let printer = "return ::print(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
   let builders = [
-    // ArrayRef needs to contain at least one element.
-    OpBuilder<(ins "ArrayRef<::mlir::Value>":$input)>
+    // ValueRange needs to contain at least one element.
+    OpBuilder<(ins "ValueRange":$input)>
   ];
 }
 
@@ -70,8 +70,8 @@ def ArrayConcatOp : RTLOp<"array_concat", [NoSideEffect]> {
   }];
 
   let builders = [
-    // ArrayRef needs to contain at least one element.
-    OpBuilder<(ins "ArrayRef<::mlir::Value>":$inputs)>
+    // ValueRange needs to contain at least one element.
+    OpBuilder<(ins "ValueRange":$inputs)>
   ];
 }
 
