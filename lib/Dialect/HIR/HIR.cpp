@@ -19,107 +19,10 @@
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/StringMap.h"
 
+#include "helper.h"
 using namespace mlir;
 using namespace hir;
 using namespace llvm;
-
-// Helper Methods.
-
-static IntegerAttr getIntegerAttr(OpAsmParser &parser, int width, int value) {
-  return IntegerAttr::get(
-      IntegerType::get(parser.getBuilder().getContext(), width),
-      APInt(width, value));
-}
-static Type getIntegerType(OpAsmParser &parser, int bitwidth) {
-  return IntegerType::get(parser.getBuilder().getContext(), bitwidth);
-}
-static ConstType getConstIntType(OpAsmParser &parser) {
-  return ConstType::get(parser.getBuilder().getContext());
-}
-
-static Type getTimeType(OpAsmParser &parser) {
-  return TimeType::get(parser.getBuilder().getContext());
-}
-
-static ParseResult parseIntegerAttr(IntegerAttr &value, int bitwidth,
-                                    StringRef attrName, OpAsmParser &parser,
-                                    OperationState &result) {
-
-  return parser.parseAttribute(value, getIntegerType(parser, bitwidth),
-                               attrName, result.attributes);
-}
-
-/// parse a comma separated list of operands.
-// static ParseResult
-// parseOperands(OpAsmParser &parser,
-//              SmallVectorImpl<OpAsmParser::OperandType> &operands) {
-//  // operands-list ::= firstOperand (, nextOperand)* .
-//  OpAsmParser::OperandType firstOperand;
-//  if (parser.parseOperand(firstOperand))
-//    return failure();
-//  operands.push_back(firstOperand);
-//  while (!parser.parseComma()) {
-//    OpAsmParser::OperandType nextOperand;
-//    if (parser.parseOperand(nextOperand))
-//      return failure();
-//    operands.push_back(nextOperand);
-//  }
-//  return success();
-//}
-
-// parse an optional comma separated list of operands with paren as delimiter.
-// static ParseResult
-// parseOptionalOperands(OpAsmParser &parser,
-//                      SmallVectorImpl<OpAsmParser::OperandType> &operands) {
-//  // ::= `(` `)` or `(` operands-list `)`.
-//  if (parser.parseLParen())
-//    return failure();
-//  if (parser.parseOptionalRParen())
-//    if (parseOperands(parser, operands))
-//      return failure();
-//  return success();
-//}
-
-// static ParseResult parseTypes(OpAsmParser &parser,
-//                              SmallVectorImpl<Type> &types) {
-//  Type firstType;
-//  if (parser.parseType(firstType))
-//    return failure();
-//  types.push_back(firstType);
-//  while (!parser.parseComma()) {
-//    Type nextType;
-//    if (parser.parseType(nextType))
-//      return failure();
-//    types.push_back(nextType);
-//  }
-//  return success();
-//}
-
-// static ParseResult parseOptionalTypes(OpAsmParser &parser,
-//                                      SmallVectorImpl<Type> &types) {
-//  if (parser.parseLParen())
-//    return failure();
-//  if (parser.parseOptionalRParen())
-//    if (parseTypes(parser, types))
-//      return failure();
-//  return success();
-//}
-
-// static ParseResult parseFunctionType(OpAsmParser &parser, unsigned
-// num_operands,
-//                                     SmallVectorImpl<Type> &operandTypes,
-//                                     SmallVectorImpl<Type> &resultTypes) {
-//  SMLoc typeLoc = parser.getCurrentLocation();
-//  if (parseOptionalTypes(parser, operandTypes))
-//    return failure();
-//  if (operandTypes.size() != num_operands)
-//    return parser.emitError(typeLoc, "Wrong number of type parameters.");
-//  if (parser.parseArrow())
-//    return failure();
-//  if (parseOptionalTypes(parser, resultTypes))
-//    return failure();
-//  return success();
-//}
 
 /// CallOp
 /// Syntax:
@@ -709,7 +612,7 @@ LogicalResult DefOp::verifyType() {
                        "' attribute of function type");
   return success();
 }
-
+#include "HIROpSyntax.h"
 /// required for functionlike trait
 LogicalResult DefOp::verifyBody() { return success(); }
 namespace mlir {

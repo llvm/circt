@@ -34,6 +34,7 @@ def MemrefType: Type<CPred<"$_self.isa<MemrefType>()">,
 def InterfaceType: Type<CPred<"$_self.isa<InterfaceType>()">,
   "HIR interface type ">,
   BuildableType<"InterfaceType::get($_builder.getContext())">;
+//ArrayType and GroupType not defined here since they are always wrapped inside InterfaceType.
 
 def WireType: Type<CPred<"$_self.isa<WireType>()">,
   "HIR wire type ">,
@@ -129,6 +130,26 @@ def MemWriteOp : HIR_Op<"mem_write", [AttrSizedOperandSegments]> {
   let assemblyFormat = [{$value `to` $mem  `[` $addr `]` `at` $tstart 
     (`offset` $offset^ )? attr-dict 
       `:` `(`type($value) `,` type($mem)`[`type($addr) `]` `)`}];
+}
+
+def SliceOp : HIR_Op<"slice", [NoSideEffect,AttrSizedOperandSegments]> {
+  let summary = "read from a memory interface.";
+  let description = [{
+    This Op reads from a memory interface. 
+      Example:
+
+      ```mlir hir.mem_read %A[%const][%x,%y] at %t : !hir.wire -> !hir.val```
+  }];
+
+  let arguments = (ins InterfaceType:$interface, 
+      Variadic<AnyType>:$addr, TimeType : $tstart,
+      Optional<Index>: $var_offset,
+      I32Attr: $const_offset);
+  let results = (outs InterfaceType: $res);
+  let assemblyFormat = [{$interface (`[`  $addr^ `]`)? `at`
+    custom<TimeAndOffset>($tstart, $var_offset,$const_offset) attr-dict 
+    `:` type($interface) custom<ArrayAccessTypes>(type($addr)) 
+    `->` type($res) }];
 }
 
 def WireReadOp : HIR_Op<"wire_read", [NoSideEffect,AttrSizedOperandSegments]> {
