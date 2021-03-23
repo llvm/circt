@@ -15,6 +15,7 @@
 BUILD_DIR=${1:-"build"}
 INSTALL_DIR=${2:-"install"}
 BUILD_TYPE=${3:-"Release"}
+EXTRA_ARGS=${@:4}
 
 mkdir -p llvm/$BUILD_DIR
 mkdir -p llvm/$INSTALL_DIR
@@ -34,6 +35,6 @@ cmake ../llvm \
   -DLLVM_INSTALL_UTILS=ON \
   -DLLVM_OPTIMIZED_TABLEGEN=ON \
   -DLLVM_TARGETS_TO_BUILD="host" \
-  -DMLIR_BINDINGS_PYTHON_ENABLED=ON
+  $EXTRA_ARGS
 
 cmake --build . --target install -- -j$(nproc)
