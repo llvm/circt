@@ -714,8 +714,7 @@ static IntegerAttr getIntAttr(const APInt &value, MLIRContext *context) {
 // TODO: This currently does not handle assignment to vectors.
 void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   Value inputVector = op.input();
-  if (auto flipV =
-          inputVector.getType().cast<FIRRTLType>().dyn_cast<FlipType>()) {
+  if (inputVector.getType().cast<FIRRTLType>().isa<FlipType>()) {
     builder->emitError(
         "Lowering of dynamic assignment to vectors not supported");
     return;
@@ -760,7 +759,7 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   SmallVector<Value, 8> muxTreeVec(1, loweredVector[0]);
   // This records a map of bundle subfield name and the corresponding subfield
   // operation.
-  DenseMap<StringRef, SubfieldOp> subfieldUsers;
+  DenseMap<Attribute, SubfieldOp> subfieldUsers;
   BundleType vectorOfBundleType = vectorElementType.dyn_cast<BundleType>();
 
   if (vectorOfBundleType) {
@@ -768,24 +767,29 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
     // else one mux tree for each bundle element. This loop initializes the mux
     // tree with the first element of the vector (for each element of the
     // bundle).
-    for (size_t elem = 1; elem < vectorOfBundleType.getNumElements(); elem++)
+    for (size_t elem = 1, e = vectorOfBundleType.getNumElements(); elem != e;
+         ++elem)
       muxTreeVec.push_back(loweredVector[elem]);
     // User of a vector of bundles is a SubfieldOp.
-    for (auto u : op->getUsers())
-      if (auto subField = dyn_cast<SubfieldOp>(u))
-        subfieldUsers[subField.fieldname()] = subField;
+    for (auto u : op->getUsers()) {
+      auto subField = dyn_cast<SubfieldOp>(u);
+      assert(subField && "User of a SubaccessOp of vector of bundles must be a "
+                         "subfield operation.");
+      subfieldUsers[subField.fieldnameAttr()] = subField;
+    }
   }
 
   // Create a true constant.
-  Value constTrue = builder->create<ConstantOp>(
-      op.getLoc(), UIntType::get(op.getContext(), 1),
-      getIntAttr(APInt(1, 1), op.getContext()));
+  Value constTrue =
+      builder->create<ConstantOp>(UIntType::get(op.getContext(), 1),
+                                  getIntAttr(APInt(1, 1), op.getContext()));
 
   size_t dimRange = 0;
-  for (size_t elem = muxTreeVec.size(); elem < loweredVector.size();
-       elem += muxTreeVec.size()) {
+  for (size_t elem = muxTreeVec.size(), e = loweredVector.size(),
+              numMuxs = muxTreeVec.size();
+       elem != e; elem += numMuxs) {
     Value isIndexEq = constTrue;
-    for (size_t ind = 0; ind < allDims.size(); ind++) {
+    for (size_t ind = 0, size = allDims.size(); ind != size; ++ind) {
       // Get the index variable.
       auto index = allDims[ind].index();
       // Get the constnat int, with which to compare the index.
@@ -796,38 +800,38 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
       isIndexEq = builder->create<AndPrimOp>(
           UIntType::get(op.getContext(), 1), isIndexEq,
           builder->create<EQPrimOp>(
-              op.getLoc(), UIntType::get(op.getContext(), 1), index,
+              UIntType::get(op.getContext(), 1), index,
               builder->create<ConstantOp>(
-                  op.getLoc(), UIntType::get(op.getContext(), selectWidth),
+                  UIntType::get(op.getContext(), selectWidth),
                   getIntAttr(APInt(selectWidth, indexInt), op.getContext()))));
       // This is the logic to generate the range of constant integers, with
       // which to compare the index.
       if (ind == dimRange) {
-        size_t maxElems = 1 << selectWidth;
+        size_t maxElems = 1ULL << selectWidth;
         // Make sure, we donot perform out of bounds access here ?
         indicesRange[ind] = (indicesRange[ind] + 1) % maxElems;
         if (!indicesRange[ind])
-          dimRange++;
+          ++dimRange;
         else
           dimRange = 0;
       }
     }
     // Generate the mux tree for each element of the bundle.
-    for (size_t m = 0; m < muxTreeVec.size(); m++)
+    for (size_t m = 0, s = muxTreeVec.size(); m != s; ++m)
       muxTreeVec[m] = builder->create<MuxPrimOp>(
-          op.getLoc(), muxTreeVec[m].getType().cast<FIRRTLType>(), isIndexEq,
+          muxTreeVec[m].getType().cast<FIRRTLType>(), isIndexEq,
           loweredVector[elem + m], muxTreeVec[m]);
   }
   if (vectorOfBundleType) {
     size_t elemNum = 0;
     for (auto bundleElem : vectorOfBundleType.getElements()) {
-      auto fieldName = bundleElem.name.getValue();
+      StringAttr fieldName = bundleElem.name;
       auto iter = subfieldUsers.find(fieldName);
       if (iter != subfieldUsers.end()) {
-        setBundleLowering(iter->getSecond().input(), fieldName,
+        setBundleLowering(iter->getSecond().input(), fieldName.getValue(),
                           muxTreeVec[elemNum]);
       }
-      elemNum++;
+      ++elemNum;
     }
   } else {
     op.replaceAllUsesWith(muxTreeVec[0]);

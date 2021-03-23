@@ -698,6 +698,51 @@ firrtl.circuit "LowerSubaccessOp5" {
 
 // ----
 
+// https://github.com/llvm/circt/issues/656
+// Test lowering of multidim vector bundle types, SubAccessOp of SubAccessOp of Subfield, b <= a[sel1][sel2].valid 
+firrtl.circuit "LowerSubaccessOp6" {
+  firrtl.module @LowerSubaccessOp6(%a: !firrtl.vector<vector<bundle<wo: uint<1>, valid: uint<2>>, 2>, 2>, %sel: !firrtl.uint<1>, %b: !firrtl.flip<bundle<wo: uint<1>, valid: uint<2>>>) {
+    %0 = firrtl.subfield %b("wo") : (!firrtl.flip<bundle<wo: uint<1>, valid: uint<2>>>) -> !firrtl.flip<uint<1>>
+      %1 = firrtl.subaccess %a[%sel] : !firrtl.vector<vector<bundle<wo: uint<1>, valid: uint<2>>, 2>, 2>, !firrtl.uint<1>
+      %2 = firrtl.subaccess %1[%sel] : !firrtl.vector<bundle<wo: uint<1>, valid: uint<2>>, 2>, !firrtl.uint<1>
+      %3 = firrtl.subfield %2("wo") : (!firrtl.bundle<wo: uint<1>, valid: uint<2>>) -> !firrtl.uint<1>
+      firrtl.connect %0, %3 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+      %4 = firrtl.subfield %b("valid") : (!firrtl.flip<bundle<wo: uint<1>, valid: uint<2>>>) -> !firrtl.flip<uint<2>>
+      %5 = firrtl.subfield %2("valid") : (!firrtl.bundle<wo: uint<1>, valid: uint<2>>) -> !firrtl.uint<2>
+      firrtl.connect %4, %5 : !firrtl.flip<uint<2>>, !firrtl.uint<2>
+  }
+  // CHECK: firrtl.module @LowerSubaccessOp6(%a_0_0_wo: !firrtl.uint<1>, %a_0_0_valid: !firrtl.uint<2>, %a_0_1_wo: !firrtl.uint<1>, %a_0_1_valid: !firrtl.uint<2>, %a_1_0_wo: !firrtl.uint<1>, %a_1_0_valid: !firrtl.uint<2>, %a_1_1_wo: !firrtl.uint<1>, %a_1_1_valid: !firrtl.uint<2>, %sel: !firrtl.uint<1>, %b_wo: !firrtl.flip<uint<1>>, %b_valid: !firrtl.flip<uint<2>>) {
+  // CHECK:   %c1_ui1 = firrtl.constant(true) : !firrtl.uint<1>
+  // CHECK:   %c1_ui1_0 = firrtl.constant(true) : !firrtl.uint<1>
+  // CHECK:   %0 = firrtl.eq %sel, %c1_ui1_0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK:   %1 = firrtl.and %c1_ui1, %0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK:   %c0_ui1 = firrtl.constant(false) : !firrtl.uint<1>
+  // CHECK:   %2 = firrtl.eq %sel, %c0_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK:   %3 = firrtl.and %1, %2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK:   %4 = firrtl.mux(%3, %a_0_1_wo, %a_0_0_wo) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK:   %5 = firrtl.mux(%3, %a_0_1_valid, %a_0_0_valid) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+  // CHECK:   %c0_ui1_1 = firrtl.constant(false) : !firrtl.uint<1>
+  // CHECK:   %6 = firrtl.eq %sel, %c0_ui1_1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK:   %7 = firrtl.and %c1_ui1, %6 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK:   %c1_ui1_2 = firrtl.constant(true) : !firrtl.uint<1>
+  // CHECK:   %8 = firrtl.eq %sel, %c1_ui1_2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK:   %9 = firrtl.and %7, %8 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK:   %10 = firrtl.mux(%9, %a_1_0_wo, %4) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK:   %11 = firrtl.mux(%9, %a_1_0_valid, %5) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+  // CHECK:   %c1_ui1_3 = firrtl.constant(true) : !firrtl.uint<1>
+  // CHECK:   %12 = firrtl.eq %sel, %c1_ui1_3 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK:   %13 = firrtl.and %c1_ui1, %12 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK:   %c1_ui1_4 = firrtl.constant(true) : !firrtl.uint<1>
+  // CHECK:   %14 = firrtl.eq %sel, %c1_ui1_4 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK:   %15 = firrtl.and %13, %14 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK:   %16 = firrtl.mux(%15, %a_1_1_wo, %10) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK:   %17 = firrtl.mux(%15, %a_1_1_valid, %11) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+  // CHECK:   firrtl.connect %b_wo, %16 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  // CHECK:   firrtl.connect %b_valid, %17 : !firrtl.flip<uint<2>>, !firrtl.uint<2>
+}
+
+// ----
+
 // COM: Test vector of bundles lowering
 firrtl.circuit "LowerVectorsOfBundles" {
   // CHECK: firrtl.module @LowerVectorsOfBundles(%in_0_a: !firrtl.uint<1>, %in_0_b: !firrtl.flip<uint<1>>, %in_1_a: !firrtl.uint<1>, %in_1_b: !firrtl.flip<uint<1>>, %out_0_a: !firrtl.flip<uint<1>>, %out_0_b: !firrtl.uint<1>, %out_1_a: !firrtl.flip<uint<1>>, %out_1_b: !firrtl.uint<1>) {
