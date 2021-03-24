@@ -791,29 +791,28 @@ ParseResult FIRParser::importAnnotations(SMLoc loc, StringRef annotationsStr) {
 
   json::Path::Root root;
   llvm::StringMap<ArrayAttr> annotationMap;
-  if (annotations) {
-    if (!fromJSON(annotations.get(), annotationMap, root, getContext())) {
-      auto diag = emitError(loc, "Invalid/unsupported annotation format");
-      std::string jsonErrorMessage =
-          "See inline comments for problem area in JSON:\n";
-      llvm::raw_string_ostream s(jsonErrorMessage);
-      root.printErrorContext(annotations.get(), s);
-      diag.attachNote() << jsonErrorMessage;
-      return failure();
-    }
+  if (!fromJSON(annotations.get(), annotationMap, root, getContext())) {
+    auto diag = emitError(loc, "Invalid/unsupported annotation format");
+    std::string jsonErrorMessage =
+      "See inline comments for problem area in JSON:\n";
+    llvm::raw_string_ostream s(jsonErrorMessage);
+    root.printErrorContext(annotations.get(), s);
+    diag.attachNote() << jsonErrorMessage;
+    return failure();
   }
 
   for (auto a : annotationMap.keys()) {
-    if (!state.annotationMap[a]) {
-      state.annotationMap[a] = annotationMap[a];
+    auto &entry = state.annotationMap[a];
+    if (!entry) {
+      entry = annotationMap[a];
       continue;
     }
 
     SmallVector<Attribute> annotationVec;
-    for (auto a : state.annotationMap[a])
-      annotationVec.push_back(a);
-    for (auto a : annotationMap[a])
-      annotationVec.push_back(a);
+    auto arrayRef = state.annotationMap[a].getValue();
+    annotationVec.append(arrayRef.begin(), arrayRef.end());
+    arrayRef = annotationMap[a].getValue();
+    annotationVec.append(arrayRef.begin(), arrayRef.end());
     state.annotationMap[a] = ArrayAttr::get(getContext(), annotationVec);
   }
 
