@@ -847,7 +847,7 @@ void FIRParser::getAnnotations(StringRef target, ArrayAttr &annotations) {
   }
 
   // Input annotations is non-empty.  Exit quickly if the target doesn't exist.
-  // Otherwise, construct anew ArrayAttr that includes existing and new
+  // Otherwise, construct a new ArrayAttr that includes existing and new
   // annotations.
   auto newAnnotations = state.annotationMap.lookup(target);
   if (!newAnnotations)

@@ -135,7 +135,7 @@ bool circt::firrtl::fromJSON(json::Value &value,
   };
 
   // The JSON value must be an array of objects.  Anything else is reported as
-  // inavlid.
+  // invalid.
   auto array = value.getAsArray();
   if (!array) {
     path.report(
