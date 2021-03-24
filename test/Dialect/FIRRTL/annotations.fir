@@ -67,3 +67,13 @@ circuit Foo: %[[{"string":"a","integer":42,"float":3.14,"boolean":true,"null":nu
     ; CHECK-SAME: integer = 42
     ; CHECK-SAME: object = {foo = "bar"}
     ; CHECK-SAME: string = "a"
+
+; // -----
+
+; COM: JSON escapes should work.
+circuit Foo: %[[{"\"":"}]]"}]]
+  module Foo:
+    skip
+
+    ; CHECK-LABEL: module {
+    ; CHECK: firrtl.circuit "Foo" attributes {annotations =
