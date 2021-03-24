@@ -13,7 +13,7 @@ jobs:
     name: Build LLVM
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/circt/images/circt-integration-test:v3
+      image: ghcr.io/circt/images/circt-integration-test:v5
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
@@ -35,12 +35,12 @@ jobs:
         uses: actions/cache@v2
         with:
           path: llvm
-          key: ${{ runner.os }}-llvm-sharedlibs-${{ steps.get-llvm-hash.outputs.hash }}
+          key: ${{ runner.os }}-llvm-sharedlibs-python-${{ steps.get-llvm-hash.outputs.hash }}
 
       # Build LLVM if we didn't hit in the cache.
       - name: Rebuild and Install LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: utils/build-llvm.sh
+        run: utils/build-llvm.sh build install Release -DMLIR_BINDINGS_PYTHON_ENABLED=ON
 
   # Build CIRCT and run its tests using a Docker container with all the
   # integration testing prerequisite installed.
@@ -60,6 +60,9 @@ jobs:
             cxx: clang++
           - cc: gcc
             cxx: g++
+        include:
+          - build-shared: ON
+            bindings-python: ON
 
     steps:
       - name: Configure Environment
@@ -89,12 +92,12 @@ jobs:
         uses: actions/cache@v2
         with:
           path: llvm
-          key: ${{ runner.os }}-llvm-sharedlibs-${{ steps.get-llvm-hash.outputs.hash }}
+          key: ${{ runner.os }}-llvm-sharedlibs-python-${{ steps.get-llvm-hash.outputs.hash }}
 
       # Build LLVM if we didn't hit in the cache.
       - name: Rebuild and Install LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: utils/build-llvm.sh
+        run: utils/build-llvm.sh build install Release -DMLIR_BINDINGS_PYTHON_ENABLED=ON
 
       # --------
       # Build and test CIRCT
@@ -107,6 +110,7 @@ jobs:
           BUILD_ASSERT: ${{ matrix.build-assert }}
           BUILD_SHARED: ${{ matrix.build-shared }}
           BUILD_TYPE: ${{ matrix.build-type }}
+          BINDINGS_PYTHON: ${{matrix.bindings-python}}
         run: |
           mkdir build && cd build
           cmake .. \
@@ -120,7 +124,7 @@ jobs:
             -DCMAKE_CXX_COMPILER=$CXX \
             -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-            -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
+            -DCIRCT_BINDINGS_PYTHON_ENABLED=$BINDINGS_PYTHON \
             -DPYTHON_EXECUTABLE=/usr/bin/python3
       - name: Build CIRCT
         run: |

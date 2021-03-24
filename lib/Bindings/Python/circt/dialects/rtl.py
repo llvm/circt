@@ -2,5 +2,5 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-# Simply a wrapper around the extension module of the same name.
-from _circt import *
+# Generated tablegen dialects end up in the mlir.dialects package for now.
+from mlir.dialects._rtl_ops_gen import *
