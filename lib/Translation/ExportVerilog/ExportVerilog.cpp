@@ -1601,8 +1601,6 @@ private:
   LogicalResult visitUnhandledSV(Operation *op) { return failure(); }
   LogicalResult visitInvalidSV(Operation *op) { return failure(); }
 
-  void emitMergeOp(MergeOp op);
-
   LogicalResult emitNoop() {
     --numStatementsEmitted;
     return success();
@@ -1745,25 +1743,6 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
   emitExpression(op->getResult(0), emittedExprs, ForceEmitMultiUse);
   os << ';';
   emitLocationInfoAndNewLine(emittedExprs);
-}
-
-void StmtEmitter::emitMergeOp(MergeOp op) {
-  SmallPtrSet<Operation *, 8> ops;
-  --numStatementsEmitted; // We manually count our statements.
-
-  // Emit "a = rtl.merge x, y, z" as:
-  //   assign a = x;
-  //   assign a = y;
-  //   assign a = z;
-  for (auto operand : op.getOperands()) {
-    ops.insert(op);
-    indent() << "assign " << emitter.getName(op) << " = ";
-    emitExpression(operand, ops);
-    os << ';';
-    emitLocationInfoAndNewLine(ops);
-    ops.clear();
-    ++numStatementsEmitted;
-  }
 }
 
 LogicalResult StmtEmitter::visitSV(ConnectOp op) {

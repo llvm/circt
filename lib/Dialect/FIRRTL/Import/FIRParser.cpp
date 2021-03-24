@@ -190,11 +190,6 @@ struct FIRParser {
     consumeToken();
   }
 
-  /// Capture the current token's location into the specified value.  This
-  /// always succeeds.
-  ParseResult parseGetLocation(SMLoc &loc);
-  ParseResult parseGetLocation(Location &loc);
-
   /// Capture the current token's spelling into the specified value.  This
   /// always succeeds.
   ParseResult parseGetSpelling(StringRef &spelling) {
@@ -257,18 +252,6 @@ InFlightDiagnostic FIRParser::emitError(SMLoc loc, const Twine &message) {
 //===----------------------------------------------------------------------===//
 // Token Parsing
 //===----------------------------------------------------------------------===//
-
-/// Capture the current token's location into the specified value.  This
-/// always succeeds.
-ParseResult FIRParser::parseGetLocation(SMLoc &loc) {
-  loc = getToken().getLoc();
-  return success();
-}
-
-ParseResult FIRParser::parseGetLocation(Location &loc) {
-  loc = translateLocation(getToken().getLoc());
-  return success();
-}
 
 /// Consume the specified token if present and return success.  On failure,
 /// output a diagnostic and return failure.
