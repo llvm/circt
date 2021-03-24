@@ -26,9 +26,6 @@
 #include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
-#include "llvm/ADT/StringMap.h"
-#include "llvm/ADT/StringSwitch.h"
-#include "llvm/Support/Error.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
@@ -38,6 +35,8 @@ using namespace firrtl;
 
 using llvm::SMLoc;
 using llvm::SourceMgr;
+
+namespace json = llvm::json;
 
 /// Return true if this is a useless temporary name produced by FIRRTL.  We
 /// drop these as they don't convey semantic meaning.
@@ -785,16 +784,16 @@ ParseResult FIRParser::importAnnotations(const SMLoc &loc,
                                          MLIRContext *context,
                                          StringRef errorMsgParse) {
 
-  auto annotations = llvm::json::parse(annotationsStr);
+  auto annotations = json::parse(annotationsStr);
   if (auto err = annotations.takeError()) {
-    handleAllErrors(std::move(err), [&](const llvm::json::ParseError &a) {
+    handleAllErrors(std::move(err), [&](const json::ParseError &a) {
       auto diag = emitError(loc, errorMsgParse);
       diag.attachNote() << a.message();
     });
     return failure();
   }
 
-  llvm::json::Path::Root root;
+  json::Path::Root root;
   llvm::StringMap<ArrayAttr> annotationMap;
   if (annotations) {
     if (!fromJSON(annotations.get(), annotationMap, root, context)) {
