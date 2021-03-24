@@ -131,6 +131,9 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     options.ignoreInfoLocators = ignoreFIRLocations;
     module = importFIRRTL(sourceMgr, &context, options);
 
+    if (enableLowerTypes)
+      pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass());
+
     // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
     if (!disableOptimization) {
       pm.addPass(createCSEPass());
@@ -139,6 +142,16 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   } else {
     assert(inputFormat == InputMLIRFile);
     module = parseSourceFile(sourceMgr, &context);
+
+    if (enableLowerTypes) {
+      pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass());
+
+      // If we are running FIRRTL passes, clean up the output.
+      if (!disableOptimization) {
+        pm.addPass(createCSEPass());
+        pm.addPass(createCanonicalizerPass());
+      }
+    }
   }
   if (!module)
     return failure();
@@ -152,8 +165,6 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (lowerToRTL || outputFormat == OutputVerilog ||
       outputFormat == OutputSplitVerilog) {
-    if (enableLowerTypes)
-      pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass());
     pm.addPass(createLowerFIRRTLToRTLPass());
 
     // If enabled, run the optimizer.
