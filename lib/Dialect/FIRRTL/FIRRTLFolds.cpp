@@ -513,91 +513,85 @@ void TailPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
 /// exactly one connect that sets the value as its destination.  This returns
 /// the operation if found and if all the other users are "reads" from the
 /// value.
-static ConnectOp findSingleConnectSet(Value value) {
-  ConnectOp set;
+static bool isOnlyConnectToValue(ConnectOp connect, Value value) {
   for (Operation *user : value.getUsers()) {
     // If we see a partial connect or attach, just conservatively fail.
     if (isa<PartialConnectOp>(user) || isa<AttachOp>(user))
       return {};
 
-    // Check for the set.
-    if (auto connect = dyn_cast<ConnectOp>(user)) {
-      if (connect.src() != value) {
-        if (set)
-          return {};
-        set = connect;
-        continue;
-      }
+    if (auto aConnect = dyn_cast<ConnectOp>(user)) {
+      if (aConnect.dest() == value && aConnect != connect)
+        return false;
     }
   }
-  return set;
+  return true;
 }
 
-static LogicalResult canonicalize(RegOp op, PatternRewriter &rewriter) {
-  // If the reg is only initialized with a constant or invalid, then we
-  // know that all the uses will always get that value.
-  if (auto set = findSingleConnectSet(op)) {
-    auto *srcValue = set.src().getDefiningOp();
-    auto *regBlock = op->getBlock();
-    if (srcValue &&
-        (isa<ConstantOp>(srcValue) || isa<InvalidValuePrimOp>(srcValue)) &&
-        // TODO: We could handle constants at other level of when's etc.
-        srcValue->getBlock() == regBlock &&
-        // TODO: Could handle extension some day if we want to.
-        srcValue->getResult(0).getType() == op.getType()) {
+// Forward simple values through wire's and reg's.
+static LogicalResult foldSingleSetConnect(ConnectOp op,
+                                          PatternRewriter &rewriter) {
+  //
+  // While we can do this for nearly all wires, we currently limit it to simple
+  // things.
+  Operation *connectedDecl = op.dest().getDefiningOp();
+  if (!connectedDecl)
+    return failure();
 
-      // Make sure the constant dominates all users.
-      if (srcValue != &regBlock->front())
-        srcValue->moveBefore(&regBlock->front());
+  // Only support wire and reg for now.
+  if (!isa<WireOp>(connectedDecl) && !isa<RegOp>(connectedDecl))
+    return failure();
 
-      // Remove the set of register.
-      rewriter.eraseOp(set);
+  // Only forward if the types exactly match and there is one connect.
+  if (op.dest().getType() != op.src().getType() ||
+      !isOnlyConnectToValue(op, op.dest()))
+    return failure();
 
-      // Replace all things using the register with the constant, and remove
-      // the reg.
-      rewriter.replaceOp(op, srcValue->getResult(0));
-      return success();
-    }
+  // Only do this if the connectee and the declaration are in the same block.
+  auto *declBlock = connectedDecl->getBlock();
+  auto *srcValueOp = op.src().getDefiningOp();
+  if (!srcValueOp) {
+    // Ports are ok for wires but not registers.
+    if (!isa<WireOp>(connectedDecl))
+      return failure();
+
+  } else {
+    // Constants/invalids in the same block are ok to forward, even through
+    // reg's since the clocking doesn't matter for constants.
+    if (!isa<ConstantOp>(srcValueOp) && !isa<InvalidValuePrimOp>(srcValueOp))
+      return failure();
+    if (srcValueOp->getBlock() != declBlock)
+      return failure();
   }
+
+  // Ok, we know we are doing the transformation.
+
+  // Make sure the constant dominates all users.
+  if (srcValueOp && srcValueOp != &declBlock->front())
+    srcValueOp->moveBefore(&declBlock->front());
+
+  // Remove the connect.
+  rewriter.eraseOp(op);
+
+  // Replace all things *using* the decl with the constant/port, and
+  // remove the declaration.
+  rewriter.replaceOp(connectedDecl, op.src());
+  return success();
+}
+
+static LogicalResult canonicalize(ConnectOp op, PatternRewriter &rewriter) {
+  // TODO: Canonicalize towards explicit extensions and flips here.
+
+  // If there is a simple value connected to a foldable decl like a wire or reg,
+  // see if we can eliminate the decl.
+  if (succeeded(foldSingleSetConnect(op, rewriter)))
+    return success();
+
   return failure();
 }
 
-void RegOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
-                                        MLIRContext *context) {
-  addCanonicalizer<RegOp>(results, context, canonicalize);
-}
-
-static LogicalResult canonicalize(WireOp op, PatternRewriter &rewriter) {
-  // If the reg is only initialized with a constant or invalid, then we
-  // know that all the uses will always get that value.
-  if (auto set = findSingleConnectSet(op)) {
-    auto *srcValue = set.src().getDefiningOp();
-    auto *wireBlock = op->getBlock();
-    if (srcValue &&
-        (isa<ConstantOp>(srcValue) || isa<InvalidValuePrimOp>(srcValue)) &&
-        // TODO: We could handle constants at other level of when's etc.
-        srcValue->getBlock() == wireBlock &&
-        // TODO: Could handle extension some day if we want to.
-        srcValue->getResult(0).getType() == op.getType()) {
-
-      // Make sure the constant dominates all users.
-      if (srcValue != &wireBlock->front())
-        srcValue->moveBefore(&wireBlock->front());
-
-      // Remove the set of wire.
-      rewriter.eraseOp(set);
-      // Replace all things *using* the wire with the constant, and
-      // remove the wire.
-      rewriter.replaceOp(op, srcValue->getResult(0));
-      return success();
-    }
-  }
-  return failure();
-}
-
-void WireOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
-                                         MLIRContext *context) {
-  addCanonicalizer<WireOp>(results, context, canonicalize);
+void ConnectOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                            MLIRContext *context) {
+  addCanonicalizer<ConnectOp>(results, context, canonicalize);
 }
 
 //===----------------------------------------------------------------------===//

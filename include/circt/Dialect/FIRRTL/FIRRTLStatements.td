@@ -54,6 +54,7 @@ def ConnectOp : FIRRTLOp<"connect"> {
     "$dest `,` $src  attr-dict `:` type($dest) `,` type($src)";
 
   let verifier = "return ::verifyConnectOp(*this);";
+  let hasCanonicalizer = 1;
 }
 
 def PartialConnectOp : FIRRTLOp<"partialconnect"> {
