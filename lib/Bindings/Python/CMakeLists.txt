@@ -14,6 +14,8 @@ add_mlir_python_extension(CIRCTBindingsPythonExtension _circt
     python
   SOURCES
     CIRCTModule.cpp
+  LINK_LIBS
+    CIRCTCAPIRTL
 )
 add_dependencies(CIRCTBindingsPython CIRCTBindingsPythonExtension)
 
@@ -42,3 +44,11 @@ foreach(PY_SRC_FILE ${PY_SRC_FILES})
         "${CMAKE_CURRENT_SOURCE_DIR}/${PY_SRC_FILE}" "${PY_DEST_FILE}"
   )
 endforeach()
+
+################################################################################
+# Generate dialect-specific bindings.
+################################################################################
+add_mlir_dialect_python_bindings(CIRCTBindingsPythonRTLOps
+  TD_FILE RTLOps.td
+  DIALECT_NAME rtl)
+add_dependencies(CIRCTBindingsPythonSources CIRCTBindingsPythonRTLOps)
