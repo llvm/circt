@@ -821,9 +821,11 @@ ParseResult FIRParser::importAnnotations(SMLoc loc, StringRef annotationsStr) {
 
 ParseResult FIRParser::importAnnotationFile(SMLoc loc) {
 
+  if (!state.annotationsBuf)
+    return success();
+
   ParseResult result = success();
-  if (state.annotationsBuf)
-    result = importAnnotations(loc, (state.annotationsBuf)->getBuffer());
+  result = importAnnotations(loc, (state.annotationsBuf)->getBuffer());
 
   if (!result)
     state.annotationsBuf = nullptr;
