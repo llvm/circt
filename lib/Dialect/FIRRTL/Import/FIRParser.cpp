@@ -251,11 +251,10 @@ struct FIRParser {
   /// Add annotations from a string to the internal annotation map.  Report
   /// errors using a provided source manager location and with a provided error
   /// message
-  ParseResult importAnnotations(const SMLoc &loc, StringRef annotationsStr,
-                                MLIRContext *context, StringRef errorMsgParse);
+  ParseResult importAnnotations(SMLoc loc, StringRef annotationsStr);
 
   /// Add annotations from the source manager, if an annotation file was added.
-  ParseResult importAnnotationFile(const SMLoc &loc, MLIRContext *context);
+  ParseResult importAnnotationFile(SMLoc loc);
 
   /// Populate a vector of annotations for a given Target.  If the annotations
   /// parameter is non-empty, then this will be appended to.
@@ -779,15 +778,12 @@ ParseResult FIRParser::parseOptionalRUW(RUWAttr &result) {
   return success();
 }
 
-ParseResult FIRParser::importAnnotations(const SMLoc &loc,
-                                         StringRef annotationsStr,
-                                         MLIRContext *context,
-                                         StringRef errorMsgParse) {
+ParseResult FIRParser::importAnnotations(SMLoc loc, StringRef annotationsStr) {
 
   auto annotations = json::parse(annotationsStr);
   if (auto err = annotations.takeError()) {
     handleAllErrors(std::move(err), [&](const json::ParseError &a) {
-      auto diag = emitError(loc, errorMsgParse);
+      auto diag = emitError(loc, "Failed to parse JSON Annotations");
       diag.attachNote() << a.message();
     });
     return failure();
@@ -796,7 +792,7 @@ ParseResult FIRParser::importAnnotations(const SMLoc &loc,
   json::Path::Root root;
   llvm::StringMap<ArrayAttr> annotationMap;
   if (annotations) {
-    if (!fromJSON(annotations.get(), annotationMap, root, context)) {
+    if (!fromJSON(annotations.get(), annotationMap, root, getContext())) {
       auto diag = emitError(loc, "Invalid/unsupported annotation format");
       std::string jsonErrorMessage =
           "See inline comments for problem area in JSON:\n";
@@ -818,19 +814,17 @@ ParseResult FIRParser::importAnnotations(const SMLoc &loc,
       annotationVec.push_back(a);
     for (auto a : annotationMap[a])
       annotationVec.push_back(a);
-    state.annotationMap[a] = ArrayAttr::get(context, annotationVec);
+    state.annotationMap[a] = ArrayAttr::get(getContext(), annotationVec);
   }
 
   return success();
 }
 
-ParseResult FIRParser::importAnnotationFile(const SMLoc &loc,
-                                            MLIRContext *context) {
+ParseResult FIRParser::importAnnotationFile(SMLoc loc) {
 
   ParseResult result = success();
   if (state.annotationsBuf)
-    result = importAnnotations(loc, (state.annotationsBuf)->getBuffer(),
-                               context, "Failed to parse JSON file");
+    result = importAnnotations(loc, (state.annotationsBuf)->getBuffer());
 
   if (!result)
     state.annotationsBuf = nullptr;
@@ -2795,20 +2789,16 @@ ParseResult FIRCircuitParser::parseCircuit() {
       parseOptionalInfo(info))
     return failure();
 
-  OpBuilder b(mlirModule.getBodyRegion());
-
   // Deal with any inline annotations, if they exist.  These are processed first
   // to place any annotations from an annotation file *after* the inline
   // annotations.  While arbitrary, this makes the annotation file have "append"
   // semantics.
   if (!inlineAnnotations.empty())
-    if (importAnnotations(inlineAnnotationsLoc, inlineAnnotations,
-                          b.getContext(),
-                          "Failed to parse inline JSON annotations"))
+    if (importAnnotations(inlineAnnotationsLoc, inlineAnnotations))
       return failure();
 
   // Deal with the annotation file if one was specified
-  if (importAnnotationFile(info.getFIRLoc(), b.getContext()))
+  if (importAnnotationFile(info.getFIRLoc()))
     return failure();
 
   // Get annotations associated with this circuit. These are either:
@@ -2817,6 +2807,8 @@ ParseResult FIRCircuitParser::parseCircuit() {
   ArrayAttr annotationVec;
   getAnnotations("~", annotationVec);
   getAnnotations("~" + name.getValue().str(), annotationVec);
+
+  OpBuilder b(mlirModule.getBodyRegion());
 
   // Create the top-level circuit op in the MLIR module.
   auto circuit = b.create<CircuitOp>(info.getLoc(), name, annotationVec);
