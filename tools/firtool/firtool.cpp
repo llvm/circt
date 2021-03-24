@@ -103,9 +103,15 @@ static cl::opt<bool>
                  cl::desc("Run the verifier after each transformation pass"),
                  cl::init(true));
 
+static cl::opt<std::string>
+    inputAnnotationFilename("annotation-file",
+                            cl::desc("Optional input annotation file"),
+                            cl::value_desc("filename"));
+
 /// Process a single buffer of the input.
 static LogicalResult
 processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
+              StringRef annotationFilename,
               std::function<LogicalResult(OwningModuleRef)> callback) {
   MLIRContext context;
 
@@ -116,6 +122,17 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   llvm::SourceMgr sourceMgr;
   sourceMgr.AddNewSourceBuffer(std::move(ownedBuffer), llvm::SMLoc());
   SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, &context);
+
+  // Add the annotation file if one was explicitly specified.
+  std::string annotationFilenameDetermined;
+  if (!annotationFilename.empty()) {
+    if (!(sourceMgr.AddIncludeFile(annotationFilename.str(), llvm::SMLoc(),
+                                   annotationFilenameDetermined))) {
+      llvm::errs() << "cannot open input annotation file '"
+                   << annotationFilename << "': No such file or directory\n";
+      return failure();
+    }
+  }
 
   // Nothing in the parser is threaded.  Disable synchronization overhead.
   context.disableMultithreading();
@@ -184,42 +201,45 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 /// Process a single buffer of the input into a single output stream.
 static LogicalResult
 processBufferIntoSingleStream(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
-                              raw_ostream &os) {
-  return processBuffer(std::move(ownedBuffer), [&](OwningModuleRef module) {
-    // Finally, emit the output.
-    switch (outputFormat) {
-    case OutputMLIR:
-      module->print(os);
-      return success();
-    case OutputDisabled:
-      return success();
-    case OutputVerilog:
-      return exportVerilog(module.get(), os);
-    case OutputSplitVerilog:
-      llvm_unreachable("multi-file format must be handled elsewhere");
-    }
-    llvm_unreachable("unknown output format");
-  });
+                              StringRef annotationFilename, raw_ostream &os) {
+  return processBuffer(
+      std::move(ownedBuffer), annotationFilename, [&](OwningModuleRef module) {
+        // Finally, emit the output.
+        switch (outputFormat) {
+        case OutputMLIR:
+          module->print(os);
+          return success();
+        case OutputDisabled:
+          return success();
+        case OutputVerilog:
+          return exportVerilog(module.get(), os);
+        case OutputSplitVerilog:
+          llvm_unreachable("multi-file format must be handled elsewhere");
+        }
+        llvm_unreachable("unknown output format");
+      });
 };
 
 /// Process a single buffer of the input into multiple output files.
 static LogicalResult
 processBufferIntoMultipleFiles(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
+                               StringRef annotationFilename,
                                StringRef outputDirectory) {
-  return processBuffer(std::move(ownedBuffer), [&](OwningModuleRef module) {
-    // Finally, emit the output.
-    switch (outputFormat) {
-    case OutputMLIR:
-    case OutputDisabled:
-    case OutputVerilog:
-      llvm_unreachable("single-stream format must be handled elsewhere");
-    case OutputSplitVerilog:
-      return exportSplitVerilog(
-          module.get(), outputDirectory,
-          [](StringRef filename) { llvm::outs() << filename << "\n"; });
-    }
-    llvm_unreachable("unknown output format");
-  });
+  return processBuffer(
+      std::move(ownedBuffer), annotationFilename, [&](OwningModuleRef module) {
+        // Finally, emit the output.
+        switch (outputFormat) {
+        case OutputMLIR:
+        case OutputDisabled:
+        case OutputVerilog:
+          llvm_unreachable("single-stream format must be handled elsewhere");
+        case OutputSplitVerilog:
+          return exportSplitVerilog(
+              module.get(), outputDirectory,
+              [](StringRef filename) { llvm::outs() << filename << "\n"; });
+        }
+        llvm_unreachable("unknown output format");
+      });
 }
 
 int main(int argc, char **argv) {
@@ -266,7 +286,8 @@ int main(int argc, char **argv) {
       return 1;
     }
 
-    if (failed(processBufferIntoSingleStream(std::move(input), output->os())))
+    if (failed(processBufferIntoSingleStream(
+            std::move(input), inputAnnotationFilename, output->os())))
       return 1;
 
     output->keep();
@@ -279,7 +300,6 @@ int main(int argc, char **argv) {
       llvm::errs() << "missing output directory: specify with -o=<dir>\n";
       return 1;
     }
-
     std::error_code error = llvm::sys::fs::create_directory(outputFilename);
     if (error) {
       llvm::errs() << "cannot create output directory '" << outputFilename
@@ -287,8 +307,8 @@ int main(int argc, char **argv) {
       return 1;
     }
 
-    if (failed(
-            processBufferIntoMultipleFiles(std::move(input), outputFilename)))
+    if (failed(processBufferIntoMultipleFiles(
+            std::move(input), inputAnnotationFilename, outputFilename)))
       return 1;
     return 0;
   }

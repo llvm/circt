@@ -10,6 +10,13 @@
 //
 //===----------------------------------------------------------------------===//
 
+// This is a hack to get around upstream ArrayAttr no implementing
+// constBuilderCall.
+def AnnotationArrayAttr : ArrayAttrBase<CPred<"$_self.isa<::mlir::ArrayAttr>()">,
+                                              "Annotation array attribute"> {
+  let constBuilderCall = "$_builder.getArrayAttr($0)";
+}
+
 def CircuitOp : FIRRTLOp<"circuit",
       [IsolatedFromAbove, SymbolTable,
        SingleBlockImplicitTerminator<"DoneOp">]> {
@@ -18,13 +25,15 @@ def CircuitOp : FIRRTLOp<"circuit",
     The "firrtl.circuit" operation represents an overall Verilog circuit,
     containing a list of modules.
   }];
-  let arguments = (ins StrAttr:$name);
+  let arguments = (ins StrAttr:$name,
+                   DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<(ins "StringAttr":$name)>
+    OpBuilder<(ins "StringAttr":$name,
+               CArg<"ArrayAttr","ArrayAttr()">:$annotations)>
   ];
 
   let extraClassDeclaration = [{
@@ -54,13 +63,15 @@ def FModuleOp : FIRRTLOp<"module",
     name, a list of ports, and a body that represents the connections within
     the module.
   }];
-  let arguments = (ins);
+  let arguments = (
+    ins DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports)>
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports,
+               CArg<"ArrayAttr","ArrayAttr()">:$annotations)>
   ];
 
   let extraClassDeclaration = [{

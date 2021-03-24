@@ -1,8 +1,9 @@
 ; RUN: firtool %s --format=fir -mlir    | circt-opt | FileCheck %s --check-prefix=MLIR
+; RUN: firtool %s --format=fir -mlir --annotation-file %s.anno.json | circt-opt | FileCheck %s --check-prefix=ANNOTATIONS
 ; RUN: firtool %s --format=fir -verilog |             FileCheck %s --check-prefix=VERILOG
 ; RUN: firtool %s --format=fir -mlir -lower-to-rtl | circt-opt | FileCheck %s --check-prefix=MLIRLOWER
 
-circuit test_mod :
+circuit test_mod : %[[{"a": "a"}]]
   module test_mod :
     input a: UInt<1>
     output b: UInt<1>
@@ -15,11 +16,20 @@ circuit test_mod :
     output d: UInt<6>
     d <= cat(cat(a, b), c)
 
-; MLIR: firrtl.circuit "test_mod" {
+; MLIR: firrtl.circuit "test_mod"
 
-; MLIR-LABEL: firrtl.module @test_mod(%a: !firrtl.uint<1>, %b: !firrtl.flip<uint<1>>) {
+; MLIR-LABEL: firrtl.module @test_mod(%a: !firrtl.uint<1>, %b: !firrtl.flip<uint<1>>)
 ; MLIR-NEXT:    firrtl.connect %b, %a : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 ; MLIR-NEXT:  }
+
+; ANNOTATIONS-LABEL: firrtl.circuit "test_mod"
+; ANNOTATIONS-SAME: a = "a"
+; ANNOTATIONS-SAME: info = "a NoTargetAnnotation"
+; ANNOTATIONS-SAME: info = "a CircuitTarget Annotation
+; ANNOTATIONS-SAME: info = "a CircuitName Annotation"
+; ANNOTATIONS: firrtl.module @test_mod
+; ANNOTATIONS-SAME: info = "a ModuleTarget Annotation"
+; ANNOTATIONS-SAME: info = "a ModuleName Annotation"
 
 ; VERILOG-LABEL: module test_mod(
 ; VERILOG-NEXT :   input  a,
