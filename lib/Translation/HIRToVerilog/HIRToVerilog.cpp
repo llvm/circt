@@ -5,11 +5,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "Generators.h"
-#include "Helpers.h"
 #include "VerilogValue.h"
 #include "circt/Dialect/HIR/HIR.h"
 #include "circt/Dialect/HIR/HIRDialect.h"
 #include "circt/Translation/HIRToVerilog.h"
+#include "helper.h"
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/MLIRContext.h"
@@ -75,7 +75,7 @@ private:
         string replacementStr = getReplacementString();
         stringstream locSStream;
         locSStream << "$loc" << loc;
-        findAndReplaceAll(code, locSStream.str(), replacementStr);
+        helper::findAndReplaceAll(code, locSStream.str(), replacementStr);
       }
       outBuffer << code;
       assert(replaceLocs.size() == topOfStack.top());
@@ -395,7 +395,7 @@ void VerilogPrinter::printDelayOp(hir::DelayOp op, unsigned indentAmount) {
   verilogMapper.insert(result,
                        VerilogValue(result, "v" + to_string(newValueNumber())));
   VerilogValue *vResult = verilogMapper.getMutable(result);
-  unsigned input_bitwidth = getBitWidth(input.getType());
+  unsigned input_bitwidth = helper::getBitWidth(input.getType());
   string str_shiftreg = "shiftreg" + to_string(newValueNumber());
   outBuffer << "reg[" << input_bitwidth - 1 << ":0]" << str_shiftreg << "["
             << v_delay->strConstOrError() << ":0] = "
@@ -885,19 +885,25 @@ void VerilogPrinter::printForOp(hir::ForOp op, unsigned indentAmount) {
   loopCounterStream << loopCounterTemplate;
 
   string loopCounterString = loopCounterStream.str();
-  findAndReplaceAll(loopCounterString, "$id_loop", to_string(id_loop));
-  findAndReplaceAll(loopCounterString, "$msb_idx", to_string(width_idx - 1));
-  findAndReplaceAll(loopCounterString, "$v_lb", v_lb.strConstOrWire());
-  findAndReplaceAll(loopCounterString, "$msb_lb", to_string(width_lb - 1));
-  findAndReplaceAll(loopCounterString, "$v_ub", v_ub.strConstOrWire());
-  findAndReplaceAll(loopCounterString, "$msb_ub", to_string(width_ub - 1));
-  findAndReplaceAll(loopCounterString, "$v_step", v_step.strConstOrWire());
-  findAndReplaceAll(loopCounterString, "$msb_step", to_string(width_step - 1));
-  findAndReplaceAll(loopCounterString, "$vTstart",
-                    vTstart->strDelayedWire(delayValue - 1));
-  findAndReplaceAll(loopCounterString, "$v_tloop", v_tloop->strWire());
-  findAndReplaceAll(loopCounterString, "$v_tfinish", v_tfinish->strWire());
-  findAndReplaceAll(loopCounterString, "$v_idx", v_idx.strWire());
+  helper::findAndReplaceAll(loopCounterString, "$id_loop", to_string(id_loop));
+  helper::findAndReplaceAll(loopCounterString, "$msb_idx",
+                            to_string(width_idx - 1));
+  helper::findAndReplaceAll(loopCounterString, "$v_lb", v_lb.strConstOrWire());
+  helper::findAndReplaceAll(loopCounterString, "$msb_lb",
+                            to_string(width_lb - 1));
+  helper::findAndReplaceAll(loopCounterString, "$v_ub", v_ub.strConstOrWire());
+  helper::findAndReplaceAll(loopCounterString, "$msb_ub",
+                            to_string(width_ub - 1));
+  helper::findAndReplaceAll(loopCounterString, "$v_step",
+                            v_step.strConstOrWire());
+  helper::findAndReplaceAll(loopCounterString, "$msb_step",
+                            to_string(width_step - 1));
+  helper::findAndReplaceAll(loopCounterString, "$vTstart",
+                            vTstart->strDelayedWire(delayValue - 1));
+  helper::findAndReplaceAll(loopCounterString, "$v_tloop", v_tloop->strWire());
+  helper::findAndReplaceAll(loopCounterString, "$v_tfinish",
+                            v_tfinish->strWire());
+  helper::findAndReplaceAll(loopCounterString, "$v_idx", v_idx.strWire());
   outBuffer << "\n//{ Loop" << id_loop << "\n";
   outBuffer << loopCounterString;
   outBuffer << "\n//Loop" << id_loop << " body\n";

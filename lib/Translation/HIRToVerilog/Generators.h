@@ -48,7 +48,7 @@ std::string gen_bram(string name, const VerilogValue ra,
   }
 
   string size = to_string(ra.getMemrefPackedSize());
-  string width = to_string(getBitWidth(ra.getElementType()));
+  string width = to_string(helper::getBitWidth(ra.getElementType()));
   string ena = ra.strMemrefRdEn() + dimSel;
   string enb = rb.strMemrefWrEn() + dimSel;
   string web = enb;
@@ -57,15 +57,15 @@ std::string gen_bram(string name, const VerilogValue ra,
   string dib = rb.strMemrefWrData() + dimSel;
   string doa = ra.strMemrefRdData() + dimSel;
 
-  findAndReplaceAll(out, "$name", name);
-  findAndReplaceAll(out, "$size", size);
-  findAndReplaceAll(out, "$width", width);
-  findAndReplaceAll(out, "$ena", ena);
-  findAndReplaceAll(out, "$enb", enb);
-  findAndReplaceAll(out, "$web", web);
-  findAndReplaceAll(out, "$addra", addra);
-  findAndReplaceAll(out, "$addrb", addrb);
-  findAndReplaceAll(out, "$dib", dib);
-  findAndReplaceAll(out, "$doa", doa);
+  helper::findAndReplaceAll(out, "$name", name);
+  helper::findAndReplaceAll(out, "$size", size);
+  helper::findAndReplaceAll(out, "$width", width);
+  helper::findAndReplaceAll(out, "$ena", ena);
+  helper::findAndReplaceAll(out, "$enb", enb);
+  helper::findAndReplaceAll(out, "$web", web);
+  helper::findAndReplaceAll(out, "$addra", addra);
+  helper::findAndReplaceAll(out, "$addrb", addrb);
+  helper::findAndReplaceAll(out, "$dib", dib);
+  helper::findAndReplaceAll(out, "$doa", doa);
   return out;
 }

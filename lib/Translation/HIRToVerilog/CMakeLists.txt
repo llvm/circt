@@ -1,5 +1,6 @@
+file(GLOB globbed *.cpp)
 add_circt_translation_library(CIRCTHIRToVerilog
-  HIRToVerilog.cpp
+  ${globbed}
 
   ADDITIONAL_HEADER_DIRS
   ${PROJECT_SOURCE_DIR}/include/circt/Target/HIRToVerilog

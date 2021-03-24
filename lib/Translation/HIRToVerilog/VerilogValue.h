@@ -1,9 +1,9 @@
 #ifndef __HIRVERILOGVALUE__
 #define __HIRVERILOGVALUE__
 
-#include "Helpers.h"
 #include "circt/Dialect/HIR/HIR.h"
 #include "circt/Translation/HIRToVerilog.h"
+#include "helper.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include <string>
 
@@ -219,12 +219,13 @@ private:
     if (!distDims.empty())
       out += "endgenerate\n";
 
-    findAndReplaceAll(out, "$numInputsMinus1", to_string(numInputs - 1));
-    findAndReplaceAll(out, "$str_en_input_if", str_en_input + "_if");
-    findAndReplaceAll(out, "$str_en_input", str_en_input);
-    findAndReplaceAll(out, "$str_en", str_en);
-    findAndReplaceAll(out, "$distDimAccessStr", distDimAccessStr);
-    findAndReplaceAll(out, "$distDimsStr", distDimsStr);
+    helper::findAndReplaceAll(out, "$numInputsMinus1",
+                              to_string(numInputs - 1));
+    helper::findAndReplaceAll(out, "$str_en_input_if", str_en_input + "_if");
+    helper::findAndReplaceAll(out, "$str_en_input", str_en_input);
+    helper::findAndReplaceAll(out, "$str_en", str_en);
+    helper::findAndReplaceAll(out, "$distDimAccessStr", distDimAccessStr);
+    helper::findAndReplaceAll(out, "$distDimsStr", distDimsStr);
     return out;
   }
 
@@ -244,7 +245,7 @@ private:
       distDimAccessStr += "[" + str_i + "]";
     }
 
-    findAndReplaceAll(body, dist_dim_index_stub, distDimAccessStr);
+    helper::findAndReplaceAll(body, dist_dim_index_stub, distDimAccessStr);
     if (numDistDims > 0)
       return "generate\n" + (prologue + body + epilogue) + "endgenerate\n";
     else
@@ -280,11 +281,11 @@ private:
     if (!distDims.empty())
       out += "endgenerate\n";
 
-    findAndReplaceAll(out, "$str_v", str_v);
-    findAndReplaceAll(out, "$str_v_array", str_v_array);
-    findAndReplaceAll(out, "$str_dataWidth", str_dataWidth);
-    findAndReplaceAll(out, "$distDimsStr", distDimsStr);
-    findAndReplaceAll(out, "$distDimAccessStr", distDimAccessStr);
+    helper::findAndReplaceAll(out, "$str_v", str_v);
+    helper::findAndReplaceAll(out, "$str_v_array", str_v_array);
+    helper::findAndReplaceAll(out, "$str_dataWidth", str_dataWidth);
+    helper::findAndReplaceAll(out, "$distDimsStr", distDimsStr);
+    helper::findAndReplaceAll(out, "$distDimAccessStr", distDimAccessStr);
     return out;
   }
 
@@ -342,18 +343,22 @@ private:
     if (!distDims.empty())
       out += "endgenerate\n";
 
-    findAndReplaceAll(out, "$v_valid_access", str_v_valid + distDimAccessStr);
-    findAndReplaceAll(out, "$v_input_access", str_v_input + distDimAccessStr);
-    findAndReplaceAll(out, "$v_valid_if", str_v_valid + "_if");
-    findAndReplaceAll(out, "$v_input_if", str_v_input + "_if");
-    findAndReplaceAll(out, "$v_valid", str_v_valid);
-    findAndReplaceAll(out, "$v_input", str_v_input);
-    findAndReplaceAll(out, "$v", str_v + distDimAccessStr);
-    findAndReplaceAll(out, "$dataWidthMinus1", to_string(dataWidth - 1));
-    findAndReplaceAll(out, "$dataWidth", to_string(dataWidth));
-    findAndReplaceAll(out, "$numInputsMinus1", to_string(numInputs - 1));
-    findAndReplaceAll(out, "$distDimsStr", distDimsStr);
-    findAndReplaceAll(out, "$distDimAccessStr", distDimAccessStr);
+    helper::findAndReplaceAll(out, "$v_valid_access",
+                              str_v_valid + distDimAccessStr);
+    helper::findAndReplaceAll(out, "$v_input_access",
+                              str_v_input + distDimAccessStr);
+    helper::findAndReplaceAll(out, "$v_valid_if", str_v_valid + "_if");
+    helper::findAndReplaceAll(out, "$v_input_if", str_v_input + "_if");
+    helper::findAndReplaceAll(out, "$v_valid", str_v_valid);
+    helper::findAndReplaceAll(out, "$v_input", str_v_input);
+    helper::findAndReplaceAll(out, "$v", str_v + distDimAccessStr);
+    helper::findAndReplaceAll(out, "$dataWidthMinus1",
+                              to_string(dataWidth - 1));
+    helper::findAndReplaceAll(out, "$dataWidth", to_string(dataWidth));
+    helper::findAndReplaceAll(out, "$numInputsMinus1",
+                              to_string(numInputs - 1));
+    helper::findAndReplaceAll(out, "$distDimsStr", distDimsStr);
+    helper::findAndReplaceAll(out, "$distDimAccessStr", distDimAccessStr);
     return out;
   }
 
@@ -435,7 +440,7 @@ public:
     stringstream output;
     auto strAddr = strMemrefAddr();
     // print addr bus selector.
-    unsigned addrWidth = calcAddrWidth(type.dyn_cast<MemrefType>());
+    unsigned addrWidth = helper::calcAddrWidth(type.dyn_cast<MemrefType>());
     if (addrWidth > 0) {
       output << buildDataSelectorStr(strMemrefAddr(), strMemrefAddrValid(),
                                      strMemrefAddrInput(), numAccess,
@@ -452,7 +457,7 @@ public:
     // print write bus selector.
     if (maxNumWrites() > 0) {
       unsigned dataWidth =
-          ::getBitWidth(type.dyn_cast<MemrefType>().getElementType());
+          helper::getBitWidth(type.dyn_cast<MemrefType>().getElementType());
       output << buildEnableSelectorStr(strMemrefWrEn(), strMemrefWrEnInput(),
                                        maxNumWrites());
       output << buildDataSelectorStr(strMemrefWrData(), strMemrefWrDataValid(),
@@ -478,7 +483,7 @@ public:
       else
         return 1;
     }
-    return ::getBitWidth(type);
+    return helper::getBitWidth(type);
   }
 
   bool isIntegerType() const { return ::isIntegerType(type); }
@@ -498,7 +503,8 @@ public:
     if (auto wireType = type.dyn_cast<hir::WireType>()) {
       auto shape = wireType.getShape();
       auto elementType = wireType.getElementType();
-      auto elementWidthStr = to_string(::getBitWidth(elementType) - 1) + ":0";
+      auto elementWidthStr =
+          to_string(helper::getBitWidth(elementType) - 1) + ":0";
       string distDimsStr = "";
       for (auto dim : shape) {
         distDimsStr += "[" + to_string(dim - 1) + ":0]";
@@ -672,12 +678,12 @@ string VerilogValue::strMemrefInstDecl() const {
   string out_decls;
   MemrefType memrefTy = type.dyn_cast<MemrefType>();
   hir::Details::PortKind port = memrefTy.getPort();
-  string portString = ((port == hir::Details::r)   ? "r"
-                       : (port == hir::Details::w) ? "w"
-                                                   : "rw");
-  unsigned addrWidth = calcAddrWidth(memrefTy);
+  string portString =
+      ((port == hir::Details::r) ? "r"
+                                 : (port == hir::Details::w) ? "w" : "rw");
+  unsigned addrWidth = helper::calcAddrWidth(memrefTy);
   string distDimsStr = strMemrefDistDims();
-  unsigned dataWidth = ::getBitWidth(memrefTy.getElementType());
+  unsigned dataWidth = helper::getBitWidth(memrefTy.getElementType());
   if (addrWidth > 0) { // All dims may be distributed.
     out_decls += "reg[" + to_string(addrWidth - 1) + ":0] " + strMemrefAddr() +
                  distDimsStr + ";\n";
@@ -700,14 +706,14 @@ string VerilogValue::strMemrefArgDecl() {
   string out;
   MemrefType memrefTy = type.dyn_cast<MemrefType>();
   hir::Details::PortKind port = memrefTy.getPort();
-  string portString = ((port == hir::Details::r)   ? "r"
-                       : (port == hir::Details::w) ? "w"
-                                                   : "rw");
+  string portString =
+      ((port == hir::Details::r) ? "r"
+                                 : (port == hir::Details::w) ? "w" : "rw");
   out += "//MemrefType : port = " + portString + ".\n";
-  unsigned addrWidth = calcAddrWidth(memrefTy);
+  unsigned addrWidth = helper::calcAddrWidth(memrefTy);
   string distDimsStr = strMemrefDistDims();
   bool printComma = false;
-  unsigned dataWidth = ::getBitWidth(memrefTy.getElementType());
+  unsigned dataWidth = helper::getBitWidth(memrefTy.getElementType());
   if (addrWidth > 0) { // all dims may be distributed.
     out += "output reg[" + to_string(addrWidth - 1) + ":0] " + strMemrefAddr() +
            distDimsStr;

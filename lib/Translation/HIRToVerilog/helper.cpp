@@ -1,18 +1,5 @@
-#include "llvm/Support/raw_ostream.h"
-#ifndef __HIRToVerilogHELPERS.H__
-#define __HIRToVerilogHELPERS .H__
-#include "circt/Dialect/HIR/HIR.h"
-#include "circt/Translation/HIRToVerilog.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "helper.h"
 
-#include <locale>
-#include <string>
-
-using namespace mlir;
-using namespace hir;
-using namespace std;
-
-static unsigned max(unsigned x, unsigned y) { return x > y ? x : y; }
 static bool isTerminatingChar(char c) {
   if (isalnum(c))
     return false;
@@ -21,8 +8,8 @@ static bool isTerminatingChar(char c) {
   return true;
 }
 
-static void findAndReplaceAll(string &data, string toSearch,
-                              string replaceStr) {
+namespace helper {
+void findAndReplaceAll(string &data, string toSearch, string replaceStr) {
   int i = 0;
   for (char c : toSearch) {
     if (i == 0 && c == '$')
@@ -49,7 +36,7 @@ static void findAndReplaceAll(string &data, string toSearch,
   }
 }
 
-static unsigned getBitWidth(Type type) {
+unsigned getBitWidth(Type type) {
   unsigned bitwidth = 0;
   if (type.dyn_cast<hir::TimeType>()) {
     return 1;
@@ -68,20 +55,18 @@ static unsigned getBitWidth(Type type) {
   return bitwidth;
 }
 
-static unsigned calcAddrWidth(hir::MemrefType memrefTy) {
+unsigned calcAddrWidth(hir::MemrefType memrefTy) {
   // FIXME: Currently we assume that all dims are power of two.
   auto shape = memrefTy.getShape();
-  auto elementType = memrefTy.getElementType();
   auto packing = memrefTy.getPacking();
-  unsigned elementWidth = getBitWidth(elementType);
-  int max_dim = shape.size() - 1;
+  int maxDim = shape.size() - 1;
   unsigned addrWidth = 0;
   for (auto dim : packing) {
     // dim0 is last in shape.
-    int dim_size = shape[max_dim - dim];
-    float log_size = log2(dim_size);
-    addrWidth += ceil(log_size);
+    int dimSize = shape[maxDim - dim];
+    float logSize = log2(dimSize);
+    addrWidth += ceil(logSize);
   }
   return addrWidth;
 }
-#endif
+} // namespace helper
