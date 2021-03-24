@@ -477,10 +477,6 @@ TimeAttr::verifyConstructionInvariants(Location loc, Type type,
                              "exactly 3, but got "
                           << timeValues.size();
 
-  // Check the time values are positive or zero integers.
-  if (timeValues[0] < 0 || timeValues[1] < 0 || timeValues[2] < 0)
-    return emitError(loc) << "Received a negative time value.";
-
   return success();
 }
 
