@@ -92,7 +92,7 @@ rtl.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:   input  [1:0]                                              c,
 // CHECK-NEXT:   input                                                     cond,
 // CHECK-NEXT:   input  [11:0][9:0][3:0]                                   array2d,
-// CHECK-NEXT:   input  [7:0]                                              uarray[15:0], postUArray,
+// CHECK-NEXT:   input  [7:0]                                              uarray[0:15], postUArray,
 // CHECK-NEXT:   input  struct packed {logic [1:0] foo; logic [3:0] bar; } structA,
 // CHECK-NEXT:   output [3:0]                                              r0, r2, r4, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15
 // CHECK-NEXT:   output                                                    r16, r17, r18, r19, r20, r21, r22, r23, r24, r25, r26, r27,
@@ -319,10 +319,10 @@ rtl.module @wires(%in4: i4, %in8: i8) -> (%a: i4, %b: i8, %c: i8) {
 
   // Unpacked arrays, and unpacked arrays of packed arrays.
 
-  // CHECK-NEXT: wire [7:0]            myUArray1[41:0];
+  // CHECK-NEXT: wire [7:0]            myUArray1[0:41];
   %myUArray1 = sv.wire : !rtl.inout<uarray<42 x i8>>
 
-  // CHECK-NEXT: wire [41:0][3:0]      myWireUArray2[2:0];
+  // CHECK-NEXT: wire [41:0][3:0]      myWireUArray2[0:2];
   %myWireUArray2 = sv.wire : !rtl.inout<uarray<3 x array<42 x i4>>>
 
   // CHECK-EMPTY:
