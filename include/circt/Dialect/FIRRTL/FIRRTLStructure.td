@@ -10,13 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-// This is a hack to get around upstream ArrayAttr no implementing
-// constBuilderCall.
-def AnnotationArrayAttr : ArrayAttrBase<CPred<"$_self.isa<::mlir::ArrayAttr>()">,
-                                              "Annotation array attribute"> {
-  let constBuilderCall = "$_builder.getArrayAttr($0)";
-}
-
 def CircuitOp : FIRRTLOp<"circuit",
       [IsolatedFromAbove, SymbolTable,
        SingleBlockImplicitTerminator<"DoneOp">]> {
