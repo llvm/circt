@@ -7,9 +7,9 @@
 // CHECK-SAME:                                     %[[VAL_0:.*]]: index, %[[VAL_1:.*]]: none, ...) -> none {
 // CHECK:           %[[VAL_2:.*]] = "handshake.merge"(%[[VAL_0]]) : (index) -> index
 // CHECK:           %[[VAL_3:.*]]:6 = "handshake.fork"(%[[VAL_1]]) {control = true} : (none) -> (none, none, none, none, none, none)
-// CHECK:           %[[VAL_4:.*]] = alloc() : memref<100xf32>
-// CHECK:           %[[VAL_5:.*]] = alloc() : memref<100xf32, 2>
-// CHECK:           %[[VAL_6:.*]] = alloc() : memref<1xi32>
+// CHECK:           %[[VAL_4:.*]] = memref.alloc() : memref<100xf32>
+// CHECK:           %[[VAL_5:.*]] = memref.alloc() : memref<100xf32, 2>
+// CHECK:           %[[VAL_6:.*]] = memref.alloc() : memref<1xi32>
 // CHECK:           %[[VAL_7:.*]] = "handshake.constant"(%[[VAL_3]]#4) {value = 0 : index} : (none) -> index
 // CHECK:           %[[VAL_8:.*]] = "handshake.constant"(%[[VAL_3]]#3) {value = 64 : index} : (none) -> index
 // CHECK:           %[[VAL_9:.*]] = "handshake.constant"(%[[VAL_3]]#2) {value = 0 : index} : (none) -> index
@@ -83,7 +83,7 @@
 // CHECK:           %[[VAL_87:.*]] = addi %[[VAL_68]]#1, %[[VAL_86]] : index
 // CHECK:           %[[VAL_88:.*]] = "handshake.constant"(%[[VAL_85]]#0) {value = 11 : index} : (none) -> index
 // CHECK:           %[[VAL_89:.*]] = addi %[[VAL_70]]#1, %[[VAL_88]] : index
-// CHECK:           dma_start %[[VAL_72]]#1{{\[}}%[[VAL_87]]], %[[VAL_74]]#1{{\[}}%[[VAL_89]]], %[[VAL_76]]#1, %[[VAL_78]]#1{{\[}}%[[VAL_80]]#1] : memref<100xf32>, memref<100xf32, 2>, memref<1xi32>
+// CHECK:           memref.dma_start %[[VAL_72]]#1{{\[}}%[[VAL_87]]], %[[VAL_74]]#1{{\[}}%[[VAL_89]]], %[[VAL_76]]#1, %[[VAL_78]]#1{{\[}}%[[VAL_80]]#1] : memref<100xf32>, memref<100xf32, 2>, memref<1xi32>
 // CHECK:           %[[VAL_90:.*]] = addi %[[VAL_68]]#0, %[[VAL_82]]#1 : index
 // CHECK:           %[[VAL_27]] = "handshake.branch"(%[[VAL_70]]#0) {control = false} : (index) -> index
 // CHECK:           %[[VAL_29]] = "handshake.branch"(%[[VAL_72]]#0) {control = false} : (memref<100xf32>) -> memref<100xf32>
@@ -101,9 +101,9 @@
 // CHECK:         }
 // CHECK:       }
 
-    %0 = alloc() : memref<100xf32>
-    %1 = alloc() : memref<100xf32, 2>
-    %2 = alloc() : memref<1xi32>
+    %0 = memref.alloc() : memref<100xf32>
+    %1 = memref.alloc() : memref<100xf32, 2>
+    %2 = memref.alloc() : memref<1xi32>
     %c0 = constant 0 : index
     %c64 = constant 64 : index
     %c0_0 = constant 0 : index
@@ -118,7 +118,7 @@
     %5 = addi %3, %c7 : index
     %c11 = constant 11 : index
     %6 = addi %arg0, %c11 : index
-    dma_start %0[%5], %1[%6], %c64, %2[%c0] : memref<100xf32>, memref<100xf32, 2>, memref<1xi32>
+    memref.dma_start %0[%5], %1[%6], %c64, %2[%c0] : memref<100xf32>, memref<100xf32, 2>, memref<1xi32>
     %7 = addi %3, %c1 : index
     br ^bb1(%7 : index)
   ^bb3: // pred: ^bb1

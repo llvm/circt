@@ -13,6 +13,7 @@
 #ifndef CIRCT_HANDSHAKEOPS_OPS_H_
 #define CIRCT_HANDSHAKEOPS_OPS_H_
 
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -31,7 +32,6 @@
 namespace circt {
 namespace handshake {
 
-using namespace mlir;
 class TerminatorOp;
 
 class HandshakeOpsDialect : public Dialect {

@@ -1,4 +1,4 @@
-// RUN: llhd-sim %s | FileCheck %s
+// RUN: llhd-sim %s -shared-libs=%shlibdir/libcirct-llhd-signals-runtime-wrappers%shlibext | FileCheck %s
 
 // CHECK: 0ps 0d 0e  root/sig[0]  0xffff
 // CHECK-NEXT: 0ps 0d 0e  root/sig[1]  0xffff

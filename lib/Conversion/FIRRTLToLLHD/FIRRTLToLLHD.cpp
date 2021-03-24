@@ -23,7 +23,6 @@
 
 #define DEBUG_TYPE "firrtl-to-llhd"
 
-using namespace mlir;
 using namespace circt;
 using namespace circt::llhd;
 

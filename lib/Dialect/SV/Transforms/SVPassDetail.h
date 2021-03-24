@@ -12,7 +12,8 @@
 #ifndef DIALECT_SV_TRANSFORMS_SVPASSDETAIL_H
 #define DIALECT_SV_TRANSFORMS_SVPASSDETAIL_H
 
-#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/RTL/RTLOps.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "mlir/Pass/Pass.h"
 
 namespace circt {

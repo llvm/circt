@@ -37,8 +37,12 @@ if( CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR )
   
   option(LLVM_INCLUDE_TOOLS "Generate build targets for the LLVM tools." ON)
   option(LLVM_BUILD_TOOLS "Build the LLVM tools. If OFF, just generate build targets." ON)
-  
+
+if (MSVC)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHs-c- /GR-")
+else ()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions -fno-rtti")
+endif ()
   
 #-------------------------------------------------------------------------------
 # MLIR/LLVM Configuration
@@ -63,8 +67,8 @@ if( CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR )
   set(CIRCT_BUILT_STANDALONE 1)
   set(BACKEND_PACKAGE_STRING "LLVM ${LLVM_PACKAGE_VERSION}")
 else()
-  set(MLIR_MAIN_SRC_DIR ${LLVM_MAIN_SRC_DIR}/../mlir/include ) # --src-root
-  set(MLIR_INCLUDE_DIR ${LLVM_MAIN_SRC_DIR}/../mlir/include ) # --includedir
+  set(MLIR_MAIN_SRC_DIR ${LLVM_MAIN_SRC_DIR}/../mlir ) # --src-root
+  set(MLIR_INCLUDE_DIR ${MLIR_MAIN_SRC_DIR}/include ) # --includedir
   set(MLIR_TABLEGEN_OUTPUT_DIR ${CMAKE_BINARY_DIR}/tools/mlir/include)
   set(MLIR_TABLEGEN_EXE $<TARGET_FILE:mlir-tblgen>)
   include_directories(SYSTEM ${MLIR_INCLUDE_DIR})
@@ -94,6 +98,7 @@ set(CIRCT_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
 set(CIRCT_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/include )
 set(CIRCT_TOOLS_DIR ${CMAKE_BINARY_DIR}/bin)
 
+list(APPEND CMAKE_MODULE_PATH "${MLIR_MAIN_SRC_DIR}/cmake/modules")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 include(AddCIRCT)
 
@@ -145,6 +150,56 @@ else()
   else()
     set(VERILATOR_PATH "")
     message(STATUS "Did not find Verilator.")
+  endif()
+endif()
+
+#-------------------------------------------------------------------------------
+# Vivado Configuration
+#-------------------------------------------------------------------------------
+
+# If vivado hasn't been explicitly disabled, find it.
+option(VIVADO_DISABLE "Disable the vivado synthesis tests.")
+if (VIVADO_DISABLE)
+  message(STATUS "Disabling vivado tests.")
+else()
+  if (EXISTS ${VIVADO_PATH})
+    message(STATUS "Setting vivado path to ${VIVADO_PATH}.")
+  else()
+    # Search for vivado's `vivado` command.
+    find_program(VIVADO_PATH "vivado")
+    if(EXISTS ${VIVADO_PATH})
+      # Then strip the filename.
+      get_filename_component(VIVADO_PATH ${VIVADO_PATH} DIRECTORY)
+      message(STATUS "Found vivado at ${VIVADO_PATH}.")
+    else()
+      set(VIVADO_PATH "")
+      message(STATUS "Did not find vivado.")
+    endif()
+  endif()
+endif()
+
+#-------------------------------------------------------------------------------
+# Quartus Configuration
+#-------------------------------------------------------------------------------
+
+# If Quartus hasn't been explicitly disabled, find it.
+option(QUARTUS_DISABLE "Disable the Quartus synthesis tests.")
+if (QUARTUS_DISABLE)
+  message(STATUS "Disabling Quartus tests.")
+else()
+  if (EXISTS ${QUARTUS_PATH})
+    message(STATUS "Setting Quartus path to ${QUARTUS_PATH}.")
+  else()
+    # Search for Quartus's `quartus` command.
+    find_program(QUARTUS_PATH "quartus")
+    if(EXISTS ${QUARTUS_PATH})
+      # Then strip the filename.
+      get_filename_component(QUARTUS_PATH ${QUARTUS_PATH} DIRECTORY)
+      message(STATUS "Found Quartus at ${QUARTUS_PATH}.")
+    else()
+      set(QUARTUS_PATH "")
+      message(STATUS "Did not find Quartus.")
+    endif()
   endif()
 endif()
 
@@ -217,6 +272,30 @@ else()
 endif()
 
 #-------------------------------------------------------------------------------
+# Python Configuration
+#-------------------------------------------------------------------------------
+
+option(CIRCT_BINDINGS_PYTHON_ENABLED "Enables CIRCT Python bindings." OFF)
+
+if(CIRCT_BINDINGS_PYTHON_ENABLED)
+  message(STATUS "CIRCT Python bindings are enabled.")
+
+  include(MLIRDetectPythonEnv)
+  find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
+  message(STATUS "Found Python include dirs: ${Python3_INCLUDE_DIRS}")
+  message(STATUS "Found Python libraries: ${Python3_LIBRARIES}")
+
+  mlir_detect_pybind11_install()
+  find_package(pybind11 2.6 CONFIG REQUIRED)
+  message(STATUS "Found pybind11 v${pybind11_VERSION}: ${pybind11_INCLUDE_DIR}")
+  message(STATUS "Python prefix = '${PYTHON_MODULE_PREFIX}', "
+                 "suffix = '${PYTHON_MODULE_SUFFIX}', "
+                 "extension = '${PYTHON_MODULE_EXTENSION}'")
+else()
+  message(STATUS "CIRCT Python bindings are disabled.")
+endif()
+
+#-------------------------------------------------------------------------------
 # Directory setup
 #-------------------------------------------------------------------------------
 
@@ -275,3 +354,21 @@ if (NOT LLVM_ENABLE_IDE)
 endif()
 
 add_subdirectory(cmake/modules)
+
+# Set RPATH to $ORIGIN on all targets.
+function(set_rpath_all_targets dir)
+  get_property(subdirectories DIRECTORY ${dir} PROPERTY SUBDIRECTORIES)
+  foreach(subdir ${subdirectories})
+    set_rpath_all_targets(${subdir})
+  endforeach()
+
+  get_directory_property(LCL_TARGETS DIRECTORY ${dir} BUILDSYSTEM_TARGETS)
+  set_property(TARGET ${LCL_TARGETS} PROPERTY INSTALL_RPATH "$ORIGIN/../lib")
+endfunction()
+
+option(STANDALONE_INSTALL "Create an 'install' for packaging which doesn't \
+         require installation" off)
+if (STANDALONE_INSTALL)
+  message(STATUS "Setting an $ORIGIN-based RPATH on all executables")
+  set_rpath_all_targets(${CMAKE_CURRENT_SOURCE_DIR})
+endif()

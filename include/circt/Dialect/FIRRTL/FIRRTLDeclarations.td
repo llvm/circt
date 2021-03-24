@@ -85,6 +85,9 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
     /// Return the kind of the specified port or None if the name is invalid.
     Optional<PortKind> getPortKind(StringRef portName);
 
+    /// Return the kind of the specified port number
+    Optional<PortKind> getPortKind(size_t resultNo);
+
     /// Return the data-type field of the memory, the type of each element.
     FIRRTLType getDataType();
 
@@ -93,6 +96,9 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
     StringRef getPortNameStr(size_t resultNo) {
       return getPortName(resultNo).getValue();
     }
+
+    /// Return the port type for the specified result number.
+    FIRRTLType getPortType(size_t resultNo);
 
     // Return the result for this instance that corresponds to the specified
     // port name.
@@ -168,7 +174,7 @@ def WireOp : FIRRTLOp<"wire", []> {
   let results = (outs FIRRTLType:$result);
 
   let builders = [
-    OpBuilderDAG<(ins "::mlir::Type":$elementType,
+    OpBuilder<(ins "::mlir::Type":$elementType,
                       CArg<"StringRef", "{}">:$name), [{
       return build($_builder, $_state, elementType,
                    $_builder.getStringAttr(name));

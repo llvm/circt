@@ -12,24 +12,59 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/ESI/ESITypes.h"
+#include "circt/Dialect/RTL/RTLTypes.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/TypeSwitch.h"
 
-using namespace mlir;
+using namespace circt;
 using namespace circt::esi;
 
-Type ChannelPort::parse(mlir::MLIRContext *ctxt, mlir::DialectAsmParser &p) {
+Type ChannelPort::parse(MLIRContext *ctxt, DialectAsmParser &p) {
   Type inner;
   if (p.parseLess() || p.parseType(inner) || p.parseGreater())
     return Type();
   return get(ctxt, inner);
 }
 
-void ChannelPort::print(mlir::DialectAsmPrinter &p) const {
+void ChannelPort::print(DialectAsmPrinter &p) const {
   p << "channel<";
   p.printType(getInner());
+  p << ">";
+}
+
+Type StructType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
+  if (p.parseLess())
+    return Type();
+  StringRef structName;
+  if (p.parseKeyword(&structName) || p.parseComma())
+    return Type();
+
+  llvm::SmallVector<rtl::StructType::FieldInfo, 4> fields;
+  StringRef fieldName;
+  while (mlir::succeeded(p.parseOptionalKeyword(&fieldName))) {
+    Type type;
+    if (p.parseColon() || p.parseType(type))
+      return Type();
+    fields.push_back(rtl::StructType::FieldInfo{fieldName, type});
+    if (p.parseOptionalComma())
+      break;
+  }
+  if (p.parseGreater())
+    return Type();
+
+  auto inner = rtl::StructType::get(ctxt, fields);
+  return get(ctxt, structName, inner);
+}
+
+void StructType::print(DialectAsmPrinter &p) const {
+  p << "struct<";
+  p << getName() << ", ";
+  llvm::interleaveComma(getInner().getElements(), p,
+                        [&](const rtl::StructType::FieldInfo &field) {
+                          p << field.name << ": " << field.type;
+                        });
   p << ">";
 }
 
@@ -41,8 +76,10 @@ Type ESIDialect::parseType(DialectAsmParser &parser) const {
   llvm::StringRef mnemonic;
   if (parser.parseKeyword(&mnemonic))
     return Type();
-  auto genType = generatedTypeParser(getContext(), parser, mnemonic);
-  if (genType != Type())
+  Type genType;
+  auto parseResult =
+      generatedTypeParser(getContext(), parser, mnemonic, genType);
+  if (parseResult.hasValue())
     return genType;
   parser.emitError(parser.getCurrentLocation(), "Could not parse esi.")
       << mnemonic << "!\n";
@@ -54,4 +91,11 @@ void ESIDialect::printType(Type type, DialectAsmPrinter &printer) const {
   if (succeeded(generatedTypePrinter(type, printer)))
     return;
   llvm_unreachable("unexpected 'esi' type kind");
+}
+
+void ESIDialect::registerTypes() {
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "circt/Dialect/ESI/ESITypes.cpp.inc"
+      >();
 }

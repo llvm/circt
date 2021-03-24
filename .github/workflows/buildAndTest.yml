@@ -13,7 +13,7 @@ jobs:
   # cache.
   build-llvm:
     name: Build LLVM
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
@@ -35,7 +35,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: llvm
-          key: ${{ runner.os }}-llvm-install-${{ steps.get-llvm-hash.outputs.hash }}
+          key: ${{ runner.os }}-llvm-sharedlibs-${{ steps.get-llvm-hash.outputs.hash }}
 
       # Build LLVM if we didn't hit in the cache.
       - name: Rebuild and Install LLVM
@@ -51,7 +51,7 @@ jobs:
   # Configure CIRCT using LLVM's build system ("Unified" build). We do not actually build this configuration since it isn't as easy to cache LLVM artifacts in this mode.
   configure-circt-unified:
     name: Configure Unified Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
@@ -66,6 +66,7 @@ jobs:
           mkdir configure_unified
           cd configure_unified
           cmake ../llvm/llvm \
+            -DBUILD_SHARED_LIBS=ON \
             -DLLVM_ENABLE_PROJECTS=mlir \
             -DLLVM_TARGETS_TO_BUILD=host \
             -DLLVM_ENABLE_ASSERTIONS=ON \
@@ -78,7 +79,7 @@ jobs:
   build-circt:
     name: Build and Test
     needs: build-llvm
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     steps:
       - name: Configure Environment
         run: echo "$GITHUB_WORKSPACE/llvm/install/bin" >> $GITHUB_PATH
@@ -114,7 +115,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: llvm
-          key: ${{ runner.os }}-llvm-install-${{ steps.get-llvm-hash.outputs.hash }}
+          key: ${{ runner.os }}-llvm-sharedlibs-${{ steps.get-llvm-hash.outputs.hash }}
 
       # Build LLVM if we didn't hit in the cache. Even though we build it in
       # the previous job, there is a low chance that it'll have been evicted by
@@ -127,14 +128,19 @@ jobs:
       # Build and test CIRCT in both debug and release mode.
       # --------
 
-      # Build the CIRCT test target in debug mode to build and test.
-      - name: Build and Test CIRCT (Assert)
+      # Our PR builds are trying to test the two corners of the build matrix:
+      # clang + release + noassert + shared
+      # gcc   + debug   + assert   + static 
+
+      # Build the CIRCT test target in release mode with assertions using Clang.
+      - name: Build and Test CIRCT (Clang release)
         run: |
-          mkdir build_assert
-          cd build_assert
+          mkdir build_clang
+          cd build_clang
           cmake .. \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DLLVM_ENABLE_ASSERTIONS=ON \
+            -DBUILD_SHARED_LIBS=ON \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLLVM_ENABLE_ASSERTIONS=OFF \
             -DMLIR_DIR=../llvm/install/lib/cmake/mlir/ \
             -DLLVM_DIR=../llvm/install/lib/cmake/llvm/ \
             -DCMAKE_LINKER=lld \
@@ -145,19 +151,19 @@ jobs:
           make check-circt -j$(nproc)
           make circt-doc
 
-      # Build the CIRCT test target in release mode to build and test.
-      - name: Build and Test CIRCT (Release)
+      # Build the CIRCT test target in debug mode with assertions using GCC.
+      - name: Build and Test CIRCT (GCC debug)
         run: |
-          mkdir build_release
-          cd build_release
+          mkdir build_gcc
+          cd build_gcc
           cmake .. \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DLLVM_ENABLE_ASSERTIONS=OFF \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DLLVM_ENABLE_ASSERTIONS=ON \
             -DMLIR_DIR=../llvm/install/lib/cmake/mlir/ \
             -DLLVM_DIR=../llvm/install/lib/cmake/llvm/ \
             -DCMAKE_LINKER=lld \
-            -DCMAKE_C_COMPILER=clang \
-            -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_CXX_COMPILER=g++ \
             -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit
           make check-circt -j$(nproc)
           make circt-doc

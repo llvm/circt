@@ -20,6 +20,8 @@
 using namespace circt;
 using namespace firrtl;
 
+using mlir::TypeStorageAllocator;
+
 //===----------------------------------------------------------------------===//
 // Type Printing
 //===----------------------------------------------------------------------===//
@@ -55,7 +57,7 @@ void FIRRTLType::print(raw_ostream &os) const {
         os << "bundle<";
         llvm::interleaveComma(bundleType.getElements(), os,
                               [&](BundleType::BundleElement element) {
-                                os << element.name << ": ";
+                                os << element.name.getValue() << ": ";
                                 element.type.print(os);
                               });
         os << '>';
@@ -157,7 +159,7 @@ static ParseResult parseType(FIRRTLType &result, DialectAsmParser &parser) {
             parseType(type, parser))
           return failure();
 
-        elements.push_back({Identifier::get(name, context), type});
+        elements.push_back({StringAttr::get(context, name), type});
       } while (!parser.parseOptionalComma());
 
       if (parser.parseGreater())
@@ -289,7 +291,7 @@ FIRRTLType FIRRTLType::getWidthlessType() {
 /// Reset, etc) then return the bitwidth.  Return -1 if the is one of these
 /// types but without a specified bitwidth.  Return -2 if this isn't a simple
 /// type.
-int32_t FIRRTLType::getBitWidthOrSentinel() const {
+int32_t FIRRTLType::getBitWidthOrSentinel() {
   return TypeSwitch<FIRRTLType, int32_t>(*this)
       .Case<ClockType, ResetType, AsyncResetType>([](Type) { return 1; })
       .Case<SIntType, UIntType>(
@@ -378,13 +380,18 @@ bool firrtl::areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType) {
   return destType.getWidthlessType() == srcType.getWidthlessType();
 }
 
-/// Return the element of an array type or null
-/// top level for ODS constraint usage
-Type firrtl::getArrayElementType(Type array) {
+/// Return the element of an array type or null.  This propagates flip types.
+Type firrtl::getVectorElementType(Type array) {
+  bool isFlipped = false;
+  if (auto flip = array.dyn_cast<FlipType>()) {
+    isFlipped = true;
+    array = flip.getElementType();
+  }
   auto vectorType = array.dyn_cast<FVectorType>();
-  if (vectorType)
-    return vectorType.getElementType();
-  return Type();
+  if (!vectorType)
+    return Type();
+  auto elementType = vectorType.getElementType();
+  return isFlipped ? FlipType::get(elementType) : elementType;
 }
 
 /// Return the passiver version of a firrtl type
@@ -570,7 +577,7 @@ FIRRTLType FlipType::getElementType() { return getImpl()->element; }
 namespace circt {
 namespace firrtl {
 llvm::hash_code hash_value(const BundleType::BundleElement &arg) {
-  return llvm::hash_value(arg.name) ^ mlir::hash_value(arg.type);
+  return mlir::hash_value(arg.name) ^ mlir::hash_value(arg.type);
 }
 } // namespace firrtl
 } // namespace circt
@@ -682,7 +689,7 @@ FIRRTLType BundleType::getPassiveType() {
 /// Look up an element by name.  This returns a BundleElement with.
 auto BundleType::getElement(StringRef name) -> Optional<BundleElement> {
   for (const auto &element : getElements()) {
-    if (element.name == name)
+    if (element.name.getValue() == name)
       return element;
   }
   return None;
@@ -771,4 +778,10 @@ FIRRTLType FVectorType::getPassiveType() {
       FVectorType::get(getElementType().getPassiveType(), getNumElements());
   impl->passiveContainsAnalogTypeInfo.setPointer(passiveType);
   return passiveType;
+}
+
+void FIRRTLDialect::registerTypes() {
+  addTypes<SIntType, UIntType, ClockType, ResetType, AsyncResetType, AnalogType,
+           // Derived Types
+           FlipType, BundleType, FVectorType>();
 }

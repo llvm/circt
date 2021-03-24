@@ -11,28 +11,26 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Handshake/HandshakeOps.h"
-
+#include "circt/Support/LLVM.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/FunctionImplementation.h"
+#include "mlir/IR/IntegerSet.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/OpImplementation.h"
-#include "mlir/IR/Value.h"
-
-using namespace mlir;
-using namespace circt;
-using namespace circt::handshake;
-
-#include "mlir/IR/IntegerSet.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/Value.h"
 #include "mlir/Transforms/InliningUtils.h"
 #include "llvm/ADT/Any.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallBitVector.h"
 #include "llvm/Support/Debug.h"
+
+using namespace circt;
+using namespace circt::handshake;
 
 #define INDEX_WIDTH 32
 
@@ -322,11 +320,51 @@ void ControlMergeOp::build(OpBuilder &builder, OperationState &result,
   result.addAttribute("control", builder.getBoolAttr(true));
 }
 
-// void ControlMergeOp::getCanonicalizationPatterns(OwningRewritePatternList
-// &results,
-//                                           MLIRContext *context) {
-//   results.insert<circt::handshake::EliminateSimpleControlMergesPattern>(context);
-// }
+namespace {
+struct EliminateSimpleControlMergesPattern
+    : mlir::OpRewritePattern<ControlMergeOp> {
+  using mlir::OpRewritePattern<ControlMergeOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(ControlMergeOp op,
+                                PatternRewriter &rewriter) const override;
+};
+} // namespace
+
+LogicalResult EliminateSimpleControlMergesPattern::matchAndRewrite(
+    ControlMergeOp op, PatternRewriter &rewriter) const {
+  auto dataResult = op.getResult(0);
+  auto choiceResult = op.getResult(1);
+  auto choiceUnused = choiceResult.use_empty();
+  if (!choiceUnused && !choiceResult.hasOneUse())
+    return failure();
+
+  auto merge = rewriter.create<MergeOp>(op.getLoc(), dataResult.getType(),
+                                        op.dataOperands());
+
+  for (auto &use : dataResult.getUses()) {
+    auto *user = use.getOwner();
+    rewriter.updateRootInPlace(
+        user, [&]() { user->setOperand(use.getOperandNumber(), merge); });
+  }
+
+  if (choiceUnused) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+  auto *choiceUser = choiceResult.getUses().begin().getUser();
+  if (!isa<SinkOp>(choiceUser))
+    return failure();
+
+  rewriter.eraseOp(choiceUser);
+  rewriter.eraseOp(op);
+  return success();
+}
+
+void ControlMergeOp::getCanonicalizationPatterns(
+    OwningRewritePatternList &results, MLIRContext *context) {
+  results.insert<EliminateSimpleControlMergesPattern>(context);
+}
 
 bool handshake::ControlMergeOp::tryExecute(
     llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,

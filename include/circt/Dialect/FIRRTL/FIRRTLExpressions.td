@@ -27,7 +27,7 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
   let assemblyFormat = "`(` $value `)` attr-dict `:` type($result)";
 
   let builders = [
-    OpBuilderDAG<(ins "IntType":$type, "const APInt &":$value)>
+    OpBuilder<(ins "IntType":$type, "const APInt &":$value)>
   ];
   let hasFolder = 1;
   let verifier = "return ::verifyConstantOp(*this);";
@@ -50,23 +50,28 @@ def SubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
   let assemblyFormat =
     "$input `(` $fieldname `)` attr-dict `:` functional-type($input, $result)";
 
+  let builders = [
+    OpBuilder<(ins "Value":$input, "StringAttr":$fieldName)>,
+    OpBuilder<(ins "Value":$input, "StringRef":$fieldName)>
+  ];
+
   let extraClassDeclaration = [{
     /// Compute the result of a Subfield operation on a value of the specified
     /// type and extracting the specified field name.  If the request is
     /// invalid, then a null type is returned.
-    static FIRRTLType getResultType(FIRRTLType inType, StringRef fieldName,
+    static FIRRTLType getResultType(Type inType, StringAttr fieldName,
                                     Location loc);
   }];
 
   let verifier = [{
-    VERIFY_RESULT_TYPE_RET(input().getType().cast<FIRRTLType>(), fieldname());
+    VERIFY_RESULT_TYPE_RET(input().getType(), fieldnameAttr());
   }];
 }
 
 class IndexConstraint<string value, string resultValue>
-  : TypesMatchWith<"type should be element of array type",
+  : TypesMatchWith<"type should be element of vector type",
                    value, resultValue,
-                   "firrtl::getArrayElementType($_self)">;
+                   "firrtl::getVectorElementType($_self)">;
 
 def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect, 
                                        IndexConstraint<"input", "result">]> {
@@ -81,7 +86,7 @@ def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect,
     ```
     }];
 
-  let arguments = (ins FVectorType:$input, I32Attr:$index);
+  let arguments = (ins FIRRTLType:$input, I32Attr:$index);
   let results = (outs FIRRTLType:$result);
 
   // TODO: Could drop the result type, inferring it from the source.
@@ -160,7 +165,7 @@ class BinaryPrimOp<string mnemonic, Type lhsType, Type rhsType, Type resultType,
     /// type if the input types are invalid.
     static FIRRTLType getResultType(FIRRTLType lhs, FIRRTLType rhs, Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
-                                    ArrayRef<int32_t> integers, Location loc) {
+                                    ArrayRef<int64_t> integers, Location loc) {
       if (inputs.size() != 2 || !integers.empty()) {
         mlir::emitError(loc,"operation requires two operands and no constants");
         return {};
@@ -245,7 +250,7 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
     /// type if the input type is invalid.
     static FIRRTLType getResultType(FIRRTLType input, Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
-                                    ArrayRef<int32_t> integers, Location loc) {
+                                    ArrayRef<int64_t> integers, Location loc) {
       if (inputs.size() != 1 || !integers.empty()) {
         mlir::emitError(loc, "operation requires one operand and no constants");
         return {};
@@ -316,7 +321,7 @@ def BitsPrimOp : PrimOp<"bits"> {
   let hasFolder = 1;
 
   let builders = [
-    OpBuilderDAG<(ins "Value":$input, "unsigned":$high, "unsigned":$low)>
+    OpBuilder<(ins "Value":$input, "unsigned":$high, "unsigned":$low)>
   ];
 
   let extraClassDeclaration = [{
@@ -325,7 +330,7 @@ def BitsPrimOp : PrimOp<"bits"> {
     static FIRRTLType getResultType(FIRRTLType input, int32_t high,
                                     int32_t low, Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
-                                    ArrayRef<int32_t> integers, Location loc) {
+                                    ArrayRef<int64_t> integers, Location loc) {
       if (inputs.size() != 1 || integers.size() != 2) {
         mlir::emitError(loc,"operation requires one operand and two constants");
         return {};
@@ -354,7 +359,7 @@ def HeadPrimOp : PrimOp<"head"> {
     static FIRRTLType getResultType(FIRRTLType input, int32_t amount,
                                     Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
-                                    ArrayRef<int32_t> integers, Location loc) {
+                                    ArrayRef<int64_t> integers, Location loc) {
       if (inputs.size() != 1 || integers.size() != 1) {
         mlir::emitError(loc, "operation requires one operand and one constant");
         return {};
@@ -401,7 +406,7 @@ def MuxPrimOp : PrimOp<"mux"> {
     static FIRRTLType getResultType(FIRRTLType sel, FIRRTLType high,
                                     FIRRTLType low, Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
-                                    ArrayRef<int32_t> integers, Location loc) {
+                                    ArrayRef<int64_t> integers, Location loc) {
       if (inputs.size() != 3 || !integers.empty()) {
         mlir::emitError(loc,
                         "operation requires three operands and no constants");
@@ -440,7 +445,7 @@ def PadPrimOp : PrimOp<"pad"> {
     static FIRRTLType getResultType(FIRRTLType input, int32_t amount,
                                     Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
-                                    ArrayRef<int32_t> integers, Location loc) {
+                                    ArrayRef<int64_t> integers, Location loc) {
       if (inputs.size() != 1 || integers.size() != 1) {
         mlir::emitError(loc, "operation requires one operand and one constant");
         return {};
@@ -468,7 +473,7 @@ class ShiftPrimOp<string mnemonic> : PrimOp<mnemonic> {
     static FIRRTLType getResultType(FIRRTLType input, int32_t amount,
                                     Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
-                                    ArrayRef<int32_t> integers, Location loc) {
+                                    ArrayRef<int64_t> integers, Location loc) {
       if (inputs.size() != 1 || integers.size() != 1) {
         mlir::emitError(loc, "operation requires one operand and one constant");
         return {};
@@ -524,7 +529,7 @@ def TailPrimOp : PrimOp<"tail"> {
     static FIRRTLType getResultType(FIRRTLType input, int32_t amount,
                                     Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
-                                    ArrayRef<int32_t> integers, Location loc) {
+                                    ArrayRef<int64_t> integers, Location loc) {
       if (inputs.size() != 1 || integers.size() != 1) {
         mlir::emitError(loc, "operation requires one operand and one constant");
         return {};
@@ -603,7 +608,7 @@ def AsPassivePrimOp : FIRRTLOp<"asPassive", [NoSideEffect,
   let assemblyFormat = "$input attr-dict `:` type($input)";
 
   let builders = [
-    OpBuilderDAG<(ins "Value":$input)>
+    OpBuilder<(ins "Value":$input)>
   ];
 }
 

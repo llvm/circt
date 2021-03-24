@@ -17,13 +17,58 @@
 #ifndef CIRCT_C_DIALECT_RTL_H
 #define CIRCT_C_DIALECT_RTL_H
 
+#include "mlir-c/IR.h"
 #include "mlir-c/Registration.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/// Named MLIR attribute.
+///
+/// A named attribute is essentially a (name, attribute) pair where the name is
+/// a string.
+
+struct RTLStructFieldInfo {
+  MlirStringRef name;
+  MlirAttribute attribute;
+};
+typedef struct MlirNamedAttribute MlirNamedAttribute;
+
+//===----------------------------------------------------------------------===//
+// Dialect API.
+//===----------------------------------------------------------------------===//
+
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(RTL, rtl);
+
+//===----------------------------------------------------------------------===//
+// Type API.
+//===----------------------------------------------------------------------===//
+
+/// Return the hardware bit width of a type. Does not reflect any encoding,
+/// padding, or storage scheme, just the bit (and wire width) of a
+/// statically-size type. Reflects the number of wires needed to transmit a
+/// value of this type. Returns -1 if the type is not known or cannot be
+/// statically computed.
+MLIR_CAPI_EXPORTED int64_t rtlGetBitWidth(MlirType);
+
+/// Return true if the specified type can be used as an RTL value type, that is
+/// the set of types that can be composed together to represent synthesized,
+/// hardware but not marker types like InOutType or unknown types from other
+/// dialects.
+MLIR_CAPI_EXPORTED bool rtlTypeIsAValueType(MlirType);
+
+/// If the type is an RTL array
+MLIR_CAPI_EXPORTED bool rtlTypeIsAArrayType(MlirType);
+
+/// Creates a fixed-size RTL array type in the context associated with element
+MLIR_CAPI_EXPORTED MlirType rtlArrayTypeGet(MlirType element, size_t size);
+
+/// returns the element type of an array type
+MLIR_CAPI_EXPORTED MlirType rtlArrayTypeGetElementType(MlirType);
+
+/// returns the size of an array type
+MLIR_CAPI_EXPORTED intptr_t rtlArrayTypeGetSize(MlirType);
 
 #ifdef __cplusplus
 }

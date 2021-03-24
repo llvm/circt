@@ -34,6 +34,18 @@ def SVDialect : Dialect {
 class SVOp<string mnemonic, list<OpTrait> traits = []> :
     Op<SVDialect, mnemonic, traits>;
 
+def ProceduralRegion : NativeOpTrait<"ProceduralRegion"> {
+  let cppNamespace = "::circt::sv";
+}
+
+def ProceduralOp : NativeOpTrait<"ProceduralOp"> {
+  let cppNamespace = "::circt::sv";
+}
+
+def NonProceduralOp : NativeOpTrait<"NonProceduralOp"> {
+  let cppNamespace = "::circt::sv";
+}
+
 include "SVTypes.td"
 include "SVExpressions.td"
 include "SVInOutOps.td"

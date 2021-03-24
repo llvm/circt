@@ -17,8 +17,8 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
 
+using namespace circt;
 using namespace circt::sv;
-using namespace mlir;
 
 /// Return the element type of an ArrayType or UnpackedArrayType, or null if the
 /// operand isn't an array.
@@ -84,7 +84,9 @@ Type SVDialect::parseType(DialectAsmParser &parser) const {
   auto loc = parser.getCurrentLocation();
   if (parser.parseKeyword(&mnemonic))
     return Type();
-  if (auto type = generatedTypeParser(getContext(), parser, mnemonic))
+  Type type;
+  auto parseResult = generatedTypeParser(getContext(), parser, mnemonic, type);
+  if (parseResult.hasValue())
     return type;
   parser.emitError(loc, "Failed to parse type sv.") << mnemonic << "\n";
   return Type();
@@ -95,4 +97,11 @@ void SVDialect::printType(Type type, DialectAsmPrinter &printer) const {
   if (succeeded(generatedTypePrinter(type, printer)))
     return;
   llvm_unreachable("unexpected 'rtl' type kind");
+}
+
+void SVDialect::registerTypes() {
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "circt/Dialect/SV/SVTypes.cpp.inc"
+      >();
 }

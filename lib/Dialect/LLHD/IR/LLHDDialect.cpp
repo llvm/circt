@@ -12,15 +12,17 @@
 
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/Transforms/InliningUtils.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
 
-using namespace mlir;
 using namespace circt;
 using namespace circt::llhd;
+
+using mlir::TypeStorageAllocator;
 
 //===----------------------------------------------------------------------===//
 // LLHDDialect Interfaces
@@ -28,8 +30,8 @@ using namespace circt::llhd;
 
 namespace {
 /// This class defines the interface for handling inlining with LLHD operations.
-struct LLHDInlinerInterface : public DialectInlinerInterface {
-  using DialectInlinerInterface::DialectInlinerInterface;
+struct LLHDInlinerInterface : public mlir::DialectInlinerInterface {
+  using mlir::DialectInlinerInterface::DialectInlinerInterface;
 
   //===--------------------------------------------------------------------===//
   // Analysis Hooks
@@ -55,8 +57,7 @@ struct LLHDInlinerInterface : public DialectInlinerInterface {
 //===----------------------------------------------------------------------===//
 
 LLHDDialect::LLHDDialect(mlir::MLIRContext *context)
-    : Dialect(getDialectNamespace(), context,
-    ::mlir::TypeID::get<LLHDDialect>()) {
+    : Dialect(getDialectNamespace(), context, TypeID::get<LLHDDialect>()) {
   addTypes<SigType, TimeType, ArrayType, PtrType>();
   addAttributes<TimeAttr>();
   addOperations<
@@ -416,9 +417,10 @@ ArrayType ArrayType::get(unsigned length, Type elementType) {
   return Base::get(elementType.getContext(), length, elementType);
 }
 
-ArrayType ArrayType::getChecked(unsigned length, Type elementType,
-                                Location location) {
-  return Base::getChecked(location, length, elementType);
+ArrayType ArrayType::getChecked(function_ref<InFlightDiagnostic()> emitError,
+                                unsigned length, Type elementType) {
+  return Base::getChecked(emitError, elementType.getContext(), length,
+                          elementType);
 }
 
 LogicalResult ArrayType::verifyConstructionInvariants(Location loc,
@@ -474,10 +476,6 @@ TimeAttr::verifyConstructionInvariants(Location loc, Type type,
     return emitError(loc) << "Got a wrong number of time values. Expected "
                              "exactly 3, but got "
                           << timeValues.size();
-
-  // Check the time values are positive or zero integers.
-  if (timeValues[0] < 0 || timeValues[1] < 0 || timeValues[2] < 0)
-    return emitError(loc) << "Received a negative time value.";
 
   return success();
 }

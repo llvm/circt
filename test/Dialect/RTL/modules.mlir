@@ -2,14 +2,14 @@
 
 module {
   rtl.module @B(%a: i1) -> (%nameOfPortInSV: i1, i1) {
-    %0 = rtl.or %a, %a : i1
-    %1 = rtl.and %a, %a : i1
+    %0 = comb.or %a, %a : i1
+    %1 = comb.and %a, %a : i1
     rtl.output %0, %1: i1, i1
   }
 
   // CHECK-LABEL: rtl.module @B(%a: i1) -> (%nameOfPortInSV: i1, i1)
-  // CHECK-NEXT:    %0 = rtl.or %a, %a : i1
-  // CHECK-NEXT:    %1 = rtl.and %a, %a : i1
+  // CHECK-NEXT:    %0 = comb.or %a, %a : i1
+  // CHECK-NEXT:    %1 = comb.and %a, %a : i1
   // CHECK-NEXT:    rtl.output %0, %1 : i1, i1
 
   rtl.module.extern @C(%a: i1 {rtl.name = "nameOfPortInSV"}) -> (i1, i1)

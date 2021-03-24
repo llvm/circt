@@ -414,4 +414,104 @@ firrtl.module @issue516(%inp_0: !firrtl.uint<0>, %tmp3: !firrtl.flip<uint<0>>) {
   %0 = firrtl.div %inp_0, %inp_0 : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<0>
   firrtl.connect %tmp3, %0 : !firrtl.flip<uint<0>>, !firrtl.uint<0>
 }
+
+// https://github.com/llvm/circt/issues/591
+// CHECK-LABEL: @reg_cst_prop1
+// CHECK-NEXT:   %c5_ui8 = firrtl.constant(5 : ui8) : !firrtl.uint<8>
+// CHECK-NEXT:   firrtl.connect %out_b, %c5_ui8 : !firrtl.flip<uint<8>>, !firrtl.uint<8>
+// CHECK-NEXT:  }
+firrtl.module @reg_cst_prop1(%clock: !firrtl.clock, %out_b: !firrtl.flip<uint<8>>) {
+  %c5_ui8 = firrtl.constant(5 : ui8) : !firrtl.uint<8>
+  %tmp_a = firrtl.reg %clock {name = "tmp_a"} : (!firrtl.clock) -> !firrtl.uint<8>
+  %tmp_b = firrtl.reg %clock {name = "tmp_b"} : (!firrtl.clock) -> !firrtl.uint<8>
+  firrtl.connect %tmp_a, %c5_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
+  firrtl.connect %tmp_b, %tmp_a : !firrtl.uint<8>, !firrtl.uint<8>
+  firrtl.connect %out_b, %tmp_b : !firrtl.flip<uint<8>>, !firrtl.uint<8>
+}
+
+// CHECK-LABEL: @reg_cst_prop2
+// CHECK-NEXT:   %c5_ui8 = firrtl.constant(5 : ui8) : !firrtl.uint<8>
+// CHECK-NEXT:   firrtl.connect %out_b, %c5_ui8 : !firrtl.flip<uint<8>>, !firrtl.uint<8>
+// CHECK-NEXT:  }
+firrtl.module @reg_cst_prop2(%clock: !firrtl.clock, %out_b: !firrtl.flip<uint<8>>) {
+  %tmp_b = firrtl.reg %clock {name = "tmp_b"} : (!firrtl.clock) -> !firrtl.uint<8>
+  firrtl.connect %out_b, %tmp_b : !firrtl.flip<uint<8>>, !firrtl.uint<8>
+
+  %tmp_a = firrtl.reg %clock {name = "tmp_a"} : (!firrtl.clock) -> !firrtl.uint<8>
+  %c5_ui8 = firrtl.constant(5 : ui8) : !firrtl.uint<8>
+  firrtl.connect %tmp_a, %c5_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
+  firrtl.connect %tmp_b, %tmp_a : !firrtl.uint<8>, !firrtl.uint<8>
+}
+
+// CHECK-LABEL: @reg_cst_prop3
+// CHECK-NEXT:   %c0_ui8 = firrtl.constant(0 : i8) : !firrtl.uint<8>
+// CHECK-NEXT:   firrtl.connect %out_b, %c0_ui8 : !firrtl.flip<uint<8>>, !firrtl.uint<8>
+// CHECK-NEXT:  }
+firrtl.module @reg_cst_prop3(%clock: !firrtl.clock, %out_b: !firrtl.flip<uint<8>>) {
+  %tmp_a = firrtl.reg %clock {name = "tmp_a"} : (!firrtl.clock) -> !firrtl.uint<8>
+  %c5_ui8 = firrtl.constant(5 : ui8) : !firrtl.uint<8>
+  firrtl.connect %tmp_a, %c5_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
+
+  %xor = firrtl.xor %tmp_a, %c5_ui8 : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
+  firrtl.connect %out_b, %xor : !firrtl.flip<uint<8>>, !firrtl.uint<8>
+}
+
+// CHECK-LABEL: @pcon
+// CHECK-NEXT:   %0 = firrtl.bits %in 4 to 0 : (!firrtl.uint<9>) -> !firrtl.uint<5>
+// CHECK-NEXT:   firrtl.connect %out, %0 : !firrtl.flip<uint<5>>, !firrtl.uint<5>
+// CHECK-NEXT:  }
+firrtl.module @pcon(%in: !firrtl.uint<9>, %out: !firrtl.flip<uint<5>>) {
+  firrtl.partialconnect %out, %in : !firrtl.flip<uint<5>>, !firrtl.uint<9>
+}
+
+// https://github.com/llvm/circt/issues/788
+
+// CHECK-LABEL: @AttachMerge
+firrtl.module @AttachMerge(%a: !firrtl.analog<1>, %b: !firrtl.analog<1>,
+                           %c: !firrtl.analog<1>) {
+  // CHECK-NEXT: firrtl.attach %c, %b, %a :
+  // CHECK-NEXT: }
+  firrtl.attach %b, %a : !firrtl.analog<1>, !firrtl.analog<1>
+  firrtl.attach %c, %b : !firrtl.analog<1>, !firrtl.analog<1>
+}
+
+// CHECK-LABEL: @AttachDeadWire
+firrtl.module @AttachDeadWire(%a: !firrtl.analog<1>, %b: !firrtl.analog<1>) {
+  // CHECK-NEXT: firrtl.attach %a, %b :
+  // CHECK-NEXT: }
+  %c = firrtl.wire  : !firrtl.analog<1>
+  firrtl.attach %a, %b, %c : !firrtl.analog<1>, !firrtl.analog<1>, !firrtl.analog<1>
+}
+
+// CHECK-LABEL: @AttachOpts
+firrtl.module @AttachOpts(%a: !firrtl.analog<1>) {
+  // CHECK-NEXT: }
+  %b = firrtl.wire  : !firrtl.analog<1>
+  firrtl.attach %b, %a : !firrtl.analog<1>, !firrtl.analog<1>
+}
+
+// CHECK-LABEL: @wire_cst_prop1
+// CHECK-NEXT:   %c5_ui8 = firrtl.constant(5 : ui8) : !firrtl.uint<8>
+// CHECK-NEXT:   %0 = firrtl.add %c5_ui8, %c5_ui8
+// CHECK-NEXT:   firrtl.connect %out_b, %0 : !firrtl.flip<uint<9>>, !firrtl.uint<9>
+// CHECK-NEXT:  }
+firrtl.module @wire_cst_prop1(%out_b: !firrtl.flip<uint<9>>) {
+  %tmp_a = firrtl.wire : !firrtl.uint<8>
+  %c5_ui8 = firrtl.constant(5 : ui8) : !firrtl.uint<8>
+  firrtl.connect %tmp_a, %c5_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
+
+  %xor = firrtl.add %tmp_a, %c5_ui8 : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<9>
+  firrtl.connect %out_b, %xor : !firrtl.flip<uint<9>>, !firrtl.uint<9>
+}
+
+// CHECK-LABEL: @wire_port_prop1
+// CHECK-NEXT:   firrtl.connect %out_b, %in_a : !firrtl.flip<uint<9>>, !firrtl.uint<9>
+// CHECK-NEXT:  }
+firrtl.module @wire_port_prop1(%in_a: !firrtl.uint<9>, %out_b: !firrtl.flip<uint<9>>) {
+  %tmp = firrtl.wire : !firrtl.uint<9>
+  firrtl.connect %tmp, %in_a : !firrtl.uint<9>, !firrtl.uint<9>
+
+  firrtl.connect %out_b, %tmp : !firrtl.flip<uint<9>>, !firrtl.uint<9>
+}
+
 }

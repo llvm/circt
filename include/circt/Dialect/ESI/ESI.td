@@ -7,7 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Top level tablegen file for the ESI dialect
+// Top level tablegen file for the ESI dialect.
 //
 //===----------------------------------------------------------------------===//
 
@@ -38,6 +38,7 @@ class ESI_Physical_Op<string mnemonic, list<OpTrait> traits = []> :
     ESI_Op<mnemonic, traits>;
 
 include "ESIPorts.td"
+include "ESITypes.td"
 include "ESIOps.td"
 include "ESIPasses.td"
 

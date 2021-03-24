@@ -15,7 +15,6 @@
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 
-using namespace mlir;
 using namespace circt;
 using namespace staticlogic;
 using namespace std;
@@ -27,7 +26,7 @@ valueVector getPipelineArgs(Block &block) {
   for (auto &op : block) {
     if (!op.mightHaveTrait<OpTrait::IsTerminator>()) {
       for (auto operand : op.getOperands()) {
-        if (operand.getKind() == Value::Kind::BlockArgument) {
+        if (operand.isa<BlockArgument>()) {
           // Add only unique uses
           if (std::find(arguments.begin(), arguments.end(), operand) ==
               arguments.end())

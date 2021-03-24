@@ -13,17 +13,11 @@
 #ifndef CIRCT_DIALECT_LLHD_TRANSFORMS_PASSES_H
 #define CIRCT_DIALECT_LLHD_TRANSFORMS_PASSES_H
 
+#include "circt/Support/LLVM.h"
 #include <memory>
-
-namespace mlir {
-class ModuleOp;
-template <typename T>
-class OperationPass;
-} // namespace mlir
 
 namespace circt {
 namespace llhd {
-using namespace mlir;
 
 class ProcOp;
 

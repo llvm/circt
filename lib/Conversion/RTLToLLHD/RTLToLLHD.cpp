@@ -41,8 +41,7 @@ struct RTLToLLHDTypeConverter : public TypeConverter {
 } // namespace
 
 /// Create a RTL to LLHD conversion pass.
-std::unique_ptr<OperationPass<mlir::ModuleOp>>
-circt::createConvertRTLToLLHDPass() {
+std::unique_ptr<OperationPass<ModuleOp>> circt::createConvertRTLToLLHDPass() {
   return std::make_unique<RTLToLLHDPass>();
 }
 
@@ -62,8 +61,8 @@ void RTLToLLHDPass::runOnOperation() {
 
   RTLToLLHDTypeConverter typeConverter;
   OwningRewritePatternList patterns;
-  populateFunctionLikeTypeConversionPattern<RTLModuleOp>(patterns, &context,
-                                                         typeConverter);
+  mlir::populateFunctionLikeTypeConversionPattern<RTLModuleOp>(
+      patterns, &context, typeConverter);
   patterns.insert<ConvertRTLModule>(typeConverter, &context);
   patterns.insert<ConvertOutput>(typeConverter, &context);
   patterns.insert<ConvertInstance>(typeConverter, &context);

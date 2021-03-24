@@ -20,12 +20,28 @@
 #include "mlir/IR/FunctionImplementation.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/SmallSet.h"
-#include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace firrtl;
+
+bool firrtl::isBundleType(Type type) {
+  if (auto flipType = type.dyn_cast<FlipType>())
+    return flipType.getElementType().isa<FlipType>();
+  return type.isa<BundleType>();
+}
+
+bool firrtl::isDuplexValue(Value val) {
+  Operation *op = val.getDefiningOp();
+  // Block arguments are not duplex values.
+  if (!op)
+    return false;
+  return TypeSwitch<Operation *, bool>(op)
+      .Case<SubfieldOp, SubindexOp, SubaccessOp>(
+          [](auto op) { return isDuplexValue(op.input()); })
+      .Case<RegOp, RegResetOp, WireOp>([](auto) { return true; })
+      .Default([](auto) { return false; });
+}
 
 //===----------------------------------------------------------------------===//
 // VERIFY_RESULT_TYPE / VERIFY_RESULT_TYPE_RET
@@ -55,9 +71,12 @@ using namespace firrtl;
 //===----------------------------------------------------------------------===//
 
 void CircuitOp::build(OpBuilder &builder, OperationState &result,
-                      StringAttr name) {
+                      StringAttr name, ArrayAttr annotations) {
   // Add an attribute for the name.
   result.addAttribute(builder.getIdentifier("name"), name);
+
+  if (annotations)
+    result.addAttribute("annotations", annotations);
 
   // Create a region and a block for the body.  The argument of the region is
   // the loop induction variable.
@@ -71,7 +90,7 @@ static void print(OpAsmPrinter &p, CircuitOp op) {
   p << op.getOperationName() << " ";
   p.printAttribute(op.nameAttr());
 
-  p.printOptionalAttrDictWithKeyword(op.getAttrs(), {"name"});
+  p.printOptionalAttrDictWithKeyword(op->getAttrs(), {"name"});
 
   p.printRegion(op.body(),
                 /*printEntryBlockArgs=*/false,
@@ -278,7 +297,8 @@ static void buildModule(OpBuilder &builder, OperationState &result,
 }
 
 void FModuleOp::build(OpBuilder &builder, OperationState &result,
-                      StringAttr name, ArrayRef<ModulePortInfo> ports) {
+                      StringAttr name, ArrayRef<ModulePortInfo> ports,
+                      ArrayAttr annotations) {
   buildModule(builder, result, name, ports);
 
   // Create a region and a block for the body.
@@ -289,6 +309,9 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
   // Add arguments to the body block.
   for (auto elt : ports)
     body->addArgument(elt.type);
+
+  if (annotations)
+    result.addAttribute("annotations", annotations);
 
   FModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
 }
@@ -643,7 +666,7 @@ static LogicalResult verifyMemOp(MemOp mem) {
 
   // Store the port names as we find them. This lets us check quickly
   // for uniqueneess.
-  StringSet<> portNamesSet;
+  llvm::SmallDenseSet<Attribute, 8> portNamesSet;
 
   // Store the previous data type. This lets us check that the data
   // type is consistent across all ports.
@@ -671,7 +694,7 @@ static LogicalResult verifyMemOp(MemOp mem) {
     }
 
     // Require that all port names are unique.
-    if (!std::get<1>(portNamesSet.insert(portName.getValue()))) {
+    if (!portNamesSet.insert(portName).second) {
       mem.emitOpError() << "has non-unique port name " << portName;
       return failure();
     }
@@ -753,7 +776,7 @@ static LogicalResult verifyMemOp(MemOp mem) {
 
     // Error if the type of the current port was not the same as the
     // last port, but skip checking the first port.
-    if (oldDataType && (oldDataType != dataType)) {
+    if (oldDataType && oldDataType != dataType) {
       mem.emitOpError() << "port " << mem.getPortName(i)
                         << " has a different type than port "
                         << mem.getPortName(i - 1) << " (expected "
@@ -772,8 +795,8 @@ BundleType MemOp::getTypeForPort(uint64_t depth, FIRRTLType dataType,
 
   auto *context = dataType.getContext();
 
-  auto getId = [&](StringRef name) -> Identifier {
-    return Identifier::get(name, context);
+  auto getId = [&](StringRef name) -> StringAttr {
+    return StringAttr::get(context, name);
   };
 
   SmallVector<BundleType::BundleElement, 7> portFields;
@@ -849,6 +872,12 @@ Optional<MemOp::PortKind> MemOp::getPortKind(StringRef portName) {
   return getMemPortKindFromType(elt.getType().cast<FIRRTLType>());
 }
 
+/// Return the kind of the specified port number.
+Optional<MemOp::PortKind> MemOp::getPortKind(size_t resultNo) {
+  return getMemPortKindFromType(
+      getResult(resultNo).getType().cast<FIRRTLType>());
+}
+
 /// Return the data-type field of the memory, the type of each element.
 FIRRTLType MemOp::getDataType() {
   assert(getNumResults() != 0 && "Mems with no read/write ports are illegal");
@@ -867,6 +896,10 @@ StringAttr MemOp::getPortName(size_t resultNo) {
   return portNames()[resultNo].cast<StringAttr>();
 }
 
+FIRRTLType MemOp::getPortType(size_t resultNo) {
+  return results()[resultNo].getType().cast<FIRRTLType>();
+}
+
 Value MemOp::getPortNamed(StringAttr name) {
   auto namesArray = portNames();
   for (size_t i = 0, e = namesArray.size(); i != e; ++i) {
@@ -883,10 +916,8 @@ Value MemOp::getPortNamed(StringAttr name) {
 //===----------------------------------------------------------------------===//
 
 static LogicalResult verifyConnectOp(ConnectOp connect) {
-  FIRRTLType destType =
-      connect.dest().getType().cast<FIRRTLType>().getPassiveType();
-  FIRRTLType srcType =
-      connect.src().getType().cast<FIRRTLType>().getPassiveType();
+  FIRRTLType destType = connect.dest().getType().cast<FIRRTLType>();
+  FIRRTLType srcType = connect.src().getType().cast<FIRRTLType>();
 
   // Analog types cannot be connected and must be attached.
   if (destType.isa<AnalogType>() || srcType.isa<AnalogType>())
@@ -895,18 +926,37 @@ static LogicalResult verifyConnectOp(ConnectOp connect) {
   // Destination and source types must be equivalent.
   if (!areTypesEquivalent(destType, srcType))
     return connect.emitError("type mismatch between destination ")
-           << destType << " and source " << srcType;
+           << destType.getPassiveType() << " and source "
+           << srcType.getPassiveType();
 
   // Destination bitwidth must be greater than or equal to source bitwidth.
-  int32_t destWidth = destType.getBitWidthOrSentinel();
-  int32_t srcWidth = srcType.getBitWidthOrSentinel();
+  int32_t destWidth = destType.getPassiveType().getBitWidthOrSentinel();
+  int32_t srcWidth = srcType.getPassiveType().getBitWidthOrSentinel();
   if (destWidth > -1 && srcWidth > -1 && destWidth < srcWidth)
     return connect.emitError("destination width ")
            << destWidth << " is not greater than or equal to source width "
            << srcWidth;
 
-  // TODO(mikeurbach): verify destination flow is sink or duplex.
-  // TODO(mikeurbach): verify source flow is source or duplex.
+  // Check that the LHS is a valid sink and RHS is a valid source.
+  if (isBundleType(destType)) {
+    // For bulk connections, we need to make sure that the connection is
+    // unambiguous by making sure that both sides are not duplex types. TODO: we
+    // are not checking that the connections are recursively well formed when
+    // neither is a duplex type.
+    if (isDuplexValue(connect.dest()) && isDuplexValue(connect.src())) {
+      return connect.emitOpError() << "ambiguous bulk connection between two "
+                                   << "duplex values of bundle type";
+    }
+  } else {
+    // This is a mono-connection. Check that the LHS side is a sink or duplex.
+    // Since we can read from a either a passive or flip type, we don't need to
+    // check anything on the RHS.
+    if (destType.isPassive() && !isDuplexValue(connect.dest())) {
+      return connect.emitOpError("connection destination must be a non-passive "
+                                 "type or a duplex value");
+    }
+  }
+
   return success();
 }
 
@@ -986,8 +1036,20 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
   return build(builder, result, type, attr);
 }
 
+void SubfieldOp::build(OpBuilder &builder, OperationState &result, Value input,
+                       StringRef fieldName) {
+  return build(builder, result, input, builder.getStringAttr(fieldName));
+}
+
+void SubfieldOp::build(OpBuilder &builder, OperationState &result, Value input,
+                       StringAttr fieldName) {
+  auto resultType = getResultType(input.getType(), fieldName, input.getLoc());
+  assert(resultType && "invalid field name for bundle");
+  return build(builder, result, resultType, input, fieldName);
+}
+
 // Return the result of a subfield operation.
-FIRRTLType SubfieldOp::getResultType(FIRRTLType inType, StringRef fieldName,
+FIRRTLType SubfieldOp::getResultType(Type inType, StringAttr fieldName,
                                      Location loc) {
   if (auto bundleType = inType.dyn_cast<BundleType>()) {
     for (auto &elt : bundleType.getElements()) {
@@ -995,7 +1057,7 @@ FIRRTLType SubfieldOp::getResultType(FIRRTLType inType, StringRef fieldName,
         return elt.type;
     }
     mlir::emitError(loc, "unknown field '")
-        << fieldName << "' in bundle type " << inType;
+        << fieldName.getValue() << "' in bundle type " << inType;
     return {};
   }
 
@@ -1624,11 +1686,12 @@ static LogicalResult verifyRTLStructCastOp(RTLStructCastOp cast) {
     return cast.emitError("bundle and struct have different number of fields");
 
   for (size_t findex = 0, fend = firFields.size(); findex < fend; ++findex) {
-    if (firFields[findex].name != rtlFields[findex].name)
+    if (firFields[findex].name.getValue() != rtlFields[findex].name)
       return cast.emitError("field names don't match '")
-             << firFields[findex].name << "', '" << rtlFields[findex].name
-             << "'";
-    int64_t firWidth = firFields[findex].type.getBitWidthOrSentinel();
+             << firFields[findex].name.getValue() << "', '"
+             << rtlFields[findex].name << "'";
+    int64_t firWidth =
+        FIRRTLType(firFields[findex].type).getBitWidthOrSentinel();
     int64_t rtlWidth = rtl::getBitWidth(rtlFields[findex].type);
     if (firWidth > 0 && rtlWidth > 0 && firWidth != rtlWidth)
       return cast.emitError("size of field '")

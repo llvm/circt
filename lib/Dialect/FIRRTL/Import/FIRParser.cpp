@@ -13,7 +13,9 @@
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 
 #include "FIRLexer.h"
+#include "circt/Dialect/FIRRTL/FIRAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
@@ -24,14 +26,17 @@
 #include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/Support/JSON.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace circt;
 using namespace firrtl;
-using namespace mlir;
+
 using llvm::SMLoc;
 using llvm::SourceMgr;
+
+namespace json = llvm::json;
 
 /// Return true if this is a useless temporary name produced by FIRRTL.  We
 /// drop these as they don't convey semantic meaning.
@@ -68,9 +73,10 @@ namespace {
 /// so that individual subparsers can refer to the same state.
 struct GlobalFIRParserState {
   GlobalFIRParserState(const llvm::SourceMgr &sourceMgr, MLIRContext *context,
-                       FIRParserOptions options)
+                       FIRParserOptions options,
+                       const llvm::MemoryBuffer *annotationsBuf)
       : context(context), options(options), lex(sourceMgr, context),
-        curToken(lex.lexToken()) {}
+        curToken(lex.lexToken()), annotationsBuf(annotationsBuf) {}
 
   /// The context we're parsing into.
   MLIRContext *const context;
@@ -78,11 +84,37 @@ struct GlobalFIRParserState {
   // Options that control the behavior of the parser.
   const FIRParserOptions options;
 
+  /// A mapping of targets to annotations
+  llvm::StringMap<ArrayAttr> annotationMap;
+
   /// The lexer for the source file we're parsing.
   FIRLexer lex;
 
   /// This is the next token that hasn't been consumed yet.
   FIRToken curToken;
+
+  /// A pointer to a buffer of annotations (the contents of a JSON
+  /// file).  This is null if no annotations were provided.
+  const llvm::MemoryBuffer *annotationsBuf;
+
+  class BacktraceState {
+  public:
+    explicit BacktraceState(GlobalFIRParserState &state)
+        : state(state), curToken(state.curToken),
+          cursor(state.lex.getCursor()) {}
+
+    void backtrack() {
+      state.curToken = curToken;
+      cursor.restore(state.lex);
+    }
+
+  private:
+    GlobalFIRParserState &state;
+    FIRToken curToken;
+    FIRLexerCursor cursor;
+  };
+
+  BacktraceState getBacktrackState() { return BacktraceState(*this); }
 
 private:
   GlobalFIRParserState(const GlobalFIRParserState &) = delete;
@@ -143,6 +175,14 @@ struct FIRParser {
                                 ArrayRef<Operation *> subOps = {});
 
   //===--------------------------------------------------------------------===//
+  // Annotation Parsing
+  //===--------------------------------------------------------------------===//
+
+  /// Parse a non-standard inline Annotation JSON blob if present.  This uses
+  /// the info-like encoding of %[<JSON Blob>].
+  ParseResult parseOptionalAnnotations(SMLoc &loc, StringRef &result);
+
+  //===--------------------------------------------------------------------===//
   // Token Parsing
   //===--------------------------------------------------------------------===//
 
@@ -170,11 +210,6 @@ struct FIRParser {
     consumeToken();
   }
 
-  /// Capture the current token's location into the specified value.  This
-  /// always succeeds.
-  ParseResult parseGetLocation(SMLoc &loc);
-  ParseResult parseGetLocation(Location &loc);
-
   /// Capture the current token's spelling into the specified value.  This
   /// always succeeds.
   ParseResult parseGetSpelling(StringRef &spelling) {
@@ -196,10 +231,10 @@ struct FIRParser {
 
   /// Parse 'intLit' into the specified value.
   ParseResult parseIntLit(APInt &result, const Twine &message);
-  ParseResult parseIntLit(int32_t &result, const Twine &message);
+  ParseResult parseIntLit(int64_t &result, const Twine &message);
 
   // Parse ('<' intLit '>')? setting result to -1 if not present.
-  ParseResult parseOptionalWidth(int32_t &result);
+  ParseResult parseOptionalWidth(int64_t &result);
 
   // Parse the 'id' grammar, which is an identifier or an allowed keyword.
   ParseResult parseId(StringRef &result, const Twine &message);
@@ -208,6 +243,22 @@ struct FIRParser {
   ParseResult parseType(FIRRTLType &result, const Twine &message);
 
   ParseResult parseOptionalRUW(RUWAttr &result);
+
+  //===--------------------------------------------------------------------===//
+  // Annotation Utilities
+  //===--------------------------------------------------------------------===//
+
+  /// Add annotations from a string to the internal annotation map.  Report
+  /// errors using a provided source manager location and with a provided error
+  /// message
+  ParseResult importAnnotations(SMLoc loc, StringRef annotationsStr);
+
+  /// Add annotations from the source manager, if an annotation file was added.
+  ParseResult importAnnotationFile(SMLoc loc);
+
+  /// Populate a vector of annotations for a given Target.  If the annotations
+  /// parameter is non-empty, then this will be appended to.
+  void getAnnotations(StringRef target, ArrayAttr &annotations);
 
 private:
   FIRParser(const FIRParser &) = delete;
@@ -237,18 +288,6 @@ InFlightDiagnostic FIRParser::emitError(SMLoc loc, const Twine &message) {
 //===----------------------------------------------------------------------===//
 // Token Parsing
 //===----------------------------------------------------------------------===//
-
-/// Capture the current token's location into the specified value.  This
-/// always succeeds.
-ParseResult FIRParser::parseGetLocation(SMLoc &loc) {
-  loc = getToken().getLoc();
-  return success();
-}
-
-ParseResult FIRParser::parseGetLocation(Location &loc) {
-  loc = translateLocation(getToken().getLoc());
-  return success();
-}
 
 /// Consume the specified token if present and return success.  On failure,
 /// output a diagnostic and return failure.
@@ -393,8 +432,8 @@ ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result,
 
     // On success, remember what we already parsed (Bar.Scala / 309:14), and
     // move on to the next chunk.
-    auto loc = FileLineColLoc::get(filename.drop_front(spaceLoc + 1), lineNo,
-                                   columnNo, getContext());
+    auto loc = FileLineColLoc::get(
+        getContext(), filename.drop_front(spaceLoc + 1), lineNo, columnNo);
     extraLocs.push_back(loc);
     filename = nextFilename;
     lineNo = nextLineNo;
@@ -403,11 +442,11 @@ ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result,
   }
 
   Location resultLoc =
-      FileLineColLoc::get(filename, lineNo, columnNo, getContext());
+      FileLineColLoc::get(getContext(), filename, lineNo, columnNo);
   if (!extraLocs.empty()) {
     extraLocs.push_back(resultLoc);
     std::reverse(extraLocs.begin(), extraLocs.end());
-    resultLoc = FusedLoc::get(extraLocs, getContext());
+    resultLoc = FusedLoc::get(getContext(), extraLocs);
   }
   result.setInfoLocation(resultLoc);
 
@@ -415,6 +454,25 @@ ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result,
   for (auto *op : subOps) {
     op->setLoc(resultLoc);
   }
+
+  return success();
+}
+
+//===--------------------------------------------------------------------===//
+// Annotation Handling
+//===--------------------------------------------------------------------===//
+
+/// Parse a non-standard inline Annotation JSON blob if present.  This uses
+/// the info-like encoding of %[<JSON Blob>].
+ParseResult FIRParser::parseOptionalAnnotations(SMLoc &loc, StringRef &result) {
+
+  if (getToken().isNot(FIRToken::inlineannotation))
+    return success();
+
+  loc = getToken().getLoc();
+
+  result = getTokenSpelling().drop_front(2).drop_back(1);
+  consumeToken(FIRToken::inlineannotation);
 
   return success();
 }
@@ -518,13 +576,13 @@ ParseResult FIRParser::parseIntLit(APInt &result, const Twine &message) {
   }
 }
 
-ParseResult FIRParser::parseIntLit(int32_t &result, const Twine &message) {
+ParseResult FIRParser::parseIntLit(int64_t &result, const Twine &message) {
   APInt value;
   auto loc = getToken().getLoc();
   if (parseIntLit(value, message))
     return failure();
 
-  result = (int32_t)value.getLimitedValue();
+  result = (int64_t)value.getLimitedValue();
   if (result != value)
     return emitError(loc, "value is too big to handle"), failure();
   return success();
@@ -533,7 +591,7 @@ ParseResult FIRParser::parseIntLit(int32_t &result, const Twine &message) {
 // optional-width ::= ('<' intLit '>')?
 //
 // This returns with result equal to -1 if not present.
-ParseResult FIRParser::parseOptionalWidth(int32_t &result) {
+ParseResult FIRParser::parseOptionalWidth(int64_t &result) {
   if (!consumeIf(FIRToken::less))
     return result = -1, success();
 
@@ -639,7 +697,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     consumeToken();
 
     // Parse a width specifier if present.
-    int32_t width;
+    int64_t width;
     if (parseOptionalWidth(width))
       return failure();
 
@@ -671,7 +729,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
           if (isFlipped)
             type = FlipType::get(type);
 
-          elements.push_back({Identifier::get(fieldName, getContext()), type});
+          elements.push_back({StringAttr::get(getContext(), fieldName), type});
           return success();
         }))
       return failure();
@@ -683,7 +741,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
   // Handle postfix vector sizes.
   while (consumeIf(FIRToken::l_square)) {
     auto sizeLoc = getToken().getLoc();
-    int32_t size;
+    int64_t size;
     if (parseIntLit(size, "expected width") ||
         parseToken(FIRToken::r_square, "expected ]"))
       return failure();
@@ -718,6 +776,84 @@ ParseResult FIRParser::parseOptionalRUW(RUWAttr &result) {
   }
 
   return success();
+}
+
+ParseResult FIRParser::importAnnotations(SMLoc loc, StringRef annotationsStr) {
+
+  auto annotations = json::parse(annotationsStr);
+  if (auto err = annotations.takeError()) {
+    handleAllErrors(std::move(err), [&](const json::ParseError &a) {
+      auto diag = emitError(loc, "Failed to parse JSON Annotations");
+      diag.attachNote() << a.message();
+    });
+    return failure();
+  }
+
+  json::Path::Root root;
+  llvm::StringMap<ArrayAttr> annotationMap;
+  if (!fromJSON(annotations.get(), annotationMap, root, getContext())) {
+    auto diag = emitError(loc, "Invalid/unsupported annotation format");
+    std::string jsonErrorMessage =
+        "See inline comments for problem area in JSON:\n";
+    llvm::raw_string_ostream s(jsonErrorMessage);
+    root.printErrorContext(annotations.get(), s);
+    diag.attachNote() << jsonErrorMessage;
+    return failure();
+  }
+
+  for (auto a : annotationMap.keys()) {
+    auto &entry = state.annotationMap[a];
+    if (!entry) {
+      entry = annotationMap[a];
+      continue;
+    }
+
+    SmallVector<Attribute> annotationVec;
+    auto arrayRef = state.annotationMap[a].getValue();
+    annotationVec.append(arrayRef.begin(), arrayRef.end());
+    arrayRef = annotationMap[a].getValue();
+    annotationVec.append(arrayRef.begin(), arrayRef.end());
+    state.annotationMap[a] = ArrayAttr::get(getContext(), annotationVec);
+  }
+
+  return success();
+}
+
+ParseResult FIRParser::importAnnotationFile(SMLoc loc) {
+
+  if (!state.annotationsBuf)
+    return success();
+
+  ParseResult result = success();
+  result = importAnnotations(loc, (state.annotationsBuf)->getBuffer());
+
+  if (!result)
+    state.annotationsBuf = nullptr;
+
+  return result;
+}
+
+void FIRParser::getAnnotations(StringRef target, ArrayAttr &annotations) {
+  // Input annotations is empty.  Just do the lookup and return.
+  if (!annotations) {
+    annotations = state.annotationMap.lookup(target);
+    return;
+  }
+
+  // Input annotations is non-empty.  Exit quickly if the target doesn't exist.
+  // Otherwise, construct a new ArrayAttr that includes existing and new
+  // annotations.
+  auto newAnnotations = state.annotationMap.lookup(target);
+  if (!newAnnotations)
+    return;
+
+  SmallVector<Attribute> annotationVec;
+  for (auto a : annotations)
+    annotationVec.push_back(a);
+  for (auto a : newAnnotations)
+    annotationVec.push_back(a);
+
+  annotations = ArrayAttr::get(state.context, annotationVec);
 }
 
 //===----------------------------------------------------------------------===//
@@ -904,9 +1040,31 @@ private:
   /// a passive-typed value and return that.
   Value convertToPassive(Value input, Location loc);
 
+  // The FIRRTL specification describes Invalidates as a statement with
+  // implicit connect semantics.  The FIRRTL dialect models it as a primitive
+  // that returns an "Invalid Value", followed by an explicit connect to make
+  // the representation simpler and more consistent.
+  void emitInvalidate(Value val, Location loc) {
+    auto invalidType = val.getType().cast<FIRRTLType>();
+    auto invalidVal =
+        builder.create<InvalidValuePrimOp>(loc, invalidType.getPassiveType());
+    if (invalidType.isa<AnalogType>())
+      builder.create<AttachOp>(loc, ValueRange{val, invalidVal});
+    else if (!invalidType.isPassive())
+      builder.create<ConnectOp>(loc, val, invalidVal);
+  }
+
   // Exp Parsing
+  ParseResult parseExpImpl(Value &result, SubOpVector &subOps,
+                           const Twine &message, bool isLeadingStmt);
   ParseResult parseExp(Value &result, SubOpVector &subOps,
-                       const Twine &message);
+                       const Twine &message) {
+    return parseExpImpl(result, subOps, message, /*isLeadingStmt:*/ false);
+  }
+  ParseResult parseExpLeadingStmt(Value &result, SubOpVector &subOps,
+                                  const Twine &message) {
+    return parseExpImpl(result, subOps, message, /*isLeadingStmt:*/ true);
+  }
 
   ParseResult parseOptionalExpPostscript(Value &result, SubOpVector &subOps);
   ParseResult parsePostFixFieldId(Value &result, SubOpVector &subOps);
@@ -972,8 +1130,14 @@ Value FIRStmtParser::convertToPassive(Value input, Location loc) {
 /// XX   ::= exp '.' DoubleLit // TODO Workaround for #470
 ///      ::= exp '[' exp ']'
 ///
-ParseResult FIRStmtParser::parseExp(Value &result, SubOpVector &subOps,
-                                    const Twine &message) {
+///
+/// If 'isLeadingStmt' is true, then this is being called to parse the first
+/// expression in a statement.  We can handle some weird cases due to this if
+/// we end up parsing the whole statement.  In that case we return success, but
+/// set the 'result' value to null.
+ParseResult FIRStmtParser::parseExpImpl(Value &result, SubOpVector &subOps,
+                                        const Twine &message,
+                                        bool isLeadingStmt) {
   switch (getToken().getKind()) {
 
     // Handle all the primitive ops: primop exp* intLit*  ')'
@@ -1003,8 +1167,31 @@ ParseResult FIRStmtParser::parseExp(Value &result, SubOpVector &subOps,
     if (!resolveSymbolEntry(result, symtabEntry, loc, false))
       break;
 
+    assert(symtabEntry.is<UnbundledID>() && "should be an instance");
+
     // Otherwise we referred to an implicitly bundled value.  We *must* be in
-    // the midst of processing a field ID reference.  If not, this is an error.
+    // the midst of processing a field ID reference or 'is invalid'.  If not,
+    // this is an error.
+    if (isLeadingStmt && consumeIf(FIRToken::kw_is)) {
+      LocWithInfo info(loc, this);
+      if (parseToken(FIRToken::kw_invalid, "expected 'invalid'") ||
+          parseOptionalInfo(info))
+        return failure();
+
+      // Invalidate all of the results of the bundled value.
+      unsigned unbundledId = symtabEntry.get<UnbundledID>() - 1;
+      assert(unbundledId < unbundledValues.size());
+      UnbundledValueEntry &ubEntry = unbundledValues[unbundledId];
+      for (auto elt : ubEntry) {
+        emitInvalidate(elt.second, info.getLoc());
+      }
+
+      // Signify that we parsed the whole statement.
+      result = Value();
+      return success();
+    }
+
+    // Handle the normal "instance.x" reference.
     StringRef fieldName;
     if (parseToken(FIRToken::period, "expected '.' in field reference") ||
         parseFieldId(fieldName, "expected field name") ||
@@ -1060,23 +1247,21 @@ ParseResult FIRStmtParser::parseOptionalExpPostscript(Value &result,
 ///
 ParseResult FIRStmtParser::parsePostFixFieldId(Value &result,
                                                SubOpVector &subOps) {
-  auto loc = getToken().getLoc();
+  auto loc = translateLocation(getToken().getLoc());
   StringRef fieldName;
   if (parseFieldId(fieldName, "expected field name"))
     return failure();
 
   // Make sure the field name matches up with the input value's type and
   // compute the result type for the expression.
+  auto fieldNameAttr = builder.getStringAttr(fieldName);
   auto resultType = result.getType().cast<FIRRTLType>();
-  resultType =
-      SubfieldOp::getResultType(resultType, fieldName, translateLocation(loc));
+  resultType = SubfieldOp::getResultType(resultType, fieldNameAttr, loc);
   if (!resultType)
     return failure();
 
   // Create the result operation.
-  auto op =
-      builder.create<SubfieldOp>(translateLocation(loc), resultType, result,
-                                 builder.getStringAttr(fieldName));
+  auto op = builder.create<SubfieldOp>(loc, resultType, result, fieldNameAttr);
   subOps.push_back(op);
   result = op.getResult();
   return success();
@@ -1089,7 +1274,7 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result,
 ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result,
                                                     SubOpVector &subOps) {
   auto indexLoc = getToken().getLoc();
-  int32_t indexNo;
+  int64_t indexNo;
   if (parseIntLit(indexNo, "expected index") ||
       parseToken(FIRToken::r_square, "expected ']'"))
     return failure();
@@ -1155,7 +1340,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
 
   // Parse the operands and constant integer arguments.
   SmallVector<Value, 4> operands;
-  SmallVector<int32_t, 4> integers;
+  SmallVector<int64_t, 4> integers;
   if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
         // Handle the integer constant case if present.
         if (getToken().isAny(FIRToken::integer, FIRToken::signed_integer,
@@ -1245,7 +1430,7 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result,
   consumeToken();
 
   // Parse a width specifier if present.
-  int32_t width;
+  int64_t width;
   APInt value;
   if (parseOptionalWidth(width) ||
       parseToken(FIRToken::l_paren, "expected '(' in integer expression") ||
@@ -1365,16 +1550,20 @@ FIRStmtParser::parseExpWithLeadingKeyword(StringRef keyword,
   // other ops.
   // Non '.' ops take the plain symbole path.
   if (resolveSymbolEntry(lhs, symtabEntry, info.getFIRLoc(), false)) {
+    // Ok if the base name didn't resolve by itself, it might be part of an
+    // expanded dot reference.  That doesn't work then we fail.
+    if (!consumeIf(FIRToken::period))
+      return ParseResult(failure());
+
     StringRef fieldName;
-    consumeToken(FIRToken::period);
     if (parseFieldId(fieldName, "expected field name") ||
         resolveSymbolEntry(lhs, symtabEntry, fieldName, info.getFIRLoc()))
       return ParseResult(failure());
-  } else {
-    // plain symbol
-    if (parseOptionalExpPostscript(lhs, subOps))
-      return ParseResult(failure());
   }
+
+  // Parse any further trailing things like "mem.x.y".
+  if (parseOptionalExpPostscript(lhs, subOps))
+    return ParseResult(failure());
 
   return parseLeadingExpStmt(lhs, subOps);
 }
@@ -1447,8 +1636,13 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
     // Statement productions that start with an expression.
     Value lhs;
     SmallVector<Operation *, 8> subOps;
-    if (parseExp(lhs, subOps, "unexpected token in module"))
+    if (parseExpLeadingStmt(lhs, subOps, "unexpected token in module"))
       return failure();
+    // We use parseExp in a special mode that can complete the entire stmt at
+    // once in unusual cases.  If this happened, then we are done.
+    if (!lhs)
+      return success();
+
     return parseLeadingExpStmt(lhs, subOps);
   }
 
@@ -1655,7 +1849,7 @@ ParseResult FIRStmtParser::parseStop() {
   SmallVector<Operation *, 8> subOps;
 
   Value clock, condition;
-  int32_t exitCode;
+  int64_t exitCode;
   if (parseExp(clock, subOps, "expected clock expression in 'stop'") ||
       parseExp(condition, subOps, "expected condition in 'stop'") ||
       parseIntLit(exitCode, "expected exit code in 'stop'") ||
@@ -1851,19 +2045,7 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs, SubOpVector &subOps) {
         parseOptionalInfo(info, subOps))
       return failure();
 
-    // The FIRRTL specification describes Invalidates as a statement with
-    // implicit connect semantics.  The FIRRTL dialect models it as a primitive
-    // that returns an "Invalid Value", followed by an explicit connect to make
-    // the representation simpler and more consistent.
-    auto invalidType = lhs.getType().cast<FIRRTLType>();
-    if (invalidType.isa<AnalogType>()) {
-      auto val = builder.create<InvalidValuePrimOp>(info.getLoc(), invalidType);
-      builder.create<AttachOp>(info.getLoc(), ValueRange{lhs, val});
-    } else {
-      auto val = builder.create<InvalidValuePrimOp>(
-          info.getLoc(), invalidType.getPassiveType());
-      builder.create<ConnectOp>(info.getLoc(), lhs, val);
-    }
+    emitInvalidate(lhs, info.getLoc());
     return success();
   }
 
@@ -2045,7 +2227,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     return failure();
 
   FIRRTLType type;
-  int32_t depth = -1, readLatency = -1, writeLatency = -1;
+  int64_t depth = -1, readLatency = -1, writeLatency = -1;
   RUWAttr ruw = RUWAttr::Undefined;
 
   SmallVector<std::pair<StringAttr, BundleType>, 4> ports;
@@ -2382,9 +2564,23 @@ FIRModuleParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
   while (getToken().isAny(FIRToken::kw_input, FIRToken::kw_output) &&
          // Must be nested under the module.
          getIndentation() > indent) {
-    bool isOutput = getToken().is(FIRToken::kw_output);
 
+    // We need one token lookahead to resolve the ambiguity between:
+    // output foo             ; port
+    // output <= input        ; identifier expression
+    // output.thing <= input  ; identifier expression
+    auto backtrackState = getState().getBacktrackState();
+
+    bool isOutput = getToken().is(FIRToken::kw_output);
     consumeToken();
+
+    // If we have something that isn't a keyword then this must be an
+    // identifier, not an input/output marker.
+    if (!getToken().is(FIRToken::identifier) && !getToken().isKeyword()) {
+      backtrackState.backtrack();
+      break;
+    }
+
     StringAttr name;
     FIRRTLType type;
     LocWithInfo info(getToken().getLoc(), this);
@@ -2530,7 +2726,11 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
   portList.reserve(portListAndLoc.size());
   for (auto &elt : portListAndLoc)
     portList.push_back(elt.first);
-  auto fmodule = builder.create<FModuleOp>(info.getLoc(), name, portList);
+  ArrayAttr annotations;
+  getAnnotations("~" + circuit.name().str() + "|" + name.getValue().str(),
+                 annotations);
+  auto fmodule =
+      builder.create<FModuleOp>(info.getLoc(), name, portList, annotations);
 
   // Install all of the ports into the symbol table, associated with their
   // block arguments.
@@ -2578,18 +2778,41 @@ ParseResult FIRCircuitParser::parseCircuit() {
 
   LocWithInfo info(getToken().getLoc(), this);
   StringAttr name;
+  SMLoc inlineAnnotationsLoc;
+  StringRef inlineAnnotations;
 
   // A file must contain a top level `circuit` definition.
   if (parseToken(FIRToken::kw_circuit,
                  "expected a top-level 'circuit' definition") ||
       parseId(name, "expected circuit name") ||
       parseToken(FIRToken::colon, "expected ':' in circuit definition") ||
+      parseOptionalAnnotations(inlineAnnotationsLoc, inlineAnnotations) ||
       parseOptionalInfo(info))
     return failure();
 
-  // Create the top-level circuit op in the MLIR module.
+  // Deal with any inline annotations, if they exist.  These are processed first
+  // to place any annotations from an annotation file *after* the inline
+  // annotations.  While arbitrary, this makes the annotation file have "append"
+  // semantics.
+  if (!inlineAnnotations.empty())
+    if (importAnnotations(inlineAnnotationsLoc, inlineAnnotations))
+      return failure();
+
+  // Deal with the annotation file if one was specified
+  if (importAnnotationFile(info.getFIRLoc()))
+    return failure();
+
+  // Get annotations associated with this circuit. These are either:
+  //   1. Annotations with no target (which we use "~" to identify)
+  //   2. Annotations targeting the circuit, e.g., "~Foo"
+  ArrayAttr annotationVec;
+  getAnnotations("~", annotationVec);
+  getAnnotations("~" + name.getValue().str(), annotationVec);
+
   OpBuilder b(mlirModule.getBodyRegion());
-  auto circuit = b.create<CircuitOp>(info.getLoc(), name);
+
+  // Create the top-level circuit op in the MLIR module.
+  auto circuit = b.create<CircuitOp>(info.getLoc(), name, annotationVec);
 
   // Parse any contained modules.
   while (true) {
@@ -2637,15 +2860,18 @@ OwningModuleRef circt::firrtl::importFIRRTL(SourceMgr &sourceMgr,
                                             MLIRContext *context,
                                             FIRParserOptions options) {
   auto sourceBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
+  const llvm::MemoryBuffer *annotationsBuf = nullptr;
+  if (sourceMgr.getNumBuffers() > 1)
+    annotationsBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID() + 1);
 
   context->loadDialect<FIRRTLDialect>();
 
   // This is the result module we are parsing into.
   OwningModuleRef module(ModuleOp::create(
-      FileLineColLoc::get(sourceBuf->getBufferIdentifier(), /*line=*/0,
-                          /*column=*/0, context)));
+      FileLineColLoc::get(context, sourceBuf->getBufferIdentifier(), /*line=*/0,
+                          /*column=*/0)));
 
-  GlobalFIRParserState state(sourceMgr, context, options);
+  GlobalFIRParserState state(sourceMgr, context, options, annotationsBuf);
   if (FIRCircuitParser(state, *module).parseCircuit())
     return nullptr;
 
@@ -2658,7 +2884,7 @@ OwningModuleRef circt::firrtl::importFIRRTL(SourceMgr &sourceMgr,
 }
 
 void circt::firrtl::registerFromFIRRTLTranslation() {
-  static TranslateToMLIRRegistration fromFIR(
+  static mlir::TranslateToMLIRRegistration fromFIR(
       "import-firrtl", [](llvm::SourceMgr &sourceMgr, MLIRContext *context) {
         return importFIRRTL(sourceMgr, context);
       });

@@ -93,17 +93,19 @@ rtl.module @top(%clk:i1, %rstn:i1) -> () {
   // SV:  );
   // SV:  always @(posedge clk) begin
   // SV:    if (ArrTestEP_DataOutValid) begin
-  // SV:      assert(rootPointer_2[6'h0+:32] == 32'h0);
-  // SV:      assert(rootPointer_2[6'h20+:16] == 16'h0);
-  // SV:      assert(rootPointer_2[6'h30+:16] == 16'h1);
-  // SV:      assert(i_ptr[6'h0+:2] == 2'h0);
-  // SV:      assert(i_ptr[6'h1F+:3] == 3'h5);
-  // SV:      assert($signed(i_ptr[6'h22+:29]) <= 29'sh0);
+  // SV:      assert({{.+}} == 32'h0);
+  // SV:      assert({{.+}} == 16'h0);
+  // SV:      assert({{.+}} == 16'h1);
+  // SV:      assert({{.+}} == 2'h1);
+  // SV:      assert({{.+}} == 3'h5);
+  // SV:      assert({{.+}} <= 29'h4);
   // SV:    end
   // SV:  end // always @(posedge)
-  // SV:  wire [63:0] rootPointer_2 = ArrTestEP_DataOut[9'h0+:64];
-  // SV:  wire [63:0] ptrSection = ArrTestEP_DataOut[9'h40+:64];
-  // SV:  wire [63:0] i_ptr = ptrSection[6'h0+:64];
+  // SV:  assign rootPointer{{.*}} = ArrTestEP_DataOut[9'h0+:64];
+  // SV:  assign ptrSection = ArrTestEP_DataOut[9'h40+:64];
+  // SV:  assign l_ptr = ptrSection[6'h0+:64];
+  // SV:  wire [29:0] {{.+}} = l_ptr[6'h2+:30] + 30'h80;
+  // SV:  wire [3:0][63:0] {{.+}} = /*cast(bit[3:0][63:0])*/ArrTestEP_DataOut[{{.+}}+:256];
 
   // The decode part is missing, but ExportVerilog is currently not using the
   // names I'm assigning since it's inlining them. More work on ExportVerilog is

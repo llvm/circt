@@ -25,7 +25,7 @@ def RTLModuleOp : RTLOp<"module",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports)>
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports)>
   ];
 
   let extraClassDeclaration = [{
@@ -44,10 +44,15 @@ def RTLModuleOp : RTLOp<"module",
     // squatting on the name.
     Block *getBodyBlock() { return &body().front(); }
 
+    // Get the module's symbolic name as StringAttr.
+    StringAttr getNameAttr() {
+      return (*this)->getAttrOfType<StringAttr>(
+        ::mlir::SymbolTable::getSymbolAttrName());
+    }
+
     // Get the module's symbolic name.
     StringRef getName() {
-      return (*this)->getAttrOfType<StringAttr>(
-        ::mlir::SymbolTable::getSymbolAttrName()).getValue();
+      return getNameAttr().getValue();
     }
 
   private:
@@ -95,7 +100,7 @@ def RTLModuleExternOp : RTLOp<"module.extern",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "StringAttr":$name,
+    OpBuilder<(ins "StringAttr":$name,
                       "ArrayRef<ModulePortInfo>":$ports,
                       CArg<"StringRef", "StringRef()">:$verilogName)>
   ];
@@ -110,6 +115,28 @@ def RTLModuleExternOp : RTLOp<"module.extern",
     /// here.  This is typically the symbol, but can be overridden with the
     /// verilogName attribute.
     StringRef getVerilogModuleName();
+
+    /// Return the name to use for the Verilog module that we're referencing
+    /// here.  This is typically the symbol, but can be overridden with the
+    /// verilogName attribute.
+    StringAttr getVerilogModuleNameAttr() {
+      if (auto vName = verilogNameAttr()){
+        return vName;
+      }
+      return (*this)->getAttrOfType<StringAttr>(
+          ::mlir::SymbolTable::getSymbolAttrName());
+    }
+
+    // Get the module's symbolic name as StringAttr.
+    StringAttr getNameAttr() {
+      return (*this)->getAttrOfType<StringAttr>(
+        ::mlir::SymbolTable::getSymbolAttrName());
+    }
+
+    // Get the module's symbolic name.
+    StringRef getName() {
+      return getNameAttr().getValue();
+    }
 
   private:
     // This trait needs access to the hooks defined below.
@@ -264,8 +291,28 @@ def InstanceOp : RTLOp<"instance",
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
     Operation *getReferencedModule();
+
+    /// Get the instances's name as StringAttr.
+    StringAttr getNameAttr() {
+      return (*this)->getAttrOfType<StringAttr>("instanceName");
+    }
+
+    /// Set the instance's name as StringAttr.
+    void setNameAttr(StringAttr name) {
+      (*this)->setAttr("instanceName", name);
+    }
+
+    /// Get the instances's name.
+    StringRef getName() {
+      return getNameAttr().getValue();
+    }
+
+    /// Set the instance's name.
+    void setName(StringRef name) {
+      setNameAttr(StringAttr::get(getContext(), name));
+    }
   }];
-  
+
   let assemblyFormat = [{
     $instanceName $moduleName `(` $inputs `)` attr-dict
       `:` functional-type($inputs, results)
@@ -285,7 +332,7 @@ def OutputOp : RTLOp<"output", [Terminator, HasParent<"RTLModuleOp">,
   let arguments = (ins Variadic<AnyType>:$operands);
 
   let builders = [
-    OpBuilderDAG<(ins), "build($_builder, $_state, llvm::None);">
+    OpBuilder<(ins), "build($_builder, $_state, llvm::None);">
   ];
 
   let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";
