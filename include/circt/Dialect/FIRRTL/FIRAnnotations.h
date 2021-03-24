@@ -1,4 +1,4 @@
-//===- FIRAnnotations.h - .fir to FIRRTL dialect parser -------------------===//
+//===- FIRAnnotations.h - FIRRTL Annotation Utilities ---------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Provide utilities related to dealing with Scala FIRRTL Compiler Annotations.
+// Provide utilities related to dealing with FIRRTL Annotations.
 //
 //===----------------------------------------------------------------------===//
 
