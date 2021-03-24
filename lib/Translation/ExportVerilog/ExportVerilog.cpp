@@ -239,7 +239,7 @@ static void printUnpackedTypePostfix(Type type, raw_ostream &os) {
       })
       .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
         printUnpackedTypePostfix(arrayType.getElementType(), os);
-        os << '[' << (arrayType.getSize() - 1) << ":0]";
+        os << "[0:" << (arrayType.getSize() - 1) << "]";
       });
 }
 
