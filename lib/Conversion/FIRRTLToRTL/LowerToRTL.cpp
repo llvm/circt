@@ -1152,6 +1152,7 @@ void FIRRTLLowering::optimizeTemporaryWire(sv::WireOp wire) {
   // that work on them.  If anything unexpected is found then leave it alone.
   SmallVector<sv::ReadInOutOp> reads;
   sv::ConnectOp write;
+  wire->dump();
 
   for (auto *user : wire->getUsers()) {
     if (auto read = dyn_cast<sv::ReadInOutOp>(user)) {
@@ -1161,19 +1162,27 @@ void FIRRTLLowering::optimizeTemporaryWire(sv::WireOp wire) {
 
     // Otherwise must be a connect, and we must not have seen a write yet.
     auto connect = dyn_cast<sv::ConnectOp>(user);
-    if (!connect || write)
+    if (!connect || write) {
+      llvm::errs() << "XX\n";
       return;
+    }
     write = connect;
   }
 
   // Must have found the write!
-  if (!write)
+  if (!write) {
+    llvm::errs() << "XX\n";
+
     return;
+  }
 
   // If the write is happening at the model level then we don't have any
   // use-before-def checking to do, so we only handle that for now.
-  if (!isa<rtl::RTLModuleOp>(write->getParentOp()))
+  if (!isa<rtl::RTLModuleOp>(write->getParentOp())) {
+    llvm::errs() << "XX\n";
+
     return;
+  }
 
   auto connected = write.src();
 
@@ -1184,6 +1193,7 @@ void FIRRTLLowering::optimizeTemporaryWire(sv::WireOp wire) {
   }
   // And remove the write and wire itself.
   write.erase();
+  wire->dump();
   wire.erase();
 }
 

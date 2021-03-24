@@ -504,4 +504,14 @@ firrtl.module @wire_cst_prop1(%out_b: !firrtl.flip<uint<9>>) {
   firrtl.connect %out_b, %xor : !firrtl.flip<uint<9>>, !firrtl.uint<9>
 }
 
+// CHECK-LABEL: @wire_port_prop1
+// CHECK-NEXT:   firrtl.connect %out_b, %in_a : !firrtl.flip<uint<9>>, !firrtl.uint<9>
+// CHECK-NEXT:  }
+firrtl.module @wire_port_prop1(%in_a: !firrtl.uint<9>, %out_b: !firrtl.flip<uint<9>>) {
+  %tmp = firrtl.wire : !firrtl.uint<9>
+  firrtl.connect %tmp, %in_a : !firrtl.uint<9>, !firrtl.uint<9>
+
+  firrtl.connect %out_b, %tmp : !firrtl.flip<uint<9>>, !firrtl.uint<9>
+}
+
 }
