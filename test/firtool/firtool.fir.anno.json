@@ -1,0 +1,21 @@
+[
+    {
+        "info": "a NoTargetAnnotation"
+    },
+    {
+        "info": "a CircuitTarget Annotation",
+        "target": "~test_mod"
+    },
+    {
+        "info": "a ModuleTarget Annotation",
+        "target": "~test_mod|test_mod"
+    },
+    {
+        "info": "a CircuitName Annotation",
+        "target": "test_mod"
+    },
+    {
+        "info": "a ModuleName Annotation",
+        "target": "test_mod.test_mod"
+    }
+]
