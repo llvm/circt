@@ -51,3 +51,19 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo"}]]
 
     ; CHECK-LABEL: module {
     ; CHECK: firrtl.module @Foo() attributes {annotations = [{a = "a"}]}
+
+; // -----
+
+; COM: All types of JSON values should work
+circuit Foo: %[[{"string":"a","integer":42,"float":3.14,"boolean":true,"null":null,"object":{"foo":"bar"},"array":[1,2,3]}]]
+  module Foo:
+    skip
+
+    ; CHECK-LABEL: module {
+    ; CHECK: firrtl.circuit "Foo" attributes {annotations =
+    ; CHECK-SAME: array = [1, 2, 3]
+    ; CHECK-SAME: boolean = true
+    ; CHECK-SAME: float = 3.140
+    ; CHECK-SAME: integer = 42
+    ; CHECK-SAME: object = {foo = "bar"}
+    ; CHECK-SAME: string = "a"
