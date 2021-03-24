@@ -14,6 +14,7 @@
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "circt/Dialect/LLHD/Translation/TranslateToVerilog.h"
+#include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Translation/ExportVerilog.h"
 
 #ifndef CIRCT_INITALLTRANSLATIONS_H
@@ -30,6 +31,7 @@ inline void registerAllTranslations() {
     esi::registerESITranslations();
     firrtl::registerFromFIRRTLTranslation();
     llhd::registerToVerilogTranslation();
+    msft::registerMSFTTclTranslation();
     return true;
   }();
   (void)initOnce;
