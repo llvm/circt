@@ -46,104 +46,26 @@ public:
 private:
   unsigned newValueNumber() { return nextValueNum++; }
 
-  /// Handles string replacements in the generated code.
-  class StringReplacerClass {
-  public:
-    StringReplacerClass(stringstream &outBuffer) : outBuffer(outBuffer) {}
-    string insert(function<string()> func) {
-      unsigned loc = replaceLocs.size();
-      replaceLocs.push_back(make_pair(loc, func));
-      return "$loc" + to_string(loc);
-    }
-    void push_frame() { topOfStack.push(replaceLocs.size()); }
-    void pop_frame() {
-      processReplacements();
-      topOfStack.pop();
-    }
+  helper::StringReplacerClass replacer;
 
-  private:
-    std::stringstream &outBuffer;
-    void processReplacements() {
-      string code = outBuffer.str();
-      outBuffer.str(std::string());
-      int numEntries = replaceLocs.size() - topOfStack.top();
-      for (int i = 0; i < numEntries; i++) {
-        auto replacement = replaceLocs.back();
-        replaceLocs.pop_back();
-        unsigned loc = replacement.first;
-        function<string()> getReplacementString = replacement.second;
-        string replacementStr = getReplacementString();
-        stringstream locSStream;
-        locSStream << "$loc" << loc;
-        helper::findAndReplaceAll(code, locSStream.str(), replacementStr);
-      }
-      outBuffer << code;
-      assert(replaceLocs.size() == topOfStack.top());
-    }
-
-    std::stack<unsigned> topOfStack;
-    std::list<std::pair<unsigned, function<string()>>> replaceLocs;
-  } replacer;
-
-  class VerilogMapperClass {
-  private:
-    llvm::DenseMap<Value, VerilogValue *> mapValueToVerilogValuePtr;
-    std::list<VerilogValue> verilogValueStore;
-    std::stack<unsigned> topOfStack;
-
-  public:
-    void push_frame() { topOfStack.push(verilogValueStore.size()); }
-    unsigned size() { return verilogValueStore.size(); }
-    void pop_frame() {
-      int numDeletes = verilogValueStore.size() - topOfStack.top();
-      for (int i = 0; i < numDeletes; i++) {
-        verilogValueStore.pop_back();
-      }
-      topOfStack.pop();
-    }
-
-    VerilogValue *getMutable(Value v) {
-      assert(v);
-      if (mapValueToVerilogValuePtr.find(v) ==
-          mapValueToVerilogValuePtr.end()) {
-        emitError(v.getDefiningOp()->getLoc(),
-                  "could not find VerilogValue for this mlir::Value!");
-        assert(false);
-      }
-      VerilogValue *out = mapValueToVerilogValuePtr[v];
-      assert(out->isInitialized());
-      return out;
-    }
-    const VerilogValue get(Value v) { return *getMutable(v); }
-
-    void insert_ptr(Value v, VerilogValue *vv) {
-      mapValueToVerilogValuePtr[v] = vv;
-      assert(mapValueToVerilogValuePtr[v]->isInitialized());
-    }
-
-    void insert(Value v, VerilogValue vv) {
-      verilogValueStore.push_back(vv);
-      insert_ptr(v, &verilogValueStore.back());
-    }
-    unsigned stack_level() { return topOfStack.size(); }
-  } verilogMapper;
+  helper::VerilogMapperClass verilogMapper;
 
   void region_begin() {
-    verilogMapper.push_frame();
-    replacer.push_frame();
-    // outBuffer << "\n//{Region  (level = " << verilogMapper.stack_level()
+    verilogMapper.pushFrame();
+    replacer.pushFrame();
+    // outBuffer << "\n//{Region  (level = " << verilogMapper.stackLevel()
     //           << ").\n";
     // outBuffer << "//#VerilogValues = " << verilogMapper.size() << ".\n";
   }
   void region_end() {
     // outBuffer << "\n// #VerilogValues = " << verilogMapper.size() << ".\n";
-    // outBuffer << "//}Region  (level = " << verilogMapper.stack_level()
+    // outBuffer << "//}Region  (level = " << verilogMapper.stackLevel()
     //           << ").\n";
 
     // replacer should process this frame's replacements before verilogMapper
     // pops its frame.
-    replacer.pop_frame();
-    verilogMapper.pop_frame();
+    replacer.popFrame();
+    verilogMapper.popFrame();
   }
 
   void printOperation(Operation *op, unsigned indentAmount = 0);
@@ -817,14 +739,14 @@ void VerilogPrinter::printIfOp(IfOp op, unsigned indentAmount) {
   auto id_if = newValueNumber();
   VerilogValue vTstart = VerilogValue(tstart, "v" + to_string(id_if));
   region_begin();
-  verilogMapper.insert_ptr(tstart, &vTstart);
+  verilogMapper.insertPtr(tstart, &vTstart);
   outBuffer << "wire " << vTstart.strWire() << " = "
             << vTstartPrev->strConstOrWire() << "&&"
             << verilogMapper.get(cond).strConstOrWire() << ";\n";
   printTimeOffsets(&vTstart);
   printBody(if_body, indentAmount);
   region_end();
-  verilogMapper.insert_ptr(tstart, vTstartPrev);
+  verilogMapper.insertPtr(tstart, vTstartPrev);
 }
 
 void VerilogPrinter::printForOp(hir::ForOp op, unsigned indentAmount) {
@@ -832,8 +754,8 @@ void VerilogPrinter::printForOp(hir::ForOp op, unsigned indentAmount) {
   Value tloop = op.getIterTimeVar();
   Value tfinish = op.tfinish();
 
-  auto id_loop = newValueNumber();
-  yieldTarget.push(std::make_pair(forOpBody, "tloop_in" + to_string(id_loop)));
+  auto idLoop = newValueNumber();
+  yieldTarget.push(std::make_pair(forOpBody, "tloop_in" + to_string(idLoop)));
 
   const VerilogValue v_lb = verilogMapper.get(op.lb());
   const VerilogValue v_ub = verilogMapper.get(op.ub());
@@ -842,12 +764,11 @@ void VerilogPrinter::printForOp(hir::ForOp op, unsigned indentAmount) {
   const VerilogValue v_offset = verilogMapper.get(op.offset());
   unsigned delayValue = v_offset.getIntegerConst();
   assert(delayValue > 0);
-  VerilogValue v_idx = VerilogValue(idx, "idx" + to_string(id_loop));
+  VerilogValue v_idx = VerilogValue(idx, "idx" + to_string(idLoop));
   verilogMapper.insert(idx, v_idx);
-  verilogMapper.insert(tloop,
-                       VerilogValue(tloop, "tloop" + to_string(id_loop)));
+  verilogMapper.insert(tloop, VerilogValue(tloop, "tloop" + to_string(idLoop)));
   verilogMapper.insert(tfinish,
-                       VerilogValue(tfinish, "tfinish" + to_string(id_loop)));
+                       VerilogValue(tfinish, "tfinish" + to_string(idLoop)));
   VerilogValue *v_tloop = verilogMapper.getMutable(tloop);
   VerilogValue *v_tfinish = verilogMapper.getMutable(tfinish);
 
@@ -859,23 +780,23 @@ void VerilogPrinter::printForOp(hir::ForOp op, unsigned indentAmount) {
   stringstream loopCounterStream;
   string loopCounterTemplate =
       "\nreg[$msb_idx:0] $v_idx ;"
-      "\nreg[$msb_ub:0] ub$id_loop ;"
-      "\nreg[$msb_step:0] step$id_loop ;"
-      "\nwire tloop_in$id_loop;"
+      "\nreg[$msb_ub:0] ub$idLoop ;"
+      "\nreg[$msb_step:0] step$idLoop ;"
+      "\nwire tloop_in$idLoop;"
       "\nreg $v_tloop;"
       "\nreg $v_tfinish;"
       "\nalways@(posedge clk) begin"
       "\n if(/*tstart=*/ $vTstart) begin"
       "\n   $v_idx <= $v_lb; //lower bound."
-      "\n   step$id_loop <= $v_step;"
-      "\n   ub$id_loop <= $v_ub;"
+      "\n   step$idLoop <= $v_step;"
+      "\n   ub$idLoop <= $v_ub;"
       "\n   $v_tloop <= ($v_ub > $v_lb);"
       "\n   $v_tfinish <=!($v_ub > $v_lb);"
       "\n end"
-      "\n else if (tloop_in$id_loop) begin"
-      "\n   $v_idx <= $v_idx + step$id_loop; //increment"
-      "\n   $v_tloop <= ($v_idx + step$id_loop) < ub$id_loop;"
-      "\n   $v_tfinish <= !(($v_idx + step$id_loop) < ub$id_loop);"
+      "\n else if (tloop_in$idLoop) begin"
+      "\n   $v_idx <= $v_idx + step$idLoop; //increment"
+      "\n   $v_tloop <= ($v_idx + step$idLoop) < ub$idLoop;"
+      "\n   $v_tfinish <= !(($v_idx + step$idLoop) < ub$idLoop);"
       "\n end"
       "\n else begin"
       "\n   $v_tloop <= 1'b0;"
@@ -885,7 +806,7 @@ void VerilogPrinter::printForOp(hir::ForOp op, unsigned indentAmount) {
   loopCounterStream << loopCounterTemplate;
 
   string loopCounterString = loopCounterStream.str();
-  helper::findAndReplaceAll(loopCounterString, "$id_loop", to_string(id_loop));
+  helper::findAndReplaceAll(loopCounterString, "$idLoop", to_string(idLoop));
   helper::findAndReplaceAll(loopCounterString, "$msb_idx",
                             to_string(width_idx - 1));
   helper::findAndReplaceAll(loopCounterString, "$v_lb", v_lb.strConstOrWire());
@@ -904,12 +825,12 @@ void VerilogPrinter::printForOp(hir::ForOp op, unsigned indentAmount) {
   helper::findAndReplaceAll(loopCounterString, "$v_tfinish",
                             v_tfinish->strWire());
   helper::findAndReplaceAll(loopCounterString, "$v_idx", v_idx.strWire());
-  outBuffer << "\n//{ Loop" << id_loop << "\n";
+  outBuffer << "\n//{ Loop" << idLoop << "\n";
   outBuffer << loopCounterString;
-  outBuffer << "\n//Loop" << id_loop << " body\n";
+  outBuffer << "\n//Loop" << idLoop << " body\n";
   printTimeOffsets(v_tloop);
   printBody(op.getLoopBody().front(), indentAmount);
-  outBuffer << "\n//} Loop" << id_loop << "\n";
+  outBuffer << "\n//} Loop" << idLoop << "\n";
   printTimeOffsets(v_tfinish);
   yieldTarget.pop();
 }
@@ -923,27 +844,27 @@ void VerilogPrinter::printUnrollForOp(UnrollForOp op, unsigned indentAmount) {
   VerilogValue *vTstart = verilogMapper.getMutable(tstart);
   Value tloop = op.getIterTimeVar();
   Value idx = op.getInductionVar();
-  verilogMapper.insert_ptr(tloop, vTstart);
-  auto id_loop = newValueNumber();
+  verilogMapper.insertPtr(tloop, vTstart);
+  auto idLoop = newValueNumber();
   verilogMapper.insert(
-      idx, VerilogValue(
-               idx,
-               "idx" + to_string(
-                           id_loop))); // FIXME remove name of the VerilogValue.
+      idx,
+      VerilogValue(
+          idx,
+          "idx" + to_string(idLoop))); // FIXME remove name of the VerilogValue.
   VerilogValue v_tloop;
   for (int i = lb; i < ub; i += step) {
     region_begin();
     auto id_tloop = newValueNumber();
 
     outBuffer << "\n//{ Unrolled body " << i
-              << " of loop" + to_string(id_loop) + ".\n";
+              << " of loop" + to_string(idLoop) + ".\n";
     VerilogValue *v_idx = verilogMapper.getMutable(idx);
     v_idx->setIntegerConst(i);
     outBuffer << "//DEBUG: " << v_idx->strConstOrWire() << ", expected " << i
               << "\n";
     if (i > lb) {
       printTimeOffsets(&v_tloop);
-      verilogMapper.insert_ptr(tloop, &v_tloop);
+      verilogMapper.insertPtr(tloop, &v_tloop);
     }
     VerilogValue next_v_tloop =
         VerilogValue(tloop, "tloop" + to_string(id_tloop));
@@ -955,7 +876,7 @@ void VerilogPrinter::printUnrollForOp(UnrollForOp op, unsigned indentAmount) {
 
     yieldTarget.pop();
     outBuffer << "\n//} Unrolled body " << i
-              << " of loop" + to_string(id_loop) + ".\n";
+              << " of loop" + to_string(idLoop) + ".\n";
 
     outBuffer << "//DEBUG: " << verilogMapper.getMutable(idx)->strConstOrWire()
               << ", expected " << i << "\n";
