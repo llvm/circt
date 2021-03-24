@@ -12,16 +12,20 @@
 
 #include "circt/Dialect/FIRRTL/FIRAnnotations.h"
 
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OperationSupport.h"
+#include "llvm/Support/JSON.h"
+
+namespace json = llvm::json;
 
 /// Deserialize a JSON value into FIRRTL Annotations.  Annotations are
 /// represented as a Target-keyed arrays of attributes.  The input JSON value is
 /// checked, at runtime, to be an array of objects.  Returns true if successful,
 /// false if unsuccessful.
-bool circt::firrtl::fromJSON(llvm::json::Value &value,
+bool circt::firrtl::fromJSON(json::Value &value,
                              llvm::StringMap<ArrayAttr> &annotationMap,
-                             llvm::json::Path path, MLIRContext *context) {
+                             json::Path path, MLIRContext *context) {
 
   /// Examine an Annotation JSON object and return an optional string indicating
   /// the target associated with this annotation.  Erase the target from the
@@ -29,9 +33,8 @@ bool circt::firrtl::fromJSON(llvm::json::Value &value,
   /// targets to actual Targets.  Note: it is expected that a target may not
   /// exist, e.g., any subclass of firrtl.annotations.NoTargetAnnotation will
   /// not have a target.
-  auto findAndEraseTarget =
-      [](llvm::json::Object *object,
-         llvm::json::Path p) -> llvm::Optional<std::string> {
+  auto findAndEraseTarget = [](json::Object *object,
+                               json::Path p) -> llvm::Optional<std::string> {
     // If no "target" field exists, then promote the annotation to a
     // CircuitTarget annotation by returning a target of "~".
     auto target = object->get("target");
@@ -89,9 +92,8 @@ bool circt::firrtl::fromJSON(llvm::json::Value &value,
   };
 
   /// Convert arbitrary JSON to an MLIR Attribute.
-  std::function<Attribute(llvm::json::Value &, llvm::json::Path)>
-      convertJSONToAttribute =
-          [&](llvm::json::Value &value, llvm::json::Path p) -> Attribute {
+  std::function<Attribute(json::Value &, json::Path)> convertJSONToAttribute =
+      [&](json::Value &value, json::Path p) -> Attribute {
     // String
     if (auto a = value.getAsString())
       return StringAttr::get(context, a.getValue());

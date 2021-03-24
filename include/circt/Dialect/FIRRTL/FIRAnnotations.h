@@ -14,9 +14,18 @@
 #define CIRCT_DIALECT_FIRRTL_FIRANNOTATIONS_H
 
 #include "circt/Support/LLVM.h"
-#include "mlir/IR/BuiltinAttributes.h"
 #include "llvm/ADT/StringMap.h"
-#include "llvm/Support/JSON.h"
+
+namespace llvm {
+namespace json {
+class Path;
+class Value;
+} // namespace json
+} // namespace llvm
+
+namespace mlir {
+class ArrayAttr;
+}
 
 namespace circt {
 namespace firrtl {
