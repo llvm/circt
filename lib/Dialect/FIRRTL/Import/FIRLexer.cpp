@@ -294,7 +294,7 @@ FIRToken FIRLexer::lexInlineAnnotation(const char *tokStart) {
   while (1) {
     switch (*curPtr++) {
     case '\\':
-      (void) *curPtr++;
+      (void)*curPtr++;
       break;
     case '"':
       stringMode = !stringMode;
