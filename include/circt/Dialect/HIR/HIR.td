@@ -132,8 +132,8 @@ def MemWriteOp : HIR_Op<"mem_write", [AttrSizedOperandSegments]> {
       `:` `(`type($value) `,` type($mem)`[`type($addr) `]` `)`}];
 }
 
-def SliceOp : HIR_Op<"slice", [NoSideEffect,AttrSizedOperandSegments]> {
-  let summary = "read from a memory interface.";
+def SliceOp : HIR_Op<"slice", [NoSideEffect]> {
+  let summary = "Select a slice of the interface.";
   let description = [{
     This Op reads from a memory interface. 
       Example:
@@ -142,13 +142,13 @@ def SliceOp : HIR_Op<"slice", [NoSideEffect,AttrSizedOperandSegments]> {
   }];
 
   let arguments = (ins InterfaceType:$interface, 
-      Variadic<AnyType>:$addr, TimeType : $tstart,
-      Optional<Index>: $var_offset,
-      I32Attr: $const_offset);
+      Variadic<AnyType>:$varAddrs,
+      ArrayAttr : $constAddrs);
   let results = (outs InterfaceType: $res);
-  let assemblyFormat = [{$interface (`[`  $addr^ `]`)? `at`
-    custom<TimeAndOffset>($tstart, $var_offset,$const_offset) attr-dict 
-    `:` type($interface) custom<ArrayAccessTypes>(type($addr)) 
+  let assemblyFormat = [{$interface
+  custom<OptionalArrayAccess>($varAddrs,$constAddrs) attr-dict 
+    `:` type($interface)
+    custom<OptionalArrayAccessTypes>(ref($constAddrs),type($varAddrs)) 
     `->` type($res) }];
 }
 
