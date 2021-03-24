@@ -117,8 +117,8 @@ jobs:
             -DBUILD_SHARED_LIBS=$BUILD_SHARED \
             -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
             -DLLVM_ENABLE_ASSERTIONS=$BUILD_ASSERT \
-            -DMLIR_DIR=../llvm/install/lib/cmake/mlir \
-            -DLLVM_DIR=../llvm/install/lib/cmake/llvm \
+            -DMLIR_DIR=../llvm/install/lib/cmake/mlir/ \
+            -DLLVM_DIR=../llvm/install/lib/cmake/llvm/ \
             -DCMAKE_LINKER=lld \
             -DCMAKE_C_COMPILER=$CC \
             -DCMAKE_CXX_COMPILER=$CXX \
