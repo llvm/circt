@@ -111,10 +111,8 @@ bool circt::firrtl::fromJSON(json::Value &value,
       return BoolAttr::get(context, a.getValue());
 
     // Null
-    if (auto a = value.getAsNull()) {
-      p.report("Found a null in the JSON, returning 'nullptr'");
-      return {};
-    }
+    if (auto a = value.getAsNull())
+      return mlir::UnitAttr::get(context);
 
     // Object
     if (auto a = value.getAsObject()) {
