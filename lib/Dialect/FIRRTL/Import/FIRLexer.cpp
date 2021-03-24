@@ -290,14 +290,25 @@ FIRToken FIRLexer::lexFileInfo(const char *tokStart) {
 ///
 FIRToken FIRLexer::lexInlineAnnotation(const char *tokStart) {
   size_t depth = 0;
+  bool stringMode = false;
   while (1) {
     switch (*curPtr++) {
+    case '\\':
+      (void) *curPtr++;
+      break;
+    case '"':
+      stringMode = !stringMode;
+      break;
     case ']':
+      if (stringMode)
+        break;
       if (depth == 1)
         return formToken(FIRToken::inlineannotation, tokStart);
       depth--;
       break;
     case '[':
+      if (stringMode)
+        break;
       depth++;
       break;
     case 0:
