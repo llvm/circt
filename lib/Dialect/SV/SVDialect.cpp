@@ -99,11 +99,11 @@ StringRef circt::sv::resolveKeywordConflict(StringRef origName,
 }
 
 static bool isValidVerilogCharacterFirst(char ch) {
-  return isalpha(ch) || ch == '_';
+  return llvm::isAlpha(ch) || ch == '_';
 }
 
 static bool isValidVerilogCharacter(char ch) {
-  return isValidVerilogCharacterFirst(ch) || isdigit(ch);
+  return isValidVerilogCharacterFirst(ch) || llvm::isDigit(ch);
 }
 
 /// Sanitize the specified name for use in SV output. Auto-uniquifies the name
