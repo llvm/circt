@@ -566,38 +566,18 @@ public:
     return entry->getSecond();
   }
 
-  /// Given a module name \p moduleName, return the updated name if it has been
-  /// previously renamed in the table moduleNameTable, else call
-  /// resolveKeywordConflict, to get a new name in case of conflict with
-  /// keywords.
-  StringRef getModuleName(StringAttr moduleName) {
-    auto entryIter = moduleNameTable.find(moduleName);
-    if (entryIter != moduleNameTable.end())
-      return entryIter->getSecond();
-    auto updatedName = resolveKeywordConflict(
-        moduleName.getValue(), usedModuleNames, nextGeneratedNameID);
-    moduleNameTable[moduleName] = updatedName;
-    return updatedName;
-  }
+  void verifyModuleName(Operation *, StringAttr nameAttr);
 
 public:
   /// nameTable keeps track of mappings from Value's and operations (for
   /// instances) to their string table entry.
   llvm::DenseMap<ValueOrOp, StringRef> nameTable;
 
-  /// moduleNameTable keeps track of mappings from Module names to updated names
-  /// to resolve keyword conflicts.
-  llvm::DenseMap<Attribute, StringRef> moduleNameTable;
-
   /// outputNames tracks the uniquified names for output ports, which don't have
   /// a Value or Op representation.
   SmallVector<StringRef> outputNames;
 
   llvm::StringSet<> usedNames;
-
-  /// Set of used MLIR module names, to ensure unique names when renaming
-  /// keywords in module names.
-  llvm::StringSet<> usedModuleNames;
 
   size_t nextGeneratedNameID = 0;
 
@@ -626,6 +606,14 @@ StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
   if (valueOrOp)
     nameTable[valueOrOp] = updatedName;
   return updatedName;
+}
+
+/// Check if the given module name \p nameAttr is a valid SV name (does not
+/// contain any illegal characters). If invalid, calls \c emitOpError.
+void ModuleEmitter::verifyModuleName(Operation *op, StringAttr nameAttr) {
+  if (!isNameValid(nameAttr.getValue()))
+    emitOpError(op, "Name \"" + nameAttr.getValue() +
+                        "\" is not allowed in Verilog output.\n");
 }
 
 //===----------------------------------------------------------------------===//
@@ -2189,9 +2177,12 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   // parameterized modules in the RTL dialect.
   if (auto extMod = dyn_cast<RTLModuleExternOp>(moduleOp)) {
     auto verilogName = extMod.getVerilogModuleNameAttr();
-    indent() << emitter.getModuleName(verilogName);
+    emitter.verifyModuleName(op, verilogName);
+    indent() << verilogName.getValue();
   } else if (auto mod = dyn_cast<RTLModuleOp>(moduleOp)) {
-    indent() << emitter.getModuleName(mod.getNameAttr()); //.moduleName());
+    auto verilogName = mod.getNameAttr();
+    emitter.verifyModuleName(op, verilogName);
+    indent() << verilogName.getValue();
   }
 
   // Helper that prints a parameter constant value in a Verilog compatible way.
@@ -2458,7 +2449,8 @@ void ModuleEmitter::emitStatementBlock(Block &body) {
 
 void ModuleEmitter::emitRTLExternModule(RTLModuleExternOp module) {
   auto verilogName = module.getVerilogModuleNameAttr();
-  os << "// external module " << getModuleName(verilogName) << "\n\n";
+  verifyModuleName(module, verilogName);
+  os << "// external module " << verilogName.getValue() << "\n\n";
 }
 
 /// We lower the Merge operation to a wire at the top level along with connects
@@ -2570,7 +2562,9 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
       addName(module.getArgument(port.argNum), name);
   }
 
-  os << "module " << getModuleName(module.getNameAttr()) << '(';
+  auto moduleNameAttr = module.getNameAttr();
+  verifyModuleName(module, moduleNameAttr);
+  os << "module " << moduleNameAttr.getValue() << '(';
   if (!portInfo.empty())
     os << '\n';
 
@@ -2792,7 +2786,6 @@ void SplitEmitter::emitMLIRModule() {
 
 void SplitEmitter::emitModule(EmittedModule &mod) {
   auto op = mod.op;
-  auto localNames = LegalNamesAnalysis(op);
 
   // Given the operation, determine the file stem name and how to emit it.
   std::function<void(VerilogEmitterState &)> emit;
