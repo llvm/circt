@@ -93,6 +93,30 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
 // Binary Operators
 //===----------------------------------------------------------------------===//
 
+OpFoldResult AddPrimOp::fold(ArrayRef<Attribute> operands) {
+  /// Any folding here requires a sign extension.
+  
+  /// If both operands are constant, and < 64 bits, then perform constant
+  /// folding. Cannot use constFoldBinaryOp, since the width of the constant is
+  /// different from operands.
+  if (operands[0] && operands[1] &&
+      lhs().getType().cast<FIRRTLType>().getBitWidthOrSentinel() < 64) {
+    auto op1 = operands[0].dyn_cast<IntegerAttr>();
+    auto op2 = operands[1].dyn_cast<IntegerAttr>();
+    if (op1 && op2) {
+      APInt sumAPInt = (op1.getValue() + op2.getValue());
+      int64_t sumVal = sumAPInt.isSignBitSet() ? sumAPInt.getSExtValue()
+                                               : sumAPInt.getZExtValue();
+      return IntegerAttr::get(
+          IntegerType::get(
+              getContext(),
+              lhs().getType().cast<FIRRTLType>().getBitWidthOrSentinel() + 1),
+          sumVal);
+    }
+  }
+  return {};
+}
+
 OpFoldResult DivPrimOp::fold(ArrayRef<Attribute> operands) {
   APInt value;
 

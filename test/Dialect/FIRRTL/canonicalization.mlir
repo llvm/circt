@@ -491,9 +491,8 @@ firrtl.module @AttachOpts(%a: !firrtl.analog<1>) {
 }
 
 // CHECK-LABEL: @wire_cst_prop1
-// CHECK-NEXT:   %c5_ui8 = firrtl.constant(5 : ui8) : !firrtl.uint<8>
-// CHECK-NEXT:   %0 = firrtl.add %c5_ui8, %c5_ui8
-// CHECK-NEXT:   firrtl.connect %out_b, %0 : !firrtl.flip<uint<9>>, !firrtl.uint<9>
+// CHECK-NEXT:   %c10_ui9 = firrtl.constant(10 : i9) : !firrtl.uint<9>
+// CHECK-NEXT:   firrtl.connect %out_b, %c10_ui9 : !firrtl.flip<uint<9>>, !firrtl.uint<9>
 // CHECK-NEXT:  }
 firrtl.module @wire_cst_prop1(%out_b: !firrtl.flip<uint<9>>) {
   %tmp_a = firrtl.wire : !firrtl.uint<8>
