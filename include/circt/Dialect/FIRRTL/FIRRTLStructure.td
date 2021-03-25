@@ -123,7 +123,9 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
     Verilog module, including a given name and a list of ports.
   }];
   let arguments = (ins OptionalAttr<StrAttr>:$defname,
-                       OptionalAttr<DictionaryAttr>:$parameters);
+                       OptionalAttr<DictionaryAttr>:$parameters,
+                       DefaultValuedAttr<AnnotationArrayAttr,
+                                         "{}">:$annotations);
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
@@ -131,7 +133,8 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   let builders = [
     OpBuilder<(ins "StringAttr":$name,
                       "ArrayRef<ModulePortInfo>":$ports,
-                      CArg<"StringRef", "StringRef()">:$defnamAttr)>
+                      CArg<"StringRef", "StringRef()">:$defnamAttr,
+                      CArg<"ArrayAttr", "ArrayAttr()">:$annotations)>
   ];
 
   let extraClassDeclaration = [{
