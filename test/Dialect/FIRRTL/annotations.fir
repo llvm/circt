@@ -54,6 +54,21 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo"}]]
 
 ; // -----
 
+; COM: A ModuleTarget Annotation can be attached to an ExtModule.
+circuit Foo: %[[{"a":"a","target":"~Foo|Bar"}]]
+  extmodule Bar:
+    input a: UInt<1>
+  module Foo:
+    input a: UInt<1>
+    inst bar of Bar
+    bar.a <= a
+
+    ; CHECK-LABEL: module {
+    ; CHECK: firrtl.extmodule @Bar
+    ; CHECK-SAME: attributes {annotations = [{a = "a"}]}
+
+; // -----
+
 ; COM: All types of JSON values should work
 circuit Foo: %[[{"string":"a","integer":42,"float":3.14,"boolean":true,"null":null,"object":{"foo":"bar"},"array":[1,2,3]}]]
   module Foo:

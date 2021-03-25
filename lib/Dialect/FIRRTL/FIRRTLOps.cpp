@@ -318,10 +318,13 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
 
 void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name, ArrayRef<ModulePortInfo> ports,
-                         StringRef defnameAttr) {
+                         StringRef defnameAttr, ArrayAttr annotations) {
   buildModule(builder, result, name, ports);
   if (!defnameAttr.empty())
     result.addAttribute("defname", builder.getStringAttr(defnameAttr));
+
+  if (annotations)
+    result.addAttribute("annotations", annotations);
 }
 
 // TODO: This ia a clone of mlir::impl::printFunctionSignature, refactor it to
