@@ -1,4 +1,5 @@
 #include "VerilogValue.h"
+#include "helper.h"
 #include <string>
 template <typename T>
 bool isEqual(ArrayRef<T> x, ArrayRef<T> y) {

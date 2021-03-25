@@ -1,12 +1,111 @@
 #include "VerilogValue.h"
 #include "helper.h"
 
+static bool isIntegerType(Type type) {
+  assert(type);
+  if (type.isa<IntegerType>())
+    return true;
+  if (type.isa<hir::ConstType>())
+    return true;
+  if (auto wireType = type.dyn_cast<WireType>())
+    return isIntegerType(wireType.getElementType());
+  return false;
+}
+
+VerilogValue::VerilogValue()
+    : value(Value()), type(Type()), name("uninitialized") {
+  maxDelay = 0;
+}
+
+VerilogValue::VerilogValue(Value value, string name)
+    : initialized(true), value(value), type(value.getType()), name(name) {
+  string out;
+  auto size = 1;
+  if (type.isa<MemrefType>()) {
+    auto packing = type.dyn_cast<hir::MemrefType>().getPacking();
+    auto shape = type.dyn_cast<hir::MemrefType>().getShape();
+    for (size_t i = 0; i < shape.size(); i++) {
+      bool isDistDim = true;
+      for (auto p : packing) {
+        if (i == shape.size() - p - 1)
+          isDistDim = false;
+      }
+      if (isDistDim) {
+        distDims.push_back(shape[i]);
+        distDimPos.push_back(i);
+        size *= shape[i];
+      }
+    }
+  }
+  usageInfo.numReads.insert(usageInfo.numReads.begin(), size, 0);
+  usageInfo.numWrites.insert(usageInfo.numWrites.begin(), size, 0);
+}
+
+int VerilogValue::numReads(ArrayRef<VerilogValue *> addr) {
+  unsigned pos = posMemrefDistDimAccess(addr);
+  return usageInfo.numReads[pos];
+}
+
+int VerilogValue::numWrites(ArrayRef<VerilogValue *> addr) {
+  unsigned pos = posMemrefDistDimAccess(addr);
+  return usageInfo.numWrites[pos];
+}
+unsigned VerilogValue::numAccess(unsigned pos) {
+  return usageInfo.numReads[pos] + usageInfo.numWrites[pos];
+}
+unsigned VerilogValue::numAccess(ArrayRef<VerilogValue *> addr) {
+  unsigned pos = posMemrefDistDimAccess(addr);
+  return numAccess(pos);
+}
+unsigned VerilogValue::maxNumReads() {
+  unsigned out = 0;
+  for (size_t i = 0; i < usageInfo.numReads.size(); i++) {
+    unsigned nReads = usageInfo.numReads[i];
+    // TODO: We don't yet support different number of reads to different
+    // wires in array.
+    if (i != 0 && out != nReads) {
+      emitWarning(this->value.getLoc(),
+                  "Number of reads is not same for all elements.");
+    }
+    out = (out > nReads) ? out : nReads;
+  }
+  return out;
+}
+unsigned VerilogValue::maxNumWrites() {
+  unsigned out = 0;
+  for (size_t i = 0; i < usageInfo.numReads.size(); i++) {
+    unsigned nWrites = usageInfo.numWrites[i];
+    // TODO: We don't yet support different number of writes to different
+    // wires in array. See printCallOp in HIRToVerilog. It increments
+    // numReads for all reads.
+    if (i != 0 && out != nWrites) {
+      emitWarning(this->value.getLoc(),
+                  "Number of writes is not same for all elements.");
+    }
+    out = (out > nWrites) ? out : nWrites;
+  }
+  return out;
+}
+unsigned VerilogValue::maxNumAccess() {
+  unsigned out = 0;
+  for (size_t i = 0; i < usageInfo.numReads.size(); i++) {
+    unsigned nAccess = usageInfo.numReads[i] + usageInfo.numWrites[i];
+    // TODO: We don't yet support different number of access to different
+    // wires in array.
+    if (i != 0 && out != nAccess) {
+      emitWarning(this->value.getLoc(),
+                  "Number of access is not same for all elements.");
+    }
+    out = (out > nAccess) ? out : nAccess;
+  }
+  return out;
+}
 SmallVector<unsigned, 4> VerilogValue::getMemrefPackedDims() const {
   SmallVector<unsigned, 4> out;
   auto memrefType = type.dyn_cast<hir::MemrefType>();
   auto shape = memrefType.getShape();
   auto packing = memrefType.getPacking();
-  for (int i = 0; i < shape.size(); i++) {
+  for (size_t i = 0; i < shape.size(); i++) {
     bool dimIsPacked = false;
     for (auto p : packing) {
       if (i == shape.size() - 1 - p)
@@ -43,7 +142,7 @@ string VerilogValue::buildEnableSelectorStr(string str_en, string str_en_input,
   // Print generate loops for distributed dimensions.
   if (!distDims.empty())
     out += "generate\n";
-  for (int i = 0; i < distDims.size(); i++) {
+  for (size_t i = 0; i < distDims.size(); i++) {
     string str_i = "i" + to_string(i);
     string str_dim = to_string(distDims[i]);
     out += "for(genvar " + str_i + " = 0; " + str_i + " < " + str_dim + ";" +
@@ -54,13 +153,13 @@ string VerilogValue::buildEnableSelectorStr(string str_en, string str_en_input,
   // Assign the enable signal using en_input.
   out += "assign $str_en $distDimAccessStr =| $str_en_input "
          "$distDimAccessStr;\n";
-  for (int i = 0; i < numInputs; i++) {
+  for (size_t i = 0; i < numInputs; i++) {
     out += "assign $str_en_input_if[" + to_string(i) +
            "]$distDimAccessStr = $str_en_input $distDimAccessStr [" +
            to_string(i) + "];\n";
   }
   // Print end/endgenerate.
-  for (int i = 0; i < distDims.size(); i++) {
+  for (size_t i = 0; i < distDims.size(); i++) {
     out += "end\n";
   }
   if (!distDims.empty())
@@ -82,7 +181,7 @@ string VerilogValue::strDistDimLoopNest(string distDimIdxStub, string body) {
   string distDimAccessStr = "";
   unsigned numDistDims = distDims.size();
   // Print generate loops for distributed dimensions.
-  for (int i = 0; i < numDistDims; i++) {
+  for (size_t i = 0; i < numDistDims; i++) {
     string str_i = "i" + to_string(i);
     string str_dim = to_string(distDims[i]);
     prologue += "for(genvar " + str_i + " = 0; " + str_i + " < " + str_dim +
@@ -94,8 +193,7 @@ string VerilogValue::strDistDimLoopNest(string distDimIdxStub, string body) {
   helper::findAndReplaceAll(body, distDimIdxStub, distDimAccessStr);
   if (numDistDims > 0)
     return "generate\n" + (prologue + body + epilogue) + "endgenerate\n";
-  else
-    return (prologue + body + epilogue);
+  return (prologue + body + epilogue);
 }
 
 string VerilogValue::strMemrefSelect(string str_v, string str_v_array,
@@ -110,7 +208,7 @@ string VerilogValue::strMemrefSelect(string str_v, string str_v_array,
 
   // Print generate loops for distributed dimensions.
   out += "generate\n";
-  for (int i = 0; i < distDims.size(); i++) {
+  for (size_t i = 0; i < distDims.size(); i++) {
     string str_i = "i" + to_string(i);
     string str_dim = to_string(distDims[i]);
     out += "for(genvar " + str_i + " = 0; " + str_i + " < " + str_dim + ";" +
@@ -120,7 +218,7 @@ string VerilogValue::strMemrefSelect(string str_v, string str_v_array,
   out += "assign $str_v $distDimAccessStr = $str_v_array $distDimAccessStr [" +
          to_string(idx) + "]";
   // Print end/endgenerate.
-  for (int i = 0; i < distDims.size(); i++) {
+  for (size_t i = 0; i < distDims.size(); i++) {
     out += "end\n";
   }
   if (!distDims.empty())
@@ -156,7 +254,7 @@ string VerilogValue::buildDataSelectorStr(string str_v, string str_v_valid,
   // Print generate loops for distributed dimensions.
   if (!distDims.empty())
     out += "generate\n";
-  for (int i = 0; i < distDims.size(); i++) {
+  for (size_t i = 0; i < distDims.size(); i++) {
     string str_i = "i" + to_string(i);
     string str_dim = to_string(distDims[i]);
     out += "for(genvar " + str_i + " = 0; " + str_i + " < " + str_dim + ";" +
@@ -168,13 +266,13 @@ string VerilogValue::buildDataSelectorStr(string str_v, string str_v_valid,
   out += "always@(*) begin\n"
          "if($v_valid_access[0] )\n$v = "
          "$v_input_access[0];\n";
-  for (int i = 1; i < numInputs; i++) {
+  for (size_t i = 1; i < numInputs; i++) {
     out += "else if ($v_valid_access[" + to_string(i) + "])\n";
     out += "$v = $v_input_access[" + to_string(i) + "];\n";
   }
   out += "else\n $v = 'x;\n";
   out += "end\n";
-  for (int i = 0; i < numInputs; i++) {
+  for (size_t i = 0; i < numInputs; i++) {
     out += "assign $v_valid_if[" + to_string(i) +
            "] $distDimAccessStr = $v_valid $distDimAccessStr [" + to_string(i) +
            "];\n";
@@ -183,7 +281,7 @@ string VerilogValue::buildDataSelectorStr(string str_v, string str_v_valid,
            "];\n";
   }
   // Print end/endgenerate.
-  for (int i = 0; i < distDims.size(); i++) {
+  for (size_t i = 0; i < distDims.size(); i++) {
     out += "end\n";
   }
   if (!distDims.empty())
@@ -210,8 +308,7 @@ unsigned
 VerilogValue::posMemrefDistDimAccess(ArrayRef<VerilogValue *> addr) const {
   assert(type.isa<hir::MemrefType>());
   unsigned out = 0;
-  auto packing = type.dyn_cast<hir::MemrefType>().getPacking();
-  for (int i = 0; i < distDimPos.size(); i++) {
+  for (size_t i = 0; i < distDimPos.size(); i++) {
     auto pos = distDimPos[i];
     int v = addr[pos]->getIntegerConst();
     out *= distDims[i];
@@ -225,7 +322,7 @@ VerilogValue::strMemrefDistDimAccess(ArrayRef<VerilogValue *> addr) const {
   assert(type.isa<hir::MemrefType>());
   string out;
   auto packing = type.dyn_cast<hir::MemrefType>().getPacking();
-  for (int i = 0; i < addr.size(); i++) {
+  for (size_t i = 0; i < addr.size(); i++) {
     bool isDistDim = true;
     for (auto p : packing) {
       if (p == addr.size() - 1 - i)
@@ -253,7 +350,7 @@ SmallVector<unsigned, 4> VerilogValue::getMemrefDistDims() const {
   auto memrefType = type.dyn_cast<hir::MemrefType>();
   auto shape = memrefType.getShape();
   auto packing = memrefType.getPacking();
-  for (int i = 0; i < shape.size(); i++) {
+  for (size_t i = 0; i < shape.size(); i++) {
     bool dimIsPacked = false;
     for (auto p : packing) {
       if (i == shape.size() - 1 - p)
@@ -267,7 +364,7 @@ SmallVector<unsigned, 4> VerilogValue::getMemrefDistDims() const {
 
 void VerilogValue::setIntegerConst(int value) {
   isConstValue = true;
-  constValue.val_int = value;
+  constValue.valInt = value;
   assert(getIntegerConst() == value);
 }
 
@@ -279,7 +376,7 @@ int VerilogValue::getIntegerConst() const {
     emitError(value.getLoc(), "ERROR: Expected const.\n");
     assert(false);
   }
-  return constValue.val_int;
+  return constValue.valInt;
 }
 string VerilogValue::strMemrefSelDecl() {
   auto numAccess = maxNumAccess();
@@ -320,8 +417,7 @@ unsigned VerilogValue::getBitWidth() const {
     int val = std::abs(getIntegerConst());
     if (val > 0)
       return std::ceil(std::log2(val + 1));
-    else
-      return 1;
+    return 1;
   }
   return helper::getBitWidth(type);
 }
@@ -341,13 +437,14 @@ string VerilogValue::strWireDecl() const {
       distDimsStr += "[" + to_string(dim - 1) + ":0]";
     }
     return "[" + elementWidthStr + "] " + strWire() + distDimsStr;
-  } else {
-    string out;
-    if (getBitWidth() > 1)
-      out += "[" + to_string(getBitWidth() - 1) + ":0] ";
-    return out + strWire();
   }
+  // If not wire type.
+  string out;
+  if (getBitWidth() > 1)
+    out += "[" + to_string(getBitWidth() - 1) + ":0] ";
+  return out + strWire();
 }
+
 string VerilogValue::strConstOrError(int n) const {
   if (isIntegerConst()) {
     string constStr = to_string(getIntegerConst() + n);
@@ -378,4 +475,224 @@ string VerilogValue::strConstOrWire() const {
     return "/*" + name + "=*/ " + vlogDecimalLiteral;
   }
   return strWire();
+}
+
+string VerilogValue::strMemrefArgDecl() {
+  string out;
+  MemrefType memrefTy = type.dyn_cast<MemrefType>();
+  hir::Details::PortKind port = memrefTy.getPort();
+  string portString = ((port == hir::Details::r)   ? "r"
+                       : (port == hir::Details::w) ? "w"
+                                                   : "rw");
+  out += "//MemrefType : port = " + portString + ".\n";
+  unsigned addrWidth = helper::calcAddrWidth(memrefTy);
+  string distDimsStr = strMemrefDistDims();
+  bool printComma = false;
+  unsigned dataWidth = helper::getBitWidth(memrefTy.getElementType());
+  if (addrWidth > 0) { // all dims may be distributed.
+    out += "output reg[" + to_string(addrWidth - 1) + ":0] " + strMemrefAddr() +
+           distDimsStr;
+    printComma = true;
+  }
+  if (port == hir::Details::r || port == hir::Details::rw) {
+    if (printComma)
+      out += ",\n";
+    out += "output wire " + strMemrefRdEn() + distDimsStr;
+    out += ",\ninput wire[" + to_string(dataWidth - 1) + ":0] " +
+           strMemrefRdData() + distDimsStr;
+    printComma = true;
+  }
+  if (port == hir::Details::w || port == hir::Details::rw) {
+    if (printComma)
+      out += ",\n";
+    out += "output wire " + strMemrefWrEn() + distDimsStr;
+    out += ",\noutput reg[" + to_string(dataWidth - 1) + ":0] " +
+           strMemrefWrData() + distDimsStr;
+  }
+  return out;
+}
+
+string VerilogValue::strMemrefInstDecl() const {
+  string out_decls;
+  MemrefType memrefTy = type.dyn_cast<MemrefType>();
+  hir::Details::PortKind port = memrefTy.getPort();
+  string portString = ((port == hir::Details::r)   ? "r"
+                       : (port == hir::Details::w) ? "w"
+                                                   : "rw");
+  unsigned addrWidth = helper::calcAddrWidth(memrefTy);
+  string distDimsStr = strMemrefDistDims();
+  unsigned dataWidth = helper::getBitWidth(memrefTy.getElementType());
+  if (addrWidth > 0) { // All dims may be distributed.
+    out_decls += "reg[" + to_string(addrWidth - 1) + ":0] " + strMemrefAddr() +
+                 distDimsStr + ";\n";
+  }
+  if (port == hir::Details::r || port == hir::Details::rw) {
+    out_decls += "wire " + strMemrefRdEn() + distDimsStr + ";\n";
+    out_decls += "logic[" + to_string(dataWidth - 1) + ":0] " +
+                 strMemrefRdData(SmallVector<VerilogValue *, 4>()) +
+                 distDimsStr + ";\n";
+  }
+  if (port == hir::Details::w || port == hir::Details::rw) {
+    out_decls += " wire " + strMemrefWrEn() + distDimsStr + ";\n";
+    out_decls += "reg[" + to_string(dataWidth - 1) + ":0] " +
+                 strMemrefWrData() + distDimsStr + ";\n";
+  }
+  return out_decls;
+}
+
+Type VerilogValue::getType() { return type; }
+
+ArrayRef<unsigned> VerilogValue::getShape() const {
+  assert(type.isa<MemrefType>());
+  return type.dyn_cast<MemrefType>().getShape();
+}
+ArrayRef<unsigned> VerilogValue::getPacking() const {
+  assert(type.isa<MemrefType>());
+  return type.dyn_cast<MemrefType>().getPacking();
+}
+
+Type VerilogValue::getElementType() const {
+  assert(type.isa<MemrefType>());
+  return type.dyn_cast<MemrefType>().getElementType();
+}
+
+string VerilogValue::strWireInput() { return name + "_input"; }
+string VerilogValue::strMemrefAddrValid() const { return name + "_addr_valid"; }
+string VerilogValue::strMemrefAddrInput() { return name + "_addr_input"; }
+string VerilogValue::strMemrefWrDataValid() { return name + "_wr_data_valid"; }
+string VerilogValue::strMemrefWrDataInput() { return name + "_wr_data_input"; }
+string VerilogValue::strMemrefRdEnInput() { return name + "_rd_en_input"; }
+string VerilogValue::strMemrefWrEnInput() { return name + "_wr_en_input"; }
+
+string VerilogValue::strWire() const {
+  if (name == "") {
+    return "/*ERROR: Anonymus variable.*/";
+  }
+  return name;
+}
+bool VerilogValue::isSimpleType() const {
+  if (isIntegerType() || isFloatType())
+    return true;
+  if (type.isa<hir::TimeType>())
+    return true;
+  return false;
+}
+string VerilogValue::strWireValid() { return name + "_valid"; }
+string VerilogValue::strWireInput(unsigned idx) {
+  return strWireInput() + "[" + to_string(idx) + "]";
+}
+string VerilogValue::strDelayedWire() const { return name + "delay"; }
+string VerilogValue::strDelayedWire(unsigned delay) {
+  updateMaxDelay(delay);
+  return strDelayedWire() + "[" + to_string(delay) + "]";
+}
+
+string VerilogValue::strMemrefAddr() const { return name + "_addr"; }
+string VerilogValue::strMemrefAddrValidIf(unsigned idx) {
+  return strMemrefAddrValid() + "_if[" + to_string(idx) + "]";
+}
+string VerilogValue::strMemrefAddrValid(unsigned idx) {
+  return strMemrefAddrValid() + "[" + to_string(idx) + "]";
+}
+string VerilogValue::strMemrefAddrValid(ArrayRef<VerilogValue *> addr,
+                                        unsigned idx) const {
+  string distDimAccessStr = strMemrefDistDimAccess(addr);
+  return strMemrefAddrValid() + distDimAccessStr + "[" + to_string(idx) + "]";
+}
+string VerilogValue::strMemrefAddrInputIf(unsigned idx) {
+  return strMemrefAddrInput() + "_if[" + to_string(idx) + "]";
+}
+string VerilogValue::strMemrefAddrInput(unsigned idx) {
+  return strMemrefAddrInput() + "[" + to_string(idx) + "]";
+}
+string VerilogValue::strMemrefAddrInput(ArrayRef<VerilogValue *> addr,
+                                        unsigned idx) {
+  string distDimAccessStr = strMemrefDistDimAccess(addr);
+  return strMemrefAddrInput() + distDimAccessStr + "[" + to_string(idx) + "]";
+}
+
+string VerilogValue::strMemrefRdData() const { return name + "_rd_data"; }
+string VerilogValue::strMemrefRdData(ArrayRef<VerilogValue *> addr) const {
+  string distDimAccessStr = strMemrefDistDimAccess(addr);
+  return strMemrefRdData() + distDimAccessStr;
+}
+
+string VerilogValue::strMemrefWrData() const { return name + "_wr_data"; }
+string VerilogValue::strMemrefWrDataValidIf(unsigned idx) {
+  return strMemrefWrDataValid() + "_if[" + to_string(idx) + "]";
+}
+string VerilogValue::strMemrefWrDataValid(ArrayRef<VerilogValue *> addr,
+                                          unsigned idx) {
+  string distDimAccessStr = strMemrefDistDimAccess(addr);
+  return strMemrefWrDataValid() + distDimAccessStr + "[" + to_string(idx) + "]";
+}
+string VerilogValue::strMemrefWrDataInputIf(unsigned idx) {
+  return strMemrefWrDataInput() + "_if[" + to_string(idx) + "]";
+}
+string VerilogValue::strMemrefWrDataInput(unsigned idx) {
+  return strMemrefWrDataInput() + "[" + to_string(idx) + "]";
+}
+string VerilogValue::strMemrefWrDataInput(ArrayRef<VerilogValue *> addr,
+                                          unsigned idx) {
+  string distDimAccessStr = strMemrefDistDimAccess(addr);
+  return strMemrefWrDataInput() + distDimAccessStr + "[" + to_string(idx) + "]";
+}
+
+string VerilogValue::strMemrefRdEn() const { return name + "_rd_en"; }
+string VerilogValue::strMemrefRdEnInputIf(unsigned idx) {
+  return strMemrefRdEnInput() + "_if[" + to_string(idx) + "]";
+}
+
+string VerilogValue::strMemrefRdEnInput(unsigned idx) {
+  return strMemrefRdEnInput() + "[" + to_string(idx) + "]";
+}
+string VerilogValue::strMemrefRdEnInput(ArrayRef<VerilogValue *> addr,
+                                        unsigned idx) {
+  string distDimAccessStr = strMemrefDistDimAccess(addr);
+  return strMemrefRdEnInput() + distDimAccessStr + "[" + to_string(idx) + "]";
+}
+
+string VerilogValue::strMemrefWrEn() const { return name + "_wr_en"; }
+string VerilogValue::strMemrefWrEnInputIf(unsigned idx) {
+  return strMemrefWrEnInput() + "_if[" + to_string(idx) + "]";
+}
+string VerilogValue::strMemrefWrEnInput(unsigned idx) {
+  return strMemrefWrEnInput() + "[" + to_string(idx) + "]";
+}
+string VerilogValue::strMemrefWrEnInput(ArrayRef<VerilogValue *> addr,
+                                        unsigned idx) {
+  string distDimAccessStr = strMemrefDistDimAccess(addr);
+  return strMemrefWrEnInput() + distDimAccessStr + "[" + to_string(idx) + "]";
+}
+void VerilogValue::incMemrefNumReads() {
+  for (size_t pos = 0; pos < usageInfo.numReads.size(); pos++) {
+    usageInfo.numReads[pos]++;
+  }
+}
+
+void VerilogValue::incMemrefNumWrites() {
+  for (size_t pos = 0; pos < usageInfo.numWrites.size(); pos++) {
+    usageInfo.numWrites[pos]++;
+  }
+}
+void VerilogValue::incMemrefNumReads(ArrayRef<VerilogValue *> addr) {
+  unsigned pos = posMemrefDistDimAccess(addr);
+  usageInfo.numReads[pos]++;
+}
+void VerilogValue::incMemrefNumWrites(ArrayRef<VerilogValue *> addr) {
+  unsigned pos = posMemrefDistDimAccess(addr);
+  usageInfo.numWrites[pos]++;
+}
+
+int VerilogValue::getMaxDelay() const {
+  if (maxDelay < 0 || maxDelay > 64) {
+    fprintf(stderr, "unexpected maxDelay %d\n", maxDelay);
+  }
+  return maxDelay;
+}
+void VerilogValue::updateMaxDelay(int delay) {
+  if (delay < 0 || delay > 64) {
+    fprintf(stderr, "unexpected delay %d\n", delay);
+  }
+  maxDelay = (maxDelay > delay) ? maxDelay : delay;
 }
