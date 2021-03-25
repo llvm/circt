@@ -2033,7 +2033,7 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
   // Create a instance operation.
   auto instanceOp = rewriter.create<firrtl::InstanceOp>(
       oldOp->getLoc(), resultTypes, subModuleOp.getName(),
-      rewriter.getArrayAttr(resultNames), rewriter.getStringAttr(""));
+      rewriter.getArrayAttr(resultNames));
 
   // Connect the new created instance with its predecessors and successors in
   // the top-module.

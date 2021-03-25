@@ -18,10 +18,13 @@ def InstanceOp : FIRRTLOp<"instance"> {
   }];
 
   let arguments = (ins FlatSymbolRefAttr:$moduleName,
-                       StrArrayAttr:$portNames, OptionalAttr<StrAttr>:$name);
+                       StrArrayAttr:$portNames, OptionalAttr<StrAttr>:$name,
+                       DefaultValuedAttr<AnnotationArrayAttr,
+                                         "{}">:$annotations);
   let results = (outs Variadic<FIRRTLType>:$results);
 
-  let assemblyFormat = "$moduleName attr-dict (`:` type($results)^ )?";
+  let assemblyFormat =
+    "$moduleName custom<InstanceOp>(attr-dict) (`:` type($results)^ )?";
 
   let verifier = "return ::verifyInstanceOp(*this);";
 
@@ -29,9 +32,11 @@ def InstanceOp : FIRRTLOp<"instance"> {
     OpBuilder<(ins "::mlir::TypeRange":$elementType,
                       "::mlir::StringRef":$moduleName,
                       "::mlir::ArrayAttr":$portNames,
-                      CArg<"StringRef", "{}">:$name), [{
+                      CArg<"StringRef", "{}">:$name,
+                      CArg<"ArrayRef<Attribute>", "{}">:$annotations), [{
       return build($_builder, $_state, elementType, moduleName, portNames,
-                   $_builder.getStringAttr(name));
+                   $_builder.getStringAttr(name),
+                   $_builder.getArrayAttr(annotations));
     }]>
   ];
 
