@@ -98,6 +98,14 @@ StringRef circt::sv::resolveKeywordConflict(StringRef origName,
   }
 }
 
+static bool isValidVerilogCharacterFirst(char ch) {
+  return llvm::isAlpha(ch) || ch == '_';
+}
+
+static bool isValidVerilogCharacter(char ch) {
+  return isValidVerilogCharacterFirst(ch) || llvm::isDigit(ch);
+}
+
 /// Sanitize the specified name for use in SV output. Auto-uniquifies the name
 /// through \c resolveKeywordConflict if required. If the name is empty, a
 /// unique temp name is created.
@@ -106,10 +114,6 @@ StringRef circt::sv::sanitizeName(StringRef name,
                                   size_t &nextGeneratedNameID) {
   if (name.empty())
     name = "_T";
-
-  auto isValidVerilogCharacter = [](char ch) -> bool {
-    return isalpha(ch) || isdigit(ch) || ch == '_';
-  };
 
   // Check to see if the name consists of all-valid identifiers.  If not, we
   // need to escape them.
@@ -133,7 +137,7 @@ StringRef circt::sv::sanitizeName(StringRef name,
 
   // Check to see if this name is valid.  The first character cannot be a
   // number or some other weird thing.  If it is, start with an underscore.
-  if (!isalpha(name.front()) && name.front() != '_') {
+  if (!isValidVerilogCharacterFirst(name.front())) {
     SmallString<16> tmpName("_");
     tmpName += name;
     return sanitizeName(tmpName, recordNames, nextGeneratedNameID);
@@ -141,4 +145,20 @@ StringRef circt::sv::sanitizeName(StringRef name,
 
   // Make sure the new valid name does not conflict with any existing names.
   return resolveKeywordConflict(name, recordNames, nextGeneratedNameID);
+}
+
+/// Check if a name is valid for use in SV output by only containing characters
+/// allowed in SV identifiers.
+///
+/// Call \c sanitizeName() to obtain a sanitized version of the name.
+bool circt::sv::isNameValid(StringRef name) {
+  if (name.empty())
+    return false;
+  if (!isValidVerilogCharacterFirst(name.front()))
+    return false;
+  for (char ch : name) {
+    if (!isValidVerilogCharacter(ch))
+      return false;
+  }
+  return reservedWords->count(name) == 0;
 }

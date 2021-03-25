@@ -543,7 +543,6 @@ class ModuleEmitter : public EmitterBase {
 public:
   explicit ModuleEmitter(VerilogEmitterState &state) : EmitterBase(state) {}
 
-  void emitMLIRModule(ModuleOp module);
   void emitRTLModule(RTLModuleOp module);
   void prepareRTLModule(Block &block);
   void emitRTLExternModule(RTLModuleExternOp module);
@@ -567,38 +566,18 @@ public:
     return entry->getSecond();
   }
 
-  /// Given a module name \p moduleName, return the updated name if it has been
-  /// previously renamed in the table moduleNameTable, else call
-  /// resolveKeywordConflict, to get a new name in case of conflict with
-  /// keywords.
-  StringRef getModuleName(StringAttr moduleName) {
-    auto entryIter = moduleNameTable.find(moduleName);
-    if (entryIter != moduleNameTable.end())
-      return entryIter->getSecond();
-    auto updatedName = resolveKeywordConflict(
-        moduleName.getValue(), usedModuleNames, nextGeneratedNameID);
-    moduleNameTable[moduleName] = updatedName;
-    return updatedName;
-  }
+  void verifyModuleName(Operation *, StringAttr nameAttr);
 
 public:
   /// nameTable keeps track of mappings from Value's and operations (for
   /// instances) to their string table entry.
   llvm::DenseMap<ValueOrOp, StringRef> nameTable;
 
-  /// moduleNameTable keeps track of mappings from Module names to updated names
-  /// to resolve keyword conflicts.
-  llvm::DenseMap<Attribute, StringRef> moduleNameTable;
-
   /// outputNames tracks the uniquified names for output ports, which don't have
   /// a Value or Op representation.
   SmallVector<StringRef> outputNames;
 
   llvm::StringSet<> usedNames;
-
-  /// Set of used MLIR module names, to ensure unique names when renaming
-  /// keywords in module names.
-  llvm::StringSet<> usedModuleNames;
 
   size_t nextGeneratedNameID = 0;
 
@@ -627,6 +606,14 @@ StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
   if (valueOrOp)
     nameTable[valueOrOp] = updatedName;
   return updatedName;
+}
+
+/// Check if the given module name \p nameAttr is a valid SV name (does not
+/// contain any illegal characters). If invalid, calls \c emitOpError.
+void ModuleEmitter::verifyModuleName(Operation *op, StringAttr nameAttr) {
+  if (!isNameValid(nameAttr.getValue()))
+    emitOpError(op, "name \"" + nameAttr.getValue() +
+                        "\" is not allowed in Verilog output");
 }
 
 //===----------------------------------------------------------------------===//
@@ -2190,9 +2177,12 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   // parameterized modules in the RTL dialect.
   if (auto extMod = dyn_cast<RTLModuleExternOp>(moduleOp)) {
     auto verilogName = extMod.getVerilogModuleNameAttr();
-    indent() << emitter.getModuleName(verilogName);
+    emitter.verifyModuleName(op, verilogName);
+    indent() << verilogName.getValue();
   } else if (auto mod = dyn_cast<RTLModuleOp>(moduleOp)) {
-    indent() << emitter.getModuleName(mod.getNameAttr()); //.moduleName());
+    auto verilogName = mod.getNameAttr();
+    emitter.verifyModuleName(op, verilogName);
+    indent() << verilogName.getValue();
   }
 
   // Helper that prints a parameter constant value in a Verilog compatible way.
@@ -2454,137 +2444,13 @@ void ModuleEmitter::emitStatementBlock(Block &body) {
 }
 
 //===----------------------------------------------------------------------===//
-// SplitModuleEmitter
-//===----------------------------------------------------------------------===//
-
-namespace {
-
-class SplitModuleEmitter {
-public:
-  explicit SplitModuleEmitter(StringRef dirname) : dirname(dirname) {}
-
-  /// Whether any error has been encountered during emission.
-  std::atomic<bool> encounteredError = {};
-
-  /// The directory to emit files into.
-  StringRef dirname;
-
-  /// A list of modules and their position within the per-file operations.
-  struct EmittedModule {
-    Operation *op;
-    size_t position;
-    SmallString<32> filename;
-  };
-  SmallVector<EmittedModule, 0> moduleOps;
-
-  /// A list of per-file operations (e.g., `sv.verbatim` or `sv.ifdef`).
-  SmallVector<Operation *, 0> perFileOps;
-
-  void emitMLIRModule(ModuleOp module);
-  void emitModule(EmittedModule &mod);
-};
-
-} // namespace
-
-void SplitModuleEmitter::emitMLIRModule(ModuleOp module) {
-  // Partition the MLIR module into modules and interfaces for which we create
-  // separate output files, and the remaining top-level verbatim SV/ifdef
-  // business that needs to go into each file.
-  for (auto &op : *module.getBody()) {
-    if (isa<RTLModuleOp>(op) || isa<RTLModuleExternOp>(op) ||
-        isa<InterfaceOp>(op)) {
-      moduleOps.push_back({&op, perFileOps.size(), /*filename=*/{}});
-    } else if (isa<VerbatimOp>(op) || isa<IfDefProceduralOp>(op)) {
-      perFileOps.push_back(&op);
-    } else if (!isa<ModuleTerminatorOp>(op)) {
-      op.emitError("unknown operation");
-      encounteredError = true;
-    }
-  }
-
-  // In parallel, emit each module into its separate file, embedded within the
-  // per-file operations.
-  llvm::parallelForEach(moduleOps.begin(), moduleOps.end(),
-                        [&](EmittedModule &mod) { emitModule(mod); });
-}
-
-void SplitModuleEmitter::emitModule(EmittedModule &mod) {
-  auto op = mod.op;
-
-  // Given the operation, determine the file stem name and how to emit it.
-  std::function<void(VerilogEmitterState &)> emit;
-
-  if (auto module = dyn_cast<RTLModuleOp>(op)) {
-    mod.filename = module.getNameAttr().getValue();
-    emit = [module](VerilogEmitterState &state) {
-      ModuleEmitter(state).emitRTLModule(module);
-    };
-  } else if (auto module = dyn_cast<RTLModuleExternOp>(op)) {
-    mod.filename = module.getVerilogModuleNameAttr().getValue();
-    emit = [module](VerilogEmitterState &state) {
-      ModuleEmitter(state).emitRTLExternModule(module);
-    };
-  } else if (auto intfOp = dyn_cast<InterfaceOp>(op)) {
-    mod.filename = intfOp.sym_name();
-    emit = [op](VerilogEmitterState &state) {
-      ModuleEmitter(state).emitStatement(op);
-    };
-  } else {
-    llvm_unreachable("only emissible ops should be in moduleOps list");
-  }
-
-  // Determine the output file name.
-  mod.filename.append(".v");
-  SmallString<128> outputFilename(dirname);
-  llvm::sys::path::append(outputFilename, mod.filename);
-
-  // Open the output file.
-  std::string errorMessage;
-  auto output = openOutputFile(outputFilename, &errorMessage);
-  if (!output) {
-    encounteredError = true;
-    llvm::errs() << errorMessage << "\n";
-    return;
-  }
-
-  // Emit the prolog of per-file operations, the module itself, and the epilog
-  // of per-file operations.
-  VerilogEmitterState state(output->os());
-
-  for (size_t i = 0; i < std::min(mod.position, perFileOps.size()); ++i) {
-    ModuleEmitter(state).emitStatement(perFileOps[i]);
-  }
-  emit(state);
-  for (size_t i = mod.position; i < perFileOps.size(); i++) {
-    ModuleEmitter(state).emitStatement(perFileOps[i]);
-  }
-
-  if (state.encounteredError)
-    encounteredError = true;
-  output->keep();
-}
-
-//===----------------------------------------------------------------------===//
 // Module Driver
 //===----------------------------------------------------------------------===//
 
-void ModuleEmitter::emitMLIRModule(ModuleOp module) {
-  for (auto &op : *module.getBody()) {
-    if (auto module = dyn_cast<RTLModuleOp>(op))
-      ModuleEmitter(state).emitRTLModule(module);
-    else if (auto module = dyn_cast<RTLModuleExternOp>(op))
-      ModuleEmitter(state).emitRTLExternModule(module);
-    else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) ||
-             isa<IfDefProceduralOp>(op))
-      ModuleEmitter(state).emitStatement(&op);
-    else if (!isa<ModuleTerminatorOp>(op))
-      emitError(&op, "unknown operation");
-  }
-}
-
 void ModuleEmitter::emitRTLExternModule(RTLModuleExternOp module) {
   auto verilogName = module.getVerilogModuleNameAttr();
-  os << "// external module " << getModuleName(verilogName) << "\n\n";
+  verifyModuleName(module, verilogName);
+  os << "// external module " << verilogName.getValue() << "\n\n";
 }
 
 /// We lower the Merge operation to a wire at the top level along with connects
@@ -2696,7 +2562,9 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
       addName(module.getArgument(port.argNum), name);
   }
 
-  os << "module " << getModuleName(module.getNameAttr()) << '(';
+  auto moduleNameAttr = module.getNameAttr();
+  verifyModuleName(module, moduleNameAttr);
+  os << "module " << moduleNameAttr.getValue() << '(';
   if (!portInfo.empty())
     os << '\n';
 
@@ -2807,20 +2675,186 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
 }
 
 //===----------------------------------------------------------------------===//
+// Common functionality for root module emitters
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+/// A base class for all MLIR module emitters.
+struct RootEmitterBase {
+  /// The MLIR module to emit.
+  ModuleOp rootOp;
+
+  /// Whether any error has been encountered during emission.
+  std::atomic<bool> encounteredError = {};
+
+  explicit RootEmitterBase(ModuleOp rootOp) : rootOp(rootOp) {}
+};
+
+} // namespace
+
+//===----------------------------------------------------------------------===//
+// Unified Emitter
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+/// A Verilog emitter that emits all modules into a single output stream.
+struct UnifiedEmitter : public RootEmitterBase {
+  explicit UnifiedEmitter(llvm::raw_ostream &os, ModuleOp rootOp)
+      : RootEmitterBase(rootOp), os(os) {}
+
+  /// The output stream to emit into.
+  llvm::raw_ostream &os;
+
+  void emitMLIRModule();
+};
+
+} // namespace
+
+void UnifiedEmitter::emitMLIRModule() {
+  VerilogEmitterState state(os);
+  for (auto &op : *rootOp.getBody()) {
+    if (auto rootOp = dyn_cast<RTLModuleOp>(op))
+      ModuleEmitter(state).emitRTLModule(rootOp);
+    else if (auto rootOp = dyn_cast<RTLModuleExternOp>(op))
+      ModuleEmitter(state).emitRTLExternModule(rootOp);
+    else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) ||
+             isa<IfDefProceduralOp>(op))
+      ModuleEmitter(state).emitStatement(&op);
+    else if (!isa<ModuleTerminatorOp>(op)) {
+      encounteredError = true;
+      op.emitError("unknown operation");
+    }
+  }
+  if (state.encounteredError)
+    encounteredError = true;
+}
+
+//===----------------------------------------------------------------------===//
+// Split Emitter
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+/// A Verilog emitter that separates modules into individual output files.
+struct SplitEmitter : public RootEmitterBase {
+  explicit SplitEmitter(StringRef dirname, ModuleOp rootOp)
+      : RootEmitterBase(rootOp), dirname(dirname) {}
+
+  /// The directory to emit files into.
+  StringRef dirname;
+
+  /// A list of modules and their position within the per-file operations.
+  struct EmittedModule {
+    Operation *op;
+    size_t position;
+    SmallString<32> filename;
+  };
+  SmallVector<EmittedModule, 0> moduleOps;
+
+  /// A list of per-file operations (e.g., `sv.verbatim` or `sv.ifdef`).
+  SmallVector<Operation *, 0> perFileOps;
+
+  void emitMLIRModule();
+  void emitModule(EmittedModule &mod);
+};
+
+} // namespace
+
+void SplitEmitter::emitMLIRModule() {
+  // Partition the MLIR module into modules and interfaces for which we create
+  // separate output files, and the remaining top-level verbatim SV/ifdef
+  // business that needs to go into each file.
+  for (auto &op : *rootOp.getBody()) {
+    if (isa<RTLModuleOp>(op) || isa<RTLModuleExternOp>(op) ||
+        isa<InterfaceOp>(op)) {
+      moduleOps.push_back({&op, perFileOps.size(), /*filename=*/{}});
+    } else if (isa<VerbatimOp>(op) || isa<IfDefProceduralOp>(op)) {
+      perFileOps.push_back(&op);
+    } else if (!isa<ModuleTerminatorOp>(op)) {
+      op.emitError("unknown operation");
+      encounteredError = true;
+    }
+  }
+
+  // In parallel, emit each module into its separate file, embedded within the
+  // per-file operations.
+  llvm::parallelForEach(moduleOps.begin(), moduleOps.end(),
+                        [&](EmittedModule &mod) { emitModule(mod); });
+}
+
+void SplitEmitter::emitModule(EmittedModule &mod) {
+  auto op = mod.op;
+
+  // Given the operation, determine the file stem name and how to emit it.
+  std::function<void(VerilogEmitterState &)> emit;
+
+  if (auto module = dyn_cast<RTLModuleOp>(op)) {
+    mod.filename = module.getNameAttr().getValue();
+    emit = [=](VerilogEmitterState &state) {
+      ModuleEmitter(state).emitRTLModule(module);
+    };
+  } else if (auto module = dyn_cast<RTLModuleExternOp>(op)) {
+    mod.filename = module.getVerilogModuleNameAttr().getValue();
+    emit = [=](VerilogEmitterState &state) {
+      ModuleEmitter(state).emitRTLExternModule(module);
+    };
+  } else if (auto intfOp = dyn_cast<InterfaceOp>(op)) {
+    mod.filename = intfOp.sym_name();
+    emit = [=](VerilogEmitterState &state) {
+      ModuleEmitter(state).emitStatement(op);
+    };
+  } else {
+    llvm_unreachable("only emissible ops should be in moduleOps list");
+  }
+
+  // Determine the output file name.
+  mod.filename.append(".v");
+  SmallString<128> outputFilename(dirname);
+  llvm::sys::path::append(outputFilename, mod.filename);
+
+  // Open the output file.
+  std::string errorMessage;
+  auto output = openOutputFile(outputFilename, &errorMessage);
+  if (!output) {
+    encounteredError = true;
+    llvm::errs() << errorMessage << "\n";
+    return;
+  }
+
+  // Emit the prolog of per-file operations, the module itself, and the epilog
+  // of per-file operations.
+  VerilogEmitterState state(output->os());
+
+  for (size_t i = 0; i < std::min(mod.position, perFileOps.size()); ++i) {
+    ModuleEmitter(state).emitStatement(perFileOps[i]);
+  }
+  emit(state);
+  for (size_t i = mod.position; i < perFileOps.size(); i++) {
+    ModuleEmitter(state).emitStatement(perFileOps[i]);
+  }
+
+  if (state.encounteredError)
+    encounteredError = true;
+  output->keep();
+}
+
+//===----------------------------------------------------------------------===//
 // MLIRModuleEmitter
 //===----------------------------------------------------------------------===//
 
 LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
-  VerilogEmitterState state(os);
-  ModuleEmitter(state).emitMLIRModule(module);
-  return failure(state.encounteredError);
+  UnifiedEmitter emitter(os, module);
+  emitter.emitMLIRModule();
+  return failure(emitter.encounteredError);
 }
 
 LogicalResult
 circt::exportSplitVerilog(ModuleOp module, StringRef dirname,
                           std::function<void(llvm::StringRef)> emittedFile) {
-  SplitModuleEmitter emitter(dirname);
-  emitter.emitMLIRModule(module);
+  SplitEmitter emitter(dirname, module);
+  emitter.emitMLIRModule();
   if (emittedFile) {
     for (auto mod : std::move(emitter.moduleOps)) {
       emittedFile(mod.filename);

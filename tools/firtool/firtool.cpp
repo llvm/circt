@@ -192,6 +192,11 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     }
   }
 
+  // If we are going to verilog, sanitize the module names.
+  if (outputFormat == OutputVerilog || outputFormat == OutputSplitVerilog) {
+    pm.addPass(sv::createRTLLegalizeNamesPass());
+  }
+
   if (failed(pm.run(module.get())))
     return failure();
 

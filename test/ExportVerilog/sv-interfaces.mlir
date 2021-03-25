@@ -1,4 +1,5 @@
-// RUN: circt-translate %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
+// RUN: circt-opt %s --rtl-legalize-names --mlir-print-debuginfo > %t
+// RUN: circt-translate %t -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 module {
   // CHECK-LABEL: interface data_vr;
@@ -79,7 +80,10 @@ module {
 
 // Next test case is related to:https://github.com/llvm/circt/issues/681
 // Rename keywords used in variable/module names
-  rtl.module.extern @reg (%m: !sv.modport<@data_vr::@data_in>)
+// NOTE(fschuiki): Extern modules should trigger an error diagnostic if they
+// would cause a rename, but since the user supplies the module externally we
+// can't just rename it.
+  rtl.module.extern @regStuff (%m: !sv.modport<@data_vr::@data_in>)
   // CHECK-LABEL: module Top2
   rtl.module @Top2 (%clk: i1) {
     // CHECK: data_vr [[IFACE:.+]]();{{.*}}//{{.+}}
@@ -89,15 +93,15 @@ module {
     %ifaceInPort = sv.modport.get %iface @data_in :
       !sv.interface<@data_vr> -> !sv.modport<@data_vr::@data_in>
 
-    // CHECK: reg_0 rcvr1 ({{.*}}//{{.+}}
+    // CHECK: regStuff rcvr1 ({{.*}}//{{.+}}
     // CHECK:   .m ([[IFACE]].data_in){{.*}}//{{.+}}
     // CHECK: );
-    rtl.instance "rcvr1" @reg(%ifaceInPort) : (!sv.modport<@data_vr::@data_in>) -> ()
+    rtl.instance "rcvr1" @regStuff(%ifaceInPort) : (!sv.modport<@data_vr::@data_in>) -> ()
 
-    // CHECK: reg_0 rcvr2 ({{.*}}//{{.+}}
+    // CHECK: regStuff rcvr2 ({{.*}}//{{.+}}
     // CHECK:   .m ([[IFACE]].data_in){{.*}}//{{.+}}
     // CHECK: );
-    rtl.instance "rcvr2" @reg(%ifaceInPort) : (!sv.modport<@data_vr::@data_in>) -> ()
+    rtl.instance "rcvr2" @regStuff(%ifaceInPort) : (!sv.modport<@data_vr::@data_in>) -> ()
   }
 
   // https://github.com/llvm/circt/issues/724
