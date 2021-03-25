@@ -174,22 +174,23 @@ def RTLGeneratorSchemaOp : RTLOp<"generator.schema",
     A generated module instance of a schema is independent of the external
     method of producing it.  It is assumed that for well known schema instances,
     multiple external tools might exist which can process it.  The schema may
-    inherite from another schema.  Generator nodes list attributes required by
+    inherit from another schema.  Generator nodes list attributes required by
     rtl.module.generated instances and are inherited.
 
     For example:
-    generator.schema @MEMORY, "Simple-Memory", "1", ["write_latency", "read_latency"]
-    generator.schema @FIRMEM (parent: @MEMORY), "FIRRTL-Memory", "1", ["ports"]
-    module.generated @mymem, @FIRMEM(ports) -> (ports) {write_latency=1, read_latency=1, ports=["read","write"]}
+    generator.schema @MEMORY, "Simple-Memory", ["write_latency", "read_latency"]
+    generator.schema @ARBLANGMEM (parent: @MEMORY), "FIRRTL-Memory", ["ports"]
+    module.generated @mymem, @ARBLANGMEM(ports) 
+      -> (ports) {write_latency=1, read_latency=1, ports=["read","write"]}
   }];
 
   let arguments = (ins SymbolNameAttr:$sym_name, StrAttr:$descriptor, 
-                       I32Attr:$version, StrArrayAttr:$requiredAttrs, 
-                      OptionalAttr<FlatSymbolRefAttr>:$parent);
+                       StrArrayAttr:$requiredAttrs, 
+                       OptionalAttr<FlatSymbolRefAttr>:$parent);
   let results = (outs);
   let assemblyFormat = [{
-      $sym_name ( `(` `parent` `:` $parent^ `)` )? `,` $descriptor `,` $version
-      `,` $requiredAttrs attr-dict
+      $sym_name ( `(` `parent` `:` $parent^ `)` )? `,` $descriptor `,`
+      $requiredAttrs attr-dict
     }];
 
   let extraClassDeclaration = [{   
@@ -220,9 +221,9 @@ def RTLModuleGeneratedOp : RTLOp<"module.generated",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "StringAttr":$name,
-                      "ArrayRef<ModulePortInfo>":$ports,
-                      CArg<"StringRef", "StringRef()">:$verilogName)>
+    OpBuilder<(ins "StringAttr":$name,
+                   "ArrayRef<ModulePortInfo>":$ports,
+                   CArg<"StringRef", "StringRef()">:$verilogName)>
   ];
 
   let extraClassDeclaration = [{   
