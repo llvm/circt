@@ -160,5 +160,5 @@ bool circt::sv::isNameValid(StringRef name) {
     if (!isValidVerilogCharacter(ch))
       return false;
   }
-  return true;
+  return reservedWords->count(name) == 0;
 }

@@ -612,8 +612,8 @@ StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
 /// contain any illegal characters). If invalid, calls \c emitOpError.
 void ModuleEmitter::verifyModuleName(Operation *op, StringAttr nameAttr) {
   if (!isNameValid(nameAttr.getValue()))
-    emitOpError(op, "Name \"" + nameAttr.getValue() +
-                        "\" is not allowed in Verilog output.\n");
+    emitOpError(op, "name \"" + nameAttr.getValue() +
+                        "\" is not allowed in Verilog output");
 }
 
 //===----------------------------------------------------------------------===//
