@@ -5,12 +5,23 @@ import circt
 from circt.dialects import rtl
 
 from mlir.ir import *
+from mlir.dialects import builtin
 
 with Context() as ctx, Location.unknown():
     circt.register_dialects(ctx)
-    i32 = IntegerType.get_signless(32)
-    a50 = IntegerAttr.get(i32, 50)
-    op = rtl.ConstantOp(i32, a50)
 
-    # CHECK: %{{.+}} = rtl.constant 50 : i32
-    op.print()
+    i32 = IntegerType.get_signless(32)
+
+    m = builtin.ModuleOp()
+    with InsertionPoint.at_block_begin(m.body):
+        op = rtl.RTLModuleOp(
+            name='MyWidget',
+            input_ports=[('my_input', i32)],
+            output_ports=[('my_output', i32)],
+            body_builder=lambda module: rtl.OutputOp(
+                [module.entry_block.arguments[0]])
+        )
+
+    # CHECK: rtl.module @MyWidget(%my_input: i32) -> (%my_output: i32)
+    # CHECK:   rtl.output %my_input : i32
+    m.print()
