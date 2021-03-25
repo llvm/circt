@@ -95,7 +95,7 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
 
 OpFoldResult AddPrimOp::fold(ArrayRef<Attribute> operands) {
   /// Any folding here requires a sign extension.
-  
+
   /// If both operands are constant, and < 64 bits, then perform constant
   /// folding. Cannot use constFoldBinaryOp, since the width of the constant is
   /// different from operands.
@@ -108,10 +108,7 @@ OpFoldResult AddPrimOp::fold(ArrayRef<Attribute> operands) {
       int64_t sumVal = sumAPInt.isSignBitSet() ? sumAPInt.getSExtValue()
                                                : sumAPInt.getZExtValue();
       return IntegerAttr::get(
-          IntegerType::get(
-              getContext(),
-              lhs().getType().cast<FIRRTLType>().getBitWidthOrSentinel() + 1),
-          sumVal);
+          IntegerType::get(getContext(), sumAPInt.getBitWidth() + 1), sumVal);
     }
   }
   return {};
