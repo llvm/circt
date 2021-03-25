@@ -1,4 +1,5 @@
-// RUN: circt-translate %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
+// RUN: circt-opt %s --rtl-legalize-names --mlir-print-debuginfo > %t
+// RUN: circt-translate %t -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 rtl.module.extern @E(%a: i1 {rtl.direction = "in"}, 
               %b: i1 {rtl.direction = "out"}, 
