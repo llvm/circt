@@ -314,7 +314,7 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
 
   auto newInstance = builder->create<InstanceOp>(
       resultTypes, op.moduleNameAttr(), builder->getArrayAttr(resultNames),
-      op.nameAttr(), builder->getArrayAttr({}));
+      op.nameAttr(), op.annotations());
 
   // Record the mapping of each old result to each new result.
   size_t nextResult = 0;

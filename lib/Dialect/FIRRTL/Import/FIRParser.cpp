@@ -2164,9 +2164,12 @@ ParseResult FIRStmtParser::parseInstance() {
     resultTypes.push_back(FlipType::get(port.type));
     resultNames.push_back(port.name);
   }
+  auto name = filterUselessName(id);
+  ArrayAttr annotations = builder.getArrayAttr({});
+  getAnnotations(getModuleTarget() + ">" + name.getValue(), annotations);
   auto result = builder.create<InstanceOp>(
       info.getLoc(), resultTypes, builder.getSymbolRefAttr(moduleName),
-      builder.getArrayAttr(resultNames), id, builder.getArrayAttr({}));
+      builder.getArrayAttr(resultNames), name, annotations);
 
   // Since we are implicitly unbundling the instance results, we need to keep
   // track of the mapping from bundle fields to results in the unbundledValues
