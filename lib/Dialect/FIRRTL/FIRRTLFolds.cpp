@@ -94,7 +94,7 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult AddPrimOp::fold(ArrayRef<Attribute> operands) {
-  /// Any folding here requires a sign extension.
+  /// Any folding here requires a bitwidth extension.
 
   /// If both operands are constant, and < 64 bits, then perform constant
   /// folding. Cannot use constFoldBinaryOp, since the width of the constant is
