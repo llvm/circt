@@ -2557,20 +2557,6 @@ void SplitModuleEmitter::emitModule(EmittedModule &mod) {
 // Module Driver
 //===----------------------------------------------------------------------===//
 
-void ModuleEmitter::emitMLIRModule(ModuleOp module) {
-  for (auto &op : *module.getBody()) {
-    if (auto module = dyn_cast<RTLModuleOp>(op))
-      ModuleEmitter(state).emitRTLModule(module);
-    else if (auto module = dyn_cast<RTLModuleExternOp>(op))
-      ModuleEmitter(state).emitRTLExternModule(module);
-    else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) ||
-             isa<IfDefProceduralOp>(op))
-      ModuleEmitter(state).emitStatement(&op);
-    else 
-      emitError(&op, "unknown operation");
-  }
-}
-
 void ModuleEmitter::emitRTLExternModule(RTLModuleExternOp module) {
   auto verilogName = module.getVerilogModuleNameAttr();
   verifyModuleName(module, verilogName);
@@ -2846,7 +2832,7 @@ void UnifiedEmitter::emitMLIRModule() {
     else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) ||
              isa<IfDefProceduralOp>(op))
       ModuleEmitter(state).emitStatement(&op);
-    else if (!isa<ModuleTerminatorOp>(op)) {
+    else {
       encounteredError = true;
       op.emitError("unknown operation");
     }
@@ -2896,7 +2882,7 @@ void SplitEmitter::emitMLIRModule() {
       moduleOps.push_back({&op, perFileOps.size(), /*filename=*/{}});
     } else if (isa<VerbatimOp>(op) || isa<IfDefProceduralOp>(op)) {
       perFileOps.push_back(&op);
-    } else if (!isa<ModuleTerminatorOp>(op)) {
+    } else {
       op.emitError("unknown operation");
       encounteredError = true;
     }

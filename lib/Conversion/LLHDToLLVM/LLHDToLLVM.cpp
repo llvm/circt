@@ -2775,7 +2775,7 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))
     signalPassFailure();
-    patterns.clear();
+  patterns.clear();
 
   // Setup the full conversion.
   populateStdToLLVMConversionPatterns(converter, patterns);
