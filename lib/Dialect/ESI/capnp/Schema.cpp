@@ -1068,7 +1068,7 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
   Slice operand(b, operandVal);
   auto loc = operand.loc();
 
-  auto alwaysAt = b.create<sv::AlwaysOp>(loc, EventControl::AtPosEdge, clk);
+  auto alwaysAt = b.create<sv::AlwaysOp>(loc, sv::EventControl::AtPosEdge, clk);
   auto ifValid =
       OpBuilder(alwaysAt.getBodyRegion()).create<sv::IfOp>(loc, valid);
   AssertBuilder asserts(loc, ifValid.getBodyRegion());

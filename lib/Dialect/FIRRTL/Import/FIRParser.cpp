@@ -2695,8 +2695,12 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
     parameters.append(nameId, value);
   }
 
-  auto fmodule =
-      builder.create<FExtModuleOp>(info.getLoc(), name, portList, defName);
+  ArrayAttr annotations;
+  getAnnotations("~" + circuit.name().str() + "|" + name.getValue().str(),
+                 annotations);
+
+  auto fmodule = builder.create<FExtModuleOp>(info.getLoc(), name, portList,
+                                              defName, annotations);
 
   if (!parameters.empty())
     fmodule->setAttr("parameters",

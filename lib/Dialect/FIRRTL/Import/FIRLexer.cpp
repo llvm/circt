@@ -294,7 +294,7 @@ FIRToken FIRLexer::lexInlineAnnotation(const char *tokStart) {
   while (1) {
     switch (*curPtr++) {
     case '\\':
-      (void)*curPtr++;
+      ++curPtr;
       break;
     case '"':
       stringMode = !stringMode;
@@ -304,12 +304,12 @@ FIRToken FIRLexer::lexInlineAnnotation(const char *tokStart) {
         break;
       if (depth == 1)
         return formToken(FIRToken::inlineannotation, tokStart);
-      depth--;
+      --depth;
       break;
     case '[':
       if (stringMode)
         break;
-      depth++;
+      ++depth;
       break;
     case 0:
       if (curPtr - 1 != curBuffer.end())
@@ -320,8 +320,6 @@ FIRToken FIRLexer::lexInlineAnnotation(const char *tokStart) {
     case '\f':
       return emitError(tokStart, "unterminated inline annotation");
     default:
-      if (depth < 0)
-        return emitError(tokStart, "malformed JSON in inline annotations");
       break;
     }
   }

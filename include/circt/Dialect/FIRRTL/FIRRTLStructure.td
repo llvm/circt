@@ -10,13 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-// This is a hack to get around upstream ArrayAttr no implementing
-// constBuilderCall.
-def AnnotationArrayAttr : ArrayAttrBase<CPred<"$_self.isa<::mlir::ArrayAttr>()">,
-                                              "Annotation array attribute"> {
-  let constBuilderCall = "$_builder.getArrayAttr($0)";
-}
-
 def CircuitOp : FIRRTLOp<"circuit",
       [IsolatedFromAbove, SymbolTable,
        SingleBlockImplicitTerminator<"DoneOp">]> {
@@ -130,7 +123,9 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
     Verilog module, including a given name and a list of ports.
   }];
   let arguments = (ins OptionalAttr<StrAttr>:$defname,
-                       OptionalAttr<DictionaryAttr>:$parameters);
+                       OptionalAttr<DictionaryAttr>:$parameters,
+                       DefaultValuedAttr<AnnotationArrayAttr,
+                                         "{}">:$annotations);
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
@@ -138,7 +133,8 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   let builders = [
     OpBuilder<(ins "StringAttr":$name,
                       "ArrayRef<ModulePortInfo>":$ports,
-                      CArg<"StringRef", "StringRef()">:$defnamAttr)>
+                      CArg<"StringRef", "StringRef()">:$defnamAttr,
+                      CArg<"ArrayAttr", "ArrayAttr()">:$annotations)>
   ];
 
   let extraClassDeclaration = [{

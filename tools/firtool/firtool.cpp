@@ -187,9 +187,16 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     // If enabled, run the optimizer.
     if (!disableOptimization) {
       pm.addNestedPass<rtl::RTLModuleOp>(sv::createRTLCleanupPass());
-      pm.addPass(createCSEPass());
+      // FIXME: Disabled because CSE crashes on graph regions in some cases.
+      // Issue #813: https://github.com/llvm/circt/issues/813
+      // pm.addPass(createCSEPass());
       pm.addPass(createCanonicalizerPass());
     }
+  }
+
+  // If we are going to verilog, sanitize the module names.
+  if (outputFormat == OutputVerilog || outputFormat == OutputSplitVerilog) {
+    pm.addPass(sv::createRTLLegalizeNamesPass());
   }
 
   if (failed(pm.run(module.get())))
