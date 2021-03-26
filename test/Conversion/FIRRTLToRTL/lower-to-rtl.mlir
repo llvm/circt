@@ -5,7 +5,11 @@ firrtl.circuit "Simple" {
   // CHECK-LABEL: rtl.module @Simple
   firrtl.module @Simple(%in1: !firrtl.uint<4>,
                         %in2: !firrtl.uint<2>,
-                        %in3: !firrtl.sint<8>) {
+                        %in3: !firrtl.sint<8>,
+                        %in4: !firrtl.uint<0>, 
+                        %in5: !firrtl.sint<0>, 
+                        %out1: !firrtl.flip<sint<1>>,
+                        %out2: !firrtl.flip<sint<1>>  ) {
     // Issue #364: https://github.com/llvm/circt/issues/364
     // CHECK: = rtl.constant -1175 : i12
     // CHECK-DAG: rtl.constant -4 : i4
@@ -220,6 +224,14 @@ firrtl.circuit "Simple" {
     // CHECK:  = comb.concat %false, %in1 : (i1, i4) -> i5
     // CHECK:  = comb.sub %c0_i5, %65 : i5
     %52 = firrtl.neg %in1 : (!firrtl.uint<4>) -> !firrtl.sint<5>
+    %53 = firrtl.neg %in4 : (!firrtl.uint<0>) -> !firrtl.sint<1>
+    // CHECK: = comb.sext %in3 : (i8) -> i9
+    // CHECK: = comb.sub %c0_i9, %67 : i9
+    %54 = firrtl.neg %in3 : (!firrtl.sint<8>) -> !firrtl.sint<9>
+    // CHECK: rtl.output %false, %false : i1, i1
+    firrtl.connect %out1, %53 : !firrtl.flip<sint<1>>, !firrtl.sint<1>
+    %55 = firrtl.neg %in5 : (!firrtl.sint<0>) -> !firrtl.sint<1>
+    firrtl.connect %out2, %55 : !firrtl.flip<sint<1>>, !firrtl.sint<1>
   }
 
 //   module Print :
