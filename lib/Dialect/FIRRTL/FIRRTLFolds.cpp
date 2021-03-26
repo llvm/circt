@@ -229,6 +229,34 @@ OpFoldResult LEQPrimOp::fold(ArrayRef<Attribute> operands) {
   if (lhs() == rhs())
     return getIntAttr(APInt(1, 1), getContext());
 
+  // Comparison against constant outside type bounds.
+  if (auto width = lhs().getType().cast<IntType>().getWidth()) {
+    if (matchPattern(rhs(), m_FConstant(value))) {
+      auto commonWidth = std::max<int32_t>(*width, value.getBitWidth());
+
+      // leq(x, const) -> 0 where const < minValue of the unsigned type of x
+      // This can never occur since const is unsigned and cannot be less than 0.
+
+      // leq(x, const) -> 0 where const < minValue of the signed type of x
+      if (!isUnsigned &&
+          value.sextOrSelf(commonWidth)
+              .slt(APInt::getSignedMinValue(*width).sextOrSelf(commonWidth)))
+        return getIntAttr(APInt(1, 0), getContext());
+
+      // leq(x, const) -> 1 where const >= maxValue of the unsigned type of x
+      if (isUnsigned &&
+          value.zextOrSelf(commonWidth)
+              .uge(APInt::getMaxValue(*width).zextOrSelf(commonWidth)))
+        return getIntAttr(APInt(1, 1), getContext());
+
+      // leq(x, const) -> 1 where const >= maxValue of the signed type of x
+      if (!isUnsigned &&
+          value.sextOrSelf(commonWidth)
+              .sge(APInt::getSignedMaxValue(*width).sextOrSelf(commonWidth)))
+        return getIntAttr(APInt(1, 1), getContext());
+    }
+  }
+
   return constFoldBinaryRelationalOp<IntegerAttr>(
       operands,
       [=](APInt a, APInt b) { return isUnsigned ? a.ule(b) : a.sle(b); });
@@ -251,6 +279,34 @@ OpFoldResult LTPrimOp::fold(ArrayRef<Attribute> operands) {
   if (matchPattern(rhs(), m_FConstant(value))) {
     if (value.isNullValue() && lhs().getType().isa<UIntType>())
       return getIntAttr(APInt(1, 0), getContext());
+  }
+
+  // Comparison against constant outside type bounds.
+  if (auto width = lhs().getType().cast<IntType>().getWidth()) {
+    if (matchPattern(rhs(), m_FConstant(value))) {
+      auto commonWidth = std::max<int32_t>(*width, value.getBitWidth());
+
+      // lt(x, const) -> 0 where const <= minValue of the unsigned type of x
+      // Handled explicitly above.
+
+      // lt(x, const) -> 0 where const <= minValue of the signed type of x
+      if (!isUnsigned &&
+          value.sextOrSelf(commonWidth)
+              .sle(APInt::getSignedMinValue(*width).sextOrSelf(commonWidth)))
+        return getIntAttr(APInt(1, 0), getContext());
+
+      // lt(x, const) -> 1 where const > maxValue of the unsigned type of x
+      if (isUnsigned &&
+          value.zextOrSelf(commonWidth)
+              .ugt(APInt::getMaxValue(*width).zextOrSelf(commonWidth)))
+        return getIntAttr(APInt(1, 1), getContext());
+
+      // lt(x, const) -> 1 where const > maxValue of the signed type of x
+      if (!isUnsigned &&
+          value.sextOrSelf(commonWidth)
+              .sgt(APInt::getSignedMaxValue(*width).sextOrSelf(commonWidth)))
+        return getIntAttr(APInt(1, 1), getContext());
+    }
   }
 
   return constFoldBinaryRelationalOp<IntegerAttr>(
@@ -277,6 +333,34 @@ OpFoldResult GEQPrimOp::fold(ArrayRef<Attribute> operands) {
       return getIntAttr(APInt(1, 1), getContext());
   }
 
+  // Comparison against constant outside type bounds.
+  if (auto width = lhs().getType().cast<IntType>().getWidth()) {
+    if (matchPattern(rhs(), m_FConstant(value))) {
+      auto commonWidth = std::max<int32_t>(*width, value.getBitWidth());
+
+      // geq(x, const) -> 0 where const > maxValue of the unsigned type of x
+      if (isUnsigned &&
+          value.zextOrSelf(commonWidth)
+              .ugt(APInt::getMaxValue(*width).zextOrSelf(commonWidth)))
+        return getIntAttr(APInt(1, 0), getContext());
+
+      // geq(x, const) -> 0 where const > maxValue of the signed type of x
+      if (!isUnsigned &&
+          value.sextOrSelf(commonWidth)
+              .sgt(APInt::getSignedMaxValue(*width).sextOrSelf(commonWidth)))
+        return getIntAttr(APInt(1, 0), getContext());
+
+      // geq(x, const) -> 1 where const <= minValue of the unsigned type of x
+      // Handled explicitly above.
+
+      // geq(x, const) -> 1 where const <= minValue of the signed type of x
+      if (!isUnsigned &&
+          value.sextOrSelf(commonWidth)
+              .sle(APInt::getSignedMinValue(*width).sextOrSelf(commonWidth)))
+        return getIntAttr(APInt(1, 1), getContext());
+    }
+  }
+
   return constFoldBinaryRelationalOp<IntegerAttr>(
       operands,
       [=](APInt a, APInt b) { return isUnsigned ? a.uge(b) : a.sge(b); });
@@ -294,6 +378,34 @@ OpFoldResult GTPrimOp::fold(ArrayRef<Attribute> operands) {
   // gt(x, x) -> 0
   if (lhs() == rhs())
     return getIntAttr(APInt(1, 0), getContext());
+
+  // Comparison against constant outside type bounds.
+  if (auto width = lhs().getType().cast<IntType>().getWidth()) {
+    if (matchPattern(rhs(), m_FConstant(value))) {
+      auto commonWidth = std::max<int32_t>(*width, value.getBitWidth());
+
+      // gt(x, const) -> 0 where const >= maxValue of the unsigned type of x
+      if (isUnsigned &&
+          value.zextOrSelf(commonWidth)
+              .uge(APInt::getMaxValue(*width).zextOrSelf(commonWidth)))
+        return getIntAttr(APInt(1, 0), getContext());
+
+      // gt(x, const) -> 0 where const >= maxValue of the signed type of x
+      if (!isUnsigned &&
+          value.sextOrSelf(commonWidth)
+              .sge(APInt::getSignedMaxValue(*width).sextOrSelf(commonWidth)))
+        return getIntAttr(APInt(1, 0), getContext());
+
+      // gt(x, const) -> 1 where const < minValue of the unsigned type of x
+      // This can never occur since const is unsigned and cannot be less than 0.
+
+      // gt(x, const) -> 1 where const < minValue of the signed type of x
+      if (!isUnsigned &&
+          value.sextOrSelf(commonWidth)
+              .slt(APInt::getSignedMinValue(*width).sextOrSelf(commonWidth)))
+        return getIntAttr(APInt(1, 1), getContext());
+    }
+  }
 
   return constFoldBinaryRelationalOp<IntegerAttr>(
       operands,
