@@ -158,8 +158,9 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
     // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
     if (!disableOptimization) {
-      pm.addPass(createCSEPass());
-      pm.addPass(createCanonicalizerPass());
+      auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
+      modulePM.addPass(createCSEPass());
+      modulePM.addPass(createCanonicalizerPass());
     }
   } else {
     assert(inputFormat == InputMLIRFile);
@@ -170,8 +171,9 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
       // If we are running FIRRTL passes, clean up the output.
       if (!disableOptimization) {
-        pm.addPass(createCSEPass());
-        pm.addPass(createCanonicalizerPass());
+        auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
+        modulePM.addPass(createCSEPass());
+        modulePM.addPass(createCanonicalizerPass());
       }
     }
   }
