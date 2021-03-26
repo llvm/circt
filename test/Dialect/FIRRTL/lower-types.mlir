@@ -589,3 +589,18 @@ firrtl.circuit "lowerRegOpNoName" {
  // CHECK:    firrtl.connect %a_q_0, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
  // CHECK:    firrtl.connect %a_q_1, %1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 }
+
+// -----
+
+// Test that InstanceOp Annotations are copied to the new instance.
+firrtl.circuit "Foo" {
+  firrtl.module @Bar(%a: !firrtl.flip<vector<uint<1>, 2>>) {
+    %0 = firrtl.invalidvalue : !firrtl.vector<uint<1>, 2>
+    firrtl.connect %a, %0 : !firrtl.flip<vector<uint<1>, 2>>, !firrtl.vector<uint<1>, 2>
+  }
+  firrtl.module @Foo() {
+    %bar_a = firrtl.instance @Bar  {annotations = [{a = "a"}], name = "bar", portNames = ["a"]} : !firrtl.vector<uint<1>, 2>
+  }
+  // CHECK: firrtl.instance
+  // CHECK-SAME: annotations = [{a = "a"}]
+}

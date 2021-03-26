@@ -69,6 +69,19 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Bar"}]]
 
 ; // -----
 
+; COM: A ReferenceTarget/ComponentName pointing at an Instance should work.
+circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar"}]]
+  module Bar:
+    skip
+  module Foo:
+    inst bar of Bar
+
+    ; CHECK-LABEL: module {
+    ; CHECK: firrtl.instance @Bar
+    ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}]
+
+; // -----
+
 ; COM: All types of JSON values should work
 circuit Foo: %[[{"string":"a","integer":42,"float":3.14,"boolean":true,"null":null,"object":{"foo":"bar"},"array":[1,2,3]}]]
   module Foo:
