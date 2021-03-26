@@ -1606,7 +1606,6 @@ private:
     return success();
   }
 
-  LogicalResult visitSV(YieldOp op) { return emitNoop(); }
   LogicalResult visitSV(TypeDeclTerminatorOp op) { return emitNoop(); }
   LogicalResult visitSV(WireOp op) { return emitNoop(); }
   LogicalResult visitSV(RegOp op) { return emitNoop(); }
@@ -1928,7 +1927,7 @@ LogicalResult StmtEmitter::visitSV(CoverOp op) {
 }
 
 LogicalResult StmtEmitter::emitIfDef(Operation *op, StringRef cond) {
-  bool hasEmptyThen = isa<YieldOp>(op->getRegion(0).front().front());
+  bool hasEmptyThen = op->getRegion(0).front().empty();
   if (hasEmptyThen)
     indent() << "`ifndef " << cond;
   else
@@ -1999,7 +1998,7 @@ LogicalResult StmtEmitter::visitSV(IfOp op) {
   indent() << "if (";
 
   // If we have an else and and empty then block, emit an inverted condition.
-  if (!op.hasElse() || !isa<YieldOp>(op.getThenBlock()->front())) {
+  if (!op.hasElse() || !op.getThenBlock()->empty()) {
     // Normal emission.
     emitExpression(op.cond(), ops);
     os << ')';
@@ -2496,7 +2495,7 @@ void SplitModuleEmitter::emitMLIRModule(ModuleOp module) {
       moduleOps.push_back({&op, perFileOps.size(), /*filename=*/{}});
     } else if (isa<VerbatimOp>(op) || isa<IfDefProceduralOp>(op)) {
       perFileOps.push_back(&op);
-    } else if (!isa<ModuleTerminatorOp>(op)) {
+    } else {
       op.emitError("unknown operation");
       encounteredError = true;
     }
@@ -2577,7 +2576,7 @@ void ModuleEmitter::emitMLIRModule(ModuleOp module) {
     else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) ||
              isa<IfDefProceduralOp>(op))
       ModuleEmitter(state).emitStatement(&op);
-    else if (!isa<ModuleTerminatorOp>(op))
+    else 
       emitError(&op, "unknown operation");
   }
 }

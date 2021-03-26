@@ -78,11 +78,9 @@ rtl.module @CaseZ(%arg8: i8) {
   sv.casez %arg8 : i8
     case b0000001x: {
       sv.fwrite "x"
-      sv.yield
     }
     default: {
       sv.fwrite "z"
-      sv.yield
     }
 }
 

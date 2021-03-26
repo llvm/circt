@@ -60,9 +60,9 @@ void RTLToLLHDPass::runOnOperation() {
   target.addIllegalOp<RTLModuleOp>();
 
   RTLToLLHDTypeConverter typeConverter;
-  OwningRewritePatternList patterns;
+  RewritePatternSet patterns(&context);
   mlir::populateFunctionLikeTypeConversionPattern<RTLModuleOp>(
-      patterns, &context, typeConverter);
+      patterns, typeConverter);
   patterns.insert<ConvertRTLModule>(typeConverter, &context);
   patterns.insert<ConvertOutput>(typeConverter, &context);
   patterns.insert<ConvertInstance>(typeConverter, &context);

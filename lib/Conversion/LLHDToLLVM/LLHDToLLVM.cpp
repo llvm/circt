@@ -2702,45 +2702,45 @@ struct LLHDToLLVMLoweringPass
 } // namespace
 
 void circt::populateLLHDToLLVMConversionPatterns(
-    LLVMTypeConverter &converter, OwningRewritePatternList &patterns,
+    LLVMTypeConverter &converter, RewritePatternSet &patterns,
     size_t &sigCounter, size_t &regCounter) {
   MLIRContext *ctx = converter.getDialect()->getContext();
 
   // Value creation conversion patterns.
-  patterns.insert<ConstOpConversion, ArrayOpConversion,
+  patterns.add<ConstOpConversion, ArrayOpConversion,
                   ArrayUniformOpConversion, TupleOpConversion>(ctx, converter);
 
   // Extract conversion patterns.
-  patterns.insert<ExtractSliceOpConversion, DynExtractSliceOpConversion,
+  patterns.add<ExtractSliceOpConversion, DynExtractSliceOpConversion,
                   ExtractElementOpConversion, DynExtractElementOpConversion>(
       ctx, converter);
 
   // Insert conversion patterns.
-  patterns.insert<InsertSliceOpConversion, InsertElementOpConversion>(
+  patterns.add<InsertSliceOpConversion, InsertElementOpConversion>(
       ctx, converter);
 
   // Bitwise conversion patterns.
-  patterns.insert<NotOpConversion, ShrOpConversion, ShlOpConversion>(ctx,
+  patterns.add<NotOpConversion, ShrOpConversion, ShlOpConversion>(ctx,
                                                                      converter);
-  patterns.insert<AndOpConversion, OrOpConversion, XorOpConversion>(converter);
+  patterns.add<AndOpConversion, OrOpConversion, XorOpConversion>(converter);
 
   // Arithmetic conversion patterns.
-  patterns.insert<NegOpConversion, EqOpConversion, NeqOpConversion>(ctx,
+  patterns.add<NegOpConversion, EqOpConversion, NeqOpConversion>(ctx,
                                                                     converter);
 
   // Unit conversion patterns.
-  patterns.insert<TerminatorOpConversion, ProcOpConversion, WaitOpConversion,
+  patterns.add<TerminatorOpConversion, ProcOpConversion, WaitOpConversion,
                   HaltOpConversion>(ctx, converter);
-  patterns.insert<EntityOpConversion>(ctx, converter, sigCounter, regCounter);
+  patterns.add<EntityOpConversion>(ctx, converter, sigCounter, regCounter);
 
   // Signal conversion patterns.
-  patterns.insert<PrbOpConversion, DrvOpConversion>(ctx, converter);
-  patterns.insert<SigOpConversion>(ctx, converter, sigCounter);
-  patterns.insert<RegOpConversion>(ctx, converter, regCounter);
+  patterns.add<PrbOpConversion, DrvOpConversion>(ctx, converter);
+  patterns.add<SigOpConversion>(ctx, converter, sigCounter);
+  patterns.add<RegOpConversion>(ctx, converter, regCounter);
 
   // Memory conversion patterns.
-  patterns.insert<VarOpConversion, StoreOpConversion>(ctx, converter);
-  patterns.insert<LoadOpConversion>(converter);
+  patterns.add<VarOpConversion, StoreOpConversion>(ctx, converter);
+  patterns.add<LoadOpConversion>(converter);
 }
 
 void LLHDToLLVMLoweringPass::runOnOperation() {
@@ -2750,7 +2750,7 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
   // Keep a counter to infer a reg's index in his entity.
   size_t regCounter = 0;
 
-  OwningRewritePatternList patterns;
+  RewritePatternSet patterns(&getContext());
   auto converter = mlir::LLVMTypeConverter(&getContext());
   converter.addConversion(
       [&](SigType sig) { return convertSigType(sig, converter); });
@@ -2765,7 +2765,7 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
 
   // Apply a partial conversion first, lowering only the instances, to generate
   // the init function.
-  patterns.insert<InstOpConversion>(&getContext(), converter);
+  patterns.add<InstOpConversion>(&getContext(), converter);
 
   LLVMConversionTarget target(getContext());
   target.addIllegalOp<InstOp>();
@@ -2775,6 +2775,7 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))
     signalPassFailure();
+    patterns.clear();
 
   // Setup the full conversion.
   populateStdToLLVMConversionPatterns(converter, patterns);
@@ -2782,7 +2783,7 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
                                        regCounter);
 
   target.addLegalDialect<LLVM::LLVMDialect>();
-  target.addLegalOp<ModuleOp, ModuleTerminatorOp>();
+  target.addLegalOp<ModuleOp>();
   target.addIllegalOp<LLVM::DialectCastOp>();
 
   // Apply the full conversion.

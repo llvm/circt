@@ -144,7 +144,7 @@ void ForkOp::build(OpBuilder &builder, OperationState &result, Value operand,
 }
 
 void handshake::ForkOp::getCanonicalizationPatterns(
-    OwningRewritePatternList &results, MLIRContext *context) {
+    RewritePatternSet &results, MLIRContext *context) {
   results.insert<circt::handshake::EliminateSimpleForksPattern>(context);
 }
 
@@ -199,7 +199,7 @@ void MergeOp::build(OpBuilder &builder, OperationState &result, Value operand,
     result.addOperands(operand);
 }
 
-void MergeOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void MergeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                           MLIRContext *context) {
   results.insert<circt::handshake::EliminateSimpleMergesPattern>(context);
 }
@@ -362,7 +362,7 @@ LogicalResult EliminateSimpleControlMergesPattern::matchAndRewrite(
 }
 
 void ControlMergeOp::getCanonicalizationPatterns(
-    OwningRewritePatternList &results, MLIRContext *context) {
+    RewritePatternSet &results, MLIRContext *context) {
   results.insert<EliminateSimpleControlMergesPattern>(context);
 }
 
@@ -417,7 +417,7 @@ void handshake::BranchOp::build(OpBuilder &builder, OperationState &result,
 }
 
 void handshake::BranchOp::getCanonicalizationPatterns(
-    OwningRewritePatternList &results, MLIRContext *context) {
+    RewritePatternSet &results, MLIRContext *context) {
   results.insert<circt::handshake::EliminateSimpleBranchesPattern>(context);
 }
 
