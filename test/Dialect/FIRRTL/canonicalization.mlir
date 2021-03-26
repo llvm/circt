@@ -550,4 +550,42 @@ firrtl.module @GTWithConstLHS(%a: !firrtl.uint, %b: !firrtl.flip<uint<1>>) {
   firrtl.connect %b, %1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 }
 
+// CHECK-LABEL: @CompareWithSelf
+firrtl.module @CompareWithSelf(
+  %a: !firrtl.uint,
+  %y0: !firrtl.flip<uint<1>>,
+  %y1: !firrtl.flip<uint<1>>,
+  %y2: !firrtl.flip<uint<1>>,
+  %y3: !firrtl.flip<uint<1>>,
+  %y4: !firrtl.flip<uint<1>>,
+  %y5: !firrtl.flip<uint<1>>
+) {
+  // CHECK-NEXT: [[_:.+]] = firrtl.constant
+  // CHECK-NEXT: [[_:.+]] = firrtl.constant
+
+  %0 = firrtl.leq %a, %a : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
+  firrtl.connect %y0, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  // CHECK-NEXT: firrtl.connect %y0, %c1_ui1
+
+  %1 = firrtl.lt %a, %a : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
+  firrtl.connect %y1, %1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  // CHECK-NEXT: firrtl.connect %y1, %c0_ui1
+
+  %2 = firrtl.geq %a, %a : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
+  firrtl.connect %y2, %2 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  // CHECK-NEXT: firrtl.connect %y2, %c1_ui1
+
+  %3 = firrtl.gt %a, %a : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
+  firrtl.connect %y3, %3 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  // CHECK-NEXT: firrtl.connect %y3, %c0_ui1
+
+  %4 = firrtl.eq %a, %a : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
+  firrtl.connect %y4, %4 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  // CHECK-NEXT: firrtl.connect %y4, %c1_ui1
+
+  %5 = firrtl.neq %a, %a : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
+  firrtl.connect %y5, %5 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  // CHECK-NEXT: firrtl.connect %y5, %c0_ui1
+}
+
 }

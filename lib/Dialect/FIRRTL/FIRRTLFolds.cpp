@@ -89,6 +89,31 @@ static void addCanonicalizerMethod(RewritePatternSet &results,
   results.insert<Folder>(context);
 }
 
+/// Performs constant folding `calculate` with element-wise behavior on the two
+/// attributes in `operands` and returns the result if possible, with the
+/// specified result type.
+///
+/// TODO: Maybe the upstream constFoldBinaryOp can be made to have a
+/// configurable result type as well.
+template <class AttrElementT,
+          class ElementValueT = typename AttrElementT::ValueType,
+          class CalculationT = function_ref<bool(ElementValueT, ElementValueT)>>
+Attribute constFoldBinaryRelationalOp(ArrayRef<Attribute> operands,
+                                      const CalculationT &calculate) {
+  assert(operands.size() == 2 && "binary op takes two operands");
+  if (!operands[0] || !operands[1])
+    return {};
+  if (operands[0].getType() != operands[1].getType())
+    return {};
+  if (operands[0].isa<AttrElementT>() && operands[1].isa<AttrElementT>()) {
+    auto lhs = operands[0].cast<AttrElementT>();
+    auto rhs = operands[1].cast<AttrElementT>();
+    return IntegerAttr::get(IntegerType::get(lhs.getContext(), 1),
+                            calculate(lhs.getValue(), rhs.getValue()));
+  }
+  return {};
+}
+
 //===----------------------------------------------------------------------===//
 // Fold Hooks
 //===----------------------------------------------------------------------===//
@@ -196,9 +221,41 @@ void LEQPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
   results.insert<patterns::LEQWithConstLHS>(context);
 }
 
+OpFoldResult LEQPrimOp::fold(ArrayRef<Attribute> operands) {
+  APInt value;
+  bool isUnsigned = lhs().getType().isa<UIntType>();
+
+  // leq(x, x) -> 1
+  if (lhs() == rhs())
+    return getIntAttr(APInt(1, 1), getContext());
+
+  return constFoldBinaryRelationalOp<IntegerAttr>(
+      operands,
+      [=](APInt a, APInt b) { return isUnsigned ? a.ule(b) : a.sle(b); });
+}
+
 void LTPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                            MLIRContext *context) {
   results.insert<patterns::LTWithConstLHS>(context);
+}
+
+OpFoldResult LTPrimOp::fold(ArrayRef<Attribute> operands) {
+  APInt value;
+  bool isUnsigned = lhs().getType().isa<UIntType>();
+
+  // lt(x, x) -> 0
+  if (lhs() == rhs())
+    return getIntAttr(APInt(1, 0), getContext());
+
+  // lt(x, 0) -> 0 when x is unsigned
+  if (matchPattern(rhs(), m_FConstant(value))) {
+    if (value.isNullValue() && lhs().getType().isa<UIntType>())
+      return getIntAttr(APInt(1, 0), getContext());
+  }
+
+  return constFoldBinaryRelationalOp<IntegerAttr>(
+      operands,
+      [=](APInt a, APInt b) { return isUnsigned ? a.ult(b) : a.slt(b); });
 }
 
 void GEQPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
@@ -206,13 +263,49 @@ void GEQPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
   results.insert<patterns::GEQWithConstLHS>(context);
 }
 
+OpFoldResult GEQPrimOp::fold(ArrayRef<Attribute> operands) {
+  APInt value;
+  bool isUnsigned = lhs().getType().isa<UIntType>();
+
+  // geq(x, x) -> 1
+  if (lhs() == rhs())
+    return getIntAttr(APInt(1, 1), getContext());
+
+  // geq(x, 0) -> 1 when x is unsigned
+  if (matchPattern(rhs(), m_FConstant(value))) {
+    if (value.isNullValue() && lhs().getType().isa<UIntType>())
+      return getIntAttr(APInt(1, 1), getContext());
+  }
+
+  return constFoldBinaryRelationalOp<IntegerAttr>(
+      operands,
+      [=](APInt a, APInt b) { return isUnsigned ? a.uge(b) : a.sge(b); });
+}
+
 void GTPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                            MLIRContext *context) {
   results.insert<patterns::GTWithConstLHS>(context);
 }
 
+OpFoldResult GTPrimOp::fold(ArrayRef<Attribute> operands) {
+  APInt value;
+  bool isUnsigned = lhs().getType().isa<UIntType>();
+
+  // gt(x, x) -> 0
+  if (lhs() == rhs())
+    return getIntAttr(APInt(1, 0), getContext());
+
+  return constFoldBinaryRelationalOp<IntegerAttr>(
+      operands,
+      [=](APInt a, APInt b) { return isUnsigned ? a.ugt(b) : a.sgt(b); });
+}
+
 OpFoldResult EQPrimOp::fold(ArrayRef<Attribute> operands) {
   APInt value;
+
+  // eq(x, x) -> 1
+  if (lhs() == rhs())
+    return getIntAttr(APInt(1, 1), getContext());
 
   if (matchPattern(rhs(), m_FConstant(value))) {
     APInt lhsCst;
@@ -238,6 +331,10 @@ OpFoldResult EQPrimOp::fold(ArrayRef<Attribute> operands) {
 
 OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
   APInt value;
+
+  // neq(x, x) -> 0
+  if (lhs() == rhs())
+    return getIntAttr(APInt(1, 0), getContext());
 
   if (matchPattern(rhs(), m_FConstant(value))) {
     APInt lhsCst;
