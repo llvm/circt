@@ -36,15 +36,11 @@ ESIDialect::ESIDialect(MLIRContext *context)
       >();
 }
 
-struct ESIPortMapping {
-  rtl::ModulePortInfo data, valid, ready;
-};
-
 /// Find all the port triples on a module which fit the
 /// <name>/<name>_valid/<name>_ready pattern. Ready must be the opposite
 /// direction of the other two.
-void findValidReadySignals(Operation *modOp,
-                           SmallVectorImpl<ESIPortMapping> &names) {
+void circt::esi::findValidReadySignals(Operation *modOp,
+                                       SmallVectorImpl<ESIPortMapping> &names) {
   SmallVector<rtl::ModulePortInfo, 64> ports;
   rtl::getModulePortInfo(modOp, ports);
 
@@ -83,8 +79,8 @@ void findValidReadySignals(Operation *modOp,
 
 /// Build an ESI module wrapper, converting the wires with latency-insensitive
 /// semantics with ESI channels and passing through the rest.
-Operation *buildESIWrapper(OpBuilder &b, Operation *mod,
-                           ArrayRef<ESIPortMapping> esiPortNames) {
+Operation *circt::esi::buildESIWrapper(OpBuilder &b, Operation *mod,
+                                       ArrayRef<ESIPortMapping> esiPortNames) {
   auto *ctxt = b.getContext();
   Location loc = mod->getLoc();
   FunctionType modType = rtl::getModuleType(mod);
@@ -144,20 +140,25 @@ Operation *buildESIWrapper(OpBuilder &b, Operation *mod,
   StringAttr wrapperName = b.getStringAttr(
       (SymbolTable::getSymbolName(mod) + "_esi").toStringRef(wrapperNameBuf));
   auto wrapper = b.create<rtl::RTLModuleOp>(loc, wrapperName, wrapperPorts);
+  ImplicitLocOpBuilder modBuilder(wrapper);
 
-  // Gather the regular input and inout ports -- they just get passed through.
+  // Assemble the inputs for the wrapped module.
   SmallVector<Value, 64> wrappedOperands(wrappedModuleOperands);
   for (auto port : wrapperPorts) {
     if (port.isOutput())
       continue;
-    if (port.type.isa<esi::ChannelPort>())
+
+    if (!port.type.isa<esi::ChannelPort>()) {
+      // If it's just a regular port, it just gets passed through.
+      size_t wrappedOpNum = inputPortMap[port.argNum].argNum;
+      Value arg = wrapper.getArgument(port.argNum);
+      wrappedOperands[wrappedOpNum] = arg;
       continue;
-    size_t wrappedOpNum = inputPortMap[port.argNum].argNum;
-    Value arg = wrapper.getArgument(port.argNum);
-    wrappedOperands[wrappedOpNum] = arg;
+    }
+
+    // modBuilder.create<UnwrapValidReady>();
   }
 
-  ImplicitLocOpBuilder modBuilder(wrapper);
   // Instantiate the wrapped module.
   auto wrappedInst = modBuilder.create<rtl::InstanceOp>(
       modType.getResults(), "wrapped", SymbolTable::getSymbolName(mod),
@@ -174,21 +175,6 @@ Operation *buildESIWrapper(OpBuilder &b, Operation *mod,
 
   modBuilder.create<rtl::OutputOp>(outputs);
   return wrapper;
-
-  // if (data->isOutput()) {
-  //   assert(valid->direction == rtl::PortDirection::OUTPUT);
-  //   assert(ready->direction == rtl::PortDirection::INPUT);
-  //   Value dataValue = inst.getResult(data->argNum);
-  //   Value validValue = inst.getResult(valid->argNum);
-  //   Value readyValue = inst.getOperand(ready->argNum);
-  //   b.create<WrapValidReady>(loc, dataValue, )
-  // } else {
-  //   assert(valid->direction == rtl::PortDirection::INPUT);
-  //   assert(ready->direction == rtl::PortDirection::OUTPUT);
-  //   Value dataValue = inst.getOperand(data->argNum);
-  //   Value validValue = inst.getOperand(valid->argNum);
-  //   Value readyValue = inst.getResult(ready->argNum);
-  // }
 }
 
 #include "circt/Dialect/ESI/ESIAttrs.cpp.inc"
