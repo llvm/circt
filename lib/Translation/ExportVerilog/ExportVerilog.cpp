@@ -1593,7 +1593,6 @@ private:
     return success();
   }
 
-  LogicalResult visitSV(YieldOp op) { return emitNoop(); }
   LogicalResult visitSV(TypeDeclTerminatorOp op) { return emitNoop(); }
   LogicalResult visitSV(WireOp op) { return emitNoop(); }
   LogicalResult visitSV(RegOp op) { return emitNoop(); }
@@ -1915,7 +1914,7 @@ LogicalResult StmtEmitter::visitSV(CoverOp op) {
 }
 
 LogicalResult StmtEmitter::emitIfDef(Operation *op, StringRef cond) {
-  bool hasEmptyThen = isa<YieldOp>(op->getRegion(0).front().front());
+  bool hasEmptyThen = op->getRegion(0).front().empty();
   if (hasEmptyThen)
     indent() << "`ifndef " << cond;
   else
@@ -1986,7 +1985,7 @@ LogicalResult StmtEmitter::visitSV(IfOp op) {
   indent() << "if (";
 
   // If we have an else and and empty then block, emit an inverted condition.
-  if (!op.hasElse() || !isa<YieldOp>(op.getThenBlock()->front())) {
+  if (!op.hasElse() || !op.getThenBlock()->empty()) {
     // Normal emission.
     emitExpression(op.cond(), ops);
     os << ')';
@@ -2444,6 +2443,117 @@ void ModuleEmitter::emitStatementBlock(Block &body) {
 }
 
 //===----------------------------------------------------------------------===//
+// SplitModuleEmitter
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+class SplitModuleEmitter {
+public:
+  explicit SplitModuleEmitter(StringRef dirname) : dirname(dirname) {}
+
+  /// Whether any error has been encountered during emission.
+  std::atomic<bool> encounteredError = {};
+
+  /// The directory to emit files into.
+  StringRef dirname;
+
+  /// A list of modules and their position within the per-file operations.
+  struct EmittedModule {
+    Operation *op;
+    size_t position;
+    SmallString<32> filename;
+  };
+  SmallVector<EmittedModule, 0> moduleOps;
+
+  /// A list of per-file operations (e.g., `sv.verbatim` or `sv.ifdef`).
+  SmallVector<Operation *, 0> perFileOps;
+
+  void emitMLIRModule(ModuleOp module);
+  void emitModule(EmittedModule &mod);
+};
+
+} // namespace
+
+void SplitModuleEmitter::emitMLIRModule(ModuleOp module) {
+  // Partition the MLIR module into modules and interfaces for which we create
+  // separate output files, and the remaining top-level verbatim SV/ifdef
+  // business that needs to go into each file.
+  for (auto &op : *module.getBody()) {
+    if (isa<RTLModuleOp>(op) || isa<RTLModuleExternOp>(op) ||
+        isa<InterfaceOp>(op)) {
+      moduleOps.push_back({&op, perFileOps.size(), /*filename=*/{}});
+    } else if (isa<VerbatimOp>(op) || isa<IfDefProceduralOp>(op)) {
+      perFileOps.push_back(&op);
+    } else {
+      op.emitError("unknown operation");
+      encounteredError = true;
+    }
+  }
+
+  // In parallel, emit each module into its separate file, embedded within the
+  // per-file operations.
+  llvm::parallelForEach(moduleOps.begin(), moduleOps.end(),
+                        [&](EmittedModule &mod) { emitModule(mod); });
+}
+
+void SplitModuleEmitter::emitModule(EmittedModule &mod) {
+  auto op = mod.op;
+
+  // Given the operation, determine the file stem name and how to emit it.
+  std::function<void(VerilogEmitterState &)> emit;
+
+  if (auto module = dyn_cast<RTLModuleOp>(op)) {
+    mod.filename = module.getNameAttr().getValue();
+    emit = [module](VerilogEmitterState &state) {
+      ModuleEmitter(state).emitRTLModule(module);
+    };
+  } else if (auto module = dyn_cast<RTLModuleExternOp>(op)) {
+    mod.filename = module.getVerilogModuleNameAttr().getValue();
+    emit = [module](VerilogEmitterState &state) {
+      ModuleEmitter(state).emitRTLExternModule(module);
+    };
+  } else if (auto intfOp = dyn_cast<InterfaceOp>(op)) {
+    mod.filename = intfOp.sym_name();
+    emit = [op](VerilogEmitterState &state) {
+      ModuleEmitter(state).emitStatement(op);
+    };
+  } else {
+    llvm_unreachable("only emissible ops should be in moduleOps list");
+  }
+
+  // Determine the output file name.
+  mod.filename.append(".v");
+  SmallString<128> outputFilename(dirname);
+  llvm::sys::path::append(outputFilename, mod.filename);
+
+  // Open the output file.
+  std::string errorMessage;
+  auto output = openOutputFile(outputFilename, &errorMessage);
+  if (!output) {
+    encounteredError = true;
+    llvm::errs() << errorMessage << "\n";
+    return;
+  }
+
+  // Emit the prolog of per-file operations, the module itself, and the epilog
+  // of per-file operations.
+  VerilogEmitterState state(output->os());
+
+  for (size_t i = 0; i < std::min(mod.position, perFileOps.size()); ++i) {
+    ModuleEmitter(state).emitStatement(perFileOps[i]);
+  }
+  emit(state);
+  for (size_t i = mod.position; i < perFileOps.size(); i++) {
+    ModuleEmitter(state).emitStatement(perFileOps[i]);
+  }
+
+  if (state.encounteredError)
+    encounteredError = true;
+  output->keep();
+}
+
+//===----------------------------------------------------------------------===//
 // Module Driver
 //===----------------------------------------------------------------------===//
 
@@ -2722,7 +2832,7 @@ void UnifiedEmitter::emitMLIRModule() {
     else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) ||
              isa<IfDefProceduralOp>(op))
       ModuleEmitter(state).emitStatement(&op);
-    else if (!isa<ModuleTerminatorOp>(op)) {
+    else {
       encounteredError = true;
       op.emitError("unknown operation");
     }
@@ -2772,7 +2882,7 @@ void SplitEmitter::emitMLIRModule() {
       moduleOps.push_back({&op, perFileOps.size(), /*filename=*/{}});
     } else if (isa<VerbatimOp>(op) || isa<IfDefProceduralOp>(op)) {
       perFileOps.push_back(&op);
-    } else if (!isa<ModuleTerminatorOp>(op)) {
+    } else {
       op.emitError("unknown operation");
       encounteredError = true;
     }

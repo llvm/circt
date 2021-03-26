@@ -308,7 +308,7 @@ void ESIToPhysicalPass::runOnOperation() {
   target.addIllegalOp<ChannelBuffer>();
 
   // Add all the conversion patterns.
-  OwningRewritePatternList patterns;
+  RewritePatternSet patterns(&getContext());
   patterns.insert<ChannelBufferLowering>(&getContext());
 
   // Run the conversion.
@@ -609,7 +609,8 @@ namespace {
 /// Eliminate back-to-back wrap-unwraps to reduce the number of ESI channels.
 struct RemoveWrapUnwrap : public ConversionPattern {
 public:
-  RemoveWrapUnwrap() : ConversionPattern(/*benefit=*/1, MatchAnyOpTypeTag()) {}
+  RemoveWrapUnwrap(MLIRContext *context)
+      : ConversionPattern(MatchAnyOpTypeTag(), /*benefit=*/1, context) {}
 
   virtual LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
@@ -917,7 +918,7 @@ void ESItoRTLPass::runOnOperation() {
 
   // Add all the conversion patterns.
   ESIRTLBuilder esiBuilder(top);
-  OwningRewritePatternList pass1Patterns;
+  RewritePatternSet pass1Patterns(ctxt);
   pass1Patterns.insert<PipelineStageLowering>(esiBuilder, ctxt);
   pass1Patterns.insert<WrapInterfaceLower>(ctxt);
   pass1Patterns.insert<UnwrapInterfaceLower>(ctxt);
@@ -934,8 +935,8 @@ void ESItoRTLPass::runOnOperation() {
   pass2Target.addLegalDialect<SVDialect>();
   pass2Target.addIllegalDialect<ESIDialect>();
 
-  OwningRewritePatternList pass2Patterns;
-  pass2Patterns.insert<RemoveWrapUnwrap>();
+  RewritePatternSet pass2Patterns(ctxt);
+  pass2Patterns.insert<RemoveWrapUnwrap>(ctxt);
   pass2Patterns.insert<EncoderLowering>(ctxt);
   pass2Patterns.insert<DecoderLowering>(ctxt);
   if (failed(

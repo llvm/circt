@@ -10,13 +10,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-def HasRegionTerminator : SingleBlockImplicitTerminator<"YieldOp">;
-
 //===----------------------------------------------------------------------===//
 // Control flow like-operations
 //===----------------------------------------------------------------------===//
 
-def IfDefOp : SVOp<"ifdef", [HasRegionTerminator, NoRegionArguments,
+def IfDefOp : SVOp<"ifdef", [SingleBlock, NoTerminator, NoRegionArguments,
                              NonProceduralOp]> {
   let summary = "'ifdef MACRO' block";
 
@@ -60,7 +58,7 @@ def IfDefOp : SVOp<"ifdef", [HasRegionTerminator, NoRegionArguments,
 }
 
 def IfDefProceduralOp
-  : SVOp<"ifdef.procedural", [HasRegionTerminator, NoRegionArguments,
+  : SVOp<"ifdef.procedural", [SingleBlock, NoTerminator, NoRegionArguments,
                               ProceduralRegion]> {
   let summary = "'ifdef MACRO' block for procedural regions";
 
@@ -99,7 +97,7 @@ def IfDefProceduralOp
   }];
 }
 
-def IfOp : SVOp<"if", [HasRegionTerminator, NoRegionArguments,
+def IfOp : SVOp<"if", [SingleBlock, NoTerminator, NoRegionArguments,
                        ProceduralRegion, ProceduralOp]> {
   let summary = "'if (cond)' block";
   
@@ -150,7 +148,7 @@ def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
 }
 
 
-def AlwaysOp : SVOp<"always", [HasRegionTerminator, NoRegionArguments,
+def AlwaysOp : SVOp<"always", [SingleBlock, NoTerminator, NoRegionArguments,
                                RecursiveSideEffects, ProceduralRegion,
                                NonProceduralOp]> {
   let summary = "'always @' block";
@@ -185,9 +183,9 @@ def AlwaysOp : SVOp<"always", [HasRegionTerminator, NoRegionArguments,
   let verifier = "return ::verifyAlwaysOp(*this);";
 }
 
-def AlwaysCombOp : SVOp<"alwayscomb", [HasRegionTerminator, NoRegionArguments,
-                                       RecursiveSideEffects, ProceduralRegion,
-                                       NonProceduralOp]> {
+def AlwaysCombOp : SVOp<"alwayscomb", [SingleBlock, NoTerminator,
+                                       NoRegionArguments, RecursiveSideEffects,
+                                       ProceduralRegion, NonProceduralOp]> {
   let summary = "'alwayscomb block";
   let description = "See SV Spec 9.2, and 9.2.2.2.";
   
@@ -215,7 +213,7 @@ def ResetTypeAttr : I32EnumAttr<"ResetType", "reset type",
                                    [NoReset, SyncReset, AsyncReset]>;
 
 
-def AlwaysFFOp : SVOp<"alwaysff", [HasRegionTerminator, NoRegionArguments,
+def AlwaysFFOp : SVOp<"alwaysff", [SingleBlock, NoTerminator, NoRegionArguments,
                                    RecursiveSideEffects, ProceduralRegion,
                                    NonProceduralOp]> {
   let summary = "'alwaysff @' block with optional reset";
@@ -260,7 +258,7 @@ def AlwaysFFOp : SVOp<"alwaysff", [HasRegionTerminator, NoRegionArguments,
 }
 
 
-def InitialOp : SVOp<"initial", [HasRegionTerminator, NoRegionArguments,
+def InitialOp : SVOp<"initial", [SingleBlock, NoTerminator, NoRegionArguments,
                                  RecursiveSideEffects, ProceduralRegion,
                                  NonProceduralOp]> {
   let summary = "'initial' block";
@@ -284,7 +282,7 @@ def InitialOp : SVOp<"initial", [HasRegionTerminator, NoRegionArguments,
   }];
 }
 
-def CaseZOp : SVOp<"casez", [HasRegionTerminator, NoRegionArguments,
+def CaseZOp : SVOp<"casez", [SingleBlock, NoTerminator, NoRegionArguments,
                              ProceduralRegion, ProceduralOp]> {
   let summary = "'casez (cond)' block";
   let description = "See SystemVerilog 2017 12.5.1.";
@@ -346,17 +344,6 @@ def CaseZOp : SVOp<"casez", [HasRegionTerminator, NoRegionArguments,
 //===----------------------------------------------------------------------===//
 // Other Statements
 //===----------------------------------------------------------------------===//
-
-def YieldOp
-  : SVOp<"yield", [NoSideEffect, Terminator,
-                   ParentOneOf<["IfDefOp", "IfDefProceduralOp", "IfOp",
-                                "AlwaysOp", "InitialOp", "AlwaysFFOp",
-                                "AlwaysCombOp", "CaseZOp"]>]> {
-  let summary = "terminator for control-flow operation regions";
-  let arguments = (ins);
-
-   let assemblyFormat = "attr-dict";
-}
 
 def BPAssignOp : SVOp<"bpassign", [InOutTypeConstraint<"src", "dest">,
                                    ProceduralOp]> {
