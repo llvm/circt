@@ -514,4 +514,40 @@ firrtl.module @wire_port_prop1(%in_a: !firrtl.uint<9>, %out_b: !firrtl.flip<uint
   firrtl.connect %out_b, %tmp : !firrtl.flip<uint<9>>, !firrtl.uint<9>
 }
 
+// CHECK-LABEL: @LEQWithConstLHS
+// CHECK-NEXT: %c42_ui = firrtl.constant
+// CHECK-NEXT: %0 = firrtl.geq %a, %c42_ui
+firrtl.module @LEQWithConstLHS(%a: !firrtl.uint, %b: !firrtl.flip<uint<1>>) {
+  %0 = firrtl.constant(42) : !firrtl.uint
+  %1 = firrtl.leq %0, %a : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
+  firrtl.connect %b, %1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+}
+
+// CHECK-LABEL: @LTWithConstLHS
+// CHECK-NEXT: %c42_ui = firrtl.constant
+// CHECK-NEXT: %0 = firrtl.gt %a, %c42_ui
+firrtl.module @LTWithConstLHS(%a: !firrtl.uint, %b: !firrtl.flip<uint<1>>) {
+  %0 = firrtl.constant(42) : !firrtl.uint
+  %1 = firrtl.lt %0, %a : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
+  firrtl.connect %b, %1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+}
+
+// CHECK-LABEL: @GEQWithConstLHS
+// CHECK-NEXT: %c42_ui = firrtl.constant
+// CHECK-NEXT: %0 = firrtl.leq %a, %c42_ui
+firrtl.module @GEQWithConstLHS(%a: !firrtl.uint, %b: !firrtl.flip<uint<1>>) {
+  %0 = firrtl.constant(42) : !firrtl.uint
+  %1 = firrtl.geq %0, %a : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
+  firrtl.connect %b, %1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+}
+
+// CHECK-LABEL: @GTWithConstLHS
+// CHECK-NEXT: %c42_ui = firrtl.constant
+// CHECK-NEXT: %0 = firrtl.lt %a, %c42_ui
+firrtl.module @GTWithConstLHS(%a: !firrtl.uint, %b: !firrtl.flip<uint<1>>) {
+  %0 = firrtl.constant(42) : !firrtl.uint
+  %1 = firrtl.gt %0, %a : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
+  firrtl.connect %b, %1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+}
+
 }

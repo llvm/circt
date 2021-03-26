@@ -16,6 +16,15 @@
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 
+// Declarative canonicalization patterns
+namespace circt {
+namespace firrtl {
+namespace patterns {
+#include "circt/Dialect/FIRRTL/Canonicalization.h.inc"
+} // namespace patterns
+} // namespace firrtl
+} // namespace circt
+
 using namespace circt;
 using namespace firrtl;
 
@@ -180,6 +189,26 @@ OpFoldResult XorPrimOp::fold(ArrayRef<Attribute> operands) {
 
   return constFoldBinaryOp<IntegerAttr>(operands,
                                         [](APInt a, APInt b) { return a ^ b; });
+}
+
+void LEQPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                            MLIRContext *context) {
+  results.insert<patterns::LEQWithConstLHS>(context);
+}
+
+void LTPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                           MLIRContext *context) {
+  results.insert<patterns::LTWithConstLHS>(context);
+}
+
+void GEQPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                            MLIRContext *context) {
+  results.insert<patterns::GEQWithConstLHS>(context);
+}
+
+void GTPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+                                           MLIRContext *context) {
+  results.insert<patterns::GTWithConstLHS>(context);
 }
 
 OpFoldResult EQPrimOp::fold(ArrayRef<Attribute> operands) {
