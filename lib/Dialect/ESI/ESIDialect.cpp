@@ -90,6 +90,7 @@ Operation *circt::esi::buildESIWrapper(OpBuilder &b, Operation *mod,
   SmallVector<rtl::ModulePortInfo, 64> ports;
   rtl::getModulePortInfo(mod, ports);
 
+  // Memoize the list of ready/valid ports to ignore.
   StringSet<> controlPorts;
   // Store a lookup table indexed on the data port name.
   llvm::StringMap<ESIPortMapping> dataPortMap;
@@ -116,21 +117,22 @@ Operation *circt::esi::buildESIWrapper(OpBuilder &b, Operation *mod,
   // Map the new result to the old port.
   SmallVector<rtl::ModulePortInfo, 64> outputPortMap;
 
-  for (auto port : ports) {
+  for (const auto port : ports) {
     if (controlPorts.contains(port.name.getValue()))
       continue;
 
+    rtl::ModulePortInfo newPort = port;
     if (dataPortMap.find(port.name.getValue()) != dataPortMap.end())
-      port.type = esi::ChannelPort::get(ctxt, port.type);
+      newPort.type = esi::ChannelPort::get(ctxt, port.type);
 
     if (port.isOutput()) {
-      port.argNum = outputPortMap.size();
+      newPort.argNum = outputPortMap.size();
       outputPortMap.push_back(port);
     } else {
-      port.argNum = inputPortMap.size();
+      newPort.argNum = inputPortMap.size();
       inputPortMap.push_back(port);
     }
-    wrapperPorts.push_back(port);
+    wrapperPorts.push_back(newPort);
   }
 
   // Create the wrapper module.
@@ -142,29 +144,52 @@ Operation *circt::esi::buildESIWrapper(OpBuilder &b, Operation *mod,
   auto modBuilder =
       ImplicitLocOpBuilder::atBlockBegin(loc, wrapper.getBodyBlock());
   BackedgeBuilder bb(modBuilder, modBuilder.getLoc());
+  SmallVector<Value, 64> outputs(
+      wrapper.getNumResults()); // rtl.output operands.
 
   // Assemble the inputs for the wrapped module.
   SmallVector<Value, 64> wrappedOperands(modType.getNumInputs());
-  llvm::DenseMap<size_t, Optional<Backedge>> readyPorts;
+  // Index the backedges by the wrapped modules result number.
+  llvm::DenseMap<size_t, Backedge> backedges;
 
-  for (auto port : wrapperPorts) {
+  // Go through the input ports, either tunneling them through or unwrapping
+  // them.
+  for (const auto port : wrapperPorts) {
     if (port.isOutput())
       continue;
 
     Value arg = wrapper.getArgument(port.argNum);
-    if (dataPortMap.find(port.name.getValue()) == dataPortMap.end()) {
+    auto esiPort = dataPortMap.find(port.name.getValue());
+    if (esiPort == dataPortMap.end()) {
       // If it's just a regular port, it just gets passed through.
       size_t wrappedOpNum = inputPortMap[port.argNum].argNum;
       wrappedOperands[wrappedOpNum] = arg;
       continue;
     }
 
-    ESIPortMapping esiPort = dataPortMap[port.name.getValue()];
     Backedge ready = bb.get(modBuilder.getI1Type());
-    readyPorts[esiPort.ready.argNum] = ready;
+    backedges.insert(std::make_pair(esiPort->second.ready.argNum, ready));
     auto unwrap = modBuilder.create<UnwrapValidReady>(arg, ready);
-    wrappedOperands[esiPort.data.argNum] = unwrap.rawOutput();
-    wrappedOperands[esiPort.valid.argNum] = unwrap.valid();
+    wrappedOperands[esiPort->second.data.argNum] = unwrap.rawOutput();
+    wrappedOperands[esiPort->second.valid.argNum] = unwrap.valid();
+  }
+
+  // Iterate through the output ports, identify the ESI channels, and build
+  // wrappers.
+  for (const auto port : wrapperPorts) {
+    if (!port.isOutput())
+      continue;
+    auto esiPort = dataPortMap.find(port.name.getValue());
+    if (esiPort == dataPortMap.end())
+      continue;
+
+    Backedge data = bb.get(esiPort->second.data.type);
+    Backedge valid = bb.get(modBuilder.getI1Type());
+    auto wrap = modBuilder.create<WrapValidReady>(data, valid);
+    backedges.insert(std::make_pair(esiPort->second.data.argNum, data));
+    backedges.insert(std::make_pair(esiPort->second.valid.argNum, valid));
+    outputs[port.argNum] = wrap.chanOutput();
+    wrappedOperands[esiPort->second.ready.argNum] = wrap.ready();
   }
 
   // Instantiate the wrapped module.
@@ -172,19 +197,22 @@ Operation *circt::esi::buildESIWrapper(OpBuilder &b, Operation *mod,
       modType.getResults(), "wrapped", SymbolTable::getSymbolName(mod),
       wrappedOperands, DictionaryAttr());
 
-  for (size_t i = 0, e = readyPorts.size(); i < e; ++i) {
-    Optional<Backedge> readyPort = readyPorts[i];
-    if (readyPort)
-      readyPort->setValue(wrappedInst.getResult(i));
-  }
-
-  SmallVector<Value, 64> outputs(wrapper.getNumResults());
-  for (auto port : wrapperPorts) {
+  // Find all the regular outputs and either tunnel them through.
+  for (const auto port : wrapperPorts) {
     if (!port.isOutput())
       continue;
-
+    auto esiPort = dataPortMap.find(port.name.getValue());
+    if (esiPort != dataPortMap.end())
+      continue;
     size_t wrappedResNum = outputPortMap[port.argNum].argNum;
     outputs[port.argNum] = wrappedInst.getResult(wrappedResNum);
+  }
+
+  // Hookup all the backedges.
+  for (size_t i = 0, e = wrappedInst.getNumResults(); i < e; ++i) {
+    auto backedge = backedges.find(i);
+    if (backedge != backedges.end())
+      backedge->second.setValue(wrappedInst.getResult(i));
   }
 
   modBuilder.create<rtl::OutputOp>(outputs);

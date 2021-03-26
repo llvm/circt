@@ -28,11 +28,12 @@ struct TestESIModWrap
     auto mlirMod = getOperation();
     auto b = mlir::OpBuilder::atBlockTerminator(mlirMod.getBody());
 
-    SmallVector<rtl::RTLModuleOp, 8> mods(mlirMod.getOps<rtl::RTLModuleOp>());
-    for (rtl::RTLModuleOp mod : mods) {
+    SmallVector<rtl::RTLModuleOp, 8> mods;
+    for (Operation *mod : mlirMod.getOps<rtl::RTLModuleExternOp>()) {
       SmallVector<ESIPortMapping, 32> liPorts;
       findValidReadySignals(mod, liPorts);
-      buildESIWrapper(b, mod, liPorts);
+      if (!liPorts.empty())
+        buildESIWrapper(b, mod, liPorts);
     }
   }
 };
