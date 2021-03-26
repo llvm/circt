@@ -31,7 +31,7 @@ def LTWithConstLHS : Pat<
   (GTPrimOp $rhs, $lhs),
   [(NonConstantOp $rhs)]>;
 
-// geq(const, x) -> geq(x, const)
+// geq(const, x) -> leq(x, const)
 def GEQWithConstLHS : Pat<
   (GEQPrimOp (ConstantOp:$lhs $_), $rhs),
   (LEQPrimOp $rhs, $lhs),
