@@ -547,7 +547,7 @@ static LogicalResult verifyRTLModuleGeneratedOp(RTLModuleGeneratedOp op) {
     if (!dict.get(strAttr.getValue()))
       return op.emitError("Missing attribute '") << strAttr.getValue() << "'";
   }
-  
+
   return success();
 }
 
