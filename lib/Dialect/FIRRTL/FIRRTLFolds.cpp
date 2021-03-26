@@ -47,7 +47,7 @@ static inline ConstantIntMatcher m_FConstant(APInt &value) {
 // TODO: Should move to MLIR upstream.
 template <typename OpType>
 static void
-addCanonicalizer(OwningRewritePatternList &results, MLIRContext *context,
+addCanonicalizer(RewritePatternSet &results, MLIRContext *context,
                  LogicalResult (*implFn)(OpType, PatternRewriter &rewriter)) {
   // std::function<LogicalResult(OpType, PatternRewriter &rewriter)> implFn) {
   struct Folder final : public OpRewritePattern<OpType> {
@@ -67,7 +67,7 @@ addCanonicalizer(OwningRewritePatternList &results, MLIRContext *context,
 }
 
 template <typename OpType>
-static void addCanonicalizerMethod(OwningRewritePatternList &results,
+static void addCanonicalizerMethod(RewritePatternSet &results,
                                    MLIRContext *context) {
   struct Folder final : public OpRewritePattern<OpType> {
     using OpRewritePattern<OpType>::OpRewritePattern;
@@ -268,7 +268,7 @@ static LogicalResult canonicalize(CatPrimOp op, PatternRewriter &rewriter) {
   return failure();
 }
 
-void CatPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void CatPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
   addCanonicalizer<CatPrimOp>(results, context, canonicalize);
 }
@@ -303,7 +303,7 @@ static LogicalResult canonicalize(BitsPrimOp op, PatternRewriter &rewriter) {
   return failure();
 }
 
-void BitsPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void BitsPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
   addCanonicalizer<BitsPrimOp>(results, context, canonicalize);
 }
@@ -339,7 +339,7 @@ static LogicalResult canonicalize(HeadPrimOp op, PatternRewriter &rewriter) {
   return success();
 }
 
-void HeadPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void HeadPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
   addCanonicalizer<HeadPrimOp>(results, context, canonicalize);
 }
@@ -483,7 +483,7 @@ static LogicalResult canonicalize(ShrPrimOp op, PatternRewriter &rewriter) {
   return success();
 }
 
-void ShrPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void ShrPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
   addCanonicalizer<ShrPrimOp>(results, context, canonicalize);
 }
@@ -500,7 +500,7 @@ static LogicalResult canonicalize(TailPrimOp op, PatternRewriter &rewriter) {
   return success();
 }
 
-void TailPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void TailPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
   addCanonicalizer<TailPrimOp>(results, context, canonicalize);
 }
@@ -589,7 +589,7 @@ static LogicalResult canonicalize(ConnectOp op, PatternRewriter &rewriter) {
   return failure();
 }
 
-void ConnectOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void ConnectOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
   addCanonicalizer<ConnectOp>(results, context, canonicalize);
 }
@@ -700,7 +700,7 @@ LogicalResult AttachOp::canonicalize(AttachOp op, PatternRewriter &rewriter) {
   return failure();
 }
 
-void AttachOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void AttachOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                            MLIRContext *context) {
   addCanonicalizer<AttachOp>(results, context, canonicalize);
 }
@@ -729,7 +729,7 @@ LogicalResult PartialConnectOp::canonicalize(PartialConnectOp op,
   return failure();
 }
 
-void PartialConnectOp::getCanonicalizationPatterns(
-    OwningRewritePatternList &results, MLIRContext *context) {
+void PartialConnectOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                   MLIRContext *context) {
   addCanonicalizerMethod<PartialConnectOp>(results, context);
 }

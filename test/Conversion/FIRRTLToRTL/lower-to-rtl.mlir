@@ -232,7 +232,7 @@ firrtl.circuit "Simple" {
 
     // CHECK: sv.always posedge %clock {
     // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
-    // CHECK-NEXT:   } else {
+    // CHECK-NEXT:   } else  {
     // CHECK-NEXT:     %PRINTF_COND_ = sv.verbatim.expr "`PRINTF_COND_" : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and %PRINTF_COND_, %reset
     // CHECK-NEXT:     sv.if [[AND]] {

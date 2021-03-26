@@ -196,7 +196,6 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
       sv.fwrite "a"
       // CHECK-NEXT: $fwrite(32'h80000002, "b");
       sv.fwrite "b"
-      sv.yield
     } // CHECK-NEXT: end
 
     // CHECK-NEXT: 8'b000000?1:
@@ -210,7 +209,6 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
     default: {
       // CHECK-NEXT:  $fwrite(32'h80000002, "z");
       sv.fwrite "z"
-      sv.yield
     } // CHECK-NEXT: endcase
 
    // CHECK-NEXT: casez (cond)

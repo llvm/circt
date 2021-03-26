@@ -25,7 +25,7 @@ namespace circt {
 
 /// Get the LLHD to LLVM conversion patterns.
 void populateLLHDToLLVMConversionPatterns(mlir::LLVMTypeConverter &converter,
-                                          OwningRewritePatternList &patterns,
+                                          RewritePatternSet &patterns,
                                           size_t &sigCounter,
                                           size_t &regCounter);
 

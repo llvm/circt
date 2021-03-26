@@ -410,7 +410,8 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
     verilogName = defName.getValue();
 
   // Build the new rtl.module op.
-  OpBuilder builder(topLevelModule->getTerminator());
+  OpBuilder builder(topLevelModule->getParent()->getContext());
+  builder.setInsertionPointToEnd(topLevelModule);
   auto nameAttr = builder.getStringAttr(oldModule.getName());
   return builder.create<rtl::RTLModuleExternOp>(oldModule.getLoc(), nameAttr,
                                                 ports, verilogName);
@@ -428,7 +429,8 @@ rtl::RTLModuleOp FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
     return {};
 
   // Build the new rtl.module op.
-  OpBuilder builder(topLevelModule->getTerminator());
+  OpBuilder builder(topLevelModule->getParent()->getContext());
+  builder.setInsertionPointToEnd(topLevelModule);
   auto nameAttr = builder.getStringAttr(oldModule.getName());
   return builder.create<rtl::RTLModuleOp>(oldModule.getLoc(), nameAttr, ports);
 }
@@ -1424,14 +1426,7 @@ void FIRRTLLowering::runWithInsertionPointAtEndOfBlock(
 
   auto oldIP = builder.saveInsertionPoint();
 
-  // If this is the first logic injected into the specified block (e.g. an
-  // else region), create the block and put an sv.yield.
-  if (region.empty()) {
-    // All SV dialect control flow operations use sv.yield.
-    sv::IfOp::ensureTerminator(region, builder, region.getParentOp()->getLoc());
-  }
-
-  builder.setInsertionPoint(region.front().getTerminator());
+  builder.setInsertionPointToEnd(&region.front());
   fn();
   builder.restoreInsertionPoint(oldIP);
 }
