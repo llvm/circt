@@ -143,7 +143,9 @@ def AtNegEdge: I32EnumAttrCase<"AtNegEdge", 1, "negedge">;
 def AtEdge   : I32EnumAttrCase<"AtEdge", 2, "edge">;
 
 def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
-                                   [AtPosEdge, AtNegEdge, AtEdge]>;
+                                   [AtPosEdge, AtNegEdge, AtEdge]> {
+  let cppNamespace = "circt::sv";
+}
 
 
 def AlwaysOp : SVOp<"always", [SingleBlock, NoTerminator, NoRegionArguments,

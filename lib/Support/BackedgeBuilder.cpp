@@ -29,19 +29,24 @@ BackedgeBuilder::~BackedgeBuilder() {
   for (Operation *op : edges) {
     auto users = op->getUsers();
     assert(users.empty() && "Backedge still in use");
-    rewriter.eraseOp(op);
+    if (rewriter)
+      rewriter->eraseOp(op);
+    else
+      op->erase();
   }
 }
 
 Backedge::operator mlir::Value() { return value; }
 
+BackedgeBuilder::BackedgeBuilder(OpBuilder &builder, Location loc)
+    : builder(builder), rewriter(nullptr), loc(loc) {}
 BackedgeBuilder::BackedgeBuilder(PatternRewriter &rewriter, Location loc)
-    : rewriter(rewriter), loc(loc) {}
+    : builder(rewriter), rewriter(&rewriter), loc(loc) {}
 
 Backedge BackedgeBuilder::get(Type t) {
   OperationState s(loc, "TemporaryBackedge");
   s.addTypes(t);
-  auto op = rewriter.createOperation(s);
+  auto op = builder.createOperation(s);
   edges.push_back(op);
   return Backedge(op);
 }

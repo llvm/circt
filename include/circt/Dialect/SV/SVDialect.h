@@ -53,6 +53,12 @@ llvm::StringRef resolveKeywordConflict(llvm::StringRef origName,
 StringRef sanitizeName(llvm::StringRef name, llvm::StringSet<> &recordNames,
                        size_t &nextGeneratedNameID);
 
+/// Check if a name is valid for use in SV output by only containing characters
+/// allowed in SV identifiers.
+///
+/// Call \c sanitizeName() to obtain a sanitized version of the name.
+bool isNameValid(llvm::StringRef name);
+
 } // namespace sv
 } // namespace circt
 
