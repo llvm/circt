@@ -39,11 +39,14 @@ def CircuitOp : FIRRTLOp<"circuit",
     /// Return body of this circuit.
     Region &getBodyRegion();
     Block *getBody();
+
+    // Return the main module that is the entry point of the circuit.  This may
+    // be either an FModuleOp or an FExtModuleOp.
+    Operation *getMainModule();
   }];
 
   let printer = "return ::print(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
-
   let verifier = "return ::verifyCircuitOp(*this);";
 }
 

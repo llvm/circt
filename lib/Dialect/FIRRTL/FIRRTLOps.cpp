@@ -116,6 +116,9 @@ static ParseResult parseCircuitOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
+// Return the main module that is the entry point of the circuit.
+Operation *CircuitOp::getMainModule() { return lookupSymbol(name()); }
+
 static LogicalResult verifyCircuitOp(CircuitOp circuit) {
   StringRef main = circuit.name();
 
@@ -126,7 +129,7 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
   }
 
   // Check that a module matching the "main" module exists in the circuit.
-  if (!circuit.lookupSymbol(main)) {
+  if (!circuit.getMainModule()) {
     circuit.emitOpError("must contain one module that matches main name '" +
                         main + "'");
     return failure();
