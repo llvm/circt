@@ -1762,6 +1762,32 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
 }
 
 //===----------------------------------------------------------------------===//
+// InstanceOp Custom attr-dict Directive
+//===----------------------------------------------------------------------===//
+
+/// No change from normal parsing.
+static ParseResult parseInstanceOp(OpAsmParser &parser,
+                                   NamedAttrList &resultAttrs) {
+  return parser.parseOptionalAttrDict(resultAttrs);
+}
+
+/// Always elide "moduleName" and elide "annotations" if it exists or
+/// if it is empty.
+static void printInstanceOp(OpAsmPrinter &p, Operation *op,
+                            DictionaryAttr attr) {
+
+  // "moduleName" is always elided
+  SmallVector<StringRef, 2> elides = {"moduleName"};
+
+  // Elide "annotations" if it doesn't exist or if it is empty
+  auto annotationsAttr = op->getAttrOfType<ArrayAttr>("annotations");
+  if (!annotationsAttr || annotationsAttr.empty())
+    elides.push_back("annotations");
+
+  p.printOptionalAttrDict(op->getAttrs(), elides);
+}
+
+//===----------------------------------------------------------------------===//
 // TblGen Generated Logic.
 //===----------------------------------------------------------------------===//
 
