@@ -49,7 +49,9 @@ private:
 void registerESIPasses();
 void registerESITranslations();
 
-struct ESIPortMapping {
+/// A triple of signals which represent a latency insensitive interface with
+/// valid/ready semantics.
+struct ESIPortValidReadyMapping {
   rtl::ModulePortInfo data, valid, ready;
 };
 
@@ -57,12 +59,12 @@ struct ESIPortMapping {
 /// <name>/<name>_valid/<name>_ready pattern. Ready must be the opposite
 /// direction of the other two.
 void findValidReadySignals(Operation *modOp,
-                           SmallVectorImpl<ESIPortMapping> &names);
+                           SmallVectorImpl<ESIPortValidReadyMapping> &names);
 
 /// Build an ESI module wrapper, converting the wires with latency-insensitive
 /// semantics to ESI channels and passing through the rest.
 Operation *buildESIWrapper(OpBuilder &b, Operation *mod,
-                           ArrayRef<ESIPortMapping> esiPortNames);
+                           ArrayRef<ESIPortValidReadyMapping> esiPortNames);
 
 } // namespace esi
 } // namespace circt

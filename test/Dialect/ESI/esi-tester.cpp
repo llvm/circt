@@ -30,10 +30,11 @@ struct TestESIModWrap
 
     SmallVector<rtl::RTLModuleOp, 8> mods;
     for (Operation *mod : mlirMod.getOps<rtl::RTLModuleExternOp>()) {
-      SmallVector<ESIPortMapping, 32> liPorts;
+      SmallVector<ESIPortValidReadyMapping, 32> liPorts;
       findValidReadySignals(mod, liPorts);
       if (!liPorts.empty())
-        buildESIWrapper(b, mod, liPorts);
+        if (!buildESIWrapper(b, mod, liPorts))
+          signalPassFailure();
     }
   }
 };

@@ -41,8 +41,8 @@ ESIDialect::ESIDialect(MLIRContext *context)
 /// Find all the port triples on a module which fit the
 /// <name>/<name>_valid/<name>_ready pattern. Ready must be the opposite
 /// direction of the other two.
-void circt::esi::findValidReadySignals(Operation *modOp,
-                                       SmallVectorImpl<ESIPortMapping> &names) {
+void circt::esi::findValidReadySignals(
+    Operation *modOp, SmallVectorImpl<ESIPortValidReadyMapping> &names) {
   SmallVector<rtl::ModulePortInfo, 64> ports;
   rtl::getModulePortInfo(modOp, ports);
 
@@ -74,7 +74,7 @@ void circt::esi::findValidReadySignals(Operation *modOp,
       continue;
 
     // Found one.
-    names.push_back(ESIPortMapping{
+    names.push_back(ESIPortValidReadyMapping{
         .data = port, .valid = valid->second, .ready = ready->second});
   }
 }
@@ -83,7 +83,7 @@ void circt::esi::findValidReadySignals(Operation *modOp,
 /// semantics to ESI channels and passing through the rest.
 Operation *
 circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
-                            ArrayRef<ESIPortMapping> portsToConvert) {
+                            ArrayRef<ESIPortValidReadyMapping> portsToConvert) {
   // In order to avoid the similar sounding and looking "wrapped" and "wrapper"
   // names or the ambiguous "module", we use "pearl" for the module _being
   // wrapped_ and "shell" for the _wrapper_ modules which is being created
@@ -100,21 +100,42 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
   // First, build up a set of data structures to use throughout this function.
 
   StringSet<> controlPorts; // Memoize the list of ready/valid ports to ignore.
-  llvm::StringMap<ESIPortMapping>
+  llvm::StringMap<ESIPortValidReadyMapping>
       dataPortMap; // Store a lookup table of ports to convert indexed on the
                    // data port name.
+  // Validate input and assemble lookup structures.
   for (const auto &esiPort : portsToConvert) {
-    assert(esiPort.data.direction != rtl::PortDirection::INOUT);
+    if (esiPort.data.direction == rtl::PortDirection::INOUT) {
+      pearl->emitError("Data signal '")
+          << esiPort.data.name << "' must not be INOUT";
+      return nullptr;
+    }
     dataPortMap[esiPort.data.name.getValue()] = esiPort;
 
-    assert(esiPort.valid.direction == esiPort.data.direction &&
-           "Valid port direction must match data port.");
+    if (esiPort.valid.direction != esiPort.data.direction) {
+      pearl->emitError("Valid port '")
+          << esiPort.valid.name << "' direction must match data port.";
+      return nullptr;
+    }
+    if (esiPort.valid.type != b.getI1Type()) {
+      pearl->emitError("Valid signal '")
+          << esiPort.valid.name << "' must be i1 type";
+      return nullptr;
+    }
     controlPorts.insert(esiPort.valid.name.getValue());
 
-    assert(esiPort.ready.direction == (esiPort.data.isOutput()
+    if (esiPort.ready.direction != (esiPort.data.isOutput()
                                            ? rtl::PortDirection::INPUT
-                                           : rtl::PortDirection::OUTPUT) &&
-           "Ready must be opposite direction to data.");
+                                           : rtl::PortDirection::OUTPUT)) {
+      pearl->emitError("Ready port '")
+          << esiPort.ready.name << "' must be opposite direction to data signal.";
+      return nullptr;
+    }
+    if (esiPort.ready.type != b.getI1Type()) {
+      pearl->emitError("Ready signal '")
+          << esiPort.ready.name << "' must be i1 type";
+      return nullptr;
+    }
     controlPorts.insert(esiPort.ready.name.getValue());
   }
 

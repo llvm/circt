@@ -16,7 +16,6 @@ add_llvm_tool(esi-tester
 llvm_update_compile_flags(esi-tester)
 target_link_libraries(esi-tester
   PRIVATE
-  CIRCTFIRRTLTransforms
   CIRCTESI
   CIRCTRTL
   CIRCTSV
