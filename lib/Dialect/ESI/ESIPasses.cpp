@@ -608,7 +608,7 @@ namespace {
 /// Eliminate back-to-back wrap-unwraps to reduce the number of ESI channels.
 struct RemoveWrapUnwrap : public ConversionPattern {
 public:
-  RemoveWrapUnwrap(MLIRContext* context)
+  RemoveWrapUnwrap(MLIRContext *context)
       : ConversionPattern(MatchAnyOpTypeTag(), /*benefit=*/1, context) {}
 
   virtual LogicalResult

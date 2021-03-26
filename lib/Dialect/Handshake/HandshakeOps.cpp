@@ -143,8 +143,8 @@ void ForkOp::build(OpBuilder &builder, OperationState &result, Value operand,
   result.addAttribute("control", builder.getBoolAttr(isControl));
 }
 
-void handshake::ForkOp::getCanonicalizationPatterns(
-    RewritePatternSet &results, MLIRContext *context) {
+void handshake::ForkOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                    MLIRContext *context) {
   results.insert<circt::handshake::EliminateSimpleForksPattern>(context);
 }
 
@@ -361,8 +361,8 @@ LogicalResult EliminateSimpleControlMergesPattern::matchAndRewrite(
   return success();
 }
 
-void ControlMergeOp::getCanonicalizationPatterns(
-    RewritePatternSet &results, MLIRContext *context) {
+void ControlMergeOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                 MLIRContext *context) {
   results.insert<EliminateSimpleControlMergesPattern>(context);
 }
 

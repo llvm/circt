@@ -2701,36 +2701,37 @@ struct LLHDToLLVMLoweringPass
 };
 } // namespace
 
-void circt::populateLLHDToLLVMConversionPatterns(
-    LLVMTypeConverter &converter, RewritePatternSet &patterns,
-    size_t &sigCounter, size_t &regCounter) {
+void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
+                                                 RewritePatternSet &patterns,
+                                                 size_t &sigCounter,
+                                                 size_t &regCounter) {
   MLIRContext *ctx = converter.getDialect()->getContext();
 
   // Value creation conversion patterns.
-  patterns.add<ConstOpConversion, ArrayOpConversion,
-                  ArrayUniformOpConversion, TupleOpConversion>(ctx, converter);
+  patterns.add<ConstOpConversion, ArrayOpConversion, ArrayUniformOpConversion,
+               TupleOpConversion>(ctx, converter);
 
   // Extract conversion patterns.
   patterns.add<ExtractSliceOpConversion, DynExtractSliceOpConversion,
-                  ExtractElementOpConversion, DynExtractElementOpConversion>(
+               ExtractElementOpConversion, DynExtractElementOpConversion>(
       ctx, converter);
 
   // Insert conversion patterns.
-  patterns.add<InsertSliceOpConversion, InsertElementOpConversion>(
-      ctx, converter);
+  patterns.add<InsertSliceOpConversion, InsertElementOpConversion>(ctx,
+                                                                   converter);
 
   // Bitwise conversion patterns.
   patterns.add<NotOpConversion, ShrOpConversion, ShlOpConversion>(ctx,
-                                                                     converter);
+                                                                  converter);
   patterns.add<AndOpConversion, OrOpConversion, XorOpConversion>(converter);
 
   // Arithmetic conversion patterns.
   patterns.add<NegOpConversion, EqOpConversion, NeqOpConversion>(ctx,
-                                                                    converter);
+                                                                 converter);
 
   // Unit conversion patterns.
   patterns.add<TerminatorOpConversion, ProcOpConversion, WaitOpConversion,
-                  HaltOpConversion>(ctx, converter);
+               HaltOpConversion>(ctx, converter);
   patterns.add<EntityOpConversion>(ctx, converter, sigCounter, regCounter);
 
   // Signal conversion patterns.

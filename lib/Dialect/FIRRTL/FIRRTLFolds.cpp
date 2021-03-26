@@ -729,7 +729,7 @@ LogicalResult PartialConnectOp::canonicalize(PartialConnectOp op,
   return failure();
 }
 
-void PartialConnectOp::getCanonicalizationPatterns(
-    RewritePatternSet &results, MLIRContext *context) {
+void PartialConnectOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                   MLIRContext *context) {
   addCanonicalizerMethod<PartialConnectOp>(results, context);
 }
