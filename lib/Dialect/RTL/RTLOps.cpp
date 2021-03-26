@@ -523,20 +523,10 @@ static void print(OpAsmPrinter &p, RTLModuleOp op) {
 /// invalid IR.
 Operation *RTLModuleGeneratedOp::getGeneratorKindOp() {
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
-  if (!topLevelModuleOp)
-    return nullptr;
-
   return topLevelModuleOp.lookupSymbol(generatorKind());
 }
 
 static LogicalResult verifyRTLModuleGeneratedOp(RTLModuleGeneratedOp op) {
-  // Check that this instance is inside a module.
-  auto module = dyn_cast<mlir::ModuleOp>(op->getParentOp());
-  if (!module) {
-    op.emitOpError("should be embedded in a top-level module");
-    return failure();
-  }
-
   auto referencedKind = op.getGeneratorKindOp();
   if (referencedKind == nullptr)
     return op.emitError("Cannot find generator definition '")
@@ -548,31 +538,17 @@ static LogicalResult verifyRTLModuleGeneratedOp(RTLModuleGeneratedOp op) {
            << "' which is not a RTLGeneratorSchemaOp";
 
   auto referencedKindOp = dyn_cast<RTLGeneratorSchemaOp>(referencedKind);
-  SmallVector<StringRef, 8> requiredParams;
-  referencedKindOp.getRequiredParams(requiredParams);
+  auto paramRef = referencedKindOp.requiredAttrs();
   auto dict = op->getAttrDictionary();
-  for (auto str : requiredParams)
-    if (!dict.get(str))
-      return op.emitError("Missing attribute '") << str << "'";
-
+  for (auto str : paramRef) {
+    auto strAttr = str.dyn_cast<StringAttr>();
+    if (!strAttr)
+      return op.emitError("Unknown attribute type, expected a string");
+    if (!dict.get(strAttr.getValue()))
+      return op.emitError("Missing attribute '") << strAttr.getValue() << "'";
+  }
+  
   return success();
-}
-
-void RTLGeneratorSchemaOp::getRequiredParams(
-    SmallVectorImpl<StringRef> &results) {
-  for (auto param : requiredAttrs())
-    results.push_back(param.dyn_cast<StringAttr>().getValue());
-  if (auto p = getGeneratorParent())
-    dyn_cast<RTLGeneratorSchemaOp>(p).getRequiredParams(results);
-}
-
-Operation *RTLGeneratorSchemaOp::getGeneratorParent() {
-  if (!parent())
-    return nullptr;
-  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
-  if (!topLevelModuleOp)
-    return nullptr;
-  return topLevelModuleOp.lookupSymbol(*parent());
 }
 
 //===----------------------------------------------------------------------===//

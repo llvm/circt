@@ -169,35 +169,29 @@ def RTLGeneratorSchemaOp : RTLOp<"generator.schema",
       [Symbol, HasParent<"mlir::ModuleOp">]> {
   let summary = "RTL Generator Schema declaration";
   let description = [{
-    the "rtl.generator.schema" operation declares a kind of generated module by
+    The "rtl.generator.schema" operation declares a kind of generated module by
     declaring the schema of meta-data required.  
     A generated module instance of a schema is independent of the external
     method of producing it.  It is assumed that for well known schema instances,
-    multiple external tools might exist which can process it.  The schema may
-    inherit from another schema.  Generator nodes list attributes required by
-    rtl.module.generated instances and are inherited.
+    multiple external tools might exist which can process it.  Generator nodes 
+    list attributes required by rtl.module.generated instances.
 
     For example:
-    generator.schema @MEMORY, "Simple-Memory", ["write_latency", "read_latency"]
-    generator.schema @ARBLANGMEM (parent: @MEMORY), "FIRRTL-Memory", ["ports"]
-    module.generated @mymem, @ARBLANGMEM(ports) 
+    generator.schema @MEMORY, "Simple-Memory", ["ports", "write_latency", "read_latency"]
+    module.generated @mymem, @MEMORY(ports) 
       -> (ports) {write_latency=1, read_latency=1, ports=["read","write"]}
   }];
 
   let arguments = (ins SymbolNameAttr:$sym_name, StrAttr:$descriptor, 
-                       StrArrayAttr:$requiredAttrs, 
-                       OptionalAttr<FlatSymbolRefAttr>:$parent);
+                       StrArrayAttr:$requiredAttrs);
   let results = (outs);
   let assemblyFormat = [{
-      $sym_name ( `(` `parent` `:` $parent^ `)` )? `,` $descriptor `,`
-      $requiredAttrs attr-dict
+      $sym_name `,` $descriptor `,` $requiredAttrs attr-dict
     }];
 
   let extraClassDeclaration = [{   
     // get a list of required attributes.  Recuses into parents
-    void getRequiredParams(SmallVectorImpl<StringRef> &results);
-
-    Operation *getGeneratorParent();
+//    void getRequiredParams(SmallVectorImpl<StringRef> &results);
   }];
 }
 
@@ -205,14 +199,12 @@ def RTLModuleGeneratedOp : RTLOp<"module.generated",
       [IsolatedFromAbove, FunctionLike, Symbol, HasParent<"mlir::ModuleOp">]> {
   let summary = "RTL Generated Module";
   let description = [{
-    The "rtl.module.generated" operation represents a reference to a
-    Verilog module that will be produced by some external process.  
+    The "rtl.module.generated" operation represents a reference to an external
+    module that will be produced by some external process.  
     This represents the name and list of ports to be generated.
     
     The 'verilogName' attribute (when present) specifies the spelling of the
-    module name in Verilog we can use.  TODO: This is a hack because we don't
-    have proper parameterization in the rtl.dialect.  We need a way to represent
-    parameterized types instead of just concrete types.
+    module name in Verilog we can use.  See rtl.module for an explanation.
   }];
   let arguments = (ins FlatSymbolRefAttr:$generatorKind, 
                        OptionalAttr<StrAttr>:$verilogName);
