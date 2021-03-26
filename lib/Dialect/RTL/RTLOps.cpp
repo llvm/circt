@@ -113,6 +113,9 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> constants) {
 // RTLModuleOp
 //===----------------------------------------------------------------------===/
 
+// Flag for parsing different module types
+enum ExternModKind { PlainMod, ExternMod, GenMod };
+
 static void buildModule(OpBuilder &builder, OperationState &result,
                         StringAttr name, ArrayRef<ModulePortInfo> ports) {
   using namespace mlir::impl;
@@ -297,7 +300,7 @@ static ParseResult parseModuleFunctionSignature(
 }
 
 static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
-                                    bool isExtModule = false) {
+                                    ExternModKind modKind = PlainMod) {
   using namespace mlir::impl;
 
   SmallVector<OpAsmParser::OperandType, 4> entryArgs;
@@ -312,6 +315,14 @@ static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
   if (parser.parseSymbolName(nameAttr, ::mlir::SymbolTable::getSymbolAttrName(),
                              result.attributes))
     return failure();
+
+  FlatSymbolRefAttr kindAttr;
+  if (modKind == GenMod) {
+    if (parser.parseComma() ||
+        parser.parseAttribute(kindAttr, "generatorKind", result.attributes)) {
+      return failure();
+    }
+  }
 
   // Parse the function signature.
   bool isVariadic = false;
@@ -369,7 +380,7 @@ static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
 
   // Parse the optional function body.
   auto *body = result.addRegion();
-  if (!isExtModule) {
+  if (modKind == PlainMod) {
     if (parser.parseRegion(*body, entryArgs,
                            entryArgs.empty() ? ArrayRef<Type>() : argTypes))
       return failure();
@@ -381,7 +392,12 @@ static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
 
 static ParseResult parseRTLModuleExternOp(OpAsmParser &parser,
                                           OperationState &result) {
-  return parseRTLModuleOp(parser, result, /*isExtModule:*/ true);
+  return parseRTLModuleOp(parser, result, ExternMod);
+}
+
+static ParseResult parseRTLModuleGeneratedOp(OpAsmParser &parser,
+                                             OperationState &result) {
+  return parseRTLModuleOp(parser, result, GenMod);
 }
 
 FunctionType getRTLModuleOpType(Operation *op) {
@@ -461,7 +477,8 @@ static void printModuleSignature(OpAsmPrinter &p, Operation *op,
   }
 }
 
-static void printRTLModuleOp(OpAsmPrinter &p, Operation *op) {
+static void printRTLModuleOp(OpAsmPrinter &p, Operation *op,
+                             ExternModKind modKind) {
   using namespace mlir::impl;
 
   FunctionType fnType = getRTLModuleOpType(op);
@@ -474,23 +491,64 @@ static void printRTLModuleOp(OpAsmPrinter &p, Operation *op) {
           .getValue();
   p << op->getName() << ' ';
   p.printSymbolName(funcName);
-
+  if (modKind == GenMod) {
+    p << ", ";
+    p.printSymbolName(dyn_cast<RTLModuleGeneratedOp>(op).generatorKind());
+  }
   printModuleSignature(p, op, argTypes, /*isVariadic=*/false, resultTypes);
-  printFunctionAttributes(p, op, argTypes.size(), resultTypes.size());
+  printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(),
+                          modKind == GenMod
+                              ? ArrayRef<StringRef>("generatorKind")
+                              : ArrayRef<StringRef>());
 }
 
 static void print(OpAsmPrinter &p, RTLModuleExternOp op) {
-  printRTLModuleOp(p, op);
+  printRTLModuleOp(p, op, ExternMod);
+}
+static void print(OpAsmPrinter &p, RTLModuleGeneratedOp op) {
+  printRTLModuleOp(p, op, GenMod);
 }
 
 static void print(OpAsmPrinter &p, RTLModuleOp op) {
-  printRTLModuleOp(p, op);
+  printRTLModuleOp(p, op, PlainMod);
 
   // Print the body if this is not an external function.
   Region &body = op.getBody();
   if (!body.empty())
     p.printRegion(body, /*printEntryBlockArgs=*/false,
                   /*printBlockTerminators=*/true);
+}
+
+/// Lookup the generator for the symbol.  This returns null on
+/// invalid IR.
+Operation *RTLModuleGeneratedOp::getGeneratorKindOp() {
+  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
+  return topLevelModuleOp.lookupSymbol(generatorKind());
+}
+
+static LogicalResult verifyRTLModuleGeneratedOp(RTLModuleGeneratedOp op) {
+  auto referencedKind = op.getGeneratorKindOp();
+  if (referencedKind == nullptr)
+    return op.emitError("Cannot find generator definition '")
+           << op.generatorKind() << "'";
+
+  if (!isa<RTLGeneratorSchemaOp>(referencedKind))
+    return op.emitError("Symbol resolved to '")
+           << referencedKind->getName()
+           << "' which is not a RTLGeneratorSchemaOp";
+
+  auto referencedKindOp = dyn_cast<RTLGeneratorSchemaOp>(referencedKind);
+  auto paramRef = referencedKindOp.requiredAttrs();
+  auto dict = op->getAttrDictionary();
+  for (auto str : paramRef) {
+    auto strAttr = str.dyn_cast<StringAttr>();
+    if (!strAttr)
+      return op.emitError("Unknown attribute type, expected a string");
+    if (!dict.get(strAttr.getValue()))
+      return op.emitError("Missing attribute '") << strAttr.getValue() << "'";
+  }
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
