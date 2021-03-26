@@ -26,9 +26,10 @@ struct TestESIModWrap
     : public mlir::PassWrapper<TestESIModWrap, OperationPass<mlir::ModuleOp>> {
   void runOnOperation() override {
     auto mlirMod = getOperation();
-    mlir::OpBuilder b(mlirMod);
+    auto b = mlir::OpBuilder::atBlockTerminator(mlirMod.getBody());
 
-    for (rtl::RTLModuleOp mod : mlirMod.getOps<rtl::RTLModuleOp>()) {
+    SmallVector<rtl::RTLModuleOp, 8> mods(mlirMod.getOps<rtl::RTLModuleOp>());
+    for (rtl::RTLModuleOp mod : mods) {
       SmallVector<ESIPortMapping, 32> liPorts;
       findValidReadySignals(mod, liPorts);
       buildESIWrapper(b, mod, liPorts);

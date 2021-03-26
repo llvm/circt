@@ -20,6 +20,7 @@
 #include "llvm/ADT/SmallVector.h"
 
 namespace mlir {
+class OpBuilder;
 class PatternRewriter;
 class Operation;
 } // namespace mlir
@@ -49,13 +50,15 @@ public:
   /// To build a backedge op and manipulate it, we need a `PatternRewriter` and
   /// a `Location`. Store them during construct of this instance and use them
   /// when building.
+  BackedgeBuilder(mlir::OpBuilder &builder, mlir::Location loc);
   BackedgeBuilder(mlir::PatternRewriter &rewriter, mlir::Location loc);
   ~BackedgeBuilder();
   /// Create a typed backedge.
   Backedge get(mlir::Type resultType);
 
 private:
-  mlir::PatternRewriter &rewriter;
+  mlir::OpBuilder &builder;
+  mlir::PatternRewriter *rewriter;
   mlir::Location loc;
   llvm::SmallVector<mlir::Operation *, 16> edges;
 };

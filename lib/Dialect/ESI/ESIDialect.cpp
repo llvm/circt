@@ -14,10 +14,12 @@
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Dialect/RTL/RTLOps.h"
+#include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/ImplicitLocOpBuilder.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/Support/FormatVariadic.h"
@@ -113,12 +115,8 @@ Operation *circt::esi::buildESIWrapper(OpBuilder &b, Operation *mod,
   SmallVector<rtl::ModulePortInfo, 64> inputPortMap;
   // Map the new result to the old port.
   SmallVector<rtl::ModulePortInfo, 64> outputPortMap;
-  // Count of the number of input and inout ports of the module we are wrapping.
-  size_t wrappedModuleOperands = 0;
 
   for (auto port : ports) {
-    if (!port.isOutput())
-      ++wrappedModuleOperands;
     if (controlPorts.contains(port.name.getValue()))
       continue;
 
@@ -140,29 +138,45 @@ Operation *circt::esi::buildESIWrapper(OpBuilder &b, Operation *mod,
   StringAttr wrapperName = b.getStringAttr(
       (SymbolTable::getSymbolName(mod) + "_esi").toStringRef(wrapperNameBuf));
   auto wrapper = b.create<rtl::RTLModuleOp>(loc, wrapperName, wrapperPorts);
-  ImplicitLocOpBuilder modBuilder(wrapper);
+  wrapper.getBodyBlock()->clear(); // Erase the terminator.
+  auto modBuilder =
+      ImplicitLocOpBuilder::atBlockBegin(loc, wrapper.getBodyBlock());
+  BackedgeBuilder bb(modBuilder, modBuilder.getLoc());
 
   // Assemble the inputs for the wrapped module.
-  SmallVector<Value, 64> wrappedOperands(wrappedModuleOperands);
+  SmallVector<Value, 64> wrappedOperands(modType.getNumInputs());
+  llvm::DenseMap<size_t, Optional<Backedge>> readyPorts;
+
   for (auto port : wrapperPorts) {
     if (port.isOutput())
       continue;
 
-    if (!port.type.isa<esi::ChannelPort>()) {
+    Value arg = wrapper.getArgument(port.argNum);
+    if (dataPortMap.find(port.name.getValue()) == dataPortMap.end()) {
       // If it's just a regular port, it just gets passed through.
       size_t wrappedOpNum = inputPortMap[port.argNum].argNum;
-      Value arg = wrapper.getArgument(port.argNum);
       wrappedOperands[wrappedOpNum] = arg;
       continue;
     }
 
-    // modBuilder.create<UnwrapValidReady>();
+    ESIPortMapping esiPort = dataPortMap[port.name.getValue()];
+    Backedge ready = bb.get(modBuilder.getI1Type());
+    readyPorts[esiPort.ready.argNum] = ready;
+    auto unwrap = modBuilder.create<UnwrapValidReady>(arg, ready);
+    wrappedOperands[esiPort.data.argNum] = unwrap.rawOutput();
+    wrappedOperands[esiPort.valid.argNum] = unwrap.valid();
   }
 
   // Instantiate the wrapped module.
   auto wrappedInst = modBuilder.create<rtl::InstanceOp>(
       modType.getResults(), "wrapped", SymbolTable::getSymbolName(mod),
       wrappedOperands, DictionaryAttr());
+
+  for (size_t i = 0, e = readyPorts.size(); i < e; ++i) {
+    Optional<Backedge> readyPort = readyPorts[i];
+    if (readyPort)
+      readyPort->setValue(wrappedInst.getResult(i));
+  }
 
   SmallVector<Value, 64> outputs(wrapper.getNumResults());
   for (auto port : wrapperPorts) {
