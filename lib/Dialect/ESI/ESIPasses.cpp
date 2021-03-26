@@ -55,7 +55,8 @@ public:
   ESIRTLBuilder(Operation *top);
 
   RTLModuleExternOp declareStage();
-  RTLModuleExternOp declareCosimEndpoint();
+  // Will be unused when CAPNP is undefined
+  RTLModuleExternOp declareCosimEndpoint() __attribute__((unused));
 
   InterfaceOp getOrConstructInterface(ChannelPort);
   InterfaceOp constructInterface(ChannelPort);
