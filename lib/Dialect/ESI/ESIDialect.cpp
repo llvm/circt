@@ -80,21 +80,30 @@ void circt::esi::findValidReadySignals(Operation *modOp,
 }
 
 /// Build an ESI module wrapper, converting the wires with latency-insensitive
-/// semantics with ESI channels and passing through the rest.
-Operation *circt::esi::buildESIWrapper(OpBuilder &b, Operation *mod,
-                                       ArrayRef<ESIPortMapping> esiPortNames) {
+/// semantics to ESI channels and passing through the rest.
+Operation *
+circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
+                            ArrayRef<ESIPortMapping> portsToConvert) {
+  // In order to avoid the similar sounding and looking "wrapped" and "wrapper"
+  // names or the ambiguous "module", we use "pearl" for the module _being
+  // wrapped_ and "shell" for the _wrapper_ modules which is being created
+  // (terms typically used in latency insensitive design papers).
+
   auto *ctxt = b.getContext();
-  Location loc = mod->getLoc();
-  FunctionType modType = rtl::getModuleType(mod);
+  Location loc = pearl->getLoc();
+  FunctionType modType = rtl::getModuleType(pearl);
 
-  SmallVector<rtl::ModulePortInfo, 64> ports;
-  rtl::getModulePortInfo(mod, ports);
+  SmallVector<rtl::ModulePortInfo, 64> pearlPorts;
+  rtl::getModulePortInfo(pearl, pearlPorts);
 
-  // Memoize the list of ready/valid ports to ignore.
-  StringSet<> controlPorts;
-  // Store a lookup table indexed on the data port name.
-  llvm::StringMap<ESIPortMapping> dataPortMap;
-  for (const auto &esiPort : esiPortNames) {
+  // -----
+  // First, build up a set of data structures to use throughout this function.
+
+  StringSet<> controlPorts; // Memoize the list of ready/valid ports to ignore.
+  llvm::StringMap<ESIPortMapping>
+      dataPortMap; // Store a lookup table of ports to convert indexed on the
+                   // data port name.
+  for (const auto &esiPort : portsToConvert) {
     assert(esiPort.data.direction != rtl::PortDirection::INOUT);
     dataPortMap[esiPort.data.name.getValue()] = esiPort;
 
@@ -109,15 +118,18 @@ Operation *circt::esi::buildESIWrapper(OpBuilder &b, Operation *mod,
     controlPorts.insert(esiPort.ready.name.getValue());
   }
 
-  // Build the list of ports, skipping the valid/ready, and converting the ESI
-  // data ports to the ESI channel port type.
-  SmallVector<rtl::ModulePortInfo, 64> wrapperPorts;
-  // Map the new operand to the old port.
+  // -----
+  // Second, build a list of ports for the shell module, skipping the
+  // valid/ready, and converting the ESI data ports to the ESI channel port
+  // type. Store some bookkeeping information.
+
+  SmallVector<rtl::ModulePortInfo, 64> shellPorts;
+  // Map the shell operand to the pearl port.
   SmallVector<rtl::ModulePortInfo, 64> inputPortMap;
-  // Map the new result to the old port.
+  // Map the shell result to the pearl port.
   SmallVector<rtl::ModulePortInfo, 64> outputPortMap;
 
-  for (const auto port : ports) {
+  for (const auto port : pearlPorts) {
     if (controlPorts.contains(port.name.getValue()))
       continue;
 
@@ -132,51 +144,62 @@ Operation *circt::esi::buildESIWrapper(OpBuilder &b, Operation *mod,
       newPort.argNum = inputPortMap.size();
       inputPortMap.push_back(port);
     }
-    wrapperPorts.push_back(newPort);
+    shellPorts.push_back(newPort);
   }
 
-  // Create the wrapper module.
-  SmallString<64> wrapperNameBuf;
-  StringAttr wrapperName = b.getStringAttr(
-      (SymbolTable::getSymbolName(mod) + "_esi").toStringRef(wrapperNameBuf));
-  auto wrapper = b.create<rtl::RTLModuleOp>(loc, wrapperName, wrapperPorts);
-  wrapper.getBodyBlock()->clear(); // Erase the terminator.
-  auto modBuilder =
-      ImplicitLocOpBuilder::atBlockBegin(loc, wrapper.getBodyBlock());
-  BackedgeBuilder bb(modBuilder, modBuilder.getLoc());
-  SmallVector<Value, 64> outputs(
-      wrapper.getNumResults()); // rtl.output operands.
+  // -----
+  // Third, create the shell module and also some builders for the inside.
 
-  // Assemble the inputs for the wrapped module.
-  SmallVector<Value, 64> wrappedOperands(modType.getNumInputs());
-  // Index the backedges by the wrapped modules result number.
+  SmallString<64> shellNameBuf;
+  StringAttr shellName = b.getStringAttr(
+      (SymbolTable::getSymbolName(pearl) + "_esi").toStringRef(shellNameBuf));
+  auto shell = b.create<rtl::RTLModuleOp>(loc, shellName, shellPorts);
+  shell.getBodyBlock()->clear(); // Erase the terminator.
+  auto modBuilder =
+      ImplicitLocOpBuilder::atBlockBegin(loc, shell.getBodyBlock());
+  BackedgeBuilder bb(modBuilder, modBuilder.getLoc());
+
+  // Hold the operands for `rtl.output` here.
+  SmallVector<Value, 64> outputs(shell.getNumResults());
+
+  // -----
+  // Fourth, assemble the inputs for the pearl module AND build all the ESI wrap
+  // and unwrap ops for both the input and output channels.
+
+  SmallVector<Value, 64> pearlOperands(modType.getNumInputs());
+
+  // Since we build all the ESI wrap and unwrap operations before pearl
+  // instantiation, we only need backedges from the pearl instance result. Index
+  // the backedges by the pearl modules result number.
   llvm::DenseMap<size_t, Backedge> backedges;
 
-  // Go through the input ports, either tunneling them through or unwrapping
-  // them.
-  for (const auto port : wrapperPorts) {
+  // Go through the shell input ports, either tunneling them through or
+  // unwrapping the ESI channels. We'll need backedges for the ready signals
+  // since they are results from the upcoming pearl instance.
+  for (const auto port : shellPorts) {
     if (port.isOutput())
       continue;
 
-    Value arg = wrapper.getArgument(port.argNum);
+    Value arg = shell.getArgument(port.argNum);
     auto esiPort = dataPortMap.find(port.name.getValue());
     if (esiPort == dataPortMap.end()) {
       // If it's just a regular port, it just gets passed through.
-      size_t wrappedOpNum = inputPortMap[port.argNum].argNum;
-      wrappedOperands[wrappedOpNum] = arg;
+      size_t pearlOpNum = inputPortMap[port.argNum].argNum;
+      pearlOperands[pearlOpNum] = arg;
       continue;
     }
 
     Backedge ready = bb.get(modBuilder.getI1Type());
     backedges.insert(std::make_pair(esiPort->second.ready.argNum, ready));
     auto unwrap = modBuilder.create<UnwrapValidReady>(arg, ready);
-    wrappedOperands[esiPort->second.data.argNum] = unwrap.rawOutput();
-    wrappedOperands[esiPort->second.valid.argNum] = unwrap.valid();
+    pearlOperands[esiPort->second.data.argNum] = unwrap.rawOutput();
+    pearlOperands[esiPort->second.valid.argNum] = unwrap.valid();
   }
 
-  // Iterate through the output ports, identify the ESI channels, and build
-  // wrappers.
-  for (const auto port : wrapperPorts) {
+  // Iterate through the shell output ports, identify the ESI channels, and
+  // build ESI wrapper ops for signals being output from the pearl. The data and
+  // valid for these wrap ops will need to be backedges.
+  for (const auto port : shellPorts) {
     if (!port.isOutput())
       continue;
     auto esiPort = dataPortMap.find(port.name.getValue());
@@ -189,34 +212,37 @@ Operation *circt::esi::buildESIWrapper(OpBuilder &b, Operation *mod,
     backedges.insert(std::make_pair(esiPort->second.data.argNum, data));
     backedges.insert(std::make_pair(esiPort->second.valid.argNum, valid));
     outputs[port.argNum] = wrap.chanOutput();
-    wrappedOperands[esiPort->second.ready.argNum] = wrap.ready();
+    pearlOperands[esiPort->second.ready.argNum] = wrap.ready();
   }
 
-  // Instantiate the wrapped module.
-  auto wrappedInst = modBuilder.create<rtl::InstanceOp>(
-      modType.getResults(), "wrapped", SymbolTable::getSymbolName(mod),
-      wrappedOperands, DictionaryAttr());
+  // -----
+  // Fifth, instantiate the pearl module.
 
-  // Find all the regular outputs and either tunnel them through.
-  for (const auto port : wrapperPorts) {
+  auto pearlInst = modBuilder.create<rtl::InstanceOp>(
+      modType.getResults(), "pearl", SymbolTable::getSymbolName(pearl),
+      pearlOperands, DictionaryAttr());
+
+  // Hookup all the backedges.
+  for (size_t i = 0, e = pearlInst.getNumResults(); i < e; ++i) {
+    auto backedge = backedges.find(i);
+    if (backedge != backedges.end())
+      backedge->second.setValue(pearlInst.getResult(i));
+  }
+
+  // -----
+  // Finally, find all the regular outputs and either tunnel them through.
+  for (const auto port : shellPorts) {
     if (!port.isOutput())
       continue;
     auto esiPort = dataPortMap.find(port.name.getValue());
     if (esiPort != dataPortMap.end())
       continue;
-    size_t wrappedResNum = outputPortMap[port.argNum].argNum;
-    outputs[port.argNum] = wrappedInst.getResult(wrappedResNum);
-  }
-
-  // Hookup all the backedges.
-  for (size_t i = 0, e = wrappedInst.getNumResults(); i < e; ++i) {
-    auto backedge = backedges.find(i);
-    if (backedge != backedges.end())
-      backedge->second.setValue(wrappedInst.getResult(i));
+    size_t pearlResNum = outputPortMap[port.argNum].argNum;
+    outputs[port.argNum] = pearlInst.getResult(pearlResNum);
   }
 
   modBuilder.create<rtl::OutputOp>(outputs);
-  return wrapper;
+  return shell;
 }
 
 #include "circt/Dialect/ESI/ESIAttrs.cpp.inc"

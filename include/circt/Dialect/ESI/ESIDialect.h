@@ -60,7 +60,7 @@ void findValidReadySignals(Operation *modOp,
                            SmallVectorImpl<ESIPortMapping> &names);
 
 /// Build an ESI module wrapper, converting the wires with latency-insensitive
-/// semantics with ESI channels and passing through the rest.
+/// semantics to ESI channels and passing through the rest.
 Operation *buildESIWrapper(OpBuilder &b, Operation *mod,
                            ArrayRef<ESIPortMapping> esiPortNames);
 
