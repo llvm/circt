@@ -1,29 +1,9 @@
 ; RUN: circt-translate -import-firrtl -verify-diagnostics --split-input-file %s
 
-; COM: A legacy `firrtl.annotations.ComponentName` is unsupported.
-
-; expected-error @+2 {{Invalid/unsupported annotation format}}
-; expected-note @+1 {{"target": /* error: Unsupported target (not a CircuitTarget or ModuleTarget) */ "Foo.Foo.a"}}
-circuit Foo: %[[{"a":"a","target":"Foo.Foo.a"}]]
-  module Foo:
-    skip
-
-; // -----
-
-; COM: A ReferenceTarget Annotation is unsupported.
-
-; expected-error @+2 {{Invalid/unsupported annotation format}}
-; expected-note @+1 {{"target": /* error: Unsupported target (not a CircuitTarget or ModuleTarget) */ "~Foo|Foo>a"}}
-circuit Foo: %[[{"a":"a","target":"~Foo|Foo>a"}]]
-  module Foo:
-    skip
-
-; // -----
-
 ; COM: A ReferenceTarget Annotation with a subindex is unsupported.
 
 ; expected-error @+2 {{Invalid/unsupported annotation format}}
-; expected-note @+1 {{"target": /* error: Unsupported target (not a CircuitTarget or ModuleTarget) */ "~Foo|Foo>a.b"}}
+; expected-note @+1 {{"target": /* error: Unsupported target (not a local CircuitTarget, ModuleTarget, or ReferenceTarget without subfield or subindex) */ "~Foo|Foo>a.b"}}
 circuit Foo: %[[{"a":"a","target":"~Foo|Foo>a.b"}]]
   module Foo:
     skip
@@ -33,7 +13,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>a.b"}]]
 ; COM: A ReferenceTarget Annotation with a subfield is unsupported.
 
 ; expected-error @+2 {{Invalid/unsupported annotation format}}
-; expected-note @+1 {{"target": /* error: Unsupported target (not a CircuitTarget or ModuleTarget) */ "~Foo|Foo>a[0]"}}
+; expected-note @+1 {{"target": /* error: Unsupported target (not a local CircuitTarget, ModuleTarget, or ReferenceTarget without subfield or subindex) */ "~Foo|Foo>a[0]"}}
 circuit Foo: %[[{"a":"a","target":"~Foo|Foo>a[0]"}]]
   module Foo:
     skip
@@ -43,7 +23,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>a[0]"}]]
 ; COM: A non-local Annotation is unsupported.
 
 ; expected-error @+2 {{Invalid/unsupported annotation format}}
-; expected-note @+1 {{"target": /* error: Unsupported target (not a CircuitTarget or ModuleTarget) */ "~Foo|Foo/bar:Bar"}}
+; expected-note @+1 {{"target": /* error: Unsupported target (not a local CircuitTarget, ModuleTarget, or ReferenceTarget without subfield or subindex) */ "~Foo|Foo/bar:Bar"}}
 circuit Foo: %[[{"a":"a","target":"~Foo|Foo/bar:Bar"}]]
   module Foo:
     skip
