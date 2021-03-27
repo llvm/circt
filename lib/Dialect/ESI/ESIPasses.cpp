@@ -398,10 +398,11 @@ bool ESIPortsPass::updateFunc(RTLModuleOp mod) {
   // Reconstruct the list of operand types, changing the type whenever an ESI
   // port is found.
   SmallVector<Type, 16> newArgTypes;
-  SmallVector<DictionaryAttr, 8> newArgAttrs;
+  SmallVector<DictionaryAttr, 16> newArgAttrs;
+  SmallVector<std::pair<Value, DictionaryAttr>, 8> newReadySignals;
 
   SmallVector<DictionaryAttr, 8> oldArgAttrs;
-  mod.getAllResultAttrs(oldArgAttrs);
+  mod.getAllArgAttrs(oldArgAttrs);
   for (size_t i = 0, e = funcType.getNumInputs(); i < e; ++i) {
     Type argTy = funcType.getInput(i);
 
@@ -413,11 +414,17 @@ bool ESIPortsPass::updateFunc(RTLModuleOp mod) {
     }
 
     // When we find one, add a data and valid signal to the new args.
-    auto sigName =
-        mod.getArgAttrOfType<StringAttr>(newArgTypes.size(), "rtl.name");
-    newArgTypes.push_back(chanTy);
+    newArgTypes.push_back(chanTy.getInner());
+    newArgTypes.push_back(i1);
     newArgAttrs.push_back(oldArgAttrs[i]);
-    // newValidReadyInputSignals.push_back(sigName);
+    newArgAttrs.push_back(appendToRtlName(oldArgAttrs[i], "_valid"));
+    Value data = mod.front().insertArgument(i, chanTy.getInner());
+    Value valid = mod.front().insertArgument(i + 1, i1);
+    auto wrap = modBuilder.create<WrapValidReady>(data, valid);
+    mod.front().getArgument(i + 2).replaceAllUsesWith(wrap.chanOutput());
+    mod.front().eraseArgument(i + 2);
+    newReadySignals.push_back(std::make_pair(
+        wrap.ready(), appendToRtlName(oldArgAttrs[i], "_ready")));
 
     updated = true;
   }
@@ -434,6 +441,7 @@ bool ESIPortsPass::updateFunc(RTLModuleOp mod) {
   rtl::OutputOp outOp =
       dyn_cast<rtl::OutputOp>(mod.getBodyBlock()->getTerminator());
 
+  modBuilder.setInsertionPointToEnd(mod.getBodyBlock());
   for (size_t resNum = 0, numRes = funcType.getNumResults(); resNum < numRes;
        ++resNum) {
     Type resTy = funcType.getResult(resNum);
@@ -461,11 +469,16 @@ bool ESIPortsPass::updateFunc(RTLModuleOp mod) {
     updated = true;
   }
 
+  for (const auto &readySig : newReadySignals) {
+    newResultTypes.push_back(i1);
+    newResultAttrs.push_back(readySig.second);
+    newOutputOperands.push_back(readySig.first);
+  }
+
   if (!updated)
     return false;
 
   outOp.erase();
-  modBuilder.setInsertionPointToEnd(mod.getBodyBlock());
   modBuilder.create<rtl::OutputOp>(newOutputOperands);
 
   // Set the new types.
