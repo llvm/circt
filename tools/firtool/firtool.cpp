@@ -196,11 +196,12 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
     // If enabled, run the optimizer.
     if (!disableOptimization) {
-      pm.addNestedPass<rtl::RTLModuleOp>(sv::createRTLCleanupPass());
+      auto &modulePM = pm.nest<rtl::RTLModuleOp>();
+      modulePM.addPass(sv::createRTLCleanupPass());
       // FIXME: Disabled because CSE crashes on graph regions in some cases.
       // Issue #813: https://github.com/llvm/circt/issues/813
-      // pm.addPass(createCSEPass());
-      pm.addPass(createCanonicalizerPass());
+      // modulePM.addPass(createCSEPass());
+      modulePM.addPass(createCanonicalizerPass());
     }
   }
 
