@@ -64,6 +64,11 @@ static cl::opt<bool> disableOptimization("disable-opt",
 
 static cl::opt<bool> lowerToRTL("lower-to-rtl",
                                 cl::desc("run the lower-to-rtl pass"));
+static cl::opt<bool> imconstprop(
+    "imconstprop",
+    cl::desc(
+        "Enable intermodule constant propagation and dead code elimination"),
+    cl::init(false));
 
 static cl::opt<bool>
     enableLowerTypes("enable-lower-types",
@@ -176,6 +181,9 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   // Allow optimizations to run multithreaded.
   context.disableMultithreading(false);
 
+  if (imconstprop)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
+
   if (blackboxMemory)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxMemoryPass());
 
@@ -187,7 +195,9 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     // If enabled, run the optimizer.
     if (!disableOptimization) {
       pm.addNestedPass<rtl::RTLModuleOp>(sv::createRTLCleanupPass());
-      pm.addPass(createCSEPass());
+      // FIXME: Disabled because CSE crashes on graph regions in some cases.
+      // Issue #813: https://github.com/llvm/circt/issues/813
+      // pm.addPass(createCSEPass());
       pm.addPass(createCanonicalizerPass());
     }
   }

@@ -1579,7 +1579,7 @@ struct HandshakeDataflowPass
     ConversionTarget target(getContext());
     target.addLegalDialect<HandshakeOpsDialect, StandardOpsDialect>();
 
-    OwningRewritePatternList patterns;
+    RewritePatternSet patterns(&getContext());
     patterns.insert<FuncOpLowering>(m.getContext());
 
     if (failed(applyPartialConversion(m, target, std::move(patterns))))
@@ -1613,7 +1613,7 @@ struct HandshakeCanonicalizePass
     //         Optional<ConversionTarget::DynamicLegalityCallbackFn>(
     //            [](Operation *op) { return op->hasOneUse(); }));
 
-    // OwningRewritePatternList patterns;
+    // RewritePatternSet patterns;
     // patterns.insert<HandshakeCanonicalizePattern>("std.muli", 1,
     // m.getContext()); applyPatternsAndFoldGreedily(
 

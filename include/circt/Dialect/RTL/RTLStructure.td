@@ -83,7 +83,7 @@ def RTLModuleOp : RTLOp<"module",
 }
 
 def RTLModuleExternOp : RTLOp<"module.extern",
-      [IsolatedFromAbove, FunctionLike, Symbol, HasParent<"mlir::ModuleOp">]> {
+      [FunctionLike, Symbol, HasParent<"mlir::ModuleOp">]> {
   let summary = "RTL external Module";
   let description = [{
     The "rtl.module.extern" operation represents an external reference to a
@@ -163,6 +163,102 @@ def RTLModuleExternOp : RTLOp<"module.extern",
 
   let printer = "return ::print(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
+}
+
+def RTLGeneratorSchemaOp : RTLOp<"generator.schema", 
+      [Symbol, HasParent<"mlir::ModuleOp">]> {
+  let summary = "RTL Generator Schema declaration";
+  let description = [{
+    The "rtl.generator.schema" operation declares a kind of generated module by
+    declaring the schema of meta-data required.  
+    A generated module instance of a schema is independent of the external
+    method of producing it.  It is assumed that for well known schema instances,
+    multiple external tools might exist which can process it.  Generator nodes 
+    list attributes required by rtl.module.generated instances.
+
+    For example:
+    generator.schema @MEMORY, "Simple-Memory", ["ports", "write_latency", "read_latency"]
+    module.generated @mymem, @MEMORY(ports) 
+      -> (ports) {write_latency=1, read_latency=1, ports=["read","write"]}
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name, StrAttr:$descriptor, 
+                       StrArrayAttr:$requiredAttrs);
+  let results = (outs);
+  let assemblyFormat = [{
+      $sym_name `,` $descriptor `,` $requiredAttrs attr-dict
+    }];
+
+  let extraClassDeclaration = [{   
+    // get a list of required attributes.  Recuses into parents
+//    void getRequiredParams(SmallVectorImpl<StringRef> &results);
+  }];
+}
+
+def RTLModuleGeneratedOp : RTLOp<"module.generated",
+      [IsolatedFromAbove, FunctionLike, Symbol, HasParent<"mlir::ModuleOp">]> {
+  let summary = "RTL Generated Module";
+  let description = [{
+    The "rtl.module.generated" operation represents a reference to an external
+    module that will be produced by some external process.  
+    This represents the name and list of ports to be generated.
+    
+    The 'verilogName' attribute (when present) specifies the spelling of the
+    module name in Verilog we can use.  See rtl.module for an explanation.
+  }];
+  let arguments = (ins FlatSymbolRefAttr:$generatorKind, 
+                       OptionalAttr<StrAttr>:$verilogName);
+  let results = (outs);
+  let regions = (region AnyRegion:$body);
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name,
+                   "ArrayRef<ModulePortInfo>":$ports,
+                   CArg<"StringRef", "StringRef()">:$verilogName)>
+  ];
+
+  let extraClassDeclaration = [{   
+    // Decode information about the input and output ports on this module.
+    void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
+      getModulePortInfo(*this, results);
+    }
+
+    /// Return the name to use for the Verilog module that we're referencing
+    /// here.  This is typically the symbol, but can be overridden with the
+    /// verilogName attribute.
+    StringRef getVerilogModuleName();
+
+    /// Lookup the generator kind for the symbol.  This returns null on
+    /// invalid IR.
+    Operation *getGeneratorKindOp();
+
+  private:
+    // This trait needs access to the hooks defined below.
+    friend class OpTrait::FunctionLike<RTLModuleGeneratedOp>;
+
+    /// Returns the number of arguments, implementing OpTrait::FunctionLike.
+    unsigned getNumFuncArguments() { return getType().getInputs().size(); }
+    /// Returns the number of results, implementing OpTrait::FunctionLike.
+    unsigned getNumFuncResults() { return getType().getResults().size(); }
+
+    /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
+    /// attribute is present and checks if it holds a function type.  Ensures
+    /// getType, getNumFuncArguments, and getNumFuncResults can be called
+    ///  safely.
+    LogicalResult verifyType() {
+      auto type = getTypeAttr().getValue();
+      if (!type.isa<FunctionType>())
+        return emitOpError("requires '" + getTypeAttrName() +
+                           "' attribute of function type");
+      return success();
+    }
+  public:
+  }];
+
+  let printer = "return ::print(p, *this);";
+  let parser = "return ::parse$cppClass(parser, result);";
+  let verifier = "return ::verify$cppClass(*this);";
 }
 
 def InstanceOp : RTLOp<"instance",

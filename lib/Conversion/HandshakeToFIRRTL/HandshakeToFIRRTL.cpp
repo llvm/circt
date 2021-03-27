@@ -2205,7 +2205,7 @@ public:
     target.addLegalDialect<FIRRTLDialect>();
     target.addIllegalDialect<handshake::HandshakeOpsDialect>();
 
-    OwningRewritePatternList patterns;
+    RewritePatternSet patterns(op.getContext());
     patterns.insert<HandshakeFuncOpLowering>(op.getContext());
 
     if (failed(applyPartialConversion(op, target, std::move(patterns))))
