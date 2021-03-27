@@ -129,10 +129,11 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
     controlPorts.insert(esiPort.valid.name.getValue());
 
     if (esiPort.ready.direction != (esiPort.data.isOutput()
-                                           ? rtl::PortDirection::INPUT
-                                           : rtl::PortDirection::OUTPUT)) {
+                                        ? rtl::PortDirection::INPUT
+                                        : rtl::PortDirection::OUTPUT)) {
       pearl->emitError("Ready port '")
-          << esiPort.ready.name << "' must be opposite direction to data signal.";
+          << esiPort.ready.name
+          << "' must be opposite direction to data signal.";
       return nullptr;
     }
     if (esiPort.ready.type != b.getI1Type()) {
