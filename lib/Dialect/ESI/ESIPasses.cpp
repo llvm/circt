@@ -379,19 +379,24 @@ bool ESIPortsPass::updateFunc(RTLModuleOp mod) {
   auto funcType = mod.getType();
   ImplicitLocOpBuilder modBuilder(mod.getLoc(), mod.getBody());
   Type i1 = modBuilder.getI1Type();
+  Identifier rtlName = modBuilder.getIdentifier("rtl.name");
 
   bool updated = false;
 
   // Reconstruct the list of operand types, changing the type whenever an ESI
   // port is found.
   SmallVector<Type, 16> newArgTypes;
-  SmallVector<StringAttr, 16> newValidReadyInputSignals;
+  SmallVector<DictionaryAttr, 8> newArgAttrs;
+
+  SmallVector<DictionaryAttr, 8> oldArgAttrs;
+  mod.getAllResultAttrs(oldArgAttrs);
   for (size_t i = 0, e = funcType.getNumInputs(); i < e; ++i) {
     Type argTy = funcType.getInput(i);
 
     auto chanTy = argTy.dyn_cast<ChannelPort>();
     if (!chanTy) {
       newArgTypes.push_back(argTy);
+      newArgAttrs.push_back(oldArgAttrs[i]);
       continue;
     }
 
@@ -399,7 +404,8 @@ bool ESIPortsPass::updateFunc(RTLModuleOp mod) {
     auto sigName =
         mod.getArgAttrOfType<StringAttr>(newArgTypes.size(), "rtl.name");
     newArgTypes.push_back(chanTy);
-    newValidReadyInputSignals.push_back(sigName);
+    newArgAttrs.push_back(oldArgAttrs[i]);
+    // newValidReadyInputSignals.push_back(sigName);
 
     updated = true;
   }
@@ -409,8 +415,13 @@ bool ESIPortsPass::updateFunc(RTLModuleOp mod) {
   // operand.
   SmallVector<Type, 8> newResultTypes;
   SmallVector<Value, 8> newOutputOperands;
+  SmallVector<DictionaryAttr, 8> newResultAttrs;
+
+  SmallVector<DictionaryAttr, 8> oldResultAttrs;
+  mod.getAllResultAttrs(oldResultAttrs);
   rtl::OutputOp outOp =
       dyn_cast<rtl::OutputOp>(mod.getBodyBlock()->getTerminator());
+
   for (size_t resNum = 0, numRes = funcType.getNumResults(); resNum < numRes;
        ++resNum) {
     Type resTy = funcType.getResult(resNum);
@@ -418,6 +429,7 @@ bool ESIPortsPass::updateFunc(RTLModuleOp mod) {
     Value oldOutputValue = outOp.getOperand(resNum);
     if (!chanTy) {
       newResultTypes.push_back(resTy);
+      newResultAttrs.push_back(oldResultAttrs[resNum]);
       newOutputOperands.push_back(oldOutputValue);
       continue;
     }
@@ -429,6 +441,22 @@ bool ESIPortsPass::updateFunc(RTLModuleOp mod) {
     auto unwrap = modBuilder.create<UnwrapValidReady>(oldOutputValue, ready);
     newOutputOperands.push_back(unwrap.rawOutput());
     newOutputOperands.push_back(unwrap.valid());
+    newResultAttrs.push_back(oldResultAttrs[resNum]);
+
+    SmallString<32> validPortName("valid");
+    SmallString<32> readyPortName("ready");
+    if (auto nameAttr = oldResultAttrs[resNum].getAs<StringAttr>(rtlName)) {
+      validPortName = nameAttr.getValue();
+      validPortName.append("_valid");
+      readyPortName = nameAttr.getValue();
+      readyPortName.append("_ready");
+    }
+    NamedAttribute validPortNameAttr =
+        NamedAttribute(rtlName, modBuilder.getStringAttr(validPortName));
+    newResultAttrs.push_back(modBuilder.getDictionaryAttr({validPortNameAttr}));
+    NamedAttribute readyPortNameAttr =
+        NamedAttribute(rtlName, modBuilder.getStringAttr(readyPortName));
+    newArgAttrs.push_back(modBuilder.getDictionaryAttr({readyPortNameAttr}));
 
     updated = true;
   }
@@ -443,6 +471,8 @@ bool ESIPortsPass::updateFunc(RTLModuleOp mod) {
   // Set the new types.
   auto newFuncType = FunctionType::get(ctxt, newArgTypes, newResultTypes);
   mod.setType(newFuncType);
+  mod.setAllArgAttrs(newArgAttrs);
+  mod.setAllResultAttrs(newResultAttrs);
   return true;
 }
 

@@ -56,17 +56,18 @@
 //   // RTL-NOT: esi
 // }
 
-rtl.module @esiInts(%clk: i1, %i: i32) -> (%mutatedInts: !esi.channel<i8>, %c4: i4) {
+// rtl.module @esiInts(%clk: i1, %i: i32) -> (%mutatedInts: !esi.channel<i8>, %c4: i4) {
+//   %m = comb.extract %i from 5 : (i32) -> i8
+//   %i_valid = rtl.constant 1 : i1
+//   %mutInts, %rdy = esi.wrap.vr %m, %i_valid : i8
+//   %c4 = rtl.constant 0 : i4
+//   rtl.output %mutInts, %c4 : !esi.channel<i8>, i4
+// }
+
+rtl.module @esiInts(%clk: i1, %ints: !esi.channel<i32>) -> (%mutatedInts: !esi.channel<i8>, %c4: i4) {
+  %i, %i_valid = esi.unwrap.vr %ints, %rdy : i32
   %m = comb.extract %i from 5 : (i32) -> i8
-  %i_valid = rtl.constant 1 : i1
   %mutInts, %rdy = esi.wrap.vr %m, %i_valid : i8
   %c4 = rtl.constant 0 : i4
   rtl.output %mutInts, %c4 : !esi.channel<i8>, i4
 }
-
-// rtl.module @esiInts(%clk: i1, %ints: !esi.channel<i32>) -> (%mutatedInts: !esi.channel<i8>) {
-  // %i, %i_valid = esi.unwrap.vr %ints, %rdy : i32
-  // %m = comb.extract %i from 5 : (i32) -> i8
-  // %mutInts, %rdy = esi.wrap.vr %m, %i_valid : i8
-  // rtl.output %mutInts : !esi.channel<i8>
-// }
