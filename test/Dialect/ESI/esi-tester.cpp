@@ -26,7 +26,7 @@ struct TestESIModWrap
     : public mlir::PassWrapper<TestESIModWrap, OperationPass<mlir::ModuleOp>> {
   void runOnOperation() override {
     auto mlirMod = getOperation();
-    auto b = mlir::OpBuilder::atBlockTerminator(mlirMod.getBody());
+    auto b = mlir::OpBuilder::atBlockEnd(mlirMod.getBody());
 
     SmallVector<rtl::RTLModuleOp, 8> mods;
     for (Operation *mod : mlirMod.getOps<rtl::RTLModuleExternOp>()) {
