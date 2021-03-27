@@ -54,8 +54,12 @@ void circt::esi::findValidReadySignals(
     if (port.direction == rtl::PortDirection::INOUT)
       continue;
 
+    StringRef portDataName = port.getName();
+    if (portDataName.endswith("_data")) // Detect both `foo` and `foo_data`.
+      portDataName = portDataName.substr(0, portDataName.size() - 5);
+
     // Try to find a corresponding 'valid' port.
-    SmallString<64> portName = port.getName();
+    SmallString<64> portName = portDataName;
     portName.append("_valid");
     auto valid = nameMap.find(portName);
     if (valid == nameMap.end() || valid->second.direction != port.direction ||
@@ -63,7 +67,7 @@ void circt::esi::findValidReadySignals(
       continue;
 
     // Try to find a corresponding 'ready' port.
-    portName = port.getName();
+    portName = portDataName;
     portName.append("_ready");
     rtl::PortDirection readyDir = port.direction == rtl::PortDirection::INPUT
                                       ? rtl::PortDirection::OUTPUT
