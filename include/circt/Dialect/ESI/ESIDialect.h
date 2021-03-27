@@ -19,8 +19,11 @@
 #ifndef CIRCT_DIALECT_ESI_ESIDIALECT_H
 #define CIRCT_DIALECT_ESI_ESIDIALECT_H
 
+#include "circt/Dialect/RTL/RTLOps.h"
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
+
 namespace circt {
 namespace esi {
 
@@ -45,6 +48,23 @@ private:
 
 void registerESIPasses();
 void registerESITranslations();
+
+/// A triple of signals which represent a latency insensitive interface with
+/// valid/ready semantics.
+struct ESIPortValidReadyMapping {
+  rtl::ModulePortInfo data, valid, ready;
+};
+
+/// Find all the port triples on a module which fit the
+/// <name>/<name>_valid/<name>_ready pattern. Ready must be the opposite
+/// direction of the other two.
+void findValidReadySignals(Operation *modOp,
+                           SmallVectorImpl<ESIPortValidReadyMapping> &names);
+
+/// Build an ESI module wrapper, converting the wires with latency-insensitive
+/// semantics to ESI channels and passing through the rest.
+Operation *buildESIWrapper(OpBuilder &b, Operation *mod,
+                           ArrayRef<ESIPortValidReadyMapping> esiPortNames);
 
 } // namespace esi
 } // namespace circt

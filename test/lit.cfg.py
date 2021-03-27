@@ -61,6 +61,7 @@ tools = [
     'circt-opt',
     'circt-translate',
     'circt-capi-ir-test',
+    'esi-tester',
     'llhd-sim'
 ]
 
