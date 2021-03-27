@@ -323,11 +323,15 @@ void ESIToPhysicalPass::runOnOperation() {
 
 namespace {
 /// Convert all the ESI ports on modules to some lower construct. SV interfaces
-/// for now. In the future, it may be possible to select a different format.
+/// for now on external modules, ready/valid to modules defined internally. In
+/// the future, it may be possible to select a different format.
 struct ESIPortsPass : public LowerESIPortsBase<ESIPortsPass> {
   void runOnOperation() override;
 
 private:
+  bool updateFunc(RTLModuleOp mod);
+  void updateInstance(RTLModuleOp mod, InstanceOp inst);
+
   bool updateFunc(RTLModuleExternOp mod);
   void updateInstance(RTLModuleExternOp mod, InstanceOp inst);
   ESIRTLBuilder *build;
@@ -341,19 +345,105 @@ void ESIPortsPass::runOnOperation() {
   build = &b;
 
   // Find all externmodules and try to modify them. Remember the modified ones.
-  DenseMap<StringRef, RTLModuleExternOp> modsMutated;
+  DenseMap<StringRef, RTLModuleExternOp> externModsMutated;
   for (auto mod : top.getOps<RTLModuleExternOp>())
     if (updateFunc(mod))
-      modsMutated[mod.getName()] = mod;
+      externModsMutated[mod.getName()] = mod;
 
   // Find all instances and update them.
-  top.walk([&modsMutated, this](InstanceOp inst) {
-    auto mapIter = modsMutated.find(inst.moduleName());
-    if (mapIter != modsMutated.end())
+  top.walk([&externModsMutated, this](InstanceOp inst) {
+    auto mapIter = externModsMutated.find(inst.moduleName());
+    if (mapIter != externModsMutated.end())
       updateInstance(mapIter->second, inst);
   });
 
+  // Find all modules and try to modify them. Remember the modified ones.
+  DenseMap<StringRef, RTLModuleOp> modsMutated;
+  for (auto mod : top.getOps<RTLModuleOp>())
+    if (updateFunc(mod))
+      modsMutated[mod.getName()] = mod;
+
+  // // Find all instances and update them.
+  // top.walk([&modsMutated, this](InstanceOp inst) {
+  //   auto mapIter = modsMutated.find(inst.moduleName());
+  //   if (mapIter != modsMutated.end())
+  //     updateInstance(mapIter->second, inst);
+  // });
+
   build = nullptr;
+}
+
+/// Convert all input and output ChannelPorts into valid/ready wires.
+bool ESIPortsPass::updateFunc(RTLModuleOp mod) {
+  auto *ctxt = &getContext();
+  auto funcType = mod.getType();
+  ImplicitLocOpBuilder modBuilder(mod.getLoc(), mod.getBody());
+  Type i1 = modBuilder.getI1Type();
+
+  bool updated = false;
+
+  // Reconstruct the list of operand types, changing the type whenever an ESI
+  // port is found.
+  SmallVector<Type, 16> newArgTypes;
+  SmallVector<StringAttr, 16> newValidReadyInputSignals;
+  for (size_t i = 0, e = funcType.getNumInputs(); i < e; ++i) {
+    Type argTy = funcType.getInput(i);
+
+    auto chanTy = argTy.dyn_cast<ChannelPort>();
+    if (!chanTy) {
+      newArgTypes.push_back(argTy);
+      continue;
+    }
+
+    // When we find one, add a data and valid signal to the new args.
+    auto sigName =
+        mod.getArgAttrOfType<StringAttr>(newArgTypes.size(), "rtl.name");
+    newArgTypes.push_back(chanTy);
+    newValidReadyInputSignals.push_back(sigName);
+
+    updated = true;
+  }
+
+  // Iterate through the results and append to one of the two below lists. The
+  // first for non-ESI-ports. The second, ports which have been re-located to an
+  // operand.
+  SmallVector<Type, 8> newResultTypes;
+  SmallVector<Value, 8> newOutputOperands;
+  rtl::OutputOp outOp =
+      dyn_cast<rtl::OutputOp>(mod.getBodyBlock()->getTerminator());
+  for (size_t resNum = 0, numRes = funcType.getNumResults(); resNum < numRes;
+       ++resNum) {
+    Type resTy = funcType.getResult(resNum);
+    auto chanTy = resTy.dyn_cast<ChannelPort>();
+    Value oldOutputValue = outOp.getOperand(resNum);
+    if (!chanTy) {
+      newResultTypes.push_back(resTy);
+      newOutputOperands.push_back(oldOutputValue);
+      continue;
+    }
+
+    newResultTypes.push_back(chanTy.getInner()); // Raw data.
+    newResultTypes.push_back(i1);                // Valid.
+    newArgTypes.push_back(i1);                   // Ready func arg.
+    Value ready = mod.front().addArgument(i1);   // Ready block arg.
+    auto unwrap = modBuilder.create<UnwrapValidReady>(oldOutputValue, ready);
+    newOutputOperands.push_back(unwrap.rawOutput());
+    newOutputOperands.push_back(unwrap.valid());
+
+    updated = true;
+  }
+
+  if (!updated)
+    return false;
+
+  outOp.erase();
+  modBuilder.setInsertionPointToEnd(mod.getBodyBlock());
+  modBuilder.create<rtl::OutputOp>(newOutputOperands);
+
+  // Set the new types.
+  auto newFuncType = FunctionType::get(ctxt, newArgTypes, newResultTypes);
+  mod.setType(newFuncType);
+  return true;
 }
 
 /// Convert all input and output ChannelPorts into SV Interfaces. For inputs,
