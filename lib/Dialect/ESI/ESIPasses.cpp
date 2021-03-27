@@ -373,13 +373,25 @@ void ESIPortsPass::runOnOperation() {
   build = nullptr;
 }
 
+/// Return a attribute with 'rtl.name' appended with suffix.
+static DictionaryAttr appendToRtlName(DictionaryAttr base, StringRef suffix) {
+  auto *ctxt = base.getContext();
+  SmallString<32> retName(suffix);
+  if (auto nameAttr = getRTLNameAttr(base.getValue())) {
+    retName = nameAttr.getValue();
+    retName.append(suffix);
+  }
+  NamedAttribute retNameAttr = NamedAttribute(Identifier::get("rtl.name", ctxt),
+                                              StringAttr::get(ctxt, retName));
+  return DictionaryAttr::get(ctxt, {retNameAttr});
+}
+
 /// Convert all input and output ChannelPorts into valid/ready wires.
 bool ESIPortsPass::updateFunc(RTLModuleOp mod) {
   auto *ctxt = &getContext();
   auto funcType = mod.getType();
   ImplicitLocOpBuilder modBuilder(mod.getLoc(), mod.getBody());
   Type i1 = modBuilder.getI1Type();
-  Identifier rtlName = modBuilder.getIdentifier("rtl.name");
 
   bool updated = false;
 
@@ -427,9 +439,10 @@ bool ESIPortsPass::updateFunc(RTLModuleOp mod) {
     Type resTy = funcType.getResult(resNum);
     auto chanTy = resTy.dyn_cast<ChannelPort>();
     Value oldOutputValue = outOp.getOperand(resNum);
+    DictionaryAttr oldAttrs = oldResultAttrs[resNum];
     if (!chanTy) {
       newResultTypes.push_back(resTy);
-      newResultAttrs.push_back(oldResultAttrs[resNum]);
+      newResultAttrs.push_back(oldAttrs);
       newOutputOperands.push_back(oldOutputValue);
       continue;
     }
@@ -441,22 +454,9 @@ bool ESIPortsPass::updateFunc(RTLModuleOp mod) {
     auto unwrap = modBuilder.create<UnwrapValidReady>(oldOutputValue, ready);
     newOutputOperands.push_back(unwrap.rawOutput());
     newOutputOperands.push_back(unwrap.valid());
-    newResultAttrs.push_back(oldResultAttrs[resNum]);
-
-    SmallString<32> validPortName("valid");
-    SmallString<32> readyPortName("ready");
-    if (auto nameAttr = oldResultAttrs[resNum].getAs<StringAttr>(rtlName)) {
-      validPortName = nameAttr.getValue();
-      validPortName.append("_valid");
-      readyPortName = nameAttr.getValue();
-      readyPortName.append("_ready");
-    }
-    NamedAttribute validPortNameAttr =
-        NamedAttribute(rtlName, modBuilder.getStringAttr(validPortName));
-    newResultAttrs.push_back(modBuilder.getDictionaryAttr({validPortNameAttr}));
-    NamedAttribute readyPortNameAttr =
-        NamedAttribute(rtlName, modBuilder.getStringAttr(readyPortName));
-    newArgAttrs.push_back(modBuilder.getDictionaryAttr({readyPortNameAttr}));
+    newResultAttrs.push_back(oldAttrs);
+    newResultAttrs.push_back(appendToRtlName(oldAttrs, "_valid"));
+    newArgAttrs.push_back(appendToRtlName(oldAttrs, "_ready"));
 
     updated = true;
   }
