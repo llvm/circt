@@ -140,6 +140,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   }
 
   // Nothing in the parser is threaded.  Disable synchronization overhead.
+  auto isMultithreaded = context.isMultithreadingEnabled();
   context.disableMultithreading();
 
   // Apply any pass manager command line options.
@@ -181,7 +182,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     return failure();
 
   // Allow optimizations to run multithreaded.
-  context.disableMultithreading(false);
+  context.enableMultithreading(isMultithreaded);
 
   if (imconstprop)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
