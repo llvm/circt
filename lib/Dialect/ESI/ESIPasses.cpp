@@ -363,12 +363,12 @@ void ESIPortsPass::runOnOperation() {
     if (updateFunc(mod))
       modsMutated[mod.getName()] = mod;
 
-  // // Find all instances and update them.
-  // top.walk([&modsMutated, this](InstanceOp inst) {
-  //   auto mapIter = modsMutated.find(inst.moduleName());
-  //   if (mapIter != modsMutated.end())
-  //     updateInstance(mapIter->second, inst);
-  // });
+  // Find all instances and update them.
+  top.walk([&modsMutated, this](InstanceOp inst) {
+    auto mapIter = modsMutated.find(inst.moduleName());
+    if (mapIter != modsMutated.end())
+      updateInstance(mapIter->second, inst);
+  });
 
   build = nullptr;
 }
@@ -487,6 +487,73 @@ bool ESIPortsPass::updateFunc(RTLModuleOp mod) {
   mod.setAllArgAttrs(newArgAttrs);
   mod.setAllResultAttrs(newResultAttrs);
   return true;
+}
+
+/// Update an instance of an updated module by adding `esi.(un)wrap.vr`
+/// ops around the instance.
+void ESIPortsPass::updateInstance(RTLModuleOp mod, InstanceOp inst) {
+  ImplicitLocOpBuilder b(inst.getLoc(), inst);
+  BackedgeBuilder beb(b, inst.getLoc());
+  Type i1 = b.getI1Type();
+
+  SmallVector<Value, 16> newOperands;
+  SmallVector<Backedge, 8> inputReadysToConnect;
+  for (auto op : inst.getOperands()) {
+    if (!op.getType().isa<ChannelPort>()) {
+      newOperands.push_back(op);
+      continue;
+    }
+
+    auto ready = beb.get(i1);
+    inputReadysToConnect.push_back(ready);
+    auto unwrap = b.create<UnwrapValidReady>(op, ready);
+    newOperands.push_back(unwrap.rawOutput());
+    newOperands.push_back(unwrap.valid());
+  }
+
+  b.setInsertionPointAfter(inst);
+  SmallVector<Type, 16> resTypes;
+  SmallVector<Backedge, 8> outputReadysToConnect;
+  for (auto resTy : inst.getResultTypes()) {
+    auto cpTy = resTy.dyn_cast<ChannelPort>();
+    if (!cpTy) {
+      resTypes.push_back(resTy);
+      continue;
+    }
+    resTypes.push_back(cpTy.getInner());
+    resTypes.push_back(i1);
+    Backedge ready = beb.get(i1);
+    newOperands.push_back(ready);
+    outputReadysToConnect.push_back(ready);
+  }
+  resTypes.append(inputReadysToConnect.size(), i1);
+
+  b.setInsertionPointAfter(inst);
+  auto newInst = b.create<InstanceOp>(resTypes, newOperands, inst->getAttrs());
+
+  size_t newInstResNum = 0;
+  size_t readyIdx = 0;
+  for (auto res : inst.getResults()) {
+    auto cpTy = res.getType().dyn_cast<ChannelPort>();
+    if (!cpTy) {
+      res.replaceAllUsesWith(newInst.getResult(newInstResNum));
+      newInstResNum++;
+      continue;
+    }
+
+    auto wrap = b.create<WrapValidReady>(newInst.getResult(newInstResNum),
+                                         newInst.getResult(newInstResNum + 1));
+    newInstResNum += 2;
+    res.replaceAllUsesWith(wrap.chanOutput());
+    outputReadysToConnect[readyIdx].setValue(wrap.ready());
+    readyIdx++;
+  }
+  for (auto inputReady : inputReadysToConnect) {
+    inputReady.setValue(newInst.getResult(newInstResNum));
+    newInstResNum++;
+  }
+
+  inst.erase();
 }
 
 /// Convert all input and output ChannelPorts into SV Interfaces. For inputs,
