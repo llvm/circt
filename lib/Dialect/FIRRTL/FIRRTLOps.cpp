@@ -182,10 +182,9 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
     }
 
     // Check that the number of ports is exactly the same.
-    SmallVector<ModulePortInfo, 8> ports;
-    SmallVector<ModulePortInfo, 8> collidingPorts;
-    extModule.getPortInfo(ports);
-    collidingExtModule.getPortInfo(collidingPorts);
+    SmallVector<ModulePortInfo> ports = extModule.getPorts();
+    SmallVector<ModulePortInfo> collidingPorts = collidingExtModule.getPorts();
+
     if (ports.size() != collidingPorts.size()) {
       auto diag = op.emitOpError()
                   << "with 'defname' attribute " << defname << " has "
