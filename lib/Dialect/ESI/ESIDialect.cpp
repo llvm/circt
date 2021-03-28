@@ -155,7 +155,7 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
   // Map the shell result to the pearl port.
   SmallVector<rtl::ModulePortInfo, 64> outputPortMap;
 
-  for (const auto port : pearlPorts) {
+  for (const auto &port : pearlPorts) {
     if (controlPorts.contains(port.name.getValue()))
       continue;
 
@@ -202,7 +202,7 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
   // Go through the shell input ports, either tunneling them through or
   // unwrapping the ESI channels. We'll need backedges for the ready signals
   // since they are results from the upcoming pearl instance.
-  for (const auto port : shellPorts) {
+  for (const auto &port : shellPorts) {
     if (port.isOutput())
       continue;
 
@@ -225,7 +225,7 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
   // Iterate through the shell output ports, identify the ESI channels, and
   // build ESI wrapper ops for signals being output from the pearl. The data and
   // valid for these wrap ops will need to be backedges.
-  for (const auto port : shellPorts) {
+  for (const auto &port : shellPorts) {
     if (!port.isOutput())
       continue;
     auto esiPort = dataPortMap.find(port.name.getValue());
@@ -257,7 +257,7 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
 
   // -----
   // Finally, find all the regular outputs and either tunnel them through.
-  for (const auto port : shellPorts) {
+  for (const auto &port : shellPorts) {
     if (!port.isOutput())
       continue;
     auto esiPort = dataPortMap.find(port.name.getValue());

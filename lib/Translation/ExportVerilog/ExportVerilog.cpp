@@ -1788,11 +1788,10 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
   --numStatementsEmitted; // Count emitted statements manually.
 
   SmallPtrSet<Operation *, 8> ops;
-  SmallVector<ModulePortInfo, 8> ports;
   RTLModuleOp parent = op->getParentOfType<RTLModuleOp>();
-  parent.getPortInfo(ports);
+
   size_t operandIndex = 0;
-  for (ModulePortInfo port : ports) {
+  for (ModulePortInfo port : parent.getPorts()) {
     if (!port.isOutput())
       continue;
     ops.clear();
@@ -2655,9 +2654,7 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
   prepareRTLModule(*module.getBodyBlock());
 
   // Add all the ports to the name table.
-  SmallVector<ModulePortInfo, 8> portInfo;
-  module.getPortInfo(portInfo);
-
+  SmallVector<ModulePortInfo> portInfo = module.getPorts();
   for (auto &port : portInfo) {
     StringRef name = port.getName();
     if (name.empty()) {
