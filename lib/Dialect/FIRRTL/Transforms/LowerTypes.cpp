@@ -260,10 +260,7 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   SmallVector<Type, 8> inputTypes;
   SmallVector<DictionaryAttr, 8> attributes;
 
-  // Get the modules port information.
-  SmallVector<ModulePortInfo, 8> ports;
-  extModule.getPortInfo(ports);
-  for (auto &port : ports) {
+  for (auto &port : extModule.getPorts()) {
     // Flatten the port type.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
     flattenType(port.type, port.getName(), false, fieldTypes);

@@ -76,8 +76,10 @@ def FModuleOp : FIRRTLOp<"module",
     using FunctionLike::getBody;
 
     // Decode information about the input and output ports on this module.
-    void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
-      getModulePortInfo(*this, results);
+    SmallVector<ModulePortInfo> getPorts() {
+      SmallVector<ModulePortInfo> ports;
+      getModulePortInfo(*this, ports);
+      return ports;
     }
 
     // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is
@@ -142,8 +144,10 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
 
   let extraClassDeclaration = [{
      // Decode information about the input and output ports on this module.
-     void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
-       getModulePortInfo(*this, results);
+     SmallVector<ModulePortInfo> getPorts() {
+       SmallVector<ModulePortInfo> ports;
+       getModulePortInfo(*this, ports);
+       return ports;
      }
 
   private:
