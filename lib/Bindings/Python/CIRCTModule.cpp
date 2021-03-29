@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "RTLModule.h"
 #include "circt-c/Dialect/Comb.h"
 #include "circt-c/Dialect/RTL.h"
 #include "circt-c/Dialect/SV.h"
@@ -18,6 +19,7 @@ namespace py = pybind11;
 PYBIND11_MODULE(_circt, m) {
   m.doc() = "CIRCT Python Native Extension";
 
+  // Dialect registration.
   m.def(
       "register_dialects",
       [](py::object capsule) {
@@ -37,4 +39,9 @@ PYBIND11_MODULE(_circt, m) {
         mlirDialectHandleLoadDialect(sv, context);
       },
       "Register CIRCT dialects on a PyMlirContext.");
+
+  // Dialect-specific pybind11 modules for CAPI interfacing.
+  auto dialectModule = m.def_submodule("_dialects", "CIRCT Dialect Bindings");
+  auto rtlModule = dialectModule.def_submodule("_rtl", "RTL Dialect Bindings");
+  populateRTLModule(rtlModule);
 }

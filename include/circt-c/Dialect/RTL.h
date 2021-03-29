@@ -79,6 +79,9 @@ MLIR_CAPI_EXPORTED MlirType rtlInOutTypeGet(MlirType element);
 /// Returns the element type of an inout type.
 MLIR_CAPI_EXPORTED MlirType rtlInOutTypeGetElementType(MlirType);
 
+/// Checks whether the given type is an integer type.
+MLIR_CAPI_EXPORTED bool rtlTypeIsAInOut(MlirType type);
+
 #ifdef __cplusplus
 }
 #endif

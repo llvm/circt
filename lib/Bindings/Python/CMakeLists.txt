@@ -14,12 +14,19 @@ add_mlir_python_extension(CIRCTBindingsPythonExtension _circt
     python
   SOURCES
     CIRCTModule.cpp
+    RTLModule.cpp
   LINK_LIBS
     CIRCTCAPIComb
     CIRCTCAPIRTL
     CIRCTCAPISV
 )
 add_dependencies(CIRCTBindingsPython CIRCTBindingsPythonExtension)
+
+# TODO(mikeurbach): Temporary measures to be able to borrow upstream PyType.
+target_include_directories(CIRCTBindingsPythonExtension PRIVATE
+  ${MLIR_MAIN_SRC_DIR}/lib/Bindings/Python)
+target_link_libraries(CIRCTBindingsPythonExtension PRIVATE
+  MLIRCoreBindingsPythonExtension)
 
 ################################################################################
 # Python source tree management

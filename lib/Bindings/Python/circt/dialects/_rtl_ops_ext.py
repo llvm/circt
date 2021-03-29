@@ -157,7 +157,7 @@ class RTLModuleOp:
           return_types = [v.type for v in return_values]
           function_type = FunctionType.get(inputs=inputs, results=return_types)
           module_op.attributes["type"] = TypeAttr.get(function_type)
-
+  
       def emit_instance_op(*call_args):
         call_op = rtl.InstanceOp(return_types, StringAttr.get(''),
                                  FlatSymbolRefAttr.get(symbol_name),
