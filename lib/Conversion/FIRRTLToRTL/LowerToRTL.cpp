@@ -399,8 +399,7 @@ rtl::RTLModuleExternOp
 FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
                                      Block *topLevelModule) {
   // Map the ports over, lowering their types as we go.
-  SmallVector<ModulePortInfo, 8> firrtlPorts;
-  oldModule.getPortInfo(firrtlPorts);
+  SmallVector<ModulePortInfo> firrtlPorts = oldModule.getPorts();
   SmallVector<rtl::ModulePortInfo, 8> ports;
   if (failed(lowerPorts(firrtlPorts, ports, oldModule)))
     return {};
@@ -422,8 +421,7 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
 rtl::RTLModuleOp FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
                                                    Block *topLevelModule) {
   // Map the ports over, lowering their types as we go.
-  SmallVector<ModulePortInfo, 8> firrtlPorts;
-  oldModule.getPortInfo(firrtlPorts);
+  SmallVector<ModulePortInfo> firrtlPorts = oldModule.getPorts();
   SmallVector<rtl::ModulePortInfo, 8> ports;
   if (failed(lowerPorts(firrtlPorts, ports, oldModule)))
     return {};
@@ -639,8 +637,7 @@ void FIRRTLModuleLowering::lowerModuleBody(
   bodyBuilder.setInsertionPoint(cursor);
 
   // Insert argument casts, and re-vector users in the old body to use them.
-  SmallVector<ModulePortInfo, 8> ports;
-  oldModule.getPortInfo(ports);
+  SmallVector<ModulePortInfo> ports = oldModule.getPorts();
   assert(oldModule.body().getNumArguments() == ports.size() &&
          "port count mismatch");
 
