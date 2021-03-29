@@ -513,4 +513,42 @@ firrtl.module @wire_port_prop1(%in_a: !firrtl.uint<9>, %out_b: !firrtl.flip<uint
   firrtl.connect %out_b, %tmp : !firrtl.flip<uint<9>>, !firrtl.uint<9>
 }
 
+// CHECK-LABEL: @add_cst_prop1
+// CHECK-NEXT:   %c11_ui9 = firrtl.constant(11 : i9) : !firrtl.uint<9>
+// CHECK-NEXT:   firrtl.connect %out_b, %c11_ui9 : !firrtl.flip<uint<9>>, !firrtl.uint<9>
+// CHECK-NEXT:  }
+firrtl.module @add_cst_prop1(%out_b: !firrtl.flip<uint<9>>) {
+  %c6_ui7 = firrtl.constant(6 : ui7) : !firrtl.uint<7>
+  %tmp_a = firrtl.wire : !firrtl.uint<7>
+  %c5_ui8 = firrtl.constant(5 : ui8) : !firrtl.uint<8>
+  firrtl.connect %tmp_a, %c6_ui7 : !firrtl.uint<7>, !firrtl.uint<7>
+  %add = firrtl.add %tmp_a, %c5_ui8 : (!firrtl.uint<7>, !firrtl.uint<8>) -> !firrtl.uint<9>
+  firrtl.connect %out_b, %add : !firrtl.flip<uint<9>>, !firrtl.uint<9>
+}
+
+// CHECK-LABEL: @add_cst_prop2
+// CHECK-NEXT:   %c127_si9 = firrtl.constant(127 : i9) : !firrtl.sint<9>
+// CHECK-NEXT:   firrtl.connect %out_b, %c127_si9 : !firrtl.flip<sint<9>>, !firrtl.sint<9>
+// CHECK-NEXT:  }
+firrtl.module @add_cst_prop2(%out_b: !firrtl.flip<sint<9>>) {
+  %c6_ui7 = firrtl.constant(-6 : i7) : !firrtl.sint<7>
+  %tmp_a = firrtl.wire : !firrtl.sint<7>
+  %c5_ui8 = firrtl.constant(5 : i8) : !firrtl.sint<8>
+  firrtl.connect %tmp_a, %c6_ui7 : !firrtl.sint<7>, !firrtl.sint<7>
+  %add = firrtl.add %tmp_a, %c5_ui8 : (!firrtl.sint<7>, !firrtl.sint<8>) -> !firrtl.sint<9>
+  firrtl.connect %out_b, %add : !firrtl.flip<sint<9>>, !firrtl.sint<9>
+}
+
+// CHECK-LABEL: @add_cst_prop3
+// CHECK-NEXT:   %c-6_si4 = firrtl.constant(-6 : i4) : !firrtl.sint<4>
+// CHECK-NEXT:   firrtl.connect %out_b, %c-6_si4 : !firrtl.flip<sint<4>>, !firrtl.sint<4>
+// CHECK-NEXT:  }
+firrtl.module @add_cst_prop3(%out_b: !firrtl.flip<sint<4>>) {
+  %c1_si2 = firrtl.constant(-1 : i2) : !firrtl.sint<2>
+  %tmp_a = firrtl.wire : !firrtl.sint<2>
+  %c1_si3 = firrtl.constant(-1 : i3) : !firrtl.sint<3>
+  firrtl.connect %tmp_a, %c1_si2 : !firrtl.sint<2>, !firrtl.sint<2>
+  %add = firrtl.add %tmp_a, %c1_si3 : (!firrtl.sint<2>, !firrtl.sint<3>) -> !firrtl.sint<4>
+  firrtl.connect %out_b, %add : !firrtl.flip<sint<4>>, !firrtl.sint<4>
+}
 }
