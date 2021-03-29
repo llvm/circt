@@ -47,3 +47,11 @@ MlirType rtlArrayTypeGetElementType(MlirType type) {
 intptr_t rtlArrayTypeGetSize(MlirType type) {
   return unwrap(type).cast<ArrayType>().getSize();
 }
+
+MlirType rtlInOutTypeGet(MlirType element) {
+  return wrap(InOutType::get(unwrap(element)));
+}
+
+MlirType rtlInOutTypeGetElementType(MlirType type) {
+  return wrap(unwrap(type).cast<InOutType>().getElementType());
+}

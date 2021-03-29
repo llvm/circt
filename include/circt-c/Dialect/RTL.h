@@ -70,6 +70,12 @@ MLIR_CAPI_EXPORTED MlirType rtlArrayTypeGetElementType(MlirType);
 /// returns the size of an array type
 MLIR_CAPI_EXPORTED intptr_t rtlArrayTypeGetSize(MlirType);
 
+/// Creates an RTL inout type in the context associated with element.
+MLIR_CAPI_EXPORTED MlirType rtlInOutTypeGet(MlirType element);
+
+/// Returns the element type of an inout type.
+MLIR_CAPI_EXPORTED MlirType rtlInOutTypeGetElementType(MlirType);
+
 #ifdef __cplusplus
 }
 #endif
