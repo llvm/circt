@@ -122,7 +122,7 @@ OpFoldResult AddPrimOp::fold(ArrayRef<Attribute> operands) {
     auto numBits = getType().cast<FIRRTLType>().getBitWidthOrSentinel();
     APInt sumAPInt = extendConstantToWidth(op1.getValue(), numBits) +
                      extendConstantToWidth(op2.getValue(), numBits);
-    return IntegerAttr::get(IntegerType::get(getContext(), numBits), sumAPInt);
+    return getIntAttr(sumAPInt, getContext());
   }
   return {};
 }
