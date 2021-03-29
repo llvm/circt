@@ -659,11 +659,12 @@ public:
   /// be emitted independently by the caller.
   ExprEmitter(ModuleEmitter &emitter, SmallVectorImpl<char> &outBuffer,
               SmallPtrSet<Operation *, 8> &emittedExprs,
-              SmallVectorImpl<Operation *> &tooLargeSubExpressions)
+              SmallVectorImpl<Operation *> &tooLargeSubExpressions,
+              Operation *stmt)
       : EmitterBase(emitter.state, os), emitter(emitter),
         emittedExprs(emittedExprs),
         tooLargeSubExpressions(tooLargeSubExpressions), outBuffer(outBuffer),
-        os(outBuffer) {}
+        os(outBuffer), stmt(stmt) {}
 
   /// Emit the specified value as an expression.  If this is an inline-emitted
   /// expression, we emit that expression, otherwise we emit a reference to the
@@ -813,6 +814,9 @@ private:
   SmallVectorImpl<Operation *> &tooLargeSubExpressions;
   SmallVectorImpl<char> &outBuffer;
   llvm::raw_svector_ostream os;
+
+  /// The statement associated with this expression.
+  Operation *stmt;
 };
 } // end anonymous namespace
 
@@ -876,7 +880,7 @@ void ExprEmitter::retroactivelyEmitExpressionIntoTemporarily(Operation *op) {
   // If we're emitting this temporary in a procedural region, we need to emit
   // the variable declaration at the end of the block's declaration range, then
   // emit an assign.
-  if (isTemporaryInProceduralRegion(op))
+  if (isTemporaryInProceduralRegion(stmt))
     emitter.outOfLineExpressionDecls.insert(op);
 
   // Remember that this subexpr needs to be emitted independently.
@@ -1562,8 +1566,8 @@ public:
 
   /// Emit the declaration for the temporary operation with no initializer and
   /// no semicolon, e.g. "wire foo".
-  void emitDeclarationForTemporary(Operation *op) {
-    indent() << getVerilogDeclWord(op) << " ";
+  void emitDeclarationForTemporary(Operation *op, Operation *stmt) {
+    indent() << getVerilogDeclWord(stmt) << " ";
     if (printPackedType(stripUnpackedTypes(op->getResult(0).getType()), os,
                         op->getLoc()))
       os << ' ';
@@ -1575,6 +1579,7 @@ private:
 
   void
   emitExpression(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
+                 Operation *stmt,
                  VerilogPrecedence parenthesizeIfLooserThan = LowestPrecedence);
 
   using StmtVisitor::visitStmt;
@@ -1626,7 +1631,7 @@ private:
   LogicalResult visitSV(InterfaceSignalOp op);
   LogicalResult visitSV(InterfaceModportOp op);
   LogicalResult visitSV(AssignInterfaceSignalOp op);
-  void emitStatementExpression(Operation *op);
+  void emitStatementExpression(Operation *op, Operation *stmt);
 
   void emitBlockAsStatement(Block *block,
                             SmallPtrSet<Operation *, 8> &locationOps,
@@ -1657,9 +1662,10 @@ private:
 ///
 void StmtEmitter::emitExpression(Value exp,
                                  SmallPtrSet<Operation *, 8> &emittedExprs,
+                                 Operation *stmt,
                                  VerilogPrecedence parenthesizeIfLooserThan) {
   SmallVector<Operation *> tooLargeSubExpressions;
-  ExprEmitter(emitter, outBuffer, emittedExprs, tooLargeSubExpressions)
+  ExprEmitter(emitter, outBuffer, emittedExprs, tooLargeSubExpressions, stmt)
       .emitExpression(exp, parenthesizeIfLooserThan);
 
   // It is possible that the emitted expression was too large to fit on a line
@@ -1679,7 +1685,7 @@ void StmtEmitter::emitExpression(Value exp,
   for (auto *expr : tooLargeSubExpressions) {
     statementBeginningIndex = outBuffer.size();
     ++numStatementsEmitted;
-    emitStatementExpression(expr);
+    emitStatementExpression(expr, stmt);
 
     if (emitter.outOfLineExpressionDecls.count(expr))
       declarationsNeeded.push_back(expr);
@@ -1696,7 +1702,7 @@ void StmtEmitter::emitExpression(Value exp,
                     outBuffer.end());
     outBuffer.resize(blockDeclarationInsertPointIndex);
     for (auto *expr : declarationsNeeded) {
-      emitDeclarationForTemporary(expr);
+      emitDeclarationForTemporary(expr, stmt);
       os << ";\n";
     }
     blockDeclarationInsertPointIndex = outBuffer.size();
@@ -1704,7 +1710,7 @@ void StmtEmitter::emitExpression(Value exp,
   }
 }
 
-void StmtEmitter::emitStatementExpression(Operation *op) {
+void StmtEmitter::emitStatementExpression(Operation *op, Operation *stmt) {
   // This is invoked for expressions that have a non-single use.  This could
   // either be because they are dead or because they have multiple uses.
   if (op->getResult(0).use_empty()) {
@@ -1714,9 +1720,9 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
     indent() << "// Zero width: ";
     --numStatementsEmitted;
   } else if (!emitter.outOfLineExpressionDecls.count(op)) {
-    emitDeclarationForTemporary(op);
+    emitDeclarationForTemporary(op, stmt);
     os << " = ";
-  } else if (op->getParentOp()->hasTrait<ProceduralRegion>()) {
+  } else if (stmt->getParentOp()->hasTrait<ProceduralRegion>()) {
     indent() << emitter.getName(op->getResult(0)) << " = ";
   } else {
     indent() << "assign " << emitter.getName(op->getResult(0)) << " = ";
@@ -1726,7 +1732,7 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
   // "deep" emission even though there are multiple uses, not just emitting the
   // name.
   SmallPtrSet<Operation *, 8> emittedExprs;
-  emitExpression(op->getResult(0), emittedExprs, ForceEmitMultiUse);
+  emitExpression(op->getResult(0), emittedExprs, op, ForceEmitMultiUse);
   os << ';';
   emitLocationInfoAndNewLine(emittedExprs);
 }
@@ -1736,9 +1742,9 @@ LogicalResult StmtEmitter::visitSV(ConnectOp op) {
   ops.insert(op);
 
   indent() << "assign ";
-  emitExpression(op.dest(), ops);
+  emitExpression(op.dest(), ops, op);
   os << " = ";
-  emitExpression(op.src(), ops);
+  emitExpression(op.src(), ops, op);
   os << ';';
   emitLocationInfoAndNewLine(ops);
   return success();
@@ -1749,9 +1755,9 @@ LogicalResult StmtEmitter::visitSV(BPAssignOp op) {
   ops.insert(op);
 
   indent();
-  emitExpression(op.dest(), ops);
+  emitExpression(op.dest(), ops, op);
   os << " = ";
-  emitExpression(op.src(), ops);
+  emitExpression(op.src(), ops, op);
   os << ';';
   emitLocationInfoAndNewLine(ops);
   return success();
@@ -1762,9 +1768,9 @@ LogicalResult StmtEmitter::visitSV(PAssignOp op) {
   ops.insert(op);
 
   indent();
-  emitExpression(op.dest(), ops);
+  emitExpression(op.dest(), ops, op);
   os << " <= ";
-  emitExpression(op.src(), ops);
+  emitExpression(op.src(), ops, op);
   os << ';';
   emitLocationInfoAndNewLine(ops);
   return success();
@@ -1776,7 +1782,8 @@ LogicalResult StmtEmitter::visitSV(AliasOp op) {
 
   indent() << "alias ";
   llvm::interleave(
-      op.getOperands(), os, [&](Value v) { emitExpression(v, ops); }, " = ");
+      op.getOperands(), os, [&](Value v) { emitExpression(v, ops, op); },
+      " = ");
   os << ';';
   emitLocationInfoAndNewLine(ops);
   return success();
@@ -1800,7 +1807,7 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
     if (isZeroBitType(port.type))
       os << "// Zero width: ";
     os << "assign " << emitter.outputNames[port.argNum] << " = ";
-    emitExpression(op.getOperand(operandIndex), ops);
+    emitExpression(op.getOperand(operandIndex), ops, op);
     os << ';';
     emitLocationInfoAndNewLine(ops);
     ++operandIndex;
@@ -1819,7 +1826,7 @@ LogicalResult StmtEmitter::visitSV(FWriteOp op) {
 
   for (auto operand : op.operands()) {
     os << ", ";
-    emitExpression(operand, ops);
+    emitExpression(operand, ops, op);
   }
   os << ");";
   emitLocationInfoAndNewLine(ops);
@@ -1860,8 +1867,9 @@ LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
     }
 
     // Emit each chunk of the line.
-    emitTextWithSubstitutions(
-        lhsRhs.first, op, [&](Value operand) { emitExpression(operand, ops); });
+    emitTextWithSubstitutions(lhsRhs.first, op, [&](Value operand) {
+      emitExpression(operand, ops, op);
+    });
     string = lhsRhs.second;
   }
 
@@ -1886,7 +1894,7 @@ LogicalResult StmtEmitter::visitSV(AssertOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   indent() << "assert(";
-  emitExpression(op.predicate(), ops);
+  emitExpression(op.predicate(), ops, op);
   os << ");";
   emitLocationInfoAndNewLine(ops);
   return success();
@@ -1896,7 +1904,7 @@ LogicalResult StmtEmitter::visitSV(AssumeOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   indent() << "assume(";
-  emitExpression(op.property(), ops);
+  emitExpression(op.property(), ops, op);
   os << ");";
   emitLocationInfoAndNewLine(ops);
   return success();
@@ -1906,7 +1914,7 @@ LogicalResult StmtEmitter::visitSV(CoverOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   indent() << "cover(";
-  emitExpression(op.property(), ops);
+  emitExpression(op.property(), ops, op);
   os << ");";
   emitLocationInfoAndNewLine(ops);
   return success();
@@ -1986,7 +1994,7 @@ LogicalResult StmtEmitter::visitSV(IfOp op) {
   // If we have an else and and empty then block, emit an inverted condition.
   if (!op.hasElse() || !op.getThenBlock()->empty()) {
     // Normal emission.
-    emitExpression(op.cond(), ops);
+    emitExpression(op.cond(), ops, op);
     os << ')';
     emitBlockAsStatement(op.getThenBlock(), ops);
     if (op.hasElse()) {
@@ -1996,7 +2004,7 @@ LogicalResult StmtEmitter::visitSV(IfOp op) {
   } else {
     // inverted condition.
     os << '!';
-    emitExpression(op.cond(), ops, Unary);
+    emitExpression(op.cond(), ops, op, Unary);
     os << ')';
     emitBlockAsStatement(op.getElseBlock(), ops);
   }
@@ -2018,7 +2026,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysOp op) {
 
   auto printEvent = [&](AlwaysOp::Condition cond) {
     os << stringifyEventControl(cond.event) << ' ';
-    emitExpression(cond.value, ops);
+    emitExpression(cond.value, ops, op);
   };
 
   switch (op.getNumConditions()) {
@@ -2076,10 +2084,10 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
   ops.insert(op);
 
   indent() << "always_ff @(" << stringifyEventControl(op.clockEdge()) << " ";
-  emitExpression(op.clock(), ops);
+  emitExpression(op.clock(), ops, op);
   if (op.resetStyle() == ResetType::AsyncReset) {
     os << " or " << stringifyEventControl(*op.resetEdge()) << " ";
-    emitExpression(op.reset(), ops);
+    emitExpression(op.reset(), ops, op);
   }
   os << ')';
 
@@ -2107,7 +2115,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
     if (op.resetStyle() == ResetType::AsyncReset &&
         *op.resetEdge() == EventControl::AtNegEdge)
       os << "!";
-    emitExpression(op.reset(), ops);
+    emitExpression(op.reset(), ops, op);
     os << ')';
     emitBlockAsStatement(op.getResetBlock(), ops);
     indent() << "else";
@@ -2135,7 +2143,7 @@ LogicalResult StmtEmitter::visitSV(CaseZOp op) {
   ops.insert(op);
 
   indent() << "casez (";
-  emitExpression(op.cond(), ops);
+  emitExpression(op.cond(), ops, op);
   os << ')';
   emitLocationInfoAndNewLine(ops);
 
@@ -2278,7 +2286,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 
     // Emit the value as an expression.
     ops.clear();
-    emitExpression(portVal, ops);
+    emitExpression(portVal, ops, op);
     os << ')';
   }
   if (!isFirst) {
@@ -2322,9 +2330,9 @@ LogicalResult StmtEmitter::visitSV(InterfaceModportOp op) {
 LogicalResult StmtEmitter::visitSV(AssignInterfaceSignalOp op) {
   SmallPtrSet<Operation *, 8> emitted;
   indent() << "assign ";
-  emitExpression(op.iface(), emitted);
+  emitExpression(op.iface(), emitted, op);
   os << '.' << op.signalName() << " = ";
-  emitExpression(op.rhs(), emitted);
+  emitExpression(op.rhs(), emitted, op);
   os << ";\n";
   return success();
 }
@@ -2338,7 +2346,7 @@ void StmtEmitter::emitStatement(Operation *op) {
   if (isVerilogExpression(op)) {
     if (emitter.outOfLineExpressions.count(op)) {
       ++numStatementsEmitted;
-      emitStatementExpression(op);
+      emitStatementExpression(op, op);
     }
     return;
   }
