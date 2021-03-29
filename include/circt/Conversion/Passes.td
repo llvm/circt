@@ -47,8 +47,7 @@ def LowerFIRRTLToRTL : Pass<"lower-firrtl-to-rtl", "mlir::ModuleOp"> {
 // HandshakeToFIRRTL
 //===----------------------------------------------------------------------===//
 
-def HandshakeToFIRRTL
-  : Pass<"lower-handshake-to-firrtl", "handshake::FuncOp"> {
+def HandshakeToFIRRTL : Pass<"lower-handshake-to-firrtl", "mlir::ModuleOp"> {
   let summary = "Lower Handshake to FIRRTL";
   let description = [{
     Lower Handshake to FIRRTL.

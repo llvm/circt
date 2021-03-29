@@ -29,7 +29,8 @@ struct RTLStubExternalModulesPass
 
 void RTLStubExternalModulesPass::runOnOperation() {
   auto topModule = getOperation().getBody();
-  OpBuilder builder(topModule->getTerminator());
+  OpBuilder builder(topModule->getParentOp()->getContext());
+  builder.setInsertionPointToEnd(topModule);
 
   for (auto &op : llvm::make_early_inc_range(*topModule))
     if (auto module = dyn_cast<rtl::RTLModuleExternOp>(op)) {

@@ -156,7 +156,7 @@ void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     setNameFn(getResult(), nameAttr.getValue());
 }
 
-void RegOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void RegOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                         MLIRContext *context) {
   // If this wire is only written to, delete the wire and all writers.
   struct DropDeadConnect final : public OpRewritePattern<RegOp> {
@@ -200,25 +200,19 @@ void IfDefOp::build(OpBuilder &odsBuilder, OperationState &result,
                     std::function<void()> elseCtor) {
   assert(!cond.getValue().empty() && cond.getValue().front() != '!' &&
          "Should only use simple Verilog identifiers in ifdef conditions");
+  OpBuilder::InsertionGuard guard(odsBuilder);
+
   result.addAttribute("cond", cond);
-  Region *thenRegion = result.addRegion();
-  IfDefOp::ensureTerminator(*thenRegion, odsBuilder, result.location);
+  odsBuilder.createBlock(result.addRegion());
 
   // Fill in the body of the #ifdef.
-  if (thenCtor) {
-    auto oldIP = &*odsBuilder.getInsertionPoint();
-    odsBuilder.setInsertionPointToStart(&*thenRegion->begin());
+  if (thenCtor)
     thenCtor();
-    odsBuilder.setInsertionPoint(oldIP);
-  }
 
   Region *elseRegion = result.addRegion();
   if (elseCtor) {
-    IfDefOp::ensureTerminator(*elseRegion, odsBuilder, result.location);
-    auto oldIP = &*odsBuilder.getInsertionPoint();
-    odsBuilder.setInsertionPointToStart(&*elseRegion->begin());
+    odsBuilder.createBlock(elseRegion);
     elseCtor();
-    odsBuilder.setInsertionPoint(oldIP);
   }
 }
 
@@ -227,7 +221,7 @@ static bool isEmptyBlockExceptForTerminator(Block *block) {
   return block->empty() || block->front().hasTrait<OpTrait::IsTerminator>();
 }
 
-void IfDefOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void IfDefOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                           MLIRContext *context) {
   // If both thenRegion and elseRegion are empty, erase op.
   struct EraseEmptyOp final : public OpRewritePattern<IfDefOp> {
@@ -263,25 +257,19 @@ void IfDefProceduralOp::build(OpBuilder &odsBuilder, OperationState &result,
 void IfOp::build(OpBuilder &odsBuilder, OperationState &result, Value cond,
                  std::function<void()> thenCtor,
                  std::function<void()> elseCtor) {
+  OpBuilder::InsertionGuard guard(odsBuilder);
+
   result.addOperands(cond);
-  Region *body = result.addRegion();
-  IfOp::ensureTerminator(*body, odsBuilder, result.location);
+  odsBuilder.createBlock(result.addRegion());
 
   // Fill in the body of the #ifdef.
-  if (thenCtor) {
-    auto oldIP = &*odsBuilder.getInsertionPoint();
-    odsBuilder.setInsertionPointToStart(&*body->begin());
+  if (thenCtor)
     thenCtor();
-    odsBuilder.setInsertionPoint(oldIP);
-  }
 
   Region *elseRegion = result.addRegion();
   if (elseCtor) {
-    IfOp::ensureTerminator(*elseRegion, odsBuilder, result.location);
-    auto oldIP = &*odsBuilder.getInsertionPoint();
-    odsBuilder.setInsertionPointToStart(&*elseRegion->begin());
+    odsBuilder.createBlock(elseRegion);
     elseCtor();
-    odsBuilder.setInsertionPoint(oldIP);
   }
 }
 
@@ -290,14 +278,12 @@ static void replaceOpWithRegion(PatternRewriter &rewriter, Operation *op,
                                 Region &region) {
   assert(llvm::hasSingleElement(region) && "expected single-region block");
   Block *fromBlock = &region.front();
-  // Remove the terminator from the block.
-  rewriter.eraseOp(fromBlock->getTerminator());
   // Merge it in above the specified operation.
   op->getBlock()->getOperations().splice(Block::iterator(op),
                                          fromBlock->getOperations());
 }
 
-void IfOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void IfOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                        MLIRContext *context) {
   struct RemoveStaticCondition : public OpRewritePattern<IfOp> {
     using OpRewritePattern<IfOp>::OpRewritePattern;
@@ -324,11 +310,11 @@ void IfOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
     LogicalResult matchAndRewrite(IfOp op,
                                   PatternRewriter &rewriter) const override {
       // If there is stuff in the then block, leave this operation alone.
-      if (!isEmptyBlockExceptForTerminator(op.getThenBlock()))
+      if (!op.getThenBlock()->empty())
         return failure();
 
       // If not and there is no else, then this operation is just useless.
-      if (!op.hasElse() || isEmptyBlockExceptForTerminator(op.getElseBlock())) {
+      if (!op.hasElse() || op.getElseBlock()->empty()) {
         rewriter.eraseOp(op);
         return success();
       }
@@ -345,7 +331,6 @@ void IfOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
       auto *thenBlock = op.getThenBlock(), *elseBlock = op.getElseBlock();
 
       // Move the body of the then block over to the else.
-      rewriter.eraseOp(thenBlock->getTerminator());
       thenBlock->getOperations().splice(thenBlock->end(),
                                         elseBlock->getOperations());
       rewriter.eraseBlock(elseBlock);
@@ -369,6 +354,7 @@ void AlwaysOp::build(OpBuilder &odsBuilder, OperationState &result,
                      std::function<void()> bodyCtor) {
   assert(events.size() == clocks.size() &&
          "mismatch between event and clock list");
+  OpBuilder::InsertionGuard guard(odsBuilder);
 
   SmallVector<Attribute> eventAttrs;
   for (auto event : events)
@@ -377,17 +363,12 @@ void AlwaysOp::build(OpBuilder &odsBuilder, OperationState &result,
   result.addAttribute("events", odsBuilder.getArrayAttr(eventAttrs));
   result.addOperands(clocks);
 
-  // Set up the body.
-  Region *body = result.addRegion();
-  AlwaysOp::ensureTerminator(*body, odsBuilder, result.location);
+  // Set up the body.  Moves the insert point
+  odsBuilder.createBlock(result.addRegion());
 
   // Fill in the body of the #ifdef.
-  if (bodyCtor) {
-    auto oldIP = &*odsBuilder.getInsertionPoint();
-    odsBuilder.setInsertionPointToStart(&*body->begin());
+  if (bodyCtor)
     bodyCtor();
-    odsBuilder.setInsertionPoint(oldIP);
-  }
 }
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
@@ -446,6 +427,8 @@ static void printEventList(OpAsmPrinter &p, AlwaysOp op, ArrayAttr portsAttr,
 void AlwaysFFOp::build(OpBuilder &odsBuilder, OperationState &result,
                        EventControl clockEdge, Value clock,
                        std::function<void()> bodyCtor) {
+  OpBuilder::InsertionGuard guard(odsBuilder);
+
   result.addAttribute("clockEdge", odsBuilder.getI32IntegerAttr(
                                        static_cast<int32_t>(clockEdge)));
   result.addOperands(clock);
@@ -453,16 +436,11 @@ void AlwaysFFOp::build(OpBuilder &odsBuilder, OperationState &result,
       "resetStyle",
       odsBuilder.getI32IntegerAttr(static_cast<int32_t>(ResetType::NoReset)));
 
-  // Set up the body.
-  Region *bodyBlk = result.addRegion();
-  AlwaysFFOp::ensureTerminator(*bodyBlk, odsBuilder, result.location);
+  // Set up the body.  Moves Insert Point
+  odsBuilder.createBlock(result.addRegion());
 
-  if (bodyCtor) {
-    auto oldIP = &*odsBuilder.getInsertionPoint();
-    odsBuilder.setInsertionPointToStart(&*bodyBlk->begin());
+  if (bodyCtor)
     bodyCtor();
-    odsBuilder.setInsertionPoint(oldIP);
-  }
 
   // Set up the reset region.
   result.addRegion();
@@ -473,6 +451,8 @@ void AlwaysFFOp::build(OpBuilder &odsBuilder, OperationState &result,
                        ResetType resetStyle, EventControl resetEdge,
                        Value reset, std::function<void()> bodyCtor,
                        std::function<void()> resetCtor) {
+  OpBuilder::InsertionGuard guard(odsBuilder);
+
   result.addAttribute("clockEdge", odsBuilder.getI32IntegerAttr(
                                        static_cast<int32_t>(clockEdge)));
   result.addOperands(clock);
@@ -482,27 +462,17 @@ void AlwaysFFOp::build(OpBuilder &odsBuilder, OperationState &result,
                                        static_cast<int32_t>(resetEdge)));
   result.addOperands(reset);
 
-  // Set up the body.
-  Region *bodyRegion = result.addRegion();
+  // Set up the body.  Moves Insert Point.
+  odsBuilder.createBlock(result.addRegion());
 
-  AlwaysFFOp::ensureTerminator(*bodyRegion, odsBuilder, result.location);
-  if (bodyCtor) {
-    auto oldIP = &*odsBuilder.getInsertionPoint();
-    odsBuilder.setInsertionPointToStart(&*bodyRegion->begin());
+  if (bodyCtor)
     bodyCtor();
-    odsBuilder.setInsertionPoint(oldIP);
-  }
 
-  // Set up the reset.
-  Region *resetRegion = result.addRegion();
+  // Set up the reset.  Moves Insert Point.
+  odsBuilder.createBlock(result.addRegion());
 
-  AlwaysFFOp::ensureTerminator(*resetRegion, odsBuilder, result.location);
-  if (resetCtor) {
-    auto oldIP = &*odsBuilder.getInsertionPoint();
-    odsBuilder.setInsertionPointToStart(&*resetRegion->begin());
+  if (resetCtor)
     resetCtor();
-    odsBuilder.setInsertionPoint(oldIP);
-  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -511,16 +481,13 @@ void AlwaysFFOp::build(OpBuilder &odsBuilder, OperationState &result,
 
 void InitialOp::build(OpBuilder &odsBuilder, OperationState &result,
                       std::function<void()> bodyCtor) {
-  Region *body = result.addRegion();
-  InitialOp::ensureTerminator(*body, odsBuilder, result.location);
+  OpBuilder::InsertionGuard guard(odsBuilder);
+
+  odsBuilder.createBlock(result.addRegion());
 
   // Fill in the body of the #ifdef.
-  if (bodyCtor) {
-    auto oldIP = &*odsBuilder.getInsertionPoint();
-    odsBuilder.setInsertionPointToStart(&*body->begin());
+  if (bodyCtor)
     bodyCtor();
-    odsBuilder.setInsertionPoint(oldIP);
-  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -642,7 +609,6 @@ static ParseResult parseCaseZOp(OpAsmParser &parser, OperationState &result) {
     auto caseRegion = std::make_unique<Region>();
     if (parser.parseColon() || parser.parseRegion(*caseRegion))
       return failure();
-    CaseZOp::ensureTerminator(*caseRegion, builder, result.location);
     result.addRegion(std::move(caseRegion));
   }
 
@@ -667,13 +633,8 @@ static void printCaseZOp(OpAsmPrinter &p, CaseZOp op) {
     }
 
     p << ':';
-    bool printTerminator = true;
-    if (auto *term = caseInfo.block->getTerminator()) {
-      printTerminator =
-          !term->getAttrDictionary().empty() || term->getNumOperands() != 0;
-    }
     p.printRegion(*caseInfo.block->getParent(), /*printEntryBlockArgs=*/false,
-                  /*printBlockTerminators=*/printTerminator);
+                  /*printBlockTerminators=*/true);
   }
 }
 
@@ -878,7 +839,7 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     setNameFn(getResult(), nameAttr.getValue());
 }
 
-void WireOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void WireOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
   // If this wire is only written to, delete the wire and all writers.
   struct DropDeadConnect final : public OpRewritePattern<WireOp> {

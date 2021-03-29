@@ -36,8 +36,10 @@ def RTLModuleOp : RTLOp<"module",
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
 
     // Decode information about the input and output ports on this module.
-    void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
+    SmallVector<ModulePortInfo> getPorts() {
+      SmallVector<ModulePortInfo> results;
       getModulePortInfo(*this, results);
+      return results;
     }
 
     // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is

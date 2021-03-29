@@ -399,8 +399,7 @@ rtl::RTLModuleExternOp
 FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
                                      Block *topLevelModule) {
   // Map the ports over, lowering their types as we go.
-  SmallVector<ModulePortInfo, 8> firrtlPorts;
-  oldModule.getPortInfo(firrtlPorts);
+  SmallVector<ModulePortInfo> firrtlPorts = oldModule.getPorts();
   SmallVector<rtl::ModulePortInfo, 8> ports;
   if (failed(lowerPorts(firrtlPorts, ports, oldModule)))
     return {};
@@ -410,7 +409,8 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
     verilogName = defName.getValue();
 
   // Build the new rtl.module op.
-  OpBuilder builder(topLevelModule->getTerminator());
+  OpBuilder builder(topLevelModule->getParent()->getContext());
+  builder.setInsertionPointToEnd(topLevelModule);
   auto nameAttr = builder.getStringAttr(oldModule.getName());
   return builder.create<rtl::RTLModuleExternOp>(oldModule.getLoc(), nameAttr,
                                                 ports, verilogName);
@@ -421,14 +421,14 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
 rtl::RTLModuleOp FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
                                                    Block *topLevelModule) {
   // Map the ports over, lowering their types as we go.
-  SmallVector<ModulePortInfo, 8> firrtlPorts;
-  oldModule.getPortInfo(firrtlPorts);
+  SmallVector<ModulePortInfo> firrtlPorts = oldModule.getPorts();
   SmallVector<rtl::ModulePortInfo, 8> ports;
   if (failed(lowerPorts(firrtlPorts, ports, oldModule)))
     return {};
 
   // Build the new rtl.module op.
-  OpBuilder builder(topLevelModule->getTerminator());
+  OpBuilder builder(topLevelModule->getParent()->getContext());
+  builder.setInsertionPointToEnd(topLevelModule);
   auto nameAttr = builder.getStringAttr(oldModule.getName());
   return builder.create<rtl::RTLModuleOp>(oldModule.getLoc(), nameAttr, ports);
 }
@@ -637,8 +637,7 @@ void FIRRTLModuleLowering::lowerModuleBody(
   bodyBuilder.setInsertionPoint(cursor);
 
   // Insert argument casts, and re-vector users in the old body to use them.
-  SmallVector<ModulePortInfo, 8> ports;
-  oldModule.getPortInfo(ports);
+  SmallVector<ModulePortInfo> ports = oldModule.getPorts();
   assert(oldModule.body().getNumArguments() == ports.size() &&
          "port count mismatch");
 
@@ -1424,14 +1423,7 @@ void FIRRTLLowering::runWithInsertionPointAtEndOfBlock(
 
   auto oldIP = builder.saveInsertionPoint();
 
-  // If this is the first logic injected into the specified block (e.g. an
-  // else region), create the block and put an sv.yield.
-  if (region.empty()) {
-    // All SV dialect control flow operations use sv.yield.
-    sv::IfOp::ensureTerminator(region, builder, region.getParentOp()->getLoc());
-  }
-
-  builder.setInsertionPoint(region.front().getTerminator());
+  builder.setInsertionPointToEnd(&region.front());
   fn();
   builder.restoreInsertionPoint(oldIP);
 }
@@ -2119,18 +2111,13 @@ LogicalResult FIRRTLLowering::visitExpr(NotPrimOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(NegPrimOp op) {
-  // FIRRTL negate always adds a bit, and always does a sign extension even if
-  // the input is unsigned.
-  // -x  ---> 0-sext(x)
-  auto operand = getLoweredValue(op.input());
-  if (!operand) {
-    return handleZeroBit(op.getOperand(), [&]() {
-      // Negate of a zero bit value is 1b0.
-      return setLowering(op, getOrCreateIntConstant(1, 0));
-    });
-  }
+  // FIRRTL negate always adds a bit.
+  // -x ---> 0-sext(x) or 0-zext(x)
+  auto operand = getLoweredAndExtendedValue(op.input(), op.getType());
+  if (!operand)
+    return failure();
+
   auto resultType = lowerType(op.getType());
-  operand = builder.createOrFold<comb::SExtOp>(resultType, operand);
 
   auto zero = getOrCreateIntConstant(resultType.getIntOrFloatBitWidth(), 0);
   return setLoweringTo<comb::SubOp>(op, zero, operand);
