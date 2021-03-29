@@ -16,6 +16,15 @@
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 
+// Declarative canonicalization patterns
+namespace circt {
+namespace firrtl {
+namespace patterns {
+#include "circt/Dialect/FIRRTL/Canonicalization.h.inc"
+} // namespace patterns
+} // namespace firrtl
+} // namespace circt
+
 using namespace circt;
 using namespace firrtl;
 
@@ -78,6 +87,32 @@ static void addCanonicalizerMethod(RewritePatternSet &results,
     }
   };
   results.insert<Folder>(context);
+}
+
+/// Applies the constant folding function `calculate` to the given operands.
+///
+/// Sign or zero extends the operands appropriately to the larger of the two
+/// bit widths, and depending on whether the operation is to be performed on
+/// signed or unsigned operands. The result is always a 1 bit integer,
+/// appropriate for comparison/relational operators.
+static Attribute
+constFoldBinaryRelationalOp(ArrayRef<Attribute> operands, bool isUnsigned,
+                            const function_ref<bool(APInt, APInt)> &calculate) {
+  assert(operands.size() == 2 && "binary op takes two operands");
+  if (!operands[0] || !operands[1])
+    return {};
+  if (operands[0].isa<IntegerAttr>() && operands[1].isa<IntegerAttr>()) {
+    auto lhs = operands[0].cast<IntegerAttr>();
+    auto rhs = operands[1].cast<IntegerAttr>();
+    auto commonWidth = std::max<int32_t>(lhs.getValue().getBitWidth(),
+                                         rhs.getValue().getBitWidth());
+    auto extOrSelf = isUnsigned ? &APInt::zextOrSelf : &APInt::sextOrSelf;
+    return IntegerAttr::get(
+        IntegerType::get(lhs.getContext(), 1),
+        calculate((lhs.getValue().*extOrSelf)(commonWidth),
+                  (rhs.getValue().*extOrSelf)(commonWidth)));
+  }
+  return {};
 }
 
 //===----------------------------------------------------------------------===//
@@ -182,17 +217,211 @@ OpFoldResult XorPrimOp::fold(ArrayRef<Attribute> operands) {
                                         [](APInt a, APInt b) { return a ^ b; });
 }
 
+void LEQPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                            MLIRContext *context) {
+  results.insert<patterns::LEQWithConstLHS>(context);
+}
+
+OpFoldResult LEQPrimOp::fold(ArrayRef<Attribute> operands) {
+  APInt value;
+  bool isUnsigned = lhs().getType().isa<UIntType>();
+
+  // leq(x, x) -> 1
+  if (lhs() == rhs())
+    return getIntAttr(APInt(1, 1), getContext());
+
+  // Comparison against constant outside type bounds.
+  if (auto width = lhs().getType().cast<IntType>().getWidth()) {
+    if (matchPattern(rhs(), m_FConstant(value))) {
+      auto commonWidth = std::max<int32_t>(*width, value.getBitWidth());
+
+      // leq(x, const) -> 0 where const < minValue of the unsigned type of x
+      // This can never occur since const is unsigned and cannot be less than 0.
+
+      // leq(x, const) -> 0 where const < minValue of the signed type of x
+      if (!isUnsigned &&
+          value.sextOrSelf(commonWidth)
+              .slt(APInt::getSignedMinValue(*width).sextOrSelf(commonWidth)))
+        return getIntAttr(APInt(1, 0), getContext());
+
+      // leq(x, const) -> 1 where const >= maxValue of the unsigned type of x
+      if (isUnsigned &&
+          value.zextOrSelf(commonWidth)
+              .uge(APInt::getMaxValue(*width).zextOrSelf(commonWidth)))
+        return getIntAttr(APInt(1, 1), getContext());
+
+      // leq(x, const) -> 1 where const >= maxValue of the signed type of x
+      if (!isUnsigned &&
+          value.sextOrSelf(commonWidth)
+              .sge(APInt::getSignedMaxValue(*width).sextOrSelf(commonWidth)))
+        return getIntAttr(APInt(1, 1), getContext());
+    }
+  }
+
+  return constFoldBinaryRelationalOp(
+      operands, isUnsigned,
+      [=](APInt a, APInt b) { return isUnsigned ? a.ule(b) : a.sle(b); });
+}
+
+void LTPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                           MLIRContext *context) {
+  results.insert<patterns::LTWithConstLHS>(context);
+}
+
+OpFoldResult LTPrimOp::fold(ArrayRef<Attribute> operands) {
+  APInt value;
+  bool isUnsigned = lhs().getType().isa<UIntType>();
+
+  // lt(x, x) -> 0
+  if (lhs() == rhs())
+    return getIntAttr(APInt(1, 0), getContext());
+
+  // lt(x, 0) -> 0 when x is unsigned
+  if (matchPattern(rhs(), m_FConstant(value))) {
+    if (value.isNullValue() && lhs().getType().isa<UIntType>())
+      return getIntAttr(APInt(1, 0), getContext());
+  }
+
+  // Comparison against constant outside type bounds.
+  if (auto width = lhs().getType().cast<IntType>().getWidth()) {
+    if (matchPattern(rhs(), m_FConstant(value))) {
+      auto commonWidth = std::max<int32_t>(*width, value.getBitWidth());
+
+      // lt(x, const) -> 0 where const <= minValue of the unsigned type of x
+      // Handled explicitly above.
+
+      // lt(x, const) -> 0 where const <= minValue of the signed type of x
+      if (!isUnsigned &&
+          value.sextOrSelf(commonWidth)
+              .sle(APInt::getSignedMinValue(*width).sextOrSelf(commonWidth)))
+        return getIntAttr(APInt(1, 0), getContext());
+
+      // lt(x, const) -> 1 where const > maxValue of the unsigned type of x
+      if (isUnsigned &&
+          value.zextOrSelf(commonWidth)
+              .ugt(APInt::getMaxValue(*width).zextOrSelf(commonWidth)))
+        return getIntAttr(APInt(1, 1), getContext());
+
+      // lt(x, const) -> 1 where const > maxValue of the signed type of x
+      if (!isUnsigned &&
+          value.sextOrSelf(commonWidth)
+              .sgt(APInt::getSignedMaxValue(*width).sextOrSelf(commonWidth)))
+        return getIntAttr(APInt(1, 1), getContext());
+    }
+  }
+
+  return constFoldBinaryRelationalOp(
+      operands, isUnsigned,
+      [=](APInt a, APInt b) { return isUnsigned ? a.ult(b) : a.slt(b); });
+}
+
+void GEQPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                            MLIRContext *context) {
+  results.insert<patterns::GEQWithConstLHS>(context);
+}
+
+OpFoldResult GEQPrimOp::fold(ArrayRef<Attribute> operands) {
+  APInt value;
+  bool isUnsigned = lhs().getType().isa<UIntType>();
+
+  // geq(x, x) -> 1
+  if (lhs() == rhs())
+    return getIntAttr(APInt(1, 1), getContext());
+
+  // geq(x, 0) -> 1 when x is unsigned
+  if (matchPattern(rhs(), m_FConstant(value))) {
+    if (value.isNullValue() && lhs().getType().isa<UIntType>())
+      return getIntAttr(APInt(1, 1), getContext());
+  }
+
+  // Comparison against constant outside type bounds.
+  if (auto width = lhs().getType().cast<IntType>().getWidth()) {
+    if (matchPattern(rhs(), m_FConstant(value))) {
+      auto commonWidth = std::max<int32_t>(*width, value.getBitWidth());
+
+      // geq(x, const) -> 0 where const > maxValue of the unsigned type of x
+      if (isUnsigned &&
+          value.zextOrSelf(commonWidth)
+              .ugt(APInt::getMaxValue(*width).zextOrSelf(commonWidth)))
+        return getIntAttr(APInt(1, 0), getContext());
+
+      // geq(x, const) -> 0 where const > maxValue of the signed type of x
+      if (!isUnsigned &&
+          value.sextOrSelf(commonWidth)
+              .sgt(APInt::getSignedMaxValue(*width).sextOrSelf(commonWidth)))
+        return getIntAttr(APInt(1, 0), getContext());
+
+      // geq(x, const) -> 1 where const <= minValue of the unsigned type of x
+      // Handled explicitly above.
+
+      // geq(x, const) -> 1 where const <= minValue of the signed type of x
+      if (!isUnsigned &&
+          value.sextOrSelf(commonWidth)
+              .sle(APInt::getSignedMinValue(*width).sextOrSelf(commonWidth)))
+        return getIntAttr(APInt(1, 1), getContext());
+    }
+  }
+
+  return constFoldBinaryRelationalOp(
+      operands, isUnsigned,
+      [=](APInt a, APInt b) { return isUnsigned ? a.uge(b) : a.sge(b); });
+}
+
+void GTPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                           MLIRContext *context) {
+  results.insert<patterns::GTWithConstLHS>(context);
+}
+
+OpFoldResult GTPrimOp::fold(ArrayRef<Attribute> operands) {
+  APInt value;
+  bool isUnsigned = lhs().getType().isa<UIntType>();
+
+  // gt(x, x) -> 0
+  if (lhs() == rhs())
+    return getIntAttr(APInt(1, 0), getContext());
+
+  // Comparison against constant outside type bounds.
+  if (auto width = lhs().getType().cast<IntType>().getWidth()) {
+    if (matchPattern(rhs(), m_FConstant(value))) {
+      auto commonWidth = std::max<int32_t>(*width, value.getBitWidth());
+
+      // gt(x, const) -> 0 where const >= maxValue of the unsigned type of x
+      if (isUnsigned &&
+          value.zextOrSelf(commonWidth)
+              .uge(APInt::getMaxValue(*width).zextOrSelf(commonWidth)))
+        return getIntAttr(APInt(1, 0), getContext());
+
+      // gt(x, const) -> 0 where const >= maxValue of the signed type of x
+      if (!isUnsigned &&
+          value.sextOrSelf(commonWidth)
+              .sge(APInt::getSignedMaxValue(*width).sextOrSelf(commonWidth)))
+        return getIntAttr(APInt(1, 0), getContext());
+
+      // gt(x, const) -> 1 where const < minValue of the unsigned type of x
+      // This can never occur since const is unsigned and cannot be less than 0.
+
+      // gt(x, const) -> 1 where const < minValue of the signed type of x
+      if (!isUnsigned &&
+          value.sextOrSelf(commonWidth)
+              .slt(APInt::getSignedMinValue(*width).sextOrSelf(commonWidth)))
+        return getIntAttr(APInt(1, 1), getContext());
+    }
+  }
+
+  return constFoldBinaryRelationalOp(
+      operands, isUnsigned,
+      [=](APInt a, APInt b) { return isUnsigned ? a.ugt(b) : a.sgt(b); });
+}
+
 OpFoldResult EQPrimOp::fold(ArrayRef<Attribute> operands) {
   APInt value;
+  bool isUnsigned = lhs().getType().isa<UIntType>();
+
+  // eq(x, x) -> 1
+  if (lhs() == rhs())
+    return getIntAttr(APInt(1, 1), getContext());
 
   if (matchPattern(rhs(), m_FConstant(value))) {
-    APInt lhsCst;
-    // Constant fold.
-    if (matchPattern(lhs(), m_FConstant(lhsCst)) &&
-        value.getBitWidth() == lhsCst.getBitWidth()) {
-      return getIntAttr(APInt(1, value == lhsCst), getContext());
-    }
-
     /// eq(x, 1) -> x when x is 1 bit.
     /// TODO: Support SInt<1> on the LHS etc.
     if (value.isAllOnesValue() && lhs().getType() == getType() &&
@@ -204,20 +433,19 @@ OpFoldResult EQPrimOp::fold(ArrayRef<Attribute> operands) {
     /// TODO: eq(x, ~0) -> andr(x)) when x is >1 bit
   }
 
-  return {};
+  return constFoldBinaryRelationalOp(operands, isUnsigned,
+                                     [=](APInt a, APInt b) { return a.eq(b); });
 }
 
 OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
   APInt value;
+  bool isUnsigned = lhs().getType().isa<UIntType>();
+
+  // neq(x, x) -> 0
+  if (lhs() == rhs())
+    return getIntAttr(APInt(1, 0), getContext());
 
   if (matchPattern(rhs(), m_FConstant(value))) {
-    APInt lhsCst;
-    // Constant fold.
-    if (matchPattern(lhs(), m_FConstant(lhsCst)) &&
-        value.getBitWidth() == lhsCst.getBitWidth()) {
-      return getIntAttr(APInt(1, value != lhsCst), getContext());
-    }
-
     /// neq(x, 0) -> x when x is 1 bit.
     /// TODO: Support SInt<1> on the LHS etc.
     if (value.isNullValue() && lhs().getType() == getType() &&
@@ -229,7 +457,8 @@ OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
     /// TODO: neq(x, ~0) -> andr(x)) when x is >1 bit
   }
 
-  return {};
+  return constFoldBinaryRelationalOp(operands, isUnsigned,
+                                     [=](APInt a, APInt b) { return a.ne(b); });
 }
 
 //===----------------------------------------------------------------------===//

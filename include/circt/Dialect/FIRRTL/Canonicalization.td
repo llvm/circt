@@ -1,0 +1,46 @@
+//===- Canonicalization.td - FIRRTL canonicalization -------*- tablegen -*-===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// The canonicalization patterns for the FIRRTL dialect.
+//
+//===----------------------------------------------------------------------===//
+
+#ifndef CIRCT_DIALECT_FIRRTL_CANONICALIZATION_TD
+#define CIRCT_DIALECT_FIRRTL_CANONICALIZATION_TD
+
+include "circt/Dialect/FIRRTL/FIRRTL.td"
+
+/// Constraint that matches non-constant operations. Used to ensure that the
+/// const-on-LHS rewriting patterns converge in case both operands are constant.
+def NonConstantOp : Constraint<CPred<"!$0.getDefiningOp<ConstantOp>()">>;
+
+// leq(const, x) -> geq(x, const)
+def LEQWithConstLHS : Pat<
+  (LEQPrimOp (ConstantOp:$lhs $_), $rhs),
+  (GEQPrimOp $rhs, $lhs),
+  [(NonConstantOp $rhs)]>;
+
+// lt(const, x) -> gt(x, const)
+def LTWithConstLHS : Pat<
+  (LTPrimOp (ConstantOp:$lhs $_), $rhs),
+  (GTPrimOp $rhs, $lhs),
+  [(NonConstantOp $rhs)]>;
+
+// geq(const, x) -> leq(x, const)
+def GEQWithConstLHS : Pat<
+  (GEQPrimOp (ConstantOp:$lhs $_), $rhs),
+  (LEQPrimOp $rhs, $lhs),
+  [(NonConstantOp $rhs)]>;
+
+// gt(const, x) -> lt(x, const)
+def GTWithConstLHS : Pat<
+  (GTPrimOp (ConstantOp:$lhs $_), $rhs),
+  (LTPrimOp $rhs, $lhs),
+  [(NonConstantOp $rhs)]>;
+
+#endif // CIRCT_DIALECT_FIRRTL_CANONICALIZATION_TD
