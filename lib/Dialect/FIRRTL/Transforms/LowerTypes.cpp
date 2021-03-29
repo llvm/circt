@@ -662,10 +662,11 @@ void TypeLoweringVisitor::visitExpr(SubfieldOp op) {
   opsToRemove.push_back(op);
 }
 
-  void TypeLoweringVisitor::visitExpr(SubaccessOp op){
-    op.emitError("Dynamically referring to a vector sub-element is not supported");
-    opsToRemove.push_back(op);
-  }
+void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
+  op.emitError(
+      "Dynamically referring to a vector sub-element is not supported");
+  opsToRemove.push_back(op);
+}
 // This is currently the same lowering as SubfieldOp, but using a fieldname
 // derived from the fixed index.
 //
