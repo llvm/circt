@@ -13,7 +13,7 @@ with Context() as ctx, Location.unknown():
     i32 = IntegerType.get_signless(32)
 
     m = builtin.ModuleOp()
-    with InsertionPoint.at_block_begin(m.body):
+    with InsertionPoint(m.body):
         # CHECK: rtl.module @MyWidget(%my_input: i32) -> (%my_output: i32)
         # CHECK:   rtl.output %my_input : i32
         op = rtl.RTLModuleOp(
