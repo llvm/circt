@@ -89,6 +89,23 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
   return valueAttr();
 }
 
+/// Check if the results of \p op are of integer type and with known bitwidth.
+/// Can be used to determine if any fold is legal.
+bool hasKnownWidths(Operation *op) {
+  for (auto resTy : op->getResultTypes()) {
+    auto ty = resTy.cast<FIRRTLType>();
+    if (!ty.isa<IntType>() || ty.getBitWidthOrSentinel() <= 0)
+      return false;
+  }
+  return true;
+}
+
+APInt extendConstantToWidth(APInt old, unsigned newWidth) {
+  if (old.isSignBitSet())
+    return old.sext(newWidth);
+  return old.zext(newWidth);
+}
+
 //===----------------------------------------------------------------------===//
 // Binary Operators
 //===----------------------------------------------------------------------===//
@@ -96,20 +113,16 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
 OpFoldResult AddPrimOp::fold(ArrayRef<Attribute> operands) {
   /// Any folding here requires a bitwidth extension.
 
-  /// If both operands are constant, and < 64 bits, then perform constant
-  /// folding. Cannot use constFoldBinaryOp, since the width of the constant is
-  /// different from operands.
-  if (operands[0] && operands[1] &&
-      lhs().getType().cast<FIRRTLType>().getBitWidthOrSentinel() < 64) {
-    auto op1 = operands[0].dyn_cast<IntegerAttr>();
-    auto op2 = operands[1].dyn_cast<IntegerAttr>();
-    if (op1 && op2) {
-      APInt sumAPInt = (op1.getValue() + op2.getValue());
-      int64_t sumVal = sumAPInt.isSignBitSet() ? sumAPInt.getSExtValue()
-                                               : sumAPInt.getZExtValue();
-      return IntegerAttr::get(
-          IntegerType::get(getContext(), sumAPInt.getBitWidth() + 1), sumVal);
-    }
+  /// If both operands are constant, and the result is integer with known
+  /// widths, then perform constant folding. Cannot use constFoldBinaryOp, since
+  /// the width of the constant is different from operands.
+  if (operands[0] && operands[1] && hasKnownWidths(*this)) {
+    auto op1 = operands[0].cast<IntegerAttr>();
+    auto op2 = operands[1].cast<IntegerAttr>();
+    auto numBits = getType().cast<FIRRTLType>().getBitWidthOrSentinel();
+    APInt sumAPInt = extendConstantToWidth(op1.getValue(), numBits) +
+                     extendConstantToWidth(op2.getValue(), numBits);
+    return IntegerAttr::get(IntegerType::get(getContext(), numBits), sumAPInt);
   }
   return {};
 }
