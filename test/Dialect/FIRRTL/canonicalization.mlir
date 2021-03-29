@@ -780,4 +780,187 @@ firrtl.module @GTOutsideBounds(
   // CHECK-NEXT: firrtl.connect %y5, %c1_ui1
 }
 
+// CHECK-LABEL: @ComparisonOfDifferentWidths
+firrtl.module @ComparisonOfDifferentWidths(
+  %y0: !firrtl.flip<uint<1>>,
+  %y1: !firrtl.flip<uint<1>>,
+  %y2: !firrtl.flip<uint<1>>,
+  %y3: !firrtl.flip<uint<1>>,
+  %y4: !firrtl.flip<uint<1>>,
+  %y5: !firrtl.flip<uint<1>>,
+  %y6: !firrtl.flip<uint<1>>,
+  %y7: !firrtl.flip<uint<1>>,
+  %y8: !firrtl.flip<uint<1>>,
+  %y9: !firrtl.flip<uint<1>>,
+  %y10: !firrtl.flip<uint<1>>,
+  %y11: !firrtl.flip<uint<1>>
+) {
+  // CHECK-NEXT: [[_:.+]] = firrtl.constant
+  // CHECK-NEXT: [[_:.+]] = firrtl.constant
+  %c3_si3 = firrtl.constant(3 : i3) : !firrtl.sint<3>
+  %c4_si4 = firrtl.constant(4 : i4) : !firrtl.sint<4>
+  %c3_ui2 = firrtl.constant(3 : i2) : !firrtl.uint<2>
+  %c4_ui3 = firrtl.constant(4 : i3) : !firrtl.uint<3>
+
+  %0 = firrtl.leq %c3_ui2, %c4_ui3 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<1>
+  %1 = firrtl.leq %c3_si3, %c4_si4 : (!firrtl.sint<3>, !firrtl.sint<4>) -> !firrtl.uint<1>
+  %2 = firrtl.lt %c3_ui2, %c4_ui3 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<1>
+  %3 = firrtl.lt %c3_si3, %c4_si4 : (!firrtl.sint<3>, !firrtl.sint<4>) -> !firrtl.uint<1>
+  %4 = firrtl.geq %c3_ui2, %c4_ui3 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<1>
+  %5 = firrtl.geq %c3_si3, %c4_si4 : (!firrtl.sint<3>, !firrtl.sint<4>) -> !firrtl.uint<1>
+  %6 = firrtl.gt %c3_ui2, %c4_ui3 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<1>
+  %7 = firrtl.gt %c3_si3, %c4_si4 : (!firrtl.sint<3>, !firrtl.sint<4>) -> !firrtl.uint<1>
+  %8 = firrtl.eq %c3_ui2, %c4_ui3 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<1>
+  %9 = firrtl.eq %c3_si3, %c4_si4 : (!firrtl.sint<3>, !firrtl.sint<4>) -> !firrtl.uint<1>
+  %10 = firrtl.neq %c3_ui2, %c4_ui3 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<1>
+  %11 = firrtl.neq %c3_si3, %c4_si4 : (!firrtl.sint<3>, !firrtl.sint<4>) -> !firrtl.uint<1>
+
+  firrtl.connect %y0, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y1, %1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y2, %2 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y3, %3 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y4, %4 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y5, %5 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y6, %6 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y7, %7 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y8, %8 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y9, %9 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y10, %10 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y11, %11 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  // CHECK-NEXT: firrtl.connect %y0, %c1_ui1
+  // CHECK-NEXT: firrtl.connect %y1, %c1_ui1
+  // CHECK-NEXT: firrtl.connect %y2, %c1_ui1
+  // CHECK-NEXT: firrtl.connect %y3, %c1_ui1
+  // CHECK-NEXT: firrtl.connect %y4, %c0_ui1
+  // CHECK-NEXT: firrtl.connect %y5, %c0_ui1
+  // CHECK-NEXT: firrtl.connect %y6, %c0_ui1
+  // CHECK-NEXT: firrtl.connect %y7, %c0_ui1
+  // CHECK-NEXT: firrtl.connect %y8, %c0_ui1
+  // CHECK-NEXT: firrtl.connect %y9, %c0_ui1
+  // CHECK-NEXT: firrtl.connect %y10, %c1_ui1
+  // CHECK-NEXT: firrtl.connect %y11, %c1_ui1
+}
+
+// CHECK-LABEL: @ComparisonOfUnsizedAndSized
+firrtl.module @ComparisonOfUnsizedAndSized(
+  %y0: !firrtl.flip<uint<1>>,
+  %y1: !firrtl.flip<uint<1>>,
+  %y2: !firrtl.flip<uint<1>>,
+  %y3: !firrtl.flip<uint<1>>,
+  %y4: !firrtl.flip<uint<1>>,
+  %y5: !firrtl.flip<uint<1>>,
+  %y6: !firrtl.flip<uint<1>>,
+  %y7: !firrtl.flip<uint<1>>,
+  %y8: !firrtl.flip<uint<1>>,
+  %y9: !firrtl.flip<uint<1>>,
+  %y10: !firrtl.flip<uint<1>>,
+  %y11: !firrtl.flip<uint<1>>
+) {
+  // CHECK-NEXT: [[_:.+]] = firrtl.constant
+  // CHECK-NEXT: [[_:.+]] = firrtl.constant
+  %c3_si = firrtl.constant(3) : !firrtl.sint
+  %c4_si4 = firrtl.constant(4 : i4) : !firrtl.sint<4>
+  %c3_ui = firrtl.constant(3) : !firrtl.uint
+  %c4_ui3 = firrtl.constant(4 : i3) : !firrtl.uint<3>
+
+  %0 = firrtl.leq %c3_ui, %c4_ui3 : (!firrtl.uint, !firrtl.uint<3>) -> !firrtl.uint<1>
+  %1 = firrtl.leq %c3_si, %c4_si4 : (!firrtl.sint, !firrtl.sint<4>) -> !firrtl.uint<1>
+  %2 = firrtl.lt %c3_ui, %c4_ui3 : (!firrtl.uint, !firrtl.uint<3>) -> !firrtl.uint<1>
+  %3 = firrtl.lt %c3_si, %c4_si4 : (!firrtl.sint, !firrtl.sint<4>) -> !firrtl.uint<1>
+  %4 = firrtl.geq %c3_ui, %c4_ui3 : (!firrtl.uint, !firrtl.uint<3>) -> !firrtl.uint<1>
+  %5 = firrtl.geq %c3_si, %c4_si4 : (!firrtl.sint, !firrtl.sint<4>) -> !firrtl.uint<1>
+  %6 = firrtl.gt %c3_ui, %c4_ui3 : (!firrtl.uint, !firrtl.uint<3>) -> !firrtl.uint<1>
+  %7 = firrtl.gt %c3_si, %c4_si4 : (!firrtl.sint, !firrtl.sint<4>) -> !firrtl.uint<1>
+  %8 = firrtl.eq %c3_ui, %c4_ui3 : (!firrtl.uint, !firrtl.uint<3>) -> !firrtl.uint<1>
+  %9 = firrtl.eq %c3_si, %c4_si4 : (!firrtl.sint, !firrtl.sint<4>) -> !firrtl.uint<1>
+  %10 = firrtl.neq %c3_ui, %c4_ui3 : (!firrtl.uint, !firrtl.uint<3>) -> !firrtl.uint<1>
+  %11 = firrtl.neq %c3_si, %c4_si4 : (!firrtl.sint, !firrtl.sint<4>) -> !firrtl.uint<1>
+
+  firrtl.connect %y0, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y1, %1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y2, %2 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y3, %3 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y4, %4 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y5, %5 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y6, %6 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y7, %7 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y8, %8 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y9, %9 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y10, %10 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y11, %11 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  // CHECK-NEXT: firrtl.connect %y0, %c1_ui1
+  // CHECK-NEXT: firrtl.connect %y1, %c1_ui1
+  // CHECK-NEXT: firrtl.connect %y2, %c1_ui1
+  // CHECK-NEXT: firrtl.connect %y3, %c1_ui1
+  // CHECK-NEXT: firrtl.connect %y4, %c0_ui1
+  // CHECK-NEXT: firrtl.connect %y5, %c0_ui1
+  // CHECK-NEXT: firrtl.connect %y6, %c0_ui1
+  // CHECK-NEXT: firrtl.connect %y7, %c0_ui1
+  // CHECK-NEXT: firrtl.connect %y8, %c0_ui1
+  // CHECK-NEXT: firrtl.connect %y9, %c0_ui1
+  // CHECK-NEXT: firrtl.connect %y10, %c1_ui1
+  // CHECK-NEXT: firrtl.connect %y11, %c1_ui1
+}
+
+// CHECK-LABEL: @ComparisonOfUnsized
+firrtl.module @ComparisonOfUnsized(
+  %y0: !firrtl.flip<uint<1>>,
+  %y1: !firrtl.flip<uint<1>>,
+  %y2: !firrtl.flip<uint<1>>,
+  %y3: !firrtl.flip<uint<1>>,
+  %y4: !firrtl.flip<uint<1>>,
+  %y5: !firrtl.flip<uint<1>>,
+  %y6: !firrtl.flip<uint<1>>,
+  %y7: !firrtl.flip<uint<1>>,
+  %y8: !firrtl.flip<uint<1>>,
+  %y9: !firrtl.flip<uint<1>>,
+  %y10: !firrtl.flip<uint<1>>,
+  %y11: !firrtl.flip<uint<1>>
+) {
+  // CHECK-NEXT: [[_:.+]] = firrtl.constant
+  // CHECK-NEXT: [[_:.+]] = firrtl.constant
+  %c0_si = firrtl.constant(0) : !firrtl.sint
+  %c4_si = firrtl.constant(4) : !firrtl.sint
+  %c0_ui = firrtl.constant(0) : !firrtl.uint
+  %c4_ui = firrtl.constant(4) : !firrtl.uint
+
+  %0 = firrtl.leq %c0_ui, %c4_ui : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
+  %1 = firrtl.leq %c0_si, %c4_si : (!firrtl.sint, !firrtl.sint) -> !firrtl.uint<1>
+  %2 = firrtl.lt %c0_ui, %c4_ui : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
+  %3 = firrtl.lt %c0_si, %c4_si : (!firrtl.sint, !firrtl.sint) -> !firrtl.uint<1>
+  %4 = firrtl.geq %c0_ui, %c4_ui : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
+  %5 = firrtl.geq %c0_si, %c4_si : (!firrtl.sint, !firrtl.sint) -> !firrtl.uint<1>
+  %6 = firrtl.gt %c0_ui, %c4_ui : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
+  %7 = firrtl.gt %c0_si, %c4_si : (!firrtl.sint, !firrtl.sint) -> !firrtl.uint<1>
+  %8 = firrtl.eq %c0_ui, %c4_ui : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
+  %9 = firrtl.eq %c0_si, %c4_si : (!firrtl.sint, !firrtl.sint) -> !firrtl.uint<1>
+  %10 = firrtl.neq %c0_ui, %c4_ui : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint<1>
+  %11 = firrtl.neq %c0_si, %c4_si : (!firrtl.sint, !firrtl.sint) -> !firrtl.uint<1>
+
+  firrtl.connect %y0, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y1, %1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y2, %2 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y3, %3 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y4, %4 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y5, %5 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y6, %6 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y7, %7 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y8, %8 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y9, %9 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y10, %10 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %y11, %11 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  // CHECK-NEXT: firrtl.connect %y0, %c1_ui1
+  // CHECK-NEXT: firrtl.connect %y1, %c1_ui1
+  // CHECK-NEXT: firrtl.connect %y2, %c1_ui1
+  // CHECK-NEXT: firrtl.connect %y3, %c1_ui1
+  // CHECK-NEXT: firrtl.connect %y4, %c0_ui1
+  // CHECK-NEXT: firrtl.connect %y5, %c0_ui1
+  // CHECK-NEXT: firrtl.connect %y6, %c0_ui1
+  // CHECK-NEXT: firrtl.connect %y7, %c0_ui1
+  // CHECK-NEXT: firrtl.connect %y8, %c0_ui1
+  // CHECK-NEXT: firrtl.connect %y9, %c0_ui1
+  // CHECK-NEXT: firrtl.connect %y10, %c1_ui1
+  // CHECK-NEXT: firrtl.connect %y11, %c1_ui1
+}
+
 }

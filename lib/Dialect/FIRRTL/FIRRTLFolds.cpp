@@ -89,27 +89,28 @@ static void addCanonicalizerMethod(RewritePatternSet &results,
   results.insert<Folder>(context);
 }
 
-/// Performs constant folding `calculate` with element-wise behavior on the two
-/// attributes in `operands` and returns the result if possible, with the
-/// specified result type.
+/// Applies the constant folding function `calculate` to the given operands.
 ///
-/// TODO: Maybe the upstream constFoldBinaryOp can be made to have a
-/// configurable result type as well.
-template <class AttrElementT,
-          class ElementValueT = typename AttrElementT::ValueType,
-          class CalculationT = function_ref<bool(ElementValueT, ElementValueT)>>
-Attribute constFoldBinaryRelationalOp(ArrayRef<Attribute> operands,
-                                      const CalculationT &calculate) {
+/// Sign or zero extends the operands appropriately to the larger of the two
+/// bit widths, and depending on whether the operation is to be performed on
+/// signed or unsigned operands. The result is always a 1 bit integer,
+/// appropriate for comparison/relational operators.
+static Attribute
+constFoldBinaryRelationalOp(ArrayRef<Attribute> operands, bool isUnsigned,
+                            const function_ref<bool(APInt, APInt)> &calculate) {
   assert(operands.size() == 2 && "binary op takes two operands");
   if (!operands[0] || !operands[1])
     return {};
-  if (operands[0].getType() != operands[1].getType())
-    return {};
-  if (operands[0].isa<AttrElementT>() && operands[1].isa<AttrElementT>()) {
-    auto lhs = operands[0].cast<AttrElementT>();
-    auto rhs = operands[1].cast<AttrElementT>();
-    return IntegerAttr::get(IntegerType::get(lhs.getContext(), 1),
-                            calculate(lhs.getValue(), rhs.getValue()));
+  if (operands[0].isa<IntegerAttr>() && operands[1].isa<IntegerAttr>()) {
+    auto lhs = operands[0].cast<IntegerAttr>();
+    auto rhs = operands[1].cast<IntegerAttr>();
+    auto commonWidth = std::max<int32_t>(lhs.getValue().getBitWidth(),
+                                         rhs.getValue().getBitWidth());
+    auto extOrSelf = isUnsigned ? &APInt::zextOrSelf : &APInt::sextOrSelf;
+    return IntegerAttr::get(
+        IntegerType::get(lhs.getContext(), 1),
+        calculate((lhs.getValue().*extOrSelf)(commonWidth),
+                  (rhs.getValue().*extOrSelf)(commonWidth)));
   }
   return {};
 }
@@ -216,7 +217,7 @@ OpFoldResult XorPrimOp::fold(ArrayRef<Attribute> operands) {
                                         [](APInt a, APInt b) { return a ^ b; });
 }
 
-void LEQPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void LEQPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
   results.insert<patterns::LEQWithConstLHS>(context);
 }
@@ -257,12 +258,12 @@ OpFoldResult LEQPrimOp::fold(ArrayRef<Attribute> operands) {
     }
   }
 
-  return constFoldBinaryRelationalOp<IntegerAttr>(
-      operands,
+  return constFoldBinaryRelationalOp(
+      operands, isUnsigned,
       [=](APInt a, APInt b) { return isUnsigned ? a.ule(b) : a.sle(b); });
 }
 
-void LTPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void LTPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                            MLIRContext *context) {
   results.insert<patterns::LTWithConstLHS>(context);
 }
@@ -309,12 +310,12 @@ OpFoldResult LTPrimOp::fold(ArrayRef<Attribute> operands) {
     }
   }
 
-  return constFoldBinaryRelationalOp<IntegerAttr>(
-      operands,
+  return constFoldBinaryRelationalOp(
+      operands, isUnsigned,
       [=](APInt a, APInt b) { return isUnsigned ? a.ult(b) : a.slt(b); });
 }
 
-void GEQPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void GEQPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
   results.insert<patterns::GEQWithConstLHS>(context);
 }
@@ -361,12 +362,12 @@ OpFoldResult GEQPrimOp::fold(ArrayRef<Attribute> operands) {
     }
   }
 
-  return constFoldBinaryRelationalOp<IntegerAttr>(
-      operands,
+  return constFoldBinaryRelationalOp(
+      operands, isUnsigned,
       [=](APInt a, APInt b) { return isUnsigned ? a.uge(b) : a.sge(b); });
 }
 
-void GTPrimOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void GTPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                            MLIRContext *context) {
   results.insert<patterns::GTWithConstLHS>(context);
 }
@@ -407,26 +408,20 @@ OpFoldResult GTPrimOp::fold(ArrayRef<Attribute> operands) {
     }
   }
 
-  return constFoldBinaryRelationalOp<IntegerAttr>(
-      operands,
+  return constFoldBinaryRelationalOp(
+      operands, isUnsigned,
       [=](APInt a, APInt b) { return isUnsigned ? a.ugt(b) : a.sgt(b); });
 }
 
 OpFoldResult EQPrimOp::fold(ArrayRef<Attribute> operands) {
   APInt value;
+  bool isUnsigned = lhs().getType().isa<UIntType>();
 
   // eq(x, x) -> 1
   if (lhs() == rhs())
     return getIntAttr(APInt(1, 1), getContext());
 
   if (matchPattern(rhs(), m_FConstant(value))) {
-    APInt lhsCst;
-    // Constant fold.
-    if (matchPattern(lhs(), m_FConstant(lhsCst)) &&
-        value.getBitWidth() == lhsCst.getBitWidth()) {
-      return getIntAttr(APInt(1, value == lhsCst), getContext());
-    }
-
     /// eq(x, 1) -> x when x is 1 bit.
     /// TODO: Support SInt<1> on the LHS etc.
     if (value.isAllOnesValue() && lhs().getType() == getType() &&
@@ -438,24 +433,19 @@ OpFoldResult EQPrimOp::fold(ArrayRef<Attribute> operands) {
     /// TODO: eq(x, ~0) -> andr(x)) when x is >1 bit
   }
 
-  return {};
+  return constFoldBinaryRelationalOp(operands, isUnsigned,
+                                     [=](APInt a, APInt b) { return a.eq(b); });
 }
 
 OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
   APInt value;
+  bool isUnsigned = lhs().getType().isa<UIntType>();
 
   // neq(x, x) -> 0
   if (lhs() == rhs())
     return getIntAttr(APInt(1, 0), getContext());
 
   if (matchPattern(rhs(), m_FConstant(value))) {
-    APInt lhsCst;
-    // Constant fold.
-    if (matchPattern(lhs(), m_FConstant(lhsCst)) &&
-        value.getBitWidth() == lhsCst.getBitWidth()) {
-      return getIntAttr(APInt(1, value != lhsCst), getContext());
-    }
-
     /// neq(x, 0) -> x when x is 1 bit.
     /// TODO: Support SInt<1> on the LHS etc.
     if (value.isNullValue() && lhs().getType() == getType() &&
@@ -467,7 +457,8 @@ OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
     /// TODO: neq(x, ~0) -> andr(x)) when x is >1 bit
   }
 
-  return {};
+  return constFoldBinaryRelationalOp(operands, isUnsigned,
+                                     [=](APInt a, APInt b) { return a.ne(b); });
 }
 
 //===----------------------------------------------------------------------===//
