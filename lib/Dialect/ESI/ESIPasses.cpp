@@ -56,7 +56,7 @@ public:
 
   RTLModuleExternOp declareStage();
   // Will be unused when CAPNP is undefined
-  RTLModuleExternOp declareCosimEndpoint() __attribute__((unused));
+  RTLModuleExternOp declareCosimEndpoint() LLVM_ATTRIBUTE_UNUSED;
 
   InterfaceOp getOrConstructInterface(ChannelPort);
   InterfaceOp constructInterface(ChannelPort);
