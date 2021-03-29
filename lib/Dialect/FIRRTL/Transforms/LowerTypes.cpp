@@ -118,6 +118,7 @@ public:
   void visitExpr(InvalidValuePrimOp op);
   void visitExpr(SubfieldOp op);
   void visitExpr(SubindexOp op);
+  void visitExpr(SubaccessOp op);
   void visitStmt(ConnectOp op);
 
 private:
@@ -661,6 +662,23 @@ void TypeLoweringVisitor::visitExpr(SubfieldOp op) {
   opsToRemove.push_back(op);
 }
 
+// Gracefully die on subaccess operations
+void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
+  op.emitError("SubaccessOp not handled.");
+
+  // We need to do enough transformation to not segfault
+  // Lower operation to an access of item 0
+  Value input = op.input();
+  std::string fieldname = "0";
+  FIRRTLType resultType = op.getType();
+
+  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
+  flattenType(resultType, fieldname, false, fieldTypes);
+
+  op.replaceAllUsesWith(getBundleLowering(input, fieldTypes[0].suffix));
+  opsToRemove.push_back(op);
+}
+
 // This is currently the same lowering as SubfieldOp, but using a fieldname
 // derived from the fixed index.
 //
@@ -713,8 +731,8 @@ void TypeLoweringVisitor::visitStmt(ConnectOp op) {
   Value dest = op.dest();
   Value src = op.src();
 
-  // Attempt to get the bundle types, potentially unwrapping an outer flip type
-  // that wraps the whole bundle.
+  // Attempt to get the bundle types, potentially unwrapping an outer flip
+  // type that wraps the whole bundle.
   FIRRTLType destType = getCanonicalAggregateType(dest.getType());
   FIRRTLType srcType = getCanonicalAggregateType(src.getType());
 
@@ -763,8 +781,8 @@ void TypeLoweringVisitor::visitStmt(ConnectOp op) {
 void TypeLoweringVisitor::visitExpr(InvalidValuePrimOp op) {
   Value result = op.result();
 
-  // Attempt to get the bundle types, potentially unwrapping an outer flip type
-  // that wraps the whole bundle.
+  // Attempt to get the bundle types, potentially unwrapping an outer flip
+  // type that wraps the whole bundle.
   FIRRTLType resultType = getCanonicalAggregateType(result.getType());
 
   // If we aren't connecting two bundles, there is nothing to do.
@@ -799,9 +817,9 @@ static DictionaryAttr getArgAttrs(StringAttr nameAttr, StringRef suffix,
   return builder->getDictionaryAttr(attr);
 }
 
-// Creates and returns a new block argument of the specified type to the module.
-// This also maintains the name attribute for the new argument, possibly with a
-// new suffix appended.
+// Creates and returns a new block argument of the specified type to the
+// module. This also maintains the name attribute for the new argument,
+// possibly with a new suffix appended.
 Value TypeLoweringVisitor::addArg(FModuleOp module, Type type,
                                   unsigned oldArgNumber, StringRef nameSuffix) {
   Block *body = module.getBodyBlock();
@@ -821,8 +839,8 @@ Value TypeLoweringVisitor::addArg(FModuleOp module, Type type,
   return newValue;
 }
 
-// Store the mapping from a bundle typed value to a mapping from its field names
-// to flat values.
+// Store the mapping from a bundle typed value to a mapping from its field
+// names to flat values.
 void TypeLoweringVisitor::setBundleLowering(Value oldValue, StringRef flatField,
                                             Value newValue) {
   auto flatFieldId = builder->getIdentifier(flatField);
@@ -833,8 +851,8 @@ void TypeLoweringVisitor::setBundleLowering(Value oldValue, StringRef flatField,
   entry = newValue;
 }
 
-// For a mapped bundle typed value and a flat subfield name, retrieve and return
-// the flat value if it exists.
+// For a mapped bundle typed value and a flat subfield name, retrieve and
+// return the flat value if it exists.
 Value TypeLoweringVisitor::getBundleLowering(Value oldValue,
                                              StringRef flatField) {
   auto flatFieldId = builder->getIdentifier(flatField);
