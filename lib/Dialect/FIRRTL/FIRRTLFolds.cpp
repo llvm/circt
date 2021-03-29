@@ -100,8 +100,9 @@ bool hasKnownWidths(Operation *op) {
   return true;
 }
 
-APInt extendConstantToWidth(APInt old, unsigned newWidth) {
-  if (old.isSignBitSet())
+// Width extension of a constant int depends only on the sign of the operand.
+APInt extendConstantToWidth(APInt old, bool isSigned, unsigned newWidth) {
+  if (isSigned)
     return old.sext(newWidth);
   return old.zext(newWidth);
 }
@@ -120,8 +121,15 @@ OpFoldResult AddPrimOp::fold(ArrayRef<Attribute> operands) {
     auto op1 = operands[0].cast<IntegerAttr>();
     auto op2 = operands[1].cast<IntegerAttr>();
     auto numBits = getType().cast<FIRRTLType>().getBitWidthOrSentinel();
-    APInt sumAPInt = extendConstantToWidth(op1.getValue(), numBits) +
-                     extendConstantToWidth(op2.getValue(), numBits);
+    APInt sumAPInt =
+        extendConstantToWidth(
+            op1.getValue(),
+            getOperand(0).getType().cast<FIRRTLType>().isSignedInteger(),
+            numBits) +
+        extendConstantToWidth(
+            op2.getValue(),
+            getOperand(1).getType().cast<FIRRTLType>().isSignedInteger(),
+            numBits);
     return getIntAttr(sumAPInt, getContext());
   }
   return {};
