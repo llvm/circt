@@ -45,6 +45,24 @@ foreach(PY_SRC_FILE ${PY_SRC_FILES})
   )
 endforeach()
 
+# The Python sources, including extensions, are in the circt.dialects namespace,
+# as expected. But, at the moment, the bindings are generated in the
+# mlir.dialects namespace, and look for Python extension modules there. To shim
+# this, symlink the extension modules in mlir.dialects.
+file(GLOB_RECURSE PY_EXT_FILES
+  RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/circt/dialects"
+  "${CMAKE_CURRENT_SOURCE_DIR}/circt/*_ops_ext.py")
+foreach(PY_EXT_FILE ${PY_EXT_FILES})
+  set(PY_DEST_FILE "${PROJECT_BINARY_DIR}/python/mlir/dialects/${PY_EXT_FILE}")
+  set(PY_SRC_FILE "${PROJECT_BINARY_DIR}/python/circt/dialects/${PY_EXT_FILE}")
+  add_custom_command(
+    TARGET CIRCTBindingsPythonSources POST_BUILD
+    COMMENT "Symlinking Python extension ${PY_SRC_FILE} -> ${PY_DEST_FILE}"
+    DEPENDS "${PY_SRC_FILE}"
+    COMMAND "${CMAKE_COMMAND}" -E create_symlink "${PY_SRC_FILE}" "${PY_DEST_FILE}"
+  )
+endforeach()
+
 ################################################################################
 # Generate dialect-specific bindings.
 ################################################################################
