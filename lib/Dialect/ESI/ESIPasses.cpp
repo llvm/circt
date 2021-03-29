@@ -338,7 +338,7 @@ private:
 };
 } // anonymous namespace
 
-/// Iterate through the `rtl.module.extern`s and lower their ports.
+/// Iterate through the `rtl.module[.extern]`s and lower their ports.
 void ESIPortsPass::runOnOperation() {
   ModuleOp top = getOperation();
   ESIRTLBuilder b(top);
@@ -357,7 +357,8 @@ void ESIPortsPass::runOnOperation() {
       updateInstance(mapIter->second, inst);
   });
 
-  // Find all modules and try to modify them. Remember the modified ones.
+  // Find all modules and try to modify them to have wires with valid/ready
+  // semantics. Remember the modified ones.
   DenseMap<StringRef, RTLModuleOp> modsMutated;
   for (auto mod : top.getOps<RTLModuleOp>())
     if (updateFunc(mod))
@@ -386,28 +387,39 @@ static DictionaryAttr appendToRtlName(DictionaryAttr base, StringRef suffix) {
   return DictionaryAttr::get(ctxt, {retNameAttr});
 }
 
-/// Convert all input and output ChannelPorts into valid/ready wires.
+/// Convert all input and output ChannelPorts into valid/ready wires. Try not to
+/// change the order and materialize ops in reasonably intuitive locations.
 bool ESIPortsPass::updateFunc(RTLModuleOp mod) {
   auto *ctxt = &getContext();
   auto funcType = mod.getType();
+  // Build ops in the module.
   ImplicitLocOpBuilder modBuilder(mod.getLoc(), mod.getBody());
   Type i1 = modBuilder.getI1Type();
+
+  // Get information to be used later on.
+  SmallVector<DictionaryAttr, 8> oldArgAttrs;
+  mod.getAllArgAttrs(oldArgAttrs);
+  SmallVector<DictionaryAttr, 8> oldResultAttrs;
+  mod.getAllResultAttrs(oldResultAttrs);
+  rtl::OutputOp outOp =
+      dyn_cast<rtl::OutputOp>(mod.getBodyBlock()->getTerminator());
 
   bool updated = false;
 
   // Reconstruct the list of operand types, changing the type whenever an ESI
-  // port is found.
+  // port is found. Keep the argument attributes, apply the ESI ports attributes
+  // to the data port only.
   SmallVector<Type, 16> newArgTypes;
   SmallVector<DictionaryAttr, 16> newArgAttrs;
+  // 'Ready' signals are outputs. Remember them for later when we deal with the
+  // returns.
   SmallVector<std::pair<Value, DictionaryAttr>, 8> newReadySignals;
-
-  SmallVector<DictionaryAttr, 8> oldArgAttrs;
-  mod.getAllArgAttrs(oldArgAttrs);
   for (size_t i = 0, e = funcType.getNumInputs(); i < e; ++i) {
     Type argTy = funcType.getInput(i);
 
     auto chanTy = argTy.dyn_cast<ChannelPort>();
     if (!chanTy) {
+      // If not ESI, pass through.
       newArgTypes.push_back(argTy);
       newArgAttrs.push_back(oldArgAttrs[i]);
       continue;
@@ -418,28 +430,26 @@ bool ESIPortsPass::updateFunc(RTLModuleOp mod) {
     newArgTypes.push_back(i1);
     newArgAttrs.push_back(oldArgAttrs[i]);
     newArgAttrs.push_back(appendToRtlName(oldArgAttrs[i], "_valid"));
+    // Add the BlockArguments.
     Value data = mod.front().insertArgument(i, chanTy.getInner());
     Value valid = mod.front().insertArgument(i + 1, i1);
+    // Build the ESI wrap operation to translate the lowered signals to what
+    // they were. (A later pass takes care of eliminating the ESI ops.)
     auto wrap = modBuilder.create<WrapValidReady>(data, valid);
+    // Replace uses of the old ESI port argument with the new one from the wrap.
     mod.front().getArgument(i + 2).replaceAllUsesWith(wrap.chanOutput());
-    mod.front().eraseArgument(i + 2);
+    mod.front().eraseArgument(i + 2); // Delete the ESI port block argument.
     newReadySignals.push_back(std::make_pair(
         wrap.ready(), appendToRtlName(oldArgAttrs[i], "_ready")));
 
     updated = true;
   }
 
-  // Iterate through the results and append to one of the two below lists. The
-  // first for non-ESI-ports. The second, ports which have been re-located to an
-  // operand.
+  // Iterate through the outputs, appending to all of the next three lists.
+  // Lower the ESI ports.
   SmallVector<Type, 8> newResultTypes;
   SmallVector<Value, 8> newOutputOperands;
   SmallVector<DictionaryAttr, 8> newResultAttrs;
-
-  SmallVector<DictionaryAttr, 8> oldResultAttrs;
-  mod.getAllResultAttrs(oldResultAttrs);
-  rtl::OutputOp outOp =
-      dyn_cast<rtl::OutputOp>(mod.getBodyBlock()->getTerminator());
 
   modBuilder.setInsertionPointToEnd(mod.getBodyBlock());
   for (size_t resNum = 0, numRes = funcType.getNumResults(); resNum < numRes;
@@ -449,12 +459,14 @@ bool ESIPortsPass::updateFunc(RTLModuleOp mod) {
     Value oldOutputValue = outOp.getOperand(resNum);
     DictionaryAttr oldAttrs = oldResultAttrs[resNum];
     if (!chanTy) {
+      // If not ESI, pass through.
       newResultTypes.push_back(resTy);
       newResultAttrs.push_back(oldAttrs);
       newOutputOperands.push_back(oldOutputValue);
       continue;
     }
 
+    // Lower the output, adding ready signals directly to the arg list.
     newResultTypes.push_back(chanTy.getInner()); // Raw data.
     newResultTypes.push_back(i1);                // Valid.
     newArgTypes.push_back(i1);                   // Ready func arg.
@@ -469,6 +481,7 @@ bool ESIPortsPass::updateFunc(RTLModuleOp mod) {
     updated = true;
   }
 
+  // Append the ready list signals we remembered above.
   for (const auto &readySig : newReadySignals) {
     newResultTypes.push_back(i1);
     newResultAttrs.push_back(readySig.second);
@@ -478,6 +491,7 @@ bool ESIPortsPass::updateFunc(RTLModuleOp mod) {
   if (!updated)
     return false;
 
+  // A new output op is necessary.
   outOp.erase();
   modBuilder.create<rtl::OutputOp>(newOutputOperands);
 
@@ -489,30 +503,40 @@ bool ESIPortsPass::updateFunc(RTLModuleOp mod) {
   return true;
 }
 
-/// Update an instance of an updated module by adding `esi.(un)wrap.vr`
-/// ops around the instance.
+/// Update an instance of an updated module by adding `esi.[un]wrap.vr`
+/// ops around the instance. Lowering or folding away `[un]wrap` ops is another
+/// pass.
 void ESIPortsPass::updateInstance(RTLModuleOp mod, InstanceOp inst) {
   ImplicitLocOpBuilder b(inst.getLoc(), inst);
   BackedgeBuilder beb(b, inst.getLoc());
   Type i1 = b.getI1Type();
 
+  // -----
+  // Lower the operands.
+
   SmallVector<Value, 16> newOperands;
+  // Store the 'ready' operands from the unwrap as a list of backedges. This
+  // doubles as a count of `i1`s to append to the existing results.
   SmallVector<Backedge, 8> inputReadysToConnect;
-  for (auto op : inst.getOperands()) {
-    if (!op.getType().isa<ChannelPort>()) {
-      newOperands.push_back(op);
+  for (auto operand : inst.getOperands()) {
+    if (!operand.getType().isa<ChannelPort>()) {
+      newOperands.push_back(operand);
       continue;
     }
 
     auto ready = beb.get(i1);
     inputReadysToConnect.push_back(ready);
-    auto unwrap = b.create<UnwrapValidReady>(op, ready);
+    auto unwrap = b.create<UnwrapValidReady>(operand, ready);
     newOperands.push_back(unwrap.rawOutput());
     newOperands.push_back(unwrap.valid());
   }
 
-  b.setInsertionPointAfter(inst);
+  // -----
+  // Lower the result types.
+
   SmallVector<Type, 16> resTypes;
+  // Backedges which we add as operands to be used later when we build the
+  // 'wrap' ops.
   SmallVector<Backedge, 8> outputReadysToConnect;
   for (auto resTy : inst.getResultTypes()) {
     auto cpTy = resTy.dyn_cast<ChannelPort>();
@@ -528,8 +552,15 @@ void ESIPortsPass::updateInstance(RTLModuleOp mod, InstanceOp inst) {
   }
   resTypes.append(inputReadysToConnect.size(), i1);
 
+  // -----
+  // Clone the instance.
+
   b.setInsertionPointAfter(inst);
   auto newInst = b.create<InstanceOp>(resTypes, newOperands, inst->getAttrs());
+
+  // -----
+  // Wrap the results back into ESI channels and connect up all the ready
+  // signals.
 
   size_t newInstResNum = 0;
   size_t readyIdx = 0;
@@ -548,11 +579,13 @@ void ESIPortsPass::updateInstance(RTLModuleOp mod, InstanceOp inst) {
     outputReadysToConnect[readyIdx].setValue(wrap.ready());
     readyIdx++;
   }
+
   for (auto inputReady : inputReadysToConnect) {
     inputReady.setValue(newInst.getResult(newInstResNum));
     newInstResNum++;
   }
 
+  // Erase the old instance.
   inst.erase();
 }
 
