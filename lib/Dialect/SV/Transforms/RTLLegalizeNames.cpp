@@ -67,6 +67,11 @@ void RTLLegalizeNamesPass::runOnOperation() {
       runOnModule(module);
     } else if (auto intf = dyn_cast<InterfaceOp>(op)) {
       runOnInterface(intf, symbolUsers);
+    } else if (auto extMod = dyn_cast<RTLModuleExternOp>(op)) {
+      auto name = extMod.getVerilogModuleName();
+      if (!sv::isNameValid(name)) {
+        extMod->emitOpError("with invalid name \"" + name + "\"");
+      }
     }
   }
 

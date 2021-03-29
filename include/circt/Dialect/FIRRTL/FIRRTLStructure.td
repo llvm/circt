@@ -39,11 +39,14 @@ def CircuitOp : FIRRTLOp<"circuit",
     /// Return body of this circuit.
     Region &getBodyRegion();
     Block *getBody();
+
+    // Return the main module that is the entry point of the circuit.  This may
+    // be either an FModuleOp or an FExtModuleOp.
+    Operation *getMainModule();
   }];
 
   let printer = "return ::print(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
-
   let verifier = "return ::verifyCircuitOp(*this);";
 }
 
@@ -73,8 +76,10 @@ def FModuleOp : FIRRTLOp<"module",
     using FunctionLike::getBody;
 
     // Decode information about the input and output ports on this module.
-    void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
-      getModulePortInfo(*this, results);
+    SmallVector<ModulePortInfo> getPorts() {
+      SmallVector<ModulePortInfo> ports;
+      getModulePortInfo(*this, ports);
+      return ports;
     }
 
     // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is
@@ -139,8 +144,10 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
 
   let extraClassDeclaration = [{
      // Decode information about the input and output ports on this module.
-     void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
-       getModulePortInfo(*this, results);
+     SmallVector<ModulePortInfo> getPorts() {
+       SmallVector<ModulePortInfo> ports;
+       getModulePortInfo(*this, ports);
+       return ports;
      }
 
   private:

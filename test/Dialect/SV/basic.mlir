@@ -82,17 +82,15 @@ rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
 
 // Smoke test generic syntax.
   sv.initial {
-    "sv.if"(%arg0) ( {
-      "sv.yield"() : () -> ()
+    "sv.if"(%arg0) ( { 
+      ^bb0:
     }, {
-      "sv.yield"() : () -> ()
     }) : (i1) -> ()
   }
 
   // CHECK-NEXT:     sv.initial {
   // CHECK-NEXT:       sv.if %arg0 {
-  // CHECK-NEXT:       } else {
-  // CHECK-NEXT:       }
+  // CHECK-NEXT:       } 
   // CHECK-NEXT:     }
 
   // CHECK-NEXT: sv.initial { 
@@ -111,14 +109,12 @@ rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
     sv.casez %arg8 : i8
     case b0000001x: {
       sv.fwrite "x"
-      sv.yield
     }
     case b000000x1: {
       sv.fwrite "y"
-    }  // implicit yield is ok.
+    }
     default: {
       sv.fwrite "z"
-      sv.yield
     }
   }
 

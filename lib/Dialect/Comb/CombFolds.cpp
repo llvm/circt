@@ -197,7 +197,7 @@ OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
       constants, [](APInt &a, const APInt &b) { a &= b; });
 }
 
-void AndOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void AndOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                         MLIRContext *context) {
   struct Folder final : public OpRewritePattern<AndOp> {
     using OpRewritePattern::OpRewritePattern;
@@ -274,7 +274,7 @@ OpFoldResult OrOp::fold(ArrayRef<Attribute> constants) {
       constants, [](APInt &a, const APInt &b) { a |= b; });
 }
 
-void OrOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void OrOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                        MLIRContext *context) {
   struct Folder final : public OpRewritePattern<OrOp> {
     using OpRewritePattern::OpRewritePattern;
@@ -343,7 +343,7 @@ OpFoldResult XorOp::fold(ArrayRef<Attribute> constants) {
       constants, [](APInt &a, const APInt &b) { a ^= b; });
 }
 
-void XorOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void XorOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                         MLIRContext *context) {
   struct Folder final : public OpRewritePattern<XorOp> {
     using OpRewritePattern::OpRewritePattern;
@@ -432,7 +432,7 @@ OpFoldResult AddOp::fold(ArrayRef<Attribute> constants) {
       constants, [](APInt &a, const APInt &b) { a += b; });
 }
 
-void AddOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void AddOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                         MLIRContext *context) {
   struct Folder final : public OpRewritePattern<AddOp> {
     using OpRewritePattern::OpRewritePattern;
@@ -546,7 +546,7 @@ OpFoldResult MulOp::fold(ArrayRef<Attribute> constants) {
       constants, [](APInt &a, const APInt &b) { a *= b; });
 }
 
-void MulOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void MulOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                         MLIRContext *context) {
   struct Folder final : public OpRewritePattern<MulOp> {
     using OpRewritePattern::OpRewritePattern;
@@ -734,7 +734,7 @@ static LogicalResult tryCanonicalizeConcat(ConcatOp op,
   return failure();
 }
 
-void ConcatOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void ConcatOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                            MLIRContext *context) {
   struct Folder final : public OpRewritePattern<ConcatOp> {
     using OpRewritePattern::OpRewritePattern;
@@ -774,7 +774,7 @@ static mlir::Value sextToDestTypeAndFlip(mlir::Value op, Type destType,
   return rewriter.create<XorOp>(op.getLoc(), destType, newOperands);
 }
 
-void MuxOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void MuxOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                         MLIRContext *context) {
   struct Folder final : public OpRewritePattern<MuxOp> {
     using OpRewritePattern::OpRewritePattern;
@@ -1045,7 +1045,7 @@ struct ICmpCanonicalizeConstant final : public OpRewritePattern<ICmpOp> {
 
 } // namespace
 
-void ICmpOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void ICmpOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
   results.insert<ICmpCanonicalizeConstant>(context);
 }

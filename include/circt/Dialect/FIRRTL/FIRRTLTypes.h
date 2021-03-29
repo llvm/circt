@@ -45,6 +45,9 @@ public:
   /// types recursively within itself.
   bool isPassive() { return getRecursiveTypeProperties().first; }
 
+  /// Return true if this is a 'ground' type, aka a non-aggregate type.
+  bool isGround();
+
   /// Return true if this is or contains an Analog type.
   bool containsAnalog() { return getRecursiveTypeProperties().second; }
 

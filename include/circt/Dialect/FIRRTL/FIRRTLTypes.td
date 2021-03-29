@@ -15,7 +15,7 @@
 //===----------------------------------------------------------------------===//
 
 def FIRRTLType : Type<CPred<"$_self.isa<FIRRTLType>()">, "FIRRTLType",
-                            "::circt::firrtl::FIRRTLType">;
+                             "::circt::firrtl::FIRRTLType">;
 
 def ClockType : Type<CPred<"$_self.isa<ClockType>()">, "clock",
                            "::circt::firrtl::ClockType">,

@@ -105,8 +105,7 @@ void FIRRTLToLLHDPass::convertModule(firrtl::FModuleOp &module) {
   // Map the potentially complex FIRRTL module ports to LLHD entity inputs and
   // outputs. This will become fairly involved, since the nested nature of flips
   // and bundle types requires refactoring of the ports.
-  SmallVector<firrtl::ModulePortInfo, 4> modulePorts;
-  module.getPortInfo(modulePorts);
+  SmallVector<firrtl::ModulePortInfo> modulePorts = module.getPorts();
 
   SmallVector<Type, 4> ins;
   SmallVector<Type, 4> outs;

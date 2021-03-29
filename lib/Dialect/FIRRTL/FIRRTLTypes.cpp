@@ -195,6 +195,20 @@ Type FIRRTLDialect::parseType(DialectAsmParser &parser) const {
 // FIRRTLType Implementation
 //===----------------------------------------------------------------------===//
 
+/// Return true if this is a 'ground' type, aka a non-aggregate type.
+bool FIRRTLType::isGround() {
+  return TypeSwitch<FIRRTLType, bool>(*this)
+      .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
+            AnalogType>([](Type) { return true; })
+      .Case<BundleType, FVectorType>([](Type) { return false; })
+      .Case<FlipType>(
+          [](FlipType type) { return type.getElementType().isGround(); })
+      .Default([](Type) {
+        llvm_unreachable("unknown FIRRTL type");
+        return false;
+      });
+}
+
 /// Return a pair with the 'isPassive' and 'containsAnalog' bits.
 std::pair<bool, bool> FIRRTLType::getRecursiveTypeProperties() {
   return TypeSwitch<FIRRTLType, std::pair<bool, bool>>(*this)

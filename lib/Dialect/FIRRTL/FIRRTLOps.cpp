@@ -116,6 +116,9 @@ static ParseResult parseCircuitOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
+// Return the main module that is the entry point of the circuit.
+Operation *CircuitOp::getMainModule() { return lookupSymbol(name()); }
+
 static LogicalResult verifyCircuitOp(CircuitOp circuit) {
   StringRef main = circuit.name();
 
@@ -126,7 +129,7 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
   }
 
   // Check that a module matching the "main" module exists in the circuit.
-  if (!circuit.lookupSymbol(main)) {
+  if (!circuit.getMainModule()) {
     circuit.emitOpError("must contain one module that matches main name '" +
                         main + "'");
     return failure();
@@ -179,10 +182,9 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
     }
 
     // Check that the number of ports is exactly the same.
-    SmallVector<ModulePortInfo, 8> ports;
-    SmallVector<ModulePortInfo, 8> collidingPorts;
-    extModule.getPortInfo(ports);
-    collidingExtModule.getPortInfo(collidingPorts);
+    SmallVector<ModulePortInfo> ports = extModule.getPorts();
+    SmallVector<ModulePortInfo> collidingPorts = collidingExtModule.getPorts();
+
     if (ports.size() != collidingPorts.size()) {
       auto diag = op.emitOpError()
                   << "with 'defname' attribute " << defname << " has "

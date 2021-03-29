@@ -62,10 +62,6 @@ static void mergeRegions(Region *region1, Region *region2) {
   if (!region2->empty()) {
     auto &block1 = region1->front();
     auto &block2 = region2->front();
-    // Remove the terminator from the first block before merging.
-    assert(isa<sv::YieldOp>(block2.back()) &&
-           "Block should be terminated by an sv.yield operation");
-    block2.back().erase();
     block1.getOperations().splice(block1.begin(), block2.getOperations());
   }
 }
