@@ -15,7 +15,9 @@ add_mlir_python_extension(CIRCTBindingsPythonExtension _circt
   SOURCES
     CIRCTModule.cpp
   LINK_LIBS
+    CIRCTCAPIComb
     CIRCTCAPIRTL
+    CIRCTCAPISV
 )
 add_dependencies(CIRCTBindingsPython CIRCTBindingsPythonExtension)
 
@@ -66,7 +68,17 @@ endforeach()
 ################################################################################
 # Generate dialect-specific bindings.
 ################################################################################
+add_mlir_dialect_python_bindings(CIRCTBindingsPythonCombOps
+  TD_FILE CombOps.td
+  DIALECT_NAME comb)
+add_dependencies(CIRCTBindingsPythonSources CIRCTBindingsPythonCombOps)
+
 add_mlir_dialect_python_bindings(CIRCTBindingsPythonRTLOps
   TD_FILE RTLOps.td
   DIALECT_NAME rtl)
 add_dependencies(CIRCTBindingsPythonSources CIRCTBindingsPythonRTLOps)
+
+add_mlir_dialect_python_bindings(CIRCTBindingsPythonSVOps
+  TD_FILE SVOps.td
+  DIALECT_NAME sv)
+add_dependencies(CIRCTBindingsPythonSources CIRCTBindingsPythonSVOps)

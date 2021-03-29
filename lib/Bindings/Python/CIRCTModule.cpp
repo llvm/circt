@@ -6,7 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt-c/Dialect/Comb.h"
 #include "circt-c/Dialect/RTL.h"
+#include "circt-c/Dialect/SV.h"
 #include "mlir-c/Bindings/Python/Interop.h"
 #include "mlir-c/Registration.h"
 
@@ -27,6 +29,12 @@ PYBIND11_MODULE(_circt, m) {
         MlirDialectHandle rtl = mlirGetDialectHandle__rtl__();
         mlirDialectHandleRegisterDialect(rtl, context);
         mlirDialectHandleLoadDialect(rtl, context);
+        MlirDialectHandle comb = mlirGetDialectHandle__comb__();
+        mlirDialectHandleRegisterDialect(comb, context);
+        mlirDialectHandleLoadDialect(comb, context);
+        MlirDialectHandle sv = mlirGetDialectHandle__sv__();
+        mlirDialectHandleRegisterDialect(sv, context);
+        mlirDialectHandleLoadDialect(sv, context);
       },
       "Register CIRCT dialects on a PyMlirContext.");
 }
