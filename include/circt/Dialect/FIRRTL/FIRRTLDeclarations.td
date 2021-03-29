@@ -60,10 +60,12 @@ def InstanceOp : FIRRTLOp<"instance"> {
 
 def CMemOp : FIRRTLOp<"cmem", [/*MemAlloc*/]> {
   let summary = "Define a new cmem";
-  let arguments = (ins OptionalAttr<StrAttr>:$name);
+  let arguments = (
+    ins OptionalAttr<StrAttr>:$name,
+        DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
   let results = (outs FIRRTLType:$result);
 
-  let assemblyFormat = "attr-dict `:` type($result)";
+  let assemblyFormat = "custom<ElideAnnotations>(attr-dict) `:` type($result)";
 }
 
 def SMemOp : FIRRTLOp<"smem", [/*MemAlloc*/]> {

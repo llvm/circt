@@ -1762,6 +1762,29 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
 }
 
 //===----------------------------------------------------------------------===//
+// Custom attr-dict Directive that Elides Annotations
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseElideAnnotations(OpAsmParser &parser,
+                                         NamedAttrList &resultAttrs) {
+
+  if (parser.parseOptionalAttrDict(resultAttrs))
+    return failure();
+
+  return success();
+}
+
+static void printElideAnnotations(OpAsmPrinter &p, Operation *op,
+                                  DictionaryAttr attr) {
+  // Elide "annotations" if it doesn't exist or if it is empty
+  auto annotationsAttr = op->getAttrOfType<ArrayAttr>("annotations");
+  if (!annotationsAttr || annotationsAttr.empty())
+    return p.printOptionalAttrDict(op->getAttrs(), {"annotations"});
+
+  p.printOptionalAttrDict(op->getAttrs());
+}
+
+//===----------------------------------------------------------------------===//
 // InstanceOp Custom attr-dict Directive
 //===----------------------------------------------------------------------===//
 

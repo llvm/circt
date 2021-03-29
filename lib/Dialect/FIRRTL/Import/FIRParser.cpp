@@ -2204,8 +2204,11 @@ ParseResult FIRStmtParser::parseCMem() {
       parseType(type, "expected cmem type") || parseOptionalInfo(info))
     return failure();
 
-  auto result =
-      builder.create<CMemOp>(info.getLoc(), type, filterUselessName(id));
+  auto name = filterUselessName(id);
+  ArrayAttr annotations = builder.getArrayAttr({});
+  getAnnotations(getModuleTarget() + ">" + name.getValue(), annotations);
+
+  auto result = builder.create<CMemOp>(info.getLoc(), type, name, annotations);
 
   // Remember that this memory is in this symbol table scope.
   // TODO(chisel bug): This should be removed along with memoryScopeTable.
