@@ -598,3 +598,24 @@ rtl.module @alwayscombTest(%a: i1) -> (%x: i1) {
   %out = sv.read_inout %combWire : !rtl.inout<i1>
   rtl.output %out : i1
 }
+
+// CHECK-LABEL: module inlineProceduralWiresWithLongNames
+rtl.module @inlineProceduralWiresWithLongNames(%clock: i1, %in: i1) {
+  %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa = sv.wire  : !rtl.inout<i1>
+  %0 = sv.read_inout %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa : !rtl.inout<i1>
+  %bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb = sv.wire  : !rtl.inout<i1>
+  %1 = sv.read_inout %bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb : !rtl.inout<i1>
+  %r = sv.reg  : !rtl.inout<uarray<1xi1>>
+  %s = sv.reg  : !rtl.inout<uarray<1xi1>>
+  %2 = sv.array_index_inout %r[%0] : !rtl.inout<uarray<1xi1>>, i1
+  %3 = sv.array_index_inout %s[%1] : !rtl.inout<uarray<1xi1>>, i1
+  // CHECK: always_ff
+  sv.alwaysff(posedge %clock)  {
+    // CHECK:      automatic logic [[x:.+]];
+    // CHECK-NEXT: automatic logic [[y:.+]];
+    // CHECK-NEXT: [[x]] = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
+    sv.passign %2, %in : i1
+    // CHECK:      [[y]] = bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb;
+    sv.passign %3, %in : i1
+  }
+}
