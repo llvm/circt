@@ -101,7 +101,8 @@ constFoldFIRRTLBinaryOp(ArrayRef<Attribute> operands, bool isUnsigned,
                         const function_ref<DstTy(APInt, APInt)> &calculate,
                         llvm::Optional<unsigned> dstWidth = None) {
   assert(operands.size() == 2 && "binary op takes two operands");
-  if (!operands[0] || !operands[1])
+  if (!operands[0] || !operands[1] ||
+      (dstWidth.hasValue() && dstWidth.getValue() == 0))
     return {};
   if (operands[0].isa<IntegerAttr>() && operands[1].isa<IntegerAttr>()) {
     auto lhs = operands[0].cast<IntegerAttr>();
@@ -110,7 +111,7 @@ constFoldFIRRTLBinaryOp(ArrayRef<Attribute> operands, bool isUnsigned,
                            ? dstWidth.getValue()
                            : std::max<int32_t>(lhs.getValue().getBitWidth(),
                                                rhs.getValue().getBitWidth());
-    auto extOrSelf = isUnsigned ? &APInt::zextOrSelf : &APInt::sextOrSelf;
+    auto extOrSelf = isUnsigned ? &APInt::zextOrTrunc : &APInt::sextOrTrunc;
     return IntegerAttr::get(
         IntegerType::get(lhs.getContext(),
                          dstWidth.hasValue() ? dstWidth.getValue() : 1),
@@ -157,12 +158,41 @@ OpFoldResult AddPrimOp::fold(ArrayRef<Attribute> operands) {
   /// If both operands are constant, and the result is integer with known
   /// widths, then perform constant folding. Cannot use constFoldBinaryOp, since
   /// the width of the constant is different from operands.
-  if (hasKnownWidths(*this)) {
+  return constFoldFIRRTLBinaryOp<APInt>(
+      operands, getOperand(0).getType().cast<IntType>().isUnsigned(),
+      [=](APInt a, APInt b) { return a + b; },
+      getType().cast<FIRRTLType>().getBitWidthOrSentinel());
+  return {};
+}
+
+OpFoldResult SubPrimOp::fold(ArrayRef<Attribute> operands) {
+  return constFoldFIRRTLBinaryOp<APInt>(
+      operands, getOperand(0).getType().cast<IntType>().isUnsigned(),
+      [=](APInt a, APInt b) { return a - b; },
+      getType().cast<FIRRTLType>().getBitWidthOrSentinel());
+  return {};
+}
+
+OpFoldResult MulPrimOp::fold(ArrayRef<Attribute> operands) {
+  return constFoldFIRRTLBinaryOp<APInt>(
+      operands, getOperand(0).getType().cast<IntType>().isUnsigned(),
+      [=](APInt a, APInt b) { return a * b; },
+      getType().cast<FIRRTLType>().getBitWidthOrSentinel());
+  return {};
+}
+
+OpFoldResult RemPrimOp::fold(ArrayRef<Attribute> operands) {
+
+  auto opType = getType().cast<IntType>();
+  if (opType.isSigned())
     return constFoldFIRRTLBinaryOp<APInt>(
         operands, getOperand(0).getType().cast<IntType>().isUnsigned(),
-        [=](APInt a, APInt b) { return a + b; },
-        getType().cast<FIRRTLType>().getBitWidthOrSentinel());
-  }
+        [=](APInt a, APInt b) { return a.srem(b); },
+        opType.getBitWidthOrSentinel());
+  return constFoldFIRRTLBinaryOp<APInt>(
+      operands, getOperand(0).getType().cast<IntType>().isUnsigned(),
+      [=](APInt a, APInt b) { return a.urem(b); },
+      opType.getBitWidthOrSentinel());
   return {};
 }
 

@@ -1000,4 +1000,95 @@ firrtl.module @add_cst_prop3(%out_b: !firrtl.flip<sint<4>>) {
   %add = firrtl.add %tmp_a, %c1_si3 : (!firrtl.sint<2>, !firrtl.sint<3>) -> !firrtl.sint<4>
   firrtl.connect %out_b, %add : !firrtl.flip<sint<4>>, !firrtl.sint<4>
 }
+
+// CHECK-LABEL: @sub_cst_prop1
+// CHECK-NEXT:      %c1_ui9 = firrtl.constant(1 : i9) : !firrtl.uint<9>
+// CHECK-NEXT:      firrtl.connect %out_b, %c1_ui9 : !firrtl.flip<uint<9>>, !firrtl.uint<9>
+// CHECK-NEXT:  }
+firrtl.module @sub_cst_prop1(%out_b: !firrtl.flip<uint<9>>) {
+  %c6_ui7 = firrtl.constant(6 : ui7) : !firrtl.uint<7>
+  %tmp_a = firrtl.wire : !firrtl.uint<7>
+  %c5_ui8 = firrtl.constant(5 : ui8) : !firrtl.uint<8>
+  firrtl.connect %tmp_a, %c6_ui7 : !firrtl.uint<7>, !firrtl.uint<7>
+  %add = firrtl.sub %tmp_a, %c5_ui8 : (!firrtl.uint<7>, !firrtl.uint<8>) -> !firrtl.uint<9>
+  firrtl.connect %out_b, %add : !firrtl.flip<uint<9>>, !firrtl.uint<9>
+}
+
+// CHECK-LABEL: @sub_cst_prop2
+// CHECK-NEXT:      %c-11_si9 = firrtl.constant(-11 : i9) : !firrtl.sint<9>
+// CHECK-NEXT:      firrtl.connect %out_b, %c-11_si9 : !firrtl.flip<sint<9>>, !firrtl.sint<9>
+// CHECK-NEXT:  }
+firrtl.module @sub_cst_prop2(%out_b: !firrtl.flip<sint<9>>) {
+  %c6_ui7 = firrtl.constant(-6 : i7) : !firrtl.sint<7>
+  %tmp_a = firrtl.wire : !firrtl.sint<7>
+  %c5_ui8 = firrtl.constant(5 : i8) : !firrtl.sint<8>
+  firrtl.connect %tmp_a, %c6_ui7 : !firrtl.sint<7>, !firrtl.sint<7>
+  %add = firrtl.sub %tmp_a, %c5_ui8 : (!firrtl.sint<7>, !firrtl.sint<8>) -> !firrtl.sint<9>
+  firrtl.connect %out_b, %add : !firrtl.flip<sint<9>>, !firrtl.sint<9>
+}
+
+// CHECK-LABEL: @mul_cst_prop1
+// CHECK-NEXT:      %c30_ui15 = firrtl.constant(30 : i15) : !firrtl.uint<15>
+// CHECK-NEXT:      firrtl.connect %out_b, %c30_ui15 : !firrtl.flip<uint<15>>, !firrtl.uint<15>
+// CHECK-NEXT:  }
+firrtl.module @mul_cst_prop1(%out_b: !firrtl.flip<uint<15>>) {
+  %c6_ui7 = firrtl.constant(6 : ui7) : !firrtl.uint<7>
+  %tmp_a = firrtl.wire : !firrtl.uint<7>
+  %c5_ui8 = firrtl.constant(5 : ui8) : !firrtl.uint<8>
+  firrtl.connect %tmp_a, %c6_ui7 : !firrtl.uint<7>, !firrtl.uint<7>
+  %add = firrtl.mul %tmp_a, %c5_ui8 : (!firrtl.uint<7>, !firrtl.uint<8>) -> !firrtl.uint<15>
+  firrtl.connect %out_b, %add : !firrtl.flip<uint<15>>, !firrtl.uint<15>
+}
+
+// CHECK-LABEL: @mul_cst_prop2
+// CHECK-NEXT:      %c-30_si15 = firrtl.constant(-30 : i15) : !firrtl.sint<15>
+// CHECK-NEXT:      firrtl.connect %out_b, %c-30_si15 : !firrtl.flip<sint<15>>, !firrtl.sint<15>
+// CHECK-NEXT:  }
+firrtl.module @mul_cst_prop2(%out_b: !firrtl.flip<sint<15>>) {
+  %c6_ui7 = firrtl.constant(-6 : i7) : !firrtl.sint<7>
+  %tmp_a = firrtl.wire : !firrtl.sint<7>
+  %c5_ui8 = firrtl.constant(5 : i8) : !firrtl.sint<8>
+  firrtl.connect %tmp_a, %c6_ui7 : !firrtl.sint<7>, !firrtl.sint<7>
+  %add = firrtl.mul %tmp_a, %c5_ui8 : (!firrtl.sint<7>, !firrtl.sint<8>) -> !firrtl.sint<15>
+  firrtl.connect %out_b, %add : !firrtl.flip<sint<15>>, !firrtl.sint<15>
+}
+
+// CHECK-LABEL: @mul_cst_prop3
+// CHECK-NEXT:      %c30_si15 = firrtl.constant(30 : i15) : !firrtl.sint<15>
+// CHECK-NEXT:      firrtl.connect %out_b, %c30_si15 : !firrtl.flip<sint<15>>, !firrtl.sint<15>
+// CHECK-NEXT:  }
+firrtl.module @mul_cst_prop3(%out_b: !firrtl.flip<sint<15>>) {
+  %c6_ui7 = firrtl.constant(-6 : i7) : !firrtl.sint<7>
+  %tmp_a = firrtl.wire : !firrtl.sint<7>
+  %c5_ui8 = firrtl.constant(-5 : i8) : !firrtl.sint<8>
+  firrtl.connect %tmp_a, %c6_ui7 : !firrtl.sint<7>, !firrtl.sint<7>
+  %add = firrtl.mul %tmp_a, %c5_ui8 : (!firrtl.sint<7>, !firrtl.sint<8>) -> !firrtl.sint<15>
+  firrtl.connect %out_b, %add : !firrtl.flip<sint<15>>, !firrtl.sint<15>
+}
+
+// CHECK-LABEL: @rem_cst_prop1
+// CHECK-NEXT:      %c1_ui7 = firrtl.constant(1 : i7) : !firrtl.uint<7>
+// CHECK-NEXT:      firrtl.connect %out_b, %c1_ui7 : !firrtl.flip<uint<7>>, !firrtl.uint<7>
+// CHECK-NEXT:  }
+firrtl.module @rem_cst_prop1(%out_b: !firrtl.flip<uint<7>>) {
+  %c6_ui7 = firrtl.constant(6 : ui7) : !firrtl.uint<7>
+  %tmp_a = firrtl.wire : !firrtl.uint<7>
+  %c5_ui8 = firrtl.constant(5 : ui8) : !firrtl.uint<8>
+  firrtl.connect %tmp_a, %c6_ui7 : !firrtl.uint<7>, !firrtl.uint<7>
+  %add = firrtl.rem %tmp_a, %c5_ui8 : (!firrtl.uint<7>, !firrtl.uint<8>) -> !firrtl.uint<7>
+  firrtl.connect %out_b, %add : !firrtl.flip<uint<7>>, !firrtl.uint<7>
+}
+
+// CHECK-LABEL: @rem_cst_prop2
+// CHECK-NEXT:      %c-1_si7 = firrtl.constant(-1 : i7) : !firrtl.sint<7>
+// CHECK-NEXT:      firrtl.connect %out_b, %c-1_si7 : !firrtl.flip<sint<7>>, !firrtl.sint<7>
+// CHECK-NEXT:  }
+firrtl.module @rem_cst_prop2(%out_b: !firrtl.flip<sint<7>>) {
+  %c6_ui7 = firrtl.constant(-6 : i7) : !firrtl.sint<7>
+  %tmp_a = firrtl.wire : !firrtl.sint<7>
+  %c5_ui8 = firrtl.constant(5 : i8) : !firrtl.sint<8>
+  firrtl.connect %tmp_a, %c6_ui7 : !firrtl.sint<7>, !firrtl.sint<7>
+  %add = firrtl.rem %tmp_a, %c5_ui8 : (!firrtl.sint<7>, !firrtl.sint<8>) -> !firrtl.sint<7>
+  firrtl.connect %out_b, %add : !firrtl.flip<sint<7>>, !firrtl.sint<7>
+}
 }
