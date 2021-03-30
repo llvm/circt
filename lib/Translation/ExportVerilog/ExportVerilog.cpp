@@ -38,7 +38,7 @@ using namespace rtl;
 using namespace sv;
 
 /// This is the preferred source width for the generated Verilog.
-static constexpr size_t preferredSourceWidth = 120;
+static constexpr size_t preferredSourceWidth = 90;
 
 //===----------------------------------------------------------------------===//
 // Helper routines
@@ -972,10 +972,10 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
     threshold = ~0U;
     break;
   case OOLUnary:
-    threshold = 70;
+    threshold = preferredSourceWidth - 20;
     break;
   case OOLBinary:
-    threshold = 45;
+    threshold = preferredSourceWidth / 2;
     break;
   }
 
