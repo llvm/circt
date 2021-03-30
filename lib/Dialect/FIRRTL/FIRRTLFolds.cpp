@@ -95,22 +95,29 @@ static void addCanonicalizerMethod(RewritePatternSet &results,
 /// bit widths, and depending on whether the operation is to be performed on
 /// signed or unsigned operands. The result is always a 1 bit integer,
 /// appropriate for comparison/relational operators.
+template <class DstTy>
 static Attribute
-constFoldBinaryRelationalOp(ArrayRef<Attribute> operands, bool isUnsigned,
-                            const function_ref<bool(APInt, APInt)> &calculate) {
+constFoldFIRRTLBinaryOp(ArrayRef<Attribute> operands, bool isLhsUnsigned,
+                            bool isRhsUnsigned,
+                            const function_ref<DstTy(APInt, APInt)> &calculate,
+                            llvm::Optional<unsigned> dstWidth = None) {
   assert(operands.size() == 2 && "binary op takes two operands");
   if (!operands[0] || !operands[1])
     return {};
   if (operands[0].isa<IntegerAttr>() && operands[1].isa<IntegerAttr>()) {
     auto lhs = operands[0].cast<IntegerAttr>();
     auto rhs = operands[1].cast<IntegerAttr>();
-    auto commonWidth = std::max<int32_t>(lhs.getValue().getBitWidth(),
-                                         rhs.getValue().getBitWidth());
-    auto extOrSelf = isUnsigned ? &APInt::zextOrSelf : &APInt::sextOrSelf;
+    auto commonWidth = dstWidth.hasValue()
+                           ? dstWidth.getValue()
+                           : std::max<int32_t>(lhs.getValue().getBitWidth(),
+                                               rhs.getValue().getBitWidth());
+    auto extOrSelfLhs = isLhsUnsigned ? &APInt::zextOrSelf : &APInt::sextOrSelf;
+    auto extOrSelfRhs = isRhsUnsigned ? &APInt::zextOrSelf : &APInt::sextOrSelf;
     return IntegerAttr::get(
-        IntegerType::get(lhs.getContext(), 1),
-        calculate((lhs.getValue().*extOrSelf)(commonWidth),
-                  (rhs.getValue().*extOrSelf)(commonWidth)));
+        IntegerType::get(lhs.getContext(),
+                         dstWidth.hasValue() ? dstWidth.getValue() : 1),
+        calculate((lhs.getValue().*extOrSelfLhs)(commonWidth),
+                  (rhs.getValue().*extOrSelfRhs)(commonWidth)));
   }
   return {};
 }
@@ -153,17 +160,11 @@ OpFoldResult AddPrimOp::fold(ArrayRef<Attribute> operands) {
   /// widths, then perform constant folding. Cannot use constFoldBinaryOp, since
   /// the width of the constant is different from operands.
   if (operands[0] && operands[1] && hasKnownWidths(*this)) {
-    auto op1 = operands[0].cast<IntegerAttr>();
-    auto op2 = operands[1].cast<IntegerAttr>();
-    auto numBits = getType().cast<FIRRTLType>().getBitWidthOrSentinel();
-    APInt sumAPInt =
-        extendConstantToWidth(
-            op1.getValue(), getOperand(0).getType().cast<IntType>().isSigned(),
-            numBits) +
-        extendConstantToWidth(
-            op2.getValue(), getOperand(1).getType().cast<IntType>().isSigned(),
-            numBits);
-    return getIntAttr(sumAPInt, getContext());
+    return constFoldFIRRTLBinaryOp<APInt>(
+        operands, getOperand(0).getType().cast<IntType>().isUnsigned(),
+        getOperand(1).getType().cast<IntType>().isUnsigned(),
+        [=](APInt a, APInt b) { return a + b; },
+        getType().cast<FIRRTLType>().getBitWidthOrSentinel());
   }
   return {};
 }
@@ -298,8 +299,8 @@ OpFoldResult LEQPrimOp::fold(ArrayRef<Attribute> operands) {
     }
   }
 
-  return constFoldBinaryRelationalOp(
-      operands, isUnsigned,
+  return constFoldFIRRTLBinaryOp<bool>(
+      operands, isUnsigned, isUnsigned,
       [=](APInt a, APInt b) { return isUnsigned ? a.ule(b) : a.sle(b); });
 }
 
@@ -350,8 +351,8 @@ OpFoldResult LTPrimOp::fold(ArrayRef<Attribute> operands) {
     }
   }
 
-  return constFoldBinaryRelationalOp(
-      operands, isUnsigned,
+  return constFoldFIRRTLBinaryOp<bool>(
+      operands, isUnsigned, isUnsigned,
       [=](APInt a, APInt b) { return isUnsigned ? a.ult(b) : a.slt(b); });
 }
 
@@ -402,8 +403,8 @@ OpFoldResult GEQPrimOp::fold(ArrayRef<Attribute> operands) {
     }
   }
 
-  return constFoldBinaryRelationalOp(
-      operands, isUnsigned,
+  return constFoldFIRRTLBinaryOp<bool>(
+      operands, isUnsigned, isUnsigned,
       [=](APInt a, APInt b) { return isUnsigned ? a.uge(b) : a.sge(b); });
 }
 
@@ -448,8 +449,8 @@ OpFoldResult GTPrimOp::fold(ArrayRef<Attribute> operands) {
     }
   }
 
-  return constFoldBinaryRelationalOp(
-      operands, isUnsigned,
+  return constFoldFIRRTLBinaryOp<bool>(
+      operands, isUnsigned, isUnsigned,
       [=](APInt a, APInt b) { return isUnsigned ? a.ugt(b) : a.sgt(b); });
 }
 
@@ -473,8 +474,9 @@ OpFoldResult EQPrimOp::fold(ArrayRef<Attribute> operands) {
     /// TODO: eq(x, ~0) -> andr(x)) when x is >1 bit
   }
 
-  return constFoldBinaryRelationalOp(operands, isUnsigned,
-                                     [=](APInt a, APInt b) { return a.eq(b); });
+  return constFoldFIRRTLBinaryOp<bool>(
+      operands, isUnsigned, isUnsigned,
+      [=](APInt a, APInt b) { return a.eq(b); });
 }
 
 OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -497,8 +499,9 @@ OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
     /// TODO: neq(x, ~0) -> andr(x)) when x is >1 bit
   }
 
-  return constFoldBinaryRelationalOp(operands, isUnsigned,
-                                     [=](APInt a, APInt b) { return a.ne(b); });
+  return constFoldFIRRTLBinaryOp<bool>(
+      operands, isUnsigned, isUnsigned,
+      [=](APInt a, APInt b) { return a.ne(b); });
 }
 
 //===----------------------------------------------------------------------===//
