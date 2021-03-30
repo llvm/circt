@@ -78,8 +78,8 @@ void circt::esi::findValidReadySignals(
       continue;
 
     // Found one.
-    names.push_back(ESIPortValidReadyMapping{
-        .data = port, .valid = valid->second, .ready = ready->second});
+    names.push_back(
+        ESIPortValidReadyMapping{port, valid->second, ready->second});
   }
 }
 
