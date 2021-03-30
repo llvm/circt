@@ -210,27 +210,15 @@ def XorPrimOp : BinaryPrimOp<"xor", IntType, IntType, UIntType, [Commutative]> {
 }
 
 // Comparison Operations
-def LEQPrimOp : BinaryPrimOp<"leq", IntType, IntType, UInt1Type> {
-  let hasCanonicalizer = 1;
-  let hasFolder = 1;
-}
-def LTPrimOp  : BinaryPrimOp<"lt",  IntType, IntType, UInt1Type> {
-  let hasCanonicalizer = 1;
-  let hasFolder = 1;
-}
-def GEQPrimOp : BinaryPrimOp<"geq", IntType, IntType, UInt1Type> {
-  let hasCanonicalizer = 1;
-  let hasFolder = 1;
-}
-def GTPrimOp  : BinaryPrimOp<"gt",  IntType, IntType, UInt1Type> {
-  let hasCanonicalizer = 1;
-  let hasFolder = 1;
-}
-def EQPrimOp  : BinaryPrimOp<"eq",  IntType, IntType, UInt1Type, [Commutative]>{
-  let hasFolder = 1;
-}
-def NEQPrimOp : BinaryPrimOp<"neq", IntType, IntType, UInt1Type, [Commutative]>{
-  let hasFolder = 1;
+let hasFolder = 1 in {
+  let hasCanonicalizer = 1 in {
+    def LEQPrimOp : BinaryPrimOp<"leq", IntType, IntType, UInt1Type>;
+    def LTPrimOp  : BinaryPrimOp<"lt",  IntType, IntType, UInt1Type>;
+    def GEQPrimOp : BinaryPrimOp<"geq", IntType, IntType, UInt1Type>;
+    def GTPrimOp  : BinaryPrimOp<"gt",  IntType, IntType, UInt1Type>;
+  }
+  def EQPrimOp  : BinaryPrimOp<"eq",  IntType, IntType, UInt1Type, [Commutative]>;
+  def NEQPrimOp : BinaryPrimOp<"neq", IntType, IntType, UInt1Type, [Commutative]>;
 }
 
 def CatPrimOp   : BinaryPrimOp<"cat", IntType, IntType, UIntType> {
