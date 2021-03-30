@@ -92,15 +92,15 @@ static void addCanonicalizerMethod(RewritePatternSet &results,
 /// Applies the constant folding function `calculate` to the given operands.
 ///
 /// Sign or zero extends the operands appropriately to the larger of the two
-/// bit widths, and depending on whether the operation is to be performed on
-/// signed or unsigned operands. The result is always a 1 bit integer,
-/// appropriate for comparison/relational operators.
+/// bit widths if dstWidth is None, else to dstWidth, and depending on whether
+/// the operation is to be performed on signed or unsigned operands. The result
+/// is a dstWidth integer or 1 bit integer if dstWidth is None.
 template <class DstTy>
 static Attribute
 constFoldFIRRTLBinaryOp(ArrayRef<Attribute> operands, bool isLhsUnsigned,
-                            bool isRhsUnsigned,
-                            const function_ref<DstTy(APInt, APInt)> &calculate,
-                            llvm::Optional<unsigned> dstWidth = None) {
+                        bool isRhsUnsigned,
+                        const function_ref<DstTy(APInt, APInt)> &calculate,
+                        llvm::Optional<unsigned> dstWidth = None) {
   assert(operands.size() == 2 && "binary op takes two operands");
   if (!operands[0] || !operands[1])
     return {};
