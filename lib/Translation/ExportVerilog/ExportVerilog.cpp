@@ -44,6 +44,24 @@ static constexpr size_t preferredSourceWidth = 120;
 // Helper routines
 //===----------------------------------------------------------------------===//
 
+/// Return true for operations that are always inlined into a containing
+/// expression.
+static bool isExpressionAlwaysInline(Operation *op) {
+  // We need to emit array indexes inline per verilog "lvalue" semantics.
+  if (isa<ArrayIndexInOutOp>(op))
+    return true;
+
+  // We don't want wires that are just constants aesthetically.
+  if (isa<ConstantOp>(op))
+    return true;
+
+  // An SV interface modport is a symbolic name that is always inlined.
+  if (isa<GetModportOp>(op) || isa<ReadInterfaceSignalOp>(op))
+    return true;
+
+  return false;
+}
+
 static bool isVerilogExpression(Operation *op) {
   // These are SV dialect expressions.
   if (isa<ReadInOutOp>(op) || isa<ArrayIndexInOutOp>(op))
@@ -692,7 +710,7 @@ private:
                           SubExprOutOfLineBehavior outOfLineBehavior,
                           SubExprSignRequirement signReq = NoRequirement);
 
-  void retroactivelyEmitExpressionIntoTemporarily(Operation *op);
+  void retroactivelyEmitExpressionIntoTemporary(Operation *op);
 
   SubExprInfo visitUnhandledExpr(Operation *op);
   SubExprInfo visitInvalidComb(Operation *op) {
@@ -866,7 +884,7 @@ SubExprInfo ExprEmitter::emitUnary(Operation *op, const char *syntax,
 /// up to the point where they turn into massively long source lines of Verilog.
 /// At that point, we retroactively break the huge expression by inserting
 /// temporaries.  This handles the bookkeeping.
-void ExprEmitter::retroactivelyEmitExpressionIntoTemporarily(Operation *op) {
+void ExprEmitter::retroactivelyEmitExpressionIntoTemporary(Operation *op) {
   assert(isVerilogExpression(op) && !emitter.outOfLineExpressions.count(op) &&
          "Should only be called on expressions though to be inlined");
 
@@ -962,11 +980,12 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
   }
 
   if (outBuffer.size() - subExprStartIndex > threshold &&
-      parenthesizeIfLooserThan != ForceEmitMultiUse) {
+      parenthesizeIfLooserThan != ForceEmitMultiUse &&
+      !isExpressionAlwaysInline(op)) {
     // Inform the module emitter that this expression needs a temporary
     // wire/logic declaration and set it up so it will be referenced instead of
     // emitted inline.
-    retroactivelyEmitExpressionIntoTemporarily(op);
+    retroactivelyEmitExpressionIntoTemporary(op);
 
     // Lop this off the buffer we emitted.
     outBuffer.resize(subExprStartIndex);
@@ -1284,18 +1303,6 @@ static bool isOkToBitSelectFrom(Value v) {
   return true;
 }
 
-/// Return true for operations that are always inlined.
-static bool isExpressionAlwaysInline(Operation *op) {
-  if (isa<ConstantOp>(op) || isa<ArrayIndexInOutOp>(op))
-    return true;
-
-  // An SV interface modport is a symbolic name that is always inlined.
-  if (isa<GetModportOp>(op) || isa<ReadInterfaceSignalOp>(op))
-    return true;
-
-  return false;
-}
-
 /// Return true if we are unable to ever inline the specified operation.  This
 /// happens because not all Verilog expressions are composable, notably you
 /// can only use bit selects like x[4:6] on simple expressions, you cannot use
@@ -1320,7 +1327,7 @@ static bool isExpressionUnableToInline(Operation *op) {
     // If the user is in a different block and the op shouldn't be inlined, then
     // we emit this as an out-of-line declaration into its block and the user
     // can refer to it.
-    if (user->getBlock() != opBlock && !isExpressionAlwaysInline(op))
+    if (user->getBlock() != opBlock)
       return true;
 
     // Verilog bit selection is required by the standard to be:
@@ -1357,10 +1364,6 @@ static bool isExpressionEmittedInline(Operation *op) {
   // of line.
   if (isExpressionUnableToInline(op))
     return false;
-
-  // These are always emitted inline even if multiply referenced.
-  if (isExpressionAlwaysInline(op))
-    return true;
 
   // Otherwise, if it has multiple uses, emit it out of line.
   return op->getResult(0).hasOneUse();
@@ -2451,6 +2454,58 @@ void ModuleEmitter::emitRTLExternModule(RTLModuleExternOp module) {
   os << "// external module " << verilogName.getValue() << "\n\n";
 }
 
+// Given a side effect free "always inline" operation, make sure that it exists
+// in the same block as its users and that it has one use for each one.
+static void lowerAlwaysInlineOperation(Operation *op) {
+  assert(op->getNumResults() == 1 &&
+         "only support 'always inline' ops with one result");
+
+  // Nuke use-less operations.
+  if (op->use_empty()) {
+    op->erase();
+    return;
+  }
+
+  // Moving/cloning an op should pull along its operand tree with it if they are
+  // always inline.  This happens when an array index has a constant operand for
+  // example.
+  auto recursivelyHandleOperands = [](Operation *op) {
+    for (auto operand : op->getOperands()) {
+      if (auto *operandOp = operand.getDefiningOp())
+        if (isExpressionAlwaysInline(operandOp))
+          lowerAlwaysInlineOperation(operandOp);
+    }
+  };
+
+  // If this operation has multiple uses, duplicate it into N-1 of them in turn.
+  while (!op->hasOneUse()) {
+    OpOperand &use = *op->getUses().begin();
+    Operation *user = use.getOwner();
+
+    // Clone the op before the user.
+    auto *newOp = op->clone();
+    user->getBlock()->getOperations().insert(Block::iterator(user), newOp);
+    // Change the user to use the new op.
+    use.set(newOp->getResult(0));
+
+    // If any of the operations of the moved op are always inline, recursively
+    // handle them too.
+    recursivelyHandleOperands(newOp);
+  }
+
+  // Finally, ensures the op is in the same block as its user so it can be
+  // inlined.
+  Operation *user = *op->getUsers().begin();
+  if (op->getBlock() != user->getBlock()) {
+    op->moveBefore(user);
+
+    // If any of the operations of the moved op are always inline, recursively
+    // move/clone them too.
+    recursivelyHandleOperands(op);
+  }
+  return;
+}
+
 /// We lower the Merge operation to a wire at the top level along with connects
 /// to it and a ReadInOut.
 static Value lowerMergeOp(MergeOp merge) {
@@ -2511,6 +2566,13 @@ void ModuleEmitter::prepareRTLModule(Block &block) {
     for (auto &region : op.getRegions()) {
       if (!region.empty())
         prepareRTLModule(region.front());
+    }
+
+    // Duplicate "always inline" expression for each of their users and move
+    // them to be next to their users.
+    if (isExpressionAlwaysInline(&op)) {
+      lowerAlwaysInlineOperation(&op);
+      continue;
     }
 
     // Lower 'merge' operations to wires and connects.
