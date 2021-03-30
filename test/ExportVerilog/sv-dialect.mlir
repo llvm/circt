@@ -310,12 +310,13 @@ rtl.module @issue508(%in1: i1, %in2: i1) {
 // CHECK-LABEL: exprInlineTestIssue439
 // https://github.com/llvm/circt/issues/439
 rtl.module @exprInlineTestIssue439(%clk: i1) {
-  // CHECK: wire [31:0] _T = 32'h0;
   %c = rtl.constant 0 : i32
 
   // CHECK: always @(posedge clk) begin
   sv.always posedge %clk {
+    // CHECK: automatic logic [31:0] _T;
     // CHECK: automatic logic [15:0] _T_0;
+    // CHECK: _T = 32'h0;
     // CHECK: _T_0 = _T[15:0];
     %e = comb.extract %c from 0 : (i32) -> i16
     %f = comb.add %e, %e : i16
@@ -597,4 +598,25 @@ rtl.module @alwayscombTest(%a: i1) -> (%x: i1) {
   // CHECK: assign x = combWire;
   %out = sv.read_inout %combWire : !rtl.inout<i1>
   rtl.output %out : i1
+}
+
+
+rtl.module @inlineProceduralWiresWithLongNames(%clock: i1, %in: i1) {
+  %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa = sv.wire  : !rtl.inout<i1>
+  %0 = sv.read_inout %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa : !rtl.inout<i1>
+  %bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb = sv.wire  : !rtl.inout<i1>
+  %1 = sv.read_inout %bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb : !rtl.inout<i1>
+  %r = sv.reg  : !rtl.inout<uarray<1xi1>>
+  %s = sv.reg  : !rtl.inout<uarray<1xi1>>
+  %2 = sv.array_index_inout %r[%0] : !rtl.inout<uarray<1xi1>>, i1
+  %3 = sv.array_index_inout %s[%1] : !rtl.inout<uarray<1xi1>>, i1
+  // CHECK: wire _T = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
+  // CHECK: wire _T_0 = bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb;
+  // CHECK: always_ff
+  sv.alwaysff(posedge %clock)  {
+    // CHECK-NEXT: r[_T] <= in;
+    sv.passign %2, %in : i1
+    // CHECK-NEXT: s[_T_0] <= in;
+    sv.passign %3, %in : i1
+  }
 }
