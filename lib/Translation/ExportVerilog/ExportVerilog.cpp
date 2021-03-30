@@ -1691,6 +1691,12 @@ void StmtEmitter::emitExpression(Value exp,
       declarationsNeeded.push_back(expr);
   }
 
+  // Remove any out-of-line expressions as they have already been emitted.  If
+  // these are not removed here, then later non-SSA definitions/uses of these
+  // expressions will be erroneously duplicated.
+  for (auto *expr : tooLargeSubExpressions)
+    emitter.outOfLineExpressions.erase(expr);
+
   // Re-add this statement now that all the preceeding ones are out.
   outBuffer.append(thisStmt.begin(), thisStmt.end());
 
