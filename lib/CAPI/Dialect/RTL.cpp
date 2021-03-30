@@ -55,3 +55,5 @@ MlirType rtlInOutTypeGet(MlirType element) {
 MlirType rtlInOutTypeGetElementType(MlirType type) {
   return wrap(unwrap(type).cast<InOutType>().getElementType());
 }
+
+bool rtlTypeIsAInOut(MlirType type) { return unwrap(type).isa<InOutType>(); }

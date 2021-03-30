@@ -61,6 +61,9 @@ MLIR_CAPI_EXPORTED bool rtlTypeIsAValueType(MlirType);
 /// If the type is an RTL array
 MLIR_CAPI_EXPORTED bool rtlTypeIsAArrayType(MlirType);
 
+/// If the type is an RTL inout.
+MLIR_CAPI_EXPORTED bool rtlTypeIsAInOut(MlirType type);
+
 /// Creates a fixed-size RTL array type in the context associated with element
 MLIR_CAPI_EXPORTED MlirType rtlArrayTypeGet(MlirType element, size_t size);
 

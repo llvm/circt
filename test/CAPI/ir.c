@@ -79,6 +79,12 @@ int testRTLTypes() {
   if (mlirTypeIsNull(elementType))
     return 2;
 
+  if (rtlTypeIsAInOut(i8type))
+    return 3;
+
+  if (!rtlTypeIsAInOut(io8type))
+    return 4;
+
   mlirContextDestroy(ctx);
 
   return 0;
