@@ -527,8 +527,8 @@ firrtl.module @add_cst_prop1(%out_b: !firrtl.flip<uint<9>>) {
 }
 
 // CHECK-LABEL: @add_cst_prop2
-// CHECK-NEXT:   %c127_si9 = firrtl.constant(127 : i9) : !firrtl.sint<9>
-// CHECK-NEXT:   firrtl.connect %out_b, %c127_si9 : !firrtl.flip<sint<9>>, !firrtl.sint<9>
+// CHECK-NEXT:   %c-1_si9 = firrtl.constant(-1 : i9) : !firrtl.sint<9>
+// CHECK-NEXT:   firrtl.connect %out_b, %c-1_si9 : !firrtl.flip<sint<9>>, !firrtl.sint<9>
 // CHECK-NEXT:  }
 firrtl.module @add_cst_prop2(%out_b: !firrtl.flip<sint<9>>) {
   %c6_ui7 = firrtl.constant(-6 : i7) : !firrtl.sint<7>
@@ -540,8 +540,8 @@ firrtl.module @add_cst_prop2(%out_b: !firrtl.flip<sint<9>>) {
 }
 
 // CHECK-LABEL: @add_cst_prop3
-// CHECK-NEXT:   %c-6_si4 = firrtl.constant(-6 : i4) : !firrtl.sint<4>
-// CHECK-NEXT:   firrtl.connect %out_b, %c-6_si4 : !firrtl.flip<sint<4>>, !firrtl.sint<4>
+// CHECK-NEXT:   %c-2_si4 = firrtl.constant(-2 : i4) : !firrtl.sint<4>
+// CHECK-NEXT:   firrtl.connect %out_b, %c-2_si4 : !firrtl.flip<sint<4>>, !firrtl.sint<4>
 // CHECK-NEXT:  }
 firrtl.module @add_cst_prop3(%out_b: !firrtl.flip<sint<4>>) {
   %c1_si2 = firrtl.constant(-1 : i2) : !firrtl.sint<2>

@@ -123,12 +123,10 @@ OpFoldResult AddPrimOp::fold(ArrayRef<Attribute> operands) {
     auto numBits = getType().cast<FIRRTLType>().getBitWidthOrSentinel();
     APInt sumAPInt =
         extendConstantToWidth(
-            op1.getValue(),
-            getOperand(0).getType().cast<FIRRTLType>().isSignedInteger(),
+            op1.getValue(), getOperand(0).getType().cast<IntType>().isSigned(),
             numBits) +
         extendConstantToWidth(
-            op2.getValue(),
-            getOperand(1).getType().cast<FIRRTLType>().isSignedInteger(),
+            op2.getValue(), getOperand(1).getType().cast<IntType>().isSigned(),
             numBits);
     return getIntAttr(sumAPInt, getContext());
   }
