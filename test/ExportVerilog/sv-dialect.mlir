@@ -1,5 +1,4 @@
-// RUN: circt-opt %s --rtl-legalize-names --mlir-print-debuginfo > %t
-// RUN: circt-translate %t -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
+// RUN: circt-translate %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 // CHECK-LABEL: module M1(
 rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
@@ -601,6 +600,8 @@ rtl.module @alwayscombTest(%a: i1) -> (%x: i1) {
 }
 
 
+// https://github.com/llvm/circt/issues/838
+// CHECK-LABEL: module inlineProceduralWiresWithLongNames(
 rtl.module @inlineProceduralWiresWithLongNames(%clock: i1, %in: i1) {
   %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa = sv.wire  : !rtl.inout<i1>
   %0 = sv.read_inout %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa : !rtl.inout<i1>

@@ -1,5 +1,4 @@
-// RUN: circt-opt %s --rtl-legalize-names --mlir-print-debuginfo > %t
-// RUN: circt-translate %t -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
+// RUN: circt-translate %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 rtl.module.extern @E(%a: i1 {rtl.direction = "in"}, 
               %b: i1 {rtl.direction = "out"}, 
@@ -430,7 +429,7 @@ rtl.module @casts(%in1: i7, %in2: !rtl.array<8xi4>) -> (%r1: !rtl.array<7xi1>, %
 // CHECK-NEXT:    );
 // CHECK-EMPTY:
 rtl.module @TestZero(%a: i4, %zeroBit: i0, %arrZero: !rtl.array<3xi0>)
-  -> (%r0: i4, %rZero: i0, %arrZero: !rtl.array<3xi0>) {
+  -> (%r0: i4, %rZero: i0, %arrZero_0: !rtl.array<3xi0>) {
 
   %b = comb.add %a, %a : i4
   rtl.output %b, %zeroBit, %arrZero : i4, i0, !rtl.array<3xi0>
@@ -443,7 +442,7 @@ rtl.module @TestZero(%a: i4, %zeroBit: i0, %arrZero: !rtl.array<3xi0>)
 
 // CHECK-LABEL: TestZeroInstance
 rtl.module @TestZeroInstance(%aa: i4, %azeroBit: i0, %aarrZero: !rtl.array<3xi0>)
-  -> (%r0: i4, %rZero: i0, %arrZero: !rtl.array<3xi0>) {
+  -> (%r0: i4, %rZero: i0, %arrZero_0: !rtl.array<3xi0>) {
 
   // CHECK: TestZero iii (	// {{.*}}rtl-dialect.mlir:{{.*}}:19
   // CHECK:   .a         (aa),
@@ -459,7 +458,7 @@ rtl.module @TestZeroInstance(%aa: i4, %azeroBit: i0, %aarrZero: !rtl.array<3xi0>
 
   // CHECK: assign r0 = iii_r0;
   // CHECK: // Zero width: assign rZero = iii_rZero;
-  // CHECK: // Zero width: assign arrZero = iii_arrZero_0;
+  // CHECK: // Zero width: assign arrZero_0 = iii_arrZero_0;
   rtl.output %o1, %o2, %o3 : i4, i0, !rtl.array<3xi0>
 }
 
@@ -575,28 +574,6 @@ rtl.module @longvariadic(%a: i8) -> (%b: i8) {
   rtl.output %1 : i8
 }
 
-// https://github.com/llvm/circt/issues/681
-// Rename keywords used in variable/module names
-// CHECK-LABEL: module inout_1(
-// CHECK-NEXT:  input  inout_0,
-// CHECK-NEXT:  output b);
-// CHECK-EMPTY:
-// CHECK-NEXT: assign b = inout_0;
-rtl.module @inout(%inout: i1) -> (%b: i1) {
-  rtl.output %inout : i1
-}   
-
-// https://github.com/llvm/circt/issues/681
-// Rename keywords used in variable/module names
-// CHECK-LABEL: module reg_2(
-// CHECK-NEXT:  input  inout_0,
-// CHECK-NEXT:  output b);
-// CHECK-EMPTY:
-// CHECK-NEXT: assign b = inout_0;
-rtl.module @reg(%inout: i1) -> (%b: i1) {
-  rtl.output %inout : i1
-}   
-
 // https://github.com/llvm/circt/issues/736
 // Can't depend on left associativeness since ops can have args with different sizes
 // CHECK-LABEL: module eqIssue(
@@ -634,22 +611,4 @@ rtl.module @ArrayLHS(%clock: i1) -> () {
   sv.initial  {
     sv.bpassign %3, %false : i1
   }
-}
-
-// Instantiate a module which has had its ports renamed.
-// CHECK-LABEL: module ModuleWithCollision
-// CHECK-NEXT:    input  reg_0,
-// CHECK-NEXT:    output wire_1);
-// CHECK:       endmodule
-rtl.module @ModuleWithCollision(%reg: i1) -> (%wire: i1) {
-  rtl.output %reg : i1
-}
-
-// CHECK-LABEL: module InstanceWithCollisions
-// CHECK:         ModuleWithCollision parameter_0 (
-// CHECK-NEXT:      .reg_0  (
-// CHECK-NEXT:      .wire_1 (
-// CHECK:       endmodule
-rtl.module @InstanceWithCollisions(%a: i1) {
-  rtl.instance "parameter" @ModuleWithCollision(%a) : (i1) -> (i1)
 }
