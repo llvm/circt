@@ -619,3 +619,17 @@ rtl.module @inlineProceduralWiresWithLongNames(%clock: i1, %in: i1) {
     sv.passign %3, %in : i1
   }
 }
+
+// CHECK-LABEL: module notEmitDuplicateWiresThatWereUnInlinedDueToLongNames
+rtl.module @notEmitDuplicateWiresThatWereUnInlinedDueToLongNames(%clock: i1, %x: i1) {
+  // CHECK: wire _tmp = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
+  // CHECK-NOT: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
+  %0 = comb.and %1, %x : i1
+  sv.alwaysff(posedge %clock)  {
+    sv.if %0  {
+      sv.verbatim "// hello"
+    }
+  }
+  %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa = sv.wire  : !rtl.inout<i1>
+  %1 = sv.read_inout %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa : !rtl.inout<i1>
+}
