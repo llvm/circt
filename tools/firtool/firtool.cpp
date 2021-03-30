@@ -140,6 +140,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   }
 
   // Nothing in the parser is threaded.  Disable synchronization overhead.
+  auto isMultithreaded = context.isMultithreadingEnabled();
   context.disableMultithreading();
 
   // Apply any pass manager command line options.
@@ -158,8 +159,9 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
     // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
     if (!disableOptimization) {
-      pm.addPass(createCSEPass());
-      pm.addPass(createCanonicalizerPass());
+      auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
+      modulePM.addPass(createCSEPass());
+      modulePM.addPass(createCanonicalizerPass());
     }
   } else {
     assert(inputFormat == InputMLIRFile);
@@ -170,8 +172,9 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
       // If we are running FIRRTL passes, clean up the output.
       if (!disableOptimization) {
-        pm.addPass(createCSEPass());
-        pm.addPass(createCanonicalizerPass());
+        auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
+        modulePM.addPass(createCSEPass());
+        modulePM.addPass(createCanonicalizerPass());
       }
     }
   }
@@ -179,7 +182,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     return failure();
 
   // Allow optimizations to run multithreaded.
-  context.disableMultithreading(false);
+  context.enableMultithreading(isMultithreaded);
 
   if (imconstprop)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
@@ -194,11 +197,12 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
     // If enabled, run the optimizer.
     if (!disableOptimization) {
-      pm.addNestedPass<rtl::RTLModuleOp>(sv::createRTLCleanupPass());
+      auto &modulePM = pm.nest<rtl::RTLModuleOp>();
+      modulePM.addPass(sv::createRTLCleanupPass());
       // FIXME: Disabled because CSE crashes on graph regions in some cases.
       // Issue #813: https://github.com/llvm/circt/issues/813
-      // pm.addPass(createCSEPass());
-      pm.addPass(createCanonicalizerPass());
+      // modulePM.addPass(createCSEPass());
+      modulePM.addPass(createCanonicalizerPass());
     }
   }
 
