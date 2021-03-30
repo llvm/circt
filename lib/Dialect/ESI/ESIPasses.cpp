@@ -55,9 +55,8 @@ public:
   ESIRTLBuilder(Operation *top);
 
   RTLModuleExternOp declareStage();
-#ifdef CAPNP
-  RTLModuleExternOp declareCosimEndpoint();
-#endif // CAPNP
+  // Will be unused when CAPNP is undefined
+  RTLModuleExternOp declareCosimEndpoint() LLVM_ATTRIBUTE_UNUSED;
 
   InterfaceOp getOrConstructInterface(ChannelPort);
   InterfaceOp constructInterface(ChannelPort);
@@ -187,7 +186,6 @@ RTLModuleExternOp ESIRTLBuilder::declareStage() {
   return declaredStage;
 }
 
-#ifdef CAPNP
 /// Write an 'ExternModuleOp' to use a hand-coded SystemVerilog module. Said
 /// module contains a bi-directional Cosimulation DPI interface with valid/ready
 /// semantics.
@@ -211,7 +209,6 @@ RTLModuleExternOp ESIRTLBuilder::declareCosimEndpoint() {
   declaredCosimEndpoint = create<RTLModuleExternOp>(name, ports);
   return declaredCosimEndpoint;
 }
-#endif
 
 /// Return the InterfaceType which corresponds to an ESI port type. If it
 /// doesn't exist in the cache, build the InterfaceOp and the corresponding
