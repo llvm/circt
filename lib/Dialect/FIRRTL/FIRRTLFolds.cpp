@@ -97,8 +97,7 @@ static void addCanonicalizerMethod(RewritePatternSet &results,
 /// is a dstWidth integer or 1 bit integer if dstWidth is None.
 template <class DstTy>
 static Attribute
-constFoldFIRRTLBinaryOp(ArrayRef<Attribute> operands, bool isLhsUnsigned,
-                        bool isRhsUnsigned,
+constFoldFIRRTLBinaryOp(ArrayRef<Attribute> operands, bool isUnsigned,
                         const function_ref<DstTy(APInt, APInt)> &calculate,
                         llvm::Optional<unsigned> dstWidth = None) {
   assert(operands.size() == 2 && "binary op takes two operands");
@@ -111,13 +110,12 @@ constFoldFIRRTLBinaryOp(ArrayRef<Attribute> operands, bool isLhsUnsigned,
                            ? dstWidth.getValue()
                            : std::max<int32_t>(lhs.getValue().getBitWidth(),
                                                rhs.getValue().getBitWidth());
-    auto extOrSelfLhs = isLhsUnsigned ? &APInt::zextOrSelf : &APInt::sextOrSelf;
-    auto extOrSelfRhs = isRhsUnsigned ? &APInt::zextOrSelf : &APInt::sextOrSelf;
+    auto extOrSelf = isUnsigned ? &APInt::zextOrSelf : &APInt::sextOrSelf;
     return IntegerAttr::get(
         IntegerType::get(lhs.getContext(),
                          dstWidth.hasValue() ? dstWidth.getValue() : 1),
-        calculate((lhs.getValue().*extOrSelfLhs)(commonWidth),
-                  (rhs.getValue().*extOrSelfRhs)(commonWidth)));
+        calculate((lhs.getValue().*extOrSelf)(commonWidth),
+                  (rhs.getValue().*extOrSelf)(commonWidth)));
   }
   return {};
 }
@@ -136,7 +134,7 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
 bool hasKnownWidths(Operation *op) {
   for (auto resTy : op->getResultTypes()) {
     auto ty = resTy.cast<FIRRTLType>();
-    if (!ty.isa<IntType>() || ty.getBitWidthOrSentinel() <= 0)
+    if (!ty.isa<IntType>() || ty.getBitWidthOrSentinel() == -1)
       return false;
   }
   return true;
@@ -159,10 +157,9 @@ OpFoldResult AddPrimOp::fold(ArrayRef<Attribute> operands) {
   /// If both operands are constant, and the result is integer with known
   /// widths, then perform constant folding. Cannot use constFoldBinaryOp, since
   /// the width of the constant is different from operands.
-  if (operands[0] && operands[1] && hasKnownWidths(*this)) {
+  if (hasKnownWidths(*this)) {
     return constFoldFIRRTLBinaryOp<APInt>(
         operands, getOperand(0).getType().cast<IntType>().isUnsigned(),
-        getOperand(1).getType().cast<IntType>().isUnsigned(),
         [=](APInt a, APInt b) { return a + b; },
         getType().cast<FIRRTLType>().getBitWidthOrSentinel());
   }
@@ -300,7 +297,7 @@ OpFoldResult LEQPrimOp::fold(ArrayRef<Attribute> operands) {
   }
 
   return constFoldFIRRTLBinaryOp<bool>(
-      operands, isUnsigned, isUnsigned,
+      operands, isUnsigned,
       [=](APInt a, APInt b) { return isUnsigned ? a.ule(b) : a.sle(b); });
 }
 
@@ -352,7 +349,7 @@ OpFoldResult LTPrimOp::fold(ArrayRef<Attribute> operands) {
   }
 
   return constFoldFIRRTLBinaryOp<bool>(
-      operands, isUnsigned, isUnsigned,
+      operands, isUnsigned,
       [=](APInt a, APInt b) { return isUnsigned ? a.ult(b) : a.slt(b); });
 }
 
@@ -404,7 +401,7 @@ OpFoldResult GEQPrimOp::fold(ArrayRef<Attribute> operands) {
   }
 
   return constFoldFIRRTLBinaryOp<bool>(
-      operands, isUnsigned, isUnsigned,
+      operands, isUnsigned,
       [=](APInt a, APInt b) { return isUnsigned ? a.uge(b) : a.sge(b); });
 }
 
@@ -450,7 +447,7 @@ OpFoldResult GTPrimOp::fold(ArrayRef<Attribute> operands) {
   }
 
   return constFoldFIRRTLBinaryOp<bool>(
-      operands, isUnsigned, isUnsigned,
+      operands, isUnsigned,
       [=](APInt a, APInt b) { return isUnsigned ? a.ugt(b) : a.sgt(b); });
 }
 
@@ -475,8 +472,7 @@ OpFoldResult EQPrimOp::fold(ArrayRef<Attribute> operands) {
   }
 
   return constFoldFIRRTLBinaryOp<bool>(
-      operands, isUnsigned, isUnsigned,
-      [=](APInt a, APInt b) { return a.eq(b); });
+      operands, isUnsigned, [=](APInt a, APInt b) { return a.eq(b); });
 }
 
 OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -500,8 +496,7 @@ OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
   }
 
   return constFoldFIRRTLBinaryOp<bool>(
-      operands, isUnsigned, isUnsigned,
-      [=](APInt a, APInt b) { return a.ne(b); });
+      operands, isUnsigned, [=](APInt a, APInt b) { return a.ne(b); });
 }
 
 //===----------------------------------------------------------------------===//
