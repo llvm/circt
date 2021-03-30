@@ -414,33 +414,40 @@ bool ESIPortsPass::updateFunc(RTLModuleOp mod) {
   // 'Ready' signals are outputs. Remember them for later when we deal with the
   // returns.
   SmallVector<std::pair<Value, DictionaryAttr>, 8> newReadySignals;
-  for (size_t i = 0, e = funcType.getNumInputs(); i < e; ++i) {
-    Type argTy = funcType.getInput(i);
+  for (size_t argNum = 0, blockArgNum = 0, e = funcType.getNumInputs();
+       argNum < e; ++argNum, ++blockArgNum) {
+    Type argTy = funcType.getInput(argNum);
 
     auto chanTy = argTy.dyn_cast<ChannelPort>();
     if (!chanTy) {
       // If not ESI, pass through.
       newArgTypes.push_back(argTy);
-      newArgAttrs.push_back(oldArgAttrs[i]);
+      newArgAttrs.push_back(oldArgAttrs[argNum]);
       continue;
     }
 
     // When we find one, add a data and valid signal to the new args.
     newArgTypes.push_back(chanTy.getInner());
     newArgTypes.push_back(i1);
-    newArgAttrs.push_back(oldArgAttrs[i]);
-    newArgAttrs.push_back(appendToRtlName(oldArgAttrs[i], "_valid"));
+    newArgAttrs.push_back(oldArgAttrs[argNum]);
+    newArgAttrs.push_back(appendToRtlName(oldArgAttrs[argNum], "_valid"));
     // Add the BlockArguments.
-    Value data = mod.front().insertArgument(i, chanTy.getInner());
-    Value valid = mod.front().insertArgument(i + 1, i1);
+    Value data = mod.front().insertArgument(blockArgNum, chanTy.getInner());
+    Value valid = mod.front().insertArgument(blockArgNum + 1, i1);
     // Build the ESI wrap operation to translate the lowered signals to what
     // they were. (A later pass takes care of eliminating the ESI ops.)
     auto wrap = modBuilder.create<WrapValidReady>(data, valid);
     // Replace uses of the old ESI port argument with the new one from the wrap.
-    mod.front().getArgument(i + 2).replaceAllUsesWith(wrap.chanOutput());
-    mod.front().eraseArgument(i + 2); // Delete the ESI port block argument.
+    mod.front()
+        .getArgument(blockArgNum + 2)
+        .replaceAllUsesWith(wrap.chanOutput());
+    // Delete the ESI port block argument.
+    mod.front().eraseArgument(blockArgNum + 2);
     newReadySignals.push_back(std::make_pair(
-        wrap.ready(), appendToRtlName(oldArgAttrs[i], "_ready")));
+        wrap.ready(), appendToRtlName(oldArgAttrs[argNum], "_ready")));
+
+    // Since we added 2 block args but erased one, there's a net increase of 1.
+    blockArgNum += 1;
 
     updated = true;
   }

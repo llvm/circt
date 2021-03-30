@@ -76,3 +76,12 @@ rtl.module @test2(%clk:i1, %rstn:i1) {
 }
 // RTL: rtl.module @test2(%clk: i1, %rstn: i1) {
 // RTL:   %adder.mutatedInts, %adder.mutatedInts_valid, %adder.c4, %adder.ints_ready = rtl.instance "adder" @add11(%clk, %adder.mutatedInts, %adder.mutatedInts_valid, %adder.ints_ready)
+
+rtl.module @twoChannelArgs(%clk: i1, %ints: !esi.channel<i32>, %foo: !esi.channel<i7>) -> () {
+  %rdy = rtl.constant 1 : i1
+  %i, %i_valid = esi.unwrap.vr %ints, %rdy : i32
+  %i2, %i2_valid = esi.unwrap.vr %foo, %rdy : i7
+}
+// RTL: rtl.module @twoChannelArgs(%clk: i1, %ints: i32, %ints_valid: i1, %foo: i7, %foo_valid: i1) -> (%ints_ready: i1, %foo_ready: i1)
+// RTL:   %true = rtl.constant true
+// RTL:   rtl.output %true, %true : i1, i1
