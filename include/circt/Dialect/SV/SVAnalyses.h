@@ -33,13 +33,6 @@ namespace sv {
 struct LegalNamesAnalysis {
   LegalNamesAnalysis(mlir::Operation *op);
 
-  /// Lookup the legalized name for an operation.
-  Optional<StringRef> lookupOperationName(Operation *op) const;
-  /// Lookup the legalized name for an argument to an operation.
-  Optional<StringRef> lookupArgName(Operation *op, size_t argNum) const;
-  /// Lookup the legalized name for a result from an operation.
-  Optional<StringRef> lookupResultName(Operation *op, size_t resultNum) const;
-
   /// Return the legalized name for an operation or assert if there is none.
   StringRef getOperationName(Operation *op) const;
   /// Return the legalized name for an argument to an operation or assert if
@@ -48,9 +41,6 @@ struct LegalNamesAnalysis {
   /// Return the legalized name for a result from an operation or assert if
   /// there is none.
   StringRef getResultName(Operation *op, size_t resultNum) const;
-
-  /// Return the set of used names.
-  const llvm::StringSet<> &getUsedNames() const;
 
 private:
   /// Mapping from operations to their legalized name. Used for module, extern
