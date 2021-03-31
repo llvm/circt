@@ -261,22 +261,6 @@ static void printUnpackedTypePostfix(Type type, raw_ostream &os) {
       });
 }
 
-/// Return true if an out-of-line name for the specified operation should be
-/// emitted as an 'automatic logic', because the op is in a procedural region.
-/// Return false if it should be declared as a wire.
-static bool isTemporaryInProceduralRegion(Operation *op) {
-  Operation *parent = op;
-  do {
-    parent = parent->getParentOp();
-    if (isa<RTLModuleOp>(parent))
-      return false;
-    if (parent->hasTrait<ProceduralRegion>())
-      return true;
-  } while (parent != nullptr);
-
-  return true;
-}
-
 /// Return the word (e.g. "reg") in Verilog to declare the specified thing.
 static StringRef getVerilogDeclWord(Operation *op) {
   if (isa<RegOp>(op))
@@ -290,7 +274,8 @@ static StringRef getVerilogDeclWord(Operation *op) {
 
   // If 'op' is in a module, output 'wire'. If 'op' is in a procedural block,
   // fall through to default.
-  return isTemporaryInProceduralRegion(op) ? "automatic logic" : "wire";
+  bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
+  return isProcedural ? "automatic logic" : "wire";
 };
 
 namespace {
