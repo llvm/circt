@@ -51,13 +51,29 @@ static bool isExpressionAlwaysInline(Operation *op) {
   if (isa<ArrayIndexInOutOp>(op))
     return true;
 
-  // We don't want wires that are just constants aesthetically.
-  if (isa<ConstantOp>(op))
-    return true;
-
   // An SV interface modport is a symbolic name that is always inlined.
   if (isa<GetModportOp>(op) || isa<ReadInterfaceSignalOp>(op))
     return true;
+
+  return false;
+}
+
+/// Return true for nullary operations that are better emitted multiple
+/// times as inline expression (when they have multiple uses) rather than having
+/// a temporary wire.
+///
+/// This can only handle nullary expressions, because we don't want to replicate
+/// subtrees arbitrarily.
+static bool isDuplicatableNullaryExpression(Operation *op) {
+  // We don't want wires that are just constants aesthetically.
+  if (isa<ConstantOp>(op) || isa<ConstantXOp>(op) || isa<ConstantZOp>(op))
+    return true;
+
+  // If this is a small verbatim expression, keep it inline.
+  if (auto verb = dyn_cast<VerbatimExprOp>(op)) {
+    if (verb->getNumOperands() == 0 && verb.string().size() <= 16)
+      return true;
+  }
 
   return false;
 }
@@ -261,22 +277,6 @@ static void printUnpackedTypePostfix(Type type, raw_ostream &os) {
       });
 }
 
-/// Return true if an out-of-line name for the specified operation should be
-/// emitted as an 'automatic logic', because the op is in a procedural region.
-/// Return false if it should be declared as a wire.
-static bool isTemporaryInProceduralRegion(Operation *op) {
-  Operation *parent = op;
-  do {
-    parent = parent->getParentOp();
-    if (isa<RTLModuleOp>(parent))
-      return false;
-    if (parent->hasTrait<ProceduralRegion>())
-      return true;
-  } while (parent != nullptr);
-
-  return true;
-}
-
 /// Return the word (e.g. "reg") in Verilog to declare the specified thing.
 static StringRef getVerilogDeclWord(Operation *op) {
   if (isa<RegOp>(op))
@@ -290,7 +290,8 @@ static StringRef getVerilogDeclWord(Operation *op) {
 
   // If 'op' is in a module, output 'wire'. If 'op' is in a procedural block,
   // fall through to default.
-  return isTemporaryInProceduralRegion(op) ? "automatic logic" : "wire";
+  bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
+  return isProcedural ? "automatic logic" : "wire";
 };
 
 namespace {
@@ -603,11 +604,6 @@ public:
   /// emitted as standalone wire declarations.  This can happen because they are
   /// multiply-used or because the user requires a name to reference.
   SmallPtrSet<Operation *, 16> outOfLineExpressions;
-
-  /// This set keeps track of expressions that need an explicit logic decl at
-  /// the top of the module to avoid "use before def" issues in the generated
-  /// verilog.  This can happen for cyclic modules.
-  SmallPtrSet<Operation *, 16> outOfLineExpressionDecls;
 };
 
 } // end anonymous namespace
@@ -620,7 +616,7 @@ public:
 /// tracked.  It can also be null for things like outputs which are not tracked
 /// in the nameTable.
 StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
-  auto updatedName = sanitizeName(name, usedNames, nextGeneratedNameID);
+  auto updatedName = legalizeName(name, usedNames, nextGeneratedNameID);
   if (valueOrOp)
     nameTable[valueOrOp] = updatedName;
   return updatedName;
@@ -890,12 +886,6 @@ void ExprEmitter::retroactivelyEmitExpressionIntoTemporary(Operation *op) {
 
   emitter.outOfLineExpressions.insert(op);
   emitter.addName(ModuleEmitter::ValueOrOp(op->getResult(0)), "_tmp");
-
-  // If we're emitting this temporary in a procedural region, we need to emit
-  // the variable declaration at the end of the block's declaration range, then
-  // emit an assign.
-  if (isTemporaryInProceduralRegion(op))
-    emitter.outOfLineExpressionDecls.insert(op);
 
   // Remember that this subexpr needs to be emitted independently.
   tooLargeSubExpressions.push_back(op);
@@ -1365,8 +1355,12 @@ static bool isExpressionEmittedInline(Operation *op) {
   if (isExpressionUnableToInline(op))
     return false;
 
-  // Otherwise, if it has multiple uses, emit it out of line.
-  return op->getResult(0).hasOneUse();
+  // If it has a single use, emit it inline.
+  if (op->getResult(0).hasOneUse())
+    return true;
+
+  // If it is nullary and duplicable, then we can emit it inline.
+  return op->getNumOperands() == 0 && isDuplicatableNullaryExpression(op);
 }
 
 namespace {
@@ -1446,15 +1440,11 @@ void NameCollector::collectNames(Block &block) {
       // definition is emitted on the line of the expression instead of a
       // block at the top of the module).
       if (isExpr) {
-        // Procedural blocks always emit out of line variable declarations to
-        // avoid use-before def issues.
-        // TODO: Relax this.
+        // Procedural blocks always emit out of line variable declarations,
+        // because Verilog requires that they all be at the top of a block.
+        // TODO: Improve this, at least in the simple cases.
         if (!isBlockProcedural)
           continue;
-
-        // Otherwise keep track of this unusual case and declare it like
-        // normal.
-        moduleEmitter.outOfLineExpressionDecls.insert(&op);
       }
 
       // Emit this value.
@@ -1619,28 +1609,25 @@ void StmtEmitter::emitExpression(Value exp,
                        outBuffer.end());
   outBuffer.resize(statementBeginningIndex);
 
-  SmallVector<Operation *> declarationsNeeded;
   // Emit each stmt expression in turn.
   for (auto *expr : tooLargeSubExpressions) {
     statementBeginningIndex = outBuffer.size();
     ++numStatementsEmitted;
     emitStatementExpression(expr);
-
-    if (emitter.outOfLineExpressionDecls.count(expr))
-      declarationsNeeded.push_back(expr);
   }
 
   // Re-add this statement now that all the preceeding ones are out.
   outBuffer.append(thisStmt.begin(), thisStmt.end());
 
-  // If any of the expressions needed a separate declaration, emit that.  We
-  // do this after inserting the assign statements because we don't want to
+  // If we are working on a procedural statement, we need to emit the
+  // declarations for each variable separately from the assignments to them.
+  // We do this after inserting the assign statements because we don't want to
   // invalidate the index.
-  if (!declarationsNeeded.empty()) {
+  if (tooLargeSubExpressions[0]->getParentOp()->hasTrait<ProceduralRegion>()) {
     thisStmt.assign(outBuffer.begin() + blockDeclarationInsertPointIndex,
                     outBuffer.end());
     outBuffer.resize(blockDeclarationInsertPointIndex);
-    for (auto *expr : declarationsNeeded) {
+    for (auto *expr : tooLargeSubExpressions) {
       emitDeclarationForTemporary(expr);
       os << ";\n";
     }
@@ -1658,13 +1645,11 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
   } else if (isZeroBitType(op->getResult(0).getType())) {
     indent() << "// Zero width: ";
     --numStatementsEmitted;
-  } else if (!emitter.outOfLineExpressionDecls.count(op)) {
-    emitDeclarationForTemporary(op);
-    os << " = ";
   } else if (op->getParentOp()->hasTrait<ProceduralRegion>()) {
     indent() << emitter.getName(op->getResult(0)) << " = ";
   } else {
-    indent() << "assign " << emitter.getName(op->getResult(0)) << " = ";
+    emitDeclarationForTemporary(op);
+    os << " = ";
   }
 
   // Emit the expression with a special precedence level so it knows to do a
@@ -2168,8 +2153,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 
   os << ' ' << emitter.getName(ModuleEmitter::ValueOrOp(op)) << " (";
 
-  SmallVector<ModulePortInfo, 8> portInfo;
-  getModulePortInfo(moduleOp, portInfo);
+  SmallVector<ModulePortInfo> portInfo = getModulePortInfo(moduleOp);
 
   // Get the max port name length so we can align the '('.
   size_t maxNameLength = 0;
