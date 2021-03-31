@@ -1249,30 +1249,4 @@ firrtl.module @mul_cst_prop3(%out_b: !firrtl.flip<sint<15>>) {
   firrtl.connect %out_b, %add : !firrtl.flip<sint<15>>, !firrtl.sint<15>
 }
 
-// CHECK-LABEL: @rem_cst_prop1
-// CHECK-NEXT:      %c1_ui7 = firrtl.constant(1 : i7) : !firrtl.uint<7>
-// CHECK-NEXT:      firrtl.connect %out_b, %c1_ui7 : !firrtl.flip<uint<7>>, !firrtl.uint<7>
-// CHECK-NEXT:  }
-firrtl.module @rem_cst_prop1(%out_b: !firrtl.flip<uint<7>>) {
-  %c6_ui7 = firrtl.constant(6 : ui7) : !firrtl.uint<7>
-  %tmp_a = firrtl.wire : !firrtl.uint<7>
-  %c5_ui8 = firrtl.constant(5 : ui8) : !firrtl.uint<8>
-  firrtl.connect %tmp_a, %c6_ui7 : !firrtl.uint<7>, !firrtl.uint<7>
-  %add = firrtl.rem %tmp_a, %c5_ui8 : (!firrtl.uint<7>, !firrtl.uint<8>) -> !firrtl.uint<7>
-  firrtl.connect %out_b, %add : !firrtl.flip<uint<7>>, !firrtl.uint<7>
-}
-
-// CHECK-LABEL: @rem_cst_prop2
-// CHECK-NEXT:      %c-1_si7 = firrtl.constant(-1 : i7) : !firrtl.sint<7>
-// CHECK-NEXT:      firrtl.connect %out_b, %c-1_si7 : !firrtl.flip<sint<7>>, !firrtl.sint<7>
-// CHECK-NEXT:  }
-firrtl.module @rem_cst_prop2(%out_b: !firrtl.flip<sint<7>>) {
-  %c6_ui7 = firrtl.constant(-6 : i7) : !firrtl.sint<7>
-  %tmp_a = firrtl.wire : !firrtl.sint<7>
-  %c5_ui8 = firrtl.constant(5 : i8) : !firrtl.sint<8>
-  firrtl.connect %tmp_a, %c6_ui7 : !firrtl.sint<7>, !firrtl.sint<7>
-  %add = firrtl.rem %tmp_a, %c5_ui8 : (!firrtl.sint<7>, !firrtl.sint<8>) -> !firrtl.sint<7>
-  firrtl.connect %out_b, %add : !firrtl.flip<sint<7>>, !firrtl.sint<7>
-}
-
 }

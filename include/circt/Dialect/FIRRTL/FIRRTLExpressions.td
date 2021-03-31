@@ -154,6 +154,7 @@ class BinaryPrimOp<string mnemonic, Type lhsType, Type rhsType, Type resultType,
     PrimOp<mnemonic, traits> {
   let arguments = (ins lhsType:$lhs, rhsType:$rhs);
   let results = (outs resultType:$result);
+  let hasFolder = 1;
 
   let assemblyFormat = [{
     $lhs `,` $rhs  attr-dict `:`
@@ -180,41 +181,38 @@ class BinaryPrimOp<string mnemonic, Type lhsType, Type rhsType, Type resultType,
   }];
 }
 
-let hasFolder = 1 in {
-  def AddPrimOp : BinaryPrimOp<"add", IntType, IntType, IntType, [Commutative]> ;
-  def SubPrimOp : BinaryPrimOp<"sub", IntType, IntType, IntType>;
-  def MulPrimOp : BinaryPrimOp<"mul", IntType, IntType, IntType, [Commutative]>;
-  def DivPrimOp : BinaryPrimOp<"div", IntType, IntType, IntType> {
-    let description = [{
-      Divides the first argument (the numerator) by the second argument
-        (the denominator) truncating the result (rounding towards zero).
+def AddPrimOp : BinaryPrimOp<"add", IntType, IntType, IntType, [Commutative]> ;
+def SubPrimOp : BinaryPrimOp<"sub", IntType, IntType, IntType>;
+def MulPrimOp : BinaryPrimOp<"mul", IntType, IntType, IntType, [Commutative]>;
+def DivPrimOp : BinaryPrimOp<"div", IntType, IntType, IntType> {
+  let description = [{
+    Divides the first argument (the numerator) by the second argument
+    (the denominator) truncating the result (rounding towards zero).
 
-        **If the denominator is zero, the result is undefined.**
+    **If the denominator is zero, the result is undefined.**
 
-        The compiler may optimize this undefined behavior in any way it
-        wants. Notably `div(a, a)` will be optimized to `1`. This may cause
-        erroneous formal equivalence mismatches between unoptimized and
-        optimized FIRRTL dialects that are separately converted to Verilog.
-    }];
-  }
-  def RemPrimOp : BinaryPrimOp<"rem", IntType, IntType, IntType>;
-
-  def AndPrimOp : BinaryPrimOp<"and", IntType, IntType, UIntType, [Commutative]>; 
-  def OrPrimOp  : BinaryPrimOp<"or",  IntType, IntType, UIntType, [Commutative]>;
-  def XorPrimOp : BinaryPrimOp<"xor", IntType, IntType, UIntType, [Commutative]>;
+    The compiler may optimize this undefined behavior in any way it
+    wants. Notably `div(a, a)` will be optimized to `1`. This may cause
+    erroneous formal equivalence mismatches between unoptimized and
+    optimized FIRRTL dialects that are separately converted to Verilog.
+  }];
 }
+def RemPrimOp : BinaryPrimOp<"rem", IntType, IntType, IntType>;
+
+def AndPrimOp : BinaryPrimOp<"and", IntType, IntType, UIntType, [Commutative]>; 
+def OrPrimOp  : BinaryPrimOp<"or",  IntType, IntType, UIntType, [Commutative]>;
+def XorPrimOp : BinaryPrimOp<"xor", IntType, IntType, UIntType, [Commutative]>;
+
 
 // Comparison Operations
-let hasFolder = 1 in {
-  let hasCanonicalizer = 1 in {
-    def LEQPrimOp : BinaryPrimOp<"leq", IntType, IntType, UInt1Type>;
-    def LTPrimOp  : BinaryPrimOp<"lt",  IntType, IntType, UInt1Type>;
-    def GEQPrimOp : BinaryPrimOp<"geq", IntType, IntType, UInt1Type>;
-    def GTPrimOp  : BinaryPrimOp<"gt",  IntType, IntType, UInt1Type>;
-  }
-  def EQPrimOp  : BinaryPrimOp<"eq",  IntType, IntType, UInt1Type, [Commutative]>;
-  def NEQPrimOp : BinaryPrimOp<"neq", IntType, IntType, UInt1Type, [Commutative]>;
+let hasCanonicalizer = 1 in {
+  def LEQPrimOp : BinaryPrimOp<"leq", IntType, IntType, UInt1Type>;
+  def LTPrimOp  : BinaryPrimOp<"lt",  IntType, IntType, UInt1Type>;
+  def GEQPrimOp : BinaryPrimOp<"geq", IntType, IntType, UInt1Type>;
+  def GTPrimOp  : BinaryPrimOp<"gt",  IntType, IntType, UInt1Type>;
 }
+def EQPrimOp  : BinaryPrimOp<"eq",  IntType, IntType, UInt1Type, [Commutative]>;
+def NEQPrimOp : BinaryPrimOp<"neq", IntType, IntType, UInt1Type, [Commutative]>;
 
 def CatPrimOp   : BinaryPrimOp<"cat", IntType, IntType, UIntType> {
   let hasCanonicalizer = 1;
