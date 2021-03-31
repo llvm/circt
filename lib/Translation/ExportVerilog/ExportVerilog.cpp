@@ -2554,7 +2554,7 @@ void ModuleEmitter::prepareRTLModule(Block &block) {
   if (!block.getParentOp()->hasTrait<ProceduralRegion>()) {
     SmallPtrSet<Operation *, 32> seenOperations;
 
-    for (auto &op : block) {
+    for (auto &op : llvm::make_early_inc_range(block)) {
       // Check the users of any expressions to see if they are
       // lexically below the operation itself.  If so, it is being used out
       // of order.
@@ -2577,6 +2577,15 @@ void ModuleEmitter::prepareRTLModule(Block &block) {
       // If all the uses of the operation are below this, then we're ok.
       if (!haveAnyOutOfOrderUses)
         continue;
+
+      // If this is a reg/wire declaration, then we move it to the top of the
+      // block.  We can't abstract the inout result.
+      if (op.getNumResults() == 1 &&
+          op.getResult(0).getType().isa<InOutType>() &&
+          op.getNumOperands() == 0) {
+        op.moveBefore(&block.front());
+        continue;
+      }
 
       // Otherwise, we need to lower this to a wire to resolve this.
       lowerUsersToTemporaryWire(op);
