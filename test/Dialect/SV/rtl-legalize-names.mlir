@@ -68,6 +68,18 @@ sv.interface @output {
   sv.interface.modport @always ("input" @input, "output" @output)
 }
 
+// Instantiate a module which has had its ports renamed.
+// CHECK-LABEL: rtl.module @ModuleWithCollision(
+// CHECK-SAME:    %reg_0: i1) -> (%wire_1: i1)
+rtl.module @ModuleWithCollision(%reg: i1) -> (%wire: i1) {
+  rtl.output %reg : i1
+}
+rtl.module @InstanceWithCollisions(%a: i1) {
+  rtl.instance "parameter" @ModuleWithCollision(%a) : (i1) -> (i1)
+}
+
+
+
 // TODO: Renaming the above interface declarations currently does not rename
 // their use in the following types.
 
@@ -82,3 +94,5 @@ sv.interface @output {
 rtl.module.extern @inout_0 () -> ()
 rtl.module.extern @inout_1 () -> ()
 rtl.module.extern @inout_2 () -> ()
+
+

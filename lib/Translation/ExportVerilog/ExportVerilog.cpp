@@ -38,11 +38,29 @@ using namespace rtl;
 using namespace sv;
 
 /// This is the preferred source width for the generated Verilog.
-static constexpr size_t preferredSourceWidth = 120;
+static constexpr size_t preferredSourceWidth = 90;
 
 //===----------------------------------------------------------------------===//
 // Helper routines
 //===----------------------------------------------------------------------===//
+
+/// Return true for operations that are always inlined into a containing
+/// expression.
+static bool isExpressionAlwaysInline(Operation *op) {
+  // We need to emit array indexes inline per verilog "lvalue" semantics.
+  if (isa<ArrayIndexInOutOp>(op))
+    return true;
+
+  // We don't want wires that are just constants aesthetically.
+  if (isa<ConstantOp>(op))
+    return true;
+
+  // An SV interface modport is a symbolic name that is always inlined.
+  if (isa<GetModportOp>(op) || isa<ReadInterfaceSignalOp>(op))
+    return true;
+
+  return false;
+}
 
 static bool isVerilogExpression(Operation *op) {
   // These are SV dialect expressions.
@@ -692,7 +710,7 @@ private:
                           SubExprOutOfLineBehavior outOfLineBehavior,
                           SubExprSignRequirement signReq = NoRequirement);
 
-  void retroactivelyEmitExpressionIntoTemporarily(Operation *op);
+  void retroactivelyEmitExpressionIntoTemporary(Operation *op);
 
   SubExprInfo visitUnhandledExpr(Operation *op);
   SubExprInfo visitInvalidComb(Operation *op) {
@@ -866,7 +884,7 @@ SubExprInfo ExprEmitter::emitUnary(Operation *op, const char *syntax,
 /// up to the point where they turn into massively long source lines of Verilog.
 /// At that point, we retroactively break the huge expression by inserting
 /// temporaries.  This handles the bookkeeping.
-void ExprEmitter::retroactivelyEmitExpressionIntoTemporarily(Operation *op) {
+void ExprEmitter::retroactivelyEmitExpressionIntoTemporary(Operation *op) {
   assert(isVerilogExpression(op) && !emitter.outOfLineExpressions.count(op) &&
          "Should only be called on expressions though to be inlined");
 
@@ -954,19 +972,20 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
     threshold = ~0U;
     break;
   case OOLUnary:
-    threshold = 70;
+    threshold = preferredSourceWidth - 20;
     break;
   case OOLBinary:
-    threshold = 45;
+    threshold = preferredSourceWidth / 2;
     break;
   }
 
   if (outBuffer.size() - subExprStartIndex > threshold &&
-      parenthesizeIfLooserThan != ForceEmitMultiUse) {
+      parenthesizeIfLooserThan != ForceEmitMultiUse &&
+      !isExpressionAlwaysInline(op)) {
     // Inform the module emitter that this expression needs a temporary
     // wire/logic declaration and set it up so it will be referenced instead of
     // emitted inline.
-    retroactivelyEmitExpressionIntoTemporarily(op);
+    retroactivelyEmitExpressionIntoTemporary(op);
 
     // Lop this off the buffer we emitted.
     outBuffer.resize(subExprStartIndex);
@@ -1284,18 +1303,6 @@ static bool isOkToBitSelectFrom(Value v) {
   return true;
 }
 
-/// Return true for operations that are always inlined.
-static bool isExpressionAlwaysInline(Operation *op) {
-  if (isa<ConstantOp>(op) || isa<ArrayIndexInOutOp>(op))
-    return true;
-
-  // An SV interface modport is a symbolic name that is always inlined.
-  if (isa<GetModportOp>(op) || isa<ReadInterfaceSignalOp>(op))
-    return true;
-
-  return false;
-}
-
 /// Return true if we are unable to ever inline the specified operation.  This
 /// happens because not all Verilog expressions are composable, notably you
 /// can only use bit selects like x[4:6] on simple expressions, you cannot use
@@ -1320,7 +1327,7 @@ static bool isExpressionUnableToInline(Operation *op) {
     // If the user is in a different block and the op shouldn't be inlined, then
     // we emit this as an out-of-line declaration into its block and the user
     // can refer to it.
-    if (user->getBlock() != opBlock && !isExpressionAlwaysInline(op))
+    if (user->getBlock() != opBlock)
       return true;
 
     // Verilog bit selection is required by the standard to be:
@@ -1358,10 +1365,6 @@ static bool isExpressionEmittedInline(Operation *op) {
   if (isExpressionUnableToInline(op))
     return false;
 
-  // These are always emitted inline even if multiply referenced.
-  if (isExpressionAlwaysInline(op))
-    return true;
-
   // Otherwise, if it has multiple uses, emit it out of line.
   return op->getResult(0).hasOneUse();
 }
@@ -1396,59 +1399,7 @@ private:
 } // namespace
 
 void NameCollector::collectNames(Block &block) {
-  // For graph regions, we need to do a prepass over the operations in the
-  // block keeping track of whether any inlinable expression nodes are used
-  // out of order by other statements they'll get inlined into.  For example
-  // in:
-  //   sv.assert %y
-  //   ...
-  //   %x = comb.and ...
-  //   %y = comb.xor %x, true
-  // We want to know that both %y and %x will be used out of order since
-  // they'll both get inlined into the sv.assert earlier in the block.
-  typedef enum {
-    UnseenSoFar = 0,
-    SeenBelow = 1,
-    SeenAndUsedOutOfOrder = 2
-  } OperationScanKind;
-
-  DenseMap<Operation *, OperationScanKind> exprsUsesInformation;
-
-  // Scan graph region blocks from to see if there are any uses before defs.
-  if (!block.getParentOp()->hasTrait<ProceduralRegion>()) {
-    // Scan the block from the bottom up.
-    for (auto &op : llvm::reverse(block)) {
-      if (!isVerilogExpression(&op)) {
-        // Just remember that we saw this operation.
-        exprsUsesInformation[&op] = SeenBelow;
-        continue;
-      }
-
-      // Check the users of any inlined expression to see if they are
-      // lexically below the operation itself.  If not, it is being used out
-      // of order.
-      bool haveAnyOutOfOrderUses = false;
-      for (auto *userOp : op.getUsers()) {
-        // If the user is in a suboperation like an always block, then zip up
-        // to the operation that uses it.
-        while (&block != &userOp->getParentRegion()->front())
-          userOp = userOp->getParentOp();
-
-        // See if we have seen this operation below.  If not, it is an out of
-        // order use, and if the user is itself an inlined expression used out
-        // of order, then this is too.
-        auto userInfo = exprsUsesInformation[userOp];
-        if (userInfo == SeenBelow)
-          continue;
-        haveAnyOutOfOrderUses = true;
-        break;
-      }
-
-      // Remember if this operation has any out of order uses.
-      exprsUsesInformation[&op] =
-          haveAnyOutOfOrderUses ? SeenAndUsedOutOfOrder : SeenBelow;
-    }
-  }
+  bool isBlockProcedural = block.getParentOp()->hasTrait<ProceduralRegion>();
 
   SmallString<32> nameTmp;
   using ValueOrOp = ModuleEmitter::ValueOrOp;
@@ -1495,16 +1446,10 @@ void NameCollector::collectNames(Block &block) {
       // definition is emitted on the line of the expression instead of a
       // block at the top of the module).
       if (isExpr) {
-        // We can only emit wire logic decls if the generated Verilog will
-        // see the declaration before all the uses.  However, rtl.module
-        // allows cyclic graphs in its body.  We check to make sure that no
-        // uses of this expression are lexically above this expression.  If
-        // they are, we have to emit the declaration at the top of the block.
-
-        // If we have no out of order uses and this is at the top level of the
-        // module, we can emit an inline declaration.
-        if (!exprsUsesInformation.empty() &&
-            exprsUsesInformation[&op] != SeenAndUsedOutOfOrder)
+        // Procedural blocks always emit out of line variable declarations to
+        // avoid use-before def issues.
+        // TODO: Relax this.
+        if (!isBlockProcedural)
           continue;
 
         // Otherwise keep track of this unusual case and declare it like
@@ -2451,6 +2396,58 @@ void ModuleEmitter::emitRTLExternModule(RTLModuleExternOp module) {
   os << "// external module " << verilogName.getValue() << "\n\n";
 }
 
+// Given a side effect free "always inline" operation, make sure that it exists
+// in the same block as its users and that it has one use for each one.
+static void lowerAlwaysInlineOperation(Operation *op) {
+  assert(op->getNumResults() == 1 &&
+         "only support 'always inline' ops with one result");
+
+  // Nuke use-less operations.
+  if (op->use_empty()) {
+    op->erase();
+    return;
+  }
+
+  // Moving/cloning an op should pull along its operand tree with it if they are
+  // always inline.  This happens when an array index has a constant operand for
+  // example.
+  auto recursivelyHandleOperands = [](Operation *op) {
+    for (auto operand : op->getOperands()) {
+      if (auto *operandOp = operand.getDefiningOp())
+        if (isExpressionAlwaysInline(operandOp))
+          lowerAlwaysInlineOperation(operandOp);
+    }
+  };
+
+  // If this operation has multiple uses, duplicate it into N-1 of them in turn.
+  while (!op->hasOneUse()) {
+    OpOperand &use = *op->getUses().begin();
+    Operation *user = use.getOwner();
+
+    // Clone the op before the user.
+    auto *newOp = op->clone();
+    user->getBlock()->getOperations().insert(Block::iterator(user), newOp);
+    // Change the user to use the new op.
+    use.set(newOp->getResult(0));
+
+    // If any of the operations of the moved op are always inline, recursively
+    // handle them too.
+    recursivelyHandleOperands(newOp);
+  }
+
+  // Finally, ensures the op is in the same block as its user so it can be
+  // inlined.
+  Operation *user = *op->getUsers().begin();
+  if (op->getBlock() != user->getBlock()) {
+    op->moveBefore(user);
+
+    // If any of the operations of the moved op are always inline, recursively
+    // move/clone them too.
+    recursivelyHandleOperands(op);
+  }
+  return;
+}
+
 /// We lower the Merge operation to a wire at the top level along with connects
 /// to it and a ReadInOut.
 static Value lowerMergeOp(MergeOp merge) {
@@ -2474,6 +2471,8 @@ static Value lowerMergeOp(MergeOp merge) {
   return b.create<ReadInOutOp>(wire);
 }
 
+/// Lower a commutative operation into an expression tree.  This enables
+/// long-line splitting to work with them.
 static Value lowerVariadicCommutativeOp(Operation &op, OperandRange operands) {
   Value lhs, rhs;
   switch (operands.size()) {
@@ -2503,6 +2502,27 @@ static Value lowerVariadicCommutativeOp(Operation &op, OperandRange operands) {
   return newOp->getResult(0);
 }
 
+/// When we find that an operation is used before it is defined in a graph
+/// region, we emit an explicit wire to resolve the issue.
+static void lowerUsersToTemporaryWire(Operation &op) {
+  Block *block = op.getBlock();
+  auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
+
+  for (auto result : op.getResults()) {
+    auto newWire = builder.create<WireOp>(result.getType());
+
+    while (!op.use_empty()) {
+      auto newWireRead = builder.create<ReadInOutOp>(newWire);
+      OpOperand &use = *op.getUses().begin();
+      use.set(newWireRead);
+      newWireRead->moveBefore(use.getOwner());
+    }
+
+    auto connect = builder.create<ConnectOp>(newWire, result);
+    connect->moveAfter(&op);
+  }
+}
+
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
 void ModuleEmitter::prepareRTLModule(Block &block) {
@@ -2511,6 +2531,13 @@ void ModuleEmitter::prepareRTLModule(Block &block) {
     for (auto &region : op.getRegions()) {
       if (!region.empty())
         prepareRTLModule(region.front());
+    }
+
+    // Duplicate "always inline" expression for each of their users and move
+    // them to be next to their users.
+    if (isExpressionAlwaysInline(&op)) {
+      lowerAlwaysInlineOperation(&op);
+      continue;
     }
 
     // Lower 'merge' operations to wires and connects.
@@ -2534,6 +2561,41 @@ void ModuleEmitter::prepareRTLModule(Block &block) {
       op.getResult(0).replaceAllUsesWith(result);
       op.erase();
       continue;
+    }
+  }
+
+  // Now that all the basic ops are settled, check for any use-before def issues
+  // in graph regions.  Lower these into explicit wires to keep the emitter
+  // simple.
+  if (!block.getParentOp()->hasTrait<ProceduralRegion>()) {
+    SmallPtrSet<Operation *, 32> seenOperations;
+
+    for (auto &op : block) {
+      // Check the users of any expressions to see if they are
+      // lexically below the operation itself.  If so, it is being used out
+      // of order.
+      bool haveAnyOutOfOrderUses = false;
+      for (auto *userOp : op.getUsers()) {
+        // If the user is in a suboperation like an always block, then zip up
+        // to the operation that uses it.
+        while (&block != &userOp->getParentRegion()->front())
+          userOp = userOp->getParentOp();
+
+        if (seenOperations.count(userOp)) {
+          haveAnyOutOfOrderUses = true;
+          break;
+        }
+      }
+
+      // Remember that we've seen this operation.
+      seenOperations.insert(&op);
+
+      // If all the uses of the operation are below this, then we're ok.
+      if (!haveAnyOutOfOrderUses)
+        continue;
+
+      // Otherwise, we need to lower this to a wire to resolve this.
+      lowerUsersToTemporaryWire(op);
     }
   }
 }

@@ -1,5 +1,4 @@
-// RUN: circt-opt %s --rtl-legalize-names --mlir-print-debuginfo > %t
-// RUN: circt-translate %t -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
+// RUN: circt-translate %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 rtl.module.extern @E(%a: i1 {rtl.direction = "in"}, 
               %b: i1 {rtl.direction = "out"}, 
@@ -95,8 +94,10 @@ rtl.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:   input  [11:0][9:0][3:0]                                   array2d,
 // CHECK-NEXT:   input  [7:0]                                              uarray[0:15], postUArray,
 // CHECK-NEXT:   input  struct packed {logic [1:0] foo; logic [3:0] bar; } structA,
-// CHECK-NEXT:   output [3:0]                                              r0, r2, r4, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15
-// CHECK-NEXT:   output                                                    r16, r17, r18, r19, r20, r21, r22, r23, r24, r25, r26, r27,
+// CHECK-NEXT:   output [3:0]                                              r0, r2, r4, r6, r7, r8, r9,
+// CHECK-NEXT:   output [3:0]                                              r10, r11, r12, r13, r14, r15,
+// CHECK-NEXT:   output                                                    r16, r17, r18, r19, r20, r21,
+// CHECK-NEXT:   output                                                    r22, r23, r24, r25, r26, r27,
 // CHECK-NEXT:   output                                                    r28,
 // CHECK-NEXT:   output [11:0]                                             r29,
 // CHECK-NEXT:   output [1:0]                                              r30,
@@ -210,6 +211,8 @@ rtl.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2
 // CHECK-NEXT: // input  /*Zero Width*/ i3,
 // CHECK-NEXT:    output                y, z, p, p2);
 // CHECK-EMPTY:
+// CHECK-NEXT:    wire _T;
+// CHECK-NEXT:    wire _T_0;
 // CHECK-NEXT:    wire a1_f;
 // CHECK-NEXT:    wire b1_b;
 // CHECK-NEXT:    wire b1_c;
@@ -218,7 +221,7 @@ rtl.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2
 // CHECK-EMPTY:
 // CHECK-NEXT:    A a1 (
 // CHECK-NEXT:      .d (w),
-// CHECK-NEXT:      .e (b1_b),
+// CHECK-NEXT:      .e (_T),
 // CHECK-NEXT:      .f (a1_f)
 // CHECK-NEXT:    )
 // CHECK-NEXT:    B b1 (
@@ -226,6 +229,8 @@ rtl.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2
 // CHECK-NEXT:      .b (b1_b),
 // CHECK-NEXT:      .c (b1_c)
 // CHECK-NEXT:    )
+// CHECK-NEXT:    assign _T_0 = b1_c;
+// CHECK-NEXT:    assign _T = _T_0;
 // CHECK-NEXT:    FooModule #(
 // CHECK-NEXT:      .DEFAULT(64'd14000240888948784983),
 // CHECK-NEXT:      .DEPTH(3.242000e+01),
@@ -242,7 +247,7 @@ rtl.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2
 // CHECK-NEXT:      .a   (i2),
 // CHECK-NEXT:      .out (paramd2_out)
 // CHECK-NEXT:    );
-// CHECK-NEXT:    assign y = b1_c;
+// CHECK-NEXT:    assign y = _T;
 // CHECK-NEXT:    assign z = x;
 // CHECK-NEXT:    assign p = paramd_out;
 // CHECK-NEXT:    assign p2 = paramd2_out;
@@ -430,7 +435,7 @@ rtl.module @casts(%in1: i7, %in2: !rtl.array<8xi4>) -> (%r1: !rtl.array<7xi1>, %
 // CHECK-NEXT:    );
 // CHECK-EMPTY:
 rtl.module @TestZero(%a: i4, %zeroBit: i0, %arrZero: !rtl.array<3xi0>)
-  -> (%r0: i4, %rZero: i0, %arrZero: !rtl.array<3xi0>) {
+  -> (%r0: i4, %rZero: i0, %arrZero_0: !rtl.array<3xi0>) {
 
   %b = comb.add %a, %a : i4
   rtl.output %b, %zeroBit, %arrZero : i4, i0, !rtl.array<3xi0>
@@ -443,7 +448,7 @@ rtl.module @TestZero(%a: i4, %zeroBit: i0, %arrZero: !rtl.array<3xi0>)
 
 // CHECK-LABEL: TestZeroInstance
 rtl.module @TestZeroInstance(%aa: i4, %azeroBit: i0, %aarrZero: !rtl.array<3xi0>)
-  -> (%r0: i4, %rZero: i0, %arrZero: !rtl.array<3xi0>) {
+  -> (%r0: i4, %rZero: i0, %arrZero_0: !rtl.array<3xi0>) {
 
   // CHECK: TestZero iii (	// {{.*}}rtl-dialect.mlir:{{.*}}:19
   // CHECK:   .a         (aa),
@@ -459,7 +464,7 @@ rtl.module @TestZeroInstance(%aa: i4, %azeroBit: i0, %aarrZero: !rtl.array<3xi0>
 
   // CHECK: assign r0 = iii_r0;
   // CHECK: // Zero width: assign rZero = iii_rZero;
-  // CHECK: // Zero width: assign arrZero = iii_arrZero_0;
+  // CHECK: // Zero width: assign arrZero_0 = iii_arrZero_0;
   rtl.output %o1, %o2, %o3 : i4, i0, !rtl.array<3xi0>
 }
 
@@ -504,13 +509,13 @@ rtl.module @issue525(%struct: i2, %else: i2) -> (%casex: i2) {
 // https://github.com/llvm/circt/issues/438
 // CHECK-LABEL: module cyclic
 rtl.module @cyclic(%a: i1) -> (%b: i1) {
-  // CHECK: wire _T_0;
+  // CHECK: wire _T;
 
-  // CHECK: wire _T = _T_0 + _T_0;
+  // CHECK: wire _T_0 = _T + _T;
   %1 = comb.add %0, %0 : i1
-  // CHECK: assign _T_0 = a << a;
+  // CHECK: assign _T = a << a;
   %0 = comb.shl %a, %a : i1
-  // CHECK: assign b = _T - _T;
+  // CHECK: assign b = _T_0 - _T_0;
   %2 = comb.sub %1, %1 : i1
   rtl.output %2 : i1
 }
@@ -575,28 +580,6 @@ rtl.module @longvariadic(%a: i8) -> (%b: i8) {
   rtl.output %1 : i8
 }
 
-// https://github.com/llvm/circt/issues/681
-// Rename keywords used in variable/module names
-// CHECK-LABEL: module inout_1(
-// CHECK-NEXT:  input  inout_0,
-// CHECK-NEXT:  output b);
-// CHECK-EMPTY:
-// CHECK-NEXT: assign b = inout_0;
-rtl.module @inout(%inout: i1) -> (%b: i1) {
-  rtl.output %inout : i1
-}   
-
-// https://github.com/llvm/circt/issues/681
-// Rename keywords used in variable/module names
-// CHECK-LABEL: module reg_2(
-// CHECK-NEXT:  input  inout_0,
-// CHECK-NEXT:  output b);
-// CHECK-EMPTY:
-// CHECK-NEXT: assign b = inout_0;
-rtl.module @reg(%inout: i1) -> (%b: i1) {
-  rtl.output %inout : i1
-}   
-
 // https://github.com/llvm/circt/issues/736
 // Can't depend on left associativeness since ops can have args with different sizes
 // CHECK-LABEL: module eqIssue(
@@ -636,20 +619,23 @@ rtl.module @ArrayLHS(%clock: i1) -> () {
   }
 }
 
-// Instantiate a module which has had its ports renamed.
-// CHECK-LABEL: module ModuleWithCollision
-// CHECK-NEXT:    input  reg_0,
-// CHECK-NEXT:    output wire_1);
-// CHECK:       endmodule
-rtl.module @ModuleWithCollision(%reg: i1) -> (%wire: i1) {
-  rtl.output %reg : i1
+// CHECK-LABEL: module notEmitDuplicateWiresThatWereUnInlinedDueToLongNames
+rtl.module @notEmitDuplicateWiresThatWereUnInlinedDueToLongNames(%clock: i1, %x: i1) {
+  // CHECK: wire _T;
+  // CHECK: wire aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
+  %0 = comb.and %1, %x : i1
+  // CHECK: wire _T_0 = _T & x;
+  // CHECK: always_ff @(posedge clock) begin
+  sv.alwaysff(posedge %clock) {
+    // CHECK: if (_T_0) begin
+    sv.if %0  {
+      sv.verbatim "// hello"
+    }
+  }
+
+  // CHECK: end // always_ff @(posedge)
+  // CHECK: assign _T = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
+  %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa = sv.wire  : !rtl.inout<i1>
+  %1 = sv.read_inout %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa : !rtl.inout<i1>
 }
 
-// CHECK-LABEL: module InstanceWithCollisions
-// CHECK:         ModuleWithCollision parameter_0 (
-// CHECK-NEXT:      .reg_0  (
-// CHECK-NEXT:      .wire_1 (
-// CHECK:       endmodule
-rtl.module @InstanceWithCollisions(%a: i1) {
-  rtl.instance "parameter" @ModuleWithCollision(%a) : (i1) -> (i1)
-}
