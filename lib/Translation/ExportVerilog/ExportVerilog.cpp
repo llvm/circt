@@ -616,7 +616,7 @@ public:
 /// tracked.  It can also be null for things like outputs which are not tracked
 /// in the nameTable.
 StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
-  auto updatedName = sanitizeName(name, usedNames, nextGeneratedNameID);
+  auto updatedName = legalizeName(name, usedNames, nextGeneratedNameID);
   if (valueOrOp)
     nameTable[valueOrOp] = updatedName;
   return updatedName;

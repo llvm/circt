@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This analysis pass establishes sanitized names for SV/RTL operations that are
+// This analysis pass establishes legalized names for SV/RTL operations that are
 // safe to use in SV output.
 //
 //===----------------------------------------------------------------------===//
@@ -24,48 +24,48 @@ using namespace rtl;
 // Name Lookup
 //===----------------------------------------------------------------------===//
 
-/// Lookup the sanitized name for an operation.
+/// Lookup the legalized name for an operation.
 Optional<StringRef>
 LegalNamesAnalysis::lookupOperationName(Operation *op) const {
   auto it = operationNames.find(op);
   return it != operationNames.end() ? it->second : Optional<StringRef>();
 }
 
-/// Lookup the sanitized name for an argument to an operation.
+/// Lookup the legalized name for an argument to an operation.
 Optional<StringRef> LegalNamesAnalysis::lookupArgName(Operation *op,
                                                       size_t argNum) const {
   auto it = argNames.find(std::make_pair(op, argNum));
   return it != argNames.end() ? it->second : Optional<StringRef>();
 }
 
-/// Lookup the sanitized name for a result from an operation.
+/// Lookup the legalized name for a result from an operation.
 Optional<StringRef>
 LegalNamesAnalysis::lookupResultName(Operation *op, size_t resultNum) const {
   auto it = resultNames.find(std::make_pair(op, resultNum));
   return it != resultNames.end() ? it->second : Optional<StringRef>();
 }
 
-/// Return the sanitized name for an operation or assert if there is none.
+/// Return the legalized name for an operation or assert if there is none.
 StringRef LegalNamesAnalysis::getOperationName(Operation *op) const {
   auto name = lookupOperationName(op);
-  assert(name && "expected valid sanitized name");
+  assert(name && "expected valid legalized name");
   return *name;
 }
 
-/// Return the sanitized name for an argument to an operation or assert if there
+/// Return the legalized name for an argument to an operation or assert if there
 /// is none.
 StringRef LegalNamesAnalysis::getArgName(Operation *op, size_t argNum) const {
   auto name = lookupArgName(op, argNum);
-  assert(name && "expected valid sanitized name");
+  assert(name && "expected valid legalized name");
   return *name;
 }
 
-/// Return the sanitized name for a result from an operation or assert if there
+/// Return the legalized name for a result from an operation or assert if there
 /// is none.
 StringRef LegalNamesAnalysis::getResultName(Operation *op,
                                             size_t resultNum) const {
   auto name = lookupResultName(op, resultNum);
-  assert(name && "expected valid sanitized name");
+  assert(name && "expected valid legalized name");
   return *name;
 }
 
@@ -75,10 +75,10 @@ const llvm::StringSet<> &LegalNamesAnalysis::getUsedNames() const {
 }
 
 //===----------------------------------------------------------------------===//
-// Name Registration and Sanitization
+// Name Registration and Legalization
 //===----------------------------------------------------------------------===//
 
-/// Register a sanitized name for an operation.
+/// Register a legalized name for an operation.
 ///
 /// Updates the set of used names.
 void LegalNamesAnalysis::registerOperation(Operation *op, StringRef name) {
@@ -86,7 +86,7 @@ void LegalNamesAnalysis::registerOperation(Operation *op, StringRef name) {
   operationNames.insert(std::make_pair(op, name));
 }
 
-/// Register a sanitized name for an argument to an operation.
+/// Register a legalized name for an argument to an operation.
 ///
 /// Updates the set of used names.
 void LegalNamesAnalysis::registerArg(Operation *op, size_t argNum,
@@ -95,7 +95,7 @@ void LegalNamesAnalysis::registerArg(Operation *op, size_t argNum,
   argNames.insert(std::make_pair(std::make_pair(op, argNum), name));
 }
 
-/// Register a sanitized name for a result from an operation.
+/// Register a legalized name for a result from an operation.
 ///
 /// Updates the set of used names.
 void LegalNamesAnalysis::registerResult(Operation *op, size_t resultNum,
@@ -104,43 +104,43 @@ void LegalNamesAnalysis::registerResult(Operation *op, size_t resultNum,
   resultNames.insert(std::make_pair(std::make_pair(op, resultNum), name));
 }
 
-/// Sanitize the name of an operation and register it for later retrieval.
-StringRef LegalNamesAnalysis::sanitizeOperation(Operation *op,
+/// Legalize the name of an operation and register it for later retrieval.
+StringRef LegalNamesAnalysis::legalizeOperation(Operation *op,
                                                 StringAttr name) {
   auto it = operationNames.find(op);
   if (it != operationNames.end())
     return it->second;
 
   auto updatedName =
-      sanitizeName(name.getValue(), usedNames, nextGeneratedNameID);
+      legalizeName(name.getValue(), usedNames, nextGeneratedNameID);
   registerOperation(op, updatedName);
   return updatedName;
 }
 
-/// Sanitize the name of an argument to an operation, and register it for later
+/// Legalize the name of an argument to an operation, and register it for later
 /// retrieval.
-StringRef LegalNamesAnalysis::sanitizeArg(Operation *op, size_t argNum,
+StringRef LegalNamesAnalysis::legalizeArg(Operation *op, size_t argNum,
                                           StringAttr name) {
   auto it = argNames.find(std::make_pair(op, argNum));
   if (it != argNames.end())
     return it->second;
 
   auto updatedName =
-      sanitizeName(name.getValue(), usedNames, nextGeneratedNameID);
+      legalizeName(name.getValue(), usedNames, nextGeneratedNameID);
   registerArg(op, argNum, updatedName);
   return updatedName;
 }
 
-/// Sanitize the name of a result from an operation, and register it for later
+/// Legalize the name of a result from an operation, and register it for later
 /// retrieval.
-StringRef LegalNamesAnalysis::sanitizeResult(Operation *op, size_t resultNum,
+StringRef LegalNamesAnalysis::legalizeResult(Operation *op, size_t resultNum,
                                              StringAttr name) {
   auto it = resultNames.find(std::make_pair(op, resultNum));
   if (it != resultNames.end())
     return it->second;
 
   auto updatedName =
-      sanitizeName(name.getValue(), usedNames, nextGeneratedNameID);
+      legalizeName(name.getValue(), usedNames, nextGeneratedNameID);
   registerResult(op, resultNum, updatedName);
   return updatedName;
 }
@@ -149,7 +149,7 @@ StringRef LegalNamesAnalysis::sanitizeResult(Operation *op, size_t resultNum,
 // Operation Analysis
 //===----------------------------------------------------------------------===//
 
-/// Construct a lookup table of sanitized and legalized names for an operation.
+/// Construct a lookup table of legalized and legalized names for an operation.
 ///
 /// You will generally want to use \c getAnalysis<LegalNamesAnalysis>() and
 /// \c getChildAnalysis<LegalNamesAnalysis>(op) inside your pass.
@@ -165,7 +165,7 @@ LegalNamesAnalysis::LegalNamesAnalysis(Operation *op) {
   }
 }
 
-/// Sanitize the name of modules and interfaces in an MLIR module.
+/// Legalize the name of modules and interfaces in an MLIR module.
 void LegalNamesAnalysis::analyze(mlir::ModuleOp op) {
   // Register the names of external modules which we cannot rename. This has to
   // occur in a first pass separate from the modules and interfaces which we are
@@ -177,12 +177,12 @@ void LegalNamesAnalysis::analyze(mlir::ModuleOp op) {
     }
   }
 
-  // Sanitize modules and interfaces.
+  // Legalize modules and interfaces.
   for (auto &op : *op.getBody()) {
     if (auto module = dyn_cast<RTLModuleOp>(op)) {
-      sanitizeOperation(&op, module.getNameAttr());
+      legalizeOperation(&op, module.getNameAttr());
     } else if (auto intf = dyn_cast<InterfaceOp>(op)) {
-      sanitizeOperation(&op, intf.getNameAttr());
+      legalizeOperation(&op, intf.getNameAttr());
     }
   }
 }
@@ -190,46 +190,46 @@ void LegalNamesAnalysis::analyze(mlir::ModuleOp op) {
 void LegalNamesAnalysis::analyzeModulePorts(Operation *module) {
   for (const ModulePortInfo &port : getModulePortInfo(module)) {
     if (port.isOutput()) {
-      sanitizeResult(module, port.argNum, port.name);
+      legalizeResult(module, port.argNum, port.name);
     } else {
-      sanitizeArg(module, port.argNum, port.name);
+      legalizeArg(module, port.argNum, port.name);
     }
   }
 }
 
-/// Sanitize the ports, instances, regs, and wires of an RTL module.
+/// Legalize the ports, instances, regs, and wires of an RTL module.
 void LegalNamesAnalysis::analyze(rtl::RTLModuleOp op) {
-  // Sanitize the ports.
+  // Legalize the ports.
   analyzeModulePorts(op);
 
-  // Sanitize instances, regs, and wires.
+  // Legalize instances, regs, and wires.
   op.walk([&](Operation *op) {
     if (auto instanceOp = dyn_cast<InstanceOp>(op)) {
-      sanitizeOperation(op, instanceOp.getNameAttr());
+      legalizeOperation(op, instanceOp.getNameAttr());
     } else if (isa<RegOp>(op) || isa<WireOp>(op)) {
-      sanitizeOperation(op, op->getAttrOfType<StringAttr>("name"));
+      legalizeOperation(op, op->getAttrOfType<StringAttr>("name"));
     }
   });
 }
 
 /// Register the ports of an RTL extern module.
 ///
-/// Note that we explicitly do not sanitize the names, as we do not have control
+/// Note that we explicitly do not legalize the names, as we do not have control
 /// over the corresponding module declaration with it being supplied externally.
 void LegalNamesAnalysis::analyze(rtl::RTLModuleExternOp op) {
-  // Sanitize the ports.
+  // Legalize the ports.
   analyzeModulePorts(op);
 }
 
-/// Sanitize the signals and modports of an SV interface.
+/// Legalize the signals and modports of an SV interface.
 void LegalNamesAnalysis::analyze(sv::InterfaceOp op) {
-  // TODO: Once interfaces gain ports we'll want to sanitize them here as well,
+  // TODO: Once interfaces gain ports we'll want to legalize them here as well,
   // pretty much like the RTLModuleOp.
 
-  // Sanitize signals and modports.
+  // Legalize signals and modports.
   for (auto &op : *op.getBodyBlock()) {
     if (isa<InterfaceSignalOp>(op) || isa<InterfaceModportOp>(op)) {
-      sanitizeOperation(
+      legalizeOperation(
           &op, op.getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()));
     }
   }
