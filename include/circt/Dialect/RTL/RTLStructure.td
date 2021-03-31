@@ -26,8 +26,7 @@ def RTLModuleOp : RTLOp<"module",
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports, 
-                   CArg<"ArrayRef<NamedAttribute>",
-                        "ArrayRef<NamedAttribute>()">:$attributes)>
+                   CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
   let extraClassDeclaration = [{
@@ -105,8 +104,7 @@ def RTLModuleExternOp : RTLOp<"module.extern",
     OpBuilder<(ins "StringAttr":$name,
                       "ArrayRef<ModulePortInfo>":$ports,
                       CArg<"StringRef", "StringRef()">:$verilogName,
-                      CArg<"ArrayRef<NamedAttribute>", 
-                           "ArrayRef<NamedAttribute>()">:$attributes)>
+                      CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
   let extraClassDeclaration = [{   
@@ -216,8 +214,7 @@ def RTLModuleGeneratedOp : RTLOp<"module.generated",
                    "StringAttr":$name,
                    "ArrayRef<ModulePortInfo>":$ports,
                    CArg<"StringRef", "StringRef()">:$verilogName,
-                   CArg<"ArrayRef<NamedAttribute>", 
-                        "ArrayRef<NamedAttribute>()">:$attributes)>
+                   CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
   let extraClassDeclaration = [{   
