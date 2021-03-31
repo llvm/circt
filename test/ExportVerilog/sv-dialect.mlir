@@ -9,11 +9,11 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
   sv.always posedge %clock {
     sv.ifdef.procedural "SYNTHESIS" {
     } else {
-  // CHECK-NEXT:     if (PRINTF_COND_ & 1'bx & 1'bz & cond)
+  // CHECK-NEXT:     if (PRINTF_COND_ & 1'bx & 1'bz & 1'bz & cond)
       %tmp = sv.verbatim.expr "PRINTF_COND_" : () -> i1
       %tmp1 = sv.constantX : i1
       %tmp2 = sv.constantZ : i1
-      %tmp3 = comb.and %tmp, %tmp1, %tmp2, %cond : i1
+      %tmp3 = comb.and %tmp, %tmp1, %tmp2, %tmp2, %cond : i1
       sv.if %tmp3 {
   // CHECK-NEXT:       $fwrite(32'h80000002, "Hi\n");
         sv.fwrite "Hi\n"
@@ -165,26 +165,21 @@ rtl.module @M1(%clock : i1, %cond : i1, %val : i8) {
 
   // CHECK-NEXT: initial begin
   sv.initial {
-    // CHECK-NEXT: automatic logic [41:0] _T;
-    // CHECK-NEXT: automatic logic        _T_0;
-    // CHECK-EMPTY:
-    // CHECK-NEXT: _T = THING;
     %thing = sv.verbatim.expr "THING" : () -> i42
-    // CHECK-NEXT: wire42 = _T;
+    // CHECK-NEXT: wire42 = THING;
     sv.bpassign %wire42, %thing : i42
 
     sv.ifdef.procedural "FOO" {
       // CHECK-NEXT: `ifdef FOO
       %c1 = sv.verbatim.expr "\"THING\"" : () -> i1
-      // CHECK-NEXT: {{.+}} = "THING";
       sv.fwrite "%d" (%c1) : i1
-      // CHECK-NEXT: fwrite(32'h80000002, "%d", {{.+}});
+      // CHECK-NEXT: fwrite(32'h80000002, "%d", "THING");
       sv.fwrite "%d" (%c1) : i1
-      // CHECK-NEXT: fwrite(32'h80000002, "%d", {{.+}});
+      // CHECK-NEXT: fwrite(32'h80000002, "%d", "THING");
       // CHECK-NEXT: `endif
     }
 
-    // CHECK-NEXT: wire42 <= _T;
+    // CHECK-NEXT: wire42 <= THING;
     sv.passign %wire42, %thing : i42
 
     // CHECK-NEXT: casez (val)
@@ -309,10 +304,10 @@ rtl.module @issue508(%in1: i1, %in2: i1) {
 // CHECK-LABEL: exprInlineTestIssue439
 // https://github.com/llvm/circt/issues/439
 rtl.module @exprInlineTestIssue439(%clk: i1) {
-  %c = rtl.constant 0 : i32
-
   // CHECK: always @(posedge clk) begin
   sv.always posedge %clk {
+    %c = rtl.constant 0 : i32
+
     // CHECK: automatic logic [31:0] _T;
     // CHECK: automatic logic [15:0] _T_0;
     // CHECK: _T = 32'h0;
