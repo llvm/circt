@@ -82,6 +82,17 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar
 
 ; // -----
 
+; COM: A ReferenceTarget/ComponentName pointing at a CMem should work.
+circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar"}]]
+  module Foo:
+    cmem bar: UInt<1>[8]
+
+    ; CHECK-LABEL: module {
+    ; CHECK: firrtl.cmem
+    ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}]
+
+; // -----
+
 ; COM: All types of JSON values should work
 circuit Foo: %[[{"string":"a","integer":42,"float":3.14,"boolean":true,"null":null,"object":{"foo":"bar"},"array":[1,2,3]}]]
   module Foo:
