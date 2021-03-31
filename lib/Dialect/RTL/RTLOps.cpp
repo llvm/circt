@@ -117,7 +117,8 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> constants) {
 enum ExternModKind { PlainMod, ExternMod, GenMod };
 
 static void buildModule(OpBuilder &builder, OperationState &result,
-                        StringAttr name, ArrayRef<ModulePortInfo> ports) {
+                        StringAttr name, ArrayRef<ModulePortInfo> ports,
+                        ArrayRef<NamedAttribute> attributes) {
   using namespace mlir::impl;
 
   // Add an attribute for the name.
@@ -154,12 +155,15 @@ static void buildModule(OpBuilder &builder, OperationState &result,
                              : getArgAttrName(port.argNum, attrNameBuf);
     result.addAttribute(attrName, builder.getDictionaryAttr(argAttrs));
   }
+  for (auto &na : attributes)
+    result.addAttribute(na.first, na.second);
   result.addRegion();
 }
 
 void RTLModuleOp::build(OpBuilder &builder, OperationState &result,
-                        StringAttr name, ArrayRef<ModulePortInfo> ports) {
-  buildModule(builder, result, name, ports);
+                        StringAttr name, ArrayRef<ModulePortInfo> ports,
+                        ArrayRef<NamedAttribute> attributes) {
+  buildModule(builder, result, name, ports, attributes);
 
   // Create a region and a block for the body.
   auto *bodyRegion = result.regions[0].get();
@@ -185,9 +189,21 @@ StringRef RTLModuleExternOp::getVerilogModuleName() {
 
 void RTLModuleExternOp::build(OpBuilder &builder, OperationState &result,
                               StringAttr name, ArrayRef<ModulePortInfo> ports,
-                              StringRef verilogName) {
-  buildModule(builder, result, name, ports);
+                              StringRef verilogName,
+                              ArrayRef<NamedAttribute> attributes) {
+  buildModule(builder, result, name, ports, attributes);
 
+  if (!verilogName.empty())
+    result.addAttribute("verilogName", builder.getStringAttr(verilogName));
+}
+
+void RTLModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
+                                 FlatSymbolRefAttr genKind, StringAttr name,
+                                 ArrayRef<ModulePortInfo> ports,
+                                 StringRef verilogName,
+                                 ArrayRef<NamedAttribute> attributes) {
+  buildModule(builder, result, name, ports, attributes);
+  result.addAttribute("generatorKind", genKind);
   if (!verilogName.empty())
     result.addAttribute("verilogName", builder.getStringAttr(verilogName));
 }
@@ -644,10 +660,11 @@ static LogicalResult verifyInstanceOp(InstanceOp op) {
            << op.moduleName() << "'";
 
   if (!isa<RTLModuleOp>(referencedModule) &&
-      !isa<RTLModuleExternOp>(referencedModule))
+      !isa<RTLModuleExternOp>(referencedModule) &&
+      !isa<RTLModuleGeneratedOp>(referencedModule))
     return op.emitError("Symbol resolved to '")
            << referencedModule->getName()
-           << "' which is not a RTL[Ext]ModuleOp";
+           << "' which is not a RTL[Ext|Generated]ModuleOp";
 
   if (auto paramDictOpt = op.parameters()) {
     DictionaryAttr paramDict = paramDictOpt.getValue();

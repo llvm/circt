@@ -1794,9 +1794,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   SmallVector<Value> pipeRegs;
 
   // Process each port in turn.
-  SmallVector<std::pair<Identifier, MemOp::PortKind>> ports;
-  op.getPorts(ports);
-  assert(op.getNumResults() == ports.size());
+  SmallVector<std::pair<Identifier, MemOp::PortKind>> ports = op.getPorts();
 
   for (size_t i = 0, e = ports.size(); i != e; ++i) {
     auto portName = ports[i].first.str();

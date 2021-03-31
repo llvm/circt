@@ -565,6 +565,7 @@ public:
   void emitRTLModule(RTLModuleOp module);
   void prepareRTLModule(Block &block);
   void emitRTLExternModule(RTLModuleExternOp module);
+  void emitRTLGeneratedModule(RTLModuleGeneratedOp module);
 
   // Statements.
   void emitStatement(Operation *op);
@@ -2380,6 +2381,12 @@ void ModuleEmitter::emitRTLExternModule(RTLModuleExternOp module) {
   os << "// external module " << verilogName.getValue() << "\n\n";
 }
 
+void ModuleEmitter::emitRTLGeneratedModule(RTLModuleGeneratedOp module) {
+  auto verilogName = module.getVerilogModuleNameAttr();
+  verifyModuleName(module, verilogName);
+  os << "// external generated module " << verilogName.getValue() << "\n\n";
+}
+
 // Given a side effect free "always inline" operation, make sure that it exists
 // in the same block as its users and that it has one use for each one.
 static void lowerAlwaysInlineOperation(Operation *op) {
@@ -2770,8 +2777,11 @@ void UnifiedEmitter::emitMLIRModule() {
       ModuleEmitter(state).emitRTLModule(rootOp);
     else if (auto rootOp = dyn_cast<RTLModuleExternOp>(op))
       ModuleEmitter(state).emitRTLExternModule(rootOp);
-    else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) ||
-             isa<IfDefProceduralOp>(op))
+    else if (auto rootOp = dyn_cast<RTLModuleGeneratedOp>(op))
+      ModuleEmitter(state).emitRTLGeneratedModule(rootOp);
+    else if (auto rootOp = dyn_cast<RTLGeneratorSchemaOp>(op)) { /* Empty */
+    } else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) ||
+               isa<IfDefProceduralOp>(op))
       ModuleEmitter(state).emitStatement(&op);
     else {
       encounteredError = true;
