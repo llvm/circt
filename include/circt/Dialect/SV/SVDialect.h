@@ -47,16 +47,16 @@ llvm::StringRef resolveKeywordConflict(llvm::StringRef origName,
                                        llvm::StringSet<> &recordNames,
                                        size_t &nextGeneratedNameID);
 
-/// Sanitize the specified name for use in SV output. Auto-uniquifies the name
+/// Legalize the specified name for use in SV output. Auto-uniquifies the name
 /// through \c resolveKeywordConflict if required. If the name is empty, a
 /// unique temp name is created.
-StringRef sanitizeName(llvm::StringRef name, llvm::StringSet<> &recordNames,
+StringRef legalizeName(llvm::StringRef name, llvm::StringSet<> &recordNames,
                        size_t &nextGeneratedNameID);
 
 /// Check if a name is valid for use in SV output by only containing characters
 /// allowed in SV identifiers.
 ///
-/// Call \c sanitizeName() to obtain a sanitized version of the name.
+/// Call \c legalizeName() to obtain a legal version of the name.
 bool isNameValid(llvm::StringRef name);
 
 } // namespace sv
