@@ -144,9 +144,9 @@ void ConstantZOp::getAsmResultNames(
 
 void RegOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                   Type elementType, StringAttr name) {
-  if (name)
-    odsState.addAttribute("name", name);
-
+  if (!name)
+    name = odsBuilder.getStringAttr("");
+  odsState.addAttribute("name", name);
   odsState.addTypes(rtl::InOutType::get(elementType));
 }
 
@@ -154,7 +154,8 @@ void RegOp::build(OpBuilder &odsBuilder, OperationState &odsState,
 /// attribute.
 void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   // If the wire has an optional 'name' attribute, use it.
-  if (auto nameAttr = (*this)->getAttrOfType<StringAttr>("name"))
+  auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
+  if (!nameAttr.getValue().empty())
     setNameFn(getResult(), nameAttr.getValue());
 }
 
@@ -827,9 +828,10 @@ LogicalResult verifySignalExists(Value ifaceVal, FlatSymbolRefAttr signalName) {
 
 void WireOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                    Type elementType, StringAttr name) {
-  if (name)
-    odsState.addAttribute("name", name);
+  if (!name)
+    name = odsBuilder.getStringAttr("");
 
+  odsState.addAttribute("name", name);
   odsState.addTypes(InOutType::get(elementType));
 }
 
@@ -837,7 +839,8 @@ void WireOp::build(OpBuilder &odsBuilder, OperationState &odsState,
 /// attribute.
 void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   // If the wire has an optional 'name' attribute, use it.
-  if (auto nameAttr = (*this)->getAttrOfType<StringAttr>("name"))
+  auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
+  if (!nameAttr.getValue().empty())
     setNameFn(getResult(), nameAttr.getValue());
 }
 
