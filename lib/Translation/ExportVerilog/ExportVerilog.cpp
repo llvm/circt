@@ -1864,6 +1864,11 @@ LogicalResult StmtEmitter::emitIfDef(Operation *op, StringRef cond) {
   }
 
   indent() << "`endif\n";
+
+  // We don't know how many statements we emitted, so assume conservatively
+  // that a lot got put out. This will make sure we get a begin/end block around
+  // this.
+  numStatementsEmitted += 2;
   return success();
 }
 
