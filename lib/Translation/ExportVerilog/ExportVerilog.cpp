@@ -51,13 +51,29 @@ static bool isExpressionAlwaysInline(Operation *op) {
   if (isa<ArrayIndexInOutOp>(op))
     return true;
 
-  // We don't want wires that are just constants aesthetically.
-  if (isa<ConstantOp>(op))
-    return true;
-
   // An SV interface modport is a symbolic name that is always inlined.
   if (isa<GetModportOp>(op) || isa<ReadInterfaceSignalOp>(op))
     return true;
+
+  return false;
+}
+
+/// Return true for nullary operations that are better emitted multiple
+/// times as inline expression (when they have multiple uses) rather than having
+/// a temporary wire.
+///
+/// This can only handle nullary expressions, because we don't want to replicate
+/// subtrees arbitrarily.
+static bool isDuplicatableNullaryExpression(Operation *op) {
+  // We don't want wires that are just constants aesthetically.
+  if (isa<ConstantOp>(op) || isa<ConstantXOp>(op) || isa<ConstantZOp>(op))
+    return true;
+
+  // If this is a small verbatim expression, keep it inline.
+  if (auto verb = dyn_cast<VerbatimExprOp>(op)) {
+    if (verb->getNumOperands() == 0 && verb.string().size() <= 16)
+      return true;
+  }
 
   return false;
 }
@@ -1339,8 +1355,12 @@ static bool isExpressionEmittedInline(Operation *op) {
   if (isExpressionUnableToInline(op))
     return false;
 
-  // Otherwise, if it has multiple uses, emit it out of line.
-  return op->getResult(0).hasOneUse();
+  // If it has a single use, emit it inline.
+  if (op->getResult(0).hasOneUse())
+    return true;
+
+  // If it is nullary and duplicable, then we can emit it inline.
+  return op->getNumOperands() == 0 && isDuplicatableNullaryExpression(op);
 }
 
 namespace {
