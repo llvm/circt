@@ -57,6 +57,13 @@ rtl.module @inout_inst(%a: i1) -> () {
   %0 = rtl.instance "foo" @inout (%a) : (i1) -> (i1)
 }
 
+// https://github.com/llvm/circt/issues/855
+// CHECK-LABEL: rtl.module @nameless_reg
+// CHECK-NEXT: %_T = sv.reg : !rtl.inout<i4>
+rtl.module @nameless_reg(%a: i1) -> () {
+  %661 = sv.reg : !rtl.inout<i4>
+}
+
 // CHECK-LABEL: sv.interface @output_5
 sv.interface @output {
   // CHECK-NEXT: sv.interface.signal @input_0 : i1

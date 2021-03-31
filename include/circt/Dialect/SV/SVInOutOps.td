@@ -34,7 +34,7 @@ def WireOp : SVOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>,
      See SV Spec 6.7, pp97.
     }];
 
-  let arguments = (ins OptionalAttr<StrAttr>:$name);
+  let arguments = (ins StrAttr:$name);
   let results = (outs InOutType:$result);
 
   let skipDefaultBuilders = 1;
@@ -64,7 +64,7 @@ def RegOp : SVOp<"reg", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
      Declare a SystemVerilog Variable Declaration of 'reg' type.
      See SV Spec 6.8, pp100.
    }];
-  let arguments = (ins OptionalAttr<StrAttr>:$name);
+  let arguments = (ins StrAttr:$name);
   let results = (outs InOutType:$result);
 
   let skipDefaultBuilders = 1;
