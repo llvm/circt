@@ -1144,7 +1144,6 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitDecl(NodeOp op);
   LogicalResult visitDecl(RegOp op);
   LogicalResult visitDecl(RegResetOp op);
-  // LogicalResult visitDecl(MemOp op);
 
   // Unary Ops.
   LogicalResult lowerNoopCast(Operation *op);
@@ -1930,67 +1929,6 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   initializeRegister(regResult, resetSignal);
   return success();
 }
-#if 0
-LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
-  StringRef memName = "mem";
-  if (op.name().hasValue())
-    memName = op.name().getValue();
-
-  // TODO: Remove this restriction and preserve aggregates in
-  // memories.
-  if (op.getDataType().cast<FIRRTLType>().getPassiveType().isa<BundleType>())
-    return op.emitOpError(
-        "should have already been lowered from a ground type to an aggregate "
-        "type using the LowerTypes pass. Use "
-        "'firtool --enable-lower-types' or 'circt-opt "
-        "--pass-pipeline='firrtl.circuit(firrtl-lower-types)' "
-        "to run this.");
-
-  uint64_t depth = op.depth();
-  uint64_t readLatency = op.readLatency();
-  uint64_t writeLatency = op.writeLatency();
-  auto addrType = lowerType(op.getResult(0)
-                                .getType()
-                                .cast<FIRRTLType>()
-                                .getPassiveType()
-                                .cast<BundleType>()
-                                .getElement("addr")
-                                ->type);
-  auto dataType = lowerType(op.getDataType());
-
-  SmallVector<ModulePortInfo> modPorts;
-
-  // Process each port in turn.
-  SmallVector<std::pair<Identifier, MemOp::PortKind>> ports;
-  op.getPorts(ports);
-  assert(op.getNumResults() == ports.size());
-
-  for (size_t i = 0, e = ports.size(); i != e; ++i) {
-    auto portName = ports[i].first.str();
-    auto port = op.getResult(i);
-
-    // Do not lower ports if they aren't used.
-    if (port.use_empty())
-      continue;
-
-    auto portBundleType =
-        port.getType().cast<FIRRTLType>().getPassiveType().cast<BundleType>();
-
-    // Create wires for all the memory ports
-    for (BundleType::BundleElement elt : portBundleType.getElements()) {
-      auto fieldType = lowerType(elt.type);
-      auto name =
-          (Twine(memName) + "_" + portName + "_" + elt.name.getValue()).str();
-      modPorts.push_back(elt.name.getValue(), fieldType);
-    }
-  }
-
-  std::array<char*, 5> schemafields("depth", "name", "portNames", "readLatency", "writeLatency");
-  builder.create<RTLGeneratorSchemaOp>("FIRRTLMem", "FIRRTL_Memory", schemafields);
-//  builder.create<rtl::ModuleGeneratedOp>();
-  return success();
-}
-#endif
 
 //===----------------------------------------------------------------------===//
 // Unary Operations
