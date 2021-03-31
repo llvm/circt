@@ -107,25 +107,53 @@ static IntegerAttr elideZeroWidthFoldOperand(Value operand,
   return {};
 }
 
+/// Check if the operands and results of \p op are of integer type and with
+/// known bitwidth. Can be used to determine if any fold is legal.
+static bool hasKnownWidths(Operation *op) {
+  for (auto resTy : op->getResultTypes()) {
+    auto ty = resTy.cast<FIRRTLType>();
+    // The result must be of integer type and the bitwidth must be knowkn and
+    // non-zero. Unkown bitwidths are handled after width inference.
+    if (!ty.isa<IntType>() || ty.getBitWidthOrSentinel() <= 0)
+      return false;
+  }
+  for (auto opTy : op->getOperandTypes()) {
+    auto ty = opTy.cast<FIRRTLType>();
+    // Operand bitwidth must be known. Unkown bitwidths are handled after width
+    // inference.
+    if (ty.getBitWidthOrSentinel() == -1)
+      return false;
+  }
+  return true;
+}
+
 /// Applies the constant folding function `calculate` to the given operands.
 ///
-/// Sign or zero extends the operands appropriately to the larger of the two
-/// bit widths, and depending on whether the operation is to be performed on
-/// signed or unsigned operands. The result is always a 1 bit integer,
-/// appropriate for comparison/relational operators.
+/// Sign or zero extends the operands appropriately to the bitwidth of the
+/// result type if \p useDstWidth is true, else to the larger of the two operand
+/// bit widths and depending on whether the operation is to be performed on
+/// signed or unsigned operands.
+template <class DstTy>
 static Attribute
-constFoldBinaryRelationalOp(Operation *op, ArrayRef<Attribute> operands,
-                            bool isUnsigned,
-                            const function_ref<bool(APInt, APInt)> &calculate) {
+constFoldFIRRTLBinaryOp(Operation *op, ArrayRef<Attribute> operands,
+                        const function_ref<DstTy(APInt, APInt)> &calculate,
+                        bool useDstWidth = false) {
   assert(operands.size() == 2 && "binary op takes two operands");
+  if (!hasKnownWidths(op) && useDstWidth)
+    return {};
   IntegerAttr lhs = elideZeroWidthFoldOperand(op->getOperand(0), operands[0]);
   IntegerAttr rhs = elideZeroWidthFoldOperand(op->getOperand(1), operands[1]);
   if (!lhs || !rhs)
     return {};
-  auto commonWidth = std::max<int32_t>(lhs.getValue().getBitWidth(),
-                                       rhs.getValue().getBitWidth());
-  auto extOrSelf = isUnsigned ? &APInt::zextOrSelf : &APInt::sextOrSelf;
-  return IntegerAttr::get(IntegerType::get(lhs.getContext(), 1),
+  auto dstType = op->getResultTypes().front().cast<IntType>();
+  auto dstWidth = dstType.getBitWidthOrSentinel();
+  auto commonWidth = useDstWidth
+                         ? dstWidth
+                         : std::max<int32_t>(lhs.getValue().getBitWidth(),
+                                             rhs.getValue().getBitWidth());
+  auto extOrSelf =
+      dstType.isUnsigned() ? &APInt::zextOrTrunc : &APInt::sextOrTrunc;
+  return IntegerAttr::get(IntegerType::get(lhs.getContext(), dstWidth),
                           calculate((lhs.getValue().*extOrSelf)(commonWidth),
                                     (rhs.getValue().*extOrSelf)(commonWidth)));
 }
@@ -161,6 +189,29 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
 // Binary Operators
 //===----------------------------------------------------------------------===//
 
+OpFoldResult AddPrimOp::fold(ArrayRef<Attribute> operands) {
+  /// Any folding here requires a bitwidth extension.
+
+  /// If both operands are constant, and the result is integer with known
+  /// widths, then perform constant folding. Cannot use constFoldBinaryOp, since
+  /// the width of the constant is different from operands.
+  return constFoldFIRRTLBinaryOp<APInt>(
+      *this, operands, [=](APInt a, APInt b) { return a + b; }, true);
+  return {};
+}
+
+OpFoldResult SubPrimOp::fold(ArrayRef<Attribute> operands) {
+  return constFoldFIRRTLBinaryOp<APInt>(
+      *this, operands, [=](APInt a, APInt b) { return a - b; }, true);
+  return {};
+}
+
+OpFoldResult MulPrimOp::fold(ArrayRef<Attribute> operands) {
+  return constFoldFIRRTLBinaryOp<APInt>(
+      *this, operands, [=](APInt a, APInt b) { return a * b; }, true);
+  return {};
+}
+
 OpFoldResult DivPrimOp::fold(ArrayRef<Attribute> operands) {
   APInt value;
 
@@ -187,6 +238,8 @@ OpFoldResult DivPrimOp::fold(ArrayRef<Attribute> operands) {
 
   return {};
 }
+
+OpFoldResult RemPrimOp::fold(ArrayRef<Attribute> operands) { return {}; }
 
 // TODO: Move to DRR.
 OpFoldResult AndPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -292,9 +345,9 @@ OpFoldResult LEQPrimOp::fold(ArrayRef<Attribute> operands) {
     }
   }
 
-  return constFoldBinaryRelationalOp(
-      *this, operands, isUnsigned,
-      [=](APInt a, APInt b) { return isUnsigned ? a.ule(b) : a.sle(b); });
+  return constFoldFIRRTLBinaryOp<bool>(*this, operands, [=](APInt a, APInt b) {
+    return isUnsigned ? a.ule(b) : a.sle(b);
+  });
 }
 
 void LTPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -345,9 +398,9 @@ OpFoldResult LTPrimOp::fold(ArrayRef<Attribute> operands) {
     }
   }
 
-  return constFoldBinaryRelationalOp(
-      *this, operands, isUnsigned,
-      [=](APInt a, APInt b) { return isUnsigned ? a.ult(b) : a.slt(b); });
+  return constFoldFIRRTLBinaryOp<bool>(*this, operands, [=](APInt a, APInt b) {
+    return isUnsigned ? a.ult(b) : a.slt(b);
+  });
 }
 
 void GEQPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -398,9 +451,9 @@ OpFoldResult GEQPrimOp::fold(ArrayRef<Attribute> operands) {
     }
   }
 
-  return constFoldBinaryRelationalOp(
-      *this, operands, isUnsigned,
-      [=](APInt a, APInt b) { return isUnsigned ? a.uge(b) : a.sge(b); });
+  return constFoldFIRRTLBinaryOp<bool>(*this, operands, [=](APInt a, APInt b) {
+    return isUnsigned ? a.uge(b) : a.sge(b);
+  });
 }
 
 void GTPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -445,14 +498,13 @@ OpFoldResult GTPrimOp::fold(ArrayRef<Attribute> operands) {
     }
   }
 
-  return constFoldBinaryRelationalOp(
-      *this, operands, isUnsigned,
-      [=](APInt a, APInt b) { return isUnsigned ? a.ugt(b) : a.sgt(b); });
+  return constFoldFIRRTLBinaryOp<bool>(*this, operands, [=](APInt a, APInt b) {
+    return isUnsigned ? a.ugt(b) : a.sgt(b);
+  });
 }
 
 OpFoldResult EQPrimOp::fold(ArrayRef<Attribute> operands) {
   APInt value;
-  bool isUnsigned = lhs().getType().isa<UIntType>();
 
   // eq(x, x) -> 1
   if (lhs() == rhs())
@@ -470,13 +522,12 @@ OpFoldResult EQPrimOp::fold(ArrayRef<Attribute> operands) {
     /// TODO: eq(x, ~0) -> andr(x)) when x is >1 bit
   }
 
-  return constFoldBinaryRelationalOp(*this, operands, isUnsigned,
-                                     [=](APInt a, APInt b) { return a.eq(b); });
+  return constFoldFIRRTLBinaryOp<bool>(
+      *this, operands, [=](APInt a, APInt b) { return a.eq(b); });
 }
 
 OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
   APInt value;
-  bool isUnsigned = lhs().getType().isa<UIntType>();
 
   // neq(x, x) -> 0
   if (lhs() == rhs())
@@ -494,10 +545,19 @@ OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
     /// TODO: neq(x, ~0) -> andr(x)) when x is >1 bit
   }
 
-  return constFoldBinaryRelationalOp(*this, operands, isUnsigned,
-                                     [=](APInt a, APInt b) { return a.ne(b); });
+  return constFoldFIRRTLBinaryOp<bool>(
+      *this, operands, [=](APInt a, APInt b) { return a.ne(b); });
 }
 
+OpFoldResult CatPrimOp::fold(ArrayRef<Attribute> operands) { return {}; }
+
+OpFoldResult DShlPrimOp::fold(ArrayRef<Attribute> operands) { return {}; }
+
+OpFoldResult DShlwPrimOp::fold(ArrayRef<Attribute> operands) { return {}; }
+
+OpFoldResult DShrPrimOp::fold(ArrayRef<Attribute> operands) { return {}; }
+
+OpFoldResult ValidIfPrimOp::fold(ArrayRef<Attribute> operands) { return {}; }
 //===----------------------------------------------------------------------===//
 // Unary Operators
 //===----------------------------------------------------------------------===//
