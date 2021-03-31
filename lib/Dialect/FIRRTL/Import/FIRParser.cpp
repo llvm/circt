@@ -2239,8 +2239,12 @@ ParseResult FIRStmtParser::parseSMem() {
       parseOptionalInfo(info))
     return failure();
 
+  auto name = filterUselessName(id);
+  ArrayAttr annotations = builder.getArrayAttr({});
+  getAnnotations(getModuleTarget() + ">" + name.getValue(), annotations);
+
   auto result =
-      builder.create<SMemOp>(info.getLoc(), type, ruw, filterUselessName(id));
+      builder.create<SMemOp>(info.getLoc(), type, ruw, name, annotations);
 
   // Remember that this memory is in this symbol table scope.
   // TODO(chisel bug): This should be removed along with memoryScopeTable.

@@ -1811,6 +1811,30 @@ static void printInstanceOp(OpAsmPrinter &p, Operation *op,
 }
 
 //===----------------------------------------------------------------------===//
+// MemOp Custom attr-dict Directive
+//===----------------------------------------------------------------------===//
+
+/// No change from normal parsing.
+static ParseResult parseMemOp(OpAsmParser &parser, NamedAttrList &resultAttrs) {
+
+  if (parser.parseOptionalAttrDict(resultAttrs))
+    return failure();
+
+  return success();
+}
+
+/// Always elide "ruw" and elide "annotations" if it exists or if it is empty.
+static void printMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
+  SmallVector<StringRef, 2> elides = {"ruw"};
+
+  auto annotationsAttr = op->getAttrOfType<ArrayAttr>("annotations");
+  if (!annotationsAttr || annotationsAttr.size() == 0)
+    elides.push_back("annotations");
+
+  p.printOptionalAttrDict(op->getAttrs(), elides);
+}
+
+//===----------------------------------------------------------------------===//
 // TblGen Generated Logic.
 //===----------------------------------------------------------------------===//
 
