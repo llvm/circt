@@ -47,7 +47,7 @@ struct ModulePortInfo {
 
 FunctionType getModuleType(Operation *op);
 
-void getModulePortInfo(Operation *op, SmallVectorImpl<ModulePortInfo> &results);
+SmallVector<ModulePortInfo> getModulePortInfo(Operation *op);
 StringAttr getRTLNameAttr(ArrayRef<NamedAttribute> attrs);
 
 /// Return true if the specified operation is a combinatorial logic op.

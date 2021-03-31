@@ -2153,8 +2153,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 
   os << ' ' << emitter.getName(ModuleEmitter::ValueOrOp(op)) << " (";
 
-  SmallVector<ModulePortInfo, 8> portInfo;
-  getModulePortInfo(moduleOp, portInfo);
+  SmallVector<ModulePortInfo> portInfo = getModulePortInfo(moduleOp);
 
   // Get the max port name length so we can align the '('.
   size_t maxNameLength = 0;

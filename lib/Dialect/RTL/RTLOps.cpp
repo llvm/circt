@@ -206,8 +206,8 @@ StringAttr rtl::getRTLNameAttr(ArrayRef<NamedAttribute> attrs) {
   return StringAttr();
 }
 
-void rtl::getModulePortInfo(Operation *op,
-                            SmallVectorImpl<ModulePortInfo> &results) {
+SmallVector<ModulePortInfo> rtl::getModulePortInfo(Operation *op) {
+  SmallVector<ModulePortInfo> results;
   auto argTypes = getModuleType(op).getInputs();
 
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
@@ -231,6 +231,7 @@ void rtl::getModulePortInfo(Operation *op,
     results.push_back(
         {getRTLNameAttr(argAttrs), PortDirection::OUTPUT, resultTypes[i], i});
   }
+  return results;
 }
 
 /// Parse a function result list.
@@ -677,10 +678,7 @@ StringAttr InstanceOp::getResultName(size_t idx) {
   if (!module)
     return {};
 
-  SmallVector<ModulePortInfo, 4> results;
-  getModulePortInfo(module, results);
-
-  for (auto &port : results) {
+  for (auto &port : getModulePortInfo(module)) {
     if (!port.isOutput())
       continue;
     if (idx == 0)
