@@ -2958,6 +2958,10 @@ void circt::registerToVerilogTranslation() {
   mlir::TranslateFromMLIRRegistration toVerilog(
       "export-verilog",
       [](ModuleOp module, llvm::raw_ostream &os) {
+        // ExportVerilog requires that the SV dialect be loaded in order to
+        // create WireOps. It may not have been  loaded by the MLIR parser,
+        // which can happen if the input IR has no SV operations.
+        module->getContext()->loadDialect<sv::SVDialect>();
         applyLoweringCLOptions(module);
         return exportVerilog(module, os);
       },
