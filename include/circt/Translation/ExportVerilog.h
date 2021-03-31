@@ -27,11 +27,12 @@ class ModuleOp;
 
 namespace circt {
 
-/// Export a module containing RTL, and SV dialect code.
+/// Export a module containing RTL, and SV dialect code. Requires that the SV
+/// dialect is loaded in to the context.
 mlir::LogicalResult exportVerilog(mlir::ModuleOp module, llvm::raw_ostream &os);
 
 /// Export a module containing RTL, and SV dialect code, as one file per SV
-/// module.
+/// module. Requires that the SV dialect is loaded in to the context.
 ///
 /// Files are created in the directory indicated by \p dirname. The function
 /// \p emittedFile is called for every emitted file, in the order appropriate
