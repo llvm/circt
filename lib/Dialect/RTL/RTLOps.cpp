@@ -155,8 +155,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
                              : getArgAttrName(port.argNum, attrNameBuf);
     result.addAttribute(attrName, builder.getDictionaryAttr(argAttrs));
   }
-  for (auto &na : attributes)
-    result.addAttribute(na.first, na.second);
+  result.addAttributes(attributes);
   result.addRegion();
 }
 
