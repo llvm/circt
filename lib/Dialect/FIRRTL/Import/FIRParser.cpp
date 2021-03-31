@@ -2373,9 +2373,13 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     resultTypes.push_back(FlipType::get(p.second));
   }
 
+  auto name = filterUselessName(id);
+  ArrayAttr annotations = builder.getArrayAttr({});
+  getAnnotations(getModuleTarget() + ">" + name.getValue().str(), annotations);
+
   auto result = builder.create<MemOp>(
       info.getLoc(), resultTypes, readLatency, writeLatency, depth, ruw,
-      builder.getArrayAttr(resultNames), filterUselessName(id));
+      builder.getArrayAttr(resultNames), filterUselessName(id), annotations);
 
   UnbundledValueEntry unbundledValueEntry;
   unbundledValueEntry.reserve(result.getNumResults());

@@ -1816,11 +1816,7 @@ static void printInstanceOp(OpAsmPrinter &p, Operation *op,
 
 /// No change from normal parsing.
 static ParseResult parseMemOp(OpAsmParser &parser, NamedAttrList &resultAttrs) {
-
-  if (parser.parseOptionalAttrDict(resultAttrs))
-    return failure();
-
-  return success();
+  return parser.parseOptionalAttrDict(resultAttrs);
 }
 
 /// Always elide "ruw" and elide "annotations" if it exists or if it is empty.

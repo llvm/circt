@@ -403,11 +403,15 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     }
 
     // Construct the new memory for this flattened field.
+    //
+    // TODO: Annotations are just copied to the lowered memory.
+    // Change this to copy all global annotations and only those which
+    // target specific ports.
     auto newName = op.name().getValue().str() + field.suffix;
     auto newMem = builder->create<MemOp>(
         resultPortTypes, op.readLatency(), op.writeLatency(), depth, op.ruw(),
         builder->getArrayAttr(resultPortNames.getArrayRef()),
-        builder->getStringAttr(newName));
+        builder->getStringAttr(newName), op.annotations());
 
     // Setup the lowering to the new memory. We need to track both the
     // new memory index ("i") and the old memory index ("j") to deal
