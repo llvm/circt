@@ -1045,7 +1045,7 @@ void FIRRTLModuleLowering::lowerMemory(MemOp memory, CircuitOp circuitOp,
 
   // Make the global module for the memory
   auto memModule = builderTop.create<rtl::RTLModuleGeneratedOp>(
-      loweringState.memorySchema, memNameAttr, modPorts, genAttrs);
+      loweringState.memorySchema, memNameAttr, modPorts, StringRef(), genAttrs);
   auto memModuleAttr = builderTop.getSymbolRefAttr(memModule);
 
   // Create the instance to replace the memop

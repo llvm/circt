@@ -858,8 +858,8 @@ static Optional<MemOp::PortKind> getMemPortKindFromType(FIRRTLType type) {
 /// Return the name and kind of ports supported by this memory.
 SmallVector<std::pair<Identifier, MemOp::PortKind>> MemOp::getPorts() {
   SmallVector<std::pair<Identifier, MemOp::PortKind>> result;
-      // Each entry in the bundle is a port.
-      for (size_t i = 0, e = getNumResults(); i != e; ++i) {
+  // Each entry in the bundle is a port.
+  for (size_t i = 0, e = getNumResults(); i != e; ++i) {
     auto elt = getResult(i);
     // Each port is a bundle.
     auto kind = getMemPortKindFromType(elt.getType().cast<FIRRTLType>());

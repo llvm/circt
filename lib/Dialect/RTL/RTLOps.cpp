@@ -155,15 +155,15 @@ static void buildModule(OpBuilder &builder, OperationState &result,
                              : getArgAttrName(port.argNum, attrNameBuf);
     result.addAttribute(attrName, builder.getDictionaryAttr(argAttrs));
   }
-  for (auto& na : attributes)
+  for (auto &na : attributes)
     result.addAttribute(na.first, na.second);
   result.addRegion();
 }
 
 void RTLModuleOp::build(OpBuilder &builder, OperationState &result,
                         StringAttr name, ArrayRef<ModulePortInfo> ports,
-                        ArrayRef<NamedAttribute> annotations) {
-  buildModule(builder, result, name, ports, annotations);
+                        ArrayRef<NamedAttribute> attributes) {
+  buildModule(builder, result, name, ports, attributes);
 
   // Create a region and a block for the body.
   auto *bodyRegion = result.regions[0].get();
@@ -190,8 +190,8 @@ StringRef RTLModuleExternOp::getVerilogModuleName() {
 void RTLModuleExternOp::build(OpBuilder &builder, OperationState &result,
                               StringAttr name, ArrayRef<ModulePortInfo> ports,
                               StringRef verilogName,
-                              ArrayRef<NamedAttribute> annotations) {
-  buildModule(builder, result, name, ports, annotations);
+                              ArrayRef<NamedAttribute> attributes) {
+  buildModule(builder, result, name, ports, attributes);
 
   if (!verilogName.empty())
     result.addAttribute("verilogName", builder.getStringAttr(verilogName));
@@ -200,9 +200,9 @@ void RTLModuleExternOp::build(OpBuilder &builder, OperationState &result,
 void RTLModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
                                  FlatSymbolRefAttr genKind, StringAttr name,
                                  ArrayRef<ModulePortInfo> ports,
-                                 ArrayRef<NamedAttribute> annotations,
-                                 StringRef verilogName) {
-  buildModule(builder, result, name, ports, annotations);
+                                 StringRef verilogName,
+                                 ArrayRef<NamedAttribute> attributes) {
+  buildModule(builder, result, name, ports, attributes);
   result.addAttribute("generatorKind", genKind);
   if (!verilogName.empty())
     result.addAttribute("verilogName", builder.getStringAttr(verilogName));
