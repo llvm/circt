@@ -856,10 +856,10 @@ static Optional<MemOp::PortKind> getMemPortKindFromType(FIRRTLType type) {
 }
 
 /// Return the name and kind of ports supported by this memory.
-void MemOp::getPorts(
-    SmallVectorImpl<std::pair<Identifier, MemOp::PortKind>> &result) {
-  // Each entry in the bundle is a port.
-  for (size_t i = 0, e = getNumResults(); i != e; ++i) {
+SmallVector<std::pair<Identifier, MemOp::PortKind>> MemOp::getPorts() {
+  SmallVector<std::pair<Identifier, MemOp::PortKind>> result;
+      // Each entry in the bundle is a port.
+      for (size_t i = 0, e = getNumResults(); i != e; ++i) {
     auto elt = getResult(i);
     // Each port is a bundle.
     auto kind = getMemPortKindFromType(elt.getType().cast<FIRRTLType>());
@@ -867,6 +867,7 @@ void MemOp::getPorts(
     result.push_back({Identifier::get(getPortNameStr(i), elt.getContext()),
                       kind.getValue()});
   }
+  return result;
 }
 
 /// Return the kind of the specified port or None if the name is invalid.

@@ -25,7 +25,8 @@ def RTLModuleOp : RTLOp<"module",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports)>
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports, 
+                   CArg<"ArrayRef<NamedAttribute>", "ArrayRef<NamedAttribute>()">:$annotations)>
   ];
 
   let extraClassDeclaration = [{
@@ -104,7 +105,8 @@ def RTLModuleExternOp : RTLOp<"module.extern",
   let builders = [
     OpBuilder<(ins "StringAttr":$name,
                       "ArrayRef<ModulePortInfo>":$ports,
-                      CArg<"StringRef", "StringRef()">:$verilogName)>
+                      CArg<"StringRef", "StringRef()">:$verilogName,
+                      CArg<"ArrayRef<NamedAttribute>", "ArrayRef<NamedAttribute>()">:$annotations)>
   ];
 
   let extraClassDeclaration = [{   
@@ -191,10 +193,6 @@ def RTLGeneratorSchemaOp : RTLOp<"generator.schema",
       $sym_name `,` $descriptor `,` $requiredAttrs attr-dict
     }];
 
-  let extraClassDeclaration = [{   
-    // get a list of required attributes.  Recuses into parents
-//    void getRequiredParams(SmallVectorImpl<StringRef> &results);
-  }];
 }
 
 def RTLModuleGeneratedOp : RTLOp<"module.generated",
@@ -215,9 +213,13 @@ def RTLModuleGeneratedOp : RTLOp<"module.generated",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<(ins "StringAttr":$name,
+    OpBuilder<(ins 
+                   "FlatSymbolRefAttr":$genKind,
+                   "StringAttr":$name,
                    "ArrayRef<ModulePortInfo>":$ports,
-                   CArg<"StringRef", "StringRef()">:$verilogName)>
+                   CArg<"ArrayRef<NamedAttribute>", "ArrayRef<NamedAttribute>()">:$annotations,
+                   CArg<"StringRef", "StringRef()">:$verilogName
+                   )>
   ];
 
   let extraClassDeclaration = [{   
@@ -230,6 +232,17 @@ def RTLModuleGeneratedOp : RTLOp<"module.generated",
     /// here.  This is typically the symbol, but can be overridden with the
     /// verilogName attribute.
     StringRef getVerilogModuleName();
+
+    /// Return the name to use for the Verilog module that we're referencing
+    /// here.  This is typically the symbol, but can be overridden with the
+    /// verilogName attribute.
+    StringAttr getVerilogModuleNameAttr() {
+      if (auto vName = verilogNameAttr()){
+        return vName;
+      }
+      return (*this)->getAttrOfType<StringAttr>(
+          ::mlir::SymbolTable::getSymbolAttrName());
+    }
 
     /// Lookup the generator kind for the symbol.  This returns null on
     /// invalid IR.

@@ -80,7 +80,7 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
                                      PortKind portKind);
 
     /// Return the name and kind of ports supported by this memory.
-    void getPorts(SmallVectorImpl<std::pair<Identifier, PortKind>> &result);
+    SmallVector<std::pair<Identifier, PortKind>> getPorts();
 
     /// Return the kind of the specified port or None if the name is invalid.
     Optional<PortKind> getPortKind(StringRef portName);

@@ -546,6 +546,7 @@ public:
   void emitRTLModule(RTLModuleOp module);
   void prepareRTLModule(Block &block);
   void emitRTLExternModule(RTLModuleExternOp module);
+  void emitRTLGeneratedModule(RTLModuleGeneratedOp module);
 
   // Statements.
   void emitStatement(Operation *op);
@@ -2451,6 +2452,12 @@ void ModuleEmitter::emitRTLExternModule(RTLModuleExternOp module) {
   os << "// external module " << verilogName.getValue() << "\n\n";
 }
 
+void ModuleEmitter::emitRTLGeneratedModule(RTLModuleGeneratedOp module) {
+  auto verilogName = module.getVerilogModuleNameAttr();
+  verifyModuleName(module, verilogName);
+  os << "// external generated module " << verilogName.getValue() << "\n\n";
+}
+
 /// We lower the Merge operation to a wire at the top level along with connects
 /// to it and a ReadInOut.
 static Value lowerMergeOp(MergeOp merge) {
@@ -2715,6 +2722,10 @@ void UnifiedEmitter::emitMLIRModule() {
       ModuleEmitter(state).emitRTLModule(rootOp);
     else if (auto rootOp = dyn_cast<RTLModuleExternOp>(op))
       ModuleEmitter(state).emitRTLExternModule(rootOp);
+    else if (auto rootOp = dyn_cast<RTLModuleGeneratedOp>(op))
+      ModuleEmitter(state).emitRTLGeneratedModule(rootOp);
+    else if (auto rootOp = dyn_cast<RTLGeneratorSchemaOp>(op))
+      { /* Empty */ }   
     else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) ||
              isa<IfDefProceduralOp>(op))
       ModuleEmitter(state).emitStatement(&op);

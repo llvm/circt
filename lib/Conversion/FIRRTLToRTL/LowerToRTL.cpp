@@ -120,6 +120,8 @@ struct CircuitLoweringState {
       used_RANDOMIZE_MEM_INIT{false};
   std::atomic<bool> used_RANDOMIZE_GARBAGE_ASSIGN{false};
 
+  FlatSymbolRefAttr memorySchema;
+
   CircuitLoweringState() {}
 
   Operation *getNewModule(Operation *oldModule) {
@@ -131,7 +133,6 @@ private:
   friend struct FIRRTLModuleLowering;
   CircuitLoweringState(const CircuitLoweringState &) = delete;
   void operator=(const CircuitLoweringState &) = delete;
-
   DenseMap<Operation *, Operation *> oldToNewModuleMap;
 };
 } // end anonymous namespace
@@ -158,6 +159,11 @@ private:
 
   void lowerInstance(InstanceOp instance, CircuitOp circuitOp,
                      CircuitLoweringState &loweringState);
+  void lowerMemory(MemOp memory, CircuitOp circuitOp,
+                   CircuitLoweringState &loweringState);
+
+  FlatSymbolRefAttr
+  getOrCreateMemorySchema(CircuitLoweringState &loweringState);
 };
 
 } // end anonymous namespace
@@ -247,8 +253,8 @@ void FIRRTLModuleLowering::runOnOperation() {
 /// Emit the file header that defines a bunch of macros.
 void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
                                            CircuitLoweringState &state) {
-  // Intentionally pass an UnknownLoc here so we don't get line number comments
-  // on the output of this boilerplate in generated Verilog.
+  // Intentionally pass an UnknownLoc here so we don't get line number
+  // comments on the output of this boilerplate in generated Verilog.
   ImplicitLocOpBuilder b(UnknownLoc::get(&getContext()), op);
 
   // TODO: We could have an operation for macros and uses of them, and
@@ -297,8 +303,8 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
     emitGuardedDefine("RANDOM", nullptr, "RANDOM $random");
 
   if (state.used_PRINTF_COND) {
-    emitString(
-        "\n// Users can define 'PRINTF_COND' to add an extra gate to prints.");
+    emitString("\n// Users can define 'PRINTF_COND' to add an extra gate to "
+               "prints.");
     emitGuardedDefine("PRINTF_COND", "PRINTF_COND_ (`PRINTF_COND)",
                       "PRINTF_COND_ 1");
   }
@@ -310,9 +316,9 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
   }
 
   if (needRandom) {
-    emitString(
-        "\n// Users can define INIT_RANDOM as general code that gets injected "
-        "into the\n// initializer block for modules with registers.");
+    emitString("\n// Users can define INIT_RANDOM as general code that gets "
+               "injected "
+               "into the\n// initializer block for modules with registers.");
     emitGuardedDefine("INIT_RANDOM", nullptr, "INIT_RANDOM");
 
     emitString(
@@ -433,8 +439,8 @@ rtl::RTLModuleOp FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
   return builder.create<rtl::RTLModuleOp>(oldModule.getLoc(), nameAttr, ports);
 }
 
-/// If the value dominates the marker, just return.  Otherwise add it to ops and
-/// recursively process its operands.
+/// If the value dominates the marker, just return.  Otherwise add it to ops
+/// and recursively process its operands.
 ///
 /// Return true if we can't move an operation, false otherwise.
 static bool
@@ -471,10 +477,10 @@ collectOperationTreeBelowMarker(Value value, Operation *marker,
   return false;
 }
 
-/// Given a value of analog type, check to see the only use of it is an attach.
-/// If so, remove the attach and return the value being attached to it,
-/// converted to an RTL inout type.  If this isn't a situation we can handle,
-/// just return null.
+/// Given a value of analog type, check to see the only use of it is an
+/// attach. If so, remove the attach and return the value being attached to
+/// it, converted to an RTL inout type.  If this isn't a situation we can
+/// handle, just return null.
 static Value tryEliminatingAttachesToAnalogValue(Value value,
                                                  Operation *insertPoint) {
   if (!value.hasOneUse())
@@ -616,6 +622,27 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
   return builder.createOrFold<comb::MergeOp>(results);
 }
 
+static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
+                                                   StringRef field) {
+  SmallVector<SubfieldOp> accesses;
+  for (auto op : structValue.getUsers()) {
+    assert(isa<SubfieldOp>(op));
+    auto fieldAccess = cast<SubfieldOp>(op);
+    if (fieldAccess.fieldname() == field) {
+      accesses.push_back(fieldAccess);
+    }
+  }
+  return accesses;
+}
+
+static Value tryEliminatingConnectsToField(Value structValue, StringAttr field,
+                                           Operation *insertPoint) {
+  auto accesses = getAllFieldAccesses(structValue, field.getValue());
+  if (accesses.size() > 1 || accesses.empty())
+    return {};
+  return tryEliminatingConnectsToValue(accesses[0], insertPoint);
+}
+
 /// Now that we have the operations for the rtl.module's corresponding to the
 /// firrtl.module's, we can go through and move the bodies over, updating the
 /// ports and instances.
@@ -720,22 +747,33 @@ void FIRRTLModuleLowering::lowerModuleBody(
   // have to be careful about iterator invalidation.
   for (auto opIt = newBlockInstList.begin(), opEnd = newBlockInstList.end();
        opIt != opEnd;) {
-    auto instance = dyn_cast<InstanceOp>(&*opIt);
-    if (!instance) {
+    if (auto instance = dyn_cast<InstanceOp>(&*opIt)) {
+      // Remember a position above the current op.  New things will get put
+      // before the current op (including other instances!) and we want to
+      // make sure to revisit them.
+      cursor->moveBefore(instance);
+
+      // We found an instance - lower it.  On successful return there will be
+      // zero uses and we can remove the operation.
+      lowerInstance(instance, oldModule->getParentOfType<CircuitOp>(),
+                    loweringState);
+      opIt = Block::iterator(cursor);
+
+    } else if (auto memory = dyn_cast<MemOp>(&*opIt)) {
+      // Remember a position above the current op.  New things will get put
+      // before the current op (including other instances!) and we want to
+      // make sure to revisit them.
+      cursor->moveBefore(memory);
+
+      // We found an instance - lower it.  On successful return there will be
+      // zero uses and we can remove the operation.
+      lowerMemory(memory, oldModule->getParentOfType<CircuitOp>(),
+                  loweringState);
+      opIt = Block::iterator(cursor);
+    } else {
       ++opIt;
       continue;
     }
-
-    // Remember a position above the current op.  New things will get put
-    // before the current op (including other instances!) and we want to make
-    // sure to revisit them.
-    cursor->moveBefore(instance);
-
-    // We found an instance - lower it.  On successful return there will be
-    // zero uses and we can remove the operation.
-    lowerInstance(instance, oldModule->getParentOfType<CircuitOp>(),
-                  loweringState);
-    opIt = Block::iterator(cursor);
   }
 
   // We are done with our cursor op.
@@ -747,8 +785,8 @@ void FIRRTLModuleLowering::lowerModuleBody(
 
 /// Lower a firrtl.instance operation to an rtl.instance operation.  This is a
 /// bit more involved than it sounds because we have to clean up the subfield
-/// operations that are hanging off of it, handle the differences between FIRRTL
-/// and RTL approaches to module parameterization and output ports.
+/// operations that are hanging off of it, handle the differences between
+/// FIRRTL and RTL approaches to module parameterization and output ports.
 ///
 /// On success, this returns with the firrtl.instance op having no users,
 /// letting the caller erase it.
@@ -867,6 +905,147 @@ void FIRRTLModuleLowering::lowerInstance(InstanceOp oldInstance,
   oldInstance.erase();
 }
 
+void FIRRTLModuleLowering::lowerMemory(MemOp memory, CircuitOp circuitOp,
+                                       CircuitLoweringState &loweringState) {
+  ImplicitLocOpBuilder builderTop(UnknownLoc::get(&getContext()),
+                                  memory->getParentOp()->getParentRegion());
+  ImplicitLocOpBuilder builder(memory.getLoc(), memory);
+
+  // Make sure the schema node exists
+  if (!loweringState.memorySchema) {
+    std::array<StringRef, 5> schemaFields = {
+        "depth", "portDirections", "readLatency", "writeLatency", "width"};
+    auto schemaFieldsAttr = builderTop.getStrArrayAttr(schemaFields);
+    auto schema = builderTop.create<rtl::RTLGeneratorSchemaOp>(
+        "FIRRTLMem", "FIRRTL_Memory", schemaFieldsAttr);
+    loweringState.memorySchema = builderTop.getSymbolRefAttr(schema);
+  }
+
+  StringRef memName = "mem";
+  if (memory.name().hasValue())
+    memName = memory.name().getValue();
+  auto memNameAttr = builderTop.getStringAttr(memName);
+
+  // Memories have simple bit-vector (integer) data ports.
+  assert(memory.getDataType().getBitWidthOrSentinel() > 0 &&
+         "unsized memories should have been removed already");
+  auto dataType = IntegerType::get(
+      memory.getContext(), memory.getDataType().getBitWidthOrSentinel());
+
+  // Process each port in turn.
+  SmallVector<rtl::ModulePortInfo> modPorts;
+  SmallVector<StringRef> portKinds;
+  SmallVector<Type, 8> resultTypes;
+  SmallVector<Value, 8> operands;
+  DenseMap<Operation *, size_t> returnHolder;
+  DenseMap<Type, Value> constantXs;
+
+  size_t readCount = 0;
+  size_t writeCount = 0;
+  size_t readwriteCount = 0;
+
+  size_t argNum = 0;
+  size_t retNum = 0;
+
+  // Memories return multiple structs, one for each port, which means we have
+  // two layers of type to split appart.
+  for (size_t i = 0, e = memory.getNumResults(); i != e; ++i) {
+    auto port = memory.getResult(i);
+
+    // Do not lower ports if they aren't used.
+    //      if (port.use_empty())
+    //        continue;
+
+    auto portName = memory.getPortName(i);
+    auto portKind = *memory.getPortKind(i);
+    StringRef portKindName = portKind == MemOp::PortKind::Read    ? "read"
+                             : portKind == MemOp::PortKind::Write ? "write"
+                                                                  : "readwrite";
+    auto &portKindNum = portKind == MemOp::PortKind::Read    ? readCount
+                        : portKind == MemOp::PortKind::Write ? writeCount
+                                                             : readwriteCount;
+    portKinds.push_back(portKindName);
+
+    auto portBundleType =
+        port.getType().cast<FIRRTLType>().getPassiveType().cast<BundleType>();
+
+    // Create wires for all the memory ports
+    for (BundleType::BundleElement elt : portBundleType.getElements()) {
+      rtl::ModulePortInfo rtlPort;
+      rtlPort.type = lowerType(elt.type);
+      rtlPort.name = builderTop.getStringAttr((Twine(portKindName) + "_" +
+                                               Twine(portKindNum) + "_" +
+                                               elt.name.getValue())
+                                                  .str());
+      if (portKind == MemOp::PortKind::Read && elt.name.getValue() == "data") {
+        rtlPort.direction = rtl::OUTPUT;
+        resultTypes.push_back(rtlPort.type);
+      } else {
+        rtlPort.direction = rtl::INPUT;
+      }
+      rtlPort.argNum = argNum++;
+      modPorts.push_back(rtlPort);
+
+      auto accesses = getAllFieldAccesses(port, elt.name.getValue());
+      if (rtlPort.direction == rtl::INPUT) {
+        if (accesses.empty()) {
+          auto &constX = constantXs[rtlPort.type];
+          if (!constX)
+            constX = builder.createOrFold<sv::ConstantXOp>(rtlPort.type);
+          operands.push_back(constX);
+        } else {
+          auto name =
+              builder.getStringAttr((Twine(".") + portName.getValue() + "." +
+                                     elt.name.getValue() + ".wire")
+                                        .str());
+          auto wire = builder.create<WireOp>(elt.type, name);
+
+          operands.push_back(castFromFIRRTLType(wire, rtlPort.type, builder));
+          for (auto a : accesses) {
+            a.replaceAllUsesWith((Operation *)wire);
+            a.erase();
+          }
+        }
+      } else {
+        // Track read results
+        for (auto &a : accesses)
+          returnHolder[a] = resultTypes.size() - 1;
+      }
+      ++portKindNum;
+    }
+  }
+
+  std::array<NamedAttribute, 5> genAttrs = {
+      builderTop.getNamedAttr("depth",
+                              builderTop.getUI32IntegerAttr(memory.depth())),
+      builderTop.getNamedAttr("portDirections",
+                              builderTop.getStrArrayAttr(portKinds)),
+      builderTop.getNamedAttr(
+          "readLatency", builderTop.getUI32IntegerAttr(memory.readLatency())),
+      builderTop.getNamedAttr(
+          "writeLatency", builderTop.getUI32IntegerAttr(memory.writeLatency())),
+      builderTop.getNamedAttr(
+          "width", builderTop.getUI32IntegerAttr(dataType.getWidth()))};
+
+  auto memModule = builderTop.create<rtl::RTLModuleGeneratedOp>(
+      loweringState.memorySchema, memNameAttr, modPorts, genAttrs);
+  auto memModuleAttr = builderTop.getSymbolRefAttr(memModule);
+
+  auto inst = builder.create<rtl::InstanceOp>(
+      resultTypes, memNameAttr, memModuleAttr, operands, DictionaryAttr());
+
+  SmallVector<Value> returnCasts;
+  for (size_t retIndex = 0, e = inst.getNumResults(); retIndex != e; ++retIndex)
+    returnCasts.push_back(castToFIRRTLType(inst.getResult(retIndex),
+                                           memory.getDataType(), builder));
+
+  for (auto &ret : returnHolder) {
+    ret.first->getResult(0).replaceAllUsesWith(returnCasts[ret.second]);
+    ret.first->erase();
+  }
+  memory.erase();
+}
+
 //===----------------------------------------------------------------------===//
 // Module Body Lowering Pass
 //===----------------------------------------------------------------------===//
@@ -945,7 +1124,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitDecl(NodeOp op);
   LogicalResult visitDecl(RegOp op);
   LogicalResult visitDecl(RegResetOp op);
-  LogicalResult visitDecl(MemOp op);
+  // LogicalResult visitDecl(MemOp op);
 
   // Unary Ops.
   LogicalResult lowerNoopCast(Operation *op);
@@ -1190,8 +1369,8 @@ void FIRRTLLowering::optimizeTemporaryWire(sv::WireOp wire) {
 // Helpers
 //===----------------------------------------------------------------------===//
 
-/// Check to see if we've already lowered the specified constant.  If so, return
-/// it.  Otherwise create it and put it in the entry block for reuse.
+/// Check to see if we've already lowered the specified constant.  If so,
+/// return it.  Otherwise create it and put it in the entry block for reuse.
 Value FIRRTLLowering::getOrCreateIntConstant(const APInt &value) {
   auto attr = builder.getIntegerAttr(
       builder.getIntegerType(value.getBitWidth()), value);
@@ -1217,10 +1396,10 @@ static LogicalResult handleZeroBit(Value failedOperand,
   return fn();
 }
 
-/// Return the lowered RTL value corresponding to the specified original value.
-/// This returns a null value for FIRRTL values that haven't be lowered, e.g.
-/// unknown width integers.  This returns rtl::inout type values if present, it
-/// does not implicitly read from them.
+/// Return the lowered RTL value corresponding to the specified original
+/// value. This returns a null value for FIRRTL values that haven't be
+/// lowered, e.g. unknown width integers.  This returns rtl::inout type values
+/// if present, it does not implicitly read from them.
 Value FIRRTLLowering::getPossiblyInoutLoweredValue(Value value) {
   assert(value.getType().isa<FIRRTLType>() &&
          "Should only lower FIRRTL operands");
@@ -1730,7 +1909,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   initializeRegister(regResult, resetSignal);
   return success();
 }
-
+#if 0
 LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   StringRef memName = "mem";
   if (op.name().hasValue())
@@ -1758,39 +1937,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
                                 ->type);
   auto dataType = lowerType(op.getDataType());
 
-  // A store of values associated with a delayed read.
-  struct ReadPipeElement {
-    Value en;
-    Value addr;
-    Value rd_en;
-    Value rd_addr;
-  };
-
-  // A store of values associated with a delayed write.
-  struct WritePipeElement {
-    Value en;
-    Value addr;
-    Value mask;
-    Value data;
-    Value rd_en;
-    Value rd_addr;
-    Value rd_mask;
-    Value rd_data;
-  };
-
-  // Create a register for the memory.
-  Value reg =
-      builder.create<sv::RegOp>(rtl::UnpackedArrayType::get(dataType, depth),
-                                builder.getStringAttr(memName.str()));
-
-  // Some helpers.
-  auto buildPAssign = [&](Value dest, Value value) {
-    builder.create<sv::PAssignOp>(dest, value);
-  };
-
-  // Track pipeline registers that were added. These need to be
-  // randomly initialized later.
-  SmallVector<Value> pipeRegs;
+  SmallVector<ModulePortInfo> modPorts;
 
   // Process each port in turn.
   SmallVector<std::pair<Identifier, MemOp::PortKind>> ports;
@@ -1809,199 +1956,20 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         port.getType().cast<FIRRTLType>().getPassiveType().cast<BundleType>();
 
     // Create wires for all the memory ports
-    llvm::StringMap<Value> portWires;
     for (BundleType::BundleElement elt : portBundleType.getElements()) {
       auto fieldType = lowerType(elt.type);
-      if (fieldType.isInteger(0)) {
-        portWires.insert({elt.name.getValue(), Value()});
-        continue;
-      }
       auto name =
           (Twine(memName) + "_" + portName + "_" + elt.name.getValue()).str();
-      auto fieldWire = createTmpWireOp(fieldType, name);
-      portWires.insert({elt.name.getValue(), fieldWire});
-    }
-
-    // Now that we have the wires for each element, rewrite any subfields to
-    // use them instead of the subfields.
-    while (!port.use_empty()) {
-      auto portField = cast<SubfieldOp>(*port.user_begin());
-      portField->dropAllReferences();
-      (void)setLowering(portField, portWires[portField.fieldname()]);
-    }
-
-    // Don't emit anything more for zero bit data values.
-    if (dataType.isInteger(0))
-      continue;
-
-    // Return the value corresponding to a port field.
-    auto getPortFieldValue = [&](StringRef name) -> Value {
-      return builder.create<sv::ReadInOutOp>(portWires[name]);
-    };
-
-    // Create an array register and keep track of it in pipeRegs.
-    auto createArrayReg = [&](StringRef elementName, Type type,
-                              uint64_t depth) -> Value {
-      auto a = builder.create<sv::RegOp>(
-          rtl::UnpackedArrayType::get(type, depth),
-          builder.getStringAttr(memName.str() + "_" + portName +
-                                elementName.str()));
-      pipeRegs.push_back(a);
-      return a;
-    };
-
-    auto i1Type = builder.getI1Type();
-    auto clk = getPortFieldValue("clk");
-
-    // Loop over each element of the port
-    switch (ports[i].second) {
-    case MemOp::PortKind::ReadWrite:
-      op.emitOpError("readwrite ports should be lowered into separate read and "
-                     "write ports by previous passes");
-      continue;
-    case MemOp::PortKind::Read: {
-      // Add delays for non-zero read latency
-      SmallVector<ReadPipeElement> readPipe;
-      auto rden = getPortFieldValue("en");
-      auto rdaddr = getPortFieldValue("addr");
-      readPipe.push_back({portWires["en"], portWires["addr"], rden, rdaddr});
-      Value enReg, addrReg, enRegRd, addRegRd;
-      for (size_t j = 0; j < readLatency; ++j) {
-        if (j == 0) {
-          enReg = createArrayReg("_en_pipe", i1Type, readLatency);
-          addrReg = createArrayReg("_addr_pipe", addrType, readLatency);
-        }
-        auto jIdx = getOrCreateIntConstant(log2(readLatency + 1), j);
-        auto enJ = builder.create<sv::ArrayIndexInOutOp>(enReg, jIdx);
-        auto addrJ = builder.create<sv::ArrayIndexInOutOp>(addrReg, jIdx);
-        auto rdEnJ = builder.create<sv::ReadInOutOp>(enJ);
-        auto rdAddrJ = builder.create<sv::ReadInOutOp>(addrJ);
-        readPipe.push_back({enJ, addrJ, rdEnJ, rdAddrJ});
-      }
-      if (readLatency != 0) {
-        addToAlwaysFFBlock(sv::EventControl::AtPosEdge, clk, [&]() {
-          for (size_t j = 1; j < readLatency + 1; ++j) {
-            buildPAssign(readPipe[j].en, readPipe[j - 1].rd_en);
-            addIfProceduralBlock(readPipe[j - 1].rd_en, [&]() {
-              buildPAssign(readPipe[j].addr, readPipe[j - 1].rd_addr);
-            });
-          }
-        });
-      }
-      Value addr = readPipe.back().rd_addr;
-      Value value = builder.create<sv::ArrayIndexInOutOp>(reg, addr);
-      value = builder.create<sv::ReadInOutOp>(value);
-
-      // If we're masking, use RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK to emit a
-      // "addr < Depth ? mem[addr] : `RANDOM" check conditionally.
-      if (!llvm::isPowerOf2_64(depth)) {
-        auto addrWidth = addr.getType().getIntOrFloatBitWidth();
-        auto depthCst = getOrCreateIntConstant(addrWidth, depth);
-        value = builder.create<sv::VerbatimExprOp>(
-            value.getType(),
-            "`RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK({{0}}, {{1}}, {{2}})",
-            ValueRange{addr, value, depthCst});
-        circuitState.used_RANDOMIZE_GARBAGE_ASSIGN = 1;
-      }
-
-      builder.create<sv::ConnectOp>(portWires["data"], value);
-      continue;
-    }
-    case MemOp::PortKind::Write: {
-      SmallVector<WritePipeElement> writePipe;
-      auto rdEn = getPortFieldValue("en");
-      auto rdAddr = getPortFieldValue("addr");
-      auto rdMask = getPortFieldValue("mask");
-      auto rdData = getPortFieldValue("data");
-      writePipe.push_back({portWires["en"], portWires["addr"],
-                           portWires["mask"], portWires["data"], rdEn, rdAddr,
-                           rdMask, rdData});
-
-      // Construct wripe pipe registers for non-unary write latency
-      Value wRegEn, wRegAddr, wRegMask, wRegData;
-      for (size_t j = 0; j < writeLatency - 1; ++j) {
-        if (j == 0) {
-          wRegEn = createArrayReg("_en_pipe", i1Type, writeLatency - 1);
-          wRegAddr = createArrayReg("_addr_pipe", addrType, writeLatency - 1);
-          wRegMask = createArrayReg("_mask_pipe", i1Type, writeLatency - 1);
-          wRegData = createArrayReg("_data_pipe", dataType, writeLatency - 1);
-        }
-        auto jIdx = getOrCreateIntConstant(log2(writeLatency), j);
-        auto arEn = builder.create<sv::ArrayIndexInOutOp>(wRegEn, jIdx);
-        auto arAddr = builder.create<sv::ArrayIndexInOutOp>(wRegAddr, jIdx);
-        auto arMask = builder.create<sv::ArrayIndexInOutOp>(wRegMask, jIdx);
-        auto arData = builder.create<sv::ArrayIndexInOutOp>(wRegData, jIdx);
-        writePipe.push_back({arEn, arAddr, arMask, arData,
-                             builder.create<sv::ReadInOutOp>(arEn),
-                             builder.create<sv::ReadInOutOp>(arAddr),
-                             builder.create<sv::ReadInOutOp>(arMask),
-                             builder.create<sv::ReadInOutOp>(arData)});
-      }
-
-      // Build the write pipe for non-unary write latency
-      if (writeLatency != 1) {
-        addToAlwaysFFBlock(sv::EventControl::AtPosEdge, clk, [&]() {
-          for (size_t j = 1; j < writeLatency; ++j) {
-            buildPAssign(writePipe[j].en, writePipe[j - 1].rd_en);
-            addIfProceduralBlock(writePipe[j - 1].rd_en, [&]() {
-              buildPAssign(writePipe[j].addr, writePipe[j - 1].rd_addr);
-              buildPAssign(writePipe[j].mask, writePipe[j - 1].rd_mask);
-              buildPAssign(writePipe[j].data, writePipe[j - 1].rd_data);
-            });
-          }
-        });
-      }
-
-      // Attach the write port
-      auto last = writePipe.back();
-      auto enable = last.rd_en;
-      auto cond = builder.createOrFold<comb::AndOp>(enable, last.rd_mask);
-      auto slot = builder.create<sv::ArrayIndexInOutOp>(reg, last.rd_addr);
-      auto rd_lastdata = last.rd_data;
-      addToAlwaysFFBlock(sv::EventControl::AtPosEdge, clk, [&]() {
-        addIfProceduralBlock(cond, [&]() { buildPAssign(slot, rd_lastdata); });
-      });
-      continue;
-    }
+      modPorts.push_back(elt.name.getValue(), fieldType);
     }
   }
 
-  // Emit the initializer expression for simulation that fills it with random
-  // value.
-  addToIfDefBlock("SYNTHESIS", {}, [&]() {
-    addToInitialBlock([&]() {
-      emitRandomizePrologIfNeeded();
-      circuitState.used_RANDOMIZE_MEM_INIT = 1;
-      addToIfDefProceduralBlock("RANDOMIZE_MEM_INIT", [&]() {
-        if (depth == 1) { // Don't emit a for loop for one element.
-          auto type = sv::getInOutElementType(reg.getType());
-          type = sv::getAnyRTLArrayElementType(type);
-          auto randomVal = builder.create<sv::VerbatimExprOp>(type, "`RANDOM");
-          auto zero = getOrCreateIntConstant(1, 0);
-          auto subscript = builder.create<sv::ArrayIndexInOutOp>(reg, zero);
-          builder.create<sv::BPAssignOp>(subscript, randomVal);
-        } else {
-          assert(depth < (1ULL << 31) && "FIXME: Our initialization logic uses "
-                                         "'integer' which doesn't support "
-                                         "mems greater than 2^32");
-
-          std::string action = "integer {{0}}_initvar;\n";
-          action += "for ({{0}}_initvar = 0; {{0}}_initvar < " +
-                    llvm::utostr(depth) + "; {{0}}_initvar = {{0}}_initvar+1)";
-          action += "\n  {{0}}[{{0}}_initvar] = `RANDOM;";
-
-          builder.create<sv::VerbatimOp>(action, reg);
-        }
-      });
-    });
-  });
-
-  // Randomly initialize any pipeline registers that were created.
-  for (auto pipeReg : pipeRegs)
-    initializeRegister(pipeReg, Value());
-
+  std::array<char*, 5> schemafields("depth", "name", "portNames", "readLatency", "writeLatency");
+  builder.create<RTLGeneratorSchemaOp>("FIRRTLMem", "FIRRTL_Memory", schemafields);
+//  builder.create<rtl::ModuleGeneratedOp>();
   return success();
 }
+#endif
 
 //===----------------------------------------------------------------------===//
 // Unary Operations
