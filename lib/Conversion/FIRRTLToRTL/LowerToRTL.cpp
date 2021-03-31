@@ -1600,8 +1600,9 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   if (resultType.isInteger(0))
     return setLowering(op, Value());
 
-  // Convert the inout to a non-inout type.
-  return setLoweringTo<sv::WireOp>(op, resultType, op.nameAttr());
+  // Name attr is requires on sv.wire but optional on firrtl.wire.
+  auto nameAttr = op.nameAttr() ? op.nameAttr() : builder.getStringAttr("");
+  return setLoweringTo<sv::WireOp>(op, resultType, nameAttr);
 }
 
 LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
