@@ -603,11 +603,6 @@ public:
   /// emitted as standalone wire declarations.  This can happen because they are
   /// multiply-used or because the user requires a name to reference.
   SmallPtrSet<Operation *, 16> outOfLineExpressions;
-
-  /// This set keeps track of expressions that need an explicit logic decl at
-  /// the top of the module to avoid "use before def" issues in the generated
-  /// verilog.  This can happen for cyclic modules.
-  SmallPtrSet<Operation *, 16> outOfLineExpressionDecls;
 };
 
 } // end anonymous namespace
@@ -890,12 +885,6 @@ void ExprEmitter::retroactivelyEmitExpressionIntoTemporary(Operation *op) {
 
   emitter.outOfLineExpressions.insert(op);
   emitter.addName(ModuleEmitter::ValueOrOp(op->getResult(0)), "_tmp");
-
-  // If we're emitting this temporary in a procedural region, we need to emit
-  // the variable declaration at the end of the block's declaration range, then
-  // emit an assign.
-  if (isTemporaryInProceduralRegion(op))
-    emitter.outOfLineExpressionDecls.insert(op);
 
   // Remember that this subexpr needs to be emitted independently.
   tooLargeSubExpressions.push_back(op);
@@ -1446,15 +1435,11 @@ void NameCollector::collectNames(Block &block) {
       // definition is emitted on the line of the expression instead of a
       // block at the top of the module).
       if (isExpr) {
-        // Procedural blocks always emit out of line variable declarations to
-        // avoid use-before def issues.
-        // TODO: Relax this.
+        // Procedural blocks always emit out of line variable declarations,
+        // because Verilog requires that they all be at the top of a block.
+        // TODO: Improve this, at least in the simple cases.
         if (!isBlockProcedural)
           continue;
-
-        // Otherwise keep track of this unusual case and declare it like
-        // normal.
-        moduleEmitter.outOfLineExpressionDecls.insert(&op);
       }
 
       // Emit this value.
@@ -1619,28 +1604,25 @@ void StmtEmitter::emitExpression(Value exp,
                        outBuffer.end());
   outBuffer.resize(statementBeginningIndex);
 
-  SmallVector<Operation *> declarationsNeeded;
   // Emit each stmt expression in turn.
   for (auto *expr : tooLargeSubExpressions) {
     statementBeginningIndex = outBuffer.size();
     ++numStatementsEmitted;
     emitStatementExpression(expr);
-
-    if (emitter.outOfLineExpressionDecls.count(expr))
-      declarationsNeeded.push_back(expr);
   }
 
   // Re-add this statement now that all the preceeding ones are out.
   outBuffer.append(thisStmt.begin(), thisStmt.end());
 
-  // If any of the expressions needed a separate declaration, emit that.  We
-  // do this after inserting the assign statements because we don't want to
+  // If we are working on a procedural statement, we need to emit the
+  // declarations for each variable separately from the assignments to them.
+  // We do this after inserting the assign statements because we don't want to
   // invalidate the index.
-  if (!declarationsNeeded.empty()) {
+  if (tooLargeSubExpressions[0]->getParentOp()->hasTrait<ProceduralRegion>()) {
     thisStmt.assign(outBuffer.begin() + blockDeclarationInsertPointIndex,
                     outBuffer.end());
     outBuffer.resize(blockDeclarationInsertPointIndex);
-    for (auto *expr : declarationsNeeded) {
+    for (auto *expr : tooLargeSubExpressions) {
       emitDeclarationForTemporary(expr);
       os << ";\n";
     }
@@ -1658,13 +1640,11 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
   } else if (isZeroBitType(op->getResult(0).getType())) {
     indent() << "// Zero width: ";
     --numStatementsEmitted;
-  } else if (!emitter.outOfLineExpressionDecls.count(op)) {
-    emitDeclarationForTemporary(op);
-    os << " = ";
   } else if (op->getParentOp()->hasTrait<ProceduralRegion>()) {
     indent() << emitter.getName(op->getResult(0)) << " = ";
   } else {
-    indent() << "assign " << emitter.getName(op->getResult(0)) << " = ";
+    emitDeclarationForTemporary(op);
+    os << " = ";
   }
 
   // Emit the expression with a special precedence level so it knows to do a
