@@ -357,19 +357,20 @@ rtl.module @issue726(%in1: i1, %in2: i1) -> (%out: i1) {
 // https://github.com/llvm/circt/issues/595
 // CHECK-LABEL: module issue595
 rtl.module @issue595(%arr: !rtl.array<128xi1>) {
-  // CHECK: wire [63:0] _T_0;
-  // CHECK: wire _T = _T_0[6'h0+:32] == 32'h0;
+  // CHECK: wire [31:0] _T;
+  // CHECK: wire _T_0 = _T == 32'h0;
   %c0_i32 = rtl.constant 0 : i32
   %c0_i7 = rtl.constant 0 : i7
   %c0_i6 = rtl.constant 0 : i6
   %0 = comb.icmp eq %3, %c0_i32 : i32
 
   sv.initial {
-    // CHECK: assert(_T);
+    // CHECK: assert(_T_0);
     sv.assert %0 : i1
   }
 
-  // CHECK: assign _T_0 = arr[7'h0+:64];
+  // CHECK: wire [63:0] _T_1 = arr[7'h0+:64];
+  // CHECK: assign _T = _T_1[6'h0+:32];
   %1 = rtl.array_slice %arr at %c0_i7 : (!rtl.array<128xi1>) -> !rtl.array<64xi1>
   %2 = rtl.array_slice %1 at %c0_i6 : (!rtl.array<64xi1>) -> !rtl.array<32xi1>
   %3 = rtl.bitcast %2 : (!rtl.array<32xi1>) -> i32
@@ -379,19 +380,20 @@ rtl.module @issue595(%arr: !rtl.array<128xi1>) {
 
 // CHECK-LABEL: module issue595_variant1
 rtl.module @issue595_variant1(%arr: !rtl.array<128xi1>) {
-  // CHECK: wire [63:0] _T_0;
-  // CHECK: wire _T = |_T_0[6'h0+:32];
+  // CHECK: wire [31:0] _T;
+  // CHECK: wire _T_0 = |_T;
   %c0_i32 = rtl.constant 0 : i32
   %c0_i7 = rtl.constant 0 : i7
   %c0_i6 = rtl.constant 0 : i6
   %0 = comb.icmp ne %3, %c0_i32 : i32
 
   sv.initial {
-    // CHECK: assert(_T);
+    // CHECK: assert(_T_0);
     sv.assert %0 : i1
   }
 
-  // CHECK: assign _T_0 = arr[7'h0+:64];
+  // CHECK: wire [63:0] _T_1 = arr[7'h0+:64];
+  // CHECK: assign _T = _T_1[6'h0+:32];
   %1 = rtl.array_slice %arr at %c0_i7 : (!rtl.array<128xi1>) -> !rtl.array<64xi1>
   %2 = rtl.array_slice %1 at %c0_i6 : (!rtl.array<64xi1>) -> !rtl.array<32xi1>
   %3 = rtl.bitcast %2 : (!rtl.array<32xi1>) -> i32
@@ -400,19 +402,20 @@ rtl.module @issue595_variant1(%arr: !rtl.array<128xi1>) {
 
 // CHECK-LABEL: module issue595_variant2_checkRedunctionAnd
 rtl.module @issue595_variant2_checkRedunctionAnd(%arr: !rtl.array<128xi1>) {
-  // CHECK: wire [63:0] _T_0;
-  // CHECK: wire _T = &_T_0[6'h0+:32]
+  // CHECK: wire [31:0] _T;
+  // CHECK: wire _T_0 = &_T;
   %c0_i32 = rtl.constant -1 : i32
   %c0_i7 = rtl.constant 0 : i7
   %c0_i6 = rtl.constant 0 : i6
   %0 = comb.icmp eq %3, %c0_i32 : i32
 
   sv.initial {
-    // CHECK: assert(_T);
+    // CHECK: assert(_T_0);
     sv.assert %0 : i1
   }
 
-  // CHECK: assign _T_0 = arr[7'h0+:64];
+  // CHECK: wire [63:0] _T_1 = arr[7'h0+:64];
+  // CHECK: assign _T = _T_1[6'h0+:32];
   %1 = rtl.array_slice %arr at %c0_i7 : (!rtl.array<128xi1>) -> !rtl.array<64xi1>
   %2 = rtl.array_slice %1 at %c0_i6 : (!rtl.array<64xi1>) -> !rtl.array<32xi1>
   %3 = rtl.bitcast %2 : (!rtl.array<32xi1>) -> i32
@@ -479,9 +482,9 @@ rtl.module @issue720(%clock: i1, %arg1: i1, %arg2: i1, %arg3: i1) {
       sv.fatal
     }
 
-  // CHECK:   _T = arg1 & arg2;
-  // CHECK:   if (_T)
-  // CHECK:     $fatal;
+    // CHECK:   _T = arg1 & arg2;
+    // CHECK:   if (_T)
+    // CHECK:     $fatal;
 
     //this forces a common subexpression to be output out-of-line
     %610 = comb.and %arg1, %arg2 : i1

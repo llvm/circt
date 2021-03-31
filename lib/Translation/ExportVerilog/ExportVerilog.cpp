@@ -1399,59 +1399,7 @@ private:
 } // namespace
 
 void NameCollector::collectNames(Block &block) {
-  // For graph regions, we need to do a prepass over the operations in the
-  // block keeping track of whether any inlinable expression nodes are used
-  // out of order by other statements they'll get inlined into.  For example
-  // in:
-  //   sv.assert %y
-  //   ...
-  //   %x = comb.and ...
-  //   %y = comb.xor %x, true
-  // We want to know that both %y and %x will be used out of order since
-  // they'll both get inlined into the sv.assert earlier in the block.
-  typedef enum {
-    UnseenSoFar = 0,
-    SeenBelow = 1,
-    SeenAndUsedOutOfOrder = 2
-  } OperationScanKind;
-
-  DenseMap<Operation *, OperationScanKind> exprsUsesInformation;
-
-  // Scan graph region blocks from to see if there are any uses before defs.
-  if (!block.getParentOp()->hasTrait<ProceduralRegion>()) {
-    // Scan the block from the bottom up.
-    for (auto &op : llvm::reverse(block)) {
-      if (!isVerilogExpression(&op)) {
-        // Just remember that we saw this operation.
-        exprsUsesInformation[&op] = SeenBelow;
-        continue;
-      }
-
-      // Check the users of any inlined expression to see if they are
-      // lexically below the operation itself.  If not, it is being used out
-      // of order.
-      bool haveAnyOutOfOrderUses = false;
-      for (auto *userOp : op.getUsers()) {
-        // If the user is in a suboperation like an always block, then zip up
-        // to the operation that uses it.
-        while (&block != &userOp->getParentRegion()->front())
-          userOp = userOp->getParentOp();
-
-        // See if we have seen this operation below.  If not, it is an out of
-        // order use, and if the user is itself an inlined expression used out
-        // of order, then this is too.
-        auto userInfo = exprsUsesInformation[userOp];
-        if (userInfo == SeenBelow)
-          continue;
-        haveAnyOutOfOrderUses = true;
-        break;
-      }
-
-      // Remember if this operation has any out of order uses.
-      exprsUsesInformation[&op] =
-          haveAnyOutOfOrderUses ? SeenAndUsedOutOfOrder : SeenBelow;
-    }
-  }
+  bool isBlockProcedural = block.getParentOp()->hasTrait<ProceduralRegion>();
 
   SmallString<32> nameTmp;
   using ValueOrOp = ModuleEmitter::ValueOrOp;
@@ -1498,16 +1446,10 @@ void NameCollector::collectNames(Block &block) {
       // definition is emitted on the line of the expression instead of a
       // block at the top of the module).
       if (isExpr) {
-        // We can only emit wire logic decls if the generated Verilog will
-        // see the declaration before all the uses.  However, rtl.module
-        // allows cyclic graphs in its body.  We check to make sure that no
-        // uses of this expression are lexically above this expression.  If
-        // they are, we have to emit the declaration at the top of the block.
-
-        // If we have no out of order uses and this is at the top level of the
-        // module, we can emit an inline declaration.
-        if (!exprsUsesInformation.empty() &&
-            exprsUsesInformation[&op] != SeenAndUsedOutOfOrder)
+        // Procedural blocks always emit out of line variable declarations to
+        // avoid use-before def issues.
+        // TODO: Relax this.
+        if (!isBlockProcedural)
           continue;
 
         // Otherwise keep track of this unusual case and declare it like
@@ -2529,6 +2471,8 @@ static Value lowerMergeOp(MergeOp merge) {
   return b.create<ReadInOutOp>(wire);
 }
 
+/// Lower a commutative operation into an expression tree.  This enables
+/// long-line splitting to work with them.
 static Value lowerVariadicCommutativeOp(Operation &op, OperandRange operands) {
   Value lhs, rhs;
   switch (operands.size()) {
@@ -2556,6 +2500,27 @@ static Value lowerVariadicCommutativeOp(Operation &op, OperandRange operands) {
   auto *newOp = Operation::create(state);
   op.getBlock()->getOperations().insert(Block::iterator(&op), newOp);
   return newOp->getResult(0);
+}
+
+/// When we find that an operation is used before it is defined in a graph
+/// region, we emit an explicit wire to resolve the issue.
+static void lowerUsersToTemporaryWire(Operation &op) {
+  Block *block = op.getBlock();
+  auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
+
+  for (auto result : op.getResults()) {
+    auto newWire = builder.create<WireOp>(result.getType());
+
+    while (!op.use_empty()) {
+      auto newWireRead = builder.create<ReadInOutOp>(newWire);
+      OpOperand &use = *op.getUses().begin();
+      use.set(newWireRead);
+      newWireRead->moveBefore(use.getOwner());
+    }
+
+    auto connect = builder.create<ConnectOp>(newWire, result);
+    connect->moveAfter(&op);
+  }
 }
 
 /// For each module we emit, do a prepass over the structure, pre-lowering and
@@ -2596,6 +2561,41 @@ void ModuleEmitter::prepareRTLModule(Block &block) {
       op.getResult(0).replaceAllUsesWith(result);
       op.erase();
       continue;
+    }
+  }
+
+  // Now that all the basic ops are settled, check for any use-before def issues
+  // in graph regions.  Lower these into explicit wires to keep the emitter
+  // simple.
+  if (!block.getParentOp()->hasTrait<ProceduralRegion>()) {
+    SmallPtrSet<Operation *, 32> seenOperations;
+
+    for (auto &op : block) {
+      // Check the users of any expressions to see if they are
+      // lexically below the operation itself.  If so, it is being used out
+      // of order.
+      bool haveAnyOutOfOrderUses = false;
+      for (auto *userOp : op.getUsers()) {
+        // If the user is in a suboperation like an always block, then zip up
+        // to the operation that uses it.
+        while (&block != &userOp->getParentRegion()->front())
+          userOp = userOp->getParentOp();
+
+        if (seenOperations.count(userOp)) {
+          haveAnyOutOfOrderUses = true;
+          break;
+        }
+      }
+
+      // Remember that we've seen this operation.
+      seenOperations.insert(&op);
+
+      // If all the uses of the operation are below this, then we're ok.
+      if (!haveAnyOutOfOrderUses)
+        continue;
+
+      // Otherwise, we need to lower this to a wire to resolve this.
+      lowerUsersToTemporaryWire(op);
     }
   }
 }
