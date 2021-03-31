@@ -24,54 +24,28 @@ using namespace rtl;
 // Name Lookup
 //===----------------------------------------------------------------------===//
 
-/// Lookup the legalized name for an operation.
-Optional<StringRef>
-LegalNamesAnalysis::lookupOperationName(Operation *op) const {
-  auto it = operationNames.find(op);
-  return it != operationNames.end() ? it->second : Optional<StringRef>();
-}
-
-/// Lookup the legalized name for an argument to an operation.
-Optional<StringRef> LegalNamesAnalysis::lookupArgName(Operation *op,
-                                                      size_t argNum) const {
-  auto it = argNames.find(std::make_pair(op, argNum));
-  return it != argNames.end() ? it->second : Optional<StringRef>();
-}
-
-/// Lookup the legalized name for a result from an operation.
-Optional<StringRef>
-LegalNamesAnalysis::lookupResultName(Operation *op, size_t resultNum) const {
-  auto it = resultNames.find(std::make_pair(op, resultNum));
-  return it != resultNames.end() ? it->second : Optional<StringRef>();
-}
-
 /// Return the legalized name for an operation or assert if there is none.
 StringRef LegalNamesAnalysis::getOperationName(Operation *op) const {
-  auto name = lookupOperationName(op);
-  assert(name && "expected valid legalized name");
-  return *name;
+  auto nameIt = operationNames.find(op);
+  assert(nameIt != operationNames.end() && "expected valid legalized name");
+  return nameIt->second;
 }
 
 /// Return the legalized name for an argument to an operation or assert if there
 /// is none.
 StringRef LegalNamesAnalysis::getArgName(Operation *op, size_t argNum) const {
-  auto name = lookupArgName(op, argNum);
-  assert(name && "expected valid legalized name");
-  return *name;
+  auto nameIt = argNames.find(std::make_pair(op, argNum));
+  assert(nameIt != argNames.end() && "expected valid legalized name");
+  return nameIt->second;
 }
 
 /// Return the legalized name for a result from an operation or assert if there
 /// is none.
 StringRef LegalNamesAnalysis::getResultName(Operation *op,
                                             size_t resultNum) const {
-  auto name = lookupResultName(op, resultNum);
-  assert(name && "expected valid legalized name");
-  return *name;
-}
-
-/// Return the set of used names.
-const llvm::StringSet<> &LegalNamesAnalysis::getUsedNames() const {
-  return usedNames;
+  auto nameIt = resultNames.find(std::make_pair(op, resultNum));
+  assert(nameIt != resultNames.end() && "expected valid legalized name");
+  return nameIt->second;
 }
 
 //===----------------------------------------------------------------------===//
