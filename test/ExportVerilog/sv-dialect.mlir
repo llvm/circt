@@ -619,3 +619,17 @@ rtl.module @inlineProceduralWiresWithLongNames(%clock: i1, %in: i1) {
     sv.passign %3, %in : i1
   }
 }
+
+// https://github.com/llvm/circt/issues/859
+// CHECK-LABEL: module oooReg(
+rtl.module @oooReg(%in: i1) -> (%result: i1) {
+  // CHECK: wire abc;
+  %0 = sv.read_inout %abc : !rtl.inout<i1>
+
+  // CHECK: assign abc = in;
+  sv.connect %abc, %in : i1
+  %abc = sv.wire  : !rtl.inout<i1>
+
+  // CHECK: assign result = abc;
+  rtl.output %0 : i1
+}
