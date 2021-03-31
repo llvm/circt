@@ -117,8 +117,8 @@ static bool hasKnownWidths(Operation *op) {
     if (!ty.isa<IntType>() || ty.getBitWidthOrSentinel() <= 0)
       return false;
   }
-  for (auto resTy : op->getResultTypes()) {
-    auto ty = resTy.cast<FIRRTLType>();
+  for (auto opTy : op->getOperandTypes()) {
+    auto ty = opTy.cast<FIRRTLType>();
     // Operand bitwidth must be known. Unkown bitwidths are handled after width
     // inference.
     if (ty.getBitWidthOrSentinel() == -1)
@@ -129,10 +129,10 @@ static bool hasKnownWidths(Operation *op) {
 
 /// Applies the constant folding function `calculate` to the given operands.
 ///
-/// Sign or zero extends the operands appropriately to the larger of the two
-/// bit widths if dstWidth is None, else to dstWidth, and depending on whether
-/// the operation is to be performed on signed or unsigned operands. The result
-/// is a dstWidth integer or 1 bit integer if dstWidth is None.
+/// Sign or zero extends the operands appropriately to the bitwidth of the
+/// result type if \p useDstWidth is true, else to the larger of the two operand
+/// bit widths and depending on whether the operation is to be performed on
+/// signed or unsigned operands.
 template <class DstTy>
 static Attribute
 constFoldFIRRTLBinaryOp(Operation *op, ArrayRef<Attribute> operands,
@@ -153,10 +153,9 @@ constFoldFIRRTLBinaryOp(Operation *op, ArrayRef<Attribute> operands,
                                              rhs.getValue().getBitWidth());
   auto extOrSelf =
       dstType.isUnsigned() ? &APInt::zextOrTrunc : &APInt::sextOrTrunc;
-  return IntegerAttr::get(
-      IntegerType::get(lhs.getContext(), useDstWidth ? dstWidth : 1),
-      calculate((lhs.getValue().*extOrSelf)(commonWidth),
-                (rhs.getValue().*extOrSelf)(commonWidth)));
+  return IntegerAttr::get(IntegerType::get(lhs.getContext(), dstWidth),
+                          calculate((lhs.getValue().*extOrSelf)(commonWidth),
+                                    (rhs.getValue().*extOrSelf)(commonWidth)));
 }
 
 /// Get the largest unsigned value of a given bit width. Returns a 1-bit zero

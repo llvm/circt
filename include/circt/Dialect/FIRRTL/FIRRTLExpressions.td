@@ -181,7 +181,7 @@ class BinaryPrimOp<string mnemonic, Type lhsType, Type rhsType, Type resultType,
   }];
 }
 
-def AddPrimOp : BinaryPrimOp<"add", IntType, IntType, IntType, [Commutative]> ;
+def AddPrimOp : BinaryPrimOp<"add", IntType, IntType, IntType, [Commutative]>;
 def SubPrimOp : BinaryPrimOp<"sub", IntType, IntType, IntType>;
 def MulPrimOp : BinaryPrimOp<"mul", IntType, IntType, IntType, [Commutative]>;
 def DivPrimOp : BinaryPrimOp<"div", IntType, IntType, IntType> {
