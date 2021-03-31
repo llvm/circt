@@ -108,14 +108,13 @@ void LegalNamesAnalysis::registerResult(Operation *op, size_t resultNum,
 StringRef LegalNamesAnalysis::sanitizeOperation(Operation *op,
                                                 StringAttr name) {
   auto it = operationNames.find(op);
-  if (it != operationNames.end()) {
+  if (it != operationNames.end())
     return it->second;
-  } else {
-    auto updatedName =
-        sanitizeName(name.getValue(), usedNames, nextGeneratedNameID);
-    registerOperation(op, updatedName);
-    return updatedName;
-  }
+
+  auto updatedName =
+      sanitizeName(name.getValue(), usedNames, nextGeneratedNameID);
+  registerOperation(op, updatedName);
+  return updatedName;
 }
 
 /// Sanitize the name of an argument to an operation, and register it for later
@@ -123,14 +122,13 @@ StringRef LegalNamesAnalysis::sanitizeOperation(Operation *op,
 StringRef LegalNamesAnalysis::sanitizeArg(Operation *op, size_t argNum,
                                           StringAttr name) {
   auto it = argNames.find(std::make_pair(op, argNum));
-  if (it != argNames.end()) {
+  if (it != argNames.end())
     return it->second;
-  } else {
-    auto updatedName =
-        sanitizeName(name.getValue(), usedNames, nextGeneratedNameID);
-    registerArg(op, argNum, updatedName);
-    return updatedName;
-  }
+
+  auto updatedName =
+      sanitizeName(name.getValue(), usedNames, nextGeneratedNameID);
+  registerArg(op, argNum, updatedName);
+  return updatedName;
 }
 
 /// Sanitize the name of a result from an operation, and register it for later
@@ -138,14 +136,13 @@ StringRef LegalNamesAnalysis::sanitizeArg(Operation *op, size_t argNum,
 StringRef LegalNamesAnalysis::sanitizeResult(Operation *op, size_t resultNum,
                                              StringAttr name) {
   auto it = resultNames.find(std::make_pair(op, resultNum));
-  if (it != resultNames.end()) {
+  if (it != resultNames.end())
     return it->second;
-  } else {
-    auto updatedName =
-        sanitizeName(name.getValue(), usedNames, nextGeneratedNameID);
-    registerResult(op, resultNum, updatedName);
-    return updatedName;
-  }
+
+  auto updatedName =
+      sanitizeName(name.getValue(), usedNames, nextGeneratedNameID);
+  registerResult(op, resultNum, updatedName);
+  return updatedName;
 }
 
 //===----------------------------------------------------------------------===//
@@ -190,19 +187,20 @@ void LegalNamesAnalysis::analyze(mlir::ModuleOp op) {
   }
 }
 
+void LegalNamesAnalysis::analyzeModulePorts(Operation *module) {
+  for (const ModulePortInfo &port : getModulePortInfo(module)) {
+    if (port.isOutput()) {
+      sanitizeResult(module, port.argNum, port.name);
+    } else {
+      sanitizeArg(module, port.argNum, port.name);
+    }
+  }
+}
+
 /// Sanitize the ports, instances, regs, and wires of an RTL module.
 void LegalNamesAnalysis::analyze(rtl::RTLModuleOp op) {
-  auto moduleType = rtl::getModuleType(op);
-
-  // Sanitize the inputs.
-  for (unsigned i = 0, e = moduleType.getInputs().size(); i < e; ++i) {
-    sanitizeArg(op, i, op.getArgAttrOfType<StringAttr>(i, "rtl.name"));
-  }
-
-  // Sanitize the results.
-  for (unsigned i = 0, e = moduleType.getResults().size(); i < e; ++i) {
-    sanitizeResult(op, i, op.getResultAttrOfType<StringAttr>(i, "rtl.name"));
-  }
+  // Sanitize the ports.
+  analyzeModulePorts(op);
 
   // Sanitize instances, regs, and wires.
   op.walk([&](Operation *op) {
@@ -219,19 +217,8 @@ void LegalNamesAnalysis::analyze(rtl::RTLModuleOp op) {
 /// Note that we explicitly do not sanitize the names, as we do not have control
 /// over the corresponding module declaration with it being supplied externally.
 void LegalNamesAnalysis::analyze(rtl::RTLModuleExternOp op) {
-  auto moduleType = rtl::getModuleType(op);
-
-  // Register the inputs.
-  for (unsigned i = 0, e = moduleType.getInputs().size(); i < e; ++i) {
-    registerArg(op, i,
-                op.getArgAttrOfType<StringAttr>(i, "rtl.name").getValue());
-  }
-
-  // Register the results.
-  for (unsigned i = 0, e = moduleType.getResults().size(); i < e; ++i) {
-    registerResult(
-        op, i, op.getResultAttrOfType<StringAttr>(i, "rtl.name").getValue());
-  }
+  // Sanitize the ports.
+  analyzeModulePorts(op);
 }
 
 /// Sanitize the signals and modports of an SV interface.

@@ -79,6 +79,7 @@ private:
   StringRef sanitizeArg(Operation *op, size_t argNum, StringAttr name);
   StringRef sanitizeResult(Operation *op, size_t resultNum, StringAttr name);
 
+  void analyzeModulePorts(Operation *module);
   void analyze(mlir::ModuleOp op);
   void analyze(rtl::RTLModuleOp op);
   void analyze(rtl::RTLModuleExternOp op);
