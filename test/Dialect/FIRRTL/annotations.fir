@@ -93,6 +93,24 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar
 
 ; // -----
 
+; COM: A ReferenceTarget/ComponentName pointing at a memory should work.
+circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar"}]]
+  module Foo:
+    mem bar:
+      data-type => UInt<8>
+      depth => 16
+      reader => r
+      writer => w
+      read-latency => 0
+      write-latency => 1
+      read-under-write => undefined
+
+    ; CHECK-LABEL: module {
+    ; CHECK: firrtl.mem
+    ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}]
+
+; // -----
+
 ; COM: A ReferenceTarget/ComponentName pointing at an SMem should work.
 circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar"}]]
   module Foo:

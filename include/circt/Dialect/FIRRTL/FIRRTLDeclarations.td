@@ -91,7 +91,7 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
         DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
   let results = (outs Variadic<FIRRTLType>:$results);
 
-  let assemblyFormat = "$ruw custom<SMemOp>(attr-dict) `:` type($results)";
+  let assemblyFormat = "$ruw custom<MemOp>(attr-dict) `:` type($results)";
 
   let verifier = "return ::verifyMemOp(*this);";
 

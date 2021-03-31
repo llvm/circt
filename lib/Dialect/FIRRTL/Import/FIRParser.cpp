@@ -2375,7 +2375,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
 
   auto name = filterUselessName(id);
   ArrayAttr annotations = builder.getArrayAttr({});
-  getAnnotations(getModuleTarget() + ">" + name.getValue().str(), annotations);
+  getAnnotations(getModuleTarget() + ">" + name.getValue(), annotations);
 
   auto result = builder.create<MemOp>(
       info.getLoc(), resultTypes, readLatency, writeLatency, depth, ruw,

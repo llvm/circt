@@ -1824,7 +1824,7 @@ static void printMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
   SmallVector<StringRef, 2> elides = {"ruw"};
 
   auto annotationsAttr = op->getAttrOfType<ArrayAttr>("annotations");
-  if (!annotationsAttr || annotationsAttr.size() == 0)
+  if (!annotationsAttr || annotationsAttr.empty())
     elides.push_back("annotations");
 
   p.printOptionalAttrDict(op->getAttrs(), elides);

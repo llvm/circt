@@ -604,3 +604,16 @@ firrtl.circuit "Foo" {
   // CHECK: firrtl.instance
   // CHECK-SAME: annotations = [{a = "a"}]
 }
+
+// -----
+
+// Test that MemOp Annotations are copied to lowered MemOps.
+firrtl.circuit "Foo" {
+  firrtl.module @Foo() {
+    %bar_r, %bar_w = firrtl.mem Undefined  {annotations = [{a = "a"}], depth = 16 : i64, name = "bar", portNames = ["r", "w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: vector<uint<8>, 2>>, !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: vector<uint<8>, 2>, mask: vector<uint<1>, 2>>>
+  }
+  // CHECK: firrtl.mem
+  // CHECK-SAME: annotations = [{a = "a"}]
+  // CHECK: firrtl.mem
+  // CHECK-SAME: annotations = [{a = "a"}]
+}
