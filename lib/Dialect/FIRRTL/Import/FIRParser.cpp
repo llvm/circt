@@ -935,6 +935,9 @@ public:
   /// we need to keep track of the scope (in the `symbolTable`) of each memory.
   /// This keeps track of this.
   MemoryScopeTable &memoryScopeTable;
+
+  /// Return the current modulet target, e.g., "~Foo|Bar".
+  StringRef getModuleTarget() { return getState().moduleTarget; }
 };
 } // end anonymous namespace
 
