@@ -82,10 +82,9 @@ const llvm::StringSet<> &LegalNamesAnalysis::getUsedNames() const {
 StringRef LegalNamesAnalysis::legalizeOperation(Operation *op,
                                                 StringAttr name) {
   auto &entry = operationNames[op];
-  if (entry.empty()) {
+  if (entry.empty())
     entry = legalizeName(name.getValue(), usedNames, nextGeneratedNameID);
-    usedNames.insert(entry);
-  }
+
   return entry;
 }
 
@@ -94,10 +93,8 @@ StringRef LegalNamesAnalysis::legalizeOperation(Operation *op,
 StringRef LegalNamesAnalysis::legalizeArg(Operation *op, size_t argNum,
                                           StringAttr name) {
   auto &entry = argNames[std::make_pair(op, argNum)];
-  if (entry.empty()) {
+  if (entry.empty())
     entry = legalizeName(name.getValue(), usedNames, nextGeneratedNameID);
-    usedNames.insert(entry);
-  }
 
   return entry;
 }
@@ -107,10 +104,8 @@ StringRef LegalNamesAnalysis::legalizeArg(Operation *op, size_t argNum,
 StringRef LegalNamesAnalysis::legalizeResult(Operation *op, size_t resultNum,
                                              StringAttr name) {
   auto &entry = resultNames[std::make_pair(op, resultNum)];
-  if (entry.empty()) {
+  if (entry.empty())
     entry = legalizeName(name.getValue(), usedNames, nextGeneratedNameID);
-    usedNames.insert(entry);
-  }
   return entry;
 }
 
