@@ -75,74 +75,43 @@ const llvm::StringSet<> &LegalNamesAnalysis::getUsedNames() const {
 }
 
 //===----------------------------------------------------------------------===//
-// Name Registration and Legalization
+// Name Legalization
 //===----------------------------------------------------------------------===//
-
-/// Register a legalized name for an operation.
-///
-/// Updates the set of used names.
-void LegalNamesAnalysis::registerOperation(Operation *op, StringRef name) {
-  usedNames.insert(name);
-  operationNames.insert(std::make_pair(op, name));
-}
-
-/// Register a legalized name for an argument to an operation.
-///
-/// Updates the set of used names.
-void LegalNamesAnalysis::registerArg(Operation *op, size_t argNum,
-                                     StringRef name) {
-  usedNames.insert(name);
-  argNames.insert(std::make_pair(std::make_pair(op, argNum), name));
-}
-
-/// Register a legalized name for a result from an operation.
-///
-/// Updates the set of used names.
-void LegalNamesAnalysis::registerResult(Operation *op, size_t resultNum,
-                                        StringRef name) {
-  usedNames.insert(name);
-  resultNames.insert(std::make_pair(std::make_pair(op, resultNum), name));
-}
 
 /// Legalize the name of an operation and register it for later retrieval.
 StringRef LegalNamesAnalysis::legalizeOperation(Operation *op,
                                                 StringAttr name) {
-  auto it = operationNames.find(op);
-  if (it != operationNames.end())
-    return it->second;
-
-  auto updatedName =
-      legalizeName(name.getValue(), usedNames, nextGeneratedNameID);
-  registerOperation(op, updatedName);
-  return updatedName;
+  auto &entry = operationNames[op];
+  if (entry.empty()) {
+    entry = legalizeName(name.getValue(), usedNames, nextGeneratedNameID);
+    usedNames.insert(entry);
+  }
+  return entry;
 }
 
 /// Legalize the name of an argument to an operation, and register it for later
 /// retrieval.
 StringRef LegalNamesAnalysis::legalizeArg(Operation *op, size_t argNum,
                                           StringAttr name) {
-  auto it = argNames.find(std::make_pair(op, argNum));
-  if (it != argNames.end())
-    return it->second;
+  auto &entry = argNames[std::make_pair(op, argNum)];
+  if (entry.empty()) {
+    entry = legalizeName(name.getValue(), usedNames, nextGeneratedNameID);
+    usedNames.insert(entry);
+  }
 
-  auto updatedName =
-      legalizeName(name.getValue(), usedNames, nextGeneratedNameID);
-  registerArg(op, argNum, updatedName);
-  return updatedName;
+  return entry;
 }
 
 /// Legalize the name of a result from an operation, and register it for later
 /// retrieval.
 StringRef LegalNamesAnalysis::legalizeResult(Operation *op, size_t resultNum,
                                              StringAttr name) {
-  auto it = resultNames.find(std::make_pair(op, resultNum));
-  if (it != resultNames.end())
-    return it->second;
-
-  auto updatedName =
-      legalizeName(name.getValue(), usedNames, nextGeneratedNameID);
-  registerResult(op, resultNum, updatedName);
-  return updatedName;
+  auto &entry = resultNames[std::make_pair(op, resultNum)];
+  if (entry.empty()) {
+    entry = legalizeName(name.getValue(), usedNames, nextGeneratedNameID);
+    usedNames.insert(entry);
+  }
+  return entry;
 }
 
 //===----------------------------------------------------------------------===//
@@ -173,7 +142,7 @@ void LegalNamesAnalysis::analyze(mlir::ModuleOp op) {
   // rename a module that later collides with an extern module.
   for (auto &op : *op.getBody()) {
     if (auto extMod = dyn_cast<RTLModuleExternOp>(op)) {
-      registerOperation(&op, extMod.getVerilogModuleNameAttr().getValue());
+      legalizeOperation(&op, extMod.getVerilogModuleNameAttr());
     }
   }
 

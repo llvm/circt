@@ -71,10 +71,6 @@ private:
   /// Numeric suffix used as uniquification agent when resolving conflicts.
   size_t nextGeneratedNameID = 0;
 
-  void registerOperation(Operation *op, StringRef name);
-  void registerArg(Operation *op, size_t argNum, StringRef name);
-  void registerResult(Operation *op, size_t resultNum, StringRef name);
-
   StringRef legalizeOperation(Operation *op, StringAttr name);
   StringRef legalizeArg(Operation *op, size_t argNum, StringAttr name);
   StringRef legalizeResult(Operation *op, size_t resultNum, StringAttr name);
