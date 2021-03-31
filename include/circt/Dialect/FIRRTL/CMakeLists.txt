@@ -10,3 +10,7 @@ set(LLVM_TARGET_DEFINITIONS Passes.td)
 mlir_tablegen(Passes.h.inc -gen-pass-decls)
 add_public_tablegen_target(CIRCTFIRRTLTransformsIncGen)
 add_circt_doc(Passes -gen-pass-doc FIRRTLPasses ./)
+
+set(LLVM_TARGET_DEFINITIONS Canonicalization.td)
+mlir_tablegen(Canonicalization.h.inc -gen-rewriters)
+add_public_tablegen_target(CIRCTFIRRTLCanonicalizationIncGen)

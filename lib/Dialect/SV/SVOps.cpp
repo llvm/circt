@@ -64,14 +64,14 @@ static ParseResult parseImplicitSSAName(OpAsmParser &parser,
   if (hadName)
     return success();
 
-  auto resultName = parser.getResultName(0);
-  if (!resultName.first.empty() && !isdigit(resultName.first[0])) {
-    StringRef name = resultName.first;
-    auto nameAttr = parser.getBuilder().getStringAttr(name);
-    auto *context = parser.getBuilder().getContext();
-    resultAttrs.push_back({Identifier::get("name", context), nameAttr});
-  }
-
+  // If there is no explicit name attribute, get it from the SSA result name.
+  // If numeric, just use an empty name.
+  auto resultName = parser.getResultName(0).first;
+  if (!resultName.empty() && isdigit(resultName[0]))
+    resultName = "";
+  auto nameAttr = parser.getBuilder().getStringAttr(resultName);
+  auto *context = parser.getBuilder().getContext();
+  resultAttrs.push_back({Identifier::get("name", context), nameAttr});
   return success();
 }
 
@@ -86,9 +86,11 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
   llvm::raw_svector_ostream tmpStream(resultNameStr);
   p.printOperand(op->getResult(0), tmpStream);
   auto expectedName = op->getAttrOfType<StringAttr>("name");
-  if (!expectedName ||
-      tmpStream.str().drop_front() != expectedName.getValue()) {
-    namesDisagree = true;
+  auto actualName = tmpStream.str().drop_front();
+  if (actualName != expectedName.getValue()) {
+    // Anonymous names are printed as digits, which is fine.
+    if (!expectedName.getValue().empty() || !isdigit(actualName[0]))
+      namesDisagree = true;
   }
 
   if (namesDisagree)
@@ -142,9 +144,9 @@ void ConstantZOp::getAsmResultNames(
 
 void RegOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                   Type elementType, StringAttr name) {
-  if (name)
-    odsState.addAttribute("name", name);
-
+  if (!name)
+    name = odsBuilder.getStringAttr("");
+  odsState.addAttribute("name", name);
   odsState.addTypes(rtl::InOutType::get(elementType));
 }
 
@@ -152,7 +154,8 @@ void RegOp::build(OpBuilder &odsBuilder, OperationState &odsState,
 /// attribute.
 void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   // If the wire has an optional 'name' attribute, use it.
-  if (auto nameAttr = (*this)->getAttrOfType<StringAttr>("name"))
+  auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
+  if (!nameAttr.getValue().empty())
     setNameFn(getResult(), nameAttr.getValue());
 }
 
@@ -825,9 +828,10 @@ LogicalResult verifySignalExists(Value ifaceVal, FlatSymbolRefAttr signalName) {
 
 void WireOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                    Type elementType, StringAttr name) {
-  if (name)
-    odsState.addAttribute("name", name);
+  if (!name)
+    name = odsBuilder.getStringAttr("");
 
+  odsState.addAttribute("name", name);
   odsState.addTypes(InOutType::get(elementType));
 }
 
@@ -835,7 +839,8 @@ void WireOp::build(OpBuilder &odsBuilder, OperationState &odsState,
 /// attribute.
 void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   // If the wire has an optional 'name' attribute, use it.
-  if (auto nameAttr = (*this)->getAttrOfType<StringAttr>("name"))
+  auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
+  if (!nameAttr.getValue().empty())
     setNameFn(getResult(), nameAttr.getValue());
 }
 

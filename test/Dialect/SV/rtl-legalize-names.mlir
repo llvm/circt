@@ -57,6 +57,13 @@ rtl.module @inout_inst(%a: i1) -> () {
   %0 = rtl.instance "foo" @inout (%a) : (i1) -> (i1)
 }
 
+// https://github.com/llvm/circt/issues/855
+// CHECK-LABEL: rtl.module @nameless_reg
+// CHECK-NEXT: %_T = sv.reg : !rtl.inout<i4>
+rtl.module @nameless_reg(%a: i1) -> () {
+  %661 = sv.reg : !rtl.inout<i4>
+}
+
 // CHECK-LABEL: sv.interface @output_5
 sv.interface @output {
   // CHECK-NEXT: sv.interface.signal @input_0 : i1
@@ -67,6 +74,18 @@ sv.interface @output {
   // CHECK-SAME: ("input" @input_0, "output" @output_1)
   sv.interface.modport @always ("input" @input, "output" @output)
 }
+
+// Instantiate a module which has had its ports renamed.
+// CHECK-LABEL: rtl.module @ModuleWithCollision(
+// CHECK-SAME:    %reg_0: i1) -> (%wire_1: i1)
+rtl.module @ModuleWithCollision(%reg: i1) -> (%wire: i1) {
+  rtl.output %reg : i1
+}
+rtl.module @InstanceWithCollisions(%a: i1) {
+  rtl.instance "parameter" @ModuleWithCollision(%a) : (i1) -> (i1)
+}
+
+
 
 // TODO: Renaming the above interface declarations currently does not rename
 // their use in the following types.
@@ -82,3 +101,5 @@ sv.interface @output {
 rtl.module.extern @inout_0 () -> ()
 rtl.module.extern @inout_1 () -> ()
 rtl.module.extern @inout_2 () -> ()
+
+

@@ -38,9 +38,7 @@ def RTLModuleOp : RTLOp<"module",
 
     // Decode information about the input and output ports on this module.
     SmallVector<ModulePortInfo> getPorts() {
-      SmallVector<ModulePortInfo> results;
-      getModulePortInfo(*this, results);
-      return results;
+      return getModulePortInfo(*this);
     }
 
     // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is
@@ -111,8 +109,8 @@ def RTLModuleExternOp : RTLOp<"module.extern",
 
   let extraClassDeclaration = [{   
     // Decode information about the input and output ports on this module.
-    void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
-      getModulePortInfo(*this, results);
+    SmallVector<ModulePortInfo> getPorts() {
+      return getModulePortInfo(*this);
     }
 
     /// Return the name to use for the Verilog module that we're referencing
@@ -224,8 +222,8 @@ def RTLModuleGeneratedOp : RTLOp<"module.generated",
 
   let extraClassDeclaration = [{   
     // Decode information about the input and output ports on this module.
-    void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
-      getModulePortInfo(*this, results);
+    SmallVector<ModulePortInfo> getPorts() {
+      return getModulePortInfo(*this);
     }
 
     /// Return the name to use for the Verilog module that we're referencing

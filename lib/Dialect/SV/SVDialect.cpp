@@ -106,10 +106,10 @@ static bool isValidVerilogCharacter(char ch) {
   return isValidVerilogCharacterFirst(ch) || llvm::isDigit(ch);
 }
 
-/// Sanitize the specified name for use in SV output. Auto-uniquifies the name
+/// Legalize the specified name for use in SV output. Auto-uniquifies the name
 /// through \c resolveKeywordConflict if required. If the name is empty, a
 /// unique temp name is created.
-StringRef circt::sv::sanitizeName(StringRef name,
+StringRef circt::sv::legalizeName(StringRef name,
                                   llvm::StringSet<> &recordNames,
                                   size_t &nextGeneratedNameID) {
   if (name.empty())
@@ -132,7 +132,7 @@ StringRef circt::sv::sanitizeName(StringRef name,
         tmpName += llvm::utohexstr((unsigned char)ch);
       }
     }
-    return sanitizeName(tmpName, recordNames, nextGeneratedNameID);
+    return legalizeName(tmpName, recordNames, nextGeneratedNameID);
   }
 
   // Check to see if this name is valid.  The first character cannot be a
@@ -140,7 +140,7 @@ StringRef circt::sv::sanitizeName(StringRef name,
   if (!isValidVerilogCharacterFirst(name.front())) {
     SmallString<16> tmpName("_");
     tmpName += name;
-    return sanitizeName(tmpName, recordNames, nextGeneratedNameID);
+    return legalizeName(tmpName, recordNames, nextGeneratedNameID);
   }
 
   // Make sure the new valid name does not conflict with any existing names.
@@ -150,7 +150,7 @@ StringRef circt::sv::sanitizeName(StringRef name,
 /// Check if a name is valid for use in SV output by only containing characters
 /// allowed in SV identifiers.
 ///
-/// Call \c sanitizeName() to obtain a sanitized version of the name.
+/// Call \c legalizeName() to obtain a legalized version of the name.
 bool circt::sv::isNameValid(StringRef name) {
   if (name.empty())
     return false;

@@ -34,8 +34,7 @@ void RTLStubExternalModulesPass::runOnOperation() {
 
   for (auto &op : llvm::make_early_inc_range(*topModule))
     if (auto module = dyn_cast<rtl::RTLModuleExternOp>(op)) {
-      SmallVector<rtl::ModulePortInfo, 8> ports;
-      module.getPortInfo(ports);
+      SmallVector<rtl::ModulePortInfo> ports = module.getPorts();
       auto nameAttr = module.getNameAttr();
       auto newModule =
           builder.create<rtl::RTLModuleOp>(module.getLoc(), nameAttr, ports);
@@ -53,7 +52,7 @@ void RTLStubExternalModulesPass::runOnOperation() {
       // Now update instances to drop parameters
       auto useRange = SymbolTable::getSymbolUses(module, getOperation());
       if (useRange)
-        for (auto& user : *useRange)
+        for (auto &user : *useRange)
           if (auto inst = dyn_cast<rtl::InstanceOp>(user.getUser()))
             inst->removeAttr("parameters");
 

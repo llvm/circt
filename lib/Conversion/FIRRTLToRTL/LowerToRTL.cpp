@@ -635,12 +635,12 @@ static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
   return accesses;
 }
 
-static Value tryEliminatingConnectsToField(Value structValue, StringAttr field,
-                                           Operation *insertPoint) {
-  auto accesses = getAllFieldAccesses(structValue, field.getValue());
+static Value
+tryEliminatingConnectsToField(SmallVectorImpl<SubfieldOp> &accesses,
+                              Operation *insertPoint) {
   if (accesses.size() > 1 || accesses.empty())
     return {};
-  return tryEliminatingConnectsToValue(accesses[0], insertPoint);
+  return tryEliminatingConnectsToValue(accesses[0].result(), insertPoint);
 }
 
 /// Now that we have the operations for the rtl.module's corresponding to the
@@ -969,52 +969,68 @@ void FIRRTLModuleLowering::lowerMemory(MemOp memory, CircuitOp circuitOp,
     auto portBundleType =
         port.getType().cast<FIRRTLType>().getPassiveType().cast<BundleType>();
 
-    // Create wires for all the memory ports
+    Twine portBaseName = portKindName + "_" + Twine(portKindNum) + "_";
+
     for (BundleType::BundleElement elt : portBundleType.getElements()) {
+      // First collect the data for the module.
       rtl::ModulePortInfo rtlPort;
       rtlPort.type = lowerType(elt.type);
-      rtlPort.name = builderTop.getStringAttr((Twine(portKindName) + "_" +
-                                               Twine(portKindNum) + "_" +
-                                               elt.name.getValue())
-                                                  .str());
+      rtlPort.name =
+          builderTop.getStringAttr((portBaseName + elt.name.getValue()).str());
       if (portKind == MemOp::PortKind::Read && elt.name.getValue() == "data") {
         rtlPort.direction = rtl::OUTPUT;
-        resultTypes.push_back(rtlPort.type);
+        resultTypes.push_back(dataType);
+        rtlPort.argNum = retNum++;
       } else {
         rtlPort.direction = rtl::INPUT;
+        rtlPort.argNum = argNum++;
       }
-      rtlPort.argNum = argNum++;
       modPorts.push_back(rtlPort);
 
+      // Now collect the data for the instance.  A memory produces multiple
+      // structures, so we need to look through SubfieldOps to see the true
+      // inputs and outputs.
       auto accesses = getAllFieldAccesses(port, elt.name.getValue());
       if (rtlPort.direction == rtl::INPUT) {
+        // Inputs might not be defined, lower to 'x
         if (accesses.empty()) {
           auto &constX = constantXs[rtlPort.type];
           if (!constX)
             constX = builder.createOrFold<sv::ConstantXOp>(rtlPort.type);
           operands.push_back(constX);
+        } else if (auto value =
+                       tryEliminatingConnectsToField(accesses, memory)) {
+          operands.push_back(value);
+          // Eliminate the subfield accesses and replace with module results
+          for (auto a : accesses) {
+            a.replaceAllUsesWith(value);
+            a.erase();
+          }
         } else {
-          auto name =
-              builder.getStringAttr((Twine(".") + portName.getValue() + "." +
-                                     elt.name.getValue() + ".wire")
-                                        .str());
+
+          // Otherwise make a wire
+          auto name = builder.getStringAttr(
+              (Twine("_T_") + portName.getValue() + "_" + elt.name.getValue())
+                  .str());
           auto wire = builder.create<WireOp>(elt.type, name);
 
           operands.push_back(castFromFIRRTLType(wire, rtlPort.type, builder));
+          // Eliminate the subfield accesses and replace with module results
           for (auto a : accesses) {
             a.replaceAllUsesWith((Operation *)wire);
             a.erase();
           }
         }
       } else {
-        // Track read results
+        // Read data ports are tracked to be updated later
         for (auto &a : accesses)
           returnHolder[a] = resultTypes.size() - 1;
       }
-      ++portKindNum;
     }
+    ++portKindNum;
   }
 
+  // These are the attributes we use in the FIRRTL memory schema
   std::array<NamedAttribute, 5> genAttrs = {
       builderTop.getNamedAttr("depth",
                               builderTop.getUI32IntegerAttr(memory.depth())),
@@ -1027,18 +1043,22 @@ void FIRRTLModuleLowering::lowerMemory(MemOp memory, CircuitOp circuitOp,
       builderTop.getNamedAttr(
           "width", builderTop.getUI32IntegerAttr(dataType.getWidth()))};
 
+  // Make the global module for the memory
   auto memModule = builderTop.create<rtl::RTLModuleGeneratedOp>(
       loweringState.memorySchema, memNameAttr, modPorts, genAttrs);
   auto memModuleAttr = builderTop.getSymbolRefAttr(memModule);
 
+  // Create the instance to replace the memop
   auto inst = builder.create<rtl::InstanceOp>(
       resultTypes, memNameAttr, memModuleAttr, operands, DictionaryAttr());
 
+  // Only cast once for each return value
   SmallVector<Value> returnCasts;
   for (size_t retIndex = 0, e = inst.getNumResults(); retIndex != e; ++retIndex)
     returnCasts.push_back(castToFIRRTLType(inst.getResult(retIndex),
                                            memory.getDataType(), builder));
 
+  // Update all users of the result of read ports
   for (auto &ret : returnHolder) {
     ret.first->getResult(0).replaceAllUsesWith(returnCasts[ret.second]);
     ret.first->erase();
@@ -1779,8 +1799,9 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   if (resultType.isInteger(0))
     return setLowering(op, Value());
 
-  // Convert the inout to a non-inout type.
-  return setLoweringTo<sv::WireOp>(op, resultType, op.nameAttr());
+  // Name attr is requires on sv.wire but optional on firrtl.wire.
+  auto nameAttr = op.nameAttr() ? op.nameAttr() : builder.getStringAttr("");
+  return setLoweringTo<sv::WireOp>(op, resultType, nameAttr);
 }
 
 LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {

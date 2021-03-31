@@ -43,8 +43,7 @@ ESIDialect::ESIDialect(MLIRContext *context)
 /// direction of the other two.
 void circt::esi::findValidReadySignals(
     Operation *modOp, SmallVectorImpl<ESIPortValidReadyMapping> &names) {
-  SmallVector<rtl::ModulePortInfo, 64> ports;
-  rtl::getModulePortInfo(modOp, ports);
+  SmallVector<rtl::ModulePortInfo> ports = rtl::getModulePortInfo(modOp);
 
   llvm::StringMap<rtl::ModulePortInfo> nameMap(ports.size());
   for (auto port : ports)
@@ -78,8 +77,8 @@ void circt::esi::findValidReadySignals(
       continue;
 
     // Found one.
-    names.push_back(ESIPortValidReadyMapping{
-        .data = port, .valid = valid->second, .ready = ready->second});
+    names.push_back(
+        ESIPortValidReadyMapping{port, valid->second, ready->second});
   }
 }
 
@@ -97,8 +96,7 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
   Location loc = pearl->getLoc();
   FunctionType modType = rtl::getModuleType(pearl);
 
-  SmallVector<rtl::ModulePortInfo, 64> pearlPorts;
-  rtl::getModulePortInfo(pearl, pearlPorts);
+  SmallVector<rtl::ModulePortInfo> pearlPorts = rtl::getModulePortInfo(pearl);
 
   // -----
   // First, build up a set of data structures to use throughout this function.
