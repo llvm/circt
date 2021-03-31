@@ -211,6 +211,8 @@ rtl.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2
 // CHECK-NEXT: // input  /*Zero Width*/ i3,
 // CHECK-NEXT:    output                y, z, p, p2);
 // CHECK-EMPTY:
+// CHECK-NEXT:    wire _T;
+// CHECK-NEXT:    wire _T_0;
 // CHECK-NEXT:    wire a1_f;
 // CHECK-NEXT:    wire b1_b;
 // CHECK-NEXT:    wire b1_c;
@@ -219,7 +221,7 @@ rtl.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2
 // CHECK-EMPTY:
 // CHECK-NEXT:    A a1 (
 // CHECK-NEXT:      .d (w),
-// CHECK-NEXT:      .e (b1_b),
+// CHECK-NEXT:      .e (_T),
 // CHECK-NEXT:      .f (a1_f)
 // CHECK-NEXT:    )
 // CHECK-NEXT:    B b1 (
@@ -227,6 +229,8 @@ rtl.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2
 // CHECK-NEXT:      .b (b1_b),
 // CHECK-NEXT:      .c (b1_c)
 // CHECK-NEXT:    )
+// CHECK-NEXT:    assign _T_0 = b1_c;
+// CHECK-NEXT:    assign _T = _T_0;
 // CHECK-NEXT:    FooModule #(
 // CHECK-NEXT:      .DEFAULT(64'd14000240888948784983),
 // CHECK-NEXT:      .DEPTH(3.242000e+01),
@@ -243,7 +247,7 @@ rtl.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2
 // CHECK-NEXT:      .a   (i2),
 // CHECK-NEXT:      .out (paramd2_out)
 // CHECK-NEXT:    );
-// CHECK-NEXT:    assign y = b1_c;
+// CHECK-NEXT:    assign y = _T;
 // CHECK-NEXT:    assign z = x;
 // CHECK-NEXT:    assign p = paramd_out;
 // CHECK-NEXT:    assign p2 = paramd2_out;
@@ -505,13 +509,13 @@ rtl.module @issue525(%struct: i2, %else: i2) -> (%casex: i2) {
 // https://github.com/llvm/circt/issues/438
 // CHECK-LABEL: module cyclic
 rtl.module @cyclic(%a: i1) -> (%b: i1) {
-  // CHECK: wire _T_0;
+  // CHECK: wire _T;
 
-  // CHECK: wire _T = _T_0 + _T_0;
+  // CHECK: wire _T_0 = _T + _T;
   %1 = comb.add %0, %0 : i1
-  // CHECK: assign _T_0 = a << a;
+  // CHECK: assign _T = a << a;
   %0 = comb.shl %a, %a : i1
-  // CHECK: assign b = _T - _T;
+  // CHECK: assign b = _T_0 - _T_0;
   %2 = comb.sub %1, %1 : i1
   rtl.output %2 : i1
 }
@@ -614,3 +618,24 @@ rtl.module @ArrayLHS(%clock: i1) -> () {
     sv.bpassign %3, %false : i1
   }
 }
+
+// CHECK-LABEL: module notEmitDuplicateWiresThatWereUnInlinedDueToLongNames
+rtl.module @notEmitDuplicateWiresThatWereUnInlinedDueToLongNames(%clock: i1, %x: i1) {
+  // CHECK: wire _T;
+  // CHECK: wire aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
+  %0 = comb.and %1, %x : i1
+  // CHECK: wire _T_0 = _T & x;
+  // CHECK: always_ff @(posedge clock) begin
+  sv.alwaysff(posedge %clock) {
+    // CHECK: if (_T_0) begin
+    sv.if %0  {
+      sv.verbatim "// hello"
+    }
+  }
+
+  // CHECK: end // always_ff @(posedge)
+  // CHECK: assign _T = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
+  %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa = sv.wire  : !rtl.inout<i1>
+  %1 = sv.read_inout %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa : !rtl.inout<i1>
+}
+
