@@ -18,10 +18,11 @@
 echo "Do you wish to install pycapnp? Cosim integration tests require pycapnp."
 read -p "Yes to confirm: " yn
 case $yn in
-    [Yy]* ) pip3 install pycapnp; break ;;
+    [Yy]* ) pip3 install pycapnp;;
     * ) echo "Skipping.";;
 esac
 
+mkdir -p "$(dirname "$BASH_SOURCE[0]")/../ext"
 EXT_DIR=$(cd "$(dirname "$BASH_SOURCE[0]")/../ext" && pwd)
 CAPNP_VER=0f1bf4fce79923fb4974aa55a53e26450f83f286
 echo "Installing capnproto..."
