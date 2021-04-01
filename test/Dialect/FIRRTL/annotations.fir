@@ -111,6 +111,24 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar
 
 ; // -----
 
+; COM: A ReferenceTarget/ComponentName pointing at a node should work.
+; COM: This shouldn't crash if the node is in a nested block.
+circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.baz"}]]
+  module Foo:
+    input cond: UInt<1>[2]
+    node bar = UInt<1>(0)
+    when cond[0]:
+      when cond[1]:
+        node baz = UInt<1>(0)
+
+    ; CHECK-LABEL: module {
+    ; CHECK: %bar = firrtl.node
+    ; CHECK-SAME: annotations = [{a = "a"}
+    ; CHECK: %baz = firrtl.node
+    ; CHECK-SAME: annotations = [{b = "b"}]
+
+; // -----
+
 ; COM: A ReferenceTarget/ComponentName pointing at an SMem should work.
 circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar"}]]
   module Foo:
