@@ -2447,10 +2447,16 @@ ParseResult FIRStmtParser::parseNode() {
 
   // The entire point of a node declaration is to carry a name.  If it got
   // dropped, then we don't even need to create a result.
+  //
+  // TODO: This optimization doesn't respect annotated, temporary nodes.
   Value result;
-  if (actualName)
-    result = builder.create<NodeOp>(info.getLoc(), initializer, actualName);
-  else
+  if (actualName) {
+    ArrayAttr annotations = builder.getArrayAttr({});
+    getAnnotations(getModuleTarget() + ">" + actualName.getValue(),
+                   annotations);
+    result = builder.create<NodeOp>(info.getLoc(), initializer, actualName,
+                                    annotations);
+  } else
     result = initializer;
   return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
 }

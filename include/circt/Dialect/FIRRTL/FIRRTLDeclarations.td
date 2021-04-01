@@ -145,7 +145,10 @@ def NodeOp : FIRRTLOp<"node", [NoSideEffect, SameOperandsAndResultType]> {
     ```
     }];
 
-  let arguments = (ins PassiveType:$input, OptionalAttr<StrAttr>:$name);
+  let arguments = (
+    ins PassiveType:$input,
+        OptionalAttr<StrAttr>:$name,
+        DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
   let results = (outs FIRRTLType:$result);
 
   let assemblyFormat = "$input custom<ImplicitSSAName>(attr-dict) `:` type($input)";
