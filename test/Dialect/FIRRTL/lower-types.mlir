@@ -630,3 +630,27 @@ firrtl.circuit "Wire" {
   // CHECK: firrtl.wire
   // CHECK-SAME: annotations = [{a = "a"}]
 }
+
+// -----
+
+// Test that Reg/RegResetOp Annotations are copied to lowered registers.
+firrtl.circuit "Reg" {
+  firrtl.module @Reg(%clock: !firrtl.clock, %reset: !firrtl.uint<1>) {
+    %bazInit = firrtl.wire  : !firrtl.vector<uint<1>, 2>
+    %0 = firrtl.subindex %bazInit[0] : !firrtl.vector<uint<1>, 2>
+    %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
+    firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    %1 = firrtl.subindex %bazInit[1] : !firrtl.vector<uint<1>, 2>
+    firrtl.connect %1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    %bar = firrtl.reg %clock  {annotations = [{a = "a"}], name = "bar"} : (!firrtl.clock) -> !firrtl.vector<uint<1>, 2>
+    %baz = firrtl.regreset %clock, %reset, %bazInit  {annotations = [{b = "b"}], name = "baz"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>) -> !firrtl.vector<uint<1>, 2>
+  }
+  // CHECK: firrtl.reg
+  // CHECK-SAME: annotations = [{a = "a"}]
+  // CHECK: firrtl.reg
+  // CHECK-SAME: annotations = [{a = "a"}]
+  // CHECK: firrtl.regreset
+  // CHECK-SAME: annotations = [{b = "b"}]
+  // CHECK: firrtl.regreset
+  // CHECK-SAME: annotations = [{b = "b"}]
+}

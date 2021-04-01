@@ -140,6 +140,22 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar
 
 ; // -----
 
+; COM: A ReferenceTarget/ComponentName pointing at a register should work.
+circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.baz"}]]
+  module Foo:
+    input clock: Clock
+    input reset: UInt<1>
+    reg bar: UInt<1>, clock
+    reg baz: UInt<1>, clock with : (reset => (reset, UInt<1>(0)))
+
+    ; CHECK-LABEL: module {
+    ; CHECK: %bar = firrtl.reg
+    ; CHECK-SAME: annotations = [{a = "a"}]
+    ; CHECK: %baz = firrtl.regreset
+    ; CHECK-SAME: annotations = [{b = "b"}]
+
+; // -----
+
 ; COM: A ReferenceTarget/ComponentName pointing at an SMem should work.
 circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar"}]]
   module Foo:
