@@ -237,7 +237,7 @@ processBufferIntoSingleStream(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
         }
         llvm_unreachable("unknown output format");
       });
-};
+}
 
 /// Process a single buffer of the input into multiple output files.
 static LogicalResult

@@ -315,7 +315,7 @@ void ESIToPhysicalPass::runOnOperation() {
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))
     signalPassFailure();
-};
+}
 
 //===----------------------------------------------------------------------===//
 // Lower ESI ports pass.
