@@ -140,8 +140,9 @@ requires a version of libcapnp which is not yet part of a release. Most of
 the ESI cosim integration tests also require the python bindings: pycapnp.
 The `utils/get-capnp.sh` script downloads, compiles, and installs a known
 good version to a directory within the circt source code. It optionally
-installs pycapnp via 'pip3'. Alternatively, you can use a docker image we
-provide via `utils/run-docker.sh`.
+installs pycapnp via 'pip3'. The capnp compile requires libtool.
+Alternatively, you can use a docker image we provide via
+`utils/run-docker.sh`.
 
 ## Submitting changes to CIRCT
 

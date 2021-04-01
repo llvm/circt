@@ -8,3 +8,8 @@ rtl.module @Top(%out: f32) {
 rtl.module @parameter() {
 }
 
+// -----
+
+// expected-error @+2 {{unknown style option 'badOption'}}
+// expected-error @+1 {{unknown style option 'anotherOne'}}
+module attributes {circt.loweringOptions = "badOption,anotherOne"} {}

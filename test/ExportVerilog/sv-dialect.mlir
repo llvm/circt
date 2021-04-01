@@ -633,3 +633,14 @@ rtl.module @oooReg(%in: i1) -> (%result: i1) {
   // CHECK: assign result = abc;
   rtl.output %0 : i1
 }
+
+// https://github.com/llvm/circt/issues/865
+// CHECK-LABEL: module ifdef_beginend(
+rtl.module @ifdef_beginend(%clock: i1, %cond: i1, %val: i8) {
+  // CHECK: always @(posedge clock) begin
+  sv.always posedge %clock  {
+    // CHECK-NEXT: `ifndef SYNTHESIS
+    sv.ifdef.procedural "SYNTHESIS"  {
+    } // CHECK-NEXT: `endif
+  } // CHECK-NEXT: end
+} // CHECK-NEXT: endmodule
