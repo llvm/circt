@@ -292,7 +292,7 @@ static StringRef getVerilogDeclWord(Operation *op) {
   // fall through to default.
   bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
   return isProcedural ? "automatic logic" : "wire";
-};
+}
 
 namespace {
 /// This enum keeps track of the precedence level of various binary operators,
