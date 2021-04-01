@@ -2507,9 +2507,9 @@ static void lowerUsersToTemporaryWire(Operation &op) {
   for (auto result : op.getResults()) {
     auto newWire = builder.create<WireOp>(result.getType());
 
-    while (!op.use_empty()) {
+    while (!result.use_empty()) {
       auto newWireRead = builder.create<ReadInOutOp>(newWire);
-      OpOperand &use = *op.getUses().begin();
+      OpOperand &use = *result.getUses().begin();
       use.set(newWireRead);
       newWireRead->moveBefore(use.getOwner());
     }
