@@ -433,46 +433,41 @@ rtl::RTLModuleOp FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
   return builder.create<rtl::RTLModuleOp>(oldModule.getLoc(), nameAttr, ports);
 }
 
-/// Collect any computation dominated by the marker that can be pushed above it,
-/// returning true if all operations can be moved.
+/// If the value dominates the marker, just return.  Otherwise add it to ops and
+/// recursively process its operands.
 ///
+/// Return true if we can't move an operation, false otherwise.
 static bool
-collectComputationBelowMarker(Value value, Operation *marker,
-                              SmallVector<Operation *, 8> &opsToMove) {
-  // We keep track of a visited set because each compute subgraph is a DAG (not
-  // a tree), and we want to only want to visit each subnode once.
-  SmallPtrSet<Operation *, 32> visited;
-  SmallVector<Value, 32> worklist;
+collectOperationTreeBelowMarker(Value value, Operation *marker,
+                                SmallVector<Operation *, 8> &ops,
+                                SmallPtrSet<Operation *, 8> &visited) {
+  // If the value is a BB argument or if the op is in a containing block, then
+  // it must dominate the marker.
+  auto *op = value.getDefiningOp();
+  if (!op || op->getBlock() != marker->getBlock())
+    return false;
 
-  worklist.push_back(value);
-  while (!worklist.empty()) {
-    auto *op = worklist.pop_back_val().getDefiningOp();
+  // We can't move the marker itself.
+  if (op == marker)
+    return true;
 
-    // If we already processed this operation (or null for a block arg), then
-    // ignore it.
-    if (!visited.insert(op).second)
-      continue;
+  // Otherwise if it is an op in the same block as the marker, see if it is
+  // already at or above the marker.
+  if (op->isBeforeInBlock(marker))
+    return false;
 
-    // If the value is a BB argument or if the op is in a containing block, then
-    // it must dominate the marker.
-    if (!op || op->getBlock() != marker->getBlock())
-      continue;
+  // Pull the computation tree into the set.  If it was already added, then
+  // don't reprocess it.
+  if (!visited.insert(op).second)
+    return false;
 
-    // We can't move the marker itself.
-    if (op == marker)
+  // Otherwise recursively process the operands.
+  for (auto operand : op->getOperands())
+    if (collectOperationTreeBelowMarker(operand, marker, ops, visited))
       return true;
 
-    // If the op in the same block as the marker, see if it is already above the
-    // marker.
-    if (op->isBeforeInBlock(marker))
-      continue;
-
-    // Otherwise, we need to move this op if we can move its operands.  Remember
-    // that, and make sure to visit the operands.
-    opsToMove.push_back(op);
-    worklist.append(op->operand_begin(), op->operand_end());
-  }
-
+  // Add ops in post order so we make sure they get moved in a coherent order.
+  ops.push_back(op);
   return false;
 }
 
@@ -563,17 +558,24 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
   // terminator in the module, because we know that everything is above it by
   // definition.
   if (!insertPoint->hasTrait<OpTrait::IsTerminator>()) {
-    // Collect the computation tree feeding the source operations.  On success,
-    // we get back the ops that we need to move up above the insertion point.
+    // On success, these are the ops that we need to move up above the
+    // insertion point.  We keep track of a visited set because each compute
+    // subgraph is a dag (not a tree), and we want to only want to visit each
+    // subnode once.
     SmallVector<Operation *, 8> opsToMove;
+    SmallPtrSet<Operation *, 8> visited;
+
+    // Collect the computation tree feeding the source operations.  We build
+    // the list of ops to move in post-order to ensure that we provide a valid
+    // DAG ordering of the result.
     for (auto connect : connects) {
-      if (collectComputationBelowMarker(connect.src(), insertPoint, opsToMove))
+      if (collectOperationTreeBelowMarker(connect.src(), insertPoint, opsToMove,
+                                          visited))
         return {};
     }
 
-    // Since it looks like all the operations can be moved, actually do it.  We
-    // move these in backward order to make sure we honor uses before defs.
-    for (auto *op : llvm::reverse(opsToMove))
+    // Since it looks like all the operations can be moved, actually do it.
+    for (auto *op : opsToMove)
       op->moveBefore(insertPoint);
   }
 
