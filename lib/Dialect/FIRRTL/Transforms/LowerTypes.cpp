@@ -549,7 +549,8 @@ void TypeLoweringVisitor::visitDecl(WireOp op) {
     loweredName.resize(wireName.size());
     loweredName += field.suffix;
     auto wire = builder->create<WireOp>(field.getPortType(),
-                                        builder->getStringAttr(loweredName));
+                                        builder->getStringAttr(loweredName),
+                                        op.annotations());
     setBundleLowering(result, StringRef(field.suffix).drop_front(1), wire);
   }
 

@@ -1820,7 +1820,7 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
       OpBuilder memOpBuilder(scopeAndOperation.second);
 
       auto wireHack = memOpBuilder.create<WireOp>(
-          info.getLoc(), result.getType(), StringAttr());
+          info.getLoc(), result.getType(), StringAttr(), ArrayAttr());
       builder.create<ConnectOp>(info.getLoc(), wireHack, result);
 
       // Inject this the wire's name into the same scope as the memory.
@@ -2478,8 +2478,11 @@ ParseResult FIRStmtParser::parseWire() {
       parseType(type, "expected wire type") || parseOptionalInfo(info))
     return failure();
 
-  auto result =
-      builder.create<WireOp>(info.getLoc(), type, filterUselessName(id));
+  ArrayAttr annotations = builder.getArrayAttr({});
+  getAnnotations(getModuleTarget() + ">" + id.getValue(), annotations);
+
+  auto result = builder.create<WireOp>(info.getLoc(), type,
+                                       filterUselessName(id), annotations);
   return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
 }
 

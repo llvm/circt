@@ -213,14 +213,18 @@ def WireOp : FIRRTLOp<"wire", []> {
     ```
     }];
 
-  let arguments = (ins OptionalAttr<StrAttr>:$name);
+  let arguments = (
+    ins OptionalAttr<StrAttr>:$name,
+        DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
   let results = (outs FIRRTLType:$result);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
-                      CArg<"StringRef", "{}">:$name), [{
+                      CArg<"StringRef", "{}">:$name,
+                      CArg<"ArrayRef<Attribute>","{}">:$annotations), [{
       return build($_builder, $_state, elementType,
-                   $_builder.getStringAttr(name));
+                   $_builder.getStringAttr(name),
+                   $_builder.getArrayAttr(annotations));
     }]>
   ];
 
