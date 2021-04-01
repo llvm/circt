@@ -1,4 +1,4 @@
-//===-- circt-c/Dialect/Comb.h - C API for Comb dialect -----------*- C -*-===//
+//===-- circt-c/Dialect/ESI.h - C API for ESI dialect -------------*- C -*-===//
 //
 // This header declares the C interface for registering and accessing the
 // Comb dialect. A dialect should be registered with a context to make it
@@ -8,8 +8,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_C_DIALECT_COMB_H
-#define CIRCT_C_DIALECT_COMB_H
+#ifndef CIRCT_C_DIALECT_ESI_H
+#define CIRCT_C_DIALECT_ESI_H
 
 #include "mlir-c/Registration.h"
 
@@ -17,10 +17,10 @@
 extern "C" {
 #endif
 
-MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(Combinational, comb);
+MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(ESI, esi);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // CIRCT_C_DIALECT_COMB_H
+#endif // CIRCT_C_DIALECT_ESI_H
