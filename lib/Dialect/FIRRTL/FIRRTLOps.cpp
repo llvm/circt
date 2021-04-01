@@ -1774,11 +1774,7 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
 
 static ParseResult parseElideAnnotations(OpAsmParser &parser,
                                          NamedAttrList &resultAttrs) {
-
-  if (parser.parseOptionalAttrDict(resultAttrs))
-    return failure();
-
-  return success();
+  return parser.parseOptionalAttrDict(resultAttrs);
 }
 
 static void printElideAnnotations(OpAsmPrinter &p, Operation *op,

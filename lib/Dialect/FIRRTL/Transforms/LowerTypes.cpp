@@ -582,7 +582,7 @@ void TypeLoweringVisitor::visitDecl(RegOp op) {
 
     setBundleLowering(result, StringRef(field.suffix).drop_front(1),
                       builder->create<RegOp>(field.getPortType(), op.clockVal(),
-                                             loweredName));
+                                             loweredName, op.annotations()));
   }
 
   // Remember to remove the original op.
@@ -615,7 +615,7 @@ void TypeLoweringVisitor::visitDecl(RegResetOp op) {
     setBundleLowering(result, suffix,
                       builder->create<RegResetOp>(
                           field.getPortType(), op.clockVal(), op.resetSignal(),
-                          resetValLowered, loweredName));
+                          resetValLowered, loweredName, op.annotations()));
   }
 
   // Remember to remove the original op.

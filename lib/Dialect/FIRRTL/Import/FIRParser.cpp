@@ -2574,13 +2574,17 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   if (parseOptionalInfo(info, subOps))
     return failure();
 
+  auto name = filterUselessName(id);
+  ArrayAttr annotations = builder.getArrayAttr({});
+  getAnnotations(getModuleTarget() + ">" + name.getValue(), annotations);
+
   Value result;
   if (resetSignal)
     result = builder.create<RegResetOp>(info.getLoc(), type, clock, resetSignal,
-                                        resetValue, filterUselessName(id));
+                                        resetValue, name, annotations);
   else
-    result = builder.create<RegOp>(info.getLoc(), type, clock,
-                                   filterUselessName(id));
+    result =
+        builder.create<RegOp>(info.getLoc(), type, clock, name, annotations);
 
   return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
 }
