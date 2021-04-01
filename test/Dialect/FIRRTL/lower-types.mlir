@@ -617,3 +617,16 @@ firrtl.circuit "Foo" {
   // CHECK: firrtl.mem
   // CHECK-SAME: annotations = [{a = "a"}]
 }
+
+// -----
+
+// Test that WireOp Annotations are copied to lowered WireOps.
+firrtl.circuit "Wire" {
+  firrtl.module @Wire() {
+    %bar = firrtl.wire  {annotations = [{a = "a"}]} : !firrtl.vector<uint<1>, 2>
+  }
+  // CHECK: firrtl.wire
+  // CHECK-SAME: annotations = [{a = "a"}]
+  // CHECK: firrtl.wire
+  // CHECK-SAME: annotations = [{a = "a"}]
+}

@@ -129,6 +129,17 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.baz
 
 ; // -----
 
+; COM: A ReferenceTarget/ComponentName pointing at a wire should work.
+circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar"}]]
+  module Foo:
+    wire bar: UInt<1>
+
+    ; CHECK-LABEL: module {
+    ; CHECK: %bar = firrtl.wire
+    ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}]
+
+; // -----
+
 ; COM: A ReferenceTarget/ComponentName pointing at an SMem should work.
 circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar"}]]
   module Foo:
