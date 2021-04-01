@@ -46,8 +46,9 @@ bool circt::rtl::isRTLIntegerType(mlir::Type type) {
 /// the set of types that can be composed together to represent synthesized,
 /// hardware but not marker types like InOutType.
 bool circt::rtl::isRTLValueType(Type type) {
-  if (auto intType = type.dyn_cast<IntegerType>())
-    return intType.isSignless();
+  // Signless and signed integer types are both valid.
+  if (type.isa<IntegerType>())
+    return true;
 
   if (auto array = type.dyn_cast<ArrayType>())
     return isRTLValueType(array.getElementType());
