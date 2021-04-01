@@ -72,6 +72,8 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
 
   let verifier = "return ::verifyMemOp(*this);";
 
+  let hasCanonicalizer = 1;
+
   let extraClassDeclaration = [{
     enum class PortKind { Read, Write, ReadWrite };
 
@@ -106,6 +108,9 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
       return getPortNamed(StringAttr::get(getContext(), name));
     }
     Value getPortNamed(StringAttr name);
+
+    static LogicalResult canonicalize(MemOp op,
+                                      PatternRewriter &rewriter);
   }];
 }
 
