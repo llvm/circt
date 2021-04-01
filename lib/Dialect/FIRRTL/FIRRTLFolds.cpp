@@ -111,7 +111,7 @@ static IntegerAttr elideZeroWidthFoldOperand(Value operand,
 /// known bitwidth. Can be used to determine if any fold is legal.
 static bool hasKnownWidths(Operation *op) {
   auto resTy = op->getResultTypes().front().cast<FIRRTLType>();
-  // The result must be of integer type and the bitwidth must be knowkn and
+  // The result must be of integer type and the bitwidth must be known and
   // non-zero. Unkown bitwidths are handled after width inference.
   if (!resTy.isa<IntType>() || resTy.getBitWidthOrSentinel() <= 0)
     return false;
