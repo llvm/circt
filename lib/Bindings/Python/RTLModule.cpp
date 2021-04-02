@@ -35,12 +35,14 @@ public:
   PyConcreteType() = default;
   PyConcreteType(PyMlirContextRef contextRef, MlirType t)
       : BaseTy(std::move(contextRef), t) {}
-  PyConcreteType(PyType &orig)
+  PyConcreteType(BaseTy &orig)
       : PyConcreteType(orig.getContext(), castFrom(orig)) {}
 
-  static MlirType castFrom(PyType &orig) {
+  static MlirType castFrom(BaseTy &orig) {
     if (!DerivedTy::isaFunction(orig)) {
-      auto origRepr = py::repr(py::cast(orig)).cast<std::string>();
+      auto origRepr = py::repr(py::cast(orig)).template cast<std::string>();
+      // TODO(mikeurbach): this needs to be marked MLIR_CAPI_EXPORTED upstream
+      // for us to be able to depend on _mlir directly.
       // throw SetPyError(PyExc_ValueError, Twine("Cannot cast type to ") +
       //                                        DerivedTy::pyClassName +
       //                                        " (from " + origRepr + ")");
@@ -50,8 +52,8 @@ public:
 
   static void bind(py::module &m) {
     auto cls = ClassTy(m, DerivedTy::pyClassName);
-    cls.def(py::init<PyType &>(), py::keep_alive<0, 1>());
-    cls.def_static("isinstance", [](PyType &otherType) -> bool {
+    cls.def(py::init<BaseTy &>(), py::keep_alive<0, 1>());
+    cls.def_static("isinstance", [](BaseTy &otherType) -> bool {
       return DerivedTy::isaFunction(otherType);
     });
     DerivedTy::bindDerived(cls);
