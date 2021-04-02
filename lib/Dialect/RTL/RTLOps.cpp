@@ -582,8 +582,8 @@ Operation *InstanceOp::getReferencedModule() {
 }
 
 // Helper function to verify instance op types
-static LogicalResult verifyInstanceOpTypes(InstanceOp op) {
-  auto referencedModule = op.getReferencedModule();
+static LogicalResult verifyInstanceOpTypes(InstanceOp op,
+                                           Operation *referencedModule) {
   assert(referencedModule && "referenced module must not be null");
 
   // Check operand types first.
@@ -686,7 +686,7 @@ static LogicalResult verifyInstanceOp(InstanceOp op) {
   if (!isa<RTLModuleOp>(referencedModule))
     return success();
 
-  return verifyInstanceOpTypes(op);
+  return verifyInstanceOpTypes(op, referencedModule);
 }
 
 StringAttr InstanceOp::getResultName(size_t idx) {
@@ -708,16 +708,24 @@ StringAttr InstanceOp::getResultName(size_t idx) {
 /// Suggest a name for each result value based on the saved result names
 /// attribute.
 void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  auto *module = getReferencedModule();
+  if (!module)
+    return;
+
   // Provide default names for instance results.
+  size_t nextResult = 0;
   std::string name;
-  for (size_t i = 0, e = getNumResults(); i != e; ++i) {
-    auto resultName = getResultName(i);
+  for (auto port : getModulePortInfo(module)) {
+    if (!port.isOutput())
+      continue;
+
     name = instanceName().str() + ".";
-    if (resultName)
-      name += resultName.getValue().str();
+    if (auto nameAttr = port.name)
+      name += nameAttr.getValue().str();
     else
-      name += std::to_string(i);
-    setNameFn(getResult(i), name);
+      name += std::to_string(nextResult);
+    setNameFn(getResult(nextResult), name);
+    ++nextResult;
   }
 }
 
