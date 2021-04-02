@@ -6,6 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "DialectModules.h"
+
 #include "circt-c/Dialect/Comb.h"
 #include "circt-c/Dialect/ESI.h"
 #include "circt-c/Dialect/RTL.h"
@@ -44,4 +46,7 @@ PYBIND11_MODULE(_circt, m) {
         mlirDialectHandleLoadDialect(sv, context);
       },
       "Register CIRCT dialects on a PyMlirContext.");
+
+  py::module esi = m.def_submodule("esi", "ESI API");
+  circt::python::populateDialectESISubmodule(esi);
 }

@@ -14,6 +14,7 @@ add_mlir_python_extension(CIRCTBindingsPythonExtension _circt
     python
   SOURCES
     CIRCTModule.cpp
+    ESIModule.cpp
   LINK_LIBS
     CIRCTCAPIComb
     CIRCTCAPIESI
@@ -88,3 +89,25 @@ add_mlir_dialect_python_bindings(CIRCTBindingsPythonSVOps
   TD_FILE SVOps.td
   DIALECT_NAME sv)
 add_dependencies(CIRCTBindingsPythonSources CIRCTBindingsPythonSVOps)
+
+# Note that we copy from the source tree just like for headers because
+# it will not be polluted with py_cache runtime artifacts (from testing and
+# such).
+install(
+  DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/circt
+  DESTINATION python
+  COMPONENT CIRCTBindingsPythonSources
+  FILES_MATCHING PATTERN "*.py"
+)
+
+# Dialect sources are generated. Install separately.
+# Note that __pycache__ directories may have been left by tests and other
+# executions. And __init__.py is handled as a regular source file.
+install(
+  DIRECTORY ${PROJECT_BINARY_DIR}/python/mlir/dialects
+  DESTINATION python/mlir
+  COMPONENT CIRCTBindingsPythonDialects
+  FILES_MATCHING PATTERN "*.py"
+  PATTERN "__pycache__" EXCLUDE
+  PATTERN "__init__.py" EXCLUDE
+)
