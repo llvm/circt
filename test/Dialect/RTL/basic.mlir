@@ -117,8 +117,8 @@ rtl.module @signed_arrays(%arg0: si8) -> (%out: !rtl.array<2xsi8>) {
   // CHECK-NEXT:  %wireArray = sv.wire  : !rtl.inout<array<2xsi8>>
   %wireArray = sv.wire : !rtl.inout<!rtl.array<2xsi8>>
 
-  // CHECK-NEXT: %0 = rtl.array_create %arg0, %arg0 : (si8)
-  %0 = rtl.array_create %arg0, %arg0 : (si8)
+  // CHECK-NEXT: %0 = rtl.array_create %arg0, %arg0 : si8
+  %0 = rtl.array_create %arg0, %arg0 : si8
 
   // CHECK-NEXT: sv.connect %wireArray, %0 : !rtl.array<2xsi8>
   sv.connect %wireArray, %0 : !rtl.array<2xsi8>
