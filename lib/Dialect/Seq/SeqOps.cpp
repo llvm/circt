@@ -18,7 +18,7 @@ using namespace mlir;
 using namespace circt;
 using namespace seq;
 
-ParseResult parseRegOp(OpAsmParser &parser, OperationState &result) {
+ParseResult parseCompRegOp(OpAsmParser &parser, OperationState &result) {
   llvm::SMLoc loc = parser.getCurrentLocation();
   SmallVector<OpAsmParser::OperandType, 4> operands;
   if (parser.parseOperandList(operands))
@@ -59,8 +59,8 @@ ParseResult parseRegOp(OpAsmParser &parser, OperationState &result) {
                                   result.operands);
 }
 
-static void print(::mlir::OpAsmPrinter &p, RegOp reg) {
-  p << "seq.reg";
+static void print(::mlir::OpAsmPrinter &p, CompRegOp reg) {
+  p << "seq.compreg";
   p << ' ' << reg.input() << ", " << reg.clk();
   if (reg.reset()) {
     p << ", " << reg.reset() << ", " << reg.resetValue() << ' ';
