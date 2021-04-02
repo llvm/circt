@@ -559,7 +559,7 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
   // We don't have an RTL equivalent of "poison" so just don't special case
   // the case where there are no connects other uses of an output.
   if (connects.empty())
-    return {};
+    return {}; // TODO: Emit an sv.constantz here since it is unconnected.
 
   // Don't special case zero-bit results.
   auto loweredType = lowerType(flipValue.getType());
