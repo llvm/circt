@@ -433,41 +433,70 @@ rtl::RTLModuleOp FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
   return builder.create<rtl::RTLModuleOp>(oldModule.getLoc(), nameAttr, ports);
 }
 
-/// If the value dominates the marker, just return.  Otherwise add it to ops and
-/// recursively process its operands.
+/// Collect any computation dominated by the marker that can be pushed above it,
+/// returning true if all operations can be moved.
 ///
-/// Return true if we can't move an operation, false otherwise.
 static bool
-collectOperationTreeBelowMarker(Value value, Operation *marker,
-                                SmallVector<Operation *, 8> &ops,
-                                SmallPtrSet<Operation *, 8> &visited) {
-  // If the value is a BB argument or if the op is in a containing block, then
-  // it must dominate the marker.
-  auto *op = value.getDefiningOp();
-  if (!op || op->getBlock() != marker->getBlock())
-    return false;
+collectComputationBelowMarker(Value value, Operation *marker,
+                              SmallVector<Operation *, 8> &opsToMove) {
+  // We keep track of a visited set because each compute subgraph is a DAG (not
+  // a tree), and we want to only want to visit each subnode once.
+  SmallPtrSet<Operation *, 32> visited;
+  SmallVector<Operation *, 32> worklist;
 
-  // We can't move the marker itself.
-  if (op == marker)
-    return true;
+  if (auto *valueOp = value.getDefiningOp())
+    worklist.push_back(valueOp);
 
-  // Otherwise if it is an op in the same block as the marker, see if it is
-  // already at or above the marker.
-  if (op->isBeforeInBlock(marker))
-    return false;
+  while (!worklist.empty()) {
+    auto *op = worklist.back();
 
-  // Pull the computation tree into the set.  If it was already added, then
-  // don't reprocess it.
-  if (!visited.insert(op).second)
-    return false;
-
-  // Otherwise recursively process the operands.
-  for (auto operand : op->getOperands())
-    if (collectOperationTreeBelowMarker(operand, marker, ops, visited))
+    // We can't move the marker itself.
+    if (op == marker)
       return true;
 
-  // Add ops in post order so we make sure they get moved in a coherent order.
-  ops.push_back(op);
+    // If is in an enclosing block, then it must dominate the marker.
+    if (op->getBlock() != marker->getBlock()) {
+      visited.insert(op);
+      worklist.pop_back();
+      continue;
+    }
+
+    // If the op in the same block as the marker, see if it is already above the
+    // marker.
+    if (op->isBeforeInBlock(marker)) {
+      visited.insert(op);
+      worklist.pop_back();
+      continue;
+    }
+
+    // Ops can get into the worklist multiple times.
+    if (visited.count(op)) {
+      worklist.pop_back();
+      continue;
+    }
+
+    // Check to see if any operands need to be processed.
+    size_t startingWLSize = worklist.size();
+    for (auto operand : op->getOperands()) {
+      // BB args are always ok, so only look at operand ops.
+      auto *operandOp = operand.getDefiningOp();
+      if (!operandOp || visited.count(operandOp))
+        continue;
+
+      // Make sure to visit the operand before we visit the user.
+      worklist.push_back(operandOp);
+    }
+
+    // If no operands need to be visited, then we can visit this operation.
+    // Otherwise we visit the operands first then revisit this op when done with
+    // them.
+    if (worklist.size() == startingWLSize) {
+      opsToMove.push_back(op);
+      worklist.pop_back();
+      visited.insert(op);
+    }
+  }
+
   return false;
 }
 
@@ -530,7 +559,7 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
   // We don't have an RTL equivalent of "poison" so just don't special case
   // the case where there are no connects other uses of an output.
   if (connects.empty())
-    return {};
+    return {}; // TODO: Emit an sv.constantz here since it is unconnected.
 
   // Don't special case zero-bit results.
   auto loweredType = lowerType(flipValue.getType());
@@ -558,19 +587,11 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
   // terminator in the module, because we know that everything is above it by
   // definition.
   if (!insertPoint->hasTrait<OpTrait::IsTerminator>()) {
-    // On success, these are the ops that we need to move up above the
-    // insertion point.  We keep track of a visited set because each compute
-    // subgraph is a dag (not a tree), and we want to only want to visit each
-    // subnode once.
+    // Collect the computation tree feeding the source operations.  On success,
+    // we get back the ops that we need to move up above the insertion point.
     SmallVector<Operation *, 8> opsToMove;
-    SmallPtrSet<Operation *, 8> visited;
-
-    // Collect the computation tree feeding the source operations.  We build
-    // the list of ops to move in post-order to ensure that we provide a valid
-    // DAG ordering of the result.
     for (auto connect : connects) {
-      if (collectOperationTreeBelowMarker(connect.src(), insertPoint, opsToMove,
-                                          visited))
+      if (collectComputationBelowMarker(connect.src(), insertPoint, opsToMove))
         return {};
     }
 
@@ -1600,8 +1621,9 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   if (resultType.isInteger(0))
     return setLowering(op, Value());
 
-  // Convert the inout to a non-inout type.
-  return setLoweringTo<sv::WireOp>(op, resultType, op.nameAttr());
+  // Name attr is requires on sv.wire but optional on firrtl.wire.
+  auto nameAttr = op.nameAttr() ? op.nameAttr() : builder.getStringAttr("");
+  return setLoweringTo<sv::WireOp>(op, resultType, nameAttr);
 }
 
 LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
@@ -1793,9 +1815,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   SmallVector<Value> pipeRegs;
 
   // Process each port in turn.
-  SmallVector<std::pair<Identifier, MemOp::PortKind>> ports;
-  op.getPorts(ports);
-  assert(op.getNumResults() == ports.size());
+  SmallVector<std::pair<Identifier, MemOp::PortKind>> ports = op.getPorts();
 
   for (size_t i = 0, e = ports.size(); i != e; ++i) {
     auto portName = ports[i].first.str();

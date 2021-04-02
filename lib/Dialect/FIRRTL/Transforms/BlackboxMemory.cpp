@@ -314,8 +314,7 @@ replaceMemWithWrapperModule(DenseMap<MemOp, FModuleOp, MemOpInfo> &knownMems,
   } else {
     // Get the memory port descriptors. This gives us the name and kind of each
     // memory port created by the MemOp.
-    SmallVector<std::pair<Identifier, MemOp::PortKind>, 2> memPorts;
-    memOp.getPorts(memPorts);
+    auto memPorts = memOp.getPorts();
 
     // Get the portlist for a module which represents the blackbox memory.
     // Typically has 1R + 1W memory port, which has 4+5=9 fields.
@@ -377,8 +376,7 @@ replaceMemWithExtModule(DenseMap<MemOp, FExtModuleOp, MemOpInfo> &knownMems,
   } else {
     // Get the memory port descriptors.  This gives us the name and kind of each
     // memory port created by the MemOp.
-    SmallVector<std::pair<Identifier, MemOp::PortKind>, 2> memPorts;
-    memOp.getPorts(memPorts);
+    auto memPorts = memOp.getPorts();
 
     // Get the portlist for a module which represents the blackbox memory.
     // Typically has 1R + 1W memory port, which has 4+5=9 fields.

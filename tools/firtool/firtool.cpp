@@ -21,6 +21,7 @@
 #include "circt/Dialect/RTL/RTLOps.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
+#include "circt/Support/LoweringOptions.h"
 #include "circt/Translation/ExportVerilog.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/AsmState.h"
@@ -140,6 +141,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   }
 
   // Nothing in the parser is threaded.  Disable synchronization overhead.
+  auto isMultithreaded = context.isMultithreadingEnabled();
   context.disableMultithreading();
 
   // Apply any pass manager command line options.
@@ -158,8 +160,9 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
     // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
     if (!disableOptimization) {
-      pm.addPass(createCSEPass());
-      pm.addPass(createCanonicalizerPass());
+      auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
+      modulePM.addPass(createCSEPass());
+      modulePM.addPass(createCanonicalizerPass());
     }
   } else {
     assert(inputFormat == InputMLIRFile);
@@ -170,8 +173,9 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
       // If we are running FIRRTL passes, clean up the output.
       if (!disableOptimization) {
-        pm.addPass(createCSEPass());
-        pm.addPass(createCanonicalizerPass());
+        auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
+        modulePM.addPass(createCSEPass());
+        modulePM.addPass(createCanonicalizerPass());
       }
     }
   }
@@ -179,7 +183,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     return failure();
 
   // Allow optimizations to run multithreaded.
-  context.disableMultithreading(false);
+  context.enableMultithreading(isMultithreaded);
 
   if (imconstprop)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
@@ -194,11 +198,10 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
     // If enabled, run the optimizer.
     if (!disableOptimization) {
-      pm.addNestedPass<rtl::RTLModuleOp>(sv::createRTLCleanupPass());
-      // FIXME: Disabled because CSE crashes on graph regions in some cases.
-      // Issue #813: https://github.com/llvm/circt/issues/813
-      // pm.addPass(createCSEPass());
-      pm.addPass(createCanonicalizerPass());
+      auto &modulePM = pm.nest<rtl::RTLModuleOp>();
+      modulePM.addPass(sv::createRTLCleanupPass());
+      modulePM.addPass(createCSEPass());
+      modulePM.addPass(createCanonicalizerPass());
     }
   }
 
@@ -206,6 +209,10 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   if (outputFormat == OutputVerilog || outputFormat == OutputSplitVerilog) {
     pm.addPass(sv::createRTLLegalizeNamesPass());
   }
+
+  // Load the emitter options from the command line. Command line options if
+  // specified will override any module options.
+  applyLoweringCLOptions(module.get());
 
   if (failed(pm.run(module.get())))
     return failure();
@@ -233,7 +240,7 @@ processBufferIntoSingleStream(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
         }
         llvm_unreachable("unknown output format");
       });
-};
+}
 
 /// Process a single buffer of the input into multiple output files.
 static LogicalResult
@@ -264,6 +271,7 @@ int main(int argc, char **argv) {
   registerMLIRContextCLOptions();
   registerPassManagerCLOptions();
   registerAsmPrinterCLOptions();
+  registerLoweringCLOptions();
 
   // Parse pass names in main to ensure static initialization completed.
   cl::ParseCommandLineOptions(argc, argv, "circt modular optimizer driver\n");

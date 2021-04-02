@@ -20,6 +20,36 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>a"}]]
 
 ; // -----
 
+; COM: A ReferenceTarget Annotation with a subindex is unsupported.
+
+; expected-error @+2 {{Invalid/unsupported annotation format}}
+; expected-note @+1 {{"target": /* error: Unsupported target (not a CircuitTarget or ModuleTarget) */ "~Foo|Foo>a.b"}}
+circuit Foo: %[[{"a":"a","target":"~Foo|Foo>a.b"}]]
+  module Foo:
+    skip
+
+; // -----
+
+; COM: A ReferenceTarget Annotation with a subfield is unsupported.
+
+; expected-error @+2 {{Invalid/unsupported annotation format}}
+; expected-note @+1 {{"target": /* error: Unsupported target (not a CircuitTarget or ModuleTarget) */ "~Foo|Foo>a[0]"}}
+circuit Foo: %[[{"a":"a","target":"~Foo|Foo>a[0]"}]]
+  module Foo:
+    skip
+
+; // -----
+
+; COM: A non-local Annotation is unsupported.
+
+; expected-error @+2 {{Invalid/unsupported annotation format}}
+; expected-note @+1 {{"target": /* error: Unsupported target (not a CircuitTarget or ModuleTarget) */ "~Foo|Foo/bar:Bar"}}
+circuit Foo: %[[{"a":"a","target":"~Foo|Foo/bar:Bar"}]]
+  module Foo:
+    skip
+
+; // -----
+
 ; COM: Annotations JSON is not an array.
 
 ; expected-error @+2 {{Invalid/unsupported annotation format}}

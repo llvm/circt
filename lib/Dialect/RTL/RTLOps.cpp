@@ -117,7 +117,8 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> constants) {
 enum ExternModKind { PlainMod, ExternMod, GenMod };
 
 static void buildModule(OpBuilder &builder, OperationState &result,
-                        StringAttr name, ArrayRef<ModulePortInfo> ports) {
+                        StringAttr name, ArrayRef<ModulePortInfo> ports,
+                        ArrayRef<NamedAttribute> attributes) {
   using namespace mlir::impl;
 
   // Add an attribute for the name.
@@ -154,12 +155,14 @@ static void buildModule(OpBuilder &builder, OperationState &result,
                              : getArgAttrName(port.argNum, attrNameBuf);
     result.addAttribute(attrName, builder.getDictionaryAttr(argAttrs));
   }
+  result.addAttributes(attributes);
   result.addRegion();
 }
 
 void RTLModuleOp::build(OpBuilder &builder, OperationState &result,
-                        StringAttr name, ArrayRef<ModulePortInfo> ports) {
-  buildModule(builder, result, name, ports);
+                        StringAttr name, ArrayRef<ModulePortInfo> ports,
+                        ArrayRef<NamedAttribute> attributes) {
+  buildModule(builder, result, name, ports, attributes);
 
   // Create a region and a block for the body.
   auto *bodyRegion = result.regions[0].get();
@@ -185,9 +188,21 @@ StringRef RTLModuleExternOp::getVerilogModuleName() {
 
 void RTLModuleExternOp::build(OpBuilder &builder, OperationState &result,
                               StringAttr name, ArrayRef<ModulePortInfo> ports,
-                              StringRef verilogName) {
-  buildModule(builder, result, name, ports);
+                              StringRef verilogName,
+                              ArrayRef<NamedAttribute> attributes) {
+  buildModule(builder, result, name, ports, attributes);
 
+  if (!verilogName.empty())
+    result.addAttribute("verilogName", builder.getStringAttr(verilogName));
+}
+
+void RTLModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
+                                 FlatSymbolRefAttr genKind, StringAttr name,
+                                 ArrayRef<ModulePortInfo> ports,
+                                 StringRef verilogName,
+                                 ArrayRef<NamedAttribute> attributes) {
+  buildModule(builder, result, name, ports, attributes);
+  result.addAttribute("generatorKind", genKind);
   if (!verilogName.empty())
     result.addAttribute("verilogName", builder.getStringAttr(verilogName));
 }
@@ -206,8 +221,8 @@ StringAttr rtl::getRTLNameAttr(ArrayRef<NamedAttribute> attrs) {
   return StringAttr();
 }
 
-void rtl::getModulePortInfo(Operation *op,
-                            SmallVectorImpl<ModulePortInfo> &results) {
+SmallVector<ModulePortInfo> rtl::getModulePortInfo(Operation *op) {
+  SmallVector<ModulePortInfo> results;
   auto argTypes = getModuleType(op).getInputs();
 
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
@@ -231,6 +246,7 @@ void rtl::getModulePortInfo(Operation *op,
     results.push_back(
         {getRTLNameAttr(argAttrs), PortDirection::OUTPUT, resultTypes[i], i});
   }
+  return results;
 }
 
 /// Parse a function result list.
@@ -566,8 +582,8 @@ Operation *InstanceOp::getReferencedModule() {
 }
 
 // Helper function to verify instance op types
-static LogicalResult verifyInstanceOpTypes(InstanceOp op) {
-  auto referencedModule = op.getReferencedModule();
+static LogicalResult verifyInstanceOpTypes(InstanceOp op,
+                                           Operation *referencedModule) {
   assert(referencedModule && "referenced module must not be null");
 
   // Check operand types first.
@@ -643,10 +659,11 @@ static LogicalResult verifyInstanceOp(InstanceOp op) {
            << op.moduleName() << "'";
 
   if (!isa<RTLModuleOp>(referencedModule) &&
-      !isa<RTLModuleExternOp>(referencedModule))
+      !isa<RTLModuleExternOp>(referencedModule) &&
+      !isa<RTLModuleGeneratedOp>(referencedModule))
     return op.emitError("Symbol resolved to '")
            << referencedModule->getName()
-           << "' which is not a RTL[Ext]ModuleOp";
+           << "' which is not a RTL[Ext|Generated]ModuleOp";
 
   if (auto paramDictOpt = op.parameters()) {
     DictionaryAttr paramDict = paramDictOpt.getValue();
@@ -669,7 +686,7 @@ static LogicalResult verifyInstanceOp(InstanceOp op) {
   if (!isa<RTLModuleOp>(referencedModule))
     return success();
 
-  return verifyInstanceOpTypes(op);
+  return verifyInstanceOpTypes(op, referencedModule);
 }
 
 StringAttr InstanceOp::getResultName(size_t idx) {
@@ -677,10 +694,7 @@ StringAttr InstanceOp::getResultName(size_t idx) {
   if (!module)
     return {};
 
-  SmallVector<ModulePortInfo, 4> results;
-  getModulePortInfo(module, results);
-
-  for (auto &port : results) {
+  for (auto &port : getModulePortInfo(module)) {
     if (!port.isOutput())
       continue;
     if (idx == 0)
@@ -694,16 +708,24 @@ StringAttr InstanceOp::getResultName(size_t idx) {
 /// Suggest a name for each result value based on the saved result names
 /// attribute.
 void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  auto *module = getReferencedModule();
+  if (!module)
+    return;
+
   // Provide default names for instance results.
+  size_t nextResult = 0;
   std::string name;
-  for (size_t i = 0, e = getNumResults(); i != e; ++i) {
-    auto resultName = getResultName(i);
+  for (auto port : getModulePortInfo(module)) {
+    if (!port.isOutput())
+      continue;
+
     name = instanceName().str() + ".";
-    if (resultName)
-      name += resultName.getValue().str();
+    if (auto nameAttr = port.name)
+      name += nameAttr.getValue().str();
     else
-      name += std::to_string(i);
-    setNameFn(getResult(i), name);
+      name += std::to_string(nextResult);
+    setNameFn(getResult(nextResult), name);
+    ++nextResult;
   }
 }
 
