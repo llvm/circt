@@ -639,9 +639,16 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
     return failure();
   }
 
+  // Build an efficient lookup that maps port name attribute to result #.
+  llvm::SmallDenseMap<Attribute, size_t, 16> portNumbers;
+  auto namesArray = instance.portNames();
+  for (size_t i = 0, e = namesArray.size(); i != e; ++i)
+    portNumbers[namesArray[i]] = i;
+
   for (size_t i = 0; i != numResults; i++) {
-    auto result = instance.getPortNamed(modulePorts[i].name);
-    if (!result) {
+    auto resultNumberIt = portNumbers.find(modulePorts[i].name);
+    if (resultNumberIt == portNumbers.end() ||
+        resultNumberIt->second >= numResults) {
       auto diag = instance.emitOpError()
                   << "is missing a port named '" << modulePorts[i].name
                   << "' expected by referenced module";
@@ -649,6 +656,7 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
           << "original module declared here";
       return failure();
     }
+    auto result = instance.getResult(resultNumberIt->second);
 
     auto resultType = result.getType();
     auto expectedType = FlipType::get(modulePorts[i].type);
