@@ -50,12 +50,12 @@ firrtl.circuit "Simple" {
   firrtl.module @TestInstance(%u2: !firrtl.uint<2>, %s8: !firrtl.sint<8>,
                               %clock: !firrtl.clock,
                               %reset: !firrtl.uint<1>) {
-
-    // CHECK: [[ARG1:%.+]] = comb.concat %c0_i2, %u2 : (i2, i2) -> i4
-    // CHECK-NEXT: %xyz.out4 = rtl.instance "xyz" @Simple([[ARG1]], %u2, %s8) : (i4, i2, i8) -> i4
+    // CHECK-NEXT: %c0_i2 = rtl.constant
+    // CHECK-NEXT: %xyz.out4 = rtl.instance "xyz" @Simple([[ARG1:%.+]], %u2, %s8) : (i4, i2, i8) -> i4
     %xyz:4 = firrtl.instance @Simple {name = "xyz", portNames=["in1", "in2", "in3", "out4"]}
      : !firrtl.flip<uint<4>>, !firrtl.flip<uint<2>>, !firrtl.flip<sint<8>>, !firrtl.uint<4>
 
+    // CHECK: [[ARG1]] = comb.concat %c0_i2, %u2 : (i2, i2) -> i4
     firrtl.connect %xyz#0, %u2 : !firrtl.flip<uint<4>>, !firrtl.uint<2>
 
     // CHECK-NOT: rtl.connect
@@ -158,12 +158,13 @@ firrtl.circuit "Simple" {
   firrtl.module @instance_ooo(%arg0: !firrtl.uint<2>, %arg1: !firrtl.uint<2>,
                               %arg2: !firrtl.uint<3>,
                               %out0: !firrtl.flip<uint<8>>) {
-    // The add and eq get hoisted.
-    // CHECK: [[ADD:%.+]] = comb.add %0, %1
-    // CHECK-NEXT: [[ARG:%.+]] = comb.icmp eq [[ADD]], %arg2 : i3
-    // CHECK-NEXT: rtl.instance "myext" @MyParameterizedExtModule([[ARG]])
+    // CHECK: %false = rtl.constant false
+
+    // CHECK-NEXT: rtl.instance "myext" @MyParameterizedExtModule([[ARG:%.+]]) {parameters
     %myext:2 = firrtl.instance @MyParameterizedExtModule {name = "myext", portNames=["in", "out"]}
       : !firrtl.flip<uint<1>>, !firrtl.uint<8>
+
+    // CHECK: [[ADD:%.+]] = comb.add %0, %1
 
     // Calculation of input (the firrtl.add + firrtl.eq) happens after the
     // instance.
@@ -171,6 +172,7 @@ firrtl.circuit "Simple" {
 
     // Multiple uses of the add.
     %a = firrtl.eq %0, %arg2 : (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<1>
+    // CHECK-NEXT: [[ARG]] = comb.icmp eq [[ADD]], %arg2 : i3
     firrtl.connect %myext#0, %a : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 
     firrtl.connect %out0, %myext#1 : !firrtl.flip<uint<8>>, !firrtl.uint<8>
@@ -180,14 +182,13 @@ firrtl.circuit "Simple" {
 
   // CHECK-LABEL: rtl.module @instance_cyclic
   firrtl.module @instance_cyclic(%arg0: !firrtl.uint<2>, %arg1: !firrtl.uint<2>) {
-    // This can't be hoisted so we end up with a wire.
-    // CHECK: %.in.wire = sv.wire  : !rtl.inout<i1>
-    // CHECK: rtl.instance
+    // CHECK: %myext.out = rtl.instance "myext" @MyParameterizedExtModule(%0)
     %myext:2 = firrtl.instance @MyParameterizedExtModule {name = "myext", portNames=["in", "out"]}
       : !firrtl.flip<uint<1>>, !firrtl.uint<8>
 
     // Output of the instance is fed into the input!
     %11 = firrtl.bits %myext#1 2 to 2 : (!firrtl.uint<8>) -> !firrtl.uint<1>
+    // CHECK: %0 = comb.extract %myext.out from 2 : (i8) -> i1
 
     firrtl.connect %myext#0, %11 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
   }
@@ -256,7 +257,8 @@ firrtl.circuit "Simple" {
 
   // https://github.com/llvm/circt/issues/740
   // CHECK-LABEL: rtl.module @foo740(%led_0: !rtl.inout<i1>) {
-  // CHECK-NEXT:  rtl.instance "fpga" @bar740(%led_0)
+  // CHECK:  %.led_0.wire = sv.wire
+  // CHECK-NEXT:  rtl.instance "fpga" @bar740(%.led_0.wire)
   firrtl.extmodule @bar740(%led_0: !firrtl.analog<1>)
   firrtl.module @foo740(%led_0: !firrtl.analog<1>) {
     %result = firrtl.instance @bar740 {name = "fpga", portNames = ["led_0"]} : !firrtl.analog<1>

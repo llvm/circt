@@ -351,13 +351,13 @@ firrtl.circuit "Simple" {
   // CHECK-LABEL: rtl.module @foo
   firrtl.module @foo() {
     // CHECK-NEXT:  %io_cpu_flush.wire = sv.wire : !rtl.inout<i1>
-    // CHECK-NEXT:  [[IO:%.+]] = sv.read_inout %io_cpu_flush.wire
     %io_cpu_flush.wire = firrtl.wire : !firrtl.uint<1>
-    // CHECK-NEXT: rtl.instance "fetch"
+    // CHECK-NEXT: rtl.instance "fetch" @bar([[IO:%[0-9]+]])
     %i = firrtl.instance @bar {name = "fetch", portNames=["io_cpu_flush"]} : !firrtl.flip<uint<1>>
     firrtl.connect %i, %io_cpu_flush.wire : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 
     %hits_1_7 = firrtl.node %io_cpu_flush.wire {name = "hits_1_7"} : !firrtl.uint<1>
+    // CHECK-NEXT:  [[IO]] = sv.read_inout %io_cpu_flush.wire
     // CHECK-NEXT:  [[IO:%.+]] = sv.read_inout %io_cpu_flush.wire
     // CHECK-NEXT:  %hits_1_7 = sv.wire : !rtl.inout<i1>
     // CHECK-NEXT:  sv.connect %hits_1_7, [[IO]] : i1
