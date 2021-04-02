@@ -31,9 +31,11 @@ def SeqDialect : Dialect {
 class SeqOp<string mnemonic, list<OpTrait> traits = []> :
     Op<SeqDialect, mnemonic, traits>;
 
-def RegOp : SeqOp<"reg",
+def CompRegOp : SeqOp<"compreg",
     [NoSideEffect, AllTypesMatch<["input", "data"/*, "resetValue"*/]>,
      SameVariadicOperandSize]> {
+       // AllTypesMatch doesn't work with Optional types yet.
+
   let summary = "Register a value, storing it for one cycle";
   let description = "See the Seq dialect rationale for a longer description";
 
@@ -43,9 +45,6 @@ def RegOp : SeqOp<"reg",
 
   let printer = "return ::print(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
-  // let assemblyFormat = [{
-  //   $input $clk ($reset^ `(` $resetValue `)`)? attr-dict `:` custom<RegTypes>(type($input), type($resetValue))
-  // }];
 }
 
 #endif // SEQ_TD
