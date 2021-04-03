@@ -6,7 +6,7 @@
 !DataPkt = type !rtl.struct<encrypted: i1, compressionLevel: ui4, blob: !rtl.array<32 x i8>>
 !pktChan = type !esi.channel<!DataPkt>
 
-rtl.module.extern @Compressor(%in: !esi.channel<i1>) -> (!pktChan { rtl.name = "x"})
+rtl.module.extern @Compressor(%in: !esi.channel<i1>) -> (%x: !pktChan)
 
 rtl.module @top(%clk:i1, %rstn:i1) -> () {
   %compressedData = rtl.instance "compressor" @Compressor(%inputData) : (!esi.channel<i1>) -> !pktChan

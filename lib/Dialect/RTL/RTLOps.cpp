@@ -113,6 +113,41 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> constants) {
 // RTLModuleOp
 //===----------------------------------------------------------------------===/
 
+/// Return true if this is an rtl.module, external module, generated module etc.
+bool rtl::isAnyModule(Operation *module) {
+  return isa<RTLModuleOp>(module) || isa<RTLModuleExternOp>(module) ||
+         isa<RTLModuleGeneratedOp>(module);
+}
+
+/// Return the signature for the specified module as a function type.
+FunctionType rtl::getModuleType(Operation *module) {
+  auto typeAttr =
+      module->getAttrOfType<TypeAttr>(RTLModuleOp::getTypeAttrName());
+  return typeAttr.getValue().cast<FunctionType>();
+}
+
+/// Return the port name for the specified argument or result.
+StringAttr rtl::getModuleArgumentNameAttr(Operation *module, size_t argNo) {
+  return module->getAttrOfType<ArrayAttr>("argNames")[argNo].cast<StringAttr>();
+}
+
+StringAttr rtl::getModuleResultNameAttr(Operation *module, size_t resultNo) {
+  return module->getAttrOfType<ArrayAttr>("resultNames")[resultNo]
+      .cast<StringAttr>();
+}
+
+void rtl::setModuleArgumentNames(Operation *module, ArrayRef<Attribute> names) {
+  assert(getModuleType(module).getNumInputs() == names.size() &&
+         "incorrect number of arguments names specified");
+  module->setAttr("argNames", ArrayAttr::get(module->getContext(), names));
+}
+
+void rtl::setModuleResultNames(Operation *module, ArrayRef<Attribute> names) {
+  assert(getModuleType(module).getNumResults() == names.size() &&
+         "incorrect number of arguments names specified");
+  module->setAttr("resultNames", ArrayAttr::get(module->getContext(), names));
+}
+
 // Flag for parsing different module types
 enum ExternModKind { PlainMod, ExternMod, GenMod };
 
@@ -142,19 +177,17 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
 
   // Record the names of the arguments if present.
-  SmallString<8> attrNameBuf;
-  SmallString<8> attrDirBuf;
+  SmallVector<Attribute> argNames, resultNames;
   for (const ModulePortInfo &port : ports) {
     SmallVector<NamedAttribute, 2> argAttrs;
-    if (!port.name.getValue().empty())
-      argAttrs.push_back(
-          NamedAttribute(builder.getIdentifier("rtl.name"), port.name));
-
-    StringRef attrName = port.isOutput()
-                             ? getResultAttrName(port.argNum, attrNameBuf)
-                             : getArgAttrName(port.argNum, attrNameBuf);
-    result.addAttribute(attrName, builder.getDictionaryAttr(argAttrs));
+    if (port.isOutput())
+      resultNames.push_back(port.name);
+    else
+      argNames.push_back(port.name);
   }
+
+  result.addAttribute("argNames", builder.getArrayAttr(argNames));
+  result.addAttribute("resultNames", builder.getArrayAttr(resultNames));
   result.addAttributes(attributes);
   result.addRegion();
 }
@@ -207,26 +240,13 @@ void RTLModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
     result.addAttribute("verilogName", builder.getStringAttr(verilogName));
 }
 
-FunctionType rtl::getModuleType(Operation *op) {
-  auto typeAttr = op->getAttrOfType<TypeAttr>(RTLModuleOp::getTypeAttrName());
-  return typeAttr.getValue().cast<FunctionType>();
-}
-
-StringAttr rtl::getRTLNameAttr(ArrayRef<NamedAttribute> attrs) {
-  for (auto &argAttr : attrs) {
-    if (argAttr.first != "rtl.name")
-      continue;
-    return argAttr.second.dyn_cast<StringAttr>();
-  }
-  return StringAttr();
-}
-
 SmallVector<ModulePortInfo> rtl::getModulePortInfo(Operation *op) {
+  assert(isAnyModule(op) && "Can only get module ports from a module");
   SmallVector<ModulePortInfo> results;
   auto argTypes = getModuleType(op).getInputs();
 
+  auto argNames = op->getAttrOfType<ArrayAttr>("argNames");
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
-    auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
     bool isInOut = false;
     auto type = argTypes[i];
 
@@ -235,18 +255,29 @@ SmallVector<ModulePortInfo> rtl::getModulePortInfo(Operation *op) {
       type = inout.getElementType();
     }
 
-    results.push_back({getRTLNameAttr(argAttrs),
-                       isInOut ? PortDirection::INOUT : PortDirection::INPUT,
-                       type, i});
+    auto direction = isInOut ? PortDirection::INOUT : PortDirection::INPUT;
+    results.push_back({argNames[i].cast<StringAttr>(), direction, type, i});
   }
 
+  auto resultNames = op->getAttrOfType<ArrayAttr>("resultNames");
   auto resultTypes = getModuleType(op).getResults();
   for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
-    auto argAttrs = ::mlir::impl::getResultAttrs(op, i);
-    results.push_back(
-        {getRTLNameAttr(argAttrs), PortDirection::OUTPUT, resultTypes[i], i});
+    results.push_back({resultNames[i].cast<StringAttr>(), PortDirection::OUTPUT,
+                       resultTypes[i], i});
   }
   return results;
+}
+
+static StringAttr getPortNameAttr(MLIRContext *context, StringRef name) {
+  if (!name.empty()) {
+    // Ignore numeric names like %42
+    assert(name.size() > 1 && name[0] == '%' && "Unknown MLIR name");
+    if (isdigit(name[1]))
+      name = StringRef();
+    else
+      name = name.drop_front();
+  }
+  return StringAttr::get(context, name);
 }
 
 /// Parse a function result list.
@@ -259,7 +290,8 @@ SmallVector<ModulePortInfo> rtl::getModulePortInfo(Operation *op) {
 ///
 static ParseResult
 parseFunctionResultList(OpAsmParser &parser, SmallVectorImpl<Type> &resultTypes,
-                        SmallVectorImpl<NamedAttrList> &resultAttrs) {
+                        SmallVectorImpl<NamedAttrList> &resultAttrs,
+                        SmallVectorImpl<Attribute> &resultNames) {
   if (parser.parseLParen())
     return failure();
 
@@ -267,6 +299,7 @@ parseFunctionResultList(OpAsmParser &parser, SmallVectorImpl<Type> &resultTypes,
   if (succeeded(parser.parseOptionalRParen()))
     return success();
 
+  auto *context = parser.getBuilder().getContext();
   // Parse individual function results.
   do {
     resultTypes.emplace_back();
@@ -280,19 +313,13 @@ parseFunctionResultList(OpAsmParser &parser, SmallVectorImpl<Type> &resultTypes,
         return failure();
 
       // If the name was specified, then we will use it.
-      implicitName = operandName.name.drop_front();
+      implicitName = operandName.name;
     }
+    resultNames.push_back(getPortNameAttr(context, implicitName));
 
     if (parser.parseType(resultTypes.back()) ||
         parser.parseOptionalAttrDict(resultAttrs.back()))
       return failure();
-
-    // If we have an implicit name and no explicit rtl.name attribute, then use
-    // the implicit name as the rtl.name attribute.
-    if (!implicitName.empty() && !getRTLNameAttr(resultAttrs.back())) {
-      auto nameAttr = parser.getBuilder().getStringAttr(implicitName);
-      resultAttrs.back().append("rtl.name", nameAttr);
-    }
   } while (succeeded(parser.parseOptionalComma()));
   return parser.parseRParen();
 }
@@ -300,19 +327,30 @@ parseFunctionResultList(OpAsmParser &parser, SmallVectorImpl<Type> &resultTypes,
 /// This is a variant of mlor::parseFunctionSignature that allows names on
 /// result arguments.
 static ParseResult parseModuleFunctionSignature(
-    OpAsmParser &parser, bool allowVariadic,
-    SmallVectorImpl<OpAsmParser::OperandType> &argNames,
+    OpAsmParser &parser, SmallVectorImpl<OpAsmParser::OperandType> &argNames,
     SmallVectorImpl<Type> &argTypes, SmallVectorImpl<NamedAttrList> &argAttrs,
     bool &isVariadic, SmallVectorImpl<Type> &resultTypes,
-    SmallVectorImpl<NamedAttrList> &resultAttrs) {
+    SmallVectorImpl<NamedAttrList> &resultAttrs,
+    SmallVectorImpl<Attribute> &resultNames) {
+
   using namespace mlir::impl;
   bool allowArgAttrs = true;
+  bool allowVariadic = false;
   if (parseFunctionArgumentList(parser, allowArgAttrs, allowVariadic, argNames,
                                 argTypes, argAttrs, isVariadic))
     return failure();
+
   if (succeeded(parser.parseOptionalArrow()))
-    return parseFunctionResultList(parser, resultTypes, resultAttrs);
+    return parseFunctionResultList(parser, resultTypes, resultAttrs,
+                                   resultNames);
   return success();
+}
+
+static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
+  for (auto &argAttr : attrs)
+    if (argAttr.first == name)
+      return true;
+  return false;
 }
 
 static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
@@ -342,10 +380,10 @@ static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
 
   // Parse the function signature.
   bool isVariadic = false;
-
-  if (parseModuleFunctionSignature(parser, /*allowVariadic=*/false, entryArgs,
-                                   argTypes, argAttrs, isVariadic, resultTypes,
-                                   resultAttrs))
+  SmallVector<Attribute> resultNames;
+  if (parseModuleFunctionSignature(parser, entryArgs, argTypes, argAttrs,
+                                   isVariadic, resultTypes, resultAttrs,
+                                   resultNames))
     return failure();
 
   // Record the argument and result types as an attribute.  This is necessary
@@ -357,39 +395,26 @@ static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
   if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
     return failure();
 
-  assert(argAttrs.size() == argTypes.size());
-  assert(resultAttrs.size() == resultTypes.size());
-
   auto *context = result.getContext();
 
-  // Postprocess each of the arguments.  If there was no 'rtl.name'
-  // attribute, and if the argument name was non-numeric, then add the
-  // rtl.name attribute with the textual name from the IR.  The name in the
-  // text file is a load-bearing part of the IR, but we don't want the
-  // verbosity in dumps of including it explicitly in the attribute
-  // dictionary.
-  for (size_t i = 0, e = argAttrs.size(); i != e; ++i) {
-    auto &attrs = argAttrs[i];
+  // Use the argument and result names if not already specified.
+  if (!hasAttribute("argNames", result.attributes)) {
+    SmallVector<Attribute> argNames;
+    if (!entryArgs.empty()) {
+      for (auto &arg : entryArgs)
+        argNames.push_back(getPortNameAttr(context, arg.name));
+    } else if (!argTypes.empty()) {
+      // The parser returns empty names in a special way.
+      argNames.assign(argTypes.size(), StringAttr::get(context, ""));
+    }
 
-    // If an explicit name attribute was present, don't add the implicit one.
-    bool hasNameAttr = false;
-    for (auto &elt : attrs)
-      if (elt.first.str() == "rtl.name")
-        hasNameAttr = true;
-    if (hasNameAttr || entryArgs.empty())
-      continue;
-
-    auto &arg = entryArgs[i];
-
-    // The name of an argument is of the form "%42" or "%id", and since
-    // parsing succeeded, we know it always has one character.
-    assert(arg.name.size() > 1 && arg.name[0] == '%' && "Unknown MLIR name");
-    if (isdigit(arg.name[1]))
-      continue;
-
-    auto nameAttr = StringAttr::get(context, arg.name.drop_front());
-    attrs.push_back({Identifier::get("rtl.name", context), nameAttr});
+    result.addAttribute("argNames", ArrayAttr::get(context, argNames));
   }
+  if (!hasAttribute("resultNames", result.attributes))
+    result.addAttribute("resultNames", ArrayAttr::get(context, resultNames));
+
+  assert(argAttrs.size() == argTypes.size());
+  assert(resultAttrs.size() == resultTypes.size());
 
   // Add the attributes to the function arguments.
   addArgAndResultAttrs(builder, result, argAttrs, resultAttrs);
@@ -423,47 +448,37 @@ FunctionType getRTLModuleOpType(Operation *op) {
 
 static void printModuleSignature(OpAsmPrinter &p, Operation *op,
                                  ArrayRef<Type> argTypes, bool isVariadic,
-                                 ArrayRef<Type> resultTypes) {
+                                 ArrayRef<Type> resultTypes,
+                                 bool &needArgNamesAttr) {
   Region &body = op->getRegion(0);
   bool isExternal = body.empty();
+  SmallString<32> resultNameStr;
 
   p << '(';
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     if (i > 0)
       p << ", ";
 
-    Value argumentValue;
+    auto argName = getModuleArgumentName(op, i);
+
     if (!isExternal) {
-      argumentValue = body.front().getArgument(i);
-      p.printOperand(argumentValue);
-      p << ": ";
+      // Get the printed format for the argument name.
+      resultNameStr.clear();
+      llvm::raw_svector_ostream tmpStream(resultNameStr);
+      p.printOperand(body.front().getArgument(i), tmpStream);
+
+      // If the name wasn't printable in a way that agreed with argName, make
+      // sure to print out an explicit argNames attribute.
+      if (tmpStream.str().drop_front() != argName)
+        needArgNamesAttr = true;
+
+      p << tmpStream.str() << ": ";
+    } else if (!argName.empty()) {
+      p << '%' << argName << ": ";
     }
 
     p.printType(argTypes[i]);
-
-    auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
-
-    // If the argument has the rtl.name attribute, and if it was used by
-    // the printer exactly (not name mangled with a suffix etc) then we can
-    // omit the rtl.name attribute from the argument attribute dictionary.
-    ArrayRef<StringRef> elidedAttrs;
-    StringRef tmp;
-    if (argumentValue) {
-      if (auto nameAttr = getRTLNameAttr(argAttrs)) {
-
-        // Check to make sure the asmprinter is printing it correctly.
-        SmallString<32> resultNameStr;
-        llvm::raw_svector_ostream tmpStream(resultNameStr);
-        p.printOperand(argumentValue, tmpStream);
-
-        // If the name is the same as we would otherwise use, then we're good!
-        if (tmpStream.str().drop_front() == nameAttr.getValue()) {
-          tmp = "rtl.name";
-          elidedAttrs = tmp;
-        }
-      }
-    }
-    p.printOptionalAttrDict(argAttrs, elidedAttrs);
+    p.printOptionalAttrDict(::mlir::impl::getArgAttrs(op, i));
   }
 
   if (isVariadic) {
@@ -481,20 +496,20 @@ static void printModuleSignature(OpAsmPrinter &p, Operation *op,
     for (size_t i = 0, e = resultTypes.size(); i < e; ++i) {
       if (i != 0)
         os << ", ";
-      auto resultAttrs = ::mlir::impl::getResultAttrs(op, i);
-      StringAttr name = getRTLNameAttr(resultAttrs);
-      if (name)
-        os << '%' << name.getValue() << ": ";
+      StringRef name = getModuleResultName(op, i);
+      if (!name.empty())
+        os << '%' << name << ": ";
 
+      auto resultAttrs = ::mlir::impl::getResultAttrs(op, i);
       p.printType(resultTypes[i]);
-      p.printOptionalAttrDict(resultAttrs, {"rtl.name"});
+      p.printOptionalAttrDict(resultAttrs);
     }
     os << ')';
   }
 }
 
-static void printRTLModuleOp(OpAsmPrinter &p, Operation *op,
-                             ExternModKind modKind) {
+static void printModuleOp(OpAsmPrinter &p, Operation *op,
+                          ExternModKind modKind) {
   using namespace mlir::impl;
 
   FunctionType fnType = getRTLModuleOpType(op);
@@ -509,30 +524,61 @@ static void printRTLModuleOp(OpAsmPrinter &p, Operation *op,
   p.printSymbolName(funcName);
   if (modKind == GenMod) {
     p << ", ";
-    p.printSymbolName(dyn_cast<RTLModuleGeneratedOp>(op).generatorKind());
+    p.printSymbolName(cast<RTLModuleGeneratedOp>(op).generatorKind());
   }
-  printModuleSignature(p, op, argTypes, /*isVariadic=*/false, resultTypes);
+
+  bool needArgNamesAttr = false;
+  printModuleSignature(p, op, argTypes, /*isVariadic=*/false, resultTypes,
+                       needArgNamesAttr);
+
+  SmallVector<StringRef, 3> omittedAttrs;
+  if (modKind == GenMod)
+    omittedAttrs.push_back("generatorKind");
+  if (!needArgNamesAttr)
+    omittedAttrs.push_back("argNames");
+  omittedAttrs.push_back("resultNames");
+
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(),
-                          modKind == GenMod
-                              ? ArrayRef<StringRef>("generatorKind")
-                              : ArrayRef<StringRef>());
+                          omittedAttrs);
 }
 
 static void print(OpAsmPrinter &p, RTLModuleExternOp op) {
-  printRTLModuleOp(p, op, ExternMod);
+  printModuleOp(p, op, ExternMod);
 }
 static void print(OpAsmPrinter &p, RTLModuleGeneratedOp op) {
-  printRTLModuleOp(p, op, GenMod);
+  printModuleOp(p, op, GenMod);
 }
 
 static void print(OpAsmPrinter &p, RTLModuleOp op) {
-  printRTLModuleOp(p, op, PlainMod);
+  printModuleOp(p, op, PlainMod);
 
   // Print the body if this is not an external function.
   Region &body = op.getBody();
   if (!body.empty())
     p.printRegion(body, /*printEntryBlockArgs=*/false,
                   /*printBlockTerminators=*/true);
+}
+
+static LogicalResult verifyModuleCommon(Operation *module) {
+  assert(isAnyModule(module) &&
+         "verifier hook should only be called on modules");
+
+  auto moduleType = getModuleType(module);
+  auto argNames = module->getAttrOfType<ArrayAttr>("argNames");
+  auto resultNames = module->getAttrOfType<ArrayAttr>("resultNames");
+  if (argNames.size() != moduleType.getNumInputs())
+    return module->emitOpError("incorrect number of argument names");
+  if (resultNames.size() != moduleType.getNumResults())
+    return module->emitOpError("incorrect number of result names");
+  return success();
+}
+
+static LogicalResult verifyRTLModuleOp(RTLModuleOp op) {
+  return verifyModuleCommon(op);
+}
+
+static LogicalResult verifyRTLModuleExternOp(RTLModuleExternOp op) {
+  return verifyModuleCommon(op);
 }
 
 /// Lookup the generator for the symbol.  This returns null on
@@ -543,6 +589,9 @@ Operation *RTLModuleGeneratedOp::getGeneratorKindOp() {
 }
 
 static LogicalResult verifyRTLModuleGeneratedOp(RTLModuleGeneratedOp op) {
+  if (failed(verifyModuleCommon(op)))
+    return failure();
+
   auto referencedKind = op.getGeneratorKindOp();
   if (referencedKind == nullptr)
     return op.emitError("Cannot find generator definition '")
@@ -658,9 +707,7 @@ static LogicalResult verifyInstanceOp(InstanceOp op) {
     return op.emitError("Cannot find module definition '")
            << op.moduleName() << "'";
 
-  if (!isa<RTLModuleOp>(referencedModule) &&
-      !isa<RTLModuleExternOp>(referencedModule) &&
-      !isa<RTLModuleGeneratedOp>(referencedModule))
+  if (!isAnyModule(referencedModule))
     return op.emitError("Symbol resolved to '")
            << referencedModule->getName()
            << "' which is not a RTL[Ext|Generated]ModuleOp";
@@ -713,19 +760,17 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     return;
 
   // Provide default names for instance results.
-  size_t nextResult = 0;
-  std::string name;
-  for (auto port : getModulePortInfo(module)) {
-    if (!port.isOutput())
-      continue;
+  std::string name = instanceName().str() + ".";
+  size_t baseNameLen = name.size();
 
-    name = instanceName().str() + ".";
-    if (auto nameAttr = port.name)
-      name += nameAttr.getValue().str();
+  for (size_t i = 0, e = getNumResults(); i != e; ++i) {
+    auto resName = getModuleResultName(module, i);
+    name.resize(baseNameLen);
+    if (!resName.empty())
+      name += resName.str();
     else
-      name += std::to_string(nextResult);
-    setNameFn(getResult(nextResult), name);
-    ++nextResult;
+      name += std::to_string(i);
+    setNameFn(getResult(i), name);
   }
 }
 

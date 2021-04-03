@@ -274,8 +274,8 @@ rtl.module @MultiUseExpr(%a: i4) -> (%b: i1, %b2: i2) {
   rtl.output %8, %7 : i1, i2
 }
 
-rtl.module.extern @MyExtModule(i8 {rtl.name = "in"}) -> (%out: i1) attributes {verilogName = "FooExtModule"}
-rtl.module.extern @MyParameterizedExtModule(i8 {rtl.name = "in"}) -> (%out: i1)
+rtl.module.extern @MyExtModule(%in: i8) -> (%out: i1) attributes {verilogName = "FooExtModule"}
+rtl.module.extern @MyParameterizedExtModule(%in: i8) -> (%out: i1)
 
 // CHECK-LABEL: module UseInstances
 rtl.module @UseInstances(%a_in: i8) -> (%a_out: i1) {
