@@ -148,6 +148,11 @@ rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
     // CHECK-NEXT: }
   }
 
+  // CHECK-NEXT: %reg23 = sv.reg : !rtl.inout<i23>
+  // CHECK-NEXT: %regStruct23 = sv.reg : !rtl.inout<struct<foo: i23>>
+  %reg23       = sv.reg  : !rtl.inout<i23>
+  %regStruct23 = sv.reg  : !rtl.inout<struct<foo: i23>>
+
   // CHECK-NEXT: rtl.output
   rtl.output
 }

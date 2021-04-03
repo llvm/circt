@@ -121,7 +121,7 @@ static ParseResult parseRTLElementType(Type &result, DialectAsmParser &p) {
       StringRef(curPtr, fullString.size() - (curPtr - fullString.data()));
 
   if (typeString.startswith("array<") || typeString.startswith("inout<") ||
-      typeString.startswith("uarray<")) {
+      typeString.startswith("uarray<") || typeString.startswith("struct<")) {
     llvm::StringRef mnemonic;
     if (p.parseKeyword(&mnemonic))
       llvm_unreachable("should have an array or inout keyword here");
