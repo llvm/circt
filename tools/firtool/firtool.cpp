@@ -77,6 +77,10 @@ static cl::opt<bool>
                      cl::init(false));
 
 static cl::opt<bool>
+    expandWhens("expand-whens", cl::desc("run the expand-whens pass on firrtl"),
+                cl::init(false));
+
+static cl::opt<bool>
     blackboxMemory("blackbox-memory",
                    cl::desc("Create a blackbox for all memory operations"),
                    cl::init(false));
@@ -155,9 +159,13 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     options.ignoreInfoLocators = ignoreFIRLocations;
     module = importFIRRTL(sourceMgr, &context, options);
 
-    if (enableLowerTypes)
+    if (enableLowerTypes) {
       pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass());
-
+      auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
+      // Only enable expand whens if lower types is also enabled.
+      if (expandWhens)
+        modulePM.addPass(firrtl::createExpandWhensPass());
+    }
     // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
     if (!disableOptimization) {
       auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
@@ -170,10 +178,12 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
     if (enableLowerTypes) {
       pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass());
-
+      auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
+      // Only enable expand whens if lower types is also enabled.
+      if (expandWhens)
+        modulePM.addPass(firrtl::createExpandWhensPass());
       // If we are running FIRRTL passes, clean up the output.
       if (!disableOptimization) {
-        auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
         modulePM.addPass(createCSEPass());
         modulePM.addPass(createCanonicalizerPass());
       }
