@@ -140,9 +140,9 @@ else()
       OUTPUT_VARIABLE VERILATOR_VERSION)
     string(REGEX MATCH "Verilator (([0-9]+)\.([0-9]+)) \.*"
       MATCH ${VERILATOR_VERSION})
-    # It's gotta be at least v4.034.
-    if (${CMAKE_MATCH_1} LESS 4.034)
-      message(FATAL_ERROR "CIRCT only supports Verilator version 4.034 and up. \
+    # It's gotta be at least v4.110.
+    if (${CMAKE_MATCH_1} LESS 4.110)
+      message(FATAL_ERROR "CIRCT only supports Verilator version 4.110 and up. \
                            Found version: ${CMAKE_MATCH_1}. You can disable \
                            the Verilator tests with '-DVERILATOR_DISABLE=ON'.")
       set(VERILATOR_PATH "")
