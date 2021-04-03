@@ -48,6 +48,7 @@ public:
     if (!svReg->hasAttrOfType<StringAttr>("name"))
       // sv.reg requires a name attribute.
       svReg->setAttr("name", rewriter.getStringAttr(""));
+    auto regVal = rewriter.create<sv::ReadInOutOp>(loc, svReg);
 
     if (reg.reset() && reg.resetValue())
       rewriter.create<sv::AlwaysFFOp>(
@@ -62,7 +63,7 @@ public:
           loc, sv::EventControl::AtPosEdge, reg.clk(),
           [&]() { rewriter.create<sv::PAssignOp>(loc, svReg, reg.input()); });
 
-    rewriter.replaceOp(reg, {svReg});
+    rewriter.replaceOp(reg, {regVal});
     return success();
   }
 };
