@@ -6,7 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This is the top level file for the Seq dialect.
+// This is the top level file for the Seq dialect. It contains the one op and
+// pass. Once we add more than one, we should break it out like the other
+// dialects.
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,6 +17,7 @@
 
 include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Pass/PassBase.td"
 
 def SeqDialect : Dialect {
   let name = "seq";
@@ -45,6 +48,11 @@ def CompRegOp : SeqOp<"compreg",
 
   let printer = "return ::print(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
+}
+
+def LowerSeqToSV: Pass<"lower-seq-to-sv", "mlir::ModuleOp"> {
+  let summary = "Lower sequential ops to SV.";
+  let constructor = "circt::seq::createSeqLowerToSVPass()";
 }
 
 #endif // SEQ_TD

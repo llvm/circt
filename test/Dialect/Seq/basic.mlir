@@ -1,4 +1,5 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
+// RUN: circt-opt %s -verify-diagnostics --lower-seq-to-sv | circt-opt -verify-diagnostics | FileCheck %s
 rtl.module @top(%clk: i1, %rst: i1, %i: i32, %s: !rtl.struct<foo: i23>) {
   %rv = rtl.constant 0 : i32
 

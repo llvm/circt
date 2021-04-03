@@ -19,13 +19,16 @@ add_circt_dialect_library(CIRCTSeq
   DEPENDS
   CIRCTRTL
   MLIRSeqIncGen
+  MLIRSeqMiscIncGen
   
   LINK_COMPONENTS
   Support
 
   LINK_LIBS PUBLIC
   CIRCTRTL
+  MLIRPass
   MLIRIR
+  MLIRTransforms
    )
 
 add_dependencies(circt-headers MLIRSeqIncGen)
