@@ -1252,18 +1252,13 @@ firrtl.module @mul_cst_prop3(%out_b: !firrtl.flip<sint<15>>) {
 // We fold `validif` operations to their RHS, regardless of the LHS.
 // See https://github.com/llvm/circt/issues/839.
 // CHECK-LABEL: @elide_validif
-// CHECK-NEXT:      firrtl.connect %out0, %clock : !firrtl.flip<clock>, !firrtl.clock
-// CHECK-NEXT:      firrtl.connect %out1, %clock : !firrtl.flip<clock>, !firrtl.clock
+// CHECK-NEXT:      firrtl.connect %out, %clock : !firrtl.flip<clock>, !firrtl.clock
 // CHECK-NEXT:  }
-firrtl.module @elide_validif(%clock: !firrtl.clock, %valid: !firrtl.uint<1>, %out0: !firrtl.flip<clock>, %out1: !firrtl.flip<clock>) {
+firrtl.module @elide_validif(%clock: !firrtl.clock, %valid: !firrtl.uint<1>, %out: !firrtl.flip<clock>) {
   %x = firrtl.wire  : !firrtl.clock
-  %y = firrtl.wire  : !firrtl.clock
   %0 = firrtl.validif %valid, %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.clock
-  %1 = firrtl.validif %valid, %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.clock
   firrtl.connect %x, %0 : !firrtl.clock, !firrtl.clock
-  firrtl.connect %y, %1 : !firrtl.clock, !firrtl.clock
-  firrtl.connect %out0, %x : !firrtl.flip<clock>, !firrtl.clock
-  firrtl.connect %out1, %y : !firrtl.flip<clock>, !firrtl.clock
+  firrtl.connect %out, %x : !firrtl.flip<clock>, !firrtl.clock
 }
 
 }
