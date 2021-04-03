@@ -31,7 +31,8 @@ struct SeqToSVPass : public LowerSeqToSVBase<SeqToSVPass> {
 } // anonymous namespace
 
 namespace {
-/// Lower the decode gasket to SV/RTL.
+/// Lower CompRegOp to `sv.reg` and `sv.alwaysff`. Use a posedge clock and
+/// synchronous reset.
 struct CompRegLower : public OpConversionPattern<CompRegOp> {
 public:
   using OpConversionPattern::OpConversionPattern;
