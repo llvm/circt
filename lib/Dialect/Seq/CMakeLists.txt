@@ -18,6 +18,7 @@ add_circt_dialect_library(CIRCTSeq
 
   DEPENDS
   CIRCTRTL
+  CIRCTSV
   MLIRSeqIncGen
   MLIRSeqMiscIncGen
   
@@ -26,6 +27,7 @@ add_circt_dialect_library(CIRCTSeq
 
   LINK_LIBS PUBLIC
   CIRCTRTL
+  CIRCTSV
   MLIRPass
   MLIRIR
   MLIRTransforms

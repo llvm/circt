@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -29,13 +30,53 @@ struct SeqToSVPass : public LowerSeqToSVBase<SeqToSVPass> {
 };
 } // anonymous namespace
 
+namespace {
+/// Lower the decode gasket to SV/RTL.
+struct CompRegLower : public OpConversionPattern<CompRegOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(CompRegOp reg, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final {
+    Location loc = reg.getLoc();
+
+    auto svReg = rewriter.create<sv::RegOp>(loc, reg.getResult().getType());
+    DictionaryAttr regAttrs = reg->getAttrDictionary();
+    if (!regAttrs.empty())
+      svReg->setAttrs(regAttrs);
+    if (!svReg->hasAttrOfType<StringAttr>("name"))
+      // sv.reg requires a name attribute.
+      svReg->setAttr("name", rewriter.getStringAttr(""));
+
+    if (reg.reset() && reg.resetValue())
+      rewriter.create<sv::AlwaysFFOp>(
+          loc, sv::EventControl::AtPosEdge, reg.clk(), ResetType::SyncReset,
+          sv::EventControl::AtPosEdge, reg.reset(),
+          [&]() { rewriter.create<sv::PAssignOp>(loc, svReg, reg.input()); },
+          [&]() {
+            rewriter.create<sv::PAssignOp>(loc, svReg, reg.resetValue());
+          });
+    else
+      rewriter.create<sv::AlwaysFFOp>(
+          loc, sv::EventControl::AtPosEdge, reg.clk(),
+          [&]() { rewriter.create<sv::PAssignOp>(loc, svReg, reg.input()); });
+
+    rewriter.replaceOp(reg, {svReg});
+    return success();
+  }
+};
+
+} // namespace
 void SeqToSVPass::runOnOperation() {
   ModuleOp top = getOperation();
   MLIRContext &ctxt = getContext();
 
   ConversionTarget target(ctxt);
   target.addIllegalDialect<SeqDialect>();
+  target.addLegalDialect<sv::SVDialect>();
   RewritePatternSet patterns(&ctxt);
+  patterns.add<CompRegLower>(&ctxt);
 
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
     signalPassFailure();
