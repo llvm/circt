@@ -35,9 +35,13 @@ void printOptionalArrayAccessTypes(OpAsmPrinter &printer, Operation *op,
                                    TypeRange varAddrTypes);
 
 // parser and printer for array address indices.
-void printOptionalArrayAccess(OpAsmPrinter &printer, Operation *op,
-                              OperandRange varAddrs, ArrayAttr constAddrs);
 ParseResult
 parseOptionalArrayAccess(OpAsmParser &parser,
                          SmallVectorImpl<OpAsmParser::OperandType> &varAddrs,
                          ArrayAttr &constAddrs);
+void printOptionalArrayAccess(OpAsmPrinter &printer, Operation *op,
+                              OperandRange varAddrs, ArrayAttr constAddrs);
+
+// parser and printer for Module Type.
+// ParseResult parseModuleType(OpAsmParser &parser, Attribute &moduleAttr);
+// void printModuleType(OpAsmPrinter &printer, Attribute moduleAttr);

@@ -19,7 +19,7 @@
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/StringMap.h"
 
-#include "helper.h"
+#include "parserHelper.h"
 using namespace mlir;
 using namespace hir;
 using namespace llvm;
@@ -612,9 +612,12 @@ LogicalResult DefOp::verifyType() {
                        "' attribute of function type");
   return success();
 }
-#include "HIROpSyntax.h"
 /// required for functionlike trait
 LogicalResult DefOp::verifyBody() { return success(); }
+
+#include "HIROpSyntax.h"
+#include "HIROpVerifier.h"
+
 namespace mlir {
 #define GET_OP_CLASSES
 #include "circt/Dialect/HIR/HIR.cpp.inc"

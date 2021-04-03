@@ -36,25 +36,6 @@ void findAndReplaceAll(string &data, string toSearch, string replaceStr) {
   }
 }
 
-unsigned getBitWidth(Type type) {
-  unsigned bitwidth = 0;
-  if (type.dyn_cast<hir::TimeType>()) {
-    return 1;
-  } else if (auto intTy = type.dyn_cast<IntegerType>()) {
-    bitwidth = intTy.getWidth();
-  } else if (auto floatTy = type.dyn_cast<FloatType>()) {
-    bitwidth = floatTy.getWidth();
-  } else {
-    string typeStr;
-    llvm::raw_string_ostream typeOstream(typeStr);
-    type.print(typeOstream);
-    fprintf(stderr, "\nERROR: Can't calculate getBitWidth for type %s.\n",
-            typeStr.c_str());
-    assert(false);
-  }
-  return bitwidth;
-}
-
 unsigned calcAddrWidth(hir::MemrefType memrefTy) {
   // FIXME: Currently we assume that all dims are power of two.
   auto shape = memrefTy.getShape();

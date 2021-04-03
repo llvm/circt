@@ -1,0 +1,12 @@
+#ifndef HIROpVerifier
+#define HIROpVerifier
+#include "circt/Dialect/HIR/HIR.h"
+#include "circt/Dialect/HIR/HIRDialect.h"
+
+namespace mlir {
+namespace hir {
+LogicalResult verifySliceOp(hir::SliceOp op);
+} // namespace hir
+} // namespace mlir
+
+#endif

@@ -24,9 +24,11 @@ static IntegerAttr getIntegerAttr(OpAsmParser &parser, int width, int value) {
       IntegerType::get(parser.getBuilder().getContext(), width),
       APInt(width, value));
 }
+
 static Type getIntegerType(OpAsmParser &parser, int bitwidth) {
   return IntegerType::get(parser.getBuilder().getContext(), bitwidth);
 }
+
 static ConstType getConstIntType(OpAsmParser &parser) {
   return ConstType::get(parser.getBuilder().getContext());
 }

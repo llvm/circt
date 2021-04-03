@@ -2,6 +2,7 @@
 #define HIR_HIR_H
 
 #include "circt/Support/LLVM.h"
+#include "helper.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/FunctionSupport.h"
@@ -260,6 +261,7 @@ public:
   }
   Type getElementType() { return getImpl()->elementType; }
   Attribute getAttribute() { return getImpl()->attr; }
+  unsigned getWidth() { return helper::getBitWidth(getElementType()); }
 };
 
 /// This class defines array type which is only accessible inside hir.interface.

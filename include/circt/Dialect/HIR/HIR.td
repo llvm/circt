@@ -150,6 +150,8 @@ def SliceOp : HIR_Op<"slice", [NoSideEffect]> {
     `:` type($interface)
     custom<OptionalArrayAccessTypes>(ref($constAddrs),type($varAddrs)) 
     `->` type($res) }];
+
+  let verifier = [{return verifySliceOp(*this);}];
 }
 
 def WireReadOp : HIR_Op<"wire_read", [NoSideEffect,AttrSizedOperandSegments]> {
@@ -495,18 +497,19 @@ def ReturnOp : HIR_Op<"return", [HasParent<"DefOp">,NoSideEffect,
       let assemblyFormat = "(`(`$operands^`)` `:` `(`type($operands)`)`)? attr-dict";
     }
 
-def AllocOp :HIR_Op<"alloc", [NoSideEffect]> {
+def AllocOp :HIR_Op<"alloca", [NoSideEffect]> {
   let summary = "Instantiate new hardware.";
 
   let description = [{
 
-    ```mlir %w = hir.wire```
+    ```%w = hir.alloc("bram") : !hir.memref<...>```
   }];
 
-  let arguments = (ins);
+  let arguments = (ins AnyAttr:$moduleAttr);
   let results = (outs Variadic<AnyType>:$res);
 
-  let assemblyFormat = "`(``)`attr-dict `:` type($res)";
+  let assemblyFormat = [{`(`$moduleAttr`)`attr-dict 
+                        `:` type($res)}];
 }
 
 def EQOp : HIR_Op<"eq",[NoSideEffect]>{
