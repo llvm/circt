@@ -556,7 +556,12 @@ OpFoldResult DShlwPrimOp::fold(ArrayRef<Attribute> operands) { return {}; }
 
 OpFoldResult DShrPrimOp::fold(ArrayRef<Attribute> operands) { return {}; }
 
-OpFoldResult ValidIfPrimOp::fold(ArrayRef<Attribute> operands) { return {}; }
+OpFoldResult ValidIfPrimOp::fold(ArrayRef<Attribute> operands) {
+  // Fold all validIf(x, y) -> y for now. This replicates what the Scala FIRRTL
+  // compiler does in all relevant cases.
+  return rhs();
+}
+
 //===----------------------------------------------------------------------===//
 // Unary Operators
 //===----------------------------------------------------------------------===//

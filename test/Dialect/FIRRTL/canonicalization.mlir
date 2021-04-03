@@ -1249,4 +1249,16 @@ firrtl.module @mul_cst_prop3(%out_b: !firrtl.flip<sint<15>>) {
   firrtl.connect %out_b, %add : !firrtl.flip<sint<15>>, !firrtl.sint<15>
 }
 
+// We fold `validif` operations to their RHS, regardless of the LHS.
+// See https://github.com/llvm/circt/issues/839.
+// CHECK-LABEL: @elide_validif
+// CHECK-NEXT:      firrtl.connect %out, %clock : !firrtl.flip<clock>, !firrtl.clock
+// CHECK-NEXT:  }
+firrtl.module @elide_validif(%clock: !firrtl.clock, %valid: !firrtl.uint<1>, %out: !firrtl.flip<clock>) {
+  %x = firrtl.wire  : !firrtl.clock
+  %0 = firrtl.validif %valid, %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.clock
+  firrtl.connect %x, %0 : !firrtl.clock, !firrtl.clock
+  firrtl.connect %out, %x : !firrtl.flip<clock>, !firrtl.clock
+}
+
 }
