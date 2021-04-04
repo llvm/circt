@@ -831,17 +831,4 @@ firrtl.circuit "Simple" {
   firrtl.module @Struct0bits(%source: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<0>>) {
     %2 = firrtl.subfield %source ("data") : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<0>>) -> !firrtl.uint<0>
   }
-
-  // CHECK-LABEL: rtl.module @MuxInvalidOpt
-  // CHECK:         rtl.output %data, %data : i4, i4
-  firrtl.module @MuxInvalidOpt(%cond: !firrtl.uint<1>, %data: !firrtl.uint<4>, %out1: !firrtl.flip<uint<4>>, %out2: !firrtl.flip<uint<4>>) {
-    // We can optimize out these mux's during lowering since the invalid value
-    // can take on any input.
-    %tmp1 = firrtl.invalidvalue : !firrtl.uint<4>
-    %a = firrtl.mux(%cond, %data, %tmp1) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
-    firrtl.connect %out1, %a : !firrtl.flip<uint<4>>, !firrtl.uint<4>
-
-    %b = firrtl.mux(%cond, %tmp1, %data) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
-    firrtl.connect %out2, %b : !firrtl.flip<uint<4>>, !firrtl.uint<4>
-  }
 }

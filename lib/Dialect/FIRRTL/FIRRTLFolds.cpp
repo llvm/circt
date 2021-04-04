@@ -640,6 +640,13 @@ OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
   if (high() == low())
     return high();
 
+  // mux(cond, x, invalid) -> x
+  // mux(cond, invalid, x) -> x
+  if (high().getDefiningOp<InvalidValuePrimOp>())
+    return low();
+  if (low().getDefiningOp<InvalidValuePrimOp>())
+    return high();
+
   // mux(cond, x, cst)
   if (matchPattern(low(), m_FConstant(value))) {
     APInt c1;

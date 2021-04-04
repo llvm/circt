@@ -1261,4 +1261,17 @@ firrtl.module @elide_validif(%clock: !firrtl.clock, %valid: !firrtl.uint<1>, %ou
   firrtl.connect %out, %x : !firrtl.flip<clock>, !firrtl.clock
 }
 
+// CHECK-LABEL: firrtl.module @MuxInvalidOpt
+firrtl.module @MuxInvalidOpt(%cond: !firrtl.uint<1>, %data: !firrtl.uint<4>, %out1: !firrtl.flip<uint<4>>, %out2: !firrtl.flip<uint<4>>) {
+
+  // We can optimize out these mux's since the invalid value can take on any input.
+  %tmp1 = firrtl.invalidvalue : !firrtl.uint<4>
+  %a = firrtl.mux(%cond, %data, %tmp1) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  // CHECK:         firrtl.connect %out1, %data 
+  firrtl.connect %out1, %a : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+
+  %b = firrtl.mux(%cond, %tmp1, %data) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  // CHECK:         firrtl.connect %out2, %data 
+  firrtl.connect %out2, %b : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+}
 }
