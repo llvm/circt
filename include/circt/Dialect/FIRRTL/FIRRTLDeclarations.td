@@ -140,6 +140,14 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
   let arguments = (ins ClockType:$clockVal, OptionalAttr<StrAttr>:$name);
   let results = (outs PassiveType:$result);
 
+  let builders = [
+    OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
+                   CArg<"StringRef", "{}">:$name), [{
+      return build($_builder, $_state, elementType, clockVal,
+                   $_builder.getStringAttr(name));
+    }]>
+  ];
+
   let assemblyFormat =
     "operands attr-dict `:` functional-type(operands, $result)";
 }
@@ -156,6 +164,15 @@ def RegResetOp : FIRRTLOp<"regreset", [/*MemAlloc*/]> {
   let arguments = (ins ClockType:$clockVal, ResetType:$resetSignal,
                        PassiveType:$resetValue, OptionalAttr<StrAttr>:$name);
   let results = (outs PassiveType:$result);
+
+  let builders = [
+    OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
+                   "::mlir::Value":$resetSignal, "::mlir::Value":$resetValue,
+                   CArg<"StringRef", "{}">:$name), [{
+      return build($_builder, $_state, elementType, clockVal, resetSignal,
+                   resetValue, $_builder.getStringAttr(name));
+    }]>
+  ];
 
   let assemblyFormat =
      "operands attr-dict `:` functional-type(operands, $result)";
