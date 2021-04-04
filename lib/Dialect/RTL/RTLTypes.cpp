@@ -291,7 +291,7 @@ void InOutType::print(DialectAsmPrinter &p) const {
 LogicalResult InOutType::verify(function_ref<InFlightDiagnostic()> emitError,
                                 Type innerType) {
   if (!isRTLValueType(innerType))
-    return emitError() << "invalid element for rtl.inout type";
+    return emitError() << "invalid element for rtl.inout type " << innerType;
   return success();
 }
 

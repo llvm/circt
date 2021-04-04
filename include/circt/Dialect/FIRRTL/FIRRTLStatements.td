@@ -31,11 +31,7 @@ def AttachOp : FIRRTLOp<"attach"> {
 
   let assemblyFormat = "$operands attr-dict `:` type($operands)";
 
-  let hasCanonicalizer = 1;
-
-  let extraClassDeclaration = [{
-    static LogicalResult canonicalize(AttachOp op, PatternRewriter &rewriter);
-  }];
+  let hasCanonicalizeMethod = true;
 }
 
 def ConnectOp : FIRRTLOp<"connect"> {
@@ -54,7 +50,7 @@ def ConnectOp : FIRRTLOp<"connect"> {
     "$dest `,` $src  attr-dict `:` type($dest) `,` type($src)";
 
   let verifier = "return ::verifyConnectOp(*this);";
-  let hasCanonicalizer = 1;
+  let hasCanonicalizeMethod = true;
 }
 
 def PartialConnectOp : FIRRTLOp<"partialconnect"> {
@@ -68,15 +64,10 @@ def PartialConnectOp : FIRRTLOp<"partialconnect"> {
 
   let arguments = (ins FIRRTLType:$dest, FIRRTLType:$src);
   let results = (outs);
-  let hasCanonicalizer = 1;
+  let hasCanonicalizeMethod = true;
 
   let assemblyFormat =
     "$dest `,` $src  attr-dict `:` type($dest) `,` type($src)";
-
-  let extraClassDeclaration = [{
-    static LogicalResult canonicalize(PartialConnectOp op,
-                                      PatternRewriter &rewriter);
-  }];
 }
 
 def PrintFOp : FIRRTLOp<"printf"> {

@@ -203,9 +203,8 @@ def AndPrimOp : BinaryPrimOp<"and", IntType, IntType, UIntType, [Commutative]>;
 def OrPrimOp  : BinaryPrimOp<"or",  IntType, IntType, UIntType, [Commutative]>;
 def XorPrimOp : BinaryPrimOp<"xor", IntType, IntType, UIntType, [Commutative]>;
 
-
 // Comparison Operations
-let hasCanonicalizer = 1 in {
+let hasCanonicalizer = true in {
   def LEQPrimOp : BinaryPrimOp<"leq", IntType, IntType, UInt1Type>;
   def LTPrimOp  : BinaryPrimOp<"lt",  IntType, IntType, UInt1Type>;
   def GEQPrimOp : BinaryPrimOp<"geq", IntType, IntType, UInt1Type>;
@@ -215,7 +214,7 @@ def EQPrimOp  : BinaryPrimOp<"eq",  IntType, IntType, UInt1Type, [Commutative]>;
 def NEQPrimOp : BinaryPrimOp<"neq", IntType, IntType, UInt1Type, [Commutative]>;
 
 def CatPrimOp   : BinaryPrimOp<"cat", IntType, IntType, UIntType> {
-  let hasCanonicalizer = 1;
+  let hasCanonicalizeMethod = true;
 }
 def DShlPrimOp  : BinaryPrimOp<"dshl", IntType, UIntType, IntType>;
 def DShlwPrimOp : BinaryPrimOp<"dshlw", IntType, UIntType, IntType>;
@@ -310,7 +309,7 @@ def BitsPrimOp : PrimOp<"bits"> {
     The result is `hi - lo + 1` bits wide.
   }];
 
-  let hasCanonicalizer = 1;
+  let hasCanonicalizeMethod = true;
   let hasFolder = 1;
 
   let builders = [
@@ -344,7 +343,7 @@ def HeadPrimOp : PrimOp<"head"> {
   let assemblyFormat =
     "$input `,` $amount attr-dict `:` functional-type($input, $result)";
 
-  let hasCanonicalizer = 1;
+  let hasCanonicalizeMethod = true;
 
   let extraClassDeclaration = [{
     /// Return the result for inputs with the specified type, returning a null
@@ -498,7 +497,7 @@ def ShrPrimOp : ShiftPrimOp<"shr"> {
   }];
 
   let hasFolder = 1;
-  let hasCanonicalizer = 1;
+  let hasCanonicalizeMethod = true;
 }
 
 def TailPrimOp : PrimOp<"tail"> {
@@ -514,7 +513,7 @@ def TailPrimOp : PrimOp<"tail"> {
     width of e. The result is `width(input)-amount` bits wide.
   }];
 
-  let hasCanonicalizer = 1;
+  let hasCanonicalizeMethod = true;
 
   let extraClassDeclaration = [{
     /// Return the result for inputs with the specified type, returning a null
