@@ -2283,9 +2283,17 @@ LogicalResult FIRRTLLowering::visitExpr(TailPrimOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(MuxPrimOp op) {
-  auto cond = getLoweredValue(op.sel());
   auto ifTrue = getLoweredAndExtendedValue(op.high(), op.getType());
   auto ifFalse = getLoweredAndExtendedValue(op.low(), op.getType());
+
+  // If either the true or the false is an invalid value, then optimize to the
+  // other value.
+  if (op.high().getDefiningOp<InvalidValuePrimOp>())
+    return setLowering(op, ifFalse);
+  if (op.low().getDefiningOp<InvalidValuePrimOp>())
+    return setLowering(op, ifTrue);
+
+  auto cond = getLoweredValue(op.sel());
   if (!cond || !ifTrue || !ifFalse)
     return failure();
 
