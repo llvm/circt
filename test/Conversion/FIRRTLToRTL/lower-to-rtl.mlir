@@ -570,7 +570,7 @@ firrtl.circuit "Simple" {
     %_M_read, %_M_write = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>, !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>
 
   // CHECK:  %_M.rd_data_0 = rtl.instance "_M" @FIRRTLMem_2_0_0_42_12_0_1(%clock1, %true, %c0_i4, %clock2, %inpred, %c0_i4_0, %true, %indata) : (i1, i1, i4, i1, i1, i4, i1, i42) -> i42
-  // CHECK-NEXT: rtl.output %_M.rd_data_0
+  // CHECK: rtl.output %_M.rd_data_0
 
     %5 = firrtl.subfield %_M_read("data") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.sint<42>
     %6 = firrtl.subfield %_M_read("addr") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<uint<4>>

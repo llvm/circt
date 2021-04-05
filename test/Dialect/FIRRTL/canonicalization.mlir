@@ -1249,12 +1249,6 @@ firrtl.module @mul_cst_prop3(%out_b: !firrtl.flip<sint<15>>) {
   firrtl.connect %out_b, %add : !firrtl.flip<sint<15>>, !firrtl.sint<15>
 }
 
-// CHECK-LABEL: @zero_mem
-// CHECK-NEXT: }
-firrtl.module @zero_mem(%clock: !firrtl.clock, %r0en: !firrtl.uint<1>) {
-  %tmp41_r0, %tmp41_w0 = firrtl.mem Undefined {depth = 10 : i64, name = "tmp41", portNames = ["r0", "w0"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<0>>, !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>>
-}
-
 // We fold `validif` operations to their RHS, regardless of the LHS.
 // See https://github.com/llvm/circt/issues/839.
 // CHECK-LABEL: @elide_validif
