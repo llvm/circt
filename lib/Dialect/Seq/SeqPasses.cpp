@@ -51,7 +51,7 @@ public:
       svReg->setAttr("name", rewriter.getStringAttr(""));
     auto regVal = rewriter.create<sv::ReadInOutOp>(loc, svReg);
 
-    if (reg.reset() && reg.resetValue())
+    if (reg.reset() && reg.resetValue()) {
       rewriter.create<sv::AlwaysFFOp>(
           loc, sv::EventControl::AtPosEdge, reg.clk(), ResetType::SyncReset,
           sv::EventControl::AtPosEdge, reg.reset(),
@@ -59,10 +59,11 @@ public:
           [&]() {
             rewriter.create<sv::PAssignOp>(loc, svReg, reg.resetValue());
           });
-    else
+    } else {
       rewriter.create<sv::AlwaysFFOp>(
           loc, sv::EventControl::AtPosEdge, reg.clk(),
           [&]() { rewriter.create<sv::PAssignOp>(loc, svReg, reg.input()); });
+    }
 
     rewriter.replaceOp(reg, {regVal});
     return success();

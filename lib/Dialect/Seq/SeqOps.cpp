@@ -40,14 +40,9 @@ ParseResult parseCompRegOp(OpAsmParser &parser, OperationState &result) {
     return parser.emitError(loc, "too many operands");
   }
 
-  if (parser.parseOptionalAttrDict(result.attributes))
-    return failure();
-
-  if (parser.parseColon())
-    return failure();
-
   Type ty;
-  if (parser.parseType(ty))
+  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(ty))
     return failure();
   Type i1 = IntegerType::get(result.getContext(), 1);
 
