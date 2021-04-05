@@ -42,3 +42,17 @@ firrtl.circuit "Div" {
   // expected-error @+1 {{cannot lower this port type to RTL}}
   firrtl.module @UnknownWidth(%a: !firrtl.uint) {}
 }
+
+  // -----
+
+firrtl.circuit "zero_width_mem" {
+  // https://github.com/llvm/circt/issues/778
+  firrtl.module @zero_width_mem(%clock: !firrtl.clock, %reset: !firrtl.uint<1>, %r0en: !firrtl.uint<1>) {
+    %c0_ui4 = firrtl.constant(0 : i4) : !firrtl.uint<4>
+    %c0_ui1 = firrtl.constant(false) : !firrtl.uint<1>
+    %c0_ui25 = firrtl.constant(0 : i25) : !firrtl.uint<25>
+    // expected-error @+2 {{memories with complex types or zero width should already have been lowered}}
+    // expected-error @+1 {{'firrtl.mem' should have simple type and known width}}
+    %tmp41_r0, %tmp41_w0 = firrtl.mem Undefined {depth = 10 : i64, name = "tmp41", portNames = ["r0", "w0"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<0>>, !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>>
+  }
+}
