@@ -1058,3 +1058,33 @@ void PartialConnectOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                    MLIRContext *context) {
   addCanonicalizerMethod<PartialConnectOp>(results, context);
 }
+
+LogicalResult MemOp::canonicalize(MemOp op,
+                                             PatternRewriter &rewriter) {
+  // If memory has known, but zero width, eliminate it.  LowerTypes is run before this, so we can't leave structs sitting around.  Thus we must do the recursion to fix up the ports.
+  if (op.getDataType().getBitWidthOrSentinel() != 0) 
+    return failure();
+  for (auto port : op->getResults()) {
+    for (auto user : port.getUsers()) {
+      SubfieldOp sfop = cast<SubfieldOp>(user);
+      if (sfop.getType().isa<FlipType>()) {
+        //Inputs to the memory.  Delete the connect driving the subfield.  Since this came from a memory, there should only be connects as users.
+        for (auto user2 : sfop->getUsers()) {
+          assert(isa<ConnectOp>(user2) || isa<PartialConnectOp>(user2));
+          rewriter.eraseOp(user2);
+        }
+        rewriter.eraseOp(sfop);
+      } else {
+        //Outputs from the memory, replace with a constant
+        rewriter.replaceOpWithNewOp<ConstantOp>(sfop, sfop.getType().cast<IntType>(), APInt());
+      }
+    }
+  }
+  rewriter.eraseOp(op);
+  return success();
+}
+
+void MemOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                   MLIRContext *context) {
+  addCanonicalizerMethod<MemOp>(results, context);
+}

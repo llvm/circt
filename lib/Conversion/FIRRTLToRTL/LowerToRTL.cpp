@@ -23,7 +23,9 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TinyPtrVector.h"
+#include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/Parallel.h"
+#include <set>
 
 using namespace circt;
 using namespace firrtl;
@@ -104,6 +106,96 @@ static bool isZeroBitFIRRTLType(Type type) {
   return type.cast<FIRRTLType>().getPassiveType().getBitWidthOrSentinel() == 0;
 }
 
+namespace {
+struct FirMemory {
+  size_t numReadPorts;
+  size_t numWritePorts;
+  size_t numReadWritePorts;
+  size_t dataWidth;
+  size_t depth;
+  size_t readLatency;
+  size_t writeLatency;
+  bool operator<(const FirMemory &rhs) const {
+    if (numReadPorts < rhs.numReadPorts)
+      return true;
+    if (numReadPorts > rhs.numReadPorts)
+      return false;
+    if (numWritePorts < rhs.numWritePorts)
+      return true;
+    if (numWritePorts > rhs.numWritePorts)
+      return false;
+    if (numReadWritePorts < rhs.numReadWritePorts)
+      return true;
+    if (numReadWritePorts > rhs.numReadWritePorts)
+      return false;
+    if (dataWidth < rhs.dataWidth)
+      return true;
+    if (dataWidth > rhs.dataWidth)
+      return false;
+    if (depth < rhs.depth)
+      return true;
+    if (depth > rhs.depth)
+      return false;
+    if (readLatency < rhs.readLatency)
+      return true;
+    if (readLatency > rhs.readLatency)
+      return false;
+    if (writeLatency < rhs.writeLatency)
+      return true;
+    if (writeLatency > rhs.writeLatency)
+      return false;
+    return false;
+  }
+};
+} // namespace
+
+static std::string getFirMemoryName(const FirMemory &mem) {
+  return llvm::formatv("FIRRTLMem_{0}_{1}_{2}_{3}_{4}_{5}_{6}",
+                       mem.numReadPorts, mem.numWritePorts,
+                       mem.numReadWritePorts, mem.dataWidth, mem.depth,
+                       mem.readLatency, mem.writeLatency);
+}
+
+static FirMemory analyzeMemOp(MemOp op) {
+  size_t numReadPorts = 0;
+  size_t numWritePorts = 0;
+  size_t numReadWritePorts = 0;
+
+  for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
+    auto portKind = *op.getPortKind(i);
+    if (portKind == MemOp::PortKind::Read)
+      ++numReadPorts;
+    else if (portKind == MemOp::PortKind::Write)
+      ++numReadPorts;
+    else
+      ++numReadWritePorts;
+  }
+  auto width = op.getDataType().getBitWidthOrSentinel();
+  if (width <= 0) {
+    op.emitError("'firrtl.mem' should have simple type and known width");
+    width = 0;
+  }
+   return {
+      numReadPorts,      numWritePorts,
+      numReadWritePorts, (size_t)width,
+      op.depth(),        op.readLatency(),
+      op.writeLatency()};
+}
+
+static std::set<FirMemory> collectFIRRTLMemories(Operation *op) {
+  auto module = cast<FModuleOp>(op);
+  std::set<FirMemory> retval;
+  for (auto op : module.getBody().getOps<MemOp>())
+    retval.insert(analyzeMemOp(op));
+  return retval;
+}
+
+static std::set<FirMemory> mergeFIRRTLMemories(std::set<FirMemory> a,
+                                               std::set<FirMemory> b) {
+  a.insert(b.begin(), b.end());
+  return a;
+}
+
 //===----------------------------------------------------------------------===//
 // firrtl.module Lowering Pass
 //===----------------------------------------------------------------------===//
@@ -159,8 +251,10 @@ private:
 
   void lowerInstance(InstanceOp instance, CircuitOp circuitOp,
                      CircuitLoweringState &loweringState);
-  void lowerMemory(MemOp memory, CircuitOp circuitOp,
-                   CircuitLoweringState &loweringState);
+  void lowerMemory(MemOp memory, CircuitLoweringState &loweringState);
+
+  void lowerMemoryDecls(const std::set<FirMemory> &mems, Block *top,
+                        CircuitLoweringState &loweringState);
 
   FlatSymbolRefAttr
   getOrCreateMemorySchema(CircuitLoweringState &loweringState);
@@ -222,8 +316,20 @@ void FIRRTLModuleLowering::runOnOperation() {
         << op.getName() << "' in a firrtl.circuit";
   }
 
-  // Now that we've lowered all of the modules, move the bodies over and update
-  // any instances that refer to the old modules.
+  std::set<FirMemory> memories;
+  if (getContext().isMultithreadingEnabled()) {
+    memories = llvm::parallelTransformReduce(
+        modulesToProcess.begin(), modulesToProcess.end(), std::set<FirMemory>(),
+        mergeFIRRTLMemories, collectFIRRTLMemories);
+  } else {
+    for (auto m : modulesToProcess)
+      memories = mergeFIRRTLMemories(memories, collectFIRRTLMemories(m));
+  }
+  if (!memories.empty())
+    lowerMemoryDecls(memories, topLevelModule, state);
+
+  // Now that we've lowered all of the modules, move the bodies over and
+  // update any instances that refer to the old modules.
   if (getContext().isMultithreadingEnabled()) {
     mlir::ParallelDiagnosticHandler diagHandler(&getContext());
     llvm::parallelForEachN(0, modulesToProcess.size(), [&](auto index) {
@@ -238,8 +344,9 @@ void FIRRTLModuleLowering::runOnOperation() {
   for (auto oldNew : state.oldToNewModuleMap)
     oldNew.first->erase();
 
-  // Now that the modules are moved over, remove the Circuit.  We pop the 'main
-  // module' specified in the Circuit into an attribute on the top level module.
+  // Now that the modules are moved over, remove the Circuit.  We pop the
+  // 'main module' specified in the Circuit into an attribute on the top level
+  // module.
   getOperation()->setAttr(
       "firrtl.mainModule",
       StringAttr::get(circuit.getContext(), circuit.name()));
@@ -248,6 +355,69 @@ void FIRRTLModuleLowering::runOnOperation() {
   lowerFileHeader(circuit, state);
 
   circuit.erase();
+}
+
+void FIRRTLModuleLowering::lowerMemoryDecls(const std::set<FirMemory> &mems,
+                                            Block *top,
+                                            CircuitLoweringState &state) {
+  auto b = ImplicitLocOpBuilder::atBlockBegin(UnknownLoc::get(&getContext()), top);
+  std::array<StringRef, 6> schemaFields = {
+      "depth", "numReadPorts", "numWritePorts", "readLatency", "writeLatency", "width"};
+  auto schemaFieldsAttr = b.getStrArrayAttr(schemaFields);
+  auto schema = b.create<rtl::RTLGeneratorSchemaOp>(
+      "FIRRTLMem", "FIRRTL_Memory", schemaFieldsAttr);
+  auto memorySchema = b.getSymbolRefAttr(schema);
+
+  SmallVector<rtl::ModulePortInfo> ports;
+  size_t inputPin = 0;
+  size_t outputPin = 0;
+
+  Type b1Type = IntegerType::get(&getContext(), 1);
+
+  auto makePortCommon = [&](StringRef prefix, Twine i, Type bAddrType) {
+    ports.push_back({b.getStringAttr((prefix + Twine("_clock_") + i).str()),
+                     rtl::INPUT, b1Type, inputPin++});
+    ports.push_back({b.getStringAttr((prefix + Twine("_en_") + i).str()),
+                     rtl::INPUT, b1Type, inputPin++});
+    ports.push_back({b.getStringAttr((prefix + Twine("_addr_") + i).str()),
+                     rtl::INPUT, bAddrType, inputPin++});
+  };
+
+  for (auto &mem : mems) {
+    // error already emitted for this when scanning memories
+    if (mem.dataWidth <= 0)
+      continue;
+    Type bDataType = IntegerType::get(&getContext(), mem.dataWidth);
+    Type bAddrType =
+        IntegerType::get(&getContext(), llvm::Log2_64_Ceil(mem.depth));
+    for (size_t i = 0; i < mem.numReadPorts; ++i) {
+      makePortCommon("rd", Twine(i), bAddrType);
+      ports.push_back({b.getStringAttr((Twine("rd_data_") + Twine(i)).str()),
+                       rtl::OUTPUT, bDataType, outputPin++});
+    }
+    for (size_t i = 0; i < mem.numWritePorts; ++i) {
+      makePortCommon("rw", Twine(i), bAddrType);
+      ports.push_back({b.getStringAttr((Twine("wr_mask_") + Twine(i)).str()),
+                       rtl::INPUT, bDataType, inputPin++});
+      ports.push_back({b.getStringAttr((Twine("wr_data_") + Twine(i)).str()),
+                       rtl::INPUT, bDataType, inputPin++});
+    }
+    assert(mem.numReadWritePorts == 0 &&
+           "Read/Write ports should be eliminated");
+    std::array<NamedAttribute, 6> genAttrs = {
+        b.getNamedAttr("depth", b.getUI32IntegerAttr(mem.depth)),
+        b.getNamedAttr("numReadPorts", b.getUI32IntegerAttr(mem.numReadPorts)),
+        b.getNamedAttr("numWritePorts",
+                       b.getUI32IntegerAttr(mem.numWritePorts)),
+        b.getNamedAttr("readLatency", b.getUI32IntegerAttr(mem.readLatency)),
+        b.getNamedAttr("writeLatency", b.getUI32IntegerAttr(mem.writeLatency)),
+        b.getNamedAttr("width", b.getUI32IntegerAttr(mem.dataWidth))};
+
+    // Make the global module for the memory
+    auto memoryName = b.getStringAttr(getFirMemoryName(mem));
+    auto memModule = b.create<rtl::RTLModuleGeneratedOp>(
+        memorySchema, memoryName, ports, StringRef(), genAttrs);
+  }
 }
 
 /// Emit the file header that defines a bunch of macros.
@@ -763,12 +933,11 @@ void FIRRTLModuleLowering::lowerModuleBody(
       // Remember a position above the current op.  New things will get put
       // before the current op (including other instances!) and we want to
       // make sure to revisit them.
-      cursor->moveBefore(memory);
+      cursor->moveAfter(memory);
 
       // We found an instance - lower it.  On successful return there will be
       // zero uses and we can remove the operation.
-      lowerMemory(memory, oldModule->getParentOfType<CircuitOp>(),
-                  loweringState);
+      lowerMemory(memory, loweringState);
       opIt = Block::iterator(cursor);
     } else {
       ++opIt;
@@ -905,40 +1074,30 @@ void FIRRTLModuleLowering::lowerInstance(InstanceOp oldInstance,
   oldInstance.erase();
 }
 
-void FIRRTLModuleLowering::lowerMemory(MemOp memory, CircuitOp circuitOp,
+void FIRRTLModuleLowering::lowerMemory(MemOp memory,
                                        CircuitLoweringState &loweringState) {
-  ImplicitLocOpBuilder builderTop(UnknownLoc::get(&getContext()),
-                                  memory->getParentOp()->getParentRegion());
+  auto mod = memory->getParentOfType<rtl::RTLModuleOp>();
   ImplicitLocOpBuilder builder(memory.getLoc(), memory);
 
-  // Make sure the schema node exists
-  if (!loweringState.memorySchema) {
-    std::array<StringRef, 5> schemaFields = {
-        "depth", "portDirections", "readLatency", "writeLatency", "width"};
-    auto schemaFieldsAttr = builderTop.getStrArrayAttr(schemaFields);
-    auto schema = builderTop.create<rtl::RTLGeneratorSchemaOp>(
-        "FIRRTLMem", "FIRRTL_Memory", schemaFieldsAttr);
-    loweringState.memorySchema = builderTop.getSymbolRefAttr(schema);
-  }
-
-  StringRef memName = "mem";
-  if (memory.name().hasValue())
-    memName = memory.name().getValue();
-  auto memNameAttr = builderTop.getStringAttr(memName);
+  // Create a unique symbol name
+  auto oldMemName = builder.getStringAttr(
+      memory.name().hasValue() ? memory.name().getValue() : "anon");
 
   // Memories have simple bit-vector (integer) data ports.
-  assert(memory.getDataType().getBitWidthOrSentinel() > 0 &&
-         "unsized memories should have been removed already");
-  auto dataType = IntegerType::get(
-      memory.getContext(), memory.getDataType().getBitWidthOrSentinel());
+  if (memory.getDataType().getBitWidthOrSentinel() <= 0) {
+    memory.emitError(
+        "memories with complex types or zero width should already have been lowered");
+    return;
+  }
+
+  FirMemory memSummary = analyzeMemOp(memory);
 
   // Process each port in turn.
-  SmallVector<rtl::ModulePortInfo> modPorts;
-  SmallVector<StringRef> portKinds;
   SmallVector<Type, 8> resultTypes;
-  SmallVector<Value, 8> operands;
+  SmallVector<Value, 8> readOperands;
+  SmallVector<Value, 8> writeOperands;
   DenseMap<Operation *, size_t> returnHolder;
-  DenseMap<Type, Value> constantXs;
+  DenseMap<size_t, Value> constantXs;
 
   size_t readCount = 0;
   size_t writeCount = 0;
@@ -950,107 +1109,86 @@ void FIRRTLModuleLowering::lowerMemory(MemOp memory, CircuitOp circuitOp,
   // Memories return multiple structs, one for each port, which means we have
   // two layers of type to split appart.
   for (size_t i = 0, e = memory.getNumResults(); i != e; ++i) {
-    auto port = memory.getResult(i);
-
-    // Do not lower ports if they aren't used.
-    //      if (port.use_empty())
-    //        continue;
-
     auto portName = memory.getPortName(i);
     auto portKind = *memory.getPortKind(i);
-    StringRef portKindName = portKind == MemOp::PortKind::Read    ? "read"
-                             : portKind == MemOp::PortKind::Write ? "write"
-                                                                  : "readwrite";
+    auto portBundleType =
+        memory.getPortType(i).getPassiveType().cast<BundleType>();
+
     auto &portKindNum = portKind == MemOp::PortKind::Read    ? readCount
                         : portKind == MemOp::PortKind::Write ? writeCount
                                                              : readwriteCount;
-    portKinds.push_back(portKindName);
-
-    auto portBundleType =
-        port.getType().cast<FIRRTLType>().getPassiveType().cast<BundleType>();
-
+    StringRef portKindName = portKind == MemOp::PortKind::Read    ? "read"
+                             : portKind == MemOp::PortKind::Write ? "write"
+                                                                  : "readwrite";
     Twine portBaseName = portKindName + "_" + Twine(portKindNum) + "_";
 
-    for (BundleType::BundleElement elt : portBundleType.getElements()) {
-      // First collect the data for the module.
-      rtl::ModulePortInfo rtlPort;
-      rtlPort.type = lowerType(elt.type);
-      rtlPort.name =
-          builderTop.getStringAttr((portBaseName + elt.name.getValue()).str());
-      if (portKind == MemOp::PortKind::Read && elt.name.getValue() == "data") {
-        rtlPort.direction = rtl::OUTPUT;
-        resultTypes.push_back(dataType);
-        rtlPort.argNum = retNum++;
+    auto addInput = [&](SmallVectorImpl<Value> &operands, StringRef field,
+                        size_t width) {
+      auto portType = IntegerType::get(&getContext(), width);
+       auto accesses = getAllFieldAccesses(memory.getResult(i), field);
+      // Inputs might not be defined, lower to 'x
+      if (accesses.empty()) {
+        auto &constX = constantXs[width];
+        if (!constX)
+          constX = builder.createOrFold<sv::ConstantXOp>(portType);
+        operands.push_back(constX);
+      } else if (auto value = tryEliminatingConnectsToField(accesses, memory)) {
+        operands.push_back(value);
+        // Eliminate the subfield accesses and replace with module results
+        for (auto a : accesses) {
+          a.replaceAllUsesWith(value);
+          a.erase();
+        }
       } else {
-        rtlPort.direction = rtl::INPUT;
-        rtlPort.argNum = argNum++;
+        // Otherwise make a wire
+        auto name = builder.getStringAttr(
+            (Twine("_T_") + portName.getValue() + "_" + field)
+                .str());
+        auto wire = builder.create<WireOp>(portType, name);
+
+        operands.push_back(castFromFIRRTLType(wire, portType, builder));
+        // Eliminate the subfield accesses and replace with module results
+        for (auto a : accesses) {
+          a.replaceAllUsesWith((Operation *)wire);
+          a.erase();
+        }
       }
-      modPorts.push_back(rtlPort);
+    };
+    auto addOutput = [&](StringRef field, size_t width) {
+      auto portType = IntegerType::get(&getContext(), width);
+      resultTypes.push_back(portType);
 
       // Now collect the data for the instance.  A memory produces multiple
       // structures, so we need to look through SubfieldOps to see the true
       // inputs and outputs.
-      auto accesses = getAllFieldAccesses(port, elt.name.getValue());
-      if (rtlPort.direction == rtl::INPUT) {
-        // Inputs might not be defined, lower to 'x
-        if (accesses.empty()) {
-          auto &constX = constantXs[rtlPort.type];
-          if (!constX)
-            constX = builder.createOrFold<sv::ConstantXOp>(rtlPort.type);
-          operands.push_back(constX);
-        } else if (auto value =
-                       tryEliminatingConnectsToField(accesses, memory)) {
-          operands.push_back(value);
-          // Eliminate the subfield accesses and replace with module results
-          for (auto a : accesses) {
-            a.replaceAllUsesWith(value);
-            a.erase();
-          }
-        } else {
+      auto accesses = getAllFieldAccesses(memory.getResult(i), field);
+      // Read data ports are tracked to be updated later
+      for (auto &a : accesses)
+        returnHolder[a] = resultTypes.size() - 1;
+    };
 
-          // Otherwise make a wire
-          auto name = builder.getStringAttr(
-              (Twine("_T_") + portName.getValue() + "_" + elt.name.getValue())
-                  .str());
-          auto wire = builder.create<WireOp>(elt.type, name);
-
-          operands.push_back(castFromFIRRTLType(wire, rtlPort.type, builder));
-          // Eliminate the subfield accesses and replace with module results
-          for (auto a : accesses) {
-            a.replaceAllUsesWith((Operation *)wire);
-            a.erase();
-          }
-        }
-      } else {
-        // Read data ports are tracked to be updated later
-        for (auto &a : accesses)
-          returnHolder[a] = resultTypes.size() - 1;
-      }
+    if (portKind == MemOp::PortKind::Read) {
+      addInput(readOperands, "clk", 1);
+      addInput(readOperands, "en", 1);
+      addInput(readOperands, "addr", llvm::Log2_64_Ceil(memSummary.depth));
+      addOutput("data", memSummary.dataWidth);
+    } else {
+      addInput(writeOperands, "clk", 1);
+      addInput(writeOperands, "en", 1);
+      addInput(writeOperands, "addr", llvm::Log2_64_Ceil(memSummary.depth));
+      addInput(writeOperands, "mask", memSummary.dataWidth);
+      addInput(writeOperands, "data", memSummary.dataWidth);
     }
     ++portKindNum;
   }
 
-  // These are the attributes we use in the FIRRTL memory schema
-  std::array<NamedAttribute, 5> genAttrs = {
-      builderTop.getNamedAttr("depth",
-                              builderTop.getUI32IntegerAttr(memory.depth())),
-      builderTop.getNamedAttr("portDirections",
-                              builderTop.getStrArrayAttr(portKinds)),
-      builderTop.getNamedAttr(
-          "readLatency", builderTop.getUI32IntegerAttr(memory.readLatency())),
-      builderTop.getNamedAttr(
-          "writeLatency", builderTop.getUI32IntegerAttr(memory.writeLatency())),
-      builderTop.getNamedAttr(
-          "width", builderTop.getUI32IntegerAttr(dataType.getWidth()))};
+  auto memModuleAttr = builder.getSymbolRefAttr(getFirMemoryName(memSummary));
 
-  // Make the global module for the memory
-  auto memModule = builderTop.create<rtl::RTLModuleGeneratedOp>(
-      loweringState.memorySchema, memNameAttr, modPorts, StringRef(), genAttrs);
-  auto memModuleAttr = builderTop.getSymbolRefAttr(memModule);
-
+  //FIRRTL ports are arbitrary in order, ours are not
+  readOperands.append(writeOperands.begin(), writeOperands.end());
   // Create the instance to replace the memop
   auto inst = builder.create<rtl::InstanceOp>(
-      resultTypes, memNameAttr, memModuleAttr, operands, DictionaryAttr());
+      resultTypes, oldMemName, memModuleAttr, readOperands, DictionaryAttr());
 
   // Only cast once for each return value
   SmallVector<Value> returnCasts;
@@ -1612,8 +1750,9 @@ LogicalResult FIRRTLLowering::setLoweringTo(Operation *orig,
 }
 
 /// Switch the insertion point of the current builder to the end of the
-/// specified block and run the closure.  This correctly handles the case where
-/// the closure is null, but the caller needs to make sure the block exists.
+/// specified block and run the closure.  This correctly handles the case
+/// where the closure is null, but the caller needs to make sure the block
+/// exists.
 void FIRRTLLowering::runWithInsertionPointAtEndOfBlock(
     std::function<void(void)> fn, Region &region) {
   if (!fn)
@@ -1726,7 +1865,8 @@ void FIRRTLLowering::addIfProceduralBlock(Value cond,
 
 /// Handle the case where an operation wasn't lowered.  When this happens, the
 /// operands should just be unlowered non-FIRRTL values.  If the operand was
-/// not lowered then leave it alone, otherwise we have a problem with lowering.
+/// not lowered then leave it alone, otherwise we have a problem with
+/// lowering.
 ///
 FIRRTLLowering::UnloweredOpResult
 FIRRTLLowering::handleUnloweredOp(Operation *op) {
@@ -2156,8 +2296,8 @@ LogicalResult FIRRTLLowering::lowerCmpOp(Operation *op, ICmpPredicate signedOp,
       op, resultType, lhsIntType.isSigned() ? signedOp : unsignedOp, lhs, rhs);
 }
 
-/// Lower a divide or dynamic shift, where the operation has to be performed in
-/// the widest type of the result and two inputs then truncated down.
+/// Lower a divide or dynamic shift, where the operation has to be performed
+/// in the widest type of the result and two inputs then truncated down.
 template <typename SignedOp, typename UnsignedOp>
 LogicalResult FIRRTLLowering::lowerDivLikeOp(Operation *op) {
   // rtl has equal types for these, firrtl doesn't.  The type of the firrtl
