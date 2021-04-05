@@ -116,35 +116,16 @@ struct FirMemory {
   size_t readLatency;
   size_t writeLatency;
   bool operator<(const FirMemory &rhs) const {
-    if (numReadPorts < rhs.numReadPorts)
-      return true;
-    if (numReadPorts > rhs.numReadPorts)
-      return false;
-    if (numWritePorts < rhs.numWritePorts)
-      return true;
-    if (numWritePorts > rhs.numWritePorts)
-      return false;
-    if (numReadWritePorts < rhs.numReadWritePorts)
-      return true;
-    if (numReadWritePorts > rhs.numReadWritePorts)
-      return false;
-    if (dataWidth < rhs.dataWidth)
-      return true;
-    if (dataWidth > rhs.dataWidth)
-      return false;
-    if (depth < rhs.depth)
-      return true;
-    if (depth > rhs.depth)
-      return false;
-    if (readLatency < rhs.readLatency)
-      return true;
-    if (readLatency > rhs.readLatency)
-      return false;
-    if (writeLatency < rhs.writeLatency)
-      return true;
-    if (writeLatency > rhs.writeLatency)
-      return false;
+    #define cmp3way(name) if (name < rhs.name) return true; if (name > rhs.name) return false;
+    cmp3way(numReadPorts);
+    cmp3way(numWritePorts);
+    cmp3way(numReadWritePorts);
+    cmp3way(dataWidth);
+    cmp3way(depth);
+    cmp3way(readLatency);
+    cmp3way(writeLatency);
     return false;
+#undef cmp3way
   }
 };
 } // namespace
