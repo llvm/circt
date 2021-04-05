@@ -116,7 +116,11 @@ struct FirMemory {
   size_t readLatency;
   size_t writeLatency;
   bool operator<(const FirMemory &rhs) const {
-    #define cmp3way(name) if (name < rhs.name) return true; if (name > rhs.name) return false;
+#define cmp3way(name)                                                          \
+  if (name < rhs.name)                                                         \
+    return true;                                                               \
+  if (name > rhs.name)                                                         \
+    return false;
     cmp3way(numReadPorts);
     cmp3way(numWritePorts);
     cmp3way(numReadWritePorts);
@@ -156,11 +160,8 @@ static FirMemory analyzeMemOp(MemOp op) {
     op.emitError("'firrtl.mem' should have simple type and known width");
     width = 0;
   }
-   return {
-      numReadPorts,      numWritePorts,
-      numReadWritePorts, (size_t)width,
-      op.depth(),        op.readLatency(),
-      op.writeLatency()};
+  return {numReadPorts, numWritePorts,    numReadWritePorts, (size_t)width,
+          op.depth(),   op.readLatency(), op.writeLatency()};
 }
 
 static std::set<FirMemory> collectFIRRTLMemories(Operation *op) {
@@ -334,9 +335,11 @@ void FIRRTLModuleLowering::runOnOperation() {
 void FIRRTLModuleLowering::lowerMemoryDecls(const std::set<FirMemory> &mems,
                                             Block *top,
                                             CircuitLoweringState &state) {
-  auto b = ImplicitLocOpBuilder::atBlockBegin(UnknownLoc::get(&getContext()), top);
-  std::array<StringRef, 6> schemaFields = {
-      "depth", "numReadPorts", "numWritePorts", "readLatency", "writeLatency", "width"};
+  auto b =
+      ImplicitLocOpBuilder::atBlockBegin(UnknownLoc::get(&getContext()), top);
+  std::array<StringRef, 6> schemaFields = {"depth",         "numReadPorts",
+                                           "numWritePorts", "readLatency",
+                                           "writeLatency",  "width"};
   auto schemaFieldsAttr = b.getStrArrayAttr(schemaFields);
   auto schema = b.create<rtl::RTLGeneratorSchemaOp>(
       "FIRRTLMem", "FIRRTL_Memory", schemaFieldsAttr);
@@ -366,8 +369,8 @@ void FIRRTLModuleLowering::lowerMemoryDecls(const std::set<FirMemory> &mems,
     for (size_t i = 0; i < mem.numReadPorts; ++i) {
       makePortCommon("rd", Twine(i), bAddrType);
       if (mem.dataWidth > 0)
-      ports.push_back({b.getStringAttr((Twine("rd_data_") + Twine(i)).str()),
-                       rtl::OUTPUT, bDataType, outputPin++});
+        ports.push_back({b.getStringAttr((Twine("rd_data_") + Twine(i)).str()),
+                         rtl::OUTPUT, bDataType, outputPin++});
     }
     for (size_t i = 0; i < mem.numWritePorts; ++i) {
       makePortCommon("rw", Twine(i), bAddrType);
@@ -390,8 +393,8 @@ void FIRRTLModuleLowering::lowerMemoryDecls(const std::set<FirMemory> &mems,
 
     // Make the global module for the memory
     auto memoryName = b.getStringAttr(getFirMemoryName(mem));
-    b.create<rtl::RTLModuleGeneratedOp>(
-        memorySchema, memoryName, ports, StringRef(), genAttrs);
+    b.create<rtl::RTLModuleGeneratedOp>(memorySchema, memoryName, ports,
+                                        StringRef(), genAttrs);
   }
 }
 
@@ -1509,7 +1512,8 @@ LogicalResult FIRRTLLowering::visitExpr(ConstantOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
-  // firrtl.mem lowering lowers some SubfieldOps.  Zero-width can leave invalid subfield accesses
+  // firrtl.mem lowering lowers some SubfieldOps.  Zero-width can leave invalid
+  // subfield accesses
   if (getLoweredValue(op) || !op.input())
     return success();
 
@@ -1711,11 +1715,12 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       auto portType = IntegerType::get(op.getContext(), width);
       auto accesses = getAllFieldAccesses(op.getResult(i), field);
 
-      Value wire = createTmpWireOp(portType, ("." + portName + "." + field + ".wire").str());
+      Value wire = createTmpWireOp(
+          portType, ("." + portName + "." + field + ".wire").str());
 
-     for (auto a : accesses)
-             (void)setLowering(a, wire);
-     
+      for (auto a : accesses)
+        (void)setLowering(a, wire);
+
       wire = builder.create<sv::ReadInOutOp>(wire);
       operands.push_back(wire);
     };
@@ -1744,7 +1749,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       addInput(writeOperands, "addr", llvm::Log2_64_Ceil(memSummary.depth));
       addInput(writeOperands, "mask", memSummary.dataWidth);
       if (memSummary.dataWidth > 0)
-      addInput(writeOperands, "data", memSummary.dataWidth);
+        addInput(writeOperands, "data", memSummary.dataWidth);
     }
     ++portKindNum;
   }
@@ -1755,7 +1760,8 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   readOperands.append(writeOperands.begin(), writeOperands.end());
   // Create the instance to replace the memop
   auto inst = builder.create<rtl::InstanceOp>(
-      resultTypes, builder.getStringAttr(memName), memModuleAttr, readOperands, DictionaryAttr());
+      resultTypes, builder.getStringAttr(memName), memModuleAttr, readOperands,
+      DictionaryAttr());
 
   // Update all users of the result of read ports
   for (auto &ret : returnHolder)
