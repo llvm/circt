@@ -1253,27 +1253,31 @@ firrtl.module @mul_cst_prop3(%out_b: !firrtl.flip<sint<15>>) {
 // CHECK-NEXT: }
 firrtl.module @zero_mem(%clock: !firrtl.clock, %r0en: !firrtl.uint<1>) {
   %tmp41_r0, %tmp41_w0 = firrtl.mem Undefined {depth = 10 : i64, name = "tmp41", portNames = ["r0", "w0"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<0>>, !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>>
-  %0 = firrtl.subfield %tmp41_r0("clk") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<0>>) -> !firrtl.flip<clock>
-  firrtl.connect %0, %clock : !firrtl.flip<clock>, !firrtl.clock
-  %1 = firrtl.subfield %tmp41_r0("en") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<0>>) -> !firrtl.flip<uint<1>>
-  firrtl.connect %1, %r0en : !firrtl.flip<uint<1>>, !firrtl.uint<1>
-  %2 = firrtl.subfield %tmp41_r0("addr") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<0>>) -> !firrtl.flip<uint<4>>
-  %c0_si25 = firrtl.constant(0 : si25) : !firrtl.sint<25>
-  %3 = firrtl.asUInt %c0_si25 : (!firrtl.sint<25>) -> !firrtl.uint<25>
-  firrtl.partialconnect %2, %3 : !firrtl.flip<uint<4>>, !firrtl.uint<25>
-  %4 = firrtl.subfield %tmp41_w0("clk") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>>) -> !firrtl.flip<clock>
-  firrtl.connect %4, %clock : !firrtl.flip<clock>, !firrtl.clock
-  %5 = firrtl.subfield %tmp41_w0("en") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
-  firrtl.connect %5, %r0en : !firrtl.flip<uint<1>>, !firrtl.uint<1>
-  %6 = firrtl.subfield %tmp41_w0("addr") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>>) -> !firrtl.flip<uint<4>>
-  %7 = firrtl.asUInt %c0_si25 : (!firrtl.sint<25>) -> !firrtl.uint<25>
-  firrtl.partialconnect %6, %7 : !firrtl.flip<uint<4>>, !firrtl.uint<25>
-  %8 = firrtl.subfield %tmp41_w0("mask") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
-  %9 = firrtl.asUInt %c0_si25 : (!firrtl.sint<25>) -> !firrtl.uint<25>
-  firrtl.partialconnect %8, %9 : !firrtl.flip<uint<1>>, !firrtl.uint<25>
-  %10 = firrtl.subfield %tmp41_w0("data") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>>) -> !firrtl.flip<uint<0>>
-  %11 = firrtl.asUInt %c0_si25 : (!firrtl.sint<25>) -> !firrtl.uint<25>
-  firrtl.partialconnect %10, %11 : !firrtl.flip<uint<0>>, !firrtl.uint<25>
 }
 
+// We fold `validif` operations to their RHS, regardless of the LHS.
+// See https://github.com/llvm/circt/issues/839.
+// CHECK-LABEL: @elide_validif
+// CHECK-NEXT:      firrtl.connect %out, %clock : !firrtl.flip<clock>, !firrtl.clock
+// CHECK-NEXT:  }
+firrtl.module @elide_validif(%clock: !firrtl.clock, %valid: !firrtl.uint<1>, %out: !firrtl.flip<clock>) {
+  %x = firrtl.wire  : !firrtl.clock
+  %0 = firrtl.validif %valid, %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.clock
+  firrtl.connect %x, %0 : !firrtl.clock, !firrtl.clock
+  firrtl.connect %out, %x : !firrtl.flip<clock>, !firrtl.clock
+}
+
+// CHECK-LABEL: firrtl.module @MuxInvalidOpt
+firrtl.module @MuxInvalidOpt(%cond: !firrtl.uint<1>, %data: !firrtl.uint<4>, %out1: !firrtl.flip<uint<4>>, %out2: !firrtl.flip<uint<4>>) {
+
+  // We can optimize out these mux's since the invalid value can take on any input.
+  %tmp1 = firrtl.invalidvalue : !firrtl.uint<4>
+  %a = firrtl.mux(%cond, %data, %tmp1) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  // CHECK:         firrtl.connect %out1, %data 
+  firrtl.connect %out1, %a : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+
+  %b = firrtl.mux(%cond, %tmp1, %data) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  // CHECK:         firrtl.connect %out2, %data 
+  firrtl.connect %out2, %b : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+}
 }

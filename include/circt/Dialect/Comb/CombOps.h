@@ -19,6 +19,10 @@
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
+namespace mlir {
+class PatternRewriter;
+}
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/Comb/Comb.h.inc"
 

@@ -184,3 +184,10 @@ rtl.module @test(%a: i2) -> () {
   rtl.instance "test" @f(%a) : (i2) -> ()
   rtl.output
 }
+
+// -----
+
+// expected-error @+1 {{'rtl.module' op incorrect number of argument names}}
+rtl.module @invalidNames(%clock: i1, %a: i1) 
+  attributes { argNames = ["x", "y", "z"] } {
+}

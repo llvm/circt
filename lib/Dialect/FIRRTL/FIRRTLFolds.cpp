@@ -53,42 +53,6 @@ static inline ConstantIntMatcher m_FConstant(APInt &value) {
   return ConstantIntMatcher(value);
 }
 
-// TODO: Should move to MLIR upstream.
-template <typename OpType>
-static void
-addCanonicalizer(RewritePatternSet &results, MLIRContext *context,
-                 LogicalResult (*implFn)(OpType, PatternRewriter &rewriter)) {
-  // std::function<LogicalResult(OpType, PatternRewriter &rewriter)> implFn) {
-  struct Folder final : public OpRewritePattern<OpType> {
-    LogicalResult (*implFn)(OpType, PatternRewriter &rewriter);
-
-    Folder(LogicalResult (*implFn)(OpType, PatternRewriter &rewriter),
-           MLIRContext *context)
-        : OpRewritePattern<OpType>(context), implFn(implFn) {}
-
-    LogicalResult matchAndRewrite(OpType op,
-                                  PatternRewriter &rewriter) const override {
-      return implFn(op, rewriter);
-    }
-  };
-
-  results.insert(std::make_unique<Folder>(std::move(implFn), context));
-}
-
-template <typename OpType>
-static void addCanonicalizerMethod(RewritePatternSet &results,
-                                   MLIRContext *context) {
-  struct Folder final : public OpRewritePattern<OpType> {
-    using OpRewritePattern<OpType>::OpRewritePattern;
-
-    LogicalResult matchAndRewrite(OpType op,
-                                  PatternRewriter &rewriter) const override {
-      return OpType::canonicalize(op, rewriter);
-    }
-  };
-  results.insert<Folder>(context);
-}
-
 /// Implicitly replace the operand to a constant folding operation with a const
 /// 0 in case the operand is non-constant but has a bit width 0.
 ///
@@ -556,7 +520,12 @@ OpFoldResult DShlwPrimOp::fold(ArrayRef<Attribute> operands) { return {}; }
 
 OpFoldResult DShrPrimOp::fold(ArrayRef<Attribute> operands) { return {}; }
 
-OpFoldResult ValidIfPrimOp::fold(ArrayRef<Attribute> operands) { return {}; }
+OpFoldResult ValidIfPrimOp::fold(ArrayRef<Attribute> operands) {
+  // Fold all validIf(x, y) -> y for now. This replicates what the Scala FIRRTL
+  // compiler does in all relevant cases.
+  return rhs();
+}
+
 //===----------------------------------------------------------------------===//
 // Unary Operators
 //===----------------------------------------------------------------------===//
@@ -577,7 +546,7 @@ OpFoldResult AsUIntPrimOp::fold(ArrayRef<Attribute> operands) {
 // Other Operators
 //===----------------------------------------------------------------------===//
 
-static LogicalResult canonicalize(CatPrimOp op, PatternRewriter &rewriter) {
+LogicalResult CatPrimOp::canonicalize(CatPrimOp op, PatternRewriter &rewriter) {
   // cat(bits(x, ...), bits(x, ...)) -> bits(x ...) when the two ...'s are
   // consequtive in the input.
   if (auto lhsBits = dyn_cast_or_null<BitsPrimOp>(op.lhs().getDefiningOp())) {
@@ -591,11 +560,6 @@ static LogicalResult canonicalize(CatPrimOp op, PatternRewriter &rewriter) {
     }
   }
   return failure();
-}
-
-void CatPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                            MLIRContext *context) {
-  addCanonicalizer<CatPrimOp>(results, context, canonicalize);
 }
 
 OpFoldResult BitsPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -615,7 +579,8 @@ OpFoldResult BitsPrimOp::fold(ArrayRef<Attribute> operands) {
   return {};
 }
 
-static LogicalResult canonicalize(BitsPrimOp op, PatternRewriter &rewriter) {
+LogicalResult BitsPrimOp::canonicalize(BitsPrimOp op,
+                                       PatternRewriter &rewriter) {
   auto inputOp = op.input().getDefiningOp();
   // bits(bits(x, ...), ...) -> bits(x, ...).
   if (auto innerBits = dyn_cast_or_null<BitsPrimOp>(inputOp)) {
@@ -626,11 +591,6 @@ static LogicalResult canonicalize(BitsPrimOp op, PatternRewriter &rewriter) {
     return success();
   }
   return failure();
-}
-
-void BitsPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                             MLIRContext *context) {
-  addCanonicalizer<BitsPrimOp>(results, context, canonicalize);
 }
 
 /// Replace the specified operation with a 'bits' op from the specified hi/lo
@@ -651,7 +611,8 @@ static void replaceWithBits(Operation *op, Value value, unsigned hiBit,
   rewriter.replaceOp(op, value);
 }
 
-static LogicalResult canonicalize(HeadPrimOp op, PatternRewriter &rewriter) {
+LogicalResult HeadPrimOp::canonicalize(HeadPrimOp op,
+                                       PatternRewriter &rewriter) {
   auto inputWidth = op.input().getType().cast<IntType>().getWidthOrSentinel();
   if (inputWidth == -1)
     return failure();
@@ -662,11 +623,6 @@ static LogicalResult canonicalize(HeadPrimOp op, PatternRewriter &rewriter) {
     replaceWithBits(op, op.input(), inputWidth - 1, inputWidth - keepAmount,
                     rewriter);
   return success();
-}
-
-void HeadPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                             MLIRContext *context) {
-  addCanonicalizer<HeadPrimOp>(results, context, canonicalize);
 }
 
 OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -682,6 +638,13 @@ OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
 
   // mux(cond, x, x) -> x
   if (high() == low())
+    return high();
+
+  // mux(cond, x, invalid) -> x
+  // mux(cond, invalid, x) -> x
+  if (high().getDefiningOp<InvalidValuePrimOp>())
+    return low();
+  if (low().getDefiningOp<InvalidValuePrimOp>())
     return high();
 
   // mux(cond, x, cst)
@@ -786,7 +749,7 @@ OpFoldResult ShrPrimOp::fold(ArrayRef<Attribute> operands) {
   return {};
 }
 
-static LogicalResult canonicalize(ShrPrimOp op, PatternRewriter &rewriter) {
+LogicalResult ShrPrimOp::canonicalize(ShrPrimOp op, PatternRewriter &rewriter) {
   auto inputWidth = op.input().getType().cast<IntType>().getWidthOrSentinel();
   if (inputWidth == -1)
     return failure();
@@ -808,12 +771,8 @@ static LogicalResult canonicalize(ShrPrimOp op, PatternRewriter &rewriter) {
   return success();
 }
 
-void ShrPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                            MLIRContext *context) {
-  addCanonicalizer<ShrPrimOp>(results, context, canonicalize);
-}
-
-static LogicalResult canonicalize(TailPrimOp op, PatternRewriter &rewriter) {
+LogicalResult TailPrimOp::canonicalize(TailPrimOp op,
+                                       PatternRewriter &rewriter) {
   auto inputWidth = op.input().getType().cast<IntType>().getWidthOrSentinel();
   if (inputWidth == -1)
     return failure();
@@ -823,11 +782,6 @@ static LogicalResult canonicalize(TailPrimOp op, PatternRewriter &rewriter) {
   if (dropAmount != unsigned(inputWidth))
     replaceWithBits(op, op.input(), inputWidth - dropAmount - 1, 0, rewriter);
   return success();
-}
-
-void TailPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                             MLIRContext *context) {
-  addCanonicalizer<TailPrimOp>(results, context, canonicalize);
 }
 
 //===----------------------------------------------------------------------===//
@@ -903,7 +857,7 @@ static LogicalResult foldSingleSetConnect(ConnectOp op,
   return success();
 }
 
-static LogicalResult canonicalize(ConnectOp op, PatternRewriter &rewriter) {
+LogicalResult ConnectOp::canonicalize(ConnectOp op, PatternRewriter &rewriter) {
   // TODO: Canonicalize towards explicit extensions and flips here.
 
   // If there is a simple value connected to a foldable decl like a wire or reg,
@@ -912,11 +866,6 @@ static LogicalResult canonicalize(ConnectOp op, PatternRewriter &rewriter) {
     return success();
 
   return failure();
-}
-
-void ConnectOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                            MLIRContext *context) {
-  addCanonicalizer<ConnectOp>(results, context, canonicalize);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1025,11 +974,6 @@ LogicalResult AttachOp::canonicalize(AttachOp op, PatternRewriter &rewriter) {
   return failure();
 }
 
-void AttachOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                           MLIRContext *context) {
-  addCanonicalizer<AttachOp>(results, context, canonicalize);
-}
-
 LogicalResult PartialConnectOp::canonicalize(PartialConnectOp op,
                                              PatternRewriter &rewriter) {
   // If a partial connect exists from a longer int to a shorter int, simplify
@@ -1052,11 +996,6 @@ LogicalResult PartialConnectOp::canonicalize(PartialConnectOp op,
     return success();
   }
   return failure();
-}
-
-void PartialConnectOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                                   MLIRContext *context) {
-  addCanonicalizerMethod<PartialConnectOp>(results, context);
 }
 
 LogicalResult MemOp::canonicalize(MemOp op,
@@ -1082,9 +1021,4 @@ LogicalResult MemOp::canonicalize(MemOp op,
   }
   rewriter.eraseOp(op);
   return success();
-}
-
-void MemOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                                   MLIRContext *context) {
-  addCanonicalizerMethod<MemOp>(results, context);
 }

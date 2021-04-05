@@ -29,7 +29,7 @@ def Channel : ESI_Port<"Channel"> {
     Example:
 
     ```mlir
-    rtl.module.extern @Sender() -> ( !esi.channel<i1> { rtl.name = "x"} )
+    rtl.module.extern @Sender() -> (%x: !esi.channel<i1>)
     rtl.module @Reciever(%a: !esi.channel<rtl.array<5xi16>>) { }
     ```
   }];

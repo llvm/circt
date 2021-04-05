@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/Comb/CombOps.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/PatternMatch.h"
 
 using namespace mlir;
 using namespace circt;
@@ -56,8 +57,6 @@ ICmpPredicate ICmpOp::getFlippedPredicate(ICmpPredicate predicate) {
   }
   llvm_unreachable("unknown comparison predicate");
 }
-
-
 
 //===----------------------------------------------------------------------===//
 // Unary Operations

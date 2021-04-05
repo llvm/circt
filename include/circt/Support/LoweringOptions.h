@@ -57,6 +57,10 @@ struct LoweringOptions {
   // If true, ExportVerilog emits AlwaysFFOp as Verilog always_ff statements.
   // Otherwise, it will print them as always statements
   bool useAlwaysFF = true;
+
+  /// This is the target width of lines in an emitted verilog source file in
+  /// columns.
+  unsigned emittedLineLength = 90;
 };
 
 /// Register commandline options for the verilog emitter.

@@ -12,16 +12,16 @@ module {
   // CHECK-NEXT:    %1 = comb.and %a, %a : i1
   // CHECK-NEXT:    rtl.output %0, %1 : i1, i1
 
-  rtl.module.extern @C(%a: i1 {rtl.name = "nameOfPortInSV"}) -> (i1, i1)
-  // CHECK-LABEL: rtl.module.extern @C(i1 {rtl.name = "nameOfPortInSV"}) -> (i1, i1)
+  rtl.module.extern @C(%a: i1) -> (i1, i1) attributes {argNames=["nameOfPortInSV"]}
+  // CHECK-LABEL: rtl.module.extern @C(%nameOfPortInSV: i1) -> (i1, i1)
   // CHECK-NOT: {
 
-  rtl.module.extern @explicitResultName() -> (%x: i1 {rtl.name="FOO"})
+  rtl.module.extern @explicitResultName() -> (%x: i1) attributes {resultNames=["FOO"]}
   // CHECK-LABEL: rtl.module.extern @explicitResultName() -> (%FOO: i1)
 
   rtl.module.extern @D_ATTR(%a: i1) -> (i1, i1) attributes {filename = "test.v", parameters = {DEFAULT = 0 : i64}}
 
-  // CHECK-LABEL: rtl.module.extern @D_ATTR(i1 {rtl.name = "a"}) -> (i1, i1) attributes {filename = "test.v", parameters = {DEFAULT = 0 : i64}}
+  // CHECK-LABEL: rtl.module.extern @D_ATTR(%a: i1) -> (i1, i1) attributes {filename = "test.v", parameters = {DEFAULT = 0 : i64}}
   // CHECK-NOT: {
 
   rtl.module @A(%d: i1, %e: !rtl.inout<i1>) -> (i1, i1) {
@@ -51,8 +51,11 @@ module {
   // CHECK-NEXT:  rtl.instance "anyType1" @AnyType1(%cst) : (vector<3xi8>) -> ()
 
   rtl.generator.schema @MEMORY, "Simple-Memory", ["ports", "write_latency", "read_latency"]
-  rtl.module.generated @genmod1, @MEMORY() -> (%x: i1 {rtl.name="FOOBAR"}) attributes {write_latency=1, read_latency=1, ports=["read","write"]}
+  rtl.module.generated @genmod1, @MEMORY() -> (%FOOBAR: i1) attributes {write_latency=1, read_latency=1, ports=["read","write"]}
   // CHECK-LABEL: rtl.generator.schema @MEMORY, "Simple-Memory", ["ports", "write_latency", "read_latency"]
   // CHECK-NEXT: rtl.module.generated @genmod1, @MEMORY() -> (%FOOBAR: i1) attributes {ports = ["read", "write"], read_latency = 1 : i64, write_latency = 1 : i64}
 
+
+  // CHECK-LABEL: rtl.module.extern @AnonArg(i42)
+  rtl.module.extern @AnonArg(i42)
 }
