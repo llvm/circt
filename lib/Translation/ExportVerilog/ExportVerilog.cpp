@@ -38,9 +38,6 @@ using namespace comb;
 using namespace rtl;
 using namespace sv;
 
-/// This is the preferred source width for the generated Verilog.
-static constexpr size_t preferredSourceWidth = 90;
-
 //===----------------------------------------------------------------------===//
 // Helper routines
 //===----------------------------------------------------------------------===//
@@ -968,10 +965,10 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
     threshold = ~0U;
     break;
   case OOLUnary:
-    threshold = preferredSourceWidth - 20;
+    threshold = std::max(state.options.emittedLineLength - 20, 10U);
     break;
   case OOLBinary:
-    threshold = preferredSourceWidth / 2;
+    threshold = std::max(state.options.emittedLineLength / 2, 10U);
     break;
   }
 
@@ -2717,6 +2714,8 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
     printUnpackedTypePostfix(portType, os);
     ++portIdx;
 
+    auto lineLength = state.options.emittedLineLength;
+
     // If we have any more ports with the same types and the same direction,
     // emit them in a list on the same line.
     while (portIdx != e && portInfo[portIdx].direction == thisPortDirection &&
@@ -2727,7 +2726,7 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
       if (os.tell() + 2 + name.size() - startOfLinePos >
           // We use "-2" here because we need a trailing comma or ); for the
           // decl.
-          preferredSourceWidth - 2)
+          lineLength - 2)
         break;
 
       // Append this to the running port decl.

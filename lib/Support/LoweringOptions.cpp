@@ -41,6 +41,12 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       // Empty options are fine.
     } else if (option == "noAlwaysFF") {
       useAlwaysFF = false;
+    } else if (option.startswith("emittedLineLength=")) {
+      option = option.drop_front(strlen("emittedLineLength="));
+      if (option.getAsInteger(10, emittedLineLength)) {
+        errorHandler("expected integer source width");
+        emittedLineLength = 90;
+      }
     } else {
       errorHandler(llvm::Twine("unknown style option \'") + option + "\'");
       // We continue parsing options after a failure.
@@ -50,8 +56,17 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
 
 std::string LoweringOptions::toString() const {
   std::string options = "";
+  // All options should add a trailing comma to simplify the code.
   if (!useAlwaysFF)
-    options += "noAlwaysFF";
+    options += "noAlwaysFF,";
+  if (emittedLineLength != 90)
+    options += "emittedLineLength=" + std::to_string(emittedLineLength) + ',';
+
+  // Remove a trailing comma if present.
+  if (!options.empty()) {
+    assert(options.back() == ',' && "all options should add a trailing comma");
+    options.pop_back();
+  }
   return options;
 }
 
