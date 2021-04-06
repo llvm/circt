@@ -7,4 +7,4 @@ from circt import esi
 # from mlir.ir import *
 # from mlir.dialects import builtin
 
-esi.attachports()
+# esi.attachports()
