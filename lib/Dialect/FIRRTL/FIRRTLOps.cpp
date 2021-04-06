@@ -1323,21 +1323,6 @@ FIRRTLType DShrPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs,
   return lhs;
 }
 
-FIRRTLType ValidIfPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs,
-                                        Location loc) {
-  auto lhsUInt = lhs.dyn_cast<UIntType>();
-  if (!lhsUInt) {
-    mlir::emitError(loc, "first operand should have UInt type");
-    return {};
-  }
-  auto lhsWidth = lhsUInt.getWidthOrSentinel();
-  if (lhsWidth != -1 && lhsWidth != 1) {
-    mlir::emitError(loc, "first operand should have 'uint<1>' type");
-    return {};
-  }
-  return rhs;
-}
-
 //===----------------------------------------------------------------------===//
 // Unary Primitives
 //===----------------------------------------------------------------------===//

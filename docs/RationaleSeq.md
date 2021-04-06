@@ -50,7 +50,7 @@ it somewhat distinct from the SystemVerilog register wherein one has to
 account for details like reset behavior and implementation (latch vs.
 flip-flop).
 
-`Reg` has four operands:
+`CompReg` has four operands:
 
 - **input**: The value to be captured at 'clock'. Generally called 'd'.
 Accepts any type, results in the same type. Does not support any notion of
@@ -98,7 +98,7 @@ optimization) another op could be added.
 
 - Enable signal: if this proves difficult to detect (or non-performant if we
 do not detect and generate the SystemVerilog correctly), we can build it into
-the reg op.
+the compreg op.
 - Reset style and clock style: how should we model posedge vs negedge clocks?
 Async vs sync resets? There are some reasonble options here: attributes on
 this op or `clock` and `reset` types which are parameterized with that

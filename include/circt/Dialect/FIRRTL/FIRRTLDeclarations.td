@@ -25,6 +25,16 @@ def InstanceOp : FIRRTLOp<"instance"> {
 
   let verifier = "return ::verifyInstanceOp(*this);";
 
+  let builders = [
+    OpBuilder<(ins "::mlir::TypeRange":$elementType,
+                      "::mlir::StringRef":$moduleName,
+                      "::mlir::ArrayAttr":$portNames,
+                      CArg<"StringRef", "{}">:$name), [{
+      return build($_builder, $_state, elementType, moduleName, portNames,
+                   $_builder.getStringAttr(name));
+    }]>
+  ];
+
   let extraClassDeclaration = [{
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.

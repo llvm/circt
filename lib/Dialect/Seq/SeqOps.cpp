@@ -12,11 +12,57 @@
 
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/DialectImplementation.h"
 
 using namespace mlir;
 using namespace circt;
 using namespace seq;
 
+ParseResult parseCompRegOp(OpAsmParser &parser, OperationState &result) {
+  llvm::SMLoc loc = parser.getCurrentLocation();
+  SmallVector<OpAsmParser::OperandType, 4> operands;
+  if (parser.parseOperandList(operands))
+    return failure();
+  switch (operands.size()) {
+  case 0:
+    return parser.emitError(loc, "expected operands");
+  case 1:
+    return parser.emitError(loc, "expected clock operand");
+  case 2:
+    // No reset.
+    break;
+  case 3:
+    return parser.emitError(loc, "expected resetValue operand");
+  case 4:
+    // reset and reset value included.
+    break;
+  default:
+    return parser.emitError(loc, "too many operands");
+  }
+
+  Type ty;
+  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(ty))
+    return failure();
+  Type i1 = IntegerType::get(result.getContext(), 1);
+
+  result.addTypes({ty});
+  if (operands.size() == 2)
+    return parser.resolveOperands(operands, {ty, i1}, loc, result.operands);
+  else
+    return parser.resolveOperands(operands, {ty, i1, i1, ty}, loc,
+                                  result.operands);
+}
+
+static void print(::mlir::OpAsmPrinter &p, CompRegOp reg) {
+  p << "seq.compreg";
+  p << ' ' << reg.input() << ", " << reg.clk();
+  if (reg.reset()) {
+    p << ", " << reg.reset() << ", " << reg.resetValue() << ' ';
+  }
+  p.printOptionalAttrDict(reg->getAttrs(), /*elidedAttrs=*/{});
+  p << " : " << reg.input().getType();
+}
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
