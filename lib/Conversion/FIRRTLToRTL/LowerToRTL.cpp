@@ -25,7 +25,6 @@
 #include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/Parallel.h"
-#include <set>
 
 using namespace circt;
 using namespace firrtl;
@@ -131,6 +130,13 @@ struct FirMemory {
     return false;
 #undef cmp3way
   }
+  bool operator==(const FirMemory &rhs) const {
+    return numReadPorts == rhs.numReadPorts &&
+           numWritePorts == rhs.numWritePorts &&
+           numReadWritePorts == rhs.numReadWritePorts &&
+           dataWidth == rhs.dataWidth && depth == rhs.depth &&
+           readLatency == rhs.readLatency && writeLatency == rhs.writeLatency;
+  }
 };
 } // namespace
 
@@ -164,18 +170,26 @@ static FirMemory analyzeMemOp(MemOp op) {
           op.depth(),   op.readLatency(), op.writeLatency()};
 }
 
-static std::set<FirMemory> collectFIRRTLMemories(Operation *op) {
+static SmallVector<FirMemory> collectFIRRTLMemories(Operation *op) {
   auto module = cast<FModuleOp>(op);
-  std::set<FirMemory> retval;
+  SmallVector<FirMemory> retval;
   for (auto op : module.getBody().getOps<MemOp>())
-    retval.insert(analyzeMemOp(op));
+    retval.push_back(analyzeMemOp(op));
   return retval;
 }
 
-static std::set<FirMemory> mergeFIRRTLMemories(std::set<FirMemory> a,
-                                               std::set<FirMemory> b) {
-  a.insert(b.begin(), b.end());
-  return a;
+static SmallVector<FirMemory>
+mergeFIRRTLMemories(const SmallVector<FirMemory> &lhs,
+                    SmallVector<FirMemory> rhs) {
+  if (rhs.empty())
+    return lhs;
+  // lhs is always sorted and uniqued
+  llvm::sort(rhs);
+  rhs.erase(std::unique(rhs.begin(), rhs.end()), rhs.end());
+  SmallVector<FirMemory> retval;
+  std::set_union(lhs.begin(), lhs.end(), rhs.begin(), rhs.end(),
+                 std::back_inserter(retval));
+  return retval;
 }
 
 //===----------------------------------------------------------------------===//
@@ -232,7 +246,7 @@ private:
   void lowerModuleOperations(rtl::RTLModuleOp module,
                              CircuitLoweringState &loweringState);
 
-  void lowerMemoryDecls(const std::set<FirMemory> &mems, Block *top,
+  void lowerMemoryDecls(const SmallVector<FirMemory> &mems, Block *top,
                         CircuitLoweringState &loweringState);
 };
 
@@ -292,11 +306,11 @@ void FIRRTLModuleLowering::runOnOperation() {
         << op.getName() << "' in a firrtl.circuit";
   }
 
-  std::set<FirMemory> memories;
+  SmallVector<FirMemory> memories;
   if (getContext().isMultithreadingEnabled()) {
     memories = llvm::parallelTransformReduce(
-        modulesToProcess.begin(), modulesToProcess.end(), std::set<FirMemory>(),
-        mergeFIRRTLMemories, collectFIRRTLMemories);
+        modulesToProcess.begin(), modulesToProcess.end(),
+        SmallVector<FirMemory>(), mergeFIRRTLMemories, collectFIRRTLMemories);
   } else {
     for (auto m : modulesToProcess)
       memories = mergeFIRRTLMemories(memories, collectFIRRTLMemories(m));
@@ -332,7 +346,7 @@ void FIRRTLModuleLowering::runOnOperation() {
   circuit.erase();
 }
 
-void FIRRTLModuleLowering::lowerMemoryDecls(const std::set<FirMemory> &mems,
+void FIRRTLModuleLowering::lowerMemoryDecls(const SmallVector<FirMemory> &mems,
                                             Block *top,
                                             CircuitLoweringState &state) {
   auto b =
@@ -1707,10 +1721,9 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     auto portName = op.getPortName(i).getValue();
     auto portKind = *op.getPortKind(i);
 
-    auto &portKindNum =
-        portKind == MemOp::PortKind::Read
-            ? readCount
-            : portKind == MemOp::PortKind::Write ? writeCount : readwriteCount;
+    auto &portKindNum = portKind == MemOp::PortKind::Read    ? readCount
+                        : portKind == MemOp::PortKind::Write ? writeCount
+                                                             : readwriteCount;
     auto addInput = [&](SmallVectorImpl<Value> &operands, StringRef field,
                         size_t width) {
       auto portType = IntegerType::get(op.getContext(), width);
