@@ -195,7 +195,6 @@ circuit Issue426:
     ; expected-error @+1 {{initializer too wide for declared width}}
     a <= SInt<1>(-2)
 
-
 ;// -----
 
 circuit circuit:
@@ -212,3 +211,27 @@ circuit circuit:
     input in: UInt<80>
     inst xyz of circuit
     node n = xyz.foo   ; expected-error {{use of invalid field name 'foo' on bundle value}}
+
+;// -----
+
+circuit Issue886:
+  module Issue886 :
+    input a: SInt<1>
+    input b: UInt<42>
+    node n = validif(a, b)  ; expected-error {{first operand should have UInt type}}
+
+;// -----
+
+circuit Issue886:
+  module Issue886 :
+    input a: UInt<2>
+    input b: UInt<42>
+    node n = validif(a, b)  ; expected-error {{first operand should have 'uint<1>' type}}
+
+;// -----
+
+circuit Issue886:
+  module Issue886 :
+    input a: UInt<1>
+    input b: UInt<42>
+    node n = validif(a, b, b)  ; expected-error {{operation requires two operands and no constants}}

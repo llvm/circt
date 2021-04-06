@@ -229,10 +229,10 @@ by the .fir file parser.
 
 ### More things are represented as primitives
 
-We describe the `mux` and `validif` expressions as "primitives", whereas the IR
-spec and grammar implement them as special kinds of expressions.
+We describe the `mux` expression as "primitive", whereas the IR
+spec and grammar implement it as a special kind of expression.
 
-We do this to simplify the implementation: These expression
+We do this to simplify the implementation: These expressions
 have the same structure as primitives, and modeling them as such allows reuse
 of the parsing logic instead of duplication of grammar rules.
 
@@ -250,3 +250,28 @@ and returns an invalid value, and a standard `firrtl.connect` operation that
 connects the invalid value to the destination (or a `firrtl.attach` for analog
 values).  This has the same expressive power as the standard FIRRTL
 representation but is easier to work with.
+
+### `validif` represented as a multiplexer
+
+The FIRRTL spec describes a `validIf(en, x)` operation that is used during lowering from high to low FIRRTL. Consider the following example:
+
+```
+c <= invalid
+when a:
+  c <= b
+```
+
+Lowering will introduce the following intermediate representation in low FIRRTL:
+
+```
+c <= validIf(a, b)
+```
+
+Since there is no precedence of this `validIf` being used anywhere in the Chisel/FIRRTL ecosystem thus far and instead is always replaced by its right-hand operand `b`, the FIRRTL MLIR dialect does not provide such an operation at all. Rather it directly replaces any `validIf` in FIRRTL input with the following equivalent operations:
+
+```mlir
+%0 = firrtl.invalidvalue : !firrtl.uint<42>
+%c = firrtl.mux(%a, %b, %0) : (!firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>) -> !firrtl.uint<42>
+```
+
+A canonicalization then folds this combination of `firrtl.invalidvalue` and `firrtl.mux` to the "high" operand of the multiplexer to facilitate downstream transformation passes.

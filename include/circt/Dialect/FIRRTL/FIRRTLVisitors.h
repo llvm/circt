@@ -36,7 +36,7 @@ public:
             // Comparisons.
             LEQPrimOp, LTPrimOp, GEQPrimOp, GTPrimOp, EQPrimOp, NEQPrimOp,
             // Misc Binary Primitives.
-            CatPrimOp, DShlPrimOp, DShlwPrimOp, DShrPrimOp, ValidIfPrimOp,
+            CatPrimOp, DShlPrimOp, DShlwPrimOp, DShrPrimOp,
             // Unary operators.
             AsSIntPrimOp, AsUIntPrimOp, AsAsyncResetPrimOp, AsClockPrimOp,
             CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
@@ -114,7 +114,6 @@ public:
   HANDLE(DShlPrimOp, Binary);
   HANDLE(DShlwPrimOp, Binary);
   HANDLE(DShrPrimOp, Binary);
-  HANDLE(ValidIfPrimOp, Binary);
 
   // Unary operators.
   HANDLE(AsSIntPrimOp, Unary);

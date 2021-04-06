@@ -1415,6 +1415,33 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
     break;                                                                     \
   }
 #include "FIRTokenKinds.def"
+
+  // Expand `validif(a, b)` expressions to `mux(a, b, invalidvalue)`, since we
+  // do not provide an operation for `validif`. See docs/RationaleFIRRTL.md for
+  // more details on this.
+  case FIRToken::lp_validif: {
+    auto tloc = translateLocation(loc);
+
+    if (opTypes.size() != 2 || !integers.empty()) {
+      mlir::emitError(tloc, "operation requires two operands and no constants");
+      return failure();
+    }
+    auto lhsUInt = opTypes[0].dyn_cast<UIntType>();
+    if (!lhsUInt) {
+      mlir::emitError(tloc, "first operand should have UInt type");
+      return failure();
+    }
+    auto lhsWidth = lhsUInt.getWidthOrSentinel();
+    if (lhsWidth != -1 && lhsWidth != 1) {
+      mlir::emitError(tloc, "first operand should have 'uint<1>' type");
+      return failure();
+    }
+
+    auto inv = builder.create<InvalidValuePrimOp>(tloc, opTypes[1]);
+    result = builder.create<MuxPrimOp>(
+        tloc, opTypes[1], ValueRange({operands[0], operands[1], inv}), attrs);
+    break;
+  }
   }
 
   subOps.push_back(result.getDefiningOp());
