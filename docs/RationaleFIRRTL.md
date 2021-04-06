@@ -229,10 +229,10 @@ by the .fir file parser.
 
 ### More things are represented as primitives
 
-We describe the `mux` and `validif` expressions as "primitives", whereas the IR
-spec and grammar implement them as special kinds of expressions.
+We describe the `mux` expression as "primitive", whereas the IR
+spec and grammar implement it as a special kind of expression.
 
-We do this to simplify the implementation: These expression
+We do this to simplify the implementation: These expressions
 have the same structure as primitives, and modeling them as such allows reuse
 of the parsing logic instead of duplication of grammar rules.
 

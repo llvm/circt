@@ -675,3 +675,22 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     mem.r.en <= rEn
     mem.r.addr <= rAddr
     rData <= mem.r.data
+
+  ; https://github.com/llvm/circt/issues/886
+  ; CHECK-LABEL: ParseValidifAsMux
+  module ParseValidifAsMux:
+    input in1: Clock
+    input in2: UInt<42>
+    input en: UInt<1>
+    output out1: Clock
+    output out2: UInt<42>
+
+    ; CHECK-NEXT: %0 = firrtl.invalidvalue : !firrtl.clock
+    ; CHECK-NEXT: %1 = firrtl.mux(%en, %in1, %0) : (!firrtl.uint<1>, !firrtl.clock, !firrtl.clock) -> !firrtl.clock
+    ; CHECK-NEXT: firrtl.connect
+    out1 <= validif(en, in1)
+
+    ; CHECK-NEXT: %2 = firrtl.invalidvalue : !firrtl.uint<42>
+    ; CHECK-NEXT: %3 = firrtl.mux(%en, %in2, %2) : (!firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>) -> !firrtl.uint<42>
+    ; CHECK-NEXT: firrtl.connect
+    out2 <= validif(en, in2)

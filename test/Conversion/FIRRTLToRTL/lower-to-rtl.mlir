@@ -160,11 +160,8 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: comb.mux {{.*}}, [[CVT4]], [[SUB]] : i4
     %26 = firrtl.mux(%17, %23, %25) : (!firrtl.uint<1>, !firrtl.sint<3>, !firrtl.sint<4>) -> !firrtl.sint<4>
 
-    // Noop
-    %27 = firrtl.validif %12, %18 : (!firrtl.uint<1>, !firrtl.uint<14>) -> !firrtl.uint<14>
-
     // CHECK-NEXT: = comb.icmp eq  {{.*}}, %c-1_i14 : i14
-    %28 = firrtl.andr %27 : (!firrtl.uint<14>) -> !firrtl.uint<1>
+    %28 = firrtl.andr %18 : (!firrtl.uint<14>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: [[XOREXT:%.+]] = comb.concat %c0_i11, [[XOR]]
     // CHECK-NEXT: [[SHIFT:%.+]] = comb.shru [[XOREXT]], [[VAL18]] : i14
@@ -187,7 +184,7 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: = comb.sext {{.*}} : (i4) -> i14
     // CHECK-NEXT: [[SHIFT:%.+]] = comb.shrs {{.*}}, {{.*}} : i14
     // CHECK-NEXT: = comb.extract [[SHIFT]] from 0 : (i14) -> i4
-    %31 = firrtl.dshr %25, %27 : (!firrtl.sint<4>, !firrtl.uint<14>) -> !firrtl.sint<4>
+    %31 = firrtl.dshr %25, %18 : (!firrtl.sint<4>, !firrtl.uint<14>) -> !firrtl.sint<4>
 
     // CHECK-NEXT: comb.icmp ule {{.*}}, {{.*}} : i4
     %41 = firrtl.leq %in1, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
@@ -556,7 +553,7 @@ firrtl.circuit "Simple" {
   //     _M.read.clk <= clock1
   //     _M.write.addr <= validif(inpred, UInt<3>("h0"))
   //     _M.write.en <= mux(inpred, UInt<1>("h1"), UInt<1>("h0"))
-  //     _M.write.clk <= validif(inpred, clock2)
+  //     _M.write.clk <= clock2
   //     _M.write.data <= validif(inpred, indata)
   //     _M.write.mask <= validif(inpred, UInt<1>("h1"))
 
@@ -579,11 +576,11 @@ firrtl.circuit "Simple" {
 
     // COM: Write port.
     // COM: --------------------------------------------------------------------
-    // CHECK-NEXT: %[[cond:.+]] = comb.and %inpred, %true
+    // CHECK-NEXT: %[[cond:.+]] = comb.and %inpred, %[[mask:.+]] :
     // CHECK-NEXT: %[[mem:.+]] = sv.array_index_inout %_M[%c0_i4_0] : !rtl.inout<uarray<12xi42>>, i4
     // CHECK-NEXT: sv.alwaysff(posedge %clock2) {
     // CHECK-NEXT:   sv.if %[[cond]]  {
-    // CHECK-NEXT:     sv.passign %[[mem]], %indata : i42
+    // CHECK-NEXT:     sv.passign %[[mem]], %[[data:.+]] : i42
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
 
@@ -597,6 +594,9 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
 
+    // CHECK:      %[[data]] = comb.mux %inpred, %indata, %c0_i42
+    // CHECK-NEXT: %[[mask]] = comb.mux %inpred, %true, %false
+
     %5 = firrtl.subfield %_M_read("data") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.sint<42>
     %6 = firrtl.subfield %_M_read("addr") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<uint<4>>
     firrtl.connect %6, %c0_ui1 : !firrtl.flip<uint<4>>, !firrtl.uint<1>
@@ -606,18 +606,20 @@ firrtl.circuit "Simple" {
     firrtl.connect %8, %clock1 : !firrtl.flip<clock>, !firrtl.clock
 
     %10 = firrtl.subfield %_M_write("addr") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<uint<4>>
-    %11 = firrtl.validif %inpred, %c0_ui3 : (!firrtl.uint<1>, !firrtl.uint<3>) -> !firrtl.uint<3>
+    %invalid_c0_ui3 = firrtl.invalidvalue : !firrtl.uint<3>
+    %11 = firrtl.mux(%inpred, %c0_ui3, %invalid_c0_ui3) : (!firrtl.uint<1>, !firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
     firrtl.connect %10, %11 : !firrtl.flip<uint<4>>, !firrtl.uint<3>
     %12 = firrtl.subfield %_M_write("en") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
     firrtl.connect %12, %inpred : !firrtl.flip<uint<1>>, !firrtl.uint<1>
     %13 = firrtl.subfield %_M_write("clk") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<clock>
-    %14 = firrtl.validif %inpred, %clock2 : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.clock
-    firrtl.connect %13, %14 : !firrtl.flip<clock>, !firrtl.clock
+    firrtl.connect %13, %clock2 : !firrtl.flip<clock>, !firrtl.clock
     %15 = firrtl.subfield %_M_write("data") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<sint<42>>
-    %16 = firrtl.validif %inpred, %indata : (!firrtl.uint<1>, !firrtl.sint<42>) -> !firrtl.sint<42>
+    %invalid_si42 = firrtl.invalidvalue : !firrtl.sint<42>
+    %16 = firrtl.mux(%inpred, %indata, %invalid_si42) : (!firrtl.uint<1>, !firrtl.sint<42>, !firrtl.sint<42>) -> !firrtl.sint<42>
     firrtl.connect %15, %16 : !firrtl.flip<sint<42>>, !firrtl.sint<42>
     %17 = firrtl.subfield %_M_write("mask") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
-    %18 = firrtl.validif %inpred, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %invalid_c1_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
+    %18 = firrtl.mux(%inpred, %c1_ui1, %invalid_c1_ui1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.connect %17, %18 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 
     firrtl.connect %result, %5: !firrtl.flip<sint<42>>, !firrtl.sint<42>
