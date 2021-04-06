@@ -167,7 +167,8 @@ class RTLModuleOp:
           function_type = FunctionType.get(inputs=inputs, results=return_types)
           module_op.attributes["type"] = TypeAttr.get(function_type)
           # Set required resultNames attribute. Could we infer real names here?
-          resultNames = [StringAttr.get('') for r in return_values]
+          resultNames = [StringAttr.get('result' + str(i))
+                         for i in range(len(return_values))]
           module_op.attributes["resultNames"] = ArrayAttr.get(resultNames)
 
       def emit_instance_op(*call_args):
