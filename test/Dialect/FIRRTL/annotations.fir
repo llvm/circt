@@ -69,6 +69,104 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Bar"}]]
 
 ; // -----
 
+; COM: A ReferenceTarget/ComponentName pointing at an Instance should work.
+circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar"}]]
+  module Bar:
+    skip
+  module Foo:
+    inst bar of Bar
+
+    ; CHECK-LABEL: module {
+    ; CHECK: firrtl.instance @Bar
+    ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}]
+
+; // -----
+
+; COM: A ReferenceTarget/ComponentName pointing at a CMem should work.
+circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar"}]]
+  module Foo:
+    cmem bar: UInt<1>[8]
+
+    ; CHECK-LABEL: module {
+    ; CHECK: firrtl.cmem
+    ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}]
+
+; // -----
+
+; COM: A ReferenceTarget/ComponentName pointing at a memory should work.
+circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar"}]]
+  module Foo:
+    mem bar:
+      data-type => UInt<8>
+      depth => 16
+      reader => r
+      writer => w
+      read-latency => 0
+      write-latency => 1
+      read-under-write => undefined
+
+    ; CHECK-LABEL: module {
+    ; CHECK: firrtl.mem
+    ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}]
+
+; // -----
+
+; COM: A ReferenceTarget/ComponentName pointing at a node should work.
+; COM: This shouldn't crash if the node is in a nested block.
+circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.baz"}]]
+  module Foo:
+    input cond: UInt<1>[2]
+    node bar = UInt<1>(0)
+    when cond[0]:
+      when cond[1]:
+        node baz = UInt<1>(0)
+
+    ; CHECK-LABEL: module {
+    ; CHECK: %bar = firrtl.node
+    ; CHECK-SAME: annotations = [{a = "a"}
+    ; CHECK: %baz = firrtl.node
+    ; CHECK-SAME: annotations = [{b = "b"}]
+
+; // -----
+
+; COM: A ReferenceTarget/ComponentName pointing at a wire should work.
+circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar"}]]
+  module Foo:
+    wire bar: UInt<1>
+
+    ; CHECK-LABEL: module {
+    ; CHECK: %bar = firrtl.wire
+    ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}]
+
+; // -----
+
+; COM: A ReferenceTarget/ComponentName pointing at a register should work.
+circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.baz"}]]
+  module Foo:
+    input clock: Clock
+    input reset: UInt<1>
+    reg bar: UInt<1>, clock
+    reg baz: UInt<1>, clock with : (reset => (reset, UInt<1>(0)))
+
+    ; CHECK-LABEL: module {
+    ; CHECK: %bar = firrtl.reg
+    ; CHECK-SAME: annotations = [{a = "a"}]
+    ; CHECK: %baz = firrtl.regreset
+    ; CHECK-SAME: annotations = [{b = "b"}]
+
+; // -----
+
+; COM: A ReferenceTarget/ComponentName pointing at an SMem should work.
+circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar"}]]
+  module Foo:
+    smem bar: UInt<1>[8]
+
+    ; CHECK-LABEL: module {
+    ; CHECK: firrtl.smem
+    ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}]
+
+; // -----
+
 ; COM: All types of JSON values should work
 circuit Foo: %[[{"string":"a","integer":42,"float":3.14,"boolean":true,"null":null,"object":{"foo":"bar"},"array":[1,2,3]}]]
   module Foo:

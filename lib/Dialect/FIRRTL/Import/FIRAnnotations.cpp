@@ -78,11 +78,12 @@ bool circt::firrtl::fromJSON(json::Value &value,
     // If the target is something that we know we don't support, then error.
     bool unsupported =
         std::any_of(newTarget.begin(), newTarget.end(), [](char a) {
-          return a == '/' || a == ':' || a == '>' || a == '.' || a == '[';
+          return a == '/' || a == ':' || a == '.' || a == '[';
         });
     if (unsupported) {
       p.field("target").report(
-          "Unsupported target (not a CircuitTarget or ModuleTarget)");
+          "Unsupported target (not a local CircuitTarget, ModuleTarget, or "
+          "ReferenceTarget without subfield or subindex)");
       return {};
     }
 
