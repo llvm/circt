@@ -1416,6 +1416,9 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
   }
 #include "FIRTokenKinds.def"
 
+  // Expand `validif(a, b)` expressions to `mux(a, b, invalidvalue)`, since we
+  // do not provide an operation for `validif`. See docs/RationaleFIRRTL.md for
+  // more details on this.
   case FIRToken::lp_validif: {
     auto tloc = translateLocation(loc);
 
