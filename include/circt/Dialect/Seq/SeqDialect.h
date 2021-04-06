@@ -30,6 +30,8 @@ public:
                                  Location loc) override;
 };
 
+void registerSeqPasses();
+
 } // namespace seq
 } // namespace circt
 
