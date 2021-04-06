@@ -114,6 +114,7 @@ struct FirMemory {
   size_t depth;
   size_t readLatency;
   size_t writeLatency;
+  size_t readUnderWrite;
   bool operator<(const FirMemory &rhs) const {
 #define cmp3way(name)                                                          \
   if (name < rhs.name)                                                         \
@@ -127,6 +128,7 @@ struct FirMemory {
     cmp3way(depth);
     cmp3way(readLatency);
     cmp3way(writeLatency);
+    cmp3way(readUnderWrite);
     return false;
 #undef cmp3way
   }
@@ -135,16 +137,17 @@ struct FirMemory {
            numWritePorts == rhs.numWritePorts &&
            numReadWritePorts == rhs.numReadWritePorts &&
            dataWidth == rhs.dataWidth && depth == rhs.depth &&
-           readLatency == rhs.readLatency && writeLatency == rhs.writeLatency;
+           readLatency == rhs.readLatency && writeLatency == rhs.writeLatency &&
+           readUnderWrite == rhs.readUnderWrite;
   }
 };
 } // namespace
 
 static std::string getFirMemoryName(const FirMemory &mem) {
-  return llvm::formatv("FIRRTLMem_{0}_{1}_{2}_{3}_{4}_{5}_{6}",
+  return llvm::formatv("FIRRTLMem_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}",
                        mem.numReadPorts, mem.numWritePorts,
                        mem.numReadWritePorts, mem.dataWidth, mem.depth,
-                       mem.readLatency, mem.writeLatency);
+                       mem.readLatency, mem.writeLatency, mem.readUnderWrite);
 }
 
 static FirMemory analyzeMemOp(MemOp op) {
@@ -166,8 +169,11 @@ static FirMemory analyzeMemOp(MemOp op) {
     op.emitError("'firrtl.mem' should have simple type and known width");
     width = 0;
   }
+  if (numReadWritePorts)
+    op.emitError("'firrtl.mem' should have had read-write ports eliminated");
+
   return {numReadPorts, numWritePorts,    numReadWritePorts, (size_t)width,
-          op.depth(),   op.readLatency(), op.writeLatency()};
+          op.depth(),   op.readLatency(), op.writeLatency(), (size_t)op.ruw()};
 }
 
 static SmallVector<FirMemory> collectFIRRTLMemories(Operation *op) {
@@ -351,9 +357,9 @@ void FIRRTLModuleLowering::lowerMemoryDecls(const SmallVector<FirMemory> &mems,
                                             CircuitLoweringState &state) {
   auto b =
       ImplicitLocOpBuilder::atBlockBegin(UnknownLoc::get(&getContext()), top);
-  std::array<StringRef, 6> schemaFields = {"depth",         "numReadPorts",
-                                           "numWritePorts", "readLatency",
-                                           "writeLatency",  "width"};
+  std::array<StringRef, 7> schemaFields = {
+      "depth",        "numReadPorts", "numWritePorts", "readLatency",
+      "writeLatency", "width",        "readUnderWrite"};
   auto schemaFieldsAttr = b.getStrArrayAttr(schemaFields);
   auto schema = b.create<rtl::RTLGeneratorSchemaOp>(
       "FIRRTLMem", "FIRRTL_Memory", schemaFieldsAttr);
@@ -366,12 +372,12 @@ void FIRRTLModuleLowering::lowerMemoryDecls(const SmallVector<FirMemory> &mems,
   Type b1Type = IntegerType::get(&getContext(), 1);
 
   auto makePortCommon = [&](StringRef prefix, Twine i, Type bAddrType) {
-    ports.push_back({b.getStringAttr((prefix + Twine("_clock_") + i).str()),
+    ports.push_back({b.getStringAttr((prefix + "_clock_" + i).str()),
                      rtl::INPUT, b1Type, inputPin++});
-    ports.push_back({b.getStringAttr((prefix + Twine("_en_") + i).str()),
-                     rtl::INPUT, b1Type, inputPin++});
-    ports.push_back({b.getStringAttr((prefix + Twine("_addr_") + i).str()),
-                     rtl::INPUT, bAddrType, inputPin++});
+    ports.push_back({b.getStringAttr((prefix + "_en_" + i).str()), rtl::INPUT,
+                     b1Type, inputPin++});
+    ports.push_back({b.getStringAttr((prefix + "_addr_" + i).str()), rtl::INPUT,
+                     bAddrType, inputPin++});
   };
 
   for (auto &mem : mems) {
@@ -383,27 +389,27 @@ void FIRRTLModuleLowering::lowerMemoryDecls(const SmallVector<FirMemory> &mems,
     for (size_t i = 0; i < mem.numReadPorts; ++i) {
       makePortCommon("rd", Twine(i), bAddrType);
       if (mem.dataWidth > 0)
-        ports.push_back({b.getStringAttr((Twine("rd_data_") + Twine(i)).str()),
+        ports.push_back({b.getStringAttr(("rd_data_" + Twine(i)).str()),
                          rtl::OUTPUT, bDataType, outputPin++});
     }
     for (size_t i = 0; i < mem.numWritePorts; ++i) {
       makePortCommon("rw", Twine(i), bAddrType);
-      ports.push_back({b.getStringAttr((Twine("wr_mask_") + Twine(i)).str()),
+      ports.push_back({b.getStringAttr(("wr_mask_" + Twine(i)).str()),
                        rtl::INPUT, bDataType, inputPin++});
       if (mem.dataWidth > 0)
-        ports.push_back({b.getStringAttr((Twine("wr_data_") + Twine(i)).str()),
+        ports.push_back({b.getStringAttr(("wr_data_" + Twine(i)).str()),
                          rtl::INPUT, bDataType, inputPin++});
     }
-    assert(mem.numReadWritePorts == 0 &&
-           "Read/Write ports should be eliminated");
-    std::array<NamedAttribute, 6> genAttrs = {
-        b.getNamedAttr("depth", b.getUI32IntegerAttr(mem.depth)),
-        b.getNamedAttr("numReadPorts", b.getUI32IntegerAttr(mem.numReadPorts)),
+    std::array<NamedAttribute, 7> genAttrs = {
+        b.getNamedAttr("depth", b.getI64IntegerAttr(mem.depth)),
+        b.getNamedAttr("numReadPorts", b.getI32IntegerAttr(mem.numReadPorts)),
         b.getNamedAttr("numWritePorts",
                        b.getUI32IntegerAttr(mem.numWritePorts)),
         b.getNamedAttr("readLatency", b.getUI32IntegerAttr(mem.readLatency)),
         b.getNamedAttr("writeLatency", b.getUI32IntegerAttr(mem.writeLatency)),
-        b.getNamedAttr("width", b.getUI32IntegerAttr(mem.dataWidth))};
+        b.getNamedAttr("width", b.getUI32IntegerAttr(mem.dataWidth)),
+        b.getNamedAttr("readUnderWrite",
+                       b.getUI32IntegerAttr(mem.readUnderWrite))};
 
     // Make the global module for the memory
     auto memoryName = b.getStringAttr(getFirMemoryName(mem));

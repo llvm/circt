@@ -569,7 +569,7 @@ firrtl.circuit "Simple" {
     %c0_ui3 = firrtl.constant(0 : ui3) : !firrtl.uint<3>
     %_M_read, %_M_write = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>, !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>
 
-  // CHECK:  %_M.rd_data_0 = rtl.instance "_M" @FIRRTLMem_2_0_0_42_12_0_1(%clock1, %true, %c0_i4, %clock2, %inpred, %c0_i4_0, %true, %indata) : (i1, i1, i4, i1, i1, i4, i1, i42) -> i42
+  // CHECK:  %_M.rd_data_0 = rtl.instance "_M" @FIRRTLMem_2_0_0_42_12_0_1_0(%clock1, %true, %c0_i4, %clock2, %inpred, %c0_i4_0, %true, %indata) : (i1, i1, i4, i1, i1, i4, i1, i42) -> i42
   // CHECK: rtl.output %_M.rd_data_0
 
     %5 = firrtl.subfield %_M_read("data") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.sint<42>
@@ -627,7 +627,7 @@ firrtl.circuit "Simple" {
     firrtl.connect %15, %wData : !firrtl.flip<uint<8>>, !firrtl.uint<8>
     firrtl.connect %rData, %10: !firrtl.flip<uint<8>>, !firrtl.uint<8>
 
-    //CHECK:  %memory.rd_data_0 = rtl.instance "memory" @FIRRTLMem_2_0_0_8_16_2_2(%clock, %rEn, %rAddr, %clock, %wEn, %wAddr, %wMask, %wData) : (i1, i1, i4, i1, i1, i4, i1, i8) -> i8
+    //CHECK:  %memory.rd_data_0 = rtl.instance "memory" @FIRRTLMem_2_0_0_8_16_2_2_0(%clock, %rEn, %rAddr, %clock, %wEn, %wAddr, %wMask, %wData) : (i1, i1, i4, i1, i1, i4, i1, i8) -> i8
     //CHECK-NEXT:  rtl.output %memory.rd_data_0 : i8
   }
 
@@ -637,7 +637,7 @@ firrtl.circuit "Simple" {
     %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
 
-    // CHECK:  %_M.rd_data_0 = rtl.instance "_M" @FIRRTLMem_1_0_0_42_12_0_1(%clock1, %true, %c0_i4) : (i1, i1, i4) -> i42 
+    // CHECK:  %_M.rd_data_0 = rtl.instance "_M" @FIRRTLMem_1_0_0_42_12_0_1_0(%clock1, %true, %c0_i4) : (i1, i1, i4) -> i42 
     %_M_read = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>
     // Read port.
     %6 = firrtl.subfield %_M_read("addr") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<uint<4>>
