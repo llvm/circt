@@ -22,18 +22,12 @@ using namespace firrtl;
 //===----------------------------------------------------------------------===//
 
 // If the specified attribute set contains the firrtl.name attribute, return it.
-StringAttr firrtl::getFIRRTLNameAttr(ArrayRef<NamedAttribute> attrs) {
-  for (auto &argAttr : attrs) {
-    // FIXME: We currently use firrtl.name instead of name because this makes
-    // the FunctionLike handling in MLIR core happier.  It otherwise doesn't
-    // allow attributes on module parameters.
-    if (argAttr.first != "firrtl.name")
-      continue;
+StringAttr firrtl::getFIRRTLModuleArgNameAttr(Operation *module, size_t argNo) {
+  return module->getAttrOfType<ArrayAttr>("argNames")[argNo].cast<StringAttr>();
+}
 
-    return argAttr.second.dyn_cast<StringAttr>();
-  }
-
-  return StringAttr();
+bool firrtl::hasFIRRTLModuleArgNameAttr(Operation *module) {
+  return module->getAttrOfType<ArrayAttr>("argNames") != nullptr;
 }
 
 namespace {
@@ -113,11 +107,12 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
     // attributes for them.  If so, use that as the name.
     auto *parentOp = block->getParentOp();
 
-    for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
-      // Scan for a 'firrtl.name' attribute.
-      if (auto str = getFIRRTLNameAttr(mlir::impl::getArgAttrs(parentOp, i)))
-        setNameFn(block->getArgument(i), str.getValue());
-    }
+    if (hasFIRRTLModuleArgNameAttr(parentOp))
+      for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
+        StringAttr str = getFIRRTLModuleArgNameAttr(parentOp, i);
+        if (!str.getValue().empty())
+          setNameFn(block->getArgument(i), str.getValue());
+      }
   }
 };
 } // end anonymous namespace

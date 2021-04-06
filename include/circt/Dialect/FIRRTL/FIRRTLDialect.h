@@ -43,8 +43,14 @@ private:
 
 /// If the specified attribute list has a firrtl.name attribute, return its
 /// value.
-StringAttr getFIRRTLNameAttr(ArrayRef<NamedAttribute> attrs);
-
+StringAttr getFIRRTLModuleArgNameAttr(Operation *module, size_t argNo);
+bool hasFIRRTLModuleArgNameAttr(Operation *module);
+static inline StringRef getFIRRTLModuleArgName(Operation *module,
+                                               size_t argNo) {
+  return hasFIRRTLModuleArgNameAttr(module)
+             ? getFIRRTLModuleArgNameAttr(module, argNo).getValue()
+             : "";
+}
 } // namespace firrtl
 } // namespace circt
 

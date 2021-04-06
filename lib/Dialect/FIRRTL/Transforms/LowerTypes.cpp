@@ -149,6 +149,7 @@ private:
 
   // State to track the new attributes for the module.
   SmallVector<NamedAttribute, 8> newModuleAttrs;
+  SmallVector<Attribute> newArgNames;
   size_t originalNumModuleArgs;
 };
 } // end anonymous namespace
@@ -198,6 +199,7 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
     originalArgAttrs.push_back(
         originalAttrs.getNamed(getArgAttrName(i)).getValue());
   DictionaryAttr::sortInPlace(originalArgAttrs);
+  // originalAttrs.dump();
 
   // Copy over any attributes that weren't original argument attributes.
   auto *argAttrBegin = originalArgAttrs.begin();
@@ -206,8 +208,11 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
     if (std::lower_bound(argAttrBegin, argAttrEnd, attr) == argAttrEnd)
       newModuleAttrs.push_back(attr);
 
+  newModuleAttrs.push_back(NamedAttribute(Identifier::get("argNames", context),
+                                          builder->getArrayAttr(newArgNames)));
   // Update the module's attributes.
   module->setAttrs(newModuleAttrs);
+  // module->addAttribute("argNames", builder->getArrayAttr(newArgNames));
   newModuleAttrs.clear();
 
   // Keep the module's type up-to-date.
@@ -254,13 +259,11 @@ void TypeLoweringVisitor::lowerArg(FModuleOp module, BlockArgument arg,
 void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   OpBuilder builder(context);
 
-  // Cache the named identifer for argument names.
-  auto argNameId = builder.getIdentifier("firrtl.name");
-
   // Create an array of the result types and results names.
   SmallVector<Type, 8> inputTypes;
   SmallVector<DictionaryAttr, 8> attributes;
 
+  SmallVector<Attribute> portNames;
   for (auto &port : extModule.getPorts()) {
     // Flatten the port type.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
@@ -268,17 +271,17 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
 
     // For each field, add record its name and type.
     for (auto field : fieldTypes) {
+      Attribute pName;
       inputTypes.push_back(field.getPortType());
-      if (port.name) {
-        auto argAttr = builder.getDictionaryAttr(
-            NamedAttribute(argNameId, builder.getStringAttr(field.suffix)));
-        attributes.push_back(argAttr);
-      } else {
-        // If the port didn't have a name, push back an empty name.
-        attributes.push_back({});
-      }
+      if (port.name)
+        pName = port.name;
+      else
+        pName = builder.getStringAttr("");
+      portNames.push_back(pName);
     }
   }
+  attributes.push_back(builder.getDictionaryAttr(NamedAttribute(
+      Identifier::get("argNames", context), builder.getArrayAttr(portNames))));
 
   // Set the type and then bulk set all the names.
   extModule.setType(builder.getFunctionType(inputTypes, {}));
@@ -806,16 +809,16 @@ void TypeLoweringVisitor::visitExpr(InvalidValuePrimOp op) {
 // Helpers to manage state.
 //===----------------------------------------------------------------------===//
 
-static DictionaryAttr getArgAttrs(StringAttr nameAttr, StringRef suffix,
-                                  OpBuilder *builder) {
-  SmallString<16> newName(nameAttr.getValue());
-  newName += suffix;
-
-  StringAttr newNameAttr = builder->getStringAttr(newName);
-  auto attr = builder->getNamedAttr("firrtl.name", newNameAttr);
-
-  return builder->getDictionaryAttr(attr);
-}
+// static DictionaryAttr getArgAttrs(StringAttr nameAttr, StringRef suffix,
+//                                  OpBuilder *builder) {
+//  SmallString<16> newName(nameAttr.getValue());
+//  newName += suffix;
+//
+//  StringAttr newNameAttr = builder->getStringAttr(newName);
+//  auto attr = builder->getNamedAttr("firrtl.name", newNameAttr);
+//
+//  return builder->getDictionaryAttr(attr);
+//}
 
 // Creates and returns a new block argument of the specified type to the
 // module. This also maintains the name attribute for the new argument,
@@ -826,14 +829,19 @@ Value TypeLoweringVisitor::addArg(FModuleOp module, Type type,
 
   // Append the new argument.
   auto newValue = body->addArgument(type);
+  if (hasFIRRTLModuleArgNameAttr(module)) {
 
-  // Save the name attribute for the new argument.
-  StringAttr nameAttr = getFIRRTLNameAttr(module.getArgAttrs(oldArgNumber));
-  if (nameAttr) {
-    auto newArgAttrs = getArgAttrs(nameAttr, nameSuffix, builder);
-    auto newArgNumber = newValue.getArgNumber() - originalNumModuleArgs;
-    auto newArgAttrName = getArgAttrName(newArgNumber);
-    newModuleAttrs.push_back(NamedAttribute(newArgAttrName, newArgAttrs));
+    // Save the name attribute for the new argument.
+    StringAttr nameAttr = getFIRRTLModuleArgNameAttr(module, oldArgNumber);
+    // auto newArgNumber = newValue.getArgNumber() - originalNumModuleArgs;
+    Attribute newArg;
+    if (!nameAttr.getValue().empty()) {
+      SmallString<16> newName(nameAttr.getValue());
+      newName += nameSuffix;
+      newArg = builder->getStringAttr(newName);
+    } else
+      newArg = builder->getStringAttr("");
+    newArgNames.push_back(newArg);
   }
 
   return newValue;

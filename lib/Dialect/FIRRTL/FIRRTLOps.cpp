@@ -261,11 +261,11 @@ void firrtl::getModulePortInfo(Operation *op,
                                SmallVectorImpl<ModulePortInfo> &results) {
   auto argTypes = getModuleType(op).getInputs();
 
-  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
-    auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
-    auto type = argTypes[i].cast<FIRRTLType>();
-    results.push_back({getFIRRTLNameAttr(argAttrs), type});
-  }
+  if (hasFIRRTLModuleArgNameAttr(op))
+    for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
+      auto type = argTypes[i].cast<FIRRTLType>();
+      results.push_back({getFIRRTLModuleArgNameAttr(op, i), type});
+    }
 }
 
 static void buildModule(OpBuilder &builder, OperationState &result,
@@ -285,16 +285,16 @@ static void buildModule(OpBuilder &builder, OperationState &result,
 
   // Record the names of the arguments if present.
   SmallString<8> attrNameBuf;
+  // Record the names of the arguments if present.
+  SmallVector<Attribute> argNames;
   for (size_t i = 0, e = ports.size(); i != e; ++i) {
-    if (ports[i].getName().empty())
-      continue;
-
-    auto argAttr =
-        NamedAttribute(builder.getIdentifier("firrtl.name"), ports[i].name);
-
-    result.addAttribute(getArgAttrName(i, attrNameBuf),
-                        builder.getDictionaryAttr(argAttr));
+    if (ports[i].getName().empty()) {
+      argNames.push_back(builder.getStringAttr(""));
+    } else {
+      argNames.push_back(ports[i].name);
+    }
   }
+  result.addAttribute("argNames", builder.getArrayAttr(argNames));
 
   result.addRegion();
 }
@@ -334,47 +334,36 @@ void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
 // allow this customization.
 static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
                                     ArrayRef<Type> argTypes, bool isVariadic,
-                                    ArrayRef<Type> resultTypes) {
+                                    ArrayRef<Type> resultTypes,
+                                    bool &needArgNamesAttr) {
   Region &body = op->getRegion(0);
   bool isExternal = body.empty();
+  SmallString<32> resultNameStr;
 
   p << '(';
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     if (i > 0)
       p << ", ";
 
+    auto argName = getFIRRTLModuleArgName(op, i);
     Value argumentValue;
     if (!isExternal) {
-      argumentValue = body.front().getArgument(i);
-      p.printOperand(argumentValue);
-      p << ": ";
+      // Get the printed format for the argument name.
+      resultNameStr.clear();
+      llvm::raw_svector_ostream tmpStream(resultNameStr);
+      p.printOperand(body.front().getArgument(i), tmpStream);
+      // If the name wasn't printable in a way that agreed with argName, make
+      // sure to print out an explicit argNames attribute.
+      if (!argName.empty() && tmpStream.str().drop_front() != argName)
+        needArgNamesAttr = true;
+
+      p << tmpStream.str() << ": ";
+    } else if (!argName.empty()) {
+      p << '%' << argName << ": ";
     }
 
     p.printType(argTypes[i]);
-
-    auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
-
-    // If the argument has the firrtl.name attribute, and if it was used by
-    // the printer exactly (not name mangled with a suffix etc) then we can
-    // omit the firrtl.name attribute from the argument attribute dictionary.
-    ArrayRef<StringRef> elidedAttrs;
-    StringRef tmp;
-    if (argumentValue) {
-      if (auto nameAttr = getFIRRTLNameAttr(argAttrs)) {
-
-        // Check to make sure the asmprinter is printing it correctly.
-        SmallString<32> resultNameStr;
-        llvm::raw_svector_ostream tmpStream(resultNameStr);
-        p.printOperand(argumentValue, tmpStream);
-
-        // If the name is the same as we would otherwise use, then we're good!
-        if (tmpStream.str().drop_front() == nameAttr.getValue()) {
-          tmp = "firrtl.name";
-          elidedAttrs = tmp;
-        }
-      }
-    }
-    p.printOptionalAttrDict(argAttrs, elidedAttrs);
+    p.printOptionalAttrDict(::mlir::impl::getArgAttrs(op, i));
   }
 
   if (isVariadic) {
@@ -403,7 +392,12 @@ static void printModuleLikeOp(OpAsmPrinter &p, Operation *op) {
   p << op->getName() << ' ';
   p.printSymbolName(funcName);
 
-  printFunctionSignature2(p, op, argTypes, /*isVariadic*/ false, resultTypes);
+  bool needArgNamesAttr = false;
+  printFunctionSignature2(p, op, argTypes, /*isVariadic*/ false, resultTypes,
+                          needArgNamesAttr);
+  SmallVector<StringRef, 3> omittedAttrs;
+  if (!needArgNamesAttr)
+    omittedAttrs.push_back("argNames");
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size());
 }
 
@@ -461,7 +455,17 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
   assert(argAttrs.size() == argTypes.size());
   assert(resultAttrs.size() == resultTypes.size());
 
-  auto *context = result.getContext();
+  for (size_t i = 0, e = argAttrs.size(); i != e; ++i) {
+    auto &attrs = argAttrs[i];
+
+    // If an explicit name attribute was present, don't add the implicit one.
+    bool hasNameAttr = false;
+    for (auto &elt : attrs) {
+      llvm::errs() << "\n attribute::" << elt.first;
+      elt.second.dump();
+    }
+  }
+  // auto *context = result.getContext();
 
   // Postprocess each of the arguments.  If there was no 'firrtl.name'
   // attribute, and if the argument name was non-numeric, then add the
@@ -469,28 +473,28 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
   // text file is a load-bearing part of the IR, but we don't want the
   // verbosity in dumps of including it explicitly in the attribute
   // dictionary.
-  for (size_t i = 0, e = argAttrs.size(); i != e; ++i) {
-    auto &attrs = argAttrs[i];
+  // for (size_t i = 0, e = argAttrs.size(); i != e; ++i) {
+  //  auto &attrs = argAttrs[i];
 
-    // If an explicit name attribute was present, don't add the implicit one.
-    bool hasNameAttr = false;
-    for (auto &elt : attrs)
-      if (elt.first.str() == "firrtl.name")
-        hasNameAttr = true;
-    if (hasNameAttr || entryArgs.empty())
-      continue;
+  //  // If an explicit name attribute was present, don't add the implicit one.
+  //  bool hasNameAttr = false;
+  //  for (auto &elt : attrs)
+  //    if (elt.first.str() == "firrtl.name")
+  //      hasNameAttr = true;
+  //  if (hasNameAttr || entryArgs.empty())
+  //    continue;
 
-    auto &arg = entryArgs[i];
+  //  auto &arg = entryArgs[i];
 
-    // The name of an argument is of the form "%42" or "%id", and since
-    // parsing succeeded, we know it always has one character.
-    assert(arg.name.size() > 1 && arg.name[0] == '%' && "Unknown MLIR name");
-    if (isdigit(arg.name[1]))
-      continue;
+  //  // The name of an argument is of the form "%42" or "%id", and since
+  //  // parsing succeeded, we know it always has one character.
+  //  assert(arg.name.size() > 1 && arg.name[0] == '%' && "Unknown MLIR name");
+  //  if (isdigit(arg.name[1]))
+  //    continue;
 
-    auto nameAttr = StringAttr::get(context, arg.name.drop_front());
-    attrs.push_back({Identifier::get("firrtl.name", context), nameAttr});
-  }
+  //  auto nameAttr = StringAttr::get(context, arg.name.drop_front());
+  //  attrs.push_back({Identifier::get("firrtl.name", context), nameAttr});
+  //}
 
   // Add the attributes to the function arguments.
   addArgAndResultAttrs(builder, result, argAttrs, resultAttrs);
