@@ -97,6 +97,12 @@ struct GlobalFIRParserState {
   /// file).  This is null if no annotations were provided.
   const llvm::MemoryBuffer *annotationsBuf;
 
+  /// A mutable reference to the current CircuitTarget.
+  StringRef circuitTarget;
+
+  /// A mutable reference to the current ModuleTarget.
+  StringRef moduleTarget;
+
   class BacktraceState {
   public:
     explicit BacktraceState(GlobalFIRParserState &state)
@@ -258,7 +264,7 @@ struct FIRParser {
 
   /// Populate a vector of annotations for a given Target.  If the annotations
   /// parameter is non-empty, then this will be appended to.
-  void getAnnotations(StringRef target, ArrayAttr &annotations);
+  void getAnnotations(Twine target, ArrayAttr &annotations);
 
 private:
   FIRParser(const FIRParser &) = delete;
@@ -833,17 +839,23 @@ ParseResult FIRParser::importAnnotationFile(SMLoc loc) {
   return result;
 }
 
-void FIRParser::getAnnotations(StringRef target, ArrayAttr &annotations) {
+void FIRParser::getAnnotations(Twine target, ArrayAttr &annotations) {
+  // Early exit if no annotations exist.  This avoids the cost of
+  // constructing strings representing targets if no annotation can
+  // possibly exist.
+  if (state.annotationMap.begin() == state.annotationMap.end())
+    return;
+
   // Input annotations is empty.  Just do the lookup and return.
   if (!annotations) {
-    annotations = state.annotationMap.lookup(target);
+    annotations = state.annotationMap.lookup(target.str());
     return;
   }
 
   // Input annotations is non-empty.  Exit quickly if the target doesn't exist.
   // Otherwise, construct a new ArrayAttr that includes existing and new
   // annotations.
-  auto newAnnotations = state.annotationMap.lookup(target);
+  auto newAnnotations = state.annotationMap.lookup(target.str());
   if (!newAnnotations)
     return;
 
@@ -2643,8 +2655,13 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   SmallVector<PortInfoAndLoc, 4> portListAndLoc;
 
   LocWithInfo info(getToken().getLoc(), this);
-  if (parseId(name, "expected module name") ||
-      parseToken(FIRToken::colon, "expected ':' in extmodule definition") ||
+  if (parseId(name, "expected module name"))
+    return failure();
+
+  auto moduleTarget = (getState().circuitTarget + "|" + name.getValue()).str();
+  getState().moduleTarget = moduleTarget;
+
+  if (parseToken(FIRToken::colon, "expected ':' in extmodule definition") ||
       parseOptionalInfo(info) || parsePortList(portListAndLoc, indent))
     return failure();
 
@@ -2723,8 +2740,7 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   }
 
   ArrayAttr annotations;
-  getAnnotations("~" + circuit.name().str() + "|" + name.getValue().str(),
-                 annotations);
+  getAnnotations(moduleTarget, annotations);
 
   auto fmodule = builder.create<FExtModuleOp>(info.getLoc(), name, portList,
                                               defName, annotations);
@@ -2745,8 +2761,13 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
   SmallVector<PortInfoAndLoc, 4> portListAndLoc;
 
   consumeToken(FIRToken::kw_module);
-  if (parseId(name, "expected module name") ||
-      parseToken(FIRToken::colon, "expected ':' in module definition") ||
+  if (parseId(name, "expected module name"))
+    return failure();
+
+  auto moduleTarget = (getState().circuitTarget + "|" + name.getValue()).str();
+  getState().moduleTarget = moduleTarget;
+
+  if (parseToken(FIRToken::colon, "expected ':' in module definition") ||
       parseOptionalInfo(info) || parsePortList(portListAndLoc, indent))
     return failure();
 
@@ -2758,8 +2779,7 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
   for (auto &elt : portListAndLoc)
     portList.push_back(elt.first);
   ArrayAttr annotations;
-  getAnnotations("~" + circuit.name().str() + "|" + name.getValue().str(),
-                 annotations);
+  getAnnotations(moduleTarget, annotations);
   auto fmodule =
       builder.create<FModuleOp>(info.getLoc(), name, portList, annotations);
 
@@ -2821,6 +2841,9 @@ ParseResult FIRCircuitParser::parseCircuit() {
       parseOptionalInfo(info))
     return failure();
 
+  auto circuitTarget = "~" + name.getValue().str();
+  getState().circuitTarget = circuitTarget;
+
   // Deal with any inline annotations, if they exist.  These are processed first
   // to place any annotations from an annotation file *after* the inline
   // annotations.  While arbitrary, this makes the annotation file have "append"
@@ -2838,7 +2861,7 @@ ParseResult FIRCircuitParser::parseCircuit() {
   //   2. Annotations targeting the circuit, e.g., "~Foo"
   ArrayAttr annotationVec;
   getAnnotations("~", annotationVec);
-  getAnnotations("~" + name.getValue().str(), annotationVec);
+  getAnnotations(circuitTarget, annotationVec);
 
   OpBuilder b(mlirModule.getBodyRegion());
 
