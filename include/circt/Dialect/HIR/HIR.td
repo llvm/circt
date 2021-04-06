@@ -34,11 +34,12 @@ def MemrefType: Type<CPred<"$_self.isa<MemrefType>()">,
 def InterfaceType: Type<CPred<"$_self.isa<InterfaceType>()">,
   "HIR interface type ">,
   BuildableType<"InterfaceType::get($_builder.getContext())">;
-//ArrayType and GroupType not defined here since they are always wrapped inside InterfaceType.
 
-def WireType: Type<CPred<"$_self.isa<WireType>()">,
-  "HIR wire type ">,
-  BuildableType<"WireType::get($_builder.getContext())">;
+def ModuleType: Type<CPred<"$_self.isa<ModuleType>()">,
+  "HIR interface type ">,
+  BuildableType<"ModuleType::get($_builder.getContext())">;
+
+//ArrayType and GroupType not defined here since they are always wrapped inside InterfaceType.
 
 // Ops
 class HIR_Op<string mnemonic, list<OpTrait> traits = []>
@@ -95,31 +96,32 @@ def SyncTimeOp : HIR_Op<"sync_time", [NoSideEffect]> {
       `,` type($inp2) `)`}];
 }
 
-def MemReadOp : HIR_Op<"mem_read", [NoSideEffect,AttrSizedOperandSegments]> {
-  let summary = "read from a memory interface.";
+def MemReadOp : HIR_Op<"load", [NoSideEffect,AttrSizedOperandSegments]> {
+  let summary = "read from a memory.";
   let description = [{
     This Op reads from a memory interface. 
       Example:
 
-      ```mlir hir.mem_read %A[%const][%x,%y] at %t : !hir.wire -> !hir.val```
+      ```mlir hir.load %A[%x,%y] at %t : !hir.memref<...>[i32,i32] -> i32```
   }];
 
   let arguments = (ins MemrefType:$mem, 
       Variadic<AnyType>:$addr, TimeType : $tstart,
       Optional<ConstType>: $offset);
   let results = (outs AnyType: $res);
-  let assemblyFormat = [{$mem `[`  $addr `]` `at` $tstart (`offset` $offset^)? 
+  let assemblyFormat = [{$mem `[`  $addr `]` `at` $tstart (`+` $offset^)? 
     attr-dict `:` type($mem) `[` type($addr) `]` `->` type($res)}];
 }
 
-def MemWriteOp : HIR_Op<"mem_write", [AttrSizedOperandSegments]> {
-  let summary = "Write to a memory interface.";
+def MemWriteOp : HIR_Op<"store", [AttrSizedOperandSegments]> {
+  let summary = "Write to a memory.";
   let description = [{
     This Op writes to memory. 
       Example:
 
       ```
-      mlir hir.mem_write %v to %A[%const][%x,%y] at %t : (!hir.val, !hir.memref)
+      mlir hir.mem_write %v to %A[%x,%y] at %t 
+        : (i32, !hir.memref<...>[i32,i32])
       ```
   }];
 
@@ -128,17 +130,30 @@ def MemWriteOp : HIR_Op<"mem_write", [AttrSizedOperandSegments]> {
       TimeType :$tstart, Optional<ConstType>:$offset);
   let results = (outs );
   let assemblyFormat = [{$value `to` $mem  `[` $addr `]` `at` $tstart 
-    (`offset` $offset^ )? attr-dict 
+    (`+` $offset^ )? attr-dict 
       `:` `(`type($value) `,` type($mem)`[`type($addr) `]` `)`}];
+}
+
+def SendOp : HIR_Op<"send", [AttrSizedOperandSegments]> {
+  let summary = "write to an interface.";
+  let description = [{
+    This Op writes to interface. 
+      ```
+  }];
+
+  let arguments = (ins AnyType:$value, InterfaceType:$interface,
+      Variadic<AnyType>:$addr, 
+      TimeType :$tstart, Optional<ConstType>:$offset);
+  let results = (outs );
+  let assemblyFormat = [{$value `to` $interface  `[` $addr `]` `at` $tstart 
+    (`+` $offset^ )? attr-dict 
+      `:` type($value) `to` type($interface)`[`type($addr) `]` }];
 }
 
 def SliceOp : HIR_Op<"slice", [NoSideEffect]> {
   let summary = "Select a slice of the interface.";
   let description = [{
     This Op reads from a memory interface. 
-      Example:
-
-      ```mlir hir.mem_read %A[%const][%x,%y] at %t : !hir.wire -> !hir.val```
   }];
 
   let arguments = (ins InterfaceType:$interface, 
@@ -152,43 +167,6 @@ def SliceOp : HIR_Op<"slice", [NoSideEffect]> {
     `->` type($res) }];
 
   let verifier = [{return verifySliceOp(*this);}];
-}
-
-def WireReadOp : HIR_Op<"wire_read", [NoSideEffect,AttrSizedOperandSegments]> {
-  let summary = "Read from a wire.";
-  let description = [{
-    This Op reads from wire. 
-      Example:
-
-      ```mlir hir.wire_read %A[%x] at %t : !hir.wire -> !hir.val```
-  }];
-
-  let arguments = (ins WireType:$wire, Variadic<ConstType>:$addr, 
-      TimeType : $tstart, Optional<ConstType>: $offset);
-
-  let results = (outs AnyType: $res);
-
-  let assemblyFormat = [{$wire  `[`$addr`]`  `at` $tstart (`offset` $offset^ )?
-    attr-dict `:` type($wire) `[`type($addr)`]` `->` type($res)}];
-}
-
-def WireWriteOp : HIR_Op<"wire_write", [AttrSizedOperandSegments]> {
-  let summary = "Write to a wire";
-  let description = [{
-    This Op writes to a wire. 
-      Example:
-
-      ```mlir hir.wire_write %v to %A at %t : (!hir.val, !hir.wire)```
-  }];
-
-  let arguments = (ins AnyType:$value, WireType:$wire, Variadic<ConstType>:$addr,
-      TimeType :$tstart, Optional<ConstType>:$offset);
-
-  let results = (outs );
-
-  let assemblyFormat = [{$value `to` $wire  `[`$addr`]` `at` $tstart 
-    (`offset` $offset^ )? attr-dict `:` `(`type($value) `,`
-        type($wire) `[`type($addr)`]` `)`}];
 }
 
 def ImplicitTerminator
@@ -222,7 +200,7 @@ Example:
       TimeType:$tstart, Optional<ConstType>: $offset);
   let results = (outs AnyType : $res);
   let assemblyFormat = [{$input `by` $delay `at` 
-    $tstart (`offset` $offset^ )? attr-dict `:` type($input) `->` type($res)}];
+    $tstart (`+` $offset^ )? attr-dict `:` type($input) `->` type($res)}];
 }
 
 //def WhileOp : HIR_Op<"while", 
@@ -339,18 +317,17 @@ def CallOp : HIR_Op<"call",[AttrSizedOperandSegments] > {
       ```
   }];
 
-  let arguments = (ins FlatSymbolRefAttr:$callee, Variadic<AnyType>:$operands,
-      TimeType:$tstart, Optional<ConstType>: $offset, 
-      ArrayAttr:$input_delays,
-      ArrayAttr:$output_delays);
+  let arguments = (ins OptionalAttr<FlatSymbolRefAttr>:$callee, 
+      TypeAttr : $interfaceTy,
+      Optional<AnyType>:$callee_var, 
+      Variadic<AnyType>:$operands, 
+      TimeType:$tstart, 
+      Optional<ConstType>: $offset
+      );
   let results = (outs Variadic<AnyType> : $res);
 
   let parser = [{return parse$cppClass(parser,result);}];
   let printer = [{return print$cppClass(p,*this);}];
-  //let assemblyFormat = [{
-  //  $callee `(` $operands `)` `at` $tstart (`offset` $offset^ )? attr-dict 
-  //    `:` functional-type($operands, $res)
-  //}];
 }
 
 def DefOp : HIR_Op<"func", [
@@ -372,8 +349,7 @@ def DefOp : HIR_Op<"func", [
       let arguments = (ins
           TypeAttr:$type,
           StrAttr:$sym_name,
-          ArrayAttr:$input_delays,
-          ArrayAttr:$output_delays
+          TypeAttr:$interfaceTy 
           );
 
       let regions = (region SizedRegion<1>:$region);
@@ -417,7 +393,7 @@ def YieldOp : HIR_Op<"yield", [AttrSizedOperandSegments] > {
   let results = (outs );
 
   let assemblyFormat = [{ attr-dict (`(` $operands^ `)` `:` type($operands))? 
-    `at` $tstart (`offset` $offset^ )?}];
+    `at` $tstart (`+` $offset^ )?}];
 }
 
 def ConstantOp : HIR_Op<"constant" > {
@@ -448,7 +424,7 @@ def CastOp : HIR_Op<"cast">{
       Optional<ConstType>:$offset);
   let results = (outs AnyType : $res);
 
-  let assemblyFormat = [{ $input  `at` $tstart (`offset` $offset^ )? attr-dict
+  let assemblyFormat = [{ $input  `at` $tstart (`+` $offset^ )? attr-dict
     `:` type($input) `->` type($res)}];
 
 }

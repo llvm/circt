@@ -10,7 +10,7 @@ parseTimeAndOffset(mlir::OpAsmParser &parser, OpAsmParser::OperandType &tstart,
                    IntegerAttr &constOffset) {
   OpAsmParser::OperandType tempOffset;
 
-  constOffset = getIntegerAttr(parser, 32, 0);
+  constOffset = getIntegerAttr(parser.getBuilder().getContext(), 32, 0);
   if (parser.parseOperand(tstart))
     return failure();
 
@@ -55,10 +55,12 @@ parseOptionalArrayAccess(OpAsmParser &parser,
     OpAsmParser::OperandType var;
     OptionalParseResult result = parser.parseOptionalInteger(val);
     if (result.hasValue() && !result.getValue()) {
-      tempConstAddrs.push_back(getIntegerAttr(parser, 32, val));
+      tempConstAddrs.push_back(
+          getIntegerAttr(parser.getBuilder().getContext(), 32, val));
     } else if (!parser.parseOperand(var)) {
       varAddrs.push_back(var);
-      tempConstAddrs.push_back(getIntegerAttr(parser, 32, -varAddrs.size()));
+      tempConstAddrs.push_back(getIntegerAttr(parser.getBuilder().getContext(),
+                                              32, -varAddrs.size()));
     } else
       return failure();
   } while (!parser.parseOptionalComma());
@@ -99,7 +101,7 @@ ParseResult parseOptionalArrayAccessTypes(mlir::OpAsmParser &parser,
     i++;
     Type t;
     if (!parser.parseOptionalKeyword("const"))
-      t = getConstIntType(parser);
+      t = getConstIntType(parser.getBuilder().getContext());
     else if (parser.parseType(t))
       return failure();
 

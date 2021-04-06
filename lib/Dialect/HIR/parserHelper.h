@@ -1,3 +1,6 @@
+#ifndef PARSERHELPER
+#define PARSERHELPER
+
 #include "circt/Dialect/HIR/HIR.h"
 #include "circt/Dialect/HIR/HIRDialect.h"
 #include "mlir/Dialect/CommonFolders.h"
@@ -19,28 +22,27 @@ using namespace llvm;
 
 // Helper Methods.
 
-static IntegerAttr getIntegerAttr(OpAsmParser &parser, int width, int value) {
-  return IntegerAttr::get(
-      IntegerType::get(parser.getBuilder().getContext(), width),
-      APInt(width, value));
+static IntegerAttr getIntegerAttr(MLIRContext *context, int width, int value) {
+  return IntegerAttr::get(IntegerType::get(context, width),
+                          APInt(width, value));
 }
 
-static Type getIntegerType(OpAsmParser &parser, int bitwidth) {
-  return IntegerType::get(parser.getBuilder().getContext(), bitwidth);
+static Type getIntegerType(MLIRContext *context, int bitwidth) {
+  return IntegerType::get(context, bitwidth);
 }
 
-static ConstType getConstIntType(OpAsmParser &parser) {
-  return ConstType::get(parser.getBuilder().getContext());
+static ConstType getConstIntType(MLIRContext *context) {
+  return ConstType::get(context);
 }
 
-static Type getTimeType(OpAsmParser &parser) {
-  return TimeType::get(parser.getBuilder().getContext());
-}
+static Type getTimeType(MLIRContext *context) { return TimeType::get(context); }
 
 static ParseResult parseIntegerAttr(IntegerAttr &value, int bitwidth,
                                     StringRef attrName, OpAsmParser &parser,
                                     OperationState &result) {
 
-  return parser.parseAttribute(value, getIntegerType(parser, bitwidth),
-                               attrName, result.attributes);
+  return parser.parseAttribute(
+      value, getIntegerType(parser.getBuilder().getContext(), bitwidth),
+      attrName, result.attributes);
 }
+#endif

@@ -14,23 +14,21 @@
 namespace mlir {
 namespace hir {
 namespace Details {
-/// PortKind tells what type of port this is. r => read port, w => write port
-/// and rw => read-write port.
 enum PortKind { r = 0, w = 1, rw = 2 };
 
 /// Storage class for MemrefType.
 struct MemrefTypeStorage : public TypeStorage {
-  MemrefTypeStorage(ArrayRef<unsigned> shape, Type elementType,
-                    ArrayRef<unsigned> packing, PortKind port = rw)
-      : shape(shape), elementType(elementType), packing(packing), port(port) {}
+  MemrefTypeStorage(ArrayRef<int64_t> shape, Type elementType,
+                    ArrayAttr bankedDims, DictionaryAttr portAttrs)
+      : shape(shape), elementType(elementType), bankedDims(bankedDims),
+        portAttrs(portAttrs) {}
 
   /// The hash key for this storage is a pair of the integer and type params.
-  using KeyTy =
-      std::tuple<ArrayRef<unsigned>, Type, ArrayRef<unsigned>, PortKind>;
+  using KeyTy = std::tuple<ArrayRef<int64_t>, Type, ArrayAttr, DictionaryAttr>;
 
   /// Define the comparison function for the key type.
   bool operator==(const KeyTy &key) const {
-    return key == KeyTy(shape, elementType, packing, port);
+    return key == KeyTy(shape, elementType, bankedDims, portAttrs);
   }
 
   /// Define a hash function for the key type.
@@ -40,26 +38,66 @@ struct MemrefTypeStorage : public TypeStorage {
   }
 
   /// Define a construction function for the key type.
-  static KeyTy getKey(ArrayRef<unsigned> shape, Type elementType,
-                      ArrayRef<unsigned> packing, PortKind port = rw) {
-    return KeyTy(shape, elementType, packing, port);
+  static KeyTy getKey(ArrayRef<int64_t> shape, Type elementType,
+                      ArrayAttr bankedDims, DictionaryAttr portAttrs) {
+    return KeyTy(shape, elementType, bankedDims, portAttrs);
   }
 
   /// Define a construction method for creating a new instance of this storage.
   static MemrefTypeStorage *construct(TypeStorageAllocator &allocator,
                                       const KeyTy &key) {
-    ArrayRef<unsigned> shape = allocator.copyInto(std::get<0>(key));
+    ArrayRef<int64_t> shape = allocator.copyInto(std::get<0>(key));
     Type elementType = std::get<1>(key);
-    ArrayRef<unsigned> packing = allocator.copyInto(std::get<2>(key));
-    Details::PortKind port = std::get<3>(key);
+    ArrayAttr bankedDims = std::get<2>(key);
+    DictionaryAttr portAttrs = std::get<3>(key);
     return new (allocator.allocate<MemrefTypeStorage>())
-        MemrefTypeStorage(shape, elementType, packing, port);
+        MemrefTypeStorage(shape, elementType, bankedDims, portAttrs);
   }
 
-  ArrayRef<unsigned> shape;
+  ArrayRef<int64_t> shape;
   Type elementType;
-  ArrayRef<unsigned> packing;
-  PortKind port;
+  ArrayAttr bankedDims;
+  DictionaryAttr portAttrs;
+};
+
+struct ModuleTypeStorage : public TypeStorage {
+  ModuleTypeStorage(FunctionType functionTy, ArrayAttr inputDelays,
+                    ArrayAttr outputDelays)
+      : functionTy(functionTy), inputDelays(inputDelays),
+        outputDelays(outputDelays) {}
+
+  /// The hash key for this storage is a pair of the integer and type params.
+  using KeyTy = std::tuple<FunctionType, ArrayAttr, ArrayAttr>;
+
+  /// Define the comparison function for the key type.
+  bool operator==(const KeyTy &key) const {
+    return key == KeyTy(functionTy, inputDelays, outputDelays);
+  }
+
+  /// Define a hash function for the key type.
+  static llvm::hash_code hashKey(const KeyTy &key) {
+    return llvm::hash_combine(std::get<0>(key), std::get<1>(key));
+  }
+
+  /// Define a construction function for the key type.
+  static KeyTy getKey(FunctionType functionTy, ArrayAttr inputDelays,
+                      ArrayAttr outputDelays) {
+    return KeyTy(functionTy, inputDelays, outputDelays);
+  }
+
+  /// Define a construction method for creating a new instance of this storage.
+  static ModuleTypeStorage *construct(TypeStorageAllocator &allocator,
+                                      const KeyTy &key) {
+    FunctionType functionTy = std::get<0>(key);
+    ArrayAttr inputDelays = std::get<1>(key);
+    ArrayAttr outputDelays = std::get<2>(key);
+    return new (allocator.allocate<ModuleTypeStorage>())
+        ModuleTypeStorage(functionTy, inputDelays, outputDelays);
+  }
+
+  FunctionType functionTy;
+  ArrayAttr inputDelays;
+  ArrayAttr outputDelays;
 };
 
 struct InterfaceTypeStorage : public TypeStorage {
@@ -166,47 +204,6 @@ struct GroupTypeStorage : public TypeStorage {
   ArrayRef<Type> elementTypes;
   ArrayRef<Attribute> attrs;
 };
-
-struct WireTypeStorage : public TypeStorage {
-  /// Storage class for WireType.
-  WireTypeStorage(ArrayRef<unsigned> shape, Type elementType,
-                  ArrayRef<unsigned> packing, PortKind port = rw)
-      : shape(shape), elementType(elementType), port(port) {}
-
-  /// The hash key for this storage is a pair of the integer and type params.
-  using KeyTy = std::tuple<ArrayRef<unsigned>, Type, PortKind>;
-
-  /// Define the comparison function for the key type.
-  bool operator==(const KeyTy &key) const {
-    return key == KeyTy(shape, elementType, port);
-  }
-
-  /// Define a hash function for the key type.
-  static llvm::hash_code hashKey(const KeyTy &key) {
-    return llvm::hash_combine(std::get<0>(key), std::get<1>(key),
-                              std::get<2>(key));
-  }
-
-  /// Define a construction function for the key type.
-  static KeyTy getKey(ArrayRef<unsigned> shape, Type elementType,
-                      ArrayRef<unsigned> packing, PortKind port = rw) {
-    return KeyTy(shape, elementType, port);
-  }
-
-  /// Define a construction method for creating a new instance of this storage.
-  static WireTypeStorage *construct(TypeStorageAllocator &allocator,
-                                    const KeyTy &key) {
-    ArrayRef<unsigned> shape = allocator.copyInto(std::get<0>(key));
-    Type elementType = std::get<1>(key);
-    Details::PortKind port = std::get<2>(key);
-    return new (allocator.allocate<WireTypeStorage>())
-        WireTypeStorage(shape, elementType, port);
-  }
-
-  ArrayRef<unsigned> shape;
-  Type elementType;
-  PortKind port;
-};
 } // namespace Details.
 
 /// This class defines hir.time type in the dialect.
@@ -237,15 +234,33 @@ public:
 
   // static bool kindof(unsigned kind) { return kind == MemrefKind; }
   static StringRef getKeyword() { return "memref"; }
-  static MemrefType get(MLIRContext *context, ArrayRef<unsigned> shape,
-                        Type elementType, ArrayRef<unsigned> packing,
-                        Details::PortKind port) {
-    return Base::get(context, shape, elementType, packing, port);
+  static MemrefType get(MLIRContext *context, ArrayRef<int64_t> shape,
+                        Type elementType, ArrayAttr bankedDims,
+                        DictionaryAttr portDims) {
+    return Base::get(context, shape, elementType, bankedDims, portDims);
   }
-  ArrayRef<unsigned> getShape() { return getImpl()->shape; }
+
+  ArrayRef<int64_t> getShape() { return getImpl()->shape; }
   Type getElementType() { return getImpl()->elementType; }
-  ArrayRef<unsigned> getPacking() { return getImpl()->packing; }
-  Details::PortKind getPort() { return getImpl()->port; }
+  ArrayAttr getBankedDims() { return getImpl()->bankedDims; }
+  DictionaryAttr getPortAttrs() { return getImpl()->portAttrs; }
+};
+
+/// This class defines !hir.func type in the dialect.
+class ModuleType
+    : public Type::TypeBase<ModuleType, Type, Details::ModuleTypeStorage> {
+public:
+  using Base::Base;
+
+  static StringRef getKeyword() { return "func"; }
+  static ModuleType get(MLIRContext *context, FunctionType functionTy,
+                        ArrayAttr inputDelays, ArrayAttr outputDelays) {
+    return Base::get(context, functionTy, inputDelays, outputDelays);
+  }
+
+  FunctionType getFunctionType() { return getImpl()->functionTy; }
+  ArrayAttr getInputDelays() { return getImpl()->inputDelays; }
+  ArrayAttr getOutputDelays() { return getImpl()->outputDelays; }
 };
 
 /// This class defines hir.interface type in the dialect.
@@ -294,24 +309,6 @@ public:
   ArrayRef<Type> getElementTypes() { return getImpl()->elementTypes; }
   ArrayRef<Attribute> getAttributes() { return getImpl()->attrs; }
 };
-
-/// This class defines hir.wire type in the dialect.
-class WireType
-    : public Type::TypeBase<WireType, Type, Details::WireTypeStorage> {
-public:
-  using Base::Base;
-
-  // static bool kindof(unsigned kind) { return kind == WireKind; }
-  static StringRef getKeyword() { return "wire"; }
-  static WireType get(MLIRContext *context, ArrayRef<unsigned> shape,
-                      Type elementType, Details::PortKind port) {
-    return Base::get(context, shape, elementType, port);
-  }
-  ArrayRef<unsigned> getShape() { return getImpl()->shape; }
-  Type getElementType() { return getImpl()->elementType; }
-  Details::PortKind getPort() { return getImpl()->port; }
-};
-
 } // namespace hir.
 #define GET_OP_CLASSES
 #include "circt/Dialect/HIR/HIR.h.inc"

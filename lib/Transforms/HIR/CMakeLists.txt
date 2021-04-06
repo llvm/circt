@@ -1,6 +1,6 @@
 add_circt_dialect_library(CIRCTHIRTransforms
-  BitwidthReductionPass.cpp
-  CanonicalizePass.cpp
+  pass/BitwidthReductionPass.cpp
+  pass/CanonicalizePass.cpp
   PassRegistration.cpp
 
   DEPENDS

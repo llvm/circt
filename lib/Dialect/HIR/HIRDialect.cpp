@@ -5,14 +5,15 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/HIR/HIRDialect.h"
 #include "circt/Dialect/HIR/HIR.h"
+#include "circt/Dialect/HIR/HIRDialect.h"
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/Types.h"
 #include "mlir/Transforms/InliningUtils.h"
+#include "parserHelper.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -22,8 +23,8 @@ using namespace hir;
 
 HIRDialect::HIRDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context, TypeID::get<HIRDialect>()) {
-  addTypes<TimeType, GroupType, ArrayType, InterfaceType, ConstType, MemrefType,
-           WireType>();
+  addTypes<TimeType, GroupType, ArrayType, InterfaceType, ConstType, ModuleType,
+           MemrefType>();
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/HIR/HIR.cpp.inc"
@@ -31,70 +32,11 @@ HIRDialect::HIRDialect(MLIRContext *context)
 }
 
 namespace Helpers {
-static ParseResult parsePortKind(DialectAsmParser &parser,
-                                 Details::PortKind &port) {
-  if (!parser.parseOptionalKeyword("rw"))
-    port = Details::rw;
-  else if (!parser.parseOptionalKeyword("r"))
-    port = Details::r;
-  else if (!parser.parseOptionalKeyword("w"))
-    port = Details::w;
-  else
-    return failure();
-  return success();
-}
-
-static OptionalParseResult
-parseOptionalMemrefPacking(DialectAsmParser &parser,
-                           SmallVectorImpl<unsigned> &packing) {
-  if (parser.parseOptionalKeyword("packing"))
-    return OptionalParseResult(None);
-  if (parser.parseEqual() || parser.parseLSquare())
-    return failure();
-  if (!parser.parseOptionalRSquare())
-    return success();
-
-  unsigned dim;
-  if (parser.parseInteger(dim))
-    return failure();
-  packing.push_back(dim);
-  while (!parser.parseOptionalComma()) {
-    if (parser.parseInteger(dim))
-      return failure();
-    packing.push_back(dim);
-  }
-  if (parser.parseRSquare())
-    return failure();
-  return success();
-}
-
 static ParseResult parseShapedType(DialectAsmParser &parser,
-                                   SmallVectorImpl<unsigned> &shape,
+                                   SmallVectorImpl<int64_t> &shape,
                                    Type &elementType) {
-  unsigned dim;
 
-  if (parser.parseInteger(dim))
-    return failure();
-  shape.push_back(dim);
-  if (parser.parseOptionalStar())
-    return parser.emitError(parser.getCurrentLocation(),
-                            "expected '*' followed by type"),
-           failure();
-  while (true) {
-    auto optionalParseRes = parser.parseOptionalInteger(dim);
-    if (!optionalParseRes.hasValue())
-      break;
-    if (optionalParseRes.getValue())
-      return parser.emitError(parser.getCurrentLocation(),
-                              "expected integer literal or type"),
-             failure();
-    shape.push_back(dim);
-    if (parser.parseOptionalStar())
-      return parser.emitError(parser.getCurrentLocation(),
-                              "expected '*' followed by type"),
-             failure();
-  }
-  if (parser.parseType(elementType))
+  if (parser.parseDimensionList(shape) || parser.parseType(elementType))
     return failure();
   return success();
 }
@@ -104,75 +46,70 @@ static ParseResult parseShapedType(DialectAsmParser &parser,
 
 // Memref Type.
 static Type parseMemrefType(DialectAsmParser &parser, MLIRContext *context) {
-  SmallVector<unsigned, 4> shape;
+  SmallVector<int64_t, 4> shape;
   Type elementType;
-  hir::Details::PortKind defaultPort = hir::Details::rw;
   if (parser.parseLess())
     return Type();
 
   if (Helpers::parseShapedType(parser, shape, elementType))
     return Type();
 
-  SmallVector<unsigned, 4> defaultPacking;
-  // default packing is [0,1,2,3] for shape = [d3,d2,d1,d0] i.e. d0 is fastest
-  // changing dim in linear index and no distributed dimensions.
-  for (size_t i = 0; i < shape.size(); i++)
-    defaultPacking.push_back(i);
-
-  if (!parser.parseOptionalGreater())
-    return MemrefType::get(context, shape, elementType, defaultPacking,
-                           defaultPort);
-
   if (parser.parseComma())
     return Type();
 
-  SmallVector<unsigned, 4> packing;
-  OptionalParseResult hasPacking =
-      Helpers::parseOptionalMemrefPacking(parser, packing);
-
-  if (hasPacking.hasValue()) {
-    if (hasPacking.getValue())
-      return Type();
-    if (!parser.parseOptionalGreater())
-      return MemrefType::get(context, shape, elementType, packing, defaultPort);
+  bool hasBankedDims = false;
+  mlir::Attribute attr1, attr2;
+  llvm::SMLoc loc1, loc2;
+  ArrayAttr bankedDims;
+  DictionaryAttr portAttr;
+  loc1 = parser.getCurrentLocation();
+  if (parser.parseAttribute(attr1))
+    return Type();
+  if (parser.parseOptionalGreater()) {
     if (parser.parseComma())
       return Type();
+    hasBankedDims = true;
+    loc2 = parser.getCurrentLocation();
+    parser.parseAttribute(attr2);
   }
-
-  hir::Details::PortKind port;
-  if (Helpers::parsePortKind(parser, port) || parser.parseGreater())
+  if (parser.parseGreater())
     return Type();
 
-  return MemrefType::get(context, shape, elementType,
-                         hasPacking.hasValue() ? packing : defaultPacking,
-                         port);
+  if (hasBankedDims) {
+    bankedDims = attr1.dyn_cast<ArrayAttr>();
+    if (!bankedDims) {
+      parser.emitError(loc1, "expected banked dims!");
+      return Type();
+    }
+    portAttr = attr2.dyn_cast<DictionaryAttr>();
+    if (!portAttr) {
+      parser.emitError(loc2, "expected port attributes!");
+      return Type();
+    }
+  } else {
+    portAttr = attr1.dyn_cast<DictionaryAttr>();
+    if (!portAttr) {
+      parser.emitError(loc1, "expected port attributes!");
+      return Type();
+    }
+  }
+  return MemrefType::get(context, shape, elementType, bankedDims, portAttr);
 }
+
 static void printMemrefType(MemrefType memrefTy, DialectAsmPrinter &printer) {
   printer << memrefTy.getKeyword();
   printer << "<";
   auto shape = memrefTy.getShape();
   auto elementType = memrefTy.getElementType();
-  auto packing = memrefTy.getPacking();
-  auto port = memrefTy.getPort();
+  auto bankedDims = memrefTy.getBankedDims();
+  auto portAttrs = memrefTy.getPortAttrs();
   for (auto dim : shape)
-    printer << dim << "*";
+    printer << dim << "x";
 
-  printer << elementType << ", packing = [";
-
-  for (size_t i = 0; i < packing.size(); i++)
-    printer << packing[i] << ((i == (packing.size() - 1)) ? "" : ", ");
-  printer << "]";
-
-  if (port == Details::r) {
-    printer << ", r";
-  } else if (port == Details::w) {
-    printer << ", w";
-  } else if (port == Details::rw) {
-    printer << "";
-  } else {
-    printer << ", unknown";
-  }
-  printer << ">";
+  printer << elementType << ", ";
+  if (!bankedDims.empty())
+    printer << bankedDims << ", ";
+  printer << portAttrs << ">";
 }
 
 // Interface Type
@@ -181,6 +118,7 @@ static void printMemrefType(MemrefType memrefTy, DialectAsmPrinter &printer) {
 namespace helper {
 
 // forward declarations.
+Type parseOptionalModule(DialectAsmParser &parser, MLIRContext *context);
 static Type parseOptionalGroup(DialectAsmParser &parser, MLIRContext *context);
 static Type parseOptionalArray(DialectAsmParser &parser, MLIRContext *context);
 static Type parseOptionalInterfaceElementType(DialectAsmParser &parser,
@@ -188,6 +126,7 @@ static Type parseOptionalInterfaceElementType(DialectAsmParser &parser,
 static std::pair<Type, Attribute>
 parseInterfaceElementTypeWithOptionalAttr(DialectAsmParser &parser,
                                           MLIRContext *context);
+static void printModule(ModuleType moduleTy, DialectAsmPrinter &printer);
 static void printGroup(GroupType groupTy, DialectAsmPrinter &printer);
 static void printArray(ArrayType groupTy, DialectAsmPrinter &printer);
 void printInterfaceElementType(Type elementTy, DialectAsmPrinter &printer);
@@ -195,12 +134,93 @@ void printInterfaceElementTypeWithOptionalAttr(DialectAsmPrinter &printer,
                                                Type elementTy, Attribute attr);
 
 // Implementations.
+Type parseOptionalModule(DialectAsmParser &parser, MLIRContext *context) {
+  SmallVector<Type, 4> argTypes;
+  SmallVector<Attribute, 4> inputDelays;
+  SmallVector<Attribute, 4> outputDelays;
+  ArrayAttr inputDelayAttr, outputDelayAttr;
+  if (parser.parseOptionalKeyword("func"))
+    return Type();
+  if (parser.parseLParen())
+    return Type();
+  int count = 0;
+  if (parser.parseOptionalRParen()) {
+    while (1) {
+      Type type;
+      IntegerAttr delayAttr;
+      if (parser.parseType(type))
+        return Type();
+      argTypes.push_back(type);
+      if (type.isa<IntegerType>() &&
+          succeeded(parser.parseOptionalKeyword("delay"))) {
+        if (parser.parseAttribute(
+                delayAttr,
+                getIntegerType(parser.getBuilder().getContext(), 64)))
+          return Type();
+        inputDelays.push_back(delayAttr);
+      } else {
+        // Default delay is 0.
+        inputDelays.push_back(
+            getIntegerAttr(parser.getBuilder().getContext(), 64, 0));
+      }
+      count++;
+      if (parser.parseOptionalComma())
+        break;
+    }
+    if (parser.parseRParen())
+      return Type();
+  }
+
+  inputDelayAttr = parser.getBuilder().getArrayAttr(inputDelays);
+
+  // Process output types and delays.
+  SmallVector<Type, 4> resultTypes;
+  if (!parser.parseOptionalArrow()) {
+    if (parser.parseLParen())
+      return Type();
+    if (parser.parseOptionalRParen()) {
+      while (1) {
+        Type type;
+        IntegerAttr delayAttr;
+        if (parser.parseType(type))
+          return Type();
+        resultTypes.push_back(type);
+        if (type.isa<IntegerType>() &&
+            succeeded(parser.parseOptionalKeyword("delay"))) {
+          if (parser.parseAttribute(
+                  delayAttr,
+                  getIntegerType(parser.getBuilder().getContext(), 64)))
+            return Type();
+          outputDelays.push_back(delayAttr);
+        } else {
+          // Default delay is 0.
+          outputDelays.push_back(
+              getIntegerAttr(parser.getBuilder().getContext(), 64, 0));
+        }
+        if (parser.parseOptionalComma())
+          break;
+      }
+
+      if (parser.parseRParen())
+        return Type();
+    }
+  }
+
+  outputDelayAttr = parser.getBuilder().getArrayAttr(outputDelays);
+  FunctionType functionTy =
+      parser.getBuilder().getFunctionType(argTypes, resultTypes);
+  return hir::ModuleType::get(parser.getBuilder().getContext(), functionTy,
+                              inputDelayAttr, outputDelayAttr);
+}
+
 static Type parseOptionalGroup(DialectAsmParser &parser, MLIRContext *context) {
   SmallVector<Type> elementTypes;
   SmallVector<Attribute> attrs;
 
-  // if no starting LParen then this is not a group.
-  if (failed(parser.parseOptionalLParen()))
+  // if not starting with "group" keyword then this is not a group.
+  if (parser.parseOptionalKeyword("group"))
+    return Type();
+  if (parser.parseLParen())
     return Type();
 
   // parse the group members.
@@ -224,7 +244,9 @@ static Type parseOptionalArray(DialectAsmParser &parser, MLIRContext *context) {
   Type elementType;
 
   // if no starting LSquare then this is not an array.
-  if (failed(parser.parseOptionalLSquare()))
+  if (parser.parseOptionalKeyword("array"))
+    return Type();
+  if (parser.parseLSquare())
     return Type();
 
   // parse the dimensions.
@@ -243,14 +265,26 @@ static Type parseOptionalArray(DialectAsmParser &parser, MLIRContext *context) {
 
 static Type parseOptionalInterfaceElementType(DialectAsmParser &parser,
                                               MLIRContext *context) {
-  Type builtinType;
+  Type simpleType;
+  auto locType = parser.getCurrentLocation();
+  OptionalParseResult result = parser.parseOptionalType(simpleType);
+  if (result.hasValue() && succeeded(result.getValue())) {
+    if (simpleType.isa<IntegerType>() || simpleType.isa<FloatType>() ||
+        simpleType.isa<hir::TimeType>())
+      return simpleType;
+    return parser.emitError(
+               locType,
+               "only integer, float, !hir.time, group, array and func types "
+               "are supported inside interface!"),
+           Type();
+  }
+  Type moduleTy = parseOptionalModule(parser, context);
+  if (moduleTy)
+    return moduleTy;
   Type groupTy = parseOptionalGroup(parser, context);
-  Type arrayTy = parseOptionalArray(parser, context);
-  OptionalParseResult result = parser.parseOptionalType(builtinType);
-  if (result.hasValue() && succeeded(result.getValue()))
-    return builtinType;
   if (groupTy)
     return groupTy;
+  Type arrayTy = parseOptionalArray(parser, context);
   if (arrayTy)
     return arrayTy;
   return Type();
@@ -266,11 +300,41 @@ parseInterfaceElementTypeWithOptionalAttr(DialectAsmParser &parser,
     parser.parseAttribute(attr);
     elementType = parseOptionalInterfaceElementType(parser, context);
   }
+  if (!elementType)
+    parser.emitError(parser.getNameLoc(), "Could not parse element type!");
   return std::make_pair(elementType, attr);
 }
 
+static void printModule(ModuleType moduleTy, DialectAsmPrinter &printer) {
+  printer << "func(";
+  FunctionType functionTy = moduleTy.getFunctionType();
+  ArrayAttr inputDelays = moduleTy.getInputDelays();
+  ArrayAttr outputDelays = moduleTy.getOutputDelays();
+  auto inputTypes = functionTy.getInputs();
+  auto outputTypes = functionTy.getResults();
+  for (size_t i = 0; i < inputTypes.size(); i++) {
+    if (i > 0)
+      printer << ", ";
+    printer << inputTypes[i];
+    auto delay = inputDelays[i].dyn_cast<IntegerAttr>().getInt();
+    if (delay != 0)
+      printer << " delay " << delay;
+  }
+  printer << ") -> (";
+
+  for (size_t i = 0; i < outputTypes.size(); i++) {
+    if (i > 0)
+      printer << ", ";
+    printer << outputTypes[i];
+    auto delay = outputDelays[i].dyn_cast<IntegerAttr>().getInt();
+    if (delay != 0)
+      printer << " delay " << delay;
+  }
+  printer << ")";
+}
+
 static void printGroup(GroupType groupTy, DialectAsmPrinter &printer) {
-  printer << "(";
+  printer << "group(";
   ArrayRef<Type> elementTypes = groupTy.getElementTypes();
   ArrayRef<Attribute> attrs = groupTy.getAttributes();
   for (unsigned i = 0; i < elementTypes.size(); i++) {
@@ -284,7 +348,7 @@ static void printGroup(GroupType groupTy, DialectAsmPrinter &printer) {
 }
 
 static void printArray(ArrayType arrayTy, DialectAsmPrinter &printer) {
-  printer << "[";
+  printer << "array[";
   ArrayRef<int64_t> dims = arrayTy.getDimensions();
   Type elementTy = arrayTy.getElementType();
   for (auto dim : dims) {
@@ -295,7 +359,9 @@ static void printArray(ArrayType arrayTy, DialectAsmPrinter &printer) {
 }
 
 void printInterfaceElementType(Type elementTy, DialectAsmPrinter &printer) {
-  if (GroupType groupTy = elementTy.dyn_cast<GroupType>()) {
+  if (ModuleType moduleTy = elementTy.dyn_cast<hir::ModuleType>()) {
+    helper::printModule(moduleTy, printer);
+  } else if (GroupType groupTy = elementTy.dyn_cast<GroupType>()) {
     helper::printGroup(groupTy, printer);
   } else if (ArrayType arrayTy = elementTy.dyn_cast<ArrayType>()) {
     helper::printArray(arrayTy, printer);
@@ -340,59 +406,6 @@ static void printInterfaceType(InterfaceType interfaceTy,
   printer << ">";
 }
 
-// WireType.
-static Type parseWireType(DialectAsmParser &parser, MLIRContext *context) {
-  SmallVector<unsigned, 4> shape;
-  Type elementType;
-  hir::Details::PortKind defaultPort = hir::Details::rw;
-  if (parser.parseLess())
-    return Type();
-
-  if (Helpers::parseShapedType(parser, shape, elementType))
-    return Type();
-
-  SmallVector<unsigned, 4> defaultPacking;
-  // default packing is [0,1,2,3] for shape = [d3,d2,d1,d0] i.e. d0 is fastest
-  // changing dim in linear index and no distributed dimensions.
-  for (size_t i = 0; i < shape.size(); i++)
-    defaultPacking.push_back(i);
-
-  if (!parser.parseOptionalGreater())
-    return WireType::get(context, shape, elementType, defaultPort);
-
-  if (parser.parseComma())
-    return Type();
-
-  hir::Details::PortKind port;
-  if (Helpers::parsePortKind(parser, port) || parser.parseGreater())
-    return Type();
-
-  return WireType::get(context, shape, elementType, port);
-}
-
-static void printWireType(WireType wireTy, DialectAsmPrinter &printer) {
-  printer << wireTy.getKeyword();
-  printer << "<";
-  auto shape = wireTy.getShape();
-  auto elementType = wireTy.getElementType();
-  auto port = wireTy.getPort();
-  for (auto dim : shape)
-    printer << dim << "*";
-
-  printer << elementType;
-
-  if (port == Details::r) {
-    printer << ", r";
-  } else if (port == Details::w) {
-    printer << ", w";
-  } else if (port == Details::rw) {
-    printer << "";
-  } else {
-    printer << ", unknown";
-  }
-  printer << ">";
-}
-
 // parseType and printType.
 Type HIRDialect::parseType(DialectAsmParser &parser) const {
   StringRef typeKeyword;
@@ -407,9 +420,6 @@ Type HIRDialect::parseType(DialectAsmParser &parser) const {
 
   if (typeKeyword == InterfaceType::getKeyword())
     return parseInterfaceType(parser, getContext());
-
-  if (typeKeyword == WireType::getKeyword())
-    return parseWireType(parser, getContext());
 
   if (typeKeyword == ConstType::getKeyword())
     return ConstType::get(getContext());
@@ -428,10 +438,6 @@ void HIRDialect::printType(Type type, DialectAsmPrinter &printer) const {
   }
   if (InterfaceType interfaceTy = type.dyn_cast<InterfaceType>()) {
     printInterfaceType(interfaceTy, printer);
-    return;
-  }
-  if (WireType wireTy = type.dyn_cast<WireType>()) {
-    printWireType(wireTy, printer);
     return;
   }
   if (ConstType constTy = type.dyn_cast<ConstType>()) {
