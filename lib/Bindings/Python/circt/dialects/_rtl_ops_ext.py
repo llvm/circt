@@ -32,10 +32,10 @@ class RTLModuleOp:
     attributes['sym_name'] = StringAttr.get(str(name))
 
     input_types = []
-    self._build_ports('arg', attributes, input_ports, input_types)
+    self._build_ports('argNames', attributes, input_ports, input_types)
 
     output_types = []
-    self._build_ports('result', attributes, output_ports, output_types)
+    self._build_ports('resultNames', attributes, output_ports, output_types)
 
     attributes["type"] = TypeAttr.get(FunctionType.get(
       inputs=input_types, results=output_types))
@@ -176,13 +176,14 @@ class RTLModuleOp:
 
     return decorator
 
-  def _build_ports(self, prefix, attributes, port_list, port_types):
+  def _build_ports(self, nameAttr, attributes, port_list, port_types):
     port_idx = 0
+    port_names = []
     for (port_name, port_type) in port_list:
       port_types.append(port_type)
-      port_attrs = {}
       if port_name:
-        port_attrs['rtl.name'] = StringAttr.get(str(port_name))
-      attributes[prefix + str(port_idx)] = DictAttr.get(port_attrs)
+          port_names.append(StringAttr.get(str(port_name)))
+      else:
+          port_names.append(StringAttr.get("result" + str(port_idx)))
       port_idx += 1
-    
+    attributes[nameAttr] = ArrayAttr.get(port_names)
