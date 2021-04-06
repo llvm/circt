@@ -536,6 +536,7 @@ firrtl.circuit "Simple" {
   //     input inpred  : UInt<1>
   //     input indata  : SInt<42>
   //     output result : SInt<42>
+  //     output result2 : SInt<42>
   //
   //     mem _M : @[Decoupled.scala 209:27]
   //           data-type => SInt<42>
@@ -544,13 +545,20 @@ firrtl.circuit "Simple" {
   //           write-latency => 1
   //           reader => read
   //           writer => write
+  //           readwriter => rw
   //           read-under-write => undefined
   //
   //     result <= _M.read.data
+  //     result2 <= _M.rw.rdata
   //
   //     _M.read.addr <= UInt<1>("h0")
   //     _M.read.en <= UInt<1>("h1")
   //     _M.read.clk <= clock1
+  //     _M.rw.addr <= UInt<1>("h0")
+  //     _M.rw.en <= UInt<1>("h1")
+  //     _M.rw.clk <= clock1
+  //     _M.rw.wmask <= UInt<1>("h1")
+  //     _M.rw.wmode <= UInt<1>("h1")
   //     _M.write.addr <= validif(inpred, UInt<3>("h0"))
   //     _M.write.en <= mux(inpred, UInt<1>("h1"), UInt<1>("h0"))
   //     _M.write.clk <= clock2
@@ -560,76 +568,47 @@ firrtl.circuit "Simple" {
   // CHECK-LABEL: rtl.module @MemSimple(
   firrtl.module @MemSimple(%clock1: !firrtl.clock, %clock2: !firrtl.clock,
                            %inpred: !firrtl.uint<1>, %indata: !firrtl.sint<42>,
-                           %result: !firrtl.flip<sint<42>>) {
+                           %result: !firrtl.flip<sint<42>>, 
+                           %result2: !firrtl.flip<sint<42>>) {
     %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
     %c0_ui3 = firrtl.constant(0 : ui3) : !firrtl.uint<3>
-    %_M_read, %_M_write = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>, !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>
+    %_M_read, %_M_rw, %_M_write = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read", "rw", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>, !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, wmode: flip<uint<1>>, rdata: sint<42>, wdata: flip<sint<42>>, wmask: flip<uint<1>>>, !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>
+  // CHECK:      %_M.ro_data_0, %_M.rw_rdata_0 = rtl.instance "_M" @FIRRTLMem_1_1_1_42_12_0_1_0(%clock1, %true, %c0_i4, %clock1, %true, %c0_i4_0, %true, %true, %0, %clock2, %inpred, %c0_i4_1, %[[mask:.+]], %[[data:.+]]) : (i1, i1, i4, i1, i1, i4, i1, i1, i42, i1, i1, i4, i1, i42) -> (i42, i42)
+  // CHECK: rtl.output %_M.ro_data_0, %_M.rw_rdata_0 : i42, i42
 
-  // CHECK:  %_M.rd_data_0 = rtl.instance "_M" @FIRRTLMem_2_0_0_42_12_0_1_0(%clock1, %true, %c0_i4, %clock2, %inpred, %c0_i4_0, %[[mask:.+]], %[[data:.+]]) : (i1, i1, i4, i1, i1, i4, i1, i42) -> i42
-  // CHECK:      %[[data]] = comb.mux %inpred, %indata, %c0_i42
-  // CHECK-NEXT: %[[mask]] = comb.mux %inpred, %true, %false
-  // CHECK: rtl.output %_M.rd_data_0
+      %0 = firrtl.subfield %_M_read("data") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.sint<42>
+      firrtl.connect %result, %0 : !firrtl.flip<sint<42>>, !firrtl.sint<42>
+      %1 = firrtl.subfield %_M_rw("rdata") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, wmode: flip<uint<1>>, rdata: sint<42>, wdata: flip<sint<42>>, wmask: flip<uint<1>>>) -> !firrtl.sint<42>
+      firrtl.connect %result2, %1 : !firrtl.flip<sint<42>>, !firrtl.sint<42>
+      %2 = firrtl.subfield %_M_read("addr") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<uint<4>>
+      firrtl.connect %2, %c0_ui1 : !firrtl.flip<uint<4>>, !firrtl.uint<1>
+      %3 = firrtl.subfield %_M_read("en") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<uint<1>>
+      firrtl.connect %3, %c1_ui1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+      %4 = firrtl.subfield %_M_read("clk") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<clock>
+      firrtl.connect %4, %clock1 : !firrtl.flip<clock>, !firrtl.clock
 
-    %5 = firrtl.subfield %_M_read("data") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.sint<42>
-    %6 = firrtl.subfield %_M_read("addr") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<uint<4>>
-    firrtl.connect %6, %c0_ui1 : !firrtl.flip<uint<4>>, !firrtl.uint<1>
-    %7 = firrtl.subfield %_M_read("en") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<uint<1>>
-    firrtl.connect %7, %c1_ui1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
-    %8 = firrtl.subfield %_M_read("clk") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<clock>
-    firrtl.connect %8, %clock1 : !firrtl.flip<clock>, !firrtl.clock
+      %5 = firrtl.subfield %_M_rw("addr") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, wmode: flip<uint<1>>, rdata: sint<42>, wdata: flip<sint<42>>, wmask: flip<uint<1>>>) -> !firrtl.flip<uint<4>>
+      firrtl.connect %5, %c0_ui1 : !firrtl.flip<uint<4>>, !firrtl.uint<1>
+      %6 = firrtl.subfield %_M_rw("en") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, wmode: flip<uint<1>>, rdata: sint<42>, wdata: flip<sint<42>>, wmask: flip<uint<1>>>) -> !firrtl.flip<uint<1>>
+      firrtl.connect %6, %c1_ui1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+      %7 = firrtl.subfield %_M_rw("clk") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, wmode: flip<uint<1>>, rdata: sint<42>, wdata: flip<sint<42>>, wmask: flip<uint<1>>>) -> !firrtl.flip<clock>
+      firrtl.connect %7, %clock1 : !firrtl.flip<clock>, !firrtl.clock
+      %8 = firrtl.subfield %_M_rw("wmask") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, wmode: flip<uint<1>>, rdata: sint<42>, wdata: flip<sint<42>>, wmask: flip<uint<1>>>) -> !firrtl.flip<uint<1>>
+      firrtl.connect %8, %c1_ui1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+      %9 = firrtl.subfield %_M_rw("wmode") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, wmode: flip<uint<1>>, rdata: sint<42>, wdata: flip<sint<42>>, wmask: flip<uint<1>>>) -> !firrtl.flip<uint<1>>
+      firrtl.connect %9, %c1_ui1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 
-    %10 = firrtl.subfield %_M_write("addr") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<uint<4>>
-    %invalid_c0_ui3 = firrtl.invalidvalue : !firrtl.uint<3>
-    %11 = firrtl.mux(%inpred, %c0_ui3, %invalid_c0_ui3) : (!firrtl.uint<1>, !firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
-    firrtl.connect %10, %11 : !firrtl.flip<uint<4>>, !firrtl.uint<3>
-    %12 = firrtl.subfield %_M_write("en") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
-    firrtl.connect %12, %inpred : !firrtl.flip<uint<1>>, !firrtl.uint<1>
-    %13 = firrtl.subfield %_M_write("clk") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<clock>
-    firrtl.connect %13, %clock2 : !firrtl.flip<clock>, !firrtl.clock
-    %15 = firrtl.subfield %_M_write("data") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<sint<42>>
-    %invalid_si42 = firrtl.invalidvalue : !firrtl.sint<42>
-    %16 = firrtl.mux(%inpred, %indata, %invalid_si42) : (!firrtl.uint<1>, !firrtl.sint<42>, !firrtl.sint<42>) -> !firrtl.sint<42>
-    firrtl.connect %15, %16 : !firrtl.flip<sint<42>>, !firrtl.sint<42>
-    %17 = firrtl.subfield %_M_write("mask") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
-    %invalid_c1_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
-    %18 = firrtl.mux(%inpred, %c1_ui1, %invalid_c1_ui1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    firrtl.connect %17, %18 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
-
-    firrtl.connect %result, %5: !firrtl.flip<sint<42>>, !firrtl.sint<42>
-  }
-
-  // CHECK-LABEL: rtl.module @MemoryWithNonZeroReadLatencyAndNonUnaryWriteLatency
-
-  // COM: Check that a positive read latency and a non-unary write
-  // COM: latency results in read and write pipes being created.
-  firrtl.module @MemoryWithNonZeroReadLatencyAndNonUnaryWriteLatency(
-    %clock: !firrtl.clock, %rAddr: !firrtl.uint<4>, %rEn: !firrtl.uint<1>,
-    %wAddr: !firrtl.uint<4>, %wEn: !firrtl.uint<1>, %wMask: !firrtl.uint<1>,
-    %wData: !firrtl.uint<8>, %rData: !firrtl.flip<uint<8>>) {
-
-    %memory_r, %memory_w = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r", "w"], readLatency = 2 : i32, writeLatency = 2 : i32} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<8>>, !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>>
-    %7 = firrtl.subfield %memory_r("clk") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<8>>) -> !firrtl.flip<clock>
-    firrtl.connect %7, %clock : !firrtl.flip<clock>, !firrtl.clock
-    %8 = firrtl.subfield %memory_r("en") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<8>>) -> !firrtl.flip<uint<1>>
-    firrtl.connect %8, %rEn : !firrtl.flip<uint<1>>, !firrtl.uint<1>
-    %9 = firrtl.subfield %memory_r("addr") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<8>>) -> !firrtl.flip<uint<4>>
-    firrtl.connect %9, %rAddr : !firrtl.flip<uint<4>>, !firrtl.uint<4>
-    %10 = firrtl.subfield %memory_r("data") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<8>>) -> !firrtl.uint<8>
-    %11 = firrtl.subfield %memory_w("clk") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>>) -> !firrtl.flip<clock>
-    firrtl.connect %11, %clock : !firrtl.flip<clock>, !firrtl.clock
-    %12 = firrtl.subfield %memory_w("en") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
-    firrtl.connect %12, %wEn : !firrtl.flip<uint<1>>, !firrtl.uint<1>
-    %13 = firrtl.subfield %memory_w("addr") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>>) -> !firrtl.flip<uint<4>>
-    firrtl.connect %13, %wAddr : !firrtl.flip<uint<4>>, !firrtl.uint<4>
-    %14 = firrtl.subfield %memory_w("mask") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
-    firrtl.connect %14, %wMask : !firrtl.flip<uint<1>>, !firrtl.uint<1>
-    %15 = firrtl.subfield %memory_w("data") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>>) -> !firrtl.flip<uint<8>>
-    firrtl.connect %15, %wData : !firrtl.flip<uint<8>>, !firrtl.uint<8>
-    firrtl.connect %rData, %10: !firrtl.flip<uint<8>>, !firrtl.uint<8>
-
-    //CHECK:  %memory.rd_data_0 = rtl.instance "memory" @FIRRTLMem_2_0_0_8_16_2_2_0(%clock, %rEn, %rAddr, %clock, %wEn, %wAddr, %wMask, %wData) : (i1, i1, i4, i1, i1, i4, i1, i8) -> i8
-    //CHECK-NEXT:  rtl.output %memory.rd_data_0 : i8
+      %10 = firrtl.subfield %_M_write("addr") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<uint<4>>
+      firrtl.connect %10, %c0_ui3 : !firrtl.flip<uint<4>>, !firrtl.uint<3>
+      %11 = firrtl.subfield %_M_write("en") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
+      firrtl.connect %11, %inpred : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+      %12 = firrtl.subfield %_M_write("clk") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<clock>
+      firrtl.connect %12, %clock2 : !firrtl.flip<clock>, !firrtl.clock
+      %13 = firrtl.subfield %_M_write("data") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<sint<42>>
+      firrtl.connect %13, %indata : !firrtl.flip<sint<42>>, !firrtl.sint<42>
+      %14 = firrtl.subfield %_M_write("mask") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.flip<uint<1>>
+      firrtl.connect %14, %c1_ui1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
   }
 
   // CHECK-LABEL: rtl.module @IncompleteRead(
@@ -638,7 +617,7 @@ firrtl.circuit "Simple" {
     %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
 
-    // CHECK:  %_M.rd_data_0 = rtl.instance "_M" @FIRRTLMem_1_0_0_42_12_0_1_0(%clock1, %true, %c0_i4) : (i1, i1, i4) -> i42 
+    // CHECK:  %_M.ro_data_0 = rtl.instance "_M" @FIRRTLMem_1_0_0_42_12_0_1_0(%clock1, %true, %c0_i4) : (i1, i1, i4) -> i42
     %_M_read = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>
     // Read port.
     %6 = firrtl.subfield %_M_read("addr") : (!firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: sint<42>>) -> !firrtl.flip<uint<4>>
