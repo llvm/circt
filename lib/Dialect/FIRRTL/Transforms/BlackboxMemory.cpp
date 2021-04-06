@@ -97,7 +97,7 @@ static InstanceOp createInstance(OpBuilder builder, Location loc,
 
   return builder.create<InstanceOp>(loc, resultTypes, moduleName,
                                     builder.getArrayAttr(resultNames),
-                                    instanceName);
+                                    instanceName.getValue());
 }
 
 /// Get the portlist for an external module representing a blackbox memory. This
