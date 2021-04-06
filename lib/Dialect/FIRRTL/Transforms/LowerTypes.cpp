@@ -314,7 +314,7 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
 
   auto newInstance = builder->create<InstanceOp>(
       resultTypes, op.moduleNameAttr(), builder->getArrayAttr(resultNames),
-      op.nameAttr());
+      op.nameAttr(), op.annotations());
 
   // Record the mapping of each old result to each new result.
   size_t nextResult = 0;
@@ -403,11 +403,15 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     }
 
     // Construct the new memory for this flattened field.
+    //
+    // TODO: Annotations are just copied to the lowered memory.
+    // Change this to copy all global annotations and only those which
+    // target specific ports.
     auto newName = op.name().getValue().str() + field.suffix;
     auto newMem = builder->create<MemOp>(
         resultPortTypes, op.readLatency(), op.writeLatency(), depth, op.ruw(),
         builder->getArrayAttr(resultPortNames.getArrayRef()),
-        builder->getStringAttr(newName));
+        builder->getStringAttr(newName), op.annotations());
 
     // Setup the lowering to the new memory. We need to track both the
     // new memory index ("i") and the old memory index ("j") to deal
@@ -545,7 +549,8 @@ void TypeLoweringVisitor::visitDecl(WireOp op) {
     loweredName.resize(wireName.size());
     loweredName += field.suffix;
     auto wire = builder->create<WireOp>(field.getPortType(),
-                                        builder->getStringAttr(loweredName));
+                                        builder->getStringAttr(loweredName),
+                                        op.annotations());
     setBundleLowering(result, StringRef(field.suffix).drop_front(1), wire);
   }
 
@@ -577,7 +582,7 @@ void TypeLoweringVisitor::visitDecl(RegOp op) {
 
     setBundleLowering(result, StringRef(field.suffix).drop_front(1),
                       builder->create<RegOp>(field.getPortType(), op.clockVal(),
-                                             loweredName));
+                                             loweredName, op.annotations()));
   }
 
   // Remember to remove the original op.
@@ -610,7 +615,7 @@ void TypeLoweringVisitor::visitDecl(RegResetOp op) {
     setBundleLowering(result, suffix,
                       builder->create<RegResetOp>(
                           field.getPortType(), op.clockVal(), op.resetSignal(),
-                          resetValLowered, loweredName));
+                          resetValLowered, loweredName, op.annotations()));
   }
 
   // Remember to remove the original op.
