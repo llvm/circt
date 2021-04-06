@@ -538,7 +538,8 @@ rtl.module @issue720ifdef(%clock: i1, %arg1: i1, %arg2: i1, %arg3: i1) {
 // https://github.com/llvm/circt/issues/728
 
 // CHECK-LABEL: module issue728(
-rtl.module @issue728(%clock: i1, %a: i1 {rtl.name = "asdfasdfasdfasdfafa"}, %b: i1 {rtl.name = "gasfdasafwjhijjafija"})  {
+rtl.module @issue728(%clock: i1, %a: i1, %b: i1)
+attributes { argNames = ["clock", "asdfasdfasdfasdfafa", "gasfdasafwjhijjafija"] } {
   // CHECK:  always @(posedge clock) begin
   // CHECK:    automatic logic _tmp;
   // CHECK:    automatic logic _tmp_0;
@@ -559,7 +560,8 @@ rtl.module @issue728(%clock: i1, %a: i1 {rtl.name = "asdfasdfasdfasdfafa"}, %b: 
 }
 
 // CHECK-LABEL: module issue728ifdef(
-rtl.module @issue728ifdef(%clock: i1, %a: i1 {rtl.name = "asdfasdfasdfasdfafa"}, %b: i1 {rtl.name = "gasfdasafwjhijjafija"})  {
+rtl.module @issue728ifdef(%clock: i1, %a: i1, %b: i1)
+  attributes { argNames = ["clock", "asdfasdfasdfasdfafa", "gasfdasafwjhijjafija"] } {
   // CHECK: always @(posedge clock) begin
   // CHECK:      automatic logic _tmp;
   // CHECK:      automatic logic _tmp_0;

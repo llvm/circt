@@ -45,7 +45,7 @@ class UTVariadicOp<string mnemonic, list<OpTrait> traits = []> :
       VariadicOp<mnemonic,
                     traits # [SameTypeOperands, SameOperandsAndResultType]> {
 
-  let hasCanonicalizer = true;
+  let hasCanonicalizeMethod = true;
   let hasFolder = true;
   let verifier =  "return ::verifyUTVariadicOp(*this);";
 
@@ -89,7 +89,7 @@ def MergeOp : UTVariadicOp<"merge", [Commutative]> {
       %result = rtl.merge %a, %b, %c : t1
     ```
     }];
-  let hasCanonicalizer = false;
+  let hasCanonicalizeMethod = false;
 }
 
 //===----------------------------------------------------------------------===//
@@ -132,7 +132,7 @@ def ICmpOp : CombOp<"icmp", [NoSideEffect, SameTypeOperands]> {
   let assemblyFormat = "$predicate $lhs `,` $rhs  attr-dict `:` type($lhs)";
   
   let hasFolder = true;
-  let hasCanonicalizer = true;
+  let hasCanonicalizeMethod = true;
 
   let builders = [
     OpBuilder<(ins "ICmpPredicate":$pred, "Value":$lhs, "Value":$rhs), [{
@@ -205,7 +205,7 @@ def ConcatOp : VariadicOp<"concat"> {
   }];
 
   let hasFolder = true;
-  let hasCanonicalizer = true;
+  let hasCanonicalizeMethod = true;
 
   let builders = [
     OpBuilder<(ins "ValueRange":$inputs)>,
@@ -233,7 +233,7 @@ def MuxOp : CombOp<"mux",
     "$cond `,` $trueValue `,` $falseValue attr-dict `:` type($result)";
   
   let hasFolder = true;
-  let hasCanonicalizer = true;
+  let hasCanonicalizeMethod = true;
 
   let builders = [
     OpBuilder<(ins "Value":$cond, "Value":$trueValue, "Value":$falseValue),

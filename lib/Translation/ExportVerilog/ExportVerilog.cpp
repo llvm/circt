@@ -38,9 +38,6 @@ using namespace comb;
 using namespace rtl;
 using namespace sv;
 
-/// This is the preferred source width for the generated Verilog.
-static constexpr size_t preferredSourceWidth = 90;
-
 //===----------------------------------------------------------------------===//
 // Helper routines
 //===----------------------------------------------------------------------===//
@@ -968,10 +965,10 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
     threshold = ~0U;
     break;
   case OOLUnary:
-    threshold = preferredSourceWidth - 20;
+    threshold = std::max(state.options.emittedLineLength - 20, 10U);
     break;
   case OOLBinary:
-    threshold = preferredSourceWidth / 2;
+    threshold = std::max(state.options.emittedLineLength / 2, 10U);
     break;
   }
 
@@ -1411,8 +1408,27 @@ void NameCollector::collectNames(Block &block) {
 
     // If the op is an instance, add its name to the name table as an op.
     auto instance = dyn_cast<InstanceOp>(&op);
-    if (instance)
+    if (instance) {
       moduleEmitter.addName(ValueOrOp(instance), instance.instanceName());
+
+      // The names for instance results is handled specially.
+      nameTmp = moduleEmitter.getName(ValueOrOp(instance)).str() + "_";
+      auto namePrefixSize = nameTmp.size();
+
+      size_t nextResultNo = 0;
+      for (auto &port : getModulePortInfo(instance.getReferencedModule())) {
+        if (!port.isOutput())
+          continue;
+
+        nameTmp.resize(namePrefixSize);
+        if (port.name)
+          nameTmp += port.name.getValue().str();
+        else
+          nameTmp += std::to_string(nextResultNo);
+        moduleEmitter.addName(instance.getResult(nextResultNo), nameTmp);
+        ++nextResultNo;
+      }
+    }
 
     for (auto result : op.getResults()) {
       // If this is an expression emitted inline or unused, it doesn't need a
@@ -1427,20 +1443,10 @@ void NameCollector::collectNames(Block &block) {
       }
 
       // Otherwise, it must be an expression or a declaration like a
-      // RegOp/WireOp.  Remember and unique the name for this result.
-      if (instance) {
-        // The name for an instance result is custom.
-        nameTmp = moduleEmitter.getName(ValueOrOp(instance)).str() + "_";
-        unsigned resultNumber = result.getResultNumber();
-        auto resultName = instance.getResultName(resultNumber);
-        if (resultName)
-          nameTmp += resultName.getValue().str();
-        else
-          nameTmp += std::to_string(resultNumber);
-        moduleEmitter.addName(result, nameTmp);
-      } else {
+      // RegOp/WireOp.  Remember and unique the name for this result.  Instances
+      // are handled separately.
+      if (!instance)
         moduleEmitter.addName(result, op.getAttrOfType<StringAttr>("name"));
-      }
 
       // Don't measure or emit wires that are emitted inline (i.e. the wire
       // definition is emitted on the line of the expression instead of a
@@ -2708,6 +2714,8 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
     printUnpackedTypePostfix(portType, os);
     ++portIdx;
 
+    auto lineLength = state.options.emittedLineLength;
+
     // If we have any more ports with the same types and the same direction,
     // emit them in a list on the same line.
     while (portIdx != e && portInfo[portIdx].direction == thisPortDirection &&
@@ -2718,7 +2726,7 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
       if (os.tell() + 2 + name.size() - startOfLinePos >
           // We use "-2" here because we need a trailing comma or ); for the
           // decl.
-          preferredSourceWidth - 2)
+          lineLength - 2)
         break;
 
       // Append this to the running port decl.

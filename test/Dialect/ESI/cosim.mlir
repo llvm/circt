@@ -4,13 +4,13 @@
 // Disable the SV test : circt-opt %s --lower-esi-ports --lower-esi-to-rtl | circt-translate --export-verilog | FileCheck --check-prefix=SV %s
 // RUN: circt-translate %s -export-esi-capnp -verify-diagnostics | FileCheck --check-prefix=CAPNP %s
 
-rtl.module.extern @Sender() -> ( !esi.channel<si14> { rtl.name = "x"})
+rtl.module.extern @Sender() -> (%x: !esi.channel<si14>)
 rtl.module.extern @Reciever(%a: !esi.channel<i32>)
 rtl.module.extern @ArrReciever(%x: !esi.channel<!rtl.array<4xsi64>>)
 
 // CHECK-LABEL: rtl.module.extern @Sender() -> (%x: !esi.channel<si14>)
-// CHECK-LABEL: rtl.module.extern @Reciever(!esi.channel<i32> {rtl.name = "a"})
-// CHECK-LABEL: rtl.module.extern @ArrReciever(!esi.channel<!rtl.array<4xsi64>> {rtl.name = "x"})
+// CHECK-LABEL: rtl.module.extern @Reciever(%a: !esi.channel<i32>)
+// CHECK-LABEL: rtl.module.extern @ArrReciever(%x: !esi.channel<!rtl.array<4xsi64>>)
 
 rtl.module @top(%clk:i1, %rstn:i1) -> () {
   rtl.instance "recv" @Reciever (%cosimRecv) : (!esi.channel<i32>) -> ()

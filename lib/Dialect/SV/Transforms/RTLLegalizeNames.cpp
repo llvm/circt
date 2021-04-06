@@ -88,25 +88,40 @@ void RTLLegalizeNamesPass::runOnModule(rtl::RTLModuleOp module) {
   auto results = moduleType.getResults();
 
   // Rename the inputs.
-  for (unsigned i = 0; i < inputs.size(); ++i) {
-    auto oldName = module.getArgAttrOfType<StringAttr>(i, "rtl.name");
+  bool changedName = false;
+  SmallVector<Attribute> names;
+  for (size_t i = 0, e = inputs.size(); i != e; ++i) {
+    auto oldName = getModuleArgumentNameAttr(module, i);
     auto newName = localNames.getArgName(module, i);
-    if (oldName.getValue() != newName) {
-      module.setArgAttr(i, "rtl.name",
-                        StringAttr::get(module.getContext(), newName));
-      anythingChanged = true;
+    if (oldName.getValue() == newName)
+      names.push_back(oldName);
+    else {
+      names.push_back(StringAttr::get(module.getContext(), newName));
+      changedName = true;
     }
   }
+  if (changedName) {
+    setModuleArgumentNames(module, names);
+    anythingChanged = true;
+  }
 
-  // Rename the results.
-  for (unsigned i = 0; i < results.size(); ++i) {
-    auto oldName = module.getResultAttrOfType<StringAttr>(i, "rtl.name");
+  changedName = false;
+  names.clear();
+
+  // Rename the results if needed.
+  for (size_t i = 0, e = results.size(); i != e; ++i) {
+    auto oldName = getModuleResultNameAttr(module, i);
     auto newName = localNames.getResultName(module, i);
-    if (oldName.getValue() != newName) {
-      module.setResultAttr(i, "rtl.name",
-                           StringAttr::get(module.getContext(), newName));
-      anythingChanged = true;
+    if (oldName.getValue() == newName)
+      names.push_back(oldName);
+    else {
+      names.push_back(StringAttr::get(module.getContext(), newName));
+      changedName = true;
     }
+  }
+  if (changedName) {
+    setModuleResultNames(module, names);
+    anythingChanged = true;
   }
 
   // Rename the instances, regs, and wires.

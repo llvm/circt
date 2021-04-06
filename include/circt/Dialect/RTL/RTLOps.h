@@ -41,14 +41,35 @@ struct ModulePortInfo {
   size_t argNum = ~0U; // Either the argument index or the result index
                        // depending on the direction.
 
-  StringRef getName() const { return name ? name.getValue() : ""; }
+  StringRef getName() const { return name.getValue(); }
   bool isOutput() const { return direction == OUTPUT; }
 };
 
-FunctionType getModuleType(Operation *op);
+// Helpers for working with modules.
 
+/// Return true if this is an rtl.module, external module, generated module etc.
+bool isAnyModule(Operation *module);
+
+/// Return the signature for the specified module as a function type.
+FunctionType getModuleType(Operation *module);
+
+/// Return the port name for the specified argument or result.
+StringAttr getModuleArgumentNameAttr(Operation *module, size_t argNo);
+StringAttr getModuleResultNameAttr(Operation *module, size_t argNo);
+
+static inline StringRef getModuleArgumentName(Operation *module, size_t argNo) {
+  return getModuleArgumentNameAttr(module, argNo).getValue();
+}
+static inline StringRef getModuleResultName(Operation *module,
+                                            size_t resultNo) {
+  return getModuleResultNameAttr(module, resultNo).getValue();
+}
+
+void setModuleArgumentNames(Operation *module, ArrayRef<Attribute> names);
+void setModuleResultNames(Operation *module, ArrayRef<Attribute> names);
+
+/// Return an encapsulated set of information about input and output ports.
 SmallVector<ModulePortInfo> getModulePortInfo(Operation *op);
-StringAttr getRTLNameAttr(ArrayRef<NamedAttribute> attrs);
 
 /// Return true if the specified operation is a combinatorial logic op.
 bool isCombinatorial(Operation *op);

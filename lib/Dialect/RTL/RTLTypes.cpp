@@ -121,7 +121,7 @@ static ParseResult parseRTLElementType(Type &result, DialectAsmParser &p) {
       StringRef(curPtr, fullString.size() - (curPtr - fullString.data()));
 
   if (typeString.startswith("array<") || typeString.startswith("inout<") ||
-      typeString.startswith("uarray<")) {
+      typeString.startswith("uarray<") || typeString.startswith("struct<")) {
     llvm::StringRef mnemonic;
     if (p.parseKeyword(&mnemonic))
       llvm_unreachable("should have an array or inout keyword here");
@@ -291,7 +291,7 @@ void InOutType::print(DialectAsmPrinter &p) const {
 LogicalResult InOutType::verify(function_ref<InFlightDiagnostic()> emitError,
                                 Type innerType) {
   if (!isRTLValueType(innerType))
-    return emitError() << "invalid element for rtl.inout type";
+    return emitError() << "invalid element for rtl.inout type " << innerType;
   return success();
 }
 

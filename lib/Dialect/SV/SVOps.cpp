@@ -159,30 +159,21 @@ void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     setNameFn(getResult(), nameAttr.getValue());
 }
 
-void RegOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                        MLIRContext *context) {
-  // If this wire is only written to, delete the wire and all writers.
-  struct DropDeadConnect final : public OpRewritePattern<RegOp> {
-    using OpRewritePattern::OpRewritePattern;
-    LogicalResult matchAndRewrite(RegOp op,
-                                  PatternRewriter &rewriter) const override {
+// If this reg is only written to, delete the reg and all writers.
+LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
+  // Check that all operations on the wire are sv.connects. All other wire
+  // operations will have been handled by other canonicalization.
+  for (auto &use : op.getResult().getUses())
+    if (!isa<ConnectOp>(use.getOwner()))
+      return failure();
 
-      // Check that all operations on the wire are sv.connects. All other wire
-      // operations will have been handled by other canonicalization.
-      for (auto &use : op.getResult().getUses())
-        if (!isa<ConnectOp>(use.getOwner()))
-          return failure();
+  // Remove all uses of the wire.
+  for (auto &use : op.getResult().getUses())
+    rewriter.eraseOp(use.getOwner());
 
-      // Remove all uses of the wire.
-      for (auto &use : op.getResult().getUses())
-        rewriter.eraseOp(use.getOwner());
-
-      // Remove the wire.
-      rewriter.eraseOp(op);
-      return success();
-    }
-  };
-  results.insert<DropDeadConnect>(context);
+  // Remove the wire.
+  rewriter.eraseOp(op);
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -224,24 +215,16 @@ static bool isEmptyBlockExceptForTerminator(Block *block) {
   return block->empty() || block->front().hasTrait<OpTrait::IsTerminator>();
 }
 
-void IfDefOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                          MLIRContext *context) {
-  // If both thenRegion and elseRegion are empty, erase op.
-  struct EraseEmptyOp final : public OpRewritePattern<IfDefOp> {
-    using OpRewritePattern::OpRewritePattern;
-    LogicalResult matchAndRewrite(IfDefOp op,
-                                  PatternRewriter &rewriter) const override {
-      if (!isEmptyBlockExceptForTerminator(op.getThenBlock()))
-        return failure();
+// If both thenRegion and elseRegion are empty, erase op.
+LogicalResult IfDefOp::canonicalize(IfDefOp op, PatternRewriter &rewriter) {
+  if (!isEmptyBlockExceptForTerminator(op.getThenBlock()))
+    return failure();
 
-      if (op.hasElse() && !isEmptyBlockExceptForTerminator(op.getElseBlock()))
-        return failure();
+  if (op.hasElse() && !isEmptyBlockExceptForTerminator(op.getElseBlock()))
+    return failure();
 
-      rewriter.eraseOp(op);
-      return success();
-    }
-  };
-  results.insert<EraseEmptyOp>(context);
+  rewriter.eraseOp(op);
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -286,64 +269,49 @@ static void replaceOpWithRegion(PatternRewriter &rewriter, Operation *op,
                                          fromBlock->getOperations());
 }
 
-void IfOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                       MLIRContext *context) {
-  struct RemoveStaticCondition : public OpRewritePattern<IfOp> {
-    using OpRewritePattern<IfOp>::OpRewritePattern;
+LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
+  if (auto constant = op.cond().getDefiningOp<rtl::ConstantOp>()) {
 
-    LogicalResult matchAndRewrite(IfOp op,
-                                  PatternRewriter &rewriter) const override {
-      auto constant = op.cond().getDefiningOp<rtl::ConstantOp>();
-      if (!constant)
-        return failure();
+    if (constant.getValue().isAllOnesValue())
+      replaceOpWithRegion(rewriter, op, op.thenRegion());
+    else if (!op.elseRegion().empty())
+      replaceOpWithRegion(rewriter, op, op.elseRegion());
 
-      if (constant.getValue().isAllOnesValue())
-        replaceOpWithRegion(rewriter, op, op.thenRegion());
-      else if (!op.elseRegion().empty())
-        replaceOpWithRegion(rewriter, op, op.elseRegion());
+    rewriter.eraseOp(op);
 
-      rewriter.eraseOp(op);
+    return success();
+  }
 
-      return success();
-    }
-  };
+  // Erase empty if's.
 
-  struct EraseEmptyOp final : public OpRewritePattern<IfOp> {
-    using OpRewritePattern::OpRewritePattern;
-    LogicalResult matchAndRewrite(IfOp op,
-                                  PatternRewriter &rewriter) const override {
-      // If there is stuff in the then block, leave this operation alone.
-      if (!op.getThenBlock()->empty())
-        return failure();
+  // If there is stuff in the then block, leave this operation alone.
+  if (!op.getThenBlock()->empty())
+    return failure();
 
-      // If not and there is no else, then this operation is just useless.
-      if (!op.hasElse() || op.getElseBlock()->empty()) {
-        rewriter.eraseOp(op);
-        return success();
-      }
+  // If not and there is no else, then this operation is just useless.
+  if (!op.hasElse() || op.getElseBlock()->empty()) {
+    rewriter.eraseOp(op);
+    return success();
+  }
 
-      // Otherwise, invert the condition and move the 'else' block to the 'then'
-      // region.
-      auto full = rewriter.create<rtl::ConstantOp>(op.getLoc(),
-                                                   op.cond().getType(), -1);
-      Value ops[] = {full, op.cond()};
-      auto cond = rewriter.createOrFold<comb::XorOp>(op.getLoc(),
-                                                     op.cond().getType(), ops);
-      op.setOperand(cond);
+  // Otherwise, invert the condition and move the 'else' block to the 'then'
+  // region.
+  auto full =
+      rewriter.create<rtl::ConstantOp>(op.getLoc(), op.cond().getType(), -1);
+  Value ops[] = {full, op.cond()};
+  auto cond =
+      rewriter.createOrFold<comb::XorOp>(op.getLoc(), op.cond().getType(), ops);
+  op.setOperand(cond);
 
-      auto *thenBlock = op.getThenBlock(), *elseBlock = op.getElseBlock();
+  auto *thenBlock = op.getThenBlock(), *elseBlock = op.getElseBlock();
 
-      // Move the body of the then block over to the else.
-      thenBlock->getOperations().splice(thenBlock->end(),
-                                        elseBlock->getOperations());
-      rewriter.eraseBlock(elseBlock);
-      return success();
-    }
-  };
-
-  results.insert<RemoveStaticCondition>(context);
-  results.insert<EraseEmptyOp>(context);
+  // Move the body of the then block over to the else.
+  thenBlock->getOperations().splice(thenBlock->end(),
+                                    elseBlock->getOperations());
+  rewriter.eraseBlock(elseBlock);
+  return success();
 }
+
 //===----------------------------------------------------------------------===//
 // AlwaysOp
 
@@ -844,30 +812,21 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     setNameFn(getResult(), nameAttr.getValue());
 }
 
-void WireOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                         MLIRContext *context) {
-  // If this wire is only written to, delete the wire and all writers.
-  struct DropDeadConnect final : public OpRewritePattern<WireOp> {
-    using OpRewritePattern::OpRewritePattern;
-    LogicalResult matchAndRewrite(WireOp op,
-                                  PatternRewriter &rewriter) const override {
+// If this wire is only written to, delete the wire and all writers.
+LogicalResult WireOp::canonicalize(WireOp op, PatternRewriter &rewriter) {
+  // Check that all operations on the wire are sv.connects. All other wire
+  // operations will have been handled by other canonicalization.
+  for (auto &use : op.getResult().getUses())
+    if (!isa<ConnectOp>(use.getOwner()))
+      return failure();
 
-      // Check that all operations on the wire are sv.connects. All other wire
-      // operations will have been handled by other canonicalization.
-      for (auto &use : op.getResult().getUses())
-        if (!isa<ConnectOp>(use.getOwner()))
-          return failure();
+  // Remove all uses of the wire.
+  for (auto &use : make_early_inc_range(op.getResult().getUses()))
+    rewriter.eraseOp(use.getOwner());
 
-      // Remove all uses of the wire.
-      for (auto &use : make_early_inc_range(op.getResult().getUses()))
-        rewriter.eraseOp(use.getOwner());
-
-      // Remove the wire.
-      rewriter.eraseOp(op);
-      return success();
-    }
-  };
-  results.insert<DropDeadConnect>(context);
+  // Remove the wire.
+  rewriter.eraseOp(op);
+  return success();
 }
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.

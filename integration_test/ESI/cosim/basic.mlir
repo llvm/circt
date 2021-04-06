@@ -30,7 +30,7 @@ rtl.module @array(%clk: i1, %rstn: i1) {
 !Config  = type !rtl.struct<encrypt:   i1, otp:  !rtl.array<32 x i8>>
 !cfgChan = type !esi.channel<!Config>
 
-rtl.module.extern @Encryptor(%clk: i1, %rstn: i1, %in: !pktChan, %cfg: !cfgChan) -> (!pktChan { rtl.name = "x"})
+rtl.module.extern @Encryptor(%clk: i1, %rstn: i1, %in: !pktChan, %cfg: !cfgChan) -> (%x: !pktChan)
 
 rtl.module @structs(%clk:i1, %rstn:i1) -> () {
   %compressedData = rtl.instance "otpCryptor" @Encryptor(%clk, %rstn, %inputData, %cfg) : (i1, i1, !pktChan, !cfgChan) -> !pktChan

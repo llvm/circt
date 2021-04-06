@@ -18,6 +18,7 @@
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
+#include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -639,9 +640,16 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
     return failure();
   }
 
+  // Build an efficient lookup that maps port name attribute to result #.
+  llvm::SmallDenseMap<Attribute, size_t, 16> portNumbers;
+  auto namesArray = instance.portNames();
+  for (size_t i = 0, e = namesArray.size(); i != e; ++i)
+    portNumbers[namesArray[i]] = i;
+
   for (size_t i = 0; i != numResults; i++) {
-    auto result = instance.getPortNamed(modulePorts[i].name);
-    if (!result) {
+    auto resultNumberIt = portNumbers.find(modulePorts[i].name);
+    if (resultNumberIt == portNumbers.end() ||
+        resultNumberIt->second >= numResults) {
       auto diag = instance.emitOpError()
                   << "is missing a port named '" << modulePorts[i].name
                   << "' expected by referenced module";
@@ -649,6 +657,7 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
           << "original module declared here";
       return failure();
     }
+    auto result = instance.getResult(resultNumberIt->second);
 
     auto resultType = result.getType();
     auto expectedType = FlipType::get(modulePorts[i].type);
@@ -1312,21 +1321,6 @@ FIRRTLType DShrPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs,
     return {};
   }
   return lhs;
-}
-
-FIRRTLType ValidIfPrimOp::getResultType(FIRRTLType lhs, FIRRTLType rhs,
-                                        Location loc) {
-  auto lhsUInt = lhs.dyn_cast<UIntType>();
-  if (!lhsUInt) {
-    mlir::emitError(loc, "first operand should have UInt type");
-    return {};
-  }
-  auto lhsWidth = lhsUInt.getWidthOrSentinel();
-  if (lhsWidth != -1 && lhsWidth != 1) {
-    mlir::emitError(loc, "first operand should have 'uint<1>' type");
-    return {};
-  }
-  return rhs;
 }
 
 //===----------------------------------------------------------------------===//

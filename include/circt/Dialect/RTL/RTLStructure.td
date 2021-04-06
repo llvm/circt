@@ -19,7 +19,7 @@ def RTLModuleOp : RTLOp<"module",
     name, a list of ports, and a body that represents the connections within
     the module.
   }];
-  let arguments = (ins);
+  let arguments = (ins StrArrayAttr:$argNames, StrArrayAttr:$resultNames);
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
 
@@ -81,6 +81,7 @@ def RTLModuleOp : RTLOp<"module",
 
   let printer = "return ::print(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
+  let verifier = "return ::verify$cppClass(*this);";
 }
 
 def RTLModuleExternOp : RTLOp<"module.extern",
@@ -95,16 +96,16 @@ def RTLModuleExternOp : RTLOp<"module.extern",
     have proper parameterization in the rtl.dialect.  We need a way to represent
     parameterized types instead of just concrete types.
   }];
-  let arguments = (ins OptionalAttr<StrAttr>:$verilogName);
+  let arguments = (ins StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
+                       OptionalAttr<StrAttr>:$verilogName);
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<(ins "StringAttr":$name,
-                      "ArrayRef<ModulePortInfo>":$ports,
-                      CArg<"StringRef", "StringRef()">:$verilogName,
-                      CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports,
+                   CArg<"StringRef", "StringRef()">:$verilogName,
+                   CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
   let extraClassDeclaration = [{   
@@ -165,6 +166,7 @@ def RTLModuleExternOp : RTLOp<"module.extern",
 
   let printer = "return ::print(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
+  let verifier = "return ::verify$cppClass(*this);";
 }
 
 def RTLGeneratorSchemaOp : RTLOp<"generator.schema", 
@@ -204,7 +206,8 @@ def RTLModuleGeneratedOp : RTLOp<"module.generated",
     module name in Verilog we can use.  See rtl.module for an explanation.
   }];
   let arguments = (ins FlatSymbolRefAttr:$generatorKind, 
-                       OptionalAttr<StrAttr>:$verilogName);
+                       OptionalAttr<StrAttr>:$verilogName,
+                       StrArrayAttr:$argNames, StrArrayAttr:$resultNames);
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
