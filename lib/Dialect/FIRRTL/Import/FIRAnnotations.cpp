@@ -180,4 +180,4 @@ bool circt::firrtl::fromJSON(json::Value &value,
     annotationMap[a] = ArrayAttr::get(context, mutableAnnotationMap[a]);
 
   return true;
-};
+}
