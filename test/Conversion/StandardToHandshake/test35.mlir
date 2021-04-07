@@ -27,7 +27,7 @@
 // CHECK:           %[[VAL_20]]:3 = "handshake.fork"(%[[VAL_25]]#1) {control = false} : (index) -> (index, index, index)
 // CHECK:           %[[VAL_27:.*]] = "handshake.mux"(%[[VAL_20]]#0, %[[VAL_28:.*]], %[[VAL_16]]) : (index, index, index) -> index
 // CHECK:           %[[VAL_29:.*]]:2 = "handshake.fork"(%[[VAL_27]]) {control = false} : (index) -> (index, index)
-// CHECK:           %[[VAL_30:.*]] = cmpi "slt", %[[VAL_29]]#1, %[[VAL_22]]#1 : index
+// CHECK:           %[[VAL_30:.*]] = cmpi slt, %[[VAL_29]]#1, %[[VAL_22]]#1 : index
 // CHECK:           %[[VAL_31:.*]]:4 = "handshake.fork"(%[[VAL_30]]) {control = false} : (i1) -> (i1, i1, i1, i1)
 // CHECK:           %[[VAL_32:.*]], %[[VAL_33:.*]] = "handshake.conditional_branch"(%[[VAL_31]]#3, %[[VAL_22]]#0) {control = false} : (i1, index) -> (index, index)
 // CHECK:           "handshake.sink"(%[[VAL_33]]) : (index) -> ()
@@ -61,22 +61,22 @@
 // CHECK:         }
 // CHECK:       }
 
-    %10 = alloc() : memref<10xf32>
-    %11 = alloc() : memref<10xf32>
+    %10 = memref.alloc() : memref<10xf32>
+    %11 = memref.alloc() : memref<10xf32>
     %c0 = constant 0 : index
     %c10 = constant 10 : index
-    %5 = load %10[%c10] : memref<10xf32>
-    store %5, %11[%c10] : memref<10xf32>
+    %5 = memref.load %10[%c10] : memref<10xf32>
+    memref.store %5, %11[%c10] : memref<10xf32>
     br ^bb1(%c0 : index)
   ^bb1(%1: index):      // 2 preds: ^bb0, ^bb2
-    %2 = cmpi "slt", %1, %c10 : index
+    %2 = cmpi slt, %1, %c10 : index
     cond_br %2, ^bb2, ^bb3
   ^bb2: // pred: ^bb1
     %c1 = constant 1 : index
     %3 = addi %1, %c1 : index
-    %7 = load %11[%3] : memref<10xf32>
+    %7 = memref.load %11[%3] : memref<10xf32>
     %8 = addf %5, %7 : f32
-    store %8, %10[%3] : memref<10xf32>
+    memref.store %8, %10[%3] : memref<10xf32>
     br ^bb1(%3 : index)
   ^bb3: // pred: ^bb1
     return

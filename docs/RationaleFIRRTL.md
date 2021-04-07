@@ -132,10 +132,47 @@ means about left-hand-side and right-hand-side connections. CIRCT consequently
 accepts all permutations of `a <= b` and types which canonicalize to the same
 representation.
 
+### Flow
+
+The FIRRTL specification describes the concept of "flow" to track whether a
+value is a `sink`, `source`, or `duplex`. In the specification, module inputs
+are `source`, while module outputs are a `sink`. The `duplex` flow type is
+used for values which can be read and written to, such as registers and
+wires. In a connect statement, the LHS must be a `sink` or a `duplex` type,
+while the RHS must be `source` or a `duplex`.
+
+Due to the flip canonicalization in the MLIR implementation, the compiler no
+longer distinguishes between inputs and outputs. As a result, the only
+requirement of a connect statement is that the LHS side is a flip type or a
+`duplex` value. In the new compiler, you can always read from a flip type, so
+there is no verification of the RHS of a connect statement.
+
 ## Operations
 
+### Multiple result `firrtl.instance` operation
 
-#### `input` and `output` Module Ports
+The FIRRTL spec describes instances as returning a bundle type, where each
+element of the bundle corresponds to one of the ports of the module being
+instanced.  This makes sense in the Scala FIRRTL implementation, given that it
+does not support multiple ports.
+
+The MLIR FIRRTL dialect takes a different approach, having each element of the
+bundle result turn into its own distinct result on the `firrtl.instance`
+operation.  This is made possible by MLIR's robust support for multiple value
+operands, and makes the IR much easier to analyze and work with.
+
+### Module bodies require def-before-use dominance instead of allowing graphs
+
+MLIR allows regions with arbitrary graphs in their bodies, and this is used by
+the RTL dialect to allow direct expression of cyclic graphs etc.  While this
+makes sense for hardware in general, the FIRRTL dialect is intended to be a
+pragmatic infrastructure focused on lowering of Chisel code to the RTL dialect,
+it isn't intended to be a "generally useful IR for hardware".
+
+We recommend that non-Chisel frontends target the RTL dialect, or a higher level
+dialect of their own creation that lowers to RTL as appropriate.
+
+### `input` and `output` Module Ports
 
 The FIRRTL specification describes two kinds of ports: `input` and `output`.
 In the `firrtl.module` declaration we don't track this distinction, instead we
@@ -183,12 +220,19 @@ firrtl.circuit "Foo" {
 that returns a bundle representing a `firrtl.module`.  However, this uses the
 inverse convention where `input` is flipped and `output` is unflipped.
 
+### `firrtl.mem`
+
+Unlike the SFC, the FIRRTL dialect represents each memory port as a distinct
+result value of the `firrtl.mem` operation.  Also, the `firrtl.mem` node does
+not allow zero port memories for simplicity.  Zero port memories are dropped
+by the .fir file parser.
+
 ### More things are represented as primitives
 
-We describe the `mux` and `validif` expressions as "primitives", whereas the IR
-spec and grammar implement them as special kinds of expressions.
+We describe the `mux` expression as "primitive", whereas the IR
+spec and grammar implement it as a special kind of expression.
 
-We do this to simplify the implementation: These expression
+We do this to simplify the implementation: These expressions
 have the same structure as primitives, and modeling them as such allows reuse
 of the parsing logic instead of duplication of grammar rules.
 
@@ -206,3 +250,28 @@ and returns an invalid value, and a standard `firrtl.connect` operation that
 connects the invalid value to the destination (or a `firrtl.attach` for analog
 values).  This has the same expressive power as the standard FIRRTL
 representation but is easier to work with.
+
+### `validif` represented as a multiplexer
+
+The FIRRTL spec describes a `validIf(en, x)` operation that is used during lowering from high to low FIRRTL. Consider the following example:
+
+```
+c <= invalid
+when a:
+  c <= b
+```
+
+Lowering will introduce the following intermediate representation in low FIRRTL:
+
+```
+c <= validIf(a, b)
+```
+
+Since there is no precedence of this `validIf` being used anywhere in the Chisel/FIRRTL ecosystem thus far and instead is always replaced by its right-hand operand `b`, the FIRRTL MLIR dialect does not provide such an operation at all. Rather it directly replaces any `validIf` in FIRRTL input with the following equivalent operations:
+
+```mlir
+%0 = firrtl.invalidvalue : !firrtl.uint<42>
+%c = firrtl.mux(%a, %b, %0) : (!firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>) -> !firrtl.uint<42>
+```
+
+A canonicalization then folds this combination of `firrtl.invalidvalue` and `firrtl.mux` to the "high" operand of the multiplexer to facilitate downstream transformation passes.

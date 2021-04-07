@@ -15,12 +15,38 @@
 
 include "mlir/Pass/PassBase.td"
 
-def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::FModuleOp"> {
+def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
   let summary = "Lower FIRRTL types to ground types";
   let description = [{
     Lower firrtl.module port types to ground types.
   }];
   let constructor = "circt::firrtl::createLowerFIRRTLTypesPass()";
+}
+
+def IMConstProp : Pass<"firrtl-imconstprop", "firrtl::CircuitOp"> {
+  let summary = "Intermodule constant propagation and dead code elimination";
+  let description = [{
+    Use optimistic constant propagation to delete ports and unreachable IR.
+  }];
+  let constructor = "circt::firrtl::createIMConstPropPass()";
+}
+
+def BlackboxMemory : Pass<"firrtl-blackbox-memory", "firrtl::CircuitOp"> {
+  let summary = "Replace all FIRRTL memories with an external module blackbox.";
+  let description = [{
+    This pass replaces all sequential memory operations with an external module
+    blackbox.  For each memory operation, it creates a FModuleOp which
+    replicates the return types of the memory operation, and replaces the
+    MemoryOp with an instance of the module.  Inside the new module, an
+    instance of an FExtModule blackbox is created.  The blackbox module must
+    use the same parameter naming conventions used by the ReplaceSeqMemories
+    pass in the Scala FIRRTL compiler.
+  }];
+  let constructor = "circt::firrtl::createBlackBoxMemoryPass()";
+  let options = [
+    Option<"emitWrapper", "emit-wrapper", "bool", "true",
+           "Create a wrapper module around the blackbox external module.">
+  ];
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

@@ -13,12 +13,12 @@
 #ifndef CIRCT_DIALECT_LLHD_IR_LLHDDIALECT_H
 #define CIRCT_DIALECT_LLHD_IR_LLHDDIALECT_H
 
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Dialect.h"
 
 namespace circt {
 namespace llhd {
-using namespace mlir;
 
 namespace detail {
 struct SigTypeStorage;
@@ -117,8 +117,8 @@ public:
   /// declared at the given, potentially unknown, location. If the ArrayType
   /// defined by the arguments would be ill-formed, emit errors and return
   /// nullptr-wrapping type.
-  static ArrayType getChecked(unsigned length, Type elementType,
-                              Location location);
+  static ArrayType getChecked(function_ref<InFlightDiagnostic()> emitError,
+                              unsigned length, Type elementType);
 
   /// Verify the construction of an array type.
   static LogicalResult

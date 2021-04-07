@@ -13,12 +13,13 @@
 #ifndef CIRCT_DIALECT_FIRRTL_DIALECT_H
 #define CIRCT_DIALECT_FIRRTL_DIALECT_H
 
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
 
 namespace circt {
 namespace firrtl {
-using namespace mlir;
+
 class FIRRTLType;
 
 class FIRRTLDialect : public Dialect {
@@ -34,6 +35,10 @@ public:
                                  Location loc) override;
 
   static StringRef getDialectNamespace() { return "firrtl"; }
+
+private:
+  /// Register all FIRRTL types.
+  void registerTypes();
 };
 
 /// If the specified attribute list has a firrtl.name attribute, return its

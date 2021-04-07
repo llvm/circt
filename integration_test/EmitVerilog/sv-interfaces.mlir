@@ -1,5 +1,5 @@
 // REQUIRES: rtl-sim
-// RUN: circt-translate %s -emit-verilog -verify-diagnostics > %t1.sv
+// RUN: circt-translate %s -export-verilog -verify-diagnostics > %t1.sv
 // RUN: verilator --lint-only --top-module top %t1.sv
 // RUN: circt-rtl-sim.py %t1.sv --cycles 2 2>&1 | FileCheck %s
 
@@ -14,7 +14,7 @@ module {
 
   // TODO: This ugly bit is because we don't yet have ExportVerilog support
   // for modports as module port declarations.
-  rtl.externmodule @Rcvr (%m: !sv.modport<@data_vr::@data_in>)
+  rtl.module.extern @Rcvr (%m: !sv.modport<@data_vr::@data_in>)
   sv.verbatim "module Rcvr (data_vr.data_in m);\nendmodule"
 
   rtl.module @top (%clk: i1, %rstn: i1) {
@@ -27,7 +27,7 @@ module {
 
     rtl.instance "rcvr2" @Rcvr(%ifaceInPort) : (!sv.modport<@data_vr::@data_in>) -> ()
 
-    %c1 = rtl.constant (1 : i1) : i1
+    %c1 = rtl.constant 1 : i1
     sv.interface.signal.assign %iface(@data_vr::@valid) = %c1 : i1
 
     sv.always posedge %clk {

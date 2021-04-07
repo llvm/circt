@@ -36,7 +36,7 @@ public:
             // Comparisons.
             LEQPrimOp, LTPrimOp, GEQPrimOp, GTPrimOp, EQPrimOp, NEQPrimOp,
             // Misc Binary Primitives.
-            CatPrimOp, DShlPrimOp, DShlwPrimOp, DShrPrimOp, ValidIfPrimOp,
+            CatPrimOp, DShlPrimOp, DShlwPrimOp, DShrPrimOp,
             // Unary operators.
             AsSIntPrimOp, AsUIntPrimOp, AsAsyncResetPrimOp, AsClockPrimOp,
             CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
@@ -46,9 +46,10 @@ public:
             AsNonPassivePrimOp,
 
             // Conversion from FIRRTL to RTL dialect types.
-            StdIntCastOp, AnalogInOutCastOp>([&](auto expr) -> ResultType {
-          return thisCast->visitExpr(expr, args...);
-        })
+            StdIntCastOp, RTLStructCastOp, AnalogInOutCastOp>(
+            [&](auto expr) -> ResultType {
+              return thisCast->visitExpr(expr, args...);
+            })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidExpr(op, args...);
         });
@@ -113,7 +114,6 @@ public:
   HANDLE(DShlPrimOp, Binary);
   HANDLE(DShlwPrimOp, Binary);
   HANDLE(DShrPrimOp, Binary);
-  HANDLE(ValidIfPrimOp, Binary);
 
   // Unary operators.
   HANDLE(AsSIntPrimOp, Unary);
@@ -141,6 +141,7 @@ public:
 
   // Conversion from FIRRTL to RTL dialect types.
   HANDLE(StdIntCastOp, Unhandled);
+  HANDLE(RTLStructCastOp, Unhandled);
   HANDLE(AnalogInOutCastOp, Unhandled);
 #undef HANDLE
 };

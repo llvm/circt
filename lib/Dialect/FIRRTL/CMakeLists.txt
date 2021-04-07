@@ -8,6 +8,7 @@ add_circt_dialect_library(CIRCTFIRRTL
   DEPENDS
   MLIRFIRRTLIncGen
   MLIRFIRRTLEnumsIncGen
+  CIRCTFIRRTLCanonicalizationIncGen
 
   LINK_COMPONENTS
   Support
@@ -18,7 +19,11 @@ add_circt_dialect_library(CIRCTFIRRTL
   MLIRPass
   )
 
-add_dependencies(circt-headers MLIRFIRRTLIncGen MLIRFIRRTLEnumsIncGen)
+add_dependencies(circt-headers
+  MLIRFIRRTLIncGen
+  MLIRFIRRTLEnumsIncGen
+  CIRCTFIRRTLCanonicalizationIncGen
+  )
 
 add_subdirectory(Import)
 add_subdirectory(Transforms)

@@ -48,9 +48,37 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
   /// OpAsmInterface.td#getAsmResultNames for usage details and documentation.
   void getAsmResultNames(Operation *op,
                          OpAsmSetValueNameFn setNameFn) const override {
+    if (auto instance = dyn_cast<InstanceOp>(op)) {
+      StringRef base;
+      if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
+        base = nameAttr.getValue();
+      if (base.empty())
+        base = "inst";
+
+      for (size_t i = 0, e = op->getNumResults(); i != e; ++i) {
+        setNameFn(instance.getResult(i),
+                  (base + "_" + instance.getPortNameStr(i)).str());
+      }
+      return;
+    }
+
+    if (auto memory = dyn_cast<MemOp>(op)) {
+      StringRef base;
+      if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
+        base = nameAttr.getValue();
+      if (base.empty())
+        base = "mem";
+
+      for (size_t i = 0, e = op->getNumResults(); i != e; ++i) {
+        setNameFn(memory.getResult(i),
+                  (base + "_" + memory.getPortNameStr(i)).str());
+      }
+      return;
+    }
+
     // Many firrtl dialect operations have an optional 'name' attribute.  If
     // present, use it.
-    if (op->getNumResults() > 0)
+    if (op->getNumResults() == 1)
       if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
         setNameFn(op->getResult(0), nameAttr.getValue());
 
@@ -87,7 +115,7 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
 
     for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
       // Scan for a 'firrtl.name' attribute.
-      if (auto str = getFIRRTLNameAttr(impl::getArgAttrs(parentOp, i)))
+      if (auto str = getFIRRTLNameAttr(mlir::impl::getArgAttrs(parentOp, i)))
         setNameFn(block->getArgument(i), str.getValue());
     }
   }
@@ -98,10 +126,7 @@ FIRRTLDialect::FIRRTLDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context,
               ::mlir::TypeID::get<FIRRTLDialect>()) {
 
-  // Register types.
-  addTypes<SIntType, UIntType, ClockType, ResetType, AsyncResetType, AnalogType,
-           // Derived Types
-           FlipType, BundleType, FVectorType>();
+  registerTypes();
 
   // Register operations.
   addOperations<

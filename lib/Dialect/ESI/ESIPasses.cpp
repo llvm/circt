@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Dialect/RTL/RTLOps.h"
@@ -17,7 +18,7 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/ImplicitLocOpBuilder.h"
-
+#include "circt/Support/LLVM.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
@@ -37,23 +38,11 @@ namespace esi {
 } // namespace esi
 } // namespace circt
 
-using namespace mlir;
+using namespace circt;
+using namespace circt::comb;
 using namespace circt::esi;
 using namespace circt::rtl;
 using namespace circt::sv;
-
-/// Figure out the number of bits a type takes on the wire in verilog. Doing it
-/// here is probably a giant hack. TODO: Establish a canonical method to get
-/// this information.
-static size_t getNumBits(Type type) {
-  return llvm::TypeSwitch<::mlir::Type, size_t>(type)
-      .Case<IntegerType>(
-          [](IntegerType t) { return t.getIntOrFloatBitWidth(); })
-      .Case<ArrayType>([](ArrayType a) {
-        return a.getSize() * getNumBits(a.getElementType());
-      })
-      .Default([](Type) { return 0; });
-}
 
 //===----------------------------------------------------------------------===//
 // ESI custom op builder.
@@ -65,8 +54,9 @@ class ESIRTLBuilder : public circt::ImplicitLocOpBuilder {
 public:
   ESIRTLBuilder(Operation *top);
 
-  RTLExternModuleOp declareStage();
-  RTLExternModuleOp declareCosimEndpoint();
+  RTLModuleExternOp declareStage();
+  // Will be unused when CAPNP is undefined
+  RTLModuleExternOp declareCosimEndpoint() LLVM_ATTRIBUTE_UNUSED;
 
   InterfaceOp getOrConstructInterface(ChannelPort);
   InterfaceOp constructInterface(ChannelPort);
@@ -88,8 +78,8 @@ private:
   /// taken in the symbol table.
   StringAttr constructInterfaceName(ChannelPort);
 
-  RTLExternModuleOp declaredStage;
-  RTLExternModuleOp declaredCosimEndpoint;
+  RTLModuleExternOp declaredStage;
+  RTLModuleExternOp declaredCosimEndpoint;
   llvm::DenseMap<Type, InterfaceOp> portTypeLookup;
 };
 } // anonymous namespace
@@ -102,20 +92,20 @@ constexpr char ESIRTLBuilder::dataStr[], ESIRTLBuilder::validStr[],
 
 ESIRTLBuilder::ESIRTLBuilder(Operation *top)
     : ImplicitLocOpBuilder(UnknownLoc::get(top->getContext()), top),
-      a(StringAttr::get("a", getContext())),
-      aValid(StringAttr::get("a_valid", getContext())),
-      aReady(StringAttr::get("a_ready", getContext())),
-      x(StringAttr::get("x", getContext())),
-      xValid(StringAttr::get("x_valid", getContext())),
-      xReady(StringAttr::get("x_ready", getContext())),
-      dataOutValid(StringAttr::get("DataOutValid", getContext())),
-      dataOutReady(StringAttr::get("DataOutReady", getContext())),
-      dataOut(StringAttr::get("DataOut", getContext())),
-      dataInValid(StringAttr::get("DataInValid", getContext())),
-      dataInReady(StringAttr::get("DataInReady", getContext())),
-      dataIn(StringAttr::get("DataIn", getContext())),
-      clk(StringAttr::get("clk", getContext())),
-      rstn(StringAttr::get("rstn", getContext())),
+      a(StringAttr::get(getContext(), "a")),
+      aValid(StringAttr::get(getContext(), "a_valid")),
+      aReady(StringAttr::get(getContext(), "a_ready")),
+      x(StringAttr::get(getContext(), "x")),
+      xValid(StringAttr::get(getContext(), "x_valid")),
+      xReady(StringAttr::get(getContext(), "x_ready")),
+      dataOutValid(StringAttr::get(getContext(), "DataOutValid")),
+      dataOutReady(StringAttr::get(getContext(), "DataOutReady")),
+      dataOut(StringAttr::get(getContext(), "DataOut")),
+      dataInValid(StringAttr::get(getContext(), "DataInValid")),
+      dataInReady(StringAttr::get(getContext(), "DataInReady")),
+      dataIn(StringAttr::get(getContext(), "DataIn")),
+      clk(StringAttr::get(getContext(), "clk")),
+      rstn(StringAttr::get(getContext(), "rstn")),
       width(Identifier::get("WIDTH", getContext())), declaredStage(nullptr) {
 
   auto regions = top->getRegions();
@@ -129,9 +119,17 @@ ESIRTLBuilder::ESIRTLBuilder(Operation *top)
 
 StringAttr ESIRTLBuilder::constructInterfaceName(ChannelPort port) {
   Operation *tableOp =
-      getInsertionPoint()->getParentWithTrait<OpTrait::SymbolTable>();
+      getInsertionPoint()->getParentWithTrait<mlir::OpTrait::SymbolTable>();
+
+  // Get a name based on the type.
   std::string portTypeName;
-  llvm::raw_string_ostream(portTypeName) << port.getInner();
+  llvm::raw_string_ostream nameOS(portTypeName);
+  TypeSwitch<Type>(port.getInner())
+      .Case([&](rtl::ArrayType arr) {
+        nameOS << "ArrayOf" << arr.getSize() << 'x' << arr.getElementType();
+      })
+      .Case([&](rtl::StructType t) { nameOS << "Struct"; })
+      .Default([&](Type t) { nameOS << port.getInner(); });
 
   // Normalize the type name.
   for (char &ch : portTypeName) {
@@ -139,6 +137,13 @@ StringAttr ESIRTLBuilder::constructInterfaceName(ChannelPort port) {
       continue;
     ch = '_';
   }
+
+  // Don't allow the name to end with '_'.
+  ssize_t i = portTypeName.size() - 1;
+  while (i >= 0 && portTypeName[i] == '_') {
+    --i;
+  }
+  portTypeName = portTypeName.substr(0, i + 1);
 
   // All stage names start with this.
   SmallString<64> proposedName("IValidReady_");
@@ -153,18 +158,18 @@ StringAttr ESIRTLBuilder::constructInterfaceName(ChannelPort port) {
     proposedName.append(llvm::utostr(++tries));
   }
 
-  return StringAttr::get(proposedName, getContext());
+  return StringAttr::get(getContext(), proposedName);
 }
 
 /// Write an 'ExternModuleOp' to use a hand-coded SystemVerilog module. Said
 /// module implements pipeline stage, adding 1 cycle latency. This particular
 /// implementation is double-buffered and fully pipelines the reverse-flow ready
 /// signal.
-RTLExternModuleOp ESIRTLBuilder::declareStage() {
+RTLModuleExternOp ESIRTLBuilder::declareStage() {
   if (declaredStage)
     return declaredStage;
 
-  auto name = StringAttr::get("ESI_PipelineStage", getContext());
+  auto name = StringAttr::get(getContext(), "ESI_PipelineStage");
   // Since this module has parameterized widths on the a input and x output,
   // give the extern declation a None type since nothing else makes sense.
   // Will be refining this when we decide how to better handle parameterized
@@ -177,17 +182,17 @@ RTLExternModuleOp ESIRTLBuilder::declareStage() {
                             {x, PortDirection::OUTPUT, getNoneType(), 1},
                             {xValid, PortDirection::OUTPUT, getI1Type(), 2},
                             {xReady, PortDirection::INPUT, getI1Type(), 4}};
-  declaredStage = create<RTLExternModuleOp>(name, ports);
+  declaredStage = create<RTLModuleExternOp>(name, ports);
   return declaredStage;
 }
 
 /// Write an 'ExternModuleOp' to use a hand-coded SystemVerilog module. Said
 /// module contains a bi-directional Cosimulation DPI interface with valid/ready
 /// semantics.
-RTLExternModuleOp ESIRTLBuilder::declareCosimEndpoint() {
+RTLModuleExternOp ESIRTLBuilder::declareCosimEndpoint() {
   if (declaredCosimEndpoint)
     return declaredCosimEndpoint;
-  auto name = StringAttr::get("Cosim_Endpoint", getContext());
+  auto name = StringAttr::get(getContext(), "Cosim_Endpoint");
   // Since this module has parameterized widths on the a input and x output,
   // give the extern declation a None type since nothing else makes sense.
   // Will be refining this when we decide how to better handle parameterized
@@ -201,7 +206,7 @@ RTLExternModuleOp ESIRTLBuilder::declareCosimEndpoint() {
       {dataInValid, PortDirection::INPUT, getI1Type(), 3},
       {dataInReady, PortDirection::OUTPUT, getI1Type(), 2},
       {dataIn, PortDirection::INPUT, getNoneType(), 4}};
-  declaredCosimEndpoint = create<RTLExternModuleOp>(name, ports);
+  declaredCosimEndpoint = create<RTLModuleExternOp>(name, ports);
   return declaredCosimEndpoint;
 }
 
@@ -279,7 +284,7 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
     if (bufferName) {
       SmallString<64> stageName(
           {bufferName.getValue(), "_stage", std::to_string(i)});
-      stage->setAttr("name", StringAttr::get(stageName, rewriter.getContext()));
+      stage->setAttr("name", StringAttr::get(rewriter.getContext(), stageName));
     }
     input = stage;
   }
@@ -303,14 +308,14 @@ void ESIToPhysicalPass::runOnOperation() {
   target.addIllegalOp<ChannelBuffer>();
 
   // Add all the conversion patterns.
-  OwningRewritePatternList patterns;
+  RewritePatternSet patterns(&getContext());
   patterns.insert<ChannelBufferLowering>(&getContext());
 
   // Run the conversion.
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))
     signalPassFailure();
-};
+}
 
 //===----------------------------------------------------------------------===//
 // Lower ESI ports pass.
@@ -318,26 +323,44 @@ void ESIToPhysicalPass::runOnOperation() {
 
 namespace {
 /// Convert all the ESI ports on modules to some lower construct. SV interfaces
-/// for now. In the future, it may be possible to select a different format.
+/// for now on external modules, ready/valid to modules defined internally. In
+/// the future, it may be possible to select a different format.
 struct ESIPortsPass : public LowerESIPortsBase<ESIPortsPass> {
-  void runOnOperation();
+  void runOnOperation() override;
 
 private:
-  bool updateFunc(RTLExternModuleOp mod);
-  void updateInstance(RTLExternModuleOp mod, InstanceOp inst);
+  bool updateFunc(RTLModuleOp mod);
+  void updateInstance(RTLModuleOp mod, InstanceOp inst);
+
+  bool updateFunc(RTLModuleExternOp mod);
+  void updateInstance(RTLModuleExternOp mod, InstanceOp inst);
   ESIRTLBuilder *build;
 };
 } // anonymous namespace
 
-/// Iterate through the `rtl.externmodule`s and lower their ports.
+/// Iterate through the `rtl.module[.extern]`s and lower their ports.
 void ESIPortsPass::runOnOperation() {
   ModuleOp top = getOperation();
   ESIRTLBuilder b(top);
   build = &b;
 
   // Find all externmodules and try to modify them. Remember the modified ones.
-  DenseMap<StringRef, RTLExternModuleOp> modsMutated;
-  for (auto mod : top.getOps<RTLExternModuleOp>())
+  DenseMap<StringRef, RTLModuleExternOp> externModsMutated;
+  for (auto mod : top.getOps<RTLModuleExternOp>())
+    if (updateFunc(mod))
+      externModsMutated[mod.getName()] = mod;
+
+  // Find all instances and update them.
+  top.walk([&externModsMutated, this](InstanceOp inst) {
+    auto mapIter = externModsMutated.find(inst.moduleName());
+    if (mapIter != externModsMutated.end())
+      updateInstance(mapIter->second, inst);
+  });
+
+  // Find all modules and try to modify them to have wires with valid/ready
+  // semantics. Remember the modified ones.
+  DenseMap<StringRef, RTLModuleOp> modsMutated;
+  for (auto mod : top.getOps<RTLModuleOp>())
     if (updateFunc(mod))
       modsMutated[mod.getName()] = mod;
 
@@ -351,22 +374,242 @@ void ESIPortsPass::runOnOperation() {
   build = nullptr;
 }
 
+/// Return a attribute with the specified suffix appended.
+static StringAttr appendToRtlName(StringAttr base, StringRef suffix) {
+  auto *context = base.getContext();
+  return StringAttr::get(context, base.getValue().str() + suffix.str());
+}
+
+/// Convert all input and output ChannelPorts into valid/ready wires. Try not to
+/// change the order and materialize ops in reasonably intuitive locations.
+bool ESIPortsPass::updateFunc(RTLModuleOp mod) {
+  auto *ctxt = &getContext();
+  auto funcType = mod.getType();
+  // Build ops in the module.
+  ImplicitLocOpBuilder modBuilder(mod.getLoc(), mod.getBody());
+  Type i1 = modBuilder.getI1Type();
+
+  // Get information to be used later on.
+  rtl::OutputOp outOp =
+      dyn_cast<rtl::OutputOp>(mod.getBodyBlock()->getTerminator());
+
+  bool updated = false;
+
+  // Reconstruct the list of operand types, changing the type whenever an ESI
+  // port is found. Keep the argument attributes, apply the ESI ports attributes
+  // to the data port only.
+  SmallVector<Type, 16> newArgTypes;
+
+  // 'Ready' signals are outputs. Remember them for later when we deal with the
+  // returns.
+  SmallVector<std::pair<Value, StringAttr>, 8> newReadySignals;
+  SmallVector<Attribute> newArgNames;
+
+  for (size_t argNum = 0, blockArgNum = 0, e = funcType.getNumInputs();
+       argNum < e; ++argNum, ++blockArgNum) {
+    Type argTy = funcType.getInput(argNum);
+    auto argNameAttr = getModuleArgumentNameAttr(mod, argNum);
+
+    auto chanTy = argTy.dyn_cast<ChannelPort>();
+    if (!chanTy) {
+      // If not ESI, pass through.
+      newArgTypes.push_back(argTy);
+      newArgNames.push_back(argNameAttr);
+      continue;
+    }
+
+    // When we find one, add a data and valid signal to the new args.
+    newArgTypes.push_back(chanTy.getInner());
+    newArgTypes.push_back(i1);
+    newArgNames.push_back(argNameAttr);
+    newArgNames.push_back(appendToRtlName(argNameAttr, "_valid"));
+    // Add the BlockArguments.
+    Value data = mod.front().insertArgument(blockArgNum, chanTy.getInner());
+    Value valid = mod.front().insertArgument(blockArgNum + 1, i1);
+    // Build the ESI wrap operation to translate the lowered signals to what
+    // they were. (A later pass takes care of eliminating the ESI ops.)
+    auto wrap = modBuilder.create<WrapValidReady>(data, valid);
+    // Replace uses of the old ESI port argument with the new one from the wrap.
+    mod.front()
+        .getArgument(blockArgNum + 2)
+        .replaceAllUsesWith(wrap.chanOutput());
+    // Delete the ESI port block argument.
+    mod.front().eraseArgument(blockArgNum + 2);
+    newReadySignals.push_back(
+        std::make_pair(wrap.ready(), appendToRtlName(argNameAttr, "_ready")));
+
+    // Since we added 2 block args but erased one, there's a net increase of 1.
+    blockArgNum += 1;
+
+    updated = true;
+  }
+
+  // Iterate through the outputs, appending to all of the next three lists.
+  // Lower the ESI ports.
+  SmallVector<Type, 8> newResultTypes;
+  SmallVector<Value, 8> newOutputOperands;
+  SmallVector<Attribute> newResultNames;
+
+  modBuilder.setInsertionPointToEnd(mod.getBodyBlock());
+  for (size_t resNum = 0, numRes = funcType.getNumResults(); resNum < numRes;
+       ++resNum) {
+    Type resTy = funcType.getResult(resNum);
+    auto chanTy = resTy.dyn_cast<ChannelPort>();
+    Value oldOutputValue = outOp.getOperand(resNum);
+    auto oldResultName = getModuleResultNameAttr(mod, resNum);
+    if (!chanTy) {
+      // If not ESI, pass through.
+      newResultTypes.push_back(resTy);
+      newResultNames.push_back(oldResultName);
+      newOutputOperands.push_back(oldOutputValue);
+      continue;
+    }
+
+    // Lower the output, adding ready signals directly to the arg list.
+    Value ready = mod.front().addArgument(i1); // Ready block arg.
+    auto unwrap = modBuilder.create<UnwrapValidReady>(oldOutputValue, ready);
+    newOutputOperands.push_back(unwrap.rawOutput());
+    newOutputOperands.push_back(unwrap.valid());
+
+    newResultTypes.push_back(chanTy.getInner()); // Raw data.
+    newResultTypes.push_back(i1);                // Valid.
+    newResultNames.push_back(oldResultName);
+    newResultNames.push_back(appendToRtlName(oldResultName, "_valid"));
+
+    newArgTypes.push_back(i1); // Ready func arg.
+    newArgNames.push_back(appendToRtlName(oldResultName, "_ready"));
+    updated = true;
+  }
+
+  // Append the ready list signals we remembered above.
+  for (const auto &readySig : newReadySignals) {
+    newResultTypes.push_back(i1);
+    newResultNames.push_back(readySig.second);
+    newOutputOperands.push_back(readySig.first);
+  }
+
+  if (!updated)
+    return false;
+
+  // A new output op is necessary.
+  outOp.erase();
+  modBuilder.create<rtl::OutputOp>(newOutputOperands);
+
+  // Set the new types.
+  auto newFuncType = FunctionType::get(ctxt, newArgTypes, newResultTypes);
+  mod.setType(newFuncType);
+  setModuleArgumentNames(mod, newArgNames);
+  setModuleResultNames(mod, newResultNames);
+  return true;
+}
+
+/// Update an instance of an updated module by adding `esi.[un]wrap.vr`
+/// ops around the instance. Lowering or folding away `[un]wrap` ops is another
+/// pass.
+void ESIPortsPass::updateInstance(RTLModuleOp mod, InstanceOp inst) {
+  ImplicitLocOpBuilder b(inst.getLoc(), inst);
+  BackedgeBuilder beb(b, inst.getLoc());
+  Type i1 = b.getI1Type();
+
+  // -----
+  // Lower the operands.
+
+  SmallVector<Value, 16> newOperands;
+  // Store the 'ready' operands from the unwrap as a list of backedges. This
+  // doubles as a count of `i1`s to append to the existing results.
+  SmallVector<Backedge, 8> inputReadysToConnect;
+  for (auto operand : inst.getOperands()) {
+    if (!operand.getType().isa<ChannelPort>()) {
+      newOperands.push_back(operand);
+      continue;
+    }
+
+    auto ready = beb.get(i1);
+    inputReadysToConnect.push_back(ready);
+    auto unwrap = b.create<UnwrapValidReady>(operand, ready);
+    newOperands.push_back(unwrap.rawOutput());
+    newOperands.push_back(unwrap.valid());
+  }
+
+  // -----
+  // Lower the result types.
+
+  SmallVector<Type, 16> resTypes;
+  // Backedges which we add as operands to be used later when we build the
+  // 'wrap' ops.
+  SmallVector<Backedge, 8> outputReadysToConnect;
+  for (auto resTy : inst.getResultTypes()) {
+    auto cpTy = resTy.dyn_cast<ChannelPort>();
+    if (!cpTy) {
+      resTypes.push_back(resTy);
+      continue;
+    }
+    resTypes.push_back(cpTy.getInner());
+    resTypes.push_back(i1);
+    Backedge ready = beb.get(i1);
+    newOperands.push_back(ready);
+    outputReadysToConnect.push_back(ready);
+  }
+  resTypes.append(inputReadysToConnect.size(), i1);
+
+  // -----
+  // Clone the instance.
+
+  b.setInsertionPointAfter(inst);
+  auto newInst = b.create<InstanceOp>(resTypes, newOperands, inst->getAttrs());
+
+  // -----
+  // Wrap the results back into ESI channels and connect up all the ready
+  // signals.
+
+  size_t newInstResNum = 0;
+  size_t readyIdx = 0;
+  for (auto res : inst.getResults()) {
+    auto cpTy = res.getType().dyn_cast<ChannelPort>();
+    if (!cpTy) {
+      res.replaceAllUsesWith(newInst.getResult(newInstResNum));
+      newInstResNum++;
+      continue;
+    }
+
+    auto wrap = b.create<WrapValidReady>(newInst.getResult(newInstResNum),
+                                         newInst.getResult(newInstResNum + 1));
+    newInstResNum += 2;
+    res.replaceAllUsesWith(wrap.chanOutput());
+    outputReadysToConnect[readyIdx].setValue(wrap.ready());
+    readyIdx++;
+  }
+
+  for (auto inputReady : inputReadysToConnect) {
+    inputReady.setValue(newInst.getResult(newInstResNum));
+    newInstResNum++;
+  }
+
+  // Erase the old instance.
+  inst.erase();
+}
+
 /// Convert all input and output ChannelPorts into SV Interfaces. For inputs,
 /// just switch the type to `ModportType`. For outputs, append a `ModportType`
 /// to the inputs and remove the output channel from the results. Returns true
 /// if 'mod' was updated. Delay updating the instances to amortize the IR walk
 /// over all the module updates.
-bool ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
+bool ESIPortsPass::updateFunc(RTLModuleExternOp mod) {
   auto *ctxt = &getContext();
   auto funcType = mod.getType();
 
   bool updated = false;
 
+  SmallVector<Attribute> newArgNames, newResultNames;
+
   // Reconstruct the list of operand types, changing the type whenever an ESI
   // port is found.
   SmallVector<Type, 16> newArgTypes;
+  size_t nextArgNo = 0;
   for (auto argTy : funcType.getInputs()) {
     auto chanTy = argTy.dyn_cast<ChannelPort>();
+    newArgNames.push_back(getModuleArgumentNameAttr(mod, nextArgNo++));
+
     if (!chanTy) {
       newArgTypes.push_back(argTy);
       continue;
@@ -379,11 +622,6 @@ bool ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
     updated = true;
   }
 
-  SmallVector<DictionaryAttr, 16> argAttrs;
-  mod.getAllArgAttrs(argAttrs);
-  SmallVector<DictionaryAttr, 16> resAttrs;
-  mod.getAllResultAttrs(resAttrs);
-
   // Iterate through the results and append to one of the two below lists. The
   // first for non-ESI-ports. The second, ports which have been re-located to an
   // operand.
@@ -393,9 +631,10 @@ bool ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
        ++resNum) {
     Type resTy = funcType.getResult(resNum);
     auto chanTy = resTy.dyn_cast<ChannelPort>();
+    auto resNameAttr = getModuleResultNameAttr(mod, resNum);
     if (!chanTy) {
       newResultTypes.push_back(resTy);
-      newResultAttrs.push_back(resAttrs[resNum]);
+      newResultNames.push_back(resNameAttr);
       continue;
     }
 
@@ -404,7 +643,7 @@ bool ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
     InterfaceOp iface = build->getOrConstructInterface(chanTy);
     ModportType sinkPort = iface.getModportType(ESIRTLBuilder::sinkStr);
     newArgTypes.push_back(sinkPort);
-    argAttrs.push_back(resAttrs[resNum]);
+    newArgNames.push_back(resNameAttr);
     updated = true;
   }
 
@@ -414,15 +653,15 @@ bool ESIPortsPass::updateFunc(RTLExternModuleOp mod) {
   // Set the new types.
   auto newFuncType = FunctionType::get(ctxt, newArgTypes, newResultTypes);
   mod.setType(newFuncType);
-  mod.setAllArgAttrs(argAttrs);
-  mod.setAllResultAttrs(newResultAttrs);
+  setModuleArgumentNames(mod, newArgNames);
+  setModuleResultNames(mod, newResultNames);
   return true;
 }
 
 /// Update an instance of an updated module by adding `esi.(un)wrap.iface`
 /// around the instance. Create a new instance at the end from the lists built
 /// up before.
-void ESIPortsPass::updateInstance(RTLExternModuleOp mod, InstanceOp inst) {
+void ESIPortsPass::updateInstance(RTLModuleExternOp mod, InstanceOp inst) {
   using namespace circt::sv;
   circt::ImplicitLocOpBuilder instBuilder(inst);
   FunctionType funcTy = mod.getType();
@@ -515,7 +754,7 @@ void ESIPortsPass::updateInstance(RTLExternModuleOp mod, InstanceOp inst) {
 
   // Create the new instance!
   InstanceOp newInst = instBuilder.create<InstanceOp>(
-      newResultTypes, newOperands, inst.getAttrs());
+      newResultTypes, newOperands, inst->getAttrs());
   // Go through the old list of non-ESI result values, and replace them with the
   // new non-ESI results.
   for (size_t resNum = 0, numRes = newResults.size(); resNum < numRes;
@@ -559,7 +798,7 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   auto stageModule = builder.declareStage();
 
   NamedAttrList stageParams;
-  size_t width = getNumBits(chPort.getInner());
+  size_t width = circt::rtl::getBitWidth(chPort.getInner());
   stageParams.set(builder.width, rewriter.getUI32IntegerAttr(width));
 
   // Unwrap the channel. The ready signal is a Value we haven't created yet, so
@@ -602,30 +841,50 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
 }
 namespace {
 /// Eliminate back-to-back wrap-unwraps to reduce the number of ESI channels.
-struct RemoveWrapUnwrap : public OpConversionPattern<WrapValidReady> {
+struct RemoveWrapUnwrap : public ConversionPattern {
 public:
-  RemoveWrapUnwrap(MLIRContext *ctxt) : OpConversionPattern(ctxt) {}
-  using OpConversionPattern::OpConversionPattern;
+  RemoveWrapUnwrap(MLIRContext *context)
+      : ConversionPattern(MatchAnyOpTypeTag(), /*benefit=*/1, context) {}
 
-  LogicalResult
-  matchAndRewrite(WrapValidReady wrap, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const final {
+  virtual LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    Value valid, ready, data;
+    WrapValidReady wrap = dyn_cast<WrapValidReady>(op);
+    UnwrapValidReady unwrap = dyn_cast<UnwrapValidReady>(op);
+    if (wrap) {
+      unwrap =
+          dyn_cast<UnwrapValidReady>(wrap.chanOutput().use_begin()->getOwner());
+      if (!unwrap)
+        return rewriter.notifyMatchFailure(wrap, [](Diagnostic &d) {
+          d << "This conversion only supports wrap-unwrap back-to-back. "
+               "Could not find 'unwrap'.";
+        });
+      data = operands[0];
+      valid = operands[1];
+      ready = unwrap.ready();
+    } else if (unwrap) {
+      wrap = dyn_cast<WrapValidReady>(operands[0].getDefiningOp());
+      if (!wrap)
+        return rewriter.notifyMatchFailure(
+            operands[0].getDefiningOp(), [](Diagnostic &d) {
+              d << "This conversion only supports wrap-unwrap back-to-back. "
+                   "Could not find 'wrap'.";
+            });
+      valid = wrap.valid();
+      data = wrap.rawInput();
+      ready = operands[1];
+    } else {
+      return failure();
+    }
 
     if (!wrap.chanOutput().hasOneUse())
       return rewriter.notifyMatchFailure(wrap, [](Diagnostic &d) {
         d << "This conversion only supports wrap-unwrap back-to-back. "
              "Wrap didn't have exactly one use.";
       });
-    UnwrapValidReady unwrap =
-        dyn_cast<UnwrapValidReady>(wrap.chanOutput().use_begin()->getOwner());
-    if (!unwrap)
-      return rewriter.notifyMatchFailure(wrap, [](Diagnostic &d) {
-        d << "This conversion only supports wrap-unwrap back-to-back. "
-             "Could not find 'unwrap'.";
-      });
-
-    rewriter.replaceOp(wrap, {nullptr, unwrap.ready()});
-    rewriter.replaceOp(unwrap, operands);
+    rewriter.replaceOp(wrap, {nullptr, ready});
+    rewriter.replaceOp(unwrap, {data, valid});
     return success();
   }
 };
@@ -642,7 +901,6 @@ namespace {
 /// new `wrap.vr`.
 struct WrapInterfaceLower : public OpConversionPattern<WrapSVInterface> {
 public:
-  WrapInterfaceLower(MLIRContext *ctxt) : OpConversionPattern(ctxt) {}
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
@@ -752,12 +1010,20 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
 #else
   auto loc = ep.getLoc();
   auto *ctxt = rewriter.getContext();
+  Value clk = operands[0];
+  Value rstn = operands[1];
+  Value send = operands[2];
+
   circt::BackedgeBuilder bb(rewriter, loc);
   builder.declareCosimEndpoint();
   Type ui64Type =
       IntegerType::get(ctxt, 64, IntegerType::SignednessSemantics::Unsigned);
-  capnp::TypeSchema sendTypeSchema(ep.send().getType());
+  capnp::TypeSchema sendTypeSchema(send.getType());
+  if (!sendTypeSchema.isSupported())
+    return rewriter.notifyMatchFailure(ep, "Send type not supported yet");
   capnp::TypeSchema recvTypeSchema(ep.recv().getType());
+  if (!recvTypeSchema.isSupported())
+    return rewriter.notifyMatchFailure(ep, "Recv type not supported yet");
 
   // Set all the parameters.
   NamedAttrList params;
@@ -765,20 +1031,20 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
   params.set("SEND_TYPE_ID",
              IntegerAttr::get(ui64Type, sendTypeSchema.capnpTypeID()));
   params.set("SEND_TYPE_SIZE_BITS",
-             rewriter.getI64IntegerAttr(sendTypeSchema.size()));
+             rewriter.getI32IntegerAttr(sendTypeSchema.size()));
   params.set("RECV_TYPE_ID",
              IntegerAttr::get(ui64Type, recvTypeSchema.capnpTypeID()));
-  params.set("RECVTYPE_SIZE_BITS",
-             rewriter.getI64IntegerAttr(recvTypeSchema.size()));
+  params.set("RECV_TYPE_SIZE_BITS",
+             rewriter.getI32IntegerAttr(recvTypeSchema.size()));
 
   // Set up the egest route to drive the EP's send ports.
   ArrayType egestBitArrayType =
       ArrayType::get(rewriter.getI1Type(), sendTypeSchema.size());
   auto sendReady = bb.get(rewriter.getI1Type());
   UnwrapValidReady unwrapSend =
-      rewriter.create<UnwrapValidReady>(loc, ep.send(), sendReady);
-  auto encodeData = rewriter.create<CapnpEncode>(loc, egestBitArrayType,
-                                                 unwrapSend.rawOutput());
+      rewriter.create<UnwrapValidReady>(loc, send, sendReady);
+  auto encodeData = rewriter.create<CapnpEncode>(
+      loc, egestBitArrayType, clk, unwrapSend.valid(), unwrapSend.rawOutput());
 
   // Get information necessary for injest path.
   auto recvReady = bb.get(rewriter.getI1Type());
@@ -789,11 +1055,7 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
   StringAttr nameAttr = ep->getAttr("name").dyn_cast_or_null<StringAttr>();
   StringRef name = nameAttr ? nameAttr.getValue() : "cosimEndpoint";
   Value epInstInputs[] = {
-      ep.clk(),           ep.rstn(),
-
-      recvReady,
-
-      unwrapSend.valid(), encodeData.capnpBits(),
+      clk, rstn, recvReady, unwrapSend.valid(), encodeData.capnpBits(),
   };
   Type epInstOutputs[] = {rewriter.getI1Type(), ingestBitArrayType,
                           rewriter.getI1Type()};
@@ -806,7 +1068,8 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
   Value recvDataFromCosim = cosimEpModule.getResult(1);
   Value recvValidFromCosim = cosimEpModule.getResult(0);
   auto decodeData =
-      rewriter.create<CapnpDecode>(loc, ep.recv().getType(), recvDataFromCosim);
+      rewriter.create<CapnpDecode>(loc, recvTypeSchema.getType(), clk,
+                                   recvValidFromCosim, recvDataFromCosim);
   WrapValidReady wrapRecv = rewriter.create<WrapValidReady>(
       loc, decodeData.decodedData(), recvValidFromCosim);
   recvReady.setValue(wrapRecv.ready());
@@ -818,12 +1081,67 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
 #endif // CAPNP
 }
 
+namespace {
+/// Lower the encode gasket to SV/RTL.
+struct EncoderLowering : public OpConversionPattern<CapnpEncode> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(CapnpEncode enc, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final {
+#ifndef CAPNP
+    return rewriter.notifyMatchFailure(enc,
+                                       "encode.capnp lowering requires the ESI "
+                                       "capnp plugin, which was disabled.");
+#else
+    capnp::TypeSchema encodeType(enc.dataToEncode().getType());
+    if (!encodeType.isSupported())
+      return rewriter.notifyMatchFailure(enc, "Type not supported yet");
+    Value encoderOutput = encodeType.buildEncoder(rewriter, operands[0],
+                                                  operands[1], operands[2]);
+    assert(encoderOutput && "Error in TypeSchema.buildEncoder()");
+    rewriter.replaceOp(enc, encoderOutput);
+    return success();
+#endif
+  }
+};
+} // anonymous namespace
+
+namespace {
+/// Lower the decode gasket to SV/RTL.
+struct DecoderLowering : public OpConversionPattern<CapnpDecode> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(CapnpDecode dec, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final {
+#ifndef CAPNP
+    return rewriter.notifyMatchFailure(dec,
+                                       "decode.capnp lowering requires the ESI "
+                                       "capnp plugin, which was disabled.");
+#else
+    capnp::TypeSchema decodeType(dec.decodedData().getType());
+    if (!decodeType.isSupported())
+      return rewriter.notifyMatchFailure(dec, "Type not supported yet");
+    Value decoderOutput = decodeType.buildDecoder(rewriter, operands[0],
+                                                  operands[1], operands[2]);
+    assert(decoderOutput && "Error in TypeSchema.buildDecoder()");
+    rewriter.replaceOp(dec, decoderOutput);
+    return success();
+#endif
+  }
+};
+} // namespace
+
 void ESItoRTLPass::runOnOperation() {
   auto top = getOperation();
   auto ctxt = &getContext();
 
   // Set up a conversion and give it a set of laws.
   ConversionTarget pass1Target(*ctxt);
+  pass1Target.addLegalDialect<CombDialect>();
   pass1Target.addLegalDialect<RTLDialect>();
   pass1Target.addLegalDialect<SVDialect>();
   pass1Target.addLegalOp<WrapValidReady, UnwrapValidReady>();
@@ -834,23 +1152,29 @@ void ESItoRTLPass::runOnOperation() {
 
   // Add all the conversion patterns.
   ESIRTLBuilder esiBuilder(top);
-  OwningRewritePatternList patterns;
-  patterns.insert<PipelineStageLowering>(esiBuilder, ctxt);
-  patterns.insert<WrapInterfaceLower>(ctxt);
-  patterns.insert<UnwrapInterfaceLower>(ctxt);
-  patterns.insert<CosimLowering>(esiBuilder);
+  RewritePatternSet pass1Patterns(ctxt);
+  pass1Patterns.insert<PipelineStageLowering>(esiBuilder, ctxt);
+  pass1Patterns.insert<WrapInterfaceLower>(ctxt);
+  pass1Patterns.insert<UnwrapInterfaceLower>(ctxt);
+  pass1Patterns.insert<CosimLowering>(esiBuilder);
 
   // Run the conversion.
-  if (failed(applyPartialConversion(top, pass1Target, std::move(patterns))))
+  if (failed(
+          applyPartialConversion(top, pass1Target, std::move(pass1Patterns))))
     signalPassFailure();
 
   ConversionTarget pass2Target(*ctxt);
+  pass2Target.addLegalDialect<CombDialect>();
   pass2Target.addLegalDialect<RTLDialect>();
-  pass2Target.addIllegalOp<PipelineStage>();
+  pass2Target.addLegalDialect<SVDialect>();
+  pass2Target.addIllegalDialect<ESIDialect>();
 
-  patterns.clear();
-  patterns.insert<RemoveWrapUnwrap>(ctxt);
-  if (failed(applyPartialConversion(top, pass2Target, std::move(patterns))))
+  RewritePatternSet pass2Patterns(ctxt);
+  pass2Patterns.insert<RemoveWrapUnwrap>(ctxt);
+  pass2Patterns.insert<EncoderLowering>(ctxt);
+  pass2Patterns.insert<DecoderLowering>(ctxt);
+  if (failed(
+          applyPartialConversion(top, pass2Target, std::move(pass2Patterns))))
     signalPassFailure();
 }
 

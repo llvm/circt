@@ -7,10 +7,9 @@
 
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/ESI/ESIOps.h"
-
 #include "circt/Dialect/RTL/RTLDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
-
+#include "circt/Support/LLVM.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -20,9 +19,10 @@
 
 #ifdef CAPNP
 #include "capnp/ESICapnp.h"
+#include "circt/Dialect/ESI/CosimSchema.h"
 #endif
 
-using namespace mlir;
+using namespace circt;
 using namespace circt::esi;
 
 //===----------------------------------------------------------------------===//
@@ -34,13 +34,14 @@ using namespace circt::esi;
 //===----------------------------------------------------------------------===//
 
 #ifdef CAPNP
+
 namespace {
 struct ExportCosimSchema {
   ExportCosimSchema(ModuleOp module, llvm::raw_ostream &os)
       : module(module), os(os), diag(module.getContext()->getDiagEngine()),
         unknown(UnknownLoc::get(module.getContext())) {
     diag.registerHandler([this](Diagnostic &diag) -> LogicalResult {
-      if (diag.getSeverity() == DiagnosticSeverity::Error)
+      if (diag.getSeverity() == mlir::DiagnosticSeverity::Error)
         ++errorCount;
       return failure();
     });
@@ -61,7 +62,7 @@ struct ExportCosimSchema {
 private:
   ModuleOp module;
   llvm::raw_ostream &os;
-  DiagnosticEngine &diag;
+  mlir::DiagnosticEngine &diag;
   const Location unknown;
   size_t errorCount = 0;
 
@@ -99,13 +100,31 @@ LogicalResult ExportCosimSchema::visitEndpoint(CosimEndpoint ep) {
   return success();
 }
 
+static void emitCosimSchemaBody(llvm::raw_ostream &os) {
+  StringRef entireSchemaFile = circt::esi::cosim::CosimSchema;
+  size_t idLocation = entireSchemaFile.find("@0x");
+  size_t newlineAfter = entireSchemaFile.find('\n', idLocation);
+
+  os << "\n\n"
+     << "#########################################################\n"
+     << "## Standard RPC interfaces.\n"
+     << "#########################################################\n";
+  os << entireSchemaFile.substr(newlineAfter) << "\n";
+}
+
 LogicalResult ExportCosimSchema::emit() {
   os << "#########################################################\n"
-     << "## ESI generated schema. For use with CosimDpi.capnp\n"
+     << "## ESI generated schema.\n"
      << "#########################################################\n";
 
   // Walk and collect the type data.
-  module.walk([this](CosimEndpoint ep) { visitEndpoint(ep); });
+  auto walkResult = module.walk([this](CosimEndpoint ep) {
+    if (failed(visitEndpoint(ep)))
+      return mlir::WalkResult::interrupt();
+    return mlir::WalkResult::advance();
+  });
+  if (walkResult.wasInterrupted())
+    return failure();
   os << "#########################################################\n";
 
   // We need a sorted list to ensure determinism.
@@ -123,6 +142,9 @@ LogicalResult ExportCosimSchema::emit() {
   fileHash |= 0x8000000000000000;
   emitId(fileHash) << ";\n\n";
 
+  os << "#########################################################\n"
+     << "## Types for your design.\n"
+     << "#########################################################\n\n";
   // Iterate through the various types and emit their schemas.
   auto end = std::unique(types.begin(), types.end());
   for (auto typeIter = types.begin(); typeIter < end; ++typeIter) {
@@ -131,6 +153,9 @@ LogicalResult ExportCosimSchema::emit() {
       // corrupted.
       return failure();
   }
+
+  // Include the RPC schema in each generated file.
+  emitCosimSchemaBody(os);
 
   return errorCount == 0 ? success() : failure();
 }
@@ -148,8 +173,9 @@ static LogicalResult exportCosimSchema(ModuleOp module, llvm::raw_ostream &os) {
 
 void circt::esi::registerESITranslations() {
 #ifdef CAPNP
-  TranslateFromMLIRRegistration cosimToCapnp(
-      "emit-esi-capnp", exportCosimSchema, [](DialectRegistry &registry) {
+  mlir::TranslateFromMLIRRegistration cosimToCapnp(
+      "export-esi-capnp", exportCosimSchema,
+      [](mlir::DialectRegistry &registry) {
         registry
             .insert<ESIDialect, circt::rtl::RTLDialect, circt::sv::SVDialect,
                     mlir::StandardOpsDialect, mlir::BuiltinDialect>();

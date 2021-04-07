@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/HandshakeToFIRRTL/HandshakeToFIRRTL.h"
+#include "../PassDetail.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
@@ -32,6 +33,13 @@ using ValueVectorList = std::vector<ValueVector>;
 // Utils
 //===----------------------------------------------------------------------===//
 
+static void legalizeFModule(FModuleOp moduleOp) {
+  SmallVector<Operation *, 8> connectOps;
+  moduleOp.walk([&](ConnectOp op) { connectOps.push_back(op); });
+  for (auto op : connectOps)
+    op->moveBefore(&moduleOp.getBodyBlock()->back());
+}
+
 /// Get the corresponding FIRRTL type given the built-in data type. Current
 /// supported data types are integer (signed, unsigned, and signless), index,
 /// and none.
@@ -51,6 +59,7 @@ static FIRRTLType getFIRRTLType(Type type) {
         case IntegerType::Signless:
           return UIntType::get(context, width);
         }
+        llvm_unreachable("invalid IntegerType");
       })
       .Case<IndexType>([&](IndexType indexType) -> FIRRTLType {
         // Currently we consider index type as 64-bits unsigned integer.
@@ -73,8 +82,8 @@ static FIRRTLType getBundleType(Type type, bool isFlip) {
   llvm::SmallVector<BundleElement, 3> elements;
 
   // Add valid and ready subfield to the bundle.
-  auto validId = Identifier::get("valid", context);
-  auto readyId = Identifier::get("ready", context);
+  auto validId = StringAttr::get(context, "valid");
+  auto readyId = StringAttr::get(context, "ready");
   auto signalType = UIntType::get(context, 1);
   if (isFlip) {
     elements.push_back(BundleElement(validId, FlipType::get(signalType)));
@@ -87,7 +96,7 @@ static FIRRTLType getBundleType(Type type, bool isFlip) {
   // Add data subfield to the bundle if dataType is not a null.
   auto dataType = getFIRRTLType(type);
   if (dataType) {
-    auto dataId = Identifier::get("data", context);
+    auto dataId = StringAttr::get(context, "data");
     if (isFlip)
       elements.push_back(BundleElement(dataId, FlipType::get(dataType)));
     else
@@ -110,15 +119,32 @@ static Value createConstantOp(FIRRTLType opType, APInt value,
   return Value();
 }
 
-/// Construct a name for creating FIRRTL sub-module. The returned string
-/// contains the following information: 1) standard or handshake operation
-/// name; 2) number of inputs; 3) number of outputs; 4) comparison operation
-/// type (if applied); 5) whether the elastic component is for the control path
-/// (if applied).
+static Type getHandshakeDataType(Operation *op) {
+  if (auto memOp = dyn_cast<MemoryOp>(op))
+    return memOp.getMemRefType().getElementType();
+
+  else if (auto sinkOp = dyn_cast<SinkOp>(op)) {
+    // As SinkOp only has one argument, which at this stage is already converted
+    // to a bundled FIRRTLType, here we convert it back to a normal data type.
+    // Is there a better way to do this?
+    auto type = sinkOp.getOperand().getType().cast<BundleType>();
+
+    if (auto dataType = type.getElementType("data")) {
+      auto intType = dataType.cast<firrtl::IntType>();
+      return IntegerType::get(type.getContext(), intType.getWidthOrSentinel(),
+                              intType.isSigned() ? IntegerType::Signed
+                                                 : IntegerType::Unsigned);
+    } else
+      return NoneType::get(type.getContext());
+  } else
+    return op->getResult(0).getType();
+}
+
+/// Construct a name for creating FIRRTL sub-module.
 static std::string getSubModuleName(Operation *oldOp) {
-  /// The dialect name is separated from the operation name by '.', which is not
-  /// valid in SystemVerilog module names. In case this name is used in
-  /// SystemVerilog output, replace '.' with '_'.
+  // The dialect name is separated from the operation name by '.', which is not
+  // valid in SystemVerilog module names. In case this name is used in
+  // SystemVerilog output, replace '.' with '_'.
   std::string prefix = oldOp->getName().getStringRef().str();
   std::replace(prefix.begin(), prefix.end(), '.', '_');
 
@@ -126,18 +152,56 @@ static std::string getSubModuleName(Operation *oldOp) {
                               std::to_string(oldOp->getNumOperands()) + "ins_" +
                               std::to_string(oldOp->getNumResults()) + "outs";
 
+  // Add value of the constant operation.
+  if (auto constOp = dyn_cast<handshake::ConstantOp>(oldOp)) {
+    if (auto intAttr = constOp.getValue().dyn_cast<IntegerAttr>()) {
+      auto intType = intAttr.getType();
+
+      if (intType.isSignedInteger())
+        subModuleName += "_c" + std::to_string(intAttr.getSInt());
+      else if (intType.isUnsignedInteger())
+        subModuleName += "_c" + std::to_string(intAttr.getUInt());
+      else
+        subModuleName += "_c" + std::to_string((uint64_t)intAttr.getInt());
+    } else
+      oldOp->emitError("unsupported constant type");
+  }
+
+  // Add operation data type. Currently we only support integer or index types.
+  // The emitted type aligns with the getFIRRTLType() method. Thus all integers
+  // other than signed integers will be emitted as unsigned.
+  auto type = getHandshakeDataType(oldOp);
+  if (type.isIntOrIndex()) {
+    if (auto indexType = type.dyn_cast<IndexType>())
+      subModuleName +=
+          "_ui" + std::to_string(indexType.kInternalStorageBitWidth);
+    else if (type.isSignedInteger())
+      subModuleName += "_si" + std::to_string(type.getIntOrFloatBitWidth());
+    else
+      subModuleName += "_ui" + std::to_string(type.getIntOrFloatBitWidth());
+
+  } else if (type.isa<NoneType>()) {
+    auto ctrlAttr = oldOp->getAttrOfType<BoolAttr>("control");
+    if (ctrlAttr.getValue())
+      subModuleName += "_ctrl";
+    else
+      oldOp->emitError("non-control component has invalid data type");
+  } else
+    oldOp->emitError("unsupported data type");
+
+  // Add memory ID.
+  if (auto memOp = dyn_cast<handshake::MemoryOp>(oldOp))
+    subModuleName += "_id" + std::to_string(memOp.id());
+
+  // Add compare kind.
   if (auto comOp = dyn_cast<mlir::CmpIOp>(oldOp))
     subModuleName += "_" + stringifyEnum(comOp.getPredicate()).str();
 
+  // Add buffer information.
   if (auto bufferOp = dyn_cast<handshake::BufferOp>(oldOp)) {
     subModuleName += "_" + bufferOp.getNumSlots().toString(10, false) + "slots";
     if (bufferOp.isSequential())
       subModuleName += "_seq";
-  }
-
-  if (auto ctrlAttr = oldOp->getAttr("control")) {
-    if (ctrlAttr.cast<BoolAttr>().getValue())
-      subModuleName += "_ctrl";
   }
 
   return subModuleName;
@@ -145,7 +209,7 @@ static std::string getSubModuleName(Operation *oldOp) {
 
 /// Return the number of bits needed to index the given number of values.
 static size_t getNumIndexBits(uint64_t numValues) {
-  return numValues ? llvm::Log2_64_Ceil(numValues) : 1;
+  return numValues > 1 ? llvm::Log2_64_Ceil(numValues) : 1;
 }
 
 /// Construct a tree of 1-bit muxes to multiplex arbitrary numbers of signals
@@ -249,7 +313,7 @@ static Value createOneHotMuxTree(ArrayRef<Value> inputs, Value select,
 
 /// Construct a decoder by dynamically shifting 1 bit by the input amount.
 /// See http://www.imm.dtu.dk/~masca/chisel-book.pdf Section 5.2.
-static Value createDecoder(Value input, unsigned width, Location insertLoc,
+static Value createDecoder(Value input, Location insertLoc,
                            ConversionPatternRewriter &rewriter) {
   auto *context = rewriter.getContext();
 
@@ -266,9 +330,7 @@ static Value createDecoder(Value input, unsigned width, Location insertLoc,
   // Shift the bit dynamically by the input amount.
   auto shift = rewriter.create<DShlPrimOp>(insertLoc, resultType, bit, input);
 
-  // Get a type for the result based on the explicitly specified width.
-  Type padType = UIntType::get(context, width);
-  return rewriter.create<PadPrimOp>(insertLoc, padType, shift, width);
+  return shift;
 }
 
 /// Construct an arbiter based on a simple priority-encoding scheme. In addition
@@ -490,10 +552,9 @@ static ValueVectorList extractSubfields(FModuleOp subModuleOp,
     if (auto argType = arg.getType().dyn_cast<BundleType>()) {
       // Extract all subfields of all bundle ports.
       for (auto &element : argType.getElements()) {
-        StringRef elementName = element.name.strref();
         FIRRTLType elementType = element.type;
-        subfields.push_back(rewriter.create<SubfieldOp>(
-            insertLoc, elementType, arg, rewriter.getStringAttr(elementName)));
+        subfields.push_back(rewriter.create<SubfieldOp>(insertLoc, elementType,
+                                                        arg, element.name));
       }
     } else if (arg.getType().isa<ClockType>() ||
                arg.getType().dyn_cast<UIntType>().getWidthOrSentinel() == 1) {
@@ -569,6 +630,7 @@ bool StdExprBuilder::visitStdExpr(CmpIOp op) {
   case CmpIPredicate::uge:
     return buildBinaryLogic<GEQPrimOp>(), true;
   }
+  llvm_unreachable("invalid CmpIOp");
 }
 
 /// Please refer to simple_addi.mlir test case.
@@ -642,10 +704,12 @@ public:
   bool visitHandshake(ForkOp op);
   bool visitHandshake(JoinOp op);
   bool visitHandshake(LazyForkOp op);
+  bool visitHandshake(handshake::LoadOp op);
   bool visitHandshake(MemoryOp op);
   bool visitHandshake(MergeOp op);
   bool visitHandshake(MuxOp op);
   bool visitHandshake(SinkOp op);
+  bool visitHandshake(handshake::StoreOp op);
 
   bool buildJoinLogic(SmallVector<ValueVector *, 4> inputs,
                       ValueVector *output);
@@ -662,6 +726,16 @@ public:
 
   void buildAllReadyLogic(SmallVector<ValueVector *, 4> inputs,
                           ValueVector *output, Value condition);
+
+  void buildControlBufferLogic(Value predValid, Value predReady,
+                               Value succValid, Value succReady, Value clock,
+                               Value reset, Value predData = nullptr,
+                               Value succData = nullptr);
+  void buildDataBufferLogic(Value predValid, Value validReg, Value predReady,
+                            Value succReady, Value predData, Value dataReg);
+  bool buildSeqBufferLogic(int64_t numStage, ValueVector *input,
+                           ValueVector *output, Value clock, Value reset,
+                           bool isControl);
 
 private:
   ValueVectorList portList;
@@ -808,9 +882,22 @@ bool HandshakeBuilder::visitHandshake(MuxOp op) {
   // Connect that to the select ready.
   rewriter.create<ConnectOp>(insertLoc, selectReady, resultValidAndReady);
 
+  // Since addresses coming from Handshake are IndexType and have a hardcoded
+  // 64-bit width in this pass, we may need to truncate down to the actual
+  // width used to index into the decoder.
+  size_t bitsNeeded = getNumIndexBits(argData.size());
+  size_t selectBits =
+      selectData.getType().cast<FIRRTLType>().getBitWidthOrSentinel();
+
+  if (selectBits > bitsNeeded) {
+    auto tailAmount = selectBits - bitsNeeded;
+    auto tailType = UIntType::get(op.getContext(), bitsNeeded);
+    selectData = rewriter.create<TailPrimOp>(insertLoc, tailType, selectData,
+                                             tailAmount);
+  }
+
   // Create a decoder for the select data.
-  auto decodedSelect =
-      createDecoder(selectData, argData.size(), insertLoc, rewriter);
+  auto decodedSelect = createDecoder(selectData, insertLoc, rewriter);
 
   // Walk through each arg data.
   for (unsigned i = 0, e = argData.size(); i != e; ++i) {
@@ -863,12 +950,10 @@ bool HandshakeBuilder::visitHandshake(MergeOp op) {
       createConstantOp(indexType, APInt(numInputs, 0), insertLoc, rewriter);
 
   // Declare wire for arbitration winner.
-  auto winName = rewriter.getStringAttr("win");
-  auto win = rewriter.create<WireOp>(insertLoc, indexType, winName);
+  auto win = rewriter.create<WireOp>(insertLoc, indexType, "win");
 
   // Declare wires for if each output is done.
-  auto resultDoneName = rewriter.getStringAttr("resultDone");
-  auto resultDone = rewriter.create<WireOp>(insertLoc, bitType, resultDoneName);
+  auto resultDone = rewriter.create<WireOp>(insertLoc, bitType, "resultDone");
 
   // Create predicates to assert if the win wire holds a valid index.
   auto hasWinnerCondition = rewriter.create<OrRPrimOp>(insertLoc, bitType, win);
@@ -956,34 +1041,26 @@ bool HandshakeBuilder::visitHandshake(ControlMergeOp op) {
   auto falseConst = createConstantOp(bitType, APInt(1, 0), insertLoc, rewriter);
 
   // Declare register for storing arbitration winner.
-  auto wonName = rewriter.getStringAttr("won");
   auto won = rewriter.create<RegResetOp>(insertLoc, indexType, clock, reset,
-                                         noWinner, wonName);
+                                         noWinner, "won");
 
   // Declare wire for arbitration winner.
-  auto winName = rewriter.getStringAttr("win");
-  auto win = rewriter.create<WireOp>(insertLoc, indexType, winName);
+  auto win = rewriter.create<WireOp>(insertLoc, indexType, "win");
 
   // Declare wire for whether the circuit just fired and emitted both outputs.
-  auto firedName = rewriter.getStringAttr("fired");
-  auto fired = rewriter.create<WireOp>(insertLoc, bitType, firedName);
+  auto fired = rewriter.create<WireOp>(insertLoc, bitType, "fired");
 
   // Declare registers for storing if each output has been emitted.
-  auto resultEmittedName = rewriter.getStringAttr("resultEmitted");
   auto resultEmitted = rewriter.create<RegResetOp>(
-      insertLoc, bitType, clock, reset, falseConst, resultEmittedName);
+      insertLoc, bitType, clock, reset, falseConst, "resultEmitted");
 
-  auto controlEmittedName = rewriter.getStringAttr("controlEmitted");
   auto controlEmitted = rewriter.create<RegResetOp>(
-      insertLoc, bitType, clock, reset, falseConst, controlEmittedName);
+      insertLoc, bitType, clock, reset, falseConst, "controlEmitted");
 
   // Declare wires for if each output is done.
-  auto resultDoneName = rewriter.getStringAttr("resultDone");
-  auto resultDone = rewriter.create<WireOp>(insertLoc, bitType, resultDoneName);
+  auto resultDone = rewriter.create<WireOp>(insertLoc, bitType, "resultDone");
 
-  auto controlDoneName = rewriter.getStringAttr("controlDone");
-  auto controlDone =
-      rewriter.create<WireOp>(insertLoc, bitType, controlDoneName);
+  auto controlDone = rewriter.create<WireOp>(insertLoc, bitType, "controlDone");
 
   // Create predicates to assert if the win wire or won register hold a valid
   // index.
@@ -1227,24 +1304,23 @@ bool HandshakeBuilder::buildForkLogic(ValueVector *input,
   // Create done wire for all results.
   SmallVector<Value, 4> doneWires;
   for (unsigned i = 0; i < resultNum; ++i) {
-    auto doneName = rewriter.getStringAttr("done" + std::to_string(i));
-    auto doneWire = rewriter.create<WireOp>(insertLoc, bitType, doneName);
+    auto doneWire =
+        rewriter.create<WireOp>(insertLoc, bitType, "done" + std::to_string(i));
     doneWires.push_back(doneWire);
   }
 
   // Create an AndPrimOp chain for generating the ready signal. Only if all
   // result ports are handshaked (done), the argument port is ready to accept
   // the next token.
-  Value allDoneWire = rewriter.create<WireOp>(
-      insertLoc, bitType, rewriter.getStringAttr("allDone"));
+  Value allDoneWire = rewriter.create<WireOp>(insertLoc, bitType, "allDone");
   buildReductionTree<AndPrimOp>(doneWires, allDoneWire);
 
   // Connect the allDoneWire to the input ready.
   rewriter.create<ConnectOp>(insertLoc, argReady, allDoneWire);
 
   // Create a notAllDoneWire for later use.
-  auto notAllDoneWire = rewriter.create<WireOp>(
-      insertLoc, bitType, rewriter.getStringAttr("notAllDone"));
+  auto notAllDoneWire =
+      rewriter.create<WireOp>(insertLoc, bitType, "notAllDone");
   rewriter.create<ConnectOp>(
       insertLoc, notAllDoneWire,
       rewriter.create<NotPrimOp>(insertLoc, bitType, allDoneWire));
@@ -1269,9 +1345,9 @@ bool HandshakeBuilder::buildForkLogic(ValueVector *input,
     }
 
     // Create a emitted register.
-    auto emtdName = rewriter.getStringAttr("emtd" + std::to_string(idx));
-    auto emtdReg = rewriter.create<RegResetOp>(insertLoc, bitType, clock, reset,
-                                               falseConst, emtdName);
+    auto emtdReg =
+        rewriter.create<RegResetOp>(insertLoc, bitType, clock, reset,
+                                    falseConst, "emtd" + std::to_string(idx));
 
     // Connect the emitted register with {doneWire && notallDoneWire}. Only if
     // notallDone, the emtdReg will be set to the value of doneWire. Otherwise,
@@ -1281,8 +1357,8 @@ bool HandshakeBuilder::buildForkLogic(ValueVector *input,
     rewriter.create<ConnectOp>(insertLoc, emtdReg, emtd);
 
     // Create a notEmtdWire for later use.
-    auto notEmtdName = rewriter.getStringAttr("notEmtd" + std::to_string(idx));
-    auto notEmtdWire = rewriter.create<WireOp>(insertLoc, bitType, notEmtdName);
+    auto notEmtdWire = rewriter.create<WireOp>(insertLoc, bitType,
+                                               "notEmtd" + std::to_string(idx));
     rewriter.create<ConnectOp>(
         insertLoc, notEmtdWire,
         rewriter.create<NotPrimOp>(insertLoc, bitType, emtdReg));
@@ -1295,10 +1371,8 @@ bool HandshakeBuilder::buildForkLogic(ValueVector *input,
 
     // Create validReady wire signal, which indicates a successful handshake in
     // the current clock cycle.
-    auto validReadyName =
-        rewriter.getStringAttr("validReady" + std::to_string(idx));
-    auto validReadyWire =
-        rewriter.create<WireOp>(insertLoc, bitType, validReadyName);
+    auto validReadyWire = rewriter.create<WireOp>(
+        insertLoc, bitType, "validReady" + std::to_string(idx));
     rewriter.create<ConnectOp>(
         insertLoc, validReadyWire,
         rewriter.create<AndPrimOp>(insertLoc, bitType, resultReady, valid));
@@ -1359,27 +1433,216 @@ bool HandshakeBuilder::visitHandshake(handshake::ConstantOp op) {
   return true;
 }
 
-bool HandshakeBuilder::visitHandshake(BufferOp op) {
-  ValueVector inputSubfields = portList[0];
-  Value inputValid = inputSubfields[0];
-  Value inputReady = inputSubfields[1];
+void HandshakeBuilder::buildControlBufferLogic(Value predValid, Value predReady,
+                                               Value succValid, Value succReady,
+                                               Value clock, Value reset,
+                                               Value predData, Value succData) {
+  auto bitType = UIntType::get(rewriter.getContext(), 1);
+  auto falseConst = createConstantOp(bitType, APInt(1, 0), insertLoc, rewriter);
 
-  ValueVector outputSubfields = portList[1];
-  Value outputValid = outputSubfields[0];
-  Value outputReady = outputSubfields[1];
+  // Create a wire and connect it to the register for the ready buffer.
+  auto readyRegWire =
+      rewriter.create<WireOp>(insertLoc, bitType, "readyRegWire");
+
+  auto readyReg = rewriter.create<RegResetOp>(insertLoc, bitType, clock, reset,
+                                              falseConst, "readyReg");
+  rewriter.create<ConnectOp>(insertLoc, readyReg, readyRegWire);
+
+  // Create the logic to drive the successor valid and potentially data.
+  auto validResult = rewriter.create<MuxPrimOp>(insertLoc, bitType, readyReg,
+                                                readyReg, predValid);
+  rewriter.create<ConnectOp>(insertLoc, succValid, validResult);
+
+  // Create the logic to drive the predecessor ready.
+  auto notReady = rewriter.create<NotPrimOp>(insertLoc, bitType, readyReg);
+  rewriter.create<ConnectOp>(insertLoc, predReady, notReady);
+
+  // Create the logic for successor and register are both low.
+  auto succNotReady = rewriter.create<NotPrimOp>(insertLoc, bitType, succReady);
+  auto neitherReady =
+      rewriter.create<AndPrimOp>(insertLoc, bitType, succNotReady, notReady);
+
+  // Create a mux for taking the input when neither ready.
+  auto ctrlNotReadyMux = rewriter.create<MuxPrimOp>(
+      insertLoc, bitType, neitherReady, predValid, readyReg);
+
+  // Create the logic for successor and register are both high.
+  auto bothReady =
+      rewriter.create<AndPrimOp>(insertLoc, bitType, succReady, readyReg);
+
+  // Create a mux for emptying the register when both are ready.
+  auto resetSignal = rewriter.create<MuxPrimOp>(insertLoc, bitType, bothReady,
+                                                falseConst, ctrlNotReadyMux);
+  rewriter.create<ConnectOp>(insertLoc, readyRegWire, resetSignal);
+
+  // Add same logic for the data path if necessary.
+  if (predData) {
+    auto dataType = predData.getType().cast<FIRRTLType>();
+    auto ctrlDataRegWire =
+        rewriter.create<WireOp>(insertLoc, dataType, "ctrlDataRegWire");
+
+    auto ctrlZeroConst =
+        createConstantOp(dataType, APInt(dataType.getBitWidthOrSentinel(), 0),
+                         insertLoc, rewriter);
+    auto ctrlDataReg = rewriter.create<RegResetOp>(
+        insertLoc, dataType, clock, reset, ctrlZeroConst, "ctrlDataReg");
+
+    rewriter.create<ConnectOp>(insertLoc, ctrlDataReg, ctrlDataRegWire);
+
+    auto dataResult = rewriter.create<MuxPrimOp>(insertLoc, dataType, readyReg,
+                                                 ctrlDataReg, predData);
+    rewriter.create<ConnectOp>(insertLoc, succData, dataResult);
+
+    auto dataNotReadyMux = rewriter.create<MuxPrimOp>(
+        insertLoc, dataType, neitherReady, predData, ctrlDataReg);
+
+    auto dataResetSignal = rewriter.create<MuxPrimOp>(
+        insertLoc, dataType, bothReady, ctrlZeroConst, dataNotReadyMux);
+    rewriter.create<ConnectOp>(insertLoc, ctrlDataRegWire, dataResetSignal);
+  }
+}
+
+void HandshakeBuilder::buildDataBufferLogic(Value predValid, Value validReg,
+                                            Value predReady, Value succReady,
+                                            Value predData = nullptr,
+                                            Value dataReg = nullptr) {
+  auto bitType = UIntType::get(rewriter.getContext(), 1);
+
+  // Create a signal for when the valid register is empty or the successor is
+  // ready to accept new token.
+  auto notValidReg = rewriter.create<NotPrimOp>(insertLoc, bitType, validReg);
+  auto emptyOrReady =
+      rewriter.create<OrPrimOp>(insertLoc, bitType, notValidReg, succReady);
+
+  rewriter.create<ConnectOp>(insertLoc, predReady, emptyOrReady);
+
+  // Create a mux that drives the register input. If the emptyOrReady signal
+  // is asserted, the mux selects the predValid signal. Otherwise, it selects
+  // the register output, keeping the output registered unchanged.
+  auto validRegMux = rewriter.create<MuxPrimOp>(
+      insertLoc, bitType, emptyOrReady, predValid, validReg);
+
+  // Now we can drive the valid register.
+  rewriter.create<ConnectOp>(insertLoc, validReg, validRegMux);
+
+  // If data is not nullptr, create data logic.
+  if (predData && dataReg) {
+    auto dataType = predData.getType().cast<FIRRTLType>();
+
+    // Create a mux that drives the date register.
+    auto dataRegMux = rewriter.create<MuxPrimOp>(
+        insertLoc, dataType, emptyOrReady, predData, dataReg);
+    rewriter.create<ConnectOp>(insertLoc, dataReg, dataRegMux);
+  }
+}
+
+bool HandshakeBuilder::buildSeqBufferLogic(int64_t numStage, ValueVector *input,
+                                           ValueVector *output, Value clock,
+                                           Value reset, bool isControl) {
+  if (input == nullptr || output == nullptr)
+    return false;
+
+  auto inputSubfields = *input;
+  auto inputValid = inputSubfields[0];
+  auto inputReady = inputSubfields[1];
+
+  auto outputSubfields = *output;
+  auto outputValid = outputSubfields[0];
+  auto outputReady = outputSubfields[1];
+
+  // Create useful value and type for valid/ready signal.
+  auto bitType = UIntType::get(rewriter.getContext(), 1);
+  auto falseConst = createConstantOp(bitType, APInt(1, 0), insertLoc, rewriter);
+
+  // Create useful value and type for data signal.
+  FIRRTLType dataType = nullptr;
+  Value zeroDataConst = nullptr;
+
+  // Temporary values for storing the valid, ready, and data signals in the
+  // procedure of constructing the multi-stages buffer.
+  Value currentValid = inputValid;
+  Value currentReady = inputReady;
+  Value currentData = nullptr;
+
+  // If is not a control buffer, fill in corresponding values and type.
+  if (!isControl) {
+    auto inputData = inputSubfields[2];
+
+    dataType = inputData.getType().cast<FIRRTLType>();
+    zeroDataConst =
+        createConstantOp(dataType, APInt(dataType.getBitWidthOrSentinel(), 0),
+                         insertLoc, rewriter);
+    currentData = inputData;
+  }
+
+  // Create multiple stages buffer logic.
+  for (unsigned i = 0; i < numStage; ++i) {
+    // Create wires for ready signal from the success buffer stage.
+    auto readyWire = rewriter.create<WireOp>(insertLoc, bitType,
+                                             "readyWire" + std::to_string(i));
+
+    // Create a register for valid signal.
+    auto validReg =
+        rewriter.create<RegResetOp>(insertLoc, bitType, clock, reset,
+                                    falseConst, "validReg" + std::to_string(i));
+
+    // Create registers for data signal.
+    Value dataReg = nullptr;
+    if (!isControl)
+      dataReg = rewriter.create<RegResetOp>(insertLoc, dataType, clock, reset,
+                                            zeroDataConst,
+                                            "dataReg" + std::to_string(i));
+
+    // Create wires for valid, ready and data signal coming from the control
+    // buffer stage.
+    auto ctrlValidWire = rewriter.create<WireOp>(
+        insertLoc, bitType, "ctrlValidWire" + std::to_string(i));
+
+    auto ctrlReadyWire = rewriter.create<WireOp>(
+        insertLoc, bitType, "ctrlReadyWire" + std::to_string(i));
+
+    Value ctrlDataWire;
+    if (!isControl)
+      ctrlDataWire = rewriter.create<WireOp>(
+          insertLoc, dataType, "ctrlDataWire" + std::to_string(i));
+
+    // Build the current stage of the buffer.
+    buildDataBufferLogic(currentValid, validReg, currentReady, readyWire,
+                         currentData, dataReg);
+
+    buildControlBufferLogic(validReg, readyWire, ctrlValidWire, ctrlReadyWire,
+                            clock, reset, dataReg, ctrlDataWire);
+
+    // Update the current valid, ready, and data.
+    currentValid = ctrlValidWire;
+    currentReady = ctrlReadyWire;
+    currentData = ctrlDataWire;
+  }
+
+  // Connect to the output ports.
+  rewriter.create<ConnectOp>(insertLoc, outputValid, currentValid);
+  rewriter.create<ConnectOp>(insertLoc, currentReady, outputReady);
+  if (!isControl) {
+    auto outputData = outputSubfields[2];
+    rewriter.create<ConnectOp>(insertLoc, outputData, currentData);
+  }
+
+  return true;
+}
+
+bool HandshakeBuilder::visitHandshake(BufferOp op) {
+  ValueVector input = portList[0];
+  ValueVector output = portList[1];
 
   Value clock = portList[2][0];
   Value reset = portList[3][0];
 
-  // FIXME: This looks unimplemented?
-  (void)outputReady;
-  (void)outputValid;
-  (void)reset;
-  (void)clock;
-  (void)inputValid;
-  (void)inputReady;
-
-  return true;
+  // For now, we only support sequential buffers.
+  if (op.sequential())
+    return buildSeqBufferLogic(op.slots(), &input, &output, clock, reset,
+                               op.control());
+  else
+    return false;
 }
 
 bool HandshakeBuilder::visitHandshake(MemoryOp op) {
@@ -1424,15 +1687,19 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     ports.push_back({portName, portKind});
   }
 
-  // Create the special type to represent this memory.
-  FIRRTLType memType = MemOp::getTypeForPortList(depth, dataType, ports);
+  llvm::SmallVector<Type> resultTypes;
+  llvm::SmallVector<Attribute> resultNames;
+  for (auto p : ports) {
+    resultTypes.push_back(
+        FlipType::get(MemOp::getTypeForPort(depth, dataType, p.second)));
+    resultNames.push_back(rewriter.getStringAttr(p.first));
+  }
 
-  // Create the actual mem op.
-  auto memOp = rewriter.create<MemOp>(insertLoc, memType, readLatency,
-                                      writeLatency, depth, ruw, name);
+  auto memOp = rewriter.create<MemOp>(
+      insertLoc, resultTypes, readLatency, writeLatency, depth, ruw,
+      rewriter.getArrayAttr(resultNames), name, rewriter.getArrayAttr({}));
 
   // Prepare to create each load and store port logic.
-  BundleType resultType = memOp.getType().cast<BundleType>();
   auto bitType = UIntType::get(rewriter.getContext(), 1);
   auto numPorts = portList.size();
   auto clock = portList[numPorts - 2][0];
@@ -1457,9 +1724,8 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 
     // Create a subfield op to access this port in the memory.
     auto fieldName = loadIdentifier(i);
-    auto bundleType = resultType.getElementType(fieldName).cast<BundleType>();
-    auto memBundle =
-        rewriter.create<SubfieldOp>(insertLoc, bundleType, memOp, fieldName);
+    auto memBundle = memOp.getPortNamed(fieldName);
+    auto bundleType = memBundle.getType().cast<BundleType>();
 
     // Get the clock out of the bundle and connect it.
     auto memClockType = bundleType.getElementType("clk");
@@ -1510,8 +1776,8 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   // Collect store arguments.
   for (size_t i = 0; i < numStores; ++i) {
     // Extract store ports from the port list.
-    auto storeData = portList[i];
-    auto storeAddr = portList[i + 1];
+    auto storeData = portList[2 * i];
+    auto storeAddr = portList[2 * i + 1];
     auto storeControl = portList[2 * numStores + 2 * numLoads + i];
 
     assert(storeAddr.size() == 3 && storeData.size() == 3 &&
@@ -1528,12 +1794,12 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     // Unpack store control.
     auto storeControlValid = storeControl[0];
 
-    // Create a subfield op to access this port in the memory.
     auto fieldName = storeIdentifier(i);
-    auto subfieldType = resultType.getElementType(fieldName).cast<FlipType>();
-    auto bundleType = subfieldType.getElementType().cast<BundleType>();
-    auto memBundle =
-        rewriter.create<SubfieldOp>(insertLoc, subfieldType, memOp, fieldName);
+    auto memBundle = memOp.getPortNamed(fieldName);
+    BundleType bundleType = memBundle.getType()
+                                .cast<FIRRTLType>()
+                                .getPassiveType()
+                                .cast<BundleType>();
 
     // Get the clock out of the bundle and connect it.
     auto memClockType = FlipType::get(bundleType.getElementType("clk"));
@@ -1573,17 +1839,16 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     // latency of 1.
     auto falseConst =
         createConstantOp(bitType, APInt(1, 0), insertLoc, rewriter);
-    auto bufferName = rewriter.getStringAttr("writeValidBuffer");
     auto writeValidBuffer = rewriter.create<RegResetOp>(
-        insertLoc, bitType, clock, reset, falseConst, bufferName);
+        insertLoc, bitType, clock, reset, falseConst, "writeValidBuffer");
 
     // Connect the write valid buffer to the store control valid.
     rewriter.create<ConnectOp>(insertLoc, storeControlValid, writeValidBuffer);
 
     // Create the logic for when both the buffered write valid signal and the
     // store complete ready signal are asserted.
-    Value storeCompleted = rewriter.create<WireOp>(
-        insertLoc, bitType, rewriter.getStringAttr("storeCompleted"));
+    Value storeCompleted =
+        rewriter.create<WireOp>(insertLoc, bitType, "storeCompleted");
     ValueVector storeCompletedVector({Value(), storeCompleted});
     buildAllReadyLogic({&storeCompletedVector}, &storeControl,
                        writeValidBuffer);
@@ -1603,8 +1868,8 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     // Create a wire for when both the store address and data are valid.
     SmallVector<Value, 2> storeValids;
     extractValues({&storeAddr, &storeData}, 0, storeValids);
-    Value writeValid = rewriter.create<WireOp>(
-        insertLoc, bitType, rewriter.getStringAttr("writeValid"));
+    Value writeValid =
+        rewriter.create<WireOp>(insertLoc, bitType, "writeValid");
     buildReductionTree<AndPrimOp>(storeValids, writeValid);
 
     // Create a mux that drives the buffer input. If the emptyOrComplete signal
@@ -1638,6 +1903,110 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   return true;
 }
 
+bool HandshakeBuilder::visitHandshake(handshake::StoreOp op) {
+  // Input data accepted from the predecessor.
+  ValueVector inputData = portList[0];
+  Value inputDataData = inputData[2];
+
+  // Input address accepted from the predecessor.
+  ValueVector inputAddr = portList[1];
+  Value inputAddrData = inputAddr[2];
+
+  // Control channel.
+  ValueVector control = portList[2];
+
+  // Data sending to the MemoryOp.
+  ValueVector outputData = portList[3];
+  Value outputDataValid = outputData[0];
+  Value outputDataReady = outputData[1];
+  Value outputDataData = outputData[2];
+
+  // Address sending to the MemoryOp.
+  ValueVector outputAddr = portList[4];
+  Value outputAddrValid = outputAddr[0];
+  Value outputAddrReady = outputAddr[1];
+  Value outputAddrData = outputAddr[2];
+
+  auto bitType = UIntType::get(rewriter.getContext(), 1);
+
+  // Create a wire that will be asserted when all inputs are valid.
+  auto inputsValid = rewriter.create<WireOp>(insertLoc, bitType, "inputsValid");
+
+  // Create a gate that will be asserted when all outputs are ready.
+  auto outputsReady = rewriter.create<AndPrimOp>(
+      insertLoc, bitType, outputDataReady, outputAddrReady);
+
+  // Build the standard join logic from the inputs to the inputsValid and
+  // outputsReady signals.
+  ValueVector joinLogicOutput({inputsValid, outputsReady});
+  buildJoinLogic({&inputData, &inputAddr, &control}, &joinLogicOutput);
+
+  // Output address and data signals are connected directly.
+  rewriter.create<ConnectOp>(insertLoc, outputAddrData, inputAddrData);
+  rewriter.create<ConnectOp>(insertLoc, outputDataData, inputDataData);
+
+  // Output valid signals are connected from the inputsValid wire.
+  rewriter.create<ConnectOp>(insertLoc, outputDataValid, inputsValid);
+  rewriter.create<ConnectOp>(insertLoc, outputAddrValid, inputsValid);
+
+  return true;
+}
+
+bool HandshakeBuilder::visitHandshake(handshake::LoadOp op) {
+  // Input address accepted from the predecessor.
+  ValueVector inputAddr = portList[0];
+  Value inputAddrValid = inputAddr[0];
+  Value inputAddrReady = inputAddr[1];
+  Value inputAddrData = inputAddr[2];
+
+  // Data accepted from the MemoryOp.
+  ValueVector memoryData = portList[1];
+  Value memoryDataValid = memoryData[0];
+  Value memoryDataReady = memoryData[1];
+  Value memoryDataData = memoryData[2];
+
+  // Control channel.
+  ValueVector control = portList[2];
+  Value controlValid = control[0];
+  Value controlReady = control[1];
+
+  // Output data sending to the successor.
+  ValueVector outputData = portList[3];
+  Value outputDataValid = outputData[0];
+  Value outputDataReady = outputData[1];
+  Value outputDataData = outputData[2];
+
+  // Address sending to the MemoryOp.
+  ValueVector memoryAddr = portList[4];
+  Value memoryAddrValid = memoryAddr[0];
+  Value memoryAddrReady = memoryAddr[1];
+  Value memoryAddrData = memoryAddr[2];
+
+  auto bitType = UIntType::get(rewriter.getContext(), 1);
+
+  // Address and data are connected accordingly.
+  rewriter.create<ConnectOp>(insertLoc, memoryAddrData, inputAddrData);
+  rewriter.create<ConnectOp>(insertLoc, outputDataData, memoryDataData);
+
+  // The valid/ready logic between inputAddr, control, and memoryAddr is similar
+  // to a JoinOp logic.
+  auto addrValid = rewriter.create<AndPrimOp>(insertLoc, bitType,
+                                              inputAddrValid, controlValid);
+  rewriter.create<ConnectOp>(insertLoc, memoryAddrValid, addrValid);
+
+  auto addrCompleted = rewriter.create<AndPrimOp>(insertLoc, bitType, addrValid,
+                                                  memoryAddrReady);
+  rewriter.create<ConnectOp>(insertLoc, inputAddrReady, addrCompleted);
+  rewriter.create<ConnectOp>(insertLoc, controlReady, addrCompleted);
+
+  // The valid/ready logic between memoryData and outputData is a direct
+  // connection.
+  rewriter.create<ConnectOp>(insertLoc, outputDataValid, memoryDataValid);
+  rewriter.create<ConnectOp>(insertLoc, memoryDataReady, outputDataReady);
+
+  return true;
+}
+
 //===----------------------------------------------------------------------===//
 // Old Operation Conversion Functions
 //===----------------------------------------------------------------------===//
@@ -1648,35 +2017,28 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
                          FModuleOp topModuleOp, unsigned clockDomain,
                          ConversionPatternRewriter &rewriter) {
   rewriter.setInsertionPointAfter(oldOp);
-  using BundleElement = BundleType::BundleElement;
-  llvm::SmallVector<BundleElement, 8> elements;
-  MLIRContext *context = subModuleOp.getContext();
+
+  llvm::SmallVector<Type> resultTypes;
+  llvm::SmallVector<Attribute> resultNames;
 
   // Bundle all ports of the instance into a new flattened bundle type.
   SmallVector<ModulePortInfo, 8> portInfo;
   getModulePortInfo(subModuleOp, portInfo);
   for (auto &port : portInfo) {
-    auto argId = rewriter.getIdentifier(port.getName());
-
     // All ports of the instance operation are flipped.
-    auto argType = FlipType::get(port.type);
-    elements.push_back(BundleElement(argId, argType));
+    resultTypes.push_back(FlipType::get(port.type));
+    resultNames.push_back(rewriter.getStringAttr(port.getName()));
   }
 
   // Create a instance operation.
-  auto instType = BundleType::get(elements, context);
   auto instanceOp = rewriter.create<firrtl::InstanceOp>(
-      oldOp->getLoc(), instType, subModuleOp.getName(),
-      rewriter.getStringAttr(""));
+      oldOp->getLoc(), resultTypes, subModuleOp.getName(),
+      rewriter.getArrayAttr(resultNames));
 
   // Connect the new created instance with its predecessors and successors in
   // the top-module.
   unsigned portIndex = 0;
-  for (auto &element : instType.cast<BundleType>().getElements()) {
-    auto subfieldOp = rewriter.create<SubfieldOp>(
-        oldOp->getLoc(), element.type, instanceOp,
-        rewriter.getStringAttr(element.name.strref()));
-
+  for (auto result : instanceOp.getResults()) {
     unsigned numIns = oldOp->getNumOperands();
     unsigned numArgs = numIns + oldOp->getNumResults();
 
@@ -1687,16 +2049,16 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
                                    });
     if (portIndex < numIns) {
       // Connect input ports.
-      rewriter.create<ConnectOp>(oldOp->getLoc(), subfieldOp,
+      rewriter.create<ConnectOp>(oldOp->getLoc(), result,
                                  oldOp->getOperand(portIndex));
     } else if (portIndex < numArgs) {
       // Connect output ports.
-      Value result = oldOp->getResult(portIndex - numIns);
-      result.replaceAllUsesWith(subfieldOp);
+      Value newResult = oldOp->getResult(portIndex - numIns);
+      newResult.replaceAllUsesWith(result);
     } else {
       // Connect clock or reset signal.
       auto signal = *(firstClock + 2 * clockDomain + portIndex - numArgs);
-      rewriter.create<ConnectOp>(oldOp->getLoc(), subfieldOp, signal);
+      rewriter.create<ConnectOp>(oldOp->getLoc(), result, signal);
     }
     ++portIndex;
   }
@@ -1770,7 +2132,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
       // be instantiated in the top-module.
       else if (op.getDialect()->getNamespace() != "firrtl") {
         FModuleOp subModuleOp = checkSubModuleOp(topModuleOp, &op);
-        bool hasClock = op.hasTrait<OpTrait::HasClock>();
+        bool hasClock = op.hasTrait<mlir::OpTrait::HasClock>();
 
         // Check if the sub-module already exists.
         if (!subModuleOp) {
@@ -1798,14 +2160,15 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
     }
     rewriter.eraseOp(funcOp);
 
+    legalizeFModule(topModuleOp);
+
     return success();
   }
 };
 
 namespace {
 class HandshakeToFIRRTLPass
-    : public mlir::PassWrapper<HandshakeToFIRRTLPass,
-                               OperationPass<handshake::FuncOp>> {
+    : public HandshakeToFIRRTLBase<HandshakeToFIRRTLPass> {
 public:
   void runOnOperation() override {
     auto op = getOperation();
@@ -1814,7 +2177,7 @@ public:
     target.addLegalDialect<FIRRTLDialect>();
     target.addIllegalDialect<handshake::HandshakeOpsDialect>();
 
-    OwningRewritePatternList patterns;
+    RewritePatternSet patterns(op.getContext());
     patterns.insert<HandshakeFuncOpLowering>(op.getContext());
 
     if (failed(applyPartialConversion(op, target, std::move(patterns))))
@@ -1823,7 +2186,6 @@ public:
 };
 } // end anonymous namespace
 
-void handshake::registerHandshakeToFIRRTLPasses() {
-  PassRegistration<HandshakeToFIRRTLPass>("lower-handshake-to-firrtl",
-                                          "Lowering to FIRRTL Dialect");
+std::unique_ptr<mlir::Pass> circt::createHandshakeToFIRRTLPass() {
+  return std::make_unique<HandshakeToFIRRTLPass>();
 }

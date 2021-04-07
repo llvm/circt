@@ -20,7 +20,8 @@
 #include "mlir/Parser.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
-#include "mlir/Target/LLVMIR.h"
+#include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
+#include "mlir/Target/LLVMIR/Export.h"
 #include "mlir/Transforms/Passes.h"
 
 #include "llvm/Support/InitLLVM.h"
@@ -101,6 +102,13 @@ static cl::opt<TraceFormat> traceMode(
             "instance and signals not having the default name '(sig)?[0-9]*'"),
         clEnumValN(noTrace, "no-trace", "Don't dump a signal trace")));
 
+static cl::list<std::string>
+    sharedLibs("shared-libs",
+               cl::desc("Libraries to link dynamically. Specify absolute path "
+                        "to llhd-signals-runtime-wrappers for GCC or Windows. "
+                        "Optional otherwise."),
+               cl::ZeroOrMore, cl::MiscFlags::CommaSeparated);
+
 static int dumpLLVM(ModuleOp module, MLIRContext &context) {
   if (dumpLLVMDialect) {
     module.dump();
@@ -131,14 +139,12 @@ static int dumpLLVM(ModuleOp module, MLIRContext &context) {
 static LogicalResult applyMLIRPasses(ModuleOp module) {
   PassManager pm(module.getContext());
 
-  pm.addPass(llhd::createConvertLLHDToLLVMPass());
+  pm.addPass(createConvertLLHDToLLVMPass());
 
   return pm.run(module);
 }
 
 int main(int argc, char **argv) {
-  llhd::initLLHDToLLVMPass();
-
   InitLLVM y(argc, argv);
 
   cl::ParseCommandLineOptions(argc, argv, "LLHD simulator\n");
@@ -165,6 +171,7 @@ int main(int argc, char **argv) {
   // Load the dialects
   context
       .loadDialect<llhd::LLHDDialect, LLVM::LLVMDialect, StandardOpsDialect>();
+  mlir::registerLLVMDialectTranslation(context);
 
   OwningModuleRef module(parseSourceFile(mgr, &context));
 
@@ -174,10 +181,13 @@ int main(int argc, char **argv) {
     return 0;
   }
 
+  SmallVector<StringRef, 1> sharedLibPaths(sharedLibs.begin(),
+                                           sharedLibs.end());
+
   llhd::sim::Engine engine(
       output->os(), *module, &applyMLIRPasses,
-      makeOptimizingTransformer(optimizationLevel, 0, nullptr), root,
-      traceMode);
+      makeOptimizingTransformer(optimizationLevel, 0, nullptr), root, traceMode,
+      sharedLibPaths);
 
   if (dumpLLVMDialect || dumpLLVMIR) {
     return dumpLLVM(engine.getModule(), context);

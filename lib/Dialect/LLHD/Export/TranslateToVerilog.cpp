@@ -71,7 +71,7 @@ LogicalResult VerilogPrinter::printModule(ModuleOp module) {
       out << "(";
       for (unsigned int i = 0, e = entryBlock.getNumArguments(); i < e; ++i) {
         out << (i > 0 ? ", " : "") << (i < entity.ins() ? "input " : "output ");
-        printType(entryBlock.getArgument(i).getType());
+        (void)printType(entryBlock.getArgument(i).getType());
         out << " " << getVariableName(entryBlock.getArgument(i));
       }
       out << ")";
@@ -421,7 +421,7 @@ LogicalResult circt::llhd::exportVerilog(ModuleOp module, raw_ostream &os) {
 
 void circt::llhd::registerToVerilogTranslation() {
   TranslateFromMLIRRegistration registration(
-      "llhd-to-verilog", exportVerilog, [](DialectRegistry &registry) {
+      "export-llhd-verilog", exportVerilog, [](DialectRegistry &registry) {
         registry.insert<mlir::StandardOpsDialect, llhd::LLHDDialect>();
       });
 }

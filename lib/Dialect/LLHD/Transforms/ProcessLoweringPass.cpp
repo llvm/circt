@@ -16,7 +16,6 @@
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Visitors.h"
 
-using namespace mlir;
 using namespace circt;
 
 namespace {
@@ -45,7 +44,7 @@ void ProcessLoweringPass::runOnOperation() {
             "Process-lowering: The second block (containing the "
             "llhd.wait) is not allowed to have arguments.");
       }
-      if (!isa<BranchOp>(first.getTerminator())) {
+      if (!isa<mlir::BranchOp>(first.getTerminator())) {
         return op.emitOpError(
             "Process-lowering: The first block has to be terminated "
             "by a BranchOp from the standard dialect.");

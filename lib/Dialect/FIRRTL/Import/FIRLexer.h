@@ -87,6 +87,8 @@ private:
   StringRef spelling;
 };
 
+class FIRLexerCursor;
+
 /// This implements a lexer for .fir files.
 class FIRLexer {
 public:
@@ -102,6 +104,9 @@ public:
   /// is preceded by another token on the same line.
   Optional<unsigned> getIndentation(const FIRToken &tok) const;
 
+  /// Get an opaque pointer into the lexer state that can be restored later.
+  FIRLexerCursor getCursor() const;
+
 private:
   // Helpers.
   FIRToken formToken(FIRToken::Kind kind, const char *tokStart) {
@@ -112,6 +117,7 @@ private:
 
   // Lexer implementation methods.
   FIRToken lexFileInfo(const char *tokStart);
+  FIRToken lexInlineAnnotation(const char *tokStart);
   FIRToken lexIdentifierOrKeyword(const char *tokStart);
   FIRToken lexNumber(const char *tokStart);
   FIRToken lexFloatingPoint(const char *tokStart);
@@ -126,7 +132,27 @@ private:
 
   FIRLexer(const FIRLexer &) = delete;
   void operator=(const FIRLexer &) = delete;
+  friend class FIRLexerCursor;
 };
+
+/// This is the state captured for a lexer cursor.
+class FIRLexerCursor {
+public:
+  FIRLexerCursor(const FIRLexer &lexer) : state(lexer.curPtr) {}
+
+  void restore(FIRLexer &lexer) {
+    assert(state && "can't restore state multiple times");
+    lexer.curPtr = state;
+    state = nullptr;
+  }
+
+private:
+  const char *state;
+};
+
+inline FIRLexerCursor FIRLexer::getCursor() const {
+  return FIRLexerCursor(*this);
+}
 
 } // namespace firrtl
 } // namespace circt

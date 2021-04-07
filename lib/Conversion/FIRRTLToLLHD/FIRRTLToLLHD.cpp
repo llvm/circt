@@ -12,6 +12,7 @@
 
 #include "circt/Conversion/FIRRTLToLLHD/FIRRTLToLLHD.h"
 
+#include "../PassDetail.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
@@ -22,14 +23,6 @@
 
 #define DEBUG_TYPE "firrtl-to-llhd"
 
-namespace circt {
-namespace llhd {
-#define GEN_PASS_CLASSES
-#include "circt/Conversion/FIRRTLToLLHD/Passes.h.inc"
-} // namespace llhd
-} // namespace circt
-
-using namespace mlir;
 using namespace circt;
 using namespace circt::llhd;
 
@@ -65,7 +58,7 @@ private:
 
 /// Create a FIRRTL to LLHD conversion pass.
 std::unique_ptr<OperationPass<ModuleOp>>
-circt::llhd::createConvertFIRRTLToLLHDPass() {
+circt::createConvertFIRRTLToLLHDPass() {
   return std::make_unique<FIRRTLToLLHDPass>();
 }
 
@@ -112,8 +105,7 @@ void FIRRTLToLLHDPass::convertModule(firrtl::FModuleOp &module) {
   // Map the potentially complex FIRRTL module ports to LLHD entity inputs and
   // outputs. This will become fairly involved, since the nested nature of flips
   // and bundle types requires refactoring of the ports.
-  SmallVector<firrtl::ModulePortInfo, 4> modulePorts;
-  module.getPortInfo(modulePorts);
+  SmallVector<firrtl::ModulePortInfo> modulePorts = module.getPorts();
 
   SmallVector<Type, 4> ins;
   SmallVector<Type, 4> outs;
@@ -266,11 +258,3 @@ LogicalResult FIRRTLToLLHDPass::visitStmt(firrtl::ConnectOp op) {
   builder->create<DrvOp>(op.getLoc(), dst, src, delta, constOne);
   return success();
 }
-
-/// Register the FIRRTL to LLHD convesion pass.
-namespace {
-#define GEN_PASS_REGISTRATION
-#include "circt/Conversion/FIRRTLToLLHD/Passes.h.inc"
-} // namespace
-
-void circt::llhd::registerFIRRTLToLLHDPasses() { registerPasses(); }

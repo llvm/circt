@@ -24,18 +24,41 @@
 
 using namespace circt::esi::cosim;
 
+/// If non-null, log to this file. Protected by 'serverMutex`.
+static FILE *logFile;
 static RpcServer *server = nullptr;
 static std::mutex serverMutex;
 
 // ---- Helper functions ----
 
-/// Get the TCP port on which to listen. Defaults to 0xECD (ESI Cosim DPI), 3789
-/// in decimal.
+/// Emit the contents of 'msg' to the log file in hex.
+static void log(int epId, bool toClient, Endpoint::BlobPtr msg) {
+  std::lock_guard<std::mutex> g(serverMutex);
+  if (!logFile)
+    return;
+
+  fprintf(logFile, "[ep: %4x to: %4s]", epId, toClient ? "host" : "sim");
+  size_t msgSize = msg->size();
+  for (size_t i = 0; i < msgSize; ++i) {
+    auto b = (*msg)[i];
+    // Separate 32-bit words.
+    if (i % 4 == 0 && i > 0)
+      fprintf(logFile, " ");
+    // Separate 64-bit words (capnp word size)
+    if (i % 8 == 0 && i > 0)
+      fprintf(logFile, "  ");
+    fprintf(logFile, " %02x", b);
+  }
+  fprintf(logFile, "\n");
+}
+
+/// Get the TCP port on which to listen. If the port isn't specified via an
+/// environment variable, return 0 to allow automatic selection.
 static int findPort() {
   const char *portEnv = getenv("COSIM_PORT");
   if (portEnv == nullptr) {
-    printf("[COSIM] RPC server port not found. Defaulting to 3789.\n");
-    return 0xECD;
+    printf("[COSIM] RPC server port not found. Letting CapnpRPC select one\n");
+    return 0;
   }
   printf("[COSIM] Opening RPC server on port %s\n", portEnv);
   return std::strtoull(portEnv, nullptr, 10);
@@ -65,8 +88,8 @@ static int validateSvOpenArray(const svOpenArrayHandle data,
   int elemSize = numElems == 0 ? 0 : (totalBytes / numElems);
   if (numElems * expectedElemSize != totalBytes) {
     printf("DPI-C: ERROR: passed array argument that doesn't have expected "
-           "element-size: expected=%d actual=%d\n",
-           expectedElemSize, elemSize);
+           "element-size: expected=%d actual=%d numElems=%d totalBytes=%d\n",
+           expectedElemSize, elemSize, numElems, totalBytes);
     return -4;
   }
   return 0;
@@ -117,6 +140,8 @@ DPI int sv2cCosimserverEpTryGet(unsigned int endpointId,
   // Do the validation only if there's a message available. Since the
   // simulator is going to poll up to every tick and there's not going to be
   // a message most of the time, this is important for performance.
+
+  log(endpointId, false, msg);
 
   if (validateSvOpenArray(data, sizeof(int8_t)) != 0) {
     printf("ERROR: DPI-func=%s line=%d event=invalid-sv-array\n", __func__,
@@ -190,6 +215,7 @@ DPI int sv2cCosimserverEpTryPut(unsigned int endpointId,
     fprintf(stderr, "Endpoint not found in registry!\n");
     return -4;
   }
+  log(endpointId, true, blob);
   ep->pushMessageToClient(blob);
   return 0;
 }
@@ -202,6 +228,9 @@ DPI void sv2cCosimserverFinish() {
   if (server != nullptr) {
     server->stop();
     server = nullptr;
+
+    fclose(logFile);
+    logFile = nullptr;
   }
 }
 
@@ -210,6 +239,14 @@ DPI void sv2cCosimserverFinish() {
 DPI int sv2cCosimserverInit() {
   std::lock_guard<std::mutex> g(serverMutex);
   if (server == nullptr) {
+    // Open log file if requested.
+    const char *logFN = getenv("COSIM_DEBUG_FILE");
+    if (logFN != nullptr) {
+      printf("[cosim] Opening debug log: %s\n", logFN);
+      logFile = fopen(logFN, "w");
+    }
+
+    // Find the port and run.
     printf("[cosim] Starting RPC server.\n");
     server = new RpcServer();
     server->run(findPort());

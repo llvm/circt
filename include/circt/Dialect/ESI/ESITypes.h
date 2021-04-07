@@ -15,6 +15,8 @@
 #ifndef CIRCT_DIALECT_ESI_ESITYPES_H
 #define CIRCT_DIALECT_ESI_ESITYPES_H
 
+#include "circt/Dialect/RTL/RTLTypes.h"
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/Operation.h"
 

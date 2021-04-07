@@ -13,23 +13,30 @@
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 
 #include "FIRLexer.h"
+#include "circt/Dialect/FIRRTL/FIRAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Verifier.h"
 #include "mlir/Translation.h"
+#include "llvm/ADT/PointerEmbeddedInt.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/Support/JSON.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace circt;
 using namespace firrtl;
-using namespace mlir;
+
 using llvm::SMLoc;
 using llvm::SourceMgr;
+
+namespace json = llvm::json;
 
 /// Return true if this is a useless temporary name produced by FIRRTL.  We
 /// drop these as they don't convey semantic meaning.
@@ -66,9 +73,10 @@ namespace {
 /// so that individual subparsers can refer to the same state.
 struct GlobalFIRParserState {
   GlobalFIRParserState(const llvm::SourceMgr &sourceMgr, MLIRContext *context,
-                       FIRParserOptions options)
+                       FIRParserOptions options,
+                       const llvm::MemoryBuffer *annotationsBuf)
       : context(context), options(options), lex(sourceMgr, context),
-        curToken(lex.lexToken()) {}
+        curToken(lex.lexToken()), annotationsBuf(annotationsBuf) {}
 
   /// The context we're parsing into.
   MLIRContext *const context;
@@ -76,11 +84,43 @@ struct GlobalFIRParserState {
   // Options that control the behavior of the parser.
   const FIRParserOptions options;
 
+  /// A mapping of targets to annotations
+  llvm::StringMap<ArrayAttr> annotationMap;
+
   /// The lexer for the source file we're parsing.
   FIRLexer lex;
 
   /// This is the next token that hasn't been consumed yet.
   FIRToken curToken;
+
+  /// A pointer to a buffer of annotations (the contents of a JSON
+  /// file).  This is null if no annotations were provided.
+  const llvm::MemoryBuffer *annotationsBuf;
+
+  /// A mutable reference to the current CircuitTarget.
+  StringRef circuitTarget;
+
+  /// A mutable reference to the current ModuleTarget.
+  StringRef moduleTarget;
+
+  class BacktraceState {
+  public:
+    explicit BacktraceState(GlobalFIRParserState &state)
+        : state(state), curToken(state.curToken),
+          cursor(state.lex.getCursor()) {}
+
+    void backtrack() {
+      state.curToken = curToken;
+      cursor.restore(state.lex);
+    }
+
+  private:
+    GlobalFIRParserState &state;
+    FIRToken curToken;
+    FIRLexerCursor cursor;
+  };
+
+  BacktraceState getBacktrackState() { return BacktraceState(*this); }
 
 private:
   GlobalFIRParserState(const GlobalFIRParserState &) = delete;
@@ -141,6 +181,14 @@ struct FIRParser {
                                 ArrayRef<Operation *> subOps = {});
 
   //===--------------------------------------------------------------------===//
+  // Annotation Parsing
+  //===--------------------------------------------------------------------===//
+
+  /// Parse a non-standard inline Annotation JSON blob if present.  This uses
+  /// the info-like encoding of %[<JSON Blob>].
+  ParseResult parseOptionalAnnotations(SMLoc &loc, StringRef &result);
+
+  //===--------------------------------------------------------------------===//
   // Token Parsing
   //===--------------------------------------------------------------------===//
 
@@ -168,11 +216,6 @@ struct FIRParser {
     consumeToken();
   }
 
-  /// Capture the current token's location into the specified value.  This
-  /// always succeeds.
-  ParseResult parseGetLocation(SMLoc &loc);
-  ParseResult parseGetLocation(Location &loc);
-
   /// Capture the current token's spelling into the specified value.  This
   /// always succeeds.
   ParseResult parseGetSpelling(StringRef &spelling) {
@@ -194,10 +237,10 @@ struct FIRParser {
 
   /// Parse 'intLit' into the specified value.
   ParseResult parseIntLit(APInt &result, const Twine &message);
-  ParseResult parseIntLit(int32_t &result, const Twine &message);
+  ParseResult parseIntLit(int64_t &result, const Twine &message);
 
   // Parse ('<' intLit '>')? setting result to -1 if not present.
-  ParseResult parseOptionalWidth(int32_t &result);
+  ParseResult parseOptionalWidth(int64_t &result);
 
   // Parse the 'id' grammar, which is an identifier or an allowed keyword.
   ParseResult parseId(StringRef &result, const Twine &message);
@@ -206,6 +249,22 @@ struct FIRParser {
   ParseResult parseType(FIRRTLType &result, const Twine &message);
 
   ParseResult parseOptionalRUW(RUWAttr &result);
+
+  //===--------------------------------------------------------------------===//
+  // Annotation Utilities
+  //===--------------------------------------------------------------------===//
+
+  /// Add annotations from a string to the internal annotation map.  Report
+  /// errors using a provided source manager location and with a provided error
+  /// message
+  ParseResult importAnnotations(SMLoc loc, StringRef annotationsStr);
+
+  /// Add annotations from the source manager, if an annotation file was added.
+  ParseResult importAnnotationFile(SMLoc loc);
+
+  /// Populate a vector of annotations for a given Target.  If the annotations
+  /// parameter is non-empty, then this will be appended to.
+  void getAnnotations(Twine target, ArrayAttr &annotations);
 
 private:
   FIRParser(const FIRParser &) = delete;
@@ -235,18 +294,6 @@ InFlightDiagnostic FIRParser::emitError(SMLoc loc, const Twine &message) {
 //===----------------------------------------------------------------------===//
 // Token Parsing
 //===----------------------------------------------------------------------===//
-
-/// Capture the current token's location into the specified value.  This
-/// always succeeds.
-ParseResult FIRParser::parseGetLocation(SMLoc &loc) {
-  loc = getToken().getLoc();
-  return success();
-}
-
-ParseResult FIRParser::parseGetLocation(Location &loc) {
-  loc = translateLocation(getToken().getLoc());
-  return success();
-}
 
 /// Consume the specified token if present and return success.  On failure,
 /// output a diagnostic and return failure.
@@ -391,8 +438,8 @@ ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result,
 
     // On success, remember what we already parsed (Bar.Scala / 309:14), and
     // move on to the next chunk.
-    auto loc = FileLineColLoc::get(filename.drop_front(spaceLoc + 1), lineNo,
-                                   columnNo, getContext());
+    auto loc = FileLineColLoc::get(
+        getContext(), filename.drop_front(spaceLoc + 1), lineNo, columnNo);
     extraLocs.push_back(loc);
     filename = nextFilename;
     lineNo = nextLineNo;
@@ -401,11 +448,11 @@ ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result,
   }
 
   Location resultLoc =
-      FileLineColLoc::get(filename, lineNo, columnNo, getContext());
+      FileLineColLoc::get(getContext(), filename, lineNo, columnNo);
   if (!extraLocs.empty()) {
     extraLocs.push_back(resultLoc);
     std::reverse(extraLocs.begin(), extraLocs.end());
-    resultLoc = FusedLoc::get(extraLocs, getContext());
+    resultLoc = FusedLoc::get(getContext(), extraLocs);
   }
   result.setInfoLocation(resultLoc);
 
@@ -413,6 +460,25 @@ ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result,
   for (auto *op : subOps) {
     op->setLoc(resultLoc);
   }
+
+  return success();
+}
+
+//===--------------------------------------------------------------------===//
+// Annotation Handling
+//===--------------------------------------------------------------------===//
+
+/// Parse a non-standard inline Annotation JSON blob if present.  This uses
+/// the info-like encoding of %[<JSON Blob>].
+ParseResult FIRParser::parseOptionalAnnotations(SMLoc &loc, StringRef &result) {
+
+  if (getToken().isNot(FIRToken::inlineannotation))
+    return success();
+
+  loc = getToken().getLoc();
+
+  result = getTokenSpelling().drop_front(2).drop_back(1);
+  consumeToken(FIRToken::inlineannotation);
 
   return success();
 }
@@ -516,13 +582,13 @@ ParseResult FIRParser::parseIntLit(APInt &result, const Twine &message) {
   }
 }
 
-ParseResult FIRParser::parseIntLit(int32_t &result, const Twine &message) {
+ParseResult FIRParser::parseIntLit(int64_t &result, const Twine &message) {
   APInt value;
   auto loc = getToken().getLoc();
   if (parseIntLit(value, message))
     return failure();
 
-  result = (int32_t)value.getLimitedValue();
+  result = (int64_t)value.getLimitedValue();
   if (result != value)
     return emitError(loc, "value is too big to handle"), failure();
   return success();
@@ -531,7 +597,7 @@ ParseResult FIRParser::parseIntLit(int32_t &result, const Twine &message) {
 // optional-width ::= ('<' intLit '>')?
 //
 // This returns with result equal to -1 if not present.
-ParseResult FIRParser::parseOptionalWidth(int32_t &result) {
+ParseResult FIRParser::parseOptionalWidth(int64_t &result) {
   if (!consumeIf(FIRToken::less))
     return result = -1, success();
 
@@ -575,7 +641,7 @@ ParseResult FIRParser::parseId(StringAttr &result, const Twine &message) {
   if (parseId(name, message))
     return failure();
 
-  result = StringAttr::get(name, getContext());
+  result = StringAttr::get(getContext(), name);
   return success();
 }
 
@@ -637,7 +703,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     consumeToken();
 
     // Parse a width specifier if present.
-    int32_t width;
+    int64_t width;
     if (parseOptionalWidth(width))
       return failure();
 
@@ -669,7 +735,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
           if (isFlipped)
             type = FlipType::get(type);
 
-          elements.push_back({Identifier::get(fieldName, getContext()), type});
+          elements.push_back({StringAttr::get(getContext(), fieldName), type});
           return success();
         }))
       return failure();
@@ -681,7 +747,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
   // Handle postfix vector sizes.
   while (consumeIf(FIRToken::l_square)) {
     auto sizeLoc = getToken().getLoc();
-    int32_t size;
+    int64_t size;
     if (parseIntLit(size, "expected width") ||
         parseToken(FIRToken::r_square, "expected ]"))
       return failure();
@@ -718,6 +784,90 @@ ParseResult FIRParser::parseOptionalRUW(RUWAttr &result) {
   return success();
 }
 
+ParseResult FIRParser::importAnnotations(SMLoc loc, StringRef annotationsStr) {
+
+  auto annotations = json::parse(annotationsStr);
+  if (auto err = annotations.takeError()) {
+    handleAllErrors(std::move(err), [&](const json::ParseError &a) {
+      auto diag = emitError(loc, "Failed to parse JSON Annotations");
+      diag.attachNote() << a.message();
+    });
+    return failure();
+  }
+
+  json::Path::Root root;
+  llvm::StringMap<ArrayAttr> annotationMap;
+  if (!fromJSON(annotations.get(), annotationMap, root, getContext())) {
+    auto diag = emitError(loc, "Invalid/unsupported annotation format");
+    std::string jsonErrorMessage =
+        "See inline comments for problem area in JSON:\n";
+    llvm::raw_string_ostream s(jsonErrorMessage);
+    root.printErrorContext(annotations.get(), s);
+    diag.attachNote() << jsonErrorMessage;
+    return failure();
+  }
+
+  for (auto a : annotationMap.keys()) {
+    auto &entry = state.annotationMap[a];
+    if (!entry) {
+      entry = annotationMap[a];
+      continue;
+    }
+
+    SmallVector<Attribute> annotationVec;
+    auto arrayRef = state.annotationMap[a].getValue();
+    annotationVec.append(arrayRef.begin(), arrayRef.end());
+    arrayRef = annotationMap[a].getValue();
+    annotationVec.append(arrayRef.begin(), arrayRef.end());
+    state.annotationMap[a] = ArrayAttr::get(getContext(), annotationVec);
+  }
+
+  return success();
+}
+
+ParseResult FIRParser::importAnnotationFile(SMLoc loc) {
+
+  if (!state.annotationsBuf)
+    return success();
+
+  ParseResult result = success();
+  result = importAnnotations(loc, (state.annotationsBuf)->getBuffer());
+
+  if (!result)
+    state.annotationsBuf = nullptr;
+
+  return result;
+}
+
+void FIRParser::getAnnotations(Twine target, ArrayAttr &annotations) {
+  // Early exit if no annotations exist.  This avoids the cost of
+  // constructing strings representing targets if no annotation can
+  // possibly exist.
+  if (state.annotationMap.begin() == state.annotationMap.end())
+    return;
+
+  // Input annotations is empty.  Just do the lookup and return.
+  if (!annotations) {
+    annotations = state.annotationMap.lookup(target.str());
+    return;
+  }
+
+  // Input annotations is non-empty.  Exit quickly if the target doesn't exist.
+  // Otherwise, construct a new ArrayAttr that includes existing and new
+  // annotations.
+  auto newAnnotations = state.annotationMap.lookup(target.str());
+  if (!newAnnotations)
+    return;
+
+  SmallVector<Attribute> annotationVec;
+  for (auto a : annotations)
+    annotationVec.push_back(a);
+  for (auto a : newAnnotations)
+    annotationVec.push_back(a);
+
+  annotations = ArrayAttr::get(state.context, annotationVec);
+}
+
 //===----------------------------------------------------------------------===//
 // FIRScopedParser
 //===----------------------------------------------------------------------===//
@@ -727,42 +877,74 @@ namespace {
 /// manipulation helpers.
 class FIRScopedParser : public FIRParser {
 public:
+  // Entries in a symbol table are either an mlir::Value for the operation that
+  // defines the value or an unbundled ID tracking the index in the
+  // UnbundledValues list.
+  using UnbundledID = llvm::PointerEmbeddedInt<unsigned, 31>;
+  using SymbolValueEntry = llvm::PointerUnion<Value, UnbundledID>;
+
   using SymbolTable =
-      llvm::ScopedHashTable<Identifier, std::pair<SMLoc, Value>,
+      llvm::ScopedHashTable<Identifier, std::pair<SMLoc, SymbolValueEntry>,
                             DenseMapInfo<Identifier>, llvm::BumpPtrAllocator>;
+
+  using UnbundledValueEntry = SmallVector<std::pair<Attribute, Value>>;
+  using UnbundledValuesList = std::vector<UnbundledValueEntry>;
+
   using MemoryScopeTable =
       llvm::ScopedHashTable<Identifier,
                             std::pair<SymbolTable::ScopeTy *, Operation *>,
                             DenseMapInfo<Identifier>, llvm::BumpPtrAllocator>;
 
   FIRScopedParser(GlobalFIRParserState &state, SymbolTable &symbolTable,
+                  UnbundledValuesList &unbundledValues,
                   MemoryScopeTable &memoryScopeTable)
       : FIRParser(state), symbolTable(symbolTable),
-        memoryScopeTable(memoryScopeTable) {}
+        unbundledValues(unbundledValues), memoryScopeTable(memoryScopeTable) {}
 
   /// Add a symbol entry with the specified name, returning failure if the name
   /// is already defined.
-  ParseResult addSymbolEntry(StringRef name, Value value, SMLoc loc);
+  ParseResult addSymbolEntry(StringRef name, SymbolValueEntry entry, SMLoc loc);
+  ParseResult addSymbolEntry(StringRef name, Value value, SMLoc loc) {
+    return addSymbolEntry(name, SymbolValueEntry(value), loc);
+  }
+
+  /// Resolved a symbol table entry to a value.  Emission of error is optional.
+  ParseResult resolveSymbolEntry(Value &result, SymbolValueEntry &entry,
+                                 SMLoc loc, bool fatal = true);
+
+  /// Resolved a symbol table entry if it is an expanded bundle e.g. from an
+  /// instance.  Emission of error is optional.
+  ParseResult resolveSymbolEntry(Value &result, SymbolValueEntry &entry,
+                                 StringRef field, SMLoc loc);
 
   /// Look up the specified name, emitting an error and returning failure if the
   /// name is unknown.
-  ParseResult lookupSymbolEntry(Value &result, StringRef name, SMLoc loc);
+  ParseResult lookupSymbolEntry(SymbolValueEntry &result, StringRef name,
+                                SMLoc loc);
 
   /// This symbol table holds the names of ports, wires, and other local decls.
   /// This is scoped because conditional statements introduce subscopes.
   SymbolTable &symbolTable;
 
+  /// This contains one entry for each value in FIRRTL that is represented as a
+  /// bundle type in the FIRRTL spec but for which we represent as an exploded
+  /// set of elements in the FIRRTL dialect.
+  UnbundledValuesList &unbundledValues;
+
   /// Chisel is producing mports with invalid scopes.  To work around the bug,
   /// we need to keep track of the scope (in the `symbolTable`) of each memory.
   /// This keeps track of this.
   MemoryScopeTable &memoryScopeTable;
+
+  /// Return the current modulet target, e.g., "~Foo|Bar".
+  StringRef getModuleTarget() { return getState().moduleTarget; }
 };
 } // end anonymous namespace
 
 /// Add a symbol entry with the specified name, returning failure if the name
 /// is already defined.
-ParseResult FIRScopedParser::addSymbolEntry(StringRef name, Value value,
-                                            SMLoc loc) {
+ParseResult FIRScopedParser::addSymbolEntry(StringRef name,
+                                            SymbolValueEntry entry, SMLoc loc) {
   // TODO(firrtl spec): Should we support name shadowing?  This will reject
   // cases where we try to define a new wire in a conditional where an outer
   // name defined the same name.
@@ -775,21 +957,59 @@ ParseResult FIRScopedParser::addSymbolEntry(StringRef name, Value value,
     return failure();
   }
 
-  symbolTable.insert(nameId, {loc, value});
+  symbolTable.insert(nameId, {loc, entry});
   return success();
 }
 
 /// Look up the specified name, emitting an error and returning null if the
 /// name is unknown.
-ParseResult FIRScopedParser::lookupSymbolEntry(Value &result, StringRef name,
-                                               SMLoc loc) {
+ParseResult FIRScopedParser::lookupSymbolEntry(SymbolValueEntry &result,
+                                               StringRef name, SMLoc loc) {
   auto prev = symbolTable.lookup(Identifier::get(name, getContext()));
   if (!prev.first.isValid())
     return emitError(loc, "use of unknown declaration '" + name.str() + "'"),
            failure();
-
-  assert(prev.second && "name in symbol table without definition");
   result = prev.second;
+  assert(result && "name in symbol table without definition");
+  return success();
+}
+
+ParseResult FIRScopedParser::resolveSymbolEntry(Value &result,
+                                                SymbolValueEntry &entry,
+                                                SMLoc loc, bool fatal) {
+  if (!entry.is<Value>()) {
+    if (fatal)
+      emitError(loc, "bundle value should only be used from subfield");
+    return failure();
+  }
+  result = entry.get<Value>();
+  return success();
+}
+
+ParseResult FIRScopedParser::resolveSymbolEntry(Value &result,
+                                                SymbolValueEntry &entry,
+                                                StringRef fieldName,
+                                                SMLoc loc) {
+  if (!entry.is<UnbundledID>()) {
+    emitError(loc, "value should not be used from subfield");
+    return failure();
+  }
+
+  unsigned unbundledId = entry.get<UnbundledID>() - 1;
+  assert(unbundledId < unbundledValues.size());
+  UnbundledValueEntry &ubEntry = unbundledValues[unbundledId];
+  for (auto elt : ubEntry) {
+    if (elt.first.cast<StringAttr>().getValue() == fieldName) {
+      result = elt.second;
+      break;
+    }
+  }
+  if (!result) {
+    emitError(loc, "use of invalid field name '")
+        << fieldName << "' on bundle value";
+    return failure();
+  }
+
   return success();
 }
 
@@ -821,6 +1041,7 @@ struct FIRStmtParser : public FIRScopedParser {
   explicit FIRStmtParser(OpBuilder builder, FIRScopedParser &parentParser,
                          FIRModuleContext &moduleContext)
       : FIRScopedParser(parentParser.getState(), parentParser.symbolTable,
+                        parentParser.unbundledValues,
                         parentParser.memoryScopeTable),
         builder(builder), moduleContext(moduleContext) {}
 
@@ -834,9 +1055,31 @@ private:
   /// a passive-typed value and return that.
   Value convertToPassive(Value input, Location loc);
 
+  // The FIRRTL specification describes Invalidates as a statement with
+  // implicit connect semantics.  The FIRRTL dialect models it as a primitive
+  // that returns an "Invalid Value", followed by an explicit connect to make
+  // the representation simpler and more consistent.
+  void emitInvalidate(Value val, Location loc) {
+    auto invalidType = val.getType().cast<FIRRTLType>();
+    auto invalidVal =
+        builder.create<InvalidValuePrimOp>(loc, invalidType.getPassiveType());
+    if (invalidType.isa<AnalogType>())
+      builder.create<AttachOp>(loc, ValueRange{val, invalidVal});
+    else if (!invalidType.isPassive())
+      builder.create<ConnectOp>(loc, val, invalidVal);
+  }
+
   // Exp Parsing
+  ParseResult parseExpImpl(Value &result, SubOpVector &subOps,
+                           const Twine &message, bool isLeadingStmt);
   ParseResult parseExp(Value &result, SubOpVector &subOps,
-                       const Twine &message);
+                       const Twine &message) {
+    return parseExpImpl(result, subOps, message, /*isLeadingStmt:*/ false);
+  }
+  ParseResult parseExpLeadingStmt(Value &result, SubOpVector &subOps,
+                                  const Twine &message) {
+    return parseExpImpl(result, subOps, message, /*isLeadingStmt:*/ true);
+  }
 
   ParseResult parseOptionalExpPostscript(Value &result, SubOpVector &subOps);
   ParseResult parsePostFixFieldId(Value &result, SubOpVector &subOps);
@@ -902,8 +1145,14 @@ Value FIRStmtParser::convertToPassive(Value input, Location loc) {
 /// XX   ::= exp '.' DoubleLit // TODO Workaround for #470
 ///      ::= exp '[' exp ']'
 ///
-ParseResult FIRStmtParser::parseExp(Value &result, SubOpVector &subOps,
-                                    const Twine &message) {
+///
+/// If 'isLeadingStmt' is true, then this is being called to parse the first
+/// expression in a statement.  We can handle some weird cases due to this if
+/// we end up parsing the whole statement.  In that case we return success, but
+/// set the 'result' value to null.
+ParseResult FIRStmtParser::parseExpImpl(Value &result, SubOpVector &subOps,
+                                        const Twine &message,
+                                        bool isLeadingStmt) {
   switch (getToken().getKind()) {
 
     // Handle all the primitive ops: primop exp* intLit*  ')'
@@ -925,7 +1174,43 @@ ParseResult FIRStmtParser::parseExp(Value &result, SubOpVector &subOps,
   default: {
     StringRef name;
     auto loc = getToken().getLoc();
-    if (parseId(name, message) || lookupSymbolEntry(result, name, loc))
+    SymbolValueEntry symtabEntry;
+    if (parseId(name, message) || lookupSymbolEntry(symtabEntry, name, loc))
+      return failure();
+
+    // If we looked up a normal value, then we're done.
+    if (!resolveSymbolEntry(result, symtabEntry, loc, false))
+      break;
+
+    assert(symtabEntry.is<UnbundledID>() && "should be an instance");
+
+    // Otherwise we referred to an implicitly bundled value.  We *must* be in
+    // the midst of processing a field ID reference or 'is invalid'.  If not,
+    // this is an error.
+    if (isLeadingStmt && consumeIf(FIRToken::kw_is)) {
+      LocWithInfo info(loc, this);
+      if (parseToken(FIRToken::kw_invalid, "expected 'invalid'") ||
+          parseOptionalInfo(info))
+        return failure();
+
+      // Invalidate all of the results of the bundled value.
+      unsigned unbundledId = symtabEntry.get<UnbundledID>() - 1;
+      assert(unbundledId < unbundledValues.size());
+      UnbundledValueEntry &ubEntry = unbundledValues[unbundledId];
+      for (auto elt : ubEntry) {
+        emitInvalidate(elt.second, info.getLoc());
+      }
+
+      // Signify that we parsed the whole statement.
+      result = Value();
+      return success();
+    }
+
+    // Handle the normal "instance.x" reference.
+    StringRef fieldName;
+    if (parseToken(FIRToken::period, "expected '.' in field reference") ||
+        parseFieldId(fieldName, "expected field name") ||
+        resolveSymbolEntry(result, symtabEntry, fieldName, loc))
       return failure();
     break;
   }
@@ -977,23 +1262,21 @@ ParseResult FIRStmtParser::parseOptionalExpPostscript(Value &result,
 ///
 ParseResult FIRStmtParser::parsePostFixFieldId(Value &result,
                                                SubOpVector &subOps) {
-  auto loc = getToken().getLoc();
+  auto loc = translateLocation(getToken().getLoc());
   StringRef fieldName;
   if (parseFieldId(fieldName, "expected field name"))
     return failure();
 
   // Make sure the field name matches up with the input value's type and
   // compute the result type for the expression.
+  auto fieldNameAttr = builder.getStringAttr(fieldName);
   auto resultType = result.getType().cast<FIRRTLType>();
-  resultType =
-      SubfieldOp::getResultType(resultType, fieldName, translateLocation(loc));
+  resultType = SubfieldOp::getResultType(resultType, fieldNameAttr, loc);
   if (!resultType)
     return failure();
 
   // Create the result operation.
-  auto op =
-      builder.create<SubfieldOp>(translateLocation(loc), resultType, result,
-                                 builder.getStringAttr(fieldName));
+  auto op = builder.create<SubfieldOp>(loc, resultType, result, fieldNameAttr);
   subOps.push_back(op);
   result = op.getResult();
   return success();
@@ -1006,7 +1289,7 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result,
 ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result,
                                                     SubOpVector &subOps) {
   auto indexLoc = getToken().getLoc();
-  int32_t indexNo;
+  int64_t indexNo;
   if (parseIntLit(indexNo, "expected index") ||
       parseToken(FIRToken::r_square, "expected ']'"))
     return failure();
@@ -1072,7 +1355,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
 
   // Parse the operands and constant integer arguments.
   SmallVector<Value, 4> operands;
-  SmallVector<int32_t, 4> integers;
+  SmallVector<int64_t, 4> integers;
   if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
         // Handle the integer constant case if present.
         if (getToken().isAny(FIRToken::integer, FIRToken::signed_integer,
@@ -1147,6 +1430,33 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
     break;                                                                     \
   }
 #include "FIRTokenKinds.def"
+
+  // Expand `validif(a, b)` expressions to `mux(a, b, invalidvalue)`, since we
+  // do not provide an operation for `validif`. See docs/RationaleFIRRTL.md for
+  // more details on this.
+  case FIRToken::lp_validif: {
+    auto tloc = translateLocation(loc);
+
+    if (opTypes.size() != 2 || !integers.empty()) {
+      mlir::emitError(tloc, "operation requires two operands and no constants");
+      return failure();
+    }
+    auto lhsUInt = opTypes[0].dyn_cast<UIntType>();
+    if (!lhsUInt) {
+      mlir::emitError(tloc, "first operand should have UInt type");
+      return failure();
+    }
+    auto lhsWidth = lhsUInt.getWidthOrSentinel();
+    if (lhsWidth != -1 && lhsWidth != 1) {
+      mlir::emitError(tloc, "first operand should have 'uint<1>' type");
+      return failure();
+    }
+
+    auto inv = builder.create<InvalidValuePrimOp>(tloc, opTypes[1]);
+    result = builder.create<MuxPrimOp>(
+        tloc, opTypes[1], ValueRange({operands[0], operands[1], inv}), attrs);
+    break;
+  }
   }
 
   subOps.push_back(result.getDefiningOp());
@@ -1162,7 +1472,7 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result,
   consumeToken();
 
   // Parse a width specifier if present.
-  int32_t width;
+  int64_t width;
   APInt value;
   if (parseOptionalWidth(width) ||
       parseToken(FIRToken::l_paren, "expected '(' in integer expression") ||
@@ -1257,7 +1567,6 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result,
 Optional<ParseResult>
 FIRStmtParser::parseExpWithLeadingKeyword(StringRef keyword,
                                           const LocWithInfo &info) {
-
   switch (getToken().getKind()) {
   default:
     // This isn't part of an expression, and isn't part of a statement.
@@ -1273,8 +1582,29 @@ FIRStmtParser::parseExpWithLeadingKeyword(StringRef keyword,
 
   Value lhs;
   SmallVector<Operation *, 8> subOps;
-  if (lookupSymbolEntry(lhs, keyword, info.getFIRLoc()) ||
-      parseOptionalExpPostscript(lhs, subOps))
+  SymbolValueEntry symtabEntry;
+
+  if (lookupSymbolEntry(symtabEntry, keyword, info.getFIRLoc()))
+    return ParseResult(failure());
+
+  // If we have a '.', we might have a symbol or an expanded port.  If we
+  // resolve to a symbol, use that, otherwise check for expanded bundles of
+  // other ops.
+  // Non '.' ops take the plain symbole path.
+  if (resolveSymbolEntry(lhs, symtabEntry, info.getFIRLoc(), false)) {
+    // Ok if the base name didn't resolve by itself, it might be part of an
+    // expanded dot reference.  That doesn't work then we fail.
+    if (!consumeIf(FIRToken::period))
+      return ParseResult(failure());
+
+    StringRef fieldName;
+    if (parseFieldId(fieldName, "expected field name") ||
+        resolveSymbolEntry(lhs, symtabEntry, fieldName, info.getFIRLoc()))
+      return ParseResult(failure());
+  }
+
+  // Parse any further trailing things like "mem.x.y".
+  if (parseOptionalExpPostscript(lhs, subOps))
     return ParseResult(failure());
 
   return parseLeadingExpStmt(lhs, subOps);
@@ -1348,8 +1678,13 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
     // Statement productions that start with an expression.
     Value lhs;
     SmallVector<Operation *, 8> subOps;
-    if (parseExp(lhs, subOps, "unexpected token in module"))
+    if (parseExpLeadingStmt(lhs, subOps, "unexpected token in module"))
       return failure();
+    // We use parseExp in a special mode that can complete the entire stmt at
+    // once in unusual cases.  If this happened, then we are done.
+    if (!lhs)
+      return success();
+
     return parseLeadingExpStmt(lhs, subOps);
   }
 
@@ -1416,13 +1751,15 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
 
   StringAttr resultValue;
   StringRef memName;
+  SymbolValueEntry memorySym;
   Value memory, indexExp, clock;
   SmallVector<Operation *, 8> subOps;
   if (parseToken(FIRToken::kw_mport, "expected 'mport' in memory port") ||
       parseId(resultValue, "expected result name") ||
       parseToken(FIRToken::equal, "expected '=' in memory port") ||
       parseId(memName, "expected memory name") ||
-      lookupSymbolEntry(memory, memName, info.getFIRLoc()) ||
+      lookupSymbolEntry(memorySym, memName, info.getFIRLoc()) ||
+      resolveSymbolEntry(memory, memorySym, info.getFIRLoc()) ||
       parseToken(FIRToken::l_square, "expected '[' in memory port") ||
       parseExp(indexExp, subOps, "expected index expression") ||
       parseToken(FIRToken::r_square, "expected ']' in memory port") ||
@@ -1483,14 +1820,14 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
       OpBuilder memOpBuilder(scopeAndOperation.second);
 
       auto wireHack = memOpBuilder.create<WireOp>(
-          info.getLoc(), result.getType(), StringAttr());
+          info.getLoc(), result.getType(), StringAttr(), ArrayAttr());
       builder.create<ConnectOp>(info.getLoc(), wireHack, result);
 
       // Inject this the wire's name into the same scope as the memory.
       symbolTable.insertIntoScope(
           scopeAndOperation.first,
           Identifier::get(resultValue.getValue(), getContext()),
-          {info.getFIRLoc(), wireHack});
+          {info.getFIRLoc(), SymbolValueEntry(wireHack)});
       return success();
     }
   }
@@ -1554,7 +1891,7 @@ ParseResult FIRStmtParser::parseStop() {
   SmallVector<Operation *, 8> subOps;
 
   Value clock, condition;
-  int32_t exitCode;
+  int64_t exitCode;
   if (parseExp(clock, subOps, "expected clock expression in 'stop'") ||
       parseExp(condition, subOps, "expected condition in 'stop'") ||
       parseIntLit(exitCode, "expected exit code in 'stop'") ||
@@ -1669,7 +2006,19 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
     SymbolTable::ScopeTy suiteScope(symbolTable);
     MemoryScopeTable::ScopeTy suiteMemoryScope(memoryScopeTable);
 
-    // We parse the substatements into their own parser, so they get insert
+    // After parsing the when region, we can release any new entries in
+    // unbundledValues since the symbol table entries that refer to them will be
+    // gone.
+    struct UnbundledValueRestorer {
+      UnbundledValuesList &list;
+      size_t startingSize;
+      UnbundledValueRestorer(UnbundledValuesList &list) : list(list) {
+        startingSize = list.size();
+      }
+      ~UnbundledValueRestorer() { list.resize(startingSize); }
+    } x(unbundledValues);
+
+    // We parse the substatements into their own parser, so they get inserted
     // into the specified 'when' region.
     FIRStmtParser subParser(builder, *this, moduleContext);
 
@@ -1738,19 +2087,7 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs, SubOpVector &subOps) {
         parseOptionalInfo(info, subOps))
       return failure();
 
-    // The FIRRTL specification describes Invalidates as a statement with
-    // implicit connect semantics.  The FIRRTL dialect models it as a primitive
-    // that returns an "Invalid Value", followed by an explicit connect to make
-    // the representation simpler and more consistent.
-    auto invalidType = lhs.getType().cast<FIRRTLType>();
-    if (invalidType.isa<AnalogType>()) {
-      auto val = builder.create<InvalidValuePrimOp>(info.getLoc(), invalidType);
-      builder.create<AttachOp>(info.getLoc(), ValueRange{lhs, val});
-    } else {
-      auto val = builder.create<InvalidValuePrimOp>(
-          info.getLoc(), invalidType.getPassiveType());
-      builder.create<ConnectOp>(info.getLoc(), lhs, val);
-    }
+    emitInvalidate(lhs, info.getLoc());
     return success();
   }
 
@@ -1764,9 +2101,20 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs, SubOpVector &subOps) {
       parseOptionalInfo(info, subOps))
     return failure();
 
-  if (kind == FIRToken::less_equal)
-    builder.create<ConnectOp>(info.getLoc(), lhs, rhs);
-  else {
+  if (kind == FIRToken::less_equal) {
+    // Some operations, dshl for example, have implicit truncations, even in lo
+    // firrtl.  Chisel will also use connects as partial connects to do
+    // truncation.  Handle truncations as partial connects, which allow
+    // truncation.
+    auto lhsPType = lhs.getType().cast<FIRRTLType>().getPassiveType();
+    auto rhsPType = rhs.getType().cast<FIRRTLType>().getPassiveType();
+    if (lhsPType != rhsPType && lhsPType.getBitWidthOrSentinel() >= 0 &&
+        lhsPType.getBitWidthOrSentinel() < rhsPType.getBitWidthOrSentinel()) {
+      builder.create<PartialConnectOp>(info.getLoc(), lhs, rhs);
+    } else {
+      builder.create<ConnectOp>(info.getLoc(), lhs, rhs);
+    }
+  } else {
     assert(kind == FIRToken::less_minus && "unexpected kind");
     builder.create<PartialConnectOp>(info.getLoc(), lhs, rhs);
   }
@@ -1807,19 +2155,35 @@ ParseResult FIRStmtParser::parseInstance() {
   getModulePortInfo(referencedModule, modulePorts);
 
   // Make a bundle of the inputs and outputs of the specified module.
-  SmallVector<BundleType::BundleElement, 4> results;
-  results.reserve(modulePorts.size());
+  SmallVector<Type, 4> resultTypes;
+  SmallVector<Attribute, 4> resultNames;
+  resultTypes.reserve(modulePorts.size());
+  resultNames.reserve(modulePorts.size());
 
   for (auto port : modulePorts) {
-    results.push_back(
-        {builder.getIdentifier(port.getName()), FlipType::get(port.type)});
+    resultTypes.push_back(FlipType::get(port.type));
+    resultNames.push_back(port.name);
   }
-  auto resultType = BundleType::get(results, getContext());
-  auto result = builder.create<InstanceOp>(info.getLoc(), resultType,
-                                           builder.getSymbolRefAttr(moduleName),
-                                           filterUselessName(id));
+  auto name = filterUselessName(id);
+  ArrayAttr annotations = builder.getArrayAttr({});
+  getAnnotations(getModuleTarget() + ">" + name.getValue(), annotations);
+  auto result = builder.create<InstanceOp>(
+      info.getLoc(), resultTypes, builder.getSymbolRefAttr(moduleName),
+      builder.getArrayAttr(resultNames), name, annotations);
 
-  return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
+  // Since we are implicitly unbundling the instance results, we need to keep
+  // track of the mapping from bundle fields to results in the unbundledValues
+  // data structure.  Build our entry now.
+  UnbundledValueEntry unbundledValueEntry;
+  unbundledValueEntry.reserve(modulePorts.size());
+  for (size_t i = 0, e = modulePorts.size(); i != e; ++i)
+    unbundledValueEntry.push_back({resultNames[i], result.getResult(i)});
+
+  // Add it to unbundledValues and add an entry to the symbol table to remember
+  // it.
+  unbundledValues.push_back(std::move(unbundledValueEntry));
+  auto entryId = UnbundledID(unbundledValues.size());
+  return addSymbolEntry(id.getValue(), entryId, info.getFIRLoc());
 }
 
 /// cmem ::= 'cmem' id ':' type info?
@@ -1840,8 +2204,11 @@ ParseResult FIRStmtParser::parseCMem() {
       parseType(type, "expected cmem type") || parseOptionalInfo(info))
     return failure();
 
-  auto result =
-      builder.create<CMemOp>(info.getLoc(), type, filterUselessName(id));
+  auto name = filterUselessName(id);
+  ArrayAttr annotations = builder.getArrayAttr({});
+  getAnnotations(getModuleTarget() + ">" + name.getValue(), annotations);
+
+  auto result = builder.create<CMemOp>(info.getLoc(), type, name, annotations);
 
   // Remember that this memory is in this symbol table scope.
   // TODO(chisel bug): This should be removed along with memoryScopeTable.
@@ -1872,8 +2239,12 @@ ParseResult FIRStmtParser::parseSMem() {
       parseOptionalInfo(info))
     return failure();
 
+  auto name = filterUselessName(id);
+  ArrayAttr annotations = builder.getArrayAttr({});
+  getAnnotations(getModuleTarget() + ">" + name.getValue(), annotations);
+
   auto result =
-      builder.create<SMemOp>(info.getLoc(), type, ruw, filterUselessName(id));
+      builder.create<SMemOp>(info.getLoc(), type, ruw, name, annotations);
 
   // Remember that this memory is in this symbol table scope.
   // TODO(chisel bug): This should be removed along with memoryScopeTable.
@@ -1908,10 +2279,10 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     return failure();
 
   FIRRTLType type;
-  int32_t depth = -1, readLatency = -1, writeLatency = -1;
+  int64_t depth = -1, readLatency = -1, writeLatency = -1;
   RUWAttr ruw = RUWAttr::Undefined;
 
-  SmallVector<std::pair<Identifier, MemOp::PortKind>, 4> ports;
+  SmallVector<std::pair<StringAttr, BundleType>, 4> ports;
 
   // Parse all the memfield records, which are indented more than the mem.
   while (1) {
@@ -1970,42 +2341,60 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     StringRef portName;
     if (parseId(portName, "expected port name"))
       return failure();
-    ports.push_back({builder.getIdentifier(portName), portKind});
+    ports.push_back({builder.getStringAttr(portName),
+                     MemOp::getTypeForPort(depth, type, portKind)});
 
     while (!getIndentation().hasValue()) {
       if (parseId(portName, "expected port name"))
         return failure();
-      ports.push_back({builder.getIdentifier(portName), portKind});
+      ports.push_back({builder.getStringAttr(portName),
+                       MemOp::getTypeForPort(depth, type, portKind)});
     }
   }
 
-  if (!type.isPassive()) {
-    emitError(info.getFIRLoc(), "'mem' data-type must be a passive type");
-    return failure();
+  // The FIRRTL dialect requires mems to have at least one port.  Since portless
+  // mems can never be referenced, it is always safe to drop them.
+  if (ports.empty())
+    return success();
+
+  // Canonicalize the ports into alphabetical order.
+  // TODO: Move this into MemOp construction/canonicalization.
+  llvm::array_pod_sort(ports.begin(), ports.end(),
+                       [](const std::pair<StringAttr, BundleType> *lhs,
+                          const std::pair<StringAttr, BundleType> *rhs) -> int {
+                         return lhs->first.getValue().compare(
+                             rhs->first.getValue());
+                       });
+
+  SmallVector<Attribute, 4> resultNames;
+  SmallVector<Type, 4> resultTypes;
+  for (auto p : ports) {
+    resultNames.push_back(p.first);
+    resultTypes.push_back(FlipType::get(p.second));
   }
 
-  if (depth < 1)
-    return emitError(info.getFIRLoc(), "invalid depth");
+  auto name = filterUselessName(id);
+  ArrayAttr annotations = builder.getArrayAttr({});
+  getAnnotations(getModuleTarget() + ">" + name.getValue(), annotations);
 
-  if (readLatency < 0 || writeLatency < 0)
-    return emitError(info.getFIRLoc(), "invalid latency");
+  auto result = builder.create<MemOp>(
+      info.getLoc(), resultTypes, readLatency, writeLatency, depth, ruw,
+      builder.getArrayAttr(resultNames), filterUselessName(id), annotations);
 
-  auto memType = MemOp::getTypeForPortList(depth, type, ports);
-  if (!memType) {
-    emitError(info.getFIRLoc(), "duplicate port name in mem");
-    return failure();
+  UnbundledValueEntry unbundledValueEntry;
+  unbundledValueEntry.reserve(result.getNumResults());
+  for (size_t i = 0, e = result.getNumResults(); i != e; ++i) {
+    unbundledValueEntry.push_back({resultNames[i], result.getResult(i)});
   }
-
-  auto result =
-      builder.create<MemOp>(info.getLoc(), memType, readLatency, writeLatency,
-                            depth, ruw, filterUselessName(id));
+  unbundledValues.push_back(std::move(unbundledValueEntry));
+  auto entryID = UnbundledID(unbundledValues.size());
 
   // Remember that this memory is in this symbol table scope.
   // TODO(chisel bug): This should be removed along with memoryScopeTable.
   memoryScopeTable.insert(Identifier::get(id.getValue(), getContext()),
                           {symbolTable.getCurScope(), result.getOperation()});
 
-  return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
+  return addSymbolEntry(id.getValue(), entryID, info.getFIRLoc());
 }
 
 /// node ::= 'node' id '=' exp info?
@@ -2058,10 +2447,16 @@ ParseResult FIRStmtParser::parseNode() {
 
   // The entire point of a node declaration is to carry a name.  If it got
   // dropped, then we don't even need to create a result.
+  //
+  // TODO: This optimization doesn't respect annotated, temporary nodes.
   Value result;
-  if (actualName)
-    result = builder.create<NodeOp>(info.getLoc(), initializer, actualName);
-  else
+  if (actualName) {
+    ArrayAttr annotations = builder.getArrayAttr({});
+    getAnnotations(getModuleTarget() + ">" + actualName.getValue(),
+                   annotations);
+    result = builder.create<NodeOp>(info.getLoc(), initializer, actualName,
+                                    annotations);
+  } else
     result = initializer;
   return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
 }
@@ -2083,8 +2478,11 @@ ParseResult FIRStmtParser::parseWire() {
       parseType(type, "expected wire type") || parseOptionalInfo(info))
     return failure();
 
-  auto result =
-      builder.create<WireOp>(info.getLoc(), type, filterUselessName(id));
+  ArrayAttr annotations = builder.getArrayAttr({});
+  getAnnotations(getModuleTarget() + ">" + id.getValue(), annotations);
+
+  auto result = builder.create<WireOp>(info.getLoc(), type,
+                                       filterUselessName(id), annotations);
   return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
 }
 
@@ -2176,13 +2574,17 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   if (parseOptionalInfo(info, subOps))
     return failure();
 
+  auto name = filterUselessName(id);
+  ArrayAttr annotations = builder.getArrayAttr({});
+  getAnnotations(getModuleTarget() + ">" + name.getValue(), annotations);
+
   Value result;
   if (resetSignal)
     result = builder.create<RegResetOp>(info.getLoc(), type, clock, resetSignal,
-                                        resetValue, filterUselessName(id));
+                                        resetValue, name, annotations);
   else
-    result = builder.create<RegOp>(info.getLoc(), type, clock,
-                                   filterUselessName(id));
+    result =
+        builder.create<RegOp>(info.getLoc(), type, clock, name, annotations);
 
   return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
 }
@@ -2195,8 +2597,10 @@ namespace {
 /// This class implements logic and state for parsing module bodies.
 struct FIRModuleParser : public FIRScopedParser {
   explicit FIRModuleParser(GlobalFIRParserState &state, CircuitOp circuit)
-      : FIRScopedParser(state, symbolTable, memoryScopeTable), circuit(circuit),
-        firstScope(symbolTable), firstMemoryScope(memoryScopeTable) {}
+      : FIRScopedParser(state, symbolTable, unbundledValueList,
+                        memoryScopeTable),
+        circuit(circuit), firstScope(symbolTable),
+        firstMemoryScope(memoryScopeTable) {}
 
   ParseResult parseExtModule(unsigned indent);
   ParseResult parseModule(unsigned indent);
@@ -2209,6 +2613,8 @@ private:
   CircuitOp circuit;
   SymbolTable symbolTable;
   SymbolTable::ScopeTy firstScope;
+
+  UnbundledValuesList unbundledValueList;
 
   MemoryScopeTable memoryScopeTable;
   MemoryScopeTable::ScopeTy firstMemoryScope;
@@ -2227,9 +2633,23 @@ FIRModuleParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
   while (getToken().isAny(FIRToken::kw_input, FIRToken::kw_output) &&
          // Must be nested under the module.
          getIndentation() > indent) {
-    bool isOutput = getToken().is(FIRToken::kw_output);
 
+    // We need one token lookahead to resolve the ambiguity between:
+    // output foo             ; port
+    // output <= input        ; identifier expression
+    // output.thing <= input  ; identifier expression
+    auto backtrackState = getState().getBacktrackState();
+
+    bool isOutput = getToken().is(FIRToken::kw_output);
     consumeToken();
+
+    // If we have something that isn't a keyword then this must be an
+    // identifier, not an input/output marker.
+    if (!getToken().is(FIRToken::identifier) && !getToken().isKeyword()) {
+      backtrackState.backtrack();
+      break;
+    }
+
     StringAttr name;
     FIRRTLType type;
     LocWithInfo info(getToken().getLoc(), this);
@@ -2265,8 +2685,13 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   SmallVector<PortInfoAndLoc, 4> portListAndLoc;
 
   LocWithInfo info(getToken().getLoc(), this);
-  if (parseId(name, "expected module name") ||
-      parseToken(FIRToken::colon, "expected ':' in extmodule definition") ||
+  if (parseId(name, "expected module name"))
+    return failure();
+
+  auto moduleTarget = (getState().circuitTarget + "|" + name.getValue()).str();
+  getState().moduleTarget = moduleTarget;
+
+  if (parseToken(FIRToken::colon, "expected ':' in extmodule definition") ||
       parseOptionalInfo(info) || parsePortList(portListAndLoc, indent))
     return failure();
 
@@ -2344,12 +2769,15 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
     parameters.append(nameId, value);
   }
 
-  auto fmodule =
-      builder.create<FExtModuleOp>(info.getLoc(), name, portList, defName);
+  ArrayAttr annotations;
+  getAnnotations(moduleTarget, annotations);
+
+  auto fmodule = builder.create<FExtModuleOp>(info.getLoc(), name, portList,
+                                              defName, annotations);
 
   if (!parameters.empty())
     fmodule->setAttr("parameters",
-                     DictionaryAttr::get(parameters, getContext()));
+                     DictionaryAttr::get(getContext(), parameters));
 
   return success();
 }
@@ -2363,8 +2791,13 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
   SmallVector<PortInfoAndLoc, 4> portListAndLoc;
 
   consumeToken(FIRToken::kw_module);
-  if (parseId(name, "expected module name") ||
-      parseToken(FIRToken::colon, "expected ':' in module definition") ||
+  if (parseId(name, "expected module name"))
+    return failure();
+
+  auto moduleTarget = (getState().circuitTarget + "|" + name.getValue()).str();
+  getState().moduleTarget = moduleTarget;
+
+  if (parseToken(FIRToken::colon, "expected ':' in module definition") ||
       parseOptionalInfo(info) || parsePortList(portListAndLoc, indent))
     return failure();
 
@@ -2375,7 +2808,10 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
   portList.reserve(portListAndLoc.size());
   for (auto &elt : portListAndLoc)
     portList.push_back(elt.first);
-  auto fmodule = builder.create<FModuleOp>(info.getLoc(), name, portList);
+  ArrayAttr annotations;
+  getAnnotations(moduleTarget, annotations);
+  auto fmodule =
+      builder.create<FModuleOp>(info.getLoc(), name, portList, annotations);
 
   // Install all of the ports into the symbol table, associated with their
   // block arguments.
@@ -2423,18 +2859,44 @@ ParseResult FIRCircuitParser::parseCircuit() {
 
   LocWithInfo info(getToken().getLoc(), this);
   StringAttr name;
+  SMLoc inlineAnnotationsLoc;
+  StringRef inlineAnnotations;
 
   // A file must contain a top level `circuit` definition.
   if (parseToken(FIRToken::kw_circuit,
                  "expected a top-level 'circuit' definition") ||
       parseId(name, "expected circuit name") ||
       parseToken(FIRToken::colon, "expected ':' in circuit definition") ||
+      parseOptionalAnnotations(inlineAnnotationsLoc, inlineAnnotations) ||
       parseOptionalInfo(info))
     return failure();
 
-  // Create the top-level circuit op in the MLIR module.
+  auto circuitTarget = "~" + name.getValue().str();
+  getState().circuitTarget = circuitTarget;
+
+  // Deal with any inline annotations, if they exist.  These are processed first
+  // to place any annotations from an annotation file *after* the inline
+  // annotations.  While arbitrary, this makes the annotation file have "append"
+  // semantics.
+  if (!inlineAnnotations.empty())
+    if (importAnnotations(inlineAnnotationsLoc, inlineAnnotations))
+      return failure();
+
+  // Deal with the annotation file if one was specified
+  if (importAnnotationFile(info.getFIRLoc()))
+    return failure();
+
+  // Get annotations associated with this circuit. These are either:
+  //   1. Annotations with no target (which we use "~" to identify)
+  //   2. Annotations targeting the circuit, e.g., "~Foo"
+  ArrayAttr annotationVec;
+  getAnnotations("~", annotationVec);
+  getAnnotations(circuitTarget, annotationVec);
+
   OpBuilder b(mlirModule.getBodyRegion());
-  auto circuit = b.create<CircuitOp>(info.getLoc(), name);
+
+  // Create the top-level circuit op in the MLIR module.
+  auto circuit = b.create<CircuitOp>(info.getLoc(), name, annotationVec);
 
   // Parse any contained modules.
   while (true) {
@@ -2482,15 +2944,18 @@ OwningModuleRef circt::firrtl::importFIRRTL(SourceMgr &sourceMgr,
                                             MLIRContext *context,
                                             FIRParserOptions options) {
   auto sourceBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
+  const llvm::MemoryBuffer *annotationsBuf = nullptr;
+  if (sourceMgr.getNumBuffers() > 1)
+    annotationsBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID() + 1);
 
   context->loadDialect<FIRRTLDialect>();
 
   // This is the result module we are parsing into.
   OwningModuleRef module(ModuleOp::create(
-      FileLineColLoc::get(sourceBuf->getBufferIdentifier(), /*line=*/0,
-                          /*column=*/0, context)));
+      FileLineColLoc::get(context, sourceBuf->getBufferIdentifier(), /*line=*/0,
+                          /*column=*/0)));
 
-  GlobalFIRParserState state(sourceMgr, context, options);
+  GlobalFIRParserState state(sourceMgr, context, options, annotationsBuf);
   if (FIRCircuitParser(state, *module).parseCircuit())
     return nullptr;
 
@@ -2503,8 +2968,8 @@ OwningModuleRef circt::firrtl::importFIRRTL(SourceMgr &sourceMgr,
 }
 
 void circt::firrtl::registerFromFIRRTLTranslation() {
-  static TranslateToMLIRRegistration fromFIR(
-      "parse-fir", [](llvm::SourceMgr &sourceMgr, MLIRContext *context) {
+  static mlir::TranslateToMLIRRegistration fromFIR(
+      "import-firrtl", [](llvm::SourceMgr &sourceMgr, MLIRContext *context) {
         return importFIRRTL(sourceMgr, context);
       });
 }

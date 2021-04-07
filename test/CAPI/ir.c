@@ -11,9 +11,10 @@
  */
 
 #include "mlir-c/IR.h"
-#include "circt-c/RTLDialect.h"
+#include "circt-c/Dialect/RTL.h"
 #include "mlir-c/AffineExpr.h"
 #include "mlir-c/AffineMap.h"
+#include "mlir-c/BuiltinTypes.h"
 #include "mlir-c/Diagnostics.h"
 #include "mlir-c/Registration.h"
 
@@ -23,38 +24,68 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(_WIN32) || defined(__CYGWIN__)
+/// The C API is currently not supported on Windows
+/// (https://github.com/llvm/circt/issues/578)
+int main() { return 0; }
+#else
 int registerOnlyRTL() {
   MlirContext ctx = mlirContextCreate();
   // The built-in dialect is always loaded.
   if (mlirContextGetNumLoadedDialects(ctx) != 1)
     return 1;
 
-  MlirDialect std =
-      mlirContextGetOrLoadDialect(ctx, mlirRTLDialectGetNamespace());
-  if (!mlirDialectIsNull(std))
+  MlirDialectHandle rtlHandle = mlirGetDialectHandle__rtl__();
+
+  MlirDialect rtl = mlirContextGetOrLoadDialect(
+      ctx, mlirDialectHandleGetNamespace(rtlHandle));
+  if (!mlirDialectIsNull(rtl))
     return 2;
 
-  mlirContextRegisterRTLDialect(ctx);
+  mlirDialectHandleRegisterDialect(rtlHandle, ctx);
   if (mlirContextGetNumRegisteredDialects(ctx) != 1)
     return 3;
   if (mlirContextGetNumLoadedDialects(ctx) != 1)
     return 4;
 
-  std = mlirContextGetOrLoadDialect(ctx, mlirRTLDialectGetNamespace());
-  if (mlirDialectIsNull(std))
+  rtl = mlirContextGetOrLoadDialect(ctx,
+                                    mlirDialectHandleGetNamespace(rtlHandle));
+  if (mlirDialectIsNull(rtl))
     return 5;
   if (mlirContextGetNumLoadedDialects(ctx) != 2)
     return 6;
 
-  MlirDialect alsoStd = mlirContextLoadRTLDialect(ctx);
-  if (!mlirDialectEqual(std, alsoStd))
+  MlirDialect alsoRtl = mlirDialectHandleLoadDialect(rtlHandle, ctx);
+  if (!mlirDialectEqual(rtl, alsoRtl))
     return 7;
 
-  MlirStringRef stdNs = mlirDialectGetNamespace(std);
-  MlirStringRef alsoStdNs = mlirRTLDialectGetNamespace();
-  if (stdNs.length != alsoStdNs.length ||
-      strncmp(stdNs.data, alsoStdNs.data, stdNs.length))
-    return 8;
+  mlirContextDestroy(ctx);
+
+  return 0;
+}
+
+int testRTLTypes() {
+  MlirContext ctx = mlirContextCreate();
+  MlirDialectHandle rtlHandle = mlirGetDialectHandle__rtl__();
+  mlirDialectHandleRegisterDialect(rtlHandle, ctx);
+  mlirDialectHandleLoadDialect(rtlHandle, ctx);
+
+  MlirType i8type = mlirIntegerTypeGet(ctx, 8);
+  MlirType io8type = rtlInOutTypeGet(i8type);
+  if (mlirTypeIsNull(io8type))
+    return 1;
+
+  MlirType elementType = rtlInOutTypeGetElementType(io8type);
+  if (mlirTypeIsNull(elementType))
+    return 2;
+
+  if (rtlTypeIsAInOut(i8type))
+    return 3;
+
+  if (!rtlTypeIsAInOut(io8type))
+    return 4;
+
+  mlirContextDestroy(ctx);
 
   return 0;
 }
@@ -63,10 +94,18 @@ int main() {
   fprintf(stderr, "@registration\n");
   int errcode = registerOnlyRTL();
   fprintf(stderr, "%d\n", errcode);
+
+  fprintf(stderr, "@rtltypes\n");
+  errcode = testRTLTypes();
+  fprintf(stderr, "%d\n", errcode);
+
   // clang-format off
   // CHECK-LABEL: @registration
+  // CHECK: 0
+  // CHECK-LABEL: @rtltypes
   // CHECK: 0
   // clang-format on
 
   return 0;
 }
+#endif

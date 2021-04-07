@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_FIRRTL_TYPES_H
 
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/Types.h"
 
 namespace circt {
@@ -24,8 +25,6 @@ struct FlipTypeStorage;
 struct BundleTypeStorage;
 struct VectorTypeStorage;
 } // namespace detail.
-
-using namespace mlir;
 
 class ClockType;
 class ResetType;
@@ -45,6 +44,9 @@ public:
   /// Return true if this is a "passive" type - one that contains no "flip"
   /// types recursively within itself.
   bool isPassive() { return getRecursiveTypeProperties().first; }
+
+  /// Return true if this is a 'ground' type, aka a non-aggregate type.
+  bool isGround();
 
   /// Return true if this is or contains an Analog type.
   bool containsAnalog() { return getRecursiveTypeProperties().second; }
@@ -89,7 +91,7 @@ protected:
 /// ignores flips.
 bool areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType);
 
-mlir::Type getArrayElementType(mlir::Type array);
+mlir::Type getVectorElementType(mlir::Type array);
 mlir::Type getPassiveType(mlir::Type anyFIRRTLType);
 
 //===----------------------------------------------------------------------===//
@@ -234,10 +236,10 @@ public:
 
   // Each element of a bundle, which is a name and type.
   struct BundleElement {
-    Identifier name;
+    StringAttr name;
     FIRRTLType type;
 
-    BundleElement(Identifier name, FIRRTLType type) : name(name), type(type) {}
+    BundleElement(StringAttr name, FIRRTLType type) : name(name), type(type) {}
 
     bool operator==(const BundleElement &rhs) const {
       return name == rhs.name && type == rhs.type;

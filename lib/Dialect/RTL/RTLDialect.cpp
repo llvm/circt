@@ -40,14 +40,14 @@ struct RTLOpAsmDialectInterface : public OpAsmDialectInterface {
   /// region contained by an operation in this dialect.
   void getAsmBlockArgumentNames(Block *block,
                                 OpAsmSetValueNameFn setNameFn) const override {
-    // Check to see if the operation containing the arguments has 'rtl.name'
-    // attributes for them.  If so, use that as the name.
+    // Assign port names to the bbargs if this is a module.
     auto *parentOp = block->getParentOp();
-
-    for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
-      // Scan for a 'rtl.name' attribute.
-      if (auto str = getRTLNameAttr(impl::getArgAttrs(parentOp, i)))
-        setNameFn(block->getArgument(i), str.getValue());
+    if (isAnyModule(parentOp)) {
+      for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
+        auto name = getModuleArgumentName(parentOp, i);
+        if (!name.empty())
+          setNameFn(block->getArgument(i), name);
+      }
     }
   }
 };
@@ -57,11 +57,7 @@ RTLDialect::RTLDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context,
               ::mlir::TypeID::get<RTLDialect>()) {
 
-  // Register types.
-  addTypes<
-#define GET_TYPEDEF_LIST
-#include "circt/Dialect/RTL/RTLTypes.cpp.inc"
-      >();
+  registerTypes();
 
   // Register operations.
   addOperations<
@@ -75,7 +71,7 @@ RTLDialect::RTLDialect(MLIRContext *context)
 
 RTLDialect::~RTLDialect() {}
 
-/// Registered hook to materialize a single constant operation from a given
+// Registered hook to materialize a single constant operation from a given
 /// attribute value with the desired resultant type. This method should use
 /// the provided builder to create the operation without changing the
 /// insertion position. The generated operation is expected to be constant
@@ -87,7 +83,7 @@ Operation *RTLDialect::materializeConstant(OpBuilder &builder, Attribute value,
   // Integer constants.
   if (auto intType = type.dyn_cast<IntegerType>())
     if (auto attrValue = value.dyn_cast<IntegerAttr>())
-      return builder.create<ConstantOp>(loc, type, attrValue);
+      return builder.create<rtl::ConstantOp>(loc, type, attrValue);
 
   return nullptr;
 }

@@ -12,14 +12,17 @@
 
 #include "circt/Dialect/RTL/RTLTypes.h"
 #include "circt/Dialect/RTL/RTLDialect.h"
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/StorageUniquerSupport.h"
 #include "mlir/IR/Types.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 
-using namespace mlir;
+using namespace circt;
 using namespace circt::rtl;
 
 #define GET_TYPEDEF_CLASSES
@@ -43,8 +46,9 @@ bool circt::rtl::isRTLIntegerType(mlir::Type type) {
 /// the set of types that can be composed together to represent synthesized,
 /// hardware but not marker types like InOutType.
 bool circt::rtl::isRTLValueType(Type type) {
-  if (auto intType = type.dyn_cast<IntegerType>())
-    return intType.isSignless();
+  // Signless and signed integer types are both valid.
+  if (type.isa<IntegerType>())
+    return true;
 
   if (auto array = type.dyn_cast<ArrayType>())
     return isRTLValueType(array.getElementType());
@@ -58,6 +62,34 @@ bool circt::rtl::isRTLValueType(Type type) {
   }
 
   return false;
+}
+
+/// Return the hardware bit width of a type. Does not reflect any encoding,
+/// padding, or storage scheme, just the bit (and wire width) of a
+/// statically-size type. Reflects the number of wires needed to transmit a
+/// value of this type. Returns -1 if the type is not known or cannot be
+/// statically computed.
+int64_t circt::rtl::getBitWidth(mlir::Type type) {
+  return llvm::TypeSwitch<::mlir::Type, size_t>(type)
+      .Case<IntegerType>(
+          [](IntegerType t) { return t.getIntOrFloatBitWidth(); })
+      .Case<ArrayType>([](ArrayType a) {
+        int64_t elementBitWidth = getBitWidth(a.getElementType());
+        if (elementBitWidth < 0)
+          return elementBitWidth;
+        return (int64_t)a.getSize() * elementBitWidth;
+      })
+      .Case<StructType>([](StructType s) {
+        int64_t total = 0;
+        for (auto field : s.getElements()) {
+          int64_t fieldSize = getBitWidth(field.type);
+          if (fieldSize < 0)
+            return fieldSize;
+          total += fieldSize;
+        }
+        return total;
+      })
+      .Default([](Type) { return -1; });
 }
 
 /// Return true if the specified type contains known marker types like
@@ -77,26 +109,6 @@ bool circt::rtl::hasRTLInOutType(Type type) {
   return type.isa<InOutType>();
 }
 
-/// Return the element type of an InOutType or null if the operand isn't an
-/// InOut type.
-mlir::Type circt::rtl::getInOutElementType(mlir::Type type) {
-  if (auto inout = type.dyn_cast_or_null<InOutType>())
-    return inout.getElementType();
-  return {};
-}
-
-/// Return the element type of an ArrayType or UnpackedArrayType, or null if the
-/// operand isn't an array.
-Type circt::rtl::getAnyRTLArrayElementType(Type type) {
-  if (!type)
-    return {};
-  if (auto array = type.dyn_cast<ArrayType>())
-    return array.getElementType();
-  if (auto array = type.dyn_cast<UnpackedArrayType>())
-    return array.getElementType();
-  return {};
-}
-
 /// Parse and print nested RTL types nicely.  These helper methods allow eliding
 /// the "rtl." prefix on array, inout, and other types when in a context that
 /// expects RTL subelement types.
@@ -109,12 +121,13 @@ static ParseResult parseRTLElementType(Type &result, DialectAsmParser &p) {
       StringRef(curPtr, fullString.size() - (curPtr - fullString.data()));
 
   if (typeString.startswith("array<") || typeString.startswith("inout<") ||
-      typeString.startswith("uarray<")) {
+      typeString.startswith("uarray<") || typeString.startswith("struct<")) {
     llvm::StringRef mnemonic;
     if (p.parseKeyword(&mnemonic))
       llvm_unreachable("should have an array or inout keyword here");
-    result = generatedTypeParser(p.getBuilder().getContext(), p, mnemonic);
-    return result ? success() : failure();
+    auto parseResult =
+        generatedTypeParser(p.getBuilder().getContext(), p, mnemonic, result);
+    return parseResult.hasValue() ? success() : failure();
   }
 
   return p.parseType(result);
@@ -195,7 +208,8 @@ Type ArrayType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
   }
 
   auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
-  if (failed(verifyConstructionInvariants(loc, inner, dims[0])))
+  if (failed(verify(mlir::detail::getDefaultDiagnosticEmitFn(loc), inner,
+                    dims[0])))
     return Type();
 
   return get(ctxt, inner, dims[0]);
@@ -207,11 +221,10 @@ void ArrayType::print(DialectAsmPrinter &p) const {
   p << '>';
 }
 
-LogicalResult ArrayType::verifyConstructionInvariants(Location loc,
-                                                      Type innerType,
-                                                      size_t size) {
-  if (!isRTLValueType(innerType))
-    return emitError(loc, "invalid element for rtl.array type");
+LogicalResult ArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
+                                Type innerType, size_t size) {
+  if (hasRTLInOutType(innerType))
+    return emitError() << "rtl.array cannot contain InOut types";
   return success();
 }
 
@@ -232,7 +245,8 @@ Type UnpackedArrayType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
   }
 
   auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
-  if (failed(verifyConstructionInvariants(loc, inner, dims[0])))
+  if (failed(verify(mlir::detail::getDefaultDiagnosticEmitFn(loc), inner,
+                    dims[0])))
     return Type();
 
   return get(ctxt, inner, dims[0]);
@@ -244,11 +258,11 @@ void UnpackedArrayType::print(DialectAsmPrinter &p) const {
   p << '>';
 }
 
-LogicalResult UnpackedArrayType::verifyConstructionInvariants(Location loc,
-                                                              Type innerType,
-                                                              size_t size) {
+LogicalResult
+UnpackedArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
+                          Type innerType, size_t size) {
   if (!isRTLValueType(innerType))
-    return emitError(loc, "invalid element for sv.uarray type");
+    return emitError() << "invalid element for sv.uarray type";
   return success();
 }
 
@@ -262,7 +276,7 @@ Type InOutType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
     return Type();
 
   auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
-  if (failed(verifyConstructionInvariants(loc, inner)))
+  if (failed(verify(mlir::detail::getDefaultDiagnosticEmitFn(loc), inner)))
     return Type();
 
   return get(ctxt, inner);
@@ -274,10 +288,10 @@ void InOutType::print(DialectAsmPrinter &p) const {
   p << '>';
 }
 
-LogicalResult InOutType::verifyConstructionInvariants(Location loc,
-                                                      Type innerType) {
+LogicalResult InOutType::verify(function_ref<InFlightDiagnostic()> emitError,
+                                Type innerType) {
   if (!isRTLValueType(innerType))
-    return emitError(loc, "invalid element for rtl.inout type");
+    return emitError() << "invalid element for rtl.inout type " << innerType;
   return success();
 }
 
@@ -287,7 +301,11 @@ Type RTLDialect::parseType(DialectAsmParser &parser) const {
   llvm::StringRef mnemonic;
   if (parser.parseKeyword(&mnemonic))
     return Type();
-  return generatedTypeParser(getContext(), parser, mnemonic);
+  Type type;
+  auto parseResult = generatedTypeParser(getContext(), parser, mnemonic, type);
+  if (parseResult.hasValue())
+    return type;
+  return Type();
 }
 
 /// Print a type registered to this dialect. Try the tblgen'd type printer
@@ -296,4 +314,11 @@ void RTLDialect::printType(Type type, DialectAsmPrinter &printer) const {
   if (succeeded(generatedTypePrinter(type, printer)))
     return;
   llvm_unreachable("unexpected 'rtl' type");
+}
+
+void RTLDialect::registerTypes() {
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "circt/Dialect/RTL/RTLTypes.cpp.inc"
+      >();
 }

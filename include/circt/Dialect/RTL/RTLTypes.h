@@ -32,18 +32,17 @@ bool isRTLIntegerType(mlir::Type type);
 /// dialects.
 bool isRTLValueType(mlir::Type type);
 
+/// Return the hardware bit width of a type. Does not reflect any encoding,
+/// padding, or storage scheme, just the bit (and wire width) of a
+/// statically-size type. Reflects the number of wires needed to transmit a
+/// value of this type. Returns -1 if the type is not known or cannot be
+/// statically computed.
+int64_t getBitWidth(mlir::Type type);
+
 /// Return true if the specified type contains known marker types like
 /// InOutType.  Unlike isRTLValueType, this is not conservative, it only returns
 /// false on known InOut types, rather than any unknown types.
 bool hasRTLInOutType(mlir::Type type);
-
-/// Return the element type of an InOutType or null if the operand isn't an
-/// InOut type.
-mlir::Type getInOutElementType(mlir::Type type);
-
-/// Return the element type of an ArrayType or UnpackedArrayType, or null if the
-/// operand isn't an array.
-mlir::Type getAnyRTLArrayElementType(mlir::Type type);
 
 } // namespace rtl
 } // namespace circt

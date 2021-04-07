@@ -18,12 +18,15 @@ target_link_libraries(circt-opt
   CIRCTLLHD
   CIRCTLLHDToLLVM
   CIRCTLLHDTransforms
+  CIRCTMSFT
   CIRCTRTL
   CIRCTRTLToLLHD
+  CIRCTSeq
   CIRCTStandardToHandshake
   CIRCTStandardToStaticLogic
   CIRCTStaticLogicOps
   CIRCTSV
+  CIRCTSVTransforms
 
   MLIRParser
   MLIRSupport

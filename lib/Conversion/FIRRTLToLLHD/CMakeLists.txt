@@ -2,7 +2,7 @@ add_circt_conversion_library(CIRCTFIRRTLToLLHD
   FIRRTLToLLHD.cpp
 
   DEPENDS
-  CIRCTFIRRTLToLLHDConversionPassIncGen
+  CIRCTConversionPassIncGen
 
   LINK_COMPONENTS
   Core

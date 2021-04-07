@@ -1,15 +1,13 @@
-// RUN: firtool %s -format=mlir -lower-to-rtl | circt-opt -verify-diagnostics | FileCheck %s --check-prefix=LOWER
-// RUN: firtool %s -format=mlir -lower-to-rtl -enable-lower-types | circt-opt -verify-diagnostics | FileCheck %s --check-prefix=LOWERTYPES
+// RUN: circt-opt -firrtl-lower-types -verify-diagnostics --split-input-file %s
 
-firrtl.circuit "Top" {
-  firrtl.module @Top(%in : !firrtl.bundle<a: uint<1>, b: uint<1>>,
-                     %out : !firrtl.bundle<a: flip<uint<1>>, b: flip<uint<1>>>) {
-    firrtl.connect %out, %in : !firrtl.bundle<a: flip<uint<1>>, b: flip<uint<1>>>, !firrtl.bundle<a: uint<1>, b: uint<1>>
+module  {
+  firrtl.circuit "top_mod" {
+    firrtl.module @top_mod(%result: !firrtl.flip<uint<8>>, %addr: !firrtl.uint<8>, %vec0: !firrtl.vector<uint<8>, 4>) {
+      %0 = firrtl.subaccess %vec0[%addr] : !firrtl.vector<uint<8>, 4>, !firrtl.uint<8>
+      // expected-error @-1 {{SubaccessOp not handled.}}
+      firrtl.connect %result, %0 :!firrtl.flip<uint<8>>, !firrtl.uint<8>
+    }
   }
 }
 
-// LOWER-LABEL: module attributes {firrtl.mainModule = "Top"}
-// expected-error: @+1 {{cannot lower this port type to RTL}}
-
-// LOWERTYPES-LABEL: module attributes {firrtl.mainModule = "Top"}
-// LOWERTYPES: rtl.output %in_a, %in_b
+// -----

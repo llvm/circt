@@ -21,14 +21,13 @@
 
 #include "llvm/Support/TargetSelect.h"
 
-using namespace mlir;
 using namespace circt::llhd::sim;
 
 Engine::Engine(
     llvm::raw_ostream &out, ModuleOp module,
     llvm::function_ref<mlir::LogicalResult(mlir::ModuleOp)> mlirTransformer,
     llvm::function_ref<llvm::Error(llvm::Module *)> llvmTransformer,
-    std::string root, int mode)
+    std::string root, int mode, ArrayRef<StringRef> sharedLibPaths)
     : out(out), root(root), traceMode(mode) {
   state = std::make_unique<State>();
   state->root = root + '.' + root;
@@ -53,8 +52,10 @@ Engine::Engine(
 
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
-  auto maybeEngine =
-      mlir::ExecutionEngine::create(this->module, nullptr, llvmTransformer);
+
+  auto maybeEngine = mlir::ExecutionEngine::create(
+      this->module, nullptr, llvmTransformer,
+      /*jitCodeGenOptLevel=*/llvm::None, /*sharedLibPaths=*/sharedLibPaths);
   assert(maybeEngine && "failed to create JIT");
   engine = std::move(*maybeEngine);
 }
@@ -74,7 +75,7 @@ int Engine::simulate(int n, uint64_t maxTime) {
 
   SmallVector<void *, 1> arg({&state});
   // Initialize tbe simulation state.
-  auto invocationResult = engine->invoke("llhd_init", arg);
+  auto invocationResult = engine->invokePacked("llhd_init", arg);
   if (invocationResult) {
     llvm::errs() << "Failed invocation of llhd_init: " << invocationResult;
     return -1;

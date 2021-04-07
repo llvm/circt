@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/RTL/RTLOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/RTL/RTLVisitors.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionImplementation.h"
@@ -18,12 +19,141 @@
 using namespace circt;
 using namespace rtl;
 
+/// Return true if the specified operation is a combinatorial logic op.
+bool rtl::isCombinatorial(Operation *op) {
+  struct IsCombClassifier : public TypeOpVisitor<IsCombClassifier, bool> {
+    bool visitInvalidTypeOp(Operation *op) { return false; }
+    bool visitUnhandledTypeOp(Operation *op) { return true; }
+  };
+
+  return op->getDialect()->getNamespace() == "comb" ||
+         IsCombClassifier().dispatchTypeOpVisitor(op);
+}
+
+//===----------------------------------------------------------------------===//
+// ConstantOp
+//===----------------------------------------------------------------------===//
+
+static void printConstantOp(OpAsmPrinter &p, ConstantOp &op) {
+  p << "rtl.constant ";
+  p.printAttribute(op.valueAttr());
+  p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"value"});
+}
+
+static ParseResult parseConstantOp(OpAsmParser &parser,
+                                   OperationState &result) {
+  IntegerAttr valueAttr;
+
+  if (parser.parseAttribute(valueAttr, "value", result.attributes) ||
+      parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  result.addTypes(valueAttr.getType());
+  return success();
+}
+
+static LogicalResult verifyConstantOp(ConstantOp constant) {
+  // If the result type has a bitwidth, then the attribute must match its width.
+  if (constant.value().getBitWidth() != constant.getType().getWidth())
+    return constant.emitError(
+        "rtl.constant attribute bitwidth doesn't match return type");
+
+  return success();
+}
+
+/// Build a ConstantOp from an APInt, infering the result type from the
+/// width of the APInt.
+void ConstantOp::build(OpBuilder &builder, OperationState &result,
+                       const APInt &value) {
+
+  auto type = IntegerType::get(builder.getContext(), value.getBitWidth());
+  auto attr = builder.getIntegerAttr(type, value);
+  return build(builder, result, type, attr);
+}
+
+/// Build a ConstantOp from an APInt, infering the result type from the
+/// width of the APInt.
+void ConstantOp::build(OpBuilder &builder, OperationState &result,
+                       IntegerAttr value) {
+  return build(builder, result, value.getType(), value);
+}
+
+/// This builder allows construction of small signed integers like 0, 1, -1
+/// matching a specified MLIR IntegerType.  This shouldn't be used for general
+/// constant folding because it only works with values that can be expressed in
+/// an int64_t.  Use APInt's instead.
+void ConstantOp::build(OpBuilder &builder, OperationState &result, Type type,
+                       int64_t value) {
+  auto numBits = type.cast<IntegerType>().getWidth();
+  build(builder, result, APInt(numBits, (uint64_t)value, /*isSigned=*/true));
+}
+
+void ConstantOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  auto intTy = getType();
+  auto intCst = getValue();
+
+  // Sugar i1 constants with 'true' and 'false'.
+  if (intTy.getWidth() == 1)
+    return setNameFn(getResult(), intCst.isNullValue() ? "false" : "true");
+
+  // Otherwise, build a complex name with the value and type.
+  SmallVector<char, 32> specialNameBuffer;
+  llvm::raw_svector_ostream specialName(specialNameBuffer);
+  specialName << 'c' << intCst << '_' << intTy;
+  setNameFn(getResult(), specialName.str());
+}
+
+OpFoldResult ConstantOp::fold(ArrayRef<Attribute> constants) {
+  assert(constants.empty() && "constant has no operands");
+  return valueAttr();
+}
+
 //===----------------------------------------------------------------------===//
 // RTLModuleOp
 //===----------------------------------------------------------------------===/
 
+/// Return true if this is an rtl.module, external module, generated module etc.
+bool rtl::isAnyModule(Operation *module) {
+  return isa<RTLModuleOp>(module) || isa<RTLModuleExternOp>(module) ||
+         isa<RTLModuleGeneratedOp>(module);
+}
+
+/// Return the signature for the specified module as a function type.
+FunctionType rtl::getModuleType(Operation *module) {
+  auto typeAttr =
+      module->getAttrOfType<TypeAttr>(RTLModuleOp::getTypeAttrName());
+  return typeAttr.getValue().cast<FunctionType>();
+}
+
+/// Return the port name for the specified argument or result.
+StringAttr rtl::getModuleArgumentNameAttr(Operation *module, size_t argNo) {
+  return module->getAttrOfType<ArrayAttr>("argNames")[argNo].cast<StringAttr>();
+}
+
+StringAttr rtl::getModuleResultNameAttr(Operation *module, size_t resultNo) {
+  return module->getAttrOfType<ArrayAttr>("resultNames")[resultNo]
+      .cast<StringAttr>();
+}
+
+void rtl::setModuleArgumentNames(Operation *module, ArrayRef<Attribute> names) {
+  assert(getModuleType(module).getNumInputs() == names.size() &&
+         "incorrect number of arguments names specified");
+  module->setAttr("argNames", ArrayAttr::get(module->getContext(), names));
+}
+
+void rtl::setModuleResultNames(Operation *module, ArrayRef<Attribute> names) {
+  assert(getModuleType(module).getNumResults() == names.size() &&
+         "incorrect number of arguments names specified");
+  module->setAttr("resultNames", ArrayAttr::get(module->getContext(), names));
+}
+
+// Flag for parsing different module types
+enum ExternModKind { PlainMod, ExternMod, GenMod };
+
 static void buildModule(OpBuilder &builder, OperationState &result,
-                        StringAttr name, ArrayRef<ModulePortInfo> ports) {
+                        StringAttr name, ArrayRef<ModulePortInfo> ports,
+                        ArrayRef<NamedAttribute> attributes) {
   using namespace mlir::impl;
 
   // Add an attribute for the name.
@@ -34,8 +164,12 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   for (auto elt : ports) {
     if (elt.isOutput())
       resultTypes.push_back(elt.type);
-    else
+    else {
+      if (elt.direction == PortDirection::INOUT &&
+          !elt.type.isa<rtl::InOutType>())
+        elt.type = rtl::InOutType::get(elt.type);
       argTypes.push_back(elt.type);
+    }
   }
 
   // Record the argument and result types as an attribute.
@@ -43,25 +177,25 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
 
   // Record the names of the arguments if present.
-  SmallString<8> attrNameBuf;
-  SmallString<8> attrDirBuf;
+  SmallVector<Attribute> argNames, resultNames;
   for (const ModulePortInfo &port : ports) {
     SmallVector<NamedAttribute, 2> argAttrs;
-    if (!port.name.getValue().empty())
-      argAttrs.push_back(
-          NamedAttribute(builder.getIdentifier("rtl.name"), port.name));
-
-    StringRef attrName = port.isOutput()
-                             ? getResultAttrName(port.argNum, attrNameBuf)
-                             : getArgAttrName(port.argNum, attrNameBuf);
-    result.addAttribute(attrName, builder.getDictionaryAttr(argAttrs));
+    if (port.isOutput())
+      resultNames.push_back(port.name);
+    else
+      argNames.push_back(port.name);
   }
+
+  result.addAttribute("argNames", builder.getArrayAttr(argNames));
+  result.addAttribute("resultNames", builder.getArrayAttr(resultNames));
+  result.addAttributes(attributes);
   result.addRegion();
 }
 
 void RTLModuleOp::build(OpBuilder &builder, OperationState &result,
-                        StringAttr name, ArrayRef<ModulePortInfo> ports) {
-  buildModule(builder, result, name, ports);
+                        StringAttr name, ArrayRef<ModulePortInfo> ports,
+                        ArrayRef<NamedAttribute> attributes) {
+  buildModule(builder, result, name, ports, attributes);
 
   // Create a region and a block for the body.
   auto *bodyRegion = result.regions[0].get();
@@ -79,41 +213,40 @@ void RTLModuleOp::build(OpBuilder &builder, OperationState &result,
 /// Return the name to use for the Verilog module that we're referencing
 /// here.  This is typically the symbol, but can be overridden with the
 /// verilogName attribute.
-StringRef RTLExternModuleOp::getVerilogModuleName() {
+StringRef RTLModuleExternOp::getVerilogModuleName() {
   if (auto vname = verilogName())
     return vname.getValue();
   return getName();
 }
 
-void RTLExternModuleOp::build(OpBuilder &builder, OperationState &result,
+void RTLModuleExternOp::build(OpBuilder &builder, OperationState &result,
                               StringAttr name, ArrayRef<ModulePortInfo> ports,
-                              StringRef verilogName) {
-  buildModule(builder, result, name, ports);
+                              StringRef verilogName,
+                              ArrayRef<NamedAttribute> attributes) {
+  buildModule(builder, result, name, ports, attributes);
 
   if (!verilogName.empty())
     result.addAttribute("verilogName", builder.getStringAttr(verilogName));
 }
 
-FunctionType rtl::getModuleType(Operation *op) {
-  auto typeAttr = op->getAttrOfType<TypeAttr>(RTLModuleOp::getTypeAttrName());
-  return typeAttr.getValue().cast<FunctionType>();
+void RTLModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
+                                 FlatSymbolRefAttr genKind, StringAttr name,
+                                 ArrayRef<ModulePortInfo> ports,
+                                 StringRef verilogName,
+                                 ArrayRef<NamedAttribute> attributes) {
+  buildModule(builder, result, name, ports, attributes);
+  result.addAttribute("generatorKind", genKind);
+  if (!verilogName.empty())
+    result.addAttribute("verilogName", builder.getStringAttr(verilogName));
 }
 
-StringAttr rtl::getRTLNameAttr(ArrayRef<NamedAttribute> attrs) {
-  for (auto &argAttr : attrs) {
-    if (argAttr.first != "rtl.name")
-      continue;
-    return argAttr.second.dyn_cast<StringAttr>();
-  }
-  return StringAttr();
-}
-
-void rtl::getModulePortInfo(Operation *op,
-                            SmallVectorImpl<ModulePortInfo> &results) {
+SmallVector<ModulePortInfo> rtl::getModulePortInfo(Operation *op) {
+  assert(isAnyModule(op) && "Can only get module ports from a module");
+  SmallVector<ModulePortInfo> results;
   auto argTypes = getModuleType(op).getInputs();
 
+  auto argNames = op->getAttrOfType<ArrayAttr>("argNames");
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
-    auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
     bool isInOut = false;
     auto type = argTypes[i];
 
@@ -122,17 +255,29 @@ void rtl::getModulePortInfo(Operation *op,
       type = inout.getElementType();
     }
 
-    results.push_back({getRTLNameAttr(argAttrs),
-                       isInOut ? PortDirection::INOUT : PortDirection::INPUT,
-                       type, i});
+    auto direction = isInOut ? PortDirection::INOUT : PortDirection::INPUT;
+    results.push_back({argNames[i].cast<StringAttr>(), direction, type, i});
   }
 
+  auto resultNames = op->getAttrOfType<ArrayAttr>("resultNames");
   auto resultTypes = getModuleType(op).getResults();
   for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
-    auto argAttrs = ::mlir::impl::getResultAttrs(op, i);
-    results.push_back(
-        {getRTLNameAttr(argAttrs), PortDirection::OUTPUT, resultTypes[i], i});
+    results.push_back({resultNames[i].cast<StringAttr>(), PortDirection::OUTPUT,
+                       resultTypes[i], i});
   }
+  return results;
+}
+
+static StringAttr getPortNameAttr(MLIRContext *context, StringRef name) {
+  if (!name.empty()) {
+    // Ignore numeric names like %42
+    assert(name.size() > 1 && name[0] == '%' && "Unknown MLIR name");
+    if (isdigit(name[1]))
+      name = StringRef();
+    else
+      name = name.drop_front();
+  }
+  return StringAttr::get(context, name);
 }
 
 /// Parse a function result list.
@@ -145,7 +290,8 @@ void rtl::getModulePortInfo(Operation *op,
 ///
 static ParseResult
 parseFunctionResultList(OpAsmParser &parser, SmallVectorImpl<Type> &resultTypes,
-                        SmallVectorImpl<NamedAttrList> &resultAttrs) {
+                        SmallVectorImpl<NamedAttrList> &resultAttrs,
+                        SmallVectorImpl<Attribute> &resultNames) {
   if (parser.parseLParen())
     return failure();
 
@@ -153,6 +299,7 @@ parseFunctionResultList(OpAsmParser &parser, SmallVectorImpl<Type> &resultTypes,
   if (succeeded(parser.parseOptionalRParen()))
     return success();
 
+  auto *context = parser.getBuilder().getContext();
   // Parse individual function results.
   do {
     resultTypes.emplace_back();
@@ -166,19 +313,13 @@ parseFunctionResultList(OpAsmParser &parser, SmallVectorImpl<Type> &resultTypes,
         return failure();
 
       // If the name was specified, then we will use it.
-      implicitName = operandName.name.drop_front();
+      implicitName = operandName.name;
     }
+    resultNames.push_back(getPortNameAttr(context, implicitName));
 
     if (parser.parseType(resultTypes.back()) ||
         parser.parseOptionalAttrDict(resultAttrs.back()))
       return failure();
-
-    // If we have an implicit name and no explicit rtl.name attribute, then use
-    // the implicit name as the rtl.name attribute.
-    if (!implicitName.empty() && !getRTLNameAttr(resultAttrs.back())) {
-      auto nameAttr = parser.getBuilder().getStringAttr(implicitName);
-      resultAttrs.back().append("rtl.name", nameAttr);
-    }
   } while (succeeded(parser.parseOptionalComma()));
   return parser.parseRParen();
 }
@@ -186,22 +327,34 @@ parseFunctionResultList(OpAsmParser &parser, SmallVectorImpl<Type> &resultTypes,
 /// This is a variant of mlor::parseFunctionSignature that allows names on
 /// result arguments.
 static ParseResult parseModuleFunctionSignature(
-    OpAsmParser &parser, bool allowVariadic,
-    SmallVectorImpl<OpAsmParser::OperandType> &argNames,
+    OpAsmParser &parser, SmallVectorImpl<OpAsmParser::OperandType> &argNames,
     SmallVectorImpl<Type> &argTypes, SmallVectorImpl<NamedAttrList> &argAttrs,
     bool &isVariadic, SmallVectorImpl<Type> &resultTypes,
-    SmallVectorImpl<NamedAttrList> &resultAttrs) {
+    SmallVectorImpl<NamedAttrList> &resultAttrs,
+    SmallVectorImpl<Attribute> &resultNames) {
+
+  using namespace mlir::impl;
   bool allowArgAttrs = true;
-  if (impl::parseFunctionArgumentList(parser, allowArgAttrs, allowVariadic,
-                                      argNames, argTypes, argAttrs, isVariadic))
+  bool allowVariadic = false;
+  if (parseFunctionArgumentList(parser, allowArgAttrs, allowVariadic, argNames,
+                                argTypes, argAttrs, isVariadic))
     return failure();
+
   if (succeeded(parser.parseOptionalArrow()))
-    return parseFunctionResultList(parser, resultTypes, resultAttrs);
+    return parseFunctionResultList(parser, resultTypes, resultAttrs,
+                                   resultNames);
   return success();
 }
 
+static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
+  for (auto &argAttr : attrs)
+    if (argAttr.first == name)
+      return true;
+  return false;
+}
+
 static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
-                                    bool isExtModule = false) {
+                                    ExternModKind modKind = PlainMod) {
   using namespace mlir::impl;
 
   SmallVector<OpAsmParser::OperandType, 4> entryArgs;
@@ -217,12 +370,20 @@ static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
                              result.attributes))
     return failure();
 
+  FlatSymbolRefAttr kindAttr;
+  if (modKind == GenMod) {
+    if (parser.parseComma() ||
+        parser.parseAttribute(kindAttr, "generatorKind", result.attributes)) {
+      return failure();
+    }
+  }
+
   // Parse the function signature.
   bool isVariadic = false;
-
-  if (parseModuleFunctionSignature(parser, /*allowVariadic=*/false, entryArgs,
-                                   argTypes, argAttrs, isVariadic, resultTypes,
-                                   resultAttrs))
+  SmallVector<Attribute> resultNames;
+  if (parseModuleFunctionSignature(parser, entryArgs, argTypes, argAttrs,
+                                   isVariadic, resultTypes, resultAttrs,
+                                   resultNames))
     return failure();
 
   // Record the argument and result types as an attribute.  This is necessary
@@ -234,46 +395,33 @@ static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
   if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
     return failure();
 
-  assert(argAttrs.size() == argTypes.size());
-  assert(resultAttrs.size() == resultTypes.size());
-
   auto *context = result.getContext();
 
-  // Postprocess each of the arguments.  If there was no 'rtl.name'
-  // attribute, and if the argument name was non-numeric, then add the
-  // rtl.name attribute with the textual name from the IR.  The name in the
-  // text file is a load-bearing part of the IR, but we don't want the
-  // verbosity in dumps of including it explicitly in the attribute
-  // dictionary.
-  for (size_t i = 0, e = argAttrs.size(); i != e; ++i) {
-    auto &attrs = argAttrs[i];
+  // Use the argument and result names if not already specified.
+  if (!hasAttribute("argNames", result.attributes)) {
+    SmallVector<Attribute> argNames;
+    if (!entryArgs.empty()) {
+      for (auto &arg : entryArgs)
+        argNames.push_back(getPortNameAttr(context, arg.name));
+    } else if (!argTypes.empty()) {
+      // The parser returns empty names in a special way.
+      argNames.assign(argTypes.size(), StringAttr::get(context, ""));
+    }
 
-    // If an explicit name attribute was present, don't add the implicit one.
-    bool hasNameAttr = false;
-    for (auto &elt : attrs)
-      if (elt.first.str() == "rtl.name")
-        hasNameAttr = true;
-    if (hasNameAttr || entryArgs.empty())
-      continue;
-
-    auto &arg = entryArgs[i];
-
-    // The name of an argument is of the form "%42" or "%id", and since
-    // parsing succeeded, we know it always has one character.
-    assert(arg.name.size() > 1 && arg.name[0] == '%' && "Unknown MLIR name");
-    if (isdigit(arg.name[1]))
-      continue;
-
-    auto nameAttr = StringAttr::get(arg.name.drop_front(), context);
-    attrs.push_back({Identifier::get("rtl.name", context), nameAttr});
+    result.addAttribute("argNames", ArrayAttr::get(context, argNames));
   }
+  if (!hasAttribute("resultNames", result.attributes))
+    result.addAttribute("resultNames", ArrayAttr::get(context, resultNames));
+
+  assert(argAttrs.size() == argTypes.size());
+  assert(resultAttrs.size() == resultTypes.size());
 
   // Add the attributes to the function arguments.
   addArgAndResultAttrs(builder, result, argAttrs, resultAttrs);
 
   // Parse the optional function body.
   auto *body = result.addRegion();
-  if (!isExtModule) {
+  if (modKind == PlainMod) {
     if (parser.parseRegion(*body, entryArgs,
                            entryArgs.empty() ? ArrayRef<Type>() : argTypes))
       return failure();
@@ -283,9 +431,14 @@ static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
   return success();
 }
 
-static ParseResult parseRTLExternModuleOp(OpAsmParser &parser,
+static ParseResult parseRTLModuleExternOp(OpAsmParser &parser,
                                           OperationState &result) {
-  return parseRTLModuleOp(parser, result, /*isExtModule:*/ true);
+  return parseRTLModuleOp(parser, result, ExternMod);
+}
+
+static ParseResult parseRTLModuleGeneratedOp(OpAsmParser &parser,
+                                             OperationState &result) {
+  return parseRTLModuleOp(parser, result, GenMod);
 }
 
 FunctionType getRTLModuleOpType(Operation *op) {
@@ -295,47 +448,37 @@ FunctionType getRTLModuleOpType(Operation *op) {
 
 static void printModuleSignature(OpAsmPrinter &p, Operation *op,
                                  ArrayRef<Type> argTypes, bool isVariadic,
-                                 ArrayRef<Type> resultTypes) {
+                                 ArrayRef<Type> resultTypes,
+                                 bool &needArgNamesAttr) {
   Region &body = op->getRegion(0);
   bool isExternal = body.empty();
+  SmallString<32> resultNameStr;
 
   p << '(';
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     if (i > 0)
       p << ", ";
 
-    Value argumentValue;
+    auto argName = getModuleArgumentName(op, i);
+
     if (!isExternal) {
-      argumentValue = body.front().getArgument(i);
-      p.printOperand(argumentValue);
-      p << ": ";
+      // Get the printed format for the argument name.
+      resultNameStr.clear();
+      llvm::raw_svector_ostream tmpStream(resultNameStr);
+      p.printOperand(body.front().getArgument(i), tmpStream);
+
+      // If the name wasn't printable in a way that agreed with argName, make
+      // sure to print out an explicit argNames attribute.
+      if (tmpStream.str().drop_front() != argName)
+        needArgNamesAttr = true;
+
+      p << tmpStream.str() << ": ";
+    } else if (!argName.empty()) {
+      p << '%' << argName << ": ";
     }
 
     p.printType(argTypes[i]);
-
-    auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
-
-    // If the argument has the rtl.name attribute, and if it was used by
-    // the printer exactly (not name mangled with a suffix etc) then we can
-    // omit the rtl.name attribute from the argument attribute dictionary.
-    ArrayRef<StringRef> elidedAttrs;
-    StringRef tmp;
-    if (argumentValue) {
-      if (auto nameAttr = getRTLNameAttr(argAttrs)) {
-
-        // Check to make sure the asmprinter is printing it correctly.
-        SmallString<32> resultNameStr;
-        llvm::raw_svector_ostream tmpStream(resultNameStr);
-        p.printOperand(argumentValue, tmpStream);
-
-        // If the name is the same as we would otherwise use, then we're good!
-        if (tmpStream.str().drop_front() == nameAttr.getValue()) {
-          tmp = "rtl.name";
-          elidedAttrs = tmp;
-        }
-      }
-    }
-    p.printOptionalAttrDict(argAttrs, elidedAttrs);
+    p.printOptionalAttrDict(::mlir::impl::getArgAttrs(op, i));
   }
 
   if (isVariadic) {
@@ -353,19 +496,20 @@ static void printModuleSignature(OpAsmPrinter &p, Operation *op,
     for (size_t i = 0, e = resultTypes.size(); i < e; ++i) {
       if (i != 0)
         os << ", ";
-      auto resultAttrs = ::mlir::impl::getResultAttrs(op, i);
-      StringAttr name = getRTLNameAttr(resultAttrs);
-      if (name)
-        os << '%' << name.getValue() << ": ";
+      StringRef name = getModuleResultName(op, i);
+      if (!name.empty())
+        os << '%' << name << ": ";
 
+      auto resultAttrs = ::mlir::impl::getResultAttrs(op, i);
       p.printType(resultTypes[i]);
-      p.printOptionalAttrDict(resultAttrs, {"rtl.name"});
+      p.printOptionalAttrDict(resultAttrs);
     }
     os << ')';
   }
 }
 
-static void printRTLModuleOp(OpAsmPrinter &p, Operation *op) {
+static void printModuleOp(OpAsmPrinter &p, Operation *op,
+                          ExternModKind modKind) {
   using namespace mlir::impl;
 
   FunctionType fnType = getRTLModuleOpType(op);
@@ -378,23 +522,98 @@ static void printRTLModuleOp(OpAsmPrinter &p, Operation *op) {
           .getValue();
   p << op->getName() << ' ';
   p.printSymbolName(funcName);
+  if (modKind == GenMod) {
+    p << ", ";
+    p.printSymbolName(cast<RTLModuleGeneratedOp>(op).generatorKind());
+  }
 
-  printModuleSignature(p, op, argTypes, /*isVariadic=*/false, resultTypes);
-  printFunctionAttributes(p, op, argTypes.size(), resultTypes.size());
+  bool needArgNamesAttr = false;
+  printModuleSignature(p, op, argTypes, /*isVariadic=*/false, resultTypes,
+                       needArgNamesAttr);
+
+  SmallVector<StringRef, 3> omittedAttrs;
+  if (modKind == GenMod)
+    omittedAttrs.push_back("generatorKind");
+  if (!needArgNamesAttr)
+    omittedAttrs.push_back("argNames");
+  omittedAttrs.push_back("resultNames");
+
+  printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(),
+                          omittedAttrs);
 }
 
-static void print(OpAsmPrinter &p, RTLExternModuleOp op) {
-  printRTLModuleOp(p, op);
+static void print(OpAsmPrinter &p, RTLModuleExternOp op) {
+  printModuleOp(p, op, ExternMod);
+}
+static void print(OpAsmPrinter &p, RTLModuleGeneratedOp op) {
+  printModuleOp(p, op, GenMod);
 }
 
 static void print(OpAsmPrinter &p, RTLModuleOp op) {
-  printRTLModuleOp(p, op);
+  printModuleOp(p, op, PlainMod);
 
   // Print the body if this is not an external function.
   Region &body = op.getBody();
   if (!body.empty())
     p.printRegion(body, /*printEntryBlockArgs=*/false,
                   /*printBlockTerminators=*/true);
+}
+
+static LogicalResult verifyModuleCommon(Operation *module) {
+  assert(isAnyModule(module) &&
+         "verifier hook should only be called on modules");
+
+  auto moduleType = getModuleType(module);
+  auto argNames = module->getAttrOfType<ArrayAttr>("argNames");
+  auto resultNames = module->getAttrOfType<ArrayAttr>("resultNames");
+  if (argNames.size() != moduleType.getNumInputs())
+    return module->emitOpError("incorrect number of argument names");
+  if (resultNames.size() != moduleType.getNumResults())
+    return module->emitOpError("incorrect number of result names");
+  return success();
+}
+
+static LogicalResult verifyRTLModuleOp(RTLModuleOp op) {
+  return verifyModuleCommon(op);
+}
+
+static LogicalResult verifyRTLModuleExternOp(RTLModuleExternOp op) {
+  return verifyModuleCommon(op);
+}
+
+/// Lookup the generator for the symbol.  This returns null on
+/// invalid IR.
+Operation *RTLModuleGeneratedOp::getGeneratorKindOp() {
+  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
+  return topLevelModuleOp.lookupSymbol(generatorKind());
+}
+
+static LogicalResult verifyRTLModuleGeneratedOp(RTLModuleGeneratedOp op) {
+  if (failed(verifyModuleCommon(op)))
+    return failure();
+
+  auto referencedKind = op.getGeneratorKindOp();
+  if (referencedKind == nullptr)
+    return op.emitError("Cannot find generator definition '")
+           << op.generatorKind() << "'";
+
+  if (!isa<RTLGeneratorSchemaOp>(referencedKind))
+    return op.emitError("Symbol resolved to '")
+           << referencedKind->getName()
+           << "' which is not a RTLGeneratorSchemaOp";
+
+  auto referencedKindOp = dyn_cast<RTLGeneratorSchemaOp>(referencedKind);
+  auto paramRef = referencedKindOp.requiredAttrs();
+  auto dict = op->getAttrDictionary();
+  for (auto str : paramRef) {
+    auto strAttr = str.dyn_cast<StringAttr>();
+    if (!strAttr)
+      return op.emitError("Unknown attribute type, expected a string");
+    if (!dict.get(strAttr.getValue()))
+      return op.emitError("Missing attribute '") << strAttr.getValue() << "'";
+  }
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -411,6 +630,70 @@ Operation *InstanceOp::getReferencedModule() {
   return topLevelModuleOp.lookupSymbol(moduleName());
 }
 
+// Helper function to verify instance op types
+static LogicalResult verifyInstanceOpTypes(InstanceOp op,
+                                           Operation *referencedModule) {
+  assert(referencedModule && "referenced module must not be null");
+
+  // Check operand types first.
+  auto numOperands = op->getNumOperands();
+  auto expectedOperandTypes = getModuleType(referencedModule).getInputs();
+
+  if (expectedOperandTypes.size() != numOperands) {
+    auto diag = op.emitOpError()
+                << "has a wrong number of operands; expected "
+                << expectedOperandTypes.size() << " but got " << numOperands;
+    diag.attachNote(referencedModule->getLoc())
+        << "original module declared here";
+
+    return failure();
+  }
+
+  for (size_t i = 0; i != numOperands; ++i) {
+    auto expectedType = expectedOperandTypes[i];
+    auto operandType = op.getOperand(i).getType();
+    if (operandType != expectedType) {
+      auto diag = op.emitOpError()
+                  << "#" << i << " operand type must be " << expectedType
+                  << ", but got " << operandType;
+
+      diag.attachNote(referencedModule->getLoc())
+          << "original module declared here";
+      return failure();
+    }
+  }
+
+  // Checke result types.
+  auto numResults = op->getNumResults();
+  auto expectedResultTypes = getModuleType(referencedModule).getResults();
+
+  if (expectedResultTypes.size() != numResults) {
+    auto diag = op.emitOpError()
+                << "has a wrong number of results; expected "
+                << expectedResultTypes.size() << " but got " << numResults;
+    diag.attachNote(referencedModule->getLoc())
+        << "original module declared here";
+
+    return failure();
+  }
+
+  for (size_t i = 0; i != numResults; ++i) {
+    auto expectedType = expectedResultTypes[i];
+    auto resultType = op.getResult(i).getType();
+    if (resultType != expectedType) {
+      auto diag = op.emitOpError()
+                  << "#" << i << " result type must be " << expectedType
+                  << ", but got " << resultType;
+
+      diag.attachNote(referencedModule->getLoc())
+          << "original module declared here";
+      return failure();
+    }
+  }
+
+  return success();
+}
+
 static LogicalResult verifyInstanceOp(InstanceOp op) {
   // Check that this instance is inside a module.
   auto module = dyn_cast<RTLModuleOp>(op->getParentOp());
@@ -424,11 +707,10 @@ static LogicalResult verifyInstanceOp(InstanceOp op) {
     return op.emitError("Cannot find module definition '")
            << op.moduleName() << "'";
 
-  if (!isa<RTLModuleOp>(referencedModule) &&
-      !isa<RTLExternModuleOp>(referencedModule))
+  if (!isAnyModule(referencedModule))
     return op.emitError("Symbol resolved to '")
            << referencedModule->getName()
-           << "' which is not a RTL[Ext]ModuleOp";
+           << "' which is not a RTL[Ext|Generated]ModuleOp";
 
   if (auto paramDictOpt = op.parameters()) {
     DictionaryAttr paramDict = paramDictOpt.getValue();
@@ -446,7 +728,12 @@ static LogicalResult verifyInstanceOp(InstanceOp op) {
       return failure();
   }
 
-  return success();
+  // If the referenced moudle is internal, check that input and result types are
+  // consistent with the referenced module.
+  if (!isa<RTLModuleOp>(referencedModule))
+    return success();
+
+  return verifyInstanceOpTypes(op, referencedModule);
 }
 
 StringAttr InstanceOp::getResultName(size_t idx) {
@@ -454,10 +741,7 @@ StringAttr InstanceOp::getResultName(size_t idx) {
   if (!module)
     return {};
 
-  SmallVector<ModulePortInfo, 4> results;
-  getModulePortInfo(module, results);
-
-  for (auto &port : results) {
+  for (auto &port : getModulePortInfo(module)) {
     if (!port.isOutput())
       continue;
     if (idx == 0)
@@ -471,13 +755,19 @@ StringAttr InstanceOp::getResultName(size_t idx) {
 /// Suggest a name for each result value based on the saved result names
 /// attribute.
 void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  auto *module = getReferencedModule();
+  if (!module)
+    return;
+
   // Provide default names for instance results.
-  std::string name;
+  std::string name = instanceName().str() + ".";
+  size_t baseNameLen = name.size();
+
   for (size_t i = 0, e = getNumResults(); i != e; ++i) {
-    auto resultName = getResultName(i);
-    name = instanceName().str() + ".";
-    if (resultName)
-      name += resultName.getValue().str();
+    auto resName = getModuleResultName(module, i);
+    name.resize(baseNameLen);
+    if (!resName.empty())
+      name += resName.str();
     else
       name += std::to_string(i);
     setNameFn(getResult(i), name);
@@ -525,173 +815,8 @@ static LogicalResult verifyOutputOp(OutputOp *op) {
 }
 
 //===----------------------------------------------------------------------===//
-// RTL combinational ops
-//===----------------------------------------------------------------------===//
-
-/// Return true if the specified operation is a combinatorial logic op.
-bool rtl::isCombinatorial(Operation *op) {
-  struct IsCombClassifier
-      : public CombinatorialVisitor<IsCombClassifier, bool> {
-    bool visitInvalidComb(Operation *op) { return false; }
-    bool visitUnhandledComb(Operation *op) { return true; }
-  };
-
-  return IsCombClassifier().dispatchCombinatorialVisitor(op);
-}
-
-//===----------------------------------------------------------------------===//
-// WireOp
-//===----------------------------------------------------------------------===//
-
-void WireOp::build(OpBuilder &odsBuilder, OperationState &odsState,
-                   Type elementType, StringAttr name) {
-  if (name)
-    odsState.addAttribute("name", name);
-
-  odsState.addTypes(InOutType::get(elementType));
-}
-
-static void printWireOp(OpAsmPrinter &p, Operation *op) {
-  p << op->getName();
-  // Note that we only need to print the "name" attribute if the asmprinter
-  // result name disagrees with it.  This can happen in strange cases, e.g.
-  // when there are conflicts.
-  bool namesDisagree = false;
-
-  SmallString<32> resultNameStr;
-  llvm::raw_svector_ostream tmpStream(resultNameStr);
-  p.printOperand(op->getResult(0), tmpStream);
-  auto expectedName = op->getAttrOfType<StringAttr>("name");
-  if (!expectedName ||
-      tmpStream.str().drop_front() != expectedName.getValue()) {
-    namesDisagree = true;
-  }
-
-  if (namesDisagree)
-    p.printOptionalAttrDict(op->getAttrs());
-  else
-    p.printOptionalAttrDict(op->getAttrs(), {"name"});
-
-  p << " : " << op->getResult(0).getType();
-}
-
-static ParseResult parseWireOp(OpAsmParser &parser, OperationState &result) {
-  llvm::SMLoc typeLoc;
-  Type resultType;
-
-  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
-      parser.getCurrentLocation(&typeLoc) || parser.parseType(resultType))
-    return failure();
-
-  result.addTypes(resultType);
-
-  // If the attribute dictionary contains no 'name' attribute, infer it from
-  // the SSA name (if specified).
-  bool hadName = llvm::any_of(result.attributes, [](NamedAttribute attr) {
-    return attr.first == "name";
-  });
-
-  // If there was no name specified, check to see if there was a useful name
-  // specified in the asm file.
-  if (hadName)
-    return success();
-
-  auto resultName = parser.getResultName(0);
-  if (!resultName.first.empty() && !isdigit(resultName.first[0])) {
-    StringRef name = resultName.first;
-    auto *context = result.getContext();
-    auto nameAttr = parser.getBuilder().getStringAttr(name);
-    result.attributes.push_back({Identifier::get("name", context), nameAttr});
-  }
-
-  return success();
-}
-
-/// Suggest a name for each result value based on the saved result names
-/// attribute.
-void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  // If the wire has an optional 'name' attribute, use it.
-  if (auto nameAttr = (*this)->getAttrOfType<StringAttr>("name"))
-    setNameFn(getResult(), nameAttr.getValue());
-}
-
-//===----------------------------------------------------------------------===//
-// ConstantOp
-//===----------------------------------------------------------------------===//
-
-static LogicalResult verifyConstantOp(ConstantOp constant) {
-  // If the result type has a bitwidth, then the attribute must match its width.
-  if (constant.value().getBitWidth() != constant.getType().getWidth())
-    return constant.emitError(
-        "firrtl.constant attribute bitwidth doesn't match return type");
-
-  return success();
-}
-
-/// Build a ConstantOp from an APInt, infering the result type from the
-/// width of the APInt.
-void ConstantOp::build(OpBuilder &builder, OperationState &result,
-                       const APInt &value) {
-
-  auto type = IntegerType::get(builder.getContext(), value.getBitWidth());
-  auto attr = builder.getIntegerAttr(type, value);
-  return build(builder, result, type, attr);
-}
-
-/// This builder allows construction of small signed integers like 0, 1, -1
-/// matching a specified MLIR IntegerType.  This shouldn't be used for general
-/// constant folding because it only works with values that can be expressed in
-/// an int64_t.  Use APInt's instead.
-void ConstantOp::build(OpBuilder &builder, OperationState &result, Type type,
-                       int64_t value) {
-  auto numBits = type.cast<IntegerType>().getWidth();
-  build(builder, result, APInt(numBits, (uint64_t)value, /*isSigned=*/true));
-}
-
-void ConstantOp::getAsmResultNames(
-    function_ref<void(Value, StringRef)> setNameFn) {
-  auto intTy = getType();
-  auto intCst = getValue();
-
-  // Sugar i1 constants with 'true' and 'false'.
-  if (intTy.getWidth() == 1)
-    return setNameFn(getResult(), intCst.isNullValue() ? "false" : "true");
-
-  // Otherwise, build a complex name with the value and type.
-  SmallVector<char, 32> specialNameBuffer;
-  llvm::raw_svector_ostream specialName(specialNameBuffer);
-  specialName << 'c' << intCst << '_' << intTy;
-  setNameFn(getResult(), specialName.str());
-}
-
-//===----------------------------------------------------------------------===//
-// Unary Operations
-//===----------------------------------------------------------------------===//
-
-static LogicalResult verifySExtOp(SExtOp op) {
-  // The source must be smaller than the dest type.  Both are already known to
-  // be signless integers.
-  auto srcType = op.getOperand().getType().cast<IntegerType>();
-  if (srcType.getWidth() >= op.getType().getWidth()) {
-    op.emitOpError("extension must increase bitwidth of operand");
-    return failure();
-  }
-
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//
-
-static LogicalResult verifyExtractOp(ExtractOp op) {
-  unsigned srcWidth = op.input().getType().cast<IntegerType>().getWidth();
-  unsigned dstWidth = op.getType().getWidth();
-  if (op.lowBit() >= srcWidth || srcWidth - op.lowBit() < dstWidth)
-    return op.emitOpError("from bit too large for input"), failure();
-
-  return success();
-}
 
 static ParseResult parseSliceTypes(OpAsmParser &p, Type &srcType,
                                    Type &idxType) {
@@ -709,38 +834,90 @@ static void printSliceTypes(OpAsmPrinter &p, Operation *, Type srcType,
   p.printType(srcType);
 }
 
-//===----------------------------------------------------------------------===//
-// Variadic operations
-//===----------------------------------------------------------------------===//
+static ParseResult parseArrayCreateOp(OpAsmParser &parser,
+                                      OperationState &result) {
+  llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
+  llvm::SmallVector<OpAsmParser::OperandType, 16> operands;
+  Type elemType;
 
-static LogicalResult verifyUTVariadicRTLOp(Operation *op) {
-  if (op->getOperands().empty())
-    return op->emitOpError("requires 1 or more args");
+  if (parser.parseOperandList(operands) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseLParen() || parser.parseType(elemType) ||
+      parser.parseRParen())
+    return failure();
 
+  if (operands.size() == 0)
+    return parser.emitError(inputOperandsLoc,
+                            "Cannot construct an array of length 0");
+  result.addTypes({ArrayType::get(elemType, operands.size())});
+
+  for (auto operand : operands)
+    if (parser.resolveOperand(operand, elemType, result.operands))
+      return failure();
   return success();
 }
 
-//===----------------------------------------------------------------------===//
-// ConcatOp
-//===----------------------------------------------------------------------===//
-
-void ConcatOp::build(OpBuilder &builder, OperationState &result,
-                     ValueRange inputs) {
-  unsigned resultWidth = 0;
-  for (auto input : inputs) {
-    resultWidth += input.getType().cast<IntegerType>().getWidth();
-  }
-  build(builder, result, builder.getIntegerType(resultWidth), inputs);
+static void print(OpAsmPrinter &p, ArrayCreateOp op) {
+  p << "rtl.array_create ";
+  p.printOperands(op.inputs());
+  p << " : (" << op.inputs()[0].getType() << ")";
 }
 
-//===----------------------------------------------------------------------===//
-// ReadInOutOp
-//===----------------------------------------------------------------------===//
+void ArrayCreateOp::build(OpBuilder &b, OperationState &state,
+                          ValueRange values) {
+  assert(values.size() > 0 && "Cannot build array of zero elements");
+  Type elemType = values[0].getType();
+  assert(llvm::all_of(
+             values,
+             [elemType](Value v) -> bool { return v.getType() == elemType; }) &&
+         "All values must have same type.");
+  build(b, state, ArrayType::get(elemType, values.size()), values);
+}
 
-void ReadInOutOp::build(OpBuilder &builder, OperationState &result,
-                        Value input) {
-  auto resultType = input.getType().cast<InOutType>().getElementType();
-  build(builder, result, resultType, input);
+static ParseResult parseArrayConcatTypes(OpAsmParser &p,
+                                         SmallVectorImpl<Type> &inputTypes,
+                                         Type &resultType) {
+  Type elemType;
+  uint64_t resultSize = 0;
+  do {
+    ArrayType ty;
+    if (p.parseType(ty))
+      return p.emitError(p.getCurrentLocation(), "Expected !rtl.array type");
+    if (elemType && elemType != ty.getElementType())
+      return p.emitError(p.getCurrentLocation(), "Expected array element type ")
+             << elemType;
+
+    elemType = ty.getElementType();
+    inputTypes.push_back(ty);
+    resultSize += ty.getSize();
+  } while (!p.parseOptionalComma());
+
+  resultType = ArrayType::get(elemType, resultSize);
+  return success();
+}
+
+static void printArrayConcatTypes(OpAsmPrinter &p, Operation *,
+                                  TypeRange inputTypes, Type resultType) {
+  llvm::interleaveComma(inputTypes, p, [&p](Type t) { p << t; });
+}
+
+void ArrayConcatOp::build(OpBuilder &b, OperationState &state,
+                          ValueRange values) {
+  assert(!values.empty() && "Cannot build array of zero elements");
+  ArrayType arrayTy = values[0].getType().cast<ArrayType>();
+  Type elemTy = arrayTy.getElementType();
+  assert(llvm::all_of(values,
+                      [elemTy](Value v) -> bool {
+                        return v.getType().isa<ArrayType>() &&
+                               v.getType().cast<ArrayType>().getElementType() ==
+                                   elemTy;
+                      }) &&
+         "All values must be of ArrayType with the same element type.");
+
+  uint64_t resultSize = 0;
+  for (Value val : values)
+    resultSize += val.getType().cast<ArrayType>().getSize();
+  build(b, state, ArrayType::get(elemTy, resultSize), values);
 }
 
 //===----------------------------------------------------------------------===//
@@ -772,7 +949,7 @@ static void print(OpAsmPrinter &printer, rtl::StructCreateOp op) {
   printer << op.getOperationName() << " (";
   printer.printOperands(op.input());
   printer << ")";
-  printer.printOptionalAttrDict(op.getAttrs());
+  printer.printOptionalAttrDict(op->getAttrs());
   printer << " : " << op.getType();
 }
 
@@ -802,7 +979,7 @@ static ParseResult parseStructExplodeOp(OpAsmParser &parser,
 static void print(OpAsmPrinter &printer, rtl::StructExplodeOp op) {
   printer << op.getOperationName() << " ";
   printer.printOperand(op.input());
-  printer.printOptionalAttrDict(op.getAttrs());
+  printer.printOptionalAttrDict(op->getAttrs());
   printer << " : " << op.input().getType();
 }
 
@@ -839,8 +1016,14 @@ static void print(OpAsmPrinter &printer, rtl::StructExtractOp op) {
   printer << op.getOperationName() << " ";
   printer.printOperand(op.input());
   printer << "[\"" << op.field() << "\"]";
-  printer.printOptionalAttrDict(op.getAttrs(), {"field"});
+  printer.printOptionalAttrDict(op->getAttrs(), {"field"});
   printer << " : " << op.input().getType();
+}
+
+void StructExtractOp::build(::mlir::OpBuilder &odsBuilder,
+                            ::mlir::OperationState &odsState, Value input,
+                            StructType::FieldInfo field) {
+  build(odsBuilder, odsState, field.type, input, field.name);
 }
 
 //===----------------------------------------------------------------------===//
@@ -880,20 +1063,18 @@ static void print(OpAsmPrinter &printer, rtl::StructInjectOp op) {
   printer.printOperand(op.input());
   printer << "[\"" << op.field() << "\"], ";
   printer.printOperand(op.newValue());
-  printer.printOptionalAttrDict(op.getAttrs(), {"field"});
+  printer.printOptionalAttrDict(op->getAttrs(), {"field"});
   printer << " : " << op.input().getType();
 }
 
 //===----------------------------------------------------------------------===//
-// ArrayIndexOp
+// ArrayGetOp
 //===----------------------------------------------------------------------===//
 
-void ArrayIndexOp::build(OpBuilder &builder, OperationState &result,
-                         Value input, Value index) {
-  auto resultType = input.getType().cast<InOutType>().getElementType();
-  resultType = getAnyRTLArrayElementType(resultType);
-  assert(resultType && "input should have 'inout of an array' type");
-  build(builder, result, InOutType::get(resultType), input, index);
+void ArrayGetOp::build(OpBuilder &builder, OperationState &result, Value input,
+                       Value index) {
+  auto resultType = input.getType().cast<ArrayType>().getElementType();
+  build(builder, result, resultType, input, index);
 }
 
 //===----------------------------------------------------------------------===//

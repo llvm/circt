@@ -27,7 +27,7 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
   let assemblyFormat = "`(` $value `)` attr-dict `:` type($result)";
 
   let builders = [
-    OpBuilderDAG<(ins "IntType":$type, "const APInt &":$value)>
+    OpBuilder<(ins "IntType":$type, "const APInt &":$value)>
   ];
   let hasFolder = 1;
   let verifier = "return ::verifyConstantOp(*this);";
@@ -50,23 +50,28 @@ def SubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
   let assemblyFormat =
     "$input `(` $fieldname `)` attr-dict `:` functional-type($input, $result)";
 
+  let builders = [
+    OpBuilder<(ins "Value":$input, "StringAttr":$fieldName)>,
+    OpBuilder<(ins "Value":$input, "StringRef":$fieldName)>
+  ];
+
   let extraClassDeclaration = [{
     /// Compute the result of a Subfield operation on a value of the specified
     /// type and extracting the specified field name.  If the request is
     /// invalid, then a null type is returned.
-    static FIRRTLType getResultType(FIRRTLType inType, StringRef fieldName,
+    static FIRRTLType getResultType(Type inType, StringAttr fieldName,
                                     Location loc);
   }];
 
   let verifier = [{
-    VERIFY_RESULT_TYPE_RET(input().getType().cast<FIRRTLType>(), fieldname());
+    VERIFY_RESULT_TYPE_RET(input().getType(), fieldnameAttr());
   }];
 }
 
 class IndexConstraint<string value, string resultValue>
-  : TypesMatchWith<"type should be element of array type",
+  : TypesMatchWith<"type should be element of vector type",
                    value, resultValue,
-                   "firrtl::getArrayElementType($_self)">;
+                   "firrtl::getVectorElementType($_self)">;
 
 def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect, 
                                        IndexConstraint<"input", "result">]> {
@@ -81,7 +86,7 @@ def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect,
     ```
     }];
 
-  let arguments = (ins FVectorType:$input, I32Attr:$index);
+  let arguments = (ins FIRRTLType:$input, I32Attr:$index);
   let results = (outs FIRRTLType:$result);
 
   // TODO: Could drop the result type, inferring it from the source.
@@ -149,6 +154,7 @@ class BinaryPrimOp<string mnemonic, Type lhsType, Type rhsType, Type resultType,
     PrimOp<mnemonic, traits> {
   let arguments = (ins lhsType:$lhs, rhsType:$rhs);
   let results = (outs resultType:$result);
+  let hasFolder = 1;
 
   let assemblyFormat = [{
     $lhs `,` $rhs  attr-dict `:`
@@ -160,7 +166,7 @@ class BinaryPrimOp<string mnemonic, Type lhsType, Type rhsType, Type resultType,
     /// type if the input types are invalid.
     static FIRRTLType getResultType(FIRRTLType lhs, FIRRTLType rhs, Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
-                                    ArrayRef<int32_t> integers, Location loc) {
+                                    ArrayRef<int64_t> integers, Location loc) {
       if (inputs.size() != 2 || !integers.empty()) {
         mlir::emitError(loc,"operation requires two operands and no constants");
         return {};
@@ -179,7 +185,6 @@ def AddPrimOp : BinaryPrimOp<"add", IntType, IntType, IntType, [Commutative]>;
 def SubPrimOp : BinaryPrimOp<"sub", IntType, IntType, IntType>;
 def MulPrimOp : BinaryPrimOp<"mul", IntType, IntType, IntType, [Commutative]>;
 def DivPrimOp : BinaryPrimOp<"div", IntType, IntType, IntType> {
-  let hasFolder = 1;
   let description = [{
     Divides the first argument (the numerator) by the second argument
     (the denominator) truncating the result (rounding towards zero).
@@ -194,37 +199,26 @@ def DivPrimOp : BinaryPrimOp<"div", IntType, IntType, IntType> {
 }
 def RemPrimOp : BinaryPrimOp<"rem", IntType, IntType, IntType>;
 
-def AndPrimOp : BinaryPrimOp<"and", IntType, IntType, UIntType, [Commutative]> {
-  let hasFolder = 1;
-}
-def OrPrimOp  : BinaryPrimOp<"or",  IntType, IntType, UIntType, [Commutative]> {
-  let hasFolder = 1;
-}
-def XorPrimOp : BinaryPrimOp<"xor", IntType, IntType, UIntType, [Commutative]> {
-  let hasFolder = 1;
-}
+def AndPrimOp : BinaryPrimOp<"and", IntType, IntType, UIntType, [Commutative]>; 
+def OrPrimOp  : BinaryPrimOp<"or",  IntType, IntType, UIntType, [Commutative]>;
+def XorPrimOp : BinaryPrimOp<"xor", IntType, IntType, UIntType, [Commutative]>;
 
 // Comparison Operations
-def LEQPrimOp : BinaryPrimOp<"leq", IntType, IntType, UInt1Type>;
-def LTPrimOp  : BinaryPrimOp<"lt",  IntType, IntType, UInt1Type>;
-def GEQPrimOp : BinaryPrimOp<"geq", IntType, IntType, UInt1Type>;
-def GTPrimOp  : BinaryPrimOp<"gt",  IntType, IntType, UInt1Type>;
-def EQPrimOp  : BinaryPrimOp<"eq",  IntType, IntType, UInt1Type, [Commutative]>{
-  let hasFolder = 1;
+let hasCanonicalizer = true in {
+  def LEQPrimOp : BinaryPrimOp<"leq", IntType, IntType, UInt1Type>;
+  def LTPrimOp  : BinaryPrimOp<"lt",  IntType, IntType, UInt1Type>;
+  def GEQPrimOp : BinaryPrimOp<"geq", IntType, IntType, UInt1Type>;
+  def GTPrimOp  : BinaryPrimOp<"gt",  IntType, IntType, UInt1Type>;
 }
-def NEQPrimOp : BinaryPrimOp<"neq", IntType, IntType, UInt1Type, [Commutative]>{
-  let hasFolder = 1;
-}
+def EQPrimOp  : BinaryPrimOp<"eq",  IntType, IntType, UInt1Type, [Commutative]>;
+def NEQPrimOp : BinaryPrimOp<"neq", IntType, IntType, UInt1Type, [Commutative]>;
 
 def CatPrimOp   : BinaryPrimOp<"cat", IntType, IntType, UIntType> {
-  let hasCanonicalizer = 1;
+  let hasCanonicalizeMethod = true;
 }
 def DShlPrimOp  : BinaryPrimOp<"dshl", IntType, UIntType, IntType>;
 def DShlwPrimOp : BinaryPrimOp<"dshlw", IntType, UIntType, IntType>;
 def DShrPrimOp  : BinaryPrimOp<"dshr", IntType, UIntType, IntType>;
-
-def ValidIfPrimOp
-  : BinaryPrimOp<"validif", UInt1Type, PassiveType, PassiveType>;
 
 //===----------------------------------------------------------------------===//
 // Unary Operations
@@ -245,7 +239,7 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
     /// type if the input type is invalid.
     static FIRRTLType getResultType(FIRRTLType input, Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
-                                    ArrayRef<int32_t> integers, Location loc) {
+                                    ArrayRef<int64_t> integers, Location loc) {
       if (inputs.size() != 1 || !integers.empty()) {
         mlir::emitError(loc, "operation requires one operand and no constants");
         return {};
@@ -312,11 +306,11 @@ def BitsPrimOp : PrimOp<"bits"> {
     The result is `hi - lo + 1` bits wide.
   }];
 
-  let hasCanonicalizer = 1;
+  let hasCanonicalizeMethod = true;
   let hasFolder = 1;
 
   let builders = [
-    OpBuilderDAG<(ins "Value":$input, "unsigned":$high, "unsigned":$low)>
+    OpBuilder<(ins "Value":$input, "unsigned":$high, "unsigned":$low)>
   ];
 
   let extraClassDeclaration = [{
@@ -325,7 +319,7 @@ def BitsPrimOp : PrimOp<"bits"> {
     static FIRRTLType getResultType(FIRRTLType input, int32_t high,
                                     int32_t low, Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
-                                    ArrayRef<int32_t> integers, Location loc) {
+                                    ArrayRef<int64_t> integers, Location loc) {
       if (inputs.size() != 1 || integers.size() != 2) {
         mlir::emitError(loc,"operation requires one operand and two constants");
         return {};
@@ -346,7 +340,7 @@ def HeadPrimOp : PrimOp<"head"> {
   let assemblyFormat =
     "$input `,` $amount attr-dict `:` functional-type($input, $result)";
 
-  let hasCanonicalizer = 1;
+  let hasCanonicalizeMethod = true;
 
   let extraClassDeclaration = [{
     /// Return the result for inputs with the specified type, returning a null
@@ -354,7 +348,7 @@ def HeadPrimOp : PrimOp<"head"> {
     static FIRRTLType getResultType(FIRRTLType input, int32_t amount,
                                     Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
-                                    ArrayRef<int32_t> integers, Location loc) {
+                                    ArrayRef<int64_t> integers, Location loc) {
       if (inputs.size() != 1 || integers.size() != 1) {
         mlir::emitError(loc, "operation requires one operand and one constant");
         return {};
@@ -401,7 +395,7 @@ def MuxPrimOp : PrimOp<"mux"> {
     static FIRRTLType getResultType(FIRRTLType sel, FIRRTLType high,
                                     FIRRTLType low, Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
-                                    ArrayRef<int32_t> integers, Location loc) {
+                                    ArrayRef<int64_t> integers, Location loc) {
       if (inputs.size() != 3 || !integers.empty()) {
         mlir::emitError(loc,
                         "operation requires three operands and no constants");
@@ -440,7 +434,7 @@ def PadPrimOp : PrimOp<"pad"> {
     static FIRRTLType getResultType(FIRRTLType input, int32_t amount,
                                     Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
-                                    ArrayRef<int32_t> integers, Location loc) {
+                                    ArrayRef<int64_t> integers, Location loc) {
       if (inputs.size() != 1 || integers.size() != 1) {
         mlir::emitError(loc, "operation requires one operand and one constant");
         return {};
@@ -468,7 +462,7 @@ class ShiftPrimOp<string mnemonic> : PrimOp<mnemonic> {
     static FIRRTLType getResultType(FIRRTLType input, int32_t amount,
                                     Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
-                                    ArrayRef<int32_t> integers, Location loc) {
+                                    ArrayRef<int64_t> integers, Location loc) {
       if (inputs.size() != 1 || integers.size() != 1) {
         mlir::emitError(loc, "operation requires one operand and one constant");
         return {};
@@ -500,7 +494,7 @@ def ShrPrimOp : ShiftPrimOp<"shr"> {
   }];
 
   let hasFolder = 1;
-  let hasCanonicalizer = 1;
+  let hasCanonicalizeMethod = true;
 }
 
 def TailPrimOp : PrimOp<"tail"> {
@@ -516,7 +510,7 @@ def TailPrimOp : PrimOp<"tail"> {
     width of e. The result is `width(input)-amount` bits wide.
   }];
 
-  let hasCanonicalizer = 1;
+  let hasCanonicalizeMethod = true;
 
   let extraClassDeclaration = [{
     /// Return the result for inputs with the specified type, returning a null
@@ -524,7 +518,7 @@ def TailPrimOp : PrimOp<"tail"> {
     static FIRRTLType getResultType(FIRRTLType input, int32_t amount,
                                     Location loc);
     static FIRRTLType getResultType(ArrayRef<FIRRTLType> inputs,
-                                    ArrayRef<int32_t> integers, Location loc) {
+                                    ArrayRef<int64_t> integers, Location loc) {
       if (inputs.size() != 1 || integers.size() != 1) {
         mlir::emitError(loc, "operation requires one operand and one constant");
         return {};
@@ -573,6 +567,18 @@ def AnalogInOutCastOp : FIRRTLOp<"analogInOutCast", [NoSideEffect]> {
   let verifier = "return ::verifyAnalogInOutCastOp(*this);";
 }
 
+// This operation converts from a struct to a bundle
+// type, or visa-versa.  FIRRTL source/destination types must be passive.
+def RTLStructCastOp : FIRRTLOp<"rtlStructCast", [NoSideEffect]> {
+  let arguments = (ins AnyType:$input);
+  let results = (outs AnyType:$result);
+
+  let assemblyFormat =
+    "$input attr-dict `:` functional-type($input, $result)";
+
+  let verifier = "return ::verifyRTLStructCastOp(*this);";
+}
+
 // MLIR specific pseudo ops.
 
 
@@ -591,7 +597,7 @@ def AsPassivePrimOp : FIRRTLOp<"asPassive", [NoSideEffect,
   let assemblyFormat = "$input attr-dict `:` type($input)";
 
   let builders = [
-    OpBuilderDAG<(ins "Value":$input)>
+    OpBuilder<(ins "Value":$input)>
   ];
 }
 

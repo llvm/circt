@@ -27,8 +27,8 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 
-using namespace mlir;
 using namespace circt;
+using namespace mlir;
 
 template <class AttrElementT,
           class ElementValueT = typename AttrElementT::ValueType,
@@ -178,8 +178,7 @@ static ParseResult parseConstOp(OpAsmParser &parser, OperationState &result) {
       parser.parseOptionalAttrDict(result.attributes))
     return failure();
   // parse the type for attributes that do not print the type by default
-  if (parser.parseOptionalColon().value ||
-      !parser.parseOptionalType(type).hasValue())
+  if (parser.parseOptionalColon() || !parser.parseOptionalType(type).hasValue())
     type = val.getType();
   return parser.addTypeToList(val.getType(), result.types);
 }
@@ -190,7 +189,7 @@ static void print(OpAsmPrinter &printer, llhd::ConstOp op) {
   // some reason. Work around by printing the attribute without type, explicitly
   // followed by the operation type
   printer.printAttributeWithoutType(op.valueAttr());
-  printer.printOptionalAttrDict(op.getAttrs(), {"value"});
+  printer.printOptionalAttrDict(op->getAttrs(), {"value"});
   printer << " : " << op.getType();
 }
 
@@ -245,12 +244,12 @@ OpFoldResult llhd::EqOp::fold(ArrayRef<Attribute> operands) {
 
   /// llhs.eq(x,x) -> 1
   if (lhs() == rhs())
-    return BoolAttr::get(true, getContext());
+    return BoolAttr::get(getContext(), true);
 
   if (!operands[0] || !operands[1])
     return {};
 
-  return BoolAttr::get(operands[0] == operands[1], getContext());
+  return BoolAttr::get(getContext(), operands[0] == operands[1]);
 }
 
 //===----------------------------------------------------------------------===//
@@ -264,12 +263,12 @@ OpFoldResult llhd::NeqOp::fold(ArrayRef<Attribute> operands) {
 
   /// llhs.neq(x,x) -> 0
   if (lhs() == rhs())
-    return BoolAttr::get(false, getContext());
+    return BoolAttr::get(getContext(), false);
 
   if (!operands[0] || !operands[1])
     return {};
 
-  return BoolAttr::get(operands[0] != operands[1], getContext());
+  return BoolAttr::get(getContext(), operands[0] != operands[1]);
 }
 
 //===----------------------------------------------------------------------===//
@@ -660,7 +659,7 @@ static void print(OpAsmPrinter &printer, llhd::EntityOp op) {
   printer << " -> ";
   printArgumentList(printer, outs);
   printer.printOptionalAttrDictWithKeyword(
-      op.getAttrs(),
+      op->getAttrs(),
       /*elidedAttrs =*/{SymbolTable::getSymbolAttrName(),
                         llhd::EntityOp::getTypeAttrName(), "ins"});
   printer.printRegion(op.body(), false, false);
@@ -969,6 +968,20 @@ FunctionType llhd::InstOp::getCalleeType() {
 }
 
 //===----------------------------------------------------------------------===//
+// ConnectOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult llhd::ConnectOp::fold(ArrayRef<Attribute> operands,
+                                    SmallVectorImpl<OpFoldResult> &results) {
+  if (lhs() == rhs()) {
+    erase();
+    return success();
+  }
+
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
 // RegOp
 //===----------------------------------------------------------------------===//
 
@@ -1079,7 +1092,7 @@ static void print(OpAsmPrinter &printer, llhd::RegOp op) {
       printer << " if " << op.getGateAt(i);
     printer << " : " << op.values()[i].getType() << ")";
   }
-  printer.printOptionalAttrDict(op.getAttrs(),
+  printer.printOptionalAttrDict(op->getAttrs(),
                                 {"modes", "gateMask", "operand_segment_sizes"});
   printer << " : " << op.signal().getType();
 }

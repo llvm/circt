@@ -26,23 +26,28 @@ public:
   ResultType dispatchSVVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<TextualValueOp,
-                       // Declarations.
-                       RegOp,
-                       // Control flow.
-                       IfDefOp, IfOp, AlwaysOp, InitialOp,
-                       // Other Statements.
-                       YieldOp, BPAssignOp, PAssignOp, AliasOp, FWriteOp,
-                       FatalOp, FinishOp, VerbatimOp,
-                       // Type declarations.
-                       InterfaceOp, InterfaceSignalOp, InterfaceModportOp,
-                       InterfaceInstanceOp, GetModportOp,
-                       AssignInterfaceSignalOp, ReadInterfaceSignalOp,
-                       // Verification statements.
-                       AssertOp, AssumeOp, CoverOp>(
-            [&](auto expr) -> ResultType {
-              return thisCast->visitSV(expr, args...);
-            })
+        .template Case<
+            // Expressions
+            ReadInOutOp, ArrayIndexInOutOp, VerbatimExprOp, ConstantXOp,
+            ConstantZOp,
+            // Declarations.
+            RegOp, WireOp,
+            // Control flow.
+            IfDefOp, IfDefProceduralOp, IfOp, AlwaysOp, AlwaysCombOp,
+            AlwaysFFOp, InitialOp, CaseZOp,
+            // Other Statements.
+            ConnectOp, BPAssignOp, PAssignOp, AliasOp, FWriteOp, FatalOp,
+            FinishOp, VerbatimOp,
+            // Type declarations.
+            InterfaceOp, InterfaceSignalOp, InterfaceModportOp,
+            InterfaceInstanceOp, GetModportOp, AssignInterfaceSignalOp,
+            ReadInterfaceSignalOp,
+            // Verification statements.
+            AssertOp, AssumeOp, CoverOp,
+            // Terminators.
+            TypeDeclTerminatorOp>([&](auto expr) -> ResultType {
+          return thisCast->visitSV(expr, args...);
+        })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidSV(op, args...);
         });
@@ -67,18 +72,27 @@ public:
 
   // Declarations
   HANDLE(RegOp, Unhandled);
+  HANDLE(WireOp, Unhandled);
 
   // Expressions
-  HANDLE(TextualValueOp, Unhandled)
+  HANDLE(ReadInOutOp, Unhandled);
+  HANDLE(ArrayIndexInOutOp, Unhandled);
+  HANDLE(VerbatimExprOp, Unhandled);
+  HANDLE(ConstantXOp, Unhandled);
+  HANDLE(ConstantZOp, Unhandled);
 
   // Control flow.
   HANDLE(IfDefOp, Unhandled);
+  HANDLE(IfDefProceduralOp, Unhandled);
   HANDLE(IfOp, Unhandled);
   HANDLE(AlwaysOp, Unhandled);
+  HANDLE(AlwaysCombOp, Unhandled);
+  HANDLE(AlwaysFFOp, Unhandled);
   HANDLE(InitialOp, Unhandled);
+  HANDLE(CaseZOp, Unhandled);
 
   // Other Statements.
-  HANDLE(YieldOp, Unhandled);
+  HANDLE(ConnectOp, Unhandled);
   HANDLE(BPAssignOp, Unhandled);
   HANDLE(PAssignOp, Unhandled);
   HANDLE(AliasOp, Unhandled);
@@ -100,6 +114,9 @@ public:
   HANDLE(AssertOp, Unhandled);
   HANDLE(AssumeOp, Unhandled);
   HANDLE(CoverOp, Unhandled);
+
+  // Terminators.
+  HANDLE(TypeDeclTerminatorOp, Unhandled);
 #undef HANDLE
 };
 

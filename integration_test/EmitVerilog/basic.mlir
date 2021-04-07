@@ -1,5 +1,5 @@
 // REQUIRES: verilator
-// RUN: circt-translate %s -emit-verilog -verify-diagnostics > %t1.sv
+// RUN: circt-translate %s -export-verilog -verify-diagnostics > %t1.sv
 // RUN: circt-rtl-sim.py %t1.sv --cycles 8 2>&1 | FileCheck %s
 
 module {
@@ -13,13 +13,13 @@ module {
     }
   }
 
-  rtl.module @AAA() -> (i1 {rtl.name = "f"}) {
-    %z = rtl.constant ( 1 : i1 ) : i1
+  rtl.module @AAA() -> (%f: i1) {
+    %z = rtl.constant 1 : i1
     rtl.output %z : i1
   }
 
-  rtl.module @shl(%a: i1) -> (i1 {rtl.name = "b"}) {
-    %0 = rtl.shl %a, %a : i1
+  rtl.module @shl(%a: i1) -> (%b: i1) {
+    %0 = comb.shl %a, %a : i1
     rtl.output %0 : i1
   }
 }
