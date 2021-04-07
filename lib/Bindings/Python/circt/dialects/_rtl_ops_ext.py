@@ -32,10 +32,18 @@ class RTLModuleOp:
     attributes['sym_name'] = StringAttr.get(str(name))
 
     input_types = []
-    self._build_ports('argNames', attributes, input_ports, input_types)
+    input_names = []
+    for (port_name, port_type) in input_ports:
+      input_types.append(port_type)
+      input_names.append(StringAttr.get(str(port_name)))
+    attributes['argNames'] = ArrayAttr.get(input_names)
 
     output_types = []
-    self._build_ports('resultNames', attributes, output_ports, output_types)
+    output_names = []
+    for (port_name, port_type) in output_ports:
+      output_types.append(port_type)
+      output_names.append(StringAttr.get(str(port_name)))
+    attributes['resultNames'] = ArrayAttr.get(output_names)
 
     attributes["type"] = TypeAttr.get(FunctionType.get(
       inputs=input_types, results=output_types))
@@ -130,6 +138,7 @@ class RTLModuleOp:
       else:
         result_types = [port_type for port_type in results]
         output_ports = zip([None] * len(result_types), result_types)
+
       module_op = RTLModuleOp(name=symbol_name,
                             input_ports=input_ports,
                             output_ports=output_ports)
@@ -157,6 +166,10 @@ class RTLModuleOp:
           return_types = [v.type for v in return_values]
           function_type = FunctionType.get(inputs=inputs, results=return_types)
           module_op.attributes["type"] = TypeAttr.get(function_type)
+          # Set required resultNames attribute. Could we infer real names here?
+          resultNames = [StringAttr.get('result' + str(i))
+                         for i in range(len(return_values))]
+          module_op.attributes["resultNames"] = ArrayAttr.get(resultNames)
 
       def emit_instance_op(*call_args):
         call_op = rtl.InstanceOp(return_types, StringAttr.get(''),
@@ -175,15 +188,3 @@ class RTLModuleOp:
       return wrapped
 
     return decorator
-
-  def _build_ports(self, nameAttr, attributes, port_list, port_types):
-    port_idx = 0
-    port_names = []
-    for (port_name, port_type) in port_list:
-      port_types.append(port_type)
-      if port_name:
-          port_names.append(StringAttr.get(str(port_name)))
-      else:
-          port_names.append(StringAttr.get("result" + str(port_idx)))
-      port_idx += 1
-    attributes[nameAttr] = ArrayAttr.get(port_names)
