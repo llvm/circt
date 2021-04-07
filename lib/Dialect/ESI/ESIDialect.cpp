@@ -82,9 +82,7 @@ void circt::esi::findValidReadySignals(
   }
 }
 
-/// Find all the port triples on a module which fit the
-/// <name>/<name>_valid/<name>_ready pattern. Ready must be the opposite
-/// direction of the other two.
+/// Given a list of logical port names, find the data/valid/ready port triples.
 void circt::esi::resolvePortNames(
     Operation *modOp, ArrayRef<StringRef> portNames,
     SmallVectorImpl<ESIPortValidReadyMapping> &names) {
@@ -99,6 +97,7 @@ void circt::esi::resolvePortNames(
     nameBuffer = name;
     size_t nameLen = name.size();
 
+    // Look for a 'data' port.
     rtl::ModulePortInfo dataPort;
     auto it = nameMap.find(nameBuffer);
     if (it == nameMap.end()) {
@@ -116,6 +115,7 @@ void circt::esi::resolvePortNames(
       continue;
     }
 
+    // Look for a 'valid' port.
     nameBuffer.set_size(nameLen);
     nameBuffer.append("_valid");
     auto valid = nameMap.find(nameBuffer);

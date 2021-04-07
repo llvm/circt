@@ -28,10 +28,7 @@ using namespace circt;
 using namespace circt::esi;
 
 //===----------------------------------------------------------------------===//
-// Functions which should be part of the C API, but which are too difficult be
-// bind to C. E.g. Functions which need complex data structures (like
-// ArrayRefs). Pybind11 has conversions to/from the STL so it's easier to write
-// a C++ wrapper.)
+// Functions that translate from something Pybind11 understands to MLIR C++.
 //===----------------------------------------------------------------------===//
 
 static MlirOperation pyWrapModule(MlirOperation cModOp,
