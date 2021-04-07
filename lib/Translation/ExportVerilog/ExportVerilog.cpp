@@ -311,7 +311,8 @@ enum VerilogPrecedence {
   AndShortCircuit, // &&
   Conditional,     // ? :
 
-  LowestPrecedence,  // Sentinel which is always the lowest precedence.
+  LowestPrecedence,          // Sentinel which is always the lowest precedence.
+  ForceEmitMultiUseConstant, // Sentinel saying to inline constants
   ForceEmitMultiUse, // Sentinel saying to recursively emit a multi-used expr.
 };
 } // end anonymous namespace
@@ -904,7 +905,9 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
 
   // Don't emit this expression inline if it has multiple uses.
   if (shouldEmitInlineExpr && parenthesizeIfLooserThan != ForceEmitMultiUse &&
-      emitter.outOfLineExpressions.count(op))
+      emitter.outOfLineExpressions.count(op) &&
+      !(parenthesizeIfLooserThan == ForceEmitMultiUseConstant &&
+        isDuplicatableNullaryExpression(op)))
     shouldEmitInlineExpr = false;
 
   // If this is a non-expr or shouldn't be done inline, just refer to its name.
@@ -975,6 +978,7 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
   if (outBuffer.size() - subExprStartIndex > threshold &&
       parenthesizeIfLooserThan != ForceEmitMultiUse &&
       !isExpressionAlwaysInline(op)) {
+
     // Inform the module emitter that this expression needs a temporary
     // wire/logic declaration and set it up so it will be referenced instead of
     // emitted inline.
@@ -1217,7 +1221,7 @@ SubExprInfo ExprEmitter::visitTypeOp(ArrayConcatOp op) {
 SubExprInfo ExprEmitter::visitSV(ArrayIndexInOutOp op) {
   auto arrayPrec = emitSubExpr(op.input(), Selection, OOLUnary);
   os << '[';
-  emitSubExpr(op.index(), LowestPrecedence, OOLBinary);
+  emitSubExpr(op.index(), ForceEmitMultiUseConstant, OOLBinary);
   os << ']';
   return {Selection, arrayPrec.signedness};
 }
@@ -1693,7 +1697,7 @@ LogicalResult StmtEmitter::visitSV(BPAssignOp op) {
   indent();
   emitExpression(op.dest(), ops);
   os << " = ";
-  emitExpression(op.src(), ops);
+  emitExpression(op.src(), ops, ForceEmitMultiUseConstant);
   os << ';';
   emitLocationInfoAndNewLine(ops);
   return success();
@@ -1706,7 +1710,7 @@ LogicalResult StmtEmitter::visitSV(PAssignOp op) {
   indent();
   emitExpression(op.dest(), ops);
   os << " <= ";
-  emitExpression(op.src(), ops);
+  emitExpression(op.src(), ops, ForceEmitMultiUseConstant);
   os << ';';
   emitLocationInfoAndNewLine(ops);
   return success();

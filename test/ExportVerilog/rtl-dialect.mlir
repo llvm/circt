@@ -601,9 +601,9 @@ rtl.module @longvariadic(%a: i8) -> (%b: i8) {
 // CHECK-EMPTY:
 // CHECK-NEXT:   wire _T = 1'h0;
 // CHECK-NEXT:   always_ff @(posedge clock)
-// CHECK-NEXT:     memory_r_en_pipe[_T] <= _T;
+// CHECK-NEXT:     memory_r_en_pipe[1'h0] <= 1'h0;
 // CHECK-NEXT:   initial
-// CHECK-NEXT:     memory_r_en_pipe[_T] = _T;
+// CHECK-NEXT:     memory_r_en_pipe[1'h0] = 1'h0;
 // CHECK-NEXT: endmodule
 rtl.module @ArrayLHS(%clock: i1) -> () {
   %false = rtl.constant false
