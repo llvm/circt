@@ -7,29 +7,29 @@
 // RUN: verilator --lint-only --top-module casts %t1.sv
 // RUN: verilator --lint-only --top-module exprInlineTestIssue439 %t1.sv
 
-rtl.module @B(%a: i1 { rtl.inout }) -> (i1 {rtl.name = "b"}, i1 {rtl.name = "c"}) {
+rtl.module @B(%a: i1) -> (%b: i1, %c: i1) {
   %0 = comb.or %a, %a : i1
   %1 = comb.and %a, %a : i1
   rtl.output %0, %1 : i1, i1
 }
 
-rtl.module @A(%d: i1, %e: i1) -> (i1 {rtl.name = "f"}) {
+rtl.module @A(%d: i1, %e: i1) -> (%f: i1) {
   %1 = comb.mux %d, %d, %e : i1
   rtl.output %1 : i1
 }
 
-rtl.module @AAA(%d: i1, %e: i1) -> (i1 {rtl.name = "f"}) {
-  %z = comb.constant 0 : i1
+rtl.module @AAA(%d: i1, %e: i1) -> (%f: i1) {
+  %z = rtl.constant 0 : i1
   rtl.output %z : i1
 }
 
-rtl.module @AB(%w: i1, %x: i1) -> (i1 {rtl.name = "y"}, i1 {rtl.name = "z"}) {
+rtl.module @AB(%w: i1, %x: i1) -> (%y: i1, %z: i1) {
   %w2 = rtl.instance "a1" @AAA(%w, %w1) : (i1, i1) -> (i1)
   %w1, %y = rtl.instance "b1" @B(%w2) : (i1) -> (i1, i1)
   rtl.output %y, %x : i1, i1
 }
 
-rtl.module @shl(%a: i1) -> (i1 {rtl.name = "b"}) {
+rtl.module @shl(%a: i1) -> (%b: i1) {
   %0 = comb.shl %a, %a : i1
   rtl.output %0 : i1
 }
@@ -76,10 +76,10 @@ rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1, %array: !rtl.array<10xi4>,
   %26 = comb.sext %a : (i4) -> i9
   %27 = comb.mux %cond, %a, %b : i4
 
-  %allone = comb.constant 15 : i4
+  %allone = rtl.constant 15 : i4
   %28 = comb.xor %a, %allone : i4
 
-  %one = comb.constant 1 : i4
+  %one = rtl.constant 1 : i4
   %aPlusOne = comb.add %a, %one : i4
   %29 = rtl.array_slice %array at %aPlusOne: (!rtl.array<10xi4>) -> !rtl.array<3xi4>
 
@@ -91,7 +91,7 @@ rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1, %array: !rtl.array<10xi4>,
 }
 
 rtl.module @exprInlineTestIssue439(%clk: i1) {
-  %c = comb.constant 0 : i32
+  %c = rtl.constant 0 : i32
 
   sv.always posedge %clk {
     %e = comb.extract %c from 0 : (i32) -> i16
@@ -101,9 +101,9 @@ rtl.module @exprInlineTestIssue439(%clk: i1) {
 }
 
 rtl.module @casts(%in1: i64) -> (%r1: !rtl.array<5xi8>) {
-  %bits = comb.bitcast %in1 : (i64) -> !rtl.array<64xi1>
-  %idx = comb.constant 10 : i6
+  %bits = rtl.bitcast %in1 : (i64) -> !rtl.array<64xi1>
+  %idx = rtl.constant 10 : i6
   %midBits = rtl.array_slice %bits at %idx : (!rtl.array<64xi1>) -> !rtl.array<40xi1>
-  %r1 = comb.bitcast %midBits : (!rtl.array<40xi1>) -> !rtl.array<5xi8>
+  %r1 = rtl.bitcast %midBits : (!rtl.array<40xi1>) -> !rtl.array<5xi8>
   rtl.output %r1 : !rtl.array<5xi8>
 }

@@ -1,8 +1,6 @@
 #!/usr/bin/python3
 
-import binascii
 import capnp
-import random
 import time
 
 
@@ -24,10 +22,10 @@ class CosimBase:
                 # Optionally check that the type IDs match.
                 print(f"SendTypeId: {iface.sendTypeID:x}")
                 print(f"RecvTypeId: {iface.recvTypeID:x}")
-                if sendType != None:
+                if sendType is not None:
                     assert (iface.sendTypeID ==
                             sendType.schema.node.id)
-                if recvType != None:
+                if recvType is not None:
                     assert (iface.recvTypeID ==
                             recvType.schema.node.id)
 

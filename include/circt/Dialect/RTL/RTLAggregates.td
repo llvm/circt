@@ -42,8 +42,8 @@ def ArrayCreateOp : RTLOp<"array_create", [NoSideEffect, SameTypeOperands]> {
   let printer = "return ::print(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
   let builders = [
-    // ArrayRef needs to contain at least one element.
-    OpBuilderDAG<(ins "ArrayRef<::mlir::Value>":$input)>
+    // ValueRange needs to contain at least one element.
+    OpBuilder<(ins "ValueRange":$input)>
   ];
 }
 
@@ -70,8 +70,8 @@ def ArrayConcatOp : RTLOp<"array_concat", [NoSideEffect]> {
   }];
 
   let builders = [
-    // ArrayRef needs to contain at least one element.
-    OpBuilderDAG<(ins "ArrayRef<::mlir::Value>":$inputs)>
+    // ValueRange needs to contain at least one element.
+    OpBuilder<(ins "ValueRange":$inputs)>
   ];
 }
 
@@ -144,7 +144,7 @@ def ArrayGetOp : RTLOp<"array_get",
   }];
 
   let builders = [
-    OpBuilderDAG<(ins "Value":$input, "Value":$index)>
+    OpBuilder<(ins "Value":$input, "Value":$index)>
   ];
 }
 
@@ -170,6 +170,10 @@ def StructExtractOp : RTLOp<"struct_extract", [NoSideEffect]> {
 
   let parser = "return ::parse$cppClass(parser, result);";
   let printer = "return ::print(p, *this);";
+
+  let builders = [
+    OpBuilder<(ins "Value":$input, "StructType::FieldInfo":$field)>
+  ];
 }
 
 // Extract a range of bits from the specified input.
@@ -192,4 +196,74 @@ def StructExplodeOp : RTLOp<"struct_explode", [NoSideEffect]> {
 
   let parser = "return ::parse$cppClass(parser, result);";
   let printer = "return ::print(p, *this);";
+}
+
+def ConstantOp
+ : RTLOp<"constant",
+          [NoSideEffect, ConstantLike, FirstAttrDerivedResultType,
+           DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
+  let summary = "Produce a constant value";
+  let description = [{
+    The constant operation produces a constant value of standard integer type
+    without a sign.
+    ```
+      %result = rtl.constant 42 : t1
+    ```
+    }];
+
+  let arguments = (ins APIntAttr:$value);
+  let results = (outs RTLIntegerType:$result);
+
+  let parser = "return parse$cppClass(parser, result);";
+  let printer = "print$cppClass(p, *this);";
+
+  let builders = [
+    /// Build a ConstantOp from an APInt, infering the result type from the
+    /// width of the APInt.
+    OpBuilder<(ins "const APInt &":$value)>,
+
+    /// This builder allows construction of small signed integers like 0, 1, -1
+    /// matching a specified MLIR IntegerType.  This shouldn't be used for
+    /// general constant folding because it only works with values that can be
+    /// expressed in an int64_t.  Use APInt's instead.
+    OpBuilder<(ins "Type":$type, "int64_t":$value)>,
+
+    /// Build a ConstantOp from a prebuilt attribute.
+    OpBuilder<(ins "IntegerAttr":$value)>
+  ];
+  let extraClassDeclaration = [{
+    APInt getValue() {
+      return (*this)->getAttrOfType<IntegerAttr>("value").getValue();
+    }
+  }];
+  let hasFolder = true;
+  let verifier = "return ::verifyConstantOp(*this);";
+}
+
+def KnownBitWidthType : Type<CPred<[{getBitWidth($_self) != -1}]>,
+  "Type wherein the bitwidth in hardware is known">;
+
+def BitcastOp: RTLOp<"bitcast", [NoSideEffect]> {
+  let summary = [{
+    Reinterpret one value to another value of the same size and
+    potentially different type.
+  }];
+
+  let description = [{
+    See the RTL-SV rationale document for a longer description, including an
+    example.
+  }];
+
+  let arguments = (ins KnownBitWidthType:$input);
+  let results = (outs KnownBitWidthType:$result);
+  let verifier = [{
+    if (getBitWidth(input().getType()) !=
+        getBitWidth(result().getType()))
+      return this->emitOpError("Bitwidth of input must match result");
+    return success();
+  }];
+
+  let assemblyFormat = [{
+    $input attr-dict `:` functional-type($input, $result)
+  }];
 }

@@ -14,6 +14,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/OperationSupport.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/Hashing.h"
@@ -35,23 +36,7 @@ llvm::hash_code computeHash(MemOp op) {
   hash = llvm::hash_combine(hash, op.ruwAttr());
 
   // Result Types
-  ArrayRef<Type> resultTypes = op->getResultTypes();
-  switch (resultTypes.size()) {
-  case 0:
-    // We don't need to add anything to the hash.
-    break;
-  case 1:
-    // Add in the result type.
-    hash = llvm::hash_combine(hash, resultTypes.front());
-    break;
-  default:
-    // Use the type buffer as the hash, as we can guarantee it is the same for
-    // any given range of result types. This takes advantage of the fact the
-    // result types >1 are stored in a TupleType and uniqued.
-    hash = llvm::hash_combine(hash, resultTypes.data());
-    break;
-  }
-  return hash;
+  return llvm::hash_combine(hash, op->getResultTypes());
 }
 
 /// Compare memory operations for equivalence.  Only compares the types of the
@@ -69,26 +54,8 @@ static bool isEquivalentTo(MemOp lhs, MemOp rhs) {
   if (lhs.ruwAttr() != rhs.ruwAttr())
     return false;
   // Compare result types.  Taken from operation equivalence.
-  ArrayRef<Type> lhsResultTypes = lhs->getResultTypes();
-  ArrayRef<Type> rhsResultTypes = rhs->getResultTypes();
-  if (lhsResultTypes.size() != rhsResultTypes.size())
+  if (lhs->getResultTypes() != rhs->getResultTypes())
     return false;
-  switch (lhsResultTypes.size()) {
-  case 0:
-    break;
-  case 1:
-    // Compare the single result type.
-    if (lhsResultTypes.front() != rhsResultTypes.front())
-      return false;
-    break;
-  default:
-    // Use the type buffer for the comparison, as we can guarantee it is the
-    // same for any given range of result types. This takes advantage of the
-    // fact the result types >1 are stored in a TupleType and uniqued.
-    if (lhsResultTypes.data() != rhsResultTypes.data())
-      return false;
-    break;
-  }
   return true;
 }
 
@@ -130,7 +97,7 @@ static InstanceOp createInstance(OpBuilder builder, Location loc,
 
   return builder.create<InstanceOp>(loc, resultTypes, moduleName,
                                     builder.getArrayAttr(resultNames),
-                                    instanceName);
+                                    instanceName.getValue());
 }
 
 /// Get the portlist for an external module representing a blackbox memory. This
@@ -169,11 +136,11 @@ getBlackboxPortsForMemOp(MemOp op, const MemoryPortList &memPorts,
       shouldFlip = false;
     }
     for (auto bundleElement : type.cast<BundleType>().getElements()) {
-      auto name = builder.getStringAttr(prefix + bundleElement.name.str());
+      auto name = (prefix + bundleElement.name.getValue()).str();
       auto type = bundleElement.type;
       if (shouldFlip)
         type = FlipType::get(type);
-      extPorts.push_back({name, type});
+      extPorts.push_back({builder.getStringAttr(name), type});
     }
   }
 }
@@ -274,11 +241,8 @@ createWrapperModule(MemOp op, const MemoryPortList &memPorts,
     auto memPortType = memPort.getType().cast<FIRRTLType>();
     for (auto field :
          memPortType.getPassiveType().cast<BundleType>().getElements()) {
-
-      auto fieldType =
-          SubfieldOp::getResultType(memPortType, field.name, op.getLoc());
-      auto fieldValue = builder.create<SubfieldOp>(
-          op.getLoc(), fieldType, memPort, builder.getStringAttr(field.name));
+      auto fieldValue =
+          builder.create<SubfieldOp>(op.getLoc(), memPort, field.name);
       // Create the connection between module arguments and the external module,
       // making sure that sinks are on the LHS
       if (fieldValue.getType().cast<FIRRTLType>().isPassive())
@@ -314,16 +278,14 @@ createWiresForMemoryPorts(OpBuilder builder, Location loc, MemOp op,
     if (wireBundle.isa<FlipType>())
       wireBundle = wireBundle.cast<FlipType>().getElementType();
     for (auto field : wireBundle.cast<BundleType>().getElements()) {
-      auto fieldType =
-          SubfieldOp::getResultType(wireOp.getType(), field.name, op.getLoc());
-      auto fieldValue = builder.create<SubfieldOp>(
-          op.getLoc(), fieldType, wireOp, builder.getStringAttr(field.name));
+      auto fieldValue =
+          builder.create<SubfieldOp>(op.getLoc(), wireOp, field.name);
       // Create the connection between module arguments and the external module,
       // making sure that sinks are on the LHS
-      if (fieldValue.getType().cast<FIRRTLType>().isPassive())
-        builder.create<ConnectOp>(op.getLoc(), *extResultIt, fieldValue);
-      else
+      if ((*extResultIt).getType().cast<FIRRTLType>().isPassive())
         builder.create<ConnectOp>(op.getLoc(), fieldValue, *extResultIt);
+      else
+        builder.create<ConnectOp>(op.getLoc(), *extResultIt, fieldValue);
       // advance the external module field iterator
       ++extResultIt;
     }
@@ -352,8 +314,7 @@ replaceMemWithWrapperModule(DenseMap<MemOp, FModuleOp, MemOpInfo> &knownMems,
   } else {
     // Get the memory port descriptors. This gives us the name and kind of each
     // memory port created by the MemOp.
-    SmallVector<std::pair<Identifier, MemOp::PortKind>, 2> memPorts;
-    memOp.getPorts(memPorts);
+    auto memPorts = memOp.getPorts();
 
     // Get the portlist for a module which represents the blackbox memory.
     // Typically has 1R + 1W memory port, which has 4+5=9 fields.
@@ -415,8 +376,7 @@ replaceMemWithExtModule(DenseMap<MemOp, FExtModuleOp, MemOpInfo> &knownMems,
   } else {
     // Get the memory port descriptors.  This gives us the name and kind of each
     // memory port created by the MemOp.
-    SmallVector<std::pair<Identifier, MemOp::PortKind>, 2> memPorts;
-    memOp.getPorts(memPorts);
+    auto memPorts = memOp.getPorts();
 
     // Get the portlist for a module which represents the blackbox memory.
     // Typically has 1R + 1W memory port, which has 4+5=9 fields.

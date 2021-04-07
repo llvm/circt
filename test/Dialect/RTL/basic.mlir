@@ -2,10 +2,10 @@
 
 // CHECK-LABEL: rtl.module @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> (i50) {
 rtl.module @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> (i50) {
-  // CHECK-NEXT:    %c42_i12 = comb.constant 42 : i12
+  // CHECK-NEXT:    %c42_i12 = rtl.constant 42 : i12
   // CHECK-NEXT:    [[RES0:%[0-9]+]] = comb.add %c42_i12, %c42_i12 : i12
   // CHECK-NEXT:    [[RES1:%[0-9]+]] = comb.mul %c42_i12, [[RES0]] : i12
-  %a = comb.constant 42 : i12
+  %a = rtl.constant 42 : i12
   %b = comb.add %a, %a : i12
   %c = comb.mul %a, %b : i12
 
@@ -92,8 +92,8 @@ rtl.module @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> (i50) {
   // CHECK-NEXT: :2 = rtl.struct_explode [[STR]] : !rtl.struct<foo: i19, bar: i7>
   %se:2 = rtl.struct_explode %s0 : !rtl.struct<foo: i19, bar: i7>
 
-  // CHECK-NEXT: comb.bitcast [[STR]] : (!rtl.struct<foo: i19, bar: i7>)
-  %structBits = comb.bitcast %s0 : (!rtl.struct<foo: i19, bar: i7>) -> i26
+  // CHECK-NEXT: rtl.bitcast [[STR]] : (!rtl.struct<foo: i19, bar: i7>)
+  %structBits = rtl.bitcast %s0 : (!rtl.struct<foo: i19, bar: i7>) -> i26
 
   // CHECK-NEXT: = constant 13 : i10
   %idx = constant 13 : i10
@@ -110,3 +110,19 @@ rtl.module @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> (i50) {
   rtl.output %result : i50
 }
 // CHECK-NEXT:  }
+
+// https://github.com/llvm/circt/issues/863
+// CHECK-LABEL: rtl.module @signed_arrays
+rtl.module @signed_arrays(%arg0: si8) -> (%out: !rtl.array<2xsi8>) {
+  // CHECK-NEXT:  %wireArray = sv.wire  : !rtl.inout<array<2xsi8>>
+  %wireArray = sv.wire : !rtl.inout<!rtl.array<2xsi8>>
+
+  // CHECK-NEXT: %0 = rtl.array_create %arg0, %arg0 : (si8)
+  %0 = rtl.array_create %arg0, %arg0 : (si8)
+
+  // CHECK-NEXT: sv.connect %wireArray, %0 : !rtl.array<2xsi8>
+  sv.connect %wireArray, %0 : !rtl.array<2xsi8>
+
+  %result = sv.read_inout %wireArray : !rtl.inout<!rtl.array<2xsi8>>
+  rtl.output %result : !rtl.array<2xsi8>
+}

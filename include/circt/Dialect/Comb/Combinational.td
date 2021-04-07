@@ -10,45 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-def ConstantOp
- : CombOp<"constant",
-          [NoSideEffect, ConstantLike, FirstAttrDerivedResultType,
-           DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
-  let summary = "Produce a constant value";
-  let description = [{
-    The constant operation produces a constant value of standard integer type
-    without a sign.
-    ```
-      %result = comb.constant 42 : t1
-    ```
-    }];
-
-  let arguments = (ins APIntAttr:$value);
-  let results = (outs CombIntegerType:$result);
-
-  let parser = "return parse$cppClass(parser, result);";
-  let printer = "print$cppClass(p, *this);";
-
-  let builders = [
-    /// Build a ConstantOp from an APInt, infering the result type from the
-    /// width of the APInt.
-    OpBuilderDAG<(ins "const APInt &":$value)>,
-
-    /// This builder allows construction of small signed integers like 0, 1, -1
-    /// matching a specified MLIR IntegerType.  This shouldn't be used for
-    /// general constant folding because it only works with values that can be
-    /// expressed in an int64_t.  Use APInt's instead.
-    OpBuilderDAG<(ins "Type":$type, "int64_t":$value)>
-  ];
-  let extraClassDeclaration = [{
-    APInt getValue() {
-      return (*this)->getAttrOfType<IntegerAttr>("value").getValue();
-    }
-  }];
-  let hasFolder = true;
-  let verifier = "return ::verifyConstantOp(*this);";
-}
-
 //===----------------------------------------------------------------------===//
 // Arithmetic and Logical Operations
 //===----------------------------------------------------------------------===//
@@ -84,14 +45,14 @@ class UTVariadicOp<string mnemonic, list<OpTrait> traits = []> :
       VariadicOp<mnemonic,
                     traits # [SameTypeOperands, SameOperandsAndResultType]> {
 
-  let hasCanonicalizer = true;
+  let hasCanonicalizeMethod = true;
   let hasFolder = true;
   let verifier =  "return ::verifyUTVariadicOp(*this);";
 
   let assemblyFormat = "$inputs attr-dict `:` type($result)";
 
   let builders = [
-    OpBuilderDAG<(ins "Value":$lhs, "Value":$rhs), [{
+    OpBuilder<(ins "Value":$lhs, "Value":$rhs), [{
       return build($_builder, $_state, lhs.getType(),
                    ValueRange{lhs, rhs}, ArrayRef<NamedAttribute>{});
     }]>
@@ -100,7 +61,6 @@ class UTVariadicOp<string mnemonic, list<OpTrait> traits = []> :
 
 // Arithmetic and Logical Operations.
 def AddOp : UTVariadicOp<"add", [Commutative]>;
-def SubOp : UTBinOp<"sub">;
 def MulOp : UTVariadicOp<"mul", [Commutative]>;
 def DivUOp : UTBinOp<"divu">;
 def DivSOp : UTBinOp<"divs">;
@@ -110,6 +70,7 @@ let hasFolder = true in {
   def ShlOp : UTBinOp<"shl">;
   def ShrUOp : UTBinOp<"shru">;
   def ShrSOp : UTBinOp<"shrs">;
+  def SubOp : UTBinOp<"sub">;
 }
 
 def AndOp : UTVariadicOp<"and", [Commutative]>;
@@ -128,7 +89,7 @@ def MergeOp : UTVariadicOp<"merge", [Commutative]> {
       %result = rtl.merge %a, %b, %c : t1
     ```
     }];
-  let hasCanonicalizer = false;
+  let hasCanonicalizeMethod = false;
 }
 
 //===----------------------------------------------------------------------===//
@@ -171,10 +132,10 @@ def ICmpOp : CombOp<"icmp", [NoSideEffect, SameTypeOperands]> {
   let assemblyFormat = "$predicate $lhs `,` $rhs  attr-dict `:` type($lhs)";
   
   let hasFolder = true;
-  let hasCanonicalizer = true;
+  let hasCanonicalizeMethod = true;
 
   let builders = [
-    OpBuilderDAG<(ins "ICmpPredicate":$pred, "Value":$lhs, "Value":$rhs), [{
+    OpBuilder<(ins "ICmpPredicate":$pred, "Value":$lhs, "Value":$rhs), [{
       return build($_builder, $_state, $_builder.getI1Type(), pred, lhs, rhs);
     }]>
   ];
@@ -221,7 +182,7 @@ def ExtractOp : CombOp<"extract", [NoSideEffect]> {
 }
 
 def SExtOp : CombOp<"sext", [NoSideEffect]> {
-  let summary = "Sign extend an integer to a larger integer";
+  let summary = "Sign extend an integer to an equal or larger integer";
 
   let arguments = (ins CombIntegerType:$input);
   let results = (outs CombIntegerType:$result);
@@ -244,11 +205,11 @@ def ConcatOp : VariadicOp<"concat"> {
   }];
 
   let hasFolder = true;
-  let hasCanonicalizer = true;
+  let hasCanonicalizeMethod = true;
 
   let builders = [
-    OpBuilderDAG<(ins "ValueRange":$inputs)>,
-    OpBuilderDAG<(ins "Value":$lhs, "Value":$rhs), [{
+    OpBuilder<(ins "ValueRange":$inputs)>,
+    OpBuilder<(ins "Value":$lhs, "Value":$rhs), [{
       return build($_builder, $_state, ValueRange{lhs, rhs});
     }]>
   ];
@@ -272,10 +233,10 @@ def MuxOp : CombOp<"mux",
     "$cond `,` $trueValue `,` $falseValue attr-dict `:` type($result)";
   
   let hasFolder = true;
-  let hasCanonicalizer = true;
+  let hasCanonicalizeMethod = true;
 
   let builders = [
-    OpBuilderDAG<(ins "Value":$cond, "Value":$trueValue, "Value":$falseValue),
+    OpBuilder<(ins "Value":$cond, "Value":$trueValue, "Value":$falseValue),
     [{
       assert(trueValue.getType() == falseValue.getType() &&
              "mux requires matching true/false value types");
@@ -283,32 +244,4 @@ def MuxOp : CombOp<"mux",
                    cond, trueValue, falseValue);
     }]>
   ];
-}
-
-def KnownBitWidthType : Type<CPred<[{rtl::getBitWidth($_self) != -1}]>,
-  "Type wherein the bitwidth in hardware is known">;
-
-def BitcastOp: CombOp<"bitcast", [NoSideEffect]> {
-  let summary = [{
-    Reinterpret one value to another value of the same size and
-    potentially different type.
-  }];
-
-  let description = [{
-    See the RTL-SV rationale document for a longer description, including an
-    example.
-  }];
-
-  let arguments = (ins KnownBitWidthType:$input);
-  let results = (outs KnownBitWidthType:$result);
-  let verifier = [{
-    if (rtl::getBitWidth(input().getType()) !=
-        rtl::getBitWidth(result().getType()))
-      return this->emitOpError("Bitwidth of input must match result");
-    return success();
-  }];
-
-  let assemblyFormat = [{
-    $input attr-dict `:` functional-type($input, $result)
-  }];
 }

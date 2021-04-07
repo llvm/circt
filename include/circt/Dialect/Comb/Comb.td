@@ -40,6 +40,6 @@ def CombIntegerType : Type<CPred<"::isCombIntegerType($_self)">,
 class CombOp<string mnemonic, list<OpTrait> traits = []> :
     Op<CombDialect, mnemonic, traits>;
 
-include "Combinational.td"
+include "circt/Dialect/Comb/Combinational.td"
 
 #endif // COMB_TD

@@ -117,8 +117,8 @@ public:
   /// declared at the given, potentially unknown, location. If the ArrayType
   /// defined by the arguments would be ill-formed, emit errors and return
   /// nullptr-wrapping type.
-  static ArrayType getChecked(unsigned length, Type elementType,
-                              Location location);
+  static ArrayType getChecked(function_ref<InFlightDiagnostic()> emitError,
+                              unsigned length, Type elementType);
 
   /// Verify the construction of an array type.
   static LogicalResult

@@ -88,8 +88,8 @@ static int validateSvOpenArray(const svOpenArrayHandle data,
   int elemSize = numElems == 0 ? 0 : (totalBytes / numElems);
   if (numElems * expectedElemSize != totalBytes) {
     printf("DPI-C: ERROR: passed array argument that doesn't have expected "
-           "element-size: expected=%d actual=%d\n",
-           expectedElemSize, elemSize);
+           "element-size: expected=%d actual=%d numElems=%d totalBytes=%d\n",
+           expectedElemSize, elemSize, numElems, totalBytes);
     return -4;
   }
   return 0;

@@ -15,12 +15,20 @@
 
 include "mlir/Pass/PassBase.td"
 
-def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::FModuleOp"> {
+def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
   let summary = "Lower FIRRTL types to ground types";
   let description = [{
     Lower firrtl.module port types to ground types.
   }];
   let constructor = "circt::firrtl::createLowerFIRRTLTypesPass()";
+}
+
+def IMConstProp : Pass<"firrtl-imconstprop", "firrtl::CircuitOp"> {
+  let summary = "Intermodule constant propagation and dead code elimination";
+  let description = [{
+    Use optimistic constant propagation to delete ports and unreachable IR.
+  }];
+  let constructor = "circt::firrtl::createIMConstPropPass()";
 }
 
 def BlackboxMemory : Pass<"firrtl-blackbox-memory", "firrtl::CircuitOp"> {

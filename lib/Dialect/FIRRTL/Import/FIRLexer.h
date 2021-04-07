@@ -117,6 +117,7 @@ private:
 
   // Lexer implementation methods.
   FIRToken lexFileInfo(const char *tokStart);
+  FIRToken lexInlineAnnotation(const char *tokStart);
   FIRToken lexIdentifierOrKeyword(const char *tokStart);
   FIRToken lexNumber(const char *tokStart);
   FIRToken lexFloatingPoint(const char *tokStart);

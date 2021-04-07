@@ -189,7 +189,7 @@ static void print(OpAsmPrinter &printer, llhd::ConstOp op) {
   // some reason. Work around by printing the attribute without type, explicitly
   // followed by the operation type
   printer.printAttributeWithoutType(op.valueAttr());
-  printer.printOptionalAttrDict(op.getAttrs(), {"value"});
+  printer.printOptionalAttrDict(op->getAttrs(), {"value"});
   printer << " : " << op.getType();
 }
 
@@ -659,7 +659,7 @@ static void print(OpAsmPrinter &printer, llhd::EntityOp op) {
   printer << " -> ";
   printArgumentList(printer, outs);
   printer.printOptionalAttrDictWithKeyword(
-      op.getAttrs(),
+      op->getAttrs(),
       /*elidedAttrs =*/{SymbolTable::getSymbolAttrName(),
                         llhd::EntityOp::getTypeAttrName(), "ins"});
   printer.printRegion(op.body(), false, false);
@@ -1092,7 +1092,7 @@ static void print(OpAsmPrinter &printer, llhd::RegOp op) {
       printer << " if " << op.getGateAt(i);
     printer << " : " << op.values()[i].getType() << ")";
   }
-  printer.printOptionalAttrDict(op.getAttrs(),
+  printer.printOptionalAttrDict(op->getAttrs(),
                                 {"modes", "gateMask", "operand_segment_sizes"});
   printer << " : " << op.signal().getType();
 }

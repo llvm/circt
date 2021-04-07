@@ -15,6 +15,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/SourceMgr.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -118,8 +119,8 @@ Location FIRLexer::translateLocation(llvm::SMLoc loc) {
   auto lineAndColumn = sourceMgr.getLineAndColumn(loc, mainFileID);
   auto *buffer = sourceMgr.getMemoryBuffer(mainFileID);
 
-  return FileLineColLoc::get(buffer->getBufferIdentifier(), lineAndColumn.first,
-                             lineAndColumn.second, context);
+  return FileLineColLoc::get(context, buffer->getBufferIdentifier(),
+                             lineAndColumn.first, lineAndColumn.second);
 }
 
 /// Emit an error message and return a FIRToken::error token.
@@ -223,6 +224,10 @@ FIRToken FIRLexer::lexToken() {
         return lexFileInfo(tokStart);
       // Unknown character, emit an error.
       return emitError(tokStart, "unexpected character");
+    case '%':
+      if (*curPtr == '[')
+        return lexInlineAnnotation(tokStart);
+      return emitError(tokStart, "unexpected character following '%'");
 
     case ';':
       skipComment();
@@ -274,6 +279,47 @@ FIRToken FIRLexer::lexFileInfo(const char *tokStart) {
       return emitError(tokStart, "unterminated file info specifier");
     default:
       // Skip over other characters.
+      break;
+    }
+  }
+}
+
+/// Lex a non-standard inline Annotation file.
+///
+/// InlineAnnotation ::= '%[' (.)* ']'
+///
+FIRToken FIRLexer::lexInlineAnnotation(const char *tokStart) {
+  size_t depth = 0;
+  bool stringMode = false;
+  while (1) {
+    switch (*curPtr++) {
+    case '\\':
+      ++curPtr;
+      break;
+    case '"':
+      stringMode = !stringMode;
+      break;
+    case ']':
+      if (stringMode)
+        break;
+      if (depth == 1)
+        return formToken(FIRToken::inlineannotation, tokStart);
+      --depth;
+      break;
+    case '[':
+      if (stringMode)
+        break;
+      ++depth;
+      break;
+    case 0:
+      if (curPtr - 1 != curBuffer.end())
+        break;
+      LLVM_FALLTHROUGH;
+    case '\n': // Vertical whitespace isn't allowed in inline annotations.
+    case '\v':
+    case '\f':
+      return emitError(tokStart, "unterminated inline annotation");
+    default:
       break;
     }
   }
