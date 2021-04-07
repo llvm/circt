@@ -17,11 +17,14 @@
 #include "mlir/CAPI/Support.h"
 #include "mlir/IR/Builders.h"
 
+#include "llvm/ADT/SmallVector.h"
+
 #include "PybindUtils.h"
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 namespace py = pybind11;
 
+using namespace circt;
 using namespace circt::esi;
 
 //===----------------------------------------------------------------------===//
@@ -30,30 +33,22 @@ using namespace circt::esi;
 // ArrayRefs). Pybind11 has conversions to/from the STL so it's easier to write
 // a C++ wrapper.)
 //===----------------------------------------------------------------------===//
-// static pyFindValidReadySignals()
-static MlirOperation pyWrapModule(MlirOperation opC) {
-  mlir::Operation *op = unwrap(opC);
-  llvm::outs() << *op << '\n';
-  return wrap(op);
-}
 
-static MlirOperation pyNewModule(MlirContext ctxtC) {
-  auto *ctxt = unwrap(ctxtC);
-  mlir::OpBuilder b(ctxt);
-  mlir::Operation *newMod = b.create<mlir::ModuleOp>(b.getUnknownLoc());
-  MlirOperation newModC = wrap(newMod);
-  return newModC;
+static MlirOperation pyWrapModule(MlirOperation cModOp,
+                                  std::vector<std::string> portNames) {
+  mlir::Operation *modOp = unwrap(cModOp);
+  SmallVector<StringRef, 8> portNamesRefs;
+  for (auto name : portNames)
+    portNamesRefs.push_back(name);
+  SmallVector<ESIPortValidReadyMapping, 8> portTriples;
+  resolvePortNames(modOp, portNamesRefs, portTriples);
+  OpBuilder b(modOp);
+  Operation *wrapper = buildESIWrapper(b, modOp, portTriples);
+  return wrap(wrapper);
 }
-
-// static void pyArr(ESIPortValidReadyMapping v) {
-//   // llvm::outs() << v.size() << "\n";
-//   llvm::outs() << v.data.getName() << "\n";
-// }
 
 void circt::python::populateDialectESISubmodule(py::module &m) {
   m.doc() = "ESI Python Native Extension";
 
   m.def("buildWrapper", &pyWrapModule);
-  m.def("newMod", &pyNewModule);
-  // m.def("arr", &pyArr);
 }
