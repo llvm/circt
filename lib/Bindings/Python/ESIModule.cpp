@@ -50,5 +50,8 @@ static MlirOperation pyWrapModule(MlirOperation cModOp,
 void circt::python::populateDialectESISubmodule(py::module &m) {
   m.doc() = "ESI Python Native Extension";
 
-  m.def("buildWrapper", &pyWrapModule);
+  m.def("buildWrapper", &pyWrapModule,
+        "Construct an ESI wrapper around RTL module 'op' given a list of "
+        "latency-insensitive ports",
+        py::arg("op"), py::arg("name_list"));
 }
