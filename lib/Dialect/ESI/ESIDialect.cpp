@@ -38,47 +38,73 @@ ESIDialect::ESIDialect(MLIRContext *context)
       >();
 }
 
+/// Try to find a valid/ready port for the specified data port. If found, append
+/// to 'names'.
+static void findValidReady(Operation *modOp,
+                           const llvm::StringMap<rtl::ModulePortInfo> &nameMap,
+                           rtl::ModulePortInfo dataPort, bool trimName,
+                           bool warn,
+                           SmallVectorImpl<ESIPortValidReadyMapping> &names) {
+  if (dataPort.direction == rtl::PortDirection::INOUT) {
+    if (warn)
+      modOp->emitWarning("Data port '")
+          << dataPort.getName() << "' cannot be inout direction.";
+    return;
+  }
+
+  SmallString<64> nameBuffer = dataPort.getName();
+  size_t nameLen = nameBuffer.size();
+  if (trimName &&
+      nameBuffer.endswith("_data")) { // Detect both `foo` and `foo_data`.
+    nameLen -= 5;
+    nameBuffer.set_size(nameLen);
+  }
+
+  // Look for a 'valid' port.
+  nameBuffer.append("_valid");
+  auto valid = nameMap.find(nameBuffer);
+  if (valid == nameMap.end() || valid->second.direction != dataPort.direction ||
+      !valid->second.type.isSignlessInteger(1)) {
+    if (warn)
+      modOp->emitWarning("Could not find appropriate valid port for '")
+          << nameBuffer << "'.";
+    return;
+  }
+
+  // Try to find a corresponding 'ready' port.
+  nameBuffer.set_size(nameLen);
+  nameBuffer.append("_ready");
+  rtl::PortDirection readyDir = dataPort.direction == rtl::PortDirection::INPUT
+                                    ? rtl::PortDirection::OUTPUT
+                                    : rtl::PortDirection::INPUT;
+  auto ready = nameMap.find(nameBuffer);
+  if (ready == nameMap.end() || ready->second.direction != readyDir ||
+      !ready->second.type.isSignlessInteger(1)) {
+    if (warn)
+      modOp->emitWarning("Could not find appropriate ready port for '")
+          << nameBuffer << "'.";
+    return;
+  }
+
+  // Found one.
+  names.push_back(
+      ESIPortValidReadyMapping{dataPort, valid->second, ready->second});
+}
+
 /// Find all the port triples on a module which fit the
-/// <name>/<name>_valid/<name>_ready pattern. Ready must be the opposite
+/// <name>[_data]/<name>_valid/<name>_ready pattern. Ready must be the opposite
 /// direction of the other two.
 void circt::esi::findValidReadySignals(
     Operation *modOp, SmallVectorImpl<ESIPortValidReadyMapping> &names) {
-  SmallVector<rtl::ModulePortInfo> ports = rtl::getModulePortInfo(modOp);
 
+  SmallVector<rtl::ModulePortInfo> ports = rtl::getModulePortInfo(modOp);
   llvm::StringMap<rtl::ModulePortInfo> nameMap(ports.size());
   for (auto port : ports)
     nameMap[port.getName()] = port;
 
   for (auto port : ports) {
-    if (port.direction == rtl::PortDirection::INOUT)
-      continue;
-
-    StringRef portDataName = port.getName();
-    if (portDataName.endswith("_data")) // Detect both `foo` and `foo_data`.
-      portDataName = portDataName.substr(0, portDataName.size() - 5);
-
-    // Try to find a corresponding 'valid' port.
-    SmallString<64> portName = portDataName;
-    portName.append("_valid");
-    auto valid = nameMap.find(portName);
-    if (valid == nameMap.end() || valid->second.direction != port.direction ||
-        !valid->second.type.isSignlessInteger(1))
-      continue;
-
-    // Try to find a corresponding 'ready' port.
-    portName = portDataName;
-    portName.append("_ready");
-    rtl::PortDirection readyDir = port.direction == rtl::PortDirection::INPUT
-                                      ? rtl::PortDirection::OUTPUT
-                                      : rtl::PortDirection::INPUT;
-    auto ready = nameMap.find(portName);
-    if (ready == nameMap.end() || ready->second.direction != readyDir ||
-        !ready->second.type.isSignlessInteger(1))
-      continue;
-
-    // Found one.
-    names.push_back(
-        ESIPortValidReadyMapping{port, valid->second, ready->second});
+    findValidReady(modOp, nameMap, port, /*trimName=*/true, /*warn=*/false,
+                   names);
   }
 }
 
@@ -86,8 +112,8 @@ void circt::esi::findValidReadySignals(
 void circt::esi::resolvePortNames(
     Operation *modOp, ArrayRef<StringRef> portNames,
     SmallVectorImpl<ESIPortValidReadyMapping> &names) {
-  SmallVector<rtl::ModulePortInfo> ports = rtl::getModulePortInfo(modOp);
 
+  SmallVector<rtl::ModulePortInfo> ports = rtl::getModulePortInfo(modOp);
   llvm::StringMap<rtl::ModulePortInfo> nameMap(ports.size());
   for (auto port : ports)
     nameMap[port.getName()] = port;
@@ -95,56 +121,21 @@ void circt::esi::resolvePortNames(
   SmallString<64> nameBuffer;
   for (auto name : portNames) {
     nameBuffer = name;
-    size_t nameLen = name.size();
 
     // Look for a 'data' port.
-    rtl::ModulePortInfo dataPort;
     auto it = nameMap.find(nameBuffer);
     if (it == nameMap.end()) {
       nameBuffer.append("_data");
       it = nameMap.find(nameBuffer);
-      if (it == nameMap.end()) {
+      if (it == nameMap.end())
         modOp->emitWarning("Could not find data port '") << name << "'.";
-        continue;
-      }
+      else
+        findValidReady(modOp, nameMap, it->second, /*trimName=*/true,
+                       /*warn=*/true, names);
+    } else {
+      findValidReady(modOp, nameMap, it->second, /*trimName=*/false,
+                     /*warn=*/true, names);
     }
-    dataPort = it->second;
-    if (dataPort.direction == rtl::PortDirection::INOUT) {
-      modOp->emitWarning("Data port '")
-          << name << "' cannot be inout direction.";
-      continue;
-    }
-
-    // Look for a 'valid' port.
-    nameBuffer.set_size(nameLen);
-    nameBuffer.append("_valid");
-    auto valid = nameMap.find(nameBuffer);
-    if (valid == nameMap.end() ||
-        valid->second.direction != dataPort.direction ||
-        !valid->second.type.isSignlessInteger(1)) {
-      modOp->emitWarning("Could not find appropriate valid port for '")
-          << nameBuffer << "'.";
-      continue;
-    }
-
-    // Try to find a corresponding 'ready' port.
-    nameBuffer.set_size(nameLen);
-    nameBuffer.append("_ready");
-    rtl::PortDirection readyDir =
-        dataPort.direction == rtl::PortDirection::INPUT
-            ? rtl::PortDirection::OUTPUT
-            : rtl::PortDirection::INPUT;
-    auto ready = nameMap.find(nameBuffer);
-    if (ready == nameMap.end() || ready->second.direction != readyDir ||
-        !ready->second.type.isSignlessInteger(1)) {
-      modOp->emitWarning("Could not find appropriate ready port for '")
-          << nameBuffer << "'.";
-      continue;
-    }
-
-    // Found one.
-    names.push_back(
-        ESIPortValidReadyMapping{dataPort, valid->second, ready->second});
   }
 }
 
