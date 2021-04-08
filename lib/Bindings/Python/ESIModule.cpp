@@ -85,9 +85,7 @@ void circt::python::populateDialectESISubmodule(py::module &m) {
 
   py::class_<System>(m, "System")
       .def(py::init<MlirContext>())
-      .def("load_mlir", &System::loadMlir,
-           "Load an MLIR assembly file.")
+      .def("load_mlir", &System::loadMlir, "Load an MLIR assembly file.")
       .def("get", &System::get, "Get the top level module op.")
-      .def("lookup", &System::lookup,
-           "Lookup an RTL module and return it.");
+      .def("lookup", &System::lookup, "Lookup an RTL module and return it.");
 }
