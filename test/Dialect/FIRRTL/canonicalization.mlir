@@ -1262,4 +1262,16 @@ firrtl.module @MuxInvalidOpt(%cond: !firrtl.uint<1>, %data: !firrtl.uint<4>, %ou
   // CHECK:         firrtl.connect %out2, %data 
   firrtl.connect %out2, %b : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 }
+
+// CHECK-LABEL: firrtl.module @MuxCanon
+firrtl.module @MuxCanon(%c1: !firrtl.uint<1>, %c2: !firrtl.uint<1>, %d1: !firrtl.uint<5>, %d2: !firrtl.uint<5>, %d3: !firrtl.uint<5>, %foo: !firrtl.flip<uint<5>>, %foo2: !firrtl.flip<uint<5>>) {
+  %0 = firrtl.mux(%c1, %d2, %d3) : (!firrtl.uint<1>, !firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<5>
+  %1 = firrtl.mux(%c1, %d1, %0) : (!firrtl.uint<1>, !firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<5>
+  %2 = firrtl.mux(%c1, %0, %d1) : (!firrtl.uint<1>, !firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<5>
+  firrtl.connect %foo, %1 : !firrtl.flip<uint<5>>, !firrtl.uint<5>
+  firrtl.connect %foo2, %2 : !firrtl.flip<uint<5>>, !firrtl.uint<5>
+  // CHECK: firrtl.mux(%c1, %d1, %d3) : (!firrtl.uint<1>, !firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<5> 
+  // CHECK: firrtl.mux(%c1, %d2, %d1) : (!firrtl.uint<1>, !firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<5> 
+}
+
 }

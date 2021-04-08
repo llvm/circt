@@ -43,4 +43,17 @@ def GTWithConstLHS : Pat<
   (LTPrimOp $rhs, $lhs),
   [(NonConstantOp $rhs)]>;
 
+// mux(cond, x, mux(cond, y, z)) -> mux(cond, x, z)
+def MuxSameCondLow : Pat<
+  (MuxPrimOp $cond, $x, (MuxPrimOp $cond, $y, $z)),
+  (MuxPrimOp $cond, $x, $z)
+  >;
+
+// mux(cond, mux(cond, y, z), x) -> mux(cond, y, x)
+def MuxSameCondHigh : Pat<
+  (MuxPrimOp $cond, (MuxPrimOp $cond, $y, $z), $x),
+  (MuxPrimOp $cond, $y, $x)
+  >;
+
+
 #endif // CIRCT_DIALECT_FIRRTL_CANONICALIZATION_TD
