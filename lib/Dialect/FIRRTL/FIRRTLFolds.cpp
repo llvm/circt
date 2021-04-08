@@ -997,3 +997,8 @@ LogicalResult PartialConnectOp::canonicalize(PartialConnectOp op,
   }
   return failure();
 }
+
+void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                         MLIRContext *context) {
+  results.insert<patterns::EmptyNode>(context);
+}

@@ -19,6 +19,11 @@ include "circt/Dialect/FIRRTL/FIRRTL.td"
 /// const-on-LHS rewriting patterns converge in case both operands are constant.
 def NonConstantOp : Constraint<CPred<"!$0.getDefiningOp<ConstantOp>()">>;
 
+// Constraint that matches empty attribute dictionaries.  Used to ensure that
+// there are no FIRRTL annotation on an operation.
+def EmptyAttrDict : Constraint<CPred<"$0.empty()">>;
+
+
 // leq(const, x) -> geq(x, const)
 def LEQWithConstLHS : Pat<
   (LEQPrimOp (ConstantOp:$lhs $_), $rhs),
@@ -55,5 +60,10 @@ def MuxSameCondHigh : Pat<
   (MuxPrimOp $cond, $y, $x)
   >;
 
+// node(x, name, {}) -> x
+def EmptyNode : Pat<
+  (NodeOp $x, $name, $attrs),
+  (replaceWithValue $x),
+  [(EmptyAttrDict $attrs)]>;
 
 #endif // CIRCT_DIALECT_FIRRTL_CANONICALIZATION_TD
