@@ -49,10 +49,11 @@ def MuxSameCondLow : Pat<
   (MuxPrimOp $cond, $x, $z)
   >;
 
-// mux(cond, x, node(mux(cond, y, z)))
-def MuxSameCondLowNode : Pat<
-  (MuxPrimOp $cond, $x, (NodeOp (MuxPrimOp $cond, $y, $z), $name, $attr)),
-  (MuxPrimOp $cond, $x, $z)
+// mux(cond, mux(cond, y, z), x)
+def MuxSameCondHigh : Pat<
+  (MuxPrimOp $cond, (MuxPrimOp $cond, $y, $z), $x),
+  (MuxPrimOp $cond, $y, $x)
   >;
+
 
 #endif // CIRCT_DIALECT_FIRRTL_CANONICALIZATION_TD

@@ -665,7 +665,7 @@ OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
 void MuxPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
   results.insert<patterns::MuxSameCondLow>(context);
-  results.insert<patterns::MuxSameCondLowNode>(context);
+  results.insert<patterns::MuxSameCondHigh>(context);
 }
 
 OpFoldResult PadPrimOp::fold(ArrayRef<Attribute> operands) {
