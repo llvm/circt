@@ -8,6 +8,7 @@
 #include "circt/Dialect/HIR/HIRDialect.h"
 #include "mlir/Dialect/CommonFolders.h"
 #include "mlir/IR/Attributes.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
@@ -20,35 +21,11 @@
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/StringMap.h"
 
-#include "parserHelper.h"
+#include "circt/Dialect/HIR/helper.h"
 using namespace mlir;
 using namespace hir;
 using namespace llvm;
 
-namespace helper {
-
-// ParseResult parseCalleeType(OpAsmParser &parser, Type calleeTy) {
-//  ModuleType moduleTy;
-//  OptionalParseResult result = parseOptionalModuleType(parser, moduleTy);
-//  if (result.hasValue()) {
-//    if (result.getValue())
-//      return parser.emitError(parser.getCurrentLocation(),
-//                              "could not parse callee type!");
-//    calleeTy = moduleTy;
-//    return success();
-//  }
-//  if (parser.parseType(calleeTy))
-//    return failure();
-//  if (!calleeTy.isa<hir::InterfaceType>())
-//    return parser.emitError(parser.getCurrentLocation(),
-//                            "Unexpected callee type!");
-//  hir::InterfaceType interfaceTy = calleeTy.dyn_cast<hir::InterfaceType>();
-//  if (!interfaceTy.getElementType().isa<hir::ModuleType>())
-//    return parser.emitError(parser.getCurrentLocation(),
-//                            "Expected type to be interface to function!");
-//  return success();
-//}
-} // namespace helper
 /// CallOp
 /// Syntax:
 /// $callee `(` $operands `)` `at` $tstart (`offset` $offset^ )?
@@ -93,33 +70,31 @@ static ParseResult parseCallOp(OpAsmParser &parser, OperationState &result) {
     if (parser.parseOperand(offset))
       return failure();
   }
+
+  // parse arg types and delays.
   if (parser.parseColon())
     return failure();
 
-  // parse arg types and delays.
   auto locCalleeTy = parser.getCurrentLocation();
   if (parser.parseType(calleeTy))
     return failure();
 
   // resolve operands.
-  hir::ModuleType moduleTy;
-  if (auto interfaceTy = calleeTy.dyn_cast<InterfaceType>())
-    moduleTy = interfaceTy.getElementType().dyn_cast<ModuleType>();
-
-  if (!moduleTy)
-    return parser.emitError(locCalleeTy, "expected interface of function!");
+  hir::FuncType funcTy = calleeTy.dyn_cast<hir::FuncType>();
+  if (!funcTy)
+    return parser.emitError(locCalleeTy, "expected !hir.func type!");
 
   if (!calleeIsSymbol)
-    parser.resolveOperand(calleeVar, calleeTy.dyn_cast<InterfaceType>(),
-                          result.operands);
-  parser.resolveOperands(operands, moduleTy.getFunctionType().getInputs(),
-                         argLoc, result.operands);
-  parser.resolveOperand(tstart, getTimeType(parser.getBuilder().getContext()),
+    parser.resolveOperand(calleeVar, calleeTy, result.operands);
+  parser.resolveOperands(operands, funcTy.getFunctionType().getInputs(), argLoc,
+                         result.operands);
+  parser.resolveOperand(tstart,
+                        helper::getTimeType(parser.getBuilder().getContext()),
                         result.operands);
   if (isOffsetPresent)
-    parser.resolveOperand(offset,
-                          getConstIntType(parser.getBuilder().getContext()),
-                          result.operands);
+    parser.resolveOperand(
+        offset, helper::getConstIntType(parser.getBuilder().getContext()),
+        result.operands);
 
   // add attributes.
   result.addAttribute("operand_segment_sizes",
@@ -128,25 +103,28 @@ static ParseResult parseCallOp(OpAsmParser &parser, OperationState &result) {
                            static_cast<int32_t>(operands.size()), 1,
                            static_cast<int32_t>(isOffsetPresent ? 1 : 0)}));
 
-  result.attributes.push_back(parser.getBuilder().getNamedAttr(
-      "inputDelays", moduleTy.getInputDelays()));
+  result.attributes.push_back(
+      parser.getBuilder().getNamedAttr("inputDelays", funcTy.getInputDelays()));
 
   result.attributes.push_back(parser.getBuilder().getNamedAttr(
-      "outputDelays", moduleTy.getOutputDelays()));
+      "outputDelays", funcTy.getOutputDelays()));
 
-  result.addAttribute("interfaceTy", TypeAttr::get(calleeTy));
-  result.addTypes(moduleTy.getFunctionType().getResults());
+  result.addAttribute("funcTy", TypeAttr::get(calleeTy));
+  result.addTypes(funcTy.getFunctionType().getResults());
 
   return success();
 }
 
 static void printCallOp(OpAsmPrinter &printer, CallOp op) {
-  printer << "hir.call @" << op.callee() << "(" << op.operands() << ") at "
-          << op.tstart();
+  if (op.callee().hasValue())
+    printer << "hir.call @" << op.callee();
+  else
+    printer << "hir.call " << op.callee_var();
+  printer << "(" << op.operands() << ") at " << op.tstart();
   if (op.offset())
     printer << " + " << op.offset();
   printer << " : ";
-  printer << op.interfaceTy();
+  printer << op.funcTy();
 }
 
 /// IfOp
@@ -165,12 +143,12 @@ static ParseResult parseIfOp(OpAsmParser &parser, OperationState &result) {
   if (parser.parseKeyword("at") || parser.parseOperand(tstart))
     return failure();
 
-  if (parser.resolveOperand(cond,
-                            getIntegerType(parser.getBuilder().getContext(), 1),
-                            result.operands) ||
-      parser.resolveOperand(tstart,
-                            getTimeType(parser.getBuilder().getContext()),
-                            result.operands))
+  if (parser.resolveOperand(
+          cond, helper::getIntegerType(parser.getBuilder().getContext(), 1),
+          result.operands) ||
+      parser.resolveOperand(
+          tstart, helper::getTimeType(parser.getBuilder().getContext()),
+          result.operands))
     return failure();
 
   Region *ifBody = result.addRegion();
@@ -200,12 +178,12 @@ static void printForOp(OpAsmPrinter &printer, ForOp op) {
 static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
   auto &builder = parser.getBuilder();
 
-  Type timeTy = getTimeType(parser.getBuilder().getContext());
+  Type timeTy = helper::getTimeType(parser.getBuilder().getContext());
   Type lbRawType;
   Type ubRawType;
   Type stepRawType;
   Type tstartRawType = timeTy;
-  Type offsetType = getConstIntType(parser.getBuilder().getContext());
+  Type offsetType = helper::getConstIntType(parser.getBuilder().getContext());
   Type regionRawOperandTypes[2];
   ArrayRef<Type> regionOperandTypes(regionRawOperandTypes);
   regionRawOperandTypes[1] = timeTy;
@@ -250,7 +228,7 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
 
   if (parser.parseRegion(*body, regionOperands, regionOperandTypes))
     return failure();
-  result.addTypes(getTimeType(parser.getBuilder().getContext()));
+  result.addTypes(helper::getTimeType(parser.getBuilder().getContext()));
   ForOp::ensureTerminator(*body, builder, result.location);
   return success();
 }
@@ -284,11 +262,12 @@ static void printUnrollForOp(OpAsmPrinter &printer, UnrollForOp op) {
 static ParseResult parseUnrollForOp(OpAsmParser &parser,
                                     OperationState &result) {
   auto &builder = parser.getBuilder();
-  Type timeTypeVar = getTimeType(parser.getBuilder().getContext());
+  Type timeTypeVar = helper::getTimeType(parser.getBuilder().getContext());
   Type tstartRawType = timeTypeVar;
   Type regionRawOperandTypes[2];
   ArrayRef<Type> regionOperandTypes(regionRawOperandTypes);
-  regionRawOperandTypes[0] = getConstIntType(parser.getBuilder().getContext());
+  regionRawOperandTypes[0] =
+      helper::getConstIntType(parser.getBuilder().getContext());
   regionRawOperandTypes[1] = timeTypeVar;
 
   IntegerAttr lbAttr;
@@ -304,11 +283,11 @@ static ParseResult parseUnrollForOp(OpAsmParser &parser,
 
   // Parse loop bounds.
 
-  if (parseIntegerAttr(lbAttr, 32, "lb", parser, result) ||
+  if (helper::parseIntegerAttr(lbAttr, 32, "lb", parser, result) ||
       parser.parseKeyword("to") ||
-      parseIntegerAttr(ubAttr, 32, "ub", parser, result) ||
+      helper::parseIntegerAttr(ubAttr, 32, "ub", parser, result) ||
       parser.parseKeyword("step") ||
-      parseIntegerAttr(stepAttr, 32, "step", parser, result))
+      helper::parseIntegerAttr(stepAttr, 32, "step", parser, result))
     return failure();
 
   // Parse iter time.
@@ -331,7 +310,7 @@ static ParseResult parseUnrollForOp(OpAsmParser &parser,
   if (parser.parseRegion(*body, regionOperands, regionOperandTypes))
     return failure();
   ForOp::ensureTerminator(*body, builder, result.location);
-  result.addTypes(getTimeType(parser.getBuilder().getContext()));
+  result.addTypes(helper::getTimeType(parser.getBuilder().getContext()));
   return success();
 }
 
@@ -347,12 +326,12 @@ LogicalResult UnrollForOp::moveOutOfLoop(ArrayRef<Operation *> ops) {
   return success();
 }
 
-/// DefOp
+/// FuncOp
 /// Example:
 /// hir.def @foo at %t (%x :!hir.int, %y:!hir.int) ->(!hir.int){}
 
-static ParseResult parseDefSignature(
-    OpAsmParser &parser, hir::InterfaceType &interfaceTy,
+static ParseResult parseFuncSignature(
+    OpAsmParser &parser, hir::FuncType &funcTy,
     SmallVectorImpl<OpAsmParser::OperandType> &entryArgs,
     SmallVectorImpl<Type> &argTypes, SmallVectorImpl<NamedAttrList> &argAttrs,
     SmallVectorImpl<Type> &resultTypes,
@@ -380,14 +359,15 @@ static ParseResult parseDefSignature(
         NamedAttrList tempAttrs;
         IntegerAttr delayAttr;
         if (parser.parseAttribute(
-                delayAttr, getIntegerType(parser.getBuilder().getContext(), 64),
+                delayAttr,
+                helper::getIntegerType(parser.getBuilder().getContext(), 64),
                 "delay", tempAttrs))
           return failure();
         inputDelays.push_back(delayAttr);
       } else {
         // Default delay is 0.
         inputDelays.push_back(
-            getIntegerAttr(parser.getBuilder().getContext(), 64, 0));
+            helper::getIntegerAttr(parser.getBuilder().getContext(), 64, 0));
       }
 
       NamedAttrList blankAttrs;
@@ -424,14 +404,14 @@ static ParseResult parseDefSignature(
           NamedAttrList tempAttrs;
           if (parser.parseAttribute(
                   delayAttr,
-                  getIntegerType(parser.getBuilder().getContext(), 64), "delay",
-                  tempAttrs))
+                  helper::getIntegerType(parser.getBuilder().getContext(), 64),
+                  "delay", tempAttrs))
             return failure();
           outputDelays.push_back(delayAttr);
         } else {
           // Default delay is 0.
           outputDelays.push_back(
-              getIntegerAttr(parser.getBuilder().getContext(), 64, 0));
+              helper::getIntegerAttr(parser.getBuilder().getContext(), 64, 0));
         }
         NamedAttrList blankAttrs;
         resultAttrs.push_back(blankAttrs);
@@ -445,16 +425,13 @@ static ParseResult parseDefSignature(
 
   ArrayAttr resultDelayAttrs = parser.getBuilder().getArrayAttr(outputDelays);
   auto functionTy = parser.getBuilder().getFunctionType(argTypes, resultTypes);
-  hir::ModuleType moduleTy =
-      hir::ModuleType::get(parser.getBuilder().getContext(), functionTy,
-                           argDelayAttrs, resultDelayAttrs);
-  interfaceTy = hir::InterfaceType::get(parser.getBuilder().getContext(),
-                                        moduleTy, Attribute());
+  funcTy = hir::FuncType::get(parser.getBuilder().getContext(), functionTy,
+                              argDelayAttrs, resultDelayAttrs);
   return success();
 }
 
 // Parse method.
-static ParseResult parseDefOp(OpAsmParser &parser, OperationState &result) {
+static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
   SmallVector<OpAsmParser::OperandType, 4> entryArgs;
   OpAsmParser::OperandType tstart;
   SmallVector<NamedAttrList, 4> argAttrs;
@@ -473,14 +450,14 @@ static ParseResult parseDefOp(OpAsmParser &parser, OperationState &result) {
     return failure();
 
   // Parse the function signature.
-  hir::InterfaceType interfaceTy;
-  if (parseDefSignature(parser, interfaceTy, entryArgs, argTypes, argAttrs,
-                        resultTypes, resultAttrs, result))
+  hir::FuncType funcTy;
+  if (parseFuncSignature(parser, funcTy, entryArgs, argTypes, argAttrs,
+                         resultTypes, resultAttrs, result))
     return failure();
 
   auto functionTy = builder.getFunctionType(argTypes, resultTypes);
   result.addAttribute(impl::getTypeAttrName(), TypeAttr::get(functionTy));
-  result.addAttribute("interfaceTy", TypeAttr::get(interfaceTy));
+  result.addAttribute("funcTy", TypeAttr::get(funcTy));
 
   // If additional attributes are present, parse them.
   // if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
@@ -494,28 +471,20 @@ static ParseResult parseDefOp(OpAsmParser &parser, OperationState &result) {
   // Parse the optional function body.
   auto *body = result.addRegion();
   entryArgs.push_back(tstart);
-  argTypes.push_back(getTimeType(parser.getBuilder().getContext()));
+  argTypes.push_back(helper::getTimeType(parser.getBuilder().getContext()));
   auto r = parser.parseOptionalRegion(*body, entryArgs, argTypes);
   if (r.hasValue())
     return r.getValue();
   return success();
 }
 
-static void printDefSignature(OpAsmPrinter &printer, DefOp op) {
+static void printFuncSignature(OpAsmPrinter &printer, hir::FuncOp op) {
   auto fnType = op.getType();
   Region &body = op.getOperation()->getRegion(0);
   auto argTypes = fnType.getInputs();
   auto resTypes = fnType.getResults();
-  ArrayAttr inputDelays = op.interfaceTy()
-                              .dyn_cast<InterfaceType>()
-                              .getElementType()
-                              .dyn_cast<ModuleType>()
-                              .getInputDelays();
-  ArrayAttr outputDelays = op.interfaceTy()
-                               .dyn_cast<InterfaceType>()
-                               .getElementType()
-                               .dyn_cast<ModuleType>()
-                               .getOutputDelays();
+  ArrayAttr inputDelays = op.funcTy().dyn_cast<FuncType>().getInputDelays();
+  ArrayAttr outputDelays = op.funcTy().dyn_cast<FuncType>().getOutputDelays();
 
   printer << "(";
   bool firstArg = true;
@@ -551,7 +520,7 @@ static void printDefSignature(OpAsmPrinter &printer, DefOp op) {
   printer << ")";
 }
 
-static void printDefOp(OpAsmPrinter &printer, DefOp op) {
+static void printFuncOp(OpAsmPrinter &printer, hir::FuncOp op) {
   // Print function name, signature, and control.
   printer << op.getOperationName() << " ";
   printer.printSymbolName(op.sym_name());
@@ -560,7 +529,7 @@ static void printDefOp(OpAsmPrinter &printer, DefOp op) {
           << body.front().getArgument(body.front().getNumArguments() - 1)
           << " ";
 
-  printDefSignature(printer, op);
+  printFuncSignature(printer, op);
 
   // Print the body if this is not an external function.
   if (!body.empty())
@@ -569,12 +538,16 @@ static void printDefOp(OpAsmPrinter &printer, DefOp op) {
 }
 
 // CallableOpInterface.
-Region *DefOp::getCallableRegion() { return isExternal() ? nullptr : &body(); }
+Region *hir::FuncOp::getCallableRegion() {
+  return isExternal() ? nullptr : &body();
+}
 
 // CallableOpInterface.
-ArrayRef<Type> DefOp::getCallableResults() { return getType().getResults(); }
+ArrayRef<Type> hir::FuncOp::getCallableResults() {
+  return getType().getResults();
+}
 
-LogicalResult DefOp::verifyType() {
+LogicalResult hir::FuncOp::verifyType() {
   auto type = getTypeAttr().getValue();
   if (!type.isa<FunctionType>())
     return emitOpError("requires '" + getTypeAttrName() +
@@ -582,7 +555,7 @@ LogicalResult DefOp::verifyType() {
   return success();
 }
 /// required for functionlike trait
-LogicalResult DefOp::verifyBody() { return success(); }
+LogicalResult hir::FuncOp::verifyBody() { return success(); }
 
 #include "HIROpSyntax.h"
 #include "HIROpVerifier.h"

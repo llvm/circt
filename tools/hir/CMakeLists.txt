@@ -3,15 +3,17 @@ set(LLVM_LINK_COMPONENTS
   )
 
 add_llvm_tool(hir-builder
- hir-builder.cpp
- MLIRGen.cpp
+  HIRGen.cpp
+  hir-builder.cpp
+
+  ADDITIONAL_HEADER_DIRS
+  ${PROJECT_SOURCE_DIR}/lib/Dialect/HIR
 )
 
 llvm_update_compile_flags(hir-builder)
 target_link_libraries(hir-builder
   PRIVATE
   CIRCTHIR
-  CIRCTHIRTransforms
 
   MLIRParser
   MLIRSupport

@@ -1,8 +1,12 @@
 #include "circt/Dialect/HIR/HIR.h"
 #include "circt/Dialect/HIR/helper.h"
+#include "mlir/IR/FunctionImplementation.h"
+#include "mlir/IR/PatternMatch.h"
 #include <string>
 
 using namespace mlir;
+using namespace hir;
+using namespace llvm;
 
 namespace helper {
 std::string typeString(Type t) {
@@ -25,5 +29,29 @@ unsigned getBitWidth(Type type) {
           typeString(type).c_str());
   assert(false);
   return 0;
+}
+
+IntegerAttr getIntegerAttr(MLIRContext *context, int width, int value) {
+  return IntegerAttr::get(IntegerType::get(context, width),
+                          APInt(width, value));
+}
+
+Type getIntegerType(MLIRContext *context, int bitwidth) {
+  return IntegerType::get(context, bitwidth);
+}
+
+ConstType getConstIntType(MLIRContext *context) {
+  return ConstType::get(context);
+}
+
+Type getTimeType(MLIRContext *context) { return TimeType::get(context); }
+
+ParseResult parseIntegerAttr(IntegerAttr &value, int bitwidth,
+                             StringRef attrName, OpAsmParser &parser,
+                             OperationState &result) {
+
+  return parser.parseAttribute(
+      value, getIntegerType(parser.getBuilder().getContext(), bitwidth),
+      attrName, result.attributes);
 }
 } // namespace helper

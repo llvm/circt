@@ -16,7 +16,7 @@ public:
 };
 } // end anonymous namespace
 
-void inspectOp(hir::DefOp op) {}
+void inspectOp(hir::FuncOp op) {}
 void inspectOp(hir::ConstantOp op) {}
 void inspectOp(hir::ForOp op) {}
 void inspectOp(hir::UnrollForOp op) {}
@@ -49,7 +49,7 @@ void processMemReadOp(hir::MemReadOp op) {
 }
 
 void CanonicalizationPass::runOnOperation() {
-  hir::DefOp funcOp = getOperation();
+  hir::FuncOp funcOp = getOperation();
   WalkResult result = funcOp.walk([](Operation *operation) -> WalkResult {
     if (hir::MemReadOp op = dyn_cast<hir::MemReadOp>(operation))
       processMemReadOp(op);
@@ -64,7 +64,7 @@ void CanonicalizationPass::runOnOperation() {
 
 namespace mlir {
 namespace hir {
-std::unique_ptr<OperationPass<hir::DefOp>> createCanonicalizationPass() {
+std::unique_ptr<OperationPass<hir::FuncOp>> createCanonicalizationPass() {
   return std::make_unique<CanonicalizationPass>();
 }
 } // namespace hir

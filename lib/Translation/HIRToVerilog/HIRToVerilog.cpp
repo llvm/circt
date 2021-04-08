@@ -33,7 +33,7 @@ using namespace std;
 // pass. We should implement these checks in op's verify function.
 // TODO: Replace recursive function calls.
 namespace {
-enum RegionKind { DefOpBody, forOpBody, unrollForOpBody };
+enum RegionKind { FuncOpBody, forOpBody, unrollForOpBody };
 /// This class is the verilog output printer for the HIR dialect. It walks
 /// throught the module and prints the verilog in the 'out' variable.
 class VerilogPrinter {
@@ -42,7 +42,7 @@ public:
       : replacer(outBuffer), out(output) {}
 
   void printModule(ModuleOp op);
-  void printDefOp(DefOp op, unsigned indentAmount = 0);
+  void printFuncOp(hir::FuncOp op, unsigned indentAmount = 0);
 
 private:
   unsigned newValueNumber() { return nextValueNum++; }
@@ -51,14 +51,14 @@ private:
 
   helper::VerilogMapperClass verilogMapper;
 
-  void region_begin() {
+  void regionBegin() {
     verilogMapper.pushFrame();
     replacer.pushFrame();
     // outBuffer << "\n//{Region  (level = " << verilogMapper.stackLevel()
     //           << ").\n";
     // outBuffer << "//#VerilogValues = " << verilogMapper.size() << ".\n";
   }
-  void region_end() {
+  void regionEnd() {
     // outBuffer << "\n// #VerilogValues = " << verilogMapper.size() << ".\n";
     // outBuffer << "//}Region  (level = " << verilogMapper.stackLevel()
     //           << ").\n";
@@ -88,8 +88,6 @@ private:
   void printMemWriteOp(MemWriteOp op, unsigned indentAmount = 0);
   void printReturnOp(hir::ReturnOp op, unsigned indentAmount = 0);
   void printYieldOp(hir::YieldOp op, unsigned indentAmount = 0);
-  void printWireWriteOp(hir::WireWriteOp op, unsigned indentAmount = 0);
-  void printWireReadOp(hir::WireReadOp op, unsigned indentAmount = 0);
   void printAllocOp(hir::AllocOp op, unsigned indentAmount = 0);
   void printDelayOp(hir::DelayOp op, unsigned indentAmount = 0);
   void printCallOp(hir::CallOp op, unsigned indentAmount = 0);
@@ -145,8 +143,8 @@ void VerilogPrinter::printMemReadOp(MemReadOp op, unsigned indentAmount) {
   Value offset = op.offset();
   int delayValue = 0;
   if (offset) {
-    VerilogValue *v_offset = verilogMapper.getMutable(offset);
-    delayValue = offset ? v_offset->getIntegerConst() : 0;
+    VerilogValue *vOffset = verilogMapper.getMutable(offset);
+    delayValue = offset ? vOffset->getIntegerConst() : 0;
   }
   VerilogValue *vMem = verilogMapper.getMutable(mem);
   if (!packing.empty()) {
@@ -382,47 +380,6 @@ void VerilogPrinter::printAllocOp(hir::AllocOp op, unsigned indentAmount) {
   }
 }
 
-void VerilogPrinter::printWireReadOp(hir::WireReadOp op,
-                                     unsigned indentAmount) {
-
-  Value result = op.res();
-  unsigned id_result = newValueNumber();
-  VerilogValue vResult(result, "v" + to_string(id_result));
-  verilogMapper.insert(result, vResult);
-
-  Value wire = op.wire();
-  VerilogValue *v_wire = verilogMapper.getMutable(wire);
-  SmallVector<VerilogValue *, 4> addr = convertToVerilog(op.addr());
-  string arrayAccessStr = "";
-  for (auto idx : addr) {
-    arrayAccessStr += "[" + idx->strConstOrError() + "]";
-  }
-  outBuffer << "wire " << vResult.strWireDecl() << " = " << v_wire->strWire()
-            << arrayAccessStr << ";\n";
-}
-
-void VerilogPrinter::printWireWriteOp(hir::WireWriteOp op,
-                                      unsigned indentAmount) {
-  Value value = op.value();
-  VerilogValue *vValue = verilogMapper.getMutable(value);
-  Value wire = op.wire();
-  VerilogValue *v_wire = verilogMapper.getMutable(wire);
-  auto addr = convertToVerilog(op.addr());
-  string arrayAccessStr = "";
-
-  for (auto idx : addr) {
-    if (idx->isIntegerConst()) {
-      arrayAccessStr += "[" + to_string(idx->getIntegerConst()) + "]";
-    } else {
-      arrayAccessStr +=
-          "[" + idx->strWire() + " /*ERROR: Expected integer constant.*/]";
-    }
-  }
-
-  outBuffer << "assign " << v_wire->strWire() << arrayAccessStr << " = "
-            << vValue->strConstOrWire() << ";\n";
-}
-
 void VerilogPrinter::printMemWriteOp(MemWriteOp op, unsigned indentAmount) {
   auto addr = convertToVerilog(op.addr());
   Value mem = op.mem();
@@ -430,9 +387,9 @@ void VerilogPrinter::printMemWriteOp(MemWriteOp op, unsigned indentAmount) {
   Value tstart = op.tstart();
   VerilogValue *vTstart = verilogMapper.getMutable(tstart);
   Value offset = op.offset();
-  VerilogValue *v_offset;
+  VerilogValue *vOffset;
   if (offset)
-    v_offset = verilogMapper.getMutable(offset);
+    vOffset = verilogMapper.getMutable(offset);
 
   auto shape = mem.getType().dyn_cast<hir::MemrefType>().getShape();
   auto packing = mem.getType().dyn_cast<hir::MemrefType>().getPacking();
@@ -444,7 +401,7 @@ void VerilogPrinter::printMemWriteOp(MemWriteOp op, unsigned indentAmount) {
   VerilogValue *vValue = verilogMapper.getMutable(value);
   VerilogValue *vMem = verilogMapper.getMutable(mem);
 
-  int delayValue = offset ? v_offset->getIntegerConst() : 0;
+  int delayValue = offset ? vOffset->getIntegerConst() : 0;
 
   if (!packing.empty()) {
     // Address bus assignments.
@@ -739,14 +696,14 @@ void VerilogPrinter::printIfOp(IfOp op, unsigned indentAmount) {
 
   auto id_if = newValueNumber();
   VerilogValue vTstart = VerilogValue(tstart, "v" + to_string(id_if));
-  region_begin();
+  regionBegin();
   verilogMapper.insertPtr(tstart, &vTstart);
   outBuffer << "wire " << vTstart.strWire() << " = "
             << vTstartPrev->strConstOrWire() << "&&"
             << verilogMapper.get(cond).strConstOrWire() << ";\n";
   printTimeOffsets(&vTstart);
   printBody(if_body, indentAmount);
-  region_end();
+  regionEnd();
   verilogMapper.insertPtr(tstart, vTstartPrev);
 }
 
@@ -762,8 +719,8 @@ void VerilogPrinter::printForOp(hir::ForOp op, unsigned indentAmount) {
   const VerilogValue v_ub = verilogMapper.get(op.ub());
   const VerilogValue v_step = verilogMapper.get(op.step());
   VerilogValue *vTstart = verilogMapper.getMutable(op.tstart());
-  const VerilogValue v_offset = verilogMapper.get(op.offset());
-  unsigned delayValue = v_offset.getIntegerConst();
+  const VerilogValue vOffset = verilogMapper.get(op.offset());
+  unsigned delayValue = vOffset.getIntegerConst();
   assert(delayValue > 0);
   VerilogValue v_idx = VerilogValue(idx, "idx" + to_string(idLoop));
   verilogMapper.insert(idx, v_idx);
@@ -854,7 +811,7 @@ void VerilogPrinter::printUnrollForOp(UnrollForOp op, unsigned indentAmount) {
           "idx" + to_string(idLoop))); // FIXME remove name of the VerilogValue.
   VerilogValue v_tloop;
   for (int i = lb; i < ub; i += step) {
-    region_begin();
+    regionBegin();
     auto id_tloop = newValueNumber();
 
     outBuffer << "\n//{ Unrolled body " << i
@@ -881,7 +838,7 @@ void VerilogPrinter::printUnrollForOp(UnrollForOp op, unsigned indentAmount) {
 
     outBuffer << "//DEBUG: " << verilogMapper.getMutable(idx)->strConstOrWire()
               << ", expected " << i << "\n";
-    region_end();
+    regionEnd();
     v_tloop = next_v_tloop;
   }
 
@@ -999,7 +956,7 @@ void VerilogPrinter::printOperation(Operation *inst, unsigned indentAmount) {
   assert(false);
 }
 
-void VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
+void VerilogPrinter::printFuncOp(hir::FuncOp op, unsigned indentAmount) {
   Block &entryBlock = op.getBody().front();
   auto args = entryBlock.getArguments();
   auto resTypes = op.getType().getResults();
@@ -1065,7 +1022,7 @@ void VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
   }
   outBuffer << ",\n//Clock.\ninput wire clk\n);\n\n";
 
-  region_begin();
+  regionBegin();
   for (auto arg : args) {
     if (arg.getType().isa<hir::MemrefType>()) {
       string loc = replacer.insert([=]() -> string {
@@ -1079,7 +1036,7 @@ void VerilogPrinter::printDefOp(DefOp op, unsigned indentAmount) {
   printTimeOffsets(vTstart);
   printBody(entryBlock);
 
-  region_end();
+  regionEnd();
 
   outBuffer << "endmodule\n";
 
@@ -1133,23 +1090,23 @@ void VerilogPrinter::printTimeOffsets(const VerilogValue *timeVar) {
 
 void VerilogPrinter::printBody(Block &block, unsigned indentAmount) {
 
-  region_begin();
+  regionBegin();
 
   // Print the operations within the entity.
   for (auto iter = block.begin(); iter != block.end(); ++iter) {
     printOperation(&(*iter), 4);
   }
 
-  region_end();
+  regionEnd();
 }
 
 void VerilogPrinter::printModule(ModuleOp module) {
   outBuffer << "`default_nettype none\n";
   outBuffer << "`include \"helper.sv\"\n";
-  WalkResult result = module.walk([this](DefOp defOp) -> WalkResult {
-    fprintf(stderr, "DefOp found\n");
+  WalkResult result = module.walk([this](hir::FuncOp funcOp) -> WalkResult {
+    fprintf(stderr, "FuncOp found\n");
     fflush(stderr);
-    printDefOp(defOp);
+    printFuncOp(funcOp);
     return WalkResult::advance();
   });
   // if printing of a single operation failed, fail the whole translation.
@@ -1160,11 +1117,11 @@ LogicalResult hir::printVerilog(ModuleOp module, raw_ostream &os) {
   llvm::formatted_raw_ostream out(os);
   out << "`default_nettype none\n";
   out << "`include \"helper.sv\"\n";
-  WalkResult result = module.walk([&out](DefOp defOp) -> WalkResult {
+  WalkResult result = module.walk([&out](hir::FuncOp funcOp) -> WalkResult {
     VerilogPrinter printer(out);
-    fprintf(stderr, "DefOp found\n");
+    fprintf(stderr, "FuncOp found\n");
     fflush(stderr);
-    printer.printDefOp(defOp);
+    printer.printFuncOp(funcOp);
     return WalkResult::advance();
   });
   return failure(result.wasInterrupted());

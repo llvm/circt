@@ -1,7 +1,12 @@
 add_subdirectory(Verification)
-file(GLOB globbed *.cpp)
 add_circt_dialect_library(CIRCTHIR
-  ${globbed}
+  helper.cpp  
+  HIR.cpp  
+  HIRDialect.cpp  
+  HIROpSyntax.cpp  
+  HIROpVerifier.cpp  
+  HIRTypeSyntax.cpp
+  HIRBuilders.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${PROJECT_SOURCE_DIR}/lib/Dialect/HIR

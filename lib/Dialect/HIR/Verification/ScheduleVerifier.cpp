@@ -148,12 +148,12 @@ public:
 }; // namespace
 /// Checks for out of bound memef access subscripts..
 class ScheduleVerifier
-    : public PassWrapper<ScheduleVerifier, OperationPass<hir::DefOp>> {
+    : public PassWrapper<ScheduleVerifier, OperationPass<hir::FuncOp>> {
 public:
   void runOnOperation() override;
 
 private:
-  bool inspectOp(DefOp op);
+  bool inspectOp(FuncOp op);
   bool inspectOp(hir::ConstantOp op);
   bool inspectOp(ForOp op);
   bool inspectOp(UnrollForOp op);
@@ -217,7 +217,7 @@ private:
   Value tstart;
 };
 
-bool ScheduleVerifier::inspectOp(DefOp op) {
+bool ScheduleVerifier::inspectOp(FuncOp op) {
   Block &entryBlock = op.getBody().front();
   // args also contains tstart;
   auto args = entryBlock.getArguments();

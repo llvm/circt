@@ -2,7 +2,7 @@
 #define HIR_HIR_H
 
 #include "circt/Support/LLVM.h"
-#include "helper.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/FunctionSupport.h"
@@ -60,9 +60,9 @@ struct MemrefTypeStorage : public TypeStorage {
   DictionaryAttr portAttrs;
 };
 
-struct ModuleTypeStorage : public TypeStorage {
-  ModuleTypeStorage(FunctionType functionTy, ArrayAttr inputDelays,
-                    ArrayAttr outputDelays)
+struct FuncTypeStorage : public TypeStorage {
+  FuncTypeStorage(FunctionType functionTy, ArrayAttr inputDelays,
+                  ArrayAttr outputDelays)
       : functionTy(functionTy), inputDelays(inputDelays),
         outputDelays(outputDelays) {}
 
@@ -86,53 +86,18 @@ struct ModuleTypeStorage : public TypeStorage {
   }
 
   /// Define a construction method for creating a new instance of this storage.
-  static ModuleTypeStorage *construct(TypeStorageAllocator &allocator,
-                                      const KeyTy &key) {
+  static FuncTypeStorage *construct(TypeStorageAllocator &allocator,
+                                    const KeyTy &key) {
     FunctionType functionTy = std::get<0>(key);
     ArrayAttr inputDelays = std::get<1>(key);
     ArrayAttr outputDelays = std::get<2>(key);
-    return new (allocator.allocate<ModuleTypeStorage>())
-        ModuleTypeStorage(functionTy, inputDelays, outputDelays);
+    return new (allocator.allocate<FuncTypeStorage>())
+        FuncTypeStorage(functionTy, inputDelays, outputDelays);
   }
 
   FunctionType functionTy;
   ArrayAttr inputDelays;
   ArrayAttr outputDelays;
-};
-
-struct InterfaceTypeStorage : public TypeStorage {
-  InterfaceTypeStorage(Type elementType, Attribute attr)
-      : elementType(elementType), attr(attr) {}
-
-  /// The hash key for this storage is a pair of the integer and type params.
-  using KeyTy = std::tuple<Type, Attribute>;
-
-  /// Define the comparison function for the key type.
-  bool operator==(const KeyTy &key) const {
-    return key == KeyTy(elementType, attr);
-  }
-
-  /// Define a hash function for the key type.
-  static llvm::hash_code hashKey(const KeyTy &key) {
-    return llvm::hash_combine(std::get<0>(key), std::get<1>(key));
-  }
-
-  /// Define a construction function for the key type.
-  static KeyTy getKey(Type elementType, Attribute attr) {
-    return KeyTy(elementType, attr);
-  }
-
-  /// Define a construction method for creating a new instance of this storage.
-  static InterfaceTypeStorage *construct(TypeStorageAllocator &allocator,
-                                         const KeyTy &key) {
-    Type elementType = std::get<0>(key);
-    Attribute attr = std::get<1>(key);
-    return new (allocator.allocate<InterfaceTypeStorage>())
-        InterfaceTypeStorage(elementType, attr);
-  }
-
-  Type elementType;
-  Attribute attr;
 };
 
 struct ArrayTypeStorage : public TypeStorage {
@@ -247,36 +212,20 @@ public:
 };
 
 /// This class defines !hir.func type in the dialect.
-class ModuleType
-    : public Type::TypeBase<ModuleType, Type, Details::ModuleTypeStorage> {
+class FuncType
+    : public Type::TypeBase<FuncType, Type, Details::FuncTypeStorage> {
 public:
   using Base::Base;
 
   static StringRef getKeyword() { return "func"; }
-  static ModuleType get(MLIRContext *context, FunctionType functionTy,
-                        ArrayAttr inputDelays, ArrayAttr outputDelays) {
+  static FuncType get(MLIRContext *context, FunctionType functionTy,
+                      ArrayAttr inputDelays, ArrayAttr outputDelays) {
     return Base::get(context, functionTy, inputDelays, outputDelays);
   }
 
   FunctionType getFunctionType() { return getImpl()->functionTy; }
   ArrayAttr getInputDelays() { return getImpl()->inputDelays; }
   ArrayAttr getOutputDelays() { return getImpl()->outputDelays; }
-};
-
-/// This class defines hir.interface type in the dialect.
-class InterfaceType : public Type::TypeBase<InterfaceType, Type,
-                                            Details::InterfaceTypeStorage> {
-public:
-  using Base::Base;
-
-  static StringRef getKeyword() { return "interface"; }
-  static InterfaceType get(MLIRContext *context, Type elementType,
-                           Attribute attr) {
-    return Base::get(context, elementType, attr);
-  }
-  Type getElementType() { return getImpl()->elementType; }
-  Attribute getAttribute() { return getImpl()->attr; }
-  unsigned getWidth() { return helper::getBitWidth(getElementType()); }
 };
 
 /// This class defines array type which is only accessible inside hir.interface.

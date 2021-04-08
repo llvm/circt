@@ -5,7 +5,7 @@
 
 namespace mlir {
 namespace hir {
-LogicalResult verifySliceOp(hir::SliceOp op);
+LogicalResult verifySelectOp(hir::SelectOp op);
 } // namespace hir
 } // namespace mlir
 

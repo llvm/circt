@@ -1,7 +1,7 @@
 #HIR
 HIR is an mlir dialect for hardware description.
 
-#Enhancement proposals 
+#Enhancement proposals : Ops
 
 ##instantiateOp
 * Syntax: `hir.instantiate hardware-block : interface-type`
@@ -9,9 +9,6 @@ HIR is an mlir dialect for hardware description.
     uram/bram/lutram/reg/latch or nothing.
 * `hir.instantiate nothing:...` only creates the interface but does not connect 
     it to anything.
-
-## TimeType
-* Allow casting between vref<i1> and TimeType.
 
 ## unroll_for loop
 * Allow multiple induction variables. 
@@ -24,58 +21,59 @@ HIR is an mlir dialect for hardware description.
     generated verilog.
 * Syntax: `hir.comment string-attr` 
 
-## Interface types
-The container types provide uniform interfaces to underlying hardware elements.
-The vref and memref container types can be cast to each other.
+## CastOp
+* Syntax: `hir.cast %v : #type1 -> #type2`
 
-### vref type
-* vref types lower to a set of wires.
-* The writes to vrefs are volatile, i.e. reads must occur in the same cycle.
-* Operations: instantiate, cast, concat, slice, assign, read, write, call
-* Attributes: read, write, call
-* Syntax: `hir.vref< element-type optional-attr-dict>`
-* element-type - IntType, FloatType, ComplexType, Tuple, Tensor
-* Tuple is enhanced to support optional attr-dict
-  - Syntax : hir.vref<tuple<i1 #rd, i1 #wr, f32 #wr>>
-  - Syntax : hir.vref<tuple<i8 , i8> #rw>
+#Enhancement proposals : Types
 
-* Usecases:
-  - Multi-dimensional array of wires: `hir.vref<tensor<3x4xi32> attr-dict>`
-  - Array of interfaces:`hir.vref<tensor<4xtuple<...>>>`
-* slice op indices :
-  - Array indices must be either constant or mlir index type.
-  - Tuple indices must be constant.
-  - Syntax: `hir.slice %a ([1,i,j], [0] attr-dict)`, i and j are of index type.
+## TimeType
+* Allow casting between group<i1> and TimeType.
 
-### memref type
-* memref is an interface to memory
-* The underlying memory element can be a dram, uram, bram, lutram, reg or latch.
-* Operations: instantiate, cast, load, store
-* Attributes: load, store
-* Syntax: `hir.memref<MxNxelement-type, attr-dict>`
-* The `attr-dict` specifies the banked dims and load/store delays.
-* `element-type` can be IntType,FloatType,ComplexType and TupleType.
-* Indices for banked dims in load/store op must be of type index or constants.
+##GroupType
+* Syntax : `!hir.group<("in" i1, i32, "out" v1)>`
+* Operations: hir.send, hir.recv, hir.select, hir.cast, hir.group
+* Indices must be constants.
 
-## Lowering
-* Convert a fully packed memref to a `vref<tuple<...>>`
-* For banked memrefs use `vref<tensor<tuple<...>>>`
-* remove the casts between memrefs and interfaces.
-* Lower load/store to read and write ops.
-* Convert read/write/call/assign op of more complex interfaces to a slice op 
-    followed by read/write/call/assign of a simple vref (i.e. element type is 
-    either IntType or FloatType).
-* Simplify slice of multiple elements to slice + concat.
-* If the slice is nested inside unroll_for loop then
-  - Check if the slice op accesses all elements. otherwise,
-  - Create a new slice op at the outermost level where the interface is defined.
-  - Use the output interface of the slice instead of the original interface
-      inside unroll loop nest.
-  - If the step size in any of the unroll_for loops is greater than 1 then add a
-      new induction var with step size 1 and use it to index the new interface 
-      in the slice op inside the unroll loop.
-* Lower iter_time in unroll_for op into iter_args by casting between time var 
-    and vref<i1>.
-* Lower iter_args of unroll_for loop to vref<tensor<...>> + read/write.
-* Lower hir.instantiate to hir.call.
+##ModuleType
+* Syntax: `!hir.func<()->()>`
+* Operations: hir.call, hir.cast
 
+##ArrayType
+* Syntax: `!hir.array<"in" [2x4xf32]>`
+* Operations: hir.select, hir.array, hir.assign.
+* Indices can be IndexType or Constants.
+
+#Lowerings
+
+## Codegen restrictions before lowering.
+* Only allow select into simple types, i.e. hir.select output can not be array
+    or group.
+
+## MemrefType lowering
+* Convert `!hir.memref` to `!hir.func` or `!hir.array<[...xfunc(...)->(...)]>`
+* Convert LoadOp/StoreOp to SelectOp and CallOp.
+
+##CallOp lowering
+* Convert CallOp-on-symbol to AllocaOp + CallOp-on-var.
+
+## FuncType lowering
+* Convert `!hir.func` to `!hir.group`.
+* Convert CallOp-on-var to multiple RecvOp/SendOp.
+* Convert SelectOp to multiple SelectOps plus one GroupOp.
+
+## ArrayType lowering
+* Convert array-of-groups to group-of-arrays.
+* Rearrange SelectOp indices accordingly (SelectOp should be to only simple
+    types).
+
+## GroupType lowering
+* [Not urgent] Flatten nested groups into a single group. 
+  * Update SelectOp with flattened index to select item.
+* Break group of multiple items to separate items.
+  * Replace the group-name+first-index in SelectOp with the correct item.
+* Replace group-of-single-array to just the array. Update SelectOp.
+
+## Codegen restrictions after lowering.
+* Only supports groups of BuiltinTypes (int/float).
+* Only support array of BuiltinTypes.
+* No MemrefType and CallOp.

@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "MLIRGen.h"
+#include "HIRGen.h"
 #include "circt/Dialect/HIR/HIR.h"
 #include "circt/Dialect/HIR/HIRDialect.h"
 

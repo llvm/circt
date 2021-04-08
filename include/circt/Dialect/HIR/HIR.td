@@ -31,15 +31,9 @@ def MemrefType: Type<CPred<"$_self.isa<MemrefType>()">,
   "HIR memref type ">,
   BuildableType<"MemrefType::get($_builder.getContext())">;
 
-def InterfaceType: Type<CPred<"$_self.isa<InterfaceType>()">,
+def FuncType: Type<CPred<"$_self.isa<FuncType>()">,
   "HIR interface type ">,
-  BuildableType<"InterfaceType::get($_builder.getContext())">;
-
-def ModuleType: Type<CPred<"$_self.isa<ModuleType>()">,
-  "HIR interface type ">,
-  BuildableType<"ModuleType::get($_builder.getContext())">;
-
-//ArrayType and GroupType not defined here since they are always wrapped inside InterfaceType.
+  BuildableType<"FuncType::get($_builder.getContext())">;
 
 // Ops
 class HIR_Op<string mnemonic, list<OpTrait> traits = []>
@@ -137,36 +131,53 @@ def MemWriteOp : HIR_Op<"store", [AttrSizedOperandSegments]> {
 def SendOp : HIR_Op<"send", [AttrSizedOperandSegments]> {
   let summary = "write to an interface.";
   let description = [{
-    This Op writes to interface. 
+    This Op writes to group or array. 
       ```
   }];
 
-  let arguments = (ins AnyType:$value, InterfaceType:$interface,
+  let arguments = (ins AnyType:$value, AnyType:$var,
       Variadic<AnyType>:$addr, 
       TimeType :$tstart, Optional<ConstType>:$offset);
   let results = (outs );
-  let assemblyFormat = [{$value `to` $interface  `[` $addr `]` `at` $tstart 
+  let assemblyFormat = [{$value `to` $var  `[` $addr `]` `at` $tstart 
     (`+` $offset^ )? attr-dict 
-      `:` type($value) `to` type($interface)`[`type($addr) `]` }];
+      `:` type($value) `to` type($var)`[`type($addr) `]` }];
 }
 
-def SliceOp : HIR_Op<"slice", [NoSideEffect]> {
-  let summary = "Select a slice of the interface.";
+def RecvOp : HIR_Op<"recv", [AttrSizedOperandSegments]> {
+  let summary = "read from a group or array.";
+  let description = [{
+    This Op Reads from group or array. 
+      ```
+  }];
+
+  let arguments = (ins AnyType:$var,
+      Variadic<AnyType>:$addr, 
+      TimeType :$tstart, Optional<ConstType>:$offset);
+  let results = (outs AnyType:$res);
+
+  let assemblyFormat = [{$var  `[` $addr `]` `at` $tstart 
+    (`+` $offset^ )? attr-dict 
+      `:` type($var)`[`type($addr) `]` `->` type($res) }];
+}
+
+def SelectOp : HIR_Op<"select", [NoSideEffect]> {
+  let summary = "Select a select of the interface.";
   let description = [{
     This Op reads from a memory interface. 
   }];
 
-  let arguments = (ins InterfaceType:$interface, 
+  let arguments = (ins AnyType:$interface, 
       Variadic<AnyType>:$varAddrs,
       ArrayAttr : $constAddrs);
-  let results = (outs InterfaceType: $res);
+  let results = (outs AnyType: $res);
   let assemblyFormat = [{$interface
   custom<OptionalArrayAccess>($varAddrs,$constAddrs) attr-dict 
     `:` type($interface)
     custom<OptionalArrayAccessTypes>(ref($constAddrs),type($varAddrs)) 
     `->` type($res) }];
 
-  let verifier = [{return verifySliceOp(*this);}];
+  let verifier = [{return verifySelectOp(*this);}];
 }
 
 def ImplicitTerminator
@@ -272,12 +283,21 @@ def ForOp : HIR_Op<"for",
       let regions = (region SizedRegion<1>:$region);
       let results = (outs TimeType:$tfinish);
 
+      let parser = [{return parse$cppClass(parser,result);}];
+      let printer = [{return print$cppClass(p,*this);}];
+      let builders = [OpBuilder<(ins "Value":$lb, "Value":$ub, "Value":$step,
+      "Value":$tstart, "Value":$offset,"Type":$inductionVarTy),[{
+        build($_builder,$_state,hir::TimeType::get($_builder.getContext()),lb,ub,step,tstart,offset);
+         
+      }]>];
       let extraClassDeclaration = [{
         Value getInductionVar() { return getBody()->getArgument(0); }
         Value getIterTimeVar() { return getBody()->getArgument(1); }
+        Block* addEntryBlock(MLIRContext *context, Type inductionVarTy);
+        void beginRegion(mlir::OpBuilder &builder);        
+        void endRegion(mlir::OpBuilder &builder);
       }];
-      let parser = [{return parse$cppClass(parser,result);}];
-      let printer = [{return print$cppClass(p,*this);}];
+      
     }
 
 def UnrollForOp : HIR_Op<"unroll_for", 
@@ -301,6 +321,9 @@ def UnrollForOp : HIR_Op<"unroll_for",
       let extraClassDeclaration = [{
         Value getInductionVar() { return getBody()->getArgument(0); }
         Value getIterTimeVar() { return getBody()->getArgument(1); }
+        Block* addEntryBlock(MLIRContext *context);
+        void beginRegion(mlir::OpBuilder &builder);        
+        void endRegion(mlir::OpBuilder &builder);
       }];
       let parser = [{return parse$cppClass(parser,result);}];
       let printer = [{return print$cppClass(p,*this);}];
@@ -318,7 +341,7 @@ def CallOp : HIR_Op<"call",[AttrSizedOperandSegments] > {
   }];
 
   let arguments = (ins OptionalAttr<FlatSymbolRefAttr>:$callee, 
-      TypeAttr : $interfaceTy,
+      TypeAttr : $funcTy,
       Optional<AnyType>:$callee_var, 
       Variadic<AnyType>:$operands, 
       TimeType:$tstart, 
@@ -330,7 +353,7 @@ def CallOp : HIR_Op<"call",[AttrSizedOperandSegments] > {
   let printer = [{return print$cppClass(p,*this);}];
 }
 
-def DefOp : HIR_Op<"func", [
+def FuncOp : HIR_Op<"func", [
     Symbol, 
     FunctionLike, 
     IsolatedFromAbove, 
@@ -349,7 +372,7 @@ def DefOp : HIR_Op<"func", [
       let arguments = (ins
           TypeAttr:$type,
           StrAttr:$sym_name,
-          TypeAttr:$interfaceTy 
+          TypeAttr:$funcTy 
           );
 
       let regions = (region SizedRegion<1>:$region);
@@ -359,7 +382,7 @@ def DefOp : HIR_Op<"func", [
       let extraClassDeclaration = [{
         private:
           // This trait needs access to the hooks defined below.
-          friend class OpTrait::FunctionLike<DefOp>;
+          friend class OpTrait::FunctionLike<FuncOp>;
 
           /// Returns the number of arguments. Hook for OpTrait::FunctionLike.
           unsigned getNumFuncArguments() { return getType().getNumInputs(); }
@@ -459,7 +482,7 @@ Examples:
       type($left) `,` type($right) `)` `->` `(` type($res) `)`}];
 }
 
-def ReturnOp : HIR_Op<"return", [HasParent<"DefOp">,NoSideEffect,
+def ReturnOp : HIR_Op<"return", [HasParent<"FuncOp">,NoSideEffect,
     Terminator]> {
       let summary = "Return from function";
 
@@ -473,7 +496,7 @@ def ReturnOp : HIR_Op<"return", [HasParent<"DefOp">,NoSideEffect,
       let assemblyFormat = "(`(`$operands^`)` `:` `(`type($operands)`)`)? attr-dict";
     }
 
-def AllocOp :HIR_Op<"alloca", [NoSideEffect]> {
+def AllocaOp :HIR_Op<"alloca", [NoSideEffect]> {
   let summary = "Instantiate new hardware.";
 
   let description = [{
