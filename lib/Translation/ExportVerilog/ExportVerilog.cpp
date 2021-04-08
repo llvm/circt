@@ -379,7 +379,7 @@ getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
       sstr << lastFileName;
     }
 
-    // Scan for entires with the same file/line.
+    // Scan for entries with the same file/line.
     size_t end = i + 1;
     while (end != e && first.getFilename() == locVector[end].getFilename() &&
            first.getLine() == locVector[end].getLine())

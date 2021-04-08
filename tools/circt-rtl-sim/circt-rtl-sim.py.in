@@ -36,8 +36,10 @@ class Questa:
                 self.path = path
         elif "@QUESTA_PATH@" != "":
             self.path = "@QUESTA_PATH@"
+            if os.path.isfile(self.path):
+                self.path = os.path.dirname(self.path)
         elif "QUESTA_PATH" in os.environ:
-            self.verilator = os.environ["QUESTA_PATH"]
+            self.path = os.environ["QUESTA_PATH"]
 
     def compile(self, sources):
         self.dpiLibs = filter(
