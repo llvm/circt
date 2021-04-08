@@ -49,7 +49,8 @@ if config.timeout is not None and config.timeout != "":
 # subdirectories contain auxiliary inputs for various tests in their parent
 # directories.
 config.excludes = [
-  'Inputs', 'CMakeLists.txt', 'README.txt', 'LICENSE.txt', 'lit.cfg.py'
+  'Inputs', 'CMakeLists.txt', 'README.txt', 'LICENSE.txt', 'lit.cfg.py',
+  'lit.local.cfg.py'
 ]
 
 # test_source_root: The root path where tests are located.
@@ -101,11 +102,14 @@ if config.quartus_path != "":
   config.available_features.add('quartus')
 
 # Enable Vivado if it has been detected.
-if config.quartus_path != "":
-  tool_dirs.append(os.path.dirname(config.vivado_path))
-  tools.append('vivado')
+if config.vivado_path != "":
+  tool_dirs.append(config.vivado_path)
+  tools.append('xvlog')
+  tools.append('xelab')
+  tools.append('xsim')
   config.available_features.add('vivado')
-
+  config.substitutions.append(
+      ('%xsim%', os.path.join(config.vivado_path, "xsim")))
 
 # Enable Questa if it has been detected.
 if config.questa_path != "":
