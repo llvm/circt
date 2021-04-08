@@ -14,6 +14,7 @@ add_mlir_python_extension(CIRCTBindingsPythonExtension _circt
     python
   SOURCES
     CIRCTModule.cpp
+    ESIModule.cpp
   LINK_LIBS
     CIRCTCAPIComb
     CIRCTCAPIESI
