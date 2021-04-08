@@ -1,11 +1,6 @@
-// REQUIRES: verilator
-// RUN: circt-opt %s -create-dataflow -canonicalize-dataflow -canonicalize -cse > %t0.mlir
-// RUN: circt-opt %t0.mlir -lower-handshake-to-firrtl -canonicalize -cse > %t1.mlir
-// RUN: circt-opt %t1.mlir -pass-pipeline='firrtl.circuit(firrtl.module(firrtl-lower-types))' > %t2.mlir
-// RUN: circt-translate %t2.mlir -emit-firrtl-verilog > %t3.sv
-// RUN: circt-rtl-sim.py %t3.sv %S/basic.cpp --sim verilator --no-default-driver
-
-func @top(%arg0: i32, %arg1: i32) -> i32 {
-  %0 = addi %arg0, %arg1 : i32
-  return %0 : i32
-}
+// REQUIRES: vivado
+// RUN: circt-opt %S/../../../test/handshake-runner/simple_loop.mlir --create-dataflow --canonicalize --cse --handshake-insert-buffer > %handshake.mlir
+// RUN: circt-opt %handshake.mlir --lower-handshake-to-firrtl --firrtl-lower-types --lower-firrtl-to-rtl > %rtl.mlir
+// RUN: circt-translate %rtl.mlir --export-verilog > %export.sv
+// RUN: circt-rtl-sim.py %export.sv %S/driver.sv --sim %xsim% --no-default-driver | FileCheck %s
+// CHECK: 42

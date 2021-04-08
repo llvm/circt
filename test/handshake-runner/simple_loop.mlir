@@ -12,7 +12,6 @@ module {
     %1 = cmpi slt, %0, %c42 : index
     cond_br %1, ^bb2, ^bb3
   ^bb2:	// pred: ^bb1
-//    call @body(%0) : (index) -> ()
     %2 = addi %0, %c1_0 : index
     br ^bb1(%2 : index)
   ^bb3:	// pred: ^bb1
