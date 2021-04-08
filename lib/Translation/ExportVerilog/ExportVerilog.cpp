@@ -56,6 +56,11 @@ static bool isExpressionAlwaysInline(Operation *op) {
   return false;
 }
 
+/// Return whether an operation is a constant.
+static bool isConstantExpression(Operation *op) {
+  return isa<ConstantOp>(op) || isa<ConstantXOp>(op) || isa<ConstantZOp>(op);
+}
+
 /// Return true for nullary operations that are better emitted multiple
 /// times as inline expression (when they have multiple uses) rather than having
 /// a temporary wire.
@@ -64,7 +69,7 @@ static bool isExpressionAlwaysInline(Operation *op) {
 /// subtrees arbitrarily.
 static bool isDuplicatableNullaryExpression(Operation *op) {
   // We don't want wires that are just constants aesthetically.
-  if (isa<ConstantOp>(op) || isa<ConstantXOp>(op) || isa<ConstantZOp>(op))
+  if (isConstantExpression(op))
     return true;
 
   // If this is a small verbatim expression, keep it inline.
@@ -281,6 +286,8 @@ static StringRef getVerilogDeclWord(Operation *op) {
     return "reg";
   if (isa<WireOp>(op))
     return "wire";
+  if (isa<ConstantOp>(op))
+    return "localparam";
 
   // Interfaces instances use the name of the declared interface.
   if (auto interface = dyn_cast<InterfaceInstanceOp>(op))
@@ -1507,14 +1514,28 @@ public:
   void emitStatementBlock(Block &body);
   size_t getNumStatementsEmitted() const { return numStatementsEmitted; }
 
-  /// Emit the declaration for the temporary operation with no initializer and
-  /// no semicolon, e.g. "wire foo".
-  void emitDeclarationForTemporary(Operation *op) {
+  /// Emit the declaration for the temporary operation. If the operation is not
+  /// a constant, emit no initializer and no semicolon, e.g. `wire foo`, and
+  /// return false. If the operation *is* a constant, also emit the initializer
+  /// and semicolon, e.g. `localparam K = 1'h0`, and return true.
+  bool emitDeclarationForTemporary(Operation *op) {
     indent() << getVerilogDeclWord(op) << " ";
     if (printPackedType(stripUnpackedTypes(op->getResult(0).getType()), os,
                         op->getLoc()))
       os << ' ';
     os << emitter.getName(op->getResult(0));
+
+    if (!isConstantExpression(op))
+      return false;
+
+    // If this is a constant, we have to immediately assign its value as
+    // required by the `localparam` construct.
+    os << " = ";
+    SmallPtrSet<Operation *, 8> emittedExprs;
+    emitExpression(op->getResult(0), emittedExprs, ForceEmitMultiUse);
+    os << ';';
+    emitLocationInfoAndNewLine(emittedExprs);
+    return true;
   }
 
 private:
@@ -1640,8 +1661,8 @@ void StmtEmitter::emitExpression(Value exp,
                     outBuffer.end());
     outBuffer.resize(blockDeclarationInsertPointIndex);
     for (auto *expr : tooLargeSubExpressions) {
-      emitDeclarationForTemporary(expr);
-      os << ";\n";
+      if (!emitDeclarationForTemporary(expr))
+        os << ";\n";
     }
     blockDeclarationInsertPointIndex = outBuffer.size();
     outBuffer.append(thisStmt.begin(), thisStmt.end());
@@ -1658,9 +1679,16 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
     indent() << "// Zero width: ";
     --numStatementsEmitted;
   } else if (op->getParentOp()->hasTrait<ProceduralRegion>()) {
+    // Constants have their value emitted directly in the corresponding
+    // `localparam` declaration. Don't try to reassign these.
+    if (isConstantExpression(op)) {
+      --numStatementsEmitted;
+      return;
+    }
     indent() << emitter.getName(op->getResult(0)) << " = ";
   } else {
-    emitDeclarationForTemporary(op);
+    if (emitDeclarationForTemporary(op))
+      return;
     os << " = ";
   }
 
@@ -2354,6 +2382,12 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
       printUnpackedTypePostfix(type, os);
     }
 
+    // Constants carry their assignment directly in the declaration.
+    if (isConstantExpression(decl)) {
+      os << " = ";
+      emitExpression(decl->getResult(0), ops, ForceEmitMultiUse);
+    }
+
     os << ';';
     emitLocationInfoAndNewLine(ops);
   }
@@ -2610,6 +2644,12 @@ void ModuleEmitter::prepareRTLModule(Block &block) {
       if (op.getNumResults() == 1 &&
           op.getResult(0).getType().isa<InOutType>() &&
           op.getNumOperands() == 0) {
+        op.moveBefore(&block.front());
+        continue;
+      }
+
+      // If this is a constant, then we move it to the top of the block.
+      if (isConstantExpression(&op)) {
         op.moveBefore(&block.front());
         continue;
       }
