@@ -15,6 +15,7 @@ with Context() as ctxt, Location.unknown():
     circt.register_dialects(ctxt)
     sys = esi.System(ctxt)
     sys.load_mlir(path.join(thisDir, "esi_load1.mlir"))
+    sys.load_mlir(path.join(thisDir, "esi_load2.mlir"))
     m = sys.get()
 
     i1 = IntegerType.get_signless(1)
@@ -39,7 +40,13 @@ with Context() as ctxt, Location.unknown():
     # CHECK-NEXT:     rtl.output %foo_valid : i1
 
     prod = sys.lookup("IntProducer")
-    if prod is not None:
-        prod.print()
-        print()  # Newline.
-        # CHECK: rtl.module.extern @IntProducer(%clk: i1) -> (%ints: !esi.channel<i32>)
+    assert (prod is not None)
+    prod.print()
+    print()  # Newline.
+    # CHECK: rtl.module.extern @IntProducer(%clk: i1) -> (%ints: !esi.channel<i32>)
+
+    acc = sys.lookup("IntAccumulator")
+    assert (acc is not None)
+    acc.print()
+    print()  # Newline.
+    # CHECK: rtl.module.extern @IntAccumulator(%clk: i1, %ints: i32, %ints_valid: i1) -> (%ints_ready: i1, %sum: i32)
