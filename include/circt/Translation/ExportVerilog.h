@@ -13,8 +13,11 @@
 #ifndef CIRCT_TRANSLATION_EXPORTVERILOG_H
 #define CIRCT_TRANSLATION_EXPORTVERILOG_H
 
+#include <functional>
+
 namespace llvm {
 class raw_ostream;
+class StringRef;
 } // namespace llvm
 
 namespace mlir {
@@ -24,17 +27,22 @@ class ModuleOp;
 
 namespace circt {
 
-/// Export a module containing RTL, and SV dialect code.
+/// Export a module containing RTL, and SV dialect code. Requires that the SV
+/// dialect is loaded in to the context.
 mlir::LogicalResult exportVerilog(mlir::ModuleOp module, llvm::raw_ostream &os);
 
-/// Register a translation for exporting FIRRTL, RTL, and SV
-void registerToVerilogTranslation();
+/// Export a module containing RTL, and SV dialect code, as one file per SV
+/// module. Requires that the SV dialect is loaded in to the context.
+///
+/// Files are created in the directory indicated by \p dirname. The function
+/// \p emittedFile is called for every emitted file, in the order appropriate
+/// given the input MLIR module.
+mlir::LogicalResult
+exportSplitVerilog(mlir::ModuleOp module, llvm::StringRef dirname,
+                   std::function<void(llvm::StringRef)> emittedFile);
 
-/// Export a module containing RTL, and SV dialect code.
-mlir::LogicalResult exportFIRRTLToVerilog(mlir::ModuleOp module,
-                                          llvm::raw_ostream &os);
-/// Register a translation for exporting FIRRTL, RTL, and SV
-void registerFIRRTLToVerilogTranslation();
+/// Register a translation for exporting RTL, Comb and SV to SystemVerilog.
+void registerToVerilogTranslation();
 
 } // namespace circt
 

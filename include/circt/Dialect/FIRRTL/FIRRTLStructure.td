@@ -18,13 +18,15 @@ def CircuitOp : FIRRTLOp<"circuit",
     The "firrtl.circuit" operation represents an overall Verilog circuit,
     containing a list of modules.
   }];
-  let arguments = (ins StrAttr:$name);
+  let arguments = (ins StrAttr:$name,
+                   DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "StringAttr":$name)>
+    OpBuilder<(ins "StringAttr":$name,
+               CArg<"ArrayAttr","ArrayAttr()">:$annotations)>
   ];
 
   let extraClassDeclaration = [{
@@ -37,11 +39,14 @@ def CircuitOp : FIRRTLOp<"circuit",
     /// Return body of this circuit.
     Region &getBodyRegion();
     Block *getBody();
+
+    // Return the main module that is the entry point of the circuit.  This may
+    // be either an FModuleOp or an FExtModuleOp.
+    Operation *getMainModule();
   }];
 
   let printer = "return ::print(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
-
   let verifier = "return ::verifyCircuitOp(*this);";
 }
 
@@ -54,13 +59,15 @@ def FModuleOp : FIRRTLOp<"module",
     name, a list of ports, and a body that represents the connections within
     the module.
   }];
-  let arguments = (ins);
+  let arguments = (
+    ins DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports)>
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports,
+               CArg<"ArrayAttr","ArrayAttr()">:$annotations)>
   ];
 
   let extraClassDeclaration = [{
@@ -69,8 +76,10 @@ def FModuleOp : FIRRTLOp<"module",
     using FunctionLike::getBody;
 
     // Decode information about the input and output ports on this module.
-    void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
-      getModulePortInfo(*this, results);
+    SmallVector<ModulePortInfo> getPorts() {
+      SmallVector<ModulePortInfo> ports;
+      getModulePortInfo(*this, ports);
+      return ports;
     }
 
     // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is
@@ -88,7 +97,7 @@ def FModuleOp : FIRRTLOp<"module",
     friend class OpTrait::FunctionLike<FModuleOp>;
 
     /// Returns the number of arguments, implementing OpTrait::FunctionLike.
-    unsigned getNumFuncArguments() { return getType().getInputs().size(); }
+    unsigned getNumFuncArguments() { return getBodyBlock()->getNumArguments(); }
     /// Returns the number of results, implementing OpTrait::FunctionLike.
     unsigned getNumFuncResults() { return getType().getResults().size(); }
 
@@ -119,21 +128,26 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
     Verilog module, including a given name and a list of ports.
   }];
   let arguments = (ins OptionalAttr<StrAttr>:$defname,
-                       OptionalAttr<DictionaryAttr>:$parameters);
+                       OptionalAttr<DictionaryAttr>:$parameters,
+                       DefaultValuedAttr<AnnotationArrayAttr,
+                                         "{}">:$annotations);
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "StringAttr":$name,
+    OpBuilder<(ins "StringAttr":$name,
                       "ArrayRef<ModulePortInfo>":$ports,
-                      CArg<"StringRef", "StringRef()">:$defnamAttr)>
+                      CArg<"StringRef", "StringRef()">:$defnamAttr,
+                      CArg<"ArrayAttr", "ArrayAttr()">:$annotations)>
   ];
 
   let extraClassDeclaration = [{
      // Decode information about the input and output ports on this module.
-     void getPortInfo(SmallVectorImpl<ModulePortInfo> &results) {
-       getModulePortInfo(*this, results);
+     SmallVector<ModulePortInfo> getPorts() {
+       SmallVector<ModulePortInfo> ports;
+       getModulePortInfo(*this, ports);
+       return ports;
      }
 
   private:

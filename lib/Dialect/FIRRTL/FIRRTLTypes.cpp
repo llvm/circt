@@ -57,7 +57,7 @@ void FIRRTLType::print(raw_ostream &os) const {
         os << "bundle<";
         llvm::interleaveComma(bundleType.getElements(), os,
                               [&](BundleType::BundleElement element) {
-                                os << element.name << ": ";
+                                os << element.name.getValue() << ": ";
                                 element.type.print(os);
                               });
         os << '>';
@@ -159,7 +159,7 @@ static ParseResult parseType(FIRRTLType &result, DialectAsmParser &parser) {
             parseType(type, parser))
           return failure();
 
-        elements.push_back({Identifier::get(name, context), type});
+        elements.push_back({StringAttr::get(context, name), type});
       } while (!parser.parseOptionalComma());
 
       if (parser.parseGreater())
@@ -194,6 +194,20 @@ Type FIRRTLDialect::parseType(DialectAsmParser &parser) const {
 //===----------------------------------------------------------------------===//
 // FIRRTLType Implementation
 //===----------------------------------------------------------------------===//
+
+/// Return true if this is a 'ground' type, aka a non-aggregate type.
+bool FIRRTLType::isGround() {
+  return TypeSwitch<FIRRTLType, bool>(*this)
+      .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
+            AnalogType>([](Type) { return true; })
+      .Case<BundleType, FVectorType>([](Type) { return false; })
+      .Case<FlipType>(
+          [](FlipType type) { return type.getElementType().isGround(); })
+      .Default([](Type) {
+        llvm_unreachable("unknown FIRRTL type");
+        return false;
+      });
+}
 
 /// Return a pair with the 'isPassive' and 'containsAnalog' bits.
 std::pair<bool, bool> FIRRTLType::getRecursiveTypeProperties() {
@@ -577,7 +591,7 @@ FIRRTLType FlipType::getElementType() { return getImpl()->element; }
 namespace circt {
 namespace firrtl {
 llvm::hash_code hash_value(const BundleType::BundleElement &arg) {
-  return llvm::hash_value(arg.name) ^ mlir::hash_value(arg.type);
+  return mlir::hash_value(arg.name) ^ mlir::hash_value(arg.type);
 }
 } // namespace firrtl
 } // namespace circt
@@ -689,7 +703,7 @@ FIRRTLType BundleType::getPassiveType() {
 /// Look up an element by name.  This returns a BundleElement with.
 auto BundleType::getElement(StringRef name) -> Optional<BundleElement> {
   for (const auto &element : getElements()) {
-    if (element.name == name)
+    if (element.name.getValue() == name)
       return element;
   }
   return None;
@@ -778,4 +792,10 @@ FIRRTLType FVectorType::getPassiveType() {
       FVectorType::get(getElementType().getPassiveType(), getNumElements());
   impl->passiveContainsAnalogTypeInfo.setPointer(passiveType);
   return passiveType;
+}
+
+void FIRRTLDialect::registerTypes() {
+  addTypes<SIntType, UIntType, ClockType, ResetType, AsyncResetType, AnalogType,
+           // Derived Types
+           FlipType, BundleType, FVectorType>();
 }

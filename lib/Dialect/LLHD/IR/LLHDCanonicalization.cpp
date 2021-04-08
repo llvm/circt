@@ -23,34 +23,34 @@ namespace {
 #include "circt/Dialect/LLHD/IR/LLHDCanonicalization.inc"
 } // namespace
 
-void llhd::XorOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void llhd::XorOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                               MLIRContext *context) {
   results.insert<XorAllBitsSet>(context);
 }
 
-void llhd::NotOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void llhd::NotOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                               MLIRContext *context) {
   results.insert<NotOfEq, NotOfNeq>(context);
 }
 
-void llhd::EqOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void llhd::EqOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
   results.insert<BooleanEqToXor>(context);
 }
 
-void llhd::NeqOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void llhd::NeqOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                               MLIRContext *context) {
   results.insert<BooleanNeqToXor>(context);
 }
 
 void llhd::DynExtractSliceOp::getCanonicalizationPatterns(
-    OwningRewritePatternList &results, MLIRContext *context) {
+    RewritePatternSet &results, MLIRContext *context) {
   results.insert<DynExtractSliceWithConstantOpStart,
                  DynExtractSliceWithLLHDConstOpStart>(context);
 }
 
 void llhd::DynExtractElementOp::getCanonicalizationPatterns(
-    OwningRewritePatternList &results, MLIRContext *context) {
+    RewritePatternSet &results, MLIRContext *context) {
   results.insert<DynExtractElementWithConstantOpIndex,
                  DynExtractElementWithLLHDConstOpIndex>(context);
 }

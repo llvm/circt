@@ -118,7 +118,13 @@ LogicalResult ExportCosimSchema::emit() {
      << "#########################################################\n";
 
   // Walk and collect the type data.
-  module.walk([this](CosimEndpoint ep) { visitEndpoint(ep); });
+  auto walkResult = module.walk([this](CosimEndpoint ep) {
+    if (failed(visitEndpoint(ep)))
+      return mlir::WalkResult::interrupt();
+    return mlir::WalkResult::advance();
+  });
+  if (walkResult.wasInterrupted())
+    return failure();
   os << "#########################################################\n";
 
   // We need a sorted list to ensure determinism.

@@ -37,9 +37,9 @@ class ESI_Abstract_Op<string mnemonic, list<OpTrait> traits = []> :
 class ESI_Physical_Op<string mnemonic, list<OpTrait> traits = []> :
     ESI_Op<mnemonic, traits>;
 
-include "ESIPorts.td"
-include "ESITypes.td"
-include "ESIOps.td"
-include "ESIPasses.td"
+include "circt/Dialect/ESI/ESIPorts.td"
+include "circt/Dialect/ESI/ESITypes.td"
+include "circt/Dialect/ESI/ESIOps.td"
+include "circt/Dialect/ESI/ESIPasses.td"
 
 #endif // ESI_TD

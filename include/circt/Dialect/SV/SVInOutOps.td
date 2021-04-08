@@ -26,28 +26,35 @@ def ConnectOp : SVOp<"connect", [InOutTypeConstraint<"src", "dest">]> {
 }
 
 // Note that net declarations like 'wire' should not appear in an always block.
-def WireOp : SVOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
+def WireOp : SVOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>,
+                           NonProceduralOp]> {
   let summary = "Define a new wire";
   let description = [{
     Declare a SystemVerilog Net Declaration of 'wire' type.
      See SV Spec 6.7, pp97.
     }];
 
-  let arguments = (ins OptionalAttr<StrAttr>:$name);
+  let arguments = (ins StrAttr:$name);
   let results = (outs InOutType:$result);
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "::mlir::Type":$elementType,
+    OpBuilder<(ins "::mlir::Type":$elementType,
                       CArg<"StringAttr", "StringAttr()">:$name)>,
-    OpBuilderDAG<(ins "::mlir::Type":$elementType, CArg<"StringRef">:$name), [{
+    OpBuilder<(ins "::mlir::Type":$elementType, CArg<"StringRef">:$name), [{
       return build($_builder, $_state, elementType,
                    $_builder.getStringAttr(name));
     }]>
   ];
 
   let assemblyFormat = "custom<ImplicitSSAName>(attr-dict) `:` type($result)";
-  let hasCanonicalizer = true;
+  let hasCanonicalizeMethod = true;
+
+  let extraClassDeclaration = [{
+    Type getElementType() {
+      return result().getType().cast<InOutType>().getElementType();
+    }
+  }];
   let verifier = [{ return ::verifyWireOp(*this); }];
 }
 
@@ -57,18 +64,24 @@ def RegOp : SVOp<"reg", [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
      Declare a SystemVerilog Variable Declaration of 'reg' type.
      See SV Spec 6.8, pp100.
    }];
-  let arguments = (ins OptionalAttr<StrAttr>:$name);
+  let arguments = (ins StrAttr:$name);
   let results = (outs InOutType:$result);
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilderDAG<(ins "::mlir::Type":$elementType,
+    OpBuilder<(ins "::mlir::Type":$elementType,
                       CArg<"StringAttr", "StringAttr()">:$name)>
   ];
 
   // We handle the name in a custom way, so we use a customer parser/printer.
   let assemblyFormat = "custom<ImplicitSSAName>(attr-dict) `:` type($result)";
-  let hasCanonicalizer = true;
+  let hasCanonicalizeMethod = true;
+
+  let extraClassDeclaration = [{
+    Type getElementType() {
+      return result().getType().cast<InOutType>().getElementType();
+    }
+  }];
 }
 
 def ReadInOutOp
@@ -80,7 +93,7 @@ def ReadInOutOp
   let results = (outs RTLValueType:$result);
 
   let builders = [
-    OpBuilderDAG<(ins "Value":$input)>
+    OpBuilder<(ins "Value":$input)>
   ];
 
   let assemblyFormat = "$input attr-dict `:` type($input)";
@@ -106,7 +119,7 @@ def ArrayIndexInOutOp
   let results = (outs InOutType:$result);
 
   let builders = [
-    OpBuilderDAG<(ins "Value":$input, "Value":$index)>
+    OpBuilder<(ins "Value":$input, "Value":$index)>
   ];
 
   let assemblyFormat =

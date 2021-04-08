@@ -27,20 +27,18 @@ public:
   ResultType dispatchCombinationalVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<ConstantOp,
-                       // Arithmetic and Logical Binary Operations.
-                       AddOp, SubOp, MulOp, DivUOp, DivSOp, ModUOp, ModSOp,
-                       ShlOp, ShrUOp, ShrSOp,
-                       // Bitwise operations
-                       AndOp, OrOp, XorOp,
-                       // Comparison operations
-                       ICmpOp,
-                       // Reduction Operators
-                       AndROp, OrROp, XorROp,
-                       // Other operations.
-                       SExtOp, ConcatOp, ExtractOp, MuxOp,
-                       // Cast operation
-                       BitcastOp>([&](auto expr) -> ResultType {
+        .template Case<
+            // Arithmetic and Logical Binary Operations.
+            AddOp, SubOp, MulOp, DivUOp, DivSOp, ModUOp, ModSOp, ShlOp, ShrUOp,
+            ShrSOp,
+            // Bitwise operations
+            AndOp, OrOp, XorOp,
+            // Comparison operations
+            ICmpOp,
+            // Reduction Operators
+            ParityOp,
+            // Other operations.
+            SExtOp, ConcatOp, ExtractOp, MuxOp>([&](auto expr) -> ResultType {
           return thisCast->visitComb(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -80,9 +78,6 @@ public:
                                                                   args...);    \
   }
 
-  // Basic nodes.
-  HANDLE(ConstantOp, Unhandled);
-
   // Arithmetic and Logical Binary Operations.
   HANDLE(AddOp, Binary);
   HANDLE(SubOp, Binary);
@@ -99,9 +94,7 @@ public:
   HANDLE(OrOp, Variadic);
   HANDLE(XorOp, Variadic);
 
-  HANDLE(AndROp, Unary);
-  HANDLE(OrROp, Unary);
-  HANDLE(XorROp, Unary);
+  HANDLE(ParityOp, Unary);
 
   HANDLE(ICmpOp, Binary);
 
@@ -110,7 +103,6 @@ public:
   HANDLE(ConcatOp, Unhandled);
   HANDLE(ExtractOp, Unhandled);
   HANDLE(MuxOp, Unhandled);
-  HANDLE(BitcastOp, Unary);
 #undef HANDLE
 };
 

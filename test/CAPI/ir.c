@@ -14,6 +14,7 @@
 #include "circt-c/Dialect/RTL.h"
 #include "mlir-c/AffineExpr.h"
 #include "mlir-c/AffineMap.h"
+#include "mlir-c/BuiltinTypes.h"
 #include "mlir-c/Diagnostics.h"
 #include "mlir-c/Registration.h"
 
@@ -58,6 +59,34 @@ int registerOnlyRTL() {
   if (!mlirDialectEqual(rtl, alsoRtl))
     return 7;
 
+  mlirContextDestroy(ctx);
+
+  return 0;
+}
+
+int testRTLTypes() {
+  MlirContext ctx = mlirContextCreate();
+  MlirDialectHandle rtlHandle = mlirGetDialectHandle__rtl__();
+  mlirDialectHandleRegisterDialect(rtlHandle, ctx);
+  mlirDialectHandleLoadDialect(rtlHandle, ctx);
+
+  MlirType i8type = mlirIntegerTypeGet(ctx, 8);
+  MlirType io8type = rtlInOutTypeGet(i8type);
+  if (mlirTypeIsNull(io8type))
+    return 1;
+
+  MlirType elementType = rtlInOutTypeGetElementType(io8type);
+  if (mlirTypeIsNull(elementType))
+    return 2;
+
+  if (rtlTypeIsAInOut(i8type))
+    return 3;
+
+  if (!rtlTypeIsAInOut(io8type))
+    return 4;
+
+  mlirContextDestroy(ctx);
+
   return 0;
 }
 
@@ -65,8 +94,15 @@ int main() {
   fprintf(stderr, "@registration\n");
   int errcode = registerOnlyRTL();
   fprintf(stderr, "%d\n", errcode);
+
+  fprintf(stderr, "@rtltypes\n");
+  errcode = testRTLTypes();
+  fprintf(stderr, "%d\n", errcode);
+
   // clang-format off
   // CHECK-LABEL: @registration
+  // CHECK: 0
+  // CHECK-LABEL: @rtltypes
   // CHECK: 0
   // clang-format on
 

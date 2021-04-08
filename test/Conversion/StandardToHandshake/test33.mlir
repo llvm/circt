@@ -52,7 +52,7 @@
 // CHECK:         }
 // CHECK:       }
 
-    %10 = alloc() : memref<10xf32>
+    %10 = memref.alloc() : memref<10xf32>
     %c0 = constant 0 : index
     %c10 = constant 10 : index
     br ^bb1(%c0 : index)
@@ -61,11 +61,11 @@
     cond_br %2, ^bb2, ^bb3
   ^bb2: // pred: ^bb1
     %c1 = constant 1 : index
-    %5 = load %10[%c1] : memref<10xf32>
+    %5 = memref.load %10[%c1] : memref<10xf32>
     %3 = addi %1, %c1 : index
-    %7 = load %10[%3] : memref<10xf32>
+    %7 = memref.load %10[%3] : memref<10xf32>
     %8 = addf %5, %7 : f32
-    store %8, %10[%3] : memref<10xf32>
+    memref.store %8, %10[%3] : memref<10xf32>
     br ^bb1(%3 : index)
   ^bb3: // pred: ^bb1
     return

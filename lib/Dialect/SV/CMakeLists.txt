@@ -14,8 +14,10 @@ add_circt_dialect_library(CIRCTSV
   LINK_LIBS PUBLIC
   MLIRIR
   CIRCTRTL
+  CIRCTComb
    )
 
 add_dependencies(circt-headers MLIRSVIncGen)
 
+add_subdirectory(Analyses)
 add_subdirectory(Transforms)

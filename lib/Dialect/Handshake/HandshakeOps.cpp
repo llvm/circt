@@ -143,8 +143,8 @@ void ForkOp::build(OpBuilder &builder, OperationState &result, Value operand,
   result.addAttribute("control", builder.getBoolAttr(isControl));
 }
 
-void handshake::ForkOp::getCanonicalizationPatterns(
-    OwningRewritePatternList &results, MLIRContext *context) {
+void handshake::ForkOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                    MLIRContext *context) {
   results.insert<circt::handshake::EliminateSimpleForksPattern>(context);
 }
 
@@ -199,7 +199,7 @@ void MergeOp::build(OpBuilder &builder, OperationState &result, Value operand,
     result.addOperands(operand);
 }
 
-void MergeOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
+void MergeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                           MLIRContext *context) {
   results.insert<circt::handshake::EliminateSimpleMergesPattern>(context);
 }
@@ -347,22 +347,22 @@ LogicalResult EliminateSimpleControlMergesPattern::matchAndRewrite(
         user, [&]() { user->setOperand(use.getOperandNumber(), merge); });
   }
 
-  rewriter.eraseOp(op);
-
-  if (choiceUnused)
+  if (choiceUnused) {
+    rewriter.eraseOp(op);
     return success();
+  }
 
   auto *choiceUser = choiceResult.getUses().begin().getUser();
   if (!isa<SinkOp>(choiceUser))
     return failure();
 
   rewriter.eraseOp(choiceUser);
-
+  rewriter.eraseOp(op);
   return success();
 }
 
-void ControlMergeOp::getCanonicalizationPatterns(
-    OwningRewritePatternList &results, MLIRContext *context) {
+void ControlMergeOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                 MLIRContext *context) {
   results.insert<EliminateSimpleControlMergesPattern>(context);
 }
 
@@ -417,7 +417,7 @@ void handshake::BranchOp::build(OpBuilder &builder, OperationState &result,
 }
 
 void handshake::BranchOp::getCanonicalizationPatterns(
-    OwningRewritePatternList &results, MLIRContext *context) {
+    RewritePatternSet &results, MLIRContext *context) {
   results.insert<circt::handshake::EliminateSimpleBranchesPattern>(context);
 }
 

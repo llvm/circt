@@ -20,4 +20,4 @@ llhd.entity @check_reg (%in64 : !llhd.sig<i64>) -> () {
   "llhd.reg"(%in64, %c64, %in64, %c1, %c1, %time, %time, %c1) {modes=[0,1], gateMask=[0,1], operand_segment_sizes=dense<[1,2,2,2,1]> : vector<5xi32>} : (!llhd.sig<i64>, i64, !llhd.sig<i64>, i1, i1, !llhd.time, !llhd.time, i1) -> ()
 }
 
-// TODO: add verification tests (expected-error tests)
+// TODO: add verification tests in reg-errors.mlir (expected-error tests)

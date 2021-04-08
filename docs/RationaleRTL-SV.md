@@ -60,20 +60,26 @@ TODO: Spotlight on module.  Allows arbitrary types for ports.
 TODO: Why is add variadic?  Why consistent operand types instead of allowing
 implicit extensions?
 
-** No Replication or ZExt Operators **
+** No "Replication", "ZExt", or "Complement" Operators **
 
-System Verilog 11.4.12.1 describes a replication operator, which replicates an
-operand a constant N times.  We decided that this was redundant and just sugar
-for the `rtl.concat` operator, so we just use `rtl.concat` (with the same 
-operand) instead.
+We choose to omit several operators that you might expect, in order to make the
+IR more regular, easy to transform, and have fewer canonical forms.
 
-We also chose to not have a zero extension operator, since it is strictly
-duplicative with `concat(zero, value)`.  The presence of such an operator adds a
-lot of complexity to canonicalization patterns and doesn't add any expressive
-power.  The `rtl.sext` operator exists because it efficiently models large
-sign extensions which are common, and would require many operands if modeled as
-a concat operator (in contrast, a zero extension always requires exactly one
-zero value).
+ * No `~x` complement operator: instead use `comb.xor(x, -1)`.
+
+ * No `{42{x}}` Replication operator (System Verilog 11.4.12.1) to replicate an
+   operand a constant N times.  We decided that this was redundant and just
+   sugar for the `comb.concat` operator, so we just use `comb.concat` (with the
+   same operand multiple times) instead.
+
+ * No zero extension operator to add high zero bits.  This is strictly redundant
+   with `concat(zero, value)`.  The `rtl.sext` operator exists because it
+   efficiently models large sign extensions which are common, and would require
+   many operands if modeled as a concat operator (in contrast, a zero extension
+   always requires a single zero value).
+
+The absence of these operations doesn't affect the expressive ability of the IR,
+and ExportVerilog will notice these and generate the compact Verilog syntax.
 
 ** Zero Bit Integers **
 
@@ -114,9 +120,9 @@ is relevant: in the MLIR assembly and in the MLIR C++ model.
 In MLIR assembly, operands are always listed MSB to LSB (big endian style):
 
 ```mlir
-%msb = rtl.constant (0xEF : i8) : i8
-%mid = rtl.constant (0x7 : i4) : i4
-%lsb = rtl.constant (0xA018 : i16) : i16
+%msb = rtl.constant 0xEF : i8
+%mid = rtl.constant 0x7 : i4
+%lsb = rtl.constant 0xA018 : i16
 %result = rtl.concat %msb, %mid, %lsb : (i8, i4, i16) -> i28
 // %result is 0xEF7A018
 ```
@@ -126,9 +132,9 @@ ordering for `rtl.concat` was chosen to be consistent with simply abutting
 them in lexical order.
 
 ```mlir
-%1 = rtl.constant (0x1 : i4) : i4
-%2 = rtl.constant (0x2 : i4) : i4
-%3 = rtl.constant (0x3 : i4) : i4
+%1 = rtl.constant 0x1 : i4
+%2 = rtl.constant 0x2 : i4
+%3 = rtl.constant 0x3 : i4
 %arr123 = rtl.array_create %1, %2, %3 : i4
 // %arr123[0] = 0x3
 // %arr123[1] = 0x2
@@ -299,7 +305,7 @@ The major classes of operations you'll find are:
 1) Access to verification constructs with `sv.assert`, `sv.assume`, and
    `sv.cover`.
 1) Escape hatches that allow direct integration of textual expressions
-   (`sv.textual_value`) and full statements (`sv.verbatim`).
+   (`sv.verbatim.expr`) and full statements (`sv.verbatim`).
 
 These operations are designed to directly model the syntax of the SystemVerilog
 language and to be easily printable by the ExportVerilog pass.  While there are

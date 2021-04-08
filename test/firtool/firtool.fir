@@ -1,8 +1,9 @@
 ; RUN: firtool %s --format=fir -mlir    | circt-opt | FileCheck %s --check-prefix=MLIR
+; RUN: firtool %s --format=fir -mlir --annotation-file %s.anno.json | circt-opt | FileCheck %s --check-prefix=ANNOTATIONS
 ; RUN: firtool %s --format=fir -verilog |             FileCheck %s --check-prefix=VERILOG
 ; RUN: firtool %s --format=fir -mlir -lower-to-rtl | circt-opt | FileCheck %s --check-prefix=MLIRLOWER
 
-circuit test_mod :
+circuit test_mod : %[[{"a": "a"}]]
   module test_mod :
     input a: UInt<1>
     output b: UInt<1>
@@ -15,11 +16,20 @@ circuit test_mod :
     output d: UInt<6>
     d <= cat(cat(a, b), c)
 
-; MLIR: firrtl.circuit "test_mod" {
+; MLIR: firrtl.circuit "test_mod"
 
-; MLIR-LABEL: firrtl.module @test_mod(%a: !firrtl.uint<1>, %b: !firrtl.flip<uint<1>>) {
+; MLIR-LABEL: firrtl.module @test_mod(%a: !firrtl.uint<1>, %b: !firrtl.flip<uint<1>>)
 ; MLIR-NEXT:    firrtl.connect %b, %a : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 ; MLIR-NEXT:  }
+
+; ANNOTATIONS-LABEL: firrtl.circuit "test_mod"
+; ANNOTATIONS-SAME: a = "a"
+; ANNOTATIONS-SAME: info = "a NoTargetAnnotation"
+; ANNOTATIONS-SAME: info = "a CircuitTarget Annotation
+; ANNOTATIONS-SAME: info = "a CircuitName Annotation"
+; ANNOTATIONS: firrtl.module @test_mod
+; ANNOTATIONS-SAME: info = "a ModuleTarget Annotation"
+; ANNOTATIONS-SAME: info = "a ModuleName Annotation"
 
 ; VERILOG-LABEL: module test_mod(
 ; VERILOG-NEXT :   input  a,
@@ -56,7 +66,7 @@ circuit test_mod :
 ; VERILOG-NEXT : endmodule
 
 ; MLIRLOWER-LABEL:   rtl.module @implicitTrunc(%inp_1: i1, %inp_2: i5) -> (%out1: i3, %out2: i3) {
-; MLIRLOWER-NEXT :     %c0_i5 = comb.constant(0 : i5) : i5
+; MLIRLOWER-NEXT :     %c0_i5 = rtl.constant 0 : i5
 ; MLIRLOWER-NEXT :     %.out1.output = sv.wire  : !rtl.inout<i3>
 ; MLIRLOWER-NEXT :     %.out2.output = sv.wire  : !rtl.inout<i3>
 ; MLIRLOWER-NEXT :     %0 = comb.sext %inp_2 : (i5) -> i6
@@ -72,3 +82,21 @@ circuit test_mod :
 ; MLIRLOWER-NEXT :   }
 
 ; MLIRLOWER: }
+
+  module flipFlop:
+    input clock: Clock
+    input a_d: UInt<1>
+    output a_q: UInt<1>
+
+    reg r: UInt<1>, clock
+
+    r <= a_d
+    a_q <= r
+
+; VERILOG-LABEL: module flipFlop(
+; VERILOG-NEXT:    input clock, a_d,
+; VERILOG-NEXT:    output a_q);
+; VERILOG:         always_ff @(posedge clock)
+; VERILOG-NEXT:      r <= a_d;
+; VERILOG-NEXT:    assign a_q = r;
+; VERILOG:       endmodule

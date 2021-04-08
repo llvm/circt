@@ -14,11 +14,14 @@
 #define CIRCT_DIALECT_COMB_COMBOPS_H
 
 #include "circt/Dialect/Comb/CombDialect.h"
-#include "circt/Dialect/RTL/RTLTypes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/FunctionSupport.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
+
+namespace mlir {
+class PatternRewriter;
+}
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/Comb/Comb.h.inc"

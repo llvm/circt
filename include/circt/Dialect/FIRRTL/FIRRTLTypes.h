@@ -45,6 +45,9 @@ public:
   /// types recursively within itself.
   bool isPassive() { return getRecursiveTypeProperties().first; }
 
+  /// Return true if this is a 'ground' type, aka a non-aggregate type.
+  bool isGround();
+
   /// Return true if this is or contains an Analog type.
   bool containsAnalog() { return getRecursiveTypeProperties().second; }
 
@@ -233,10 +236,10 @@ public:
 
   // Each element of a bundle, which is a name and type.
   struct BundleElement {
-    Identifier name;
+    StringAttr name;
     FIRRTLType type;
 
-    BundleElement(Identifier name, FIRRTLType type) : name(name), type(type) {}
+    BundleElement(StringAttr name, FIRRTLType type) : name(name), type(type) {}
 
     bool operator==(const BundleElement &rhs) const {
       return name == rhs.name && type == rhs.type;

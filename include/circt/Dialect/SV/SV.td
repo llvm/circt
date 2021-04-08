@@ -38,10 +38,18 @@ def ProceduralRegion : NativeOpTrait<"ProceduralRegion"> {
   let cppNamespace = "::circt::sv";
 }
 
-include "SVTypes.td"
-include "SVExpressions.td"
-include "SVInOutOps.td"
-include "SVStatements.td"
-include "SVTypeDecl.td"
+def ProceduralOp : NativeOpTrait<"ProceduralOp"> {
+  let cppNamespace = "::circt::sv";
+}
+
+def NonProceduralOp : NativeOpTrait<"NonProceduralOp"> {
+  let cppNamespace = "::circt::sv";
+}
+
+include "circt/Dialect/SV/SVTypes.td"
+include "circt/Dialect/SV/SVExpressions.td"
+include "circt/Dialect/SV/SVInOutOps.td"
+include "circt/Dialect/SV/SVStatements.td"
+include "circt/Dialect/SV/SVTypeDecl.td"
 
 #endif // SV_TD

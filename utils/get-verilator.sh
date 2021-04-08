@@ -12,8 +12,9 @@
 #
 ##===----------------------------------------------------------------------===##
 
+mkdir -p "$(dirname "$BASH_SOURCE[0]")/../ext"
 EXT_DIR=$(cd "$(dirname "$BASH_SOURCE[0]")/../ext" && pwd)
-VERILATOR_VER=4.102
+VERILATOR_VER=4.110
 
 echo $EXT_DIR
 cd $EXT_DIR

@@ -1,4 +1,5 @@
 add_subdirectory(CAPI)
+add_subdirectory(Dialect)
 
 configure_lit_site_cfg(
   ${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.py.in
@@ -12,15 +13,13 @@ set(CIRCT_TEST_DEPENDS
   circt-capi-ir-test
   circt-opt
   circt-translate
+  esi-tester
   handshake-runner
   firtool
+  llhd-sim
   mlir-opt
   mlir-cpu-runner
   )
-
-if(NOT WIN32)
-  list(APPEND CIRCT_TEST_DEPENDS llhd-sim)
-endif()
 
 add_lit_testsuite(check-circt "Running the CIRCT regression tests"
   ${CMAKE_CURRENT_BINARY_DIR}

@@ -29,7 +29,7 @@ def Channel : ESI_Port<"Channel"> {
     Example:
 
     ```mlir
-    rtl.module.extern @Sender() -> ( !esi.channel<i1> { rtl.name = "x"} )
+    rtl.module.extern @Sender() -> (%x: !esi.channel<i1>)
     rtl.module @Reciever(%a: !esi.channel<rtl.array<5xi16>>) { }
     ```
   }];
@@ -60,7 +60,7 @@ def WrapValidReady : ESI_Op<"wrap.vr", [NoSideEffect]> {
   let parser = [{ return ::parse$cppClass(parser, result); }];
 
   let builders = [
-    OpBuilderDAG<(ins "mlir::Value":$data, "mlir::Value":$valid)>
+    OpBuilder<(ins "mlir::Value":$data, "mlir::Value":$valid)>
   ];
 }
 
@@ -79,7 +79,7 @@ def UnwrapValidReady : ESI_Op<"unwrap.vr", [NoSideEffect]> {
   let parser = [{ return ::parse$cppClass(parser, result); }];
 
   let builders = [
-    OpBuilderDAG<(ins "mlir::Value":$inChan, "mlir::Value":$ready)>
+    OpBuilder<(ins "mlir::Value":$inChan, "mlir::Value":$ready)>
   ];
 }
 

@@ -76,8 +76,10 @@ Type ESIDialect::parseType(DialectAsmParser &parser) const {
   llvm::StringRef mnemonic;
   if (parser.parseKeyword(&mnemonic))
     return Type();
-  auto genType = generatedTypeParser(getContext(), parser, mnemonic);
-  if (genType != Type())
+  Type genType;
+  auto parseResult =
+      generatedTypeParser(getContext(), parser, mnemonic, genType);
+  if (parseResult.hasValue())
     return genType;
   parser.emitError(parser.getCurrentLocation(), "Could not parse esi.")
       << mnemonic << "!\n";
@@ -89,4 +91,11 @@ void ESIDialect::printType(Type type, DialectAsmPrinter &printer) const {
   if (succeeded(generatedTypePrinter(type, printer)))
     return;
   llvm_unreachable("unexpected 'esi' type kind");
+}
+
+void ESIDialect::registerTypes() {
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "circt/Dialect/ESI/ESITypes.cpp.inc"
+      >();
 }

@@ -653,3 +653,40 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.connect %0, %c0_ui1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
     io[0] <= UInt<1>("h00") 
 
+
+  ; https://github.com/llvm/circt/issues/782
+  ; CHECK-LABEL: mem_madness782
+  module mem_madness782:
+    input clock: Clock
+    input rAddr: UInt<4>
+    input rEn: UInt<1>
+    output rData: UInt<8>
+
+    ; CHECK: %mem_r = firrtl.mem Undefined {depth = 16 : i64, name = "mem", portNames = ["r"], readLatency = 2 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<8>> 
+    mem mem:
+      data-type => UInt<8>
+      depth => 16
+      reader => r
+      read-latency => 2
+      write-latency => 1
+      read-under-write => undefined
+
+    mem.r.clk <= clock
+    mem.r.en <= rEn
+    mem.r.addr <= rAddr
+    rData <= mem.r.data
+
+  ; https://github.com/llvm/circt/issues/886
+  ; CHECK-LABEL: ParseValidifAsMux
+  module ParseValidifAsMux:
+    input in1: Clock
+    input in2: UInt<42>
+    input en: UInt<1>
+
+    ; CHECK:      %0 = firrtl.invalidvalue : !firrtl.clock
+    ; CHECK-NEXT: %1 = firrtl.mux(%en, %in1, %0) : (!firrtl.uint<1>, !firrtl.clock, !firrtl.clock) -> !firrtl.clock
+    node out1 = validif(en, in1)
+
+    ; CHECK:      %2 = firrtl.invalidvalue : !firrtl.uint<42>
+    ; CHECK-NEXT: %3 = firrtl.mux(%en, %in2, %2) : (!firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>) -> !firrtl.uint<42>
+    node out2 = validif(en, in2)

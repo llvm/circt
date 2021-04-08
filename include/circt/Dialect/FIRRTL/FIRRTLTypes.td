@@ -15,7 +15,7 @@
 //===----------------------------------------------------------------------===//
 
 def FIRRTLType : Type<CPred<"$_self.isa<FIRRTLType>()">, "FIRRTLType",
-                            "::circt::firrtl::FIRRTLType">;
+                             "::circt::firrtl::FIRRTLType">;
 
 def ClockType : Type<CPred<"$_self.isa<ClockType>()">, "clock",
                            "::circt::firrtl::ClockType">,
@@ -97,3 +97,10 @@ def MemDir_ReadWrite: I32EnumAttrCase<"ReadWrite", 3>;
 def MemDirAttr: I32EnumAttr<"MemDirAttr", "Memory Direction Enum",
                             [MemDir_Infer, MemDir_Read, MemDir_Write,
                               MemDir_ReadWrite]>;
+
+//===----------------------------------------------------------------------===//
+// FIRRTL Annotations Definition
+//===----------------------------------------------------------------------===//
+
+def AnnotationArrayAttr : TypedArrayAttrBase<DictionaryAttr,
+                                             "An array of FIRRTL Annotations">;

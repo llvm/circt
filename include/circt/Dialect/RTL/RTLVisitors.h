@@ -27,11 +27,15 @@ public:
   ResultType dispatchTypeOpVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case< // Array operations
-            ArraySliceOp, ArrayCreateOp, ArrayConcatOp, ArrayGetOp>(
-            [&](auto expr) -> ResultType {
-              return thisCast->visitTypeOp(expr, args...);
-            })
+        .template Case<ConstantOp,
+                       // Array operations
+                       ArraySliceOp, ArrayCreateOp, ArrayConcatOp, ArrayGetOp,
+                       // Struct operations
+                       StructCreateOp, StructExtractOp, StructInjectOp,
+                       // Cast operation
+                       BitcastOp>([&](auto expr) -> ResultType {
+          return thisCast->visitTypeOp(expr, args...);
+        })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidTypeOp(op, args...);
         });
@@ -55,6 +59,11 @@ public:
                                                                     args...);  \
   }
 
+  HANDLE(ConstantOp, Unhandled);
+  HANDLE(BitcastOp, Unhandled);
+  HANDLE(StructCreateOp, Unhandled);
+  HANDLE(StructExtractOp, Unhandled);
+  HANDLE(StructInjectOp, Unhandled);
   HANDLE(ArraySliceOp, Unhandled);
   HANDLE(ArrayGetOp, Unhandled);
   HANDLE(ArrayCreateOp, Unhandled);
