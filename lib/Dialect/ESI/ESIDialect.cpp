@@ -52,37 +52,36 @@ static void findValidReady(Operation *modOp,
     return;
   }
 
-  SmallString<64> nameBuffer = dataPort.getName();
-  size_t nameLen = nameBuffer.size();
-  if (trimName &&
-      nameBuffer.endswith("_data")) { // Detect both `foo` and `foo_data`.
+  SmallString<64> name = dataPort.getName();
+  size_t nameLen = name.size();
+  if (trimName && name.endswith("_data")) { // Detect both `foo` and `foo_data`.
     nameLen -= 5;
-    nameBuffer.set_size(nameLen);
+    name.set_size(nameLen);
   }
 
   // Look for a 'valid' port.
-  nameBuffer.append("_valid");
-  auto valid = nameMap.find(nameBuffer);
+  name.append("_valid");
+  auto valid = nameMap.find(name);
   if (valid == nameMap.end() || valid->second.direction != dataPort.direction ||
       !valid->second.type.isSignlessInteger(1)) {
     if (warn)
       modOp->emitWarning("Could not find appropriate valid port for '")
-          << nameBuffer << "'.";
+          << name << "'.";
     return;
   }
 
   // Try to find a corresponding 'ready' port.
-  nameBuffer.set_size(nameLen);
-  nameBuffer.append("_ready");
+  name.set_size(nameLen);
+  name.append("_ready");
   rtl::PortDirection readyDir = dataPort.direction == rtl::PortDirection::INPUT
                                     ? rtl::PortDirection::OUTPUT
                                     : rtl::PortDirection::INPUT;
-  auto ready = nameMap.find(nameBuffer);
+  auto ready = nameMap.find(name);
   if (ready == nameMap.end() || ready->second.direction != readyDir ||
       !ready->second.type.isSignlessInteger(1)) {
     if (warn)
       modOp->emitWarning("Could not find appropriate ready port for '")
-          << nameBuffer << "'.";
+          << name << "'.";
     return;
   }
 
@@ -101,11 +100,9 @@ void circt::esi::findValidReadySignals(
   llvm::StringMap<rtl::ModulePortInfo> nameMap(ports.size());
   for (auto port : ports)
     nameMap[port.getName()] = port;
-
-  for (auto port : ports) {
+  for (auto port : ports)
     findValidReady(modOp, nameMap, port, /*trimName=*/true, /*warn=*/false,
                    names);
-  }
 }
 
 /// Given a list of logical port names, find the data/valid/ready port triples.
