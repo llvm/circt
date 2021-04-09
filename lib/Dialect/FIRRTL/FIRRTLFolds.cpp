@@ -662,6 +662,12 @@ OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
   return {};
 }
 
+void MuxPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                            MLIRContext *context) {
+  results.insert<patterns::MuxSameCondLow>(context);
+  results.insert<patterns::MuxSameCondHigh>(context);
+}
+
 OpFoldResult PadPrimOp::fold(ArrayRef<Attribute> operands) {
   auto input = this->input();
 
@@ -990,4 +996,9 @@ LogicalResult PartialConnectOp::canonicalize(PartialConnectOp op,
     return success();
   }
   return failure();
+}
+
+void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                         MLIRContext *context) {
+  results.insert<patterns::EmptyNode>(context);
 }
