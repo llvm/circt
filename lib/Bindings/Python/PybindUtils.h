@@ -121,6 +121,14 @@ struct type_caster<MlirModule> {
     }
     return true;
   }
+  static handle cast(MlirModule v, return_value_policy, handle) {
+    auto capsule =
+        py::reinterpret_steal<py::object>(mlirPythonModuleToCapsule(v));
+    return py::module::import("mlir.ir")
+        .attr("Module")
+        .attr(MLIR_PYTHON_CAPI_FACTORY_ATTR)(capsule)
+        .release();
+  };
 };
 
 /// Casts object <-> MlirOperation.
@@ -136,6 +144,8 @@ struct type_caster<MlirOperation> {
     return true;
   }
   static handle cast(MlirOperation v, return_value_policy, handle) {
+    if (v.ptr == nullptr)
+      return py::none();
     auto capsule =
         py::reinterpret_steal<py::object>(mlirPythonOperationToCapsule(v));
     return py::module::import("mlir.ir")
