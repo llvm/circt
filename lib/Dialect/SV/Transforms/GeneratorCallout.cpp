@@ -64,6 +64,8 @@ void RTLGeneratorCalloutPass::runOnOperation() {
         generatorArgs.push_back(
             modGenOp.getVerilogModuleNameAttr().getValue().str());
         generatorArgs.push_back("--o");
+        // The file name for output is ignored and the module name is used
+        // instead.
         generatorArgs.push_back("out");
         // Iterate over all the attributes in the schema.
         // Assumption: All the options required by the generator program must be
