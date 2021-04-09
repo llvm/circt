@@ -49,4 +49,19 @@ def RTLLegalizeNames : Pass<"rtl-legalize-names", "ModuleOp"> {
   let constructor = "circt::sv::createRTLLegalizeNamesPass()";
 }
 
+def RTLGeneratorCalloutPass : Pass<"rtl-generator-callout", "ModuleOp"> {
+  let summary = "Lower Generator Schema to external module";
+  let description = [{
+    This pass calls an external program for all the rtl.module.generated nodes.
+    The corresponding rtl.generator.schema node is used for the port names, 
+    the value for each port name is parsed from the attribute on the rtl.module.generated nodes.
+    The module is then declared as an external module, whose definition is present 
+    in a file with the module name.
+  }];
+  let constructor = "circt::sv::createRTLGeneratorCalloutPass()";
+
+  let options = [Option<"genExecutable", "generator-executable", "std::string",
+                        "", "Generator program executable with full path name">];
+}
+
 #endif // CIRCT_DIALECT_SV_SVPASSES
