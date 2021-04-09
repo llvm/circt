@@ -1524,7 +1524,8 @@ struct HandshakeInsertBufferPass
       auto user = operand.getOwner();
 
       // If graph cycle detected, insert a BufferOp into the edge.
-      if (!isa<handshake::BufferOp>(op) && !isa<handshake::BufferOp>(user)) {
+      if (opOnStack[user] && !isa<handshake::BufferOp>(op) &&
+          !isa<handshake::BufferOp>(user)) {
         auto value = operand.get();
 
         builder.setInsertionPointAfter(op);
@@ -1539,15 +1540,32 @@ struct HandshakeInsertBufferPass
             }));
       }
       // For unvisited operations, recursively call insertBufferOp() method.
-      if (!opVisited[user])
+      else if (!opVisited[user])
         insertBufferOp(user, builder);
     }
     // Pop operation out of the stack.
     opOnStack[op] = false;
   }
 
+  void bufferControlMerge(ControlMergeOp op, OpBuilder &builder) {
+    for (auto &operand : op->getOpOperands()) {
+      builder.setInsertionPoint(op);
+      auto value = operand.get();
+      auto bufferOp = builder.create<handshake::BufferOp>(
+          op.getLoc(), value.getType(), value, /*sequential=*/true,
+          /*control=*/op.isControl(), /*slots=*/1);
+      operand.set(bufferOp);
+    }
+  }
+
   void runOnOperation() override {
     auto f = getOperation();
+    auto builder = OpBuilder(f.getContext());
+
+    // Before doing the DFS, buffer CMerge input channels. This helps prevent
+    // deadlocks in common looping arrangements.
+    f.walk([&](ControlMergeOp op) { bufferControlMerge(op, builder); });
+
     for (auto &block : f) {
       for (auto &op : block) {
         opVisited[&op] = false;
@@ -1555,7 +1573,6 @@ struct HandshakeInsertBufferPass
       }
     }
     // Traverse each use of each argument of the entry block.
-    auto builder = OpBuilder(f.getContext());
     for (auto &arg : f.getBody().front().getArguments()) {
       for (auto &operand : arg.getUses()) {
         if (!opVisited[operand.getOwner()])
