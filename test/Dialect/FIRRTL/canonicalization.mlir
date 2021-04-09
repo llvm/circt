@@ -1274,4 +1274,15 @@ firrtl.module @MuxCanon(%c1: !firrtl.uint<1>, %c2: !firrtl.uint<1>, %d1: !firrtl
   // CHECK: firrtl.mux(%c1, %d2, %d1) : (!firrtl.uint<1>, !firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<5> 
 }
 
+// CHECK-LABEL: firrtl.module @EmptyNode
+firrtl.module @EmptyNode(%d1: !firrtl.uint<5>, %foo: !firrtl.flip<uint<5>>, %foo2: !firrtl.flip<uint<5>>) {
+  %bar = firrtl.node %d1  : !firrtl.uint<5>
+  %bar2 = firrtl.node %d1 {annotations = [{extrastuff = "n1"}]}  : !firrtl.uint<5>
+  firrtl.connect %foo, %bar : !firrtl.flip<uint<5>>, !firrtl.uint<5>
+  firrtl.connect %foo2, %bar2 : !firrtl.flip<uint<5>>, !firrtl.uint<5>
+}
+// CHECK-NEXT: %bar2 = firrtl.node %d1 {annotations = [{extrastuff = "n1"}]}
+// CHECK-NEXT: firrtl.connect %foo, %d1
+// CHECK-NEXT: firrtl.connect %foo2, %bar2
+
 }
