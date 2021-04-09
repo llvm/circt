@@ -61,6 +61,10 @@ struct ESIPortValidReadyMapping {
 void findValidReadySignals(Operation *modOp,
                            SmallVectorImpl<ESIPortValidReadyMapping> &names);
 
+/// Given a list of logical port names, find the data/valid/ready port triples.
+void resolvePortNames(Operation *modOp, ArrayRef<StringRef> portNames,
+                      SmallVectorImpl<ESIPortValidReadyMapping> &portTriples);
+
 /// Build an ESI module wrapper, converting the wires with latency-insensitive
 /// semantics to ESI channels and passing through the rest.
 Operation *buildESIWrapper(OpBuilder &b, Operation *mod,
