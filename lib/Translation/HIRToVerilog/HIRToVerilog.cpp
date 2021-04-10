@@ -76,7 +76,7 @@ private:
   void printIfOp(IfOp op, unsigned indentAmount = 0);
   void printForOp(ForOp op, unsigned indentAmount = 0);
   void printUnrollForOp(UnrollForOp op, unsigned indentAmount = 0);
-  void printMemReadOp(MemReadOp op, unsigned indentAmount = 0);
+  void printLoadOp(LoadOp op, unsigned indentAmount = 0);
   void printEQOp(hir::EQOp op, unsigned indentAmount = 0);
   void printNEQOp(hir::NEQOp op, unsigned indentAmount = 0);
   void printGTOp(hir::GTOp op, unsigned indentAmount = 0);
@@ -85,7 +85,7 @@ private:
   void printOrOp(hir::OrOp op, unsigned indentAmount = 0);
   void printAddOp(hir::AddOp op, unsigned indentAmount = 0);
   void printSubtractOp(hir::SubtractOp op, unsigned indentAmount = 0);
-  void printMemWriteOp(MemWriteOp op, unsigned indentAmount = 0);
+  void printStoreOp(StoreOp op, unsigned indentAmount = 0);
   void printReturnOp(hir::ReturnOp op, unsigned indentAmount = 0);
   void printYieldOp(hir::YieldOp op, unsigned indentAmount = 0);
   void printAllocOp(hir::AllocOp op, unsigned indentAmount = 0);
@@ -126,7 +126,7 @@ VerilogPrinter::registerResults(ResultRange results) {
   return out;
 }
 
-void VerilogPrinter::printMemReadOp(MemReadOp op, unsigned indentAmount) {
+void VerilogPrinter::printLoadOp(LoadOp op, unsigned indentAmount) {
   Value result = op.res();
   VerilogValue vResult(result, "v" + to_string(newValueNumber()));
   verilogMapper.insert(result, vResult);
@@ -380,7 +380,7 @@ void VerilogPrinter::printAllocOp(hir::AllocOp op, unsigned indentAmount) {
   }
 }
 
-void VerilogPrinter::printMemWriteOp(MemWriteOp op, unsigned indentAmount) {
+void VerilogPrinter::printStoreOp(StoreOp op, unsigned indentAmount) {
   auto addr = convertToVerilog(op.addr());
   Value mem = op.mem();
   Value value = op.value();
@@ -896,13 +896,13 @@ void VerilogPrinter::printOperation(Operation *inst, unsigned indentAmount) {
     outBuffer << "\n//" << formattedOp(inst, "ReturnOp");
     return printReturnOp(op, indentAmount);
   }
-  if (auto op = dyn_cast<hir::MemReadOp>(inst)) {
-    outBuffer << "\n//" << formattedOp(inst, "MemReadOp");
-    return printMemReadOp(op, indentAmount);
+  if (auto op = dyn_cast<hir::LoadOp>(inst)) {
+    outBuffer << "\n//" << formattedOp(inst, "LoadOp");
+    return printLoadOp(op, indentAmount);
   }
-  if (auto op = dyn_cast<hir::MemWriteOp>(inst)) {
-    outBuffer << "\n//" << formattedOp(inst, "MemWriteOp");
-    return printMemWriteOp(op, indentAmount);
+  if (auto op = dyn_cast<hir::StoreOp>(inst)) {
+    outBuffer << "\n//" << formattedOp(inst, "StoreOp");
+    return printStoreOp(op, indentAmount);
   }
   if (auto op = dyn_cast<hir::WireReadOp>(inst)) {
     outBuffer << "\n//" << formattedOp(inst, "WireReadOp");

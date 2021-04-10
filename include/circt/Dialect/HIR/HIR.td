@@ -90,7 +90,7 @@ def SyncTimeOp : HIR_Op<"sync_time", [NoSideEffect]> {
       `,` type($inp2) `)`}];
 }
 
-def MemReadOp : HIR_Op<"load", [NoSideEffect,AttrSizedOperandSegments]> {
+def LoadOp : HIR_Op<"load", [NoSideEffect,AttrSizedOperandSegments]> {
   let summary = "read from a memory.";
   let description = [{
     This Op reads from a memory interface. 
@@ -107,7 +107,7 @@ def MemReadOp : HIR_Op<"load", [NoSideEffect,AttrSizedOperandSegments]> {
     attr-dict `:` type($mem) `[` type($addr) `]` `->` type($res)}];
 }
 
-def MemWriteOp : HIR_Op<"store", [AttrSizedOperandSegments]> {
+def StoreOp : HIR_Op<"store", [AttrSizedOperandSegments]> {
   let summary = "Write to a memory.";
   let description = [{
     This Op writes to memory. 
