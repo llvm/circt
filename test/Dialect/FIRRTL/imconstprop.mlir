@@ -5,7 +5,8 @@ firrtl.circuit "Test" {
   // CHECK-LABEL: @PassThrough
   // CHECK: (%source: !firrtl.uint<1>, %dest: !firrtl.flip<uint<1>>) {
   firrtl.module @PassThrough(%source: !firrtl.uint<1>, %dest: !firrtl.flip<uint<1>>) {
-    // CHECK-NEXT: firrtl.connect %dest, %source
+    // CHECK-NEXT: %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.connect %dest, %c0_ui1
     firrtl.connect %dest, %source : !firrtl.flip<uint<1>>, !firrtl.uint<1>
     // CHECK-NEXT: }
   }
@@ -39,7 +40,7 @@ firrtl.circuit "Test" {
 
     // CHECK: firrtl.connect %inst_source, %c0_ui1
     firrtl.connect %source, %c0_ui1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
-    // CHECK: firrtl.connect %result3, %inst_dest
+    // CHECK: firrtl.connect %result3, %c0_ui1_1
     firrtl.connect %result3, %dest : !firrtl.flip<uint<1>>, !firrtl.uint<1>
   }
 }

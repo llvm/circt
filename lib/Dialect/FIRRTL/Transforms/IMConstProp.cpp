@@ -8,6 +8,7 @@
 
 #include "./PassDetails.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "llvm/ADT/TinyPtrVector.h"
 using namespace circt;
 using namespace firrtl;
 
@@ -122,19 +123,31 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   /// Merge information from the 'from' lattice value into value.  If it
   /// changes, then users of the value are added to the worklist for
   /// revisitation.
-  void mergeLatticeValue(Value value, LatticeValue from) {
-    mergeLatticeValue(value, latticeValues[value], from);
-  }
   void mergeLatticeValue(Value value, LatticeValue &valueEntry,
-                         LatticeValue from) {
-    if (valueEntry.meet(from))
+                         LatticeValue source) {
+    if (valueEntry.meet(source))
       changedLatticeValueWorklist.push_back(value);
+  }
+  void mergeLatticeValue(Value value, LatticeValue source) {
+    // Don't even do a map lookup if from has no info in it.
+    if (source.isUnknown())
+      return;
+    mergeLatticeValue(value, latticeValues[value], source);
+  }
+  void mergeLatticeValue(Value result, Value from) {
+    // If 'from' hasn't been computed yet, then it is unknown, don't do
+    // anything.
+    auto it = latticeValues.find(from);
+    if (it == latticeValues.end())
+      return;
+    mergeLatticeValue(result, it->second);
   }
 
   /// Mark the given block as executable.
   void markBlockExecutable(Block *block);
   void markWire(WireOp wire);
   void markConstant(ConstantOp constant);
+  void markInstance(InstanceOp instance);
 
   void visitConnect(ConnectOp connect);
   void visitPartialConnect(PartialConnectOp connect);
@@ -153,6 +166,11 @@ private:
   /// A worklist of values whose LatticeValue recently changed, indicating the
   /// users need to be reprocessed.
   SmallVector<Value, 64> changedLatticeValueWorklist;
+
+  /// This keeps track of users the instance results that correspond to output
+  /// ports.
+  DenseMap<BlockArgument, llvm::TinyPtrVector<Value>>
+      resultPortToInstanceResultMapping;
 };
 } // end anonymous namespace
 
@@ -178,15 +196,12 @@ void IMConstPropPass::runOnOperation() {
     }
   }
 
-  // Drive the worklist to convergence.
+  // If a value changed lattice state then reprocess any of its users.
   while (!changedLatticeValueWorklist.empty()) {
-    // If a value changed lattice state then reprocess any of its users.
-    while (!changedLatticeValueWorklist.empty()) {
-      Value changedVal = changedLatticeValueWorklist.pop_back_val();
-      for (Operation *user : changedVal.getUsers()) {
-        if (isBlockExecutable(user->getBlock()))
-          visitOperation(user);
-      }
+    Value changedVal = changedLatticeValueWorklist.pop_back_val();
+    for (Operation *user : changedVal.getUsers()) {
+      if (isBlockExecutable(user->getBlock()))
+        visitOperation(user);
     }
   }
 
@@ -199,6 +214,7 @@ void IMConstPropPass::runOnOperation() {
   // Clean up our state for next time.
   latticeValues.clear();
   executableBlocks.clear();
+  resultPortToInstanceResultMapping.clear();
 }
 
 /// Mark a block executable if it isn't already.  This does an initial scan of
@@ -219,6 +235,8 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
       markWire(wire);
     else if (auto constant = dyn_cast<ConstantOp>(op))
       markConstant(constant);
+    else if (auto instance = dyn_cast<InstanceOp>(op))
+      markInstance(instance);
     else {
       // TODO: Mems, instances, etc.
       for (auto result : op.getResults())
@@ -242,54 +260,102 @@ void IMConstPropPass::markConstant(ConstantOp constant) {
   mergeLatticeValue(constant, LatticeValue(constant.valueAttr()));
 }
 
-void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
-  // TODO: If a module is unreachable, then nuke its body.
-  if (!executableBlocks.count(module.getBodyBlock()))
+/// Instances have no operands, so they are visited exactly once when their
+/// enclosing block is marked live.  This sets up the def-use edges for ports.
+void IMConstPropPass::markInstance(InstanceOp instance) {
+  // Get the module being reference or a null pointer if this is an extmodule.
+  auto module = dyn_cast<FModuleOp>(instance.getReferencedModule());
+
+  // If this is an extmodule, just remember that any results and inouts are
+  // overdefined.
+  if (!module) {
+    for (size_t resultNo = 0, e = instance.getNumResults(); resultNo != e;
+         ++resultNo) {
+      auto portVal = instance.getResult(resultNo);
+      // If this is a flip value, then this is an input to the extmodule which
+      // we can ignore.
+      if (portVal.getType().isa<FlipType>())
+        continue;
+
+      // Otherwise this is a result from it or an inout, mark it as overdefined.
+      markOverdefined(portVal);
+    }
     return;
+  }
 
-  OpBuilder builder(module);
+  markBlockExecutable(module.getBodyBlock());
 
-  // TODO: Walk 'when's.
-  for (auto &op : llvm::make_early_inc_range(*module.getBodyBlock())) {
-    // Connects to values that we found to be constant can be dropped.  These
-    // will already have been replaced since we're walking top-down.
-    if (auto connect = dyn_cast<ConnectOp>(op)) {
-      if (connect.dest().getDefiningOp<ConstantOp>()) {
-        connect.erase();
-        continue;
-      }
+  // Ok, it is a normal internal module reference.  Populate
+  // resultPortToInstanceResultMapping, and forward any already-computed values.
+  for (size_t resultNo = 0, e = instance.getNumResults(); resultNo != e;
+       ++resultNo) {
+    auto instancePortVal = instance.getResult(resultNo);
+    // If this is a flip value then this is an input to the instance, which will
+    // get handled when any connects to it are processed.
+    if (instancePortVal.getType().isa<FlipType>())
+      continue;
+    // We only support simple values so far.
+    if (!instancePortVal.getType().cast<FIRRTLType>().isGround()) {
+      // TODO: Add field sensitivity.
+      markOverdefined(instancePortVal);
+      continue;
     }
 
-    // If the op had any constants folded, replace them.
-    if (op.getNumResults() != 0 && !isa<ConstantOp>(op)) {
-      for (auto result : op.getResults()) {
-        auto it = latticeValues.find(result);
-        if (it != latticeValues.end() && it->second.isConstant()) {
-          builder.setInsertionPoint(&op);
-          auto cstAttr = it->second.getConstant();
-          auto *cst = op.getDialect()->materializeConstant(
-              builder, cstAttr, result.getType(), op.getLoc());
-          if (cst)
-            result.replaceAllUsesWith(cst->getResult(0));
-        }
-      }
-      if (op.use_empty() && (wouldOpBeTriviallyDead(&op) || isa<WireOp>(op))) {
-        op.erase();
-        continue;
-      }
-    }
+    // Otherwise we have a result from the instance.  We need to forward results
+    // from the body to this instance result's SSA value, so remember it.
+
+    // TODO: This should do result number matching, not name matching!
+    auto portName = instance.getPortName(resultNo);
+    BlockArgument modulePortVal = module.getPortArgument(portName);
+    resultPortToInstanceResultMapping[modulePortVal].push_back(instancePortVal);
+
+    // If there is already a value known for modulePortVal make sure to forward
+    // it here.
+    mergeLatticeValue(instancePortVal, modulePortVal);
   }
 }
 
+// We merge the value from the RHS into the value of the LHS.
 void IMConstPropPass::visitConnect(ConnectOp connect) {
-  // We merge the value from the RHS into the value of the LHS.
-  mergeLatticeValue(connect.dest(), latticeValues[connect.src()]);
+  // TODO: Generalize to subaccesses etc when we have a field sensitive model.
+  if (!connect.dest().getType().cast<FIRRTLType>().getPassiveType().isGround())
+    return;
+
+  // FIXME: Handle implicit extensions etc.
+
+  // Driving result ports propagates the value to each instance using the
+  // module.
+  if (auto blockArg = connect.dest().dyn_cast<BlockArgument>()) {
+    for (auto userOfResultPort : resultPortToInstanceResultMapping[blockArg])
+      mergeLatticeValue(userOfResultPort, connect.src());
+    return;
+  }
+
+  auto dest = connect.dest().cast<mlir::OpResult>();
+
+  // For wires, we just drive the value of the wire itself, which automatically
+  // propagates to users.
+  if (isa<WireOp>(dest.getOwner()))
+    return mergeLatticeValue(connect.dest(), connect.src());
+
+  // Driving an instance argument port drives the corresponding argument of the
+  // referenced module.
+  if (auto instance = dyn_cast<InstanceOp>(dest.getOwner())) {
+    auto module = dyn_cast<FModuleOp>(instance.getReferencedModule());
+    if (!module)
+      return;
+
+    // TODO: This should do result number matching, not name matching!
+    auto portName = instance.getPortName(dest.getResultNumber());
+    BlockArgument modulePortVal = module.getPortArgument(portName);
+    return mergeLatticeValue(modulePortVal, connect.src());
+  }
+
+  connect.emitError("connect unhandled by IMConstProp");
 }
 
 void IMConstPropPass::visitPartialConnect(PartialConnectOp partialConnect) {
-  // We don't handle partial connects yet, just be super conservative.
-  markOverdefined(partialConnect.dest());
-  markOverdefined(partialConnect.src());
+  partialConnect.emitError("IMConstProp cannot handle partial connect");
 }
 
 /// This method is invoked when an operand of the specified op changes its
@@ -304,7 +370,7 @@ void IMConstPropPass::visitOperation(Operation *op) {
     return visitConnect(connectOp);
   if (auto partialConnectOp = dyn_cast<PartialConnectOp>(op))
     return visitPartialConnect(partialConnectOp);
-  // TODO: Handle instances and when operations.
+  // TODO: Handle 'when' operations.
 
   // If this op produces no results, it can't produce any constants.
   if (op->getNumResults() == 0)
@@ -366,6 +432,68 @@ void IMConstPropPass::visitOperation(Operation *op) {
     else // Folding to an operand results in its value.
       resultLattice = latticeValues[foldResult.get<Value>()];
     mergeLatticeValue(op->getResult(i), resultLattice);
+  }
+}
+
+void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
+  // TODO: If a module is unreachable, then nuke its body.
+  if (!executableBlocks.count(module.getBodyBlock()))
+    return;
+
+  auto builder = OpBuilder::atBlockBegin(module.getBodyBlock());
+
+  auto replaceValueWithConstant = [&](Value value, Attribute constantValue) {
+    // FIXME: Unique constants into the entry block of the module.
+    auto *cst = module->getDialect()->materializeConstant(
+        builder, constantValue, value.getType(), value.getLoc());
+    if (!cst)
+      return;
+    value.replaceAllUsesWith(cst->getResult(0));
+  };
+
+  auto getAttributeIfConstant = [&](Value value) -> Attribute {
+    auto it = latticeValues.find(value);
+    if (it != latticeValues.end() && it->second.isConstant())
+      return it->second.getConstant();
+    return {};
+  };
+
+  for (auto &port : module.getBodyBlock()->getArguments()) {
+    if (auto attr = getAttributeIfConstant(port))
+      replaceValueWithConstant(port, attr);
+  }
+
+  // TODO: Walk 'when's preorder with `walk`.
+  for (auto &op : llvm::make_early_inc_range(*module.getBodyBlock())) {
+    // Connects to values that we found to be constant can be dropped.  These
+    // will already have been replaced since we're walking top-down.
+    if (auto connect = dyn_cast<ConnectOp>(op)) {
+      if (connect.dest().getDefiningOp<ConstantOp>()) {
+        connect.erase();
+        continue;
+      }
+    }
+
+    // Other ops with no results don't need processing.
+    if (op.getNumResults() == 0)
+      continue;
+
+    // Don't "refold" constants.  TODO: Unique in the module entry block.
+    if (isa<ConstantOp>(op))
+      continue;
+
+    // If the op had any constants folded, replace them.
+
+    for (auto result : op.getResults()) {
+      if (auto attr = getAttributeIfConstant(result)) {
+        builder.setInsertionPoint(&op);
+        replaceValueWithConstant(result, attr);
+      }
+    }
+    if (op.use_empty() && (wouldOpBeTriviallyDead(&op) || isa<WireOp>(op))) {
+      op.erase();
+      continue;
+    }
   }
 }
 
