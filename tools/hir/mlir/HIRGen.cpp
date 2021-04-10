@@ -1,4 +1,4 @@
-#include "HIRGen.h"
+#include "../include/HIRGen.h"
 #include "circt/Dialect/HIR/helper.h"
 #include "mlir/IR/Builders.h"
 
@@ -8,7 +8,9 @@ using namespace hir;
 int emitMLIR(mlir::MLIRContext &context, mlir::OwningModuleRef &module) {
   mlir::OpBuilder builder(&context);
   module = mlir::ModuleOp::create(builder.getUnknownLoc());
-  emitLineBuffer(builder, context, module, "line_buffer");
+  int imgDims[2] = {16, 16};
+  int kernelDims[2] = {2, 2};
+  emitLineBuffer(builder, context, module, "line_buffer", imgDims, kernelDims);
   return 0;
 }
 
@@ -16,7 +18,10 @@ FuncType buildFifoPopInterfaceTy(mlir::OpBuilder &builder,
                                  mlir::MLIRContext &context, Type elementTy) {
   assert(elementTy.isa<IntegerType>() || elementTy.isa<FloatType>());
 
-  SmallVector<Type, 4> resultTypes = {TimeType::get(&context), elementTy};
+  GroupType wrappedElementTy =
+      GroupType::get(&context, {elementTy}, {Attribute()});
+  SmallVector<Type, 4> resultTypes = {TimeType::get(&context),
+                                      wrappedElementTy};
   auto functionTy = FunctionType::get(&context, llvm::None, resultTypes);
   IntegerAttr zeroAttr =
       IntegerAttr::get(helper::getIntegerType(&context, 64), 0);
@@ -52,7 +57,8 @@ DictionaryAttr buildMemrefPortAttr(mlir::MLIRContext &context, int rd, int wr) {
 }
 
 void emitLineBufferBody(mlir::OpBuilder &builder, mlir::MLIRContext &context,
-                        Block *entryBlock) {
+                        Block *entryBlock, int imgDims[2], int kernelDims[2]) {
+
   mlir::Value inp = entryBlock->getArgument(0);
   mlir::Value outp = entryBlock->getArgument(1);
   mlir::Value t = entryBlock->getArgument(2);
@@ -68,17 +74,18 @@ void emitLineBufferBody(mlir::OpBuilder &builder, mlir::MLIRContext &context,
   auto f32Ty = FloatType::getF32(&context);
   auto timeTy = hir::TimeType::get(&context);
   auto constTy = hir::ConstType::get(&context);
+
   // %buff_r, %buff_w = hir.alloca ...
   mlir::Value buffR, buffW;
   {
-    auto memref2x16bramRd =
-        hir::MemrefType::get(&context, {2, 16}, f32Ty,
+    auto memrefBramRd =
+        hir::MemrefType::get(&context, {kernelDims[0], imgDims[1]}, f32Ty,
                              ArrayAttr::get(&context, {oneAttr}), bramRdAttr);
-    auto memref2x16bramWr =
-        hir::MemrefType::get(&context, {2, 16}, f32Ty,
+    auto memrefBramWr =
+        hir::MemrefType::get(&context, {kernelDims[0], imgDims[1]}, f32Ty,
                              ArrayAttr::get(&context, {oneAttr}), bramWrAttr);
 
-    SmallVector<Type, 4> resultTypes = {memref2x16bramRd, memref2x16bramWr};
+    SmallVector<Type, 4> resultTypes = {memrefBramRd, memrefBramWr};
     auto op =
         builder.create<hir::AllocaOp>(builder.getUnknownLoc(), resultTypes,
                                       StringAttr::get(&context, "bram"));
@@ -89,14 +96,14 @@ void emitLineBufferBody(mlir::OpBuilder &builder, mlir::MLIRContext &context,
   // %wndw_r, %wndw_w = hir.alloca ...
   mlir::Value wndwR, wndwW;
   {
-    auto memref2x2regRd = hir::MemrefType::get(
-        &context, {2, 2}, f32Ty, ArrayAttr::get(&context, {zeroAttr, oneAttr}),
-        regRdAttr);
-    auto memref2x2regWr = hir::MemrefType::get(
-        &context, {2, 2}, f32Ty, ArrayAttr::get(&context, {zeroAttr, oneAttr}),
-        regWrAttr);
+    auto memrefRegRd = hir::MemrefType::get(
+        &context, {kernelDims[0], kernelDims[1]}, f32Ty,
+        ArrayAttr::get(&context, {zeroAttr, oneAttr}), regRdAttr);
+    auto memrefRegWr = hir::MemrefType::get(
+        &context, {kernelDims[0], kernelDims[1]}, f32Ty,
+        ArrayAttr::get(&context, {zeroAttr, oneAttr}), regWrAttr);
 
-    SmallVector<Type, 4> resultTypes = {memref2x2regRd, memref2x2regWr};
+    SmallVector<Type, 4> resultTypes = {memrefRegRd, memrefRegWr};
     hir::AllocaOp op =
         builder.create<hir::AllocaOp>(builder.getUnknownLoc(), resultTypes,
                                       StringAttr::get(&context, "bram"));
@@ -105,7 +112,7 @@ void emitLineBufferBody(mlir::OpBuilder &builder, mlir::MLIRContext &context,
   }
 
   //%0 = hir.constant ...
-  mlir::Value c0, c1, c2, c3, c4, c16;
+  mlir::Value c0, c1, cK1Minus1, cNi, cNj;
   {
     c0 = builder
              .create<hir::ConstantOp>(builder.getUnknownLoc(),
@@ -115,13 +122,20 @@ void emitLineBufferBody(mlir::OpBuilder &builder, mlir::MLIRContext &context,
              .create<hir::ConstantOp>(builder.getUnknownLoc(),
                                       helper::getConstIntType(&context), 1)
              .getResult();
-    c2 = builder
-             .create<hir::ConstantOp>(builder.getUnknownLoc(),
-                                      helper::getConstIntType(&context), 2)
-             .getResult();
-    c16 = builder
+    cK1Minus1 = builder
+                    .create<hir::ConstantOp>(builder.getUnknownLoc(),
+                                             helper::getConstIntType(&context),
+                                             kernelDims[0] - 1)
+                    .getResult();
+    cNi = builder
               .create<hir::ConstantOp>(builder.getUnknownLoc(),
-                                       helper::getConstIntType(&context), 16)
+                                       helper::getConstIntType(&context),
+                                       imgDims[0])
+              .getResult();
+    cNj = builder
+              .create<hir::ConstantOp>(builder.getUnknownLoc(),
+                                       helper::getConstIntType(&context),
+                                       imgDims[1])
               .getResult();
   }
 
@@ -130,7 +144,7 @@ void emitLineBufferBody(mlir::OpBuilder &builder, mlir::MLIRContext &context,
 
     hir::ForOp forI = builder.create<hir::ForOp>(builder.getUnknownLoc(),
                                                  helper::getTimeType(&context),
-                                                 c0, c16, c1, t, c1);
+                                                 c0, cNi, c1, t, c1);
 
     auto owningBlock = std::make_unique<Block>();
 
@@ -143,11 +157,11 @@ void emitLineBufferBody(mlir::OpBuilder &builder, mlir::MLIRContext &context,
     Value tf;
     {
       hir::ForOp forJ = builder.create<hir::ForOp>(
-          builder.getUnknownLoc(), helper::getTimeType(&context), c0, c16, c1,
+          builder.getUnknownLoc(), helper::getTimeType(&context), c0, cNj, c1,
           ti, c1);
       forJ.addEntryBlock(&context, helper::getIntegerType(&context, 32));
       forJ.beginRegion(builder);
-      mlir::Value tj = forJ.getInductionVar();
+      mlir::Value tj = forJ.getIterTimeVar();
       mlir::Value j = forJ.getInductionVar();
       tf = forJ.getResult();
 
@@ -191,7 +205,8 @@ void emitLineBufferBody(mlir::OpBuilder &builder, mlir::MLIRContext &context,
       // hir.unroll_for %k1 =
       {
         hir::UnrollForOp unrollK1 = builder.create<hir::UnrollForOp>(
-            builder.getUnknownLoc(), hir::TimeType::get(&context), 0, 1, 1, tv);
+            builder.getUnknownLoc(), hir::TimeType::get(&context), 0,
+            kernelDims[0] - 1, 1, tv);
         unrollK1.addEntryBlock(&context);
         unrollK1.beginRegion(builder);
         mlir::Value tk1 = unrollK1.getIterTimeVar();
@@ -249,22 +264,24 @@ void emitLineBufferBody(mlir::OpBuilder &builder, mlir::MLIRContext &context,
         unrollK1.endRegion(builder);
       }
 
-      // hir.store %v1 to %buff_w[%1,%j] at %tv + %1
+      // hir.store %v1 to %buff_w[%K1Minus1,%j] at %tv + %1
       {
         builder.create<hir::StoreOp>(builder.getUnknownLoc(), v1, buffW,
-                                     SmallVector<mlir::Value>({c1, j}), tv, c1);
+                                     SmallVector<mlir::Value>({cK1Minus1, j}),
+                                     tv, c1);
       }
-      // hir.store %v1 to %wndw_w[%1,%0] at %tv + %1
+      // hir.store %v1 to %wndw_w[%K1Minus1,%0] at %tv + %1
       {
         builder.create<hir::StoreOp>(builder.getUnknownLoc(), v1, wndwW,
-                                     SmallVector<mlir::Value>({c1, c0}), tv,
-                                     c1);
+                                     SmallVector<mlir::Value>({cK1Minus1, c0}),
+                                     tv, c1);
       }
-      // hir.send %v1 to %outp[%1,%1,%0] at %tv + %1
+      // hir.send %v1 to %outp[%1,%K1Minus1,%0] at %tv + %1
       {
 
         builder.create<hir::SendOp>(builder.getUnknownLoc(), v1, outp,
-                                    SmallVector<Value>({c1, c1, c0}), tv, c1);
+                                    SmallVector<Value>({c1, cK1Minus1, c0}), tv,
+                                    c1);
       }
       // %t_send = hir.delay %tv by %1 at %tv :!hir.time -> !hir.time
       mlir::Value tSend;
@@ -280,13 +297,13 @@ void emitLineBufferBody(mlir::OpBuilder &builder, mlir::MLIRContext &context,
       {
 
         builder.create<hir::SendOp>(builder.getUnknownLoc(), tSend, outp,
-                                    SmallVector<Value>({c0}), tSend, c0);
+                                    SmallVector<Value>({c0}), tSend, Value());
       }
 
       // hir.unroll_for %k1 = 0 to 2 step 1 iter_time(%tk1 = %tv){
       {
         hir::UnrollForOp unrollK1 = builder.create<hir::UnrollForOp>(
-            builder.getUnknownLoc(), timeTy, 0, 2, 1, tv);
+            builder.getUnknownLoc(), timeTy, 0, kernelDims[0], 1, tv);
         unrollK1.addEntryBlock(&context);
         unrollK1.beginRegion(builder);
         mlir::Value tk1 = unrollK1.getIterTimeVar();
@@ -302,7 +319,7 @@ void emitLineBufferBody(mlir::OpBuilder &builder, mlir::MLIRContext &context,
         // hir.unroll_for %k2 = 0 to 1 step 1 iter_time(%tk2 = %tk1){
         {
           hir::UnrollForOp unrollK2 = builder.create<hir::UnrollForOp>(
-              builder.getUnknownLoc(), timeTy, 0, 1, 1, tk1);
+              builder.getUnknownLoc(), timeTy, 0, kernelDims[1] - 1, 1, tk1);
           unrollK2.addEntryBlock(&context);
           unrollK2.beginRegion(builder);
           mlir::Value tk2 = unrollK2.getIterTimeVar();
@@ -369,6 +386,7 @@ void emitLineBufferBody(mlir::OpBuilder &builder, mlir::MLIRContext &context,
     }
     forI.endRegion(builder);
   }
+
   // hir.return
   {
     builder.create<hir::ReturnOp>(builder.getUnknownLoc(),
@@ -377,7 +395,9 @@ void emitLineBufferBody(mlir::OpBuilder &builder, mlir::MLIRContext &context,
 }
 
 void emitLineBuffer(mlir::OpBuilder &builder, mlir::MLIRContext &context,
-                    mlir::OwningModuleRef &module, StringRef funcName) {
+                    mlir::OwningModuleRef &module, StringRef funcName,
+                    int imgDims[2], int kernelDims[2]) {
+
   IntegerAttr zeroAttr = helper::getIntegerAttr(&context, 64, 0);
   auto functionTy = builder.getFunctionType(
       buildLineBufferArgTypes(builder, context), llvm::None);
@@ -391,6 +411,6 @@ void emitLineBuffer(mlir::OpBuilder &builder, mlir::MLIRContext &context,
   Block *entryBlock = funcOp.addEntryBlock();
   entryBlock->addArgument(TimeType::get(&context));
   builder.setInsertionPointToStart(entryBlock);
-  emitLineBufferBody(builder, context, entryBlock);
+  emitLineBufferBody(builder, context, entryBlock, imgDims, kernelDims);
   module->push_back(funcOp);
 }

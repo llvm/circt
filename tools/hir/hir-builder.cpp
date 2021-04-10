@@ -1,18 +1,6 @@
-//===- toyc.cpp - The Toy Compiler ----------------------------------------===//
-//
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
-//
-// This file implements the entry point for the Toy compiler.
-//
-//===----------------------------------------------------------------------===//
-
-#include "HIRGen.h"
 #include "circt/Dialect/HIR/HIR.h"
 #include "circt/Dialect/HIR/HIRDialect.h"
+#include "include/HIRGen.h"
 
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/ExecutionEngine/OptUtils.h"
@@ -48,8 +36,8 @@ int main(int argc, char **argv) {
   context.getOrLoadDialect<mlir::hir::HIRDialect>();
 
   mlir::OwningModuleRef module;
-  if (int error = emitMLIR(context, module))
-    return error;
-  module->dump();
+  emitMLIR(context, module);
+  module->print(llvm::outs());
+  // module->dump();
   return 0;
 }

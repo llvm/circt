@@ -3,7 +3,7 @@ set(LLVM_LINK_COMPONENTS
   )
 
 add_llvm_tool(hir-builder
-  HIRGen.cpp
+  mlir/HIRGen.cpp
   hir-builder.cpp
 
   ADDITIONAL_HEADER_DIRS
