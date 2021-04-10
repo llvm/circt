@@ -41,7 +41,7 @@ hir.func @line_buffer at %t(
           :(f32, !hir.memref<2x16xf32, [1], #bram_w>[!hir.const,i32])
         hir.store %val to %wndw_w[%k1,%0] at %tk1  +  %1 
           :(f32, !hir.memref<2x2xf32, [0,1], #reg_w>[!hir.const,!hir.const])
-        hir.send %val to %outp[%1,%k1,%0] at %tv + %1
+        hir.send %val to %outp[%1,%k1,%0] at %tk1 + %1
           :f32 to
           !hir.group<!hir.time,array<2x2xf32>>[!hir.const,!hir.const,!hir.const]
       }
