@@ -43,5 +43,13 @@ firrtl.circuit "Test" {
     // CHECK: firrtl.connect %result3, %c0_ui1_1
     firrtl.connect %result3, %dest : !firrtl.flip<uint<1>>, !firrtl.uint<1>
   }
+
+  // Unused modules should be completely dropped.
+
+  // CHECK-LABEL: @UnusedModule
+  firrtl.module @UnusedModule(%source: !firrtl.uint<1>, %dest: !firrtl.flip<uint<1>>) {
+    firrtl.connect %dest, %source : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    // CHECK-NEXT: }
+  }
 }
 

@@ -436,11 +436,20 @@ void IMConstPropPass::visitOperation(Operation *op) {
 }
 
 void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
-  // TODO: If a module is unreachable, then nuke its body.
-  if (!executableBlocks.count(module.getBodyBlock()))
+  auto *body = module.getBodyBlock();
+  // If a module is unreachable, then nuke its body.
+  if (!executableBlocks.count(body)) {
+    // TODO: Get rid of DoneOp, we don't need it anymore with recent MLIR
+    // improvements.
+    //     while (!body->empty())
+    //       body->back().erase();
+    auto done = cast<DoneOp>(body->getTerminator());
+    while (&body->front() != done)
+      (--Block::iterator(done))->erase();
     return;
+  }
 
-  auto builder = OpBuilder::atBlockBegin(module.getBodyBlock());
+  auto builder = OpBuilder::atBlockBegin(body);
 
   auto replaceValueWithConstant = [&](Value value, Attribute constantValue) {
     // FIXME: Unique constants into the entry block of the module.
@@ -458,13 +467,14 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     return {};
   };
 
-  for (auto &port : module.getBodyBlock()->getArguments()) {
+  // Constant propagate any ports that are always constant.
+  for (auto &port : body->getArguments()) {
     if (auto attr = getAttributeIfConstant(port))
       replaceValueWithConstant(port, attr);
   }
 
   // TODO: Walk 'when's preorder with `walk`.
-  for (auto &op : llvm::make_early_inc_range(*module.getBodyBlock())) {
+  for (auto &op : llvm::make_early_inc_range(*body)) {
     // Connects to values that we found to be constant can be dropped.  These
     // will already have been replaced since we're walking top-down.
     if (auto connect = dyn_cast<ConnectOp>(op)) {
