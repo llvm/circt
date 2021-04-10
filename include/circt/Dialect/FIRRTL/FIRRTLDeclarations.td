@@ -152,6 +152,8 @@ def NodeOp : FIRRTLOp<"node", [NoSideEffect, SameOperandsAndResultType]> {
   let results = (outs FIRRTLType:$result);
 
   let assemblyFormat = "$input custom<ImplicitSSAName>(attr-dict) `:` type($input)";
+
+  let hasCanonicalizer = true;
 }
 
 def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {

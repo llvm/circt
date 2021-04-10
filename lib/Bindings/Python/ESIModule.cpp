@@ -16,6 +16,8 @@
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Support.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/Parser.h"
+#include "mlir/Support/FileUtilities.h"
 
 #include "llvm/ADT/SmallVector.h"
 
@@ -44,11 +46,46 @@ static MlirOperation pyWrapModule(MlirOperation cModOp,
   return wrap(wrapper);
 }
 
+//===----------------------------------------------------------------------===//
+// The main entry point into the ESI API.
+//===----------------------------------------------------------------------===//
+
+class System {
+public:
+  System(MlirContext cCtxt) : ctxt(unwrap(cCtxt)) {
+    module = OwningModuleRef(ModuleOp::create(UnknownLoc::get(ctxt)));
+  }
+
+  void loadMlir(std::string filename) {
+    auto loadedMod = mlir::parseSourceFile(filename, ctxt);
+    Block *loadedBlock = loadedMod->getBody();
+    auto &ops = module->getBody()->getOperations();
+    ops.splice(ops.end(), loadedBlock->getOperations());
+  }
+
+  MlirOperation get() { return wrap((Operation *)module.get()); }
+  MlirOperation lookup(std::string symbol) {
+    Operation *found =
+        SymbolTable::lookupSymbolIn((Operation *)module.get(), symbol);
+    return wrap(found);
+  }
+
+private:
+  MLIRContext *ctxt;
+  OwningModuleRef module;
+};
+
 void circt::python::populateDialectESISubmodule(py::module &m) {
   m.doc() = "ESI Python Native Extension";
 
   m.def("buildWrapper", &pyWrapModule,
         "Construct an ESI wrapper around RTL module 'op' given a list of "
-        "latency-insensitive ports",
+        "latency-insensitive ports.",
         py::arg("op"), py::arg("name_list"));
+
+  py::class_<System>(m, "System")
+      .def(py::init<MlirContext>())
+      .def("load_mlir", &System::loadMlir, "Load an MLIR assembly file.")
+      .def("get", &System::get, "Get the top level module op.")
+      .def("lookup", &System::lookup, "Lookup an RTL module and return it.");
 }
