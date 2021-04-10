@@ -109,26 +109,35 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     return it != latticeValues.end() && it->second.isOverdefined();
   }
 
-  /// Visit the users of the given IR that reside within executable blocks.
-  template <typename T>
-  void visitUsers(T &valueOrOperation) {
-    for (Operation *user : valueOrOperation.getUsers())
-      if (isBlockExecutable(user->getBlock()))
-        visitOperation(user);
-  }
-
   /// Mark the given value as overdefined. This means that we cannot refine a
   /// specific constant for this value.
-  void markOverdefined(Value value) { latticeValues[value].markOverdefined(); }
+  void markOverdefined(Value value) {
+    auto &entry = latticeValues[value];
+    if (!entry.isOverdefined()) {
+      entry.markOverdefined();
+      changedLatticeValueWorklist.push_back(value);
+    }
+  }
+
+  /// Merge information from the 'from' lattice value into value.  If it
+  /// changes, then users of the value are added to the worklist for
+  /// revisitation.
+  void mergeLatticeValue(Value value, LatticeValue from) {
+    mergeLatticeValue(value, latticeValues[value], from);
+  }
+  void mergeLatticeValue(Value value, LatticeValue &valueEntry,
+                         LatticeValue from) {
+    if (valueEntry.meet(from))
+      changedLatticeValueWorklist.push_back(value);
+  }
 
   /// Mark the given block as executable. Returns false if the block was already
   /// marked executable.
   bool markBlockExecutable(Block *block);
 
-  void meet(Operation *owner, LatticeValue &to, LatticeValue from);
-
   void visitWire(WireOp wire);
   void visitConnect(ConnectOp connect);
+  void visitPartialConnect(PartialConnectOp connect);
   void visitOperation(Operation *op);
 
 private:
@@ -141,16 +150,11 @@ private:
   /// A worklist containing blocks that need to be processed.
   SmallVector<Block *, 64> blockWorklist;
 
-  /// A worklist of operations that need to be processed.
-  SmallVector<Operation *, 64> opWorklist;
+  /// A worklist of values whose LatticeValue recently changed, indicating the
+  /// users need to be reprocessed.
+  SmallVector<Value, 64> changedLatticeValueWorklist;
 };
 } // end anonymous namespace
-
-void IMConstPropPass::meet(Operation *owner, LatticeValue &to,
-                           LatticeValue from) {
-  if (to.meet(from))
-    opWorklist.push_back(owner);
-}
 
 bool IMConstPropPass::markBlockExecutable(Block *block) {
   bool marked = executableBlocks.insert(block).second;
@@ -182,12 +186,18 @@ void IMConstPropPass::runOnOperation() {
   }
 
   // Drive the worklist to convergence.
-  while (!blockWorklist.empty() || !opWorklist.empty()) {
-    // Process any operations in the op worklist.
-    while (!opWorklist.empty())
-      visitUsers(*opWorklist.pop_back_val());
+  while (!changedLatticeValueWorklist.empty() || !blockWorklist.empty()) {
+    // If a value changed lattice state then reprocess any of its users.
+    while (!changedLatticeValueWorklist.empty()) {
+      Value changedVal = changedLatticeValueWorklist.pop_back_val();
+      for (Operation *user : changedVal.getUsers())
+        if (isBlockExecutable(user->getBlock()))
+          visitOperation(user);
+    }
 
-    // Process any blocks in the block worklist.
+    // If a block just became live, then make sure all the operations in it are
+    // processed at least once.  We may have already processed operations in
+    // this block, so only visit one that haven't been seen yet.
     while (!blockWorklist.empty()) {
       for (Operation &op : *blockWorklist.pop_back_val())
         visitOperation(&op);
@@ -247,8 +257,9 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
 void IMConstPropPass::visitWire(WireOp wire) {
   // If the wire has a non-ground type, then it is too complex for us to handle,
   // mark the wire as overdefined.
+  // TODO: Eventually add a field-sensitive model.
   if (!wire.getType().getPassiveType().isGround())
-    return meet(wire, latticeValues[wire], LatticeValue::getOverdefined());
+    return markOverdefined(wire);
 
   // Otherwise, we leave this value undefined and allow connects to change its
   // state.
@@ -256,18 +267,34 @@ void IMConstPropPass::visitWire(WireOp wire) {
 
 void IMConstPropPass::visitConnect(ConnectOp connect) {
   // We merge the value from the RHS into the value of the LHS.
-  auto rhs = latticeValues[connect.src()];
-  Value dest = connect.dest();
-  if (latticeValues[dest].meet(rhs))
-    visitUsers(dest);
+  mergeLatticeValue(connect.dest(), latticeValues[connect.src()]);
 }
 
+void IMConstPropPass::visitPartialConnect(PartialConnectOp partialConnect) {
+  // We don't handle partial connects yet, just be super conservative.
+  markOverdefined(partialConnect.dest());
+  markOverdefined(partialConnect.src());
+}
+
+/// This method is invoked when an operand of the specified op changes its
+/// lattice value state and when the block containing the operation is first
+/// noticed as being alive.
+///
+/// This should update the lattice value state for any result values.
+///
 void IMConstPropPass::visitOperation(Operation *op) {
   // If this is a operation with special handling, handle it specially.
   if (auto wireOp = dyn_cast<WireOp>(op))
     return visitWire(wireOp);
   if (auto connectOp = dyn_cast<ConnectOp>(op))
     return visitConnect(connectOp);
+  if (auto partialConnectOp = dyn_cast<PartialConnectOp>(op))
+    return visitPartialConnect(partialConnectOp);
+  // TODO: Handle instances and when operations.
+
+  // If this op produces no results, it can't produce any constants.
+  if (op->getNumResults() == 0)
+    return;
 
   // Collect all of the constant operands feeding into this operation. If any
   // are not ready to be resolved, bail out and wait for them to resolve.
@@ -280,12 +307,6 @@ void IMConstPropPass::visitOperation(Operation *op) {
       return;
     operandConstants.push_back(operandLattice.getConstant());
   }
-
-  // TODO: Handle instances and when operations.
-
-  // If this op produces no results, it can't produce any constants.
-  if (op->getNumResults() == 0)
-    return;
 
   // If all of the results of this operation are already overdefined, bail out
   // early.
@@ -323,14 +344,14 @@ void IMConstPropPass::visitOperation(Operation *op) {
   // Merge the fold results into the lattice for this operation.
   assert(foldResults.size() == op->getNumResults() && "invalid result size");
   for (unsigned i = 0, e = foldResults.size(); i != e; ++i) {
-    LatticeValue &resultLattice = latticeValues[op->getResult(i)];
-
     // Merge in the result of the fold, either a constant or a value.
+    LatticeValue resultLattice;
     OpFoldResult foldResult = foldResults[i];
     if (Attribute foldAttr = foldResult.dyn_cast<Attribute>())
-      meet(op, resultLattice, LatticeValue(foldAttr));
-    else
-      meet(op, resultLattice, latticeValues[foldResult.get<Value>()]);
+      resultLattice = LatticeValue(foldAttr);
+    else // Folding to an operand results in its value.
+      resultLattice = latticeValues[foldResult.get<Value>()];
+    mergeLatticeValue(op->getResult(i), resultLattice);
   }
 }
 
