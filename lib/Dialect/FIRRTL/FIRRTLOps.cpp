@@ -319,6 +319,20 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
   FModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
 }
 
+// Return the port with the specified name.
+BlockArgument FModuleOp::getPortArgument(StringAttr name) {
+  auto *body = getBodyBlock();
+
+  // FIXME: This is O(n)!
+  for (unsigned i = 0, e = body->getNumArguments(); i < e; ++i) {
+    auto argAttrs = ::mlir::impl::getArgAttrs(*this, i);
+    if (getFIRRTLNameAttr(argAttrs) == name)
+      return body->getArgument(i);
+  }
+
+  return {};
+}
+
 void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name, ArrayRef<ModulePortInfo> ports,
                          StringRef defnameAttr, ArrayAttr annotations) {
