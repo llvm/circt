@@ -131,11 +131,11 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
       changedLatticeValueWorklist.push_back(value);
   }
 
-  /// Mark the given block as executable. Returns false if the block was already
-  /// marked executable.
-  bool markBlockExecutable(Block *block);
+  /// Mark the given block as executable.
+  void markBlockExecutable(Block *block);
+  void markWire(WireOp wire);
+  void markConstant(ConstantOp constant);
 
-  void visitWire(WireOp wire);
   void visitConnect(ConnectOp connect);
   void visitPartialConnect(PartialConnectOp connect);
   void visitOperation(Operation *op);
@@ -155,13 +155,6 @@ private:
   SmallVector<Value, 64> changedLatticeValueWorklist;
 };
 } // end anonymous namespace
-
-bool IMConstPropPass::markBlockExecutable(Block *block) {
-  bool marked = executableBlocks.insert(block).second;
-  if (marked)
-    blockWorklist.push_back(block);
-  return marked;
-}
 
 // TODO: handle annotations: [[OptimizableExtModuleAnnotation]],
 //  [[DontTouchAnnotation]]
@@ -186,21 +179,14 @@ void IMConstPropPass::runOnOperation() {
   }
 
   // Drive the worklist to convergence.
-  while (!changedLatticeValueWorklist.empty() || !blockWorklist.empty()) {
+  while (!changedLatticeValueWorklist.empty()) {
     // If a value changed lattice state then reprocess any of its users.
     while (!changedLatticeValueWorklist.empty()) {
       Value changedVal = changedLatticeValueWorklist.pop_back_val();
-      for (Operation *user : changedVal.getUsers())
+      for (Operation *user : changedVal.getUsers()) {
         if (isBlockExecutable(user->getBlock()))
           visitOperation(user);
-    }
-
-    // If a block just became live, then make sure all the operations in it are
-    // processed at least once.  We may have already processed operations in
-    // this block, so only visit one that haven't been seen yet.
-    while (!blockWorklist.empty()) {
-      for (Operation &op : *blockWorklist.pop_back_val())
-        visitOperation(&op);
+      }
     }
   }
 
@@ -213,6 +199,47 @@ void IMConstPropPass::runOnOperation() {
   // Clean up our state for next time.
   latticeValues.clear();
   executableBlocks.clear();
+}
+
+/// Mark a block executable if it isn't already.  This does an initial scan of
+/// the block, processing nullary operations like wires, instances, and
+/// constants that only get processed once.
+void IMConstPropPass::markBlockExecutable(Block *block) {
+  if (!executableBlocks.insert(block).second)
+    return; // Already executable.
+
+  for (auto &op : *block) {
+    // We only handle nullary firrtl nodes in the prepass.  Other nodes will get
+    // handled as part of top-down worklist processing.
+    if (op.getNumOperands() != 0)
+      continue;
+
+    // Handle each of the nullary operations in the firrtl dialect.
+    if (auto wire = dyn_cast<WireOp>(op))
+      markWire(wire);
+    else if (auto constant = dyn_cast<ConstantOp>(op))
+      markConstant(constant);
+    else {
+      // TODO: Mems, instances, etc.
+      for (auto result : op.getResults())
+        markOverdefined(result);
+    }
+  }
+}
+
+void IMConstPropPass::markWire(WireOp wire) {
+  // If the wire has a non-ground type, then it is too complex for us to handle,
+  // mark the wire as overdefined.
+  // TODO: Eventually add a field-sensitive model.
+  if (!wire.getType().getPassiveType().isGround())
+    return markOverdefined(wire);
+
+  // Otherwise, we leave this value undefined and allow connects to change its
+  // state.
+}
+
+void IMConstPropPass::markConstant(ConstantOp constant) {
+  mergeLatticeValue(constant, LatticeValue(constant.valueAttr()));
 }
 
 void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
@@ -254,17 +281,6 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
   }
 }
 
-void IMConstPropPass::visitWire(WireOp wire) {
-  // If the wire has a non-ground type, then it is too complex for us to handle,
-  // mark the wire as overdefined.
-  // TODO: Eventually add a field-sensitive model.
-  if (!wire.getType().getPassiveType().isGround())
-    return markOverdefined(wire);
-
-  // Otherwise, we leave this value undefined and allow connects to change its
-  // state.
-}
-
 void IMConstPropPass::visitConnect(ConnectOp connect) {
   // We merge the value from the RHS into the value of the LHS.
   mergeLatticeValue(connect.dest(), latticeValues[connect.src()]);
@@ -284,8 +300,6 @@ void IMConstPropPass::visitPartialConnect(PartialConnectOp partialConnect) {
 ///
 void IMConstPropPass::visitOperation(Operation *op) {
   // If this is a operation with special handling, handle it specially.
-  if (auto wireOp = dyn_cast<WireOp>(op))
-    return visitWire(wireOp);
   if (auto connectOp = dyn_cast<ConnectOp>(op))
     return visitConnect(connectOp);
   if (auto partialConnectOp = dyn_cast<PartialConnectOp>(op))
