@@ -13,3 +13,8 @@ add_circt_dialect(Seq seq)
 add_circt_doc(Seq -gen-dialect-doc Seq Dialects/)
 
 set(LLVM_TARGET_DEFINITIONS Seq.td)
+mlir_tablegen(SeqPasses.h.inc -gen-pass-decls)
+
+add_circt_doc(Seq -gen-pass-doc SeqPasses ./)
+
+add_public_tablegen_target(MLIRSeqMiscIncGen)

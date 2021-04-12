@@ -220,9 +220,6 @@ def DShlPrimOp  : BinaryPrimOp<"dshl", IntType, UIntType, IntType>;
 def DShlwPrimOp : BinaryPrimOp<"dshlw", IntType, UIntType, IntType>;
 def DShrPrimOp  : BinaryPrimOp<"dshr", IntType, UIntType, IntType>;
 
-def ValidIfPrimOp
-  : BinaryPrimOp<"validif", UInt1Type, PassiveType, PassiveType>;
-
 //===----------------------------------------------------------------------===//
 // Unary Operations
 //===----------------------------------------------------------------------===//
@@ -391,6 +388,7 @@ def MuxPrimOp : PrimOp<"mux"> {
     "`(` operands `)` attr-dict `:` functional-type(operands, $result)";
 
   let hasFolder = 1;
+  let hasCanonicalizer = true;
 
   let extraClassDeclaration = [{
     /// Return the result for inputs with the specified type, returning a null

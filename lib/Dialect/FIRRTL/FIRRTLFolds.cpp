@@ -520,12 +520,6 @@ OpFoldResult DShlwPrimOp::fold(ArrayRef<Attribute> operands) { return {}; }
 
 OpFoldResult DShrPrimOp::fold(ArrayRef<Attribute> operands) { return {}; }
 
-OpFoldResult ValidIfPrimOp::fold(ArrayRef<Attribute> operands) {
-  // Fold all validIf(x, y) -> y for now. This replicates what the Scala FIRRTL
-  // compiler does in all relevant cases.
-  return rhs();
-}
-
 //===----------------------------------------------------------------------===//
 // Unary Operators
 //===----------------------------------------------------------------------===//
@@ -666,6 +660,12 @@ OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
   // TODO: "x ? c1 : y" -> "~x ? y : c1"
 
   return {};
+}
+
+void MuxPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                            MLIRContext *context) {
+  results.insert<patterns::MuxSameCondLow>(context);
+  results.insert<patterns::MuxSameCondHigh>(context);
 }
 
 OpFoldResult PadPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -996,4 +996,9 @@ LogicalResult PartialConnectOp::canonicalize(PartialConnectOp op,
     return success();
   }
   return failure();
+}
+
+void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                         MLIRContext *context) {
+  results.insert<patterns::EmptyNode>(context);
 }

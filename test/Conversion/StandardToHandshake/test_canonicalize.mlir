@@ -27,6 +27,14 @@ module {
     handshake.return %5#1 : none
   }
 
+  // CHECK-LABEL: cmerge_with_control_used
+  handshake.func @cmerge_with_control_used(%arg0: none, %arg1: none, %arg2: none) -> (none, index, none) {
+    // CHECK: "handshake.control_merge"(%{{.+}}, %{{.+}})
+    // CHECK: handshake.return
+    %result, %index = "handshake.control_merge"(%arg0, %arg1) {control = true} : (none, none) -> (none, index)
+    handshake.return %result, %index, %arg2 : none, index, none
+  }
+
   // CHECK-LABEL: cmerge_with_control_sunk
   handshake.func @cmerge_with_control_sunk(%arg0: none, %arg1: none, %arg2: none) -> (none, none) {
     // CHECK: "handshake.merge"(%{{.+}}, %{{.+}})

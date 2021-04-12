@@ -589,3 +589,68 @@ firrtl.circuit "lowerRegOpNoName" {
  // CHECK:    firrtl.connect %a_q_0, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
  // CHECK:    firrtl.connect %a_q_1, %1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 }
+
+// -----
+
+// Test that InstanceOp Annotations are copied to the new instance.
+firrtl.circuit "Foo" {
+  firrtl.module @Bar(%a: !firrtl.flip<vector<uint<1>, 2>>) {
+    %0 = firrtl.invalidvalue : !firrtl.vector<uint<1>, 2>
+    firrtl.connect %a, %0 : !firrtl.flip<vector<uint<1>, 2>>, !firrtl.vector<uint<1>, 2>
+  }
+  firrtl.module @Foo() {
+    %bar_a = firrtl.instance @Bar  {annotations = [{a = "a"}], name = "bar", portNames = ["a"]} : !firrtl.vector<uint<1>, 2>
+  }
+  // CHECK: firrtl.instance
+  // CHECK-SAME: annotations = [{a = "a"}]
+}
+
+// -----
+
+// Test that MemOp Annotations are copied to lowered MemOps.
+firrtl.circuit "Foo" {
+  firrtl.module @Foo() {
+    %bar_r, %bar_w = firrtl.mem Undefined  {annotations = [{a = "a"}], depth = 16 : i64, name = "bar", portNames = ["r", "w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: vector<uint<8>, 2>>, !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: vector<uint<8>, 2>, mask: vector<uint<1>, 2>>>
+  }
+  // CHECK: firrtl.mem
+  // CHECK-SAME: annotations = [{a = "a"}]
+  // CHECK: firrtl.mem
+  // CHECK-SAME: annotations = [{a = "a"}]
+}
+
+// -----
+
+// Test that WireOp Annotations are copied to lowered WireOps.
+firrtl.circuit "Wire" {
+  firrtl.module @Wire() {
+    %bar = firrtl.wire  {annotations = [{a = "a"}]} : !firrtl.vector<uint<1>, 2>
+  }
+  // CHECK: firrtl.wire
+  // CHECK-SAME: annotations = [{a = "a"}]
+  // CHECK: firrtl.wire
+  // CHECK-SAME: annotations = [{a = "a"}]
+}
+
+// -----
+
+// Test that Reg/RegResetOp Annotations are copied to lowered registers.
+firrtl.circuit "Reg" {
+  firrtl.module @Reg(%clock: !firrtl.clock, %reset: !firrtl.uint<1>) {
+    %bazInit = firrtl.wire  : !firrtl.vector<uint<1>, 2>
+    %0 = firrtl.subindex %bazInit[0] : !firrtl.vector<uint<1>, 2>
+    %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
+    firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    %1 = firrtl.subindex %bazInit[1] : !firrtl.vector<uint<1>, 2>
+    firrtl.connect %1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    %bar = firrtl.reg %clock  {annotations = [{a = "a"}], name = "bar"} : (!firrtl.clock) -> !firrtl.vector<uint<1>, 2>
+    %baz = firrtl.regreset %clock, %reset, %bazInit  {annotations = [{b = "b"}], name = "baz"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>) -> !firrtl.vector<uint<1>, 2>
+  }
+  // CHECK: firrtl.reg
+  // CHECK-SAME: annotations = [{a = "a"}]
+  // CHECK: firrtl.reg
+  // CHECK-SAME: annotations = [{a = "a"}]
+  // CHECK: firrtl.regreset
+  // CHECK-SAME: annotations = [{b = "b"}]
+  // CHECK: firrtl.regreset
+  // CHECK-SAME: annotations = [{b = "b"}]
+}

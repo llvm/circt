@@ -7,29 +7,29 @@
 // RUN: verilator --lint-only --top-module casts %t1.sv
 // RUN: verilator --lint-only --top-module exprInlineTestIssue439 %t1.sv
 
-rtl.module @B(%a: i1 { rtl.inout }) -> (i1 {rtl.name = "b"}, i1 {rtl.name = "c"}) {
+rtl.module @B(%a: i1) -> (%b: i1, %c: i1) {
   %0 = comb.or %a, %a : i1
   %1 = comb.and %a, %a : i1
   rtl.output %0, %1 : i1, i1
 }
 
-rtl.module @A(%d: i1, %e: i1) -> (i1 {rtl.name = "f"}) {
+rtl.module @A(%d: i1, %e: i1) -> (%f: i1) {
   %1 = comb.mux %d, %d, %e : i1
   rtl.output %1 : i1
 }
 
-rtl.module @AAA(%d: i1, %e: i1) -> (i1 {rtl.name = "f"}) {
+rtl.module @AAA(%d: i1, %e: i1) -> (%f: i1) {
   %z = rtl.constant 0 : i1
   rtl.output %z : i1
 }
 
-rtl.module @AB(%w: i1, %x: i1) -> (i1 {rtl.name = "y"}, i1 {rtl.name = "z"}) {
+rtl.module @AB(%w: i1, %x: i1) -> (%y: i1, %z: i1) {
   %w2 = rtl.instance "a1" @AAA(%w, %w1) : (i1, i1) -> (i1)
   %w1, %y = rtl.instance "b1" @B(%w2) : (i1) -> (i1, i1)
   rtl.output %y, %x : i1, i1
 }
 
-rtl.module @shl(%a: i1) -> (i1 {rtl.name = "b"}) {
+rtl.module @shl(%a: i1) -> (%b: i1) {
   %0 = comb.shl %a, %a : i1
   rtl.output %0 : i1
 }
