@@ -38,35 +38,66 @@ private:
 };
 } // end anonymous namespace
 
+// Parse the \p genExec string, to extract the program executable, the path to
+// the executable and all the required arguments.
+void static parseProgramArgs(const std::string genExec, std::string &execName,
+                             std::string &genExecutablePath,
+                             std::vector<std::string> &genOptions) {
+  std::string temp = genExec;
+  size_t pos;
+  while ((pos = temp.find_last_of(";")) != std::string::npos) {
+    genOptions.push_back(temp.substr(pos + 1));
+    temp = temp.substr(0, pos);
+  }
+
+  auto pathLoc = temp.find_last_of("/\\");
+  if (pathLoc != std::string::npos)
+    genExecutablePath = temp.substr(0, pathLoc + 1);
+  else
+    genExecutablePath = "";
+  execName = temp.substr(pathLoc + 1);
+  return;
+}
+
 void RTLGeneratorCalloutPass::runOnOperation() {
   ModuleOp root = getOperation();
+  std::string genExecutableName, genExecutablePath;
+  std::vector<std::string> genOptions;
+  parseProgramArgs(genExecutable, genExecutableName, genExecutablePath,
+                   genOptions);
 
   OpBuilder builder(root->getContext());
-  auto pathLoc = genExecutable.find_last_of("/\\");
-  auto genExecutablePath = genExecutable.substr(0, pathLoc);
-  auto genExecutableName = genExecutable.substr(pathLoc + 1);
   auto genMemExe =
       llvm::sys::findProgramByName(genExecutableName, {genExecutablePath});
+  // If the executable was not found in the provided path (when the path is
+  // empty), then search it in the $PATH.
+  if (!genMemExe)
+    genMemExe = llvm::sys::findProgramByName(genExecutableName);
+  // If cannot find the executable, then nothing to do return. TODO: Should we
+  // error out here ?
+  if (!genMemExe)
+    return;
   SmallVector<Operation *> opsToRemove;
   for (auto &op : *root.getBody()) {
     if (auto modGenOp = dyn_cast<RTLModuleGeneratedOp>(op)) {
       std::vector<std::string> generatorArgs;
       // First argument should be the executable name.
       generatorArgs.push_back(genExecutableName);
-      // This is the option required by duh-mem, TODO: make it an option.
-      generatorArgs.push_back("fir");
+
+      for (auto o : genOptions) {
+        generatorArgs.push_back(o);
+      }
       // Get the corresponding schema associated with this generated op.
       if (auto genSchema =
               dyn_cast<RTLGeneratorSchemaOp>(modGenOp.getGeneratorKindOp())) {
+        auto moduleName = modGenOp.getVerilogModuleNameAttr().getValue().str();
         // The moduleName option is not present in the schema, so add it
         // explicitly.
         generatorArgs.push_back("--moduleName");
-        generatorArgs.push_back(
-            modGenOp.getVerilogModuleNameAttr().getValue().str());
-        generatorArgs.push_back("--o");
-        // The file name for output is ignored and the module name is used
-        // instead.
-        generatorArgs.push_back("out");
+        generatorArgs.push_back(moduleName);
+        generatorArgs.push_back("-o");
+        // The file name for output is "moduleName.v".
+        generatorArgs.push_back(moduleName + ".v");
         // Iterate over all the attributes in the schema.
         // Assumption: All the options required by the generator program must be
         // present in the schema.
@@ -97,12 +128,15 @@ void RTLGeneratorCalloutPass::runOnOperation() {
             /*Redirects=*/redirects,
             /*SecondsToWait=*/0, /*MemoryLimit=*/0, &errMsg);
 
-        // TODO: Silently ignores if any error occurs.
+        // TODO: Silently ignore if any error occurs?
         if (result >= 0) {
           builder.setInsertionPointAfter(&op);
-          builder.create<rtl::RTLModuleExternOp>(
+          RTLModuleExternOp extMod = builder.create<rtl::RTLModuleExternOp>(
               modGenOp.getLoc(), modGenOp.getVerilogModuleNameAttr(),
               modGenOp.getPorts());
+          // Attach an attribute to which file the definition of the external
+          // module exists in.
+          extMod->setAttr("Filename", builder.getStringAttr(moduleName + ".v"));
           opsToRemove.push_back(modGenOp);
           // builder.create<sv::VerbatimOp>(op.getLoc(), "`include " +
           // moduleName + ".v");
