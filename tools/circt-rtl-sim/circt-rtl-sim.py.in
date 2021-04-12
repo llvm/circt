@@ -93,7 +93,8 @@ class Vivado:
             lambda fn: not (fn.endswith(".so") or fn.endswith(".dll")),
             sources)
         vlog = os.path.join(self.path, "xvlog")
-        args = [vlog, "-sv"] + list(sources)
+        work = self.libname + "=" + self.libname + ".dir"
+        args = [vlog, "-sv", "-work", work] + list(sources)
         rc = subprocess.run(args)
         if rc.returncode != 0:
             return rc
@@ -103,7 +104,8 @@ class Vivado:
             top = self.args.top
         else:
             top = "driver"
-        args = [elab, top, "-debug", "typical"]
+        top = self.libname + "." + top
+        args = [elab, top, "-lib", work, "-debug", "typical"]
         return subprocess.run(args)
 
     def run(self, cycles, simargs):
@@ -113,7 +115,7 @@ class Vivado:
             top = self.args.top
         else:
             top = "driver"
-
+        top = self.libname + "." + top
         args = [xsim, top]
 
         script = "script.tcl"
@@ -131,6 +133,13 @@ class Vivado:
             args.append("-gui")
 
         return subprocess.run(args + simargs.split())
+
+    @property
+    def libname(self):
+        name = self.args.sources[0].split("/")[0].split('.')[0]
+        if not name:
+            name = "work"
+        return name
 
 
 class Verilator:

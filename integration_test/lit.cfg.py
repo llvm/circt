@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import warnings
 
 import lit.formats
 import lit.util
@@ -107,7 +108,10 @@ if config.vivado_path != "":
   tools.append('xvlog')
   tools.append('xelab')
   tools.append('xsim')
+  config.available_features.add('ieee-sim')
   config.available_features.add('vivado')
+  config.substitutions.append(
+      ('%ieee-sim', os.path.join(config.vivado_path, "xsim")))
   config.substitutions.append(
       ('%xsim%', os.path.join(config.vivado_path, "xsim")))
 
@@ -124,12 +128,14 @@ if config.questa_path != "":
   tools.append('vlog')
   tools.append('vsim')
 
-  # When we add support for other simulators, we'll have to figure out which
-  # one should be the default and modify this appropriately.
   config.substitutions.append(
       ('%questa', os.path.join(config.questa_path, "vsim")))
   config.substitutions.append(
       ('%ieee-sim', os.path.join(config.questa_path, "vsim")))
+
+ieee_sims = list(filter(lambda x: x[0] == '%ieee-sim', config.substitutions))
+if len(ieee_sims) > 1:
+  warnings.warn(f"You have multiple ieee-sim simulators configured, choosing: {ieee_sims[-1][1]}")
 
 # Enable ESI cosim tests if they have been built.
 if config.esi_cosim_path != "":
