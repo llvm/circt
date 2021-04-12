@@ -2899,13 +2899,14 @@ void SplitEmitter::emitMLIRModule() {
   // separate output files, and the remaining top-level verbatim SV/ifdef
   // business that needs to go into each file.
   for (auto &op : *rootOp.getBody()) {
-    if (isa<RTLModuleOp>(op) || isa<RTLModuleExternOp>(op) ||
-        isa<InterfaceOp>(op)) {
+    if (isa<RTLModuleOp>(op) || isa<InterfaceOp>(op)) {
       moduleOps.push_back({&op, perFileOps.size(), /*filename=*/{}});
     } else if (isa<VerbatimOp>(op) || isa<IfDefProceduralOp>(op)) {
       perFileOps.push_back(&op);
     } else if (isa<RTLGeneratorSchemaOp>(op)) {
       /* Empty */
+    } else if (isa<RTLModuleExternOp>(op)) {
+      // ignore extern modules for split Verilog emission
     } else {
       op.emitError("unknown operation");
       encounteredError = true;
@@ -2929,11 +2930,6 @@ void SplitEmitter::emitModule(const LoweringOptions &options,
     mod.filename = module.getNameAttr().getValue();
     emit = [=](VerilogEmitterState &state) {
       ModuleEmitter(state).emitRTLModule(module);
-    };
-  } else if (auto module = dyn_cast<RTLModuleExternOp>(op)) {
-    mod.filename = module.getVerilogModuleNameAttr().getValue();
-    emit = [=](VerilogEmitterState &state) {
-      ModuleEmitter(state).emitRTLExternModule(module);
     };
   } else if (auto intfOp = dyn_cast<InterfaceOp>(op)) {
     mod.filename = intfOp.sym_name();
