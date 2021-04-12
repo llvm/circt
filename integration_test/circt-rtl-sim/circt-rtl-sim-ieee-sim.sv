@@ -1,5 +1,5 @@
 // REQUIRES: ieee-sim
-// RUN: circt-rtl-sim.py --sim %ieee-sim --cycles 2 %s
+// RUN: circt-rtl-sim.py --sim %ieee-sim --cycles 2 %s | FileCheck %s
 
 module top(
   input clk,

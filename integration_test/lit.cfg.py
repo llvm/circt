@@ -107,7 +107,10 @@ if config.vivado_path != "":
   tools.append('xvlog')
   tools.append('xelab')
   tools.append('xsim')
+  config.available_features.add('ieee-sim')
   config.available_features.add('vivado')
+  config.substitutions.append(
+      ('%ieee-sim', os.path.join(config.vivado_path, "xsim")))
   config.substitutions.append(
       ('%xsim%', os.path.join(config.vivado_path, "xsim")))
 
