@@ -3,7 +3,7 @@ module top();
   logic reset = 0;
   logic arg0_valid, arg0_ready;
   logic arg1_valid, arg1_ready;
-  logic [63:0] arg1_data;
+  logic [31:0] arg1_data;
   logic arg2_valid, arg2_ready;
 
   main main (.*);
