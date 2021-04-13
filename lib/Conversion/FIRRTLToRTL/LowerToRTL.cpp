@@ -392,6 +392,8 @@ void FIRRTLModuleLowering::lowerMemoryDecls(const SmallVector<FirMemory> &mems,
     }
     for (size_t i = 0; i < mem.numReadWritePorts; ++i) {
       makePortCommon("rw", Twine(i), bAddrType);
+      ports.push_back({b.getStringAttr(("rw_wmode_" + Twine(i)).str()),
+                       rtl::INPUT, b1Type, inputPin++});
       ports.push_back({b.getStringAttr(("rw_wmask_" + Twine(i)).str()),
                        rtl::INPUT, b1Type, inputPin++});
       if (mem.dataWidth > 0)
