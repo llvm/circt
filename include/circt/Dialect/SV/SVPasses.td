@@ -49,4 +49,16 @@ def RTLLegalizeNames : Pass<"rtl-legalize-names", "ModuleOp"> {
   let constructor = "circt::sv::createRTLLegalizeNamesPass()";
 }
 
+def RTLMemSimImpl : Pass<"rtl-memory-sim", "ModuleOp"> {
+  let summary = "Implement FIRRTMMem memories nodes with simulation model";
+  let description = [{
+    This pass replaces generated module nodes of type FIRRTLMem with a model
+    suitable for simulation.
+  }];
+
+  let constructor = "circt::sv::createRTLMemSimImplPass()";
+  let dependentDialects = ["circt::sv::SVDialect"];
+}
+
+
 #endif // CIRCT_DIALECT_SV_SVPASSES
