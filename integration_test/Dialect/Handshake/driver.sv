@@ -1,4 +1,4 @@
-module top();
+module driver();
   logic clock = 0;
   logic reset = 0;
   logic arg0_valid, arg0_ready;
@@ -6,7 +6,7 @@ module top();
   logic [31:0] arg1_data;
   logic arg2_valid, arg2_ready;
 
-  main main (.*);
+  top dut (.*);
 
   always begin
     // A clock period is #4.

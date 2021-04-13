@@ -2,11 +2,11 @@
 // RUN: circt-opt %s --create-dataflow --canonicalize --cse --handshake-insert-buffer > %memory-handshake.mlir
 // RUN: circt-opt %memory-handshake.mlir --lower-handshake-to-firrtl --firrtl-lower-types --firrtl-imconstprop --lower-firrtl-to-rtl --rtl-cleanup --canonicalize --cse --rtl-legalize-names > %memory-rtl.mlir
 // RUN: circt-translate %memory-rtl.mlir --export-verilog > %memory-export.sv
-// RUN: circt-rtl-sim.py %memory-export.sv %S/driver.sv --sim %ieee-sim --no-default-driver | FileCheck %s
+// RUN: circt-rtl-sim.py %memory-export.sv %S/driver.sv --sim %ieee-sim --no-default-driver --top driver | FileCheck %s
 // CHECK: 34
 
 module  {
-  func @main() -> i32 {
+  func @top() -> i32 {
     %c34_i32 = constant 34 : i32
     %c1 = constant 1 : index
     %0 = memref.alloc() : memref<1xi32>

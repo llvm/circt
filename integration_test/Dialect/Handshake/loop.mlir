@@ -2,11 +2,11 @@
 // RUN: circt-opt %s --create-dataflow --canonicalize --cse --handshake-insert-buffer > %loop-handshake.mlir
 // RUN: circt-opt %loop-handshake.mlir --lower-handshake-to-firrtl --firrtl-lower-types --firrtl-imconstprop --lower-firrtl-to-rtl --rtl-cleanup --canonicalize --cse --rtl-legalize-names > %loop-rtl.mlir
 // RUN: circt-translate %loop-rtl.mlir --export-verilog > %loop-export.sv
-// RUN: circt-rtl-sim.py %loop-export.sv %S/driver.sv --sim %ieee-sim --no-default-driver | FileCheck %s
+// RUN: circt-rtl-sim.py %loop-export.sv %S/driver.sv --sim %ieee-sim --no-default-driver --top driver | FileCheck %s
 // CHECK: 42
 
 module  {
-  func @main() -> i32 {
+  func @top() -> i32 {
     %c42_i32 = constant 42 : i32
     %c1_i32 = constant 1 : i32
     br ^bb1(%c1_i32 : i32)
