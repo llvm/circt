@@ -166,9 +166,14 @@ def WhenOp : FIRRTLOp<"when", [SingleBlockImplicitTerminator<"DoneOp">,
     "$condition $thenRegion (`else` $elseRegion^)? attr-dict-with-keyword";
 
   let extraClassDeclaration = [{
-    OpBuilder getThenBodyBuilder() {
+    
+    Block &getThenBlock() {
       assert(!thenRegion().empty() && "Unexpected empty 'then' region.");
-      Block &body = thenRegion().front();
+      return thenRegion().front();
+    }
+
+    OpBuilder getThenBodyBuilder() {
+      Block &body = getThenBlock();
       return OpBuilder(&body, std::prev(body.end()));
     }
 
@@ -178,9 +183,13 @@ def WhenOp : FIRRTLOp<"when", [SingleBlockImplicitTerminator<"DoneOp">,
 
     void createElseRegion();
 
-    OpBuilder getElseBodyBuilder() {
+    Block &getElseBlock() {
       assert(hasElseRegion() && "Unexpected empty 'else' region.");
-      Block &body = elseRegion().front();
+      return elseRegion().front();
+    }
+
+    OpBuilder getElseBodyBuilder() {
+      Block &body = getElseBlock();
       return OpBuilder(&body, std::prev(body.end()));
     }
   }];
