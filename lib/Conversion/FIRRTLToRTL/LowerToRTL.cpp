@@ -356,8 +356,8 @@ void FIRRTLModuleLowering::lowerMemoryDecls(const SmallVector<FirMemory> &mems,
   auto b =
       ImplicitLocOpBuilder::atBlockBegin(UnknownLoc::get(&getContext()), top);
   std::array<StringRef, 8> schemaFields = {
-      "depth",        "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency",
-      "writeLatency", "width",        "readUnderWrite"};
+      "depth",       "numReadPorts", "numWritePorts", "numReadWritePorts",
+      "readLatency", "writeLatency", "width",         "readUnderWrite"};
   auto schemaFieldsAttr = b.getStrArrayAttr(schemaFields);
   auto schema = b.create<rtl::RTLGeneratorSchemaOp>(
       "FIRRTLMem", "FIRRTL_Memory", schemaFieldsAttr);
@@ -379,16 +379,16 @@ void FIRRTLModuleLowering::lowerMemoryDecls(const SmallVector<FirMemory> &mems,
                        rtl::INPUT, bAddrType, inputPin++});
     };
 
-    Type bDataType;
-    if (mem.dataWidth > 0)
-      bDataType = IntegerType::get(&getContext(), mem.dataWidth);
-    Type bAddrType =
-        IntegerType::get(&getContext(), llvm::Log2_64_Ceil(mem.depth));
+    Type bDataType =
+        IntegerType::get(&getContext(), std::max((size_t)1, mem.dataWidth));
+
+    Type bAddrType = IntegerType::get(
+        &getContext(), std::max(1U, llvm::Log2_64_Ceil(mem.depth)));
+
     for (size_t i = 0; i < mem.numReadPorts; ++i) {
       makePortCommon("ro", Twine(i), bAddrType);
-      if (mem.dataWidth > 0)
-        ports.push_back({b.getStringAttr(("ro_data_" + Twine(i)).str()),
-                         rtl::OUTPUT, bDataType, outputPin++});
+      ports.push_back({b.getStringAttr(("ro_data_" + Twine(i)).str()),
+                       rtl::OUTPUT, bDataType, outputPin++});
     }
     for (size_t i = 0; i < mem.numReadWritePorts; ++i) {
       makePortCommon("rw", Twine(i), bAddrType);
@@ -396,21 +396,18 @@ void FIRRTLModuleLowering::lowerMemoryDecls(const SmallVector<FirMemory> &mems,
                        rtl::INPUT, b1Type, inputPin++});
       ports.push_back({b.getStringAttr(("rw_wmask_" + Twine(i)).str()),
                        rtl::INPUT, b1Type, inputPin++});
-      if (mem.dataWidth > 0)
-        ports.push_back({b.getStringAttr(("rw_wdata_" + Twine(i)).str()),
-                         rtl::INPUT, bDataType, inputPin++});
-      if (mem.dataWidth > 0)
-        ports.push_back({b.getStringAttr(("rw_rdata_" + Twine(i)).str()),
-                         rtl::OUTPUT, bDataType, outputPin++});
+      ports.push_back({b.getStringAttr(("rw_wdata_" + Twine(i)).str()),
+                       rtl::INPUT, bDataType, inputPin++});
+      ports.push_back({b.getStringAttr(("rw_rdata_" + Twine(i)).str()),
+                       rtl::OUTPUT, bDataType, outputPin++});
     }
 
     for (size_t i = 0; i < mem.numWritePorts; ++i) {
       makePortCommon("wo", Twine(i), bAddrType);
       ports.push_back({b.getStringAttr(("wo_mask_" + Twine(i)).str()),
                        rtl::INPUT, b1Type, inputPin++});
-      if (mem.dataWidth > 0)
-        ports.push_back({b.getStringAttr(("wo_data_" + Twine(i)).str()),
-                         rtl::INPUT, bDataType, inputPin++});
+      ports.push_back({b.getStringAttr(("wo_data_" + Twine(i)).str()),
+                       rtl::INPUT, bDataType, inputPin++});
     }
     std::array<NamedAttribute, 8> genAttrs = {
         b.getNamedAttr("depth", b.getI64IntegerAttr(mem.depth)),
@@ -1741,26 +1738,30 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     auto portName = op.getPortName(i).getValue();
     auto portKind = *op.getPortKind(i);
 
-    auto &portKindNum =
-        portKind == MemOp::PortKind::Read
-            ? readCount
-            : portKind == MemOp::PortKind::Write ? writeCount : readwriteCount;
+    auto &portKindNum = portKind == MemOp::PortKind::Read    ? readCount
+                        : portKind == MemOp::PortKind::Write ? writeCount
+                                                             : readwriteCount;
     auto addInput = [&](SmallVectorImpl<Value> &operands, StringRef field,
                         size_t width) {
-      auto portType = IntegerType::get(op.getContext(), width);
+      auto portType =
+          IntegerType::get(op.getContext(), std::max((size_t)1, width));
       auto accesses = getAllFieldAccesses(op.getResult(i), field);
 
       Value wire = createTmpWireOp(
           portType, ("." + portName + "." + field + ".wire").str());
 
       for (auto a : accesses)
-        (void)setLowering(a, wire);
+        if (width)
+          (void)setLowering(a, wire);
+        else
+          a->eraseOperand(0);
 
       wire = builder.create<sv::ReadInOutOp>(wire);
       operands.push_back(wire);
     };
     auto addOutput = [&](StringRef field, size_t width) {
-      auto portType = IntegerType::get(op.getContext(), width);
+      auto portType =
+          IntegerType::get(op.getContext(), std::max((size_t)1, width));
       resultTypes.push_back(portType);
 
       // Now collect the data for the instance.  A op produces multiple
@@ -1769,32 +1770,31 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       auto accesses = getAllFieldAccesses(op.getResult(i), field);
       // Read data ports are tracked to be updated later
       for (auto &a : accesses)
-        returnHolder[a] = resultTypes.size() - 1;
+        if (width)
+          returnHolder[a] = resultTypes.size() - 1;
+        else
+          a->eraseOperand(0);
     };
 
     if (portKind == MemOp::PortKind::Read) {
       addInput(readOperands, "clk", 1);
       addInput(readOperands, "en", 1);
       addInput(readOperands, "addr", llvm::Log2_64_Ceil(memSummary.depth));
-      if (memSummary.dataWidth > 0)
-        addOutput("data", memSummary.dataWidth);
+      addOutput("data", memSummary.dataWidth);
     } else if (portKind == MemOp::PortKind::ReadWrite) {
       addInput(readOperands, "clk", 1);
       addInput(readOperands, "en", 1);
       addInput(readOperands, "addr", llvm::Log2_64_Ceil(memSummary.depth));
       addInput(readOperands, "wmode", 1);
-      addInput(writeOperands, "wmask", memSummary.dataWidth);
-      if (memSummary.dataWidth > 0)
-        addInput(writeOperands, "wdata", memSummary.dataWidth);
-      if (memSummary.dataWidth > 0)
-        addOutput("rdata", memSummary.dataWidth);
+      addInput(writeOperands, "wmask", 1);
+      addInput(writeOperands, "wdata", memSummary.dataWidth);
+      addOutput("rdata", memSummary.dataWidth);
     } else {
       addInput(writeOperands, "clk", 1);
       addInput(writeOperands, "en", 1);
       addInput(writeOperands, "addr", llvm::Log2_64_Ceil(memSummary.depth));
-      addInput(writeOperands, "mask", memSummary.dataWidth);
-      if (memSummary.dataWidth > 0)
-        addInput(writeOperands, "data", memSummary.dataWidth);
+      addInput(writeOperands, "mask", 1);
+      addInput(writeOperands, "data", memSummary.dataWidth);
     }
     ++portKindNum;
   }
