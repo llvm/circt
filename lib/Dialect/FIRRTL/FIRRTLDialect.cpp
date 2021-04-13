@@ -23,10 +23,14 @@ using namespace firrtl;
 
 // If the specified attribute set contains the firrtl.name attribute, return it.
 StringAttr firrtl::getFIRRTLModuleArgNameAttr(Operation *module, size_t argNo) {
+  if (!hasFIRRTLModuleArgNameAttr(module))
+    return StringAttr();
   return module->getAttrOfType<ArrayAttr>("argNames")[argNo].cast<StringAttr>();
 }
 
 bool firrtl::hasFIRRTLModuleArgNameAttr(Operation *module) {
+  //llvm::errs() << "\n Has attr::"<< *module;
+  //module->dump();
   return module->getAttrOfType<ArrayAttr>("argNames") != nullptr;
 }
 
@@ -107,6 +111,7 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
     // attributes for them.  If so, use that as the name.
     auto *parentOp = block->getParentOp();
 
+    llvm::errs() << "\n getAsmBlockArgumentNames\n";
     if (hasFIRRTLModuleArgNameAttr(parentOp))
       for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
         StringAttr str = getFIRRTLModuleArgNameAttr(parentOp, i);

@@ -261,7 +261,8 @@ void firrtl::getModulePortInfo(Operation *op,
                                SmallVectorImpl<ModulePortInfo> &results) {
   auto argTypes = getModuleType(op).getInputs();
 
-  if (hasFIRRTLModuleArgNameAttr(op))
+  llvm::errs() << "\n getModulePortInfo\n";
+  //if (hasFIRRTLModuleArgNameAttr(op))
     for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
       auto type = argTypes[i].cast<FIRRTLType>();
       results.push_back({getFIRRTLModuleArgNameAttr(op, i), type});
@@ -287,7 +288,9 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   SmallString<8> attrNameBuf;
   // Record the names of the arguments if present.
   SmallVector<Attribute> argNames;
+  llvm::errs() << "\n buildModule\n";
   for (size_t i = 0, e = ports.size(); i != e; ++i) {
+    llvm::errs() << "\n port name:"<< ports[i].name;
     if (ports[i].getName().empty()) {
       argNames.push_back(builder.getStringAttr(""));
     } else {
@@ -323,10 +326,12 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
 BlockArgument FModuleOp::getPortArgument(StringAttr name) {
   auto *body = getBodyBlock();
 
+  llvm::errs() << "\n getPortArgument\n"<<name;
+
   // FIXME: This is O(n)!
+
   for (unsigned i = 0, e = body->getNumArguments(); i < e; ++i) {
-    auto argAttrs = ::mlir::impl::getArgAttrs(*this, i);
-    if (getFIRRTLNameAttr(argAttrs) == name)
+    if (getFIRRTLModuleArgNameAttr(*this, i) == name)
       return body->getArgument(i);
   }
 
@@ -359,7 +364,9 @@ static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
     if (i > 0)
       p << ", ";
 
+    llvm::errs() << "\n printFunctionSignature2\n";
     auto argName = getFIRRTLModuleArgName(op, i);
+    llvm::errs() << "\n arg:"<< argName;
     Value argumentValue;
     if (!isExternal) {
       // Get the printed format for the argument name.
@@ -368,6 +375,7 @@ static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
       p.printOperand(body.front().getArgument(i), tmpStream);
       // If the name wasn't printable in a way that agreed with argName, make
       // sure to print out an explicit argNames attribute.
+      llvm::errs() << "\n tmpstream:"<< tmpStream.str();
       if (!argName.empty() && tmpStream.str().drop_front() != argName)
         needArgNamesAttr = true;
 
@@ -409,6 +417,7 @@ static void printModuleLikeOp(OpAsmPrinter &p, Operation *op) {
   bool needArgNamesAttr = false;
   printFunctionSignature2(p, op, argTypes, /*isVariadic*/ false, resultTypes,
                           needArgNamesAttr);
+  llvm::errs() << "\n needArgNamesAttr:"<< needArgNamesAttr;
   SmallVector<StringRef, 3> omittedAttrs;
   if (!needArgNamesAttr)
     omittedAttrs.push_back("argNames");
@@ -469,11 +478,13 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
   assert(argAttrs.size() == argTypes.size());
   assert(resultAttrs.size() == resultTypes.size());
 
+  llvm::errs() << "\n parseFModuleOp:\n";
   for (size_t i = 0, e = argAttrs.size(); i != e; ++i) {
     auto &attrs = argAttrs[i];
+    llvm::errs() << "\n attrs:";
 
     // If an explicit name attribute was present, don't add the implicit one.
-    bool hasNameAttr = false;
+    //  bool hasNameAttr = false;
     for (auto &elt : attrs) {
       llvm::errs() << "\n attribute::" << elt.first;
       elt.second.dump();
