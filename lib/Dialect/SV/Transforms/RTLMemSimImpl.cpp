@@ -76,8 +76,7 @@ static Value addPipelineStages(ImplicitLocOpBuilder &b, size_t stages,
   return data;
 }
 
-void RTLMemSimImplPass::generateMemory(rtl::RTLModuleOp op,
-                                       FirMemory mem) {
+void RTLMemSimImplPass::generateMemory(rtl::RTLModuleOp op, FirMemory mem) {
   ImplicitLocOpBuilder b(UnknownLoc::get(&getContext()), op.getBody());
 
   // Create a register for the memory.
