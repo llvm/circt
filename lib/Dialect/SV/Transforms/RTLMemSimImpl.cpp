@@ -180,11 +180,9 @@ void RTLMemSimImplPass::runOnOperation() {
 
   for (auto op : topModule->getOps<rtl::RTLModuleGeneratedOp>()) {
     auto oldModule = cast<rtl::RTLModuleGeneratedOp>(op);
-    oldModule.dump();
     auto gen = oldModule.generatorKind();
     auto genOp = cast<rtl::RTLGeneratorSchemaOp>(
         SymbolTable::lookupSymbolIn(getOperation(), gen));
-    genOp->dump();
 
     if (genOp.descriptor() == "FIRRTL_Memory") {
       llvm::errs() << "Found\n";
