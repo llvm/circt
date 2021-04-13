@@ -97,10 +97,11 @@ void RTLMemSimImplPass::generateMemory(rtl::RTLModuleOp op,
     addr = addPipelineStages(b, mem.readLatency, clock, addr);
 
     // Read Logic
-    Value rdata = b.create<comb::MuxOp>(
-        en,
-        b.create<sv::ReadInOutOp>(b.create<sv::ArrayIndexInOutOp>(reg, addr)),
-        b.create<sv::ConstantXOp>(dataType));
+    Value ren =
+        b.create<sv::ReadInOutOp>(b.create<sv::ArrayIndexInOutOp>(reg, addr));
+    Value x = b.create<sv::ConstantXOp>(dataType);
+
+    Value rdata = b.create<comb::MuxOp>(en, ren, x);
     outputs.push_back(rdata);
   }
   for (size_t i = 0; i < mem.numReadWritePorts; ++i) {
@@ -128,8 +129,8 @@ void RTLMemSimImplPass::generateMemory(rtl::RTLModuleOp op,
       auto slot = b.create<sv::ArrayIndexInOutOp>(reg, addr);
       auto rcond = b.createOrFold<comb::AndOp>(
           en, b.createOrFold<comb::ICmpOp>(
-                     ICmpPredicate::eq, wmode,
-                     b.createOrFold<rtl::ConstantOp>(wmode.getType(), 0)));
+                  ICmpPredicate::eq, wmode,
+                  b.createOrFold<rtl::ConstantOp>(wmode.getType(), 0)));
       auto wcond = b.createOrFold<comb::AndOp>(
           en, b.createOrFold<comb::AndOp>(wmask, wmode));
 
