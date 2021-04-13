@@ -101,15 +101,15 @@ struct FuncTypeStorage : public TypeStorage {
 };
 
 struct ArrayTypeStorage : public TypeStorage {
-  ArrayTypeStorage(ArrayRef<int64_t> dims, Type elementType)
-      : dims(dims), elementType(elementType) {}
+  ArrayTypeStorage(ArrayRef<int64_t> dims, Type elementType, Attribute attr)
+      : dims(dims), elementType(elementType), attr(attr) {}
 
   /// The hash key for this storage is a pair of the integer and type params.
-  using KeyTy = std::tuple<ArrayRef<int64_t>, Type>;
+  using KeyTy = std::tuple<ArrayRef<int64_t>, Type, Attribute>;
 
   /// Define the comparison function for the key type.
   bool operator==(const KeyTy &key) const {
-    return key == KeyTy(dims, elementType);
+    return key == KeyTy(dims, elementType, attr);
   }
 
   /// Define a hash function for the key type.
@@ -118,8 +118,9 @@ struct ArrayTypeStorage : public TypeStorage {
   }
 
   /// Define a construction function for the key type.
-  static KeyTy getKey(ArrayRef<int64_t> dims, Type elementType) {
-    return KeyTy(dims, elementType);
+  static KeyTy getKey(ArrayRef<int64_t> dims, Type elementType,
+                      Attribute attr) {
+    return KeyTy(dims, elementType, attr);
   }
 
   /// Define a construction method for creating a new instance of this storage.
@@ -127,12 +128,14 @@ struct ArrayTypeStorage : public TypeStorage {
                                      const KeyTy &key) {
     ArrayRef<int64_t> dims = allocator.copyInto(std::get<0>(key));
     Type elementType = std::get<1>(key);
+    Attribute attr = std::get<2>(key);
     return new (allocator.allocate<ArrayTypeStorage>())
-        ArrayTypeStorage(dims, elementType);
+        ArrayTypeStorage(dims, elementType, attr);
   }
 
   ArrayRef<int64_t> dims;
   Type elementType;
+  Attribute attr;
 };
 
 struct GroupTypeStorage : public TypeStorage {
@@ -202,6 +205,8 @@ public:
   static MemrefType get(MLIRContext *context, ArrayRef<int64_t> shape,
                         Type elementType, ArrayAttr bankedDims,
                         DictionaryAttr portDims) {
+    assert(bankedDims);
+    assert(portDims);
     return Base::get(context, shape, elementType, bankedDims, portDims);
   }
 
@@ -209,6 +214,29 @@ public:
   Type getElementType() { return getImpl()->elementType; }
   ArrayAttr getBankedDims() { return getImpl()->bankedDims; }
   DictionaryAttr getPortAttrs() { return getImpl()->portAttrs; }
+  Details::PortKind getPort() {
+    DictionaryAttr portAttrs = getPortAttrs();
+    auto rd = portAttrs.getNamed("rd");
+    auto wr = portAttrs.getNamed("wr");
+    if (rd && wr)
+      return Details::rw;
+    if (rd)
+      return Details::r;
+    return Details::w;
+  }
+
+  SmallVector<int, 4> getPacking() {
+    SmallVector<int, 4> packedDims;
+    for (size_t i = 0; i < getShape().size(); i++) {
+      bool isBankedDim = false;
+      for (auto dim : getBankedDims())
+        if (i == (size_t)dim.dyn_cast<IntegerAttr>().getInt())
+          isBankedDim = true;
+      if (!isBankedDim)
+        packedDims.push_back(i);
+    }
+    return packedDims;
+  }
 };
 
 /// This class defines !hir.func type in the dialect.
@@ -228,23 +256,28 @@ public:
   ArrayAttr getOutputDelays() { return getImpl()->outputDelays; }
 };
 
-/// This class defines array type which is only accessible inside hir.interface.
+/// This class defines array type which is only accessible inside
+/// hir.interface.
 class ArrayType
     : public Type::TypeBase<ArrayType, Type, Details::ArrayTypeStorage> {
 public:
   using Base::Base;
 
   static StringRef getKeyword() { return "array"; }
+
   static ArrayType get(MLIRContext *context, ArrayRef<int64_t> dims,
-                       Type elementType) {
-    return Base::get(context, dims, elementType);
+                       Type elementType, Attribute attr) {
+    return Base::get(context, dims, elementType, attr);
   }
+
   ArrayRef<int64_t> dims;
   Type getElementType() { return getImpl()->elementType; }
   ArrayRef<int64_t> getDimensions() { return getImpl()->dims; }
+  Attribute getAttribute() { return getImpl()->attr; }
 };
 
-/// This class defines group type which is only accessible inside hir.interface.
+/// This class defines group type which is only accessible inside
+/// hir.interface.
 class GroupType
     : public Type::TypeBase<GroupType, Type, Details::GroupTypeStorage> {
 public:

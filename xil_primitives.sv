@@ -1,7 +1,8 @@
 //Block ram True-Dual-Port, Read-First.
 `ifndef HIR_XIL_PRIMITIVES
 `define HIR_XIL_PRIMITIVES
-module bram_tdp_rf_rf#(SIZE=1024,WIDTH=256) (clka,clkb,ena,enb,wea,web,addra,addrb,dia,dib,doa,dob);
+
+module bram_tdp_rf_rf#(SIZE=1024,WIDTH=16) (clka,clkb,ena,enb,wea,web,addra,addrb,dia,dib,doa,dob);
 input wire clka,clkb,ena,enb,wea,web;
 input wire [$clog2(SIZE)-1:0] addra,addrb;
 input wire [WIDTH-1:0] dia,dib;

@@ -1,0 +1,58 @@
+// BEGIN macro definition
+
+
+
+
+// END macro definition
+
+decl A_int: ubit<32>[8][8];
+
+for (let i: ubit<4> = 0..8) {
+  let j: ubit<4> = 0;
+  while (j < i) {
+    decor "#pragma HLS loop_tripcount min=0 max=7 avg=4"
+    let k: ubit<4> = 0;
+    while(k < j) {
+      decor "#pragma HLS loop_tripcount min=0 max=6 avg=2"
+      let A_i_j = A_int[i][j];
+      ---
+      let A_i_k = A_int[i][k];
+      ---
+      let A_k_j = A_int[k][j];
+      ---
+      A_int[i][j] := A_i_j - A_i_k * A_k_j;
+
+      // Update loop counter
+      k := k + 1;
+    }
+    ---
+    let A_i_j = A_int[i][j];
+    ---
+    let A_j_j = A_int[j][j];
+    ---
+    A_int[i][j] := A_i_j / A_j_j;
+
+    // Update loop counter
+    j := j + 1;
+  }
+  ---
+  j := i;
+  while (j < 8) {
+    decor "#pragma HLS loop_tripcount min=1 max=8 avg=4"
+    let k: ubit<4> = 0;
+    while (k < i) {
+      decor "#pragma HLS loop_tripcount min=0 max=7 avg=2"
+      let A_i_j = A_int[i][j];
+      ---
+      let A_i_k = A_int[i][k];
+      ---
+      let A_k_j = A_int[k][j];
+      ---
+      A_int[i][j] := A_i_j - A_i_k * A_k_j;
+      // Update loop counter
+      k := k + 1;
+    }
+    // Update loop counter
+    j := j + 1;
+  }
+}

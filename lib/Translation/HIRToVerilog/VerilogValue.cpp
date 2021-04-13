@@ -7,8 +7,6 @@ static bool isIntegerType(Type type) {
     return true;
   if (type.isa<hir::ConstType>())
     return true;
-  if (auto wireType = type.dyn_cast<WireType>())
-    return isIntegerType(wireType.getElementType());
   return false;
 }
 
@@ -423,27 +421,6 @@ unsigned VerilogValue::getBitWidth() const {
 }
 bool VerilogValue::isIntegerType() const { return ::isIntegerType(type); }
 bool VerilogValue::isFloatType() const { return type.isa<FloatType>(); }
-string VerilogValue::strWireDecl() const {
-  assert(initialized);
-  assert(name != "");
-  assert(isSimpleType());
-  if (auto wireType = type.dyn_cast<hir::WireType>()) {
-    auto shape = wireType.getShape();
-    auto elementType = wireType.getElementType();
-    auto elementWidthStr =
-        to_string(helper::getBitWidth(elementType) - 1) + ":0";
-    string distDimsStr = "";
-    for (auto dim : shape) {
-      distDimsStr += "[" + to_string(dim - 1) + ":0]";
-    }
-    return "[" + elementWidthStr + "] " + strWire() + distDimsStr;
-  }
-  // If not wire type.
-  string out;
-  if (getBitWidth() > 1)
-    out += "[" + to_string(getBitWidth() - 1) + ":0] ";
-  return out + strWire();
-}
 
 string VerilogValue::strConstOrError(int n) const {
   if (isIntegerConst()) {
@@ -512,6 +489,71 @@ string VerilogValue::strMemrefArgDecl() {
   return out;
 }
 
+bool isModuleOutput(Attribute attr) {
+  if (attr) {
+    assert(attr.isa<StringAttr>());
+    StringRef permission = attr.dyn_cast<StringAttr>().getValue();
+    if (permission == "send")
+      return true;
+  }
+  return false;
+}
+
+string VerilogValue::strGroupArgDecl() {
+  string out;
+  GroupType groupTy = type.dyn_cast<GroupType>();
+  assert(groupTy.getElementTypes().size() ==
+         1); // supports only one element inside group.
+  Type elementTy = groupTy.getElementTypes()[0];
+  Attribute attr = groupTy.getAttributes()[0];
+
+  assert(elementTy.isa<IntegerType>() || elementTy.isa<FloatType>() ||
+         elementTy.isa<hir::TimeType>());
+  int width = helper::getBitWidth(elementTy);
+
+  // Print input/output depending on the attribute.
+  if (isModuleOutput(attr))
+    out += "output wire ";
+  else
+    out += "input wire ";
+
+  // Print width of the wire.
+  if (width > 1)
+    out += "[" + to_string(width - 1) + ":0] ";
+
+  // Print the wire name.
+  return out + strWire();
+  return out;
+}
+
+string VerilogValue::strArrayArgDecl() {
+  string out;
+  ArrayType arrayTy = type.dyn_cast<ArrayType>();
+
+  Type elementTy = arrayTy.getElementType();
+  assert(elementTy.isa<IntegerType>() || elementTy.isa<FloatType>());
+  auto shape = arrayTy.getDimensions();
+  Attribute attr = arrayTy.getAttribute();
+  int width = helper::getBitWidth(elementTy);
+
+  // Print input/output depending on the attribute.
+  if (isModuleOutput(attr))
+    out += "output wire";
+  else
+    out += "input wire";
+
+  // Print width of the wire.
+  if (width > 1)
+    out += "[" + to_string(width - 1) + ":0] ";
+
+  out += strWire();
+
+  for (auto dim : shape)
+    out += "[" + to_string(dim) + "]";
+
+  return out;
+}
+
 string VerilogValue::strMemrefInstDecl() const {
   string out_decls;
   MemrefType memrefTy = type.dyn_cast<MemrefType>();
@@ -542,11 +584,11 @@ string VerilogValue::strMemrefInstDecl() const {
 
 Type VerilogValue::getType() { return type; }
 
-ArrayRef<unsigned> VerilogValue::getShape() const {
+ArrayRef<int64_t> VerilogValue::getShape() const {
   assert(type.isa<MemrefType>());
   return type.dyn_cast<MemrefType>().getShape();
 }
-ArrayRef<unsigned> VerilogValue::getPacking() const {
+SmallVector<int, 4> VerilogValue::getPacking() const {
   assert(type.isa<MemrefType>());
   return type.dyn_cast<MemrefType>().getPacking();
 }
@@ -570,6 +612,7 @@ string VerilogValue::strWire() const {
   }
   return name;
 }
+
 bool VerilogValue::isSimpleType() const {
   if (isIntegerType() || isFloatType())
     return true;
@@ -577,6 +620,7 @@ bool VerilogValue::isSimpleType() const {
     return true;
   return false;
 }
+
 string VerilogValue::strWireValid() { return name + "_valid"; }
 string VerilogValue::strWireInput(unsigned idx) {
   return strWireInput() + "[" + to_string(idx) + "]";
@@ -584,7 +628,20 @@ string VerilogValue::strWireInput(unsigned idx) {
 string VerilogValue::strDelayedWire() const { return name + "delay"; }
 string VerilogValue::strDelayedWire(unsigned delay) {
   updateMaxDelay(delay);
-  return strDelayedWire() + "[" + to_string(delay) + "]";
+  if (delay > 0)
+    return strDelayedWire() + "[" + to_string(delay) + "]";
+  return strWire();
+}
+
+string VerilogValue::strWireDecl() const {
+  assert(initialized);
+  assert(name != "");
+  assert(isSimpleType());
+  // If not wire type.
+  string out;
+  if (getBitWidth() > 1)
+    out += "[" + to_string(getBitWidth() - 1) + ":0] ";
+  return out + strWire();
 }
 
 string VerilogValue::strMemrefAddr() const { return name + "_addr"; }

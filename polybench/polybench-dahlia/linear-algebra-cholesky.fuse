@@ -1,0 +1,61 @@
+import c++("math.h")
+       vivado("math.h")
+       futil("primitives/bitnum/math.futil") {
+  def sqrt(in: ubit<32>): ubit<32>;
+}
+
+decl A_int: ubit<32>[8][8];
+
+for (let i: ubit<4> = 0..8) {
+  // j < i
+  let j: ubit<4> = 0 ;
+  while(j < i) {
+    decor "#pragma HLS loop_tripcount min=0 max=7 avg=4"
+    let k: ubit<4> = 0;
+    while(k < j) {
+      decor "#pragma HLS loop_tripcount min=0 max=6 avg=2"
+      let A_i_j = A_int[i][j];
+      ---
+      let A_i_k = A_int[i][k];
+      ---
+      let A_j_k = A_int[j][k];
+      ---
+      A_int[i][j] := A_i_j - A_i_k * A_j_k;
+      // Update loop counter
+      k := k + 1;
+    }
+    ---
+    let A_j_j = A_int[j][j];
+    ---
+    let A_i_j = A_int[i][j];
+    ---
+    if (A_j_j != 0) {
+      A_int[i][j] := A_i_j / A_j_j;
+    } else {
+      A_int[i][j] := 0;
+    }
+
+    // Update loop counter
+    j := j + 1;
+  }
+
+  ---
+  // i==j case
+  let k: ubit<4> = 0;
+  while(k < i) {
+    decor "#pragma HLS loop_tripcount min=0 max=7 avg=4"
+    let A_i_k = A_int[i][k];
+    ---
+    let A_i_i = A_int[i][i];
+    ---
+    A_int[i][i] := A_i_i - A_i_k * A_i_k;
+
+    // Update loop counter
+    k := k + 1;
+  }
+  ---
+  let A_i_i = A_int[i][i];
+  ---
+  let sq = sqrt(A_i_i);
+  A_int[i][i] := sq;
+}

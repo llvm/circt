@@ -1,0 +1,247 @@
+{
+  "alpha_int0": {
+    "data": [
+      87
+    ],
+    "format": {
+      "numeric_type": "bitnum",
+      "is_signed": false,
+      "width": 32
+    }
+  },
+  "beta_int0": {
+    "data": [
+      35
+    ],
+    "format": {
+      "numeric_type": "bitnum",
+      "is_signed": false,
+      "width": 32
+    }
+  },
+  "A_int0_0": {
+    "data": [
+      [
+        10,
+        54,
+        98,
+        62,
+        83,
+        60,
+        97,
+        78
+      ],
+      [
+        45,
+        16,
+        2,
+        38,
+        24,
+        84,
+        15,
+        62
+      ],
+      [
+        34,
+        5,
+        13,
+        12,
+        42,
+        62,
+        26,
+        75
+      ],
+      [
+        84,
+        98,
+        41,
+        90,
+        93,
+        51,
+        88,
+        68
+      ],
+      [
+        84,
+        8,
+        41,
+        64,
+        19,
+        82,
+        30,
+        54
+      ],
+      [
+        78,
+        16,
+        90,
+        13,
+        63,
+        41,
+        14,
+        58
+      ],
+      [
+        28,
+        13,
+        39,
+        8,
+        99,
+        80,
+        93,
+        39
+      ],
+      [
+        13,
+        56,
+        62,
+        97,
+        67,
+        49,
+        51,
+        56
+      ]
+    ],
+    "format": {
+      "numeric_type": "bitnum",
+      "is_signed": false,
+      "width": 32
+    }
+  },
+  "u1_int0": {
+    "data": [
+      3,
+      22,
+      65,
+      5,
+      82,
+      50,
+      43,
+      81
+    ],
+    "format": {
+      "numeric_type": "bitnum",
+      "is_signed": false,
+      "width": 32
+    }
+  },
+  "v1_int0": {
+    "data": [
+      28,
+      20,
+      89,
+      49,
+      66,
+      27,
+      49,
+      14
+    ],
+    "format": {
+      "numeric_type": "bitnum",
+      "is_signed": false,
+      "width": 32
+    }
+  },
+  "u2_int0": {
+    "data": [
+      19,
+      15,
+      81,
+      75,
+      66,
+      70,
+      66,
+      83
+    ],
+    "format": {
+      "numeric_type": "bitnum",
+      "is_signed": false,
+      "width": 32
+    }
+  },
+  "v2_int0": {
+    "data": [
+      56,
+      35,
+      85,
+      77,
+      45,
+      72,
+      62,
+      89
+    ],
+    "format": {
+      "numeric_type": "bitnum",
+      "is_signed": false,
+      "width": 32
+    }
+  },
+  "w_int0": {
+    "data": [
+      47,
+      53,
+      64,
+      85,
+      46,
+      34,
+      76,
+      3
+    ],
+    "format": {
+      "numeric_type": "bitnum",
+      "is_signed": false,
+      "width": 32
+    }
+  },
+  "x_int0": {
+    "data": [
+      27,
+      96,
+      23,
+      71,
+      64,
+      20,
+      3,
+      87
+    ],
+    "format": {
+      "numeric_type": "bitnum",
+      "is_signed": false,
+      "width": 32
+    }
+  },
+  "y_int0": {
+    "data": [
+      47,
+      14,
+      34,
+      8,
+      26,
+      40,
+      77,
+      69
+    ],
+    "format": {
+      "numeric_type": "bitnum",
+      "is_signed": false,
+      "width": 32
+    }
+  },
+  "z_int0": {
+    "data": [
+      53,
+      45,
+      39,
+      21,
+      2,
+      51,
+      72,
+      88
+    ],
+    "format": {
+      "numeric_type": "bitnum",
+      "is_signed": false,
+      "width": 32
+    }
+  }
+}

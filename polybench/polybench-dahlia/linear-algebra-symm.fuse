@@ -1,0 +1,39 @@
+// BEGIN macro definition
+
+
+
+
+
+
+// END macro definition
+
+decl alpha_int: ubit<32>[1];
+decl beta_int: ubit<32>[1];
+decl C_int: ubit<32>[8][12];
+decl A_int: ubit<32>[8][8];
+decl B_int: ubit<32>[8][12];
+
+let temp2: ubit<32> = 0;
+
+for (let i: ubit<4> = 0..8) {
+  for (let j: ubit<4> = 0..12) {
+    temp2 := 0;
+    // This is a 'for' loop in the original source
+    let k: ubit<4> = 0;
+    while (k < i) {
+      decor "#pragma HLS loop_tripcount min=0 max=7 avg=4"
+      let C_k_j: ubit<32> = C_int[k][j];
+      ---
+      C_int[k][j] := alpha_int[0] * B_int[i][j] * A_int[i][k] + C_k_j;
+      ---
+      temp2 := temp2 + B_int[k][j] * A_int[i][k];
+
+      // Update loop counter
+      k := k + 1;
+    }
+    ---
+    let C_i_j: ubit<32> = C_int[i][j];
+    ---
+    C_int[i][j] := beta_int[0] * C_i_j + alpha_int[0]*B_int[i][j] * A_int[i][i] + alpha_int[0] * temp2;
+  }
+}

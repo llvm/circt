@@ -76,7 +76,10 @@ private:
   void printIfOp(IfOp op, unsigned indentAmount = 0);
   void printForOp(ForOp op, unsigned indentAmount = 0);
   void printUnrollForOp(UnrollForOp op, unsigned indentAmount = 0);
-  void printLoadOp(LoadOp op, unsigned indentAmount = 0);
+  void printLoadOp(hir::LoadOp op, unsigned indentAmount = 0);
+  void printStoreOp(hir::StoreOp op, unsigned indentAmount = 0);
+  void printSendOp(hir::SendOp op, unsigned indentAmount = 0);
+  void printRecvOp(hir::RecvOp op, unsigned indentAmount = 0);
   void printEQOp(hir::EQOp op, unsigned indentAmount = 0);
   void printNEQOp(hir::NEQOp op, unsigned indentAmount = 0);
   void printGTOp(hir::GTOp op, unsigned indentAmount = 0);
@@ -85,10 +88,9 @@ private:
   void printOrOp(hir::OrOp op, unsigned indentAmount = 0);
   void printAddOp(hir::AddOp op, unsigned indentAmount = 0);
   void printSubtractOp(hir::SubtractOp op, unsigned indentAmount = 0);
-  void printStoreOp(StoreOp op, unsigned indentAmount = 0);
   void printReturnOp(hir::ReturnOp op, unsigned indentAmount = 0);
   void printYieldOp(hir::YieldOp op, unsigned indentAmount = 0);
-  void printAllocOp(hir::AllocOp op, unsigned indentAmount = 0);
+  void printAllocOp(hir::AllocaOp op, unsigned indentAmount = 0);
   void printDelayOp(hir::DelayOp op, unsigned indentAmount = 0);
   void printCallOp(hir::CallOp op, unsigned indentAmount = 0);
 
@@ -126,12 +128,77 @@ VerilogPrinter::registerResults(ResultRange results) {
   return out;
 }
 
-void VerilogPrinter::printLoadOp(LoadOp op, unsigned indentAmount) {
+void VerilogPrinter::printSendOp(hir::SendOp op, unsigned indentAmount) {
+  Value value = op.value();
+  VerilogValue vValue = verilogMapper.get(value);
+  Value var = op.var();
+  VerilogValue vVar = verilogMapper.get(var);
+  SmallVector<VerilogValue *, 4> addr = convertToVerilog(op.addr());
+
+  Type varTy = var.getType();
+
+  assert(varTy.isa<GroupType>() || varTy.isa<ArrayType>());
+
+  if (varTy.isa<GroupType>()) {
+    hir::GroupType groupTy = varTy.dyn_cast<hir::GroupType>();
+    auto elementTypes = groupTy.getElementTypes();
+    assert(elementTypes.size() == 1);
+    assert(addr.size() == 1);
+    VerilogValue *vIndex = addr[0];
+    assert(vIndex->isIntegerConst());
+    assert(vIndex->getIntegerConst() == 0);
+    outBuffer << "assign " << vVar.strWire() << " = " << vValue.strWire();
+  } else if (varTy.isa<ArrayType>()) {
+    outBuffer << "assign " << vVar.strWire();
+    for (VerilogValue *idx : addr) {
+      outBuffer << "[" << idx->strConstOrWire() << "]";
+    }
+    outBuffer << " = " << vValue.strWire();
+  }
+  outBuffer << ";\n";
+}
+
+void VerilogPrinter::printRecvOp(hir::RecvOp op, unsigned indentAmount) {
+  Value result = op.res();
+  verilogMapper.insert(result,
+                       VerilogValue(result, "v" + to_string(newValueNumber())));
+  VerilogValue *vResult = verilogMapper.getMutable(result);
+
+  SmallVector<VerilogValue *, 4> addr = convertToVerilog(op.addr());
+  Value var = op.var();
+  Type varTy = var.getType();
+  VerilogValue vVar = verilogMapper.get(var);
+  assert(varTy.isa<GroupType>() || varTy.isa<ArrayType>());
+  if (varTy.isa<GroupType>()) {
+    hir::GroupType groupTy = varTy.dyn_cast<hir::GroupType>();
+    auto elementTypes = groupTy.getElementTypes();
+    assert(elementTypes.size() == 1);
+    assert(addr.size() == 1);
+    VerilogValue *vIndex = addr[0];
+    assert(vIndex->isIntegerConst());
+    assert(vIndex->getIntegerConst() == 0);
+    outBuffer << "wire " << vResult->strWireDecl() << " = "
+              << vVar.strConstOrWire();
+  } else if (varTy.isa<ArrayType>()) {
+    outBuffer << "wire " << vResult->strWireDecl() << " = " << vVar.strWire();
+    for (VerilogValue *idx : addr) {
+      outBuffer << "[" << idx->strConstOrWire() << "]";
+    }
+  }
+  outBuffer << ";\n";
+  if (varTy.isa<GroupType>()) {
+    Type elementTy = varTy.dyn_cast<GroupType>().getElementTypes()[0];
+    if (elementTy.isa<TimeType>())
+      printTimeOffsets(vResult);
+  }
+}
+
+void VerilogPrinter::printLoadOp(hir::LoadOp op, unsigned indentAmount) {
   Value result = op.res();
   VerilogValue vResult(result, "v" + to_string(newValueNumber()));
   verilogMapper.insert(result, vResult);
 
-  auto addr = convertToVerilog(op.addr());
+  SmallVector<VerilogValue *, 4> addr = convertToVerilog(op.addr());
   Value mem = op.mem();
   auto shape = mem.getType().dyn_cast<hir::MemrefType>().getShape();
   auto packing = mem.getType().dyn_cast<hir::MemrefType>().getPacking();
@@ -158,9 +225,9 @@ void VerilogPrinter::printLoadOp(LoadOp op, unsigned indentAmount) {
               << " = {";
     for (int i = packing.size() - 1; i >= 0; i--) {
       auto p = addr.size() - 1 - packing[i];
-      auto addrI = addr[p];
+      auto *addrI = addr[p];
       auto dimI = shape[p];
-      if (i < packing.size() - 1)
+      if (i < (int)packing.size() - 1)
         outBuffer << ", ";
       outBuffer << addrI->strConstOrWire(ceil(log2(dimI)));
     }
@@ -179,7 +246,8 @@ void VerilogPrinter::printLoadOp(LoadOp op, unsigned indentAmount) {
 void VerilogPrinter::printCallOp(hir::CallOp op, unsigned indentAmount) {
   ResultRange results = op.res();
   auto vResults = registerResults(results);
-  StringRef callee = op.callee();
+  assert(op.callee().hasValue()); // don't yet support callee with var name.
+  StringRef callee = op.callee().getValue();
   OperandRange operands = op.operands();
   Value tstart = op.tstart();
   VerilogValue *vTstart = verilogMapper.getMutable(tstart);
@@ -209,13 +277,13 @@ void VerilogPrinter::printCallOp(hir::CallOp op, unsigned indentAmount) {
   for (Value operand : operands) {
     if (auto memrefType = operand.getType().dyn_cast<MemrefType>()) {
       Details::PortKind port = memrefType.getPort();
-      VerilogValue *v_operand = verilogMapper.getMutable(operand);
+      VerilogValue *vOperand = verilogMapper.getMutable(operand);
       if (memrefType.getPacking().size() > 0) {
         if (!firstArg) {
           outBuffer << ",\n";
         }
         firstArg = false;
-        outBuffer << v_operand->strMemrefAddrInputIf(v_operand->maxNumAccess());
+        outBuffer << vOperand->strMemrefAddrInputIf(vOperand->maxNumAccess());
       }
       if (port == Details::PortKind::r || port == Details::PortKind::rw) {
         if (!firstArg) {
@@ -223,59 +291,56 @@ void VerilogPrinter::printCallOp(hir::CallOp op, unsigned indentAmount) {
         }
         firstArg = false;
         if (memrefType.getPacking().size() > 0) {
-          outBuffer << v_operand->strMemrefRdEnInputIf(
-              v_operand->maxNumReads());
+          outBuffer << vOperand->strMemrefRdEnInputIf(vOperand->maxNumReads());
         } else {
           outBuffer << "/*Ignored*/";
         }
-        outBuffer << ",\n" << v_operand->strMemrefRdData();
+        outBuffer << ",\n" << vOperand->strMemrefRdData();
       }
       if (port == Details::PortKind::w || port == Details::PortKind::rw) {
         if (!firstArg) {
           outBuffer << ",\n";
         }
         firstArg = false;
-        outBuffer << v_operand->strMemrefWrEnInputIf(v_operand->maxNumWrites())
+        outBuffer << vOperand->strMemrefWrEnInputIf(vOperand->maxNumWrites())
                   << ",\n"
-                  << v_operand->strMemrefWrDataInputIf(
-                         v_operand->maxNumWrites());
+                  << vOperand->strMemrefWrDataInputIf(vOperand->maxNumWrites());
         strEpilogue +=
             "assign " +
-            v_operand->strMemrefWrDataValidIf(v_operand->maxNumAccess()) +
-            " = " + v_operand->strMemrefWrEnInputIf(v_operand->maxNumWrites()) +
-            ";\n";
+            vOperand->strMemrefWrDataValidIf(vOperand->maxNumAccess()) + " = " +
+            vOperand->strMemrefWrEnInputIf(vOperand->maxNumWrites()) + ";\n";
       }
 
       if (memrefType.getPacking().size() > 0) {
         strEpilogue +=
             "assign " +
-            v_operand->strMemrefAddrValidIf(v_operand->maxNumAccess()) + " = ";
+            vOperand->strMemrefAddrValidIf(vOperand->maxNumAccess()) + " = ";
         if (port == Details::PortKind::rw) {
           strEpilogue +=
-              v_operand->strMemrefRdEnInputIf(v_operand->maxNumReads()) + "|" +
-              v_operand->strMemrefWrEnInputIf(v_operand->maxNumWrites());
+              vOperand->strMemrefRdEnInputIf(vOperand->maxNumReads()) + "|" +
+              vOperand->strMemrefWrEnInputIf(vOperand->maxNumWrites());
         } else if (port == Details::PortKind::r) {
           strEpilogue +=
-              v_operand->strMemrefRdEnInputIf(v_operand->maxNumReads());
+              vOperand->strMemrefRdEnInputIf(vOperand->maxNumReads());
         } else {
           strEpilogue +=
-              v_operand->strMemrefWrEnInputIf(v_operand->maxNumWrites());
+              vOperand->strMemrefWrEnInputIf(vOperand->maxNumWrites());
         }
         strEpilogue += ";\n";
       }
       if (port == Details::PortKind::r || port == Details::PortKind::rw) {
-        v_operand->incMemrefNumReads();
+        vOperand->incMemrefNumReads();
       }
       if (port == Details::PortKind::w || port == Details::PortKind::rw) {
-        v_operand->incMemrefNumWrites();
+        vOperand->incMemrefNumWrites();
       }
     } else {
       if (!firstArg) {
         outBuffer << ",\n";
       }
       firstArg = false;
-      VerilogValue *v_operand = verilogMapper.getMutable(operand);
-      outBuffer << v_operand->strConstOrWire();
+      VerilogValue *vOperand = verilogMapper.getMutable(operand);
+      outBuffer << vOperand->strConstOrWire();
     }
   }
   if (!firstArg) {
@@ -335,7 +400,7 @@ void VerilogPrinter::printDelayOp(hir::DelayOp op, unsigned indentAmount) {
     printTimeOffsets(vResult);
 }
 
-void VerilogPrinter::printAllocOp(hir::AllocOp op, unsigned indentAmount) {
+void VerilogPrinter::printAllocOp(hir::AllocaOp op, unsigned indentAmount) {
   Operation::result_range result = op.res();
   if (result[0].getType().isa<MemrefType>()) {
     if (result.size() == 1) {
@@ -380,7 +445,7 @@ void VerilogPrinter::printAllocOp(hir::AllocOp op, unsigned indentAmount) {
   }
 }
 
-void VerilogPrinter::printStoreOp(StoreOp op, unsigned indentAmount) {
+void VerilogPrinter::printStoreOp(hir::StoreOp op, unsigned indentAmount) {
   auto addr = convertToVerilog(op.addr());
   Value mem = op.mem();
   Value value = op.value();
@@ -680,7 +745,10 @@ void VerilogPrinter::printConstantOp(hir::ConstantOp op,
   auto result = op.res();
   unsigned id_result = newValueNumber();
   VerilogValue vResult(result, "v" + to_string(id_result));
-  int value = op.value();
+
+  // assume that the attribute is integer.
+  int value = op.value().dyn_cast<IntegerAttr>().getInt();
+
   vResult.setIntegerConst(value);
   verilogMapper.insert(result, vResult);
 
@@ -872,8 +940,8 @@ void VerilogPrinter::printOperation(Operation *inst, unsigned indentAmount) {
     outBuffer << "\n//" << formattedOp(inst, "CallOp");
     return printCallOp(op, indentAmount);
   }
-  if (auto op = dyn_cast<hir::AllocOp>(inst)) {
-    outBuffer << "\n//" << formattedOp(inst, "AllocOp");
+  if (auto op = dyn_cast<hir::AllocaOp>(inst)) {
+    outBuffer << "\n//" << formattedOp(inst, "AllocaOp");
     return printAllocOp(op, indentAmount);
   }
   if (auto op = dyn_cast<hir::DelayOp>(inst)) {
@@ -904,14 +972,16 @@ void VerilogPrinter::printOperation(Operation *inst, unsigned indentAmount) {
     outBuffer << "\n//" << formattedOp(inst, "StoreOp");
     return printStoreOp(op, indentAmount);
   }
-  if (auto op = dyn_cast<hir::WireReadOp>(inst)) {
-    outBuffer << "\n//" << formattedOp(inst, "WireReadOp");
-    return printWireReadOp(op, indentAmount);
+
+  if (auto op = dyn_cast<hir::SendOp>(inst)) {
+    outBuffer << "\n//" << formattedOp(inst, "SendOp");
+    return printSendOp(op, indentAmount);
   }
-  if (auto op = dyn_cast<hir::WireWriteOp>(inst)) {
-    outBuffer << "\n//" << formattedOp(inst, "WireWriteOp");
-    return printWireWriteOp(op, indentAmount);
+  if (auto op = dyn_cast<hir::RecvOp>(inst)) {
+    outBuffer << "\n//" << formattedOp(inst, "RecvOp");
+    return printRecvOp(op, indentAmount);
   }
+
   if (auto op = dyn_cast<hir::EQOp>(inst)) {
     outBuffer << "\n//" << formattedOp(inst, "EQOp");
     return printEQOp(op, indentAmount);
@@ -1009,9 +1079,19 @@ void VerilogPrinter::printFuncOp(hir::FuncOp op, unsigned indentAmount) {
       outBuffer << "input wire" << vIntArg.strWireDecl();
     } else if (argType.isa<MemrefType>()) {
       unsigned idMemrefArg = newValueNumber();
-      auto vMemref_arg = VerilogValue(arg, "v" + to_string(idMemrefArg));
-      verilogMapper.insert(arg, vMemref_arg);
-      outBuffer << vMemref_arg.strMemrefArgDecl();
+      auto vMemrefArg = VerilogValue(arg, "v" + to_string(idMemrefArg));
+      verilogMapper.insert(arg, vMemrefArg);
+      outBuffer << vMemrefArg.strMemrefArgDecl();
+    } else if (argType.isa<hir::GroupType>()) {
+      unsigned idGroupArg = newValueNumber();
+      auto vGroupArg = VerilogValue(arg, "v" + to_string(idGroupArg));
+      verilogMapper.insert(arg, vGroupArg);
+      outBuffer << vGroupArg.strGroupArgDecl();
+    } else if (argType.isa<hir::ArrayType>()) {
+      unsigned idArrayArg = newValueNumber();
+      auto vArrayArg = VerilogValue(arg, "v" + to_string(idArrayArg));
+      verilogMapper.insert(arg, vArrayArg);
+      outBuffer << vArrayArg.strArrayArgDecl();
     } else {
       emitError(op.getLoc(), "Unsupported argument type!");
       assert(false);
@@ -1099,24 +1179,11 @@ void VerilogPrinter::printBody(Block &block, unsigned indentAmount) {
 
   regionEnd();
 }
-
-void VerilogPrinter::printModule(ModuleOp module) {
-  outBuffer << "`default_nettype none\n";
-  outBuffer << "`include \"helper.sv\"\n";
-  WalkResult result = module.walk([this](hir::FuncOp funcOp) -> WalkResult {
-    fprintf(stderr, "FuncOp found\n");
-    fflush(stderr);
-    printFuncOp(funcOp);
-    return WalkResult::advance();
-  });
-  // if printing of a single operation failed, fail the whole translation.
-}
 } // namespace.
 
 LogicalResult hir::printVerilog(ModuleOp module, raw_ostream &os) {
   llvm::formatted_raw_ostream out(os);
   out << "`default_nettype none\n";
-  out << "`include \"helper.sv\"\n";
   WalkResult result = module.walk([&out](hir::FuncOp funcOp) -> WalkResult {
     VerilogPrinter printer(out);
     fprintf(stderr, "FuncOp found\n");

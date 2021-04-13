@@ -369,7 +369,6 @@ static ParseResult parseFuncSignature(
         inputDelays.push_back(
             helper::getIntegerAttr(parser.getBuilder().getContext(), 64, 0));
       }
-
       NamedAttrList blankAttrs;
       argAttrs.push_back(blankAttrs);
 

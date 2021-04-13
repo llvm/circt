@@ -1,0 +1,60 @@
+// BEGIN macro definition
+
+
+
+
+
+
+
+
+
+
+
+
+// END macro definition
+
+decl E_int: ubit<32>[8][8];
+decl A_int: ubit<32>[8][8];
+decl B_int: ubit<32>[8][8];
+decl F_int: ubit<32>[8][8];
+decl C_int: ubit<32>[8][8];
+decl D_int: ubit<32>[8][8];
+decl G_int: ubit<32>[8][8];
+
+for (let i: ubit<4> = 0..8) {
+  for (let j: ubit<4> = 0..8) {
+    E_int[i][j] := (0 as ubit<32>);
+    ---
+    for (let k: ubit<4> = 0..8) {
+      let v: ubit<32> = A_int[i][k] * B_int[k][j];
+    } combine {
+      E_int[i][j] += v;
+    }
+  }
+}
+
+for (let i: ubit<4> = 0..8) {
+  for (let j: ubit<4> = 0..8) {
+    F_int[i][j] := (0 as ubit<32>);
+    ---
+    for (let k: ubit<4> = 0..8) {
+      let v: ubit<32> = C_int[i][k] * D_int[k][j];
+    } combine {
+      F_int[i][j] += v;
+    }
+  }
+}
+
+---
+
+for (let i: ubit<4> = 0..8) {
+  for (let j: ubit<4> = 0..8) {
+    G_int[i][j] := (0 as ubit<32>);
+    ---
+    for (let k: ubit<4> = 0..8) {
+      let v: ubit<32> = E_int[i][k] * F_int[k][j];
+    } combine {
+      G_int[i][j] += v;
+    }
+  }
+}

@@ -1,0 +1,82 @@
+import c++("math.h")
+       vivado("math.h")
+       futil("primitives/bitnum/math.futil") {
+  def sqrt(in: ubit<32>): ubit<32>;
+}
+
+decl A_int: ubit<32>[8][12];
+decl R_int: ubit<32>[12][12];
+decl Q_int: ubit<32>[8][12];
+
+let A: ubit<32>[8][12];
+let R: ubit<32>[12][12];
+let Q: ubit<32>[8][12];
+
+view A_sh = A[_: bank 1][_: bank 1];
+view Q_sh = Q[_: bank 1][_: bank 1];
+view R_sh = R[_: bank 1][_: bank 1];
+
+for (let init0: ubit<4> = 0..12) {
+  for (let init1: ubit<4> = 0..12) {
+    R_sh[init0][init1] := R_int[init0][init1];
+  }
+}
+
+for (let i0: ubit<4> = 0..8) {
+  for (let j0: ubit<4> = 0..12) {
+    A_sh[i0][j0] := A_int[i0][j0];
+    Q_sh[i0][j0] := Q_int[i0][j0];
+  }
+}
+
+---
+
+for (let k: ubit<4> = 0..12) {
+  let nrm: ubit<32> = 0;
+
+  for (let i: ubit<4> = 0..8) {
+    let A_i_k = A[i][k];
+  } combine {
+    nrm += A_i_k * A_i_k;
+  }
+
+  let sq = sqrt(nrm);
+  R[k][k] := sq;
+  ---
+  for (let i: ubit<4> = 0..8) {
+    Q[i][k] := A[i][k] / R[k][k];
+  }
+  ---
+  let j: ubit<4> = k + (1 as ubit<4>);
+  while (j < 12) {
+    decor "#pragma HLS loop_tripcount min=0 max=11 avg=6"
+    R[k][j] := 0;
+    ---
+    for (let i: ubit<4> = 0..8) {
+      let v: ubit<32> = Q[i][k] * A[i][j];
+    } combine {
+      R[k][j] += v;
+    }
+    ---
+    for (let i: ubit<4> = 0..8) {
+      let A_i_j = A[i][j];
+      ---
+      A[i][j] := A_i_j - Q[i][k] * R[k][j];
+    }
+    // Update loop counter
+    j := j + (1 as ubit<4>);
+  }
+}
+---
+for (let init0: ubit<4> = 0..12) {
+  for (let init1: ubit<4> = 0..12) {
+    R_int[init0][init1] := R_sh[init0][init1];
+  }
+}
+
+for (let i0: ubit<4> = 0..8) {
+  for (let j0: ubit<4> = 0..12) {
+    A_int[i0][j0] := A_sh[i0][j0];
+    Q_int[i0][j0] := Q_sh[i0][j0];
+  }
+}

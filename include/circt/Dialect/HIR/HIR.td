@@ -164,18 +164,14 @@ def RecvOp : HIR_Op<"recv", [AttrSizedOperandSegments]> {
 def SelectOp : HIR_Op<"select", [NoSideEffect]> {
   let summary = "Select a select of the interface.";
   let description = [{
-    This Op reads from a memory interface. 
+    This Op selects from hir.array or hir.group. 
   }];
 
-  let arguments = (ins AnyType:$interface, 
-      Variadic<AnyType>:$varAddrs,
-      ArrayAttr : $constAddrs);
+  let arguments = (ins AnyType:$var, 
+      Variadic<AnyType>:$addr);
   let results = (outs AnyType: $res);
-  let assemblyFormat = [{$interface
-  custom<OptionalArrayAccess>($varAddrs,$constAddrs) attr-dict 
-    `:` type($interface)
-    custom<OptionalArrayAccessTypes>(ref($constAddrs),type($varAddrs)) 
-    `->` type($res) }];
+  let assemblyFormat = [{$var
+  `[` $addr `]` attr-dict `:` type($var) `[` type($addr) `]` `->` type($res) }];
 
   let verifier = [{return verifySelectOp(*this);}];
 }
@@ -425,13 +421,14 @@ def ConstantOp : HIR_Op<"constant" > {
     This Op calls a function/module. 
       Example:
 
-      ```mlir %0 = hir.const 0 at %ti : !hir.val```
+      ```mlir %0 = hir.const 0 : !hir.const```
+      ```mlir %f = hir.const 3.18 : !hir.group<f32>```
   }];
 
-  let arguments = (ins I32Attr:$value);
-  let results = (outs ConstType : $res);
+  let arguments = (ins AnyAttr:$value);
+  let results = (outs AnyType : $res);
 
-  let assemblyFormat = [{ $value attr-dict }];
+  let assemblyFormat = [{ `(` $value `)` attr-dict `:` type($res)}];
 }
 
 def CastOp : HIR_Op<"cast">{

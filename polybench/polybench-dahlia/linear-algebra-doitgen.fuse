@@ -1,0 +1,34 @@
+// BEGIN macro defintions
+
+
+
+
+
+
+
+
+// END macro definitions
+// broken because of compilation bug in Verilator
+
+decl A_int: ubit<32>[8][8][8];
+decl C4_int: ubit<32>[8][8];
+decl sum_int: ubit<32>[8];
+
+for (let r: ubit<4> = 0..8) {
+  for (let q: ubit<4> = 0..8) {
+
+    for (let p: ubit<4> = 0..8) {
+      sum_int[p] := 0;
+      ---
+      for (let s: ubit<4> = 0..8) {
+        let v: ubit<32> = A_int[r][q][s] * C4_int[s][p];
+      } combine {
+        sum_int[p] += v;
+      }
+    }
+    ---
+    for (let p: ubit<4> = 0..8) {
+      A_int[r][q][p] := sum_int[p];
+    }
+  }
+}

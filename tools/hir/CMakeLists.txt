@@ -4,6 +4,8 @@ set(LLVM_LINK_COMPONENTS
 
 add_llvm_tool(hir-builder
   mlir/HIRGen.cpp
+  mlir/EmitExpr.cpp
+  apps/polymageHelpers.cpp
   hir-builder.cpp
 
   ADDITIONAL_HEADER_DIRS

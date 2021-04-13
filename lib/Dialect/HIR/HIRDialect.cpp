@@ -70,28 +70,31 @@ static Type parseMemrefType(DialectAsmParser &parser, MLIRContext *context) {
     hasBankedDims = true;
     loc2 = parser.getCurrentLocation();
     parser.parseAttribute(attr2);
+    if (parser.parseGreater())
+      return Type();
   }
-  if (parser.parseGreater())
-    return Type();
 
   if (hasBankedDims) {
     bankedDims = attr1.dyn_cast<ArrayAttr>();
+    portAttr = attr2.dyn_cast<DictionaryAttr>();
     if (!bankedDims) {
       parser.emitError(loc1, "expected banked dims!");
       return Type();
     }
-    portAttr = attr2.dyn_cast<DictionaryAttr>();
     if (!portAttr) {
       parser.emitError(loc2, "expected port attributes!");
       return Type();
     }
   } else {
     portAttr = attr1.dyn_cast<DictionaryAttr>();
+    bankedDims = ArrayAttr::get(context, SmallVector<Attribute>());
     if (!portAttr) {
       parser.emitError(loc1, "expected port attributes!");
       return Type();
     }
   }
+  assert(bankedDims);
+  assert(portAttr);
   return MemrefType::get(context, shape, elementType, bankedDims, portAttr);
 }
 
@@ -158,15 +161,21 @@ static Type parseOptionalElementType(DialectAsmParser &parser,
     return parseArrayType(parser, context);
 
   Type simpleTy; // non-container types.
-  if (parser.parseType(simpleTy))
-    return Type();
-  if (!isValidElementType(simpleTy))
-    return parser.emitError(locType,
-                            "only integer, float, !hir.time, !hir.memref, "
-                            "group, array and func types "
-                            "are supported inside interface!"),
-           Type();
-  return simpleTy;
+  auto result = parser.parseOptionalType(simpleTy);
+
+  if (result.hasValue()) {
+    if (result.getValue())
+      return parser.emitError(locType, "could not parse type!"), Type();
+    if (!isValidElementType(simpleTy))
+      return parser.emitError(locType,
+                              "only integer, float, !hir.time, !hir.memref, "
+                              "group, array and func types "
+                              "are supported inside interface!"),
+             Type();
+    return simpleTy;
+  }
+
+  return Type();
 }
 
 static std::pair<Type, Attribute>
@@ -176,7 +185,8 @@ parseElementTypeWithOptionalAttr(DialectAsmParser &parser,
   Attribute attr = nullptr;
   elementType = parseOptionalElementType(parser, context);
   if (!elementType) {
-    parser.parseAttribute(attr);
+    if (!parser.parseKeyword("send"))
+      attr = StringAttr::get(context, "send");
     elementType = parseOptionalElementType(parser, context);
   }
   if (!elementType)
@@ -281,7 +291,10 @@ static Type parseInnerGroupType(DialectAsmParser &parser,
 static Type parseInnerArrayType(DialectAsmParser &parser,
                                 MLIRContext *context) {
   SmallVector<int64_t, 4> dims;
+  StringAttr attr;
   Type elementType;
+  if (!parser.parseOptionalKeyword("send"))
+    attr = StringAttr::get(context, "send");
 
   // parse the dimensions.
   if (parser.parseDimensionList(dims, false))
@@ -292,7 +305,7 @@ static Type parseInnerArrayType(DialectAsmParser &parser,
   if (!elementType)
     return Type();
 
-  return ArrayType::get(context, dims, elementType);
+  return ArrayType::get(context, dims, elementType, attr);
 }
 
 void printElementType(Type elementTy, DialectAsmPrinter &printer) {

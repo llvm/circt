@@ -1,0 +1,62 @@
+// BEGIN macro definitions
+
+
+
+
+
+
+
+
+// END macro definitions
+
+decl alpha_int: ubit<32>[1];
+decl beta_int: ubit<32>[1];
+decl C: ubit<32>[12][12];
+decl A_int: ubit<32>[12][8];
+
+let A: ubit<32>[12][8];
+view A_sh = A[_: bank 1][_: bank 1];
+
+for (let i0: ubit<4> = 0..12) {
+  for (let j0: ubit<4> = 0..8) {
+    A_sh[i0][j0] := A_int[i0][j0];
+  }
+}
+
+---
+
+for (let i: ubit<4> = 0..12) {
+  let j: ubit<4> = 0;
+
+  // Originally a for loop
+  while (j <= i) {
+    decor "#pragma HLS loop_tripcount min=1 max=8 avg=4"
+    let C_i_j: ubit<32> = C[i][j];
+    ---
+    C[i][j] := C_i_j * beta_int[0];
+    // Update loop counter
+    j := j + (1 as ubit<4>);
+  }
+  ---
+  let j2: ubit<4> = 0;
+  while (j2 <= i) {
+    decor "#pragma HLS loop_tripcount min=1 max=8 avg=4"
+    for (let k: ubit<4> = 0..8) {
+      let A_i_k: ubit<32> = A[i][k];
+      ---
+      let t = alpha_int[0] * A_i_k * A[j2][k];
+    } combine {
+      C[i][j2] += t;
+    }
+    // Update loop counter
+    j2 := j2 + (1 as ubit<4>);
+  }
+}
+
+---
+
+for (let i0: ubit<4> = 0..12) {
+  for (let j0: ubit<4> = 0..8) {
+    A_int[i0][j0] := A_sh[i0][j0];
+  }
+}

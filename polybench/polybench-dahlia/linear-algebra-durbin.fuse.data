@@ -1,0 +1,53 @@
+{
+  "r_int0": {
+    "data": [
+      80,
+      54,
+      53,
+      85,
+      94,
+      5,
+      3,
+      92
+    ],
+    "format": {
+      "numeric_type": "bitnum",
+      "is_signed": false,
+      "width": 32
+    }
+  },
+  "y_int0": {
+    "data": [
+      67,
+      73,
+      51,
+      45,
+      8,
+      76,
+      24,
+      69
+    ],
+    "format": {
+      "numeric_type": "bitnum",
+      "is_signed": false,
+      "width": 32
+    }
+  },
+  "z_int0": {
+    "data": [
+      29,
+      5,
+      46,
+      35,
+      27,
+      0,
+      0,
+      3
+    ],
+    "format": {
+      "numeric_type": "bitnum",
+      "is_signed": false,
+      "width": 32
+    }
+  }
+}

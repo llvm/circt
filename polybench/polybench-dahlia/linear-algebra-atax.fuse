@@ -1,0 +1,57 @@
+// BEGIN macro definitions
+
+
+
+
+
+
+// END macro definitions
+
+decl A_int: ubit<32>[8][8];
+decl x_int: ubit<32>[8];
+decl y_int: ubit<32>[8];
+decl tmp_int: ubit<32>[8];
+
+let A: ubit<32>[8][8];
+let x: ubit<32>[8];
+let y: ubit<32>[8];
+
+view y_sh = y[_: bank 1];
+view x_sh = x[_: bank 1];
+view A_sh = A[_: bank 1][_: bank 1];
+
+for (let i0: ubit<4> = 0..8) {
+  y_sh[i0] := 0;
+  x_sh[i0] := x_int[i0];
+  for (let j0: ubit<4> = 0..8) {
+    A_sh[i0][j0] := A_int[i0][j0];
+  }
+}
+
+---
+
+for (let i: ubit<4> = 0..8) {
+  tmp_int[i] := 0;
+  ---
+  for (let j: ubit<4> = 0..8) {
+    let t: ubit<32> = A[i][j] * x[j];
+  } combine {
+    tmp_int[i] += t;
+  }
+  ---
+  for (let j: ubit<4> = 0..8) {
+    let y0: ubit<32> = y[j];
+    ---
+    y[j] := y0 + A[i][j] * tmp_int[i];
+  }
+}
+
+---
+
+for (let i1: ubit<4> = 0..8) {
+  y_int[i1] := y_sh[i1];
+  x_int[i1] := x_sh[i1];
+  for (let j1: ubit<4> = 0..8) {
+    A_int[i1][j1] := A_sh[i1][j1];
+  }
+}

@@ -1,0 +1,37 @@
+// BEGIN macro definition
+
+
+
+
+
+
+
+// END macro definition
+
+decl alpha_int: ubit<32>[1];
+decl A_int: ubit<32>[8][8];
+decl B_int: ubit<32>[8][12];
+
+for (let i: ubit<4> = 0..8) {
+  for (let j: ubit<4> = 0..12) {
+    let k: ubit<4> = i + (1 as ubit<4>);
+    // XXX: Try rewriting this as a 'for' loop
+    while (k < 8) {
+      decor "#pragma HLS loop_tripcount min=0 max=7 avg=4"
+      let B_i_j: ubit<32> = B_int[i][j];
+      ---
+      let B_k_j: ubit<32> = B_int[k][j];
+      ---
+
+      // XXX: This is reduction pattern
+      B_int[i][j] := A_int[k][i] * B_k_j + B_i_j;
+      // Update loop counter
+      k := k + (1 as ubit<4>);
+    }
+    ---
+    // XXX: This is reduction pattern
+    let B_i_j: ubit<32> = B_int[i][j];
+    ---
+    B_int[i][j] := alpha_int[0] * B_i_j;
+  }
+}

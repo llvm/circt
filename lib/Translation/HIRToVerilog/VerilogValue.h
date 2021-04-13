@@ -32,9 +32,12 @@ public:
 
   string strMemrefArgDecl();
   string strMemrefInstDecl() const;
+  string strGroupArgDecl();
+  string strArrayArgDecl();
+
   Type getType();
-  ArrayRef<unsigned> getShape() const;
-  ArrayRef<unsigned> getPacking() const;
+  ArrayRef<int64_t> getShape() const;
+  SmallVector<int, 4> getPacking() const;
   Type getElementType() const;
 
 private:

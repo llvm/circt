@@ -1,4 +1,4 @@
-#include "../HIRGen.h"
+#include "../include/polymageHelpers.h"
 using namespace mlir;
 using namespace hir;
 void calcOutputDims(int outputDims[2], int inputDims[2], int kernelDims[2]) {

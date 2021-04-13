@@ -1,4 +1,5 @@
 #include "../include/HIRGen.h"
+#include "../include/polymageHelpers.h"
 #include "circt/Dialect/HIR/helper.h"
 #include "mlir/IR/Builders.h"
 
@@ -8,9 +9,13 @@ using namespace hir;
 int emitMLIR(mlir::MLIRContext &context, mlir::OwningModuleRef &module) {
   mlir::OpBuilder builder(&context);
   module = mlir::ModuleOp::create(builder.getUnknownLoc());
-  int imgDims[2] = {16, 16};
-  int kernelDims[2] = {2, 2};
-  emitLineBuffer(builder, context, module, "line_buffer", imgDims, kernelDims);
+  // int imgDims[2] = {16, 16};
+  // int kernelDims[2] = {2, 2};
+  // emitLineBuffer(builder, context, module, "line_buffer", imgDims,
+  // kernelDims);
+
+  emitMultiply(builder, context, module);
+
   return 0;
 }
 
@@ -116,26 +121,33 @@ void emitLineBufferBody(mlir::OpBuilder &builder, mlir::MLIRContext &context,
   {
     c0 = builder
              .create<hir::ConstantOp>(builder.getUnknownLoc(),
-                                      helper::getConstIntType(&context), 0)
+                                      helper::getConstIntType(&context),
+                                      helper::getIntegerAttr(&context, 64, 0))
              .getResult();
+
     c1 = builder
              .create<hir::ConstantOp>(builder.getUnknownLoc(),
-                                      helper::getConstIntType(&context), 1)
+                                      helper::getConstIntType(&context),
+                                      helper::getIntegerAttr(&context, 64, 1))
              .getResult();
-    cK1Minus1 = builder
-                    .create<hir::ConstantOp>(builder.getUnknownLoc(),
-                                             helper::getConstIntType(&context),
-                                             kernelDims[0] - 1)
-                    .getResult();
+
+    cK1Minus1 =
+        builder
+            .create<hir::ConstantOp>(
+                builder.getUnknownLoc(), helper::getConstIntType(&context),
+                helper::getIntegerAttr(&context, 64, kernelDims[0] - 1))
+            .getResult();
+
     cNi = builder
-              .create<hir::ConstantOp>(builder.getUnknownLoc(),
-                                       helper::getConstIntType(&context),
-                                       imgDims[0])
+              .create<hir::ConstantOp>(
+                  builder.getUnknownLoc(), helper::getConstIntType(&context),
+                  helper::getIntegerAttr(&context, 64, imgDims[0]))
               .getResult();
+
     cNj = builder
-              .create<hir::ConstantOp>(builder.getUnknownLoc(),
-                                       helper::getConstIntType(&context),
-                                       imgDims[1])
+              .create<hir::ConstantOp>(
+                  builder.getUnknownLoc(), helper::getConstIntType(&context),
+                  helper::getIntegerAttr(&context, 64, imgDims[1]))
               .getResult();
   }
 

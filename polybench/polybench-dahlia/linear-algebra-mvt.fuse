@@ -1,0 +1,65 @@
+// BEGIN macro definitions
+
+
+
+
+// END macro definitions
+
+decl x1_int: ubit<32>[8];
+decl x2_int: ubit<32>[8];
+decl y1_int: ubit<32>[8];
+decl y2_int: ubit<32>[8];
+decl A_int: ubit<32>[8][8];
+
+let x1: ubit<32>[8];
+let x2: ubit<32>[8];
+let y1: ubit<32>[8];
+let y2: ubit<32>[8];
+let A: ubit<32>[8][8];
+
+view x1_sh = x1[_: bank 1];
+view x2_sh = x2[_: bank 1];
+view y1_sh = y1[_: bank 1];
+view y2_sh = y2[_: bank 1];
+view A_sh = A[_: bank 1][_: bank 1];
+
+// Input interfaces.
+for (let i: ubit<4> = 0..8) {
+  y1_sh[i] := y1_int[i];
+  y2_sh[i] := y2_int[i];
+  x1_sh[i] := x1_int[i];  // XXX no need for this
+  x2_sh[i] := x2_int[i];  // XXX x1 & x2 are outputs
+}
+for (let i: ubit<4> = 0..8) {
+  for (let j: ubit<4> = 0..8) {
+    A_sh[i][j] := A_int[i][j];
+  }
+}
+
+---
+
+for (let i: ubit<4> = 0..8) {
+  for (let j: ubit<4> = 0..8) {
+    let tmp = A[i][j] * y1[j];
+  } combine {
+    x1[i] += tmp;
+  }
+}
+
+---
+
+for (let i: ubit<4> = 0..8) {
+  for (let j: ubit<4> = 0..8) {
+    let tmp2 = A[j][i] * y2[j];
+  } combine {
+    x2[i] += tmp2;
+  }
+}
+
+---
+
+// Output interfaces.
+for (let i: ubit<4> = 0..8) {
+  x1_int[i] := x1_sh[i];
+  x2_int[i] := x2_sh[i];
+}

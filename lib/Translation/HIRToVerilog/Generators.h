@@ -1,8 +1,23 @@
 #include "VerilogValue.h"
 #include "helper.h"
 #include <string>
+// template <typename T>
+// bool isEqual(ArrayRef<T> x, ArrayRef<T> y) {
+//  if (x.size() != y.size()) {
+//    fprintf(stderr, "%d != %d\n", x.size(), y.size());
+//    return false;
+//  }
+//  for (int i = 0; i < x.size(); i++) {
+//    if (x[i] != y[i]) {
+//      fprintf(stderr, "i=%d, %d != %d\n", i, x[i], y[i]);
+//      return false;
+//    }
+//  }
+//  return true;
+//}
+
 template <typename T>
-bool isEqual(ArrayRef<T> x, ArrayRef<T> y) {
+bool isEqual(T x, T y) {
   if (x.size() != y.size()) {
     fprintf(stderr, "%d != %d\n", x.size(), y.size());
     return false;

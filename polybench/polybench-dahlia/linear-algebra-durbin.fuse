@@ -1,0 +1,56 @@
+// BEGIN macro definitions
+
+
+
+
+// END macro definitions
+
+decl r_int: ubit<32>[8];
+decl y_int: ubit<32>[8];
+
+// XXX(rachit): This should be a local array.
+decl z_int: ubit<32>[8];
+
+let alpha: ubit<32> = 0 - r_int[0];
+let beta: ubit<32> = 1;
+y_int[0] := alpha;
+---
+for (let k: ubit<4> = 1..8) {
+  beta := (1 - alpha * alpha) * beta;
+
+  let sum: ubit<32> = 0;
+  let i: ubit<4> = 0;
+  while (i < k) {
+    decor "#pragma HLS loop_tripcount min=1 max=7 avg=4"
+    sum := sum + r_int[k-i-1] * y_int[i];
+    // Update loop counter
+    i := i + 1;
+  }
+  ---
+  // modification to prevent div by 0
+  if (beta != 0) {
+    alpha := 0 - (r_int[k] + sum)/beta;
+  } else {
+    alpha := 0;
+  }
+
+  i := 0;
+  while(i < k) {
+    decor "#pragma HLS loop_tripcount min=1 max=7 avg=4"
+    let y_i: ubit<32> = y_int[i];
+    ---
+    z_int[i] := y_i + alpha * y_int[k-i-1];
+    // Update loop counter
+    i := i + 1;
+  }
+  ---
+  i := 0;
+  while(i < k) {
+    decor "#pragma HLS loop_tripcount min=1 max=7 avg=4"
+    y_int[i] := z_int[i];
+    // Update loop counter
+    i := i + 1;
+  }
+  ---
+  y_int[k] := alpha;
+}

@@ -1,0 +1,104 @@
+// BEGIN macro definition
+
+
+
+
+
+
+
+
+
+
+
+// END macro definition
+
+decl A_int: ubit<32>[8][8];
+decl b_int: ubit<32>[8];
+decl x_int: ubit<32>[8];
+decl y_int: ubit<32>[8];
+
+// outer 1
+for (let i: ubit<4> = 0..8) {
+  // inner 1.1
+  let j: ubit<4> = 0;
+  while (j < i) {
+    decor "#pragma HLS loop_tripcount min=0 max=7 avg=4"
+    let w: ubit<32> = A_int[i][j];
+    ---
+    // inner 1.1.1
+    let k: ubit<4> = 0;
+    while (k < j) {
+      decor "#pragma HLS loop_tripcount min=0 max=6 avg=2"
+      let A_i_k: ubit<32> = A_int[i][k];
+      ---
+      w := w - (A_i_k * A_int[k][j]);
+      k := k + 1;
+    }
+    ---
+    let A_j_j: ubit<32> = A_int[j][j];
+    ---
+    if (A_j_j != 0) {
+      A_int[i][j] := w / A_j_j;
+    }
+    j := j + 1;
+  }
+
+  ---
+
+  // inner 1.2
+  j := i;
+  while(j < 8) {
+    decor "#pragma HLS loop_tripcount min=1 max=8 avg=4"
+    let w: ubit<32> = A_int[i][j];
+    ---
+    // inner 1.2.1
+    let k: ubit<4> = 0;
+    while(k < i) {
+      decor "#pragma HLS loop_tripcount min=0 max=7 avg=2"
+      let A_i_k: ubit<32> = A_int[i][k];
+      ---
+      w := w - (A_i_k * A_int[k][j]);
+      k := k + 1;
+    }
+    ---
+    A_int[i][j] := w;
+
+    j := j + 1;
+  }
+}
+
+---
+
+// outer 2
+for (let i: ubit<4> = 0..8) {
+  let w: ubit<32> = b_int[i];
+  // inner 2.1
+  let j: ubit<4> = 0;
+  while (j < i) {
+    decor "#pragma HLS loop_tripcount min=0 max=7 avg=4"
+    w := w - (A_int[i][j] * y_int[j]);
+    j := j + 1;
+  }
+  ---
+  y_int[i] := w;
+}
+---
+
+// outer 3
+let i: ubit<4> = 8 - 1;
+while (i >= 0 && i < 8) {
+  decor "#pragma HLS loop_tripcount min=8 max=8 avg=8"
+  let w: ubit<32> = y_int[i];
+  // inner 3.1
+  let j: ubit<4> = i + 1;
+  while (j < 8) {
+    decor "#pragma HLS loop_tripcount min=0 max=7 avg=4"
+    w := w - (A_int[i][j] * x_int[j]);
+    j := j + 1;
+  }
+  ---
+  if (A_int[i][i] != 0) {
+    x_int[i] := w / A_int[i][i];
+  }
+  i := i - 1;
+}

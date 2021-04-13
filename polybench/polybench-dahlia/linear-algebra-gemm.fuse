@@ -1,0 +1,68 @@
+// BEGIN macro defintions
+
+
+
+
+
+
+
+
+// END macro definitions
+
+decl alpha_int: ubit<32>[1];
+decl beta_int: ubit<32>[1];
+decl C_int: ubit<32>[8][8];
+decl A_int: ubit<32>[8][8];
+decl B_int: ubit<32>[8][8];
+
+let C: ubit<32>[8][8];
+let A: ubit<32>[8][8];
+let B: ubit<32>[8][8];
+
+view C_sh = C[_: bank 1][_: bank 1];
+view A_sh = A[_: bank 1][_: bank 1];
+view B_sh = B[_: bank 1][_: bank 1];
+
+let alpha_ = alpha_int[0];
+let beta_ = beta_int[0];
+
+// Input interface.
+for (let i: ubit<4> = 0..8) {
+  for (let j: ubit<4> = 0..8) {
+    A_sh[i][j] := A_int[i][j];
+    B_sh[i][j] := B_int[i][j];
+    C_sh[i][j] := C_int[i][j];
+  }
+}
+
+---
+
+for (let i: ubit<4> = 0..8) {
+  for (let j: ubit<4> = 0..8) {
+    let C_i_j: ubit<32> = C[i][j];
+    ---
+    C[i][j] := C_i_j * beta_;
+  }
+
+  ---
+
+  // Loop order has to change since j is not defined in the combine
+  // block otherwise.
+  for (let j: ubit<4> = 0..8) {
+    for (let k: ubit<4> = 0..8) {
+      let v: ubit<32> = alpha_ * A[i][k] * B[k][j];
+    } combine {
+      C[i][j] += v;
+    }
+  }
+}
+
+---
+
+// Output interface.
+
+for (let i: ubit<4> = 0..8) {
+  for (let j: ubit<4> = 0..8) {
+    C_int[i][j] := C_sh[i][j];
+  }
+}

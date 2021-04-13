@@ -4,8 +4,10 @@
 #reg_w  = {"wr"= 1}
 
 hir.func @line_buffer at %t(
-%inp : !hir.func<()->(!hir.time,!hir.group<f32>)>,
-%outp :!hir.group<!hir.time,array<2x2xf32>>){
+%inp_t : !hir.group<!hir.time>,
+%inp : !hir.group<f32>,
+%outp_t :!hir.group<send !hir.time>,
+%outp : !hir.array<send 2x2xf32>){
 
   %buff_r,%buff_w = hir.alloca("bram") :!hir.memref<2x16xf32,[1], #bram_r>,
                     !hir.memref<2x16xf32,[1], #bram_w>
@@ -13,11 +15,11 @@ hir.func @line_buffer at %t(
   %wndw_r,%wndw_w = hir.alloca("bram") :!hir.memref<2x2xf32,[0,1], #reg_r>,
   !hir.memref<2x2xf32,[0,1], #reg_w>
 
-  %0 = hir.constant 0
-  %1 = hir.constant 1
-  %K1Minus1 = hir.constant 1
-  %Ni = hir.constant 16
-  %Nj = hir.constant 16
+  %0 = hir.constant (0):!hir.const
+  %1 = hir.constant (1):!hir.const
+  %K1Minus1 = hir.constant (1):!hir.const
+  %Ni = hir.constant (16):!hir.const
+  %Nj = hir.constant (16):!hir.const
 
   hir.for %i :i32 = %0 :!hir.const to %Ni :!hir.const step %1 :!hir.const 
     iter_time(%ti = %t  +  %1 ){
@@ -26,9 +28,8 @@ hir.func @line_buffer at %t(
       iter_time(%tj = %ti  +  %1 ){
 
       //read the new input from stream.
-      %tv, %vg = hir.call %inp() at %tj 
-        :!hir.func<() -> (!hir.time,!hir.group<f32>)>
-      %v = hir.recv %vg[%0] at %tv : !hir.group<f32>[!hir.const] -> f32
+      %tv = hir.recv %inp_t[%0] at %t : !hir.group<!hir.time>[!hir.const] -> !hir.time
+      %v = hir.recv %inp[%0] at %tv : !hir.group<f32>[!hir.const] -> f32
 
       %v1 = hir.delay %v by %1 at %tv: f32 -> f32
 
@@ -42,9 +43,9 @@ hir.func @line_buffer at %t(
           :(f32, !hir.memref<2x16xf32, [1], #bram_w>[!hir.const,i32])
         hir.store %val to %wndw_w[%k1,%0] at %tk1  +  %1 
           :(f32, !hir.memref<2x2xf32, [0,1], #reg_w>[!hir.const,!hir.const])
-        hir.send %val to %outp[%1,%k1,%0] at %tk1 + %1
+        hir.send %val to %outp[%k1,%0] at %tk1 + %1
           :f32 to
-          !hir.group<!hir.time,array<2x2xf32>>[!hir.const,!hir.const,!hir.const]
+          !hir.array<send 2x2xf32>[!hir.const,!hir.const]
       }
 
       //insert the new input from stream.
@@ -53,14 +54,14 @@ hir.func @line_buffer at %t(
       hir.store %v1 to %wndw_w[%K1Minus1,%0] at %tv + %1
         :(f32, !hir.memref<2x2xf32, [0,1], #reg_w>[!hir.const,!hir.const])
 
-      hir.send %v1 to %outp[%1,%K1Minus1,%0] at %tv + %1
+      hir.send %v1 to %outp[%K1Minus1,%0] at %tv + %1
         :f32 to
-        !hir.group<!hir.time,array<2x2xf32>>[!hir.const,!hir.const,!hir.const]
+        !hir.array<send 2x2xf32>[!hir.const,!hir.const]
 
       %t_send = hir.delay %tv by %1 at %tv :!hir.time -> !hir.time
-      hir.send %t_send to %outp[%0] at %t_send
+      hir.send %t_send to %outp_t[%0] at %t_send
         :!hir.time to
-        !hir.group<!hir.time,array<2x2xf32>>[!hir.const]
+        !hir.group<send !hir.time>[!hir.const]
 
       // shift the window.
       hir.unroll_for %k1 = 0 to 2 step 1 iter_time(%tk1 = %tv){
@@ -72,9 +73,9 @@ hir.func @line_buffer at %t(
           %k2Plus1 = hir.add(%k2,%1) :(!hir.const, !hir.const) -> (!hir.const)
           hir.store %val to %wndw_w[%k1,%k2Plus1] at %tk2 + %1
             :(f32, !hir.memref<2x2xf32, [0,1], #reg_w> [!hir.const,!hir.const])
-          hir.send %val to %outp[%1,%k1,%k2Plus1] at %tk2 + %1
+          hir.send %val to %outp[%k1,%k2Plus1] at %tk2 + %1
             :f32 to
-            !hir.group<!hir.time,array<2x2xf32>>[!hir.const,!hir.const,!hir.const]
+            !hir.array<send 2x2xf32>[!hir.const,!hir.const]
         }
       }
       hir.yield at %tv + %1

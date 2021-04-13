@@ -1,0 +1,113 @@
+// BEGIN macro definitions
+
+
+
+
+// END macro definitions
+
+decl alpha_int: ubit<32>[1];
+decl beta_int: ubit<32>[1];
+decl A_int: ubit<32>[8][8];
+decl u1_int: ubit<32>[8];
+decl v1_int: ubit<32>[8];
+decl u2_int: ubit<32>[8];
+decl v2_int: ubit<32>[8];
+decl w_int: ubit<32>[8];
+decl x_int: ubit<32>[8];
+decl y_int: ubit<32>[8];
+decl z_int: ubit<32>[8];
+
+let A: ubit<32>[8][8];
+let u1: ubit<32>[8];
+let v1: ubit<32>[8];
+let u2: ubit<32>[8];
+let v2: ubit<32>[8];
+let w: ubit<32>[8];
+let x: ubit<32>[8];
+let y: ubit<32>[8];
+let z: ubit<32>[8];
+
+view A_sh = A[_: bank 1][_: bank 1];
+view u1_sh = u1[_: bank 1];
+view v1_sh = v1[_: bank 1];
+view u2_sh = u2[_: bank 1];
+view v2_sh = v2[_: bank 1];
+view w_sh = w[_: bank 1];
+view x_sh = x[_: bank 1];
+view y_sh = y[_: bank 1];
+view z_sh = z[_: bank 1];
+
+// Scalar inputs.
+let alpha_ = alpha_int[0];
+let beta_ = beta_int[0];
+
+// Input interfaces.
+for (let i: ubit<4> = 0..8) {
+  u1_sh[i] := u1_int[i];
+  v1_sh[i] := v1_int[i];
+  u2_sh[i] := u2_int[i];
+  v2_sh[i] := v2_int[i];
+  w_sh[i] := w_int[i];
+  x_sh[i] := x_int[i];
+  y_sh[i] := y_int[i];
+  z_sh[i] := z_int[i];
+}
+for (let i: ubit<4> = 0..8) {
+  for (let j: ubit<4> = 0..8) {
+    A_sh[i][j] := A_int[i][j];
+  }
+}
+
+---
+
+for (let i: ubit<4> = 0..8) {
+  for (let j: ubit<4> = 0..8) {
+    let tmp1 = u1[i] * v1[j] + u2[i] * v2[j];
+    let old = A[i][j];
+    ---
+    A[i][j] := old + tmp1;
+  }
+}
+---
+for (let i: ubit<4> = 0..8) {
+  for (let j: ubit<4> = 0..8) {
+    let tmp2 = beta_ * A[j][i] * y[j];
+  } combine {
+    x[i] += tmp2;
+  }
+}
+---
+// We could've moved this up and parallelized with loop1.
+for (let i: ubit<4> = 0..8) {
+  let tmp3 = z[i];
+  let old = x[i];
+  ---
+  x[i] := old + tmp3;
+}
+---
+for (let i: ubit<4> = 0..8) {
+  for (let j: ubit<4> = 0..8) {
+    let tmp4 = alpha_ * A[i][j] * x[j];
+  } combine {
+    w[i] += tmp4;
+  }
+}
+
+---
+
+// Output interfaces.
+for (let i: ubit<4> = 0..8) {
+  u1_int[i] := u1_sh[i];
+  v1_int[i] := v1_sh[i];
+  u2_int[i] := u2_sh[i];
+  v2_int[i] := v2_sh[i];
+  w_int[i] := w_sh[i];
+  x_int[i] := x_sh[i];
+  y_int[i] := y_sh[i];
+  z_int[i] := z_sh[i];
+}
+for (let i: ubit<4> = 0..8) {
+  for (let j: ubit<4> = 0..8) {
+    A_int[i][j] := A_sh[i][j];
+  }
+}

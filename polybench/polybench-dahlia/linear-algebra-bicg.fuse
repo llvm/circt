@@ -1,0 +1,33 @@
+// BEGIN macro definitions
+
+
+
+
+
+
+// END macro definitions
+
+decl A_int: ubit<32>[8][8];
+decl s_int: ubit<32>[8];
+decl q_int: ubit<32>[8];
+decl p_int: ubit<32>[8];
+decl r_int: ubit<32>[8];
+
+for (let i: ubit<4> = 0..8) {
+  s_int[i] := 0;
+}
+
+---
+
+for (let i: ubit<4> = 0..8) {
+  q_int[i] := 0;
+  ---
+  for (let j: ubit<4> = 0..8) {
+    let s0: ubit<32> = s_int[j];
+    let q0: ubit<32> = q_int[i];
+    let A_i_j: ubit<32> = A_int[i][j];
+    ---
+    s_int[j] := s0 + r_int[i] * A_i_j;
+    q_int[i] := q0 + A_i_j * p_int[j];
+  }
+}
