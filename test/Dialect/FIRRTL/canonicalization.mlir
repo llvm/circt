@@ -1250,17 +1250,27 @@ firrtl.module @mul_cst_prop3(%out_b: !firrtl.flip<sint<15>>) {
 }
 
 // CHECK-LABEL: firrtl.module @MuxInvalidOpt
-firrtl.module @MuxInvalidOpt(%cond: !firrtl.uint<1>, %data: !firrtl.uint<4>, %out1: !firrtl.flip<uint<4>>, %out2: !firrtl.flip<uint<4>>) {
+firrtl.module @MuxInvalidOpt(%cond: !firrtl.uint<1>, %data: !firrtl.uint<4>, %out1: !firrtl.flip<uint<4>>, %out2: !firrtl.flip<uint<4>>, %out3: !firrtl.flip<uint<4>>, %out4: !firrtl.flip<uint<4>>) {
 
   // We can optimize out these mux's since the invalid value can take on any input.
   %tmp1 = firrtl.invalidvalue : !firrtl.uint<4>
   %a = firrtl.mux(%cond, %data, %tmp1) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
-  // CHECK:         firrtl.connect %out1, %data 
+  // CHECK:         firrtl.connect %out1, %data
   firrtl.connect %out1, %a : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
   %b = firrtl.mux(%cond, %tmp1, %data) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
-  // CHECK:         firrtl.connect %out2, %data 
+  // CHECK:         firrtl.connect %out2, %data
   firrtl.connect %out2, %b : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+
+  %false = firrtl.constant(false) : !firrtl.uint<1>
+  %c = firrtl.mux(%false, %data, %tmp1) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  // CHECK:         firrtl.connect %out3, %data
+  firrtl.connect %out3, %c : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+
+  %true = firrtl.constant(true) : !firrtl.uint<1>
+  %d = firrtl.mux(%false, %tmp1, %data) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  // CHECK:         firrtl.connect %out4, %data
+  firrtl.connect %out4, %d : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 }
 
 // CHECK-LABEL: firrtl.module @MuxCanon
