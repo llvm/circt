@@ -185,7 +185,6 @@ void RTLMemSimImplPass::runOnOperation() {
         SymbolTable::lookupSymbolIn(getOperation(), gen));
 
     if (genOp.descriptor() == "FIRRTL_Memory") {
-      llvm::errs() << "Found\n";
       auto nameAttr = builder.getStringAttr(oldModule.getName());
       auto newModule = builder.create<rtl::RTLModuleOp>(
           oldModule.getLoc(), nameAttr, oldModule.getPorts());
