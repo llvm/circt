@@ -1250,17 +1250,27 @@ firrtl.module @mul_cst_prop3(%out_b: !firrtl.flip<sint<15>>) {
 }
 
 // CHECK-LABEL: firrtl.module @MuxInvalidOpt
-firrtl.module @MuxInvalidOpt(%cond: !firrtl.uint<1>, %data: !firrtl.uint<4>, %out1: !firrtl.flip<uint<4>>, %out2: !firrtl.flip<uint<4>>) {
+firrtl.module @MuxInvalidOpt(%cond: !firrtl.uint<1>, %data: !firrtl.uint<4>, %out1: !firrtl.flip<uint<4>>, %out2: !firrtl.flip<uint<4>>, %out3: !firrtl.flip<uint<4>>, %out4: !firrtl.flip<uint<4>>) {
 
   // We can optimize out these mux's since the invalid value can take on any input.
   %tmp1 = firrtl.invalidvalue : !firrtl.uint<4>
   %a = firrtl.mux(%cond, %data, %tmp1) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
-  // CHECK:         firrtl.connect %out1, %data 
+  // CHECK:         firrtl.connect %out1, %data
   firrtl.connect %out1, %a : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
   %b = firrtl.mux(%cond, %tmp1, %data) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
-  // CHECK:         firrtl.connect %out2, %data 
+  // CHECK:         firrtl.connect %out2, %data
   firrtl.connect %out2, %b : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+
+  %false = firrtl.constant(false) : !firrtl.uint<1>
+  %c = firrtl.mux(%false, %data, %tmp1) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  // CHECK:         firrtl.connect %out3, %data
+  firrtl.connect %out3, %c : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+
+  %true = firrtl.constant(true) : !firrtl.uint<1>
+  %d = firrtl.mux(%false, %tmp1, %data) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  // CHECK:         firrtl.connect %out4, %data
+  firrtl.connect %out4, %d : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 }
 
 // CHECK-LABEL: firrtl.module @MuxCanon
@@ -1273,5 +1283,16 @@ firrtl.module @MuxCanon(%c1: !firrtl.uint<1>, %c2: !firrtl.uint<1>, %d1: !firrtl
   // CHECK: firrtl.mux(%c1, %d1, %d3) : (!firrtl.uint<1>, !firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<5> 
   // CHECK: firrtl.mux(%c1, %d2, %d1) : (!firrtl.uint<1>, !firrtl.uint<5>, !firrtl.uint<5>) -> !firrtl.uint<5> 
 }
+
+// CHECK-LABEL: firrtl.module @EmptyNode
+firrtl.module @EmptyNode(%d1: !firrtl.uint<5>, %foo: !firrtl.flip<uint<5>>, %foo2: !firrtl.flip<uint<5>>) {
+  %bar = firrtl.node %d1  : !firrtl.uint<5>
+  %bar2 = firrtl.node %d1 {annotations = [{extrastuff = "n1"}]}  : !firrtl.uint<5>
+  firrtl.connect %foo, %bar : !firrtl.flip<uint<5>>, !firrtl.uint<5>
+  firrtl.connect %foo2, %bar2 : !firrtl.flip<uint<5>>, !firrtl.uint<5>
+}
+// CHECK-NEXT: %bar2 = firrtl.node %d1 {annotations = [{extrastuff = "n1"}]}
+// CHECK-NEXT: firrtl.connect %foo, %d1
+// CHECK-NEXT: firrtl.connect %foo2, %bar2
 
 }

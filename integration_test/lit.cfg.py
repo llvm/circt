@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import warnings
 
 import lit.formats
 import lit.util
@@ -49,7 +50,8 @@ if config.timeout is not None and config.timeout != "":
 # subdirectories contain auxiliary inputs for various tests in their parent
 # directories.
 config.excludes = [
-  'Inputs', 'CMakeLists.txt', 'README.txt', 'LICENSE.txt', 'lit.cfg.py'
+  'Inputs', 'CMakeLists.txt', 'README.txt', 'LICENSE.txt', 'lit.cfg.py',
+  'lit.local.cfg.py'
 ]
 
 # test_source_root: The root path where tests are located.
@@ -101,11 +103,17 @@ if config.quartus_path != "":
   config.available_features.add('quartus')
 
 # Enable Vivado if it has been detected.
-if config.quartus_path != "":
-  tool_dirs.append(os.path.dirname(config.vivado_path))
-  tools.append('vivado')
+if config.vivado_path != "":
+  tool_dirs.append(config.vivado_path)
+  tools.append('xvlog')
+  tools.append('xelab')
+  tools.append('xsim')
+  config.available_features.add('ieee-sim')
   config.available_features.add('vivado')
-
+  config.substitutions.append(
+      ('%ieee-sim', os.path.join(config.vivado_path, "xsim")))
+  config.substitutions.append(
+      ('%xsim%', os.path.join(config.vivado_path, "xsim")))
 
 # Enable Questa if it has been detected.
 if config.questa_path != "":
@@ -120,12 +128,14 @@ if config.questa_path != "":
   tools.append('vlog')
   tools.append('vsim')
 
-  # When we add support for other simulators, we'll have to figure out which
-  # one should be the default and modify this appropriately.
   config.substitutions.append(
       ('%questa', os.path.join(config.questa_path, "vsim")))
   config.substitutions.append(
       ('%ieee-sim', os.path.join(config.questa_path, "vsim")))
+
+ieee_sims = list(filter(lambda x: x[0] == '%ieee-sim', config.substitutions))
+if len(ieee_sims) > 1:
+  warnings.warn(f"You have multiple ieee-sim simulators configured, choosing: {ieee_sims[-1][1]}")
 
 # Enable ESI cosim tests if they have been built.
 if config.esi_cosim_path != "":
