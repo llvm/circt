@@ -1549,7 +1549,6 @@ struct HandshakeInsertBufferPass
 
   void runOnOperation() override {
     auto f = getOperation();
-
     for (auto &block : f) {
       for (auto &op : block) {
         opVisited[&op] = false;
