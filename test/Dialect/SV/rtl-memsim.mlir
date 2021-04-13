@@ -56,4 +56,25 @@ rtl.module @simple(%clock: i1, %reset: i1, %r0en: i1, %mode: i1, %data0: i16) ->
 //CHECK-NEXT:  rtl.output %[[readres]], %[[rwres]]
 
 //CHECK-LABEL: @FIRRTLMem_1_1_1_16_10_2_4_0
-//CHECK:     %Memory = sv.reg  : !rtl.inout<uarray<10xi16>>
+//COM: This produces a lot of output, we check one field's pipeline
+//CHECK:         %Memory = sv.reg  : !rtl.inout<uarray<10xi16>>
+//CHECK:         sv.alwaysff(posedge %ro_clock_0)  {
+//CHECK-NEXT:      sv.passign %0, %ro_en_0 : i1
+//CHECK-NEXT:    }
+//CHECK-NEXT:    %1 = sv.read_inout %0 : !rtl.inout<i1>
+//CHECK-NEXT:    %2 = sv.reg  : !rtl.inout<i1>
+//CHECK-NEXT:    sv.alwaysff(posedge %ro_clock_0)  {
+//CHECK-NEXT:      sv.passign %2, %1 : i1
+//CHECK-NEXT:    }
+//CHECK-NEXT:    %3 = sv.read_inout %2 : !rtl.inout<i1>
+//CHECK-NEXT:    %4 = sv.reg  : !rtl.inout<i4>
+//CHECK-NEXT:    sv.alwaysff(posedge %ro_clock_0)  {
+//CHECK-NEXT:      sv.passign %4, %ro_addr_0 : i4
+//CHECK-NEXT:    }
+//CHECK-NEXT:    %5 = sv.read_inout %4 : !rtl.inout<i4>
+//CHECK-NEXT:    %6 = sv.reg  : !rtl.inout<i4>
+//CHECK-NEXT:    sv.alwaysff(posedge %ro_clock_0)  {
+//CHECK-NEXT:      sv.passign %6, %5 : i4
+//CHECK-NEXT:    }
+//CHECK-NEXT:    %7 = sv.read_inout %6 : !rtl.inout<i4>
+//CHECK-NEXT:    %8 = sv.array_index_inout %Memory[%7] : !rtl.inout<uarray<10xi16>>, i4

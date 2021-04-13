@@ -23,12 +23,6 @@ using namespace circt;
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct RTLMemSimImplPass : public sv::RTLMemSimImplBase<RTLMemSimImplPass> {
-  void runOnOperation() override;
-
-private:
-  void generateMemory(rtl::RTLModuleOp op, rtl::RTLModuleGeneratedOp refOp);
-};
 
 struct FirMemory {
   size_t numReadPorts;
@@ -40,6 +34,14 @@ struct FirMemory {
   size_t writeLatency;
   size_t readUnderWrite;
 };
+
+struct RTLMemSimImplPass : public sv::RTLMemSimImplBase<RTLMemSimImplPass> {
+  void runOnOperation() override;
+
+private:
+  void generateMemory(rtl::RTLModuleOp op, FirMemory mem);
+};
+
 } // end anonymous namespace
 
 static FirMemory analyzeMemOp(rtl::RTLModuleGeneratedOp op) {
@@ -75,9 +77,8 @@ static Value addPipelineStages(ImplicitLocOpBuilder &b, size_t stages,
 }
 
 void RTLMemSimImplPass::generateMemory(rtl::RTLModuleOp op,
-                                       rtl::RTLModuleGeneratedOp refOp) {
+                                       FirMemory mem) {
   ImplicitLocOpBuilder b(UnknownLoc::get(&getContext()), op.getBody());
-  auto mem = analyzeMemOp(refOp);
 
   // Create a register for the memory.
   auto dataType = b.getIntegerType(mem.dataWidth);
@@ -186,10 +187,11 @@ void RTLMemSimImplPass::runOnOperation() {
         SymbolTable::lookupSymbolIn(getOperation(), gen));
 
     if (genOp.descriptor() == "FIRRTL_Memory") {
+      auto mem = analyzeMemOp(oldModule);
       auto nameAttr = builder.getStringAttr(oldModule.getName());
       auto newModule = builder.create<rtl::RTLModuleOp>(
           oldModule.getLoc(), nameAttr, oldModule.getPorts());
-      generateMemory(newModule, oldModule);
+      generateMemory(newModule, mem);
       toErase.push_back(oldModule);
     }
   }
