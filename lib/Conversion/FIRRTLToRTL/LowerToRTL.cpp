@@ -355,8 +355,8 @@ void FIRRTLModuleLowering::lowerMemoryDecls(const SmallVector<FirMemory> &mems,
                                             CircuitLoweringState &state) {
   auto b =
       ImplicitLocOpBuilder::atBlockBegin(UnknownLoc::get(&getContext()), top);
-  std::array<StringRef, 7> schemaFields = {
-      "depth",        "numReadPorts", "numWritePorts", "readLatency",
+  std::array<StringRef, 8> schemaFields = {
+      "depth",        "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency",
       "writeLatency", "width",        "readUnderWrite"};
   auto schemaFieldsAttr = b.getStrArrayAttr(schemaFields);
   auto schema = b.create<rtl::RTLGeneratorSchemaOp>(
@@ -412,11 +412,13 @@ void FIRRTLModuleLowering::lowerMemoryDecls(const SmallVector<FirMemory> &mems,
         ports.push_back({b.getStringAttr(("wo_data_" + Twine(i)).str()),
                          rtl::INPUT, bDataType, inputPin++});
     }
-    std::array<NamedAttribute, 7> genAttrs = {
+    std::array<NamedAttribute, 8> genAttrs = {
         b.getNamedAttr("depth", b.getI64IntegerAttr(mem.depth)),
-        b.getNamedAttr("numReadPorts", b.getI32IntegerAttr(mem.numReadPorts)),
+        b.getNamedAttr("numReadPorts", b.getUI32IntegerAttr(mem.numReadPorts)),
         b.getNamedAttr("numWritePorts",
                        b.getUI32IntegerAttr(mem.numWritePorts)),
+        b.getNamedAttr("numReadWritePorts",
+                       b.getUI32IntegerAttr(mem.numReadWritePorts)),
         b.getNamedAttr("readLatency", b.getUI32IntegerAttr(mem.readLatency)),
         b.getNamedAttr("writeLatency", b.getUI32IntegerAttr(mem.writeLatency)),
         b.getNamedAttr("width", b.getUI32IntegerAttr(mem.dataWidth)),
