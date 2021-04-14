@@ -1,0 +1,9 @@
+./linear-algebra-gesummv.fuse
+./linear-algebra-3mm.fuse
+./linear-algebra-doitgen.fuse
+./linear-algebra-2mm.fuse
+./linear-algebra-atax.fuse
+./linear-algebra-gemm.fuse
+./linear-algebra-gemver.fuse
+./linear-algebra-mvt.fuse
+./linear-algebra-bicg.fuse

@@ -92,6 +92,39 @@
     end
   endmodule
 
+  module i32Adder(
+    output wire[31:0] out,
+    input  wire[31:0] in1,
+    input  wire[31:0] in2,
+    input wire tstart,
+    input wire clk
+  );
+
+    assign  out = in1+in2;  
+  endmodule
+
+  module i32Multiplier(
+    output wire[31:0] out,
+    input  wire[31:0] in1,
+    input  wire[31:0] in2,
+    input wire tstart,
+    input wire clk
+  );
+
+    reg[31:0] a1,b1;
+    reg[31:0] out2;
+    reg[31:0] out3;
+    reg[31:0] out4;
+    always@(posedge clk) begin
+      a1 <= in1;
+      b1 <= in2;
+      out2 <= a1*b1;
+      out3 <= out2;
+      out4 <= out3;
+    end
+    assign out = out4;
+  endmodule
+
   module mult(
     output reg[31:0] out,
     input  wire[31:0] in1,
