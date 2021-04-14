@@ -16,12 +16,11 @@ with Context() as ctxt, Location.unknown():
     sys = esi.System(ctxt)
     sys.load_mlir(path.join(thisDir, "esi_load1.mlir"))
     sys.load_mlir(path.join(thisDir, "esi_load2.mlir"))
-    m = sys.get()
 
     i1 = IntegerType.get_signless(1)
     i32 = IntegerType.get_signless(32)
 
-    with InsertionPoint(m.regions[0].blocks[0]):
+    with InsertionPoint(sys.get_body()):
         op = rtl.RTLModuleOp(
             name='MyWidget',
             input_ports=[('foo', i32), ('foo_valid', i1)],
@@ -31,7 +30,7 @@ with Context() as ctxt, Location.unknown():
         )
 
     esi.buildWrapper(op.operation, ["foo"])
-    m.print()
+    sys.print()
     # CHECK-LABEL:  rtl.module @MyWidget_esi(%foo: !esi.channel<i32>) {
     # CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr %foo, %pearl.foo_ready : i32
     # CHECK-NEXT:     %pearl.foo_ready = rtl.instance "pearl" @MyWidget(%rawOutput, %valid) : (i32, i1) -> i1
@@ -50,3 +49,5 @@ with Context() as ctxt, Location.unknown():
     acc.print()
     print()  # Newline.
     # CHECK: rtl.module.extern @IntAccumulator(%clk: i1, %ints: i32, %ints_valid: i1) -> (%ints_ready: i1, %sum: i32)
+
+    sys.print_verilog()

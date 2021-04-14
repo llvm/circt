@@ -12,6 +12,7 @@
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Support/LLVM.h"
 #include "mlir-c/Bindings/Python/Interop.h"
+#include "mlir-c/Diagnostics.h"
 
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Support.h"
@@ -46,6 +47,33 @@ static MlirOperation pyWrapModule(MlirOperation cModOp,
   return wrap(wrapper);
 }
 
+// This function taken from npcomp.
+// Register a diagnostic handler that will redirect output to `sys.stderr`
+// instead of a C/C++-level file abstraction. This ensures, for example,
+// that mlir diagnostics emitted are correctly routed in Jupyter notebooks.
+static MlirDiagnosticHandlerID
+registerPythonSysStderrDiagnosticHandler(MlirContext context) {
+  auto diagnosticHandler = [](MlirDiagnostic diagnostic,
+                              void *) -> MlirLogicalResult {
+    std::stringstream ss;
+    auto stringCallback = [](MlirStringRef s, void *stringCallbackUserData) {
+      auto *ssp = static_cast<std::stringstream *>(stringCallbackUserData);
+      ssp->write(s.data, s.length);
+    };
+    mlirDiagnosticPrint(diagnostic, stringCallback, static_cast<void *>(&ss));
+    // Use pybind11's print:
+    // https://pybind11.readthedocs.io/en/stable/advanced/pycpp/utilities.html
+    using namespace pybind11::literals;
+    py::print(ss.str(), "file"_a = py::module_::import("sys").attr("stderr"));
+    return mlirLogicalResultSuccess();
+  };
+  MlirDiagnosticHandlerID id = mlirContextAttachDiagnosticHandler(
+      context, diagnosticHandler, nullptr, [](void *) { return; });
+  // Ignore the ID. We intend to keep this handler for the entire lifetime
+  // of this context.
+  return id;
+}
+
 //===----------------------------------------------------------------------===//
 // The main entry point into the ESI API.
 //===----------------------------------------------------------------------===//
@@ -53,39 +81,53 @@ static MlirOperation pyWrapModule(MlirOperation cModOp,
 class System {
 public:
   System(MlirContext cCtxt) : ctxt(unwrap(cCtxt)) {
-    module = OwningModuleRef(ModuleOp::create(UnknownLoc::get(ctxt)));
+    registerPythonSysStderrDiagnosticHandler(cCtxt);
+  }
+  ~System() { mlirContextDetachDiagnosticHandler(wrap(ctxt), diagID); }
+
+  MlirModule createModule() {
+    assert(!module);
+    auto loc = UnknownLoc::get(ctxt);
+    module = ModuleOp::create(loc);
+    return wrap(module);
   }
 
   void loadMlir(std::string filename) {
+    assert(module && "Must call create_module first()!");
     auto loadedMod = mlir::parseSourceFile(filename, ctxt);
     Block *loadedBlock = loadedMod->getBody();
-    auto &ops = module->getBody()->getOperations();
+    assert(!module->getRegions().empty());
+    if (module.body().empty()) {
+      module.body().push_back(loadedBlock);
+      return;
+    }
+    auto &ops = module.getBody()->getOperations();
     ops.splice(ops.end(), loadedBlock->getOperations());
   }
 
-  MlirOperation get() { return wrap((Operation *)module.get()); }
   MlirOperation lookup(std::string symbol) {
-    Operation *found =
-        SymbolTable::lookupSymbolIn((Operation *)module.get(), symbol);
+    Operation *found = SymbolTable::lookupSymbolIn(module, symbol);
     return wrap(found);
   }
 
 private:
   MLIRContext *ctxt;
-  OwningModuleRef module;
+  ModuleOp module;
+  MlirDiagnosticHandlerID diagID;
 };
 
 void circt::python::populateDialectESISubmodule(py::module &m) {
   m.doc() = "ESI Python Native Extension";
+  ::registerESIPasses();
 
   m.def("buildWrapper", &pyWrapModule,
         "Construct an ESI wrapper around RTL module 'op' given a list of "
         "latency-insensitive ports.",
         py::arg("op"), py::arg("name_list"));
 
-  py::class_<System>(m, "System")
+  py::class_<System>(m, "CppSystem")
       .def(py::init<MlirContext>())
       .def("load_mlir", &System::loadMlir, "Load an MLIR assembly file.")
-      .def("get", &System::get, "Get the top level module op.")
-      .def("lookup", &System::lookup, "Lookup an RTL module and return it.");
+      .def("lookup", &System::lookup, "Lookup an RTL module and return it.")
+      .def("create_module", &System::createModule, "");
 }
