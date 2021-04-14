@@ -49,4 +49,30 @@ def BlackboxMemory : Pass<"firrtl-blackbox-memory", "firrtl::CircuitOp"> {
   ];
 }
 
+def ExpandWhens : Pass<"firrtl-expand-whens", "firrtl::FModuleOp"> {
+  let summary = "Remove all when conditional blocks.";
+  let description = [{
+    This pass will:
+    1. Resolve last connect semantics.
+    2. Remove all when operations.
+
+    When a wire has multiple connections, only the final connection is used,
+    all previous connections are overwritten. When there is a conditional
+    connect, the previous connect is only overwritten when the condition
+    holds:
+
+    ```firrtl
+    w <= a
+    when c :
+      w <= b
+
+    ; Equivalent to:
+    w <= mux(c, b, a)
+    ```
+
+    This pass requires that all connects are expanded.
+  }];
+  let constructor = "circt::firrtl::createExpandWhensPass()";
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

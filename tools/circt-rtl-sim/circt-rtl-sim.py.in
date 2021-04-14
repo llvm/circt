@@ -79,6 +79,69 @@ class Questa:
         return subprocess.run(cmd + simargs.split())
 
 
+class Vivado:
+    """Run and compile funcs for Vivado."""
+
+    DefaultDriver = "driver.sv"
+
+    def __init__(self, path, args):
+        self.path = path
+        self.args = args
+
+    def compile(self, sources):
+        sources = filter(
+            lambda fn: not (fn.endswith(".so") or fn.endswith(".dll")),
+            sources)
+        vlog = os.path.join(self.path, "xvlog")
+        work = self.libname + "=" + self.libname + ".dir"
+        args = [vlog, "-sv", "-work", work] + list(sources)
+        rc = subprocess.run(args)
+        if rc.returncode != 0:
+            return rc
+
+        elab = os.path.join(self.path, "xelab")
+        if self.args.no_default_driver:
+            top = self.args.top
+        else:
+            top = "driver"
+        top = self.libname + "." + top
+        args = [elab, top, "-lib", work, "-debug", "typical"]
+        return subprocess.run(args)
+
+    def run(self, cycles, simargs):
+        xsim = os.path.join(self.path, "xsim")
+
+        if self.args.no_default_driver:
+            top = self.args.top
+        else:
+            top = "driver"
+        top = self.libname + "." + top
+        args = [xsim, top]
+
+        script = "script.tcl"
+        with open(script, "w") as f:
+            commands = "run -all\n"
+            if not self.args.gui:
+                commands += "quit\n"
+            f.write(commands)
+        args += ["-t", script]
+
+        if self.args.cycles >= 0:
+            args += ["-testplusarg", f"cycles={cycles}"]
+
+        if self.args.gui:
+            args.append("-gui")
+
+        return subprocess.run(args + simargs.split())
+
+    @property
+    def libname(self):
+        name = self.args.sources[0].split("/")[0].split('.')[0]
+        if not name:
+            name = "work"
+        return name
+
+
 class Verilator:
     """Run and compile funcs for Verilator."""
 
@@ -163,7 +226,8 @@ def __main__(args):
 
     if simName in ["questa", "vsim", "vlog", "vopt"]:
         sim = Questa(simParts[0], args)
-
+    elif simName == "xsim":
+        sim = Vivado(simParts[0], args)
     elif simName == "verilator":
         sim = Verilator(args)
     else:

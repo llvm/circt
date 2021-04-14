@@ -28,6 +28,8 @@ std::unique_ptr<mlir::Pass> createIMConstPropPass();
 
 std::unique_ptr<mlir::Pass> createBlackBoxMemoryPass();
 
+std::unique_ptr<mlir::Pass> createExpandWhensPass();
+
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/FIRRTL/Passes.h.inc"
