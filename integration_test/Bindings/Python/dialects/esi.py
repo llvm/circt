@@ -19,6 +19,7 @@ with Context() as ctxt, Location.unknown():
 
     i1 = IntegerType.get_signless(1)
     i32 = IntegerType.get_signless(32)
+    i32_chan = esi.channel_type(i32)
 
     with InsertionPoint(sys.get_body()):
         op = rtl.RTLModuleOp(
@@ -29,6 +30,14 @@ with Context() as ctxt, Location.unknown():
                 [module.entry_block.arguments[1]])
         )
 
+        snoop = rtl.RTLModuleOp(
+            name='I32Snoop',
+            input_ports=[('foo_in', i32_chan)],
+            output_ports=[('foo_out', i32_chan)],
+            body_builder=lambda module: rtl.OutputOp(
+                [module.entry_block.arguments[0]])
+        )
+
     esi.buildWrapper(op.operation, ["foo"])
     sys.print()
     # CHECK-LABEL:  rtl.module @MyWidget_esi(%foo: !esi.channel<i32>) {
@@ -37,6 +46,8 @@ with Context() as ctxt, Location.unknown():
     # CHECK-NEXT:     rtl.output
     # CHECK-LABEL:  rtl.module @MyWidget(%foo: i32, %foo_valid: i1) -> (%foo_ready: i1) {
     # CHECK-NEXT:     rtl.output %foo_valid : i1
+    # CHECK-LABEL:  rtl.module @I32Snoop(%foo_in: !esi.channel<i32>) -> (%foo_out: !esi.channel<i32>) {
+    # CHECK-NEXT:     rtl.output %foo_in : !esi.channel<i32>
 
     prod = sys.lookup("IntProducer")
     assert (prod is not None)

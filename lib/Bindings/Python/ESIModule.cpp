@@ -10,6 +10,7 @@
 
 #include "circt-c/Dialect/ESI.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
+#include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir-c/Bindings/Python/Interop.h"
 #include "mlir-c/Diagnostics.h"
@@ -74,8 +75,14 @@ registerPythonSysStderrDiagnosticHandler(MlirContext context) {
   return id;
 }
 
+static MlirType channelType(MlirType cElem) {
+  Type elemTy = unwrap(cElem);
+  auto chanTy = ChannelPort::get(elemTy.getContext(), elemTy);
+  return wrap(chanTy);
+}
+
 //===----------------------------------------------------------------------===//
-// The main entry point into the ESI API.
+// The main entry point into the ESI Assembly API.
 //===----------------------------------------------------------------------===//
 
 class System {
@@ -124,6 +131,8 @@ void circt::python::populateDialectESISubmodule(py::module &m) {
         "Construct an ESI wrapper around RTL module 'op' given a list of "
         "latency-insensitive ports.",
         py::arg("op"), py::arg("name_list"));
+  m.def("channel_type", &channelType,
+        "Create an ESI channel type which wraps the argument type");
 
   py::class_<System>(m, "CppSystem")
       .def(py::init<MlirContext>())

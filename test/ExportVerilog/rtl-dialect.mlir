@@ -297,7 +297,7 @@ rtl.module @literal_extract(%inp_1: i349) -> (%tmp6: i349) {
   rtl.output %0 : i349
 }
 // CHECK-LABEL: module literal_extract
-// CHECK: wire [16:0] _T = 17'h11A2C;
+// CHECK: localparam [16:0] _T = 17'h11A2C;
 // CHECK: assign tmp6 = {{[{][{]}}332{_T[16]}}, _T};
 
 rtl.module @wires(%in4: i4, %in8: i8) -> (%a: i4, %b: i8, %c: i8) {
@@ -599,7 +599,7 @@ rtl.module @longvariadic(%a: i8) -> (%b: i8) {
 // CHECK-EMPTY:
 // CHECK-NEXT:   reg memory_r_en_pipe[0:0];
 // CHECK-EMPTY:
-// CHECK-NEXT:   wire _T = 1'h0;
+// CHECK-NEXT:   localparam _T = 1'h0;
 // CHECK-NEXT:   always_ff @(posedge clock)
 // CHECK-NEXT:     memory_r_en_pipe[_T] <= _T;
 // CHECK-NEXT:   initial
@@ -639,9 +639,9 @@ rtl.module @notEmitDuplicateWiresThatWereUnInlinedDueToLongNames(%clock: i1, %x:
 
 // CHECK-LABEL: module largeConstant
 rtl.module @largeConstant(%a: i100000, %b: i16) -> (%x: i100000, %y: i16) {
-  // Large constant is broken out to its own wire to avoid long line problems.
+  // Large constant is broken out to its own localparam to avoid long line problems.
 
-  // CHECK: wire [99999:0] _tmp = 100000'h2CD76FE086B93CE2F768A00B22A00000000000;
+  // CHECK: localparam [99999:0] _tmp = 100000'h2CD76FE086B93CE2F768A00B22A00000000000;
   %c = rtl.constant 1000000000000000000000000000000000000000000000 : i100000
   // CHECK: assign x = a + _tmp + _tmp + _tmp + _tmp + _tmp + _tmp + _tmp + _tmp;
   %1 = comb.add %a, %c, %c, %c, %c, %c, %c, %c, %c : i100000

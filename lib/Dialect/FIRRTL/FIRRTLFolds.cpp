@@ -108,6 +108,7 @@ constFoldFIRRTLBinaryOp(Operation *op, ArrayRef<Attribute> operands,
   IntegerAttr rhs = elideZeroWidthFoldOperand(op->getOperand(1), operands[1]);
   if (!lhs || !rhs)
     return {};
+  auto srcType = op->getOperandTypes().front().cast<IntType>();
   auto dstType = op->getResultTypes().front().cast<IntType>();
   auto dstWidth = dstType.getBitWidthOrSentinel();
   auto commonWidth = useDstWidth
@@ -115,7 +116,7 @@ constFoldFIRRTLBinaryOp(Operation *op, ArrayRef<Attribute> operands,
                          : std::max<int32_t>(lhs.getValue().getBitWidth(),
                                              rhs.getValue().getBitWidth());
   auto extOrSelf =
-      dstType.isUnsigned() ? &APInt::zextOrTrunc : &APInt::sextOrTrunc;
+      srcType.isUnsigned() ? &APInt::zextOrTrunc : &APInt::sextOrTrunc;
   return IntegerAttr::get(IntegerType::get(lhs.getContext(), dstWidth),
                           calculate((lhs.getValue().*extOrSelf)(commonWidth),
                                     (rhs.getValue().*extOrSelf)(commonWidth)));
@@ -622,6 +623,13 @@ LogicalResult HeadPrimOp::canonicalize(HeadPrimOp op,
 OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
   APInt value;
 
+  // mux(cond, x, invalid) -> x
+  // mux(cond, invalid, x) -> x
+  if (high().getDefiningOp<InvalidValuePrimOp>())
+    return low();
+  if (low().getDefiningOp<InvalidValuePrimOp>())
+    return high();
+
   /// mux(0/1, x, y) -> x or y
   if (matchPattern(sel(), m_FConstant(value))) {
     if (value.isNullValue() && low().getType() == getType())
@@ -632,13 +640,6 @@ OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
 
   // mux(cond, x, x) -> x
   if (high() == low())
-    return high();
-
-  // mux(cond, x, invalid) -> x
-  // mux(cond, invalid, x) -> x
-  if (high().getDefiningOp<InvalidValuePrimOp>())
-    return low();
-  if (low().getDefiningOp<InvalidValuePrimOp>())
     return high();
 
   // mux(cond, x, cst)
@@ -996,4 +997,9 @@ LogicalResult PartialConnectOp::canonicalize(PartialConnectOp op,
     return success();
   }
   return failure();
+}
+
+void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                         MLIRContext *context) {
+  results.insert<patterns::EmptyNode>(context);
 }
