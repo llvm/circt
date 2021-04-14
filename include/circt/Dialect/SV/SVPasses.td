@@ -60,8 +60,16 @@ def RTLGeneratorCalloutPass : Pass<"rtl-generator-callout", "ModuleOp"> {
   }];
   let constructor = "circt::sv::createRTLGeneratorCalloutPass()";
 
-  let options = [Option<"genExecutable", "generator-executable", "std::string",
-                        "", "Generator program executable with full path name">];
+  let options = [
+    Option<"schemaName", "schema-name", "std::string",
+                "", "Name of the schema to process">,
+    Option<"genExecutable", "generator-executable", "std::string",
+                "", "Generator program executable with optional full path name">,
+    Option<"genExecArgs", "generator-executable-arguments", "std::string",
+                "", "Generator program arguments separated by ;">,
+    Option<"genExecOutFileName", "generator-executable-output-filename", "std::string",
+                "", "Name of the output file to be used by the generator program to dump the filenames in which the module definition is generated.">
+   ];
 }
 
 #endif // CIRCT_DIALECT_SV_SVPASSES
