@@ -1742,6 +1742,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         portKind == MemOp::PortKind::Read
             ? readCount
             : portKind == MemOp::PortKind::Write ? writeCount : readwriteCount;
+
     auto addInput = [&](SmallVectorImpl<Value> &operands, StringRef field,
                         size_t width) {
       auto portType =
@@ -1751,11 +1752,15 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       Value wire = createTmpWireOp(
           portType, ("." + portName + "." + field + ".wire").str());
 
-      for (auto a : accesses)
-        if (width)
+      for (auto a : accesses) {
+        if (a.getType()
+                .cast<FIRRTLType>()
+                .getPassiveType()
+                .getBitWidthOrSentinel() > 0)
           (void)setLowering(a, wire);
         else
           a->eraseOperand(0);
+      }
 
       wire = builder.create<sv::ReadInOutOp>(wire);
       operands.push_back(wire);

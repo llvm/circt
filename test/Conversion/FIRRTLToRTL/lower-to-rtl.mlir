@@ -704,4 +704,21 @@ firrtl.circuit "Simple" {
   firrtl.module @Struct0bits(%source: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<0>>) {
     %2 = firrtl.subfield %source ("data") : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<0>>) -> !firrtl.uint<0>
   }
+
+  // CHECK-LABEL: rtl.module @MemDepth1
+  firrtl.module @MemDepth1(%clock: !firrtl.clock, %en: !firrtl.uint<1>,
+                         %addr: !firrtl.uint<1>, %data: !firrtl.flip<uint<32>>) {
+    // CHECK: %mem0.ro_data_0 = rtl.instance "mem0" @FIRRTLMem_1_0_0_32_1_0_1_1(%clock, %en, %addr) : (i1, i1, i1) -> i32
+    // CHECK: rtl.output %mem0.ro_data_0 : i32
+    %mem0_load0 = firrtl.mem Old {depth = 1 : i64, name = "mem0", portNames = ["load0"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: flip<uint<1>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<32>>
+    %0 = firrtl.subfield %mem0_load0("clk") : (!firrtl.bundle<addr: flip<uint<1>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<32>>) -> !firrtl.flip<clock>
+    firrtl.connect %0, %clock : !firrtl.flip<clock>, !firrtl.clock
+    %1 = firrtl.subfield %mem0_load0("addr") : (!firrtl.bundle<addr: flip<uint<1>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<32>>) -> !firrtl.flip<uint<1>>
+    firrtl.connect %1, %addr : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    %2 = firrtl.subfield %mem0_load0("data") : (!firrtl.bundle<addr: flip<uint<1>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<32>>) -> !firrtl.uint<32>
+    firrtl.connect %data, %2 : !firrtl.flip<uint<32>>, !firrtl.uint<32>
+    %3 = firrtl.subfield %mem0_load0("en") : (!firrtl.bundle<addr: flip<uint<1>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<32>>) -> !firrtl.flip<uint<1>>
+    firrtl.connect %3, %en : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+}
+
 }
