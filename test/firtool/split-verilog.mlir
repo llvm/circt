@@ -1,9 +1,11 @@
 // RUN: firtool %s --format=mlir -verilog | FileCheck %s --check-prefix=VERILOG
-// RUN: firtool %s --format=mlir -split-verilog -o=%t | FileCheck %s --check-prefix=FIRTOOL
-// RUN: FileCheck %s --check-prefix=VERILOG-FOO < %t/foo.v
-// RUN: FileCheck %s --check-prefix=VERILOG-BAR < %t/bar.v
-// RUN: FileCheck %s --check-prefix=VERILOG-USB < %t/usb.v
-// RUN: FileCheck %s --check-prefix=VERILOG-INOUT-3 < %t/inout_3.v
+// RUN: rm -rf %t
+// RUN: firtool %s --format=mlir -split-verilog -o=%t
+// RUN: FileCheck %s --check-prefix=VERILOG-FOO < %t/foo.sv
+// RUN: FileCheck %s --check-prefix=VERILOG-BAR < %t/bar.sv
+// RUN: FileCheck %s --check-prefix=VERILOG-USB < %t/usb.sv
+// RUN: FileCheck %s --check-prefix=VERILOG-INOUT-3 < %t/inout_3.sv
+// RUN: FileCheck %s --check-prefix=LIST < %t/filelist.f
 
 sv.verbatim "// I'm everywhere"
 sv.ifdef.procedural "VERILATOR" {
@@ -35,10 +37,10 @@ rtl.module.extern @inout_0 () -> ()
 rtl.module.extern @inout_1 () -> ()
 rtl.module.extern @inout_2 () -> ()
 
-// FIRTOOL:      foo.v
-// FIRTOOL-NEXT: bar.v
-// FIRTOOL-NEXT: usb.v
-// FIRTOOL-NEXT: inout_3.v
+// LIST:      foo.sv
+// LIST-NEXT: bar.sv
+// LIST-NEXT: usb.sv
+// LIST-NEXT: inout_3.sv
 
 // VERILOG-FOO:       // I'm everywhere
 // VERILOG-FOO-NEXT:  `ifdef VERILATOR

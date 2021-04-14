@@ -268,9 +268,7 @@ processBufferIntoMultipleFiles(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
         case OutputVerilog:
           llvm_unreachable("single-stream format must be handled elsewhere");
         case OutputSplitVerilog:
-          return exportSplitVerilog(
-              module.get(), outputDirectory,
-              [](StringRef filename) { llvm::outs() << filename << "\n"; });
+          return exportSplitVerilog(module.get(), outputDirectory);
         }
         llvm_unreachable("unknown output format");
       });
