@@ -17,6 +17,7 @@
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Support/ImplicitLocOpBuilder.h"
 #include "circt/Translation/ExportVerilog.h"
+#include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Process.h"
 
 using namespace circt;
@@ -39,16 +40,20 @@ private:
 } // end anonymous namespace
 
 // Parse the \p genExec string, to extract the program executable, the path to
-// the executable and all the required arguments.
-void static parseProgramArgs(const std::string genExec, std::string &execName,
+// the executable and all the required arguments from \p genExecArgs.
+void static parseProgramArgs(const std::string genExec,
+                             const std::string genExecArgs,
+                             std::string &execName,
                              std::string &genExecutablePath,
                              std::vector<std::string> &genOptions) {
-  std::string temp = genExec;
+  std::string temp = genExecArgs;
   size_t pos;
   while ((pos = temp.find_last_of(";")) != std::string::npos) {
     genOptions.push_back(temp.substr(pos + 1));
     temp = temp.substr(0, pos);
   }
+  genOptions.push_back(temp);
+  temp = genExec;
 
   auto pathLoc = temp.find_last_of("/\\");
   if (pathLoc != std::string::npos)
@@ -63,8 +68,8 @@ void RTLGeneratorCalloutPass::runOnOperation() {
   ModuleOp root = getOperation();
   std::string genExecutableName, genExecutablePath;
   std::vector<std::string> genOptions;
-  parseProgramArgs(genExecutable, genExecutableName, genExecutablePath,
-                   genOptions);
+  parseProgramArgs(genExecutable, genExecArgs, genExecutableName,
+                   genExecutablePath, genOptions);
 
   OpBuilder builder(root->getContext());
   auto genMemExe =
@@ -73,8 +78,7 @@ void RTLGeneratorCalloutPass::runOnOperation() {
   // empty), then search it in the $PATH.
   if (!genMemExe)
     genMemExe = llvm::sys::findProgramByName(genExecutableName);
-  // If cannot find the executable, then nothing to do return. TODO: Should we
-  // error out here ?
+  // If cannot find the executable, then nothing to do return.
   if (!genMemExe)
     return;
   SmallVector<Operation *> opsToRemove;
@@ -95,9 +99,6 @@ void RTLGeneratorCalloutPass::runOnOperation() {
         // explicitly.
         generatorArgs.push_back("--moduleName");
         generatorArgs.push_back(moduleName);
-        generatorArgs.push_back("-o");
-        // The file name for output is "moduleName.v".
-        generatorArgs.push_back(moduleName + ".v");
         // Iterate over all the attributes in the schema.
         // Assumption: All the options required by the generator program must be
         // present in the schema.
@@ -113,16 +114,15 @@ void RTLGeneratorCalloutPass::runOnOperation() {
           else if (auto strV = v.dyn_cast<StringAttr>())
             generatorArgs.push_back(strV.getValue().str());
         }
+        generatorArgs.push_back(" ");
         std::vector<StringRef> generatorArgStrRef;
         for (const std::string &a : generatorArgs) {
           generatorArgStrRef.push_back(a);
         }
 
         std::string errMsg;
-        // TODO: Redirects only for debugging and testing purpose, we will
-        // remove this.
-        Optional<StringRef> redirects[] = {None, StringRef("genOutRedirect2"),
-                                           StringRef("genOutRedirect3")};
+        Optional<StringRef> redirects[] = {None, StringRef(genExecOutFileName),
+                                           None};
         int result = llvm::sys::ExecuteAndWait(
             *genMemExe, generatorArgStrRef, /*Env=*/None,
             /*Redirects=*/redirects,
@@ -130,13 +130,17 @@ void RTLGeneratorCalloutPass::runOnOperation() {
 
         // TODO: Silently ignore if any error occurs?
         if (result >= 0) {
+          auto bufferRead = llvm::MemoryBuffer::getFile(genExecOutFileName);
+          if (!bufferRead || !*bufferRead)
+            return;
+          auto fileContent = (*bufferRead)->getBuffer().str();
           builder.setInsertionPointAfter(&op);
           RTLModuleExternOp extMod = builder.create<rtl::RTLModuleExternOp>(
               modGenOp.getLoc(), modGenOp.getVerilogModuleNameAttr(),
               modGenOp.getPorts());
           // Attach an attribute to which file the definition of the external
           // module exists in.
-          extMod->setAttr("Filename", builder.getStringAttr(moduleName + ".v"));
+          extMod->setAttr("filenames", builder.getStringAttr(fileContent));
           opsToRemove.push_back(modGenOp);
           // builder.create<sv::VerbatimOp>(op.getLoc(), "`include " +
           // moduleName + ".v");
