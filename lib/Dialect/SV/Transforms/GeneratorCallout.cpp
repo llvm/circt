@@ -84,16 +84,18 @@ void RTLGeneratorCalloutPass::runOnOperation() {
   SmallVector<Operation *> opsToRemove;
   for (auto &op : *root.getBody()) {
     if (auto modGenOp = dyn_cast<RTLModuleGeneratedOp>(op)) {
-      std::vector<std::string> generatorArgs;
-      // First argument should be the executable name.
-      generatorArgs.push_back(genExecutableName);
-
-      for (auto o : genOptions) {
-        generatorArgs.push_back(o);
-      }
       // Get the corresponding schema associated with this generated op.
       if (auto genSchema =
               dyn_cast<RTLGeneratorSchemaOp>(modGenOp.getGeneratorKindOp())) {
+        if (genSchema.descriptor().str() != schemaName)
+          continue;
+        std::vector<std::string> generatorArgs;
+        // First argument should be the executable name.
+        generatorArgs.push_back(genExecutableName);
+
+        for (auto o : genOptions) {
+          generatorArgs.push_back(o);
+        }
         auto moduleName = modGenOp.getVerilogModuleNameAttr().getValue().str();
         // The moduleName option is not present in the schema, so add it
         // explicitly.
