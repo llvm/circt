@@ -108,6 +108,7 @@ constFoldFIRRTLBinaryOp(Operation *op, ArrayRef<Attribute> operands,
   IntegerAttr rhs = elideZeroWidthFoldOperand(op->getOperand(1), operands[1]);
   if (!lhs || !rhs)
     return {};
+  auto srcType = op->getOperandTypes().front().cast<IntType>();
   auto dstType = op->getResultTypes().front().cast<IntType>();
   auto dstWidth = dstType.getBitWidthOrSentinel();
   auto commonWidth = useDstWidth
@@ -115,7 +116,7 @@ constFoldFIRRTLBinaryOp(Operation *op, ArrayRef<Attribute> operands,
                          : std::max<int32_t>(lhs.getValue().getBitWidth(),
                                              rhs.getValue().getBitWidth());
   auto extOrSelf =
-      dstType.isUnsigned() ? &APInt::zextOrTrunc : &APInt::sextOrTrunc;
+      srcType.isUnsigned() ? &APInt::zextOrTrunc : &APInt::sextOrTrunc;
   return IntegerAttr::get(IntegerType::get(lhs.getContext(), dstWidth),
                           calculate((lhs.getValue().*extOrSelf)(commonWidth),
                                     (rhs.getValue().*extOrSelf)(commonWidth)));
