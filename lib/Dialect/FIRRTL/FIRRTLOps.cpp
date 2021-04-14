@@ -319,6 +319,20 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
   FModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
 }
 
+// Return the port with the specified name.
+BlockArgument FModuleOp::getPortArgument(StringAttr name) {
+  auto *body = getBodyBlock();
+
+  // FIXME: This is O(n)!
+  for (unsigned i = 0, e = body->getNumArguments(); i < e; ++i) {
+    auto argAttrs = ::mlir::impl::getArgAttrs(*this, i);
+    if (getFIRRTLNameAttr(argAttrs) == name)
+      return body->getArgument(i);
+  }
+
+  return {};
+}
+
 void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name, ArrayRef<ModulePortInfo> ports,
                          StringRef defnameAttr, ArrayAttr annotations) {
@@ -1755,10 +1769,82 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
     namesDisagree = true;
   }
 
-  if (namesDisagree)
-    p.printOptionalAttrDict(op->getAttrs());
-  else
-    p.printOptionalAttrDict(op->getAttrs(), {"name"});
+  SmallVector<StringRef, 2> elides;
+
+  if (!namesDisagree)
+    elides.push_back("name");
+
+  // Elide "annotations" if it doesn't exist or if it is empty
+  auto annotationsAttr = op->getAttrOfType<ArrayAttr>("annotations");
+  if (!annotationsAttr || annotationsAttr.empty())
+    elides.push_back("annotations");
+
+  p.printOptionalAttrDict(op->getAttrs(), elides);
+}
+
+//===----------------------------------------------------------------------===//
+// Custom attr-dict Directive that Elides Annotations
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseElideAnnotations(OpAsmParser &parser,
+                                         NamedAttrList &resultAttrs) {
+  return parser.parseOptionalAttrDict(resultAttrs);
+}
+
+static void printElideAnnotations(OpAsmPrinter &p, Operation *op,
+                                  DictionaryAttr attr) {
+  // Elide "annotations" if it doesn't exist or if it is empty
+  auto annotationsAttr = op->getAttrOfType<ArrayAttr>("annotations");
+  if (!annotationsAttr || annotationsAttr.empty())
+    return p.printOptionalAttrDict(op->getAttrs(), {"annotations"});
+
+  p.printOptionalAttrDict(op->getAttrs());
+}
+
+//===----------------------------------------------------------------------===//
+// InstanceOp Custom attr-dict Directive
+//===----------------------------------------------------------------------===//
+
+/// No change from normal parsing.
+static ParseResult parseInstanceOp(OpAsmParser &parser,
+                                   NamedAttrList &resultAttrs) {
+  return parser.parseOptionalAttrDict(resultAttrs);
+}
+
+/// Always elide "moduleName" and elide "annotations" if it exists or
+/// if it is empty.
+static void printInstanceOp(OpAsmPrinter &p, Operation *op,
+                            DictionaryAttr attr) {
+
+  // "moduleName" is always elided
+  SmallVector<StringRef, 2> elides = {"moduleName"};
+
+  // Elide "annotations" if it doesn't exist or if it is empty
+  auto annotationsAttr = op->getAttrOfType<ArrayAttr>("annotations");
+  if (!annotationsAttr || annotationsAttr.empty())
+    elides.push_back("annotations");
+
+  p.printOptionalAttrDict(op->getAttrs(), elides);
+}
+
+//===----------------------------------------------------------------------===//
+// MemOp Custom attr-dict Directive
+//===----------------------------------------------------------------------===//
+
+/// No change from normal parsing.
+static ParseResult parseMemOp(OpAsmParser &parser, NamedAttrList &resultAttrs) {
+  return parser.parseOptionalAttrDict(resultAttrs);
+}
+
+/// Always elide "ruw" and elide "annotations" if it exists or if it is empty.
+static void printMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
+  SmallVector<StringRef, 2> elides = {"ruw"};
+
+  auto annotationsAttr = op->getAttrOfType<ArrayAttr>("annotations");
+  if (!annotationsAttr || annotationsAttr.empty())
+    elides.push_back("annotations");
+
+  p.printOptionalAttrDict(op->getAttrs(), elides);
 }
 
 //===----------------------------------------------------------------------===//

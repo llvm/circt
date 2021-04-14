@@ -308,9 +308,8 @@ rtl.module @exprInlineTestIssue439(%clk: i1) {
   sv.always posedge %clk {
     %c = rtl.constant 0 : i32
 
-    // CHECK: automatic logic [31:0] _T;
+    // CHECK: localparam      [31:0] _T = 32'h0;
     // CHECK: automatic logic [15:0] _T_0;
-    // CHECK: _T = 32'h0;
     // CHECK: _T_0 = _T[15:0];
     %e = comb.extract %c from 0 : (i32) -> i16
     %f = comb.add %e, %e : i16
@@ -646,3 +645,86 @@ rtl.module @ifdef_beginend(%clock: i1, %cond: i1, %val: i8) {
     } // CHECK-NEXT: `endif
   } // CHECK-NEXT: end
 } // CHECK-NEXT: endmodule
+
+// https://github.com/llvm/circt/issues/884
+// CHECK-LABEL: module ConstResetValueMustBeInlined(
+rtl.module @ConstResetValueMustBeInlined(%clock: i1, %reset: i1, %d: i42) -> (%q: i42) {
+  %c0_i42 = rtl.constant 0 : i42
+  %tmp = sv.reg : !rtl.inout<i42>
+  // CHECK:      localparam [41:0] _T = 42'h0;
+  // CHECK-NEXT: always_ff @(posedge clock or posedge reset) begin
+  // CHECK-NEXT:   if (reset)
+  // CHECK-NEXT:     tmp <= _T;
+  sv.alwaysff(posedge %clock) {
+    sv.passign %tmp, %d : i42
+  } (asyncreset : posedge %reset)  {
+    sv.passign %tmp, %c0_i42 : i42
+  }
+  %1 = sv.read_inout %tmp : !rtl.inout<i42>
+  rtl.output %1 : i42
+}
+
+// CHECK-LABEL: module OutOfLineConstantsInAlwaysSensitivity
+rtl.module @OutOfLineConstantsInAlwaysSensitivity() {
+  // CHECK-NEXT: localparam _T = 1'h0;
+  // CHECK-NEXT: always_ff @(posedge _T)
+  %clock = rtl.constant 0 : i1
+  sv.alwaysff(posedge %clock) {}
+}
+
+// CHECK-LABEL: module TooLongConstExpr
+rtl.module @TooLongConstExpr() {
+  %myreg = sv.reg : !rtl.inout<i4200>
+  // CHECK: always @*
+  sv.always {
+    // CHECK-NEXT: localparam [4199:0] _tmp = 4200'h
+    // CHECK-NEXT: myreg <= _tmp + _tmp;
+    %0 = rtl.constant 15894191981981165163143546843135416146464164161464654561818646486465164684484 : i4200
+    %1 = comb.add %0, %0 : i4200
+    sv.passign %myreg, %1 : i4200
+  }
+}
+
+// Constants defined before use should be emitted in-place.
+// CHECK-LABEL: module ConstantDefBeforeUse
+rtl.module @ConstantDefBeforeUse() {
+  %myreg = sv.reg : !rtl.inout<i32>
+  // CHECK:      localparam [31:0] _T = 32'h2A;
+  // CHECK-NEXT: always @*
+  // CHECK-NEXT:   myreg <= _T
+  %0 = rtl.constant 42 : i32
+  sv.always {
+    sv.passign %myreg, %0 : i32
+  }
+}
+
+// Constants defined after use in non-procedural regions should be moved to the
+// top of the block.
+// CHECK-LABEL: module ConstantDefAfterUse
+rtl.module @ConstantDefAfterUse() {
+  %myreg = sv.reg : !rtl.inout<i32>
+  // CHECK:      localparam [31:0] _T = 32'h2A;
+  // CHECK-NEXT: always @*
+  // CHECK-NEXT:   myreg <= _T
+  sv.always {
+    sv.passign %myreg, %0 : i32
+  }
+  %0 = rtl.constant 42 : i32
+}
+
+// Constants defined in a procedural block with users in a different block
+// should be emitted at the top of their defining block.
+// CHECK-LABEL: module ConstantEmissionAtTopOfBlock
+rtl.module @ConstantEmissionAtTopOfBlock() {
+  %myreg = sv.reg : !rtl.inout<i32>
+  // CHECK:      always @* begin
+  // CHECK-NEXT:   localparam [31:0] _T = 32'h2A;
+  // CHECK:          myreg <= _T;
+  sv.always {
+    %0 = rtl.constant 42 : i32
+    %1 = rtl.constant 1 : i1
+    sv.if %1 {
+      sv.passign %myreg, %0 : i32
+    }
+  }
+}

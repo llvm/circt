@@ -1715,7 +1715,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     return op.emitOpError(
         "should have already been lowered from a ground type to an aggregate "
         "type using the LowerTypes pass. Use "
-        "'firtool --enable-lower-types' or 'circt-opt "
+        "'firtool --lower-types' or 'circt-opt "
         "--pass-pipeline='firrtl.circuit(firrtl-lower-types)' "
         "to run this.");
 

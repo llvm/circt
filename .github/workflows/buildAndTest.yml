@@ -34,8 +34,10 @@ jobs:
         id: cache-llvm
         uses: actions/cache@v2
         with:
-          path: llvm
-          key: ${{ runner.os }}-llvm-sharedlibs-${{ steps.get-llvm-hash.outputs.hash }}
+          path: |
+            llvm/build
+            llvm/install
+          key: ${{ runner.os }}-llvm-nocode-sharedlibs-${{ steps.get-llvm-hash.outputs.hash }}
 
       # Build LLVM if we didn't hit in the cache.
       - name: Rebuild and Install LLVM
@@ -114,8 +116,10 @@ jobs:
         id: cache-llvm
         uses: actions/cache@v2
         with:
-          path: llvm
-          key: ${{ runner.os }}-llvm-sharedlibs-${{ steps.get-llvm-hash.outputs.hash }}
+          path: |
+            llvm/build
+            llvm/install
+          key: ${{ runner.os }}-llvm-nocode-sharedlibs-${{ steps.get-llvm-hash.outputs.hash }}
 
       # Build LLVM if we didn't hit in the cache. Even though we build it in
       # the previous job, there is a low chance that it'll have been evicted by

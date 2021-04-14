@@ -97,6 +97,12 @@ struct GlobalFIRParserState {
   /// file).  This is null if no annotations were provided.
   const llvm::MemoryBuffer *annotationsBuf;
 
+  /// A mutable reference to the current CircuitTarget.
+  StringRef circuitTarget;
+
+  /// A mutable reference to the current ModuleTarget.
+  StringRef moduleTarget;
+
   class BacktraceState {
   public:
     explicit BacktraceState(GlobalFIRParserState &state)
@@ -258,7 +264,7 @@ struct FIRParser {
 
   /// Populate a vector of annotations for a given Target.  If the annotations
   /// parameter is non-empty, then this will be appended to.
-  void getAnnotations(StringRef target, ArrayAttr &annotations);
+  void getAnnotations(Twine target, ArrayAttr &annotations);
 
 private:
   FIRParser(const FIRParser &) = delete;
@@ -833,17 +839,23 @@ ParseResult FIRParser::importAnnotationFile(SMLoc loc) {
   return result;
 }
 
-void FIRParser::getAnnotations(StringRef target, ArrayAttr &annotations) {
+void FIRParser::getAnnotations(Twine target, ArrayAttr &annotations) {
+  // Early exit if no annotations exist.  This avoids the cost of
+  // constructing strings representing targets if no annotation can
+  // possibly exist.
+  if (state.annotationMap.begin() == state.annotationMap.end())
+    return;
+
   // Input annotations is empty.  Just do the lookup and return.
   if (!annotations) {
-    annotations = state.annotationMap.lookup(target);
+    annotations = state.annotationMap.lookup(target.str());
     return;
   }
 
   // Input annotations is non-empty.  Exit quickly if the target doesn't exist.
   // Otherwise, construct a new ArrayAttr that includes existing and new
   // annotations.
-  auto newAnnotations = state.annotationMap.lookup(target);
+  auto newAnnotations = state.annotationMap.lookup(target.str());
   if (!newAnnotations)
     return;
 
@@ -923,6 +935,9 @@ public:
   /// we need to keep track of the scope (in the `symbolTable`) of each memory.
   /// This keeps track of this.
   MemoryScopeTable &memoryScopeTable;
+
+  /// Return the current modulet target, e.g., "~Foo|Bar".
+  StringRef getModuleTarget() { return getState().moduleTarget; }
 };
 } // end anonymous namespace
 
@@ -1805,7 +1820,7 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
       OpBuilder memOpBuilder(scopeAndOperation.second);
 
       auto wireHack = memOpBuilder.create<WireOp>(
-          info.getLoc(), result.getType(), StringAttr());
+          info.getLoc(), result.getType(), StringAttr(), ArrayAttr());
       builder.create<ConnectOp>(info.getLoc(), wireHack, result);
 
       // Inject this the wire's name into the same scope as the memory.
@@ -2149,9 +2164,12 @@ ParseResult FIRStmtParser::parseInstance() {
     resultTypes.push_back(FlipType::get(port.type));
     resultNames.push_back(port.name);
   }
+  auto name = filterUselessName(id);
+  ArrayAttr annotations = builder.getArrayAttr({});
+  getAnnotations(getModuleTarget() + ">" + name.getValue(), annotations);
   auto result = builder.create<InstanceOp>(
       info.getLoc(), resultTypes, builder.getSymbolRefAttr(moduleName),
-      builder.getArrayAttr(resultNames), filterUselessName(id));
+      builder.getArrayAttr(resultNames), name, annotations);
 
   // Since we are implicitly unbundling the instance results, we need to keep
   // track of the mapping from bundle fields to results in the unbundledValues
@@ -2186,8 +2204,11 @@ ParseResult FIRStmtParser::parseCMem() {
       parseType(type, "expected cmem type") || parseOptionalInfo(info))
     return failure();
 
-  auto result =
-      builder.create<CMemOp>(info.getLoc(), type, filterUselessName(id));
+  auto name = filterUselessName(id);
+  ArrayAttr annotations = builder.getArrayAttr({});
+  getAnnotations(getModuleTarget() + ">" + name.getValue(), annotations);
+
+  auto result = builder.create<CMemOp>(info.getLoc(), type, name, annotations);
 
   // Remember that this memory is in this symbol table scope.
   // TODO(chisel bug): This should be removed along with memoryScopeTable.
@@ -2218,8 +2239,12 @@ ParseResult FIRStmtParser::parseSMem() {
       parseOptionalInfo(info))
     return failure();
 
+  auto name = filterUselessName(id);
+  ArrayAttr annotations = builder.getArrayAttr({});
+  getAnnotations(getModuleTarget() + ">" + name.getValue(), annotations);
+
   auto result =
-      builder.create<SMemOp>(info.getLoc(), type, ruw, filterUselessName(id));
+      builder.create<SMemOp>(info.getLoc(), type, ruw, name, annotations);
 
   // Remember that this memory is in this symbol table scope.
   // TODO(chisel bug): This should be removed along with memoryScopeTable.
@@ -2348,9 +2373,13 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     resultTypes.push_back(FlipType::get(p.second));
   }
 
+  auto name = filterUselessName(id);
+  ArrayAttr annotations = builder.getArrayAttr({});
+  getAnnotations(getModuleTarget() + ">" + name.getValue(), annotations);
+
   auto result = builder.create<MemOp>(
       info.getLoc(), resultTypes, readLatency, writeLatency, depth, ruw,
-      builder.getArrayAttr(resultNames), filterUselessName(id));
+      builder.getArrayAttr(resultNames), filterUselessName(id), annotations);
 
   UnbundledValueEntry unbundledValueEntry;
   unbundledValueEntry.reserve(result.getNumResults());
@@ -2418,10 +2447,16 @@ ParseResult FIRStmtParser::parseNode() {
 
   // The entire point of a node declaration is to carry a name.  If it got
   // dropped, then we don't even need to create a result.
+  //
+  // TODO: This optimization doesn't respect annotated, temporary nodes.
   Value result;
-  if (actualName)
-    result = builder.create<NodeOp>(info.getLoc(), initializer, actualName);
-  else
+  if (actualName) {
+    ArrayAttr annotations = builder.getArrayAttr({});
+    getAnnotations(getModuleTarget() + ">" + actualName.getValue(),
+                   annotations);
+    result = builder.create<NodeOp>(info.getLoc(), initializer, actualName,
+                                    annotations);
+  } else
     result = initializer;
   return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
 }
@@ -2443,8 +2478,11 @@ ParseResult FIRStmtParser::parseWire() {
       parseType(type, "expected wire type") || parseOptionalInfo(info))
     return failure();
 
-  auto result =
-      builder.create<WireOp>(info.getLoc(), type, filterUselessName(id));
+  ArrayAttr annotations = builder.getArrayAttr({});
+  getAnnotations(getModuleTarget() + ">" + id.getValue(), annotations);
+
+  auto result = builder.create<WireOp>(info.getLoc(), type,
+                                       filterUselessName(id), annotations);
   return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
 }
 
@@ -2536,13 +2574,17 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   if (parseOptionalInfo(info, subOps))
     return failure();
 
+  auto name = filterUselessName(id);
+  ArrayAttr annotations = builder.getArrayAttr({});
+  getAnnotations(getModuleTarget() + ">" + name.getValue(), annotations);
+
   Value result;
   if (resetSignal)
     result = builder.create<RegResetOp>(info.getLoc(), type, clock, resetSignal,
-                                        resetValue, filterUselessName(id));
+                                        resetValue, name, annotations);
   else
-    result = builder.create<RegOp>(info.getLoc(), type, clock,
-                                   filterUselessName(id));
+    result =
+        builder.create<RegOp>(info.getLoc(), type, clock, name, annotations);
 
   return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
 }
@@ -2643,8 +2685,13 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   SmallVector<PortInfoAndLoc, 4> portListAndLoc;
 
   LocWithInfo info(getToken().getLoc(), this);
-  if (parseId(name, "expected module name") ||
-      parseToken(FIRToken::colon, "expected ':' in extmodule definition") ||
+  if (parseId(name, "expected module name"))
+    return failure();
+
+  auto moduleTarget = (getState().circuitTarget + "|" + name.getValue()).str();
+  getState().moduleTarget = moduleTarget;
+
+  if (parseToken(FIRToken::colon, "expected ':' in extmodule definition") ||
       parseOptionalInfo(info) || parsePortList(portListAndLoc, indent))
     return failure();
 
@@ -2723,8 +2770,7 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   }
 
   ArrayAttr annotations;
-  getAnnotations("~" + circuit.name().str() + "|" + name.getValue().str(),
-                 annotations);
+  getAnnotations(moduleTarget, annotations);
 
   auto fmodule = builder.create<FExtModuleOp>(info.getLoc(), name, portList,
                                               defName, annotations);
@@ -2745,8 +2791,13 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
   SmallVector<PortInfoAndLoc, 4> portListAndLoc;
 
   consumeToken(FIRToken::kw_module);
-  if (parseId(name, "expected module name") ||
-      parseToken(FIRToken::colon, "expected ':' in module definition") ||
+  if (parseId(name, "expected module name"))
+    return failure();
+
+  auto moduleTarget = (getState().circuitTarget + "|" + name.getValue()).str();
+  getState().moduleTarget = moduleTarget;
+
+  if (parseToken(FIRToken::colon, "expected ':' in module definition") ||
       parseOptionalInfo(info) || parsePortList(portListAndLoc, indent))
     return failure();
 
@@ -2758,8 +2809,7 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
   for (auto &elt : portListAndLoc)
     portList.push_back(elt.first);
   ArrayAttr annotations;
-  getAnnotations("~" + circuit.name().str() + "|" + name.getValue().str(),
-                 annotations);
+  getAnnotations(moduleTarget, annotations);
   auto fmodule =
       builder.create<FModuleOp>(info.getLoc(), name, portList, annotations);
 
@@ -2821,6 +2871,9 @@ ParseResult FIRCircuitParser::parseCircuit() {
       parseOptionalInfo(info))
     return failure();
 
+  auto circuitTarget = "~" + name.getValue().str();
+  getState().circuitTarget = circuitTarget;
+
   // Deal with any inline annotations, if they exist.  These are processed first
   // to place any annotations from an annotation file *after* the inline
   // annotations.  While arbitrary, this makes the annotation file have "append"
@@ -2838,7 +2891,7 @@ ParseResult FIRCircuitParser::parseCircuit() {
   //   2. Annotations targeting the circuit, e.g., "~Foo"
   ArrayAttr annotationVec;
   getAnnotations("~", annotationVec);
-  getAnnotations("~" + name.getValue().str(), annotationVec);
+  getAnnotations(circuitTarget, annotationVec);
 
   OpBuilder b(mlirModule.getBodyRegion());
 

@@ -401,7 +401,7 @@ private:
 
 SigType SigType::get(mlir::Type underlyingType) {
   return Base::get(underlyingType.getContext(), underlyingType);
-};
+}
 
 mlir::Type SigType::getUnderlyingType() {
   return getImpl()->getUnderlyingType();
@@ -439,7 +439,7 @@ Type ArrayType::getElementType() const { return getImpl()->getElementType(); }
 
 PtrType PtrType::get(mlir::Type underlyingType) {
   return Base::get(underlyingType.getContext(), underlyingType);
-};
+}
 
 mlir::Type PtrType::getUnderlyingType() {
   return getImpl()->getUnderlyingType();
