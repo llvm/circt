@@ -1,4 +1,4 @@
-//===- RTLLegalizeNames.cpp - RTL Name Legalization Pass ------------------===//
+//===- GeneratorCallout.cpp - Generator Callout Pass ------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -33,52 +33,38 @@ namespace {
 struct RTLGeneratorCalloutPass
     : public sv::RTLGeneratorCalloutPassBase<RTLGeneratorCalloutPass> {
   void runOnOperation() override;
-
-private:
-  DenseMap<StringRef, RTLGeneratorSchemaOp> generatorSchema;
 };
 } // end anonymous namespace
 
 // Parse the \p genExec string, to extract the program executable, the path to
 // the executable and all the required arguments from \p genExecArgs.
-void static parseProgramArgs(const std::string genExec,
-                             const std::string genExecArgs,
-                             std::string &execName,
-                             std::string &genExecutablePath,
-                             std::vector<std::string> &genOptions) {
-  std::string temp = genExecArgs;
-  size_t pos;
-  while ((pos = temp.find_last_of(";")) != std::string::npos) {
-    genOptions.push_back(temp.substr(pos + 1));
-    temp = temp.substr(0, pos);
-  }
-  genOptions.push_back(temp);
-  temp = genExec;
+llvm::ErrorOr<std::string> static parseProgramArgs(const std::string genExec) {
+  std::string execName, execPath;
 
-  auto pathLoc = temp.find_last_of("/\\");
+  auto pathLoc = genExec.find_last_of("/\\");
   if (pathLoc != std::string::npos)
-    genExecutablePath = temp.substr(0, pathLoc + 1);
+    execPath = genExec.substr(0, pathLoc + 1);
   else
-    genExecutablePath = "";
-  execName = temp.substr(pathLoc + 1);
-  return;
+    execPath = "";
+  execName = genExec.substr(pathLoc + 1);
+
+  auto genMemExe = llvm::sys::findProgramByName(execName, {execPath});
+  // If the executable was not found in the provided path (when the path is
+  // empty), then search it in the $PATH.
+  if (!genMemExe)
+    genMemExe = llvm::sys::findProgramByName(execName);
+  return genMemExe;
 }
 
 void RTLGeneratorCalloutPass::runOnOperation() {
   ModuleOp root = getOperation();
   std::string genExecutableName, genExecutablePath;
-  std::vector<std::string> genOptions;
-  parseProgramArgs(genExecutable, genExecArgs, genExecutableName,
-                   genExecutablePath, genOptions);
-
+  SmallVector<StringRef> genOptions;
+  StringRef genArgs(genExecArgs);
+  genArgs.split(genOptions, ';');
   OpBuilder builder(root->getContext());
-  auto genMemExe =
-      llvm::sys::findProgramByName(genExecutableName, {genExecutablePath});
-  // If the executable was not found in the provided path (when the path is
-  // empty), then search it in the $PATH.
-  if (!genMemExe)
-    genMemExe = llvm::sys::findProgramByName(genExecutableName);
-  // If cannot find the executable, then nothing to do return.
+  auto genMemExe = parseProgramArgs(genExecutable);
+  // If cannot find the executable, then nothing to do, return.
   if (!genMemExe)
     return;
   SmallVector<Operation *> opsToRemove;
@@ -89,17 +75,18 @@ void RTLGeneratorCalloutPass::runOnOperation() {
               dyn_cast<RTLGeneratorSchemaOp>(modGenOp.getGeneratorKindOp())) {
         if (genSchema.descriptor().str() != schemaName)
           continue;
-        std::vector<std::string> generatorArgs;
+        SmallVector<std::string> generatorArgs;
         // First argument should be the executable name.
         generatorArgs.push_back(genExecutableName);
 
         for (auto o : genOptions) {
-          generatorArgs.push_back(o);
+          generatorArgs.push_back(o.str());
         }
         auto moduleName = modGenOp.getVerilogModuleNameAttr().getValue().str();
+        const std::string moduleNameOption("--moduleName");
         // The moduleName option is not present in the schema, so add it
         // explicitly.
-        generatorArgs.push_back("--moduleName");
+        generatorArgs.push_back(moduleNameOption);
         generatorArgs.push_back(moduleName);
         // Iterate over all the attributes in the schema.
         // Assumption: All the options required by the generator program must be
