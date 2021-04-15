@@ -297,7 +297,8 @@ static void buildModule(OpBuilder &builder, OperationState &result,
       argNames.push_back(ports[i].name);
     }
   }
-  result.addAttribute("argNames", builder.getArrayAttr(argNames));
+  if (!argNames.empty())
+    result.addAttribute("argNames", builder.getArrayAttr(argNames));
 
   result.addRegion();
 }
@@ -478,6 +479,7 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
   assert(argAttrs.size() == argTypes.size());
   assert(resultAttrs.size() == resultTypes.size());
 
+  auto *context = result.getContext();
   llvm::errs() << "\n parseFModuleOp:\n";
   for (size_t i = 0, e = argAttrs.size(); i != e; ++i) {
     auto &attrs = argAttrs[i];
@@ -492,35 +494,37 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
   }
   // auto *context = result.getContext();
 
+  SmallVector<Attribute> argNames;
   // Postprocess each of the arguments.  If there was no 'firrtl.name'
   // attribute, and if the argument name was non-numeric, then add the
   // firrtl.name attribute with the textual name from the IR.  The name in the
   // text file is a load-bearing part of the IR, but we don't want the
   // verbosity in dumps of including it explicitly in the attribute
   // dictionary.
-  // for (size_t i = 0, e = argAttrs.size(); i != e; ++i) {
-  //  auto &attrs = argAttrs[i];
+  for (size_t i = 0, e = entryArgs.size(); i != e; ++i) {
+    //auto &attrs = argAttrs[i];
 
-  //  // If an explicit name attribute was present, don't add the implicit one.
-  //  bool hasNameAttr = false;
-  //  for (auto &elt : attrs)
-  //    if (elt.first.str() == "firrtl.name")
-  //      hasNameAttr = true;
-  //  if (hasNameAttr || entryArgs.empty())
-  //    continue;
+    //// If an explicit name attribute was present, don't add the implicit one.
+    //bool hasNameAttr = false;
+    //for (auto &elt : attrs)
+    //  if (elt.first.str() == "firrtl.name")
+    //    hasNameAttr = true;
+    //if (hasNameAttr || entryArgs.empty())
+    //  continue;
 
-  //  auto &arg = entryArgs[i];
+    auto &arg = entryArgs[i];
 
-  //  // The name of an argument is of the form "%42" or "%id", and since
-  //  // parsing succeeded, we know it always has one character.
-  //  assert(arg.name.size() > 1 && arg.name[0] == '%' && "Unknown MLIR name");
-  //  if (isdigit(arg.name[1]))
-  //    continue;
+    // The name of an argument is of the form "%42" or "%id", and since
+    // parsing succeeded, we know it always has one character.
+    assert(arg.name.size() > 1 && arg.name[0] == '%' && "Unknown MLIR name");
+    if (isdigit(arg.name[1]))
+      continue;
 
-  //  auto nameAttr = StringAttr::get(context, arg.name.drop_front());
-  //  attrs.push_back({Identifier::get("firrtl.name", context), nameAttr});
-  //}
-
+    argNames.push_back(StringAttr::get(context, arg.name.drop_front()));
+    // attrs.push_back({Identifier::get("firrtl.name", context), nameAttr});
+  }
+  if (!argNames.empty() && result.attributes.getNamed("argNames") == None)
+    result.addAttribute("argNames", builder.getArrayAttr(argNames));
   // Add the attributes to the function arguments.
   addArgAndResultAttrs(builder, result, argAttrs, resultAttrs);
 
