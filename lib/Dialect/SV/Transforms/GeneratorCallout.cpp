@@ -68,7 +68,7 @@ void RTLGeneratorCalloutPass::runOnOperation() {
   if (!genMemExe)
     return;
   SmallVector<Operation *> opsToRemove;
-  for (auto &op : *root.getBody()) {
+  for (auto &op : llvm::make_early_inc_range(root.getBody()->getOperations())) {
     if (auto modGenOp = dyn_cast<RTLModuleGeneratedOp>(op)) {
       // Get the corresponding schema associated with this generated op.
       if (auto genSchema =
@@ -83,10 +83,9 @@ void RTLGeneratorCalloutPass::runOnOperation() {
           generatorArgs.push_back(o.str());
         }
         auto moduleName = modGenOp.getVerilogModuleNameAttr().getValue().str();
-        const std::string moduleNameOption("--moduleName");
         // The moduleName option is not present in the schema, so add it
         // explicitly.
-        generatorArgs.push_back(moduleNameOption);
+        generatorArgs.push_back("--moduleName");
         generatorArgs.push_back(moduleName);
         // Iterate over all the attributes in the schema.
         // Assumption: All the options required by the generator program must be
@@ -103,7 +102,6 @@ void RTLGeneratorCalloutPass::runOnOperation() {
           else if (auto strV = v.dyn_cast<StringAttr>())
             generatorArgs.push_back(strV.getValue().str());
         }
-        generatorArgs.push_back(" ");
         std::vector<StringRef> generatorArgStrRef;
         for (const std::string &a : generatorArgs) {
           generatorArgStrRef.push_back(a);
@@ -122,7 +120,8 @@ void RTLGeneratorCalloutPass::runOnOperation() {
           auto bufferRead = llvm::MemoryBuffer::getFile(genExecOutFileName);
           if (!bufferRead || !*bufferRead)
             return;
-          auto fileContent = (*bufferRead)->getBuffer().str();
+          // Only extract the first line from the output.
+          auto fileContent = (*bufferRead)->getBuffer().split('\n').first.str();
           builder.setInsertionPointAfter(&op);
           RTLModuleExternOp extMod = builder.create<rtl::RTLModuleExternOp>(
               modGenOp.getLoc(), modGenOp.getVerilogModuleNameAttr(),
@@ -130,15 +129,11 @@ void RTLGeneratorCalloutPass::runOnOperation() {
           // Attach an attribute to which file the definition of the external
           // module exists in.
           extMod->setAttr("filenames", builder.getStringAttr(fileContent));
-          opsToRemove.push_back(modGenOp);
-          // builder.create<sv::VerbatimOp>(op.getLoc(), "`include " +
-          // moduleName + ".v");
+          modGenOp.erase();
         }
       }
     }
   }
-  for (auto remOp : opsToRemove)
-    remOp->erase();
 }
 
 std::unique_ptr<Pass> circt::sv::createRTLGeneratorCalloutPass() {
