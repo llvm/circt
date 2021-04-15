@@ -25,10 +25,6 @@ using namespace firrtl;
 /// the source block empty.
 static void mergeBlock(Block &destination, Block::iterator insertPoint,
                        Block &source) {
-  // Erase the terminator.
-  assert(isa<DoneOp>(source.back()) &&
-         "Block must be terminated with a DoneOp");
-  source.back().erase();
   destination.getOperations().splice(insertPoint, source.getOperations());
 }
 

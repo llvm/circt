@@ -42,7 +42,6 @@ struct FIRRTLToLLHDPass
   LogicalResult visitUnhandledOp(Operation *op);
   LogicalResult visitInvalidOp(Operation *op);
 
-  LogicalResult visitStmt(firrtl::DoneOp op) { return success(); }
   LogicalResult visitStmt(firrtl::ConnectOp op);
 
 private:
@@ -89,8 +88,8 @@ void FIRRTLToLLHDPass::convertCircuit(firrtl::CircuitOp &circuit) {
     if (auto module = dyn_cast<firrtl::FModuleOp>(op)) {
       builder->setInsertionPointAfter(circuit);
       convertModule(module);
-    } else if (!isa<firrtl::DoneOp>(op)) {
-      op.emitError("expected `firrtl.module` or `firrtl.done`");
+    } else {
+      op.emitError("expected `firrtl.module`");
       signalPassFailure();
     }
   }

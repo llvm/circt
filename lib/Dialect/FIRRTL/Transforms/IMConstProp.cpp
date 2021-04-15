@@ -439,13 +439,8 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
   auto *body = module.getBodyBlock();
   // If a module is unreachable, then nuke its body.
   if (!executableBlocks.count(body)) {
-    // TODO: Get rid of DoneOp, we don't need it anymore with recent MLIR
-    // improvements.
-    //     while (!body->empty())
-    //       body->back().erase();
-    auto done = cast<DoneOp>(body->getTerminator());
-    while (&body->front() != done)
-      (--Block::iterator(done))->erase();
+    while (!body->empty())
+      body->back().erase();
     return;
   }
 

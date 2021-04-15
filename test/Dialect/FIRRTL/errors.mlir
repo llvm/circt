@@ -21,25 +21,10 @@ firrtl.module @X(%b : !firrtl.uint<32>, %d : !firrtl.uint<16>, %out : !firrtl.ui
 
 // -----
 
-firrtl.circuit "MyModule" {
-
-// expected-error @+2 {{'firrtl.module' op expects regions to end with 'firrtl.done'}}
-// expected-note @+1 {{implies 'firrtl.done'}}
-"firrtl.module"() ( {
-^bb0(%a: !firrtl.uint<32>):
-  %0 = firrtl.add %a, %a : (!firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<33>
-
-}) {sym_name = "MyModule", type = (!firrtl.uint<32>) -> ()} : () -> ()
-
-}
-
-// -----
-
 // expected-error @+1 {{'firrtl.circuit' op must contain one module that matches main name 'MyCircuit'}}
 firrtl.circuit "MyCircuit" {
 
 "firrtl.module"() ( {
-  "firrtl.done"() : () -> ()
 }) { type = () -> ()} : () -> ()
 
 }
