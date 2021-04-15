@@ -106,7 +106,7 @@ struct LoweringOptionsParser : public llvm::cl::parser<LoweringOptions> {
 /// the command line arguments in multiple tools.
 struct LoweringCLOptions {
   llvm::cl::opt<LoweringOptions, false, LoweringOptionsParser> loweringOptions{
-      "circt-lowering-options", llvm::cl::desc("Style options"),
+      "lowering-options", llvm::cl::desc("Style options"),
       llvm::cl::value_desc("option")};
 };
 } // namespace
