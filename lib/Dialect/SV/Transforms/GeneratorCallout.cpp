@@ -102,7 +102,7 @@ void RTLGeneratorCalloutPass::runOnOperation() {
           else if (auto strV = v.dyn_cast<StringAttr>())
             generatorArgs.push_back(strV.getValue().str());
         }
-        std::vector<StringRef> generatorArgStrRef;
+        SmallVector<StringRef> generatorArgStrRef;
         for (const std::string &a : generatorArgs) {
           generatorArgStrRef.push_back(a);
         }
