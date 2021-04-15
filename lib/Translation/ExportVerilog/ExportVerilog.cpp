@@ -2845,7 +2845,7 @@ void UnifiedEmitter::emitMLIRModule() {
       ModuleEmitter(state).emitRTLExternModule(rootOp);
     else if (auto rootOp = dyn_cast<RTLModuleGeneratedOp>(op))
       ModuleEmitter(state).emitRTLGeneratedModule(rootOp);
-    else if (auto rootOp = dyn_cast<RTLGeneratorSchemaOp>(op)) { /* Empty */
+    else if (isa<RTLGeneratorSchemaOp>(op)) { /* Empty */
     } else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) ||
                isa<IfDefProceduralOp>(op))
       ModuleEmitter(state).emitStatement(&op);
