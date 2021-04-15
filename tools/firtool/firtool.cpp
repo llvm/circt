@@ -72,7 +72,7 @@ static cl::opt<bool> imconstprop(
     cl::init(false));
 
 static cl::opt<bool>
-    enableLowerTypes("enable-lower-types",
+    enableLowerTypes("lower-types",
                      cl::desc("run the lower-types pass within lower-to-rtl"),
                      cl::init(false));
 
