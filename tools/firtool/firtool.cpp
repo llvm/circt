@@ -205,6 +205,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   if (lowerToRTL || outputFormat == OutputVerilog ||
       outputFormat == OutputSplitVerilog) {
     pm.addPass(createLowerFIRRTLToRTLPass());
+    pm.addPass(sv::createRTLMemSimImplPass());
 
     // If enabled, run the optimizer.
     if (!disableOptimization) {

@@ -23,6 +23,7 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TinyPtrVector.h"
+#include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/Parallel.h"
 
 using namespace circt;
@@ -104,6 +105,97 @@ static bool isZeroBitFIRRTLType(Type type) {
   return type.cast<FIRRTLType>().getPassiveType().getBitWidthOrSentinel() == 0;
 }
 
+namespace {
+struct FirMemory {
+  size_t numReadPorts;
+  size_t numWritePorts;
+  size_t numReadWritePorts;
+  size_t dataWidth;
+  size_t depth;
+  size_t readLatency;
+  size_t writeLatency;
+  size_t readUnderWrite;
+  bool operator<(const FirMemory &rhs) const {
+#define cmp3way(name)                                                          \
+  if (name < rhs.name)                                                         \
+    return true;                                                               \
+  if (name > rhs.name)                                                         \
+    return false;
+    cmp3way(numReadPorts);
+    cmp3way(numWritePorts);
+    cmp3way(numReadWritePorts);
+    cmp3way(dataWidth);
+    cmp3way(depth);
+    cmp3way(readLatency);
+    cmp3way(writeLatency);
+    cmp3way(readUnderWrite);
+    return false;
+#undef cmp3way
+  }
+  bool operator==(const FirMemory &rhs) const {
+    return numReadPorts == rhs.numReadPorts &&
+           numWritePorts == rhs.numWritePorts &&
+           numReadWritePorts == rhs.numReadWritePorts &&
+           dataWidth == rhs.dataWidth && depth == rhs.depth &&
+           readLatency == rhs.readLatency && writeLatency == rhs.writeLatency &&
+           readUnderWrite == rhs.readUnderWrite;
+  }
+};
+} // namespace
+
+static std::string getFirMemoryName(const FirMemory &mem) {
+  return llvm::formatv("FIRRTLMem_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}",
+                       mem.numReadPorts, mem.numWritePorts,
+                       mem.numReadWritePorts, mem.dataWidth, mem.depth,
+                       mem.readLatency, mem.writeLatency, mem.readUnderWrite);
+}
+
+static FirMemory analyzeMemOp(MemOp op) {
+  size_t numReadPorts = 0;
+  size_t numWritePorts = 0;
+  size_t numReadWritePorts = 0;
+
+  for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
+    auto portKind = *op.getPortKind(i);
+    if (portKind == MemOp::PortKind::Read)
+      ++numReadPorts;
+    else if (portKind == MemOp::PortKind::Write)
+      ++numWritePorts;
+    else
+      ++numReadWritePorts;
+  }
+  auto width = op.getDataType().getBitWidthOrSentinel();
+  if (width <= 0) {
+    op.emitError("'firrtl.mem' should have simple type and known width");
+    width = 0;
+  }
+
+  return {numReadPorts, numWritePorts,    numReadWritePorts, (size_t)width,
+          op.depth(),   op.readLatency(), op.writeLatency(), (size_t)op.ruw()};
+}
+
+static SmallVector<FirMemory> collectFIRRTLMemories(Operation *op) {
+  auto module = cast<FModuleOp>(op);
+  SmallVector<FirMemory> retval;
+  for (auto op : module.getBody().getOps<MemOp>())
+    retval.push_back(analyzeMemOp(op));
+  return retval;
+}
+
+static SmallVector<FirMemory>
+mergeFIRRTLMemories(const SmallVector<FirMemory> &lhs,
+                    SmallVector<FirMemory> rhs) {
+  if (rhs.empty())
+    return lhs;
+  // lhs is always sorted and uniqued
+  llvm::sort(rhs);
+  rhs.erase(std::unique(rhs.begin(), rhs.end()), rhs.end());
+  SmallVector<FirMemory> retval;
+  std::set_union(lhs.begin(), lhs.end(), rhs.begin(), rhs.end(),
+                 std::back_inserter(retval));
+  return retval;
+}
+
 //===----------------------------------------------------------------------===//
 // firrtl.module Lowering Pass
 //===----------------------------------------------------------------------===//
@@ -157,6 +249,9 @@ private:
                        CircuitLoweringState &loweringState);
   void lowerModuleOperations(rtl::RTLModuleOp module,
                              CircuitLoweringState &loweringState);
+
+  void lowerMemoryDecls(const SmallVector<FirMemory> &mems, Block *top,
+                        CircuitLoweringState &loweringState);
 };
 
 } // end anonymous namespace
@@ -215,6 +310,18 @@ void FIRRTLModuleLowering::runOnOperation() {
         << op.getName() << "' in a firrtl.circuit";
   }
 
+  SmallVector<FirMemory> memories;
+  if (getContext().isMultithreadingEnabled()) {
+    memories = llvm::parallelTransformReduce(
+        modulesToProcess.begin(), modulesToProcess.end(),
+        SmallVector<FirMemory>(), mergeFIRRTLMemories, collectFIRRTLMemories);
+  } else {
+    for (auto m : modulesToProcess)
+      memories = mergeFIRRTLMemories(memories, collectFIRRTLMemories(m));
+  }
+  if (!memories.empty())
+    lowerMemoryDecls(memories, topLevelModule, state);
+
   // Now that we've lowered all of the modules, move the bodies over and update
   // any instances that refer to the old modules.
   if (getContext().isMultithreadingEnabled()) {
@@ -241,6 +348,85 @@ void FIRRTLModuleLowering::runOnOperation() {
   lowerFileHeader(circuit, state);
 
   circuit.erase();
+}
+
+void FIRRTLModuleLowering::lowerMemoryDecls(const SmallVector<FirMemory> &mems,
+                                            Block *top,
+                                            CircuitLoweringState &state) {
+  auto b =
+      ImplicitLocOpBuilder::atBlockBegin(UnknownLoc::get(&getContext()), top);
+  std::array<StringRef, 8> schemaFields = {
+      "depth",       "numReadPorts", "numWritePorts", "numReadWritePorts",
+      "readLatency", "writeLatency", "width",         "readUnderWrite"};
+  auto schemaFieldsAttr = b.getStrArrayAttr(schemaFields);
+  auto schema = b.create<rtl::RTLGeneratorSchemaOp>(
+      "FIRRTLMem", "FIRRTL_Memory", schemaFieldsAttr);
+  auto memorySchema = b.getSymbolRefAttr(schema);
+
+  Type b1Type = IntegerType::get(&getContext(), 1);
+
+  for (auto &mem : mems) {
+    SmallVector<rtl::ModulePortInfo> ports;
+    size_t inputPin = 0;
+    size_t outputPin = 0;
+
+    auto makePortCommon = [&](StringRef prefix, Twine i, Type bAddrType) {
+      ports.push_back({b.getStringAttr((prefix + "_clock_" + i).str()),
+                       rtl::INPUT, b1Type, inputPin++});
+      ports.push_back({b.getStringAttr((prefix + "_en_" + i).str()), rtl::INPUT,
+                       b1Type, inputPin++});
+      ports.push_back({b.getStringAttr((prefix + "_addr_" + i).str()),
+                       rtl::INPUT, bAddrType, inputPin++});
+    };
+
+    Type bDataType =
+        IntegerType::get(&getContext(), std::max((size_t)1, mem.dataWidth));
+
+    Type bAddrType = IntegerType::get(
+        &getContext(), std::max(1U, llvm::Log2_64_Ceil(mem.depth)));
+
+    for (size_t i = 0; i < mem.numReadPorts; ++i) {
+      makePortCommon("ro", Twine(i), bAddrType);
+      ports.push_back({b.getStringAttr(("ro_data_" + Twine(i)).str()),
+                       rtl::OUTPUT, bDataType, outputPin++});
+    }
+    for (size_t i = 0; i < mem.numReadWritePorts; ++i) {
+      makePortCommon("rw", Twine(i), bAddrType);
+      ports.push_back({b.getStringAttr(("rw_wmode_" + Twine(i)).str()),
+                       rtl::INPUT, b1Type, inputPin++});
+      ports.push_back({b.getStringAttr(("rw_wmask_" + Twine(i)).str()),
+                       rtl::INPUT, b1Type, inputPin++});
+      ports.push_back({b.getStringAttr(("rw_wdata_" + Twine(i)).str()),
+                       rtl::INPUT, bDataType, inputPin++});
+      ports.push_back({b.getStringAttr(("rw_rdata_" + Twine(i)).str()),
+                       rtl::OUTPUT, bDataType, outputPin++});
+    }
+
+    for (size_t i = 0; i < mem.numWritePorts; ++i) {
+      makePortCommon("wo", Twine(i), bAddrType);
+      ports.push_back({b.getStringAttr(("wo_mask_" + Twine(i)).str()),
+                       rtl::INPUT, b1Type, inputPin++});
+      ports.push_back({b.getStringAttr(("wo_data_" + Twine(i)).str()),
+                       rtl::INPUT, bDataType, inputPin++});
+    }
+    std::array<NamedAttribute, 8> genAttrs = {
+        b.getNamedAttr("depth", b.getI64IntegerAttr(mem.depth)),
+        b.getNamedAttr("numReadPorts", b.getUI32IntegerAttr(mem.numReadPorts)),
+        b.getNamedAttr("numWritePorts",
+                       b.getUI32IntegerAttr(mem.numWritePorts)),
+        b.getNamedAttr("numReadWritePorts",
+                       b.getUI32IntegerAttr(mem.numReadWritePorts)),
+        b.getNamedAttr("readLatency", b.getUI32IntegerAttr(mem.readLatency)),
+        b.getNamedAttr("writeLatency", b.getUI32IntegerAttr(mem.writeLatency)),
+        b.getNamedAttr("width", b.getUI32IntegerAttr(mem.dataWidth)),
+        b.getNamedAttr("readUnderWrite",
+                       b.getUI32IntegerAttr(mem.readUnderWrite))};
+
+    // Make the global module for the memory
+    auto memoryName = b.getStringAttr(getFirMemoryName(mem));
+    b.create<rtl::RTLModuleGeneratedOp>(memorySchema, memoryName, ports,
+                                        StringRef(), genAttrs);
+  }
 }
 
 /// Emit the file header that defines a bunch of macros.
@@ -533,6 +719,19 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
 
   // Folding merge of one value just returns the value.
   return builder.createOrFold<comb::MergeOp>(results);
+}
+
+static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
+                                                   StringRef field) {
+  SmallVector<SubfieldOp> accesses;
+  for (auto op : structValue.getUsers()) {
+    assert(isa<SubfieldOp>(op));
+    auto fieldAccess = cast<SubfieldOp>(op);
+    if (fieldAccess.fieldname() == field) {
+      accesses.push_back(fieldAccess);
+    }
+  }
+  return accesses;
 }
 
 /// Now that we have the operations for the rtl.module's corresponding to the
@@ -1343,9 +1542,9 @@ LogicalResult FIRRTLLowering::visitExpr(ConstantOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
-  // firrtl.mem lowering leaves invalid SubfieldOps.  Ignore these invalid
-  // ops.
-  if (!op.input())
+  // firrtl.mem lowering lowers some SubfieldOps.  Zero-width can leave invalid
+  // subfield accesses
+  if (getLoweredValue(op) || !op.input())
     return success();
 
   // Extracting a zero bit value from a struct is defined but doesn't do
@@ -1520,258 +1719,104 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         "--pass-pipeline='firrtl.circuit(firrtl-lower-types)' "
         "to run this.");
 
-  uint64_t depth = op.depth();
-  uint64_t readLatency = op.readLatency();
-  uint64_t writeLatency = op.writeLatency();
-  auto addrType = lowerType(op.getResult(0)
-                                .getType()
-                                .cast<FIRRTLType>()
-                                .getPassiveType()
-                                .cast<BundleType>()
-                                .getElement("addr")
-                                ->type);
-  auto dataType = lowerType(op.getDataType());
-
-  // A store of values associated with a delayed read.
-  struct ReadPipeElement {
-    Value en;
-    Value addr;
-    Value rd_en;
-    Value rd_addr;
-  };
-
-  // A store of values associated with a delayed write.
-  struct WritePipeElement {
-    Value en;
-    Value addr;
-    Value mask;
-    Value data;
-    Value rd_en;
-    Value rd_addr;
-    Value rd_mask;
-    Value rd_data;
-  };
-
-  // Create a register for the memory.
-  Value reg =
-      builder.create<sv::RegOp>(rtl::UnpackedArrayType::get(dataType, depth),
-                                builder.getStringAttr(memName.str()));
-
-  // Some helpers.
-  auto buildPAssign = [&](Value dest, Value value) {
-    builder.create<sv::PAssignOp>(dest, value);
-  };
-
-  // Track pipeline registers that were added. These need to be
-  // randomly initialized later.
-  SmallVector<Value> pipeRegs;
+  FirMemory memSummary = analyzeMemOp(op);
 
   // Process each port in turn.
-  SmallVector<std::pair<Identifier, MemOp::PortKind>> ports = op.getPorts();
+  SmallVector<Type, 8> resultTypes;
+  SmallVector<Value, 8> readOperands;
+  SmallVector<Value, 8> rwOperands;
+  SmallVector<Value, 8> writeOperands;
+  DenseMap<Operation *, size_t> returnHolder;
 
-  for (size_t i = 0, e = ports.size(); i != e; ++i) {
-    auto portName = ports[i].first.str();
-    auto port = op.getResult(i);
+  size_t readCount = 0;
+  size_t writeCount = 0;
+  size_t readwriteCount = 0;
 
-    // Do not lower ports if they aren't used.
-    if (port.use_empty())
-      continue;
+  // Memories return multiple structs, one for each port, which means we have
+  // two layers of type to split appart.
+  for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
+    auto portName = op.getPortName(i).getValue();
+    auto portKind = *op.getPortKind(i);
 
-    auto portBundleType =
-        port.getType().cast<FIRRTLType>().getPassiveType().cast<BundleType>();
+    auto &portKindNum =
+        portKind == MemOp::PortKind::Read
+            ? readCount
+            : portKind == MemOp::PortKind::Write ? writeCount : readwriteCount;
 
-    // Create wires for all the memory ports
-    llvm::StringMap<Value> portWires;
-    for (BundleType::BundleElement elt : portBundleType.getElements()) {
-      auto fieldType = lowerType(elt.type);
-      if (fieldType.isInteger(0)) {
-        portWires.insert({elt.name.getValue(), Value()});
-        continue;
+    auto addInput = [&](SmallVectorImpl<Value> &operands, StringRef field,
+                        size_t width) {
+      auto portType =
+          IntegerType::get(op.getContext(), std::max((size_t)1, width));
+      auto accesses = getAllFieldAccesses(op.getResult(i), field);
+
+      Value wire = createTmpWireOp(
+          portType, ("." + portName + "." + field + ".wire").str());
+
+      for (auto a : accesses) {
+        if (a.getType()
+                .cast<FIRRTLType>()
+                .getPassiveType()
+                .getBitWidthOrSentinel() > 0)
+          (void)setLowering(a, wire);
+        else
+          a->eraseOperand(0);
       }
-      auto name =
-          (Twine(memName) + "_" + portName + "_" + elt.name.getValue()).str();
-      auto fieldWire = createTmpWireOp(fieldType, name);
-      portWires.insert({elt.name.getValue(), fieldWire});
-    }
 
-    // Now that we have the wires for each element, rewrite any subfields to
-    // use them instead of the subfields.
-    while (!port.use_empty()) {
-      auto portField = cast<SubfieldOp>(*port.user_begin());
-      portField->dropAllReferences();
-      (void)setLowering(portField, portWires[portField.fieldname()]);
-    }
+      wire = builder.create<sv::ReadInOutOp>(wire);
+      operands.push_back(wire);
+    };
+    auto addOutput = [&](StringRef field, size_t width) {
+      auto portType =
+          IntegerType::get(op.getContext(), std::max((size_t)1, width));
+      resultTypes.push_back(portType);
 
-    // Don't emit anything more for zero bit data values.
-    if (dataType.isInteger(0))
-      continue;
-
-    // Return the value corresponding to a port field.
-    auto getPortFieldValue = [&](StringRef name) -> Value {
-      return builder.create<sv::ReadInOutOp>(portWires[name]);
+      // Now collect the data for the instance.  A op produces multiple
+      // structures, so we need to look through SubfieldOps to see the true
+      // inputs and outputs.
+      auto accesses = getAllFieldAccesses(op.getResult(i), field);
+      // Read data ports are tracked to be updated later
+      for (auto &a : accesses)
+        if (width)
+          returnHolder[a] = resultTypes.size() - 1;
+        else
+          a->eraseOperand(0);
     };
 
-    // Create an array register and keep track of it in pipeRegs.
-    auto createArrayReg = [&](StringRef elementName, Type type,
-                              uint64_t depth) -> Value {
-      auto a = builder.create<sv::RegOp>(
-          rtl::UnpackedArrayType::get(type, depth),
-          builder.getStringAttr(memName.str() + "_" + portName +
-                                elementName.str()));
-      pipeRegs.push_back(a);
-      return a;
-    };
-
-    auto i1Type = builder.getI1Type();
-    auto clk = getPortFieldValue("clk");
-
-    // Loop over each element of the port
-    switch (ports[i].second) {
-    case MemOp::PortKind::ReadWrite:
-      op.emitOpError("readwrite ports should be lowered into separate read and "
-                     "write ports by previous passes");
-      continue;
-    case MemOp::PortKind::Read: {
-      // Add delays for non-zero read latency
-      SmallVector<ReadPipeElement> readPipe;
-      auto rden = getPortFieldValue("en");
-      auto rdaddr = getPortFieldValue("addr");
-      readPipe.push_back({portWires["en"], portWires["addr"], rden, rdaddr});
-      Value enReg, addrReg, enRegRd, addRegRd;
-      for (size_t j = 0; j < readLatency; ++j) {
-        if (j == 0) {
-          enReg = createArrayReg("_en_pipe", i1Type, readLatency);
-          addrReg = createArrayReg("_addr_pipe", addrType, readLatency);
-        }
-        auto jIdx = getOrCreateIntConstant(log2(readLatency + 1), j);
-        auto enJ = builder.create<sv::ArrayIndexInOutOp>(enReg, jIdx);
-        auto addrJ = builder.create<sv::ArrayIndexInOutOp>(addrReg, jIdx);
-        auto rdEnJ = builder.create<sv::ReadInOutOp>(enJ);
-        auto rdAddrJ = builder.create<sv::ReadInOutOp>(addrJ);
-        readPipe.push_back({enJ, addrJ, rdEnJ, rdAddrJ});
-      }
-      if (readLatency != 0) {
-        addToAlwaysFFBlock(sv::EventControl::AtPosEdge, clk, [&]() {
-          for (size_t j = 1; j < readLatency + 1; ++j) {
-            buildPAssign(readPipe[j].en, readPipe[j - 1].rd_en);
-            addIfProceduralBlock(readPipe[j - 1].rd_en, [&]() {
-              buildPAssign(readPipe[j].addr, readPipe[j - 1].rd_addr);
-            });
-          }
-        });
-      }
-      Value addr = readPipe.back().rd_addr;
-      Value value = builder.create<sv::ArrayIndexInOutOp>(reg, addr);
-      value = builder.create<sv::ReadInOutOp>(value);
-
-      // If we're masking, use RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK to emit a
-      // "addr < Depth ? mem[addr] : `RANDOM" check conditionally.
-      if (!llvm::isPowerOf2_64(depth)) {
-        auto addrWidth = addr.getType().getIntOrFloatBitWidth();
-        auto depthCst = getOrCreateIntConstant(addrWidth, depth);
-        value = builder.create<sv::VerbatimExprOp>(
-            value.getType(),
-            "`RANDOMIZE_GARBAGE_ASSIGN_BOUND_CHECK({{0}}, {{1}}, {{2}})",
-            ValueRange{addr, value, depthCst});
-        circuitState.used_RANDOMIZE_GARBAGE_ASSIGN = 1;
-      }
-
-      builder.create<sv::ConnectOp>(portWires["data"], value);
-      continue;
+    if (portKind == MemOp::PortKind::Read) {
+      addInput(readOperands, "clk", 1);
+      addInput(readOperands, "en", 1);
+      addInput(readOperands, "addr", llvm::Log2_64_Ceil(memSummary.depth));
+      addOutput("data", memSummary.dataWidth);
+    } else if (portKind == MemOp::PortKind::ReadWrite) {
+      addInput(readOperands, "clk", 1);
+      addInput(readOperands, "en", 1);
+      addInput(readOperands, "addr", llvm::Log2_64_Ceil(memSummary.depth));
+      addInput(readOperands, "wmode", 1);
+      addInput(writeOperands, "wmask", 1);
+      addInput(writeOperands, "wdata", memSummary.dataWidth);
+      addOutput("rdata", memSummary.dataWidth);
+    } else {
+      addInput(writeOperands, "clk", 1);
+      addInput(writeOperands, "en", 1);
+      addInput(writeOperands, "addr", llvm::Log2_64_Ceil(memSummary.depth));
+      addInput(writeOperands, "mask", 1);
+      addInput(writeOperands, "data", memSummary.dataWidth);
     }
-    case MemOp::PortKind::Write: {
-      SmallVector<WritePipeElement> writePipe;
-      auto rdEn = getPortFieldValue("en");
-      auto rdAddr = getPortFieldValue("addr");
-      auto rdMask = getPortFieldValue("mask");
-      auto rdData = getPortFieldValue("data");
-      writePipe.push_back({portWires["en"], portWires["addr"],
-                           portWires["mask"], portWires["data"], rdEn, rdAddr,
-                           rdMask, rdData});
-
-      // Construct wripe pipe registers for non-unary write latency
-      Value wRegEn, wRegAddr, wRegMask, wRegData;
-      for (size_t j = 0; j < writeLatency - 1; ++j) {
-        if (j == 0) {
-          wRegEn = createArrayReg("_en_pipe", i1Type, writeLatency - 1);
-          wRegAddr = createArrayReg("_addr_pipe", addrType, writeLatency - 1);
-          wRegMask = createArrayReg("_mask_pipe", i1Type, writeLatency - 1);
-          wRegData = createArrayReg("_data_pipe", dataType, writeLatency - 1);
-        }
-        auto jIdx = getOrCreateIntConstant(log2(writeLatency), j);
-        auto arEn = builder.create<sv::ArrayIndexInOutOp>(wRegEn, jIdx);
-        auto arAddr = builder.create<sv::ArrayIndexInOutOp>(wRegAddr, jIdx);
-        auto arMask = builder.create<sv::ArrayIndexInOutOp>(wRegMask, jIdx);
-        auto arData = builder.create<sv::ArrayIndexInOutOp>(wRegData, jIdx);
-        writePipe.push_back({arEn, arAddr, arMask, arData,
-                             builder.create<sv::ReadInOutOp>(arEn),
-                             builder.create<sv::ReadInOutOp>(arAddr),
-                             builder.create<sv::ReadInOutOp>(arMask),
-                             builder.create<sv::ReadInOutOp>(arData)});
-      }
-
-      // Build the write pipe for non-unary write latency
-      if (writeLatency != 1) {
-        addToAlwaysFFBlock(sv::EventControl::AtPosEdge, clk, [&]() {
-          for (size_t j = 1; j < writeLatency; ++j) {
-            buildPAssign(writePipe[j].en, writePipe[j - 1].rd_en);
-            addIfProceduralBlock(writePipe[j - 1].rd_en, [&]() {
-              buildPAssign(writePipe[j].addr, writePipe[j - 1].rd_addr);
-              buildPAssign(writePipe[j].mask, writePipe[j - 1].rd_mask);
-              buildPAssign(writePipe[j].data, writePipe[j - 1].rd_data);
-            });
-          }
-        });
-      }
-
-      // Attach the write port
-      auto last = writePipe.back();
-      auto enable = last.rd_en;
-      auto cond = builder.createOrFold<comb::AndOp>(enable, last.rd_mask);
-      auto slot = builder.create<sv::ArrayIndexInOutOp>(reg, last.rd_addr);
-      auto rd_lastdata = last.rd_data;
-      addToAlwaysFFBlock(sv::EventControl::AtPosEdge, clk, [&]() {
-        addIfProceduralBlock(cond, [&]() { buildPAssign(slot, rd_lastdata); });
-      });
-      continue;
-    }
-    }
+    ++portKindNum;
   }
 
-  // Emit the initializer expression for simulation that fills it with random
-  // value.
-  addToIfDefBlock("SYNTHESIS", {}, [&]() {
-    addToInitialBlock([&]() {
-      emitRandomizePrologIfNeeded();
-      circuitState.used_RANDOMIZE_MEM_INIT = 1;
-      addToIfDefProceduralBlock("RANDOMIZE_MEM_INIT", [&]() {
-        if (depth == 1) { // Don't emit a for loop for one element.
-          auto type = sv::getInOutElementType(reg.getType());
-          type = sv::getAnyRTLArrayElementType(type);
-          auto randomVal = builder.create<sv::VerbatimExprOp>(type, "`RANDOM");
-          auto zero = getOrCreateIntConstant(1, 0);
-          auto subscript = builder.create<sv::ArrayIndexInOutOp>(reg, zero);
-          builder.create<sv::BPAssignOp>(subscript, randomVal);
-        } else {
-          assert(depth < (1ULL << 31) && "FIXME: Our initialization logic uses "
-                                         "'integer' which doesn't support "
-                                         "mems greater than 2^32");
+  auto memModuleAttr = builder.getSymbolRefAttr(getFirMemoryName(memSummary));
 
-          std::string action = "integer {{0}}_initvar;\n";
-          action += "for ({{0}}_initvar = 0; {{0}}_initvar < " +
-                    llvm::utostr(depth) + "; {{0}}_initvar = {{0}}_initvar+1)";
-          action += "\n  {{0}}[{{0}}_initvar] = `RANDOM;";
+  // FIRRTL ports are arbitrary in order, ours are not
+  readOperands.append(writeOperands.begin(), writeOperands.end());
+  // Create the instance to replace the memop
+  auto inst = builder.create<rtl::InstanceOp>(
+      resultTypes, builder.getStringAttr(memName), memModuleAttr, readOperands,
+      DictionaryAttr());
 
-          builder.create<sv::VerbatimOp>(action, reg);
-        }
-      });
-    });
-  });
-
-  // Randomly initialize any pipeline registers that were created.
-  for (auto pipeReg : pipeRegs)
-    initializeRegister(pipeReg, Value());
-
+  // Update all users of the result of read ports
+  for (auto &ret : returnHolder)
+    (void)setLowering(ret.first->getResult(0), inst.getResult(ret.second));
   return success();
 }
 
