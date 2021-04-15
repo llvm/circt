@@ -205,9 +205,6 @@ void FIRRTLModuleLowering::runOnOperation() {
       continue;
     }
 
-    if (isa<DoneOp>(op))
-      continue;
-
     // Otherwise we don't know what this is.  We are just going to drop it,
     // but emit an error so the client has some chance to know that this is
     // going to happen.
@@ -630,8 +627,7 @@ void FIRRTLModuleLowering::lowerModuleBody(
   auto &oldBlockInstList = oldModule.getBodyBlock()->getOperations();
   auto &newBlockInstList = newModule.getBodyBlock()->getOperations();
   newBlockInstList.splice(Block::iterator(cursor), oldBlockInstList,
-                          oldBlockInstList.begin(),
-                          std::prev(oldBlockInstList.end()));
+                          oldBlockInstList.begin(), oldBlockInstList.end());
 
   // We are done with our cursor op.
   cursor.erase();
