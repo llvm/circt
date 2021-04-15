@@ -46,7 +46,7 @@ firrtl.circuit "Test" {
 
   // Unused modules should be completely dropped.
 
-  // CHECK-LABEL: @UnusedModule(%source: !firrtl.uint<1>, %dest: !firrtl.flip<uint<1>>) attributes {argNames = ["source", "dest"]}
+  // CHECK-LABEL: @UnusedModule(%source: !firrtl.uint<1>, %dest: !firrtl.flip<uint<1>>)
   firrtl.module @UnusedModule(%source: !firrtl.uint<1>, %dest: !firrtl.flip<uint<1>>) {
     firrtl.connect %dest, %source : !firrtl.flip<uint<1>>, !firrtl.uint<1>
     // CHECK-NEXT: }

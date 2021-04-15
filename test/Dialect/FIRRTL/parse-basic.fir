@@ -19,8 +19,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
   ; CHECK: }
 
-  ; CHECK-LABEL: firrtl.extmodule @MyExtModule(!firrtl.uint {firrtl.name = "in"},
-  ; CHECK: !firrtl.flip<uint<8>> {firrtl.name = "out"})
+  ; CHECK-LABEL: firrtl.extmodule @MyExtModule(%in: !firrtl.uint, %out: !firrtl.flip<uint<8>>)
   ; CHECK: attributes {defname = "myextmodule"}
   ; CHECK-NOT: {
   extmodule MyExtModule :
@@ -28,7 +27,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     output ,,, out ,,: ,, UInt,<,8,>  ; Commas are whitespace
     defname = myextmodule
 
-  ; CHECK-LABEL: firrtl.extmodule @MyParameterizedExtModule(!firrtl.uint {firrtl.name = "in"}, !firrtl.flip<uint<8>> {firrtl.name = "out"})
+  ; CHECK-LABEL: firrtl.extmodule @MyParameterizedExtModule(%in: !firrtl.uint, %out: !firrtl.flip<uint<8>>)
   ; CHECK: attributes {defname = "name_thing",
   ; CHECK: parameters = {DEFAULT = 0 : i64,
   ; CHECK:               DEPTH = 3.242000e+01 : f64,

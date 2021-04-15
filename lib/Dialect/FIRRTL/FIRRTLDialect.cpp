@@ -29,8 +29,6 @@ StringAttr firrtl::getFIRRTLModuleArgNameAttr(Operation *module, size_t argNo) {
 }
 
 bool firrtl::hasFIRRTLModuleArgNameAttr(Operation *module) {
-  //llvm::errs() << "\n Has attr::"<< *module;
-  //module->dump();
   return module->getAttrOfType<ArrayAttr>("argNames") != nullptr;
 }
 
@@ -111,7 +109,6 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
     // attributes for them.  If so, use that as the name.
     auto *parentOp = block->getParentOp();
 
-    llvm::errs() << "\n getAsmBlockArgumentNames\n";
     if (hasFIRRTLModuleArgNameAttr(parentOp))
       for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
         StringAttr str = getFIRRTLModuleArgNameAttr(parentOp, i);

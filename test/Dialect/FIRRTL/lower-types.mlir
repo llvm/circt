@@ -510,7 +510,7 @@ firrtl.circuit "LowerVectorsOfBundles" {
 // -----
 firrtl.circuit "ExternalModule" {
   // CHECK-LABEL: firrtl.extmodule @ExternalModule(!firrtl.uint<1> {firrtl.name = "source_valid"}, !firrtl.flip<uint<1>> {firrtl.name = "source_ready"}, !firrtl.uint<64> {firrtl.name = "source_data"})
-  firrtl.extmodule @ExternalModule(!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>> {firrtl.name = "source"})
+  firrtl.extmodule @ExternalModule(!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>> {firrtl.name = "source"}) attributes {argNames = ["", "source"]}
   firrtl.module @Test() {
     // CHECK:  %inst_source_valid, %inst_source_ready, %inst_source_data = firrtl.instance @ExternalModule {name = "", portNames = ["source_valid", "source_ready", "source_data"]} : !firrtl.flip<uint<1>>, !firrtl.uint<1>, !firrtl.flip<uint<64>>
     %inst_source = firrtl.instance @ExternalModule {name = "", portNames = ["source"]} : !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>

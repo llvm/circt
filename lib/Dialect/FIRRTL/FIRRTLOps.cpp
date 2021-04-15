@@ -288,9 +288,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   SmallString<8> attrNameBuf;
   // Record the names of the arguments if present.
   SmallVector<Attribute> argNames;
-  llvm::errs() << "\n buildModule\n";
   for (size_t i = 0, e = ports.size(); i != e; ++i) {
-    llvm::errs() << "\n port name:"<< ports[i].name;
     if (ports[i].getName().empty()) {
       argNames.push_back(builder.getStringAttr(""));
     } else {
@@ -327,10 +325,7 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
 BlockArgument FModuleOp::getPortArgument(StringAttr name) {
   auto *body = getBodyBlock();
 
-  llvm::errs() << "\n getPortArgument\n"<<name;
-
   // FIXME: This is O(n)!
-
   for (unsigned i = 0, e = body->getNumArguments(); i < e; ++i) {
     if (getFIRRTLModuleArgNameAttr(*this, i) == name)
       return body->getArgument(i);
@@ -365,9 +360,7 @@ static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
     if (i > 0)
       p << ", ";
 
-    llvm::errs() << "\n printFunctionSignature2\n";
     auto argName = getFIRRTLModuleArgName(op, i);
-    llvm::errs() << "\n arg:"<< argName;
     Value argumentValue;
     if (!isExternal) {
       // Get the printed format for the argument name.
@@ -376,10 +369,8 @@ static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
       p.printOperand(body.front().getArgument(i), tmpStream);
       // If the name wasn't printable in a way that agreed with argName, make
       // sure to print out an explicit argNames attribute.
-      llvm::errs() << "\n tmpstream:"<< tmpStream.str();
       if (!argName.empty() && tmpStream.str().drop_front() != argName)
         needArgNamesAttr = true;
-
       p << tmpStream.str() << ": ";
     } else if (!argName.empty()) {
       p << '%' << argName << ": ";
@@ -418,11 +409,10 @@ static void printModuleLikeOp(OpAsmPrinter &p, Operation *op) {
   bool needArgNamesAttr = false;
   printFunctionSignature2(p, op, argTypes, /*isVariadic*/ false, resultTypes,
                           needArgNamesAttr);
-  llvm::errs() << "\n needArgNamesAttr:"<< needArgNamesAttr;
   SmallVector<StringRef, 3> omittedAttrs;
   if (!needArgNamesAttr)
     omittedAttrs.push_back("argNames");
-  printFunctionAttributes(p, op, argTypes.size(), resultTypes.size());
+  printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(), omittedAttrs);
 }
 
 static void print(OpAsmPrinter &p, FExtModuleOp op) {
