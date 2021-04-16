@@ -490,6 +490,7 @@ def ConstantOp : Handshake_Op<"constant", [
   // let skipDefaultBuilders = 1;
   let builders = [OpBuilder<(ins "Attribute":$value, "Value":$operand)>];
 
+  let hasCanonicalizer = 1;
   let extraClassDeclaration = [{
     Attribute getValue() { return (*this)->getAttr("value"); }
   }];
@@ -659,5 +660,9 @@ def EliminateSimpleForksPattern : Pat<(ForkOp
                                        : $op $a, $attr),
                                       (replaceWithValue $a), [(HasOneResult
                                                                : $op)]>;
+
+def EliminateSunkConstantsPattern
+    : Pat<(SinkOp:$sink (ConstantOp $control, $value)),
+          (replaceWithValue $sink)>;
 
 #endif // HANDSHAKE_OPS

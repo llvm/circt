@@ -52,4 +52,13 @@ module {
     %result, %index = "handshake.control_merge"(%arg0, %arg1) {control = true} : (none, none) -> (none, index)
     handshake.return %result, %arg2 : none, none
   }
+
+  // CHECK-LABEL: sunk_constant
+  handshake.func @sunk_constant(%arg0: none) -> (none) {
+    // CHECK-NOT: handshake.constant
+    // CHECK-NOT: handshake.sink
+    %0 = "handshake.constant"(%arg0) { value = 24 : i8 } : (none) -> i8
+    "handshake.sink"(%0) : (i8) -> ()
+    handshake.return %arg0: none
+  }
 }
