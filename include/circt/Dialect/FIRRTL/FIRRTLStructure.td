@@ -82,6 +82,9 @@ def FModuleOp : FIRRTLOp<"module",
       return ports;
     }
 
+    // Return the block argument for the port with the specified name.
+    BlockArgument getPortArgument(StringAttr name);
+
     // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is
     // squatting on the name.
     Block *getBodyBlock() { return &body().front(); }

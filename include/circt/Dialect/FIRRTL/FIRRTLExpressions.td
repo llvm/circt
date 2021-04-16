@@ -388,6 +388,7 @@ def MuxPrimOp : PrimOp<"mux"> {
     "`(` operands `)` attr-dict `:` functional-type(operands, $result)";
 
   let hasFolder = 1;
+  let hasCanonicalizer = true;
 
   let extraClassDeclaration = [{
     /// Return the result for inputs with the specified type, returning a null

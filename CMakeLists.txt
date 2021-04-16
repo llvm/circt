@@ -163,6 +163,7 @@ if (VIVADO_DISABLE)
   message(STATUS "Disabling vivado tests.")
 else()
   if (EXISTS ${VIVADO_PATH})
+    get_filename_component(VIVADO_PATH ${VIVADO_PATH} DIRECTORY)
     message(STATUS "Setting vivado path to ${VIVADO_PATH}.")
   else()
     # Search for vivado's `vivado` command.
