@@ -2943,7 +2943,7 @@ void SplitEmitter::emitModule(const LoweringOptions &options,
   }
 
   // Determine the output file name.
-  mod.filename.append(".v");
+  mod.filename.append(".sv");
   SmallString<128> outputFilename(dirname);
   llvm::sys::path::append(outputFilename, mod.filename);
 

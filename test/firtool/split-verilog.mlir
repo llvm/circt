@@ -39,14 +39,14 @@ rtl.module.extern @inout_0 () -> ()
 rtl.module.extern @inout_1 () -> ()
 rtl.module.extern @inout_2 () -> ()
 
-// FIRTOOL:      foo.v
-// FIRTOOL-NEXT: bar.v
-// FIRTOOL-NEXT: usb.v
-// FIRTOOL-NEXT: pll.v
-// FIRTOOL-NEXT: inout_3.v
-// FIRTOOL-NEXT: inout_0.v
-// FIRTOOL-NEXT: inout_1.v
-// FIRTOOL-NEXT: inout_2.v
+// FIRTOOL:      foo.sv
+// FIRTOOL-NEXT: bar.sv
+// FIRTOOL-NEXT: usb.sv
+// FIRTOOL-NEXT: pll.sv
+// FIRTOOL-NEXT: inout_3.sv
+// FIRTOOL-NEXT: inout_0.sv
+// FIRTOOL-NEXT: inout_1.sv
+// FIRTOOL-NEXT: inout_2.sv
 
 // VERILOG-FOO:       // I'm everywhere
 // VERILOG-FOO-NEXT:  `ifdef VERILATOR
