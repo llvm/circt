@@ -19,29 +19,11 @@
 namespace circt {
 namespace rtl {
 
-class RTLDialect : public Dialect {
-public:
-  explicit RTLDialect(MLIRContext *context);
-  ~RTLDialect();
-
-  static StringRef getDialectNamespace() { return "rtl"; }
-
-  /// Parses a type registered to this dialect
-  Type parseType(DialectAsmParser &parser) const override;
-
-  /// Print a type registered to this dialect
-  void printType(Type type, DialectAsmPrinter &printer) const override;
-
-  Operation *materializeConstant(OpBuilder &builder, Attribute value, Type type,
-                                 Location loc) override;
-
-private:
-  /// Register all RTL types.
-  void registerTypes();
-};
-
 } // namespace rtl
 } // namespace circt
+
+// Pull in the dialect definition.
+#include "circt/Dialect/RTL/RTLDialect.h.inc"
 
 // Pull in all enum type definitions and utility function declarations.
 #include "circt/Dialect/RTL/RTLEnums.h.inc"

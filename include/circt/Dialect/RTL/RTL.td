@@ -29,7 +29,12 @@ def RTLDialect : Dialect {
     representation of RTL outside of a particular use-case.
   }];
 
+  let hasConstantMaterializer = 1;
   let cppNamespace = "::circt::rtl";
+  let extraClassDeclaration = [{
+    /// Register all RTL types.
+    void registerTypes();
+  }];
 }
 
 include "circt/Dialect/RTL/RTLTypes.td"
