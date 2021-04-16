@@ -28,17 +28,7 @@
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Pass/Pass.h"
 
-namespace circt {
-namespace staticlogic {
-
-class StaticLogicDialect : public Dialect {
-public:
-  StaticLogicDialect(MLIRContext *context);
-  static StringRef getDialectNamespace() { return "staticlogic"; }
-};
-
-} // namespace staticlogic
-} // namespace circt
+#include "circt/Dialect/StaticLogic/StaticLogicDialect.h.inc"
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/StaticLogic/StaticLogic.h.inc"

@@ -20,6 +20,10 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 def ESI_Dialect : Dialect {
   let name = "esi";
   let cppNamespace = "::circt::esi";
+  let extraClassDeclaration = [{
+    /// Register all ESI types.
+    void registerTypes();
+  }];
 }
 
 class ESI_Op<string mnemonic, list<OpTrait> traits = []> :

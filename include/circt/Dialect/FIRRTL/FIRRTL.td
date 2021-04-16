@@ -28,7 +28,12 @@ def FIRRTLDialect : Dialect {
     [FIRRTL GitHub page](https://github.com/freechipsproject/firrtl).
   }];
 
+  let hasConstantMaterializer = 1;
   let cppNamespace = "::circt::firrtl";
+  let extraClassDeclaration = [{
+    /// Register all FIRRTL types.
+    void registerTypes();
+  }];
 }
 
 // Base class for the operation in this dialect.

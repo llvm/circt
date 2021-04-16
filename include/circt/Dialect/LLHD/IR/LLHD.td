@@ -40,11 +40,13 @@ def LLHD_Dialect : Dialect {
 //===----------------------------------------------------------------------===//
 
 // LLHD Time Type
-def LLHD_TimeType : Type<CPred<"$_self.isa<TimeType>()">, "LLHD time type">,
-                    BuildableType<"TimeType::get($_builder.getContext())">;
+def LLHD_TimeType : DialectType<LLHD_Dialect,
+    CPred<"$_self.isa<TimeType>()">, "LLHD time type">,
+    BuildableType<"TimeType::get($_builder.getContext())">;
 
 // LLHD Array Type
-def LLHD_ArrayType : Type<CPred<"$_self.isa<ArrayType>()">, "LLHD array type">;
+def LLHD_ArrayType : DialectType<LLHD_Dialect,
+    CPred<"$_self.isa<ArrayType>()">, "LLHD array type">;
 
 // Legal underlying types for signals and pointers.
 def LLHD_AnyUnderlyingType :
@@ -70,8 +72,8 @@ def LLHD_AnyPtrType : LLHD_PtrType<[LLHD_AnyUnderlyingType]>;
 //===----------------------------------------------------------------------===//
 
 // LLHD time attr
-def LLHD_TimeAttr
-    : Attr<CPred<"$_self.isa<TimeAttr>()">, "LLHD time attribute"> {
+def LLHD_TimeAttr : DialectAttr<LLHD_Dialect,
+    CPred<"$_self.isa<TimeAttr>()">, "LLHD time attribute"> {
   let storageType= [{ TimeAttr }];
   let returnType = [{ llvm::ArrayRef<unsigned> }];
   let valueType = LLHD_TimeType;
