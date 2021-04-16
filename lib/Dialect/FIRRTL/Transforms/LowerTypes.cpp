@@ -195,28 +195,22 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   // Remember the original argument attributess.
   SmallVector<NamedAttribute, 8> originalArgAttrs;
   DictionaryAttr originalAttrs = module->getAttrDictionary();
-  //for (size_t i = 0, e = originalNumModuleArgs; i < e; ++i)
+  // for (size_t i = 0, e = originalNumModuleArgs; i < e; ++i)
   //  originalArgAttrs.push_back(
   //      originalAttrs.getNamed(getArgAttrName(i)).getValue());
-  //DictionaryAttr::sortInPlace(originalArgAttrs);
-  // originalAttrs.dump();
+  // DictionaryAttr::sortInPlace(originalArgAttrs);
 
   // Copy over any attributes that weren't original argument attributes.
   auto *argAttrBegin = originalArgAttrs.begin();
   auto *argAttrEnd = originalArgAttrs.end();
   for (auto attr : originalAttrs)
     if (std::lower_bound(argAttrBegin, argAttrEnd, attr) == argAttrEnd)
-      newModuleAttrs.push_back(attr);
+      if (attr.first.str() != "argNames")
+        newModuleAttrs.push_back(attr);
 
-  for (auto a : module->getAttrOfType<ArrayAttr>("argNames")){
-    llvm::errs() << "\n existing atttr::"<< a;
-  }
-  for (auto a : newArgNames){
-    llvm::errs() << "\n newarg atttr::"<< a;
-  }
-  if (!hasFIRRTLModuleArgNameAttr(module))
-    newModuleAttrs.push_back(NamedAttribute(Identifier::get("argNames", context),
+  newModuleAttrs.push_back(NamedAttribute(Identifier::get("argNames", context),
                                           builder->getArrayAttr(newArgNames)));
+
   // Update the module's attributes.
   module->setAttrs(newModuleAttrs);
   newModuleAttrs.clear();
@@ -280,17 +274,18 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
       Attribute pName;
       inputTypes.push_back(field.getPortType());
       if (port.name)
-        pName = port.name;
+        pName = builder.getStringAttr(field.suffix);
       else
         pName = builder.getStringAttr("");
       portNames.push_back(pName);
     }
   }
-  extModule->setAttr(Identifier::get("argNames", context), builder.getArrayAttr(portNames));
+  extModule->setAttr(Identifier::get("argNames", context),
+                     builder.getArrayAttr(portNames));
 
   // Set the type and then bulk set all the names.
   extModule.setType(builder.getFunctionType(inputTypes, {}));
-  //extModule.setAllArgAttrs(attributes);
+  // extModule.setAllArgAttrs(attributes);
 }
 
 //===----------------------------------------------------------------------===//
@@ -818,17 +813,6 @@ void TypeLoweringVisitor::visitExpr(InvalidValuePrimOp op) {
 //===----------------------------------------------------------------------===//
 // Helpers to manage state.
 //===----------------------------------------------------------------------===//
-
-// static DictionaryAttr getArgAttrs(StringAttr nameAttr, StringRef suffix,
-//                                  OpBuilder *builder) {
-//  SmallString<16> newName(nameAttr.getValue());
-//  newName += suffix;
-//
-//  StringAttr newNameAttr = builder->getStringAttr(newName);
-//  auto attr = builder->getNamedAttr("firrtl.name", newNameAttr);
-//
-//  return builder->getDictionaryAttr(attr);
-//}
 
 // Creates and returns a new block argument of the specified type to the
 // module. This also maintains the name attribute for the new argument,

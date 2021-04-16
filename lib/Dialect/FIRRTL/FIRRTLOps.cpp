@@ -261,12 +261,10 @@ void firrtl::getModulePortInfo(Operation *op,
                                SmallVectorImpl<ModulePortInfo> &results) {
   auto argTypes = getModuleType(op).getInputs();
 
-  llvm::errs() << "\n getModulePortInfo\n";
-  //if (hasFIRRTLModuleArgNameAttr(op))
-    for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
-      auto type = argTypes[i].cast<FIRRTLType>();
-      results.push_back({getFIRRTLModuleArgNameAttr(op, i), type});
-    }
+  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
+    auto type = argTypes[i].cast<FIRRTLType>();
+    results.push_back({getFIRRTLModuleArgNameAttr(op, i), type});
+  }
 }
 
 static void buildModule(OpBuilder &builder, OperationState &result,
@@ -412,7 +410,8 @@ static void printModuleLikeOp(OpAsmPrinter &p, Operation *op) {
   SmallVector<StringRef, 3> omittedAttrs;
   if (!needArgNamesAttr)
     omittedAttrs.push_back("argNames");
-  printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(), omittedAttrs);
+  printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(),
+                          omittedAttrs);
 }
 
 static void print(OpAsmPrinter &p, FExtModuleOp op) {
@@ -470,19 +469,6 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
   assert(resultAttrs.size() == resultTypes.size());
 
   auto *context = result.getContext();
-  llvm::errs() << "\n parseFModuleOp:\n";
-  for (size_t i = 0, e = argAttrs.size(); i != e; ++i) {
-    auto &attrs = argAttrs[i];
-    llvm::errs() << "\n attrs:";
-
-    // If an explicit name attribute was present, don't add the implicit one.
-    //  bool hasNameAttr = false;
-    for (auto &elt : attrs) {
-      llvm::errs() << "\n attribute::" << elt.first;
-      elt.second.dump();
-    }
-  }
-  // auto *context = result.getContext();
 
   SmallVector<Attribute> argNames;
   // Postprocess each of the arguments.  If there was no 'firrtl.name'
@@ -492,15 +478,6 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
   // verbosity in dumps of including it explicitly in the attribute
   // dictionary.
   for (size_t i = 0, e = entryArgs.size(); i != e; ++i) {
-    //auto &attrs = argAttrs[i];
-
-    //// If an explicit name attribute was present, don't add the implicit one.
-    //bool hasNameAttr = false;
-    //for (auto &elt : attrs)
-    //  if (elt.first.str() == "firrtl.name")
-    //    hasNameAttr = true;
-    //if (hasNameAttr || entryArgs.empty())
-    //  continue;
 
     auto &arg = entryArgs[i];
 
@@ -511,7 +488,6 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
       continue;
 
     argNames.push_back(StringAttr::get(context, arg.name.drop_front()));
-    // attrs.push_back({Identifier::get("firrtl.name", context), nameAttr});
   }
   if (!argNames.empty() && result.attributes.getNamed("argNames") == None)
     result.addAttribute("argNames", builder.getArrayAttr(argNames));
