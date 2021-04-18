@@ -85,11 +85,11 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
   SmallString<32> resultNameStr;
   llvm::raw_svector_ostream tmpStream(resultNameStr);
   p.printOperand(op->getResult(0), tmpStream);
-  auto expectedName = op->getAttrOfType<StringAttr>("name");
+  auto expectedName = op->getAttrOfType<StringAttr>("name").getValue();
   auto actualName = tmpStream.str().drop_front();
-  if (actualName != expectedName.getValue()) {
+  if (actualName != expectedName) {
     // Anonymous names are printed as digits, which is fine.
-    if (!expectedName.getValue().empty() || !isdigit(actualName[0]))
+    if (!expectedName.empty() || !isdigit(actualName[0]))
       namesDisagree = true;
   }
 

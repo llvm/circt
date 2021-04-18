@@ -1659,7 +1659,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   RUWAttr ruw = RUWAttr::Old;
   uint64_t depth = type.getNumElements();
   FIRRTLType dataType = getFIRRTLType(elementType);
-  StringAttr name = rewriter.getStringAttr("mem" + std::to_string(op.id()));
+  auto name = "mem" + std::to_string(op.id());
 
   // Helpers to get port identifiers.
   auto loadIdentifier = [&](size_t i) {

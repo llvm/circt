@@ -18,7 +18,7 @@ def InstanceOp : FIRRTLOp<"instance"> {
   }];
 
   let arguments = (ins FlatSymbolRefAttr:$moduleName,
-                       StrArrayAttr:$portNames, OptionalAttr<StrAttr>:$name,
+                       StrArrayAttr:$portNames, StrAttr:$name,
                        DefaultValuedAttr<AnnotationArrayAttr,
                                          "{}">:$annotations);
   let results = (outs Variadic<FIRRTLType>:$results);
@@ -34,8 +34,7 @@ def InstanceOp : FIRRTLOp<"instance"> {
                       "::mlir::ArrayAttr":$portNames,
                       CArg<"StringRef", "{}">:$name,
                       CArg<"ArrayRef<Attribute>", "{}">:$annotations), [{
-      return build($_builder, $_state, elementType, moduleName, portNames,
-                   $_builder.getStringAttr(name),
+      return build($_builder, $_state, elementType, moduleName, portNames, name,
                    $_builder.getArrayAttr(annotations));
     }]>
   ];
@@ -60,8 +59,7 @@ def InstanceOp : FIRRTLOp<"instance"> {
 
 def CMemOp : FIRRTLOp<"cmem", [/*MemAlloc*/]> {
   let summary = "Define a new cmem";
-  let arguments = (
-    ins OptionalAttr<StrAttr>:$name,
+  let arguments = (ins StrAttr:$name,
         DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
   let results = (outs FIRRTLType:$result);
 
@@ -70,9 +68,7 @@ def CMemOp : FIRRTLOp<"cmem", [/*MemAlloc*/]> {
 
 def SMemOp : FIRRTLOp<"smem", [/*MemAlloc*/]> {
   let summary = "Define a new smem";
-  let arguments = (
-    ins RUWAttr:$ruw,
-        OptionalAttr<StrAttr>:$name,
+  let arguments = (ins RUWAttr:$ruw, StrAttr:$name,
         DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
   let results = (outs FIRRTLType:$result);
 
@@ -86,8 +82,7 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
     ins Confined<I32Attr, [IntMinValue<0>]>:$readLatency,
         Confined<I32Attr, [IntMinValue<1>]>:$writeLatency,
         Confined<I64Attr, [IntMinValue<1>]>:$depth, RUWAttr:$ruw,
-        StrArrayAttr:$portNames,
-        OptionalAttr<StrAttr>:$name,
+        StrArrayAttr:$portNames, StrAttr:$name,
         DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
   let results = (outs Variadic<FIRRTLType>:$results);
 
@@ -146,8 +141,7 @@ def NodeOp : FIRRTLOp<"node", [NoSideEffect, SameOperandsAndResultType]> {
     }];
 
   let arguments = (
-    ins PassiveType:$input,
-        OptionalAttr<StrAttr>:$name,
+    ins PassiveType:$input, StrAttr:$name,
         DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
   let results = (outs FIRRTLType:$result);
 
@@ -166,8 +160,7 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
     }];
 
   let arguments = (
-    ins ClockType:$clockVal,
-      OptionalAttr<StrAttr>:$name,
+    ins ClockType:$clockVal, StrAttr:$name,
       DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
   let results = (outs PassiveType:$result);
 
@@ -175,14 +168,13 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
                    CArg<"StringRef", "{}">:$name,
                    CArg<"ArrayRef<Attribute>","{}">:$annotations), [{
-      return build($_builder, $_state, elementType, clockVal,
-                   $_builder.getStringAttr(name),
+      return build($_builder, $_state, elementType, clockVal, name,
                    $_builder.getArrayAttr(annotations));
     }]>
   ];
 
   let assemblyFormat =
-    "operands custom<ElideAnnotations>(attr-dict) `:` functional-type(operands, $result)";
+    "operands custom<ImplicitSSAName>(attr-dict) `:` functional-type(operands, $result)";
 }
 
 def RegResetOp : FIRRTLOp<"regreset", [/*MemAlloc*/]> {
@@ -196,7 +188,7 @@ def RegResetOp : FIRRTLOp<"regreset", [/*MemAlloc*/]> {
 
   let arguments = (
     ins ClockType:$clockVal, ResetType:$resetSignal,
-        PassiveType:$resetValue, OptionalAttr<StrAttr>:$name,
+        PassiveType:$resetValue, StrAttr:$name,
         DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
   let results = (outs PassiveType:$result);
 
@@ -206,13 +198,13 @@ def RegResetOp : FIRRTLOp<"regreset", [/*MemAlloc*/]> {
                    CArg<"StringRef", "{}">:$name,
                    CArg<"ArrayRef<Attribute>","{}">:$annotations), [{
       return build($_builder, $_state, elementType, clockVal, resetSignal,
-                   resetValue, $_builder.getStringAttr(name),
+                   resetValue, name,
                    $_builder.getArrayAttr(annotations));
     }]>
   ];
 
   let assemblyFormat =
-     "operands custom<ElideAnnotations>(attr-dict) `:` functional-type(operands, $result)";
+     "operands custom<ImplicitSSAName>(attr-dict) `:` functional-type(operands, $result)";
 }
 
 def WireOp : FIRRTLOp<"wire", []> {
@@ -225,7 +217,7 @@ def WireOp : FIRRTLOp<"wire", []> {
     }];
 
   let arguments = (
-    ins OptionalAttr<StrAttr>:$name,
+    ins StrAttr:$name,
         DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
   let results = (outs FIRRTLType:$result);
 
@@ -233,8 +225,7 @@ def WireOp : FIRRTLOp<"wire", []> {
     OpBuilder<(ins "::mlir::Type":$elementType,
                       CArg<"StringRef", "{}">:$name,
                       CArg<"ArrayRef<Attribute>","{}">:$annotations), [{
-      return build($_builder, $_state, elementType,
-                   $_builder.getStringAttr(name),
+      return build($_builder, $_state, elementType, name,
                    $_builder.getArrayAttr(annotations));
     }]>
   ];
