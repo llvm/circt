@@ -26,7 +26,12 @@ def MSFTDialect : Dialect {
     a candidate for generalization and re-homing.
   }];
 
+  let hasConstantMaterializer = 1;
   let cppNamespace = "::circt::msft";
+  let extraClassDeclaration = [{
+    /// Register all MSFT attributes.
+    void registerAttributes();
+  }];
 }
 
 // Base class for the operation in this dialect.

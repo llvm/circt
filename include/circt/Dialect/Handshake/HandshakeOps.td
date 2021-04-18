@@ -25,21 +25,21 @@ include "mlir/IR/RegionKindInterface.td"
 include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
-def Handshake_Dialect : Dialect {
+def HandshakeOps_Dialect : Dialect {
   let name = "handshake";
   let cppNamespace = "::circt::handshake";
 }
 
 // Base class for Handshake dialect ops.
 class Handshake_Op<string mnemonic, list<OpTrait> traits = []>
-    : Op<Handshake_Dialect, mnemonic,
+    : Op<HandshakeOps_Dialect, mnemonic,
          traits # [HasParent<"handshake::FuncOp">]> {
 }
 
 // This is almost exactly like a standard FuncOp, except that it has some
 // extra verification conditions.  In particular, each Value must
 // only have a single use.  Also, it defines a Dominance-Free Scope
-def FuncOp : Op<Handshake_Dialect, "func", [
+def FuncOp : Op<HandshakeOps_Dialect, "func", [
    NativeOpTrait<"IsIsolatedFromAbove">,
    NativeOpTrait<"FunctionLike">,
    Symbol,

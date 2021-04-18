@@ -28,11 +28,8 @@ using namespace circt::sv;
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
-SVDialect::SVDialect(MLIRContext *context)
-    : Dialect(getDialectNamespace(), context,
-              ::mlir::TypeID::get<SVDialect>()) {
-  context->loadDialect<circt::comb::CombDialect>();
-
+void SVDialect::initialize() {
+  // Register types.
   registerTypes();
 
   // Register operations.
@@ -41,8 +38,6 @@ SVDialect::SVDialect(MLIRContext *context)
 #include "circt/Dialect/SV/SV.cpp.inc"
       >();
 }
-
-SVDialect::~SVDialect() {}
 
 //===----------------------------------------------------------------------===//
 // Name conflict resolution
