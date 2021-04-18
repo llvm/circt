@@ -48,33 +48,6 @@ static MlirOperation pyWrapModule(MlirOperation cModOp,
   return wrap(wrapper);
 }
 
-// This function taken from npcomp.
-// Register a diagnostic handler that will redirect output to `sys.stderr`
-// instead of a C/C++-level file abstraction. This ensures, for example,
-// that mlir diagnostics emitted are correctly routed in Jupyter notebooks.
-static MlirDiagnosticHandlerID
-registerPythonSysStderrDiagnosticHandler(MlirContext context) {
-  auto diagnosticHandler = [](MlirDiagnostic diagnostic,
-                              void *) -> MlirLogicalResult {
-    std::stringstream ss;
-    auto stringCallback = [](MlirStringRef s, void *stringCallbackUserData) {
-      auto *ssp = static_cast<std::stringstream *>(stringCallbackUserData);
-      ssp->write(s.data, s.length);
-    };
-    mlirDiagnosticPrint(diagnostic, stringCallback, static_cast<void *>(&ss));
-    // Use pybind11's print:
-    // https://pybind11.readthedocs.io/en/stable/advanced/pycpp/utilities.html
-    using namespace pybind11::literals;
-    py::print(ss.str(), "file"_a = py::module_::import("sys").attr("stderr"));
-    return mlirLogicalResultSuccess();
-  };
-  MlirDiagnosticHandlerID id = mlirContextAttachDiagnosticHandler(
-      context, diagnosticHandler, nullptr, [](void *) { return; });
-  // Ignore the ID. We intend to keep this handler for the entire lifetime
-  // of this context.
-  return id;
-}
-
 static MlirType channelType(MlirType cElem) {
   Type elemTy = unwrap(cElem);
   auto chanTy = ChannelPort::get(elemTy.getContext(), elemTy);
@@ -87,10 +60,7 @@ static MlirType channelType(MlirType cElem) {
 
 class System {
 public:
-  System(MlirContext cCtxt) : ctxt(unwrap(cCtxt)) {
-    registerPythonSysStderrDiagnosticHandler(cCtxt);
-  }
-  ~System() { mlirContextDetachDiagnosticHandler(wrap(ctxt), diagID); }
+  System(MlirContext cCtxt) : ctxt(unwrap(cCtxt)) {}
 
   MlirModule createModule() {
     assert(!module);
@@ -120,7 +90,6 @@ public:
 private:
   MLIRContext *ctxt;
   ModuleOp module;
-  MlirDiagnosticHandlerID diagID;
 };
 
 void circt::python::populateDialectESISubmodule(py::module &m) {

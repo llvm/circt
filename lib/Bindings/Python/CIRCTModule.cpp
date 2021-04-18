@@ -25,7 +25,7 @@ namespace py = pybind11;
 static void registerPasses() { registerSVPasses(); }
 
 /// Taken from PybindUtils.h in MLIR
-/// Accumulates int a python file-like object, either writing text (default)
+/// Accumulates into a python file-like object, either writing text (default)
 /// or binary.
 class PyFileAccumulator {
 public:

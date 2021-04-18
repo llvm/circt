@@ -38,6 +38,7 @@ with Context() as ctxt, Location.unknown():
                 [module.entry_block.arguments[0]])
         )
 
+
     esi.buildWrapper(op.operation, ["foo"])
     sys.print()
     # CHECK-LABEL:  rtl.module @MyWidget_esi(%foo: !esi.channel<i32>) {
@@ -61,4 +62,6 @@ with Context() as ctxt, Location.unknown():
     print()  # Newline.
     # CHECK: rtl.module.extern @IntAccumulator(%clk: i1, %ints: i32, %ints_valid: i1) -> (%ints_ready: i1, %sum: i32)
 
+    print("\n\n=== Verilog ===")
+    # CHECK: === Verilog ===
     sys.print_verilog()
