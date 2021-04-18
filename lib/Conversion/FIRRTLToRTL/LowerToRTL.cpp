@@ -1701,9 +1701,9 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
-  StringRef memName = "mem";
-  if (op.name().hasValue())
-    memName = op.name().getValue();
+  auto memName = op.name();
+  if (memName.empty())
+    memName = "mem";
 
   // TODO: Remove this restriction and preserve aggregates in
   // memories.
@@ -1890,12 +1890,8 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   FlatSymbolRefAttr symbolAttr = builder.getSymbolRefAttr(newModule);
 
   // Create the new rtl.instance operation.
-  StringAttr instanceName;
-  if (oldInstance.name().hasValue())
-    instanceName = oldInstance.nameAttr();
-
   auto newInstance = builder.create<rtl::InstanceOp>(
-      resultTypes, instanceName, symbolAttr, operands, parameters);
+      resultTypes, oldInstance.nameAttr(), symbolAttr, operands, parameters);
 
   // Now that we have the new rtl.instance, we need to remap all of the users
   // of the outputs/results to the values returned by the instance.

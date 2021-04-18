@@ -77,7 +77,7 @@ firrtl.circuit "Simple" {
     firrtl.wire {name = "test-name"} : !firrtl.uint<4>
 
     // CHECK-NEXT: = sv.wire : !rtl.inout<i2>
-    firrtl.wire : !firrtl.uint<2>
+    %_t_1 = firrtl.wire : !firrtl.uint<2>
 
     // CHECK-NEXT: = firrtl.wire : !firrtl.vector<uint<1>, 13>
     %_t_2 = firrtl.wire : !firrtl.vector<uint<1>, 13>
@@ -139,7 +139,7 @@ firrtl.circuit "Simple" {
     %n1 = firrtl.node %in2  {name = "n1"} : !firrtl.uint<2>
 
     // Nodes with no names are just dropped.
-    %22 = firrtl.node %n1 : !firrtl.uint<2>
+    %22 = firrtl.node %n1 {name = ""} : !firrtl.uint<2>
 
     // CHECK-NEXT: [[CVT:%.+]] = comb.concat %false, %in2 : (i1, i2) -> i3
     %23 = firrtl.cvt %22 : (!firrtl.uint<2>) -> !firrtl.sint<3>
@@ -218,12 +218,12 @@ firrtl.circuit "Simple" {
     %c1175_ui11 = firrtl.constant(1175 : ui11) : !firrtl.uint<11>
     %51 = firrtl.neg %c1175_ui11 : (!firrtl.uint<11>) -> !firrtl.sint<12>
     // https://github.com/llvm/circt/issues/821
-    // CHECK:  = comb.concat %false, %in1 : (i1, i4) -> i5
-    // CHECK:  = comb.sub %c0_i5, %65 : i5
+    // CHECK: [[CONCAT:%.+]] = comb.concat %false, %in1 : (i1, i4) -> i5
+    // CHECK:  = comb.sub %c0_i5, [[CONCAT]] : i5
     %52 = firrtl.neg %in1 : (!firrtl.uint<4>) -> !firrtl.sint<5>
     %53 = firrtl.neg %in4 : (!firrtl.uint<0>) -> !firrtl.sint<1>
-    // CHECK: = comb.sext %in3 : (i8) -> i9
-    // CHECK: = comb.sub %c0_i9, %67 : i9
+    // CHECK: [[SEXT:%.+]] = comb.sext %in3 : (i8) -> i9
+    // CHECK: = comb.sub %c0_i9, [[SEXT]] : i9
     %54 = firrtl.neg %in3 : (!firrtl.sint<8>) -> !firrtl.sint<9>
     // CHECK: rtl.output %false, %false : i1, i1
     firrtl.connect %out1, %53 : !firrtl.flip<sint<1>>, !firrtl.sint<1>

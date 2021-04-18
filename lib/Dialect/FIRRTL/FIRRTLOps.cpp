@@ -1701,36 +1701,31 @@ static ParseResult parseImplicitSSAName(OpAsmParser &parser,
   if (hadName)
     return success();
 
-  auto resultName = parser.getResultName(0);
-  if (!resultName.first.empty() && !isdigit(resultName.first[0])) {
-    StringRef name = resultName.first;
-    auto nameAttr = parser.getBuilder().getStringAttr(name);
-    auto *context = parser.getBuilder().getContext();
-    resultAttrs.push_back({Identifier::get("name", context), nameAttr});
-  }
-
+  auto resultName = parser.getResultName(0).first;
+  if (!resultName.empty() && isdigit(resultName[0]))
+    resultName = "";
+  auto nameAttr = parser.getBuilder().getStringAttr(resultName);
+  auto *context = parser.getBuilder().getContext();
+  resultAttrs.push_back({Identifier::get("name", context), nameAttr});
   return success();
 }
 
 static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
                                  DictionaryAttr attr) {
+  // List of attributes to elide when printing the dictionary.
+  SmallVector<StringRef, 2> elides;
+
   // Note that we only need to print the "name" attribute if the asmprinter
   // result name disagrees with it.  This can happen in strange cases, e.g.
   // when there are conflicts.
-  bool namesDisagree = false;
-
   SmallString<32> resultNameStr;
   llvm::raw_svector_ostream tmpStream(resultNameStr);
   p.printOperand(op->getResult(0), tmpStream);
-  auto expectedName = op->getAttrOfType<StringAttr>("name");
-  if (!expectedName ||
-      tmpStream.str().drop_front() != expectedName.getValue()) {
-    namesDisagree = true;
-  }
-
-  SmallVector<StringRef, 2> elides;
-
-  if (!namesDisagree)
+  auto actualName = tmpStream.str().drop_front();
+  auto expectedName = op->getAttrOfType<StringAttr>("name").getValue();
+  // Anonymous names are printed as digits, which is fine.
+  if (actualName == expectedName ||
+      (expectedName.empty() && isdigit(actualName[0])))
     elides.push_back("name");
 
   // Elide "annotations" if it doesn't exist or if it is empty
