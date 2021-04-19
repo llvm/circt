@@ -117,9 +117,7 @@ bool tryToExecute(Operation *op,
 // HandshakeOpsDialect
 //===----------------------------------------------------------------------===//
 
-HandshakeOpsDialect::HandshakeOpsDialect(MLIRContext *context)
-    : Dialect(getDialectNamespace(), context,
-              ::mlir::TypeID::get<HandshakeOpsDialect>()) {
+void HandshakeOpsDialect::initialize() {
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/Handshake/HandshakeOps.cpp.inc"

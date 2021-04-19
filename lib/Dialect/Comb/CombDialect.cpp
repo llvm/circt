@@ -24,18 +24,13 @@ using namespace comb;
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
-CombDialect::CombDialect(MLIRContext *context)
-    : Dialect(getDialectNamespace(), context,
-              ::mlir::TypeID::get<CombDialect>()) {
-
+void CombDialect::initialize() {
   // Register operations.
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/Comb/Comb.cpp.inc"
       >();
 }
-
-CombDialect::~CombDialect() {}
 
 /// Registered hook to materialize a single constant operation from a given
 /// attribute value with the desired resultant type. This method should use

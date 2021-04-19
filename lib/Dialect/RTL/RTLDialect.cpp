@@ -53,10 +53,8 @@ struct RTLOpAsmDialectInterface : public OpAsmDialectInterface {
 };
 } // end anonymous namespace
 
-RTLDialect::RTLDialect(MLIRContext *context)
-    : Dialect(getDialectNamespace(), context,
-              ::mlir::TypeID::get<RTLDialect>()) {
-
+void RTLDialect::initialize() {
+  // Register types.
   registerTypes();
 
   // Register operations.
@@ -68,8 +66,6 @@ RTLDialect::RTLDialect(MLIRContext *context)
   // Register interface implementations.
   addInterfaces<RTLOpAsmDialectInterface>();
 }
-
-RTLDialect::~RTLDialect() {}
 
 // Registered hook to materialize a single constant operation from a given
 /// attribute value with the desired resultant type. This method should use
