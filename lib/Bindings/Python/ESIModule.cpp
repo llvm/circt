@@ -60,12 +60,12 @@ static MlirType channelType(MlirType cElem) {
 
 class System {
 public:
-  System(MlirContext cCtxt, MlirOperation modOp)
-      : cCtxt(cCtxt), cModuleOp(modOp) {
-    assert(isa<ModuleOp>(unwrap(modOp)) &&
-           "Must construct 'System' with a ModuleOp");
-  }
+  /// Construct an ESI system. The Python bindings really want to own the MLIR
+  /// objects, so we create them in Python and pass them into the constructor.
+  System(MlirModule modOp)
+      : cCtxt(mlirModuleGetContext(modOp)), cModuleOp(modOp) {}
 
+  /// Load the contents of an MLIR asm file into the system module.
   void loadMlir(std::string filename) {
     auto loadedMod = mlir::parseSourceFile(filename, ctxt());
     Block *loadedBlock = loadedMod->getBody();
@@ -86,10 +86,10 @@ public:
 
 private:
   MLIRContext *ctxt() { return unwrap(cCtxt); }
-  ModuleOp mod() { return cast<ModuleOp>(unwrap(cModuleOp)); }
+  ModuleOp mod() { return unwrap(cModuleOp); }
 
   MlirContext cCtxt;
-  MlirOperation cModuleOp;
+  MlirModule cModuleOp;
   MlirDiagnosticHandlerID diagID;
 };
 
@@ -105,7 +105,7 @@ void circt::python::populateDialectESISubmodule(py::module &m) {
         "Create an ESI channel type which wraps the argument type");
 
   py::class_<System>(m, "CppSystem")
-      .def(py::init<MlirContext, MlirOperation>())
+      .def(py::init<MlirModule>())
       .def("load_mlir", &System::loadMlir, "Load an MLIR assembly file.")
       .def("lookup", &System::lookup, "Lookup an RTL module and return it.");
 }

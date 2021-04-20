@@ -13,7 +13,7 @@ thisDir = path.dirname(__file__)
 
 with Context() as ctxt, Location.unknown():
     circt.register_dialects(ctxt)
-    sys = esi.System(ctxt)
+    sys = esi.System()
     sys.load_mlir(path.join(thisDir, "esi_load1.mlir"))
     sys.load_mlir(path.join(thisDir, "esi_load2.mlir"))
 

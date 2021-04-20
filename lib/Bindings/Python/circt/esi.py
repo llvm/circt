@@ -11,9 +11,6 @@ import circt
 import sys
 import os
 
-input(f"Attach to {os.getpid()} then hit enter...")
-print("  ... Resuming execution")
-
 class System (CppSystem):
 
   mod = None
@@ -26,10 +23,9 @@ class System (CppSystem):
   ]
   passed = False
 
-  def __init__(self, ctxt):
-    with ctxt:
-      self.mod = mlir.ir.Module.create()
-    super().__init__(ctxt, self.mod.operation)
+  def __init__(self):
+    self.mod = mlir.ir.Module.create()
+    super().__init__(self.mod)
 
   @property
   def body(self):
@@ -42,7 +38,6 @@ class System (CppSystem):
     if self.passed:
       return
     pm = PassManager.parse(",".join(self.passes))
-    # super().run_passes(pm)
     pm.run(self.mod)
     self.passed = True
 
