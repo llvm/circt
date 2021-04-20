@@ -735,6 +735,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
           if (isFlipped)
             type = FlipType::get(type);
 
+          llvm::errs() << "\n fieldname:"<< fieldName;
           elements.push_back({StringAttr::get(getContext(), fieldName), type});
           return success();
         }))
@@ -808,18 +809,23 @@ ParseResult FIRParser::importAnnotations(SMLoc loc, StringRef annotationsStr) {
   }
 
   for (auto a : annotationMap.keys()) {
+    llvm::errs() << "\n =============== \n ";
     auto &entry = state.annotationMap[a];
     if (!entry) {
       entry = annotationMap[a];
+      llvm::errs() << "\n entry:"<< entry << " for a:"<< a;
       continue;
     }
 
     SmallVector<Attribute> annotationVec;
     auto arrayRef = state.annotationMap[a].getValue();
+    
+
     annotationVec.append(arrayRef.begin(), arrayRef.end());
     arrayRef = annotationMap[a].getValue();
     annotationVec.append(arrayRef.begin(), arrayRef.end());
     state.annotationMap[a] = ArrayAttr::get(getContext(), annotationVec);
+    llvm::errs() << "\n state annotationMap:"<< a << " = "<< state.annotationMap[a] << "\n";
   }
 
   return success();
@@ -839,12 +845,45 @@ ParseResult FIRParser::importAnnotationFile(SMLoc loc) {
   return result;
 }
 
+void static parseSubFieldSubIndexAnnotations(StringRef target, ArrayAttr &annotations,MLIRContext *context ) {
+  //const char delims[] = {'.', '['};
+  std::string temp = "";
+  if (target.empty())
+    return;
+  temp.push_back(target[0]);
+  llvm::errs() << "\n target:"<< target;
+  size_t state = 0;
+  SmallVector<Attribute> annotationVec;
+  if (temp[0] == '.')
+    state = 1;
+  else if (temp[0] != '[')
+    state = 2;
+  else
+    return;
+  for (size_t i=1; i < target.size(); i++){
+    if (target[i] == '['){
+      llvm::errs() << "\n annotationVec::"<< temp;
+      annotationVec.push_back( StringAttr::get(context, temp));
+      temp = "";
+    } else if (target[i] == '.') {
+      llvm::errs() << "\n annotationVec::"<< temp;
+      annotationVec.push_back( StringAttr::get(context, temp));
+      temp = "";
+    }
+
+    temp.push_back(target[i]);
+  }
+  annotationVec.push_back( StringAttr::get(context, temp));
+  annotations = ArrayAttr::get(context, annotationVec);
+}
+
 void FIRParser::getAnnotations(Twine target, ArrayAttr &annotations) {
   // Early exit if no annotations exist.  This avoids the cost of
   // constructing strings representing targets if no annotation can
   // possibly exist.
   if (state.annotationMap.begin() == state.annotationMap.end())
     return;
+  llvm::errs()<< "\n getann:"<< target;
 
   // Input annotations is empty.  Just do the lookup and return.
   if (!annotations) {
@@ -852,18 +891,47 @@ void FIRParser::getAnnotations(Twine target, ArrayAttr &annotations) {
     return;
   }
 
+  SmallVector<Attribute> annotationVec;
+  for (auto a : state.annotationMap.keys()) {
+    auto posField = a.find_first_of(target.str()+".");
+    auto posIndex = a.find_first_of(target.str()+"[");
+    auto end = target.str().size();
+    llvm::errs() << "\n a::"<< target.str()<<"\n a:"<< a;
+    llvm::errs() << "\n searched ::"<< posField << " searched::" << posIndex;
+    if (posField == 0 || posIndex == 0){
+      auto t = a.str().substr(end);
+      llvm::errs() << "\n target after substr::"<< t;
+      ArrayAttr annotations;
+      parseSubFieldSubIndexAnnotations(t, annotations, getContext());
+      llvm::errs() << "\n parsed ::\n";
+      annotations.dump();
+      NamedAttrList targetAttr;
+      targetAttr.append("target", annotations);
+      auto newAnnotations = state.annotationMap[a];
+      for (auto a : newAnnotations) {
+        annotationVec.push_back(a);
+        a.dump();
+      }
+    }
+  }
+  
+
   // Input annotations is non-empty.  Exit quickly if the target doesn't exist.
   // Otherwise, construct a new ArrayAttr that includes existing and new
   // annotations.
-  auto newAnnotations = state.annotationMap.lookup(target.str());
-  if (!newAnnotations)
+  auto x = target.str();
+  auto newAnnotations = state.annotationMap.lookup(x);
+  if (!newAnnotations) {
     return;
+  }
 
-  SmallVector<Attribute> annotationVec;
   for (auto a : annotations)
     annotationVec.push_back(a);
   for (auto a : newAnnotations)
     annotationVec.push_back(a);
+
+  llvm::errs()<< "\n getAnnotations::"<< annotations;
+  annotations.dump();
 
   annotations = ArrayAttr::get(state.context, annotationVec);
 }
@@ -2480,6 +2548,8 @@ ParseResult FIRStmtParser::parseWire() {
 
   ArrayAttr annotations = builder.getArrayAttr({});
   getAnnotations(getModuleTarget() + ">" + id.getValue(), annotations);
+  llvm::errs()<< "\n parse wire:"<< annotations;
+  annotations.dump();
 
   auto result = builder.create<WireOp>(info.getLoc(), type,
                                        filterUselessName(id), annotations);
@@ -2578,6 +2648,8 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   ArrayAttr annotations = builder.getArrayAttr({});
   getAnnotations(getModuleTarget() + ">" + name.getValue(), annotations);
 
+  llvm::errs()<< "\n parse reg:"<< annotations;
+  annotations.dump();
   Value result;
   if (resetSignal)
     result = builder.create<RegResetOp>(info.getLoc(), type, clock, resetSignal,
@@ -2772,6 +2844,8 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   ArrayAttr annotations;
   getAnnotations(moduleTarget, annotations);
 
+  llvm::errs()<< "\n parse ext module:"<< annotations;
+  annotations.dump();
   auto fmodule = builder.create<FExtModuleOp>(info.getLoc(), name, portList,
                                               defName, annotations);
 
@@ -2810,6 +2884,8 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
     portList.push_back(elt.first);
   ArrayAttr annotations;
   getAnnotations(moduleTarget, annotations);
+  llvm::errs()<< "\n parse module:"<< annotations;
+  annotations.dump();
   auto fmodule =
       builder.create<FModuleOp>(info.getLoc(), name, portList, annotations);
 
@@ -2891,7 +2967,11 @@ ParseResult FIRCircuitParser::parseCircuit() {
   //   2. Annotations targeting the circuit, e.g., "~Foo"
   ArrayAttr annotationVec;
   getAnnotations("~", annotationVec);
+  llvm::errs() << "\n annotation vec:: \n";
+  annotationVec.dump();
   getAnnotations(circuitTarget, annotationVec);
+  llvm::errs() << "\n annotation vec:: \n" << circuitTarget << "\n";
+  annotationVec.dump();
 
   OpBuilder b(mlirModule.getBodyRegion());
 

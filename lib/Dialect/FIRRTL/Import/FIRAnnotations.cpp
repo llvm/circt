@@ -78,7 +78,7 @@ bool circt::firrtl::fromJSON(json::Value &value,
     // If the target is something that we know we don't support, then error.
     bool unsupported =
         std::any_of(newTarget.begin(), newTarget.end(), [](char a) {
-          return a == '/' || a == ':' || a == '.' || a == '[';
+          return a == '/' || a == ':' ;
         });
     if (unsupported) {
       p.field("target").report(
@@ -160,12 +160,14 @@ bool circt::firrtl::fromJSON(json::Value &value,
     auto target = findAndEraseTarget(object, p);
     if (!target)
       return false;
+    llvm::errs() << "\n target ::" << target;
 
     // Build up the Attribute to represent the Annotation and store it in the
     // global Target -> Attribute mapping.
     NamedAttrList metadata;
     for (auto field : *object) {
       if (auto value = convertJSONToAttribute(field.second, p)) {
+        llvm::errs() << "\n field.first:"<< field.first << " value:"<< value << "\n";
         metadata.append(field.first, value);
         continue;
       }
@@ -176,8 +178,10 @@ bool circt::firrtl::fromJSON(json::Value &value,
   }
 
   // Convert the mutable Annotation map to a SmallVector<ArrayAttr>.
-  for (auto a : mutableAnnotationMap.keys())
+  for (auto a : mutableAnnotationMap.keys()) {
     annotationMap[a] = ArrayAttr::get(context, mutableAnnotationMap[a]);
+    llvm::errs() << "\n annotation:"<< a << " array atttr : :"<< annotationMap[a] << "\n";
+  }
 
   return true;
 }
