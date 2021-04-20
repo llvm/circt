@@ -63,6 +63,19 @@ static StringRef filterUselessName(StringRef name) {
   return isUselessName(name) ? "" : name;
 }
 
+/// Get an annotation with a class name field.
+static DictionaryAttr getAnnotationOfClass(MLIRContext *context,
+                                           StringRef classString) {
+  auto id = NamedAttribute(Identifier::get("class", context),
+                           StringAttr::get(context, classString));
+  return DictionaryAttr::getWithSorted(context, {id});
+}
+
+/// Checks the annotations array for a matching annotation.
+static bool hasAnnotation(ArrayAttr annotations, DictionaryAttr annotation) {
+  return llvm::is_contained(annotations, annotation);
+}
+
 //===----------------------------------------------------------------------===//
 // GlobalFIRParserState
 //===----------------------------------------------------------------------===//
@@ -76,7 +89,10 @@ struct GlobalFIRParserState {
                        FIRParserOptions options,
                        const llvm::MemoryBuffer *annotationsBuf)
       : context(context), options(options), lex(sourceMgr, context),
-        curToken(lex.lexToken()), annotationsBuf(annotationsBuf) {}
+        curToken(lex.lexToken()), annotationsBuf(annotationsBuf) {
+    dontTouchAnnotation =
+        getAnnotationOfClass(context, "firrtl.transforms.DontTouchAnnotation");
+  }
 
   /// The context we're parsing into.
   MLIRContext *const context;
@@ -102,6 +118,9 @@ struct GlobalFIRParserState {
 
   /// A mutable reference to the current ModuleTarget.
   StringRef moduleTarget;
+
+  // Cached annotation for DontTouch.
+  DictionaryAttr dontTouchAnnotation;
 
   class BacktraceState {
   public:
@@ -265,6 +284,13 @@ struct FIRParser {
   /// Populate a vector of annotations for a given Target.  If the annotations
   /// parameter is non-empty, then this will be appended to.
   void getAnnotations(Twine target, ArrayAttr &annotations);
+
+  /// Returns true if the annotation list contains the DontTouchAnnotation. This
+  /// method is slightly more efficient than other lookup methods, because it
+  /// uses a stashed copy of the annotation for lookup.
+  bool hasDontTouch(ArrayAttr annotations) {
+    return hasAnnotation(annotations, state.dontTouchAnnotation);
+  }
 
 private:
   FIRParser(const FIRParser &) = delete;
@@ -2181,9 +2207,10 @@ ParseResult FIRStmtParser::parseInstance() {
     resultTypes.push_back(FlipType::get(port.type));
     resultNames.push_back(port.name);
   }
-  auto name = filterUselessName(id);
   ArrayAttr annotations = builder.getArrayAttr({});
-  getAnnotations(getModuleTarget() + ">" + name, annotations);
+  getAnnotations(getModuleTarget() + ">" + id, annotations);
+  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
+
   auto result = builder.create<InstanceOp>(
       info.getLoc(), resultTypes, moduleName, builder.getArrayAttr(resultNames),
       name, annotations);
@@ -2221,9 +2248,9 @@ ParseResult FIRStmtParser::parseCMem() {
       parseType(type, "expected cmem type") || parseOptionalInfo(info))
     return failure();
 
-  auto name = filterUselessName(id);
   ArrayAttr annotations = builder.getArrayAttr({});
-  getAnnotations(getModuleTarget() + ">" + name, annotations);
+  getAnnotations(getModuleTarget() + ">" + id, annotations);
+  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
   auto result = builder.create<CMemOp>(info.getLoc(), type, name, annotations);
 
@@ -2256,9 +2283,9 @@ ParseResult FIRStmtParser::parseSMem() {
       parseOptionalInfo(info))
     return failure();
 
-  auto name = filterUselessName(id);
   ArrayAttr annotations = builder.getArrayAttr({});
-  getAnnotations(getModuleTarget() + ">" + name, annotations);
+  getAnnotations(getModuleTarget() + ">" + id, annotations);
+  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
   auto result =
       builder.create<SMemOp>(info.getLoc(), type, ruw, name, annotations);
@@ -2390,9 +2417,9 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     resultTypes.push_back(FlipType::get(p.second));
   }
 
-  auto name = filterUselessName(id);
   ArrayAttr annotations = builder.getArrayAttr({});
-  getAnnotations(getModuleTarget() + ">" + name, annotations);
+  getAnnotations(getModuleTarget() + ">" + id, annotations);
+  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
   auto result = builder.create<MemOp>(
       info.getLoc(), resultTypes, readLatency, writeLatency, depth, ruw,
@@ -2459,19 +2486,18 @@ ParseResult FIRStmtParser::parseNode() {
   // passive.
   initializer = convertToPassive(initializer, initializer.getLoc());
 
+  ArrayAttr annotations = builder.getArrayAttr({});
+  getAnnotations(getModuleTarget() + ">" + id, annotations);
+
   // Ignore useless names like _T.
-  auto actualName = filterUselessName(id);
+  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
   // The entire point of a node declaration is to carry a name.  If it got
   // dropped, then we don't even need to create a result.
-  //
-  // TODO: This optimization doesn't respect annotated, temporary nodes.
   Value result;
-  if (!actualName.empty()) {
-    ArrayAttr annotations = builder.getArrayAttr({});
-    getAnnotations(getModuleTarget() + ">" + actualName, annotations);
+  if (!name.empty()) {
     result = builder.create<NodeOp>(info.getLoc(), initializer.getType(),
-                                    initializer, actualName, annotations);
+                                    initializer, name, annotations);
   } else
     result = initializer;
   return addSymbolEntry(id, result, info.getFIRLoc());
@@ -2496,9 +2522,9 @@ ParseResult FIRStmtParser::parseWire() {
 
   ArrayAttr annotations = builder.getArrayAttr({});
   getAnnotations(getModuleTarget() + ">" + id, annotations);
+  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
-  auto result = builder.create<WireOp>(info.getLoc(), type,
-                                       filterUselessName(id), annotations);
+  auto result = builder.create<WireOp>(info.getLoc(), type, name, annotations);
   return addSymbolEntry(id, result, info.getFIRLoc());
 }
 
@@ -2590,9 +2616,9 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   if (parseOptionalInfo(info, subOps))
     return failure();
 
-  auto name = filterUselessName(id);
   ArrayAttr annotations = builder.getArrayAttr({});
-  getAnnotations(getModuleTarget() + ">" + name, annotations);
+  getAnnotations(getModuleTarget() + ">" + id, annotations);
+  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
   Value result;
   if (resetSignal)
