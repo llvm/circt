@@ -3,8 +3,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt-c/Dialect/MSFT.h"
-#include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
+#include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Registration.h"
 #include "mlir/CAPI/Support.h"
