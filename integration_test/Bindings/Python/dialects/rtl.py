@@ -42,6 +42,41 @@ with Context() as ctx, Location.unknown():
             a, b = swap(a, b)
             return a, b
 
+        # CHECK-LABEL: rtl.module @instance_builder_tests
+        instance_builder_tests = rtl.RTLModuleOp(name="instance_builder_tests")
+        one_input = rtl.RTLModuleOp(
+            name="one_input",
+            input_ports=[("a", i32)],
+            body_builder=lambda m: rtl.OutputOp([]),
+        )
+        two_inputs = rtl.RTLModuleOp(
+            name="two_inputs",
+            input_ports=[("a", i32), ("b", i32)],
+            body_builder=lambda m: rtl.OutputOp([]),
+        )
+        one_output = rtl.RTLModuleOp(
+            name="one_output",
+            output_ports=[("a", i32)],
+            body_builder=lambda m: rtl.OutputOp(
+                [rtl.ConstantOp(i32, IntegerAttr.get(i32, 46)).result]),
+        )
+
+        with InsertionPoint(instance_builder_tests.add_entry_block()):
+          # CHECK: %[[INST1_RESULT:.+]] = rtl.instance "inst1" @one_output()
+          inst1 = one_output.create("inst1")
+
+          # CHECK: rtl.instance "inst2" @one_input(%[[INST1_RESULT]])
+          inst2 = one_input.create("inst2", {"a": inst1.a})
+
+          # CHECK-NOT: rtl.instance "inst3"
+          inst3 = two_inputs.create("inst3", {"a": inst1.a})
+
+          # CHECK: rtl.instance "inst4" @two_inputs(%[[INST1_RESULT]], %[[INST1_RESULT]])
+          inst4 = two_inputs.create("inst4", {"a": inst1.a})
+          inst4.b = inst1.a
+
+          rtl.OutputOp([])
+
     m.operation.print()
 
     # CHECK-LABEL: === Verilog ===

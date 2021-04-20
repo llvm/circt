@@ -1,16 +1,121 @@
-from typing import Optional, Sequence
+from typing import Dict, Optional, Sequence
 
 import inspect
 
 from mlir.ir import *
+
+
+class InstanceBuilder:
+  """Helper class to incrementally construct an instance of a module."""
+
+  __slots__ = [
+      'module', 'instance_name', 'module_name', 'parameters', 'loc', 'ip',
+      'instance', 'arg_values', 'arg_names', 'arg_names_set', 'result_values',
+      'result_names', 'result_names_set'
+  ]
+
+  def __init__(self,
+               module,
+               name,
+               input_port_mapping,
+               *,
+               parameters={},
+               loc=None,
+               ip=None):
+    self.module = module
+    self.instance_name = StringAttr.get(name)
+    self.module_name = FlatSymbolRefAttr.get(StringAttr(self.module.name).value)
+    self.parameters = DictAttr.get(parameters)
+    self.loc = loc
+    self.ip = ip
+    self.instance = None
+    self.arg_values = {}
+    self.result_values = {}
+
+    arg_names = ArrayAttr(self.module.attributes["argNames"])
+    result_names = ArrayAttr(self.module.attributes["resultNames"])
+
+    def string_value(attr):
+      return StringAttr(attr).value
+
+    self.arg_names = list(map(string_value, arg_names))
+    self.arg_names_set = frozenset(self.arg_names)
+    self.result_names = list(map(string_value, result_names))
+    self.result_names_set = frozenset(self.result_names)
+
+    for (name, value) in input_port_mapping.items():
+      if name in self.arg_names_set:
+        self.arg_values[name] = value
+      else:
+        raise AttributeError(f"unknown input port name {name}")
+
+    self.maybe_build()
+
+  def maybe_build(self):
+    # Ensure all the arg values have been stored.
+    if len(self.arg_values) < len(self.arg_names):
+      return
+
+    # Get the stored arg values in the correct order.
+    arg_values = [self.arg_values[name] for name in self.arg_names]
+
+    # Lazily import InstanceOp to avoid cyclic dependencies.
+    from ._rtl_ops_gen import InstanceOp
+
+    # Actually build the InstanceOp.
+    self.instance = InstanceOp(
+        self.module.type.results,
+        self.instance_name,
+        self.module_name,
+        arg_values,
+        self.parameters,
+        loc=self.loc,
+        ip=self.ip,
+    )
+
+  def __getattr__(self, name):
+    # Check for the attribute in the result name set.
+    if name in object.__getattribute__(self, "result_names_set"):
+      # Ensure the instance is fully instantiated.
+      instance = object.__getattribute__(self, "instance")
+      if not instance:
+        raise AttributeError("instance is not yet fully-defined")
+
+      # Return the instance result with this name.
+      result_names = object.__getattribute__(self, "result_names")
+      return instance.results[result_names.index(name)]
+
+    # If we fell through to here, the name isn't a result.
+    raise AttributeError(f"unknown output port name {name}")
+
+  def __setattr__(self, name, value):
+    # If we are actually setting an InstanceBuilder attribute, just do that.
+    if name in self.__slots__:
+      object.__setattr__(self, name, value)
+      return
+
+    # Check for the attribute in the arg name set.
+    if name in object.__getattribute__(self, "arg_names_set"):
+      # Store the value for building the InstanceOp.
+      arg_values = object.__getattribute__(self, "arg_values")
+      arg_values[name] = value
+
+      # Attempt to build the InstanceOp.
+      maybe_build = object.__getattribute__(self, "maybe_build")
+      maybe_build()
+      return
+
+    # If we fell through to here, the name isn't an arg.
+    raise AttributeError(f"unknown input port name {name}")
+
 
 class RTLModuleOp:
   """Specialization for the RTL module op class."""
 
   def __init__(self,
                name,
-               input_ports,
-               output_ports,
+               input_ports=[],
+               output_ports=[],
                *,
                body_builder=None,
                loc=None,
@@ -82,6 +187,13 @@ class RTLModuleOp:
       raise IndexError('The module already has an entry block')
     self.body.blocks.append(*self.type.inputs)
     return self.body.blocks[0]
+
+  def create(self,
+             name: str,
+             input_port_mapping: Dict[str, Value] = {},
+             loc=None,
+             ip=None):
+    return InstanceBuilder(self, name, input_port_mapping, loc=loc, ip=ip)
 
   @classmethod
   def from_py_func(RTLModuleOp,
