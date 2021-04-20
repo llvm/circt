@@ -64,5 +64,11 @@ with Context() as ctxt, Location.unknown():
     # CHECK: rtl.module.extern @IntAccumulator(%clk: i1, %ints: i32, %ints_valid: i1) -> (%ints_ready: i1, %sum: i32)
 
     print("\n\n=== Verilog ===")
-    # CHECK: === Verilog ===
+    # CHECK-LABEL: === Verilog ===
+    # CHECK: interface IValidReady_i32;
+    # CHECK: // external module IntProducer
+    # CHECK: // external module IntAccumulator
+    # CHECK: module MyWidget_esi
+    # CHECK: module MyWidget
+    # CHECK: module I32Snoop
     sys.print_verilog()

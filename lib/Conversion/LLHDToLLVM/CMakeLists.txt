@@ -13,5 +13,4 @@ add_circt_conversion_library(CIRCTLLHDToLLVM
   MLIRStandardToLLVM
   MLIRVector
   MLIRTransforms
-  MLIRTransformUtils
 )

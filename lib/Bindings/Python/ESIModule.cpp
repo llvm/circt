@@ -13,7 +13,6 @@
 #include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir-c/Bindings/Python/Interop.h"
-#include "mlir-c/Diagnostics.h"
 
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Support.h"
