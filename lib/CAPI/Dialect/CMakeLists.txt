@@ -2,6 +2,7 @@
 set(LLVM_OPTIONAL_SOURCES
   Comb.cpp
   ESI.cpp
+  MSFT.cpp
   RTL.cpp
   SV.cpp
 )
@@ -28,6 +29,18 @@ add_circt_library(CIRCTCAPIESI
   LINK_LIBS PUBLIC
   MLIRCAPIIR
   CIRCTESI
+  )
+
+add_circt_library(CIRCTCAPIMSFT
+
+  MSFT.cpp
+
+  ADDITIONAL_HEADER_DIRS
+  ${MLIR_MAIN_INCLUDE_DIR}/mlir-c
+
+  LINK_LIBS PUBLIC
+  MLIRCAPIIR
+  CIRCTMSFT
   )
 
 add_circt_library(CIRCTCAPIRTL

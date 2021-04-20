@@ -10,6 +10,7 @@
 
 #include "circt-c/Dialect/Comb.h"
 #include "circt-c/Dialect/ESI.h"
+#include "circt-c/Dialect/MSFT.h"
 #include "circt-c/Dialect/RTL.h"
 #include "circt-c/Dialect/SV.h"
 #include "circt-c/ExportVerilog.h"
@@ -44,6 +45,10 @@ PYBIND11_MODULE(_circt, m) {
         MlirDialectHandle esi = mlirGetDialectHandle__esi__();
         mlirDialectHandleRegisterDialect(esi, context);
         mlirDialectHandleLoadDialect(esi, context);
+
+        MlirDialectHandle msft = mlirGetDialectHandle__msft__();
+        mlirDialectHandleRegisterDialect(msft, context);
+        mlirDialectHandleLoadDialect(msft, context);
 
         MlirDialectHandle rtl = mlirGetDialectHandle__rtl__();
         mlirDialectHandleRegisterDialect(rtl, context);
