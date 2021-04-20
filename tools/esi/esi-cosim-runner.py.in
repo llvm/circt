@@ -56,15 +56,18 @@ class CosimTestRunner:
         sources = []
         for line in fileReader:
             # Arguments to circt-rtl-sim, except for source files list
-            if m := re.match(r"^//\s*ARGS:(.*)$", line):
+            m = re.match(r"^//\s*ARGS:(.*)$", line)
+            if m:
                 self.args.extend(m.group(1).split())
             # SOURCES are the additional source files (if any). If specified,
             # must include the current file. These files are either absolute or
             # relative to the current file.
-            if m := re.match(r"^//\s*SOURCES:(.*)$", line):
+            m = re.match(r"^//\s*SOURCES:(.*)$", line)
+            if m:
                 sources.extend(m.group(1).split())
             # Run this Python line.
-            if m := re.match(r"^//\s*PY:(.*)$", line):
+            m = re.match(r"^//\s*PY:(.*)$", line)
+            if m:
                 self.runs.append(m.group(1).strip())
         fileReader.close()
 
