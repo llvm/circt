@@ -79,42 +79,10 @@ void CircuitOp::build(OpBuilder &builder, OperationState &result,
   if (annotations)
     result.addAttribute("annotations", annotations);
 
-  // Create a region and a block for the body.  The argument of the region is
-  // the loop induction variable.
+  // Create a region and a block for the body.
   Region *bodyRegion = result.addRegion();
   Block *body = new Block();
   bodyRegion->push_back(body);
-  CircuitOp::ensureTerminator(*bodyRegion, builder, result.location);
-}
-
-static void print(OpAsmPrinter &p, CircuitOp op) {
-  p << op.getOperationName() << " ";
-  p.printAttribute(op.nameAttr());
-
-  p.printOptionalAttrDictWithKeyword(op->getAttrs(), {"name"});
-
-  p.printRegion(op.body(),
-                /*printEntryBlockArgs=*/false,
-                /*printBlockTerminators=*/false);
-}
-
-static ParseResult parseCircuitOp(OpAsmParser &parser, OperationState &result) {
-  // Parse the module name.
-  StringAttr nameAttr;
-  if (parser.parseAttribute(nameAttr, "name", result.attributes))
-    return failure();
-
-  // Parse the optional attribute list.
-  if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
-    return failure();
-
-  // Parse the body region.
-  Region *body = result.addRegion();
-  if (parser.parseRegion(*body, /*regionArgs*/ {}, /*argTypes*/ {}))
-    return failure();
-
-  CircuitOp::ensureTerminator(*body, parser.getBuilder(), result.location);
-  return success();
 }
 
 // Return the main module that is the entry point of the circuit.
@@ -315,8 +283,6 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
 
   if (annotations)
     result.addAttribute("annotations", annotations);
-
-  FModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
 }
 
 // Return the port with the specified name.
@@ -421,11 +387,13 @@ static void print(OpAsmPrinter &p, FExtModuleOp op) {
 static void print(OpAsmPrinter &p, FModuleOp op) {
   printModuleLikeOp(p, op);
 
-  // Print the body if this is not an external function.
+  // Print the body if this is not an external function. Since this block does
+  // not have terminators, printing the terminator actually just prints the last
+  // operation.
   Region &body = op.getBody();
   if (!body.empty())
     p.printRegion(body, /*printEntryBlockArgs=*/false,
-                  /*printBlockTerminators=*/false);
+                  /*printBlockTerminators=*/true);
 }
 
 static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
@@ -500,8 +468,8 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
     if (parser.parseRegion(*body, entryArgs,
                            entryArgs.empty() ? ArrayRef<Type>() : argTypes))
       return failure();
-
-    FModuleOp::ensureTerminator(*body, parser.getBuilder(), result.location);
+    if (body->empty())
+      body->push_back(new Block());
   }
   return success();
 }
@@ -976,35 +944,26 @@ static LogicalResult verifyConnectOp(ConnectOp connect) {
 
 void WhenOp::createElseRegion() {
   assert(!hasElseRegion() && "already has an else region");
-  OpBuilder builder(&elseRegion());
-  WhenOp::ensureTerminator(elseRegion(), builder, getLoc());
+  elseRegion().push_back(new Block());
 }
 
 void WhenOp::build(OpBuilder &builder, OperationState &result, Value condition,
                    bool withElseRegion, std::function<void()> thenCtor,
                    std::function<void()> elseCtor) {
+  OpBuilder::InsertionGuard guard(builder);
   result.addOperands(condition);
 
-  Region *thenRegion = result.addRegion();
-  Region *elseRegion = result.addRegion();
-  WhenOp::ensureTerminator(*thenRegion, builder, result.location);
-
-  if (thenCtor) {
-    auto oldIP = &*builder.getInsertionPoint();
-    builder.setInsertionPointToStart(&*thenRegion->begin());
+  // Create "then" region.
+  builder.createBlock(result.addRegion());
+  if (thenCtor)
     thenCtor();
-    builder.setInsertionPoint(oldIP);
-  }
 
+  // Create "else" region.
+  Region *elseRegion = result.addRegion();
   if (withElseRegion) {
-    WhenOp::ensureTerminator(*elseRegion, builder, result.location);
-
-    if (elseCtor) {
-      auto oldIP = &*builder.getInsertionPoint();
-      builder.setInsertionPointToStart(&*elseRegion->begin());
+    builder.createBlock(elseRegion);
+    if (elseCtor)
       elseCtor();
-      builder.setInsertionPoint(oldIP);
-    }
   }
 }
 
@@ -1727,36 +1686,31 @@ static ParseResult parseImplicitSSAName(OpAsmParser &parser,
   if (hadName)
     return success();
 
-  auto resultName = parser.getResultName(0);
-  if (!resultName.first.empty() && !isdigit(resultName.first[0])) {
-    StringRef name = resultName.first;
-    auto nameAttr = parser.getBuilder().getStringAttr(name);
-    auto *context = parser.getBuilder().getContext();
-    resultAttrs.push_back({Identifier::get("name", context), nameAttr});
-  }
-
+  auto resultName = parser.getResultName(0).first;
+  if (!resultName.empty() && isdigit(resultName[0]))
+    resultName = "";
+  auto nameAttr = parser.getBuilder().getStringAttr(resultName);
+  auto *context = parser.getBuilder().getContext();
+  resultAttrs.push_back({Identifier::get("name", context), nameAttr});
   return success();
 }
 
 static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
                                  DictionaryAttr attr) {
+  // List of attributes to elide when printing the dictionary.
+  SmallVector<StringRef, 2> elides;
+
   // Note that we only need to print the "name" attribute if the asmprinter
   // result name disagrees with it.  This can happen in strange cases, e.g.
   // when there are conflicts.
-  bool namesDisagree = false;
-
   SmallString<32> resultNameStr;
   llvm::raw_svector_ostream tmpStream(resultNameStr);
   p.printOperand(op->getResult(0), tmpStream);
-  auto expectedName = op->getAttrOfType<StringAttr>("name");
-  if (!expectedName ||
-      tmpStream.str().drop_front() != expectedName.getValue()) {
-    namesDisagree = true;
-  }
-
-  SmallVector<StringRef, 2> elides;
-
-  if (!namesDisagree)
+  auto actualName = tmpStream.str().drop_front();
+  auto expectedName = op->getAttrOfType<StringAttr>("name").getValue();
+  // Anonymous names are printed as digits, which is fine.
+  if (actualName == expectedName ||
+      (expectedName.empty() && isdigit(actualName[0])))
     elides.push_back("name");
 
   // Elide "annotations" if it doesn't exist or if it is empty

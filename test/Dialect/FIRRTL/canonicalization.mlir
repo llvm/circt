@@ -1382,4 +1382,17 @@ firrtl.module @EmptyNode(%d1: !firrtl.uint<5>, %foo: !firrtl.flip<uint<5>>, %foo
 // CHECK-NEXT: firrtl.connect %foo, %d1
 // CHECK-NEXT: firrtl.connect %foo2, %bar2
 
+// COM: https://github.com/llvm/circt/issues/929
+// CHECK-LABEL: firrtl.module @MuxInvalidTypeOpt
+firrtl.module @MuxInvalidTypeOpt(%in : !firrtl.uint<1>, %out : !firrtl.flip<uint<4>>) {
+  %c7_ui4 = firrtl.constant(7 : ui4) : !firrtl.uint<4>
+  %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
+  %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
+  %0 = firrtl.mux (%in, %c7_ui4, %c0_ui2) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<4>
+  %1 = firrtl.mux (%in, %c1_ui2, %0) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.connect %out, %1 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+}
+// CHECK: firrtl.mux(%in, %c7_ui4, %c0_ui2) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<4>
+// CHECK: firrtl.mux(%in, %c1_ui2, %0) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<4>) -> !firrtl.uint<4>
+
 }
