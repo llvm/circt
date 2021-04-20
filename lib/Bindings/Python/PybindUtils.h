@@ -124,10 +124,7 @@ struct type_caster<MlirModule> {
   static handle cast(MlirModule v, return_value_policy, handle) {
     auto capsule =
         py::reinterpret_steal<py::object>(mlirPythonModuleToCapsule(v));
-    return py::module::import("mlir.ir")
-        .attr("Module")
-        .attr(MLIR_PYTHON_CAPI_FACTORY_ATTR)(capsule)
-        .release();
+    return capsule.attr(MLIR_PYTHON_CAPI_FACTORY_ATTR)(capsule).release();
   };
 };
 

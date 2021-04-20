@@ -60,36 +60,37 @@ static MlirType channelType(MlirType cElem) {
 
 class System {
 public:
-  System(MlirContext cCtxt) : ctxt(unwrap(cCtxt)) {}
-
-  MlirModule createModule() {
-    assert(!module);
-    auto loc = UnknownLoc::get(ctxt);
-    module = ModuleOp::create(loc);
-    return wrap(module);
+  System(MlirContext cCtxt, MlirOperation modOp)
+      : cCtxt(cCtxt), cModuleOp(modOp) {
+    assert(isa<ModuleOp>(unwrap(modOp)) &&
+           "Must construct 'System' with a ModuleOp");
   }
 
   void loadMlir(std::string filename) {
-    assert(module && "Must call create_module first()!");
-    auto loadedMod = mlir::parseSourceFile(filename, ctxt);
+    auto loadedMod = mlir::parseSourceFile(filename, ctxt());
     Block *loadedBlock = loadedMod->getBody();
-    assert(!module->getRegions().empty());
-    if (module.body().empty()) {
-      module.body().push_back(loadedBlock);
+    ModuleOp modOp = mod();
+    assert(!modOp->getRegions().empty());
+    if (modOp.body().empty()) {
+      modOp.body().push_back(loadedBlock);
       return;
     }
-    auto &ops = module.getBody()->getOperations();
+    auto &ops = modOp.getBody()->getOperations();
     ops.splice(ops.end(), loadedBlock->getOperations());
   }
 
   MlirOperation lookup(std::string symbol) {
-    Operation *found = SymbolTable::lookupSymbolIn(module, symbol);
+    Operation *found = SymbolTable::lookupSymbolIn(mod(), symbol);
     return wrap(found);
   }
 
 private:
-  MLIRContext *ctxt;
-  ModuleOp module;
+  MLIRContext *ctxt() { return unwrap(cCtxt); }
+  ModuleOp mod() { return cast<ModuleOp>(unwrap(cModuleOp)); }
+
+  MlirContext cCtxt;
+  MlirOperation cModuleOp;
+  MlirDiagnosticHandlerID diagID;
 };
 
 void circt::python::populateDialectESISubmodule(py::module &m) {
@@ -104,8 +105,7 @@ void circt::python::populateDialectESISubmodule(py::module &m) {
         "Create an ESI channel type which wraps the argument type");
 
   py::class_<System>(m, "CppSystem")
-      .def(py::init<MlirContext>())
+      .def(py::init<MlirContext, MlirOperation>())
       .def("load_mlir", &System::loadMlir, "Load an MLIR assembly file.")
-      .def("lookup", &System::lookup, "Lookup an RTL module and return it.")
-      .def("create_module", &System::createModule, "");
+      .def("lookup", &System::lookup, "Lookup an RTL module and return it.");
 }

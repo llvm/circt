@@ -9,7 +9,10 @@ from _circt._esi import *
 import circt
 
 import sys
+import os
 
+input(f"Attach to {os.getpid()} then hit enter...")
+print("  ... Resuming execution")
 
 class System (CppSystem):
 
@@ -24,22 +27,22 @@ class System (CppSystem):
   passed = False
 
   def __init__(self, ctxt):
-    super().__init__(ctxt)
-    self.mod = self.create_module()
+    with ctxt:
+      self.mod = mlir.ir.Module.create()
+    super().__init__(ctxt, self.mod.operation)
 
-  def get(self):
-    return self.mod
+  @property
+  def body(self):
+    return self.mod.body
 
   def print(self):
     self.mod.operation.print()
-
-  def get_body(self):
-    return self.mod.body
 
   def run_passes(self):
     if self.passed:
       return
     pm = PassManager.parse(",".join(self.passes))
+    # super().run_passes(pm)
     pm.run(self.mod)
     self.passed = True
 
