@@ -6,6 +6,7 @@ from circt import msft
 from circt.dialects import rtl
 
 from mlir.ir import *
+import sys
 
 with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)
@@ -33,3 +34,10 @@ with Context() as ctx, Location.unknown():
     # CHECK: rtl.instance "widget" @MyWidget() {"loc:mem" = #msft.physloc<M20K, 50, 100, 1>, parameters = {}} : () -> ()
 
   m.operation.print()
+
+  # CHECK-LABEL: === tcl ===
+  print("=== tcl ===")
+
+  # CHECK: proc top_config { parent } {
+  # CHECK:   set_location_assignment M20K_X50_Y100_N1 -to $parent|widget|mem
+  msft.export_tcl(m, sys.stdout)
