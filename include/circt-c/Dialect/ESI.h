@@ -18,6 +18,7 @@ extern "C" {
 #endif
 
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(ESI, esi);
+MLIR_CAPI_EXPORTED void registerESIPasses();
 
 #ifdef __cplusplus
 }
