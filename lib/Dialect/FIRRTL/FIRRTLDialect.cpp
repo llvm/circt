@@ -21,7 +21,7 @@ using namespace firrtl;
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
-// If the specified attribute set contains the firrtl.name attribute, return it.
+// If the specified module contains the argNames attribute, return it.
 StringAttr firrtl::getFIRRTLModuleArgNameAttr(Operation *module, size_t argNo) {
   if (!hasFIRRTLModuleArgNameAttr(module))
     return StringAttr();
