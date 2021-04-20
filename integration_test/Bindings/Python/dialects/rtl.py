@@ -5,7 +5,7 @@ import circt
 from circt.dialects import rtl
 
 from mlir.ir import *
-from mlir.dialects import builtin
+from mlir.passmanager import PassManager
 
 import sys
 
@@ -44,7 +44,11 @@ with Context() as ctx, Location.unknown():
 
     m.operation.print()
 
+    # CHECK-LABEL: === Verilog ===
     print("=== Verilog ===")
+
+    pm = PassManager.parse("rtl-legalize-names,rtl.module(rtl-cleanup)")
+    pm.run(m)
     # CHECK: module MyWidget
     # CHECK: module swap
     # CHECK: module top
