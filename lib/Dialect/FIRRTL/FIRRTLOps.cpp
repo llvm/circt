@@ -254,13 +254,12 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   SmallString<8> attrNameBuf;
   // Record the names of the arguments if present.
   SmallVector<Attribute> argNames;
-  for (size_t i = 0, e = ports.size(); i != e; ++i) {
-    if (ports[i].getName().empty()) {
+  for (size_t i = 0, e = ports.size(); i != e; ++i)
+    if (ports[i].getName().empty())
       argNames.push_back(builder.getStringAttr(""));
-    } else {
+    else
       argNames.push_back(ports[i].name);
-    }
-  }
+
   if (!argNames.empty())
     result.addAttribute("argNames", builder.getArrayAttr(argNames));
 

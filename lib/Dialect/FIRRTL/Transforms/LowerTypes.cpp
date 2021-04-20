@@ -195,10 +195,6 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   // Remember the original argument attributess.
   SmallVector<NamedAttribute, 8> originalArgAttrs;
   DictionaryAttr originalAttrs = module->getAttrDictionary();
-  // for (size_t i = 0, e = originalNumModuleArgs; i < e; ++i)
-  //  originalArgAttrs.push_back(
-  //      originalAttrs.getNamed(getArgAttrName(i)).getValue());
-  // DictionaryAttr::sortInPlace(originalArgAttrs);
 
   // Copy over any attributes that weren't original argument attributes.
   auto *argAttrBegin = originalArgAttrs.begin();
@@ -285,7 +281,6 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
 
   // Set the type and then bulk set all the names.
   extModule.setType(builder.getFunctionType(inputTypes, {}));
-  // extModule.setAllArgAttrs(attributes);
 }
 
 //===----------------------------------------------------------------------===//
@@ -822,7 +817,6 @@ Value TypeLoweringVisitor::addArg(FModuleOp module, Type type,
 
     // Save the name attribute for the new argument.
     StringAttr nameAttr = getFIRRTLModuleArgNameAttr(module, oldArgNumber);
-    // auto newArgNumber = newValue.getArgNumber() - originalNumModuleArgs;
     Attribute newArg;
     if (!nameAttr.getValue().empty()) {
       SmallString<16> newName(nameAttr.getValue());
