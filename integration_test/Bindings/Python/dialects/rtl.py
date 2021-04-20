@@ -7,12 +7,14 @@ from circt.dialects import rtl
 from mlir.ir import *
 from mlir.dialects import builtin
 
+import sys
+
 with Context() as ctx, Location.unknown():
     circt.register_dialects(ctx)
 
     i32 = IntegerType.get_signless(32)
 
-    m = builtin.ModuleOp()
+    m = Module.create()
     with InsertionPoint(m.body):
         # CHECK: rtl.module @MyWidget(%my_input: i32) -> (%my_output: i32)
         # CHECK:   rtl.output %my_input : i32
@@ -40,4 +42,10 @@ with Context() as ctx, Location.unknown():
             a, b = swap(a, b)
             return a, b
 
-    m.print()
+    m.operation.print()
+
+    print("=== Verilog ===")
+    # CHECK: module MyWidget
+    # CHECK: module swap
+    # CHECK: module top
+    circt.export_verilog(m, sys.stdout)
