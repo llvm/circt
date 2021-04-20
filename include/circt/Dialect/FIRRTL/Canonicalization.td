@@ -23,6 +23,8 @@ def NonConstantOp : Constraint<CPred<"!$0.getDefiningOp<ConstantOp>()">>;
 // there are no FIRRTL annotation on an operation.
 def EmptyAttrDict : Constraint<CPred<"$0.empty()">>;
 
+// Constraint that enforces equal EqualTypes
+def EqualTypes : Constraint<CPred<"$0.getType() == $1.getType()">>;
 
 // leq(const, x) -> geq(x, const)
 def LEQWithConstLHS : Pat<
@@ -51,13 +53,16 @@ def GTWithConstLHS : Pat<
 // mux(cond, x, mux(cond, y, z)) -> mux(cond, x, z)
 def MuxSameCondLow : Pat<
   (MuxPrimOp $cond, $x, (MuxPrimOp $cond, $y, $z)),
-  (MuxPrimOp $cond, $x, $z)
+  (MuxPrimOp $cond, $x, $z),
+  [(EqualTypes $x, $y),(EqualTypes $x, $z)]
   >;
 
 // mux(cond, mux(cond, y, z), x) -> mux(cond, y, x)
 def MuxSameCondHigh : Pat<
   (MuxPrimOp $cond, (MuxPrimOp $cond, $y, $z), $x),
-  (MuxPrimOp $cond, $y, $x)
+  (MuxPrimOp $cond, $y, $x),
+  [(EqualTypes $x, $y),(EqualTypes $x, $z)]
+
   >;
 
 // node(x, name, {}) -> x

@@ -438,9 +438,8 @@ def ConditionalBranchOp : Handshake_Op<"conditional_branch", [
   }];
 }
 
-def SinkOp : Handshake_Op<"sink", [
-  NoSideEffect, DeclareOpInterfaceMethods<ExecutableOpInterface>
-]> {
+def SinkOp
+    : Handshake_Op<"sink", [DeclareOpInterfaceMethods<ExecutableOpInterface>]> {
   let summary = "sink operation";
   let description = [{
     The "handshake.sink" operation discards any data that arrives at its
@@ -491,6 +490,7 @@ def ConstantOp : Handshake_Op<"constant", [
   // let skipDefaultBuilders = 1;
   let builders = [OpBuilder<(ins "Attribute":$value, "Value":$operand)>];
 
+  let hasCanonicalizer = 1;
   let extraClassDeclaration = [{
     Attribute getValue() { return (*this)->getAttr("value"); }
   }];
@@ -660,5 +660,9 @@ def EliminateSimpleForksPattern : Pat<(ForkOp
                                        : $op $a, $attr),
                                       (replaceWithValue $a), [(HasOneResult
                                                                : $op)]>;
+
+def EliminateSunkConstantsPattern
+    : Pat<(SinkOp:$sink (ConstantOp $control, $value)),
+          (replaceWithValue $sink)>;
 
 #endif // HANDSHAKE_OPS

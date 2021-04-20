@@ -563,6 +563,11 @@ bool handshake::ConstantOp::tryExecute(
   return tryToExecute(getOperation(), valueMap, timeMap, scheduleList, 0);
 }
 
+void handshake::ConstantOp::getCanonicalizationPatterns(
+    RewritePatternSet &results, MLIRContext *context) {
+  results.insert<circt::handshake::EliminateSunkConstantsPattern>(context);
+}
+
 void handshake::TerminatorOp::build(OpBuilder &builder, OperationState &result,
                                     ArrayRef<Block *> successors) {
   // Add all the successor blocks of the block which contains this terminator
