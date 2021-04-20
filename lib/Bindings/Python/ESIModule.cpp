@@ -90,7 +90,6 @@ private:
 
   MlirContext cCtxt;
   MlirModule cModuleOp;
-  MlirDiagnosticHandlerID diagID;
 };
 
 void circt::python::populateDialectESISubmodule(py::module &m) {
