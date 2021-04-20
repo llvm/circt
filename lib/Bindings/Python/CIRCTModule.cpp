@@ -61,6 +61,6 @@ PYBIND11_MODULE(_circt, m) {
     mlirExportVerilog(mod, accum.getCallback(), accum.getUserData());
   });
 
-  py::module esi = m.def_submodule("esi", "ESI API");
+  py::module esi = m.def_submodule("_esi", "ESI API");
   circt::python::populateDialectESISubmodule(esi);
 }
