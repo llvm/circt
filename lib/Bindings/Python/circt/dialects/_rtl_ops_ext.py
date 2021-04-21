@@ -75,14 +75,14 @@ class InstanceBuilder:
 
   def __getattr__(self, name):
     # Check for the attribute in the result name set.
-    if name in object.__getattribute__(self, "result_names_set"):
+    if name in getattr(self, "result_names_set"):
       # Ensure the instance is fully instantiated.
-      instance = object.__getattribute__(self, "instance")
+      instance = getattr(self, "instance")
       if not instance:
         raise AttributeError("instance is not yet fully-defined")
 
       # Return the instance result with this name.
-      result_names = object.__getattribute__(self, "result_names")
+      result_names = getattr(self, "result_names")
       return instance.results[result_names.index(name)]
 
     # If we fell through to here, the name isn't a result.
@@ -95,13 +95,13 @@ class InstanceBuilder:
       return
 
     # Check for the attribute in the arg name set.
-    if name in object.__getattribute__(self, "arg_names_set"):
+    if name in getattr(self, "arg_names_set"):
       # Store the value for building the InstanceOp.
-      arg_values = object.__getattribute__(self, "arg_values")
+      arg_values = getattr(self, "arg_values")
       arg_values[name] = value
 
       # Attempt to build the InstanceOp.
-      maybe_build = object.__getattribute__(self, "maybe_build")
+      maybe_build = getattr(self, "maybe_build")
       maybe_build()
       return
 
