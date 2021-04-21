@@ -10,19 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-def MemoryPortOp : FIRRTLOp<"memoryport"> {
-  let summary = "Access a memory";
-
-  let arguments = (ins FIRRTLType:$memory, IntType:$index, ClockType:$clock,
-                       MemDirAttr:$direction, OptionalAttr<StrAttr>:$name);
-  let results = (outs FIRRTLType:$result);
-
-  let assemblyFormat = [{
-    $direction $memory `,` $index `,` $clock attr-dict `:`
-       functional-type(operands, $result)
-  }];
-}
-
 def AttachOp : FIRRTLOp<"attach"> {
   let summary = "Analog Attach Statement";
 

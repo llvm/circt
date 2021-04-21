@@ -1793,13 +1793,13 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
   if (auto isExpr = parseExpWithLeadingKeyword(spelling, info))
     return isExpr.getValue();
 
-  StringRef resultValue;
+  StringRef id;
   StringRef memName;
   SymbolValueEntry memorySym;
   Value memory, indexExp, clock;
   SmallVector<Operation *, 8> subOps;
   if (parseToken(FIRToken::kw_mport, "expected 'mport' in memory port") ||
-      parseId(resultValue, "expected result name") ||
+      parseId(id, "expected result name") ||
       parseToken(FIRToken::equal, "expected '=' in memory port") ||
       parseId(memName, "expected memory name") ||
       lookupSymbolEntry(memorySym, memName, info.getFIRLoc()) ||
@@ -1816,9 +1816,13 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
     return emitError(info.getFIRLoc(), "memory should have vector type");
   auto resultType = memVType.getElementType();
 
-  auto name = builder.getStringAttr(filterUselessName(resultValue));
-  auto result = builder.create<MemoryPortOp>(info.getLoc(), resultType, memory,
-                                             indexExp, clock, direction, name);
+  ArrayAttr annotations = builder.getArrayAttr({});
+  getAnnotations(getModuleTarget() + ">" + id, annotations);
+  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
+
+  auto result = builder.create<MemoryPortOp>(
+      info.getLoc(), resultType, memory, indexExp, clock, direction,
+      builder.getStringAttr(name), annotations);
 
   // TODO(firrtl scala bug): If the next operation is a skip, just eat it if it
   // is at the same indent level as us.  This is a horrible hack on top of the
@@ -1857,7 +1861,7 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
     }
 
     // If we need to inject this name into a parent scope, then we have to do
-    // some IR hackery.  Create a wire for the resultValue name right before
+    // some IR hackery.  Create a wire for the id name right before
     // the mem in question, inject its name into that scope, then connect
     // the output of the mport to it.
     if (scopeAndOperation.first != symbolTable.getCurScope()) {
@@ -1869,13 +1873,13 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
 
       // Inject this the wire's name into the same scope as the memory.
       symbolTable.insertIntoScope(
-          scopeAndOperation.first, Identifier::get(resultValue, getContext()),
+          scopeAndOperation.first, Identifier::get(id, getContext()),
           {info.getFIRLoc(), SymbolValueEntry(wireHack)});
       return success();
     }
   }
 
-  return addSymbolEntry(resultValue, result, info.getFIRLoc());
+  return addSymbolEntry(id, result, info.getFIRLoc());
 }
 
 /// printf ::= 'printf(' exp exp StringLit exp* ')' info?
