@@ -545,8 +545,9 @@ void TypeLoweringVisitor::visitDecl(WireOp op) {
     if (!name.empty())
       loweredName = name + field.suffix;
     SmallVector<Attribute> loweredAttrs;
-    // For all annotations on the parent op, filter them based on the target attribute.
-    for (auto opAttr : op.annotations()){
+    // For all annotations on the parent op, filter them based on the target
+    // attribute.
+    for (auto opAttr : op.annotations()) {
       auto di = opAttr.dyn_cast<DictionaryAttr>();
       if (!di) {
         loweredAttrs.push_back(opAttr);
@@ -558,24 +559,31 @@ void TypeLoweringVisitor::visitDecl(WireOp op) {
         continue;
       }
 
-      ArrayAttr subFieldTarget = targetAttr.cast<ArrayAttr>() ;
+      ArrayAttr subFieldTarget = targetAttr.cast<ArrayAttr>();
       std::string targetStr = "";
-      for (auto fName: subFieldTarget){
+      for (auto fName : subFieldTarget) {
         std::string fNameStr = fName.cast<StringAttr>().getValue().str();
-        // The fNameStr will begin with either '[' or '.', replace it with an '_' to construct the suffix.
+        // The fNameStr will begin with either '[' or '.', replace it with an
+        // '_' to construct the suffix.
         fNameStr[0] = '_';
         // If it ends with ']', then just remove it.
         if (fNameStr.back() == ']')
-          fNameStr.erase(fNameStr.size()-1);
+          fNameStr.erase(fNameStr.size() - 1);
 
         targetStr += fNameStr;
       }
-      if (!targetStr.empty()){
-        if (field.suffix.find(targetStr) != std::string::npos)
-          loweredAttrs.push_back(opAttr);
-      } else 
+      if (!targetStr.empty()) {
+        if (field.suffix.find(targetStr) != std::string::npos) {
+          NamedAttrList modAttr;
+          for (auto attr : di.getValue()) {
+            if (attr.first.str() == "target")
+              continue;
+            modAttr.push_back(attr);
+          }
+          loweredAttrs.push_back(DictionaryAttr::get(context, modAttr));
+        }
+      } else
         loweredAttrs.push_back(opAttr);
-
     }
     auto wire = builder->create<WireOp>(field.getPortType(),
                                         builder->getStringAttr(loweredName),

@@ -667,14 +667,14 @@ firrtl.circuit "AnnotationsRegOp" {
 
 // -----
 
-// Test that Reg/RegResetOp Annotations are copied to lowered registers.
+// Test that subfield annotations on wire are lowred to appropriate instance based on target.
 firrtl.circuit "AnnotationsBundle" {
   firrtl.module @AnnotationsBundle() {
     %bar = firrtl.wire  {annotations = [{one, target = [".qux"]}, {target = ["[1]", ".baz"], two}]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
 
       // CHECK: %bar_0_baz = firrtl.wire  : !firrtl.uint<1>
-      // CHECK: %bar_0_qux = firrtl.wire  {annotations = [{one, target = [".qux"]}]} : !firrtl.uint<1>
-      // CHECK: %bar_1_baz = firrtl.wire  {annotations = [{target = ["[1]", ".baz"], two}]} : !firrtl.uint<1>
-      // CHECK: %bar_1_qux = firrtl.wire  {annotations = [{one, target = [".qux"]}]} : !firrtl.uint<1>
+      // CHECK: %bar_0_qux = firrtl.wire  {annotations = [{one}]} : !firrtl.uint<1>
+      // CHECK: %bar_1_baz = firrtl.wire  {annotations = [{two}]} : !firrtl.uint<1>
+      // CHECK: %bar_1_qux = firrtl.wire  {annotations = [{one}]} : !firrtl.uint<1>
   }
 }

@@ -23,31 +23,37 @@ namespace json = llvm::json;
 using namespace circt;
 using namespace firrtl;
 
-/// Given a string \p target, starting with either '.' or '[', this function splits the string at every '[' and '.' and populates the \p annotations with the array of strings. Assumption, the \p target string is a well formed valid token specifying an instance of a bundle/array.
-void static parseSubFieldSubIndexAnnotations(StringRef target, ArrayAttr &annotations,MLIRContext *context ) {
+/// Given a string \p target, starting with either '.' or '[', this function
+/// splits the string at every '[' and '.' and populates the \p annotations with
+/// the array of strings. Assumption, the \p target string is a well formed
+/// valid token specifying an instance of a bundle/array.
+void static parseSubFieldSubIndexAnnotations(StringRef target,
+                                             ArrayAttr &annotations,
+                                             MLIRContext *context) {
   std::string temp = "";
   if (target.empty())
     return;
   char begin = target[0];
   temp.push_back(begin);
   SmallVector<Attribute> annotationVec;
-  // The caller must strip the prefix, and the string target must only contain the suffix.
+  // The caller must strip the prefix, and the string target must only contain
+  // the suffix.
   if (begin != '.' && begin != '[')
     return;
-  for (size_t i=1; i < target.size(); i++){
-    if (target[i] == '['){
+  for (size_t i = 1; i < target.size(); i++) {
+    if (target[i] == '[') {
       // Create a StringAttr with the previous token.
-      annotationVec.push_back( StringAttr::get(context, temp));
+      annotationVec.push_back(StringAttr::get(context, temp));
       temp = "";
     } else if (target[i] == '.') {
       // Create a StringAttr with the previous token.
-      annotationVec.push_back( StringAttr::get(context, temp));
+      annotationVec.push_back(StringAttr::get(context, temp));
       temp = "";
     }
     temp.push_back(target[i]);
   }
   // Save the last token.
-  annotationVec.push_back( StringAttr::get(context, temp));
+  annotationVec.push_back(StringAttr::get(context, temp));
   annotations = ArrayAttr::get(context, annotationVec);
 }
 
@@ -108,10 +114,8 @@ bool circt::firrtl::fromJSON(json::Value &value,
     }
 
     // If the target is something that we know we don't support, then error.
-    bool unsupported =
-        std::any_of(newTarget.begin(), newTarget.end(), [](char a) {
-          return a == '/' || a == ':' ;
-        });
+    bool unsupported = std::any_of(newTarget.begin(), newTarget.end(),
+                                   [](char a) { return a == '/' || a == ':'; });
     if (unsupported) {
       p.field("target").report(
           "Unsupported target (not a local CircuitTarget, ModuleTarget, or "
@@ -201,9 +205,11 @@ bool circt::firrtl::fromJSON(json::Value &value,
     NamedAttrList metadata;
     // Annotations on the element instance.
     ArrayAttr elementAnnotations;
-    if (fieldBegin != StringRef::npos){
-      parseSubFieldSubIndexAnnotations(targetStrRef.substr(fieldBegin), elementAnnotations, context);
-      // Create an annotations with key "target", which will be parsed by lowerTypes, and propagated to the appropriate instance.
+    if (fieldBegin != StringRef::npos) {
+      parseSubFieldSubIndexAnnotations(targetStrRef.substr(fieldBegin),
+                                       elementAnnotations, context);
+      // Create an annotations with key "target", which will be parsed by
+      // lowerTypes, and propagated to the appropriate instance.
       metadata.append("target", elementAnnotations);
       targetStrRef = targetStrRef.substr(0, fieldBegin);
     }
@@ -225,7 +231,7 @@ bool circt::firrtl::fromJSON(json::Value &value,
     if (annotationMap.count(a))
       for (auto attr : annotationMap[a])
         mutableAnnotationMap[a].push_back(attr);
-      
+
     annotationMap[a] = ArrayAttr::get(context, mutableAnnotationMap[a]);
   }
 
