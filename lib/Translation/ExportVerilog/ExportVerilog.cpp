@@ -2845,7 +2845,7 @@ void UnifiedEmitter::emitMLIRModule() {
       ModuleEmitter(state).emitRTLExternModule(rootOp);
     else if (auto rootOp = dyn_cast<RTLModuleGeneratedOp>(op))
       ModuleEmitter(state).emitRTLGeneratedModule(rootOp);
-    else if (auto rootOp = dyn_cast<RTLGeneratorSchemaOp>(op)) { /* Empty */
+    else if (isa<RTLGeneratorSchemaOp>(op)) { /* Empty */
     } else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) ||
                isa<IfDefProceduralOp>(op))
       ModuleEmitter(state).emitStatement(&op);
@@ -2904,6 +2904,8 @@ void SplitEmitter::emitMLIRModule() {
       moduleOps.push_back({&op, perFileOps.size(), /*filename=*/{}});
     } else if (isa<VerbatimOp>(op) || isa<IfDefProceduralOp>(op)) {
       perFileOps.push_back(&op);
+    } else if (isa<RTLGeneratorSchemaOp>(op)) {
+      /* Empty */
     } else {
       op.emitError("unknown operation");
       encounteredError = true;
@@ -2943,7 +2945,7 @@ void SplitEmitter::emitModule(const LoweringOptions &options,
   }
 
   // Determine the output file name.
-  mod.filename.append(".v");
+  mod.filename.append(".sv");
   SmallString<128> outputFilename(dirname);
   llvm::sys::path::append(outputFilename, mod.filename);
 

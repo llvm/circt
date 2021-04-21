@@ -13,16 +13,16 @@ thisDir = path.dirname(__file__)
 
 with Context() as ctxt, Location.unknown():
     circt.register_dialects(ctxt)
-    sys = esi.System(ctxt)
+    sys = esi.System()
     sys.load_mlir(path.join(thisDir, "esi_load1.mlir"))
     sys.load_mlir(path.join(thisDir, "esi_load2.mlir"))
-    m = sys.get()
 
     i1 = IntegerType.get_signless(1)
     i32 = IntegerType.get_signless(32)
     i32_chan = esi.channel_type(i32)
+    sys.print()
 
-    with InsertionPoint(m.regions[0].blocks[0]):
+    with InsertionPoint(sys.body):
         op = rtl.RTLModuleOp(
             name='MyWidget',
             input_ports=[('foo', i32), ('foo_valid', i1)],
@@ -39,8 +39,9 @@ with Context() as ctxt, Location.unknown():
                 [module.entry_block.arguments[0]])
         )
 
+
     esi.buildWrapper(op.operation, ["foo"])
-    m.print()
+    sys.print()
     # CHECK-LABEL:  rtl.module @MyWidget_esi(%foo: !esi.channel<i32>) {
     # CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr %foo, %pearl.foo_ready : i32
     # CHECK-NEXT:     %pearl.foo_ready = rtl.instance "pearl" @MyWidget(%rawOutput, %valid) : (i32, i1) -> i1
@@ -61,3 +62,13 @@ with Context() as ctxt, Location.unknown():
     acc.print()
     print()  # Newline.
     # CHECK: rtl.module.extern @IntAccumulator(%clk: i1, %ints: i32, %ints_valid: i1) -> (%ints_ready: i1, %sum: i32)
+
+    print("\n\n=== Verilog ===")
+    # CHECK-LABEL: === Verilog ===
+    # CHECK: interface IValidReady_i32;
+    # CHECK: // external module IntProducer
+    # CHECK: // external module IntAccumulator
+    # CHECK: module MyWidget_esi
+    # CHECK: module MyWidget
+    # CHECK: module I32Snoop
+    sys.print_verilog()

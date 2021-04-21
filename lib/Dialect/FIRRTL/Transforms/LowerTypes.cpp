@@ -407,9 +407,10 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     // TODO: Annotations are just copied to the lowered memory.
     // Change this to copy all global annotations and only those which
     // target specific ports.
-    auto newName = op.name().getValue().str() + field.suffix;
+    auto newName = op.name().str() + field.suffix;
     auto newMem = builder->create<MemOp>(
-        resultPortTypes, op.readLatency(), op.writeLatency(), depth, op.ruw(),
+        resultPortTypes, op.readLatencyAttr(), op.writeLatencyAttr(),
+        op.depthAttr(), op.ruwAttr(),
         builder->getArrayAttr(resultPortNames.getArrayRef()),
         builder->getStringAttr(newName), op.annotations());
 
@@ -452,9 +453,8 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
                            const std::string &wireName) -> Value {
           auto wire = newWires[wireName];
           if (!wire) {
-            wire = builder->create<WireOp>(type.getPassiveType(),
-                                           newMem.name().getValue().str() +
-                                               "_" + wireName);
+            wire = builder->create<WireOp>(
+                type.getPassiveType(), newMem.name().str() + "_" + wireName);
             newWires[wireName] = wire;
           }
           return wire;
@@ -538,19 +538,48 @@ void TypeLoweringVisitor::visitDecl(WireOp op) {
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
   flattenType(resultType, "", false, fieldTypes);
 
-  // Create the prefix of the lowered name
-  StringRef wireName = "";
-  if (op.name().hasValue())
-    wireName = op.name().getValue();
-
   // Loop over the leaf aggregates.
-  SmallString<16> loweredName(wireName);
+  auto name = op.name().str();
   for (auto field : fieldTypes) {
-    loweredName.resize(wireName.size());
-    loweredName += field.suffix;
+    std::string loweredName = "";
+    if (!name.empty())
+      loweredName = name + field.suffix;
+    SmallVector<Attribute> loweredAttrs;
+    // For all annotations on the parent op, filter them based on the target attribute.
+    for (auto opAttr : op.annotations()){
+      auto di = opAttr.dyn_cast<DictionaryAttr>();
+      if (!di) {
+        loweredAttrs.push_back(opAttr);
+        continue;
+      }
+      auto targetAttr = di.get("target");
+      if (!targetAttr) {
+        loweredAttrs.push_back(opAttr);
+        continue;
+      }
+
+      ArrayAttr subFieldTarget = targetAttr.cast<ArrayAttr>() ;
+      std::string targetStr = "";
+      for (auto fName: subFieldTarget){
+        std::string fNameStr = fName.cast<StringAttr>().getValue().str();
+        // The fNameStr will begin with either '[' or '.', replace it with an '_' to construct the suffix.
+        fNameStr[0] = '_';
+        // If it ends with ']', then just remove it.
+        if (fNameStr.back() == ']')
+          fNameStr.erase(fNameStr.size()-1);
+
+        targetStr += fNameStr;
+      }
+      if (!targetStr.empty()){
+        if (field.suffix.find(targetStr) != std::string::npos)
+          loweredAttrs.push_back(opAttr);
+      } else 
+        loweredAttrs.push_back(opAttr);
+
+    }
     auto wire = builder->create<WireOp>(field.getPortType(),
                                         builder->getStringAttr(loweredName),
-                                        op.annotations());
+                                        ArrayAttr::get(context, loweredAttrs));
     setBundleLowering(result, StringRef(field.suffix).drop_front(1), wire);
   }
 
@@ -574,12 +603,11 @@ void TypeLoweringVisitor::visitDecl(RegOp op) {
   flattenType(resultType, "", false, fieldTypes);
 
   // Loop over the leaf aggregates.
+  auto name = op.name().str();
   for (auto field : fieldTypes) {
-    StringAttr loweredName;
-    if (auto nameAttr = op.nameAttr())
-      loweredName =
-          builder->getStringAttr(nameAttr.getValue().str() + field.suffix);
-
+    std::string loweredName = "";
+    if (!name.empty())
+      loweredName = name + field.suffix;
     setBundleLowering(result, StringRef(field.suffix).drop_front(1),
                       builder->create<RegOp>(field.getPortType(), op.clockVal(),
                                              loweredName, op.annotations()));
@@ -605,11 +633,11 @@ void TypeLoweringVisitor::visitDecl(RegResetOp op) {
   flattenType(resultType, "", false, fieldTypes);
 
   // Loop over the leaf aggregates.
+  auto name = op.name().str();
   for (auto field : fieldTypes) {
-    StringAttr loweredName;
-    if (auto nameAttr = op.nameAttr())
-      loweredName =
-          builder->getStringAttr(nameAttr.getValue().str() + field.suffix);
+    std::string loweredName = "";
+    if (!name.empty())
+      loweredName = name + field.suffix;
     auto suffix = StringRef(field.suffix).drop_front(1);
     auto resetValLowered = getBundleLowering(op.resetValue(), suffix);
     setBundleLowering(result, suffix,

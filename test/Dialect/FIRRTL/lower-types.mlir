@@ -401,8 +401,9 @@ module  {
 
 // COM: This test is just checking that the following doesn't error.
 module  {
-  firrtl.circuit "foo" {
-    firrtl.module @foo(%clock: !firrtl.clock) {
+  firrtl.circuit "Issue661" {
+    // CHECK-LABEL: firrtl.module @Issue661
+    firrtl.module @Issue661(%clock: !firrtl.clock) {
       %head_MPORT_2, %head_MPORT_6 = firrtl.mem Undefined {depth = 20 : i64, name = "head", portNames = ["MPORT_2", "MPORT_6"], readLatency = 0 : i32, writeLatency = 1 : i32}
       : !firrtl.flip<bundle<addr: uint<5>, en: uint<1>, clk: clock, data: uint<5>, mask: uint<1>>>,
         !firrtl.flip<bundle<addr: uint<5>, en: uint<1>, clk: clock, data: uint<5>, mask: uint<1>>>
@@ -414,7 +415,7 @@ module  {
 firrtl.circuit "RegBundle" {
     // CHECK-LABEL: firrtl.module @RegBundle(%a_a: !firrtl.uint<1>, %clk: !firrtl.clock, %b_a: !firrtl.flip<uint<1>>) {
     firrtl.module @RegBundle(%a: !firrtl.bundle<a: uint<1>>, %clk: !firrtl.clock, %b: !firrtl.flip<bundle<a: uint<1>>>) {
-      // CHECK-NEXT: %x_a = firrtl.reg %clk {name = "x_a"} : (!firrtl.clock) -> !firrtl.uint<1>
+      // CHECK-NEXT: %x_a = firrtl.reg %clk : (!firrtl.clock) -> !firrtl.uint<1>
       // CHECK-NEXT: firrtl.connect %x_a, %a_a : !firrtl.uint<1>, !firrtl.uint<1>
       // CHECK-NEXT: firrtl.connect %b_a, %x_a : !firrtl.flip<uint<1>>, !firrtl.uint<1>
       %x = firrtl.reg %clk {name = "x"} : (!firrtl.clock) -> !firrtl.bundle<a: uint<1>>
@@ -432,7 +433,7 @@ firrtl.circuit "RegBundle" {
 firrtl.circuit "RegBundleWithBulkConnect" {
     // CHECK-LABEL: firrtl.module @RegBundleWithBulkConnect(%a_a: !firrtl.uint<1>, %clk: !firrtl.clock, %b_a: !firrtl.flip<uint<1>>) {
     firrtl.module @RegBundleWithBulkConnect(%a: !firrtl.bundle<a: uint<1>>, %clk: !firrtl.clock, %b: !firrtl.flip<bundle<a: uint<1>>>) {
-      // CHECK-NEXT: %x_a = firrtl.reg %clk {name = "x_a"} : (!firrtl.clock) -> !firrtl.uint<1>
+      // CHECK-NEXT: %x_a = firrtl.reg %clk : (!firrtl.clock) -> !firrtl.uint<1>
       // CHECK-NEXT: firrtl.connect %x_a, %a_a : !firrtl.uint<1>, !firrtl.uint<1>
       // CHECK-NEXT: firrtl.connect %b_a, %x_a : !firrtl.flip<uint<1>>, !firrtl.uint<1>
       %x = firrtl.reg %clk {name = "x"} : (!firrtl.clock) -> !firrtl.bundle<a: uint<1>>
@@ -462,6 +463,7 @@ firrtl.circuit "WireBundle" {
 // -----
 
 firrtl.circuit "WireBundlesWithBulkConnect" {
+  // CHECK-LABEL: firrtl.module @WireBundlesWithBulkConnect
   firrtl.module @WireBundlesWithBulkConnect(%source: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>,
                              %sink: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>) {
     // CHECK: %w_valid = firrtl.wire  : !firrtl.uint<1>
@@ -485,7 +487,7 @@ firrtl.circuit "LowerVectors" {
   firrtl.module @LowerVectors(%a: !firrtl.vector<uint<1>, 2>, %b: !firrtl.flip<vector<uint<1>, 2>>) {
     firrtl.connect %b, %a: !firrtl.flip<vector<uint<1>, 2>>, !firrtl.vector<uint<1>, 2>
   }
-  // CHECK: firrtl.module @LowerVectors(%a_0: !firrtl.uint<1>, %a_1: !firrtl.uint<1>, %b_0: !firrtl.flip<uint<1>>, %b_1: !firrtl.flip<uint<1>>)
+  // CHECK-LABEL: firrtl.module @LowerVectors(%a_0: !firrtl.uint<1>, %a_1: !firrtl.uint<1>, %b_0: !firrtl.flip<uint<1>>, %b_1: !firrtl.flip<uint<1>>)
   // CHECK: firrtl.connect %b_0, %a_0
   // CHECK: firrtl.connect %b_1, %a_1
 }
@@ -494,7 +496,7 @@ firrtl.circuit "LowerVectors" {
 
 // COM: Test vector of bundles lowering
 firrtl.circuit "LowerVectorsOfBundles" {
-  // CHECK: firrtl.module @LowerVectorsOfBundles(%in_0_a: !firrtl.uint<1>, %in_0_b: !firrtl.flip<uint<1>>, %in_1_a: !firrtl.uint<1>, %in_1_b: !firrtl.flip<uint<1>>, %out_0_a: !firrtl.flip<uint<1>>, %out_0_b: !firrtl.uint<1>, %out_1_a: !firrtl.flip<uint<1>>, %out_1_b: !firrtl.uint<1>) {
+  // CHECK-LABEL: firrtl.module @LowerVectorsOfBundles(%in_0_a: !firrtl.uint<1>, %in_0_b: !firrtl.flip<uint<1>>, %in_1_a: !firrtl.uint<1>, %in_1_b: !firrtl.flip<uint<1>>, %out_0_a: !firrtl.flip<uint<1>>, %out_0_b: !firrtl.uint<1>, %out_1_a: !firrtl.flip<uint<1>>, %out_1_b: !firrtl.uint<1>) {
   firrtl.module @LowerVectorsOfBundles(%in: !firrtl.vector<bundle<a : uint<1>, b : flip<uint<1>>>, 2>,
                                        %out: !firrtl.flip<vector<bundle<a : uint<1>, b : flip<uint<1>>>, 2>>) {
     // CHECK: firrtl.connect %out_0_a, %in_0_a : !firrtl.flip<uint<1>>, !firrtl.uint<1>
@@ -507,7 +509,7 @@ firrtl.circuit "LowerVectorsOfBundles" {
 
 // -----
 firrtl.circuit "ExternalModule" {
-  // CHECK: firrtl.extmodule @ExternalModule(!firrtl.uint<1> {firrtl.name = "source_valid"}, !firrtl.flip<uint<1>> {firrtl.name = "source_ready"}, !firrtl.uint<64> {firrtl.name = "source_data"})
+  // CHECK-LABEL: firrtl.extmodule @ExternalModule(!firrtl.uint<1> {firrtl.name = "source_valid"}, !firrtl.flip<uint<1>> {firrtl.name = "source_ready"}, !firrtl.uint<64> {firrtl.name = "source_data"})
   firrtl.extmodule @ExternalModule(!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>> {firrtl.name = "source"})
   firrtl.module @Test() {
     // CHECK:  %inst_source_valid, %inst_source_ready, %inst_source_data = firrtl.instance @ExternalModule {name = "", portNames = ["source_valid", "source_ready", "source_data"]} : !firrtl.flip<uint<1>>, !firrtl.uint<1>, !firrtl.flip<uint<64>>
@@ -518,8 +520,9 @@ firrtl.circuit "ExternalModule" {
 // -----
 
 // Test RegResetOp lowering
-firrtl.circuit "LowereRegResetOp" {
-  firrtl.module @LowereRegResetOp(%clock: !firrtl.clock, %reset: !firrtl.uint<1>, %a_d: !firrtl.vector<uint<1>, 2>, %a_q: !firrtl.flip<vector<uint<1>, 2>>) {
+firrtl.circuit "LowerRegResetOp" {
+  // CHECK-LABEL: firrtl.module @LowerRegResetOp
+  firrtl.module @LowerRegResetOp(%clock: !firrtl.clock, %reset: !firrtl.uint<1>, %a_d: !firrtl.vector<uint<1>, 2>, %a_q: !firrtl.flip<vector<uint<1>, 2>>) {
     %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
     %init = firrtl.wire  : !firrtl.vector<uint<1>, 2>
     %0 = firrtl.subindex %init[0] : !firrtl.vector<uint<1>, 2>
@@ -535,8 +538,8 @@ firrtl.circuit "LowereRegResetOp" {
   // CHECK:   %init_1 = firrtl.wire  : !firrtl.uint<1>
   // CHECK:   firrtl.connect %init_0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK:   firrtl.connect %init_1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-  // CHECK:   %r_0 = firrtl.regreset %clock, %reset, %init_0 {name = "r_0"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-  // CHECK:   %r_1 = firrtl.regreset %clock, %reset, %init_1 {name = "r_1"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK:   %r_0 = firrtl.regreset %clock, %reset, %init_0 : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK:   %r_1 = firrtl.regreset %clock, %reset, %init_1 : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   // CHECK:   firrtl.connect %r_0, %a_d_0 : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK:   firrtl.connect %r_1, %a_d_1 : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK:   firrtl.connect %a_q_0, %r_0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
@@ -547,15 +550,16 @@ firrtl.circuit "LowereRegResetOp" {
 
 // Test RegResetOp lowering without name attribute
 // https://github.com/llvm/circt/issues/795
-firrtl.circuit "LowereRegResetOpNoName" {
-  firrtl.module @LowereRegResetOpNoName(%clock: !firrtl.clock, %reset: !firrtl.uint<1>, %a_d: !firrtl.vector<uint<1>, 2>, %a_q: !firrtl.flip<vector<uint<1>, 2>>) {
+firrtl.circuit "LowerRegResetOpNoName" {
+  // CHECK-LABEL: firrtl.module @LowerRegResetOpNoName
+  firrtl.module @LowerRegResetOpNoName(%clock: !firrtl.clock, %reset: !firrtl.uint<1>, %a_d: !firrtl.vector<uint<1>, 2>, %a_q: !firrtl.flip<vector<uint<1>, 2>>) {
     %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
     %init = firrtl.wire  : !firrtl.vector<uint<1>, 2>
     %0 = firrtl.subindex %init[0] : !firrtl.vector<uint<1>, 2>
     firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     %1 = firrtl.subindex %init[1] : !firrtl.vector<uint<1>, 2>
     firrtl.connect %1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    %r = firrtl.regreset %clock, %reset, %init : (!firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>) -> !firrtl.vector<uint<1>, 2>
+    %r = firrtl.regreset %clock, %reset, %init {name = ""} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>) -> !firrtl.vector<uint<1>, 2>
     firrtl.connect %r, %a_d : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
     firrtl.connect %a_q, %r : !firrtl.flip<vector<uint<1>, 2>>, !firrtl.vector<uint<1>, 2>
   }
@@ -564,8 +568,8 @@ firrtl.circuit "LowereRegResetOpNoName" {
   // CHECK:   %init_1 = firrtl.wire  : !firrtl.uint<1>
   // CHECK:   firrtl.connect %init_0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK:   firrtl.connect %init_1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-  // CHECK:   0 = firrtl.regreset %clock, %reset, %init_0 : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-  // CHECK:   1 = firrtl.regreset %clock, %reset, %init_1 : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK:   %0 = firrtl.regreset %clock, %reset, %init_0 : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK:   %1 = firrtl.regreset %clock, %reset, %init_1 : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   // CHECK:   firrtl.connect %0, %a_d_0 : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK:   firrtl.connect %1, %a_d_1 : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK:   firrtl.connect %a_q_0, %0 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
@@ -577,8 +581,9 @@ firrtl.circuit "LowereRegResetOpNoName" {
 // Test RegOp lowering without name attribute
 // https://github.com/llvm/circt/issues/795
 firrtl.circuit "lowerRegOpNoName" {
+  // CHECK-LABEL: firrtl.module @lowerRegOpNoName
   firrtl.module @lowerRegOpNoName(%clock: !firrtl.clock, %a_d: !firrtl.vector<uint<1>, 2>, %a_q: !firrtl.flip<vector<uint<1>, 2>>) {
-    %r = firrtl.reg %clock : (!firrtl.clock) -> !firrtl.vector<uint<1>, 2>
+    %r = firrtl.reg %clock {name = ""} : (!firrtl.clock) -> !firrtl.vector<uint<1>, 2>
       firrtl.connect %r, %a_d : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
       firrtl.connect %a_q, %r : !firrtl.flip<vector<uint<1>, 2>>, !firrtl.vector<uint<1>, 2>
   }
@@ -593,12 +598,13 @@ firrtl.circuit "lowerRegOpNoName" {
 // -----
 
 // Test that InstanceOp Annotations are copied to the new instance.
-firrtl.circuit "Foo" {
+// CHECK-LABEL: firrtl.circuit "AnnotationsInstanceOp"
+firrtl.circuit "AnnotationsInstanceOp" {
   firrtl.module @Bar(%a: !firrtl.flip<vector<uint<1>, 2>>) {
     %0 = firrtl.invalidvalue : !firrtl.vector<uint<1>, 2>
     firrtl.connect %a, %0 : !firrtl.flip<vector<uint<1>, 2>>, !firrtl.vector<uint<1>, 2>
   }
-  firrtl.module @Foo() {
+  firrtl.module @AnnotationsInstanceOp() {
     %bar_a = firrtl.instance @Bar  {annotations = [{a = "a"}], name = "bar", portNames = ["a"]} : !firrtl.vector<uint<1>, 2>
   }
   // CHECK: firrtl.instance
@@ -608,8 +614,9 @@ firrtl.circuit "Foo" {
 // -----
 
 // Test that MemOp Annotations are copied to lowered MemOps.
-firrtl.circuit "Foo" {
-  firrtl.module @Foo() {
+firrtl.circuit "AnnotationsMemOp" {
+  // CHECK-LABEL: firrtl.module @AnnotationsMemOp
+  firrtl.module @AnnotationsMemOp() {
     %bar_r, %bar_w = firrtl.mem Undefined  {annotations = [{a = "a"}], depth = 16 : i64, name = "bar", portNames = ["r", "w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: vector<uint<8>, 2>>, !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: vector<uint<8>, 2>, mask: vector<uint<1>, 2>>>
   }
   // CHECK: firrtl.mem
@@ -621,8 +628,9 @@ firrtl.circuit "Foo" {
 // -----
 
 // Test that WireOp Annotations are copied to lowered WireOps.
-firrtl.circuit "Wire" {
-  firrtl.module @Wire() {
+firrtl.circuit "AnnotationsWireOp" {
+  // CHECK-LABEL: firrtl.module @AnnotationsWireOp
+  firrtl.module @AnnotationsWireOp() {
     %bar = firrtl.wire  {annotations = [{a = "a"}]} : !firrtl.vector<uint<1>, 2>
   }
   // CHECK: firrtl.wire
@@ -634,8 +642,9 @@ firrtl.circuit "Wire" {
 // -----
 
 // Test that Reg/RegResetOp Annotations are copied to lowered registers.
-firrtl.circuit "Reg" {
-  firrtl.module @Reg(%clock: !firrtl.clock, %reset: !firrtl.uint<1>) {
+firrtl.circuit "AnnotationsRegOp" {
+  // CHECK-LABEL: firrtl.module @AnnotationsRegOp
+  firrtl.module @AnnotationsRegOp(%clock: !firrtl.clock, %reset: !firrtl.uint<1>) {
     %bazInit = firrtl.wire  : !firrtl.vector<uint<1>, 2>
     %0 = firrtl.subindex %bazInit[0] : !firrtl.vector<uint<1>, 2>
     %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
@@ -653,4 +662,19 @@ firrtl.circuit "Reg" {
   // CHECK-SAME: annotations = [{b = "b"}]
   // CHECK: firrtl.regreset
   // CHECK-SAME: annotations = [{b = "b"}]
+}
+
+
+// -----
+
+// Test that Reg/RegResetOp Annotations are copied to lowered registers.
+firrtl.circuit "AnnotationsBundle" {
+  firrtl.module @AnnotationsBundle() {
+    %bar = firrtl.wire  {annotations = [{one, target = [".qux"]}, {target = ["[1]", ".baz"], two}]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+
+      // CHECK: %bar_0_baz = firrtl.wire  : !firrtl.uint<1>
+      // CHECK: %bar_0_qux = firrtl.wire  {annotations = [{one, target = [".qux"]}]} : !firrtl.uint<1>
+      // CHECK: %bar_1_baz = firrtl.wire  {annotations = [{target = ["[1]", ".baz"], two}]} : !firrtl.uint<1>
+      // CHECK: %bar_1_qux = firrtl.wire  {annotations = [{one, target = [".qux"]}]} : !firrtl.uint<1>
+  }
 }

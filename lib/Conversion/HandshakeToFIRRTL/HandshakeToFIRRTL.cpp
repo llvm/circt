@@ -468,10 +468,8 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
   }
 
   // Move all operations of the second block to the entry block.
-  while (!secondBlock->empty()) {
-    Operation &op = secondBlock->front();
-    op.moveBefore(entryBlock->getTerminator());
-  }
+  entryBlock->getOperations().splice(entryBlock->end(),
+                                     secondBlock->getOperations());
   rewriter.eraseBlock(secondBlock);
 
   return topModuleOp;
@@ -1661,7 +1659,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   RUWAttr ruw = RUWAttr::Old;
   uint64_t depth = type.getNumElements();
   FIRRTLType dataType = getFIRRTLType(elementType);
-  StringAttr name = rewriter.getStringAttr("mem" + std::to_string(op.id()));
+  auto name = "mem" + std::to_string(op.id());
 
   // Helpers to get port identifiers.
   auto loadIdentifier = [&](size_t i) {
@@ -2138,9 +2136,9 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
         if (!subModuleOp) {
           subModuleOp = createSubModuleOp(topModuleOp, &op, hasClock, rewriter);
 
-          Operation *termOp = subModuleOp.getBody().front().getTerminator();
-          Location insertLoc = termOp->getLoc();
-          rewriter.setInsertionPoint(termOp);
+          Location insertLoc = subModuleOp.getLoc();
+          auto &bodyBlock = subModuleOp.getBody().front();
+          rewriter.setInsertionPoint(&bodyBlock, bodyBlock.end());
 
           ValueVectorList portList =
               extractSubfields(subModuleOp, insertLoc, rewriter);

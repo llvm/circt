@@ -52,4 +52,5 @@ add_circt_library(CIRCTCAPISV
   LINK_LIBS PUBLIC
   MLIRCAPIIR
   CIRCTSV
+  CIRCTSVTransforms
   )

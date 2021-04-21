@@ -58,9 +58,9 @@ static bool isUselessName(StringRef name) {
 }
 
 /// If the specified name is a useless temporary name produced by FIRRTL, return
-/// an empty attribute to ignore it.  Otherwise, return the argument unmodified.
-static StringAttr filterUselessName(StringAttr name) {
-  return isUselessName(name.getValue()) ? StringAttr() : name;
+/// an empty string to ignore it.  Otherwise, return the argument unmodified.
+static StringRef filterUselessName(StringRef name) {
+  return isUselessName(name) ? "" : name;
 }
 
 //===----------------------------------------------------------------------===//
@@ -735,7 +735,6 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
           if (isFlipped)
             type = FlipType::get(type);
 
-          llvm::errs() << "\n fieldname:"<< fieldName;
           elements.push_back({StringAttr::get(getContext(), fieldName), type});
           return success();
         }))
@@ -809,23 +808,18 @@ ParseResult FIRParser::importAnnotations(SMLoc loc, StringRef annotationsStr) {
   }
 
   for (auto a : annotationMap.keys()) {
-    llvm::errs() << "\n =============== \n ";
     auto &entry = state.annotationMap[a];
     if (!entry) {
       entry = annotationMap[a];
-      llvm::errs() << "\n entry:"<< entry << " for a:"<< a;
       continue;
     }
 
     SmallVector<Attribute> annotationVec;
     auto arrayRef = state.annotationMap[a].getValue();
-    
-
     annotationVec.append(arrayRef.begin(), arrayRef.end());
     arrayRef = annotationMap[a].getValue();
     annotationVec.append(arrayRef.begin(), arrayRef.end());
     state.annotationMap[a] = ArrayAttr::get(getContext(), annotationVec);
-    llvm::errs() << "\n state annotationMap:"<< a << " = "<< state.annotationMap[a] << "\n";
   }
 
   return success();
@@ -845,45 +839,12 @@ ParseResult FIRParser::importAnnotationFile(SMLoc loc) {
   return result;
 }
 
-void static parseSubFieldSubIndexAnnotations(StringRef target, ArrayAttr &annotations,MLIRContext *context ) {
-  //const char delims[] = {'.', '['};
-  std::string temp = "";
-  if (target.empty())
-    return;
-  temp.push_back(target[0]);
-  llvm::errs() << "\n target:"<< target;
-  size_t state = 0;
-  SmallVector<Attribute> annotationVec;
-  if (temp[0] == '.')
-    state = 1;
-  else if (temp[0] != '[')
-    state = 2;
-  else
-    return;
-  for (size_t i=1; i < target.size(); i++){
-    if (target[i] == '['){
-      llvm::errs() << "\n annotationVec::"<< temp;
-      annotationVec.push_back( StringAttr::get(context, temp));
-      temp = "";
-    } else if (target[i] == '.') {
-      llvm::errs() << "\n annotationVec::"<< temp;
-      annotationVec.push_back( StringAttr::get(context, temp));
-      temp = "";
-    }
-
-    temp.push_back(target[i]);
-  }
-  annotationVec.push_back( StringAttr::get(context, temp));
-  annotations = ArrayAttr::get(context, annotationVec);
-}
-
 void FIRParser::getAnnotations(Twine target, ArrayAttr &annotations) {
   // Early exit if no annotations exist.  This avoids the cost of
   // constructing strings representing targets if no annotation can
   // possibly exist.
   if (state.annotationMap.begin() == state.annotationMap.end())
     return;
-  llvm::errs()<< "\n getann:"<< target;
 
   // Input annotations is empty.  Just do the lookup and return.
   if (!annotations) {
@@ -891,47 +852,18 @@ void FIRParser::getAnnotations(Twine target, ArrayAttr &annotations) {
     return;
   }
 
-  SmallVector<Attribute> annotationVec;
-  for (auto a : state.annotationMap.keys()) {
-    auto posField = a.find_first_of(target.str()+".");
-    auto posIndex = a.find_first_of(target.str()+"[");
-    auto end = target.str().size();
-    llvm::errs() << "\n a::"<< target.str()<<"\n a:"<< a;
-    llvm::errs() << "\n searched ::"<< posField << " searched::" << posIndex;
-    if (posField == 0 || posIndex == 0){
-      auto t = a.str().substr(end);
-      llvm::errs() << "\n target after substr::"<< t;
-      ArrayAttr annotations;
-      parseSubFieldSubIndexAnnotations(t, annotations, getContext());
-      llvm::errs() << "\n parsed ::\n";
-      annotations.dump();
-      NamedAttrList targetAttr;
-      targetAttr.append("target", annotations);
-      auto newAnnotations = state.annotationMap[a];
-      for (auto a : newAnnotations) {
-        annotationVec.push_back(a);
-        a.dump();
-      }
-    }
-  }
-  
-
   // Input annotations is non-empty.  Exit quickly if the target doesn't exist.
   // Otherwise, construct a new ArrayAttr that includes existing and new
   // annotations.
-  auto x = target.str();
-  auto newAnnotations = state.annotationMap.lookup(x);
-  if (!newAnnotations) {
+  auto newAnnotations = state.annotationMap.lookup(target.str());
+  if (!newAnnotations)
     return;
-  }
 
+  SmallVector<Attribute> annotationVec;
   for (auto a : annotations)
     annotationVec.push_back(a);
   for (auto a : newAnnotations)
     annotationVec.push_back(a);
-
-  llvm::errs()<< "\n getAnnotations::"<< annotations;
-  annotations.dump();
 
   annotations = ArrayAttr::get(state.context, annotationVec);
 }
@@ -1817,7 +1749,7 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
   if (auto isExpr = parseExpWithLeadingKeyword(spelling, info))
     return isExpr.getValue();
 
-  StringAttr resultValue;
+  StringRef resultValue;
   StringRef memName;
   SymbolValueEntry memorySym;
   Value memory, indexExp, clock;
@@ -1840,9 +1772,9 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
     return emitError(info.getFIRLoc(), "memory should have vector type");
   auto resultType = memVType.getElementType();
 
+  auto name = builder.getStringAttr(filterUselessName(resultValue));
   auto result = builder.create<MemoryPortOp>(info.getLoc(), resultType, memory,
-                                             indexExp, clock, direction,
-                                             filterUselessName(resultValue));
+                                             indexExp, clock, direction, name);
 
   // TODO(firrtl scala bug): If the next operation is a skip, just eat it if it
   // is at the same indent level as us.  This is a horrible hack on top of the
@@ -1888,19 +1820,18 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
       OpBuilder memOpBuilder(scopeAndOperation.second);
 
       auto wireHack = memOpBuilder.create<WireOp>(
-          info.getLoc(), result.getType(), StringAttr(), ArrayAttr());
+          info.getLoc(), result.getType(), "", ArrayAttr());
       builder.create<ConnectOp>(info.getLoc(), wireHack, result);
 
       // Inject this the wire's name into the same scope as the memory.
       symbolTable.insertIntoScope(
-          scopeAndOperation.first,
-          Identifier::get(resultValue.getValue(), getContext()),
+          scopeAndOperation.first, Identifier::get(resultValue, getContext()),
           {info.getFIRLoc(), SymbolValueEntry(wireHack)});
       return success();
     }
   }
 
-  return addSymbolEntry(resultValue.getValue(), result, info.getFIRLoc());
+  return addSymbolEntry(resultValue, result, info.getFIRLoc());
 }
 
 /// printf ::= 'printf(' exp exp StringLit exp* ')' info?
@@ -2202,7 +2133,7 @@ ParseResult FIRStmtParser::parseInstance() {
   if (auto isExpr = parseExpWithLeadingKeyword("inst", info))
     return isExpr.getValue();
 
-  StringAttr id;
+  StringRef id;
   StringRef moduleName;
   if (parseId(id, "expected instance name") ||
       parseToken(FIRToken::kw_of, "expected 'of' in instance") ||
@@ -2234,10 +2165,10 @@ ParseResult FIRStmtParser::parseInstance() {
   }
   auto name = filterUselessName(id);
   ArrayAttr annotations = builder.getArrayAttr({});
-  getAnnotations(getModuleTarget() + ">" + name.getValue(), annotations);
+  getAnnotations(getModuleTarget() + ">" + name, annotations);
   auto result = builder.create<InstanceOp>(
-      info.getLoc(), resultTypes, builder.getSymbolRefAttr(moduleName),
-      builder.getArrayAttr(resultNames), name, annotations);
+      info.getLoc(), resultTypes, moduleName, builder.getArrayAttr(resultNames),
+      name, annotations);
 
   // Since we are implicitly unbundling the instance results, we need to keep
   // track of the mapping from bundle fields to results in the unbundledValues
@@ -2251,7 +2182,7 @@ ParseResult FIRStmtParser::parseInstance() {
   // it.
   unbundledValues.push_back(std::move(unbundledValueEntry));
   auto entryId = UnbundledID(unbundledValues.size());
-  return addSymbolEntry(id.getValue(), entryId, info.getFIRLoc());
+  return addSymbolEntry(id, entryId, info.getFIRLoc());
 }
 
 /// cmem ::= 'cmem' id ':' type info?
@@ -2265,7 +2196,7 @@ ParseResult FIRStmtParser::parseCMem() {
   if (auto isExpr = parseExpWithLeadingKeyword("cmem", info))
     return isExpr.getValue();
 
-  StringAttr id;
+  StringRef id;
   FIRRTLType type;
   if (parseId(id, "expected cmem name") ||
       parseToken(FIRToken::colon, "expected ':' in cmem") ||
@@ -2274,16 +2205,16 @@ ParseResult FIRStmtParser::parseCMem() {
 
   auto name = filterUselessName(id);
   ArrayAttr annotations = builder.getArrayAttr({});
-  getAnnotations(getModuleTarget() + ">" + name.getValue(), annotations);
+  getAnnotations(getModuleTarget() + ">" + name, annotations);
 
   auto result = builder.create<CMemOp>(info.getLoc(), type, name, annotations);
 
   // Remember that this memory is in this symbol table scope.
   // TODO(chisel bug): This should be removed along with memoryScopeTable.
-  memoryScopeTable.insert(Identifier::get(id.getValue(), getContext()),
+  memoryScopeTable.insert(Identifier::get(id, getContext()),
                           {symbolTable.getCurScope(), result.getOperation()});
 
-  return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
+  return addSymbolEntry(id, result, info.getFIRLoc());
 }
 
 /// smem ::= 'smem' id ':' type ruw? info?
@@ -2297,7 +2228,7 @@ ParseResult FIRStmtParser::parseSMem() {
   if (auto isExpr = parseExpWithLeadingKeyword("smem", info))
     return isExpr.getValue();
 
-  StringAttr id;
+  StringRef id;
   FIRRTLType type;
   RUWAttr ruw = RUWAttr::Undefined;
 
@@ -2309,17 +2240,17 @@ ParseResult FIRStmtParser::parseSMem() {
 
   auto name = filterUselessName(id);
   ArrayAttr annotations = builder.getArrayAttr({});
-  getAnnotations(getModuleTarget() + ">" + name.getValue(), annotations);
+  getAnnotations(getModuleTarget() + ">" + name, annotations);
 
   auto result =
       builder.create<SMemOp>(info.getLoc(), type, ruw, name, annotations);
 
   // Remember that this memory is in this symbol table scope.
   // TODO(chisel bug): This should be removed along with memoryScopeTable.
-  memoryScopeTable.insert(Identifier::get(id.getValue(), getContext()),
+  memoryScopeTable.insert(Identifier::get(id, getContext()),
                           {symbolTable.getCurScope(), result.getOperation()});
 
-  return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
+  return addSymbolEntry(id, result, info.getFIRLoc());
 }
 
 /// mem ::= 'mem' id ':' info? INDENT memField* DEDENT
@@ -2340,7 +2271,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
   if (auto isExpr = parseExpWithLeadingKeyword("mem", info))
     return isExpr.getValue();
 
-  StringAttr id;
+  StringRef id;
   if (parseId(id, "expected mem name") ||
       parseToken(FIRToken::colon, "expected ':' in mem") ||
       parseOptionalInfo(info))
@@ -2443,11 +2374,11 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
 
   auto name = filterUselessName(id);
   ArrayAttr annotations = builder.getArrayAttr({});
-  getAnnotations(getModuleTarget() + ">" + name.getValue(), annotations);
+  getAnnotations(getModuleTarget() + ">" + name, annotations);
 
   auto result = builder.create<MemOp>(
       info.getLoc(), resultTypes, readLatency, writeLatency, depth, ruw,
-      builder.getArrayAttr(resultNames), filterUselessName(id), annotations);
+      builder.getArrayAttr(resultNames), name, annotations);
 
   UnbundledValueEntry unbundledValueEntry;
   unbundledValueEntry.reserve(result.getNumResults());
@@ -2459,10 +2390,10 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
 
   // Remember that this memory is in this symbol table scope.
   // TODO(chisel bug): This should be removed along with memoryScopeTable.
-  memoryScopeTable.insert(Identifier::get(id.getValue(), getContext()),
+  memoryScopeTable.insert(Identifier::get(id, getContext()),
                           {symbolTable.getCurScope(), result.getOperation()});
 
-  return addSymbolEntry(id.getValue(), entryID, info.getFIRLoc());
+  return addSymbolEntry(id, entryID, info.getFIRLoc());
 }
 
 /// node ::= 'node' id '=' exp info?
@@ -2476,7 +2407,7 @@ ParseResult FIRStmtParser::parseNode() {
   if (auto isExpr = parseExpWithLeadingKeyword("node", info))
     return isExpr.getValue();
 
-  StringAttr id;
+  StringRef id;
   Value initializer;
   SmallVector<Operation *, 8> subOps;
   if (parseId(id, "expected node name") ||
@@ -2518,15 +2449,14 @@ ParseResult FIRStmtParser::parseNode() {
   //
   // TODO: This optimization doesn't respect annotated, temporary nodes.
   Value result;
-  if (actualName) {
+  if (!actualName.empty()) {
     ArrayAttr annotations = builder.getArrayAttr({});
-    getAnnotations(getModuleTarget() + ">" + actualName.getValue(),
-                   annotations);
-    result = builder.create<NodeOp>(info.getLoc(), initializer, actualName,
-                                    annotations);
+    getAnnotations(getModuleTarget() + ">" + actualName, annotations);
+    result = builder.create<NodeOp>(info.getLoc(), initializerType, initializer,
+                                    actualName, annotations);
   } else
     result = initializer;
-  return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
+  return addSymbolEntry(id, result, info.getFIRLoc());
 }
 
 /// wire ::= 'wire' id ':' type info?
@@ -2539,7 +2469,7 @@ ParseResult FIRStmtParser::parseWire() {
   if (auto isExpr = parseExpWithLeadingKeyword("wire", info))
     return isExpr.getValue();
 
-  StringAttr id;
+  StringRef id;
   FIRRTLType type;
   if (parseId(id, "expected wire name") ||
       parseToken(FIRToken::colon, "expected ':' in wire") ||
@@ -2547,13 +2477,11 @@ ParseResult FIRStmtParser::parseWire() {
     return failure();
 
   ArrayAttr annotations = builder.getArrayAttr({});
-  getAnnotations(getModuleTarget() + ">" + id.getValue(), annotations);
-  llvm::errs()<< "\n parse wire:"<< annotations;
-  annotations.dump();
+  getAnnotations(getModuleTarget() + ">" + id, annotations);
 
   auto result = builder.create<WireOp>(info.getLoc(), type,
                                        filterUselessName(id), annotations);
-  return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
+  return addSymbolEntry(id, result, info.getFIRLoc());
 }
 
 /// register    ::= 'reg' id ':' type exp ('with' ':' reset_block)? info?
@@ -2575,7 +2503,7 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   if (auto isExpr = parseExpWithLeadingKeyword("reg", info))
     return isExpr.getValue();
 
-  StringAttr id;
+  StringRef id;
   FIRRTLType type;
   Value clock;
   SmallVector<Operation *, 8> subOps;
@@ -2620,7 +2548,7 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
     // the right form. Recognize that this is happening and treat it as a
     // register without a reset for compatibility.
     // TODO(firrtl scala impl): pretty print registers without resets right.
-    if (getTokenSpelling() == id.getValue()) {
+    if (getTokenSpelling() == id) {
       consumeToken();
       if (parseToken(FIRToken::r_paren, "expected ')' in reset specifier") ||
           parseOptionalInfo(info, subOps))
@@ -2646,10 +2574,8 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
 
   auto name = filterUselessName(id);
   ArrayAttr annotations = builder.getArrayAttr({});
-  getAnnotations(getModuleTarget() + ">" + name.getValue(), annotations);
+  getAnnotations(getModuleTarget() + ">" + name, annotations);
 
-  llvm::errs()<< "\n parse reg:"<< annotations;
-  annotations.dump();
   Value result;
   if (resetSignal)
     result = builder.create<RegResetOp>(info.getLoc(), type, clock, resetSignal,
@@ -2658,7 +2584,7 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
     result =
         builder.create<RegOp>(info.getLoc(), type, clock, name, annotations);
 
-  return addSymbolEntry(id.getValue(), result, info.getFIRLoc());
+  return addSymbolEntry(id, result, info.getFIRLoc());
 }
 
 //===----------------------------------------------------------------------===//
@@ -2844,8 +2770,6 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   ArrayAttr annotations;
   getAnnotations(moduleTarget, annotations);
 
-  llvm::errs()<< "\n parse ext module:"<< annotations;
-  annotations.dump();
   auto fmodule = builder.create<FExtModuleOp>(info.getLoc(), name, portList,
                                               defName, annotations);
 
@@ -2884,8 +2808,6 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
     portList.push_back(elt.first);
   ArrayAttr annotations;
   getAnnotations(moduleTarget, annotations);
-  llvm::errs()<< "\n parse module:"<< annotations;
-  annotations.dump();
   auto fmodule =
       builder.create<FModuleOp>(info.getLoc(), name, portList, annotations);
 
@@ -2967,11 +2889,7 @@ ParseResult FIRCircuitParser::parseCircuit() {
   //   2. Annotations targeting the circuit, e.g., "~Foo"
   ArrayAttr annotationVec;
   getAnnotations("~", annotationVec);
-  llvm::errs() << "\n annotation vec:: \n";
-  annotationVec.dump();
   getAnnotations(circuitTarget, annotationVec);
-  llvm::errs() << "\n annotation vec:: \n" << circuitTarget << "\n";
-  annotationVec.dump();
 
   OpBuilder b(mlirModule.getBodyRegion());
 

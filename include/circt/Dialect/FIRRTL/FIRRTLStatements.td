@@ -142,8 +142,8 @@ def CoverOp : FIRRTLOp<"cover"> {
     "$clock `,` $predicate `,` $enable `,` $message attr-dict";
 }
 
-def WhenOp : FIRRTLOp<"when", [SingleBlockImplicitTerminator<"DoneOp">,
-                               NoRegionArguments, RecursiveSideEffects]> {
+def WhenOp : FIRRTLOp<"when", [SingleBlock, NoTerminator, NoRegionArguments,
+                               RecursiveSideEffects]> {
   let summary = "When Statement";
   let description = [{
     The "firrtl.when" operation represents a conditional.  Connections within
@@ -166,10 +166,15 @@ def WhenOp : FIRRTLOp<"when", [SingleBlockImplicitTerminator<"DoneOp">,
     "$condition $thenRegion (`else` $elseRegion^)? attr-dict-with-keyword";
 
   let extraClassDeclaration = [{
-    OpBuilder getThenBodyBuilder() {
+    
+    Block &getThenBlock() {
       assert(!thenRegion().empty() && "Unexpected empty 'then' region.");
-      Block &body = thenRegion().front();
-      return OpBuilder(&body, std::prev(body.end()));
+      return thenRegion().front();
+    }
+
+    OpBuilder getThenBodyBuilder() {
+      Block &body = getThenBlock();
+      return OpBuilder::atBlockEnd(&body);
     }
 
     bool hasElseRegion() {
@@ -178,10 +183,14 @@ def WhenOp : FIRRTLOp<"when", [SingleBlockImplicitTerminator<"DoneOp">,
 
     void createElseRegion();
 
-    OpBuilder getElseBodyBuilder() {
+    Block &getElseBlock() {
       assert(hasElseRegion() && "Unexpected empty 'else' region.");
-      Block &body = elseRegion().front();
-      return OpBuilder(&body, std::prev(body.end()));
+      return elseRegion().front();
+    }
+
+    OpBuilder getElseBodyBuilder() {
+      Block &body = getElseBlock();
+      return OpBuilder::atBlockEnd(&body);
     }
   }];
 }

@@ -190,3 +190,14 @@ circuit Foo: %[[{"\"":"}]]"}]]
 
     ; CHECK-LABEL: module {
     ; CHECK: firrtl.circuit "Foo" attributes {annotations =
+
+; // -----
+
+; COM: JSON escapes should work.
+circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.qux"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
+  module Foo:
+    wire bar: {baz: UInt<1>, qux: UInt<1>}[2]
+
+    ; CHECK-LABEL: module {
+    ; CHECK: %bar = firrtl.wire  {annotations = [{one, target = [".qux"]}, {target = ["[1]", ".baz"], two}]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+
