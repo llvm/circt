@@ -552,7 +552,8 @@ void static filterAnnotations(ArrayAttr annotations,
       targetStr += fNameStr;
     }
     if (!targetStr.empty()) {
-      if (fieldSuffix.find(targetStr) != std::string::npos) {
+      auto pos = fieldSuffix.find(targetStr);
+      if (pos == 0) {
         NamedAttrList modAttr;
         for (auto attr : di.getValue()) {
           if (attr.first.str() == "target")
