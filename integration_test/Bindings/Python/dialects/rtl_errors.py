@@ -28,6 +28,12 @@ with Context() as ctx, Location.unknown():
         body_builder=lambda m: rtl.OutputOp(
             [rtl.ConstantOp(i32, IntegerAttr.get(i32, 46)).result]),
     )
+    input_output = rtl.RTLModuleOp(
+        name="input_output",
+        input_ports=[("a", i32)],
+        output_ports=[("b", i32)],
+        body_builder=lambda m: rtl.OutputOp([m.entry_block.arguments[0]]),
+    )
 
     with InsertionPoint(instance_builder_tests.add_entry_block()):
       # CHECK: unknown input port name b
@@ -47,5 +53,14 @@ with Context() as ctx, Location.unknown():
       try:
         inst3 = one_output.create("inst3")
         inst3.b
+      except AttributeError as e:
+        print(e)
+
+      # CHECK: instance is not yet fully-defined
+      try:
+        inst5 = input_output.create("inst4")
+        inst6 = input_output.create("inst5")
+        inst5.a = inst6.b
+        inst6.a = inst5.b
       except AttributeError as e:
         print(e)
