@@ -522,7 +522,49 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
 
   opsToRemove.push_back(op);
 }
+void static filterAnnotations(ArrayAttr annotations,
+                              SmallVector<Attribute> &loweredAttrs,
+                              std::string fieldSuffix, MLIRContext *context) {
 
+  for (auto opAttr : annotations) {
+    auto di = opAttr.dyn_cast<DictionaryAttr>();
+    if (!di) {
+      loweredAttrs.push_back(opAttr);
+      continue;
+    }
+    auto targetAttr = di.get("target");
+    if (!targetAttr) {
+      loweredAttrs.push_back(opAttr);
+      continue;
+    }
+
+    ArrayAttr subFieldTarget = targetAttr.cast<ArrayAttr>();
+    std::string targetStr = "";
+    for (auto fName : subFieldTarget) {
+      std::string fNameStr = fName.cast<StringAttr>().getValue().str();
+      // The fNameStr will begin with either '[' or '.', replace it with an
+      // '_' to construct the suffix.
+      fNameStr[0] = '_';
+      // If it ends with ']', then just remove it.
+      if (fNameStr.back() == ']')
+        fNameStr.erase(fNameStr.size() - 1);
+
+      targetStr += fNameStr;
+    }
+    if (!targetStr.empty()) {
+      if (fieldSuffix.find(targetStr) != std::string::npos) {
+        NamedAttrList modAttr;
+        for (auto attr : di.getValue()) {
+          if (attr.first.str() == "target")
+            continue;
+          modAttr.push_back(attr);
+        }
+        loweredAttrs.push_back(DictionaryAttr::get(context, modAttr));
+      }
+    } else
+      loweredAttrs.push_back(opAttr);
+  }
+}
 /// Lower a wire op with a bundle to mutliple non-bundled wires.
 void TypeLoweringVisitor::visitDecl(WireOp op) {
   Value result = op.result();
@@ -547,44 +589,7 @@ void TypeLoweringVisitor::visitDecl(WireOp op) {
     SmallVector<Attribute> loweredAttrs;
     // For all annotations on the parent op, filter them based on the target
     // attribute.
-    for (auto opAttr : op.annotations()) {
-      auto di = opAttr.dyn_cast<DictionaryAttr>();
-      if (!di) {
-        loweredAttrs.push_back(opAttr);
-        continue;
-      }
-      auto targetAttr = di.get("target");
-      if (!targetAttr) {
-        loweredAttrs.push_back(opAttr);
-        continue;
-      }
-
-      ArrayAttr subFieldTarget = targetAttr.cast<ArrayAttr>();
-      std::string targetStr = "";
-      for (auto fName : subFieldTarget) {
-        std::string fNameStr = fName.cast<StringAttr>().getValue().str();
-        // The fNameStr will begin with either '[' or '.', replace it with an
-        // '_' to construct the suffix.
-        fNameStr[0] = '_';
-        // If it ends with ']', then just remove it.
-        if (fNameStr.back() == ']')
-          fNameStr.erase(fNameStr.size() - 1);
-
-        targetStr += fNameStr;
-      }
-      if (!targetStr.empty()) {
-        if (field.suffix.find(targetStr) != std::string::npos) {
-          NamedAttrList modAttr;
-          for (auto attr : di.getValue()) {
-            if (attr.first.str() == "target")
-              continue;
-            modAttr.push_back(attr);
-          }
-          loweredAttrs.push_back(DictionaryAttr::get(context, modAttr));
-        }
-      } else
-        loweredAttrs.push_back(opAttr);
-    }
+    filterAnnotations(op.annotations(), loweredAttrs, field.suffix, context);
     auto wire = builder->create<WireOp>(field.getPortType(),
                                         builder->getStringAttr(loweredName),
                                         ArrayAttr::get(context, loweredAttrs));
@@ -616,9 +621,13 @@ void TypeLoweringVisitor::visitDecl(RegOp op) {
     std::string loweredName = "";
     if (!name.empty())
       loweredName = name + field.suffix;
+    SmallVector<Attribute> loweredAttrs;
+    // For all annotations on the parent op, filter them based on the target
+    // attribute.
+    filterAnnotations(op.annotations(), loweredAttrs, field.suffix, context);
     setBundleLowering(result, StringRef(field.suffix).drop_front(1),
                       builder->create<RegOp>(field.getPortType(), op.clockVal(),
-                                             loweredName, op.annotations()));
+                                             loweredName, loweredAttrs));
   }
 
   // Remember to remove the original op.
