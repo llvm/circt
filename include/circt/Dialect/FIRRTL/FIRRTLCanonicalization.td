@@ -1,4 +1,4 @@
-//===- Canonicalization.td - FIRRTL canonicalization -------*- tablegen -*-===//
+//===- FIRRTLCanonicalization.td - FIRRTL canonicalization -*- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_FIRRTL_CANONICALIZATION_TD
-#define CIRCT_DIALECT_FIRRTL_CANONICALIZATION_TD
+#ifndef CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD
+#define CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD
 
 include "circt/Dialect/FIRRTL/FIRRTL.td"
 
@@ -71,4 +71,4 @@ def EmptyNode : Pat<
   (replaceWithValue $x),
   [(EmptyAttrDict $attrs)]>;
 
-#endif // CIRCT_DIALECT_FIRRTL_CANONICALIZATION_TD
+#endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD
