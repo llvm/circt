@@ -2452,8 +2452,8 @@ ParseResult FIRStmtParser::parseNode() {
   if (!actualName.empty()) {
     ArrayAttr annotations = builder.getArrayAttr({});
     getAnnotations(getModuleTarget() + ">" + actualName, annotations);
-    result = builder.create<NodeOp>(info.getLoc(), initializerType, initializer,
-                                    actualName, annotations);
+    result = builder.create<NodeOp>(info.getLoc(), initializer.getType(),
+                                    initializer, actualName, annotations);
   } else
     result = initializer;
   return addSymbolEntry(id, result, info.getFIRLoc());
