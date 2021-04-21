@@ -31,7 +31,7 @@ firrtl.circuit "Simple" {
     %1 = firrtl.asUInt %in1 : (!firrtl.uint<4>) -> !firrtl.uint<4>
 
     // CHECK: comb.concat %false, %in1
-    // CHECK: comb.concat %false, %in1 
+    // CHECK: comb.concat %false, %in1
 
     // CHECK: comb.sub
     %2 = firrtl.sub %1, %1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
@@ -66,7 +66,7 @@ firrtl.circuit "Simple" {
 
     // CHECK: sv.fwrite "%x"(%xyz.out4) : i4
     firrtl.printf %clock, %reset, "%x"(%xyz#3) : !firrtl.uint<4>
- 
+
     // CHECK: sv.fwrite "Something interesting! %x"(%myext.out) : i8
 
     // Parameterized module reference.
@@ -102,14 +102,8 @@ firrtl.circuit "Simple" {
                              %outD: !firrtl.flip<uint<4>>,
                              %inE: !firrtl.uint<3>,
                              %outE: !firrtl.flip<uint<4>>) {
-    // CHECK: %0 = firrtl.stdIntCast %inA : (i4) -> !firrtl.uint<4>
-    // CHECK-NEXT: %1 = firrtl.stdIntCast %inB : (i4) -> !firrtl.uint<4>
-    // CHECK-NEXT: %2 = firrtl.stdIntCast %inC : (i4) -> !firrtl.uint<4>
-
-    // CHECK: [[OUTC:%.+]] = firrtl.wire {{.*}} : !firrtl.flip<uint<4>>
-    // CHECK: [[OUTD:%.+]] = firrtl.wire {{.*}} : !firrtl.flip<uint<4>>
-
-    // CHECK: [[INE:%.+]] = firrtl.stdIntCast %inE : (i3) -> !firrtl.uint<3>
+    // CHECK: [[OUTC:%.+]] = sv.wire : !rtl.inout<i4>
+    // CHECK: [[OUTD:%.+]] = sv.wire : !rtl.inout<i4>
 
     // Normal
     firrtl.connect %outA, %inA : !firrtl.flip<uint<4>>, !firrtl.uint<4>
@@ -121,15 +115,6 @@ firrtl.circuit "Simple" {
     // Use of output as an input.
     %tmp = firrtl.asPassive %outC : !firrtl.flip<uint<4>>
     %0 = firrtl.sub %inA, %tmp : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
-
-    // Use of an input as an output.
-    // NOTE: This isn't valid but needs to be accepted until the verifier
-    // rejects it.
-    %tmp2 = firrtl.asNonPassive %inC : !firrtl.flip<uint<4>>
-
-    // expected-error @+2 {{'firrtl.connect' op LowerToRTL couldn't handle this operation}}
-    // expected-error @+1 {{destination isn't an inout type}}
-    firrtl.connect %tmp2, %inA : !firrtl.flip<uint<4>>, !firrtl.uint<4>
 
     // No connections to outD.
 
