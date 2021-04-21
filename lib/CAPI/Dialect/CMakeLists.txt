@@ -41,6 +41,7 @@ add_circt_library(CIRCTCAPIMSFT
   LINK_LIBS PUBLIC
   MLIRCAPIIR
   CIRCTMSFT
+  CIRCTMSFTExportTcl
   )
 
 add_circt_library(CIRCTCAPIRTL

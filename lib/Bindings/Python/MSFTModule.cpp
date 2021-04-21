@@ -8,6 +8,7 @@
 
 #include "DialectModules.h"
 
+#include "circt-c/Dialect/MSFT.h"
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
 #include "circt/Support/LLVM.h"
 
@@ -50,4 +51,10 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
       .value("M20K", DeviceType::M20K)
       .value("DSP", DeviceType::DSP)
       .export_values();
+
+  m.def("export_tcl", [](MlirModule mod, py::object fileObject) {
+    circt::python::PyFileAccumulator accum(fileObject, false);
+    py::gil_scoped_release();
+    mlirMSFTExportTcl(mod, accum.getCallback(), accum.getUserData());
+  });
 }
