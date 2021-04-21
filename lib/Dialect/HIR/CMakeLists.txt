@@ -1,4 +1,4 @@
-add_subdirectory(Verification)
+#add_subdirectory(Verification)
 add_circt_dialect_library(CIRCTHIR
   helper.cpp  
   HIR.cpp  

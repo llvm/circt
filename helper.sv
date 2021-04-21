@@ -2,6 +2,39 @@
 `ifndef HIR_HELPER
   `define HIR_HELPER
 
+  module i32mult_dsp48(a, b, p, tstart, clk);
+    input[32 - 1 : 0] a; 
+    input[32 - 1 : 0] b; 
+    output[32 - 1 : 0] p;//2 cycle delay.
+    input tstart;
+    input clk;
+
+    reg signed [32 - 1 : 0] a_reg0;
+    reg signed [32 - 1 : 0] b_reg0;
+    wire signed [32 - 1 : 0] tmp_product;
+    reg signed [32 - 1 : 0] buff0;
+
+    assign p = buff0;
+    assign tmp_product = a_reg0 * b_reg0;
+    always @ (posedge clk) begin
+        a_reg0 <= a;
+        b_reg0 <= b;
+        buff0 <= tmp_product;
+    end
+  endmodule
+
+  module mux (
+    output wire[31:0] out,
+    input wire cond,
+    input wire[31:0] in1,
+    input wire[31:0] in2,
+    input wire tstart,
+    input wire clk
+  );
+
+    assign out = cond?in1:in2;
+  endmodule
+
   module readTimeVar(
     output wire tout, 
     input wire tin, 

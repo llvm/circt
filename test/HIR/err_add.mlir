@@ -1,25 +1,27 @@
+#bram_r = {"rd"=1}
+#bram_w = {"wr"=1}
 // RUN: circt-opt %s
-hir.func @Array_Add at %t (%A:!hir.memref<128*i32, r>, 
-  %B : !hir.memref<128*i32, r>, 
-  %C:!hir.memref<128*i32, w>){
+hir.func @Array_Add at %t (%A:!hir.memref<128xi32, #bram_r>, 
+%B : !hir.memref<128xi32, #bram_r>, 
+%C:!hir.memref<128xi32, #bram_w>){
 
-  %0 = hir.constant 0 
-  %1 = hir.constant 1 
-  %128 = hir.constant 128 
+  %0 = hir.constant (0) : !hir.const
+  %1 = hir.constant (1) : !hir.const
+  %128 = hir.constant (128) : !hir.const
 
   hir.for %i:i8 = %0:!hir.const to %128:!hir.const  
-    step %1:!hir.const iter_time(%ti = %t offset %1){
-        hir.yield at %ti offset %1
+  step %1:!hir.const iter_time(%ti = %t  +  %1){
+    hir.yield at %ti  +  %1
 
-        %a = hir.mem_read %A[%i] at %ti 
-            :!hir.memref<128*i32,r>[i8] -> i32
-        %b = hir.mem_read %B[%i] at %ti 
-            : !hir.memref<128*i32, r>[i8] -> i32
+    %a = hir.load %A[%i] at %ti 
+    :!hir.memref<128xi32,#bram_r>[i8] -> i32
+    %b = hir.load %B[%i] at %ti 
+    : !hir.memref<128xi32, #bram_r>[i8] -> i32
 
-        %c = hir.add (%a, %b) : (i32, i32) -> (i32)
+    %c = hir.add (%a, %b) : (i32, i32) -> (i32)
 
-        hir.mem_write %c to %C[%i] at %ti offset %1 
-            : (i32, !hir.memref<128*i32, w>[i8])
+    hir.store %c to %C[%i] at %ti  +  %1 
+    : (i32, !hir.memref<128xi32, #bram_w>[i8])
   }
   hir.return
 }

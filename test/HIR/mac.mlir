@@ -4,6 +4,7 @@ hir.func @mac_test at %t (%a :i32, %b :i32, %c :i32) -> (){
   : !hir.interface<func(i32, i32) -> (i32 delay 3)>
   hir.return
 }
+
 hir.func @mac at %t (%a :i32, %b :i32, %c :i32) -> (i32 delay 3){
   %1 = hir.constant 1
   %2 = hir.constant 2
@@ -13,10 +14,10 @@ hir.func @mac at %t (%a :i32, %b :i32, %c :i32) -> (i32 delay 3){
   //      : (i32 , i32) -> (i32 delay 2)
 
   hir.call @mult_3stage (%a,%b) at %t 
-  : !hir.interface<func(i32, i32) -> ()>
+  : !hir.func<(i32, i32) -> ()>
   //new multiplier
   %m = hir.call @mult_3stage (%a,%b) at %t 
-  : !hir.interface<func(i32, i32) -> (i32 delay 3)>
+  : !hir.func<(i32, i32) -> (i32 delay 3)>
 
   //Delay added to match old multiplier.
   %c2= hir.delay %c by %2 at %t : i32 -> i32

@@ -388,7 +388,7 @@ static ParseResult parseFuncSignature(
     if (parser.parseLParen())
       return failure();
 
-    if (parser.parseRParen()) {
+    if (parser.parseOptionalRParen()) {
       while (1) {
         // Parse result type
         Type resultType;

@@ -20,6 +20,7 @@
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/StringMap.h"
 
+#include "../PassDetails.h"
 #include "mlir/Analysis/Utils.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
@@ -58,17 +59,17 @@ public:
         return out;
       }
 
-      TimeInstant prev_instant = it->getSecond();
-      if (prev_instant.t == out.t) {
-        if (prev_instant.delay > 0) {
+      TimeInstant prevInstant = it->getSecond();
+      if (prevInstant.t == out.t) {
+        if (prevInstant.delay > 0) {
           emitError(out.t.getLoc(),
                     "Circular mapping found for this time var.");
           return out;
-        } else
-          break;
+        }
+        break;
       }
-      out.delay += prev_instant.delay;
-      out.t = prev_instant.t;
+      out.delay += prevInstant.delay;
+      out.t = prevInstant.t;
     }
     return out;
   }
@@ -95,14 +96,14 @@ public:
           if (instant.delay > 0) {
             emitError(t.getLoc(), "Circular mapping found for this time var.");
             return false;
-          } else
-            break;
+          }
+          break;
         }
         delay += instant.delay;
         t = instant.t;
       }
-    TimeInstant v_instant(t, delay);
-    mapValueToTimeInstant[v] = v_instant;
+    TimeInstant vInstant(t, delay);
+    mapValueToTimeInstant[v] = vInstant;
     return true;
   }
 
@@ -115,12 +116,11 @@ public:
     return it->getSecond();
   }
 
-  bool check(mlir::Location op_loc, mlir::Location def_loc, Value v, Value t,
-             unsigned delay, std::string use_loc) {
+  bool check(mlir::Location opLoc, mlir::Location defLoc, Value v, Value t,
+             unsigned delay, std::string useLoc) {
     // consts are valid at any time.
-    Type v_type = v.getType();
-    if (v_type.isa<hir::ConstType>() || v_type.isa<hir::MemrefType>() ||
-        v_type.isa<WireType>())
+    Type vType = v.getType();
+    if (vType.isa<hir::ConstType>() || vType.isa<hir::MemrefType>())
       return true;
     TimeInstant instant = getTimeInstantOrError(v);
     TimeInstant instant2 = getRootTimeInstant(TimeInstant(t, delay));
@@ -134,38 +134,35 @@ public:
 
     std::string error;
     if (instant.t != instant2.t)
-      error = "Schedule error: mismatched time instants in " + use_loc + "!";
+      error = "Schedule error: mismatched time instants in " + useLoc + "!";
     else
-      error = "Schedule error: mismatched delay (" +
+      error = "\n\tSchedule error: mismatched delay (" +
               std::to_string(instant.delay) + " vs " + std::to_string(delay) +
-              ") in " + use_loc + "!";
-    emitError(op_loc, error)
-        .attachNote(def_loc)
-        .append("Prior definition here.");
+              ") in " + useLoc + "!";
+    emitError(opLoc, error).attachNote(defLoc).append("Prior definition here.");
 
     return false;
   }
 }; // namespace
 /// Checks for out of bound memef access subscripts..
-class ScheduleVerifier
-    : public PassWrapper<ScheduleVerifier, OperationPass<hir::FuncOp>> {
+class ScheduleVerifier : public hir::ScheduleVerifierBase<ScheduleVerifier> {
 public:
   void runOnOperation() override;
 
 private:
-  bool inspectOp(FuncOp op);
+  bool inspectOp(hir::FuncOp op);
   bool inspectOp(hir::ConstantOp op);
   bool inspectOp(ForOp op);
   bool inspectOp(UnrollForOp op);
-  bool inspectOp(MemReadOp op);
+  bool inspectOp(hir::LoadOp op);
   bool inspectOp(hir::AddOp op);
   bool inspectOp(hir::SubtractOp op);
-  bool inspectOp(MemWriteOp op);
+  bool inspectOp(hir::StoreOp op);
   bool inspectOp(hir::ReturnOp op);
   bool inspectOp(hir::YieldOp op);
-  bool inspectOp(hir::WireWriteOp op);
-  bool inspectOp(hir::WireReadOp op);
-  bool inspectOp(hir::AllocOp op);
+  bool inspectOp(hir::SendOp op);
+  bool inspectOp(hir::RecvOp op);
+  bool inspectOp(hir::AllocaOp op);
   bool inspectOp(hir::DelayOp op);
   bool inspectOp(hir::CallOp op);
   bool inspectOp(Operation *op);
@@ -199,9 +196,8 @@ private:
     auto it = mapValueToDefiningLoc.find(v);
     if (it != mapValueToDefiningLoc.end()) {
       return it->getSecond();
-    } else {
-      return v.getLoc();
     }
+    return v.getLoc();
   }
 
   llvm::DenseMap<Value, int> mapValueToIntConst;
@@ -213,32 +209,33 @@ private:
 private:
   Schedule schedule;
   std::stack<TimeInstant> yieldPoints;
-  ArrayAttr output_delays;
+  ArrayAttr outputDelays;
   Value tstart;
 };
 
-bool ScheduleVerifier::inspectOp(FuncOp op) {
+bool ScheduleVerifier::inspectOp(hir::FuncOp op) {
   Block &entryBlock = op.getBody().front();
   // args also contains tstart;
   auto args = entryBlock.getArguments();
   Value tstart = args.back();
   this->tstart = tstart;
-  auto input_delays = op.input_delays();
-  this->output_delays = op.output_delays();
+  hir::FuncType funcTy = op.funcTy().dyn_cast<hir::FuncType>();
+  auto inputDelays = funcTy.getInputDelays();
+  this->outputDelays = funcTy.getOutputDelays();
   // Indentity map for root level time vars.
   schedule.insert(tstart, tstart, 0);
-  for (unsigned i = 0; i < input_delays.size(); i++) {
+  for (unsigned i = 0; i < inputDelays.size(); i++) {
     mapValueToDefiningLoc.insert(std::make_pair(args[i], op.getLoc()));
     if (!args[i].getType().isa<IntegerType>())
       continue;
-    int delay = input_delays[i].dyn_cast<IntegerAttr>().getInt();
+    int delay = inputDelays[i].dyn_cast<IntegerAttr>().getInt();
     schedule.insert(args[i], tstart, delay);
   }
   return inspectBody(entryBlock);
 }
 
 bool ScheduleVerifier::inspectOp(hir::ConstantOp op) {
-  setIntegerConst(op.res(), op.value());
+  setIntegerConst(op.res(), op.value().dyn_cast<IntegerAttr>().getInt());
   return true;
 }
 
@@ -285,7 +282,7 @@ bool ScheduleVerifier::inspectOp(UnrollForOp op) {
   return ok;
 }
 
-bool ScheduleVerifier::inspectOp(MemReadOp op) {
+bool ScheduleVerifier::inspectOp(hir::LoadOp op) {
   auto addr = op.addr();
   Value result = op.res();
   Value tstart = op.tstart();
@@ -299,16 +296,17 @@ bool ScheduleVerifier::inspectOp(MemReadOp op) {
                          delay, "address " + std::to_string(c));
     c++;
   }
+  auto memrefTy = op.mem().getType().dyn_cast<hir::MemrefType>();
+  auto portAttrs = memrefTy.getPortAttrs();
+  auto rdAttr = portAttrs.getNamed("rd");
+  assert(rdAttr);
+  auto rdDelay = rdAttr->second.dyn_cast<IntegerAttr>().getInt();
 
-  if (op.mem().getType().dyn_cast<hir::MemrefType>().getPacking().size() > 0)
-    schedule.insert(result, tstart, delay + 1);
-  else
-    schedule.insert(result, tstart, delay);
-
+  schedule.insert(result, tstart, delay + rdDelay);
   return ok;
 }
 
-bool ScheduleVerifier::inspectOp(MemWriteOp op) {
+bool ScheduleVerifier::inspectOp(hir::StoreOp op) {
   auto addr = op.addr();
   Value value = op.value();
   Value tstart = op.tstart();
@@ -319,8 +317,8 @@ bool ScheduleVerifier::inspectOp(MemWriteOp op) {
                        "input var");
   int c = 1;
   for (auto addrI : addr) {
-    mlir::Location loc_addrI = getDefiningLoc(addrI);
-    ok &= schedule.check(op.getLoc(), loc_addrI, addrI, tstart, delay,
+    mlir::Location locAddrI = getDefiningLoc(addrI);
+    ok &= schedule.check(op.getLoc(), locAddrI, addrI, tstart, delay,
                          "address " + std::to_string(c));
     c++;
   }
@@ -373,7 +371,7 @@ bool ScheduleVerifier::inspectOp(hir::ReturnOp op) {
   bool ok = true;
   for (int i = 0; i < operands.size(); i++) {
     Value operand = operands[i];
-    int delay = this->output_delays[i].dyn_cast<IntegerAttr>().getInt();
+    int delay = this->outputDelays[i].dyn_cast<IntegerAttr>().getInt();
     ok &= schedule.check(op.getLoc(), getDefiningLoc(operand), operand,
                          this->tstart, delay,
                          "return operand " + std::to_string(i + 1));
@@ -389,19 +387,19 @@ bool ScheduleVerifier::inspectOp(hir::YieldOp op) {
   return true;
 }
 
-bool ScheduleVerifier::inspectOp(hir::WireWriteOp op) {
+bool ScheduleVerifier::inspectOp(hir::SendOp op) {
   unsigned delay = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
   return schedule.check(op.getLoc(), getDefiningLoc(op.value()), op.value(),
                         op.tstart(), delay, "input var");
 }
 
-bool ScheduleVerifier::inspectOp(hir::WireReadOp op) {
+bool ScheduleVerifier::inspectOp(hir::RecvOp op) {
   unsigned delay = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
   schedule.insert(op.res(), op.tstart(), delay);
   return true;
 }
 
-bool ScheduleVerifier::inspectOp(hir::AllocOp op) { return true; }
+bool ScheduleVerifier::inspectOp(hir::AllocaOp op) { return true; }
 
 bool ScheduleVerifier::inspectOp(hir::DelayOp op) {
   unsigned delay = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
@@ -415,61 +413,57 @@ bool ScheduleVerifier::inspectOp(hir::DelayOp op) {
 bool ScheduleVerifier::inspectOp(hir::CallOp op) {
   ResultRange results = op.res();
   auto operands = op.operands();
-  Value tstart = op.tstart();
-  unsigned tstart_delay = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
-  ArrayAttr input_delays = op->getAttrOfType<ArrayAttr>("input_delays");
-  ArrayAttr output_delays = op->getAttrOfType<ArrayAttr>("output_delays");
-  assert(input_delays.size() == operands.size());
-  assert(output_delays.size() == results.size());
+  unsigned tstartDelay = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
+  ArrayAttr inputDelays = op->getAttrOfType<ArrayAttr>("inputDelays");
+  ArrayAttr outputDelays = op->getAttrOfType<ArrayAttr>("outputDelays");
+  assert(inputDelays.size() == operands.size());
+  assert(outputDelays.size() == results.size());
   bool ok = true;
   for (unsigned i = 0; i < operands.size(); i++) {
-    auto arg_delay = input_delays[i].cast<IntegerAttr>().getInt();
+    auto argDelay = inputDelays[i].cast<IntegerAttr>().getInt();
     ok &= schedule.check(op.getLoc(), getDefiningLoc(operands[i]), operands[i],
-                         op.tstart(), tstart_delay + arg_delay,
+                         op.tstart(), tstartDelay + argDelay,
                          "operand " + std::to_string(i + 1));
   }
   for (unsigned i = 0; i < results.size(); i++) {
-    auto res_delay = output_delays[i].cast<IntegerAttr>().getInt();
-    schedule.insert(results[i], op.tstart(), tstart_delay + res_delay);
+    auto resDelay = outputDelays[i].cast<IntegerAttr>().getInt();
+    schedule.insert(results[i], op.tstart(), tstartDelay + resDelay);
   }
   return ok;
 }
 
 bool ScheduleVerifier::inspectOp(Operation *inst) {
-  if (auto op = dyn_cast<hir::ConstantOp>(inst)) {
+  if (auto op = dyn_cast<hir::ConstantOp>(inst))
     return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::CallOp>(inst)) {
+  if (auto op = dyn_cast<hir::CallOp>(inst))
     return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::AllocOp>(inst)) {
+  if (auto op = dyn_cast<hir::AllocaOp>(inst))
     return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::DelayOp>(inst)) {
+  if (auto op = dyn_cast<hir::DelayOp>(inst))
     return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::ForOp>(inst)) {
+  if (auto op = dyn_cast<hir::ForOp>(inst))
     return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::UnrollForOp>(inst)) {
+  if (auto op = dyn_cast<hir::UnrollForOp>(inst))
     return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::ReturnOp>(inst)) {
+  if (auto op = dyn_cast<hir::ReturnOp>(inst))
     return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::MemReadOp>(inst)) {
+  if (auto op = dyn_cast<hir::LoadOp>(inst))
     return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::MemWriteOp>(inst)) {
+  if (auto op = dyn_cast<hir::StoreOp>(inst))
     return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::WireReadOp>(inst)) {
+  if (auto op = dyn_cast<hir::RecvOp>(inst))
     return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::WireWriteOp>(inst)) {
+  if (auto op = dyn_cast<hir::SendOp>(inst))
     return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::AddOp>(inst)) {
+  if (auto op = dyn_cast<hir::AddOp>(inst))
     return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::SubtractOp>(inst)) {
+  if (auto op = dyn_cast<hir::SubtractOp>(inst))
     return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::YieldOp>(inst)) {
+  if (auto op = dyn_cast<hir::YieldOp>(inst))
     return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::TerminatorOp>(inst)) {
-    // Do nothing.
-  } else {
-    emitError(inst->getLoc(), "Unsupported Operation for verification!");
-    return false;
-  }
+  if (auto op = dyn_cast<hir::TerminatorOp>(inst))
+    return true;
+  emitError(inst->getLoc(), "Unsupported Operation for verification!");
   return false;
 }
 
@@ -490,11 +484,11 @@ bool ScheduleVerifier::inspectBody(Block &block) {
 } // end anonymous namespace
 
 void ScheduleVerifier::runOnOperation() { inspectOp(getOperation()); }
+
 namespace mlir {
 namespace hir {
-void registerScheduleVerifier() {
-  PassRegistration<ScheduleVerifier>("hir-schedule-verifier",
-                                     "Verify schedule in HIR functions.");
+std::unique_ptr<OperationPass<hir::FuncOp>> createScheduleVerificationPass() {
+  return std::make_unique<ScheduleVerifier>();
 }
 } // namespace hir
 } // namespace mlir

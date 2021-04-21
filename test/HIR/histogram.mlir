@@ -19,6 +19,7 @@ hir.func @histogram at %t(
       hir.mem_write %0 to %buffw[%i] at %ti
         : (!hir.const,!hir.memref<256*i32,w>[i32])
   }
+
   %t3=hir.for %i : i32 = %0 : !hir.const to %16: !hir.const 
     step %1:!hir.const iter_time(%ti = %t2 offset %1 ){
       %t_next=hir.for %j : i32 = %0 : !hir.const to %16: !hir.const 
@@ -34,6 +35,7 @@ hir.func @histogram at %t(
       }
       hir.yield at %t_next offset %1
   }
+
   hir.for %i : i32 = %0 : !hir.const to %256 : !hir.const 
     step %1:!hir.const iter_time(%ti = %t3 offset %4 ){
       hir.yield at %ti offset %1
