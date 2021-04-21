@@ -524,7 +524,8 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
 }
 void static filterAnnotations(ArrayAttr annotations,
                               SmallVector<Attribute> &loweredAttrs,
-                              std::string fieldSuffix, MLIRContext *context) {
+                              const FlatBundleFieldEntry &field,
+                              MLIRContext *context) {
 
   for (auto opAttr : annotations) {
     auto di = opAttr.dyn_cast<DictionaryAttr>();
@@ -552,8 +553,13 @@ void static filterAnnotations(ArrayAttr annotations,
       targetStr += fNameStr;
     }
     if (!targetStr.empty()) {
-      auto pos = fieldSuffix.find(targetStr);
+      auto pos = field.suffix.find(targetStr);
       if (pos == 0) {
+        auto endTarget = (pos + targetStr.size());
+        // Ignore, if the annotation is specified on an un-flattened array.
+        if (field.suffix.size() > endTarget + 1 &&
+            std::isdigit(field.suffix[endTarget + 1]))
+          continue;
         NamedAttrList modAttr;
         for (auto attr : di.getValue()) {
           if (attr.first.str() == "target")
@@ -566,6 +572,7 @@ void static filterAnnotations(ArrayAttr annotations,
       loweredAttrs.push_back(opAttr);
   }
 }
+
 /// Lower a wire op with a bundle to mutliple non-bundled wires.
 void TypeLoweringVisitor::visitDecl(WireOp op) {
   Value result = op.result();
@@ -585,12 +592,13 @@ void TypeLoweringVisitor::visitDecl(WireOp op) {
   auto name = op.name().str();
   for (auto field : fieldTypes) {
     std::string loweredName = "";
+    // field.getPortType().isa<FVectorType>()
     if (!name.empty())
       loweredName = name + field.suffix;
     SmallVector<Attribute> loweredAttrs;
     // For all annotations on the parent op, filter them based on the target
     // attribute.
-    filterAnnotations(op.annotations(), loweredAttrs, field.suffix, context);
+    filterAnnotations(op.annotations(), loweredAttrs, field, context);
     auto wire = builder->create<WireOp>(field.getPortType(),
                                         builder->getStringAttr(loweredName),
                                         ArrayAttr::get(context, loweredAttrs));
@@ -625,7 +633,7 @@ void TypeLoweringVisitor::visitDecl(RegOp op) {
     SmallVector<Attribute> loweredAttrs;
     // For all annotations on the parent op, filter them based on the target
     // attribute.
-    filterAnnotations(op.annotations(), loweredAttrs, field.suffix, context);
+    filterAnnotations(op.annotations(), loweredAttrs, field, context);
     setBundleLowering(result, StringRef(field.suffix).drop_front(1),
                       builder->create<RegOp>(field.getPortType(), op.clockVal(),
                                              loweredName, loweredAttrs));

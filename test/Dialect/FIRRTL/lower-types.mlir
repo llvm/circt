@@ -681,7 +681,7 @@ firrtl.circuit "AnnotationsBundle" {
 
 // -----
 
-// Test that subfield annotations on wire are lowred to appropriate instance based on target.
+// Test that subfield annotations on reg are lowred to appropriate instance based on target.
 firrtl.circuit "AnnotationsBundle2" {
   firrtl.module @AnnotationsBundle2(%clock: !firrtl.clock) {
     %bar = firrtl.reg %clock  {annotations = [{one, target = [".qux"]}, {target = ["[1]", ".baz"], two}]} : (!firrtl.clock) -> !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
@@ -690,5 +690,29 @@ firrtl.circuit "AnnotationsBundle2" {
     // CHECK: %bar_0_qux = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
     // CHECK: %bar_1_baz = firrtl.reg %clock  {annotations = [{two}]} : (!firrtl.clock) -> !firrtl.uint<1>
     // CHECK: %bar_1_qux = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Test that subfield annotations on reg are lowred to appropriate instance based on target. Ignore un-flattened array targets
+// circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0].qux[0]"},{"two":null,"target":"~Foo|Foo>bar[1].baz"},{"three":null,"target":"~Foo|Foo>bar[0].yes"} ]]
+
+firrtl.circuit "AnnotationsBundle3" {
+  firrtl.module @AnnotationsBundle3(%clock: !firrtl.clock) {
+    %bar = firrtl.reg %clock  {annotations = [{one, target = ["[0]", ".qux", "[0]"]}, {target = ["[1]", ".baz"], two}, {target = ["[0]", ".yes"], three}]} : (!firrtl.clock) -> !firrtl.vector<bundle<baz: vector<uint<1>, 2>, qux: vector<uint<1>, 2>, yes: bundle<a: uint<1>, b: uint<1>>>, 2>
+
+    // CHECK: %bar_0_baz_0 = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_0_baz_1 = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_0_qux_0 = firrtl.reg %clock  {annotations = [{one}]} : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_0_qux_1 = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_0_yes_a = firrtl.reg %clock  {annotations = [{three}]} : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_0_yes_b = firrtl.reg %clock  {annotations = [{three}]} : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_1_baz_0 = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_1_baz_1 = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_1_qux_0 = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_1_qux_1 = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_1_yes_a = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_1_yes_b = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
   }
 }
