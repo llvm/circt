@@ -25,290 +25,284 @@ ThisFileDir = os.path.dirname(__file__)
 
 
 class CosimTestRunner:
-    """The main class responsible for running a cosim test. We use a separate
+  """The main class responsible for running a cosim test. We use a separate
     class to allow for per-test mutable state variables."""
 
-    def __init__(self, testFile, schema, addlArgs):
-        """Parse a test file. Look for comments we recognize anywhere in the
+  def __init__(self, testFile, schema, addlArgs):
+    """Parse a test file. Look for comments we recognize anywhere in the
         file. Assemble a list of sources."""
 
-        self.args = addlArgs
-        self.file = testFile
-        self.runs = list()
-        self.srcdir = os.path.dirname(self.file)
-        self.sources = list()
-        self.top = "top"
+    self.args = addlArgs
+    self.file = testFile
+    self.runs = list()
+    self.srcdir = os.path.dirname(self.file)
+    self.sources = list()
+    self.top = "top"
 
-        if "@ESI_COSIM_PATH@" == "" or not os.path.exists("@ESI_COSIM_PATH@"):
-            raise Exception("The ESI cosimulation DPI library must be " +
-                            "enabled to run cosim tests.")
+    if "@ESI_COSIM_PATH@" == "" or not os.path.exists("@ESI_COSIM_PATH@"):
+      raise Exception("The ESI cosimulation DPI library must be " +
+                      "enabled to run cosim tests.")
 
-        self.simRunScript = os.path.join(
-            "@CIRCT_TOOLS_DIR@", "circt-rtl-sim.py")
+    self.simRunScript = os.path.join("@CIRCT_TOOLS_DIR@", "circt-rtl-sim.py")
 
-        if schema == "":
-            schema = os.path.join(
-                "@CIRCT_MAIN_INCLUDE_DIR@", "circt", "Dialect", "ESI",
-                "cosim", "CosimDpi.capnp")
-        self.schema = schema
+    if schema == "":
+      schema = os.path.join("@CIRCT_MAIN_INCLUDE_DIR@", "circt", "Dialect",
+                            "ESI", "cosim", "CosimDpi.capnp")
+    self.schema = schema
 
-        fileReader = open(self.file, "r")
-        sources = []
-        for line in fileReader:
-            # Arguments to circt-rtl-sim, except for source files list
-            m = re.match(r"^//\s*ARGS:(.*)$", line)
-            if m:
-                self.args.extend(m.group(1).split())
-            # SOURCES are the additional source files (if any). If specified,
-            # must include the current file. These files are either absolute or
-            # relative to the current file.
-            m = re.match(r"^//\s*SOURCES:(.*)$", line)
-            if m:
-                sources.extend(m.group(1).split())
-            # Run this Python line.
-            m = re.match(r"^//\s*PY:(.*)$", line)
-            if m:
-                self.runs.append(m.group(1).strip())
-        fileReader.close()
+    fileReader = open(self.file, "r")
+    sources = []
+    for line in fileReader:
+      # Arguments to circt-rtl-sim, except for source files list
+      m = re.match(r"^//\s*ARGS:(.*)$", line)
+      if m:
+        self.args.extend(m.group(1).split())
+      # SOURCES are the additional source files (if any). If specified,
+      # must include the current file. These files are either absolute or
+      # relative to the current file.
+      m = re.match(r"^//\s*SOURCES:(.*)$", line)
+      if m:
+        sources.extend(m.group(1).split())
+      # Run this Python line.
+      m = re.match(r"^//\s*PY:(.*)$", line)
+      if m:
+        self.runs.append(m.group(1).strip())
+    fileReader.close()
 
-        self.sources = [(src if os.path.isabs(src) else os.path.join(
-            self.srcdir, src)) for src in self.sources]
+    self.sources = [
+        (src if os.path.isabs(src) else os.path.join(self.srcdir, src))
+        for src in self.sources
+    ]
 
-        # Include the cosim DPI SystemVerilog files.
-        esiInclude = os.path.join(
-            "@CIRCT_MAIN_INCLUDE_DIR@", "circt", "Dialect", "ESI")
-        cosimInclude = os.path.join(esiInclude, "cosim")
-        self.sources.insert(0, os.path.join(cosimInclude, "Cosim_DpiPkg.sv"))
-        self.sources.insert(1, os.path.join(cosimInclude, "Cosim_Endpoint.sv"))
-        self.sources.insert(2, os.path.join(esiInclude, "ESIPrimitives.sv"))
-        self.sources.append("@ESI_COSIM_PATH@")
+    # Include the cosim DPI SystemVerilog files.
+    esiInclude = os.path.join("@CIRCT_MAIN_INCLUDE_DIR@", "circt", "Dialect",
+                              "ESI")
+    cosimInclude = os.path.join(esiInclude, "cosim")
+    self.sources.insert(0, os.path.join(cosimInclude, "Cosim_DpiPkg.sv"))
+    self.sources.insert(1, os.path.join(cosimInclude, "Cosim_Endpoint.sv"))
+    self.sources.insert(2, os.path.join(esiInclude, "ESIPrimitives.sv"))
+    self.sources.append("@ESI_COSIM_PATH@")
 
-    def compile(self):
-        """Compile with circt-rtl-sim.py"""
-        start = time.time()
+  def compile(self):
+    """Compile with circt-rtl-sim.py"""
+    start = time.time()
 
-        # Run the simulation compilation step. Requires a simulator to be
-        # installed and working.
-        cmd = [self.simRunScript, "--no-run",
-               "--objdir", "o"] \
-            + self.sources + self.args
-        print("[INFO] Compile command: " + " ".join(cmd))
-        vrun = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True)
-        # cwd=self.execdir)
-        output = vrun.stdout + "\n----- STDERR ------\n" + vrun.stderr
-        if vrun.returncode != 0:
-            print("====== Compilation failure:")
-            print(output)
-        print(f"[INFO] Compile time: {time.time()-start}")
-        return vrun.returncode
+    # Run the simulation compilation step. Requires a simulator to be
+    # installed and working.
+    cmd = [self.simRunScript, "--no-run",
+           "--objdir", "o"] \
+        + self.sources + self.args
+    print("[INFO] Compile command: " + " ".join(cmd))
+    vrun = subprocess.run(cmd, capture_output=True, text=True)
+    # cwd=self.execdir)
+    output = vrun.stdout + "\n----- STDERR ------\n" + vrun.stderr
+    if vrun.returncode != 0:
+      print("====== Compilation failure:")
+      print(output)
+    print(f"[INFO] Compile time: {time.time()-start}")
+    return vrun.returncode
 
-    def writeScript(self, port):
-        """Write out the test script."""
+  def writeScript(self, port):
+    """Write out the test script."""
 
-        with open("script.py", "w") as script:
-            # Include a bunch of config variables at the beginning of the
-            # script for use by the test code.
-            vars = {
-                "srcdir": self.srcdir,
-                "srcfile": self.file,
-                # 'rpcSchemaPath' points to the CapnProto schema for RPC and is
-                # the one that nearly all scripts are going to need.
-                "rpcschemapath": self.schema
-            }
-            script.writelines(f"{name} = \"{value}\"\n" for (
-                name, value) in vars.items())
-            script.write("\n\n")
+    with open("script.py", "w") as script:
+      # Include a bunch of config variables at the beginning of the
+      # script for use by the test code.
+      vars = {
+          "srcdir": self.srcdir,
+          "srcfile": self.file,
+          # 'rpcSchemaPath' points to the CapnProto schema for RPC and is
+          # the one that nearly all scripts are going to need.
+          "rpcschemapath": self.schema
+      }
+      script.writelines(
+          f"{name} = \"{value}\"\n" for (name, value) in vars.items())
+      script.write("\n\n")
 
-            # Add the test files directory and this files directory to the
-            # pythonpath.
-            script.write("import os\n")
-            script.write("import sys\n")
-            script.write(
-                f"sys.path.append(\"{os.path.dirname(self.file)}\")\n")
-            script.write(
-                f"sys.path.append(\"{os.path.dirname(__file__)}\")\n")
-            script.write("\n\n")
-            script.write(
-                "simhostport = f'{os.uname()[1]}:" + str(port) + "'\n")
+      # Add the test files directory and this files directory to the
+      # pythonpath.
+      script.write("import os\n")
+      script.write("import sys\n")
+      script.write(f"sys.path.append(\"{os.path.dirname(self.file)}\")\n")
+      script.write(f"sys.path.append(\"{os.path.dirname(__file__)}\")\n")
+      script.write("\n\n")
+      script.write("simhostport = f'{os.uname()[1]}:" + str(port) + "'\n")
 
-            # Run the lines specified in the test file.
-            script.writelines(
-                f"{x}\n" for x in self.runs)
+      # Run the lines specified in the test file.
+      script.writelines(f"{x}\n" for x in self.runs)
 
-    def run(self):
-        """Run the test by creating a Python script, starting the simulation,
+  def run(self):
+    """Run the test by creating a Python script, starting the simulation,
         running the Python script, then stopping the simulation. Use
         circt-rtl-sim.py to run the sim."""
 
-        # These two variables are accessed in the finally block. Declare them
-        # here to avoid syntax errors in that block.
-        testProc = None
-        simProc = None
+    # These two variables are accessed in the finally block. Declare them
+    # here to avoid syntax errors in that block.
+    testProc = None
+    simProc = None
+    try:
+      start = time.time()
+
+      # Open log files
+      simStdout = open("sim_stdout.log", "w")
+      simStderr = open("sim_stderr.log", "w")
+      testStdout = open("test_stdout.log", "w")
+      testStderr = open("test_stderr.log", "w")
+
+      # Erase the config file if it exists. We don't want to read
+      # an old config.
+      portFileName = "cosim.cfg"
+      if os.path.exists(portFileName):
+        os.remove(portFileName)
+
+      # Run the simulation.
+      simEnv = os.environ.copy()
+      if "@CMAKE_BUILD_TYPE@" == "Debug":
+        simEnv["COSIM_DEBUG_FILE"] = "cosim_debug.log"
+      cmd = [self.simRunScript, "--objdir", "o"] + \
+          self.sources + self.args
+      print("[INFO] Sim run command: " + " ".join(cmd))
+      simProc = subprocess.Popen(cmd,
+                                 stdout=simStdout,
+                                 stderr=simStderr,
+                                 env=simEnv,
+                                 preexec_fn=os.setsid)
+      simStderr.close()
+      simStdout.close()
+
+      # Get the port which the simulation RPC selected.
+      checkCount = 0
+      while (not os.path.exists(portFileName)) and \
+              simProc.poll() is None:
+        time.sleep(0.05)
+        checkCount += 1
+        if checkCount > 200:
+          raise Exception(f"Cosim never wrote cfg file: {portFileName}")
+      portFile = open(portFileName, "r")
+      for line in portFile.readlines():
+        m = re.match("port: (\\d+)", line)
+        if m is not None:
+          port = int(m.group(1))
+      portFile.close()
+
+      # Wait for the simulation to start accepting RPC connections.
+      checkCount = 0
+      while not isPortOpen(port):
+        checkCount += 1
+        if checkCount > 200:
+          raise Exception(f"Cosim RPC port ({port}) never opened")
+        if simProc.poll() is not None:
+          raise Exception("Simulation exited early")
+        time.sleep(0.05)
+
+      # Write the test script.
+      self.writeScript(port)
+
+      # Pycapnp complains if the PWD environment var doesn't match the
+      # actual CWD.
+      testEnv = os.environ.copy()
+      testEnv["PWD"] = os.getcwd()
+      # Run the test script.
+      cmd = [sys.executable, "-u", "script.py"]
+      print("[INFO] Test run command: " + " ".join(cmd))
+      testProc = subprocess.run(cmd,
+                                stdout=testStdout,
+                                stderr=testStderr,
+                                cwd=os.getcwd(),
+                                env=testEnv)
+      testStdout.close()
+      testStderr.close()
+    finally:
+      # Make sure to stop the simulation no matter what.
+      if simProc:
+        os.killpg(os.getpgid(simProc.pid), signal.SIGINT)
+        # simProc.send_signal(signal.SIGINT)
+        # Allow the simulation time to flush its outputs.
         try:
-            start = time.time()
+          simProc.wait(timeout=1.0)
+        except subprocess.TimeoutExpired:
+          simProc.kill()
 
-            # Open log files
-            simStdout = open("sim_stdout.log", "w")
-            simStderr = open("sim_stderr.log", "w")
-            testStdout = open("test_stdout.log", "w")
-            testStderr = open("test_stderr.log", "w")
+      print(f"[INFO] Run time: {time.time()-start}")
 
-            # Erase the config file if it exists. We don't want to read
-            # an old config.
-            portFileName = "cosim.cfg"
-            if os.path.exists(portFileName):
-                os.remove(portFileName)
+      # Read the output log files and return the proper result.
+      err, logs = self.readLogs()
+      if testProc is not None:
+        logs += f"---- Test process exit code: {testProc.returncode}\n"
+        passed = testProc.returncode == 0 and not err
+      else:
+        passed = False
+      if not passed:
+        print(logs)
 
-            # Run the simulation.
-            simEnv = os.environ.copy()
-            if "@CMAKE_BUILD_TYPE@" == "Debug":
-                simEnv["COSIM_DEBUG_FILE"] = "cosim_debug.log"
-            cmd = [self.simRunScript, "--objdir", "o"] + \
-                self.sources + self.args
-            print("[INFO] Sim run command: " + " ".join(cmd))
-            simProc = subprocess.Popen(
-                cmd,
-                stdout=simStdout, stderr=simStderr, env=simEnv,
-                preexec_fn=os.setsid)
-            simStderr.close()
-            simStdout.close()
+    return 0 if passed else 1
 
-            # Get the port which the simulation RPC selected.
-            checkCount = 0
-            while (not os.path.exists(portFileName)) and \
-                    simProc.poll() is None:
-                time.sleep(0.05)
-                checkCount += 1
-                if checkCount > 200:
-                    raise Exception(
-                        f"Cosim never wrote cfg file: {portFileName}")
-            portFile = open(portFileName, "r")
-            for line in portFile.readlines():
-                m = re.match("port: (\\d+)", line)
-                if m is not None:
-                    port = int(m.group(1))
-            portFile.close()
-
-            # Wait for the simulation to start accepting RPC connections.
-            checkCount = 0
-            while not isPortOpen(port):
-                checkCount += 1
-                if checkCount > 200:
-                    raise Exception(f"Cosim RPC port ({port}) never opened")
-                if simProc.poll() is not None:
-                    raise Exception("Simulation exited early")
-                time.sleep(0.05)
-
-            # Write the test script.
-            self.writeScript(port)
-
-            # Pycapnp complains if the PWD environment var doesn't match the
-            # actual CWD.
-            testEnv = os.environ.copy()
-            testEnv["PWD"] = os.getcwd()
-            # Run the test script.
-            cmd = [sys.executable, "-u", "script.py"]
-            print("[INFO] Test run command: " + " ".join(cmd))
-            testProc = subprocess.run(cmd,
-                                      stdout=testStdout, stderr=testStderr,
-                                      cwd=os.getcwd(), env=testEnv)
-            testStdout.close()
-            testStderr.close()
-        finally:
-            # Make sure to stop the simulation no matter what.
-            if simProc:
-                os.killpg(os.getpgid(simProc.pid), signal.SIGINT)
-                # simProc.send_signal(signal.SIGINT)
-                # Allow the simulation time to flush its outputs.
-                try:
-                    simProc.wait(timeout=1.0)
-                except subprocess.TimeoutExpired:
-                    simProc.kill()
-
-            print(f"[INFO] Run time: {time.time()-start}")
-
-            # Read the output log files and return the proper result.
-            err, logs = self.readLogs()
-            if testProc is not None:
-                logs += f"---- Test process exit code: {testProc.returncode}\n"
-                passed = testProc.returncode == 0 and not err
-            else:
-                passed = False
-            if not passed:
-                print(logs)
-
-        return 0 if passed else 1
-
-    def readLogs(self):
-        """Read the log files from the simulation and the test script. Only add
+  def readLogs(self):
+    """Read the log files from the simulation and the test script. Only add
         the stderr logs if they contain something. Also return a flag
         indicating that one of the stderr logs has content."""
 
-        foundErr = False
-        ret = "----- Simulation stdout -----\n"
-        with open("sim_stdout.log") as f:
-            ret += f.read()
+    foundErr = False
+    ret = "----- Simulation stdout -----\n"
+    with open("sim_stdout.log") as f:
+      ret += f.read()
 
-        with open("sim_stderr.log") as f:
-            stderr = f.read()
-            if stderr != "":
-                ret += "\n----- Simulation stderr -----\n"
-                ret += stderr
-                foundErr = True
+    with open("sim_stderr.log") as f:
+      stderr = f.read()
+      if stderr != "":
+        ret += "\n----- Simulation stderr -----\n"
+        ret += stderr
+        foundErr = True
 
-            ret += "\n----- Test stdout -----\n"
-        with open("test_stdout.log") as f:
-            ret += f.read()
+      ret += "\n----- Test stdout -----\n"
+    with open("test_stdout.log") as f:
+      ret += f.read()
 
-        with open("test_stderr.log") as f:
-            stderr = f.read()
-            if stderr != "":
-                ret += "\n----- Test stderr -----\n"
-                ret += stderr
-                foundErr = True
+    with open("test_stderr.log") as f:
+      stderr = f.read()
+      if stderr != "":
+        ret += "\n----- Test stderr -----\n"
+        ret += stderr
+        foundErr = True
 
-        return (foundErr, ret)
+    return (foundErr, ret)
 
 
 def isPortOpen(port):
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    result = sock.connect_ex(('127.0.0.1', port))
-    sock.close()
-    return True if result == 0 else False
+  sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+  result = sock.connect_ex(('127.0.0.1', port))
+  sock.close()
+  return True if result == 0 else False
 
 
 def __main__(args):
-    argparser = argparse.ArgumentParser(
-        description="RTL cosimulation runner for ESI")
-    argparser.add_argument("--schema", default="",
-                           help="The schema file to use.")
-    argparser.add_argument("source",
-                           help="The source run spec file")
-    argparser.add_argument("addlArgs", nargs=argparse.REMAINDER,
-                           help="Additional arguments to pass through to " +
-                           "'circt-rtl-sim.py'")
+  argparser = argparse.ArgumentParser(
+      description="RTL cosimulation runner for ESI")
+  argparser.add_argument("--schema", default="", help="The schema file to use.")
+  argparser.add_argument("source", help="The source run spec file")
+  argparser.add_argument("addlArgs",
+                         nargs=argparse.REMAINDER,
+                         help="Additional arguments to pass through to " +
+                         "'circt-rtl-sim.py'")
 
-    if len(args) <= 1:
-        argparser.print_help()
-        return
-    args = argparser.parse_args(args[1:])
+  if len(args) <= 1:
+    argparser.print_help()
+    return
+  args = argparser.parse_args(args[1:])
 
-    # Create and cd into a test directory before running
-    sourceName = os.path.basename(args.source)
-    testDir = f"{sourceName}.d"
-    if not os.path.exists(testDir):
-        os.mkdir(testDir)
-    os.chdir(testDir)
+  # Create and cd into a test directory before running
+  sourceName = os.path.basename(args.source)
+  testDir = f"{sourceName}.d"
+  if not os.path.exists(testDir):
+    os.mkdir(testDir)
+  os.chdir(testDir)
 
-    runner = CosimTestRunner(args.source, args.schema, args.addlArgs)
-    rc = runner.compile()
-    if rc != 0:
-        return rc
-    return runner.run()
+  runner = CosimTestRunner(args.source, args.schema, args.addlArgs)
+  rc = runner.compile()
+  if rc != 0:
+    return rc
+  return runner.run()
 
 
 if __name__ == '__main__':
-    sys.exit(__main__(sys.argv))
+  sys.exit(__main__(sys.argv))

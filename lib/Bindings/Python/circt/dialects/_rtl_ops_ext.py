@@ -4,6 +4,7 @@ import inspect
 
 from mlir.ir import *
 
+
 class RTLModuleOp:
   """Specialization for the RTL module op class."""
 
@@ -45,12 +46,15 @@ class RTLModuleOp:
       output_names.append(StringAttr.get(str(port_name)))
     attributes['resultNames'] = ArrayAttr.get(output_names)
 
-    attributes["type"] = TypeAttr.get(FunctionType.get(
-      inputs=input_types, results=output_types))
+    attributes["type"] = TypeAttr.get(
+        FunctionType.get(inputs=input_types, results=output_types))
 
-    super().__init__(self.build_generic(
-        attributes=attributes, results=results, operands=operands,
-        loc=loc, ip=ip))
+    super().__init__(
+        self.build_generic(attributes=attributes,
+                           results=results,
+                           operands=operands,
+                           loc=loc,
+                           ip=ip))
 
     if body_builder:
       entry_block = self.add_entry_block()
@@ -122,8 +126,8 @@ class RTLModuleOp:
         if param.kind == param.VAR_KEYWORD:
           has_arg_module_op = True
         if param.name == "module_op" and (param.kind
-                                        == param.POSITIONAL_OR_KEYWORD or
-                                        param.kind == param.KEYWORD_ONLY):
+                                          == param.POSITIONAL_OR_KEYWORD or
+                                          param.kind == param.KEYWORD_ONLY):
           has_arg_module_op = True
 
       # Emit the RTLModuleOp.
@@ -140,8 +144,8 @@ class RTLModuleOp:
         output_ports = zip([None] * len(result_types), result_types)
 
       module_op = RTLModuleOp(name=symbol_name,
-                            input_ports=input_ports,
-                            output_ports=output_ports)
+                              input_ports=input_ports,
+                              output_ports=output_ports)
       with InsertionPoint(module_op.add_entry_block()):
         module_args = module_op.entry_block.arguments
         module_kwargs = {}
@@ -167,14 +171,16 @@ class RTLModuleOp:
           function_type = FunctionType.get(inputs=inputs, results=return_types)
           module_op.attributes["type"] = TypeAttr.get(function_type)
           # Set required resultNames attribute. Could we infer real names here?
-          resultNames = [StringAttr.get('result' + str(i))
-                         for i in range(len(return_values))]
+          resultNames = [
+              StringAttr.get('result' + str(i))
+              for i in range(len(return_values))
+          ]
           module_op.attributes["resultNames"] = ArrayAttr.get(resultNames)
 
       def emit_instance_op(*call_args):
         call_op = rtl.InstanceOp(return_types, StringAttr.get(''),
-                                 FlatSymbolRefAttr.get(symbol_name),
-                                 call_args, DictAttr.get({}))
+                                 FlatSymbolRefAttr.get(symbol_name), call_args,
+                                 DictAttr.get({}))
         if return_types is None:
           return None
         elif len(return_types) == 1:
