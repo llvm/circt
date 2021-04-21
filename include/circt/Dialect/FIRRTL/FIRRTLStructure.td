@@ -50,7 +50,8 @@ def CircuitOp : FIRRTLOp<"circuit",
 }
 
 def FModuleOp : FIRRTLOp<"module",
-      [IsolatedFromAbove, FunctionLike, Symbol, SingleBlock, NoTerminator]> {
+      [IsolatedFromAbove, FunctionLike, Symbol, SingleBlock, NoTerminator, 
+       HasParent<"CircuitOp">]> {
   let summary = "FIRRTL Module";
   let description = [{
     The "firrtl.module" operation represents a Verilog module, including a given
@@ -122,7 +123,7 @@ def FModuleOp : FIRRTLOp<"module",
 }
 
 def FExtModuleOp : FIRRTLOp<"extmodule",
-      [IsolatedFromAbove, FunctionLike, Symbol]> {
+      [IsolatedFromAbove, FunctionLike, Symbol, HasParent<"CircuitOp">]> {
   let summary = "FIRRTL extmodule";
   let description = [{
     The "firrtl.extmodule" operation represents an external reference to a

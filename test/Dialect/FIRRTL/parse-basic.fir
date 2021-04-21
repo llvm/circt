@@ -183,6 +183,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.asClock %reset_async : (!firrtl.asyncreset) -> !firrtl.clock
     node check_c5 = asClock(reset_async)
 
+    ; CHECK: [[PASSIVE:%.*]] = firrtl.asPassive %auto : !firrtl.flip<uint<1>>
+    ; CHECK: firrtl.node [[PASSIVE]]  : !firrtl.uint<1>
+    node check_output = auto
+
     ; CHECK: %c42_ui10 = firrtl.constant(42 : ui10) : !firrtl.uint<10>
     ; CHECK: %c171_ui8 = firrtl.constant(171 : ui8) : !firrtl.uint<8>
     ; CHECK: firrtl.add %c42_ui10, %c171_ui8

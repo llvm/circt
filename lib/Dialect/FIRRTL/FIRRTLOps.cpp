@@ -502,11 +502,6 @@ static LogicalResult verifyModuleSignature(Operation *op) {
 }
 
 static LogicalResult verifyFModuleOp(FModuleOp op) {
-  // The parent op must be a circuit op.
-  auto parentOp = dyn_cast_or_null<CircuitOp>(op->getParentOp());
-  if (!parentOp)
-    return op.emitOpError("should be embedded into a 'firrtl.circuit'");
-
   // Verify the module signature.
   return verifyModuleSignature(op);
 }

@@ -20,7 +20,7 @@
 namespace circt {
 namespace firrtl {
 namespace patterns {
-#include "circt/Dialect/FIRRTL/Canonicalization.h.inc"
+#include "circt/Dialect/FIRRTL/FIRRTLCanonicalization.h.inc"
 } // namespace patterns
 } // namespace firrtl
 } // namespace circt
