@@ -123,7 +123,7 @@ def FModuleOp : FIRRTLOp<"module",
 }
 
 def FExtModuleOp : FIRRTLOp<"extmodule",
-      [IsolatedFromAbove, FunctionLike, Symbol]> {
+      [IsolatedFromAbove, FunctionLike, Symbol, HasParent<"CircuitOp">]> {
   let summary = "FIRRTL extmodule";
   let description = [{
     The "firrtl.extmodule" operation represents an external reference to a
