@@ -13,6 +13,7 @@
 #include "circt-c/Dialect/MSFT.h"
 #include "circt-c/Dialect/RTL.h"
 #include "circt-c/Dialect/SV.h"
+#include "circt-c/Dialect/Seq.h"
 #include "circt-c/ExportVerilog.h"
 #include "mlir-c/Bindings/Python/Interop.h"
 #include "mlir-c/Registration.h"
@@ -24,7 +25,10 @@
 #include <pybind11/pybind11.h>
 namespace py = pybind11;
 
-static void registerPasses() { registerSVPasses(); }
+static void registerPasses() {
+  registerSeqPasses();
+  registerSVPasses();
+}
 
 PYBIND11_MODULE(_circt, m) {
   m.doc() = "CIRCT Python Native Extension";
@@ -54,6 +58,10 @@ PYBIND11_MODULE(_circt, m) {
         MlirDialectHandle rtl = mlirGetDialectHandle__rtl__();
         mlirDialectHandleRegisterDialect(rtl, context);
         mlirDialectHandleLoadDialect(rtl, context);
+
+        MlirDialectHandle seq = mlirGetDialectHandle__seq__();
+        mlirDialectHandleRegisterDialect(seq, context);
+        mlirDialectHandleLoadDialect(seq, context);
 
         MlirDialectHandle sv = mlirGetDialectHandle__sv__();
         mlirDialectHandleRegisterDialect(sv, context);
