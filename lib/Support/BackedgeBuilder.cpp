@@ -13,6 +13,7 @@
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/STLExtras.h"
 
 using namespace circt;
 
@@ -20,7 +21,7 @@ Backedge::Backedge(mlir::Operation *op) : value(op->getResult(0)) {}
 
 void Backedge::setValue(mlir::Value newValue) {
   assert(value.getType() == newValue.getType());
-  for (auto &use : value.getUses())
+  for (auto &use : llvm::make_early_inc_range(value.getUses()))
     use.set(newValue);
   value = newValue;
 }
