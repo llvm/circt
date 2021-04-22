@@ -898,6 +898,21 @@ static LogicalResult verifyConnectOp(ConnectOp connect) {
   FIRRTLType destType = connect.dest().getType().cast<FIRRTLType>();
   FIRRTLType srcType = connect.src().getType().cast<FIRRTLType>();
 
+  auto isPortOrInstancePort = [](Value a) -> bool {
+    auto op = a.getDefiningOp();
+    return !op || isa<InstanceOp>(op);
+  };
+
+  // If the source or destination is a port or instance port, then an optional
+  // outer flip, indicating the direction (input or output), should be stripped
+  // for type checking.
+  if (isPortOrInstancePort(connect.dest()))
+    if (auto destTypeFlip = destType.dyn_cast<FlipType>())
+      destType = destTypeFlip.getElementType();
+  if (isPortOrInstancePort(connect.src()))
+    if (auto srcTypeFlip = srcType.dyn_cast<FlipType>())
+      srcType = srcTypeFlip.getElementType();
+
   // Analog types cannot be connected and must be attached.
   if (destType.isa<AnalogType>() || srcType.isa<AnalogType>())
     return connect.emitError("analog types may not be connected");
@@ -905,8 +920,7 @@ static LogicalResult verifyConnectOp(ConnectOp connect) {
   // Destination and source types must be equivalent.
   if (!areTypesEquivalent(destType, srcType))
     return connect.emitError("type mismatch between destination ")
-           << destType.getPassiveType() << " and source "
-           << srcType.getPassiveType();
+           << destType << " and source " << srcType;
 
   // Destination bitwidth must be greater than or equal to source bitwidth.
   int32_t destWidth = destType.getPassiveType().getBitWidthOrSentinel();
@@ -916,24 +930,28 @@ static LogicalResult verifyConnectOp(ConnectOp connect) {
            << destWidth << " is not greater than or equal to source width "
            << srcWidth;
 
-  // Check that the LHS is a valid sink and RHS is a valid source.
-  if (isBundleType(destType)) {
-    // For bulk connections, we need to make sure that the connection is
-    // unambiguous by making sure that both sides are not duplex types. TODO: we
-    // are not checking that the connections are recursively well formed when
-    // neither is a duplex type.
-    if (isDuplexValue(connect.dest()) && isDuplexValue(connect.src())) {
-      return connect.emitOpError() << "ambiguous bulk connection between two "
-                                   << "duplex values of bundle type";
+  // TODO: Relax this to allow reads from output ports,
+  // instance/memory input ports.
+  if (foldFlow(connect.src()) == flow::Sink) {
+    // A sink that is a port output or instance input used as a source is okay.
+    auto kind = getDeclarationKind(connect.src());
+    if (kind != kind::Port && kind != kind::Instance) {
+      auto diag =
+          connect.emitOpError()
+          << "has invalid flow: the right-hand-side has sink flow and "
+             "is not an output port or instance input (expected source "
+             "flow, duplex flow, an output port, or an instance input).";
+      return diag.attachNote(connect.src().getLoc())
+             << "the right-hand-side was defined here.";
     }
-  } else {
-    // This is a mono-connection. Check that the LHS side is a sink or duplex.
-    // Since we can read from a either a passive or flip type, we don't need to
-    // check anything on the RHS.
-    if (destType.isPassive() && !isDuplexValue(connect.dest())) {
-      return connect.emitOpError("connection destination must be a non-passive "
-                                 "type or a duplex value");
-    }
+  }
+
+  if (foldFlow(connect.dest()) == flow::Source) {
+    auto diag = connect.emitOpError()
+                << "has invalid flow: the left-hand-side has source flow "
+                   "(expected sink or duplex flow).";
+    return diag.attachNote(connect.dest().getLoc())
+           << "the left-hand-side was defined here.";
   }
 
   return success();

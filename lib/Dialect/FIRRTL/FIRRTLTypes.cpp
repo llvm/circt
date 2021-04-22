@@ -343,18 +343,11 @@ static bool areBundleElementsEquivalent(BundleType::BundleElement destElement,
   return areTypesEquivalent(destElement.type, srcElement.type);
 }
 
-/// Returns whether the two types are equivalent. See the FIRRTL spec for the
-/// full definition of type equivalence. This predicate differs from the spec in
-/// that it only compares passive types. Because of how the FIRRTL dialect uses
-/// flip types in module ports and aggregates, this definition, unlike the spec,
-/// ignores flips.
+/// Returns whether the two types are equivalent.  This implements the exact
+/// definition of type equivalence in the FIRRTL spec.  If the types being
+/// compared have any outer flips that encode FIRRTL module directions (input or
+/// output), these should be stripped before using this method.
 bool firrtl::areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType) {
-  // Ensure we are comparing passive types.
-  if (!destType.isPassive())
-    destType = destType.getPassiveType();
-  if (!srcType.isPassive())
-    srcType = srcType.getPassiveType();
-
   // Reset types can be driven by UInt<1>, AsyncReset, or Reset types.
   if (destType.isa<ResetType>())
     return srcType.isResetType();
