@@ -229,9 +229,10 @@ void firrtl::getModulePortInfo(Operation *op,
                                SmallVectorImpl<ModulePortInfo> &results) {
   auto argTypes = getModuleType(op).getInputs();
 
+  auto argAttr = getFIRRTLModuleArgNameAttr(op);
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     auto type = argTypes[i].cast<FIRRTLType>();
-    results.push_back({getFIRRTLModuleArgNameAttr(op, i), type});
+    results.push_back({argAttr[i].cast<StringAttr>(), type});
   }
 }
 
@@ -282,6 +283,12 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
 
   if (annotations)
     result.addAttribute("annotations", annotations);
+  if (result.attributes.get("argNames"))
+    return;
+  SmallVector<Attribute> argNames;
+  for (size_t i = 0, e = ports.size(); i != e; i++)
+    argNames.push_back(builder.getStringAttr(""));
+  result.addAttribute("argNames", builder.getArrayAttr(argNames));
 }
 
 // Return the port with the specified name.
@@ -289,8 +296,9 @@ BlockArgument FModuleOp::getPortArgument(StringAttr name) {
   auto *body = getBodyBlock();
 
   // FIXME: This is O(n)!
+  auto argAttr = getFIRRTLModuleArgNameAttr(*this);
   for (unsigned i = 0, e = body->getNumArguments(); i < e; ++i) {
-    if (getFIRRTLModuleArgNameAttr(*this, i) == name)
+    if (argAttr[i].cast<StringAttr>() == name)
       return body->getArgument(i);
   }
 
@@ -319,11 +327,12 @@ static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
   SmallString<32> resultNameStr;
 
   p << '(';
+  auto argAttr = getFIRRTLModuleArgNameAttr(op);
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     if (i > 0)
       p << ", ";
 
-    auto argName = getFIRRTLModuleArgName(op, i);
+    auto argName = argAttr[i].cast<StringAttr>().getValue();
     Value argumentValue;
     if (!isExternal) {
       // Get the printed format for the argument name.

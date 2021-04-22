@@ -133,7 +133,6 @@ private:
   Value getBundleLowering(Value oldValue, StringRef flatField);
   void getAllBundleLowerings(Value oldValue, SmallVectorImpl<Value> &results);
 
-  Identifier getArgAttrName(unsigned newArgNumber);
 
   MLIRContext *context;
 
@@ -813,10 +812,10 @@ Value TypeLoweringVisitor::addArg(FModuleOp module, Type type,
 
   // Append the new argument.
   auto newValue = body->addArgument(type);
-  if (hasFIRRTLModuleArgNameAttr(module)) {
 
     // Save the name attribute for the new argument.
-    StringAttr nameAttr = getFIRRTLModuleArgNameAttr(module, oldArgNumber);
+    StringAttr nameAttr =
+        getFIRRTLModuleArgNameAttr(module)[oldArgNumber].cast<StringAttr>();
     Attribute newArg;
     if (!nameAttr.getValue().empty()) {
       SmallString<16> newName(nameAttr.getValue());
@@ -825,7 +824,7 @@ Value TypeLoweringVisitor::addArg(FModuleOp module, Type type,
     } else
       newArg = builder->getStringAttr("");
     newArgNames.push_back(newArg);
-  }
+  
 
   return newValue;
 }
@@ -874,11 +873,6 @@ void TypeLoweringVisitor::getAllBundleLowerings(
       .Default([&](auto) {});
 }
 
-Identifier TypeLoweringVisitor::getArgAttrName(unsigned newArgNumber) {
-  SmallString<16> argNameBuffer;
-  mlir::impl::getArgAttrName(newArgNumber, argNameBuffer);
-  return Identifier::get(argNameBuffer, context);
-}
 
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure

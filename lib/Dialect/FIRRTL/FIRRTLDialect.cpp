@@ -22,14 +22,8 @@ using namespace firrtl;
 //===----------------------------------------------------------------------===//
 
 // If the specified module contains the argNames attribute, return it.
-StringAttr firrtl::getFIRRTLModuleArgNameAttr(Operation *module, size_t argNo) {
-  if (!hasFIRRTLModuleArgNameAttr(module))
-    return StringAttr();
-  return module->getAttrOfType<ArrayAttr>("argNames")[argNo].cast<StringAttr>();
-}
-
-bool firrtl::hasFIRRTLModuleArgNameAttr(Operation *module) {
-  return module->getAttrOfType<ArrayAttr>("argNames") != nullptr;
+ArrayAttr firrtl::getFIRRTLModuleArgNameAttr(Operation *module) {
+  return module->getAttrOfType<ArrayAttr>("argNames");
 }
 
 namespace {
@@ -109,12 +103,14 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
     // attributes for them.  If so, use that as the name.
     auto *parentOp = block->getParentOp();
 
-    if (hasFIRRTLModuleArgNameAttr(parentOp))
-      for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
-        StringAttr str = getFIRRTLModuleArgNameAttr(parentOp, i);
-        if (!str.getValue().empty())
-          setNameFn(block->getArgument(i), str.getValue());
-      }
+    auto argAttr = getFIRRTLModuleArgNameAttr(parentOp);
+    for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
+      StringAttr str =
+          argAttr[i]
+              .cast<StringAttr>();
+      if (!str.getValue().empty())
+        setNameFn(block->getArgument(i), str.getValue());
+    }
   }
 };
 } // end anonymous namespace

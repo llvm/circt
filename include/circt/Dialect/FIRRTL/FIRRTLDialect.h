@@ -24,16 +24,9 @@ class FIRRTLType;
 
 /// If the specified module has an argnames attribute, return its
 /// value.
-StringAttr getFIRRTLModuleArgNameAttr(Operation *module, size_t argNo);
+ArrayAttr getFIRRTLModuleArgNameAttr(Operation *module);
 
-bool hasFIRRTLModuleArgNameAttr(Operation *module);
 
-static inline StringRef getFIRRTLModuleArgName(Operation *module,
-                                               size_t argNo) {
-  return hasFIRRTLModuleArgNameAttr(module)
-             ? getFIRRTLModuleArgNameAttr(module, argNo).getValue()
-             : "";
-}
 } // namespace firrtl
 } // namespace circt
 
