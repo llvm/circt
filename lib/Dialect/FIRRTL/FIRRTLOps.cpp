@@ -44,6 +44,42 @@ bool firrtl::isDuplexValue(Value val) {
       .Default([](auto) { return false; });
 }
 
+flow::Flow firrtl::foldFlow(Value val, flow::Flow accumulatedFlow) {
+  auto swap = [&accumulatedFlow]() -> flow::Flow {
+    switch (accumulatedFlow) {
+    case flow::Source:
+      return flow::Sink;
+    case flow::Sink:
+      return flow::Source;
+    case flow::Duplex:
+      return flow::Duplex;
+    }
+  };
+
+  Operation *op = val.getDefiningOp();
+  if (!op) {
+    if (val.getType().isa<FlipType>())
+      return swap();
+    return accumulatedFlow;
+  }
+
+  return TypeSwitch<Operation *, flow::Flow>(op)
+      .Case<SubfieldOp>([&](auto op) {
+        return foldFlow(op.input(),
+                        op.isFieldFlipped() ? swap() : accumulatedFlow);
+      })
+      .Case<SubindexOp, SubaccessOp>(
+          [&](auto op) { return foldFlow(op.input(), accumulatedFlow); })
+      // Registers and Wires are always Duplex.
+      .Case<RegOp, RegResetOp, WireOp>([](auto) { return flow::Duplex; })
+      .Case<InstanceOp>([&](auto) {
+        return val.getType().isa<FlipType>() ? swap() : accumulatedFlow;
+      })
+      .Case<MemOp>([&](auto op) { return swap(); })
+      // Anything else acts like a universal source.
+      .Default([&](auto) { return accumulatedFlow; });
+}
+
 //===----------------------------------------------------------------------===//
 // VERIFY_RESULT_TYPE / VERIFY_RESULT_TYPE_RET
 //===----------------------------------------------------------------------===//
