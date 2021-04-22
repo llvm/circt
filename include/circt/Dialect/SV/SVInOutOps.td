@@ -48,7 +48,6 @@ def WireOp : SVOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>,
   ];
 
   let assemblyFormat = "custom<ImplicitSSAName>(attr-dict) `:` type($result)";
-  let hasCanonicalizeMethod = true;
 
   let extraClassDeclaration = [{
     Type getElementType() {

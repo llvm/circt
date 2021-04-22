@@ -812,23 +812,6 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     setNameFn(getResult(), nameAttr.getValue());
 }
 
-// If this wire is only written to, delete the wire and all writers.
-LogicalResult WireOp::canonicalize(WireOp op, PatternRewriter &rewriter) {
-  // Check that all operations on the wire are sv.connects. All other wire
-  // operations will have been handled by other canonicalization.
-  for (auto &use : op.getResult().getUses())
-    if (!isa<ConnectOp>(use.getOwner()))
-      return failure();
-
-  // Remove all uses of the wire.
-  for (auto &use : make_early_inc_range(op.getResult().getUses()))
-    rewriter.eraseOp(use.getOwner());
-
-  // Remove the wire.
-  rewriter.eraseOp(op);
-  return success();
-}
-
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
 static LogicalResult verifyWireOp(WireOp op) {
   if (!isa<rtl::RTLModuleOp>(op->getParentOp()))
