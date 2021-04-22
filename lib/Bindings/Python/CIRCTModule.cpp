@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "DialectModules.h"
+#include "SupportModule.h"
 
 #include "circt-c/Dialect/Comb.h"
 #include "circt-c/Dialect/ESI.h"
@@ -70,4 +71,6 @@ PYBIND11_MODULE(_circt, m) {
   circt::python::populateDialectESISubmodule(esi);
   py::module msft = m.def_submodule("msft", "MSFT API");
   circt::python::populateDialectMSFTSubmodule(msft);
+  py::module support = m.def_submodule("_support", "Support API");
+  circt::python::populateSupportSubmodule(support);
 }
