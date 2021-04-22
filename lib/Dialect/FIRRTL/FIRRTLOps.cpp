@@ -995,6 +995,30 @@ FIRRTLType SubfieldOp::getResultType(Type inType, StringAttr fieldName,
   return {};
 }
 
+bool SubfieldOp::isFieldFlipped() {
+  auto fieldname = this->fieldname();
+
+  auto handleBundle = [&](BundleType a) -> bool {
+    auto b = a.getElement(fieldname);
+    if (!b) {
+      emitOpError() << "unknown field '" << fieldname << "' in bundle type "
+                    << a;
+      return false;
+    };
+    return b.getValue().type.isa<FlipType>();
+  };
+
+  return TypeSwitch<Type, bool>(this->input().getType())
+      .Case<BundleType>([&](auto a) { return handleBundle(a); })
+      .Case<FlipType>([&](auto a) {
+        return handleBundle(a.getElementType().template dyn_cast<BundleType>());
+      })
+      .Default([&](auto) {
+        emitOpError() << "subfield requires bundle operand";
+        return false;
+      });
+}
+
 FIRRTLType SubindexOp::getResultType(FIRRTLType inType, unsigned fieldIdx,
                                      Location loc) {
   if (auto vectorType = inType.dyn_cast<FVectorType>()) {
