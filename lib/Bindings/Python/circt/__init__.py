@@ -3,4 +3,4 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 # Simply a wrapper around the extension module of the same name.
-from  _circt import *
+from _circt import *
