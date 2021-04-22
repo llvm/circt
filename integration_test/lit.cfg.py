@@ -37,8 +37,7 @@ config.substitutions.append(('%shlibdir', config.circt_shlib_dir))
 config.substitutions.append(('%INC%', config.circt_include_dir))
 config.substitutions.append(('%PYTHON%', config.python_executable))
 
-llvm_config.with_system_environment(
-    ['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP'])
+llvm_config.with_system_environment(['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP'])
 
 llvm_config.use_default_substitutions()
 
@@ -50,8 +49,8 @@ if config.timeout is not None and config.timeout != "":
 # subdirectories contain auxiliary inputs for various tests in their parent
 # directories.
 config.excludes = [
-  'Inputs', 'CMakeLists.txt', 'README.txt', 'LICENSE.txt', 'lit.cfg.py',
-  'lit.local.cfg.py'
+    'Inputs', 'CMakeLists.txt', 'README.txt', 'LICENSE.txt', 'lit.cfg.py',
+    'lit.local.cfg.py'
 ]
 
 # test_source_root: The root path where tests are located.
@@ -68,16 +67,15 @@ llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
 if config.bindings_python_enabled:
   llvm_config.with_environment('PYTHONPATH', [
       os.path.join(config.llvm_obj_root, 'python'),
-      os.path.join(config.circt_obj_root, 'python')],
-      append_path=True)
+      os.path.join(config.circt_obj_root, 'python')
+  ],
+                               append_path=True)
 
-tool_dirs = [config.circt_tools_dir,
-             config.mlir_tools_dir, config.llvm_tools_dir]
+tool_dirs = [
+    config.circt_tools_dir, config.mlir_tools_dir, config.llvm_tools_dir
+]
 tools = [
-    'circt-opt',
-    'circt-translate',
-    'firtool',
-    'circt-rtl-sim.py',
+    'circt-opt', 'circt-translate', 'firtool', 'circt-rtl-sim.py',
     'esi-cosim-runner.py'
 ]
 
@@ -93,8 +91,7 @@ if config.verilator_path != "":
   tools.append('verilator')
   config.available_features.add('verilator')
   config.available_features.add('rtl-sim')
-  llvm_config.with_environment(
-      'VERILATOR_PATH', config.verilator_path)
+  llvm_config.with_environment('VERILATOR_PATH', config.verilator_path)
 
 # Enable Questa if it has been detected.
 if config.quartus_path != "":
@@ -112,8 +109,8 @@ if config.vivado_path != "":
   config.available_features.add('vivado')
   config.substitutions.append(
       ('%ieee-sim', os.path.join(config.vivado_path, "xsim")))
-  config.substitutions.append(
-      ('%xsim%', os.path.join(config.vivado_path, "xsim")))
+  config.substitutions.append(('%xsim%', os.path.join(config.vivado_path,
+                                                      "xsim")))
 
 # Enable Questa if it has been detected.
 if config.questa_path != "":
@@ -121,8 +118,8 @@ if config.questa_path != "":
   config.available_features.add('ieee-sim')
   config.available_features.add('rtl-sim')
   if 'LM_LICENSE_FILE' in os.environ:
-    llvm_config.with_environment(
-        'LM_LICENSE_FILE', os.environ['LM_LICENSE_FILE'])
+    llvm_config.with_environment('LM_LICENSE_FILE',
+                                 os.environ['LM_LICENSE_FILE'])
 
   tool_dirs.append(config.questa_path)
   tools.append('vlog')
@@ -135,12 +132,15 @@ if config.questa_path != "":
 
 ieee_sims = list(filter(lambda x: x[0] == '%ieee-sim', config.substitutions))
 if len(ieee_sims) > 1:
-  warnings.warn(f"You have multiple ieee-sim simulators configured, choosing: {ieee_sims[-1][1]}")
+  warnings.warn(
+      f"You have multiple ieee-sim simulators configured, choosing: {ieee_sims[-1][1]}"
+  )
 
 # Enable ESI cosim tests if they have been built.
 if config.esi_cosim_path != "":
   config.available_features.add('esi-cosim')
-  config.substitutions.append(('%ESIINC%', f'{config.circt_include_dir}/circt/Dialect/ESI/'))
+  config.substitutions.append(
+      ('%ESIINC%', f'{config.circt_include_dir}/circt/Dialect/ESI/'))
   config.substitutions.append(('%ESICOSIM%', f'{config.esi_cosim_path}'))
 
 # Enable ESI's Capnp tests if they're supported.

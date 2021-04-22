@@ -11,15 +11,13 @@ import circt
 import sys
 import os
 
-class System (CppSystem):
+
+class System(CppSystem):
 
   mod = None
   passes = [
-      "lower-esi-ports",
-      "lower-esi-to-physical",
-      "lower-esi-to-rtl",
-      "rtl-legalize-names",
-      "rtl.module(rtl-cleanup)"
+      "lower-esi-ports", "lower-esi-to-physical", "lower-esi-to-rtl",
+      "rtl-legalize-names", "rtl.module(rtl-cleanup)"
   ]
   passed = False
 

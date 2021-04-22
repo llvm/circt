@@ -10,6 +10,7 @@
 
 #include "circt-c/Dialect/Comb.h"
 #include "circt-c/Dialect/ESI.h"
+#include "circt-c/Dialect/MSFT.h"
 #include "circt-c/Dialect/RTL.h"
 #include "circt-c/Dialect/SV.h"
 #include "circt-c/ExportVerilog.h"
@@ -45,6 +46,10 @@ PYBIND11_MODULE(_circt, m) {
         mlirDialectHandleRegisterDialect(esi, context);
         mlirDialectHandleLoadDialect(esi, context);
 
+        MlirDialectHandle msft = mlirGetDialectHandle__msft__();
+        mlirDialectHandleRegisterDialect(msft, context);
+        mlirDialectHandleLoadDialect(msft, context);
+
         MlirDialectHandle rtl = mlirGetDialectHandle__rtl__();
         mlirDialectHandleRegisterDialect(rtl, context);
         mlirDialectHandleLoadDialect(rtl, context);
@@ -63,4 +68,6 @@ PYBIND11_MODULE(_circt, m) {
 
   py::module esi = m.def_submodule("_esi", "ESI API");
   circt::python::populateDialectESISubmodule(esi);
+  py::module msft = m.def_submodule("msft", "MSFT API");
+  circt::python::populateDialectMSFTSubmodule(msft);
 }
