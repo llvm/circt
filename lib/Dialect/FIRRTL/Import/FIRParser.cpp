@@ -1055,18 +1055,40 @@ private:
   /// a passive-typed value and return that.
   Value convertToPassive(Value input, Location loc);
 
+  /// Attach invalid values to every element of the value.
+  void emitInvalidate(Value val, Location loc, bool isDuplex) {
+    // Invalidate doesn't match the semantics of connect or partial connect, and
+    // so we have to manually do something like expand-connects. Invalid value
+    // needs to be connected to every field of a bundle which is flip, or
+    // every field in a duplex operation.
+    auto invalidType = val.getType().cast<FIRRTLType>();
+    if (invalidType.isa<AnalogType>()) {
+      // Analog types must be 'attach'ed, not connected.
+      auto invalidVal =
+          builder.create<InvalidValuePrimOp>(loc, invalidType.getPassiveType());
+      builder.create<AttachOp>(loc, ValueRange{val, invalidVal});
+    } else if (auto bundleType = invalidType.dyn_cast<BundleType>()) {
+      // We need to recurse into bundle types without an outer flip.  They could
+      // have inner flips or analog types.
+      for (auto element : bundleType.getElements()) {
+        auto elementVal = builder.create<SubfieldOp>(loc, val, element.name);
+        emitInvalidate(elementVal, loc, isDuplex);
+      }
+    } else if (invalidType.isa<FlipType>() || isDuplex) {
+      // If there is an outer flip type, or it is a duplex type, we can emit
+      // an invalid connect. This might be a bulk connect to a bundle.
+      auto invalidVal =
+          builder.create<InvalidValuePrimOp>(loc, invalidType.getPassiveType());
+      builder.create<ConnectOp>(loc, val, invalidVal);
+    }
+  }
+
   // The FIRRTL specification describes Invalidates as a statement with
   // implicit connect semantics.  The FIRRTL dialect models it as a primitive
   // that returns an "Invalid Value", followed by an explicit connect to make
   // the representation simpler and more consistent.
   void emitInvalidate(Value val, Location loc) {
-    auto invalidType = val.getType().cast<FIRRTLType>();
-    auto invalidVal =
-        builder.create<InvalidValuePrimOp>(loc, invalidType.getPassiveType());
-    if (invalidType.isa<AnalogType>())
-      builder.create<AttachOp>(loc, ValueRange{val, invalidVal});
-    else if (!invalidType.isPassive())
-      builder.create<ConnectOp>(loc, val, invalidVal);
+    emitInvalidate(val, loc, isDuplexValue(val));
   }
 
   // Exp Parsing
