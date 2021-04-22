@@ -104,6 +104,11 @@ class InstanceBuilder:
     # If we fell through to here, the name isn't an arg.
     raise AttributeError(f"unknown input port name {name}")
 
+  @property
+  def operation(self):
+    """Get the operation associated with this builder."""
+    return self.__instance__.operation
+
 
 class RTLModuleOp:
   """Specialization for the RTL module op class."""
