@@ -141,7 +141,7 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
   }];
 }
 
-def NodeOp : FIRRTLOp<"node", [NoSideEffect, SameOperandsAndResultType]> {
+def NodeOp : FIRRTLOp<"node", [SameOperandsAndResultType]> {
   let summary = "No-op to name a value";
   let description = [{
     A node is simply a named intermediate value in a circuit. The node must

@@ -67,8 +67,8 @@ def MuxSameCondHigh : Pat<
 
 // node(x, name, {}) -> x
 def EmptyNode : Pat<
-  (NodeOp $x, $name, $attrs),
+  (NodeOp $x, $name, $annotations),
   (replaceWithValue $x),
-  [(EmptyAttrDict $attrs)]>;
+  [(EmptyAttrDict $annotations)]>;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD
