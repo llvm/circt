@@ -99,7 +99,6 @@ class InstanceBuilder:
       index = self.__operand_indices__[name]
       backedge = self.__backedges__[index]
       backedge.set_value(value)
-      # self.__instance__.operands[index] = value
       return
 
     # If we fell through to here, the name isn't an arg.

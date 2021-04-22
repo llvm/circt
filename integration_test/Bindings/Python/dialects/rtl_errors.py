@@ -38,12 +38,6 @@ with Context() as ctx, Location.unknown():
     with InsertionPoint(instance_builder_tests.add_entry_block()):
       # CHECK: unknown input port name b
       try:
-        inst1 = one_input.create("inst1", {"b": None})
-      except AttributeError as e:
-        print(e)
-
-      # CHECK: unknown input port name b
-      try:
         inst2 = one_input.create("inst2")
         inst2.b = None
       except AttributeError as e:
