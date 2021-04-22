@@ -1062,24 +1062,20 @@ private:
     // needs to be connected to every field of a bundle which is flip, or
     // every field in a duplex operation.
     auto invalidType = val.getType().cast<FIRRTLType>();
-    if (invalidType.isa<AnalogType>()) {
-      // Analog types must be 'attach'ed, not connected.
-      auto invalidVal =
-          builder.create<InvalidValuePrimOp>(loc, invalidType.getPassiveType());
-      builder.create<AttachOp>(loc, ValueRange{val, invalidVal});
-    } else if (auto bundleType = invalidType.dyn_cast<BundleType>()) {
+    if (auto bundleType = invalidType.dyn_cast<BundleType>()) {
       // We need to recurse into bundle types without an outer flip.  They could
       // have inner flips or analog types.
       for (auto element : bundleType.getElements()) {
-        auto elementVal = builder.create<SubfieldOp>(loc, val, element.name);
-        emitInvalidate(elementVal, loc, isDuplex);
+        emitInvalidate(builder.create<SubfieldOp>(loc, val, element.name), loc,
+                       isDuplex);
       }
-    } else if (invalidType.isa<FlipType>() || isDuplex) {
+    } else if (invalidType.isa<FlipType>() ||
+               (isDuplex && !invalidType.isa<AnalogType>())) {
       // If there is an outer flip type, or it is a duplex type, we can emit
       // an invalid connect. This might be a bulk connect to a bundle.
-      auto invalidVal =
-          builder.create<InvalidValuePrimOp>(loc, invalidType.getPassiveType());
-      builder.create<ConnectOp>(loc, val, invalidVal);
+      builder.create<ConnectOp>(loc, val,
+                                builder.create<InvalidValuePrimOp>(
+                                    loc, invalidType.getPassiveType()));
     }
   }
 

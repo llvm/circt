@@ -96,8 +96,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NEXT: firrtl.connect %auto, [[INV]] : !firrtl.flip<uint<1>>, !firrtl.uint<1>
     auto is invalid
 
-    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue : !firrtl.analog<1>
-    ; CHECK-NEXT: firrtl.attach %a1, [[INV]] : !firrtl.analog<1>, !firrtl.analog<1>
+    ; CHECK-NOT: firrtl.attach %a1
     a1 is invalid
 
     ; CHECK: firrtl.skip
@@ -710,8 +709,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
     ; CHECK: firrtl.connect [[WIRE2_X_A]], [[INV]]
     ; CHECK: [[WIRE2_X_B:%.+]] = firrtl.subfield [[WIRE2_X]]("b")
-    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
-    ; CHECK: firrtl.attach [[WIRE2_X_B]], [[INV]]
+    ; CHECK-NOT: firrtl.attach [[WIRE2_X_B]], [[INV]]
     wire wire2 : {x : {flip a : UInt<1>, flip b: Analog<1> } }
     wire2 is invalid
 
