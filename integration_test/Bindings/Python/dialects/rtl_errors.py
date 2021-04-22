@@ -55,12 +55,3 @@ with Context() as ctx, Location.unknown():
         inst3.b
       except AttributeError as e:
         print(e)
-
-      # CHECK: instance is not yet fully-defined
-      try:
-        inst5 = input_output.create("inst4")
-        inst6 = input_output.create("inst5")
-        inst5.a = inst6.b
-        inst6.a = inst5.b
-      except AttributeError as e:
-        print(e)

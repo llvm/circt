@@ -75,6 +75,9 @@ with Context() as ctx, Location.unknown():
       inst4 = two_inputs.create("inst4", {"a": inst1.a})
       inst4.b = inst1.a
 
+      inst5 = op.create("inst5")
+      inst5.my_input = inst5.my_output
+
       rtl.OutputOp([])
 
   m.operation.print()
