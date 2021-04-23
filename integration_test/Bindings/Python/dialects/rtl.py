@@ -42,8 +42,6 @@ with Context() as ctx, Location.unknown():
       a, b = swap(a, b)
       return a, b
 
-    # CHECK-LABEL: rtl.module @instance_builder_tests
-    instance_builder_tests = rtl.RTLModuleOp(name="instance_builder_tests")
     one_input = rtl.RTLModuleOp(
         name="one_input",
         input_ports=[("a", i32)],
@@ -61,7 +59,7 @@ with Context() as ctx, Location.unknown():
             [rtl.ConstantOp(i32, IntegerAttr.get(i32, 46)).result]),
     )
 
-    with InsertionPoint(instance_builder_tests.add_entry_block()):
+    def instance_builder_body(module):
       # CHECK: %[[INST1_RESULT:.+]] = rtl.instance "inst1" @one_output()
       inst1 = one_output.create("inst1")
 
@@ -70,16 +68,21 @@ with Context() as ctx, Location.unknown():
 
       # COM: CHECK-NOT: rtl.instance "inst3"
       # COM: handle un-resolved backedges.
-      # inst3 = two_inputs.create("inst3", {"a": inst1.a})
+      inst3 = two_inputs.create("inst3", {"a": inst1.a})
 
       # CHECK: rtl.instance "inst4" @two_inputs(%[[INST1_RESULT]], %[[INST1_RESULT]])
       inst4 = two_inputs.create("inst4", {"a": inst1.a})
       inst4.b = inst1.a
 
+      # CHECK: %[[INST5_RESULT:.+]] = rtl.instance "inst5" @MyWidget(%[[INST5_RESULT]])
       inst5 = op.create("inst5")
       inst5.my_input = inst5.my_output
 
       rtl.OutputOp([])
+
+    # CHECK-LABEL: rtl.module @instance_builder_tests
+    instance_builder_tests = rtl.RTLModuleOp(name="instance_builder_tests",
+                                             body_builder=instance_builder_body)
 
   m.operation.print()
 
