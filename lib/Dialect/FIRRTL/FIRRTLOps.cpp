@@ -80,6 +80,20 @@ flow::Flow firrtl::foldFlow(Value val, flow::Flow accumulatedFlow) {
       .Default([&](auto) { return accumulatedFlow; });
 }
 
+// TODO: This is doing the same walk as foldFlow.  These two functions can be
+// combined and return a (flow, kind) product.
+kind::Kind firrtl::getDeclarationKind(Value val) {
+  Operation *op = val.getDefiningOp();
+  if (!op)
+    return kind::Port;
+
+  return TypeSwitch<Operation *, kind::Kind>(op)
+      .Case<InstanceOp>([](auto) { return kind::Instance; })
+      .Case<SubfieldOp, SubindexOp, SubaccessOp>(
+          [](auto op) { return getDeclarationKind(op.input()); })
+      .Default([](auto) { return kind::Other; });
+}
+
 //===----------------------------------------------------------------------===//
 // VERIFY_RESULT_TYPE / VERIFY_RESULT_TYPE_RET
 //===----------------------------------------------------------------------===//

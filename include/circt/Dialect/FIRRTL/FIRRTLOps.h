@@ -72,7 +72,7 @@ bool isBundleType(Type type);
 bool isDuplexValue(Value val);
 
 namespace flow {
-  enum Flow { Source, Sink, Duplex };
+enum Flow { Source, Sink, Duplex };
 }
 
 /// Compute the flow for a Value, \p val, as determined by the FIRRTL
@@ -87,6 +87,12 @@ namespace flow {
 /// should normally \a not have to change this from its default of \p
 /// flow::Source.
 flow::Flow foldFlow(Value val, flow::Flow accumulatedFlow = flow::Source);
+
+namespace kind {
+enum Kind { Port, Instance, Other };
+}
+
+kind::Kind getDeclarationKind(Value val);
 
 } // namespace firrtl
 } // namespace circt
