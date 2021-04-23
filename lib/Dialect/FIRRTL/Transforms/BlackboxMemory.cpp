@@ -154,10 +154,10 @@ createBlackboxModuleForMem(MemOp op,
   OpBuilder builder(op->getContext());
 
   // The module's name is the name of the memory postfixed with "_ext".
-  StringRef memName = "mem";
-  if (op.name().hasValue())
-    memName = op.name().getValue();
-  std::string extName = memName.str() + "_ext";
+  auto memName = op.name().str();
+  if (memName.empty())
+    memName = "mem";
+  std::string extName = memName + "_ext";
 
   // Create the blackbox external module.
   auto extModuleOp = builder.create<FExtModuleOp>(
@@ -201,12 +201,10 @@ createWrapperModule(MemOp op, const MemoryPortList &memPorts,
                     SmallVectorImpl<ModulePortInfo> &modPorts) {
   OpBuilder builder(op->getContext());
 
-  // Get the name of the memory.  The wrapper module name matched the external
-  // module, but without the "_ext" name.  In the event of a name collision,
-  // matches the memory name over the blackbox name.
-  StringRef memName = "mem";
-  if (op.name().hasValue())
-    memName = op.name().getValue();
+  // The wrapper module's name is the name of the memory.
+  auto memName = op.name();
+  if (memName.empty())
+    memName = "mem";
 
   // Create a wrapper module with the same type as the memory
   modPorts.reserve(op.getResults().size());

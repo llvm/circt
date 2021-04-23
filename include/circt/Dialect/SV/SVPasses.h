@@ -13,6 +13,8 @@
 #ifndef CIRCT_DIALECT_SV_SVPASSES_H
 #define CIRCT_DIALECT_SV_SVPASSES_H
 
+#include "mlir/Pass/Pass.h"
+
 #include <memory>
 
 namespace mlir {

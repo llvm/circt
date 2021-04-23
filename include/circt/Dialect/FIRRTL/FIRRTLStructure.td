@@ -11,8 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 def CircuitOp : FIRRTLOp<"circuit",
-      [IsolatedFromAbove, SymbolTable,
-       SingleBlockImplicitTerminator<"DoneOp">]> {
+      [IsolatedFromAbove, SymbolTable, SingleBlock, NoTerminator,
+       NoRegionArguments]> {
   let summary = "FIRRTL Circuit";
   let description = [{
     The "firrtl.circuit" operation represents an overall Verilog circuit,
@@ -33,7 +33,7 @@ def CircuitOp : FIRRTLOp<"circuit",
     OpBuilder getBodyBuilder() {
       assert(!body().empty() && "Unexpected empty 'body' region.");
       Block &bodyBlock = body().front();
-      return OpBuilder(&bodyBlock, std::prev(bodyBlock.end()));
+      return OpBuilder::atBlockEnd(&bodyBlock);
     }
 
     /// Return body of this circuit.
@@ -45,14 +45,13 @@ def CircuitOp : FIRRTLOp<"circuit",
     Operation *getMainModule();
   }];
 
-  let printer = "return ::print(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
+  let assemblyFormat = "$name attr-dict-with-keyword $body";
   let verifier = "return ::verifyCircuitOp(*this);";
 }
 
 def FModuleOp : FIRRTLOp<"module",
-      [IsolatedFromAbove, FunctionLike, Symbol,
-       SingleBlockImplicitTerminator<"DoneOp">]> {
+      [IsolatedFromAbove, FunctionLike, Symbol, SingleBlock, NoTerminator, 
+       HasParent<"CircuitOp">]> {
   let summary = "FIRRTL Module";
   let description = [{
     The "firrtl.module" operation represents a Verilog module, including a given
@@ -92,7 +91,7 @@ def FModuleOp : FIRRTLOp<"module",
     OpBuilder getBodyBuilder() {
       assert(!body().empty() && "Unexpected empty 'body' region.");
       Block &bodyBlock = body().front();
-      return OpBuilder(&bodyBlock, std::prev(bodyBlock.end()));
+      return OpBuilder::atBlockEnd(&bodyBlock);
     }
 
   private:
@@ -124,7 +123,7 @@ def FModuleOp : FIRRTLOp<"module",
 }
 
 def FExtModuleOp : FIRRTLOp<"extmodule",
-      [IsolatedFromAbove, FunctionLike, Symbol]> {
+      [IsolatedFromAbove, FunctionLike, Symbol, HasParent<"CircuitOp">]> {
   let summary = "FIRRTL extmodule";
   let description = [{
     The "firrtl.extmodule" operation represents an external reference to a
@@ -179,13 +178,4 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   let printer = "return ::print(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
   let verifier = "return ::verifyFExtModuleOp(*this);";
-}
-
-def DoneOp : FIRRTLOp<"done", [Terminator]> {
-  let summary = "FIRRTL termination operation";
-  let description = [{
-    "firrtl.done" marks the end of a region in the FIRRTL dialect.
-  }];
-
-  let arguments = (ins);
 }

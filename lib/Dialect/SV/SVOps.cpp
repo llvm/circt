@@ -85,11 +85,11 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
   SmallString<32> resultNameStr;
   llvm::raw_svector_ostream tmpStream(resultNameStr);
   p.printOperand(op->getResult(0), tmpStream);
-  auto expectedName = op->getAttrOfType<StringAttr>("name");
+  auto expectedName = op->getAttrOfType<StringAttr>("name").getValue();
   auto actualName = tmpStream.str().drop_front();
-  if (actualName != expectedName.getValue()) {
+  if (actualName != expectedName) {
     // Anonymous names are printed as digits, which is fine.
-    if (!expectedName.getValue().empty() || !isdigit(actualName[0]))
+    if (!expectedName.empty() || !isdigit(actualName[0]))
       namesDisagree = true;
   }
 
@@ -810,23 +810,6 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
   if (!nameAttr.getValue().empty())
     setNameFn(getResult(), nameAttr.getValue());
-}
-
-// If this wire is only written to, delete the wire and all writers.
-LogicalResult WireOp::canonicalize(WireOp op, PatternRewriter &rewriter) {
-  // Check that all operations on the wire are sv.connects. All other wire
-  // operations will have been handled by other canonicalization.
-  for (auto &use : op.getResult().getUses())
-    if (!isa<ConnectOp>(use.getOwner()))
-      return failure();
-
-  // Remove all uses of the wire.
-  for (auto &use : make_early_inc_range(op.getResult().getUses()))
-    rewriter.eraseOp(use.getOwner());
-
-  // Remove the wire.
-  rewriter.eraseOp(op);
-  return success();
 }
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.

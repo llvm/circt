@@ -300,9 +300,6 @@ void FIRRTLModuleLowering::runOnOperation() {
       continue;
     }
 
-    if (isa<DoneOp>(op))
-      continue;
-
     // Otherwise we don't know what this is.  We are just going to drop it,
     // but emit an error so the client has some chance to know that this is
     // going to happen.
@@ -829,8 +826,7 @@ void FIRRTLModuleLowering::lowerModuleBody(
   auto &oldBlockInstList = oldModule.getBodyBlock()->getOperations();
   auto &newBlockInstList = newModule.getBodyBlock()->getOperations();
   newBlockInstList.splice(Block::iterator(cursor), oldBlockInstList,
-                          oldBlockInstList.begin(),
-                          std::prev(oldBlockInstList.end()));
+                          oldBlockInstList.begin(), oldBlockInstList.end());
 
   // We are done with our cursor op.
   cursor.erase();
@@ -1705,9 +1701,9 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
-  StringRef memName = "mem";
-  if (op.name().hasValue())
-    memName = op.name().getValue();
+  auto memName = op.name();
+  if (memName.empty())
+    memName = "mem";
 
   // TODO: Remove this restriction and preserve aggregates in
   // memories.
@@ -1894,12 +1890,8 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   FlatSymbolRefAttr symbolAttr = builder.getSymbolRefAttr(newModule);
 
   // Create the new rtl.instance operation.
-  StringAttr instanceName;
-  if (oldInstance.name().hasValue())
-    instanceName = oldInstance.nameAttr();
-
   auto newInstance = builder.create<rtl::InstanceOp>(
-      resultTypes, instanceName, symbolAttr, operands, parameters);
+      resultTypes, oldInstance.nameAttr(), symbolAttr, operands, parameters);
 
   // Now that we have the new rtl.instance, we need to remap all of the users
   // of the outputs/results to the values returned by the instance.
