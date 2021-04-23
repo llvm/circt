@@ -12,12 +12,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "SVPassDetail.h"
-#include "circt/Dialect/SV/SVAnalyses.h"
-#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Support/ImplicitLocOpBuilder.h"
-#include "circt/Translation/ExportVerilog.h"
-#include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Process.h"
 
 using namespace circt;
@@ -65,9 +61,11 @@ void RTLGeneratorCalloutPass::runOnOperation() {
   OpBuilder builder(root->getContext());
   auto genMemExe = parseProgramArgs(genExecutable);
   // If cannot find the executable, then nothing to do, return.
-  if (!genMemExe)
+  if (!genMemExe) {
+    root.emitError("\n Error: Cannot find executable " + genExecutable +
+                   " in program path\n");
     return;
-  SmallVector<Operation *> opsToRemove;
+  }
   for (auto &op : llvm::make_early_inc_range(root.getBody()->getOperations())) {
     if (auto modGenOp = dyn_cast<RTLModuleGeneratedOp>(op)) {
       // Get the corresponding schema associated with this generated op.
@@ -116,7 +114,7 @@ void RTLGeneratorCalloutPass::runOnOperation() {
             /*SecondsToWait=*/0, /*MemoryLimit=*/0, &errMsg);
 
         // TODO: Silently ignore if any error occurs?
-        if (result >= 0) {
+        if (result == 0) {
           auto bufferRead = llvm::MemoryBuffer::getFile(genExecOutFileName);
           if (!bufferRead || !*bufferRead)
             return;
