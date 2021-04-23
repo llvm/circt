@@ -254,15 +254,14 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   // Record the names of the arguments if present.
   SmallString<8> attrNameBuf;
   // Record the names of the arguments if present.
-  SmallVector<Attribute> argNames;
+  SmallVector<Attribute, 4> argNames;
   for (size_t i = 0, e = ports.size(); i != e; ++i)
     if (ports[i].getName().empty())
       argNames.push_back(builder.getStringAttr(""));
     else
       argNames.push_back(ports[i].name);
 
-  if (!argNames.empty())
-    result.addAttribute("argNames", builder.getArrayAttr(argNames));
+  result.addAttribute("argNames", builder.getArrayAttr(argNames));
 
   result.addRegion();
 }
@@ -283,12 +282,6 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
 
   if (annotations)
     result.addAttribute("annotations", annotations);
-  if (result.attributes.get("argNames"))
-    return;
-  SmallVector<Attribute> argNames;
-  for (size_t i = 0, e = ports.size(); i != e; i++)
-    argNames.push_back(builder.getStringAttr(""));
-  result.addAttribute("argNames", builder.getArrayAttr(argNames));
 }
 
 // Return the port with the specified name.
@@ -447,26 +440,27 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
   auto *context = result.getContext();
 
   SmallVector<Attribute> argNames;
-  // Postprocess each of the arguments.  If there was no 'firrtl.name'
-  // attribute, and if the argument name was non-numeric, then add the
-  // firrtl.name attribute with the textual name from the IR.  The name in the
-  // text file is a load-bearing part of the IR, but we don't want the
-  // verbosity in dumps of including it explicitly in the attribute
-  // dictionary.
-  for (size_t i = 0, e = entryArgs.size(); i != e; ++i) {
+  if (!result.attributes.get("argNames")) {
+    // Postprocess each of the arguments.  If there was no argNames
+    // attribute, and if the argument name was non-numeric, then add the
+    // argNames attribute with the textual name from the IR.  The name in the
+    // text file is a load-bearing part of the IR, but we don't want the
+    // verbosity in dumps of including it explicitly in the attribute
+    // dictionary.
+    for (size_t i = 0, e = entryArgs.size(); i != e; ++i) {
 
-    auto &arg = entryArgs[i];
+      auto &arg = entryArgs[i];
 
-    // The name of an argument is of the form "%42" or "%id", and since
-    // parsing succeeded, we know it always has one character.
-    assert(arg.name.size() > 1 && arg.name[0] == '%' && "Unknown MLIR name");
-    if (isdigit(arg.name[1]))
-      continue;
-
-    argNames.push_back(StringAttr::get(context, arg.name.drop_front()));
-  }
-  if (!argNames.empty() && result.attributes.getNamed("argNames") == None)
+      // The name of an argument is of the form "%42" or "%id", and since
+      // parsing succeeded, we know it always has one character.
+      assert(arg.name.size() > 1 && arg.name[0] == '%' && "Unknown MLIR name");
+      if (isdigit(arg.name[1]))
+        argNames.push_back(StringAttr::get(context, ""));
+      else
+        argNames.push_back(StringAttr::get(context, arg.name.drop_front()));
+    }
     result.addAttribute("argNames", builder.getArrayAttr(argNames));
+  }
   // Add the attributes to the function arguments.
   addArgAndResultAttrs(builder, result, argAttrs, resultAttrs);
 
@@ -521,6 +515,11 @@ static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
 
   if (!llvm::all_of(paramDict, checkParmValue))
     return failure();
+  auto argAttr = getFIRRTLModuleArgNameAttr(op);
+
+  if (op.getPorts().size() != argAttr.size()) {
+    return failure();
+  }
 
   return success();
 }

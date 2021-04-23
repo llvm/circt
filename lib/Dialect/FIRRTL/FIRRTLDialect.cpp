@@ -105,11 +105,9 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
 
     auto argAttr = getFIRRTLModuleArgNameAttr(parentOp);
     for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
-      StringAttr str =
-          argAttr[i]
-              .cast<StringAttr>();
-      if (!str.getValue().empty())
-        setNameFn(block->getArgument(i), str.getValue());
+      auto str = argAttr[i].cast<StringAttr>().getValue();
+      if (!str.empty())
+        setNameFn(block->getArgument(i), str);
     }
   }
 };
