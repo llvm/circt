@@ -133,7 +133,6 @@ private:
   Value getBundleLowering(Value oldValue, StringRef flatField);
   void getAllBundleLowerings(Value oldValue, SmallVectorImpl<Value> &results);
 
-
   MLIRContext *context;
 
   // The builder is set and maintained in the main loop.
@@ -813,18 +812,17 @@ Value TypeLoweringVisitor::addArg(FModuleOp module, Type type,
   // Append the new argument.
   auto newValue = body->addArgument(type);
 
-    // Save the name attribute for the new argument.
-    StringAttr nameAttr =
-        getFIRRTLModuleArgNameAttr(module)[oldArgNumber].cast<StringAttr>();
-    Attribute newArg;
-    if (!nameAttr.getValue().empty()) {
-      SmallString<16> newName(nameAttr.getValue());
-      newName += nameSuffix;
-      newArg = builder->getStringAttr(newName);
-    } else
-      newArg = builder->getStringAttr("");
-    newArgNames.push_back(newArg);
-  
+  // Save the name attribute for the new argument.
+  StringAttr nameAttr =
+      getFIRRTLModuleArgNameAttr(module)[oldArgNumber].cast<StringAttr>();
+  Attribute newArg;
+  if (!nameAttr.getValue().empty()) {
+    SmallString<16> newName(nameAttr.getValue());
+    newName += nameSuffix;
+    newArg = builder->getStringAttr(newName);
+  } else
+    newArg = builder->getStringAttr("");
+  newArgNames.push_back(newArg);
 
   return newValue;
 }
@@ -872,7 +870,6 @@ void TypeLoweringVisitor::getAllBundleLowerings(
       })
       .Default([&](auto) {});
 }
-
 
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
