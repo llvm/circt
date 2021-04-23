@@ -65,7 +65,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Bar"}]]
 
     ; CHECK-LABEL: module {
     ; CHECK: firrtl.extmodule @Bar
-    ; CHECK-SAME: attributes {annotations = [{a = "a"}]
+    ; CHECK-SAME: attributes {annotations = [{a = "a"}]}
 
 ; // -----
 
