@@ -417,11 +417,11 @@ firrtl.module @issue516(%inp_0: !firrtl.uint<0>, %tmp3: !firrtl.flip<uint<0>>) {
 
 // https://github.com/llvm/circt/issues/591
 // CHECK-LABEL: @reg_cst_prop1
-// CHECK-NEXT:   %c5_ui8 = firrtl.constant(5 : ui8) : !firrtl.uint<8>
+// CHECK-NEXT:   %c5_ui8 = firrtl.constant 5 : !firrtl.uint<8>
 // CHECK-NEXT:   firrtl.connect %out_b, %c5_ui8 : !firrtl.flip<uint<8>>, !firrtl.uint<8>
 // CHECK-NEXT:  }
 firrtl.module @reg_cst_prop1(%clock: !firrtl.clock, %out_b: !firrtl.flip<uint<8>>) {
-  %c5_ui8 = firrtl.constant(5 : ui8) : !firrtl.uint<8>
+  %c5_ui8 = firrtl.constant 5 : !firrtl.uint<8>
   %tmp_a = firrtl.reg %clock {name = "tmp_a"} : (!firrtl.clock) -> !firrtl.uint<8>
   %tmp_b = firrtl.reg %clock {name = "tmp_b"} : (!firrtl.clock) -> !firrtl.uint<8>
   firrtl.connect %tmp_a, %c5_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
@@ -430,7 +430,7 @@ firrtl.module @reg_cst_prop1(%clock: !firrtl.clock, %out_b: !firrtl.flip<uint<8>
 }
 
 // CHECK-LABEL: @reg_cst_prop2
-// CHECK-NEXT:   %c5_ui8 = firrtl.constant(5 : ui8) : !firrtl.uint<8>
+// CHECK-NEXT:   %c5_ui8 = firrtl.constant 5 : !firrtl.uint<8>
 // CHECK-NEXT:   firrtl.connect %out_b, %c5_ui8 : !firrtl.flip<uint<8>>, !firrtl.uint<8>
 // CHECK-NEXT:  }
 firrtl.module @reg_cst_prop2(%clock: !firrtl.clock, %out_b: !firrtl.flip<uint<8>>) {
@@ -438,7 +438,7 @@ firrtl.module @reg_cst_prop2(%clock: !firrtl.clock, %out_b: !firrtl.flip<uint<8>
   firrtl.connect %out_b, %tmp_b : !firrtl.flip<uint<8>>, !firrtl.uint<8>
 
   %tmp_a = firrtl.reg %clock {name = "tmp_a"} : (!firrtl.clock) -> !firrtl.uint<8>
-  %c5_ui8 = firrtl.constant(5 : ui8) : !firrtl.uint<8>
+  %c5_ui8 = firrtl.constant 5 : !firrtl.uint<8>
   firrtl.connect %tmp_a, %c5_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
   firrtl.connect %tmp_b, %tmp_a : !firrtl.uint<8>, !firrtl.uint<8>
 }
@@ -449,7 +449,7 @@ firrtl.module @reg_cst_prop2(%clock: !firrtl.clock, %out_b: !firrtl.flip<uint<8>
 // CHECK-NEXT:  }
 firrtl.module @reg_cst_prop3(%clock: !firrtl.clock, %out_b: !firrtl.flip<uint<8>>) {
   %tmp_a = firrtl.reg %clock {name = "tmp_a"} : (!firrtl.clock) -> !firrtl.uint<8>
-  %c5_ui8 = firrtl.constant(5 : ui8) : !firrtl.uint<8>
+  %c5_ui8 = firrtl.constant 5 : !firrtl.uint<8>
   firrtl.connect %tmp_a, %c5_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
 
   %xor = firrtl.xor %tmp_a, %c5_ui8 : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
@@ -496,7 +496,7 @@ firrtl.module @AttachOpts(%a: !firrtl.analog<1>) {
 // CHECK-NEXT:  }
 firrtl.module @wire_cst_prop1(%out_b: !firrtl.flip<uint<9>>) {
   %tmp_a = firrtl.wire : !firrtl.uint<8>
-  %c5_ui8 = firrtl.constant(5 : ui8) : !firrtl.uint<8>
+  %c5_ui8 = firrtl.constant 5 : !firrtl.uint<8>
   firrtl.connect %tmp_a, %c5_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
 
   %xor = firrtl.add %tmp_a, %c5_ui8 : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<9>
@@ -1239,7 +1239,7 @@ firrtl.module @ComparisonOfConsts(
 firrtl.module @add_cst_prop1(%out_b: !firrtl.flip<uint<9>>) {
   %c6_ui7 = firrtl.constant(6 : ui7) : !firrtl.uint<7>
   %tmp_a = firrtl.wire : !firrtl.uint<7>
-  %c5_ui8 = firrtl.constant(5 : ui8) : !firrtl.uint<8>
+  %c5_ui8 = firrtl.constant 5 : !firrtl.uint<8>
   firrtl.connect %tmp_a, %c6_ui7 : !firrtl.uint<7>, !firrtl.uint<7>
   %add = firrtl.add %tmp_a, %c5_ui8 : (!firrtl.uint<7>, !firrtl.uint<8>) -> !firrtl.uint<9>
   firrtl.connect %out_b, %add : !firrtl.flip<uint<9>>, !firrtl.uint<9>
@@ -1278,7 +1278,7 @@ firrtl.module @add_cst_prop3(%out_b: !firrtl.flip<sint<4>>) {
 firrtl.module @sub_cst_prop1(%out_b: !firrtl.flip<uint<9>>) {
   %c6_ui7 = firrtl.constant(6 : ui7) : !firrtl.uint<7>
   %tmp_a = firrtl.wire : !firrtl.uint<7>
-  %c5_ui8 = firrtl.constant(5 : ui8) : !firrtl.uint<8>
+  %c5_ui8 = firrtl.constant 5 : !firrtl.uint<8>
   firrtl.connect %tmp_a, %c6_ui7 : !firrtl.uint<7>, !firrtl.uint<7>
   %add = firrtl.sub %tmp_a, %c5_ui8 : (!firrtl.uint<7>, !firrtl.uint<8>) -> !firrtl.uint<9>
   firrtl.connect %out_b, %add : !firrtl.flip<uint<9>>, !firrtl.uint<9>
@@ -1304,7 +1304,7 @@ firrtl.module @sub_cst_prop2(%out_b: !firrtl.flip<sint<9>>) {
 firrtl.module @mul_cst_prop1(%out_b: !firrtl.flip<uint<15>>) {
   %c6_ui7 = firrtl.constant(6 : ui7) : !firrtl.uint<7>
   %tmp_a = firrtl.wire : !firrtl.uint<7>
-  %c5_ui8 = firrtl.constant(5 : ui8) : !firrtl.uint<8>
+  %c5_ui8 = firrtl.constant 5 : !firrtl.uint<8>
   firrtl.connect %tmp_a, %c6_ui7 : !firrtl.uint<7>, !firrtl.uint<7>
   %add = firrtl.mul %tmp_a, %c5_ui8 : (!firrtl.uint<7>, !firrtl.uint<8>) -> !firrtl.uint<15>
   firrtl.connect %out_b, %add : !firrtl.flip<uint<15>>, !firrtl.uint<15>
