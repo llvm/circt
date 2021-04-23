@@ -29,6 +29,11 @@ jobs:
         run: echo "::set-output name=hash::$(git rev-parse @:./llvm)"
         shell: bash
 
+      - name: Get workflow spec hash
+        id: get-workflow-hash
+        run: echo "::set-output name=hash::$(md5sum $GITHUB_WORKSPACE/.github/workflows/buildAndTest.yml)"
+        shell: bash
+
       # Try to fetch LLVM from the cache.
       - name: Cache LLVM
         id: cache-llvm
@@ -37,7 +42,7 @@ jobs:
           path: |
             llvm/build
             llvm/install
-          key: ${{ runner.os }}-llvm-nocode-sharedlibs-${{ steps.get-llvm-hash.outputs.hash }}
+          key: ${{ runner.os }}-llvm-${{ steps.get-llvm-hash.outputs.hash }}-${{ steps.get-workflow-hash.outputs.hash }}
 
       # Build LLVM if we didn't hit in the cache.
       - name: Rebuild and Install LLVM
@@ -113,6 +118,11 @@ jobs:
         run: echo "::set-output name=hash::$(git rev-parse @:./llvm)"
         shell: bash
 
+      - name: Get workflow spec hash
+        id: get-workflow-hash
+        run: echo "::set-output name=hash::$(md5sum $GITHUB_WORKSPACE/.github/workflows/buildAndTest.yml)"
+        shell: bash
+
       # Try to fetch LLVM from the cache.
       - name: Cache LLVM
         id: cache-llvm
@@ -121,7 +131,7 @@ jobs:
           path: |
             llvm/build
             llvm/install
-          key: ${{ runner.os }}-llvm-nocode-sharedlibs-${{ steps.get-llvm-hash.outputs.hash }}
+          key: ${{ runner.os }}-llvm-${{ steps.get-llvm-hash.outputs.hash }}-${{ steps.get-workflow-hash.outputs.hash }}
 
       # Build LLVM if we didn't hit in the cache. Even though we build it in
       # the previous job, there is a low chance that it'll have been evicted by
