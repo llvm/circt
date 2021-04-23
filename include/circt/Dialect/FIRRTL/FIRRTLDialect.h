@@ -26,7 +26,6 @@ class FIRRTLType;
 /// value.
 ArrayAttr getFIRRTLModuleArgNameAttr(Operation *module);
 
-
 } // namespace firrtl
 } // namespace circt
 
