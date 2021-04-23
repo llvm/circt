@@ -37,6 +37,9 @@ struct RTLGeneratorCalloutPass
 llvm::ErrorOr<std::string> static parseProgramArgs(const std::string genExec) {
   std::string execName, execPath;
 
+  // TODO: Find a platform independent way to parse the path from the executable
+  // string. Does LLVM have such a method already ? The executable name can
+  // contain one of the following characters.
   auto pathLoc = genExec.find_last_of("/\\");
   if (pathLoc != std::string::npos)
     execPath = genExec.substr(0, pathLoc + 1);
