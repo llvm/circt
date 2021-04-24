@@ -1514,7 +1514,7 @@ struct HandshakeInsertBufferPass
 
   /// DFS-based graph cycle detection and naive buffer insertion. Exactly one
   /// 2-slot non-transparent buffer will be inserted into each graph cycle.
-  void insertBufferOp(Operation *op, OpBuilder &builder) {
+  void insertBufferDFS(Operation *op, OpBuilder &builder) {
     // Mark operation as visited and push into the stack.
     opVisited[op] = true;
     opOnStack[op] = true;
@@ -1539,9 +1539,9 @@ struct HandshakeInsertBufferPass
               return !isa<handshake::BufferOp>(operand.getOwner());
             }));
       }
-      // For unvisited operations, recursively call insertBufferOp() method.
+      // For unvisited operations, recursively call insertBufferDFS() method.
       else if (!opVisited[user])
-        insertBufferOp(user, builder);
+        insertBufferDFS(user, builder);
     }
     // Pop operation out of the stack.
     opOnStack[op] = false;
@@ -1560,7 +1560,7 @@ struct HandshakeInsertBufferPass
     for (auto &arg : f.getBody().front().getArguments()) {
       for (auto &operand : arg.getUses()) {
         if (!opVisited[operand.getOwner()])
-          insertBufferOp(operand.getOwner(), builder);
+          insertBufferDFS(operand.getOwner(), builder);
       }
     }
   }
