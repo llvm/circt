@@ -1,6 +1,6 @@
 // RUN: circt-translate --split-input-file --export-verilog %s | FileCheck %s --check-prefix=DEFAULT
-// RUN: circt-translate --circt-lowering-options= --split-input-file --export-verilog %s | FileCheck %s --check-prefix=CLEAR
-// RUN: circt-translate --circt-lowering-options=noAlwaysFF --split-input-file --export-verilog %s | FileCheck %s --check-prefix=NOALWAYSFF
+// RUN: circt-translate --lowering-options= --split-input-file --export-verilog %s | FileCheck %s --check-prefix=CLEAR
+// RUN: circt-translate --lowering-options=noAlwaysFF --split-input-file --export-verilog %s | FileCheck %s --check-prefix=NOALWAYSFF
 
 rtl.module @test(%clock : i1, %cond : i1) {
   sv.alwaysff(posedge %clock) {

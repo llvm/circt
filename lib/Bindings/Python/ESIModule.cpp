@@ -59,31 +59,41 @@ static MlirType channelType(MlirType cElem) {
 
 class System {
 public:
-  System(MlirContext cCtxt) : ctxt(unwrap(cCtxt)) {
-    module = OwningModuleRef(ModuleOp::create(UnknownLoc::get(ctxt)));
-  }
+  /// Construct an ESI system. The Python bindings really want to own the MLIR
+  /// objects, so we create them in Python and pass them into the constructor.
+  System(MlirModule modOp)
+      : cCtxt(mlirModuleGetContext(modOp)), cModuleOp(modOp) {}
 
+  /// Load the contents of an MLIR asm file into the system module.
   void loadMlir(std::string filename) {
-    auto loadedMod = mlir::parseSourceFile(filename, ctxt);
+    auto loadedMod = mlir::parseSourceFile(filename, ctxt());
     Block *loadedBlock = loadedMod->getBody();
-    auto &ops = module->getBody()->getOperations();
+    ModuleOp modOp = mod();
+    assert(!modOp->getRegions().empty());
+    if (modOp.body().empty()) {
+      modOp.body().push_back(loadedBlock);
+      return;
+    }
+    auto &ops = modOp.getBody()->getOperations();
     ops.splice(ops.end(), loadedBlock->getOperations());
   }
 
-  MlirOperation get() { return wrap((Operation *)module.get()); }
   MlirOperation lookup(std::string symbol) {
-    Operation *found =
-        SymbolTable::lookupSymbolIn((Operation *)module.get(), symbol);
+    Operation *found = SymbolTable::lookupSymbolIn(mod(), symbol);
     return wrap(found);
   }
 
 private:
-  MLIRContext *ctxt;
-  OwningModuleRef module;
+  MLIRContext *ctxt() { return unwrap(cCtxt); }
+  ModuleOp mod() { return unwrap(cModuleOp); }
+
+  MlirContext cCtxt;
+  MlirModule cModuleOp;
 };
 
 void circt::python::populateDialectESISubmodule(py::module &m) {
   m.doc() = "ESI Python Native Extension";
+  ::registerESIPasses();
 
   m.def("buildWrapper", &pyWrapModule,
         "Construct an ESI wrapper around RTL module 'op' given a list of "
@@ -92,9 +102,8 @@ void circt::python::populateDialectESISubmodule(py::module &m) {
   m.def("channel_type", &channelType,
         "Create an ESI channel type which wraps the argument type");
 
-  py::class_<System>(m, "System")
-      .def(py::init<MlirContext>())
+  py::class_<System>(m, "CppSystem")
+      .def(py::init<MlirModule>())
       .def("load_mlir", &System::loadMlir, "Load an MLIR assembly file.")
-      .def("get", &System::get, "Get the top level module op.")
       .def("lookup", &System::lookup, "Lookup an RTL module and return it.");
 }

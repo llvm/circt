@@ -9,3 +9,5 @@
 #include "mlir/CAPI/Support.h"
 
 MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(ESI, esi, circt::esi::ESIDialect)
+
+void registerESIPasses() { circt::esi::registerESIPasses(); }

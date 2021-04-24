@@ -122,10 +122,8 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
 };
 } // end anonymous namespace
 
-FIRRTLDialect::FIRRTLDialect(MLIRContext *context)
-    : Dialect(getDialectNamespace(), context,
-              ::mlir::TypeID::get<FIRRTLDialect>()) {
-
+void FIRRTLDialect::initialize() {
+  // Register types.
   registerTypes();
 
   // Register operations.
@@ -137,8 +135,6 @@ FIRRTLDialect::FIRRTLDialect(MLIRContext *context)
   // Register interface implementations.
   addInterfaces<FIRRTLOpAsmDialectInterface>();
 }
-
-FIRRTLDialect::~FIRRTLDialect() {}
 
 void FIRRTLDialect::printType(Type type, DialectAsmPrinter &os) const {
   type.cast<FIRRTLType>().print(os.getStream());

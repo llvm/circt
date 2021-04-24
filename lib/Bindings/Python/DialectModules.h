@@ -19,6 +19,7 @@ namespace circt {
 namespace python {
 
 void populateDialectESISubmodule(pybind11::module &m);
+void populateDialectMSFTSubmodule(pybind11::module &m);
 
 } // namespace python
 } // namespace circt

@@ -15,11 +15,14 @@ add_mlir_python_extension(CIRCTBindingsPythonExtension _circt
   SOURCES
     CIRCTModule.cpp
     ESIModule.cpp
+    MSFTModule.cpp
   LINK_LIBS
     CIRCTCAPIComb
     CIRCTCAPIESI
+    CIRCTCAPIMSFT
     CIRCTCAPIRTL
     CIRCTCAPISV
+    CIRCTCAPIExportVerilog
 )
 add_dependencies(CIRCTBindingsPython CIRCTBindingsPythonExtension)
 

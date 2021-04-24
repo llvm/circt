@@ -19,20 +19,12 @@
 namespace circt {
 namespace seq {
 
-class SeqDialect : public Dialect {
-public:
-  explicit SeqDialect(MLIRContext *context);
-  ~SeqDialect();
-
-  static StringRef getDialectNamespace() { return "seq"; }
-
-  Operation *materializeConstant(OpBuilder &builder, Attribute value, Type type,
-                                 Location loc) override;
-};
-
 void registerSeqPasses();
 
 } // namespace seq
 } // namespace circt
+
+// Pull in the dialect definition.
+#include "circt/Dialect/Seq/SeqDialect.h.inc"
 
 #endif // CIRCT_DIALECT_SEQ_SEQDIALECT_H

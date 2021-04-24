@@ -27,11 +27,8 @@
 using namespace circt;
 using namespace circt::esi;
 
-ESIDialect::ESIDialect(MLIRContext *context)
-    : Dialect("esi", context, TypeID::get<ESIDialect>()) {
-
+void ESIDialect::initialize() {
   registerTypes();
-
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/ESI/ESI.cpp.inc"

@@ -314,10 +314,6 @@ FIRToken FIRLexer::lexInlineAnnotation(const char *tokStart) {
     case 0:
       if (curPtr - 1 != curBuffer.end())
         break;
-      LLVM_FALLTHROUGH;
-    case '\n': // Vertical whitespace isn't allowed in inline annotations.
-    case '\v':
-    case '\f':
       return emitError(tokStart, "unterminated inline annotation");
     default:
       break;

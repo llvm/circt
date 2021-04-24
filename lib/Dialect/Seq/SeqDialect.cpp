@@ -24,18 +24,13 @@ using namespace seq;
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
-SeqDialect::SeqDialect(MLIRContext *context)
-    : Dialect(getDialectNamespace(), context,
-              ::mlir::TypeID::get<SeqDialect>()) {
-
+void SeqDialect::initialize() {
   // Register operations.
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/Seq/Seq.cpp.inc"
       >();
 }
-
-SeqDialect::~SeqDialect() {}
 
 /// Registered hook to materialize a single constant operation from a given
 /// attribute value with the desired resultant type. This method should use
