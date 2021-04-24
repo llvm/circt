@@ -116,7 +116,7 @@ def HandshakeInsertBuffer
   let options = [
     ListOption<"strategies", "strategies", "std::string",
                "List of strategies to apply. Possible values are: cycles",
-	       "llvm::cl::ZeroOrMore, llvm::cl::MiscFlags::CommaSeparated">
+               "llvm::cl::ZeroOrMore, llvm::cl::MiscFlags::CommaSeparated">
   ];
 }
 
