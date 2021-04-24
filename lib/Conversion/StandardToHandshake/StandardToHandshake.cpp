@@ -1509,22 +1509,36 @@ namespace {
 struct HandshakeInsertBufferPass
     : public HandshakeInsertBufferBase<HandshakeInsertBufferPass> {
 
-  DenseMap<Operation *, bool> opVisited;
-  DenseMap<Operation *, bool> opOnStack;
+  void bufferCyclesStrategy() {
+    auto f = getOperation();
+    DenseSet<Operation *> opVisited;
+    DenseSet<Operation *> opOnStack;
+
+    // Traverse each use of each argument of the entry block.
+    auto builder = OpBuilder(f.getContext());
+    for (auto &arg : f.getBody().front().getArguments()) {
+      for (auto &operand : arg.getUses()) {
+        if (opVisited.count(operand.getOwner()) == 0)
+          insertBufferDFS(operand.getOwner(), builder, opVisited, opOnStack);
+      }
+    }
+  }
 
   /// DFS-based graph cycle detection and naive buffer insertion. Exactly one
   /// 2-slot non-transparent buffer will be inserted into each graph cycle.
-  void insertBufferDFS(Operation *op, OpBuilder &builder) {
+  void insertBufferDFS(Operation *op, OpBuilder &builder,
+                       DenseSet<Operation *> &opVisited,
+                       DenseSet<Operation *> &opOnStack) {
     // Mark operation as visited and push into the stack.
-    opVisited[op] = true;
-    opOnStack[op] = true;
+    opVisited.insert(op);
+    opOnStack.insert(op);
 
     // Traverse all uses of the current operation.
     for (auto &operand : op->getUses()) {
-      auto user = operand.getOwner();
+      auto *user = operand.getOwner();
 
       // If graph cycle detected, insert a BufferOp into the edge.
-      if (opOnStack[user] && !isa<handshake::BufferOp>(op) &&
+      if (opOnStack.count(user) != 0 && !isa<handshake::BufferOp>(op) &&
           !isa<handshake::BufferOp>(user)) {
         auto value = operand.get();
 
@@ -1540,30 +1554,14 @@ struct HandshakeInsertBufferPass
             }));
       }
       // For unvisited operations, recursively call insertBufferDFS() method.
-      else if (!opVisited[user])
-        insertBufferDFS(user, builder);
+      else if (opVisited.count(user) == 0)
+        insertBufferDFS(user, builder, opVisited, opOnStack);
     }
     // Pop operation out of the stack.
-    opOnStack[op] = false;
+    opOnStack.erase(op);
   }
 
-  void runOnOperation() override {
-    auto f = getOperation();
-    for (auto &block : f) {
-      for (auto &op : block) {
-        opVisited[&op] = false;
-        opOnStack[&op] = false;
-      }
-    }
-    // Traverse each use of each argument of the entry block.
-    auto builder = OpBuilder(f.getContext());
-    for (auto &arg : f.getBody().front().getArguments()) {
-      for (auto &operand : arg.getUses()) {
-        if (!opVisited[operand.getOwner()])
-          insertBufferDFS(operand.getOwner(), builder);
-      }
-    }
-  }
+  void runOnOperation() override { bufferCyclesStrategy(); }
 };
 
 struct HandshakeRemoveBlockPass
