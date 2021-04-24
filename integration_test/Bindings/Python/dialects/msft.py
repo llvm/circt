@@ -25,7 +25,7 @@ with Context() as ctx, Location.unknown():
                           body_builder=lambda module: rtl.OutputOp([]))
 
   with InsertionPoint.at_block_terminator(top.body.blocks[0]):
-    inst = op.create("inst1", {})
+    inst = op.create(m, "inst1", {})
     msft.locate(inst.operation, "mem", devtype=msft.M20K, x=50, y=100, num=1)
     # CHECK: rtl.instance "inst1" @MyWidget() {"loc:mem" = #msft.physloc<M20K, 50, 100, 1>, parameters = {}} : () -> ()
 

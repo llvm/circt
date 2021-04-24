@@ -67,10 +67,6 @@ with Context() as ctx, Location.unknown():
       # CHECK: rtl.instance "inst2" @one_input(%[[INST1_RESULT]])
       inst2 = one_input.create(module, "inst2", {"a": inst1.a})
 
-      # COM: CHECK-NOT: rtl.instance "inst3"
-      # COM: handle un-resolved backedges.
-      inst3 = two_inputs.create(module, "inst3", {"a": inst1.a})
-
       # CHECK: rtl.instance "inst4" @two_inputs(%[[INST1_RESULT]], %[[INST1_RESULT]])
       inst4 = two_inputs.create(module, "inst4", {"a": inst1.a})
       inst4.b = inst1.a
