@@ -84,7 +84,7 @@ with Context() as ctx, Location.unknown():
     instance_builder_tests = rtl.RTLModuleOp(name="instance_builder_tests",
                                              body_builder=instance_builder_body)
 
-  m.operation.print()
+  print(m)
 
   # CHECK-LABEL: === Verilog ===
   print("=== Verilog ===")
