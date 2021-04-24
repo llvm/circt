@@ -22,11 +22,13 @@
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Types.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Support/LLVM.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Passes.h"
 #include "mlir/Transforms/Utils.h"
@@ -1561,7 +1563,21 @@ struct HandshakeInsertBufferPass
     opOnStack.erase(op);
   }
 
-  void runOnOperation() override { bufferCyclesStrategy(); }
+  void runOnOperation() override {
+    if (strategies.size() == 0)
+      strategies = {"cycles"};
+
+    for (auto strategy : strategies) {
+      if (strategy == "cycles")
+        bufferCyclesStrategy();
+      else {
+        emitError(getOperation().getLoc())
+            << "Unknown buffer strategy: " << strategy;
+        signalPassFailure();
+        return;
+      }
+    }
+  }
 };
 
 struct HandshakeRemoveBlockPass
