@@ -11,7 +11,7 @@ class InstanceBuilder:
   """Helper class to incrementally construct an instance of a module."""
 
   __slots__ = [
-      "__mod__",
+      "__parent_module__",
       "__backedges__",
       "__instance__",
       "__operand_indices__",
@@ -19,6 +19,7 @@ class InstanceBuilder:
   ]
 
   def __init__(self,
+               parent_module,
                module,
                name,
                input_port_mapping,
@@ -44,7 +45,7 @@ class InstanceBuilder:
         operand_values.append(input_port_mapping[arg_name])
       else:
         type = module.type.inputs[i]
-        backedge = module.backedge_builder.create(type)
+        backedge = parent_module.backedge_builder.create(type)
         backedges[i] = backedge
         operand_values.append(backedge)
 
@@ -54,7 +55,7 @@ class InstanceBuilder:
       result_indices[result_name] = i
 
     # Save the module, backedges, operand, and result indices for later.
-    self.__mod__ = module
+    self.__parent_module__ = parent_module
     self.__backedges__ = backedges
     self.__operand_indices__ = operand_indices
     self.__result_indices__ = result_indices
@@ -94,7 +95,7 @@ class InstanceBuilder:
       # Put the value into the instance.
       index = self.__operand_indices__[name]
       self.__instance__.inputs[index] = value
-      self.__mod__.backedge_builder.remove(self.__backedges__[index])
+      self.__parent_module__.backedge_builder.remove(self.__backedges__[index])
       return
 
     # If we fell through to here, the name isn't an arg.
@@ -195,11 +196,17 @@ class RTLModuleOp:
     return self.body.blocks[0]
 
   def create(self,
+             module,
              name: str,
              input_port_mapping: Dict[str, Value] = {},
              loc=None,
              ip=None):
-    return InstanceBuilder(self, name, input_port_mapping, loc=loc, ip=ip)
+    return InstanceBuilder(module,
+                           self,
+                           name,
+                           input_port_mapping,
+                           loc=loc,
+                           ip=ip)
 
   @classmethod
   def from_py_func(
