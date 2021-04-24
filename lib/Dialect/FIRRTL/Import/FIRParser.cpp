@@ -63,6 +63,19 @@ static StringRef filterUselessName(StringRef name) {
   return isUselessName(name) ? "" : name;
 }
 
+/// Get an annotation with a class name field.
+static DictionaryAttr getAnnotationOfClass(MLIRContext *context,
+                                           StringRef classString) {
+  auto id = NamedAttribute(Identifier::get("class", context),
+                           StringAttr::get(context, classString));
+  return DictionaryAttr::getWithSorted(context, {id});
+}
+
+/// Checks the annotations array for a matching annotation.
+static bool hasAnnotation(ArrayAttr annotations, DictionaryAttr annotation) {
+  return llvm::is_contained(annotations, annotation);
+}
+
 //===----------------------------------------------------------------------===//
 // GlobalFIRParserState
 //===----------------------------------------------------------------------===//
@@ -76,7 +89,10 @@ struct GlobalFIRParserState {
                        FIRParserOptions options,
                        const llvm::MemoryBuffer *annotationsBuf)
       : context(context), options(options), lex(sourceMgr, context),
-        curToken(lex.lexToken()), annotationsBuf(annotationsBuf) {}
+        curToken(lex.lexToken()), annotationsBuf(annotationsBuf) {
+    dontTouchAnnotation =
+        getAnnotationOfClass(context, "firrtl.transforms.DontTouchAnnotation");
+  }
 
   /// The context we're parsing into.
   MLIRContext *const context;
@@ -102,6 +118,9 @@ struct GlobalFIRParserState {
 
   /// A mutable reference to the current ModuleTarget.
   StringRef moduleTarget;
+
+  // Cached annotation for DontTouch.
+  DictionaryAttr dontTouchAnnotation;
 
   class BacktraceState {
   public:
@@ -265,6 +284,13 @@ struct FIRParser {
   /// Populate a vector of annotations for a given Target.  If the annotations
   /// parameter is non-empty, then this will be appended to.
   void getAnnotations(Twine target, ArrayAttr &annotations);
+
+  /// Returns true if the annotation list contains the DontTouchAnnotation. This
+  /// method is slightly more efficient than other lookup methods, because it
+  /// uses a stashed copy of the annotation for lookup.
+  bool hasDontTouch(ArrayAttr annotations) {
+    return hasAnnotation(annotations, state.dontTouchAnnotation);
+  }
 
 private:
   FIRParser(const FIRParser &) = delete;
@@ -1055,18 +1081,36 @@ private:
   /// a passive-typed value and return that.
   Value convertToPassive(Value input, Location loc);
 
+  /// Attach invalid values to every element of the value.
+  void emitInvalidate(Value val, Location loc, bool isDuplex) {
+    // Invalidate doesn't match the semantics of connect or partial connect, and
+    // so we have to manually do something like expand-connects. Invalid value
+    // needs to be connected to every field of a bundle which is flip, or
+    // every field in a duplex operation.
+    auto invalidType = val.getType().cast<FIRRTLType>();
+    if (auto bundleType = invalidType.dyn_cast<BundleType>()) {
+      // We need to recurse into bundle types without an outer flip.  They could
+      // have inner flips or analog types.
+      for (auto element : bundleType.getElements()) {
+        emitInvalidate(builder.create<SubfieldOp>(loc, val, element.name), loc,
+                       isDuplex);
+      }
+    } else if (invalidType.isa<FlipType>() ||
+               (isDuplex && !invalidType.isa<AnalogType>())) {
+      // If there is an outer flip type, or it is a duplex type, we can emit
+      // an invalid connect. This might be a bulk connect to a bundle.
+      builder.create<ConnectOp>(loc, val,
+                                builder.create<InvalidValuePrimOp>(
+                                    loc, invalidType.getPassiveType()));
+    }
+  }
+
   // The FIRRTL specification describes Invalidates as a statement with
   // implicit connect semantics.  The FIRRTL dialect models it as a primitive
   // that returns an "Invalid Value", followed by an explicit connect to make
   // the representation simpler and more consistent.
   void emitInvalidate(Value val, Location loc) {
-    auto invalidType = val.getType().cast<FIRRTLType>();
-    auto invalidVal =
-        builder.create<InvalidValuePrimOp>(loc, invalidType.getPassiveType());
-    if (invalidType.isa<AnalogType>())
-      builder.create<AttachOp>(loc, ValueRange{val, invalidVal});
-    else if (!invalidType.isPassive())
-      builder.create<ConnectOp>(loc, val, invalidVal);
+    emitInvalidate(val, loc, isDuplexValue(val));
   }
 
   // Exp Parsing
@@ -1749,13 +1793,13 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
   if (auto isExpr = parseExpWithLeadingKeyword(spelling, info))
     return isExpr.getValue();
 
-  StringRef resultValue;
+  StringRef id;
   StringRef memName;
   SymbolValueEntry memorySym;
   Value memory, indexExp, clock;
   SmallVector<Operation *, 8> subOps;
   if (parseToken(FIRToken::kw_mport, "expected 'mport' in memory port") ||
-      parseId(resultValue, "expected result name") ||
+      parseId(id, "expected result name") ||
       parseToken(FIRToken::equal, "expected '=' in memory port") ||
       parseId(memName, "expected memory name") ||
       lookupSymbolEntry(memorySym, memName, info.getFIRLoc()) ||
@@ -1772,9 +1816,13 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
     return emitError(info.getFIRLoc(), "memory should have vector type");
   auto resultType = memVType.getElementType();
 
-  auto name = builder.getStringAttr(filterUselessName(resultValue));
-  auto result = builder.create<MemoryPortOp>(info.getLoc(), resultType, memory,
-                                             indexExp, clock, direction, name);
+  ArrayAttr annotations = builder.getArrayAttr({});
+  getAnnotations(getModuleTarget() + ">" + id, annotations);
+  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
+
+  auto result = builder.create<MemoryPortOp>(
+      info.getLoc(), resultType, memory, indexExp, clock, direction,
+      builder.getStringAttr(name), annotations);
 
   // TODO(firrtl scala bug): If the next operation is a skip, just eat it if it
   // is at the same indent level as us.  This is a horrible hack on top of the
@@ -1813,7 +1861,7 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
     }
 
     // If we need to inject this name into a parent scope, then we have to do
-    // some IR hackery.  Create a wire for the resultValue name right before
+    // some IR hackery.  Create a wire for the id name right before
     // the mem in question, inject its name into that scope, then connect
     // the output of the mport to it.
     if (scopeAndOperation.first != symbolTable.getCurScope()) {
@@ -1825,13 +1873,13 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
 
       // Inject this the wire's name into the same scope as the memory.
       symbolTable.insertIntoScope(
-          scopeAndOperation.first, Identifier::get(resultValue, getContext()),
+          scopeAndOperation.first, Identifier::get(id, getContext()),
           {info.getFIRLoc(), SymbolValueEntry(wireHack)});
       return success();
     }
   }
 
-  return addSymbolEntry(resultValue, result, info.getFIRLoc());
+  return addSymbolEntry(id, result, info.getFIRLoc());
 }
 
 /// printf ::= 'printf(' exp exp StringLit exp* ')' info?
@@ -2163,9 +2211,10 @@ ParseResult FIRStmtParser::parseInstance() {
     resultTypes.push_back(FlipType::get(port.type));
     resultNames.push_back(port.name);
   }
-  auto name = filterUselessName(id);
   ArrayAttr annotations = builder.getArrayAttr({});
-  getAnnotations(getModuleTarget() + ">" + name, annotations);
+  getAnnotations(getModuleTarget() + ">" + id, annotations);
+  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
+
   auto result = builder.create<InstanceOp>(
       info.getLoc(), resultTypes, moduleName, builder.getArrayAttr(resultNames),
       name, annotations);
@@ -2203,9 +2252,9 @@ ParseResult FIRStmtParser::parseCMem() {
       parseType(type, "expected cmem type") || parseOptionalInfo(info))
     return failure();
 
-  auto name = filterUselessName(id);
   ArrayAttr annotations = builder.getArrayAttr({});
-  getAnnotations(getModuleTarget() + ">" + name, annotations);
+  getAnnotations(getModuleTarget() + ">" + id, annotations);
+  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
   auto result = builder.create<CMemOp>(info.getLoc(), type, name, annotations);
 
@@ -2238,9 +2287,9 @@ ParseResult FIRStmtParser::parseSMem() {
       parseOptionalInfo(info))
     return failure();
 
-  auto name = filterUselessName(id);
   ArrayAttr annotations = builder.getArrayAttr({});
-  getAnnotations(getModuleTarget() + ">" + name, annotations);
+  getAnnotations(getModuleTarget() + ">" + id, annotations);
+  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
   auto result =
       builder.create<SMemOp>(info.getLoc(), type, ruw, name, annotations);
@@ -2372,9 +2421,9 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     resultTypes.push_back(FlipType::get(p.second));
   }
 
-  auto name = filterUselessName(id);
   ArrayAttr annotations = builder.getArrayAttr({});
-  getAnnotations(getModuleTarget() + ">" + name, annotations);
+  getAnnotations(getModuleTarget() + ">" + id, annotations);
+  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
   auto result = builder.create<MemOp>(
       info.getLoc(), resultTypes, readLatency, writeLatency, depth, ruw,
@@ -2441,19 +2490,18 @@ ParseResult FIRStmtParser::parseNode() {
   // passive.
   initializer = convertToPassive(initializer, initializer.getLoc());
 
+  ArrayAttr annotations = builder.getArrayAttr({});
+  getAnnotations(getModuleTarget() + ">" + id, annotations);
+
   // Ignore useless names like _T.
-  auto actualName = filterUselessName(id);
+  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
   // The entire point of a node declaration is to carry a name.  If it got
   // dropped, then we don't even need to create a result.
-  //
-  // TODO: This optimization doesn't respect annotated, temporary nodes.
   Value result;
-  if (!actualName.empty()) {
-    ArrayAttr annotations = builder.getArrayAttr({});
-    getAnnotations(getModuleTarget() + ">" + actualName, annotations);
+  if (!name.empty()) {
     result = builder.create<NodeOp>(info.getLoc(), initializer.getType(),
-                                    initializer, actualName, annotations);
+                                    initializer, name, annotations);
   } else
     result = initializer;
   return addSymbolEntry(id, result, info.getFIRLoc());
@@ -2478,9 +2526,9 @@ ParseResult FIRStmtParser::parseWire() {
 
   ArrayAttr annotations = builder.getArrayAttr({});
   getAnnotations(getModuleTarget() + ">" + id, annotations);
+  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
-  auto result = builder.create<WireOp>(info.getLoc(), type,
-                                       filterUselessName(id), annotations);
+  auto result = builder.create<WireOp>(info.getLoc(), type, name, annotations);
   return addSymbolEntry(id, result, info.getFIRLoc());
 }
 
@@ -2572,9 +2620,9 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   if (parseOptionalInfo(info, subOps))
     return failure();
 
-  auto name = filterUselessName(id);
   ArrayAttr annotations = builder.getArrayAttr({});
-  getAnnotations(getModuleTarget() + ">" + name, annotations);
+  getAnnotations(getModuleTarget() + ">" + id, annotations);
+  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
   Value result;
   if (resetSignal)

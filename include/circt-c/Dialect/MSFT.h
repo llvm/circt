@@ -19,6 +19,11 @@ extern "C" {
 
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(MSFT, msft);
 
+/// Emits tcl for the specified module using the provided callback and user
+/// data
+MlirLogicalResult mlirMSFTExportTcl(MlirModule, MlirStringCallback,
+                                    void *userData);
+
 #ifdef __cplusplus
 }
 #endif

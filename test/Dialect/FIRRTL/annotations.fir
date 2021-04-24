@@ -212,3 +212,91 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.qux"},{"two":null,"target":"~
 
     ; CHECK-LABEL: module {
     ; CHECK: %bar = firrtl.reg %clock  {annotations = [{one, target = [".qux"]}, {target = ["[1]", ".baz"], two}]} : (!firrtl.clock) -> !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+
+; // -----
+
+; COM: Annotations should apply even when the target's name is dropped.
+circuit Foo: %[[{"target": "Foo|Foo>_T_0", "a": "a"},
+                {"target": "Foo|Foo>_T_1", "a": "a"},
+                {"target": "Foo|Foo>_T_2", "a": "a"},
+                {"target": "Foo|Foo>_T_3", "a": "a"},
+                {"target": "Foo|Foo>_T_4", "a": "a"},
+                {"target": "Foo|Foo>_T_5", "a": "a"},
+                {"target": "Foo|Foo>_T_6", "a": "a"},
+                {"target": "Foo|Foo>_T_7", "a": "a"},
+                {"target": "Foo|Foo>_T_8", "a": "a"}]]
+  module Bar:
+    skip
+  module Foo:
+    input reset : UInt<1>
+    input clock : Clock
+
+    ; CHECK: %0 = firrtl.wire  {annotations = [{a = "a"}]}
+    wire _T_0 : UInt<1>
+    ; CHECK-NOT: firrtl.node
+    node _T_1 = _T_0
+    ; CHECK: %1 = firrtl.reg %clock  {annotations = [{a = "a"}]}
+    reg _T_2 : UInt<1>, clock
+    ; CHECK: %2 = firrtl.regreset %clock, %reset, %c0_ui4  {annotations = [{a = "a"}]}
+    reg _T_3 : UInt<4>, clock with :
+      reset => (reset, UInt<4>("h0"))
+    ; CHECK: %3 = firrtl.smem Undefined  {annotations = [{a = "a"}], name = ""}
+    smem _T_4 : UInt<1>[9] [256]
+    ; CHECK: %4 = firrtl.cmem  {annotations = [{a = "a"}], name = ""}
+    cmem _T_5 : UInt<1>[9] [256]
+    ; CHECK: %5 = firrtl.memoryport Infer %4, %reset, %clock {annotations = [{a = "a"}], name = ""}
+    infer mport _T_6 = _T_5[reset], clock
+    ; CHECK: firrtl.instance @Bar  {annotations = [{a = "a"}], name = "", portNames = []}
+    inst _T_7 of Bar
+    ; CHECK: firrtl.mem Undefined  {annotations = [{a = "a"}], depth = 8 : i64, name = "", portNames = ["w"], readLatency = 0 : i32, writeLatency = 1 : i32}
+    mem _T_8 :
+        data-type => UInt<4>
+        depth => 8
+        writer => w
+        read-latency => 0
+        write-latency => 1
+        read-under-write => undefined
+
+; // -----
+
+; COM: DontTouch annotation preserves temporary names
+circuit Foo: %[[{"target": "Foo|Foo>_T_0", "class": "firrtl.transforms.DontTouchAnnotation"},
+                {"target": "Foo|Foo>_T_1", "class": "firrtl.transforms.DontTouchAnnotation"},
+                {"target": "Foo|Foo>_T_2", "class": "firrtl.transforms.DontTouchAnnotation"},
+                {"target": "Foo|Foo>_T_3", "class": "firrtl.transforms.DontTouchAnnotation"},
+                {"target": "Foo|Foo>_T_4", "class": "firrtl.transforms.DontTouchAnnotation"},
+                {"target": "Foo|Foo>_T_5", "class": "firrtl.transforms.DontTouchAnnotation"},
+                {"target": "Foo|Foo>_T_6", "class": "firrtl.transforms.DontTouchAnnotation"},
+                {"target": "Foo|Foo>_T_7", "class": "firrtl.transforms.DontTouchAnnotation"},
+                {"target": "Foo|Foo>_T_8", "class": "firrtl.transforms.DontTouchAnnotation"}]]
+  module Bar:
+    skip
+  module Foo:
+    input reset : UInt<1>
+    input clock : Clock
+
+    ; CHECK: %_T_0 = firrtl.wire  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
+    wire _T_0 : UInt<1>
+    ; CHECK: %_T_1 = firrtl.node %_T_0  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
+    node _T_1 = _T_0
+    ; CHECK: %_T_2 = firrtl.reg %clock  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
+    reg _T_2 : UInt<1>, clock
+    ; CHECK: %_T_3 = firrtl.regreset %clock, %reset, %c0_ui4  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
+    reg _T_3 : UInt<4>, clock with :
+      reset => (reset, UInt<4>("h0"))
+    ; CHECK: %_T_4 = firrtl.smem Undefined  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}], name = "_T_4"}
+    smem _T_4 : UInt<1>[9] [256]
+    ; CHECK: %_T_5 = firrtl.cmem  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}], name = "_T_5"}
+    cmem _T_5 : UInt<1>[9] [256]
+    ; CHECK: %_T_6 = firrtl.memoryport Infer %_T_5, %reset, %clock {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}], name = "_T_6"}
+    infer mport _T_6 = _T_5[reset], clock
+    ; CHECK: firrtl.instance @Bar  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}], name = "_T_7", portNames = []}
+    inst _T_7 of Bar
+    ; CHECK: firrtl.mem Undefined  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}], depth = 8 : i64, name = "_T_8", portNames = ["w"], readLatency = 0 : i32, writeLatency = 1 : i32}
+    mem _T_8 :
+        data-type => UInt<4>
+        depth => 8
+        writer => w
+        read-latency => 0
+        write-latency => 1
+        read-under-write => undefined

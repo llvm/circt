@@ -20,7 +20,7 @@
 namespace circt {
 namespace firrtl {
 namespace patterns {
-#include "circt/Dialect/FIRRTL/Canonicalization.h.inc"
+#include "circt/Dialect/FIRRTL/FIRRTLCanonicalization.h.inc"
 } // namespace patterns
 } // namespace firrtl
 } // namespace circt
@@ -849,12 +849,13 @@ static LogicalResult foldSingleSetConnect(ConnectOp op,
   if (srcValueOp && srcValueOp != &declBlock->front())
     srcValueOp->moveBefore(&declBlock->front());
 
-  // Remove the connect.
-  rewriter.eraseOp(op);
-
   // Replace all things *using* the decl with the constant/port, and
   // remove the declaration.
   rewriter.replaceOp(connectedDecl, op.src());
+
+  // Remove the connect.
+  rewriter.eraseOp(op);
+
   return success();
 }
 

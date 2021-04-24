@@ -32,7 +32,7 @@ firrtl.circuit "MyCircuit" {
 // -----
 
 
-// expected-error @+1 {{'firrtl.module' op should be embedded into a 'firrtl.circuit'}}
+// expected-error @+1 {{'firrtl.module' op expects parent op 'firrtl.circuit'}}
 firrtl.module @X() {}
 
 // -----

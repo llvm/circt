@@ -555,11 +555,6 @@ void static filterAnnotations(ArrayAttr annotations,
     if (!targetStr.empty()) {
       auto pos = field.suffix.find(targetStr);
       if (pos == 0) {
-        auto endTarget = (pos + targetStr.size());
-        // Ignore, if the annotation is specified on an un-flattened array.
-        if (field.suffix.size() > endTarget + 1 &&
-            std::isdigit(field.suffix[endTarget + 1]))
-          continue;
         NamedAttrList modAttr;
         for (auto attr : di.getValue()) {
           if (attr.first.str() == "target")
@@ -592,7 +587,6 @@ void TypeLoweringVisitor::visitDecl(WireOp op) {
   auto name = op.name().str();
   for (auto field : fieldTypes) {
     std::string loweredName = "";
-    // field.getPortType().isa<FVectorType>()
     if (!name.empty())
       loweredName = name + field.suffix;
     SmallVector<Attribute> loweredAttrs;

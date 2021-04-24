@@ -549,54 +549,6 @@ rtl.module @concat_fold6(%arg0: i5, %arg1: i3) -> (i4) {
   rtl.output %2 : i4
 }
 
-// CHECK-LABEL: rtl.module @wire0()
-// CHECK-NEXT:    rtl.output
-rtl.module @wire0() {
-  %w = sv.wire : !rtl.inout<i1>
-  rtl.output
-}
-
-// CHECK-LABEL: rtl.module @wire1()
-// CHECK-NEXT:    rtl.output
-rtl.module @wire1() {
-  %w = sv.wire : !rtl.inout<i1>
-  %0 = sv.read_inout %w : !rtl.inout<i1>
-  rtl.output
-}
-
-// CHECK-LABEL: rtl.module @wire2()
-// CHECK-NEXT:    rtl.output
-rtl.module @wire2() {
-  %c = rtl.constant 1 : i1
-  %w = sv.wire : !rtl.inout<i1>
-  sv.connect %w, %c : i1
-  rtl.output
-}
-
-// CHECK-LABEL: rtl.module @wire3()
-// CHECK-NEXT:    rtl.output
-rtl.module @wire3() {
-  %c = rtl.constant 1 : i1
-  %w = sv.wire : !rtl.inout<i1>
-  %0 = sv.read_inout %w : !rtl.inout<i1>
-  sv.connect %w, %c :i1
-  rtl.output
-}
-
-// CHECK-LABEL: rtl.module @wire4() -> (i1)
-// CHECK-NEXT:    %true = rtl.constant true
-// CHECK-NEXT:    %w = sv.wire : !rtl.inout<i1>
-// CHECK-NEXT:    %0 = sv.read_inout %w : !rtl.inout<i1>
-// CHECK-NEXT:    sv.connect %w, %true : i1
-// CHECK-NEXT:    rtl.output %0
-rtl.module @wire4() -> (i1) {
-  %true = rtl.constant true
-  %w = sv.wire : !rtl.inout<i1>
-  %0 = sv.read_inout %w : !rtl.inout<i1>
-  sv.connect %w, %true : i1
-  rtl.output %0 : i1
-}
-
 // CHECK-LABEL: rtl.module @mux_fold0(%arg0: i3, %arg1: i3)
 // CHECK-NEXT:    rtl.output %arg0 : i3
 rtl.module @mux_fold0(%arg0: i3, %arg1: i3) -> (i3) {

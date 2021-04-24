@@ -76,6 +76,20 @@ def SMemOp : FIRRTLOp<"smem", [/*MemAlloc*/]> {
     "$ruw custom<MemOp>(attr-dict) `:` type($result)";
 }
 
+def MemoryPortOp : FIRRTLOp<"memoryport"> {
+  let summary = "Access a memory";
+
+  let arguments = (ins FIRRTLType:$memory, IntType:$index, ClockType:$clock,
+                    MemDirAttr:$direction, OptionalAttr<StrAttr>:$name,
+                    DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
+  let results = (outs FIRRTLType:$result);
+
+  let assemblyFormat = [{
+    $direction $memory `,` $index `,` $clock attr-dict `:`
+       functional-type(operands, $result)
+  }];
+}
+
 def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
   let summary = "Define a new mem";
   let arguments = (
@@ -127,7 +141,7 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
   }];
 }
 
-def NodeOp : FIRRTLOp<"node", [NoSideEffect, SameOperandsAndResultType]> {
+def NodeOp : FIRRTLOp<"node", [SameOperandsAndResultType]> {
   let summary = "No-op to name a value";
   let description = [{
     A node is simply a named intermediate value in a circuit. The node must
