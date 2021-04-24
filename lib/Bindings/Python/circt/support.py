@@ -19,6 +19,7 @@ class BackedgeBuilder:
 
   def remove(self, edge):
     self.edges.remove(edge)
+    del self.builders[repr(edge)]
     edge.owner.destroy()
 
   def check(self):
