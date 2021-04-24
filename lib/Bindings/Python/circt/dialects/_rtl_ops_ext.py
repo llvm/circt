@@ -11,7 +11,7 @@ class InstanceBuilder:
   """Helper class to incrementally construct an instance of a module."""
 
   __slots__ = [
-      "__backedge_builder__",
+      "__mod__",
       "__backedges__",
       "__instance__",
       "__operand_indices__",
@@ -29,14 +29,10 @@ class InstanceBuilder:
     # Lazily import dependencies to avoid cyclic dependencies.
     from ._rtl_ops_gen import InstanceOp, ConstantOp
 
-    # Create mappings from port name to value and index.
+    # Create mappings from port name to value, index, and potentially backedge.
     operand_indices = {}
     operand_values = []
     result_indices = {}
-
-    # Create a backedge builder for filling in temporary operands.
-    loc = loc or Location.current
-    backedge_builder = BackedgeBuilder(loc)
     backedges = {}
 
     arg_names = ArrayAttr(module.attributes["argNames"])
@@ -48,17 +44,17 @@ class InstanceBuilder:
         operand_values.append(input_port_mapping[arg_name])
       else:
         type = module.type.inputs[i]
-        backedge = backedge_builder.get(type)
-        operand_values.append(backedge.value)
+        backedge = module.backedge_builder.create(type)
         backedges[i] = backedge
+        operand_values.append(backedge)
 
     result_names = ArrayAttr(module.attributes["resultNames"])
     for i in range(len(result_names)):
       result_name = StringAttr(result_names[i]).value
       result_indices[result_name] = i
 
-    # Save the builder, backedges, operand, and result indices for later.
-    self.__backedge_builder__ = backedge_builder
+    # Save the module, backedges, operand, and result indices for later.
+    self.__mod__ = module
     self.__backedges__ = backedges
     self.__operand_indices__ = operand_indices
     self.__result_indices__ = result_indices
@@ -97,8 +93,8 @@ class InstanceBuilder:
     if name in self.__operand_indices__:
       # Put the value into the instance.
       index = self.__operand_indices__[name]
-      backedge = self.__backedges__[index]
-      backedge.set_value(value)
+      self.__instance__.inputs[index] = value
+      self.__mod__.backedge_builder.remove(self.__backedges__[index])
       return
 
     # If we fell through to here, the name isn't an arg.
@@ -168,7 +164,9 @@ class RTLModuleOp:
     if body_builder:
       entry_block = self.add_entry_block()
       with InsertionPoint(entry_block):
+        self.backedge_builder = BackedgeBuilder()
         body_builder(self)
+        self.backedge_builder.check()
 
   @property
   def body(self):

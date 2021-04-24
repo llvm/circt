@@ -59,6 +59,7 @@ with Context() as ctx, Location.unknown():
             [rtl.ConstantOp(i32, IntegerAttr.get(i32, 46)).result]),
     )
 
+    # CHECK-LABEL: rtl.module @instance_builder_tests
     def instance_builder_body(module):
       # CHECK: %[[INST1_RESULT:.+]] = rtl.instance "inst1" @one_output()
       inst1 = one_output.create("inst1")
@@ -68,7 +69,7 @@ with Context() as ctx, Location.unknown():
 
       # COM: CHECK-NOT: rtl.instance "inst3"
       # COM: handle un-resolved backedges.
-      inst3 = two_inputs.create("inst3", {"a": inst1.a})
+      # COM: inst3 = two_inputs.create("inst3", {"a": inst1.a})
 
       # CHECK: rtl.instance "inst4" @two_inputs(%[[INST1_RESULT]], %[[INST1_RESULT]])
       inst4 = two_inputs.create("inst4", {"a": inst1.a})
@@ -80,7 +81,6 @@ with Context() as ctx, Location.unknown():
 
       rtl.OutputOp([])
 
-    # CHECK-LABEL: rtl.module @instance_builder_tests
     instance_builder_tests = rtl.RTLModuleOp(name="instance_builder_tests",
                                              body_builder=instance_builder_body)
 
