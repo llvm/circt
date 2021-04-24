@@ -12,6 +12,7 @@ class InstanceBuilder:
 
   __slots__ = [
       "__parent_module__",
+      "__mod__",
       "__backedges__",
       "__instance__",
       "__operand_indices__",
@@ -45,7 +46,7 @@ class InstanceBuilder:
         operand_values.append(input_port_mapping[arg_name])
       else:
         type = module.type.inputs[i]
-        backedge = parent_module.backedge_builder.create(type)
+        backedge = parent_module.backedge_builder.create(type, self)
         backedges[i] = backedge
         operand_values.append(backedge)
 
@@ -54,8 +55,9 @@ class InstanceBuilder:
       result_name = StringAttr(result_names[i]).value
       result_indices[result_name] = i
 
-    # Save the module, backedges, operand, and result indices for later.
+    # Save the parent, module, backedges, operand, and result indices for later.
     self.__parent_module__ = parent_module
+    self.__mod__ = module
     self.__backedges__ = backedges
     self.__operand_indices__ = operand_indices
     self.__result_indices__ = result_indices
@@ -105,6 +107,11 @@ class InstanceBuilder:
   def operation(self):
     """Get the operation associated with this builder."""
     return self.__instance__.operation
+
+  @property
+  def module(self):
+    """Get the module associated with this builder."""
+    return self.__mod__.operation
 
 
 class RTLModuleOp:

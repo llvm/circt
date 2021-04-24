@@ -7,29 +7,33 @@ class BackedgeBuilder:
 
   def __init__(self):
     self.edges = []
-    self.n = 0
-    print(f"initialized")
+    self.builders = {}
 
-  def create(self, type):
-    print(f"adding, n = {self.n}")
+  def create(self, type, instance_builder):
     from mlir.ir import Operation
 
-    edge = Operation.create(f"TemporaryBackedge{self.n}", [type]).result
-    self.n += 1
+    edge = Operation.create(f"TemporaryBackedge", [type]).result
     self.edges.append(edge)
-
-    print(
-        f"added {edge.owner.name}, remaining edges = {len(self.edges)}, n = {self.n}"
-    )
+    self.builders[repr(edge)] = instance_builder
     return edge
 
   def remove(self, edge):
-    print(f"removing {edge.owner.name}, n = {self.n}")
     self.edges.remove(edge)
     edge.owner.destroy()
-    print(
-        f"removed {edge.owner.name}, remaining edges = {len(self.edges)}, n = {self.n}"
-    )
 
   def check(self):
-    print(f"checking, remaining edges = {len(self.edges)}, n = {self.n}")
+    for edge in self.edges:
+      builder = self.builders[repr(edge)]
+      value = str(edge)
+      instance = str(builder.operation)
+      module = str(builder.module)
+
+      import re
+      value_ident = re.search("(%\w+) =", value)[1]
+      module_decl = re.search("(rtl.module @.+\))", module)[1]
+
+      msg = "Uninitialized ports remain in circuit!\n"
+      msg += "Port:     " + value_ident + "\n"
+      msg += "Instance: " + instance + "\n"
+      msg += "Module:   " + module_decl + "\n"
+      raise RuntimeError(msg)
