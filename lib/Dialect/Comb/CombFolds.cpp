@@ -171,8 +171,7 @@ static Attribute constFoldVariadicOp(ArrayRef<Attribute> operands,
 }
 
 OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
-  auto width = getType().getWidth();
-  APInt value(/*numBits=*/width, -1, /*isSigned=*/false);
+  APInt value = APInt::getAllOnesValue(getType().getWidth());
 
   // and(x, 0, 1) -> 0 -- annulment
   for (auto operand : constants) {

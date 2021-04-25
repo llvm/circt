@@ -833,3 +833,20 @@ rtl.module @sub_fold3(%arg0: i7) -> (i7) {
   %0 = comb.sub %arg0, %arg0 : i7
   rtl.output %0 : i7
 }
+
+// CHECK-LABEL: issue955
+// Incorrect constant folding with >64 bit constants.
+rtl.module @issue955() -> (i100, i100) {
+  // 1 << 64
+  %0 = rtl.constant 18446744073709551616 : i100
+  %1 = comb.and %0, %0 : i100
+
+  // CHECK: = rtl.constant 18446744073709551616 : i100
+  
+  // (1 << 64) + 1
+  %2 = rtl.constant 18446744073709551617 : i100
+  %3 = comb.and %2, %2 : i100
+
+  // CHECK: = rtl.constant 18446744073709551617 : i100
+  rtl.output %1, %3 : i100, i100
+}
