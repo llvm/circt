@@ -28,7 +28,9 @@ namespace {
 /// and various other operations to a legalized version that is properly
 /// uniquified and does not collide with any keywords.
 struct LegalNamesAnalysis {
-  LegalNamesAnalysis(mlir::Operation *op);
+  LegalNamesAnalysis(ModuleOp module);
+  LegalNamesAnalysis(RTLModuleOp module);
+  LegalNamesAnalysis(InterfaceOp op);
 
   /// Return the legalized name for an operation or assert if there is none.
   StringRef getOperationName(Operation *op) const;
@@ -63,10 +65,6 @@ private:
   StringRef legalizeResult(Operation *op, size_t resultNum, StringAttr name);
 
   void analyzeModulePorts(Operation *module);
-  void analyze(mlir::ModuleOp op);
-  void analyze(rtl::RTLModuleOp op);
-  void analyze(rtl::RTLModuleExternOp op);
-  void analyze(sv::InterfaceOp op);
 };
 } // end anonymous namespace
 
@@ -137,24 +135,8 @@ StringRef LegalNamesAnalysis::legalizeResult(Operation *op, size_t resultNum,
 // Operation Analysis
 //===----------------------------------------------------------------------===//
 
-/// Construct a lookup table of legalized and legalized names for an operation.
-///
-/// You will generally want to use \c getAnalysis<LegalNamesAnalysis>() and
-/// \c getChildAnalysis<LegalNamesAnalysis>(op) inside your pass.
-LegalNamesAnalysis::LegalNamesAnalysis(Operation *op) {
-  if (auto op2 = dyn_cast<mlir::ModuleOp>(op)) {
-    analyze(op2);
-  } else if (auto op2 = dyn_cast<RTLModuleOp>(op)) {
-    analyze(op2);
-  } else if (auto op2 = dyn_cast<RTLModuleExternOp>(op)) {
-    analyze(op2);
-  } else if (auto op2 = dyn_cast<InterfaceOp>(op)) {
-    analyze(op2);
-  }
-}
-
 /// Legalize the name of modules and interfaces in an MLIR module.
-void LegalNamesAnalysis::analyze(mlir::ModuleOp op) {
+LegalNamesAnalysis::LegalNamesAnalysis(mlir::ModuleOp op) {
   // Register the names of external modules which we cannot rename. This has to
   // occur in a first pass separate from the modules and interfaces which we are
   // actually allowed to rename, in order to ensure that we don't accidentally
@@ -186,7 +168,7 @@ void LegalNamesAnalysis::analyzeModulePorts(Operation *module) {
 }
 
 /// Legalize the ports, instances, regs, and wires of an RTL module.
-void LegalNamesAnalysis::analyze(rtl::RTLModuleOp op) {
+LegalNamesAnalysis::LegalNamesAnalysis(rtl::RTLModuleOp op) {
   // Legalize the ports.
   analyzeModulePorts(op);
 
@@ -200,17 +182,8 @@ void LegalNamesAnalysis::analyze(rtl::RTLModuleOp op) {
   });
 }
 
-/// Register the ports of an RTL extern module.
-///
-/// Note that we explicitly do not legalize the names, as we do not have control
-/// over the corresponding module declaration with it being supplied externally.
-void LegalNamesAnalysis::analyze(rtl::RTLModuleExternOp op) {
-  // Legalize the ports.
-  analyzeModulePorts(op);
-}
-
 /// Legalize the signals and modports of an SV interface.
-void LegalNamesAnalysis::analyze(sv::InterfaceOp op) {
+LegalNamesAnalysis::LegalNamesAnalysis(sv::InterfaceOp op) {
   // TODO: Once interfaces gain ports we'll want to legalize them here as well,
   // pretty much like the RTLModuleOp.
 
@@ -245,7 +218,7 @@ void RTLLegalizeNamesPass::runOnOperation() {
   ModuleOp root = getOperation();
 
   // Analyze the legal names for top-level operations in the MLIR module.
-  auto &rootNames = getAnalysis<LegalNamesAnalysis>();
+  LegalNamesAnalysis rootNames(root);
 
   // Rename modules and interfaces.
   mlir::SymbolTableCollection symbolTable;
@@ -284,7 +257,7 @@ void RTLLegalizeNamesPass::runOnOperation() {
 }
 
 void RTLLegalizeNamesPass::runOnModule(rtl::RTLModuleOp module) {
-  auto localNames = getChildAnalysis<LegalNamesAnalysis>(module);
+  LegalNamesAnalysis localNames(module);
   auto moduleType = rtl::getModuleType(module);
   auto inputs = moduleType.getInputs();
   auto results = moduleType.getResults();
@@ -346,9 +319,9 @@ void RTLLegalizeNamesPass::runOnModule(rtl::RTLModuleOp module) {
   }
 }
 
-void RTLLegalizeNamesPass::runOnInterface(sv::InterfaceOp intf,
+void RTLLegalizeNamesPass::runOnInterface(InterfaceOp intf,
                                           mlir::SymbolUserMap &symbolUsers) {
-  auto localNames = getChildAnalysis<LegalNamesAnalysis>(intf);
+  LegalNamesAnalysis localNames(intf);
 
   // Rename signals and modports.
   for (auto &op : *intf.getBodyBlock()) {
