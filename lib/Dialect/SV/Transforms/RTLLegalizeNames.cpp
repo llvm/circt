@@ -24,13 +24,12 @@ namespace {
 
 /// A lookup table for legalized and legalized output names.
 ///
-/// This analysis establishes a mapping from the name of modules, interfaces,
+/// This analysis establishes a mapping from the name of modules
 /// and various other operations to a legalized version that is properly
 /// uniquified and does not collide with any keywords.
 struct LegalNamesAnalysis {
   LegalNamesAnalysis(ModuleOp module);
   LegalNamesAnalysis(RTLModuleOp module);
-  LegalNamesAnalysis(InterfaceOp op);
 
   /// Return the legalized name for an operation or assert if there is none.
   StringRef getOperationName(Operation *op) const;
@@ -182,18 +181,35 @@ LegalNamesAnalysis::LegalNamesAnalysis(rtl::RTLModuleOp op) {
   });
 }
 
-/// Legalize the signals and modports of an SV interface.
-LegalNamesAnalysis::LegalNamesAnalysis(sv::InterfaceOp op) {
-  // TODO: Once interfaces gain ports we'll want to legalize them here as well,
-  // pretty much like the RTLModuleOp.
+//===----------------------------------------------------------------------===//
+// NameCollisionResolver
+//===----------------------------------------------------------------------===//
 
-  // Legalize signals and modports.
-  for (auto &op : *op.getBodyBlock()) {
-    if (isa<InterfaceSignalOp>(op) || isa<InterfaceModportOp>(op)) {
-      legalizeOperation(
-          &op, op.getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()));
-    }
-  }
+namespace {
+struct NameCollisionResolver {
+  NameCollisionResolver() = default;
+
+  /// Given a name that may have collisions or invalid symbols, return a
+  /// replacement name to use, or null if the original name was ok.
+  StringRef getLegalName(StringRef originalName);
+
+private:
+  /// Set of used names, to ensure uniqueness.
+  llvm::StringSet<> usedNames;
+
+  /// Numeric suffix used as uniquification agent when resolving conflicts.
+  size_t nextGeneratedNameID = 0;
+
+  NameCollisionResolver(const NameCollisionResolver &) = delete;
+  void operator=(const NameCollisionResolver &) = delete;
+};
+} // end anonymous namespace
+
+/// Given a name that may have collisions or invalid symbols, return a
+/// replacement name to use, or null if the original name was ok.
+StringRef NameCollisionResolver::getLegalName(StringRef originalName) {
+  StringRef result = legalizeName(originalName, usedNames, nextGeneratedNameID);
+  return result != originalName ? result : StringRef();
 }
 
 //===----------------------------------------------------------------------===//
@@ -319,21 +335,23 @@ void RTLLegalizeNamesPass::runOnModule(rtl::RTLModuleOp module) {
   }
 }
 
-void RTLLegalizeNamesPass::runOnInterface(InterfaceOp intf,
+void RTLLegalizeNamesPass::runOnInterface(InterfaceOp interface,
                                           mlir::SymbolUserMap &symbolUsers) {
-  LegalNamesAnalysis localNames(intf);
+  NameCollisionResolver localNames;
+  auto symbolAttrName = SymbolTable::getSymbolAttrName();
 
   // Rename signals and modports.
-  for (auto &op : *intf.getBodyBlock()) {
-    if (isa<InterfaceSignalOp>(op) || isa<InterfaceModportOp>(op)) {
-      auto oldName = SymbolTable::getSymbolName(&op);
-      auto newName = localNames.getOperationName(&op);
-      if (oldName != newName) {
-        symbolUsers.replaceAllUsesWith(&op, newName);
-        SymbolTable::setSymbolName(&op, newName);
-        anythingChanged = true;
-      }
-    }
+  for (auto &op : *interface.getBodyBlock()) {
+    if (!isa<InterfaceSignalOp>(op) && !isa<InterfaceModportOp>(op))
+      continue;
+
+    StringRef oldName = op.getAttrOfType<StringAttr>(symbolAttrName).getValue();
+    auto newName = localNames.getLegalName(oldName);
+    if (newName.empty())
+      continue;
+    symbolUsers.replaceAllUsesWith(&op, newName);
+    SymbolTable::setSymbolName(&op, newName);
+    anythingChanged = true;
   }
 }
 
