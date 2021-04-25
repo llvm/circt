@@ -173,7 +173,7 @@ static Attribute constFoldVariadicOp(ArrayRef<Attribute> operands,
 OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
   APInt value = APInt::getAllOnesValue(getType().getWidth());
 
-  // and(x, 0, 1) -> 0 -- annulment
+  // and(x, 01, 10) -> 00 -- annulment.
   for (auto operand : constants) {
     if (!operand)
       continue;
@@ -182,12 +182,12 @@ OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
       return getIntAttr(value, getContext());
   }
 
-  // and(x, -1) -> x
+  // and(x, -1) -> x.
   if (constants.size() == 2 && constants[1] &&
       constants[1].cast<IntegerAttr>().getValue().isAllOnesValue())
     return inputs()[0];
 
-  // and(x, x, x) -> x -- noop
+  // and(x, x, x) -> x.  This also handles and(x) -> x.
   if (llvm::all_of(inputs(), [&](auto in) { return in == this->inputs()[0]; }))
     return inputs()[0];
 
@@ -199,16 +199,7 @@ OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
 LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
   auto inputs = op.inputs();
   auto size = inputs.size();
-  assert(size > 1 && "expected 2 or more operands");
-
-  APInt value, value2;
-
-  // and(..., '1) -> and(...) -- identity
-  if (matchPattern(inputs.back(), m_RConstant(value)) &&
-      value.isAllOnesValue()) {
-    rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), inputs.drop_back());
-    return success();
-  }
+  assert(size > 1 && "expected 2 or more operands, `fold` should handle this");
 
   // TODO: remove all duplicate arguments
   // and(..., x, x) -> and(..., x) -- idempotent
@@ -217,16 +208,27 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
     return success();
   }
 
-  // TODO: Combine all constants in one shot
-  // and(..., c1, c2) -> and(..., c3) where c3 = c1 & c2 -- constant folding
-  if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
-      matchPattern(inputs[size - 2], m_RConstant(value2))) {
-    auto cst = rewriter.create<rtl::ConstantOp>(op.getLoc(), value & value2);
-    SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
-    newOperands.push_back(cst);
-    rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
-    return success();
+  // Patterns for and with a constant on RHS.
+  APInt value;
+  if (matchPattern(inputs.back(), m_RConstant(value))) {
+    // and(..., '1) -> and(...) -- identity
+    if (value.isAllOnesValue()) {
+      rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), inputs.drop_back());
+      return success();
+    }
+
+    // TODO: Combine multiple constants together even if they aren't at the end.
+    // and(..., c1, c2) -> and(..., c3) where c3 = c1 & c2 -- constant folding
+    APInt value2;
+    if (matchPattern(inputs[size - 2], m_RConstant(value2))) {
+      auto cst = rewriter.create<rtl::ConstantOp>(op.getLoc(), value & value2);
+      SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
+      newOperands.push_back(cst);
+      rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
+      return success();
+    }
   }
+
   // and(x, and(...)) -> and(x, ...) -- flatten
   if (tryFlatteningOperands(op, rewriter))
     return success();
@@ -236,10 +238,9 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult OrOp::fold(ArrayRef<Attribute> constants) {
-  auto width = getType().getWidth();
-  APInt value(/*numBits=*/width, 0, /*isSigned=*/false);
+  APInt value(/*numBits=*/getType().getWidth(), 0, /*isSigned=*/false);
 
-  // or(x, 1, 0) -> 1
+  // or(x, 10, 01) -> 11
   for (auto operand : constants) {
     if (!operand)
       continue;
@@ -253,7 +254,7 @@ OpFoldResult OrOp::fold(ArrayRef<Attribute> constants) {
       constants[1].cast<IntegerAttr>().getValue().isNullValue())
     return inputs()[0];
 
-  // or(x, x, x) -> x
+  // or(x, x, x) -> x.  This also handles or(x) -> x
   if (llvm::all_of(inputs(), [&](auto in) { return in == this->inputs()[0]; }))
     return inputs()[0];
 
@@ -326,40 +327,39 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
 
-  APInt value, value2;
-
-  // xor(..., 0) -> xor(...) -- identity
-  if (matchPattern(inputs.back(), m_RConstant(value)) && value.isNullValue()) {
-
-    rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(), inputs.drop_back());
-    return success();
-  }
-
+  // xor(..., x, x) -> xor (...) -- idempotent
   if (inputs[size - 1] == inputs[size - 2]) {
     assert(size > 2 &&
            "expected idempotent case for 2 elements handled already.");
-    // xor(..., x, x) -> xor (...) -- idempotent
     rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(),
                                        inputs.drop_back(/*n=*/2));
     return success();
   }
 
-  // xor(..., c1, c2) -> xor(..., c3) where c3 = c1 ^ c2 -- constant folding
-  if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
-      matchPattern(inputs[size - 2], m_RConstant(value2))) {
-    auto cst = rewriter.create<rtl::ConstantOp>(op.getLoc(), value ^ value2);
-    SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
-    newOperands.push_back(cst);
-    rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(), newOperands);
-    return success();
+  // Patterns for xor with a constant on RHS.
+  APInt value;
+  if (matchPattern(inputs.back(), m_RConstant(value))) {
+    // xor(..., 0) -> xor(...) -- identity
+    if (value.isNullValue()) {
+      rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(), inputs.drop_back());
+      return success();
+    }
+
+    // xor(..., c1, c2) -> xor(..., c3) where c3 = c1 ^ c2.
+    APInt value2;
+    if (matchPattern(inputs[size - 2], m_RConstant(value2))) {
+      auto cst = rewriter.create<rtl::ConstantOp>(op.getLoc(), value ^ value2);
+      SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
+      newOperands.push_back(cst);
+      rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(), newOperands);
+      return success();
+    }
   }
 
   // xor(x, xor(...)) -> xor(x, ...) -- flatten
   if (tryFlatteningOperands(op, rewriter))
     return success();
 
-  /// TODO: xor(..., '1) -> not(xor(...))
-  /// TODO: xor(..., x, not(x)) -> xor(..., '1)
   return failure();
 }
 
