@@ -850,3 +850,24 @@ rtl.module @issue955() -> (i100, i100) {
   // CHECK: = rtl.constant 18446744073709551617 : i100
   rtl.output %1, %3 : i100, i100
 }
+
+// CHECK-LABEL: sext_and_one_bit
+rtl.module @sext_and_one_bit(%bit: i1) -> (%a: i65, %b: i8, %c: i8) {
+  %c-18446744073709551616_i65 = rtl.constant -18446744073709551616 : i65
+  %0 = comb.sext %bit : (i1) -> i65
+  %1 = comb.and %0, %c-18446744073709551616_i65 : i65
+  // CHECK: [[A:%[0-9]+]] = comb.concat %bit, %c0_i64 : (i1, i64) -> i65
+
+  %c4_i8 = rtl.constant 4 : i8
+  %2 = comb.sext %bit : (i1) -> i8
+  %3 = comb.and %2, %c4_i8 : i8
+  // CHECK: [[B:%[0-9]+]] = comb.concat %c0_i5, %bit, %c0_i2 : (i5, i1, i2) -> i8
+
+  %c1_i8 = rtl.constant 1 : i8
+  %4 = comb.and %2, %c1_i8 : i8
+  // CHECK: [[C:%[0-9]+]] = comb.concat %c0_i7, %bit : (i7, i1) -> i8
+
+  // CHECK: rtl.output [[A]], [[B]], [[C]] :
+  rtl.output %1, %3, %4 : i65, i8, i8
+}
+

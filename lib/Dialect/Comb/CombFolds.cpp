@@ -227,6 +227,38 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
       rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
       return success();
     }
+
+    // Handle 'and' with a single bit constant on the RHS.
+    if (size == 2 && value.isPowerOf2()) {
+      // If the LHS is a sign extend from a single bit, we can 'concat' it into
+      // place.  e.g.:
+      //   `sext(x) & 4` -> `concat(zeros, x, zeros)`
+      if (auto sext = inputs[0].getDefiningOp<SExtOp>()) {
+        auto sextOperand = sext.getOperand();
+        if (sextOperand.getType().isInteger(1)) {
+          unsigned resultWidth = op.getType().getIntOrFloatBitWidth();
+          auto trailingZeros = value.countTrailingZeros();
+
+          // We have to dance around the top and bottom bits because we can't
+          // make zero bit wide APInts.
+          SmallVector<Value, 3> concatOperands;
+          if (trailingZeros != resultWidth - 1) {
+            auto highZeros = rewriter.create<rtl::ConstantOp>(
+                op.getLoc(), APInt(resultWidth - trailingZeros - 1, 0));
+            concatOperands.push_back(highZeros);
+          }
+          concatOperands.push_back(sextOperand);
+          if (trailingZeros != 0) {
+            auto lowZeros = rewriter.create<rtl::ConstantOp>(
+                op.getLoc(), APInt(trailingZeros, 0));
+            concatOperands.push_back(lowZeros);
+          }
+          rewriter.replaceOpWithNewOp<ConcatOp>(op, op.getType(),
+                                                concatOperands);
+          return success();
+        }
+      }
+    }
   }
 
   // and(x, and(...)) -> and(x, ...) -- flatten
