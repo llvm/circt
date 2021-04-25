@@ -14,172 +14,10 @@
 #include "SVPassDetail.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
-#include "circt/Translation/ExportVerilog.h"
 
 using namespace circt;
 using namespace sv;
 using namespace rtl;
-
-namespace {
-
-/// A lookup table for legalized and legalized output names.
-///
-/// This analysis establishes a mapping from the name of modules
-/// and various other operations to a legalized version that is properly
-/// uniquified and does not collide with any keywords.
-struct LegalNamesAnalysis {
-  LegalNamesAnalysis(ModuleOp module);
-  LegalNamesAnalysis(RTLModuleOp module);
-
-  /// Return the legalized name for an operation or assert if there is none.
-  StringRef getOperationName(Operation *op) const;
-  /// Return the legalized name for an argument to an operation or assert if
-  /// there is none.
-  StringRef getArgName(Operation *op, size_t argNum) const;
-  /// Return the legalized name for a result from an operation or assert if
-  /// there is none.
-  StringRef getResultName(Operation *op, size_t resultNum) const;
-
-private:
-  /// Mapping from operations to their legalized name. Used for module, extern
-  /// module, and interface operations.
-  llvm::DenseMap<Operation *, StringRef> operationNames;
-
-  /// Mapping from operation arguments to their legalized name. Used for module
-  /// input ports.
-  llvm::DenseMap<std::pair<Operation *, size_t>, StringRef> argNames;
-
-  /// Mapping from operation results to their legalized name. Used for module
-  /// output ports.
-  llvm::DenseMap<std::pair<Operation *, size_t>, StringRef> resultNames;
-
-  /// Set of used names, to ensure uniqueness.
-  llvm::StringSet<> usedNames;
-
-  /// Numeric suffix used as uniquification agent when resolving conflicts.
-  size_t nextGeneratedNameID = 0;
-
-  StringRef legalizeOperation(Operation *op, StringAttr name);
-  StringRef legalizeArg(Operation *op, size_t argNum, StringAttr name);
-  StringRef legalizeResult(Operation *op, size_t resultNum, StringAttr name);
-
-  void analyzeModulePorts(Operation *module);
-};
-} // end anonymous namespace
-
-//===----------------------------------------------------------------------===//
-// Name Lookup
-//===----------------------------------------------------------------------===//
-
-/// Return the legalized name for an operation or assert if there is none.
-StringRef LegalNamesAnalysis::getOperationName(Operation *op) const {
-  auto nameIt = operationNames.find(op);
-  assert(nameIt != operationNames.end() && "expected valid legalized name");
-  return nameIt->second;
-}
-
-/// Return the legalized name for an argument to an operation or assert if there
-/// is none.
-StringRef LegalNamesAnalysis::getArgName(Operation *op, size_t argNum) const {
-  auto nameIt = argNames.find(std::make_pair(op, argNum));
-  assert(nameIt != argNames.end() && "expected valid legalized name");
-  return nameIt->second;
-}
-
-/// Return the legalized name for a result from an operation or assert if there
-/// is none.
-StringRef LegalNamesAnalysis::getResultName(Operation *op,
-                                            size_t resultNum) const {
-  auto nameIt = resultNames.find(std::make_pair(op, resultNum));
-  assert(nameIt != resultNames.end() && "expected valid legalized name");
-  return nameIt->second;
-}
-
-//===----------------------------------------------------------------------===//
-// Name Legalization
-//===----------------------------------------------------------------------===//
-
-/// Legalize the name of an operation and register it for later retrieval.
-StringRef LegalNamesAnalysis::legalizeOperation(Operation *op,
-                                                StringAttr name) {
-  auto &entry = operationNames[op];
-  if (entry.empty())
-    entry = legalizeName(name.getValue(), usedNames, nextGeneratedNameID);
-
-  return entry;
-}
-
-/// Legalize the name of an argument to an operation, and register it for later
-/// retrieval.
-StringRef LegalNamesAnalysis::legalizeArg(Operation *op, size_t argNum,
-                                          StringAttr name) {
-  auto &entry = argNames[std::make_pair(op, argNum)];
-  if (entry.empty())
-    entry = legalizeName(name.getValue(), usedNames, nextGeneratedNameID);
-
-  return entry;
-}
-
-/// Legalize the name of a result from an operation, and register it for later
-/// retrieval.
-StringRef LegalNamesAnalysis::legalizeResult(Operation *op, size_t resultNum,
-                                             StringAttr name) {
-  auto &entry = resultNames[std::make_pair(op, resultNum)];
-  if (entry.empty())
-    entry = legalizeName(name.getValue(), usedNames, nextGeneratedNameID);
-  return entry;
-}
-
-//===----------------------------------------------------------------------===//
-// Operation Analysis
-//===----------------------------------------------------------------------===//
-
-/// Legalize the name of modules and interfaces in an MLIR module.
-LegalNamesAnalysis::LegalNamesAnalysis(mlir::ModuleOp op) {
-  // Register the names of external modules which we cannot rename. This has to
-  // occur in a first pass separate from the modules and interfaces which we are
-  // actually allowed to rename, in order to ensure that we don't accidentally
-  // rename a module that later collides with an extern module.
-  for (auto &op : *op.getBody()) {
-    if (auto extMod = dyn_cast<RTLModuleExternOp>(op)) {
-      legalizeOperation(&op, extMod.getVerilogModuleNameAttr());
-    }
-  }
-
-  // Legalize modules and interfaces.
-  for (auto &op : *op.getBody()) {
-    if (auto module = dyn_cast<RTLModuleOp>(op)) {
-      legalizeOperation(&op, module.getNameAttr());
-    } else if (auto intf = dyn_cast<InterfaceOp>(op)) {
-      legalizeOperation(&op, intf.getNameAttr());
-    }
-  }
-}
-
-void LegalNamesAnalysis::analyzeModulePorts(Operation *module) {
-  for (const ModulePortInfo &port : getModulePortInfo(module)) {
-    if (port.isOutput()) {
-      legalizeResult(module, port.argNum, port.name);
-    } else {
-      legalizeArg(module, port.argNum, port.name);
-    }
-  }
-}
-
-/// Legalize the ports, instances, regs, and wires of an RTL module.
-LegalNamesAnalysis::LegalNamesAnalysis(rtl::RTLModuleOp op) {
-  // Legalize the ports.
-  analyzeModulePorts(op);
-
-  // Legalize instances, regs, and wires.
-  op.walk([&](Operation *op) {
-    if (auto instanceOp = dyn_cast<InstanceOp>(op)) {
-      legalizeOperation(op, instanceOp.getNameAttr());
-    } else if (isa<RegOp>(op) || isa<WireOp>(op)) {
-      legalizeOperation(op, op->getAttrOfType<StringAttr>("name"));
-    }
-  });
-}
 
 //===----------------------------------------------------------------------===//
 // NameCollisionResolver
@@ -191,7 +29,7 @@ struct NameCollisionResolver {
 
   /// Given a name that may have collisions or invalid symbols, return a
   /// replacement name to use, or null if the original name was ok.
-  StringRef getLegalName(StringRef originalName);
+  StringRef getLegalName(StringAttr originalName);
 
 private:
   /// Set of used names, to ensure uniqueness.
@@ -207,9 +45,10 @@ private:
 
 /// Given a name that may have collisions or invalid symbols, return a
 /// replacement name to use, or null if the original name was ok.
-StringRef NameCollisionResolver::getLegalName(StringRef originalName) {
-  StringRef result = legalizeName(originalName, usedNames, nextGeneratedNameID);
-  return result != originalName ? result : StringRef();
+StringRef NameCollisionResolver::getLegalName(StringAttr originalName) {
+  StringRef result =
+      legalizeName(originalName.getValue(), usedNames, nextGeneratedNameID);
+  return result != originalName.getValue() ? result : StringRef();
 }
 
 //===----------------------------------------------------------------------===//
@@ -232,24 +71,38 @@ private:
 void RTLLegalizeNamesPass::runOnOperation() {
   anythingChanged = false;
   ModuleOp root = getOperation();
-
-  // Analyze the legal names for top-level operations in the MLIR module.
-  LegalNamesAnalysis rootNames(root);
-
-  // Rename modules and interfaces.
   mlir::SymbolTableCollection symbolTable;
   mlir::SymbolUserMap symbolUsers(symbolTable, root);
 
+  // Analyze the legal names for top-level operations in the MLIR module.
+  NameCollisionResolver nameResolver;
+
+  // Register the names of external modules which we cannot rename. This has to
+  // occur in a first pass separate from the modules and interfaces which we are
+  // actually allowed to rename, in order to ensure that we don't accidentally
+  // rename a module that later collides with an extern module.
   for (auto &op : *root.getBody()) {
-    if (isa<RTLModuleOp>(op) || isa<InterfaceOp>(op)) {
-      auto oldName = SymbolTable::getSymbolName(&op);
-      auto newName = rootNames.getOperationName(&op);
-      if (oldName != newName) {
-        symbolUsers.replaceAllUsesWith(&op, newName);
-        SymbolTable::setSymbolName(&op, newName);
-        anythingChanged = true;
-      }
-    }
+    // Note that external modules *often* have name collisions, because they
+    // correspond to the same verilog module with different parameters.
+    if (auto extMod = dyn_cast<RTLModuleExternOp>(op))
+      (void)nameResolver.getLegalName(extMod.getVerilogModuleNameAttr());
+  }
+
+  auto symbolAttrName = SymbolTable::getSymbolAttrName();
+
+  // Legalize module and interface names.
+  for (auto &op : *root.getBody()) {
+    if (!isa<RTLModuleOp>(op) && !isa<InterfaceOp>(op))
+      continue;
+
+    StringAttr oldName = op.getAttrOfType<StringAttr>(symbolAttrName);
+    auto newName = nameResolver.getLegalName(oldName);
+    if (newName.empty())
+      continue;
+
+    symbolUsers.replaceAllUsesWith(&op, newName);
+    SymbolTable::setSymbolName(&op, newName);
+    anythingChanged = true;
   }
 
   // Rename individual operations.
@@ -273,61 +126,47 @@ void RTLLegalizeNamesPass::runOnOperation() {
 }
 
 void RTLLegalizeNamesPass::runOnModule(rtl::RTLModuleOp module) {
-  LegalNamesAnalysis localNames(module);
-  auto moduleType = rtl::getModuleType(module);
-  auto inputs = moduleType.getInputs();
-  auto results = moduleType.getResults();
+  NameCollisionResolver nameResolver;
 
-  // Rename the inputs.
-  bool changedName = false;
-  SmallVector<Attribute> names;
-  for (size_t i = 0, e = inputs.size(); i != e; ++i) {
-    auto oldName = getModuleArgumentNameAttr(module, i);
-    auto newName = localNames.getArgName(module, i);
-    if (oldName.getValue() == newName)
-      names.push_back(oldName);
-    else {
-      names.push_back(StringAttr::get(module.getContext(), newName));
-      changedName = true;
+  bool changedArgNames = false, changedOutputNames = false;
+  SmallVector<Attribute> argNames, outputNames;
+
+  // Legalize the ports.
+  for (const ModulePortInfo &port : getModulePortInfo(module)) {
+    auto newName = nameResolver.getLegalName(port.name);
+
+    auto &namesVector = port.isOutput() ? outputNames : argNames;
+    auto &changedBool = port.isOutput() ? changedOutputNames : changedArgNames;
+
+    if (newName.empty()) {
+      namesVector.push_back(port.name);
+    } else {
+      changedBool = true;
+      namesVector.push_back(StringAttr::get(module.getContext(), newName));
     }
   }
-  if (changedName) {
-    setModuleArgumentNames(module, names);
+
+  if (changedArgNames) {
+    setModuleArgumentNames(module, argNames);
     anythingChanged = true;
   }
-
-  changedName = false;
-  names.clear();
-
-  // Rename the results if needed.
-  for (size_t i = 0, e = results.size(); i != e; ++i) {
-    auto oldName = getModuleResultNameAttr(module, i);
-    auto newName = localNames.getResultName(module, i);
-    if (oldName.getValue() == newName)
-      names.push_back(oldName);
-    else {
-      names.push_back(StringAttr::get(module.getContext(), newName));
-      changedName = true;
-    }
-  }
-  if (changedName) {
-    setModuleResultNames(module, names);
+  if (changedOutputNames) {
+    setModuleResultNames(module, outputNames);
     anythingChanged = true;
   }
 
   // Rename the instances, regs, and wires.
   for (auto &op : *module.getBodyBlock()) {
     if (auto instanceOp = dyn_cast<InstanceOp>(op)) {
-      auto oldName = instanceOp.getName();
-      auto newName = localNames.getOperationName(&op);
-      if (oldName != newName) {
+      auto newName = nameResolver.getLegalName(instanceOp.getNameAttr());
+      if (!newName.empty()) {
         instanceOp.setName(newName);
         anythingChanged = true;
       }
     } else if (isa<RegOp>(op) || isa<WireOp>(op)) {
-      auto oldName = op.getAttrOfType<StringAttr>("name").getValue();
-      auto newName = localNames.getOperationName(&op);
-      if (oldName != newName) {
+      auto oldName = op.getAttrOfType<StringAttr>("name");
+      auto newName = nameResolver.getLegalName(oldName);
+      if (!newName.empty()) {
         op.setAttr("name", StringAttr::get(op.getContext(), newName));
         anythingChanged = true;
       }
@@ -345,7 +184,7 @@ void RTLLegalizeNamesPass::runOnInterface(InterfaceOp interface,
     if (!isa<InterfaceSignalOp>(op) && !isa<InterfaceModportOp>(op))
       continue;
 
-    StringRef oldName = op.getAttrOfType<StringAttr>(symbolAttrName).getValue();
+    StringAttr oldName = op.getAttrOfType<StringAttr>(symbolAttrName);
     auto newName = localNames.getLegalName(oldName);
     if (newName.empty())
       continue;
