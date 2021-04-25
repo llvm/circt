@@ -92,6 +92,7 @@ struct GlobalFIRParserState {
         curToken(lex.lexToken()), annotationsBuf(annotationsBuf) {
     dontTouchAnnotation =
         getAnnotationOfClass(context, "firrtl.transforms.DontTouchAnnotation");
+    emptyArrayAttr = ArrayAttr::get(context, {});
   }
 
   /// The context we're parsing into.
@@ -121,6 +122,9 @@ struct GlobalFIRParserState {
 
   // Cached annotation for DontTouch.
   DictionaryAttr dontTouchAnnotation;
+
+  // An empty array attribute.
+  ArrayAttr emptyArrayAttr;
 
   class BacktraceState {
   public:
@@ -1816,7 +1820,7 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
     return emitError(info.getFIRLoc(), "memory should have vector type");
   auto resultType = memVType.getElementType();
 
-  ArrayAttr annotations = builder.getArrayAttr({});
+  ArrayAttr annotations = getState().emptyArrayAttr;
   getAnnotations(getModuleTarget() + ">" + id, annotations);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
@@ -2211,7 +2215,7 @@ ParseResult FIRStmtParser::parseInstance() {
     resultTypes.push_back(FlipType::get(port.type));
     resultNames.push_back(port.name);
   }
-  ArrayAttr annotations = builder.getArrayAttr({});
+  ArrayAttr annotations = getState().emptyArrayAttr;
   getAnnotations(getModuleTarget() + ">" + id, annotations);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
@@ -2252,7 +2256,7 @@ ParseResult FIRStmtParser::parseCMem() {
       parseType(type, "expected cmem type") || parseOptionalInfo(info))
     return failure();
 
-  ArrayAttr annotations = builder.getArrayAttr({});
+  ArrayAttr annotations = getState().emptyArrayAttr;
   getAnnotations(getModuleTarget() + ">" + id, annotations);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
@@ -2287,7 +2291,7 @@ ParseResult FIRStmtParser::parseSMem() {
       parseOptionalInfo(info))
     return failure();
 
-  ArrayAttr annotations = builder.getArrayAttr({});
+  ArrayAttr annotations = getState().emptyArrayAttr;
   getAnnotations(getModuleTarget() + ">" + id, annotations);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
@@ -2421,7 +2425,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     resultTypes.push_back(FlipType::get(p.second));
   }
 
-  ArrayAttr annotations = builder.getArrayAttr({});
+  ArrayAttr annotations = getState().emptyArrayAttr;
   getAnnotations(getModuleTarget() + ">" + id, annotations);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
@@ -2490,7 +2494,7 @@ ParseResult FIRStmtParser::parseNode() {
   // passive.
   initializer = convertToPassive(initializer, initializer.getLoc());
 
-  ArrayAttr annotations = builder.getArrayAttr({});
+  ArrayAttr annotations = getState().emptyArrayAttr;
   getAnnotations(getModuleTarget() + ">" + id, annotations);
 
   // Ignore useless names like _T.
@@ -2524,7 +2528,7 @@ ParseResult FIRStmtParser::parseWire() {
       parseType(type, "expected wire type") || parseOptionalInfo(info))
     return failure();
 
-  ArrayAttr annotations = builder.getArrayAttr({});
+  ArrayAttr annotations = getState().emptyArrayAttr;
   getAnnotations(getModuleTarget() + ">" + id, annotations);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
@@ -2620,7 +2624,7 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   if (parseOptionalInfo(info, subOps))
     return failure();
 
-  ArrayAttr annotations = builder.getArrayAttr({});
+  ArrayAttr annotations = getState().emptyArrayAttr;
   getAnnotations(getModuleTarget() + ">" + id, annotations);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
