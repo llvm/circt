@@ -219,6 +219,17 @@ StringRef RTLModuleExternOp::getVerilogModuleName() {
   return getName();
 }
 
+/// Return the name to use for the Verilog module that we're referencing
+/// here.  This is typically the symbol, but can be overridden with the
+/// verilogName attribute.
+StringAttr RTLModuleExternOp::getVerilogModuleNameAttr() {
+  if (auto vName = verilogNameAttr())
+    return vName;
+
+  return (*this)->getAttrOfType<StringAttr>(
+      ::mlir::SymbolTable::getSymbolAttrName());
+}
+
 void RTLModuleExternOp::build(OpBuilder &builder, OperationState &result,
                               StringAttr name, ArrayRef<ModulePortInfo> ports,
                               StringRef verilogName,
