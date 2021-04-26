@@ -17,7 +17,3 @@ set(LLVM_TARGET_DEFINITIONS SVPasses.td)
 mlir_tablegen(SVPasses.h.inc -gen-pass-decls)
 add_public_tablegen_target(CIRCTSVTransformsIncGen)
 add_circt_doc(SVPasses -gen-pass-doc SVPasses ./)
-
-set(LLVM_TARGET_DEFINITIONS SVCanonicalization.td)
-mlir_tablegen(SVCanonicalization.h.inc -gen-rewriters)
-add_public_tablegen_target(CIRCTSVCanonicalizationIncGen)
