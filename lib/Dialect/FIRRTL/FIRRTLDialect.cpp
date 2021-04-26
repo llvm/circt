@@ -21,7 +21,7 @@ using namespace firrtl;
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
-// If the specified module contains the argNames attribute, return it.
+// If the specified module contains the portNames attribute, return it.
 ArrayAttr firrtl::getModulePortNames(Operation *module) {
   return module->getAttrOfType<ArrayAttr>(portNameAttrStringRef);
 }

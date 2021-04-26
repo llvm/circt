@@ -261,14 +261,14 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   // Record the names of the arguments if present.
   SmallString<8> attrNameBuf;
   // Record the names of the arguments if present.
-  SmallVector<Attribute, 4> argNames;
+  SmallVector<Attribute, 4> portNames;
   for (size_t i = 0, e = ports.size(); i != e; ++i)
     if (ports[i].getName().empty())
-      argNames.push_back(builder.getStringAttr(""));
+      portNames.push_back(builder.getStringAttr(""));
     else
-      argNames.push_back(ports[i].name);
+      portNames.push_back(ports[i].name);
 
-  result.addAttribute(portNameAttrStringRef, builder.getArrayAttr(argNames));
+  result.addAttribute(portNameAttrStringRef, builder.getArrayAttr(portNames));
 
   result.addRegion();
 }
@@ -312,7 +312,7 @@ void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
 static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
                                     ArrayRef<Type> argTypes, bool isVariadic,
                                     ArrayRef<Type> resultTypes,
-                                    bool &needArgNamesAttr) {
+                                    bool &needportNamesAttr) {
   Region &body = op->getRegion(0);
   bool isExternal = body.empty();
   SmallString<32> resultNameStr;
@@ -323,20 +323,20 @@ static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
     if (i > 0)
       p << ", ";
 
-    auto argName = argAttr[i].cast<StringAttr>().getValue();
+    auto portName = argAttr[i].cast<StringAttr>().getValue();
     Value argumentValue;
     if (!isExternal) {
       // Get the printed format for the argument name.
       resultNameStr.clear();
       llvm::raw_svector_ostream tmpStream(resultNameStr);
       p.printOperand(body.front().getArgument(i), tmpStream);
-      // If the name wasn't printable in a way that agreed with argName, make
-      // sure to print out an explicit argNames attribute.
-      if (!argName.empty() && tmpStream.str().drop_front() != argName)
-        needArgNamesAttr = true;
+      // If the name wasn't printable in a way that agreed with portName, make
+      // sure to print out an explicit portNames attribute.
+      if (!portName.empty() && tmpStream.str().drop_front() != portName)
+        needportNamesAttr = true;
       p << tmpStream.str() << ": ";
-    } else if (!argName.empty()) {
-      p << '%' << argName << ": ";
+    } else if (!portName.empty()) {
+      p << '%' << portName << ": ";
     }
 
     p.printType(argTypes[i]);
@@ -369,11 +369,11 @@ static void printModuleLikeOp(OpAsmPrinter &p, Operation *op) {
   p << op->getName() << ' ';
   p.printSymbolName(funcName);
 
-  bool needArgNamesAttr = false;
+  bool needportNamesAttr = false;
   printFunctionSignature2(p, op, argTypes, /*isVariadic*/ false, resultTypes,
-                          needArgNamesAttr);
+                          needportNamesAttr);
   SmallVector<StringRef, 3> omittedAttrs;
-  if (!needArgNamesAttr)
+  if (!needportNamesAttr)
     omittedAttrs.push_back(portNameAttrStringRef);
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(),
                           omittedAttrs);
@@ -437,11 +437,11 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
 
   auto *context = result.getContext();
 
-  SmallVector<Attribute> argNames;
+  SmallVector<Attribute> portNames;
   if (!result.attributes.get(portNameAttrStringRef)) {
-    // Postprocess each of the arguments.  If there was no argNames
+    // Postprocess each of the arguments.  If there was no portNames
     // attribute, and if the argument name was non-numeric, then add the
-    // argNames attribute with the textual name from the IR.  The name in the
+    // portNames attribute with the textual name from the IR.  The name in the
     // text file is a load-bearing part of the IR, but we don't want the
     // verbosity in dumps of including it explicitly in the attribute
     // dictionary.
@@ -453,11 +453,11 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
       // parsing succeeded, we know it always has one character.
       assert(arg.name.size() > 1 && arg.name[0] == '%' && "Unknown MLIR name");
       if (isdigit(arg.name[1]))
-        argNames.push_back(StringAttr::get(context, ""));
+        portNames.push_back(StringAttr::get(context, ""));
       else
-        argNames.push_back(StringAttr::get(context, arg.name.drop_front()));
+        portNames.push_back(StringAttr::get(context, arg.name.drop_front()));
     }
-    result.addAttribute(portNameAttrStringRef, builder.getArrayAttr(argNames));
+    result.addAttribute(portNameAttrStringRef, builder.getArrayAttr(portNames));
   }
   // Add the attributes to the function arguments.
   addArgAndResultAttrs(builder, result, argAttrs, resultAttrs);
