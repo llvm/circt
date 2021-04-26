@@ -229,7 +229,7 @@ SmallVector<ModulePortInfo> firrtl::getModulePortInfo(Operation *op) {
   SmallVector<ModulePortInfo> results;
   auto argTypes = getModuleType(op).getInputs();
 
-  auto argAttr = getFIRRTLModuleArgNameAttr(op);
+  auto argAttr = getModulePortNames(op);
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     auto type = argTypes[i].cast<FIRRTLType>();
     results.push_back({argAttr[i].cast<StringAttr>(), type});
@@ -240,7 +240,7 @@ SmallVector<ModulePortInfo> firrtl::getModulePortInfo(Operation *op) {
 /// Given an FModule or ExtModule, return the name of the specified port number.
 StringAttr firrtl::getModulePortName(Operation *op, size_t portIndex) {
   assert(isa<FModuleOp>(op) || isa<FExtModuleOp>(op));
-  return getFIRRTLModuleArgNameAttr(op)[portIndex].cast<StringAttr>();
+  return getModulePortNames(op)[portIndex].cast<StringAttr>();
 }
 
 static void buildModule(OpBuilder &builder, OperationState &result,
@@ -318,7 +318,7 @@ static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
   SmallString<32> resultNameStr;
 
   p << '(';
-  auto argAttr = getFIRRTLModuleArgNameAttr(op);
+  auto argAttr = getModulePortNames(op);
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     if (i > 0)
       p << ", ";
@@ -513,7 +513,7 @@ static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
 
   if (!llvm::all_of(paramDict, checkParmValue))
     return failure();
-  auto argAttr = getFIRRTLModuleArgNameAttr(op);
+  auto argAttr = getModulePortNames(op);
 
   if (op.getPorts().size() != argAttr.size()) {
     return failure();

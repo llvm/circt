@@ -813,7 +813,7 @@ Value TypeLoweringVisitor::addArg(FModuleOp module, Type type,
 
   // Save the name attribute for the new argument.
   StringAttr nameAttr =
-      getFIRRTLModuleArgNameAttr(module)[oldArgNumber].cast<StringAttr>();
+      getModulePortNames(module)[oldArgNumber].cast<StringAttr>();
   Attribute newArg;
   if (!nameAttr.getValue().empty())
     newArg =

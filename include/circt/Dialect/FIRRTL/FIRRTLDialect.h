@@ -22,9 +22,8 @@ namespace firrtl {
 
 class FIRRTLType;
 
-/// If the specified module has an argnames attribute, return its
-/// value.
-ArrayAttr getFIRRTLModuleArgNameAttr(Operation *module);
+/// Return the argNames attribute for the specified module, which contains the name for each port.
+ArrayAttr getModulePortNames(Operation *module);
 
 } // namespace firrtl
 } // namespace circt

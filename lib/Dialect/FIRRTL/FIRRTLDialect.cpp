@@ -22,7 +22,7 @@ using namespace firrtl;
 //===----------------------------------------------------------------------===//
 
 // If the specified module contains the argNames attribute, return it.
-ArrayAttr firrtl::getFIRRTLModuleArgNameAttr(Operation *module) {
+ArrayAttr firrtl::getModulePortNames(Operation *module) {
   return module->getAttrOfType<ArrayAttr>("argNames");
 }
 
@@ -103,7 +103,7 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
     // attributes for them.  If so, use that as the name.
     auto *parentOp = block->getParentOp();
 
-    auto argAttr = getFIRRTLModuleArgNameAttr(parentOp);
+    auto argAttr = getModulePortNames(parentOp);
     for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
       auto str = argAttr[i].cast<StringAttr>().getValue();
       if (!str.empty())
