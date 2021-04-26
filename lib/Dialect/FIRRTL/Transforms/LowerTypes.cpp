@@ -815,11 +815,10 @@ Value TypeLoweringVisitor::addArg(FModuleOp module, Type type,
   StringAttr nameAttr =
       getFIRRTLModuleArgNameAttr(module)[oldArgNumber].cast<StringAttr>();
   Attribute newArg;
-  if (!nameAttr.getValue().empty()) {
-    SmallString<16> newName(nameAttr.getValue());
-    newName += nameSuffix;
-    newArg = builder->getStringAttr(newName);
-  } else
+  if (!nameAttr.getValue().empty())
+    newArg =
+        builder->getStringAttr(nameAttr.getValue().str() + nameSuffix.str());
+  else
     newArg = builder->getStringAttr("");
   newArgNames.push_back(newArg);
 
