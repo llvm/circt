@@ -854,6 +854,46 @@ static LogicalResult verifyAliasOp(AliasOp op) {
 }
 
 //===----------------------------------------------------------------------===//
+// PAssignOp
+//===----------------------------------------------------------------------===//
+
+// If this reg is only written to, delete the reg and all writers.
+LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
+  return failure();
+  auto mux = dyn_cast<comb::MuxOp>(op.src().getDefiningOp());
+  if (!mux)
+    return failure();
+
+  if (mux.trueValue() != op.src() && mux.falseValue() != op.src())
+    return failure();
+
+  auto reg = dyn_cast<sv::RegOp>(op.dest().getDefiningOp());
+  if (!reg)
+    return failure();
+
+  // Check that this is the only write of the register
+  for (auto &use : reg->getUses()) {
+    if (isa<ReadInOutOp>(use.getOwner()))
+      continue;
+    if (use.getOwner() == op)
+      continue;
+    return failure();
+  }
+
+  if (mux.falseValue() == op.src()) {
+    rewriter.create<sv::IfOp>(mux.getLoc(), mux.cond(), [&]() {rewriter.create<PAssignOp>(op.getLoc(), reg, mux.trueValue());});
+  } else {
+    rewriter.create<sv::IfOp>(mux.getLoc(), mux.cond(), [&](){}, [&]() {
+      rewriter.create<PAssignOp>(op.getLoc(), reg, mux.falseValue());
+    });
+  }
+
+  // Remove the wire.
+  rewriter.eraseOp(op);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
