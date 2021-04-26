@@ -2012,7 +2012,7 @@ LogicalResult FIRRTLLowering::visitExpr(NotPrimOp op) {
     return failure();
   // ~x  ---> x ^ 0xFF
   auto allOnes = getOrCreateIntConstant(
-      operand.getType().getIntOrFloatBitWidth(), -1, /*signed=*/true);
+      APInt::getAllOnesValue(operand.getType().getIntOrFloatBitWidth()));
   return setLoweringTo<comb::XorOp>(op, operand, allOnes);
 }
 
@@ -2060,8 +2060,8 @@ LogicalResult FIRRTLLowering::visitExpr(AndRPrimOp op) {
   // Lower AndR to == -1
   return setLoweringTo<comb::ICmpOp>(
       op, ICmpPredicate::eq, operand,
-      getOrCreateIntConstant(operand.getType().getIntOrFloatBitWidth(), -1,
-                             /*signed*/ true));
+      getOrCreateIntConstant(
+          APInt::getAllOnesValue(operand.getType().getIntOrFloatBitWidth())));
 }
 
 LogicalResult FIRRTLLowering::visitExpr(OrRPrimOp op) {
