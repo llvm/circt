@@ -41,9 +41,9 @@ firrtl.circuit "TopLevel" {
                           %sink: !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>) {
 
     // CHECK-NEXT: %inst_source_valid, %inst_source_ready, %inst_source_data, %inst_sink_valid, %inst_sink_ready, %inst_sink_data
-    // CHECK-SAME: = firrtl.instance @Simple {name = "", portNames = ["source_valid", "source_ready", "source_data", "sink_valid", "sink_ready", "sink_data"]} :
+    // CHECK-SAME: = firrtl.instance @Simple {name = ""} :
     // CHECK-SAME: !firrtl.flip<uint<1>>, !firrtl.uint<1>, !firrtl.flip<uint<64>>, !firrtl.uint<1>, !firrtl.flip<uint<1>>, !firrtl.uint<64>
-    %sourceV, %sinkV = firrtl.instance @Simple {name = "", portNames = ["source", "sink"]} : !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>
+    %sourceV, %sinkV = firrtl.instance @Simple {name = ""} : !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>, !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>
 
     // CHECK-NEXT: firrtl.connect %inst_source_valid, %source_valid
     // CHECK-NEXT: firrtl.connect %source_ready, %inst_source_ready
@@ -373,7 +373,7 @@ module  {
     firrtl.module @mod_2(%clock: !firrtl.clock, %inp_a: !firrtl.bundle<inp_d: uint<14>>) {
     }
     firrtl.module @top_mod(%clock: !firrtl.clock) {
-      %U0_clock, %U0_inp_a = firrtl.instance @mod_2 {name = "U0", portNames = ["clock", "inp_a"]} : !firrtl.flip<clock>, !firrtl.flip<bundle<inp_d: uint<14>>>
+      %U0_clock, %U0_inp_a = firrtl.instance @mod_2 {name = "U0"} : !firrtl.flip<clock>, !firrtl.flip<bundle<inp_d: uint<14>>>
       %0 = firrtl.invalidvalue : !firrtl.clock
       firrtl.connect %U0_clock, %0 : !firrtl.flip<clock>, !firrtl.clock
       %1 = firrtl.invalidvalue : !firrtl.bundle<inp_d: uint<14>>
@@ -387,7 +387,7 @@ module  {
 //CHECK-NEXT:     firrtl.module @mod_2(%clock: !firrtl.clock, %inp_a_inp_d: !firrtl.uint<14>) {
 //CHECK-NEXT:     }
 //CHECK-NEXT:    firrtl.module @top_mod(%clock: !firrtl.clock) {
-//CHECK-NEXT:      %U0_clock, %U0_inp_a_inp_d = firrtl.instance @mod_2 {name = "U0", portNames = ["clock", "inp_a_inp_d"]} : !firrtl.flip<clock>, !firrtl.flip<uint<14>>
+//CHECK-NEXT:      %U0_clock, %U0_inp_a_inp_d = firrtl.instance @mod_2 {name = "U0"} : !firrtl.flip<clock>, !firrtl.flip<uint<14>>
 //CHECK-NEXT:      %0 = firrtl.invalidvalue : !firrtl.clock
 //CHECK-NEXT:      firrtl.connect %U0_clock, %0 : !firrtl.flip<clock>, !firrtl.clock
 //CHECK-NEXT:      %1 = firrtl.invalidvalue : !firrtl.uint<14>
@@ -512,8 +512,8 @@ firrtl.circuit "ExternalModule" {
   // CHECK-LABEL: firrtl.extmodule @ExternalModule(!firrtl.uint<1> {firrtl.name = "source_valid"}, !firrtl.flip<uint<1>> {firrtl.name = "source_ready"}, !firrtl.uint<64> {firrtl.name = "source_data"})
   firrtl.extmodule @ExternalModule(!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>> {firrtl.name = "source"})
   firrtl.module @Test() {
-    // CHECK:  %inst_source_valid, %inst_source_ready, %inst_source_data = firrtl.instance @ExternalModule {name = "", portNames = ["source_valid", "source_ready", "source_data"]} : !firrtl.flip<uint<1>>, !firrtl.uint<1>, !firrtl.flip<uint<64>>
-    %inst_source = firrtl.instance @ExternalModule {name = "", portNames = ["source"]} : !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>
+    // CHECK:  %inst_source_valid, %inst_source_ready, %inst_source_data = firrtl.instance @ExternalModule {name = ""} : !firrtl.flip<uint<1>>, !firrtl.uint<1>, !firrtl.flip<uint<64>>
+    %inst_source = firrtl.instance @ExternalModule {name = ""} : !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>
   }
 }
 
@@ -605,7 +605,7 @@ firrtl.circuit "AnnotationsInstanceOp" {
     firrtl.connect %a, %0 : !firrtl.flip<vector<uint<1>, 2>>, !firrtl.vector<uint<1>, 2>
   }
   firrtl.module @AnnotationsInstanceOp() {
-    %bar_a = firrtl.instance @Bar  {annotations = [{a = "a"}], name = "bar", portNames = ["a"]} : !firrtl.vector<uint<1>, 2>
+    %bar_a = firrtl.instance @Bar  {annotations = [{a = "a"}], name = "bar"} : !firrtl.vector<uint<1>, 2>
   }
   // CHECK: firrtl.instance
   // CHECK-SAME: annotations = [{a = "a"}]

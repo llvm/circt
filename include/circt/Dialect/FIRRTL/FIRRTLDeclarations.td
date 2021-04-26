@@ -17,8 +17,7 @@ def InstanceOp : FIRRTLOp<"instance"> {
     and outputs.  The inputs have flip type, the outputs do not.
   }];
 
-  let arguments = (ins FlatSymbolRefAttr:$moduleName,
-                       StrArrayAttr:$portNames, StrAttr:$name,
+  let arguments = (ins FlatSymbolRefAttr:$moduleName, StrAttr:$name,
                        DefaultValuedAttr<AnnotationArrayAttr,
                                          "{}">:$annotations);
   let results = (outs Variadic<FIRRTLType>:$results);
@@ -31,10 +30,9 @@ def InstanceOp : FIRRTLOp<"instance"> {
   let builders = [
     OpBuilder<(ins "::mlir::TypeRange":$elementType,
                       "::mlir::StringRef":$moduleName,
-                      "::mlir::ArrayAttr":$portNames,
                       CArg<"StringRef", "{}">:$name,
                       CArg<"ArrayRef<Attribute>", "{}">:$annotations), [{
-      return build($_builder, $_state, elementType, moduleName, portNames, name,
+      return build($_builder, $_state, elementType, moduleName, name,
                    $_builder.getArrayAttr(annotations));
     }]>
   ];
@@ -45,15 +43,12 @@ def InstanceOp : FIRRTLOp<"instance"> {
     Operation *getReferencedModule();
 
     /// Return the port name for the specified result number.
-    StringAttr getPortName(size_t resultNo);
+    StringAttr getPortName(size_t resultNo) {
+      return getModulePortName(getReferencedModule(), resultNo);
+    }
     StringRef getPortNameStr(size_t resultNo) {
       return getPortName(resultNo).getValue();
     }
-
-    // Return the result for this instance that corresponds to the specified
-    // port name.
-    Value getPortNamed(StringRef name);
-    Value getPortNamed(StringAttr name);
   }];
 }
 

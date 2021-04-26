@@ -225,7 +225,7 @@ circuit Foo: %[[{"target": "Foo|Foo>_T_0", "a": "a"},
     cmem _T_5 : UInt<1>[9] [256]
     ; CHECK: %5 = firrtl.memoryport Infer %4, %reset, %clock {annotations = [{a = "a"}], name = ""}
     infer mport _T_6 = _T_5[reset], clock
-    ; CHECK: firrtl.instance @Bar  {annotations = [{a = "a"}], name = "", portNames = []}
+    ; CHECK: firrtl.instance @Bar  {annotations = [{a = "a"}], name = ""}
     inst _T_7 of Bar
     ; CHECK: firrtl.mem Undefined  {annotations = [{a = "a"}], depth = 8 : i64, name = "", portNames = ["w"], readLatency = 0 : i32, writeLatency = 1 : i32}
     mem _T_8 :
@@ -269,7 +269,7 @@ circuit Foo: %[[{"target": "Foo|Foo>_T_0", "class": "firrtl.transforms.DontTouch
     cmem _T_5 : UInt<1>[9] [256]
     ; CHECK: %_T_6 = firrtl.memoryport Infer %_T_5, %reset, %clock {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}], name = "_T_6"}
     infer mport _T_6 = _T_5[reset], clock
-    ; CHECK: firrtl.instance @Bar  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}], name = "_T_7", portNames = []}
+    ; CHECK: firrtl.instance @Bar  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}], name = "_T_7"}
     inst _T_7 of Bar
     ; CHECK: firrtl.mem Undefined  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}], depth = 8 : i64, name = "_T_8", portNames = ["w"], readLatency = 0 : i32, writeLatency = 1 : i32}
     mem _T_8 :

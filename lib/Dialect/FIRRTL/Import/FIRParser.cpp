@@ -2202,26 +2202,21 @@ ParseResult FIRStmtParser::parseInstance() {
     return failure();
   }
 
-  SmallVector<ModulePortInfo, 4> modulePorts =
-      getModulePortInfo(referencedModule);
+  SmallVector<ModulePortInfo> modulePorts = getModulePortInfo(referencedModule);
 
   // Make a bundle of the inputs and outputs of the specified module.
   SmallVector<Type, 4> resultTypes;
-  SmallVector<Attribute, 4> resultNames;
   resultTypes.reserve(modulePorts.size());
-  resultNames.reserve(modulePorts.size());
 
   for (auto port : modulePorts) {
     resultTypes.push_back(FlipType::get(port.type));
-    resultNames.push_back(port.name);
   }
   ArrayAttr annotations = getState().emptyArrayAttr;
   getAnnotations(getModuleTarget() + ">" + id, annotations);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
-  auto result = builder.create<InstanceOp>(
-      info.getLoc(), resultTypes, moduleName, builder.getArrayAttr(resultNames),
-      name, annotations);
+  auto result = builder.create<InstanceOp>(info.getLoc(), resultTypes,
+                                           moduleName, name, annotations);
 
   // Since we are implicitly unbundling the instance results, we need to keep
   // track of the mapping from bundle fields to results in the unbundledValues
@@ -2229,7 +2224,7 @@ ParseResult FIRStmtParser::parseInstance() {
   UnbundledValueEntry unbundledValueEntry;
   unbundledValueEntry.reserve(modulePorts.size());
   for (size_t i = 0, e = modulePorts.size(); i != e; ++i)
-    unbundledValueEntry.push_back({resultNames[i], result.getResult(i)});
+    unbundledValueEntry.push_back({modulePorts[i].name, result.getResult(i)});
 
   // Add it to unbundledValues and add an entry to the symbol table to remember
   // it.

@@ -294,9 +294,9 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
 // ensuring both lowerings are the same, we can process every module in the
 // circuit in parallel, and every instance will have the correct ports.
 void TypeLoweringVisitor::visitDecl(InstanceOp op) {
-  // Create a new, flat bundle type for the new result
+  // Create a new, flat bundle type for the new result.
   SmallVector<Type, 8> resultTypes;
-  SmallVector<Attribute, 8> resultNames;
+  SmallVector<StringAttr, 8> resultNames;
   SmallVector<size_t, 8> numFieldsPerResult;
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
     // Flatten any nested bundle types the usual way.
@@ -313,8 +313,7 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
   }
 
   auto newInstance = builder->create<InstanceOp>(
-      resultTypes, op.moduleNameAttr(), builder->getArrayAttr(resultNames),
-      op.nameAttr(), op.annotations());
+      resultTypes, op.moduleNameAttr(), op.nameAttr(), op.annotations());
 
   // Record the mapping of each old result to each new result.
   size_t nextResult = 0;
@@ -322,7 +321,7 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
     // If this result was a non-bundle value, just RAUW it.
     auto origPortName = op.getPortNameStr(i);
     if (numFieldsPerResult[i] == 1 &&
-        newInstance.getPortNameStr(nextResult) == origPortName) {
+        resultNames[nextResult].getValue() == origPortName) {
       op.getResult(i).replaceAllUsesWith(newInstance.getResult(nextResult));
       ++nextResult;
       continue;
@@ -330,7 +329,7 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
 
     // Otherwise lower bundles.
     for (size_t j = 0, e = numFieldsPerResult[i]; j != e; ++j) {
-      auto newPortName = newInstance.getPortNameStr(nextResult);
+      auto newPortName = resultNames[nextResult].getValue();
       // Drop the original port name and the underscore.
       newPortName = newPortName.drop_front(origPortName.size() + 1);
 

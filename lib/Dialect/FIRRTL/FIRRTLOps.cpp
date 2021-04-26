@@ -237,6 +237,12 @@ SmallVector<ModulePortInfo> firrtl::getModulePortInfo(Operation *op) {
   return results;
 }
 
+/// Given an FModule or ExtModule, return the name of the specified port number.
+StringAttr firrtl::getModulePortName(Operation *op, size_t portIndex) {
+  assert(isa<FModuleOp>(op) || isa<FExtModuleOp>(op));
+  return getFIRRTLNameAttr(::mlir::impl::getArgAttrs(op, portIndex));
+}
+
 static void buildModule(OpBuilder &builder, OperationState &result,
                         StringAttr name, ArrayRef<ModulePortInfo> ports) {
   using namespace mlir::impl;
@@ -287,17 +293,8 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
 }
 
 // Return the port with the specified name.
-BlockArgument FModuleOp::getPortArgument(StringAttr name) {
-  auto *body = getBodyBlock();
-
-  // FIXME: This is O(n)!
-  for (unsigned i = 0, e = body->getNumArguments(); i < e; ++i) {
-    auto argAttrs = ::mlir::impl::getArgAttrs(*this, i);
-    if (getFIRRTLNameAttr(argAttrs) == name)
-      return body->getArgument(i);
-  }
-
-  return {};
+BlockArgument FModuleOp::getPortArgument(size_t portNumber) {
+  return getBodyBlock()->getArgument(portNumber);
 }
 
 void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
@@ -547,32 +544,6 @@ Operation *InstanceOp::getReferencedModule() {
   return circuit.lookupSymbol(moduleName());
 }
 
-StringAttr InstanceOp::getPortName(size_t resultNo) {
-  return portNames()[resultNo].cast<StringAttr>();
-}
-
-Value InstanceOp::getPortNamed(StringRef name) {
-  auto namesArray = portNames();
-  for (size_t i = 0, e = namesArray.size(); i != e; ++i) {
-    if (namesArray[i].cast<StringAttr>().getValue() == name) {
-      assert(i < getNumResults() && " names array out of sync with results");
-      return getResult(i);
-    }
-  }
-  return Value();
-}
-
-Value InstanceOp::getPortNamed(StringAttr name) {
-  auto namesArray = portNames();
-  for (size_t i = 0, e = namesArray.size(); i != e; ++i) {
-    if (namesArray[i] == name) {
-      assert(i < getNumResults() && " names array out of sync with results");
-      return getResult(i);
-    }
-  }
-  return Value();
-}
-
 /// Verify the correctness of an InstanceOp.
 static LogicalResult verifyInstanceOp(InstanceOp instance) {
 
@@ -611,32 +582,8 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
     return failure();
   }
 
-  // Check that the names array is the right length.
-  if (instance.portNames().size() != instance.getNumResults()) {
-    instance.emitOpError("incorrect number of port names");
-    return failure();
-  }
-
-  // Build an efficient lookup that maps port name attribute to result #.
-  llvm::SmallDenseMap<Attribute, size_t, 16> portNumbers;
-  auto namesArray = instance.portNames();
-  for (size_t i = 0, e = namesArray.size(); i != e; ++i)
-    portNumbers[namesArray[i]] = i;
-
   for (size_t i = 0; i != numResults; i++) {
-    auto resultNumberIt = portNumbers.find(modulePorts[i].name);
-    if (resultNumberIt == portNumbers.end() ||
-        resultNumberIt->second >= numResults) {
-      auto diag = instance.emitOpError()
-                  << "is missing a port named '" << modulePorts[i].name
-                  << "' expected by referenced module";
-      diag.attachNote(referencedModule->getLoc())
-          << "original module declared here";
-      return failure();
-    }
-    auto result = instance.getResult(resultNumberIt->second);
-
-    auto resultType = result.getType();
+    auto resultType = instance.getResult(i).getType();
     auto expectedType = FlipType::get(modulePorts[i].type);
     if (resultType != expectedType) {
       auto diag = instance.emitOpError()

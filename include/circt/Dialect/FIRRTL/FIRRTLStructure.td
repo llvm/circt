@@ -79,8 +79,8 @@ def FModuleOp : FIRRTLOp<"module",
       return getModulePortInfo(*this);
     }
 
-    // Return the block argument for the port with the specified name.
-    BlockArgument getPortArgument(StringAttr name);
+    // Return the block argument for the port with the specified index.
+    BlockArgument getPortArgument(size_t portNumber);
 
     // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is
     // squatting on the name.

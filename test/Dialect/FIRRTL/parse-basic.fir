@@ -274,13 +274,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     reg _t_2622 : UInt<4>, clock with :
       reset => (UInt<1>("h0"), _t_2622)
 
-    ; CHECK: %xyz_in = firrtl.instance @circuit {name = "xyz", portNames = ["in"]} : !firrtl.flip<uint<80>>
+    ; CHECK: %xyz_in = firrtl.instance @circuit {name = "xyz"} : !firrtl.flip<uint<80>>
     inst xyz of circuit
     ; CHECK: firrtl.connect %xyz_in, %i8 : !firrtl.flip<uint<80>>, !firrtl.uint<8>
     xyz.in <= i8
 
     ; CHECK: %myext_in, %myext_out = firrtl.instance @MyExtModule
-    ; CHECK: {name = "myext", portNames = ["in", "out"]} :
+    ; CHECK: {name = "myext"} :
     ; CHECK: !firrtl.flip<uint>, !firrtl.uint<8>
     inst myext of MyExtModule
     myext.in <= i8
@@ -289,7 +289,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.when %reset  {
     when reset :
       ; CHECK: %reset_myext_in, %reset_myext_out = firrtl.instance @MyExtModule
-      ; CHECK: {name = "reset_myext", portNames = ["in", "out"]} :
+      ; CHECK: {name = "reset_myext"} :
       ; CHECK: !firrtl.flip<uint>, !firrtl.uint<8>
       inst reset_myext of MyExtModule
       reset_myext.in <= i8

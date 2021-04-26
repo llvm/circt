@@ -55,6 +55,9 @@ FunctionType getModuleType(Operation *op);
 /// extmodule.
 SmallVector<ModulePortInfo> getModulePortInfo(Operation *op);
 
+/// Given an FModule or ExtModule, return the name of the specified port number.
+StringAttr getModulePortName(Operation *op, size_t portIndex);
+
 /// Returns true if the type is a bundle or a flip of a bundle.
 bool isBundleType(Type type);
 

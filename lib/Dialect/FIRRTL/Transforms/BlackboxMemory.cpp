@@ -87,16 +87,12 @@ static InstanceOp createInstance(OpBuilder builder, Location loc,
                                  const ModulePortList &modulePorts) {
   // Make a bundle of the inputs and outputs of the specified module.
   SmallVector<Type, 4> resultTypes;
-  SmallVector<Attribute, 4> resultNames;
   resultTypes.reserve(modulePorts.size());
-  resultNames.reserve(modulePorts.size());
   for (auto port : modulePorts) {
     resultTypes.push_back(FlipType::get(port.type));
-    resultNames.push_back(port.name);
   }
 
   return builder.create<InstanceOp>(loc, resultTypes, moduleName,
-                                    builder.getArrayAttr(resultNames),
                                     instanceName.getValue());
 }
 
