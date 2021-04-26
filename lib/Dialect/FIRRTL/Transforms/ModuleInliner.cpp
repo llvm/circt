@@ -27,17 +27,12 @@ using namespace firrtl;
 
 /// If this operation or any child operation has a name, add the prefix to that
 /// operation's name.
-static void rename(const Twine &prefix, Operation *op) {
-  // TODO: this should really be an OpInterface.. Or we can just blindly
-  // modify the attribute "name" indiscriminantly.
+static void rename(StringRef prefix, Operation *op) {
   llvm::TypeSwitch<Operation *>(op)
       .Case<CMemOp, InstanceOp, MemOp, MemoryPortOp, NodeOp, RegOp, RegResetOp,
             SMemOp, WireOp>([&](auto op) {
-        // TODO: one day names won't be optional
-        if (auto name = op.nameAttr()) {
-          std::string newName = (prefix + name.getValue()).str();
-          op.nameAttr(StringAttr::get(op.getContext(), newName));
-        }
+        op.nameAttr(
+            StringAttr::get(op.getContext(), (prefix + op.name()).str()));
       });
   // Recursively rename any child operations.
   for (auto &region : op->getRegions())
@@ -49,7 +44,7 @@ static void rename(const Twine &prefix, Operation *op) {
 /// Clone an operation, mapping used values and results with the mapper, and
 /// apply the prefix to the name of the operation. This will clone to the
 /// insert point of the builder.
-static void cloneAndRename(const Twine &prefix, OpBuilder b,
+static void cloneAndRename(StringRef prefix, OpBuilder &b,
                            BlockAndValueMapping &mapper, Operation &op) {
   auto newOp = b.clone(op, mapper);
   rename(prefix, newOp);
@@ -60,12 +55,12 @@ static void cloneAndRename(const Twine &prefix, OpBuilder b,
 /// module, create a wire, and assign a mapping from each module port to the
 /// wire. When the body of the module is cloned, the value of the wire will be
 /// used instead of the module's ports.
-static SmallVector<Value> mapPortsToWires(const Twine &prefix, OpBuilder &b,
+static SmallVector<Value> mapPortsToWires(StringRef prefix, OpBuilder &b,
                                           BlockAndValueMapping &mapper,
                                           FModuleOp target) {
   SmallVector<Value> wires;
   auto portInfo = target.getPorts();
-  for (unsigned i = 0; i < target.getNumArguments(); ++i) {
+  for (unsigned i = 0, e = target.getNumArguments(); i < e; ++i) {
     auto arg = target.getArgument(i);
     auto wire = b.create<WireOp>(target.getLoc(), arg.getType(),
                                  (prefix + portInfo[i].getName()).str());
@@ -83,7 +78,7 @@ static SmallVector<Value> mapPortsToWires(const Twine &prefix, OpBuilder &b,
 static void mapResultsToWires(BlockAndValueMapping &mapper,
                               SmallVectorImpl<Value> &wires,
                               InstanceOp instance) {
-  for (unsigned i = 0; i < instance.getNumResults(); ++i) {
+  for (unsigned i = 0, e = instance.getNumResults(); i < e; ++i) {
     auto result = instance.getResult(i);
     auto wire = wires[i];
     mapper.map(result, wire);
@@ -130,14 +125,14 @@ private:
   /// Flattens a target module in to the insertion point of the builder,
   /// renaming all operations using the prefix.  This clones all operations from
   /// the target, and does not trigger inlining on the target itself.
-  void flattenInto(const Twine &prefix, OpBuilder &b,
-                   BlockAndValueMapping &mapper, FModuleOp target);
+  void flattenInto(StringRef prefix, OpBuilder &b, BlockAndValueMapping &mapper,
+                   FModuleOp target);
 
   /// Inlines a target module in to the location of the build, prefixing all
   /// operations with prefix.  This clones all operations from the target, and
   /// does not trigger inlining on the target itself.
-  void inlineInto(const Twine &prefix, OpBuilder &b,
-                  BlockAndValueMapping &mapper, FModuleOp target);
+  void inlineInto(StringRef prefix, OpBuilder &b, BlockAndValueMapping &mapper,
+                  FModuleOp target);
 
   /// Recursively flatten all instances in a module.
   void flattenInstances(FModuleOp module);
@@ -184,10 +179,9 @@ bool Inliner::shouldInline(Operation *op) {
   return false;
 }
 
-void Inliner::flattenInto(const Twine &prefix, OpBuilder &b,
+void Inliner::flattenInto(StringRef prefix, OpBuilder &b,
                           BlockAndValueMapping &mapper, FModuleOp target) {
-  for (auto &op : target.getBodyBlock()->without_terminator()) {
-
+  for (auto &op : *target.getBodyBlock()) {
     // If its not an instance op, clone it and continue.
     auto instance = dyn_cast<InstanceOp>(op);
     if (!instance) {
@@ -205,8 +199,7 @@ void Inliner::flattenInto(const Twine &prefix, OpBuilder &b,
     }
 
     // Create the wire mapping for results + ports.
-    auto instanceName = instance.nameAttr().getValue();
-    auto nestedPrefix = (prefix + instanceName + "_").str();
+    auto nestedPrefix = (prefix + instance.name() + "_").str();
     auto wires = mapPortsToWires(nestedPrefix, b, mapper, target);
     mapResultsToWires(mapper, wires, instance);
 
@@ -234,10 +227,9 @@ void Inliner::flattenInstances(FModuleOp module) {
     // of mapping them.
     BlockAndValueMapping mapper;
     OpBuilder b(instance);
-    auto instanceName = instance.nameAttr().getValue();
-    auto nestedPrefix = (instanceName + "_").str();
+    auto nestedPrefix = (instance.name() + "_").str();
     auto wires = mapPortsToWires(nestedPrefix, b, mapper, target);
-    for (unsigned i = 0; i < instance.getNumResults(); ++i)
+    for (unsigned i = 0, e = instance.getNumResults(); i < e; ++i)
       instance.getResult(i).replaceAllUsesWith(wires[i]);
 
     // Recursively flatten the target module.
@@ -248,9 +240,9 @@ void Inliner::flattenInstances(FModuleOp module) {
   }
 }
 
-void Inliner::inlineInto(const Twine &prefix, OpBuilder &b,
+void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
                          BlockAndValueMapping &mapper, FModuleOp target) {
-  for (auto &op : target.getBodyBlock()->without_terminator()) {
+  for (auto &op : *target.getBodyBlock()) {
     // If its not an instance op, clone it and continue.
     auto instance = dyn_cast<InstanceOp>(op);
     if (!instance) {
@@ -277,8 +269,7 @@ void Inliner::inlineInto(const Twine &prefix, OpBuilder &b,
     }
 
     // Create the wire mapping for results + ports.
-    auto instanceName = instance.nameAttr().getValue();
-    auto nestedPrefix = (prefix + instanceName + "_").str();
+    auto nestedPrefix = (prefix + instance.name() + "_").str();
     auto wires = mapPortsToWires(nestedPrefix, b, mapper, target);
     mapResultsToWires(mapper, wires, instance);
 
@@ -318,10 +309,9 @@ void Inliner::inlineInstances(FModuleOp module) {
     // of mapping them.
     BlockAndValueMapping mapper;
     OpBuilder b(instance);
-    auto instanceName = instance.nameAttr().getValue();
-    auto nestedPrefix = (instanceName + "_").str();
+    auto nestedPrefix = (instance.name() + "_").str();
     auto wires = mapPortsToWires(nestedPrefix, b, mapper, target);
-    for (unsigned i = 0; i < instance.getNumResults(); ++i)
+    for (unsigned i = 0, e = instance.getNumResults(); i < e; ++i)
       instance.getResult(i).replaceAllUsesWith(wires[i]);
 
     // Inline the module, it can be marked as flatten and inline.
@@ -350,12 +340,12 @@ Inliner::Inliner(CircuitOp circuit)
 }
 
 void Inliner::run() {
-  // If the top module is not a regular module, there is nothing to do.
-  auto topModule = dyn_cast<FModuleOp>(symbolTable.lookup(circuit.name()));
-  if (topModule) {
-    worklist.push_back(topModule);
-  }
+  auto topModule = circuit.getMainModule();
+  // Mark the top module as live, so it doesn't get deleted.
   liveModules.insert(topModule);
+  // If the top module is not a regular module, there is nothing to do.
+  if (auto fmodule = dyn_cast<FModuleOp>(topModule))
+    worklist.push_back(fmodule);
 
   // If the module is marked for flattening, flatten it. Otherwise, inline
   // every instance marked to be inlined.
@@ -370,9 +360,8 @@ void Inliner::run() {
 
   // Delete all unreferenced modules.
   for (auto &op : llvm::make_early_inc_range(*circuit.getBody())) {
-    if (isa<FModuleOp, FExtModuleOp>(op) && !liveModules.count(&op)) {
+    if (!liveModules.count(&op))
       op.erase();
-    }
   }
 }
 

@@ -1,10 +1,19 @@
 // RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-inliner)' %s | FileCheck %s
 
+// Test that an external module as the main module works.
+firrtl.circuit "main_extmodule" {
+  firrtl.extmodule @main_extmodule()
+  firrtl.module @unused () { }
+}
+// CHECK-LABEL: firrtl.circuit "main_extmodule" {
+// CHECK-NEXT:   firrtl.extmodule @main_extmodule()
+// CHECK-NEXT: }
+
 // Test that unused modules are deleted.
 firrtl.circuit "delete_dead_modules" {
 firrtl.module @delete_dead_modules () {
-  firrtl.instance @used {name = "used", portNames = []}
-  firrtl.instance @used_ext {name = "used", portNames = []}
+  firrtl.instance @used {name = "used"}
+  firrtl.instance @used_ext {name = "used"}
 }
 firrtl.module @unused () { }
 firrtl.module @used () { }
@@ -13,8 +22,8 @@ firrtl.extmodule @used_ext ()
 }
 // CHECK-LABEL: firrtl.circuit "delete_dead_modules" {
 // CHECK-NEXT:   firrtl.module @delete_dead_modules() {
-// CHECK-NEXT:     firrtl.instance @used  {name = "used", portNames = []}
-// CHECK-NEXT:     firrtl.instance @used_ext  {name = "used", portNames = []}
+// CHECK-NEXT:     firrtl.instance @used  {name = "used"}
+// CHECK-NEXT:     firrtl.instance @used_ext  {name = "used"}
 // CHECK-NEXT:   }
 // CHECK-NEXT:   firrtl.module @used() {
 // CHECK-NEXT:   }
@@ -25,12 +34,12 @@ firrtl.extmodule @used_ext ()
 // Test basic inlining
 firrtl.circuit "inlining" {
 firrtl.module @inlining() {
-  firrtl.instance @test1 {name = "test1", portNames=[]}
+  firrtl.instance @test1 {name = "test1"}
 }
 firrtl.module @test1()
   attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
   %test_wire = firrtl.wire : !firrtl.uint<2>
-  firrtl.instance @test2 {name = "test2", portNames=[]}
+  firrtl.instance @test2 {name = "test2"}
 }
 firrtl.module @test2()
   attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
@@ -39,8 +48,8 @@ firrtl.module @test2()
 }
 // CHECK-LABEL: firrtl.circuit "inlining" {
 // CHECK-NEXT:   firrtl.module @inlining() {
-// CHECK-NEXT:     %test1_test_wire = firrtl.wire  : !firrtl.uint<2>
-// CHECK-NEXT:     %test1_test2_test_wire = firrtl.wire  : !firrtl.uint<2>
+// CHECK-NEXT:     %test1_test_wire = firrtl.wire : !firrtl.uint<2>
+// CHECK-NEXT:     %test1_test2_test_wire = firrtl.wire : !firrtl.uint<2>
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 
@@ -49,11 +58,11 @@ firrtl.module @test2()
 firrtl.circuit "flattening" {
 firrtl.module @flattening()
   attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
-  firrtl.instance @test1 {name = "test1", portNames=[]}
+  firrtl.instance @test1 {name = "test1"}
 }
 firrtl.module @test1() {
   %test_wire = firrtl.wire : !firrtl.uint<2>
-  firrtl.instance @test2 {name = "test2", portNames=[]}
+  firrtl.instance @test2 {name = "test2"}
 }
 firrtl.module @test2() {
   %test_wire = firrtl.wire : !firrtl.uint<2>
@@ -61,8 +70,8 @@ firrtl.module @test2() {
 }
 // CHECK-LABEL: firrtl.circuit "flattening" {
 // CHECK-NEXT:   firrtl.module @flattening() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
-// CHECK-NEXT:     %test1_test_wire = firrtl.wire  : !firrtl.uint<2>
-// CHECK-NEXT:     %test1_test2_test_wire = firrtl.wire  : !firrtl.uint<2>
+// CHECK-NEXT:     %test1_test_wire = firrtl.wire : !firrtl.uint<2>
+// CHECK-NEXT:     %test1_test2_test_wire = firrtl.wire : !firrtl.uint<2>
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
 
@@ -70,21 +79,21 @@ firrtl.module @test2() {
 // Test that inlining and flattening compose well.
 firrtl.circuit "compose" {
 firrtl.module @compose() {
-  firrtl.instance @test1 {name = "test1", portNames=[]}
-  firrtl.instance @test2 {name = "test2", portNames=[]}
-  firrtl.instance @test3 {name = "test3", portNames=[]}
+  firrtl.instance @test1 {name = "test1"}
+  firrtl.instance @test2 {name = "test2"}
+  firrtl.instance @test3 {name = "test3"}
 }
 firrtl.module @test1() attributes {annotations = 
         [{class = "firrtl.transforms.FlattenAnnotation"},
          {class = "firrtl.passes.InlineAnnotation"}]} {
   %test_wire = firrtl.wire : !firrtl.uint<2>
-  firrtl.instance @test2 {name = "test2", portNames=[]}
-  firrtl.instance @test3 {name = "test3", portNames=[]}
+  firrtl.instance @test2 {name = "test2"}
+  firrtl.instance @test3 {name = "test3"}
 }
 firrtl.module @test2() attributes {annotations = 
         [{class = "firrtl.passes.InlineAnnotation"}]} {
   %test_wire = firrtl.wire : !firrtl.uint<2>
-  firrtl.instance @test3 {name = "test3", portNames=[]}
+  firrtl.instance @test3 {name = "test3"}
 }
 firrtl.module @test3() {
   %test_wire = firrtl.wire : !firrtl.uint<2>
@@ -97,8 +106,8 @@ firrtl.module @test3() {
 // CHECK-NEXT:     %test1_test2_test3_test_wire = firrtl.wire  : !firrtl.uint<2>
 // CHECK-NEXT:     %test1_test3_test_wire = firrtl.wire  : !firrtl.uint<2>
 // CHECK-NEXT:     %test2_test_wire = firrtl.wire  : !firrtl.uint<2>
-// CHECK-NEXT:     firrtl.instance @test3  {name = "test2_test3", portNames = []}
-// CHECK-NEXT:     firrtl.instance @test3  {name = "test3", portNames = []}
+// CHECK-NEXT:     firrtl.instance @test3  {name = "test2_test3"}
+// CHECK-NEXT:     firrtl.instance @test3  {name = "test3"}
 // CHECK-NEXT:   }
 // CHECK-NEXT:   firrtl.module @test3() {
 // CHECK-NEXT:     %test_wire = firrtl.wire  : !firrtl.uint<2>
@@ -175,10 +184,10 @@ firrtl.module @declarations(%clock : !firrtl.clock, %u8 : !firrtl.uint<8>, %rese
   %memport = firrtl.memoryport Infer %cmem, %u8, %clock {name = "memoryport"} : (!firrtl.uint<8>, !firrtl.uint<8>, !firrtl.clock) -> !firrtl.bundle<id: uint<4>, resp: uint<2>>
   // CHECK: %myinst_node = firrtl.node %myinst_u8  : !firrtl.uint<8>
   %node = firrtl.node %u8 {name = "node"} : !firrtl.uint<8>
-  // CHECK: %myinst_reg = firrtl.reg %myinst_clock  {name = "myinst_reg"} : (!firrtl.clock) -> !firrtl.uint<8>
+  // CHECK: %myinst_reg = firrtl.reg %myinst_clock : (!firrtl.clock) -> !firrtl.uint<8>
   %reg = firrtl.reg %clock {name = "reg"} : (!firrtl.clock) -> !firrtl.uint<8>
-  // CHECK: %myinst_regreset = firrtl.regreset %myinst_clock, %myinst_reset, %myinst_u8  {name = "myinst_regreset"} : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>) -> !firrtl.uint<8>
-  %regreset = firrtl.regreset %clock, %reset, %u8 {name = "regreset"} : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>) -> !firrtl.uint<8>
+  // CHECK: %myinst_regreset = firrtl.regreset %myinst_clock, %myinst_reset, %myinst_u8 : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>) -> !firrtl.uint<8>
+  %regreset = firrtl.regreset %clock, %reset, %u8 : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>) -> !firrtl.uint<8>
   // CHECK: %myinst_smem = firrtl.smem Undefined  {name = "myinst_smem"} : !firrtl.uint<1>
   %smem = firrtl.smem Undefined {name = "smem"} : !firrtl.uint<1>
   // CHECK: %myinst_wire = firrtl.wire  : !firrtl.uint<1>
