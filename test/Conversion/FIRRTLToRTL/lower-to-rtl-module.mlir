@@ -19,7 +19,7 @@ firrtl.circuit "Simple" {
                                 DEPTH = 3.242000e+01 : f64,
                                 FORMAT = "xyz_timeout=%d\0A",
                                 WIDTH = 32 : i8},
-                  argNames = ["in", "out"]
+                  portNames = ["in", "out"]
                                 }
 
    // CHECK-LABEL: rtl.module @Simple(%in1: i4, %in2: i2, %in3: i8) -> (%out4: i4) {

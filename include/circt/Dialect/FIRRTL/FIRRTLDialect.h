@@ -22,7 +22,10 @@ namespace firrtl {
 
 class FIRRTLType;
 
-/// Return the argNames attribute for the specified module, which contains the name for each port.
+const StringRef portNameAttrStringRef("portNames");
+
+/// Return the portNames attribute for the specified module, which contains the
+/// name for each port.
 ArrayAttr getModulePortNames(Operation *module);
 
 } // namespace firrtl

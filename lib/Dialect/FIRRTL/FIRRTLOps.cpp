@@ -268,7 +268,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
     else
       argNames.push_back(ports[i].name);
 
-  result.addAttribute("argNames", builder.getArrayAttr(argNames));
+  result.addAttribute(portNameAttrStringRef, builder.getArrayAttr(argNames));
 
   result.addRegion();
 }
@@ -374,7 +374,7 @@ static void printModuleLikeOp(OpAsmPrinter &p, Operation *op) {
                           needArgNamesAttr);
   SmallVector<StringRef, 3> omittedAttrs;
   if (!needArgNamesAttr)
-    omittedAttrs.push_back("argNames");
+    omittedAttrs.push_back(portNameAttrStringRef);
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(),
                           omittedAttrs);
 }
@@ -438,7 +438,7 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
   auto *context = result.getContext();
 
   SmallVector<Attribute> argNames;
-  if (!result.attributes.get("argNames")) {
+  if (!result.attributes.get(portNameAttrStringRef)) {
     // Postprocess each of the arguments.  If there was no argNames
     // attribute, and if the argument name was non-numeric, then add the
     // argNames attribute with the textual name from the IR.  The name in the
@@ -457,7 +457,7 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
       else
         argNames.push_back(StringAttr::get(context, arg.name.drop_front()));
     }
-    result.addAttribute("argNames", builder.getArrayAttr(argNames));
+    result.addAttribute(portNameAttrStringRef, builder.getArrayAttr(argNames));
   }
   // Add the attributes to the function arguments.
   addArgAndResultAttrs(builder, result, argAttrs, resultAttrs);

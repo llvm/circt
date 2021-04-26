@@ -23,7 +23,7 @@ using namespace firrtl;
 
 // If the specified module contains the argNames attribute, return it.
 ArrayAttr firrtl::getModulePortNames(Operation *module) {
-  return module->getAttrOfType<ArrayAttr>("argNames");
+  return module->getAttrOfType<ArrayAttr>(portNameAttrStringRef);
 }
 
 namespace {

@@ -53,7 +53,7 @@ firrtl.circuit "Top" {
 
 // Test some hard cases of name handling.
 firrtl.module @Mod2(%in : !firrtl.uint<8>,
-                    %out : !firrtl.flip<uint<8>>) attributes {argNames = ["some_name", "out"]}{
+                    %out : !firrtl.flip<uint<8>>) attributes {portNames = ["some_name", "out"]}{
   firrtl.connect %out, %in : !firrtl.flip<uint<8>>, !firrtl.uint<8>
 }
 
