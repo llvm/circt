@@ -857,18 +857,26 @@ static LogicalResult verifyAliasOp(AliasOp op) {
 // PAssignOp
 //===----------------------------------------------------------------------===//
 
-// If this reg is only written to, delete the reg and all writers.
+// reg s <= cond ? val : s simplification.
+// Don't assign a register's value to itself, conditionally assign the new value
+// instead.
 LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
-  return failure();
-  auto mux = dyn_cast<comb::MuxOp>(op.src().getDefiningOp());
+  auto mux = op.src().getDefiningOp<comb::MuxOp>();
   if (!mux)
-    return failure();
-
-  if (mux.trueValue() != op.src() && mux.falseValue() != op.src())
     return failure();
 
   auto reg = dyn_cast<sv::RegOp>(op.dest().getDefiningOp());
   if (!reg)
+    return failure();
+
+  bool trueBranch; // did we find the register on the true branch?
+  auto tvread = mux.trueValue().getDefiningOp<sv::ReadInOutOp>();
+  auto fvread = mux.falseValue().getDefiningOp<sv::ReadInOutOp>();
+  if (tvread && reg == tvread.input().getDefiningOp<sv::RegOp>())
+    trueBranch = true;
+  else if (fvread && reg == fvread.input().getDefiningOp<sv::RegOp>())
+    trueBranch = false;
+  else
     return failure();
 
   // Check that this is the only write of the register
@@ -880,11 +888,15 @@ LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
     return failure();
   }
 
-  if (mux.falseValue() == op.src()) {
-    rewriter.create<sv::IfOp>(mux.getLoc(), mux.cond(), [&]() {rewriter.create<PAssignOp>(op.getLoc(), reg, mux.trueValue());});
+  if (trueBranch) {
+    rewriter.create<sv::IfOp>(
+        mux.getLoc(), mux.cond(), [&]() {},
+        [&]() {
+          rewriter.create<PAssignOp>(op.getLoc(), reg, mux.falseValue());
+        });
   } else {
-    rewriter.create<sv::IfOp>(mux.getLoc(), mux.cond(), [&](){}, [&]() {
-      rewriter.create<PAssignOp>(op.getLoc(), reg, mux.falseValue());
+    rewriter.create<sv::IfOp>(mux.getLoc(), mux.cond(), [&]() {
+      rewriter.create<PAssignOp>(op.getLoc(), reg, mux.trueValue());
     });
   }
 
