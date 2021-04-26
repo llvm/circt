@@ -1826,9 +1826,9 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
   getAnnotations(getModuleTarget() + ">" + id, annotations);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
-  auto result = builder.create<MemoryPortOp>(
-      info.getLoc(), resultType, memory, indexExp, clock, direction,
-      builder.getStringAttr(name), annotations);
+  auto result =
+      builder.create<MemoryPortOp>(info.getLoc(), resultType, memory, indexExp,
+                                   clock, direction, name, annotations);
 
   // TODO(firrtl scala bug): If the next operation is a skip, just eat it if it
   // is at the same indent level as us.  This is a horrible hack on top of the
