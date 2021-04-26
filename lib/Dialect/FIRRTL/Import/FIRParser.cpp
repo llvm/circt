@@ -1025,11 +1025,13 @@ ParseResult FIRScopedParser::resolveSymbolEntry(Value &result,
     return failure();
   }
 
+  auto fieldAttr = StringAttr::get(getContext(), fieldName);
+
   unsigned unbundledId = entry.get<UnbundledID>() - 1;
   assert(unbundledId < unbundledValues.size());
   UnbundledValueEntry &ubEntry = unbundledValues[unbundledId];
   for (auto elt : ubEntry) {
-    if (elt.first.cast<StringAttr>().getValue() == fieldName) {
+    if (elt.first == fieldAttr) {
       result = elt.second;
       break;
     }
@@ -1638,7 +1640,7 @@ FIRStmtParser::parseExpWithLeadingKeyword(StringRef keyword,
   // If we have a '.', we might have a symbol or an expanded port.  If we
   // resolve to a symbol, use that, otherwise check for expanded bundles of
   // other ops.
-  // Non '.' ops take the plain symbole path.
+  // Non '.' ops take the plain symbol path.
   if (resolveSymbolEntry(lhs, symtabEntry, info.getFIRLoc(), false)) {
     // Ok if the base name didn't resolve by itself, it might be part of an
     // expanded dot reference.  That doesn't work then we fail.
