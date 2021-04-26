@@ -1,4 +1,4 @@
-// RUN: circt-opt -canonicalize %s | FileCheck %s
+// RUN: circt-opt -simple-canonicalizer %s | FileCheck %s
 
 // CHECK-LABEL: rtl.module @extract_noop(%arg0: i3) -> (i3) {
 // CHECK-NEXT:    rtl.output %arg0

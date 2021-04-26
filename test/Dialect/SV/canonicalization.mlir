@@ -1,4 +1,4 @@
-// RUN: circt-opt -canonicalize %s | FileCheck %s
+// RUN: circt-opt -simple-canonicalizer %s | FileCheck %s
 
 // CHECK-LABEL: func @if_dead_condition(%arg0: i1) {
 // CHECK-NEXT:    sv.always posedge %arg0  {

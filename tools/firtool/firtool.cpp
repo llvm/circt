@@ -22,6 +22,7 @@
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Support/LoweringOptions.h"
+#include "circt/Transforms/Passes.h"
 #include "circt/Translation/ExportVerilog.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/AsmState.h"
@@ -170,7 +171,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     if (!disableOptimization) {
       auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
       modulePM.addPass(createCSEPass());
-      modulePM.addPass(createCanonicalizerPass());
+      modulePM.addPass(createSimpleCanonicalizerPass());
     }
   } else {
     assert(inputFormat == InputMLIRFile);
@@ -185,7 +186,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
       // If we are running FIRRTL passes, clean up the output.
       if (!disableOptimization) {
         modulePM.addPass(createCSEPass());
-        modulePM.addPass(createCanonicalizerPass());
+        modulePM.addPass(createSimpleCanonicalizerPass());
       }
     }
   }
@@ -212,7 +213,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
       auto &modulePM = pm.nest<rtl::RTLModuleOp>();
       modulePM.addPass(sv::createRTLCleanupPass());
       modulePM.addPass(createCSEPass());
-      modulePM.addPass(createCanonicalizerPass());
+      modulePM.addPass(createSimpleCanonicalizerPass());
     }
   }
 
