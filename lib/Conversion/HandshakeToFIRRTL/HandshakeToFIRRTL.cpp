@@ -2020,8 +2020,7 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
   llvm::SmallVector<Attribute> resultNames;
 
   // Bundle all ports of the instance into a new flattened bundle type.
-  SmallVector<ModulePortInfo, 8> portInfo;
-  getModulePortInfo(subModuleOp, portInfo);
+  SmallVector<ModulePortInfo, 8> portInfo = getModulePortInfo(subModuleOp);
   for (auto &port : portInfo) {
     // All ports of the instance operation are flipped.
     resultTypes.push_back(FlipType::get(port.type));

@@ -2202,8 +2202,8 @@ ParseResult FIRStmtParser::parseInstance() {
     return failure();
   }
 
-  SmallVector<ModulePortInfo, 4> modulePorts;
-  getModulePortInfo(referencedModule, modulePorts);
+  SmallVector<ModulePortInfo, 4> modulePorts =
+      getModulePortInfo(referencedModule);
 
   // Make a bundle of the inputs and outputs of the specified module.
   SmallVector<Type, 4> resultTypes;

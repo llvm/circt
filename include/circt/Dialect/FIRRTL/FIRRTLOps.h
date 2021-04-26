@@ -53,7 +53,7 @@ FunctionType getModuleType(Operation *op);
 
 /// This function can extract information about ports from a module and an
 /// extmodule.
-void getModulePortInfo(Operation *op, SmallVectorImpl<ModulePortInfo> &results);
+SmallVector<ModulePortInfo> getModulePortInfo(Operation *op);
 
 /// Returns true if the type is a bundle or a flip of a bundle.
 bool isBundleType(Type type);

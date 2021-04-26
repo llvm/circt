@@ -76,9 +76,7 @@ def FModuleOp : FIRRTLOp<"module",
 
     // Decode information about the input and output ports on this module.
     SmallVector<ModulePortInfo> getPorts() {
-      SmallVector<ModulePortInfo> ports;
-      getModulePortInfo(*this, ports);
-      return ports;
+      return getModulePortInfo(*this);
     }
 
     // Return the block argument for the port with the specified name.
@@ -147,9 +145,7 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   let extraClassDeclaration = [{
      // Decode information about the input and output ports on this module.
      SmallVector<ModulePortInfo> getPorts() {
-       SmallVector<ModulePortInfo> ports;
-       getModulePortInfo(*this, ports);
-       return ports;
+       return getModulePortInfo(*this);
      }
 
   private:

@@ -225,8 +225,8 @@ FunctionType firrtl::getModuleType(Operation *op) {
 
 /// This function can extract information about ports from a module and an
 /// extmodule.
-void firrtl::getModulePortInfo(Operation *op,
-                               SmallVectorImpl<ModulePortInfo> &results) {
+SmallVector<ModulePortInfo> firrtl::getModulePortInfo(Operation *op) {
+  SmallVector<ModulePortInfo> results;
   auto argTypes = getModuleType(op).getInputs();
 
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
@@ -234,6 +234,7 @@ void firrtl::getModulePortInfo(Operation *op,
     auto type = argTypes[i].cast<FIRRTLType>();
     results.push_back({getFIRRTLNameAttr(argAttrs), type});
   }
+  return results;
 }
 
 static void buildModule(OpBuilder &builder, OperationState &result,
@@ -597,8 +598,7 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
     return failure();
   }
 
-  SmallVector<ModulePortInfo> modulePorts;
-  getModulePortInfo(referencedModule, modulePorts);
+  SmallVector<ModulePortInfo> modulePorts = getModulePortInfo(referencedModule);
 
   // Check that result types are consistent with the referenced module's ports.
   size_t numResults = instance.getNumResults();
