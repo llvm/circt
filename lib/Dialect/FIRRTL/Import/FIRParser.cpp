@@ -92,6 +92,7 @@ struct GlobalFIRParserState {
         curToken(lex.lexToken()), annotationsBuf(annotationsBuf) {
     dontTouchAnnotation =
         getAnnotationOfClass(context, "firrtl.transforms.DontTouchAnnotation");
+    emptyArrayAttr = ArrayAttr::get(context, {});
   }
 
   /// The context we're parsing into.
@@ -121,6 +122,9 @@ struct GlobalFIRParserState {
 
   // Cached annotation for DontTouch.
   DictionaryAttr dontTouchAnnotation;
+
+  // An empty array attribute.
+  ArrayAttr emptyArrayAttr;
 
   class BacktraceState {
   public:
@@ -1021,11 +1025,13 @@ ParseResult FIRScopedParser::resolveSymbolEntry(Value &result,
     return failure();
   }
 
+  auto fieldAttr = StringAttr::get(getContext(), fieldName);
+
   unsigned unbundledId = entry.get<UnbundledID>() - 1;
   assert(unbundledId < unbundledValues.size());
   UnbundledValueEntry &ubEntry = unbundledValues[unbundledId];
   for (auto elt : ubEntry) {
-    if (elt.first.cast<StringAttr>().getValue() == fieldName) {
+    if (elt.first == fieldAttr) {
       result = elt.second;
       break;
     }
@@ -1634,7 +1640,7 @@ FIRStmtParser::parseExpWithLeadingKeyword(StringRef keyword,
   // If we have a '.', we might have a symbol or an expanded port.  If we
   // resolve to a symbol, use that, otherwise check for expanded bundles of
   // other ops.
-  // Non '.' ops take the plain symbole path.
+  // Non '.' ops take the plain symbol path.
   if (resolveSymbolEntry(lhs, symtabEntry, info.getFIRLoc(), false)) {
     // Ok if the base name didn't resolve by itself, it might be part of an
     // expanded dot reference.  That doesn't work then we fail.
@@ -1816,7 +1822,7 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
     return emitError(info.getFIRLoc(), "memory should have vector type");
   auto resultType = memVType.getElementType();
 
-  ArrayAttr annotations = builder.getArrayAttr({});
+  ArrayAttr annotations = getState().emptyArrayAttr;
   getAnnotations(getModuleTarget() + ">" + id, annotations);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
@@ -2198,26 +2204,21 @@ ParseResult FIRStmtParser::parseInstance() {
     return failure();
   }
 
-  SmallVector<ModulePortInfo, 4> modulePorts;
-  getModulePortInfo(referencedModule, modulePorts);
+  SmallVector<ModulePortInfo> modulePorts = getModulePortInfo(referencedModule);
 
   // Make a bundle of the inputs and outputs of the specified module.
   SmallVector<Type, 4> resultTypes;
-  SmallVector<Attribute, 4> resultNames;
   resultTypes.reserve(modulePorts.size());
-  resultNames.reserve(modulePorts.size());
 
   for (auto port : modulePorts) {
     resultTypes.push_back(FlipType::get(port.type));
-    resultNames.push_back(port.name);
   }
-  ArrayAttr annotations = builder.getArrayAttr({});
+  ArrayAttr annotations = getState().emptyArrayAttr;
   getAnnotations(getModuleTarget() + ">" + id, annotations);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
-  auto result = builder.create<InstanceOp>(
-      info.getLoc(), resultTypes, moduleName, builder.getArrayAttr(resultNames),
-      name, annotations);
+  auto result = builder.create<InstanceOp>(info.getLoc(), resultTypes,
+                                           moduleName, name, annotations);
 
   // Since we are implicitly unbundling the instance results, we need to keep
   // track of the mapping from bundle fields to results in the unbundledValues
@@ -2225,7 +2226,7 @@ ParseResult FIRStmtParser::parseInstance() {
   UnbundledValueEntry unbundledValueEntry;
   unbundledValueEntry.reserve(modulePorts.size());
   for (size_t i = 0, e = modulePorts.size(); i != e; ++i)
-    unbundledValueEntry.push_back({resultNames[i], result.getResult(i)});
+    unbundledValueEntry.push_back({modulePorts[i].name, result.getResult(i)});
 
   // Add it to unbundledValues and add an entry to the symbol table to remember
   // it.
@@ -2252,7 +2253,7 @@ ParseResult FIRStmtParser::parseCMem() {
       parseType(type, "expected cmem type") || parseOptionalInfo(info))
     return failure();
 
-  ArrayAttr annotations = builder.getArrayAttr({});
+  ArrayAttr annotations = getState().emptyArrayAttr;
   getAnnotations(getModuleTarget() + ">" + id, annotations);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
@@ -2287,7 +2288,7 @@ ParseResult FIRStmtParser::parseSMem() {
       parseOptionalInfo(info))
     return failure();
 
-  ArrayAttr annotations = builder.getArrayAttr({});
+  ArrayAttr annotations = getState().emptyArrayAttr;
   getAnnotations(getModuleTarget() + ">" + id, annotations);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
@@ -2421,7 +2422,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     resultTypes.push_back(FlipType::get(p.second));
   }
 
-  ArrayAttr annotations = builder.getArrayAttr({});
+  ArrayAttr annotations = getState().emptyArrayAttr;
   getAnnotations(getModuleTarget() + ">" + id, annotations);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
@@ -2490,7 +2491,7 @@ ParseResult FIRStmtParser::parseNode() {
   // passive.
   initializer = convertToPassive(initializer, initializer.getLoc());
 
-  ArrayAttr annotations = builder.getArrayAttr({});
+  ArrayAttr annotations = getState().emptyArrayAttr;
   getAnnotations(getModuleTarget() + ">" + id, annotations);
 
   // Ignore useless names like _T.
@@ -2524,7 +2525,7 @@ ParseResult FIRStmtParser::parseWire() {
       parseType(type, "expected wire type") || parseOptionalInfo(info))
     return failure();
 
-  ArrayAttr annotations = builder.getArrayAttr({});
+  ArrayAttr annotations = getState().emptyArrayAttr;
   getAnnotations(getModuleTarget() + ">" + id, annotations);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
@@ -2620,7 +2621,7 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   if (parseOptionalInfo(info, subOps))
     return failure();
 
-  ArrayAttr annotations = builder.getArrayAttr({});
+  ArrayAttr annotations = getState().emptyArrayAttr;
   getAnnotations(getModuleTarget() + ">" + id, annotations);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 

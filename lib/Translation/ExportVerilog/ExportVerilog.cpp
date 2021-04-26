@@ -2899,17 +2899,17 @@ void SplitEmitter::emitMLIRModule() {
   // separate output files, and the remaining top-level verbatim SV/ifdef
   // business that needs to go into each file.
   for (auto &op : *rootOp.getBody()) {
-    if (isa<RTLModuleOp>(op) || isa<RTLModuleExternOp>(op) ||
-        isa<InterfaceOp>(op)) {
-      moduleOps.push_back({&op, perFileOps.size(), /*filename=*/{}});
-    } else if (isa<VerbatimOp>(op) || isa<IfDefProceduralOp>(op)) {
-      perFileOps.push_back(&op);
-    } else if (isa<RTLGeneratorSchemaOp>(op)) {
-      /* Empty */
-    } else {
-      op.emitError("unknown operation");
-      encounteredError = true;
-    }
+    TypeSwitch<Operation *>(&op)
+        .Case<RTLModuleOp, InterfaceOp>([&](auto &) {
+          moduleOps.push_back({&op, perFileOps.size()});
+        })
+        .Case<VerbatimOp, IfDefProceduralOp>(
+            [&](auto &) { perFileOps.push_back(&op); })
+        .Case<RTLGeneratorSchemaOp, RTLModuleExternOp>([&](auto &) {})
+        .Default([&](auto *) {
+          op.emitError("unknown operation");
+          encounteredError = true;
+        });
   }
 
   // In parallel, emit each module into its separate file, embedded within the
@@ -2929,11 +2929,6 @@ void SplitEmitter::emitModule(const LoweringOptions &options,
     mod.filename = module.getNameAttr().getValue();
     emit = [=](VerilogEmitterState &state) {
       ModuleEmitter(state).emitRTLModule(module);
-    };
-  } else if (auto module = dyn_cast<RTLModuleExternOp>(op)) {
-    mod.filename = module.getVerilogModuleNameAttr().getValue();
-    emit = [=](VerilogEmitterState &state) {
-      ModuleEmitter(state).emitRTLExternModule(module);
     };
   } else if (auto intfOp = dyn_cast<InterfaceOp>(op)) {
     mod.filename = intfOp.sym_name();
@@ -2988,16 +2983,26 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   return failure(emitter.encounteredError);
 }
 
-LogicalResult
-circt::exportSplitVerilog(ModuleOp module, StringRef dirname,
-                          std::function<void(llvm::StringRef)> emittedFile) {
+LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
   SplitEmitter emitter(dirname, module);
   emitter.emitMLIRModule();
-  if (emittedFile) {
-    for (auto mod : std::move(emitter.moduleOps)) {
-      emittedFile(mod.filename);
-    }
+
+  // Write the file list.
+  SmallString<128> filelistPath(dirname);
+  llvm::sys::path::append(filelistPath, "filelist.f");
+
+  std::string errorMessage;
+  auto output = mlir::openOutputFile(filelistPath, &errorMessage);
+  if (!output) {
+    module->emitError(errorMessage);
+    return failure();
   }
+
+  for (auto mod : std::move(emitter.moduleOps)) {
+    output->os() << mod.filename << "\n";
+  }
+  output->keep();
+
   return failure(emitter.encounteredError);
 }
 

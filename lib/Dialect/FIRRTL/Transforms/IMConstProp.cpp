@@ -303,10 +303,7 @@ void IMConstPropPass::markInstance(InstanceOp instance) {
 
     // Otherwise we have a result from the instance.  We need to forward results
     // from the body to this instance result's SSA value, so remember it.
-
-    // TODO: This should do result number matching, not name matching!
-    auto portName = instance.getPortName(resultNo);
-    BlockArgument modulePortVal = module.getPortArgument(portName);
+    BlockArgument modulePortVal = module.getPortArgument(resultNo);
     resultPortToInstanceResultMapping[modulePortVal].push_back(instancePortVal);
 
     // If there is already a value known for modulePortVal make sure to forward
@@ -345,9 +342,8 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
     if (!module)
       return;
 
-    // TODO: This should do result number matching, not name matching!
-    auto portName = instance.getPortName(dest.getResultNumber());
-    BlockArgument modulePortVal = module.getPortArgument(portName);
+    BlockArgument modulePortVal =
+        module.getPortArgument(dest.getResultNumber());
     return mergeLatticeValue(modulePortVal, connect.src());
   }
 

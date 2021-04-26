@@ -1,4 +1,4 @@
-// RUN: circt-opt --canonicalize %s | FileCheck %s
+// RUN: circt-opt -simple-canonicalizer %s | FileCheck %s
 
 // The following tests are derived from `ConstantPropagationSingleModule` in [1].
 // They are intended to closely follow the module test case structure in the

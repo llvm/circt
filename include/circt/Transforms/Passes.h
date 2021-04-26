@@ -1,4 +1,4 @@
-//===- SVPasses.h - SV pass entry points ------------------------*- C++ -*-===//
+//===- Passes.h - Generic CIRCT Passes --------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,12 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This header file defines prototypes that expose pass constructors.
+// This header file defines prototypes that expose pass constructors.  These
+// passes are dialect independent.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_SV_SVPASSES_H
-#define CIRCT_DIALECT_SV_SVPASSES_H
+#ifndef CIRCT_TRANSFORMS_PASSES_H
+#define CIRCT_TRANSFORMS_PASSES_H
 
 #include "mlir/Pass/Pass.h"
 
@@ -24,19 +25,13 @@ class OperationPass;
 } // namespace mlir
 
 namespace circt {
-namespace sv {
 
-std::unique_ptr<mlir::Pass> createRTLCleanupPass();
-std::unique_ptr<mlir::Pass> createRTLStubExternalModulesPass();
-std::unique_ptr<mlir::Pass> createRTLLegalizeNamesPass();
-std::unique_ptr<mlir::Pass> createRTLGeneratorCalloutPass();
-std::unique_ptr<mlir::Pass> createRTLMemSimImplPass();
+std::unique_ptr<mlir::Pass> createSimpleCanonicalizerPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
-#include "circt/Dialect/SV/SVPasses.h.inc"
+#include "circt/Transforms/Passes.h.inc"
 
-} // namespace sv
 } // namespace circt
 
-#endif // CIRCT_DIALECT_SV_SVPASSES_H
+#endif // CIRCT_TRANSFORMS_PASSES_H

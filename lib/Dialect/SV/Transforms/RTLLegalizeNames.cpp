@@ -12,14 +12,44 @@
 //===----------------------------------------------------------------------===//
 
 #include "SVPassDetail.h"
-#include "circt/Dialect/SV/SVAnalyses.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
-#include "circt/Translation/ExportVerilog.h"
 
 using namespace circt;
 using namespace sv;
 using namespace rtl;
+
+//===----------------------------------------------------------------------===//
+// NameCollisionResolver
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct NameCollisionResolver {
+  NameCollisionResolver() = default;
+
+  /// Given a name that may have collisions or invalid symbols, return a
+  /// replacement name to use, or null if the original name was ok.
+  StringRef getLegalName(StringAttr originalName);
+
+private:
+  /// Set of used names, to ensure uniqueness.
+  llvm::StringSet<> usedNames;
+
+  /// Numeric suffix used as uniquification agent when resolving conflicts.
+  size_t nextGeneratedNameID = 0;
+
+  NameCollisionResolver(const NameCollisionResolver &) = delete;
+  void operator=(const NameCollisionResolver &) = delete;
+};
+} // end anonymous namespace
+
+/// Given a name that may have collisions or invalid symbols, return a
+/// replacement name to use, or null if the original name was ok.
+StringRef NameCollisionResolver::getLegalName(StringAttr originalName) {
+  StringRef result =
+      legalizeName(originalName.getValue(), usedNames, nextGeneratedNameID);
+  return result != originalName.getValue() ? result : StringRef();
+}
 
 //===----------------------------------------------------------------------===//
 // RTLLegalizeNamesPass
@@ -41,24 +71,38 @@ private:
 void RTLLegalizeNamesPass::runOnOperation() {
   anythingChanged = false;
   ModuleOp root = getOperation();
-
-  // Analyze the legal names for top-level operations in the MLIR module.
-  auto &rootNames = getAnalysis<LegalNamesAnalysis>();
-
-  // Rename modules and interfaces.
   mlir::SymbolTableCollection symbolTable;
   mlir::SymbolUserMap symbolUsers(symbolTable, root);
 
+  // Analyze the legal names for top-level operations in the MLIR module.
+  NameCollisionResolver nameResolver;
+
+  // Register the names of external modules which we cannot rename. This has to
+  // occur in a first pass separate from the modules and interfaces which we are
+  // actually allowed to rename, in order to ensure that we don't accidentally
+  // rename a module that later collides with an extern module.
   for (auto &op : *root.getBody()) {
-    if (isa<RTLModuleOp>(op) || isa<InterfaceOp>(op)) {
-      auto oldName = SymbolTable::getSymbolName(&op);
-      auto newName = rootNames.getOperationName(&op);
-      if (oldName != newName) {
-        symbolUsers.replaceAllUsesWith(&op, newName);
-        SymbolTable::setSymbolName(&op, newName);
-        anythingChanged = true;
-      }
-    }
+    // Note that external modules *often* have name collisions, because they
+    // correspond to the same verilog module with different parameters.
+    if (auto extMod = dyn_cast<RTLModuleExternOp>(op))
+      (void)nameResolver.getLegalName(extMod.getVerilogModuleNameAttr());
+  }
+
+  auto symbolAttrName = SymbolTable::getSymbolAttrName();
+
+  // Legalize module and interface names.
+  for (auto &op : *root.getBody()) {
+    if (!isa<RTLModuleOp>(op) && !isa<InterfaceOp>(op))
+      continue;
+
+    StringAttr oldName = op.getAttrOfType<StringAttr>(symbolAttrName);
+    auto newName = nameResolver.getLegalName(oldName);
+    if (newName.empty())
+      continue;
+
+    symbolUsers.replaceAllUsesWith(&op, newName);
+    SymbolTable::setSymbolName(&op, newName);
+    anythingChanged = true;
   }
 
   // Rename individual operations.
@@ -82,61 +126,47 @@ void RTLLegalizeNamesPass::runOnOperation() {
 }
 
 void RTLLegalizeNamesPass::runOnModule(rtl::RTLModuleOp module) {
-  auto localNames = getChildAnalysis<LegalNamesAnalysis>(module);
-  auto moduleType = rtl::getModuleType(module);
-  auto inputs = moduleType.getInputs();
-  auto results = moduleType.getResults();
+  NameCollisionResolver nameResolver;
 
-  // Rename the inputs.
-  bool changedName = false;
-  SmallVector<Attribute> names;
-  for (size_t i = 0, e = inputs.size(); i != e; ++i) {
-    auto oldName = getModuleArgumentNameAttr(module, i);
-    auto newName = localNames.getArgName(module, i);
-    if (oldName.getValue() == newName)
-      names.push_back(oldName);
-    else {
-      names.push_back(StringAttr::get(module.getContext(), newName));
-      changedName = true;
+  bool changedArgNames = false, changedOutputNames = false;
+  SmallVector<Attribute> argNames, outputNames;
+
+  // Legalize the ports.
+  for (const ModulePortInfo &port : getModulePortInfo(module)) {
+    auto newName = nameResolver.getLegalName(port.name);
+
+    auto &namesVector = port.isOutput() ? outputNames : argNames;
+    auto &changedBool = port.isOutput() ? changedOutputNames : changedArgNames;
+
+    if (newName.empty()) {
+      namesVector.push_back(port.name);
+    } else {
+      changedBool = true;
+      namesVector.push_back(StringAttr::get(module.getContext(), newName));
     }
   }
-  if (changedName) {
-    setModuleArgumentNames(module, names);
+
+  if (changedArgNames) {
+    setModuleArgumentNames(module, argNames);
     anythingChanged = true;
   }
-
-  changedName = false;
-  names.clear();
-
-  // Rename the results if needed.
-  for (size_t i = 0, e = results.size(); i != e; ++i) {
-    auto oldName = getModuleResultNameAttr(module, i);
-    auto newName = localNames.getResultName(module, i);
-    if (oldName.getValue() == newName)
-      names.push_back(oldName);
-    else {
-      names.push_back(StringAttr::get(module.getContext(), newName));
-      changedName = true;
-    }
-  }
-  if (changedName) {
-    setModuleResultNames(module, names);
+  if (changedOutputNames) {
+    setModuleResultNames(module, outputNames);
     anythingChanged = true;
   }
 
   // Rename the instances, regs, and wires.
   for (auto &op : *module.getBodyBlock()) {
     if (auto instanceOp = dyn_cast<InstanceOp>(op)) {
-      auto oldName = instanceOp.getName();
-      auto newName = localNames.getOperationName(&op);
-      if (oldName != newName) {
+      auto newName = nameResolver.getLegalName(instanceOp.getNameAttr());
+      if (!newName.empty()) {
         instanceOp.setName(newName);
         anythingChanged = true;
       }
     } else if (isa<RegOp>(op) || isa<WireOp>(op)) {
-      auto oldName = op.getAttrOfType<StringAttr>("name").getValue();
-      auto newName = localNames.getOperationName(&op);
-      if (oldName != newName) {
+      auto oldName = op.getAttrOfType<StringAttr>("name");
+      auto newName = nameResolver.getLegalName(oldName);
+      if (!newName.empty()) {
         op.setAttr("name", StringAttr::get(op.getContext(), newName));
         anythingChanged = true;
       }
@@ -144,21 +174,23 @@ void RTLLegalizeNamesPass::runOnModule(rtl::RTLModuleOp module) {
   }
 }
 
-void RTLLegalizeNamesPass::runOnInterface(sv::InterfaceOp intf,
+void RTLLegalizeNamesPass::runOnInterface(InterfaceOp interface,
                                           mlir::SymbolUserMap &symbolUsers) {
-  auto localNames = getChildAnalysis<LegalNamesAnalysis>(intf);
+  NameCollisionResolver localNames;
+  auto symbolAttrName = SymbolTable::getSymbolAttrName();
 
   // Rename signals and modports.
-  for (auto &op : *intf.getBodyBlock()) {
-    if (isa<InterfaceSignalOp>(op) || isa<InterfaceModportOp>(op)) {
-      auto oldName = SymbolTable::getSymbolName(&op);
-      auto newName = localNames.getOperationName(&op);
-      if (oldName != newName) {
-        symbolUsers.replaceAllUsesWith(&op, newName);
-        SymbolTable::setSymbolName(&op, newName);
-        anythingChanged = true;
-      }
-    }
+  for (auto &op : *interface.getBodyBlock()) {
+    if (!isa<InterfaceSignalOp>(op) && !isa<InterfaceModportOp>(op))
+      continue;
+
+    StringAttr oldName = op.getAttrOfType<StringAttr>(symbolAttrName);
+    auto newName = localNames.getLegalName(oldName);
+    if (newName.empty())
+      continue;
+    symbolUsers.replaceAllUsesWith(&op, newName);
+    SymbolTable::setSymbolName(&op, newName);
+    anythingChanged = true;
   }
 }
 
