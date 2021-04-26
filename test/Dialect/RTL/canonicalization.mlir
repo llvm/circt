@@ -871,3 +871,58 @@ rtl.module @sext_and_one_bit(%bit: i1) -> (%a: i65, %b: i8, %c: i8) {
   rtl.output %1, %3, %4 : i65, i8, i8
 }
 
+// CHECK-LABEL: rtl.module @wire0()
+// CHECK-NEXT:    rtl.output
+rtl.module @wire0() {
+  %0 = sv.wire : !rtl.inout<i1>
+  rtl.output
+}
+
+// CHECK-LABEL: rtl.module @wire1()
+// CHECK-NEXT:    rtl.output
+rtl.module @wire1() {
+  %0 = sv.wire : !rtl.inout<i1>
+  %1 = sv.read_inout %0 : !rtl.inout<i1>
+  rtl.output
+}
+
+// CHECK-LABEL: rtl.module @wire2()
+// CHECK-NEXT:    rtl.output
+rtl.module @wire2() {
+  %c = rtl.constant 1 : i1
+  %0 = sv.wire : !rtl.inout<i1>
+  sv.connect %0, %c : i1
+  rtl.output
+}
+
+// CHECK-LABEL: rtl.module @wire3()
+// CHECK-NEXT:    rtl.output
+rtl.module @wire3() {
+  %c = rtl.constant 1 : i1
+  %0 = sv.wire : !rtl.inout<i1>
+  %1 = sv.read_inout %0 : !rtl.inout<i1>
+  sv.connect %0, %c :i1
+  rtl.output
+}
+
+// CHECK-LABEL: rtl.module @wire4() -> (i1)
+// CHECK-NEXT:   %true = rtl.constant true
+// CHECK-NEXT:   %0 = sv.wire  : !rtl.inout<i1>
+// CHECK-NEXT:   %1 = sv.read_inout %0 : !rtl.inout<i1>
+// CHECK-NEXT:   sv.connect %0, %true : i1
+// CHECK-NEXT:   rtl.output %1 : i1
+rtl.module @wire4() -> (i1) {
+  %true = rtl.constant true
+  %0 = sv.wire : !rtl.inout<i1>
+  %1 = sv.read_inout %0 : !rtl.inout<i1>
+  sv.connect %0, %true : i1
+  rtl.output %1 : i1
+}
+
+// CHECK-LABEL: rtl.module @wire5()
+// CHECK-NEXT:   %wire_with_name = sv.wire  : !rtl.inout<i1>
+// CHECK-NEXT:   rtl.output
+rtl.module @wire5() -> () {
+  %wire_with_name = sv.wire : !rtl.inout<i1>
+  rtl.output
+}
