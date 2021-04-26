@@ -240,7 +240,7 @@ SmallVector<ModulePortInfo> firrtl::getModulePortInfo(Operation *op) {
 /// Given an FModule or ExtModule, return the name of the specified port number.
 StringAttr firrtl::getModulePortName(Operation *op, size_t portIndex) {
   assert(isa<FModuleOp>(op) || isa<FExtModuleOp>(op));
-  return getFIRRTLNameAttr(::mlir::impl::getArgAttrs(op, portIndex));
+  return getFIRRTLModuleArgNameAttr(op)[portIndex].cast<StringAttr>();
 }
 
 static void buildModule(OpBuilder &builder, OperationState &result,
