@@ -75,7 +75,7 @@ def MemoryPortOp : FIRRTLOp<"memoryport"> {
   let summary = "Access a memory";
 
   let arguments = (ins FIRRTLType:$memory, IntType:$index, ClockType:$clock,
-                    MemDirAttr:$direction, OptionalAttr<StrAttr>:$name,
+                    MemDirAttr:$direction, StrAttr:$name,
                     DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
   let results = (outs FIRRTLType:$result);
 

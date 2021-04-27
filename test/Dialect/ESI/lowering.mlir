@@ -70,6 +70,7 @@ rtl.module @add11(%clk: i1, %ints: !esi.channel<i32>) -> (%mutatedInts: !esi.cha
 // RTL:   %{{.+}} = rtl.constant 0 : i4
 // RTL:   rtl.output [[RES0]], %ints_valid, %{{.+}}, %mutatedInts_ready : i32, i1, i4, i1
 
+rtl.module @InternRcvr(%in: !esi.channel<!rtl.array<4xi8>>) -> () {}
 
 rtl.module @test2(%clk:i1, %rstn:i1) {
   %ints, %c4 = rtl.instance "adder" @add11(%clk, %ints) : (i1, !esi.channel<i32>) -> (!esi.channel<i32>, i4)

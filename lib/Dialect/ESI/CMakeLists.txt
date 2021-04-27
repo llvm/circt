@@ -7,6 +7,7 @@
 
 set(srcs
   ESIDialect.cpp
+  ESIFolds.cpp
   ESIOps.cpp
   ESIPasses.cpp
   ESITranslations.cpp

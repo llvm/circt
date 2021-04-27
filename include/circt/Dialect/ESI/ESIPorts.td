@@ -58,6 +58,7 @@ def WrapValidReady : ESI_Op<"wrap.vr", [NoSideEffect]> {
 
   let printer = [{ return ::print(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
+  let hasFolder = 1;
 
   let builders = [
     OpBuilder<(ins "mlir::Value":$data, "mlir::Value":$valid)>
