@@ -24,6 +24,7 @@ def ESI_Dialect : Dialect {
     /// Register all ESI types.
     void registerTypes();
   }];
+  let hasConstantMaterializer = 1;
 }
 
 class ESI_Op<string mnemonic, list<OpTrait> traits = []> :
