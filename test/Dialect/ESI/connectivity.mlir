@@ -40,6 +40,11 @@ rtl.module @test(%clk: i1, %rstn: i1) {
   // CHECK-NEXT:  %sender.x_0 = rtl.instance "sender" @Sender()  : () -> !esi.channel<i1>
   // CHECK-NEXT:  %1 = esi.buffer %clk, %rstn, %sender.x_0 {stages = 4 : i64} : i1
   // CHECK-NEXT:  rtl.instance "recv" @Reciever(%1)  : (!esi.channel<i1>) -> ()
+
+  %nullBit = esi.null : !esi.channel<i1>
+  rtl.instance "nullRcvr" @Reciever(%nullBit) : (!esi.channel<i1>) -> ()
+  // CHECK-NEXT:  [[NULLI1:%.+]] = esi.null : !esi.channel<i1>
+  // CHECK-NEXT:  rtl.instance "nullRcvr" @Reciever([[NULLI1]]) : (!esi.channel<i1>) -> ()
 }
 
 rtl.module.extern @IFaceSender(!sv.modport<@IData::@Source>) -> ()

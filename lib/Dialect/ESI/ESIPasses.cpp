@@ -839,6 +839,39 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   rewriter.replaceOp(stage, wrap.chanOutput());
   return success();
 }
+
+namespace {
+struct NullSourceOpLowering : public OpConversionPattern<NullSourceOp> {
+public:
+  NullSourceOpLowering(MLIRContext *ctxt) : OpConversionPattern(ctxt) {}
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(NullSourceOp nullop, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final;
+};
+} // anonymous namespace
+
+LogicalResult NullSourceOpLowering::matchAndRewrite(
+    NullSourceOp nullop, ArrayRef<Value> stageOperands,
+    ConversionPatternRewriter &rewriter) const {
+  auto innerType = nullop.out().getType().cast<ChannelPort>().getInner();
+  Location loc = nullop.getLoc();
+  int64_t width = rtl::getBitWidth(innerType);
+  if (width == -1)
+    return rewriter.notifyMatchFailure(
+        nullop, "NullOp lowering only supports rtl types");
+  auto valid = rewriter.create<rtl::ConstantOp>(nullop.getLoc(),
+                                                rewriter.getI1Type(), 0);
+  auto zero =
+      rewriter.create<rtl::ConstantOp>(loc, rewriter.getIntegerType(width), 0);
+  auto typedZero = rewriter.create<rtl::BitcastOp>(loc, innerType, zero);
+  auto wrap = rewriter.create<WrapValidReady>(loc, typedZero, valid);
+  wrap->setAttr("name", rewriter.getStringAttr("nullsource"));
+  rewriter.replaceOp(nullop, {wrap.chanOutput()});
+  return success();
+}
+
 namespace {
 /// Eliminate back-to-back wrap-unwraps to reduce the number of ESI channels.
 struct RemoveWrapUnwrap : public ConversionPattern {
@@ -853,13 +886,12 @@ public:
     WrapValidReady wrap = dyn_cast<WrapValidReady>(op);
     UnwrapValidReady unwrap = dyn_cast<UnwrapValidReady>(op);
     if (wrap) {
-      unwrap =
-          dyn_cast<UnwrapValidReady>(wrap.chanOutput().use_begin()->getOwner());
-      if (!unwrap)
-        return rewriter.notifyMatchFailure(wrap, [](Diagnostic &d) {
-          d << "This conversion only supports wrap-unwrap back-to-back. "
-               "Could not find 'unwrap'.";
-        });
+      if (!wrap.chanOutput().hasOneUse() ||
+          !(unwrap = dyn_cast<UnwrapValidReady>(
+                wrap.chanOutput().use_begin()->getOwner())))
+        return rewriter.notifyMatchFailure(
+            wrap, "This conversion only supports wrap-unwrap back-to-back. "
+                  "Could not find 'unwrap'.");
       data = operands[0];
       valid = operands[1];
       ready = unwrap.ready();
@@ -867,10 +899,9 @@ public:
       wrap = dyn_cast<WrapValidReady>(operands[0].getDefiningOp());
       if (!wrap)
         return rewriter.notifyMatchFailure(
-            operands[0].getDefiningOp(), [](Diagnostic &d) {
-              d << "This conversion only supports wrap-unwrap back-to-back. "
-                   "Could not find 'wrap'.";
-            });
+            operands[0].getDefiningOp(),
+            "This conversion only supports wrap-unwrap back-to-back. "
+            "Could not find 'wrap'.");
       valid = wrap.valid();
       data = wrap.rawInput();
       ready = operands[1];
@@ -1157,6 +1188,7 @@ void ESItoRTLPass::runOnOperation() {
   pass1Patterns.insert<WrapInterfaceLower>(ctxt);
   pass1Patterns.insert<UnwrapInterfaceLower>(ctxt);
   pass1Patterns.insert<CosimLowering>(esiBuilder);
+  pass1Patterns.insert<NullSourceOpLowering>(ctxt);
 
   // Run the conversion.
   if (failed(
