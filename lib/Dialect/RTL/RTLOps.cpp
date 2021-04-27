@@ -998,11 +998,13 @@ static void print(OpAsmPrinter &printer, rtl::StructExplodeOp op) {
 // StructExtractOp
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseStructExtractOp(OpAsmParser &parser,
-                                        OperationState &result) {
+/// Use the same parser for both struct_extract and union_extract since the
+/// syntax is identical.
+template <typename AggType>
+static ParseResult parseExtractOp(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::OperandType operand;
   StringAttr fieldName;
-  StructType declType;
+  AggType declType;
 
   if (parser.parseOperand(operand) || parser.parseLSquare() ||
       parser.parseAttribute(fieldName, "field", result.attributes) ||
@@ -1023,12 +1025,22 @@ static ParseResult parseStructExtractOp(OpAsmParser &parser,
   return success();
 }
 
-static void print(OpAsmPrinter &printer, rtl::StructExtractOp op) {
+static ParseResult parseStructExtractOp(OpAsmParser &parser,
+                                        OperationState &result) {
+  return parseExtractOp<StructType>(parser, result);
+}
+
+template <typename AggType>
+static void printExtractOp(OpAsmPrinter &printer, AggType op) {
   printer << op.getOperationName() << " ";
   printer.printOperand(op.input());
   printer << "[\"" << op.field() << "\"]";
   printer.printOptionalAttrDict(op->getAttrs(), {"field"});
   printer << " : " << op.input().getType();
+}
+
+static void print(OpAsmPrinter &printer, rtl::StructExtractOp op) {
+  printExtractOp(printer, op);
 }
 
 void StructExtractOp::build(::mlir::OpBuilder &odsBuilder,
@@ -1115,35 +1127,11 @@ static void print(OpAsmPrinter &printer, rtl::UnionCreateOp op) {
 
 static ParseResult parseUnionExtractOp(OpAsmParser &parser,
                                        OperationState &result) {
-  OpAsmParser::OperandType operand;
-  StringAttr fieldName;
-  UnionType declType;
-
-  if (parser.parseOperand(operand) || parser.parseLSquare() ||
-      parser.parseAttribute(fieldName, "field", result.attributes) ||
-      parser.parseRSquare() ||
-      parser.parseOptionalAttrDict(result.attributes) ||
-      parser.parseColonType(declType))
-    return failure();
-
-  Type resultType = declType.getFieldType(fieldName.getValue());
-  if (!resultType) {
-    parser.emitError(parser.getNameLoc(), "invalid field name specified");
-    return failure();
-  }
-  result.addTypes(resultType);
-
-  if (parser.resolveOperand(operand, declType, result.operands))
-    return failure();
-  return success();
+  return parseExtractOp<UnionType>(parser, result);
 }
 
 static void print(OpAsmPrinter &printer, rtl::UnionExtractOp op) {
-  printer << op.getOperationName() << " ";
-  printer.printOperand(op.input());
-  printer << "[\"" << op.field() << "\"]";
-  printer.printOptionalAttrDict(op->getAttrs(), {"field"});
-  printer << " : " << op.input().getType();
+  printExtractOp(printer, op);
 }
 
 //===----------------------------------------------------------------------===//
