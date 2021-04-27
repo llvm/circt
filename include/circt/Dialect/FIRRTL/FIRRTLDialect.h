@@ -17,20 +17,6 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
 
-namespace circt {
-namespace firrtl {
-
-class FIRRTLType;
-
-const StringRef portNameAttrStringRef("portNames");
-
-/// Return the portNames attribute for the specified module, which contains the
-/// name for each port.
-ArrayAttr getModulePortNames(Operation *module);
-
-} // namespace firrtl
-} // namespace circt
-
 // Pull in the dialect definition.
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h.inc"
 

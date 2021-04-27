@@ -229,10 +229,10 @@ SmallVector<ModulePortInfo> firrtl::getModulePortInfo(Operation *op) {
   SmallVector<ModulePortInfo> results;
   auto argTypes = getModuleType(op).getInputs();
 
-  auto argAttr = getModulePortNames(op);
+  auto portNamesAttr = getModulePortNames(op);
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     auto type = argTypes[i].cast<FIRRTLType>();
-    results.push_back({argAttr[i].cast<StringAttr>(), type});
+    results.push_back({portNamesAttr[i].cast<StringAttr>(), type});
   }
   return results;
 }
@@ -265,7 +265,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   for (size_t i = 0, e = ports.size(); i != e; ++i)
     portNames.push_back(ports[i].name);
 
-  result.addAttribute(portNameAttrStringRef, builder.getArrayAttr(portNames));
+  result.addAttribute("portNames", builder.getArrayAttr(portNames));
 
   result.addRegion();
 }
@@ -315,12 +315,12 @@ static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
   SmallString<32> resultNameStr;
 
   p << '(';
-  auto argAttr = getModulePortNames(op);
+  auto portNamesAttr = getModulePortNames(op);
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     if (i > 0)
       p << ", ";
 
-    auto portName = argAttr[i].cast<StringAttr>().getValue();
+    auto portName = portNamesAttr[i].cast<StringAttr>().getValue();
     Value argumentValue;
     if (!isExternal) {
       // Get the printed format for the argument name.
@@ -371,7 +371,7 @@ static void printModuleLikeOp(OpAsmPrinter &p, Operation *op) {
                           needportNamesAttr);
   SmallVector<StringRef, 3> omittedAttrs;
   if (!needportNamesAttr)
-    omittedAttrs.push_back(portNameAttrStringRef);
+    omittedAttrs.push_back("portNames");
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(),
                           omittedAttrs);
 }
@@ -401,7 +401,7 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
   // terminator.
 
   SmallVector<OpAsmParser::OperandType, 4> entryArgs;
-  SmallVector<NamedAttrList, 4> argAttrs;
+  SmallVector<NamedAttrList, 4> portNamesAttrs;
   SmallVector<NamedAttrList, 4> resultAttrs;
   SmallVector<Type, 4> argTypes;
   SmallVector<Type, 4> resultTypes;
@@ -416,7 +416,7 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
   // Parse the function signature.
   bool isVariadic = false;
   if (parseFunctionSignature(parser, /*allowVariadic*/ false, entryArgs,
-                             argTypes, argAttrs, isVariadic, resultTypes,
+                             argTypes, portNamesAttrs, isVariadic, resultTypes,
                              resultAttrs))
     return failure();
 
@@ -429,13 +429,13 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
   if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
     return failure();
 
-  assert(argAttrs.size() == argTypes.size());
+  assert(portNamesAttrs.size() == argTypes.size());
   assert(resultAttrs.size() == resultTypes.size());
 
   auto *context = result.getContext();
 
   SmallVector<Attribute> portNames;
-  if (!result.attributes.get(portNameAttrStringRef)) {
+  if (!result.attributes.get("portNames")) {
     // Postprocess each of the arguments.  If there was no portNames
     // attribute, and if the argument name was non-numeric, then add the
     // portNames attribute with the textual name from the IR.  The name in the
@@ -443,7 +443,6 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
     // verbosity in dumps of including it explicitly in the attribute
     // dictionary.
     for (size_t i = 0, e = entryArgs.size(); i != e; ++i) {
-
       auto &arg = entryArgs[i];
 
       // The name of an argument is of the form "%42" or "%id", and since
@@ -454,10 +453,10 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
       else
         portNames.push_back(StringAttr::get(context, arg.name.drop_front()));
     }
-    result.addAttribute(portNameAttrStringRef, builder.getArrayAttr(portNames));
+    result.addAttribute("portNames", builder.getArrayAttr(portNames));
   }
   // Add the attributes to the function arguments.
-  addArgAndResultAttrs(builder, result, argAttrs, resultAttrs);
+  addArgAndResultAttrs(builder, result, portNamesAttrs, resultAttrs);
 
   // Parse the optional function body.
   auto *body = result.addRegion();
@@ -510,9 +509,9 @@ static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
 
   if (!llvm::all_of(paramDict, checkParmValue))
     return failure();
-  auto argAttr = getModulePortNames(op);
+  auto portNamesAttr = getModulePortNames(op);
 
-  if (op.getPorts().size() != argAttr.size()) {
+  if (op.getPorts().size() != portNamesAttr.size()) {
     op.emitError("module ports does not match number of arguments");
     return failure();
   }

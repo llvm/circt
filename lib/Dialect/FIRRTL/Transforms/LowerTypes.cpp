@@ -199,12 +199,11 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   auto *argAttrEnd = originalArgAttrs.end();
   for (auto attr : originalAttrs)
     if (std::lower_bound(argAttrBegin, argAttrEnd, attr) == argAttrEnd)
-      if (attr.first.str() != portNameAttrStringRef)
+      if (attr.first.str() != "portNames")
         newModuleAttrs.push_back(attr);
 
-  newModuleAttrs.push_back(
-      NamedAttribute(Identifier::get(portNameAttrStringRef, context),
-                     builder->getArrayAttr(newArgNames)));
+  newModuleAttrs.push_back(NamedAttribute(Identifier::get("portNames", context),
+                                          builder->getArrayAttr(newArgNames)));
 
   // Update the module's attributes.
   module->setAttrs(newModuleAttrs);
@@ -275,7 +274,7 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
       portNames.push_back(pName);
     }
   }
-  extModule->setAttr(Identifier::get(portNameAttrStringRef, context),
+  extModule->setAttr(Identifier::get("portNames", context),
                      builder.getArrayAttr(portNames));
 
   // Set the type and then bulk set all the names.
