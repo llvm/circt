@@ -193,10 +193,36 @@ def StructExplodeOp : RTLOp<"struct_explode", [NoSideEffect]> {
   let summary = "Expand a struct into its constituent parts.";
   let arguments = (ins StructType:$input);
   let results = (outs Variadic<RTLNonInOutType>:$result);
+   let parser = "return ::parse$cppClass(parser, result);";
+   let printer = "return ::print(p, *this);";
+ }
+
+//===----------------------------------------------------------------------===//
+// Union operations
+//===----------------------------------------------------------------------===//
+
+def UnionCreateOp : RTLOp<"union_create", [NoSideEffect]> {
+  let summary = "Create a union be populating the specified field.";
+  let arguments = (ins StrAttr:$field, RTLNonInOutType:$input);
+  let results = (outs UnionType:$result);
 
   let parser = "return ::parse$cppClass(parser, result);";
   let printer = "return ::print(p, *this);";
 }
+
+def UnionExtractOp : RTLOp<"union_extract", [NoSideEffect]> {
+  let summary = "Extract a named field from a struct.";
+
+  let arguments = (ins UnionType:$input, StrAttr:$field);
+  let results = (outs RTLNonInOutType:$result);
+
+  let parser = "return ::parse$cppClass(parser, result);";
+  let printer = "return ::print(p, *this);";
+}
+
+//===----------------------------------------------------------------------===//
+// Misc. operations
+//===----------------------------------------------------------------------===//
 
 def ConstantOp
  : RTLOp<"constant",

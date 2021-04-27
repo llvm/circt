@@ -1079,6 +1079,74 @@ static void print(OpAsmPrinter &printer, rtl::StructInjectOp op) {
 }
 
 //===----------------------------------------------------------------------===//
+// UnionCreateOp
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseUnionCreateOp(OpAsmParser &parser,
+                                      OperationState &result) {
+  UnionType declType;
+  StringAttr field;
+  OpAsmParser::OperandType input;
+
+  if (parser.parseAttribute(field, "field", result.attributes) ||
+      parser.parseComma() || parser.parseOperand(input) ||
+      parser.parseOptionalAttrDict(result.attributes) ||
+      parser.parseColonType(declType))
+    return failure();
+
+  Type inputType = declType.getFieldType(field.getValue());
+
+  if (parser.resolveOperand(input, inputType, result.operands))
+    return failure();
+  result.addTypes({declType});
+  return success();
+}
+
+static void print(OpAsmPrinter &printer, rtl::UnionCreateOp op) {
+  printer << op.getOperationName() << " \"" << op.field() << "\", ";
+  printer.printOperand(op.input());
+  printer.printOptionalAttrDict(op->getAttrs(), {"field"});
+  printer << " : " << op.getType();
+}
+
+//===----------------------------------------------------------------------===//
+// UnionExtractOp
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseUnionExtractOp(OpAsmParser &parser,
+                                       OperationState &result) {
+  OpAsmParser::OperandType operand;
+  StringAttr fieldName;
+  UnionType declType;
+
+  if (parser.parseOperand(operand) || parser.parseLSquare() ||
+      parser.parseAttribute(fieldName, "field", result.attributes) ||
+      parser.parseRSquare() ||
+      parser.parseOptionalAttrDict(result.attributes) ||
+      parser.parseColonType(declType))
+    return failure();
+
+  Type resultType = declType.getFieldType(fieldName.getValue());
+  if (!resultType) {
+    parser.emitError(parser.getNameLoc(), "invalid field name specified");
+    return failure();
+  }
+  result.addTypes(resultType);
+
+  if (parser.resolveOperand(operand, declType, result.operands))
+    return failure();
+  return success();
+}
+
+static void print(OpAsmPrinter &printer, rtl::UnionExtractOp op) {
+  printer << op.getOperationName() << " ";
+  printer.printOperand(op.input());
+  printer << "[\"" << op.field() << "\"]";
+  printer.printOptionalAttrDict(op->getAttrs(), {"field"});
+  printer << " : " << op.input().getType();
+}
+
+//===----------------------------------------------------------------------===//
 // ArrayGetOp
 //===----------------------------------------------------------------------===//
 

@@ -193,6 +193,57 @@ void StructType::getInnerTypes(SmallVectorImpl<Type> &types) {
 }
 
 //===----------------------------------------------------------------------===//
+// Union Type
+//===----------------------------------------------------------------------===//
+namespace circt {
+namespace rtl {
+bool operator==(const UnionType::FieldInfo &a, const UnionType::FieldInfo &b) {
+  return a.name == b.name && a.type == b.type;
+}
+llvm::hash_code hash_value(const UnionType::FieldInfo &fi) {
+  return llvm::hash_combine(fi.name, fi.type);
+}
+} // namespace rtl
+} // namespace circt
+
+Type UnionType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
+  llvm::SmallVector<FieldInfo, 4> parameters;
+  StringRef name;
+  if (p.parseLess())
+    return Type();
+  while (mlir::succeeded(p.parseOptionalKeyword(&name))) {
+    Type type;
+    if (p.parseColon() || p.parseType(type))
+      return Type();
+    parameters.push_back(FieldInfo{name, type});
+    if (p.parseOptionalComma())
+      break;
+  }
+  if (p.parseGreater())
+    return Type();
+  return get(ctxt, parameters);
+}
+
+void UnionType::print(DialectAsmPrinter &p) const {
+  p << "union<";
+  llvm::interleaveComma(getElements(), p, [&](const FieldInfo &field) {
+    p << field.name << ": " << field.type;
+  });
+  p << ">";
+}
+
+Type UnionType::getFieldType(mlir::StringRef fieldName) {
+  for (const auto &field : getElements())
+    if (field.name == fieldName)
+      return field.type;
+  return Type();
+}
+
+void UnionType::getInnerTypes(SmallVectorImpl<Type> &types) {
+  for (const auto &field : getElements())
+    types.push_back(field.type);
+}
+//===----------------------------------------------------------------------===//
 // ArrayType
 //===----------------------------------------------------------------------===//
 

@@ -111,6 +111,16 @@ rtl.module @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> (i50) {
 }
 // CHECK-NEXT:  }
 
+rtl.module @UnionOps(%a: !rtl.union<foo: i1, bar: i3>) -> (%x: i3, %z: !rtl.union<bar: i3, baz: i8>) {
+  %x = rtl.union_extract %a["bar"] : !rtl.union<foo: i1, bar: i3>
+  %z = rtl.union_create "bar", %x : !rtl.union<bar: i3, baz: i8>
+  rtl.output %x, %z : i3, !rtl.union<bar: i3, baz: i8>
+}
+// CHECK-LABEL: rtl.module @UnionOps(%a: !rtl.union<foo: i1, bar: i3>) -> (%x: i3, %z: !rtl.union<bar: i3, baz: i8>) {
+// CHECK-NEXT:    [[I3REG:%.+]] = rtl.union_extract %a["bar"] : !rtl.union<foo: i1, bar: i3>
+// CHECK-NEXT:    [[UREG:%.+]] = rtl.union_create "bar", [[I3REG]] : !rtl.union<bar: i3, baz: i8>
+// CHECK-NEXT:    rtl.output [[I3REG]], [[UREG]] : i3, !rtl.union<bar: i3, baz: i8>
+
 // https://github.com/llvm/circt/issues/863
 // CHECK-LABEL: rtl.module @signed_arrays
 rtl.module @signed_arrays(%arg0: si8) -> (%out: !rtl.array<2xsi8>) {
