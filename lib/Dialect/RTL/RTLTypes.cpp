@@ -24,9 +24,14 @@
 
 using namespace circt;
 using namespace circt::rtl;
+using namespace circt::rtl::detail;
 
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/RTL/RTLTypes.cpp.inc"
+
+FieldInfo FieldInfo::allocateInto(mlir::TypeStorageAllocator &alloc) const {
+  return FieldInfo{alloc.copyInto(name), type};
+}
 
 //===----------------------------------------------------------------------===//
 // Type Helpers
@@ -144,13 +149,14 @@ static void printRTLElementType(Type element, DialectAsmPrinter &p) {
 //===----------------------------------------------------------------------===//
 namespace circt {
 namespace rtl {
-bool operator==(const StructType::FieldInfo &a,
-                const StructType::FieldInfo &b) {
+namespace detail {
+bool operator==(const FieldInfo &a, const FieldInfo &b) {
   return a.name == b.name && a.type == b.type;
 }
-llvm::hash_code hash_value(const StructType::FieldInfo &fi) {
+llvm::hash_code hash_value(const FieldInfo &fi) {
   return llvm::hash_combine(fi.name, fi.type);
 }
+} // namespace detail
 } // namespace rtl
 } // namespace circt
 
@@ -195,16 +201,6 @@ void StructType::getInnerTypes(SmallVectorImpl<Type> &types) {
 //===----------------------------------------------------------------------===//
 // Union Type
 //===----------------------------------------------------------------------===//
-namespace circt {
-namespace rtl {
-bool operator==(const UnionType::FieldInfo &a, const UnionType::FieldInfo &b) {
-  return a.name == b.name && a.type == b.type;
-}
-llvm::hash_code hash_value(const UnionType::FieldInfo &fi) {
-  return llvm::hash_combine(fi.name, fi.type);
-}
-} // namespace rtl
-} // namespace circt
 
 Type UnionType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
   llvm::SmallVector<FieldInfo, 4> parameters;
