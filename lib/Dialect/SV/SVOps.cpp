@@ -888,12 +888,18 @@ LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
     return failure();
   }
 
+  // Replace a non-blocking procedural assign in a procedural region with a
+  // conditional procedural assign.  We've ensured that this is the only write
+  // of the register.
   if (trueBranch) {
-    rewriter.create<sv::IfOp>(
-        mux.getLoc(), mux.cond(), [&]() {},
-        [&]() {
-          rewriter.create<PAssignOp>(op.getLoc(), reg, mux.falseValue());
-        });
+    auto one = rewriter.create<rtl::ConstantOp>(mux.getLoc(),
+                                                mux.cond().getType(), -1);
+    Value ops[] = {mux.cond(), one};
+    auto cond = rewriter.createOrFold<comb::XorOp>(mux.getLoc(),
+                                                   mux.cond().getType(), ops);
+    rewriter.create<sv::IfOp>(mux.getLoc(), cond, [&]() {
+      rewriter.create<PAssignOp>(op.getLoc(), reg, mux.falseValue());
+    });
   } else {
     rewriter.create<sv::IfOp>(mux.getLoc(), mux.cond(), [&]() {
       rewriter.create<PAssignOp>(op.getLoc(), reg, mux.trueValue());
