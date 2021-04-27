@@ -263,10 +263,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   // Record the names of the arguments if present.
   SmallVector<Attribute, 4> portNames;
   for (size_t i = 0, e = ports.size(); i != e; ++i)
-    if (ports[i].getName().empty())
-      portNames.push_back(builder.getStringAttr(""));
-    else
-      portNames.push_back(ports[i].name);
+    portNames.push_back(ports[i].name);
 
   result.addAttribute(portNameAttrStringRef, builder.getArrayAttr(portNames));
 
@@ -516,6 +513,7 @@ static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
   auto argAttr = getModulePortNames(op);
 
   if (op.getPorts().size() != argAttr.size()) {
+    op.emitError("module ports does not match number of arguments");
     return failure();
   }
 

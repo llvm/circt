@@ -813,14 +813,9 @@ Value TypeLoweringVisitor::addArg(FModuleOp module, Type type,
   auto newValue = body->addArgument(type);
 
   // Save the name attribute for the new argument.
-  StringAttr nameAttr =
-      getModulePortNames(module)[oldArgNumber].cast<StringAttr>();
-  Attribute newArg;
-  if (!nameAttr.getValue().empty())
-    newArg =
-        builder->getStringAttr(nameAttr.getValue().str() + nameSuffix.str());
-  else
-    newArg = builder->getStringAttr("");
+  StringAttr nameAttr = getModulePortName(module, oldArgNumber);
+  Attribute newArg =
+      builder->getStringAttr(nameAttr.getValue().str() + nameSuffix.str());
   newArgNames.push_back(newArg);
 
   return newValue;
