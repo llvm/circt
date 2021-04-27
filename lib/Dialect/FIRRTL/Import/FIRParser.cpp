@@ -2111,10 +2111,14 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   whenStmt.createElseRegion();
 
   // If we have the ':' form, then handle it.
+
+  // Syntactic shorthand 'else when'. This uses the same indentation level as
+  // the outer 'when'.
   if (getToken().is(FIRToken::kw_when)) {
-    // TODO(completeness): Handle the 'else when' syntactic sugar when we
-    // care.
-    return emitError("'else when' syntax not supported yet"), failure();
+    // We create a sub parser for the else block.
+    FIRStmtParser subParser(whenStmt.getElseBodyBuilder(), *this,
+                            moduleContext);
+    return subParser.parseWhen(whenIndent);
   }
 
   // Parse the 'else' body into the 'else' region.
