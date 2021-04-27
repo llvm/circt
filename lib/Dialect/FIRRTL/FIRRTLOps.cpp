@@ -511,10 +511,8 @@ static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
     return failure();
   auto portNamesAttr = getModulePortNames(op);
 
-  if (op.getPorts().size() != portNamesAttr.size()) {
-    op.emitError("module ports does not match number of arguments");
-    return failure();
-  }
+  if (op.getPorts().size() != portNamesAttr.size())
+    return op.emitError("module ports does not match number of arguments");
 
   return success();
 }
