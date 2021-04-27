@@ -223,6 +223,36 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     when lt(reset, UInt(4)) :   ;; When with no else.
       _t <= _t_2
 
+    ; CHECK: firrtl.when %reset  {
+    ; CHECK:   firrtl.connect %_t, %_t_2
+    ; CHECK: } else  {
+    ; CHECK:   [[COND:%.+]] = firrtl.not %reset
+    ; CHECK:   firrtl.when [[COND]]  {
+    ; CHECK:     firrtl.connect %_t, %_t_2
+    ; CHECK:   }
+    ; CHECK: }
+    when reset :
+      _t <= _t_2
+    else when not(reset) :
+      _t <= _t_2
+
+    ; CHECK: firrtl.when %reset  {
+    ; CHECK:   firrtl.connect %_t, %_t
+    ; CHECK: } else  {
+    ; CHECK:   [[COND:%.+]] = firrtl.not %reset
+    ; CHECK:   firrtl.when [[COND]]  {
+    ; CHECK:     firrtl.connect %_t, %_t_2
+    ; CHECK:   } else  {
+    ; CHECK:     firrtl.connect %_t, %_t_2
+    ; CHECK:   }
+    ; CHECK: }
+    when reset:
+      _t <= _t_2
+    else when not(reset) :
+      _t <= _t_2
+    else :
+      _t <= _t_2
+
     ; CHECK: firrtl.printf %clock, %reset, "Something interesting!\0A %x %x"(%_t, %_t_2) : !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 12>
     printf(clock, reset, "Something interesting!\n %x %x", _t, _t_2)
 
