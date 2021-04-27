@@ -202,7 +202,7 @@ def StructExplodeOp : RTLOp<"struct_explode", [NoSideEffect]> {
 //===----------------------------------------------------------------------===//
 
 def UnionCreateOp : RTLOp<"union_create", [NoSideEffect]> {
-  let summary = "Create a union be populating the specified field.";
+  let summary = "Create a union by populating the specified field.";
   let arguments = (ins StrAttr:$field, RTLNonInOutType:$input);
   let results = (outs UnionType:$result);
 

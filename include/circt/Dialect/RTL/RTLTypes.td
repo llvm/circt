@@ -135,6 +135,5 @@ def UnionType : RTLType<"Union"> {
   let extraClassDeclaration = [{
     using FieldInfo = ::circt::rtl::detail::FieldInfo;
     mlir::Type getFieldType(mlir::StringRef fieldName);
-    void getInnerTypes(mlir::SmallVectorImpl<mlir::Type>&);
   }];
 }

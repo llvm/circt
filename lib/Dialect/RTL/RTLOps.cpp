@@ -1025,11 +1025,8 @@ static ParseResult parseExtractOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-static ParseResult parseStructExtractOp(OpAsmParser &parser,
-                                        OperationState &result) {
-  return parseExtractOp<StructType>(parser, result);
-}
-
+/// Use the same printer for both struct_extract and union_extract since the
+/// syntax is identical.
 template <typename AggType>
 static void printExtractOp(OpAsmPrinter &printer, AggType op) {
   printer << op.getOperationName() << " ";
@@ -1037,6 +1034,11 @@ static void printExtractOp(OpAsmPrinter &printer, AggType op) {
   printer << "[\"" << op.field() << "\"]";
   printer.printOptionalAttrDict(op->getAttrs(), {"field"});
   printer << " : " << op.input().getType();
+}
+
+static ParseResult parseStructExtractOp(OpAsmParser &parser,
+                                        OperationState &result) {
+  return parseExtractOp<StructType>(parser, result);
 }
 
 static void print(OpAsmPrinter &printer, rtl::StructExtractOp op) {
@@ -1099,6 +1101,7 @@ static ParseResult parseUnionCreateOp(OpAsmParser &parser,
   UnionType declType;
   StringAttr field;
   OpAsmParser::OperandType input;
+  llvm::SMLoc fieldLoc = parser.getCurrentLocation();
 
   if (parser.parseAttribute(field, "field", result.attributes) ||
       parser.parseComma() || parser.parseOperand(input) ||
@@ -1107,6 +1110,11 @@ static ParseResult parseUnionCreateOp(OpAsmParser &parser,
     return failure();
 
   Type inputType = declType.getFieldType(field.getValue());
+  if (!inputType) {
+    parser.emitError(fieldLoc, "cannot find union field '")
+        << field.getValue() << "'.";
+    return failure();
+  }
 
   if (parser.resolveOperand(input, inputType, result.operands))
     return failure();

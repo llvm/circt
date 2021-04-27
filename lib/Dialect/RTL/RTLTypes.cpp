@@ -66,6 +66,11 @@ bool circt::rtl::isRTLValueType(Type type) {
                        [](const auto &f) { return isRTLValueType(f.type); });
   }
 
+  if (auto t = type.dyn_cast<UnionType>()) {
+    return std::all_of(t.getElements().begin(), t.getElements().end(),
+                       [](const auto &f) { return isRTLValueType(f.type); });
+  }
+
   return false;
 }
 
@@ -93,6 +98,15 @@ int64_t circt::rtl::getBitWidth(mlir::Type type) {
           total += fieldSize;
         }
         return total;
+      })
+      .Case<UnionType>([](UnionType u) {
+        int64_t maxSize = 0;
+        for (auto field : u.getElements()) {
+          int64_t fieldSize = getBitWidth(field.type);
+          if (fieldSize > maxSize)
+            maxSize = fieldSize;
+        }
+        return maxSize;
       })
       .Default([](Type) { return -1; });
 }
@@ -160,30 +174,45 @@ llvm::hash_code hash_value(const FieldInfo &fi) {
 } // namespace rtl
 } // namespace circt
 
-Type StructType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
-  llvm::SmallVector<FieldInfo, 4> parameters;
+/// Parse a list of field names and types within <>. E.g.:
+/// <foo: i7, bar: i8>
+static ParseResult parseFields(MLIRContext *ctxt, DialectAsmParser &p,
+                               SmallVectorImpl<FieldInfo> &parameters) {
   StringRef name;
   if (p.parseLess())
-    return Type();
+    return failure();
   while (mlir::succeeded(p.parseOptionalKeyword(&name))) {
     Type type;
     if (p.parseColon() || p.parseType(type))
-      return Type();
+      return failure();
     parameters.push_back(FieldInfo{name, type});
     if (p.parseOptionalComma())
       break;
   }
   if (p.parseGreater())
+    return failure();
+  return success();
+}
+
+/// Print out a list of named fields surrounded by <>.
+static void printFields(DialectAsmPrinter &p, ArrayRef<FieldInfo> fields) {
+  p << '<';
+  llvm::interleaveComma(fields, p, [&](const FieldInfo &field) {
+    p << field.name << ": " << field.type;
+  });
+  p << ">";
+}
+
+Type StructType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
+  llvm::SmallVector<FieldInfo, 4> parameters;
+  if (parseFields(ctxt, p, parameters))
     return Type();
   return get(ctxt, parameters);
 }
 
 void StructType::print(DialectAsmPrinter &p) const {
-  p << "struct<";
-  llvm::interleaveComma(getElements(), p, [&](const FieldInfo &field) {
-    p << field.name << ": " << field.type;
-  });
-  p << ">";
+  p << "struct";
+  printFields(p, getElements());
 }
 
 Type StructType::getFieldType(mlir::StringRef fieldName) {
@@ -204,28 +233,14 @@ void StructType::getInnerTypes(SmallVectorImpl<Type> &types) {
 
 Type UnionType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
   llvm::SmallVector<FieldInfo, 4> parameters;
-  StringRef name;
-  if (p.parseLess())
-    return Type();
-  while (mlir::succeeded(p.parseOptionalKeyword(&name))) {
-    Type type;
-    if (p.parseColon() || p.parseType(type))
-      return Type();
-    parameters.push_back(FieldInfo{name, type});
-    if (p.parseOptionalComma())
-      break;
-  }
-  if (p.parseGreater())
+  if (parseFields(ctxt, p, parameters))
     return Type();
   return get(ctxt, parameters);
 }
 
 void UnionType::print(DialectAsmPrinter &p) const {
-  p << "union<";
-  llvm::interleaveComma(getElements(), p, [&](const FieldInfo &field) {
-    p << field.name << ": " << field.type;
-  });
-  p << ">";
+  p << "union";
+  printFields(p, getElements());
 }
 
 Type UnionType::getFieldType(mlir::StringRef fieldName) {
@@ -235,10 +250,6 @@ Type UnionType::getFieldType(mlir::StringRef fieldName) {
   return Type();
 }
 
-void UnionType::getInnerTypes(SmallVectorImpl<Type> &types) {
-  for (const auto &field : getElements())
-    types.push_back(field.type);
-}
 //===----------------------------------------------------------------------===//
 // ArrayType
 //===----------------------------------------------------------------------===//
