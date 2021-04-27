@@ -55,6 +55,10 @@ FunctionType getModuleType(Operation *op);
 /// extmodule.
 SmallVector<ModulePortInfo> getModulePortInfo(Operation *op);
 
+/// Return the portNames attribute for the specified module, which contains the
+/// name for each port.
+ArrayAttr getModulePortNames(Operation *module);
+
 /// Given an FModule or ExtModule, return the name of the specified port number.
 StringAttr getModulePortName(Operation *op, size_t portIndex);
 

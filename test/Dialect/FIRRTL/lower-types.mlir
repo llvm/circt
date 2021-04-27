@@ -89,7 +89,8 @@ firrtl.circuit "Uniquification" {
   // CHECK-LABEL: firrtl.module @Uniquification
   // CHECK-SAME: %[[FLATTENED_ARG:a_b]]: [[FLATTENED_TYPE:!firrtl.uint<1>]],
   // CHECK-NOT: %[[FLATTENED_ARG]]
-  // CHECK-SAME: %[[RENAMED_ARG:a_b.+]]: [[RENAMED_TYPE:!firrtl.uint<1>]] {firrtl.name = "[[FLATTENED_ARG]]"}
+  // CHECK-SAME: %[[RENAMED_ARG:a_b.+]]: [[RENAMED_TYPE:!firrtl.uint<1>]] 
+  // CHECK-SAME: {portNames = ["a_b", "a_b"]}
   firrtl.module @Uniquification(%a: !firrtl.bundle<b: uint<1>>, %a_b: !firrtl.uint<1>) {
   }
 
@@ -509,10 +510,10 @@ firrtl.circuit "LowerVectorsOfBundles" {
 
 // -----
 firrtl.circuit "ExternalModule" {
-  // CHECK-LABEL: firrtl.extmodule @ExternalModule(!firrtl.uint<1> {firrtl.name = "source_valid"}, !firrtl.flip<uint<1>> {firrtl.name = "source_ready"}, !firrtl.uint<64> {firrtl.name = "source_data"})
-  firrtl.extmodule @ExternalModule(!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>> {firrtl.name = "source"})
+  // CHECK-LABEL: firrtl.extmodule @ExternalModule(%source_valid: !firrtl.uint<1>, %source_ready: !firrtl.flip<uint<1>>, %source_data: !firrtl.uint<64>)
+  firrtl.extmodule @ExternalModule(!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>> ) attributes {portNames = ["source"]}
   firrtl.module @Test() {
-    // CHECK:  %inst_source_valid, %inst_source_ready, %inst_source_data = firrtl.instance @ExternalModule {name = ""} : !firrtl.flip<uint<1>>, !firrtl.uint<1>, !firrtl.flip<uint<64>>
+    // CHECK:  %inst_source_valid, %inst_source_ready, %inst_source_data = firrtl.instance @ExternalModule  {name = ""} : !firrtl.flip<uint<1>>, !firrtl.uint<1>, !firrtl.flip<uint<64>>
     %inst_source = firrtl.instance @ExternalModule {name = ""} : !firrtl.bundle<valid: flip<uint<1>>, ready: uint<1>, data: flip<uint<64>>>
   }
 }

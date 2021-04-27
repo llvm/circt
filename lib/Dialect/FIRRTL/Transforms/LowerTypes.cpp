@@ -133,8 +133,6 @@ private:
   Value getBundleLowering(Value oldValue, StringRef flatField);
   void getAllBundleLowerings(Value oldValue, SmallVectorImpl<Value> &results);
 
-  Identifier getArgAttrName(unsigned newArgNumber);
-
   MLIRContext *context;
 
   // The builder is set and maintained in the main loop.
@@ -149,6 +147,7 @@ private:
 
   // State to track the new attributes for the module.
   SmallVector<NamedAttribute, 8> newModuleAttrs;
+  SmallVector<Attribute> newArgNames;
   size_t originalNumModuleArgs;
 };
 } // end anonymous namespace
@@ -194,17 +193,17 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   // Remember the original argument attributess.
   SmallVector<NamedAttribute, 8> originalArgAttrs;
   DictionaryAttr originalAttrs = module->getAttrDictionary();
-  for (size_t i = 0, e = originalNumModuleArgs; i < e; ++i)
-    originalArgAttrs.push_back(
-        originalAttrs.getNamed(getArgAttrName(i)).getValue());
-  DictionaryAttr::sortInPlace(originalArgAttrs);
 
   // Copy over any attributes that weren't original argument attributes.
   auto *argAttrBegin = originalArgAttrs.begin();
   auto *argAttrEnd = originalArgAttrs.end();
   for (auto attr : originalAttrs)
     if (std::lower_bound(argAttrBegin, argAttrEnd, attr) == argAttrEnd)
-      newModuleAttrs.push_back(attr);
+      if (attr.first.str() != "portNames")
+        newModuleAttrs.push_back(attr);
+
+  newModuleAttrs.push_back(NamedAttribute(Identifier::get("portNames", context),
+                                          builder->getArrayAttr(newArgNames)));
 
   // Update the module's attributes.
   module->setAttrs(newModuleAttrs);
@@ -254,13 +253,11 @@ void TypeLoweringVisitor::lowerArg(FModuleOp module, BlockArgument arg,
 void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   OpBuilder builder(context);
 
-  // Cache the named identifer for argument names.
-  auto argNameId = builder.getIdentifier("firrtl.name");
-
   // Create an array of the result types and results names.
   SmallVector<Type, 8> inputTypes;
   SmallVector<DictionaryAttr, 8> attributes;
 
+  SmallVector<Attribute> portNames;
   for (auto &port : extModule.getPorts()) {
     // Flatten the port type.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
@@ -268,21 +265,20 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
 
     // For each field, add record its name and type.
     for (auto field : fieldTypes) {
+      Attribute pName;
       inputTypes.push_back(field.getPortType());
-      if (port.name) {
-        auto argAttr = builder.getDictionaryAttr(
-            NamedAttribute(argNameId, builder.getStringAttr(field.suffix)));
-        attributes.push_back(argAttr);
-      } else {
-        // If the port didn't have a name, push back an empty name.
-        attributes.push_back({});
-      }
+      if (port.name)
+        pName = builder.getStringAttr(field.suffix);
+      else
+        pName = builder.getStringAttr("");
+      portNames.push_back(pName);
     }
   }
+  extModule->setAttr(Identifier::get("portNames", context),
+                     builder.getArrayAttr(portNames));
 
   // Set the type and then bulk set all the names.
   extModule.setType(builder.getFunctionType(inputTypes, {}));
-  extModule.setAllArgAttrs(attributes);
 }
 
 //===----------------------------------------------------------------------===//
@@ -805,17 +801,6 @@ void TypeLoweringVisitor::visitExpr(InvalidValuePrimOp op) {
 // Helpers to manage state.
 //===----------------------------------------------------------------------===//
 
-static DictionaryAttr getArgAttrs(StringAttr nameAttr, StringRef suffix,
-                                  OpBuilder *builder) {
-  SmallString<16> newName(nameAttr.getValue());
-  newName += suffix;
-
-  StringAttr newNameAttr = builder->getStringAttr(newName);
-  auto attr = builder->getNamedAttr("firrtl.name", newNameAttr);
-
-  return builder->getDictionaryAttr(attr);
-}
-
 // Creates and returns a new block argument of the specified type to the
 // module. This also maintains the name attribute for the new argument,
 // possibly with a new suffix appended.
@@ -827,13 +812,10 @@ Value TypeLoweringVisitor::addArg(FModuleOp module, Type type,
   auto newValue = body->addArgument(type);
 
   // Save the name attribute for the new argument.
-  StringAttr nameAttr = getFIRRTLNameAttr(module.getArgAttrs(oldArgNumber));
-  if (nameAttr) {
-    auto newArgAttrs = getArgAttrs(nameAttr, nameSuffix, builder);
-    auto newArgNumber = newValue.getArgNumber() - originalNumModuleArgs;
-    auto newArgAttrName = getArgAttrName(newArgNumber);
-    newModuleAttrs.push_back(NamedAttribute(newArgAttrName, newArgAttrs));
-  }
+  StringAttr nameAttr = getModulePortName(module, oldArgNumber);
+  Attribute newArg =
+      builder->getStringAttr(nameAttr.getValue().str() + nameSuffix.str());
+  newArgNames.push_back(newArg);
 
   return newValue;
 }
@@ -880,12 +862,6 @@ void TypeLoweringVisitor::getAllBundleLowerings(
         }
       })
       .Default([&](auto) {});
-}
-
-Identifier TypeLoweringVisitor::getArgAttrName(unsigned newArgNumber) {
-  SmallString<16> argNameBuffer;
-  mlir::impl::getArgAttrName(newArgNumber, argNameBuffer);
-  return Identifier::get(argNameBuffer, context);
 }
 
 //===----------------------------------------------------------------------===//
