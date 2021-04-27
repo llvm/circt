@@ -85,3 +85,43 @@ func @invert_if(%arg0: i1) {
   }
   return
 }
+
+// CHECK-LABEL: func @mux_to_cond_assign_f
+// CHECK-NEXT:    %r = sv.reg  : !rtl.inout<i2>
+// CHECK-NEXT:    sv.alwaysff(posedge %arg0)  {
+// CHECK-NEXT:      sv.if %arg1  {
+// CHECK-NEXT:        sv.passign %r, %arg2 : i2
+// CHECK-NEXT:      }
+// CHECK-NEXT:    }
+// CHECK-NEXT:    return
+// CHECK-NEXT:  }
+func @mux_to_cond_assign_f(%clock: i1, %c: i1, %data: i2) {
+  %r = sv.reg  : !rtl.inout<i2>
+  %1 = sv.read_inout %r : !rtl.inout<i2>
+  %0 = comb.mux %c, %data, %1 : i2
+  sv.alwaysff(posedge %clock)  {
+    sv.passign %r, %0 : i2
+  }
+  return
+}
+
+// CHECK-LABEL: func @mux_to_cond_assign_t
+// CHECK-NEXT:    %true = rtl.constant true
+// CHECK-NEXT:    %r = sv.reg  : !rtl.inout<i2>
+// CHECK-NEXT:    sv.alwaysff(posedge %arg0)  {
+// CHECK-NEXT:      %0 = comb.xor %arg1, %true : i1
+// CHECK-NEXT:      sv.if %0  {
+// CHECK-NEXT:        sv.passign %r, %arg2 : i2
+// CHECK-NEXT:      }
+// CHECK-NEXT:    }
+// CHECK-NEXT:    return
+// CHECK-NEXT:  }
+func @mux_to_cond_assign_t(%clock: i1, %c: i1, %data: i2) {
+  %r = sv.reg  : !rtl.inout<i2>
+  %1 = sv.read_inout %r : !rtl.inout<i2>
+  %0 = comb.mux %c, %1, %data : i2
+  sv.alwaysff(posedge %clock)  {
+    sv.passign %r, %0 : i2
+  }
+  return
+}

@@ -875,6 +875,64 @@ static LogicalResult verifyAliasOp(AliasOp op) {
 }
 
 //===----------------------------------------------------------------------===//
+// PAssignOp
+//===----------------------------------------------------------------------===//
+
+// reg s <= cond ? val : s simplification.
+// Don't assign a register's value to itself, conditionally assign the new value
+// instead.
+LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
+  auto mux = op.src().getDefiningOp<comb::MuxOp>();
+  if (!mux)
+    return failure();
+
+  auto reg = dyn_cast<sv::RegOp>(op.dest().getDefiningOp());
+  if (!reg)
+    return failure();
+
+  bool trueBranch; // did we find the register on the true branch?
+  auto tvread = mux.trueValue().getDefiningOp<sv::ReadInOutOp>();
+  auto fvread = mux.falseValue().getDefiningOp<sv::ReadInOutOp>();
+  if (tvread && reg == tvread.input().getDefiningOp<sv::RegOp>())
+    trueBranch = true;
+  else if (fvread && reg == fvread.input().getDefiningOp<sv::RegOp>())
+    trueBranch = false;
+  else
+    return failure();
+
+  // Check that this is the only write of the register
+  for (auto &use : reg->getUses()) {
+    if (isa<ReadInOutOp>(use.getOwner()))
+      continue;
+    if (use.getOwner() == op)
+      continue;
+    return failure();
+  }
+
+  // Replace a non-blocking procedural assign in a procedural region with a
+  // conditional procedural assign.  We've ensured that this is the only write
+  // of the register.
+  if (trueBranch) {
+    auto one = rewriter.create<rtl::ConstantOp>(mux.getLoc(),
+                                                mux.cond().getType(), -1);
+    Value ops[] = {mux.cond(), one};
+    auto cond = rewriter.createOrFold<comb::XorOp>(mux.getLoc(),
+                                                   mux.cond().getType(), ops);
+    rewriter.create<sv::IfOp>(mux.getLoc(), cond, [&]() {
+      rewriter.create<PAssignOp>(op.getLoc(), reg, mux.falseValue());
+    });
+  } else {
+    rewriter.create<sv::IfOp>(mux.getLoc(), mux.cond(), [&]() {
+      rewriter.create<PAssignOp>(op.getLoc(), reg, mux.trueValue());
+    });
+  }
+
+  // Remove the wire.
+  rewriter.eraseOp(op);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
