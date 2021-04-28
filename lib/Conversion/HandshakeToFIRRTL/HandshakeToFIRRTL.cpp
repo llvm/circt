@@ -71,11 +71,11 @@ static FIRRTLType getFIRRTLType(Type type) {
 
 /// Return a FIRRTL bundle type (with data, valid, and ready subfields) given a
 /// standard data type.
-static FIRRTLType getBundleType(Type type, bool isFlip) {
+static FIRRTLType getBundleType(Type type, bool isOutput) {
   // If the input is already converted to a bundle type elsewhere, itself will
   // be returned after cast.
-  if (auto bundleType = type.dyn_cast<BundleType>())
-    return bundleType;
+  if (auto firrtlType = type.dyn_cast<FIRRTLType>())
+    return firrtlType;
 
   MLIRContext *context = type.getContext();
   using BundleElement = BundleType::BundleElement;
@@ -85,25 +85,20 @@ static FIRRTLType getBundleType(Type type, bool isFlip) {
   auto validId = StringAttr::get(context, "valid");
   auto readyId = StringAttr::get(context, "ready");
   auto signalType = UIntType::get(context, 1);
-  if (isFlip) {
-    elements.push_back(BundleElement(validId, FlipType::get(signalType)));
-    elements.push_back(BundleElement(readyId, signalType));
-  } else {
-    elements.push_back(BundleElement(validId, signalType));
-    elements.push_back(BundleElement(readyId, FlipType::get(signalType)));
-  }
+  elements.push_back(BundleElement(validId, signalType));
+  elements.push_back(BundleElement(readyId, FlipType::get(signalType)));
 
   // Add data subfield to the bundle if dataType is not a null.
   auto dataType = getFIRRTLType(type);
   if (dataType) {
     auto dataId = StringAttr::get(context, "data");
-    if (isFlip)
-      elements.push_back(BundleElement(dataId, FlipType::get(dataType)));
-    else
-      elements.push_back(BundleElement(dataId, dataType));
+    elements.push_back(BundleElement(dataId, dataType));
   }
 
-  return BundleType::get(elements, context);
+  auto bundleType = BundleType::get(elements, context);
+  if (isOutput)
+    return FlipType::get(bundleType);
+  return bundleType;
 }
 
 static Value createConstantOp(FIRRTLType opType, APInt value,
@@ -407,7 +402,7 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
   unsigned argIndex = 0;
   for (auto &arg : funcOp.getArguments()) {
     auto portName = rewriter.getStringAttr("arg" + std::to_string(argIndex));
-    auto bundlePortType = getBundleType(arg.getType(), /*isFlip=*/false);
+    auto bundlePortType = getBundleType(arg.getType(), /*isOutput=*/false);
 
     if (!bundlePortType)
       funcOp.emitError("Unsupported data type. Supported data types: integer "
@@ -420,7 +415,7 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
   // Add all outputs of funcOp.
   for (auto portType : funcOp.getType().getResults()) {
     auto portName = rewriter.getStringAttr("arg" + std::to_string(argIndex));
-    auto bundlePortType = getBundleType(portType, /*isFlip=*/true);
+    auto bundlePortType = getBundleType(portType, /*isOutput=*/true);
 
     if (!bundlePortType)
       funcOp.emitError("Unsupported data type. Supported data types: integer "
@@ -504,7 +499,7 @@ static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
   unsigned argIndex = 0;
   for (auto portType : oldOp->getOperands().getTypes()) {
     auto portName = rewriter.getStringAttr("arg" + std::to_string(argIndex));
-    auto bundlePortType = getBundleType(portType, /*isFlip=*/false);
+    auto bundlePortType = getBundleType(portType, /*isOutput=*/false);
 
     if (!bundlePortType)
       oldOp->emitError("Unsupported data type. Supported data types: integer "
@@ -517,7 +512,7 @@ static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
   // Add all outputs of oldOp.
   for (auto portType : oldOp->getResults().getTypes()) {
     auto portName = rewriter.getStringAttr("arg" + std::to_string(argIndex));
-    auto bundlePortType = getBundleType(portType, /*isFlip=*/true);
+    auto bundlePortType = getBundleType(portType, /*isOutput=*/true);
 
     if (!bundlePortType)
       oldOp->emitError("Unsupported data type. Supported data types: integer "
@@ -547,17 +542,23 @@ static ValueVectorList extractSubfields(FModuleOp subModuleOp,
   ValueVectorList portList;
   for (auto &arg : subModuleOp.getArguments()) {
     ValueVector subfields;
-    if (auto argType = arg.getType().dyn_cast<BundleType>()) {
+    auto type = arg.getType().cast<FIRRTLType>();
+    // Strip off the outer flip if it has one.
+    if (auto flipType = type.dyn_cast<FlipType>())
+      type = flipType.getElementType();
+    if (auto bundleType = type.dyn_cast<BundleType>()) {
       // Extract all subfields of all bundle ports.
-      for (auto &element : argType.getElements()) {
-        FIRRTLType elementType = element.type;
-        subfields.push_back(rewriter.create<SubfieldOp>(insertLoc, elementType,
-                                                        arg, element.name));
+      for (auto &element : bundleType.getElements()) {
+        subfields.push_back(
+            rewriter.create<SubfieldOp>(insertLoc, arg, element.name));
       }
-    } else if (arg.getType().isa<ClockType>() ||
-               arg.getType().dyn_cast<UIntType>().getWidthOrSentinel() == 1) {
-      // Extract clock and reset signals.
+    } else if (type.isa<ClockType>()) {
+      // Extract clock signals.
       subfields.push_back(arg);
+    } else if (auto intType = type.dyn_cast<UIntType>()) {
+      // Extract reset signals.
+      if (intType.getWidthOrSentinel() == 1)
+        subfields.push_back(arg);
     }
     portList.push_back(subfields);
   }
@@ -1420,7 +1421,7 @@ bool HandshakeBuilder::visitHandshake(handshake::ConstantOp op) {
   Value resultReady = resultSubfields[1];
   Value resultData = resultSubfields[2];
 
-  auto constantType = FlipType::get(resultData.getType().cast<FIRRTLType>());
+  auto constantType = resultData.getType().cast<FIRRTLType>();
   auto constantValue = op->getAttrOfType<IntegerAttr>("value").getValue();
 
   rewriter.create<ConnectOp>(insertLoc, resultValid, controlValid);
@@ -1723,22 +1724,18 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     // Create a subfield op to access this port in the memory.
     auto fieldName = loadIdentifier(i);
     auto memBundle = memOp.getPortNamed(fieldName);
-    auto bundleType = memBundle.getType().cast<BundleType>();
 
     // Get the clock out of the bundle and connect it.
-    auto memClockType = bundleType.getElementType("clk");
-    auto memClock =
-        rewriter.create<SubfieldOp>(insertLoc, memClockType, memBundle, "clk");
+    auto memClock = rewriter.create<SubfieldOp>(insertLoc, memBundle, "clk");
     rewriter.create<ConnectOp>(insertLoc, memClock, clock);
 
     // Get the load address out of the bundle.
-    auto memAddrType = bundleType.getElementType("addr");
-    auto memAddr =
-        rewriter.create<SubfieldOp>(insertLoc, memAddrType, memBundle, "addr");
+    auto memAddr = rewriter.create<SubfieldOp>(insertLoc, memBundle, "addr");
 
     // Since addresses coming from Handshake are IndexType and have a hardcoded
     // 64-bit width in this pass, we may need to truncate down to the actual
     // size of the address port used by the FIRRTL memory.
+    auto memAddrType = memAddr.getType().cast<FIRRTLType>();
     auto loadAddrType = loadAddrData.getType().cast<FIRRTLType>();
     if (memAddrType != loadAddrType) {
       auto memAddrPassiveType = memAddrType.getPassiveType();
@@ -1752,17 +1749,13 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     rewriter.create<ConnectOp>(insertLoc, memAddr, loadAddrData);
 
     // Get the load data out of the bundle.
-    auto memDataType = bundleType.getElementType("data");
-    auto memData =
-        rewriter.create<SubfieldOp>(insertLoc, memDataType, memBundle, "data");
+    auto memData = rewriter.create<SubfieldOp>(insertLoc, memBundle, "data");
 
     // Connect the memory to the load data.
     rewriter.create<ConnectOp>(insertLoc, loadDataData, memData);
 
     // Get the load enable out of the bundle.
-    auto memEnableType = bundleType.getElementType("en");
-    auto memEnable =
-        rewriter.create<SubfieldOp>(insertLoc, memEnableType, memBundle, "en");
+    auto memEnable = rewriter.create<SubfieldOp>(insertLoc, memBundle, "en");
 
     // Connect the address valid signal to the memory enable.
     rewriter.create<ConnectOp>(insertLoc, memEnable, loadAddrValid);
@@ -1800,19 +1793,16 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
                                 .cast<BundleType>();
 
     // Get the clock out of the bundle and connect it.
-    auto memClockType = FlipType::get(bundleType.getElementType("clk"));
-    auto memClock =
-        rewriter.create<SubfieldOp>(insertLoc, memClockType, memBundle, "clk");
+    auto memClock = rewriter.create<SubfieldOp>(insertLoc, memBundle, "clk");
     rewriter.create<ConnectOp>(insertLoc, memClock, clock);
 
     // Get the store address out of the bundle.
-    auto memAddrType = FlipType::get(bundleType.getElementType("addr"));
-    auto memAddr =
-        rewriter.create<SubfieldOp>(insertLoc, memAddrType, memBundle, "addr");
+    auto memAddr = rewriter.create<SubfieldOp>(insertLoc, memBundle, "addr");
 
     // Since addresses coming from Handshake are IndexType and have a hardcoded
     // 64-bit width in this pass, we may need to truncate down to the actual
     // size of the address port used by the FIRRTL memory.
+    auto memAddrType = memAddr.getType();
     auto storeAddrType = storeAddrData.getType().cast<FIRRTLType>();
     if (memAddrType != storeAddrType) {
       auto memAddrPassiveType = memAddrType.getPassiveType();
@@ -1826,9 +1816,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     rewriter.create<ConnectOp>(insertLoc, memAddr, storeAddrData);
 
     // Get the store data out of the bundle.
-    auto memDataType = FlipType::get(bundleType.getElementType("data"));
-    auto memData =
-        rewriter.create<SubfieldOp>(insertLoc, memDataType, memBundle, "data");
+    auto memData = rewriter.create<SubfieldOp>(insertLoc, memBundle, "data");
 
     // Connect the store data to the memory.
     rewriter.create<ConnectOp>(insertLoc, memData, storeDataData);
@@ -1881,17 +1869,13 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
                                writeValidBufferMux);
 
     // Get the store enable out of the bundle.
-    auto memEnableType = FlipType::get(bundleType.getElementType("en"));
-    auto memEnable =
-        rewriter.create<SubfieldOp>(insertLoc, memEnableType, memBundle, "en");
+    auto memEnable = rewriter.create<SubfieldOp>(insertLoc, memBundle, "en");
 
     // Connect the write valid signal to the memory enable.
     rewriter.create<ConnectOp>(insertLoc, memEnable, writeValid);
 
     // Get the store mask out of the bundle.
-    auto memMaskType = FlipType::get(bundleType.getElementType("mask"));
-    auto memMask =
-        rewriter.create<SubfieldOp>(insertLoc, memMaskType, memBundle, "mask");
+    auto memMask = rewriter.create<SubfieldOp>(insertLoc, memBundle, "mask");
 
     // Since we are not storing bundles in the memory, we can assume the mask is
     // a single bit.
