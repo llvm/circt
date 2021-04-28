@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "DialectModules.h"
+#include "IRModule.h"
 
 #include "circt-c/Dialect/ESI.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
@@ -22,7 +23,7 @@
 
 #include "llvm/ADT/SmallVector.h"
 
-#include "PybindUtils.h"
+#include "CirctPybindUtils.h"
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 namespace py = pybind11;

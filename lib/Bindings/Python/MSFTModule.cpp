@@ -15,6 +15,7 @@
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Support.h"
 
+#include "CirctPybindUtils.h"
 #include "PybindUtils.h"
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -53,7 +54,7 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
       .export_values();
 
   m.def("export_tcl", [](MlirModule mod, py::object fileObject) {
-    circt::python::PyFileAccumulator accum(fileObject, false);
+    mlir::PyFileAccumulator accum(fileObject, false);
     py::gil_scoped_release();
     mlirMSFTExportTcl(mod, accum.getCallback(), accum.getUserData());
   });

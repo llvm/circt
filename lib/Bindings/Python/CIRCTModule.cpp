@@ -19,6 +19,7 @@
 
 #include "llvm-c/ErrorHandling.h"
 
+#include "CirctPybindUtils.h"
 #include "PybindUtils.h"
 #include <pybind11/pybind11.h>
 namespace py = pybind11;
@@ -61,7 +62,7 @@ PYBIND11_MODULE(_circt, m) {
       "Register CIRCT dialects on a PyMlirContext.");
 
   m.def("export_verilog", [](MlirModule mod, py::object fileObject) {
-    circt::python::PyFileAccumulator accum(fileObject, false);
+    mlir::PyFileAccumulator accum(fileObject, false);
     py::gil_scoped_release();
     mlirExportVerilog(mod, accum.getCallback(), accum.getUserData());
   });

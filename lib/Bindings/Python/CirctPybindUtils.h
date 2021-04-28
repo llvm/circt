@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_BINDINGS_PYTHON_PYBINDUTILS_H
-#define CIRCT_BINDINGS_PYTHON_PYBINDUTILS_H
+#ifndef CIRCT_BINDINGS_PYTHON_CIRCTPYBINDUTILS_H
+#define CIRCT_BINDINGS_PYTHON_CIRCTPYBINDUTILS_H
 
 #include <string>
 
@@ -26,47 +26,8 @@
 
 namespace py = pybind11;
 
-namespace circt {
-namespace python {
-
-/// Taken from PybindUtils.h in MLIR.
-/// Accumulates into a python file-like object, either writing text (default)
-/// or binary.
-class PyFileAccumulator {
-public:
-  PyFileAccumulator(pybind11::object fileObject, bool binary)
-      : pyWriteFunction(fileObject.attr("write")), binary(binary) {}
-
-  void *getUserData() { return this; }
-
-  MlirStringCallback getCallback() {
-    return [](MlirStringRef part, void *userData) {
-      pybind11::gil_scoped_acquire();
-      PyFileAccumulator *accum = static_cast<PyFileAccumulator *>(userData);
-      if (accum->binary) {
-        // Note: Still has to copy and not avoidable with this API.
-        pybind11::bytes pyBytes(part.data, part.length);
-        accum->pyWriteFunction(pyBytes);
-      } else {
-        pybind11::str pyStr(part.data,
-                            part.length); // Decodes as UTF-8 by default.
-        accum->pyWriteFunction(pyStr);
-      }
-    };
-  }
-
-private:
-  pybind11::object pyWriteFunction;
-  bool binary;
-};
-} // namespace python
-} // namespace circt
-
 namespace pybind11 {
 namespace detail {
-
-template <typename T>
-struct type_caster<llvm::Optional<T>> : optional_caster<llvm::Optional<T>> {};
 
 /// Helper to convert a presumed MLIR API object to a capsule, accepting either
 /// an explicit Capsule (which can happen when two C APIs are communicating
@@ -257,4 +218,4 @@ inline pybind11::error_already_set raiseValueError(const std::string &message) {
 
 } // namespace pybind11
 
-#endif // CIRCT_BINDINGS_PYTHON_PYBINDUTILS_H
+#endif // CIRCT_BINDINGS_PYTHON_CIRCTPYBINDUTILS_H
