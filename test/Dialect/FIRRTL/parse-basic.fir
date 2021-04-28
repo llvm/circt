@@ -19,8 +19,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
   ; CHECK: }
 
-  ; CHECK-LABEL: firrtl.extmodule @MyExtModule(!firrtl.uint {firrtl.name = "in"},
-  ; CHECK: !firrtl.flip<uint<8>> {firrtl.name = "out"})
+  ; CHECK-LABEL: firrtl.extmodule @MyExtModule(%in: !firrtl.uint, %out: !firrtl.flip<uint<8>>)
   ; CHECK: attributes {defname = "myextmodule"}
   ; CHECK-NOT: {
   extmodule MyExtModule :
@@ -28,7 +27,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     output ,,, out ,,: ,, UInt,<,8,>  ; Commas are whitespace
     defname = myextmodule
 
-  ; CHECK-LABEL: firrtl.extmodule @MyParameterizedExtModule(!firrtl.uint {firrtl.name = "in"}, !firrtl.flip<uint<8>> {firrtl.name = "out"})
+  ; CHECK-LABEL: firrtl.extmodule @MyParameterizedExtModule(%in: !firrtl.uint, %out: !firrtl.flip<uint<8>>)
   ; CHECK: attributes {defname = "name_thing",
   ; CHECK: parameters = {DEFAULT = 0 : i64,
   ; CHECK:               DEPTH = 3.242000e+01 : f64,
@@ -96,8 +95,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NEXT: firrtl.connect %auto, [[INV]] : !firrtl.flip<uint<1>>, !firrtl.uint<1>
     auto is invalid
 
-    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue : !firrtl.analog<1>
-    ; CHECK-NEXT: firrtl.attach %a1, [[INV]] : !firrtl.analog<1>, !firrtl.analog<1>
+    ; CHECK-NOT: firrtl.attach %a1
     a1 is invalid
 
     ; CHECK: firrtl.skip
@@ -107,7 +105,6 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NEXT: firrtl.connect %auto, [[INV]] : !firrtl.flip<uint<1>>, !firrtl.uint<1>
     auto is invalid
 
-    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue : !firrtl.uint<1>
     ; CHECK-NOT: firrtl.connect %reset
     reset is invalid
 
@@ -276,13 +273,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     reg _t_2622 : UInt<4>, clock with :
       reset => (UInt<1>("h0"), _t_2622)
 
-    ; CHECK: %xyz_in = firrtl.instance @circuit {name = "xyz", portNames = ["in"]} : !firrtl.flip<uint<80>>
+    ; CHECK: %xyz_in = firrtl.instance @circuit {name = "xyz"} : !firrtl.flip<uint<80>>
     inst xyz of circuit
     ; CHECK: firrtl.connect %xyz_in, %i8 : !firrtl.flip<uint<80>>, !firrtl.uint<8>
     xyz.in <= i8
 
     ; CHECK: %myext_in, %myext_out = firrtl.instance @MyExtModule
-    ; CHECK: {name = "myext", portNames = ["in", "out"]} :
+    ; CHECK: {name = "myext"} :
     ; CHECK: !firrtl.flip<uint>, !firrtl.uint<8>
     inst myext of MyExtModule
     myext.in <= i8
@@ -291,7 +288,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.when %reset  {
     when reset :
       ; CHECK: %reset_myext_in, %reset_myext_out = firrtl.instance @MyExtModule
-      ; CHECK: {name = "reset_myext", portNames = ["in", "out"]} :
+      ; CHECK: {name = "reset_myext"} :
       ; CHECK: !firrtl.flip<uint>, !firrtl.uint<8>
       inst reset_myext of MyExtModule
       reset_myext.in <= i8
@@ -307,7 +304,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %myMem = firrtl.cmem {name = "myMem"} : !firrtl.vector<bundle<id: uint<4>, resp: uint<2>>, 8>
     cmem myMem : { id : UInt<4>, resp : UInt<2>} [8] @[Decoupled.scala 209:24]
 
-    ; CHECK: %memValue = firrtl.memoryport Infer %myMem, %i8, %clock {name = "memValue"} : (!firrtl.vector<bundle<id: uint<4>, resp: uint<2>>, 8>, !firrtl.uint<8>, !firrtl.clock) -> !firrtl.bundle<id: uint<4>, resp: uint<2>>
+    ; CHECK: %memValue = firrtl.memoryport Infer %myMem, %i8, %clock  {annotations = [], name = "memValue"} : (!firrtl.vector<bundle<id: uint<4>, resp: uint<2>>, 8>, !firrtl.uint<8>, !firrtl.clock) -> !firrtl.bundle<id: uint<4>, resp: uint<2>>
     infer mport memValue = myMem[i8], clock
     auto11 <= memValue.id
 
@@ -316,7 +313,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %base_table_1 = firrtl.smem Old {name = "base_table_1"} : !firrtl.vector<vector<uint<1>, 9>, 256>
     smem base_table_1 : UInt<1>[9] [256] old
 
-    ; CHECK: %tableValue = firrtl.memoryport Read %base_table_0, %i8, %clock {name = "tableValue"} : (!firrtl.vector<vector<uint<1>, 9>, 256>, !firrtl.uint<8>, !firrtl.clock) -> !firrtl.vector<uint<1>, 9>
+    ; CHECK: %tableValue = firrtl.memoryport Read %base_table_0, %i8, %clock {annotations = [], name = "tableValue"} : (!firrtl.vector<vector<uint<1>, 9>, 256>, !firrtl.uint<8>, !firrtl.clock) -> !firrtl.vector<uint<1>, 9>
     read mport tableValue = base_table_0[i8], clock
 
     ; CHECK: firrtl.pad %i8, 10 : (!firrtl.uint<8>) -> !firrtl.uint<10>
@@ -633,20 +630,96 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
 
 
-  ; https://github.com/llvm/circt/issues/563
   module mod_0_563 :
-    input tmp1: UInt<5>
-    output tmp2: UInt<5>
-    tmp2 <= tmp1
+    input in0: UInt<5>
+    input in1: { a : UInt<5> }
+    output out0: UInt<5>
+    output out1: { a : UInt<5> }
+    out0 <= in0
+    out1 <= in1
 
-  ; CHECK-LABEL: firrtl.module @invalidate_entire_instance_563
-  module invalidate_entire_instance_563 :
-    ; CHECK:  %U0_tmp1, %U0_tmp2 = firrtl.instance @mod_0_563
+  ; CHECK-LABEL: firrtl.module @CheckInvalids
+  module CheckInvalids :
+    input in0 : UInt<1>
+    input in1 : { a : UInt<1>, b : UInt<1> }
+    input in2 : { a : UInt<1>, flip b : UInt<1>}
+    input in3 : {a : { b : UInt<1>, flip c : UInt<1>}}
+    output out0 : UInt<1>
+    output out1 : { a : UInt<1>, b : UInt<1> }
+    output out2 : { a : UInt<1>, flip b : UInt<1>}
+    output out3 : {a : { b : UInt<1>, flip c : UInt<1>}}
+
+    ; CHECK-NOT: firrtl.connect %in0
+    in0 is invalid
+
+    ; CHECK-NOT: firrtl.connect %in1
+    in1 is invalid
+
+    ; CHECK: [[IN2_B:%.+]] = firrtl.subfield %in2("b")
+    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
+    ; CHECK: firrtl.connect [[IN2_B]], [[INV]]
+    in2 is invalid
+
+    ; CHECK: [[IN3_A:%.+]] = firrtl.subfield %in3("a")
+    ; CHECK: [[IN3_A_C:%.+]] = firrtl.subfield [[IN3_A]]("c")
+    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
+    ; CHECK: firrtl.connect [[IN3_A_C]], [[INV]]
+    in3 is invalid
+
+    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
+    ; CHECK: firrtl.connect %out0, [[INV]]
+    out0 is invalid
+
+    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
+    ; CHECK: firrtl.connect %out1, [[INV]]
+    out1 is invalid
+
+    ; CHECK: [[OUT2_A:%.+]] = firrtl.subfield %out2("a")
+    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
+    ; CHECK: firrtl.connect [[OUT2_A]], [[INV]]
+    out2 is invalid
+
+    ; CHECK: [[OUT3_A:%.+]] = firrtl.subfield %out3("a")
+    ; CHECK: [[OUT3_A_B:%.+]] = firrtl.subfield [[OUT3_A]]("b")
+    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
+    ; CHECK: firrtl.connect [[OUT3_A_B]], [[INV]]
+    out3 is invalid
+
+    ; CHECK: %wire0 = firrtl.wire
+    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
+    ; CHECK: firrtl.connect %wire0, [[INV]]
+    wire wire0 : UInt<1>
+    wire0 is invalid
+
+    ; CHECK: %wire1 = firrtl.wire
+    ; CHECK: [[WIRE1_A:%.+]] = firrtl.subfield %wire1("a")
+    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
+    ; CHECK: firrtl.connect [[WIRE1_A]], [[INV]]
+    ; CHECK: [[WIRE1_B:%.+]] = firrtl.subfield %wire1("b")
+    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
+    ; CHECK: firrtl.connect [[WIRE1_B]], [[INV]]
+    wire wire1 : {a : UInt<1>, flip b : UInt<1> }
+    wire1 is invalid
+
+    ; An analog in the leaf of a wire should be attached not connected.
+    ; CHECK: %wire2 = firrtl.wire
+    ; CHECK: [[WIRE2_X:%.+]] = firrtl.subfield %wire2("x")
+    ; CHECK: [[WIRE2_X_A:%.+]] = firrtl.subfield [[WIRE2_X]]("a")
+    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
+    ; CHECK: firrtl.connect [[WIRE2_X_A]], [[INV]]
+    ; CHECK: [[WIRE2_X_B:%.+]] = firrtl.subfield [[WIRE2_X]]("b")
+    ; CHECK-NOT: firrtl.attach [[WIRE2_X_B]], [[INV]]
+    wire wire2 : {x : {flip a : UInt<1>, flip b: Analog<1> } }
+    wire2 is invalid
+
+    ; https://github.com/llvm/circt/issues/563
+    ; CHECK: %U0_in0, %U0_in1, %U0_out0, %U0_out1 = firrtl.instance @mod_0_563
     inst U0 of mod_0_563
 
-    ; CHECK: %0 = firrtl.invalidvalue : !firrtl.uint<5>
-    ; CHECK: firrtl.connect %U0_tmp1, %0 : !firrtl.flip<uint<5>>, !firrtl.uint<5>
-    ; CHECK: %1 = firrtl.invalidvalue : !firrtl.uint<5>
+    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
+    ; CHECK: firrtl.connect %U0_in0, [[INV]]
+    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
+    ; CHECK: firrtl.connect %U0_in1, [[INV]]
     U0 is invalid
 
   ; https://github.com/llvm/circt/issues/606

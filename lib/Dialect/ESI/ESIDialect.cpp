@@ -35,6 +35,18 @@ void ESIDialect::initialize() {
       >();
 }
 
+Operation *ESIDialect::materializeConstant(OpBuilder &builder, Attribute value,
+                                           Type type, Location loc) {
+  // Integer constants.
+  if (auto intType = type.dyn_cast<IntegerType>())
+    if (auto attrValue = value.dyn_cast<IntegerAttr>())
+      return builder.create<rtl::ConstantOp>(loc, attrValue.getType(),
+                                             attrValue);
+  if (value.isa<mlir::UnitAttr>())
+    return builder.create<rtl::ConstantOp>(loc, builder.getI1Type(), 1);
+  return nullptr;
+}
+
 /// Try to find a valid/ready port for the specified data port. If found, append
 /// to 'names'.
 static void findValidReady(Operation *modOp,

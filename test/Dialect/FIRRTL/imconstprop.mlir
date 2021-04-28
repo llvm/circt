@@ -3,7 +3,7 @@
 firrtl.circuit "Test" {
 
   // CHECK-LABEL: @PassThrough
-  // CHECK: (%source: !firrtl.uint<1>, %dest: !firrtl.flip<uint<1>>) {
+  // CHECK: (%source: !firrtl.uint<1>, %dest: !firrtl.flip<uint<1>>) 
   firrtl.module @PassThrough(%source: !firrtl.uint<1>, %dest: !firrtl.flip<uint<1>>) {
     // CHECK-NEXT: %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
     // CHECK-NEXT: firrtl.connect %dest, %c0_ui1
@@ -46,7 +46,7 @@ firrtl.circuit "Test" {
 
   // Unused modules should be completely dropped.
 
-  // CHECK-LABEL: @UnusedModule
+  // CHECK-LABEL: @UnusedModule(%source: !firrtl.uint<1>, %dest: !firrtl.flip<uint<1>>)
   firrtl.module @UnusedModule(%source: !firrtl.uint<1>, %dest: !firrtl.flip<uint<1>>) {
     firrtl.connect %dest, %source : !firrtl.flip<uint<1>>, !firrtl.uint<1>
     // CHECK-NEXT: }

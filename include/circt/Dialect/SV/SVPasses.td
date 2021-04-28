@@ -49,6 +49,29 @@ def RTLLegalizeNames : Pass<"rtl-legalize-names", "ModuleOp"> {
   let constructor = "circt::sv::createRTLLegalizeNamesPass()";
 }
 
+def RTLGeneratorCalloutPass : Pass<"rtl-generator-callout", "ModuleOp"> {
+  let summary = "Lower Generator Schema to external module";
+  let description = [{
+    This pass calls an external program for all the rtl.module.generated nodes.
+    The corresponding rtl.generator.schema node is used for the port names, 
+    the value for each port name is parsed from the attribute on the rtl.module.generated nodes.
+    The module is then declared as an external module, whose definition is present 
+    in a file with the module name.
+  }];
+  let constructor = "circt::sv::createRTLGeneratorCalloutPass()";
+
+  let options = [
+    Option<"schemaName", "schema-name", "std::string",
+                "", "Name of the schema to process">,
+    Option<"genExecutable", "generator-executable", "std::string",
+                "", "Generator program executable with optional full path name">,
+    Option<"genExecArgs", "generator-executable-arguments", "std::string",
+                "", "Generator program arguments separated by ;">,
+    Option<"genExecOutFileName", "generator-executable-output-filename", "std::string",
+                "", "Name of the output file to be used by the generator program to dump the filenames in which the module definition is generated.">
+   ];
+}
+
 def RTLMemSimImpl : Pass<"rtl-memory-sim", "ModuleOp"> {
   let summary = "Implement FIRRTMMem memories nodes with simulation model";
   let description = [{
