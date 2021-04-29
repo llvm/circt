@@ -165,7 +165,7 @@ def StructCreateOp : RTLOp<"struct_create", [NoSideEffect]> {
 def StructExtractOp : RTLOp<"struct_extract", [NoSideEffect]> {
   let summary = "Extract a named field from a struct.";
 
-  let arguments = (ins StructType:$input, StrAttr:$field);
+  let arguments = (ins StructOrAliasType:$input, StrAttr:$field);
   let results = (outs RTLNonInOutType:$result);
 
   let parser = "return ::parse$cppClass(parser, result);";

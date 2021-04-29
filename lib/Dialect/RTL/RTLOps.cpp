@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/RTL/RTLOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/RTL/RTLTypes.h"
 #include "circt/Dialect/RTL/RTLVisitors.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionImplementation.h"
@@ -1002,7 +1003,7 @@ static ParseResult parseStructExtractOp(OpAsmParser &parser,
                                         OperationState &result) {
   OpAsmParser::OperandType operand;
   StringAttr fieldName;
-  StructType declType;
+  Type declType;
 
   if (parser.parseOperand(operand) || parser.parseLSquare() ||
       parser.parseAttribute(fieldName, "field", result.attributes) ||
@@ -1011,7 +1012,11 @@ static ParseResult parseStructExtractOp(OpAsmParser &parser,
       parser.parseColonType(declType))
     return failure();
 
-  Type resultType = declType.getFieldType(fieldName.getValue());
+  auto structType = getCanonicalType(declType).dyn_cast<StructType>();
+  if (!structType)
+    return parser.emitError(parser.getNameLoc(),
+                            "expected canonical type to be StructType");
+  Type resultType = structType.getFieldType(fieldName.getValue());
   if (!resultType) {
     parser.emitError(parser.getNameLoc(), "invalid field name specified");
     return failure();

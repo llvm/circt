@@ -140,3 +140,11 @@ def TypeAliasType : RTLType<"TypeAlias"> {
     "::mlir::Type":$inner
   );
 }
+
+// Type constraint that supports a type alias or an inner type.
+class TypeAliasOr<Type innerType> :
+    TypeConstraint<Or<[innerType.predicate, CPred<
+        "getCanonicalType($_self).isa<" # innerType.cppClassName # ">()">]>>;
+
+// Define some types using TypeAliasOr.
+def StructOrAliasType : TypeAliasOr<StructType>;
