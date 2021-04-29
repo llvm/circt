@@ -198,11 +198,6 @@ TypeSchemaImpl::TypeSchemaImpl(Type t) : type(t) {
       .Case([this](rtl::ArrayType t) {
         fieldTypes.push_back(FieldInfo{.name = "l", .type = t});
       })
-      .Case([this](esi::StructType t) {
-        auto innerType = t.getInner();
-        fieldTypes.append(innerType.getElements().begin(),
-                          innerType.getElements().end());
-      })
       .Case([this](rtl::StructType t) {
         fieldTypes.append(t.getElements().begin(), t.getElements().end());
       })
@@ -283,7 +278,6 @@ static bool isSupported(Type type, bool outer = false) {
   return llvm::TypeSwitch<::mlir::Type, bool>(type)
       .Case([](IntegerType t) { return t.getWidth() <= 64; })
       .Case([](rtl::ArrayType t) { return isSupported(t.getElementType()); })
-      .Case([](esi::StructType t) { return isSupported(t.getInner(), true); })
       .Case([outer](rtl::StructType t) {
         // We don't yet support structs containing structs.
         if (!outer)
@@ -358,7 +352,6 @@ static void emitName(Type type, uint64_t id, llvm::raw_ostream &os) {
         emitName(arrTy.getElementType(), 0, os);
       })
       .Case([&os, id](rtl::StructType t) { os << "Struct" << id; })
-      .Case([&os](esi::StructType t) { os << t.getName(); })
       .Default([](Type) {
         assert(false && "Type not supported. Please check support first with "
                         "isSupported()");
