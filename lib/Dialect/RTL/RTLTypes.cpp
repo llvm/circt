@@ -295,6 +295,23 @@ LogicalResult InOutType::verify(function_ref<InFlightDiagnostic()> emitError,
   return success();
 }
 
+//===----------------------------------------------------------------------===//
+// TypeAliasType
+//===----------------------------------------------------------------------===//
+
+Type TypeAliasType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
+  StringRef name;
+  Type inner;
+  if (p.parseLess() || p.parseKeyword(&name) || p.parseComma() ||
+      parseRTLElementType(inner, p) || p.parseGreater())
+    return Type();
+  return get(ctxt, name, inner);
+}
+
+void TypeAliasType::print(DialectAsmPrinter &p) const {
+  p << getMnemonic() << "<" << getName() << "," << getInner() << ">";
+}
+
 /// Parses a type registered to this dialect. Parse out the mnemonic then invoke
 /// the tblgen'd type parser dispatcher.
 Type RTLDialect::parseType(DialectAsmParser &parser) const {

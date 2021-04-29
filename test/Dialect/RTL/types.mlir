@@ -37,4 +37,8 @@ module {
     %arg4: !rtl.inout<uarray<2xarray<42xi8>>>) {
     return
   }
+
+  func @simpleTypeAlias(%alias: !rtl.typealias<foo, i1>) {
+    return
+  }
 }

@@ -127,3 +127,16 @@ def StructType : RTLType<"Struct"> {
 
   }];
 }
+
+def TypeAliasType : RTLType<"TypeAlias"> {
+  let summary = "RTL type alias";
+  let description = [{
+    A type that wraps another type and names it.
+  }];
+
+  let mnemonic = "typealias";
+  let parameters = (ins
+    StringRefParameter<"type name">:$name,
+    "::mlir::Type":$inner
+  );
+}
