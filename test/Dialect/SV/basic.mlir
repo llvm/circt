@@ -156,3 +156,8 @@ rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   // CHECK-NEXT: rtl.output
   rtl.output
 }
+
+//CHECK-LABEL: sv.bind "testinst" @test1 @test2
+//CHECK-NEXT: rtl.module.extern @test2
+sv.bind "testinst" @test1 @test2
+rtl.module.extern @test2(%arg0: i1, %arg1: i1, %arg8: i8)

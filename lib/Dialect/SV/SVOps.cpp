@@ -933,6 +933,26 @@ LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
 }
 
 //===----------------------------------------------------------------------===//
+// BindOp
+//===----------------------------------------------------------------------===//
+
+Operation *BindOp::getReferencedSrcModule() {
+  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
+  if (!topLevelModuleOp)
+    return nullptr;
+
+  return topLevelModuleOp.lookupSymbol(src());
+}
+
+Operation *BindOp::getReferencedDestModule() {
+  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
+  if (!topLevelModuleOp)
+    return nullptr;
+
+  return topLevelModuleOp.lookupSymbol(dest());
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

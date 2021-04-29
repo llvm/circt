@@ -10,6 +10,13 @@
 //
 //===----------------------------------------------------------------------===//
 
+/// Ensure symbol is one of the rtl module.* types
+def isModLikeSym : AttrConstraint<
+  CPred<
+    "rtl::isAnyModule(::mlir::SymbolTable::lookupNearestSymbolFrom("
+      "&$_op, $_self.cast<::mlir::FlatSymbolRefAttr>().getValue()))"
+  >, "is module like">;
+
 //===----------------------------------------------------------------------===//
 // Control flow like-operations
 //===----------------------------------------------------------------------===//
@@ -473,4 +480,28 @@ def CoverOp : SVOp<"cover", [ProceduralOp]> {
   let arguments = (ins AnyType:$property);
   let results = (outs);
   let assemblyFormat = "attr-dict $property `:` type($property)";
+}
+
+def BindOp : SVOp<"bind", [IsolatedFromAbove, HasParent<"mlir::ModuleOp">]> {
+  let summary = "indirect instantiation statement";
+  let description = [{
+    Indirectly instantiate a module in the context of another module.  This
+    implements all-instance module binding in system verilog.  This will
+    generate and validate ".*" name binding.
+  }];
+
+  let arguments = (ins StrAttr:$instanceName, Confined<FlatSymbolRefAttr, [isModLikeSym]>:$src, Confined<FlatSymbolRefAttr, [isModLikeSym]>:$dest);
+  let results = (outs);
+
+  let assemblyFormat = [{$instanceName $src $dest attr-dict}];
+
+  let extraClassDeclaration = [{
+    /// Lookup the module or extmodule for the src symbol.  This returns null on
+    /// invalid IR.
+    Operation *getReferencedSrcModule();
+
+    /// Lookup the module or extmodule for the dest symbol.  This returns null on
+    /// invalid IR.
+    Operation *getReferencedDestModule();
+  }];
 }

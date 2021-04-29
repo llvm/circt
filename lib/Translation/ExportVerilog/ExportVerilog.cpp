@@ -576,6 +576,7 @@ public:
   void prepareRTLModule(Block &block);
   void emitRTLExternModule(RTLModuleExternOp module);
   void emitRTLGeneratedModule(RTLModuleGeneratedOp module);
+  void emitGlobalBind(BindOp bind);
 
   // Statements.
   void emitStatement(Operation *op);
@@ -2150,18 +2151,10 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   auto *moduleOp = op.getReferencedModule();
   assert(moduleOp && "Invalid IR");
 
-  // If this is a reference to an external module with a hard coded Verilog
-  // name, then use it here.  This is a hack because we lack proper support for
-  // parameterized modules in the RTL dialect.
-  if (auto extMod = dyn_cast<RTLModuleExternOp>(moduleOp)) {
-    auto verilogName = extMod.getVerilogModuleNameAttr();
-    emitter.verifyModuleName(op, verilogName);
-    indent() << verilogName.getValue();
-  } else if (auto mod = dyn_cast<RTLModuleOp>(moduleOp)) {
-    auto verilogName = mod.getNameAttr();
-    emitter.verifyModuleName(op, verilogName);
-    indent() << verilogName.getValue();
-  }
+  // Use the specified name or the symbol name as appropriate.
+  auto verilogName = getVerilogModuleNameAttr(moduleOp);
+  emitter.verifyModuleName(op, verilogName);
+  indent() << verilogName.getValue();
 
   // Helper that prints a parameter constant value in a Verilog compatible way.
   auto printParmValue = [&](Attribute value) {
@@ -2442,6 +2435,18 @@ void ModuleEmitter::emitRTLGeneratedModule(RTLModuleGeneratedOp module) {
   os << "// external generated module " << verilogName.getValue() << "\n\n";
 }
 
+void ModuleEmitter::emitGlobalBind(BindOp bind) {
+  auto *modSrc = bind.getReferencedSrcModule();
+  auto *modDest = bind.getReferencedDestModule();
+  assert(modSrc && modDest && "Invalid IR");
+
+  auto srcName = getVerilogModuleNameAttr(modSrc);
+  auto destName = getVerilogModuleNameAttr(modDest);
+  // Names are verified in the module op emitter
+  os << "bind " << srcName.getValue() << " " << destName.getValue() << " "
+     << bind.instanceName() << " (.*)\n";
+}
+
 // Given a side effect free "always inline" operation, make sure that it exists
 // in the same block as its users and that it has one use for each one.
 static void lowerAlwaysInlineOperation(Operation *op) {
@@ -2681,7 +2686,7 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
       addName(module.getArgument(port.argNum), name);
   }
 
-  auto moduleNameAttr = module.getNameAttr();
+  auto moduleNameAttr = module.getVerilogModuleNameAttr();
   verifyModuleName(module, moduleNameAttr);
   os << "module " << moduleNameAttr.getValue() << '(';
   if (!portInfo.empty())
@@ -2846,6 +2851,8 @@ void UnifiedEmitter::emitMLIRModule() {
       ModuleEmitter(state).emitRTLExternModule(rootOp);
     else if (auto rootOp = dyn_cast<RTLModuleGeneratedOp>(op))
       ModuleEmitter(state).emitRTLGeneratedModule(rootOp);
+    else if (auto rootOp = dyn_cast<BindOp>(op))
+      ModuleEmitter(state).emitGlobalBind(rootOp);
     else if (isa<RTLGeneratorSchemaOp>(op)) { /* Empty */
     } else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) ||
                isa<IfDefProceduralOp>(op))
