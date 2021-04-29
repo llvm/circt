@@ -914,10 +914,14 @@ public:
       valid = operands[1];
       ready = unwrap.ready();
     } else if (unwrap) {
-      wrap = dyn_cast<WrapValidReady>(operands[0].getDefiningOp());
+      auto *definingOp = operands[0].getDefiningOp();
+      if (auto cosim = dyn_cast<CosimEndpoint>(definingOp))
+        return rewriter.notifyMatchFailure(
+            definingOp, "Need to handle unwrapping CosimEndpoint.");
+      wrap = dyn_cast<WrapValidReady>(definingOp);
       if (!wrap)
         return rewriter.notifyMatchFailure(
-            operands[0].getDefiningOp(),
+            definingOp,
             "This conversion only supports wrap-unwrap back-to-back. "
             "Could not find 'wrap'.");
       valid = wrap.valid();
