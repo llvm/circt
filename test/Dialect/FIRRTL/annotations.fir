@@ -167,6 +167,23 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar
 
 ; // -----
 
+; COM: A ReferenceTarget/ComponentName pointing at a module/extmodule port should work.
+circuit Foo: %[[{"a":"a","target":"~Foo|Bar>bar"},{"b":"b","target":"Foo.Foo.foo"}]]
+  extmodule Bar:
+    input bar: UInt<1>
+  module Foo:
+    input foo: UInt<1>
+    inst bar of Bar
+    bar.bar <= foo
+
+    ; CHECK-LABEL: module {
+    ; CHECK: firrtl.extmodule @Bar
+    ; CHECK-SAME: [[_:.+]] {firrtl.annotations = [{a = "a"}]}
+    ; CHECK: firrtl.module @Foo
+    ; CHECK-SAME: %foo: [[_:.+]] {firrtl.annotations = [{b = "b"}]}
+
+; // -----
+
 ; COM: All types of JSON values should work
 circuit Foo: %[[{"string":"a","integer":42,"float":3.14,"boolean":true,"null":null,"object":{"foo":"bar"},"array":[1,2,3]}]]
   module Foo:
