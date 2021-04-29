@@ -3,7 +3,7 @@
 // RUN: circt-opt %s --lower-esi-ports --lower-esi-to-rtl -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck --check-prefix=COSIM %s
 // RUN: circt-opt %s --lower-esi-ports --lower-esi-to-rtl | circt-translate --export-verilog | FileCheck --check-prefix=SV %s
 
-!DataPkt = type !esi.struct<DataPkt, encrypted: i1, compressionLevel: ui4, blob: !rtl.array<32 x i8>>
+!DataPkt = type !rtl.typealias<DataPkt, struct<encrypted: i1, compressionLevel: ui4, blob: !rtl.array<32 x i8>>>
 !pktChan = type !esi.channel<!DataPkt>
 
 rtl.module.extern @Compressor(%in: !esi.channel<i1>) -> (%x: !pktChan)
