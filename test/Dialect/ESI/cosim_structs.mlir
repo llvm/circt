@@ -3,7 +3,7 @@
 // RUN: circt-opt %s --lower-esi-ports --lower-esi-to-rtl -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck --check-prefix=COSIM %s
 // RUN: circt-opt %s --lower-esi-ports --lower-esi-to-rtl | circt-translate --export-verilog | FileCheck --check-prefix=SV %s
 
-!DataPkt = type !rtl.struct<encrypted: i1, compressionLevel: ui4, blob: !rtl.array<32 x i8>>
+!DataPkt = type !esi.struct<DataPkt, encrypted: i1, compressionLevel: ui4, blob: !rtl.array<32 x i8>>
 !pktChan = type !esi.channel<!DataPkt>
 
 rtl.module.extern @Compressor(%in: !esi.channel<i1>) -> (%x: !pktChan)
@@ -13,7 +13,7 @@ rtl.module @top(%clk:i1, %rstn:i1) -> () {
   %inputData = esi.cosim %clk, %rstn, %compressedData, 1 {name="Compressor"} : !pktChan -> !esi.channel<i1>
 }
 
-// CAPNP:      struct Struct13922113893393513056
+// CAPNP:      struct DataPkt
 // CAPNP-NEXT:   encrypted        @0 :Bool;
 // CAPNP-NEXT:   compressionLevel @1 :UInt8;
 // CAPNP-NEXT:   blob             @2 :List(UInt8);
