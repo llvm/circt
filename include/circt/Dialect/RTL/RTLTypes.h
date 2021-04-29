@@ -44,6 +44,10 @@ int64_t getBitWidth(mlir::Type type);
 /// false on known InOut types, rather than any unknown types.
 bool hasRTLInOutType(mlir::Type type);
 
+/// Return the canonical type, that is, the type with all type aliases
+/// recursively resolved to a base type.
+mlir::Type getCanonicalType(mlir::Type type);
+
 } // namespace rtl
 } // namespace circt
 

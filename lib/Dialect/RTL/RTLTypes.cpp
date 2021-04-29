@@ -109,6 +109,29 @@ bool circt::rtl::hasRTLInOutType(Type type) {
   return type.isa<InOutType>();
 }
 
+/// Return the canonical type, that is, the type with all type aliases
+/// recursively resolved to a base type.
+Type circt::rtl::getCanonicalType(Type type) {
+  return llvm::TypeSwitch<Type, Type>(type)
+      .Case([](TypeAliasType t) { return getCanonicalType(t.getInner()); })
+      .Case([](ArrayType t) {
+        return ArrayType::get(getCanonicalType(t.getElementType()),
+                              t.getSize());
+      })
+      .Case([](UnpackedArrayType t) {
+        return UnpackedArrayType::get(getCanonicalType(t.getElementType()),
+                                      t.getSize());
+      })
+      .Case([](StructType t) {
+        SmallVector<StructType::FieldInfo> fieldInfo;
+        for (auto field : t.getElements())
+          fieldInfo.push_back(
+              StructType::FieldInfo{field.name, getCanonicalType(field.type)});
+        return StructType::get(t.getContext(), fieldInfo);
+      })
+      .Default([](Type t) { return t; });
+}
+
 /// Parse and print nested RTL types nicely.  These helper methods allow eliding
 /// the "rtl." prefix on array, inout, and other types when in a context that
 /// expects RTL subelement types.
