@@ -110,6 +110,7 @@ public:
 private:
   ::capnp::ParsedSchema getSchema() const;
   ::capnp::StructSchema getTypeSchema() const;
+  void setFieldTypes(Type);
 
   Type type;
   /// Capnp requires that everything be contained in a struct. ESI doesn't so we
@@ -190,7 +191,9 @@ static bool isPointerType(::capnp::schema::Type::Reader type) {
   }
 }
 
-TypeSchemaImpl::TypeSchemaImpl(Type t) : type(t) {
+TypeSchemaImpl::TypeSchemaImpl(Type t) : type(t) { setFieldTypes(t); }
+
+void TypeSchemaImpl::setFieldTypes(Type type) {
   TypeSwitch<Type>(type)
       .Case([this](IntegerType t) {
         fieldTypes.push_back(FieldInfo{.name = "i", .type = t});
@@ -200,6 +203,9 @@ TypeSchemaImpl::TypeSchemaImpl(Type t) : type(t) {
       })
       .Case([this](rtl::StructType t) {
         fieldTypes.append(t.getElements().begin(), t.getElements().end());
+      })
+      .Case([this](rtl::TypeAliasType t) {
+        setFieldTypes(rtl::getCanonicalType(t));
       })
       .Default([](Type) {});
 }
@@ -289,6 +295,9 @@ static bool isSupported(Type type, bool outer = false) {
         }
         return true;
       })
+      .Case([](rtl::TypeAliasType t) {
+        return isSupported(rtl::getCanonicalType(t), true);
+      })
       .Default([](Type) { return false; });
 }
 
@@ -352,6 +361,7 @@ static void emitName(Type type, uint64_t id, llvm::raw_ostream &os) {
         emitName(arrTy.getElementType(), 0, os);
       })
       .Case([&os, id](rtl::StructType t) { os << "Struct" << id; })
+      .Case([&os](rtl::TypeAliasType t) { os << t.getName(); })
       .Default([](Type) {
         assert(false && "Type not supported. Please check support first with "
                         "isSupported()");
