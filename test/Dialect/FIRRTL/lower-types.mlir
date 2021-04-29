@@ -664,3 +664,30 @@ firrtl.circuit "AnnotationsRegOp" {
   // CHECK: firrtl.regreset
   // CHECK-SAME: annotations = [{b = "b"}]
 }
+
+// -----
+
+// Test that WhenOp with regions has its regions lowered.
+firrtl.circuit "WhenOp" {
+  firrtl.module @WhenOp (%p: !firrtl.uint<1>,
+                         %in : !firrtl.bundle<a: uint<1>, b: uint<1>>,
+                         %out : !firrtl.flip<bundle<a: uint<1>, b: uint<1>>>) {
+    // No else region.
+    firrtl.when %p {
+      // CHECK: firrtl.connect %out_a, %in_a : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+      // CHECK: firrtl.connect %out_b, %in_b : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+      firrtl.connect %out, %in : !firrtl.flip<bundle<a: uint<1>, b: uint<1>>>, !firrtl.bundle<a: uint<1>, b: uint<1>>
+    }
+
+    // Else region.
+    firrtl.when %p {
+      // CHECK: firrtl.connect %out_a, %in_a : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+      // CHECK: firrtl.connect %out_b, %in_b : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+      firrtl.connect %out, %in : !firrtl.flip<bundle<a: uint<1>, b: uint<1>>>, !firrtl.bundle<a: uint<1>, b: uint<1>>
+    } else {
+      // CHECK: firrtl.connect %out_a, %in_a : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+      // CHECK: firrtl.connect %out_b, %in_b : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+      firrtl.connect %out, %in : !firrtl.flip<bundle<a: uint<1>, b: uint<1>>>, !firrtl.bundle<a: uint<1>, b: uint<1>>
+    }
+  }
+}
