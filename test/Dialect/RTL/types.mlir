@@ -38,7 +38,9 @@ module {
     return
   }
 
-  func @simpleTypeAlias(%alias: !rtl.typealias<foo, i1>) {
+  // CHECK-LABEL: typeAlias
+  // CHECK-SAME: %simple: !rtl.typealias<foo, i1>
+  func @typeAlias(%simple: !rtl.typealias<foo, i1>) {
     return
   }
 }
