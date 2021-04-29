@@ -110,6 +110,9 @@ static int getBitWidthOrSentinel(Type type) {
 /// Push this type's dimension into a vector.
 static void getTypeDims(SmallVectorImpl<int64_t> &dims, Type type,
                         Location loc) {
+  // Resolve any type aliases.
+  type = getCanonicalType(type);
+
   if (auto inout = type.dyn_cast<rtl::InOutType>())
     return getTypeDims(dims, inout.getElementType(), loc);
   if (auto uarray = type.dyn_cast<rtl::UnpackedArrayType>())
@@ -253,6 +256,10 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         os << "<<unexpected unpacked array>>";
         emitError(loc, "Unexpected unpacked array in packed type ")
             << arrayType;
+        return true;
+      })
+      .Case<TypeAliasType>([&](TypeAliasType alias) {
+        os << alias.getName();
         return true;
       })
       .Default([&](Type type) {
