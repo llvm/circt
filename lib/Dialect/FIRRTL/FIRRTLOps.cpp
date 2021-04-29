@@ -331,6 +331,12 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   for (size_t i = 0, e = ports.size(); i != e; ++i) {
     portNames.push_back(ports[i].name);
     portDirections.push_back(ports[i].direction);
+    if (!ports[i].annotations)
+      continue;
+    result.addAttribute(
+        getArgAttrName(i, attrNameBuf),
+        builder.getDictionaryAttr({{builder.getIdentifier("firrtl.annotations"),
+                                    ports[i].annotations}}));
   }
 
   // Both attributes are added, even if the module has no ports.
