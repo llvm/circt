@@ -112,6 +112,7 @@ private:
   ::capnp::StructSchema getTypeSchema() const;
 
   Type type;
+  Type canonicalType; // Same as `type`, with any type aliases resolved.
   /// Capnp requires that everything be contained in a struct. ESI doesn't so we
   /// wrap non-struct types in a capnp struct. During decoder/encoder
   /// construction, it's convenient to use the capnp model so assemble the
@@ -190,10 +191,8 @@ static bool isPointerType(::capnp::schema::Type::Reader type) {
   }
 }
 
-TypeSchemaImpl::TypeSchemaImpl(Type t) : type(t) {
-  // Resolve any type aliases.
-  Type canonicalType = rtl::getCanonicalType(type);
-
+TypeSchemaImpl::TypeSchemaImpl(Type t)
+    : type(t), canonicalType(rtl::getCanonicalType(t)) {
   TypeSwitch<Type>(canonicalType)
       .Case([this](IntegerType t) {
         fieldTypes.push_back(FieldInfo{.name = "i", .type = t});
@@ -278,6 +277,9 @@ uint64_t TypeSchemaImpl::capnpTypeID() const {
 
 /// Returns true if the type is currently supported.
 static bool isSupported(Type type, bool outer = false) {
+  // Resolve any type aliases.
+  type = rtl::getCanonicalType(type);
+
   return llvm::TypeSwitch<::mlir::Type, bool>(type)
       .Case([](IntegerType t) { return t.getWidth() <= 64; })
       .Case([](rtl::ArrayType t) { return isSupported(t.getElementType()); })
@@ -291,9 +293,6 @@ static bool isSupported(Type type, bool outer = false) {
             return false;
         }
         return true;
-      })
-      .Case([](rtl::TypeAliasType t) {
-        return isSupported(rtl::getCanonicalType(t), true);
       })
       .Default([](Type) { return false; });
 }
@@ -378,6 +377,9 @@ StringRef TypeSchemaImpl::name() const {
 
 /// Write a valid Capnp type.
 static void emitCapnpType(Type type, IndentingOStream &os) {
+  // Resolve any type aliases.
+  type = rtl::getCanonicalType(type);
+
   llvm::TypeSwitch<Type>(type)
       .Case([&os](IntegerType intTy) {
         auto w = intTy.getWidth();
@@ -933,7 +935,7 @@ Value TypeSchemaImpl::buildEncoder(OpBuilder &b, Value clk, Value valid,
   // The values in the struct we are encoding.
   SmallVector<GasketComponent, 16> fieldValues;
   assert(operand.getValue().getType() == type);
-  if (auto structTy = type.dyn_cast<rtl::StructType>()) {
+  if (auto structTy = canonicalType.dyn_cast<rtl::StructType>()) {
     for (auto field : structTy.getElements()) {
       fieldValues.push_back(GasketComponent(
           b, b.create<rtl::StructExtractOp>(loc, operand, field)));
@@ -1124,7 +1126,7 @@ Value TypeSchemaImpl::buildDecoder(OpBuilder &b, Value clk, Value valid,
   // What to return depends on the type. (e.g. structs have to be constructed
   // from the field values.)
   GasketComponent ret =
-      TypeSwitch<Type, GasketComponent>(type)
+      TypeSwitch<Type, GasketComponent>(canonicalType)
           .Case([&fieldValues](IntegerType) { return fieldValues[0]; })
           .Case([&fieldValues](rtl::ArrayType) { return fieldValues[0]; })
           .Case([&](rtl::StructType) {
