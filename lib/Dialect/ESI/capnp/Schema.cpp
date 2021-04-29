@@ -110,7 +110,6 @@ public:
 private:
   ::capnp::ParsedSchema getSchema() const;
   ::capnp::StructSchema getTypeSchema() const;
-  void setFieldTypes(Type);
 
   Type type;
   /// Capnp requires that everything be contained in a struct. ESI doesn't so we
@@ -191,10 +190,11 @@ static bool isPointerType(::capnp::schema::Type::Reader type) {
   }
 }
 
-TypeSchemaImpl::TypeSchemaImpl(Type t) : type(t) { setFieldTypes(t); }
+TypeSchemaImpl::TypeSchemaImpl(Type t) : type(t) {
+  // Resolve any type aliases.
+  Type canonicalType = rtl::getCanonicalType(type);
 
-void TypeSchemaImpl::setFieldTypes(Type type) {
-  TypeSwitch<Type>(type)
+  TypeSwitch<Type>(canonicalType)
       .Case([this](IntegerType t) {
         fieldTypes.push_back(FieldInfo{.name = "i", .type = t});
       })
@@ -203,9 +203,6 @@ void TypeSchemaImpl::setFieldTypes(Type type) {
       })
       .Case([this](rtl::StructType t) {
         fieldTypes.append(t.getElements().begin(), t.getElements().end());
-      })
-      .Case([this](rtl::TypeAliasType t) {
-        setFieldTypes(rtl::getCanonicalType(t));
       })
       .Default([](Type) {});
 }
