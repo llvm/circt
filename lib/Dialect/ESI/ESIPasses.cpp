@@ -16,6 +16,7 @@
 #include "circt/Dialect/RTL/RTLOps.h"
 #include "circt/Dialect/RTL/RTLTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/SV/SVTypes.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/ImplicitLocOpBuilder.h"
 #include "circt/Support/LLVM.h"
@@ -44,6 +45,19 @@ using namespace circt::comb;
 using namespace circt::esi;
 using namespace circt::rtl;
 using namespace circt::sv;
+
+//===----------------------------------------------------------------------===//
+// Static helpers.
+//===----------------------------------------------------------------------===//
+
+/// Convert the channel's inner type into an appropriate RTL/SV type.
+static Type convertChannelType(Type innerType) {
+  if (auto type = innerType.dyn_cast<esi::StructType>())
+    return sv::TypeAliasType::get(innerType.getContext(), type.getName(),
+                                  TypeAttr::get(type.getInner()));
+
+  return innerType;
+}
 
 //===----------------------------------------------------------------------===//
 // ESI custom op builder.
@@ -231,7 +245,7 @@ InterfaceOp ESIRTLBuilder::constructInterface(ChannelPort chan) {
   InterfaceSignalOp s;
   ib.create<InterfaceSignalOp>(validStr, getI1Type());
   ib.create<InterfaceSignalOp>(readyStr, getI1Type());
-  ib.create<InterfaceSignalOp>(dataStr, chan.getInner());
+  ib.create<InterfaceSignalOp>(dataStr, convertChannelType(chan.getInner()));
   ib.create<InterfaceModportOp>(
       sinkStr, /*inputs=*/ArrayRef<StringRef>{readyStr},
       /*outputs=*/ArrayRef<StringRef>{validStr, dataStr});
@@ -742,8 +756,11 @@ void ESIPortsPass::updateInstance(RTLModuleExternOp mod, InstanceOp inst) {
         instBuilder.create<InterfaceInstanceOp>(iface.getInterfaceType());
     GetModportOp sourceModport =
         instBuilder.create<GetModportOp>(ifaceInst, ESIRTLBuilder::sourceStr);
-    auto newChannel =
-        instBuilder.create<WrapSVInterface>(res.getType(), sourceModport);
+
+    auto convertedType =
+        convertChannelType(res.getType().cast<ChannelPort>().getInner());
+    auto newChannel = instBuilder.create<WrapSVInterface>(
+        ChannelPort::get(res.getContext(), convertedType), sourceModport);
     // Connect all the old users of the output channel with the newly wrapped
     // replacement channel.
     res.replaceAllUsesWith(newChannel);
