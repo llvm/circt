@@ -71,11 +71,8 @@ def InterfaceOp : SVOp<"interface",
 def SignalTypeAttr : TypeAttrBase<"::mlir::Type", "Any SV/RTL type"> {
   let predicate = And<[
       CPred<"$_self.isa<::mlir::TypeAttr>()">,
-      Or<[
-        CPred<"::circt::rtl::getBitWidth(" #
-                "$_self.cast<::mlir::TypeAttr>().getValue()) != -1">,
-        CPred<"::circt::sv::getBitWidth(" #
-                "$_self.cast<::mlir::TypeAttr>().getValue()) != -1">]>
+      CPred<"::circt::rtl::getBitWidth(" #
+              "$_self.cast<::mlir::TypeAttr>().getValue()) != -1">
   ]>;
 }
 
@@ -182,19 +179,6 @@ def ModportType : SVType<"Modport"> {
 
   let mnemonic = "modport";
   let parameters = (ins "::mlir::SymbolRefAttr":$modport);
-}
-
-def TypeAliasType : SVType<"TypeAlias"> {
-  let summary = "SystemVerilog type that names another type";
-  let description = [{
-    A MLIR type for wrapping another type with a name.
-  }];
-
-  let mnemonic = "typealias";
-  let parameters = (ins
-    StringRefParameter<"type name">:$name,
-    "::mlir::TypeAttr":$inner
-  );
 }
 
 //===----------------------------------------------------------------------===//
