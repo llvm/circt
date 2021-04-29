@@ -12,15 +12,15 @@ class BackedgeBuilder:
   def create(self, type, instance_builder):
     from mlir.ir import Operation
 
-    edge = Operation.create(f"TemporaryBackedge", [type]).result
+    edge = Operation.create("TemporaryBackedge", [type]).result
     self.edges.append(edge)
     self.builders[repr(edge)] = instance_builder
     return edge
 
   def remove(self, edge):
     self.edges.remove(edge)
-    del self.builders[repr(edge)]
-    edge.owner.destroy()
+    self.builders.pop(repr(edge))
+    edge.owner.erase()
 
   def check(self):
     for edge in self.edges:
@@ -39,10 +39,7 @@ class BackedgeBuilder:
       msg += "Module:   " + module_decl + "\n"
 
       # Clean up the IR and Python references.
+      instance.erase()
       self.remove(edge)
-      instance.destroy()
-      del builder
-      del instance
-      del edge
 
       raise RuntimeError(msg)
