@@ -31,6 +31,14 @@ mlir::Type getInOutElementType(mlir::Type type);
 /// Return the element type of an ArrayType or UnpackedArrayType, or null if the
 /// operand isn't an array.
 mlir::Type getAnyRTLArrayElementType(mlir::Type type);
+
+/// Return the hardware bit width of a type. Does not reflect any encoding,
+/// padding, or storage scheme, just the bit (and wire width) of a
+/// statically-size type. Reflects the number of wires needed to transmit a
+/// value of this type. Returns -1 if the type is not known or cannot be
+/// statically computed.
+int64_t getBitWidth(mlir::Type type);
+
 } // end namespace sv
 } // end namespace circt
 

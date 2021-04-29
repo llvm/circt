@@ -14,6 +14,7 @@
 #include "circt/Dialect/RTL/RTLTypes.h"
 #include "circt/Dialect/SV/SVDialect.h"
 
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -30,6 +31,25 @@ Type circt::sv::getAnyRTLArrayElementType(Type type) {
   if (auto array = type.dyn_cast<rtl::UnpackedArrayType>())
     return array.getElementType();
   return {};
+}
+
+/// Return the hardware bit width of a type. Does not reflect any encoding,
+/// padding, or storage scheme, just the bit (and wire width) of a
+/// statically-size type. Reflects the number of wires needed to transmit a
+/// value of this type. Returns -1 if the type is not known or cannot be
+/// statically computed.
+int64_t circt::sv::getBitWidth(mlir::Type type) {
+  return llvm::TypeSwitch<mlir::Type, int64_t>(type)
+      .Case<TypeAliasType>(
+          [](TypeAliasType t) { return getBitWidth(t.getInner().getValue()); })
+      .Default([](Type t) {
+        // Attempt to fall back to RTL's getBitWidth.
+        int64_t rtlBitWidth = rtl::getBitWidth(t);
+        if (rtlBitWidth != -1)
+          return rtlBitWidth;
+
+        return -1l;
+      });
 }
 
 //===----------------------------------------------------------------------===//
@@ -68,6 +88,19 @@ Type ModportType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
 
 void ModportType::print(DialectAsmPrinter &p) const {
   p << "modport<" << getModport() << ">";
+}
+
+Type TypeAliasType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
+  StringRef name;
+  TypeAttr inner;
+  if (p.parseLess() || p.parseKeyword(name) || p.parseComma() ||
+      p.parseAttribute(inner) || p.parseGreater())
+    return Type();
+  return get(ctxt, name, inner);
+}
+
+void TypeAliasType::print(DialectAsmPrinter &p) const {
+  p << "typealias<" << getName() << "," << getInner() << ">";
 }
 
 //===----------------------------------------------------------------------===//
