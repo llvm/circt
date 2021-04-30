@@ -154,6 +154,30 @@ def InterfaceModportOp : SVOp<"interface.modport",
 }
 
 //===----------------------------------------------------------------------===//
+// Type operations
+//===----------------------------------------------------------------------===//
+
+def TypeDefOp : SVOp<"typedef", [Symbol]> {
+  let summary = "SystemVerilog `typedef` declaration";
+  let description = [{
+    This operations declares a specific name for a SystemVerilog type. See
+    SystemVerilog standard section 6.18 "User-defined types".
+
+    Example:
+    ```mlir
+    sv.typedef @foo : i1
+    ```
+  }];
+
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    TypeAttr:$type
+  );
+
+  let assemblyFormat = "$sym_name `:` $type attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
 // Types for integration in to type-based dialects.
 //===----------------------------------------------------------------------===//
 
