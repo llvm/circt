@@ -524,6 +524,25 @@ OpFoldResult llhd::ExtractSliceOp::fold(ArrayRef<Attribute> operands) {
 }
 
 //===----------------------------------------------------------------------===//
+// SigOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult llhd::SigOp::canonicalize(llhd::SigOp op,
+                                        PatternRewriter &rewriter) {
+  for (auto &use : op.getResult().getUses())
+    if (isa<llhd::DrvOp>(use.getOwner()))
+      return failure();
+
+  auto probe = op.init().getDefiningOp<llhd::PrbOp>();
+  if (!probe)
+    return failure();
+
+  rewriter.replaceOp(op, probe.signal());
+  rewriter.eraseOp(probe);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // DrvOp
 //===----------------------------------------------------------------------===//
 

@@ -1,4 +1,4 @@
-// RUN: circt-opt -convert-rtl-to-llhd -split-input-file -verify-diagnostics %s | FileCheck %s
+// RUN: circt-opt -convert-rtl-to-llhd -simple-canonicalizer -split-input-file -verify-diagnostics %s | FileCheck %s
 
 module {
   // CHECK-LABEL: llhd.entity @test
