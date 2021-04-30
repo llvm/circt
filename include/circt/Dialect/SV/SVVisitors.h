@@ -41,7 +41,7 @@ public:
             // Type declarations.
             InterfaceOp, InterfaceSignalOp, InterfaceModportOp,
             InterfaceInstanceOp, GetModportOp, AssignInterfaceSignalOp,
-            ReadInterfaceSignalOp,
+            ReadInterfaceSignalOp, TypeDefOp,
             // Verification statements.
             AssertOp, AssumeOp, CoverOp,
             // Terminators.
@@ -109,6 +109,7 @@ public:
   HANDLE(GetModportOp, Unhandled);
   HANDLE(AssignInterfaceSignalOp, Unhandled);
   HANDLE(ReadInterfaceSignalOp, Unhandled);
+  HANDLE(TypeDefOp, Unhandled);
 
   // Verification statements.
   HANDLE(AssertOp, Unhandled);
