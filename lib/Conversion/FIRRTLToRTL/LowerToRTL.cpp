@@ -18,6 +18,7 @@
 #include "circt/Dialect/RTL/RTLOps.h"
 #include "circt/Dialect/RTL/RTLTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Support/ImplicitLocOpBuilder.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
@@ -787,12 +788,14 @@ void FIRRTLModuleLowering::lowerModuleBody(
     // We lower zero width inout and outputs to a wire that isn't connected to
     // anything outside the module.  Inputs are lowered to zero.
     if (isZeroWidth && port.isInput()) {
-      Value newArg = bodyBuilder.create<WireOp>(FlipType::get(port.type),
-                                                "." + port.getName().str() +
-                                                    ".0width_input");
+      auto newArg = bodyBuilder.create<WireOp>(FlipType::get(port.type),
+                                               "." + port.getName().str() +
+                                                   ".0width_input");
+      newArg->setAttr(SymbolTable::getVisibilityAttrName(),
+                      bodyBuilder.getStringAttr("private"));
 
-      newArg = bodyBuilder.create<AsPassivePrimOp>(newArg);
-      oldArg.replaceAllUsesWith(newArg);
+      auto newArgTmp = bodyBuilder.create<AsPassivePrimOp>(newArg);
+      oldArg.replaceAllUsesWith(newArgTmp);
       continue;
     }
 
@@ -806,8 +809,10 @@ void FIRRTLModuleLowering::lowerModuleBody(
 
     // Outputs need a temporary wire so they can be connect'd to, which we
     // then return.
-    Value newArg = bodyBuilder.create<WireOp>(
+    auto newArg = bodyBuilder.create<WireOp>(
         port.type, "." + port.getName().str() + ".output");
+    newArg->setAttr(SymbolTable::getVisibilityAttrName(),
+                    bodyBuilder.getStringAttr("private"));
     // Switch all uses of the old operands to the new ones.
     oldArg.replaceAllUsesWith(newArg);
 
@@ -840,6 +845,62 @@ void FIRRTLModuleLowering::lowerModuleBody(
 //===----------------------------------------------------------------------===//
 
 namespace {
+struct WireCleanup {
+
+  WireCleanup(rtl::RTLModuleOp op) { run(op); }
+  void visitWire(sv::WireOp op);
+  void run(rtl::RTLModuleOp op);
+};
+void WireCleanup::run(rtl::RTLModuleOp op) {
+  SmallVector<sv::WireOp> toRemove;
+  // for (auto &o : make_early_inc_range(op.body().getOps())) {
+  for (auto &o : op.body().getOps()) {
+    if (auto wire = dyn_cast<sv::WireOp>(o))
+      if (wire->getAttrOfType<StringAttr>(SymbolTable::getVisibilityAttrName()))
+        toRemove.push_back(wire);
+  }
+  for (auto w : toRemove)
+    visitWire(w);
+}
+void WireCleanup::visitWire(sv::WireOp wire) {
+
+  SmallVector<sv::ReadInOutOp> reads;
+  sv::ConnectOp write;
+
+  for (auto *user : wire->getUsers()) {
+    if (auto read = dyn_cast<sv::ReadInOutOp>(user)) {
+      reads.push_back(read);
+      continue;
+    }
+
+    // Otherwise must be a connect, and we must not have seen a write yet.
+    auto connect = dyn_cast<sv::ConnectOp>(user);
+    if (!connect || write)
+      return;
+    write = connect;
+  }
+
+  // Must have found the write!
+  if (!write)
+    return;
+
+  // If the write is happening at the model level then we don't have any
+  // use-before-def checking to do, so we only handle that for now.
+  if (!isa<rtl::RTLModuleOp>(write->getParentOp()))
+    return;
+
+  auto connected = write.src();
+
+  // Ok, we can do this.  Replace all the reads with the connected value.
+  for (auto read : reads) {
+    read.replaceAllUsesWith(connected);
+    read.erase();
+  }
+  // And remove the write and wire itself.
+  write.erase();
+  wire.erase();
+}
+
 struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
   FIRRTLLowering(rtl::RTLModuleOp module, CircuitLoweringState &circuitState)
@@ -892,6 +953,9 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   // eliminate it later as part of lowering post processing.
   sv::WireOp createTmpWireOp(Type type, StringRef name) {
     auto result = builder.create<sv::WireOp>(type, name);
+    result->setAttr(SymbolTable::getVisibilityAttrName(),
+                    builder.getStringAttr("private"));
+
     tmpWiresToOptimize.push_back(result);
     return result;
   }
@@ -1107,10 +1171,11 @@ void FIRRTLLowering::run() {
     opsToRemove.pop_back_val()->erase();
   }
 
+  WireCleanup cleanup(theModule);
   // Now that the IR is in a stable form, try to eliminate temporary wires
   // inserted by MemOp insertions.
-  for (auto wire : tmpWiresToOptimize)
-    optimizeTemporaryWire(wire);
+  // for (auto wire : tmpWiresToOptimize)
+  //  optimizeTemporaryWire(wire);
 }
 
 // Try to optimize out temporary wires introduced during lowering.
@@ -1568,7 +1633,7 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   if (resultType.isInteger(0))
     return setLowering(op, Value());
 
-  // Name attr is requires on sv.wire but optional on firrtl.wire.
+  // Name attr is required on sv.wire but optional on firrtl.wire.
   auto nameAttr = op.nameAttr() ? op.nameAttr() : builder.getStringAttr("");
   return setLoweringTo<sv::WireOp>(op, resultType, nameAttr);
 }
