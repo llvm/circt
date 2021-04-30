@@ -187,7 +187,7 @@ struct ConvertOutput : public OpConversionPattern<OutputOp> {
 
       // If the source has a signal type, connect it.
       if (auto sigTy = src.getType().dyn_cast<SigType>()) {
-        rewriter.create<llhd::ConnectOp>(output.getLoc(), dest, src);
+        rewriter.createOrFold<llhd::ConnectOp>(output.getLoc(), dest, src);
         continue;
       }
 
