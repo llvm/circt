@@ -130,6 +130,7 @@ StringAttr ESIRTLBuilder::constructInterfaceName(ChannelPort port) {
         nameOS << "ArrayOf" << arr.getSize() << 'x' << arr.getElementType();
       })
       .Case([&](rtl::StructType t) { nameOS << "Struct"; })
+      .Case([&](rtl::TypeAliasType t) { nameOS << t.getName(); })
       .Default([&](Type t) { nameOS << port.getInner(); });
 
   // Normalize the type name.
