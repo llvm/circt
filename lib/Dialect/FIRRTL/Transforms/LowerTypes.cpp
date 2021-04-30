@@ -120,6 +120,7 @@ public:
   void visitExpr(SubindexOp op);
   void visitExpr(SubaccessOp op);
   void visitStmt(ConnectOp op);
+  void visitStmt(WhenOp op);
 
 private:
   // Lowering module block arguments.
@@ -795,6 +796,30 @@ void TypeLoweringVisitor::visitExpr(InvalidValuePrimOp op) {
 
   // Remember to remove the original op.
   opsToRemove.push_back(op);
+}
+
+void TypeLoweringVisitor::visitStmt(WhenOp op) {
+  // The WhenOp itself does not require any lowering, the only value it uses is
+  // a one-bit predicate.  Recursively visit all regions so internal operations
+  // are lowered.
+
+  // Visit operations in the then block.
+  for (auto &op : op.getThenBlock()) {
+    builder->setInsertionPoint(&op);
+    builder->setLoc(op.getLoc());
+    dispatchVisitor(&op);
+  }
+
+  // If there is no else block, return.
+  if (!op.hasElseRegion())
+    return;
+
+  // Visit operations in the else block.
+  for (auto &op : op.getElseBlock()) {
+    builder->setInsertionPoint(&op);
+    builder->setLoc(op.getLoc());
+    dispatchVisitor(&op);
+  }
 }
 
 //===----------------------------------------------------------------------===//
