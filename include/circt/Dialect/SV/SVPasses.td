@@ -83,5 +83,18 @@ def RTLMemSimImpl : Pass<"rtl-memory-sim", "ModuleOp"> {
   let dependentDialects = ["circt::sv::SVDialect"];
 }
 
+def RTLDeclareTypedefs : Pass<"rtl-declare-typedefs", "ModuleOp"> {
+  let summary = "Declare SystemVerilog typedefs for any RTL TypeAlias types";
+  let description = [{
+    This pass finds any TypeAlias types uses as operands, results, or block
+    arguments, and declares typedefs in the top-level module using the name and
+    type from the TypeAlias. This should be used as a pre-processing step before
+    Verilog emission to ensure TypeAliases used throughout the circuit have a
+    typedef.
+  }];
+
+  let constructor = "circt::sv::createRTLDeclareTypedefsPass()";
+  let dependentDialects = ["circt::sv::SVDialect"];
+}
 
 #endif // CIRCT_DIALECT_SV_SVPASSES

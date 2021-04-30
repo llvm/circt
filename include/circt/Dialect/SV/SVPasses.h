@@ -31,6 +31,7 @@ std::unique_ptr<mlir::Pass> createRTLStubExternalModulesPass();
 std::unique_ptr<mlir::Pass> createRTLLegalizeNamesPass();
 std::unique_ptr<mlir::Pass> createRTLGeneratorCalloutPass();
 std::unique_ptr<mlir::Pass> createRTLMemSimImplPass();
+std::unique_ptr<mlir::Pass> createRTLDeclareTypedefsPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
