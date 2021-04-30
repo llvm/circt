@@ -12,6 +12,7 @@
 
 #include "circt/Conversion/RTLToLLHD/RTLToLLHD.h"
 #include "../PassDetail.h"
+#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/RTL/RTLDialect.h"
@@ -21,6 +22,7 @@
 #include "mlir/Transforms/DialectConversion.h"
 
 using namespace circt;
+using namespace comb;
 using namespace llhd;
 using namespace rtl;
 
@@ -37,6 +39,10 @@ struct RTLToLLHDPass : public ConvertRTLToLLHDBase<RTLToLLHDPass> {
 /// materializations and type conversions for converting RTL to LLHD.
 struct RTLToLLHDTypeConverter : public TypeConverter {
   RTLToLLHDTypeConverter();
+
+private:
+  std::string getName() { return "tmp" + std::to_string(++uniqueId); }
+  size_t uniqueId = 0;
 };
 } // namespace
 
@@ -57,6 +63,7 @@ void RTLToLLHDPass::runOnOperation() {
 
   ConversionTarget target(context);
   target.addLegalDialect<LLHDDialect>();
+  target.addLegalDialect<CombDialect>();
   target.addIllegalOp<RTLModuleOp>();
 
   RTLToLLHDTypeConverter typeConverter;
@@ -81,6 +88,22 @@ RTLToLLHDTypeConverter::RTLToLLHDTypeConverter() {
 
   // Mark SigType legal by converting it to itself.
   addConversion([](SigType type) { return type; });
+
+  // Materialze probes when arguments are converted from IntegerType to SigType.
+  addArgumentMaterialization([](OpBuilder &builder, IntegerType type,
+                                ValueRange values, Location loc) {
+    assert(values.size() == 1);
+    auto op = builder.create<PrbOp>(loc, type, values[0]);
+    return op.getResult();
+  });
+
+  // Materialize signals when operands expect IntegerType but receive SigType.
+  addTargetMaterialization([this](OpBuilder &builder, SigType type,
+                                  ValueRange values, Location loc) {
+    assert(values.size() == 1);
+    auto op = builder.create<SigOp>(loc, type, getName(), values[0]);
+    return op.getResult();
+  });
 }
 
 //===----------------------------------------------------------------------===//
