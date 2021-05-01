@@ -1514,14 +1514,14 @@ struct HandshakeInsertBufferPass
   void bufferCyclesStrategy() {
     auto f = getOperation();
     DenseSet<Operation *> opVisited;
-    DenseSet<Operation *> opOnStack;
+    DenseSet<Operation *> opInFlight;
 
     // Traverse each use of each argument of the entry block.
     auto builder = OpBuilder(f.getContext());
     for (auto &arg : f.getBody().front().getArguments()) {
       for (auto &operand : arg.getUses()) {
         if (opVisited.count(operand.getOwner()) == 0)
-          insertBufferDFS(operand.getOwner(), builder, opVisited, opOnStack);
+          insertBufferDFS(operand.getOwner(), builder, opVisited, opInFlight);
       }
     }
   }
@@ -1530,17 +1530,17 @@ struct HandshakeInsertBufferPass
   /// 2-slot non-transparent buffer will be inserted into each graph cycle.
   void insertBufferDFS(Operation *op, OpBuilder &builder,
                        DenseSet<Operation *> &opVisited,
-                       DenseSet<Operation *> &opOnStack) {
+                       DenseSet<Operation *> &opInFlight) {
     // Mark operation as visited and push into the stack.
     opVisited.insert(op);
-    opOnStack.insert(op);
+    opInFlight.insert(op);
 
     // Traverse all uses of the current operation.
     for (auto &operand : op->getUses()) {
       auto *user = operand.getOwner();
 
       // If graph cycle detected, insert a BufferOp into the edge.
-      if (opOnStack.count(user) != 0 && !isa<handshake::BufferOp>(op) &&
+      if (opInFlight.count(user) != 0 && !isa<handshake::BufferOp>(op) &&
           !isa<handshake::BufferOp>(user)) {
         auto value = operand.get();
 
@@ -1557,14 +1557,14 @@ struct HandshakeInsertBufferPass
       }
       // For unvisited operations, recursively call insertBufferDFS() method.
       else if (opVisited.count(user) == 0)
-        insertBufferDFS(user, builder, opVisited, opOnStack);
+        insertBufferDFS(user, builder, opVisited, opInFlight);
     }
     // Pop operation out of the stack.
-    opOnStack.erase(op);
+    opInFlight.erase(op);
   }
 
   void runOnOperation() override {
-    if (strategies.size() == 0)
+    if (strategies.empty())
       strategies = {"cycles"};
 
     for (auto strategy : strategies) {
