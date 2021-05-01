@@ -1526,6 +1526,14 @@ struct HandshakeInsertBufferPass
     }
   }
 
+  void bufferAllStrategy() {
+    auto f = getOperation();
+    auto builder = OpBuilder(f.getContext());
+    for (auto &arg : f.getArguments())
+      for (auto &use : arg.getUses())
+        insertBufferRecursive(use, builder);
+  }
+
   /// DFS-based graph cycle detection and naive buffer insertion. Exactly one
   /// 2-slot non-transparent buffer will be inserted into each graph cycle.
   void insertBufferDFS(Operation *op, OpBuilder &builder,
@@ -1563,6 +1571,26 @@ struct HandshakeInsertBufferPass
     opInFlight.erase(op);
   }
 
+  void insertBufferRecursive(OpOperand &use, OpBuilder &builder) {
+    auto oldValue = use.get();
+
+    if (oldValue.isa<OpResult>())
+      builder.setInsertionPointAfter(oldValue.getDefiningOp());
+    else
+      builder.setInsertionPointToStart(oldValue.getParentBlock());
+
+    auto buffer = builder.create<handshake::BufferOp>(
+        oldValue.getLoc(), oldValue.getType(), oldValue, /*sequential=*/true,
+        /*control=*/oldValue.getType().isa<NoneType>(),
+        /*slots=*/2);
+
+    use.getOwner()->setOperand(use.getOperandNumber(), buffer);
+
+    for (auto &childUse : use.getOwner()->getUses())
+      if (!isa<handshake::BufferOp>(childUse.getOwner()))
+        insertBufferRecursive(childUse, builder);
+  }
+
   void runOnOperation() override {
     if (strategies.empty())
       strategies = {"cycles"};
@@ -1570,6 +1598,8 @@ struct HandshakeInsertBufferPass
     for (auto strategy : strategies) {
       if (strategy == "cycles")
         bufferCyclesStrategy();
+      else if (strategy == "all")
+        bufferAllStrategy();
       else {
         emitError(getOperation().getLoc())
             << "Unknown buffer strategy: " << strategy;
