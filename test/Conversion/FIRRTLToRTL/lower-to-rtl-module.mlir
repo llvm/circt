@@ -13,12 +13,14 @@ firrtl.circuit "Simple" {
 
    // CHECK-LABEL: rtl.module.extern @MyParameterizedExtModule(%in: i1) -> (%out: i8)
    // CHECK: attributes {verilogName = "name_thing"}
-   firrtl.extmodule @MyParameterizedExtModule(!firrtl.uint<1> {firrtl.name = "in"}, !firrtl.flip<uint<8>> {firrtl.name = "out"})
+   firrtl.extmodule @MyParameterizedExtModule(!firrtl.uint<1> , !firrtl.flip<uint<8>> )
       attributes {defname = "name_thing",
                   parameters = {DEFAULT = 0 : i64,
                                 DEPTH = 3.242000e+01 : f64,
                                 FORMAT = "xyz_timeout=%d\0A",
-                                WIDTH = 32 : i8}}
+                                WIDTH = 32 : i8},
+                  portNames = ["in", "out"]
+                                }
 
    // CHECK-LABEL: rtl.module @Simple(%in1: i4, %in2: i2, %in3: i8) -> (%out4: i4) {
    firrtl.module @Simple(%in1: !firrtl.uint<4>,

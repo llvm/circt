@@ -21,19 +21,9 @@ using namespace firrtl;
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
-// If the specified attribute set contains the firrtl.name attribute, return it.
-StringAttr firrtl::getFIRRTLNameAttr(ArrayRef<NamedAttribute> attrs) {
-  for (auto &argAttr : attrs) {
-    // FIXME: We currently use firrtl.name instead of name because this makes
-    // the FunctionLike handling in MLIR core happier.  It otherwise doesn't
-    // allow attributes on module parameters.
-    if (argAttr.first != "firrtl.name")
-      continue;
-
-    return argAttr.second.dyn_cast<StringAttr>();
-  }
-
-  return StringAttr();
+// If the specified module contains the portNames attribute, return it.
+ArrayAttr firrtl::getModulePortNames(Operation *module) {
+  return module->getAttrOfType<ArrayAttr>("portNames");
 }
 
 namespace {
@@ -113,10 +103,11 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
     // attributes for them.  If so, use that as the name.
     auto *parentOp = block->getParentOp();
 
+    auto argAttr = getModulePortNames(parentOp);
     for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
-      // Scan for a 'firrtl.name' attribute.
-      if (auto str = getFIRRTLNameAttr(mlir::impl::getArgAttrs(parentOp, i)))
-        setNameFn(block->getArgument(i), str.getValue());
+      auto str = argAttr[i].cast<StringAttr>().getValue();
+      if (!str.empty())
+        setNameFn(block->getArgument(i), str);
     }
   }
 };

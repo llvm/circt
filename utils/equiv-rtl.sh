@@ -36,8 +36,8 @@ yosys -q -p "
  opt -purge
  equiv_make top1 top2 equiv
  hierarchy -top equiv
- equiv_simple
- equiv_induct
+ equiv_simple -undef
+ equiv_induct -undef
  equiv_status -assert
 "
 if [ $? -eq 0 ]

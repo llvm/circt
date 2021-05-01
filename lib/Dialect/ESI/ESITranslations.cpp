@@ -14,6 +14,7 @@
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Translation.h"
+#include "llvm/Support/Format.h"
 
 #include <algorithm>
 

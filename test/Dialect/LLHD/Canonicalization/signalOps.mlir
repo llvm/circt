@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -canonicalize | FileCheck %s
+// RUN: circt-opt %s -simple-canonicalizer | FileCheck %s
 
 // CHECK-LABEL: @drv_folding
 // CHECK-SAME: %[[SIG:.*]]: !llhd.sig<i32>

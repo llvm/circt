@@ -44,8 +44,9 @@ def DeviceType : I32EnumAttr<"DeviceType",
     I32EnumAttrCase<"DSP", 2>,
   ]>;
 
-class MSFT_Attr<string name, string baseCppClass = "::mlir::Attribute">
-    : AttrDef<MSFTDialect, name, baseCppClass> {
+class MSFT_Attr<string name, list<Trait> traits = [],
+                string baseCppClass = "::mlir::Attribute">
+    : AttrDef<MSFTDialect, name, traits, baseCppClass> {
   let mnemonic = ?;
 }
 
