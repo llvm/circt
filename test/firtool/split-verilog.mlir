@@ -1,13 +1,11 @@
 // RUN: firtool %s --format=mlir -verilog | FileCheck %s --check-prefix=VERILOG
-// RUN: firtool %s --format=mlir -split-verilog -o=%t | FileCheck %s --check-prefix=FIRTOOL
+// RUN: rm -rf %t
+// RUN: firtool %s --format=mlir -split-verilog -o=%t
 // RUN: FileCheck %s --check-prefix=VERILOG-FOO < %t/foo.sv
 // RUN: FileCheck %s --check-prefix=VERILOG-BAR < %t/bar.sv
 // RUN: FileCheck %s --check-prefix=VERILOG-USB < %t/usb.sv
-// RUN: FileCheck %s --check-prefix=VERILOG-PLL < %t/pll.sv
 // RUN: FileCheck %s --check-prefix=VERILOG-INOUT-3 < %t/inout_3.sv
-// RUN: FileCheck %s --check-prefix=VERILOG-INOUT-0 < %t/inout_0.sv
-// RUN: FileCheck %s --check-prefix=VERILOG-INOUT-1 < %t/inout_1.sv
-// RUN: FileCheck %s --check-prefix=VERILOG-INOUT-2 < %t/inout_2.sv
+// RUN: FileCheck %s --check-prefix=LIST < %t/filelist.f
 
 sv.verbatim "// I'm everywhere"
 sv.ifdef.procedural "VERILATOR" {
@@ -39,14 +37,10 @@ rtl.module.extern @inout_0 () -> ()
 rtl.module.extern @inout_1 () -> ()
 rtl.module.extern @inout_2 () -> ()
 
-// FIRTOOL:      foo.sv
-// FIRTOOL-NEXT: bar.sv
-// FIRTOOL-NEXT: usb.sv
-// FIRTOOL-NEXT: pll.sv
-// FIRTOOL-NEXT: inout_3.sv
-// FIRTOOL-NEXT: inout_0.sv
-// FIRTOOL-NEXT: inout_1.sv
-// FIRTOOL-NEXT: inout_2.sv
+// LIST:      foo.sv
+// LIST-NEXT: bar.sv
+// LIST-NEXT: usb.sv
+// LIST-NEXT: inout_3.sv
 
 // VERILOG-FOO:       // I'm everywhere
 // VERILOG-FOO-NEXT:  `ifdef VERILATOR
@@ -75,14 +69,6 @@ rtl.module.extern @inout_2 () -> ()
 // VERILOG-USB-LABEL: interface usb;
 // VERILOG-USB:       endinterface
 
-// VERILOG-PLL:        // I'm everywhere
-// VERILOG-PLL-NEXT:   `ifdef VERILATOR
-// VERILOG-PLL-NEXT:     // Hello
-// VERILOG-PLL-NEXT:   `else
-// VERILOG-PLL-NEXT:     // World
-// VERILOG-PLL-NEXT:   `endif
-// VERILOG-PLL:        // external module pll
-
 // VERILOG-INOUT-3:       // I'm everywhere
 // VERILOG-INOUT-3-NEXT:  `ifdef VERILATOR
 // VERILOG-INOUT-3-NEXT:    // Hello
@@ -91,11 +77,6 @@ rtl.module.extern @inout_2 () -> ()
 // VERILOG-INOUT-3-NEXT:  `endif
 // VERILOG-INOUT-3-LABEL: module inout_3(
 // VERILOG-INOUT-3:       endmodule
-
-// VERILOG-INOUT-0:    // external module inout_0
-// VERILOG-INOUT-1:    // external module inout_1
-// VERILOG-INOUT-2:    // external module inout_2
-
 
 // VERILOG:       // I'm everywhere
 // VERILOG-NEXT:  `ifdef VERILATOR

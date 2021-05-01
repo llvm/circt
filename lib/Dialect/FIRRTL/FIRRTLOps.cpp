@@ -225,15 +225,22 @@ FunctionType firrtl::getModuleType(Operation *op) {
 
 /// This function can extract information about ports from a module and an
 /// extmodule.
-void firrtl::getModulePortInfo(Operation *op,
-                               SmallVectorImpl<ModulePortInfo> &results) {
+SmallVector<ModulePortInfo> firrtl::getModulePortInfo(Operation *op) {
+  SmallVector<ModulePortInfo> results;
   auto argTypes = getModuleType(op).getInputs();
 
+  auto portNamesAttr = getModulePortNames(op);
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
-    auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
     auto type = argTypes[i].cast<FIRRTLType>();
-    results.push_back({getFIRRTLNameAttr(argAttrs), type});
+    results.push_back({portNamesAttr[i].cast<StringAttr>(), type});
   }
+  return results;
+}
+
+/// Given an FModule or ExtModule, return the name of the specified port number.
+StringAttr firrtl::getModulePortName(Operation *op, size_t portIndex) {
+  assert(isa<FModuleOp>(op) || isa<FExtModuleOp>(op));
+  return getModulePortNames(op)[portIndex].cast<StringAttr>();
 }
 
 static void buildModule(OpBuilder &builder, OperationState &result,
@@ -253,16 +260,12 @@ static void buildModule(OpBuilder &builder, OperationState &result,
 
   // Record the names of the arguments if present.
   SmallString<8> attrNameBuf;
-  for (size_t i = 0, e = ports.size(); i != e; ++i) {
-    if (ports[i].getName().empty())
-      continue;
+  // Record the names of the arguments if present.
+  SmallVector<Attribute, 4> portNames;
+  for (size_t i = 0, e = ports.size(); i != e; ++i)
+    portNames.push_back(ports[i].name);
 
-    auto argAttr =
-        NamedAttribute(builder.getIdentifier("firrtl.name"), ports[i].name);
-
-    result.addAttribute(getArgAttrName(i, attrNameBuf),
-                        builder.getDictionaryAttr(argAttr));
-  }
+  result.addAttribute("portNames", builder.getArrayAttr(portNames));
 
   result.addRegion();
 }
@@ -286,17 +289,8 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
 }
 
 // Return the port with the specified name.
-BlockArgument FModuleOp::getPortArgument(StringAttr name) {
-  auto *body = getBodyBlock();
-
-  // FIXME: This is O(n)!
-  for (unsigned i = 0, e = body->getNumArguments(); i < e; ++i) {
-    auto argAttrs = ::mlir::impl::getArgAttrs(*this, i);
-    if (getFIRRTLNameAttr(argAttrs) == name)
-      return body->getArgument(i);
-  }
-
-  return {};
+BlockArgument FModuleOp::getPortArgument(size_t portNumber) {
+  return getBodyBlock()->getArgument(portNumber);
 }
 
 void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
@@ -314,47 +308,36 @@ void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
 // allow this customization.
 static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
                                     ArrayRef<Type> argTypes, bool isVariadic,
-                                    ArrayRef<Type> resultTypes) {
+                                    ArrayRef<Type> resultTypes,
+                                    bool &needportNamesAttr) {
   Region &body = op->getRegion(0);
   bool isExternal = body.empty();
+  SmallString<32> resultNameStr;
 
   p << '(';
+  auto portNamesAttr = getModulePortNames(op);
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     if (i > 0)
       p << ", ";
 
+    auto portName = portNamesAttr[i].cast<StringAttr>().getValue();
     Value argumentValue;
     if (!isExternal) {
-      argumentValue = body.front().getArgument(i);
-      p.printOperand(argumentValue);
-      p << ": ";
+      // Get the printed format for the argument name.
+      resultNameStr.clear();
+      llvm::raw_svector_ostream tmpStream(resultNameStr);
+      p.printOperand(body.front().getArgument(i), tmpStream);
+      // If the name wasn't printable in a way that agreed with portName, make
+      // sure to print out an explicit portNames attribute.
+      if (!portName.empty() && tmpStream.str().drop_front() != portName)
+        needportNamesAttr = true;
+      p << tmpStream.str() << ": ";
+    } else if (!portName.empty()) {
+      p << '%' << portName << ": ";
     }
 
     p.printType(argTypes[i]);
-
-    auto argAttrs = ::mlir::impl::getArgAttrs(op, i);
-
-    // If the argument has the firrtl.name attribute, and if it was used by
-    // the printer exactly (not name mangled with a suffix etc) then we can
-    // omit the firrtl.name attribute from the argument attribute dictionary.
-    ArrayRef<StringRef> elidedAttrs;
-    StringRef tmp;
-    if (argumentValue) {
-      if (auto nameAttr = getFIRRTLNameAttr(argAttrs)) {
-
-        // Check to make sure the asmprinter is printing it correctly.
-        SmallString<32> resultNameStr;
-        llvm::raw_svector_ostream tmpStream(resultNameStr);
-        p.printOperand(argumentValue, tmpStream);
-
-        // If the name is the same as we would otherwise use, then we're good!
-        if (tmpStream.str().drop_front() == nameAttr.getValue()) {
-          tmp = "firrtl.name";
-          elidedAttrs = tmp;
-        }
-      }
-    }
-    p.printOptionalAttrDict(argAttrs, elidedAttrs);
+    p.printOptionalAttrDict(::mlir::impl::getArgAttrs(op, i));
   }
 
   if (isVariadic) {
@@ -383,8 +366,14 @@ static void printModuleLikeOp(OpAsmPrinter &p, Operation *op) {
   p << op->getName() << ' ';
   p.printSymbolName(funcName);
 
-  printFunctionSignature2(p, op, argTypes, /*isVariadic*/ false, resultTypes);
-  printFunctionAttributes(p, op, argTypes.size(), resultTypes.size());
+  bool needportNamesAttr = false;
+  printFunctionSignature2(p, op, argTypes, /*isVariadic*/ false, resultTypes,
+                          needportNamesAttr);
+  SmallVector<StringRef, 3> omittedAttrs;
+  if (!needportNamesAttr)
+    omittedAttrs.push_back("portNames");
+  printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(),
+                          omittedAttrs);
 }
 
 static void print(OpAsmPrinter &p, FExtModuleOp op) {
@@ -412,7 +401,7 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
   // terminator.
 
   SmallVector<OpAsmParser::OperandType, 4> entryArgs;
-  SmallVector<NamedAttrList, 4> argAttrs;
+  SmallVector<NamedAttrList, 4> portNamesAttrs;
   SmallVector<NamedAttrList, 4> resultAttrs;
   SmallVector<Type, 4> argTypes;
   SmallVector<Type, 4> resultTypes;
@@ -427,7 +416,7 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
   // Parse the function signature.
   bool isVariadic = false;
   if (parseFunctionSignature(parser, /*allowVariadic*/ false, entryArgs,
-                             argTypes, argAttrs, isVariadic, resultTypes,
+                             argTypes, portNamesAttrs, isVariadic, resultTypes,
                              resultAttrs))
     return failure();
 
@@ -440,42 +429,34 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
   if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
     return failure();
 
-  assert(argAttrs.size() == argTypes.size());
+  assert(portNamesAttrs.size() == argTypes.size());
   assert(resultAttrs.size() == resultTypes.size());
 
   auto *context = result.getContext();
 
-  // Postprocess each of the arguments.  If there was no 'firrtl.name'
-  // attribute, and if the argument name was non-numeric, then add the
-  // firrtl.name attribute with the textual name from the IR.  The name in the
-  // text file is a load-bearing part of the IR, but we don't want the
-  // verbosity in dumps of including it explicitly in the attribute
-  // dictionary.
-  for (size_t i = 0, e = argAttrs.size(); i != e; ++i) {
-    auto &attrs = argAttrs[i];
+  SmallVector<Attribute> portNames;
+  if (!result.attributes.get("portNames")) {
+    // Postprocess each of the arguments.  If there was no portNames
+    // attribute, and if the argument name was non-numeric, then add the
+    // portNames attribute with the textual name from the IR.  The name in the
+    // text file is a load-bearing part of the IR, but we don't want the
+    // verbosity in dumps of including it explicitly in the attribute
+    // dictionary.
+    for (size_t i = 0, e = entryArgs.size(); i != e; ++i) {
+      auto &arg = entryArgs[i];
 
-    // If an explicit name attribute was present, don't add the implicit one.
-    bool hasNameAttr = false;
-    for (auto &elt : attrs)
-      if (elt.first.str() == "firrtl.name")
-        hasNameAttr = true;
-    if (hasNameAttr || entryArgs.empty())
-      continue;
-
-    auto &arg = entryArgs[i];
-
-    // The name of an argument is of the form "%42" or "%id", and since
-    // parsing succeeded, we know it always has one character.
-    assert(arg.name.size() > 1 && arg.name[0] == '%' && "Unknown MLIR name");
-    if (isdigit(arg.name[1]))
-      continue;
-
-    auto nameAttr = StringAttr::get(context, arg.name.drop_front());
-    attrs.push_back({Identifier::get("firrtl.name", context), nameAttr});
+      // The name of an argument is of the form "%42" or "%id", and since
+      // parsing succeeded, we know it always has one character.
+      assert(arg.name.size() > 1 && arg.name[0] == '%' && "Unknown MLIR name");
+      if (isdigit(arg.name[1]))
+        portNames.push_back(StringAttr::get(context, ""));
+      else
+        portNames.push_back(StringAttr::get(context, arg.name.drop_front()));
+    }
+    result.addAttribute("portNames", builder.getArrayAttr(portNames));
   }
-
   // Add the attributes to the function arguments.
-  addArgAndResultAttrs(builder, result, argAttrs, resultAttrs);
+  addArgAndResultAttrs(builder, result, portNamesAttrs, resultAttrs);
 
   // Parse the optional function body.
   auto *body = result.addRegion();
@@ -528,6 +509,10 @@ static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
 
   if (!llvm::all_of(paramDict, checkParmValue))
     return failure();
+  auto portNamesAttr = getModulePortNames(op);
+
+  if (op.getPorts().size() != portNamesAttr.size())
+    return op.emitError("module ports does not match number of arguments");
 
   return success();
 }
@@ -544,32 +529,6 @@ Operation *InstanceOp::getReferencedModule() {
     return nullptr;
 
   return circuit.lookupSymbol(moduleName());
-}
-
-StringAttr InstanceOp::getPortName(size_t resultNo) {
-  return portNames()[resultNo].cast<StringAttr>();
-}
-
-Value InstanceOp::getPortNamed(StringRef name) {
-  auto namesArray = portNames();
-  for (size_t i = 0, e = namesArray.size(); i != e; ++i) {
-    if (namesArray[i].cast<StringAttr>().getValue() == name) {
-      assert(i < getNumResults() && " names array out of sync with results");
-      return getResult(i);
-    }
-  }
-  return Value();
-}
-
-Value InstanceOp::getPortNamed(StringAttr name) {
-  auto namesArray = portNames();
-  for (size_t i = 0, e = namesArray.size(); i != e; ++i) {
-    if (namesArray[i] == name) {
-      assert(i < getNumResults() && " names array out of sync with results");
-      return getResult(i);
-    }
-  }
-  return Value();
 }
 
 /// Verify the correctness of an InstanceOp.
@@ -597,8 +556,7 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
     return failure();
   }
 
-  SmallVector<ModulePortInfo> modulePorts;
-  getModulePortInfo(referencedModule, modulePorts);
+  SmallVector<ModulePortInfo> modulePorts = getModulePortInfo(referencedModule);
 
   // Check that result types are consistent with the referenced module's ports.
   size_t numResults = instance.getNumResults();
@@ -611,32 +569,8 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
     return failure();
   }
 
-  // Check that the names array is the right length.
-  if (instance.portNames().size() != instance.getNumResults()) {
-    instance.emitOpError("incorrect number of port names");
-    return failure();
-  }
-
-  // Build an efficient lookup that maps port name attribute to result #.
-  llvm::SmallDenseMap<Attribute, size_t, 16> portNumbers;
-  auto namesArray = instance.portNames();
-  for (size_t i = 0, e = namesArray.size(); i != e; ++i)
-    portNumbers[namesArray[i]] = i;
-
   for (size_t i = 0; i != numResults; i++) {
-    auto resultNumberIt = portNumbers.find(modulePorts[i].name);
-    if (resultNumberIt == portNumbers.end() ||
-        resultNumberIt->second >= numResults) {
-      auto diag = instance.emitOpError()
-                  << "is missing a port named '" << modulePorts[i].name
-                  << "' expected by referenced module";
-      diag.attachNote(referencedModule->getLoc())
-          << "original module declared here";
-      return failure();
-    }
-    auto result = instance.getResult(resultNumberIt->second);
-
-    auto resultType = result.getType();
+    auto resultType = instance.getResult(i).getType();
     auto expectedType = FlipType::get(modulePorts[i].type);
     if (resultType != expectedType) {
       auto diag = instance.emitOpError()

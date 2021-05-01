@@ -122,13 +122,7 @@ def RTLModuleExternOp : RTLOp<"module.extern",
     /// Return the name to use for the Verilog module that we're referencing
     /// here.  This is typically the symbol, but can be overridden with the
     /// verilogName attribute.
-    StringAttr getVerilogModuleNameAttr() {
-      if (auto vName = verilogNameAttr()){
-        return vName;
-      }
-      return (*this)->getAttrOfType<StringAttr>(
-          ::mlir::SymbolTable::getSymbolAttrName());
-    }
+    StringAttr getVerilogModuleNameAttr();
 
     // Get the module's symbolic name as StringAttr.
     StringAttr getNameAttr() {

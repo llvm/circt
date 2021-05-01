@@ -87,16 +87,12 @@ static InstanceOp createInstance(OpBuilder builder, Location loc,
                                  const ModulePortList &modulePorts) {
   // Make a bundle of the inputs and outputs of the specified module.
   SmallVector<Type, 4> resultTypes;
-  SmallVector<Attribute, 4> resultNames;
   resultTypes.reserve(modulePorts.size());
-  resultNames.reserve(modulePorts.size());
   for (auto port : modulePorts) {
     resultTypes.push_back(FlipType::get(port.type));
-    resultNames.push_back(port.name);
   }
 
   return builder.create<InstanceOp>(loc, resultTypes, moduleName,
-                                    builder.getArrayAttr(resultNames),
                                     instanceName.getValue());
 }
 
@@ -308,7 +304,7 @@ replaceMemWithWrapperModule(DenseMap<MemOp, FModuleOp, MemOpInfo> &knownMems,
     // Create an instance of the wrapping module.  We have to retrieve the
     // module port information back from the module.
     moduleOp = it->second;
-    getModulePortInfo(moduleOp, modPorts);
+    modPorts = getModulePortInfo(moduleOp);
   } else {
     // Get the memory port descriptors. This gives us the name and kind of each
     // memory port created by the MemOp.
@@ -370,7 +366,7 @@ replaceMemWithExtModule(DenseMap<MemOp, FExtModuleOp, MemOpInfo> &knownMems,
     // Create an instance of the wrapping module.  We have to retrieve the
     // module port information back from the module.
     extModuleOp = it->second;
-    getModulePortInfo(extModuleOp, extPortList);
+    extPortList = getModulePortInfo(extModuleOp);
   } else {
     // Get the memory port descriptors.  This gives us the name and kind of each
     // memory port created by the MemOp.

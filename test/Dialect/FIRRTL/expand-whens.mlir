@@ -300,4 +300,37 @@ firrtl.module @nested2(%clock : !firrtl.clock, %p0 : !firrtl.uint<1>, %p1 : !fir
 //CHECK-NEXT:   firrtl.connect %out, %9 : !firrtl.flip<uint<2>>, !firrtl.uint<2>
 //CHECK-NEXT: }
 
+// Test that registers are multiplexed with themselves.
+firrtl.module @register_mux(%p : !firrtl.uint<1>, %clock: !firrtl.clock) {
+  %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
+  %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
+
+  // CHECK: %reg0 = firrtl.reg %clock
+  // CHECK: firrtl.connect %reg0, %reg0
+  %reg0 = firrtl.reg %clock : (!firrtl.clock) -> !firrtl.uint<2>
+
+  // CHECK: %reg1 = firrtl.reg %clock
+  // CHECK: firrtl.connect %reg1, %c0_ui2
+  %reg1 = firrtl.reg %clock : (!firrtl.clock) -> !firrtl.uint<2>
+  firrtl.connect %reg1, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+
+  // CHECK: %reg2 = firrtl.reg %clock 
+  // CHECK: [[MUX:%.+]] = firrtl.mux(%p, %c0_ui2, %reg2)
+  // CHECK: firrtl.connect %reg2, [[MUX]]
+  %reg2 = firrtl.reg %clock : (!firrtl.clock) -> !firrtl.uint<2>
+  firrtl.when %p {
+    firrtl.connect %reg2, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  }
+  
+  // CHECK: %reg3 = firrtl.reg %clock
+  // CHECK: [[MUX:%.+]] = firrtl.mux(%p, %c0_ui2, %c1_ui2)
+  // CHECK: firrtl.connect %reg3, [[MUX]]
+  %reg3 = firrtl.reg %clock : (!firrtl.clock) -> !firrtl.uint<2>
+  firrtl.when %p {
+    firrtl.connect %reg3, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  } else {
+    firrtl.connect %reg3, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  }
+}
+
 }

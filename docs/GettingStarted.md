@@ -165,7 +165,7 @@ GitHub issues.  Here are some high-level guidelines:
  * Please use "Squash and Merge" in PRs when they are approved - we don't
    need the intra-change history in the repository history.
 
- * Please create a PRs to get a code review.  For reviewers, it is good to look
+ * Please create a PR to get a code review.  For reviewers, it is good to look
    at the primary author of the code you are touching to make sure they are at
    least CC'd on the PR.
 

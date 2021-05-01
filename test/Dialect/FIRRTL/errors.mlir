@@ -192,7 +192,7 @@ firrtl.circuit "Foo" {
 
   firrtl.extmodule @Foo()
   // expected-error @+1 {{'firrtl.instance' op should be embedded in a 'firrtl.module'}}
-  firrtl.instance @Foo {name = "", portNames = []}
+  firrtl.instance @Foo {name = ""}
 
 }
 
@@ -203,7 +203,7 @@ firrtl.circuit "Foo" {
   // expected-note @+1 {{containing module declared here}}
   firrtl.module @Foo() {
     // expected-error @+1 {{'firrtl.instance' op is a recursive instantiation of its containing module}}
-    firrtl.instance @Foo {name = "", portNames = []}
+    firrtl.instance @Foo {name = ""}
   }
 
 }
@@ -216,7 +216,7 @@ firrtl.circuit "Foo" {
   firrtl.module @Callee(%arg0: !firrtl.uint<1>) { }
   firrtl.module @Foo() {
     // expected-error @+1 {{'firrtl.instance' op result type for "arg0" must be '!firrtl.flip<uint<1>>', but got '!firrtl.uint<2>'}}
-    %a = firrtl.instance @Callee {name = "", portNames = ["arg0"]} : !firrtl.uint<2>
+    %a = firrtl.instance @Callee {name = ""} : !firrtl.uint<2>
   }
 }
 
@@ -228,7 +228,7 @@ firrtl.circuit "Foo" {
   firrtl.module @Callee(%arg0: !firrtl.uint<1> ) { }
   firrtl.module @Foo() {
     // expected-error @+1 {{'firrtl.instance' op has a wrong number of results; expected 1 but got 0}}
-    firrtl.instance @Callee {name = "", portNames = []}
+    firrtl.instance @Callee {name = ""}
   }
 }
 
@@ -240,7 +240,7 @@ firrtl.circuit "Foo" {
   firrtl.module @Callee(%arg0: !firrtl.uint<1>, %arg1: !firrtl.bundle<valid: uint<1>>) { }
   firrtl.module @Foo() {
     // expected-error @+1 {{'firrtl.instance' op result type for "arg0" must be '!firrtl.flip<uint<1>>', but got '!firrtl.uint<1>'}}
-    %a:2 = firrtl.instance @Callee {name = "", portNames = ["arg0", "arg1"]}
+    %a:2 = firrtl.instance @Callee {name = ""}
     : !firrtl.uint<1>, !firrtl.bundle<valid: uint<2>>
   }
 }
@@ -274,21 +274,6 @@ firrtl.circuit "X" {
 firrtl.module @X(%a : !firrtl.uint<4>) {
   // expected-error @+1 {{'firrtl.bits' op result type should be '!firrtl.uint<3>'}}
   %0 = firrtl.bits %a 3 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<2>
-}
-
-}
-
-// -----
-
-firrtl.circuit "TopModule" {
-
-// expected-note @+1 {{declared here}}
-firrtl.module @SubModule(%a : !firrtl.uint<1>) {
-}
-
-firrtl.module @TopModule() {
-  // expected-error @+1 {{'firrtl.instance' op is missing a port named '"a"' expected by referenced module}}
-  %0 = firrtl.instance @SubModule {name = "", portNames = ["arg0"]}: !firrtl.sint<1>
 }
 
 }

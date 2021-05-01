@@ -25,6 +25,7 @@
 #include "mlir/Transforms/Passes.h"
 
 #include "llvm/Support/InitLLVM.h"
+#include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
 
 using namespace llvm;

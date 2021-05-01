@@ -34,7 +34,6 @@ int main(int argc, char **argv) {
   circt::registerAllPasses();
 
   // Register the standard passes we want.
-  mlir::registerCanonicalizerPass();
   mlir::registerCSEPass();
   mlir::registerSCCPPass();
   mlir::registerInlinerPass();
