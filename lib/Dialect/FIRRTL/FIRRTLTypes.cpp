@@ -510,18 +510,6 @@ struct FlipTypeStorage : mlir::TypeStorage {
 } // namespace firrtl
 } // namespace circt
 
-/// Return a bundle type with the specified elements all flipped.  This assumes
-/// the elements list is non-empty.
-static FIRRTLType
-getFlippedBundleType(ArrayRef<BundleType::BundleElement> elements) {
-  assert(!elements.empty());
-  SmallVector<BundleType::BundleElement, 16> flippedelements;
-  flippedelements.reserve(elements.size());
-  for (auto &elt : elements)
-    flippedelements.push_back({elt.name, FlipType::get(elt.type)});
-  return BundleType::get(flippedelements, elements[0].type.getContext());
-}
-
 FIRRTLType FlipType::get(FIRRTLType element) {
   return TypeSwitch<FIRRTLType, FIRRTLType>(element)
       .Case<FlipType>([](auto flipType) {
