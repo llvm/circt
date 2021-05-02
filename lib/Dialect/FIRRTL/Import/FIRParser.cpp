@@ -26,6 +26,7 @@
 #include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
@@ -1088,27 +1089,54 @@ private:
   Value convertToPassive(Value input, Location loc);
 
   /// Attach invalid values to every element of the value.
-  void emitInvalidate(Value val, Location loc, bool isDuplex) {
-    // Invalidate doesn't match the semantics of connect or partial connect, and
-    // so we have to manually do something like expand-connects. Invalid value
-    // needs to be connected to every field of a bundle which is flip, or
-    // every field in a duplex operation.
-    auto invalidType = val.getType().cast<FIRRTLType>();
-    if (auto bundleType = invalidType.dyn_cast<BundleType>()) {
-      // We need to recurse into bundle types without an outer flip.  They could
-      // have inner flips or analog types.
-      for (auto element : bundleType.getElements()) {
-        emitInvalidate(builder.create<SubfieldOp>(loc, val, element.name), loc,
-                       isDuplex);
+  void emitInvalidate(Value val, Location loc, flow::Flow flow) {
+
+    auto swap = [](flow::Flow flow) -> flow::Flow {
+      switch (flow) {
+      case flow::Source:
+        return flow::Sink;
+      case flow::Sink:
+        return flow::Source;
+      case flow::Duplex:
+        return flow::Duplex;
       }
-    } else if (invalidType.isa<FlipType>() ||
-               (isDuplex && !invalidType.isa<AnalogType>())) {
-      // If there is an outer flip type, or it is a duplex type, we can emit
-      // an invalid connect. This might be a bulk connect to a bundle.
-      builder.create<ConnectOp>(loc, val,
-                                builder.create<InvalidValuePrimOp>(
-                                    loc, invalidType.getPassiveType()));
-    }
+    };
+
+    // Strip an outer flip.  This is associated with an output port, but this
+    // was already included in flow calculation.
+    auto tpe = val.getType().cast<FIRRTLType>();
+    if (auto a = tpe.dyn_cast<FlipType>())
+      tpe = a.getElementType();
+
+    // Recurse until we hit leaves.  Connect any leaves which have sink or
+    // duplex flow.
+    //
+    // TODO: This is very similar to connect expansion in the LowerTypes pass
+    // works.  Find a way to unify this with methods common to LowerTypes or to
+    // have LowerTypes to the actual work here, e.g., emitting a partial connect
+    // to only the leaf sources.
+    TypeSwitch<FIRRTLType>(tpe)
+        .Case<BundleType>([&](auto tpe) {
+          for (auto element : tpe.getElements()) {
+            auto subfield = builder.create<SubfieldOp>(loc, val, element.name);
+            emitInvalidate(subfield, loc,
+                           subfield.isFieldFlipped() ? swap(flow) : flow);
+          }
+        })
+        .Case<FVectorType>([&](auto tpe) {
+          auto tpex = tpe.getElementType();
+          for (size_t i = 0, e = tpe.getNumElements(); i != e; ++i)
+            emitInvalidate(builder.create<SubindexOp>(loc, tpex, val, i), loc,
+                           flow);
+        })
+        // Drop invalidation of analog.
+        .Case<AnalogType>([](auto) {})
+        // Invalidate any sink or duplex flow ground types.
+        .Default([&](auto tpe) {
+          if (flow != flow::Source)
+            builder.create<ConnectOp>(
+                loc, val, builder.create<InvalidValuePrimOp>(loc, tpe));
+        });
   }
 
   // The FIRRTL specification describes Invalidates as a statement with
@@ -1116,7 +1144,7 @@ private:
   // that returns an "Invalid Value", followed by an explicit connect to make
   // the representation simpler and more consistent.
   void emitInvalidate(Value val, Location loc) {
-    emitInvalidate(val, loc, isDuplexValue(val));
+    emitInvalidate(val, loc, foldFlow(val));
   }
 
   // Exp Parsing

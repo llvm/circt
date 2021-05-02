@@ -35,16 +35,16 @@ firrtl.module @shadow_when(%p : !firrtl.uint<1>) {
   %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
   %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
   firrtl.when %p {
-    %w = firrtl.wire : !firrtl.flip<uint<2>>
-    firrtl.connect %w, %c0_ui2 : !firrtl.flip<uint<2>>, !firrtl.uint<2>
-    firrtl.connect %w, %c1_ui2 : !firrtl.flip<uint<2>>, !firrtl.uint<2>
+    %w = firrtl.wire : !firrtl.uint<2>
+    firrtl.connect %w, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+    firrtl.connect %w, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   }
 }
 // CHECK-LABEL: firrtl.module @shadow_when(%p: !firrtl.uint<1>) {
 // CHECK-NEXT:   %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
 // CHECK-NEXT:   %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
-// CHECK-NEXT:   %w = firrtl.wire  : !firrtl.flip<uint<2>>
-// CHECK-NEXT:   firrtl.connect %w, %c1_ui2 : !firrtl.flip<uint<2>>, !firrtl.uint<2>
+// CHECK-NEXT:   %w = firrtl.wire  : !firrtl.uint<2>
+// CHECK-NEXT:   firrtl.connect %w, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK-NEXT: }
 
 

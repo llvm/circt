@@ -234,8 +234,9 @@ FIRRTLType FIRRTLType::getPassiveType() {
       .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
             AnalogType>([&](Type) { return *this; })
       .Case<FlipType>([](FlipType flipType) {
-        // The element of a flip type is always passive.
-        return flipType.getElementType();
+        // Since types are _not_ canonicalized, a FlipType does _not_
+        // guarantee that its elements are passive.
+        return flipType.getElementType().getPassiveType();
       })
       .Case<BundleType>(
           [](BundleType bundleType) { return bundleType.getPassiveType(); })
@@ -342,18 +343,11 @@ static bool areBundleElementsEquivalent(BundleType::BundleElement destElement,
   return areTypesEquivalent(destElement.type, srcElement.type);
 }
 
-/// Returns whether the two types are equivalent. See the FIRRTL spec for the
-/// full definition of type equivalence. This predicate differs from the spec in
-/// that it only compares passive types. Because of how the FIRRTL dialect uses
-/// flip types in module ports and aggregates, this definition, unlike the spec,
-/// ignores flips.
+/// Returns whether the two types are equivalent.  This implements the exact
+/// definition of type equivalence in the FIRRTL spec.  If the types being
+/// compared have any outer flips that encode FIRRTL module directions (input or
+/// output), these should be stripped before using this method.
 bool firrtl::areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType) {
-  // Ensure we are comparing passive types.
-  if (!destType.isPassive())
-    destType = destType.getPassiveType();
-  if (!srcType.isPassive())
-    srcType = srcType.getPassiveType();
-
   // Reset types can be driven by UInt<1>, AsyncReset, or Reset types.
   if (destType.isa<ResetType>())
     return srcType.isResetType();
@@ -394,7 +388,7 @@ bool firrtl::areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType) {
   return destType.getWidthlessType() == srcType.getWidthlessType();
 }
 
-/// Return the element of an array type or null.  This propagates flip types.
+/// Return the element of an array type or null.  This strips flip types.
 Type firrtl::getVectorElementType(Type array) {
   bool isFlipped = false;
   if (auto flip = array.dyn_cast<FlipType>()) {
@@ -404,8 +398,7 @@ Type firrtl::getVectorElementType(Type array) {
   auto vectorType = array.dyn_cast<FVectorType>();
   if (!vectorType)
     return Type();
-  auto elementType = vectorType.getElementType();
-  return isFlipped ? FlipType::get(elementType) : elementType;
+  return vectorType.getElementType();
 }
 
 /// Return the passiver version of a firrtl type
@@ -530,19 +523,8 @@ getFlippedBundleType(ArrayRef<BundleType::BundleElement> elements) {
 }
 
 FIRRTLType FlipType::get(FIRRTLType element) {
-  // We maintain a canonical form for flip types, where we prefer to have the
-  // flip as far outward from an otherwise passive type as possible.  If a flip
-  // is being used with an aggregate type that contains non-passive or analog
-  // elements, then it is forced into the elements to get the canonical form.
   return TypeSwitch<FIRRTLType, FIRRTLType>(element)
-      .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType>(
-          [&](Type) {
-            // TODO: This should maintain a canonical form, digging any flips
-            // out of sub-types.
-            auto *context = element.getContext();
-            return Base::get(context, element);
-          })
-      .Case<FlipType>([](FlipType flipType) {
+      .Case<FlipType>([](auto flipType) {
         // flip(flip(x)) -> x
         return flipType.getElementType();
       })
@@ -550,35 +532,8 @@ FIRRTLType FlipType::get(FIRRTLType element) {
         // flip(analog) -> analog.
         return analogType;
       })
-      .Case<BundleType>([&](BundleType bundleType) {
-        // If the bundle is passive and doesn't contain analog elements, then
-        // we're done because the flip will be at the outer level. Otherwise, it
-        // contains flip types recursively within itself that we should
-        // canonicalize.
-        auto properties = bundleType.getRecursiveTypeProperties();
-        if (properties.first && !properties.second) {
-          return Base::get(element.getContext(), element).cast<FIRRTLType>();
-        }
-
-        return getFlippedBundleType(bundleType.getElements());
-      })
-      .Case<FVectorType>([&](FVectorType vectorType) {
-        // If the vector is passive and doesn't contain analog elements, then
-        // we're done because the flip will be at the outer level. Otherwise, it
-        // contains flip types recursively within itself that we should
-        // canonicalize.
-        auto properties = vectorType.getRecursiveTypeProperties();
-        if (properties.first && !properties.second) {
-          auto *context = element.getContext();
-          return Base::get(context, element).cast<FIRRTLType>();
-        }
-
-        return FVectorType::get(get(vectorType.getElementType()),
-                                vectorType.getNumElements());
-      })
-      .Default([](Type) {
-        llvm_unreachable("unknown FIRRTL type");
-        return FIRRTLType();
+      .Default([](FIRRTLType a) {
+        return Base::get(a.getContext(), a).cast<FIRRTLType>();
       });
 }
 
@@ -651,15 +606,6 @@ struct BundleTypeStorage : mlir::TypeStorage {
 
 FIRRTLType BundleType::get(ArrayRef<BundleElement> elements,
                            MLIRContext *context) {
-  // If all of the elements are flip types, then we canonicalize the flips to
-  // the outer level.
-  if (!elements.empty() &&
-      llvm::all_of(elements, [&](const BundleElement &elt) -> bool {
-        return elt.type.isa<FlipType>();
-      })) {
-    return FlipType::get(getFlippedBundleType(elements));
-  }
-
   return Base::get(context, elements);
 }
 

@@ -369,10 +369,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
 
     ; CHECK: %_M__T_10, %_M__T_11, %_M__T_18 = firrtl.mem Undefined {depth = 8 : i64, name = "_M", portNames = ["_T_10", "_T_11", "_T_18"]
-    ; CHECK:   readLatency = 0 : i32, writeLatency = 1 : i32} :
-    ; CHECK:       !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>,
-    ; CHECK:       !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>,
-    ; CHECK:       !firrtl.bundle<addr: flip<uint<3>>, en: flip<uint<1>>, clk: flip<clock>, data: bundle<id: uint<4>>
+    ; CHECK-SAME: readLatency = 0 : i32, writeLatency = 1 : i32} :
+    ; CHECK-SAME: !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>,
+    ; CHECK-SAME: !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>,
+    ; CHECK-SAME: !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: flip<bundle<id: uint<4>>>>
     mem _M : @[Decoupled.scala 209:24]
         data-type => { id : UInt<4> }
         depth => 8
@@ -409,13 +409,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     wire _t_6 : { flip b : { bits : { source : UInt<7> } } }
     node _t_8 = bits(_t_6.b.bits.source, 5, 0)
 
-    ; CHECK: %flip1 = firrtl.wire : !firrtl.bundle<x: bundle<a: uint>>
+    ; CHECK: %flip1 = firrtl.wire : !firrtl.bundle<x: flip<bundle<a: flip<uint>>>>
     wire flip1 : { flip x : { flip a : UInt } }
-    ; CHECK: %flip2 = firrtl.wire : !firrtl.bundle<x: bundle<a: uint, b: analog>>
+    ; CHECK: %flip2 = firrtl.wire : !firrtl.bundle<x: flip<bundle<a: flip<uint>, b: analog>>>
     wire flip2 : { flip x : { flip a : UInt, b: Analog } }
-    ; CHECK: %flip3 = firrtl.wire : !firrtl.bundle<x: bundle<a: uint, b: analog>>
+    ; CHECK: %flip3 = firrtl.wire : !firrtl.bundle<x: flip<bundle<a: flip<uint>, b: analog>>>
     wire flip3 : { flip x : { flip a : UInt, flip b: Analog } }
-    ; CHECK: %flip4 = firrtl.wire : !firrtl.bundle<x: vector<bundle<a: uint>, 4>>
+    ; CHECK: %flip4 = firrtl.wire : !firrtl.bundle<x: flip<vector<bundle<a: flip<uint>>, 4>>>
     wire flip4 : { flip x : { flip a : UInt }[4] }
 
 
@@ -539,8 +539,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input bf: { flip int_1 : UInt<1>, int_out : UInt<2>}
     ; CHECK: %0 = firrtl.subfield %bf("int_1")
     node _T = bf.int_1
-    ; CHECK: %1 = firrtl.asPassive %0 : !firrtl.flip<uint<1>>
-    when _T :  ; CHECK: firrtl.when %1 {
+    when _T :  ; CHECK: firrtl.when %0 {
       skip
 
   ; CHECK-LABEL: firrtl.module @mem_depth_1
@@ -558,7 +557,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       read-under-write => undefined
       ; CHECK: %bar_MPORT, %bar_io_deq_bits_MPORT = firrtl.mem Undefined {depth = 1 : i64, name = "bar", portNames = ["MPORT", "io_deq_bits_MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} :
       ; CHECK: !firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<3>, mask: uint<1>>>,
-      ; CHECK: !firrtl.bundle<addr: flip<uint<1>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<3>>
+      ; CHECK: !firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: flip<uint<3>>>>
 
   ; CHECK-LABEL: firrtl.module @mem_no_ports() {
   ; CHECK-NEXT: }
@@ -700,8 +699,12 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.connect %out0, [[INV]]
     out0 is invalid
 
+    ; CHECK: [[OUT1_A:%.+]] = firrtl.subfield %out1("a")
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
-    ; CHECK: firrtl.connect %out1, [[INV]]
+    ; CHECK: firrtl.connect [[OUT1_A]], [[INV]]
+    ; CHECK: [[OUT1_B:%.+]] = firrtl.subfield %out1("b")
+    ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
+    ; CHECK: firrtl.connect [[OUT1_B]], [[INV]]
     out1 is invalid
 
     ; CHECK: [[OUT2_A:%.+]] = firrtl.subfield %out2("a")
@@ -748,17 +751,18 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
     ; CHECK: firrtl.connect %U0_in0, [[INV]]
+    ; CHECK: [[U0_IN1_A:%.+]] = firrtl.subfield %U0_in1("a")
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
-    ; CHECK: firrtl.connect %U0_in1, [[INV]]
+    ; CHECK: firrtl.connect [[U0_IN1_A]], [[INV]]
     U0 is invalid
 
   ; https://github.com/llvm/circt/issues/606
   ; CHECK-LABEL: firrtl.module @mutableSubIndex606
-  module mutableSubIndex606 : 
+  module mutableSubIndex606 :
     output io : UInt<1>[8]
     ; CHECK:  %0 = firrtl.subindex %io[0] : !firrtl.flip<vector<uint<1>, 8>>
-    ; CHECK: firrtl.connect %0, %c0_ui1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
-    io[0] <= UInt<1>("h00") 
+    ; CHECK: firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    io[0] <= UInt<1>("h00")
 
 
   ; https://github.com/llvm/circt/issues/782
@@ -769,7 +773,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input rEn: UInt<1>
     output rData: UInt<8>
 
-    ; CHECK: %mem_r = firrtl.mem Undefined {depth = 16 : i64, name = "mem", portNames = ["r"], readLatency = 2 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: flip<uint<4>>, en: flip<uint<1>>, clk: flip<clock>, data: uint<8>> 
+    ; CHECK: %mem_r = firrtl.mem Undefined {depth = 16 : i64, name = "mem", portNames = ["r"], readLatency = 2 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<uint<8>>>>
     mem mem:
       data-type => UInt<8>
       depth => 16
