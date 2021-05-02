@@ -26,7 +26,7 @@ module driver();
 
     wait(arg1_valid == 1);
 
-    $display("%d", arg1_data);
+    $display("Result=%d", arg1_data);
     $finish();
   end
 

@@ -3,7 +3,7 @@
 // RUN: circt-opt %mac-handshake.mlir --lower-handshake-to-firrtl --firrtl-lower-types --firrtl-imconstprop --lower-firrtl-to-rtl --rtl-memory-sim --rtl-cleanup --simple-canonicalizer --cse --rtl-legalize-names > %mac-rtl.mlir
 // RUN: circt-translate %mac-rtl.mlir --export-verilog > %mac-export.sv
 // RUN: circt-rtl-sim.py %mac-export.sv %S/driver.sv --sim %ieee-sim --no-default-driver --top driver | FileCheck %s
-// CHECK: 912
+// CHECK: Result={{.*}}912
 
 module  {
   func @top() -> i32 {
