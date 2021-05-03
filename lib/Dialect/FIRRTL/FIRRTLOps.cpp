@@ -1154,7 +1154,7 @@ static bool isSameIntTypeKind(FIRRTLType lhs, FIRRTLType rhs, int32_t &lhsWidth,
   }
 
   lhsWidth = lhsi.getWidthOrSentinel();
-  rhsWidth = rhs.cast<IntType>().getWidthOrSentinel();
+  rhsWidth = rhsi.getWidthOrSentinel();
   return true;
 }
 
