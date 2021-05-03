@@ -32,6 +32,8 @@ std::unique_ptr<mlir::Pass> createRTLLegalizeNamesPass();
 std::unique_ptr<mlir::Pass> createRTLGeneratorCalloutPass();
 std::unique_ptr<mlir::Pass> createRTLMemSimImplPass();
 
+std::unique_ptr<mlir::Pass> createSVExtractTestCodePass();
+
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/SV/SVPasses.h.inc"
