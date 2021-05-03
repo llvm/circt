@@ -746,17 +746,11 @@ void TypeLoweringVisitor::visitStmt(ConnectOp op) {
     auto newDestFlipped = std::get<0>(tuple).second;
     auto newSrc = std::get<1>(tuple).first;
 
-    switch (foldFlow(newDest)) {
-    case flow::Source:
+    // Flow checks guarantee that the connection is valid.  Therfore,
+    // no flow checks are needed and just the type of the LHS
+    // determines whether or not this is a reverse connection.
+    if (newDestFlipped)
       std::swap(newSrc, newDest);
-      break;
-    case flow::Sink:
-      break;
-    case flow::Duplex:
-      if (newDestFlipped)
-        std::swap(newSrc, newDest);
-      break;
-    }
 
     builder->create<ConnectOp>(newDest, newSrc);
   }
