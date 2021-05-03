@@ -2,7 +2,7 @@
 # Set up Python binding tools
 ################################################################################
 
-include(AddMLIRPythonExtension)
+include(AddMLIRPython)
 add_custom_target(CIRCTBindingsPython)
 
 ################################################################################

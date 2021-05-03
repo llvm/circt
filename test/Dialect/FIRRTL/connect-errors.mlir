@@ -2,8 +2,9 @@
 // RUN: circt-opt %s -split-input-file -verify-diagnostics
 
 firrtl.circuit "test" {
+// expected-note @+1 {{the left-hand-side was defined here}}
 firrtl.module @test(%a : !firrtl.uint<1>, %b : !firrtl.flip<uint<1>>) {
-  // expected-error @+1 {{connection destination must be a non-passive type or a duplex value}}
+  // expected-error @+1 {{has invalid flow: the left-hand-side has source flow}}
   firrtl.connect %a, %b : !firrtl.uint<1>, !firrtl.flip<uint<1>>
 }
 }
@@ -226,7 +227,7 @@ firrtl.module @test(%a : !firrtl.vector<uint<1>, 3>, %b : !firrtl.flip<vector<si
 
 firrtl.circuit "test" {
 firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>>, %b : !firrtl.bundle<f1: flip<uint<1>>, f2: sint<1>>) {
-  // expected-error @+1 {{type mismatch between destination '!firrtl.bundle<f1: uint<1>, f2: sint<1>>' and source '!firrtl.bundle<f1: uint<1>>'}}
+  // expected-error @+1 {{type mismatch between destination '!firrtl.bundle<f1: flip<uint<1>>, f2: sint<1>>' and source '!firrtl.bundle<f1: uint<1>>'}}
   firrtl.connect %b, %a : !firrtl.bundle<f1: flip<uint<1>>, f2: sint<1>>, !firrtl.bundle<f1: uint<1>>
 }
 }
@@ -235,7 +236,7 @@ firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>>, %b : !firrtl.bundle<f1: fl
 
 firrtl.circuit "test" {
 firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>>, %b : !firrtl.bundle<f2: flip<uint<1>>>) {
-  // expected-error @+1 {{type mismatch between destination '!firrtl.bundle<f2: uint<1>>' and source '!firrtl.bundle<f1: uint<1>>'}}
+  // expected-error @+1 {{type mismatch between destination '!firrtl.bundle<f2: flip<uint<1>>>' and source '!firrtl.bundle<f1: uint<1>>'}}
   firrtl.connect %b, %a : !firrtl.bundle<f2: flip<uint<1>>>, !firrtl.bundle<f1: uint<1>>
 }
 }
@@ -244,7 +245,7 @@ firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>>, %b : !firrtl.bundle<f2: fl
 
 firrtl.circuit "test" {
 firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>>, %b : !firrtl.bundle<f1: flip<sint<1>>>) {
-  // expected-error @+1 {{type mismatch between destination '!firrtl.bundle<f1: sint<1>>' and source '!firrtl.bundle<f1: uint<1>>'}}
+  // expected-error @+1 {{type mismatch between destination '!firrtl.bundle<f1: flip<sint<1>>>' and source '!firrtl.bundle<f1: uint<1>>'}}
   firrtl.connect %b, %a : !firrtl.bundle<f1: flip<sint<1>>>, !firrtl.bundle<f1: uint<1>>
 }
 }
@@ -253,10 +254,11 @@ firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>>, %b : !firrtl.bundle<f1: fl
 
 firrtl.circuit "test" {
 firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>>, %b : !firrtl.flip<bundle<f1: uint<1>>>) {
+  // expected-note @+1 {{the left-hand-side was defined here}}
   %0 = firrtl.subfield %a("f1") : (!firrtl.bundle<f1: uint<1>>) -> !firrtl.uint<1>
-  %1 = firrtl.subfield %b("f1") : (!firrtl.flip<bundle<f1: uint<1>>>) -> !firrtl.flip<uint<1>>
-  // expected-error @+1 {{connection destination must be a non-passive type or a duplex value}}
-  firrtl.connect %0, %1 : !firrtl.uint<1>, !firrtl.flip<uint<1>>
+  %1 = firrtl.subfield %b("f1") : (!firrtl.flip<bundle<f1: uint<1>>>) -> !firrtl.uint<1>
+  // expected-error @+1 {{op has invalid flow: the left-hand-side has source flow}}
+  firrtl.connect %0, %1 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 }
 
@@ -268,17 +270,5 @@ firrtl.circuit "test" {
 firrtl.module @test(%a : !firrtl.uint<2>, %b : !firrtl.flip<uint<1>>) {
   // expected-error @+1 {{destination width 1 is not greater than or equal to source width 2}}
   firrtl.connect %b, %a : !firrtl.flip<uint<1>>, !firrtl.uint<2>
-}
-}
-
-// -----
-
-// Two duplex values with bundle types can not be bulk connected.
-firrtl.circuit "test" {
-firrtl.module @test(%clock : !firrtl.clock) {
-  %w = firrtl.wire : !firrtl.bundle<a : uint<1>>
-  %r = firrtl.reg %clock : (!firrtl.clock) -> !firrtl.bundle<a: uint<1>>
-  // expected-error @+1 {{ambiguous bulk connection between two duplex values of bundle type}}
-  firrtl.connect %r, %w : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
 }
 }

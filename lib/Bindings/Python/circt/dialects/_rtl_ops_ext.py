@@ -19,6 +19,7 @@ class InstanceBuilder:
       "__result_indices__",
   ]
 
+
   def __init__(self,
                parent_module,
                module,
@@ -114,8 +115,8 @@ class InstanceBuilder:
     return self.__mod__.operation
 
 
-class RTLModuleOp:
-  """Specialization for the RTL module op class."""
+class ModuleLike:
+  """Custom Python base class for module-like operations."""
 
   def __init__(
       self,
@@ -128,16 +129,16 @@ class RTLModuleOp:
       ip=None,
   ):
     """
-        Create a RTLModuleOp with the provided `name`, `input_ports`, and
-        `output_ports`.
-        - `name` is a string representing the function name.
-        - `input_ports` is a list of pairs of string names and mlir.ir types.
-        - `output_ports` is a list of pairs of string names and mlir.ir types.
-        - `body_builder` is an optional callback, when provided a new entry block
-          is created and the callback is invoked with the new op as argument within
-          an InsertionPoint context already set for the block. The callback is
-          expected to insert a terminator in the block.
-        """
+    Create a module-like with the provided `name`, `input_ports`, and
+    `output_ports`.
+    - `name` is a string representing the module name.
+    - `input_ports` is a list of pairs of string names and mlir.ir types.
+    - `output_ports` is a list of pairs of string names and mlir.ir types.
+    - `body_builder` is an optional callback, when provided a new entry block
+      is created and the callback is invoked with the new op as argument within
+      an InsertionPoint context already set for the block. The callback is
+      expected to insert a terminator in the block.
+    """
     operands = []
     results = []
     attributes = {}
@@ -175,6 +176,10 @@ class RTLModuleOp:
         self.backedge_builder = BackedgeBuilder()
         body_builder(self)
         self.backedge_builder.check()
+
+
+class RTLModuleOp(ModuleLike):
+  """Specialization for the RTL module op class."""
 
   @property
   def body(self):
@@ -329,3 +334,8 @@ class RTLModuleOp:
       return wrapped
 
     return decorator
+
+
+class RTLModuleExternOp(ModuleLike):
+  """Specialization for the RTL module op class."""
+  pass

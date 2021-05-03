@@ -204,10 +204,18 @@ void ExpandWhensVisitor::visitDecl(FModuleOp op) {
 
 void ExpandWhensVisitor::visitDecl(WireOp op) { scope[op.result()] = nullptr; }
 
-void ExpandWhensVisitor::visitDecl(RegOp op) { scope[op.result()] = nullptr; }
+void ExpandWhensVisitor::visitDecl(RegOp op) {
+  // Registers are initialized to themselves.
+  auto connect = OpBuilder(op->getBlock(), ++Block::iterator(op))
+                     .create<ConnectOp>(op.getLoc(), op, op);
+  scope[op.result()] = connect;
+}
 
 void ExpandWhensVisitor::visitDecl(RegResetOp op) {
-  scope[op.result()] = nullptr;
+  // Registers are initialized to themselves.
+  auto connect = OpBuilder(op->getBlock(), ++Block::iterator(op))
+                     .create<ConnectOp>(op.getLoc(), op, op);
+  scope[op.result()] = connect;
 }
 
 void ExpandWhensVisitor::visitDecl(InstanceOp op) {
