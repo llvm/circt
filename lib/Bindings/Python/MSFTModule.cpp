@@ -15,6 +15,7 @@
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Support.h"
 
+#include "MLIRPybindAdaptors.h"
 #include "PybindUtils.h"
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
