@@ -375,7 +375,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     resultPortTypes.clear();
     resultPortNames.clear();
     for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
-      auto kind = op.getPortKind(i).getValue();
+      auto kind = op.getPortKind(i);
       auto name = op.getPortName(i);
 
       // Any read or write ports are just added.
@@ -421,9 +421,8 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
                                   .getPassiveType()
                                   .cast<BundleType>();
 
-      auto kind =
-          newMem.getPortKind(newMem.getPortName(i).getValue()).getValue();
-      auto oldKind = op.getPortKind(op.getPortName(j).getValue()).getValue();
+      auto kind = newMem.getPortKind(newMem.getPortName(i).getValue());
+      auto oldKind = op.getPortKind(op.getPortName(j).getValue());
 
       auto skip = kind == MemOp::PortKind::Write &&
                   oldKind == MemOp::PortKind::ReadWrite;

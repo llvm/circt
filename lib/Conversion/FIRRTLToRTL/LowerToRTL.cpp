@@ -156,7 +156,7 @@ static FirMemory analyzeMemOp(MemOp op) {
   size_t numReadWritePorts = 0;
 
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
-    auto portKind = *op.getPortKind(i);
+    auto portKind = op.getPortKind(i);
     if (portKind == MemOp::PortKind::Read)
       ++numReadPorts;
     else if (portKind == MemOp::PortKind::Write)
@@ -1729,7 +1729,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   // two layers of type to split appart.
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
     auto portName = op.getPortName(i).getValue();
-    auto portKind = *op.getPortKind(i);
+    auto portKind = op.getPortKind(i);
 
     auto &portKindNum =
         portKind == MemOp::PortKind::Read
