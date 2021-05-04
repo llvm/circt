@@ -22,8 +22,7 @@ with Context() as ctx, Location.unknown():
                          input_ports=[('my_input', i32)],
                          output_ports=[('my_output', i32)],
                          body_builder=lambda module: rtl.OutputOp(
-                           [module.entry_block.arguments[0]]),
-    )
+                             [module.entry_block.arguments[0]]))
 
     # CHECK: rtl.module.extern @FancyThing(%input0: i32) -> (%output0: i32)
     extern = rtl.RTLModuleExternOp(name="FancyThing",

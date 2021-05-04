@@ -309,7 +309,7 @@ class RTLModuleOp(ModuleLike):
           module_op.attributes["resultNames"] = ArrayAttr.get(resultNames)
 
       def emit_instance_op(*call_args):
-        call_op = rtl.InstanceOp(return_types, StringAttr.get(""),
+        call_op = rtl.InstanceOp(return_types, StringAttr.get(''),
                                  FlatSymbolRefAttr.get(symbol_name), call_args,
                                  DictAttr.get({}))
         if return_types is None:
