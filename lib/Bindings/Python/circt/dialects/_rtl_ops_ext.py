@@ -10,15 +10,6 @@ from mlir.ir import *
 class InstanceBuilder:
   """Helper class to incrementally construct an instance of a module."""
 
-  __slots__ = [
-      "__parent_module__",
-      "__mod__",
-      "__backedges__",
-      "__instance__",
-      "__operand_indices__",
-      "__result_indices__",
-  ]
-
 
   def __init__(self,
                parent_module,
@@ -33,45 +24,40 @@ class InstanceBuilder:
     from ._rtl_ops_gen import InstanceOp, ConstantOp
 
     # Create mappings from port name to value, index, and potentially backedge.
-    operand_indices = {}
-    operand_values = []
-    result_indices = {}
-    backedges = {}
+    self.parent_module = parent_module
+    self.mod = module
+    self.operand_indices = {}
+    self.operand_values = []
+    self.result_indices = {}
+    self.backedges = {}
 
     arg_names = ArrayAttr(module.attributes["argNames"])
     for i in range(len(arg_names)):
       arg_name = StringAttr(arg_names[i]).value
-      operand_indices[arg_name] = i
+      self.operand_indices[arg_name] = i
 
       if arg_name in input_port_mapping:
-        operand_values.append(input_port_mapping[arg_name])
+        self.operand_values.append(input_port_mapping[arg_name])
       else:
         type = module.type.inputs[i]
-        backedge = parent_module.backedge_builder.create(type, self)
-        backedges[i] = backedge
-        operand_values.append(backedge)
+        backedge = self.parent_module.backedge_builder.create(type, self)
+        self.backedges[i] = backedge
+        self.operand_values.append(backedge)
 
     result_names = ArrayAttr(module.attributes["resultNames"])
     for i in range(len(result_names)):
       result_name = StringAttr(result_names[i]).value
-      result_indices[result_name] = i
-
-    # Save the parent, module, backedges, operand, and result indices for later.
-    self.__parent_module__ = parent_module
-    self.__mod__ = module
-    self.__backedges__ = backedges
-    self.__operand_indices__ = operand_indices
-    self.__result_indices__ = result_indices
+      self.result_indices[result_name] = i
 
     # Actually build the InstanceOp.
     instance_name = StringAttr.get(name)
-    module_name = FlatSymbolRefAttr.get(StringAttr(module.name).value)
+    module_name = FlatSymbolRefAttr.get(StringAttr(self.mod.name).value)
     parameters = DictAttr.get(parameters)
-    self.__instance__ = InstanceOp(
-        module.type.results,
+    self.instance = InstanceOp(
+        self.mod.type.results,
         instance_name,
         module_name,
-        operand_values,
+        self.operand_values,
         parameters,
         loc=loc,
         ip=ip,
@@ -79,21 +65,20 @@ class InstanceBuilder:
 
   def get_port(self, name):
     # Check for the attribute in the result name set.
-    if name in self.__result_indices__:
-      index = self.__result_indices__[name]
-      instance = self.__instance__
-      return instance.results[index]
+    if name in self.result_indices:
+      index = self.result_indices[name]
+      return self.instance.results[index]
 
     # If we fell through to here, the name isn't a result.
     raise AttributeError(f"unknown output port name {name}")
 
   def set_port(self, name, value):
     # Check for the attribute in the arg name set.
-    if name in self.__operand_indices__:
+    if name in self.operand_indices:
       # Put the value into the instance.
-      index = self.__operand_indices__[name]
-      self.__instance__.inputs[index] = value
-      self.__parent_module__.backedge_builder.remove(self.__backedges__[index])
+      index = self.operand_indices[name]
+      self.instance.inputs[index] = value
+      self.parent_module.backedge_builder.remove(self.backedges[index])
       return
 
     # If we fell through to here, the name isn't an arg.
@@ -102,12 +87,12 @@ class InstanceBuilder:
   @property
   def operation(self):
     """Get the operation associated with this builder."""
-    return self.__instance__.operation
+    return self.instance.operation
 
   @property
   def module(self):
     """Get the module associated with this builder."""
-    return self.__mod__.operation
+    return self.mod.operation
 
 
 class ModuleLike:
