@@ -109,11 +109,11 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
     /// Return the name and kind of ports supported by this memory.
     SmallVector<std::pair<Identifier, PortKind>> getPorts();
 
-    /// Return the kind of the specified port or None if the name is invalid.
-    Optional<PortKind> getPortKind(StringRef portName);
+    /// Return the kind of the specified port.
+    PortKind getPortKind(StringRef portName);
 
-    /// Return the kind of the specified port number
-    Optional<PortKind> getPortKind(size_t resultNo);
+    /// Return the kind of the specified port number.
+    PortKind getPortKind(size_t resultNo);
 
     /// Return the data-type field of the memory, the type of each element.
     FIRRTLType getDataType();

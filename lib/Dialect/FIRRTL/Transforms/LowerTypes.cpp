@@ -299,7 +299,7 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-    flattenType(op.getType(i).cast<FIRRTLType>(), op.getPortNameStr(i),
+    flattenType(op.getType(i).cast<FIRRTLType>(), "",
                 /*isFlip*/ false, fieldTypes);
 
     for (auto field : fieldTypes) {
@@ -317,9 +317,8 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
   size_t nextResult = 0;
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
     // If this result was a non-bundle value, just RAUW it.
-    auto origPortName = op.getPortNameStr(i);
     if (numFieldsPerResult[i] == 1 &&
-        resultNames[nextResult].getValue() == origPortName) {
+        resultNames[nextResult].getValue().empty()) {
       op.getResult(i).replaceAllUsesWith(newInstance.getResult(nextResult));
       ++nextResult;
       continue;
@@ -328,9 +327,8 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
     // Otherwise lower bundles.
     for (size_t j = 0, e = numFieldsPerResult[i]; j != e; ++j) {
       auto newPortName = resultNames[nextResult].getValue();
-      // Drop the original port name and the underscore.
-      newPortName = newPortName.drop_front(origPortName.size() + 1);
-
+      // Drop the leading underscore.
+      newPortName = newPortName.drop_front(1);
       // Map the flattened suffix for the original bundle to the new value.
       setBundleLowering(op.getResult(i), newPortName,
                         newInstance.getResult(nextResult));
@@ -377,7 +375,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     resultPortTypes.clear();
     resultPortNames.clear();
     for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
-      auto kind = op.getPortKind(i).getValue();
+      auto kind = op.getPortKind(i);
       auto name = op.getPortName(i);
 
       // Any read or write ports are just added.
@@ -423,9 +421,8 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
                                   .getPassiveType()
                                   .cast<BundleType>();
 
-      auto kind =
-          newMem.getPortKind(newMem.getPortName(i).getValue()).getValue();
-      auto oldKind = op.getPortKind(op.getPortName(j).getValue()).getValue();
+      auto kind = newMem.getPortKind(newMem.getPortName(i).getValue());
+      auto oldKind = op.getPortKind(op.getPortName(j).getValue());
 
       auto skip = kind == MemOp::PortKind::Write &&
                   oldKind == MemOp::PortKind::ReadWrite;
