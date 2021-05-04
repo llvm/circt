@@ -68,15 +68,15 @@ with Context() as ctx, Location.unknown():
       inst1 = one_output.create(module, "inst1")
 
       # CHECK: rtl.instance "inst2" @one_input(%[[INST1_RESULT]])
-      inst2 = one_input.create(module, "inst2", {"a": inst1.a})
+      inst2 = one_input.create(module, "inst2", {"a": inst1.get_port("a")})
 
       # CHECK: rtl.instance "inst4" @two_inputs(%[[INST1_RESULT]], %[[INST1_RESULT]])
-      inst4 = two_inputs.create(module, "inst4", {"a": inst1.a})
-      inst4.b = inst1.a
+      inst4 = two_inputs.create(module, "inst4", {"a": inst1.get_port("a")})
+      inst4.set_port("b", inst1.get_port("a"))
 
       # CHECK: %[[INST5_RESULT:.+]] = rtl.instance "inst5" @MyWidget(%[[INST5_RESULT]])
       inst5 = op.create(module, "inst5")
-      inst5.my_input = inst5.my_output
+      inst5.set_port("my_input", inst5.get_port("my_output"))
 
       rtl.OutputOp([])
 

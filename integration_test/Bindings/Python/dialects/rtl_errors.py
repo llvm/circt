@@ -35,19 +35,19 @@ with Context() as ctx, Location.unknown():
     )
 
     def instance_builder_body(module):
-      constant_value = one_output.create(module, "inst1").a
+      constant_value = one_output.create(module, "inst1").get_port("a")
 
       # CHECK: unknown input port name b
       try:
         inst2 = one_input.create(module, "inst2", {"a": constant_value})
-        inst2.b = None
+        inst2.set_port("b", None)
       except AttributeError as e:
         print(e)
 
       # CHECK: unknown output port name b
       try:
         inst3 = one_output.create(module, "inst3")
-        inst3.b
+        inst3.get_port("b")
       except AttributeError as e:
         print(e)
 
