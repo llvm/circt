@@ -177,14 +177,6 @@ class ModuleLike:
         body_builder(self)
         self.backedge_builder.check()
 
-
-class RTLModuleOp(ModuleLike):
-  """Specialization for the RTL module op class."""
-
-  @property
-  def body(self):
-    return self.regions[0]
-
   @property
   def type(self):
     return FunctionType(TypeAttr(self.attributes["type"]).value)
@@ -196,16 +188,6 @@ class RTLModuleOp(ModuleLike):
   @property
   def is_external(self):
     return len(self.regions[0].blocks) == 0
-
-  @property
-  def entry_block(self):
-    return self.regions[0].blocks[0]
-
-  def add_entry_block(self):
-    if not self.is_external:
-      raise IndexError("The module already has an entry block")
-    self.body.blocks.append(*self.type.inputs)
-    return self.body.blocks[0]
 
   def create(self,
              module,
@@ -219,6 +201,24 @@ class RTLModuleOp(ModuleLike):
                            input_port_mapping,
                            loc=loc,
                            ip=ip)
+
+
+class RTLModuleOp(ModuleLike):
+  """Specialization for the RTL module op class."""
+
+  @property
+  def body(self):
+    return self.regions[0]
+
+  @property
+  def entry_block(self):
+    return self.regions[0].blocks[0]
+
+  def add_entry_block(self):
+    if not self.is_external:
+      raise IndexError("The module already has an entry block")
+    self.body.blocks.append(*self.type.inputs)
+    return self.body.blocks[0]
 
   @classmethod
   def from_py_func(
