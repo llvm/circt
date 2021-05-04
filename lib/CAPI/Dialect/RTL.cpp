@@ -12,6 +12,7 @@
 
 #include "circt-c/Dialect/RTL.h"
 #include "circt/Dialect/RTL/RTLOps.h"
+#include "mlir-c/IR.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Registration.h"
 #include "mlir/CAPI/Support.h"
@@ -57,3 +58,12 @@ MlirType rtlInOutTypeGetElementType(MlirType type) {
 }
 
 bool rtlTypeIsAInOut(MlirType type) { return unwrap(type).isa<InOutType>(); }
+
+bool rtlTypeIsATypeAlias(MlirType type) {
+  return unwrap(type).isa<TypeAliasType>();
+}
+
+MlirType rtlTypeAliasTypeGet(MlirStringRef name, MlirType inner) {
+  wrap(TypeAliasType::get(unwrap(mlirTypeGetContext(inner)), unwrap(name),
+                          unwrap(inner)));
+}
