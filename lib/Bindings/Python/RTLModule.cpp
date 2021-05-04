@@ -34,4 +34,12 @@ void circt::python::populateDialectRTLSubmodule(py::module &m) {
           [](MlirType self) { return rtlArrayTypeGetElementType(self); })
       .def_property_readonly(
           "size", [](MlirType self) { return rtlArrayTypeGetSize(self); });
+
+  mlir_type_subclass(m, "TypeAliasType", rtlTypeIsATypeAlias)
+      .def_static("get", [](std::string name, MlirType inner) {
+        return py::cast(rtlTypeAliasTypeGet(
+            mlirIdentifierGet(mlirTypeGetContext(inner),
+                              mlirStringRefCreate(name.data(), name.size())),
+            inner));
+      });
 }
