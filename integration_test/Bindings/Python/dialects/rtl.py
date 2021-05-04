@@ -24,6 +24,10 @@ with Context() as ctx, Location.unknown():
   print(rtl.ArrayType(array_i32).element_type)
   print(rtl.ArrayType(array_i32).size)
 
+  # CHECK: !rtl.struct<foo: i32, bar: !rtl.array<5xi32>>
+  struct = rtl.StructType.get([("foo", i32), ("bar", array_i32)])
+  print(struct)
+
   m = Module.create()
   with InsertionPoint(m.body):
     # CHECK: rtl.module @MyWidget(%my_input: i32) -> (%my_output: i32)
