@@ -40,7 +40,7 @@ class InstanceBuilder:
         self.operand_values.append(input_port_mapping[arg_name])
       else:
         type = module.type.inputs[i]
-        backedge = self.parent_module.backedge_builder.create(type, self)
+        backedge = self.parent_module.create_backedge(type, self)
         self.backedges[i] = backedge
         self.operand_values.append(backedge)
 
@@ -78,7 +78,7 @@ class InstanceBuilder:
       # Put the value into the instance.
       index = self.operand_indices[name]
       self.instance.inputs[index] = value
-      self.parent_module.backedge_builder.remove(self.backedges[index])
+      self.parent_module.remove_backedge(self.backedges[index])
       return
 
     # If we fell through to here, the name isn't an arg.
@@ -179,6 +179,12 @@ class ModuleLike:
                            input_port_mapping,
                            loc=loc,
                            ip=ip)
+
+  def create_backedge(self, type, builder):
+    return self.backedge_builder.create(type, builder)
+
+  def remove_backedge(self, backedge):
+    self.backedge_builder.remove(backedge)
 
 
 class RTLModuleOp(ModuleLike):
