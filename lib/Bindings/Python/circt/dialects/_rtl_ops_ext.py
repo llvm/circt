@@ -162,13 +162,11 @@ class ModuleLike:
         FunctionType.get(inputs=input_types, results=output_types))
 
     super().__init__(
-        self.build_generic(
-            attributes=attributes,
-            results=results,
-            operands=operands,
-            loc=loc,
-            ip=ip,
-        ))
+        self.build_generic(attributes=attributes,
+                           results=results,
+                           operands=operands,
+                           loc=loc,
+                           ip=ip))
 
     if body_builder:
       entry_block = self.add_entry_block()
@@ -216,45 +214,42 @@ class RTLModuleOp(ModuleLike):
 
   def add_entry_block(self):
     if not self.is_external:
-      raise IndexError("The module already has an entry block")
+      raise IndexError('The module already has an entry block')
     self.body.blocks.append(*self.type.inputs)
     return self.body.blocks[0]
 
   @classmethod
-  def from_py_func(
-      RTLModuleOp,
-      *inputs: Type,
-      results: Optional[Sequence[Type]] = None,
-      name: Optional[str] = None,
-  ):
+  def from_py_func(RTLModuleOp,
+                   *inputs: Type,
+                   results: Optional[Sequence[Type]] = None,
+                   name: Optional[str] = None):
     """Decorator to define an MLIR RTLModuleOp specified as a python function.
-        Requires that an `mlir.ir.InsertionPoint` and `mlir.ir.Location` are
-        active for the current thread (i.e. established in a `with` block).
-        When applied as a decorator to a Python function, an entry block will
-        be constructed for the RTLModuleOp with types as specified in `*inputs`. The
-        block arguments will be passed positionally to the Python function. In
-        addition, if the Python function accepts keyword arguments generally or
-        has a corresponding keyword argument, the following will be passed:
-          * `module_op`: The `module` op being defined.
-        By default, the function name will be the Python function `__name__`. This
-        can be overriden by passing the `name` argument to the decorator.
-        If `results` is not specified, then the decorator will implicitly
-        insert a `OutputOp` with the `Value`'s returned from the decorated
-        function. It will also set the `RTLModuleOp` type with the actual return
-        value types. If `results` is specified, then the decorated function
-        must return `None` and no implicit `OutputOp` is added (nor are the result
-        types updated). The implicit behavior is intended for simple, single-block
-        cases, and users should specify result types explicitly for any complicated
-        cases.
-        The decorated function can further be called from Python and will insert
-        a `InstanceOp` at the then-current insertion point, returning either None (
-        if no return values), a unary Value (for one result), or a list of Values).
-        This mechanism cannot be used to emit recursive calls (by construction).
-        """
+    Requires that an `mlir.ir.InsertionPoint` and `mlir.ir.Location` are
+    active for the current thread (i.e. established in a `with` block).
+    When applied as a decorator to a Python function, an entry block will
+    be constructed for the RTLModuleOp with types as specified in `*inputs`. The
+    block arguments will be passed positionally to the Python function. In
+    addition, if the Python function accepts keyword arguments generally or
+    has a corresponding keyword argument, the following will be passed:
+      * `module_op`: The `module` op being defined.
+    By default, the function name will be the Python function `__name__`. This
+    can be overriden by passing the `name` argument to the decorator.
+    If `results` is not specified, then the decorator will implicitly
+    insert a `OutputOp` with the `Value`'s returned from the decorated
+    function. It will also set the `RTLModuleOp` type with the actual return
+    value types. If `results` is specified, then the decorated function
+    must return `None` and no implicit `OutputOp` is added (nor are the result
+    types updated). The implicit behavior is intended for simple, single-block
+    cases, and users should specify result types explicitly for any complicated
+    cases.
+    The decorated function can further be called from Python and will insert
+    a `InstanceOp` at the then-current insertion point, returning either None (
+    if no return values), a unary Value (for one result), or a list of Values).
+    This mechanism cannot be used to emit recursive calls (by construction).
+    """
 
     def decorator(f):
       from circt.dialects import rtl
-
       # Introspect the callable for optional features.
       sig = inspect.signature(f)
       has_arg_module_op = False
@@ -308,19 +303,15 @@ class RTLModuleOp(ModuleLike):
           module_op.attributes["type"] = TypeAttr.get(function_type)
           # Set required resultNames attribute. Could we infer real names here?
           resultNames = [
-              StringAttr.get("result" + str(i))
+              StringAttr.get('result' + str(i))
               for i in range(len(return_values))
           ]
           module_op.attributes["resultNames"] = ArrayAttr.get(resultNames)
 
       def emit_instance_op(*call_args):
-        call_op = rtl.InstanceOp(
-            return_types,
-            StringAttr.get(""),
-            FlatSymbolRefAttr.get(symbol_name),
-            call_args,
-            DictAttr.get({}),
-        )
+        call_op = rtl.InstanceOp(return_types, StringAttr.get(""),
+                                 FlatSymbolRefAttr.get(symbol_name), call_args,
+                                 DictAttr.get({}))
         if return_types is None:
           return None
         elif len(return_types) == 1:

@@ -18,12 +18,11 @@ with Context() as ctx, Location.unknown():
   with InsertionPoint(m.body):
     # CHECK: rtl.module @MyWidget(%my_input: i32) -> (%my_output: i32)
     # CHECK:   rtl.output %my_input : i32
-    op = rtl.RTLModuleOp(
-        name="MyWidget",
-        input_ports=[("my_input", i32)],
-        output_ports=[("my_output", i32)],
-        body_builder=lambda module: rtl.OutputOp(
-            [module.entry_block.arguments[0]]),
+    op = rtl.RTLModuleOp(name='MyWidget',
+                         input_ports=[('my_input', i32)],
+                         output_ports=[('my_output', i32)],
+                         body_builder=lambda module: rtl.OutputOp(
+                           [module.entry_block.arguments[0]]),
     )
 
     # CHECK: rtl.module.extern @FancyThing(%input0: i32) -> (%output0: i32)
