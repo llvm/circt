@@ -95,6 +95,13 @@ protected:
 /// ignores flips.
 bool areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType);
 
+/// Returns true if two types are weakly equivalent.  See the FIRRTL spec for a
+/// full definition of this.  Roughly, the oriented types (the types with any
+/// flips pushed to the leaves) must match.  This allows for types with flips in
+/// different positions to be equivalent.
+bool areTypesWeaklyEquivalent(FIRRTLType destType, FIRRTLType srcType,
+                              bool destFlip = false, bool srcFlip = false);
+
 mlir::Type getVectorElementType(mlir::Type array);
 mlir::Type getPassiveType(mlir::Type anyFIRRTLType);
 
