@@ -14,6 +14,16 @@ with Context() as ctx, Location.unknown():
 
   i32 = IntegerType.get_signless(32)
 
+  # CHECK: !rtl.array<5xi32>
+  # CHECK: i32
+  # CHECK: 5
+  array_i32 = rtl.ArrayType.get(i32, 5)
+  print(array_i32)
+  # print(array_i32.element_type)
+  # print(array_i32.size)
+  print(rtl.ArrayType(array_i32).element_type)
+  print(rtl.ArrayType(array_i32).size)
+
   m = Module.create()
   with InsertionPoint(m.body):
     # CHECK: rtl.module @MyWidget(%my_input: i32) -> (%my_output: i32)
@@ -23,6 +33,11 @@ with Context() as ctx, Location.unknown():
                          output_ports=[('my_output', i32)],
                          body_builder=lambda module: rtl.OutputOp(
                              [module.entry_block.arguments[0]]))
+
+    # CHECK: rtl.module.extern @FancyThing(%input0: i32) -> (%output0: i32)
+    extern = rtl.RTLModuleExternOp(name="FancyThing",
+                                   input_ports=[("input0", i32)],
+                                   output_ports=[("output0", i32)])
 
     # CHECK: rtl.module @swap(%a: i32, %b: i32) -> (%{{.+}}: i32, %{{.+}}: i32)
     # CHECK:   rtl.output %b, %a : i32, i32
@@ -48,6 +63,7 @@ with Context() as ctx, Location.unknown():
   pm = PassManager.parse("rtl-legalize-names,rtl.module(rtl-cleanup)")
   pm.run(m)
   # CHECK: module MyWidget
+  # CHECK: external module FancyThing
   # CHECK: module swap
   # CHECK: module top
   circt.export_verilog(m, sys.stdout)

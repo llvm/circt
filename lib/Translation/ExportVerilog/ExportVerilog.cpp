@@ -2920,7 +2920,7 @@ void SplitEmitter::emitMLIRModule() {
   for (auto &op : *rootOp.getBody()) {
     TypeSwitch<Operation *>(&op)
         .Case<RTLModuleOp, InterfaceOp>([&](auto &) {
-          moduleOps.push_back({&op, perFileOps.size()});
+          moduleOps.push_back({&op, perFileOps.size(), {}});
         })
         .Case<VerbatimOp, IfDefProceduralOp, TypeDefOp>(
             [&](auto &) { perFileOps.push_back(&op); })

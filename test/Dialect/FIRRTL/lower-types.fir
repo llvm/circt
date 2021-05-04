@@ -21,13 +21,6 @@ circuit TypeCanonicalizationConsideredHarmful:
     ; CHECK-NEXT: firrtl.partialconnect %a_a_a, %ax_a_a
     ; CHECK-NEXT: firrtl.partialconnect %a_a_a, %ax_a_a
 
-    a <= ax
-    a.a <= ax.a
-    a.a.a <= ax.a.a
-    ; CHECK:      firrtl.connect %a_a_a, %ax_a_a
-    ; CHECK-NEXT: firrtl.connect %a_a_a, %ax_a_a
-    ; CHECK-NEXT: firrtl.connect %a_a_a, %ax_a_a
-
     wire b:  { a: {flip a: UInt<1>}}
     wire bx: { a: {flip a: UInt<1>}}
 
@@ -37,13 +30,6 @@ circuit TypeCanonicalizationConsideredHarmful:
     ; CHECK:      firrtl.partialconnect %bx_a_a, %b_a_a
     ; CHECK-NEXT: firrtl.partialconnect %bx_a_a, %b_a_a
     ; CHECK-NEXT: firrtl.partialconnect %b_a_a,  %bx_a_a
-
-    b <= bx
-    b.a <= bx.a
-    b.a.a <= bx.a.a
-    ; CHECK:      firrtl.connect %bx_a_a, %b_a_a
-    ; CHECK-NEXT: firrtl.connect %bx_a_a, %b_a_a
-    ; CHECK-NEXT: firrtl.connect %b_a_a,  %bx_a_a
 
     wire c:  {flip a: { a: UInt<1>}}
     wire cx: {flip a: { a: UInt<1>}}
@@ -55,13 +41,6 @@ circuit TypeCanonicalizationConsideredHarmful:
     ; CHECK-NEXT: firrtl.partialconnect %c_a_a,  %cx_a_a
     ; CHECK-NEXT: firrtl.partialconnect %c_a_a,  %cx_a_a
 
-    c <= cx
-    c.a <= cx.a
-    c.a.a <= cx.a.a
-    ; CHECK:      firrtl.connect %cx_a_a, %c_a_a
-    ; CHECK-NEXT: firrtl.connect %c_a_a,  %cx_a_a
-    ; CHECK-NEXT: firrtl.connect %c_a_a,  %cx_a_a
-
     wire d:  {flip a: {flip a: UInt<1>}}
     wire dx: {flip a: {flip a: UInt<1>}}
 
@@ -71,13 +50,6 @@ circuit TypeCanonicalizationConsideredHarmful:
     ; CHECK:      firrtl.partialconnect %d_a_a,  %dx_a_a
     ; CHECK-NEXT: firrtl.partialconnect %dx_a_a, %d_a_a
     ; CHECK-NEXT: firrtl.partialconnect %d_a_a,  %dx_a_a
-
-    d <= dx
-    d.a <= dx.a
-    d.a.a <= dx.a.a
-    ; CHECK:      firrtl.connect %d_a_a,  %dx_a_a
-    ; CHECK-NEXT: firrtl.connect %dx_a_a, %d_a_a
-    ; CHECK-NEXT: firrtl.connect %d_a_a,  %dx_a_a
 
   module TypeCanonicalizationStillConsideredHarmful:
 
