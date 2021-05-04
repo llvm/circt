@@ -299,7 +299,7 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-    flattenType(op.getType(i).cast<FIRRTLType>(), op.getPortNameStr(i),
+    flattenType(op.getType(i).cast<FIRRTLType>(), "",
                 /*isFlip*/ false, fieldTypes);
 
     for (auto field : fieldTypes) {
@@ -317,9 +317,8 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
   size_t nextResult = 0;
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
     // If this result was a non-bundle value, just RAUW it.
-    auto origPortName = op.getPortNameStr(i);
     if (numFieldsPerResult[i] == 1 &&
-        resultNames[nextResult].getValue() == origPortName) {
+        resultNames[nextResult].getValue().empty()) {
       op.getResult(i).replaceAllUsesWith(newInstance.getResult(nextResult));
       ++nextResult;
       continue;
@@ -328,9 +327,8 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
     // Otherwise lower bundles.
     for (size_t j = 0, e = numFieldsPerResult[i]; j != e; ++j) {
       auto newPortName = resultNames[nextResult].getValue();
-      // Drop the original port name and the underscore.
-      newPortName = newPortName.drop_front(origPortName.size() + 1);
-
+      // Drop the leading underscore.
+      newPortName = newPortName.drop_front(1);
       // Map the flattened suffix for the original bundle to the new value.
       setBundleLowering(op.getResult(i), newPortName,
                         newInstance.getResult(nextResult));
