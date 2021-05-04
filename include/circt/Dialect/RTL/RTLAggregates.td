@@ -155,7 +155,7 @@ def ArrayGetOp : RTLOp<"array_get",
 def StructCreateOp : RTLOp<"struct_create", [NoSideEffect]> {
   let summary = "Create a struct from constituent parts.";
   let arguments = (ins Variadic<RTLNonInOutType>:$input);
-  let results = (outs StructType:$result);
+  let results = (outs StructOrAliasType:$result);
 
   let parser = "return ::parse$cppClass(parser, result);";
   let printer = "return ::print(p, *this);";
