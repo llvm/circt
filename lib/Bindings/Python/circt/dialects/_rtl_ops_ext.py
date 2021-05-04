@@ -10,7 +10,6 @@ from mlir.ir import *
 class InstanceBuilder:
   """Helper class to incrementally construct an instance of a module."""
 
-
   def __init__(self,
                parent_module,
                module,
@@ -20,9 +19,6 @@ class InstanceBuilder:
                parameters={},
                loc=None,
                ip=None):
-    # Lazily import dependencies to avoid cyclic dependencies.
-    from ._rtl_ops_gen import InstanceOp, ConstantOp
-
     # Create mappings from port name to value, index, and potentially backedge.
     self.parent_module = parent_module
     self.mod = module
