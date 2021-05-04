@@ -1133,6 +1133,56 @@ static LogicalResult verifyConnectOp(ConnectOp connect) {
   return success();
 }
 
+static LogicalResult verifyPartialConnectOp(PartialConnectOp partialConnect) {
+  FIRRTLType destType = partialConnect.dest().getType().cast<FIRRTLType>();
+  FIRRTLType srcType = partialConnect.src().getType().cast<FIRRTLType>();
+
+  auto isPortOrInstancePort = [](Value a) -> bool {
+    auto op = a.getDefiningOp();
+    return !op || isa<InstanceOp>(op);
+  };
+
+  // If the source or destination is a port or instance port, then an optional
+  // outer flip, indicating the direction (input or output), should be stripped
+  // for type checking.
+  if (isPortOrInstancePort(partialConnect.dest()))
+    if (auto destTypeFlip = destType.dyn_cast<FlipType>())
+      destType = destTypeFlip.getElementType();
+  if (isPortOrInstancePort(partialConnect.src()))
+    if (auto srcTypeFlip = srcType.dyn_cast<FlipType>())
+      srcType = srcTypeFlip.getElementType();
+
+  if (!areTypesWeaklyEquivalent(destType, srcType))
+    return partialConnect.emitError("type mismatch between destination ")
+           << destType << " and source " << srcType
+           << ". Types are not weakly equivalent.";
+
+  // Check that the flows make sense.
+  if (foldFlow(partialConnect.src()) == flow::Sink) {
+    // A sink that is a port output or instance input used as a source is okay.
+    auto kind = getDeclarationKind(partialConnect.src());
+    if (kind != kind::Port && kind != kind::Instance) {
+      auto diag =
+          partialConnect.emitOpError()
+          << "has invalid flow: the right-hand-side has sink flow and "
+             "is not an output port or instance input (expected source "
+             "flow, duplex flow, an output port, or an instance input).";
+      return diag.attachNote(partialConnect.src().getLoc())
+             << "the right-hand-side was defined here.";
+    }
+  }
+
+  if (foldFlow(partialConnect.dest()) == flow::Source) {
+    auto diag = partialConnect.emitOpError()
+                << "has invalid flow: the left-hand-side has source flow "
+                   "(expected sink or duplex flow).";
+    return diag.attachNote(partialConnect.dest().getLoc())
+           << "the left-hand-side was defined here.";
+  }
+
+  return success();
+}
+
 void WhenOp::createElseRegion() {
   assert(!hasElseRegion() && "already has an else region");
   elseRegion().push_back(new Block());
