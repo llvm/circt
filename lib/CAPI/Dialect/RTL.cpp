@@ -63,7 +63,7 @@ bool rtlTypeIsATypeAlias(MlirType type) {
   return unwrap(type).isa<TypeAliasType>();
 }
 
-MlirType rtlTypeAliasTypeGet(MlirStringRef name, MlirType inner) {
-  wrap(TypeAliasType::get(unwrap(mlirTypeGetContext(inner)), unwrap(name),
-                          unwrap(inner)));
+MlirType rtlTypeAliasTypeGet(MlirIdentifier name, MlirType inner) {
+  return wrap(TypeAliasType::get(unwrap(mlirTypeGetContext(inner)),
+                                 unwrap(name).strref(), unwrap(inner)));
 }
