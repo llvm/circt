@@ -27,10 +27,10 @@ extern "C" {
 /// Named MLIR attribute.
 ///
 /// A named attribute is essentially a (name, attribute) pair where the name is
-/// a string.
+/// an identifier.
 
 struct RTLStructFieldInfo {
-  MlirStringRef name;
+  MlirIdentifier name;
   MlirAttribute attribute;
 };
 typedef struct MlirNamedAttribute MlirNamedAttribute;
