@@ -132,7 +132,8 @@ private:
 
   void setBundleLowering(Value oldValue, StringRef flatField, Value newValue);
   Value getBundleLowering(Value oldValue, StringRef flatField);
-  void getAllBundleLowerings(Value oldValue, SmallVectorImpl<Value> &results);
+  void getAllBundleLowerings(Value oldValue,
+                             SmallVectorImpl<std::pair<Value, bool>> &results);
 
   MLIRContext *context;
 
@@ -298,7 +299,7 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-    flattenType(op.getType(i).cast<FIRRTLType>(), op.getPortNameStr(i),
+    flattenType(op.getType(i).cast<FIRRTLType>(), "",
                 /*isFlip*/ false, fieldTypes);
 
     for (auto field : fieldTypes) {
@@ -316,9 +317,8 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
   size_t nextResult = 0;
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
     // If this result was a non-bundle value, just RAUW it.
-    auto origPortName = op.getPortNameStr(i);
     if (numFieldsPerResult[i] == 1 &&
-        resultNames[nextResult].getValue() == origPortName) {
+        resultNames[nextResult].getValue().empty()) {
       op.getResult(i).replaceAllUsesWith(newInstance.getResult(nextResult));
       ++nextResult;
       continue;
@@ -327,9 +327,8 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
     // Otherwise lower bundles.
     for (size_t j = 0, e = numFieldsPerResult[i]; j != e; ++j) {
       auto newPortName = resultNames[nextResult].getValue();
-      // Drop the original port name and the underscore.
-      newPortName = newPortName.drop_front(origPortName.size() + 1);
-
+      // Drop the leading underscore.
+      newPortName = newPortName.drop_front(1);
       // Map the flattened suffix for the original bundle to the new value.
       setBundleLowering(op.getResult(i), newPortName,
                         newInstance.getResult(nextResult));
@@ -464,7 +463,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
         // lowering target, and then connecting every new port
         // subfield to that.
         if (oldName == "clk" || oldName == "en" || oldName == "addr") {
-          FIRRTLType theType = FlipType::get(elt.type);
+          FIRRTLType theType = elt.type.getPassiveType();
 
           // Construct a new wire if needed.
           auto wireName =
@@ -499,9 +498,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
         // Data ports ("data", "mask") are trivially lowered because
         // each data leaf winds up in a new, separate memory. No wire
         // creation is needed.
-        FIRRTLType theType = elt.type;
-        if (kind == MemOp::PortKind::Write)
-          theType = FlipType::get(theType);
+        FIRRTLType theType = elt.type.getPassiveType();
 
         setBundleLowering(op.getResult(j), (oldName + field.suffix).str(),
                           builder->create<SubfieldOp>(
@@ -540,9 +537,8 @@ void TypeLoweringVisitor::visitDecl(WireOp op) {
     std::string loweredName = "";
     if (!name.empty())
       loweredName = name + field.suffix;
-    auto wire = builder->create<WireOp>(field.getPortType(),
-                                        builder->getStringAttr(loweredName),
-                                        op.annotations());
+    auto wire = builder->create<WireOp>(
+        field.type, builder->getStringAttr(loweredName), op.annotations());
     setBundleLowering(result, StringRef(field.suffix).drop_front(1), wire);
   }
 
@@ -736,35 +732,23 @@ void TypeLoweringVisitor::visitStmt(ConnectOp op) {
   if (!destType || !srcType)
     return;
 
-  // Get the lowered values for each side.
-  SmallVector<Value, 8> destValues;
+  SmallVector<std::pair<Value, bool>, 8> destValues;
   getAllBundleLowerings(dest, destValues);
 
-  SmallVector<Value, 8> srcValues;
+  SmallVector<std::pair<Value, bool>, 8> srcValues;
   getAllBundleLowerings(src, srcValues);
 
-  // Check that we got out the same number of values from each bundle.
-  assert(destValues.size() == srcValues.size() &&
-         "connected bundles don't match");
-
-  // Determine if the LHS expression is the duplex value.
-  auto isDestDuplex = isDuplexValue(destValues.front());
-
   for (auto tuple : llvm::zip_first(destValues, srcValues)) {
-    Value newDest = std::get<0>(tuple);
-    Value newSrc = std::get<1>(tuple);
 
-    // When two bundles are bulk connected, the connect operation becomes a
-    // pair-wise connect of each field. The rules for flow state that a value
-    // from a duplex expression can be used as both a source and sink,
-    // regardless of the flip orientation of the type. To make this work, we
-    // find the non-duplex value and make sure that it is the in the correct
-    // position. Two duplex values cannot be connected, since it is unclear
-    // which side is left or right.
-    if (isDestDuplex ? newSrc.getType().isa<FlipType>()
-                     : !newDest.getType().isa<FlipType>()) {
+    auto newDest = std::get<0>(tuple).first;
+    auto newDestFlipped = std::get<0>(tuple).second;
+    auto newSrc = std::get<1>(tuple).first;
+
+    // Flow checks guarantee that the connection is valid.  Therfore,
+    // no flow checks are needed and just the type of the LHS
+    // determines whether or not this is a reverse connection.
+    if (newDestFlipped)
       std::swap(newSrc, newDest);
-    }
 
     builder->create<ConnectOp>(newDest, newSrc);
   }
@@ -870,7 +854,7 @@ Value TypeLoweringVisitor::getBundleLowering(Value oldValue,
 // For a mapped aggregate typed value, retrieve and return the flat values for
 // each field.
 void TypeLoweringVisitor::getAllBundleLowerings(
-    Value value, SmallVectorImpl<Value> &results) {
+    Value value, SmallVectorImpl<std::pair<Value, bool>> &results) {
 
   TypeSwitch<FIRRTLType>(getCanonicalAggregateType(value.getType()))
       .Case<BundleType, FVectorType>([&](auto aggregateType) {
@@ -883,7 +867,7 @@ void TypeLoweringVisitor::getAllBundleLowerings(
           auto name = StringRef(element.suffix).drop_front(1);
 
           // Store the resulting lowering for this flat value.
-          results.push_back(getBundleLowering(value, name));
+          results.push_back({getBundleLowering(value, name), element.isOutput});
         }
       })
       .Default([&](auto) {});

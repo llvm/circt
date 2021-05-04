@@ -5,8 +5,8 @@ import inspect
 from mlir.ir import *
 
 
-class RTLModuleOp:
-  """Specialization for the RTL module op class."""
+class ModuleLike:
+  """Custom Python base class for module-like operations."""
 
   def __init__(self,
                name,
@@ -17,9 +17,9 @@ class RTLModuleOp:
                loc=None,
                ip=None):
     """
-    Create a RTLModuleOp with the provided `name`, `input_ports`, and
+    Create a module-like with the provided `name`, `input_ports`, and
     `output_ports`.
-    - `name` is a string representing the function name.
+    - `name` is a string representing the module name.
     - `input_ports` is a list of pairs of string names and mlir.ir types.
     - `output_ports` is a list of pairs of string names and mlir.ir types.
     - `body_builder` is an optional callback, when provided a new entry block
@@ -30,21 +30,21 @@ class RTLModuleOp:
     operands = []
     results = []
     attributes = {}
-    attributes['sym_name'] = StringAttr.get(str(name))
+    attributes["sym_name"] = StringAttr.get(str(name))
 
     input_types = []
     input_names = []
     for (port_name, port_type) in input_ports:
       input_types.append(port_type)
       input_names.append(StringAttr.get(str(port_name)))
-    attributes['argNames'] = ArrayAttr.get(input_names)
+    attributes["argNames"] = ArrayAttr.get(input_names)
 
     output_types = []
     output_names = []
     for (port_name, port_type) in output_ports:
       output_types.append(port_type)
       output_names.append(StringAttr.get(str(port_name)))
-    attributes['resultNames'] = ArrayAttr.get(output_names)
+    attributes["resultNames"] = ArrayAttr.get(output_names)
 
     attributes["type"] = TypeAttr.get(
         FunctionType.get(inputs=input_types, results=output_types))
@@ -60,6 +60,10 @@ class RTLModuleOp:
       entry_block = self.add_entry_block()
       with InsertionPoint(entry_block):
         body_builder(self)
+
+
+class RTLModuleOp(ModuleLike):
+  """Specialization for the RTL module op class."""
 
   @property
   def body(self):
@@ -194,3 +198,8 @@ class RTLModuleOp:
       return wrapped
 
     return decorator
+
+
+class RTLModuleExternOp(ModuleLike):
+  """Specialization for the RTL module op class."""
+  pass

@@ -24,6 +24,11 @@ with Context() as ctx, Location.unknown():
                          body_builder=lambda module: rtl.OutputOp(
                              [module.entry_block.arguments[0]]))
 
+    # CHECK: rtl.module.extern @FancyThing(%input0: i32) -> (%output0: i32)
+    extern = rtl.RTLModuleExternOp(name="FancyThing",
+                                   input_ports=[("input0", i32)],
+                                   output_ports=[("output0", i32)])
+
     # CHECK: rtl.module @swap(%a: i32, %b: i32) -> (%{{.+}}: i32, %{{.+}}: i32)
     # CHECK:   rtl.output %b, %a : i32, i32
     @rtl.RTLModuleOp.from_py_func(i32, i32)
@@ -48,6 +53,7 @@ with Context() as ctx, Location.unknown():
   pm = PassManager.parse("rtl-legalize-names,rtl.module(rtl-cleanup)")
   pm.run(m)
   # CHECK: module MyWidget
+  # CHECK: external module FancyThing
   # CHECK: module swap
   # CHECK: module top
   circt.export_verilog(m, sys.stdout)

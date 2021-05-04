@@ -19,6 +19,7 @@
 
 #include "llvm-c/ErrorHandling.h"
 
+#include "MLIRPybindAdaptors.h"
 #include "PybindUtils.h"
 #include <pybind11/pybind11.h>
 namespace py = pybind11;
