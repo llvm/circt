@@ -155,9 +155,9 @@ class ModuleLike:
     if body_builder:
       entry_block = self.add_entry_block()
       with InsertionPoint(entry_block):
-        self.backedge_builder = BackedgeBuilder()
-        body_builder(self)
-        self.backedge_builder.check()
+        with BackedgeBuilder() as bb:
+          self.backedge_builder = bb
+          body_builder(self)
 
   @property
   def type(self):
@@ -185,9 +185,11 @@ class ModuleLike:
                            ip=ip)
 
   def create_backedge(self, type, builder):
+    assert self.backedge_builder, "No backedge builder initialized."
     return self.backedge_builder.create(type, builder)
 
   def remove_backedge(self, backedge):
+    assert self.backedge_builder, "No backedge builder initialized."
     self.backedge_builder.remove(backedge)
 
 
