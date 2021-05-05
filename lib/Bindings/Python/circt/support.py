@@ -16,19 +16,19 @@ class BackedgeBuilder(AbstractContextManager):
 
     edge = Operation.create("TemporaryBackedge", [type]).result
     self.edges.append(edge)
-    self.builders[repr(edge)] = instance_builder
+    self.builders[id(edge)] = instance_builder
     return edge
 
   def remove(self, edge):
     self.edges.remove(edge)
-    self.builders.pop(repr(edge))
+    self.builders.pop(id(edge))
     edge.owner.erase()
 
   def __exit__(self, exc_type, exc_value, traceback):
     errors = []
     for edge in self.edges:
       # Build a nice error message about the uninitialized port.
-      builder = self.builders[repr(edge)]
+      builder = self.builders[id(edge)]
       instance = builder.operation
       module = builder.module
 
