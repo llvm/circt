@@ -26,7 +26,12 @@ with Context() as ctx, Location.unknown():
       # CHECK: %[[INPUT_VAL:.+]] = rtl.constant 45
       reg_input = rtl.ConstantOp(i32, IntegerAttr.get(i32, 45)).result
       # CHECK: %[[DATA_VAL:.+]] = seq.compreg %[[INPUT_VAL]], %clk, %rstn, %[[RESET_VAL]]
-      reg = seq.CompRegOp(i32, reg_input, clk, rstn, reg_reset, name="my_reg")
+      reg = seq.CompRegOp(i32,
+                          reg_input,
+                          clk,
+                          reset=rstn,
+                          reset_value=reg_reset,
+                          name="my_reg")
       # CHECK: rtl.output %[[DATA_VAL]]
       return reg.data
 

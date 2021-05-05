@@ -4,25 +4,25 @@ from mlir.ir import OpView, StringAttr
 class CompRegOp:
 
   def __init__(self,
-               data,
+               data_type,
                input,
                clk,
-               reset,
-               resetValue,
                *,
+               reset=None,
+               reset_value=None,
                name=None,
                loc=None,
                ip=None):
     operands = []
     results = []
     attributes = {}
-    results.append(data)
+    results.append(data_type)
     operands.append(input)
     operands.append(clk)
     if reset is not None:
       operands.append(reset)
-    if resetValue is not None:
-      operands.append(resetValue)
+    if reset_value is not None:
+      operands.append(reset_value)
     if name is not None:
       attributes["name"] = StringAttr.get(name)
 
