@@ -62,14 +62,19 @@ class InstanceBuilder:
         ip=ip,
     )
 
-  def get_port(self, name):
+  def __getattr__(self, name):
+    # Check for the attribute in the arg name set.
+    if name in self.operand_indices:
+      index = self.operand_indices[name]
+      return self.instance.inputs[index]
+
     # Check for the attribute in the result name set.
     if name in self.result_indices:
       index = self.result_indices[name]
       return self.instance.results[index]
 
     # If we fell through to here, the name isn't a result.
-    raise AttributeError(f"unknown output port name {name}")
+    raise AttributeError(f"unknown port name {name}")
 
   def set_port(self, name, value):
     # Check for the attribute in the arg name set.
