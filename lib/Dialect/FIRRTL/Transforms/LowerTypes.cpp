@@ -849,14 +849,13 @@ void TypeLoweringVisitor::recursivePartialConnect(Value a, FIRRTLType aType,
         for (auto aElt : aType.getElements()) {
           auto aField = aElt.name.getValue();
           auto bElt = bBundle.getElement(aField);
-          if (bElt) {
-            if (suffix.isTriviallyEmpty())
-              recursivePartialConnect(a, aElt.type, b, bElt.getValue().type,
-                                      aField, aFlip);
-            else
-              recursivePartialConnect(a, aElt.type, b, bElt.getValue().type,
-                                      suffix + "_" + aField, aFlip);
-          }
+          if (!bElt)
+            continue;
+          auto fieldSuffix = aField.str();
+          if (!suffix.isTriviallyEmpty())
+            fieldSuffix = (suffix + "_" + aField).str();
+          recursivePartialConnect(a, aElt.type, b, bElt.getValue().type,
+                                  fieldSuffix, aFlip);
         }
       })
       .Case<FVectorType>([&](auto aType) {
@@ -864,16 +863,14 @@ void TypeLoweringVisitor::recursivePartialConnect(Value a, FIRRTLType aType,
         if (!bVector)
           return;
 
-        for (size_t i = 0, e = std::min<unsigned>(aType.getNumElements(),
-                                                  bVector.getNumElements());
-             i != e; ++i) {
-          if (suffix.isTriviallyEmpty())
-            recursivePartialConnect(a, aType.getElementType(), b,
-                                    bVector.getElementType(), Twine(i), aFlip);
-          else
-            recursivePartialConnect(a, aType.getElementType(), b,
-                                    bVector.getElementType(),
-                                    suffix + "_" + Twine(i), aFlip);
+        auto e = std::min<unsigned>(aType.getNumElements(),
+                                    bVector.getNumElements());
+        for (size_t i = 0; i != e; ++i) {
+          auto fieldSuffix = Twine(i).str();
+          if (!suffix.isTriviallyEmpty())
+            fieldSuffix = (suffix + "_" + fieldSuffix).str();
+          recursivePartialConnect(a, aType.getElementType(), b,
+                                  bVector.getElementType(), fieldSuffix, aFlip);
         }
       })
       .Case<FlipType>([&](auto aType) {
