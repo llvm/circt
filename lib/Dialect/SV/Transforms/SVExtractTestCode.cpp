@@ -6,7 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This transformation pass extracts simulation constructs to submodules.
+// This transformation pass extracts simulation constructs to submodules.  It
+// will take simulation operations, write, finish, assert, assume, and cover and
+// extract them and the dataflow into them into a separate module.  This module
+// is then instantiated in the original module.
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,12 +18,140 @@
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Support/ImplicitLocOpBuilder.h"
+#include "mlir/Analysis/SliceAnalysis.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 
 #include <set>
 
+using namespace mlir;
 using namespace circt;
 using namespace sv;
+
+//===----------------------------------------------------------------------===//
+// StubExternalModules Helpers
+//===----------------------------------------------------------------------===//
+
+// Compute the dataflow for a set of ops.
+static void dataflowSlice(ArrayRef<Operation *> ops,
+                          SetVector<Operation *> &results) {
+  for (auto op : ops) {
+    getBackwardSlice(op, &results, [](Operation *testOp) -> bool {
+      return !isa<sv::ReadInOutOp>(testOp) && !isa<rtl::InstanceOp>(testOp) &&
+             !isa<sv::PAssignOp>(testOp) && !isa<sv::BPAssignOp>(testOp);
+    });
+  }
+}
+
+// Compute the ops defining the blocks a set of ops are in.
+static void blockSlice(ArrayRef<Operation *> ops,
+                       SetVector<Operation *> &blocks) {
+  for (auto op : ops) {
+    while (!isa<rtl::RTLModuleOp>(op->getParentOp())) {
+      op = op->getParentOp();
+      blocks.insert(op);
+    }
+  }
+}
+
+// Aggressively mark operations to be moved to the new module.  This leaves
+// maximum flexibility for optimization after removal of the nodes from the old
+// module.
+static SetVector<Operation *> computeCloneSet(ArrayRef<Operation *> roots) {
+  SetVector<Operation *> results;
+  // Get Dataflow for roots
+  dataflowSlice(roots, results);
+
+  // Get Blocks
+  SetVector<Operation *> blocks;
+  blockSlice(roots, blocks);
+  blockSlice(results.getArrayRef(), blocks);
+
+  // Make sure dataflow to block args (if conds, etc) is included
+  dataflowSlice(blocks.getArrayRef(), results);
+
+  // include the blocks and roots to clone
+  results.insert(roots.begin(), roots.end());
+  results.insert(blocks.begin(), blocks.end());
+
+  return results;
+}
+
+// Given a set of values, construct a module and bind instance of that module
+// that passes those values through.
+static rtl::RTLModuleOp createModuleForCut(rtl::RTLModuleOp op,
+                                           SetVector<Value> &inputs,
+                                           BlockAndValueMapping &cutMap,
+                                           StringRef suffix, StringRef path) {
+  OpBuilder b(op->getParentOfType<mlir::ModuleOp>()->getRegion(0));
+
+  // Construct the ports, this is just the input Values
+  SmallVector<rtl::ModulePortInfo> ports;
+  for (auto port : llvm::enumerate(inputs))
+    ports.push_back({b.getStringAttr(""), rtl::INPUT, port.value().getType(),
+                     port.index()});
+
+  // Create the module, setting the output path if indicated
+  std::array<NamedAttribute, 1> pathAttr = {
+      b.getNamedAttr("outputPath", b.getStringAttr(path))};
+  auto newMod = b.create<rtl::RTLModuleOp>(
+      op.getLoc(),
+      b.getStringAttr(
+          (op.getVerilogModuleNameAttr().getValue() + suffix).str()),
+      ports, path.empty() ? ArrayRef<NamedAttribute>() : pathAttr);
+
+  // Update the mapping from old values to cloned values
+  for (auto port : llvm::enumerate(inputs))
+    cutMap.map(port.value(), newMod.body().getArgument(port.index()));
+  cutMap.map(op.getBodyBlock(), newMod.getBodyBlock());
+
+  // Add an instance in the old module for the extracted module
+  std::array<NamedAttribute, 3> bindAttr = {
+      b.getNamedAttr("genAsBind", b.getBoolAttr(true)),
+      b.getNamedAttr("instanceName",
+                     b.getStringAttr(("InvisibleBind" + suffix).str())),
+      b.getNamedAttr("moduleName", b.getSymbolRefAttr(newMod.getName()))};
+
+  b = OpBuilder::atBlockTerminator(op.getBodyBlock());
+  b.create<rtl::InstanceOp>(op.getLoc(), ArrayRef<Type>(), inputs.getArrayRef(), bindAttr);
+  return newMod;
+}
+
+// Some blocks have terminators, some don't
+static void setInsertPointToEndOrTerminator(OpBuilder &builder, Block *block) {
+  if (!block->empty() && block->back().mightHaveTrait<OpTrait::IsTerminator>())
+    builder.setInsertionPoint(&block->back());
+  else
+    builder.setInsertionPointToEnd(block);
+}
+
+// Shallow clone, which we use to not clone the content of blocks, doesn't clone
+// the regions, so create all the blocks we need and update the mapping.
+static void addBlockMapping(BlockAndValueMapping &cutMap, Operation *oldOp,
+                            Operation *newOp) {
+  assert(oldOp->getNumRegions() == newOp->getNumRegions());
+  for (size_t i = 0, e = oldOp->getNumRegions(); i != e; ++i) {
+    auto &oldRegion = oldOp->getRegion(i);
+    auto &newRegion = newOp->getRegion(i);
+    for (auto oi = oldRegion.begin(), oe = oldRegion.end(); oi != oe; ++oi) {
+      cutMap.map(&*oi, &newRegion.emplaceBlock());
+    }
+  }
+}
+
+// Do the cloning, which is just a pre-order traversal over the module looking
+// for marked ops.
+static void migrateOps(rtl::RTLModuleOp oldMod, rtl::RTLModuleOp newMod,
+                       SetVector<Operation *> &depOps,
+                       BlockAndValueMapping &cutMap) {
+  OpBuilder b = OpBuilder::atBlockBegin(newMod.getBodyBlock());
+  oldMod.walk<WalkOrder::PreOrder>([&](Operation *op) {
+    if (depOps.count(op)) {
+      setInsertPointToEndOrTerminator(b, cutMap.lookup(op->getBlock()));
+      auto newOp = b.cloneWithoutRegions(*op, cutMap);
+      addBlockMapping(cutMap, op, newOp);
+    }
+  });
+}
 
 //===----------------------------------------------------------------------===//
 // StubExternalModules Pass
@@ -28,130 +159,41 @@ using namespace sv;
 
 namespace {
 
-struct rootSets {
-  SmallVector<AssertOp> asserts;
-  SmallVector<AssumeOp> assumes;
-  SmallVector<CoverOp> covers;
-};
-
-void findRoots(Operation* op, rootSets& roots) {
-    for (auto& r : op->getRegions())
-    for(auto& b : r.getBlocks())
-    for (auto& o : b.getOperations())
-    if (auto opInterest = dyn_cast<AssertOp>(o)) {
-        roots.asserts.push_back(opInterest);
-    }
-    else if (auto opInterest = dyn_cast<AssumeOp>(o)) {
-      roots.assumes.push_back(opInterest);
-    } else if (auto opInterest = dyn_cast<CoverOp>(o)) {
-      roots.covers.push_back(opInterest);
-    } else if (op->getNumRegions()) {
-        findRoots(&o, roots);
-    }
-}
-
-bool allUsesInSet(Operation* op, SetVector<Operation*> opSet) {
-  for (auto en : llvm::enumerate(op->getResults())) {
-    auto operand = en.value();
-    for (auto use : operand->getUses())
-        if (!opSet.count(use.getDefiningOp()))
-            return false;
-    return true;
-  }
-}
-
-// Aggressively clone operations to the new module.  This leaves maximum
-// flexibility for optimization after removal of the nodes from the old module.
-SetVector<Operation*> computeCloneSet(std::set<Operation*>& roots) {
-  SetVector<Operation*> results;
-  for (auto op : roots) {
-    getBackwardsSlice(op, results, [](Operation *testOp) -> bool {
-      return !isa<ReadWriteOp>() && !isa<InstanceOp>() && !isa<PAssignOp> &&
-             !isa<PBAssignOp>;
-    });
-  }
-  return results;
-}
-
-void expandRegion(SmallVector<Operation*>& roots) {
-
-    SetVector<Operation*> slice;
-    unsigned currentIndex = 0;
-
-    bool changed = true;
-    SmallVector<Operation*> curWL, nextWL;
-    curWL.insert(region.begin(), region.end());
-    while (changed) {
-        changed = false;
-        for (auto op : curWL) {
-        for (auto arg : op->getOperands()) {
-            if (!region.count(arg.getDefiningOp())) {
-                //Outside set, record
-                inputs.insert(arg);
-                op->dump();    
-                arg.dump(); 
-           }
-        }
-    }
-    return inputs;
-}
-
-rtl::RTLModuleOp createModuleForCut(rtl::RTLModuleOp op,
-                                    DenseSet<Value> &inputs, StringRef name,
-                                    BlockAndValueMapping& cutMap) {
-  OpBuilder b(op->getParentOfType<mlir::ModuleOp>()->getContext());
-   SmallVector<rtl::ModulePortInfo> ports;
-  size_t inputNum = 0;
-  for (auto port : inputs) {
-    ports.push_back({b.getStringAttr(""), rtl::INPUT, port.getType(),
-                     inputNum++});
-                     llvm::errs() << inputNum - 1 << ": ";
-                     port.dump();
-                     port.getType().dump();
-                     llvm::errs() << "\n";
-  }
-  std::array<NamedAttribute, 1> bindAttr = {
-      b.getNamedAttr("genAsBind", b.getBoolAttr(true))};
-  auto newMod = b.create<rtl::RTLModuleOp>(op.getLoc(), b.getStringAttr(name), ports, bindAttr);
-  inputNum = 0;
-  for (auto port : inputs) {
-      cutMap.map(port, newMod.body().getArgument(inputNum++));
-  }
-    return newMod;
-  }
-
-  void migrateOps(rtl::RTLModuleOp oldMod, rtl::RTLModuleOp newMod,
-                  std::set<Operation *> &ops, BlockAndValueMapping &cutMap) {
-    OpBuilder b(newMod);
-    for (auto op : ops) {
-//        if (!cutMap.contains(op->getBlock()))
-
-
-        b.clone(*op, cutMap);
-    }
-  }
-
-struct SVExtractTestCodeImplPass : public SVExtractTestCodeBase<SVExtractTestCodeImplPass> {
+struct SVExtractTestCodeImplPass
+    : public SVExtractTestCodeBase<SVExtractTestCodeImplPass> {
   void runOnOperation() override;
 
 private:
-  void doModule(rtl::RTLModuleOp module) {
-    rootSets roots;
-    findRoots(module, roots);
-    std::set<Operation *> allRoots;
-    allRoots.insert(roots.asserts.begin(), roots.asserts.end());
-    allRoots.insert(roots.assumes.begin(), roots.assumes.end());
-    allRoots.insert(roots.covers.begin(), roots.covers.end());
-    if (allRoots.empty())
+  void doModule(rtl::RTLModuleOp module, std::function<bool(Operation *)> fn,
+                StringRef suffix, StringRef path) {
+    // Find Operations of interest.
+    SmallVector<Operation *> roots;
+    module->walk([&fn, &roots](Operation *op) {
+      if (fn(op))
+        roots.push_back(op);
+    });
+    // No Ops?  No problem.
+    if (roots.empty())
       return;
+    // Find the data-flow and structural ops to clone.  Result includes roots.
     auto opsToClone = computeCloneSet(roots);
+    // Find the dataflow into the clone set
+    SetVector<Value> inputs;
+    for (auto op : opsToClone)
+      for (auto arg : op->getOperands()) {
+        auto argOp = arg.getDefiningOp(); // may be null
+        if (!opsToClone.count(argOp))
+          inputs.insert(arg);
+      }
+
+    // Make a module to contain the clone set, with arguments being the cut
     BlockAndValueMapping cutMap;
-    auto inputs = computeCut(osToClone, cutMap);
-    auto bmod = createModuleForCut(
-        module, inputs,
-        (module.getVerilogModuleNameAttr().getValue() + "_bind").str(), cutMap);
-    bmod.dump();
-    migrateOps(module, bmod, allRoots, cutMap);
+    auto bmod = createModuleForCut(module, inputs, cutMap, suffix, path);
+    // do the clone
+    migrateOps(module, bmod, opsToClone, cutMap);
+    // erase old operations of interest
+    for (auto op : roots)
+      op->erase();
   }
 };
 
@@ -160,11 +202,21 @@ private:
 void SVExtractTestCodeImplPass::runOnOperation() {
   auto *topLevelModule = getOperation().getBody();
   for (auto &op : topLevelModule->getOperations())
-      if (auto rtlmod = dyn_cast<rtl::RTLModuleOp>(op))
-            doModule(rtlmod);
+    if (auto rtlmod = dyn_cast<rtl::RTLModuleOp>(op)) {
+      // Extract two sets of ops to different modules
+      doModule(
+          rtlmod,
+          [](Operation *op) -> bool {
+            return isa<AssertOp>(op) || isa<AssumeOp>(op) ||
+                   isa<FinishOp>(op) || isa<FWriteOp>(op);
+          },
+          "_assert", "generated/asserts");
+      doModule(
+          rtlmod, [](Operation *op) -> bool { return isa<CoverOp>(op); },
+          "_cover", "generated/covers/*  */");
+    }
 }
 
-    std::unique_ptr<Pass>
-    circt::sv::createSVExtractTestCodePass() {
+std::unique_ptr<Pass> circt::sv::createSVExtractTestCodePass() {
   return std::make_unique<SVExtractTestCodeImplPass>();
 }
