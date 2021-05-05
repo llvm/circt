@@ -67,7 +67,7 @@ void PrettifyVerilogPass::prettifyUnaryOperator(Operation *op) {
   //
   // This is particularly helpful when the operand of the unary op has multiple
   // uses as well.
-  if (op->use_empty())
+  if (op->use_empty() || op->hasOneUse())
     return;
 
   while (!op->hasOneUse()) {

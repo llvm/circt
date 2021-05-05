@@ -218,9 +218,16 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     }
   }
 
-  // If we are going to verilog, sanitize the module names.
+  // Add passes specific to Verilog emission if we're going there.
   if (outputFormat == OutputVerilog || outputFormat == OutputSplitVerilog) {
+    // Legalize the module names.
     pm.addPass(sv::createRTLLegalizeNamesPass());
+
+    // Tidy up the IR to improve verilog emission quality.
+    if (!disableOptimization) {
+      auto &modulePM = pm.nest<rtl::RTLModuleOp>();
+      modulePM.addPass(sv::createPrettifyVerilogPass());
+    }
   }
 
   // Load the emitter options from the command line. Command line options if
