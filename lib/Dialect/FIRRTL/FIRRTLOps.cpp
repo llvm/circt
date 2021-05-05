@@ -1134,23 +1134,10 @@ static LogicalResult verifyConnectOp(ConnectOp connect) {
 }
 
 static LogicalResult verifyPartialConnectOp(PartialConnectOp partialConnect) {
-  FIRRTLType destType = partialConnect.dest().getType().cast<FIRRTLType>();
-  FIRRTLType srcType = partialConnect.src().getType().cast<FIRRTLType>();
-
-  auto isPortOrInstancePort = [](Value a) -> bool {
-    auto op = a.getDefiningOp();
-    return !op || isa<InstanceOp>(op);
-  };
-
-  // If the source or destination is a port or instance port, then an optional
-  // outer flip, indicating the direction (input or output), should be stripped
-  // for type checking.
-  if (isPortOrInstancePort(partialConnect.dest()))
-    if (auto destTypeFlip = destType.dyn_cast<FlipType>())
-      destType = destTypeFlip.getElementType();
-  if (isPortOrInstancePort(partialConnect.src()))
-    if (auto srcTypeFlip = srcType.dyn_cast<FlipType>())
-      srcType = srcTypeFlip.getElementType();
+  FIRRTLType destType =
+      partialConnect.dest().getType().cast<FIRRTLType>().stripFlip().first;
+  FIRRTLType srcType =
+      partialConnect.src().getType().cast<FIRRTLType>().stripFlip().first;
 
   if (!areTypesWeaklyEquivalent(destType, srcType))
     return partialConnect.emitError("type mismatch between destination ")
