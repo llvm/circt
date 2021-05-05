@@ -45,7 +45,45 @@ with Context() as ctx, Location.unknown():
       a, b = swap(a, b)
       return a, b
 
-  m.operation.print()
+    one_input = rtl.RTLModuleOp(
+        name="one_input",
+        input_ports=[("a", i32)],
+        body_builder=lambda m: rtl.OutputOp([]),
+    )
+    two_inputs = rtl.RTLModuleOp(
+        name="two_inputs",
+        input_ports=[("a", i32), ("b", i32)],
+        body_builder=lambda m: rtl.OutputOp([]),
+    )
+    one_output = rtl.RTLModuleOp(
+        name="one_output",
+        output_ports=[("a", i32)],
+        body_builder=lambda m: rtl.OutputOp(
+            [rtl.ConstantOp(i32, IntegerAttr.get(i32, 46)).result]),
+    )
+
+    # CHECK-LABEL: rtl.module @instance_builder_tests
+    def instance_builder_body(module):
+      # CHECK: %[[INST1_RESULT:.+]] = rtl.instance "inst1" @one_output()
+      inst1 = one_output.create(module, "inst1")
+
+      # CHECK: rtl.instance "inst2" @one_input(%[[INST1_RESULT]])
+      inst2 = one_input.create(module, "inst2", {"a": inst1.a})
+
+      # CHECK: rtl.instance "inst4" @two_inputs(%[[INST1_RESULT]], %[[INST1_RESULT]])
+      inst4 = two_inputs.create(module, "inst4", {"a": inst1.a})
+      inst4.set_input_port("b", inst1.a)
+
+      # CHECK: %[[INST5_RESULT:.+]] = rtl.instance "inst5" @MyWidget(%[[INST5_RESULT]])
+      inst5 = op.create(module, "inst5")
+      inst5.set_input_port("my_input", inst5.my_output)
+
+      rtl.OutputOp([])
+
+    instance_builder_tests = rtl.RTLModuleOp(name="instance_builder_tests",
+                                             body_builder=instance_builder_body)
+
+  print(m)
 
   # CHECK-LABEL: === Verilog ===
   print("=== Verilog ===")

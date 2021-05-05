@@ -1,21 +1,117 @@
-from typing import Optional, Sequence
+from typing import Dict, Optional, Sequence
 
 import inspect
 
+from circt.support import BackedgeBuilder
+
 from mlir.ir import *
+
+
+class InstanceBuilder:
+  """Helper class to incrementally construct an instance of a module."""
+
+  def __init__(self,
+               parent_module,
+               module,
+               name,
+               input_port_mapping,
+               *,
+               parameters={},
+               loc=None,
+               ip=None):
+    # Lazily import dependencies to avoid cyclic dependencies.
+    from ._rtl_ops_gen import InstanceOp
+
+    # Create mappings from port name to value, index, and potentially backedge.
+    self.parent_module = parent_module
+    self.mod = module
+    self.operand_indices = {}
+    self.operand_values = []
+    self.result_indices = {}
+    self.backedges = {}
+
+    arg_names = ArrayAttr(module.attributes["argNames"])
+    for i in range(len(arg_names)):
+      arg_name = StringAttr(arg_names[i]).value
+      self.operand_indices[arg_name] = i
+
+      if arg_name in input_port_mapping:
+        self.operand_values.append(input_port_mapping[arg_name])
+      else:
+        type = module.type.inputs[i]
+        backedge = self.parent_module.create_backedge(type, self)
+        self.backedges[i] = backedge
+        self.operand_values.append(backedge)
+
+    result_names = ArrayAttr(module.attributes["resultNames"])
+    for i in range(len(result_names)):
+      result_name = StringAttr(result_names[i]).value
+      self.result_indices[result_name] = i
+
+    # Actually build the InstanceOp.
+    instance_name = StringAttr.get(name)
+    module_name = FlatSymbolRefAttr.get(StringAttr(self.mod.name).value)
+    parameters = DictAttr.get(parameters)
+    self.instance = InstanceOp(
+        self.mod.type.results,
+        instance_name,
+        module_name,
+        self.operand_values,
+        parameters,
+        loc=loc,
+        ip=ip,
+    )
+
+  def __getattr__(self, name):
+    # Check for the attribute in the arg name set.
+    if name in self.operand_indices:
+      index = self.operand_indices[name]
+      return self.instance.inputs[index]
+
+    # Check for the attribute in the result name set.
+    if name in self.result_indices:
+      index = self.result_indices[name]
+      return self.instance.results[index]
+
+    # If we fell through to here, the name isn't a result.
+    raise AttributeError(f"unknown port name {name}")
+
+  def set_input_port(self, name, value):
+    # Check for the attribute in the arg name set.
+    if name in self.operand_indices:
+      # Put the value into the instance.
+      index = self.operand_indices[name]
+      self.instance.inputs[index] = value
+      self.parent_module.remove_backedge(self.backedges[index])
+      return
+
+    # If we fell through to here, the name isn't an arg.
+    raise AttributeError(f"unknown input port name {name}")
+
+  @property
+  def operation(self):
+    """Get the operation associated with this builder."""
+    return self.instance.operation
+
+  @property
+  def module(self):
+    """Get the module associated with this builder."""
+    return self.mod.operation
 
 
 class ModuleLike:
   """Custom Python base class for module-like operations."""
 
-  def __init__(self,
-               name,
-               input_ports,
-               output_ports,
-               *,
-               body_builder=None,
-               loc=None,
-               ip=None):
+  def __init__(
+      self,
+      name,
+      input_ports=[],
+      output_ports=[],
+      *,
+      body_builder=None,
+      loc=None,
+      ip=None,
+  ):
     """
     Create a module-like with the provided `name`, `input_ports`, and
     `output_ports`.
@@ -59,15 +155,9 @@ class ModuleLike:
     if body_builder:
       entry_block = self.add_entry_block()
       with InsertionPoint(entry_block):
-        body_builder(self)
-
-
-class RTLModuleOp(ModuleLike):
-  """Specialization for the RTL module op class."""
-
-  @property
-  def body(self):
-    return self.regions[0]
+        with BackedgeBuilder() as bb:
+          self.backedge_builder = bb
+          body_builder(self)
 
   @property
   def type(self):
@@ -80,6 +170,35 @@ class RTLModuleOp(ModuleLike):
   @property
   def is_external(self):
     return len(self.regions[0].blocks) == 0
+
+  def create(self,
+             module,
+             name: str,
+             input_port_mapping: Dict[str, Value] = {},
+             loc=None,
+             ip=None):
+    return InstanceBuilder(module,
+                           self,
+                           name,
+                           input_port_mapping,
+                           loc=loc,
+                           ip=ip)
+
+  def create_backedge(self, type, builder):
+    assert self.backedge_builder, "No backedge builder initialized."
+    return self.backedge_builder.create(type, builder)
+
+  def remove_backedge(self, backedge):
+    assert self.backedge_builder, "No backedge builder initialized."
+    self.backedge_builder.remove(backedge)
+
+
+class RTLModuleOp(ModuleLike):
+  """Specialization for the RTL module op class."""
+
+  @property
+  def body(self):
+    return self.regions[0]
 
   @property
   def entry_block(self):
