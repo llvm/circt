@@ -88,17 +88,17 @@ protected:
   using Type::Type;
 };
 
-/// Returns whether the two types are equivalent.  See the FIRRTL spec, Section
-/// 4.6, for the full definition of type equivalence.  This predicate differs
-/// from the spec in that it only compares passive types.  Because of how the
-/// FIRRTL dialect uses flip types in module ports and aggregates, this
-/// definition, unlike the spec, ignores flips.
+/// Returns whether the two types are equivalent. See the FIRRTL spec for the
+/// full definition of type equivalence. This predicate differs from the spec in
+/// that it only compares passive types. Because of how the FIRRTL dialect uses
+/// flip types in module ports and aggregates, this definition, unlike the spec,
+/// ignores flips.
 bool areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType);
 
-/// Returns true if two types are weakly equivalent.  See the FIRRTL spec for a
-/// full definition of this.  Roughly, the oriented types (the types with any
-/// flips pushed to the leaves) must match.  This allows for types with flips in
-/// different positions to be equivalent.
+/// Returns true if two types are weakly equivalent.  See the FIRRTL spec,
+/// Section 4.6, for a full definition of this.  Roughly, the oriented types
+/// (the types with any flips pushed to the leaves) must match.  This allows for
+/// types with flips in different positions to be equivalent.
 bool areTypesWeaklyEquivalent(FIRRTLType destType, FIRRTLType srcType,
                               bool destFlip = false, bool srcFlip = false);
 
