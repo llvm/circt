@@ -330,6 +330,12 @@ bool FIRRTLType::isResetType() {
       .Default([](Type) { return false; });
 }
 
+std::pair<FIRRTLType, bool> FIRRTLType::stripFlip() {
+  if (auto a = this->dyn_cast<FlipType>())
+    return {a.getElementType(), true};
+  return {*this, false};
+}
+
 /// Helper to implement the equivalence logic for a pair of bundle elements.
 /// Note that the FIRRTL spec requires bundle elements to have the same
 /// orientation, but this only compares their passive types. The FIRRTL dialect

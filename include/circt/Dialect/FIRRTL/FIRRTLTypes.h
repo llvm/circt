@@ -80,6 +80,10 @@ public:
   /// Return true if this is a valid "reset" type.
   bool isResetType();
 
+  /// Return the type with an outer flip stripped and a bool indicating if an
+  /// outer flip was stripped.
+  std::pair<FIRRTLType, bool> stripFlip();
+
 protected:
   using Type::Type;
 };
