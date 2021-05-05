@@ -42,19 +42,19 @@ void circt::python::populateDialectRTLSubmodule(py::module &m) {
   mlir_type_subclass(m, "StructType", rtlTypeIsAStructType)
       .def_static("get", [](py::list pyFieldInfos) {
         llvm::SmallVector<RTLStructFieldInfo> mlirFieldInfos;
-        llvm::SmallVector<llvm::SmallString<8>> names;
         MlirContext ctx;
-        size_t i = 0;
-        for (auto &it : pyFieldInfos) {
-          auto tuple = it.cast<py::tuple>();
-          auto name = tuple[0].cast<std::string>();
-          names.push_back(llvm::SmallString<8>(name));
+
+        // Since we're just passing string refs to the type constructor, copy
+        // them into a temporary vector to give them all new addresses.
+        llvm::SmallVector<llvm::SmallString<8>> names;
+        for (size_t i = 0, e = pyFieldInfos.size(); i < e; ++i) {
+          auto tuple = pyFieldInfos[i].cast<py::tuple>();
           auto type = tuple[1].cast<MlirType>();
           ctx = mlirTypeGetContext(type);
+          names.emplace_back(tuple[0].cast<std::string>());
           mlirFieldInfos.push_back(RTLStructFieldInfo{
               mlirStringRefCreate(names[i].data(), names[i].size()),
               mlirTypeAttrGet(type)});
-          ++i;
         }
         return py::cast(rtlStructTypeGet(ctx, mlirFieldInfos.size(),
                                          mlirFieldInfos.data()));
