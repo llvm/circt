@@ -32,14 +32,17 @@ class BackedgeBuilder(AbstractContextManager):
       instance = builder.operation
       module = builder.module
 
-      import re
+      for i in range(len(instance.operands)):
+        if instance.operands[i] == edge:
+          from mlir.ir import ArrayAttr, StringAttr
+          arg_names = ArrayAttr(module.attributes["argNames"])
+          port_name = "%" + StringAttr(arg_names[i]).value
 
-      value_ident = re.search("(%\w+) =", str(edge))[1]
-      module_decl = re.search("(rtl.module @.+\))", str(module))[1]
+      assert port_name, "Could not look up port name for backedge"
 
-      msg = "Port:     " + value_ident + "\n"
+      msg = "Port:     " + port_name + "\n"
       msg += "Instance: " + str(instance) + "\n"
-      msg += "Module:   " + module_decl
+      msg += "Module:   " + str(module).split(" {")[0]
 
       # Clean up the IR and Python references.
       instance.erase()
