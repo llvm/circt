@@ -12,6 +12,7 @@
 
 #include "mlir-c/IR.h"
 #include "circt-c/Dialect/RTL.h"
+#include "circt-c/Dialect/Seq.h"
 #include "mlir-c/AffineExpr.h"
 #include "mlir-c/AffineMap.h"
 #include "mlir-c/BuiltinTypes.h"
@@ -35,6 +36,7 @@ int registerOnlyRTL() {
   if (mlirContextGetNumLoadedDialects(ctx) != 1)
     return 1;
 
+  // RTL dialect tests.
   MlirDialectHandle rtlHandle = mlirGetDialectHandle__rtl__();
 
   MlirDialect rtl = mlirContextGetOrLoadDialect(
@@ -58,6 +60,22 @@ int registerOnlyRTL() {
   MlirDialect alsoRtl = mlirDialectHandleLoadDialect(rtlHandle, ctx);
   if (!mlirDialectEqual(rtl, alsoRtl))
     return 7;
+
+  // Seq dialect tests.
+  MlirDialectHandle seqHandle = mlirGetDialectHandle__seq__();
+  mlirDialectHandleRegisterDialect(seqHandle, ctx);
+  mlirDialectHandleLoadDialect(seqHandle, ctx);
+
+  MlirDialect seq = mlirContextGetOrLoadDialect(
+      ctx, mlirDialectHandleGetNamespace(seqHandle));
+  if (mlirDialectIsNull(seq))
+    return 8;
+
+  MlirDialect alsoSeq = mlirDialectHandleLoadDialect(seqHandle, ctx);
+  if (!mlirDialectEqual(seq, alsoSeq))
+    return 9;
+
+  registerSeqPasses();
 
   mlirContextDestroy(ctx);
 
