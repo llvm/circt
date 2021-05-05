@@ -54,8 +54,8 @@ with Context() as ctx, Location.unknown():
       # Note, the error here is actually caught and printed below.
       # CHECK: Uninitialized ports remain in circuit!
       # CHECK: Port:     %[[PORT_NAME:.+]]
-      # CHECK: Instance: rtl.instance "inst1" @one_input({{.+}})
       # CHECK: Module:   rtl.module @one_input(%[[PORT_NAME]]: i32)
+      # CHECK: Instance: rtl.instance "inst1" @one_input({{.+}})
       inst1 = one_input.create(module, "inst1")
 
     try:

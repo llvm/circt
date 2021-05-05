@@ -41,8 +41,8 @@ class BackedgeBuilder(AbstractContextManager):
       assert port_name, "Could not look up port name for backedge"
 
       msg = "Port:     " + port_name + "\n"
-      msg += "Instance: " + str(instance) + "\n"
-      msg += "Module:   " + str(module).split(" {")[0]
+      msg += "Module:   " + str(module).split(" {")[0] + "\n"
+      msg += "Instance: " + str(instance)
 
       # Clean up the IR and Python references.
       instance.erase()
