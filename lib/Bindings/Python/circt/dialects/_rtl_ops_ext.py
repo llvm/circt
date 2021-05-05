@@ -76,7 +76,7 @@ class InstanceBuilder:
     # If we fell through to here, the name isn't a result.
     raise AttributeError(f"unknown port name {name}")
 
-  def set_port(self, name, value):
+  def set_input_port(self, name, value):
     # Check for the attribute in the arg name set.
     if name in self.operand_indices:
       # Put the value into the instance.

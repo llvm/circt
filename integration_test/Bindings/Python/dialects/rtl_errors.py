@@ -40,7 +40,7 @@ with Context() as ctx, Location.unknown():
       # CHECK: unknown input port name b
       try:
         inst2 = one_input.create(module, "inst2", {"a": constant_value})
-        inst2.set_port("b", None)
+        inst2.set_input_port("b", None)
       except AttributeError as e:
         print(e)
 
