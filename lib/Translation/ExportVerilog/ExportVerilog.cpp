@@ -801,11 +801,8 @@ private:
   SubExprInfo visitComb(AndOp op) { return emitVariadic(op, And, "&"); }
   SubExprInfo visitComb(OrOp op) { return emitVariadic(op, Or, "|"); }
   SubExprInfo visitComb(XorOp op) {
-    if (op.getNumOperands() == 2)
-      if (auto cst =
-              dyn_cast_or_null<ConstantOp>(op.getOperand(1).getDefiningOp()))
-        if (cst.getValue().isAllOnesValue())
-          return emitUnary(op, "~");
+    if (op.isBinaryNot())
+      return emitUnary(op, "~");
 
     return emitVariadic(op, Xor, "^");
   }
@@ -1081,21 +1078,15 @@ SubExprInfo ExprEmitter::visitComb(ICmpOp op) {
 
   auto pred = static_cast<uint64_t>(op.predicate());
   assert(pred < sizeof(symop) / sizeof(symop[0]));
-  if (op.predicate() == ICmpPredicate::eq) {
-    // Lower "== -1" to Reduction And
-    if (auto op1 =
-            dyn_cast_or_null<ConstantOp>(op.getOperand(1).getDefiningOp())) {
-      if (op1.getValue().isAllOnesValue())
-        return emitUnary(op, "&", true);
-    }
-  } else if (op.predicate() == ICmpPredicate::ne) {
-    // Lower "!= 0" to Reduction Or
-    if (auto op1 =
-            dyn_cast_or_null<ConstantOp>(op.getOperand(1).getDefiningOp())) {
-      if (op1.getValue().isNullValue())
-        return emitUnary(op, "|", true);
-    }
-  }
+
+  // Lower "== -1" to Reduction And.
+  if (op.isEqualAllOnes())
+    return emitUnary(op, "&", true);
+
+  // Lower "!= 0" to Reduction Or.
+  if (op.isNotEqualZero())
+    return emitUnary(op, "|", true);
+
   auto result = emitBinary(op, Comparison, symop[pred], signop[pred]);
 
   // SystemVerilog 11.8.1: "Comparison... operator results are unsigned,
