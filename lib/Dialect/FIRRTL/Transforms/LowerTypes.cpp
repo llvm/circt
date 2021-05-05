@@ -868,15 +868,12 @@ void TypeLoweringVisitor::recursivePartialConnect(Value a, FIRRTLType aType,
                                                   bVector.getNumElements());
              i != e; ++i) {
           if (suffix.isTriviallyEmpty())
-            recursivePartialConnect(
-                a, aType.getElementType().template dyn_cast<FIRRTLType>(), b,
-                bVector.getElementType().dyn_cast<FIRRTLType>(), Twine(i),
-                aFlip);
+            recursivePartialConnect(a, aType.getElementType(), b,
+                                    bVector.getElementType(), Twine(i), aFlip);
           else
-            recursivePartialConnect(
-                a, aType.getElementType().template dyn_cast<FIRRTLType>(), b,
-                bVector.getElementType().dyn_cast<FIRRTLType>(),
-                suffix + "_" + Twine(i), aFlip);
+            recursivePartialConnect(a, aType.getElementType(), b,
+                                    bVector.getElementType(),
+                                    suffix + "_" + Twine(i), aFlip);
         }
       })
       .Case<FlipType>([&](auto aType) {
