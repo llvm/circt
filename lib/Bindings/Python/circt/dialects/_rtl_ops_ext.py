@@ -19,6 +19,9 @@ class InstanceBuilder:
                parameters={},
                loc=None,
                ip=None):
+    # Lazily import dependencies to avoid cyclic dependencies.
+    from ._rtl_ops_gen import InstanceOp
+
     # Create mappings from port name to value, index, and potentially backedge.
     self.parent_module = parent_module
     self.mod = module

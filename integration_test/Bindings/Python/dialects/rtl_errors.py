@@ -51,7 +51,7 @@ with Context() as ctx, Location.unknown():
       except AttributeError as e:
         print(e)
 
-      # COM: Note, the error here is actually caught and printed below.
+      # Note, the error here is actually caught and printed below.
       # CHECK: Uninitialized ports remain in circuit!
       # CHECK: Port:     %[[PORT_NAME:.+]]
       # CHECK: Instance: rtl.instance "inst1" @one_input(%[[PORT_NAME]])
