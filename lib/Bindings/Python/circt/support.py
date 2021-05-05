@@ -25,6 +25,7 @@ class BackedgeBuilder(AbstractContextManager):
     edge.owner.erase()
 
   def __exit__(self, exc_type, exc_value, traceback):
+    errors = []
     for edge in self.edges:
       # Build a nice error message about the uninitialized port.
       builder = self.builders[repr(edge)]
@@ -36,13 +37,16 @@ class BackedgeBuilder(AbstractContextManager):
       value_ident = re.search("(%\w+) =", str(edge))[1]
       module_decl = re.search("(rtl.module @.+\))", str(module))[1]
 
-      msg = "Uninitialized ports remain in circuit!\n"
-      msg += "Port:     " + value_ident + "\n"
+      msg = "Port:     " + value_ident + "\n"
       msg += "Instance: " + str(instance) + "\n"
-      msg += "Module:   " + module_decl + "\n"
+      msg += "Module:   " + module_decl
 
       # Clean up the IR and Python references.
       instance.erase()
       self.remove(edge)
 
-      raise RuntimeError(msg)
+      errors.append(msg)
+
+    if errors:
+      errors.insert(0, "Uninitialized ports remain in circuit!")
+      raise RuntimeError("\n".join(errors))
