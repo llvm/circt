@@ -2231,7 +2231,10 @@ ParseResult FIRStmtParser::parseInstance() {
   resultTypes.reserve(modulePorts.size());
 
   for (auto port : modulePorts) {
-    resultTypes.push_back(FlipType::get(port.type));
+    auto portType = port.type;
+    if (port.direction == Direction::Input)
+      portType = FlipType::get(portType);
+    resultTypes.push_back(portType);
   }
   ArrayAttr annotations = getState().emptyArrayAttr;
   getAnnotations(getModuleTarget() + ">" + id, annotations);
@@ -2726,13 +2729,10 @@ FIRModuleParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
         parseOptionalInfo(info))
       return failure();
 
-    // If this is an output port, flip the type.
-    if (isOutput)
-      type = FlipType::get(type);
-
     // FIXME: We should persist the info loc into the IR, not just the name
     // and type.
-    result.push_back({{name, type}, info.getFIRLoc()});
+    result.push_back(
+        {{name, type, direction::get(isOutput)}, info.getFIRLoc()});
   }
 
   return success();

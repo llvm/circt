@@ -48,20 +48,26 @@ bool isExpression(Operation *op);
 struct ModulePortInfo {
   StringAttr name;
   FIRRTLType type;
+  Direction direction;
 
   StringRef getName() const { return name ? name.getValue() : ""; }
 
-  /// Return true if this is a simple output-only port.
-  bool isOutput() { return type.isa<FlipType>(); }
-
-  /// Return true if this is a simple input-only port.
-  bool isInput() {
+  /// Return true if this is a simple output-only port.  If you want the
+  /// direction of the port, use the \p direction parameter.
+  bool isOutput() {
     auto flags = type.getRecursiveTypeProperties();
-    // isPassive & !containsAnalog.
-    return flags.first && !flags.second;
+    return flags.first && !flags.second && direction == Direction::Output;
   }
 
-  /// Return true if this is an inout port.
+  /// Return true if this is a simple input-only port.  If you want the
+  /// direction of the port, use the \p direction parameter.
+  bool isInput() {
+    auto flags = type.getRecursiveTypeProperties();
+    return flags.first && !flags.second && direction == Direction::Input;
+  }
+
+  /// Return true if this is an inout port.  This will be true if the port
+  /// contains either bi-directional signals or ananlog types.
   bool isInOut() { return !isOutput() && !isInput(); }
 };
 
@@ -78,6 +84,14 @@ ArrayAttr getModulePortNames(Operation *module);
 
 /// Given an FModule or ExtModule, return the name of the specified port number.
 StringAttr getModulePortName(Operation *op, size_t portIndex);
+
+/// Return the portDirections attribute for the specified module, which contains
+/// the direction for each port.
+IntegerAttr getModulePortDirections(Operation *module);
+
+/// Given an FModule or ExtModule, return the direction of the specified port
+/// number.
+Direction getModulePortDirection(Operation *op, size_t portIndex);
 
 /// Returns true if the type is a bundle or a flip of a bundle.
 bool isBundleType(Type type);

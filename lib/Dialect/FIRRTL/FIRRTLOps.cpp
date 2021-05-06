@@ -62,12 +62,15 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
     return swapFlow(accumulatedFlow);
   };
 
-  Operation *op = val.getDefiningOp();
-  if (!op) {
-    if (val.getType().isa<FlipType>())
+  if (auto blockArg = val.dyn_cast<BlockArgument>()) {
+    auto op = val.getParentBlock()->getParentOp();
+    auto info = getModulePortInfo(op)[blockArg.getArgNumber()];
+    if (info.direction == Direction::Output)
       return swap();
     return accumulatedFlow;
   }
+
+  Operation *op = val.getDefiningOp();
 
   return TypeSwitch<Operation *, Flow>(op)
       .Case<SubfieldOp>([&](auto op) {
@@ -286,9 +289,11 @@ SmallVector<ModulePortInfo> firrtl::getModulePortInfo(Operation *op) {
   auto argTypes = getModuleType(op).getInputs();
 
   auto portNamesAttr = getModulePortNames(op);
+  auto portDirections = getModulePortDirections(op).getValue();
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     auto type = argTypes[i].cast<FIRRTLType>();
-    results.push_back({portNamesAttr[i].cast<StringAttr>(), type});
+    auto direction = direction::get(portDirections[i]);
+    results.push_back({portNamesAttr[i].cast<StringAttr>(), type, direction});
   }
   return results;
 }
@@ -297,6 +302,11 @@ SmallVector<ModulePortInfo> firrtl::getModulePortInfo(Operation *op) {
 StringAttr firrtl::getModulePortName(Operation *op, size_t portIndex) {
   assert(isa<FModuleOp>(op) || isa<FExtModuleOp>(op));
   return getModulePortNames(op)[portIndex].cast<StringAttr>();
+}
+
+Direction firrtl::getModulePortDirection(Operation *op, size_t portIndex) {
+  assert(isa<FModuleOp>(op) || isa<FExtModuleOp>(op));
+  return direction::get(getModulePortDirections(op).getValue()[portIndex]);
 }
 
 static void buildModule(OpBuilder &builder, OperationState &result,
@@ -318,10 +328,17 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   SmallString<8> attrNameBuf;
   // Record the names of the arguments if present.
   SmallVector<Attribute, 4> portNames;
-  for (size_t i = 0, e = ports.size(); i != e; ++i)
+  SmallVector<Direction, 4> portDirections;
+  for (size_t i = 0, e = ports.size(); i != e; ++i) {
     portNames.push_back(ports[i].name);
+    portDirections.push_back(ports[i].direction);
+  }
 
+  // Both attributes are added, even if the module has no ports.
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
+  result.addAttribute(
+      direction::attrKey,
+      direction::packIntegerAttribute(portDirections, builder.getContext()));
 
   result.addRegion();
 }
@@ -365,7 +382,7 @@ void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
 static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
                                     ArrayRef<Type> argTypes, bool isVariadic,
                                     ArrayRef<Type> resultTypes,
-                                    bool &needportNamesAttr) {
+                                    bool &needportNamesAttr, APInt directions) {
   Region &body = op->getRegion(0);
   bool isExternal = body.empty();
   SmallString<32> resultNameStr;
@@ -375,6 +392,8 @@ static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     if (i > 0)
       p << ", ";
+
+    p << (directions[i] ? "out " : "in ");
 
     auto portName = portNamesAttr[i].cast<StringAttr>().getValue();
     Value argumentValue;
@@ -405,6 +424,128 @@ static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
   p << ')';
 }
 
+static ParseResult parseFunctionArgumentList2(
+    OpAsmParser &parser, bool allowAttributes, bool allowVariadic,
+    SmallVectorImpl<OpAsmParser::OperandType> &argNames,
+    SmallVectorImpl<Type> &argTypes, SmallVectorImpl<Direction> &argDirections,
+    SmallVectorImpl<NamedAttrList> &argAttrs, bool &isVariadic) {
+  if (parser.parseLParen())
+    return failure();
+
+  // The argument list either has to consistently have ssa-id's followed by
+  // types, or just be a type list.  It isn't ok to sometimes have SSA ID's and
+  // sometimes not.
+  auto parseArgument = [&]() -> ParseResult {
+    llvm::SMLoc loc = parser.getCurrentLocation();
+
+    // Parse argument name if present.
+    OpAsmParser::OperandType argument;
+    Type argumentType;
+    // TODO: is this safe?
+    SmallVector<StringRef, 2> directions({{"in"}, {"out"}});
+    StringRef direction;
+    if (succeeded(parser.parseOptionalKeyword(&direction, directions)) &&
+        succeeded(parser.parseOptionalRegionArgument(argument)) &&
+        !argument.name.empty()) {
+      // Reject this if the preceding argument was missing a name.
+      if (argNames.empty() && !argTypes.empty())
+        return parser.emitError(loc, "expected type instead of SSA identifier");
+      argNames.push_back(argument);
+      argDirections.push_back(direction::get(direction == "out"));
+
+      if (parser.parseColonType(argumentType))
+        return failure();
+    } else if (allowVariadic && succeeded(parser.parseOptionalEllipsis())) {
+      isVariadic = true;
+      return success();
+    } else if (!argNames.empty()) {
+      // Reject this if the preceding argument had a name.
+      return parser.emitError(loc, "expected SSA identifier");
+    } else if (parser.parseType(argumentType)) {
+      return failure();
+    }
+
+    // Add the argument type.
+    argTypes.push_back(argumentType);
+
+    // Parse any argument attributes.
+    NamedAttrList attrs;
+    if (parser.parseOptionalAttrDict(attrs))
+      return failure();
+    if (!allowAttributes && !attrs.empty())
+      return parser.emitError(loc, "expected arguments without attributes");
+    argAttrs.push_back(attrs);
+    return success();
+  };
+
+  // Parse the function arguments.
+  isVariadic = false;
+  if (failed(parser.parseOptionalRParen())) {
+    do {
+      unsigned numTypedArguments = argTypes.size();
+      if (parseArgument())
+        return failure();
+
+      llvm::SMLoc loc = parser.getCurrentLocation();
+      if (argTypes.size() == numTypedArguments &&
+          succeeded(parser.parseOptionalComma()))
+        return parser.emitError(
+            loc, "variadic arguments must be in the end of the argument list");
+    } while (succeeded(parser.parseOptionalComma()));
+    parser.parseRParen();
+  }
+
+  return success();
+}
+
+static ParseResult
+parseFunctionResultList2(OpAsmParser &parser,
+                         SmallVectorImpl<Type> &resultTypes,
+                         SmallVectorImpl<NamedAttrList> &resultAttrs) {
+  if (failed(parser.parseOptionalLParen())) {
+    // We already know that there is no `(`, so parse a type.
+    // Because there is no `(`, it cannot be a function type.
+    Type ty;
+    if (parser.parseType(ty))
+      return failure();
+    resultTypes.push_back(ty);
+    resultAttrs.emplace_back();
+    return success();
+  }
+
+  // Special case for an empty set of parens.
+  if (succeeded(parser.parseOptionalRParen()))
+    return success();
+
+  // Parse individual function results.
+  do {
+    resultTypes.emplace_back();
+    resultAttrs.emplace_back();
+    if (parser.parseType(resultTypes.back()) ||
+        parser.parseOptionalAttrDict(resultAttrs.back())) {
+      return failure();
+    }
+  } while (succeeded(parser.parseOptionalComma()));
+  return parser.parseRParen();
+}
+
+static ParseResult
+parseFunctionSignature2(OpAsmParser &parser, bool allowVariadic,
+                        SmallVectorImpl<OpAsmParser::OperandType> &argNames,
+                        SmallVectorImpl<Type> &argTypes,
+                        SmallVectorImpl<Direction> &argDirections,
+                        SmallVectorImpl<NamedAttrList> &argAttrs,
+                        bool &isVariadic, SmallVectorImpl<Type> &resultTypes,
+                        SmallVectorImpl<NamedAttrList> &resultAttrs) {
+  bool allowArgAttrs = true;
+  if (parseFunctionArgumentList2(parser, allowArgAttrs, allowVariadic, argNames,
+                                 argTypes, argDirections, argAttrs, isVariadic))
+    return failure();
+  if (succeeded(parser.parseOptionalArrow()))
+    return parseFunctionResultList2(parser, resultTypes, resultAttrs);
+  return success();
+}
+
 static void printModuleLikeOp(OpAsmPrinter &p, Operation *op) {
   using namespace mlir::impl;
 
@@ -424,8 +565,9 @@ static void printModuleLikeOp(OpAsmPrinter &p, Operation *op) {
 
   bool needportNamesAttr = false;
   printFunctionSignature2(p, op, argTypes, /*isVariadic*/ false, resultTypes,
-                          needportNamesAttr);
-  SmallVector<StringRef, 3> omittedAttrs;
+                          needportNamesAttr,
+                          getModulePortDirections(op).getValue());
+  SmallVector<StringRef, 3> omittedAttrs({direction::attrKey});
   if (!needportNamesAttr)
     omittedAttrs.push_back("portNames");
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(),
@@ -461,6 +603,7 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
   SmallVector<NamedAttrList, 4> resultAttrs;
   SmallVector<Type, 4> argTypes;
   SmallVector<Type, 4> resultTypes;
+  SmallVector<Direction, 4> argDirections;
   auto &builder = parser.getBuilder();
 
   // Parse the name as a symbol.
@@ -471,9 +614,9 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
 
   // Parse the function signature.
   bool isVariadic = false;
-  if (parseFunctionSignature(parser, /*allowVariadic*/ false, entryArgs,
-                             argTypes, portNamesAttrs, isVariadic, resultTypes,
-                             resultAttrs))
+  if (parseFunctionSignature2(parser, /*allowVariadic*/ false, entryArgs,
+                              argTypes, argDirections, portNamesAttrs,
+                              isVariadic, resultTypes, resultAttrs))
     return failure();
 
   // Record the argument and result types as an attribute.  This is necessary
@@ -489,6 +632,10 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
   assert(resultAttrs.size() == resultTypes.size());
 
   auto *context = result.getContext();
+
+  // Add the port directions attribute indiciating which port is.
+  result.addAttribute(direction::attrKey,
+                      direction::packIntegerAttribute(argDirections, context));
 
   SmallVector<Attribute> portNames;
   if (!result.attributes.get("portNames")) {
@@ -532,9 +679,12 @@ static ParseResult parseFExtModuleOp(OpAsmParser &parser,
 }
 
 static LogicalResult verifyModuleSignature(Operation *op) {
-  for (auto argType : getModuleType(op).getInputs())
+  for (auto argType : getModuleType(op).getInputs()) {
     if (!argType.isa<FIRRTLType>())
       return op->emitOpError("all module ports must be firrtl types");
+    if (argType.isa<FlipType>())
+      return op->emitOpError("module ports should not contain an outer flip");
+  }
   return success();
 }
 
@@ -567,8 +717,19 @@ static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
     return failure();
   auto portNamesAttr = getModulePortNames(op);
 
-  if (op.getPorts().size() != portNamesAttr.size())
+  auto numPorts = op.getPorts().size();
+  if (numPorts != portNamesAttr.size())
     return op.emitError("module ports does not match number of arguments");
+
+  // Directions are stored in an APInt which cannot have zero bitwidth.  If the
+  // module has no ports, then the APInt should be size one.  Otherwise, their
+  // sizes should match.
+  auto numDirections = getModulePortDirections(op).getValue().getBitWidth();
+  if ((numPorts != numDirections) && (numPorts != 0 || numDirections != 1))
+    return op.emitError()
+           << "module ports size (" << numPorts
+           << ") does not match number of bits in port direction ("
+           << numDirections << ")";
 
   return success();
 }
@@ -627,7 +788,9 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
 
   for (size_t i = 0; i != numResults; i++) {
     auto resultType = instance.getResult(i).getType();
-    auto expectedType = FlipType::get(modulePorts[i].type);
+    auto expectedType = modulePorts[i].type;
+    if (modulePorts[i].direction == Direction::Input)
+      expectedType = FlipType::get(expectedType);
     if (resultType != expectedType) {
       auto diag = instance.emitOpError()
                   << "result type for " << modulePorts[i].name << " must be "
