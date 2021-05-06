@@ -27,24 +27,24 @@ using namespace firrtl;
 /// splits the string at every '[' and '.' and populates the \p annotations with
 /// the array of strings. Assumption, the \p target string is a well formed
 /// valid token specifying an instance of a bundle/array.
-void static parseSubFieldSubIndexAnnotations(StringRef target,
+static void parseSubFieldSubIndexAnnotations(StringRef target,
                                              ArrayAttr &annotations,
                                              MLIRContext *context) {
-  std::string temp = "";
   if (target.empty())
     return;
   char begin = target[0];
-  temp.push_back(begin);
   SmallVector<Attribute> annotationVec;
   // The caller must strip the prefix, and the string target must only contain
   // the suffix.
   if (begin != '.' && begin != '[')
     return;
-  for (size_t i = 1; i < target.size(); i++) {
+  SmallString<16> temp;
+  temp.push_back(begin);
+  for (size_t i = 1, s = target.size(); i < s; ++i) {
     if (target[i] == '[') {
       // Create a StringAttr with the previous token.
       annotationVec.push_back(StringAttr::get(context, temp));
-      temp = "";
+      temp.clear();
     } else if (target[i] == '.') {
       // Create a StringAttr with the previous token.
       annotationVec.push_back(StringAttr::get(context, temp));

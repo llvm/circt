@@ -515,7 +515,9 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
   opsToRemove.push_back(op);
 }
 
-void static filterAnnotations(ArrayAttr annotations,
+/// Copy annotations from \p annotations to \p loweredAttrs, except annotations
+/// with "target" key, that do not match the field suffix.
+static void filterAnnotations(ArrayAttr annotations,
                               SmallVector<Attribute> &loweredAttrs,
                               const FlatBundleFieldEntry &field,
                               MLIRContext *context) {
@@ -533,7 +535,7 @@ void static filterAnnotations(ArrayAttr annotations,
     }
 
     ArrayAttr subFieldTarget = targetAttr.cast<ArrayAttr>();
-    std::string targetStr = "";
+    SmallString<16> targetStr;
     for (auto fName : subFieldTarget) {
       std::string fNameStr = fName.cast<StringAttr>().getValue().str();
       // The fNameStr will begin with either '[' or '.', replace it with an
@@ -546,7 +548,7 @@ void static filterAnnotations(ArrayAttr annotations,
       targetStr += fNameStr;
     }
     if (!targetStr.empty()) {
-      auto pos = field.suffix.find(targetStr);
+      auto pos = field.suffix.find(targetStr.str().str());
       if (pos == 0) {
         NamedAttrList modAttr;
         for (auto attr : di.getValue()) {
@@ -586,9 +588,9 @@ void TypeLoweringVisitor::visitDecl(WireOp op) {
     // For all annotations on the parent op, filter them based on the target
     // attribute.
     filterAnnotations(op.annotations(), loweredAttrs, field, context);
-    auto wire = builder->create<WireOp>(field.getPortType(),
-                                        builder->getStringAttr(loweredName),
-                                        ArrayAttr::get(context, loweredAttrs));
+    auto wire =
+        builder->create<WireOp>(field.type, builder->getStringAttr(loweredName),
+                                ArrayAttr::get(context, loweredAttrs));
     setBundleLowering(result, StringRef(field.suffix).drop_front(1), wire);
   }
 
