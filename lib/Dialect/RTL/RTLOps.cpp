@@ -126,6 +126,18 @@ FunctionType rtl::getModuleType(Operation *module) {
   return typeAttr.getValue().cast<FunctionType>();
 }
 
+/// Return the name to use for the Verilog module that we're referencing
+/// here.  This is typically the symbol, but can be overridden with the
+/// verilogName attribute.
+StringAttr rtl::getVerilogModuleNameAttr(Operation *module) {
+  auto nameAttr = module->getAttrOfType<StringAttr>("verilogName");
+  if (nameAttr)
+    return nameAttr;
+
+  return module->getAttrOfType<StringAttr>(
+      ::mlir::SymbolTable::getSymbolAttrName());
+}
+
 /// Return the port name for the specified argument or result.
 StringAttr rtl::getModuleArgumentNameAttr(Operation *module, size_t argNo) {
   return module->getAttrOfType<ArrayAttr>("argNames")[argNo].cast<StringAttr>();

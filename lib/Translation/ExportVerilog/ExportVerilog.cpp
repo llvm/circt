@@ -2141,18 +2141,10 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   auto *moduleOp = op.getReferencedModule();
   assert(moduleOp && "Invalid IR");
 
-  // If this is a reference to an external module with a hard coded Verilog
-  // name, then use it here.  This is a hack because we lack proper support for
-  // parameterized modules in the RTL dialect.
-  if (auto extMod = dyn_cast<RTLModuleExternOp>(moduleOp)) {
-    auto verilogName = extMod.getVerilogModuleNameAttr();
-    emitter.verifyModuleName(op, verilogName);
-    indent() << verilogName.getValue();
-  } else if (auto mod = dyn_cast<RTLModuleOp>(moduleOp)) {
-    auto verilogName = mod.getNameAttr();
-    emitter.verifyModuleName(op, verilogName);
-    indent() << verilogName.getValue();
-  }
+  // Use the specified name or the symbol name as appropriate.
+  auto verilogName = getVerilogModuleNameAttr(moduleOp);
+  emitter.verifyModuleName(op, verilogName);
+  indent() << verilogName.getValue();
 
   // Helper that prints a parameter constant value in a Verilog compatible way.
   auto printParmValue = [&](Attribute value) {
