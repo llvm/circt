@@ -20,7 +20,7 @@ with Context() as ctxt, Location.unknown():
 
   i1 = IntegerType.get_signless(1)
   i32 = IntegerType.get_signless(32)
-  i32_chan = esi.channel_type(i32)
+  i32_chan = esi.ChannelType.get(i32)
   sys.print()
 
   with InsertionPoint(sys.body):

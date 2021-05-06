@@ -83,6 +83,25 @@ circuit test_mod : %[[{"a": "a"}]]
 
 ; MLIRLOWER: }
 
+
+; Check that we prettify the IR before Verilog emission.
+;
+  module prettifyExample :
+    input inp_1: UInt<5>
+    input inp_2: UInt<5>
+    input inp_3: UInt<5>
+    output out1: UInt<10>
+    output out2: UInt<10>
+    out1 <= cat(not(inp_1), inp_2)
+    out2 <= cat(not(inp_1), inp_3)
+
+; VERILOG-LABEL:   module prettifyExample(
+; VERILOG-NEXT :   assign out1 = {~inp_1, inp_2};
+; VERILOG-NEXT :   assign out2 = {~inp_1, inp_3};
+
+
+
+
   module flipFlop:
     input clock: Clock
     input a_d: UInt<1>

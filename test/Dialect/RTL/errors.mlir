@@ -127,6 +127,13 @@ rtl.module @struct(%a: !rtl.struct<foo: i42>, %b: i42) {
 
 // -----
 
+rtl.module @union(%b: i42) {
+  // expected-error @+1 {{custom op 'rtl.union_create' cannot find union field 'bar'}}
+  %u = rtl.union_create "bar", %a : !rtl.union<foo: i42>
+}
+
+// -----
+
 rtl.module @invalid_add(%a: i0) {  // i0 ports are ok.
   // expected-error @+1 {{'comb.add' op operand #0 must be an integer bitvector of one or more bits, but got 'i0'}}
   %b = comb.add %a, %a: i0

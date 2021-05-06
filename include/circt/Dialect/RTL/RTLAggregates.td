@@ -193,10 +193,57 @@ def StructExplodeOp : RTLOp<"struct_explode", [NoSideEffect]> {
   let summary = "Expand a struct into its constituent parts.";
   let arguments = (ins StructType:$input);
   let results = (outs Variadic<RTLNonInOutType>:$result);
+   let parser = "return ::parse$cppClass(parser, result);";
+   let printer = "return ::print(p, *this);";
+ }
+
+//===----------------------------------------------------------------------===//
+// Union operations
+//===----------------------------------------------------------------------===//
+
+def UnionCreateOp : RTLOp<"union_create", [NoSideEffect]> {
+  let summary = "Create a union with the specified value.";
+  let description = [{
+    Create a union with the value 'input', which can then be accessed via the
+    specified field.
+
+    ```
+      %x = rtl.constant 0 : i3
+      %z = rtl.union_create "bar", %x : !rtl.union<bar: i3, baz: i8>
+    ```
+  }];
+
+  let arguments = (ins StrAttr:$field, RTLNonInOutType:$input);
+  let results = (outs UnionType:$result);
 
   let parser = "return ::parse$cppClass(parser, result);";
   let printer = "return ::print(p, *this);";
 }
+
+def UnionExtractOp : RTLOp<"union_extract", [NoSideEffect]> {
+  let summary = "Get a union member.";
+  let description = [{
+    Get the value of a union, interpreting it as the type of the specified
+    member field.  Extracting a value belonging to a different field than the
+    union was initially created will result in undefined behavior.
+
+    ```
+      %u = ...
+      %v = rtl.union_extract %u["foo"] : !rtl.union<foo: i3, bar: i16>
+      // %v is of type 'i3'
+    ```
+  }];
+
+  let arguments = (ins UnionType:$input, StrAttr:$field);
+  let results = (outs RTLNonInOutType:$result);
+
+  let parser = "return ::parse$cppClass(parser, result);";
+  let printer = "return ::print(p, *this);";
+}
+
+//===----------------------------------------------------------------------===//
+// Misc. operations
+//===----------------------------------------------------------------------===//
 
 def ConstantOp
  : RTLOp<"constant",
