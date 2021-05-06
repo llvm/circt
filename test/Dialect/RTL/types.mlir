@@ -21,7 +21,12 @@ module {
   func @structType(%SE: !rtl.struct<>, %SF: !rtl.struct<foo: i32, bar: i4, baz: !rtl.struct<foo: i7>>) {
     return
   }
-  
+
+  // CHECK-LABEL: func @unionType(%arg0: !rtl.union<foo: i32, bar: i4, baz: !rtl.struct<foo: i7>>) {
+  func @unionType(%SF: !rtl.union<foo: i32, bar: i4, baz: !rtl.struct<foo: i7>>) {
+    return
+  }
+
   // CHECK-LABEL: nestedType
   func @nestedType(
     // CHECK: %arg0: !rtl.inout<array<42xi8>>,
