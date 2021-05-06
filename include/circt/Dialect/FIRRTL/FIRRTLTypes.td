@@ -19,7 +19,7 @@ def FIRRTLType : DialectType<FIRRTLDialect, CPred<"$_self.isa<FIRRTLType>()">,
 
 def ClockType : DialectType<FIRRTLDialect, CPred<"$_self.isa<ClockType>()">,
  "clock", "::circt::firrtl::ClockType">,
- BuildableType<"ClockType::get($_builder.getContext())">; 
+ BuildableType<"ClockType::get($_builder.getContext())">;
 
 def IntType : DialectType<FIRRTLDialect, CPred<"$_self.isa<IntType>()">,
  "sint or uint type", "::circt::firrtl::IntType">;
@@ -41,7 +41,7 @@ def FVectorType : DialectType<FIRRTLDialect, CPred<"$_self.isa<FVectorType>()">,
 
 def UInt1Type : DialectType<FIRRTLDialect,
   CPred<"$_self.isa<UIntType>() && $_self.cast<UIntType>().getWidth() == 1">,
-   "UInt<1>", "::circt::firrtl::UIntType">, 
+   "UInt<1>", "::circt::firrtl::UIntType">,
    BuildableType<"UIntType::get($_builder.getContext(), 1)">;
 
 def AsyncResetType : DialectType<FIRRTLDialect,
@@ -51,6 +51,10 @@ def AsyncResetType : DialectType<FIRRTLDialect,
 def PassiveType : DialectType<FIRRTLDialect,
   CPred<"$_self.isa<FIRRTLType>() && $_self.cast<FIRRTLType>().isPassive()">,
   "a passive type (contain no flips)", "::circt::firrtl::FIRRTLType">;
+
+def UnflippedType : DialectType<FIRRTLDialect,
+  CPred<"$_self.isa<FIRRTLType>() && !$_self.isa<FlipType>()">,
+  "a type that does not contain an outer flip", "::circt::firrtl::FIRRTLType">;
 
 //===----------------------------------------------------------------------===//
 // FIRRTL Types Predicates

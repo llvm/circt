@@ -22,6 +22,7 @@
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Support/LoweringOptions.h"
+#include "circt/Transforms/Passes.h"
 #include "circt/Translation/ExportVerilog.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/AsmState.h"
@@ -33,6 +34,7 @@
 #include "mlir/Transforms/Passes.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
+#include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
 
 using namespace llvm;
@@ -62,6 +64,10 @@ static cl::opt<std::string>
 
 static cl::opt<bool> disableOptimization("disable-opt",
                                          cl::desc("disable optimizations"));
+
+static cl::opt<bool> inliner("inline",
+                             cl::desc("Run the FIRRTL module inliner"),
+                             cl::init(false));
 
 static cl::opt<bool> lowerToRTL("lower-to-rtl",
                                 cl::desc("run the lower-to-rtl pass"));
@@ -170,7 +176,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     if (!disableOptimization) {
       auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
       modulePM.addPass(createCSEPass());
-      modulePM.addPass(createCanonicalizerPass());
+      modulePM.addPass(createSimpleCanonicalizerPass());
     }
   } else {
     assert(inputFormat == InputMLIRFile);
@@ -185,7 +191,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
       // If we are running FIRRTL passes, clean up the output.
       if (!disableOptimization) {
         modulePM.addPass(createCSEPass());
-        modulePM.addPass(createCanonicalizerPass());
+        modulePM.addPass(createSimpleCanonicalizerPass());
       }
     }
   }
@@ -194,6 +200,9 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
   // Allow optimizations to run multithreaded.
   context.enableMultithreading(isMultithreaded);
+
+  if (inliner)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
 
   if (imconstprop)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
@@ -212,13 +221,20 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
       auto &modulePM = pm.nest<rtl::RTLModuleOp>();
       modulePM.addPass(sv::createRTLCleanupPass());
       modulePM.addPass(createCSEPass());
-      modulePM.addPass(createCanonicalizerPass());
+      modulePM.addPass(createSimpleCanonicalizerPass());
     }
   }
 
-  // If we are going to verilog, sanitize the module names.
+  // Add passes specific to Verilog emission if we're going there.
   if (outputFormat == OutputVerilog || outputFormat == OutputSplitVerilog) {
+    // Legalize the module names.
     pm.addPass(sv::createRTLLegalizeNamesPass());
+
+    // Tidy up the IR to improve verilog emission quality.
+    if (!disableOptimization) {
+      auto &modulePM = pm.nest<rtl::RTLModuleOp>();
+      modulePM.addPass(sv::createPrettifyVerilogPass());
+    }
   }
 
   // Load the emitter options from the command line. Command line options if
@@ -267,9 +283,7 @@ processBufferIntoMultipleFiles(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
         case OutputVerilog:
           llvm_unreachable("single-stream format must be handled elsewhere");
         case OutputSplitVerilog:
-          return exportSplitVerilog(
-              module.get(), outputDirectory,
-              [](StringRef filename) { llvm::outs() << filename << "\n"; });
+          return exportSplitVerilog(module.get(), outputDirectory);
         }
         llvm_unreachable("unknown output format");
       });

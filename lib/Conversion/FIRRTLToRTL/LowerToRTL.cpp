@@ -156,7 +156,7 @@ static FirMemory analyzeMemOp(MemOp op) {
   size_t numReadWritePorts = 0;
 
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
-    auto portKind = *op.getPortKind(i);
+    auto portKind = op.getPortKind(i);
     if (portKind == MemOp::PortKind::Read)
       ++numReadPorts;
     else if (portKind == MemOp::PortKind::Write)
@@ -787,11 +787,8 @@ void FIRRTLModuleLowering::lowerModuleBody(
     // We lower zero width inout and outputs to a wire that isn't connected to
     // anything outside the module.  Inputs are lowered to zero.
     if (isZeroWidth && port.isInput()) {
-      Value newArg = bodyBuilder.create<WireOp>(FlipType::get(port.type),
-                                                "." + port.getName().str() +
-                                                    ".0width_input");
-
-      newArg = bodyBuilder.create<AsPassivePrimOp>(newArg);
+      Value newArg = bodyBuilder.create<WireOp>(
+          port.type, "." + port.getName().str() + ".0width_input");
       oldArg.replaceAllUsesWith(newArg);
       continue;
     }
@@ -807,7 +804,7 @@ void FIRRTLModuleLowering::lowerModuleBody(
     // Outputs need a temporary wire so they can be connect'd to, which we
     // then return.
     Value newArg = bodyBuilder.create<WireOp>(
-        port.type, "." + port.getName().str() + ".output");
+        FlipType::get(port.type), "." + port.getName().str() + ".output");
     // Switch all uses of the old operands to the new ones.
     oldArg.replaceAllUsesWith(newArg);
 
@@ -1732,7 +1729,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   // two layers of type to split appart.
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
     auto portName = op.getPortName(i).getValue();
-    auto portKind = *op.getPortKind(i);
+    auto portKind = op.getPortKind(i);
 
     auto &portKindNum =
         portKind == MemOp::PortKind::Read
@@ -1834,8 +1831,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
 
   // Decode information about the input and output ports on the referenced
   // module.
-  SmallVector<ModulePortInfo, 8> portInfo;
-  getModulePortInfo(oldModule, portInfo);
+  SmallVector<ModulePortInfo, 8> portInfo = getModulePortInfo(oldModule);
 
   // Build an index from the name attribute to an index into portInfo, so we
   // can do efficient lookups.
@@ -2013,7 +2009,7 @@ LogicalResult FIRRTLLowering::visitExpr(NotPrimOp op) {
     return failure();
   // ~x  ---> x ^ 0xFF
   auto allOnes = getOrCreateIntConstant(
-      operand.getType().getIntOrFloatBitWidth(), -1, /*signed=*/true);
+      APInt::getAllOnesValue(operand.getType().getIntOrFloatBitWidth()));
   return setLoweringTo<comb::XorOp>(op, operand, allOnes);
 }
 
@@ -2061,8 +2057,8 @@ LogicalResult FIRRTLLowering::visitExpr(AndRPrimOp op) {
   // Lower AndR to == -1
   return setLoweringTo<comb::ICmpOp>(
       op, ICmpPredicate::eq, operand,
-      getOrCreateIntConstant(operand.getType().getIntOrFloatBitWidth(), -1,
-                             /*signed*/ true));
+      getOrCreateIntConstant(
+          APInt::getAllOnesValue(operand.getType().getIntOrFloatBitWidth())));
 }
 
 LogicalResult FIRRTLLowering::visitExpr(OrRPrimOp op) {

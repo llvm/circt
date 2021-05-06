@@ -120,3 +120,12 @@ def CapnpEncode : ESI_Physical_Op<"encode.capnp", [NoSideEffect]> {
     $clk $valid $dataToEncode attr-dict `:` type($dataToEncode) `->` type($capnpBits)
   }];
 }
+
+def NullSourceOp : ESI_Physical_Op<"null", [NoSideEffect]> {
+  let summary = "An op which never produces messages.";
+
+  let arguments = (ins);
+  let results = (outs ChannelType:$out);
+
+  let assemblyFormat = [{ attr-dict `:` type($out) }];
+}

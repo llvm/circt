@@ -17,18 +17,6 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
 
-namespace circt {
-namespace firrtl {
-
-class FIRRTLType;
-
-/// If the specified attribute list has a firrtl.name attribute, return its
-/// value.
-StringAttr getFIRRTLNameAttr(ArrayRef<NamedAttribute> attrs);
-
-} // namespace firrtl
-} // namespace circt
-
 // Pull in the dialect definition.
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h.inc"
 

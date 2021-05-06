@@ -17,8 +17,7 @@ def InstanceOp : FIRRTLOp<"instance"> {
     and outputs.  The inputs have flip type, the outputs do not.
   }];
 
-  let arguments = (ins FlatSymbolRefAttr:$moduleName,
-                       StrArrayAttr:$portNames, StrAttr:$name,
+  let arguments = (ins FlatSymbolRefAttr:$moduleName, StrAttr:$name,
                        DefaultValuedAttr<AnnotationArrayAttr,
                                          "{}">:$annotations);
   let results = (outs Variadic<FIRRTLType>:$results);
@@ -31,10 +30,9 @@ def InstanceOp : FIRRTLOp<"instance"> {
   let builders = [
     OpBuilder<(ins "::mlir::TypeRange":$elementType,
                       "::mlir::StringRef":$moduleName,
-                      "::mlir::ArrayAttr":$portNames,
                       CArg<"StringRef", "{}">:$name,
                       CArg<"ArrayRef<Attribute>", "{}">:$annotations), [{
-      return build($_builder, $_state, elementType, moduleName, portNames, name,
+      return build($_builder, $_state, elementType, moduleName, name,
                    $_builder.getArrayAttr(annotations));
     }]>
   ];
@@ -45,15 +43,12 @@ def InstanceOp : FIRRTLOp<"instance"> {
     Operation *getReferencedModule();
 
     /// Return the port name for the specified result number.
-    StringAttr getPortName(size_t resultNo);
+    StringAttr getPortName(size_t resultNo) {
+      return getModulePortName(getReferencedModule(), resultNo);
+    }
     StringRef getPortNameStr(size_t resultNo) {
       return getPortName(resultNo).getValue();
     }
-
-    // Return the result for this instance that corresponds to the specified
-    // port name.
-    Value getPortNamed(StringRef name);
-    Value getPortNamed(StringAttr name);
   }];
 }
 
@@ -80,7 +75,7 @@ def MemoryPortOp : FIRRTLOp<"memoryport"> {
   let summary = "Access a memory";
 
   let arguments = (ins FIRRTLType:$memory, IntType:$index, ClockType:$clock,
-                    MemDirAttr:$direction, OptionalAttr<StrAttr>:$name,
+                    MemDirAttr:$direction, StrAttr:$name,
                     DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
   let results = (outs FIRRTLType:$result);
 
@@ -114,11 +109,11 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
     /// Return the name and kind of ports supported by this memory.
     SmallVector<std::pair<Identifier, PortKind>> getPorts();
 
-    /// Return the kind of the specified port or None if the name is invalid.
-    Optional<PortKind> getPortKind(StringRef portName);
+    /// Return the kind of the specified port.
+    PortKind getPortKind(StringRef portName);
 
-    /// Return the kind of the specified port number
-    Optional<PortKind> getPortKind(size_t resultNo);
+    /// Return the kind of the specified port number.
+    PortKind getPortKind(size_t resultNo);
 
     /// Return the data-type field of the memory, the type of each element.
     FIRRTLType getDataType();
@@ -233,7 +228,7 @@ def WireOp : FIRRTLOp<"wire", []> {
   let arguments = (
     ins StrAttr:$name,
         DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
-  let results = (outs FIRRTLType:$result);
+  let results = (outs UnflippedType:$result);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,

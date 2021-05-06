@@ -22,11 +22,13 @@
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Types.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Support/LLVM.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Passes.h"
 #include "mlir/Transforms/Utils.h"
@@ -1509,22 +1511,36 @@ namespace {
 struct HandshakeInsertBufferPass
     : public HandshakeInsertBufferBase<HandshakeInsertBufferPass> {
 
-  DenseMap<Operation *, bool> opVisited;
-  DenseMap<Operation *, bool> opOnStack;
+  void bufferCyclesStrategy() {
+    auto f = getOperation();
+    DenseSet<Operation *> opVisited;
+    DenseSet<Operation *> opInFlight;
+
+    // Traverse each use of each argument of the entry block.
+    auto builder = OpBuilder(f.getContext());
+    for (auto &arg : f.getBody().front().getArguments()) {
+      for (auto &operand : arg.getUses()) {
+        if (opVisited.count(operand.getOwner()) == 0)
+          insertBufferDFS(operand.getOwner(), builder, opVisited, opInFlight);
+      }
+    }
+  }
 
   /// DFS-based graph cycle detection and naive buffer insertion. Exactly one
   /// 2-slot non-transparent buffer will be inserted into each graph cycle.
-  void insertBufferOp(Operation *op, OpBuilder &builder) {
+  void insertBufferDFS(Operation *op, OpBuilder &builder,
+                       DenseSet<Operation *> &opVisited,
+                       DenseSet<Operation *> &opInFlight) {
     // Mark operation as visited and push into the stack.
-    opVisited[op] = true;
-    opOnStack[op] = true;
+    opVisited.insert(op);
+    opInFlight.insert(op);
 
     // Traverse all uses of the current operation.
     for (auto &operand : op->getUses()) {
-      auto user = operand.getOwner();
+      auto *user = operand.getOwner();
 
       // If graph cycle detected, insert a BufferOp into the edge.
-      if (opOnStack[user] && !isa<handshake::BufferOp>(op) &&
+      if (opInFlight.count(user) != 0 && !isa<handshake::BufferOp>(op) &&
           !isa<handshake::BufferOp>(user)) {
         auto value = operand.get();
 
@@ -1539,28 +1555,26 @@ struct HandshakeInsertBufferPass
               return !isa<handshake::BufferOp>(operand.getOwner());
             }));
       }
-      // For unvisited operations, recursively call insertBufferOp() method.
-      else if (!opVisited[user])
-        insertBufferOp(user, builder);
+      // For unvisited operations, recursively call insertBufferDFS() method.
+      else if (opVisited.count(user) == 0)
+        insertBufferDFS(user, builder, opVisited, opInFlight);
     }
     // Pop operation out of the stack.
-    opOnStack[op] = false;
+    opInFlight.erase(op);
   }
 
   void runOnOperation() override {
-    auto f = getOperation();
-    for (auto &block : f) {
-      for (auto &op : block) {
-        opVisited[&op] = false;
-        opOnStack[&op] = false;
-      }
-    }
-    // Traverse each use of each argument of the entry block.
-    auto builder = OpBuilder(f.getContext());
-    for (auto &arg : f.getBody().front().getArguments()) {
-      for (auto &operand : arg.getUses()) {
-        if (!opVisited[operand.getOwner()])
-          insertBufferOp(operand.getOwner(), builder);
+    if (strategies.empty())
+      strategies = {"cycles"};
+
+    for (auto strategy : strategies) {
+      if (strategy == "cycles")
+        bufferCyclesStrategy();
+      else {
+        emitError(getOperation().getLoc())
+            << "Unknown buffer strategy: " << strategy;
+        signalPassFailure();
+        return;
       }
     }
   }

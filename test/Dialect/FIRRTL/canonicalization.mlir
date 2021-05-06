@@ -1,4 +1,4 @@
-// RUN: circt-opt -canonicalize %s | FileCheck %s
+// RUN: circt-opt -simple-canonicalizer %s | FileCheck %s
 
 firrtl.circuit "And" {
 

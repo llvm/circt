@@ -22,19 +22,11 @@ circuit TypeCanonicalizationStillConsideredHarmful:
 
     ; @expected-error @+1 {{invalid}}
     b.a.a <- bx.a.a
-    ; @expected-error @+1 {{invalid}}
-    b.a.a <= bx.a.a
 
     ; @expected-error @+1 {{invalid}}
     c.a <- cx.a
     ; @expected-error @+1 {{invalid}}
-    c.a <= cx.a
-    ; @expected-error @+1 {{invalid}}
     c.a.a <- cx.a.a
-    ; @expected-error @+1 {{invalid}}
-    c.a.a <= cx.a.a
 
     ; @expected-error @+1 {{invalid}}
     d.a <- dx.a
-    ; @expected-error @+1 {{invalid}}
-    d.a <= dx.a

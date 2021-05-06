@@ -14,6 +14,7 @@
 #include "SVPassDetail.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Support/ImplicitLocOpBuilder.h"
+#include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Process.h"
 
 using namespace circt;

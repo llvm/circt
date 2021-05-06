@@ -120,6 +120,7 @@ public:
   void visitExpr(SubindexOp op);
   void visitExpr(SubaccessOp op);
   void visitStmt(ConnectOp op);
+  void visitStmt(WhenOp op);
 
 private:
   // Lowering module block arguments.
@@ -131,9 +132,8 @@ private:
 
   void setBundleLowering(Value oldValue, StringRef flatField, Value newValue);
   Value getBundleLowering(Value oldValue, StringRef flatField);
-  void getAllBundleLowerings(Value oldValue, SmallVectorImpl<Value> &results);
-
-  Identifier getArgAttrName(unsigned newArgNumber);
+  void getAllBundleLowerings(Value oldValue,
+                             SmallVectorImpl<std::pair<Value, bool>> &results);
 
   MLIRContext *context;
 
@@ -149,6 +149,7 @@ private:
 
   // State to track the new attributes for the module.
   SmallVector<NamedAttribute, 8> newModuleAttrs;
+  SmallVector<Attribute> newArgNames;
   size_t originalNumModuleArgs;
 };
 } // end anonymous namespace
@@ -194,17 +195,17 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   // Remember the original argument attributess.
   SmallVector<NamedAttribute, 8> originalArgAttrs;
   DictionaryAttr originalAttrs = module->getAttrDictionary();
-  for (size_t i = 0, e = originalNumModuleArgs; i < e; ++i)
-    originalArgAttrs.push_back(
-        originalAttrs.getNamed(getArgAttrName(i)).getValue());
-  DictionaryAttr::sortInPlace(originalArgAttrs);
 
   // Copy over any attributes that weren't original argument attributes.
   auto *argAttrBegin = originalArgAttrs.begin();
   auto *argAttrEnd = originalArgAttrs.end();
   for (auto attr : originalAttrs)
     if (std::lower_bound(argAttrBegin, argAttrEnd, attr) == argAttrEnd)
-      newModuleAttrs.push_back(attr);
+      if (attr.first.str() != "portNames")
+        newModuleAttrs.push_back(attr);
+
+  newModuleAttrs.push_back(NamedAttribute(Identifier::get("portNames", context),
+                                          builder->getArrayAttr(newArgNames)));
 
   // Update the module's attributes.
   module->setAttrs(newModuleAttrs);
@@ -254,13 +255,11 @@ void TypeLoweringVisitor::lowerArg(FModuleOp module, BlockArgument arg,
 void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   OpBuilder builder(context);
 
-  // Cache the named identifer for argument names.
-  auto argNameId = builder.getIdentifier("firrtl.name");
-
   // Create an array of the result types and results names.
   SmallVector<Type, 8> inputTypes;
   SmallVector<DictionaryAttr, 8> attributes;
 
+  SmallVector<Attribute> portNames;
   for (auto &port : extModule.getPorts()) {
     // Flatten the port type.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
@@ -268,21 +267,20 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
 
     // For each field, add record its name and type.
     for (auto field : fieldTypes) {
+      Attribute pName;
       inputTypes.push_back(field.getPortType());
-      if (port.name) {
-        auto argAttr = builder.getDictionaryAttr(
-            NamedAttribute(argNameId, builder.getStringAttr(field.suffix)));
-        attributes.push_back(argAttr);
-      } else {
-        // If the port didn't have a name, push back an empty name.
-        attributes.push_back({});
-      }
+      if (port.name)
+        pName = builder.getStringAttr(field.suffix);
+      else
+        pName = builder.getStringAttr("");
+      portNames.push_back(pName);
     }
   }
+  extModule->setAttr(Identifier::get("portNames", context),
+                     builder.getArrayAttr(portNames));
 
   // Set the type and then bulk set all the names.
   extModule.setType(builder.getFunctionType(inputTypes, {}));
-  extModule.setAllArgAttrs(attributes);
 }
 
 //===----------------------------------------------------------------------===//
@@ -294,14 +292,14 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
 // ensuring both lowerings are the same, we can process every module in the
 // circuit in parallel, and every instance will have the correct ports.
 void TypeLoweringVisitor::visitDecl(InstanceOp op) {
-  // Create a new, flat bundle type for the new result
+  // Create a new, flat bundle type for the new result.
   SmallVector<Type, 8> resultTypes;
-  SmallVector<Attribute, 8> resultNames;
+  SmallVector<StringAttr, 8> resultNames;
   SmallVector<size_t, 8> numFieldsPerResult;
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-    flattenType(op.getType(i).cast<FIRRTLType>(), op.getPortNameStr(i),
+    flattenType(op.getType(i).cast<FIRRTLType>(), "",
                 /*isFlip*/ false, fieldTypes);
 
     for (auto field : fieldTypes) {
@@ -313,16 +311,14 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
   }
 
   auto newInstance = builder->create<InstanceOp>(
-      resultTypes, op.moduleNameAttr(), builder->getArrayAttr(resultNames),
-      op.nameAttr(), op.annotations());
+      resultTypes, op.moduleNameAttr(), op.nameAttr(), op.annotations());
 
   // Record the mapping of each old result to each new result.
   size_t nextResult = 0;
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
     // If this result was a non-bundle value, just RAUW it.
-    auto origPortName = op.getPortNameStr(i);
     if (numFieldsPerResult[i] == 1 &&
-        newInstance.getPortNameStr(nextResult) == origPortName) {
+        resultNames[nextResult].getValue().empty()) {
       op.getResult(i).replaceAllUsesWith(newInstance.getResult(nextResult));
       ++nextResult;
       continue;
@@ -330,10 +326,9 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
 
     // Otherwise lower bundles.
     for (size_t j = 0, e = numFieldsPerResult[i]; j != e; ++j) {
-      auto newPortName = newInstance.getPortNameStr(nextResult);
-      // Drop the original port name and the underscore.
-      newPortName = newPortName.drop_front(origPortName.size() + 1);
-
+      auto newPortName = resultNames[nextResult].getValue();
+      // Drop the leading underscore.
+      newPortName = newPortName.drop_front(1);
       // Map the flattened suffix for the original bundle to the new value.
       setBundleLowering(op.getResult(i), newPortName,
                         newInstance.getResult(nextResult));
@@ -380,7 +375,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     resultPortTypes.clear();
     resultPortNames.clear();
     for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
-      auto kind = op.getPortKind(i).getValue();
+      auto kind = op.getPortKind(i);
       auto name = op.getPortName(i);
 
       // Any read or write ports are just added.
@@ -426,9 +421,8 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
                                   .getPassiveType()
                                   .cast<BundleType>();
 
-      auto kind =
-          newMem.getPortKind(newMem.getPortName(i).getValue()).getValue();
-      auto oldKind = op.getPortKind(op.getPortName(j).getValue()).getValue();
+      auto kind = newMem.getPortKind(newMem.getPortName(i).getValue());
+      auto oldKind = op.getPortKind(op.getPortName(j).getValue());
 
       auto skip = kind == MemOp::PortKind::Write &&
                   oldKind == MemOp::PortKind::ReadWrite;
@@ -468,7 +462,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
         // lowering target, and then connecting every new port
         // subfield to that.
         if (oldName == "clk" || oldName == "en" || oldName == "addr") {
-          FIRRTLType theType = FlipType::get(elt.type);
+          FIRRTLType theType = elt.type.getPassiveType();
 
           // Construct a new wire if needed.
           auto wireName =
@@ -503,9 +497,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
         // Data ports ("data", "mask") are trivially lowered because
         // each data leaf winds up in a new, separate memory. No wire
         // creation is needed.
-        FIRRTLType theType = elt.type;
-        if (kind == MemOp::PortKind::Write)
-          theType = FlipType::get(theType);
+        FIRRTLType theType = elt.type.getPassiveType();
 
         setBundleLowering(op.getResult(j), (oldName + field.suffix).str(),
                           builder->create<SubfieldOp>(
@@ -522,6 +514,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
 
   opsToRemove.push_back(op);
 }
+
 void static filterAnnotations(ArrayAttr annotations,
                               SmallVector<Attribute> &loweredAttrs,
                               const FlatBundleFieldEntry &field,
@@ -793,35 +786,23 @@ void TypeLoweringVisitor::visitStmt(ConnectOp op) {
   if (!destType || !srcType)
     return;
 
-  // Get the lowered values for each side.
-  SmallVector<Value, 8> destValues;
+  SmallVector<std::pair<Value, bool>, 8> destValues;
   getAllBundleLowerings(dest, destValues);
 
-  SmallVector<Value, 8> srcValues;
+  SmallVector<std::pair<Value, bool>, 8> srcValues;
   getAllBundleLowerings(src, srcValues);
 
-  // Check that we got out the same number of values from each bundle.
-  assert(destValues.size() == srcValues.size() &&
-         "connected bundles don't match");
-
-  // Determine if the LHS expression is the duplex value.
-  auto isDestDuplex = isDuplexValue(destValues.front());
-
   for (auto tuple : llvm::zip_first(destValues, srcValues)) {
-    Value newDest = std::get<0>(tuple);
-    Value newSrc = std::get<1>(tuple);
 
-    // When two bundles are bulk connected, the connect operation becomes a
-    // pair-wise connect of each field. The rules for flow state that a value
-    // from a duplex expression can be used as both a source and sink,
-    // regardless of the flip orientation of the type. To make this work, we
-    // find the non-duplex value and make sure that it is the in the correct
-    // position. Two duplex values cannot be connected, since it is unclear
-    // which side is left or right.
-    if (isDestDuplex ? newSrc.getType().isa<FlipType>()
-                     : !newDest.getType().isa<FlipType>()) {
+    auto newDest = std::get<0>(tuple).first;
+    auto newDestFlipped = std::get<0>(tuple).second;
+    auto newSrc = std::get<1>(tuple).first;
+
+    // Flow checks guarantee that the connection is valid.  Therfore,
+    // no flow checks are needed and just the type of the LHS
+    // determines whether or not this is a reverse connection.
+    if (newDestFlipped)
       std::swap(newSrc, newDest);
-    }
 
     builder->create<ConnectOp>(newDest, newSrc);
   }
@@ -855,20 +836,33 @@ void TypeLoweringVisitor::visitExpr(InvalidValuePrimOp op) {
   opsToRemove.push_back(op);
 }
 
+void TypeLoweringVisitor::visitStmt(WhenOp op) {
+  // The WhenOp itself does not require any lowering, the only value it uses is
+  // a one-bit predicate.  Recursively visit all regions so internal operations
+  // are lowered.
+
+  // Visit operations in the then block.
+  for (auto &op : op.getThenBlock()) {
+    builder->setInsertionPoint(&op);
+    builder->setLoc(op.getLoc());
+    dispatchVisitor(&op);
+  }
+
+  // If there is no else block, return.
+  if (!op.hasElseRegion())
+    return;
+
+  // Visit operations in the else block.
+  for (auto &op : op.getElseBlock()) {
+    builder->setInsertionPoint(&op);
+    builder->setLoc(op.getLoc());
+    dispatchVisitor(&op);
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // Helpers to manage state.
 //===----------------------------------------------------------------------===//
-
-static DictionaryAttr getArgAttrs(StringAttr nameAttr, StringRef suffix,
-                                  OpBuilder *builder) {
-  SmallString<16> newName(nameAttr.getValue());
-  newName += suffix;
-
-  StringAttr newNameAttr = builder->getStringAttr(newName);
-  auto attr = builder->getNamedAttr("firrtl.name", newNameAttr);
-
-  return builder->getDictionaryAttr(attr);
-}
 
 // Creates and returns a new block argument of the specified type to the
 // module. This also maintains the name attribute for the new argument,
@@ -881,13 +875,10 @@ Value TypeLoweringVisitor::addArg(FModuleOp module, Type type,
   auto newValue = body->addArgument(type);
 
   // Save the name attribute for the new argument.
-  StringAttr nameAttr = getFIRRTLNameAttr(module.getArgAttrs(oldArgNumber));
-  if (nameAttr) {
-    auto newArgAttrs = getArgAttrs(nameAttr, nameSuffix, builder);
-    auto newArgNumber = newValue.getArgNumber() - originalNumModuleArgs;
-    auto newArgAttrName = getArgAttrName(newArgNumber);
-    newModuleAttrs.push_back(NamedAttribute(newArgAttrName, newArgAttrs));
-  }
+  StringAttr nameAttr = getModulePortName(module, oldArgNumber);
+  Attribute newArg =
+      builder->getStringAttr(nameAttr.getValue().str() + nameSuffix.str());
+  newArgNames.push_back(newArg);
 
   return newValue;
 }
@@ -917,7 +908,7 @@ Value TypeLoweringVisitor::getBundleLowering(Value oldValue,
 // For a mapped aggregate typed value, retrieve and return the flat values for
 // each field.
 void TypeLoweringVisitor::getAllBundleLowerings(
-    Value value, SmallVectorImpl<Value> &results) {
+    Value value, SmallVectorImpl<std::pair<Value, bool>> &results) {
 
   TypeSwitch<FIRRTLType>(getCanonicalAggregateType(value.getType()))
       .Case<BundleType, FVectorType>([&](auto aggregateType) {
@@ -930,16 +921,10 @@ void TypeLoweringVisitor::getAllBundleLowerings(
           auto name = StringRef(element.suffix).drop_front(1);
 
           // Store the resulting lowering for this flat value.
-          results.push_back(getBundleLowering(value, name));
+          results.push_back({getBundleLowering(value, name), element.isOutput});
         }
       })
       .Default([&](auto) {});
-}
-
-Identifier TypeLoweringVisitor::getArgAttrName(unsigned newArgNumber) {
-  SmallString<16> argNameBuffer;
-  mlir::impl::getArgAttrName(newArgNumber, argNameBuffer);
-  return Identifier::get(argNameBuffer, context);
 }
 
 //===----------------------------------------------------------------------===//

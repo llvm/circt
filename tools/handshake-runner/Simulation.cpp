@@ -18,6 +18,7 @@
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/Simulation.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "runner"
 

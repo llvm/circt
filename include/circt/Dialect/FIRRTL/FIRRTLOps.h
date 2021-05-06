@@ -53,7 +53,14 @@ FunctionType getModuleType(Operation *op);
 
 /// This function can extract information about ports from a module and an
 /// extmodule.
-void getModulePortInfo(Operation *op, SmallVectorImpl<ModulePortInfo> &results);
+SmallVector<ModulePortInfo> getModulePortInfo(Operation *op);
+
+/// Return the portNames attribute for the specified module, which contains the
+/// name for each port.
+ArrayAttr getModulePortNames(Operation *module);
+
+/// Given an FModule or ExtModule, return the name of the specified port number.
+StringAttr getModulePortName(Operation *op, size_t portIndex);
 
 /// Returns true if the type is a bundle or a flip of a bundle.
 bool isBundleType(Type type);
@@ -63,6 +70,29 @@ bool isBundleType(Type type);
 /// flip orientation is not used to determine the direction of each pairwise
 /// connect.
 bool isDuplexValue(Value val);
+
+namespace flow {
+enum Flow { Source, Sink, Duplex };
+}
+
+/// Compute the flow for a Value, \p val, as determined by the FIRRTL
+/// specification.  This recursively walks backwards from \p val to the
+/// declaration.  The resulting flow is a combination of the declaration flow
+/// (output ports and instance inputs are sinks, registers and wires are duplex,
+/// anything else is a source) and the number of intermediary flips.  An even
+/// number of flips will result in the same flow as the declaration.  An odd
+/// number of flips will result in reversed flow being returned.  The reverse of
+/// source is sink.  The reverse of sink is source.  The reverse of duplex is
+/// duplex.  The \p accumulatedFlow parameter sets the initial flow.  A user
+/// should normally \a not have to change this from its default of \p
+/// flow::Source.
+flow::Flow foldFlow(Value val, flow::Flow accumulatedFlow = flow::Source);
+
+namespace kind {
+enum Kind { Port, Instance, Other };
+}
+
+kind::Kind getDeclarationKind(Value val);
 
 } // namespace firrtl
 } // namespace circt

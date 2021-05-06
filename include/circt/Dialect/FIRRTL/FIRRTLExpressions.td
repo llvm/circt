@@ -61,6 +61,9 @@ def SubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
     /// invalid, then a null type is returned.
     static FIRRTLType getResultType(Type inType, StringAttr fieldName,
                                     Location loc);
+
+    /// Return true if the specified field is flipped.
+    bool isFieldFlipped();
   }];
 
   let verifier = [{

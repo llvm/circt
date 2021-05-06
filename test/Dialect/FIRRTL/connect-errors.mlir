@@ -2,8 +2,9 @@
 // RUN: circt-opt %s -split-input-file -verify-diagnostics
 
 firrtl.circuit "test" {
+// expected-note @+1 {{the left-hand-side was defined here}}
 firrtl.module @test(%a : !firrtl.uint<1>, %b : !firrtl.flip<uint<1>>) {
-  // expected-error @+1 {{connection destination must be a non-passive type or a duplex value}}
+  // expected-error @+1 {{has invalid flow: the left-hand-side has source flow}}
   firrtl.connect %a, %b : !firrtl.uint<1>, !firrtl.flip<uint<1>>
 }
 }
@@ -226,7 +227,7 @@ firrtl.module @test(%a : !firrtl.vector<uint<1>, 3>, %b : !firrtl.flip<vector<si
 
 firrtl.circuit "test" {
 firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>>, %b : !firrtl.bundle<f1: flip<uint<1>>, f2: sint<1>>) {
-  // expected-error @+1 {{type mismatch between destination '!firrtl.bundle<f1: uint<1>, f2: sint<1>>' and source '!firrtl.bundle<f1: uint<1>>'}}
+  // expected-error @+1 {{type mismatch between destination '!firrtl.bundle<f1: flip<uint<1>>, f2: sint<1>>' and source '!firrtl.bundle<f1: uint<1>>'}}
   firrtl.connect %b, %a : !firrtl.bundle<f1: flip<uint<1>>, f2: sint<1>>, !firrtl.bundle<f1: uint<1>>
 }
 }
@@ -235,7 +236,7 @@ firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>>, %b : !firrtl.bundle<f1: fl
 
 firrtl.circuit "test" {
 firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>>, %b : !firrtl.bundle<f2: flip<uint<1>>>) {
-  // expected-error @+1 {{type mismatch between destination '!firrtl.bundle<f2: uint<1>>' and source '!firrtl.bundle<f1: uint<1>>'}}
+  // expected-error @+1 {{type mismatch between destination '!firrtl.bundle<f2: flip<uint<1>>>' and source '!firrtl.bundle<f1: uint<1>>'}}
   firrtl.connect %b, %a : !firrtl.bundle<f2: flip<uint<1>>>, !firrtl.bundle<f1: uint<1>>
 }
 }
@@ -244,7 +245,7 @@ firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>>, %b : !firrtl.bundle<f2: fl
 
 firrtl.circuit "test" {
 firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>>, %b : !firrtl.bundle<f1: flip<sint<1>>>) {
-  // expected-error @+1 {{type mismatch between destination '!firrtl.bundle<f1: sint<1>>' and source '!firrtl.bundle<f1: uint<1>>'}}
+  // expected-error @+1 {{type mismatch between destination '!firrtl.bundle<f1: flip<sint<1>>>' and source '!firrtl.bundle<f1: uint<1>>'}}
   firrtl.connect %b, %a : !firrtl.bundle<f1: flip<sint<1>>>, !firrtl.bundle<f1: uint<1>>
 }
 }
@@ -253,10 +254,11 @@ firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>>, %b : !firrtl.bundle<f1: fl
 
 firrtl.circuit "test" {
 firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>>, %b : !firrtl.flip<bundle<f1: uint<1>>>) {
+  // expected-note @+1 {{the left-hand-side was defined here}}
   %0 = firrtl.subfield %a("f1") : (!firrtl.bundle<f1: uint<1>>) -> !firrtl.uint<1>
-  %1 = firrtl.subfield %b("f1") : (!firrtl.flip<bundle<f1: uint<1>>>) -> !firrtl.flip<uint<1>>
-  // expected-error @+1 {{connection destination must be a non-passive type or a duplex value}}
-  firrtl.connect %0, %1 : !firrtl.uint<1>, !firrtl.flip<uint<1>>
+  %1 = firrtl.subfield %b("f1") : (!firrtl.flip<bundle<f1: uint<1>>>) -> !firrtl.uint<1>
+  // expected-error @+1 {{op has invalid flow: the left-hand-side has source flow}}
+  firrtl.connect %0, %1 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 }
 
@@ -273,12 +275,108 @@ firrtl.module @test(%a : !firrtl.uint<2>, %b : !firrtl.flip<uint<1>>) {
 
 // -----
 
-// Two duplex values with bundle types can not be bulk connected.
+/// Check that the following is an invalid source flow destination:
+///
+///     output a:  {a: {flip a: UInt<1>}}
+///     wire   ax: {a: {flip a: UInt<1>}}
+///     a.a.a <= ax.a.a
+
+firrtl.circuit "test"  {
+firrtl.module @test(%a: !firrtl.flip<bundle<a: bundle<a: flip<uint<1>>>>>) {
+  %ax = firrtl.wire  : !firrtl.bundle<a: bundle<a: flip<uint<1>>>>
+  %a_a = firrtl.subfield %a("a") : (!firrtl.flip<bundle<a: bundle<a: flip<uint<1>>>>>) -> !firrtl.bundle<a: flip<uint<1>>>
+  // expected-note @+1 {{the left-hand-side was defined here}}
+  %a_a_a = firrtl.subfield %a_a("a") : (!firrtl.bundle<a: flip<uint<1>>>) -> !firrtl.uint<1>
+  %ax_a = firrtl.subfield %ax("a") : (!firrtl.bundle<a: bundle<a: flip<uint<1>>>>) -> !firrtl.bundle<a: flip<uint<1>>>
+  %ax_a_a = firrtl.subfield %ax_a("a") : (!firrtl.bundle<a: flip<uint<1>>>) -> !firrtl.uint<1>
+  // expected-error @+1 {{invalid flow: the left-hand-side has source flow}}
+  firrtl.connect %a_a_a, %ax_a_a : !firrtl.uint<1>, !firrtl.uint<1>
+}
+}
+
+// -----
+
+/// Check that the following is an invalid source flow destination:
+///
+///     output a:  {flip a: {a: UInt<1>}}
+///     wire   ax: {flip a: {a: UInt<1>}}
+///     a.a <= ax.a
+
+firrtl.circuit "test"  {
+firrtl.module @test(%a: !firrtl.flip<bundle<a: flip<bundle<a: uint<1>>>>>) {
+  %ax = firrtl.wire  : !firrtl.bundle<a: flip<bundle<a: uint<1>>>>
+  // expected-note @+1 {{the left-hand-side was defined here}}
+  %a_a = firrtl.subfield %a("a") : (!firrtl.flip<bundle<a: flip<bundle<a: uint<1>>>>>) -> !firrtl.bundle<a: uint<1>>
+  %ax_a = firrtl.subfield %ax("a") : (!firrtl.bundle<a: flip<bundle<a: uint<1>>>>) -> !firrtl.bundle<a: uint<1>>
+  // expected-error @+1 {{invalid flow: the left-hand-side has source flow}}
+  firrtl.connect %a_a, %ax_a : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
+}
+}
+
+// -----
+
+/// Check that the following is an invalid source flow destination:
+///
+///     output a:  {flip a: {a: UInt<1>}}
+///     wire   ax: {flip a: {a: UInt<1>}}
+///     a.a.a <= ax.a.a
+
+firrtl.circuit "test"  {
+firrtl.module @test(%a: !firrtl.flip<bundle<a: flip<bundle<a: uint<1>>>>>) {
+  %ax = firrtl.wire  : !firrtl.bundle<a: flip<bundle<a: uint<1>>>>
+  %a_a = firrtl.subfield %a("a") : (!firrtl.flip<bundle<a: flip<bundle<a: uint<1>>>>>) -> !firrtl.bundle<a: uint<1>>
+  // expected-note @+1 {{the left-hand-side was defined here}}
+  %a_a_a = firrtl.subfield %a_a("a") : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
+  %ax_a = firrtl.subfield %ax("a") : (!firrtl.bundle<a: flip<bundle<a: uint<1>>>>) -> !firrtl.bundle<a: uint<1>>
+  %ax_a_a = firrtl.subfield %ax_a("a") : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
+  // expected-error @+1 {{invalid flow: the left-hand-side has source flow}}
+  firrtl.connect %a_a_a, %ax_a_a : !firrtl.uint<1>, !firrtl.uint<1>
+}
+}
+
+// -----
+
+/// Check that the following is an invalid source flow destination:
+///
+///     output a:  {flip a: {flip a: UInt<1>}}
+///     wire   ax: {flip a: {flip a: UInt<1>}}
+///     a.a <= ax.a
+
+firrtl.circuit "test"  {
+firrtl.module @test(%a: !firrtl.flip<bundle<a: flip<bundle<a: flip<uint<1>>>>>>) {
+  %ax = firrtl.wire  : !firrtl.bundle<a: flip<bundle<a: flip<uint<1>>>>>
+  // expected-note @+1 {{the left-hand-side was defined here}}
+  %a_a = firrtl.subfield %a("a") : (!firrtl.flip<bundle<a: flip<bundle<a: flip<uint<1>>>>>>) -> !firrtl.bundle<a: flip<uint<1>>>
+  %ax_a = firrtl.subfield %ax("a") : (!firrtl.bundle<a: flip<bundle<a: flip<uint<1>>>>>) -> !firrtl.bundle<a: flip<uint<1>>>
+  // expected-error @+1 {{invalid flow: the left-hand-side has source flow}}
+  firrtl.connect %a_a, %ax_a : !firrtl.bundle<a: flip<uint<1>>>, !firrtl.bundle<a: flip<uint<1>>>
+}
+}
+
+// -----
+
+/// Check that the following is an invalid sink flow source.  This has to use a
+/// memory because all other sinks (module outputs or instance inputs) can
+/// legally be used as sources.
+///
+///     output a: UInt<1>
+///
+///     mem memory:
+///       data-type => UInt<1>
+///       depth => 2
+///       reader => r
+///       read-latency => 0
+///       write-latency => 1
+///       read-under-write => undefined
+///
+///     a <= memory.r.en
+
 firrtl.circuit "test" {
-firrtl.module @test(%clock : !firrtl.clock) {
-  %w = firrtl.wire : !firrtl.bundle<a : uint<1>>
-  %r = firrtl.reg %clock : (!firrtl.clock) -> !firrtl.bundle<a: uint<1>>
-  // expected-error @+1 {{ambiguous bulk connection between two duplex values of bundle type}}
-  firrtl.connect %r, %w : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
+firrtl.module @test(%a: !firrtl.flip<uint<1>>) {
+  %memory_r = firrtl.mem Undefined  {depth = 2 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: flip<uint<1>>>>
+  // expected-note @+1 {{the right-hand-side was defined here}}
+  %memory_r_en = firrtl.subfield %memory_r("en") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: flip<uint<1>>>>) -> !firrtl.uint<1>
+  // expected-error @+1 {{invalid flow: the right-hand-side has sink flow}}
+  firrtl.connect %a, %memory_r_en : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 }
 }
