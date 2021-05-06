@@ -12,10 +12,13 @@
 
 #include "circt-c/Dialect/RTL.h"
 #include "circt/Dialect/RTL/RTLOps.h"
+#include "circt/Dialect/RTL/RTLTypes.h"
+#include "circt/Support/LLVM.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Registration.h"
 #include "mlir/CAPI/Support.h"
 
+using namespace circt;
 using namespace circt::rtl;
 
 //===----------------------------------------------------------------------===//
@@ -57,3 +60,21 @@ MlirType rtlInOutTypeGetElementType(MlirType type) {
 }
 
 bool rtlTypeIsAInOut(MlirType type) { return unwrap(type).isa<InOutType>(); }
+
+bool rtlTypeIsAStructType(MlirType type) {
+  return unwrap(type).isa<StructType>();
+}
+
+MlirType rtlStructTypeGet(MlirContext ctx, intptr_t numElements,
+                          RTLStructFieldInfo const *elements) {
+  SmallVector<StructType::FieldInfo> fieldInfos;
+  fieldInfos.reserve(numElements);
+  for (intptr_t i = 0; i < numElements; ++i) {
+    auto typeAttr = unwrap(elements[i].attribute).dyn_cast<TypeAttr>();
+    if (!typeAttr)
+      return MlirType();
+    fieldInfos.push_back(
+        StructType::FieldInfo{unwrap(elements[i].name), typeAttr.getValue()});
+  }
+  return wrap(StructType::get(unwrap(ctx), fieldInfos));
+}

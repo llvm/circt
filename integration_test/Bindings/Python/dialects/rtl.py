@@ -14,6 +14,18 @@ with Context() as ctx, Location.unknown():
 
   i32 = IntegerType.get_signless(32)
 
+  # CHECK: !rtl.array<5xi32>
+  array_i32 = rtl.ArrayType.get(i32, 5)
+  print(array_i32)
+
+  # CHECK: !rtl.struct<foo: i32, bar: !rtl.array<5xi32>>
+  struct = rtl.StructType.get([("foo", i32), ("bar", array_i32)])
+  print(struct)
+
+  # CHECK: !rtl.struct<baz: i32, qux: !rtl.array<5xi32>>
+  struct = rtl.StructType.get([("baz", i32), ("qux", array_i32)])
+  print(struct)
+
   m = Module.create()
   with InsertionPoint(m.body):
     # CHECK: rtl.module @MyWidget(%my_input: i32) -> (%my_output: i32)

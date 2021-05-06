@@ -4,3 +4,4 @@
 
 # Generated tablegen dialects end up in the mlir.dialects package for now.
 from mlir.dialects._rtl_ops_gen import *
+from _circt._rtl import *
