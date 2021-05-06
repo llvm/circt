@@ -24,6 +24,23 @@
 namespace circt {
 namespace firrtl {
 
+enum class Direction { Input, Output };
+
+namespace direction {
+
+/// The key in a module's attribute dictionary used to find the direction.
+static const char *const attrKey = "portDirections";
+
+/// Return an output direction if \p isOutput is true, otherwise return an
+/// input direction.
+Direction get(bool isOutput);
+
+/// Return a \p IntegerAttr containing the packed representation of an array of
+/// directions.
+IntegerAttr packIntegerAttribute(ArrayRef<Direction> a, MLIRContext *b);
+
+} // namespace direction
+
 /// Return true if the specified operation is a firrtl expression.
 bool isExpression(Operation *op);
 

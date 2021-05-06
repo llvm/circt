@@ -1847,6 +1847,33 @@ static void printMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
 }
 
 //===----------------------------------------------------------------------===//
+// Utilities related to Direction
+//===----------------------------------------------------------------------===//
+
+Direction direction::get(bool a) { return (Direction)a; }
+
+IntegerAttr direction::packIntegerAttribute(ArrayRef<Direction> a,
+                                            MLIRContext *b) {
+
+  // If the module contaions no ports (parameter a is empty), then use an APInt
+  // of size 1 with value 0 to store the ports.  This works around an issue
+  // where APInt cannot be zero-sized.  This aligns with port name storage which
+  // will use a zero-element array.
+  auto size = a.size();
+  if (size == 0)
+    size = 1;
+
+  // Pack the array of directions into an APInt.  Input is zero, output is one.
+  APInt portDirections(size, 0);
+  for (size_t i = 0, e = a.size(); i != e; ++i)
+    if (a[i] == Direction::Output)
+      portDirections.setBit(i);
+
+  return IntegerAttr::get(IntegerType::get(b, size, IntegerType::Unsigned),
+                          portDirections);
+}
+
+//===----------------------------------------------------------------------===//
 // TblGen Generated Logic.
 //===----------------------------------------------------------------------===//
 
