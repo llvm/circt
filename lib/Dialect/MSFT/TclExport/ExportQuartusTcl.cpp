@@ -126,6 +126,8 @@ LogicalResult Entity::emit(Operation *op, StringRef attrKey, StringRef instName,
   // the child entity patch.
   if (!instName.empty())
     s.os << instName << '|';
+  else if (auto name = op->getAttrOfType<StringAttr>("name"))
+    s.os << name.getValue() << '|';
   s.os << childEntity << '\n';
 
   emittedAttrKeys.insert(attrKey);
