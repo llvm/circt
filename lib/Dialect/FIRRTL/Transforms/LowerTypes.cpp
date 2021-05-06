@@ -581,16 +581,14 @@ void TypeLoweringVisitor::visitDecl(WireOp op) {
   // Loop over the leaf aggregates.
   auto name = op.name().str();
   for (auto field : fieldTypes) {
-    std::string loweredName = "";
+    SmallString<16> loweredName;
     if (!name.empty())
       loweredName = name + field.suffix;
     SmallVector<Attribute> loweredAttrs;
     // For all annotations on the parent op, filter them based on the target
     // attribute.
     filterAnnotations(op.annotations(), loweredAttrs, field, context);
-    auto wire =
-        builder->create<WireOp>(field.type, builder->getStringAttr(loweredName),
-                                ArrayAttr::get(context, loweredAttrs));
+    auto wire = builder->create<WireOp>(field.type, loweredName, loweredAttrs);
     setBundleLowering(result, StringRef(field.suffix).drop_front(1), wire);
   }
 
@@ -616,7 +614,7 @@ void TypeLoweringVisitor::visitDecl(RegOp op) {
   // Loop over the leaf aggregates.
   auto name = op.name().str();
   for (auto field : fieldTypes) {
-    std::string loweredName = "";
+    SmallString<16> loweredName;
     if (!name.empty())
       loweredName = name + field.suffix;
     SmallVector<Attribute> loweredAttrs;
