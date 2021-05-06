@@ -8,8 +8,8 @@
 //
 // This file defines the CheckWidths pass.
 //
-// Modeled after:
-// https://github.com/chipsalliance/firrtl/blob/master/src/main/scala/firrtl/passes/CheckWidths.scala
+// Modeled after: <https://github.com/chipsalliance/firrtl/blob/master/src/main/
+// scala/firrtl/passes/CheckWidths.scala>
 //
 //===----------------------------------------------------------------------===//
 
@@ -34,33 +34,34 @@ class CheckWidthsPass : public CheckWidthsBase<CheckWidthsPass> {
     signalPassFailure();
     return mlir::emitError(loc, message);
   }
+
+  /// A set of already-checked types, to avoid unnecessary work.
+  llvm::DenseSet<Type> checkedTypes;
 };
 } // namespace
 
 void CheckWidthsPass::runOnOperation() {
-  getOperation()->walk([&](Operation *op) {
-    TypeSwitch<Operation *>(op)
-        .Case<FModuleOp>([&](auto op) {
-          // Check the port types. Unfortunately we don't have an exact location
-          // of the port name, so we just point at the module with the port name
-          // mentioned in the error.
-          for (auto &port : op.getPorts()) {
-            checkType(port.type, port.type, op.getLoc(),
-                      [&](InFlightDiagnostic &error) {
-                        error.attachNote()
-                            << "in port `" << port.getName() << "` of module `"
-                            << op.getName() << "`";
-                      });
-          }
-        })
-        .Default([&](auto *op) {
-          // Check each result of the operation.
-          for (auto type : op->getResultTypes())
-            checkType(type, type, op->getLoc(), [&](InFlightDiagnostic &error) {
-              error.attachNote() << "in result of `" << op->getName() << "`";
-            });
+  FModuleOp module = getOperation();
+
+  // Check the port types. Unfortunately we don't have an exact location of the
+  // port name, so we just point at the module with the port name mentioned in
+  // the error.
+  for (auto &port : module.getPorts()) {
+    checkType(
+        port.type, port.type, module.getLoc(), [&](InFlightDiagnostic &error) {
+          error.attachNote() << "in port `" << port.getName() << "` of module `"
+                             << module.getName() << "`";
         });
+  }
+
+  // Check the results of each operation.
+  module->walk([&](Operation *op) {
+    for (auto type : op->getResultTypes())
+      checkType(type, type, op->getLoc(), [&](InFlightDiagnostic &error) {
+        error.attachNote() << "in result of `" << op->getName() << "`";
+      });
   });
+  checkedTypes.clear();
 }
 
 /// Check a type and its children for any occurrences of uninferred widths.
@@ -71,6 +72,11 @@ void CheckWidthsPass::runOnOperation() {
 void CheckWidthsPass::checkType(
     Type type, Type reportType, Location loc,
     llvm::function_ref<void(InFlightDiagnostic &)> addContext) {
+  // Add the type to the already-checked set. If an entry was already there,
+  // don't do the work twice.
+  if (!checkedTypes.insert(type).second)
+    return;
+
   TypeSwitch<Type>(type)
       // Primarily complain about integer and analog types not having a proper
       // width.
