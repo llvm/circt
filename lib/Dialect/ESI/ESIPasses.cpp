@@ -23,6 +23,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
+
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -659,6 +660,28 @@ bool ESIPortsPass::updateFunc(RTLModuleExternOp mod) {
   return true;
 }
 
+static std::string constructInstanceName(Value operand, InterfaceOp iface) {
+  std::string ret;
+  llvm::raw_string_ostream s(ret);
+  s << llvm::toLower(iface.sym_name()[12]) << iface.sym_name().substr(13);
+  if (operand.hasOneUse()) {
+    Operation *dstOp = *operand.getUsers().begin();
+    if (auto instOp = dyn_cast<InstanceOp>(dstOp))
+      s << "To" << llvm::toUpper(instOp.instanceName()[0])
+        << instOp.instanceName().substr(1);
+    else if (auto dstName = dstOp->getAttrOfType<StringAttr>("name"))
+      s << "To" << dstName.getValue();
+  }
+
+  auto srcOp = operand.getDefiningOp();
+  if (auto instOp = dyn_cast<InstanceOp>(srcOp))
+    s << "From" << llvm::toUpper(instOp.instanceName()[0])
+      << instOp.instanceName().substr(1);
+  if (auto srcName = srcOp->getAttrOfType<StringAttr>("name"))
+    s << "From" << srcName.getValue();
+  return s.str();
+}
+
 /// Update an instance of an updated module by adding `esi.(un)wrap.iface`
 /// around the instance. Create a new instance at the end from the lists built
 /// up before.
@@ -698,6 +721,9 @@ void ESIPortsPass::updateInstance(RTLModuleExternOp mod, InstanceOp inst) {
     // `esi.unwrap.iface` and the other end to the instance.
     auto ifaceInst =
         instBuilder.create<InterfaceInstanceOp>(iface.getInterfaceType());
+    ifaceInst->setAttr(
+        "name",
+        StringAttr::get(mod.getContext(), constructInstanceName(op, iface)));
     GetModportOp sinkModport =
         instBuilder.create<GetModportOp>(ifaceInst, ESIRTLBuilder::sinkStr);
     instBuilder.create<UnwrapSVInterface>(op, sinkModport);
@@ -740,6 +766,9 @@ void ESIPortsPass::updateInstance(RTLModuleExternOp mod, InstanceOp inst) {
     // operand list.
     auto ifaceInst =
         instBuilder.create<InterfaceInstanceOp>(iface.getInterfaceType());
+    ifaceInst->setAttr(
+        "name",
+        StringAttr::get(mod.getContext(), constructInstanceName(res, iface)));
     GetModportOp sourceModport =
         instBuilder.create<GetModportOp>(ifaceInst, ESIRTLBuilder::sourceStr);
     auto newChannel =
