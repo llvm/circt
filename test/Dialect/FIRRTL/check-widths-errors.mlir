@@ -3,7 +3,7 @@
 firrtl.circuit "Foo" {
   // expected-error @+2 {{uninferred width: type '!firrtl.uint'}}
   // expected-note @+1 {{in port `a` of module `Foo`}}
-  firrtl.module @Foo (%a: !firrtl.uint) {
+  firrtl.module @Foo (in %a: !firrtl.uint) {
   }
 }
 
@@ -69,6 +69,6 @@ firrtl.circuit "Foo" {
 firrtl.circuit "Foo" {
   // expected-error @+2 {{uninferred width: type '!firrtl.uint'}}
   // expected-note @+1 {{in port `a` of module `Foo`}}
-  firrtl.module @Foo (%a: !firrtl.uint, %b: !firrtl.sint) {
+  firrtl.module @Foo (in %a: !firrtl.uint, in %b: !firrtl.sint) {
   }
 }

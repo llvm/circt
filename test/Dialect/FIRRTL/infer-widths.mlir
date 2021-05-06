@@ -2,19 +2,19 @@
 
 firrtl.circuit "Foo" {
   // CHECK-LABEL: @InferConstant
-  // CHECK-SAME: %out0: !firrtl.flip<uint<42>>
-  // CHECK-SAME: %out1: !firrtl.flip<sint<42>>
-  firrtl.module @InferConstant(%out0: !firrtl.flip<uint>, %out1: !firrtl.flip<sint>) {
+  // CHECK-SAME: out %out0: !firrtl.uint<42>
+  // CHECK-SAME: out %out1: !firrtl.sint<42>
+  firrtl.module @InferConstant(out %out0: !firrtl.uint, out %out1: !firrtl.sint) {
     %0 = firrtl.constant(1 : ui42) : !firrtl.uint
     %1 = firrtl.constant(2 : si42) : !firrtl.sint
-    firrtl.connect %out0, %0 : !firrtl.flip<uint>, !firrtl.uint
-    firrtl.connect %out1, %1 : !firrtl.flip<sint>, !firrtl.sint
+    firrtl.connect %out0, %0 : !firrtl.uint, !firrtl.uint
+    firrtl.connect %out1, %1 : !firrtl.sint, !firrtl.sint
   }
 
   // CHECK-LABEL: @InferOutput
-  // CHECK-SAME: %out: !firrtl.flip<uint<2>>
-  firrtl.module @InferOutput(%in: !firrtl.uint<2>, %out: !firrtl.flip<uint>) {
-    firrtl.connect %out, %in : !firrtl.flip<uint>, !firrtl.uint<2>
+  // CHECK-SAME: out %out: !firrtl.uint<2>
+  firrtl.module @InferOutput(in %in: !firrtl.uint<2>, out %out: !firrtl.uint) {
+    firrtl.connect %out, %in : !firrtl.uint, !firrtl.uint<2>
   }
 
   // CHECK-LABEL: @AddSubOp
@@ -80,7 +80,7 @@ firrtl.circuit "Foo" {
   }
 
   // CHECK-LABEL: @ComparisonOp
-  firrtl.module @ComparisonOp(%a: !firrtl.uint<2>, %b: !firrtl.uint<3>) {
+  firrtl.module @ComparisonOp(in %a: !firrtl.uint<2>, in %b: !firrtl.uint<3>) {
     // CHECK: %6 = firrtl.wire : !firrtl.uint<1>
     // CHECK: %7 = firrtl.wire : !firrtl.uint<1>
     // CHECK: %8 = firrtl.wire : !firrtl.uint<1>
@@ -108,7 +108,7 @@ firrtl.circuit "Foo" {
   }
 
   // CHECK-LABEL: @MuxOp
-  firrtl.module @MuxOp(%a: !firrtl.uint<1>) {
+  firrtl.module @MuxOp(in %a: !firrtl.uint<1>) {
     // CHECK: %0 = firrtl.wire : !firrtl.uint<2>
     // CHECK: %1 = firrtl.wire : !firrtl.uint<3>
     // CHECK: %2 = firrtl.mux{{.*}} -> !firrtl.uint<3>
