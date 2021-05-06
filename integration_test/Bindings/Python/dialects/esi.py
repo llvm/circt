@@ -15,13 +15,15 @@ thisDir = path.dirname(__file__)
 
 
 class TestESISys(esi.System):
+
   def declare_externs(self):
     """Declare all of the external modules"""
     self.load_mlir(path.join(thisDir, "esi_load1.mlir"))
     self.load_mlir(path.join(thisDir, "esi_load2.mlir"))
 
     op = rtl.RTLModuleOp(name='MyWidget',
-                         input_ports=[('foo', self.i32), ('foo_valid', self.i1)],
+                         input_ports=[('foo', self.i32),
+                                      ('foo_valid', self.i1)],
                          output_ports=[('foo_ready', self.i1)],
                          body_builder=lambda module: rtl.OutputOp(
                              [module.entry_block.arguments[1]]))

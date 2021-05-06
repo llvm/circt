@@ -33,11 +33,10 @@ class System(CppSystem):
 
       with mlir.ir.InsertionPoint(self.body):
         self.declare_externs()
-        rtl.RTLModuleOp(
-            name='top',
-            input_ports=[('clk', self.i1), ('rstn', self.i1)],
-            output_ports=[],
-            body_builder=self.build_top)
+        rtl.RTLModuleOp(name='top',
+                        input_ports=[('clk', self.i1), ('rstn', self.i1)],
+                        output_ports=[],
+                        body_builder=self.build_top)
 
   def declare_externs(self):
     pass
@@ -74,7 +73,9 @@ class System(CppSystem):
       recv_type = mlir.ir.IntegerType.get_signless(1)
     recv_type = ChannelType.get(recv_type)
     if send is None:
-      send = NullSourceOp(ChannelType.get(mlir.ir.IntegerType.get_signless(1))).out
-    ep = CosimEndpoint(recv_type, clk, rstn, send, mlir.ir.Attribute.parse(str(id)))
+      send = NullSourceOp(ChannelType.get(
+          mlir.ir.IntegerType.get_signless(1))).out
+    ep = CosimEndpoint(recv_type, clk, rstn, send,
+                       mlir.ir.Attribute.parse(str(id)))
     ep.operation.attributes["name"] = mlir.ir.StringAttr.get(name)
     return ep
