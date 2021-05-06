@@ -90,6 +90,9 @@ with Context() as ctx, Location.unknown():
       inst5 = op.create(module, "inst5")
       inst5.set_input_port("my_input", inst5.my_output)
 
+      # CHECK: rtl.instance "inst6" {{.*}} {BANKS = 2 : i64}
+      one_input.create(module, "inst6", {"a": inst1.a}, parameters={"BANKS": 2})
+
       rtl.OutputOp([])
 
     instance_builder_tests = rtl.RTLModuleOp(name="instance_builder_tests",

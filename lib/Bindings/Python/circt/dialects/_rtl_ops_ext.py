@@ -51,6 +51,7 @@ class InstanceBuilder:
     # Actually build the InstanceOp.
     instance_name = StringAttr.get(name)
     module_name = FlatSymbolRefAttr.get(StringAttr(self.mod.name).value)
+    parameters = {k: Attribute.parse(str(v)) for (k, v) in parameters.items()}
     parameters = DictAttr.get(parameters)
     self.instance = InstanceOp(
         self.mod.type.results,
@@ -175,12 +176,14 @@ class ModuleLike:
              module,
              name: str,
              input_port_mapping: Dict[str, Value] = {},
+             parameters: Dict[str, object] = {},
              loc=None,
              ip=None):
     return InstanceBuilder(module,
                            self,
                            name,
                            input_port_mapping,
+                           parameters=parameters,
                            loc=loc,
                            ip=ip)
 
