@@ -547,19 +547,23 @@ static void filterAnnotations(ArrayAttr annotations,
 
       targetStr += fNameStr;
     }
-    if (!targetStr.empty()) {
-      auto pos = field.suffix.find(targetStr.str().str());
-      if (pos == 0) {
-        NamedAttrList modAttr;
-        for (auto attr : di.getValue()) {
-          if (attr.first.str() == "target")
-            continue;
-          modAttr.push_back(attr);
-        }
-        loweredAttrs.push_back(DictionaryAttr::get(context, modAttr));
-      }
-    } else
+    // If no subfield attribute, then copy the annotation.
+    if (targetStr.empty()) {
       loweredAttrs.push_back(opAttr);
+      continue;
+    }
+    // If the subfield suffix doesn't match, then ignore the annotation.
+    if (field.suffix.find(targetStr.str().str()) != 0)
+      continue;
+
+    NamedAttrList modAttr;
+    for (auto attr : di.getValue()) {
+      // Ignore the actual target annotation, but copy the rest of annotations.
+      if (attr.first.str() == "target")
+        continue;
+      modAttr.push_back(attr);
+    }
+    loweredAttrs.push_back(DictionaryAttr::get(context, modAttr));
   }
 }
 

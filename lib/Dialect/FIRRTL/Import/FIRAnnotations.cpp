@@ -41,14 +41,10 @@ static void parseSubFieldSubIndexAnnotations(StringRef target,
   SmallString<16> temp;
   temp.push_back(begin);
   for (size_t i = 1, s = target.size(); i < s; ++i) {
-    if (target[i] == '[') {
+    if (target[i] == '[' || target[i] == '.') {
       // Create a StringAttr with the previous token.
       annotationVec.push_back(StringAttr::get(context, temp));
       temp.clear();
-    } else if (target[i] == '.') {
-      // Create a StringAttr with the previous token.
-      annotationVec.push_back(StringAttr::get(context, temp));
-      temp = "";
     }
     temp.push_back(target[i]);
   }
