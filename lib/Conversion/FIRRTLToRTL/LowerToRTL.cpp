@@ -804,7 +804,7 @@ void FIRRTLModuleLowering::lowerModuleBody(
     // Outputs need a temporary wire so they can be connect'd to, which we
     // then return.
     Value newArg = bodyBuilder.create<WireOp>(
-        FlipType::get(port.type), "." + port.getName().str() + ".output");
+        port.type, "." + port.getName().str() + ".output");
     // Switch all uses of the old operands to the new ones.
     oldArg.replaceAllUsesWith(newArg);
 
