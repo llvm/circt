@@ -2677,7 +2677,7 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
       addName(module.getArgument(port.argNum), name);
   }
 
-  auto moduleNameAttr = module.getVerilogModuleNameAttr();
+  auto moduleNameAttr = module.getNameAttr();
   verifyModuleName(module, moduleNameAttr);
   os << "module " << moduleNameAttr.getValue() << '(';
   if (!portInfo.empty())

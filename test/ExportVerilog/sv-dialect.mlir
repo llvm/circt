@@ -714,8 +714,8 @@ rtl.module @ConstantDefAfterUse() {
 
 // Constants defined in a procedural block with users in a different block
 // should be emitted at the top of their defining block.
-// CHECK-LABEL: module OtherName
-rtl.module @ConstantEmissionAtTopOfBlock() attributes {verilogName = "OtherName"} {
+// CHECK-LABEL: module ConstantEmissionAtTopOfBlock
+rtl.module @ConstantEmissionAtTopOfBlock() {
   %myreg = sv.reg : !rtl.inout<i32>
   // CHECK:      always @* begin
   // CHECK-NEXT:   localparam [31:0] _T = 32'h2A;
@@ -729,5 +729,5 @@ rtl.module @ConstantEmissionAtTopOfBlock() attributes {verilogName = "OtherName"
   }
 }
 
-//CHECK-LABEL: bind ConstantDefAfterUse OtherName foobar_inst (.*)
+//CHECK-LABEL: bind ConstantDefAfterUse ConstantEmissionAtTopOfBlock foobar_inst (.*)
 sv.bind "foobar_inst" @ConstantDefAfterUse @ConstantEmissionAtTopOfBlock

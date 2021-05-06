@@ -531,17 +531,6 @@ static void printModuleSignature(OpAsmPrinter &p, Operation *op,
   }
 }
 
-/// Return the name to use for the Verilog module that we're referencing
-/// here.  This is typically the symbol, but can be overridden with the
-/// verilogName attribute.
-StringAttr RTLModuleOp::getVerilogModuleNameAttr() {
-  if (auto vName = verilogNameAttr())
-    return vName;
-
-  return (*this)->getAttrOfType<StringAttr>(
-      ::mlir::SymbolTable::getSymbolAttrName());
-}
-
 static void printModuleOp(OpAsmPrinter &p, Operation *op,
                           ExternModKind modKind) {
   using namespace mlir::impl;

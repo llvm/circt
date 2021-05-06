@@ -19,8 +19,7 @@ def RTLModuleOp : RTLOp<"module",
     name, a list of ports, and a body that represents the connections within
     the module.
   }];
-  let arguments = (ins StrArrayAttr:$argNames, StrArrayAttr:$resultNames, 
-                       OptionalAttr<StrAttr>:$verilogName);
+  let arguments = (ins StrArrayAttr:$argNames, StrArrayAttr:$resultNames);
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
 
@@ -56,11 +55,6 @@ def RTLModuleOp : RTLOp<"module",
     StringRef getName() {
       return getNameAttr().getValue();
     }
-
-    /// Return the name to use for the Verilog module that we're referencing
-    /// here.  This is typically the symbol, but can be overridden with the
-    /// verilogName attribute.
-    StringAttr getVerilogModuleNameAttr();
 
   private:
     // This trait needs access to the hooks defined below.

@@ -53,7 +53,8 @@ bool isAnyModule(Operation *module);
 /// Return the signature for the specified module as a function type.
 FunctionType getModuleType(Operation *module);
 
-/// Returns the verilog module name attr of any module-like type
+/// Returns the verilog module name attribute or symbol name of any module-like
+/// operations.
 StringAttr getVerilogModuleNameAttr(Operation *module);
 
 /// Return the port name for the specified argument or result.

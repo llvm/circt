@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 /// Ensure symbol is one of the rtl module.* types
-def isModLikeSym : AttrConstraint<
+def isModuleSymbol : AttrConstraint<
   CPred<
     "rtl::isAnyModule(::mlir::SymbolTable::lookupNearestSymbolFrom("
       "&$_op, $_self.cast<::mlir::FlatSymbolRefAttr>().getValue()))"
@@ -482,15 +482,52 @@ def CoverOp : SVOp<"cover", [ProceduralOp]> {
   let assemblyFormat = "attr-dict $property `:` type($property)";
 }
 
-def BindOp : SVOp<"bind", [IsolatedFromAbove, HasParent<"mlir::ModuleOp">]> {
+def BindInstanceOp : SVOp<"instance.bind", [Symbol]> {
+  let summary = "Create an instance of a module that will be bound with a bind statement";
+  let description = [{
+    This represents an instance of a module instantiated with bind. The inputs
+     are the referenced module's inputs.  Any parameters
+    are stored in the "parameters" dictionary. This operation makes explicit the
+    behavior of a bind emitted elsewhere, but does not generate output.  A bind
+    operation may use this operation to track the names of module inputs.
+    The module bound must have only inputs.
+  }];
+  let arguments = (ins FlatSymbolRefAttr:$moduleName,
+                       Variadic<AnyType>:$inputs,
+                       OptionalAttr<DictionaryAttr>:$parameters);
+  let results = (outs);
+
+  let assemblyFormat = [{
+    $moduleName `(` $inputs `)` attr-dict
+      `:` type($inputs)
+  }];
+
+}
+
+def BindExplicitOp : SVOp<"bind.explicit", []> {
+  let summary = "indirect instantiation statement";
+  let description = [{
+    Indirectly instantiate a module in the context of another module.
+      This operation pairs with sv.instance.bind which tracks all information except the emission point for the bind.
+      Use this flavor of bind when the instantiation location can be explicitly tracked.
+    See 23.11 of SV 2017 spec.
+  }];
+
+  let arguments = (ins Confined<FlatSymbolRefAttr, [ReferToOp<"BindInstanceOp">]>:$bind);
+  let results = (outs);
+}
+
+
+def BindOp : SVOp<"bind", []> {
   let summary = "indirect instantiation statement";
   let description = [{
     Indirectly instantiate a module in the context of another module.  This
     implements all-instance module binding in system verilog.  This will
     generate and validate ".*" name binding.
+    See 23.11 of SV 2017 spec.
   }];
 
-  let arguments = (ins StrAttr:$instanceName, Confined<FlatSymbolRefAttr, [isModLikeSym]>:$src, Confined<FlatSymbolRefAttr, [isModLikeSym]>:$dest);
+  let arguments = (ins StrAttr:$instanceName, Confined<FlatSymbolRefAttr, [isModuleSymbol]>:$src, Confined<FlatSymbolRefAttr, [isModuleSymbol]>:$dest);
   let results = (outs);
 
   let assemblyFormat = [{$instanceName $src $dest attr-dict}];
