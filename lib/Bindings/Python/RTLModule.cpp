@@ -29,15 +29,9 @@ void circt::python::populateDialectRTLSubmodule(py::module &m) {
   m.doc() = "RTL dialect Python native extension";
 
   mlir_type_subclass(m, "ArrayType", rtlTypeIsAArrayType)
-      .def_static("get",
-                  [](MlirType elementType, intptr_t size) {
-                    return py::cast(rtlArrayTypeGet(elementType, size));
-                  })
-      .def_property_readonly(
-          "element_type",
-          [](MlirType self) { return rtlArrayTypeGetElementType(self); })
-      .def_property_readonly(
-          "size", [](MlirType self) { return rtlArrayTypeGetSize(self); });
+      .def_static("get", [](MlirType elementType, intptr_t size) {
+        return py::cast(rtlArrayTypeGet(elementType, size));
+      });
 
   mlir_type_subclass(m, "StructType", rtlTypeIsAStructType)
       .def_static("get", [](py::list pyFieldInfos) {

@@ -15,14 +15,8 @@ with Context() as ctx, Location.unknown():
   i32 = IntegerType.get_signless(32)
 
   # CHECK: !rtl.array<5xi32>
-  # CHECK: i32
-  # CHECK: 5
   array_i32 = rtl.ArrayType.get(i32, 5)
   print(array_i32)
-  # print(array_i32.element_type)
-  # print(array_i32.size)
-  print(rtl.ArrayType(array_i32).element_type)
-  print(rtl.ArrayType(array_i32).size)
 
   # CHECK: !rtl.struct<foo: i32, bar: !rtl.array<5xi32>>
   struct = rtl.StructType.get([("foo", i32), ("bar", array_i32)])
