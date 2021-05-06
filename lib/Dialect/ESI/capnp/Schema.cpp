@@ -915,12 +915,12 @@ CapnpSegmentBuilder::build(::capnp::schema::Node::Struct::Reader cStruct,
   return compile();
 }
 
-/// Build an RTL/SV dialect capnp encoder for this type. Inputs need to be
-/// packed on unpadded.
+/// Build an RTL/SV dialect capnp encoder module for this type. Inputs need to
+/// be packed and unpadded.
 rtl::RTLModuleOp TypeSchemaImpl::buildEncoder(Value clk, Value valid,
                                               Value operandVal) {
-  auto loc = operandVal.getDefiningOp()->getLoc();
-  auto topMod = operandVal.getDefiningOp()->getParentOfType<ModuleOp>();
+  Location loc = operandVal.getDefiningOp()->getLoc();
+  ModuleOp topMod = operandVal.getDefiningOp()->getParentOfType<ModuleOp>();
   OpBuilder b = OpBuilder::atBlockEnd(topMod.getBody());
 
   SmallString<64> modName;
@@ -963,7 +963,7 @@ rtl::RTLModuleOp TypeSchemaImpl::buildEncoder(Value clk, Value valid,
   } else {
     fieldValues.push_back(GasketComponent(b, operand));
   }
-  auto ret = seg.build(st, fieldValues);
+  GasketComponent ret = seg.build(st, fieldValues);
 
   innerBlock->getTerminator()->erase();
   b.setInsertionPointToEnd(innerBlock);
@@ -1087,8 +1087,8 @@ static GasketComponent decodeField(Type type,
   return esiValue;
 }
 
-/// Build an RTL/SV dialect capnp decoder for this type. Outputs packed and
-/// unpadded data.
+/// Build an RTL/SV dialect capnp decoder module for this type. Outputs packed
+/// and unpadded data.
 rtl::RTLModuleOp TypeSchemaImpl::buildDecoder(Value clk, Value valid,
                                               Value operandVal) {
   auto loc = operandVal.getDefiningOp()->getLoc();
