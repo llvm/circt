@@ -3,11 +3,11 @@ HIR is an mlir dialect for hardware description.
 
 #Enhancement proposals : Ops
 
-##instantiateOp
-* Syntax: `hir.instantiate hardware-block : interface-type`
+##AllocaOp
+* Syntax: `hir.alloca ("hardware-block") : type`
 * `hardware-block` can be one of the following - Function symbol,
     uram/bram/lutram/reg/latch or nothing.
-* `hir.instantiate nothing:...` only creates the interface but does not connect 
+* `hir.alloca nothing:...` only creates the interface but does not connect 
     it to anything.
 
 ## unroll_for loop
@@ -30,7 +30,7 @@ HIR is an mlir dialect for hardware description.
 * Allow casting between group<i1> and TimeType.
 
 ##GroupType
-* Syntax : `!hir.group<("in" i1, i32, "out" v1)>`
+* Syntax : `!hir.group<(@in i1, i32, @out v1)>`
 * Operations: hir.send, hir.recv, hir.select, hir.cast, hir.group
 * Indices must be constants.
 
@@ -77,3 +77,39 @@ HIR is an mlir dialect for hardware description.
 * Only supports groups of BuiltinTypes (int/float).
 * Only support array of BuiltinTypes.
 * No MemrefType and CallOp.
+
+## Protocols
+* Syntax:
+`
+hir.protocol @axis ("data") {
+  send "data" => { ctrl<send i1 "valid", recv i1 "ready">,
+                   send = "axis_send"("data","valid","ready"),
+                   ready = "axis_ready"("ready"),
+                   valid = "axis_valid" (<"valid">)
+                 }
+  recv "data" => { ctrl<send i1 "ready", recv i1 "valid">,
+                   recv= "axis_recv"("data","valid","ready"),
+                   valid = "axis_valid" (<"valid">)
+                   ready = "axis_ready"("ready"),
+                 }
+}
+`
+`
+hir.protocol @m_axi ("addr","data") {
+  send "data" => { ctrl<send i1 "valid", recv i1 "ready">,
+                   send = "axis_send"("data","valid","ready"),
+                   ready = "axis_ready"("ready")
+                 }
+  send "addr" => { ctrl<send i1 "valid", recv i1 "ready">,
+                   send = "axis_send"("addr","valid","ready"),
+                   ready = "axis_ready"("ready")
+                 }
+}
+`
+
+* Protocols are used to define the interface in GroupTypes and ArrayTypes.
+* They have the same benefit as the memref type. They abstract over the exact
+    protocol for transmission.
+* The verilog name for the signal is the variable_name + payload_name + ctrl_signal_name. For
+    example, "v1_data_valid" or "v2_addr_ready".
+
