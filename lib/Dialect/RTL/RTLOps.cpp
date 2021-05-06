@@ -1000,11 +1000,11 @@ static void print(OpAsmPrinter &printer, rtl::StructExplodeOp op) {
 
 /// Use the same parser for both struct_extract and union_extract since the
 /// syntax is identical.
-template <typename AggType>
+template <typename AggregateType>
 static ParseResult parseExtractOp(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::OperandType operand;
   StringAttr fieldName;
-  AggType declType;
+  AggregateType declType;
 
   if (parser.parseOperand(operand) || parser.parseLSquare() ||
       parser.parseAttribute(fieldName, "field", result.attributes) ||
@@ -1112,7 +1112,7 @@ static ParseResult parseUnionCreateOp(OpAsmParser &parser,
   Type inputType = declType.getFieldType(field.getValue());
   if (!inputType) {
     parser.emitError(fieldLoc, "cannot find union field '")
-        << field.getValue() << "'.";
+        << field.getValue() << '\'';
     return failure();
   }
 

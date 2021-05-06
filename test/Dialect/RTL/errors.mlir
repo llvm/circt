@@ -128,7 +128,7 @@ rtl.module @struct(%a: !rtl.struct<foo: i42>, %b: i42) {
 // -----
 
 rtl.module @union(%b: i42) {
-  // expected-error @+1 {{custom op 'rtl.union_create' cannot find union field 'bar'.}}
+  // expected-error @+1 {{custom op 'rtl.union_create' cannot find union field 'bar'}}
   %u = rtl.union_create "bar", %a : !rtl.union<foo: i42>
 }
 
