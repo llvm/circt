@@ -62,7 +62,11 @@ static SmallVector<Value> mapPortsToWires(StringRef prefix, OpBuilder &b,
   auto portInfo = target.getPorts();
   for (unsigned i = 0, e = target.getNumArguments(); i < e; ++i) {
     auto arg = target.getArgument(i);
-    auto wire = b.create<WireOp>(target.getLoc(), arg.getType(),
+    // Get the type of the wire.  If this is an output port, remove the flip.
+    auto type = arg.getType().cast<FIRRTLType>();
+    if (auto flipType = type.dyn_cast<FlipType>())
+      type = flipType.getElementType();
+    auto wire = b.create<WireOp>(target.getLoc(), type,
                                  (prefix + portInfo[i].getName()).str());
     wires.push_back(wire);
     mapper.map(arg, wire.getResult());
@@ -343,6 +347,7 @@ void Inliner::run() {
   auto topModule = circuit.getMainModule();
   // Mark the top module as live, so it doesn't get deleted.
   liveModules.insert(topModule);
+
   // If the top module is not a regular module, there is nothing to do.
   if (auto fmodule = dyn_cast<FModuleOp>(topModule))
     worklist.push_back(fmodule);
