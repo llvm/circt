@@ -128,7 +128,7 @@ private:
 
   // Helpers to manage state.
   Value addArg(FModuleOp module, Type type, unsigned oldArgNumber,
-               StringRef nameSuffix = "");
+               Direction direction, StringRef nameSuffix = "");
 
   void setBundleLowering(Value oldValue, StringRef flatField, Value newValue);
   Value getBundleLowering(Value oldValue, StringRef flatField);
@@ -150,6 +150,7 @@ private:
   // State to track the new attributes for the module.
   SmallVector<NamedAttribute, 8> newModuleAttrs;
   SmallVector<Attribute> newArgNames;
+  SmallVector<Direction> newArgDirections;
   size_t originalNumModuleArgs;
 };
 } // end anonymous namespace
@@ -201,11 +202,15 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   auto *argAttrEnd = originalArgAttrs.end();
   for (auto attr : originalAttrs)
     if (std::lower_bound(argAttrBegin, argAttrEnd, attr) == argAttrEnd)
-      if (attr.first.str() != "portNames")
+      if (attr.first.str() != "portNames" &&
+          attr.first.str() != direction::attrKey)
         newModuleAttrs.push_back(attr);
 
   newModuleAttrs.push_back(NamedAttribute(Identifier::get("portNames", context),
                                           builder->getArrayAttr(newArgNames)));
+  newModuleAttrs.push_back(NamedAttribute(
+      Identifier::get(direction::attrKey, context),
+      direction::packIntegerAttribute(newArgDirections, context)));
 
   // Update the module's attributes.
   module->setAttrs(newModuleAttrs);
@@ -232,8 +237,11 @@ void TypeLoweringVisitor::lowerArg(FModuleOp module, BlockArgument arg,
   for (auto field : fieldTypes) {
 
     // Create new block arguments.
-    auto type = field.getPortType();
-    auto newValue = addArg(module, type, argNumber, field.suffix);
+    auto type = field.type;
+    // Flip the direction if the field is an output.
+    auto direction = (Direction)(
+        (unsigned)getModulePortDirection(module, argNumber) ^ field.isOutput);
+    auto newValue = addArg(module, type, argNumber, direction, field.suffix);
 
     // If this field was flattened from a bundle.
     if (!field.suffix.empty()) {
@@ -260,6 +268,8 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   SmallVector<DictionaryAttr, 8> attributes;
 
   SmallVector<Attribute> portNames;
+  SmallVector<Direction> portDirections;
+  size_t argNumber = 0;
   for (auto &port : extModule.getPorts()) {
     // Flatten the port type.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
@@ -268,16 +278,24 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
     // For each field, add record its name and type.
     for (auto field : fieldTypes) {
       Attribute pName;
-      inputTypes.push_back(field.getPortType());
+      inputTypes.push_back(field.type);
       if (port.name)
         pName = builder.getStringAttr(field.suffix);
       else
         pName = builder.getStringAttr("");
       portNames.push_back(pName);
+      // Flip the direction if the field is an output.
+      portDirections.push_back(
+          (Direction)((unsigned)getModulePortDirection(extModule, argNumber) ^
+                      field.isOutput));
     }
+    ++argNumber;
   }
+
   extModule->setAttr(Identifier::get("portNames", context),
                      builder.getArrayAttr(portNames));
+  extModule->setAttr(direction::attrKey,
+                     direction::packIntegerAttribute(portDirections, context));
 
   // Set the type and then bulk set all the names.
   extModule.setType(builder.getFunctionType(inputTypes, {}));
@@ -872,7 +890,8 @@ void TypeLoweringVisitor::visitStmt(WhenOp op) {
 // module. This also maintains the name attribute for the new argument,
 // possibly with a new suffix appended.
 Value TypeLoweringVisitor::addArg(FModuleOp module, Type type,
-                                  unsigned oldArgNumber, StringRef nameSuffix) {
+                                  unsigned oldArgNumber, Direction direction,
+                                  StringRef nameSuffix) {
   Block *body = module.getBodyBlock();
 
   // Append the new argument.
@@ -883,6 +902,7 @@ Value TypeLoweringVisitor::addArg(FModuleOp module, Type type,
   Attribute newArg =
       builder->getStringAttr(nameAttr.getValue().str() + nameSuffix.str());
   newArgNames.push_back(newArg);
+  newArgDirections.push_back(direction);
 
   return newValue;
 }
