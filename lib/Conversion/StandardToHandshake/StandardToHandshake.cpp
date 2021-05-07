@@ -1540,6 +1540,21 @@ struct HandshakeInsertBufferPass
                               });
   }
 
+  // Perform a depth first search and add a buffer to any control merge inputs
+  // or conditional branch outputs.
+  void bufferControlStrategy() {
+    auto f = getOperation();
+    auto builder = OpBuilder(f.getContext());
+    for (auto &arg : f.getArguments())
+      for (auto &use : arg.getUses())
+        insertBufferRecursive(use, builder, /*numSlots=*/1,
+                              [](Operation *definingOp, Operation *usingOp) {
+                                return !isa_and_nonnull<ConditionalBranchOp>(
+                                           definingOp) &&
+                                       !isa<ControlMergeOp>(usingOp);
+                              });
+  }
+
   /// DFS-based graph cycle detection and naive buffer insertion. Exactly one
   /// 2-slot non-transparent buffer will be inserted into each graph cycle.
   void insertBufferDFS(Operation *op, OpBuilder &builder,
@@ -1606,6 +1621,8 @@ struct HandshakeInsertBufferPass
         bufferCyclesStrategy();
       else if (strategy == "all")
         bufferAllStrategy();
+      else if (strategy == "control")
+        bufferControlStrategy();
       else {
         emitError(getOperation().getLoc())
             << "Unknown buffer strategy: " << strategy;
