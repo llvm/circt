@@ -135,11 +135,19 @@ public:
   using FIRRTLType::TypeBase<ConcreteType, ParentType,
                              detail::WidthTypeStorage>::Base::Base;
 
+  /// Return the bitwidth of this type or None if unknown.
+  Optional<int32_t> getWidth() {
+    return static_cast<ConcreteType *>(this)->getWidth();
+  }
+
   /// Return the width of this type, or -1 if it has none specified.
   int32_t getWidthOrSentinel() {
-    auto width = static_cast<ConcreteType *>(this)->getWidth();
+    auto width = getWidth();
     return width.hasValue() ? width.getValue() : -1;
   }
+
+  /// Return true if this type has a known width.
+  bool hasWidth() { return getWidth().hasValue(); }
 };
 
 class SIntType;

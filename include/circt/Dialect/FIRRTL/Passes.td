@@ -94,4 +94,13 @@ def ExpandWhens : Pass<"firrtl-expand-whens", "firrtl::FModuleOp"> {
   let constructor = "circt::firrtl::createExpandWhensPass()";
 }
 
+def CheckWidths : Pass<"firrtl-check-widths", "firrtl::FModuleOp"> {
+  let summary = "Verify that types have a well-known width";
+  let description = [{
+    This pass checks if the widths of all types throughout a FIRRTL module are
+    well-known.
+  }];
+  let constructor = "circt::firrtl::createCheckWidthsPass()";
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD
