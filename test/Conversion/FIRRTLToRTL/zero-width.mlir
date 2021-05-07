@@ -8,7 +8,7 @@ firrtl.circuit "Arithmetic" {
                             %out2: !firrtl.flip<uint<4>>,
                             %out3: !firrtl.flip<uint<1>>) {
   %uin0c = firrtl.wire : !firrtl.uint<0>
-  
+
     // CHECK-DAG: [[MULZERO:%.+]] = rtl.constant 0 : i3
     %0 = firrtl.mul %uin0c, %uin3c : (!firrtl.uint<0>, !firrtl.uint<3>) -> !firrtl.uint<3>
     firrtl.connect %out0, %0 : !firrtl.flip<uint<3>>, !firrtl.uint<3>
@@ -44,7 +44,7 @@ firrtl.circuit "Arithmetic" {
                         %out0: !firrtl.flip<uint<3>>,
                         %out1: !firrtl.flip<uint<3>>) {
     %uin0c = firrtl.wire : !firrtl.uint<0>
-  
+
     // CHECK-DAG: = rtl.constant true
     %0 = firrtl.andr %uin0c : (!firrtl.uint<0>) -> !firrtl.uint<1>
 
@@ -73,8 +73,8 @@ firrtl.circuit "Arithmetic" {
     %uin0c = firrtl.wire : !firrtl.uint<0>
 
     // Lowers to nothing.
-    %wire = firrtl.wire : !firrtl.flip<sint<0>>
-    firrtl.connect %wire, %sin0c : !firrtl.flip<sint<0>>, !firrtl.sint<0>
+    %wire = firrtl.wire : !firrtl.sint<0>
+    firrtl.connect %wire, %sin0c : !firrtl.sint<0>, !firrtl.sint<0>
 
     // CHECK-NEXT: rtl.output
   }

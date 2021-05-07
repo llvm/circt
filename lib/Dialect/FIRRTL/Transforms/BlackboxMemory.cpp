@@ -233,13 +233,12 @@ createWrapperModule(MemOp op, const MemoryPortList &memPorts,
   auto extResultIt = instanceOp.result_begin();
   for (auto memPort : moduleOp.getArguments()) {
     auto memPortType = memPort.getType().cast<FIRRTLType>();
-    for (auto field :
-         memPortType.getPassiveType().cast<BundleType>().getElements()) {
+    for (auto field : memPortType.cast<BundleType>().getElements()) {
       auto fieldValue =
           builder.create<SubfieldOp>(op.getLoc(), memPort, field.name);
       // Create the connection between module arguments and the external module,
       // making sure that sinks are on the LHS
-      if (fieldValue.getType().cast<FIRRTLType>().isPassive())
+      if (!field.type.isa<FlipType>())
         builder.create<ConnectOp>(op.getLoc(), *extResultIt, fieldValue);
       else
         builder.create<ConnectOp>(op.getLoc(), fieldValue, *extResultIt);
@@ -264,7 +263,8 @@ createWiresForMemoryPorts(OpBuilder builder, Location loc, MemOp op,
 
   for (auto memPort : op.getResults()) {
     // Create  a wire bundle for each memory port
-    auto wireOp = builder.create<WireOp>(loc, memPort.getType());
+    auto wireOp = builder.create<WireOp>(
+        loc, memPort.getType().cast<FlipType>().getElementType());
     results.push_back(wireOp.getResult());
 
     // Connect each wire to the corresponding ports in the external module
@@ -276,7 +276,7 @@ createWiresForMemoryPorts(OpBuilder builder, Location loc, MemOp op,
           builder.create<SubfieldOp>(op.getLoc(), wireOp, field.name);
       // Create the connection between module arguments and the external module,
       // making sure that sinks are on the LHS
-      if ((*extResultIt).getType().cast<FIRRTLType>().isPassive())
+      if (field.type.isa<FlipType>())
         builder.create<ConnectOp>(op.getLoc(), fieldValue, *extResultIt);
       else
         builder.create<ConnectOp>(op.getLoc(), *extResultIt, fieldValue);

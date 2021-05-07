@@ -191,6 +191,27 @@ circuit Foo: %[[{"\"":"}]]"}]]
     ; CHECK-LABEL: module {
     ; CHECK: firrtl.circuit "Foo" attributes {annotations =
 
+; // -----
+
+; COM: Subfield/Subindex annotations should be parsed correctly on wires
+circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.qux"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
+  module Foo:
+    wire bar: {baz: UInt<1>, qux: UInt<1>}[2]
+
+    ; CHECK-LABEL: module {
+    ; CHECK: %bar = firrtl.wire  {annotations = [{one, target = [".qux"]}, {target = ["[1]", ".baz"], two}]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+
+
+; // -----
+
+; COM: Subfield/Subindex annotations should be parsed correctly on registers
+circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.qux"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
+  module Foo:
+    input clock: Clock
+    reg bar: {baz: UInt<1>, qux: UInt<1>}[2], clock
+
+    ; CHECK-LABEL: module {
+    ; CHECK: %bar = firrtl.reg %clock  {annotations = [{one, target = [".qux"]}, {target = ["[1]", ".baz"], two}]} : (!firrtl.clock) -> !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
 
 ; // -----
 

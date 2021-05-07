@@ -75,7 +75,13 @@ let hasFolder = true in {
 
 def AndOp : UTVariadicOp<"and", [Commutative]>;
 def OrOp  : UTVariadicOp<"or", [Commutative]>;
-def XorOp : UTVariadicOp<"xor", [Commutative]>;
+def XorOp : UTVariadicOp<"xor", [Commutative]> {
+  let extraClassDeclaration = [{
+    /// Return true if this is a two operand xor with an all ones constant as
+    /// its RHS operand.
+    bool isBinaryNot();
+  }];
+}
 
 def MergeOp : UTVariadicOp<"merge", [Commutative]> {
   let summary ="Electrically merge signals together as if connected by a wire.";
@@ -143,6 +149,14 @@ def ICmpOp : CombOp<"icmp", [NoSideEffect, SameTypeOperands]> {
     /// Returns the flipped predicate, reversing the LHS and RHS operands.  The
     /// lhs and rhs operands should be flipped to match the new predicate.
     static ICmpPredicate getFlippedPredicate(ICmpPredicate predicate);
+
+    /// Return true if this is an equality test with -1, which is a "reduction
+    /// and" operation in Verilog.
+    bool isEqualAllOnes();
+
+    /// Return true if this is a not equal test with 0, which is a "reduction
+    /// or" operation in Verilog.
+    bool isNotEqualZero();
   }];
 }
 

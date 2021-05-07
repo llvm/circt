@@ -65,6 +65,10 @@ static cl::opt<std::string>
 static cl::opt<bool> disableOptimization("disable-opt",
                                          cl::desc("disable optimizations"));
 
+static cl::opt<bool> inliner("inline",
+                             cl::desc("Run the FIRRTL module inliner"),
+                             cl::init(false));
+
 static cl::opt<bool> lowerToRTL("lower-to-rtl",
                                 cl::desc("run the lower-to-rtl pass"));
 static cl::opt<bool> imconstprop(
@@ -197,6 +201,9 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   // Allow optimizations to run multithreaded.
   context.enableMultithreading(isMultithreaded);
 
+  if (inliner)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
+
   if (imconstprop)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
 
@@ -218,9 +225,16 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     }
   }
 
-  // If we are going to verilog, sanitize the module names.
+  // Add passes specific to Verilog emission if we're going there.
   if (outputFormat == OutputVerilog || outputFormat == OutputSplitVerilog) {
+    // Legalize the module names.
     pm.addPass(sv::createRTLLegalizeNamesPass());
+
+    // Tidy up the IR to improve verilog emission quality.
+    if (!disableOptimization) {
+      auto &modulePM = pm.nest<rtl::RTLModuleOp>();
+      modulePM.addPass(sv::createPrettifyVerilogPass());
+    }
   }
 
   // Load the emitter options from the command line. Command line options if

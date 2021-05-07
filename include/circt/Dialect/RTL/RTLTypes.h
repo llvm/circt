@@ -16,6 +16,19 @@
 
 #include "mlir/IR/Types.h"
 
+namespace circt {
+namespace rtl {
+namespace detail {
+/// Struct defining a field. Used in structs and unions.
+struct FieldInfo {
+  mlir::StringRef name;
+  mlir::Type type;
+  FieldInfo allocateInto(mlir::TypeStorageAllocator &alloc) const;
+};
+} // namespace detail
+} // namespace rtl
+} // namespace circt
+
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/RTL/RTLTypes.h.inc"
 

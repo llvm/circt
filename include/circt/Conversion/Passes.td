@@ -113,6 +113,11 @@ def HandshakeInsertBuffer
   : Pass<"handshake-insert-buffer", "handshake::FuncOp"> {
   let summary = "Insert buffers to break graph cycles";
   let constructor = "circt::createHandshakeInsertBufferPass()";
+  let options = [
+    ListOption<"strategies", "strategies", "std::string",
+               "List of strategies to apply. Possible values are: cycles",
+               "llvm::cl::ZeroOrMore, llvm::cl::MiscFlags::CommaSeparated">
+  ];
 }
 
 //===----------------------------------------------------------------------===//

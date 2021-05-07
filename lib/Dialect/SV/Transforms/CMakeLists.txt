@@ -1,8 +1,9 @@
 add_circt_dialect_library(CIRCTSVTransforms
+  GeneratorCallout.cpp
+  PrettifyVerilog.cpp
   RTLCleanup.cpp
   RTLStubExternalModules.cpp
   RTLLegalizeNames.cpp
-  GeneratorCallout.cpp
   RTLMemSimImpl.cpp
 
   DEPENDS

@@ -192,6 +192,11 @@ element's LSB located at array LSB.
 - **Structs**: The RTL dialect defines a custom `StructType`. The in-hardware
 layout matchss C -- the first listed member's MSB corresponds to the struct's
 MSB. The last member in the list shares its LSB with the struct.
+- **Unions**: The RTL dialect's `UnionType` could contain the data of any of the
+member types so its layout is defined to be equivalent to the union of members
+type bitcast layout. In cases where the member types have different bit widths,
+all members start at the 0th bit and are padded up to the width of the widest
+member. The value with which they are padded is undefined.
 
 #### Example figure
 
