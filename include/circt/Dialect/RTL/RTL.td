@@ -45,5 +45,6 @@ class RTLOp<string mnemonic, list<OpTrait> traits = []> :
 
 include "circt/Dialect/RTL/RTLAggregates.td"
 include "circt/Dialect/RTL/RTLStructure.td"
+include "circt/Dialect/RTL/RTLTypeDecls.td"
 
 #endif // RTL_TD
