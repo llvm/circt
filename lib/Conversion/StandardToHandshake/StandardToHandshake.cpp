@@ -1533,7 +1533,11 @@ struct HandshakeInsertBufferPass
     auto builder = OpBuilder(f.getContext());
     for (auto &arg : f.getArguments())
       for (auto &use : arg.getUses())
-        insertBufferRecursive(use, builder);
+        insertBufferRecursive(use, builder, /*numSlots=*/2,
+                              [](Operation *definingOp, Operation *usingOp) {
+                                return !isa_and_nonnull<BufferOp>(definingOp) &&
+                                       !isa<BufferOp>(usingOp);
+                              });
   }
 
   /// DFS-based graph cycle detection and naive buffer insertion. Exactly one
@@ -1573,27 +1577,24 @@ struct HandshakeInsertBufferPass
     opInFlight.erase(op);
   }
 
-  void insertBufferRecursive(OpOperand &use, OpBuilder &builder) {
+  void
+  insertBufferRecursive(OpOperand &use, OpBuilder builder, size_t numSlots,
+                        function_ref<bool(Operation *, Operation *)> callback) {
     auto oldValue = use.get();
-
-    if (!isa_and_nonnull<BufferOp>(oldValue.getDefiningOp()) &&
-        !isa<BufferOp>(use.getOwner())) {
-      if (oldValue.isa<OpResult>())
-        builder.setInsertionPointAfter(oldValue.getDefiningOp());
-      else
-        builder.setInsertionPointToStart(oldValue.getParentBlock());
-
+    auto *definingOp = oldValue.getDefiningOp();
+    auto *usingOp = use.getOwner();
+    if (callback(definingOp, usingOp)) {
+      builder.setInsertionPoint(usingOp);
       auto buffer = builder.create<handshake::BufferOp>(
           oldValue.getLoc(), oldValue.getType(), oldValue, /*sequential=*/true,
           /*control=*/oldValue.getType().isa<NoneType>(),
-          /*slots=*/2);
-
+          /*slots=*/numSlots);
       use.getOwner()->setOperand(use.getOperandNumber(), buffer);
     }
 
-    for (auto &childUse : use.getOwner()->getUses())
+    for (auto &childUse : usingOp->getUses())
       if (!isa<handshake::BufferOp>(childUse.getOwner()))
-        insertBufferRecursive(childUse, builder);
+        insertBufferRecursive(childUse, builder, numSlots, callback);
   }
 
   void runOnOperation() override {
