@@ -71,9 +71,10 @@ bool isBundleType(Type type);
 /// connect.
 bool isDuplexValue(Value val);
 
-namespace flow {
-enum Flow { Source, Sink, Duplex };
-}
+enum class Flow { Source, Sink, Duplex };
+
+/// Get a flow's reverse.
+Flow swapFlow(Flow flow);
 
 /// Compute the flow for a Value, \p val, as determined by the FIRRTL
 /// specification.  This recursively walks backwards from \p val to the
@@ -85,14 +86,12 @@ enum Flow { Source, Sink, Duplex };
 /// source is sink.  The reverse of sink is source.  The reverse of duplex is
 /// duplex.  The \p accumulatedFlow parameter sets the initial flow.  A user
 /// should normally \a not have to change this from its default of \p
-/// flow::Source.
-flow::Flow foldFlow(Value val, flow::Flow accumulatedFlow = flow::Source);
+/// Flow::Source.
+Flow foldFlow(Value val, Flow accumulatedFlow = Flow::Source);
 
-namespace kind {
-enum Kind { Port, Instance, Other };
-}
+enum class Kind { Port, Instance, Other };
 
-kind::Kind getDeclarationKind(Value val);
+Kind getDeclarationKind(Value val);
 
 } // namespace firrtl
 } // namespace circt

@@ -1089,19 +1089,7 @@ private:
   Value convertToPassive(Value input, Location loc);
 
   /// Attach invalid values to every element of the value.
-  void emitInvalidate(Value val, Location loc, flow::Flow flow) {
-
-    auto swap = [](flow::Flow flow) -> flow::Flow {
-      switch (flow) {
-      case flow::Source:
-        return flow::Sink;
-      case flow::Sink:
-        return flow::Source;
-      case flow::Duplex:
-        return flow::Duplex;
-      }
-    };
-
+  void emitInvalidate(Value val, Location loc, Flow flow) {
     // Strip an outer flip.  This is associated with an output port, but this
     // was already included in flow calculation.
     auto tpe = val.getType().cast<FIRRTLType>();
@@ -1120,7 +1108,7 @@ private:
           for (auto element : tpe.getElements()) {
             auto subfield = builder.create<SubfieldOp>(loc, val, element.name);
             emitInvalidate(subfield, loc,
-                           subfield.isFieldFlipped() ? swap(flow) : flow);
+                           subfield.isFieldFlipped() ? swapFlow(flow) : flow);
           }
         })
         .Case<FVectorType>([&](auto tpe) {
@@ -1133,7 +1121,7 @@ private:
         .Case<AnalogType>([](auto) {})
         // Invalidate any sink or duplex flow ground types.
         .Default([&](auto tpe) {
-          if (flow != flow::Source)
+          if (flow != Flow::Source)
             builder.create<ConnectOp>(
                 loc, val, builder.create<InvalidValuePrimOp>(loc, tpe));
         });
