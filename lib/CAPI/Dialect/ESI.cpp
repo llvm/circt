@@ -18,12 +18,8 @@ void registerESIPasses() { circt::esi::registerESIPasses(); }
 MlirLogicalResult circtESIExportCosimSchema(MlirModule module,
                                             MlirStringCallback callback,
                                             void *userData) {
-#ifdef CAPNP
   mlir::detail::CallbackOstream stream(callback, userData);
   return wrap(circt::esi::exportCosimSchema(unwrap(module), stream));
-#else
-  return wrap(mlir::failure());
-#endif
 }
 
 bool circtESITypeIsAChannelType(MlirType type) {

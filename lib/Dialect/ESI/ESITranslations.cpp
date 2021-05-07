@@ -167,6 +167,13 @@ LogicalResult circt::esi::exportCosimSchema(ModuleOp module,
   return schema.emit();
 }
 
+#else // Not CAPNP
+
+LogicalResult circt::esi::exportCosimSchema(ModuleOp module,
+                                            llvm::raw_ostream &os) {
+  return failure();
+}
+
 #endif
 
 //===----------------------------------------------------------------------===//
