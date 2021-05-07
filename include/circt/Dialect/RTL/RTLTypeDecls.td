@@ -29,9 +29,13 @@ def TypedeclScope : RTLOp<"typedecl_scope",
   let arguments = (ins SymbolNameAttr:$sym_name);
 
   let assemblyFormat = "$sym_name $body attr-dict";
+
+  let extraClassDeclaration = [{
+    Block *getBodyBlock() { return &body().front(); }
+  }];
 }
 
-def Typedecl : RTLOp<"typedecl", [Symbol]> {
+def Typedecl : RTLOp<"typedecl", [Symbol, HasParent<"TypedeclScope">]> {
   let summary = "Type declaration.";
   let description = "Associate a symbolic name with a type.";
 
