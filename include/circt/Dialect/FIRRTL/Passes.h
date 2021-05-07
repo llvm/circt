@@ -26,9 +26,13 @@ std::unique_ptr<mlir::Pass> createLowerFIRRTLTypesPass();
 
 std::unique_ptr<mlir::Pass> createIMConstPropPass();
 
+std::unique_ptr<mlir::Pass> createInlinerPass();
+
 std::unique_ptr<mlir::Pass> createBlackBoxMemoryPass();
 
 std::unique_ptr<mlir::Pass> createExpandWhensPass();
+
+std::unique_ptr<mlir::Pass> createCheckWidthsPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

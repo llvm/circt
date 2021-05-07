@@ -114,16 +114,26 @@ def StructType : RTLType<"Struct"> {
   );
 
   let extraClassDeclaration = [{
-    struct FieldInfo {
-      mlir::StringRef name;
-      Type type;
-      FieldInfo allocateInto(mlir::TypeStorageAllocator &alloc) const {
-        return FieldInfo{alloc.copyInto(name), type};
-      }
-    };
-
+    using FieldInfo = ::circt::rtl::detail::FieldInfo;
     mlir::Type getFieldType(mlir::StringRef fieldName);
     void getInnerTypes(mlir::SmallVectorImpl<mlir::Type>&);
+  }];
+}
 
+def UnionType : RTLType<"Union"> {
+  let summary = "An untagged union of types";
+  let parameters = (
+    ins
+    // An ArrayRef of something which requires allocation in the storage
+    // constructor.
+    ArrayRefOfSelfAllocationParameter<
+      "::circt::rtl::UnionType::FieldInfo",
+      "union fields">: $elements
+  );
+  let mnemonic = "union";
+
+  let extraClassDeclaration = [{
+    using FieldInfo = ::circt::rtl::detail::FieldInfo;
+    mlir::Type getFieldType(mlir::StringRef fieldName);
   }];
 }

@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRAnnotations.h"
+#include "circt/Support/LLVM.h"
 
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -18,6 +19,39 @@
 #include "llvm/Support/JSON.h"
 
 namespace json = llvm::json;
+
+using namespace circt;
+using namespace firrtl;
+
+/// Given a string \p target, starting with either '.' or '[', this function
+/// splits the string at every '[' and '.' and populates the \p annotations with
+/// the array of strings. Assumption, the \p target string is a well formed
+/// valid token specifying an instance of a bundle/array.
+static void parseSubFieldSubIndexAnnotations(StringRef target,
+                                             ArrayAttr &annotations,
+                                             MLIRContext *context) {
+  if (target.empty())
+    return;
+  char begin = target[0];
+  SmallVector<Attribute> annotationVec;
+  // The caller must strip the prefix, and the string target must only contain
+  // the suffix.
+  if (begin != '.' && begin != '[')
+    return;
+  SmallString<16> temp;
+  temp.push_back(begin);
+  for (size_t i = 1, s = target.size(); i < s; ++i) {
+    if (target[i] == '[' || target[i] == '.') {
+      // Create a StringAttr with the previous token.
+      annotationVec.push_back(StringAttr::get(context, temp));
+      temp.clear();
+    }
+    temp.push_back(target[i]);
+  }
+  // Save the last token.
+  annotationVec.push_back(StringAttr::get(context, temp));
+  annotations = ArrayAttr::get(context, annotationVec);
+}
 
 /// Deserialize a JSON value into FIRRTL Annotations.  Annotations are
 /// represented as a Target-keyed arrays of attributes.  The input JSON value is
@@ -76,10 +110,8 @@ bool circt::firrtl::fromJSON(json::Value &value,
     }
 
     // If the target is something that we know we don't support, then error.
-    bool unsupported =
-        std::any_of(newTarget.begin(), newTarget.end(), [](char a) {
-          return a == '/' || a == ':' || a == '.' || a == '[';
-        });
+    bool unsupported = std::any_of(newTarget.begin(), newTarget.end(),
+                                   [](char a) { return a == '/' || a == ':'; });
     if (unsupported) {
       p.field("target").report(
           "Unsupported target (not a local CircuitTarget, ModuleTarget, or "
@@ -157,13 +189,27 @@ bool circt::firrtl::fromJSON(json::Value &value,
     // Find and remove the "target" field from the Annotation object if it
     // exists.  In the FIRRTL Dialect, the target will be implicitly specified
     // based on where the attribute is applied.
-    auto target = findAndEraseTarget(object, p);
-    if (!target)
+    auto optTarget = findAndEraseTarget(object, p);
+    if (!optTarget)
       return false;
+    StringRef targetStrRef = optTarget.getValue();
+    // Get the position of the first '.' or '['.
+    auto fieldBegin = targetStrRef.find_first_of(".[");
 
     // Build up the Attribute to represent the Annotation and store it in the
     // global Target -> Attribute mapping.
     NamedAttrList metadata;
+    // Annotations on the element instance.
+    ArrayAttr elementAnnotations;
+    if (fieldBegin != StringRef::npos) {
+      parseSubFieldSubIndexAnnotations(targetStrRef.substr(fieldBegin),
+                                       elementAnnotations, context);
+      // Create an annotations with key "target", which will be parsed by
+      // lowerTypes, and propagated to the appropriate instance.
+      metadata.append("target", elementAnnotations);
+      targetStrRef = targetStrRef.substr(0, fieldBegin);
+    }
+
     for (auto field : *object) {
       if (auto value = convertJSONToAttribute(field.second, p)) {
         metadata.append(field.first, value);
@@ -171,13 +217,19 @@ bool circt::firrtl::fromJSON(json::Value &value,
       }
       return false;
     }
-    mutableAnnotationMap[target.getValue()].push_back(
+    mutableAnnotationMap[targetStrRef].push_back(
         DictionaryAttr::get(context, metadata));
   }
 
   // Convert the mutable Annotation map to a SmallVector<ArrayAttr>.
-  for (auto a : mutableAnnotationMap.keys())
+  for (auto a : mutableAnnotationMap.keys()) {
+    // If multiple annotations on a single object, then append it.
+    if (annotationMap.count(a))
+      for (auto attr : annotationMap[a])
+        mutableAnnotationMap[a].push_back(attr);
+
     annotationMap[a] = ArrayAttr::get(context, mutableAnnotationMap[a]);
+  }
 
   return true;
 }

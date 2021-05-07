@@ -14,6 +14,18 @@ with Context() as ctx, Location.unknown():
 
   i32 = IntegerType.get_signless(32)
 
+  # CHECK: !rtl.array<5xi32>
+  array_i32 = rtl.ArrayType.get(i32, 5)
+  print(array_i32)
+
+  # CHECK: !rtl.struct<foo: i32, bar: !rtl.array<5xi32>>
+  struct = rtl.StructType.get([("foo", i32), ("bar", array_i32)])
+  print(struct)
+
+  # CHECK: !rtl.struct<baz: i32, qux: !rtl.array<5xi32>>
+  struct = rtl.StructType.get([("baz", i32), ("qux", array_i32)])
+  print(struct)
+
   m = Module.create()
   with InsertionPoint(m.body):
     # CHECK: rtl.module @MyWidget(%my_input: i32) -> (%my_output: i32)
@@ -45,7 +57,55 @@ with Context() as ctx, Location.unknown():
       a, b = swap(a, b)
       return a, b
 
-  m.operation.print()
+    one_input = rtl.RTLModuleOp(
+        name="one_input",
+        input_ports=[("a", i32)],
+        body_builder=lambda m: rtl.OutputOp([]),
+    )
+    two_inputs = rtl.RTLModuleOp(
+        name="two_inputs",
+        input_ports=[("a", i32), ("b", i32)],
+        body_builder=lambda m: rtl.OutputOp([]),
+    )
+    one_output = rtl.RTLModuleOp(
+        name="one_output",
+        output_ports=[("a", i32)],
+        body_builder=lambda m: rtl.OutputOp(
+            [rtl.ConstantOp(i32, IntegerAttr.get(i32, 46)).result]),
+    )
+
+    # CHECK-LABEL: rtl.module @instance_builder_tests
+    def instance_builder_body(module):
+      # CHECK: %[[INST1_RESULT:.+]] = rtl.instance "inst1" @one_output()
+      inst1 = one_output.create(module, "inst1")
+
+      # CHECK: rtl.instance "inst2" @one_input(%[[INST1_RESULT]])
+      inst2 = one_input.create(module, "inst2", {"a": inst1.a})
+
+      # CHECK: rtl.instance "inst4" @two_inputs(%[[INST1_RESULT]], %[[INST1_RESULT]])
+      inst4 = two_inputs.create(module, "inst4", {"a": inst1.a})
+      inst4.set_input_port("b", inst1.a)
+
+      # CHECK: %[[INST5_RESULT:.+]] = rtl.instance "inst5" @MyWidget(%[[INST5_RESULT]])
+      inst5 = op.create(module, "inst5")
+      inst5.set_input_port("my_input", inst5.my_output)
+
+      # CHECK: rtl.instance "inst6" {{.*}} {BANKS = 2 : i64}
+      one_input.create(module, "inst6", {"a": inst1.a}, parameters={"BANKS": 2})
+
+      rtl.OutputOp([])
+
+    instance_builder_tests = rtl.RTLModuleOp(name="instance_builder_tests",
+                                             body_builder=instance_builder_body)
+
+    # CHECK: rtl.module @block_args_test(%[[PORT_NAME:.+]]: i32) ->
+    # CHECK: rtl.output %[[PORT_NAME]]
+    rtl.RTLModuleOp(name="block_args_test",
+                    input_ports=[("foo", i32)],
+                    output_ports=[("bar", i32)],
+                    body_builder=lambda module: rtl.OutputOp([module.foo]))
+
+  print(m)
 
   # CHECK-LABEL: === Verilog ===
   print("=== Verilog ===")

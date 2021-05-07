@@ -12,6 +12,8 @@
 
 #include "circt/Conversion/RTLToLLHD/RTLToLLHD.h"
 #include "../PassDetail.h"
+#include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/RTL/RTLDialect.h"
@@ -23,6 +25,7 @@
 using namespace circt;
 using namespace llhd;
 using namespace rtl;
+using namespace comb;
 
 //===----------------------------------------------------------------------===//
 // RTL to LLHD Conversion Pass
@@ -55,18 +58,22 @@ void RTLToLLHDPass::runOnOperation() {
   MLIRContext &context = getContext();
   ModuleOp module = getOperation();
 
+  // Mark the RTL structure ops as illegal such that they get rewritten.
   ConversionTarget target(context);
   target.addLegalDialect<LLHDDialect>();
+  target.addLegalDialect<CombDialect>();
   target.addIllegalOp<RTLModuleOp>();
+  target.addIllegalOp<OutputOp>();
+  target.addIllegalOp<InstanceOp>();
 
+  // Rewrite `rtl.module`, `rtl.output`, and `rtl.instance`.
   RTLToLLHDTypeConverter typeConverter;
   RewritePatternSet patterns(&context);
   mlir::populateFunctionLikeTypeConversionPattern<RTLModuleOp>(patterns,
                                                                typeConverter);
-  patterns.insert<ConvertRTLModule>(typeConverter, &context);
-  patterns.insert<ConvertOutput>(typeConverter, &context);
-  patterns.insert<ConvertInstance>(typeConverter, &context);
-
+  patterns.add<ConvertRTLModule>(&context);
+  patterns.add<ConvertInstance>(&context);
+  patterns.add<ConvertOutput>(&context);
   if (failed(applyPartialConversion(module, target, std::move(patterns))))
     signalPassFailure();
 }
@@ -76,11 +83,19 @@ void RTLToLLHDPass::runOnOperation() {
 //===----------------------------------------------------------------------===//
 
 RTLToLLHDTypeConverter::RTLToLLHDTypeConverter() {
-  // Convert IntegerType by just wrapping it in SigType.
-  addConversion([](IntegerType type) { return SigType::get(type); });
+  // Convert any type by just wrapping it in `SigType`.
+  addConversion([](Type type) { return SigType::get(type); });
 
-  // Mark SigType legal by converting it to itself.
+  // Mark `SigType` legal by converting it to itself.
   addConversion([](SigType type) { return type; });
+
+  // Materialze probes when arguments are converted from any type to `SigType`.
+  addArgumentMaterialization(
+      [](OpBuilder &builder, Type type, ValueRange values, Location loc) {
+        assert(values.size() == 1);
+        auto op = builder.create<PrbOp>(loc, type, values[0]);
+        return op.getResult();
+      });
 }
 
 //===----------------------------------------------------------------------===//
@@ -121,10 +136,6 @@ struct ConvertRTLModule : public OpConversionPattern<RTLModuleOp> {
     rewriter.inlineRegionBefore(module.getBodyRegion(), entityBodyRegion,
                                 entityBodyRegion.end());
 
-    // Add the LLHD terminator op after the RTL module's output ops.
-    rewriter.setInsertionPointToEnd(entity.getBodyBlock());
-    rewriter.create<llhd::TerminatorOp>(entity.getLoc());
-
     // Set the entity type and name attributes. Add block arguments for each
     // output, since LLHD entity outputs are still block arguments to the op.
     auto entityType = rewriter.getFunctionType(entityTypes, {});
@@ -150,6 +161,8 @@ struct ConvertOutput : public OpConversionPattern<OutputOp> {
                   ConversionPatternRewriter &rewriter) const override {
     // Get the number of inputs in the entity to offset into the block args.
     auto entity = output->getParentOfType<EntityOp>();
+    if (!entity)
+      return rewriter.notifyMatchFailure(output, "parent was not an EntityOp");
     size_t numInputs = entity.ins();
 
     // Drive the results from the mapped operands.
@@ -161,6 +174,14 @@ struct ConvertOutput : public OpConversionPattern<OutputOp> {
       if (!src || !dest)
         return rewriter.notifyMatchFailure(
             output, "output operand must map to result block arg");
+
+      // Look through probes on the source side and use the signal directly.
+      if (auto prb = src.getDefiningOp<PrbOp>())
+        src = prb.signal();
+
+      // No work needed if they already are the same.
+      if (src == dest)
+        continue;
 
       // If the source has a signal type, connect it.
       if (auto sigTy = src.getType().dyn_cast<SigType>()) {
@@ -177,7 +198,8 @@ struct ConvertOutput : public OpConversionPattern<OutputOp> {
       rewriter.create<DrvOp>(output.getLoc(), dest, src, delta, Value());
     }
 
-    // Erase the original output terminator.
+    // Replace the output with an LLHD terminator.
+    rewriter.create<llhd::TerminatorOp>(entity.getLoc());
     rewriter.eraseOp(output);
 
     return success();
@@ -193,11 +215,60 @@ struct ConvertInstance : public OpConversionPattern<InstanceOp> {
   LogicalResult
   matchAndRewrite(InstanceOp instance, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
+    Value delta;
+
+    // Materialize signals for instance arguments that are of non-signal type.
+    SmallVector<Value, 4> arguments;
+    unsigned argIdx = 0;
+    for (auto arg : operands) {
+      // Connect signals directly.
+      auto argType = arg.getType();
+      if (argType.isa<SigType>()) {
+        arguments.push_back(arg);
+        continue;
+      }
+
+      // Look through probes and use the signal directly.
+      if (auto prb = arg.getDefiningOp<PrbOp>()) {
+        arguments.push_back(prb.signal());
+        continue;
+      }
+
+      // Otherwise materialize a signal.
+      // TODO: This should be a `llhd.buffer` operation. Ultimately we would
+      // want this to be done by the TypeConverter in a materialization
+      // callback. That requires adding the mentioned operation and fleshing out
+      // the semantics of a zero-delay drive in the simulation. Once this is
+      // done, the materializer can insert buffers with no delay and have them
+      // collected in a canonicalization later where appropriate.
+      // See github.com/llvm/circt/pull/988 for a discussion.
+      if (!argType.isa<IntegerType>())
+        return rewriter.notifyMatchFailure(instance, [&](Diagnostic &diag) {
+          diag << "argument type " << argType << " is not supported";
+        });
+
+      auto init = rewriter.create<ConstOp>(arg.getLoc(), argType,
+                                           rewriter.getIntegerAttr(argType, 0));
+      SmallString<8> sigName(instance.instanceName());
+      sigName += "_arg_";
+      sigName += std::to_string(argIdx++);
+      auto sig = rewriter.createOrFold<SigOp>(
+          arg.getLoc(), SigType::get(argType), sigName, init);
+      if (!delta) {
+        auto timeType = TimeType::get(rewriter.getContext());
+        auto deltaAttr = TimeAttr::get(timeType, {0, 1, 0}, "ns");
+        delta = rewriter.create<ConstOp>(arg.getLoc(), timeType, deltaAttr);
+      }
+      rewriter.create<DrvOp>(arg.getLoc(), sig, arg, delta, Value());
+      arguments.push_back(sig);
+    }
+
     // RTL instances model output ports as SSA results produced by the op. LLHD
     // instances model output ports as arguments to the op, so we need to find
     // or create SSA values. For each output port in the RTL instance, try to
     // find a signal that can be used directly, or else create a new signal.
-    SmallVector<Value, 4> results;
+    SmallVector<Value, 4> resultSigs;
+    SmallVector<Value, 4> resultValues;
     for (auto result : instance.getResults()) {
       auto resultType = result.getType();
       if (!resultType.isa<IntegerType>())
@@ -207,39 +278,59 @@ struct ConvertInstance : public OpConversionPattern<InstanceOp> {
 
       Location loc = result.getLoc();
 
-      Value init;
+      // Since we need to have a signal for this result, see if an OutputOp maps
+      // it to an output signal of our parent module. In that case we can just
+      // use that signal.
+      Value sig;
       for (auto &use : result.getUses()) {
-        Value sig;
-
         if (isa<OutputOp>(use.getOwner())) {
-          // If the result is an entity output, use that signal.
           auto entity = instance->getParentOfType<EntityOp>();
+          if (!entity)
+            continue;
           sig = entity.getArgument(entity.ins() + use.getOperandNumber());
-        } else {
-          // Otherwise, materialize a signal.
-          if (!init)
-            init = rewriter.create<ConstOp>(
-                loc, resultType, rewriter.getIntegerAttr(resultType, 0));
-
-          SmallString<8> sigName(instance.instanceName());
-          sigName += "_result_";
-          sigName += std::to_string(result.getResultNumber());
-          sig = rewriter.createOrFold<SigOp>(loc, SigType::get(resultType),
-                                             sigName, init);
+          break;
         }
-
-        // Replace all uses of this result with the signal.
-        rewriter.updateRootInPlace(use.getOwner(), [&]() { use.set(sig); });
-
-        results.push_back(sig);
       }
+
+      // Otherwise materialize a signal.
+      // TODO: This should be a `llhd.buffer` operation. Ultimately we would
+      // want this to be done by the TypeConverter in a materialization
+      // callback. That requires adding the mentioned operation and fleshing out
+      // the semantics of a zero-delay drive in the simulation. Once this is
+      // done, the materializer can insert buffers with no delay and have them
+      // collected in a canonicalization later where appropriate.
+      // See github.com/llvm/circt/pull/988 for a discussion.
+      if (!sig) {
+        auto init = rewriter.create<ConstOp>(
+            loc, resultType, rewriter.getIntegerAttr(resultType, 0));
+        SmallString<8> sigName(instance.instanceName());
+        sigName += "_result_";
+        sigName += std::to_string(result.getResultNumber());
+        sig = rewriter.createOrFold<SigOp>(loc, SigType::get(resultType),
+                                           sigName, init);
+      }
+
+      // Make OutputOps directly refer to this signal, which allows them to use
+      // a ConnectOp rather than a PrbOp+DrvOp combo.
+      for (auto &use : llvm::make_early_inc_range(result.getUses())) {
+        if (isa<OutputOp>(use.getOwner())) {
+          rewriter.updateRootInPlace(use.getOwner(), [&]() { use.set(sig); });
+        }
+      }
+
+      // Probe the value of the signal such that we end up having a replacement
+      // for the InstanceOp results later on.
+      auto prb = rewriter.create<PrbOp>(loc, resultType, sig);
+      resultSigs.push_back(sig);
+      resultValues.push_back(prb);
     }
 
-    // Create the LLHD instance from the operands and results.
+    // Create the LLHD instance from the operands and results. Then mark the
+    // original instance for replacement with the new values probed from the
+    // signals attached to the LLHD instance.
     rewriter.create<InstOp>(instance.getLoc(), instance.instanceName(),
-                            instance.moduleName(), operands, results);
-
-    rewriter.eraseOp(instance);
+                            instance.moduleName(), arguments, resultSigs);
+    rewriter.replaceOp(instance, resultValues);
 
     return success();
   }

@@ -84,6 +84,13 @@ public:
     return wrap(found);
   }
 
+  void printCapnpSchema(py::object fileObject) {
+    circt::python::PyFileAccumulator accum(fileObject, false);
+    py::gil_scoped_release();
+    circtESIExportCosimSchema(cModuleOp, accum.getCallback(),
+                              accum.getUserData());
+  }
+
 private:
   MLIRContext *ctxt() { return unwrap(cCtxt); }
   ModuleOp mod() { return unwrap(cModuleOp); }
@@ -108,7 +115,9 @@ void circt::python::populateDialectESISubmodule(py::module &m) {
   py::class_<System>(m, "CppSystem")
       .def(py::init<MlirModule>())
       .def("load_mlir", &System::loadMlir, "Load an MLIR assembly file.")
-      .def("lookup", &System::lookup, "Lookup an RTL module and return it.");
+      .def("lookup", &System::lookup, "Lookup an RTL module and return it.")
+      .def("print_cosim_schema", &System::printCapnpSchema,
+           "Print the cosim RPC schema");
 
   mlir_type_subclass(m, "ChannelType", circtESITypeIsAChannelType)
       .def_static("get",

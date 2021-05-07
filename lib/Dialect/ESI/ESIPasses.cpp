@@ -23,6 +23,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
+
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -659,6 +660,33 @@ bool ESIPortsPass::updateFunc(RTLModuleExternOp mod) {
   return true;
 }
 
+/// Create a reasonable name for a SV interface instance.
+static std::string &constructInstanceName(Value operand, InterfaceOp iface,
+                                          std::string &name) {
+  llvm::raw_string_ostream s(name);
+  // Drop the "IValidReady_" part of the interface name.
+  s << llvm::toLower(iface.sym_name()[12]) << iface.sym_name().substr(13);
+
+  // Indicate to where the source is connected.
+  if (operand.hasOneUse()) {
+    Operation *dstOp = *operand.getUsers().begin();
+    if (auto instOp = dyn_cast<InstanceOp>(dstOp))
+      s << "To" << llvm::toUpper(instOp.instanceName()[0])
+        << instOp.instanceName().substr(1);
+    else if (auto dstName = dstOp->getAttrOfType<StringAttr>("name"))
+      s << "To" << dstName.getValue();
+  }
+
+  // Indicate to where the sink is connected.
+  auto srcOp = operand.getDefiningOp();
+  if (auto instOp = dyn_cast<InstanceOp>(srcOp))
+    s << "From" << llvm::toUpper(instOp.instanceName()[0])
+      << instOp.instanceName().substr(1);
+  if (auto srcName = srcOp->getAttrOfType<StringAttr>("name"))
+    s << "From" << srcName.getValue();
+  return s.str();
+}
+
 /// Update an instance of an updated module by adding `esi.(un)wrap.iface`
 /// around the instance. Create a new instance at the end from the lists built
 /// up before.
@@ -673,6 +701,7 @@ void ESIPortsPass::updateInstance(RTLModuleExternOp mod, InstanceOp inst) {
   SmallVector<Value, 16> newOperands;
 
   // Fill the new operand list with old plain operands and mutated ones.
+  std::string nameStringBuffer; // raw_string_ostream uses std::string.
   for (auto op : inst.getOperands()) {
     auto instChanTy = op.getType().dyn_cast<ChannelPort>();
     if (!instChanTy) {
@@ -698,6 +727,11 @@ void ESIPortsPass::updateInstance(RTLModuleExternOp mod, InstanceOp inst) {
     // `esi.unwrap.iface` and the other end to the instance.
     auto ifaceInst =
         instBuilder.create<InterfaceInstanceOp>(iface.getInterfaceType());
+    nameStringBuffer.clear();
+    ifaceInst->setAttr(
+        "name",
+        StringAttr::get(mod.getContext(),
+                        constructInstanceName(op, iface, nameStringBuffer)));
     GetModportOp sinkModport =
         instBuilder.create<GetModportOp>(ifaceInst, ESIRTLBuilder::sinkStr);
     instBuilder.create<UnwrapSVInterface>(op, sinkModport);
@@ -740,12 +774,17 @@ void ESIPortsPass::updateInstance(RTLModuleExternOp mod, InstanceOp inst) {
     // operand list.
     auto ifaceInst =
         instBuilder.create<InterfaceInstanceOp>(iface.getInterfaceType());
+    nameStringBuffer.clear();
+    ifaceInst->setAttr(
+        "name",
+        StringAttr::get(mod.getContext(),
+                        constructInstanceName(res, iface, nameStringBuffer)));
     GetModportOp sourceModport =
         instBuilder.create<GetModportOp>(ifaceInst, ESIRTLBuilder::sourceStr);
     auto newChannel =
         instBuilder.create<WrapSVInterface>(res.getType(), sourceModport);
-    // Connect all the old users of the output channel with the newly wrapped
-    // replacement channel.
+    // Connect all the old users of the output channel with the newly
+    // wrapped replacement channel.
     res.replaceAllUsesWith(newChannel);
     GetModportOp sinkModport =
         instBuilder.create<GetModportOp>(ifaceInst, ESIRTLBuilder::sinkStr);
