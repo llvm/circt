@@ -98,6 +98,13 @@ with Context() as ctx, Location.unknown():
     instance_builder_tests = rtl.RTLModuleOp(name="instance_builder_tests",
                                              body_builder=instance_builder_body)
 
+    # CHECK: rtl.module @block_args_test(%[[PORT_NAME:.+]]: i32) ->
+    # CHECK: rtl.output %[[PORT_NAME]]
+    rtl.RTLModuleOp(name="block_args_test",
+                    input_ports=[("foo", i32)],
+                    output_ports=[("bar", i32)],
+                    body_builder=lambda module: rtl.OutputOp([module.foo]))
+
   print(m)
 
   # CHECK-LABEL: === Verilog ===
