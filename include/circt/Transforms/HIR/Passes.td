@@ -16,4 +16,13 @@ def ScheduleVerifier : Pass<"hir-schedule-verifier", "hir::FuncOp"> {
 
   let constructor = "mlir::hir::createScheduleVerificationPass()";
 }
+
+def LoopUnroll : Pass<"hir-loop-unroll", "hir::FuncOp"> {
+  let summary = "Unroll loop body";
+  let description = [{This pass unrolls the body of the UnrollForOp and removes
+  the op.
+  }];
+
+  let constructor = "mlir::hir::createLoopUnrollPass()";
+}
 #endif // CIRCT_DIALECT_HIR_TRANSFORMS_PASSES

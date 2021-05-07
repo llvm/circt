@@ -16,6 +16,7 @@ namespace hir {
 
 std::unique_ptr<OperationPass<hir::FuncOp>> createCanonicalizationPass();
 std::unique_ptr<OperationPass<hir::FuncOp>> createScheduleVerificationPass();
+std::unique_ptr<OperationPass<hir::FuncOp>> createLoopUnrollPass();
 void initHIRTransformationPasses();
 } // namespace hir
 } // namespace mlir
