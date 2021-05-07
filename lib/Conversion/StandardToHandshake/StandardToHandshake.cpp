@@ -1511,6 +1511,7 @@ namespace {
 struct HandshakeInsertBufferPass
     : public HandshakeInsertBufferBase<HandshakeInsertBufferPass> {
 
+  // Perform a depth first search and insert buffers when cycles are detected.
   void bufferCyclesStrategy() {
     auto f = getOperation();
     DenseSet<Operation *> opVisited;
@@ -1526,6 +1527,7 @@ struct HandshakeInsertBufferPass
     }
   }
 
+  // Perform a depth first search and add a buffer to any un-buffered channel.
   void bufferAllStrategy() {
     auto f = getOperation();
     auto builder = OpBuilder(f.getContext());
@@ -1574,17 +1576,20 @@ struct HandshakeInsertBufferPass
   void insertBufferRecursive(OpOperand &use, OpBuilder &builder) {
     auto oldValue = use.get();
 
-    if (oldValue.isa<OpResult>())
-      builder.setInsertionPointAfter(oldValue.getDefiningOp());
-    else
-      builder.setInsertionPointToStart(oldValue.getParentBlock());
+    if (!isa_and_nonnull<BufferOp>(oldValue.getDefiningOp()) &&
+        !isa<BufferOp>(use.getOwner())) {
+      if (oldValue.isa<OpResult>())
+        builder.setInsertionPointAfter(oldValue.getDefiningOp());
+      else
+        builder.setInsertionPointToStart(oldValue.getParentBlock());
 
-    auto buffer = builder.create<handshake::BufferOp>(
-        oldValue.getLoc(), oldValue.getType(), oldValue, /*sequential=*/true,
-        /*control=*/oldValue.getType().isa<NoneType>(),
-        /*slots=*/2);
+      auto buffer = builder.create<handshake::BufferOp>(
+          oldValue.getLoc(), oldValue.getType(), oldValue, /*sequential=*/true,
+          /*control=*/oldValue.getType().isa<NoneType>(),
+          /*slots=*/2);
 
-    use.getOwner()->setOperand(use.getOperandNumber(), buffer);
+      use.getOwner()->setOperand(use.getOperandNumber(), buffer);
+    }
 
     for (auto &childUse : use.getOwner()->getUses())
       if (!isa<handshake::BufferOp>(childUse.getOwner()))
