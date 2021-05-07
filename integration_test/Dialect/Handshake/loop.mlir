@@ -1,8 +1,8 @@
-// REQUIRES: ieee-sim
+// REQUIRES: vivado
 // RUN: circt-opt %s --create-dataflow --simple-canonicalizer --cse --handshake-insert-buffer=strategies=all > %loop-handshake.mlir
 // RUN: circt-opt %loop-handshake.mlir --lower-handshake-to-firrtl --firrtl-lower-types --firrtl-imconstprop --lower-firrtl-to-rtl --rtl-cleanup --simple-canonicalizer --cse --rtl-legalize-names > %loop-rtl.mlir
 // RUN: circt-translate %loop-rtl.mlir --export-verilog > %loop-export.sv
-// RUN: circt-rtl-sim.py %loop-export.sv %S/driver.sv --sim %ieee-sim --no-default-driver --top driver | FileCheck %s
+// RUN: circt-rtl-sim.py %loop-export.sv %S/driver.sv --sim %xsim% --no-default-driver --top driver | FileCheck %s
 // CHECK: Result={{.*}}42
 
 module  {
