@@ -7,7 +7,9 @@
 //===----------------------------------------------------------------------===//
 //
 // This transformation pass performs various cleanups and canonicalization
-// transformations for rtl.module bodies.
+// transformations for rtl.module bodies.  This is intended to be used early in
+// the RTL/SV pipeline to expose optimization opportunities that require global
+// analysis.
 //
 //===----------------------------------------------------------------------===//
 
@@ -67,7 +69,7 @@ static void mergeRegions(Region *region1, Region *region2) {
 }
 
 //===----------------------------------------------------------------------===//
-// AlwaysFusionPass
+// RTLCleanupPass
 //===----------------------------------------------------------------------===//
 
 namespace {

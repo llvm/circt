@@ -64,6 +64,9 @@ MLIR_CAPI_EXPORTED bool rtlTypeIsAArrayType(MlirType);
 /// If the type is an RTL inout.
 MLIR_CAPI_EXPORTED bool rtlTypeIsAInOut(MlirType type);
 
+/// If the type is an RTL struct.
+MLIR_CAPI_EXPORTED bool rtlTypeIsAStructType(MlirType);
+
 /// Creates a fixed-size RTL array type in the context associated with element
 MLIR_CAPI_EXPORTED MlirType rtlArrayTypeGet(MlirType element, size_t size);
 
@@ -78,6 +81,11 @@ MLIR_CAPI_EXPORTED MlirType rtlInOutTypeGet(MlirType element);
 
 /// Returns the element type of an inout type.
 MLIR_CAPI_EXPORTED MlirType rtlInOutTypeGetElementType(MlirType);
+
+/// Creates an RTL struct type in the context associated with the elements.
+MLIR_CAPI_EXPORTED MlirType
+rtlStructTypeGet(MlirContext ctx, intptr_t numElements,
+                 struct RTLStructFieldInfo const *elements);
 
 #ifdef __cplusplus
 }

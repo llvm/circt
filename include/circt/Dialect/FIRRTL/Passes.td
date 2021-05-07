@@ -31,6 +31,25 @@ def IMConstProp : Pass<"firrtl-imconstprop", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createIMConstPropPass()";
 }
 
+def Inliner : Pass<"firrtl-inliner", "firrtl::CircuitOp"> {
+  let summary = "Performs inlining, flattening, and dead module elimination";
+  let description = [{
+    This inliner pass will inline any instance of module marked as inline, and
+    recursively inline all instances inside of a module marked with flatten.
+    This pass performs renaming of every entity with a name that is inlined by
+    prefixing it with the instance name.  This pass also will remove any module
+    which is not reachable from the top level module.
+
+    The inline and flatten annotation attributes are attached to module
+    definitions, and they are:
+    ```mlir
+      {class = "firrtl.passes.InlineAnnotation"}
+      {class = "firrtl.transforms.FlattenAnnotation"}
+    ```
+  }];
+  let constructor = "circt::firrtl::createInlinerPass()";
+}
+
 def BlackboxMemory : Pass<"firrtl-blackbox-memory", "firrtl::CircuitOp"> {
   let summary = "Replace all FIRRTL memories with an external module blackbox.";
   let description = [{

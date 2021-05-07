@@ -22,6 +22,7 @@
 
 #include "llvm/ADT/SmallVector.h"
 
+#include "MLIRPybindAdaptors.h"
 #include "PybindUtils.h"
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -83,6 +84,13 @@ public:
     return wrap(found);
   }
 
+  void printCapnpSchema(py::object fileObject) {
+    circt::python::PyFileAccumulator accum(fileObject, false);
+    py::gil_scoped_release();
+    circtESIExportCosimSchema(cModuleOp, accum.getCallback(),
+                              accum.getUserData());
+  }
+
 private:
   MLIRContext *ctxt() { return unwrap(cCtxt); }
   ModuleOp mod() { return unwrap(cModuleOp); }
@@ -90,6 +98,8 @@ private:
   MlirContext cCtxt;
   MlirModule cModuleOp;
 };
+
+using namespace mlir::python::adaptors;
 
 void circt::python::populateDialectESISubmodule(py::module &m) {
   m.doc() = "ESI Python Native Extension";
@@ -105,5 +115,15 @@ void circt::python::populateDialectESISubmodule(py::module &m) {
   py::class_<System>(m, "CppSystem")
       .def(py::init<MlirModule>())
       .def("load_mlir", &System::loadMlir, "Load an MLIR assembly file.")
-      .def("lookup", &System::lookup, "Lookup an RTL module and return it.");
+      .def("lookup", &System::lookup, "Lookup an RTL module and return it.")
+      .def("print_cosim_schema", &System::printCapnpSchema,
+           "Print the cosim RPC schema");
+
+  mlir_type_subclass(m, "ChannelType", circtESITypeIsAChannelType)
+      .def_static("get",
+                  [](MlirType inner) {
+                    return py::cast(circtESIChannelTypeGet(inner));
+                  })
+      .def_property_readonly(
+          "inner", [](MlirType self) { return circtESIChannelGetInner(self); });
 }

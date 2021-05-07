@@ -156,7 +156,7 @@ static FirMemory analyzeMemOp(MemOp op) {
   size_t numReadWritePorts = 0;
 
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
-    auto portKind = *op.getPortKind(i);
+    auto portKind = op.getPortKind(i);
     if (portKind == MemOp::PortKind::Read)
       ++numReadPorts;
     else if (portKind == MemOp::PortKind::Write)
@@ -787,11 +787,8 @@ void FIRRTLModuleLowering::lowerModuleBody(
     // We lower zero width inout and outputs to a wire that isn't connected to
     // anything outside the module.  Inputs are lowered to zero.
     if (isZeroWidth && port.isInput()) {
-      Value newArg = bodyBuilder.create<WireOp>(FlipType::get(port.type),
-                                                "." + port.getName().str() +
-                                                    ".0width_input");
-
-      newArg = bodyBuilder.create<AsPassivePrimOp>(newArg);
+      Value newArg = bodyBuilder.create<WireOp>(
+          port.type, "." + port.getName().str() + ".0width_input");
       oldArg.replaceAllUsesWith(newArg);
       continue;
     }
@@ -807,7 +804,7 @@ void FIRRTLModuleLowering::lowerModuleBody(
     // Outputs need a temporary wire so they can be connect'd to, which we
     // then return.
     Value newArg = bodyBuilder.create<WireOp>(
-        port.type, "." + port.getName().str() + ".output");
+        FlipType::get(port.type), "." + port.getName().str() + ".output");
     // Switch all uses of the old operands to the new ones.
     oldArg.replaceAllUsesWith(newArg);
 
@@ -1732,7 +1729,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   // two layers of type to split appart.
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
     auto portName = op.getPortName(i).getValue();
-    auto portKind = *op.getPortKind(i);
+    auto portKind = op.getPortKind(i);
 
     auto &portKindNum =
         portKind == MemOp::PortKind::Read

@@ -71,14 +71,14 @@ firrtl.module @vect0(%a : !firrtl.vector<uint<1>, 3>, %b : !firrtl.flip<vector<u
 /// Bundle types can be connected if they have the same size, element names, and
 /// element types.
 
-firrtl.module @bundle0(%a : !firrtl.bundle<f1: uint<1>, f2: flip<sint<1>>>, %b : !firrtl.bundle<f1: flip<uint<1>>, f2: sint<1>>) {
+firrtl.module @bundle0(%a : !firrtl.bundle<f1: uint<1>, f2: flip<sint<1>>>, %b : !firrtl.flip<bundle<f1: uint<1>, f2: flip<sint<1>>>>) {
   // CHECK: firrtl.connect %b, %a
-  firrtl.connect %b, %a : !firrtl.bundle<f1: flip<uint<1>>, f2: sint<1>>, !firrtl.bundle<f1: uint<1>, f2: flip<sint<1>>>
+  firrtl.connect %b, %a : !firrtl.flip<bundle<f1: uint<1>, f2: flip<sint<1>>>>, !firrtl.bundle<f1: uint<1>, f2: flip<sint<1>>>
 }
 
-firrtl.module @bundle1(%a : !firrtl.bundle<f1: uint<1>, f2: flip<sint<2>>>, %b : !firrtl.bundle<f1: flip<uint<2>>, f2: sint<1>>) {
+firrtl.module @bundle1(%a : !firrtl.bundle<f1: uint<1>, f2: flip<sint<2>>>, %b : !firrtl.flip<bundle<f1: uint<2>, f2: flip<sint<1>>>>) {
   // CHECK: firrtl.connect %b, %a
-  firrtl.connect %b, %a : !firrtl.bundle<f1: flip<uint<2>>, f2: sint<1>>, !firrtl.bundle<f1: uint<1>, f2: flip<sint<2>>>
+  firrtl.connect %b, %a : !firrtl.flip<bundle<f1: uint<2>, f2: flip<sint<1>>>>, !firrtl.bundle<f1: uint<1>, f2: flip<sint<2>>>
 }
 
 /// Destination bitwidth must be greater than or equal to source bitwidth.
@@ -102,11 +102,11 @@ firrtl.module @wires0(%in : !firrtl.uint<1>, %out : !firrtl.flip<uint<1>>) {
 }
 
 firrtl.module @wires1(%in : !firrtl.uint<1>, %out : !firrtl.flip<uint<1>>) {
-  %wf = firrtl.wire : !firrtl.flip<uint<1>>
-  // CHECK: firrtl.connect %wf, %in : !firrtl.flip<uint<1>>, !firrtl.uint<1>
-  // CHECK: firrtl.connect %out, %wf : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
-  firrtl.connect %wf, %in : !firrtl.flip<uint<1>>, !firrtl.uint<1>
-  firrtl.connect %out, %wf : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+  %wf = firrtl.wire : !firrtl.uint<1>
+  // CHECK: firrtl.connect %wf, %in : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: firrtl.connect %out, %wf : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %wf, %in : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.connect %out, %wf : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 }
 
 firrtl.module @wires2() {
@@ -116,21 +116,14 @@ firrtl.module @wires2() {
   firrtl.connect %w0, %w1 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
-firrtl.module @wires3() {
-  // CHECK: firrtl.connect %wf0, %wf1
-  %wf0 = firrtl.wire : !firrtl.flip<uint<1>>
-  %wf1 = firrtl.wire : !firrtl.flip<uint<1>>
-  firrtl.connect %wf0, %wf1 : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
-}
-
-firrtl.module @wires4(%out : !firrtl.flip<uint<1>>) {
-  %wf = firrtl.wire : !firrtl.flip<uint<1>>
+firrtl.module @wires3(%out : !firrtl.flip<uint<1>>) {
+  %wf = firrtl.wire : !firrtl.uint<1>
   // check that we can read from an output port
   // CHECK: firrtl.connect %wf, %out
-  firrtl.connect %wf, %out : !firrtl.flip<uint<1>>, !firrtl.flip<uint<1>>
+  firrtl.connect %wf, %out : !firrtl.uint<1>, !firrtl.flip<uint<1>>
 }
 
-firrtl.module @wires5(%in : !firrtl.uint<1>, %out : !firrtl.flip<uint<1>>) {
+firrtl.module @wires4(%in : !firrtl.uint<1>, %out : !firrtl.flip<uint<1>>) {
   %w = firrtl.wire : !firrtl.bundle<a: uint<1>>
   %0 = firrtl.subfield %w("a") : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
   // CHECK: firrtl.connect %0, %in : !firrtl.uint<1>, !firrtl.uint<1>

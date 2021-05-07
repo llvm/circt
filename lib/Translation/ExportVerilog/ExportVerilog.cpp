@@ -801,11 +801,8 @@ private:
   SubExprInfo visitComb(AndOp op) { return emitVariadic(op, And, "&"); }
   SubExprInfo visitComb(OrOp op) { return emitVariadic(op, Or, "|"); }
   SubExprInfo visitComb(XorOp op) {
-    if (op.getNumOperands() == 2)
-      if (auto cst =
-              dyn_cast_or_null<ConstantOp>(op.getOperand(1).getDefiningOp()))
-        if (cst.getValue().isAllOnesValue())
-          return emitUnary(op, "~");
+    if (op.isBinaryNot())
+      return emitUnary(op, "~");
 
     return emitVariadic(op, Xor, "^");
   }
@@ -1081,21 +1078,15 @@ SubExprInfo ExprEmitter::visitComb(ICmpOp op) {
 
   auto pred = static_cast<uint64_t>(op.predicate());
   assert(pred < sizeof(symop) / sizeof(symop[0]));
-  if (op.predicate() == ICmpPredicate::eq) {
-    // Lower "== -1" to Reduction And
-    if (auto op1 =
-            dyn_cast_or_null<ConstantOp>(op.getOperand(1).getDefiningOp())) {
-      if (op1.getValue().isAllOnesValue())
-        return emitUnary(op, "&", true);
-    }
-  } else if (op.predicate() == ICmpPredicate::ne) {
-    // Lower "!= 0" to Reduction Or
-    if (auto op1 =
-            dyn_cast_or_null<ConstantOp>(op.getOperand(1).getDefiningOp())) {
-      if (op1.getValue().isNullValue())
-        return emitUnary(op, "|", true);
-    }
-  }
+
+  // Lower "== -1" to Reduction And.
+  if (op.isEqualAllOnes())
+    return emitUnary(op, "&", true);
+
+  // Lower "!= 0" to Reduction Or.
+  if (op.isNotEqualZero())
+    return emitUnary(op, "|", true);
+
   auto result = emitBinary(op, Comparison, symop[pred], signop[pred]);
 
   // SystemVerilog 11.8.1: "Comparison... operator results are unsigned,
@@ -2150,18 +2141,10 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   auto *moduleOp = op.getReferencedModule();
   assert(moduleOp && "Invalid IR");
 
-  // If this is a reference to an external module with a hard coded Verilog
-  // name, then use it here.  This is a hack because we lack proper support for
-  // parameterized modules in the RTL dialect.
-  if (auto extMod = dyn_cast<RTLModuleExternOp>(moduleOp)) {
-    auto verilogName = extMod.getVerilogModuleNameAttr();
-    emitter.verifyModuleName(op, verilogName);
-    indent() << verilogName.getValue();
-  } else if (auto mod = dyn_cast<RTLModuleOp>(moduleOp)) {
-    auto verilogName = mod.getNameAttr();
-    emitter.verifyModuleName(op, verilogName);
-    indent() << verilogName.getValue();
-  }
+  // Use the specified name or the symbol name as appropriate.
+  auto verilogName = getVerilogModuleNameAttr(moduleOp);
+  emitter.verifyModuleName(op, verilogName);
+  indent() << verilogName.getValue();
 
   // Helper that prints a parameter constant value in a Verilog compatible way.
   auto printParmValue = [&](Attribute value) {
