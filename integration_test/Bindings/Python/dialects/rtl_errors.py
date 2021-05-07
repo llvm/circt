@@ -51,6 +51,12 @@ with Context() as ctx, Location.unknown():
       except AttributeError as e:
         print(e)
 
+      # CHECK: unknown input port name nonexistant_port
+      try:
+        module.nonexistant_port
+      except AttributeError as e:
+        print(e)
+
       # Note, the error here is actually caught and printed below.
       # CHECK: Uninitialized ports remain in circuit!
       # CHECK: Port:     %[[PORT_NAME:.+]]
