@@ -119,12 +119,8 @@ void FIRRTLToLLHDPass::convertModule(firrtl::FModuleOp &module) {
 
     // For now, let's do a simple approach where we only support flip at the top
     // of a port's aggregate type.
-    bool isFlip = false;
+    bool isFlip = port.direction == circt::firrtl::Direction::Output;
     firrtl::FIRRTLType type = port.type;
-    if (auto flipType = type.dyn_cast<firrtl::FlipType>()) {
-      isFlip = true;
-      type = flipType.getElementType();
-    }
 
     // Convert the type. We keep things simple for the time being.
     auto width = type.getBitWidthOrSentinel();
