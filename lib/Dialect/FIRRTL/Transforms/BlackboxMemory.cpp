@@ -86,7 +86,10 @@ static InstanceOp createInstance(OpBuilder builder, Location loc,
   SmallVector<Type, 4> resultTypes;
   resultTypes.reserve(modulePorts.size());
   for (auto port : modulePorts) {
-    resultTypes.push_back(FlipType::get(port.type));
+    if (port.direction == Direction::Input)
+      resultTypes.push_back(FlipType::get(port.type));
+    else
+      resultTypes.push_back(port.type);
   }
 
   return builder.create<InstanceOp>(loc, resultTypes, moduleName,
@@ -118,22 +121,18 @@ getBlackboxPortsForMemOp(MemOp op, ArrayRef<MemOp::NamedPort> memPorts,
       break;
     }
     // Flatten the bundle representing a memory port, name-mangling and adding
-    // every field in the bundle to the exter module's port list.
-    auto type = op.getResult(i).getType().cast<FIRRTLType>();
-    bool shouldFlip = true;
-    if (auto flip = type.dyn_cast<FlipType>()) {
-      type = flip.getElementType();
-      // We need to flip each element in the bundle.  If the bundle as a whole
-      // was flipped, we can reuse the element type directly without applying a
-      // flip.
-      shouldFlip = false;
-    }
+    // every field in the bundle to the exter module's port list.  All memory
+    // ports have an outer flip, so we just strip this.
+    auto type = op.getResult(i).getType().cast<FlipType>().getElementType();
     for (auto bundleElement : type.cast<BundleType>().getElements()) {
       auto name = (prefix + bundleElement.name.getValue()).str();
       auto type = bundleElement.type;
-      if (shouldFlip)
+      auto direction = Direction::Input;
+      if (type.isa<FlipType>()) {
         type = FlipType::get(type);
-      extPorts.push_back({builder.getStringAttr(name), type});
+        direction = Direction::Output;
+      }
+      extPorts.push_back({builder.getStringAttr(name), type, direction});
     }
   }
 }
@@ -201,8 +200,8 @@ createWrapperModule(MemOp op, ArrayRef<MemOp::NamedPort> memPorts,
   modPorts.reserve(op.getResults().size());
   for (size_t i = 0, e = memPorts.size(); i != e; ++i) {
     auto name = op.getPortName(i);
-    auto type = FlipType::get(op.getPortType(i));
-    modPorts.push_back({name, type});
+    auto type = op.getPortType(i).cast<FlipType>().getElementType();
+    modPorts.push_back({name, type, Direction::Input});
   }
   auto moduleOp = builder.create<FModuleOp>(
       op.getLoc(), builder.getStringAttr(memName), modPorts);
