@@ -1511,6 +1511,7 @@ namespace {
 struct HandshakeInsertBufferPass
     : public HandshakeInsertBufferBase<HandshakeInsertBufferPass> {
 
+  // Perform a depth first search and insert buffers when cycles are detected.
   void bufferCyclesStrategy() {
     auto f = getOperation();
     DenseSet<Operation *> opVisited;
@@ -1524,6 +1525,15 @@ struct HandshakeInsertBufferPass
           insertBufferDFS(operand.getOwner(), builder, opVisited, opInFlight);
       }
     }
+  }
+
+  // Perform a depth first search and add a buffer to any un-buffered channel.
+  void bufferAllStrategy() {
+    auto f = getOperation();
+    auto builder = OpBuilder(f.getContext());
+    for (auto &arg : f.getArguments())
+      for (auto &use : arg.getUses())
+        insertBufferRecursive(use, builder);
   }
 
   /// DFS-based graph cycle detection and naive buffer insertion. Exactly one
@@ -1563,6 +1573,29 @@ struct HandshakeInsertBufferPass
     opInFlight.erase(op);
   }
 
+  void insertBufferRecursive(OpOperand &use, OpBuilder &builder) {
+    auto oldValue = use.get();
+
+    if (!isa_and_nonnull<BufferOp>(oldValue.getDefiningOp()) &&
+        !isa<BufferOp>(use.getOwner())) {
+      if (oldValue.isa<OpResult>())
+        builder.setInsertionPointAfter(oldValue.getDefiningOp());
+      else
+        builder.setInsertionPointToStart(oldValue.getParentBlock());
+
+      auto buffer = builder.create<handshake::BufferOp>(
+          oldValue.getLoc(), oldValue.getType(), oldValue, /*sequential=*/true,
+          /*control=*/oldValue.getType().isa<NoneType>(),
+          /*slots=*/2);
+
+      use.getOwner()->setOperand(use.getOperandNumber(), buffer);
+    }
+
+    for (auto &childUse : use.getOwner()->getUses())
+      if (!isa<handshake::BufferOp>(childUse.getOwner()))
+        insertBufferRecursive(childUse, builder);
+  }
+
   void runOnOperation() override {
     if (strategies.empty())
       strategies = {"cycles"};
@@ -1570,6 +1603,8 @@ struct HandshakeInsertBufferPass
     for (auto strategy : strategies) {
       if (strategy == "cycles")
         bufferCyclesStrategy();
+      else if (strategy == "all")
+        bufferAllStrategy();
       else {
         emitError(getOperation().getLoc())
             << "Unknown buffer strategy: " << strategy;
