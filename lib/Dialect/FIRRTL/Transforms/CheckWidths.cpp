@@ -31,17 +31,22 @@ class CheckWidthsPass : public CheckWidthsBase<CheckWidthsPass> {
                  llvm::function_ref<void(InFlightDiagnostic &)> addContext);
 
   InFlightDiagnostic emitError(Location loc, const Twine &message) {
+    anyFailed = true;
     signalPassFailure();
     return mlir::emitError(loc, message);
   }
 
   /// A set of already-checked types, to avoid unnecessary work.
   llvm::DenseSet<Type> checkedTypes;
+
+  /// Whether any checks have failed.
+  bool anyFailed;
 };
 } // namespace
 
 void CheckWidthsPass::runOnOperation() {
   FModuleOp module = getOperation();
+  anyFailed = false;
 
   // Check the port types. Unfortunately we don't have an exact location of the
   // port name, so we just point at the module with the port name mentioned in
@@ -52,6 +57,8 @@ void CheckWidthsPass::runOnOperation() {
           error.attachNote() << "in port `" << port.getName() << "` of module `"
                              << module.getName() << "`";
         });
+    if (anyFailed)
+      break;
   }
 
   // Check the results of each operation.
@@ -60,8 +67,14 @@ void CheckWidthsPass::runOnOperation() {
       checkType(type, type, op->getLoc(), [&](InFlightDiagnostic &error) {
         error.attachNote() << "in result of `" << op->getName() << "`";
       });
+    if (anyFailed)
+      return WalkResult::interrupt();
+    return WalkResult::advance();
   });
+
+  // Cleanup.
   checkedTypes.clear();
+  markAllAnalysesPreserved();
 }
 
 /// Check a type and its children for any occurrences of uninferred widths.
