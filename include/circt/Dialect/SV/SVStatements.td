@@ -482,7 +482,7 @@ def CoverOp : SVOp<"cover", [ProceduralOp]> {
   let assemblyFormat = "attr-dict $property `:` type($property)";
 }
 
-def BindInstanceOp : SVOp<"instance.bind", [Symbol]> {
+def BindInstanceOp : SVOp<"bind.instance", [Symbol]> {
   let summary = "Create an instance of a module that will be bound with a bind statement";
   let description = [{
     This represents an instance of a module instantiated with bind. The inputs
@@ -492,16 +492,22 @@ def BindInstanceOp : SVOp<"instance.bind", [Symbol]> {
     operation may use this operation to track the names of module inputs.
     The module bound must have only inputs.
   }];
-  let arguments = (ins FlatSymbolRefAttr:$moduleName,
+  let arguments = (ins SymbolNameAttr:$sym_name,
+                       FlatSymbolRefAttr:$moduleName,
                        Variadic<AnyType>:$inputs,
                        OptionalAttr<DictionaryAttr>:$parameters);
   let results = (outs);
 
   let assemblyFormat = [{
-    $moduleName `(` $inputs `)` attr-dict
+    $sym_name $moduleName `(` $inputs `)` attr-dict
       `:` type($inputs)
   }];
 
+  let extraClassDeclaration = [{
+    /// Lookup the module or extmodule for the symbol.  This returns null on
+    /// invalid IR.
+    Operation *getReferencedModule();
+  }];
 }
 
 def BindExplicitOp : SVOp<"bind.explicit", []> {
@@ -513,8 +519,10 @@ def BindExplicitOp : SVOp<"bind.explicit", []> {
     See 23.11 of SV 2017 spec.
   }];
 
-  let arguments = (ins Confined<FlatSymbolRefAttr, [ReferToOp<"BindInstanceOp">]>:$bind);
+  let arguments = (ins SymbolRefAttr:$bind);
   let results = (outs);
+
+  let assemblyFormat = [{ $bind attr-dict }];
 }
 
 

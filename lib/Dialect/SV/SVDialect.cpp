@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/RTL/RTLOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVTypes.h"
 

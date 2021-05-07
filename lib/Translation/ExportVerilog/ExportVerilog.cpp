@@ -577,6 +577,7 @@ public:
   void emitRTLExternModule(RTLModuleExternOp module);
   void emitRTLGeneratedModule(RTLModuleGeneratedOp module);
   void emitGlobalBind(BindOp bind);
+  void emitGlobalBind(BindExplicitOp bind);
 
   // Statements.
   void emitStatement(Operation *op);
@@ -1587,6 +1588,8 @@ private:
   LogicalResult visitSV(InterfaceSignalOp op);
   LogicalResult visitSV(InterfaceModportOp op);
   LogicalResult visitSV(AssignInterfaceSignalOp op);
+  LogicalResult visitSV(BindInstanceOp op);
+  
   void emitStatementExpression(Operation *op);
 
   void emitBlockAsStatement(Block *block,
@@ -2292,6 +2295,12 @@ LogicalResult StmtEmitter::visitSV(AssignInterfaceSignalOp op) {
   return success();
 }
 
+LogicalResult StmtEmitter::visitSV(BindInstanceOp op) {
+  auto *moduleOp = op.getReferencedModule();
+  indent() << "// bind " << getVerilogModuleNameAttr(moduleOp).getValue() << "\n";
+  return success();
+}
+
 void StmtEmitter::emitStatement(Operation *op) {
   // Know where the start of this statement is in case any out of band precuror
   // statements need to be emitted.
@@ -2427,6 +2436,18 @@ void ModuleEmitter::emitRTLGeneratedModule(RTLModuleGeneratedOp module) {
 }
 
 void ModuleEmitter::emitGlobalBind(BindOp bind) {
+  auto *modSrc = bind.getReferencedSrcModule();
+  auto *modDest = bind.getReferencedDestModule();
+  assert(modSrc && modDest && "Invalid IR");
+
+  auto srcName = getVerilogModuleNameAttr(modSrc);
+  auto destName = getVerilogModuleNameAttr(modDest);
+  // Names are verified in the module op emitter
+  os << "bind " << srcName.getValue() << " " << destName.getValue() << " "
+     << bind.instanceName() << " (.*)\n";
+}
+
+void ModuleEmitter::emitGlobalBind(BindExplicitOp bind) {
   auto *modSrc = bind.getReferencedSrcModule();
   auto *modDest = bind.getReferencedDestModule();
   assert(modSrc && modDest && "Invalid IR");

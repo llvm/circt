@@ -44,6 +44,8 @@ public:
             ReadInterfaceSignalOp,
             // Verification statements.
             AssertOp, AssumeOp, CoverOp,
+            // Bind Statements
+            BindExplicitOp, BindInstanceOp, BindOp,
             // Terminators.
             TypeDeclTerminatorOp>([&](auto expr) -> ResultType {
           return thisCast->visitSV(expr, args...);
@@ -114,6 +116,11 @@ public:
   HANDLE(AssertOp, Unhandled);
   HANDLE(AssumeOp, Unhandled);
   HANDLE(CoverOp, Unhandled);
+
+  // Bind statements.
+  HANDLE(BindExplicitOp, Unhandled);
+  HANDLE(BindInstanceOp, Unhandled);
+  HANDLE(BindOp, Unhandled);
 
   // Terminators.
   HANDLE(TypeDeclTerminatorOp, Unhandled);

@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 def RTLModuleOp : RTLOp<"module",
-      [IsolatedFromAbove, FunctionLike, Symbol, RegionKindInterface,
+      [IsolatedFromAbove, FunctionLike, Symbol, SymbolTable, RegionKindInterface,
        SingleBlockImplicitTerminator<"OutputOp">, HasParent<"mlir::ModuleOp">]>{
   let summary = "RTL Module";
   let description = [{

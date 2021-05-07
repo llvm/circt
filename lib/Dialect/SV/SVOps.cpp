@@ -953,6 +953,20 @@ Operation *BindOp::getReferencedDestModule() {
 }
 
 //===----------------------------------------------------------------------===//
+// BindInstanceOp
+//===----------------------------------------------------------------------===//
+
+/// Lookup the module or extmodule for the symbol.  This returns null on
+/// invalid IR.
+Operation *BindInstanceOp::getReferencedModule() {
+  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
+  if (!topLevelModuleOp)
+    return nullptr;
+
+  return topLevelModuleOp.lookupSymbol(moduleName());
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
