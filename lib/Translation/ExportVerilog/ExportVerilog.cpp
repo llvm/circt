@@ -1563,6 +1563,7 @@ private:
   LogicalResult visitSV(AliasOp op);
   LogicalResult visitStmt(OutputOp op);
   LogicalResult visitStmt(InstanceOp op);
+  LogicalResult visitStmt(TypedeclOp op);
 
   LogicalResult emitIfDef(Operation *op, StringRef cond);
   LogicalResult visitSV(IfDefOp op) { return emitIfDef(op, op.cond()); }
@@ -2253,6 +2254,15 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   return success();
 }
 
+LogicalResult StmtEmitter::visitStmt(TypedeclOp op) {
+  indent() << "typedef ";
+  printPackedType(stripUnpackedTypes(op.type()), os, op.getLoc(), false);
+  printUnpackedTypePostfix(op.type(), os);
+  os << ' ' << op.sym_name();
+  os << ";\n";
+  return success();
+}
+
 LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
   os << "interface " << op.sym_name() << ";\n";
   emitStatementBlock(*op.getBodyBlock());
@@ -2829,6 +2839,8 @@ void UnifiedEmitter::emitMLIRModule() {
       ModuleEmitter(state).emitRTLExternModule(rootOp);
     else if (auto rootOp = dyn_cast<RTLModuleGeneratedOp>(op))
       ModuleEmitter(state).emitRTLGeneratedModule(rootOp);
+    else if (auto typedecls = dyn_cast<TypeScopeOp>(op))
+      ModuleEmitter(state).emitStatementBlock(*typedecls.getBodyBlock());
     else if (isa<RTLGeneratorSchemaOp>(op)) { /* Empty */
     } else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) ||
                isa<IfDefProceduralOp>(op))
@@ -2889,6 +2901,10 @@ void SplitEmitter::emitMLIRModule() {
         })
         .Case<VerbatimOp, IfDefProceduralOp>(
             [&](auto &) { perFileOps.push_back(&op); })
+        .Case<TypeScopeOp>([&](auto &typeScope) {
+          for (auto &typedecl : *typeScope.getBodyBlock())
+            perFileOps.push_back(&typedecl);
+        })
         .Case<RTLGeneratorSchemaOp, RTLModuleExternOp>([&](auto &) {})
         .Default([&](auto *) {
           op.emitError("unknown operation");
