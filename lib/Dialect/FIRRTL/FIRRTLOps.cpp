@@ -44,16 +44,22 @@ bool firrtl::isDuplexValue(Value val) {
       .Default([](auto) { return false; });
 }
 
-flow::Flow firrtl::foldFlow(Value val, flow::Flow accumulatedFlow) {
-  auto swap = [&accumulatedFlow]() -> flow::Flow {
-    switch (accumulatedFlow) {
-    case flow::Source:
-      return flow::Sink;
-    case flow::Sink:
-      return flow::Source;
-    case flow::Duplex:
-      return flow::Duplex;
-    }
+Flow firrtl::swapFlow(Flow flow) {
+  switch (flow) {
+  case Flow::Source:
+    return Flow::Sink;
+  case Flow::Sink:
+    return Flow::Source;
+  case Flow::Duplex:
+    return Flow::Duplex;
+  default:
+    llvm_unreachable("invalid flow");
+  }
+}
+
+Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
+  auto swap = [&accumulatedFlow]() -> Flow {
+    return swapFlow(accumulatedFlow);
   };
 
   Operation *op = val.getDefiningOp();
@@ -63,7 +69,7 @@ flow::Flow firrtl::foldFlow(Value val, flow::Flow accumulatedFlow) {
     return accumulatedFlow;
   }
 
-  return TypeSwitch<Operation *, flow::Flow>(op)
+  return TypeSwitch<Operation *, Flow>(op)
       .Case<SubfieldOp>([&](auto op) {
         return foldFlow(op.input(),
                         op.isFieldFlipped() ? swap() : accumulatedFlow);
@@ -71,7 +77,7 @@ flow::Flow firrtl::foldFlow(Value val, flow::Flow accumulatedFlow) {
       .Case<SubindexOp, SubaccessOp>(
           [&](auto op) { return foldFlow(op.input(), accumulatedFlow); })
       // Registers and Wires are always Duplex.
-      .Case<RegOp, RegResetOp, WireOp>([](auto) { return flow::Duplex; })
+      .Case<RegOp, RegResetOp, WireOp>([](auto) { return Flow::Duplex; })
       .Case<InstanceOp>([&](auto) {
         return val.getType().isa<FlipType>() ? swap() : accumulatedFlow;
       })
@@ -82,16 +88,16 @@ flow::Flow firrtl::foldFlow(Value val, flow::Flow accumulatedFlow) {
 
 // TODO: This is doing the same walk as foldFlow.  These two functions can be
 // combined and return a (flow, kind) product.
-kind::Kind firrtl::getDeclarationKind(Value val) {
+Kind firrtl::getDeclarationKind(Value val) {
   Operation *op = val.getDefiningOp();
   if (!op)
-    return kind::Port;
+    return Kind::Port;
 
-  return TypeSwitch<Operation *, kind::Kind>(op)
-      .Case<InstanceOp>([](auto) { return kind::Instance; })
+  return TypeSwitch<Operation *, Kind>(op)
+      .Case<InstanceOp>([](auto) { return Kind::Instance; })
       .Case<SubfieldOp, SubindexOp, SubaccessOp>(
           [](auto op) { return getDeclarationKind(op.input()); })
-      .Default([](auto) { return kind::Other; });
+      .Default([](auto) { return Kind::Other; });
 }
 
 //===----------------------------------------------------------------------===//
@@ -943,10 +949,10 @@ static LogicalResult verifyConnectOp(ConnectOp connect) {
 
   // TODO: Relax this to allow reads from output ports,
   // instance/memory input ports.
-  if (foldFlow(connect.src()) == flow::Sink) {
+  if (foldFlow(connect.src()) == Flow::Sink) {
     // A sink that is a port output or instance input used as a source is okay.
     auto kind = getDeclarationKind(connect.src());
-    if (kind != kind::Port && kind != kind::Instance) {
+    if (kind != Kind::Port && kind != Kind::Instance) {
       auto diag =
           connect.emitOpError()
           << "has invalid flow: the right-hand-side has sink flow and "
@@ -957,7 +963,7 @@ static LogicalResult verifyConnectOp(ConnectOp connect) {
     }
   }
 
-  if (foldFlow(connect.dest()) == flow::Source) {
+  if (foldFlow(connect.dest()) == Flow::Source) {
     auto diag = connect.emitOpError()
                 << "has invalid flow: the left-hand-side has source flow "
                    "(expected sink or duplex flow).";

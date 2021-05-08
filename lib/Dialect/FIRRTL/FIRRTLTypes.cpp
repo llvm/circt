@@ -390,11 +390,8 @@ bool firrtl::areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType) {
 
 /// Return the element of an array type or null.  This strips flip types.
 Type firrtl::getVectorElementType(Type array) {
-  bool isFlipped = false;
-  if (auto flip = array.dyn_cast<FlipType>()) {
-    isFlipped = true;
+  if (auto flip = array.dyn_cast<FlipType>())
     array = flip.getElementType();
-  }
   auto vectorType = array.dyn_cast<FVectorType>();
   if (!vectorType)
     return Type();
