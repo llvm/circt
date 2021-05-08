@@ -507,10 +507,22 @@ public:
     return name<T>(StringRef(fieldName.cStr()) + nameSuffix);
   }
 
+  StringRef getName() const {
+    auto nameAttr = s.getDefiningOp()->getAttrOfType<StringAttr>("name");
+    if (nameAttr)
+      return nameAttr.getValue();
+    return StringRef();
+  }
+
   /// Construct a bitcast.
   GasketComponent cast(Type t) const {
     auto dst = builder->create<rtl::BitcastOp>(loc(), t, s);
-    return GasketComponent(*builder, dst);
+    auto gc = GasketComponent(*builder, dst);
+    StringRef name = getName();
+    if (name.empty())
+      return gc;
+    return gc.name(name + "_casted");
+    ;
   }
 
   /// Construct a bitcast.
@@ -838,7 +850,11 @@ uint64_t CapnpSegmentBuilder::buildList(Slice val,
   rtl::ArrayType arrTy = val.getValue().getType().cast<rtl::ArrayType>();
   auto elemType = type.getList().getElementType();
   size_t elemWidth = bits(elemType);
-  uint64_t listOffset = alloc(elemWidth * arrTy.getSize());
+  uint64_t listSize = elemWidth * arrTy.getSize();
+  uint64_t m;
+  if ((m = listSize % 64) != 0)
+    listSize += (64 - m);
+  uint64_t listOffset = alloc(listSize);
 
   for (size_t i = 0, e = arrTy.getSize(); i < e; ++i) {
     size_t elemNum = e - i - 1;
@@ -990,16 +1006,17 @@ static GasketComponent decodeList(rtl::ArrayType type,
 
   auto loc = ptrSection.loc();
   OpBuilder &b = ptrSection.b();
+  GasketBuilder gb(b, loc);
 
   // Get the list pointer and break out its parts.
   auto ptr = ptrSection.slice(field.getSlot().getOffset() * 64, 64)
                  .name(field.getName(), "_ptr");
-  auto ptrType = ptr.slice(0, 2);
+  auto ptrType = ptr.slice(0, 2).name(field.getName(), "_ptrType");
   auto offset = ptr.slice(2, 30)
                     .cast(b.getIntegerType(30))
                     .name(field.getName(), "_offset");
-  auto elemSize = ptr.slice(32, 3);
-  auto length = ptr.slice(35, 29);
+  auto elemSize = ptr.slice(32, 3).name(field.getName(), "_elemSize");
+  auto length = ptr.slice(35, 29).name(field.getName(), "_listLength");
 
   // Assert that ptr type == list type;
   asserts.assertEqual(ptrType, 1);
@@ -1040,11 +1057,14 @@ static GasketComponent decodeList(rtl::ArrayType type,
   auto msg = ptr.getRootSlice();
   auto ptrOffset = ptr.getOffsetFromRoot();
   assert(ptrOffset);
-  auto listOffset = b.create<comb::AddOp>(
-      loc, offset,
-      b.create<rtl::ConstantOp>(loc, b.getIntegerType(30), *ptrOffset + 64));
+  GasketComponent offsetInBits(
+      b, b.create<comb::ConcatOp>(loc, offset, gb.zero(6)));
+  GasketComponent listOffset(
+      b, b.create<comb::AddOp>(loc, offsetInBits,
+                               gb.constant(36, *ptrOffset + 64)));
+  listOffset.name(field.getName(), "_listOffset");
   auto listSlice =
-      msg.slice(listOffset.getResult(), type.getSize() * expectedElemSizeBits);
+      msg.slice(listOffset, type.getSize() * expectedElemSizeBits).name("list");
 
   // Cast to an array of capnp int elements.
   assert(type.getElementType().isa<IntegerType>() &&
@@ -1176,7 +1196,7 @@ rtl::RTLModuleOp TypeSchemaImpl::buildDecoder(Value clk, Value valid,
 
   // What to return depends on the type. (e.g. structs have to be constructed
   // from the field values.)
-  GasketComponent retGC =
+  GasketComponent ret =
       TypeSwitch<Type, GasketComponent>(type)
           .Case([&fieldValues](IntegerType) { return fieldValues[0]; })
           .Case([&fieldValues](rtl::ArrayType) { return fieldValues[0]; })
@@ -1186,10 +1206,12 @@ rtl::RTLModuleOp TypeSchemaImpl::buildDecoder(Value clk, Value valid,
             return GasketComponent(
                 b, b.create<rtl::StructCreateOp>(loc, type, rawValues));
           });
+  ret.name(name());
 
   innerBlock->getTerminator()->erase();
   b.setInsertionPointToEnd(innerBlock);
-  b.create<rtl::OutputOp>(loc, ValueRange{retGC.getValue()});
+  auto outputOp = b.create<rtl::OutputOp>(loc, ValueRange{ret.getValue()});
+  alwaysAt->moveBefore(outputOp);
   return retMod;
 }
 
