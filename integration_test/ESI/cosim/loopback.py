@@ -63,14 +63,13 @@ class LoopbackTester(cosim.CosimBase):
     for i in range(num_msgs):
       kt = cStructType.new_message(
           key=[random.randrange(0, 255) for x in range(4)],
-          text=[random.randrange(0, 16000) for x in range(6)]
-      )
+          text=[random.randrange(0, 16000) for x in range(6)])
       kts.append(kt)
       ep.send(kt).wait()
 
     for i in range(num_msgs):
       kt = self.readMsg(ep, cStructType)
-      print (f"expected: {kts[i]}")
-      print (f"got:      {kt}")
+      print(f"expected: {kts[i]}")
+      print(f"got:      {kt}")
       assert list(kt.key) == list(kts[i].key)
       assert list(kt.text) == list(kts[i].text)
