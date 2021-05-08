@@ -88,16 +88,16 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
 
 // TODO: This is doing the same walk as foldFlow.  These two functions can be
 // combined and return a (flow, kind) product.
-Kind firrtl::getDeclarationKind(Value val) {
+DeclKind firrtl::getDeclarationKind(Value val) {
   Operation *op = val.getDefiningOp();
   if (!op)
-    return Kind::Port;
+    return DeclKind::Port;
 
-  return TypeSwitch<Operation *, Kind>(op)
-      .Case<InstanceOp>([](auto) { return Kind::Instance; })
+  return TypeSwitch<Operation *, DeclKind>(op)
+      .Case<InstanceOp>([](auto) { return DeclKind::Instance; })
       .Case<SubfieldOp, SubindexOp, SubaccessOp>(
           [](auto op) { return getDeclarationKind(op.input()); })
-      .Default([](auto) { return Kind::Other; });
+      .Default([](auto) { return DeclKind::Other; });
 }
 
 //===----------------------------------------------------------------------===//
@@ -952,7 +952,7 @@ static LogicalResult verifyConnectOp(ConnectOp connect) {
   if (foldFlow(connect.src()) == Flow::Sink) {
     // A sink that is a port output or instance input used as a source is okay.
     auto kind = getDeclarationKind(connect.src());
-    if (kind != Kind::Port && kind != Kind::Instance) {
+    if (kind != DeclKind::Port && kind != DeclKind::Instance) {
       auto diag =
           connect.emitOpError()
           << "has invalid flow: the right-hand-side has sink flow and "

@@ -89,9 +89,9 @@ Flow swapFlow(Flow flow);
 /// Flow::Source.
 Flow foldFlow(Value val, Flow accumulatedFlow = Flow::Source);
 
-enum class Kind { Port, Instance, Other };
+enum class DeclKind { Port, Instance, Other };
 
-Kind getDeclarationKind(Value val);
+DeclKind getDeclarationKind(Value val);
 
 } // namespace firrtl
 } // namespace circt
