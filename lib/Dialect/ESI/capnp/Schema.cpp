@@ -850,7 +850,11 @@ uint64_t CapnpSegmentBuilder::buildList(Slice val,
   rtl::ArrayType arrTy = val.getValue().getType().cast<rtl::ArrayType>();
   auto elemType = type.getList().getElementType();
   size_t elemWidth = bits(elemType);
-  uint64_t listOffset = alloc(elemWidth * arrTy.getSize());
+  uint64_t listSize = elemWidth * arrTy.getSize();
+  uint64_t m;
+  if ((m = listSize % 64) != 0)
+    listSize += (64 - m);
+  uint64_t listOffset = alloc(listSize);
 
   for (size_t i = 0, e = arrTy.getSize(); i < e; ++i) {
     size_t elemNum = e - i - 1;

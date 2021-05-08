@@ -72,5 +72,5 @@ class LoopbackTester(cosim.CosimBase):
       kt = self.readMsg(ep, cStructType)
       print (f"expected: {kts[i]}")
       print (f"got:      {kt}")
-      assert kt.key == kts[i].key
-      assert kt.text == kts[i].text
+      assert list(kt.key) == list(kts[i].key)
+      assert list(kt.text) == list(kts[i].text)
