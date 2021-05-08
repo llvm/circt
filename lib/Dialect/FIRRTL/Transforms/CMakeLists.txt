@@ -4,6 +4,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   ExpandWhens.cpp
   ModuleInliner.cpp
   IMConstProp.cpp
+  InferWidths.cpp
   LowerTypes.cpp
 
   DEPENDS
