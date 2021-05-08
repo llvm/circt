@@ -17,10 +17,10 @@
 #include "circt/Dialect/RTL/RTLTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/BackedgeBuilder.h"
-#include "circt/Support/ImplicitLocOpBuilder.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
@@ -692,7 +692,7 @@ static std::string &constructInstanceName(Value operand, InterfaceOp iface,
 /// up before.
 void ESIPortsPass::updateInstance(RTLModuleExternOp mod, InstanceOp inst) {
   using namespace circt::sv;
-  circt::ImplicitLocOpBuilder instBuilder(inst);
+  circt::ImplicitLocOpBuilder instBuilder(inst.getLoc(), inst);
   FunctionType funcTy = mod.getType();
 
   // op counter for error reporting purposes.
