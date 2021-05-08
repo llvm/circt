@@ -23,9 +23,6 @@
 using namespace circt;
 using namespace firrtl;
 
-using MemoryPortList = SmallVectorImpl<std::pair<Identifier, MemOp::PortKind>>;
-using ModulePortList = SmallVectorImpl<ModulePortInfo>;
-
 /// Compute a hash code for a MemOp. This specialized hash ignores the naming of
 /// the memory and ports.
 llvm::hash_code computeHash(MemOp op) {
@@ -84,7 +81,7 @@ struct MemOpInfo : public llvm::DenseMapInfo<MemOp> {
 /// Create an instance of a Module using the module name and the port list.
 static InstanceOp createInstance(OpBuilder builder, Location loc,
                                  StringRef moduleName, StringAttr instanceName,
-                                 const ModulePortList &modulePorts) {
+                                 ArrayRef<ModulePortInfo> modulePorts) {
   // Make a bundle of the inputs and outputs of the specified module.
   SmallVector<Type, 4> resultTypes;
   resultTypes.reserve(modulePorts.size());
@@ -100,13 +97,13 @@ static InstanceOp createInstance(OpBuilder builder, Location loc,
 /// external module must be compatible with the modules which are generated for
 /// `vlsi_mem_gen`, which can be found in the rocketchip project.
 static void
-getBlackboxPortsForMemOp(MemOp op, const MemoryPortList &memPorts,
+getBlackboxPortsForMemOp(MemOp op, ArrayRef<MemOp::NamedPort> memPorts,
                          SmallVectorImpl<ModulePortInfo> &extPorts) {
   OpBuilder builder(op);
   unsigned readPorts = 0;
   unsigned writePorts = 0;
   unsigned readWritePorts = 0;
-  for (unsigned i = 0; i < memPorts.size(); ++i) {
+  for (size_t i = 0, e = memPorts.size(); i != e; ++i) {
     // Calculate the naming prefix to use based on the kind of the port.
     std::string prefix;
     switch (memPorts[i].second) {
@@ -124,8 +121,8 @@ getBlackboxPortsForMemOp(MemOp op, const MemoryPortList &memPorts,
     // every field in the bundle to the exter module's port list.
     auto type = op.getResult(i).getType().cast<FIRRTLType>();
     bool shouldFlip = true;
-    if (type.isa<FlipType>()) {
-      type = type.cast<FlipType>().getElementType();
+    if (auto flip = type.dyn_cast<FlipType>()) {
+      type = flip.getElementType();
       // We need to flip each element in the bundle.  If the bundle as a whole
       // was flipped, we can reuse the element type directly without applying a
       // flip.
@@ -144,8 +141,7 @@ getBlackboxPortsForMemOp(MemOp op, const MemoryPortList &memPorts,
 /// Create an external module blackbox representing the memory operation.
 /// Returns the port list of the external module.
 static FExtModuleOp
-createBlackboxModuleForMem(MemOp op,
-                           const SmallVectorImpl<ModulePortInfo> &extPorts) {
+createBlackboxModuleForMem(MemOp op, ArrayRef<ModulePortInfo> extPorts) {
 
   OpBuilder builder(op->getContext());
 
@@ -191,9 +187,8 @@ createBlackboxModuleForMem(MemOp op,
 /// done for compatibility with the Scala FIRRTL compiler and it is unclear if
 /// this will be needed in the long run.
 static FModuleOp
-createWrapperModule(MemOp op, const MemoryPortList &memPorts,
-                    FExtModuleOp extModuleOp,
-                    const SmallVectorImpl<ModulePortInfo> &extPorts,
+createWrapperModule(MemOp op, ArrayRef<MemOp::NamedPort> memPorts,
+                    FExtModuleOp extModuleOp, ArrayRef<ModulePortInfo> extPorts,
                     SmallVectorImpl<ModulePortInfo> &modPorts) {
   OpBuilder builder(op->getContext());
 
@@ -204,7 +199,7 @@ createWrapperModule(MemOp op, const MemoryPortList &memPorts,
 
   // Create a wrapper module with the same type as the memory
   modPorts.reserve(op.getResults().size());
-  for (unsigned i = 0; i < memPorts.size(); ++i) {
+  for (size_t i = 0, e = memPorts.size(); i != e; ++i) {
     auto name = op.getPortName(i);
     auto type = FlipType::get(op.getPortType(i));
     modPorts.push_back({name, type});
@@ -253,11 +248,10 @@ createWrapperModule(MemOp op, const MemoryPortList &memPorts,
 /// Create a bundle wire for each memory port.  This takes all the individual
 /// fields returned from instantiating the external module, and wraps them in to
 /// bundles to match the memory return type.
-static void
-createWiresForMemoryPorts(OpBuilder builder, Location loc, MemOp op,
-                          InstanceOp instanceOp,
-                          const SmallVectorImpl<ModulePortInfo> &extPorts,
-                          SmallVectorImpl<Value> &results) {
+static void createWiresForMemoryPorts(OpBuilder builder, Location loc, MemOp op,
+                                      InstanceOp instanceOp,
+                                      ArrayRef<ModulePortInfo> extPorts,
+                                      SmallVectorImpl<Value> &results) {
 
   auto extResultIt = instanceOp.result_begin();
 
