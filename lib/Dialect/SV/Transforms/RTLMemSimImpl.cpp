@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This transformation pass converts gemerated FIRRTL memory modules to
+// This transformation pass converts generated FIRRTL memory modules to
 // simulation models.
 //
 //===----------------------------------------------------------------------===//
@@ -19,11 +19,10 @@
 using namespace circt;
 
 //===----------------------------------------------------------------------===//
-// StubExternalModules Pass
+// RTLMemSimImplPass Pass
 //===----------------------------------------------------------------------===//
 
 namespace {
-
 struct FirMemory {
   size_t numReadPorts;
   size_t numWritePorts;
@@ -34,14 +33,15 @@ struct FirMemory {
   size_t writeLatency;
   size_t readUnderWrite;
 };
+} // end anonymous namespace
 
+namespace {
 struct RTLMemSimImplPass : public sv::RTLMemSimImplBase<RTLMemSimImplPass> {
   void runOnOperation() override;
 
 private:
   void generateMemory(rtl::RTLModuleOp op, FirMemory mem);
 };
-
 } // end anonymous namespace
 
 static FirMemory analyzeMemOp(rtl::RTLModuleGeneratedOp op) {
@@ -104,6 +104,7 @@ void RTLMemSimImplPass::generateMemory(rtl::RTLModuleOp op, FirMemory mem) {
     Value rdata = b.create<comb::MuxOp>(en, ren, x);
     outputs.push_back(rdata);
   }
+
   for (size_t i = 0; i < mem.numReadWritePorts; ++i) {
     auto numStages = std::max(mem.readLatency, mem.writeLatency) - 1;
     Value clock = op.body().getArgument(inArg++);
@@ -145,6 +146,7 @@ void RTLMemSimImplPass::generateMemory(rtl::RTLModuleOp op, FirMemory mem) {
     });
     outputs.push_back(rdata);
   }
+
   for (size_t i = 0; i < mem.numWritePorts; ++i) {
     auto numStages = mem.writeLatency - 1;
     Value clock = op.body().getArgument(inArg++);
@@ -174,12 +176,12 @@ void RTLMemSimImplPass::generateMemory(rtl::RTLModuleOp op, FirMemory mem) {
 
 void RTLMemSimImplPass::runOnOperation() {
   auto topModule = getOperation().getBody();
-  OpBuilder builder(topModule->getParentOp()->getContext());
-  builder.setInsertionPointToEnd(topModule);
 
   SmallVector<rtl::RTLModuleGeneratedOp> toErase;
+  bool anythingChanged = false;
 
-  for (auto op : topModule->getOps<rtl::RTLModuleGeneratedOp>()) {
+  for (auto op : llvm::make_early_inc_range(
+           topModule->getOps<rtl::RTLModuleGeneratedOp>())) {
     auto oldModule = cast<rtl::RTLModuleGeneratedOp>(op);
     auto gen = oldModule.generatorKind();
     auto genOp = cast<rtl::RTLGeneratorSchemaOp>(
@@ -187,16 +189,19 @@ void RTLMemSimImplPass::runOnOperation() {
 
     if (genOp.descriptor() == "FIRRTL_Memory") {
       auto mem = analyzeMemOp(oldModule);
+
+      OpBuilder builder(oldModule);
       auto nameAttr = builder.getStringAttr(oldModule.getName());
       auto newModule = builder.create<rtl::RTLModuleOp>(
           oldModule.getLoc(), nameAttr, oldModule.getPorts());
       generateMemory(newModule, mem);
-      toErase.push_back(oldModule);
+      oldModule.erase();
+      anythingChanged = true;
     }
   }
 
-  for (auto m : toErase)
-    m.erase();
+  if (!anythingChanged)
+    markAllAnalysesPreserved();
 }
 
 std::unique_ptr<Pass> circt::sv::createRTLMemSimImplPass() {
