@@ -18,7 +18,8 @@ firrtl.circuit "Test" {
                       out %result3: !firrtl.uint<1>,
                       out %result4: !firrtl.uint<2>,
                       out %result5: !firrtl.uint<2>,
-                      out %result6: !firrtl.uint<4>) {
+                      out %result6: !firrtl.uint<4>,
+                      out %result7: !firrtl.uint<4>) {
     %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
 
@@ -71,10 +72,12 @@ firrtl.circuit "Test" {
     // reg
     %reg = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<4>
     firrtl.connect %reg, %c0_ui2 : !firrtl.uint<4>, !firrtl.uint<2>
-
     // CHECK: firrtl.connect %result6, %c0_ui4
     firrtl.connect %result6, %reg: !firrtl.uint<4>, !firrtl.uint<4>
 
+    // Wire without connects to it should turn into 'invalid'.
+    %unconnectedWire = firrtl.wire : !firrtl.uint<2>
+    firrtl.connect %result7, %unconnectedWire: !firrtl.uint<4>, !firrtl.uint<2>
   }
 
   // Unused modules should be completely dropped.

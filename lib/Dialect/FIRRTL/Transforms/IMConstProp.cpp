@@ -28,9 +28,19 @@ namespace {
 /// take.
 class LatticeValue {
   enum Kind {
-    /// A value with a yet to be determined value. This state may be changed to
-    /// anything.
+    /// A value with a yet-to-be-determined value. This state may be changed to
+    /// anything, it hasn't been processed by IMConstProp.
     Unknown,
+
+    /// A value with 'invalid' value.  It has been processed by IMConstProp but
+    /// hasn't been assigned a value, or has only been assigned the result of a
+    /// InvalidValuePrimOp.  Wires and other stateful values start out in this
+    /// state.
+    ///
+    /// This is named "FIRRTLInvalid" instead of "Invalid" to avoid confusion
+    /// about whether the lattice value is corrupted.  "FIRRTLInvalid" is a
+    /// valid state, and a can move up to Constant or Overdefined.
+    FIRRTLInvalid,
 
     /// A value that is known to be a constant. This state may be changed to
     /// overdefined.
@@ -53,7 +63,16 @@ public:
     return result;
   }
 
+  static LatticeValue getFIRRTLInvalid() {
+    LatticeValue result;
+    result.markFIRRTLInvalid();
+    return result;
+  }
+
   bool isUnknown() const { return constantAndTag.getInt() == Kind::Unknown; }
+  bool isFIRRTLInvalid() const {
+    return constantAndTag.getInt() == Kind::FIRRTLInvalid;
+  }
   bool isConstant() const { return constantAndTag.getInt() == Kind::Constant; }
   bool isOverdefined() const {
     return constantAndTag.getInt() == Kind::Overdefined;
@@ -62,6 +81,10 @@ public:
   /// Mark the lattice value as overdefined.
   void markOverdefined() {
     constantAndTag.setPointerAndInt(nullptr, Kind::Overdefined);
+  }
+
+  void markFIRRTLInvalid() {
+    constantAndTag.setPointerAndInt(nullptr, Kind::FIRRTLInvalid);
   }
 
   /// Mark the lattice value as constant.
@@ -79,12 +102,24 @@ public:
 
   /// Merge in the value of the 'rhs' lattice into this one. Returns true if the
   /// lattice value changed.
-  bool meet(LatticeValue rhs) {
+  bool mergeIn(LatticeValue rhs) {
     // If we are already overdefined, or rhs is unknown, there is nothing to do.
     if (isOverdefined() || rhs.isUnknown())
       return false;
+
     // If we are unknown, just take the value of rhs.
     if (isUnknown()) {
+      constantAndTag = rhs.constantAndTag;
+      return true;
+    }
+
+    // If the right side is FIRRTLInvalid then it won't contribute anything to
+    // our state since we're either already FIRRTLInvalid or a constant here.
+    if (rhs.isFIRRTLInvalid())
+      return false;
+
+    // If we are FIRRTLInvalid, then upgrade to Constant or Overdefined.
+    if (isFIRRTLInvalid()) {
       constantAndTag = rhs.constantAndTag;
       return true;
     }
@@ -134,7 +169,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   /// revisitation.
   void mergeLatticeValue(Value value, LatticeValue &valueEntry,
                          LatticeValue source) {
-    if (valueEntry.meet(source))
+    if (valueEntry.mergeIn(source))
       changedLatticeValueWorklist.push_back(value);
   }
   void mergeLatticeValue(Value value, LatticeValue source) {
@@ -160,7 +195,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
 
   /// Mark the given block as executable.
   void markBlockExecutable(Block *block);
-  void markWireOp(WireOp wire);
+  void markWireOrUnresetableRegOp(Operation *wireOrReg);
   void markRegResetOp(RegResetOp regReset);
   void markRegOp(RegOp reg);
 
@@ -246,9 +281,10 @@ LatticeValue IMConstPropPass::getExtendedLatticeValue(Value value,
   auto it = latticeValues.find(value);
   if (it == latticeValues.end())
     return LatticeValue();
+
   auto result = it->second;
   if (!result.isConstant())
-    return result; // Unknown and overdefined stay whatever they are.
+    return result; // Unknown/FIRRTLInvalid/overdefined stay whatever they are.
 
   // If destType is wider than the source constant type, extend it.
   auto resultConstant = result.getConstant().getValue();
@@ -288,34 +324,35 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
     if (op.getNumOperands() != 0 || isa<RegResetOp>(&op))
       continue;
 
-    // Handle each of the nullary operations in the firrtl dialect.
-    if (auto wire = dyn_cast<WireOp>(op))
-      markWireOp(wire);
+    // Handle each of the special operations in the firrtl dialect.
+    if (isa<WireOp>(op) || isa<RegOp>(op))
+      markWireOrUnresetableRegOp(&op);
     else if (auto constant = dyn_cast<ConstantOp>(op))
       markConstantOp(constant);
-    else if (auto instance = dyn_cast<InstanceOp>(op))
-      markInstanceOp(instance);
     else if (auto invalid = dyn_cast<InvalidValuePrimOp>(op))
       markInvalidValueOp(invalid);
+    else if (auto instance = dyn_cast<InstanceOp>(op))
+      markInstanceOp(instance);
     else if (auto regReset = dyn_cast<RegResetOp>(op))
       markRegResetOp(regReset);
     else {
-      // TODO: Mems, regs, etc.
+      // TODO: Mems.
       for (auto result : op.getResults())
         markOverdefined(result);
     }
   }
 }
 
-void IMConstPropPass::markWireOp(WireOp wire) {
-  // If the wire has a non-ground type, then it is too complex for us to handle,
-  // mark it as overdefined.
+void IMConstPropPass::markWireOrUnresetableRegOp(Operation *wireOrReg) {
+  // If the wire/reg has a non-ground type, then it is too complex for us to
+  // handle, mark it as overdefined.
   // TODO: Eventually add a field-sensitive model.
-  if (!wire.getType().getPassiveType().isGround())
-    return markOverdefined(wire);
+  auto resultValue = wireOrReg->getResult(0);
+  if (!resultValue.getType().cast<FIRRTLType>().getPassiveType().isGround())
+    return markOverdefined(resultValue);
 
-  // Otherwise, we leave this value undefined and allow connects to change its
-  // state.
+  // Otherwise, this starts out as FIRRTLInvalid and is upgraded by connects.
+  mergeLatticeValue(resultValue, LatticeValue::getFIRRTLInvalid());
 }
 
 void IMConstPropPass::markRegResetOp(RegResetOp regReset) {
@@ -330,9 +367,6 @@ void IMConstPropPass::markRegResetOp(RegResetOp regReset) {
                                           regReset.getType().cast<FIRRTLType>(),
                                           /*allowTruncation=*/true);
   mergeLatticeValue(regReset, srcValue);
-
-  // Otherwise, we leave this value undefined and allow connects to change its
-  // state.
 }
 
 void IMConstPropPass::markConstantOp(ConstantOp constant) {
@@ -340,7 +374,7 @@ void IMConstPropPass::markConstantOp(ConstantOp constant) {
 }
 
 void IMConstPropPass::markInvalidValueOp(InvalidValuePrimOp invalid) {
-  // Noop, invalids are invalid.
+  mergeLatticeValue(invalid, LatticeValue::getFIRRTLInvalid());
 }
 
 /// Instances have no operands, so they are visited exactly once when their
@@ -420,7 +454,7 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
 
   auto dest = connect.dest().cast<mlir::OpResult>();
 
-  // For wires and registers, we just drive the value of the wire itself, which
+  // For wires and registers, we drive the value of the wire itself, which
   // automatically propagates to users.
   if (isWireOrReg(dest.getOwner()))
     return mergeLatticeValue(connect.dest(), srcValue);
@@ -466,8 +500,10 @@ void IMConstPropPass::visitOperation(Operation *op) {
     return;
   // TODO: Handle 'when' operations.
 
-  // If this op produces no results, it can't produce any constants.
-  if (op->getNumResults() == 0)
+  // If all of the results of this operation are already overdefined (or if
+  // there are no results) then bail out early: we've converged.
+  auto isOverdefinedFn = [&](Value value) { return isOverdefined(value); };
+  if (llvm::all_of(op->getResults(), isOverdefinedFn))
     return;
 
   // Collect all of the constant operands feeding into this operation. If any
@@ -481,12 +517,6 @@ void IMConstPropPass::visitOperation(Operation *op) {
       return;
     operandConstants.push_back(operandLattice.getConstant());
   }
-
-  // If all of the results of this operation are already overdefined, bail out
-  // early.
-  auto isOverdefinedFn = [&](Value value) { return isOverdefined(value); };
-  if (llvm::all_of(op->getResults(), isOverdefinedFn))
-    return;
 
   // Save the original operands and attributes just in case the operation folds
   // in-place. The constant passed in may not correspond to the real runtime
@@ -586,7 +616,6 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
       continue;
 
     // If the op had any constants folded, replace them.
-
     for (auto result : op.getResults()) {
       if (auto attr = getAttributeIfConstant(result)) {
         builder.setInsertionPoint(&op);
