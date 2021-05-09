@@ -574,36 +574,44 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
 
   auto builder = OpBuilder::atBlockBegin(body);
 
-  auto replaceValueWithConstant = [&](Value value, Attribute constantValue) {
-    // FIXME: Unique constants into the entry block of the module.
-    auto *cst = module->getDialect()->materializeConstant(
-        builder, constantValue, value.getType(), value.getLoc());
-    if (!cst)
-      return;
-    value.replaceAllUsesWith(cst->getResult(0));
-  };
-
-  auto getAttributeIfConstant = [&](Value value) -> Attribute {
+  // If the lattice value for the specified value is a constant or
+  // FIRRTLInvalid, update it.
+  auto replaceValueIfPossible = [&](Value value) {
     auto it = latticeValues.find(value);
-    if (it != latticeValues.end() && it->second.isConstant())
-      return it->second.getConstant();
-    return {};
+    if (it == latticeValues.end() || it->second.isOverdefined() ||
+        it->second.isUnknown())
+      return;
+
+    Value replacement;
+    if (it->second.isFIRRTLInvalid()) {
+      replacement =
+          builder.create<InvalidValuePrimOp>(value.getLoc(), value.getType());
+    } else {
+      Attribute constantValue = it->second.getConstant();
+      // FIXME: Unique constants into the entry block of the module.
+      auto *cst = module->getDialect()->materializeConstant(
+          builder, constantValue, value.getType(), value.getLoc());
+      if (!cst)
+        return;
+      replacement = cst->getResult(0);
+    }
+    value.replaceAllUsesWith(replacement);
   };
 
   // Constant propagate any ports that are always constant.
-  for (auto &port : body->getArguments()) {
-    if (auto attr = getAttributeIfConstant(port))
-      replaceValueWithConstant(port, attr);
-  }
+  for (auto &port : body->getArguments())
+    replaceValueIfPossible(port);
 
   // TODO: Walk 'when's preorder with `walk`.
   for (auto &op : llvm::make_early_inc_range(*body)) {
     // Connects to values that we found to be constant can be dropped.  These
     // will already have been replaced since we're walking top-down.
     if (auto connect = dyn_cast<ConnectOp>(op)) {
-      if (connect.dest().getDefiningOp<ConstantOp>()) {
-        connect.erase();
-        continue;
+      if (auto *destOp = connect.dest().getDefiningOp()) {
+        if (isa<ConstantOp>(destOp) || isa<InvalidValuePrimOp>(destOp)) {
+          connect.erase();
+          continue;
+        }
       }
     }
 
@@ -612,15 +620,13 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
       continue;
 
     // Don't "refold" constants.  TODO: Unique in the module entry block.
-    if (isa<ConstantOp>(op))
+    if (isa<ConstantOp>(op) && !isa<InvalidValuePrimOp>(op))
       continue;
 
     // If the op had any constants folded, replace them.
     for (auto result : op.getResults()) {
-      if (auto attr = getAttributeIfConstant(result)) {
-        builder.setInsertionPoint(&op);
-        replaceValueWithConstant(result, attr);
-      }
+      builder.setInsertionPoint(&op);
+      replaceValueIfPossible(result);
     }
     if (op.use_empty() && (wouldOpBeTriviallyDead(&op) || isWireOrReg(&op))) {
       op.erase();
