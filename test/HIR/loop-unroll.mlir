@@ -4,6 +4,7 @@ hir.func @convolution at %t(%x : i32){
     hir.yield at %ti 
     %0 = hir.constant (0) : !hir.const
     %1 = hir.constant (1) : !hir.const
+    %2 = hir.add (%0,%1) :(!hir.const, !hir.const) -> (!hir.const)
   }
   hir.return
 }

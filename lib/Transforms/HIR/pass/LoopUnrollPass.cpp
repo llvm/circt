@@ -27,6 +27,13 @@ void LoopUnrollPass::unrollLoopFull(hir::UnrollForOp op) {
   builder.setInsertionPointAfter(op);
   Block::iterator srcBlockEnd = std::prev(loopBodyBlock.end(), 1);
 
+  SmallVector<Value, 4> yieldedValues;
+  for (auto it = loopBodyBlock.begin(); it != srcBlockEnd; it++) {
+    if (auto yieldOp = dyn_cast<hir::YieldOp>(it)) {
+      yieldedValues.push_back(yieldOp.tstart());
+    }
+  }
+
   for (int i = lb; i < ub; i += step) {
     BlockAndValueMapping operandMap;
 
@@ -34,7 +41,12 @@ void LoopUnrollPass::unrollLoopFull(hir::UnrollForOp op) {
     for (auto it = loopBodyBlock.begin(); it != srcBlockEnd; it++) {
       if (auto yieldOp = dyn_cast<hir::YieldOp>(it))
         continue;
-      builder.clone(*it, operandMap);
+      Operation *insertedOp = builder.clone(*it, operandMap);
+      for (auto yieldedValue : yieldedValues) {
+        Operation *definingOp = yieldedValue.getDefiningOp();
+        if (definingOp == &*it) {
+        }
+      }
     }
   }
 }
