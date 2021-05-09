@@ -1145,10 +1145,10 @@ static LogicalResult verifyPartialConnectOp(PartialConnectOp partialConnect) {
            << ". Types are not weakly equivalent.";
 
   // Check that the flows make sense.
-  if (foldFlow(partialConnect.src()) == flow::Sink) {
+  if (foldFlow(partialConnect.src()) == Flow::Sink) {
     // A sink that is a port output or instance input used as a source is okay.
     auto kind = getDeclarationKind(partialConnect.src());
-    if (kind != kind::Port && kind != kind::Instance) {
+    if (kind != DeclKind::Port && kind != DeclKind::Instance) {
       auto diag =
           partialConnect.emitOpError()
           << "has invalid flow: the right-hand-side has sink flow and "
@@ -1159,7 +1159,7 @@ static LogicalResult verifyPartialConnectOp(PartialConnectOp partialConnect) {
     }
   }
 
-  if (foldFlow(partialConnect.dest()) == flow::Source) {
+  if (foldFlow(partialConnect.dest()) == Flow::Source) {
     auto diag = partialConnect.emitOpError()
                 << "has invalid flow: the left-hand-side has source flow "
                    "(expected sink or duplex flow).";
