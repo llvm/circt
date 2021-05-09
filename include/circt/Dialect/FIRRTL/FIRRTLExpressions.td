@@ -33,6 +33,25 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
   let verifier = "return ::verifyConstantOp(*this);";
 }
 
+
+def InvalidValueOp : FIRRTLOp<"invalidvalue", [NoSideEffect]> {
+  let summary = "InvalidValue primitive";
+  let description = [{
+    The InvalidValue operation returns an invalid value of a specified type:
+    ```
+      %result = firrtl.invalid : !firrtl.uint<1>
+    ```
+
+    This corresponds to the FIRRTL invalidate operation without the implicit
+    connect semantics.
+  }];
+
+  let arguments = (ins);
+  let results = (outs FIRRTLType:$result);
+
+  let assemblyFormat = "attr-dict `:` type($result)";
+}
+
 def SubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
   let summary = "Extract a subfield of another value";
   let description = [{
@@ -363,24 +382,6 @@ def HeadPrimOp : PrimOp<"head"> {
   let verifier = [{
     VERIFY_RESULT_TYPE_RET(input().getType().cast<FIRRTLType>(), amount());
   }];
-}
-
-def InvalidValuePrimOp : PrimOp<"invalidvalue"> {
-  let summary = "InvalidValue primitive";
-  let description = [{
-    The InvalidValue operation returns an invalid value of a specified type:
-    ```
-      %result = firrtl.invalid : !firrtl.uint<1>
-    ```
-
-    This corresponds to the FIRRTL invalidate operation without the implicit
-    connect semantics.
-  }];
-
-  let arguments = (ins);
-  let results = (outs FIRRTLType:$result);
-
-  let assemblyFormat = "attr-dict `:` type($result)";
 }
 
 def MuxPrimOp : PrimOp<"mux"> {

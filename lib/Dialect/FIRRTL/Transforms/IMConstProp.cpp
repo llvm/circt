@@ -34,7 +34,7 @@ class LatticeValue {
 
     /// A value with 'invalid' value.  It has been processed by IMConstProp but
     /// hasn't been assigned a value, or has only been assigned the result of a
-    /// InvalidValuePrimOp.  Wires and other stateful values start out in this
+    /// InvalidValueOp.  Wires and other stateful values start out in this
     /// state.
     ///
     /// This is named "FIRRTLInvalid" instead of "Invalid" to avoid confusion
@@ -199,7 +199,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   void markRegResetOp(RegResetOp regReset);
   void markRegOp(RegOp reg);
 
-  void markInvalidValueOp(InvalidValuePrimOp invalid);
+  void markInvalidValueOp(InvalidValueOp invalid);
   void markConstantOp(ConstantOp constant);
   void markInstanceOp(InstanceOp instance);
 
@@ -329,7 +329,7 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
       markWireOrUnresetableRegOp(&op);
     else if (auto constant = dyn_cast<ConstantOp>(op))
       markConstantOp(constant);
-    else if (auto invalid = dyn_cast<InvalidValuePrimOp>(op))
+    else if (auto invalid = dyn_cast<InvalidValueOp>(op))
       markInvalidValueOp(invalid);
     else if (auto instance = dyn_cast<InstanceOp>(op))
       markInstanceOp(instance);
@@ -373,7 +373,7 @@ void IMConstPropPass::markConstantOp(ConstantOp constant) {
   mergeLatticeValue(constant, LatticeValue(constant.valueAttr()));
 }
 
-void IMConstPropPass::markInvalidValueOp(InvalidValuePrimOp invalid) {
+void IMConstPropPass::markInvalidValueOp(InvalidValueOp invalid) {
   mergeLatticeValue(invalid, LatticeValue::getFIRRTLInvalid());
 }
 
@@ -585,7 +585,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     Value replacement;
     if (it->second.isFIRRTLInvalid()) {
       replacement =
-          builder.create<InvalidValuePrimOp>(value.getLoc(), value.getType());
+          builder.create<InvalidValueOp>(value.getLoc(), value.getType());
     } else {
       Attribute constantValue = it->second.getConstant();
       // FIXME: Unique constants into the entry block of the module.
@@ -608,7 +608,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     // will already have been replaced since we're walking top-down.
     if (auto connect = dyn_cast<ConnectOp>(op)) {
       if (auto *destOp = connect.dest().getDefiningOp()) {
-        if (isa<ConstantOp>(destOp) || isa<InvalidValuePrimOp>(destOp)) {
+        if (isa<ConstantOp>(destOp) || isa<InvalidValueOp>(destOp)) {
           connect.erase();
           continue;
         }
@@ -620,7 +620,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
       continue;
 
     // Don't "refold" constants.  TODO: Unique in the module entry block.
-    if (isa<ConstantOp>(op) && !isa<InvalidValuePrimOp>(op))
+    if (isa<ConstantOp>(op) && !isa<InvalidValueOp>(op))
       continue;
 
     // If the op had any constants folded, replace them.

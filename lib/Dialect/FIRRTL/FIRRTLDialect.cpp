@@ -99,7 +99,7 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
     }
 
     // Set invalid values to have a distinct name.
-    if (auto invalid = dyn_cast<InvalidValuePrimOp>(op)) {
+    if (auto invalid = dyn_cast<InvalidValueOp>(op)) {
       std::string name;
       if (auto ty = invalid.getType().dyn_cast<IntType>()) {
         const char *base = ty.isSigned() ? "invalid_si" : "invalid_ui";

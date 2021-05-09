@@ -115,7 +115,7 @@ public:
   void visitDecl(RegOp op);
   void visitDecl(WireOp op);
   void visitDecl(RegResetOp op);
-  void visitExpr(InvalidValuePrimOp op);
+  void visitExpr(InvalidValueOp op);
   void visitExpr(SubfieldOp op);
   void visitExpr(SubindexOp op);
   void visitExpr(SubaccessOp op);
@@ -834,7 +834,7 @@ void TypeLoweringVisitor::visitStmt(ConnectOp op) {
 }
 
 // Lowering invalid may need to create a new invalid for each field
-void TypeLoweringVisitor::visitExpr(InvalidValuePrimOp op) {
+void TypeLoweringVisitor::visitExpr(InvalidValueOp op) {
   Value result = op.result();
 
   // Attempt to get the bundle types, potentially unwrapping an outer flip
@@ -851,7 +851,7 @@ void TypeLoweringVisitor::visitExpr(InvalidValuePrimOp op) {
   // Loop over the leaf aggregates.
   for (auto field : fieldTypes) {
     setBundleLowering(result, StringRef(field.suffix).drop_front(1),
-                      builder->create<InvalidValuePrimOp>(field.getPortType()));
+                      builder->create<InvalidValueOp>(field.getPortType()));
   }
 
   // Remember to remove the original op.

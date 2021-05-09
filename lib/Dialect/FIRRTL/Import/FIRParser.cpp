@@ -1122,8 +1122,8 @@ private:
         // Invalidate any sink or duplex flow ground types.
         .Default([&](auto tpe) {
           if (flow != Flow::Source)
-            builder.create<ConnectOp>(
-                loc, val, builder.create<InvalidValuePrimOp>(loc, tpe));
+            builder.create<ConnectOp>(loc, val,
+                                      builder.create<InvalidValueOp>(loc, tpe));
         });
   }
 
@@ -1518,7 +1518,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
       return failure();
     }
 
-    auto inv = builder.create<InvalidValuePrimOp>(tloc, opTypes[1]);
+    auto inv = builder.create<InvalidValueOp>(tloc, opTypes[1]);
     result = builder.create<MuxPrimOp>(
         tloc, opTypes[1], ValueRange({operands[0], operands[1], inv}), attrs);
     break;

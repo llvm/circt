@@ -990,7 +990,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
   // Other Operations
   LogicalResult visitExpr(BitsPrimOp op);
-  LogicalResult visitExpr(InvalidValuePrimOp op);
+  LogicalResult visitExpr(InvalidValueOp op);
   LogicalResult visitExpr(HeadPrimOp op);
   LogicalResult visitExpr(ShlPrimOp op);
   LogicalResult visitExpr(ShrPrimOp op);
@@ -2225,7 +2225,7 @@ LogicalResult FIRRTLLowering::visitExpr(BitsPrimOp op) {
   return setLoweringTo<comb::ExtractOp>(op, resultType, input, op.lo());
 }
 
-LogicalResult FIRRTLLowering::visitExpr(InvalidValuePrimOp op) {
+LogicalResult FIRRTLLowering::visitExpr(InvalidValueOp op) {
   auto resultTy = lowerType(op.getType());
   if (!resultTy)
     return failure();
