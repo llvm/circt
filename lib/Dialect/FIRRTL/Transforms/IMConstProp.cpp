@@ -12,6 +12,11 @@
 using namespace circt;
 using namespace firrtl;
 
+/// Return true if this is a wire or register.
+static bool isWireOrReg(Operation *op) {
+  return isa<WireOp>(op) || isa<RegResetOp>(op) || isa<RegOp>(op);
+}
+
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
@@ -147,45 +152,21 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     mergeLatticeValue(result, it->second);
   }
 
-  LatticeValue getExtendedLatticeValue(Value value, FIRRTLType destType) {
-    // If 'value' hasn't been computed yet, then it is unknown.
-    auto it = latticeValues.find(value);
-    if (it == latticeValues.end())
-      return LatticeValue();
-    auto result = it->second;
-    if (!result.isConstant())
-      return result; // Unknown and overdefined stay whatever they are.
-
-    // If destType is wider than the source constant type, extend it.
-    auto resultConstant = result.getConstant().getValue();
-    auto destWidth = destType.getBitWidthOrSentinel();
-    if (destWidth == -1)
-      return LatticeValue::getOverdefined();
-    if (resultConstant.getBitWidth() == (unsigned)destWidth)
-      return result; // Already the right width, we're done.
-
-    // Otherwise, extend the constant using the signedness of the source.
-    bool isSigned = false;
-    auto srcType = value.getType().cast<FIRRTLType>().getPassiveType();
-    if (auto intType = srcType.dyn_cast<IntType>())
-      isSigned = intType.isSigned();
-    if (isSigned)
-      resultConstant = resultConstant.sext(destWidth);
-    else
-      resultConstant = resultConstant.zext(destWidth);
-    auto resultType = IntegerType::get(&getContext(), destWidth,
-                                       isSigned ? IntegerType::Signed
-                                                : IntegerType::Unsigned);
-    return LatticeValue(IntegerAttr::get(resultType, resultConstant));
-  }
+  /// Return the lattice value for the specified SSA value, extended to the
+  /// width of the specified destType.  If allowTruncation is true, then this
+  /// allows truncating the lattice value to the specified type.
+  LatticeValue getExtendedLatticeValue(Value value, FIRRTLType destType,
+                                       bool allowTruncation = false);
 
   /// Mark the given block as executable.
   void markBlockExecutable(Block *block);
-  void markWire(WireOp wire);
+  void markWireOp(WireOp wire);
+  void markRegResetOp(RegResetOp regReset);
+  void markRegOp(RegOp reg);
 
-  void markInvalidValue(InvalidValuePrimOp invalid);
-  void markConstant(ConstantOp constant);
-  void markInstance(InstanceOp instance);
+  void markInvalidValueOp(InvalidValuePrimOp invalid);
+  void markConstantOp(ConstantOp constant);
+  void markInstanceOp(InstanceOp instance);
 
   void visitConnect(ConnectOp connect);
   void visitPartialConnect(PartialConnectOp connect);
@@ -255,6 +236,46 @@ void IMConstPropPass::runOnOperation() {
   resultPortToInstanceResultMapping.clear();
 }
 
+/// Return the lattice value for the specified SSA value, extended to the width
+/// of the specified destType.  If allowTruncation is true, then this allows
+/// truncating the lattice value to the specified type.
+LatticeValue IMConstPropPass::getExtendedLatticeValue(Value value,
+                                                      FIRRTLType destType,
+                                                      bool allowTruncation) {
+  // If 'value' hasn't been computed yet, then it is unknown.
+  auto it = latticeValues.find(value);
+  if (it == latticeValues.end())
+    return LatticeValue();
+  auto result = it->second;
+  if (!result.isConstant())
+    return result; // Unknown and overdefined stay whatever they are.
+
+  // If destType is wider than the source constant type, extend it.
+  auto resultConstant = result.getConstant().getValue();
+  auto destWidth = destType.getBitWidthOrSentinel();
+  if (destWidth == -1)
+    return LatticeValue::getOverdefined();
+  if (resultConstant.getBitWidth() == (unsigned)destWidth)
+    return result; // Already the right width, we're done.
+
+  // Otherwise, extend the constant using the signedness of the source.
+  bool isSigned = false;
+  auto srcType = value.getType().cast<FIRRTLType>().getPassiveType();
+  if (auto intType = srcType.dyn_cast<IntType>())
+    isSigned = intType.isSigned();
+
+  if (allowTruncation && resultConstant.getBitWidth() > (unsigned)destWidth)
+    resultConstant = resultConstant.trunc(destWidth);
+  else if (isSigned)
+    resultConstant = resultConstant.sext(destWidth);
+  else
+    resultConstant = resultConstant.zext(destWidth);
+  auto resultType =
+      IntegerType::get(&getContext(), destWidth,
+                       isSigned ? IntegerType::Signed : IntegerType::Unsigned);
+  return LatticeValue(IntegerAttr::get(resultType, resultConstant));
+}
+
 /// Mark a block executable if it isn't already.  This does an initial scan of
 /// the block, processing nullary operations like wires, instances, and
 /// constants that only get processed once.
@@ -263,20 +284,21 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
     return; // Already executable.
 
   for (auto &op : *block) {
-    // We only handle nullary firrtl nodes in the prepass.  Other nodes will get
-    // handled as part of top-down worklist processing.
-    if (op.getNumOperands() != 0)
+    // Filter out primitives etc quickly.
+    if (op.getNumOperands() != 0 || isa<RegResetOp>(&op))
       continue;
 
     // Handle each of the nullary operations in the firrtl dialect.
     if (auto wire = dyn_cast<WireOp>(op))
-      markWire(wire);
+      markWireOp(wire);
     else if (auto constant = dyn_cast<ConstantOp>(op))
-      markConstant(constant);
+      markConstantOp(constant);
     else if (auto instance = dyn_cast<InstanceOp>(op))
-      markInstance(instance);
+      markInstanceOp(instance);
     else if (auto invalid = dyn_cast<InvalidValuePrimOp>(op))
-      markInvalidValue(invalid);
+      markInvalidValueOp(invalid);
+    else if (auto regReset = dyn_cast<RegResetOp>(op))
+      markRegResetOp(regReset);
     else {
       // TODO: Mems, regs, etc.
       for (auto result : op.getResults())
@@ -285,9 +307,9 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
   }
 }
 
-void IMConstPropPass::markWire(WireOp wire) {
+void IMConstPropPass::markWireOp(WireOp wire) {
   // If the wire has a non-ground type, then it is too complex for us to handle,
-  // mark the wire as overdefined.
+  // mark it as overdefined.
   // TODO: Eventually add a field-sensitive model.
   if (!wire.getType().getPassiveType().isGround())
     return markOverdefined(wire);
@@ -296,17 +318,34 @@ void IMConstPropPass::markWire(WireOp wire) {
   // state.
 }
 
-void IMConstPropPass::markConstant(ConstantOp constant) {
+void IMConstPropPass::markRegResetOp(RegResetOp regReset) {
+  // If the reg has a non-ground type, then it is too complex for us to handle,
+  // mark it as overdefined.
+  // TODO: Eventually add a field-sensitive model.
+  if (!regReset.getType().getPassiveType().isGround())
+    return markOverdefined(regReset);
+
+  // The reset value may be known - if so, merge it in.
+  auto srcValue = getExtendedLatticeValue(regReset.resetValue(),
+                                          regReset.getType().cast<FIRRTLType>(),
+                                          /*allowTruncation=*/true);
+  mergeLatticeValue(regReset, srcValue);
+
+  // Otherwise, we leave this value undefined and allow connects to change its
+  // state.
+}
+
+void IMConstPropPass::markConstantOp(ConstantOp constant) {
   mergeLatticeValue(constant, LatticeValue(constant.valueAttr()));
 }
 
-void IMConstPropPass::markInvalidValue(InvalidValuePrimOp invalid) {
+void IMConstPropPass::markInvalidValueOp(InvalidValuePrimOp invalid) {
   // Noop, invalids are invalid.
 }
 
 /// Instances have no operands, so they are visited exactly once when their
 /// enclosing block is marked live.  This sets up the def-use edges for ports.
-void IMConstPropPass::markInstance(InstanceOp instance) {
+void IMConstPropPass::markInstanceOp(InstanceOp instance) {
   // Get the module being reference or a null pointer if this is an extmodule.
   auto module = dyn_cast<FModuleOp>(instance.getReferencedModule());
 
@@ -381,9 +420,9 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
 
   auto dest = connect.dest().cast<mlir::OpResult>();
 
-  // For wires, we just drive the value of the wire itself, which automatically
-  // propagates to users.
-  if (isa<WireOp>(dest.getOwner()))
+  // For wires and registers, we just drive the value of the wire itself, which
+  // automatically propagates to users.
+  if (isWireOrReg(dest.getOwner()))
     return mergeLatticeValue(connect.dest(), srcValue);
 
   // Driving an instance argument port drives the corresponding argument of the
@@ -419,6 +458,12 @@ void IMConstPropPass::visitOperation(Operation *op) {
     return visitConnect(connectOp);
   if (auto partialConnectOp = dyn_cast<PartialConnectOp>(op))
     return visitPartialConnect(partialConnectOp);
+  if (auto regResetOp = dyn_cast<RegResetOp>(op))
+    return markRegResetOp(regResetOp);
+
+  // The clock operand of regop changing doesn't change its result value.
+  if (isa<RegOp>(op))
+    return;
   // TODO: Handle 'when' operations.
 
   // If this op produces no results, it can't produce any constants.
@@ -548,7 +593,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
         replaceValueWithConstant(result, attr);
       }
     }
-    if (op.use_empty() && (wouldOpBeTriviallyDead(&op) || isa<WireOp>(op))) {
+    if (op.use_empty() && (wouldOpBeTriviallyDead(&op) || isWireOrReg(&op))) {
       op.erase();
       continue;
     }
