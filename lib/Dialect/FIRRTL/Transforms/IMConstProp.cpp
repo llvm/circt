@@ -40,7 +40,7 @@ public:
   /// Initialize a lattice value with "Unknown".
   LatticeValue() : constantAndTag(nullptr, Kind::Unknown) {}
   /// Initialize a lattice value with a constant.
-  LatticeValue(Attribute attr) : constantAndTag(attr, Kind::Constant) {}
+  LatticeValue(IntegerAttr attr) : constantAndTag(attr, Kind::Constant) {}
 
   static LatticeValue getOverdefined() {
     LatticeValue result;
@@ -60,13 +60,17 @@ public:
   }
 
   /// Mark the lattice value as constant.
-  void markConstant(Attribute value) {
+  void markConstant(IntegerAttr value) {
     constantAndTag.setPointerAndInt(value, Kind::Constant);
   }
 
   /// If this lattice is constant, return the constant. Returns nullptr
   /// otherwise.
-  Attribute getConstant() const { return constantAndTag.getPointer(); }
+  IntegerAttr getConstant() const {
+    if (auto attr = constantAndTag.getPointer())
+      return attr.cast<IntegerAttr>();
+    return {};
+  }
 
   /// Merge in the value of the 'rhs' lattice into this one. Returns true if the
   /// lattice value changed.
@@ -90,7 +94,7 @@ public:
 
 private:
   /// The attribute value if this is a constant and the tag for the element
-  /// kind.
+  /// kind.  The attribute is always an IntegerAttr.
   llvm::PointerIntPair<Attribute, 2, Kind> constantAndTag;
 };
 } // end anonymous namespace
@@ -141,6 +145,38 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     if (it == latticeValues.end())
       return;
     mergeLatticeValue(result, it->second);
+  }
+
+  LatticeValue getExtendedLatticeValue(Value value, FIRRTLType destType) {
+    // If 'value' hasn't been computed yet, then it is unknown.
+    auto it = latticeValues.find(value);
+    if (it == latticeValues.end())
+      return LatticeValue();
+    auto result = it->second;
+    if (!result.isConstant())
+      return result; // Unknown and overdefined stay whatever they are.
+
+    // If destType is wider than the source constant type, extend it.
+    auto resultConstant = result.getConstant().getValue();
+    auto destWidth = destType.getBitWidthOrSentinel();
+    if (destWidth == -1)
+      return LatticeValue::getOverdefined();
+    if (resultConstant.getBitWidth() == (unsigned)destWidth)
+      return result; // Already the right width, we're done.
+
+    // Otherwise, extend the constant using the signedness of the source.
+    bool isSigned = false;
+    auto srcType = value.getType().cast<FIRRTLType>().getPassiveType();
+    if (auto intType = srcType.dyn_cast<IntType>())
+      isSigned = intType.isSigned();
+    if (isSigned)
+      resultConstant = resultConstant.sext(destWidth);
+    else
+      resultConstant = resultConstant.zext(destWidth);
+    auto resultType = IntegerType::get(&getContext(), destWidth,
+                                       isSigned ? IntegerType::Signed
+                                                : IntegerType::Unsigned);
+    return LatticeValue(IntegerAttr::get(resultType, resultConstant));
   }
 
   /// Mark the given block as executable.
@@ -314,17 +350,24 @@ void IMConstPropPass::markInstance(InstanceOp instance) {
 
 // We merge the value from the RHS into the value of the LHS.
 void IMConstPropPass::visitConnect(ConnectOp connect) {
-  // TODO: Generalize to subaccesses etc when we have a field sensitive model.
-  if (!connect.dest().getType().cast<FIRRTLType>().getPassiveType().isGround())
-    return;
+  auto destType = connect.dest().getType().cast<FIRRTLType>().getPassiveType();
 
-  // FIXME: Handle implicit extensions etc.
+  // TODO: Generalize to subaccesses etc when we have a field sensitive model.
+  if (!destType.isGround()) {
+    connect.emitError("non-ground type connect unhandled by IMConstProp");
+    return;
+  }
+
+  // Handle implicit extensions.
+  auto srcValue = getExtendedLatticeValue(connect.src(), destType);
+  if (srcValue.isUnknown())
+    return;
 
   // Driving result ports propagates the value to each instance using the
   // module.
   if (auto blockArg = connect.dest().dyn_cast<BlockArgument>()) {
     for (auto userOfResultPort : resultPortToInstanceResultMapping[blockArg])
-      mergeLatticeValue(userOfResultPort, connect.src());
+      mergeLatticeValue(userOfResultPort, srcValue);
     return;
   }
 
@@ -333,7 +376,7 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
   // For wires, we just drive the value of the wire itself, which automatically
   // propagates to users.
   if (isa<WireOp>(dest.getOwner()))
-    return mergeLatticeValue(connect.dest(), connect.src());
+    return mergeLatticeValue(connect.dest(), srcValue);
 
   // Driving an instance argument port drives the corresponding argument of the
   // referenced module.
@@ -344,7 +387,7 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
 
     BlockArgument modulePortVal =
         module.getPortArgument(dest.getResultNumber());
-    return mergeLatticeValue(modulePortVal, connect.src());
+    return mergeLatticeValue(modulePortVal, srcValue);
   }
 
   connect.emitError("connect unhandled by IMConstProp");
@@ -423,10 +466,14 @@ void IMConstPropPass::visitOperation(Operation *op) {
     // Merge in the result of the fold, either a constant or a value.
     LatticeValue resultLattice;
     OpFoldResult foldResult = foldResults[i];
-    if (Attribute foldAttr = foldResult.dyn_cast<Attribute>())
-      resultLattice = LatticeValue(foldAttr);
-    else // Folding to an operand results in its value.
+    if (Attribute foldAttr = foldResult.dyn_cast<Attribute>()) {
+      if (auto intAttr = foldAttr.dyn_cast<IntegerAttr>())
+        resultLattice = LatticeValue(intAttr);
+      else // Treat non integer constants as overdefined.
+        resultLattice = LatticeValue::getOverdefined();
+    } else { // Folding to an operand results in its value.
       resultLattice = latticeValues[foldResult.get<Value>()];
+    }
     mergeLatticeValue(op->getResult(i), resultLattice);
   }
 }

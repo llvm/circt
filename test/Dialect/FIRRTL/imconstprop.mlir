@@ -14,7 +14,8 @@ firrtl.circuit "Test" {
   // CHECK-LABEL: @Test
   firrtl.module @Test(%result1: !firrtl.flip<uint<1>>,
                       %result2: !firrtl.flip<uint<1>>,
-                      %result3: !firrtl.flip<uint<1>>) {
+                      %result3: !firrtl.flip<uint<1>>,
+                      %result4: !firrtl.flip<uint<2>>) {
     %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
 
@@ -42,6 +43,13 @@ firrtl.circuit "Test" {
     firrtl.connect %source, %c0_ui1 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
     // CHECK: firrtl.connect %result3, %c0_ui1_1
     firrtl.connect %result3, %dest : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+
+    // Check connect extensions.
+    %extWire = firrtl.wire : !firrtl.uint<2>
+    firrtl.connect %extWire, %c0_ui1 : !firrtl.uint<2>, !firrtl.uint<1>
+
+    // CHECK: firrtl.connect %result4, %c0_ui2
+    firrtl.connect %result4, %extWire: !firrtl.flip<uint<2>>, !firrtl.uint<2>
   }
 
   // Unused modules should be completely dropped.
