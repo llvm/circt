@@ -182,6 +182,8 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   /// Mark the given block as executable.
   void markBlockExecutable(Block *block);
   void markWire(WireOp wire);
+
+  void markInvalidValue(InvalidValuePrimOp invalid);
   void markConstant(ConstantOp constant);
   void markInstance(InstanceOp instance);
 
@@ -273,8 +275,10 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
       markConstant(constant);
     else if (auto instance = dyn_cast<InstanceOp>(op))
       markInstance(instance);
+    else if (auto invalid = dyn_cast<InvalidValuePrimOp>(op))
+      markInvalidValue(invalid);
     else {
-      // TODO: Mems, instances, etc.
+      // TODO: Mems, regs, etc.
       for (auto result : op.getResults())
         markOverdefined(result);
     }
@@ -294,6 +298,10 @@ void IMConstPropPass::markWire(WireOp wire) {
 
 void IMConstPropPass::markConstant(ConstantOp constant) {
   mergeLatticeValue(constant, LatticeValue(constant.valueAttr()));
+}
+
+void IMConstPropPass::markInvalidValue(InvalidValuePrimOp invalid) {
+  // Noop, invalids are invalid.
 }
 
 /// Instances have no operands, so they are visited exactly once when their
@@ -390,7 +398,9 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
     return mergeLatticeValue(modulePortVal, srcValue);
   }
 
-  connect.emitError("connect unhandled by IMConstProp");
+  connect.emitError("connect unhandled by IMConstProp")
+          .attachNote(connect.dest().getLoc())
+      << "connect destination is here";
 }
 
 void IMConstPropPass::visitPartialConnect(PartialConnectOp partialConnect) {

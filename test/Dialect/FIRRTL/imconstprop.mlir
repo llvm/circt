@@ -48,6 +48,10 @@ firrtl.circuit "Test" {
     %extWire = firrtl.wire : !firrtl.uint<2>
     firrtl.connect %extWire, %c0_ui1 : !firrtl.uint<2>, !firrtl.uint<1>
 
+    // Connects of invalid values shouldn't hurt.
+    %invalid = firrtl.invalidvalue : !firrtl.uint<2>
+    firrtl.connect %extWire, %invalid : !firrtl.uint<2>, !firrtl.uint<2>
+
     // CHECK: firrtl.connect %result4, %c0_ui2
     firrtl.connect %result4, %extWire: !firrtl.flip<uint<2>>, !firrtl.uint<2>
   }
