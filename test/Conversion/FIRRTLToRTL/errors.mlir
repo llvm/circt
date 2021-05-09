@@ -16,7 +16,7 @@ firrtl.circuit "Div" {
   //          read-under-write => undefined
   // COM: This is a memory with aggregates which is currently not
   // supported.
-  firrtl.module @Div(%clock1: !firrtl.clock, %clock2: !firrtl.clock) {
+  firrtl.module @Div(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock) {
   // expected-error @+2 {{'firrtl.mem' should have simple type and known width}}
   // expected-error @+1 {{'firrtl.mem' op should have already been lowered from a ground type to an aggregate type using the LowerTypes pass}}
     %_M_read, %_M_write = firrtl.mem Undefined {depth = 20 : i64, name = "_M", portNames = ["read", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<5>, en: uint<1>, clk: clock, data: flip<bundle<id: uint<4>, other: sint<8>>>>>, !firrtl.flip<bundle<addr: uint<5>, en: uint<1>, clk: clock, data: bundle<id: uint<4>, other: sint<8>>, mask: bundle<id: uint<1>, other: uint<1>>>>
@@ -40,10 +40,10 @@ firrtl.circuit "Div" {
 
   // COM: Unknown widths are unsupported
   // expected-error @+1 {{cannot lower this port type to RTL}}
-  firrtl.module @UnknownWidth(%a: !firrtl.uint) {}
+  firrtl.module @UnknownWidth(in %a: !firrtl.uint) {}
 
   // https://github.com/llvm/circt/issues/778
-  firrtl.module @zero_width_mem(%clock: !firrtl.clock, %reset: !firrtl.uint<1>, %r0en: !firrtl.uint<1>) {
+  firrtl.module @zero_width_mem(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %r0en: !firrtl.uint<1>) {
     %c0_ui4 = firrtl.constant(0 : i4) : !firrtl.uint<4>
     %c0_ui1 = firrtl.constant(false) : !firrtl.uint<1>
     %c0_ui25 = firrtl.constant(0 : i25) : !firrtl.uint<25>

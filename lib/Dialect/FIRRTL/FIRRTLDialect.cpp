@@ -26,6 +26,10 @@ ArrayAttr firrtl::getModulePortNames(Operation *module) {
   return module->getAttrOfType<ArrayAttr>("portNames");
 }
 
+// If the specified module contains the portDirections attribute, return it.
+mlir::IntegerAttr firrtl::getModulePortDirections(Operation *module) {
+  return module->getAttrOfType<mlir::IntegerAttr>(direction::attrKey);
+}
 namespace {
 
 // We implement the OpAsmDialectInterface so that FIRRTL dialect operations

@@ -18,8 +18,8 @@ circuit test_mod : %[[{"a": "a"}]]
 
 ; MLIR: firrtl.circuit "test_mod"
 
-; MLIR-LABEL: firrtl.module @test_mod(%a: !firrtl.uint<1>, %b: !firrtl.flip<uint<1>>)
-; MLIR-NEXT:    firrtl.connect %b, %a : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+; MLIR-LABEL: firrtl.module @test_mod(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>)
+; MLIR-NEXT:    firrtl.connect %b, %a : !firrtl.uint<1>, !firrtl.uint<1>
 ; MLIR-NEXT:  }
 
 ; ANNOTATIONS-LABEL: firrtl.circuit "test_mod"

@@ -3,9 +3,9 @@
 
 firrtl.circuit "test" {
 // expected-note @+1 {{the left-hand-side was defined here}}
-firrtl.module @test(%a : !firrtl.uint<1>, %b : !firrtl.flip<uint<1>>) {
+firrtl.module @test(in %a : !firrtl.uint<1>, out %b : !firrtl.uint<1>) {
   // expected-error @+1 {{has invalid flow: the left-hand-side has source flow}}
-  firrtl.connect %a, %b : !firrtl.uint<1>, !firrtl.flip<uint<1>>
+  firrtl.connect %a, %b : !firrtl.uint<1>, !firrtl.uint<1>
 }
 }
 
@@ -14,27 +14,27 @@ firrtl.module @test(%a : !firrtl.uint<1>, %b : !firrtl.flip<uint<1>>) {
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(%a : !firrtl.analog, %b : !firrtl.flip<analog>) {
+firrtl.module @test(in %a : !firrtl.analog, out %b : !firrtl.analog) {
   // expected-error @+1 {{analog types may not be connected}}
-  firrtl.connect %b, %a : !firrtl.flip<analog>, !firrtl.analog
+  firrtl.connect %b, %a : !firrtl.analog, !firrtl.analog
 }
 }
 
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(%a : !firrtl.analog, %b : !firrtl.flip<uint<1>>) {
+firrtl.module @test(in %a : !firrtl.analog, out %b : !firrtl.uint<1>) {
   // expected-error @+1 {{analog types may not be connected}}
-  firrtl.connect %b, %a : !firrtl.flip<uint<1>>, !firrtl.analog
+  firrtl.connect %b, %a : !firrtl.uint<1>, !firrtl.analog
 }
 }
 
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(%a : !firrtl.uint<1>, %b : !firrtl.flip<analog>) {
+firrtl.module @test(in %a : !firrtl.uint<1>, out %b : !firrtl.analog) {
   // expected-error @+1 {{analog types may not be connected}}
-  firrtl.connect %b, %a : !firrtl.flip<analog>, !firrtl.uint<1>
+  firrtl.connect %b, %a : !firrtl.analog, !firrtl.uint<1>
 }
 }
 
@@ -45,18 +45,18 @@ firrtl.module @test(%a : !firrtl.uint<1>, %b : !firrtl.flip<analog>) {
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(%a : !firrtl.reset, %b : !firrtl.flip<uint<2>>) {
+firrtl.module @test(in %a : !firrtl.reset, out %b : !firrtl.uint<2>) {
   // expected-error @+1 {{type mismatch between destination '!firrtl.uint<2>' and source '!firrtl.reset'}}
-  firrtl.connect %b, %a : !firrtl.flip<uint<2>>, !firrtl.reset
+  firrtl.connect %b, %a : !firrtl.uint<2>, !firrtl.reset
 }
 }
 
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(%a : !firrtl.reset, %b : !firrtl.flip<sint<1>>) {
+firrtl.module @test(in %a : !firrtl.reset, out %b : !firrtl.sint<1>) {
   // expected-error @+1 {{type mismatch between destination '!firrtl.sint<1>' and source '!firrtl.reset'}}
-  firrtl.connect %b, %a : !firrtl.flip<sint<1>>, !firrtl.reset
+  firrtl.connect %b, %a : !firrtl.sint<1>, !firrtl.reset
 }
 }
 
@@ -65,18 +65,18 @@ firrtl.module @test(%a : !firrtl.reset, %b : !firrtl.flip<sint<1>>) {
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(%a : !firrtl.uint<2>, %b : !firrtl.flip<reset>) {
+firrtl.module @test(in %a : !firrtl.uint<2>, out %b : !firrtl.reset) {
   // expected-error @+1 {{type mismatch between destination '!firrtl.reset' and source '!firrtl.uint<2>'}}
-  firrtl.connect %b, %a : !firrtl.flip<reset>, !firrtl.uint<2>
+  firrtl.connect %b, %a : !firrtl.reset, !firrtl.uint<2>
 }
 }
 
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(%a : !firrtl.sint<1>, %b : !firrtl.flip<reset>) {
+firrtl.module @test(in %a : !firrtl.sint<1>, out %b : !firrtl.reset) {
   // expected-error @+1 {{type mismatch between destination '!firrtl.reset' and source '!firrtl.sint<1>'}}
-  firrtl.connect %b, %a : !firrtl.flip<reset>, !firrtl.sint<1>
+  firrtl.connect %b, %a : !firrtl.reset, !firrtl.sint<1>
 }
 }
 
@@ -87,9 +87,9 @@ firrtl.module @test(%a : !firrtl.sint<1>, %b : !firrtl.flip<reset>) {
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(%a : !firrtl.uint<1>, %b : !firrtl.flip<sint<1>>) {
+firrtl.module @test(in %a : !firrtl.uint<1>, out %b : !firrtl.sint<1>) {
   // expected-error @+1 {{type mismatch between destination '!firrtl.sint<1>' and source '!firrtl.uint<1>'}}
-  firrtl.connect %b, %a : !firrtl.flip<sint<1>>, !firrtl.uint<1>
+  firrtl.connect %b, %a : !firrtl.sint<1>, !firrtl.uint<1>
 }
 }
 
@@ -97,9 +97,9 @@ firrtl.module @test(%a : !firrtl.uint<1>, %b : !firrtl.flip<sint<1>>) {
 
 firrtl.circuit "test" {
 
-firrtl.module @test(%a : !firrtl.uint<1>, %b : !firrtl.flip<clock>) {
+firrtl.module @test(in %a : !firrtl.uint<1>, out %b : !firrtl.clock) {
   // expected-error @+1 {{type mismatch between destination '!firrtl.clock' and source '!firrtl.uint<1>'}}
-  firrtl.connect %b, %a : !firrtl.flip<clock>, !firrtl.uint<1>
+  firrtl.connect %b, %a : !firrtl.clock, !firrtl.uint<1>
 }
 
 }
@@ -107,9 +107,9 @@ firrtl.module @test(%a : !firrtl.uint<1>, %b : !firrtl.flip<clock>) {
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(%a : !firrtl.uint<1>, %b : !firrtl.flip<asyncreset>) {
+firrtl.module @test(in %a : !firrtl.uint<1>, out %b : !firrtl.asyncreset) {
   // expected-error @+1 {{type mismatch between destination '!firrtl.asyncreset' and source '!firrtl.uint<1>'}}
-  firrtl.connect %b, %a : !firrtl.flip<asyncreset>, !firrtl.uint<1>
+  firrtl.connect %b, %a : !firrtl.asyncreset, !firrtl.uint<1>
 }
 }
 
@@ -118,27 +118,27 @@ firrtl.module @test(%a : !firrtl.uint<1>, %b : !firrtl.flip<asyncreset>) {
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(%a : !firrtl.sint<1>, %b : !firrtl.flip<uint<1>>) {
+firrtl.module @test(in %a : !firrtl.sint<1>, out %b : !firrtl.uint<1>) {
   // expected-error @+1 {{type mismatch between destination '!firrtl.uint<1>' and source '!firrtl.sint<1>'}}
-  firrtl.connect %b, %a : !firrtl.flip<uint<1>>, !firrtl.sint<1>
+  firrtl.connect %b, %a : !firrtl.uint<1>, !firrtl.sint<1>
 }
 }
 
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(%a : !firrtl.sint<1>, %b : !firrtl.flip<clock>) {
+firrtl.module @test(in %a : !firrtl.sint<1>, out %b : !firrtl.clock) {
   // expected-error @+1 {{type mismatch between destination '!firrtl.clock' and source '!firrtl.sint<1>'}}
-  firrtl.connect %b, %a : !firrtl.flip<clock>, !firrtl.sint<1>
+  firrtl.connect %b, %a : !firrtl.clock, !firrtl.sint<1>
 }
 }
 
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(%a : !firrtl.sint<1>, %b : !firrtl.flip<asyncreset>) {
+firrtl.module @test(in %a : !firrtl.sint<1>, out %b : !firrtl.asyncreset) {
   // expected-error @+1 {{type mismatch between destination '!firrtl.asyncreset' and source '!firrtl.sint<1>'}}
-  firrtl.connect %b, %a : !firrtl.flip<asyncreset>, !firrtl.sint<1>
+  firrtl.connect %b, %a : !firrtl.asyncreset, !firrtl.sint<1>
 }
 }
 
@@ -147,27 +147,27 @@ firrtl.module @test(%a : !firrtl.sint<1>, %b : !firrtl.flip<asyncreset>) {
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(%a : !firrtl.clock, %b : !firrtl.flip<uint<1>>) {
+firrtl.module @test(in %a : !firrtl.clock, out %b : !firrtl.uint<1>) {
   // expected-error @+1 {{type mismatch between destination '!firrtl.uint<1>' and source '!firrtl.clock'}}
-  firrtl.connect %b, %a : !firrtl.flip<uint<1>>, !firrtl.clock
+  firrtl.connect %b, %a : !firrtl.uint<1>, !firrtl.clock
 }
 }
 
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(%a : !firrtl.clock, %b : !firrtl.flip<sint<1>>) {
+firrtl.module @test(in %a : !firrtl.clock, out %b : !firrtl.sint<1>) {
   // expected-error @+1 {{type mismatch between destination '!firrtl.sint<1>' and source '!firrtl.clock'}}
-  firrtl.connect %b, %a : !firrtl.flip<sint<1>>, !firrtl.clock
+  firrtl.connect %b, %a : !firrtl.sint<1>, !firrtl.clock
 }
 }
 
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(%a : !firrtl.clock, %b : !firrtl.flip<asyncreset>) {
+firrtl.module @test(in %a : !firrtl.clock, out %b : !firrtl.asyncreset) {
   // expected-error @+1 {{type mismatch between destination '!firrtl.asyncreset' and source '!firrtl.clock'}}
-  firrtl.connect %b, %a : !firrtl.flip<asyncreset>, !firrtl.clock
+  firrtl.connect %b, %a : !firrtl.asyncreset, !firrtl.clock
 }
 }
 
@@ -176,27 +176,27 @@ firrtl.module @test(%a : !firrtl.clock, %b : !firrtl.flip<asyncreset>) {
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(%a : !firrtl.asyncreset, %b : !firrtl.flip<uint<1>>) {
+firrtl.module @test(in %a : !firrtl.asyncreset, out %b : !firrtl.uint<1>) {
   // expected-error @+1 {{type mismatch between destination '!firrtl.uint<1>' and source '!firrtl.asyncreset'}}
-  firrtl.connect %b, %a : !firrtl.flip<uint<1>>, !firrtl.asyncreset
+  firrtl.connect %b, %a : !firrtl.uint<1>, !firrtl.asyncreset
 }
 }
 
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(%a : !firrtl.asyncreset, %b : !firrtl.flip<sint<1>>) {
+firrtl.module @test(in %a : !firrtl.asyncreset, out %b : !firrtl.sint<1>) {
   // expected-error @+1 {{type mismatch between destination '!firrtl.sint<1>' and source '!firrtl.asyncreset'}}
-  firrtl.connect %b, %a : !firrtl.flip<sint<1>>, !firrtl.asyncreset
+  firrtl.connect %b, %a : !firrtl.sint<1>, !firrtl.asyncreset
 }
 }
 
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(%a : !firrtl.asyncreset, %b : !firrtl.flip<clock>) {
+firrtl.module @test(in %a : !firrtl.asyncreset, out %b : !firrtl.clock) {
   // expected-error @+1 {{type mismatch between destination '!firrtl.clock' and source '!firrtl.asyncreset'}}
-  firrtl.connect %b, %a : !firrtl.flip<clock>, !firrtl.asyncreset
+  firrtl.connect %b, %a : !firrtl.clock, !firrtl.asyncreset
 }
 }
 
@@ -205,18 +205,18 @@ firrtl.module @test(%a : !firrtl.asyncreset, %b : !firrtl.flip<clock>) {
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(%a : !firrtl.vector<uint<1>, 3>, %b : !firrtl.flip<vector<uint<1>, 2>>) {
+firrtl.module @test(in %a : !firrtl.vector<uint<1>, 3>, out %b : !firrtl.vector<uint<1>, 2>) {
   // expected-error @+1 {{type mismatch between destination '!firrtl.vector<uint<1>, 2>' and source '!firrtl.vector<uint<1>, 3>'}}
-  firrtl.connect %b, %a : !firrtl.flip<vector<uint<1>, 2>>, !firrtl.vector<uint<1>, 3>
+  firrtl.connect %b, %a : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 3>
 }
 }
 
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(%a : !firrtl.vector<uint<1>, 3>, %b : !firrtl.flip<vector<sint<1>, 3>>) {
+firrtl.module @test(in %a : !firrtl.vector<uint<1>, 3>, out %b : !firrtl.vector<sint<1>, 3>) {
   // expected-error @+1 {{type mismatch between destination '!firrtl.vector<sint<1>, 3>' and source '!firrtl.vector<uint<1>, 3>'}}
-  firrtl.connect %b, %a : !firrtl.flip<vector<sint<1>, 3>>, !firrtl.vector<uint<1>, 3>
+  firrtl.connect %b, %a : !firrtl.vector<sint<1>, 3>, !firrtl.vector<uint<1>, 3>
 }
 }
 
@@ -226,7 +226,7 @@ firrtl.module @test(%a : !firrtl.vector<uint<1>, 3>, %b : !firrtl.flip<vector<si
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>>, %b : !firrtl.bundle<f1: flip<uint<1>>, f2: sint<1>>) {
+firrtl.module @test(in %a : !firrtl.bundle<f1: uint<1>>, in %b : !firrtl.bundle<f1: flip<uint<1>>, f2: sint<1>>) {
   // expected-error @+1 {{type mismatch between destination '!firrtl.bundle<f1: flip<uint<1>>, f2: sint<1>>' and source '!firrtl.bundle<f1: uint<1>>'}}
   firrtl.connect %b, %a : !firrtl.bundle<f1: flip<uint<1>>, f2: sint<1>>, !firrtl.bundle<f1: uint<1>>
 }
@@ -235,7 +235,7 @@ firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>>, %b : !firrtl.bundle<f1: fl
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>>, %b : !firrtl.bundle<f2: flip<uint<1>>>) {
+firrtl.module @test(in %a : !firrtl.bundle<f1: uint<1>>, in %b : !firrtl.bundle<f2: flip<uint<1>>>) {
   // expected-error @+1 {{type mismatch between destination '!firrtl.bundle<f2: flip<uint<1>>>' and source '!firrtl.bundle<f1: uint<1>>'}}
   firrtl.connect %b, %a : !firrtl.bundle<f2: flip<uint<1>>>, !firrtl.bundle<f1: uint<1>>
 }
@@ -244,7 +244,7 @@ firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>>, %b : !firrtl.bundle<f2: fl
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>>, %b : !firrtl.bundle<f1: flip<sint<1>>>) {
+firrtl.module @test(in %a : !firrtl.bundle<f1: uint<1>>, in %b : !firrtl.bundle<f1: flip<sint<1>>>) {
   // expected-error @+1 {{type mismatch between destination '!firrtl.bundle<f1: flip<sint<1>>>' and source '!firrtl.bundle<f1: uint<1>>'}}
   firrtl.connect %b, %a : !firrtl.bundle<f1: flip<sint<1>>>, !firrtl.bundle<f1: uint<1>>
 }
@@ -253,10 +253,10 @@ firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>>, %b : !firrtl.bundle<f1: fl
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>>, %b : !firrtl.flip<bundle<f1: uint<1>>>) {
+firrtl.module @test(in %a : !firrtl.bundle<f1: uint<1>>, out %b : !firrtl.bundle<f1: uint<1>>) {
   // expected-note @+1 {{the left-hand-side was defined here}}
   %0 = firrtl.subfield %a("f1") : (!firrtl.bundle<f1: uint<1>>) -> !firrtl.uint<1>
-  %1 = firrtl.subfield %b("f1") : (!firrtl.flip<bundle<f1: uint<1>>>) -> !firrtl.uint<1>
+  %1 = firrtl.subfield %b("f1") : (!firrtl.bundle<f1: uint<1>>) -> !firrtl.uint<1>
   // expected-error @+1 {{op has invalid flow: the left-hand-side has source flow}}
   firrtl.connect %0, %1 : !firrtl.uint<1>, !firrtl.uint<1>
 }
@@ -267,9 +267,9 @@ firrtl.module @test(%a : !firrtl.bundle<f1: uint<1>>, %b : !firrtl.flip<bundle<f
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(%a : !firrtl.uint<2>, %b : !firrtl.flip<uint<1>>) {
+firrtl.module @test(in %a : !firrtl.uint<2>, out %b : !firrtl.uint<1>) {
   // expected-error @+1 {{destination width 1 is not greater than or equal to source width 2}}
-  firrtl.connect %b, %a : !firrtl.flip<uint<1>>, !firrtl.uint<2>
+  firrtl.connect %b, %a : !firrtl.uint<1>, !firrtl.uint<2>
 }
 }
 
@@ -282,9 +282,9 @@ firrtl.module @test(%a : !firrtl.uint<2>, %b : !firrtl.flip<uint<1>>) {
 ///     a.a.a <= ax.a.a
 
 firrtl.circuit "test"  {
-firrtl.module @test(%a: !firrtl.flip<bundle<a: bundle<a: flip<uint<1>>>>>) {
+firrtl.module @test(out %a: !firrtl.bundle<a: bundle<a: flip<uint<1>>>>) {
   %ax = firrtl.wire  : !firrtl.bundle<a: bundle<a: flip<uint<1>>>>
-  %a_a = firrtl.subfield %a("a") : (!firrtl.flip<bundle<a: bundle<a: flip<uint<1>>>>>) -> !firrtl.bundle<a: flip<uint<1>>>
+  %a_a = firrtl.subfield %a("a") : (!firrtl.bundle<a: bundle<a: flip<uint<1>>>>) -> !firrtl.bundle<a: flip<uint<1>>>
   // expected-note @+1 {{the left-hand-side was defined here}}
   %a_a_a = firrtl.subfield %a_a("a") : (!firrtl.bundle<a: flip<uint<1>>>) -> !firrtl.uint<1>
   %ax_a = firrtl.subfield %ax("a") : (!firrtl.bundle<a: bundle<a: flip<uint<1>>>>) -> !firrtl.bundle<a: flip<uint<1>>>
@@ -303,10 +303,10 @@ firrtl.module @test(%a: !firrtl.flip<bundle<a: bundle<a: flip<uint<1>>>>>) {
 ///     a.a <= ax.a
 
 firrtl.circuit "test"  {
-firrtl.module @test(%a: !firrtl.flip<bundle<a: flip<bundle<a: uint<1>>>>>) {
+firrtl.module @test(out %a: !firrtl.bundle<a: flip<bundle<a: uint<1>>>>) {
   %ax = firrtl.wire  : !firrtl.bundle<a: flip<bundle<a: uint<1>>>>
   // expected-note @+1 {{the left-hand-side was defined here}}
-  %a_a = firrtl.subfield %a("a") : (!firrtl.flip<bundle<a: flip<bundle<a: uint<1>>>>>) -> !firrtl.bundle<a: uint<1>>
+  %a_a = firrtl.subfield %a("a") : (!firrtl.bundle<a: flip<bundle<a: uint<1>>>>) -> !firrtl.bundle<a: uint<1>>
   %ax_a = firrtl.subfield %ax("a") : (!firrtl.bundle<a: flip<bundle<a: uint<1>>>>) -> !firrtl.bundle<a: uint<1>>
   // expected-error @+1 {{invalid flow: the left-hand-side has source flow}}
   firrtl.connect %a_a, %ax_a : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
@@ -322,9 +322,9 @@ firrtl.module @test(%a: !firrtl.flip<bundle<a: flip<bundle<a: uint<1>>>>>) {
 ///     a.a.a <= ax.a.a
 
 firrtl.circuit "test"  {
-firrtl.module @test(%a: !firrtl.flip<bundle<a: flip<bundle<a: uint<1>>>>>) {
+firrtl.module @test(out %a: !firrtl.bundle<a: flip<bundle<a: uint<1>>>>) {
   %ax = firrtl.wire  : !firrtl.bundle<a: flip<bundle<a: uint<1>>>>
-  %a_a = firrtl.subfield %a("a") : (!firrtl.flip<bundle<a: flip<bundle<a: uint<1>>>>>) -> !firrtl.bundle<a: uint<1>>
+  %a_a = firrtl.subfield %a("a") : (!firrtl.bundle<a: flip<bundle<a: uint<1>>>>) -> !firrtl.bundle<a: uint<1>>
   // expected-note @+1 {{the left-hand-side was defined here}}
   %a_a_a = firrtl.subfield %a_a("a") : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
   %ax_a = firrtl.subfield %ax("a") : (!firrtl.bundle<a: flip<bundle<a: uint<1>>>>) -> !firrtl.bundle<a: uint<1>>
@@ -343,10 +343,10 @@ firrtl.module @test(%a: !firrtl.flip<bundle<a: flip<bundle<a: uint<1>>>>>) {
 ///     a.a <= ax.a
 
 firrtl.circuit "test"  {
-firrtl.module @test(%a: !firrtl.flip<bundle<a: flip<bundle<a: flip<uint<1>>>>>>) {
+firrtl.module @test(out %a: !firrtl.bundle<a: flip<bundle<a: flip<uint<1>>>>>) {
   %ax = firrtl.wire  : !firrtl.bundle<a: flip<bundle<a: flip<uint<1>>>>>
   // expected-note @+1 {{the left-hand-side was defined here}}
-  %a_a = firrtl.subfield %a("a") : (!firrtl.flip<bundle<a: flip<bundle<a: flip<uint<1>>>>>>) -> !firrtl.bundle<a: flip<uint<1>>>
+  %a_a = firrtl.subfield %a("a") : (!firrtl.bundle<a: flip<bundle<a: flip<uint<1>>>>>) -> !firrtl.bundle<a: flip<uint<1>>>
   %ax_a = firrtl.subfield %ax("a") : (!firrtl.bundle<a: flip<bundle<a: flip<uint<1>>>>>) -> !firrtl.bundle<a: flip<uint<1>>>
   // expected-error @+1 {{invalid flow: the left-hand-side has source flow}}
   firrtl.connect %a_a, %ax_a : !firrtl.bundle<a: flip<uint<1>>>, !firrtl.bundle<a: flip<uint<1>>>
@@ -372,11 +372,11 @@ firrtl.module @test(%a: !firrtl.flip<bundle<a: flip<bundle<a: flip<uint<1>>>>>>)
 ///     a <= memory.r.en
 
 firrtl.circuit "test" {
-firrtl.module @test(%a: !firrtl.flip<uint<1>>) {
+firrtl.module @test(out %a: !firrtl.uint<1>) {
   %memory_r = firrtl.mem Undefined  {depth = 2 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: flip<uint<1>>>>
   // expected-note @+1 {{the right-hand-side was defined here}}
   %memory_r_en = firrtl.subfield %memory_r("en") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: flip<uint<1>>>>) -> !firrtl.uint<1>
   // expected-error @+1 {{invalid flow: the right-hand-side has sink flow}}
-  firrtl.connect %a, %memory_r_en : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  firrtl.connect %a, %memory_r_en : !firrtl.uint<1>, !firrtl.uint<1>
 }
 }

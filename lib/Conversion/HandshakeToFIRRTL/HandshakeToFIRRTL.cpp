@@ -71,7 +71,7 @@ static FIRRTLType getFIRRTLType(Type type) {
 
 /// Return a FIRRTL bundle type (with data, valid, and ready subfields) given a
 /// standard data type.
-static FIRRTLType getBundleType(Type type, bool isOutput) {
+static FIRRTLType getBundleType(Type type) {
   // If the input is already converted to a bundle type elsewhere, itself will
   // be returned after cast.
   if (auto firrtlType = type.dyn_cast<FIRRTLType>())
@@ -96,8 +96,6 @@ static FIRRTLType getBundleType(Type type, bool isOutput) {
   }
 
   auto bundleType = BundleType::get(elements, context);
-  if (isOutput)
-    return FlipType::get(bundleType);
   return bundleType;
 }
 
@@ -402,43 +400,43 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
   unsigned argIndex = 0;
   for (auto &arg : funcOp.getArguments()) {
     auto portName = rewriter.getStringAttr("arg" + std::to_string(argIndex));
-    auto bundlePortType = getBundleType(arg.getType(), /*isOutput=*/false);
+    auto bundlePortType = getBundleType(arg.getType());
 
     if (!bundlePortType)
       funcOp.emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back({portName, bundlePortType});
+    ports.push_back({portName, bundlePortType, Direction::Input});
     ++argIndex;
   }
 
   // Add all outputs of funcOp.
   for (auto portType : funcOp.getType().getResults()) {
     auto portName = rewriter.getStringAttr("arg" + std::to_string(argIndex));
-    auto bundlePortType = getBundleType(portType, /*isOutput=*/true);
+    auto bundlePortType = getBundleType(portType);
 
     if (!bundlePortType)
       funcOp.emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back({portName, bundlePortType});
+    ports.push_back({portName, bundlePortType, Direction::Output});
     ++argIndex;
   }
 
   // Add clock and reset signals.
   if (numClocks == 1) {
-    ports.push_back(
-        {rewriter.getStringAttr("clock"), rewriter.getType<ClockType>()});
-    ports.push_back(
-        {rewriter.getStringAttr("reset"), rewriter.getType<UIntType>(1)});
+    ports.push_back({rewriter.getStringAttr("clock"),
+                     rewriter.getType<ClockType>(), Direction::Input});
+    ports.push_back({rewriter.getStringAttr("reset"),
+                     rewriter.getType<UIntType>(1), Direction::Input});
   } else if (numClocks > 1) {
     for (unsigned i = 0; i < numClocks; ++i) {
       auto clockName = "clock" + std::to_string(i);
       auto resetName = "reset" + std::to_string(i);
-      ports.push_back(
-          {rewriter.getStringAttr(clockName), rewriter.getType<ClockType>()});
-      ports.push_back(
-          {rewriter.getStringAttr(resetName), rewriter.getType<UIntType>(1)});
+      ports.push_back({rewriter.getStringAttr(clockName),
+                       rewriter.getType<ClockType>(), Direction::Input});
+      ports.push_back({rewriter.getStringAttr(resetName),
+                       rewriter.getType<UIntType>(1), Direction::Input});
     }
   }
 
@@ -499,35 +497,35 @@ static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
   unsigned argIndex = 0;
   for (auto portType : oldOp->getOperands().getTypes()) {
     auto portName = rewriter.getStringAttr("arg" + std::to_string(argIndex));
-    auto bundlePortType = getBundleType(portType, /*isOutput=*/false);
+    auto bundlePortType = getBundleType(portType);
 
     if (!bundlePortType)
       oldOp->emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back({portName, bundlePortType});
+    ports.push_back({portName, bundlePortType, Direction::Input});
     ++argIndex;
   }
 
   // Add all outputs of oldOp.
   for (auto portType : oldOp->getResults().getTypes()) {
     auto portName = rewriter.getStringAttr("arg" + std::to_string(argIndex));
-    auto bundlePortType = getBundleType(portType, /*isOutput=*/true);
+    auto bundlePortType = getBundleType(portType);
 
     if (!bundlePortType)
       oldOp->emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back({portName, bundlePortType});
+    ports.push_back({portName, bundlePortType, Direction::Output});
     ++argIndex;
   }
 
   // Add clock and reset signals.
   if (hasClock) {
-    ports.push_back(
-        {rewriter.getStringAttr("clock"), rewriter.getType<ClockType>()});
-    ports.push_back(
-        {rewriter.getStringAttr("reset"), rewriter.getType<UIntType>(1)});
+    ports.push_back({rewriter.getStringAttr("clock"),
+                     rewriter.getType<ClockType>(), Direction::Input});
+    ports.push_back({rewriter.getStringAttr("reset"),
+                     rewriter.getType<UIntType>(1), Direction::Input});
   }
 
   return rewriter.create<FModuleOp>(
@@ -543,9 +541,6 @@ static ValueVectorList extractSubfields(FModuleOp subModuleOp,
   for (auto &arg : subModuleOp.getArguments()) {
     ValueVector subfields;
     auto type = arg.getType().cast<FIRRTLType>();
-    // Strip off the outer flip if it has one.
-    if (auto flipType = type.dyn_cast<FlipType>())
-      type = flipType.getElementType();
     if (auto bundleType = type.dyn_cast<BundleType>()) {
       // Extract all subfields of all bundle ports.
       for (auto &element : bundleType.getElements()) {
@@ -2001,8 +1996,12 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
   // Bundle all ports of the instance into a new flattened bundle type.
   SmallVector<ModulePortInfo, 8> portInfo = getModulePortInfo(subModuleOp);
   for (auto &port : portInfo) {
-    // All ports of the instance operation are flipped.
-    resultTypes.push_back(FlipType::get(port.type));
+    // All instance input ports are flipped.
+    if (port.direction == Direction::Input) {
+      resultTypes.push_back(FlipType::get(port.type));
+      continue;
+    }
+    resultTypes.push_back(port.type);
   }
 
   // Create a instance operation.

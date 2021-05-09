@@ -6,13 +6,13 @@ firrtl.circuit "MyModule" {
 //  input in: UInt<8>
 //  output out: UInt<8>
 //  out <= in
-firrtl.module @MyModule(%in : !firrtl.uint<8>,
-                        %out : !firrtl.flip<uint<8>>) {
-  firrtl.connect %out, %in : !firrtl.flip<uint<8>>, !firrtl.uint<8>
+firrtl.module @MyModule(in %in : !firrtl.uint<8>,
+                        out %out : !firrtl.uint<8>) {
+  firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint<8>
 }
 
-// CHECK-LABEL: firrtl.module @MyModule(%in: !firrtl.uint<8>, %out: !firrtl.flip<uint<8>>) 
-// CHECK-NEXT:    firrtl.connect %out, %in : !firrtl.flip<uint<8>>, !firrtl.uint<8>
+// CHECK-LABEL: firrtl.module @MyModule(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>)
+// CHECK-NEXT:    firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint<8>
 // CHECK-NEXT:  }
 
 
@@ -25,41 +25,41 @@ firrtl.module @MyModule(%in : !firrtl.uint<8>,
 //    out <= add(b,d)
 
 firrtl.circuit "Top" {
-  firrtl.module @Top(%out: !firrtl.flip<uint>,
-                     %b: !firrtl.uint<32>,
-                     %c: !firrtl.analog<13>,
-                     %d: !firrtl.uint<16>) {
+  firrtl.module @Top(out %out: !firrtl.uint,
+                     in %b: !firrtl.uint<32>,
+                     in %c: !firrtl.analog<13>,
+                     in %d: !firrtl.uint<16>) {
     %3 = firrtl.add %b, %d : (!firrtl.uint<32>, !firrtl.uint<16>) -> !firrtl.uint<33>
 
     %4 = firrtl.invalidvalue : !firrtl.analog<13>
     firrtl.attach %c, %4 : !firrtl.analog<13>, !firrtl.analog<13>
     %5 = firrtl.add %3, %d : (!firrtl.uint<33>, !firrtl.uint<16>) -> !firrtl.uint<34>
 
-    firrtl.connect %out, %5 : !firrtl.flip<uint>, !firrtl.uint<34>
+    firrtl.connect %out, %5 : !firrtl.uint, !firrtl.uint<34>
   }
 }
 
 // CHECK-LABEL: firrtl.circuit "Top" {
-// CHECK-NEXT:    firrtl.module @Top(%out: !firrtl.flip<uint>,
-// CHECK:                            %b: !firrtl.uint<32>, %c: !firrtl.analog<13>, %d: !firrtl.uint<16>) {
+// CHECK-NEXT:    firrtl.module @Top(out %out: !firrtl.uint,
+// CHECK:                            in %b: !firrtl.uint<32>, in %c: !firrtl.analog<13>, in %d: !firrtl.uint<16>) {
 // CHECK-NEXT:      %0 = firrtl.add %b, %d : (!firrtl.uint<32>, !firrtl.uint<16>) -> !firrtl.uint<33>
 // CHECK-NEXT:      %1 = firrtl.invalidvalue : !firrtl.analog<13>
 // CHECK-NEXT:      firrtl.attach %c, %1 : !firrtl.analog<13>, !firrtl.analog<13>
 // CHECK-NEXT:      %2 = firrtl.add %0, %d : (!firrtl.uint<33>, !firrtl.uint<16>) -> !firrtl.uint<34>
-// CHECK-NEXT:      firrtl.connect %out, %2 : !firrtl.flip<uint>, !firrtl.uint<34>
+// CHECK-NEXT:      firrtl.connect %out, %2 : !firrtl.uint, !firrtl.uint<34>
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 
 
 // Test some hard cases of name handling.
-firrtl.module @Mod2(%in : !firrtl.uint<8>,
-                    %out : !firrtl.flip<uint<8>>) attributes {portNames = ["some_name", "out"]}{
-  firrtl.connect %out, %in : !firrtl.flip<uint<8>>, !firrtl.uint<8>
+firrtl.module @Mod2(in %in : !firrtl.uint<8>,
+                    out %out : !firrtl.uint<8>) attributes {portNames = ["some_name", "out"]}{
+  firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint<8>
 }
 
-// CHECK-LABEL: firrtl.module @Mod2(%some_name: !firrtl.uint<8>,
-// CHECK:                           %out: !firrtl.flip<uint<8>>) 
-// CHECK-NEXT:    firrtl.connect %out, %some_name : !firrtl.flip<uint<8>>, !firrtl.uint<8>
+// CHECK-LABEL: firrtl.module @Mod2(in %some_name: !firrtl.uint<8>,
+// CHECK:                           out %out: !firrtl.uint<8>)
+// CHECK-NEXT:    firrtl.connect %out, %some_name : !firrtl.uint<8>, !firrtl.uint<8>
 // CHECK-NEXT:  }
 
 
@@ -70,7 +70,7 @@ firrtl.module @no_ports() {
 
 // stdIntCast can work with clock inputs/outputs too.
 // CHECK-LABEL: @ClockCast
-firrtl.module @ClockCast(%clock: !firrtl.clock) {
+firrtl.module @ClockCast(in %clock: !firrtl.clock) {
   // CHECK: %0 = firrtl.stdIntCast %clock : (!firrtl.clock) -> i1
   %0 = firrtl.stdIntCast %clock : (!firrtl.clock) -> i1
 
@@ -80,7 +80,7 @@ firrtl.module @ClockCast(%clock: !firrtl.clock) {
 
 
 // CHECK-LABEL: @TestDshRL
-firrtl.module @TestDshRL(%in1 : !firrtl.uint<2>, %in2: !firrtl.uint<3>) {
+firrtl.module @TestDshRL(in %in1 : !firrtl.uint<2>, in %in2: !firrtl.uint<3>) {
   // CHECK: %0 = firrtl.dshl %in1, %in2 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<9>
   %0 = firrtl.dshl %in1, %in2 : (!firrtl.uint<2>, !firrtl.uint<3>) -> !firrtl.uint<9>
 
@@ -92,7 +92,7 @@ firrtl.module @TestDshRL(%in1 : !firrtl.uint<2>, %in2: !firrtl.uint<3>) {
 }
 
 // CHECK-LABEL: @TestNodeName
-firrtl.module @TestNodeName(%in1 : !firrtl.uint<8>) {
+firrtl.module @TestNodeName(in %in1 : !firrtl.uint<8>) {
   // CHECK: %n1 = firrtl.node %in1 : !firrtl.uint<8>
   %n1 = firrtl.node %in1 : !firrtl.uint<8>
 
