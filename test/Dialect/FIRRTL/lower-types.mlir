@@ -389,10 +389,10 @@ module  {
 //CHECK-NEXT:     }
 //CHECK-NEXT:    firrtl.module @top_mod(in %clock: !firrtl.clock) {
 //CHECK-NEXT:      %U0_clock, %U0_inp_a_inp_d = firrtl.instance @mod_2 {name = "U0"} : !firrtl.flip<clock>, !firrtl.flip<uint<14>>
-//CHECK-NEXT:      %0 = firrtl.invalidvalue : !firrtl.clock
-//CHECK-NEXT:      firrtl.connect %U0_clock, %0 : !firrtl.flip<clock>, !firrtl.clock
-//CHECK-NEXT:      %1 = firrtl.invalidvalue : !firrtl.uint<14>
-//CHECK-NEXT:      firrtl.connect %U0_inp_a_inp_d, %1 : !firrtl.flip<uint<14>>, !firrtl.uint<14>
+//CHECK-NEXT:      %invalid_clock = firrtl.invalidvalue : !firrtl.clock
+//CHECK-NEXT:      firrtl.connect %U0_clock, %invalid_clock : !firrtl.flip<clock>, !firrtl.clock
+//CHECK-NEXT:      %invalid_ui14 = firrtl.invalidvalue : !firrtl.uint<14>
+//CHECK-NEXT:      firrtl.connect %U0_inp_a_inp_d, %invalid_ui14 : !firrtl.flip<uint<14>>, !firrtl.uint<14>
 //CHECK-NEXT:    }
 //CHECK-NEXT:  }
 //CHECK-NEXT:}

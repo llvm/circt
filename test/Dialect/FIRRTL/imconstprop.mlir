@@ -77,8 +77,7 @@ firrtl.circuit "Test" {
 
     // Wire without connects to it should turn into 'invalid'.
     %unconnectedWire = firrtl.wire : !firrtl.uint<2>
-    // CHECK: %1 = firrtl.invalidvalue : !firrtl.uint<2>
-    // CHECK: firrtl.connect %result7, %1
+    // CHECK: firrtl.connect %result7, %invalid_ui2
     firrtl.connect %result7, %unconnectedWire: !firrtl.uint<4>, !firrtl.uint<2>
   }
 

@@ -43,10 +43,10 @@ firrtl.circuit "Top" {
 // CHECK-NEXT:    firrtl.module @Top(out %out: !firrtl.uint,
 // CHECK:                            in %b: !firrtl.uint<32>, in %c: !firrtl.analog<13>, in %d: !firrtl.uint<16>) {
 // CHECK-NEXT:      %0 = firrtl.add %b, %d : (!firrtl.uint<32>, !firrtl.uint<16>) -> !firrtl.uint<33>
-// CHECK-NEXT:      %1 = firrtl.invalidvalue : !firrtl.analog<13>
-// CHECK-NEXT:      firrtl.attach %c, %1 : !firrtl.analog<13>, !firrtl.analog<13>
-// CHECK-NEXT:      %2 = firrtl.add %0, %d : (!firrtl.uint<33>, !firrtl.uint<16>) -> !firrtl.uint<34>
-// CHECK-NEXT:      firrtl.connect %out, %2 : !firrtl.uint, !firrtl.uint<34>
+// CHECK-NEXT:      %invalid_analog13 = firrtl.invalidvalue : !firrtl.analog<13>
+// CHECK-NEXT:      firrtl.attach %c, %invalid_analog13 : !firrtl.analog<13>, !firrtl.analog<13>
+// CHECK-NEXT:      %1 = firrtl.add %0, %d : (!firrtl.uint<33>, !firrtl.uint<16>) -> !firrtl.uint<34>
+// CHECK-NEXT:      firrtl.connect %out, %1 : !firrtl.uint, !firrtl.uint<34>
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 

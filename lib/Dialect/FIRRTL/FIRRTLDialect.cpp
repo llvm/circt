@@ -97,6 +97,34 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
       }
       setNameFn(constant.getResult(), specialName.str());
     }
+
+    // Set invalid values to have a distinct name.
+    if (auto invalid = dyn_cast<InvalidValuePrimOp>(op)) {
+      std::string name;
+      if (auto ty = invalid.getType().dyn_cast<IntType>()) {
+        const char *base = ty.isSigned() ? "invalid_si" : "invalid_ui";
+        auto width = ty.getWidthOrSentinel();
+        if (width == -1)
+          name = base;
+        else
+          name = (Twine(base) + Twine(width)).str();
+      } else if (auto ty = invalid.getType().dyn_cast<AnalogType>()) {
+        auto width = ty.getWidthOrSentinel();
+        if (width == -1)
+          name = "invalid_analog";
+        else
+          name = ("invalid_analog" + Twine(width)).str();
+      } else if (invalid.getType().isa<AsyncResetType>())
+        name = "invalid_asyncreset";
+      else if (invalid.getType().isa<ResetType>())
+        name = "invalid_reset";
+      else if (invalid.getType().isa<ClockType>())
+        name = "invalid_clock";
+      else
+        name = "invalid";
+
+      setNameFn(invalid.getResult(), name);
+    }
   }
 
   /// Get a special name to use when printing the entry block arguments of the
