@@ -686,7 +686,7 @@ static LogicalResult verifyInstanceOpTypes(InstanceOp op,
     }
   }
 
-  // Checke result types.
+  // Check result types.
   auto numResults = op->getNumResults();
   auto expectedResultTypes = getModuleType(referencedModule).getResults();
 
@@ -729,11 +729,6 @@ static LogicalResult verifyInstanceOp(InstanceOp op) {
   if (referencedModule == nullptr)
     return op.emitError("Cannot find module definition '")
            << op.moduleName() << "'";
-
-  if (!isAnyModule(referencedModule))
-    return op.emitError("Symbol resolved to '")
-           << referencedModule->getName()
-           << "' which is not a RTL[Ext|Generated]ModuleOp";
 
   if (auto paramDictOpt = op.parameters()) {
     DictionaryAttr paramDict = paramDictOpt.getValue();
