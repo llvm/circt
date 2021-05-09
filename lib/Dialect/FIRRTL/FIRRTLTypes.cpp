@@ -330,6 +330,12 @@ bool FIRRTLType::isResetType() {
       .Default([](Type) { return false; });
 }
 
+std::pair<FIRRTLType, bool> FIRRTLType::stripFlip() {
+  if (auto a = this->dyn_cast<FlipType>())
+    return {a.getElementType(), true};
+  return {*this, false};
+}
+
 /// Helper to implement the equivalence logic for a pair of bundle elements.
 /// Note that the FIRRTL spec requires bundle elements to have the same
 /// orientation, but this only compares their passive types. The FIRRTL dialect
@@ -386,6 +392,52 @@ bool firrtl::areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType) {
   // Ground types can be connected if their passive, widthless versions
   // are equal.
   return destType.getWidthlessType() == srcType.getWidthlessType();
+}
+
+/// Returns whether the two types are weakly equivalent.
+bool firrtl::areTypesWeaklyEquivalent(FIRRTLType destType, FIRRTLType srcType,
+                                      bool destFlip, bool srcFlip) {
+
+  // Reset types can be driven by UInt<1>, AsyncReset, or Reset types.
+  if (destType.isa<ResetType>())
+    return srcType.isResetType();
+
+  // Reset types can drive UInt<1>, AsyncReset, or Reset types.
+  if (srcType.isa<ResetType>())
+    return destType.isResetType();
+
+  // Vector types can be connected if their element types are weakly equivalent.
+  // Size doesn't matter.
+  auto destVectorType = destType.dyn_cast<FVectorType>();
+  auto srcVectorType = srcType.dyn_cast<FVectorType>();
+  if (destVectorType && srcVectorType)
+    return areTypesWeaklyEquivalent(destVectorType.getElementType(),
+                                    srcVectorType.getElementType(), destFlip,
+                                    srcFlip);
+
+  // Bundle types are weakly equivalent if all common elements are weakly
+  // equivalent.  Non-matching fields are ignored.  Flips are "pushed" into
+  // recursive weak type equivalence checks.
+  auto destBundleType = destType.dyn_cast<BundleType>();
+  auto srcBundleType = srcType.dyn_cast<BundleType>();
+  if (destBundleType && srcBundleType)
+    return llvm::all_of(
+        destBundleType.getElements(), [&](auto destElt) -> bool {
+          auto destField = destElt.name.getValue();
+          auto srcElt = srcBundleType.getElement(destField);
+          // If the src doesn't contain the destination's field, that's okay.
+          if (!srcElt)
+            return true;
+          auto a = destElt.type.stripFlip();
+          auto b = srcElt.getValue().type.stripFlip();
+          return areTypesWeaklyEquivalent(a.first, b.first, destFlip ^ a.second,
+                                          srcFlip ^ b.second);
+        });
+
+  // Ground types can be connected if their passive, widthless versions
+  // are equal and leaf flippedness matches.
+  return destType.getWidthlessType() == srcType.getWidthlessType() &&
+         destFlip == srcFlip;
 }
 
 /// Return the element of an array type or null.  This strips flip types.

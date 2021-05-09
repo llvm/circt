@@ -121,6 +121,7 @@ public:
   void visitExpr(SubaccessOp op);
   void visitStmt(ConnectOp op);
   void visitStmt(WhenOp op);
+  void visitStmt(PartialConnectOp op);
 
 private:
   // Lowering module block arguments.
@@ -152,6 +153,10 @@ private:
   SmallVector<Attribute> newArgNames;
   SmallVector<Direction> newArgDirections;
   size_t originalNumModuleArgs;
+
+  void recursivePartialConnect(Value a, FIRRTLType aType, Value b,
+                               FIRRTLType bType, Twine suffix,
+                               bool aFlip = false);
 };
 } // end anonymous namespace
 
@@ -830,6 +835,71 @@ void TypeLoweringVisitor::visitStmt(ConnectOp op) {
   }
 
   // Remember to remove the original op.
+  opsToRemove.push_back(op);
+}
+
+void TypeLoweringVisitor::recursivePartialConnect(Value a, FIRRTLType aType,
+                                                  Value b, FIRRTLType bType,
+                                                  Twine suffix, bool aFlip) {
+  TypeSwitch<FIRRTLType>(aType)
+      .Case<BundleType>([&](auto aType) {
+        auto bBundle = bType.dyn_cast_or_null<BundleType>();
+        if (!bBundle)
+          return;
+        for (auto aElt : aType.getElements()) {
+          auto aField = aElt.name.getValue();
+          auto bElt = bBundle.getElement(aField);
+          if (!bElt)
+            continue;
+          auto fieldSuffix = aField.str();
+          if (!suffix.isTriviallyEmpty())
+            fieldSuffix = (suffix + "_" + aField).str();
+          recursivePartialConnect(a, aElt.type, b, bElt.getValue().type,
+                                  fieldSuffix, aFlip);
+        }
+      })
+      .Case<FVectorType>([&](auto aType) {
+        auto bVector = bType.dyn_cast_or_null<FVectorType>();
+        if (!bVector)
+          return;
+
+        auto e = std::min<unsigned>(aType.getNumElements(),
+                                    bVector.getNumElements());
+        for (size_t i = 0; i != e; ++i) {
+          auto fieldSuffix = Twine(i).str();
+          if (!suffix.isTriviallyEmpty())
+            fieldSuffix = (suffix + "_" + fieldSuffix).str();
+          recursivePartialConnect(a, aType.getElementType(), b,
+                                  bVector.getElementType(), fieldSuffix, aFlip);
+        }
+      })
+      .Case<FlipType>([&](auto aType) {
+        recursivePartialConnect(a, FlipType::get(aType), b, bType, suffix,
+                                !aFlip);
+      })
+      .Default([&](auto) {
+        if (aFlip)
+          std::swap(a, b);
+        builder->create<PartialConnectOp>(getBundleLowering(a, suffix.str()),
+                                          getBundleLowering(b, suffix.str()));
+      });
+}
+
+void TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
+
+  Value dest = op.dest();
+  Value src = op.src();
+
+  // Attempt to get the bundle types, potentially unwrapping an outer flip
+  // type that wraps the whole bundle.
+  FIRRTLType destType = getCanonicalAggregateType(dest.getType());
+  FIRRTLType srcType = getCanonicalAggregateType(src.getType());
+
+  // If we aren't connecting two bundles, there is nothing to do.
+  if (!destType || !srcType)
+    return;
+
+  recursivePartialConnect(dest, destType, src, srcType.getPassiveType(), "");
   opsToRemove.push_back(op);
 }
 

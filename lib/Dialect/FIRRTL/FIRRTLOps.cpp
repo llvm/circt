@@ -1133,6 +1133,43 @@ static LogicalResult verifyConnectOp(ConnectOp connect) {
   return success();
 }
 
+static LogicalResult verifyPartialConnectOp(PartialConnectOp partialConnect) {
+  FIRRTLType destType =
+      partialConnect.dest().getType().cast<FIRRTLType>().stripFlip().first;
+  FIRRTLType srcType =
+      partialConnect.src().getType().cast<FIRRTLType>().stripFlip().first;
+
+  if (!areTypesWeaklyEquivalent(destType, srcType))
+    return partialConnect.emitError("type mismatch between destination ")
+           << destType << " and source " << srcType
+           << ". Types are not weakly equivalent.";
+
+  // Check that the flows make sense.
+  if (foldFlow(partialConnect.src()) == Flow::Sink) {
+    // A sink that is a port output or instance input used as a source is okay.
+    auto kind = getDeclarationKind(partialConnect.src());
+    if (kind != DeclKind::Port && kind != DeclKind::Instance) {
+      auto diag =
+          partialConnect.emitOpError()
+          << "has invalid flow: the right-hand-side has sink flow and "
+             "is not an output port or instance input (expected source "
+             "flow, duplex flow, an output port, or an instance input).";
+      return diag.attachNote(partialConnect.src().getLoc())
+             << "the right-hand-side was defined here.";
+    }
+  }
+
+  if (foldFlow(partialConnect.dest()) == Flow::Source) {
+    auto diag = partialConnect.emitOpError()
+                << "has invalid flow: the left-hand-side has source flow "
+                   "(expected sink or duplex flow).";
+    return diag.attachNote(partialConnect.dest().getLoc())
+           << "the left-hand-side was defined here.";
+  }
+
+  return success();
+}
+
 void WhenOp::createElseRegion() {
   assert(!hasElseRegion() && "already has an else region");
   elseRegion().push_back(new Block());
