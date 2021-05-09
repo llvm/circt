@@ -52,8 +52,6 @@ Flow firrtl::swapFlow(Flow flow) {
     return Flow::Source;
   case Flow::Duplex:
     return Flow::Duplex;
-  default:
-    llvm_unreachable("invalid flow");
   }
 }
 
