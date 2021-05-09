@@ -14,6 +14,7 @@
 // DIALECT-NEXT: memref
 // DIALECT-NEXT: msft
 // DIALECT-NEXT: rtl
+// DIALECT-NEXT: sched
 // DIALECT-NEXT: seq
 // DIALECT-NEXT: staticlogic
 // DIALECT-NEXT: std
