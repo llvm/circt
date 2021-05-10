@@ -11,6 +11,6 @@
 rtl.module.extern @remote(%arg0: !rtl.inout<i1>, %arg1: i1) -> (%r : i3)
 
 rtl.module @local(%arg0: !rtl.inout<i1>, %arg1: i1) -> (%r : i3) {
-    %tr = rtl.instance "foo" @bar::@remote(%arg0, %arg1) {parameters = {DEFAULT = 0 : i64}} : (!rtl.inout<i1>, i1) -> (i3)
+    %tr = rtl.instance "foo" @remote(%arg0, %arg1) {parameters = {DEFAULT = 0 : i64}} : (!rtl.inout<i1>, i1) -> (i3)
     rtl.output %tr : i3
 }

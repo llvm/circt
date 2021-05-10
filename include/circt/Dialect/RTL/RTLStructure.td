@@ -14,9 +14,9 @@
 /// more basic symbol validation can provide more useful error messages.
 def isModuleSymbol : AttrConstraint<
     CPred<"!::mlir::SymbolTable::lookupSymbolIn("
-            "&$_op, $_self.cast<::mlir::SymbolRefAttr>()) || "
+            "$_op.getParentOfType<mlir::ModuleOp>(), $_self.cast<::mlir::SymbolRefAttr>()) || "
           "rtl::isAnyModule(::mlir::SymbolTable::lookupSymbolIn("
-            "&$_op, $_self.cast<::mlir::SymbolRefAttr>()))"
+            "$_op.getParentOfType<mlir::ModuleOp>(), $_self.cast<::mlir::SymbolRefAttr>()))"
     >, "is module like">;
 
 def RTLModuleOp : RTLOp<"module",
