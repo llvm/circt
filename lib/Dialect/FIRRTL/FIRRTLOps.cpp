@@ -62,8 +62,9 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
 
   if (auto blockArg = val.dyn_cast<BlockArgument>()) {
     auto op = val.getParentBlock()->getParentOp();
-    auto info = getModulePortInfo(op)[blockArg.getArgNumber()];
-    if (info.direction == Direction::Output)
+    auto direction = (Direction)getModulePortDirections(op)
+                         .getValue()[blockArg.getArgNumber()];
+    if (direction == Direction::Output)
       return swap();
     return accumulatedFlow;
   }
