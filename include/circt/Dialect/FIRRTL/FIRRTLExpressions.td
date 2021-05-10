@@ -95,7 +95,7 @@ class IndexConstraint<string value, string resultValue>
                    value, resultValue,
                    "firrtl::getVectorElementType($_self)">;
 
-def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect, 
+def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect,
                                        IndexConstraint<"input", "result">]> {
   let summary = "Extract an element of a vector value";
   let description = [{
@@ -127,7 +127,7 @@ def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect,
   }];
 }
 
-def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect, 
+def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect,
                                          IndexConstraint<"input", "result">]> {
   let summary = "Extract a dynamic element of a vector value";
   let description = [{
@@ -221,7 +221,7 @@ def DivPrimOp : BinaryPrimOp<"div", IntType, IntType, IntType> {
 }
 def RemPrimOp : BinaryPrimOp<"rem", IntType, IntType, IntType>;
 
-def AndPrimOp : BinaryPrimOp<"and", IntType, IntType, UIntType, [Commutative]>; 
+def AndPrimOp : BinaryPrimOp<"and", IntType, IntType, UIntType, [Commutative]>;
 def OrPrimOp  : BinaryPrimOp<"or",  IntType, IntType, UIntType, [Commutative]>;
 def XorPrimOp : BinaryPrimOp<"xor", IntType, IntType, UIntType, [Commutative]>;
 
@@ -593,7 +593,7 @@ class PassiveConstraint<string value, string resultValue>
                    "firrtl::getPassiveType($_self)">;
 
 // Convert a value with non-passive type to a value with passive type.
-def AsPassivePrimOp : FIRRTLOp<"asPassive", [NoSideEffect, 
+def AsPassivePrimOp : FIRRTLOp<"asPassive", [NoSideEffect,
                                PassiveConstraint<"input", "result">]> {
   let arguments = (ins FIRRTLType:$input);
   let results = (outs PassiveType:$result);
