@@ -2,14 +2,14 @@
 
 firrtl.circuit "simple" {
 
-firrtl.module @simple(%in : !firrtl.uint<1>, %out : !firrtl.flip<uint<1>>) {
-    firrtl.connect %out, %in : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+firrtl.module @simple(in %in : !firrtl.uint<1>, out %out : !firrtl.uint<1>) {
+    firrtl.connect %out, %in : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
 // This test is checking each kind of declaration to ensure that it is caught
 // by the initialization coverage check. This is also testing that we can emit
 // all errors in a module at once.
-firrtl.module @CheckInitialization(%clock : !firrtl.clock, %en : !firrtl.uint<1>, %p : !firrtl.uint<1>, %out : !firrtl.flip<uint<2>>) {
+firrtl.module @CheckInitialization(in %clock : !firrtl.clock, in %en : !firrtl.uint<1>, in %p : !firrtl.uint<1>, out %out : !firrtl.uint<2>) {
   // expected-error @-1 {{module port "out" not fully initialized}}
   // expected-error @+1 {{sink not fully initialized}}
   %w = firrtl.wire : !firrtl.uint<2>
@@ -22,7 +22,7 @@ firrtl.module @CheckInitialization(%clock : !firrtl.clock, %en : !firrtl.uint<1>
 
 firrtl.circuit "declaration_in_when" {
 // Check that wires declared inside of a when are detected as uninitialized.
-firrtl.module @declaration_in_when(%p : !firrtl.uint<1>) {
+firrtl.module @declaration_in_when(in %p : !firrtl.uint<1>) {
   firrtl.when %p {
     // expected-error @+1 {{sink not fully initialized}}
     %w_then = firrtl.wire : !firrtl.uint<2>
@@ -38,7 +38,7 @@ firrtl.module @declaration_in_when(%p : !firrtl.uint<1>) {
 firrtl.circuit "complex" {
 // Test that a wire set across separate when statements is detected as not
 // completely initialized.
-firrtl.module @complex(%p : !firrtl.uint<1>, %q : !firrtl.uint<1>) {
+firrtl.module @complex(in %p : !firrtl.uint<1>, in %q : !firrtl.uint<1>) {
   // expected-error @+1 {{sink not fully initialized}}
   %w = firrtl.wire : !firrtl.uint<2>
 
@@ -55,4 +55,3 @@ firrtl.module @complex(%p : !firrtl.uint<1>, %q : !firrtl.uint<1>) {
 }
 
 }
-

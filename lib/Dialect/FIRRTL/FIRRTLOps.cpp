@@ -44,26 +44,33 @@ bool firrtl::isDuplexValue(Value val) {
       .Default([](auto) { return false; });
 }
 
-flow::Flow firrtl::foldFlow(Value val, flow::Flow accumulatedFlow) {
-  auto swap = [&accumulatedFlow]() -> flow::Flow {
-    switch (accumulatedFlow) {
-    case flow::Source:
-      return flow::Sink;
-    case flow::Sink:
-      return flow::Source;
-    case flow::Duplex:
-      return flow::Duplex;
-    }
+Flow firrtl::swapFlow(Flow flow) {
+  switch (flow) {
+  case Flow::Source:
+    return Flow::Sink;
+  case Flow::Sink:
+    return Flow::Source;
+  case Flow::Duplex:
+    return Flow::Duplex;
+  }
+}
+
+Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
+  auto swap = [&accumulatedFlow]() -> Flow {
+    return swapFlow(accumulatedFlow);
   };
 
-  Operation *op = val.getDefiningOp();
-  if (!op) {
-    if (val.getType().isa<FlipType>())
+  if (auto blockArg = val.dyn_cast<BlockArgument>()) {
+    auto op = val.getParentBlock()->getParentOp();
+    auto info = getModulePortInfo(op)[blockArg.getArgNumber()];
+    if (info.direction == Direction::Output)
       return swap();
     return accumulatedFlow;
   }
 
-  return TypeSwitch<Operation *, flow::Flow>(op)
+  Operation *op = val.getDefiningOp();
+
+  return TypeSwitch<Operation *, Flow>(op)
       .Case<SubfieldOp>([&](auto op) {
         return foldFlow(op.input(),
                         op.isFieldFlipped() ? swap() : accumulatedFlow);
@@ -71,7 +78,7 @@ flow::Flow firrtl::foldFlow(Value val, flow::Flow accumulatedFlow) {
       .Case<SubindexOp, SubaccessOp>(
           [&](auto op) { return foldFlow(op.input(), accumulatedFlow); })
       // Registers and Wires are always Duplex.
-      .Case<RegOp, RegResetOp, WireOp>([](auto) { return flow::Duplex; })
+      .Case<RegOp, RegResetOp, WireOp>([](auto) { return Flow::Duplex; })
       .Case<InstanceOp>([&](auto) {
         return val.getType().isa<FlipType>() ? swap() : accumulatedFlow;
       })
@@ -82,16 +89,16 @@ flow::Flow firrtl::foldFlow(Value val, flow::Flow accumulatedFlow) {
 
 // TODO: This is doing the same walk as foldFlow.  These two functions can be
 // combined and return a (flow, kind) product.
-kind::Kind firrtl::getDeclarationKind(Value val) {
+DeclKind firrtl::getDeclarationKind(Value val) {
   Operation *op = val.getDefiningOp();
   if (!op)
-    return kind::Port;
+    return DeclKind::Port;
 
-  return TypeSwitch<Operation *, kind::Kind>(op)
-      .Case<InstanceOp>([](auto) { return kind::Instance; })
+  return TypeSwitch<Operation *, DeclKind>(op)
+      .Case<InstanceOp>([](auto) { return DeclKind::Instance; })
       .Case<SubfieldOp, SubindexOp, SubaccessOp>(
           [](auto op) { return getDeclarationKind(op.input()); })
-      .Default([](auto) { return kind::Other; });
+      .Default([](auto) { return DeclKind::Other; });
 }
 
 //===----------------------------------------------------------------------===//
@@ -280,9 +287,11 @@ SmallVector<ModulePortInfo> firrtl::getModulePortInfo(Operation *op) {
   auto argTypes = getModuleType(op).getInputs();
 
   auto portNamesAttr = getModulePortNames(op);
+  auto portDirections = getModulePortDirections(op).getValue();
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     auto type = argTypes[i].cast<FIRRTLType>();
-    results.push_back({portNamesAttr[i].cast<StringAttr>(), type});
+    auto direction = direction::get(portDirections[i]);
+    results.push_back({portNamesAttr[i].cast<StringAttr>(), type, direction});
   }
   return results;
 }
@@ -291,6 +300,11 @@ SmallVector<ModulePortInfo> firrtl::getModulePortInfo(Operation *op) {
 StringAttr firrtl::getModulePortName(Operation *op, size_t portIndex) {
   assert(isa<FModuleOp>(op) || isa<FExtModuleOp>(op));
   return getModulePortNames(op)[portIndex].cast<StringAttr>();
+}
+
+Direction firrtl::getModulePortDirection(Operation *op, size_t portIndex) {
+  assert(isa<FModuleOp>(op) || isa<FExtModuleOp>(op));
+  return direction::get(getModulePortDirections(op).getValue()[portIndex]);
 }
 
 static void buildModule(OpBuilder &builder, OperationState &result,
@@ -312,10 +326,17 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   SmallString<8> attrNameBuf;
   // Record the names of the arguments if present.
   SmallVector<Attribute, 4> portNames;
-  for (size_t i = 0, e = ports.size(); i != e; ++i)
+  SmallVector<Direction, 4> portDirections;
+  for (size_t i = 0, e = ports.size(); i != e; ++i) {
     portNames.push_back(ports[i].name);
+    portDirections.push_back(ports[i].direction);
+  }
 
+  // Both attributes are added, even if the module has no ports.
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
+  result.addAttribute(
+      direction::attrKey,
+      direction::packIntegerAttribute(portDirections, builder.getContext()));
 
   result.addRegion();
 }
@@ -359,7 +380,7 @@ void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
 static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
                                     ArrayRef<Type> argTypes, bool isVariadic,
                                     ArrayRef<Type> resultTypes,
-                                    bool &needportNamesAttr) {
+                                    bool &needportNamesAttr, APInt directions) {
   Region &body = op->getRegion(0);
   bool isExternal = body.empty();
   SmallString<32> resultNameStr;
@@ -369,6 +390,8 @@ static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     if (i > 0)
       p << ", ";
+
+    p << (directions[i] ? "out " : "in ");
 
     auto portName = portNamesAttr[i].cast<StringAttr>().getValue();
     Value argumentValue;
@@ -399,6 +422,128 @@ static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
   p << ')';
 }
 
+static ParseResult parseFunctionArgumentList2(
+    OpAsmParser &parser, bool allowAttributes, bool allowVariadic,
+    SmallVectorImpl<OpAsmParser::OperandType> &argNames,
+    SmallVectorImpl<Type> &argTypes, SmallVectorImpl<Direction> &argDirections,
+    SmallVectorImpl<NamedAttrList> &argAttrs, bool &isVariadic) {
+  if (parser.parseLParen())
+    return failure();
+
+  // The argument list either has to consistently have ssa-id's followed by
+  // types, or just be a type list.  It isn't ok to sometimes have SSA ID's and
+  // sometimes not.
+  auto parseArgument = [&]() -> ParseResult {
+    llvm::SMLoc loc = parser.getCurrentLocation();
+
+    // Parse argument name if present.
+    OpAsmParser::OperandType argument;
+    Type argumentType;
+    // TODO: is this safe?
+    SmallVector<StringRef, 2> directions({{"in"}, {"out"}});
+    StringRef direction;
+    if (succeeded(parser.parseOptionalKeyword(&direction, directions)) &&
+        succeeded(parser.parseOptionalRegionArgument(argument)) &&
+        !argument.name.empty()) {
+      // Reject this if the preceding argument was missing a name.
+      if (argNames.empty() && !argTypes.empty())
+        return parser.emitError(loc, "expected type instead of SSA identifier");
+      argNames.push_back(argument);
+      argDirections.push_back(direction::get(direction == "out"));
+
+      if (parser.parseColonType(argumentType))
+        return failure();
+    } else if (allowVariadic && succeeded(parser.parseOptionalEllipsis())) {
+      isVariadic = true;
+      return success();
+    } else if (!argNames.empty()) {
+      // Reject this if the preceding argument had a name.
+      return parser.emitError(loc, "expected SSA identifier");
+    } else if (parser.parseType(argumentType)) {
+      return failure();
+    }
+
+    // Add the argument type.
+    argTypes.push_back(argumentType);
+
+    // Parse any argument attributes.
+    NamedAttrList attrs;
+    if (parser.parseOptionalAttrDict(attrs))
+      return failure();
+    if (!allowAttributes && !attrs.empty())
+      return parser.emitError(loc, "expected arguments without attributes");
+    argAttrs.push_back(attrs);
+    return success();
+  };
+
+  // Parse the function arguments.
+  isVariadic = false;
+  if (failed(parser.parseOptionalRParen())) {
+    do {
+      unsigned numTypedArguments = argTypes.size();
+      if (parseArgument())
+        return failure();
+
+      llvm::SMLoc loc = parser.getCurrentLocation();
+      if (argTypes.size() == numTypedArguments &&
+          succeeded(parser.parseOptionalComma()))
+        return parser.emitError(
+            loc, "variadic arguments must be in the end of the argument list");
+    } while (succeeded(parser.parseOptionalComma()));
+    parser.parseRParen();
+  }
+
+  return success();
+}
+
+static ParseResult
+parseFunctionResultList2(OpAsmParser &parser,
+                         SmallVectorImpl<Type> &resultTypes,
+                         SmallVectorImpl<NamedAttrList> &resultAttrs) {
+  if (failed(parser.parseOptionalLParen())) {
+    // We already know that there is no `(`, so parse a type.
+    // Because there is no `(`, it cannot be a function type.
+    Type ty;
+    if (parser.parseType(ty))
+      return failure();
+    resultTypes.push_back(ty);
+    resultAttrs.emplace_back();
+    return success();
+  }
+
+  // Special case for an empty set of parens.
+  if (succeeded(parser.parseOptionalRParen()))
+    return success();
+
+  // Parse individual function results.
+  do {
+    resultTypes.emplace_back();
+    resultAttrs.emplace_back();
+    if (parser.parseType(resultTypes.back()) ||
+        parser.parseOptionalAttrDict(resultAttrs.back())) {
+      return failure();
+    }
+  } while (succeeded(parser.parseOptionalComma()));
+  return parser.parseRParen();
+}
+
+static ParseResult
+parseFunctionSignature2(OpAsmParser &parser, bool allowVariadic,
+                        SmallVectorImpl<OpAsmParser::OperandType> &argNames,
+                        SmallVectorImpl<Type> &argTypes,
+                        SmallVectorImpl<Direction> &argDirections,
+                        SmallVectorImpl<NamedAttrList> &argAttrs,
+                        bool &isVariadic, SmallVectorImpl<Type> &resultTypes,
+                        SmallVectorImpl<NamedAttrList> &resultAttrs) {
+  bool allowArgAttrs = true;
+  if (parseFunctionArgumentList2(parser, allowArgAttrs, allowVariadic, argNames,
+                                 argTypes, argDirections, argAttrs, isVariadic))
+    return failure();
+  if (succeeded(parser.parseOptionalArrow()))
+    return parseFunctionResultList2(parser, resultTypes, resultAttrs);
+  return success();
+}
+
 static void printModuleLikeOp(OpAsmPrinter &p, Operation *op) {
   using namespace mlir::impl;
 
@@ -418,8 +563,9 @@ static void printModuleLikeOp(OpAsmPrinter &p, Operation *op) {
 
   bool needportNamesAttr = false;
   printFunctionSignature2(p, op, argTypes, /*isVariadic*/ false, resultTypes,
-                          needportNamesAttr);
-  SmallVector<StringRef, 3> omittedAttrs;
+                          needportNamesAttr,
+                          getModulePortDirections(op).getValue());
+  SmallVector<StringRef, 3> omittedAttrs({direction::attrKey});
   if (!needportNamesAttr)
     omittedAttrs.push_back("portNames");
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(),
@@ -455,6 +601,7 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
   SmallVector<NamedAttrList, 4> resultAttrs;
   SmallVector<Type, 4> argTypes;
   SmallVector<Type, 4> resultTypes;
+  SmallVector<Direction, 4> argDirections;
   auto &builder = parser.getBuilder();
 
   // Parse the name as a symbol.
@@ -465,9 +612,9 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
 
   // Parse the function signature.
   bool isVariadic = false;
-  if (parseFunctionSignature(parser, /*allowVariadic*/ false, entryArgs,
-                             argTypes, portNamesAttrs, isVariadic, resultTypes,
-                             resultAttrs))
+  if (parseFunctionSignature2(parser, /*allowVariadic*/ false, entryArgs,
+                              argTypes, argDirections, portNamesAttrs,
+                              isVariadic, resultTypes, resultAttrs))
     return failure();
 
   // Record the argument and result types as an attribute.  This is necessary
@@ -483,6 +630,10 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
   assert(resultAttrs.size() == resultTypes.size());
 
   auto *context = result.getContext();
+
+  // Add the port directions attribute indiciating which port is.
+  result.addAttribute(direction::attrKey,
+                      direction::packIntegerAttribute(argDirections, context));
 
   SmallVector<Attribute> portNames;
   if (!result.attributes.get("portNames")) {
@@ -526,9 +677,12 @@ static ParseResult parseFExtModuleOp(OpAsmParser &parser,
 }
 
 static LogicalResult verifyModuleSignature(Operation *op) {
-  for (auto argType : getModuleType(op).getInputs())
+  for (auto argType : getModuleType(op).getInputs()) {
     if (!argType.isa<FIRRTLType>())
       return op->emitOpError("all module ports must be firrtl types");
+    if (argType.isa<FlipType>())
+      return op->emitOpError("module ports should not contain an outer flip");
+  }
   return success();
 }
 
@@ -561,8 +715,19 @@ static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
     return failure();
   auto portNamesAttr = getModulePortNames(op);
 
-  if (op.getPorts().size() != portNamesAttr.size())
+  auto numPorts = op.getPorts().size();
+  if (numPorts != portNamesAttr.size())
     return op.emitError("module ports does not match number of arguments");
+
+  // Directions are stored in an APInt which cannot have zero bitwidth.  If the
+  // module has no ports, then the APInt should be size one.  Otherwise, their
+  // sizes should match.
+  auto numDirections = getModulePortDirections(op).getValue().getBitWidth();
+  if ((numPorts != numDirections) && (numPorts != 0 || numDirections != 1))
+    return op.emitError()
+           << "module ports size (" << numPorts
+           << ") does not match number of bits in port direction ("
+           << numDirections << ")";
 
   return success();
 }
@@ -621,7 +786,9 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
 
   for (size_t i = 0; i != numResults; i++) {
     auto resultType = instance.getResult(i).getType();
-    auto expectedType = FlipType::get(modulePorts[i].type);
+    auto expectedType = modulePorts[i].type;
+    if (modulePorts[i].direction == Direction::Input)
+      expectedType = FlipType::get(expectedType);
     if (resultType != expectedType) {
       auto diag = instance.emitOpError()
                   << "result type for " << modulePorts[i].name << " must be "
@@ -843,15 +1010,13 @@ static MemOp::PortKind getMemPortKindFromType(FIRRTLType type) {
 }
 
 /// Return the name and kind of ports supported by this memory.
-SmallVector<std::pair<Identifier, MemOp::PortKind>> MemOp::getPorts() {
-  SmallVector<std::pair<Identifier, MemOp::PortKind>> result;
+SmallVector<MemOp::NamedPort> MemOp::getPorts() {
+  SmallVector<MemOp::NamedPort> result;
   // Each entry in the bundle is a port.
   for (size_t i = 0, e = getNumResults(); i != e; ++i) {
-    auto elt = getResult(i);
     // Each port is a bundle.
-    result.push_back(
-        {Identifier::get(getPortNameStr(i), elt.getContext()),
-         getMemPortKindFromType(elt.getType().cast<FIRRTLType>())});
+    auto portType = getResult(i).getType().cast<FIRRTLType>();
+    result.push_back({getPortName(i), getMemPortKindFromType(portType)});
   }
   return result;
 }
@@ -943,10 +1108,10 @@ static LogicalResult verifyConnectOp(ConnectOp connect) {
 
   // TODO: Relax this to allow reads from output ports,
   // instance/memory input ports.
-  if (foldFlow(connect.src()) == flow::Sink) {
+  if (foldFlow(connect.src()) == Flow::Sink) {
     // A sink that is a port output or instance input used as a source is okay.
     auto kind = getDeclarationKind(connect.src());
-    if (kind != kind::Port && kind != kind::Instance) {
+    if (kind != DeclKind::Port && kind != DeclKind::Instance) {
       auto diag =
           connect.emitOpError()
           << "has invalid flow: the right-hand-side has sink flow and "
@@ -957,11 +1122,48 @@ static LogicalResult verifyConnectOp(ConnectOp connect) {
     }
   }
 
-  if (foldFlow(connect.dest()) == flow::Source) {
+  if (foldFlow(connect.dest()) == Flow::Source) {
     auto diag = connect.emitOpError()
                 << "has invalid flow: the left-hand-side has source flow "
                    "(expected sink or duplex flow).";
     return diag.attachNote(connect.dest().getLoc())
+           << "the left-hand-side was defined here.";
+  }
+
+  return success();
+}
+
+static LogicalResult verifyPartialConnectOp(PartialConnectOp partialConnect) {
+  FIRRTLType destType =
+      partialConnect.dest().getType().cast<FIRRTLType>().stripFlip().first;
+  FIRRTLType srcType =
+      partialConnect.src().getType().cast<FIRRTLType>().stripFlip().first;
+
+  if (!areTypesWeaklyEquivalent(destType, srcType))
+    return partialConnect.emitError("type mismatch between destination ")
+           << destType << " and source " << srcType
+           << ". Types are not weakly equivalent.";
+
+  // Check that the flows make sense.
+  if (foldFlow(partialConnect.src()) == Flow::Sink) {
+    // A sink that is a port output or instance input used as a source is okay.
+    auto kind = getDeclarationKind(partialConnect.src());
+    if (kind != DeclKind::Port && kind != DeclKind::Instance) {
+      auto diag =
+          partialConnect.emitOpError()
+          << "has invalid flow: the right-hand-side has sink flow and "
+             "is not an output port or instance input (expected source "
+             "flow, duplex flow, an output port, or an instance input).";
+      return diag.attachNote(partialConnect.src().getLoc())
+             << "the right-hand-side was defined here.";
+    }
+  }
+
+  if (foldFlow(partialConnect.dest()) == Flow::Source) {
+    auto diag = partialConnect.emitOpError()
+                << "has invalid flow: the left-hand-side has source flow "
+                   "(expected sink or duplex flow).";
+    return diag.attachNote(partialConnect.dest().getLoc())
            << "the left-hand-side was defined here.";
   }
 
@@ -1840,6 +2042,33 @@ static void printMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
     elides.push_back("annotations");
 
   p.printOptionalAttrDict(op->getAttrs(), elides);
+}
+
+//===----------------------------------------------------------------------===//
+// Utilities related to Direction
+//===----------------------------------------------------------------------===//
+
+Direction direction::get(bool a) { return (Direction)a; }
+
+IntegerAttr direction::packIntegerAttribute(ArrayRef<Direction> a,
+                                            MLIRContext *b) {
+
+  // If the module contaions no ports (parameter a is empty), then use an APInt
+  // of size 1 with value 0 to store the ports.  This works around an issue
+  // where APInt cannot be zero-sized.  This aligns with port name storage which
+  // will use a zero-element array.
+  auto size = a.size();
+  if (size == 0)
+    size = 1;
+
+  // Pack the array of directions into an APInt.  Input is zero, output is one.
+  APInt portDirections(size, 0);
+  for (size_t i = 0, e = a.size(); i != e; ++i)
+    if (a[i] == Direction::Output)
+      portDirections.setBit(i);
+
+  return IntegerAttr::get(IntegerType::get(b, size, IntegerType::Unsigned),
+                          portDirections);
 }
 
 //===----------------------------------------------------------------------===//

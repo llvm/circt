@@ -1,13 +1,13 @@
 // RUN: circt-opt -lower-handshake-to-firrtl -split-input-file %s | FileCheck %s
 
 // CHECK-LABEL: firrtl.module @handshake_fork_1ins_2outs_ctrl(
-// CHECK-SAME:  %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg1: !firrtl.flip<bundle<valid: uint<1>, ready: flip<uint<1>>>>, %arg2: !firrtl.flip<bundle<valid: uint<1>, ready: flip<uint<1>>>>, %clock: !firrtl.clock, %reset: !firrtl.uint<1>
+// CHECK-SAME:  in %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, out %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, out %arg2: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>
 // CHECK:   %[[ARG_VALID:.+]] = firrtl.subfield %arg0("valid") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>) -> !firrtl.uint<1>
 // CHECK:   %[[ARG_READY:.+]] = firrtl.subfield %arg0("ready") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>) -> !firrtl.uint<1>
-// CHECK:   %[[RES0_VALID:.+]] = firrtl.subfield %arg1("valid") : (!firrtl.flip<bundle<valid: uint<1>, ready: flip<uint<1>>>>) -> !firrtl.uint<1>
-// CHECK:   %[[RES0_READY:.+]] = firrtl.subfield %arg1("ready") : (!firrtl.flip<bundle<valid: uint<1>, ready: flip<uint<1>>>>) -> !firrtl.uint<1>
-// CHECK:   %[[RES1_VALID:.+]] = firrtl.subfield %arg2("valid") : (!firrtl.flip<bundle<valid: uint<1>, ready: flip<uint<1>>>>) -> !firrtl.uint<1>
-// CHECK:   %[[RES1_READY:.+]] = firrtl.subfield %arg2("ready") : (!firrtl.flip<bundle<valid: uint<1>, ready: flip<uint<1>>>>) -> !firrtl.uint<1>
+// CHECK:   %[[RES0_VALID:.+]] = firrtl.subfield %arg1("valid") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>) -> !firrtl.uint<1>
+// CHECK:   %[[RES0_READY:.+]] = firrtl.subfield %arg1("ready") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>) -> !firrtl.uint<1>
+// CHECK:   %[[RES1_VALID:.+]] = firrtl.subfield %arg2("valid") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>) -> !firrtl.uint<1>
+// CHECK:   %[[RES1_READY:.+]] = firrtl.subfield %arg2("ready") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>) -> !firrtl.uint<1>
 
 // Done logic.
 // CHECK:   %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
@@ -61,7 +61,7 @@
 // CHECK: }
 
 // CHECK-LABEL: firrtl.module @test_fork(
-// CHECK-SAME:  %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg2: !firrtl.flip<bundle<valid: uint<1>, ready: flip<uint<1>>>>, %arg3: !firrtl.flip<bundle<valid: uint<1>, ready: flip<uint<1>>>>, %arg4: !firrtl.flip<bundle<valid: uint<1>, ready: flip<uint<1>>>>, %clock: !firrtl.clock, %reset: !firrtl.uint<1>) {
+// CHECK-SAME:  in %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, in %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, out %arg2: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, out %arg3: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, out %arg4: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
 handshake.func @test_fork(%arg0: none, %arg1: none, ...) -> (none, none, none) {
 
   // CHECK: %inst_arg0, %inst_arg1, %inst_arg2, %inst_clock, %inst_reset = firrtl.instance @handshake_fork_1ins_2outs_ctrl {name = ""} : !firrtl.flip<bundle<valid: uint<1>, ready: flip<uint<1>>>>, !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, !firrtl.flip<clock>, !firrtl.flip<uint<1>>
@@ -72,16 +72,16 @@ handshake.func @test_fork(%arg0: none, %arg1: none, ...) -> (none, none, none) {
 // -----
 
 // CHECK-LABEL: firrtl.module @handshake_fork_1ins_2outs_ui64(
-// CHECK-SAME: %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, %arg1: !firrtl.flip<bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>>, %arg2: !firrtl.flip<bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>>, %clock: !firrtl.clock, %reset: !firrtl.uint<1>) {
+// CHECK-SAME: in %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, out %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, out %arg2: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
 // CHECK:   %[[ARG_DATA:.+]] = firrtl.subfield %arg0("data") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>) -> !firrtl.uint<64>
-// CHECK:   %[[RES0_DATA:.+]] = firrtl.subfield %arg1("data") : (!firrtl.flip<bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>>) -> !firrtl.uint<64>
-// CHECK:   %[[RES1_DATA:.+]] = firrtl.subfield %arg2("data") : (!firrtl.flip<bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>>) -> !firrtl.uint<64>
+// CHECK:   %[[RES0_DATA:.+]] = firrtl.subfield %arg1("data") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>) -> !firrtl.uint<64>
+// CHECK:   %[[RES1_DATA:.+]] = firrtl.subfield %arg2("data") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>) -> !firrtl.uint<64>
 
 // CHECK:   firrtl.connect %[[RES0_DATA:.+]], %[[ARG_DATA:.+]] : !firrtl.uint<64>, !firrtl.uint<64>
 // CHECK:   firrtl.connect %[[RES1_DATA:.+]], %[[ARG_DATA:.+]] : !firrtl.uint<64>, !firrtl.uint<64>
 
 // CHECK-LABEL: firrtl.module @test_fork_data(
-// CHECK-SAME:  %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, %arg2: !firrtl.flip<bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>>, %arg3: !firrtl.flip<bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>>, %arg4: !firrtl.flip<bundle<valid: uint<1>, ready: flip<uint<1>>>>, %clock: !firrtl.clock, %reset: !firrtl.uint<1>) {
+// CHECK-SAME:  in %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, in %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, out %arg2: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, out %arg3: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, out %arg4: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
 handshake.func @test_fork_data(%arg0: index, %arg1: none, ...) -> (index, index, none) {
 
   // CHECK: %inst_arg0, %inst_arg1, %inst_arg2, %inst_clock, %inst_reset = firrtl.instance @handshake_fork_1ins_2outs_ui64 {name = ""} : !firrtl.flip<bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>>, !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, !firrtl.flip<clock>, !firrtl.flip<uint<1>>

@@ -193,11 +193,10 @@ void ExpandWhensVisitor::process(Block &block) {
 
 void ExpandWhensVisitor::visitDecl(FModuleOp op) {
   // Track any results (flipped arguments) of the module for init coverage.
-  for (auto arg : op.getArguments()) {
-    auto type = arg.getType().cast<FIRRTLType>();
-    if (!type.isPassive())
+  size_t i = 0;
+  for (auto arg : op.getArguments())
+    if (getModulePortDirection(op, i++) == Direction::Output)
       scope[arg] = nullptr;
-  }
 
   process(*op.getBodyBlock());
 }

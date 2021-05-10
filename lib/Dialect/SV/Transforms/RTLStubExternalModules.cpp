@@ -12,12 +12,12 @@
 
 #include "SVPassDetail.h"
 #include "circt/Dialect/SV/SVPasses.h"
-#include "circt/Support/ImplicitLocOpBuilder.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 
 using namespace circt;
 
 //===----------------------------------------------------------------------===//
-// StubExternalModules Pass
+// RTLStubExternalModules Pass
 //===----------------------------------------------------------------------===//
 
 namespace {

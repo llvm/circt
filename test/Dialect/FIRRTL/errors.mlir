@@ -2,7 +2,7 @@
 
 firrtl.circuit "X" {
 
-firrtl.module @X(%b : !firrtl.unknowntype) {
+firrtl.module @X(in %b : !firrtl.unknowntype) {
   // expected-error @-1 {{unknown firrtl type}}
 }
 
@@ -12,7 +12,7 @@ firrtl.module @X(%b : !firrtl.unknowntype) {
 
 firrtl.circuit "X" {
 
-firrtl.module @X(%b : !firrtl.uint<32>, %d : !firrtl.uint<16>, %out : !firrtl.uint) {
+firrtl.module @X(in %b : !firrtl.uint<32>, in %d : !firrtl.uint<16>, in %out : !firrtl.uint) {
   // expected-error @+1 {{'firrtl.add' op expected 2 operands, but found 3}}
   %3 = "firrtl.add"(%b, %d, %out) : (!firrtl.uint<32>, !firrtl.uint<16>, !firrtl.uint) -> !firrtl.uint<32>
 }
@@ -53,7 +53,7 @@ firrtl.circuit "" {
 // -----
 
 firrtl.circuit "Foo" {
-  firrtl.module @Foo(%clk: !firrtl.uint<1>, %reset: !firrtl.uint<1>) {
+  firrtl.module @Foo(in %clk: !firrtl.uint<1>, in %reset: !firrtl.uint<1>) {
     // expected-error @+1 {{'firrtl.reg' op operand #0 must be clock, but got '!firrtl.uint<1>'}}
     %a = firrtl.reg %clk {name = "a"} : (!firrtl.uint<1>) -> !firrtl.uint<1>
   }
@@ -62,7 +62,7 @@ firrtl.circuit "Foo" {
 // -----
 
 firrtl.circuit "Foo" {
-  firrtl.module @Foo(%clk: !firrtl.uint<1>, %reset: !firrtl.uint<1>) {
+  firrtl.module @Foo(in %clk: !firrtl.uint<1>, in %reset: !firrtl.uint<1>) {
     %zero = firrtl.constant(0 : ui1) : !firrtl.uint<1>
     // expected-error @+1 {{'firrtl.regreset' op operand #0 must be clock, but got '!firrtl.uint<1>'}}
     %a = firrtl.regreset %clk, %reset, %zero {name = "a"} : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
@@ -72,7 +72,7 @@ firrtl.circuit "Foo" {
 // -----
 
 firrtl.circuit "Foo" {
-  firrtl.module @Foo(%clk: !firrtl.clock, %reset: !firrtl.uint<2>) {
+  firrtl.module @Foo(in %clk: !firrtl.clock, in %reset: !firrtl.uint<2>) {
     %zero = firrtl.constant(0 : ui1) : !firrtl.uint<1>
     // expected-error @+1 {{'firrtl.regreset' op operand #1 must be Reset, but got '!firrtl.uint<2>'}}
     %a = firrtl.regreset %clk, %reset, %zero {name = "a"} : (!firrtl.clock, !firrtl.uint<2>, !firrtl.uint<1>) -> !firrtl.uint<1>
@@ -92,7 +92,7 @@ firrtl.circuit "Foo" {
 // -----
 
 firrtl.circuit "Foo" {
-  firrtl.module @Foo(%clk: !firrtl.clock) {
+  firrtl.module @Foo(in %clk: !firrtl.clock) {
     // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive type (contain no flips)}}
     %a = firrtl.reg %clk {name = "a"} : (!firrtl.clock) -> !firrtl.flip<uint<1>>
   }
@@ -101,7 +101,7 @@ firrtl.circuit "Foo" {
 // -----
 
 firrtl.circuit "Foo" {
-  firrtl.module @Foo(%clk: !firrtl.clock, %reset: !firrtl.uint<1>) {
+  firrtl.module @Foo(in %clk: !firrtl.clock, in %reset: !firrtl.uint<1>) {
     %zero = firrtl.constant(0 : ui1) : !firrtl.uint<1>
     // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive type (contain no flips)}}
     %a = firrtl.regreset %clk, %reset, %zero {name = "a"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.flip<uint<1>>
@@ -126,7 +126,7 @@ firrtl.circuit "Foo" {
 firrtl.circuit "Foo" {
 
   // expected-note @+1 {{previous extmodule definition occurred here}}
-  firrtl.extmodule @Foo(%a : !firrtl.uint<1>) attributes { defname = "Foo" }
+  firrtl.extmodule @Foo(in %a : !firrtl.uint<1>) attributes { defname = "Foo" }
   // expected-error @+1 {{'firrtl.extmodule' op with 'defname' attribute "Foo" has 0 ports which is different from a previously defined extmodule with the same 'defname' which has 1 ports}}
   firrtl.extmodule @Bar() attributes { defname = "Foo" }
 
@@ -137,9 +137,9 @@ firrtl.circuit "Foo" {
 firrtl.circuit "Foo" {
 
   // expected-note @+1 {{previous extmodule definition occurred here}}
-  firrtl.extmodule @Foo(%a : !firrtl.uint<1>) attributes { defname = "Foo" }
+  firrtl.extmodule @Foo(in %a : !firrtl.uint<1>) attributes { defname = "Foo" }
   // expected-error @+1 {{'firrtl.extmodule' op with 'defname' attribute "Foo" has a port with name "b" which does not match the name of the port in the same position of a previously defined extmodule with the same 'defname', expected port to have name "a"}}
-  firrtl.extmodule @Foo_(%b : !firrtl.uint<1>) attributes { defname = "Foo" }
+  firrtl.extmodule @Foo_(in %b : !firrtl.uint<1>) attributes { defname = "Foo" }
 
 }
 
@@ -147,11 +147,11 @@ firrtl.circuit "Foo" {
 
 firrtl.circuit "Foo" {
 
-  firrtl.extmodule @Foo(%a : !firrtl.uint<2>) attributes { defname = "Foo", parameters = { width = 2 : i32 } }
+  firrtl.extmodule @Foo(in %a : !firrtl.uint<2>) attributes { defname = "Foo", parameters = { width = 2 : i32 } }
   // expected-note @+1 {{previous extmodule definition occurred here}}
-  firrtl.extmodule @Bar(%a : !firrtl.uint<1>) attributes { defname = "Foo" }
+  firrtl.extmodule @Bar(in %a : !firrtl.uint<1>) attributes { defname = "Foo" }
   // expected-error @+1 {{'firrtl.extmodule' op with 'defname' attribute "Foo" has a port with name "a" which has a different type '!firrtl.uint<2>' which does not match the type of the port in the same position of a previously defined extmodule with the same 'defname', expected port to have type '!firrtl.uint<1>'}}
-  firrtl.extmodule @Baz(%a : !firrtl.uint<2>) attributes { defname = "Foo" }
+  firrtl.extmodule @Baz(in %a : !firrtl.uint<2>) attributes { defname = "Foo" }
 
 }
 
@@ -160,9 +160,9 @@ firrtl.circuit "Foo" {
 firrtl.circuit "Foo" {
 
   // expected-note @+1 {{previous extmodule definition occurred here}}
-  firrtl.extmodule @Foo(%a : !firrtl.uint<1>) attributes { defname = "Foo" }
+  firrtl.extmodule @Foo(in %a : !firrtl.uint<1>) attributes { defname = "Foo" }
   // expected-error @+1 {{'firrtl.extmodule' op with 'defname' attribute "Foo" has a port with name "a" which has a different type '!firrtl.sint<1>' which does not match the type of the port in the same position of a previously defined extmodule with the same 'defname', expected port to have type '!firrtl.uint<1>'}}
-  firrtl.extmodule @Foo_(%a : !firrtl.sint<1>) attributes { defname = "Foo" }
+  firrtl.extmodule @Foo_(in %a : !firrtl.sint<1>) attributes { defname = "Foo" }
 
 }
 
@@ -171,9 +171,9 @@ firrtl.circuit "Foo" {
 firrtl.circuit "Foo" {
 
   // expected-note @+1 {{previous extmodule definition occurred here}}
-  firrtl.extmodule @Foo(%a : !firrtl.uint<2>) attributes { defname = "Foo", parameters = { width = 2 : i32 } }
+  firrtl.extmodule @Foo(in %a : !firrtl.uint<2>) attributes { defname = "Foo", parameters = { width = 2 : i32 } }
   // expected-error @+1 {{'firrtl.extmodule' op with 'defname' attribute "Foo" has a port with name "a" which has a different type '!firrtl.sint' which does not match the type of the port in the same position of a previously defined extmodule with the same 'defname', expected port to have type '!firrtl.uint'}}
-  firrtl.extmodule @Bar(%a : !firrtl.sint<1>) attributes { defname = "Foo" }
+  firrtl.extmodule @Bar(in %a : !firrtl.sint<1>) attributes { defname = "Foo" }
 
 }
 
@@ -182,7 +182,7 @@ firrtl.circuit "Foo" {
 firrtl.circuit "Foo" {
 
   // expected-error @+1 {{has unknown extmodule parameter value 'width' = @Foo}}
-  firrtl.extmodule @Foo(%a : !firrtl.uint<2>) attributes { defname = "Foo", parameters = { width = @Foo } }
+  firrtl.extmodule @Foo(in %a : !firrtl.uint<2>) attributes { defname = "Foo", parameters = { width = @Foo } }
 
 }
 
@@ -213,7 +213,7 @@ firrtl.circuit "Foo" {
 firrtl.circuit "Foo" {
 
   // expected-note @+1 {{original module declared here}}
-  firrtl.module @Callee(%arg0: !firrtl.uint<1>) { }
+  firrtl.module @Callee(in %arg0: !firrtl.uint<1>) { }
   firrtl.module @Foo() {
     // expected-error @+1 {{'firrtl.instance' op result type for "arg0" must be '!firrtl.flip<uint<1>>', but got '!firrtl.uint<2>'}}
     %a = firrtl.instance @Callee {name = ""} : !firrtl.uint<2>
@@ -225,7 +225,7 @@ firrtl.circuit "Foo" {
 firrtl.circuit "Foo" {
 
   // expected-note @+1 {{original module declared here}}
-  firrtl.module @Callee(%arg0: !firrtl.uint<1> ) { }
+  firrtl.module @Callee(in %arg0: !firrtl.uint<1> ) { }
   firrtl.module @Foo() {
     // expected-error @+1 {{'firrtl.instance' op has a wrong number of results; expected 1 but got 0}}
     firrtl.instance @Callee {name = ""}
@@ -237,7 +237,7 @@ firrtl.circuit "Foo" {
 firrtl.circuit "Foo" {
 
   // expected-note @+1 {{original module declared here}}
-  firrtl.module @Callee(%arg0: !firrtl.uint<1>, %arg1: !firrtl.bundle<valid: uint<1>>) { }
+  firrtl.module @Callee(in %arg0: !firrtl.uint<1>, in %arg1: !firrtl.bundle<valid: uint<1>>) { }
   firrtl.module @Foo() {
     // expected-error @+1 {{'firrtl.instance' op result type for "arg0" must be '!firrtl.flip<uint<1>>', but got '!firrtl.uint<1>'}}
     %a:2 = firrtl.instance @Callee {name = ""}
@@ -249,7 +249,7 @@ firrtl.circuit "Foo" {
 
 firrtl.circuit "X" {
 
-firrtl.module @X(%a : !firrtl.uint<4>) {
+firrtl.module @X(in %a : !firrtl.uint<4>) {
   // expected-error @+1 {{high must be equal or greater than low, but got high = 3, low = 4}}
   %0 = firrtl.bits %a 3 to 4 : (!firrtl.uint<4>) -> !firrtl.uint<2>
 }
@@ -260,7 +260,7 @@ firrtl.module @X(%a : !firrtl.uint<4>) {
 
 firrtl.circuit "X" {
 
-firrtl.module @X(%a : !firrtl.uint<4>) {
+firrtl.module @X(in %a : !firrtl.uint<4>) {
   // expected-error @+1 {{high must be smaller than the width of input, but got high = 4, width = 4}}
   %0 = firrtl.bits %a 4 to 3 : (!firrtl.uint<4>) -> !firrtl.uint<2>
 }
@@ -271,7 +271,7 @@ firrtl.module @X(%a : !firrtl.uint<4>) {
 
 firrtl.circuit "X" {
 
-firrtl.module @X(%a : !firrtl.uint<4>) {
+firrtl.module @X(in %a : !firrtl.uint<4>) {
   // expected-error @+1 {{'firrtl.bits' op result type should be '!firrtl.uint<3>'}}
   %0 = firrtl.bits %a 3 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<2>
 }
@@ -282,14 +282,14 @@ firrtl.module @X(%a : !firrtl.uint<4>) {
 
 firrtl.circuit "BadPort" {
   // expected-error @+1 {{'firrtl.module' op all module ports must be firrtl types}}
-  firrtl.module @BadPort(%in1 : i1) {
+  firrtl.module @BadPort(in %in1 : i1) {
   }
 }
 
 // -----
 
 firrtl.circuit "BadPort" {
-  firrtl.module @BadPort(%a : !firrtl.uint<1>) {
+  firrtl.module @BadPort(in %a : !firrtl.uint<1>) {
     // expected-error @+1 {{'firrtl.attach' op operand #0 must be analog type, but got '!firrtl.uint<1>'}}
     firrtl.attach %a, %a : !firrtl.uint<1>, !firrtl.uint<1>
   }
@@ -298,7 +298,7 @@ firrtl.circuit "BadPort" {
 // -----
 
 firrtl.circuit "BadAdd" {
-  firrtl.module @BadAdd(%a : !firrtl.uint<1>) {
+  firrtl.module @BadAdd(in %a : !firrtl.uint<1>) {
     // expected-error @+1 {{'firrtl.add' op result type should be '!firrtl.uint<2>'}}
     firrtl.add %a, %a : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   }
@@ -307,7 +307,9 @@ firrtl.circuit "BadAdd" {
 // -----
 
 firrtl.circuit "NodeMustBePassive" {
-  firrtl.module @NodeMustBePassive(%a: !firrtl.flip<uint<1>>) {
+  firrtl.module @Sub(in %a: !firrtl.uint<1>) {}
+  firrtl.module @NodeMustBePassive() {
+    %a = firrtl.instance @Sub {name = "sub"} : !firrtl.flip<uint<1>>
     // expected-error @+1 {{'firrtl.node' op operand #0 must be a passive type}}
     %b = firrtl.node %a  : !firrtl.flip<uint<1>>
   }
@@ -346,7 +348,7 @@ firrtl.circuit "StructCast3" {
 // -----
 
 firrtl.circuit "OutOfOrder" {
-  firrtl.module @OutOfOrder(%a: !firrtl.uint<32>) {
+  firrtl.module @OutOfOrder(in %a: !firrtl.uint<32>) {
     // expected-error @+1 {{operand #0 does not dominate this use}}
     %0 = firrtl.add %1, %1 : (!firrtl.uint<33>, !firrtl.uint<33>) -> !firrtl.uint<34>
     // expected-note @+1 {{operand defined here}}

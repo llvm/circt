@@ -34,7 +34,7 @@ func private @notModule () {
 }
 
 rtl.module @A(%arg0: i1) {
-  // expected-error @+1 {{Symbol resolved to 'func' which is not a RTL[Ext|Generated]ModuleOp}}
+  // expected-error @+1 {{'rtl.instance' op attribute 'moduleName' failed to satisfy constraint: flat symbol reference attribute is module like}}
   rtl.instance "foo" @notModule(%arg0) : (i1) -> ()
 }
 

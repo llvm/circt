@@ -14,6 +14,8 @@
 #ifndef CIRCT_DIALECT_ESI_CAPNP_ESICAPNP_H
 #define CIRCT_DIALECT_ESI_CAPNP_ESICAPNP_H
 
+#include "circt/Dialect/RTL/RTLOps.h"
+
 #include <memory>
 
 namespace mlir {
@@ -77,6 +79,10 @@ private:
   /// The implementation of this. Separate to hide the details and avoid having
   /// to include the capnp headers in this header.
   std::shared_ptr<detail::TypeSchemaImpl> s;
+
+  /// Cache of the decode/encode modules;
+  static llvm::SmallDenseMap<Type, rtl::RTLModuleOp> decImplMods;
+  static llvm::SmallDenseMap<Type, rtl::RTLModuleOp> encImplMods;
 };
 
 } // namespace capnp

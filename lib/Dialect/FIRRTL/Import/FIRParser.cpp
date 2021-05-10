@@ -1089,19 +1089,7 @@ private:
   Value convertToPassive(Value input, Location loc);
 
   /// Attach invalid values to every element of the value.
-  void emitInvalidate(Value val, Location loc, flow::Flow flow) {
-
-    auto swap = [](flow::Flow flow) -> flow::Flow {
-      switch (flow) {
-      case flow::Source:
-        return flow::Sink;
-      case flow::Sink:
-        return flow::Source;
-      case flow::Duplex:
-        return flow::Duplex;
-      }
-    };
-
+  void emitInvalidate(Value val, Location loc, Flow flow) {
     // Strip an outer flip.  This is associated with an output port, but this
     // was already included in flow calculation.
     auto tpe = val.getType().cast<FIRRTLType>();
@@ -1120,7 +1108,7 @@ private:
           for (auto element : tpe.getElements()) {
             auto subfield = builder.create<SubfieldOp>(loc, val, element.name);
             emitInvalidate(subfield, loc,
-                           subfield.isFieldFlipped() ? swap(flow) : flow);
+                           subfield.isFieldFlipped() ? swapFlow(flow) : flow);
           }
         })
         .Case<FVectorType>([&](auto tpe) {
@@ -1133,9 +1121,9 @@ private:
         .Case<AnalogType>([](auto) {})
         // Invalidate any sink or duplex flow ground types.
         .Default([&](auto tpe) {
-          if (flow != flow::Source)
-            builder.create<ConnectOp>(
-                loc, val, builder.create<InvalidValuePrimOp>(loc, tpe));
+          if (flow != Flow::Source)
+            builder.create<ConnectOp>(loc, val,
+                                      builder.create<InvalidValueOp>(loc, tpe));
         });
   }
 
@@ -1530,7 +1518,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
       return failure();
     }
 
-    auto inv = builder.create<InvalidValuePrimOp>(tloc, opTypes[1]);
+    auto inv = builder.create<InvalidValueOp>(tloc, opTypes[1]);
     result = builder.create<MuxPrimOp>(
         tloc, opTypes[1], ValueRange({operands[0], operands[1], inv}), attrs);
     break;
@@ -2243,7 +2231,10 @@ ParseResult FIRStmtParser::parseInstance() {
   resultTypes.reserve(modulePorts.size());
 
   for (auto port : modulePorts) {
-    resultTypes.push_back(FlipType::get(port.type));
+    auto portType = port.type;
+    if (port.direction == Direction::Input)
+      portType = FlipType::get(portType);
+    resultTypes.push_back(portType);
   }
   ArrayAttr annotations = getState().emptyArrayAttr;
   getAnnotations(getModuleTarget() + ">" + id, annotations);
@@ -2738,13 +2729,10 @@ FIRModuleParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
         parseOptionalInfo(info))
       return failure();
 
-    // If this is an output port, flip the type.
-    if (isOutput)
-      type = FlipType::get(type);
-
     // FIXME: We should persist the info loc into the IR, not just the name
     // and type.
-    result.push_back({{name, type}, info.getFIRLoc()});
+    result.push_back(
+        {{name, type, direction::get(isOutput)}, info.getFIRLoc()});
   }
 
   return success();

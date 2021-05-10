@@ -102,12 +102,14 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
   let extraClassDeclaration = [{
     enum class PortKind { Read, Write, ReadWrite };
 
+    using NamedPort = std::pair<StringAttr, MemOp::PortKind>;
+
     /// Return the type of a port given the memory depth, type, and kind
     static BundleType getTypeForPort(uint64_t depth, FIRRTLType dataType,
                                      PortKind portKind);
 
     /// Return the name and kind of ports supported by this memory.
-    SmallVector<std::pair<Identifier, PortKind>> getPorts();
+    SmallVector<NamedPort> getPorts();
 
     /// Return the kind of the specified port.
     PortKind getPortKind(StringRef portName);

@@ -24,6 +24,23 @@
 namespace circt {
 namespace firrtl {
 
+enum class Direction { Input, Output };
+
+namespace direction {
+
+/// The key in a module's attribute dictionary used to find the direction.
+static const char *const attrKey = "portDirections";
+
+/// Return an output direction if \p isOutput is true, otherwise return an
+/// input direction.
+Direction get(bool isOutput);
+
+/// Return a \p IntegerAttr containing the packed representation of an array of
+/// directions.
+IntegerAttr packIntegerAttribute(ArrayRef<Direction> a, MLIRContext *b);
+
+} // namespace direction
+
 /// Return true if the specified operation is a firrtl expression.
 bool isExpression(Operation *op);
 
@@ -31,20 +48,26 @@ bool isExpression(Operation *op);
 struct ModulePortInfo {
   StringAttr name;
   FIRRTLType type;
+  Direction direction;
 
   StringRef getName() const { return name ? name.getValue() : ""; }
 
-  /// Return true if this is a simple output-only port.
-  bool isOutput() { return type.isa<FlipType>(); }
-
-  /// Return true if this is a simple input-only port.
-  bool isInput() {
+  /// Return true if this is a simple output-only port.  If you want the
+  /// direction of the port, use the \p direction parameter.
+  bool isOutput() {
     auto flags = type.getRecursiveTypeProperties();
-    // isPassive & !containsAnalog.
-    return flags.first && !flags.second;
+    return flags.first && !flags.second && direction == Direction::Output;
   }
 
-  /// Return true if this is an inout port.
+  /// Return true if this is a simple input-only port.  If you want the
+  /// direction of the port, use the \p direction parameter.
+  bool isInput() {
+    auto flags = type.getRecursiveTypeProperties();
+    return flags.first && !flags.second && direction == Direction::Input;
+  }
+
+  /// Return true if this is an inout port.  This will be true if the port
+  /// contains either bi-directional signals or ananlog types.
   bool isInOut() { return !isOutput() && !isInput(); }
 };
 
@@ -62,6 +85,14 @@ ArrayAttr getModulePortNames(Operation *module);
 /// Given an FModule or ExtModule, return the name of the specified port number.
 StringAttr getModulePortName(Operation *op, size_t portIndex);
 
+/// Return the portDirections attribute for the specified module, which contains
+/// the direction for each port.
+IntegerAttr getModulePortDirections(Operation *module);
+
+/// Given an FModule or ExtModule, return the direction of the specified port
+/// number.
+Direction getModulePortDirection(Operation *op, size_t portIndex);
+
 /// Returns true if the type is a bundle or a flip of a bundle.
 bool isBundleType(Type type);
 
@@ -71,9 +102,10 @@ bool isBundleType(Type type);
 /// connect.
 bool isDuplexValue(Value val);
 
-namespace flow {
-enum Flow { Source, Sink, Duplex };
-}
+enum class Flow { Source, Sink, Duplex };
+
+/// Get a flow's reverse.
+Flow swapFlow(Flow flow);
 
 /// Compute the flow for a Value, \p val, as determined by the FIRRTL
 /// specification.  This recursively walks backwards from \p val to the
@@ -85,14 +117,12 @@ enum Flow { Source, Sink, Duplex };
 /// source is sink.  The reverse of sink is source.  The reverse of duplex is
 /// duplex.  The \p accumulatedFlow parameter sets the initial flow.  A user
 /// should normally \a not have to change this from its default of \p
-/// flow::Source.
-flow::Flow foldFlow(Value val, flow::Flow accumulatedFlow = flow::Source);
+/// Flow::Source.
+Flow foldFlow(Value val, Flow accumulatedFlow = Flow::Source);
 
-namespace kind {
-enum Kind { Port, Instance, Other };
-}
+enum class DeclKind { Port, Instance, Other };
 
-kind::Kind getDeclarationKind(Value val);
+DeclKind getDeclarationKind(Value val);
 
 } // namespace firrtl
 } // namespace circt

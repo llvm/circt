@@ -29,7 +29,7 @@ public:
     return TypeSwitch<Operation *, ResultType>(op)
         // Basic Expressions
         .template Case<
-            ConstantOp, SubfieldOp, SubindexOp, SubaccessOp,
+            ConstantOp, InvalidValueOp, SubfieldOp, SubindexOp, SubaccessOp,
             // Arithmetic and Logical Binary Primitives.
             AddPrimOp, SubPrimOp, MulPrimOp, DivPrimOp, RemPrimOp, AndPrimOp,
             OrPrimOp, XorPrimOp,
@@ -41,9 +41,8 @@ public:
             AsSIntPrimOp, AsUIntPrimOp, AsAsyncResetPrimOp, AsClockPrimOp,
             CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
             // Miscellaneous.
-            BitsPrimOp, HeadPrimOp, InvalidValuePrimOp, MuxPrimOp, PadPrimOp,
-            ShlPrimOp, ShrPrimOp, TailPrimOp, AsPassivePrimOp,
-            AsNonPassivePrimOp,
+            BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
+            TailPrimOp, AsPassivePrimOp, AsNonPassivePrimOp,
 
             // Conversion from FIRRTL to RTL dialect types.
             StdIntCastOp, RTLStructCastOp, AnalogInOutCastOp>(
@@ -130,7 +129,7 @@ public:
   // Miscellaneous.
   HANDLE(BitsPrimOp, Unhandled);
   HANDLE(HeadPrimOp, Unhandled);
-  HANDLE(InvalidValuePrimOp, Unhandled);
+  HANDLE(InvalidValueOp, Unhandled);
   HANDLE(MuxPrimOp, Unhandled);
   HANDLE(PadPrimOp, Unhandled);
   HANDLE(ShlPrimOp, Unhandled);

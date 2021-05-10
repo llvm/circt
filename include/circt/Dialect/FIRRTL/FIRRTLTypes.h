@@ -80,6 +80,10 @@ public:
   /// Return true if this is a valid "reset" type.
   bool isResetType();
 
+  /// Return the type with an outer flip stripped and a bool indicating if an
+  /// outer flip was stripped.
+  std::pair<FIRRTLType, bool> stripFlip();
+
 protected:
   using Type::Type;
 };
@@ -90,6 +94,13 @@ protected:
 /// flip types in module ports and aggregates, this definition, unlike the spec,
 /// ignores flips.
 bool areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType);
+
+/// Returns true if two types are weakly equivalent.  See the FIRRTL spec,
+/// Section 4.6, for a full definition of this.  Roughly, the oriented types
+/// (the types with any flips pushed to the leaves) must match.  This allows for
+/// types with flips in different positions to be equivalent.
+bool areTypesWeaklyEquivalent(FIRRTLType destType, FIRRTLType srcType,
+                              bool destFlip = false, bool srcFlip = false);
 
 mlir::Type getVectorElementType(mlir::Type array);
 mlir::Type getPassiveType(mlir::Type anyFIRRTLType);
@@ -135,11 +146,19 @@ public:
   using FIRRTLType::TypeBase<ConcreteType, ParentType,
                              detail::WidthTypeStorage>::Base::Base;
 
+  /// Return the bitwidth of this type or None if unknown.
+  Optional<int32_t> getWidth() {
+    return static_cast<ConcreteType *>(this)->getWidth();
+  }
+
   /// Return the width of this type, or -1 if it has none specified.
   int32_t getWidthOrSentinel() {
-    auto width = static_cast<ConcreteType *>(this)->getWidth();
+    auto width = getWidth();
     return width.hasValue() ? width.getValue() : -1;
   }
+
+  /// Return true if this type has a known width.
+  bool hasWidth() { return getWidth().hasValue(); }
 };
 
 class SIntType;

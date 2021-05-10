@@ -1,25 +1,5 @@
 ; RUN: circt-translate -import-firrtl -verify-diagnostics --split-input-file %s
 
-; COM: A ReferenceTarget Annotation with a subindex is unsupported.
-
-; expected-error @+2 {{Invalid/unsupported annotation format}}
-; expected-note @+1 {{"target": /* error: Unsupported target (not a local CircuitTarget, ModuleTarget, or ReferenceTarget without subfield or subindex) */ "~Foo|Foo>a.b"}}
-circuit Foo: %[[{"a":"a","target":"~Foo|Foo>a.b"}]]
-  module Foo:
-    skip
-
-; // -----
-
-; COM: A ReferenceTarget Annotation with a subfield is unsupported.
-
-; expected-error @+2 {{Invalid/unsupported annotation format}}
-; expected-note @+1 {{"target": /* error: Unsupported target (not a local CircuitTarget, ModuleTarget, or ReferenceTarget without subfield or subindex) */ "~Foo|Foo>a[0]"}}
-circuit Foo: %[[{"a":"a","target":"~Foo|Foo>a[0]"}]]
-  module Foo:
-    skip
-
-; // -----
-
 ; COM: A non-local Annotation is unsupported.
 
 ; expected-error @+2 {{Invalid/unsupported annotation format}}

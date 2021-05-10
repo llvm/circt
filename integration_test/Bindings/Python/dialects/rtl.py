@@ -90,10 +90,20 @@ with Context() as ctx, Location.unknown():
       inst5 = op.create(module, "inst5")
       inst5.set_input_port("my_input", inst5.my_output)
 
+      # CHECK: rtl.instance "inst6" {{.*}} {BANKS = 2 : i64}
+      one_input.create(module, "inst6", {"a": inst1.a}, parameters={"BANKS": 2})
+
       rtl.OutputOp([])
 
     instance_builder_tests = rtl.RTLModuleOp(name="instance_builder_tests",
                                              body_builder=instance_builder_body)
+
+    # CHECK: rtl.module @block_args_test(%[[PORT_NAME:.+]]: i32) ->
+    # CHECK: rtl.output %[[PORT_NAME]]
+    rtl.RTLModuleOp(name="block_args_test",
+                    input_ports=[("foo", i32)],
+                    output_ports=[("bar", i32)],
+                    body_builder=lambda module: rtl.OutputOp([module.foo]))
 
   print(m)
 

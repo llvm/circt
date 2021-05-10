@@ -625,9 +625,9 @@ OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
 
   // mux(cond, x, invalid) -> x
   // mux(cond, invalid, x) -> x
-  if (high().getDefiningOp<InvalidValuePrimOp>())
+  if (high().getDefiningOp<InvalidValueOp>())
     return low();
-  if (low().getDefiningOp<InvalidValuePrimOp>())
+  if (low().getDefiningOp<InvalidValueOp>())
     return high();
 
   /// mux(0/1, x, y) -> x or y
@@ -837,7 +837,7 @@ static LogicalResult foldSingleSetConnect(ConnectOp op,
   } else {
     // Constants/invalids in the same block are ok to forward, even through
     // reg's since the clocking doesn't matter for constants.
-    if (!isa<ConstantOp>(srcValueOp) && !isa<InvalidValuePrimOp>(srcValueOp))
+    if (!isa<ConstantOp>(srcValueOp) && !isa<InvalidValueOp>(srcValueOp))
       return failure();
     if (srcValueOp->getBlock() != declBlock)
       return failure();

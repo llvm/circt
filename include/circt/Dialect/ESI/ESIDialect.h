@@ -29,6 +29,7 @@ namespace esi {
 
 void registerESIPasses();
 void registerESITranslations();
+LogicalResult exportCosimSchema(ModuleOp module, llvm::raw_ostream &os);
 
 /// A triple of signals which represent a latency insensitive interface with
 /// valid/ready semantics.

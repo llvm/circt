@@ -51,6 +51,7 @@ class InstanceBuilder:
     # Actually build the InstanceOp.
     instance_name = StringAttr.get(name)
     module_name = FlatSymbolRefAttr.get(StringAttr(self.mod.name).value)
+    parameters = {k: Attribute.parse(str(v)) for (k, v) in parameters.items()}
     parameters = DictAttr.get(parameters)
     self.instance = InstanceOp(
         self.mod.type.results,
@@ -130,16 +131,24 @@ class ModuleLike:
 
     input_types = []
     input_names = []
-    for (port_name, port_type) in input_ports:
+    self.input_indices = {}
+    input_ports = list(input_ports)
+    for i in range(len(input_ports)):
+      port_name, port_type = input_ports[i]
       input_types.append(port_type)
       input_names.append(StringAttr.get(str(port_name)))
+      self.input_indices[port_name] = i
     attributes["argNames"] = ArrayAttr.get(input_names)
 
     output_types = []
     output_names = []
-    for (port_name, port_type) in output_ports:
+    output_ports = list(output_ports)
+    self.output_indices = {}
+    for i in range(len(output_ports)):
+      port_name, port_type = output_ports[i]
       output_types.append(port_type)
       output_names.append(StringAttr.get(str(port_name)))
+      self.output_indices[port_name] = i
     attributes["resultNames"] = ArrayAttr.get(output_names)
 
     attributes["type"] = TypeAttr.get(
@@ -175,12 +184,14 @@ class ModuleLike:
              module,
              name: str,
              input_port_mapping: Dict[str, Value] = {},
+             parameters: Dict[str, object] = {},
              loc=None,
              ip=None):
     return InstanceBuilder(module,
                            self,
                            name,
                            input_port_mapping,
+                           parameters=parameters,
                            loc=loc,
                            ip=ip)
 
@@ -203,6 +214,13 @@ class RTLModuleOp(ModuleLike):
   @property
   def entry_block(self):
     return self.regions[0].blocks[0]
+
+  # Support attribute access to block arguments by name
+  def __getattr__(self, name):
+    if name in self.input_indices:
+      index = self.input_indices[name]
+      return self.entry_block.arguments[index]
+    raise AttributeError(f"unknown input port name {name}")
 
   def add_entry_block(self):
     if not self.is_external:

@@ -55,3 +55,21 @@ class LoopbackTester(cosim.CosimBase):
       dataRecv.append(self.read_3bytes(ep))
     ep.close().wait()
     assert dataSent == dataRecv
+
+  def test_keytext(self, num_msgs=50):
+    cStructType = self.schema.Struct12387990283439066727
+    ep = self.openEP(epNum=2, sendType=cStructType, recvType=cStructType)
+    kts = []
+    for i in range(num_msgs):
+      kt = cStructType.new_message(
+          key=[random.randrange(0, 255) for x in range(4)],
+          text=[random.randrange(0, 16000) for x in range(6)])
+      kts.append(kt)
+      ep.send(kt).wait()
+
+    for i in range(num_msgs):
+      kt = self.readMsg(ep, cStructType)
+      print(f"expected: {kts[i]}")
+      print(f"got:      {kt}")
+      assert list(kt.key) == list(kts[i].key)
+      assert list(kt.text) == list(kts[i].text)

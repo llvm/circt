@@ -26,6 +26,10 @@ ArrayAttr firrtl::getModulePortNames(Operation *module) {
   return module->getAttrOfType<ArrayAttr>("portNames");
 }
 
+// If the specified module contains the portDirections attribute, return it.
+mlir::IntegerAttr firrtl::getModulePortDirections(Operation *module) {
+  return module->getAttrOfType<mlir::IntegerAttr>(direction::attrKey);
+}
 namespace {
 
 // We implement the OpAsmDialectInterface so that FIRRTL dialect operations
@@ -92,6 +96,34 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
         constant.value().print(specialName, /*isSigned:*/ false);
       }
       setNameFn(constant.getResult(), specialName.str());
+    }
+
+    // Set invalid values to have a distinct name.
+    if (auto invalid = dyn_cast<InvalidValueOp>(op)) {
+      std::string name;
+      if (auto ty = invalid.getType().dyn_cast<IntType>()) {
+        const char *base = ty.isSigned() ? "invalid_si" : "invalid_ui";
+        auto width = ty.getWidthOrSentinel();
+        if (width == -1)
+          name = base;
+        else
+          name = (Twine(base) + Twine(width)).str();
+      } else if (auto ty = invalid.getType().dyn_cast<AnalogType>()) {
+        auto width = ty.getWidthOrSentinel();
+        if (width == -1)
+          name = "invalid_analog";
+        else
+          name = ("invalid_analog" + Twine(width)).str();
+      } else if (invalid.getType().isa<AsyncResetType>())
+        name = "invalid_asyncreset";
+      else if (invalid.getType().isa<ResetType>())
+        name = "invalid_reset";
+      else if (invalid.getType().isa<ClockType>())
+        name = "invalid_clock";
+      else
+        name = "invalid";
+
+      setNameFn(invalid.getResult(), name);
     }
   }
 

@@ -161,9 +161,17 @@ LogicalResult ExportCosimSchema::emit() {
   return errorCount == 0 ? success() : failure();
 }
 
-static LogicalResult exportCosimSchema(ModuleOp module, llvm::raw_ostream &os) {
+LogicalResult circt::esi::exportCosimSchema(ModuleOp module,
+                                            llvm::raw_ostream &os) {
   ExportCosimSchema schema(module, os);
   return schema.emit();
+}
+
+#else // Not CAPNP
+
+LogicalResult circt::esi::exportCosimSchema(ModuleOp module,
+                                            llvm::raw_ostream &os) {
+  return failure();
 }
 
 #endif

@@ -32,6 +32,18 @@ with Context() as ctx, Location.unknown():
                           reset=rstn,
                           reset_value=reg_reset,
                           name="my_reg")
+
+      # CHECK: seq.compreg %[[INPUT_VAL]], %clk
+      seq.reg(reg_input, clk)
+      # CHECK: seq.compreg %[[INPUT_VAL]], %clk, %rstn, %{{.+}}
+      seq.reg(reg_input, clk, reset=rstn)
+      # CHECK: %[[RESET_VALUE:.+]] = rtl.constant 123
+      # CHECK: seq.compreg %[[INPUT_VAL]], %clk, %rstn, %[[RESET_VALUE]]
+      custom_reset = rtl.ConstantOp(i32, IntegerAttr.get(i32, 123)).result
+      seq.reg(reg_input, clk, reset=rstn, reset_value=custom_reset)
+      # CHECK: seq.compreg {{.+}} {name = "FuBar"}
+      seq.reg(reg_input, clk, name="FuBar")
+
       # CHECK: rtl.output %[[DATA_VAL]]
       return reg.data
 

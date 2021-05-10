@@ -10,6 +10,15 @@
 //
 //===----------------------------------------------------------------------===//
 
+/// Ensure symbol is one of the rtl module.* types.  Passes on failed lookup, so
+/// more basic symbol validation can provide more useful error messages.
+def isModuleSymbol : AttrConstraint<
+    CPred<"!::mlir::SymbolTable::lookupNearestSymbolFrom("
+            "&$_op, $_self.cast<::mlir::FlatSymbolRefAttr>().getValue()) || "
+          "rtl::isAnyModule(::mlir::SymbolTable::lookupNearestSymbolFrom("
+            "&$_op, $_self.cast<::mlir::FlatSymbolRefAttr>().getValue()))"
+    >, "is module like">;
+
 def RTLModuleOp : RTLOp<"module",
       [IsolatedFromAbove, FunctionLike, Symbol, SymbolTable, RegionKindInterface,
        SingleBlockImplicitTerminator<"OutputOp">, HasParent<"mlir::ModuleOp">]>{
@@ -278,7 +287,7 @@ def InstanceOp : RTLOp<"instance",
   }];
 
   let arguments = (ins StrAttr:$instanceName,
-                       FlatSymbolRefAttr:$moduleName,
+                       Confined<FlatSymbolRefAttr, [isModuleSymbol]>:$moduleName,
                        Variadic<AnyType>:$inputs,
                        OptionalAttr<DictionaryAttr>:$parameters);
   let results = (outs Variadic<AnyType>);

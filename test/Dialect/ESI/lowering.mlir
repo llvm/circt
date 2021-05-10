@@ -40,13 +40,13 @@ rtl.module @test(%clk:i1, %rstn:i1) {
   // CHECK-NEXT:  rtl.instance "recv2" @Reciever(%3, %clk)  : (!esi.channel<i4>, i1) -> ()
 
   // IFACE-LABEL: rtl.module @test(%clk: i1, %rstn: i1) {
-  // IFACE-NEXT:    %0 = sv.interface.instance : !sv.interface<@IValidReady_i4>
+  // IFACE-NEXT:    %0 = sv.interface.instance {name = "i4FromSender2"} : !sv.interface<@IValidReady_i4>
   // IFACE-NEXT:    %1 = sv.modport.get %0 @source : !sv.interface<@IValidReady_i4> -> !sv.modport<@IValidReady_i4::@source>
   // IFACE-NEXT:    %2 = esi.wrap.iface %1 : !sv.modport<@IValidReady_i4::@source> -> !esi.channel<i4>
   // IFACE-NEXT:    %3 = sv.modport.get %0 @sink : !sv.interface<@IValidReady_i4> -> !sv.modport<@IValidReady_i4::@sink>
   // IFACE-NEXT:    %sender2.y = rtl.instance "sender2" @Sender(%clk, %3) : (i1, !sv.modport<@IValidReady_i4::@sink>) -> i8
   // IFACE-NEXT:    %4 = esi.buffer %clk, %rstn, %2 {stages = 4 : i64} : i4
-  // IFACE-NEXT:    %5 = sv.interface.instance : !sv.interface<@IValidReady_i4>
+  // IFACE-NEXT:    %5 = sv.interface.instance {name = "i4ToRecv2"} : !sv.interface<@IValidReady_i4>
   // IFACE-NEXT:    %6 = sv.modport.get %5 @sink : !sv.interface<@IValidReady_i4> -> !sv.modport<@IValidReady_i4::@sink>
   // IFACE-NEXT:    esi.unwrap.iface %4 into %6 : (!esi.channel<i4>, !sv.modport<@IValidReady_i4::@sink>)
   // IFACE-NEXT:    %7 = sv.modport.get %5 @source : !sv.interface<@IValidReady_i4> -> !sv.modport<@IValidReady_i4::@source>

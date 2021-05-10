@@ -18,8 +18,8 @@
 #include "circt/Dialect/RTL/RTLOps.h"
 #include "circt/Dialect/RTL/RTLTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
-#include "circt/Support/ImplicitLocOpBuilder.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TinyPtrVector.h"
@@ -804,7 +804,7 @@ void FIRRTLModuleLowering::lowerModuleBody(
     // Outputs need a temporary wire so they can be connect'd to, which we
     // then return.
     Value newArg = bodyBuilder.create<WireOp>(
-        FlipType::get(port.type), "." + port.getName().str() + ".output");
+        port.type, "." + port.getName().str() + ".output");
     // Switch all uses of the old operands to the new ones.
     oldArg.replaceAllUsesWith(newArg);
 
@@ -990,7 +990,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
   // Other Operations
   LogicalResult visitExpr(BitsPrimOp op);
-  LogicalResult visitExpr(InvalidValuePrimOp op);
+  LogicalResult visitExpr(InvalidValueOp op);
   LogicalResult visitExpr(HeadPrimOp op);
   LogicalResult visitExpr(ShlPrimOp op);
   LogicalResult visitExpr(ShrPrimOp op);
@@ -2225,7 +2225,7 @@ LogicalResult FIRRTLLowering::visitExpr(BitsPrimOp op) {
   return setLoweringTo<comb::ExtractOp>(op, resultType, input, op.lo());
 }
 
-LogicalResult FIRRTLLowering::visitExpr(InvalidValuePrimOp op) {
+LogicalResult FIRRTLLowering::visitExpr(InvalidValueOp op) {
   auto resultTy = lowerType(op.getType());
   if (!resultTy)
     return failure();

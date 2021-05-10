@@ -154,10 +154,6 @@ class Verilator:
       self.verilator = os.environ["VERILATOR_PATH"]
 
     self.top = args.top
-    if args.objdir != "":
-      self.ObjDir = args.objdir
-    else:
-      self.ObjDir = os.path.basename(args.sources[0]) + ".obj_dir"
 
   def compile(self, sources):
     dpiLibs = filter(lambda fn: fn.endswith(".so") or fn.endswith(".dll"),
@@ -165,11 +161,11 @@ class Verilator:
     self.ldPaths = ":".join([os.path.dirname(x) for x in dpiLibs])
     return subprocess.run([
         self.verilator, "--cc", "--top-module", self.top, "-sv", "--build",
-        "--exe", "--Mdir", self.ObjDir, "--assert"
+        "--exe", "--assert"
     ] + sources)
 
   def run(self, cycles, args):
-    exe = os.path.join(self.ObjDir, "V" + self.top)
+    exe = os.path.join("obj_dir", "V" + self.top)
     cmd = [exe]
     if cycles >= 0:
       cmd.append("--cycles")
@@ -209,9 +205,13 @@ def __main__(args):
   argparser.add_argument("--objdir",
                          type=str,
                          default="",
-                         help="(Verilator) Select an 'obj_dir' to use." +
+                         help="Select a directoy in which to run this test." +
                          " Must be different from other tests in the same" +
-                         " directory. Defaults to 'sources[0].obj_dir'.")
+                         " directory. Defaults to 'sources[0].o'.")
+  argparser.add_argument("--no-objdir",
+                         dest="no_objdir",
+                         action='store_true',
+                         help="Don't create and run in subdir.")
   argparser.add_argument("--simargs",
                          type=str,
                          default="",
@@ -234,6 +234,20 @@ def __main__(args):
     argparser.print_help()
     return
   args = argparser.parse_args(args[1:])
+
+  sources = [os.path.abspath(s) for s in args.sources]
+  args.sources = sources
+
+  # Create and cd into a test directory before running
+  if not args.no_objdir:
+    if args.objdir != "":
+      objDir = args.objdir
+    else:
+      objDir = os.path.basename(args.sources[0])
+    testDir = f"{objDir}.d"
+    if not os.path.exists(testDir):
+      os.mkdir(testDir)
+    os.chdir(testDir)
 
   # Break up simulator string
   simParts = os.path.split(args.sim)
