@@ -96,6 +96,11 @@ static cl::opt<bool>
                        cl::desc("ignore the @info locations in the .fir file"),
                        cl::init(false));
 
+static cl::opt<bool>
+    inferWidths("infer-widths",
+                cl::desc("run the width inference pass on firrtl"),
+                cl::init(false));
+
 enum OutputFormatKind {
   OutputMLIR,
   OutputVerilog,
@@ -201,6 +206,9 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   // Allow optimizations to run multithreaded.
   context.enableMultithreading(isMultithreaded);
 
+  if (inferWidths)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidthsPass());
+
   if (inliner)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
 
@@ -213,6 +221,8 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (lowerToRTL || outputFormat == OutputVerilog ||
       outputFormat == OutputSplitVerilog) {
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createCheckWidthsPass());
     pm.addPass(createLowerFIRRTLToRTLPass());
     pm.addPass(sv::createRTLMemSimImplPass());
 
