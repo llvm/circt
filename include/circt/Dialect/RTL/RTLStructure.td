@@ -13,10 +13,10 @@
 /// Ensure symbol is one of the rtl module.* types.  Passes on failed lookup, so
 /// more basic symbol validation can provide more useful error messages.
 def isModuleSymbol : AttrConstraint<
-    CPred<"!::mlir::SymbolTable::lookupNearestSymbolFrom("
-            "&$_op, $_self.cast<::mlir::FlatSymbolRefAttr>().getValue()) || "
-          "rtl::isAnyModule(::mlir::SymbolTable::lookupNearestSymbolFrom("
-            "&$_op, $_self.cast<::mlir::FlatSymbolRefAttr>().getValue()))"
+    CPred<"!::mlir::SymbolTable::lookupSymbolIn("
+            "&$_op, $_self.cast<::mlir::SymbolRefAttr>()) || "
+          "rtl::isAnyModule(::mlir::SymbolTable::lookupSymbolIn("
+            "&$_op, $_self.cast<::mlir::SymbolRefAttr>()))"
     >, "is module like">;
 
 def RTLModuleOp : RTLOp<"module",
@@ -278,7 +278,8 @@ def RTLModuleGeneratedOp : RTLOp<"module.generated",
 }
 
 def InstanceOp : RTLOp<"instance",
-                       [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
+                       [DeclareOpInterfaceMethods<OpAsmOpInterface>,
+                       HasParent<"RTLModuleOp">]> {
   let summary = "Create an instance of a module";
   let description = [{
     This represents an instance of a module. The inputs and results are 
@@ -287,7 +288,7 @@ def InstanceOp : RTLOp<"instance",
   }];
 
   let arguments = (ins StrAttr:$instanceName,
-                       Confined<FlatSymbolRefAttr, [isModuleSymbol]>:$moduleName,
+                       Confined<SymbolRefAttr, [isModuleSymbol]>:$moduleName,
                        Variadic<AnyType>:$inputs,
                        OptionalAttr<DictionaryAttr>:$parameters);
   let results = (outs Variadic<AnyType>);

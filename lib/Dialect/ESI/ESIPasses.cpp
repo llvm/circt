@@ -354,7 +354,7 @@ void ESIPortsPass::runOnOperation() {
 
   // Find all instances and update them.
   top.walk([&externModsMutated, this](InstanceOp inst) {
-    auto mapIter = externModsMutated.find(inst.moduleName());
+    auto mapIter = externModsMutated.find(inst.moduleName().getLeafReference());
     if (mapIter != externModsMutated.end())
       updateInstance(mapIter->second, inst);
   });
@@ -368,7 +368,7 @@ void ESIPortsPass::runOnOperation() {
 
   // Find all instances and update them.
   top.walk([&modsMutated, this](InstanceOp inst) {
-    auto mapIter = modsMutated.find(inst.moduleName());
+    auto mapIter = modsMutated.find(inst.moduleName().getLeafReference());
     if (mapIter != modsMutated.end())
       updateInstance(mapIter->second, inst);
   });
@@ -860,7 +860,7 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   Type resultTypes[] = {rewriter.getI1Type(), unwrap.rawOutput().getType(),
                         rewriter.getI1Type()};
   auto stageInst = rewriter.create<InstanceOp>(
-      loc, resultTypes, pipeStageName, stageModule.getName(), operands,
+      loc, resultTypes, pipeStageName, rewriter.getSymbolRefAttr(stageModule), operands,
       stageParams.getDictionary(rewriter.getContext()));
   auto stageInstResults = stageInst.getResults();
 
@@ -1003,7 +1003,8 @@ WrapInterfaceLower::matchAndRewrite(WrapSVInterface wrap,
       loc, ifaceInstance, ESIRTLBuilder::dataStr);
   auto wrapVR = rewriter.create<WrapValidReady>(loc, dataSignal, validSignal);
   rewriter.create<AssignInterfaceSignalOp>(
-      loc, ifaceInstance, ESIRTLBuilder::readyStr, wrapVR.ready());
+      loc, ifaceInstance, rewriter.getSymbolRefAttr(ESIRTLBuilder::readyStr),
+      wrapVR.ready());
   rewriter.replaceOp(wrap, {wrapVR.chanOutput()});
   return success();
 }
@@ -1045,9 +1046,10 @@ LogicalResult UnwrapInterfaceLower::matchAndRewrite(
   auto unwrapVR =
       rewriter.create<UnwrapValidReady>(loc, operands[0], readySignal);
   rewriter.create<AssignInterfaceSignalOp>(
-      loc, ifaceInstance, ESIRTLBuilder::validStr, unwrapVR.valid());
+      loc, ifaceInstance, rewriter.getSymbolRefAttr(ESIRTLBuilder::validStr), unwrapVR.valid());
   rewriter.create<AssignInterfaceSignalOp>(
-      loc, ifaceInstance, ESIRTLBuilder::dataStr, unwrapVR.rawOutput());
+      loc, ifaceInstance, rewriter.getSymbolRefAttr(ESIRTLBuilder::dataStr),
+      unwrapVR.rawOutput());
   rewriter.eraseOp(unwrap);
   return success();
 }

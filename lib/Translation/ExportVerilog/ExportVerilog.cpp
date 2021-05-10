@@ -292,7 +292,7 @@ static StringRef getVerilogDeclWord(Operation *op) {
 
   // Interfaces instances use the name of the declared interface.
   if (auto interface = dyn_cast<InterfaceInstanceOp>(op))
-    return interface.getInterfaceType().getInterface().getValue();
+    return interface.getInterfaceType().getInterface().getRootReference();
 
   // If 'op' is in a module, output 'wire'. If 'op' is in a procedural block,
   // fall through to default.
@@ -1118,12 +1118,12 @@ SubExprInfo ExprEmitter::visitComb(ExtractOp op) {
 }
 
 SubExprInfo ExprEmitter::visitSV(GetModportOp op) {
-  os << emitter.getName(op.iface()) + "." + op.field();
+  os << emitter.getName(op.iface()) + "." + op.field().getLeafReference();
   return {Selection, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitSV(ReadInterfaceSignalOp op) {
-  os << emitter.getName(op.iface()) + "." + op.signalName();
+  os << emitter.getName(op.iface()) + "." + op.signalName().getLeafReference();
   return {Selection, IsUnsigned};
 }
 
@@ -2278,7 +2278,7 @@ LogicalResult StmtEmitter::visitSV(InterfaceModportOp op) {
 
   llvm::interleaveComma(op.ports(), os, [&](const Attribute &portAttr) {
     auto port = portAttr.cast<ModportStructAttr>();
-    os << port.direction().getValue() << ' ' << port.signal().getValue();
+    os << port.direction().getValue() << ' ' << port.signal().getLeafReference();
   });
 
   os << ");\n";
@@ -2433,30 +2433,6 @@ void ModuleEmitter::emitRTLGeneratedModule(RTLModuleGeneratedOp module) {
   auto verilogName = module.getVerilogModuleNameAttr();
   verifyModuleName(module, verilogName);
   os << "// external generated module " << verilogName.getValue() << "\n\n";
-}
-
-void ModuleEmitter::emitGlobalBind(BindOp bind) {
-  auto *modSrc = bind.getReferencedSrcModule();
-  auto *modDest = bind.getReferencedDestModule();
-  assert(modSrc && modDest && "Invalid IR");
-
-  auto srcName = getVerilogModuleNameAttr(modSrc);
-  auto destName = getVerilogModuleNameAttr(modDest);
-  // Names are verified in the module op emitter
-  os << "bind " << srcName.getValue() << " " << destName.getValue() << " "
-     << bind.instanceName() << " (.*)\n";
-}
-
-void ModuleEmitter::emitGlobalBind(BindExplicitOp bind) {
-  auto *modSrc = bind.getReferencedSrcModule();
-  auto *modDest = bind.getReferencedDestModule();
-  assert(modSrc && modDest && "Invalid IR");
-
-  auto srcName = getVerilogModuleNameAttr(modSrc);
-  auto destName = getVerilogModuleNameAttr(modDest);
-  // Names are verified in the module op emitter
-  os << "bind " << srcName.getValue() << " " << destName.getValue() << " "
-     << bind.instanceName() << " (.*)\n";
 }
 
 // Given a side effect free "always inline" operation, make sure that it exists
@@ -2863,8 +2839,6 @@ void UnifiedEmitter::emitMLIRModule() {
       ModuleEmitter(state).emitRTLExternModule(rootOp);
     else if (auto rootOp = dyn_cast<RTLModuleGeneratedOp>(op))
       ModuleEmitter(state).emitRTLGeneratedModule(rootOp);
-    else if (auto rootOp = dyn_cast<BindOp>(op))
-      ModuleEmitter(state).emitGlobalBind(rootOp);
     else if (isa<RTLGeneratorSchemaOp>(op)) { /* Empty */
     } else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) ||
                isa<IfDefProceduralOp>(op))

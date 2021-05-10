@@ -187,9 +187,11 @@ static Type getEsiDataType(circt::sv::InterfaceOp iface) {
 static LogicalResult verifySVInterface(Operation *op,
                                        circt::sv::ModportType modportType,
                                        ChannelPort chanType) {
+  auto topLevelModuleOp = op->getParentOfType<ModuleOp>();
+  if (!topLevelModuleOp)
+      return op->emitError("Op not in a top-level module.");
   auto modport =
-      SymbolTable::lookupNearestSymbolFrom<circt::sv::InterfaceModportOp>(
-          op, modportType.getModport());
+      SymbolTable::lookupSymbolIn(topLevelModuleOp, modportType.getModport());
   if (!modport)
     return op->emitError("Could not find modport ")
            << modportType.getModport() << " in symbol table.";

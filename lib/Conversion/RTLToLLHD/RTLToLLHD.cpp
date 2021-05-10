@@ -329,7 +329,7 @@ struct ConvertInstance : public OpConversionPattern<InstanceOp> {
     // original instance for replacement with the new values probed from the
     // signals attached to the LLHD instance.
     rewriter.create<InstOp>(instance.getLoc(), instance.instanceName(),
-                            instance.moduleName(), arguments, resultSigs);
+                            instance.moduleName().getLeafReference(), arguments, resultSigs);
     rewriter.replaceOp(instance, resultValues);
 
     return success();

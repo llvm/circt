@@ -696,13 +696,13 @@ void InterfaceModportOp::build(OpBuilder &builder, OperationState &state,
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
 static LogicalResult verifyInterfaceInstanceOp(InterfaceInstanceOp op) {
-  auto symtable = SymbolTable::getNearestSymbolTable(op);
-  if (!symtable)
-    return op.emitError("sv.interface.instance must exist within a region "
-                        "which has a symbol table.");
+  auto topLevelModuleOp = op->getParentOfType<ModuleOp>();
+  if (!topLevelModuleOp)
+    return op.emitError("Op not in a top-level module.");
+
   auto ifaceTy = op.getType();
   auto referencedOp =
-      SymbolTable::lookupSymbolIn(symtable, ifaceTy.getInterface());
+      SymbolTable::lookupSymbolIn(topLevelModuleOp, ifaceTy.getInterface());
   if (!referencedOp)
     return op.emitError("Symbol not found: ") << ifaceTy.getInterface() << ".";
   if (!isa<InterfaceOp>(referencedOp))
@@ -714,13 +714,13 @@ static LogicalResult verifyInterfaceInstanceOp(InterfaceInstanceOp op) {
 /// Ensure that the symbol being instantiated exists and is an
 /// InterfaceModportOp.
 static LogicalResult verifyGetModportOp(GetModportOp op) {
-  auto symtable = SymbolTable::getNearestSymbolTable(op);
-  if (!symtable)
-    return op.emitError("sv.interface.instance must exist within a region "
-                        "which has a symbol table.");
+  auto topLevelModuleOp = op->getParentOfType<ModuleOp>();
+  if (!topLevelModuleOp)
+    return op.emitError("Op not in a top-level module.");
+
   auto ifaceTy = op.getType();
   auto referencedOp =
-      SymbolTable::lookupSymbolIn(symtable, ifaceTy.getModport());
+      SymbolTable::lookupSymbolIn(topLevelModuleOp, ifaceTy.getModport());
   if (!referencedOp)
     return op.emitError("Symbol not found: ") << ifaceTy.getModport() << ".";
   if (!isa<InterfaceModportOp>(referencedOp))
@@ -743,40 +743,39 @@ void GetModportOp::build(OpBuilder &builder, OperationState &state, Value value,
 
 void ReadInterfaceSignalOp::build(OpBuilder &builder, OperationState &state,
                                   Value iface, StringRef signalName) {
+  auto topLevelModuleOp = iface.getDefiningOp()->getParentOfType<ModuleOp>();
   auto ifaceTy = iface.getType().dyn_cast<InterfaceType>();
   assert(ifaceTy && "ReadInterfaceSignalOp expects an InterfaceType.");
   auto fieldAttr = SymbolRefAttr::get(builder.getContext(), signalName);
-  InterfaceOp ifaceDefOp = SymbolTable::lookupNearestSymbolFrom<InterfaceOp>(
-      iface.getDefiningOp(), ifaceTy.getInterface());
-  assert(ifaceDefOp &&
-         "ReadInterfaceSignalOp could not resolve an InterfaceOp.");
+  auto _ifaceDefOp = SymbolTable::lookupSymbolIn(
+      topLevelModuleOp, ifaceTy.getInterface());
+  InterfaceOp ifaceDefOp = cast<InterfaceOp>(_ifaceDefOp);
+  assert(
+      ifaceDefOp && "ReadInterfaceSignalOp could not resolve an InterfaceOp.");
   build(builder, state, ifaceDefOp.getSignalType(signalName), iface, fieldAttr);
 }
 
 ParseResult parseIfaceTypeAndSignal(OpAsmParser &p, Type &ifaceTy,
-                                    FlatSymbolRefAttr &signalName) {
+                                    SymbolRefAttr &signalName) {
   SymbolRefAttr fullSym;
   if (p.parseAttribute(fullSym) || fullSym.getNestedReferences().size() != 1)
     return failure();
 
   auto *ctxt = p.getBuilder().getContext();
   ifaceTy = InterfaceType::get(
-      ctxt, FlatSymbolRefAttr::get(ctxt, fullSym.getRootReference()));
-  signalName = FlatSymbolRefAttr::get(ctxt, fullSym.getLeafReference());
+      ctxt, SymbolRefAttr::get(ctxt, fullSym.getRootReference()));
+  signalName = SymbolRefAttr::get(ctxt, fullSym.getLeafReference());
   return success();
 }
 
 void printIfaceTypeAndSignal(OpAsmPrinter &p, Operation *op, Type type,
-                             FlatSymbolRefAttr signalName) {
+                             SymbolRefAttr signalName) {
   InterfaceType ifaceTy = type.dyn_cast<InterfaceType>();
   assert(ifaceTy && "Expected an InterfaceType");
-  auto sym = SymbolRefAttr::get(op->getContext(),
-                                ifaceTy.getInterface().getRootReference(),
-                                {signalName});
-  p << sym;
+  p << ifaceTy.getInterface();
 }
 
-LogicalResult verifySignalExists(Value ifaceVal, FlatSymbolRefAttr signalName) {
+LogicalResult verifySignalExists(Value ifaceVal, SymbolRefAttr signalName) {
   auto ifaceTy = ifaceVal.getType().dyn_cast<InterfaceType>();
   if (!ifaceTy)
     return failure();

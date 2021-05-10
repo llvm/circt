@@ -113,7 +113,7 @@ def ModportDirectionAttr : StrEnumAttr<"ModportDirectionAttr",
 
 def ModportDirectionField : StructFieldAttr<"direction", ModportDirectionAttr>;
 
-def ModportSignalField : StructFieldAttr<"signal", FlatSymbolRefAttr>;
+def ModportSignalField : StructFieldAttr<"signal", SymbolRefAttr>;
 
 def ModportStructAttr : StructAttr<"ModportStructAttr", SVDialect,
   [ModportDirectionField, ModportSignalField]>;
@@ -166,7 +166,7 @@ def InterfaceType : SVType<"Interface"> {
   }];
 
   let mnemonic = "interface";
-  let parameters = (ins "::mlir::FlatSymbolRefAttr":$interface);
+  let parameters = (ins "::mlir::SymbolRefAttr":$interface);
 }
 
 def ModportType : SVType<"Modport"> {
@@ -219,7 +219,7 @@ def GetModportOp: SVOp<"modport.get", [NoSideEffect]> {
     ```
   }];
 
-  let arguments = (ins InterfaceType:$iface, FlatSymbolRefAttr:$field);
+  let arguments = (ins InterfaceType:$iface, SymbolRefAttr:$field);
   let results = (outs ModportType:$result);
 
   let assemblyFormat =
@@ -249,7 +249,7 @@ def AssignInterfaceSignalOp : SVOp<"interface.signal.assign", []> {
     ```
   }];
 
-  let arguments = (ins InterfaceType:$iface, FlatSymbolRefAttr:$signalName,
+  let arguments = (ins InterfaceType:$iface, SymbolRefAttr:$signalName,
     AnyType:$rhs);
 
   let assemblyFormat = [{
@@ -276,7 +276,7 @@ def ReadInterfaceSignalOp : SVOp<"interface.signal.read", [NoSideEffect]> {
     ```
   }];
 
-  let arguments = (ins InterfaceType:$iface, FlatSymbolRefAttr:$signalName);
+  let arguments = (ins InterfaceType:$iface, SymbolRefAttr:$signalName);
   let results = (outs AnyType:$signalData);
 
   let assemblyFormat = [{

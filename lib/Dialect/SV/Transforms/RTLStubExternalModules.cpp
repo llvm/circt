@@ -32,8 +32,19 @@ void RTLStubExternalModulesPass::runOnOperation() {
   OpBuilder builder(topModule->getParentOp()->getContext());
   builder.setInsertionPointToEnd(topModule);
 
+  mlir::SymbolTableCollection symbolTable;
+  mlir::SymbolUserMap symbolUsers(symbolTable, getOperation());
+
   for (auto &op : llvm::make_early_inc_range(*topModule))
     if (auto module = dyn_cast<rtl::RTLModuleExternOp>(op)) {
+
+      // Update instances to drop parameters
+      for (auto &user : symbolUsers.getUsers(module)) {
+        llvm::errs() << "User: "; user->dump();
+        if (auto inst = dyn_cast<rtl::InstanceOp>(user))
+          inst->removeAttr("parameters");
+      }
+
       SmallVector<rtl::ModulePortInfo> ports = module.getPorts();
       auto nameAttr = module.getNameAttr();
       auto newModule =
@@ -48,13 +59,6 @@ void RTLStubExternalModulesPass::runOnOperation() {
               innerBuilder.create<sv::ConstantXOp>(outputOp->getLoc(), p.type));
       }
       outputOp->setOperands(outputs);
-
-      // Now update instances to drop parameters
-      auto useRange = SymbolTable::getSymbolUses(module, getOperation());
-      if (useRange)
-        for (auto &user : *useRange)
-          if (auto inst = dyn_cast<rtl::InstanceOp>(user.getUser()))
-            inst->removeAttr("parameters");
 
       // Done with the old module.
       module.erase();
