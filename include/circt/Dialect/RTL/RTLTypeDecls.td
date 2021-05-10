@@ -14,7 +14,7 @@
 // Declaration operations
 //===----------------------------------------------------------------------===//
 
-def TypedeclScopeOp : RTLOp<"typedecl_scope",
+def TypeScopeOp : RTLOp<"type_scope",
       [Symbol, SymbolTable, SingleBlock, NoTerminator, NoRegionArguments,
       HasParent<"mlir::ModuleOp">]> {
   let summary = "Type declaration wrapper.";
@@ -35,11 +35,15 @@ def TypedeclScopeOp : RTLOp<"typedecl_scope",
   }];
 }
 
-def TypedeclOp : RTLOp<"typedecl", [Symbol, HasParent<"TypedeclScopeOp">]> {
+def TypedeclOp : RTLOp<"typedecl", [Symbol, HasParent<"TypeScopeOp">]> {
   let summary = "Type declaration.";
   let description = "Associate a symbolic name with a type.";
 
-  let arguments = (ins SymbolNameAttr:$sym_name, TypeAttr:$type);
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    TypeAttr:$type,
+    OptionalAttr<StrAttr>:$verilogName
+  );
 
-  let assemblyFormat = "$sym_name `:` $type attr-dict";
+  let assemblyFormat = "$sym_name (`,` $verilogName^)? `:` $type attr-dict";
 }
