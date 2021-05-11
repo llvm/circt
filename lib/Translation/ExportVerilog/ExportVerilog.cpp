@@ -1487,6 +1487,47 @@ void NameCollector::collectNames(Block &block) {
 }
 
 //===----------------------------------------------------------------------===//
+// TypeScopeEmitter
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// This emits typescope-related operations.
+class TypeScopeEmitter
+    : public EmitterBase,
+      public rtl::TypeScopeVisitor<TypeScopeEmitter, LogicalResult> {
+public:
+  /// Create a TypeScopeEmitter for the specified module emitter.
+  TypeScopeEmitter(VerilogEmitterState &state) : EmitterBase(state) {}
+
+  void emitTypeScopeBlock(Block &body);
+
+private:
+  friend class TypeScopeVisitor<TypeScopeEmitter, LogicalResult>;
+
+  LogicalResult visitTypeScope(TypedeclOp op);
+};
+
+} // end anonymous namespace
+
+void TypeScopeEmitter::emitTypeScopeBlock(Block &body) {
+  for (auto &op : body) {
+    if (failed(dispatchTypeScopeVisitor(&op))) {
+      op.emitOpError("cannot emit this type scope op to Verilog");
+      os << "<<unsupported op: " << op.getName().getStringRef() << ">>\n";
+    }
+  }
+}
+
+LogicalResult TypeScopeEmitter::visitTypeScope(TypedeclOp op) {
+  indent() << "typedef ";
+  printPackedType(stripUnpackedTypes(op.type()), os, op.getLoc(), false);
+  printUnpackedTypePostfix(op.type(), os);
+  os << ' ' << op.sym_name();
+  os << ";\n";
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // StmtEmitter
 //===----------------------------------------------------------------------===//
 
@@ -2829,6 +2870,8 @@ void UnifiedEmitter::emitMLIRModule() {
       ModuleEmitter(state).emitRTLExternModule(rootOp);
     else if (auto rootOp = dyn_cast<RTLModuleGeneratedOp>(op))
       ModuleEmitter(state).emitRTLGeneratedModule(rootOp);
+    else if (auto typedecls = dyn_cast<TypeScopeOp>(op))
+      TypeScopeEmitter(state).emitTypeScopeBlock(*typedecls.getBodyBlock());
     else if (isa<RTLGeneratorSchemaOp>(op)) { /* Empty */
     } else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) ||
                isa<IfDefProceduralOp>(op))
@@ -2887,7 +2930,7 @@ void SplitEmitter::emitMLIRModule() {
         .Case<RTLModuleOp, InterfaceOp>([&](auto &) {
           moduleOps.push_back({&op, perFileOps.size(), {}});
         })
-        .Case<VerbatimOp, IfDefProceduralOp>(
+        .Case<VerbatimOp, IfDefProceduralOp, TypeScopeOp>(
             [&](auto &) { perFileOps.push_back(&op); })
         .Case<RTLGeneratorSchemaOp, RTLModuleExternOp>([&](auto &) {})
         .Default([&](auto *) {
@@ -2945,11 +2988,21 @@ void SplitEmitter::emitModule(const LoweringOptions &options,
   state.options = options;
 
   for (size_t i = 0; i < std::min(mod.position, perFileOps.size()); ++i) {
-    ModuleEmitter(state).emitStatement(perFileOps[i]);
+    TypeSwitch<Operation *>(perFileOps[i])
+        .Case<VerbatimOp, IfDefProceduralOp>(
+            [&](auto &op) { ModuleEmitter(state).emitStatement(op); })
+        .Case<TypeScopeOp>([&](auto &op) {
+          TypeScopeEmitter(state).emitTypeScopeBlock(*op.getBodyBlock());
+        });
   }
   emit(state);
   for (size_t i = mod.position; i < perFileOps.size(); i++) {
-    ModuleEmitter(state).emitStatement(perFileOps[i]);
+    TypeSwitch<Operation *>(perFileOps[i])
+        .Case<VerbatimOp, IfDefProceduralOp>(
+            [&](auto &op) { ModuleEmitter(state).emitStatement(op); })
+        .Case<TypeScopeOp>([&](auto &op) {
+          TypeScopeEmitter(state).emitTypeScopeBlock(*op.getBodyBlock());
+        });
   }
 
   if (state.encounteredError)
