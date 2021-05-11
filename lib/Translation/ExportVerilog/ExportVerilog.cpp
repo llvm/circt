@@ -581,9 +581,6 @@ public:
   void emitStatement(Operation *op);
   void emitStatementBlock(Block &block);
 
-  // Type scopes.
-  void emitTypeScopeBlock(Block &block);
-
   using ValueOrOp = PointerUnion<Value, Operation *>;
 
   StringRef addName(ValueOrOp valueOrOp, StringRef name);
@@ -1500,15 +1497,14 @@ class TypeScopeEmitter
       public rtl::TypeScopeVisitor<TypeScopeEmitter, LogicalResult> {
 public:
   /// Create a TypeScopeEmitter for the specified module emitter.
-  TypeScopeEmitter(ModuleEmitter &emitter, SmallVectorImpl<char> &outBuffer)
-      : EmitterBase(emitter.state, stringStream), stringStream(outBuffer) {}
+  TypeScopeEmitter(VerilogEmitterState &state) : EmitterBase(state) {}
 
   void emitTypeScopeBlock(Block &body);
 
 private:
   friend class TypeScopeVisitor<TypeScopeEmitter, LogicalResult>;
+
   LogicalResult visitTypeScope(TypedeclOp op);
-  llvm::raw_svector_ostream stringStream;
 };
 
 } // end anonymous namespace
@@ -2458,12 +2454,6 @@ void ModuleEmitter::emitStatementBlock(Block &body) {
   os << outputBuffer;
 }
 
-void ModuleEmitter::emitTypeScopeBlock(Block &body) {
-  SmallString<128> outputBuffer;
-  TypeScopeEmitter(*this, outputBuffer).emitTypeScopeBlock(body);
-  os << outputBuffer;
-}
-
 //===----------------------------------------------------------------------===//
 // Module Driver
 //===----------------------------------------------------------------------===//
@@ -2885,7 +2875,7 @@ void UnifiedEmitter::emitMLIRModule() {
     else if (auto rootOp = dyn_cast<RTLModuleGeneratedOp>(op))
       ModuleEmitter(state).emitRTLGeneratedModule(rootOp);
     else if (auto typedecls = dyn_cast<TypeScopeOp>(op))
-      ModuleEmitter(state).emitTypeScopeBlock(*typedecls.getBodyBlock());
+      TypeScopeEmitter(state).emitTypeScopeBlock(*typedecls.getBodyBlock());
     else if (isa<RTLGeneratorSchemaOp>(op)) { /* Empty */
     } else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) ||
                isa<IfDefProceduralOp>(op))
@@ -3006,7 +2996,7 @@ void SplitEmitter::emitModule(const LoweringOptions &options,
         .Case<VerbatimOp, IfDefProceduralOp>(
             [&](auto &op) { ModuleEmitter(state).emitStatement(op); })
         .Case<TypeScopeOp>([&](auto &op) {
-          ModuleEmitter(state).emitTypeScopeBlock(*op.getBodyBlock());
+          TypeScopeEmitter(state).emitTypeScopeBlock(*op.getBodyBlock());
         });
   }
   emit(state);
@@ -3015,7 +3005,7 @@ void SplitEmitter::emitModule(const LoweringOptions &options,
         .Case<VerbatimOp, IfDefProceduralOp>(
             [&](auto &op) { ModuleEmitter(state).emitStatement(op); })
         .Case<TypeScopeOp>([&](auto &op) {
-          ModuleEmitter(state).emitTypeScopeBlock(*op.getBodyBlock());
+          TypeScopeEmitter(state).emitTypeScopeBlock(*op.getBodyBlock());
         });
   }
 
