@@ -42,4 +42,9 @@ module {
     %arg4: !rtl.inout<uarray<2xarray<42xi8>>>) {
     return
   }
+
+  // CHECK-LABEL: typeref
+  func @typeref(%arg0: !rtl.typeref<@__rtl_types::@foo>) {
+    return
+  }
 }

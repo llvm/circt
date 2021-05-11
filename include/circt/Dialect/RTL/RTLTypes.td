@@ -137,3 +137,30 @@ def UnionType : RTLType<"Union"> {
     mlir::Type getFieldType(mlir::StringRef fieldName);
   }];
 }
+
+def TypeRefType : RTLType<"TypeRef"> {
+  let summary = "An symbolic reference to a type declaration";
+  let description = [{
+    A TypeRef is parameterized by a SymbolRefAttr, which points to the
+    declaration of this type. Upon construction, a TypeRef verifies the
+    referent exists and stores the inner type. It also canonicalizes the inner
+    type, resolving any nested TypeRefs. If different, the canonical type is
+    also stored.
+  }];
+
+  let mnemonic = "typeref";
+
+  let parameters = (ins
+    "mlir::SymbolRefAttr":$ref,
+    "mlir::Type":$canonicalType,
+    "mlir::StringAttr":$name
+  );
+
+  let genStorageClass = 0;
+  let genAccessors = 0;
+
+  let extraClassDeclaration = [{
+    static TypeRefType get(SymbolRefAttr ref);
+    mlir::SymbolRefAttr getRef() const;
+  }];
+}

@@ -21,6 +21,9 @@
 #include "mlir/IR/Types.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include <mlir/IR/BuiltinAttributes.h>
+#include <mlir/IR/TypeSupport.h>
+#include <mlir/Support/StorageUniquer.h>
 
 using namespace circt;
 using namespace circt::rtl;
@@ -352,6 +355,60 @@ LogicalResult InOutType::verify(function_ref<InFlightDiagnostic()> emitError,
     return emitError() << "invalid element for rtl.inout type " << innerType;
   return success();
 }
+
+//===----------------------------------------------------------------------===//
+// TypeRefType
+//===----------------------------------------------------------------------===//
+
+struct detail::TypeRefTypeStorage : public mlir::TypeStorage {
+  TypeRefTypeStorage(SymbolRefAttr ref) : ref(ref) {}
+
+  // The hash key is a tuple containing the parameters, but only the symbol ref
+  // is considered, as the type and name are looked up and cached in storage
+  // lazily.
+  using KeyTy = std::tuple<SymbolRefAttr, Type, StringAttr>;
+
+  bool operator==(const KeyTy &tblgenKey) const {
+    if (!(ref == std::get<0>(tblgenKey)))
+      return false;
+    return true;
+  }
+
+  static llvm::hash_code hashKey(const KeyTy &tblgenKey) {
+    return llvm::hash_combine(std::get<0>(tblgenKey));
+  }
+
+  static TypeRefTypeStorage *construct(mlir::TypeStorageAllocator &allocator,
+                                       const KeyTy &tblgenKey) {
+    auto ref = std::get<0>(tblgenKey);
+
+    return new (allocator.allocate<TypeRefTypeStorage>())
+        TypeRefTypeStorage(ref);
+  }
+
+  SymbolRefAttr ref;
+  Type canonicalType;
+  StringAttr name;
+};
+
+TypeRefType TypeRefType::get(SymbolRefAttr ref) {
+  // Initially create the type without an inner type or name.
+  return get(ref.getContext(), ref, Type(), StringAttr());
+}
+
+Type TypeRefType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
+  SymbolRefAttr ref;
+  if (p.parseLess() || p.parseAttribute(ref) || p.parseGreater())
+    return Type();
+
+  return get(ref);
+}
+
+void TypeRefType::print(DialectAsmPrinter &p) const {
+  p << getMnemonic() << "<" << getRef() << ">";
+}
+
+SymbolRefAttr TypeRefType::getRef() const { return getImpl()->ref; }
 
 /// Parses a type registered to this dialect. Parse out the mnemonic then invoke
 /// the tblgen'd type parser dispatcher.

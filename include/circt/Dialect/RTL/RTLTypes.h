@@ -14,6 +14,7 @@
 #ifndef CIRCT_DIALECT_RTL_TYPES_H
 #define CIRCT_DIALECT_RTL_TYPES_H
 
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/Types.h"
 
 namespace circt {
