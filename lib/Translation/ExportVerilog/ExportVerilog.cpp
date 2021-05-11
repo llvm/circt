@@ -1510,16 +1510,12 @@ private:
 } // end anonymous namespace
 
 void TypeScopeEmitter::emitTypeScopeBlock(Block &body) {
-  addIndent();
-
   for (auto &op : body) {
     if (failed(dispatchTypeScopeVisitor(&op))) {
       op.emitOpError("cannot emit this type scope op to Verilog");
       os << "<<unsupported op: " << op.getName().getStringRef() << ">>\n";
     }
   }
-
-  reduceIndent();
 }
 
 LogicalResult TypeScopeEmitter::visitTypeScope(TypedeclOp op) {
