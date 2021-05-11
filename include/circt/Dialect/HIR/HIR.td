@@ -310,7 +310,7 @@ def UnrollForOp : HIR_Op<"unroll_for",
       }];
 
       let arguments = (ins I32Attr: $lb, I32Attr: $ub, I32Attr: $step, 
-          TimeType:$tstart);
+          TimeType:$tstart, Optional<ConstType>:$offset);
       let regions = (region SizedRegion<1>:$region);
       let results = (outs TimeType:$tlast);
 

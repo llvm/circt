@@ -252,7 +252,10 @@ static void printUnrollForOp(OpAsmPrinter &printer, UnrollForOp op) {
   printer << "hir.unroll_for"
           << " " << op.getInductionVar() << " = " << op.lb() << " to "
           << op.ub() << " step " << op.step() << " iter_time( "
-          << op.getIterTimeVar() << " = " << op.tstart() << " ) ";
+          << op.getIterTimeVar() << " = " << op.tstart();
+  if (op.offset())
+    printer << " + " << op.offset();
+  printer << ")";
 
   printer.printRegion(op.region(),
                       /*printEntryBlockArgs=*/false,
@@ -264,6 +267,8 @@ static ParseResult parseUnrollForOp(OpAsmParser &parser,
   auto &builder = parser.getBuilder();
   Type timeTypeVar = helper::getTimeType(parser.getBuilder().getContext());
   Type tstartRawType = timeTypeVar;
+  Type offsetType = helper::getConstIntType(parser.getBuilder().getContext());
+
   Type regionRawOperandTypes[2];
   ArrayRef<Type> regionOperandTypes(regionRawOperandTypes);
   regionRawOperandTypes[0] =
@@ -274,6 +279,7 @@ static ParseResult parseUnrollForOp(OpAsmParser &parser,
   IntegerAttr ubAttr;
   IntegerAttr stepAttr;
   OpAsmParser::OperandType tstartRawOperand;
+  OpAsmParser::OperandType offsetRawOperand;
   OpAsmParser::OperandType regionRawOperands[2];
 
   ArrayRef<OpAsmParser::OperandType> regionOperands(regionRawOperands);
@@ -295,13 +301,22 @@ static ParseResult parseUnrollForOp(OpAsmParser &parser,
       parser.parseRegionArgument(regionRawOperands[1]) || parser.parseEqual() ||
       parser.parseOperand(tstartRawOperand))
     return failure();
+  bool offsetIsPresent = false;
+  if (!parser.parseOptionalPlus()) {
+    if (parser.parseOperand(offsetRawOperand))
+      return failure();
+    offsetIsPresent = true;
+  }
 
-  // Parse the type of induction variable.
   if (parser.parseRParen())
     return failure();
 
-  // resolve operand.
+  // resolve operands.
   if (parser.resolveOperand(tstartRawOperand, tstartRawType, result.operands))
+    return failure();
+
+  if (offsetIsPresent &&
+      parser.resolveOperand(offsetRawOperand, offsetType, result.operands))
     return failure();
 
   // Parse the body region.
