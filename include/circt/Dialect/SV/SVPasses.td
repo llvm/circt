@@ -78,8 +78,6 @@ def RTLGeneratorCalloutPass : Pass<"rtl-generator-callout", "ModuleOp"> {
                 "", "Generator program executable with optional full path">,
     Option<"genExecArgs", "generator-executable-arguments", "std::string",
                 "", "Generator program arguments separated by ;">,
-    Option<"genExecOutFileName", "generator-executable-output-filename",
-                "std::string", "", "Filename the generator program outputs to">
    ];
 }
 
