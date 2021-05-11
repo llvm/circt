@@ -9,3 +9,18 @@ hw.type_scope @__hw_typedecls {
   // CHECK: hw.typedecl @baz, "MY_NAMESPACE_baz" : i8
   hw.typedecl @baz, "MY_NAMESPACE_baz" : i8
 }
+
+// CHECK-LABEL: hw.module.extern @testTypeAlias
+hw.module.extern @testTypeAlias(
+  // CHECK: hw.typealias<@__hw_typedecls::@foo, i1>
+  %arg0: !hw.typealias<@__hw_typedecls::@foo, i1>
+)
+
+// CHECK-LABEL: hw.module @testTypeAliasComb
+hw.module @testTypeAliasComb(
+  %arg0: !hw.typealias<@__hw_typedecls::@foo, i1>,
+  %arg1: !hw.typealias<@__hw_typedecls::@foo, i1>) -> (!hw.typealias<@__hw_typedecls::@foo, i1>) {
+  // CHECK: comb.add %arg0, %arg1 : !hw.typealias<@__hw_typedecls::@foo, i1>
+  %0 = comb.add %arg0, %arg1 : !hw.typealias<@__hw_typedecls::@foo, i1>
+  hw.output %0 : !hw.typealias<@__hw_typedecls::@foo, i1>
+}

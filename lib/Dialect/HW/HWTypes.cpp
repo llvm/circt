@@ -40,6 +40,9 @@ FieldInfo FieldInfo::allocateInto(mlir::TypeStorageAllocator &alloc) const {
 /// Return true if the specified type is a value HW Integer type.  This checks
 /// that it is a signless standard dialect type, that it isn't zero bits.
 bool circt::hw::isHWIntegerType(mlir::Type type) {
+  if (auto typeAlias = type.dyn_cast<TypeAliasType>())
+    type = typeAlias.getCanonicalType();
+
   auto intType = type.dyn_cast<IntegerType>();
   if (!intType || !intType.isSignless())
     return false;
@@ -70,6 +73,9 @@ bool circt::hw::isHWValueType(Type type) {
     return std::all_of(t.getElements().begin(), t.getElements().end(),
                        [](const auto &f) { return isHWValueType(f.type); });
   }
+
+  if (auto t = type.dyn_cast<TypeAliasType>())
+    return isHWValueType(t.getCanonicalType());
 
   return false;
 }
@@ -108,6 +114,8 @@ int64_t circt::hw::getBitWidth(mlir::Type type) {
         }
         return maxSize;
       })
+      .Case<TypeAliasType>(
+          [](TypeAliasType t) { return getBitWidth(t.getCanonicalType()); })
       .Default([](Type) { return -1; });
 }
 
@@ -125,6 +133,10 @@ bool circt::hw::hasHWInOutType(Type type) {
     return std::any_of(t.getElements().begin(), t.getElements().end(),
                        [](const auto &f) { return hasHWInOutType(f.type); });
   }
+
+  if (auto t = type.dyn_cast<TypeAliasType>())
+    return hasHWInOutType(t.getCanonicalType());
+
   return type.isa<InOutType>();
 }
 
@@ -351,6 +363,51 @@ LogicalResult InOutType::verify(function_ref<InFlightDiagnostic()> emitError,
   if (!isHWValueType(innerType))
     return emitError() << "invalid element for hw.inout type " << innerType;
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// TypeAliasType
+//===----------------------------------------------------------------------===//
+
+static Type computeCanonicalType(Type type) {
+  return llvm::TypeSwitch<Type, Type>(type)
+      .Case([](TypeAliasType t) {
+        return computeCanonicalType(t.getCanonicalType());
+      })
+      .Case([](ArrayType t) {
+        return ArrayType::get(computeCanonicalType(t.getElementType()),
+                              t.getSize());
+      })
+      .Case([](UnpackedArrayType t) {
+        return UnpackedArrayType::get(computeCanonicalType(t.getElementType()),
+                                      t.getSize());
+      })
+      .Case([](StructType t) {
+        SmallVector<StructType::FieldInfo> fieldInfo;
+        for (auto field : t.getElements())
+          fieldInfo.push_back(StructType::FieldInfo{
+              field.name, computeCanonicalType(field.type)});
+        return StructType::get(t.getContext(), fieldInfo);
+      })
+      .Default([](Type t) { return t; });
+}
+
+TypeAliasType TypeAliasType::get(SymbolRefAttr ref, Type innerType) {
+  return get(ref.getContext(), ref, innerType, computeCanonicalType(innerType));
+}
+
+Type TypeAliasType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
+  SymbolRefAttr ref;
+  Type type;
+  if (p.parseLess() || p.parseAttribute(ref) || p.parseComma() ||
+      p.parseType(type) || p.parseGreater())
+    return Type();
+
+  return get(ref, type);
+}
+
+void TypeAliasType::print(DialectAsmPrinter &p) const {
+  p << getMnemonic() << "<" << getRef() << ", " << getInnerType() << ">";
 }
 
 /// Parses a type registered to this dialect. Parse out the mnemonic then invoke
