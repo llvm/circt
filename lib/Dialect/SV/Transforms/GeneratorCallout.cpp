@@ -54,8 +54,8 @@ void RTLGeneratorCalloutPass::runOnOperation() {
     generatorExe = llvm::sys::findProgramByName(execName);
   // If cannot find the executable, then nothing to do, return.
   if (!generatorExe) {
-    root.emitError("cannot find executable '" + execName +
-                   "' in path '" + execPath + "'");
+    root.emitError("cannot find executable '" + execName + "' in path '" +
+                   execPath + "'");
     return;
   }
   for (auto &op : llvm::make_early_inc_range(root.getBody()->getOperations())) {
@@ -123,8 +123,7 @@ void RTLGeneratorCalloutPass::processGenerator(
   // Default error code is 0.
   std::error_code ok;
   if (errCode != ok) {
-    generatedModuleOp.emitError(
-        "cannot generate a unique temporary file name");
+    generatedModuleOp.emitError("cannot generate a unique temporary file name");
     return;
   }
   Optional<StringRef> redirects[] = {None, StringRef(genExecOutFileName), None};
@@ -134,8 +133,7 @@ void RTLGeneratorCalloutPass::processGenerator(
       /*SecondsToWait=*/0, /*MemoryLimit=*/0, &errMsg);
 
   if (result != 0) {
-    generatedModuleOp.emitError("execution of '" + generatorExe +
-                                "' failed");
+    generatedModuleOp.emitError("execution of '" + generatorExe + "' failed");
     return;
   }
 
