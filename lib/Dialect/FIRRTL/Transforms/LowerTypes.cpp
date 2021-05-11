@@ -613,8 +613,7 @@ void TypeLoweringVisitor::visitDecl(WireOp op) {
     SmallVector<Attribute> loweredAttrs;
     // For all annotations on the parent op, filter them based on the target
     // attribute.
-    filterAnnotations(op.annotations(), loweredAttrs, field.suffix,
-                      context);
+    filterAnnotations(op.annotations(), loweredAttrs, field.suffix, context);
     auto wire = builder->create<WireOp>(field.type, loweredName, loweredAttrs);
     setBundleLowering(result, StringRef(field.suffix).drop_front(1), wire);
   }
@@ -647,8 +646,7 @@ void TypeLoweringVisitor::visitDecl(RegOp op) {
     SmallVector<Attribute> loweredAttrs;
     // For all annotations on the parent op, filter them based on the target
     // attribute.
-    filterAnnotations(op.annotations(), loweredAttrs, field.suffix,
-                      context);
+    filterAnnotations(op.annotations(), loweredAttrs, field.suffix, context);
     setBundleLowering(result, StringRef(field.suffix).drop_front(1),
                       builder->create<RegOp>(field.getPortType(), op.clockVal(),
                                              loweredName, loweredAttrs));
