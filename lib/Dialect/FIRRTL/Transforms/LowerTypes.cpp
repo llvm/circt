@@ -542,8 +542,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
 /// with "target" key, that do not match the field suffix.
 static void filterAnnotations(ArrayAttr annotations,
                               SmallVector<Attribute> &loweredAttrs,
-                              const FlatBundleFieldEntry &field,
-                              MLIRContext *context) {
+                              StringRef suffix, MLIRContext *context) {
 
   for (auto opAttr : annotations) {
     auto di = opAttr.dyn_cast<DictionaryAttr>();
@@ -576,7 +575,7 @@ static void filterAnnotations(ArrayAttr annotations,
       continue;
     }
     // If the subfield suffix doesn't match, then ignore the annotation.
-    if (field.suffix.find(targetStr.str().str()) != 0)
+    if (suffix.find(targetStr.str().str()) != 0)
       continue;
 
     NamedAttrList modAttr;
@@ -614,7 +613,8 @@ void TypeLoweringVisitor::visitDecl(WireOp op) {
     SmallVector<Attribute> loweredAttrs;
     // For all annotations on the parent op, filter them based on the target
     // attribute.
-    filterAnnotations(op.annotations(), loweredAttrs, field, context);
+    filterAnnotations(op.annotations(), loweredAttrs, field.suffix,
+                      context);
     auto wire = builder->create<WireOp>(field.type, loweredName, loweredAttrs);
     setBundleLowering(result, StringRef(field.suffix).drop_front(1), wire);
   }
@@ -647,7 +647,8 @@ void TypeLoweringVisitor::visitDecl(RegOp op) {
     SmallVector<Attribute> loweredAttrs;
     // For all annotations on the parent op, filter them based on the target
     // attribute.
-    filterAnnotations(op.annotations(), loweredAttrs, field, context);
+    filterAnnotations(op.annotations(), loweredAttrs, field.suffix,
+                      context);
     setBundleLowering(result, StringRef(field.suffix).drop_front(1),
                       builder->create<RegOp>(field.getPortType(), op.clockVal(),
                                              loweredName, loweredAttrs));
