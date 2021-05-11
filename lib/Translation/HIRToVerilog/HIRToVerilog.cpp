@@ -867,6 +867,8 @@ void VerilogPrinter::printUnrollForOp(UnrollForOp op, unsigned indentAmount) {
   int ub = op.ub();
   int step = op.step();
   Value tstart = op.tstart();
+  assert(!op.offset()); // run canonicalization pass before codegen.
+
   VerilogValue *vTstart = verilogMapper.getMutable(tstart);
   Value tloop = op.getIterTimeVar();
   Value idx = op.getInductionVar();
