@@ -91,6 +91,57 @@ static FIRRTLType getCanonicalAggregateType(Type originalType) {
       .Default([](auto) { return nullptr; });
 }
 
+/// Copy annotations from \p annotations to \p loweredAttrs, except annotations
+/// with "target" key, that do not match the field suffix.
+static void filterAnnotations(ArrayAttr annotations,
+                              SmallVector<Attribute> &loweredAttrs,
+                              StringRef suffix, MLIRContext *context) {
+
+  for (auto opAttr : annotations) {
+    auto di = opAttr.dyn_cast<DictionaryAttr>();
+    if (!di) {
+      loweredAttrs.push_back(opAttr);
+      continue;
+    }
+    auto targetAttr = di.get("target");
+    if (!targetAttr) {
+      loweredAttrs.push_back(opAttr);
+      continue;
+    }
+
+    ArrayAttr subFieldTarget = targetAttr.cast<ArrayAttr>();
+    SmallString<16> targetStr;
+    for (auto fName : subFieldTarget) {
+      std::string fNameStr = fName.cast<StringAttr>().getValue().str();
+      // The fNameStr will begin with either '[' or '.', replace it with an
+      // '_' to construct the suffix.
+      fNameStr[0] = '_';
+      // If it ends with ']', then just remove it.
+      if (fNameStr.back() == ']')
+        fNameStr.erase(fNameStr.size() - 1);
+
+      targetStr += fNameStr;
+    }
+    // If no subfield attribute, then copy the annotation.
+    if (targetStr.empty()) {
+      loweredAttrs.push_back(opAttr);
+      continue;
+    }
+    // If the subfield suffix doesn't match, then ignore the annotation.
+    if (suffix.find(targetStr.str().str()) != 0)
+      continue;
+
+    NamedAttrList modAttr;
+    for (auto attr : di.getValue()) {
+      // Ignore the actual target annotation, but copy the rest of annotations.
+      if (attr.first.str() == "target")
+        continue;
+      modAttr.push_back(attr);
+    }
+    loweredAttrs.push_back(DictionaryAttr::get(context, modAttr));
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // Module Type Lowering
 //===----------------------------------------------------------------------===//
@@ -536,57 +587,6 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
   }
 
   opsToRemove.push_back(op);
-}
-
-/// Copy annotations from \p annotations to \p loweredAttrs, except annotations
-/// with "target" key, that do not match the field suffix.
-static void filterAnnotations(ArrayAttr annotations,
-                              SmallVector<Attribute> &loweredAttrs,
-                              StringRef suffix, MLIRContext *context) {
-
-  for (auto opAttr : annotations) {
-    auto di = opAttr.dyn_cast<DictionaryAttr>();
-    if (!di) {
-      loweredAttrs.push_back(opAttr);
-      continue;
-    }
-    auto targetAttr = di.get("target");
-    if (!targetAttr) {
-      loweredAttrs.push_back(opAttr);
-      continue;
-    }
-
-    ArrayAttr subFieldTarget = targetAttr.cast<ArrayAttr>();
-    SmallString<16> targetStr;
-    for (auto fName : subFieldTarget) {
-      std::string fNameStr = fName.cast<StringAttr>().getValue().str();
-      // The fNameStr will begin with either '[' or '.', replace it with an
-      // '_' to construct the suffix.
-      fNameStr[0] = '_';
-      // If it ends with ']', then just remove it.
-      if (fNameStr.back() == ']')
-        fNameStr.erase(fNameStr.size() - 1);
-
-      targetStr += fNameStr;
-    }
-    // If no subfield attribute, then copy the annotation.
-    if (targetStr.empty()) {
-      loweredAttrs.push_back(opAttr);
-      continue;
-    }
-    // If the subfield suffix doesn't match, then ignore the annotation.
-    if (suffix.find(targetStr.str().str()) != 0)
-      continue;
-
-    NamedAttrList modAttr;
-    for (auto attr : di.getValue()) {
-      // Ignore the actual target annotation, but copy the rest of annotations.
-      if (attr.first.str() == "target")
-        continue;
-      modAttr.push_back(attr);
-    }
-    loweredAttrs.push_back(DictionaryAttr::get(context, modAttr));
-  }
 }
 
 /// Lower a wire op with a bundle to mutliple non-bundled wires.
