@@ -203,7 +203,7 @@ private:
   SmallVector<NamedAttribute, 8> newModuleAttrs;
   SmallVector<Attribute> newArgNames;
   SmallVector<Direction> newArgDirections;
-  SmallVector<ArrayRef<NamedAttribute>, 8> newArgAttrs;
+  SmallVector<SmallVector<NamedAttribute>, 8> newArgAttrs;
   size_t originalNumModuleArgs;
 
   void recursivePartialConnect(Value a, FIRRTLType aType, Value b,
@@ -345,14 +345,27 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   for (auto &port : extModule.getPorts()) {
     // Flatten the port type.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-    flattenType(port.type, port.getName(), false, fieldTypes);
+    flattenType(port.type, "", false, fieldTypes);
+
+    // Pre-populate argAttrs with the current arg attrributes that are not
+    // annotations.  Populate oldAnnotations with the current annotations.
+    SmallVector<NamedAttribute> argAttrs;
+    ArrayAttr oldAnnotations;
+    for (auto oldArgAttr :
+         builder.getDictionaryAttr(extModule.getArgAttrs(oldArgNumber))) {
+      if (oldArgAttr.first == "firrtl.annotations") {
+        oldAnnotations = oldArgAttr.second.cast<ArrayAttr>();
+        continue;
+      }
+      argAttrs.push_back({oldArgAttr.first, oldArgAttr.second});
+    }
 
     // For each field, add record its name and type.
     for (auto field : fieldTypes) {
       Attribute pName;
       inputTypes.push_back(field.type);
       if (port.name)
-        pName = builder.getStringAttr(field.suffix);
+        pName = builder.getStringAttr((port.getName() + field.suffix).str());
       else
         pName = builder.getStringAttr("");
       portNames.push_back(pName);
@@ -360,14 +373,28 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
       portDirections.push_back((Direction)(
           (unsigned)getModulePortDirection(extModule, oldArgNumber) ^
           field.isOutput));
-      // Copy argument attributes from the old port to the new port.
-      //
-      // TODO: This should add special handling for targeted
-      // anotations.
-      attributes.push_back(NamedAttribute(
-          Identifier::get(
-              mlir::impl::getArgAttrName(newArgNumber++, attrNameBuf), context),
-          builder.getDictionaryAttr(extModule.getArgAttrs(oldArgNumber))));
+
+      // Populate newAnnotations with the old annotations filtered to those
+      // associated with just this field.
+      SmallVector<Attribute> newAnnotations;
+      if (oldAnnotations)
+        filterAnnotations(oldAnnotations, newAnnotations, field.suffix,
+                          context);
+
+      // If any filtered annotations exist, add them to the end of argAttrs.
+      bool hasAnnotations = !newAnnotations.empty();
+      if (hasAnnotations)
+        argAttrs.push_back({builder.getIdentifier("firrtl.annotations"),
+                            builder.getArrayAttr(newAnnotations)});
+
+      // Populate the new arg attributes.
+      attributes.push_back({builder.getIdentifier(mlir::impl::getArgAttrName(
+                                newArgNumber++, attrNameBuf)),
+                            builder.getDictionaryAttr(argAttrs)});
+
+      // Pop off any added annotations to reuse argAttrs for the next iteration.
+      if (hasAnnotations)
+        argAttrs.pop_back();
     }
     ++oldArgNumber;
   }
@@ -379,8 +406,8 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
       {Identifier::get(direction::attrKey, context),
        direction::packIntegerAttribute(portDirections, context)});
 
-  // Copy over any lingering attributes which are not "portNames" or
-  // argument attributes.
+  // Copy over any lingering attributes which are not "portNames", directions,
+  // or argument attributes.
   for (auto a : extModule->getAttrs()) {
     if (a.first == "portNames" || a.first == direction::attrKey ||
         mlir::impl::isArgAttrName(a.first))
@@ -1010,7 +1037,22 @@ Value TypeLoweringVisitor::addArg(FModuleOp module, Type type,
       builder->getStringAttr(nameAttr.getValue().str() + nameSuffix.str());
   newArgNames.push_back(newArg);
   newArgDirections.push_back(direction);
-  newArgAttrs.push_back(module.getArgAttrs(oldArgNumber));
+  auto argAttrs = module.getArgAttrs(oldArgNumber);
+  SmallVector<NamedAttribute> attributes;
+  for (auto a : argAttrs) {
+    if (a.first != "firrtl.annotations") {
+      attributes.push_back(a);
+      continue;
+    }
+    SmallVector<Attribute> newAnnotations;
+    filterAnnotations(a.second.cast<ArrayAttr>(), newAnnotations, nameSuffix,
+                      context);
+    if (newAnnotations.empty())
+      continue;
+    attributes.push_back({builder->getIdentifier("firrtl.annotations"),
+                          builder->getArrayAttr(newAnnotations)});
+  }
+  newArgAttrs.push_back(attributes);
 
   return newValue;
 }
