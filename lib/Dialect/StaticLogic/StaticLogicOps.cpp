@@ -16,6 +16,8 @@
 using namespace circt;
 using namespace circt::staticlogic;
 
+using circt::sched::OperatorInfoAttr;
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/StaticLogic/StaticLogic.cpp.inc"
 
@@ -24,4 +26,15 @@ void StaticLogicDialect::initialize() {
 #define GET_OP_LIST
 #include "circt/Dialect/StaticLogic/StaticLogic.cpp.inc"
       >();
+}
+
+OperatorInfoAttr PipelineOp::getOperatorInfo(Operation *op) {
+  auto operatorInfo = op->getAttrOfType<OperatorInfoAttr>("opr");
+  if (operatorInfo)
+    return operatorInfo;
+  return OperatorInfoAttr::get(getContext(), "unit", 1);
+}
+
+Block& PipelineOp::getBlockToSchedule() {
+  return getRegion().front();
 }

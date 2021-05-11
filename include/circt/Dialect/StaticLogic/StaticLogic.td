@@ -23,13 +23,16 @@ include "mlir/IR/SymbolInterfaces.td"
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "circt/Dialect/Scheduling/Scheduling.td"
 
 def StaticLogic_Dialect : Dialect {
   let name = "staticlogic";
   let cppNamespace = "::circt::staticlogic";
+  let dependentDialects = ["::circt::sched::SchedulingDialect"];
 }
 
-def PipelineOp : Op<StaticLogic_Dialect, "pipeline", [NoSideEffect]> {
+def PipelineOp : Op<StaticLogic_Dialect, "pipeline", [NoSideEffect,
+                    DeclareOpInterfaceMethods<SchedulableOpInterface>]> {
   let summary = "pipeline operation";
   let description = [{
     The "staticlogic.pipeline" operation represents a statically scheduled 

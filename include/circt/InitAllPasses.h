@@ -19,6 +19,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
 #include "circt/Dialect/SV/SVPasses.h"
+#include "circt/Dialect/StaticLogic/StaticLogicPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Transforms/Passes.h"
 
@@ -33,6 +34,7 @@ inline void registerAllPasses() {
   firrtl::registerPasses();
   llhd::initLLHDTransformationPasses();
   seq::registerSeqPasses();
+  staticlogic::registerPasses();
   sv::registerPasses();
   circt::registerPasses();
 }

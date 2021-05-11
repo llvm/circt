@@ -7,5 +7,6 @@ add_circt_dialect_library(CIRCTScheduling
 
   DEPENDS
   MLIRSchedulingIncGen
-  MLIRSchedulingExtraIncGen
+  MLIRSchedulingAttributesIncGen
+  MLIRSchedulableOpInterfaceIncGen
 )

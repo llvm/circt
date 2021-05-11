@@ -2,6 +2,8 @@ set(LLVM_OPTIONAL_SOURCES
   DialectRegistration.cpp
   mlir_std_runner.cpp
   Ops.cpp
+  StaticLogicOps.cpp
+  StaticLogicPasses.cpp
   )
 
 add_circt_dialect_library(CIRCTStaticLogicOps
@@ -17,4 +19,15 @@ add_circt_dialect_library(CIRCTStaticLogicOps
 
   DEPENDS
   MLIRStaticLogicIncGen
+)
+
+add_circt_library(CIRCTStaticLogicPasses
+  StaticLogicPasses.cpp
+
+  LINK_LIBS PUBLIC
+  MLIRStandard
+  MLIRIR
+
+  DEPENDS
+  MLIRStaticLogicPassesIncGen
 )

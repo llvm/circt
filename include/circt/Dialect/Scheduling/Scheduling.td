@@ -15,6 +15,10 @@
 
 include "mlir/IR/OpBase.td"
 
+//===----------------------------------------------------------------------===//
+// Dialect definitions
+//===----------------------------------------------------------------------===//
+
 def Scheduling_Dialect : Dialect {
   let name = "sched";
   let summary = "The `sched` dialect provides an interface and infrastructure for static operation schedulers.";
@@ -33,6 +37,10 @@ def Scheduling_Dialect : Dialect {
   let cppNamespace = "::circt::sched";
 }
 
+//===----------------------------------------------------------------------===//
+// Attribute definitions
+//===----------------------------------------------------------------------===//
+
 def Scheduling_OperatorInfo : AttrDef<Scheduling_Dialect, "OperatorInfo"> {
   let mnemonic = "opr";
   let description = [{
@@ -48,6 +56,31 @@ def Scheduling_OperatorInfo : AttrDef<Scheduling_Dialect, "OperatorInfo"> {
    StringRefParameter<"the operator's name">:$name,
    AttrParameter<"unsigned", "the operator's result is available after `latency` cycles">:$latency
   );
+}
+
+//===----------------------------------------------------------------------===//
+// Interface definitions
+//===----------------------------------------------------------------------===//
+
+def SchedulableOpInterface : OpInterface<"SchedulableOpInterface"> {
+  let description = [{
+    TODO
+  }];
+  let cppNamespace = "::circt::sched";
+
+  let methods = [
+    InterfaceMethod<[{
+        TODO
+      }],
+      "::circt::sched::OperatorInfoAttr", "getOperatorInfo",
+      (ins "::mlir::Operation *":$op)
+    >,
+    InterfaceMethod<[{
+        TODO
+      }],
+      "::mlir::Block &", "getBlockToSchedule"
+    >
+  ];
 }
 
 #endif // CIRCT_DIALECT_SCHEDULING_TD
