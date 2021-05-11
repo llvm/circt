@@ -12,7 +12,7 @@
 
 #include "circt/Dialect/StaticLogic/StaticLogicPasses.h"
 
-#include "circt/Dialect/Scheduling/Scheduling.h"
+#include "circt/Dialect/Scheduling/Algorithms/ASAPScheduler.h"
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 
@@ -43,12 +43,14 @@ void SchedulePipelinePass::runOnFunction() {
 }
 
 LogicalResult SchedulePipelinePass::schedule(PipelineOp pipeline) {
-  auto scheduler = sched::createASAPScheduler();
-  if (failed(scheduler->schedule(pipeline)))
+  sched::ASAPScheduler scheduler;
+  if (failed(pipeline.constructSchedulingProblem(scheduler)) ||
+      failed(scheduler.schedule()))
     return failure();
+
   OpBuilder builder(&getContext());
   pipeline->walk([&](Operation *scheduledOp) {
-    auto startTime = scheduler->getStartTime(scheduledOp);
+    auto startTime = scheduler.getStartTime(scheduledOp);
     if (startTime)
       scheduledOp->setAttr("startTime", builder.getIndexAttr(*startTime));
   });

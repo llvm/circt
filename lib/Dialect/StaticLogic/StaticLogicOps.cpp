@@ -11,6 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
+
+#include "circt/Dialect/Scheduling/Scheduler.h"
 #include "mlir/IR/FunctionImplementation.h"
 
 using namespace circt;
@@ -28,13 +30,27 @@ void StaticLogicDialect::initialize() {
       >();
 }
 
-OperatorInfoAttr PipelineOp::getOperatorInfo(Operation *op) {
-  auto operatorInfo = op->getAttrOfType<OperatorInfoAttr>("opr");
-  if (operatorInfo)
-    return operatorInfo;
-  return OperatorInfoAttr::get(getContext(), "unit", 1);
-}
+LogicalResult PipelineOp::constructSchedulingProblem(sched::SchedulerBase &scheduler){
+  auto &blockToSchedule = getRegion().getBlocks().front();
+  auto &operationsToSchedule = blockToSchedule.getOperations();
 
-Block& PipelineOp::getBlockToSchedule() {
-  return getRegion().front();
+  auto unitLatencyOperator = OperatorInfoAttr::get(getContext(), "unit", 1);
+
+  for (Operation &op : operationsToSchedule) {
+    if (failed(scheduler.registerOperation(&op)) ||
+        failed(scheduler.registerOperators(&op, unitLatencyOperator)))
+      return failure();
+  }
+
+  for (Operation &op : operationsToSchedule) {
+    for (Value operand : op.getOperands()) {
+      if (operand.isa<BlockArgument>())
+        continue; // block arguments are always available w.r.t the schedule
+      Operation *operandOp = operand.getDefiningOp();
+      if (failed(scheduler.registerDependence(operandOp, 0, &op, 0, 0)))
+        return failure();
+    }
+  }
+
+  return success();
 }

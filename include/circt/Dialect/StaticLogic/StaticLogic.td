@@ -23,7 +23,7 @@ include "mlir/IR/SymbolInterfaces.td"
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
-include "circt/Dialect/Scheduling/Scheduling.td"
+include "circt/Dialect/Scheduling/SchedulingInterfaces.td"
 
 def StaticLogic_Dialect : Dialect {
   let name = "staticlogic";

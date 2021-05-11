@@ -10,22 +10,33 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/Scheduling/Scheduling.h"
+#include "circt/Dialect/Scheduling/SchedulingDialect.h"
+#include "circt/Dialect/Scheduling/SchedulingInterfaces.h"
+#include "circt/Dialect/Scheduling/SchedulingAttributes.h"
+#include "circt/Dialect/Scheduling/Algorithms/ASAPScheduler.h"
 
 #include "mlir/IR/DialectImplementation.h"
-#include "mlir/IR/RegionKindInterface.h"
 
-#include "llvm/ADT/PriorityWorklist.h"
 #include "llvm/ADT/TypeSwitch.h"
+
+#include <list>
 
 using namespace mlir;
 using namespace circt;
 using namespace circt::sched;
 
+//===----------------------------------------------------------------------===//
+// Interfaces
+//===----------------------------------------------------------------------===//
+
+#include "circt/Dialect/Scheduling/SchedulingInterfaces.cpp.inc"
+
+//===----------------------------------------------------------------------===//
+// Attributes
+//===----------------------------------------------------------------------===//
+
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/Scheduling/SchedulingAttributes.cpp.inc"
-
-#include "circt/Dialect/Scheduling/SchedulableOpInterface.cpp.inc"
 
 void SchedulingDialect::initialize() {
   addAttributes<
@@ -85,73 +96,73 @@ void SchedulingDialect::printAttribute(Attribute attr,
 // A very simple acyclic as-soon-as-possible list scheduler
 //===----------------------------------------------------------------------===//
 
-namespace {
-class ASAPScheduler : public SchedulerBase {
-private:
-  llvm::SmallDenseMap<mlir::Operation *, unsigned> startTimes;
+LogicalResult ASAPScheduler::registerOperation(Operation *op) {
+  return success(operations.insert(op));
+}
+LogicalResult ASAPScheduler::registerDependence(Operation *src,
+                                                unsigned int srcIdx,
+                                                Operation *dst,
+                                                unsigned int dstIdx,
+                                                unsigned int distance) {
+  if (srcIdx > 0 || dstIdx > 0 || distance > 0)
+    return failure(); // or could just warn that backedges are not supported
+  if (!operations.contains(src) || !operations.contains(dst))
+    return failure();
+  dependences[dst].push_back(src);
+  return success();
+}
+LogicalResult
+ASAPScheduler::registerOperators(Operation *op,
+                                 ArrayRef<OperatorInfoAttr> operatorInfos) {
+  if (operatorInfos.size() != 1)
+    return failure();
+  if (!operations.contains(op))
+    return failure();
+  operators[op] = operatorInfos.front();
+  return success();
+}
 
-public:
-  mlir::LogicalResult
-  schedule(circt::sched::SchedulableOpInterface schedulableOp) override;
-  mlir::Optional<unsigned> getStartTime(mlir::Operation *scheduledOp) override;
-};
-} // anonymous namespace
-
-LogicalResult ASAPScheduler::schedule(SchedulableOpInterface schedulableOp) {
-  auto &blockToSchedule = schedulableOp.getBlockToSchedule();
-  auto &operationsToSchedule = blockToSchedule.getOperations();
+LogicalResult ASAPScheduler::schedule() {
   startTimes.clear();
 
+  // TODO: validate scheduling problem, e.g. check for cycles
+
   // initialize a worklist with the block's operations
-  llvm::PriorityWorklist<Operation *> worklist;
-  for (auto revIt = operationsToSchedule.rbegin(),
-            revEnd = operationsToSchedule.rend(); revIt != revEnd; ++revIt)
-    worklist.insert(&*revIt);
+  std::list<Operation *> worklist;
+  worklist.insert(worklist.begin(), operations.begin(), operations.end());
 
   // iterate until all operations are scheduled
   while (!worklist.empty()) {
-    Operation *op = worklist.pop_back_val();
-    if (op->getNumOperands() == 0) {
+    Operation *op = worklist.front();
+    worklist.pop_front();
+    if (dependences[op].empty()) {
       // operations with no predecessors are scheduled at time step 0
-      startTimes.insert(std::make_pair(op, 0));
+      startTimes[op] = 0;
       continue;
     }
 
-    // `unscheduled` has at least one predecessor. Compute start time as:
+    // op has at least one predecessor. Compute start time as:
     //   max_{p : preds} startTime[p] + latency[p]
     unsigned startTime = 0;
-    bool isValid = true;
-    for (Value operand : op->getOperands()) {
-      if (operand.isa<BlockArgument>())
-        continue; // block arguments are available at time step 0
-
-      Operation *operandOp = operand.getDefiningOp();
-      if (operandOp->getBlock() != &blockToSchedule)
-        continue; // handle values computed in different blocks analogous to
-                  // block arguments. TOOD: should these occur?
-
-      auto it = startTimes.find(operandOp);
+    bool startTimeIsValid = true;
+    for (Operation *pred : dependences[op]) {
+      auto it = startTimes.find(pred);
       if (it != startTimes.end()) {
-        // operand is already scheduled
-        unsigned operandStart = it->getSecond();
-        unsigned operandLatency =
-            schedulableOp.getOperatorInfo(operandOp).getLatency();
-        startTime = std::max(startTime, operandStart + operandLatency);
+        // pred is already scheduled
+        unsigned predStart = it->getSecond();
+        unsigned predLatency = operators[pred].getLatency();
+        startTime = std::max(startTime, predStart + predLatency);
       } else {
-        // operand is not yet scheduled, but will be. Re-enqueue `op` and give
-        // for now
-        assert(worklist.count(operandOp));
-        isValid = false;
+        // pred is not yet scheduled, give up and try again later
+        startTimeIsValid = false;
         break;
       }
     }
 
-    if (isValid)
-      // operands are arguments or were already scheduled
-      startTimes.insert(std::make_pair(op, startTime));
+    if (startTimeIsValid)
+      startTimes[op] = startTime;
     else
-      // not all operands were scheduled; try again later
-      worklist.insert(op);
+      worklist.push_back(op);
   }
 
   return LogicalResult::success();
@@ -162,8 +173,4 @@ Optional<unsigned> ASAPScheduler::getStartTime(Operation *scheduledOp) {
   if (it != startTimes.end())
     return it->getSecond();
   return None;
-}
-
-std::unique_ptr<SchedulerBase> circt::sched::createASAPScheduler() {
-  return std::make_unique<ASAPScheduler>();
 }

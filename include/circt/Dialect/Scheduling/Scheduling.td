@@ -6,32 +6,23 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines the Scheduling dialect.
+// This file defines the Scheduling dialect and its attributes.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_SCHEDULING_TD
-#define CIRCT_DIALECT_SCHEDULING_TD
+#ifndef CIRCT_DIALECT_SCHEDULING_SCHEDULING_TD
+#define CIRCT_DIALECT_SCHEDULING_SCHEDULING_TD
 
 include "mlir/IR/OpBase.td"
 
 //===----------------------------------------------------------------------===//
-// Dialect definitions
+// Dialect definition
 //===----------------------------------------------------------------------===//
 
 def Scheduling_Dialect : Dialect {
   let name = "sched";
-  let summary = "The `sched` dialect provides an interface and infrastructure for static operation schedulers.";
   let description = [{
-    This is a work-in-progress.
-
-    * `SchedulableOpInterface` is implemented by operations containing a graph
-      region that should be scheduled. Such a schedulable operation must provide
-      _operator_ and _dependence_ information for their nested operations.
-
-    * `SchedulerTrait` is attached to implementations of concrete scheduling
-      algorithms, and provides a consistent interface as well as commonly needed
-      utilities.
+    The `sched` dialect provides infrastructure for static operation schedulers.
   }];
 
   let cppNamespace = "::circt::sched";
@@ -54,33 +45,9 @@ def Scheduling_OperatorInfo : AttrDef<Scheduling_Dialect, "OperatorInfo"> {
 
   let parameters = (ins
    StringRefParameter<"the operator's name">:$name,
-   AttrParameter<"unsigned", "the operator's result is available after `latency` cycles">:$latency
+   AttrParameter<"unsigned", "the operator's result is available after "
+                             "`latency` cycles">:$latency
   );
 }
 
-//===----------------------------------------------------------------------===//
-// Interface definitions
-//===----------------------------------------------------------------------===//
-
-def SchedulableOpInterface : OpInterface<"SchedulableOpInterface"> {
-  let description = [{
-    TODO
-  }];
-  let cppNamespace = "::circt::sched";
-
-  let methods = [
-    InterfaceMethod<[{
-        TODO
-      }],
-      "::circt::sched::OperatorInfoAttr", "getOperatorInfo",
-      (ins "::mlir::Operation *":$op)
-    >,
-    InterfaceMethod<[{
-        TODO
-      }],
-      "::mlir::Block &", "getBlockToSchedule"
-    >
-  ];
-}
-
-#endif // CIRCT_DIALECT_SCHEDULING_TD
+#endif // CIRCT_DIALECT_SCHEDULING_SCHEDULING_TD

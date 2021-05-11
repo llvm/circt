@@ -13,7 +13,8 @@
 #ifndef CIRCT_STATICLOGIC_OPS_H_
 #define CIRCT_STATICLOGIC_OPS_H_
 
-#include "circt/Dialect/Scheduling/Scheduling.h"
+#include "circt/Dialect/Scheduling/SchedulingDialect.h"
+#include "circt/Dialect/Scheduling/SchedulingInterfaces.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
