@@ -581,6 +581,9 @@ public:
   void emitStatement(Operation *op);
   void emitStatementBlock(Block &block);
 
+  // Type scopes.
+  void emitTypeScopeBlock(Block &block);
+
   using ValueOrOp = PointerUnion<Value, Operation *>;
 
   StringRef addName(ValueOrOp valueOrOp, StringRef name);
@@ -1487,6 +1490,52 @@ void NameCollector::collectNames(Block &block) {
 }
 
 //===----------------------------------------------------------------------===//
+// TypeScopeEmitter
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// This emits typescope-related operations.
+class TypeScopeEmitter
+    : public EmitterBase,
+      public rtl::TypeScopeVisitor<TypeScopeEmitter, LogicalResult> {
+public:
+  /// Create a TypeScopeEmitter for the specified module emitter.
+  TypeScopeEmitter(ModuleEmitter &emitter, SmallVectorImpl<char> &outBuffer)
+      : EmitterBase(emitter.state, stringStream), stringStream(outBuffer) {}
+
+  void emitTypeScopeBlock(Block &body);
+
+private:
+  friend class TypeScopeVisitor<TypeScopeEmitter, LogicalResult>;
+  LogicalResult visitTypeScope(TypedeclOp op);
+  llvm::raw_svector_ostream stringStream;
+};
+
+} // end anonymous namespace
+
+void TypeScopeEmitter::emitTypeScopeBlock(Block &body) {
+  addIndent();
+
+  for (auto &op : body) {
+    if (failed(dispatchTypeScopeVisitor(&op))) {
+      op.emitOpError("cannot emit this type scope op to Verilog");
+      os << "<<unsupported op: " << op.getName().getStringRef() << ">>\n";
+    }
+  }
+
+  reduceIndent();
+}
+
+LogicalResult TypeScopeEmitter::visitTypeScope(TypedeclOp op) {
+  indent() << "typedef ";
+  printPackedType(stripUnpackedTypes(op.type()), os, op.getLoc(), false);
+  printUnpackedTypePostfix(op.type(), os);
+  os << ' ' << op.sym_name();
+  os << ";\n";
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // StmtEmitter
 //===----------------------------------------------------------------------===//
 
@@ -1563,7 +1612,6 @@ private:
   LogicalResult visitSV(AliasOp op);
   LogicalResult visitStmt(OutputOp op);
   LogicalResult visitStmt(InstanceOp op);
-  LogicalResult visitStmt(TypedeclOp op);
 
   LogicalResult emitIfDef(Operation *op, StringRef cond);
   LogicalResult visitSV(IfDefOp op) { return emitIfDef(op, op.cond()); }
@@ -2254,15 +2302,6 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   return success();
 }
 
-LogicalResult StmtEmitter::visitStmt(TypedeclOp op) {
-  indent() << "typedef ";
-  printPackedType(stripUnpackedTypes(op.type()), os, op.getLoc(), false);
-  printUnpackedTypePostfix(op.type(), os);
-  os << ' ' << op.sym_name();
-  os << ";\n";
-  return success();
-}
-
 LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
   os << "interface " << op.sym_name() << ";\n";
   emitStatementBlock(*op.getBodyBlock());
@@ -2416,6 +2455,12 @@ void ModuleEmitter::emitStatement(Operation *op) {
 void ModuleEmitter::emitStatementBlock(Block &body) {
   SmallString<128> outputBuffer;
   StmtEmitter(*this, outputBuffer).emitStatementBlock(body);
+  os << outputBuffer;
+}
+
+void ModuleEmitter::emitTypeScopeBlock(Block &body) {
+  SmallString<128> outputBuffer;
+  TypeScopeEmitter(*this, outputBuffer).emitTypeScopeBlock(body);
   os << outputBuffer;
 }
 
@@ -2840,7 +2885,7 @@ void UnifiedEmitter::emitMLIRModule() {
     else if (auto rootOp = dyn_cast<RTLModuleGeneratedOp>(op))
       ModuleEmitter(state).emitRTLGeneratedModule(rootOp);
     else if (auto typedecls = dyn_cast<TypeScopeOp>(op))
-      ModuleEmitter(state).emitStatementBlock(*typedecls.getBodyBlock());
+      ModuleEmitter(state).emitTypeScopeBlock(*typedecls.getBodyBlock());
     else if (isa<RTLGeneratorSchemaOp>(op)) { /* Empty */
     } else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) ||
                isa<IfDefProceduralOp>(op))
@@ -2899,12 +2944,8 @@ void SplitEmitter::emitMLIRModule() {
         .Case<RTLModuleOp, InterfaceOp>([&](auto &) {
           moduleOps.push_back({&op, perFileOps.size(), {}});
         })
-        .Case<VerbatimOp, IfDefProceduralOp>(
+        .Case<VerbatimOp, IfDefProceduralOp, TypeScopeOp>(
             [&](auto &) { perFileOps.push_back(&op); })
-        .Case<TypeScopeOp>([&](auto &typeScope) {
-          for (auto &typedecl : *typeScope.getBodyBlock())
-            perFileOps.push_back(&typedecl);
-        })
         .Case<RTLGeneratorSchemaOp, RTLModuleExternOp>([&](auto &) {})
         .Default([&](auto *) {
           op.emitError("unknown operation");
@@ -2961,11 +3002,21 @@ void SplitEmitter::emitModule(const LoweringOptions &options,
   state.options = options;
 
   for (size_t i = 0; i < std::min(mod.position, perFileOps.size()); ++i) {
-    ModuleEmitter(state).emitStatement(perFileOps[i]);
+    TypeSwitch<Operation *>(perFileOps[i])
+        .Case<VerbatimOp, IfDefProceduralOp>(
+            [&](auto &op) { ModuleEmitter(state).emitStatement(op); })
+        .Case<TypeScopeOp>([&](auto &op) {
+          ModuleEmitter(state).emitTypeScopeBlock(*op.getBodyBlock());
+        });
   }
   emit(state);
   for (size_t i = mod.position; i < perFileOps.size(); i++) {
-    ModuleEmitter(state).emitStatement(perFileOps[i]);
+    TypeSwitch<Operation *>(perFileOps[i])
+        .Case<VerbatimOp, IfDefProceduralOp>(
+            [&](auto &op) { ModuleEmitter(state).emitStatement(op); })
+        .Case<TypeScopeOp>([&](auto &op) {
+          ModuleEmitter(state).emitTypeScopeBlock(*op.getBodyBlock());
+        });
   }
 
   if (state.encounteredError)
