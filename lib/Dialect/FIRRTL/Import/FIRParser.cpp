@@ -1122,8 +1122,8 @@ private:
         // Invalidate any sink or duplex flow ground types.
         .Default([&](auto tpe) {
           if (flow != Flow::Source)
-            builder.create<ConnectOp>(
-                loc, val, builder.create<InvalidValuePrimOp>(loc, tpe));
+            builder.create<ConnectOp>(loc, val,
+                                      builder.create<InvalidValueOp>(loc, tpe));
         });
   }
 
@@ -1518,7 +1518,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
       return failure();
     }
 
-    auto inv = builder.create<InvalidValuePrimOp>(tloc, opTypes[1]);
+    auto inv = builder.create<InvalidValueOp>(tloc, opTypes[1]);
     result = builder.create<MuxPrimOp>(
         tloc, opTypes[1], ValueRange({operands[0], operands[1], inv}), attrs);
     break;
@@ -2678,7 +2678,7 @@ struct FIRModuleParser : public FIRScopedParser {
 private:
   using PortInfoAndLoc = std::pair<ModulePortInfo, SMLoc>;
   ParseResult parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
-                            unsigned indent);
+                            unsigned indent, StringRef moduleTarget);
 
   CircuitOp circuit;
   SymbolTable symbolTable;
@@ -2698,7 +2698,7 @@ private:
 ///
 ParseResult
 FIRModuleParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
-                               unsigned indent) {
+                               unsigned indent, StringRef moduleTarget) {
   // Parse any ports.
   while (getToken().isAny(FIRToken::kw_input, FIRToken::kw_output) &&
          // Must be nested under the module.
@@ -2729,10 +2729,13 @@ FIRModuleParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
         parseOptionalInfo(info))
       return failure();
 
+    ArrayAttr annotations = ArrayAttr({});
+    getAnnotations(getModuleTarget() + ">" + name.getValue(), annotations);
+
     // FIXME: We should persist the info loc into the IR, not just the name
     // and type.
-    result.push_back(
-        {{name, type, direction::get(isOutput)}, info.getFIRLoc()});
+    result.push_back({{name, type, direction::get(isOutput), annotations},
+                      info.getFIRLoc()});
   }
 
   return success();
@@ -2759,7 +2762,8 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   getState().moduleTarget = moduleTarget;
 
   if (parseToken(FIRToken::colon, "expected ':' in extmodule definition") ||
-      parseOptionalInfo(info) || parsePortList(portListAndLoc, indent))
+      parseOptionalInfo(info) ||
+      parsePortList(portListAndLoc, indent, moduleTarget))
     return failure();
 
   auto builder = circuit.getBodyBuilder();
@@ -2865,7 +2869,8 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
   getState().moduleTarget = moduleTarget;
 
   if (parseToken(FIRToken::colon, "expected ':' in module definition") ||
-      parseOptionalInfo(info) || parsePortList(portListAndLoc, indent))
+      parseOptionalInfo(info) ||
+      parsePortList(portListAndLoc, indent, moduleTarget))
     return failure();
 
   auto builder = circuit.getBodyBuilder();

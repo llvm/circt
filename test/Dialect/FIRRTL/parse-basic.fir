@@ -788,10 +788,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input in2: UInt<42>
     input en: UInt<1>
 
-    ; CHECK:      %0 = firrtl.invalidvalue : !firrtl.clock
-    ; CHECK-NEXT: %1 = firrtl.mux(%en, %in1, %0) : (!firrtl.uint<1>, !firrtl.clock, !firrtl.clock) -> !firrtl.clock
+    ; CHECK:      %invalid_clock = firrtl.invalidvalue : !firrtl.clock
+    ; CHECK-NEXT: firrtl.mux(%en, %in1, %invalid_clock) : (!firrtl.uint<1>, !firrtl.clock, !firrtl.clock) -> !firrtl.clock
     node out1 = validif(en, in1)
 
-    ; CHECK:      %2 = firrtl.invalidvalue : !firrtl.uint<42>
-    ; CHECK-NEXT: %3 = firrtl.mux(%en, %in2, %2) : (!firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>) -> !firrtl.uint<42>
+    ; CHECK:      %invalid_ui42 = firrtl.invalidvalue : !firrtl.uint<42>
+    ; CHECK-NEXT: firrtl.mux(%en, %in2, %invalid_ui42) : (!firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>) -> !firrtl.uint<42>
     node out2 = validif(en, in2)

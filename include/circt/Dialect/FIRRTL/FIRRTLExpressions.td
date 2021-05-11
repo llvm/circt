@@ -33,6 +33,25 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
   let verifier = "return ::verifyConstantOp(*this);";
 }
 
+
+def InvalidValueOp : FIRRTLOp<"invalidvalue", [NoSideEffect]> {
+  let summary = "InvalidValue primitive";
+  let description = [{
+    The InvalidValue operation returns an invalid value of a specified type:
+    ```
+      %result = firrtl.invalid : !firrtl.uint<1>
+    ```
+
+    This corresponds to the FIRRTL invalidate operation without the implicit
+    connect semantics.
+  }];
+
+  let arguments = (ins);
+  let results = (outs FIRRTLType:$result);
+
+  let assemblyFormat = "attr-dict `:` type($result)";
+}
+
 def SubfieldOp : FIRRTLOp<"subfield", [NoSideEffect]> {
   let summary = "Extract a subfield of another value";
   let description = [{
@@ -76,7 +95,7 @@ class IndexConstraint<string value, string resultValue>
                    value, resultValue,
                    "firrtl::getVectorElementType($_self)">;
 
-def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect, 
+def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect,
                                        IndexConstraint<"input", "result">]> {
   let summary = "Extract an element of a vector value";
   let description = [{
@@ -108,7 +127,7 @@ def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect,
   }];
 }
 
-def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect, 
+def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect,
                                          IndexConstraint<"input", "result">]> {
   let summary = "Extract a dynamic element of a vector value";
   let description = [{
@@ -202,7 +221,7 @@ def DivPrimOp : BinaryPrimOp<"div", IntType, IntType, IntType> {
 }
 def RemPrimOp : BinaryPrimOp<"rem", IntType, IntType, IntType>;
 
-def AndPrimOp : BinaryPrimOp<"and", IntType, IntType, UIntType, [Commutative]>; 
+def AndPrimOp : BinaryPrimOp<"and", IntType, IntType, UIntType, [Commutative]>;
 def OrPrimOp  : BinaryPrimOp<"or",  IntType, IntType, UIntType, [Commutative]>;
 def XorPrimOp : BinaryPrimOp<"xor", IntType, IntType, UIntType, [Commutative]>;
 
@@ -363,24 +382,6 @@ def HeadPrimOp : PrimOp<"head"> {
   let verifier = [{
     VERIFY_RESULT_TYPE_RET(input().getType().cast<FIRRTLType>(), amount());
   }];
-}
-
-def InvalidValuePrimOp : PrimOp<"invalidvalue"> {
-  let summary = "InvalidValue primitive";
-  let description = [{
-    The InvalidValue operation returns an invalid value of a specified type:
-    ```
-      %result = firrtl.invalid : !firrtl.uint<1>
-    ```
-
-    This corresponds to the FIRRTL invalidate operation without the implicit
-    connect semantics.
-  }];
-
-  let arguments = (ins);
-  let results = (outs FIRRTLType:$result);
-
-  let assemblyFormat = "attr-dict `:` type($result)";
 }
 
 def MuxPrimOp : PrimOp<"mux"> {
@@ -592,7 +593,7 @@ class PassiveConstraint<string value, string resultValue>
                    "firrtl::getPassiveType($_self)">;
 
 // Convert a value with non-passive type to a value with passive type.
-def AsPassivePrimOp : FIRRTLOp<"asPassive", [NoSideEffect, 
+def AsPassivePrimOp : FIRRTLOp<"asPassive", [NoSideEffect,
                                PassiveConstraint<"input", "result">]> {
   let arguments = (ins FIRRTLType:$input);
   let results = (outs PassiveType:$result);

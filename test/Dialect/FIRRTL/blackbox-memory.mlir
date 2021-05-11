@@ -213,24 +213,24 @@ firrtl.circuit "MemSimple" {
 // WRAPPER-NEXT:     %3 = firrtl.subfield %_M_read("clk") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<sint<42>>>>) -> !firrtl.clock
 // WRAPPER-NEXT:     firrtl.connect %3, %clock1 : !firrtl.clock, !firrtl.clock
 // WRAPPER-NEXT:     %4 = firrtl.subfield %_M_write("addr") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.uint<4>
-// WRAPPER-NEXT:     %5 = firrtl.invalidvalue : !firrtl.uint<3>
-// WRAPPER-NEXT:     %6 = firrtl.mux(%inpred, %c0_ui3, %5) : (!firrtl.uint<1>, !firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
-// WRAPPER-NEXT:     firrtl.connect %4, %6 : !firrtl.uint<4>, !firrtl.uint<3>
-// WRAPPER-NEXT:     %7 = firrtl.subfield %_M_write("en") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.uint<1>
-// WRAPPER-NEXT:     %8 = firrtl.mux(%inpred, %c1_ui1, %c0_ui1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// WRAPPER-NEXT:     firrtl.connect %7, %8 : !firrtl.uint<1>, !firrtl.uint<1>
-// WRAPPER-NEXT:     %9 = firrtl.subfield %_M_write("clk") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.clock
-// WRAPPER-NEXT:     %10 = firrtl.invalidvalue : !firrtl.clock
-// WRAPPER-NEXT:     %11 = firrtl.mux(%inpred, %clock2, %10) : (!firrtl.uint<1>, !firrtl.clock, !firrtl.clock) -> !firrtl.clock
-// WRAPPER-NEXT:     firrtl.connect %9, %11 : !firrtl.clock, !firrtl.clock
-// WRAPPER-NEXT:     %12 = firrtl.subfield %_M_write("data") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.sint<42>
-// WRAPPER-NEXT:     %13 = firrtl.invalidvalue : !firrtl.sint<42>
-// WRAPPER-NEXT:     %14 = firrtl.mux(%inpred, %indata, %13) : (!firrtl.uint<1>, !firrtl.sint<42>, !firrtl.sint<42>) -> !firrtl.sint<42>
-// WRAPPER-NEXT:     firrtl.connect %12, %14 : !firrtl.sint<42>, !firrtl.sint<42>
-// WRAPPER-NEXT:     %15 = firrtl.subfield %_M_write("mask") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.uint<1>
-// WRAPPER-NEXT:     %16 = firrtl.invalidvalue : !firrtl.uint<1>
-// WRAPPER-NEXT:     %17 = firrtl.mux(%inpred, %c1_ui1, %16) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// WRAPPER-NEXT:     firrtl.connect %15, %17 : !firrtl.uint<1>, !firrtl.uint<1>
+// WRAPPER-NEXT:     %invalid_ui3 = firrtl.invalidvalue : !firrtl.uint<3>
+// WRAPPER-NEXT:     %5 = firrtl.mux(%inpred, %c0_ui3, %invalid_ui3) : (!firrtl.uint<1>, !firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
+// WRAPPER-NEXT:     firrtl.connect %4, %5 : !firrtl.uint<4>, !firrtl.uint<3>
+// WRAPPER-NEXT:     %6 = firrtl.subfield %_M_write("en") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.uint<1>
+// WRAPPER-NEXT:     %7 = firrtl.mux(%inpred, %c1_ui1, %c0_ui1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// WRAPPER-NEXT:     firrtl.connect %6, %7 : !firrtl.uint<1>, !firrtl.uint<1>
+// WRAPPER-NEXT:     %8 = firrtl.subfield %_M_write("clk") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.clock
+// WRAPPER-NEXT:     %invalid_clock = firrtl.invalidvalue : !firrtl.clock
+// WRAPPER-NEXT:     %9 = firrtl.mux(%inpred, %clock2, %invalid_clock) : (!firrtl.uint<1>, !firrtl.clock, !firrtl.clock) -> !firrtl.clock
+// WRAPPER-NEXT:     firrtl.connect %8, %9 : !firrtl.clock, !firrtl.clock
+// WRAPPER-NEXT:     %10 = firrtl.subfield %_M_write("data") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.sint<42>
+// WRAPPER-NEXT:     %invalid_si42 = firrtl.invalidvalue : !firrtl.sint<42>
+// WRAPPER-NEXT:     %11 = firrtl.mux(%inpred, %indata, %invalid_si42) : (!firrtl.uint<1>, !firrtl.sint<42>, !firrtl.sint<42>) -> !firrtl.sint<42>
+// WRAPPER-NEXT:     firrtl.connect %10, %11 : !firrtl.sint<42>, !firrtl.sint<42>
+// WRAPPER-NEXT:     %12 = firrtl.subfield %_M_write("mask") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>) -> !firrtl.uint<1>
+// WRAPPER-NEXT:     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
+// WRAPPER-NEXT:     %13 = firrtl.mux(%inpred, %c1_ui1, %invalid_ui1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// WRAPPER-NEXT:     firrtl.connect %12, %13 : !firrtl.uint<1>, !firrtl.uint<1>
 // WRAPPER-NEXT:   }
 // WRAPPER-NEXT: }
 
@@ -270,24 +270,24 @@ firrtl.circuit "MemSimple" {
 // INLINE-NEXT:     %14 = firrtl.subfield %0("clk") : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<sint<42>>>) -> !firrtl.clock
 // INLINE-NEXT:     firrtl.connect %14, %clock1 : !firrtl.clock, !firrtl.clock
 // INLINE-NEXT:     %15 = firrtl.subfield %5("addr") : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>) -> !firrtl.uint<4>
-// INLINE-NEXT:     %16 = firrtl.invalidvalue : !firrtl.uint<3>
-// INLINE-NEXT:     %17 = firrtl.mux(%inpred, %c0_ui3, %16) : (!firrtl.uint<1>, !firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
-// INLINE-NEXT:     firrtl.connect %15, %17 : !firrtl.uint<4>, !firrtl.uint<3>
-// INLINE-NEXT:     %18 = firrtl.subfield %5("en") : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>) -> !firrtl.uint<1>
-// INLINE-NEXT:     %19 = firrtl.mux(%inpred, %c1_ui1, %c0_ui1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// INLINE-NEXT:     firrtl.connect %18, %19 : !firrtl.uint<1>, !firrtl.uint<1>
-// INLINE-NEXT:     %20 = firrtl.subfield %5("clk") : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>) -> !firrtl.clock
-// INLINE-NEXT:     %21 = firrtl.invalidvalue : !firrtl.clock
-// INLINE-NEXT:     %22 = firrtl.mux(%inpred, %clock2, %21) : (!firrtl.uint<1>, !firrtl.clock, !firrtl.clock) -> !firrtl.clock
-// INLINE-NEXT:     firrtl.connect %20, %22 : !firrtl.clock, !firrtl.clock
-// INLINE-NEXT:     %23 = firrtl.subfield %5("data") : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>) -> !firrtl.sint<42>
-// INLINE-NEXT:     %24 = firrtl.invalidvalue : !firrtl.sint<42>
-// INLINE-NEXT:     %25 = firrtl.mux(%inpred, %indata, %24) : (!firrtl.uint<1>, !firrtl.sint<42>, !firrtl.sint<42>) -> !firrtl.sint<42>
-// INLINE-NEXT:     firrtl.connect %23, %25 : !firrtl.sint<42>, !firrtl.sint<42>
-// INLINE-NEXT:     %26 = firrtl.subfield %5("mask") : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>) -> !firrtl.uint<1>
-// INLINE-NEXT:     %27 = firrtl.invalidvalue : !firrtl.uint<1>
-// INLINE-NEXT:     %28 = firrtl.mux(%inpred, %c1_ui1, %27) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// INLINE-NEXT:     firrtl.connect %26, %28 : !firrtl.uint<1>, !firrtl.uint<1>
+// INLINE-NEXT:     %invalid_ui3 = firrtl.invalidvalue : !firrtl.uint<3>
+// INLINE-NEXT:     %16 = firrtl.mux(%inpred, %c0_ui3, %invalid_ui3) : (!firrtl.uint<1>, !firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
+// INLINE-NEXT:     firrtl.connect %15, %16 : !firrtl.uint<4>, !firrtl.uint<3>
+// INLINE-NEXT:     %17 = firrtl.subfield %5("en") : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>) -> !firrtl.uint<1>
+// INLINE-NEXT:     %18 = firrtl.mux(%inpred, %c1_ui1, %c0_ui1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// INLINE-NEXT:     firrtl.connect %17, %18 : !firrtl.uint<1>, !firrtl.uint<1>
+// INLINE-NEXT:     %19 = firrtl.subfield %5("clk") : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>) -> !firrtl.clock
+// INLINE-NEXT:     %invalid_clock = firrtl.invalidvalue : !firrtl.clock
+// INLINE-NEXT:     %20 = firrtl.mux(%inpred, %clock2, %invalid_clock) : (!firrtl.uint<1>, !firrtl.clock, !firrtl.clock) -> !firrtl.clock
+// INLINE-NEXT:     firrtl.connect %19, %20 : !firrtl.clock, !firrtl.clock
+// INLINE-NEXT:     %21 = firrtl.subfield %5("data") : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>) -> !firrtl.sint<42>
+// INLINE-NEXT:     %invalid_si42 = firrtl.invalidvalue : !firrtl.sint<42>
+// INLINE-NEXT:     %22 = firrtl.mux(%inpred, %indata, %invalid_si42) : (!firrtl.uint<1>, !firrtl.sint<42>, !firrtl.sint<42>) -> !firrtl.sint<42>
+// INLINE-NEXT:     firrtl.connect %21, %22 : !firrtl.sint<42>, !firrtl.sint<42>
+// INLINE-NEXT:     %23 = firrtl.subfield %5("mask") : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>) -> !firrtl.uint<1>
+// INLINE-NEXT:     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
+// INLINE-NEXT:     %24 = firrtl.mux(%inpred, %c1_ui1, %invalid_ui1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// INLINE-NEXT:     firrtl.connect %23, %24 : !firrtl.uint<1>, !firrtl.uint<1>
 // INLINE-NEXT:   }
 // INLINE-NEXT: }
 

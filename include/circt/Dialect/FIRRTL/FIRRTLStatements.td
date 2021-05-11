@@ -53,6 +53,8 @@ def PartialConnectOp : FIRRTLOp<"partialconnect"> {
   let results = (outs);
   let hasCanonicalizeMethod = true;
 
+  let verifier = "return ::verifyPartialConnectOp(*this);";
+
   let assemblyFormat =
     "$dest `,` $src  attr-dict `:` type($dest) `,` type($src)";
 }

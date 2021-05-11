@@ -62,8 +62,9 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
 
   if (auto blockArg = val.dyn_cast<BlockArgument>()) {
     auto op = val.getParentBlock()->getParentOp();
-    auto info = getModulePortInfo(op)[blockArg.getArgNumber()];
-    if (info.direction == Direction::Output)
+    auto direction = (Direction)getModulePortDirections(op)
+                         .getValue()[blockArg.getArgNumber()];
+    if (direction == Direction::Output)
       return swap();
     return accumulatedFlow;
   }
@@ -330,6 +331,12 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   for (size_t i = 0, e = ports.size(); i != e; ++i) {
     portNames.push_back(ports[i].name);
     portDirections.push_back(ports[i].direction);
+    if (!ports[i].annotations)
+      continue;
+    result.addAttribute(
+        getArgAttrName(i, attrNameBuf),
+        builder.getDictionaryAttr({{builder.getIdentifier("firrtl.annotations"),
+                                    ports[i].annotations}}));
   }
 
   // Both attributes are added, even if the module has no ports.
@@ -1127,6 +1134,43 @@ static LogicalResult verifyConnectOp(ConnectOp connect) {
                 << "has invalid flow: the left-hand-side has source flow "
                    "(expected sink or duplex flow).";
     return diag.attachNote(connect.dest().getLoc())
+           << "the left-hand-side was defined here.";
+  }
+
+  return success();
+}
+
+static LogicalResult verifyPartialConnectOp(PartialConnectOp partialConnect) {
+  FIRRTLType destType =
+      partialConnect.dest().getType().cast<FIRRTLType>().stripFlip().first;
+  FIRRTLType srcType =
+      partialConnect.src().getType().cast<FIRRTLType>().stripFlip().first;
+
+  if (!areTypesWeaklyEquivalent(destType, srcType))
+    return partialConnect.emitError("type mismatch between destination ")
+           << destType << " and source " << srcType
+           << ". Types are not weakly equivalent.";
+
+  // Check that the flows make sense.
+  if (foldFlow(partialConnect.src()) == Flow::Sink) {
+    // A sink that is a port output or instance input used as a source is okay.
+    auto kind = getDeclarationKind(partialConnect.src());
+    if (kind != DeclKind::Port && kind != DeclKind::Instance) {
+      auto diag =
+          partialConnect.emitOpError()
+          << "has invalid flow: the right-hand-side has sink flow and "
+             "is not an output port or instance input (expected source "
+             "flow, duplex flow, an output port, or an instance input).";
+      return diag.attachNote(partialConnect.src().getLoc())
+             << "the right-hand-side was defined here.";
+    }
+  }
+
+  if (foldFlow(partialConnect.dest()) == Flow::Source) {
+    auto diag = partialConnect.emitOpError()
+                << "has invalid flow: the left-hand-side has source flow "
+                   "(expected sink or duplex flow).";
+    return diag.attachNote(partialConnect.dest().getLoc())
            << "the left-hand-side was defined here.";
   }
 
