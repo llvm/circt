@@ -889,3 +889,46 @@ firrtl.circuit "PartialConnectEdgeCases" {
     // CHECK-NOT: firrtl.partialconnect %d_
   }
 }
+
+// -----
+
+// Test that annotations on aggregate ports are copied.
+firrtl.circuit "Port" {
+  firrtl.extmodule @Sub(in %a: !firrtl.vector<uint<1>, 2> {firrtl.annotations = [{a}]})
+  // CHECK: firrtl.extmodule
+  // CHECK-COUNT-2: firrtl.annotations = [{a}]
+  // CHECK-NOT: firrtl.annotations = [{a}]
+  firrtl.module @Port(in %a: !firrtl.vector<uint<1>, 2> {firrtl.annotations = [{b}]}) {
+    %sub_a = firrtl.instance @Sub  {name = "sub", portNames = ["a"]} : !firrtl.flip<vector<uint<1>, 2>>
+    firrtl.connect %sub_a, %a : !firrtl.flip<vector<uint<1>, 2>>, !firrtl.vector<uint<1>, 2>
+  }
+  // CHECK: firrtl.module
+  // CHECK-COUNT-2: firrtl.annotations = [{b}]
+  // CHECK-NOT: firrtl.annotations = [{b}]
+}
+
+// -----
+
+// Test that annotations on subfield/subindices of ports are only applied to
+// matching targets.  Any other arg attributes should be copied.
+module  {
+  firrtl.circuit "PortBundle"  {
+    // The annotation should be copied to just a.a.  The firrtl.hello arg
+    // attribute should be copied to each new port.
+    firrtl.module @PortBundle(in %a: !firrtl.bundle<a: uint<1>, b: flip<uint<1>>> {firrtl.annotations = [{a, target = [".a"]}], firrtl.hello}) {}
+    // CHECK: firrtl.module @PortBundle
+    // CHECK-COUNT-1: firrtl.annotations = [{a}]
+    // CHECK-COUNT-2: firrtl.hello
+    // CHECK-NOT: firrtl.annotations
+    // CHECK-NOT: firrtl.hello
+
+    // The annotation should be copied to just a[0].  The firrtl.world arg
+    // attribute should be copied to each port.
+    firrtl.extmodule @PortVector(in %a: !firrtl.vector<uint<1>, 2> {firrtl.annotations = [{b, target = ["[0]"]}], firrtl.world})
+    // CHECK: firrtl.extmodule @PortVector
+    // CHECK-COUNT-1: firrtl.annotations = [{b}]
+    // CHECK-COUNT-2: firrtl.world
+    // CHECK-NOT: firrtl.annotations
+    // CHECK-NOT: firrtl.world
+  }
+}
