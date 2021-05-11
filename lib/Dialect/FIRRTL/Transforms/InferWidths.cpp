@@ -452,9 +452,9 @@ class InferenceMapping {
 public:
   InferenceMapping(ConstraintSolver &solver) : solver(solver) {}
 
-  void map(CircuitOp op);
-  void map(FModuleOp op);
-  void mapOperation(Operation *op);
+  LogicalResult map(CircuitOp op);
+  LogicalResult map(FModuleOp op);
+  LogicalResult mapOperation(Operation *op);
 
   Expr *declareVars(Value value);
   Expr *declareVars(Type type);
@@ -478,24 +478,30 @@ private:
 
 } // namespace
 
-void InferenceMapping::map(CircuitOp op) {
+LogicalResult InferenceMapping::map(CircuitOp op) {
   for (auto &op : *op.getBody()) {
     if (auto module = dyn_cast<FModuleOp>(&op))
-      map(module);
+      if (failed(map(module)))
+        return failure();
   }
+  return success();
 }
 
-void InferenceMapping::map(FModuleOp module) {
+LogicalResult InferenceMapping::map(FModuleOp module) {
   // Ensure we have constraint variables for the module ports.
   for (auto arg : module.getArguments())
     declareVars(arg);
 
   // Go through operations, creating type variables for results, and generating
   // constraints.
-  module.walk([&](Operation *op) { mapOperation(op); });
+  auto result = module.getBody().walk(
+      [&](Operation *op) { return WalkResult(mapOperation(op)); });
+
+  return failure(result.wasInterrupted());
 }
 
-void InferenceMapping::mapOperation(Operation *op) {
+LogicalResult InferenceMapping::mapOperation(Operation *op) {
+  bool mappingFailed = false;
   TypeSwitch<Operation *>(op)
       .Case<ConstantOp>([&](auto op) {
         // Constants just use the bit width of the APInt. This is guaranteed to
@@ -632,11 +638,16 @@ void InferenceMapping::mapOperation(Operation *op) {
         auto dest = getExpr(op.dest());
         auto src = getExpr(op.src());
         constrainTypes(dest, src);
+      })
+      .Default([&](auto op) {
+        op->emitOpError("not supported in width inference");
+        mappingFailed = true;
       });
   // TODO: Handle PartialConnect
   // TODO: Handle DefRegister
   // TODO: Handle Attach
   // TODO: Handle Conditionally
+  return failure(mappingFailed);
 }
 
 /// Declare free variables for the type of a value, and associate the resulting
@@ -859,7 +870,10 @@ void InferWidthsPass::runOnOperation() {
   // Collect variables and constraints
   ConstraintSolver solver;
   InferenceMapping mapping(solver);
-  mapping.map(getOperation());
+  if (failed(mapping.map(getOperation()))) {
+    signalPassFailure();
+    return;
+  }
   LLVM_DEBUG({
     llvm::dbgs() << "Constraints:\n";
     solver.dumpConstraints(llvm::dbgs());
