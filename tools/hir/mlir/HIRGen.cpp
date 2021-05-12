@@ -1,5 +1,5 @@
 #include "../include/HIRGen.h"
-#include "../include/polymageHelpers.h"
+//#include "../include/polymageHelpers.h"
 #include "circt/Dialect/HIR/helper.h"
 #include "mlir/IR/Builders.h"
 
@@ -14,7 +14,7 @@ int emitMLIR(mlir::MLIRContext &context, mlir::OwningModuleRef &module) {
   // emitLineBuffer(builder, context, module, "line_buffer", imgDims,
   // kernelDims);
 
-  emitMultiply(builder, context, module);
+  // emitMultiply(builder, context, module);
 
   return 0;
 }
@@ -38,7 +38,7 @@ SmallVector<Type, 4> buildLineBufferArgTypes(mlir::OpBuilder &builder,
                                              mlir::MLIRContext &context) {
   auto f32Ty = FloatType::getF32(&context);
   Type arg1Ty = buildFifoPopInterfaceTy(builder, context, f32Ty);
-  Type outputArrayTy = ArrayType::get(&context, {2, 2}, f32Ty);
+  Type outputArrayTy = ArrayType::get(&context, {2, 2}, f32Ty, Attribute());
   Type arg2Ty =
       GroupType::get(&context, {TimeType::get(&context), outputArrayTy},
                      {Attribute(), Attribute()});
@@ -218,7 +218,7 @@ void emitLineBufferBody(mlir::OpBuilder &builder, mlir::MLIRContext &context,
       {
         hir::UnrollForOp unrollK1 = builder.create<hir::UnrollForOp>(
             builder.getUnknownLoc(), hir::TimeType::get(&context), 0,
-            kernelDims[0] - 1, 1, tv);
+            kernelDims[0] - 1, 1, tv, Value());
         unrollK1.addEntryBlock(&context);
         unrollK1.beginRegion(builder);
         mlir::Value tk1 = unrollK1.getIterTimeVar();
@@ -315,7 +315,7 @@ void emitLineBufferBody(mlir::OpBuilder &builder, mlir::MLIRContext &context,
       // hir.unroll_for %k1 = 0 to 2 step 1 iter_time(%tk1 = %tv){
       {
         hir::UnrollForOp unrollK1 = builder.create<hir::UnrollForOp>(
-            builder.getUnknownLoc(), timeTy, 0, kernelDims[0], 1, tv);
+            builder.getUnknownLoc(), timeTy, 0, kernelDims[0], 1, tv, Value());
         unrollK1.addEntryBlock(&context);
         unrollK1.beginRegion(builder);
         mlir::Value tk1 = unrollK1.getIterTimeVar();
@@ -331,7 +331,8 @@ void emitLineBufferBody(mlir::OpBuilder &builder, mlir::MLIRContext &context,
         // hir.unroll_for %k2 = 0 to 1 step 1 iter_time(%tk2 = %tk1){
         {
           hir::UnrollForOp unrollK2 = builder.create<hir::UnrollForOp>(
-              builder.getUnknownLoc(), timeTy, 0, kernelDims[1] - 1, 1, tk1);
+              builder.getUnknownLoc(), timeTy, 0, kernelDims[1] - 1, 1, tk1,
+              Value());
           unrollK2.addEntryBlock(&context);
           unrollK2.beginRegion(builder);
           mlir::Value tk2 = unrollK2.getIterTimeVar();

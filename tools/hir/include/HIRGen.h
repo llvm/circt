@@ -112,7 +112,7 @@ public:
       return item.binOp->getResultType();
     if (tag == selectOp)
       return item.selectOp->getResultType();
-    assert(item.valueIdx < argTypes.size());
+    assert(item.valueIdx < (int)argTypes.size());
     return argTypes[item.valueIdx];
   }
   int getResultOffset() {

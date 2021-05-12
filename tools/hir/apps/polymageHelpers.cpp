@@ -57,7 +57,6 @@ ExprTree *buildReductionTree(mlir::OpBuilder &builder,
     ExprTree *right = arr[i + 1];
     arrNext[i / 2] = buildAddExpr(builder, context, left, right, offset);
   }
-  ExprTree* lastDelayed = new ExprTree(new ExprTree::UnaryOp("hir.delay",last,
   arrNext[n / 2] = last; // don't worry about pipeline balancing here.
   return buildReductionTree(builder, context, n / 2 + 1, arrNext);
 }
