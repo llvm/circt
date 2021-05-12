@@ -30,6 +30,7 @@
 
 #include <functional>
 #include <list>
+#include <stack>
 
 using namespace mlir;
 using namespace hir;
