@@ -105,6 +105,7 @@ def LoadOp : HIR_Op<"load", [NoSideEffect,AttrSizedOperandSegments]> {
   let results = (outs AnyType: $res);
   let assemblyFormat = [{$mem `[`  $addr `]` `at` $tstart (`+` $offset^)? 
     attr-dict `:` type($mem) `[` type($addr) `]` `->` type($res)}];
+  let hasCanonicalizeMethod = true;
 }
 
 def StoreOp : HIR_Op<"store", [AttrSizedOperandSegments]> {
@@ -126,6 +127,7 @@ def StoreOp : HIR_Op<"store", [AttrSizedOperandSegments]> {
   let assemblyFormat = [{$value `to` $mem  `[` $addr `]` `at` $tstart 
     (`+` $offset^ )? attr-dict 
       `:` `(`type($value) `,` type($mem)`[`type($addr) `]` `)`}];
+  let hasCanonicalizeMethod = true;
 }
 
 def SendOp : HIR_Op<"send", [AttrSizedOperandSegments]> {
@@ -142,6 +144,7 @@ def SendOp : HIR_Op<"send", [AttrSizedOperandSegments]> {
   let assemblyFormat = [{$value `to` $var  `[` $addr `]` `at` $tstart 
     (`+` $offset^ )? attr-dict 
       `:` type($value) `to` type($var)`[`type($addr) `]` }];
+  let hasCanonicalizeMethod = true;
 }
 
 def RecvOp : HIR_Op<"recv", [AttrSizedOperandSegments]> {
@@ -159,6 +162,7 @@ def RecvOp : HIR_Op<"recv", [AttrSizedOperandSegments]> {
   let assemblyFormat = [{$var  `[` $addr `]` `at` $tstart 
     (`+` $offset^ )? attr-dict 
       `:` type($var)`[`type($addr) `]` `->` type($res) }];
+  let hasCanonicalizeMethod = true;
 }
 
 def SelectOp : HIR_Op<"select", [NoSideEffect]> {
@@ -293,11 +297,12 @@ def ForOp : HIR_Op<"for",
         void beginRegion(mlir::OpBuilder &builder);        
         void endRegion(mlir::OpBuilder &builder);
       }];
-      
+      let hasCanonicalizeMethod = true; 
     }
 
+//RecursiveSideEffects,
 def UnrollForOp : HIR_Op<"unroll_for", 
-    [ImplicitTerminator, RecursiveSideEffects,
+    [ImplicitTerminator, 
     DeclareOpInterfaceMethods<LoopLikeOpInterface>]> {
       let summary = "for operation";
       let description = [{
@@ -323,6 +328,7 @@ def UnrollForOp : HIR_Op<"unroll_for",
       }];
       let parser = [{return parse$cppClass(parser,result);}];
       let printer = [{return print$cppClass(p,*this);}];
+      let hasCanonicalizeMethod = true;
     }
 
 def CallOp : HIR_Op<"call",[AttrSizedOperandSegments] > {
@@ -347,6 +353,7 @@ def CallOp : HIR_Op<"call",[AttrSizedOperandSegments] > {
 
   let parser = [{return parse$cppClass(parser,result);}];
   let printer = [{return print$cppClass(p,*this);}];
+  let hasCanonicalizeMethod = true;
 }
 
 def FuncOp : HIR_Op<"func", [
@@ -413,6 +420,7 @@ def YieldOp : HIR_Op<"yield", [AttrSizedOperandSegments] > {
 
   let assemblyFormat = [{ attr-dict (`(` $operands^ `)` `:` type($operands))? 
     `at` $tstart (`+` $offset^ )?}];
+  let hasCanonicalizeMethod = true;
 }
 
 def ConstantOp : HIR_Op<"constant" > {
@@ -440,11 +448,10 @@ def CastOp : HIR_Op<"cast">{
       ```mlir %1 = hir.cast %0 at %ti : !hir.const -> !hir.val```
   }];
 
-  let arguments = (ins AnyType:$input, TimeType: $tstart,
-      Optional<ConstType>:$offset);
+  let arguments = (ins AnyType:$input);
   let results = (outs AnyType : $res);
 
-  let assemblyFormat = [{ $input  `at` $tstart (`+` $offset^ )? attr-dict
+  let assemblyFormat = [{ $input  attr-dict
     `:` type($input) `->` type($res)}];
 
 }
