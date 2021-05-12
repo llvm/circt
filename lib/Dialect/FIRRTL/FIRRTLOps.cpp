@@ -310,7 +310,7 @@ Direction firrtl::getModulePortDirection(Operation *op, size_t portIndex) {
 
 static void buildModule(OpBuilder &builder, OperationState &result,
                         StringAttr name, ArrayRef<ModulePortInfo> ports) {
-  using namespace mlir::impl;
+  using namespace mlir::function_like_impl;
 
   // Add an attribute for the name.
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
@@ -324,22 +324,21 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
 
   // Record the names of the arguments if present.
-  SmallString<8> attrNameBuf;
-  // Record the names of the arguments if present.
+  SmallVector<Attribute, 4> argAttrs;
   SmallVector<Attribute, 4> portNames;
   SmallVector<Direction, 4> portDirections;
   for (size_t i = 0, e = ports.size(); i != e; ++i) {
     portNames.push_back(ports[i].name);
     portDirections.push_back(ports[i].direction);
-    if (!ports[i].annotations)
-      continue;
-    result.addAttribute(
-        getArgAttrName(i, attrNameBuf),
-        builder.getDictionaryAttr({{builder.getIdentifier("firrtl.annotations"),
-                                    ports[i].annotations}}));
+    argAttrs.push_back(ports[i].annotations
+                           ? builder.getDictionaryAttr(
+                                 {{builder.getIdentifier("firrtl.annotations"),
+                                   ports[i].annotations}})
+                           : builder.getDictionaryAttr({}));
   }
 
   // Both attributes are added, even if the module has no ports.
+  result.addAttribute(getArgDictAttrName(), builder.getArrayAttr(argAttrs));
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
   result.addAttribute(
       direction::attrKey,
@@ -417,7 +416,7 @@ static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
     }
 
     p.printType(argTypes[i]);
-    p.printOptionalAttrDict(::mlir::impl::getArgAttrs(op, i));
+    p.printOptionalAttrDict(::mlir::function_like_impl::getArgAttrs(op, i));
   }
 
   if (isVariadic) {
@@ -552,14 +551,14 @@ parseFunctionSignature2(OpAsmParser &parser, bool allowVariadic,
 }
 
 static void printModuleLikeOp(OpAsmPrinter &p, Operation *op) {
-  using namespace mlir::impl;
+  using namespace mlir::function_like_impl;
 
   FunctionType fnType = getModuleType(op);
   auto argTypes = fnType.getInputs();
   auto resultTypes = fnType.getResults();
 
-  // TODO: Should refactor mlir::impl::printFunctionLikeOp to allow these
-  // customizations.  Need to not print the terminator.
+  // TODO: Should refactor mlir::function_like_impl::printFunctionLikeOp to
+  // allow these customizations.  Need to not print the terminator.
 
   // Print the operation and the function name.
   auto funcName =
@@ -597,11 +596,11 @@ static void print(OpAsmPrinter &p, FModuleOp op) {
 
 static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
                                   bool isExtModule = false) {
-  using namespace mlir::impl;
+  using namespace mlir::function_like_impl;
 
-  // TODO: Should refactor mlir::impl::parseFunctionLikeOp to allow these
-  // customizations for implicit argument names.  Need to not print the
-  // terminator.
+  // TODO: Should refactor mlir::function_like_impl::parseFunctionLikeOp to
+  // allow these customizations for implicit argument names.  Need to not print
+  // the terminator.
 
   SmallVector<OpAsmParser::OperandType, 4> entryArgs;
   SmallVector<NamedAttrList, 4> portNamesAttrs;

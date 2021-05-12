@@ -141,17 +141,17 @@ def FuncOp : Op<HandshakeOps_Dialect, "func", [
   }];
   let printer = [{
     FunctionType fnType = getType();
-    mlir::impl::printFunctionLikeOp(p, *this, fnType.getInputs(),
+    mlir::function_like_impl::printFunctionLikeOp(p, *this, fnType.getInputs(),
         /*isVariadic=*/true, fnType.getResults());
   }];
   let parser = [{
     auto buildFuncType =
         [](Builder & builder, ArrayRef<Type> argTypes, ArrayRef<Type> results,
-           mlir::impl::VariadicFlag, std::string &) {
+           mlir::function_like_impl::VariadicFlag, std::string &) {
       return builder.getFunctionType(argTypes, results);
     };
 
-    return mlir::impl::parseFunctionLikeOp(parser, result,
+    return mlir::function_like_impl::parseFunctionLikeOp(parser, result,
         /*allowVariadic=*/true, buildFuncType);
   }];
 }
@@ -246,12 +246,12 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock]> {
 
   let description = [{
     The "handshake.buffer" operation represents a buffer operation. $slots
-    must be an unsigned integer larger than 0. $sequantial=True indicates a 
-    nontransparent buffer, while $sequantial=False indicates a transparent 
+    must be an unsigned integer larger than 0. $sequantial=True indicates a
+    nontransparent buffer, while $sequantial=False indicates a transparent
     buffer.
   }];
 
-  let arguments = (ins AnyType, BoolAttr:$sequential, BoolAttr:$control, 
+  let arguments = (ins AnyType, BoolAttr:$sequential, BoolAttr:$control,
                    Confined<I32Attr, [IntMinValue<1>]>:$slots);
   let results = (outs AnyType);
 

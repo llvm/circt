@@ -166,7 +166,7 @@ enum ExternModKind { PlainMod, ExternMod, GenMod };
 static void buildModule(OpBuilder &builder, OperationState &result,
                         StringAttr name, ArrayRef<ModulePortInfo> ports,
                         ArrayRef<NamedAttribute> attributes) {
-  using namespace mlir::impl;
+  using namespace mlir::function_like_impl;
 
   // Add an attribute for the name.
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
@@ -356,7 +356,7 @@ static ParseResult parseModuleFunctionSignature(
     SmallVectorImpl<NamedAttrList> &resultAttrs,
     SmallVectorImpl<Attribute> &resultNames) {
 
-  using namespace mlir::impl;
+  using namespace mlir::function_like_impl;
   bool allowArgAttrs = true;
   bool allowVariadic = false;
   if (parseFunctionArgumentList(parser, allowArgAttrs, allowVariadic, argNames,
@@ -378,7 +378,7 @@ static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
 
 static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
                                     ExternModKind modKind = PlainMod) {
-  using namespace mlir::impl;
+  using namespace mlir::function_like_impl;
 
   SmallVector<OpAsmParser::OperandType, 4> entryArgs;
   SmallVector<NamedAttrList, 4> argAttrs;
@@ -501,7 +501,7 @@ static void printModuleSignature(OpAsmPrinter &p, Operation *op,
     }
 
     p.printType(argTypes[i]);
-    p.printOptionalAttrDict(::mlir::impl::getArgAttrs(op, i));
+    p.printOptionalAttrDict(::mlir::function_like_impl::getArgAttrs(op, i));
   }
 
   if (isVariadic) {
@@ -523,9 +523,9 @@ static void printModuleSignature(OpAsmPrinter &p, Operation *op,
       if (!name.empty())
         os << '%' << name << ": ";
 
-      auto resultAttrs = ::mlir::impl::getResultAttrs(op, i);
       p.printType(resultTypes[i]);
-      p.printOptionalAttrDict(resultAttrs);
+      p.printOptionalAttrDict(
+          ::mlir::function_like_impl::getResultAttrs(op, i));
     }
     os << ')';
   }
@@ -533,7 +533,7 @@ static void printModuleSignature(OpAsmPrinter &p, Operation *op,
 
 static void printModuleOp(OpAsmPrinter &p, Operation *op,
                           ExternModKind modKind) {
-  using namespace mlir::impl;
+  using namespace mlir::function_like_impl;
 
   FunctionType fnType = getRTLModuleOpType(op);
   auto argTypes = fnType.getInputs();
