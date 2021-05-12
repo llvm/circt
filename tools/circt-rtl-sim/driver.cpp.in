@@ -13,9 +13,7 @@
 
 #include "Vtop.h"
 
-#ifdef DEBUG
 #include "verilated_vcd_c.h"
-#endif
 
 #include "signal.h"
 #include <iostream>
@@ -53,12 +51,15 @@ int main(int argc, char **argv) {
 
   // Construct the simulated module's C++ model.
   auto &dut = *new Vtop();
-#ifdef DEBUG
-  VerilatedVcdC *tfp = new VerilatedVcdC;
-  Verilated::traceEverOn(true);
-  dut.trace(tfp, 99); // Trace 99 levels of hierarchy
-  tfp->open("main.vcd");
-#endif
+  char *waveformFile = getenv("SAVE_WAVE");
+
+  VerilatedVcdC *tfp = nullptr;
+  if (waveformFile) {
+    tfp = new VerilatedVcdC();
+    Verilated::traceEverOn(true);
+    dut.trace(tfp, 99); // Trace 99 levels of hierarchy
+    tfp->open(waveformFile);
+  }
 
   std::cout << "[driver] Starting simulation" << std::endl;
 
@@ -70,9 +71,8 @@ int main(int argc, char **argv) {
   for (timeStamp = 0; timeStamp < 8 && !Verilated::gotFinish(); timeStamp++) {
     dut.eval();
     dut.clk = !dut.clk;
-#ifdef DEBUG
-    tfp->dump(timeStamp);
-#endif
+    if (tfp)
+      tfp->dump(timeStamp);
   }
 
   // Take simulation out of reset.
@@ -85,17 +85,15 @@ int main(int argc, char **argv) {
        timeStamp++) {
     dut.eval();
     dut.clk = !dut.clk;
-#ifdef DEBUG
-    tfp->dump(timeStamp);
-#endif
+    if (tfp)
+      tfp->dump(timeStamp);
   }
 
   // Tell the simulator that we're going to exit. This flushes the output(s) and
   // frees whatever memory may have been allocated.
   dut.final();
-#ifdef DEBUG
-  tfp->close();
-#endif
+  if (tfp)
+    tfp->close();
 
   std::cout << "[driver] Ending simulation at tick #" << timeStamp << std::endl;
   return 0;
