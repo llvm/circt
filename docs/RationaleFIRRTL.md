@@ -12,26 +12,39 @@ files to Verilog.  It provides a number of useful compiler passes and
 infrastructure that allows the development of domain specific passes.  The
 FIRRTL project includes a [well documented IR
 specification](https://github.com/chipsalliance/firrtl/blob/master/spec/spec.pdf)
-that explains the semantics of its IR, an [Antlr
+that explains the semantics of its IR, an [ANTLR
 grammar](https://github.com/chipsalliance/firrtl/blob/master/src/main/antlr4/FIRRTL.g4)
 includes some extensions beyond it, and a compiler implemented in Scala which we
 refer to as the _Scala FIRRTL Compiler_ (SFC).
 
-The FIRRTL dialect in CIRCT is designed to follow the FIRRTL IR very closely,
-but does diverge for a variety of reasons.  Here we capture some of those
-reasons and why.  They generally boil down to simplifying compiler
-implementation and take advantages of the properties of MLIR's SSA form.
+_The FIRRTL dialect in CIRCT is designed to provide a drop-in replacement for
+the SFC for the subset of FIRRTL IR that is produced by Chisel and in common
+use._  The FIRRTL dialect also provides robust support for SFC _Annotations_.
+
+To achieve these goals, the FIRRTL dialect follows the FIRRTL IR specification
+and the SFC implementation almost exactly.  The small deviations we do make are
+discussed below.  Early versions of the FIRRTL dialect made _heavy deviations_
+from FIRRTL IR and the SFC (see the Type Canonicalization section below).  These
+deviations, while elegant, led to difficult to resolve mismatches with the SFC
+and the inability to verify FIRRTL IR.  The remaining small deviations
+introduced in the FIRRTL dialect are done to simplify the CIRCT implementation
+of a FIRRTL compiler and to take advantage of MLIR's various features.
+
 This document generally assumes that you've read and have a basic grasp of the
-IR spec, and it can be occasionally helpful to refer to the grammar.
+FIRRTL IR spec, and it can be occasionally helpful to refer to the ANTLR
+grammar.
 
 ## Status
 
 The FIRRTL dialect and FIR parser is a generally complete implementation of the
 FIRRTL specification and is actively maintained, tracking new enhancements. The
 FIRRTL dialect supports some undocumented features and the "CHIRRTL" flavor of
-FIRRTL IR that is produced from Chisel.
+FIRRTL IR that is produced from Chisel.  The FIRRTL dialect has support for
+parsing an SFC Annotation file consisting of only local annotations and
+converting this to operation or argument attributes.  Non-local annotation
+support is planned, but not implemented.
 
-There are some exceptions:
+There are some exceptions to the above:
 
 1) We don't support the `'raw string'` syntax for strings.
 2) We don't support the `Fixed` types for fixed point numbers, and some
@@ -51,7 +64,7 @@ the original FIRRTL, and they are predictably transformed during lowering.
 For example, after bundles are replaced with scalars in the lower-types pass,
 each field should be prefixed with the bundle name:
 
-```firrtl
+```scala
 circuit Example
   module Example
     reg myreg: { a :UInt<1>, b: UInt<1> }, clock
@@ -92,11 +105,10 @@ Having the known width and unknown width types implemented with two different
 C++ classes was awkward, led to casting bugs, and prevented having a
 `FIRRTLType` class that unified all the FIRRTL dialect types.
 
-### Canonicalized Flip Types
+### Not Canonicalizing Flip Types
 
-One significant difference between the CIRCT and Scala implementation of FIRRTL
-is that the CIRCT implementation of the FIRRTL type system always canonicalizes
-flip types, according to the following rules:
+An initial version of the FIRRTL dialect relied on canonicalization of flip
+types according to the following rules:
 
 1) `flip(flip(x))` == `x`.
 2) `flip(analog(x))` == `analog(x)` since analog types are implicitly
@@ -112,76 +124,125 @@ flip types, according to the following rules:
    Due to the other rules, the operand to a flip must be a passive type, so the
    entire bundle will be passive, and rule #3 won't be recursively reinvoked.
 
-The result of this is that FIRRTL types are guaranteed to have a canonical
-representation, and can therefore be tested for pointer equality.  The
-canonicalization of analog types means that both input and output ports of
-analog type have the same representation.
+While elegant in a number of ways (e.g., FIRRTL types are guaranteed to have a
+canonical representation and can be compared using pointer equality, flips
+partially subsume port directionality and "flow", and analog inputs and outputs
+are canonicalized to the same representation), this resulted in information loss
+during canonicalization because the number of flip types can change.  Namely,
+three problems were identified:
 
-As a further consequence of this, there are a few things to be aware of:
+1) Type canonicalization may make illegal operations legal.
+2) The flow of connections could not be verified because flow is a function of
+   the number of flip types.
+3) The directionality of leaves in an aggregate could not be determined.
 
-1) the `FlipType::get(x)` method may not return a flip type!
-2) the notion of "flow" in the FIRRTL dialect is different from the notion
-   described in the FIRRTL spec.
-3) canonicalization may make types equivalent that the SFC views as different
+As an example of the first problem, consider the following circuit:
 
-As an example of (3), consider the following module:
-
-```
+``` scala
 module Foo:
   output a: { flip a: UInt<1> }
   output b: { a: UInt<1> }
+
   b <= a
 ```
 
-The connection `b <= a` _is illegal_ in the SFC due to a type mismatch. However,
-type canonicalization in CIRCT converts the above module to the following
-module:
+The connection `b <= a` _is illegal_ FIRRTL due to a type mismatch where `{ flip
+a: UInt<1> }` is not equal to `{ a: UInt<1> }`.  However, type canonicalization
+would transform this circuit into the following circuit:
 
-```
+```scala
 module Foo:
   input a: { a: UInt<1> }
   output b: { a: UInt<1> }
+
   b <= a
 ```
 
-Here, the connection `b <= a` _is legal_ in the SFC. Consequently, type
-canonicalization may result in us accepting more circuits than the SFC.
+Here, the connection `b <= a` _is legal_ FIRRTL.  This then makes it impossible
+for a type canonical form to be type checked.
 
-Conversely, the SFC views the following two modules as exactly the same (but
-with different names):
+As an example of the second problem, consider the following circuit:
 
-```
-module Foo:
-  input a: { a: UInt<1> }
-  output b: { a: UInt<1> }
-  b <= a
+```scala
 module Bar:
   output a: { flip a: UInt<1> }
-  input b: { flip a: UInt<1> }
-  a <= b
+  input b: { flip b: UInt<1> }
+
+  b <= a
 ```
 
-**Note**: the left-hand-side and right-hand-side of `b <= a` must change to `a
-<= b` or the SFC will reject the circuit. CIRCT type canonicalization does not
-extend to reversing connection directions and this requires relaxing what it
-means about left-hand-side and right-hand-side connections. CIRCT consequently
-accepts all permutations of `a <= b` and types which canonicalize to the same
-representation.
+Here, the connection `b <= a` _is illegal_ FIRRTL because `b` is a source and
+`a` is a sink.  However, type canonicalization converts this to the following
+circuit:
+
+``` scala
+module Bar:
+  input a: { a: UInt<1> }
+  output b: { b: UInt<1> }
+
+  b <= a
+```
+
+Here, the connect `b <= a` _is legal_ FIRRTL because `b` is now a sink and `a`
+is now a source.  This then makes it impossible for a type canonical form to be
+flow checked.
+
+As an example of the third problem, consider the following circuit:
+
+``` scala
+module Baz:
+  wire a: {flip a: {flip a: UInt<1>}}
+  wire b: {flip a: {flip a: UInt<1>}}
+
+  b.a <= a.a
+```
+
+The connection `b.a <= a.a`, when lowered, results in the _reverse_ connect
+`a.a.a <= b.a.a`.  However, type canonicalization will remove the flips from the
+circuit to produce:
+
+```scala
+module Baz:
+  wire a: {a: {a: UInt<1>}}
+  wire b: {a: {a: UInt<1>}}
+
+  b.a <= a.a
+```
+
+Here, the connect `b.a <= a.a`, when lowered, results in the normal connect
+`b.a.a <= a.a.a`.  Type canonicalization has thereby changed the semantics of
+connect.
+
+Due to the elegance of type canonicalization, we initially decided that we would
+use type canonicalization and CIRCT would accept more circuits than the SFC.
+The third problem (identified much later than the first two) convinced us to
+remove type canonicalization.
+
+For a historical discussion of type canonicalization see:
+
+- [`llvm/circt#380`](https://github.com/llvm/circt/issues/380)
+- [`llvm/circt#919`](https://github.com/llvm/circt/issues/919)
+- [`llvm/circt#944`](https://github.com/llvm/circt/pull/944)
 
 ### Flow
 
-The FIRRTL specification describes the concept of "flow" to track whether a
-value is a `sink`, `source`, or `duplex`. In the specification, module inputs
-are `source`, while module outputs are a `sink`. The `duplex` flow type is
-used for values which can be read and written to, such as registers and
-wires. In a connect statement, the LHS must be a `sink` or a `duplex` type,
-while the RHS must be `source` or a `duplex`.
+The FIRRTL specification describes the concept of "flow".  Flow encodes
+additional information that determines the legality of operations.  FIRRTL
+defines three different flows: `sink`, `source`, and `duplex`.  Module inputs,
+instance outputs, and nodes are `source`, module outputs and instance inputs are
+`sink`, and wires and registers are `duplex`.  A value with `sink` flow may only
+be written to, but not read from (with the exception of module outputs and
+instance inputs which may be also read from).  A value with `source` flow may be
+read from, but not written to.  A value with `duplex` flow may be read from or
+written to.
 
-Due to the flip canonicalization in the MLIR implementation, the compiler no
-longer distinguishes between inputs and outputs. As a result, the only
-requirement of a connect statement is that the LHS side is a flip type or a
-`duplex` value. In the new compiler, you can always read from a flip type, so
-there is no verification of the RHS of a connect statement.
+For FIRRTL connects or partial connect statements, it follows that the
+left-hand-side must be `sink` or `duplex` and the right-hand-side must be
+`source`, `duplex`, or a port/instance `sink`.
+
+Flow is _not_ represented as a first-class type in CIRCT.  We instead provide
+utilities for computing flow when needed, e.g., for connect statement
+verification.
 
 ## Operations
 
@@ -210,51 +271,29 @@ dialect of their own creation that lowers to RTL as appropriate.
 
 ### `input` and `output` Module Ports
 
-The FIRRTL specification describes two kinds of ports: `input` and `output`.
-In the `firrtl.module` declaration we don't track this distinction, instead we
-just represent `output` ports as having a flipped type compared to its
-specification.
+The FIRRTL specification describes two kinds of ports: `input` and `output`.  In
+the `firrtl.module` declaration we track this via an arbitrary precision integer
+attribute (`IntegerAttr`) where each bit encodes the directionality of the port
+at that index.
 
-**Rationale:**: This simplifies the IR and provides a more canonical
-representation of the same concept.  This also composes with flip type
-canonicalization nicely.
+Originally, we encoded direction as the absence of an outer flip type (input) or
+presence of an outer flip type (output).  This was done as part of the original
+type canonicalization effort which combined input/output with the type system.
+However, once type canonicalization was removed flip type only became used in
+three places: on the types of bundle fields, on the variadic return types of
+instances or memories, and on ports.  The first is the same as the FIRRTL
+specification.  The second is a deviation from the FIRRTL specification, but
+allowable as it takes advantage of the MLIR's variadic capabilities to simplify
+the IR.  The third was an inelegant abuse of an unrelated concept that added
+bloat to the type system.  Many operations would have to check for an outer flip
+on ports and immediately discard it.
 
-The FIRRTL specification uses the same type for module ports and instance ports.
-Consequently, the FIRRTL specification relies on "flow" to set the root
-directionality of a module port vs. an instance port. Computation of "flow"
-requires tracking the "kind" of a reference. For modules and instances this
-differentiation happens via "port kind" and "instance kind".
+For this reason, the `IntegerAttr` encoding implementation was chosen.
 
-E.g., in the following module, when inside `module Foo`, the SFC views the types
-of `a` and `bar.a` as the same. The SFC then computed the "kind" of each
-reference to infer that `bar.a` is "sink flow" (something l-value like) and `a`
-is "source flow" (something r-value like).
+For a historical discussion of this issue and its development see:
 
-```
-module Bar:
-  input a: UInt<1>
-module Foo:
-  input a: UInt<1>
-  inst bar of Bar
-```
-
-We diverge from this in CIRCT and represent all information in the type. I.e.,
-the type of `bar.a` inside module `Foo` is flipped:
-
-```mlir
-firrtl.circuit "Foo" {
-  firrtl.module @Bar(%a: !firrtl.uint<1>) {
-  }
-  firrtl.module @Foo(%a: !firrtl.uint<1>) {
-    %bar = firrtl.instance @Bar {name = "bar"} : !firrtl.flip<bundle<a: uint<1>>>
-  }
-}
-```
-
-**Note**: The SFC provides a similar public utility,
-[`firrtl.Utils.module_type`](https://www.chisel-lang.org/api/firrtl/latest/firrtl/Utils$.html#module_type(m:firrtl.ir.DefModule):firrtl.ir.BundleType),
-that returns a bundle representing a `firrtl.module`.  However, this uses the
-inverse convention where `input` is flipped and `output` is unflipped.
+- [`llvm/circt#989`](https://github.com/llvm/circt/issues/989)
+- [`llvm/circt#992`](https://github.com/llvm/circt/pull/992)
 
 ### `firrtl.mem`
 
@@ -287,11 +326,32 @@ connects the invalid value to the destination (or a `firrtl.attach` for analog
 values).  This has the same expressive power as the standard FIRRTL
 representation but is easier to work with.
 
+During parsing, we break up an `x is invalid` statement into leaf connections.
+As an example, consider the following FIRRTL module where a bi-directional
+aggregate, `a` is invalidated:
+
+``` scala
+module Foo:
+  output a: { a: UInt<1>, flip b: UInt<1> }
+
+  a is invalid
+```
+
+This is parsed into the following MLIR.  Here, only `a.a` is invalidated:
+
+``` mlir
+firrtl.module @Foo(out %a: !firrtl.bundle<a: uint<1>, b: flip<uint<1>>>) {
+  %0 = firrtl.subfield %a("a") : (!firrtl.bundle<a: uint<1>, b: flip<uint<1>>>) -> !firrtl.uint<1>
+  %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
+  firrtl.connect %0, %invalid_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+}
+```
+
 ### `validif` represented as a multiplexer
 
 The FIRRTL spec describes a `validIf(en, x)` operation that is used during lowering from high to low FIRRTL. Consider the following example:
 
-```
+```scala
 c <= invalid
 when a:
   c <= b
@@ -299,7 +359,7 @@ when a:
 
 Lowering will introduce the following intermediate representation in low FIRRTL:
 
-```
+```scala
 c <= validIf(a, b)
 ```
 
@@ -311,3 +371,133 @@ Since there is no precedence of this `validIf` being used anywhere in the Chisel
 ```
 
 A canonicalization then folds this combination of `firrtl.invalidvalue` and `firrtl.mux` to the "high" operand of the multiplexer to facilitate downstream transformation passes.
+
+## Annotations
+
+The SFC provides a mechanism to encode arbitrary metadata and associate it with
+zero or more "things" in a FIRRTL circuit.  This mechanism is an _Annotation_
+and the association is described using one or more _Targets_.  Annotations are
+serializable to JSON and either live in a separate file (e.g., during the
+handoff between Chisel and the SFC) or are stored in-memory (e.g., during
+SFC-based compilation).  The SFC pass API requires that passes describe which
+targets in the circuit they update.  SFC infrastructure then automatically
+updates annotations so they are always synchronized with their corresponding
+FIRRTL IR.
+
+Historically, annotations grew out of three choices in the design of FIRRTL IR:
+
+1) FIRRTL IR is not extensible with user-defined IR nodes.
+2) FIRRTL IR is not parameterized.
+3) FIRRTL IR does not support in-IR attributes.
+
+Annotations have then been used for all manner of extensions including:
+
+1) Encoding SystemVerilog nodes into the IR using special printfs, an example of
+   working around (1) above.
+2) Setting the reset vector of different, identical CPU cores, an example of
+   working around (2) above.
+3) Encoding sources and sinks that should be wired together by an SFC pass, an
+   example of (3) above.
+
+### Targets
+
+A target is a special identifier of the form:
+
+```
+“~” (circuit) (“|” (module) (“/” (instance) “:” (module) )* (“>” (reference) )?)?
+```
+
+A reference is a name inside a module and one or more qualifying tokens that
+encode subfields (of a bundle) or subindices (of a vector):
+
+```
+(name) ("[" (index) "]" | "." (field))*
+```
+
+To show some examples of what these look like, consider the following example
+circuit. This consists of four instances of module `Baz`, two instances of
+module `Bar`, and one instance of module `Foo`:
+
+```scala
+circuit Foo:
+  module Baz:
+    skip
+  module Bar:
+    inst c of Baz
+    inst d of Baz
+  module Foo:
+    inst a of Bar
+    inst b of Bar
+```
+
+Using targets (or multiple targets), any specific module, instance, or
+combination of instances can be expressed. Some examples include:
+
+- `~Foo` refers to the whole circuit
+- `~Foo|Foo` refers to the top module
+- `~Foo|Bar` refers to module `Bar` (or both instances of module `Bar`)
+- `~Foo|Foo/a:Bar` refers just to one instance of module `Bar`
+- `~Foo|Foo/b:Bar/c:Baz` refers to one instance of module `Baz`
+- `~Foo|Bar/d:Baz` refers to two instances of module `Baz`
+
+If a target does not contain an instance path, it is a _local_ target.  A local
+target points to all instances of a module.  If a target contains an instance
+path, it is a _non-local_ target.  A non-local target _may_ not point to all
+instances of a module.  Additionally, a non-local target may have an equivalent
+local target representation.
+
+### CIRCT Support
+
+We plan to provide full support for annotations in CIRCT.  The FIRRTL dialect
+current supports:
+
+1) All non-local annotations can be parsed and applied to the correct circuit
+   component.
+2) Annotations, with and without references, are copied to the correct ground
+   type in the `LowerTypes` pass.
+
+Annotations can be parsed using the `--annotation-file` command line argument to
+the `firtool` utility.  Alternatively, we provide a non-standard way of encoding
+annotations in the FIRRTL IR textual representation.  We provide this
+non-standard support primarily to make test writing easier.  As an example of
+this, consider the following JSON annotation file:
+
+```json
+[
+  {
+    "target": "~Foo|Foo",
+    "hello": "world"
+  }
+]
+```
+
+This can be equivalently, in CIRCT, expressed as:
+
+``` scala
+circuit Foo: %[[{"target":"~Foo|Foo","hello":"world"}]]
+  module Foo:
+    skip
+```
+
+During parsing, annotations are "scattered" into the MLIR representation as
+operation or argument attributes.  As an example of this, the above parses into
+the following MLIR representation:
+
+```mlir
+firrtl.circuit "Foo"  {
+  firrtl.module @Foo() attributes {annotations = [{hello = "world"}]} {
+    firrtl.skip
+  }
+}
+```
+
+Targets without references have their targets stripped during scattering since
+target information is redundant once annotation metadata is attached to the IR.
+Targets with references have the reference portion of the target included in the
+attribute.  The `LowerTypes` pass then uses this reference information to attach
+annotation metadata to only the _lowered_ portion of a targeted circuit
+component.
+
+Annotations are expected to be fully removed via custom transforms, conversion
+to other MLIR operations, or dropped.  E.g., the `ModuleInliner` pass removes
+`firrtl.passes.InlineAnnotation` by inlining annotated modules or instances.
