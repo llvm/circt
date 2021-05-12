@@ -20,6 +20,7 @@ import sys
 ThisFileDir = os.path.dirname(__file__)
 DebugBuild = "@CMAKE_BUILD_TYPE@" == "Debug"
 
+
 class Questa:
   """Run and compile funcs for Questasim."""
 
