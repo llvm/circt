@@ -27,8 +27,8 @@ module {
   rtl.module @A(%d: i1, %e: !rtl.inout<i1>) -> (i1, i1) {
     // Instantiate @B as a RTL module with result-as-output sementics
     %r1, %r2 = rtl.instance "b1" @B(%d) : (i1) -> (i1, i1)
-    // Instantiate @C
-    %f, %g = rtl.instance "c1" @C(%d) : (i1) -> (i1, i1)
+    // Instantiate @C with a public symbol on the instance
+    %f, %g = rtl.instance "c1" sym @E @C(%d) : (i1) -> (i1, i1)
     // Connect the inout port with %f
     sv.connect %e, %f : i1
     // Output values
@@ -36,7 +36,7 @@ module {
   }
   // CHECK-LABEL: rtl.module @A(%d: i1, %e: !rtl.inout<i1>) -> (i1, i1)
   // CHECK-NEXT:  %b1.nameOfPortInSV, %b1.1 = rtl.instance "b1" @B(%d) : (i1) -> (i1, i1)
-  // CHECK-NEXT:  %c1.0, %c1.1 = rtl.instance "c1" @C(%d) : (i1) -> (i1, i1)
+  // CHECK-NEXT:  %c1.0, %c1.1 = rtl.instance "c1" sym @E @C(%d) : (i1) -> (i1, i1)
 
   rtl.module @AnyType1(%a: vector< 3 x i8 >) { }
   // CHECK-LABEL: rtl.module @AnyType1(%a: vector<3xi8>)

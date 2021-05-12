@@ -324,6 +324,43 @@ The SV dialect is primarily designed for human consumption, not machines.  As
 such, transformations should aim to reduce redundancy, eliminate useless
 constructs (e.g. eliminate empty ifdef and if blocks), etc.
 
+## Symbols and Visibility
+
+Verilog has a broad notion of what can be named outside the context of its
+declaration.  This is compounded by the many tools which have additional source
+files which refer to verilog names (e.g. tcl files).  However, we do not what to
+require that every wire, register, instance, localparam, port, etc which can be
+named not be touched by passes.  We want only entities marked as public facing
+to impede transformation.
+
+For this reason, wires, registers, and instances may optionally define a symbol.
+When the symbol is defined, the entity is considered part of the visible
+interface and should be preserved in transformation.  Entities without a symbol
+defined are considered private and may be changed by transformation.
+
+### Implementation constraints
+
+Currently, MLIR restricts symbol resolution to looking in and downward though
+any nested symbol tables when resolving symbols.  This assumption has
+implications for verification, the pass manager, and threading.  Until symbol
+references are more general, SV and RTL dialects do not define symbol tables for
+modules.  Therefore, wires, registers, and interfaces exist in the same
+namespace as modules.  It is encouraged that one prefaces the names to avoid
+conflict with modules.  The symbol names on these entities has no bearing on the
+output verilog, each of these entities has a defined way to assign its name (SSA
+value name for wires and regs, a non-optional string for instances).
+
+As MLIR symbol support improves, it is desired to more to per-module symbol
+tables and to unify names with symbol names.
+
+### Ports
+
+Module ports are remotely namable entities in Verilog, but are non easily named
+with symbols.  A suggested workaround is to attach a wire to a port and use it's
+symbol for remote references.
+
+Instance ports have a similar problem.
+
 ## Future Directions
 
 There are many possible future directions that we anticipate tackling, when and
