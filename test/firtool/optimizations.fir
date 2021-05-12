@@ -10,8 +10,8 @@ circuit test_cse :
     b <= and(a, UInt<4>(0))
     b <= and(UInt<4>(3), UInt<4>(1))
 
-; OPT: %c0_ui4 = firrtl.constant(0 : ui4)
-; OPT: %c1_ui4 = firrtl.constant(1 : ui4)
+; OPT: %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
+; OPT: %c1_ui4 = firrtl.constant 1 : !firrtl.uint<4>
 
 ; Only one add.
 ; OPT: %0 = firrtl.add %a, %a
@@ -29,11 +29,11 @@ circuit test_cse :
 ; NOOPT: firrtl.connect %b, %1 
 
 ; Ands persist.
-; NOOPT: %c0_ui4 = firrtl.constant(0 : ui4)
+; NOOPT: %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
 ; NOOPT: firrtl.and %a, %c0_ui4
 ; NOOPT: firrtl.connect %b,
 
-; NOOPT: %c3_ui4 = firrtl.constant(3 : ui4)
-; NOOPT: %c1_ui4 = firrtl.constant(1 : ui4)
+; NOOPT: %c3_ui4 = firrtl.constant 3 : !firrtl.uint<4>
+; NOOPT: %c1_ui4 = firrtl.constant 1 : !firrtl.uint<4>
 ; NOOPT: firrtl.and %c3_ui4, %c1_ui4
 ; NOOPT: firrtl.connect %b,

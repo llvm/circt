@@ -43,13 +43,13 @@ firrtl.module @complex(in %p : !firrtl.uint<1>, in %q : !firrtl.uint<1>) {
   %w = firrtl.wire : !firrtl.uint<2>
 
   firrtl.when %p {
-    %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
+    %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
     firrtl.connect %w, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   }
 
   firrtl.when %q {
   } else {
-    %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
+    %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
     firrtl.connect %w, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   }
 }

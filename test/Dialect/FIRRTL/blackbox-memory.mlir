@@ -3,8 +3,8 @@
 
 firrtl.circuit "Read" {
   firrtl.module @Read() {
-    %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
-    %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 
     %0 = firrtl.mem Undefined {depth = 16 : i64, name = "ReadMemory", portNames = ["read0"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<sint<8>>>>
 
@@ -31,8 +31,8 @@ firrtl.circuit "Read" {
 // WRAPPER-NEXT:     firrtl.connect %3, %ReadMemory_R0_data : !firrtl.sint<8>, !firrtl.sint<8>
 // WRAPPER-NEXT:   }
 // WRAPPER-NEXT:   firrtl.module @Read() {
-// WRAPPER-NEXT:     %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
-// WRAPPER-NEXT:     %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
+// WRAPPER-NEXT:     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+// WRAPPER-NEXT:     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 // WRAPPER-NEXT:     %ReadMemory_read0 = firrtl.instance @ReadMemory {name = "ReadMemory"} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<sint<8>>>>
 // WRAPPER-NEXT:     %0 = firrtl.subfield %ReadMemory_read0("data") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<sint<8>>>>) -> !firrtl.sint<8>
 // WRAPPER-NEXT:     %1 = firrtl.subfield %ReadMemory_read0("addr") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<sint<8>>>>) -> !firrtl.uint<4>
@@ -46,8 +46,8 @@ firrtl.circuit "Read" {
 // INLINE-LABEL: firrtl.circuit "Read" {
 // INLINE-NEXT:   firrtl.extmodule @ReadMemory_ext(in %R0_addr: !firrtl.uint<4>, in %R0_en: !firrtl.uint<1>, in %R0_clk: !firrtl.clock, out %R0_data: !firrtl.sint<8>) attributes {depth = 16 : i64, generator = "FIRRTLMemory", readLatency = 1 : i32, ruw = 0 : i32, writeLatency = 1 : i32}
 // INLINE-NEXT:   firrtl.module @Read() {
-// INLINE-NEXT:     %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
-// INLINE-NEXT:     %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
+// INLINE-NEXT:     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+// INLINE-NEXT:     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 // INLINE-NEXT:     %ReadMemory_R0_addr, %ReadMemory_R0_en, %ReadMemory_R0_clk, %ReadMemory_R0_data = firrtl.instance @ReadMemory_ext {name = "ReadMemory"} : !firrtl.flip<uint<4>>, !firrtl.flip<uint<1>>, !firrtl.flip<clock>, !firrtl.sint<8>
 // INLINE-NEXT:     %0 = firrtl.wire : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<sint<8>>>
 // INLINE-NEXT:     %1 = firrtl.subfield %0("addr") : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<sint<8>>>) -> !firrtl.uint<4>
@@ -142,9 +142,9 @@ firrtl.circuit "Write" {
 
 firrtl.circuit "MemSimple" {
   firrtl.module @MemSimple(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock, in %inpred: !firrtl.uint<1>, in %indata: !firrtl.sint<42>, out %result: !firrtl.sint<42>) {
-    %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
-    %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
-    %c0_ui3 = firrtl.constant(0 : ui3) : !firrtl.uint<3>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %c0_ui3 = firrtl.constant 0 : !firrtl.uint<3>
     %_M_read, %_M_write = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read", "write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<sint<42>>>>, !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>
     %0 = firrtl.subfield %_M_read("data") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<sint<42>>>>) -> !firrtl.sint<42>
     firrtl.connect %result, %0 : !firrtl.sint<42>, !firrtl.sint<42>
@@ -200,9 +200,9 @@ firrtl.circuit "MemSimple" {
 // WRAPPER-NEXT:     firrtl.connect %_M_W0_mask, %8 : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 // WRAPPER-NEXT:   }
 // WRAPPER-NEXT:   firrtl.module @MemSimple(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock, in %inpred: !firrtl.uint<1>, in %indata: !firrtl.sint<42>, out %result: !firrtl.sint<42>) {
-// WRAPPER-NEXT:     %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
-// WRAPPER-NEXT:     %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
-// WRAPPER-NEXT:     %c0_ui3 = firrtl.constant(0 : ui3) : !firrtl.uint<3>
+// WRAPPER-NEXT:     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+// WRAPPER-NEXT:     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+// WRAPPER-NEXT:     %c0_ui3 = firrtl.constant 0 : !firrtl.uint<3>
 // WRAPPER-NEXT:     %_M_read, %_M_write = firrtl.instance @_M {name = "_M"} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<sint<42>>>>, !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>
 // WRAPPER-NEXT:     %0 = firrtl.subfield %_M_read("data") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<sint<42>>>>) -> !firrtl.sint<42>
 // WRAPPER-NEXT:     firrtl.connect %result, %0 : !firrtl.sint<42>, !firrtl.sint<42>
@@ -237,9 +237,9 @@ firrtl.circuit "MemSimple" {
 // INLINE-LABEL: firrtl.circuit "MemSimple" {
 // INLINE-NEXT:   firrtl.extmodule @_M_ext(in %R0_addr: !firrtl.uint<4>, in %R0_en: !firrtl.uint<1>, in %R0_clk: !firrtl.clock, out %R0_data: !firrtl.sint<42>, in %W0_addr: !firrtl.uint<4>, in %W0_en: !firrtl.uint<1>, in %W0_clk: !firrtl.clock, in %W0_data: !firrtl.sint<42>, in %W0_mask: !firrtl.uint<1>) attributes {depth = 12 : i64, generator = "FIRRTLMemory", readLatency = 1 : i32, ruw = 0 : i32, writeLatency = 1 : i32}
 // INLINE-NEXT:   firrtl.module @MemSimple(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock, in %inpred: !firrtl.uint<1>, in %indata: !firrtl.sint<42>, out %result: !firrtl.sint<42>) {
-// INLINE-NEXT:     %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
-// INLINE-NEXT:     %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
-// INLINE-NEXT:     %c0_ui3 = firrtl.constant(0 : ui3) : !firrtl.uint<3>
+// INLINE-NEXT:     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+// INLINE-NEXT:     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+// INLINE-NEXT:     %c0_ui3 = firrtl.constant 0 : !firrtl.uint<3>
 // INLINE-NEXT:     %_M_R0_addr, %_M_R0_en, %_M_R0_clk, %_M_R0_data, %_M_W0_addr, %_M_W0_en, %_M_W0_clk, %_M_W0_data, %_M_W0_mask = firrtl.instance @_M_ext {name = "_M"} : !firrtl.flip<uint<4>>, !firrtl.flip<uint<1>>, !firrtl.flip<clock>, !firrtl.sint<42>, !firrtl.flip<uint<4>>, !firrtl.flip<uint<1>>, !firrtl.flip<clock>, !firrtl.flip<sint<42>>, !firrtl.flip<uint<1>>
 // INLINE-NEXT:     %0 = firrtl.wire  : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<sint<42>>>
 // INLINE-NEXT:     %1 = firrtl.subfield %0("addr") : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<sint<42>>>) -> !firrtl.uint<4>

@@ -44,9 +44,9 @@ firrtl.circuit "Div" {
 
   // https://github.com/llvm/circt/issues/778
   firrtl.module @zero_width_mem(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %r0en: !firrtl.uint<1>) {
-    %c0_ui4 = firrtl.constant(0 : i4) : !firrtl.uint<4>
-    %c0_ui1 = firrtl.constant(false) : !firrtl.uint<1>
-    %c0_ui25 = firrtl.constant(0 : i25) : !firrtl.uint<25>
+    %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %c0_ui25 = firrtl.constant 0 : !firrtl.uint<25>
   // expected-error @+1 {{'firrtl.mem' should have simple type and known width}}
     %tmp41_r0, %tmp41_w0 = firrtl.mem Undefined {depth = 10 : i64, name = "tmp41", portNames = ["r0", "w0"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<uint<0>>>>, !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>>
     %0 = firrtl.subfield %tmp41_r0("clk") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<uint<0>>>>) -> !firrtl.clock

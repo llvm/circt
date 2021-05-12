@@ -24,7 +24,10 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
   let arguments = (ins APIntAttr:$value);
   let results = (outs NonZeroIntType:$result);
 
-  let assemblyFormat = "`(` $value `)` attr-dict `:` type($result)";
+  // Need a custom parser/printer to avoid redundant type for the attribute and
+  // the op itself.
+  let parser = "return parse$cppClass(parser, result);";
+  let printer = "print$cppClass(p, *this);";
 
   let builders = [
     OpBuilder<(ins "IntType":$type, "const APInt &":$value)>

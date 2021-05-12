@@ -1215,6 +1215,59 @@ bool firrtl::isExpression(Operation *op) {
   return IsExprClassifier().dispatchExprVisitor(op);
 }
 
+static void printConstantOp(OpAsmPrinter &p, ConstantOp &op) {
+  p << "firrtl.constant ";
+  p.printAttributeWithoutType(op.valueAttr());
+  p << " : ";
+  p.printType(op.getType());
+  p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"value"});
+}
+
+static ParseResult parseConstantOp(OpAsmParser &parser,
+                                   OperationState &result) {
+  // Parse the constant value, without knowing its width.
+  APInt value;
+  auto loc = parser.getCurrentLocation();
+  auto valueResult = parser.parseOptionalInteger(value);
+  if (!valueResult.hasValue())
+    return parser.emitError(loc, "expected integer value");
+
+  // Parse the result firrtl integer type.
+  IntType resultType;
+  if (failed(*valueResult) || parser.parseColonType(resultType) ||
+      parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+  result.addTypes(resultType);
+
+  // Now that we know the width and sign of the result type, we can munge the
+  // APInt as appropriate.
+  if (resultType.hasWidth()) {
+    auto width = (unsigned)resultType.getWidthOrSentinel();
+    if (width == 0)
+      return parser.emitError(loc, "zero bit constants aren't allowed");
+
+    if (width > value.getBitWidth()) {
+      // sext is always safe here, even for unsigned values, because the
+      // parseOptionalInteger method will return something with a zero in the
+      // top bits if it is a positive number.
+      value = value.sext(width);
+    } else if (width < value.getBitWidth()) {
+      // The parser can return an unnecessarily wide result with leading zeros.
+      // This isn't a problem, but truncating off bits is bad.
+      if (value.getNumSignBits() < value.getBitWidth() - width)
+        return parser.emitError(loc, "constant too large for result type ")
+               << resultType;
+      value = value.trunc(width);
+    }
+  }
+
+  auto intType = parser.getBuilder().getIntegerType(value.getBitWidth(),
+                                                    resultType.isSigned());
+  auto valueAttr = parser.getBuilder().getIntegerAttr(intType, value);
+  result.addAttribute("value", valueAttr);
+  return success();
+}
+
 static LogicalResult verifyConstantOp(ConstantOp constant) {
   // If the result type has a bitwidth, then the attribute must match its width.
   auto intType = constant.getType().cast<IntType>();
@@ -1222,6 +1275,12 @@ static LogicalResult verifyConstantOp(ConstantOp constant) {
   if (width != -1 && (int)constant.value().getBitWidth() != width)
     return constant.emitError(
         "firrtl.constant attribute bitwidth doesn't match return type");
+
+  // The sign of the attribute's integer type must match our integer type sign.
+  auto attrType = constant.valueAttr().getType().cast<IntegerType>();
+  if (attrType.isSignless() ||
+      attrType.isSigned() != constant.getType().isSigned())
+    return constant.emitError("firrtl.constant attribute has wrong sign");
 
   return success();
 }

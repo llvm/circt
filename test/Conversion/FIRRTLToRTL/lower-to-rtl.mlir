@@ -13,10 +13,10 @@ firrtl.circuit "Simple" {
     // Issue #364: https://github.com/llvm/circt/issues/364
     // CHECK: = rtl.constant -1175 : i12
     // CHECK-DAG: rtl.constant -4 : i4
-    %c12_ui4 = firrtl.constant(12 : ui4) : !firrtl.uint<4>
+    %c12_ui4 = firrtl.constant 12 : !firrtl.uint<4>
 
     // CHECK-DAG: rtl.constant 2 : i3
-    %c2_si3 = firrtl.constant(2 : si3) : !firrtl.sint<3>
+    %c2_si3 = firrtl.constant 2 : !firrtl.sint<3>
 
 
     // CHECK: %out4 = sv.wire  : !rtl.inout<i4>
@@ -211,11 +211,11 @@ firrtl.circuit "Simple" {
     // Issue #355: https://github.com/llvm/circt/issues/355
     // CHECK: [[DIV:%.+]] = comb.divu %c104_i10, %c306_i10 : i10
     // CHECK: = comb.extract [[DIV]] from 0 : (i10) -> i8
-    %c104_ui8 = firrtl.constant(104 : ui8) : !firrtl.uint<8>
-    %c306_ui10 = firrtl.constant(306 : ui10) : !firrtl.uint<10>
+    %c104_ui8 = firrtl.constant 104 : !firrtl.uint<8>
+    %c306_ui10 = firrtl.constant 306 : !firrtl.uint<10>
     %50 = firrtl.div %c104_ui8, %c306_ui10 : (!firrtl.uint<8>, !firrtl.uint<10>) -> !firrtl.uint<8>
 
-    %c1175_ui11 = firrtl.constant(1175 : ui11) : !firrtl.uint<11>
+    %c1175_ui11 = firrtl.constant 1175 : !firrtl.uint<11>
     %51 = firrtl.neg %c1175_ui11 : (!firrtl.uint<11>) -> !firrtl.sint<12>
     // https://github.com/llvm/circt/issues/821
     // CHECK: [[CONCAT:%.+]] = comb.concat %false, %in1 : (i1, i4) -> i5
@@ -432,7 +432,7 @@ firrtl.circuit "Simple" {
   firrtl.module @UninitReg1(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
                             in %cond: !firrtl.uint<1>, in %value: !firrtl.uint<2>) {
     // CHECK-NEXT: %c0_i2 = rtl.constant 0 : i2
-    %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
+    %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
     // CHECK-NEXT: %count = sv.reg : !rtl.inout<i2>
     %count = firrtl.reg %clock {name = "count"} : (!firrtl.clock) -> !firrtl.uint<2>
 
@@ -479,7 +479,7 @@ firrtl.circuit "Simple" {
                           in %io_d: !firrtl.uint<32>, in %io_en: !firrtl.uint<1>,
                           out %io_q: !firrtl.uint<32>) {
     // CHECK: %c0_i32 = rtl.constant 0 : i32
-    %c0_ui32 = firrtl.constant(0 : ui32) : !firrtl.uint<32>
+    %c0_ui32 = firrtl.constant 0 : !firrtl.uint<32>
 
     %4 = firrtl.asAsyncReset %reset : (!firrtl.uint<1>) -> !firrtl.asyncreset
 
@@ -570,9 +570,9 @@ firrtl.circuit "Simple" {
                            in %inpred: !firrtl.uint<1>, in %indata: !firrtl.sint<42>,
                            out %result: !firrtl.sint<42>,
                            out %result2: !firrtl.sint<42>) {
-    %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
-    %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
-    %c0_ui3 = firrtl.constant(0 : ui3) : !firrtl.uint<3>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %c0_ui3 = firrtl.constant 0 : !firrtl.uint<3>
     %_M_read, %_M_rw, %_M_write = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read", "rw", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<sint<42>>>>, !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata: flip<sint<42>>, wdata: sint<42>, wmask: uint<1>>>, !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>
   // CHECK:      %_M.ro_data_0, %_M.rw_rdata_0 = rtl.instance "_M" @FIRRTLMem_1_1_1_42_12_0_1_0(%clock1, %true, %c0_i4, %clock1, %true, %c0_i4_0, %true, %true, %0, %clock2, %inpred, %c0_i4_1, %[[mask:.+]], %[[data:.+]]) : (i1, i1, i4, i1, i1, i4, i1, i1, i42, i1, i1, i4, i1, i42) -> (i42, i42)
   // CHECK: rtl.output %_M.ro_data_0, %_M.rw_rdata_0 : i42, i42
@@ -614,8 +614,8 @@ firrtl.circuit "Simple" {
   // CHECK-LABEL: rtl.module @IncompleteRead(
   // The read port has no use of the data field.
   firrtl.module @IncompleteRead(in %clock1: !firrtl.clock) {
-    %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
-    %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 
     // CHECK:  %_M.ro_data_0 = rtl.instance "_M" @FIRRTLMem_1_0_0_42_12_0_1_0(%clock1, %true, %c0_i4) : (i1, i1, i4) -> i42
     %_M_read = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<sint<42>>>>
@@ -635,7 +635,7 @@ firrtl.circuit "Simple" {
   // CHECK-NEXT:  }
   firrtl.module @top_mod(out %tmp27: !firrtl.uint<23>) {
     %0 = firrtl.wire : !firrtl.uint<0>
-    %c42_ui23 = firrtl.constant(42 : ui23) : !firrtl.uint<23>
+    %c42_ui23 = firrtl.constant 42 : !firrtl.uint<23>
     %1 = firrtl.tail %c42_ui23, 23 : (!firrtl.uint<23>) -> !firrtl.uint<0>
     firrtl.connect %0, %1 : !firrtl.uint<0>, !firrtl.uint<0>
     %2 = firrtl.head %c42_ui23, 0 : (!firrtl.uint<23>) -> !firrtl.uint<0>
@@ -647,7 +647,7 @@ firrtl.circuit "Simple" {
   //CHECK: sv.alwaysff(posedge %clock)
   firrtl.module @test_partialconnect(in %clock : !firrtl.clock) {
     %b = firrtl.reg %clock {name = "pcon"} : (!firrtl.clock) -> !firrtl.uint<1>
-    %a = firrtl.constant(0 : ui2) : !firrtl.uint<2>
+    %a = firrtl.constant 0 : !firrtl.uint<2>
     firrtl.partialconnect %b, %a : !firrtl.uint<1>, !firrtl.uint<2>
   }
 
@@ -694,7 +694,7 @@ firrtl.circuit "Simple" {
   // CHECK-LABEL: ASQ
   // https://github.com/llvm/circt/issues/699
   firrtl.module @ASQ(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) {
-    %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %widx_widx_bin = firrtl.regreset %clock, %reset, %c0_ui1 {name = "widx_widx_bin"} : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>) -> !firrtl.uint<4>
   }
 

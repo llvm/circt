@@ -13,7 +13,7 @@
 // CHECK:   %[[ARG2_DATA:.+]] = firrtl.subfield %arg2("data") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>) -> !firrtl.uint<64>
 
 // Common definitions.
-// CHECK:   %[[NO_WINNER:.+]] = firrtl.constant(0 : ui2) : !firrtl.uint<2>
+// CHECK:   %[[NO_WINNER:.+]] = firrtl.constant 0 : !firrtl.uint<2>
 
 // Win wire.
 // CHECK:   %win = firrtl.wire : !firrtl.uint<2>
@@ -25,15 +25,15 @@
 // CHECK:   %[[HAS_WINNER:.+]] = firrtl.orr %win
 
 // Arbiter logic to assign win wire.
-// CHECK:   %[[INDEX1:.+]] = firrtl.constant(2 : ui2)
+// CHECK:   %[[INDEX1:.+]] = firrtl.constant 2
 // CHECK:   %[[ARB1:.+]] = firrtl.mux(%[[ARG1_VALID]], %[[INDEX1]], %[[NO_WINNER]])
-// CHECK:   %[[INDEX0:.+]] = firrtl.constant(1 : ui2)
+// CHECK:   %[[INDEX0:.+]] = firrtl.constant 1
 // CHECK:   %[[ARB0:.+]] = firrtl.mux(%[[ARG0_VALID]], %[[INDEX0]], %[[ARB1]])
 // CHECK:   firrtl.connect %win, %[[ARB0]]
 
 // Logic to assign result outputs.
 // CHECK:   firrtl.connect %[[ARG2_VALID]], %[[HAS_WINNER]]
-// CHECK:   %[[DEFAULT1:.+]] = firrtl.constant(0 : ui64)
+// CHECK:   %[[DEFAULT1:.+]] = firrtl.constant 0
 // CHECK:   %[[BITS2:.+]] = firrtl.bits %win 1 to 1
 // CHECK:   %[[RESULT_DATA0:.+]] = firrtl.mux(%[[BITS2]], %[[ARG1_DATA]], %[[DEFAULT1]])
 // CHECK:   %[[BITS3:.+]] = firrtl.bits %win 0 to 0

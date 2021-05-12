@@ -5,7 +5,7 @@ firrtl.circuit "Test" {
   // CHECK-LABEL: @PassThrough
   // CHECK: (in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>)
   firrtl.module @PassThrough(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>) {
-    // CHECK-NEXT: %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
+    // CHECK-NEXT: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     // CHECK-NEXT: firrtl.connect %dest, %c0_ui1
     firrtl.connect %dest, %source : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK-NEXT: }
@@ -20,8 +20,8 @@ firrtl.circuit "Test" {
                       out %result5: !firrtl.uint<2>,
                       out %result6: !firrtl.uint<4>,
                       out %result7: !firrtl.uint<4>) {
-    %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
-    %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 
     // Trivial wire constant propagation.
     %someWire = firrtl.wire : !firrtl.uint<1>
@@ -60,10 +60,10 @@ firrtl.circuit "Test" {
     firrtl.connect %result4, %extWire: !firrtl.uint<2>, !firrtl.uint<2>
 
     // regreset
-    %c0_ui20 = firrtl.constant(0 : ui20) : !firrtl.uint<20>
+    %c0_ui20 = firrtl.constant 0 : !firrtl.uint<20>
     %regreset = firrtl.regreset %clock, %reset, %c0_ui20  : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<20>) -> !firrtl.uint<2>
 
-    %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
+    %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
     firrtl.connect %regreset, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
 
     // CHECK: firrtl.connect %result5, %c0_ui2
