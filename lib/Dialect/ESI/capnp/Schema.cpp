@@ -814,8 +814,8 @@ private:
   /// manage 'memory allocations' (figuring out where to place pointed to
   /// objects) separately from the data contained in those values, some of which
   /// are pointers themselves.
-  llvm::IntervalMap<uint64_t, GasketComponent, 2048>::Allocator allocator;
-  llvm::IntervalMap<uint64_t, GasketComponent, 2048> segmentValues;
+  llvm::IntervalMap<uint64_t, GasketComponent>::Allocator allocator;
+  llvm::IntervalMap<uint64_t, GasketComponent> segmentValues;
 
   /// Track the allocated message size. Increase to 'alloc' more.
   uint64_t messageSize;
