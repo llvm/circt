@@ -328,7 +328,7 @@ constructs (e.g. eliminate empty ifdef and if blocks), etc.
 
 Verilog has a broad notion of what can be named outside the context of its
 declaration.  This is compounded by the many tools which have additional source
-files which refer to verilog names (e.g. tcl files).  However, we do not what to
+files which refer to verilog names (e.g. tcl files).  However, we do not want to
 require that every wire, register, instance, localparam, port, etc which can be
 named not be touched by passes.  We want only entities marked as public facing
 to impede transformation.

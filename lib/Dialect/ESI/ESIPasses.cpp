@@ -861,7 +861,7 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
                         rewriter.getI1Type()};
   auto stageInst = rewriter.create<InstanceOp>(
       loc, resultTypes, pipeStageName, stageModule.getName(), operands,
-      stageParams.getDictionary(rewriter.getContext()));
+      stageParams.getDictionary(rewriter.getContext()), StringAttr());
   auto stageInstResults = stageInst.getResults();
 
   // Set a_ready (from the unwrap) back edge correctly to its output from stage.
