@@ -1427,7 +1427,7 @@ struct FuncOpLowering : public OpConversionPattern<mlir::FuncOp> {
     SmallVector<NamedAttribute, 4> attributes;
     for (const auto &attr : funcOp->getAttrs()) {
       if (attr.first == SymbolTable::getSymbolAttrName() ||
-          attr.first == impl::getTypeAttrName())
+          attr.first == function_like_impl::getTypeAttrName())
         continue;
       attributes.push_back(attr);
     }
