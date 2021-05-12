@@ -55,10 +55,12 @@ int main(int argc, char **argv) {
 
   VerilatedVcdC *tfp = nullptr;
   if (waveformFile) {
+#ifdef TRACE
     tfp = new VerilatedVcdC();
     Verilated::traceEverOn(true);
     dut.trace(tfp, 99); // Trace 99 levels of hierarchy
     tfp->open(waveformFile);
+#endif
   }
 
   std::cout << "[driver] Starting simulation" << std::endl;

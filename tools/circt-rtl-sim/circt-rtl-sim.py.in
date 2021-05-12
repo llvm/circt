@@ -162,7 +162,7 @@ class Verilator:
     self.ldPaths = ":".join([os.path.dirname(x) for x in dpiLibs])
     debugFlags = []
     if DebugBuild:
-      debugFlags = ["--trace", "--trace-params", "--trace-structs"]
+      debugFlags = ["--trace", "--trace-params", "--trace-structs", "-DTRACE"]
     return subprocess.run([
         self.verilator, "--cc", "--top-module", self.top, "-sv", "--build",
         "--exe", "--assert"
