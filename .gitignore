@@ -14,7 +14,8 @@ lit.site.cfg.py
 .vscode
 compile_commands.json
 .clangd
-out.sv
+*.sv
+*.mlir
 *.log
 *.pb
 xsim.dir
