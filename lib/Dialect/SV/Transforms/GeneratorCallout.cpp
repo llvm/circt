@@ -92,24 +92,23 @@ void RTLGeneratorCalloutPass::processGenerator(
   // Assumption: All the options required by the generator program must be
   // present in the schema.
   for (auto attr : genSchema.requiredAttrs()) {
-    if (auto sAttr = attr.dyn_cast<StringAttr>()) {
-      // Get the port name from schema.
-      StringRef portName = sAttr.getValue();
-      generatorArgs.push_back("--" + portName.str());
-      // Get the value for the corresponding port name.
-      auto v = generatedModuleOp->getAttr(portName);
-      if (auto intV = v.dyn_cast<IntegerAttr>())
-        generatorArgs.push_back(intV.getValue().toString(10, false));
-      else if (auto strV = v.dyn_cast<StringAttr>())
-        generatorArgs.push_back(strV.getValue().str());
-      else {
-        generatedModuleOp.emitError(
-            "portname attribute " + portName +
-            " value specified on the rtl.module.generated operation is not "
-            "handled, "
-            "only integer and string types supported.");
-        return;
-      }
+    auto sAttr = attr.cast<StringAttr>();
+    // Get the port name from schema.
+    StringRef portName = sAttr.getValue();
+    generatorArgs.push_back("--" + portName.str());
+    // Get the value for the corresponding port name.
+    auto v = generatedModuleOp->getAttr(portName);
+    if (auto intV = v.dyn_cast<IntegerAttr>())
+      generatorArgs.push_back(intV.getValue().toString(10, false));
+    else if (auto strV = v.dyn_cast<StringAttr>())
+      generatorArgs.push_back(strV.getValue().str());
+    else {
+      generatedModuleOp.emitError(
+          "portname attribute " + portName +
+          " value specified on the rtl.module.generated operation is not "
+          "handled, "
+          "only integer and string types supported.");
+      return;
     }
   }
   SmallVector<StringRef> generatorArgStrRef;
