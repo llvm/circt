@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_HW_HWDIALECT_H
 
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
 
 // Pull in the dialect definition.
@@ -21,5 +22,6 @@
 
 // Pull in all enum type definitions and utility function declarations.
 #include "circt/Dialect/HW/HWEnums.h.inc"
+#include "circt/Dialect/HW/HWStructs.h.inc"
 
 #endif // CIRCT_DIALECT_HW_HWDIALECT_H
