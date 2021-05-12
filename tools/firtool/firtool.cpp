@@ -31,6 +31,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
+#include "mlir/Support/Timing.h"
 #include "mlir/Transforms/Passes.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
@@ -132,7 +133,7 @@ static cl::opt<std::string>
 /// Process a single buffer of the input.
 static LogicalResult
 processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
-              StringRef annotationFilename,
+              StringRef annotationFilename, TimingScope &ts,
               std::function<LogicalResult(OwningModuleRef)> callback) {
   MLIRContext context;
 
@@ -162,8 +163,10 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   // Apply any pass manager command line options.
   PassManager pm(&context);
   pm.enableVerifier(verifyPasses);
+  pm.enableTiming(ts);
   applyPassManagerCLOptions(pm);
 
+  auto parserTimer = ts.nest("Parser");
   OwningModuleRef module;
   if (inputFormat == InputFIRFile) {
     firrtl::FIRParserOptions options;
@@ -200,6 +203,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
       }
     }
   }
+  parserTimer.stop();
   if (!module)
     return failure();
 
@@ -254,49 +258,51 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   if (failed(pm.run(module.get())))
     return failure();
 
+  auto outputTimer = ts.nest("Output");
   return callback(std::move(module));
 }
 
 /// Process a single buffer of the input into a single output stream.
 static LogicalResult
 processBufferIntoSingleStream(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
-                              StringRef annotationFilename, raw_ostream &os) {
-  return processBuffer(
-      std::move(ownedBuffer), annotationFilename, [&](OwningModuleRef module) {
-        // Finally, emit the output.
-        switch (outputFormat) {
-        case OutputMLIR:
-          module->print(os);
-          return success();
-        case OutputDisabled:
-          return success();
-        case OutputVerilog:
-          return exportVerilog(module.get(), os);
-        case OutputSplitVerilog:
-          llvm_unreachable("multi-file format must be handled elsewhere");
-        }
-        llvm_unreachable("unknown output format");
-      });
+                              StringRef annotationFilename, raw_ostream &os,
+                              TimingScope &ts) {
+  auto emitCallback = [&](OwningModuleRef module) {
+    switch (outputFormat) {
+    case OutputMLIR:
+      module->print(os);
+      return success();
+    case OutputDisabled:
+      return success();
+    case OutputVerilog:
+      return exportVerilog(module.get(), os);
+    case OutputSplitVerilog:
+      llvm_unreachable("multi-file format must be handled elsewhere");
+    }
+    llvm_unreachable("unknown output format");
+  };
+  return processBuffer(std::move(ownedBuffer), annotationFilename, ts,
+                       std::move(emitCallback));
 }
 
 /// Process a single buffer of the input into multiple output files.
 static LogicalResult
 processBufferIntoMultipleFiles(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
                                StringRef annotationFilename,
-                               StringRef outputDirectory) {
-  return processBuffer(
-      std::move(ownedBuffer), annotationFilename, [&](OwningModuleRef module) {
-        // Finally, emit the output.
-        switch (outputFormat) {
-        case OutputMLIR:
-        case OutputDisabled:
-        case OutputVerilog:
-          llvm_unreachable("single-stream format must be handled elsewhere");
-        case OutputSplitVerilog:
-          return exportSplitVerilog(module.get(), outputDirectory);
-        }
-        llvm_unreachable("unknown output format");
-      });
+                               StringRef outputDirectory, TimingScope &ts) {
+  auto emitCallback = [&](OwningModuleRef module) {
+    switch (outputFormat) {
+    case OutputMLIR:
+    case OutputDisabled:
+    case OutputVerilog:
+      llvm_unreachable("single-stream format must be handled elsewhere");
+    case OutputSplitVerilog:
+      return exportSplitVerilog(module.get(), outputDirectory);
+    }
+    llvm_unreachable("unknown output format");
+  };
+  return processBuffer(std::move(ownedBuffer), annotationFilename, ts,
+                       std::move(emitCallback));
 }
 
 int main(int argc, char **argv) {
@@ -305,11 +311,17 @@ int main(int argc, char **argv) {
   // Register any pass manager command line options.
   registerMLIRContextCLOptions();
   registerPassManagerCLOptions();
+  registerDefaultTimingManagerCLOptions();
   registerAsmPrinterCLOptions();
   registerLoweringCLOptions();
 
   // Parse pass names in main to ensure static initialization completed.
   cl::ParseCommandLineOptions(argc, argv, "circt modular optimizer driver\n");
+
+  // Create the timing manager we use to sample execution times.
+  DefaultTimingManager tm;
+  applyDefaultTimingManagerCLOptions(tm);
+  auto ts = tm.getRootScope();
 
   // Figure out the input format if unspecified.
   if (inputFormat == InputUnspecified) {
@@ -345,7 +357,7 @@ int main(int argc, char **argv) {
     }
 
     if (failed(processBufferIntoSingleStream(
-            std::move(input), inputAnnotationFilename, output->os())))
+            std::move(input), inputAnnotationFilename, output->os(), ts)))
       return 1;
 
     output->keep();
@@ -366,7 +378,7 @@ int main(int argc, char **argv) {
     }
 
     if (failed(processBufferIntoMultipleFiles(
-            std::move(input), inputAnnotationFilename, outputFilename)))
+            std::move(input), inputAnnotationFilename, outputFilename, ts)))
       return 1;
     return 0;
   }
