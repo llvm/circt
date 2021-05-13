@@ -142,10 +142,12 @@ def TypeRefType : RTLType<"TypeRef"> {
   let summary = "An symbolic reference to a type declaration";
   let description = [{
     A TypeRef is parameterized by a SymbolRefAttr, which points to the
-    declaration of this type. Upon construction, a TypeRef verifies the
-    referent exists and stores the inner type. It also canonicalizes the inner
-    type, resolving any nested TypeRefs. If different, the canonical type is
-    also stored.
+    declaration of this type. Upon construction, a TypeRef simply stores the
+    symbol reference, leaving the canonical type and name null. Accessors for
+    the canonical type and name are provided, which lazily look up the
+    reference. If it doesn't exist, an error is logged and None is returned. The
+    accessors cache the referred canonical type and name in storage to avoid
+    future lookups.
   }];
 
   let mnemonic = "typeref";
