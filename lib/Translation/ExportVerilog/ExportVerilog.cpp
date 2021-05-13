@@ -254,6 +254,16 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Operation *op,
         op->emitError("Unexpected unpacked array in packed type ") << arrayType;
         return true;
       })
+      .Case<TypeRefType>([&](TypeRefType typeRef) {
+        auto name = typeRef.getName(op);
+        if (!name.hasValue()) {
+          op->emitError("unable to resolve name for type reference ")
+              << typeRef;
+          return false;
+        }
+        os << name.getValue();
+        return true;
+      })
       .Default([&](Type type) {
         os << "<<invalid type>>";
         op->emitError("value has an unsupported verilog type ") << type;

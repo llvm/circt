@@ -12,12 +12,14 @@
 
 #include "circt/Dialect/RTL/RTLTypes.h"
 #include "circt/Dialect/RTL/RTLDialect.h"
+#include "circt/Dialect/RTL/RTLOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/StorageUniquerSupport.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Types.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -409,6 +411,26 @@ void TypeRefType::print(DialectAsmPrinter &p) const {
 }
 
 SymbolRefAttr TypeRefType::getRef() const { return getImpl()->ref; }
+
+Optional<StringRef> TypeRefType::getName(Operation *op) {
+  // Check if the name is in storage.
+  if (getImpl()->name)
+    return getImpl()->name.getValue();
+
+  auto typedecl =
+      SymbolTable::lookupNearestSymbolFrom<TypedeclOp>(op, getRef());
+
+  if (!typedecl)
+    return None;
+
+  // Use the verilogName if set, otherwise default to the symbol name.
+  StringRef name = typedecl.verilogName().getValueOr(typedecl.sym_name());
+
+  // Cache the name in storage.
+  getImpl()->name = StringAttr::get(getContext(), name);
+
+  return name;
+}
 
 /// Parses a type registered to this dialect. Parse out the mnemonic then invoke
 /// the tblgen'd type parser dispatcher.

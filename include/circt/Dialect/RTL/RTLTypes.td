@@ -162,5 +162,6 @@ def TypeRefType : RTLType<"TypeRef"> {
   let extraClassDeclaration = [{
     static TypeRefType get(SymbolRefAttr ref);
     mlir::SymbolRefAttr getRef() const;
+    Optional<mlir::StringRef> getName(Operation *op);
   }];
 }
