@@ -1887,7 +1887,8 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
 
   // Create the new rtl.instance operation.
   auto newInstance = builder.create<rtl::InstanceOp>(
-      resultTypes, oldInstance.nameAttr(), symbolAttr, operands, parameters, StringAttr());
+      resultTypes, oldInstance.nameAttr(), symbolAttr, operands, parameters,
+      StringAttr());
 
   // Now that we have the new rtl.instance, we need to remap all of the users
   // of the outputs/results to the values returned by the instance.

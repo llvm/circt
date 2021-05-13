@@ -340,7 +340,7 @@ defined are considered private and may be changed by transformation.
 
 ### Implementation constraints
 
-Currently, MLIR restricts symbol resolution to looking in and downward though
+Currently, MLIR restricts symbol resolution to looking in and downward through
 any nested symbol tables when resolving symbols.  This assumption has
 implications for verification, the pass manager, and threading.  Until symbol
 references are more general, SV and RTL dialects do not define symbol tables for
@@ -350,13 +350,13 @@ conflict with modules.  The symbol names on these entities has no bearing on the
 output verilog, each of these entities has a defined way to assign its name (SSA
 value name for wires and regs, a non-optional string for instances).
 
-As MLIR symbol support improves, it is desired to more to per-module symbol
+As MLIR symbol support improves, it is desired to move to per-module symbol
 tables and to unify names with symbol names.
 
 ### Ports
 
-Module ports are remotely namable entities in Verilog, but are non easily named
-with symbols.  A suggested workaround is to attach a wire to a port and use it's
+Module ports are remotely namable entities in Verilog, but are not easily named
+with symbols.  A suggested workaround is to attach a wire to a port and use its
 symbol for remote references.
 
 Instance ports have a similar problem.

@@ -68,7 +68,7 @@ def WireOp : SVOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>,
 }
 
 def RegOp : SVOp<"reg", [DeclareOpInterfaceMethods<OpAsmOpInterface>,
-                         NonProceduralOp, Symbol]> {
+                         Symbol]> {
   let summary = "Define a new `reg` in SystemVerilog";
    let description = [{
      Declare a SystemVerilog Variable Declaration of 'reg' type.
