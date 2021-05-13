@@ -420,8 +420,10 @@ Optional<StringRef> TypeRefType::getName(Operation *op) {
   auto typedecl =
       SymbolTable::lookupNearestSymbolFrom<TypedeclOp>(op, getRef());
 
-  if (!typedecl)
+  if (!typedecl) {
+    op->emitError("unable to resolve name for type reference ") << *this;
     return None;
+  }
 
   // Use the verilogName if set, otherwise default to the symbol name.
   StringRef name = typedecl.verilogName().getValueOr(typedecl.sym_name());

@@ -256,11 +256,8 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Operation *op,
       })
       .Case<TypeRefType>([&](TypeRefType typeRef) {
         auto name = typeRef.getName(op);
-        if (!name.hasValue()) {
-          op->emitError("unable to resolve name for type reference ")
-              << typeRef;
+        if (!name.hasValue())
           return false;
-        }
         os << name.getValue();
         return true;
       })
