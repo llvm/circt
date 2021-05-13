@@ -326,3 +326,166 @@ circuit Foo: %[[{"target": "Foo|Foo>_T_0", "class": "firrtl.transforms.DontTouch
         read-latency => 0
         write-latency => 1
         read-under-write => undefined
+
+; // -----
+
+; --------------------------------------------------------------------------------
+; SiFive-custom annotations related to the GrandCentral utility.  These
+; annotations do not conform to standard SingleTarget or NoTarget format and
+; need to be manually split up.
+; --------------------------------------------------------------------------------
+
+; Test sifive.enterprise.grandcentral.DataTapsAnnotation with all possible
+; variants of DataTapKeys.
+circuit GCTDataTap : %[
+[
+  {
+    "class": "sifive.enterprise.grandcentral.DataTapsAnnotation",
+    "blackBox": "~GCTDataTap|DataTap",
+    "keys": [
+      {
+        "class": "sifive.enterprise.grandcentral.ReferenceDataTapKey",
+        "source": "~GCTDataTap|GCTDataTap>r",
+        "portName": "~GCTDataTap|DataTap>_0"
+      },
+      {
+        "class":"sifive.enterprise.grandcentral.DataTapModuleSignalKey",
+        "module":"~GCTDataTap|Blackbox",
+        "internalPath":"baz.qux",
+        "portName":"~GCTDataTap|DataTap>_1"
+      },
+      {
+        "class":"sifive.enterprise.grandcentral.DeletedDataTapKey",
+        "portName":"~GCTDataTap|DataTap>_2"
+      },
+      {
+        "class":"sifive.enterprise.grandcentral.LiteralDataTapKey",
+        "literal":"UInt<16>(\"h2a\")",
+        "portName":"~GCTDataTap|DataTap>_3"
+      }
+    ]
+  }
+]]
+  extmodule DataTap :
+    output _0 : UInt<1>
+    output _1 : UInt<1>
+    output _2 : UInt<1>
+    output _3 : UInt<1>
+
+    defname = DataTap
+
+  extmodule Blackbox:
+    defname = Blackbox
+
+  module GCTDataTap :
+    input clock : Clock
+    input reset : UInt<1>
+    input a : UInt<1>
+    output b : UInt<1>
+
+    reg r : UInt<1>, clock
+    inst DataTap of DataTap
+    inst Blackbox of Blackbox
+
+    ; CHECK-LABEL: firrtl.circuit "GCTDataTap"
+    ; CHECK: firrtl.extmodule @DataTap
+    ; CHECK-SAME: %_0: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = [[ID:[0-9]+]] : i64, portID = [[PORT_ID:[0-9]+]] : i64}]},
+    ; CHECK-SAME: %_1: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey", id = [[ID]] : i64}]},
+    ; CHECK-SAME: %_2: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.DeletedDataTapKey", id = [[ID]] : i64}]},
+    ; CHECK-SAME: %_3: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.LiteralDataTapKey", literal = "UInt<16>(\22h2a\22)"}]}
+    ; CHECK-SAME: annotations = [{class = "sifive.enterprise.grandcentral.DataTapsAnnotation"}]
+
+    ; CHECK: firrtl.extmodule @Blackbox
+    ; CHECK-SAME: annotations = [{class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey", id = [[ID]] : i64, internalPath = "baz.qux"}]
+
+    ; CHECK: firrtl.module @GCTDataTap
+    ; CHECK: firrtl.reg
+    ; CHECk-SAME: annotations = [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = [[ID]] : i64, portID = [[PORT_ID]] : i64}]
+
+; // -----
+
+; Test sifive.enterprise.grandcentral.MemTapAnnotation
+circuit GCTMemTap : %[
+[
+  {
+    "class":"sifive.enterprise.grandcentral.MemTapAnnotation",
+    "taps":[
+      "GCTMemTap.MemTap.mem[0]",
+      "GCTMemTap.MemTap.mem[1]"
+    ],
+    "source":"~GCTMemTap|GCTMemTap>mem"
+  }
+]]
+  extmodule MemTap :
+    output mem : UInt<1>[2]
+
+    defname = MemTap
+
+  module GCTMemTap :
+    input clock : Clock
+    input reset : UInt<1>
+
+    cmem mem : UInt<1>[2]
+    inst MemTap of MemTap
+    MemTap.mem is invalid
+    wire memTap : UInt<1>[2]
+    memTap[0] <= MemTap.mem[0]
+    memTap[1] <= MemTap.mem[1]
+
+    ; CHECK-LABEL: firrtl.circuit "GCTMemTap"
+    ; CHECK: firrtl.extmodule @MemTap
+    ; CHECK-SAME: %mem: [[A:.+]] {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = [[ID:.+]] : i64, target = ["[0]"]}, {class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = [[ID]] : i64, target = ["[1]"]}]
+    ; CHECK: firrtl.module @GCTMemTap
+    ; CHECK: %mem = firrtl.cmem
+    ; CHECK-SAME: annotations = [{class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = [[ID]] : i64}]
+
+; // -----
+
+; Test sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation
+circuit GCTInterface : %[
+[
+  {
+    "class": "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation",
+    "name": "view",
+    "companion": "~GCTInterface|view_companion",
+    "parent": "~GCTInterface|GCTInterface",
+    "view": "{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"ViewName\",\"elements\":[{\"name\":\"register\",\"description\":\"the register in GCTInterface\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"register\",\"elements\":[{\"name\":\"_2\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedVectorType\",\"elements\":[{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"r\",\"component\":[{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_2\"},{\"class\":\"firrtl.annotations.TargetToken$Index\",\"value\":0}]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}},{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"r\",\"component\":[{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_2\"},{\"class\":\"firrtl.annotations.TargetToken$Index\",\"value\":1}]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}}]}},{\"name\":\"_0\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"_0\",\"elements\":[{\"name\":\"_1\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"r\",\"component\":[{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_0\"},{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_1\"}]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}}},{\"name\":\"_0\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"r\",\"component\":[{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_0\"},{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_0\"}]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}}}]}}]}},{\"name\":\"port\",\"description\":\"the port 'a' in GCTInterface\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"a\",\"component\":[]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}}}]}"
+  }
+]
+]
+  module view_companion:
+    skip
+  module GCTInterface :
+    input clock : Clock
+    input reset : UInt<1>
+    input a : UInt<1>
+
+    reg r : {_0 : {_0 : UInt<1>, _1 : UInt<1>}, _2 : UInt<1>[2]}, clock
+
+    inst view_companion of view_companion
+
+    ; CHECK-LABEL: firrtl.circuit "GCTInterface"
+
+    ; The interface definitions should show up as circuit annotations.
+    ; CHECK-SAME: annotations
+    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "_0", elements = [{name = "_1"}, {name = "_0"}]}
+    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "register", elements = [{name = "_2"}, {name = "_0"}]}
+    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "ViewName", elements = [{description = "the register in GCTInterface", name = "register"}, {description = "the port 'a' in GCTInterface", name = "port"}]}
+
+    ; The companion should be marked.
+    ; CHECK: firrtl.module @view_companion
+    ; CHECK-SAME: annotations
+    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation", id = [[ID:.+]] : i64, type = "companion"}
+
+    ; The parent should be annotated. Additionally, this example has all the
+    ; members of the interface inside the parent.  Both port "a" and register
+    ; "r" should be annotated.
+    ; CHECK: firrtl.module @GCTInterface
+    ; CHECK-SAME: %a: [[TYPE:.+]] {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "ViewName", name = "port", target = []}]}
+    ; CHECK-SAME: annotations = [{class = "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation", id = [[ID]] : i64, type = "parent"}]
+    ; CHECK: firrtl.reg
+    ; CHECK-SAME: annotations
+    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "register", name = "_2", target = ["._2", "[0]"]}
+    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "register", name = "_2", target = ["._2", "[1]"]}
+    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "_0", name = "_1", target = ["._0", "._1"]}
+    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "_0", name = "_0", target = ["._0", "._0"]}]}
