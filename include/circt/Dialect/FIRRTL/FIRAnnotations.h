@@ -32,7 +32,10 @@ namespace firrtl {
 
 bool fromJSON(llvm::json::Value &value,
               llvm::StringMap<ArrayAttr> &annotationMap, llvm::json::Path path,
-              MLIRContext *context);
+              MLIRContext *context, unsigned &annotationID);
+
+void scatterCustomAnnotations(llvm::StringMap<ArrayAttr> &annotationMao,
+                              MLIRContext *context, unsigned &annotationID);
 
 } // namespace firrtl
 } // namespace circt

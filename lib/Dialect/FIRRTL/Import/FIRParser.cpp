@@ -105,6 +105,10 @@ struct GlobalFIRParserState {
   /// A mapping of targets to annotations
   llvm::StringMap<ArrayAttr> annotationMap;
 
+  /// A global identifier that can be used to link multiple annotations
+  /// together.  This should be incremented on use.
+  unsigned annotationID = 0;
+
   /// The lexer for the source file we're parsing.
   FIRLexer lex;
 
@@ -828,7 +832,8 @@ ParseResult FIRParser::importAnnotations(SMLoc loc, StringRef annotationsStr) {
 
   json::Path::Root root;
   llvm::StringMap<ArrayAttr> annotationMap;
-  if (!fromJSON(annotations.get(), annotationMap, root, getContext())) {
+  if (!fromJSON(annotations.get(), annotationMap, root, getContext(),
+                state.annotationID)) {
     auto diag = emitError(loc, "Invalid/unsupported annotation format");
     std::string jsonErrorMessage =
         "See inline comments for problem area in JSON:\n";
