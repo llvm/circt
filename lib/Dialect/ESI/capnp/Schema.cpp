@@ -26,6 +26,7 @@
 #include "llvm/Support/Format.h"
 
 #include <initializer_list>
+#include <mlir/IR/BuiltinAttributes.h>
 #include <string>
 
 using namespace circt::esi::capnp::detail;
@@ -1268,7 +1269,7 @@ Value circt::esi::capnp::TypeSchema::buildEncoder(OpBuilder &builder, Value clk,
   auto resTypes = rtl::getModuleType(encImplMod).getResults();
   auto encodeInst = builder.create<rtl::InstanceOp>(
       operand.getLoc(), resTypes, instName, encImplMod.getName(),
-      ValueRange{clk, valid, operand}, DictionaryAttr());
+      ValueRange{clk, valid, operand}, DictionaryAttr(), StringAttr());
   return encodeInst.getResult(0);
 }
 
@@ -1291,6 +1292,6 @@ Value circt::esi::capnp::TypeSchema::buildDecoder(OpBuilder &builder, Value clk,
   auto resTypes = rtl::getModuleType(decImplMod).getResults();
   auto decodeInst = builder.create<rtl::InstanceOp>(
       operand.getLoc(), resTypes, instName, decImplMod.getName(),
-      ValueRange{clk, valid, operand}, DictionaryAttr());
+      ValueRange{clk, valid, operand}, DictionaryAttr(), StringAttr());
   return decodeInst.getResult(0);
 }

@@ -1130,9 +1130,9 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
   };
   Type epInstOutputs[] = {rewriter.getI1Type(), ingestBitArrayType,
                           rewriter.getI1Type()};
-  auto cosimEpModule =
-      rewriter.create<InstanceOp>(loc, epInstOutputs, name, "Cosim_Endpoint",
-                                  epInstInputs, params.getDictionary(ctxt));
+  auto cosimEpModule = rewriter.create<InstanceOp>(
+      loc, epInstOutputs, name, "Cosim_Endpoint", epInstInputs,
+      params.getDictionary(ctxt), StringAttr());
   sendReady.setValue(cosimEpModule.getResult(2));
 
   // Set up the injest path.

@@ -17,6 +17,7 @@ class InstanceBuilder:
                input_port_mapping,
                *,
                parameters={},
+               sym_name=None,
                loc=None,
                ip=None):
     # Lazily import dependencies to avoid cyclic dependencies.
@@ -53,12 +54,15 @@ class InstanceBuilder:
     module_name = FlatSymbolRefAttr.get(StringAttr(self.mod.name).value)
     parameters = {k: Attribute.parse(str(v)) for (k, v) in parameters.items()}
     parameters = DictAttr.get(parameters)
+    if sym_name:
+      sym_name = StringAttr.get(sym_name)
     self.instance = InstanceOp(
         self.mod.type.results,
         instance_name,
         module_name,
         self.operand_values,
         parameters,
+        sym_name,
         loc=loc,
         ip=ip,
     )
@@ -321,7 +325,7 @@ class RTLModuleOp(ModuleLike):
       def emit_instance_op(*call_args):
         call_op = rtl.InstanceOp(return_types, StringAttr.get(''),
                                  FlatSymbolRefAttr.get(symbol_name), call_args,
-                                 DictAttr.get({}))
+                                 DictAttr.get({}), None)
         if return_types is None:
           return None
         elif len(return_types) == 1:
