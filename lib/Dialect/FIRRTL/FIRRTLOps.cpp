@@ -53,6 +53,7 @@ Flow firrtl::swapFlow(Flow flow) {
   case Flow::Duplex:
     return Flow::Duplex;
   }
+  llvm_unreachable("invalid flow");
 }
 
 Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
