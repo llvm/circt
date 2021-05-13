@@ -29,9 +29,9 @@ using namespace firrtl;
 
 static IntegerAttr getIntAttr(Type type, const APInt &value) {
   auto firType = type.cast<IntType>();
-  assert(!firType.hasWidth() ||
-         (unsigned)firType.getWidthOrSentinel() == value.getBitWidth() &&
-             "value / type width mismatch");
+  assert((!firType.hasWidth() ||
+          (unsigned)firType.getWidthOrSentinel() == value.getBitWidth()) &&
+         "value / type width mismatch");
   auto intSign =
       firType.isSigned() ? IntegerType::Signed : IntegerType::Unsigned;
   auto intType =
