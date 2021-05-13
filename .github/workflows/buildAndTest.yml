@@ -31,7 +31,7 @@ jobs:
 
       - name: Get workflow spec hash
         id: get-workflow-hash
-        run: echo "::set-output name=hash::$(md5sum $GITHUB_WORKSPACE/.github/workflows/buildAndTest.yml)"
+        run: echo "::set-output name=hash::$(md5sum $GITHUB_WORKSPACE/.github/workflows/buildAndTest.yml | awk '{print $1}')"
         shell: bash
 
       # Try to fetch LLVM from the cache.
@@ -120,7 +120,7 @@ jobs:
 
       - name: Get workflow spec hash
         id: get-workflow-hash
-        run: echo "::set-output name=hash::$(md5sum $GITHUB_WORKSPACE/.github/workflows/buildAndTest.yml)"
+        run: echo "::set-output name=hash::$(md5sum $GITHUB_WORKSPACE/.github/workflows/buildAndTest.yml | awk '{print $1}')"
         shell: bash
 
       # Try to fetch LLVM from the cache.
