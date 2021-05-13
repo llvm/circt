@@ -94,9 +94,9 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
   }
 
   if (namesDisagree)
-    p.printOptionalAttrDict(op->getAttrs());
+    p.printOptionalAttrDict(op->getAttrs(), {"sym_name"});
   else
-    p.printOptionalAttrDict(op->getAttrs(), {"name"});
+    p.printOptionalAttrDict(op->getAttrs(), {"name", "sym_name"});
 }
 
 //===----------------------------------------------------------------------===//
@@ -143,10 +143,12 @@ void ConstantZOp::getAsmResultNames(
 //===----------------------------------------------------------------------===//
 
 void RegOp::build(OpBuilder &odsBuilder, OperationState &odsState,
-                  Type elementType, StringAttr name) {
+                  Type elementType, StringAttr name, StringAttr sym_name) {
   if (!name)
     name = odsBuilder.getStringAttr("");
   odsState.addAttribute("name", name);
+  if (sym_name)
+    odsState.addAttribute("sym_name", sym_name);
   odsState.addTypes(rtl::InOutType::get(elementType));
 }
 

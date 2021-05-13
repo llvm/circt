@@ -278,7 +278,8 @@ def RTLModuleGeneratedOp : RTLOp<"module.generated",
 }
 
 def InstanceOp : RTLOp<"instance",
-                       [DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
+                       [DeclareOpInterfaceMethods<OpAsmOpInterface>,
+                        Symbol]> {
   let summary = "Create an instance of a module";
   let description = [{
     This represents an instance of a module. The inputs and results are 
@@ -289,7 +290,8 @@ def InstanceOp : RTLOp<"instance",
   let arguments = (ins StrAttr:$instanceName,
                        Confined<FlatSymbolRefAttr, [isModuleSymbol]>:$moduleName,
                        Variadic<AnyType>:$inputs,
-                       OptionalAttr<DictionaryAttr>:$parameters);
+                       OptionalAttr<DictionaryAttr>:$parameters,
+                       OptionalAttr<SymbolNameAttr>:$sym_name);
   let results = (outs Variadic<AnyType>);
 
   let extraClassDeclaration = [{
@@ -320,10 +322,19 @@ def InstanceOp : RTLOp<"instance",
     void setName(StringRef name) {
       setNameAttr(StringAttr::get(getContext(), name));
     }
+
+    //===------------------------------------------------------------------===//
+    // SymbolOpInterface Methods
+    //===------------------------------------------------------------------===//
+
+    /// An InstanceOp may optionally define a symbol.
+    bool isOptionalSymbol() { return true; }
+
   }];
 
+  /// sym keyword for optional symbol simplifies parsing
   let assemblyFormat = [{
-    $instanceName $moduleName `(` $inputs `)` attr-dict
+    $instanceName (`sym` $sym_name^)? $moduleName `(` $inputs `)` attr-dict
       `:` functional-type($inputs, results)
   }];
 

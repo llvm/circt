@@ -307,7 +307,7 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
 
   auto pearlInst = modBuilder.create<rtl::InstanceOp>(
       modType.getResults(), "pearl", SymbolTable::getSymbolName(pearl),
-      pearlOperands, DictionaryAttr());
+      pearlOperands, DictionaryAttr(), StringAttr());
 
   // Hookup all the backedges.
   for (size_t i = 0, e = pearlInst.getNumResults(); i < e; ++i) {

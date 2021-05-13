@@ -1805,7 +1805,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   // Create the instance to replace the memop
   auto inst = builder.create<rtl::InstanceOp>(
       resultTypes, builder.getStringAttr(memName), memModuleAttr, readOperands,
-      DictionaryAttr());
+      DictionaryAttr(), StringAttr());
 
   // Update all users of the result of read ports
   for (auto &ret : returnHolder)
@@ -1887,7 +1887,8 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
 
   // Create the new rtl.instance operation.
   auto newInstance = builder.create<rtl::InstanceOp>(
-      resultTypes, oldInstance.nameAttr(), symbolAttr, operands, parameters);
+      resultTypes, oldInstance.nameAttr(), symbolAttr, operands, parameters,
+      StringAttr());
 
   // Now that we have the new rtl.instance, we need to remap all of the users
   // of the outputs/results to the values returned by the instance.

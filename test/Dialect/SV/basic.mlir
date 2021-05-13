@@ -150,8 +150,12 @@ rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
 
   // CHECK-NEXT: %reg23 = sv.reg : !rtl.inout<i23>
   // CHECK-NEXT: %regStruct23 = sv.reg : !rtl.inout<struct<foo: i23>>
+  // CHECK-NEXT: %reg24 = sv.reg sym @regSym1 : !rtl.inout<i23>
+  // CHECK-NEXT: %wire25 = sv.wire sym @wireSym1 : !rtl.inout<i23>
   %reg23       = sv.reg  : !rtl.inout<i23>
   %regStruct23 = sv.reg  : !rtl.inout<struct<foo: i23>>
+  %reg24       = sv.reg sym @regSym1 : !rtl.inout<i23>
+  %wire25      = sv.wire sym @wireSym1 : !rtl.inout<i23>
 
   // CHECK-NEXT: rtl.output
   rtl.output
