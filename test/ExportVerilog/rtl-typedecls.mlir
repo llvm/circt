@@ -8,3 +8,6 @@ rtl.type_scope @__rtl_typedecls {
   // CHECK: typedef logic [7:0][0:15] baz;
   rtl.typedecl @baz : !rtl.uarray<16xi8>
 }
+
+rtl.module @testTypeRef(%arg0: !rtl.typeref<@__rtl_typedecls::@foo>) {
+}
