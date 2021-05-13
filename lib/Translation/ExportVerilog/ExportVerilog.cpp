@@ -1531,7 +1531,7 @@ LogicalResult TypeScopeEmitter::visitTypeScope(TypedeclOp op) {
   indent() << "typedef ";
   printPackedType(stripUnpackedTypes(op.type()), os, op, false);
   printUnpackedTypePostfix(op.type(), os);
-  os << ' ' << op.sym_name();
+  os << ' ' << op.verilogName().getValueOr(op.sym_name());
   os << ";\n";
   return success();
 }

@@ -44,7 +44,9 @@ module {
   }
 
   // CHECK-LABEL: typeref
-  func @typeref(%arg0: !rtl.typeref<@__rtl_types::@foo>) {
+  func @typeref(
+    // CHECK: %arg0: !rtl.typeref<@__rtl_typedecls::@foo>
+    %arg0: !rtl.typeref<@__rtl_typedecls::@foo>) {
     return
   }
 }
