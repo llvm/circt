@@ -9,12 +9,21 @@ firrtl.module @simple(in %in : !firrtl.uint<1>, out %out : !firrtl.uint<1>) {
 // This test is checking each kind of declaration to ensure that it is caught
 // by the initialization coverage check. This is also testing that we can emit
 // all errors in a module at once.
-firrtl.module @CheckInitialization(in %clock : !firrtl.clock, in %en : !firrtl.uint<1>, in %p : !firrtl.uint<1>, out %out : !firrtl.uint<2>) {
-  // expected-error @-1 {{module port "out" not fully initialized}}
-  // expected-error @+1 {{sink not fully initialized}}
-  %w = firrtl.wire : !firrtl.uint<2>
-  // expected-error @+1 {{instance port "in" not fully initialized}}
+firrtl.module @CheckInitialization(in %clock : !firrtl.clock, in %en : !firrtl.uint<1>, in %p : !firrtl.uint<1>, in %in0 : !firrtl.bundle<a : flip<uint<1>>>, out %out0 : !firrtl.uint<2>, out %out1 : !firrtl.bundle<a: flip<uint<1>>>) {
+  // expected-error @-1 {{sink "in0.a" not fully initialized}}
+  // expected-error @-2 {{sink "out0" not fully initialized}}
+
+  // expected-error @+2 {{sink "w.a" not fully initialized}}
+  // expected-error @+1 {{sink "w.b" not fully initialized}}
+  %w = firrtl.wire : !firrtl.bundle<a : uint<1>, b : flip<uint<1>>>
+
+  // expected-error @+1 {{sink "test.in" not fully initialized}}
   %simple_out, %simple_in = firrtl.instance @simple {name = "test", portNames=["in", "out"]}: !firrtl.flip<uint<1>>, !firrtl.uint<1>
+
+  // expected-error @+3 {{sink "memory.r.addr" not fully initialized}}
+  // expected-error @+2 {{sink "memory.r.en" not fully initialized}}
+  // expected-error @+1 {{sink "memory.r.clk" not fully initialized}}
+  %memory_r = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<bundle<a: uint<8>, b: uint<8>>>>>
 }
 }
 
@@ -24,10 +33,10 @@ firrtl.circuit "declaration_in_when" {
 // Check that wires declared inside of a when are detected as uninitialized.
 firrtl.module @declaration_in_when(in %p : !firrtl.uint<1>) {
   firrtl.when %p {
-    // expected-error @+1 {{sink not fully initialized}}
+    // expected-error @+1 {{sink "w_then" not fully initialized}}
     %w_then = firrtl.wire : !firrtl.uint<2>
   } else {
-    // expected-error @+1 {{sink not fully initialized}}
+    // expected-error @+1 {{sink "w_else" not fully initialized}}
     %w_else = firrtl.wire : !firrtl.uint<2>
   }
 }
@@ -39,7 +48,7 @@ firrtl.circuit "complex" {
 // Test that a wire set across separate when statements is detected as not
 // completely initialized.
 firrtl.module @complex(in %p : !firrtl.uint<1>, in %q : !firrtl.uint<1>) {
-  // expected-error @+1 {{sink not fully initialized}}
+  // expected-error @+1 {{sink "w" not fully initialized}}
   %w = firrtl.wire : !firrtl.uint<2>
 
   firrtl.when %p {

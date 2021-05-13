@@ -683,12 +683,20 @@ FIRRTLType BundleType::getPassiveType() {
   return passiveType;
 }
 
+llvm::Optional<unsigned> BundleType::getElementIndex(StringRef name) {
+  for (auto it : llvm::enumerate(getElements())) {
+    auto element = it.value();
+    if (element.name.getValue() == name) {
+      return {it.index()};
+    }
+  }
+  return None;
+}
+
 /// Look up an element by name.  This returns a BundleElement with.
 auto BundleType::getElement(StringRef name) -> Optional<BundleElement> {
-  for (const auto &element : getElements()) {
-    if (element.name.getValue() == name)
-      return element;
-  }
+  if (auto maybeIndex = getElementIndex(name))
+    return getElements()[*maybeIndex];
   return None;
 }
 
