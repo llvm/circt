@@ -209,6 +209,15 @@ circuit Foo: %[[{"\"":"}]]"}]]
     ; CHECK: firrtl.circuit "Foo" attributes {annotations =
 
 ; // -----
+; COM: JSON with a JSON-quoted string should be expanded.
+circuit Foo: %[[{"a":"{\"b\":null}"}]]
+  module Foo:
+    skip
+
+    ; CHECK-LABEL: module {
+    ; CHECK: firrtl.circuit "Foo" attributes {annotations = [{a = {b}}]}
+
+; // -----
 
 ; COM: Subfield/Subindex annotations should be parsed correctly on wires
 circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.qux"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]

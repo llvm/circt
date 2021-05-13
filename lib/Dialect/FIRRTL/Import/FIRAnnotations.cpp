@@ -138,9 +138,21 @@ bool circt::firrtl::fromJSON(json::Value &value,
   /// Convert arbitrary JSON to an MLIR Attribute.
   std::function<Attribute(json::Value &, json::Path)> convertJSONToAttribute =
       [&](json::Value &value, json::Path p) -> Attribute {
-    // String
-    if (auto a = value.getAsString())
+    // String or quoted JSON
+    if (auto a = value.getAsString()) {
+      // Test to see if this might be quoted JSON (a string that is actually
+      // JSON).  Sometimes FIRRTL developers will do this to serialize objects
+      // that the Scala FIRRTL Compiler doesn't know about.
+      auto unquotedValue = json::parse(a.getValue());
+      auto err = unquotedValue.takeError();
+      // If this parsed without an error, then it's more JSON and recurse on
+      // that.
+      if (!err)
+        return convertJSONToAttribute(unquotedValue.get(), p);
+      // If there was an error, then swallow it and handle this as a string.
+      handleAllErrors(std::move(err), [&](const json::ParseError &a) {});
       return StringAttr::get(context, a.getValue());
+    }
 
     // Integer
     if (auto a = value.getAsInteger())
