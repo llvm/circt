@@ -14,6 +14,7 @@ add_circt_dialect_library(CIRCTStaticLogicOps
   ${PROJECT_BINARY_DIR}/include
 
   LINK_LIBS PUBLIC
+  CIRCTScheduling
   MLIRStandard
   MLIRIR
 
@@ -25,8 +26,11 @@ add_circt_library(CIRCTStaticLogicPasses
   StaticLogicPasses.cpp
 
   LINK_LIBS PUBLIC
+  CIRCTStaticLogicOps
+  CIRCTScheduling
   MLIRStandard
   MLIRIR
+  MLIRPass
 
   DEPENDS
   MLIRStaticLogicPassesIncGen
