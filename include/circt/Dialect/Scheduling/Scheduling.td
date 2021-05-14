@@ -39,7 +39,7 @@ def Scheduling_OperatorInfo : AttrDef<Scheduling_Dialect, "OperatorInfo"> {
 
     Example:
     ```
-    %2 = addf %0, %1 {opr = #sched.opr<"mul", latency=6>} : f32
+    %2 = mulf %0, %1 {opr = #sched.opr<"mul", latency=6>} : f32
     ```
   }];
 
@@ -48,6 +48,12 @@ def Scheduling_OperatorInfo : AttrDef<Scheduling_Dialect, "OperatorInfo"> {
    AttrParameter<"unsigned", "the operator's result is available after "
                              "`latency` cycles">:$latency
   );
+
+  let extraClassDeclaration = [{
+    static llvm::StringRef getDefaultAttributeName() {
+      return "opr";
+    }
+  }];
 }
 
 #endif // CIRCT_DIALECT_SCHEDULING_SCHEDULING_TD

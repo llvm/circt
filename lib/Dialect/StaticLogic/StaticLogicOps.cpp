@@ -30,15 +30,23 @@ void StaticLogicDialect::initialize() {
       >();
 }
 
-LogicalResult PipelineOp::constructSchedulingProblem(sched::SchedulerBase &scheduler){
+LogicalResult
+PipelineOp::constructSchedulingProblem(sched::SchedulerBase &scheduler) {
   auto &blockToSchedule = getRegion().getBlocks().front();
   auto &operationsToSchedule = blockToSchedule.getOperations();
 
   auto unitLatencyOperator = OperatorInfoAttr::get(getContext(), "unit", 1);
+  StringRef defaultAttrName = OperatorInfoAttr::getDefaultAttributeName();
 
   for (Operation &op : operationsToSchedule) {
+    OperatorInfoAttr opr;
+    if (op.hasAttrOfType<OperatorInfoAttr>(defaultAttrName))
+      opr = op.getAttrOfType<OperatorInfoAttr>(defaultAttrName);
+    else
+      opr = unitLatencyOperator; // fallback if attribute is not present
+
     if (failed(scheduler.registerOperation(&op)) ||
-        failed(scheduler.registerOperators(&op, unitLatencyOperator)))
+        failed(scheduler.registerOperators(&op, opr)))
       return failure();
   }
 
