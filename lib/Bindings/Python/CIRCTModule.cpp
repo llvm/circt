@@ -17,11 +17,11 @@
 #include "circt-c/ExportVerilog.h"
 #include "mlir-c/Bindings/Python/Interop.h"
 #include "mlir-c/Registration.h"
+#include "mlir/Bindings/Python/PybindAdaptors.h"
 
 #include "llvm-c/ErrorHandling.h"
 #include "llvm/Support/Signals.h"
 
-#include "MLIRPybindAdaptors.h"
 #include "PybindUtils.h"
 #include <pybind11/pybind11.h>
 namespace py = pybind11;

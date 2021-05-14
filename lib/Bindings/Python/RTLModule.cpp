@@ -11,10 +11,10 @@
 #include "circt-c/Dialect/RTL.h"
 
 #include "mlir-c/BuiltinAttributes.h"
+#include "mlir/Bindings/Python/PybindAdaptors.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/raw_ostream.h"
 
-#include "MLIRPybindAdaptors.h"
 #include "PybindUtils.h"
 #include <pybind11/pybind11.h>
 #include <pybind11/pytypes.h>
@@ -29,12 +29,12 @@ void circt::python::populateDialectRTLSubmodule(py::module &m) {
   m.doc() = "RTL dialect Python native extension";
 
   mlir_type_subclass(m, "ArrayType", rtlTypeIsAArrayType)
-      .def_static("get", [](MlirType elementType, intptr_t size) {
+      .def_staticmethod("get", [](MlirType elementType, intptr_t size) {
         return py::cast(rtlArrayTypeGet(elementType, size));
       });
 
   mlir_type_subclass(m, "StructType", rtlTypeIsAStructType)
-      .def_static("get", [](py::list pyFieldInfos) {
+      .def_staticmethod("get", [](py::list pyFieldInfos) {
         llvm::SmallVector<RTLStructFieldInfo> mlirFieldInfos;
         MlirContext ctx;
 

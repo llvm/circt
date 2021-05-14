@@ -14,6 +14,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir-c/Bindings/Python/Interop.h"
 
+#include "mlir/Bindings/Python/PybindAdaptors.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Support.h"
 #include "mlir/IR/Builders.h"
@@ -22,7 +23,6 @@
 
 #include "llvm/ADT/SmallVector.h"
 
-#include "MLIRPybindAdaptors.h"
 #include "PybindUtils.h"
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -120,10 +120,10 @@ void circt::python::populateDialectESISubmodule(py::module &m) {
            "Print the cosim RPC schema");
 
   mlir_type_subclass(m, "ChannelType", circtESITypeIsAChannelType)
-      .def_static("get",
-                  [](MlirType inner) {
-                    return py::cast(circtESIChannelTypeGet(inner));
-                  })
+      .def_staticmethod("get",
+                        [](MlirType inner) {
+                          return py::cast(circtESIChannelTypeGet(inner));
+                        })
       .def_property_readonly(
           "inner", [](MlirType self) { return circtESIChannelGetInner(self); });
 }
