@@ -19,6 +19,7 @@
 #include "mlir-c/Registration.h"
 
 #include "llvm-c/ErrorHandling.h"
+#include "llvm/Support/Signals.h"
 
 #include "MLIRPybindAdaptors.h"
 #include "PybindUtils.h"
@@ -33,6 +34,7 @@ static void registerPasses() {
 PYBIND11_MODULE(_circt, m) {
   m.doc() = "CIRCT Python Native Extension";
   registerPasses();
+  llvm::sys::PrintStackTraceOnErrorSignal(/*argv=*/"");
   LLVMEnablePrettyStackTrace();
 
   m.def(
