@@ -166,9 +166,9 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   pm.enableTiming(ts);
   applyPassManagerCLOptions(pm);
 
-  auto parserTimer = ts.nest("Parser");
   OwningModuleRef module;
   if (inputFormat == InputFIRFile) {
+    auto parserTimer = ts.nest("FIR Parser");
     firrtl::FIRParserOptions options;
     options.ignoreInfoLocators = ignoreFIRLocations;
     module = importFIRRTL(sourceMgr, &context, options);
@@ -187,6 +187,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
       modulePM.addPass(createSimpleCanonicalizerPass());
     }
   } else {
+    auto parserTimer = ts.nest("MLIR Parser");
     assert(inputFormat == InputMLIRFile);
     module = parseSourceFile(sourceMgr, &context);
 
@@ -203,7 +204,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
       }
     }
   }
-  parserTimer.stop();
+
   if (!module)
     return failure();
 
