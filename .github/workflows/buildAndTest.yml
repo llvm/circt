@@ -9,45 +9,45 @@ on:
   workflow_dispatch:
 
 jobs:
-  # Build the LLVM submodule then cache it. Do not rebuild if hit in the
-  # cache.
-  build-llvm:
-    name: Build LLVM
-    runs-on: ubuntu-18.04
-    steps:
-      # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
-      # time.
-      - name: Get CIRCT
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 2
-          submodules: "true"
+  # # Build the LLVM submodule then cache it. Do not rebuild if hit in the
+  # # cache.
+  # build-llvm:
+  #   name: Build LLVM
+  #   runs-on: ubuntu-18.04
+  #   steps:
+  #     # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
+  #     # time.
+  #     - name: Get CIRCT
+  #       uses: actions/checkout@v2
+  #       with:
+  #         fetch-depth: 2
+  #         submodules: "true"
 
-      # Extract the LLVM submodule hash for use in the cache key.
-      - name: Get LLVM Hash
-        id: get-llvm-hash
-        run: echo "::set-output name=hash::$(git rev-parse @:./llvm)"
-        shell: bash
+  #     # Extract the LLVM submodule hash for use in the cache key.
+  #     - name: Get LLVM Hash
+  #       id: get-llvm-hash
+  #       run: echo "::set-output name=hash::$(git rev-parse @:./llvm)"
+  #       shell: bash
 
-      - name: Get workflow spec hash
-        id: get-workflow-hash
-        run: echo "::set-output name=hash::$(md5sum $GITHUB_WORKSPACE/.github/workflows/buildAndTest.yml)"
-        shell: bash
+  #     - name: Get workflow spec hash
+  #       id: get-workflow-hash
+  #       run: echo "::set-output name=hash::$(md5sum $GITHUB_WORKSPACE/.github/workflows/buildAndTest.yml)"
+  #       shell: bash
 
-      # Try to fetch LLVM from the cache.
-      - name: Cache LLVM
-        id: cache-llvm
-        uses: actions/cache@v2
-        with:
-          path: |
-            llvm/build
-            llvm/install
-          key: ${{ runner.os }}-llvm-${{ steps.get-llvm-hash.outputs.hash }}-${{ steps.get-workflow-hash.outputs.hash }}
+  #     # Try to fetch LLVM from the cache.
+  #     - name: Cache LLVM
+  #       id: cache-llvm
+  #       uses: actions/cache@v2
+  #       with:
+  #         path: |
+  #           llvm/build
+  #           llvm/install
+  #         key: ${{ runner.os }}-llvm-${{ steps.get-llvm-hash.outputs.hash }}-${{ steps.get-workflow-hash.outputs.hash }}
 
-      # Build LLVM if we didn't hit in the cache.
-      - name: Rebuild and Install LLVM
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: utils/build-llvm.sh
+  #     # Build LLVM if we didn't hit in the cache.
+  #     - name: Rebuild and Install LLVM
+  #       if: steps.cache-llvm.outputs.cache-hit != 'true'
+  #       run: utils/build-llvm.sh
 
 
     # Installing the results into the cache is an action which is automatically
@@ -85,7 +85,7 @@ jobs:
   # Build CIRCT and run its tests.
   build-circt:
     name: Build and Test
-    needs: build-llvm
+    # needs: build-llvm
     runs-on: ubuntu-18.04
     steps:
       - name: Configure Environment
@@ -137,7 +137,7 @@ jobs:
       # the previous job, there is a low chance that it'll have been evicted by
       # the time we get here.
       - name: Rebuild and Install LLVM
-        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        # if: steps.cache-llvm.outputs.cache-hit != 'true'
         run: utils/build-llvm.sh
 
       # --------
