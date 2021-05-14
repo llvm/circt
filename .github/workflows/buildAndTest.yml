@@ -14,6 +14,8 @@ jobs:
   build-llvm:
     name: Build LLVM
     runs-on: ubuntu-18.04
+    container:
+      image: ghcr.io/circt/images/circt-ci-build:20210514022546
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
@@ -87,6 +89,8 @@ jobs:
     name: Build and Test
     needs: build-llvm
     runs-on: ubuntu-18.04
+    container:
+      image: ghcr.io/circt/images/circt-ci-build:20210514022546
     steps:
       - name: Configure Environment
         run: echo "$GITHUB_WORKSPACE/llvm/install/bin" >> $GITHUB_PATH
@@ -98,15 +102,6 @@ jobs:
         with:
           fetch-depth: 2
           submodules: "true"
-
-      # We'll be running clang-tidy, etc. later in this flow.
-      - name: Install formatting and linting tools
-        run: |
-          sudo apt-get install -y clang-tidy-9
-          sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy \
-            /usr/bin/clang-tidy-9 100
-          pip3 install yapf
-          echo "Using $(yapf --version)"
 
       # --------
       # Restore LLVM from cache and build if it's not in there.
