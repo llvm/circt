@@ -263,49 +263,6 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   return callback(std::move(module));
 }
 
-/// Process a single buffer of the input into a single output stream.
-static LogicalResult
-processBufferIntoSingleStream(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
-                              StringRef annotationFilename, raw_ostream &os,
-                              TimingScope &ts) {
-  auto emitCallback = [&](OwningModuleRef module) {
-    switch (outputFormat) {
-    case OutputMLIR:
-      module->print(os);
-      return success();
-    case OutputDisabled:
-      return success();
-    case OutputVerilog:
-      return exportVerilog(module.get(), os);
-    case OutputSplitVerilog:
-      llvm_unreachable("multi-file format must be handled elsewhere");
-    }
-    llvm_unreachable("unknown output format");
-  };
-  return processBuffer(std::move(ownedBuffer), annotationFilename, ts,
-                       std::move(emitCallback));
-}
-
-/// Process a single buffer of the input into multiple output files.
-static LogicalResult
-processBufferIntoMultipleFiles(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
-                               StringRef annotationFilename,
-                               StringRef outputDirectory, TimingScope &ts) {
-  auto emitCallback = [&](OwningModuleRef module) {
-    switch (outputFormat) {
-    case OutputMLIR:
-    case OutputDisabled:
-    case OutputVerilog:
-      llvm_unreachable("single-stream format must be handled elsewhere");
-    case OutputSplitVerilog:
-      return exportSplitVerilog(module.get(), outputDirectory);
-    }
-    llvm_unreachable("unknown output format");
-  };
-  return processBuffer(std::move(ownedBuffer), annotationFilename, ts,
-                       std::move(emitCallback));
-}
-
 int main(int argc, char **argv) {
   InitLLVM y(argc, argv);
 
@@ -345,42 +302,51 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  // Emit a single file or multiple files depending on the output format.
-  switch (outputFormat) {
-  // Outputs into a single stream.
-  case OutputMLIR:
-  case OutputDisabled:
-  case OutputVerilog: {
-    auto output = openOutputFile(outputFilename, &errorMessage);
-    if (!output) {
+  // Create the output directory or output file depending on our mode.
+  Optional<std::unique_ptr<llvm::ToolOutputFile>> outputFile;
+  if (outputFormat != OutputSplitVerilog) {
+    // Create an output file.
+    outputFile.emplace(openOutputFile(outputFilename, &errorMessage));
+    if (!outputFile.getValue()) {
       llvm::errs() << errorMessage << "\n";
       return 1;
     }
-
-    if (failed(processBufferIntoSingleStream(
-            std::move(input), inputAnnotationFilename, output->os(), ts)))
-      return 1;
-
-    output->keep();
-    return 0;
-  }
-
-  // Outputs into multiple files.
-  case OutputSplitVerilog:
+  } else {
+    // Create an output directory.
     if (outputFilename.isDefaultOption() || outputFilename == "-") {
       llvm::errs() << "missing output directory: specify with -o=<dir>\n";
       return 1;
     }
-    std::error_code error = llvm::sys::fs::create_directory(outputFilename);
+    auto error = llvm::sys::fs::create_directory(outputFilename);
     if (error) {
       llvm::errs() << "cannot create output directory '" << outputFilename
                    << "': " << error.message() << "\n";
       return 1;
     }
-
-    if (failed(processBufferIntoMultipleFiles(
-            std::move(input), inputAnnotationFilename, outputFilename, ts)))
-      return 1;
-    return 0;
   }
+
+  // Emit a single file or multiple files depending on the output format.
+  auto emitCallback = [&](OwningModuleRef module) -> LogicalResult {
+    switch (outputFormat) {
+    case OutputMLIR:
+      module->print(outputFile.getValue()->os());
+      return success();
+    case OutputDisabled:
+      return success();
+    case OutputVerilog:
+      return exportVerilog(module.get(), outputFile.getValue()->os());
+    case OutputSplitVerilog:
+      return exportSplitVerilog(module.get(), outputFilename);
+    }
+  };
+
+  auto result = processBuffer(std::move(input), inputAnnotationFilename, ts,
+                              std::move(emitCallback));
+  if (failed(result))
+    return 1;
+
+  // If the result succeeded and we're emitting a file, close it.
+  if (outputFile.hasValue())
+    outputFile.getValue()->keep();
+  return 0;
 }
