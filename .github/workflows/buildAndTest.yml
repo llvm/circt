@@ -47,7 +47,7 @@ jobs:
       # Build LLVM if we didn't hit in the cache.
       - name: Rebuild and Install LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: utils/build-llvm.sh
+        run: utils/build-llvm.sh build install debug
 
 
     # Installing the results into the cache is an action which is automatically
@@ -138,7 +138,7 @@ jobs:
       # the time we get here.
       - name: Rebuild and Install LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: utils/build-llvm.sh
+        run: utils/build-llvm.sh build install debug
 
       # --------
       # Build and test CIRCT in both debug and release mode.
