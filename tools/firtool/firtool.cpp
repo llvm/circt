@@ -134,9 +134,8 @@ static cl::opt<std::string>
 static LogicalResult
 processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
               StringRef annotationFilename, TimingScope &ts,
+              MLIRContext &context,
               std::function<LogicalResult(OwningModuleRef)> callback) {
-  MLIRContext context;
-
   // Register our dialects.
   context.loadDialect<firrtl::FIRRTLDialect, rtl::RTLDialect, comb::CombDialect,
                       sv::SVDialect>();
@@ -263,19 +262,10 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   return callback(std::move(module));
 }
 
-int main(int argc, char **argv) {
-  InitLLVM y(argc, argv);
-
-  // Register any pass manager command line options.
-  registerMLIRContextCLOptions();
-  registerPassManagerCLOptions();
-  registerDefaultTimingManagerCLOptions();
-  registerAsmPrinterCLOptions();
-  registerLoweringCLOptions();
-
-  // Parse pass names in main to ensure static initialization completed.
-  cl::ParseCommandLineOptions(argc, argv, "circt modular optimizer driver\n");
-
+/// This implements the top-level logic for the firtool command, invoked once
+/// command line options are parsed and LLVM/MLIR are all set up and ready to
+/// go.
+static LogicalResult executeFirtool(MLIRContext &context) {
   // Create the timing manager we use to sample execution times.
   DefaultTimingManager tm;
   applyDefaultTimingManagerCLOptions(tm);
@@ -290,7 +280,7 @@ int main(int argc, char **argv) {
     else {
       llvm::errs() << "unknown input format: "
                       "specify with -format=fir or -format=mlir\n";
-      exit(1);
+      return failure();
     }
   }
 
@@ -299,7 +289,7 @@ int main(int argc, char **argv) {
   auto input = openInputFile(inputFilename, &errorMessage);
   if (!input) {
     llvm::errs() << errorMessage << "\n";
-    return 1;
+    return failure();
   }
 
   // Create the output directory or output file depending on our mode.
@@ -309,19 +299,19 @@ int main(int argc, char **argv) {
     outputFile.emplace(openOutputFile(outputFilename, &errorMessage));
     if (!outputFile.getValue()) {
       llvm::errs() << errorMessage << "\n";
-      return 1;
+      return failure();
     }
   } else {
     // Create an output directory.
     if (outputFilename.isDefaultOption() || outputFilename == "-") {
       llvm::errs() << "missing output directory: specify with -o=<dir>\n";
-      return 1;
+      return failure();
     }
     auto error = llvm::sys::fs::create_directory(outputFilename);
     if (error) {
       llvm::errs() << "cannot create output directory '" << outputFilename
                    << "': " << error.message() << "\n";
-      return 1;
+      return failure();
     }
   }
 
@@ -341,12 +331,40 @@ int main(int argc, char **argv) {
   };
 
   auto result = processBuffer(std::move(input), inputAnnotationFilename, ts,
-                              std::move(emitCallback));
+                              context, std::move(emitCallback));
   if (failed(result))
-    return 1;
+    return failure();
 
   // If the result succeeded and we're emitting a file, close it.
   if (outputFile.hasValue())
     outputFile.getValue()->keep();
-  return 0;
+
+  return success();
+}
+
+/// Main driver for firtool command.  This sets up LLVM and MLIR, and parses
+/// command line options before passing off to 'executeFirtool'.  This is set up
+/// so we can `exit(0)` at the end of the program to avoid teardown of the
+/// MLIRContext and modules inside of it (reducing compile time).
+int main(int argc, char **argv) {
+  InitLLVM y(argc, argv);
+
+  // Register any pass manager command line options.
+  registerMLIRContextCLOptions();
+  registerPassManagerCLOptions();
+  registerDefaultTimingManagerCLOptions();
+  registerAsmPrinterCLOptions();
+  registerLoweringCLOptions();
+  // Parse pass names in main to ensure static initialization completed.
+  cl::ParseCommandLineOptions(argc, argv, "circt modular optimizer driver\n");
+
+  MLIRContext context;
+
+  // Do the guts of the firtool process.
+  auto result = executeFirtool(context);
+
+  // Use "exit" instead of return'ing to signal completion.  This avoids
+  // invoking the MLIRContext destructor, which spends a bunch of time
+  // deallocating memory etc which process exit will do for us.
+  exit(failed(result));
 }
