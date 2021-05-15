@@ -240,7 +240,7 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
   SmallString<64> shellNameBuf;
   StringAttr shellName = b.getStringAttr(
       (SymbolTable::getSymbolName(pearl) + "_esi").toStringRef(shellNameBuf));
-  auto shell = b.create<rtl::RTLModuleOp>(loc, shellName, shellPorts);
+  auto shell = b.create<rtl::HWModuleOp>(loc, shellName, shellPorts);
   shell.getBodyBlock()->clear(); // Erase the terminator.
   auto modBuilder =
       ImplicitLocOpBuilder::atBlockBegin(loc, shell.getBodyBlock());

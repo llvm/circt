@@ -215,7 +215,7 @@ def SExtOp : CombOp<"sext", [NoSideEffect]> {
 def ConcatOp : VariadicOp<"concat"> {
   let summary = "Concatenate a variadic list of operands together.";
   let description = [{
-    See the RTL-SV rationale document for details on operand ordering.
+    See the HW-SV rationale document for details on operand ordering.
   }];
 
   let hasFolder = true;

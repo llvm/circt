@@ -20,19 +20,19 @@ include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/IR/RegionKindInterface.td"
 
-def RTLDialect : Dialect {
+def HWDialect : Dialect {
   let name = "rtl";
 
   let summary = "Types and operations for rtl dialect";
   let description = [{
     This dialect defines the `rtl` dialect, which is intended to be a generic
-    representation of RTL outside of a particular use-case.
+    representation of HW outside of a particular use-case.
   }];
 
   let hasConstantMaterializer = 1;
   let cppNamespace = "::circt::rtl";
   let extraClassDeclaration = [{
-    /// Register all RTL types.
+    /// Register all HW types.
     void registerTypes();
   }];
 }
@@ -40,8 +40,8 @@ def RTLDialect : Dialect {
 include "circt/Dialect/HW/HWTypes.td"
 
 // Base class for the operation in this dialect.
-class RTLOp<string mnemonic, list<OpTrait> traits = []> :
-    Op<RTLDialect, mnemonic, traits>;
+class HWOp<string mnemonic, list<OpTrait> traits = []> :
+    Op<HWDialect, mnemonic, traits>;
 
 include "circt/Dialect/HW/HWAggregates.td"
 include "circt/Dialect/HW/HWStructure.td"

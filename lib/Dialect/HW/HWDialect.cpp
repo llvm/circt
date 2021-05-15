@@ -26,9 +26,9 @@ using namespace rtl;
 
 namespace {
 
-// We implement the OpAsmDialectInterface so that RTL dialect operations
+// We implement the OpAsmDialectInterface so that HW dialect operations
 // automatically interpret the name attribute on operations as their SSA name.
-struct RTLOpAsmDialectInterface : public OpAsmDialectInterface {
+struct HWOpAsmDialectInterface : public OpAsmDialectInterface {
   using OpAsmDialectInterface::OpAsmDialectInterface;
 
   /// Get a special name to use when printing the given operation. See
@@ -53,7 +53,7 @@ struct RTLOpAsmDialectInterface : public OpAsmDialectInterface {
 };
 } // end anonymous namespace
 
-void RTLDialect::initialize() {
+void HWDialect::initialize() {
   // Register types.
   registerTypes();
 
@@ -64,7 +64,7 @@ void RTLDialect::initialize() {
       >();
 
   // Register interface implementations.
-  addInterfaces<RTLOpAsmDialectInterface>();
+  addInterfaces<HWOpAsmDialectInterface>();
 }
 
 // Registered hook to materialize a single constant operation from a given
@@ -74,8 +74,8 @@ void RTLDialect::initialize() {
 /// like, i.e. single result, zero operands, non side-effecting, etc. On
 /// success, this hook should return the value generated to represent the
 /// constant value. Otherwise, it should return null on failure.
-Operation *RTLDialect::materializeConstant(OpBuilder &builder, Attribute value,
-                                           Type type, Location loc) {
+Operation *HWDialect::materializeConstant(OpBuilder &builder, Attribute value,
+                                          Type type, Location loc) {
   // Integer constants.
   if (auto intType = type.dyn_cast<IntegerType>())
     if (auto attrValue = value.dyn_cast<IntegerAttr>())

@@ -19,10 +19,10 @@ def isModuleSymbol : AttrConstraint<
             "&$_op, $_self.cast<::mlir::FlatSymbolRefAttr>().getValue()))"
     >, "is module like">;
 
-def RTLModuleOp : RTLOp<"module",
+def HWModuleOp : HWOp<"module",
       [IsolatedFromAbove, FunctionLike, Symbol, RegionKindInterface,
        SingleBlockImplicitTerminator<"OutputOp">, HasParent<"mlir::ModuleOp">]>{
-  let summary = "RTL Module";
+  let summary = "HW Module";
   let description = [{
     The "rtl.module" operation represents a Verilog module, including a given
     name, a list of ports, and a body that represents the connections within
@@ -67,7 +67,7 @@ def RTLModuleOp : RTLOp<"module",
 
   private:
     // This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<RTLModuleOp>;
+    friend class OpTrait::FunctionLike<HWModuleOp>;
 
     /// Returns the number of arguments, implementing OpTrait::FunctionLike.
     unsigned getNumFuncArguments() { return getType().getInputs().size(); }
@@ -93,9 +93,9 @@ def RTLModuleOp : RTLOp<"module",
   let verifier = "return ::verify$cppClass(*this);";
 }
 
-def RTLModuleExternOp : RTLOp<"module.extern",
+def HWModuleExternOp : HWOp<"module.extern",
       [FunctionLike, Symbol, HasParent<"mlir::ModuleOp">]> {
-  let summary = "RTL external Module";
+  let summary = "HW external Module";
   let description = [{
     The "rtl.module.extern" operation represents an external reference to a
     Verilog module, including a given name and a list of ports.
@@ -146,7 +146,7 @@ def RTLModuleExternOp : RTLOp<"module.extern",
 
   private:
     // This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<RTLModuleExternOp>;
+    friend class OpTrait::FunctionLike<HWModuleExternOp>;
 
     /// Returns the number of arguments, implementing OpTrait::FunctionLike.
     unsigned getNumFuncArguments() { return getType().getInputs().size(); }
@@ -172,9 +172,9 @@ def RTLModuleExternOp : RTLOp<"module.extern",
   let verifier = "return ::verify$cppClass(*this);";
 }
 
-def RTLGeneratorSchemaOp : RTLOp<"generator.schema", 
+def HWGeneratorSchemaOp : HWOp<"generator.schema", 
       [Symbol, HasParent<"mlir::ModuleOp">]> {
-  let summary = "RTL Generator Schema declaration";
+  let summary = "HW Generator Schema declaration";
   let description = [{
     The "rtl.generator.schema" operation declares a kind of generated module by
     declaring the schema of meta-data required.  
@@ -197,9 +197,9 @@ def RTLGeneratorSchemaOp : RTLOp<"generator.schema",
     }];
 }
 
-def RTLModuleGeneratedOp : RTLOp<"module.generated",
+def HWModuleGeneratedOp : HWOp<"module.generated",
       [IsolatedFromAbove, FunctionLike, Symbol, HasParent<"mlir::ModuleOp">]> {
-  let summary = "RTL Generated Module";
+  let summary = "HW Generated Module";
   let description = [{
     The "rtl.module.generated" operation represents a reference to an external
     module that will be produced by some external process.  
@@ -251,7 +251,7 @@ def RTLModuleGeneratedOp : RTLOp<"module.generated",
 
   private:
     // This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<RTLModuleGeneratedOp>;
+    friend class OpTrait::FunctionLike<HWModuleGeneratedOp>;
 
     /// Returns the number of arguments, implementing OpTrait::FunctionLike.
     unsigned getNumFuncArguments() { return getType().getInputs().size(); }
@@ -277,7 +277,7 @@ def RTLModuleGeneratedOp : RTLOp<"module.generated",
   let verifier = "return ::verify$cppClass(*this);";
 }
 
-def InstanceOp : RTLOp<"instance",
+def InstanceOp : HWOp<"instance",
                        [DeclareOpInterfaceMethods<OpAsmOpInterface>,
                         Symbol]> {
   let summary = "Create an instance of a module";
@@ -341,11 +341,11 @@ def InstanceOp : RTLOp<"instance",
   let verifier = "return ::verifyInstanceOp(*this);";
 }
 
-def OutputOp : RTLOp<"output", [Terminator, HasParent<"RTLModuleOp">,
+def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,
                                 NoSideEffect, ReturnLike]> {
-  let summary = "RTL termination operation";
+  let summary = "HW termination operation";
   let description = [{
-    "rtl.output" marks the end of a region in the RTL dialect and the values
+    "rtl.output" marks the end of a region in the HW dialect and the values
     to put on the output ports.
   }];
 

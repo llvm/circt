@@ -26,7 +26,7 @@
 namespace circt {
 namespace rtl {
 
-/// A RTL module ports direction.
+/// A HW module ports direction.
 enum PortDirection {
   INPUT = 1,
   OUTPUT = 2,

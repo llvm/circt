@@ -1,4 +1,4 @@
-//===- RTLStubExternalModules.cpp - RTL Module Stubbing Pass --------------===//
+//===- HWStubExternalModules.cpp - HW Module Stubbing Pass ----------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -17,27 +17,27 @@
 using namespace circt;
 
 //===----------------------------------------------------------------------===//
-// RTLStubExternalModules Pass
+// HWStubExternalModules Pass
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct RTLStubExternalModulesPass
-    : public sv::RTLStubExternalModulesBase<RTLStubExternalModulesPass> {
+struct HWStubExternalModulesPass
+    : public sv::HWStubExternalModulesBase<HWStubExternalModulesPass> {
   void runOnOperation() override;
 };
 } // end anonymous namespace
 
-void RTLStubExternalModulesPass::runOnOperation() {
+void HWStubExternalModulesPass::runOnOperation() {
   auto topModule = getOperation().getBody();
   OpBuilder builder(topModule->getParentOp()->getContext());
   builder.setInsertionPointToEnd(topModule);
 
   for (auto &op : llvm::make_early_inc_range(*topModule))
-    if (auto module = dyn_cast<rtl::RTLModuleExternOp>(op)) {
+    if (auto module = dyn_cast<rtl::HWModuleExternOp>(op)) {
       SmallVector<rtl::ModulePortInfo> ports = module.getPorts();
       auto nameAttr = module.getNameAttr();
       auto newModule =
-          builder.create<rtl::RTLModuleOp>(module.getLoc(), nameAttr, ports);
+          builder.create<rtl::HWModuleOp>(module.getLoc(), nameAttr, ports);
       auto outputOp = newModule.getBodyBlock()->getTerminator();
       OpBuilder innerBuilder(outputOp);
       SmallVector<Value, 8> outputs;
@@ -61,6 +61,6 @@ void RTLStubExternalModulesPass::runOnOperation() {
     }
 }
 
-std::unique_ptr<Pass> circt::sv::createRTLStubExternalModulesPass() {
-  return std::make_unique<RTLStubExternalModulesPass>();
+std::unique_ptr<Pass> circt::sv::createHWStubExternalModulesPass() {
+  return std::make_unique<HWStubExternalModulesPass>();
 }

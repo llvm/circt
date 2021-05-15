@@ -33,7 +33,7 @@ class System(CppSystem):
 
       with mlir.ir.InsertionPoint(self.body):
         self.declare_externs()
-        rtl.RTLModuleOp(name='top',
+        rtl.HWModuleOp(name='top',
                         input_ports=[('clk', self.i1), ('rstn', self.i1)],
                         output_ports=[],
                         body_builder=self.build_top)

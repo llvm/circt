@@ -17,11 +17,11 @@ with Context() as ctx, Location.unknown():
   with InsertionPoint(m.body):
     # CHECK: rtl.module @MyWidget()
     # CHECK:   rtl.output
-    op = rtl.RTLModuleOp(name='MyWidget',
+    op = rtl.HWModuleOp(name='MyWidget',
                          input_ports=[],
                          output_ports=[],
                          body_builder=lambda module: rtl.OutputOp([]))
-    top = rtl.RTLModuleOp(name='top',
+    top = rtl.HWModuleOp(name='top',
                           input_ports=[],
                           output_ports=[],
                           body_builder=lambda module: rtl.OutputOp([]))

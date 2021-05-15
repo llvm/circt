@@ -30,13 +30,13 @@
 /// (https://github.com/llvm/circt/issues/578)
 int main() { return 0; }
 #else
-int registerOnlyRTL() {
+int registerOnlyHW() {
   MlirContext ctx = mlirContextCreate();
   // The built-in dialect is always loaded.
   if (mlirContextGetNumLoadedDialects(ctx) != 1)
     return 1;
 
-  // RTL dialect tests.
+  // HW dialect tests.
   MlirDialectHandle rtlHandle = mlirGetDialectHandle__rtl__();
 
   MlirDialect rtl = mlirContextGetOrLoadDialect(
@@ -82,7 +82,7 @@ int registerOnlyRTL() {
   return 0;
 }
 
-int testRTLTypes() {
+int testHWTypes() {
   MlirContext ctx = mlirContextCreate();
   MlirDialectHandle rtlHandle = mlirGetDialectHandle__rtl__();
   mlirDialectHandleRegisterDialect(rtlHandle, ctx);
@@ -110,11 +110,11 @@ int testRTLTypes() {
 
 int main() {
   fprintf(stderr, "@registration\n");
-  int errcode = registerOnlyRTL();
+  int errcode = registerOnlyHW();
   fprintf(stderr, "%d\n", errcode);
 
   fprintf(stderr, "@rtltypes\n");
-  errcode = testRTLTypes();
+  errcode = testHWTypes();
   fprintf(stderr, "%d\n", errcode);
 
   // clang-format off

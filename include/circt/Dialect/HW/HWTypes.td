@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 // Base class for other typedefs. Provides dialact-specific defaults.
-class RTLType<string name> : TypeDef<RTLDialect, name> { }
+class HWType<string name> : TypeDef<HWDialect, name> { }
 
 //===----------------------------------------------------------------------===//
 // Type predicates
@@ -19,18 +19,18 @@ class RTLType<string name> : TypeDef<RTLDialect, name> { }
 
 // Type constraint that indicates that an operand/result may only be a valid,
 // known, non-directional type.
-def RTLIntegerType : DialectType<RTLDialect, CPred<"isRTLIntegerType($_self)">,
+def HWIntegerType : DialectType<HWDialect, CPred<"isHWIntegerType($_self)">,
                                  "an integer bitvector of one or more bits",
                                  "::mlir::IntegerType">;
 
 // Type constraint that indicates that an operand/result may only be a valid,
 // known, non-directional type.
-def RTLValueType : DialectType<RTLDialect, CPred<"isRTLValueType($_self)">,
+def HWValueType : DialectType<HWDialect, CPred<"isHWValueType($_self)">,
                                "a known primitive element">;
 
 // Type constraint that indicates that an operand/result may only be a valid
 // non-directional type.
-def RTLNonInOutType : DialectType<RTLDialect, CPred<"!hasRTLInOutType($_self)">,
+def HWNonInOutType : DialectType<HWDialect, CPred<"!hasHWInOutType($_self)">,
                                   "a type without inout">;
 
 //===----------------------------------------------------------------------===//
@@ -38,10 +38,10 @@ def RTLNonInOutType : DialectType<RTLDialect, CPred<"!hasRTLInOutType($_self)">,
 //===----------------------------------------------------------------------===//
 
 // A simple fixed size array.
-def ArrayType : RTLType<"Array"> {
+def ArrayType : HWType<"Array"> {
   let summary = "fixed-sized array";
   let description = [{
-    Fixed sized RTL arrays are roughly similar to C arrays. On the wire (vs.
+    Fixed sized HW arrays are roughly similar to C arrays. On the wire (vs.
     in a memory), arrays are always packed. Memory layout is not defined as
     it does not need to be since in silicon there is not implicit memory
     sharing.
@@ -59,7 +59,7 @@ def ArrayType : RTLType<"Array"> {
 }
 
 // An 'unpacked' array of fixed size.
-def UnpackedArrayType : RTLType<"UnpackedArray"> {
+def UnpackedArrayType : HWType<"UnpackedArray"> {
   let summary = "SystemVerilog 'unpacked' fixed-sized array";
   let description = [{
     Unpacked arrays are a more flexible array representation than packed arrays,
@@ -77,7 +77,7 @@ def UnpackedArrayType : RTLType<"UnpackedArray"> {
   }];
 }
 
-def InOutType : RTLType<"InOut"> {
+def InOutType : HWType<"InOut"> {
   let summary = "inout type";
   let description = [{
     InOut type is used for model operations and values that have "connection"
@@ -96,8 +96,8 @@ def InOutType : RTLType<"InOut"> {
   }];
 }
 
-def StructType : RTLType<"Struct"> {
-  let summary = "RTL struct type";
+def StructType : HWType<"Struct"> {
+  let summary = "HW struct type";
   let description = [{
     Represents a structure of name, value pairs.
     !rtl.struct<fieldName1: Type1, fieldName2: Type2>
@@ -120,7 +120,7 @@ def StructType : RTLType<"Struct"> {
   }];
 }
 
-def UnionType : RTLType<"Union"> {
+def UnionType : HWType<"Union"> {
   let summary = "An untagged union of types";
   let parameters = (
     ins

@@ -43,7 +43,7 @@ public:
 
   /// This callback is invoked on any non-expression operations.
   ResultType visitInvalidTypeOp(Operation *op, ExtraArgs... args) {
-    op->emitOpError("unknown RTL combinatorial node");
+    op->emitOpError("unknown HW combinatorial node");
     abort();
   }
 
@@ -89,7 +89,7 @@ public:
 
   /// This callback is invoked on any non-expression operations.
   ResultType visitInvalidStmt(Operation *op, ExtraArgs... args) {
-    op->emitOpError("unknown RTL combinatorial node");
+    op->emitOpError("unknown HW combinatorial node");
     abort();
   }
 
@@ -139,7 +139,7 @@ public:
 
   /// This callback is invoked on any non-type scope operations.
   ResultType visitInvalidTypeScope(Operation *op, ExtraArgs... args) {
-    op->emitOpError("unknown RTL type scope node");
+    op->emitOpError("unknown HW type scope node");
     abort();
   }
 

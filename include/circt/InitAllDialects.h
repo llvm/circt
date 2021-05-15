@@ -38,7 +38,7 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
     handshake::HandshakeOpsDialect,
     llhd::LLHDDialect,
     msft::MSFTDialect,
-    rtl::RTLDialect,
+    rtl::HWDialect,
     seq::SeqDialect,
     staticlogic::StaticLogicDialect,
     sv::SVDialect

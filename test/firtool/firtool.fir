@@ -42,7 +42,7 @@ circuit test_mod : %[[{"a": "a"}]]
 ; MLIRLOWER:     rtl.output %a : i1
 ; MLIRLOWER:   }
 
-; Check that we canonicalize the RTL output of lowering.
+; Check that we canonicalize the HW output of lowering.
 ;
 ; MLIRLOWER: rtl.module @cat(%a: i2, %b: i2, %c: i2) -> (%d: i6) {
 ; MLIRLOWER:   %0 = comb.concat %a, %b, %c : (i2, i2, i2) -> i6

@@ -87,7 +87,7 @@ static bool isVerilogExpression(Operation *op) {
   if (isa<ReadInOutOp>(op) || isa<ArrayIndexInOutOp>(op))
     return true;
 
-  // All RTL combinatorial logic ops and SV expression ops are Verilog
+  // All HW combinatorial logic ops and SV expression ops are Verilog
   // expressions.
   return isCombinatorial(op) || isExpression(op);
 }
@@ -572,10 +572,10 @@ class ModuleEmitter : public EmitterBase {
 public:
   explicit ModuleEmitter(VerilogEmitterState &state) : EmitterBase(state) {}
 
-  void emitRTLModule(RTLModuleOp module);
-  void prepareRTLModule(Block &block);
-  void emitRTLExternModule(RTLModuleExternOp module);
-  void emitRTLGeneratedModule(RTLModuleGeneratedOp module);
+  void emitHWModule(HWModuleOp module);
+  void prepareHWModule(Block &block);
+  void emitHWExternModule(HWModuleExternOp module);
+  void emitHWGeneratedModule(HWModuleGeneratedOp module);
 
   // Statements.
   void emitStatement(Operation *op);
@@ -1791,7 +1791,7 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
   --numStatementsEmitted; // Count emitted statements manually.
 
   SmallPtrSet<Operation *, 8> ops;
-  RTLModuleOp parent = op->getParentOfType<RTLModuleOp>();
+  HWModuleOp parent = op->getParentOfType<HWModuleOp>();
 
   size_t operandIndex = 0;
   for (ModulePortInfo port : parent.getPorts()) {
@@ -2348,7 +2348,7 @@ void StmtEmitter::emitStatement(Operation *op) {
 
   ++numStatementsEmitted;
 
-  // Handle RTL statements.
+  // Handle HW statements.
   if (succeeded(dispatchStmtVisitor(op)))
     return;
 
@@ -2454,13 +2454,13 @@ void ModuleEmitter::emitStatementBlock(Block &body) {
 // Module Driver
 //===----------------------------------------------------------------------===//
 
-void ModuleEmitter::emitRTLExternModule(RTLModuleExternOp module) {
+void ModuleEmitter::emitHWExternModule(HWModuleExternOp module) {
   auto verilogName = module.getVerilogModuleNameAttr();
   verifyModuleName(module, verilogName);
   os << "// external module " << verilogName.getValue() << "\n\n";
 }
 
-void ModuleEmitter::emitRTLGeneratedModule(RTLModuleGeneratedOp module) {
+void ModuleEmitter::emitHWGeneratedModule(HWModuleGeneratedOp module) {
   auto verilogName = module.getVerilogModuleNameAttr();
   verifyModuleName(module, verilogName);
   os << "// external generated module " << verilogName.getValue() << "\n\n";
@@ -2521,7 +2521,7 @@ static void lowerAlwaysInlineOperation(Operation *op) {
 /// We lower the Merge operation to a wire at the top level along with connects
 /// to it and a ReadInOut.
 static Value lowerMergeOp(MergeOp merge) {
-  auto module = merge->getParentOfType<RTLModuleOp>();
+  auto module = merge->getParentOfType<HWModuleOp>();
   assert(module && "merges should only be in a module");
 
   // Start with the wire at the top level.
@@ -2595,12 +2595,12 @@ static void lowerUsersToTemporaryWire(Operation &op) {
 
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
-void ModuleEmitter::prepareRTLModule(Block &block) {
+void ModuleEmitter::prepareHWModule(Block &block) {
   for (auto &op : llvm::make_early_inc_range(block)) {
     // If the operations has regions, lower each of the regions.
     for (auto &region : op.getRegions()) {
       if (!region.empty())
-        prepareRTLModule(region.front());
+        prepareHWModule(region.front());
     }
 
     // Duplicate "always inline" expression for each of their users and move
@@ -2685,9 +2685,9 @@ void ModuleEmitter::prepareRTLModule(Block &block) {
   }
 }
 
-void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
+void ModuleEmitter::emitHWModule(HWModuleOp module) {
   // Perform lowerings to make it easier to emit the module.
-  prepareRTLModule(*module.getBodyBlock());
+  prepareHWModule(*module.getBodyBlock());
 
   // Add all the ports to the name table.
   SmallVector<ModulePortInfo> portInfo = module.getPorts();
@@ -2864,15 +2864,15 @@ void UnifiedEmitter::emitMLIRModule() {
   state.options.parseFromAttribute(rootOp);
 
   for (auto &op : *rootOp.getBody()) {
-    if (auto rootOp = dyn_cast<RTLModuleOp>(op))
-      ModuleEmitter(state).emitRTLModule(rootOp);
-    else if (auto rootOp = dyn_cast<RTLModuleExternOp>(op))
-      ModuleEmitter(state).emitRTLExternModule(rootOp);
-    else if (auto rootOp = dyn_cast<RTLModuleGeneratedOp>(op))
-      ModuleEmitter(state).emitRTLGeneratedModule(rootOp);
+    if (auto rootOp = dyn_cast<HWModuleOp>(op))
+      ModuleEmitter(state).emitHWModule(rootOp);
+    else if (auto rootOp = dyn_cast<HWModuleExternOp>(op))
+      ModuleEmitter(state).emitHWExternModule(rootOp);
+    else if (auto rootOp = dyn_cast<HWModuleGeneratedOp>(op))
+      ModuleEmitter(state).emitHWGeneratedModule(rootOp);
     else if (auto typedecls = dyn_cast<TypeScopeOp>(op))
       TypeScopeEmitter(state).emitTypeScopeBlock(*typedecls.getBodyBlock());
-    else if (isa<RTLGeneratorSchemaOp>(op)) { /* Empty */
+    else if (isa<HWGeneratorSchemaOp>(op)) { /* Empty */
     } else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) ||
                isa<IfDefProceduralOp>(op))
       ModuleEmitter(state).emitStatement(&op);
@@ -2927,12 +2927,12 @@ void SplitEmitter::emitMLIRModule() {
   // business that needs to go into each file.
   for (auto &op : *rootOp.getBody()) {
     TypeSwitch<Operation *>(&op)
-        .Case<RTLModuleOp, InterfaceOp>([&](auto &) {
+        .Case<HWModuleOp, InterfaceOp>([&](auto &) {
           moduleOps.push_back({&op, perFileOps.size(), {}});
         })
         .Case<VerbatimOp, IfDefProceduralOp, TypeScopeOp>(
             [&](auto &) { perFileOps.push_back(&op); })
-        .Case<RTLGeneratorSchemaOp, RTLModuleExternOp>([&](auto &) {})
+        .Case<HWGeneratorSchemaOp, HWModuleExternOp>([&](auto &) {})
         .Default([&](auto *) {
           op.emitError("unknown operation");
           encounteredError = true;
@@ -2952,10 +2952,10 @@ void SplitEmitter::emitModule(const LoweringOptions &options,
   // Given the operation, determine the file stem name and how to emit it.
   std::function<void(VerilogEmitterState &)> emit;
 
-  if (auto module = dyn_cast<RTLModuleOp>(op)) {
+  if (auto module = dyn_cast<HWModuleOp>(op)) {
     mod.filename = module.getNameAttr().getValue();
     emit = [=](VerilogEmitterState &state) {
-      ModuleEmitter(state).emitRTLModule(module);
+      ModuleEmitter(state).emitHWModule(module);
     };
   } else if (auto intfOp = dyn_cast<InterfaceOp>(op)) {
     mod.filename = intfOp.sym_name();
@@ -3058,6 +3058,6 @@ void circt::registerToVerilogTranslation() {
         return exportVerilog(module, os);
       },
       [](DialectRegistry &registry) {
-        registry.insert<CombDialect, RTLDialect, SVDialect>();
+        registry.insert<CombDialect, HWDialect, SVDialect>();
       });
 }

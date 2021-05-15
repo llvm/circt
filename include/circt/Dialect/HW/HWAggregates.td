@@ -15,7 +15,7 @@
 // Packed Array Processing Operations
 //===----------------------------------------------------------------------===//
 
-def ArrayCreateOp : RTLOp<"array_create", [NoSideEffect, SameTypeOperands]> {
+def ArrayCreateOp : HWOp<"array_create", [NoSideEffect, SameTypeOperands]> {
   let summary = "Create an array from values";
   let description = [{
     Creates an array from a variable set of values. One or more values must be
@@ -26,10 +26,10 @@ def ArrayCreateOp : RTLOp<"array_create", [NoSideEffect, SameTypeOperands]> {
     %array = rtl.array_create %a, %b, %c : (i4)
     ```
 
-    See the RTL-SV rationale document for details on operand ordering.
+    See the HW-SV rationale document for details on operand ordering.
   }];
 
-  let arguments = (ins Variadic<RTLNonInOutType>:$inputs);
+  let arguments = (ins Variadic<HWNonInOutType>:$inputs);
   let results = (outs ArrayType:$result);
 
   let verifier = [{
@@ -47,7 +47,7 @@ def ArrayCreateOp : RTLOp<"array_create", [NoSideEffect, SameTypeOperands]> {
   ];
 }
 
-def ArrayConcatOp : RTLOp<"array_concat", [NoSideEffect]> {
+def ArrayConcatOp : HWOp<"array_concat", [NoSideEffect]> {
   let summary = "Concatenate some arrays";
   let description = [{
     Creates an array by concatenating a variable set of arrays. One or more
@@ -59,7 +59,7 @@ def ArrayConcatOp : RTLOp<"array_concat", [NoSideEffect]> {
     // %array is !rtl.array<11 x i4>
     ```
 
-    See the RTL-SV rationale document for details on operand ordering.
+    See the HW-SV rationale document for details on operand ordering.
   }];
 
   let arguments = (ins Variadic<ArrayType>:$inputs);
@@ -75,7 +75,7 @@ def ArrayConcatOp : RTLOp<"array_concat", [NoSideEffect]> {
   ];
 }
 
-def ArraySliceOp : RTLOp<"array_slice", [NoSideEffect]> {
+def ArraySliceOp : HWOp<"array_slice", [NoSideEffect]> {
   let summary = "Get a range of values from an array";
   let description = [{
     Extracts a sub-range from an array. The range is from `lowIndex` to
@@ -101,7 +101,7 @@ def ArraySliceOp : RTLOp<"array_slice", [NoSideEffect]> {
     behavior.
   }];
 
-  let arguments = (ins ArrayType:$input, RTLIntegerType:$lowIndex);
+  let arguments = (ins ArrayType:$input, HWIntegerType:$lowIndex);
   let results = (outs ArrayType:$dst);
   let verifier = [{
     unsigned inputSize = input().getType().cast<ArrayType>().getSize();
@@ -132,12 +132,12 @@ class ArrayElementTypeConstraint<string result, string input>
                    "$_self.cast<ArrayType>().getElementType()">;
 
 // rtl.array_get does not work with unpacked arrays.
-def ArrayGetOp : RTLOp<"array_get",
+def ArrayGetOp : HWOp<"array_get",
     [NoSideEffect, IndexBitWidthConstraint<"index", "input">,
      ArrayElementTypeConstraint<"result", "input">]> {
   let summary = "Get the value in an array at the specified index";
-  let arguments = (ins ArrayType:$input, RTLIntegerType:$index);
-  let results = (outs RTLNonInOutType:$result);
+  let arguments = (ins ArrayType:$input, HWIntegerType:$index);
+  let results = (outs HWNonInOutType:$result);
 
   let assemblyFormat = [{
     $input`[`$index`]` attr-dict `:` type($input)
@@ -152,9 +152,9 @@ def ArrayGetOp : RTLOp<"array_get",
 // Structure Processing Operations
 //===----------------------------------------------------------------------===//
 
-def StructCreateOp : RTLOp<"struct_create", [NoSideEffect]> {
+def StructCreateOp : HWOp<"struct_create", [NoSideEffect]> {
   let summary = "Create a struct from constituent parts.";
-  let arguments = (ins Variadic<RTLNonInOutType>:$input);
+  let arguments = (ins Variadic<HWNonInOutType>:$input);
   let results = (outs StructType:$result);
 
   let parser = "return ::parse$cppClass(parser, result);";
@@ -162,11 +162,11 @@ def StructCreateOp : RTLOp<"struct_create", [NoSideEffect]> {
 }
 
 // Extract a range of bits from the specified input.
-def StructExtractOp : RTLOp<"struct_extract", [NoSideEffect]> {
+def StructExtractOp : HWOp<"struct_extract", [NoSideEffect]> {
   let summary = "Extract a named field from a struct.";
 
   let arguments = (ins StructType:$input, StrAttr:$field);
-  let results = (outs RTLNonInOutType:$result);
+  let results = (outs HWNonInOutType:$result);
 
   let parser = "return ::parse$cppClass(parser, result);";
   let printer = "return ::print(p, *this);";
@@ -177,22 +177,22 @@ def StructExtractOp : RTLOp<"struct_extract", [NoSideEffect]> {
 }
 
 // Extract a range of bits from the specified input.
-def StructInjectOp : RTLOp<"struct_inject", [NoSideEffect, 
+def StructInjectOp : HWOp<"struct_inject", [NoSideEffect, 
                            AllTypesMatch<["input", "result"]>]> {
   let summary = "Inject a value into a named field of a struct.";
 
   let arguments = (ins StructType:$input, StrAttr:$field,
-                   RTLNonInOutType:$newValue);
+                   HWNonInOutType:$newValue);
   let results = (outs StructType:$result);
 
   let parser = "return ::parse$cppClass(parser, result);";
   let printer = "return ::print(p, *this);";
 }
 
-def StructExplodeOp : RTLOp<"struct_explode", [NoSideEffect]> {
+def StructExplodeOp : HWOp<"struct_explode", [NoSideEffect]> {
   let summary = "Expand a struct into its constituent parts.";
   let arguments = (ins StructType:$input);
-  let results = (outs Variadic<RTLNonInOutType>:$result);
+  let results = (outs Variadic<HWNonInOutType>:$result);
    let parser = "return ::parse$cppClass(parser, result);";
    let printer = "return ::print(p, *this);";
  }
@@ -201,7 +201,7 @@ def StructExplodeOp : RTLOp<"struct_explode", [NoSideEffect]> {
 // Union operations
 //===----------------------------------------------------------------------===//
 
-def UnionCreateOp : RTLOp<"union_create", [NoSideEffect]> {
+def UnionCreateOp : HWOp<"union_create", [NoSideEffect]> {
   let summary = "Create a union with the specified value.";
   let description = [{
     Create a union with the value 'input', which can then be accessed via the
@@ -213,14 +213,14 @@ def UnionCreateOp : RTLOp<"union_create", [NoSideEffect]> {
     ```
   }];
 
-  let arguments = (ins StrAttr:$field, RTLNonInOutType:$input);
+  let arguments = (ins StrAttr:$field, HWNonInOutType:$input);
   let results = (outs UnionType:$result);
 
   let parser = "return ::parse$cppClass(parser, result);";
   let printer = "return ::print(p, *this);";
 }
 
-def UnionExtractOp : RTLOp<"union_extract", [NoSideEffect]> {
+def UnionExtractOp : HWOp<"union_extract", [NoSideEffect]> {
   let summary = "Get a union member.";
   let description = [{
     Get the value of a union, interpreting it as the type of the specified
@@ -235,7 +235,7 @@ def UnionExtractOp : RTLOp<"union_extract", [NoSideEffect]> {
   }];
 
   let arguments = (ins UnionType:$input, StrAttr:$field);
-  let results = (outs RTLNonInOutType:$result);
+  let results = (outs HWNonInOutType:$result);
 
   let parser = "return ::parse$cppClass(parser, result);";
   let printer = "return ::print(p, *this);";
@@ -246,7 +246,7 @@ def UnionExtractOp : RTLOp<"union_extract", [NoSideEffect]> {
 //===----------------------------------------------------------------------===//
 
 def ConstantOp
- : RTLOp<"constant",
+ : HWOp<"constant",
           [NoSideEffect, ConstantLike, FirstAttrDerivedResultType,
            DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   let summary = "Produce a constant value";
@@ -259,7 +259,7 @@ def ConstantOp
     }];
 
   let arguments = (ins APIntAttr:$value);
-  let results = (outs RTLIntegerType:$result);
+  let results = (outs HWIntegerType:$result);
 
   let parser = "return parse$cppClass(parser, result);";
   let printer = "print$cppClass(p, *this);";
@@ -290,14 +290,14 @@ def ConstantOp
 def KnownBitWidthType : Type<CPred<[{getBitWidth($_self) != -1}]>,
   "Type wherein the bitwidth in hardware is known">;
 
-def BitcastOp: RTLOp<"bitcast", [NoSideEffect]> {
+def BitcastOp: HWOp<"bitcast", [NoSideEffect]> {
   let summary = [{
     Reinterpret one value to another value of the same size and
     potentially different type.
   }];
 
   let description = [{
-    See the RTL-SV rationale document for a longer description, including an
+    See the HW-SV rationale document for a longer description, including an
     example.
   }];
 

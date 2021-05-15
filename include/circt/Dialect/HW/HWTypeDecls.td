@@ -14,7 +14,7 @@
 // Declaration operations
 //===----------------------------------------------------------------------===//
 
-def TypeScopeOp : RTLOp<"type_scope",
+def TypeScopeOp : HWOp<"type_scope",
       [Symbol, SymbolTable, SingleBlock, NoTerminator, NoRegionArguments,
       HasParent<"mlir::ModuleOp">]> {
   let summary = "Type declaration wrapper.";
@@ -35,7 +35,7 @@ def TypeScopeOp : RTLOp<"type_scope",
   }];
 }
 
-def TypedeclOp : RTLOp<"typedecl", [Symbol, HasParent<"TypeScopeOp">]> {
+def TypedeclOp : HWOp<"typedecl", [Symbol, HasParent<"TypeScopeOp">]> {
   let summary = "Type declaration.";
   let description = "Associate a symbolic name with a type.";
 

@@ -208,8 +208,8 @@ class ModuleLike:
     self.backedge_builder.remove(backedge)
 
 
-class RTLModuleOp(ModuleLike):
-  """Specialization for the RTL module op class."""
+class HWModuleOp(ModuleLike):
+  """Specialization for the HW module op class."""
 
   @property
   def body(self):
@@ -233,15 +233,15 @@ class RTLModuleOp(ModuleLike):
     return self.body.blocks[0]
 
   @classmethod
-  def from_py_func(RTLModuleOp,
+  def from_py_func(HWModuleOp,
                    *inputs: Type,
                    results: Optional[Sequence[Type]] = None,
                    name: Optional[str] = None):
-    """Decorator to define an MLIR RTLModuleOp specified as a python function.
+    """Decorator to define an MLIR HWModuleOp specified as a python function.
     Requires that an `mlir.ir.InsertionPoint` and `mlir.ir.Location` are
     active for the current thread (i.e. established in a `with` block).
     When applied as a decorator to a Python function, an entry block will
-    be constructed for the RTLModuleOp with types as specified in `*inputs`. The
+    be constructed for the HWModuleOp with types as specified in `*inputs`. The
     block arguments will be passed positionally to the Python function. In
     addition, if the Python function accepts keyword arguments generally or
     has a corresponding keyword argument, the following will be passed:
@@ -250,7 +250,7 @@ class RTLModuleOp(ModuleLike):
     can be overriden by passing the `name` argument to the decorator.
     If `results` is not specified, then the decorator will implicitly
     insert a `OutputOp` with the `Value`'s returned from the decorated
-    function. It will also set the `RTLModuleOp` type with the actual return
+    function. It will also set the `HWModuleOp` type with the actual return
     value types. If `results` is specified, then the decorated function
     must return `None` and no implicit `OutputOp` is added (nor are the result
     types updated). The implicit behavior is intended for simple, single-block
@@ -275,7 +275,7 @@ class RTLModuleOp(ModuleLike):
                                           param.kind == param.KEYWORD_ONLY):
           has_arg_module_op = True
 
-      # Emit the RTLModuleOp.
+      # Emit the HWModuleOp.
       implicit_return = results is None
       symbol_name = name or f.__name__
       input_names = [v.name for v in sig.parameters.values()]
@@ -288,7 +288,7 @@ class RTLModuleOp(ModuleLike):
         result_types = [port_type for port_type in results]
         output_ports = zip([None] * len(result_types), result_types)
 
-      module_op = RTLModuleOp(name=symbol_name,
+      module_op = HWModuleOp(name=symbol_name,
                               input_ports=input_ports,
                               output_ports=output_ports)
       with InsertionPoint(module_op.add_entry_block()):
@@ -341,6 +341,6 @@ class RTLModuleOp(ModuleLike):
     return decorator
 
 
-class RTLModuleExternOp(ModuleLike):
-  """Specialization for the RTL module op class."""
+class HWModuleExternOp(ModuleLike):
+  """Specialization for the HW module op class."""
   pass

@@ -106,7 +106,7 @@ void circt::python::populateDialectESISubmodule(py::module &m) {
   ::registerESIPasses();
 
   m.def("buildWrapper", &pyWrapModule,
-        "Construct an ESI wrapper around RTL module 'op' given a list of "
+        "Construct an ESI wrapper around HW module 'op' given a list of "
         "latency-insensitive ports.",
         py::arg("op"), py::arg("name_list"));
   m.def("channel_type", &channelType,
@@ -115,7 +115,7 @@ void circt::python::populateDialectESISubmodule(py::module &m) {
   py::class_<System>(m, "CppSystem")
       .def(py::init<MlirModule>())
       .def("load_mlir", &System::loadMlir, "Load an MLIR assembly file.")
-      .def("lookup", &System::lookup, "Lookup an RTL module and return it.")
+      .def("lookup", &System::lookup, "Lookup an HW module and return it.")
       .def("print_cosim_schema", &System::printCapnpSchema,
            "Print the cosim RPC schema");
 

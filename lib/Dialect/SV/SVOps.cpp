@@ -837,7 +837,7 @@ LogicalResult WireOp::canonicalize(WireOp op, PatternRewriter &rewriter) {
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
 static LogicalResult verifyWireOp(WireOp op) {
-  if (!isa<rtl::RTLModuleOp>(op->getParentOp()))
+  if (!isa<rtl::HWModuleOp>(op->getParentOp()))
     return op.emitError("sv.wire must not be in an always or initial block");
   return success();
 }
@@ -859,7 +859,7 @@ void ReadInOutOp::build(OpBuilder &builder, OperationState &result,
 void ArrayIndexInOutOp::build(OpBuilder &builder, OperationState &result,
                               Value input, Value index) {
   auto resultType = input.getType().cast<InOutType>().getElementType();
-  resultType = getAnyRTLArrayElementType(resultType);
+  resultType = getAnyHWArrayElementType(resultType);
   assert(resultType && "input should have 'inout of an array' type");
   build(builder, result, InOutType::get(resultType), input, index);
 }

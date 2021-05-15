@@ -1946,7 +1946,7 @@ static LogicalResult verifyAnalogInOutCastOp(AnalogInOutCastOp cast) {
 // Conversions to/from structs in the standard dialect.
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyRTLStructCastOp(RTLStructCastOp cast) {
+static LogicalResult verifyHWStructCastOp(HWStructCastOp cast) {
   // We must have a bundle and a struct, with matching pairwise fields
   BundleType bundleType;
   rtl::StructType structType;

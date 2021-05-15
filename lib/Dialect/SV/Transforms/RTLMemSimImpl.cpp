@@ -1,4 +1,4 @@
-//===- RTLMemSimImpl.cpp - RTL Memory Implementation Pass -----------------===//
+//===- HWMemSimImpl.cpp - HW Memory Implementation Pass -------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -19,7 +19,7 @@
 using namespace circt;
 
 //===----------------------------------------------------------------------===//
-// RTLMemSimImplPass Pass
+// HWMemSimImplPass Pass
 //===----------------------------------------------------------------------===//
 
 namespace {
@@ -36,15 +36,15 @@ struct FirMemory {
 } // end anonymous namespace
 
 namespace {
-struct RTLMemSimImplPass : public sv::RTLMemSimImplBase<RTLMemSimImplPass> {
+struct HWMemSimImplPass : public sv::HWMemSimImplBase<HWMemSimImplPass> {
   void runOnOperation() override;
 
 private:
-  void generateMemory(rtl::RTLModuleOp op, FirMemory mem);
+  void generateMemory(rtl::HWModuleOp op, FirMemory mem);
 };
 } // end anonymous namespace
 
-static FirMemory analyzeMemOp(rtl::RTLModuleGeneratedOp op) {
+static FirMemory analyzeMemOp(rtl::HWModuleGeneratedOp op) {
   FirMemory mem;
   mem.depth = op->getAttrOfType<IntegerAttr>("depth").getInt();
   mem.numReadPorts = op->getAttrOfType<IntegerAttr>("numReadPorts").getUInt();
@@ -76,7 +76,7 @@ static Value addPipelineStages(ImplicitLocOpBuilder &b, size_t stages,
   return data;
 }
 
-void RTLMemSimImplPass::generateMemory(rtl::RTLModuleOp op, FirMemory mem) {
+void HWMemSimImplPass::generateMemory(rtl::HWModuleOp op, FirMemory mem) {
   ImplicitLocOpBuilder b(UnknownLoc::get(&getContext()), op.getBody());
 
   // Create a register for the memory.
@@ -174,17 +174,17 @@ void RTLMemSimImplPass::generateMemory(rtl::RTLModuleOp op, FirMemory mem) {
   outputOp->setOperands(outputs);
 }
 
-void RTLMemSimImplPass::runOnOperation() {
+void HWMemSimImplPass::runOnOperation() {
   auto topModule = getOperation().getBody();
 
-  SmallVector<rtl::RTLModuleGeneratedOp> toErase;
+  SmallVector<rtl::HWModuleGeneratedOp> toErase;
   bool anythingChanged = false;
 
   for (auto op : llvm::make_early_inc_range(
-           topModule->getOps<rtl::RTLModuleGeneratedOp>())) {
-    auto oldModule = cast<rtl::RTLModuleGeneratedOp>(op);
+           topModule->getOps<rtl::HWModuleGeneratedOp>())) {
+    auto oldModule = cast<rtl::HWModuleGeneratedOp>(op);
     auto gen = oldModule.generatorKind();
-    auto genOp = cast<rtl::RTLGeneratorSchemaOp>(
+    auto genOp = cast<rtl::HWGeneratorSchemaOp>(
         SymbolTable::lookupSymbolIn(getOperation(), gen));
 
     if (genOp.descriptor() == "FIRRTL_Memory") {
@@ -192,7 +192,7 @@ void RTLMemSimImplPass::runOnOperation() {
 
       OpBuilder builder(oldModule);
       auto nameAttr = builder.getStringAttr(oldModule.getName());
-      auto newModule = builder.create<rtl::RTLModuleOp>(
+      auto newModule = builder.create<rtl::HWModuleOp>(
           oldModule.getLoc(), nameAttr, oldModule.getPorts());
       generateMemory(newModule, mem);
       oldModule.erase();
@@ -204,6 +204,6 @@ void RTLMemSimImplPass::runOnOperation() {
     markAllAnalysesPreserved();
 }
 
-std::unique_ptr<Pass> circt::sv::createRTLMemSimImplPass() {
-  return std::make_unique<RTLMemSimImplPass>();
+std::unique_ptr<Pass> circt::sv::createHWMemSimImplPass() {
+  return std::make_unique<HWMemSimImplPass>();
 }

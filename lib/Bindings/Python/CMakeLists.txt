@@ -15,13 +15,13 @@ add_mlir_python_extension(CIRCTBindingsPythonExtension _circt
   SOURCES
     CIRCTModule.cpp
     ESIModule.cpp
-    RTLModule.cpp
+    HWModule.cpp
     MSFTModule.cpp
   LINK_LIBS
     CIRCTCAPIComb
     CIRCTCAPIESI
     CIRCTCAPIMSFT
-    CIRCTCAPIRTL
+    CIRCTCAPIHW
     CIRCTCAPISeq
     CIRCTCAPISV
     CIRCTCAPIExportVerilog
@@ -107,10 +107,10 @@ add_mlir_dialect_python_bindings(CIRCTBindingsPythonESIOps
   DIALECT_NAME esi)
 add_dependencies(CIRCTBindingsPythonSources CIRCTBindingsPythonESIOps)
 
-add_mlir_dialect_python_bindings(CIRCTBindingsPythonRTLOps
-  TD_FILE RTLOps.td
+add_mlir_dialect_python_bindings(CIRCTBindingsPythonHWOps
+  TD_FILE HWOps.td
   DIALECT_NAME rtl)
-add_dependencies(CIRCTBindingsPythonSources CIRCTBindingsPythonRTLOps)
+add_dependencies(CIRCTBindingsPythonSources CIRCTBindingsPythonHWOps)
 
 add_mlir_dialect_python_bindings(CIRCTBindingsPythonSeqOps
   TD_FILE SeqOps.td

@@ -30,20 +30,20 @@ with Context() as ctx, Location.unknown():
   with InsertionPoint(m.body):
     # CHECK: rtl.module @MyWidget(%my_input: i32) -> (%my_output: i32)
     # CHECK:   rtl.output %my_input : i32
-    op = rtl.RTLModuleOp(name='MyWidget',
+    op = rtl.HWModuleOp(name='MyWidget',
                          input_ports=[('my_input', i32)],
                          output_ports=[('my_output', i32)],
                          body_builder=lambda module: rtl.OutputOp(
                              [module.entry_block.arguments[0]]))
 
     # CHECK: rtl.module.extern @FancyThing(%input0: i32) -> (%output0: i32)
-    extern = rtl.RTLModuleExternOp(name="FancyThing",
+    extern = rtl.HWModuleExternOp(name="FancyThing",
                                    input_ports=[("input0", i32)],
                                    output_ports=[("output0", i32)])
 
     # CHECK: rtl.module @swap(%a: i32, %b: i32) -> (%{{.+}}: i32, %{{.+}}: i32)
     # CHECK:   rtl.output %b, %a : i32, i32
-    @rtl.RTLModuleOp.from_py_func(i32, i32)
+    @rtl.HWModuleOp.from_py_func(i32, i32)
     def swap(a, b):
       return b, a
 
@@ -51,23 +51,23 @@ with Context() as ctx, Location.unknown():
     # CHECK:   %[[a0:.+]], %[[b0:.+]] = rtl.instance "" @swap(%a, %b)
     # CHECK:   %[[a1:.+]], %[[b1:.+]] = rtl.instance "" @swap(%[[a0]], %[[b0]])
     # CHECK:   rtl.output %[[a1:.+]], %[[b1:.+]] : i32, i32
-    @rtl.RTLModuleOp.from_py_func(i32, i32)
+    @rtl.HWModuleOp.from_py_func(i32, i32)
     def top(a, b):
       a, b = swap(a, b)
       a, b = swap(a, b)
       return a, b
 
-    one_input = rtl.RTLModuleOp(
+    one_input = rtl.HWModuleOp(
         name="one_input",
         input_ports=[("a", i32)],
         body_builder=lambda m: rtl.OutputOp([]),
     )
-    two_inputs = rtl.RTLModuleOp(
+    two_inputs = rtl.HWModuleOp(
         name="two_inputs",
         input_ports=[("a", i32), ("b", i32)],
         body_builder=lambda m: rtl.OutputOp([]),
     )
-    one_output = rtl.RTLModuleOp(
+    one_output = rtl.HWModuleOp(
         name="one_output",
         output_ports=[("a", i32)],
         body_builder=lambda m: rtl.OutputOp(
@@ -95,12 +95,12 @@ with Context() as ctx, Location.unknown():
 
       rtl.OutputOp([])
 
-    instance_builder_tests = rtl.RTLModuleOp(name="instance_builder_tests",
+    instance_builder_tests = rtl.HWModuleOp(name="instance_builder_tests",
                                              body_builder=instance_builder_body)
 
     # CHECK: rtl.module @block_args_test(%[[PORT_NAME:.+]]: i32) ->
     # CHECK: rtl.output %[[PORT_NAME]]
-    rtl.RTLModuleOp(name="block_args_test",
+    rtl.HWModuleOp(name="block_args_test",
                     input_ports=[("foo", i32)],
                     output_ports=[("bar", i32)],
                     body_builder=lambda module: rtl.OutputOp([module.foo]))

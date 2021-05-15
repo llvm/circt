@@ -81,6 +81,6 @@ PYBIND11_MODULE(_circt, m) {
   circt::python::populateDialectESISubmodule(esi);
   py::module msft = m.def_submodule("msft", "MSFT API");
   circt::python::populateDialectMSFTSubmodule(msft);
-  py::module rtl = m.def_submodule("_rtl", "RTL API");
-  circt::python::populateDialectRTLSubmodule(rtl);
+  py::module rtl = m.def_submodule("_rtl", "HW API");
+  circt::python::populateDialectHWSubmodule(rtl);
 }

@@ -68,10 +68,10 @@ public:
   /// Write out the schema in its entirety.
   mlir::LogicalResult write(llvm::raw_ostream &os) const;
 
-  /// Build an RTL/SV dialect capnp encoder for this type.
+  /// Build an HW/SV dialect capnp encoder for this type.
   mlir::Value buildEncoder(mlir::OpBuilder &, mlir::Value clk,
                            mlir::Value valid, mlir::Value rawData) const;
-  /// Build an RTL/SV dialect capnp decoder for this type.
+  /// Build an HW/SV dialect capnp decoder for this type.
   mlir::Value buildDecoder(mlir::OpBuilder &, mlir::Value clk,
                            mlir::Value valid, mlir::Value capnpData) const;
 
@@ -81,8 +81,8 @@ private:
   std::shared_ptr<detail::TypeSchemaImpl> s;
 
   /// Cache of the decode/encode modules;
-  static llvm::SmallDenseMap<Type, rtl::RTLModuleOp> decImplMods;
-  static llvm::SmallDenseMap<Type, rtl::RTLModuleOp> encImplMods;
+  static llvm::SmallDenseMap<Type, rtl::HWModuleOp> decImplMods;
+  static llvm::SmallDenseMap<Type, rtl::HWModuleOp> encImplMods;
 };
 
 } // namespace capnp

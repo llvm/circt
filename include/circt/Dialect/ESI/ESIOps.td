@@ -97,10 +97,10 @@ def CosimEndpoint : ESI_Physical_Op<"cosim", []> {
 
 def RtlBitArray : Type<CPred<"$_self.isa<::circt::rtl::ArrayType>()"
  " && $_self.cast<::circt::rtl::ArrayType>().getElementType() =="
- "   ::mlir::IntegerType::get($_self.getContext(), 1)">, "an RTL bit array">;
+ "   ::mlir::IntegerType::get($_self.getContext(), 1)">, "an HW bit array">;
 
 def CapnpDecode : ESI_Physical_Op<"decode.capnp", [NoSideEffect]> {
-  let summary = "Translate bits in Cap'nProto messages to RTL typed data";
+  let summary = "Translate bits in Cap'nProto messages to HW typed data";
 
   let arguments = (ins I1:$clk, I1:$valid, RtlBitArray:$capnpBits);
   let results = (outs AnyType:$decodedData);
@@ -111,7 +111,7 @@ def CapnpDecode : ESI_Physical_Op<"decode.capnp", [NoSideEffect]> {
 }
 
 def CapnpEncode : ESI_Physical_Op<"encode.capnp", [NoSideEffect]> {
-  let summary = "Translate RTL typed data to Cap'nProto";
+  let summary = "Translate HW typed data to Cap'nProto";
 
   let arguments = (ins I1:$clk, I1:$valid, AnyType:$dataToEncode);
   let results = (outs RtlBitArray:$capnpBits);

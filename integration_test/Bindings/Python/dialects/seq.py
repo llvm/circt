@@ -19,7 +19,7 @@ with Context() as ctx, Location.unknown():
   m = Module.create()
   with InsertionPoint(m.body):
 
-    @rtl.RTLModuleOp.from_py_func(i1, i1)
+    @rtl.HWModuleOp.from_py_func(i1, i1)
     def top(clk, rstn):
       # CHECK: %[[RESET_VAL:.+]] = rtl.constant 0
       reg_reset = rtl.ConstantOp(i32, IntegerAttr.get(i32, 0)).result

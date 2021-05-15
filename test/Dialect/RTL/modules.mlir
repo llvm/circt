@@ -25,7 +25,7 @@ module {
   // CHECK-NOT: {
 
   rtl.module @A(%d: i1, %e: !rtl.inout<i1>) -> (i1, i1) {
-    // Instantiate @B as a RTL module with result-as-output sementics
+    // Instantiate @B as a HW module with result-as-output sementics
     %r1, %r2 = rtl.instance "b1" @B(%d) : (i1) -> (i1, i1)
     // Instantiate @C with a public symbol on the instance
     %f, %g = rtl.instance "c1" sym @E @C(%d) : (i1) -> (i1, i1)

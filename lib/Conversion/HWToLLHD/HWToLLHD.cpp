@@ -28,7 +28,7 @@ using namespace rtl;
 using namespace comb;
 
 //===----------------------------------------------------------------------===//
-// RTL to LLHD Conversion Pass
+// HW to LLHD Conversion Pass
 //===----------------------------------------------------------------------===//
 
 namespace {
@@ -37,41 +37,41 @@ struct HWToLLHDPass : public ConvertHWToLLHDBase<HWToLLHDPass> {
 };
 
 /// A helper type converter class that automatically populates the relevant
-/// materializations and type conversions for converting RTL to LLHD.
+/// materializations and type conversions for converting HW to LLHD.
 struct HWToLLHDTypeConverter : public TypeConverter {
   HWToLLHDTypeConverter();
 };
 } // namespace
 
-/// Create a RTL to LLHD conversion pass.
+/// Create a HW to LLHD conversion pass.
 std::unique_ptr<OperationPass<ModuleOp>> circt::createConvertHWToLLHDPass() {
   return std::make_unique<HWToLLHDPass>();
 }
 
 /// Forward declare conversion patterns.
-struct ConvertRTLModule;
+struct ConvertHWModule;
 struct ConvertOutput;
 struct ConvertInstance;
 
-/// This is the main entrypoint for the RTL to LLHD conversion pass.
+/// This is the main entrypoint for the HW to LLHD conversion pass.
 void HWToLLHDPass::runOnOperation() {
   MLIRContext &context = getContext();
   ModuleOp module = getOperation();
 
-  // Mark the RTL structure ops as illegal such that they get rewritten.
+  // Mark the HW structure ops as illegal such that they get rewritten.
   ConversionTarget target(context);
   target.addLegalDialect<LLHDDialect>();
   target.addLegalDialect<CombDialect>();
-  target.addIllegalOp<RTLModuleOp>();
+  target.addIllegalOp<HWModuleOp>();
   target.addIllegalOp<OutputOp>();
   target.addIllegalOp<InstanceOp>();
 
   // Rewrite `rtl.module`, `rtl.output`, and `rtl.instance`.
   HWToLLHDTypeConverter typeConverter;
   RewritePatternSet patterns(&context);
-  mlir::populateFunctionLikeTypeConversionPattern<RTLModuleOp>(patterns,
-                                                               typeConverter);
-  patterns.add<ConvertRTLModule>(&context);
+  mlir::populateFunctionLikeTypeConversionPattern<HWModuleOp>(patterns,
+                                                              typeConverter);
+  patterns.add<ConvertHWModule>(&context);
   patterns.add<ConvertInstance>(&context);
   patterns.add<ConvertOutput>(&context);
   if (failed(applyPartialConversion(module, target, std::move(patterns))))
@@ -102,15 +102,15 @@ HWToLLHDTypeConverter::HWToLLHDTypeConverter() {
 // Convert structure operations
 //===----------------------------------------------------------------------===//
 
-/// This works on each RTL module, creates corresponding entities, moves the
+/// This works on each HW module, creates corresponding entities, moves the
 /// bodies of the modules into the entities, and converts the bodies.
-struct ConvertRTLModule : public OpConversionPattern<RTLModuleOp> {
+struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(RTLModuleOp module, ArrayRef<Value> operands,
+  matchAndRewrite(HWModuleOp module, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
-    // Collect the RTL module's port types.
+    // Collect the HW module's port types.
     FunctionType moduleType = module.getType();
     unsigned numInputs = moduleType.getNumInputs();
     TypeRange moduleInputs = moduleType.getInputs();
@@ -131,7 +131,7 @@ struct ConvertRTLModule : public OpConversionPattern<RTLModuleOp> {
     // entities, so this conversion does not support parameterized modules.
     auto entity = rewriter.create<EntityOp>(module.getLoc(), numInputs);
 
-    // Inline the RTL module body into the entity body.
+    // Inline the HW module body into the entity body.
     Region &entityBodyRegion = entity.getBodyRegion();
     rewriter.inlineRegionBefore(module.getBodyRegion(), entityBodyRegion,
                                 entityBodyRegion.end());
@@ -145,7 +145,7 @@ struct ConvertRTLModule : public OpConversionPattern<RTLModuleOp> {
       entityBodyRegion.addArguments(moduleOutputs);
     });
 
-    // Erase the RTL module.
+    // Erase the HW module.
     rewriter.eraseOp(module);
 
     return success();
@@ -207,7 +207,7 @@ struct ConvertOutput : public OpConversionPattern<OutputOp> {
 };
 
 /// This works on each instance op, converting them to the LLHD dialect. If the
-/// RTL instance ops were defined in terms of the CallableOpInterface, we could
+/// HW instance ops were defined in terms of the CallableOpInterface, we could
 /// generalize this in terms of the upstream pattern to rewrite call ops' types.
 struct ConvertInstance : public OpConversionPattern<InstanceOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -263,9 +263,9 @@ struct ConvertInstance : public OpConversionPattern<InstanceOp> {
       arguments.push_back(sig);
     }
 
-    // RTL instances model output ports as SSA results produced by the op. LLHD
+    // HW instances model output ports as SSA results produced by the op. LLHD
     // instances model output ports as arguments to the op, so we need to find
-    // or create SSA values. For each output port in the RTL instance, try to
+    // or create SSA values. For each output port in the HW instance, try to
     // find a signal that can be used directly, or else create a new signal.
     SmallVector<Value, 4> resultSigs;
     SmallVector<Value, 4> resultValues;

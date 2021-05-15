@@ -1,4 +1,4 @@
-//===- RTLCleanup.cpp - RTL Cleanup Pass ----------------------------------===//
+//===- HWCleanup.cpp - HW Cleanup Pass ------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -8,7 +8,7 @@
 //
 // This transformation pass performs various cleanups and canonicalization
 // transformations for rtl.module bodies.  This is intended to be used early in
-// the RTL/SV pipeline to expose optimization opportunities that require global
+// the HW/SV pipeline to expose optimization opportunities that require global
 // analysis.
 //
 //===----------------------------------------------------------------------===//
@@ -69,11 +69,11 @@ static void mergeRegions(Region *region1, Region *region2) {
 }
 
 //===----------------------------------------------------------------------===//
-// RTLCleanupPass
+// HWCleanupPass
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct RTLCleanupPass : public sv::RTLCleanupBase<RTLCleanupPass> {
+struct HWCleanupPass : public sv::HWCleanupBase<HWCleanupPass> {
   void runOnOperation() override;
 
   void runOnRegionsInOp(Operation &op);
@@ -100,7 +100,7 @@ private:
 };
 } // end anonymous namespace
 
-void RTLCleanupPass::runOnOperation() {
+void HWCleanupPass::runOnOperation() {
   // Keeps track if anything changed during this pass, used to determine if
   // the analyses were preserved.
   anythingChanged = false;
@@ -114,7 +114,7 @@ void RTLCleanupPass::runOnOperation() {
 
 /// Recursively process all of the regions in the specified op, dispatching to
 /// graph or procedural processing as appropriate.
-void RTLCleanupPass::runOnRegionsInOp(Operation &op) {
+void HWCleanupPass::runOnRegionsInOp(Operation &op) {
   if (op.hasTrait<sv::ProceduralRegion>()) {
     for (auto &region : op.getRegions())
       runOnProceduralRegion(region, /*shallow=*/false);
@@ -126,7 +126,7 @@ void RTLCleanupPass::runOnRegionsInOp(Operation &op) {
 
 /// Run simplifications on the specified graph region.  If shallow is true, then
 /// we only look at the specified region, we don't recurse into subregions.
-void RTLCleanupPass::runOnGraphRegion(Region &region, bool shallow) {
+void HWCleanupPass::runOnGraphRegion(Region &region, bool shallow) {
   if (region.getBlocks().size() != 1)
     return;
   Block &body = region.front();
@@ -204,7 +204,7 @@ void RTLCleanupPass::runOnGraphRegion(Region &region, bool shallow) {
 
 /// Run simplifications on the specified procedural region.  If shallow is true,
 /// then we only look at the specified region, we don't recurse into subregions.
-void RTLCleanupPass::runOnProceduralRegion(Region &region, bool shallow) {
+void HWCleanupPass::runOnProceduralRegion(Region &region, bool shallow) {
   if (region.getBlocks().size() != 1)
     return;
   Block &body = region.front();
@@ -259,6 +259,6 @@ void RTLCleanupPass::runOnProceduralRegion(Region &region, bool shallow) {
   }
 }
 
-std::unique_ptr<Pass> circt::sv::createRTLCleanupPass() {
-  return std::make_unique<RTLCleanupPass>();
+std::unique_ptr<Pass> circt::sv::createHWCleanupPass() {
+  return std::make_unique<HWCleanupPass>();
 }

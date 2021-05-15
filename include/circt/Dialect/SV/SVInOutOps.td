@@ -20,7 +20,7 @@ def ConnectOp : SVOp<"connect", [InOutTypeConstraint<"src", "dest">]> {
     ```
     }];
 
-  let arguments = (ins InOutType:$dest, RTLValueType:$src);
+  let arguments = (ins InOutType:$dest, HWValueType:$src);
   let results = (outs);
   let assemblyFormat = "$dest `,` $src  attr-dict `:` type($src)";
 }
@@ -109,7 +109,7 @@ def ReadInOutOp
   let summary = "Get the value of from something of inout type (e.g. a wire or"
                 " inout port) as the value itself.";
   let arguments = (ins InOutType:$input);
-  let results = (outs RTLValueType:$result);
+  let results = (outs HWValueType:$result);
 
   let builders = [
     OpBuilder<(ins "Value":$input)>
@@ -119,14 +119,14 @@ def ReadInOutOp
 }
 
 def InOutArrayType
-  : Type<CPred<"getAnyRTLArrayElementType(getInOutElementType($_self)) "
+  : Type<CPred<"getAnyHWArrayElementType(getInOutElementType($_self)) "
                         "!= Type()">,
          "an inout type with array element", "::circt::rtl::InOutType">;
 
 class InOutIndexConstraint<string value, string inoutValue>
   : TypesMatchWith<"type should be element of inout type",
                    inoutValue, value,
-                   "InOutType::get(getAnyRTLArrayElementType("
+                   "InOutType::get(getAnyHWArrayElementType("
                                             "getInOutElementType($_self)))">;
 
 def ArrayIndexInOutOp
@@ -134,7 +134,7 @@ def ArrayIndexInOutOp
         [NoSideEffect, InOutIndexConstraint<"result", "input">]> {
   let summary = "Index an inout memory to produce an inout element";
   let description = "See SV Spec 11.5.2.";
-  let arguments = (ins InOutArrayType:$input, RTLIntegerType:$index);
+  let arguments = (ins InOutArrayType:$input, HWIntegerType:$index);
   let results = (outs InOutType:$result);
 
   let builders = [

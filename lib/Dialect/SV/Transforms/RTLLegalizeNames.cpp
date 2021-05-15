@@ -1,4 +1,4 @@
-//===- RTLLegalizeNames.cpp - RTL Name Legalization Pass ------------------===//
+//===- HWLegalizeNames.cpp - HW Name Legalization Pass --------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -52,23 +52,23 @@ StringRef NameCollisionResolver::getLegalName(StringAttr originalName) {
 }
 
 //===----------------------------------------------------------------------===//
-// RTLLegalizeNamesPass
+// HWLegalizeNamesPass
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct RTLLegalizeNamesPass
-    : public sv::RTLLegalizeNamesBase<RTLLegalizeNamesPass> {
+struct HWLegalizeNamesPass
+    : public sv::HWLegalizeNamesBase<HWLegalizeNamesPass> {
   void runOnOperation() override;
 
 private:
   bool anythingChanged;
 
-  void runOnModule(rtl::RTLModuleOp module);
+  void runOnModule(rtl::HWModuleOp module);
   void runOnInterface(sv::InterfaceOp intf, mlir::SymbolUserMap &symbolUsers);
 };
 } // end anonymous namespace
 
-void RTLLegalizeNamesPass::runOnOperation() {
+void HWLegalizeNamesPass::runOnOperation() {
   anythingChanged = false;
   ModuleOp root = getOperation();
   mlir::SymbolTableCollection symbolTable;
@@ -84,7 +84,7 @@ void RTLLegalizeNamesPass::runOnOperation() {
   for (auto &op : *root.getBody()) {
     // Note that external modules *often* have name collisions, because they
     // correspond to the same verilog module with different parameters.
-    if (auto extMod = dyn_cast<RTLModuleExternOp>(op))
+    if (auto extMod = dyn_cast<HWModuleExternOp>(op))
       (void)nameResolver.getLegalName(extMod.getVerilogModuleNameAttr());
   }
 
@@ -92,7 +92,7 @@ void RTLLegalizeNamesPass::runOnOperation() {
 
   // Legalize module and interface names.
   for (auto &op : *root.getBody()) {
-    if (!isa<RTLModuleOp>(op) && !isa<InterfaceOp>(op))
+    if (!isa<HWModuleOp>(op) && !isa<InterfaceOp>(op))
       continue;
 
     StringAttr oldName = op.getAttrOfType<StringAttr>(symbolAttrName);
@@ -107,11 +107,11 @@ void RTLLegalizeNamesPass::runOnOperation() {
 
   // Rename individual operations.
   for (auto &op : *root.getBody()) {
-    if (auto module = dyn_cast<RTLModuleOp>(op)) {
+    if (auto module = dyn_cast<HWModuleOp>(op)) {
       runOnModule(module);
     } else if (auto intf = dyn_cast<InterfaceOp>(op)) {
       runOnInterface(intf, symbolUsers);
-    } else if (auto extMod = dyn_cast<RTLModuleExternOp>(op)) {
+    } else if (auto extMod = dyn_cast<HWModuleExternOp>(op)) {
       auto name = extMod.getVerilogModuleName();
       if (!sv::isNameValid(name)) {
         extMod->emitOpError("with invalid name \"" + name + "\"");
@@ -125,7 +125,7 @@ void RTLLegalizeNamesPass::runOnOperation() {
     markAllAnalysesPreserved();
 }
 
-void RTLLegalizeNamesPass::runOnModule(rtl::RTLModuleOp module) {
+void HWLegalizeNamesPass::runOnModule(rtl::HWModuleOp module) {
   NameCollisionResolver nameResolver;
 
   bool changedArgNames = false, changedOutputNames = false;
@@ -174,8 +174,8 @@ void RTLLegalizeNamesPass::runOnModule(rtl::RTLModuleOp module) {
   }
 }
 
-void RTLLegalizeNamesPass::runOnInterface(InterfaceOp interface,
-                                          mlir::SymbolUserMap &symbolUsers) {
+void HWLegalizeNamesPass::runOnInterface(InterfaceOp interface,
+                                         mlir::SymbolUserMap &symbolUsers) {
   NameCollisionResolver localNames;
   auto symbolAttrName = SymbolTable::getSymbolAttrName();
 
@@ -194,6 +194,6 @@ void RTLLegalizeNamesPass::runOnInterface(InterfaceOp interface,
   }
 }
 
-std::unique_ptr<Pass> circt::sv::createRTLLegalizeNamesPass() {
-  return std::make_unique<RTLLegalizeNamesPass>();
+std::unique_ptr<Pass> circt::sv::createHWLegalizeNamesPass() {
+  return std::make_unique<HWLegalizeNamesPass>();
 }

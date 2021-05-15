@@ -1,4 +1,4 @@
-//===- RTLModule.cpp - RTL API pybind module ------------------------------===//
+//===- HWModule.cpp - HW API pybind module --------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -25,8 +25,8 @@ using namespace circt;
 using namespace mlir::python::adaptors;
 
 /// Populate the rtl python module.
-void circt::python::populateDialectRTLSubmodule(py::module &m) {
-  m.doc() = "RTL dialect Python native extension";
+void circt::python::populateDialectHWSubmodule(py::module &m) {
+  m.doc() = "HW dialect Python native extension";
 
   mlir_type_subclass(m, "ArrayType", rtlTypeIsAArrayType)
       .def_staticmethod("get", [](MlirType elementType, intptr_t size) {
@@ -35,7 +35,7 @@ void circt::python::populateDialectRTLSubmodule(py::module &m) {
 
   mlir_type_subclass(m, "StructType", rtlTypeIsAStructType)
       .def_staticmethod("get", [](py::list pyFieldInfos) {
-        llvm::SmallVector<RTLStructFieldInfo> mlirFieldInfos;
+        llvm::SmallVector<HWStructFieldInfo> mlirFieldInfos;
         MlirContext ctx;
 
         // Since we're just passing string refs to the type constructor, copy
@@ -46,7 +46,7 @@ void circt::python::populateDialectRTLSubmodule(py::module &m) {
           auto type = tuple[1].cast<MlirType>();
           ctx = mlirTypeGetContext(type);
           names.emplace_back(tuple[0].cast<std::string>());
-          mlirFieldInfos.push_back(RTLStructFieldInfo{
+          mlirFieldInfos.push_back(HWStructFieldInfo{
               mlirStringRefCreate(names[i].data(), names[i].size()),
               mlirTypeAttrGet(type)});
         }

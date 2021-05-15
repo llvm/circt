@@ -29,7 +29,7 @@
 using namespace circt;
 using namespace firrtl;
 
-/// Given a FIRRTL type, return the corresponding type for the RTL dialect.
+/// Given a FIRRTL type, return the corresponding type for the HW dialect.
 /// This returns a null type if it cannot be lowered.
 static Type lowerType(Type type) {
   auto firType = type.dyn_cast<FIRRTLType>();
@@ -75,7 +75,7 @@ static Value castToFIRRTLType(Value val, Type type,
     return builder.createOrFold<AnalogInOutCastOp>(firType, val);
 
   if (BundleType bundle = type.dyn_cast<BundleType>()) {
-    val = builder.createOrFold<RTLStructCastOp>(firType.getPassiveType(), val);
+    val = builder.createOrFold<HWStructCastOp>(firType.getPassiveType(), val);
   } else {
     val = builder.createOrFold<StdIntCastOp>(firType.getPassiveType(), val);
   }
@@ -95,7 +95,7 @@ static Value castFromFIRRTLType(Value val, Type type,
   // Strip off Flip type if needed.
   val = builder.createOrFold<AsPassivePrimOp>(val);
   if (rtl::StructType structTy = type.dyn_cast<rtl::StructType>())
-    return builder.createOrFold<RTLStructCastOp>(type, val);
+    return builder.createOrFold<HWStructCastOp>(type, val);
   return builder.createOrFold<StdIntCastOp>(type, val);
 }
 
@@ -240,13 +240,13 @@ private:
   LogicalResult lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
                            SmallVectorImpl<rtl::ModulePortInfo> &ports,
                            Operation *moduleOp);
-  rtl::RTLModuleOp lowerModule(FModuleOp oldModule, Block *topLevelModule);
-  rtl::RTLModuleExternOp lowerExtModule(FExtModuleOp oldModule,
-                                        Block *topLevelModule);
+  rtl::HWModuleOp lowerModule(FModuleOp oldModule, Block *topLevelModule);
+  rtl::HWModuleExternOp lowerExtModule(FExtModuleOp oldModule,
+                                       Block *topLevelModule);
 
   void lowerModuleBody(FModuleOp oldModule,
                        CircuitLoweringState &loweringState);
-  void lowerModuleOperations(rtl::RTLModuleOp module,
+  void lowerModuleOperations(rtl::HWModuleOp module,
                              CircuitLoweringState &loweringState);
 
   void lowerMemoryDecls(const SmallVector<FirMemory> &mems, Block *top,
@@ -355,8 +355,8 @@ void FIRRTLModuleLowering::lowerMemoryDecls(const SmallVector<FirMemory> &mems,
       "depth",       "numReadPorts", "numWritePorts", "numReadWritePorts",
       "readLatency", "writeLatency", "width",         "readUnderWrite"};
   auto schemaFieldsAttr = b.getStrArrayAttr(schemaFields);
-  auto schema = b.create<rtl::RTLGeneratorSchemaOp>(
-      "FIRRTLMem", "FIRRTL_Memory", schemaFieldsAttr);
+  auto schema = b.create<rtl::HWGeneratorSchemaOp>("FIRRTLMem", "FIRRTL_Memory",
+                                                   schemaFieldsAttr);
   auto memorySchema = b.getSymbolRefAttr(schema);
 
   Type b1Type = IntegerType::get(&getContext(), 1);
@@ -420,8 +420,8 @@ void FIRRTLModuleLowering::lowerMemoryDecls(const SmallVector<FirMemory> &mems,
 
     // Make the global module for the memory
     auto memoryName = b.getStringAttr(getFirMemoryName(mem));
-    b.create<rtl::RTLModuleGeneratedOp>(memorySchema, memoryName, ports,
-                                        StringRef(), genAttrs);
+    b.create<rtl::HWModuleGeneratedOp>(memorySchema, memoryName, ports,
+                                       StringRef(), genAttrs);
   }
 }
 
@@ -548,12 +548,12 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
 
     // We can't lower all types, so make sure to cleanly reject them.
     if (!rtlPort.type) {
-      moduleOp->emitError("cannot lower this port type to RTL");
+      moduleOp->emitError("cannot lower this port type to HW");
       return failure();
     }
 
     // If this is a zero bit port, just drop it.  It doesn't matter if it is
-    // input, output, or inout.  We don't want these at the RTL level.
+    // input, output, or inout.  We don't want these at the HW level.
     if (rtlPort.type.isInteger(0))
       continue;
 
@@ -576,7 +576,7 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
   return success();
 }
 
-rtl::RTLModuleExternOp
+rtl::HWModuleExternOp
 FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
                                      Block *topLevelModule) {
   // Map the ports over, lowering their types as we go.
@@ -593,14 +593,14 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   OpBuilder builder(topLevelModule->getParent()->getContext());
   builder.setInsertionPointToEnd(topLevelModule);
   auto nameAttr = builder.getStringAttr(oldModule.getName());
-  return builder.create<rtl::RTLModuleExternOp>(oldModule.getLoc(), nameAttr,
-                                                ports, verilogName);
+  return builder.create<rtl::HWModuleExternOp>(oldModule.getLoc(), nameAttr,
+                                               ports, verilogName);
 }
 
 /// Run on each firrtl.module, transforming it from an firrtl.module into an
 /// rtl.module, then deleting the old one.
-rtl::RTLModuleOp FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
-                                                   Block *topLevelModule) {
+rtl::HWModuleOp FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
+                                                  Block *topLevelModule) {
   // Map the ports over, lowering their types as we go.
   SmallVector<ModulePortInfo> firrtlPorts = oldModule.getPorts();
   SmallVector<rtl::ModulePortInfo, 8> ports;
@@ -611,12 +611,12 @@ rtl::RTLModuleOp FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
   OpBuilder builder(topLevelModule->getParent()->getContext());
   builder.setInsertionPointToEnd(topLevelModule);
   auto nameAttr = builder.getStringAttr(oldModule.getName());
-  return builder.create<rtl::RTLModuleOp>(oldModule.getLoc(), nameAttr, ports);
+  return builder.create<rtl::HWModuleOp>(oldModule.getLoc(), nameAttr, ports);
 }
 
 /// Given a value of analog type, check to see the only use of it is an attach.
 /// If so, remove the attach and return the value being attached to it,
-/// converted to an RTL inout type.  If this isn't a situation we can handle,
+/// converted to an HW inout type.  If this isn't a situation we can handle,
 /// just return null.
 static Value tryEliminatingAttachesToAnalogValue(Value value,
                                                  Operation *insertPoint) {
@@ -649,7 +649,7 @@ static Value tryEliminatingAttachesToAnalogValue(Value value,
 
 /// Given a value of flip type, check to see if all of the uses of it are
 /// connects.  If so, remove the connects and return the value being connected
-/// to it, converted to an RTL type.  If this isn't a situation we can handle,
+/// to it, converted to an HW type.  If this isn't a situation we can handle,
 /// just return null.
 ///
 /// This can happen when there are no connects to the value.  The 'mergePoint'
@@ -670,7 +670,7 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
     connects.push_back(connect);
   }
 
-  // We don't have an RTL equivalent of "poison" so just don't special case
+  // We don't have an HW equivalent of "poison" so just don't special case
   // the case where there are no connects other uses of an output.
   if (connects.empty())
     return {}; // TODO: Emit an sv.constantz here since it is unconnected.
@@ -736,7 +736,7 @@ static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
 void FIRRTLModuleLowering::lowerModuleBody(
     FModuleOp oldModule, CircuitLoweringState &loweringState) {
   auto newModule =
-      dyn_cast_or_null<rtl::RTLModuleOp>(loweringState.getNewModule(oldModule));
+      dyn_cast_or_null<rtl::HWModuleOp>(loweringState.getNewModule(oldModule));
   // Don't touch modules if we failed to lower ports.
   if (!newModule)
     return;
@@ -808,9 +808,9 @@ void FIRRTLModuleLowering::lowerModuleBody(
     oldArg.replaceAllUsesWith(newArg);
 
     // Don't output zero bit results or inouts.
-    auto resultRTLType = lowerType(port.type);
-    if (!resultRTLType.isInteger(0)) {
-      auto output = castFromFIRRTLType(newArg, resultRTLType, outputBuilder);
+    auto resultHWType = lowerType(port.type);
+    if (!resultHWType.isInteger(0)) {
+      auto output = castFromFIRRTLType(newArg, resultHWType, outputBuilder);
       outputs.push_back(output);
     }
   }
@@ -838,7 +838,7 @@ void FIRRTLModuleLowering::lowerModuleBody(
 namespace {
 struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
-  FIRRTLLowering(rtl::RTLModuleOp module, CircuitLoweringState &circuitState)
+  FIRRTLLowering(rtl::HWModuleOp module, CircuitLoweringState &circuitState)
       : theModule(module), circuitState(circuitState),
         builder(module.getLoc(), module.getContext()) {}
 
@@ -922,7 +922,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(AsAsyncResetPrimOp op) { return lowerNoopCast(op); }
 
   LogicalResult visitExpr(StdIntCastOp op);
-  LogicalResult visitExpr(RTLStructCastOp op);
+  LogicalResult visitExpr(HWStructCastOp op);
   LogicalResult visitExpr(AnalogInOutCastOp op);
   LogicalResult visitExpr(CvtPrimOp op);
   LogicalResult visitExpr(NotPrimOp op);
@@ -1018,7 +1018,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
 private:
   /// The module we're lowering into.
-  rtl::RTLModuleOp theModule;
+  rtl::HWModuleOp theModule;
 
   /// Global state.
   CircuitLoweringState &circuitState;
@@ -1027,7 +1027,7 @@ private:
   ImplicitLocOpBuilder builder;
 
   /// Each value lowered (e.g. operation result) is kept track in this map.
-  /// The key should have a FIRRTL type, the result will have an RTL dialect
+  /// The key should have a FIRRTL type, the result will have an HW dialect
   /// type.
   DenseMap<Value, Value> valueMapping;
 
@@ -1046,7 +1046,7 @@ private:
   llvm::SmallDenseMap<Block *, sv::InitialOp> initialBlocks;
 
   /// This is a set of wires that get inserted as an artifact of the
-  /// lowering process.  LowerToRTL should attempt to clean these up after
+  /// lowering process.  LowerToHW should attempt to clean these up after
   /// lowering.
   SmallVector<sv::WireOp> tmpWiresToOptimize;
 
@@ -1057,7 +1057,7 @@ private:
 } // end anonymous namespace
 
 void FIRRTLModuleLowering::lowerModuleOperations(
-    rtl::RTLModuleOp module, CircuitLoweringState &loweringState) {
+    rtl::HWModuleOp module, CircuitLoweringState &loweringState) {
   FIRRTLLowering(module, loweringState).run();
 }
 
@@ -1135,7 +1135,7 @@ void FIRRTLLowering::optimizeTemporaryWire(sv::WireOp wire) {
 
   // If the write is happening at the model level then we don't have any
   // use-before-def checking to do, so we only handle that for now.
-  if (!isa<rtl::RTLModuleOp>(write->getParentOp()))
+  if (!isa<rtl::HWModuleOp>(write->getParentOp()))
     return;
 
   auto connected = write.src();
@@ -1181,7 +1181,7 @@ static LogicalResult handleZeroBit(Value failedOperand,
   return fn();
 }
 
-/// Return the lowered RTL value corresponding to the specified original value.
+/// Return the lowered HW value corresponding to the specified original value.
 /// This returns a null value for FIRRTL values that haven't be lowered, e.g.
 /// unknown width integers.  This returns rtl::inout type values if present, it
 /// does not implicitly read from them.
@@ -1396,7 +1396,7 @@ void FIRRTLLowering::addToAlwaysBlock(Value clock,
                                       std::function<void(void)> fn) {
   // This isn't uniquing the parent region in.  This can be added as a key to
   // the alwaysBlocks set if needed.
-  assert(isa<rtl::RTLModuleOp>(builder.getBlock()->getParentOp()) &&
+  assert(isa<rtl::HWModuleOp>(builder.getBlock()->getParentOp()) &&
          "only support inserting into the top level of a module so far");
 
   auto &op = alwaysBlocks[clock];
@@ -1497,7 +1497,7 @@ void FIRRTLLowering::addIfProceduralBlock(Value cond,
 FIRRTLLowering::UnloweredOpResult
 FIRRTLLowering::handleUnloweredOp(Operation *op) {
   // Scan the operand list for the operation to see if none were lowered.  In
-  // that case the operation must be something lowered to RTL already, e.g.
+  // that case the operation must be something lowered to HW already, e.g.
   // the rtl.output operation.  This is success for us because it is already
   // lowered.
   if (llvm::all_of(op->getOpOperands(), [&](auto &operand) -> bool {
@@ -1525,7 +1525,7 @@ FIRRTLLowering::handleUnloweredOp(Operation *op) {
       return NowLowered;
     }
   }
-  op->emitOpError("LowerToRTL couldn't handle this operation");
+  op->emitOpError("LowerToHW couldn't handle this operation");
   return LoweringFailure;
 }
 
@@ -1910,7 +1910,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
 // Unary Operations
 //===----------------------------------------------------------------------===//
 
-// Lower a cast that is a noop at the RTL level.
+// Lower a cast that is a noop at the HW level.
 LogicalResult FIRRTLLowering::lowerNoopCast(Operation *op) {
   auto operand = getPossiblyInoutLoweredValue(op->getOperand(0));
   if (!operand)
@@ -1933,7 +1933,7 @@ LogicalResult FIRRTLLowering::visitExpr(StdIntCastOp op) {
   // Otherwise must be a conversion from FIRRTL type to standard int type.
   auto result = getLoweredValue(op.getOperand());
   if (!result) {
-    // If this is a conversion from a zero bit RTL type to firrtl value, then
+    // If this is a conversion from a zero bit HW type to firrtl value, then
     // we want to successfully lower this to a null Value.
     if (op.getOperand().getType().isSignlessInteger(0)) {
       return setLowering(op, Value());
@@ -1947,7 +1947,7 @@ LogicalResult FIRRTLLowering::visitExpr(StdIntCastOp op) {
   return success();
 }
 
-LogicalResult FIRRTLLowering::visitExpr(RTLStructCastOp op) {
+LogicalResult FIRRTLLowering::visitExpr(HWStructCastOp op) {
   // Conversions from rtl struct types to FIRRTL types are lowered as the
   // input operand.
   if (auto opStructType = op.getOperand().getType().dyn_cast<rtl::StructType>())

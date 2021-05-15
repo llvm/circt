@@ -15,7 +15,7 @@
 class ESI_Type<string name> : TypeDef<ESI_Dialect, name> { }
 
 def Struct : ESI_Type<"Struct"> {
-  let summary = "An RTL struct with a name";
+  let summary = "A HW struct with a name";
   let mnemonic = "struct";
   let parameters = (ins
     StringRefParameter<"struct name">:$name,

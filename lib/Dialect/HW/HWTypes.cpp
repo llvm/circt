@@ -37,9 +37,9 @@ FieldInfo FieldInfo::allocateInto(mlir::TypeStorageAllocator &alloc) const {
 // Type Helpers
 //===----------------------------------------------------------------------===/
 
-/// Return true if the specified type is a value RTL Integer type.  This checks
+/// Return true if the specified type is a value HW Integer type.  This checks
 /// that it is a signless standard dialect type, that it isn't zero bits.
-bool circt::rtl::isRTLIntegerType(mlir::Type type) {
+bool circt::rtl::isHWIntegerType(mlir::Type type) {
   auto intType = type.dyn_cast<IntegerType>();
   if (!intType || !intType.isSignless())
     return false;
@@ -47,28 +47,28 @@ bool circt::rtl::isRTLIntegerType(mlir::Type type) {
   return intType.getWidth() != 0;
 }
 
-/// Return true if the specified type can be used as an RTL value type, that is
+/// Return true if the specified type can be used as an HW value type, that is
 /// the set of types that can be composed together to represent synthesized,
 /// hardware but not marker types like InOutType.
-bool circt::rtl::isRTLValueType(Type type) {
+bool circt::rtl::isHWValueType(Type type) {
   // Signless and signed integer types are both valid.
   if (type.isa<IntegerType>())
     return true;
 
   if (auto array = type.dyn_cast<ArrayType>())
-    return isRTLValueType(array.getElementType());
+    return isHWValueType(array.getElementType());
 
   if (auto array = type.dyn_cast<UnpackedArrayType>())
-    return isRTLValueType(array.getElementType());
+    return isHWValueType(array.getElementType());
 
   if (auto t = type.dyn_cast<StructType>()) {
     return std::all_of(t.getElements().begin(), t.getElements().end(),
-                       [](const auto &f) { return isRTLValueType(f.type); });
+                       [](const auto &f) { return isHWValueType(f.type); });
   }
 
   if (auto t = type.dyn_cast<UnionType>()) {
     return std::all_of(t.getElements().begin(), t.getElements().end(),
-                       [](const auto &f) { return isRTLValueType(f.type); });
+                       [](const auto &f) { return isHWValueType(f.type); });
   }
 
   return false;
@@ -112,27 +112,27 @@ int64_t circt::rtl::getBitWidth(mlir::Type type) {
 }
 
 /// Return true if the specified type contains known marker types like
-/// InOutType.  Unlike isRTLValueType, this is not conservative, it only returns
+/// InOutType.  Unlike isHWValueType, this is not conservative, it only returns
 /// false on known InOut types, rather than any unknown types.
-bool circt::rtl::hasRTLInOutType(Type type) {
+bool circt::rtl::hasHWInOutType(Type type) {
   if (auto array = type.dyn_cast<ArrayType>())
-    return hasRTLInOutType(array.getElementType());
+    return hasHWInOutType(array.getElementType());
 
   if (auto array = type.dyn_cast<UnpackedArrayType>())
-    return hasRTLInOutType(array.getElementType());
+    return hasHWInOutType(array.getElementType());
 
   if (auto t = type.dyn_cast<StructType>()) {
     return std::any_of(t.getElements().begin(), t.getElements().end(),
-                       [](const auto &f) { return hasRTLInOutType(f.type); });
+                       [](const auto &f) { return hasHWInOutType(f.type); });
   }
   return type.isa<InOutType>();
 }
 
-/// Parse and print nested RTL types nicely.  These helper methods allow eliding
+/// Parse and print nested HW types nicely.  These helper methods allow eliding
 /// the "rtl." prefix on array, inout, and other types when in a context that
-/// expects RTL subelement types.
-static ParseResult parseRTLElementType(Type &result, DialectAsmParser &p) {
-  // If this is an RTL dialect type, then we don't need/want the !rtl. prefix
+/// expects HW subelement types.
+static ParseResult parseHWElementType(Type &result, DialectAsmParser &p) {
+  // If this is an HW dialect type, then we don't need/want the !rtl. prefix
   // redundantly specified.
   auto fullString = p.getFullSymbolSpec();
   auto *curPtr = p.getCurrentLocation().getPointer();
@@ -152,7 +152,7 @@ static ParseResult parseRTLElementType(Type &result, DialectAsmParser &p) {
   return p.parseType(result);
 }
 
-static void printRTLElementType(Type element, DialectAsmPrinter &p) {
+static void printHWElementType(Type element, DialectAsmPrinter &p) {
   if (succeeded(generatedTypePrinter(element, p)))
     return;
   p.printType(element);
@@ -258,7 +258,7 @@ Type ArrayType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
   SmallVector<int64_t, 2> dims;
   Type inner;
   if (p.parseLess() || p.parseDimensionList(dims, /* allowDynamic */ false) ||
-      parseRTLElementType(inner, p) || p.parseGreater())
+      parseHWElementType(inner, p) || p.parseGreater())
     return Type();
   if (dims.size() != 1) {
     p.emitError(p.getNameLoc(), "rtl.array only supports one dimension");
@@ -275,13 +275,13 @@ Type ArrayType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
 
 void ArrayType::print(DialectAsmPrinter &p) const {
   p << "array<" << getSize() << "x";
-  printRTLElementType(getElementType(), p);
+  printHWElementType(getElementType(), p);
   p << '>';
 }
 
 LogicalResult ArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
                                 Type innerType, size_t size) {
-  if (hasRTLInOutType(innerType))
+  if (hasHWInOutType(innerType))
     return emitError() << "rtl.array cannot contain InOut types";
   return success();
 }
@@ -294,7 +294,7 @@ Type UnpackedArrayType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
   SmallVector<int64_t, 2> dims;
   Type inner;
   if (p.parseLess() || p.parseDimensionList(dims, /* allowDynamic */ false) ||
-      parseRTLElementType(inner, p) || p.parseGreater())
+      parseHWElementType(inner, p) || p.parseGreater())
     return Type();
 
   if (dims.size() != 1) {
@@ -312,14 +312,14 @@ Type UnpackedArrayType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
 
 void UnpackedArrayType::print(DialectAsmPrinter &p) const {
   p << "uarray<" << getSize() << "x";
-  printRTLElementType(getElementType(), p);
+  printHWElementType(getElementType(), p);
   p << '>';
 }
 
 LogicalResult
 UnpackedArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
                           Type innerType, size_t size) {
-  if (!isRTLValueType(innerType))
+  if (!isHWValueType(innerType))
     return emitError() << "invalid element for sv.uarray type";
   return success();
 }
@@ -330,7 +330,7 @@ UnpackedArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
 
 Type InOutType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
   Type inner;
-  if (p.parseLess() || parseRTLElementType(inner, p) || p.parseGreater())
+  if (p.parseLess() || parseHWElementType(inner, p) || p.parseGreater())
     return Type();
 
   auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
@@ -342,20 +342,20 @@ Type InOutType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
 
 void InOutType::print(DialectAsmPrinter &p) const {
   p << "inout<";
-  printRTLElementType(getElementType(), p);
+  printHWElementType(getElementType(), p);
   p << '>';
 }
 
 LogicalResult InOutType::verify(function_ref<InFlightDiagnostic()> emitError,
                                 Type innerType) {
-  if (!isRTLValueType(innerType))
+  if (!isHWValueType(innerType))
     return emitError() << "invalid element for rtl.inout type " << innerType;
   return success();
 }
 
 /// Parses a type registered to this dialect. Parse out the mnemonic then invoke
 /// the tblgen'd type parser dispatcher.
-Type RTLDialect::parseType(DialectAsmParser &parser) const {
+Type HWDialect::parseType(DialectAsmParser &parser) const {
   llvm::StringRef mnemonic;
   if (parser.parseKeyword(&mnemonic))
     return Type();
@@ -367,14 +367,14 @@ Type RTLDialect::parseType(DialectAsmParser &parser) const {
 }
 
 /// Print a type registered to this dialect. Try the tblgen'd type printer
-/// dispatcher then fail since all RTL types are defined via ODS.
-void RTLDialect::printType(Type type, DialectAsmPrinter &printer) const {
+/// dispatcher then fail since all HW types are defined via ODS.
+void HWDialect::printType(Type type, DialectAsmPrinter &printer) const {
   if (succeeded(generatedTypePrinter(type, printer)))
     return;
   llvm_unreachable("unexpected 'rtl' type");
 }
 
-void RTLDialect::registerTypes() {
+void HWDialect::registerTypes() {
   addTypes<
 #define GET_TYPEDEF_LIST
 #include "circt/Dialect/HW/HWTypes.cpp.inc"

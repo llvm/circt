@@ -110,19 +110,19 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> constants) {
 }
 
 //===----------------------------------------------------------------------===//
-// RTLModuleOp
+// HWModuleOp
 //===----------------------------------------------------------------------===/
 
 /// Return true if this is an rtl.module, external module, generated module etc.
 bool rtl::isAnyModule(Operation *module) {
-  return isa<RTLModuleOp>(module) || isa<RTLModuleExternOp>(module) ||
-         isa<RTLModuleGeneratedOp>(module);
+  return isa<HWModuleOp>(module) || isa<HWModuleExternOp>(module) ||
+         isa<HWModuleGeneratedOp>(module);
 }
 
 /// Return the signature for the specified module as a function type.
 FunctionType rtl::getModuleType(Operation *module) {
   auto typeAttr =
-      module->getAttrOfType<TypeAttr>(RTLModuleOp::getTypeAttrName());
+      module->getAttrOfType<TypeAttr>(HWModuleOp::getTypeAttrName());
   return typeAttr.getValue().cast<FunctionType>();
 }
 
@@ -204,9 +204,9 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   result.addRegion();
 }
 
-void RTLModuleOp::build(OpBuilder &builder, OperationState &result,
-                        StringAttr name, ArrayRef<ModulePortInfo> ports,
-                        ArrayRef<NamedAttribute> attributes) {
+void HWModuleOp::build(OpBuilder &builder, OperationState &result,
+                       StringAttr name, ArrayRef<ModulePortInfo> ports,
+                       ArrayRef<NamedAttribute> attributes) {
   buildModule(builder, result, name, ports, attributes);
 
   // Create a region and a block for the body.
@@ -219,13 +219,13 @@ void RTLModuleOp::build(OpBuilder &builder, OperationState &result,
     if (!elt.isOutput())
       body->addArgument(elt.type);
 
-  RTLModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
+  HWModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
 }
 
 /// Return the name to use for the Verilog module that we're referencing
 /// here.  This is typically the symbol, but can be overridden with the
 /// verilogName attribute.
-StringRef RTLModuleExternOp::getVerilogModuleName() {
+StringRef HWModuleExternOp::getVerilogModuleName() {
   if (auto vname = verilogName())
     return vname.getValue();
   return getName();
@@ -234,7 +234,7 @@ StringRef RTLModuleExternOp::getVerilogModuleName() {
 /// Return the name to use for the Verilog module that we're referencing
 /// here.  This is typically the symbol, but can be overridden with the
 /// verilogName attribute.
-StringAttr RTLModuleExternOp::getVerilogModuleNameAttr() {
+StringAttr HWModuleExternOp::getVerilogModuleNameAttr() {
   if (auto vName = verilogNameAttr())
     return vName;
 
@@ -242,21 +242,21 @@ StringAttr RTLModuleExternOp::getVerilogModuleNameAttr() {
       ::mlir::SymbolTable::getSymbolAttrName());
 }
 
-void RTLModuleExternOp::build(OpBuilder &builder, OperationState &result,
-                              StringAttr name, ArrayRef<ModulePortInfo> ports,
-                              StringRef verilogName,
-                              ArrayRef<NamedAttribute> attributes) {
+void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
+                             StringAttr name, ArrayRef<ModulePortInfo> ports,
+                             StringRef verilogName,
+                             ArrayRef<NamedAttribute> attributes) {
   buildModule(builder, result, name, ports, attributes);
 
   if (!verilogName.empty())
     result.addAttribute("verilogName", builder.getStringAttr(verilogName));
 }
 
-void RTLModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
-                                 FlatSymbolRefAttr genKind, StringAttr name,
-                                 ArrayRef<ModulePortInfo> ports,
-                                 StringRef verilogName,
-                                 ArrayRef<NamedAttribute> attributes) {
+void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
+                                FlatSymbolRefAttr genKind, StringAttr name,
+                                ArrayRef<ModulePortInfo> ports,
+                                StringRef verilogName,
+                                ArrayRef<NamedAttribute> attributes) {
   buildModule(builder, result, name, ports, attributes);
   result.addAttribute("generatorKind", genKind);
   if (!verilogName.empty())
@@ -376,8 +376,8 @@ static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
   return false;
 }
 
-static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
-                                    ExternModKind modKind = PlainMod) {
+static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
+                                   ExternModKind modKind = PlainMod) {
   using namespace mlir::function_like_impl;
 
   SmallVector<OpAsmParser::OperandType, 4> entryArgs;
@@ -449,23 +449,23 @@ static ParseResult parseRTLModuleOp(OpAsmParser &parser, OperationState &result,
                            entryArgs.empty() ? ArrayRef<Type>() : argTypes))
       return failure();
 
-    RTLModuleOp::ensureTerminator(*body, parser.getBuilder(), result.location);
+    HWModuleOp::ensureTerminator(*body, parser.getBuilder(), result.location);
   }
   return success();
 }
 
-static ParseResult parseRTLModuleExternOp(OpAsmParser &parser,
-                                          OperationState &result) {
-  return parseRTLModuleOp(parser, result, ExternMod);
+static ParseResult parseHWModuleExternOp(OpAsmParser &parser,
+                                         OperationState &result) {
+  return parseHWModuleOp(parser, result, ExternMod);
 }
 
-static ParseResult parseRTLModuleGeneratedOp(OpAsmParser &parser,
-                                             OperationState &result) {
-  return parseRTLModuleOp(parser, result, GenMod);
+static ParseResult parseHWModuleGeneratedOp(OpAsmParser &parser,
+                                            OperationState &result) {
+  return parseHWModuleOp(parser, result, GenMod);
 }
 
-FunctionType getRTLModuleOpType(Operation *op) {
-  auto typeAttr = op->getAttrOfType<TypeAttr>(RTLModuleOp::getTypeAttrName());
+FunctionType getHWModuleOpType(Operation *op) {
+  auto typeAttr = op->getAttrOfType<TypeAttr>(HWModuleOp::getTypeAttrName());
   return typeAttr.getValue().cast<FunctionType>();
 }
 
@@ -535,7 +535,7 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
                           ExternModKind modKind) {
   using namespace mlir::function_like_impl;
 
-  FunctionType fnType = getRTLModuleOpType(op);
+  FunctionType fnType = getHWModuleOpType(op);
   auto argTypes = fnType.getInputs();
   auto resultTypes = fnType.getResults();
 
@@ -547,7 +547,7 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
   p.printSymbolName(funcName);
   if (modKind == GenMod) {
     p << ", ";
-    p.printSymbolName(cast<RTLModuleGeneratedOp>(op).generatorKind());
+    p.printSymbolName(cast<HWModuleGeneratedOp>(op).generatorKind());
   }
 
   bool needArgNamesAttr = false;
@@ -565,14 +565,14 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
                           omittedAttrs);
 }
 
-static void print(OpAsmPrinter &p, RTLModuleExternOp op) {
+static void print(OpAsmPrinter &p, HWModuleExternOp op) {
   printModuleOp(p, op, ExternMod);
 }
-static void print(OpAsmPrinter &p, RTLModuleGeneratedOp op) {
+static void print(OpAsmPrinter &p, HWModuleGeneratedOp op) {
   printModuleOp(p, op, GenMod);
 }
 
-static void print(OpAsmPrinter &p, RTLModuleOp op) {
+static void print(OpAsmPrinter &p, HWModuleOp op) {
   printModuleOp(p, op, PlainMod);
 
   // Print the body if this is not an external function.
@@ -596,22 +596,22 @@ static LogicalResult verifyModuleCommon(Operation *module) {
   return success();
 }
 
-static LogicalResult verifyRTLModuleOp(RTLModuleOp op) {
+static LogicalResult verifyHWModuleOp(HWModuleOp op) {
   return verifyModuleCommon(op);
 }
 
-static LogicalResult verifyRTLModuleExternOp(RTLModuleExternOp op) {
+static LogicalResult verifyHWModuleExternOp(HWModuleExternOp op) {
   return verifyModuleCommon(op);
 }
 
 /// Lookup the generator for the symbol.  This returns null on
 /// invalid IR.
-Operation *RTLModuleGeneratedOp::getGeneratorKindOp() {
+Operation *HWModuleGeneratedOp::getGeneratorKindOp() {
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
   return topLevelModuleOp.lookupSymbol(generatorKind());
 }
 
-static LogicalResult verifyRTLModuleGeneratedOp(RTLModuleGeneratedOp op) {
+static LogicalResult verifyHWModuleGeneratedOp(HWModuleGeneratedOp op) {
   if (failed(verifyModuleCommon(op)))
     return failure();
 
@@ -620,12 +620,12 @@ static LogicalResult verifyRTLModuleGeneratedOp(RTLModuleGeneratedOp op) {
     return op.emitError("Cannot find generator definition '")
            << op.generatorKind() << "'";
 
-  if (!isa<RTLGeneratorSchemaOp>(referencedKind))
+  if (!isa<HWGeneratorSchemaOp>(referencedKind))
     return op.emitError("Symbol resolved to '")
            << referencedKind->getName()
-           << "' which is not a RTLGeneratorSchemaOp";
+           << "' which is not a HWGeneratorSchemaOp";
 
-  auto referencedKindOp = dyn_cast<RTLGeneratorSchemaOp>(referencedKind);
+  auto referencedKindOp = dyn_cast<HWGeneratorSchemaOp>(referencedKind);
   auto paramRef = referencedKindOp.requiredAttrs();
   auto dict = op->getAttrDictionary();
   for (auto str : paramRef) {
@@ -719,7 +719,7 @@ static LogicalResult verifyInstanceOpTypes(InstanceOp op,
 
 static LogicalResult verifyInstanceOp(InstanceOp op) {
   // Check that this instance is inside a module.
-  auto module = dyn_cast<RTLModuleOp>(op->getParentOp());
+  auto module = dyn_cast<HWModuleOp>(op->getParentOp());
   if (!module) {
     op.emitOpError("should be embedded in an 'rtl.module'");
     return failure();
@@ -748,7 +748,7 @@ static LogicalResult verifyInstanceOp(InstanceOp op) {
 
   // If the referenced moudle is internal, check that input and result types are
   // consistent with the referenced module.
-  if (!isa<RTLModuleOp>(referencedModule))
+  if (!isa<HWModuleOp>(referencedModule))
     return success();
 
   return verifyInstanceOpTypes(op, referencedModule);
@@ -793,7 +793,7 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 //===----------------------------------------------------------------------===//
-// RTLOutputOp
+// HWOutputOp
 //===----------------------------------------------------------------------===//
 
 /// Verify that the num of operands and types fit the declared results.
@@ -802,10 +802,10 @@ static LogicalResult verifyOutputOp(OutputOp *op) {
   auto opParent = (*op)->getParentOp();
 
   // Check that we are in the correct region. OutputOp should be directly
-  // contained by an RTLModuleOp region. We'll loosen this restriction if
+  // contained by an HWModuleOp region. We'll loosen this restriction if
   // there's a compelling use case.
-  if (!isa<RTLModuleOp>(opParent)) {
-    op->emitOpError("operation expected to be in a RTLModuleOp.");
+  if (!isa<HWModuleOp>(opParent)) {
+    op->emitOpError("operation expected to be in a HWModuleOp.");
     return failure();
   }
 

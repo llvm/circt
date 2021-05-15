@@ -45,7 +45,7 @@ add_circt_library(CIRCTCAPIMSFT
   CIRCTMSFTExportTcl
   )
 
-add_circt_library(CIRCTCAPIRTL
+add_circt_library(CIRCTCAPIHW
 
   HW.cpp
 

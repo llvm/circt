@@ -25,7 +25,7 @@ using namespace circt::rtl;
 // Dialect API.
 //===----------------------------------------------------------------------===//
 
-MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(RTL, rtl, RTLDialect)
+MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(HW, rtl, HWDialect)
 
 //===----------------------------------------------------------------------===//
 // Type API.
@@ -33,7 +33,7 @@ MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(RTL, rtl, RTLDialect)
 
 int64_t rtlGetBitWidth(MlirType type) { return getBitWidth(unwrap(type)); }
 
-bool rtlTypeIsAValueType(MlirType type) { return isRTLValueType(unwrap(type)); }
+bool rtlTypeIsAValueType(MlirType type) { return isHWValueType(unwrap(type)); }
 
 bool rtlTypeIsAArrayType(MlirType type) {
   return unwrap(type).isa<ArrayType>();
@@ -66,7 +66,7 @@ bool rtlTypeIsAStructType(MlirType type) {
 }
 
 MlirType rtlStructTypeGet(MlirContext ctx, intptr_t numElements,
-                          RTLStructFieldInfo const *elements) {
+                          HWStructFieldInfo const *elements) {
   SmallVector<StructType::FieldInfo> fieldInfos;
   fieldInfos.reserve(numElements);
   for (intptr_t i = 0; i < numElements; ++i) {

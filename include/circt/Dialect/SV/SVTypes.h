@@ -30,7 +30,7 @@ mlir::Type getInOutElementType(mlir::Type type);
 
 /// Return the element type of an ArrayType or UnpackedArrayType, or null if the
 /// operand isn't an array.
-mlir::Type getAnyRTLArrayElementType(mlir::Type type);
+mlir::Type getAnyHWArrayElementType(mlir::Type type);
 } // end namespace sv
 } // end namespace circt
 

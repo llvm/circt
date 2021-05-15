@@ -22,7 +22,7 @@ using namespace circt::sv;
 
 /// Return the element type of an ArrayType or UnpackedArrayType, or null if the
 /// operand isn't an array.
-Type circt::sv::getAnyRTLArrayElementType(Type type) {
+Type circt::sv::getAnyHWArrayElementType(Type type) {
   if (!type)
     return {};
   if (auto array = type.dyn_cast<rtl::ArrayType>())

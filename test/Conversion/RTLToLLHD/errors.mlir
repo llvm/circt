@@ -1,7 +1,7 @@
 // RUN: circt-opt -convert-rtl-to-llhd -split-input-file -verify-diagnostics %s
 
 module {
-  // Since RTL-to-LLHD needs to construct a zero value for temporary signals,
+  // Since HW-to-LLHD needs to construct a zero value for temporary signals,
   // we don't support non-IntegerType arguments to instances.
   rtl.module @sub(%in: f16) -> (%out: f16) {
     rtl.output %in: f16

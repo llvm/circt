@@ -16,18 +16,18 @@ with Context() as ctx, Location.unknown():
 
   m = Module.create()
   with InsertionPoint(m.body):
-    one_input = rtl.RTLModuleOp(
+    one_input = rtl.HWModuleOp(
         name="one_input",
         input_ports=[("a", i32)],
         body_builder=lambda m: rtl.OutputOp([]),
     )
-    one_output = rtl.RTLModuleOp(
+    one_output = rtl.HWModuleOp(
         name="one_output",
         output_ports=[("a", i32)],
         body_builder=lambda m: rtl.OutputOp(
             [rtl.ConstantOp(i32, IntegerAttr.get(i32, 46)).result]),
     )
-    input_output = rtl.RTLModuleOp(
+    input_output = rtl.HWModuleOp(
         name="input_output",
         input_ports=[("a", i32)],
         output_ports=[("b", i32)],
@@ -65,7 +65,7 @@ with Context() as ctx, Location.unknown():
       inst1 = one_input.create(module, "inst1")
 
     try:
-      instance_builder_tests = rtl.RTLModuleOp(
+      instance_builder_tests = rtl.HWModuleOp(
           name="instance_builder_tests", body_builder=instance_builder_body)
     except RuntimeError as e:
       print(e)

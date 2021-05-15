@@ -1,6 +1,6 @@
-# RTL and SV Dialect Rationale
+# HW and SV Dialect Rationale
 
-This document describes various design points of the RTL and SV dialects, why
+This document describes various design points of the HW and SV dialects, why
 they are the way they are, and current status.  This follows in the spirit of
 other [MLIR Rationale docs](https://mlir.llvm.org/docs/Rationale/).
 
@@ -14,10 +14,10 @@ ubiquitous, SystemVerilog is not easy to generate or transform.  Furthermore, it
 is non-trivial for compiler tools to generate high quality human readable
 SystemVerilog.
 
-The RTL and SV dialects attempt to address these problems with three major
+The HW and SV dialects attempt to address these problems with three major
 contributions: 
 
- 1) By providing the RTL dialect, which contains a common set of abstractions
+ 1) By providing the HW dialect, which contains a common set of abstractions
     for combinational logic.  This dialect is designed to allow easy analysis
     and transformation, is allows other dialects to "mix in" with it to provide
     higher level functionality.
@@ -31,15 +31,15 @@ contributions:
 The combination of these capabilities provides a useful suite of functionality
 for compiler tools that want to generate high quality SystemVerilog.
 
-## The RTL Dialect
+## The HW Dialect
 
-The RTL dialect is designed as a mid-level compiler IR for combinational logic.
+The HW dialect is designed as a mid-level compiler IR for combinational logic.
 It is *not* designed to model SystemVerilog or any other hardware design
 language directly.  Instead, it is designed to be easy to analyze and transform,
 and be a flexible and extensible substrate that may be extended with higher
 level dialects mixed into it.
 
-The RTL dialect defines a set of common functionality, such as `rtl.module` for
+The HW dialect defines a set of common functionality, such as `rtl.module` for
 representing hardware modules, and operations like `rtl.add` and `rtl.mux` for
 logic.
 
@@ -49,7 +49,7 @@ TODO: Describe inout types.  Analogy to lvalues vs rvalues.  Array indices for
 both forms.  Arrays, structs,
 moving [UnpackedArray](https://github.com/llvm/circt/issues/389) to SV someday.
 
-InOut types live at the SV dialect level and not the RTL dialect level.  This
+InOut types live at the SV dialect level and not the HW dialect level.  This
 allows connects, wires and other syntactic constructs that aren't necessary for
 combinational logic, but are nonetheless pretty useful when generating Verilog.
 
@@ -99,11 +99,11 @@ point would require us to special case this in our cost models, and we would
 have that optimizes it away.
 
 By rejecting zero bit operations, we choose to put the complexity into the
-lowering passes that generate the RTL dialect (e.g. LowerToRTL from FIRRTL).
+lowering passes that generate the HW dialect (e.g. LowerToHW from FIRRTL).
 
-Note that this decision only affects the core operations in the RTL dialect
+Note that this decision only affects the core operations in the HW dialect
 itself - it is perfectly reasonable to define your operations and mix them into
-other RTL constructs.  Also, certain other operations do support zero bit
+other HW constructs.  Also, certain other operations do support zero bit
 declarations in limited ways:
 
  - The `rtl.module` operation allows zero bit ports, since it supports an open
@@ -186,13 +186,13 @@ padding or alignment.
 
 - **Integer bit vectors**: MLIR's `IntegerType` with `Signless` semantics are
 used to represent bit vectors. They are never padded or aligned.
-- **Arrays**: The RTL dialect defines a custom `ArrayType`. The in-hardware
+- **Arrays**: The HW dialect defines a custom `ArrayType`. The in-hardware
 layout matches C -- the high index of array starts at the MSB. Array's 0th
 element's LSB located at array LSB.
-- **Structs**: The RTL dialect defines a custom `StructType`. The in-hardware
+- **Structs**: The HW dialect defines a custom `StructType`. The in-hardware
 layout matchss C -- the first listed member's MSB corresponds to the struct's
 MSB. The last member in the list shares its LSB with the struct.
-- **Unions**: The RTL dialect's `UnionType` could contain the data of any of the
+- **Unions**: The HW dialect's `UnionType` could contain the data of any of the
 member types so its layout is defined to be equivalent to the union of members
 type bitcast layout. In cases where the member types have different bit widths,
 all members start at the 0th bit and are padded up to the width of the widest
@@ -228,7 +228,7 @@ canonicalizations and other general purpose transformations should optimize for.
 There are often many different ways to represent a piece of logic in the IR, and
 things will work better together if we keep the compiler consistent.
 
-First, unlike something like LLVM IR, keep in mind that the RTL dialect is a
+First, unlike something like LLVM IR, keep in mind that the HW dialect is a
 model of hardware -- each operation generally corresponds to an instance of
 hardware, it is not an "instruction" that is executed by an imperative CPU.
 As such, the primary concerns are area and latency, not "number of operations
@@ -275,21 +275,21 @@ but it is ok to introduce more of these to improve on other metrics above.
 
 ## The SV Dialect
 
-The SV dialect is one of the dialects that can be mixed into the RTL dialect,
+The SV dialect is one of the dialects that can be mixed into the HW dialect,
 providing
 access to a range of syntactic and behavioral constructs.  The driving focus of
 this dialect is to provide simple and predictable access to SystemVerilog
 features: it is not focused primarily on being easy to analyze and transform.
 
-The SV dialect is designed to build on top of the RTL dialect, so it does not
+The SV dialect is designed to build on top of the HW dialect, so it does not
 have its own operations for combinational logic, modules, or other base
-functionality defined in the RTL dialect.
+functionality defined in the HW dialect.
 
 ### Type System
 
-Like the RTL dialect, the SV dialect is designed to tolerate unknown types where
+Like the HW dialect, the SV dialect is designed to tolerate unknown types where
 possible, allowing other dialects to mix in with it.  In addition to these
-external types, and the types used by the RTL dialect, the SV dialect defines
+external types, and the types used by the HW dialect, the SV dialect defines
 types for SystemVerilog interfaces.
 
 TODO: Describe interface types, modports, etc.
@@ -343,7 +343,7 @@ defined are considered private and may be changed by transformation.
 Currently, MLIR restricts symbol resolution to looking in and downward through
 any nested symbol tables when resolving symbols.  This assumption has
 implications for verification, the pass manager, and threading.  Until symbol
-references are more general, SV and RTL dialects do not define symbol tables for
+references are more general, SV and HW dialects do not define symbol tables for
 modules.  Therefore, wires, registers, and interfaces exist in the same
 namespace as modules.  It is encouraged that one prefaces the names to avoid
 conflict with modules.  The symbol names on these entities has no bearing on the
@@ -370,7 +370,7 @@ if the need arises:
 
 Many in the CIRCT community are interested in adding first-class support for
 parametric modules -- similar but more general than SystemVerilog module
-parameters.  It isn't clear yet whether this should be part of the RTL dialect
+parameters.  It isn't clear yet whether this should be part of the HW dialect
 or something higher level.
 
 Separate from a "good" representation of parametric modules, the SV dialect
@@ -386,7 +386,7 @@ different systems and their capabilities.  As such, we expect that the day will
 come where a frontend wants to generate fancy features for some modern systems,
 but cannot afford to break compatibility with other ecosystem tools.
 
-Given the design of the RTL/SV dialects, there is no need to resort to "lowest
+Given the design of the HW/SV dialects, there is no need to resort to "lowest
 common denominator" approach here: we can allow frontends to generate "fancy"
 features, then use progressive lowering when dealing with tools that can't
 handle them.  This can also allow IP providers to decide what flavor

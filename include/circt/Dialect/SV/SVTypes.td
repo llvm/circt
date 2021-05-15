@@ -13,26 +13,26 @@
 class SVType<string name> : TypeDef<SVDialect, name> { }
 
 //===----------------------------------------------------------------------===//
-// Generic stuff shared with RTL Dialect.
+// Generic stuff shared with HW Dialect.
 //===----------------------------------------------------------------------===//
 
 // Type constraint that indicates that an operand/result may only be a valid,
 // known, non-directional type.
-def RTLIntegerType : Type<CPred<"rtl::isRTLIntegerType($_self)">,
+def HWIntegerType : Type<CPred<"rtl::isHWIntegerType($_self)">,
                           "an integer bitvector of one or more bits",
                           "::mlir::IntegerType">;
 
 // Type constraint that indicates that an operand/result may only be a valid,
 // known, non-directional type.
-def RTLValueType : Type<CPred<"rtl::isRTLValueType($_self)">,
+def HWValueType : Type<CPred<"rtl::isHWValueType($_self)">,
                         "a known primitive element">;
 
 // Type constraint that indicates that an operand/result may only be a valid
 // non-directional type.
-def RTLNonInOutType : Type<CPred<"!rtl::hasRTLInOutType($_self)">,
+def HWNonInOutType : Type<CPred<"!rtl::hasHWInOutType($_self)">,
                            "a type without inout">;
 
-// FIXME: Shouldn't have to duplicate this from the RTL dialect tblgen files.
+// FIXME: Shouldn't have to duplicate this from the HW dialect tblgen files.
 def InOutType : Type<CPred<"$_self.isa<rtl::InOutType>()">, "InOutType",
                            "::circt::rtl::InOutType">;
 
@@ -42,7 +42,7 @@ def InOutType : Type<CPred<"$_self.isa<rtl::InOutType>()">, "InOutType",
 
 // Type constraint that indicates that an operand/result may only be a valid
 // inout element type.
-def InOutElementType : Type<CPred<"rtl::isRTLValueType($_self)">,
+def InOutElementType : Type<CPred<"rtl::isHWValueType($_self)">,
                             "a valid inout element">;
 
 // This type constraint is used by operations whose asm strings have a type "T"

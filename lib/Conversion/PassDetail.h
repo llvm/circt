@@ -39,8 +39,8 @@ class CombDialect;
 } // namespace comb
 
 namespace rtl {
-class RTLDialect;
-class RTLModuleOp;
+class HWDialect;
+class HWModuleOp;
 } // namespace rtl
 
 namespace staticlogic {

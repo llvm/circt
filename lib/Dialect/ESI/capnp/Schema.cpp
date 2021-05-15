@@ -103,10 +103,10 @@ public:
 
   bool operator==(const TypeSchemaImpl &) const;
 
-  /// Build an RTL/SV dialect capnp encoder for this type.
-  rtl::RTLModuleOp buildEncoder(Value clk, Value valid, Value);
-  /// Build an RTL/SV dialect capnp decoder for this type.
-  rtl::RTLModuleOp buildDecoder(Value clk, Value valid, Value);
+  /// Build an HW/SV dialect capnp encoder for this type.
+  rtl::HWModuleOp buildEncoder(Value clk, Value valid, Value);
+  /// Build an HW/SV dialect capnp decoder for this type.
+  rtl::HWModuleOp buildDecoder(Value clk, Value valid, Value);
 
 private:
   ::capnp::ParsedSchema getSchema() const;
@@ -531,7 +531,7 @@ public:
 
   /// Downcast an int, accounting for signedness.
   GasketComponent downcast(IntegerType t) const {
-    // Since the RTL dialect operators only operate on signless integers, we
+    // Since the HW dialect operators only operate on signless integers, we
     // have to cast to signless first, then cast the sign back.
     assert(s.getType().isa<IntegerType>());
     Value signlessVal = s;
@@ -763,7 +763,7 @@ private:
 } // anonymous namespace
 
 //===----------------------------------------------------------------------===//
-// Capnp encode "gasket" RTL builders.
+// Capnp encode "gasket" HW builders.
 //
 // These have the potential to get large and complex as we add more types. The
 // encoding spec is here: https://capnproto.org/encoding.html
@@ -932,10 +932,10 @@ CapnpSegmentBuilder::build(::capnp::schema::Node::Struct::Reader cStruct,
   return compile();
 }
 
-/// Build an RTL/SV dialect capnp encoder module for this type. Inputs need to
+/// Build an HW/SV dialect capnp encoder module for this type. Inputs need to
 /// be packed and unpadded.
-rtl::RTLModuleOp TypeSchemaImpl::buildEncoder(Value clk, Value valid,
-                                              Value operandVal) {
+rtl::HWModuleOp TypeSchemaImpl::buildEncoder(Value clk, Value valid,
+                                             Value operandVal) {
   Location loc = operandVal.getDefiningOp()->getLoc();
   ModuleOp topMod = operandVal.getDefiningOp()->getParentOfType<ModuleOp>();
   OpBuilder b = OpBuilder::atBlockEnd(topMod.getBody());
@@ -955,7 +955,7 @@ rtl::RTLModuleOp TypeSchemaImpl::buildEncoder(Value clk, Value valid,
   ports.push_back(rtl::ModulePortInfo{b.getStringAttr("encoded"),
                                       rtl::PortDirection::OUTPUT, modOutputType,
                                       0});
-  rtl::RTLModuleOp retMod = b.create<rtl::RTLModuleOp>(
+  rtl::HWModuleOp retMod = b.create<rtl::HWModuleOp>(
       operandVal.getLoc(), b.getStringAttr(modName), ports);
 
   Block *innerBlock = retMod.getBodyBlock();
@@ -989,7 +989,7 @@ rtl::RTLModuleOp TypeSchemaImpl::buildEncoder(Value clk, Value valid,
 }
 
 //===----------------------------------------------------------------------===//
-// Capnp decode "gasket" RTL builders.
+// Capnp decode "gasket" HW builders.
 //
 // These have the potential to get large and complex as we add more types. The
 // encoding spec is here: https://capnproto.org/encoding.html
@@ -1108,10 +1108,10 @@ static GasketComponent decodeField(Type type,
   return esiValue;
 }
 
-/// Build an RTL/SV dialect capnp decoder module for this type. Outputs packed
+/// Build an HW/SV dialect capnp decoder module for this type. Outputs packed
 /// and unpadded data.
-rtl::RTLModuleOp TypeSchemaImpl::buildDecoder(Value clk, Value valid,
-                                              Value operandVal) {
+rtl::HWModuleOp TypeSchemaImpl::buildDecoder(Value clk, Value valid,
+                                             Value operandVal) {
   auto loc = operandVal.getDefiningOp()->getLoc();
   auto topMod = operandVal.getDefiningOp()->getParentOfType<ModuleOp>();
   OpBuilder b = OpBuilder::atBlockEnd(topMod.getBody());
@@ -1129,7 +1129,7 @@ rtl::RTLModuleOp TypeSchemaImpl::buildDecoder(Value clk, Value valid,
                                       operandVal.getType(), 2});
   ports.push_back(rtl::ModulePortInfo{
       b.getStringAttr("decoded"), rtl::PortDirection::OUTPUT, getType(), 0});
-  rtl::RTLModuleOp retMod = b.create<rtl::RTLModuleOp>(
+  rtl::HWModuleOp retMod = b.create<rtl::HWModuleOp>(
       operandVal.getLoc(), b.getStringAttr(modName), ports);
 
   Block *innerBlock = retMod.getBodyBlock();
@@ -1220,9 +1220,9 @@ rtl::RTLModuleOp TypeSchemaImpl::buildDecoder(Value clk, Value valid,
 // TypeSchema wrapper.
 //===----------------------------------------------------------------------===//
 
-llvm::SmallDenseMap<Type, rtl::RTLModuleOp>
+llvm::SmallDenseMap<Type, rtl::HWModuleOp>
     circt::esi::capnp::TypeSchema::decImplMods;
-llvm::SmallDenseMap<Type, rtl::RTLModuleOp>
+llvm::SmallDenseMap<Type, rtl::HWModuleOp>
     circt::esi::capnp::TypeSchema::encImplMods;
 
 circt::esi::capnp::TypeSchema::TypeSchema(Type type) {
@@ -1253,7 +1253,7 @@ bool circt::esi::capnp::TypeSchema::operator==(const TypeSchema &that) const {
 Value circt::esi::capnp::TypeSchema::buildEncoder(OpBuilder &builder, Value clk,
                                                   Value valid,
                                                   Value operand) const {
-  rtl::RTLModuleOp encImplMod;
+  rtl::HWModuleOp encImplMod;
   auto encImplIT = encImplMods.find(getType());
   if (encImplIT == encImplMods.end()) {
     encImplMod = s->buildEncoder(clk, valid, operand);
@@ -1276,7 +1276,7 @@ Value circt::esi::capnp::TypeSchema::buildEncoder(OpBuilder &builder, Value clk,
 Value circt::esi::capnp::TypeSchema::buildDecoder(OpBuilder &builder, Value clk,
                                                   Value valid,
                                                   Value operand) const {
-  rtl::RTLModuleOp decImplMod;
+  rtl::HWModuleOp decImplMod;
   auto decImplIT = decImplMods.find(getType());
   if (decImplIT == decImplMods.end()) {
     decImplMod = s->buildDecoder(clk, valid, operand);

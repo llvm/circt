@@ -71,7 +71,7 @@ struct Entity {
 } // anonymous namespace
 
 Optional<Entity> Entity::enter(InstanceOp inst) {
-  auto mod = dyn_cast_or_null<rtl::RTLModuleOp>(inst.getReferencedModule());
+  auto mod = dyn_cast_or_null<rtl::HWModuleOp>(inst.getReferencedModule());
   if (!mod) // Could be an extern module, which we should ignore.
     return {};
   bool modEmitted = insideEmittedModule ||
@@ -144,7 +144,7 @@ void Entity::emitPath() {
 /// Export the TCL for a particular entity, corresponding to op. Do this
 /// recusively, assume that all descendants are in the same entity. When this is
 /// no longer a sound assuption, we'll have to refactor this code. For now, only
-/// RTLModule instances create a new entity.
+/// HWModule instances create a new entity.
 static LogicalResult exportTcl(Entity &entity, Operation *op) {
   // Instances require a new child entity and trigger a descent of the
   // instantiated module in the new entity.
@@ -185,7 +185,7 @@ LogicalResult circt::msft::exportQuartusTcl(ModuleOp module,
   TclOutputState state(os);
 
   for (auto &op : module.getBody()->getOperations()) {
-    auto rtlMod = dyn_cast<RTLModuleOp>(op);
+    auto rtlMod = dyn_cast<HWModuleOp>(op);
     if (!rtlMod)
       continue;
     os << "proc " << rtlMod.getName() << "_config { parent } {\n";
@@ -201,6 +201,6 @@ void circt::msft::registerMSFTTclTranslation() {
   mlir::TranslateFromMLIRRegistration toQuartusTcl(
       "export-quartus-tcl", exportQuartusTcl,
       [](mlir::DialectRegistry &registry) {
-        registry.insert<MSFTDialect, RTLDialect>();
+        registry.insert<MSFTDialect, HWDialect>();
       });
 }

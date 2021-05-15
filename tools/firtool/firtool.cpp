@@ -70,8 +70,8 @@ static cl::opt<bool> inliner("inline",
                              cl::desc("Run the FIRRTL module inliner"),
                              cl::init(false));
 
-static cl::opt<bool> lowerToRTL("lower-to-rtl",
-                                cl::desc("run the lower-to-rtl pass"));
+static cl::opt<bool> lowerToHW("lower-to-rtl",
+                               cl::desc("run the lower-to-rtl pass"));
 static cl::opt<bool> imconstprop(
     "imconstprop",
     cl::desc(
@@ -137,7 +137,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
               MLIRContext &context,
               std::function<LogicalResult(OwningModuleRef)> callback) {
   // Register our dialects.
-  context.loadDialect<firrtl::FIRRTLDialect, rtl::RTLDialect, comb::CombDialect,
+  context.loadDialect<firrtl::FIRRTLDialect, rtl::HWDialect, comb::CombDialect,
                       sv::SVDialect>();
 
   llvm::SourceMgr sourceMgr;
@@ -223,17 +223,17 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxMemoryPass());
 
   // Lower if we are going to verilog or if lowering was specifically requested.
-  if (lowerToRTL || outputFormat == OutputVerilog ||
+  if (lowerToHW || outputFormat == OutputVerilog ||
       outputFormat == OutputSplitVerilog) {
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createCheckWidthsPass());
     pm.addPass(createLowerFIRRTLToHWPass());
-    pm.addPass(sv::createRTLMemSimImplPass());
+    pm.addPass(sv::createHWMemSimImplPass());
 
     // If enabled, run the optimizer.
     if (!disableOptimization) {
-      auto &modulePM = pm.nest<rtl::RTLModuleOp>();
-      modulePM.addPass(sv::createRTLCleanupPass());
+      auto &modulePM = pm.nest<rtl::HWModuleOp>();
+      modulePM.addPass(sv::createHWCleanupPass());
       modulePM.addPass(createCSEPass());
       modulePM.addPass(createSimpleCanonicalizerPass());
     }
@@ -242,11 +242,11 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   // Add passes specific to Verilog emission if we're going there.
   if (outputFormat == OutputVerilog || outputFormat == OutputSplitVerilog) {
     // Legalize the module names.
-    pm.addPass(sv::createRTLLegalizeNamesPass());
+    pm.addPass(sv::createHWLegalizeNamesPass());
 
     // Tidy up the IR to improve verilog emission quality.
     if (!disableOptimization) {
-      auto &modulePM = pm.nest<rtl::RTLModuleOp>();
+      auto &modulePM = pm.nest<rtl::HWModuleOp>();
       modulePM.addPass(sv::createPrettifyVerilogPass());
     }
   }

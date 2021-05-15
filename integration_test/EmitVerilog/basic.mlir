@@ -3,7 +3,7 @@
 // RUN: circt-rtl-sim.py %t1.sv --cycles 8 2>&1 | FileCheck %s
 
 module {
-  // The RTL dialect doesn't have any sequential constructs yet. So don't do
+  // The HW dialect doesn't have any sequential constructs yet. So don't do
   // much.
   rtl.module @top(%clk: i1, %rstn: i1) {
     %c1 = rtl.instance "aaa" @AAA () : () -> (i1)
