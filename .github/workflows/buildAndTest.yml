@@ -13,7 +13,7 @@ jobs:
   # cache.
   build-llvm:
     name: Build LLVM
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     container:
       image: ghcr.io/circt/images/circt-ci-build:20210515012409
     steps:
@@ -88,7 +88,7 @@ jobs:
   build-circt:
     name: Build and Test
     needs: build-llvm
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     container:
       image: ghcr.io/circt/images/circt-ci-build:20210515012409
     steps:
