@@ -140,12 +140,19 @@ StringAttr hw::getVerilogModuleNameAttr(Operation *module) {
 
 /// Return the port name for the specified argument or result.
 StringAttr hw::getModuleArgumentNameAttr(Operation *module, size_t argNo) {
-  return module->getAttrOfType<ArrayAttr>("argNames")[argNo].cast<StringAttr>();
+  auto argNames = module->getAttrOfType<ArrayAttr>("argNames");
+  // Tolerate malformed IR here to enable debug printing etc.
+  if (argNames && argNo < argNames.size())
+    return argNames[argNo].cast<StringAttr>();
+  return StringAttr();
 }
 
 StringAttr hw::getModuleResultNameAttr(Operation *module, size_t resultNo) {
-  return module->getAttrOfType<ArrayAttr>("resultNames")[resultNo]
-      .cast<StringAttr>();
+  auto resultNames = module->getAttrOfType<ArrayAttr>("resultNames");
+  // Tolerate malformed IR here to enable debug printing etc.
+  if (resultNames && resultNo < resultNames.size())
+    return resultNames[resultNo].cast<StringAttr>();
+  return StringAttr();
 }
 
 void hw::setModuleArgumentNames(Operation *module, ArrayRef<Attribute> names) {
@@ -759,15 +766,7 @@ StringAttr InstanceOp::getResultName(size_t idx) {
   if (!module)
     return {};
 
-  for (auto &port : getModulePortInfo(module)) {
-    if (!port.isOutput())
-      continue;
-    if (idx == 0)
-      return port.name;
-    --idx;
-  }
-
-  return StringAttr();
+  return getModuleResultNameAttr(module, idx);
 }
 
 /// Suggest a name for each result value based on the saved result names

@@ -57,16 +57,19 @@ FunctionType getModuleType(Operation *module);
 /// operations.
 StringAttr getVerilogModuleNameAttr(Operation *module);
 
-/// Return the port name for the specified argument or result.
+/// Return the port name for the specified argument or result.  These can only
+/// return a null StringAttr when the IR is invalid.
 StringAttr getModuleArgumentNameAttr(Operation *module, size_t argNo);
 StringAttr getModuleResultNameAttr(Operation *module, size_t argNo);
 
 static inline StringRef getModuleArgumentName(Operation *module, size_t argNo) {
-  return getModuleArgumentNameAttr(module, argNo).getValue();
+  auto attr = getModuleArgumentNameAttr(module, argNo);
+  return attr ? attr.getValue() : StringRef();
 }
 static inline StringRef getModuleResultName(Operation *module,
                                             size_t resultNo) {
-  return getModuleResultNameAttr(module, resultNo).getValue();
+  auto attr = getModuleResultNameAttr(module, resultNo);
+  return attr ? attr.getValue() : StringRef();
 }
 
 void setModuleArgumentNames(Operation *module, ArrayRef<Attribute> names);
