@@ -227,7 +227,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
       outputFormat == OutputSplitVerilog) {
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createCheckWidthsPass());
-    pm.addPass(createLowerFIRRTLToRTLPass());
+    pm.addPass(createLowerFIRRTLToHWPass());
     pm.addPass(sv::createRTLMemSimImplPass());
 
     // If enabled, run the optimizer.

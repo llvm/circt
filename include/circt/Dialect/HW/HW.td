@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef RTL_TD
-#define RTL_TD
+#ifndef HW_TD
+#define HW_TD
 
 include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
@@ -47,4 +47,4 @@ include "circt/Dialect/HW/HWAggregates.td"
 include "circt/Dialect/HW/HWStructure.td"
 include "circt/Dialect/HW/HWTypeDecls.td"
 
-#endif // RTL_TD
+#endif // HW_TD

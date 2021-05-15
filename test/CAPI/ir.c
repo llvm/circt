@@ -11,7 +11,7 @@
  */
 
 #include "mlir-c/IR.h"
-#include "circt-c/Dialect/RTL.h"
+#include "circt-c/Dialect/HW.h"
 #include "circt-c/Dialect/Seq.h"
 #include "mlir-c/AffineExpr.h"
 #include "mlir-c/AffineMap.h"

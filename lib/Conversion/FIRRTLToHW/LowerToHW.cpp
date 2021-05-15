@@ -1,4 +1,4 @@
-//===- LowerToRTL.cpp - FIRRTL to RTL Lowering Pass -----------------------===//
+//===- LowerToHW.cpp - FIRRTL to HW/SV Lowering Pass ----------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,12 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This is the main FIRRTL to RTL Lowering Pass Implementation.
+// This is the main FIRRTL to HW/SV Lowering Pass Implementation.
 //
 //===----------------------------------------------------------------------===//
 
 #include "../PassDetail.h"
-#include "circt/Conversion/FIRRTLToRTL/FIRRTLToRTL.h"
+#include "circt/Conversion/FIRRTLToHW/FIRRTLToHW.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
@@ -231,8 +231,7 @@ private:
 } // end anonymous namespace
 
 namespace {
-struct FIRRTLModuleLowering
-    : public LowerFIRRTLToRTLBase<FIRRTLModuleLowering> {
+struct FIRRTLModuleLowering : public LowerFIRRTLToHWBase<FIRRTLModuleLowering> {
 
   void runOnOperation() override;
 
@@ -257,7 +256,7 @@ private:
 } // end anonymous namespace
 
 /// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::createLowerFIRRTLToRTLPass() {
+std::unique_ptr<mlir::Pass> circt::createLowerFIRRTLToHWPass() {
   return std::make_unique<FIRRTLModuleLowering>();
 }
 

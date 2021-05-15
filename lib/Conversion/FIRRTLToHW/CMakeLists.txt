@@ -1,5 +1,5 @@
-add_circt_conversion_library(CIRCTHWToLLHD
-  RTLToLLHD.cpp
+add_circt_conversion_library(CIRCTFIRRTLToHW
+  LowerToHW.cpp
 
   DEPENDS
   CIRCTConversionPassIncGen
@@ -8,7 +8,9 @@ add_circt_conversion_library(CIRCTHWToLLHD
   Core
 
   LINK_LIBS PUBLIC
-  CIRCTLLHD
+  CIRCTComb
+  CIRCTFIRRTL
   CIRCTHW
+  CIRCTSV
   MLIRTransforms
 )

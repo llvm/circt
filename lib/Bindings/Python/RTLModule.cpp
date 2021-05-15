@@ -8,7 +8,7 @@
 
 #include "DialectModules.h"
 
-#include "circt-c/Dialect/RTL.h"
+#include "circt-c/Dialect/HW.h"
 
 #include "mlir-c/BuiltinAttributes.h"
 #include "mlir/Bindings/Python/PybindAdaptors.h"

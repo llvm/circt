@@ -1,4 +1,4 @@
-//===- RTLToLLHD.h - LLHD to LLVM pass entry point ------------------------===//
+//===- FIRRTLToHW.h - FIRRTL to HW conversion pass --------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,25 +6,24 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This header file defines prototypes that expose the RTLToLLHD pass
-// constructors.
+// This file declares passes which together will lower the FIRRTL dialect to
+// HW and SV dialects.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_CONVERSION_RTLTOLLHD_RTLTOLLHD_H_
-#define CIRCT_CONVERSION_RTLTOLLHD_RTLTOLLHD_H_
+#ifndef CIRCT_CONVERSION_FIRRTLTOHW_FIRRTLTOHW_H
+#define CIRCT_CONVERSION_FIRRTLTOHW_FIRRTLTOHW_H
 
 #include <memory>
 
 namespace mlir {
-template <typename T>
-class OperationPass;
-class ModuleOp;
+class Pass;
 } // namespace mlir
 
 namespace circt {
-std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
-createConvertRTLToLLHDPass();
+
+std::unique_ptr<mlir::Pass> createLowerFIRRTLToHWPass();
+
 } // namespace circt
 
-#endif // CIRCT_CONVERSION_RTLTOLLHD_RTLTOLLHD_H_
+#endif // CIRCT_CONVERSION_FIRRTLTOHW_FIRRTLTOHW_H

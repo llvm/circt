@@ -10,8 +10,8 @@
 
 #include "circt-c/Dialect/Comb.h"
 #include "circt-c/Dialect/ESI.h"
+#include "circt-c/Dialect/HW.h"
 #include "circt-c/Dialect/MSFT.h"
-#include "circt-c/Dialect/RTL.h"
 #include "circt-c/Dialect/SV.h"
 #include "circt-c/Dialect/Seq.h"
 #include "circt-c/ExportVerilog.h"

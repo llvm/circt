@@ -1,4 +1,4 @@
-//===- RTLToLLHD.cpp - RTL to LLHD Conversion Pass ------------------------===//
+//===- HWToLLHD.cpp - HW to LLHD Conversion Pass --------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,11 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This is the main RTL to LLHD Conversion Pass Implementation.
+// This is the main HW to LLHD Conversion Pass Implementation.
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Conversion/RTLToLLHD/RTLToLLHD.h"
+#include "circt/Conversion/HWToLLHD/HWToLLHD.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
@@ -32,20 +32,20 @@ using namespace comb;
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct RTLToLLHDPass : public ConvertRTLToLLHDBase<RTLToLLHDPass> {
+struct HWToLLHDPass : public ConvertHWToLLHDBase<HWToLLHDPass> {
   void runOnOperation() override;
 };
 
 /// A helper type converter class that automatically populates the relevant
 /// materializations and type conversions for converting RTL to LLHD.
-struct RTLToLLHDTypeConverter : public TypeConverter {
-  RTLToLLHDTypeConverter();
+struct HWToLLHDTypeConverter : public TypeConverter {
+  HWToLLHDTypeConverter();
 };
 } // namespace
 
 /// Create a RTL to LLHD conversion pass.
-std::unique_ptr<OperationPass<ModuleOp>> circt::createConvertRTLToLLHDPass() {
-  return std::make_unique<RTLToLLHDPass>();
+std::unique_ptr<OperationPass<ModuleOp>> circt::createConvertHWToLLHDPass() {
+  return std::make_unique<HWToLLHDPass>();
 }
 
 /// Forward declare conversion patterns.
@@ -54,7 +54,7 @@ struct ConvertOutput;
 struct ConvertInstance;
 
 /// This is the main entrypoint for the RTL to LLHD conversion pass.
-void RTLToLLHDPass::runOnOperation() {
+void HWToLLHDPass::runOnOperation() {
   MLIRContext &context = getContext();
   ModuleOp module = getOperation();
 
@@ -67,7 +67,7 @@ void RTLToLLHDPass::runOnOperation() {
   target.addIllegalOp<InstanceOp>();
 
   // Rewrite `rtl.module`, `rtl.output`, and `rtl.instance`.
-  RTLToLLHDTypeConverter typeConverter;
+  HWToLLHDTypeConverter typeConverter;
   RewritePatternSet patterns(&context);
   mlir::populateFunctionLikeTypeConversionPattern<RTLModuleOp>(patterns,
                                                                typeConverter);
@@ -82,7 +82,7 @@ void RTLToLLHDPass::runOnOperation() {
 // TypeConverter conversions and materializations
 //===----------------------------------------------------------------------===//
 
-RTLToLLHDTypeConverter::RTLToLLHDTypeConverter() {
+HWToLLHDTypeConverter::HWToLLHDTypeConverter() {
   // Convert any type by just wrapping it in `SigType`.
   addConversion([](Type type) { return SigType::get(type); });
 
