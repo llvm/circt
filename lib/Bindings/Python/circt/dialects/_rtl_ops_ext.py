@@ -310,7 +310,7 @@ class HWModuleOp(ModuleLike):
             return_values = [return_values]
           else:
             return_values = list(return_values)
-          rtl.OutputOp(return_values)
+          hw.OutputOp(return_values)
           # Recompute the function type.
           return_types = [v.type for v in return_values]
           function_type = FunctionType.get(inputs=inputs, results=return_types)
@@ -323,7 +323,7 @@ class HWModuleOp(ModuleLike):
           module_op.attributes["resultNames"] = ArrayAttr.get(resultNames)
 
       def emit_instance_op(*call_args):
-        call_op = rtl.InstanceOp(return_types, StringAttr.get(''),
+        call_op = hw.InstanceOp(return_types, StringAttr.get(''),
                                  FlatSymbolRefAttr.get(symbol_name), call_args,
                                  DictAttr.get({}), None)
         if return_types is None:

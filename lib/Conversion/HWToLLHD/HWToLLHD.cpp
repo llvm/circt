@@ -66,7 +66,7 @@ void HWToLLHDPass::runOnOperation() {
   target.addIllegalOp<OutputOp>();
   target.addIllegalOp<InstanceOp>();
 
-  // Rewrite `rtl.module`, `rtl.output`, and `rtl.instance`.
+  // Rewrite `hw.module`, `hw.output`, and `hw.instance`.
   HWToLLHDTypeConverter typeConverter;
   RewritePatternSet patterns(&context);
   mlir::populateFunctionLikeTypeConversionPattern<HWModuleOp>(patterns,

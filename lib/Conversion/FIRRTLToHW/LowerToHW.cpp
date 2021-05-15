@@ -589,7 +589,7 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   if (auto defName = oldModule.defname())
     verilogName = defName.getValue();
 
-  // Build the new rtl.module op.
+  // Build the new hw.module op.
   OpBuilder builder(topLevelModule->getParent()->getContext());
   builder.setInsertionPointToEnd(topLevelModule);
   auto nameAttr = builder.getStringAttr(oldModule.getName());
@@ -598,7 +598,7 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
 }
 
 /// Run on each firrtl.module, transforming it from an firrtl.module into an
-/// rtl.module, then deleting the old one.
+/// hw.module, then deleting the old one.
 rtl::HWModuleOp FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
                                                   Block *topLevelModule) {
   // Map the ports over, lowering their types as we go.
@@ -607,7 +607,7 @@ rtl::HWModuleOp FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
   if (failed(lowerPorts(firrtlPorts, ports, oldModule)))
     return {};
 
-  // Build the new rtl.module op.
+  // Build the new hw.module op.
   OpBuilder builder(topLevelModule->getParent()->getContext());
   builder.setInsertionPointToEnd(topLevelModule);
   auto nameAttr = builder.getStringAttr(oldModule.getName());
@@ -653,7 +653,7 @@ static Value tryEliminatingAttachesToAnalogValue(Value value,
 /// just return null.
 ///
 /// This can happen when there are no connects to the value.  The 'mergePoint'
-/// location is where a 'rtl.merge' operation should be inserted if needed.
+/// location is where a 'hw.merge' operation should be inserted if needed.
 static Value tryEliminatingConnectsToValue(Value flipValue,
                                            Operation *insertPoint) {
   // Handle analog's separately.
@@ -730,7 +730,7 @@ static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
   return accesses;
 }
 
-/// Now that we have the operations for the rtl.module's corresponding to the
+/// Now that we have the operations for the hw.module's corresponding to the
 /// firrtl.module's, we can go through and move the bodies over, updating the
 /// ports and instances.
 void FIRRTLModuleLowering::lowerModuleBody(
@@ -776,7 +776,7 @@ void FIRRTLModuleLowering::lowerModuleBody(
       Value newArg = newModule.body().getArgument(nextNewArg++);
 
       // Cast the argument to the old type, reintroducing sign information in
-      // the rtl.module body.
+      // the hw.module body.
       newArg = castToFIRRTLType(newArg, oldArg.getType(), bodyBuilder);
       // Switch all uses of the old operands to the new ones.
       oldArg.replaceAllUsesWith(newArg);
@@ -815,7 +815,7 @@ void FIRRTLModuleLowering::lowerModuleBody(
     }
   }
 
-  // Update the rtl.output terminator with the list of outputs we have.
+  // Update the hw.output terminator with the list of outputs we have.
   outputOp->setOperands(outputs);
 
   // Finally splice the body over, don't move the old terminator over though.
@@ -1081,7 +1081,7 @@ void FIRRTLLowering::run() {
     } else {
       switch (handleUnloweredOp(&op)) {
       case AlreadyLowered:
-        break;         // Something like rtl.output, which is already lowered.
+        break;         // Something like hw.output, which is already lowered.
       case NowLowered: // Something handleUnloweredOp removed.
         opsToRemove.push_back(&op);
         break;
@@ -1498,7 +1498,7 @@ FIRRTLLowering::UnloweredOpResult
 FIRRTLLowering::handleUnloweredOp(Operation *op) {
   // Scan the operand list for the operation to see if none were lowered.  In
   // that case the operation must be something lowered to HW already, e.g.
-  // the rtl.output operation.  This is success for us because it is already
+  // the hw.output operation.  This is success for us because it is already
   // lowered.
   if (llvm::all_of(op->getOpOperands(), [&](auto &operand) -> bool {
         return !valueMapping.count(operand.get());
@@ -1884,12 +1884,12 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   // Use the symbol from the module we are referencing.
   FlatSymbolRefAttr symbolAttr = builder.getSymbolRefAttr(newModule);
 
-  // Create the new rtl.instance operation.
+  // Create the new hw.instance operation.
   auto newInstance = builder.create<rtl::InstanceOp>(
       resultTypes, oldInstance.nameAttr(), symbolAttr, operands, parameters,
       StringAttr());
 
-  // Now that we have the new rtl.instance, we need to remap all of the users
+  // Now that we have the new hw.instance, we need to remap all of the users
   // of the outputs/results to the values returned by the instance.
   unsigned resultNo = 0;
   for (size_t portIndex = 0, e = portInfo.size(); portIndex != e; ++portIndex) {

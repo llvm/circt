@@ -1,4 +1,4 @@
-add_circt_dialect(HW rtl)
+add_circt_dialect(HW hw)
 add_circt_doc(HW -gen-dialect-doc HW Dialects/)
 
 set(LLVM_TARGET_DEFINITIONS HW.td)

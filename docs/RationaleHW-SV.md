@@ -39,8 +39,8 @@ language directly.  Instead, it is designed to be easy to analyze and transform,
 and be a flexible and extensible substrate that may be extended with higher
 level dialects mixed into it.
 
-The HW dialect defines a set of common functionality, such as `rtl.module` for
-representing hardware modules, and operations like `rtl.add` and `rtl.mux` for
+The HW dialect defines a set of common functionality, such as `hw.module` for
+representing hardware modules, and operations like `hw.add` and `hw.mux` for
 logic.
 
 ### Type System
@@ -73,7 +73,7 @@ IR more regular, easy to transform, and have fewer canonical forms.
    same operand multiple times) instead.
 
  * No zero extension operator to add high zero bits.  This is strictly redundant
-   with `concat(zero, value)`.  The `rtl.sext` operator exists because it
+   with `concat(zero, value)`.  The `hw.sext` operator exists because it
    efficiently models large sign extensions which are common, and would require
    many operands if modeled as a concat operator (in contrast, a zero extension
    always requires a single zero value).
@@ -87,13 +87,13 @@ Combinatorial operations like add and multiply work on values of signless
 standard integer types, e.g. `i42`, but they do not allow zero bit inputs.  This
 design point is motivated by a couple of reasons:
 
-1) The semantics of some operations (e.g. `rtl.sext`) do not have an obvious
+1) The semantics of some operations (e.g. `hw.sext`) do not have an obvious
    definition with a zero bit input.
 
 1) Zero bit operations are useless for operations that are definable, and their
    presence makes the compiler more complicated.
 
-On the second point, consider an example like `rtl.mux` which could allow zero
+On the second point, consider an example like `hw.mux` which could allow zero
 bit inputs and therefore produce zero bit results.  Allowing that as a design
 point would require us to special case this in our cost models, and we would
 have that optimizes it away.
@@ -106,43 +106,43 @@ itself - it is perfectly reasonable to define your operations and mix them into
 other HW constructs.  Also, certain other operations do support zero bit
 declarations in limited ways:
 
- - The `rtl.module` operation allows zero bit ports, since it supports an open
+ - The `hw.module` operation allows zero bit ports, since it supports an open
    type system.  They are dropped from Verilog emission.
  - Interface signals are allowed to be zero bits wide.  They are dropped from
    Verilog emission.
 
 ### Endianness: operand ordering and internal representation
 
-Certain operations require ordering to be defined (i.e. `rtl.concat`,
-`rtl.array_concat`, and `rtl.array_create`). There are two places where this
+Certain operations require ordering to be defined (i.e. `hw.concat`,
+`hw.array_concat`, and `hw.array_create`). There are two places where this
 is relevant: in the MLIR assembly and in the MLIR C++ model.
 
 In MLIR assembly, operands are always listed MSB to LSB (big endian style):
 
 ```mlir
-%msb = rtl.constant 0xEF : i8
-%mid = rtl.constant 0x7 : i4
-%lsb = rtl.constant 0xA018 : i16
-%result = rtl.concat %msb, %mid, %lsb : (i8, i4, i16) -> i28
+%msb = hw.constant 0xEF : i8
+%mid = hw.constant 0x7 : i4
+%lsb = hw.constant 0xA018 : i16
+%result = hw.concat %msb, %mid, %lsb : (i8, i4, i16) -> i28
 // %result is 0xEF7A018
 ```
 
 **Note**: Integers are always written in left-to-right lexical order. Operand
-ordering for `rtl.concat` was chosen to be consistent with simply abutting
+ordering for `hw.concat` was chosen to be consistent with simply abutting
 them in lexical order.
 
 ```mlir
-%1 = rtl.constant 0x1 : i4
-%2 = rtl.constant 0x2 : i4
-%3 = rtl.constant 0x3 : i4
-%arr123 = rtl.array_create %1, %2, %3 : i4
+%1 = hw.constant 0x1 : i4
+%2 = hw.constant 0x2 : i4
+%3 = hw.constant 0x3 : i4
+%arr123 = hw.array_create %1, %2, %3 : i4
 // %arr123[0] = 0x3
 // %arr123[1] = 0x2
 // %arr123[2] = 0x1
 
 %arr456 = ... // {0x4, 0x5, 0x6}
 %arr78  = ... // {0x7, 0x8}
-%arr = rtl.array_concat %arr123, %arr456, %arr78 : !rtl.array<3 x i4>, !rtl.array<3 x i4>, !rtl.array<2 x i4>
+%arr = hw.array_concat %arr123, %arr456, %arr78 : !hw.array<3 x i4>, !hw.array<3 x i4>, !hw.array<2 x i4>
 // %arr[0] = 0x6
 // %arr[1] = 0x5
 // %arr[2] = 0x4

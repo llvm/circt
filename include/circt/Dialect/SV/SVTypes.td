@@ -47,7 +47,7 @@ def InOutElementType : Type<CPred<"rtl::isHWValueType($_self)">,
 
 // This type constraint is used by operations whose asm strings have a type "T"
 // in the asmstring, which constraints an input or output to type `T`, and then
-// constraints another to `!rtl.inout<T>`.  The "value" and "inoutValue" are the
+// constraints another to `!hw.inout<T>`.  The "value" and "inoutValue" are the
 // name of the operand or result for the type sides of this.
 //
 // Note that the inoutValue must be constrained to being an InOutElementType to

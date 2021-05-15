@@ -1,11 +1,11 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 
-// CHECK-LABEL: rtl.module @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> (i50) {
-rtl.module @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> (i50) {
-  // CHECK-NEXT:    %c42_i12 = rtl.constant 42 : i12
+// CHECK-LABEL: hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (i50) {
+hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (i50) {
+  // CHECK-NEXT:    %c42_i12 = hw.constant 42 : i12
   // CHECK-NEXT:    [[RES0:%[0-9]+]] = comb.add %c42_i12, %c42_i12 : i12
   // CHECK-NEXT:    [[RES1:%[0-9]+]] = comb.mul %c42_i12, [[RES0]] : i12
-  %a = rtl.constant 42 : i12
+  %a = hw.constant 42 : i12
   %b = comb.add %a, %a : i12
   %c = comb.mul %a, %b : i12
 
@@ -60,79 +60,79 @@ rtl.module @test1(%arg0: i3, %arg1: i1, %arg2: !rtl.array<1000xi8>) -> (i50) {
   // CHECK-NEXT: comb.icmp uge [[RES9]], [[RES10]] : i19
   %ugeq = comb.icmp uge %small1, %small2 : i19
 
-  // CHECK-NEXT: %w = sv.wire : !rtl.inout<i4>
-  %w = sv.wire : !rtl.inout<i4>
+  // CHECK-NEXT: %w = sv.wire : !hw.inout<i4>
+  %w = sv.wire : !hw.inout<i4>
 
-  // CHECK-NEXT: %after1 = sv.wire : !rtl.inout<i4>
-  %before1 = sv.wire {name = "after1"} : !rtl.inout<i4>
+  // CHECK-NEXT: %after1 = sv.wire : !hw.inout<i4>
+  %before1 = sv.wire {name = "after1"} : !hw.inout<i4>
 
-  // CHECK-NEXT: sv.read_inout %after1 : !rtl.inout<i4>
-  %read_before1 = sv.read_inout %before1 : !rtl.inout<i4>
+  // CHECK-NEXT: sv.read_inout %after1 : !hw.inout<i4>
+  %read_before1 = sv.read_inout %before1 : !hw.inout<i4>
 
-  // CHECK-NEXT: %after2_conflict = sv.wire : !rtl.inout<i4>
-  // CHECK-NEXT: %after2_conflict_0 = sv.wire {name = "after2_conflict"} : !rtl.inout<i4>
-  %before2_0 = sv.wire {name = "after2_conflict"} : !rtl.inout<i4>
-  %before2_1 = sv.wire {name = "after2_conflict"} : !rtl.inout<i4>
+  // CHECK-NEXT: %after2_conflict = sv.wire : !hw.inout<i4>
+  // CHECK-NEXT: %after2_conflict_0 = sv.wire {name = "after2_conflict"} : !hw.inout<i4>
+  %before2_0 = sv.wire {name = "after2_conflict"} : !hw.inout<i4>
+  %before2_1 = sv.wire {name = "after2_conflict"} : !hw.inout<i4>
 
-  // CHECK-NEXT: %after3 = sv.wire {someAttr = "foo"} : !rtl.inout<i4>
-  %before3 = sv.wire {name = "after3", someAttr = "foo"} : !rtl.inout<i4>
+  // CHECK-NEXT: %after3 = sv.wire {someAttr = "foo"} : !hw.inout<i4>
+  %before3 = sv.wire {name = "after3", someAttr = "foo"} : !hw.inout<i4>
 
   // CHECK-NEXT: = comb.mux %arg1, [[RES2]], [[RES2]] : i7
   %mux = comb.mux %arg1, %d, %d : i7
   
-  // CHECK-NEXT: [[STR:%[0-9]+]] = rtl.struct_create ({{.*}}, {{.*}}) : !rtl.struct<foo: i19, bar: i7>
-  %s0 = rtl.struct_create (%small1, %mux) : !rtl.struct<foo: i19, bar: i7>
+  // CHECK-NEXT: [[STR:%[0-9]+]] = hw.struct_create ({{.*}}, {{.*}}) : !hw.struct<foo: i19, bar: i7>
+  %s0 = hw.struct_create (%small1, %mux) : !hw.struct<foo: i19, bar: i7>
 
-  // CHECK-NEXT: = rtl.struct_extract [[STR]]["foo"] : !rtl.struct<foo: i19, bar: i7>
-  %sf1 = rtl.struct_extract %s0["foo"] : !rtl.struct<foo: i19, bar: i7>
+  // CHECK-NEXT: = hw.struct_extract [[STR]]["foo"] : !hw.struct<foo: i19, bar: i7>
+  %sf1 = hw.struct_extract %s0["foo"] : !hw.struct<foo: i19, bar: i7>
 
-  // CHECK-NEXT: = rtl.struct_inject [[STR]]["foo"], {{.*}} : !rtl.struct<foo: i19, bar: i7>
-  %s1 = rtl.struct_inject %s0["foo"], %sf1 : !rtl.struct<foo: i19, bar: i7>
+  // CHECK-NEXT: = hw.struct_inject [[STR]]["foo"], {{.*}} : !hw.struct<foo: i19, bar: i7>
+  %s1 = hw.struct_inject %s0["foo"], %sf1 : !hw.struct<foo: i19, bar: i7>
   
-  // CHECK-NEXT: :2 = rtl.struct_explode [[STR]] : !rtl.struct<foo: i19, bar: i7>
-  %se:2 = rtl.struct_explode %s0 : !rtl.struct<foo: i19, bar: i7>
+  // CHECK-NEXT: :2 = hw.struct_explode [[STR]] : !hw.struct<foo: i19, bar: i7>
+  %se:2 = hw.struct_explode %s0 : !hw.struct<foo: i19, bar: i7>
 
-  // CHECK-NEXT: rtl.bitcast [[STR]] : (!rtl.struct<foo: i19, bar: i7>)
-  %structBits = rtl.bitcast %s0 : (!rtl.struct<foo: i19, bar: i7>) -> i26
+  // CHECK-NEXT: hw.bitcast [[STR]] : (!hw.struct<foo: i19, bar: i7>)
+  %structBits = hw.bitcast %s0 : (!hw.struct<foo: i19, bar: i7>) -> i26
 
   // CHECK-NEXT: = constant 13 : i10
   %idx = constant 13 : i10
-  // CHECK-NEXT: = rtl.array_slice %arg2 at %c13_i10 : (!rtl.array<1000xi8>) -> !rtl.array<24xi8>
-  %subArray = rtl.array_slice %arg2 at %idx : (!rtl.array<1000xi8>) -> !rtl.array<24xi8>
-  // CHECK-NEXT: [[ARR1:%.+]] = rtl.array_create [[RES9]], [[RES10]] : (i19)
-  %arrCreated = rtl.array_create %small1, %small2 : (i19)
-  // CHECK-NEXT: [[ARR2:%.+]] = rtl.array_create [[RES9]], [[RES10]], {{.+}} : (i19)
-  %arr2 = rtl.array_create %small1, %small2, %add : (i19)
-  // CHECK-NEXT: = rtl.array_concat [[ARR1]], [[ARR2]] : !rtl.array<2xi19>, !rtl.array<3xi19>
-  %bigArray = rtl.array_concat %arrCreated, %arr2 : !rtl.array<2 x i19>, !rtl.array<3 x i19>
+  // CHECK-NEXT: = hw.array_slice %arg2 at %c13_i10 : (!hw.array<1000xi8>) -> !hw.array<24xi8>
+  %subArray = hw.array_slice %arg2 at %idx : (!hw.array<1000xi8>) -> !hw.array<24xi8>
+  // CHECK-NEXT: [[ARR1:%.+]] = hw.array_create [[RES9]], [[RES10]] : (i19)
+  %arrCreated = hw.array_create %small1, %small2 : (i19)
+  // CHECK-NEXT: [[ARR2:%.+]] = hw.array_create [[RES9]], [[RES10]], {{.+}} : (i19)
+  %arr2 = hw.array_create %small1, %small2, %add : (i19)
+  // CHECK-NEXT: = hw.array_concat [[ARR1]], [[ARR2]] : !hw.array<2xi19>, !hw.array<3xi19>
+  %bigArray = hw.array_concat %arrCreated, %arr2 : !hw.array<2 x i19>, !hw.array<3 x i19>
 
-  // CHECK-NEXT:    rtl.output [[RES8]] : i50
-  rtl.output %result : i50
+  // CHECK-NEXT:    hw.output [[RES8]] : i50
+  hw.output %result : i50
 }
 // CHECK-NEXT:  }
 
-rtl.module @UnionOps(%a: !rtl.union<foo: i1, bar: i3>) -> (%x: i3, %z: !rtl.union<bar: i3, baz: i8>) {
-  %x = rtl.union_extract %a["bar"] : !rtl.union<foo: i1, bar: i3>
-  %z = rtl.union_create "bar", %x : !rtl.union<bar: i3, baz: i8>
-  rtl.output %x, %z : i3, !rtl.union<bar: i3, baz: i8>
+hw.module @UnionOps(%a: !hw.union<foo: i1, bar: i3>) -> (%x: i3, %z: !hw.union<bar: i3, baz: i8>) {
+  %x = hw.union_extract %a["bar"] : !hw.union<foo: i1, bar: i3>
+  %z = hw.union_create "bar", %x : !hw.union<bar: i3, baz: i8>
+  hw.output %x, %z : i3, !hw.union<bar: i3, baz: i8>
 }
-// CHECK-LABEL: rtl.module @UnionOps(%a: !rtl.union<foo: i1, bar: i3>) -> (%x: i3, %z: !rtl.union<bar: i3, baz: i8>) {
-// CHECK-NEXT:    [[I3REG:%.+]] = rtl.union_extract %a["bar"] : !rtl.union<foo: i1, bar: i3>
-// CHECK-NEXT:    [[UREG:%.+]] = rtl.union_create "bar", [[I3REG]] : !rtl.union<bar: i3, baz: i8>
-// CHECK-NEXT:    rtl.output [[I3REG]], [[UREG]] : i3, !rtl.union<bar: i3, baz: i8>
+// CHECK-LABEL: hw.module @UnionOps(%a: !hw.union<foo: i1, bar: i3>) -> (%x: i3, %z: !hw.union<bar: i3, baz: i8>) {
+// CHECK-NEXT:    [[I3REG:%.+]] = hw.union_extract %a["bar"] : !hw.union<foo: i1, bar: i3>
+// CHECK-NEXT:    [[UREG:%.+]] = hw.union_create "bar", [[I3REG]] : !hw.union<bar: i3, baz: i8>
+// CHECK-NEXT:    hw.output [[I3REG]], [[UREG]] : i3, !hw.union<bar: i3, baz: i8>
 
 // https://github.com/llvm/circt/issues/863
-// CHECK-LABEL: rtl.module @signed_arrays
-rtl.module @signed_arrays(%arg0: si8) -> (%out: !rtl.array<2xsi8>) {
-  // CHECK-NEXT:  %wireArray = sv.wire  : !rtl.inout<array<2xsi8>>
-  %wireArray = sv.wire : !rtl.inout<!rtl.array<2xsi8>>
+// CHECK-LABEL: hw.module @signed_arrays
+hw.module @signed_arrays(%arg0: si8) -> (%out: !hw.array<2xsi8>) {
+  // CHECK-NEXT:  %wireArray = sv.wire  : !hw.inout<array<2xsi8>>
+  %wireArray = sv.wire : !hw.inout<!hw.array<2xsi8>>
 
-  // CHECK-NEXT: %0 = rtl.array_create %arg0, %arg0 : (si8)
-  %0 = rtl.array_create %arg0, %arg0 : (si8)
+  // CHECK-NEXT: %0 = hw.array_create %arg0, %arg0 : (si8)
+  %0 = hw.array_create %arg0, %arg0 : (si8)
 
-  // CHECK-NEXT: sv.connect %wireArray, %0 : !rtl.array<2xsi8>
-  sv.connect %wireArray, %0 : !rtl.array<2xsi8>
+  // CHECK-NEXT: sv.connect %wireArray, %0 : !hw.array<2xsi8>
+  sv.connect %wireArray, %0 : !hw.array<2xsi8>
 
-  %result = sv.read_inout %wireArray : !rtl.inout<!rtl.array<2xsi8>>
-  rtl.output %result : !rtl.array<2xsi8>
+  %result = sv.read_inout %wireArray : !hw.inout<!hw.array<2xsi8>>
+  hw.output %result : !hw.array<2xsi8>
 }

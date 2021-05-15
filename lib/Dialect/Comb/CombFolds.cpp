@@ -392,7 +392,7 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult MergeOp::fold(ArrayRef<Attribute> constants) {
-  // rtl.merge(x, x, x) -> x.
+  // hw.merge(x, x, x) -> x.
   if (llvm::all_of(inputs(), [&](auto in) { return in == this->inputs()[0]; }))
     return inputs()[0];
 

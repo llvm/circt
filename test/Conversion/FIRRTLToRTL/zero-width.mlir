@@ -1,7 +1,7 @@
 // RUN: circt-opt -lower-firrtl-to-rtl %s | FileCheck %s
 
 firrtl.circuit "Arithmetic" {
-  // CHECK-LABEL: rtl.module @Arithmetic
+  // CHECK-LABEL: hw.module @Arithmetic
   firrtl.module @Arithmetic(in %uin3c: !firrtl.uint<3>,
                             out %out0: !firrtl.uint<3>,
                             out %out1: !firrtl.uint<4>,
@@ -9,7 +9,7 @@ firrtl.circuit "Arithmetic" {
                             out %out3: !firrtl.uint<1>) {
   %uin0c = firrtl.wire : !firrtl.uint<0>
 
-    // CHECK-DAG: [[MULZERO:%.+]] = rtl.constant 0 : i3
+    // CHECK-DAG: [[MULZERO:%.+]] = hw.constant 0 : i3
     %0 = firrtl.mul %uin0c, %uin3c : (!firrtl.uint<0>, !firrtl.uint<3>) -> !firrtl.uint<3>
     firrtl.connect %out0, %0 : !firrtl.uint<3>, !firrtl.uint<3>
 
@@ -22,8 +22,8 @@ firrtl.circuit "Arithmetic" {
     // Lowers to nothing.  Issue #429.
     %div = firrtl.div %node, %uin3c : (!firrtl.uint<0>, !firrtl.uint<3>) -> !firrtl.uint<0>
 
-    // CHECK-DAG: %c0_i4 = rtl.constant 0 : i4
-    // CHECK-DAG: %false = rtl.constant false
+    // CHECK-DAG: %c0_i4 = hw.constant 0 : i4
+    // CHECK-DAG: %false = hw.constant false
     // CHECK-NEXT: [[UIN3EXT:%.+]] = comb.concat %false, %uin3c : (i1, i3) -> i4
     // CHECK-NEXT: [[ADDRES:%.+]] = comb.add %c0_i4, [[UIN3EXT]] : i4
     %1 = firrtl.add %uin0c, %uin3c : (!firrtl.uint<0>, !firrtl.uint<3>) -> !firrtl.uint<4>
@@ -36,19 +36,19 @@ firrtl.circuit "Arithmetic" {
     %3 = firrtl.eq %uin0c, %uin0c : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<1>
     firrtl.connect %out3, %3 : !firrtl.uint<1>, !firrtl.uint<1>
 
-    // CHECK: rtl.output %c0_i3, [[ADDRES]], %c0_i4, %true
+    // CHECK: hw.output %c0_i3, [[ADDRES]], %c0_i4, %true
   }
 
-  // CHECK-LABEL: rtl.module @Exotic
+  // CHECK-LABEL: hw.module @Exotic
   firrtl.module @Exotic(in %uin3c: !firrtl.uint<3>,
                         out %out0: !firrtl.uint<3>,
                         out %out1: !firrtl.uint<3>) {
     %uin0c = firrtl.wire : !firrtl.uint<0>
 
-    // CHECK-DAG: = rtl.constant true
+    // CHECK-DAG: = hw.constant true
     %0 = firrtl.andr %uin0c : (!firrtl.uint<0>) -> !firrtl.uint<1>
 
-    // CHECK-DAG: = rtl.constant false
+    // CHECK-DAG: = hw.constant false
     %1 = firrtl.xorr %uin0c : (!firrtl.uint<0>) -> !firrtl.uint<1>
 
     %2 = firrtl.orr %uin0c : (!firrtl.uint<0>) -> !firrtl.uint<1>
@@ -64,10 +64,10 @@ firrtl.circuit "Arithmetic" {
     // Lowers to nothing.
     %5 = firrtl.cat %uin0c, %uin0c : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.uint<0>
 
-    // CHECK: rtl.output %uin3c, %uin3c : i3, i3
+    // CHECK: hw.output %uin3c, %uin3c : i3, i3
   }
 
-  // CHECK-LABEL: rtl.module @Decls
+  // CHECK-LABEL: hw.module @Decls
   firrtl.module @Decls(in %uin3c: !firrtl.uint<3>) {
     %sin0c = firrtl.wire : !firrtl.sint<0>
     %uin0c = firrtl.wire : !firrtl.uint<0>
@@ -76,7 +76,7 @@ firrtl.circuit "Arithmetic" {
     %wire = firrtl.wire : !firrtl.sint<0>
     firrtl.connect %wire, %sin0c : !firrtl.sint<0>, !firrtl.sint<0>
 
-    // CHECK-NEXT: rtl.output
+    // CHECK-NEXT: hw.output
   }
 
 }

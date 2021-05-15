@@ -23,7 +23,7 @@ def ArrayCreateOp : HWOp<"array_create", [NoSideEffect, SameTypeOperands]> {
 
     ```
     // %a, %b, %c are all i4
-    %array = rtl.array_create %a, %b, %c : (i4)
+    %array = hw.array_create %a, %b, %c : (i4)
     ```
 
     See the HW-SV rationale document for details on operand ordering.
@@ -55,8 +55,8 @@ def ArrayConcatOp : HWOp<"array_concat", [NoSideEffect]> {
 
     ```
     // %a, %b, %c are rtl arrays of i4 with sizes 2, 5, and 4 respectively.
-    %array = rtl.array_concat %a, %b, %c : (2, 5, 4 x i4)
-    // %array is !rtl.array<11 x i4>
+    %array = hw.array_concat %a, %b, %c : (2, 5, 4 x i4)
+    // %array is !hw.array<11 x i4>
     ```
 
     See the HW-SV rationale document for details on operand ordering.
@@ -84,8 +84,8 @@ def ArraySliceOp : HWOp<"array_slice", [NoSideEffect]> {
 
     ```
     // Slices 16 elements starting at '%offset'.
-    %subArray = rtl.slice %largerArray at %offset :
-        (!rtl.array<1024xi8>) -> !rtl.array<16xi8>
+    %subArray = hw.slice %largerArray at %offset :
+        (!hw.array<1024xi8>) -> !hw.array<16xi8>
     ```
 
     Would translate to the following SystemVerilog:
@@ -131,7 +131,7 @@ class ArrayElementTypeConstraint<string result, string input>
                    input, result,
                    "$_self.cast<ArrayType>().getElementType()">;
 
-// rtl.array_get does not work with unpacked arrays.
+// hw.array_get does not work with unpacked arrays.
 def ArrayGetOp : HWOp<"array_get",
     [NoSideEffect, IndexBitWidthConstraint<"index", "input">,
      ArrayElementTypeConstraint<"result", "input">]> {
@@ -208,8 +208,8 @@ def UnionCreateOp : HWOp<"union_create", [NoSideEffect]> {
     specified field.
 
     ```
-      %x = rtl.constant 0 : i3
-      %z = rtl.union_create "bar", %x : !rtl.union<bar: i3, baz: i8>
+      %x = hw.constant 0 : i3
+      %z = hw.union_create "bar", %x : !hw.union<bar: i3, baz: i8>
     ```
   }];
 
@@ -229,7 +229,7 @@ def UnionExtractOp : HWOp<"union_extract", [NoSideEffect]> {
 
     ```
       %u = ...
-      %v = rtl.union_extract %u["foo"] : !rtl.union<foo: i3, bar: i16>
+      %v = hw.union_extract %u["foo"] : !hw.union<foo: i3, bar: i16>
       // %v is of type 'i3'
     ```
   }];
@@ -254,7 +254,7 @@ def ConstantOp
     The constant operation produces a constant value of standard integer type
     without a sign.
     ```
-      %result = rtl.constant 42 : t1
+      %result = hw.constant 42 : t1
     ```
     }];
 

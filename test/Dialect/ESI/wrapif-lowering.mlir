@@ -8,7 +8,7 @@ sv.interface @IValidReady_i4 {
   sv.interface.modport @sink  ("input" @valid, "input" @data, "output" @ready)
 }
 
-rtl.module @test(%clk:i1, %rstn:i1) {
+hw.module @test(%clk:i1, %rstn:i1) {
 
   %0 = sv.interface.instance : !sv.interface<@IValidReady_i4>
   %1 = sv.modport.get %0 @source : !sv.interface<@IValidReady_i4> -> !sv.modport<@IValidReady_i4::@source>

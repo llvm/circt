@@ -321,7 +321,7 @@ firrtl.circuit "StructCast" {
   firrtl.module @StructCast() {
     %a = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
     // expected-error @+1 {{bundle and struct have different number of fields}}
-    %b = firrtl.rtlStructCast %a : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>) -> (!rtl.struct<valid: i1, ready: i1>)
+    %b = firrtl.rtlStructCast %a : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>) -> (!hw.struct<valid: i1, ready: i1>)
   }
 }
 
@@ -331,7 +331,7 @@ firrtl.circuit "StructCast2" {
   firrtl.module @StructCast2() {
     %a = firrtl.wire : !firrtl.bundle<valid: uint<1>>
     // expected-error @+1 {{field names don't match 'valid', 'yovalid'}}
-    %b = firrtl.rtlStructCast %a : (!firrtl.bundle<valid: uint<1>>) -> (!rtl.struct<yovalid: i1>)
+    %b = firrtl.rtlStructCast %a : (!firrtl.bundle<valid: uint<1>>) -> (!hw.struct<yovalid: i1>)
   }
 }
 
@@ -341,7 +341,7 @@ firrtl.circuit "StructCast3" {
   firrtl.module @StructCast3() {
     %a = firrtl.wire : !firrtl.bundle<valid: uint<1>>
     // expected-error @+1 {{size of field 'valid' don't match 1, 2}}
-    %b = firrtl.rtlStructCast %a : (!firrtl.bundle<valid: uint<1>>) -> (!rtl.struct<valid: i2>)
+    %b = firrtl.rtlStructCast %a : (!firrtl.bundle<valid: uint<1>>) -> (!hw.struct<valid: i2>)
   }
 }
 

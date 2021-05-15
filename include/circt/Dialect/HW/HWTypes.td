@@ -100,7 +100,7 @@ def StructType : HWType<"Struct"> {
   let summary = "HW struct type";
   let description = [{
     Represents a structure of name, value pairs.
-    !rtl.struct<fieldName1: Type1, fieldName2: Type2>
+    !hw.struct<fieldName1: Type1, fieldName2: Type2>
   }];
   let mnemonic = "struct";
 

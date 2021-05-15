@@ -19,12 +19,12 @@ with Context() as ctx, Location.unknown():
   m = Module.create()
   with InsertionPoint(m.body):
 
-    @rtl.HWModuleOp.from_py_func(i1, i1)
+    @hw.HWModuleOp.from_py_func(i1, i1)
     def top(clk, rstn):
-      # CHECK: %[[RESET_VAL:.+]] = rtl.constant 0
-      reg_reset = rtl.ConstantOp(i32, IntegerAttr.get(i32, 0)).result
-      # CHECK: %[[INPUT_VAL:.+]] = rtl.constant 45
-      reg_input = rtl.ConstantOp(i32, IntegerAttr.get(i32, 45)).result
+      # CHECK: %[[RESET_VAL:.+]] = hw.constant 0
+      reg_reset = hw.ConstantOp(i32, IntegerAttr.get(i32, 0)).result
+      # CHECK: %[[INPUT_VAL:.+]] = hw.constant 45
+      reg_input = hw.ConstantOp(i32, IntegerAttr.get(i32, 45)).result
       # CHECK: %[[DATA_VAL:.+]] = seq.compreg %[[INPUT_VAL]], %clk, %rstn, %[[RESET_VAL]]
       reg = seq.CompRegOp(i32,
                           reg_input,
@@ -37,14 +37,14 @@ with Context() as ctx, Location.unknown():
       seq.reg(reg_input, clk)
       # CHECK: seq.compreg %[[INPUT_VAL]], %clk, %rstn, %{{.+}}
       seq.reg(reg_input, clk, reset=rstn)
-      # CHECK: %[[RESET_VALUE:.+]] = rtl.constant 123
+      # CHECK: %[[RESET_VALUE:.+]] = hw.constant 123
       # CHECK: seq.compreg %[[INPUT_VAL]], %clk, %rstn, %[[RESET_VALUE]]
-      custom_reset = rtl.ConstantOp(i32, IntegerAttr.get(i32, 123)).result
+      custom_reset = hw.ConstantOp(i32, IntegerAttr.get(i32, 123)).result
       seq.reg(reg_input, clk, reset=rstn, reset_value=custom_reset)
       # CHECK: seq.compreg {{.+}} {name = "FuBar"}
       seq.reg(reg_input, clk, name="FuBar")
 
-      # CHECK: rtl.output %[[DATA_VAL]]
+      # CHECK: hw.output %[[DATA_VAL]]
       return reg.data
 
   print("=== MLIR ===")

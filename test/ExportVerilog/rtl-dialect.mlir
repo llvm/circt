@@ -1,13 +1,13 @@
 // RUN: circt-translate %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 // CHECK-LABEL: // external module E
-rtl.module.extern @E(%a: i1, %b: i1, %c: i1)
+hw.module.extern @E(%a: i1, %b: i1, %c: i1)
 
-rtl.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
-                        %array2d: !rtl.array<12 x array<10xi4>>,
-                        %uarray: !rtl.uarray<16xi8>,
+hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
+                        %array2d: !hw.array<12 x array<10xi4>>,
+                        %uarray: !hw.uarray<16xi8>,
                         %postUArray: i8,
-                        %structA: !rtl.struct<foo: i2, bar:i4>) -> (
+                        %structA: !hw.struct<foo: i2, bar:i4>) -> (
   %r0: i4, %r2: i4, %r4: i4, %r6: i4,
   %r7: i4, %r8: i4, %r9: i4, %r10: i4,
   %r11: i4, %r12: i4, %r13: i4, %r14: i4,
@@ -16,9 +16,9 @@ rtl.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   %r21: i1, %r22: i1, %r23: i1, %r24: i1,
   %r25: i1, %r26: i1, %r27: i1, %r28: i1,
   %r29: i12, %r30: i2, %r31: i9, %r33: i4, %r34: i4,
-  %r35: !rtl.array<3xi4>, %r36: i12, %r37: i4,
-  %r38: !rtl.array<6xi4>, 
-  %r40: !rtl.struct<foo: i2, bar:i4>, %r41: !rtl.struct<foo: i2, bar: i4>
+  %r35: !hw.array<3xi4>, %r36: i12, %r37: i4,
+  %r38: !hw.array<6xi4>, 
+  %r40: !hw.struct<foo: i2, bar:i4>, %r41: !hw.struct<foo: i2, bar: i4>
   ) {
   
   %0 = comb.add %a, %b : i4
@@ -44,9 +44,9 @@ rtl.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   %23 = comb.icmp ule %a, %b : i4
   %24 = comb.icmp ugt %a, %b : i4
   %25 = comb.icmp uge %a, %b : i4
-  %one4 = rtl.constant -1 : i4
+  %one4 = hw.constant -1 : i4
   %26 = comb.icmp eq %a, %one4 : i4
-  %zero4 = rtl.constant 0 : i4
+  %zero4 = hw.constant 0 : i4
   %27 = comb.icmp ne %a, %zero4 : i4
   %28 = comb.parity %a : i4
   %29 = comb.concat %a, %a, %b : (i4, i4, i4) -> i12
@@ -54,35 +54,35 @@ rtl.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   %31 = comb.sext %a : (i4) -> i9
   %33 = comb.mux %cond, %a, %b : i4
 
-  %allone = rtl.constant 15 : i4
+  %allone = hw.constant 15 : i4
   %34 = comb.xor %a, %allone : i4
 
-  %arrCreated = rtl.array_create %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone : (i4)
-  %slice1 = rtl.array_slice %arrCreated at %a : (!rtl.array<9xi4>) -> !rtl.array<3xi4>
-  %slice2 = rtl.array_slice %arrCreated at %b : (!rtl.array<9xi4>) -> !rtl.array<3xi4>
-  %35 = comb.mux %cond, %slice1, %slice2 : !rtl.array<3xi4>
+  %arrCreated = hw.array_create %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone : (i4)
+  %slice1 = hw.array_slice %arrCreated at %a : (!hw.array<9xi4>) -> !hw.array<3xi4>
+  %slice2 = hw.array_slice %arrCreated at %b : (!hw.array<9xi4>) -> !hw.array<3xi4>
+  %35 = comb.mux %cond, %slice1, %slice2 : !hw.array<3xi4>
 
   %ab = comb.add %a, %b : i4
-  %subArr = rtl.array_create %allone, %ab, %allone : (i4)
-  %38 = rtl.array_concat %subArr, %subArr : !rtl.array<3 x i4>, !rtl.array<3 x i4>
+  %subArr = hw.array_create %allone, %ab, %allone : (i4)
+  %38 = hw.array_concat %subArr, %subArr : !hw.array<3 x i4>, !hw.array<3 x i4>
 
-  %elem2d = rtl.array_get %array2d[%a] : !rtl.array<12 x array<10xi4>>
-  %37 = rtl.array_get %elem2d[%b] : !rtl.array<10xi4>
+  %elem2d = hw.array_get %array2d[%a] : !hw.array<12 x array<10xi4>>
+  %37 = hw.array_get %elem2d[%b] : !hw.array<10xi4>
 
   %36 = comb.concat %a, %a, %a : (i4, i4, i4) -> i12
 
-  %39 = rtl.struct_extract %structA["bar"] : !rtl.struct<foo: i2, bar: i4>
-  %40 = rtl.struct_inject %structA["bar"], %a : !rtl.struct<foo: i2, bar: i4>
-  %41 = rtl.struct_create (%c, %a) : !rtl.struct<foo: i2, bar: i4>
-  %42 = rtl.struct_inject %41["bar"], %b : !rtl.struct<foo: i2, bar: i4>
+  %39 = hw.struct_extract %structA["bar"] : !hw.struct<foo: i2, bar: i4>
+  %40 = hw.struct_inject %structA["bar"], %a : !hw.struct<foo: i2, bar: i4>
+  %41 = hw.struct_create (%c, %a) : !hw.struct<foo: i2, bar: i4>
+  %42 = hw.struct_inject %41["bar"], %b : !hw.struct<foo: i2, bar: i4>
 
-  rtl.output %0, %2, %4, %6, %7, %8, %9, %10, %11, %12, %13, %14,
+  hw.output %0, %2, %4, %6, %7, %8, %9, %10, %11, %12, %13, %14,
               %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27,
               %28, %29, %30, %31, %33, %34, %35, %36, %37, %38, %40, %42 :
     i4,i4, i4,i4,i4,i4,i4, i4,i4,i4,i4,i4,
     i4,i1,i1,i1,i1, i1,i1,i1,i1,i1, i1,i1,i1,i1,
-   i12, i2, i9, i4, i4, !rtl.array<3xi4>, i12, i4, !rtl.array<6xi4>, 
-   !rtl.struct<foo: i2, bar: i4>, !rtl.struct<foo: i2, bar: i4>
+   i12, i2, i9, i4, i4, !hw.array<3xi4>, i12, i4, !hw.array<6xi4>, 
+   !hw.struct<foo: i2, bar: i4>, !hw.struct<foo: i2, bar: i4>
 }
 // CHECK-LABEL: module TESTSIMPLE(
 // CHECK-NEXT:   input  [3:0]                                              a, b,
@@ -149,10 +149,10 @@ rtl.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT: endmodule
 
 
-rtl.module @B(%a: i1) -> (%b: i1, %c: i1) {
+hw.module @B(%a: i1) -> (%b: i1, %c: i1) {
   %0 = comb.or %a, %a : i1
   %1 = comb.and %a, %a : i1
-  rtl.output %0, %1 : i1, i1
+  hw.output %0, %1 : i1, i1
 }
 // CHECK-LABEL: module B(
 // CHECK-NEXT:   input  a,
@@ -162,9 +162,9 @@ rtl.module @B(%a: i1) -> (%b: i1, %c: i1) {
 // CHECK-NEXT:   assign c = a & a;
 // CHECK-NEXT: endmodule
 
-rtl.module @A(%d: i1, %e: i1) -> (%f: i1) {
+hw.module @A(%d: i1, %e: i1) -> (%f: i1) {
   %1 = comb.mux %d, %d, %e : i1
-  rtl.output %1 : i1
+  hw.output %1 : i1
 }
 // CHECK-LABEL: module A(
 // CHECK-NEXT:  input  d, e,
@@ -173,9 +173,9 @@ rtl.module @A(%d: i1, %e: i1) -> (%f: i1) {
 // CHECK-NEXT:  assign f = d ? d : e;
 // CHECK-NEXT: endmodule
 
-rtl.module @AAA(%d: i1, %e: i1) -> (%f: i1) {
-  %z = rtl.constant 0 : i1
-  rtl.output %z : i1
+hw.module @AAA(%d: i1, %e: i1) -> (%f: i1) {
+  %z = hw.constant 0 : i1
+  hw.output %z : i1
 }
 // CHECK-LABEL: module AAA(
 // CHECK-NEXT:  input  d, e,
@@ -186,21 +186,21 @@ rtl.module @AAA(%d: i1, %e: i1) -> (%f: i1) {
 
 
 /// TODO: Specify parameter declarations.
-rtl.module.extern @EXT_W_PARAMS(%a: i1, %b: i0) -> (%out: i1)
+hw.module.extern @EXT_W_PARAMS(%a: i1, %b: i0) -> (%out: i1)
   attributes { verilogName="FooModule" }
 
-rtl.module.extern @EXT_W_PARAMS2(%a: i2) -> (%out: i1)
+hw.module.extern @EXT_W_PARAMS2(%a: i2) -> (%out: i1)
   attributes { verilogName="FooModule" }
 
-rtl.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2: i1) {
-  %w2 = rtl.instance "a1" @AAA(%w, %w1) : (i1, i1) -> (i1)
-  %w1, %y = rtl.instance "b1" @B(%w2) : (i1) -> (i1, i1)
+hw.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2: i1) {
+  %w2 = hw.instance "a1" @AAA(%w, %w1) : (i1, i1) -> (i1)
+  %w1, %y = hw.instance "b1" @B(%w2) : (i1) -> (i1, i1)
 
-  %p = rtl.instance "paramd" @EXT_W_PARAMS(%w, %i3) {parameters = {DEFAULT = 14000240888948784983 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i1, i0) -> i1
+  %p = hw.instance "paramd" @EXT_W_PARAMS(%w, %i3) {parameters = {DEFAULT = 14000240888948784983 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i1, i0) -> i1
 
-  %p2 = rtl.instance "paramd2" @EXT_W_PARAMS2(%i2) {parameters = {DEFAULT = 1 : i64}} : (i2) -> i1
+  %p2 = hw.instance "paramd2" @EXT_W_PARAMS2(%i2) {parameters = {DEFAULT = 1 : i64}} : (i2) -> i1
 
-  rtl.output %y, %x, %p, %p2 : i1, i1, i1, i1
+  hw.output %y, %x, %p, %p2 : i1, i1, i1, i1
 }
 // CHECK-LABEL:  module AB(
 // CHECK-NEXT:    input                 w, x,
@@ -251,9 +251,9 @@ rtl.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2
 // CHECK-NEXT:  endmodule
 
 
-rtl.module @shl(%a: i1) -> (%b: i1) {
+hw.module @shl(%a: i1) -> (%b: i1) {
   %0 = comb.shl %a, %a : i1
-  rtl.output %0 : i1
+  hw.output %0 : i1
 }
 // CHECK-LABEL:  module shl(
 // CHECK-NEXT:   input  a,
@@ -263,9 +263,9 @@ rtl.module @shl(%a: i1) -> (%b: i1) {
 // CHECK-NEXT: endmodule
 
 
-rtl.module @inout_0(%a: !rtl.inout<i42>) -> (%out: i42) {
-  %aget = sv.read_inout %a: !rtl.inout<i42>
-  rtl.output %aget : i42
+hw.module @inout_0(%a: !hw.inout<i42>) -> (%out: i42) {
+  %aget = sv.read_inout %a: !hw.inout<i42>
+  hw.output %aget : i42
 }
 // CHECK-LABEL:  module inout_0(
 // CHECK-NEXT:     inout  [41:0] a,
@@ -277,30 +277,30 @@ rtl.module @inout_0(%a: !rtl.inout<i42>) -> (%out: i42) {
 // https://github.com/llvm/circt/issues/316
 // FIXME: The MLIR parser doesn't accept an i0 even though it is valid IR,
 // this needs to be fixed upstream.
-//rtl.module @issue316(%inp_0: i0) {
-//  rtl.output
+//hw.module @issue316(%inp_0: i0) {
+//  hw.output
 //}
 
 // https://github.com/llvm/circt/issues/318
 // This shouldn't generate invalid Verilog
-rtl.module @extract_all(%tmp85: i1) -> (%tmp106: i1) {
+hw.module @extract_all(%tmp85: i1) -> (%tmp106: i1) {
   %1 = comb.extract %tmp85 from 0 : (i1) -> i1
-  rtl.output %1 : i1
+  hw.output %1 : i1
 }
 // CHECK-LABEL: module extract_all
 // CHECK:  assign tmp106 = tmp85;
 
 // https://github.com/llvm/circt/issues/320
-rtl.module @literal_extract(%inp_1: i349) -> (%tmp6: i349) {
-  %c-58836_i17 = rtl.constant -58836 : i17
+hw.module @literal_extract(%inp_1: i349) -> (%tmp6: i349) {
+  %c-58836_i17 = hw.constant -58836 : i17
   %0 = comb.sext %c-58836_i17 : (i17) -> i349
-  rtl.output %0 : i349
+  hw.output %0 : i349
 }
 // CHECK-LABEL: module literal_extract
 // CHECK: localparam [16:0] _T = 17'h11A2C;
 // CHECK: assign tmp6 = {{[{][{]}}332{_T[16]}}, _T};
 
-rtl.module @wires(%in4: i4, %in8: i8) -> (%a: i4, %b: i8, %c: i8) {
+hw.module @wires(%in4: i4, %in8: i8) -> (%a: i4, %b: i8, %c: i8) {
   // CHECK-LABEL: module wires(
   // CHECK-NEXT:   input  [3:0] in4,
   // CHECK-NEXT:   input  [7:0] in8,
@@ -311,22 +311,22 @@ rtl.module @wires(%in4: i4, %in8: i8) -> (%a: i4, %b: i8, %c: i8) {
 
   // Wires.
   // CHECK-NEXT: wire [3:0]            myWire;
-  %myWire = sv.wire : !rtl.inout<i4>
+  %myWire = sv.wire : !hw.inout<i4>
 
   // Packed arrays.
 
   // CHECK-NEXT: wire [41:0][7:0]      myArray1;
-  %myArray1 = sv.wire : !rtl.inout<array<42 x i8>>
+  %myArray1 = sv.wire : !hw.inout<array<42 x i8>>
   // CHECK-NEXT: wire [2:0][41:0][3:0] myWireArray2;
-  %myWireArray2 = sv.wire : !rtl.inout<array<3 x array<42 x i4>>>
+  %myWireArray2 = sv.wire : !hw.inout<array<3 x array<42 x i4>>>
 
   // Unpacked arrays, and unpacked arrays of packed arrays.
 
   // CHECK-NEXT: wire [7:0]            myUArray1[0:41];
-  %myUArray1 = sv.wire : !rtl.inout<uarray<42 x i8>>
+  %myUArray1 = sv.wire : !hw.inout<uarray<42 x i8>>
 
   // CHECK-NEXT: wire [41:0][3:0]      myWireUArray2[0:2];
-  %myWireUArray2 = sv.wire : !rtl.inout<uarray<3 x array<42 x i4>>>
+  %myWireUArray2 = sv.wire : !hw.inout<uarray<3 x array<42 x i4>>>
 
   // CHECK-EMPTY:
 
@@ -334,31 +334,31 @@ rtl.module @wires(%in4: i4, %in8: i8) -> (%a: i4, %b: i8, %c: i8) {
 
   // CHECK-NEXT: assign myWire = in4;
   sv.connect %myWire, %in4 : i4
-  %wireout = sv.read_inout %myWire : !rtl.inout<i4>
+  %wireout = sv.read_inout %myWire : !hw.inout<i4>
 
   // Packed arrays.
 
-  %subscript = sv.array_index_inout %myArray1[%in4] : !rtl.inout<array<42 x i8>>, i4
+  %subscript = sv.array_index_inout %myArray1[%in4] : !hw.inout<array<42 x i8>>, i4
   // CHECK-NEXT: assign myArray1[in4] = in8;
   sv.connect %subscript, %in8 : i8
 
-  %memout1 = sv.read_inout %subscript : !rtl.inout<i8>
+  %memout1 = sv.read_inout %subscript : !hw.inout<i8>
 
     // Unpacked arrays, and unpacked arrays of packed arrays.
-  %subscriptu = sv.array_index_inout %myUArray1[%in4] : !rtl.inout<uarray<42 x i8>>, i4
+  %subscriptu = sv.array_index_inout %myUArray1[%in4] : !hw.inout<uarray<42 x i8>>, i4
   // CHECK-NEXT: assign myUArray1[in4] = in8;
   sv.connect %subscriptu, %in8 : i8
 
-  %memout2 = sv.read_inout %subscriptu : !rtl.inout<i8>
+  %memout2 = sv.read_inout %subscriptu : !hw.inout<i8>
 
   // CHECK-NEXT: assign a = myWire;
   // CHECK-NEXT: assign b = myArray1[in4];
   // CHECK-NEXT: assign c = myUArray1[in4];
-  rtl.output %wireout, %memout1, %memout2 : i4, i8, i8
+  hw.output %wireout, %memout1, %memout2 : i4, i8, i8
 }
 
 // CHECK-LABEL: module merge
-rtl.module @merge(%in1: i4, %in2: i4, %in3: i4, %in4: i4) -> (%x: i4) {
+hw.module @merge(%in1: i4, %in2: i4, %in3: i4, %in4: i4) -> (%x: i4) {
   // CHECK: wire [3:0] _T;
   // CHECK: assign _T = in1 + in2;
   %a = comb.add %in1, %in2 : i4
@@ -369,12 +369,12 @@ rtl.module @merge(%in1: i4, %in2: i4, %in3: i4, %in4: i4) -> (%x: i4) {
 
   // CHECK: assign x = _T + in4 + in4;
   %c = comb.add %b, %in4, %in4 : i4
-  rtl.output %c : i4
+  hw.output %c : i4
 }
 
 // CHECK-LABEL: module signs
-rtl.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
-  %awire = sv.wire : !rtl.inout<i4>
+hw.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
+  %awire = sv.wire : !hw.inout<i4>
   // CHECK: wire [3:0] awire;
 
   // CHECK: assign awire = $unsigned($signed(in1) / $signed(in2)) /
@@ -398,12 +398,12 @@ rtl.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
 
   // https://github.com/llvm/circt/issues/369
   // CHECK: assign awire = 4'sh5 / -4'sh3;
-  %c5_i4 = rtl.constant 5 : i4
-  %c-3_i4 = rtl.constant -3 : i4
+  %c5_i4 = hw.constant 5 : i4
+  %c-3_i4 = hw.constant -3 : i4
   %divs = comb.divs %c5_i4, %c-3_i4 : i4
   sv.connect %awire, %divs: i4
 
-  rtl.output
+  hw.output
 }
 
 
@@ -412,14 +412,14 @@ rtl.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
 // CHECK-NEXT: input  [7:0][3:0] in2,
 // CHECK-NEXT: output [6:0]      r1,
 // CHECK-NEXT: output [31:0]     r2);
-rtl.module @casts(%in1: i7, %in2: !rtl.array<8xi4>) -> (%r1: !rtl.array<7xi1>, %r2: i32) {
+hw.module @casts(%in1: i7, %in2: !hw.array<8xi4>) -> (%r1: !hw.array<7xi1>, %r2: i32) {
   // CHECK-EMPTY:
-  %r1 = rtl.bitcast %in1 : (i7) -> !rtl.array<7xi1>
-  %r2 = rtl.bitcast %in2 : (!rtl.array<8xi4>) -> i32
+  %r1 = hw.bitcast %in1 : (i7) -> !hw.array<7xi1>
+  %r2 = hw.bitcast %in2 : (!hw.array<8xi4>) -> i32
 
   // CHECK-NEXT: wire [31:0] {{.+}} = /*cast(bit[31:0])*/in2;
   // CHECK-NEXT: assign r1 = in1;
-  rtl.output %r1, %r2 : !rtl.array<7xi1>, i32
+  hw.output %r1, %r2 : !hw.array<7xi1>, i32
 }
 
 // CHECK-LABEL: module TestZero(
@@ -431,11 +431,11 @@ rtl.module @casts(%in1: i7, %in2: !rtl.array<8xi4>) -> (%r1: !rtl.array<7xi1>, %
 // CHECK-NEXT:   // output [2:0]/*Zero Width*/ arrZero_0
 // CHECK-NEXT:    );
 // CHECK-EMPTY:
-rtl.module @TestZero(%a: i4, %zeroBit: i0, %arrZero: !rtl.array<3xi0>)
-  -> (%r0: i4, %rZero: i0, %arrZero_0: !rtl.array<3xi0>) {
+hw.module @TestZero(%a: i4, %zeroBit: i0, %arrZero: !hw.array<3xi0>)
+  -> (%r0: i4, %rZero: i0, %arrZero_0: !hw.array<3xi0>) {
 
   %b = comb.add %a, %a : i4
-  rtl.output %b, %zeroBit, %arrZero : i4, i0, !rtl.array<3xi0>
+  hw.output %b, %zeroBit, %arrZero : i4, i0, !hw.array<3xi0>
 
   // CHECK-NEXT:   assign r0 = a + a;
   // CHECK-NEXT:   // Zero width: assign rZero = zeroBit;
@@ -444,8 +444,8 @@ rtl.module @TestZero(%a: i4, %zeroBit: i0, %arrZero: !rtl.array<3xi0>)
 }
 
 // CHECK-LABEL: TestZeroInstance
-rtl.module @TestZeroInstance(%aa: i4, %azeroBit: i0, %aarrZero: !rtl.array<3xi0>)
-  -> (%r0: i4, %rZero: i0, %arrZero_0: !rtl.array<3xi0>) {
+hw.module @TestZeroInstance(%aa: i4, %azeroBit: i0, %aarrZero: !hw.array<3xi0>)
+  -> (%r0: i4, %rZero: i0, %arrZero_0: !hw.array<3xi0>) {
 
   // CHECK: TestZero iii (	// {{.*}}rtl-dialect.mlir:{{.*}}:19
   // CHECK:   .a         (aa),
@@ -456,46 +456,46 @@ rtl.module @TestZeroInstance(%aa: i4, %azeroBit: i0, %aarrZero: !rtl.array<3xi0>
   // CHECK: //.arrZero_0 (iii_arrZero_0)
   // CHECK: );
 
-  %o1, %o2, %o3 = rtl.instance "iii" @TestZero(%aa, %azeroBit, %aarrZero)
-    : (i4, i0, !rtl.array<3xi0>) -> (i4, i0, !rtl.array<3xi0>)
+  %o1, %o2, %o3 = hw.instance "iii" @TestZero(%aa, %azeroBit, %aarrZero)
+    : (i4, i0, !hw.array<3xi0>) -> (i4, i0, !hw.array<3xi0>)
 
   // CHECK: assign r0 = iii_r0;
   // CHECK: // Zero width: assign rZero = iii_rZero;
   // CHECK: // Zero width: assign arrZero_0 = iii_arrZero_0;
-  rtl.output %o1, %o2, %o3 : i4, i0, !rtl.array<3xi0>
+  hw.output %o1, %o2, %o3 : i4, i0, !hw.array<3xi0>
 }
 
 // CHECK-LABEL: TestDupInstanceName
-rtl.module @TestDupInstanceName(%a: i1) {
+hw.module @TestDupInstanceName(%a: i1) {
   // CHECK: B name (
-  %w1, %y1 = rtl.instance "name" @B(%a) : (i1) -> (i1, i1)
+  %w1, %y1 = hw.instance "name" @B(%a) : (i1) -> (i1, i1)
 
   // CHECK: B name_0 (
-  %w2, %y2 = rtl.instance "name" @B(%a) : (i1) -> (i1, i1)
+  %w2, %y2 = hw.instance "name" @B(%a) : (i1) -> (i1, i1)
 }
 
 // CHECK-LABEL: TestEmptyInstanceName
-rtl.module @TestEmptyInstanceName(%a: i1) {
+hw.module @TestEmptyInstanceName(%a: i1) {
   // CHECK: B _T (
-  %w1, %y1 = rtl.instance "" @B(%a) : (i1) -> (i1, i1)
+  %w1, %y1 = hw.instance "" @B(%a) : (i1) -> (i1, i1)
 
   // CHECK: B _T_0 (
-  %w2, %y2 = rtl.instance "" @B(%a) : (i1) -> (i1, i1)
+  %w2, %y2 = hw.instance "" @B(%a) : (i1) -> (i1, i1)
 }
 
 // CHECK-LABEL: TestInstanceNameValueConflict
-rtl.module @TestInstanceNameValueConflict(%a: i1) {
+hw.module @TestInstanceNameValueConflict(%a: i1) {
   // CHECK: wire name
-  %name = sv.wire : !rtl.inout<i1>
+  %name = sv.wire : !hw.inout<i1>
 
   // CHECK: B name_0 (
-  %w, %y = rtl.instance "name" @B(%a) : (i1) -> (i1, i1)
+  %w, %y = hw.instance "name" @B(%a) : (i1) -> (i1, i1)
 }
 
 // https://github.com/llvm/circt/issues/525
-rtl.module @issue525(%struct: i2, %else: i2) -> (%casex: i2) {
+hw.module @issue525(%struct: i2, %else: i2) -> (%casex: i2) {
   %2 = comb.add %struct, %else : i2
-  rtl.output %2 : i2
+  hw.output %2 : i2
 }
 // CHECK-LABEL: module issue525(
 // CHECK-NEXT: input  [1:0] struct_0, else_1,
@@ -505,7 +505,7 @@ rtl.module @issue525(%struct: i2, %else: i2) -> (%casex: i2) {
 
 // https://github.com/llvm/circt/issues/438
 // CHECK-LABEL: module cyclic
-rtl.module @cyclic(%a: i1) -> (%b: i1) {
+hw.module @cyclic(%a: i1) -> (%b: i1) {
   // CHECK: wire _T;
 
   // CHECK: wire _T_0 = _T + _T;
@@ -514,13 +514,13 @@ rtl.module @cyclic(%a: i1) -> (%b: i1) {
   %0 = comb.shl %a, %a : i1
   // CHECK: assign b = _T_0 - _T_0;
   %2 = comb.sub %1, %1 : i1
-  rtl.output %2 : i1
+  hw.output %2 : i1
 }
 
 
 // https://github.com/llvm/circt/issues/668
 // CHECK-LABEL: module longExpressions
-rtl.module @longExpressions(%a: i8, %a2: i8) -> (%b: i8) {
+hw.module @longExpressions(%a: i8, %a2: i8) -> (%b: i8) {
   // CHECK: wire [7:0] _tmp = a + a + a + a + a
   %1 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a : i8
   // CHECK-NEXT: wire [7:0] _tmp_0 = a + a + a 
@@ -533,12 +533,12 @@ rtl.module @longExpressions(%a: i8, %a2: i8) -> (%b: i8) {
   %5 = comb.mul %1, %2 : i8
   %6 = comb.mul %3, %4 : i8
   %7 = comb.or %5, %6 : i8
-  rtl.output %7 : i8
+  hw.output %7 : i8
 }
 
 // https://github.com/llvm/circt/issues/668
 // CHECK-LABEL: module longvariadic
-rtl.module @longvariadic(%a: i8) -> (%b: i8) {
+hw.module @longvariadic(%a: i8) -> (%b: i8) {
   // CHECK: wire [7:0] _tmp = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
   // CHECK: wire [7:0] _tmp_0 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
   // CHECK: wire [7:0] _tmp_1 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
@@ -574,7 +574,7 @@ rtl.module @longvariadic(%a: i8) -> (%b: i8) {
                 %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
                 %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
                 %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a : i8
-  rtl.output %1 : i8
+  hw.output %1 : i8
 }
 
 // https://github.com/llvm/circt/issues/736
@@ -585,11 +585,11 @@ rtl.module @longvariadic(%a: i8) -> (%b: i8) {
 // CHECK-NEXT: output       r);
 // CHECK-EMPTY:
 // CHECK-NEXT: assign r = a == c == (d == e);
-  rtl.module @eqIssue(%a: i9, %c :i9, %d: i4, %e: i4) -> (%r : i1){
+  hw.module @eqIssue(%a: i9, %c :i9, %d: i4, %e: i4) -> (%r : i1){
     %1 = comb.icmp eq %a, %c : i9
     %2 = comb.icmp eq %d, %e : i4
     %4 = comb.icmp eq %1, %2 : i1
-    rtl.output %4 : i1
+    hw.output %4 : i1
   }
   
 // https://github.com/llvm/circt/issues/750
@@ -605,10 +605,10 @@ rtl.module @longvariadic(%a: i8) -> (%b: i8) {
 // CHECK-NEXT:   initial
 // CHECK-NEXT:     memory_r_en_pipe[_T] = _T;
 // CHECK-NEXT: endmodule
-rtl.module @ArrayLHS(%clock: i1) -> () {
-  %false = rtl.constant false
-  %memory_r_en_pipe = sv.reg  : !rtl.inout<uarray<1xi1>>
-  %3 = sv.array_index_inout %memory_r_en_pipe[%false] : !rtl.inout<uarray<1xi1>>, i1
+hw.module @ArrayLHS(%clock: i1) -> () {
+  %false = hw.constant false
+  %memory_r_en_pipe = sv.reg  : !hw.inout<uarray<1xi1>>
+  %3 = sv.array_index_inout %memory_r_en_pipe[%false] : !hw.inout<uarray<1xi1>>, i1
   sv.alwaysff(posedge %clock)  {
     sv.passign %3, %false : i1
   }
@@ -618,7 +618,7 @@ rtl.module @ArrayLHS(%clock: i1) -> () {
 }
 
 // CHECK-LABEL: module notEmitDuplicateWiresThatWereUnInlinedDueToLongNames
-rtl.module @notEmitDuplicateWiresThatWereUnInlinedDueToLongNames(%clock: i1, %x: i1) {
+hw.module @notEmitDuplicateWiresThatWereUnInlinedDueToLongNames(%clock: i1, %x: i1) {
   // CHECK: wire _T;
   // CHECK: wire aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
   %0 = comb.and %1, %x : i1
@@ -633,42 +633,42 @@ rtl.module @notEmitDuplicateWiresThatWereUnInlinedDueToLongNames(%clock: i1, %x:
 
   // CHECK: end // always_ff @(posedge)
   // CHECK: assign _T = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
-  %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa = sv.wire  : !rtl.inout<i1>
-  %1 = sv.read_inout %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa : !rtl.inout<i1>
+  %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa = sv.wire  : !hw.inout<i1>
+  %1 = sv.read_inout %aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa : !hw.inout<i1>
 }
 
 // CHECK-LABEL: module largeConstant
-rtl.module @largeConstant(%a: i100000, %b: i16) -> (%x: i100000, %y: i16) {
+hw.module @largeConstant(%a: i100000, %b: i16) -> (%x: i100000, %y: i16) {
   // Large constant is broken out to its own localparam to avoid long line problems.
 
   // CHECK: localparam [99999:0] _tmp = 100000'h2CD76FE086B93CE2F768A00B22A00000000000;
-  %c = rtl.constant 1000000000000000000000000000000000000000000000 : i100000
+  %c = hw.constant 1000000000000000000000000000000000000000000000 : i100000
   // CHECK: assign x = a + _tmp + _tmp + _tmp + _tmp + _tmp + _tmp + _tmp + _tmp;
   %1 = comb.add %a, %c, %c, %c, %c, %c, %c, %c, %c : i100000
 
   // Small constants are emitted inline.
 
   // CHECK: assign y = b + 16'hA + 16'hA + 16'hA + 16'hA + 16'hA + 16'hA + 16'hA + 16'hA;
-  %c2 = rtl.constant 10 : i16
+  %c2 = hw.constant 10 : i16
   %2 = comb.add %b, %c2, %c2, %c2, %c2, %c2, %c2, %c2, %c2 : i16
 
-  rtl.output %1, %2 : i100000, i16
+  hw.output %1, %2 : i100000, i16
 }
 
-rtl.module.extern @DifferentResultMod() -> (%out1: i1, %out2: i2)
+hw.module.extern @DifferentResultMod() -> (%out1: i1, %out2: i2)
 
 // CHECK-LABEL: module out_of_order_multi_result(
-rtl.module @out_of_order_multi_result() -> (%b: i1, %c: i2) {
+hw.module @out_of_order_multi_result() -> (%b: i1, %c: i2) {
   // CHECK: wire       _T;
   // CHECK: wire [1:0] _T_0;
   %b = comb.add %out1, %out1 : i1
   %c = comb.add %out2, %out2 : i2
 
-  %out1, %out2 = rtl.instance "b1" @DifferentResultMod() : () -> (i1, i2)
+  %out1, %out2 = hw.instance "b1" @DifferentResultMod() : () -> (i1, i2)
 
   // CHECK: assign _T_0 = b1_out2;
   // CHECK: assign _T = b1_out1;
   // CHECK: assign b = _T + _T;
   // CHECK: assign c = _T_0 + _T_0;
-  rtl.output %b, %c : i1, i2
+  hw.output %b, %c : i1, i2
 }

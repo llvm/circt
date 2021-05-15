@@ -21,17 +21,17 @@ class TestESISys(esi.System):
     self.load_mlir(path.join(thisDir, "esi_load1.mlir"))
     self.load_mlir(path.join(thisDir, "esi_load2.mlir"))
 
-    op = rtl.HWModuleOp(name='MyWidget',
+    op = hw.HWModuleOp(name='MyWidget',
                          input_ports=[('foo', self.i32),
                                       ('foo_valid', self.i1)],
                          output_ports=[('foo_ready', self.i1)],
-                         body_builder=lambda module: rtl.OutputOp(
+                         body_builder=lambda module: hw.OutputOp(
                              [module.entry_block.arguments[1]]))
 
-    rtl.HWModuleOp(name='I32Snoop',
+    hw.HWModuleOp(name='I32Snoop',
                     input_ports=[('foo_in', self.i32_chan)],
                     output_ports=[('foo_out', self.i32_chan)],
-                    body_builder=lambda module: rtl.OutputOp(
+                    body_builder=lambda module: hw.OutputOp(
                         [module.entry_block.arguments[0]]))
 
     esi.buildWrapper(op.operation, ["foo"])
@@ -52,23 +52,23 @@ prod = esisys.lookup("IntProducer")
 assert (prod is not None)
 prod.print()
 print()  # Newline.
-# CHECK: rtl.module.extern @IntProducer(%clk: i1) -> (%ints: !esi.channel<i32>)
+# CHECK: hw.module.extern @IntProducer(%clk: i1) -> (%ints: !esi.channel<i32>)
 
 acc = esisys.lookup("IntAccumulator")
 assert (acc is not None)
 acc.print()
 print()  # Newline.
-# CHECK: rtl.module.extern @IntAccumulator(%clk: i1, %ints: i32, %ints_valid: i1) -> (%ints_ready: i1, %sum: i32)
+# CHECK: hw.module.extern @IntAccumulator(%clk: i1, %ints: i32, %ints_valid: i1) -> (%ints_ready: i1, %sum: i32)
 
 esisys.print()
-# CHECK-LABEL:  rtl.module @MyWidget_esi(%foo: !esi.channel<i32>) {
+# CHECK-LABEL:  hw.module @MyWidget_esi(%foo: !esi.channel<i32>) {
 # CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr %foo, %pearl.foo_ready : i32
-# CHECK-NEXT:     %pearl.foo_ready = rtl.instance "pearl" @MyWidget(%rawOutput, %valid) : (i32, i1) -> i1
-# CHECK-NEXT:     rtl.output
-# CHECK-LABEL:  rtl.module @MyWidget(%foo: i32, %foo_valid: i1) -> (%foo_ready: i1) {
-# CHECK-NEXT:     rtl.output %foo_valid : i1
-# CHECK-LABEL:  rtl.module @I32Snoop(%foo_in: !esi.channel<i32>) -> (%foo_out: !esi.channel<i32>) {
-# CHECK-NEXT:     rtl.output %foo_in : !esi.channel<i32>
+# CHECK-NEXT:     %pearl.foo_ready = hw.instance "pearl" @MyWidget(%rawOutput, %valid) : (i32, i1) -> i1
+# CHECK-NEXT:     hw.output
+# CHECK-LABEL:  hw.module @MyWidget(%foo: i32, %foo_valid: i1) -> (%foo_ready: i1) {
+# CHECK-NEXT:     hw.output %foo_valid : i1
+# CHECK-LABEL:  hw.module @I32Snoop(%foo_in: !esi.channel<i32>) -> (%foo_out: !esi.channel<i32>) {
+# CHECK-NEXT:     hw.output %foo_in : !esi.channel<i32>
 
 print("\n\n=== Verilog ===")
 # CHECK-LABEL: === Verilog ===

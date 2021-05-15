@@ -4,31 +4,31 @@
 // Disable the SV test : circt-opt %s --lower-esi-ports --lower-esi-to-rtl | circt-translate --export-verilog | FileCheck --check-prefix=SV %s
 // RUN: circt-translate %s -export-esi-capnp -verify-diagnostics | FileCheck --check-prefix=CAPNP %s
 
-rtl.module.extern @Sender() -> (%x: !esi.channel<si14>)
-rtl.module.extern @Reciever(%a: !esi.channel<i32>)
-rtl.module.extern @ArrReciever(%x: !esi.channel<!rtl.array<4xsi64>>)
+hw.module.extern @Sender() -> (%x: !esi.channel<si14>)
+hw.module.extern @Reciever(%a: !esi.channel<i32>)
+hw.module.extern @ArrReciever(%x: !esi.channel<!hw.array<4xsi64>>)
 
-// CHECK-LABEL: rtl.module.extern @Sender() -> (%x: !esi.channel<si14>)
-// CHECK-LABEL: rtl.module.extern @Reciever(%a: !esi.channel<i32>)
-// CHECK-LABEL: rtl.module.extern @ArrReciever(%x: !esi.channel<!rtl.array<4xsi64>>)
+// CHECK-LABEL: hw.module.extern @Sender() -> (%x: !esi.channel<si14>)
+// CHECK-LABEL: hw.module.extern @Reciever(%a: !esi.channel<i32>)
+// CHECK-LABEL: hw.module.extern @ArrReciever(%x: !esi.channel<!hw.array<4xsi64>>)
 
-rtl.module @top(%clk:i1, %rstn:i1) -> () {
-  rtl.instance "recv" @Reciever (%cosimRecv) : (!esi.channel<i32>) -> ()
-  // CHECK:  rtl.instance "recv" @Reciever(%0)  : (!esi.channel<i32>) -> ()
+hw.module @top(%clk:i1, %rstn:i1) -> () {
+  hw.instance "recv" @Reciever (%cosimRecv) : (!esi.channel<i32>) -> ()
+  // CHECK:  hw.instance "recv" @Reciever(%0)  : (!esi.channel<i32>) -> ()
 
-  %send.x = rtl.instance "send" @Sender () : () -> (!esi.channel<si14>)
-  // CHECK:  %send.x = rtl.instance "send" @Sender() : () -> !esi.channel<si14>
+  %send.x = hw.instance "send" @Sender () : () -> (!esi.channel<si14>)
+  // CHECK:  %send.x = hw.instance "send" @Sender() : () -> !esi.channel<si14>
 
   %cosimRecv = esi.cosim %clk, %rstn, %send.x, 1 {name="TestEP"} : !esi.channel<si14> -> !esi.channel<i32>
   // CHECK:  esi.cosim %clk, %rstn, %send.x, 1 {name = "TestEP"} : !esi.channel<si14> -> !esi.channel<i32>
 
-  %send2.x = rtl.instance "send2" @Sender () : () -> (!esi.channel<si14>)
-  // CHECK:  %send2.x = rtl.instance "send2" @Sender() : () -> !esi.channel<si14>
+  %send2.x = hw.instance "send2" @Sender () : () -> (!esi.channel<si14>)
+  // CHECK:  %send2.x = hw.instance "send2" @Sender() : () -> !esi.channel<si14>
 
-  %cosimArrRecv = esi.cosim %clk, %rstn, %send2.x, 2 {name="ArrTestEP"} : !esi.channel<si14> -> !esi.channel<!rtl.array<4xsi64>>
-  // CHECK:  esi.cosim %clk, %rstn, %send2.x, 2 {name = "ArrTestEP"} : !esi.channel<si14> -> !esi.channel<!rtl.array<4xsi64>>
+  %cosimArrRecv = esi.cosim %clk, %rstn, %send2.x, 2 {name="ArrTestEP"} : !esi.channel<si14> -> !esi.channel<!hw.array<4xsi64>>
+  // CHECK:  esi.cosim %clk, %rstn, %send2.x, 2 {name = "ArrTestEP"} : !esi.channel<si14> -> !esi.channel<!hw.array<4xsi64>>
 
-  rtl.instance "arrRecv" @ArrReciever (%cosimArrRecv) : (!esi.channel<!rtl.array<4 x si64>>) -> ()
+  hw.instance "arrRecv" @ArrReciever (%cosimArrRecv) : (!esi.channel<!hw.array<4 x si64>>) -> ()
 
   // Ensure that the file hash is deterministic.
   // CAPNP: @0xd3e298e39d351062;
@@ -41,7 +41,7 @@ rtl.module @top(%clk:i1, %rstn:i1) -> () {
   // CAPNP: list @0 () -> (ifaces :List(EsiDpiInterfaceDesc));
   // CAPNP: open @1 [S, T] (iface :EsiDpiInterfaceDesc) -> (iface :EsiDpiEndpoint(S, T));
 
-  // COSIM: rtl.instance "TestEP" @Cosim_Endpoint(%clk, %rstn, %{{.+}}, %{{.+}}, %{{.+}}) {parameters = {ENDPOINT_ID = 1 : i32, RECV_TYPE_ID = 10578209918096690139 : ui64, RECV_TYPE_SIZE_BITS = 128 : i32, SEND_TYPE_ID = 11229133067582987457 : ui64, SEND_TYPE_SIZE_BITS = 128 : i32}} : (i1, i1, i1, i1, !rtl.array<128xi1>) -> (i1, !rtl.array<128xi1>, i1)
+  // COSIM: hw.instance "TestEP" @Cosim_Endpoint(%clk, %rstn, %{{.+}}, %{{.+}}, %{{.+}}) {parameters = {ENDPOINT_ID = 1 : i32, RECV_TYPE_ID = 10578209918096690139 : ui64, RECV_TYPE_SIZE_BITS = 128 : i32, SEND_TYPE_ID = 11229133067582987457 : ui64, SEND_TYPE_SIZE_BITS = 128 : i32}} : (i1, i1, i1, i1, !hw.array<128xi1>) -> (i1, !hw.array<128xi1>, i1)
 
   // SV: assign _T.valid = TestEP_DataOutValid;
   // SV: assign _T.data = dataSection[6'h0+:32];

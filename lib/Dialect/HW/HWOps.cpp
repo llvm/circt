@@ -35,7 +35,7 @@ bool rtl::isCombinatorial(Operation *op) {
 //===----------------------------------------------------------------------===//
 
 static void printConstantOp(OpAsmPrinter &p, ConstantOp &op) {
-  p << "rtl.constant ";
+  p << "hw.constant ";
   p.printAttribute(op.valueAttr());
   p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"value"});
 }
@@ -56,7 +56,7 @@ static LogicalResult verifyConstantOp(ConstantOp constant) {
   // If the result type has a bitwidth, then the attribute must match its width.
   if (constant.value().getBitWidth() != constant.getType().getWidth())
     return constant.emitError(
-        "rtl.constant attribute bitwidth doesn't match return type");
+        "hw.constant attribute bitwidth doesn't match return type");
 
   return success();
 }
@@ -113,7 +113,7 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> constants) {
 // HWModuleOp
 //===----------------------------------------------------------------------===/
 
-/// Return true if this is an rtl.module, external module, generated module etc.
+/// Return true if this is an hw.module, external module, generated module etc.
 bool rtl::isAnyModule(Operation *module) {
   return isa<HWModuleOp>(module) || isa<HWModuleExternOp>(module) ||
          isa<HWModuleGeneratedOp>(module);
@@ -721,7 +721,7 @@ static LogicalResult verifyInstanceOp(InstanceOp op) {
   // Check that this instance is inside a module.
   auto module = dyn_cast<HWModuleOp>(op->getParentOp());
   if (!module) {
-    op.emitOpError("should be embedded in an 'rtl.module'");
+    op.emitOpError("should be embedded in an 'hw.module'");
     return failure();
   }
 
@@ -809,7 +809,7 @@ static LogicalResult verifyOutputOp(OutputOp *op) {
     return failure();
   }
 
-  // Check that the we (rtl.output) have the same number of operands as our
+  // Check that the we (hw.output) have the same number of operands as our
   // region has results.
   FunctionType modType = getModuleType(opParent);
   ArrayRef<Type> modResults = modType.getResults();
@@ -876,7 +876,7 @@ static ParseResult parseArrayCreateOp(OpAsmParser &parser,
 }
 
 static void print(OpAsmPrinter &p, ArrayCreateOp op) {
-  p << "rtl.array_create ";
+  p << "hw.array_create ";
   p.printOperands(op.inputs());
   p << " : (" << op.inputs()[0].getType() << ")";
 }
@@ -900,7 +900,7 @@ static ParseResult parseArrayConcatTypes(OpAsmParser &p,
   do {
     ArrayType ty;
     if (p.parseType(ty))
-      return p.emitError(p.getCurrentLocation(), "Expected !rtl.array type");
+      return p.emitError(p.getCurrentLocation(), "Expected !hw.array type");
     if (elemType && elemType != ty.getElementType())
       return p.emitError(p.getCurrentLocation(), "Expected array element type ")
              << elemType;

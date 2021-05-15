@@ -246,7 +246,7 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
       ImplicitLocOpBuilder::atBlockBegin(loc, shell.getBodyBlock());
   BackedgeBuilder bb(modBuilder, modBuilder.getLoc());
 
-  // Hold the operands for `rtl.output` here.
+  // Hold the operands for `hw.output` here.
   SmallVector<Value, 64> outputs(shell.getNumResults());
 
   // -----

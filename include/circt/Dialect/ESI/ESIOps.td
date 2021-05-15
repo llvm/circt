@@ -33,10 +33,10 @@ def ChannelBuffer : ESI_Abstract_Op<"buffer", [NoSideEffect]> {
     Example:
 
     ```mlir
-    %esiChan = rtl.instance "sender" @Sender () : () -> (!esi.channel<i1>)
+    %esiChan = hw.instance "sender" @Sender () : () -> (!esi.channel<i1>)
     // Allow automatic selection of options.
     %bufferedChan = esi.buffer %esiChan { } : i1
-    rtl.instance "recv" @Reciever (%bufferedChan) : (!esi.channel<i1>) -> ()
+    hw.instance "recv" @Reciever (%bufferedChan) : (!esi.channel<i1>) -> ()
 
     // Alternatively, specify the number of stages.
     %fourStageBufferedChan = esi.buffer %esiChan { stages = 4 } : i1

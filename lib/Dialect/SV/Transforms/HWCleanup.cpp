@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 //
 // This transformation pass performs various cleanups and canonicalization
-// transformations for rtl.module bodies.  This is intended to be used early in
+// transformations for hw.module bodies.  This is intended to be used early in
 // the HW/SV pipeline to expose optimization opportunities that require global
 // analysis.
 //

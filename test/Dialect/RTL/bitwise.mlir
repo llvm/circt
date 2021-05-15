@@ -32,11 +32,11 @@ func @shr_op(%a: i7, %b: i7) -> i7 {
   return %0 : i7
 }
 
-// CHECK-LABEL: func @casts(%arg0: i7) -> !rtl.struct<int: i7>
-func @casts(%in1: i7) -> !rtl.struct<int: i7> {
-  // CHECK-NEXT: %0 = rtl.bitcast %arg0 : (i7) -> !rtl.array<7xi1>
-  // CHECK-NEXT: %1 = rtl.bitcast %0 : (!rtl.array<7xi1>) -> !rtl.struct<int: i7>
-  %bits = rtl.bitcast %in1 : (i7) -> !rtl.array<7xi1>
-  %backToInt = rtl.bitcast %bits : (!rtl.array<7xi1>) -> !rtl.struct<int: i7>
-  return %backToInt : !rtl.struct<int: i7>
+// CHECK-LABEL: func @casts(%arg0: i7) -> !hw.struct<int: i7>
+func @casts(%in1: i7) -> !hw.struct<int: i7> {
+  // CHECK-NEXT: %0 = hw.bitcast %arg0 : (i7) -> !hw.array<7xi1>
+  // CHECK-NEXT: %1 = hw.bitcast %0 : (!hw.array<7xi1>) -> !hw.struct<int: i7>
+  %bits = hw.bitcast %in1 : (i7) -> !hw.array<7xi1>
+  %backToInt = hw.bitcast %bits : (!hw.array<7xi1>) -> !hw.struct<int: i7>
+  return %backToInt : !hw.struct<int: i7>
 }

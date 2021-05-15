@@ -24,7 +24,7 @@ def HWModuleOp : HWOp<"module",
        SingleBlockImplicitTerminator<"OutputOp">, HasParent<"mlir::ModuleOp">]>{
   let summary = "HW Module";
   let description = [{
-    The "rtl.module" operation represents a Verilog module, including a given
+    The "hw.module" operation represents a Verilog module, including a given
     name, a list of ports, and a body that represents the connections within
     the module.
   }];
@@ -97,12 +97,12 @@ def HWModuleExternOp : HWOp<"module.extern",
       [FunctionLike, Symbol, HasParent<"mlir::ModuleOp">]> {
   let summary = "HW external Module";
   let description = [{
-    The "rtl.module.extern" operation represents an external reference to a
+    The "hw.module.extern" operation represents an external reference to a
     Verilog module, including a given name and a list of ports.
 
     The 'verilogName' attribute (when present) specifies the spelling of the
     module name in Verilog we can use.  TODO: This is a hack because we don't
-    have proper parameterization in the rtl.dialect.  We need a way to represent
+    have proper parameterization in the hw.dialect.  We need a way to represent
     parameterized types instead of just concrete types.
   }];
   let arguments = (ins StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
@@ -176,12 +176,12 @@ def HWGeneratorSchemaOp : HWOp<"generator.schema",
       [Symbol, HasParent<"mlir::ModuleOp">]> {
   let summary = "HW Generator Schema declaration";
   let description = [{
-    The "rtl.generator.schema" operation declares a kind of generated module by
+    The "hw.generator.schema" operation declares a kind of generated module by
     declaring the schema of meta-data required.  
     A generated module instance of a schema is independent of the external
     method of producing it.  It is assumed that for well known schema instances,
     multiple external tools might exist which can process it.  Generator nodes 
-    list attributes required by rtl.module.generated instances.
+    list attributes required by hw.module.generated instances.
 
     For example:
     generator.schema @MEMORY, "Simple-Memory", ["ports", "write_latency", "read_latency"]
@@ -201,12 +201,12 @@ def HWModuleGeneratedOp : HWOp<"module.generated",
       [IsolatedFromAbove, FunctionLike, Symbol, HasParent<"mlir::ModuleOp">]> {
   let summary = "HW Generated Module";
   let description = [{
-    The "rtl.module.generated" operation represents a reference to an external
+    The "hw.module.generated" operation represents a reference to an external
     module that will be produced by some external process.  
     This represents the name and list of ports to be generated.
     
     The 'verilogName' attribute (when present) specifies the spelling of the
-    module name in Verilog we can use.  See rtl.module for an explanation.
+    module name in Verilog we can use.  See hw.module for an explanation.
   }];
   let arguments = (ins FlatSymbolRefAttr:$generatorKind, 
                        OptionalAttr<StrAttr>:$verilogName,
@@ -345,7 +345,7 @@ def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,
                                 NoSideEffect, ReturnLike]> {
   let summary = "HW termination operation";
   let description = [{
-    "rtl.output" marks the end of a region in the HW dialect and the values
+    "hw.output" marks the end of a region in the HW dialect and the values
     to put on the output ports.
   }];
 

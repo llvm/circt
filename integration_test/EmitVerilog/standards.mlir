@@ -24,11 +24,11 @@
 // RUN: vlog -lint -sv -sv12compat %t1.2012.sv
 // RUN: vlog -lint -sv -sv17compat %t1.2017.sv
 
-rtl.module @top(%clock : i1, %reset: i1,
+hw.module @top(%clock : i1, %reset: i1,
                 %a: i4, 
-                %s: !rtl.struct<foo: i2, bar: i4>,
-                %parray: !rtl.array<10xi4>,
-                %uarray: !rtl.uarray<16xi8>
+                %s: !hw.struct<foo: i2, bar: i4>,
+                %parray: !hw.array<10xi4>,
+                %uarray: !hw.uarray<16xi8>
                 ) -> (%r0: i4, %r1: i4) {
   %0 = comb.or %a, %a : i4
   %1 = comb.and %a, %a : i4
@@ -40,5 +40,5 @@ rtl.module @top(%clock : i1, %reset: i1,
     sv.fwrite "Yo\n"
   }
   
-  rtl.output %0, %1 : i4, i4
+  hw.output %0, %1 : i4, i4
 }

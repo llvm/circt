@@ -21,11 +21,11 @@ include "mlir/IR/SymbolInterfaces.td"
 include "mlir/IR/RegionKindInterface.td"
 
 def HWDialect : Dialect {
-  let name = "rtl";
+  let name = "hw";
 
-  let summary = "Types and operations for rtl dialect";
+  let summary = "Types and operations for the hardware dialect";
   let description = [{
-    This dialect defines the `rtl` dialect, which is intended to be a generic
+    This dialect defines the `hw` dialect, which is intended to be a generic
     representation of HW outside of a particular use-case.
   }];
 

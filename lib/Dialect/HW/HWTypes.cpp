@@ -129,10 +129,10 @@ bool circt::rtl::hasHWInOutType(Type type) {
 }
 
 /// Parse and print nested HW types nicely.  These helper methods allow eliding
-/// the "rtl." prefix on array, inout, and other types when in a context that
+/// the "hw." prefix on array, inout, and other types when in a context that
 /// expects HW subelement types.
 static ParseResult parseHWElementType(Type &result, DialectAsmParser &p) {
-  // If this is an HW dialect type, then we don't need/want the !rtl. prefix
+  // If this is an HW dialect type, then we don't need/want the !hw. prefix
   // redundantly specified.
   auto fullString = p.getFullSymbolSpec();
   auto *curPtr = p.getCurrentLocation().getPointer();
@@ -261,7 +261,7 @@ Type ArrayType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
       parseHWElementType(inner, p) || p.parseGreater())
     return Type();
   if (dims.size() != 1) {
-    p.emitError(p.getNameLoc(), "rtl.array only supports one dimension");
+    p.emitError(p.getNameLoc(), "hw.array only supports one dimension");
     return Type();
   }
 
@@ -282,7 +282,7 @@ void ArrayType::print(DialectAsmPrinter &p) const {
 LogicalResult ArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
                                 Type innerType, size_t size) {
   if (hasHWInOutType(innerType))
-    return emitError() << "rtl.array cannot contain InOut types";
+    return emitError() << "hw.array cannot contain InOut types";
   return success();
 }
 
@@ -349,7 +349,7 @@ void InOutType::print(DialectAsmPrinter &p) const {
 LogicalResult InOutType::verify(function_ref<InFlightDiagnostic()> emitError,
                                 Type innerType) {
   if (!isHWValueType(innerType))
-    return emitError() << "invalid element for rtl.inout type " << innerType;
+    return emitError() << "invalid element for hw.inout type " << innerType;
   return success();
 }
 

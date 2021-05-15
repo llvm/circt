@@ -47,7 +47,7 @@ struct ModulePortInfo {
 
 // Helpers for working with modules.
 
-/// Return true if this is an rtl.module, external module, generated module etc.
+/// Return true if this is an hw.module, external module, generated module etc.
 bool isAnyModule(Operation *module);
 
 /// Return the signature for the specified module as a function type.

@@ -16,7 +16,7 @@
 include "mlir/Pass/PassBase.td"
 
 def HWCleanup : Pass<"rtl-cleanup", "rtl::HWModuleOp"> {
-  let summary = "Cleanup transformations for operations in rtl.module bodies";
+  let summary = "Cleanup transformations for operations in hw.module bodies";
   let description = [{
       This pass merges sv.alwaysff operations with the same condition, sv.ifdef
       nodes with the same condition, and perform other cleanups for the IR.
@@ -53,7 +53,7 @@ def HWStubExternalModules : Pass<"rtl-stub-external-modules",
 }
 
 def HWLegalizeNames : Pass<"rtl-legalize-names", "ModuleOp"> {
-  let summary = "Legalize module/variable names in rtl.modules and their bodies";
+  let summary = "Legalize module/variable names in hw.modules and their bodies";
   let description = [{
     This pass modifies the names of modules and names such that they do not
     cause conflicts with SV keywords. This is a good thing to run before
@@ -66,8 +66,8 @@ def HWLegalizeNames : Pass<"rtl-legalize-names", "ModuleOp"> {
 def HWGeneratorCalloutPass : Pass<"rtl-generator-callout", "ModuleOp"> {
   let summary = "Lower Generator Schema to external module";
   let description = [{
-    This pass calls an external program for all the rtl.module.generated nodes,
-    following the description in the rtl.generator.schema node.
+    This pass calls an external program for all the hw.module.generated nodes,
+    following the description in the hw.generator.schema node.
   }];
   let constructor = "circt::sv::createHWGeneratorCalloutPass()";
 
