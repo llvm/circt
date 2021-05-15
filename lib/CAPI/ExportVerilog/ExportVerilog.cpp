@@ -1,6 +1,6 @@
-//===- RTLDialect.cpp - C Interface EmitVerilog ---------------------------===//
+//===- ExportVerilog.cpp - C Interface to ExportVerilog -------------------===//
 //
-//  Implements a C Interface for emitVerilog
+//  Implements a C Interface for export Verilog.
 //
 //===----------------------------------------------------------------------===//
 
