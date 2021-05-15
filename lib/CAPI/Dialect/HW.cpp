@@ -1,4 +1,4 @@
-//===- RTLDialect.cpp - C Interface for the RTL Dialect -------------------===//
+//===- HW.cpp - C Interface for the HW Dialect ----------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-//  Implements a C Interface for the RTL Dialect
+//  Implements a C Interface for the HW Dialect
 //
 //===----------------------------------------------------------------------===//
 
