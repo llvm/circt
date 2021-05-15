@@ -12,9 +12,9 @@
 #include "ESICapnp.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/ESI/ESITypes.h"
-#include "circt/Dialect/RTL/RTLDialect.h"
-#include "circt/Dialect/RTL/RTLOps.h"
-#include "circt/Dialect/RTL/RTLTypes.h"
+#include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
 
 #include "capnp/schema-parser.h"

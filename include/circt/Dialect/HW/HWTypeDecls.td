@@ -1,4 +1,4 @@
-//===- RTLTypeDecls.td - RTL data type declaration ops and types ----------===//
+//===- HWTypeDecls.td - HW data type declaration ops and types ------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Support for type declarations in the RTL type system.
+// Support for type declarations in the HW type system.
 //
 //===----------------------------------------------------------------------===//
 

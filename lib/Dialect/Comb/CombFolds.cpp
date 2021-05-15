@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Comb/CombOps.h"
-#include "circt/Dialect/RTL/RTLOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/Dialect/CommonFolders.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"

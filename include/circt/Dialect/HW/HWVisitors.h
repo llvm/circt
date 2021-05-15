@@ -1,4 +1,4 @@
-//===- RTLVisitors.h - RTL Dialect Visitors ---------------------*- C++ -*-===//
+//===- HWVisitors.h - HW Dialect Visitors ---------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,14 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines visitors that make it easier to work with RTL IR.
+// This file defines visitors that make it easier to work with HW IR.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_RTL_RTLVISITORS_H
-#define CIRCT_DIALECT_RTL_RTLVISITORS_H
+#ifndef CIRCT_DIALECT_HW_HWVISITORS_H
+#define CIRCT_DIALECT_HW_HWVISITORS_H
 
-#include "circt/Dialect/RTL/RTLOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {
@@ -162,4 +162,4 @@ public:
 } // namespace rtl
 } // namespace circt
 
-#endif // CIRCT_DIALECT_RTL_RTLVISITORS_H
+#endif // CIRCT_DIALECT_HW_HWVISITORS_H

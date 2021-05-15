@@ -19,8 +19,8 @@ target_link_libraries(circt-opt
   CIRCTLLHDToLLVM
   CIRCTLLHDTransforms
   CIRCTMSFT
-  CIRCTRTL
-  CIRCTRTLToLLHD
+  CIRCTHW
+  CIRCTHWToLLHD
   CIRCTSeq
   CIRCTStandardToHandshake
   CIRCTStandardToStaticLogic

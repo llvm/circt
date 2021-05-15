@@ -19,7 +19,7 @@
 #ifndef CIRCT_DIALECT_ESI_ESIDIALECT_H
 #define CIRCT_DIALECT_ESI_ESIDIALECT_H
 
-#include "circt/Dialect/RTL/RTLOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"

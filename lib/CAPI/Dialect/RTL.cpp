@@ -11,8 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt-c/Dialect/RTL.h"
-#include "circt/Dialect/RTL/RTLOps.h"
-#include "circt/Dialect/RTL/RTLTypes.h"
+#include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Registration.h"

@@ -18,7 +18,7 @@ set(ESI_LinkLibs
   CIRCTSupport
   CIRCTComb
   CIRCTSV
-  CIRCTRTL
+  CIRCTHW
   MLIREDSC
   MLIRIR
   MLIRTransforms

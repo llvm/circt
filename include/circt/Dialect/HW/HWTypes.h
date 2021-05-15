@@ -1,4 +1,4 @@
-//===- RTLTypes.h - types for the RTL dialect -------------------*- C++ -*-===//
+//===- HWTypes.h - Types for the HW dialect ---------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,13 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Types for the RTL dialect are mostly in tablegen. This file should contain
+// Types for the HW dialect are mostly in tablegen. This file should contain
 // C++ types used in MLIR type parameters.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_RTL_TYPES_H
-#define CIRCT_DIALECT_RTL_TYPES_H
+#ifndef CIRCT_DIALECT_HW_TYPES_H
+#define CIRCT_DIALECT_HW_TYPES_H
 
 #include "mlir/IR/Types.h"
 
@@ -30,7 +30,7 @@ struct FieldInfo {
 } // namespace circt
 
 #define GET_TYPEDEF_CLASSES
-#include "circt/Dialect/RTL/RTLTypes.h.inc"
+#include "circt/Dialect/HW/HWTypes.h.inc"
 
 namespace circt {
 namespace rtl {
@@ -60,4 +60,4 @@ bool hasRTLInOutType(mlir::Type type);
 } // namespace rtl
 } // namespace circt
 
-#endif // CIRCT_DIALECT_RTL_TYPES_H
+#endif // CIRCT_DIALECT_HW_TYPES_H

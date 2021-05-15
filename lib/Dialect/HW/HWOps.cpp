@@ -1,4 +1,4 @@
-//===- RTLOps.cpp - Implement the RTL operations --------------------------===//
+//===- HWOps.cpp - Implement the HW operations ----------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implement the RTL ops.
+// This file implement the HW ops.
 //
 //===----------------------------------------------------------------------===//
 

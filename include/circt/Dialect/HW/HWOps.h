@@ -1,4 +1,4 @@
-//===- RTLOps.h - Declare RTL dialect operations ----------------*- C++ -*-===//
+//===- HWOps.h - Declare HW dialect operations ------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,15 +6,15 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file declares the operation classes for the RTL dialect.
+// This file declares the operation classes for the HW dialect.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_RTL_OPS_H
-#define CIRCT_DIALECT_RTL_OPS_H
+#ifndef CIRCT_DIALECT_HW_OPS_H
+#define CIRCT_DIALECT_HW_OPS_H
 
-#include "circt/Dialect/RTL/RTLDialect.h"
-#include "circt/Dialect/RTL/RTLTypes.h"
+#include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/FunctionSupport.h"
 #include "mlir/IR/OpImplementation.h"
@@ -82,6 +82,6 @@ bool isCombinatorial(Operation *op);
 } // namespace circt
 
 #define GET_OP_CLASSES
-#include "circt/Dialect/RTL/RTL.h.inc"
+#include "circt/Dialect/HW/HW.h.inc"
 
-#endif // CIRCT_DIALECT_RTL_OPS_H
+#endif // CIRCT_DIALECT_HW_OPS_H

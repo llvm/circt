@@ -1,4 +1,4 @@
-//===- RTLDialect.cpp - Implement the RTL dialect -------------------------===//
+//===- HWDialect.cpp - Implement the HW dialect ---------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,13 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implements the RTL dialect.
+// This file implements the HW dialect.
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/RTL/RTLDialect.h"
-#include "circt/Dialect/RTL/RTLOps.h"
-#include "circt/Dialect/RTL/RTLTypes.h"
+#include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -60,7 +60,7 @@ void RTLDialect::initialize() {
   // Register operations.
   addOperations<
 #define GET_OP_LIST
-#include "circt/Dialect/RTL/RTL.cpp.inc"
+#include "circt/Dialect/HW/HW.cpp.inc"
       >();
 
   // Register interface implementations.
@@ -85,4 +85,4 @@ Operation *RTLDialect::materializeConstant(OpBuilder &builder, Attribute value,
 }
 
 // Provide implementations for the enums we use.
-#include "circt/Dialect/RTL/RTLEnums.cpp.inc"
+#include "circt/Dialect/HW/HWEnums.cpp.inc"

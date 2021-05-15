@@ -12,8 +12,8 @@
 
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
-#include "circt/Dialect/RTL/RTLOps.h"
-#include "circt/Dialect/RTL/RTLTypes.h"
+#include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/PatternMatch.h"

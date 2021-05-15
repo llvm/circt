@@ -13,7 +13,7 @@
 #ifndef CIRCT_DIALECT_SV_TYPES_H
 #define CIRCT_DIALECT_SV_TYPES_H
 
-#include "circt/Dialect/RTL/RTLTypes.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinAttributes.h"
 

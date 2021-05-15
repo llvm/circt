@@ -14,7 +14,7 @@
 #ifndef CIRCT_DIALECT_ESI_CAPNP_ESICAPNP_H
 #define CIRCT_DIALECT_ESI_CAPNP_ESICAPNP_H
 
-#include "circt/Dialect/RTL/RTLOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 
 #include <memory>
 

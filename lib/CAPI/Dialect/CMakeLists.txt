@@ -54,7 +54,7 @@ add_circt_library(CIRCTCAPIRTL
 
   LINK_LIBS PUBLIC
   MLIRCAPIIR
-  CIRCTRTL
+  CIRCTHW
   )
 
 add_circt_library(CIRCTCAPISeq

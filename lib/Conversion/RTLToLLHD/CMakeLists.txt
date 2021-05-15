@@ -1,4 +1,4 @@
-add_circt_conversion_library(CIRCTRTLToLLHD
+add_circt_conversion_library(CIRCTHWToLLHD
   RTLToLLHD.cpp
 
   DEPENDS
@@ -9,6 +9,6 @@ add_circt_conversion_library(CIRCTRTLToLLHD
 
   LINK_LIBS PUBLIC
   CIRCTLLHD
-  CIRCTRTL
+  CIRCTHW
   MLIRTransforms
 )

@@ -10,7 +10,7 @@ add_circt_conversion_library(CIRCTFIRRTLToRTL
   LINK_LIBS PUBLIC
   CIRCTComb
   CIRCTFIRRTL
-  CIRCTRTL
+  CIRCTHW
   CIRCTSV
   MLIRTransforms
 )

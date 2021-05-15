@@ -1,4 +1,4 @@
-//===- RTLTypes.cpp - RTL types code defs ---------------------------------===//
+//===- HWTypes.cpp - HW types code defs -----------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,12 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Implementation logic for RTL data types.
+// Implementation logic for HW data types.
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/RTL/RTLTypes.h"
-#include "circt/Dialect/RTL/RTLDialect.h"
+#include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -27,7 +27,7 @@ using namespace circt::rtl;
 using namespace circt::rtl::detail;
 
 #define GET_TYPEDEF_CLASSES
-#include "circt/Dialect/RTL/RTLTypes.cpp.inc"
+#include "circt/Dialect/HW/HWTypes.cpp.inc"
 
 FieldInfo FieldInfo::allocateInto(mlir::TypeStorageAllocator &alloc) const {
   return FieldInfo{alloc.copyInto(name), type};
@@ -377,6 +377,6 @@ void RTLDialect::printType(Type type, DialectAsmPrinter &printer) const {
 void RTLDialect::registerTypes() {
   addTypes<
 #define GET_TYPEDEF_LIST
-#include "circt/Dialect/RTL/RTLTypes.cpp.inc"
+#include "circt/Dialect/HW/HWTypes.cpp.inc"
       >();
 }

@@ -12,7 +12,7 @@
 
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
-#include "circt/Dialect/RTL/RTLOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"

@@ -10,6 +10,6 @@
 #define BINDINGS_PYTHON_RTL_OPS
 
 include "mlir/Bindings/Python/Attributes.td"
-include "circt/Dialect/RTL/RTL.td"
+include "circt/Dialect/HW/HW.td"
 
 #endif

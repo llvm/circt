@@ -12,7 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/ESI/ESITypes.h"
-#include "circt/Dialect/RTL/RTLTypes.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/ArrayRef.h"

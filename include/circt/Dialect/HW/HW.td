@@ -1,4 +1,4 @@
-//===- RTL.td - RTL dialect definition ---------------------*- tablegen -*-===//
+//===- HW.td - HW dialect definition -----------------------*- tablegen -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This is the top level file for the RTL dialect.
+// This is the top level file for the HW dialect.
 //
 //===----------------------------------------------------------------------===//
 
@@ -37,14 +37,14 @@ def RTLDialect : Dialect {
   }];
 }
 
-include "circt/Dialect/RTL/RTLTypes.td"
+include "circt/Dialect/HW/HWTypes.td"
 
 // Base class for the operation in this dialect.
 class RTLOp<string mnemonic, list<OpTrait> traits = []> :
     Op<RTLDialect, mnemonic, traits>;
 
-include "circt/Dialect/RTL/RTLAggregates.td"
-include "circt/Dialect/RTL/RTLStructure.td"
-include "circt/Dialect/RTL/RTLTypeDecls.td"
+include "circt/Dialect/HW/HWAggregates.td"
+include "circt/Dialect/HW/HWStructure.td"
+include "circt/Dialect/HW/HWTypeDecls.td"
 
 #endif // RTL_TD

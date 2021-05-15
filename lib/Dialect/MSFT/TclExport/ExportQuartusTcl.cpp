@@ -10,9 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
-#include "circt/Dialect/RTL/RTLOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Translation.h"
 #include "llvm/ADT/StringSet.h"
