@@ -447,7 +447,7 @@ hw.module @TestZero(%a: i4, %zeroBit: i0, %arrZero: !hw.array<3xi0>)
 hw.module @TestZeroInstance(%aa: i4, %azeroBit: i0, %aarrZero: !hw.array<3xi0>)
   -> (%r0: i4, %rZero: i0, %arrZero_0: !hw.array<3xi0>) {
 
-  // CHECK: TestZero iii (	// {{.*}}rtl-dialect.mlir:{{.*}}:19
+  // CHECK: TestZero iii (	// {{.*}}hw-dialect.mlir:{{.*}}:19
   // CHECK:   .a         (aa),
   // CHECK: //.zeroBit   (azeroBit),
   // CHECK: //.arrZero   (aarrZero),
