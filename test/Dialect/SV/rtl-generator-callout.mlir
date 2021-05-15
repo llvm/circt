@@ -1,4 +1,4 @@
-// RUN:  circt-opt -rtl-generator-callout='schema-name=Schema_Name generator-executable=echo generator-executable-arguments=file1.v,file2.v,file3.v,file4.v generator-executable-output-filename=litTestout' %s | FileCheck %s
+// RUN:  circt-opt -hw-generator-callout='schema-name=Schema_Name generator-executable=echo generator-executable-arguments=file1.v,file2.v,file3.v,file4.v generator-executable-output-filename=litTestout' %s | FileCheck %s
 
 module attributes {firrtl.mainModule = "top_mod"}  {
   hw.generator.schema @SchemaVar, "Schema_Name", ["port1", "port2"]

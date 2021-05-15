@@ -3,7 +3,7 @@
 
 import circt
 from circt import msft
-from circt.dialects import rtl, seq
+from circt.dialects import hw, seq
 
 from mlir.ir import *
 import sys

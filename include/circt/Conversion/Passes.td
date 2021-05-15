@@ -33,13 +33,13 @@ def ConvertFIRRTLToLLHD : Pass<"convert-firrtl-to-llhd", "mlir::ModuleOp"> {
 // FIRRTLToHW
 //===----------------------------------------------------------------------===//
 
-def LowerFIRRTLToHW : Pass<"lower-firrtl-to-rtl", "mlir::ModuleOp"> {
+def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
   let summary = "Lower FIRRTL to HW";
   let description = [{
     Lower a module of FIRRTL dialect to the HW dialect family.
   }];
   let constructor = "circt::createLowerFIRRTLToHWPass()";
-  let dependentDialects = ["comb::CombDialect", "rtl::HWDialect",
+  let dependentDialects = ["comb::CombDialect", "hw::HWDialect",
                            "sv::SVDialect"];
 }
 
@@ -74,7 +74,7 @@ def ConvertLLHDToLLVM : Pass<"convert-llhd-to-llvm", "mlir::ModuleOp"> {
 // HWToLLHD
 //===----------------------------------------------------------------------===//
 
-def ConvertHWToLLHD : Pass<"convert-rtl-to-llhd", "mlir::ModuleOp"> {
+def ConvertHWToLLHD : Pass<"convert-hw-to-llhd", "mlir::ModuleOp"> {
   let summary = "Convert HW to LLHD";
   let description = [{
     This pass translates a HW design into an equivalent structural LLHD

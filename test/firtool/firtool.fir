@@ -1,7 +1,7 @@
 ; RUN: firtool %s --format=fir -mlir    | circt-opt | FileCheck %s --check-prefix=MLIR
 ; RUN: firtool %s --format=fir -mlir --annotation-file %s.anno.json | circt-opt | FileCheck %s --check-prefix=ANNOTATIONS
 ; RUN: firtool %s --format=fir -verilog |             FileCheck %s --check-prefix=VERILOG
-; RUN: firtool %s --format=fir -mlir -lower-to-rtl | circt-opt | FileCheck %s --check-prefix=MLIRLOWER
+; RUN: firtool %s --format=fir -mlir -lower-to-hw | circt-opt | FileCheck %s --check-prefix=MLIRLOWER
 
 circuit test_mod : %[[{"a": "a"}]]
   module test_mod :

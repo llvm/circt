@@ -1,4 +1,4 @@
-// RUN: circt-opt -convert-rtl-to-llhd -split-input-file -verify-diagnostics %s
+// RUN: circt-opt -convert-hw-to-llhd -split-input-file -verify-diagnostics %s
 
 module {
   // Since HW-to-LLHD needs to construct a zero value for temporary signals,

@@ -2424,7 +2424,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     }
   }
 
-  // The FIRRTL dialect requires mems to have at least one port.  Since portless
+  // The FIRRTL dialect requires mems to have at least one port.  Since pohwess
   // mems can never be referenced, it is always safe to drop them.
   if (ports.empty())
     return success();
@@ -2692,7 +2692,7 @@ private:
 
 } // end anonymous namespace
 
-/// portlist ::= port*
+/// pohwist ::= port*
 /// port     ::= dir id ':' type info? NEWLINE
 /// dir      ::= 'input' | 'output'
 ///
@@ -2742,7 +2742,7 @@ FIRModuleParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
 }
 
 /// module    ::=
-///        'extmodule' id ':' info? INDENT portlist defname? parameter* DEDENT
+///        'extmodule' id ':' info? INDENT pohwist defname? parameter* DEDENT
 /// defname   ::= 'defname' '=' id NEWLINE
 ///
 /// parameter ::= 'parameter' id '=' intLit NEWLINE
@@ -2853,7 +2853,7 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   return success();
 }
 
-/// module ::= 'module' id ':' info? INDENT portlist simple_stmt_block
+/// module ::= 'module' id ':' info? INDENT pohwist simple_stmt_block
 /// DEDENT
 ///
 ParseResult FIRModuleParser::parseModule(unsigned indent) {

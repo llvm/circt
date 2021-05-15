@@ -34,7 +34,7 @@ LogicalResult exportCosimSchema(ModuleOp module, llvm::raw_ostream &os);
 /// A triple of signals which represent a latency insensitive interface with
 /// valid/ready semantics.
 struct ESIPortValidReadyMapping {
-  rtl::ModulePortInfo data, valid, ready;
+  hw::ModulePortInfo data, valid, ready;
 };
 
 /// Find all the port triples on a module which fit the

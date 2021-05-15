@@ -149,7 +149,7 @@ void RegOp::build(OpBuilder &odsBuilder, OperationState &odsState,
   odsState.addAttribute("name", name);
   if (sym_name)
     odsState.addAttribute("sym_name", sym_name);
-  odsState.addTypes(rtl::InOutType::get(elementType));
+  odsState.addTypes(hw::InOutType::get(elementType));
 }
 
 /// Suggest a name for each result value based on the saved result names
@@ -272,7 +272,7 @@ static void replaceOpWithRegion(PatternRewriter &rewriter, Operation *op,
 }
 
 LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
-  if (auto constant = op.cond().getDefiningOp<rtl::ConstantOp>()) {
+  if (auto constant = op.cond().getDefiningOp<hw::ConstantOp>()) {
 
     if (constant.getValue().isAllOnesValue())
       replaceOpWithRegion(rewriter, op, op.thenRegion());
@@ -299,7 +299,7 @@ LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
   // Otherwise, invert the condition and move the 'else' block to the 'then'
   // region.
   auto full =
-      rewriter.create<rtl::ConstantOp>(op.getLoc(), op.cond().getType(), -1);
+      rewriter.create<hw::ConstantOp>(op.getLoc(), op.cond().getType(), -1);
   Value ops[] = {full, op.cond()};
   auto cond =
       rewriter.createOrFold<comb::XorOp>(op.getLoc(), op.cond().getType(), ops);
@@ -837,7 +837,7 @@ LogicalResult WireOp::canonicalize(WireOp op, PatternRewriter &rewriter) {
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
 static LogicalResult verifyWireOp(WireOp op) {
-  if (!isa<rtl::HWModuleOp>(op->getParentOp()))
+  if (!isa<hw::HWModuleOp>(op->getParentOp()))
     return op.emitError("sv.wire must not be in an always or initial block");
   return success();
 }
@@ -915,8 +915,8 @@ LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
   // conditional procedural assign.  We've ensured that this is the only write
   // of the register.
   if (trueBranch) {
-    auto one = rewriter.create<rtl::ConstantOp>(mux.getLoc(),
-                                                mux.cond().getType(), -1);
+    auto one =
+        rewriter.create<hw::ConstantOp>(mux.getLoc(), mux.cond().getType(), -1);
     Value ops[] = {mux.cond(), one};
     auto cond = rewriter.createOrFold<comb::XorOp>(mux.getLoc(),
                                                    mux.cond().getType(), ops);

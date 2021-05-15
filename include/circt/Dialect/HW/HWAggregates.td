@@ -54,7 +54,7 @@ def ArrayConcatOp : HWOp<"array_concat", [NoSideEffect]> {
     values must be listed.
 
     ```
-    // %a, %b, %c are rtl arrays of i4 with sizes 2, 5, and 4 respectively.
+    // %a, %b, %c are hw arrays of i4 with sizes 2, 5, and 4 respectively.
     %array = hw.array_concat %a, %b, %c : (2, 5, 4 x i4)
     // %array is !hw.array<11 x i4>
     ```

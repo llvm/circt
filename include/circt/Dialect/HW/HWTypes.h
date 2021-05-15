@@ -17,7 +17,7 @@
 #include "mlir/IR/Types.h"
 
 namespace circt {
-namespace rtl {
+namespace hw {
 namespace detail {
 /// Struct defining a field. Used in structs and unions.
 struct FieldInfo {
@@ -26,14 +26,14 @@ struct FieldInfo {
   FieldInfo allocateInto(mlir::TypeStorageAllocator &alloc) const;
 };
 } // namespace detail
-} // namespace rtl
+} // namespace hw
 } // namespace circt
 
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/HW/HWTypes.h.inc"
 
 namespace circt {
-namespace rtl {
+namespace hw {
 
 /// Return true if the specified type is a value HW Integer type.  This checks
 /// that it is a signless standard dialect type and that it isn't zero bits.
@@ -57,7 +57,7 @@ int64_t getBitWidth(mlir::Type type);
 /// false on known InOut types, rather than any unknown types.
 bool hasHWInOutType(mlir::Type type);
 
-} // namespace rtl
+} // namespace hw
 } // namespace circt
 
 #endif // CIRCT_DIALECT_HW_TYPES_H

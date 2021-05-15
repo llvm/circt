@@ -22,7 +22,7 @@
 
 namespace circt {
 namespace sv {
-using InOutType = circt::rtl::InOutType;
+using InOutType = circt::hw::InOutType;
 
 /// Return the element type of an InOutType or null if the operand isn't an
 /// InOut type.

@@ -109,7 +109,7 @@ add_dependencies(CIRCTBindingsPythonSources CIRCTBindingsPythonESIOps)
 
 add_mlir_dialect_python_bindings(CIRCTBindingsPythonHWOps
   TD_FILE HWOps.td
-  DIALECT_NAME rtl)
+  DIALECT_NAME hw)
 add_dependencies(CIRCTBindingsPythonSources CIRCTBindingsPythonHWOps)
 
 add_mlir_dialect_python_bindings(CIRCTBindingsPythonSeqOps

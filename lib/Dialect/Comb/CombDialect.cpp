@@ -44,7 +44,7 @@ Operation *CombDialect::materializeConstant(OpBuilder &builder, Attribute value,
   // Integer constants.
   if (auto intType = type.dyn_cast<IntegerType>())
     if (auto attrValue = value.dyn_cast<IntegerAttr>())
-      return builder.create<rtl::ConstantOp>(loc, type, attrValue);
+      return builder.create<hw::ConstantOp>(loc, type, attrValue);
 
   return nullptr;
 }

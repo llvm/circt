@@ -4,7 +4,7 @@
 import sys
 
 import circt
-from circt.dialects import rtl, seq
+from circt.dialects import hw, seq
 
 from mlir.ir import *
 from mlir.passmanager import PassManager

@@ -24,16 +24,16 @@ namespace py = pybind11;
 using namespace circt;
 using namespace mlir::python::adaptors;
 
-/// Populate the rtl python module.
+/// Populate the hw python module.
 void circt::python::populateDialectHWSubmodule(py::module &m) {
   m.doc() = "HW dialect Python native extension";
 
-  mlir_type_subclass(m, "ArrayType", rtlTypeIsAArrayType)
+  mlir_type_subclass(m, "ArrayType", hwTypeIsAArrayType)
       .def_staticmethod("get", [](MlirType elementType, intptr_t size) {
-        return py::cast(rtlArrayTypeGet(elementType, size));
+        return py::cast(hwArrayTypeGet(elementType, size));
       });
 
-  mlir_type_subclass(m, "StructType", rtlTypeIsAStructType)
+  mlir_type_subclass(m, "StructType", hwTypeIsAStructType)
       .def_staticmethod("get", [](py::list pyFieldInfos) {
         llvm::SmallVector<HWStructFieldInfo> mlirFieldInfos;
         MlirContext ctx;
@@ -50,7 +50,7 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
               mlirStringRefCreate(names[i].data(), names[i].size()),
               mlirTypeAttrGet(type)});
         }
-        return py::cast(rtlStructTypeGet(ctx, mlirFieldInfos.size(),
-                                         mlirFieldInfos.data()));
+        return py::cast(
+            hwStructTypeGet(ctx, mlirFieldInfos.size(), mlirFieldInfos.data()));
       });
 }

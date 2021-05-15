@@ -7,7 +7,7 @@ import mlir.ir
 
 from _circt._esi import *
 import circt
-from circt.dialects import rtl
+from circt.dialects import hw
 from circt.dialects.esi import *
 
 import typing
@@ -18,8 +18,8 @@ class System(CppSystem):
 
   mod = None
   passes = [
-      "lower-esi-ports", "lower-esi-to-physical", "lower-esi-to-rtl",
-      "rtl-legalize-names", "hw.module(rtl-cleanup)"
+      "lower-esi-ports", "lower-esi-to-physical", "lower-esi-to-hw",
+      "hw-legalize-names", "hw.module(hw-cleanup)"
   ]
   passed = False
 

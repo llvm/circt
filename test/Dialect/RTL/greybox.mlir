@@ -1,4 +1,4 @@
-// RUN: circt-opt -rtl-stub-external-modules %s | FileCheck %s
+// RUN: circt-opt -hw-stub-external-modules %s | FileCheck %s
 
 //CHECK-LABEL: hw.module @local(%arg0: !hw.inout<i1>, %arg1: i1) -> (%r: i3) {
 //CHECK-NEXT:    %foo.r = hw.instance "foo" @remote(%arg0, %arg1) : (!hw.inout<i1>, i1) -> i3

@@ -577,7 +577,7 @@ def AnalogInOutCastOp : FIRRTLOp<"analogInOutCast", [NoSideEffect]> {
 
 // This operation converts from a struct to a bundle
 // type, or visa-versa.  FIRRTL source/destination types must be passive.
-def HWStructCastOp : FIRRTLOp<"rtlStructCast", [NoSideEffect]> {
+def HWStructCastOp : FIRRTLOp<"hwStructCast", [NoSideEffect]> {
   let arguments = (ins AnyType:$input);
   let results = (outs AnyType:$result);
 

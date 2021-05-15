@@ -19,10 +19,10 @@ def Struct : ESI_Type<"Struct"> {
   let mnemonic = "struct";
   let parameters = (ins
     StringRefParameter<"struct name">:$name,
-    "::circt::rtl::StructType":$inner);
+    "::circt::hw::StructType":$inner);
 
   let extraClassDeclaration = [{
-    ArrayRef<::circt::rtl::StructType::FieldInfo> getElements() const {
+    ArrayRef<::circt::hw::StructType::FieldInfo> getElements() const {
       return getInner().getElements();
     }
   }];

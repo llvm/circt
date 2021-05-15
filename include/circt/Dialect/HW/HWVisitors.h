@@ -17,7 +17,7 @@
 #include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {
-namespace rtl {
+namespace hw {
 
 /// This helps visit TypeOp nodes.
 template <typename ConcreteType, typename ResultType = void,
@@ -159,7 +159,7 @@ public:
 #undef HANDLE
 };
 
-} // namespace rtl
+} // namespace hw
 } // namespace circt
 
 #endif // CIRCT_DIALECT_HW_HWVISITORS_H

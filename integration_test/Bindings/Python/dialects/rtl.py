@@ -2,7 +2,7 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
 import circt
-from circt.dialects import rtl
+from circt.dialects import hw
 
 from mlir.ir import *
 from mlir.passmanager import PassManager
@@ -110,7 +110,7 @@ with Context() as ctx, Location.unknown():
   # CHECK-LABEL: === Verilog ===
   print("=== Verilog ===")
 
-  pm = PassManager.parse("rtl-legalize-names,hw.module(rtl-cleanup)")
+  pm = PassManager.parse("hw-legalize-names,hw.module(hw-cleanup)")
   pm.run(m)
   # CHECK: module MyWidget
   # CHECK: external module FancyThing

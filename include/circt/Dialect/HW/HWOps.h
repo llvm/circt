@@ -24,7 +24,7 @@
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 namespace circt {
-namespace rtl {
+namespace hw {
 
 /// A HW module ports direction.
 enum PortDirection {
@@ -78,7 +78,7 @@ SmallVector<ModulePortInfo> getModulePortInfo(Operation *op);
 /// Return true if the specified operation is a combinatorial logic op.
 bool isCombinatorial(Operation *op);
 
-} // namespace rtl
+} // namespace hw
 } // namespace circt
 
 #define GET_OP_CLASSES

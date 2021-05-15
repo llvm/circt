@@ -33,11 +33,11 @@ void HWStubExternalModulesPass::runOnOperation() {
   builder.setInsertionPointToEnd(topModule);
 
   for (auto &op : llvm::make_early_inc_range(*topModule))
-    if (auto module = dyn_cast<rtl::HWModuleExternOp>(op)) {
-      SmallVector<rtl::ModulePortInfo> ports = module.getPorts();
+    if (auto module = dyn_cast<hw::HWModuleExternOp>(op)) {
+      SmallVector<hw::ModulePortInfo> ports = module.getPorts();
       auto nameAttr = module.getNameAttr();
       auto newModule =
-          builder.create<rtl::HWModuleOp>(module.getLoc(), nameAttr, ports);
+          builder.create<hw::HWModuleOp>(module.getLoc(), nameAttr, ports);
       auto outputOp = newModule.getBodyBlock()->getTerminator();
       OpBuilder innerBuilder(outputOp);
       SmallVector<Value, 8> outputs;
@@ -53,7 +53,7 @@ void HWStubExternalModulesPass::runOnOperation() {
       auto useRange = SymbolTable::getSymbolUses(module, getOperation());
       if (useRange)
         for (auto &user : *useRange)
-          if (auto inst = dyn_cast<rtl::InstanceOp>(user.getUser()))
+          if (auto inst = dyn_cast<hw::InstanceOp>(user.getUser()))
             inst->removeAttr("parameters");
 
       // Done with the old module.

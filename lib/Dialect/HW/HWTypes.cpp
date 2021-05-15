@@ -23,8 +23,8 @@
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
-using namespace circt::rtl;
-using namespace circt::rtl::detail;
+using namespace circt::hw;
+using namespace circt::hw::detail;
 
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/HW/HWTypes.cpp.inc"
@@ -39,7 +39,7 @@ FieldInfo FieldInfo::allocateInto(mlir::TypeStorageAllocator &alloc) const {
 
 /// Return true if the specified type is a value HW Integer type.  This checks
 /// that it is a signless standard dialect type, that it isn't zero bits.
-bool circt::rtl::isHWIntegerType(mlir::Type type) {
+bool circt::hw::isHWIntegerType(mlir::Type type) {
   auto intType = type.dyn_cast<IntegerType>();
   if (!intType || !intType.isSignless())
     return false;
@@ -50,7 +50,7 @@ bool circt::rtl::isHWIntegerType(mlir::Type type) {
 /// Return true if the specified type can be used as an HW value type, that is
 /// the set of types that can be composed together to represent synthesized,
 /// hardware but not marker types like InOutType.
-bool circt::rtl::isHWValueType(Type type) {
+bool circt::hw::isHWValueType(Type type) {
   // Signless and signed integer types are both valid.
   if (type.isa<IntegerType>())
     return true;
@@ -79,7 +79,7 @@ bool circt::rtl::isHWValueType(Type type) {
 /// statically-size type. Reflects the number of wires needed to transmit a
 /// value of this type. Returns -1 if the type is not known or cannot be
 /// statically computed.
-int64_t circt::rtl::getBitWidth(mlir::Type type) {
+int64_t circt::hw::getBitWidth(mlir::Type type) {
   return llvm::TypeSwitch<::mlir::Type, size_t>(type)
       .Case<IntegerType>(
           [](IntegerType t) { return t.getIntOrFloatBitWidth(); })
@@ -114,7 +114,7 @@ int64_t circt::rtl::getBitWidth(mlir::Type type) {
 /// Return true if the specified type contains known marker types like
 /// InOutType.  Unlike isHWValueType, this is not conservative, it only returns
 /// false on known InOut types, rather than any unknown types.
-bool circt::rtl::hasHWInOutType(Type type) {
+bool circt::hw::hasHWInOutType(Type type) {
   if (auto array = type.dyn_cast<ArrayType>())
     return hasHWInOutType(array.getElementType());
 
@@ -162,7 +162,7 @@ static void printHWElementType(Type element, DialectAsmPrinter &p) {
 // Struct Type
 //===----------------------------------------------------------------------===//
 namespace circt {
-namespace rtl {
+namespace hw {
 namespace detail {
 bool operator==(const FieldInfo &a, const FieldInfo &b) {
   return a.name == b.name && a.type == b.type;
@@ -171,7 +171,7 @@ llvm::hash_code hash_value(const FieldInfo &fi) {
   return llvm::hash_combine(fi.name, fi.type);
 }
 } // namespace detail
-} // namespace rtl
+} // namespace hw
 } // namespace circt
 
 /// Parse a list of field names and types within <>. E.g.:
@@ -371,7 +371,7 @@ Type HWDialect::parseType(DialectAsmParser &parser) const {
 void HWDialect::printType(Type type, DialectAsmPrinter &printer) const {
   if (succeeded(generatedTypePrinter(type, printer)))
     return;
-  llvm_unreachable("unexpected 'rtl' type");
+  llvm_unreachable("unexpected 'hw' type");
 }
 
 void HWDialect::registerTypes() {

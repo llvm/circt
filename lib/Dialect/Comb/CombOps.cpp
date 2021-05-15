@@ -65,7 +65,7 @@ bool ICmpOp::isEqualAllOnes() {
     return false;
 
   if (auto op1 =
-          dyn_cast_or_null<rtl::ConstantOp>(getOperand(1).getDefiningOp()))
+          dyn_cast_or_null<hw::ConstantOp>(getOperand(1).getDefiningOp()))
     return op1.getValue().isAllOnesValue();
   return false;
 }
@@ -77,7 +77,7 @@ bool ICmpOp::isNotEqualZero() {
     return false;
 
   if (auto op1 =
-          dyn_cast_or_null<rtl::ConstantOp>(getOperand(1).getDefiningOp()))
+          dyn_cast_or_null<hw::ConstantOp>(getOperand(1).getDefiningOp()))
     return op1.getValue().isNullValue();
   return false;
 }
@@ -115,7 +115,7 @@ bool XorOp::isBinaryNot() {
   if (getNumOperands() != 2)
     return false;
   if (auto cst =
-          dyn_cast_or_null<rtl::ConstantOp>(getOperand(1).getDefiningOp()))
+          dyn_cast_or_null<hw::ConstantOp>(getOperand(1).getDefiningOp()))
     if (cst.getValue().isAllOnesValue())
       return true;
   return false;

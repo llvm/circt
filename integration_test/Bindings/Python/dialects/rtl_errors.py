@@ -2,7 +2,7 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
 import circt
-from circt.dialects import rtl
+from circt.dialects import hw
 
 from mlir.ir import *
 from mlir.passmanager import PassManager

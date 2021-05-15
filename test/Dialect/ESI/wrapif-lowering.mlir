@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --lower-esi-to-rtl -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
+// RUN: circt-opt %s --lower-esi-to-hw -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 
 sv.interface @IValidReady_i4 {
   sv.interface.signal @valid : i1

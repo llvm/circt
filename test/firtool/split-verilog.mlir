@@ -15,7 +15,7 @@ sv.ifdef.procedural "VERILATOR" {
 }
 sv.verbatim ""
 
-hw.type_scope @__rtl_typedecls {
+hw.type_scope @__hw_typedecls {
   hw.typedecl @foo : i1
 }
 

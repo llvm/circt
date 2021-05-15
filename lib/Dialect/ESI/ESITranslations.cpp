@@ -185,7 +185,7 @@ void circt::esi::registerESITranslations() {
   mlir::TranslateFromMLIRRegistration cosimToCapnp(
       "export-esi-capnp", exportCosimSchema,
       [](mlir::DialectRegistry &registry) {
-        registry.insert<ESIDialect, circt::rtl::HWDialect, circt::sv::SVDialect,
+        registry.insert<ESIDialect, circt::hw::HWDialect, circt::sv::SVDialect,
                         mlir::StandardOpsDialect, mlir::BuiltinDialect>();
       });
 #endif

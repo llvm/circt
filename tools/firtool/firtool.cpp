@@ -70,8 +70,8 @@ static cl::opt<bool> inliner("inline",
                              cl::desc("Run the FIRRTL module inliner"),
                              cl::init(false));
 
-static cl::opt<bool> lowerToHW("lower-to-rtl",
-                               cl::desc("run the lower-to-rtl pass"));
+static cl::opt<bool> lowerToHW("lower-to-hw",
+                               cl::desc("run the lower-to-hw pass"));
 static cl::opt<bool> imconstprop(
     "imconstprop",
     cl::desc(
@@ -80,7 +80,7 @@ static cl::opt<bool> imconstprop(
 
 static cl::opt<bool>
     enableLowerTypes("lower-types",
-                     cl::desc("run the lower-types pass within lower-to-rtl"),
+                     cl::desc("run the lower-types pass within lower-to-hw"),
                      cl::init(false));
 
 static cl::opt<bool>
@@ -137,7 +137,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
               MLIRContext &context,
               std::function<LogicalResult(OwningModuleRef)> callback) {
   // Register our dialects.
-  context.loadDialect<firrtl::FIRRTLDialect, rtl::HWDialect, comb::CombDialect,
+  context.loadDialect<firrtl::FIRRTLDialect, hw::HWDialect, comb::CombDialect,
                       sv::SVDialect>();
 
   llvm::SourceMgr sourceMgr;
@@ -232,7 +232,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
     // If enabled, run the optimizer.
     if (!disableOptimization) {
-      auto &modulePM = pm.nest<rtl::HWModuleOp>();
+      auto &modulePM = pm.nest<hw::HWModuleOp>();
       modulePM.addPass(sv::createHWCleanupPass());
       modulePM.addPass(createCSEPass());
       modulePM.addPass(createSimpleCanonicalizerPass());
@@ -246,7 +246,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
     // Tidy up the IR to improve verilog emission quality.
     if (!disableOptimization) {
-      auto &modulePM = pm.nest<rtl::HWModuleOp>();
+      auto &modulePM = pm.nest<hw::HWModuleOp>();
       modulePM.addPass(sv::createPrettifyVerilogPass());
     }
   }

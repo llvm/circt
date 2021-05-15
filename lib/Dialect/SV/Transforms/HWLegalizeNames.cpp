@@ -17,7 +17,7 @@
 
 using namespace circt;
 using namespace sv;
-using namespace rtl;
+using namespace hw;
 
 //===----------------------------------------------------------------------===//
 // NameCollisionResolver
@@ -63,7 +63,7 @@ struct HWLegalizeNamesPass
 private:
   bool anythingChanged;
 
-  void runOnModule(rtl::HWModuleOp module);
+  void runOnModule(hw::HWModuleOp module);
   void runOnInterface(sv::InterfaceOp intf, mlir::SymbolUserMap &symbolUsers);
 };
 } // end anonymous namespace
@@ -125,7 +125,7 @@ void HWLegalizeNamesPass::runOnOperation() {
     markAllAnalysesPreserved();
 }
 
-void HWLegalizeNamesPass::runOnModule(rtl::HWModuleOp module) {
+void HWLegalizeNamesPass::runOnModule(hw::HWModuleOp module) {
   NameCollisionResolver nameResolver;
 
   bool changedArgNames = false, changedOutputNames = false;

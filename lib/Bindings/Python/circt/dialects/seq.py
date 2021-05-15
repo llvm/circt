@@ -12,7 +12,7 @@ from mlir.dialects._seq_ops_gen import *
 # otherwise it will reset to zero. If name is provided, the register will be
 # named.
 def reg(value, clock, reset=None, reset_value=None, name=None):
-  import circt.dialects.rtl as rtl
+  import circt.dialects.hw as hw
   from mlir.ir import IntegerAttr
   value_type = value.type
   if reset:

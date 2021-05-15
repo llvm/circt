@@ -28,7 +28,7 @@ struct ConstantIntMatcher {
   APInt &value;
   ConstantIntMatcher(APInt &value) : value(value) {}
   bool match(Operation *op) {
-    if (auto cst = dyn_cast<rtl::ConstantOp>(op)) {
+    if (auto cst = dyn_cast<hw::ConstantOp>(op)) {
       value = cst.value();
       return true;
     }
@@ -217,7 +217,7 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
     // and(..., c1, c2) -> and(..., c3) where c3 = c1 & c2 -- constant folding
     APInt value2;
     if (matchPattern(inputs[size - 2], m_RConstant(value2))) {
-      auto cst = rewriter.create<rtl::ConstantOp>(op.getLoc(), value & value2);
+      auto cst = rewriter.create<hw::ConstantOp>(op.getLoc(), value & value2);
       SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
       newOperands.push_back(cst);
       rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
@@ -239,13 +239,13 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
           // make zero bit wide APInts.
           SmallVector<Value, 3> concatOperands;
           if (trailingZeros != resultWidth - 1) {
-            auto highZeros = rewriter.create<rtl::ConstantOp>(
+            auto highZeros = rewriter.create<hw::ConstantOp>(
                 op.getLoc(), APInt(resultWidth - trailingZeros - 1, 0));
             concatOperands.push_back(highZeros);
           }
           concatOperands.push_back(sextOperand);
           if (trailingZeros != 0) {
-            auto lowZeros = rewriter.create<rtl::ConstantOp>(
+            auto lowZeros = rewriter.create<hw::ConstantOp>(
                 op.getLoc(), APInt(trailingZeros, 0));
             concatOperands.push_back(lowZeros);
           }
@@ -314,7 +314,7 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
   // or(..., c1, c2) -> or(..., c3) where c3 = c1 | c2 -- constant folding
   if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
       matchPattern(inputs[size - 2], m_RConstant(value2))) {
-    auto cst = rewriter.create<rtl::ConstantOp>(op.getLoc(), value | value2);
+    auto cst = rewriter.create<hw::ConstantOp>(op.getLoc(), value | value2);
     SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
     newOperands.push_back(cst);
     rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), newOperands);
@@ -376,7 +376,7 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
     // xor(..., c1, c2) -> xor(..., c3) where c3 = c1 ^ c2.
     APInt value2;
     if (matchPattern(inputs[size - 2], m_RConstant(value2))) {
-      auto cst = rewriter.create<rtl::ConstantOp>(op.getLoc(), value ^ value2);
+      auto cst = rewriter.create<hw::ConstantOp>(op.getLoc(), value ^ value2);
       SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
       newOperands.push_back(cst);
       rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(), newOperands);
@@ -443,7 +443,7 @@ LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
   // add(..., c1, c2) -> add(..., c3) where c3 = c1 + c2 -- constant folding
   if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
       matchPattern(inputs[size - 2], m_RConstant(value2))) {
-    auto cst = rewriter.create<rtl::ConstantOp>(op.getLoc(), value + value2);
+    auto cst = rewriter.create<hw::ConstantOp>(op.getLoc(), value + value2);
     SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
     newOperands.push_back(cst);
     rewriter.replaceOpWithNewOp<AddOp>(op, op.getType(), newOperands);
@@ -454,7 +454,7 @@ LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
   if (inputs[size - 1] == inputs[size - 2]) {
     SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
 
-    auto one = rewriter.create<rtl::ConstantOp>(op.getLoc(), op.getType(), 1);
+    auto one = rewriter.create<hw::ConstantOp>(op.getLoc(), op.getType(), 1);
     auto shiftLeftOp =
         rewriter.create<comb::ShlOp>(op.getLoc(), inputs.back(), one);
 
@@ -470,7 +470,7 @@ LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
 
     APInt one(/*numBits=*/value.getBitWidth(), 1, /*isSigned=*/false);
     auto rhs =
-        rewriter.create<rtl::ConstantOp>(op.getLoc(), (one << value) + one);
+        rewriter.create<hw::ConstantOp>(op.getLoc(), (one << value) + one);
 
     std::array<Value, 2> factors = {shlOp.lhs(), rhs};
     auto mulOp = rewriter.create<comb::MulOp>(op.getLoc(), factors);
@@ -488,7 +488,7 @@ LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
       matchPattern(mulOp.inputs()[1], m_RConstant(value))) {
 
     APInt one(/*numBits=*/value.getBitWidth(), 1, /*isSigned=*/false);
-    auto rhs = rewriter.create<rtl::ConstantOp>(op.getLoc(), value + one);
+    auto rhs = rewriter.create<hw::ConstantOp>(op.getLoc(), value + one);
     std::array<Value, 2> factors = {mulOp.inputs()[0], rhs};
     auto newMulOp = rewriter.create<comb::MulOp>(op.getLoc(), factors);
 
@@ -539,8 +539,8 @@ LogicalResult MulOp::canonicalize(MulOp op, PatternRewriter &rewriter) {
   // mul(x, c) -> shl(x, log2(c)), where c is a power of two.
   if (size == 2 && matchPattern(inputs.back(), m_RConstant(value)) &&
       value.isPowerOf2()) {
-    auto shift = rewriter.create<rtl::ConstantOp>(op.getLoc(), op.getType(),
-                                                  value.exactLogBase2());
+    auto shift = rewriter.create<hw::ConstantOp>(op.getLoc(), op.getType(),
+                                                 value.exactLogBase2());
     auto shlOp = rewriter.create<comb::ShlOp>(op.getLoc(), inputs[0], shift);
 
     rewriter.replaceOpWithNewOp<MulOp>(op, op.getType(),
@@ -557,7 +557,7 @@ LogicalResult MulOp::canonicalize(MulOp op, PatternRewriter &rewriter) {
   // mul(..., c1, c2) -> mul(..., c3) where c3 = c1 * c2 -- constant folding
   if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
       matchPattern(inputs[size - 2], m_RConstant(value2))) {
-    auto cst = rewriter.create<rtl::ConstantOp>(op.getLoc(), value * value2);
+    auto cst = rewriter.create<hw::ConstantOp>(op.getLoc(), value * value2);
     SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
     newOperands.push_back(cst);
     rewriter.replaceOpWithNewOp<MulOp>(op, op.getType(), newOperands);
@@ -640,15 +640,15 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
     // Check for canonicalization due to neighboring operands.
     if (i != 0) {
       // Merge neighboring constants.
-      if (auto cst = inputs[i].getDefiningOp<rtl::ConstantOp>()) {
-        if (auto prevCst = inputs[i - 1].getDefiningOp<rtl::ConstantOp>()) {
+      if (auto cst = inputs[i].getDefiningOp<hw::ConstantOp>()) {
+        if (auto prevCst = inputs[i - 1].getDefiningOp<hw::ConstantOp>()) {
           unsigned prevWidth = prevCst.getValue().getBitWidth();
           unsigned thisWidth = cst.getValue().getBitWidth();
           auto resultCst = cst.getValue().zext(prevWidth + thisWidth);
           resultCst |= prevCst.getValue().zext(prevWidth + thisWidth)
                        << thisWidth;
           Value replacement =
-              rewriter.create<rtl::ConstantOp>(op.getLoc(), resultCst);
+              rewriter.create<hw::ConstantOp>(op.getLoc(), resultCst);
           return flattenConcat(i - 1, i, replacement);
         }
       }
@@ -729,7 +729,7 @@ static mlir::Value sextToDestTypeAndFlip(mlir::Value op, Type destType,
                                          PatternRewriter &rewriter) {
   op = rewriter.createOrFold<SExtOp>(op.getLoc(), destType, op);
   Value newOperands[] = {
-      op, rewriter.create<rtl::ConstantOp>(op.getLoc(), destType, -1)};
+      op, rewriter.create<hw::ConstantOp>(op.getLoc(), destType, -1)};
   return rewriter.create<XorOp>(op.getLoc(), destType, newOperands);
 }
 
@@ -864,10 +864,10 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
 
   // Canonicalize with RHS constant
   if (matchPattern(op.rhs(), m_RConstant(rhs))) {
-    rtl::ConstantOp constant;
+    hw::ConstantOp constant;
 
     auto getConstant = [&](APInt constant) -> Value {
-      return rewriter.create<rtl::ConstantOp>(op.getLoc(), std::move(constant));
+      return rewriter.create<hw::ConstantOp>(op.getLoc(), std::move(constant));
     };
 
     auto replaceWith = [&](ICmpPredicate predicate, Value lhs,
@@ -877,7 +877,7 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
     };
 
     auto replaceWithConstantI1 = [&](bool constant) -> LogicalResult {
-      rewriter.replaceOpWithNewOp<rtl::ConstantOp>(op, APInt(1, constant));
+      rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, APInt(1, constant));
       return success();
     };
 

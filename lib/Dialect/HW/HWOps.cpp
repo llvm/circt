@@ -17,10 +17,10 @@
 #include "mlir/IR/FunctionImplementation.h"
 
 using namespace circt;
-using namespace rtl;
+using namespace hw;
 
 /// Return true if the specified operation is a combinatorial logic op.
-bool rtl::isCombinatorial(Operation *op) {
+bool hw::isCombinatorial(Operation *op) {
   struct IsCombClassifier : public TypeOpVisitor<IsCombClassifier, bool> {
     bool visitInvalidTypeOp(Operation *op) { return false; }
     bool visitUnhandledTypeOp(Operation *op) { return true; }
@@ -114,13 +114,13 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> constants) {
 //===----------------------------------------------------------------------===/
 
 /// Return true if this is an hw.module, external module, generated module etc.
-bool rtl::isAnyModule(Operation *module) {
+bool hw::isAnyModule(Operation *module) {
   return isa<HWModuleOp>(module) || isa<HWModuleExternOp>(module) ||
          isa<HWModuleGeneratedOp>(module);
 }
 
 /// Return the signature for the specified module as a function type.
-FunctionType rtl::getModuleType(Operation *module) {
+FunctionType hw::getModuleType(Operation *module) {
   auto typeAttr =
       module->getAttrOfType<TypeAttr>(HWModuleOp::getTypeAttrName());
   return typeAttr.getValue().cast<FunctionType>();
@@ -129,7 +129,7 @@ FunctionType rtl::getModuleType(Operation *module) {
 /// Return the name to use for the Verilog module that we're referencing
 /// here.  This is typically the symbol, but can be overridden with the
 /// verilogName attribute.
-StringAttr rtl::getVerilogModuleNameAttr(Operation *module) {
+StringAttr hw::getVerilogModuleNameAttr(Operation *module) {
   auto nameAttr = module->getAttrOfType<StringAttr>("verilogName");
   if (nameAttr)
     return nameAttr;
@@ -139,22 +139,22 @@ StringAttr rtl::getVerilogModuleNameAttr(Operation *module) {
 }
 
 /// Return the port name for the specified argument or result.
-StringAttr rtl::getModuleArgumentNameAttr(Operation *module, size_t argNo) {
+StringAttr hw::getModuleArgumentNameAttr(Operation *module, size_t argNo) {
   return module->getAttrOfType<ArrayAttr>("argNames")[argNo].cast<StringAttr>();
 }
 
-StringAttr rtl::getModuleResultNameAttr(Operation *module, size_t resultNo) {
+StringAttr hw::getModuleResultNameAttr(Operation *module, size_t resultNo) {
   return module->getAttrOfType<ArrayAttr>("resultNames")[resultNo]
       .cast<StringAttr>();
 }
 
-void rtl::setModuleArgumentNames(Operation *module, ArrayRef<Attribute> names) {
+void hw::setModuleArgumentNames(Operation *module, ArrayRef<Attribute> names) {
   assert(getModuleType(module).getNumInputs() == names.size() &&
          "incorrect number of arguments names specified");
   module->setAttr("argNames", ArrayAttr::get(module->getContext(), names));
 }
 
-void rtl::setModuleResultNames(Operation *module, ArrayRef<Attribute> names) {
+void hw::setModuleResultNames(Operation *module, ArrayRef<Attribute> names) {
   assert(getModuleType(module).getNumResults() == names.size() &&
          "incorrect number of arguments names specified");
   module->setAttr("resultNames", ArrayAttr::get(module->getContext(), names));
@@ -178,8 +178,8 @@ static void buildModule(OpBuilder &builder, OperationState &result,
       resultTypes.push_back(elt.type);
     else {
       if (elt.direction == PortDirection::INOUT &&
-          !elt.type.isa<rtl::InOutType>())
-        elt.type = rtl::InOutType::get(elt.type);
+          !elt.type.isa<hw::InOutType>())
+        elt.type = hw::InOutType::get(elt.type);
       argTypes.push_back(elt.type);
     }
   }
@@ -263,7 +263,7 @@ void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
     result.addAttribute("verilogName", builder.getStringAttr(verilogName));
 }
 
-SmallVector<ModulePortInfo> rtl::getModulePortInfo(Operation *op) {
+SmallVector<ModulePortInfo> hw::getModulePortInfo(Operation *op) {
   assert(isAnyModule(op) && "Can only get module ports from a module");
   SmallVector<ModulePortInfo> results;
   auto argTypes = getModuleType(op).getInputs();
@@ -963,7 +963,7 @@ static ParseResult parseStructCreateOp(OpAsmParser &parser,
   return success();
 }
 
-static void print(OpAsmPrinter &printer, rtl::StructCreateOp op) {
+static void print(OpAsmPrinter &printer, hw::StructCreateOp op) {
   printer << op.getOperationName() << " (";
   printer.printOperands(op.input());
   printer << ")";
@@ -994,7 +994,7 @@ static ParseResult parseStructExplodeOp(OpAsmParser &parser,
   return success();
 }
 
-static void print(OpAsmPrinter &printer, rtl::StructExplodeOp op) {
+static void print(OpAsmPrinter &printer, hw::StructExplodeOp op) {
   printer << op.getOperationName() << " ";
   printer.printOperand(op.input());
   printer.printOptionalAttrDict(op->getAttrs());
@@ -1048,7 +1048,7 @@ static ParseResult parseStructExtractOp(OpAsmParser &parser,
   return parseExtractOp<StructType>(parser, result);
 }
 
-static void print(OpAsmPrinter &printer, rtl::StructExtractOp op) {
+static void print(OpAsmPrinter &printer, hw::StructExtractOp op) {
   printExtractOp(printer, op);
 }
 
@@ -1090,7 +1090,7 @@ static ParseResult parseStructInjectOp(OpAsmParser &parser,
   return success();
 }
 
-static void print(OpAsmPrinter &printer, rtl::StructInjectOp op) {
+static void print(OpAsmPrinter &printer, hw::StructInjectOp op) {
   printer << op.getOperationName() << " ";
   printer.printOperand(op.input());
   printer << "[\"" << op.field() << "\"], ";
@@ -1129,7 +1129,7 @@ static ParseResult parseUnionCreateOp(OpAsmParser &parser,
   return success();
 }
 
-static void print(OpAsmPrinter &printer, rtl::UnionCreateOp op) {
+static void print(OpAsmPrinter &printer, hw::UnionCreateOp op) {
   printer << op.getOperationName() << " \"" << op.field() << "\", ";
   printer.printOperand(op.input());
   printer.printOptionalAttrDict(op->getAttrs(), {"field"});
@@ -1145,7 +1145,7 @@ static ParseResult parseUnionExtractOp(OpAsmParser &parser,
   return parseExtractOp<UnionType>(parser, result);
 }
 
-static void print(OpAsmPrinter &printer, rtl::UnionExtractOp op) {
+static void print(OpAsmPrinter &printer, hw::UnionExtractOp op) {
   printExtractOp(printer, op);
 }
 

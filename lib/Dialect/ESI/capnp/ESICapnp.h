@@ -81,8 +81,8 @@ private:
   std::shared_ptr<detail::TypeSchemaImpl> s;
 
   /// Cache of the decode/encode modules;
-  static llvm::SmallDenseMap<Type, rtl::HWModuleOp> decImplMods;
-  static llvm::SmallDenseMap<Type, rtl::HWModuleOp> encImplMods;
+  static llvm::SmallDenseMap<Type, hw::HWModuleOp> decImplMods;
+  static llvm::SmallDenseMap<Type, hw::HWModuleOp> encImplMods;
 };
 
 } // namespace capnp

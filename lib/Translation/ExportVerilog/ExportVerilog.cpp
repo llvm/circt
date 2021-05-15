@@ -36,7 +36,7 @@
 using namespace circt;
 
 using namespace comb;
-using namespace rtl;
+using namespace hw;
 using namespace sv;
 
 //===----------------------------------------------------------------------===//
@@ -110,9 +110,9 @@ static int getBitWidthOrSentinel(Type type) {
 /// Push this type's dimension into a vector.
 static void getTypeDims(SmallVectorImpl<int64_t> &dims, Type type,
                         Location loc) {
-  if (auto inout = type.dyn_cast<rtl::InOutType>())
+  if (auto inout = type.dyn_cast<hw::InOutType>())
     return getTypeDims(dims, inout.getElementType(), loc);
-  if (auto uarray = type.dyn_cast<rtl::UnpackedArrayType>())
+  if (auto uarray = type.dyn_cast<hw::UnpackedArrayType>())
     return getTypeDims(dims, uarray.getElementType(), loc);
   if (type.isa<InterfaceType>())
     return;
@@ -120,7 +120,7 @@ static void getTypeDims(SmallVectorImpl<int64_t> &dims, Type type,
     return;
 
   int width;
-  if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
+  if (auto arrayType = type.dyn_cast<hw::ArrayType>()) {
     width = arrayType.getSize();
   } else {
     width = getBitWidthOrSentinel(type);
@@ -131,7 +131,7 @@ static void getTypeDims(SmallVectorImpl<int64_t> &dims, Type type,
   if (width != 1) // Width 1 is implicit.
     dims.push_back(width);
 
-  if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
+  if (auto arrayType = type.dyn_cast<hw::ArrayType>()) {
     getTypeDims(dims, arrayType.getElementType(), loc);
   }
 }
@@ -179,11 +179,11 @@ static bool haveMatchingDims(Type a, Type b, Location loc) {
 static bool isZeroBitType(Type type) {
   if (auto intType = type.dyn_cast<IntegerType>())
     return intType.getWidth() == 0;
-  if (auto inout = type.dyn_cast<rtl::InOutType>())
+  if (auto inout = type.dyn_cast<hw::InOutType>())
     return isZeroBitType(inout.getElementType());
-  if (auto uarray = type.dyn_cast<rtl::UnpackedArrayType>())
+  if (auto uarray = type.dyn_cast<hw::UnpackedArrayType>())
     return isZeroBitType(uarray.getElementType());
-  if (auto array = type.dyn_cast<rtl::ArrayType>())
+  if (auto array = type.dyn_cast<hw::ArrayType>())
     return isZeroBitType(array.getElementType());
 
   // We have an open type system, so assume it is ok.
@@ -1494,7 +1494,7 @@ namespace {
 /// This emits typescope-related operations.
 class TypeScopeEmitter
     : public EmitterBase,
-      public rtl::TypeScopeVisitor<TypeScopeEmitter, LogicalResult> {
+      public hw::TypeScopeVisitor<TypeScopeEmitter, LogicalResult> {
 public:
   /// Create a TypeScopeEmitter for the specified module emitter.
   TypeScopeEmitter(VerilogEmitterState &state) : EmitterBase(state) {}
@@ -1534,7 +1534,7 @@ LogicalResult TypeScopeEmitter::visitTypeScope(TypedeclOp op) {
 namespace {
 /// This emits statement-related operations.
 class StmtEmitter : public EmitterBase,
-                    public rtl::StmtVisitor<StmtEmitter, LogicalResult>,
+                    public hw::StmtVisitor<StmtEmitter, LogicalResult>,
                     public sv::Visitor<StmtEmitter, LogicalResult> {
 public:
   /// Create an ExprEmitter for the specified module emitter, and keeping track
@@ -1580,7 +1580,7 @@ private:
 
   using StmtVisitor::visitStmt;
   using Visitor::visitSV;
-  friend class rtl::StmtVisitor<StmtEmitter, LogicalResult>;
+  friend class hw::StmtVisitor<StmtEmitter, LogicalResult>;
   friend class sv::Visitor<StmtEmitter, LogicalResult>;
 
   // Visitor methods.

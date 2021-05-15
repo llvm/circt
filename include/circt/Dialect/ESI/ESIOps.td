@@ -95,8 +95,8 @@ def CosimEndpoint : ESI_Physical_Op<"cosim", []> {
   }];
 }
 
-def RtlBitArray : Type<CPred<"$_self.isa<::circt::rtl::ArrayType>()"
- " && $_self.cast<::circt::rtl::ArrayType>().getElementType() =="
+def RtlBitArray : Type<CPred<"$_self.isa<::circt::hw::ArrayType>()"
+ " && $_self.cast<::circt::hw::ArrayType>().getElementType() =="
  "   ::mlir::IntegerType::get($_self.getContext(), 1)">, "an HW bit array">;
 
 def CapnpDecode : ESI_Physical_Op<"decode.capnp", [NoSideEffect]> {

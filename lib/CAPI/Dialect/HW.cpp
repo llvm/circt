@@ -19,54 +19,52 @@
 #include "mlir/CAPI/Support.h"
 
 using namespace circt;
-using namespace circt::rtl;
+using namespace circt::hw;
 
 //===----------------------------------------------------------------------===//
 // Dialect API.
 //===----------------------------------------------------------------------===//
 
-MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(HW, rtl, HWDialect)
+MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(HW, hw, HWDialect)
 
 //===----------------------------------------------------------------------===//
 // Type API.
 //===----------------------------------------------------------------------===//
 
-int64_t rtlGetBitWidth(MlirType type) { return getBitWidth(unwrap(type)); }
+int64_t hwGetBitWidth(MlirType type) { return getBitWidth(unwrap(type)); }
 
-bool rtlTypeIsAValueType(MlirType type) { return isHWValueType(unwrap(type)); }
+bool hwTypeIsAValueType(MlirType type) { return isHWValueType(unwrap(type)); }
 
-bool rtlTypeIsAArrayType(MlirType type) {
-  return unwrap(type).isa<ArrayType>();
-}
+bool hwTypeIsAArrayType(MlirType type) { return unwrap(type).isa<ArrayType>(); }
 
-MlirType rtlArrayTypeGet(MlirType element, size_t size) {
+MlirType hwArrayTypeGet(MlirType element, size_t size) {
   return wrap(ArrayType::get(unwrap(element), size));
 }
 
-MlirType rtlArrayTypeGetElementType(MlirType type) {
+MlirType hwArrayTypeGetElementType(MlirType type) {
   return wrap(unwrap(type).cast<ArrayType>().getElementType());
 }
 
-intptr_t rtlArrayTypeGetSize(MlirType type) {
+intptr_t hwArrayTypeGetSize(MlirType type) {
   return unwrap(type).cast<ArrayType>().getSize();
 }
 
-MlirType rtlInOutTypeGet(MlirType element) {
+MlirType hwInOutTypeGet(MlirType element) {
   return wrap(InOutType::get(unwrap(element)));
 }
 
-MlirType rtlInOutTypeGetElementType(MlirType type) {
+MlirType hwInOutTypeGetElementType(MlirType type) {
   return wrap(unwrap(type).cast<InOutType>().getElementType());
 }
 
-bool rtlTypeIsAInOut(MlirType type) { return unwrap(type).isa<InOutType>(); }
+bool hwTypeIsAInOut(MlirType type) { return unwrap(type).isa<InOutType>(); }
 
-bool rtlTypeIsAStructType(MlirType type) {
+bool hwTypeIsAStructType(MlirType type) {
   return unwrap(type).isa<StructType>();
 }
 
-MlirType rtlStructTypeGet(MlirContext ctx, intptr_t numElements,
-                          HWStructFieldInfo const *elements) {
+MlirType hwStructTypeGet(MlirContext ctx, intptr_t numElements,
+                         HWStructFieldInfo const *elements) {
   SmallVector<StructType::FieldInfo> fieldInfos;
   fieldInfos.reserve(numElements);
   for (intptr_t i = 0; i < numElements; ++i) {

@@ -39,7 +39,7 @@ typedef struct MlirNamedAttribute MlirNamedAttribute;
 // Dialect API.
 //===----------------------------------------------------------------------===//
 
-MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(HW, rtl);
+MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(HW, hw);
 
 //===----------------------------------------------------------------------===//
 // Type API.
@@ -50,42 +50,42 @@ MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(HW, rtl);
 /// statically-size type. Reflects the number of wires needed to transmit a
 /// value of this type. Returns -1 if the type is not known or cannot be
 /// statically computed.
-MLIR_CAPI_EXPORTED int64_t rtlGetBitWidth(MlirType);
+MLIR_CAPI_EXPORTED int64_t hwGetBitWidth(MlirType);
 
 /// Return true if the specified type can be used as an HW value type, that is
 /// the set of types that can be composed together to represent synthesized,
 /// hardware but not marker types like InOutType or unknown types from other
 /// dialects.
-MLIR_CAPI_EXPORTED bool rtlTypeIsAValueType(MlirType);
+MLIR_CAPI_EXPORTED bool hwTypeIsAValueType(MlirType);
 
 /// If the type is an HW array
-MLIR_CAPI_EXPORTED bool rtlTypeIsAArrayType(MlirType);
+MLIR_CAPI_EXPORTED bool hwTypeIsAArrayType(MlirType);
 
 /// If the type is an HW inout.
-MLIR_CAPI_EXPORTED bool rtlTypeIsAInOut(MlirType type);
+MLIR_CAPI_EXPORTED bool hwTypeIsAInOut(MlirType type);
 
 /// If the type is an HW struct.
-MLIR_CAPI_EXPORTED bool rtlTypeIsAStructType(MlirType);
+MLIR_CAPI_EXPORTED bool hwTypeIsAStructType(MlirType);
 
 /// Creates a fixed-size HW array type in the context associated with element
-MLIR_CAPI_EXPORTED MlirType rtlArrayTypeGet(MlirType element, size_t size);
+MLIR_CAPI_EXPORTED MlirType hwArrayTypeGet(MlirType element, size_t size);
 
 /// returns the element type of an array type
-MLIR_CAPI_EXPORTED MlirType rtlArrayTypeGetElementType(MlirType);
+MLIR_CAPI_EXPORTED MlirType hwArrayTypeGetElementType(MlirType);
 
 /// returns the size of an array type
-MLIR_CAPI_EXPORTED intptr_t rtlArrayTypeGetSize(MlirType);
+MLIR_CAPI_EXPORTED intptr_t hwArrayTypeGetSize(MlirType);
 
 /// Creates an HW inout type in the context associated with element.
-MLIR_CAPI_EXPORTED MlirType rtlInOutTypeGet(MlirType element);
+MLIR_CAPI_EXPORTED MlirType hwInOutTypeGet(MlirType element);
 
 /// Returns the element type of an inout type.
-MLIR_CAPI_EXPORTED MlirType rtlInOutTypeGetElementType(MlirType);
+MLIR_CAPI_EXPORTED MlirType hwInOutTypeGetElementType(MlirType);
 
 /// Creates an HW struct type in the context associated with the elements.
 MLIR_CAPI_EXPORTED MlirType
-rtlStructTypeGet(MlirContext ctx, intptr_t numElements,
-                 struct HWStructFieldInfo const *elements);
+hwStructTypeGet(MlirContext ctx, intptr_t numElements,
+                struct HWStructFieldInfo const *elements);
 
 #ifdef __cplusplus
 }

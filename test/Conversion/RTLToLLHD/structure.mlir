@@ -1,4 +1,4 @@
-// RUN: circt-opt --convert-rtl-to-llhd --verify-diagnostics %s | FileCheck %s
+// RUN: circt-opt --convert-hw-to-llhd --verify-diagnostics %s | FileCheck %s
 
 module {
   // CHECK-LABEL: llhd.entity @FeedThrough

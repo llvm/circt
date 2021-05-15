@@ -1,4 +1,4 @@
-// RUN: circt-opt -lower-firrtl-to-rtl %s | FileCheck %s
+// RUN: circt-opt -lower-firrtl-to-hw %s | FileCheck %s
 
 firrtl.circuit "Simple" {
 

@@ -1,4 +1,4 @@
-// RUN: circt-opt -rtl-cleanup %s | FileCheck %s
+// RUN: circt-opt -hw-cleanup %s | FileCheck %s
 
 //CHECK-LABEL: hw.module @alwaysff_basic(%arg0: i1, %arg1: i1) {
 //CHECK-NEXT:   sv.initial {

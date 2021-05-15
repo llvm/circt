@@ -1,4 +1,4 @@
-// RUN: circt-opt -rtl-legalize-names %s | FileCheck %s
+// RUN: circt-opt -hw-legalize-names %s | FileCheck %s
 
 hw.module @B(%a: i1) -> () {
 }

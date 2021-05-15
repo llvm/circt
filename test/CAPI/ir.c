@@ -37,28 +37,28 @@ int registerOnlyHW() {
     return 1;
 
   // HW dialect tests.
-  MlirDialectHandle rtlHandle = mlirGetDialectHandle__rtl__();
+  MlirDialectHandle hwHandle = mlirGetDialectHandle__hw__();
 
-  MlirDialect rtl = mlirContextGetOrLoadDialect(
-      ctx, mlirDialectHandleGetNamespace(rtlHandle));
-  if (!mlirDialectIsNull(rtl))
+  MlirDialect hw =
+      mlirContextGetOrLoadDialect(ctx, mlirDialectHandleGetNamespace(hwHandle));
+  if (!mlirDialectIsNull(hw))
     return 2;
 
-  mlirDialectHandleRegisterDialect(rtlHandle, ctx);
+  mlirDialectHandleRegisterDialect(hwHandle, ctx);
   if (mlirContextGetNumRegisteredDialects(ctx) != 1)
     return 3;
   if (mlirContextGetNumLoadedDialects(ctx) != 1)
     return 4;
 
-  rtl = mlirContextGetOrLoadDialect(ctx,
-                                    mlirDialectHandleGetNamespace(rtlHandle));
-  if (mlirDialectIsNull(rtl))
+  hw =
+      mlirContextGetOrLoadDialect(ctx, mlirDialectHandleGetNamespace(hwHandle));
+  if (mlirDialectIsNull(hw))
     return 5;
   if (mlirContextGetNumLoadedDialects(ctx) != 2)
     return 6;
 
-  MlirDialect alsoRtl = mlirDialectHandleLoadDialect(rtlHandle, ctx);
-  if (!mlirDialectEqual(rtl, alsoRtl))
+  MlirDialect alsoRtl = mlirDialectHandleLoadDialect(hwHandle, ctx);
+  if (!mlirDialectEqual(hw, alsoRtl))
     return 7;
 
   // Seq dialect tests.
@@ -84,23 +84,23 @@ int registerOnlyHW() {
 
 int testHWTypes() {
   MlirContext ctx = mlirContextCreate();
-  MlirDialectHandle rtlHandle = mlirGetDialectHandle__rtl__();
-  mlirDialectHandleRegisterDialect(rtlHandle, ctx);
-  mlirDialectHandleLoadDialect(rtlHandle, ctx);
+  MlirDialectHandle hwHandle = mlirGetDialectHandle__hw__();
+  mlirDialectHandleRegisterDialect(hwHandle, ctx);
+  mlirDialectHandleLoadDialect(hwHandle, ctx);
 
   MlirType i8type = mlirIntegerTypeGet(ctx, 8);
-  MlirType io8type = rtlInOutTypeGet(i8type);
+  MlirType io8type = hwInOutTypeGet(i8type);
   if (mlirTypeIsNull(io8type))
     return 1;
 
-  MlirType elementType = rtlInOutTypeGetElementType(io8type);
+  MlirType elementType = hwInOutTypeGetElementType(io8type);
   if (mlirTypeIsNull(elementType))
     return 2;
 
-  if (rtlTypeIsAInOut(i8type))
+  if (hwTypeIsAInOut(i8type))
     return 3;
 
-  if (!rtlTypeIsAInOut(io8type))
+  if (!hwTypeIsAInOut(io8type))
     return 4;
 
   mlirContextDestroy(ctx);
@@ -113,14 +113,14 @@ int main() {
   int errcode = registerOnlyHW();
   fprintf(stderr, "%d\n", errcode);
 
-  fprintf(stderr, "@rtltypes\n");
+  fprintf(stderr, "@hwtypes\n");
   errcode = testHWTypes();
   fprintf(stderr, "%d\n", errcode);
 
   // clang-format off
   // CHECK-LABEL: @registration
   // CHECK: 0
-  // CHECK-LABEL: @rtltypes
+  // CHECK-LABEL: @hwtypes
   // CHECK: 0
   // clang-format on
 

@@ -20,7 +20,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 using namespace circt;
-using namespace rtl;
+using namespace hw;
 using namespace msft;
 
 // TODO: Currently assumes Stratix 10 and QuartusPro. Make more general.
@@ -71,7 +71,7 @@ struct Entity {
 } // anonymous namespace
 
 Optional<Entity> Entity::enter(InstanceOp inst) {
-  auto mod = dyn_cast_or_null<rtl::HWModuleOp>(inst.getReferencedModule());
+  auto mod = dyn_cast_or_null<hw::HWModuleOp>(inst.getReferencedModule());
   if (!mod) // Could be an extern module, which we should ignore.
     return {};
   bool modEmitted = insideEmittedModule ||
@@ -149,7 +149,7 @@ static LogicalResult exportTcl(Entity &entity, Operation *op) {
   // Instances require a new child entity and trigger a descent of the
   // instantiated module in the new entity.
   StringRef instName;
-  if (auto inst = dyn_cast<rtl::InstanceOp>(op)) {
+  if (auto inst = dyn_cast<hw::InstanceOp>(op)) {
     instName = inst.instanceName();
     Optional<Entity> inModule = entity.enter(inst);
     if (inModule && failed(exportTcl(*inModule, inst.getReferencedModule())))
@@ -185,12 +185,12 @@ LogicalResult circt::msft::exportQuartusTcl(ModuleOp module,
   TclOutputState state(os);
 
   for (auto &op : module.getBody()->getOperations()) {
-    auto rtlMod = dyn_cast<HWModuleOp>(op);
-    if (!rtlMod)
+    auto hwMod = dyn_cast<HWModuleOp>(op);
+    if (!hwMod)
       continue;
-    os << "proc " << rtlMod.getName() << "_config { parent } {\n";
+    os << "proc " << hwMod.getName() << "_config { parent } {\n";
     Entity entity(state);
-    if (failed(exportTcl(entity, rtlMod)))
+    if (failed(exportTcl(entity, hwMod)))
       return failure();
     os << "}\n\n";
   }

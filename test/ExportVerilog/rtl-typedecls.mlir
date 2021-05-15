@@ -1,6 +1,6 @@
 // RUN: circt-translate %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
-hw.type_scope @__rtl_typedecls {
+hw.type_scope @__hw_typedecls {
   // CHECK: typedef logic foo;
   hw.typedecl @foo : i1
   // CHECK: typedef struct packed {logic a; logic b; } bar;

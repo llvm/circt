@@ -15,7 +15,7 @@
 
 include "mlir/Pass/PassBase.td"
 
-def HWCleanup : Pass<"rtl-cleanup", "rtl::HWModuleOp"> {
+def HWCleanup : Pass<"hw-cleanup", "hw::HWModuleOp"> {
   let summary = "Cleanup transformations for operations in hw.module bodies";
   let description = [{
       This pass merges sv.alwaysff operations with the same condition, sv.ifdef
@@ -27,7 +27,7 @@ def HWCleanup : Pass<"rtl-cleanup", "rtl::HWModuleOp"> {
   let constructor = "circt::sv::createHWCleanupPass()";
 }
 
-def PrettifyVerilog : Pass<"prettify-verilog", "rtl::HWModuleOp"> {
+def PrettifyVerilog : Pass<"prettify-verilog", "hw::HWModuleOp"> {
   let summary = "Transformations to improve quality of ExportVerilog output";
   let description = [{
       This pass contains elective transformations that improve the quality of
@@ -40,9 +40,9 @@ def PrettifyVerilog : Pass<"prettify-verilog", "rtl::HWModuleOp"> {
   let constructor = "circt::sv::createPrettifyVerilogPass()";
 }
 
-def HWStubExternalModules : Pass<"rtl-stub-external-modules", 
+def HWStubExternalModules : Pass<"hw-stub-external-modules", 
                                   "mlir::ModuleOp"> {
-  let summary = "transform external rtl modules to empty rtl modules";
+  let summary = "transform external hw modules to empty hw modules";
   let description = [{
       This pass creates empty module bodies for external modules.  This is
       useful for linting to eliminate missing file errors.
@@ -52,7 +52,7 @@ def HWStubExternalModules : Pass<"rtl-stub-external-modules",
   let dependentDialects = ["circt::sv::SVDialect"];
 }
 
-def HWLegalizeNames : Pass<"rtl-legalize-names", "ModuleOp"> {
+def HWLegalizeNames : Pass<"hw-legalize-names", "ModuleOp"> {
   let summary = "Legalize module/variable names in hw.modules and their bodies";
   let description = [{
     This pass modifies the names of modules and names such that they do not
@@ -63,7 +63,7 @@ def HWLegalizeNames : Pass<"rtl-legalize-names", "ModuleOp"> {
   let constructor = "circt::sv::createHWLegalizeNamesPass()";
 }
 
-def HWGeneratorCalloutPass : Pass<"rtl-generator-callout", "ModuleOp"> {
+def HWGeneratorCalloutPass : Pass<"hw-generator-callout", "ModuleOp"> {
   let summary = "Lower Generator Schema to external module";
   let description = [{
     This pass calls an external program for all the hw.module.generated nodes,
@@ -83,7 +83,7 @@ def HWGeneratorCalloutPass : Pass<"rtl-generator-callout", "ModuleOp"> {
    ];
 }
 
-def HWMemSimImpl : Pass<"rtl-memory-sim", "ModuleOp"> {
+def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
   let summary = "Implement FIRRTMMem memories nodes with simulation model";
   let description = [{
     This pass replaces generated module nodes of type FIRRTLMem with a model

@@ -1,4 +1,4 @@
-// RUN: circt-opt -lower-firrtl-to-rtl -split-input-file -verify-diagnostics %s
+// RUN: circt-opt -lower-firrtl-to-hw -split-input-file -verify-diagnostics %s
 
 firrtl.circuit "Div" {
 

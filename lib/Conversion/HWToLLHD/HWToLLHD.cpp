@@ -24,7 +24,7 @@
 
 using namespace circt;
 using namespace llhd;
-using namespace rtl;
+using namespace hw;
 using namespace comb;
 
 //===----------------------------------------------------------------------===//

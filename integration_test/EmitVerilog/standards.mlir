@@ -1,12 +1,12 @@
 // REQUIRES: verilator, questa
 
-// RUN: firtool --lower-to-rtl --verilog %s > %t1.1995.v
-// RUN: firtool --lower-to-rtl --verilog %s > %t1.2001.v
-// RUN: firtool --lower-to-rtl --verilog %s > %t1.2005.v
-// RUN: firtool --lower-to-rtl --verilog %s > %t1.2005.sv
-// RUN: firtool --lower-to-rtl --verilog %s > %t1.2009.sv
-// RUN: firtool --lower-to-rtl --verilog %s > %t1.2012.sv
-// RUN: firtool --lower-to-rtl --verilog %s> %t1.2017.sv
+// RUN: firtool --lower-to-hw --verilog %s > %t1.1995.v
+// RUN: firtool --lower-to-hw --verilog %s > %t1.2001.v
+// RUN: firtool --lower-to-hw --verilog %s > %t1.2005.v
+// RUN: firtool --lower-to-hw --verilog %s > %t1.2005.sv
+// RUN: firtool --lower-to-hw --verilog %s > %t1.2009.sv
+// RUN: firtool --lower-to-hw --verilog %s > %t1.2012.sv
+// RUN: firtool --lower-to-hw --verilog %s> %t1.2017.sv
 
 // RUN: verilator --lint-only +1364-1995ext+v %t1.1995.v || true
 // RUN: verilator --lint-only +1364-2001ext+v %t1.2001.v || true

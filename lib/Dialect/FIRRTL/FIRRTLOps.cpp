@@ -1910,14 +1910,14 @@ static LogicalResult verifyStdIntCastOp(StdIntCastOp cast) {
 
 static LogicalResult verifyAnalogInOutCastOp(AnalogInOutCastOp cast) {
   AnalogType firType;
-  rtl::InOutType inoutType;
+  hw::InOutType inoutType;
 
   if ((firType = cast.getOperand().getType().dyn_cast<AnalogType>())) {
-    inoutType = cast.getType().dyn_cast<rtl::InOutType>();
+    inoutType = cast.getType().dyn_cast<hw::InOutType>();
     if (!inoutType)
       return cast.emitError("result type must be an inout type");
   } else if ((firType = cast.getType().dyn_cast<AnalogType>())) {
-    inoutType = cast.getOperand().getType().dyn_cast<rtl::InOutType>();
+    inoutType = cast.getOperand().getType().dyn_cast<hw::InOutType>();
     if (!inoutType)
       return cast.emitError("operand type must be an inout type");
   } else {
@@ -1949,13 +1949,13 @@ static LogicalResult verifyAnalogInOutCastOp(AnalogInOutCastOp cast) {
 static LogicalResult verifyHWStructCastOp(HWStructCastOp cast) {
   // We must have a bundle and a struct, with matching pairwise fields
   BundleType bundleType;
-  rtl::StructType structType;
+  hw::StructType structType;
   if ((bundleType = cast.getOperand().getType().dyn_cast<BundleType>())) {
-    structType = cast.getType().dyn_cast<rtl::StructType>();
+    structType = cast.getType().dyn_cast<hw::StructType>();
     if (!structType)
       return cast.emitError("result type must be a struct");
   } else if ((bundleType = cast.getType().dyn_cast<BundleType>())) {
-    structType = cast.getOperand().getType().dyn_cast<rtl::StructType>();
+    structType = cast.getOperand().getType().dyn_cast<hw::StructType>();
     if (!structType)
       return cast.emitError("operand type must be a struct");
   } else {
@@ -1963,22 +1963,22 @@ static LogicalResult verifyHWStructCastOp(HWStructCastOp cast) {
   }
 
   auto firFields = bundleType.getElements();
-  auto rtlFields = structType.getElements();
-  if (firFields.size() != rtlFields.size())
+  auto hwFields = structType.getElements();
+  if (firFields.size() != hwFields.size())
     return cast.emitError("bundle and struct have different number of fields");
 
   for (size_t findex = 0, fend = firFields.size(); findex < fend; ++findex) {
-    if (firFields[findex].name.getValue() != rtlFields[findex].name)
+    if (firFields[findex].name.getValue() != hwFields[findex].name)
       return cast.emitError("field names don't match '")
              << firFields[findex].name.getValue() << "', '"
-             << rtlFields[findex].name << "'";
+             << hwFields[findex].name << "'";
     int64_t firWidth =
         FIRRTLType(firFields[findex].type).getBitWidthOrSentinel();
-    int64_t rtlWidth = rtl::getBitWidth(rtlFields[findex].type);
-    if (firWidth > 0 && rtlWidth > 0 && firWidth != rtlWidth)
+    int64_t hwWidth = hw::getBitWidth(hwFields[findex].type);
+    if (firWidth > 0 && hwWidth > 0 && firWidth != hwWidth)
       return cast.emitError("size of field '")
-             << rtlFields[findex].name << "' don't match " << firWidth << ", "
-             << rtlWidth;
+             << hwFields[findex].name << "' don't match " << firWidth << ", "
+             << hwWidth;
   }
 
   return success();

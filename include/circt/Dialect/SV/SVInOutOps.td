@@ -121,7 +121,7 @@ def ReadInOutOp
 def InOutArrayType
   : Type<CPred<"getAnyHWArrayElementType(getInOutElementType($_self)) "
                         "!= Type()">,
-         "an inout type with array element", "::circt::rtl::InOutType">;
+         "an inout type with array element", "::circt::hw::InOutType">;
 
 class InOutIndexConstraint<string value, string inoutValue>
   : TypesMatchWith<"type should be element of inout type",

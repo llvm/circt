@@ -1,4 +1,4 @@
-// RUN: circt-opt -lower-firrtl-to-rtl %s -verify-diagnostics | FileCheck %s
+// RUN: circt-opt -lower-firrtl-to-hw %s -verify-diagnostics | FileCheck %s
 
 // The firrtl.circuit should be removed, the main module name moved to an
 // attribute on the module.

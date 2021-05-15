@@ -3,5 +3,5 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 # Generated tablegen dialects end up in the mlir.dialects package for now.
-from mlir.dialects._rtl_ops_gen import *
-from _circt._rtl import *
+from mlir.dialects._hw_ops_gen import *
+from _circt._hw import *

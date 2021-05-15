@@ -109,12 +109,12 @@ def StructType : HWType<"Struct"> {
     // An ArrayRef of something which requires allocation in the storage
     // constructor.
     ArrayRefOfSelfAllocationParameter<
-      "::circt::rtl::StructType::FieldInfo",
+      "::circt::hw::StructType::FieldInfo",
       "struct fields">: $elements
   );
 
   let extraClassDeclaration = [{
-    using FieldInfo = ::circt::rtl::detail::FieldInfo;
+    using FieldInfo = ::circt::hw::detail::FieldInfo;
     mlir::Type getFieldType(mlir::StringRef fieldName);
     void getInnerTypes(mlir::SmallVectorImpl<mlir::Type>&);
   }];
@@ -127,13 +127,13 @@ def UnionType : HWType<"Union"> {
     // An ArrayRef of something which requires allocation in the storage
     // constructor.
     ArrayRefOfSelfAllocationParameter<
-      "::circt::rtl::UnionType::FieldInfo",
+      "::circt::hw::UnionType::FieldInfo",
       "union fields">: $elements
   );
   let mnemonic = "union";
 
   let extraClassDeclaration = [{
-    using FieldInfo = ::circt::rtl::detail::FieldInfo;
+    using FieldInfo = ::circt::hw::detail::FieldInfo;
     mlir::Type getFieldType(mlir::StringRef fieldName);
   }];
 }

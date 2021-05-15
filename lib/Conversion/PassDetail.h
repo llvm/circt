@@ -38,10 +38,10 @@ namespace comb {
 class CombDialect;
 } // namespace comb
 
-namespace rtl {
+namespace hw {
 class HWDialect;
 class HWModuleOp;
-} // namespace rtl
+} // namespace hw
 
 namespace staticlogic {
 class StaticLogicDialect;

@@ -30,7 +30,7 @@ def HWDialect : Dialect {
   }];
 
   let hasConstantMaterializer = 1;
-  let cppNamespace = "::circt::rtl";
+  let cppNamespace = "::circt::hw";
   let extraClassDeclaration = [{
     /// Register all HW types.
     void registerTypes();

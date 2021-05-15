@@ -1,4 +1,4 @@
-// RUN: circt-opt -rtl-memory-sim %s | FileCheck %s
+// RUN: circt-opt -hw-memory-sim %s | FileCheck %s
 
 hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency", "writeLatency", "width", "readUnderWrite"]
 

@@ -21,7 +21,7 @@ class InstanceBuilder:
                loc=None,
                ip=None):
     # Lazily import dependencies to avoid cyclic dependencies.
-    from ._rtl_ops_gen import InstanceOp
+    from ._hw_ops_gen import InstanceOp
 
     # Create mappings from port name to value, index, and potentially backedge.
     self.parent_module = parent_module
@@ -263,7 +263,7 @@ class HWModuleOp(ModuleLike):
     """
 
     def decorator(f):
-      from circt.dialects import rtl
+      from circt.dialects import hw
       # Introspect the callable for optional features.
       sig = inspect.signature(f)
       has_arg_module_op = False

@@ -3,7 +3,7 @@
 
 import circt
 from circt import esi
-from circt.dialects import rtl
+from circt.dialects import hw
 
 from mlir.ir import *
 from mlir.dialects import builtin

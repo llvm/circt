@@ -43,7 +43,7 @@ namespace esi {
 using namespace circt;
 using namespace circt::comb;
 using namespace circt::esi;
-using namespace circt::rtl;
+using namespace circt::hw;
 using namespace circt::sv;
 
 //===----------------------------------------------------------------------===//
@@ -127,10 +127,10 @@ StringAttr ESIHWBuilder::constructInterfaceName(ChannelPort port) {
   std::string portTypeName;
   llvm::raw_string_ostream nameOS(portTypeName);
   TypeSwitch<Type>(port.getInner())
-      .Case([&](rtl::ArrayType arr) {
+      .Case([&](hw::ArrayType arr) {
         nameOS << "ArrayOf" << arr.getSize() << 'x' << arr.getElementType();
       })
-      .Case([&](rtl::StructType t) { nameOS << "Struct"; })
+      .Case([&](hw::StructType t) { nameOS << "Struct"; })
       .Default([&](Type t) { nameOS << port.getInner(); });
 
   // Normalize the type name.
@@ -392,8 +392,8 @@ bool ESIPortsPass::updateFunc(HWModuleOp mod) {
   Type i1 = modBuilder.getI1Type();
 
   // Get information to be used later on.
-  rtl::OutputOp outOp =
-      dyn_cast<rtl::OutputOp>(mod.getBodyBlock()->getTerminator());
+  hw::OutputOp outOp =
+      dyn_cast<hw::OutputOp>(mod.getBodyBlock()->getTerminator());
 
   bool updated = false;
 
@@ -495,7 +495,7 @@ bool ESIPortsPass::updateFunc(HWModuleOp mod) {
 
   // A new output op is necessary.
   outOp.erase();
-  modBuilder.create<rtl::OutputOp>(newOutputOperands);
+  modBuilder.create<hw::OutputOp>(newOutputOperands);
 
   // Set the new types.
   auto newFuncType = FunctionType::get(ctxt, newArgTypes, newResultTypes);
@@ -837,7 +837,7 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   auto stageModule = builder.declareStage();
 
   NamedAttrList stageParams;
-  size_t width = circt::rtl::getBitWidth(chPort.getInner());
+  size_t width = circt::hw::getBitWidth(chPort.getInner());
   stageParams.set(builder.width, rewriter.getUI32IntegerAttr(width));
 
   // Unwrap the channel. The ready signal is a Value we haven't created yet, so
@@ -896,15 +896,15 @@ LogicalResult NullSourceOpLowering::matchAndRewrite(
     ConversionPatternRewriter &rewriter) const {
   auto innerType = nullop.out().getType().cast<ChannelPort>().getInner();
   Location loc = nullop.getLoc();
-  int64_t width = rtl::getBitWidth(innerType);
+  int64_t width = hw::getBitWidth(innerType);
   if (width == -1)
     return rewriter.notifyMatchFailure(
-        nullop, "NullOp lowering only supports rtl types");
-  auto valid = rewriter.create<rtl::ConstantOp>(nullop.getLoc(),
-                                                rewriter.getI1Type(), 0);
+        nullop, "NullOp lowering only supports hw types");
+  auto valid =
+      rewriter.create<hw::ConstantOp>(nullop.getLoc(), rewriter.getI1Type(), 0);
   auto zero =
-      rewriter.create<rtl::ConstantOp>(loc, rewriter.getIntegerType(width), 0);
-  auto typedZero = rewriter.create<rtl::BitcastOp>(loc, innerType, zero);
+      rewriter.create<hw::ConstantOp>(loc, rewriter.getIntegerType(width), 0);
+  auto typedZero = rewriter.create<hw::BitcastOp>(loc, innerType, zero);
   auto wrap = rewriter.create<WrapValidReady>(loc, typedZero, valid);
   wrap->setAttr("name", rewriter.getStringAttr("nullsource"));
   rewriter.replaceOp(nullop, {wrap.chanOutput()});

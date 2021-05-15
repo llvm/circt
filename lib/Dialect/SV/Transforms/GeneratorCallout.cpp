@@ -19,7 +19,7 @@
 
 using namespace circt;
 using namespace sv;
-using namespace rtl;
+using namespace hw;
 
 //===----------------------------------------------------------------------===//
 // GeneratorCalloutPass
@@ -139,7 +139,7 @@ void HWGeneratorCalloutPass::processGenerator(
   // Only extract the first line from the output.
   auto fileContent = (*bufferRead)->getBuffer().split('\n').first.str();
   OpBuilder builder(generatedModuleOp);
-  auto extMod = builder.create<rtl::HWModuleExternOp>(
+  auto extMod = builder.create<hw::HWModuleExternOp>(
       generatedModuleOp.getLoc(), generatedModuleOp.getVerilogModuleNameAttr(),
       generatedModuleOp.getPorts());
   // Attach an attribute to which file the definition of the external
