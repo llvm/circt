@@ -63,40 +63,38 @@ static inline ConstantIntMatcher m_FConstant(APInt &value) {
 /// This makes constant folding significantly easier, as we can simply pass the
 /// operands to an operation through this function to appropriately replace any
 /// zero-width dynamic values with a constant of value 0.
-static IntegerAttr elideZeroWidthFoldOperand(Value operand,
-                                             Attribute foldOperand) {
-  if (foldOperand)
-    return foldOperand.dyn_cast<IntegerAttr>();
+static Optional<APInt> getExtendedConstant(Value operand, Attribute constant,
+                                           int32_t destWidth) {
+  // We never support constant folding to unknown or zero width values: APInt
+  // can't do it.
+  if (destWidth <= 0)
+    return {};
 
-  if (auto type = operand.getType().dyn_cast<IntType>()) {
-    if (type.getWidth() == 0) {
-      auto intSign =
-          type.isSigned() ? IntegerType::Signed : IntegerType::Unsigned;
-      return IntegerAttr::get(
-          IntegerType::get(operand.getContext(), 1, intSign), APInt(1, 0));
-    }
+  if (IntegerAttr result = constant.dyn_cast_or_null<IntegerAttr>()) {
+    APInt resultVal = result.getValue();
+    if (resultVal.getBitWidth() == (unsigned)destWidth)
+      return resultVal;
+
+    // Extension signedness follows the operand sign.
+    bool sextOperand = operand.getType().cast<IntType>().isSigned();
+    auto extOrTrunc = sextOperand ? &APInt::sextOrTrunc : &APInt::zextOrTrunc;
+    return (resultVal.*extOrTrunc)(destWidth);
   }
+
+  // If the operand is zero bits, then we can return a zero of the result
+  // type.
+  if (operand.getType().cast<IntType>().getWidth() == 0)
+    return APInt(destWidth, 0);
   return {};
 }
 
-/// Check if the operands and results of \p op are of integer type and with
-/// known bitwidth. Can be used to determine if any fold is legal.
-static bool hasKnownWidths(Operation *op) {
-  auto resTy = op->getResultTypes().front().cast<FIRRTLType>();
-  // The result must be of integer type and the bitwidth must be known and
-  // non-zero. Unkown bitwidths are handled after width inference.
-  if (!resTy.isa<IntType>() || resTy.getBitWidthOrSentinel() <= 0)
-    return false;
-
-  for (auto opTy : op->getOperandTypes()) {
-    auto ty = opTy.cast<FIRRTLType>();
-    // Operand bitwidth must be known. Unkown bitwidths are handled after width
-    // inference.
-    if (ty.getBitWidthOrSentinel() == -1)
-      return false;
-  }
-  return true;
-}
+/// This is the policy for folding, which depends on the sort of operator we're
+/// processing.
+enum class BinOpKind {
+  Normal,
+  Compare,
+  DivideOrShift,
+};
 
 /// Applies the constant folding function `calculate` to the given operands.
 ///
@@ -106,26 +104,66 @@ static bool hasKnownWidths(Operation *op) {
 /// signed or unsigned operands.
 static Attribute
 constFoldFIRRTLBinaryOp(Operation *op, ArrayRef<Attribute> operands,
-                        const function_ref<APInt(APInt, APInt)> &calculate,
-                        bool useDstWidth = false) {
+                        BinOpKind opKind,
+                        const function_ref<APInt(APInt, APInt)> &calculate) {
   assert(operands.size() == 2 && "binary op takes two operands");
-  if (!hasKnownWidths(op) && useDstWidth)
+
+  auto resultType = op->getResult(0).getType().cast<IntType>();
+  if (!resultType.hasWidth())
     return {};
-  IntegerAttr lhs = elideZeroWidthFoldOperand(op->getOperand(0), operands[0]);
-  IntegerAttr rhs = elideZeroWidthFoldOperand(op->getOperand(1), operands[1]);
-  if (!lhs || !rhs)
+
+  // Compares extend the operands to the widest of the operand types, not to the
+  // result type.
+  int32_t operandWidth;
+  switch (opKind) {
+  case BinOpKind::Normal:
+    operandWidth = resultType.getWidthOrSentinel();
+    break;
+  case BinOpKind::Compare:
+    // Compares compute with the widest operand, not at the destination type
+    // (which is always i1).
+    operandWidth = std::max(
+        op->getOperand(0).getType().cast<IntType>().getWidthOrSentinel(),
+        op->getOperand(1).getType().cast<IntType>().getWidthOrSentinel());
+
+    // If both operands have unknown width but we have two constants, then we
+    // can use the widest one as the result width.
+    if (operandWidth == -1) {
+      if (auto lhsC = operands[0].dyn_cast_or_null<IntegerAttr>())
+        if (auto rhsC = operands[1].dyn_cast_or_null<IntegerAttr>())
+          operandWidth = std::max(lhsC.getValue().getBitWidth(),
+                                  rhsC.getValue().getBitWidth());
+    } else if (operandWidth == 0) {
+      // If both operands have zero width, then compare the zeros as bitwidth=1.
+      operandWidth = 1;
+    }
+
+    break;
+
+  case BinOpKind::DivideOrShift:
+    operandWidth = std::max(
+        std::max(
+            op->getOperand(0).getType().cast<IntType>().getWidthOrSentinel(),
+            op->getOperand(1).getType().cast<IntType>().getWidthOrSentinel()),
+        resultType.getWidthOrSentinel());
+    break;
+  }
+
+  auto lhs = getExtendedConstant(op->getOperand(0), operands[0], operandWidth);
+  if (!lhs.hasValue())
     return {};
-  auto srcType = op->getOperandTypes().front().cast<IntType>();
-  auto dstType = op->getResultTypes().front().cast<IntType>();
-  auto commonWidth = useDstWidth
-                         ? dstType.getBitWidthOrSentinel()
-                         : std::max<int32_t>(lhs.getValue().getBitWidth(),
-                                             rhs.getValue().getBitWidth());
-  auto extOrSelf =
-      srcType.isUnsigned() ? &APInt::zextOrTrunc : &APInt::sextOrTrunc;
-  return getIntAttr(op->getResult(0).getType(),
-                    calculate((lhs.getValue().*extOrSelf)(commonWidth),
-                              (rhs.getValue().*extOrSelf)(commonWidth)));
+  auto rhs = getExtendedConstant(op->getOperand(1), operands[1], operandWidth);
+  if (!rhs.hasValue())
+    return {};
+
+  APInt resultValue = calculate(lhs.getValue(), rhs.getValue());
+
+  // If the result type is smaller than the computation then we need to
+  // narrow the constant after the calculation.
+  if (opKind == BinOpKind::DivideOrShift)
+    resultValue = resultValue.truncOrSelf(resultType.getWidthOrSentinel());
+
+  return getIntAttr(resultType, resultValue);
 }
 
 /// Get the largest unsigned value of a given bit width. Returns a 1-bit zero
@@ -164,21 +202,18 @@ OpFoldResult AddPrimOp::fold(ArrayRef<Attribute> operands) {
 
   /// If both operands are constant, and the result is integer with known
   /// widths, then perform constant folding.
-  return constFoldFIRRTLBinaryOp(
-      *this, operands, [=](APInt a, APInt b) { return a + b; }, true);
-  return {};
+  return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::Normal,
+                                 [=](APInt a, APInt b) { return a + b; });
 }
 
 OpFoldResult SubPrimOp::fold(ArrayRef<Attribute> operands) {
-  return constFoldFIRRTLBinaryOp(
-      *this, operands, [=](APInt a, APInt b) { return a - b; }, true);
-  return {};
+  return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::Normal,
+                                 [=](APInt a, APInt b) { return a - b; });
 }
 
 OpFoldResult MulPrimOp::fold(ArrayRef<Attribute> operands) {
-  return constFoldFIRRTLBinaryOp(
-      *this, operands, [=](APInt a, APInt b) { return a * b; }, true);
-  return {};
+  return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::Normal,
+                                 [=](APInt a, APInt b) { return a * b; });
 }
 
 OpFoldResult DivPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -205,10 +240,42 @@ OpFoldResult DivPrimOp::fold(ArrayRef<Attribute> operands) {
       lhs().getType() == getType())
     return lhs();
 
-  return {};
+  return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::DivideOrShift,
+                                 [=](APInt a, APInt b) -> APInt {
+                                   // Don't divide by zero.
+                                   if (!b)
+                                     return APInt(a.getBitWidth(), 0);
+                                   return getType().isSigned() ? a.sdiv(b)
+                                                               : a.udiv(b);
+                                 });
 }
 
-OpFoldResult RemPrimOp::fold(ArrayRef<Attribute> operands) { return {}; }
+OpFoldResult DShlPrimOp::fold(ArrayRef<Attribute> operands) {
+  return constFoldFIRRTLBinaryOp(
+      *this, operands, BinOpKind::DivideOrShift,
+      [=](APInt a, APInt b) -> APInt { return a << b; });
+}
+
+OpFoldResult DShlwPrimOp::fold(ArrayRef<Attribute> operands) {
+  // This follows LowerToHW's precedent.
+  // TODO: Verify this: https://github.com/llvm/circt/issues/1062
+  return constFoldFIRRTLBinaryOp(
+      *this, operands, BinOpKind::DivideOrShift, [=](APInt a, APInt b) {
+        return getType().isSigned() ? a.ashr(b) : a.lshr(b);
+      });
+}
+
+OpFoldResult DShrPrimOp::fold(ArrayRef<Attribute> operands) {
+  return constFoldFIRRTLBinaryOp(
+      *this, operands, BinOpKind::DivideOrShift, [=](APInt a, APInt b) {
+        return getType().isSigned() ? a.ashr(b) : a.lshr(b);
+      });
+}
+
+OpFoldResult RemPrimOp::fold(ArrayRef<Attribute> operands) {
+  // TODO: Constant fold rem.
+  return {};
+}
 
 // TODO: Move to DRR.
 OpFoldResult AndPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -228,8 +295,8 @@ OpFoldResult AndPrimOp::fold(ArrayRef<Attribute> operands) {
   if (lhs() == rhs() && rhs().getType() == getType())
     return rhs();
 
-  return constFoldFIRRTLBinaryOp(
-      *this, operands, [](APInt a, APInt b) { return a & b; }, true);
+  return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::Normal,
+                                 [](APInt a, APInt b) { return a & b; });
 }
 
 OpFoldResult OrPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -249,8 +316,8 @@ OpFoldResult OrPrimOp::fold(ArrayRef<Attribute> operands) {
   if (lhs() == rhs() && rhs().getType() == getType())
     return rhs();
 
-  return constFoldFIRRTLBinaryOp(
-      *this, operands, [](APInt a, APInt b) { return a | b; }, true);
+  return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::Normal,
+                                 [](APInt a, APInt b) { return a | b; });
 }
 
 OpFoldResult XorPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -268,8 +335,8 @@ OpFoldResult XorPrimOp::fold(ArrayRef<Attribute> operands) {
       return getIntAttr(getType(), APInt(width, 0));
   }
 
-  return constFoldFIRRTLBinaryOp(
-      *this, operands, [](APInt a, APInt b) { return a ^ b; }, true);
+  return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::Normal,
+                                 [](APInt a, APInt b) { return a ^ b; });
 }
 
 void LEQPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -314,9 +381,10 @@ OpFoldResult LEQPrimOp::fold(ArrayRef<Attribute> operands) {
     }
   }
 
-  return constFoldFIRRTLBinaryOp(*this, operands, [=](APInt a, APInt b) {
-    return APInt(1, isUnsigned ? a.ule(b) : a.sle(b));
-  });
+  return constFoldFIRRTLBinaryOp(
+      *this, operands, BinOpKind::Compare, [=](APInt a, APInt b) {
+        return APInt(1, isUnsigned ? a.ule(b) : a.sle(b));
+      });
 }
 
 void LTPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -367,9 +435,10 @@ OpFoldResult LTPrimOp::fold(ArrayRef<Attribute> operands) {
     }
   }
 
-  return constFoldFIRRTLBinaryOp(*this, operands, [=](APInt a, APInt b) {
-    return APInt(1, isUnsigned ? a.ult(b) : a.slt(b));
-  });
+  return constFoldFIRRTLBinaryOp(
+      *this, operands, BinOpKind::Compare, [=](APInt a, APInt b) {
+        return APInt(1, isUnsigned ? a.ult(b) : a.slt(b));
+      });
 }
 
 void GEQPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -420,9 +489,10 @@ OpFoldResult GEQPrimOp::fold(ArrayRef<Attribute> operands) {
     }
   }
 
-  return constFoldFIRRTLBinaryOp(*this, operands, [=](APInt a, APInt b) {
-    return APInt(1, isUnsigned ? a.uge(b) : a.sge(b));
-  });
+  return constFoldFIRRTLBinaryOp(
+      *this, operands, BinOpKind::Compare, [=](APInt a, APInt b) {
+        return APInt(1, isUnsigned ? a.uge(b) : a.sge(b));
+      });
 }
 
 void GTPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -467,9 +537,10 @@ OpFoldResult GTPrimOp::fold(ArrayRef<Attribute> operands) {
     }
   }
 
-  return constFoldFIRRTLBinaryOp(*this, operands, [=](APInt a, APInt b) {
-    return APInt(1, isUnsigned ? a.ugt(b) : a.sgt(b));
-  });
+  return constFoldFIRRTLBinaryOp(
+      *this, operands, BinOpKind::Compare, [=](APInt a, APInt b) {
+        return APInt(1, isUnsigned ? a.ugt(b) : a.sgt(b));
+      });
 }
 
 OpFoldResult EQPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -492,7 +563,8 @@ OpFoldResult EQPrimOp::fold(ArrayRef<Attribute> operands) {
   }
 
   return constFoldFIRRTLBinaryOp(
-      *this, operands, [=](APInt a, APInt b) { return APInt(1, a.eq(b)); });
+      *this, operands, BinOpKind::Compare,
+      [=](APInt a, APInt b) { return APInt(1, a.eq(b)); });
 }
 
 OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -515,16 +587,11 @@ OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
   }
 
   return constFoldFIRRTLBinaryOp(
-      *this, operands, [=](APInt a, APInt b) { return APInt(1, a.ne(b)); });
+      *this, operands, BinOpKind::Compare,
+      [=](APInt a, APInt b) { return APInt(1, a.ne(b)); });
 }
 
 OpFoldResult CatPrimOp::fold(ArrayRef<Attribute> operands) { return {}; }
-
-OpFoldResult DShlPrimOp::fold(ArrayRef<Attribute> operands) { return {}; }
-
-OpFoldResult DShlwPrimOp::fold(ArrayRef<Attribute> operands) { return {}; }
-
-OpFoldResult DShrPrimOp::fold(ArrayRef<Attribute> operands) { return {}; }
 
 //===----------------------------------------------------------------------===//
 // Unary Operators

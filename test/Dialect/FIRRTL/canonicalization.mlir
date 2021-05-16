@@ -10,7 +10,8 @@ firrtl.module @Div(in %a: !firrtl.uint<4>,
                    in %e: !firrtl.uint,
                    out %f: !firrtl.uint,
                    in %g: !firrtl.sint,
-                   out %h: !firrtl.sint) {
+                   out %h: !firrtl.sint,
+                   out %i: !firrtl.uint<4>) {
 
   // CHECK-DAG: [[ONE_i4:%.+]] = firrtl.constant 1 : !firrtl.uint<4>
   // CHECK-DAG: [[ONE_s5:%.+]] = firrtl.constant 1 : !firrtl.sint<5>
@@ -43,6 +44,11 @@ firrtl.module @Div(in %a: !firrtl.uint<4>,
   %4 = firrtl.div %a, %c1_ui2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<4>
   firrtl.connect %b, %4 : !firrtl.uint<4>, !firrtl.uint<4>
 
+  // CHECK: firrtl.connect %i, %c5_ui4
+  %c1_ui4 = firrtl.constant 15 : !firrtl.uint<4>
+  %c3_ui4 = firrtl.constant 3 : !firrtl.uint<4>
+  %5 = firrtl.div %c1_ui4, %c3_ui4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.connect %i, %5 : !firrtl.uint<4>, !firrtl.uint<4>
 }
 
 // CHECK-LABEL: firrtl.module @And
