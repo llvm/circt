@@ -985,7 +985,9 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(DivPrimOp op) {
     return lowerDivLikeOp<comb::DivSOp, comb::DivUOp>(op);
   }
-  LogicalResult visitExpr(RemPrimOp op);
+  LogicalResult visitExpr(RemPrimOp op) {
+    return lowerDivLikeOp<comb::ModSOp, comb::ModUOp>(op);
+  }
 
   // Other Operations
   LogicalResult visitExpr(BitsPrimOp op);
@@ -2178,38 +2180,6 @@ LogicalResult FIRRTLLowering::visitExpr(CatPrimOp op) {
     return handleZeroBit(op.rhs(), [&]() { return setLowering(op, lhs); });
 
   return setLoweringTo<comb::ConcatOp>(op, lhs, rhs);
-}
-
-LogicalResult FIRRTLLowering::visitExpr(RemPrimOp op) {
-  // FIRRTL has the width of (a % b) = Min(W(a), W(b)), but the operation is
-  // done at max(W(a), W(b))) so we need to extend one operand, then truncate
-  // the result.
-  auto lhsFirTy = op.lhs().getType().dyn_cast<IntType>();
-  auto rhsFirTy = op.rhs().getType().dyn_cast<IntType>();
-  if (!lhsFirTy || !rhsFirTy || !lhsFirTy.hasWidth() || !rhsFirTy.hasWidth())
-    return failure();
-  auto opType = getWidestIntType(lhsFirTy, rhsFirTy);
-  auto lhs = getLoweredAndExtendedValue(op.lhs(), opType);
-  auto rhs = getLoweredAndExtendedValue(op.rhs(), opType);
-  if (!lhs || !rhs)
-    return failure();
-
-  auto resultFirType = op.getType().cast<IntType>();
-  if (!resultFirType.hasWidth())
-    return failure();
-  auto destWidth = unsigned(resultFirType.getWidthOrSentinel());
-  if (destWidth == 0)
-    return setLowering(op, Value());
-
-  Value modInst;
-  if (resultFirType.isUnsigned()) {
-    modInst = builder.createOrFold<comb::ModUOp>(lhs, rhs);
-  } else {
-    modInst = builder.createOrFold<comb::ModSOp>(lhs, rhs);
-  }
-
-  auto resultType = builder.getIntegerType(destWidth);
-  return setLoweringTo<comb::ExtractOp>(op, resultType, modInst, 0);
 }
 
 //===----------------------------------------------------------------------===//

@@ -242,11 +242,26 @@ OpFoldResult DivPrimOp::fold(ArrayRef<Attribute> operands) {
 
   return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::DivideOrShift,
                                  [=](APInt a, APInt b) -> APInt {
-                                   // Don't divide by zero.
+                                   // Fold divide by zero to zero.  Would be
+                                   // better to fold it to invalid when we
+                                   // supports this as a constant.
                                    if (!b)
                                      return APInt(a.getBitWidth(), 0);
                                    return getType().isSigned() ? a.sdiv(b)
                                                                : a.udiv(b);
+                                 });
+}
+
+OpFoldResult RemPrimOp::fold(ArrayRef<Attribute> operands) {
+  return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::DivideOrShift,
+                                 [=](APInt a, APInt b) -> APInt {
+                                   // Fold divide by zero to zero.  Would be
+                                   // better to fold it to invalid when we
+                                   // supports this as a constant.
+                                   if (!b)
+                                     return APInt(a.getBitWidth(), 0);
+                                   return getType().isSigned() ? a.srem(b)
+                                                               : a.urem(b);
                                  });
 }
 
@@ -270,11 +285,6 @@ OpFoldResult DShrPrimOp::fold(ArrayRef<Attribute> operands) {
       *this, operands, BinOpKind::DivideOrShift, [=](APInt a, APInt b) {
         return getType().isSigned() ? a.ashr(b) : a.lshr(b);
       });
-}
-
-OpFoldResult RemPrimOp::fold(ArrayRef<Attribute> operands) {
-  // TODO: Constant fold rem.
-  return {};
 }
 
 // TODO: Move to DRR.
