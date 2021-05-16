@@ -795,3 +795,26 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK:      %invalid_ui42 = firrtl.invalidvalue : !firrtl.uint<42>
     ; CHECK-NEXT: firrtl.mux(%en, %in2, %invalid_ui42) : (!firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>) -> !firrtl.uint<42>
     node out2 = validif(en, in2)
+
+  ; Test that behavioral memory reads and writes both work and that flow checks
+  ; don't fail here.  (A memory port should have duplex flow.)
+  ; See: https://github.com/llvm/circt/issues/1058
+  ; CHECK-LABEL: firrtl.module @BehavioralMemory
+  module BehavioralMemory:
+    input clock: Clock
+    input rAddr: UInt<3>
+    output rData: UInt<1>
+    input wAddr: UInt<3>
+    input wData: UInt<1>
+
+    cmem a: UInt<1>[8]
+
+    ; CHECK: %r = firrtl.memoryport Infer %a
+    ; CHECK-NEXT: firrtl.connect %rData, %r
+    infer mport r = a[rAddr], clock
+    rData <= r
+
+    ; CHECK: %w = firrtl.memoryport Infer %a
+    ; CHECK-NEXT: firrtl.connect %w, %wData
+    infer mport w = a[wAddr], clock
+    w <= wData
