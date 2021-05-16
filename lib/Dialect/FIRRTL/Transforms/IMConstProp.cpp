@@ -198,6 +198,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   void markWireOrUnresetableRegOp(Operation *wireOrReg);
   void markRegResetOp(RegResetOp regReset);
   void markRegOp(RegOp reg);
+  void markMemOp(MemOp mem);
 
   void markInvalidValueOp(InvalidValueOp invalid);
   void markConstantOp(ConstantOp constant);
@@ -335,8 +336,9 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
       markInstanceOp(instance);
     else if (auto regReset = dyn_cast<RegResetOp>(op))
       markRegResetOp(regReset);
+    else if (auto mem = dyn_cast<MemOp>(op))
+      markMemOp(mem);
     else {
-      // TODO: Mems.
       for (auto result : op.getResults())
         markOverdefined(result);
     }
@@ -367,6 +369,11 @@ void IMConstPropPass::markRegResetOp(RegResetOp regReset) {
                                           regReset.getType().cast<FIRRTLType>(),
                                           /*allowTruncation=*/true);
   mergeLatticeValue(regReset, srcValue);
+}
+
+void IMConstPropPass::markMemOp(MemOp mem) {
+  for (auto result : mem.getResults())
+    markOverdefined(result);
 }
 
 void IMConstPropPass::markConstantOp(ConstantOp constant) {
@@ -461,7 +468,7 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
 
   // Driving an instance argument port drives the corresponding argument of the
   // referenced module.
-  if (auto instance = dyn_cast<InstanceOp>(dest.getOwner())) {
+  if (auto instance = dest.getDefiningOp<InstanceOp>()) {
     auto module = dyn_cast<FModuleOp>(instance.getReferencedModule());
     if (!module)
       return;
@@ -469,6 +476,13 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
     BlockArgument modulePortVal =
         module.getPortArgument(dest.getResultNumber());
     return mergeLatticeValue(modulePortVal, srcValue);
+  }
+
+  // Driving a memory result is ignored because these are always treated as
+  // overdefined.
+  if (auto subfield = dest.getDefiningOp<SubfieldOp>()) {
+    if (subfield.getOperand().getDefiningOp<MemOp>())
+      return;
   }
 
   connect.emitError("connect unhandled by IMConstProp")
