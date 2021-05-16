@@ -276,14 +276,12 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
   let verifier = [{
     VERIFY_RESULT_TYPE_RET(input().getType().cast<FIRRTLType>());
   }];
+
+  let hasFolder = 1;
 }
 
-def AsSIntPrimOp : UnaryPrimOp<"asSInt", FIRRTLType, SIntType> {
-  let hasFolder = 1;
-}
-def AsUIntPrimOp : UnaryPrimOp<"asUInt", FIRRTLType, UIntType> {
-  let hasFolder = 1;
-}
+def AsSIntPrimOp : UnaryPrimOp<"asSInt", FIRRTLType, SIntType>;
+def AsUIntPrimOp : UnaryPrimOp<"asUInt", FIRRTLType, UIntType>;
 def AsAsyncResetPrimOp
   : UnaryPrimOp<"asAsyncReset", OneBitCastableType, AsyncResetType>;
 def AsClockPrimOp : UnaryPrimOp<"asClock", OneBitCastableType, ClockType>;

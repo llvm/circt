@@ -39,6 +39,17 @@ static IntegerAttr getIntAttr(Type type, const APInt &value) {
   return IntegerAttr::get(intType, value);
 }
 
+/// Return true if this operation's operands and results all have known width.
+/// This only works for integer types.
+static bool hasKnownWidthIntegerTypes(Operation *op) {
+  if (!op->getResult(0).getType().cast<IntType>().hasWidth())
+    return false;
+  for (Value operand : op->getOperands())
+    if (!operand.getType().cast<IntType>().hasWidth())
+      return false;
+  return true;
+}
+
 namespace {
 struct ConstantIntMatcher {
   APInt &value;
@@ -601,8 +612,6 @@ OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
       [=](APInt a, APInt b) { return APInt(1, a.ne(b)); });
 }
 
-OpFoldResult CatPrimOp::fold(ArrayRef<Attribute> operands) { return {}; }
-
 //===----------------------------------------------------------------------===//
 // Unary Operators
 //===----------------------------------------------------------------------===//
@@ -619,9 +628,104 @@ OpFoldResult AsUIntPrimOp::fold(ArrayRef<Attribute> operands) {
   return {};
 }
 
+OpFoldResult AsAsyncResetPrimOp::fold(ArrayRef<Attribute> operands) {
+  // TODO: Implement constants of asyncreset type.
+  return {};
+}
+
+OpFoldResult AsClockPrimOp::fold(ArrayRef<Attribute> operands) {
+  // TODO: Implement constants of clock type.
+  return {};
+}
+
+OpFoldResult CvtPrimOp::fold(ArrayRef<Attribute> operands) {
+  if (!hasKnownWidthIntegerTypes(*this))
+    return {};
+
+  // Signed to signed is a noop, unsigned operands prepend a zero bit.
+  auto cst = getExtendedConstant(getOperand(), operands[0],
+                                 getType().getWidthOrSentinel());
+  if (cst.hasValue())
+    return getIntAttr(getType(), *cst);
+
+  return {};
+}
+
+OpFoldResult NegPrimOp::fold(ArrayRef<Attribute> operands) {
+  if (!hasKnownWidthIntegerTypes(*this))
+    return {};
+
+  // FIRRTL negate always adds a bit.
+  // -x ---> 0-sext(x) or 0-zext(x)
+  auto cst = getExtendedConstant(getOperand(), operands[0],
+                                 getType().getWidthOrSentinel());
+  if (cst.hasValue())
+    return getIntAttr(getType(), APInt((*cst).getBitWidth(), 0) - *cst);
+
+  return {};
+}
+
+OpFoldResult NotPrimOp::fold(ArrayRef<Attribute> operands) {
+  if (!hasKnownWidthIntegerTypes(*this))
+    return {};
+
+  if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
+    return getIntAttr(getType(), ~attr.getValue());
+
+  return {};
+}
+
+OpFoldResult AndRPrimOp::fold(ArrayRef<Attribute> operands) {
+  if (!hasKnownWidthIntegerTypes(*this))
+    return {};
+
+  // x == -1
+  if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
+    return getIntAttr(getType(), APInt(1, attr.getValue().isAllOnesValue()));
+  return {};
+}
+
+OpFoldResult OrRPrimOp::fold(ArrayRef<Attribute> operands) {
+  if (!hasKnownWidthIntegerTypes(*this))
+    return {};
+
+  // x != 0
+  if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
+    return getIntAttr(getType(), APInt(1, !attr.getValue()));
+  return {};
+}
+
+OpFoldResult XorRPrimOp::fold(ArrayRef<Attribute> operands) {
+  if (!hasKnownWidthIntegerTypes(*this))
+    return {};
+
+  // popcount(x) & 1
+  if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
+    return getIntAttr(getType(),
+                      APInt(1, attr.getValue().countPopulation() & 1));
+  return {};
+}
+
 //===----------------------------------------------------------------------===//
 // Other Operators
 //===----------------------------------------------------------------------===//
+
+OpFoldResult CatPrimOp::fold(ArrayRef<Attribute> operands) {
+  if (!hasKnownWidthIntegerTypes(*this))
+    return {};
+
+  // Constant fold cat.
+  if (auto lhs = operands[0].dyn_cast_or_null<IntegerAttr>())
+    if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>()) {
+      auto destWidth = getType().getWidthOrSentinel();
+      APInt tmp1 = lhs.getValue().zext(destWidth)
+                   << rhs.getValue().getBitWidth();
+      APInt tmp2 = rhs.getValue().zext(destWidth);
+      return getIntAttr(getType(), tmp1 | tmp2);
+    }
+
+  return {};
+}
 
 LogicalResult CatPrimOp::canonicalize(CatPrimOp op, PatternRewriter &rewriter) {
   // cat(bits(x, ...), bits(x, ...)) -> bits(x ...) when the two ...'s are
