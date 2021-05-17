@@ -13,7 +13,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
-#include "circt/Dialect/RTL/RTLTypes.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -53,6 +53,7 @@ Flow firrtl::swapFlow(Flow flow) {
   case Flow::Duplex:
     return Flow::Duplex;
   }
+  llvm_unreachable("invalid flow");
 }
 
 Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
@@ -78,8 +79,9 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
       })
       .Case<SubindexOp, SubaccessOp>(
           [&](auto op) { return foldFlow(op.input(), accumulatedFlow); })
-      // Registers and Wires are always Duplex.
-      .Case<RegOp, RegResetOp, WireOp>([](auto) { return Flow::Duplex; })
+      // Registers, Wires, and behavioral memory ports are always Duplex.
+      .Case<RegOp, RegResetOp, WireOp, MemoryPortOp>(
+          [](auto) { return Flow::Duplex; })
       .Case<InstanceOp>([&](auto) {
         return val.getType().isa<FlipType>() ? swap() : accumulatedFlow;
       })
@@ -310,7 +312,7 @@ Direction firrtl::getModulePortDirection(Operation *op, size_t portIndex) {
 
 static void buildModule(OpBuilder &builder, OperationState &result,
                         StringAttr name, ArrayRef<ModulePortInfo> ports) {
-  using namespace mlir::impl;
+  using namespace mlir::function_like_impl;
 
   // Add an attribute for the name.
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
@@ -324,22 +326,21 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
 
   // Record the names of the arguments if present.
-  SmallString<8> attrNameBuf;
-  // Record the names of the arguments if present.
+  SmallVector<Attribute, 4> argAttrs;
   SmallVector<Attribute, 4> portNames;
   SmallVector<Direction, 4> portDirections;
   for (size_t i = 0, e = ports.size(); i != e; ++i) {
     portNames.push_back(ports[i].name);
     portDirections.push_back(ports[i].direction);
-    if (!ports[i].annotations)
-      continue;
-    result.addAttribute(
-        getArgAttrName(i, attrNameBuf),
-        builder.getDictionaryAttr({{builder.getIdentifier("firrtl.annotations"),
-                                    ports[i].annotations}}));
+    argAttrs.push_back(ports[i].annotations
+                           ? builder.getDictionaryAttr(
+                                 {{builder.getIdentifier("firrtl.annotations"),
+                                   ports[i].annotations}})
+                           : builder.getDictionaryAttr({}));
   }
 
   // Both attributes are added, even if the module has no ports.
+  result.addAttribute(getArgDictAttrName(), builder.getArrayAttr(argAttrs));
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
   result.addAttribute(
       direction::attrKey,
@@ -417,7 +418,7 @@ static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
     }
 
     p.printType(argTypes[i]);
-    p.printOptionalAttrDict(::mlir::impl::getArgAttrs(op, i));
+    p.printOptionalAttrDict(::mlir::function_like_impl::getArgAttrs(op, i));
   }
 
   if (isVariadic) {
@@ -552,14 +553,14 @@ parseFunctionSignature2(OpAsmParser &parser, bool allowVariadic,
 }
 
 static void printModuleLikeOp(OpAsmPrinter &p, Operation *op) {
-  using namespace mlir::impl;
+  using namespace mlir::function_like_impl;
 
   FunctionType fnType = getModuleType(op);
   auto argTypes = fnType.getInputs();
   auto resultTypes = fnType.getResults();
 
-  // TODO: Should refactor mlir::impl::printFunctionLikeOp to allow these
-  // customizations.  Need to not print the terminator.
+  // TODO: Should refactor mlir::function_like_impl::printFunctionLikeOp to
+  // allow these customizations.  Need to not print the terminator.
 
   // Print the operation and the function name.
   auto funcName =
@@ -597,11 +598,11 @@ static void print(OpAsmPrinter &p, FModuleOp op) {
 
 static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
                                   bool isExtModule = false) {
-  using namespace mlir::impl;
+  using namespace mlir::function_like_impl;
 
-  // TODO: Should refactor mlir::impl::parseFunctionLikeOp to allow these
-  // customizations for implicit argument names.  Need to not print the
-  // terminator.
+  // TODO: Should refactor mlir::function_like_impl::parseFunctionLikeOp to
+  // allow these customizations for implicit argument names.  Need to not print
+  // the terminator.
 
   SmallVector<OpAsmParser::OperandType, 4> entryArgs;
   SmallVector<NamedAttrList, 4> portNamesAttrs;
@@ -1216,6 +1217,59 @@ bool firrtl::isExpression(Operation *op) {
   return IsExprClassifier().dispatchExprVisitor(op);
 }
 
+static void printConstantOp(OpAsmPrinter &p, ConstantOp &op) {
+  p << "firrtl.constant ";
+  p.printAttributeWithoutType(op.valueAttr());
+  p << " : ";
+  p.printType(op.getType());
+  p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"value"});
+}
+
+static ParseResult parseConstantOp(OpAsmParser &parser,
+                                   OperationState &result) {
+  // Parse the constant value, without knowing its width.
+  APInt value;
+  auto loc = parser.getCurrentLocation();
+  auto valueResult = parser.parseOptionalInteger(value);
+  if (!valueResult.hasValue())
+    return parser.emitError(loc, "expected integer value");
+
+  // Parse the result firrtl integer type.
+  IntType resultType;
+  if (failed(*valueResult) || parser.parseColonType(resultType) ||
+      parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+  result.addTypes(resultType);
+
+  // Now that we know the width and sign of the result type, we can munge the
+  // APInt as appropriate.
+  if (resultType.hasWidth()) {
+    auto width = (unsigned)resultType.getWidthOrSentinel();
+    if (width == 0)
+      return parser.emitError(loc, "zero bit constants aren't allowed");
+
+    if (width > value.getBitWidth()) {
+      // sext is always safe here, even for unsigned values, because the
+      // parseOptionalInteger method will return something with a zero in the
+      // top bits if it is a positive number.
+      value = value.sext(width);
+    } else if (width < value.getBitWidth()) {
+      // The parser can return an unnecessarily wide result with leading zeros.
+      // This isn't a problem, but truncating off bits is bad.
+      if (value.getNumSignBits() < value.getBitWidth() - width)
+        return parser.emitError(loc, "constant too large for result type ")
+               << resultType;
+      value = value.trunc(width);
+    }
+  }
+
+  auto intType = parser.getBuilder().getIntegerType(value.getBitWidth(),
+                                                    resultType.isSigned());
+  auto valueAttr = parser.getBuilder().getIntegerAttr(intType, value);
+  result.addAttribute("value", valueAttr);
+  return success();
+}
+
 static LogicalResult verifyConstantOp(ConstantOp constant) {
   // If the result type has a bitwidth, then the attribute must match its width.
   auto intType = constant.getType().cast<IntType>();
@@ -1223,6 +1277,12 @@ static LogicalResult verifyConstantOp(ConstantOp constant) {
   if (width != -1 && (int)constant.value().getBitWidth() != width)
     return constant.emitError(
         "firrtl.constant attribute bitwidth doesn't match return type");
+
+  // The sign of the attribute's integer type must match our integer type sign.
+  auto attrType = constant.valueAttr().getType().cast<IntegerType>();
+  if (attrType.isSignless() ||
+      attrType.isSigned() != constant.getType().isSigned())
+    return constant.emitError("firrtl.constant attribute has wrong sign");
 
   return success();
 }
@@ -1851,14 +1911,14 @@ static LogicalResult verifyStdIntCastOp(StdIntCastOp cast) {
 
 static LogicalResult verifyAnalogInOutCastOp(AnalogInOutCastOp cast) {
   AnalogType firType;
-  rtl::InOutType inoutType;
+  hw::InOutType inoutType;
 
   if ((firType = cast.getOperand().getType().dyn_cast<AnalogType>())) {
-    inoutType = cast.getType().dyn_cast<rtl::InOutType>();
+    inoutType = cast.getType().dyn_cast<hw::InOutType>();
     if (!inoutType)
       return cast.emitError("result type must be an inout type");
   } else if ((firType = cast.getType().dyn_cast<AnalogType>())) {
-    inoutType = cast.getOperand().getType().dyn_cast<rtl::InOutType>();
+    inoutType = cast.getOperand().getType().dyn_cast<hw::InOutType>();
     if (!inoutType)
       return cast.emitError("operand type must be an inout type");
   } else {
@@ -1887,16 +1947,16 @@ static LogicalResult verifyAnalogInOutCastOp(AnalogInOutCastOp cast) {
 // Conversions to/from structs in the standard dialect.
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyRTLStructCastOp(RTLStructCastOp cast) {
+static LogicalResult verifyHWStructCastOp(HWStructCastOp cast) {
   // We must have a bundle and a struct, with matching pairwise fields
   BundleType bundleType;
-  rtl::StructType structType;
+  hw::StructType structType;
   if ((bundleType = cast.getOperand().getType().dyn_cast<BundleType>())) {
-    structType = cast.getType().dyn_cast<rtl::StructType>();
+    structType = cast.getType().dyn_cast<hw::StructType>();
     if (!structType)
       return cast.emitError("result type must be a struct");
   } else if ((bundleType = cast.getType().dyn_cast<BundleType>())) {
-    structType = cast.getOperand().getType().dyn_cast<rtl::StructType>();
+    structType = cast.getOperand().getType().dyn_cast<hw::StructType>();
     if (!structType)
       return cast.emitError("operand type must be a struct");
   } else {
@@ -1904,22 +1964,22 @@ static LogicalResult verifyRTLStructCastOp(RTLStructCastOp cast) {
   }
 
   auto firFields = bundleType.getElements();
-  auto rtlFields = structType.getElements();
-  if (firFields.size() != rtlFields.size())
+  auto hwFields = structType.getElements();
+  if (firFields.size() != hwFields.size())
     return cast.emitError("bundle and struct have different number of fields");
 
   for (size_t findex = 0, fend = firFields.size(); findex < fend; ++findex) {
-    if (firFields[findex].name.getValue() != rtlFields[findex].name)
+    if (firFields[findex].name.getValue() != hwFields[findex].name)
       return cast.emitError("field names don't match '")
              << firFields[findex].name.getValue() << "', '"
-             << rtlFields[findex].name << "'";
+             << hwFields[findex].name << "'";
     int64_t firWidth =
         FIRRTLType(firFields[findex].type).getBitWidthOrSentinel();
-    int64_t rtlWidth = rtl::getBitWidth(rtlFields[findex].type);
-    if (firWidth > 0 && rtlWidth > 0 && firWidth != rtlWidth)
+    int64_t hwWidth = hw::getBitWidth(hwFields[findex].type);
+    if (firWidth > 0 && hwWidth > 0 && firWidth != hwWidth)
       return cast.emitError("size of field '")
-             << rtlFields[findex].name << "' don't match " << firWidth << ", "
-             << rtlWidth;
+             << hwFields[findex].name << "' don't match " << firWidth << ", "
+             << hwWidth;
   }
 
   return success();

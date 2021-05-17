@@ -2,13 +2,13 @@
 // RUN: circt-translate  --export-verilog %s | FileCheck %s --check-prefix=DEFAULT
 // RUN: circt-translate --lowering-options=emittedLineLength=180 --export-verilog %s | FileCheck %s --check-prefix=LONG
 
-rtl.module @longvariadic(%a: i8) -> (%b: i8) {
+hw.module @longvariadic(%a: i8) -> (%b: i8) {
   %1 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
                 %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
                 %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
                 %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a
                  : i8
-  rtl.output %1 : i8
+  hw.output %1 : i8
 }
 
 // SHORT-LABEL: module longvariadic

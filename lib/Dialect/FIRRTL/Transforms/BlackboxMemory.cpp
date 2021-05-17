@@ -96,7 +96,7 @@ static InstanceOp createInstance(OpBuilder builder, Location loc,
                                     instanceName.getValue());
 }
 
-/// Get the portlist for an external module representing a blackbox memory. This
+/// Get the pohwist for an external module representing a blackbox memory. This
 /// external module must be compatible with the modules which are generated for
 /// `vlsi_mem_gen`, which can be found in the rocketchip project.
 static void
@@ -303,7 +303,7 @@ replaceMemWithWrapperModule(DenseMap<MemOp, FModuleOp, MemOpInfo> &knownMems,
     // memory port created by the MemOp.
     auto memPorts = memOp.getPorts();
 
-    // Get the portlist for a module which represents the blackbox memory.
+    // Get the pohwist for a module which represents the blackbox memory.
     // Typically has 1R + 1W memory port, which has 4+5=9 fields.
     SmallVector<ModulePortInfo, 9> extPortList;
     getBlackboxPortsForMemOp(memOp, memPorts, extPortList);
@@ -365,7 +365,7 @@ replaceMemWithExtModule(DenseMap<MemOp, FExtModuleOp, MemOpInfo> &knownMems,
     // memory port created by the MemOp.
     auto memPorts = memOp.getPorts();
 
-    // Get the portlist for a module which represents the blackbox memory.
+    // Get the pohwist for a module which represents the blackbox memory.
     // Typically has 1R + 1W memory port, which has 4+5=9 fields.
     getBlackboxPortsForMemOp(memOp, memPorts, extPortList);
     extModuleOp = createBlackboxModuleForMem(memOp, extPortList);

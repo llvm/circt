@@ -261,9 +261,8 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
     if (std::lower_bound(argAttrBegin, argAttrEnd, attr) == argAttrEnd)
       // Drop old "portNames", directions, and argument attributes.  These are
       // handled differently below.
-      if (attr.first.str() != "portNames" &&
-          attr.first.str() != direction::attrKey &&
-          !mlir::impl::isArgAttrName(attr.first))
+      if (attr.first != "portNames" && attr.first != direction::attrKey &&
+          attr.first != mlir::function_like_impl::getArgDictAttrName())
         newModuleAttrs.push_back(attr);
 
   newModuleAttrs.push_back(NamedAttribute(Identifier::get("portNames", context),
@@ -272,16 +271,14 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
       Identifier::get(direction::attrKey, context),
       direction::packIntegerAttribute(newArgDirections, context)));
 
-  SmallString<8> attrNameBuf;
   // Attach new argument attributes.
-  for (size_t i = 0, e = newArgAttrs.size(); i != e; ++i) {
-    auto attrs = newArgAttrs[i];
-    if (attrs.empty())
-      continue;
-    newModuleAttrs.push_back(NamedAttribute(
-        Identifier::get(mlir::impl::getArgAttrName(i, attrNameBuf), context),
-        builder->getDictionaryAttr(attrs)));
-  }
+  SmallVector<Attribute, 8> newArgDictAttrs;
+  newArgDictAttrs.reserve(newArgAttrs.size());
+  for (auto attr : newArgAttrs)
+    newArgDictAttrs.push_back(builder->getDictionaryAttr(attr));
+  newModuleAttrs.push_back(NamedAttribute(
+      builder->getIdentifier(mlir::function_like_impl::getArgDictAttrName()),
+      builder->getArrayAttr(newArgDictAttrs)));
 
   // Update the module's attributes.
   module->setAttrs(newModuleAttrs);
@@ -337,10 +334,11 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   // Create an array of the result types and results names.
   SmallVector<Type, 8> inputTypes;
   SmallVector<NamedAttribute, 8> attributes;
+  SmallVector<Attribute, 8> argAttrDicts;
 
   SmallVector<Attribute> portNames;
   SmallVector<Direction> portDirections;
-  unsigned oldArgNumber = 0, newArgNumber = 0;
+  unsigned oldArgNumber = 0;
   SmallString<8> attrNameBuf;
   for (auto &port : extModule.getPorts()) {
     // Flatten the port type.
@@ -388,9 +386,7 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
                             builder.getArrayAttr(newAnnotations)});
 
       // Populate the new arg attributes.
-      attributes.push_back({builder.getIdentifier(mlir::impl::getArgAttrName(
-                                newArgNumber++, attrNameBuf)),
-                            builder.getDictionaryAttr(argAttrs)});
+      argAttrDicts.push_back(builder.getDictionaryAttr(argAttrs));
 
       // Pop off any added annotations to reuse argAttrs for the next iteration.
       if (hasAnnotations)
@@ -401,6 +397,9 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
 
   // Add port names attribute.
   attributes.push_back(
+      {Identifier::get(mlir::function_like_impl::getArgDictAttrName(), context),
+       builder.getArrayAttr(argAttrDicts)});
+  attributes.push_back(
       {Identifier::get("portNames", context), builder.getArrayAttr(portNames)});
   attributes.push_back(
       {Identifier::get(direction::attrKey, context),
@@ -410,7 +409,7 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   // or argument attributes.
   for (auto a : extModule->getAttrs()) {
     if (a.first == "portNames" || a.first == direction::attrKey ||
-        mlir::impl::isArgAttrName(a.first))
+        a.first == mlir::function_like_impl::getArgDictAttrName())
       continue;
     attributes.push_back(a);
   }

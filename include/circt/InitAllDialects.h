@@ -17,10 +17,10 @@
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
-#include "circt/Dialect/RTL/RTLDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/Scheduling/SchedulingDialect.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
@@ -39,7 +39,7 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
     handshake::HandshakeOpsDialect,
     llhd::LLHDDialect,
     msft::MSFTDialect,
-    rtl::RTLDialect,
+    hw::HWDialect,
     sched::SchedulingDialect,
     seq::SeqDialect,
     staticlogic::StaticLogicDialect,

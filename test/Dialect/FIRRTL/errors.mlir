@@ -63,7 +63,7 @@ firrtl.circuit "Foo" {
 
 firrtl.circuit "Foo" {
   firrtl.module @Foo(in %clk: !firrtl.uint<1>, in %reset: !firrtl.uint<1>) {
-    %zero = firrtl.constant(0 : ui1) : !firrtl.uint<1>
+    %zero = firrtl.constant 0 : !firrtl.uint<1>
     // expected-error @+1 {{'firrtl.regreset' op operand #0 must be clock, but got '!firrtl.uint<1>'}}
     %a = firrtl.regreset %clk, %reset, %zero {name = "a"} : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   }
@@ -73,7 +73,7 @@ firrtl.circuit "Foo" {
 
 firrtl.circuit "Foo" {
   firrtl.module @Foo(in %clk: !firrtl.clock, in %reset: !firrtl.uint<2>) {
-    %zero = firrtl.constant(0 : ui1) : !firrtl.uint<1>
+    %zero = firrtl.constant 0 : !firrtl.uint<1>
     // expected-error @+1 {{'firrtl.regreset' op operand #1 must be Reset, but got '!firrtl.uint<2>'}}
     %a = firrtl.regreset %clk, %reset, %zero {name = "a"} : (!firrtl.clock, !firrtl.uint<2>, !firrtl.uint<1>) -> !firrtl.uint<1>
   }
@@ -102,7 +102,7 @@ firrtl.circuit "Foo" {
 
 firrtl.circuit "Foo" {
   firrtl.module @Foo(in %clk: !firrtl.clock, in %reset: !firrtl.uint<1>) {
-    %zero = firrtl.constant(0 : ui1) : !firrtl.uint<1>
+    %zero = firrtl.constant 0 : !firrtl.uint<1>
     // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive type (contain no flips)}}
     %a = firrtl.regreset %clk, %reset, %zero {name = "a"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.flip<uint<1>>
   }
@@ -321,7 +321,7 @@ firrtl.circuit "StructCast" {
   firrtl.module @StructCast() {
     %a = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
     // expected-error @+1 {{bundle and struct have different number of fields}}
-    %b = firrtl.rtlStructCast %a : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>) -> (!rtl.struct<valid: i1, ready: i1>)
+    %b = firrtl.hwStructCast %a : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>) -> (!hw.struct<valid: i1, ready: i1>)
   }
 }
 
@@ -331,7 +331,7 @@ firrtl.circuit "StructCast2" {
   firrtl.module @StructCast2() {
     %a = firrtl.wire : !firrtl.bundle<valid: uint<1>>
     // expected-error @+1 {{field names don't match 'valid', 'yovalid'}}
-    %b = firrtl.rtlStructCast %a : (!firrtl.bundle<valid: uint<1>>) -> (!rtl.struct<yovalid: i1>)
+    %b = firrtl.hwStructCast %a : (!firrtl.bundle<valid: uint<1>>) -> (!hw.struct<yovalid: i1>)
   }
 }
 
@@ -341,7 +341,7 @@ firrtl.circuit "StructCast3" {
   firrtl.module @StructCast3() {
     %a = firrtl.wire : !firrtl.bundle<valid: uint<1>>
     // expected-error @+1 {{size of field 'valid' don't match 1, 2}}
-    %b = firrtl.rtlStructCast %a : (!firrtl.bundle<valid: uint<1>>) -> (!rtl.struct<valid: i2>)
+    %b = firrtl.hwStructCast %a : (!firrtl.bundle<valid: uint<1>>) -> (!hw.struct<valid: i2>)
   }
 }
 

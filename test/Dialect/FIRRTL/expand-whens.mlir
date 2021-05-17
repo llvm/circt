@@ -4,36 +4,36 @@ firrtl.module @ExpandWhens () {}
 
 // Test that last connect semantics are resolved for connects.
 firrtl.module @shadow_connects(out %out : !firrtl.uint<1>) {
-  %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
-  %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   firrtl.connect %out, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   firrtl.connect %out, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 // CHECK-LABEL: firrtl.module @shadow_connects(out %out: !firrtl.uint<1>) {
-// CHECK-NEXT:   %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
-// CHECK-NEXT:   %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
+// CHECK-NEXT:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+// CHECK-NEXT:   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.connect %out, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT: }
 
 
 // Test that last connect semantics are resolved for partial connects.
 firrtl.module @shadow_partialconnects(out %out : !firrtl.uint<1>) {
-  %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
-  %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   firrtl.partialconnect %out, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   firrtl.partialconnect %out, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 // CHECK-LABEL: firrtl.module @shadow_partialconnects(out %out: !firrtl.uint<1>) {
-// CHECK-NEXT:   %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
-// CHECK-NEXT:   %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
+// CHECK-NEXT:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+// CHECK-NEXT:   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.partialconnect %out, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT: }
 
 
 // Test that last connect semantics are resolved in a WhenOp
 firrtl.module @shadow_when(in %p : !firrtl.uint<1>) {
-  %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
-  %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
+  %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+  %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
   firrtl.when %p {
     %w = firrtl.wire : !firrtl.uint<2>
     firrtl.connect %w, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
@@ -41,8 +41,8 @@ firrtl.module @shadow_when(in %p : !firrtl.uint<1>) {
   }
 }
 // CHECK-LABEL: firrtl.module @shadow_when(in %p: !firrtl.uint<1>) {
-// CHECK-NEXT:   %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
-// CHECK-NEXT:   %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
+// CHECK-NEXT:   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+// CHECK-NEXT:   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
 // CHECK-NEXT:   %w = firrtl.wire  : !firrtl.uint<2>
 // CHECK-NEXT:   firrtl.connect %w, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK-NEXT: }
@@ -108,17 +108,17 @@ firrtl.module @nested_whens(in %clock : !firrtl.clock, in %p0 : !firrtl.uint<1>,
 // used is local to each region.
 firrtl.module @set_in_both(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, out %out : !firrtl.uint<2>) {
   firrtl.when %p {
-    %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
+    %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
     firrtl.connect %out, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   } else {
-    %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
+    %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
     firrtl.connect %out, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   }
 }
 // CHECK-LABEL: firrtl.module @set_in_both(in %clock: !firrtl.clock, in %p: !firrtl.uint<1>, out %out: !firrtl.uint<2>) {
-// CHECK-NEXT:   %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
+// CHECK-NEXT:   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
 // CHECK-NEXT:   %0 = firrtl.not %p : (!firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
+// CHECK-NEXT:   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
 // CHECK-NEXT:   %1 = firrtl.mux(%p, %c0_ui2, %c1_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
 // CHECK-NEXT:   firrtl.connect %out, %1 : !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK-NEXT: }
@@ -127,9 +127,9 @@ firrtl.module @set_in_both(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, o
 // Test that a parameter set before a WhenOp, and then in both sides of the
 // WhenOp is resolved.
 firrtl.module @set_before_and_in_both(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, out %out : !firrtl.uint<2>) {
-  %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
-  %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
-  %c2_ui2 = firrtl.constant(2 : ui2) : !firrtl.uint<2>
+  %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+  %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
+  %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
   firrtl.connect %out, %c2_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   firrtl.when %p {
     firrtl.connect %out, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
@@ -138,9 +138,9 @@ firrtl.module @set_before_and_in_both(in %clock : !firrtl.clock, in %p : !firrtl
   }
 }
 // CHECK-LABEL: firrtl.module @set_before_and_in_both(in %clock: !firrtl.clock, in %p: !firrtl.uint<1>, out %out: !firrtl.uint<2>) {
-// CHECK-NEXT:   %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
-// CHECK-NEXT:   %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
-// CHECK-NEXT:   %c2_ui2 = firrtl.constant(2 : ui2) : !firrtl.uint<2>
+// CHECK-NEXT:   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+// CHECK-NEXT:   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
+// CHECK-NEXT:   %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
 // CHECK-NEXT:   %0 = firrtl.not %p : (!firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK-NEXT:   %1 = firrtl.mux(%p, %c0_ui2, %c1_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
 // CHECK-NEXT:   firrtl.connect %out, %1 : !firrtl.uint<2>, !firrtl.uint<2>
@@ -149,9 +149,9 @@ firrtl.module @set_before_and_in_both(in %clock : !firrtl.clock, in %p : !firrtl
 
 // Test that a parameter set in a WhenOp is not the last connect.
 firrtl.module @set_after(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, out %out : !firrtl.uint<2>) {
-  %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
-  %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
-  %c2_ui2 = firrtl.constant(2 : ui2) : !firrtl.uint<2>
+  %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+  %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
+  %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
   firrtl.when %p {
     firrtl.connect %out, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   } else {
@@ -160,9 +160,9 @@ firrtl.module @set_after(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, out
   firrtl.connect %out, %c2_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
 }
 // CHECK-LABEL: firrtl.module @set_after(in %clock: !firrtl.clock, in %p: !firrtl.uint<1>, out %out: !firrtl.uint<2>) {
-// CHECK-NEXT:   %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
-// CHECK-NEXT:   %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
-// CHECK-NEXT:   %c2_ui2 = firrtl.constant(2 : ui2) : !firrtl.uint<2>
+// CHECK-NEXT:   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+// CHECK-NEXT:   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
+// CHECK-NEXT:   %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
 // CHECK-NEXT:   %0 = firrtl.not %p : (!firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK-NEXT:   %1 = firrtl.mux(%p, %c0_ui2, %c1_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
 // CHECK-NEXT:   firrtl.connect %out, %c2_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
@@ -171,16 +171,16 @@ firrtl.module @set_after(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, out
 
 // Test that wire written to in only the thenblock is resolved.
 firrtl.module @set_in_then0(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, out %out : !firrtl.uint<2>) {
-  %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
-  %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
+  %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+  %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
   firrtl.connect %out, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   firrtl.when %p {
     firrtl.connect %out, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   }
 }
 // CHECK-LABEL: firrtl.module @set_in_then0(in %clock: !firrtl.clock, in %p: !firrtl.uint<1>, out %out: !firrtl.uint<2>) {
-// CHECK-NEXT:   %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
-// CHECK-NEXT:   %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
+// CHECK-NEXT:   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+// CHECK-NEXT:   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
 // CHECK-NEXT:   %0 = firrtl.mux(%p, %c1_ui2, %c0_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
 // CHECK-NEXT:   firrtl.connect %out, %0 : !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK-NEXT: }
@@ -188,24 +188,24 @@ firrtl.module @set_in_then0(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, 
 
 // Test that wire written to in only the then block is resolved.
 firrtl.module @set_in_then1(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, out %out : !firrtl.uint<2>) {
-  %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
-  %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
+  %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+  %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
   firrtl.when %p {
     firrtl.connect %out, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   }
   firrtl.connect %out, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
 }
 // CHECK-LABEL: firrtl.module @set_in_then1(in %clock: !firrtl.clock, in %p: !firrtl.uint<1>, out %out: !firrtl.uint<2>) {
-// CHECK-NEXT:   %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
-// CHECK-NEXT:   %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
+// CHECK-NEXT:   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+// CHECK-NEXT:   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
 // CHECK-NEXT:   firrtl.connect %out, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK-NEXT: }
 
 
 // Test that wire written to in only the else is resolved.
 firrtl.module @set_in_else0(in %p : !firrtl.uint<1>, out %out : !firrtl.uint<2>) {
-  %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
-  %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
+  %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+  %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
   firrtl.connect %out, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   firrtl.when %p {
   } else {
@@ -213,8 +213,8 @@ firrtl.module @set_in_else0(in %p : !firrtl.uint<1>, out %out : !firrtl.uint<2>)
   }
 }
 // CHECK-LABEL: firrtl.module @set_in_else0(in %p: !firrtl.uint<1>, out %out: !firrtl.uint<2>) {
-// CHECK-NEXT:   %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
-// CHECK-NEXT:   %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
+// CHECK-NEXT:   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+// CHECK-NEXT:   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
 // CHECK-NEXT:   %0 = firrtl.not %p : (!firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK-NEXT:   %1 = firrtl.mux(%p, %c0_ui2, %c1_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
 // CHECK-NEXT:   firrtl.connect %out, %1 : !firrtl.uint<2>, !firrtl.uint<2>
@@ -223,8 +223,8 @@ firrtl.module @set_in_else0(in %p : !firrtl.uint<1>, out %out : !firrtl.uint<2>)
 
 // Test that wire written to in only the else block is resolved.
 firrtl.module @set_in_else1(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, out %out : !firrtl.uint<2>) {
-  %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
-  %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
+  %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+  %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
   firrtl.when %p {
   } else {
     firrtl.connect %out, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
@@ -232,17 +232,17 @@ firrtl.module @set_in_else1(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, 
   firrtl.connect %out, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
 }
 // CHECK-LABEL: firrtl.module @set_in_else1(in %clock: !firrtl.clock, in %p: !firrtl.uint<1>, out %out: !firrtl.uint<2>) {
-// CHECK-NEXT:   %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
-// CHECK-NEXT:   %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
+// CHECK-NEXT:   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+// CHECK-NEXT:   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
 // CHECK-NEXT:   %0 = firrtl.not %p : (!firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK-NEXT:   firrtl.connect %out, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK-NEXT: }
 
 // Check that nested WhenOps work.
 firrtl.module @nested(in %clock : !firrtl.clock, in %p0 : !firrtl.uint<1>, in %p1 : !firrtl.uint<1>, out %out : !firrtl.uint<2>) {
-  %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
-  %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
-  %c2_ui2 = firrtl.constant(2 : ui2) : !firrtl.uint<2>
+  %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+  %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
+  %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
 
   firrtl.connect %out, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   firrtl.when %p0 {
@@ -252,9 +252,9 @@ firrtl.module @nested(in %clock : !firrtl.clock, in %p0 : !firrtl.uint<1>, in %p
   }
 }
 // CHECK-LABEL: firrtl.module @nested(in %clock: !firrtl.clock, in %p0: !firrtl.uint<1>, in %p1: !firrtl.uint<1>, out %out: !firrtl.uint<2>) {
-// CHECK-NEXT:   %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
-// CHECK-NEXT:   %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
-// CHECK-NEXT:   %c2_ui2 = firrtl.constant(2 : ui2) : !firrtl.uint<2>
+// CHECK-NEXT:   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+// CHECK-NEXT:   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
+// CHECK-NEXT:   %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
 // CHECK-NEXT:   %0 = firrtl.and %p0, %p1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK-NEXT:   %1 = firrtl.mux(%p0, %c1_ui2, %c0_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
 // CHECK-NEXT:   firrtl.connect %out, %1 : !firrtl.uint<2>, !firrtl.uint<2>
@@ -263,10 +263,10 @@ firrtl.module @nested(in %clock : !firrtl.clock, in %p0 : !firrtl.uint<1>, in %p
 
 // Check that nested WhenOps work.
 firrtl.module @nested2(in %clock : !firrtl.clock, in %p0 : !firrtl.uint<1>, in %p1 : !firrtl.uint<1>, out %out : !firrtl.uint<2>) {
-  %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
-  %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
-  %c2_ui2 = firrtl.constant(2 : ui2) : !firrtl.uint<2>
-  %c3_ui2 = firrtl.constant(3 : ui2) : !firrtl.uint<2>
+  %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+  %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
+  %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
+  %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
 
   firrtl.when %p0 {
     firrtl.when %p1 {
@@ -283,10 +283,10 @@ firrtl.module @nested2(in %clock : !firrtl.clock, in %p0 : !firrtl.uint<1>, in %
   }
 }
 //CHECK-LABEL: firrtl.module @nested2(in %clock: !firrtl.clock, in %p0: !firrtl.uint<1>, in %p1: !firrtl.uint<1>, out %out: !firrtl.uint<2>) {
-//CHECK-NEXT:   %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
-//CHECK-NEXT:   %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
-//CHECK-NEXT:   %c2_ui2 = firrtl.constant(2 : ui2) : !firrtl.uint<2>
-//CHECK-NEXT:   %c3_ui2 = firrtl.constant(3 : ui2) : !firrtl.uint<2>
+//CHECK-NEXT:   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+//CHECK-NEXT:   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
+//CHECK-NEXT:   %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
+//CHECK-NEXT:   %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
 //CHECK-NEXT:   %0 = firrtl.and %p0, %p1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 //CHECK-NEXT:   %1 = firrtl.not %p1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
 //CHECK-NEXT:   %2 = firrtl.and %p0, %1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
@@ -302,8 +302,8 @@ firrtl.module @nested2(in %clock : !firrtl.clock, in %p0 : !firrtl.uint<1>, in %
 
 // Test that registers are multiplexed with themselves.
 firrtl.module @register_mux(in %p : !firrtl.uint<1>, in %clock: !firrtl.clock) {
-  %c0_ui2 = firrtl.constant(0 : ui2) : !firrtl.uint<2>
-  %c1_ui2 = firrtl.constant(1 : ui2) : !firrtl.uint<2>
+  %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+  %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
 
   // CHECK: %reg0 = firrtl.reg %clock
   // CHECK: firrtl.connect %reg0, %reg0

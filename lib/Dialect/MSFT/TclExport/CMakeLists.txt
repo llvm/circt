@@ -15,6 +15,6 @@ add_circt_translation_library(CIRCTMSFTExportTcl
 
   LINK_LIBS PUBLIC
   CIRCTMSFT
-  CIRCTRTL
+  CIRCTHW
   MLIRTranslation
   )

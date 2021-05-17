@@ -10,7 +10,7 @@
 // CHECK:   %[[RES1_READY:.+]] = firrtl.subfield %arg2("ready") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>) -> !firrtl.uint<1>
 
 // Done logic.
-// CHECK:   %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
+// CHECK:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
 // CHECK:   %done0 = firrtl.wire : !firrtl.uint<1>
 // CHECK:   %done1 = firrtl.wire : !firrtl.uint<1>
 

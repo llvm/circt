@@ -12,10 +12,10 @@
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
 #include "circt/Support/LLVM.h"
 
+#include "mlir/Bindings/Python/PybindAdaptors.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Support.h"
 
-#include "MLIRPybindAdaptors.h"
 #include "PybindUtils.h"
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>

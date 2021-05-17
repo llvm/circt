@@ -19,7 +19,7 @@
 
 using namespace circt;
 using namespace sv;
-using namespace rtl;
+using namespace hw;
 
 //===----------------------------------------------------------------------===//
 // GeneratorCalloutPass
@@ -27,11 +27,11 @@ using namespace rtl;
 
 namespace {
 
-struct RTLGeneratorCalloutPass
-    : public sv::RTLGeneratorCalloutPassBase<RTLGeneratorCalloutPass> {
+struct HWGeneratorCalloutPass
+    : public sv::HWGeneratorCalloutPassBase<HWGeneratorCalloutPass> {
   void runOnOperation() override;
 
-  void processGenerator(RTLModuleGeneratedOp generatedModuleOp,
+  void processGenerator(HWModuleGeneratedOp generatedModuleOp,
                         StringRef generatorExe,
                         ArrayRef<StringRef> extraGeneratorArgs);
 };
@@ -60,7 +60,7 @@ llvm::ErrorOr<std::string> static parseProgramArgs(const std::string &genExec) {
   return generatorExe;
 }
 
-void RTLGeneratorCalloutPass::runOnOperation() {
+void HWGeneratorCalloutPass::runOnOperation() {
   ModuleOp root = getOperation();
   SmallVector<StringRef> genOptions;
   StringRef extraGeneratorArgs(genExecArgs);
@@ -74,17 +74,17 @@ void RTLGeneratorCalloutPass::runOnOperation() {
     return;
   }
   for (auto &op : llvm::make_early_inc_range(root.getBody()->getOperations())) {
-    if (auto generator = dyn_cast<RTLModuleGeneratedOp>(op))
+    if (auto generator = dyn_cast<HWModuleGeneratedOp>(op))
       processGenerator(generator, *generatorExe, extraGeneratorArgs);
   }
 }
 
-void RTLGeneratorCalloutPass::processGenerator(
-    RTLModuleGeneratedOp generatedModuleOp, StringRef generatorExe,
+void HWGeneratorCalloutPass::processGenerator(
+    HWModuleGeneratedOp generatedModuleOp, StringRef generatorExe,
     ArrayRef<StringRef> extraGeneratorArgs) {
   // Get the corresponding schema associated with this generated op.
   auto genSchema =
-      dyn_cast<RTLGeneratorSchemaOp>(generatedModuleOp.getGeneratorKindOp());
+      dyn_cast<HWGeneratorSchemaOp>(generatedModuleOp.getGeneratorKindOp());
   if (!genSchema)
     return;
 
@@ -139,7 +139,7 @@ void RTLGeneratorCalloutPass::processGenerator(
   // Only extract the first line from the output.
   auto fileContent = (*bufferRead)->getBuffer().split('\n').first.str();
   OpBuilder builder(generatedModuleOp);
-  auto extMod = builder.create<rtl::RTLModuleExternOp>(
+  auto extMod = builder.create<hw::HWModuleExternOp>(
       generatedModuleOp.getLoc(), generatedModuleOp.getVerilogModuleNameAttr(),
       generatedModuleOp.getPorts());
   // Attach an attribute to which file the definition of the external
@@ -148,6 +148,6 @@ void RTLGeneratorCalloutPass::processGenerator(
   generatedModuleOp.erase();
 }
 
-std::unique_ptr<Pass> circt::sv::createRTLGeneratorCalloutPass() {
-  return std::make_unique<RTLGeneratorCalloutPass>();
+std::unique_ptr<Pass> circt::sv::createHWGeneratorCalloutPass() {
+  return std::make_unique<HWGeneratorCalloutPass>();
 }

@@ -9,11 +9,11 @@
 // DIALECT-NEXT: esi
 // DIALECT-NEXT: firrtl
 // DIALECT-NEXT: handshake
+// DIALECT-NEXT: hw
 // DIALECT-NEXT: llhd
 // DIALECT-NEXT: llvm
 // DIALECT-NEXT: memref
 // DIALECT-NEXT: msft
-// DIALECT-NEXT: rtl
 // DIALECT-NEXT: sched
 // DIALECT-NEXT: seq
 // DIALECT-NEXT: staticlogic

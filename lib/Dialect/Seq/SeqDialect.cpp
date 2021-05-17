@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Seq/SeqDialect.h"
-#include "circt/Dialect/RTL/RTLOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -44,7 +44,7 @@ Operation *SeqDialect::materializeConstant(OpBuilder &builder, Attribute value,
   // Integer constants.
   if (auto intType = type.dyn_cast<IntegerType>())
     if (auto attrValue = value.dyn_cast<IntegerAttr>())
-      return builder.create<rtl::ConstantOp>(loc, type, attrValue);
+      return builder.create<hw::ConstantOp>(loc, type, attrValue);
 
   return nullptr;
 }

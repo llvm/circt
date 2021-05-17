@@ -10,19 +10,19 @@
 // CHECK:   %[[ARG1_DATA:.+]] = firrtl.subfield %arg1("data") : (!firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>) -> !firrtl.uint<64>
 // CHECK:   firrtl.connect %[[ARG1_VALID:.+]], %[[ARG0_VALID:.+]] : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:   firrtl.connect %[[ARG0_READY:.+]], %[[ARG1_READY:.+]] : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:   %c42_ui64 = firrtl.constant(42 : ui64) : !firrtl.uint<64>
+// CHECK:   %c42_ui64 = firrtl.constant 42 : !firrtl.uint<64>
 // CHECK:   firrtl.connect %[[ARG1_DATA:.+]], %c42_ui64 : !firrtl.uint<64>, !firrtl.uint<64>
 // CHECK: }
 
 // Submodule for the ui32 ConstantOp.
 // CHECK-LABEL: firrtl.module @handshake_constant_1ins_1outs_c42_ui32(
 // CHECK-SAME:  in %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, out %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<32>>) {
-// CHECK:   %c42_ui32 = firrtl.constant(42 : ui32) : !firrtl.uint<32>
+// CHECK:   %c42_ui32 = firrtl.constant 42 : !firrtl.uint<32>
 
 // Submodule for the si32 ConstantOp.
 // CHECK-LABEL: firrtl.module @"handshake_constant_1ins_1outs_c-11_si32"(
 // CHECK-SAME:  in %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, out %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<32>>) {
-// CHECK:   %c-11_si32 = firrtl.constant(-11 : si32) : !firrtl.sint<32>
+// CHECK:   %c-11_si32 = firrtl.constant -11 : !firrtl.sint<32>
 
 // CHECK-LABEL: firrtl.module @test_constant(
 // CHECK-SAME:  in %arg0: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, out %arg1: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, out %arg2: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, out %arg3: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<32>>, out %arg4: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: sint<32>>, out %arg5: !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {

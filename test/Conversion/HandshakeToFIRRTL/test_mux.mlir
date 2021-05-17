@@ -24,7 +24,7 @@
 // CHECK:   %17 = firrtl.and %16, %10 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:   firrtl.connect %1, %17 : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:   %18 = firrtl.tail %2, 63 : (!firrtl.uint<64>) -> !firrtl.uint<1>
-// CHECK:   %c1_ui1 = firrtl.constant(1 : ui1) : !firrtl.uint<1>
+// CHECK:   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 // CHECK:   %19 = firrtl.dshl %c1_ui1, %18 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
 // CHECK:   %20 = firrtl.bits %19 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
 // CHECK:   %21 = firrtl.and %20, %17 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>

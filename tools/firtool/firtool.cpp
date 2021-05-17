@@ -17,8 +17,8 @@
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
-#include "circt/Dialect/RTL/RTLDialect.h"
-#include "circt/Dialect/RTL/RTLOps.h"
+#include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Support/LoweringOptions.h"
@@ -31,6 +31,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
+#include "mlir/Support/Timing.h"
 #include "mlir/Transforms/Passes.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
@@ -69,8 +70,8 @@ static cl::opt<bool> inliner("inline",
                              cl::desc("Run the FIRRTL module inliner"),
                              cl::init(false));
 
-static cl::opt<bool> lowerToRTL("lower-to-rtl",
-                                cl::desc("run the lower-to-rtl pass"));
+static cl::opt<bool> lowerToHW("lower-to-hw",
+                               cl::desc("run the lower-to-hw pass"));
 static cl::opt<bool> imconstprop(
     "imconstprop",
     cl::desc(
@@ -79,7 +80,7 @@ static cl::opt<bool> imconstprop(
 
 static cl::opt<bool>
     enableLowerTypes("lower-types",
-                     cl::desc("run the lower-types pass within lower-to-rtl"),
+                     cl::desc("run the lower-types pass within lower-to-hw"),
                      cl::init(false));
 
 static cl::opt<bool>
@@ -132,12 +133,11 @@ static cl::opt<std::string>
 /// Process a single buffer of the input.
 static LogicalResult
 processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
-              StringRef annotationFilename,
+              StringRef annotationFilename, TimingScope &ts,
+              MLIRContext &context,
               std::function<LogicalResult(OwningModuleRef)> callback) {
-  MLIRContext context;
-
   // Register our dialects.
-  context.loadDialect<firrtl::FIRRTLDialect, rtl::RTLDialect, comb::CombDialect,
+  context.loadDialect<firrtl::FIRRTLDialect, hw::HWDialect, comb::CombDialect,
                       sv::SVDialect>();
 
   llvm::SourceMgr sourceMgr;
@@ -162,10 +162,12 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   // Apply any pass manager command line options.
   PassManager pm(&context);
   pm.enableVerifier(verifyPasses);
+  pm.enableTiming(ts);
   applyPassManagerCLOptions(pm);
 
   OwningModuleRef module;
   if (inputFormat == InputFIRFile) {
+    auto parserTimer = ts.nest("FIR Parser");
     firrtl::FIRParserOptions options;
     options.ignoreInfoLocators = ignoreFIRLocations;
     module = importFIRRTL(sourceMgr, &context, options);
@@ -184,6 +186,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
       modulePM.addPass(createSimpleCanonicalizerPass());
     }
   } else {
+    auto parserTimer = ts.nest("MLIR Parser");
     assert(inputFormat == InputMLIRFile);
     module = parseSourceFile(sourceMgr, &context);
 
@@ -200,6 +203,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
       }
     }
   }
+
   if (!module)
     return failure();
 
@@ -219,17 +223,17 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxMemoryPass());
 
   // Lower if we are going to verilog or if lowering was specifically requested.
-  if (lowerToRTL || outputFormat == OutputVerilog ||
+  if (lowerToHW || outputFormat == OutputVerilog ||
       outputFormat == OutputSplitVerilog) {
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createCheckWidthsPass());
-    pm.addPass(createLowerFIRRTLToRTLPass());
-    pm.addPass(sv::createRTLMemSimImplPass());
+    pm.addPass(createLowerFIRRTLToHWPass());
+    pm.addPass(sv::createHWMemSimImplPass());
 
     // If enabled, run the optimizer.
     if (!disableOptimization) {
-      auto &modulePM = pm.nest<rtl::RTLModuleOp>();
-      modulePM.addPass(sv::createRTLCleanupPass());
+      auto &modulePM = pm.nest<hw::HWModuleOp>();
+      modulePM.addPass(sv::createHWCleanupPass());
       modulePM.addPass(createCSEPass());
       modulePM.addPass(createSimpleCanonicalizerPass());
     }
@@ -238,11 +242,11 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   // Add passes specific to Verilog emission if we're going there.
   if (outputFormat == OutputVerilog || outputFormat == OutputSplitVerilog) {
     // Legalize the module names.
-    pm.addPass(sv::createRTLLegalizeNamesPass());
+    pm.addPass(sv::createHWLegalizeNamesPass());
 
     // Tidy up the IR to improve verilog emission quality.
     if (!disableOptimization) {
-      auto &modulePM = pm.nest<rtl::RTLModuleOp>();
+      auto &modulePM = pm.nest<hw::HWModuleOp>();
       modulePM.addPass(sv::createPrettifyVerilogPass());
     }
   }
@@ -254,62 +258,18 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   if (failed(pm.run(module.get())))
     return failure();
 
+  auto outputTimer = ts.nest("Output");
   return callback(std::move(module));
 }
 
-/// Process a single buffer of the input into a single output stream.
-static LogicalResult
-processBufferIntoSingleStream(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
-                              StringRef annotationFilename, raw_ostream &os) {
-  return processBuffer(
-      std::move(ownedBuffer), annotationFilename, [&](OwningModuleRef module) {
-        // Finally, emit the output.
-        switch (outputFormat) {
-        case OutputMLIR:
-          module->print(os);
-          return success();
-        case OutputDisabled:
-          return success();
-        case OutputVerilog:
-          return exportVerilog(module.get(), os);
-        case OutputSplitVerilog:
-          llvm_unreachable("multi-file format must be handled elsewhere");
-        }
-        llvm_unreachable("unknown output format");
-      });
-}
-
-/// Process a single buffer of the input into multiple output files.
-static LogicalResult
-processBufferIntoMultipleFiles(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
-                               StringRef annotationFilename,
-                               StringRef outputDirectory) {
-  return processBuffer(
-      std::move(ownedBuffer), annotationFilename, [&](OwningModuleRef module) {
-        // Finally, emit the output.
-        switch (outputFormat) {
-        case OutputMLIR:
-        case OutputDisabled:
-        case OutputVerilog:
-          llvm_unreachable("single-stream format must be handled elsewhere");
-        case OutputSplitVerilog:
-          return exportSplitVerilog(module.get(), outputDirectory);
-        }
-        llvm_unreachable("unknown output format");
-      });
-}
-
-int main(int argc, char **argv) {
-  InitLLVM y(argc, argv);
-
-  // Register any pass manager command line options.
-  registerMLIRContextCLOptions();
-  registerPassManagerCLOptions();
-  registerAsmPrinterCLOptions();
-  registerLoweringCLOptions();
-
-  // Parse pass names in main to ensure static initialization completed.
-  cl::ParseCommandLineOptions(argc, argv, "circt modular optimizer driver\n");
+/// This implements the top-level logic for the firtool command, invoked once
+/// command line options are parsed and LLVM/MLIR are all set up and ready to
+/// go.
+static LogicalResult executeFirtool(MLIRContext &context) {
+  // Create the timing manager we use to sample execution times.
+  DefaultTimingManager tm;
+  applyDefaultTimingManagerCLOptions(tm);
+  auto ts = tm.getRootScope();
 
   // Figure out the input format if unspecified.
   if (inputFormat == InputUnspecified) {
@@ -320,7 +280,7 @@ int main(int argc, char **argv) {
     else {
       llvm::errs() << "unknown input format: "
                       "specify with -format=fir or -format=mlir\n";
-      exit(1);
+      return failure();
     }
   }
 
@@ -329,45 +289,82 @@ int main(int argc, char **argv) {
   auto input = openInputFile(inputFilename, &errorMessage);
   if (!input) {
     llvm::errs() << errorMessage << "\n";
-    return 1;
+    return failure();
   }
 
-  // Emit a single file or multiple files depending on the output format.
-  switch (outputFormat) {
-  // Outputs into a single stream.
-  case OutputMLIR:
-  case OutputDisabled:
-  case OutputVerilog: {
-    auto output = openOutputFile(outputFilename, &errorMessage);
-    if (!output) {
+  // Create the output directory or output file depending on our mode.
+  Optional<std::unique_ptr<llvm::ToolOutputFile>> outputFile;
+  if (outputFormat != OutputSplitVerilog) {
+    // Create an output file.
+    outputFile.emplace(openOutputFile(outputFilename, &errorMessage));
+    if (!outputFile.getValue()) {
       llvm::errs() << errorMessage << "\n";
-      return 1;
+      return failure();
     }
-
-    if (failed(processBufferIntoSingleStream(
-            std::move(input), inputAnnotationFilename, output->os())))
-      return 1;
-
-    output->keep();
-    return 0;
-  }
-
-  // Outputs into multiple files.
-  case OutputSplitVerilog:
+  } else {
+    // Create an output directory.
     if (outputFilename.isDefaultOption() || outputFilename == "-") {
       llvm::errs() << "missing output directory: specify with -o=<dir>\n";
-      return 1;
+      return failure();
     }
-    std::error_code error = llvm::sys::fs::create_directory(outputFilename);
+    auto error = llvm::sys::fs::create_directory(outputFilename);
     if (error) {
       llvm::errs() << "cannot create output directory '" << outputFilename
                    << "': " << error.message() << "\n";
-      return 1;
+      return failure();
     }
-
-    if (failed(processBufferIntoMultipleFiles(
-            std::move(input), inputAnnotationFilename, outputFilename)))
-      return 1;
-    return 0;
   }
+
+  // Emit a single file or multiple files depending on the output format.
+  auto emitCallback = [&](OwningModuleRef module) -> LogicalResult {
+    switch (outputFormat) {
+    case OutputMLIR:
+      module->print(outputFile.getValue()->os());
+      return success();
+    case OutputDisabled:
+      return success();
+    case OutputVerilog:
+      return exportVerilog(module.get(), outputFile.getValue()->os());
+    case OutputSplitVerilog:
+      return exportSplitVerilog(module.get(), outputFilename);
+    }
+  };
+
+  auto result = processBuffer(std::move(input), inputAnnotationFilename, ts,
+                              context, std::move(emitCallback));
+  if (failed(result))
+    return failure();
+
+  // If the result succeeded and we're emitting a file, close it.
+  if (outputFile.hasValue())
+    outputFile.getValue()->keep();
+
+  return success();
+}
+
+/// Main driver for firtool command.  This sets up LLVM and MLIR, and parses
+/// command line options before passing off to 'executeFirtool'.  This is set up
+/// so we can `exit(0)` at the end of the program to avoid teardown of the
+/// MLIRContext and modules inside of it (reducing compile time).
+int main(int argc, char **argv) {
+  InitLLVM y(argc, argv);
+
+  // Register any pass manager command line options.
+  registerMLIRContextCLOptions();
+  registerPassManagerCLOptions();
+  registerDefaultTimingManagerCLOptions();
+  registerAsmPrinterCLOptions();
+  registerLoweringCLOptions();
+  // Parse pass names in main to ensure static initialization completed.
+  cl::ParseCommandLineOptions(argc, argv, "circt modular optimizer driver\n");
+
+  MLIRContext context;
+
+  // Do the guts of the firtool process.
+  auto result = executeFirtool(context);
+
+  // Use "exit" instead of return'ing to signal completion.  This avoids
+  // invoking the MLIRContext destructor, which spends a bunch of time
+  // deallocating memory etc which process exit will do for us.
+  exit(failed(result));
 }

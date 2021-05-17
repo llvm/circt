@@ -92,7 +92,7 @@ def MergeOp : UTVariadicOp<"merge", [Commutative]> {
 
     This operation allows modeling multiconnect semantics in SSA.
     ```
-      %result = rtl.merge %a, %b, %c : t1
+      %result = hw.merge %a, %b, %c : t1
     ```
     }];
   let hasCanonicalizeMethod = false;
@@ -114,7 +114,7 @@ def ICmpPredicateUGT : I64EnumAttrCase<"ugt", 8>;
 def ICmpPredicateUGE : I64EnumAttrCase<"uge", 9>;
 def ICmpPredicate : I64EnumAttr<
     "ICmpPredicate",
-    "rtl.icmp comparison predicate",
+    "hw.icmp comparison predicate",
     [ICmpPredicateEQ, ICmpPredicateNE, ICmpPredicateSLT, ICmpPredicateSLE,
      ICmpPredicateSGT, ICmpPredicateSGE, ICmpPredicateULT, ICmpPredicateULE,
      ICmpPredicateUGT, ICmpPredicateUGE]>;
@@ -127,7 +127,7 @@ def ICmpOp : CombOp<"icmp", [NoSideEffect, SameTypeOperands]> {
     bit wide result.
 
     ```
-        %r = rtl.icmp eq %a, %b : i4
+        %r = hw.icmp eq %a, %b : i4
     ```
   }];
 
@@ -215,7 +215,7 @@ def SExtOp : CombOp<"sext", [NoSideEffect]> {
 def ConcatOp : VariadicOp<"concat"> {
   let summary = "Concatenate a variadic list of operands together.";
   let description = [{
-    See the RTL-SV rationale document for details on operand ordering.
+    See the HW-SV rationale document for details on operand ordering.
   }];
 
   let hasFolder = true;
