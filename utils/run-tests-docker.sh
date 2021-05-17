@@ -13,22 +13,21 @@
 ##===----------------------------------------------------------------------===##
 
 set -e
+BUILD_DIR=${1:-"20.04"}
 
 UTILS_DIR=$(dirname "$BASH_SOURCE[0]")
 
-if [ ! -e llvm/build_20.04 ]; then
+if [ ! -e llvm/build_$BUILD_DIR ]; then
   echo "=== Building MLIR"
-  $UTILS_DIR/build-llvm.sh build_20.04 build_20.04/install
+  $UTILS_DIR/build-llvm.sh build_$BUILD_DIR build_$BUILD_DIR/install
 fi
 
 echo "=== Building CIRCT"
-cmake -Bdocker_build \
-  -DMLIR_DIR=llvm/build_20.04/lib/cmake/mlir \
-  -DLLVM_DIR=llvm/build_20.04/lib/cmake/llvm \
+cmake -Bbuild_$BUILD_DIR \
+  -DMLIR_DIR=llvm/build_$BUILD_DIR/lib/cmake/mlir \
+  -DLLVM_DIR=llvm/build_$BUILD_DIR/lib/cmake/llvm \
   -DLLVM_ENABLE_ASSERTIONS=ON \
-  -DVERILATOR_PATH=/usr/bin/verilator \
-  -DCAPNP_PATH=/usr \
   -DCMAKE_BUILD_TYPE=DEBUG
 
-cmake --build docker_build -j$(nproc) --target check-circt
-cmake --build docker_build -j$(nproc) --target check-circt-integration
+cmake --build build_$BUILD_DIR -j$(nproc) --target check-circt
+cmake --build build_$BUILD_DIR -j$(nproc) --target check-circt-integration
