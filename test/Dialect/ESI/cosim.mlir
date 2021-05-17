@@ -31,7 +31,7 @@ hw.module @top(%clk:i1, %rstn:i1) -> () {
   hw.instance "arrRecv" @ArrReciever (%cosimArrRecv) : (!esi.channel<!hw.array<4 x si64>>) -> ()
 
   // Ensure that the file hash is deterministic.
-  // CAPNP: @0xd3e298e39d351062;
+  // CAPNP: @0xccf233b58d85e822;
   // CAPNP-LABEL: struct Si14 @0x9bd5e507cce05cc1
   // CAPNP:         i @0 :Int16;
   // CAPNP-LABEL: struct I32 @0x92cd59dfefaacbdb
