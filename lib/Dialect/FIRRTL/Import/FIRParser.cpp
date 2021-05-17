@@ -1938,7 +1938,8 @@ ParseResult FIRStmtParser::parsePrintf() {
     builder.create<CoverOp>(info.getLoc(), clock, condition, constTrue,
                             builder.getStringAttr(formatStrUnescaped));
     return success();
-  } else if (formatStringRef.startswith("assert:")) {
+  } else if (formatStringRef.startswith("assert:") ||
+             formatStringRef.startswith("Assertion failed")) {
     APInt constOne(1, 1, false);
     auto constTrue = builder.create<ConstantOp>(
         info.getLoc(), UIntType::get(getContext(), 1), constOne);

@@ -399,6 +399,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: [[C:%.+]] = firrtl.constant 1 : !firrtl.uint<1>
     ; CHECK-NEXT: firrtl.assert %clock, %pred, [[C]], "assert:X equals Y when Z is valid"
     printf(clock, pred, "assert:X equals Y when Z is valid")
+    ; CHECK: [[C:%.+]] = firrtl.constant 1 : !firrtl.uint<1>
+    ; CHECK-NEXT: firrtl.assert %clock, %pred, [[C]], "Assertion failed:X equals Y when Z is valid"
+    printf(clock, pred, "Assertion failed:X equals Y when Z is valid")
     ; CHECK: firrtl.assume %clock, %pred, %en, "X equals Y when Z is valid"
     assume(clock, pred, en, "X equals Y when Z is valid")
     ; CHECK: [[C2:%.+]] = firrtl.constant 1 : !firrtl.uint<1>
