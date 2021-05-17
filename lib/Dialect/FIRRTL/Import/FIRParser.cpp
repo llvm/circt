@@ -1941,21 +1941,22 @@ ParseResult FIRStmtParser::parsePrintf() {
     return failure();
 
   auto formatStrUnescaped = FIRToken::getStringValue(formatString);
-  if (stringBeginsWith(formatStrUnescaped, "cover:")) {
+  StringRef formatStringRef(formatStrUnescaped);
+  if (formatStringRef.startswith("cover:")) {
     APInt constOne(1, 1, false);
     auto constTrue = builder.create<ConstantOp>(
         info.getLoc(), UIntType::get(getContext(), 1), constOne);
     builder.create<CoverOp>(info.getLoc(), clock, condition, constTrue,
                             builder.getStringAttr(formatStrUnescaped));
     return success();
-  } else if (stringBeginsWith(formatStrUnescaped, "assert:")) {
+  } else if (formatStringRef.startswith("assert:")) {
     APInt constOne(1, 1, false);
     auto constTrue = builder.create<ConstantOp>(
         info.getLoc(), UIntType::get(getContext(), 1), constOne);
     builder.create<AssertOp>(info.getLoc(), clock, condition, constTrue,
                              builder.getStringAttr(formatStrUnescaped));
     return success();
-  } else if (stringBeginsWith(formatStrUnescaped, "assume:")) {
+  } else if (formatStringRef.startswith("assume:")) {
     APInt constOne(1, 1, false);
     auto constTrue = builder.create<ConstantOp>(
         info.getLoc(), UIntType::get(getContext(), 1), constOne);
