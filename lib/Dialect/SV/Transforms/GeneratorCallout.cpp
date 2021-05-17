@@ -21,7 +21,7 @@
 
 using namespace circt;
 using namespace sv;
-using namespace rtl;
+using namespace hw;
 
 //===----------------------------------------------------------------------===//
 // GeneratorCalloutPass
@@ -29,17 +29,40 @@ using namespace rtl;
 
 namespace {
 
-struct RTLGeneratorCalloutPass
-    : public sv::RTLGeneratorCalloutPassBase<RTLGeneratorCalloutPass> {
+struct HWGeneratorCalloutPass
+    : public sv::HWGeneratorCalloutPassBase<HWGeneratorCalloutPass> {
   void runOnOperation() override;
 
-  void processGenerator(RTLModuleGeneratedOp generatedModuleOp,
+  void processGenerator(HWModuleGeneratedOp generatedModuleOp,
                         StringRef generatorExe,
                         ArrayRef<StringRef> extraGeneratorArgs);
 };
 } // end anonymous namespace
 
-void RTLGeneratorCalloutPass::runOnOperation() {
+// Parse the \p genExec string, to extract the program executable, the path to
+// the executable and all the required arguments from \p genExecArgs.
+llvm::ErrorOr<std::string> static parseProgramArgs(const std::string &genExec) {
+  std::string execName, execPath;
+
+  // TODO: Find a platform independent way to parse the path from the executable
+  // string. Does LLVM have such a method already ? The executable name can
+  // contain one of the following characters.
+  auto pathLoc = genExec.find_last_of("/\\");
+  if (pathLoc != std::string::npos)
+    execPath = genExec.substr(0, pathLoc + 1);
+  else
+    execPath = "";
+  execName = genExec.substr(pathLoc + 1);
+
+  auto generatorExe = llvm::sys::findProgramByName(execName, {execPath});
+  // If the executable was not found in the provided path (when the path is
+  // empty), then search it in the $PATH.
+  if (!generatorExe)
+    generatorExe = llvm::sys::findProgramByName(execName);
+  return generatorExe;
+}
+
+void HWGeneratorCalloutPass::runOnOperation() {
   ModuleOp root = getOperation();
   SmallVector<StringRef> genOptions;
   StringRef extraGeneratorArgs(genExecArgs);
@@ -59,17 +82,19 @@ void RTLGeneratorCalloutPass::runOnOperation() {
     return;
   }
   for (auto &op : llvm::make_early_inc_range(root.getBody()->getOperations())) {
-    if (auto generator = dyn_cast<RTLModuleGeneratedOp>(op))
+    if (auto generator = dyn_cast<HWModuleGeneratedOp>(op))
       processGenerator(generator, *generatorExe, extraGeneratorArgs);
   }
 }
 
-void RTLGeneratorCalloutPass::processGenerator(
-    RTLModuleGeneratedOp generatedModuleOp, StringRef generatorExe,
+void HWGeneratorCalloutPass::processGenerator(
+    HWModuleGeneratedOp generatedModuleOp, StringRef generatorExe,
     ArrayRef<StringRef> extraGeneratorArgs) {
   // Get the corresponding schema associated with this generated op.
   auto genSchema =
-      dyn_cast<RTLGeneratorSchemaOp>(generatedModuleOp.getGeneratorKindOp());
+      dyn_cast<HWGeneratorSchemaOp>(generatedModuleOp.getGeneratorKindOp());
+  if (!genSchema)
+    return;
 
   // Ignore the generator op if the schema does not match the user specified
   // schema name from command line "-schema-name"
@@ -147,7 +172,7 @@ void RTLGeneratorCalloutPass::processGenerator(
   // Only extract the first line from the output.
   auto fileContent = (*bufferRead)->getBuffer().split('\n').first.str();
   OpBuilder builder(generatedModuleOp);
-  auto extMod = builder.create<rtl::RTLModuleExternOp>(
+  auto extMod = builder.create<hw::HWModuleExternOp>(
       generatedModuleOp.getLoc(), generatedModuleOp.getVerilogModuleNameAttr(),
       generatedModuleOp.getPorts());
   // Attach an attribute to which file the definition of the external
@@ -156,6 +181,6 @@ void RTLGeneratorCalloutPass::processGenerator(
   generatedModuleOp.erase();
 }
 
-std::unique_ptr<Pass> circt::sv::createRTLGeneratorCalloutPass() {
-  return std::make_unique<RTLGeneratorCalloutPass>();
+std::unique_ptr<Pass> circt::sv::createHWGeneratorCalloutPass() {
+  return std::make_unique<HWGeneratorCalloutPass>();
 }

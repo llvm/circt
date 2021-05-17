@@ -18,6 +18,7 @@ import subprocess
 import sys
 
 ThisFileDir = os.path.dirname(__file__)
+DebugBuild = "@CMAKE_BUILD_TYPE@" == "Debug"
 
 
 class Questa:
@@ -159,10 +160,13 @@ class Verilator:
     dpiLibs = filter(lambda fn: fn.endswith(".so") or fn.endswith(".dll"),
                      sources)
     self.ldPaths = ":".join([os.path.dirname(x) for x in dpiLibs])
+    debugFlags = []
+    if DebugBuild:
+      debugFlags = ["--trace", "--trace-params", "--trace-structs", "-DTRACE"]
     return subprocess.run([
         self.verilator, "--cc", "--top-module", self.top, "-sv", "--build",
         "--exe", "--assert"
-    ] + sources)
+    ] + debugFlags + sources)
 
   def run(self, cycles, args):
     exe = os.path.join("obj_dir", "V" + self.top)

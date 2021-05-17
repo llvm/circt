@@ -91,6 +91,57 @@ static FIRRTLType getCanonicalAggregateType(Type originalType) {
       .Default([](auto) { return nullptr; });
 }
 
+/// Copy annotations from \p annotations to \p loweredAttrs, except annotations
+/// with "target" key, that do not match the field suffix.
+static void filterAnnotations(ArrayAttr annotations,
+                              SmallVector<Attribute> &loweredAttrs,
+                              StringRef suffix, MLIRContext *context) {
+
+  for (auto opAttr : annotations) {
+    auto di = opAttr.dyn_cast<DictionaryAttr>();
+    if (!di) {
+      loweredAttrs.push_back(opAttr);
+      continue;
+    }
+    auto targetAttr = di.get("target");
+    if (!targetAttr) {
+      loweredAttrs.push_back(opAttr);
+      continue;
+    }
+
+    ArrayAttr subFieldTarget = targetAttr.cast<ArrayAttr>();
+    SmallString<16> targetStr;
+    for (auto fName : subFieldTarget) {
+      std::string fNameStr = fName.cast<StringAttr>().getValue().str();
+      // The fNameStr will begin with either '[' or '.', replace it with an
+      // '_' to construct the suffix.
+      fNameStr[0] = '_';
+      // If it ends with ']', then just remove it.
+      if (fNameStr.back() == ']')
+        fNameStr.erase(fNameStr.size() - 1);
+
+      targetStr += fNameStr;
+    }
+    // If no subfield attribute, then copy the annotation.
+    if (targetStr.empty()) {
+      loweredAttrs.push_back(opAttr);
+      continue;
+    }
+    // If the subfield suffix doesn't match, then ignore the annotation.
+    if (suffix.find(targetStr.str().str()) != 0)
+      continue;
+
+    NamedAttrList modAttr;
+    for (auto attr : di.getValue()) {
+      // Ignore the actual target annotation, but copy the rest of annotations.
+      if (attr.first.str() == "target")
+        continue;
+      modAttr.push_back(attr);
+    }
+    loweredAttrs.push_back(DictionaryAttr::get(context, modAttr));
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // Module Type Lowering
 //===----------------------------------------------------------------------===//
@@ -152,6 +203,7 @@ private:
   SmallVector<NamedAttribute, 8> newModuleAttrs;
   SmallVector<Attribute> newArgNames;
   SmallVector<Direction> newArgDirections;
+  SmallVector<SmallVector<NamedAttribute>, 8> newArgAttrs;
   size_t originalNumModuleArgs;
 
   void recursivePartialConnect(Value a, FIRRTLType aType, Value b,
@@ -207,8 +259,10 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   auto *argAttrEnd = originalArgAttrs.end();
   for (auto attr : originalAttrs)
     if (std::lower_bound(argAttrBegin, argAttrEnd, attr) == argAttrEnd)
-      if (attr.first.str() != "portNames" &&
-          attr.first.str() != direction::attrKey)
+      // Drop old "portNames", directions, and argument attributes.  These are
+      // handled differently below.
+      if (attr.first != "portNames" && attr.first != direction::attrKey &&
+          attr.first != mlir::function_like_impl::getArgDictAttrName())
         newModuleAttrs.push_back(attr);
 
   newModuleAttrs.push_back(NamedAttribute(Identifier::get("portNames", context),
@@ -216,6 +270,15 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   newModuleAttrs.push_back(NamedAttribute(
       Identifier::get(direction::attrKey, context),
       direction::packIntegerAttribute(newArgDirections, context)));
+
+  // Attach new argument attributes.
+  SmallVector<Attribute, 8> newArgDictAttrs;
+  newArgDictAttrs.reserve(newArgAttrs.size());
+  for (auto attr : newArgAttrs)
+    newArgDictAttrs.push_back(builder->getDictionaryAttr(attr));
+  newModuleAttrs.push_back(NamedAttribute(
+      builder->getIdentifier(mlir::function_like_impl::getArgDictAttrName()),
+      builder->getArrayAttr(newArgDictAttrs)));
 
   // Update the module's attributes.
   module->setAttrs(newModuleAttrs);
@@ -270,37 +333,89 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
 
   // Create an array of the result types and results names.
   SmallVector<Type, 8> inputTypes;
-  SmallVector<DictionaryAttr, 8> attributes;
+  SmallVector<NamedAttribute, 8> attributes;
+  SmallVector<Attribute, 8> argAttrDicts;
 
   SmallVector<Attribute> portNames;
   SmallVector<Direction> portDirections;
-  size_t argNumber = 0;
+  unsigned oldArgNumber = 0;
+  SmallString<8> attrNameBuf;
   for (auto &port : extModule.getPorts()) {
     // Flatten the port type.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-    flattenType(port.type, port.getName(), false, fieldTypes);
+    flattenType(port.type, "", false, fieldTypes);
+
+    // Pre-populate argAttrs with the current arg attrributes that are not
+    // annotations.  Populate oldAnnotations with the current annotations.
+    SmallVector<NamedAttribute> argAttrs;
+    ArrayAttr oldAnnotations;
+    for (auto oldArgAttr :
+         builder.getDictionaryAttr(extModule.getArgAttrs(oldArgNumber))) {
+      if (oldArgAttr.first == "firrtl.annotations") {
+        oldAnnotations = oldArgAttr.second.cast<ArrayAttr>();
+        continue;
+      }
+      argAttrs.push_back({oldArgAttr.first, oldArgAttr.second});
+    }
 
     // For each field, add record its name and type.
     for (auto field : fieldTypes) {
       Attribute pName;
       inputTypes.push_back(field.type);
       if (port.name)
-        pName = builder.getStringAttr(field.suffix);
+        pName = builder.getStringAttr((port.getName() + field.suffix).str());
       else
         pName = builder.getStringAttr("");
       portNames.push_back(pName);
       // Flip the direction if the field is an output.
-      portDirections.push_back(
-          (Direction)((unsigned)getModulePortDirection(extModule, argNumber) ^
-                      field.isOutput));
+      portDirections.push_back((Direction)(
+          (unsigned)getModulePortDirection(extModule, oldArgNumber) ^
+          field.isOutput));
+
+      // Populate newAnnotations with the old annotations filtered to those
+      // associated with just this field.
+      SmallVector<Attribute> newAnnotations;
+      if (oldAnnotations)
+        filterAnnotations(oldAnnotations, newAnnotations, field.suffix,
+                          context);
+
+      // If any filtered annotations exist, add them to the end of argAttrs.
+      bool hasAnnotations = !newAnnotations.empty();
+      if (hasAnnotations)
+        argAttrs.push_back({builder.getIdentifier("firrtl.annotations"),
+                            builder.getArrayAttr(newAnnotations)});
+
+      // Populate the new arg attributes.
+      argAttrDicts.push_back(builder.getDictionaryAttr(argAttrs));
+
+      // Pop off any added annotations to reuse argAttrs for the next iteration.
+      if (hasAnnotations)
+        argAttrs.pop_back();
     }
-    ++argNumber;
+    ++oldArgNumber;
   }
 
-  extModule->setAttr(Identifier::get("portNames", context),
-                     builder.getArrayAttr(portNames));
-  extModule->setAttr(direction::attrKey,
-                     direction::packIntegerAttribute(portDirections, context));
+  // Add port names attribute.
+  attributes.push_back(
+      {Identifier::get(mlir::function_like_impl::getArgDictAttrName(), context),
+       builder.getArrayAttr(argAttrDicts)});
+  attributes.push_back(
+      {Identifier::get("portNames", context), builder.getArrayAttr(portNames)});
+  attributes.push_back(
+      {Identifier::get(direction::attrKey, context),
+       direction::packIntegerAttribute(portDirections, context)});
+
+  // Copy over any lingering attributes which are not "portNames", directions,
+  // or argument attributes.
+  for (auto a : extModule->getAttrs()) {
+    if (a.first == "portNames" || a.first == direction::attrKey ||
+        a.first == mlir::function_like_impl::getArgDictAttrName())
+      continue;
+    attributes.push_back(a);
+  }
+
+  // Set the attributes.
+  extModule->setAttrs(builder.getDictionaryAttr(attributes));
 
   // Set the type and then bulk set all the names.
   extModule.setType(builder.getFunctionType(inputTypes, {}));
@@ -538,58 +653,6 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
   opsToRemove.push_back(op);
 }
 
-/// Copy annotations from \p annotations to \p loweredAttrs, except annotations
-/// with "target" key, that do not match the field suffix.
-static void filterAnnotations(ArrayAttr annotations,
-                              SmallVector<Attribute> &loweredAttrs,
-                              const FlatBundleFieldEntry &field,
-                              MLIRContext *context) {
-
-  for (auto opAttr : annotations) {
-    auto di = opAttr.dyn_cast<DictionaryAttr>();
-    if (!di) {
-      loweredAttrs.push_back(opAttr);
-      continue;
-    }
-    auto targetAttr = di.get("target");
-    if (!targetAttr) {
-      loweredAttrs.push_back(opAttr);
-      continue;
-    }
-
-    ArrayAttr subFieldTarget = targetAttr.cast<ArrayAttr>();
-    SmallString<16> targetStr;
-    for (auto fName : subFieldTarget) {
-      std::string fNameStr = fName.cast<StringAttr>().getValue().str();
-      // The fNameStr will begin with either '[' or '.', replace it with an
-      // '_' to construct the suffix.
-      fNameStr[0] = '_';
-      // If it ends with ']', then just remove it.
-      if (fNameStr.back() == ']')
-        fNameStr.erase(fNameStr.size() - 1);
-
-      targetStr += fNameStr;
-    }
-    // If no subfield attribute, then copy the annotation.
-    if (targetStr.empty()) {
-      loweredAttrs.push_back(opAttr);
-      continue;
-    }
-    // If the subfield suffix doesn't match, then ignore the annotation.
-    if (field.suffix.find(targetStr.str().str()) != 0)
-      continue;
-
-    NamedAttrList modAttr;
-    for (auto attr : di.getValue()) {
-      // Ignore the actual target annotation, but copy the rest of annotations.
-      if (attr.first.str() == "target")
-        continue;
-      modAttr.push_back(attr);
-    }
-    loweredAttrs.push_back(DictionaryAttr::get(context, modAttr));
-  }
-}
-
 /// Lower a wire op with a bundle to mutliple non-bundled wires.
 void TypeLoweringVisitor::visitDecl(WireOp op) {
   Value result = op.result();
@@ -614,7 +677,7 @@ void TypeLoweringVisitor::visitDecl(WireOp op) {
     SmallVector<Attribute> loweredAttrs;
     // For all annotations on the parent op, filter them based on the target
     // attribute.
-    filterAnnotations(op.annotations(), loweredAttrs, field, context);
+    filterAnnotations(op.annotations(), loweredAttrs, field.suffix, context);
     auto wire = builder->create<WireOp>(field.type, loweredName, loweredAttrs);
     setBundleLowering(result, StringRef(field.suffix).drop_front(1), wire);
   }
@@ -647,7 +710,7 @@ void TypeLoweringVisitor::visitDecl(RegOp op) {
     SmallVector<Attribute> loweredAttrs;
     // For all annotations on the parent op, filter them based on the target
     // attribute.
-    filterAnnotations(op.annotations(), loweredAttrs, field, context);
+    filterAnnotations(op.annotations(), loweredAttrs, field.suffix, context);
     setBundleLowering(result, StringRef(field.suffix).drop_front(1),
                       builder->create<RegOp>(field.getPortType(), op.clockVal(),
                                              loweredName, loweredAttrs));
@@ -973,6 +1036,22 @@ Value TypeLoweringVisitor::addArg(FModuleOp module, Type type,
       builder->getStringAttr(nameAttr.getValue().str() + nameSuffix.str());
   newArgNames.push_back(newArg);
   newArgDirections.push_back(direction);
+  auto argAttrs = module.getArgAttrs(oldArgNumber);
+  SmallVector<NamedAttribute> attributes;
+  for (auto a : argAttrs) {
+    if (a.first != "firrtl.annotations") {
+      attributes.push_back(a);
+      continue;
+    }
+    SmallVector<Attribute> newAnnotations;
+    filterAnnotations(a.second.cast<ArrayAttr>(), newAnnotations, nameSuffix,
+                      context);
+    if (newAnnotations.empty())
+      continue;
+    attributes.push_back({builder->getIdentifier("firrtl.annotations"),
+                          builder->getArrayAttr(newAnnotations)});
+  }
+  newArgAttrs.push_back(attributes);
 
   return newValue;
 }

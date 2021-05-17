@@ -7,35 +7,35 @@
 // RUN: verilator --lint-only --top-module casts %t1.sv
 // RUN: verilator --lint-only --top-module exprInlineTestIssue439 %t1.sv
 
-rtl.module @B(%a: i1) -> (%b: i1, %c: i1) {
+hw.module @B(%a: i1) -> (%b: i1, %c: i1) {
   %0 = comb.or %a, %a : i1
   %1 = comb.and %a, %a : i1
-  rtl.output %0, %1 : i1, i1
+  hw.output %0, %1 : i1, i1
 }
 
-rtl.module @A(%d: i1, %e: i1) -> (%f: i1) {
+hw.module @A(%d: i1, %e: i1) -> (%f: i1) {
   %1 = comb.mux %d, %d, %e : i1
-  rtl.output %1 : i1
+  hw.output %1 : i1
 }
 
-rtl.module @AAA(%d: i1, %e: i1) -> (%f: i1) {
-  %z = rtl.constant 0 : i1
-  rtl.output %z : i1
+hw.module @AAA(%d: i1, %e: i1) -> (%f: i1) {
+  %z = hw.constant 0 : i1
+  hw.output %z : i1
 }
 
-rtl.module @AB(%w: i1, %x: i1) -> (%y: i1, %z: i1) {
-  %w2 = rtl.instance "a1" @AAA(%w, %w1) : (i1, i1) -> (i1)
-  %w1, %y = rtl.instance "b1" @B(%w2) : (i1) -> (i1, i1)
-  rtl.output %y, %x : i1, i1
+hw.module @AB(%w: i1, %x: i1) -> (%y: i1, %z: i1) {
+  %w2 = hw.instance "a1" @AAA(%w, %w1) : (i1, i1) -> (i1)
+  %w1, %y = hw.instance "b1" @B(%w2) : (i1) -> (i1, i1)
+  hw.output %y, %x : i1, i1
 }
 
-rtl.module @shl(%a: i1) -> (%b: i1) {
+hw.module @shl(%a: i1) -> (%b: i1) {
   %0 = comb.shl %a, %a : i1
-  rtl.output %0 : i1
+  hw.output %0 : i1
 }
 
-rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1, %array: !rtl.array<10xi4>,
-                        %uarray: !rtl.uarray<16xi8>) -> (
+hw.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1, %array: !hw.array<10xi4>,
+                        %uarray: !hw.uarray<16xi8>) -> (
   %r0: i4, %r1: i4, %r2: i4, %r3: i4,
   %r4: i4, %r5: i4, %r6: i4, %r7: i4,
   %r8: i4, %r9: i4, %r10: i4, %r11: i4,
@@ -44,7 +44,7 @@ rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1, %array: !rtl.array<10xi4>,
   %r18: i1, %r19: i1, %r20: i1, %r21: i1,
   %r22: i1, %r23: i1, 
   %r24: i12, %r25: i2, %r26: i9, %r27: i4, %r28: i4,
-  %r29: !rtl.array<3xi4>
+  %r29: !hw.array<3xi4>
   ) {
 
   %0 = comb.add %a, %b : i4
@@ -76,22 +76,22 @@ rtl.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1, %array: !rtl.array<10xi4>,
   %26 = comb.sext %a : (i4) -> i9
   %27 = comb.mux %cond, %a, %b : i4
 
-  %allone = rtl.constant 15 : i4
+  %allone = hw.constant 15 : i4
   %28 = comb.xor %a, %allone : i4
 
-  %one = rtl.constant 1 : i4
+  %one = hw.constant 1 : i4
   %aPlusOne = comb.add %a, %one : i4
-  %29 = rtl.array_slice %array at %aPlusOne: (!rtl.array<10xi4>) -> !rtl.array<3xi4>
+  %29 = hw.array_slice %array at %aPlusOne: (!hw.array<10xi4>) -> !hw.array<3xi4>
 
 
-  rtl.output %0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27, %28, %29:
+  hw.output %0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27, %28, %29:
     i4,i4, i4,i4,i4,i4,i4, i4,i4,i4,i4,i4,
     i4,i1,i1,i1,i1, i1,i1,i1,i1,i1, i1,i1,
-    i12, i2,i9,i4, i4, !rtl.array<3xi4>
+    i12, i2,i9,i4, i4, !hw.array<3xi4>
 }
 
-rtl.module @exprInlineTestIssue439(%clk: i1) {
-  %c = rtl.constant 0 : i32
+hw.module @exprInlineTestIssue439(%clk: i1) {
+  %c = hw.constant 0 : i32
 
   sv.always posedge %clk {
     %e = comb.extract %c from 0 : (i32) -> i16
@@ -100,10 +100,10 @@ rtl.module @exprInlineTestIssue439(%clk: i1) {
   }
 }
 
-rtl.module @casts(%in1: i64) -> (%r1: !rtl.array<5xi8>) {
-  %bits = rtl.bitcast %in1 : (i64) -> !rtl.array<64xi1>
-  %idx = rtl.constant 10 : i6
-  %midBits = rtl.array_slice %bits at %idx : (!rtl.array<64xi1>) -> !rtl.array<40xi1>
-  %r1 = rtl.bitcast %midBits : (!rtl.array<40xi1>) -> !rtl.array<5xi8>
-  rtl.output %r1 : !rtl.array<5xi8>
+hw.module @casts(%in1: i64) -> (%r1: !hw.array<5xi8>) {
+  %bits = hw.bitcast %in1 : (i64) -> !hw.array<64xi1>
+  %idx = hw.constant 10 : i6
+  %midBits = hw.array_slice %bits at %idx : (!hw.array<64xi1>) -> !hw.array<40xi1>
+  %r1 = hw.bitcast %midBits : (!hw.array<40xi1>) -> !hw.array<5xi8>
+  hw.output %r1 : !hw.array<5xi8>
 }

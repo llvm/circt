@@ -23,23 +23,27 @@ namespace json = llvm::json;
 using namespace circt;
 using namespace firrtl;
 
-/// Given a string \p target, starting with either '.' or '[', this function
-/// splits the string at every '[' and '.' and populates the \p annotations with
-/// the array of strings. Assumption, the \p target string is a well formed
-/// valid token specifying an instance of a bundle/array.
-static void parseSubFieldSubIndexAnnotations(StringRef target,
-                                             ArrayAttr &annotations,
-                                             MLIRContext *context) {
+/// Given a string \p target, return a target with any subfield or subindex
+/// references stripped.  Populate a \p annotations with any discovered
+/// references.  This function assumes that the \p target string is a well
+/// formed Annotation Target.
+static StringRef parseSubFieldSubIndexAnnotations(StringRef target,
+                                                  ArrayAttr &annotations,
+                                                  MLIRContext *context) {
   if (target.empty())
-    return;
-  char begin = target[0];
+    return target;
+
+  auto fieldBegin = target.find_first_of(".[");
+
+  // Exit if the target does not contain a subfield or subindex.
+  if (fieldBegin == StringRef::npos)
+    return target;
+
+  auto targetBase = target.take_front(fieldBegin);
+  target = target.substr(fieldBegin);
   SmallVector<Attribute> annotationVec;
-  // The caller must strip the prefix, and the string target must only contain
-  // the suffix.
-  if (begin != '.' && begin != '[')
-    return;
   SmallString<16> temp;
-  temp.push_back(begin);
+  temp.push_back(target[0]);
   for (size_t i = 1, s = target.size(); i < s; ++i) {
     if (target[i] == '[' || target[i] == '.') {
       // Create a StringAttr with the previous token.
@@ -51,6 +55,44 @@ static void parseSubFieldSubIndexAnnotations(StringRef target,
   // Save the last token.
   annotationVec.push_back(StringAttr::get(context, temp));
   annotations = ArrayAttr::get(context, annotationVec);
+
+  return targetBase;
+}
+
+/// Return an input \p target string in canonical form.  This converts a Legacy
+/// Annotation (e.g., A.B.C) into a modern annotation (e.g., ~A|B>C).  Trailing
+/// subfield/subindex references are preserved.
+static std::string canonicalizeTarget(StringRef target) {
+
+  // If this is a normal Target (not a Named), erase that field in the JSON
+  // object and return that Target.
+  if (target[0] == '~')
+    return target.str();
+
+  // This is a legacy target using the firrtl.annotations.Named type.  This
+  // can be trivially canonicalized to a non-legacy target, so we do it with
+  // the following three mappings:
+  //   1. CircuitName => CircuitTarget, e.g., A -> ~A
+  //   2. ModuleName => ModuleTarget, e.g., A.B -> ~A|B
+  //   3. ComponentName => ReferenceTarget, e.g., A.B.C -> ~A|B>C
+  std::string newTarget = "~";
+  llvm::raw_string_ostream s(newTarget);
+  bool isModule = true;
+  for (auto a : target) {
+    switch (a) {
+    case '.':
+      if (isModule) {
+        s << "|";
+        isModule = false;
+        break;
+      }
+      s << ">";
+      break;
+    default:
+      s << a;
+    }
+  }
+  return newTarget;
 }
 
 /// Deserialize a JSON value into FIRRTL Annotations.  Annotations are
@@ -71,46 +113,15 @@ bool circt::firrtl::fromJSON(json::Value &value,
                                json::Path p) -> llvm::Optional<std::string> {
     // If no "target" field exists, then promote the annotation to a
     // CircuitTarget annotation by returning a target of "~".
-    auto target = object->get("target");
-    if (!target)
+    auto maybeTarget = object->get("target");
+    if (!maybeTarget)
       return llvm::Optional<std::string>("~");
 
     // Find the target.
-    auto maybeTarget = object->get("target")->getAsString();
-
-    // If this is a normal Target (not a Named), erase that field in the JSON
-    // object and return that Target.
-    std::string newTarget;
-    if (maybeTarget.getValue()[0] == '~') {
-      newTarget = maybeTarget->str();
-    } else {
-      // This is a legacy target using the firrtl.annotations.Named type.  This
-      // can be trivially canonicalized to a non-legacy target, so we do it with
-      // the following three mappings:
-      //   1. CircuitName => CircuitTarget, e.g., A -> ~A
-      //   2. ModuleName => ModuleTarget, e.g., A.B -> ~A|B
-      //   3. ComponentName => ReferenceTarget, e.g., A.B.C -> ~A|B>C
-      newTarget = "~";
-      llvm::raw_string_ostream s(newTarget);
-      bool isModule = true;
-      for (auto a : maybeTarget.getValue()) {
-        switch (a) {
-        case '.':
-          if (isModule) {
-            s << "|";
-            isModule = false;
-            break;
-          }
-          s << ">";
-          break;
-        default:
-          s << a;
-        }
-      }
-    }
+    auto target = canonicalizeTarget(maybeTarget->getAsString().getValue());
 
     // If the target is something that we know we don't support, then error.
-    bool unsupported = std::any_of(newTarget.begin(), newTarget.end(),
+    bool unsupported = std::any_of(target.begin(), target.end(),
                                    [](char a) { return a == '/' || a == ':'; });
     if (unsupported) {
       p.field("target").report(
@@ -121,7 +132,7 @@ bool circt::firrtl::fromJSON(json::Value &value,
 
     // Remove the target field from the annotation and return the target.
     object->erase("target");
-    return llvm::Optional<std::string>(newTarget);
+    return llvm::Optional<std::string>(target);
   };
 
   /// Convert arbitrary JSON to an MLIR Attribute.
@@ -193,22 +204,18 @@ bool circt::firrtl::fromJSON(json::Value &value,
     if (!optTarget)
       return false;
     StringRef targetStrRef = optTarget.getValue();
-    // Get the position of the first '.' or '['.
-    auto fieldBegin = targetStrRef.find_first_of(".[");
 
     // Build up the Attribute to represent the Annotation and store it in the
     // global Target -> Attribute mapping.
     NamedAttrList metadata;
     // Annotations on the element instance.
     ArrayAttr elementAnnotations;
-    if (fieldBegin != StringRef::npos) {
-      parseSubFieldSubIndexAnnotations(targetStrRef.substr(fieldBegin),
-                                       elementAnnotations, context);
-      // Create an annotations with key "target", which will be parsed by
-      // lowerTypes, and propagated to the appropriate instance.
+    targetStrRef = parseSubFieldSubIndexAnnotations(
+        targetStrRef, elementAnnotations, context);
+    // Create an annotations with key "target", which will be parsed by
+    // lowerTypes, and propagated to the appropriate instance.
+    if (elementAnnotations && !elementAnnotations.empty())
       metadata.append("target", elementAnnotations);
-      targetStrRef = targetStrRef.substr(0, fieldBegin);
-    }
 
     for (auto field : *object) {
       if (auto value = convertJSONToAttribute(field.second, p)) {

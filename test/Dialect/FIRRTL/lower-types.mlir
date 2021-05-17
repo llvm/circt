@@ -524,7 +524,7 @@ firrtl.circuit "ExternalModule" {
 firrtl.circuit "LowerRegResetOp" {
   // CHECK-LABEL: firrtl.module @LowerRegResetOp
   firrtl.module @LowerRegResetOp(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %a_d: !firrtl.vector<uint<1>, 2>, out %a_q: !firrtl.vector<uint<1>, 2>) {
-    %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %init = firrtl.wire  : !firrtl.vector<uint<1>, 2>
     %0 = firrtl.subindex %init[0] : !firrtl.vector<uint<1>, 2>
     firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -534,7 +534,7 @@ firrtl.circuit "LowerRegResetOp" {
     firrtl.connect %r, %a_d : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
     firrtl.connect %a_q, %r : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
   }
-  // CHECK:   %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
+  // CHECK:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
   // CHECK:   %init_0 = firrtl.wire  : !firrtl.uint<1>
   // CHECK:   %init_1 = firrtl.wire  : !firrtl.uint<1>
   // CHECK:   firrtl.connect %init_0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -554,7 +554,7 @@ firrtl.circuit "LowerRegResetOp" {
 firrtl.circuit "LowerRegResetOpNoName" {
   // CHECK-LABEL: firrtl.module @LowerRegResetOpNoName
   firrtl.module @LowerRegResetOpNoName(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %a_d: !firrtl.vector<uint<1>, 2>, out %a_q: !firrtl.vector<uint<1>, 2>) {
-    %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %init = firrtl.wire  : !firrtl.vector<uint<1>, 2>
     %0 = firrtl.subindex %init[0] : !firrtl.vector<uint<1>, 2>
     firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -564,7 +564,7 @@ firrtl.circuit "LowerRegResetOpNoName" {
     firrtl.connect %r, %a_d : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
     firrtl.connect %a_q, %r : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
   }
-  // CHECK:   %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
+  // CHECK:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
   // CHECK:   %init_0 = firrtl.wire  : !firrtl.uint<1>
   // CHECK:   %init_1 = firrtl.wire  : !firrtl.uint<1>
   // CHECK:   firrtl.connect %init_0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -648,7 +648,7 @@ firrtl.circuit "AnnotationsRegOp" {
   firrtl.module @AnnotationsRegOp(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
     %bazInit = firrtl.wire  : !firrtl.vector<uint<1>, 2>
     %0 = firrtl.subindex %bazInit[0] : !firrtl.vector<uint<1>, 2>
-    %c0_ui1 = firrtl.constant(0 : ui1) : !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     %1 = firrtl.subindex %bazInit[1] : !firrtl.vector<uint<1>, 2>
     firrtl.connect %1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -887,5 +887,48 @@ firrtl.circuit "PartialConnectEdgeCases" {
     // CHECK: firrtl.partialconnect %d_0, %c_0
     // CHECK-NEXT: firrtl.partialconnect %d_1, %c_1
     // CHECK-NOT: firrtl.partialconnect %d_
+  }
+}
+
+// -----
+
+// Test that annotations on aggregate ports are copied.
+firrtl.circuit "Port" {
+  firrtl.extmodule @Sub(in %a: !firrtl.vector<uint<1>, 2> {firrtl.annotations = [{a}]})
+  // CHECK: firrtl.extmodule
+  // CHECK-COUNT-2: firrtl.annotations = [{a}]
+  // CHECK-NOT: firrtl.annotations = [{a}]
+  firrtl.module @Port(in %a: !firrtl.vector<uint<1>, 2> {firrtl.annotations = [{b}]}) {
+    %sub_a = firrtl.instance @Sub  {name = "sub", portNames = ["a"]} : !firrtl.flip<vector<uint<1>, 2>>
+    firrtl.connect %sub_a, %a : !firrtl.flip<vector<uint<1>, 2>>, !firrtl.vector<uint<1>, 2>
+  }
+  // CHECK: firrtl.module
+  // CHECK-COUNT-2: firrtl.annotations = [{b}]
+  // CHECK-NOT: firrtl.annotations = [{b}]
+}
+
+// -----
+
+// Test that annotations on subfield/subindices of ports are only applied to
+// matching targets.  Any other arg attributes should be copied.
+module  {
+  firrtl.circuit "PortBundle"  {
+    // The annotation should be copied to just a.a.  The firrtl.hello arg
+    // attribute should be copied to each new port.
+    firrtl.module @PortBundle(in %a: !firrtl.bundle<a: uint<1>, b: flip<uint<1>>> {firrtl.annotations = [{a, target = [".a"]}], firrtl.hello}) {}
+    // CHECK: firrtl.module @PortBundle
+    // CHECK-COUNT-1: firrtl.annotations = [{a}]
+    // CHECK-COUNT-2: firrtl.hello
+    // CHECK-NOT: firrtl.annotations
+    // CHECK-NOT: firrtl.hello
+
+    // The annotation should be copied to just a[0].  The firrtl.world arg
+    // attribute should be copied to each port.
+    firrtl.extmodule @PortVector(in %a: !firrtl.vector<uint<1>, 2> {firrtl.annotations = [{b, target = ["[0]"]}], firrtl.world})
+    // CHECK: firrtl.extmodule @PortVector
+    // CHECK-COUNT-1: firrtl.annotations = [{b}]
+    // CHECK-COUNT-2: firrtl.world
+    // CHECK-NOT: firrtl.annotations
+    // CHECK-NOT: firrtl.world
   }
 }

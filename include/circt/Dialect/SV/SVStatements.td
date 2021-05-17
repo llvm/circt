@@ -288,7 +288,7 @@ def CaseZOp : SVOp<"casez", [SingleBlock, NoTerminator, NoRegionArguments,
   let description = "See SystemVerilog 2017 12.5.1.";
 
   let regions = (region VariadicRegion<SizedRegion<1>>:$caseRegions);
-  let arguments = (ins RTLIntegerType:$cond, ArrayAttr:$casePatterns);
+  let arguments = (ins HWIntegerType:$cond, ArrayAttr:$casePatterns);
   let results = (outs);
 
   let parser = "return parseCaseZOp(parser, result);";

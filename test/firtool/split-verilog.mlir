@@ -15,27 +15,31 @@ sv.ifdef.procedural "VERILATOR" {
 }
 sv.verbatim ""
 
-rtl.module @foo(%a: i1) -> (%b: i1) {
-  rtl.output %a : i1
+hw.type_scope @__hw_typedecls {
+  hw.typedecl @foo : i1
 }
-rtl.module @bar(%x: i1) -> (%y: i1) {
-  rtl.output %x : i1
+
+hw.module @foo(%a: i1) -> (%b: i1) {
+  hw.output %a : i1
+}
+hw.module @bar(%x: i1) -> (%y: i1) {
+  hw.output %x : i1
 }
 sv.interface @usb {
   sv.interface.signal @valid : i1
   sv.interface.signal @ready : i1
 }
-rtl.module.extern @pll ()
+hw.module.extern @pll ()
 
-rtl.module @inout(%inout: i1) -> (%output: i1) {
-  rtl.output %inout : i1
+hw.module @inout(%inout: i1) -> (%output: i1) {
+  hw.output %inout : i1
 }
 
 // This is made collide with the first renaming attempt of the `@inout` module
 // above.
-rtl.module.extern @inout_0 () -> ()
-rtl.module.extern @inout_1 () -> ()
-rtl.module.extern @inout_2 () -> ()
+hw.module.extern @inout_0 () -> ()
+hw.module.extern @inout_1 () -> ()
+hw.module.extern @inout_2 () -> ()
 
 // LIST:      foo.sv
 // LIST-NEXT: bar.sv
@@ -48,6 +52,7 @@ rtl.module.extern @inout_2 () -> ()
 // VERILOG-FOO-NEXT:  `else
 // VERILOG-FOO-NEXT:    // World
 // VERILOG-FOO-NEXT:  `endif
+// VERILOG-FOO:       typedef logic foo;
 // VERILOG-FOO-LABEL: module foo(
 // VERILOG-FOO:       endmodule
 
@@ -57,6 +62,7 @@ rtl.module.extern @inout_2 () -> ()
 // VERILOG-BAR-NEXT:  `else
 // VERILOG-BAR-NEXT:    // World
 // VERILOG-BAR-NEXT:  `endif
+// VERILOG-BAR:       typedef logic foo;
 // VERILOG-BAR-LABEL: module bar
 // VERILOG-BAR:       endmodule
 
@@ -66,6 +72,7 @@ rtl.module.extern @inout_2 () -> ()
 // VERILOG-USB-NEXT:  `else
 // VERILOG-USB-NEXT:    // World
 // VERILOG-USB-NEXT:  `endif
+// VERILOG-USB:       typedef logic foo;
 // VERILOG-USB-LABEL: interface usb;
 // VERILOG-USB:       endinterface
 
@@ -75,6 +82,7 @@ rtl.module.extern @inout_2 () -> ()
 // VERILOG-INOUT-3-NEXT:  `else
 // VERILOG-INOUT-3-NEXT:    // World
 // VERILOG-INOUT-3-NEXT:  `endif
+// VERILOG-INOUT-3:       typedef logic foo;
 // VERILOG-INOUT-3-LABEL: module inout_3(
 // VERILOG-INOUT-3:       endmodule
 
@@ -84,6 +92,7 @@ rtl.module.extern @inout_2 () -> ()
 // VERILOG-NEXT:  `else
 // VERILOG-NEXT:    // World
 // VERILOG-NEXT:  `endif
+// VERILOG:       typedef logic foo;
 // VERILOG-LABEL: module foo(
 // VERILOG:       endmodule
 // VERILOG-LABEL: module bar

@@ -24,7 +24,10 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
   let arguments = (ins APIntAttr:$value);
   let results = (outs NonZeroIntType:$result);
 
-  let assemblyFormat = "`(` $value `)` attr-dict `:` type($result)";
+  // Need a custom parser/printer to avoid redundant type for the attribute and
+  // the op itself.
+  let parser = "return parse$cppClass(parser, result);";
+  let printer = "print$cppClass(p, *this);";
 
   let builders = [
     OpBuilder<(ins "IntType":$type, "const APInt &":$value)>
@@ -95,7 +98,7 @@ class IndexConstraint<string value, string resultValue>
                    value, resultValue,
                    "firrtl::getVectorElementType($_self)">;
 
-def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect, 
+def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect,
                                        IndexConstraint<"input", "result">]> {
   let summary = "Extract an element of a vector value";
   let description = [{
@@ -127,7 +130,7 @@ def SubindexOp : FIRRTLOp<"subindex", [NoSideEffect,
   }];
 }
 
-def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect, 
+def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect,
                                          IndexConstraint<"input", "result">]> {
   let summary = "Extract a dynamic element of a vector value";
   let description = [{
@@ -221,7 +224,7 @@ def DivPrimOp : BinaryPrimOp<"div", IntType, IntType, IntType> {
 }
 def RemPrimOp : BinaryPrimOp<"rem", IntType, IntType, IntType>;
 
-def AndPrimOp : BinaryPrimOp<"and", IntType, IntType, UIntType, [Commutative]>; 
+def AndPrimOp : BinaryPrimOp<"and", IntType, IntType, UIntType, [Commutative]>;
 def OrPrimOp  : BinaryPrimOp<"or",  IntType, IntType, UIntType, [Commutative]>;
 def XorPrimOp : BinaryPrimOp<"xor", IntType, IntType, UIntType, [Commutative]>;
 
@@ -273,14 +276,12 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
   let verifier = [{
     VERIFY_RESULT_TYPE_RET(input().getType().cast<FIRRTLType>());
   }];
+
+  let hasFolder = 1;
 }
 
-def AsSIntPrimOp : UnaryPrimOp<"asSInt", FIRRTLType, SIntType> {
-  let hasFolder = 1;
-}
-def AsUIntPrimOp : UnaryPrimOp<"asUInt", FIRRTLType, UIntType> {
-  let hasFolder = 1;
-}
+def AsSIntPrimOp : UnaryPrimOp<"asSInt", FIRRTLType, SIntType>;
+def AsUIntPrimOp : UnaryPrimOp<"asUInt", FIRRTLType, UIntType>;
 def AsAsyncResetPrimOp
   : UnaryPrimOp<"asAsyncReset", OneBitCastableType, AsyncResetType>;
 def AsClockPrimOp : UnaryPrimOp<"asClock", OneBitCastableType, ClockType>;
@@ -574,14 +575,14 @@ def AnalogInOutCastOp : FIRRTLOp<"analogInOutCast", [NoSideEffect]> {
 
 // This operation converts from a struct to a bundle
 // type, or visa-versa.  FIRRTL source/destination types must be passive.
-def RTLStructCastOp : FIRRTLOp<"rtlStructCast", [NoSideEffect]> {
+def HWStructCastOp : FIRRTLOp<"hwStructCast", [NoSideEffect]> {
   let arguments = (ins AnyType:$input);
   let results = (outs AnyType:$result);
 
   let assemblyFormat =
     "$input attr-dict `:` functional-type($input, $result)";
 
-  let verifier = "return ::verifyRTLStructCastOp(*this);";
+  let verifier = "return ::verifyHWStructCastOp(*this);";
 }
 
 // MLIR specific pseudo ops.
@@ -593,7 +594,7 @@ class PassiveConstraint<string value, string resultValue>
                    "firrtl::getPassiveType($_self)">;
 
 // Convert a value with non-passive type to a value with passive type.
-def AsPassivePrimOp : FIRRTLOp<"asPassive", [NoSideEffect, 
+def AsPassivePrimOp : FIRRTLOp<"asPassive", [NoSideEffect,
                                PassiveConstraint<"input", "result">]> {
   let arguments = (ins FIRRTLType:$input);
   let results = (outs PassiveType:$result);

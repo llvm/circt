@@ -53,17 +53,13 @@ inline llvm::hash_code hash_value(const T &e) {
 } // namespace mlir
 
 namespace {
+#define EXPR_NAMES(x) Root##x, Var##x, Known##x, Add##x, Pow##x, Max##x, Min##x
+#define EXPR_KINDS EXPR_NAMES()
+#define EXPR_CLASSES EXPR_NAMES(Expr)
 
 /// An expression on the right-hand side of a constraint.
 struct Expr {
-  enum Kind {
-    KindRoot,
-    KindVar,
-    KindKnown,
-    KindAdd,
-    KindMax,
-    KindMin,
-  };
+  enum class Kind { EXPR_KINDS };
   llvm::Optional<int32_t> solution = {};
   Kind kind;
 
@@ -95,7 +91,7 @@ struct ExprBase : public Expr {
 };
 
 /// A free variable.
-struct RootExpr : public ExprBase<RootExpr, Expr::KindRoot> {
+struct RootExpr : public ExprBase<RootExpr, Expr::Kind::Root> {
   RootExpr(std::vector<Expr *> &exprs) : exprs(exprs) {}
   void print(llvm::raw_ostream &os) const { os << "root"; }
   iterator begin() const { return &exprs[0]; }
@@ -104,7 +100,7 @@ struct RootExpr : public ExprBase<RootExpr, Expr::KindRoot> {
 };
 
 /// A free variable.
-struct VarExpr : public ExprBase<VarExpr, Expr::KindVar> {
+struct VarExpr : public ExprBase<VarExpr, Expr::Kind::Var> {
   void print(llvm::raw_ostream &os) const {
     // Hash the `this` pointer into something somewhat human readable. Since
     // this is just for debug dumping, we wrap around at 4096 variables.
@@ -113,7 +109,7 @@ struct VarExpr : public ExprBase<VarExpr, Expr::KindVar> {
 };
 
 /// A known constant value.
-struct KnownExpr : public ExprBase<KnownExpr, Expr::KindKnown> {
+struct KnownExpr : public ExprBase<KnownExpr, Expr::Kind::Known> {
   KnownExpr(int32_t value) : ExprBase() { solution = value; }
   void print(llvm::raw_ostream &os) const { os << solution.getValue(); }
   bool operator==(const KnownExpr &other) const {
@@ -122,6 +118,40 @@ struct KnownExpr : public ExprBase<KnownExpr, Expr::KindKnown> {
   llvm::hash_code hash_value() const {
     return llvm::hash_combine(Expr::hash_value(), solution.getValue());
   }
+};
+
+/// A unary expression. Contains the actual data. Concrete subclasses are merely
+/// there for show and ease of use.
+struct UnaryExpr : public Expr {
+  bool operator==(const UnaryExpr &other) const {
+    return kind == other.kind && arg == other.arg;
+  }
+  llvm::hash_code hash_value() const {
+    return llvm::hash_combine(Expr::hash_value(), arg);
+  }
+  iterator begin() const { return &arg; }
+  iterator end() const { return &arg + 1; }
+
+  /// The child expression.
+  Expr *const arg;
+
+protected:
+  UnaryExpr(Kind kind, Expr *arg) : Expr(kind), arg(arg) {}
+};
+
+/// Helper class to CRTP-derive common functions.
+template <class DerivedT, Expr::Kind DerivedKind>
+struct UnaryExprBase : public UnaryExpr {
+  template <typename... Args>
+  UnaryExprBase(Args &&... args)
+      : UnaryExpr(DerivedKind, std::forward<Args>(args)...) {}
+  static bool classof(const Expr *e) { return e->kind == DerivedKind; }
+};
+
+/// A power of two.
+struct PowExpr : public UnaryExprBase<PowExpr, Expr::Kind::Pow> {
+  using UnaryExprBase::UnaryExprBase;
+  void print(llvm::raw_ostream &os) const { os << "2^" << arg; }
 };
 
 /// A binary expression. Contains the actual data. Concrete subclasses are
@@ -155,7 +185,7 @@ struct BinaryExprBase : public BinaryExpr {
 };
 
 /// An addition.
-struct AddExpr : public BinaryExprBase<AddExpr, Expr::KindAdd> {
+struct AddExpr : public BinaryExprBase<AddExpr, Expr::Kind::Add> {
   using BinaryExprBase::BinaryExprBase;
   void print(llvm::raw_ostream &os) const {
     os << "(" << *lhs() << " + " << *rhs() << ")";
@@ -163,7 +193,7 @@ struct AddExpr : public BinaryExprBase<AddExpr, Expr::KindAdd> {
 };
 
 /// The maximum of two expressions.
-struct MaxExpr : public BinaryExprBase<MaxExpr, Expr::KindMax> {
+struct MaxExpr : public BinaryExprBase<MaxExpr, Expr::Kind::Max> {
   using BinaryExprBase::BinaryExprBase;
   void print(llvm::raw_ostream &os) const {
     os << "max(" << *lhs() << ", " << *rhs() << ")";
@@ -171,7 +201,7 @@ struct MaxExpr : public BinaryExprBase<MaxExpr, Expr::KindMax> {
 };
 
 /// The minimum of two expressions.
-struct MinExpr : public BinaryExprBase<MinExpr, Expr::KindMin> {
+struct MinExpr : public BinaryExprBase<MinExpr, Expr::Kind::Min> {
   using BinaryExprBase::BinaryExprBase;
   void print(llvm::raw_ostream &os) const {
     os << "min(" << *lhs() << ", " << *rhs() << ")";
@@ -179,21 +209,18 @@ struct MinExpr : public BinaryExprBase<MinExpr, Expr::KindMin> {
 };
 
 void Expr::print(llvm::raw_ostream &os) const {
-  TypeSwitch<const Expr *>(this)
-      .Case<RootExpr, VarExpr, KnownExpr, AddExpr, MaxExpr, MinExpr>(
-          [&](auto *e) { e->print(os); });
+  TypeSwitch<const Expr *>(this).Case<EXPR_CLASSES>(
+      [&](auto *e) { e->print(os); });
 }
 
 Expr::iterator Expr::begin() const {
-  return TypeSwitch<const Expr *, Expr::iterator>(this)
-      .Case<RootExpr, VarExpr, KnownExpr, AddExpr, MaxExpr, MinExpr>(
-          [&](auto *e) { return e->begin(); });
+  return TypeSwitch<const Expr *, Expr::iterator>(this).Case<EXPR_CLASSES>(
+      [&](auto *e) { return e->begin(); });
 }
 
 Expr::iterator Expr::end() const {
-  return TypeSwitch<const Expr *, Expr::iterator>(this)
-      .Case<RootExpr, VarExpr, KnownExpr, AddExpr, MaxExpr, MinExpr>(
-          [&](auto *e) { return e->end(); });
+  return TypeSwitch<const Expr *, Expr::iterator>(this).Case<EXPR_CLASSES>(
+      [&](auto *e) { return e->end(); });
 }
 
 } // namespace
@@ -295,6 +322,7 @@ public:
     return v;
   }
   KnownExpr *known(int32_t value) { return alloc<KnownExpr>(knowns, value); }
+  PowExpr *pow(Expr *arg) { return alloc<PowExpr>(uns, arg); }
   AddExpr *add(Expr *lhs, Expr *rhs) { return alloc<AddExpr>(bins, lhs, rhs); }
   MaxExpr *max(Expr *lhs, Expr *rhs) { return alloc<MaxExpr>(bins, lhs, rhs); }
   MinExpr *min(Expr *lhs, Expr *rhs) { return alloc<MinExpr>(bins, lhs, rhs); }
@@ -316,6 +344,7 @@ private:
   llvm::BumpPtrAllocator allocator;
   VarAllocator vars = {allocator};
   InternedAllocator<KnownExpr> knowns = {allocator};
+  InternedAllocator<UnaryExpr> uns = {allocator};
   InternedAllocator<BinaryExpr> bins = {allocator};
 
   /// A list of expressions in the order they were created.
@@ -352,6 +381,12 @@ void ConstraintSolver::dumpConstraints(llvm::raw_ostream &os) {
   }
 }
 
+// Helper function to compute unary expressions if the operand has a solution.
+static void solveUnary(UnaryExpr *expr, std::function<int32_t(int32_t)> f) {
+  if (expr->arg->solution.hasValue())
+    expr->solution = f(expr->arg->solution.getValue());
+}
+
 // Helper function to compute binary expressions if both operands have a
 // solution.
 static void solveBinary(BinaryExpr *expr,
@@ -375,6 +410,12 @@ void ConstraintSolver::solve() {
           auto it = constraints.find(var);
           if (it != constraints.end())
             var->solution = it->second->solution;
+        })
+        .Case<PowExpr>([&](auto *expr) {
+          solveUnary(expr, [](int32_t arg) {
+            assert(arg < 32);
+            return 1 << arg;
+          });
         })
         .Case<AddExpr>([&](auto *expr) {
           solveBinary(expr, [](int32_t lhs, int32_t rhs) { return lhs + rhs; });
@@ -411,9 +452,9 @@ class InferenceMapping {
 public:
   InferenceMapping(ConstraintSolver &solver) : solver(solver) {}
 
-  void map(CircuitOp op);
-  void map(FModuleOp op);
-  void mapOperation(Operation *op);
+  LogicalResult map(CircuitOp op);
+  LogicalResult map(FModuleOp op);
+  LogicalResult mapOperation(Operation *op);
 
   Expr *declareVars(Value value);
   Expr *declareVars(Type type);
@@ -437,24 +478,30 @@ private:
 
 } // namespace
 
-void InferenceMapping::map(CircuitOp op) {
+LogicalResult InferenceMapping::map(CircuitOp op) {
   for (auto &op : *op.getBody()) {
     if (auto module = dyn_cast<FModuleOp>(&op))
-      map(module);
+      if (failed(map(module)))
+        return failure();
   }
+  return success();
 }
 
-void InferenceMapping::map(FModuleOp module) {
+LogicalResult InferenceMapping::map(FModuleOp module) {
   // Ensure we have constraint variables for the module ports.
   for (auto arg : module.getArguments())
     declareVars(arg);
 
   // Go through operations, creating type variables for results, and generating
   // constraints.
-  module.walk([&](Operation *op) { mapOperation(op); });
+  auto result = module.getBody().walk(
+      [&](Operation *op) { return WalkResult(mapOperation(op)); });
+
+  return failure(result.wasInterrupted());
 }
 
-void InferenceMapping::mapOperation(Operation *op) {
+LogicalResult InferenceMapping::mapOperation(Operation *op) {
+  bool mappingFailed = false;
   TypeSwitch<Operation *>(op)
       .Case<ConstantOp>([&](auto op) {
         // Constants just use the bit width of the APInt. This is guaranteed to
@@ -462,7 +509,10 @@ void InferenceMapping::mapOperation(Operation *op) {
         auto e = solver.known(op.value().getBitWidth());
         setExpr(op.getResult(), e);
       })
-      .Case<WireOp>([&](auto op) { declareVars(op.getResult()); })
+      .Case<WireOp, InvalidValueOp>(
+          [&](auto op) { declareVars(op.getResult()); })
+
+      // Arithmetic and Logical Binary Primitives
       .Case<AddPrimOp, SubPrimOp>([&](auto op) {
         auto lhs = getExpr(op.lhs());
         auto rhs = getExpr(op.rhs());
@@ -488,7 +538,7 @@ void InferenceMapping::mapOperation(Operation *op) {
       .Case<RemPrimOp>([&](auto op) {
         auto lhs = getExpr(op.lhs());
         auto rhs = getExpr(op.rhs());
-        auto *e = solver.min(lhs, rhs);
+        auto e = solver.min(lhs, rhs);
         setExpr(op.getResult(), e);
       })
       .Case<AndPrimOp, OrPrimOp, XorPrimOp>([&](auto op) {
@@ -497,11 +547,82 @@ void InferenceMapping::mapOperation(Operation *op) {
         auto e = solver.max(lhs, rhs);
         setExpr(op.getResult(), e);
       })
-      .Case<LEQPrimOp, LTPrimOp, GEQPrimOp, GTPrimOp, EQPrimOp, NEQPrimOp>(
-          [&](auto op) {
-            auto e = solver.known(1);
-            setExpr(op.getResult(), e);
-          })
+
+      // Misc Binary Primitives
+      .Case<CatPrimOp>([&](auto op) {
+        auto lhs = getExpr(op.lhs());
+        auto rhs = getExpr(op.rhs());
+        auto e = solver.add(lhs, rhs);
+        setExpr(op.getResult(), e);
+      })
+      .Case<DShlPrimOp>([&](auto op) {
+        auto lhs = getExpr(op.lhs());
+        auto rhs = getExpr(op.rhs());
+        auto e = solver.add(lhs, solver.add(solver.pow(rhs), solver.known(-1)));
+        setExpr(op.getResult(), e);
+      })
+      .Case<DShlwPrimOp, DShrPrimOp>([&](auto op) {
+        auto e = getExpr(op.lhs());
+        setExpr(op.getResult(), e);
+      })
+
+      // Unary operators
+      .Case<NegPrimOp>([&](auto op) {
+        auto input = getExpr(op.input());
+        auto e = solver.add(input, solver.known(1));
+        setExpr(op.getResult(), e);
+      })
+      .Case<CvtPrimOp>([&](auto op) {
+        auto input = getExpr(op.input());
+        auto e = op.input().getType().template cast<IntType>().isSigned()
+                     ? input
+                     : solver.add(input, solver.known(1));
+        setExpr(op.getResult(), e);
+      })
+
+      // Miscellaneous
+      .Case<BitsPrimOp>([&](auto op) {
+        setExpr(op.getResult(), solver.known(op.hi() - op.lo() + 1));
+      })
+      .Case<HeadPrimOp>(
+          [&](auto op) { setExpr(op.getResult(), solver.known(op.amount())); })
+      .Case<TailPrimOp>([&](auto op) {
+        auto input = getExpr(op.input());
+        auto e = solver.add(input, solver.known(-op.amount()));
+        setExpr(op.getResult(), e);
+      })
+      .Case<PadPrimOp>([&](auto op) {
+        auto input = getExpr(op.input());
+        auto e = solver.max(input, solver.known(op.amount()));
+        setExpr(op.getResult(), e);
+      })
+      .Case<ShlPrimOp>([&](auto op) {
+        auto input = getExpr(op.input());
+        auto e = solver.add(input, solver.known(op.amount()));
+        setExpr(op.getResult(), e);
+      })
+      .Case<ShrPrimOp>([&](auto op) {
+        auto input = getExpr(op.input());
+        auto e = solver.max(solver.add(input, solver.known(-op.amount())),
+                            solver.known(1));
+        setExpr(op.getResult(), e);
+      })
+
+      // Handle operations whose output width matches the input width.
+      .Case<NotPrimOp, AsSIntPrimOp, AsUIntPrimOp, AsPassivePrimOp,
+            AsNonPassivePrimOp>(
+          [&](auto op) { setExpr(op.getResult(), getExpr(op.input())); })
+
+      // Handle operations with a single result type that always has a
+      // well-known width.
+      .Case<LEQPrimOp, LTPrimOp, GEQPrimOp, GTPrimOp, EQPrimOp, NEQPrimOp,
+            AsClockPrimOp, AsAsyncResetPrimOp, AndRPrimOp, OrRPrimOp,
+            XorRPrimOp>([&](auto op) {
+        auto width = op.getType().getBitWidthOrSentinel();
+        assert(width > 0 && "width should have been checked by verifier");
+        setExpr(op.getResult(), solver.known(width));
+      })
+
       .Case<MuxPrimOp>([&](auto op) {
         // Caveat: The Scala implementation imposes a constraint on the select
         // signal to be at least 1 bit wide. The FIRRTL MLIR dialect requries
@@ -517,11 +638,16 @@ void InferenceMapping::mapOperation(Operation *op) {
         auto dest = getExpr(op.dest());
         auto src = getExpr(op.src());
         constrainTypes(dest, src);
+      })
+      .Default([&](auto op) {
+        op->emitOpError("not supported in width inference");
+        mappingFailed = true;
       });
   // TODO: Handle PartialConnect
   // TODO: Handle DefRegister
   // TODO: Handle Attach
   // TODO: Handle Conditionally
+  return failure(mappingFailed);
 }
 
 /// Declare free variables for the type of a value, and associate the resulting
@@ -536,9 +662,9 @@ Expr *InferenceMapping::declareVars(Value value) {
 Expr *InferenceMapping::declareVars(Type type) {
   if (auto ftype = type.dyn_cast<FIRRTLType>())
     return declareVars(ftype);
-  // TODO: Once we support compound types, non-FIRRTL types will just map to an
-  // empty list of expressions in the solver. At that point we'll have something
-  // proper to return here.
+  // TODO: Once we support compound types, non-FIRRTL types will just map to
+  // an empty list of expressions in the solver. At that point we'll have
+  // something proper to return here.
   llvm_unreachable("non-FIRRTL ops not supported");
 }
 
@@ -564,10 +690,10 @@ Expr *InferenceMapping::declareVars(FIRRTLType type) {
 /// than or equal to the sizes in the `smaller` type.
 void InferenceMapping::constrainTypes(Expr *larger, Expr *smaller) {
   // Mimic the Scala implementation here by simply doing nothing if the larger
-  // expr is not a free variable. Apparently there are many cases where useless
-  // constraints can be added, e.g. on multiple well-known values. As long as we
-  // don't want to do type checking itself here, but only width inference, we
-  // should be fine ignoring expr we cannot constraint anyway.
+  // expr is not a free variable. Apparently there are many cases where
+  // useless constraints can be added, e.g. on multiple well-known values. As
+  // long as we don't want to do type checking itself here, but only width
+  // inference, we should be fine ignoring expr we cannot constraint anyway.
   if (auto largerVar = dyn_cast<VarExpr>(larger)) {
     auto c = solver.addGeqConstraint(largerVar, smaller);
     LLVM_DEBUG(llvm::dbgs()
@@ -600,9 +726,8 @@ void InferenceMapping::setExpr(Value value, Expr *expr) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-
-/// A helper class which maps the types and operations in a design to a set of
-/// variables and constraints to be solved later.
+/// A helper class which maps the types and operations in a design to a set
+/// of variables and constraints to be solved later.
 class InferenceTypeUpdate {
 public:
   InferenceTypeUpdate(InferenceMapping &mapping) : mapping(mapping) {}
@@ -745,7 +870,10 @@ void InferWidthsPass::runOnOperation() {
   // Collect variables and constraints
   ConstraintSolver solver;
   InferenceMapping mapping(solver);
-  mapping.map(getOperation());
+  if (failed(mapping.map(getOperation()))) {
+    signalPassFailure();
+    return;
+  }
   LLVM_DEBUG({
     llvm::dbgs() << "Constraints:\n";
     solver.dumpConstraints(llvm::dbgs());

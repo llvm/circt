@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file contains definitions for passes that work on the FIRRTL dialect.
+// This file defines the passes that work on the FIRRTL dialect.
 //
 //===----------------------------------------------------------------------===//
 

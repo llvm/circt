@@ -14,7 +14,7 @@ add_circt_dialect_library(CIRCTMSFT
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/MSFT
 
   DEPENDS
-  CIRCTRTL
+  CIRCTHW
   MLIRMSFTIncGen
   MLIRMSFTExtraIncGen
   

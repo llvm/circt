@@ -7,7 +7,7 @@
 
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/ESI/ESIOps.h"
-#include "circt/Dialect/RTL/RTLDialect.h"
+#include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
@@ -185,9 +185,8 @@ void circt::esi::registerESITranslations() {
   mlir::TranslateFromMLIRRegistration cosimToCapnp(
       "export-esi-capnp", exportCosimSchema,
       [](mlir::DialectRegistry &registry) {
-        registry
-            .insert<ESIDialect, circt::rtl::RTLDialect, circt::sv::SVDialect,
-                    mlir::StandardOpsDialect, mlir::BuiltinDialect>();
+        registry.insert<ESIDialect, circt::hw::HWDialect, circt::sv::SVDialect,
+                        mlir::StandardOpsDialect, mlir::BuiltinDialect>();
       });
 #endif
 }

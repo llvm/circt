@@ -3,7 +3,7 @@
 
 import circt
 from circt import msft
-from circt.dialects import rtl, seq
+from circt.dialects import hw, seq
 
 from mlir.ir import *
 import sys
@@ -15,24 +15,24 @@ with Context() as ctx, Location.unknown():
 
   m = Module.create()
   with InsertionPoint(m.body):
-    # CHECK: rtl.module @MyWidget()
-    # CHECK:   rtl.output
-    op = rtl.RTLModuleOp(name='MyWidget',
+    # CHECK: hw.module @MyWidget()
+    # CHECK:   hw.output
+    op = hw.HWModuleOp(name='MyWidget',
                          input_ports=[],
                          output_ports=[],
-                         body_builder=lambda module: rtl.OutputOp([]))
-    top = rtl.RTLModuleOp(name='top',
+                         body_builder=lambda module: hw.OutputOp([]))
+    top = hw.HWModuleOp(name='top',
                           input_ports=[],
                           output_ports=[],
-                          body_builder=lambda module: rtl.OutputOp([]))
+                          body_builder=lambda module: hw.OutputOp([]))
 
   with InsertionPoint.at_block_terminator(top.body.blocks[0]):
     inst = op.create(m, "inst1", {})
     msft.locate(inst.operation, "mem", devtype=msft.M20K, x=50, y=100, num=1)
-    # CHECK: rtl.instance "inst1" @MyWidget() {"loc:mem" = #msft.physloc<M20K, 50, 100, 1>, parameters = {}} : () -> ()
+    # CHECK: hw.instance "inst1" @MyWidget() {"loc:mem" = #msft.physloc<M20K, 50, 100, 1>, parameters = {}} : () -> ()
 
-    val = rtl.ConstantOp(i32, IntegerAttr.get(i32, 14)).result
-    clk = rtl.ConstantOp(i1, IntegerAttr.get(i1, 0)).result
+    val = hw.ConstantOp(i32, IntegerAttr.get(i32, 14)).result
+    clk = hw.ConstantOp(i1, IntegerAttr.get(i1, 0)).result
     reg = seq.reg(val, clk, name="MyLocatableRegister")
     msft.locate(reg.owner, "mem", devtype=msft.M20K, x=25, y=25, num=1)
     # CHECK: seq.compreg {{.+}} {"loc:mem" = #msft.physloc<M20K, 25, 25, 1>, name = "MyLocatableRegister"}

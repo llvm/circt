@@ -2,13 +2,13 @@
 
 // CHECK-LABEL: module inputs_only(
 // CHECK-NEXT: input a, b);
-rtl.module @inputs_only(%a: i1, %b: i1) {
-  rtl.output
+hw.module @inputs_only(%a: i1, %b: i1) {
+  hw.output
 }
 
 // CHECK-LABEL: module no_ports();
-rtl.module @no_ports() {
-  rtl.output
+hw.module @no_ports() {
+  hw.output
 }
 
 // CHECK-LABEL: module Expressions(
@@ -19,18 +19,18 @@ rtl.module @no_ports() {
 // CHECK-NEXT:    output [15:0] out16, out16s,
 // CHECK-NEXT:    output [16:0] sext17);
 
-rtl.module @Expressions(%in4: i4, %clock: i1) ->
+hw.module @Expressions(%in4: i4, %clock: i1) ->
   (%out1: i1, %out4: i4, %out4s: i4, %out16: i16, %out16s: i16, %sext17: i17) {
-  %c1_i4 = rtl.constant 1 : i4
-  %c2_i4 = rtl.constant 2 : i4
-  %c3_i4 = rtl.constant 3 : i4
-  %c-1_i4 = rtl.constant -1 : i4
-  %c0_i4 = rtl.constant 0 : i4
-  %false = rtl.constant false
-  %c0_i2 = rtl.constant 0 : i2
-  %c0_i5 = rtl.constant 0 : i5
-  %c0_i6 = rtl.constant 0 : i6
-  %c0_i10 = rtl.constant 0 : i10
+  %c1_i4 = hw.constant 1 : i4
+  %c2_i4 = hw.constant 2 : i4
+  %c3_i4 = hw.constant 3 : i4
+  %c-1_i4 = hw.constant -1 : i4
+  %c0_i4 = hw.constant 0 : i4
+  %false = hw.constant false
+  %c0_i2 = hw.constant 0 : i2
+  %c0_i5 = hw.constant 0 : i5
+  %c0_i6 = hw.constant 0 : i6
+  %c0_i10 = hw.constant 0 : i10
 
   // CHECK: wire [3:0] _T_3 = in4 >> in4;
   %7 = comb.extract %in4 from 2 : (i4) -> i1
@@ -102,19 +102,19 @@ rtl.module @Expressions(%in4: i4, %clock: i1) ->
   // CHECK: assign out4s = $signed(in4) >>> $signed(in4);
   // CHECK: assign sext17 = {_T_8[15], _T_8};
   %35 = comb.sext %34 : (i16) -> i17
-  rtl.output %24, %28, %11, %31, %34, %35 : i1, i4, i4, i16, i16, i17
+  hw.output %24, %28, %11, %31, %34, %35 : i1, i4, i4, i16, i16, i17
 }
 
 // CHECK-LABEL: module Precedence(
-rtl.module @Precedence(%a: i4, %b: i4, %c: i4) -> (%out1: i1, %out: i10) {
-  %false = rtl.constant false
-  %c0_i2 = rtl.constant 0 : i2
-  %c0_i4 = rtl.constant 0 : i4
-  %c0_i5 = rtl.constant 0 : i5
-  %c0_i3 = rtl.constant 0 : i3
-  %c0_i6 = rtl.constant 0 : i6
-  %.out1.output = sv.wire  : !rtl.inout<i1>
-  %.out.output = sv.wire  : !rtl.inout<i10>
+hw.module @Precedence(%a: i4, %b: i4, %c: i4) -> (%out1: i1, %out: i10) {
+  %false = hw.constant false
+  %c0_i2 = hw.constant 0 : i2
+  %c0_i4 = hw.constant 0 : i4
+  %c0_i5 = hw.constant 0 : i5
+  %c0_i3 = hw.constant 0 : i3
+  %c0_i6 = hw.constant 0 : i6
+  %.out1.output = sv.wire  : !hw.inout<i1>
+  %.out.output = sv.wire  : !hw.inout<i10>
 
   // CHECK: wire [4:0] _T = {1'h0, b};
   // CHECK: wire [4:0] _T_0 = _T + {1'h0, c};
@@ -191,23 +191,23 @@ rtl.module @Precedence(%a: i4, %b: i4, %c: i4) -> (%out1: i1, %out: i10) {
   %40 = comb.or %38, %39 : i1
   sv.connect %.out1.output, %40 : i1
   %41 = comb.xor %b, %c : i4
-  %42 = sv.read_inout %.out1.output : !rtl.inout<i1>
+  %42 = sv.read_inout %.out1.output : !hw.inout<i1>
   %43 = comb.concat %c0_i3, %42 : (i3, i1) -> i4
   %44 = comb.and %41, %43 : i4
   %45 = comb.concat %c0_i6, %44 : (i6, i4) -> i10
   sv.connect %.out.output, %45 : i10
-  %46 = sv.read_inout %.out.output : !rtl.inout<i10>
+  %46 = sv.read_inout %.out.output : !hw.inout<i10>
   %47 = comb.extract %46 from 2 : (i10) -> i8
   %48 = comb.concat %c0_i2, %47 : (i2, i8) -> i10
   sv.connect %.out.output, %48 : i10
   %49 = comb.concat %c0_i6, %a : (i6, i4) -> i10
   %50 = comb.icmp ult %46, %49 : i10
   sv.connect %.out1.output, %50 : i1
-  rtl.output %42, %46 : i1, i10
+  hw.output %42, %46 : i1, i10
 }
 
 // CHECK-LABEL: module CmpSign(
-rtl.module @CmpSign(%a: i4, %b: i4, %c: i4, %d: i4) -> (%out: i1) {
+hw.module @CmpSign(%a: i4, %b: i4, %c: i4, %d: i4) -> (%out: i1) {
   // CHECK: assign _T = a < b;
   %0 = comb.icmp ult %a, %b : i4
   // CHECK-NEXT: assign _T = $signed(c) < $signed(d);
@@ -241,15 +241,15 @@ rtl.module @CmpSign(%a: i4, %b: i4, %c: i4, %d: i4) -> (%out: i1) {
   %14 = comb.icmp ne %a, %b : i4
   %15 = comb.icmp ne %c, %d : i4
   %16 = comb.merge %0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15 : i1
-  rtl.output %16 : i1
+  hw.output %16 : i1
 }
 
 // CHECK-LABEL: module MultiUseExpr
-rtl.module @MultiUseExpr(%a: i4) -> (%b: i1, %b2: i2) {
-  %false = rtl.constant false
-  %c1_i5 = rtl.constant 1 : i5
-  %c-1_i5 = rtl.constant -1 : i5
-  %c-1_i4 = rtl.constant -1 : i4
+hw.module @MultiUseExpr(%a: i4) -> (%b: i1, %b2: i2) {
+  %false = hw.constant false
+  %c1_i5 = hw.constant 1 : i5
+  %c-1_i5 = hw.constant -1 : i5
+  %c-1_i4 = hw.constant -1 : i4
 
   // CHECK: wire _T_0 = ^a;
    %0 = comb.parity %a : i4
@@ -271,14 +271,14 @@ rtl.module @MultiUseExpr(%a: i4) -> (%b: i1, %b2: i2) {
   %6 = comb.xor %a, %c-1_i4 : i4
   %7 = comb.extract %6 from 2 : (i4) -> i2
   %8 = comb.merge %0, %3, %4, %5, %false : i1
-  rtl.output %8, %7 : i1, i2
+  hw.output %8, %7 : i1, i2
 }
 
-rtl.module.extern @MyExtModule(%in: i8) -> (%out: i1) attributes {verilogName = "FooExtModule"}
-rtl.module.extern @MyParameterizedExtModule(%in: i8) -> (%out: i1)
+hw.module.extern @MyExtModule(%in: i8) -> (%out: i1) attributes {verilogName = "FooExtModule"}
+hw.module.extern @MyParameterizedExtModule(%in: i8) -> (%out: i1)
 
 // CHECK-LABEL: module UseInstances
-rtl.module @UseInstances(%a_in: i8) -> (%a_out: i1) {
+hw.module @UseInstances(%a_in: i8) -> (%a_out: i1) {
   // CHECK: wire _T;
   // CHECK: wire xyz_out; 
   // CHECK: wire xyz2_out;
@@ -298,14 +298,14 @@ rtl.module @UseInstances(%a_in: i8) -> (%a_out: i1) {
   // CHECK: assign _T = xyz_out;
   // CHECK: assign _T = xyz2_out;
   // CHECK: assign a_out = _T; 
-  %xyz.out = rtl.instance "xyz" @MyExtModule(%a_in) : (i8) -> i1
-  %xyz2.out = rtl.instance "xyz2" @MyParameterizedExtModule(%a_in) {parameters = {DEFAULT = 0 : i64, DEPTH = 3.500000e+00 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i8) -> i1
+  %xyz.out = hw.instance "xyz" @MyExtModule(%a_in) : (i8) -> i1
+  %xyz2.out = hw.instance "xyz2" @MyParameterizedExtModule(%a_in) {parameters = {DEFAULT = 0 : i64, DEPTH = 3.500000e+00 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i8) -> i1
   %0 = comb.merge %xyz.out, %xyz2.out : i1
-  rtl.output %0 : i1
+  hw.output %0 : i1
 }
 
 // CHECK-LABEL: module Stop(
-rtl.module @Stop(%clock: i1, %reset: i1) {
+hw.module @Stop(%clock: i1, %reset: i1) {
   // CHECK: always @(posedge clock) begin
   // CHECK:   `ifndef SYNTHESIS
   // CHECK:     if (`STOP_COND_ & reset)
@@ -322,13 +322,13 @@ rtl.module @Stop(%clock: i1, %reset: i1) {
       }
     }
   }
-  rtl.output
+  hw.output
 }
 
 // CHECK-LABEL: module Print
-rtl.module @Print(%clock: i1, %reset: i1, %a: i4, %b: i4) {
-  %false = rtl.constant false
-  %c1_i5 = rtl.constant 1 : i5
+hw.module @Print(%clock: i1, %reset: i1, %a: i4, %b: i4) {
+  %false = hw.constant false
+  %c1_i5 = hw.constant 1 : i5
 
   // CHECK: wire [4:0] _T = {1'h0, a} << 5'h1;
   // CHECK: always @(posedge clock) begin
@@ -344,19 +344,19 @@ rtl.module @Print(%clock: i1, %reset: i1, %a: i4, %b: i4) {
       sv.fwrite "Hi %x %x\0A"(%1, %b) : i5, i4
     }
   }
-  rtl.output
+  hw.output
 }
 
 // CHECK-LABEL: module UninitReg1(
-rtl.module @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
-  %c-1_i2 = rtl.constant -1 : i2
-  %count = sv.reg  : !rtl.inout<i2>
+hw.module @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
+  %c-1_i2 = hw.constant -1 : i2
+  %count = sv.reg  : !hw.inout<i2>
  
   // CHECK: wire [1:0] _T = ~{2{reset}} & (cond ? value : count);
   // CHECK-NEXT: always_ff @(posedge clock)
   // CHECK-NEXT:   count <= _T;
 
-  %0 = sv.read_inout %count : !rtl.inout<i2>
+  %0 = sv.read_inout %count : !hw.inout<i2>
   %1 = comb.mux %cond, %value, %0 : i2
   %2 = comb.sext %reset : (i1) -> i2
   %3 = comb.xor %2, %c-1_i2 : i2
@@ -364,17 +364,17 @@ rtl.module @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
   sv.alwaysff(posedge %clock)  {
     sv.passign %count, %4 : i2
   }
-  rtl.output
+  hw.output
 }
 
 // https://github.com/llvm/circt/issues/755
 // CHECK-LABEL: module UnaryParensIssue755(
 // CHECK: assign b = |(~a);
-rtl.module @UnaryParensIssue755(%a: i8) -> (%b: i1) {
-  %c-1_i8 = rtl.constant -1 : i8
-  %c0_i8 = rtl.constant 0 : i8
+hw.module @UnaryParensIssue755(%a: i8) -> (%b: i1) {
+  %c-1_i8 = hw.constant -1 : i8
+  %c0_i8 = hw.constant 0 : i8
   %0 = comb.xor %a, %c-1_i8 : i8
   %1 = comb.icmp ne %0, %c0_i8 : i8
-  rtl.output %1 : i1
+  hw.output %1 : i1
 }
 

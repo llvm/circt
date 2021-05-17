@@ -2424,7 +2424,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     }
   }
 
-  // The FIRRTL dialect requires mems to have at least one port.  Since portless
+  // The FIRRTL dialect requires mems to have at least one port.  Since pohwess
   // mems can never be referenced, it is always safe to drop them.
   if (ports.empty())
     return success();
@@ -2678,7 +2678,7 @@ struct FIRModuleParser : public FIRScopedParser {
 private:
   using PortInfoAndLoc = std::pair<ModulePortInfo, SMLoc>;
   ParseResult parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
-                            unsigned indent);
+                            unsigned indent, StringRef moduleTarget);
 
   CircuitOp circuit;
   SymbolTable symbolTable;
@@ -2692,13 +2692,13 @@ private:
 
 } // end anonymous namespace
 
-/// portlist ::= port*
+/// pohwist ::= port*
 /// port     ::= dir id ':' type info? NEWLINE
 /// dir      ::= 'input' | 'output'
 ///
 ParseResult
 FIRModuleParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
-                               unsigned indent) {
+                               unsigned indent, StringRef moduleTarget) {
   // Parse any ports.
   while (getToken().isAny(FIRToken::kw_input, FIRToken::kw_output) &&
          // Must be nested under the module.
@@ -2729,17 +2729,20 @@ FIRModuleParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
         parseOptionalInfo(info))
       return failure();
 
+    ArrayAttr annotations = ArrayAttr({});
+    getAnnotations(getModuleTarget() + ">" + name.getValue(), annotations);
+
     // FIXME: We should persist the info loc into the IR, not just the name
     // and type.
-    result.push_back(
-        {{name, type, direction::get(isOutput)}, info.getFIRLoc()});
+    result.push_back({{name, type, direction::get(isOutput), annotations},
+                      info.getFIRLoc()});
   }
 
   return success();
 }
 
 /// module    ::=
-///        'extmodule' id ':' info? INDENT portlist defname? parameter* DEDENT
+///        'extmodule' id ':' info? INDENT pohwist defname? parameter* DEDENT
 /// defname   ::= 'defname' '=' id NEWLINE
 ///
 /// parameter ::= 'parameter' id '=' intLit NEWLINE
@@ -2759,7 +2762,8 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   getState().moduleTarget = moduleTarget;
 
   if (parseToken(FIRToken::colon, "expected ':' in extmodule definition") ||
-      parseOptionalInfo(info) || parsePortList(portListAndLoc, indent))
+      parseOptionalInfo(info) ||
+      parsePortList(portListAndLoc, indent, moduleTarget))
     return failure();
 
   auto builder = circuit.getBodyBuilder();
@@ -2849,7 +2853,7 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   return success();
 }
 
-/// module ::= 'module' id ':' info? INDENT portlist simple_stmt_block
+/// module ::= 'module' id ':' info? INDENT pohwist simple_stmt_block
 /// DEDENT
 ///
 ParseResult FIRModuleParser::parseModule(unsigned indent) {
@@ -2865,7 +2869,8 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
   getState().moduleTarget = moduleTarget;
 
   if (parseToken(FIRToken::colon, "expected ':' in module definition") ||
-      parseOptionalInfo(info) || parsePortList(portListAndLoc, indent))
+      parseOptionalInfo(info) ||
+      parsePortList(portListAndLoc, indent, moduleTarget))
     return failure();
 
   auto builder = circuit.getBodyBuilder();

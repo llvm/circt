@@ -183,13 +183,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.node %auto  : !firrtl.uint<1>
     node check_output = auto
 
-    ; CHECK: %c42_ui10 = firrtl.constant(42 : ui10) : !firrtl.uint<10>
-    ; CHECK: %c171_ui8 = firrtl.constant(171 : ui8) : !firrtl.uint<8>
+    ; CHECK: %c42_ui10 = firrtl.constant 42 : !firrtl.uint<10>
+    ; CHECK: %c171_ui8 = firrtl.constant 171 : !firrtl.uint<8>
     ; CHECK: firrtl.add %c42_ui10, %c171_ui8
     ; CHECK: firrtl.connect %auto
     auto11 <= add(UInt<10>(42), UInt<8>("hAB"))
 
-    ; CHECK: %c-85_si8 = firrtl.constant(-85 : si8) : !firrtl.sint<8>
+    ; CHECK: %c-85_si8 = firrtl.constant -85 : !firrtl.sint<8>
     sauto <= add(s8, SInt<8>(-85))
 
     ; CHECK: firrtl.when %reset {
@@ -213,7 +213,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       node n4 = _t_2   ; 'n4' name is in unique scopes.
       _t <- n4
 
-    ; CHECK: [[TMP:%.+]] = firrtl.constant(4 : ui4)
+    ; CHECK: [[TMP:%.+]] = firrtl.constant 4
     ; CHECK: [[COND:%.+]] = firrtl.lt %reset, [[TMP]]
     ; CHECK: firrtl.when [[COND]] {
     ; CHECK:   firrtl.connect %_t, %_t_2
@@ -506,14 +506,14 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module constant_implicit_cse :
     input cond : UInt<1>
 
-    ; CHECK: [[CST15:%.+]] = firrtl.constant(15 : ui4) : !firrtl.uint<4>
+    ; CHECK: [[CST15:%.+]] = firrtl.constant 15 : !firrtl.uint<4>
     ; CHECK: %a = firrtl.node [[CST15]]
     node a = UInt<4>(15)
     ; CHECK: %b = firrtl.node [[CST15]]
     node b = UInt<4>(15)
 
     ;; Constants always get emitted to the top level.
-    ; CHECK: [[CST7:%.+]] = firrtl.constant(7 : ui4) : !firrtl.uint<4>
+    ; CHECK: [[CST7:%.+]] = firrtl.constant 7 : !firrtl.uint<4>
     ; CHECK: firrtl.when %cond {
     when cond :
       ; CHECK: %c = firrtl.node [[CST15]]
@@ -571,14 +571,14 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module issue354 :
     output tmp5: SInt<19>
     tmp5 <= SInt<19>(8)
-     ; CHECK: %c8_si19 = firrtl.constant(8 : si19) : !firrtl.sint<19>
+     ; CHECK: %c8_si19 = firrtl.constant 8 : !firrtl.sint<19>
      ; CHECK: firrtl.connect %tmp5, %c8_si19 : !firrtl.sint<19>, !firrtl.sint<19>
 
    ; CHECK-LABEL: firrtl.module @issue347
   module issue347 :
     output tmp12: SInt<4>
     tmp12 <= SInt<4>(-4)
-    ; CHECK: %c-4_si4 = firrtl.constant(-4 : si4) : !firrtl.sint<4>
+    ; CHECK: %c-4_si4 = firrtl.constant -4 : !firrtl.sint<4>
 
   ; CHECK-LABEL: firrtl.extmodule @issue183()
   ; CHECK: attributes {parameters = {A = -1 : i4}}
@@ -795,3 +795,26 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK:      %invalid_ui42 = firrtl.invalidvalue : !firrtl.uint<42>
     ; CHECK-NEXT: firrtl.mux(%en, %in2, %invalid_ui42) : (!firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>) -> !firrtl.uint<42>
     node out2 = validif(en, in2)
+
+  ; Test that behavioral memory reads and writes both work and that flow checks
+  ; don't fail here.  (A memory port should have duplex flow.)
+  ; See: https://github.com/llvm/circt/issues/1058
+  ; CHECK-LABEL: firrtl.module @BehavioralMemory
+  module BehavioralMemory:
+    input clock: Clock
+    input rAddr: UInt<3>
+    output rData: UInt<1>
+    input wAddr: UInt<3>
+    input wData: UInt<1>
+
+    cmem a: UInt<1>[8]
+
+    ; CHECK: %r = firrtl.memoryport Infer %a
+    ; CHECK-NEXT: firrtl.connect %rData, %r
+    infer mport r = a[rAddr], clock
+    rData <= r
+
+    ; CHECK: %w = firrtl.memoryport Infer %a
+    ; CHECK-NEXT: firrtl.connect %w, %wData
+    infer mport w = a[wAddr], clock
+    w <= wData

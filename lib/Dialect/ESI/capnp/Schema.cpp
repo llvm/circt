@@ -12,9 +12,9 @@
 #include "ESICapnp.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/ESI/ESITypes.h"
-#include "circt/Dialect/RTL/RTLDialect.h"
-#include "circt/Dialect/RTL/RTLOps.h"
-#include "circt/Dialect/RTL/RTLTypes.h"
+#include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
 
 #include "capnp/schema-parser.h"
@@ -26,6 +26,7 @@
 #include "llvm/Support/Format.h"
 
 #include <initializer_list>
+#include <mlir/IR/BuiltinAttributes.h>
 #include <string>
 
 using namespace circt::esi::capnp::detail;
@@ -102,10 +103,10 @@ public:
 
   bool operator==(const TypeSchemaImpl &) const;
 
-  /// Build an RTL/SV dialect capnp encoder for this type.
-  rtl::RTLModuleOp buildEncoder(Value clk, Value valid, Value);
-  /// Build an RTL/SV dialect capnp decoder for this type.
-  rtl::RTLModuleOp buildDecoder(Value clk, Value valid, Value);
+  /// Build an HW/SV dialect capnp encoder for this type.
+  hw::HWModuleOp buildEncoder(Value clk, Value valid, Value);
+  /// Build an HW/SV dialect capnp decoder for this type.
+  hw::HWModuleOp buildDecoder(Value clk, Value valid, Value);
 
 private:
   ::capnp::ParsedSchema getSchema() const;
@@ -116,7 +117,7 @@ private:
   /// wrap non-struct types in a capnp struct. During decoder/encoder
   /// construction, it's convenient to use the capnp model so assemble the
   /// virtual list of `Type`s here.
-  using FieldInfo = rtl::StructType::FieldInfo;
+  using FieldInfo = hw::StructType::FieldInfo;
   SmallVector<FieldInfo> fieldTypes;
 
   ::capnp::SchemaParser parser;
@@ -195,10 +196,10 @@ TypeSchemaImpl::TypeSchemaImpl(Type t) : type(t) {
       .Case([this](IntegerType t) {
         fieldTypes.push_back(FieldInfo{.name = "i", .type = t});
       })
-      .Case([this](rtl::ArrayType t) {
+      .Case([this](hw::ArrayType t) {
         fieldTypes.push_back(FieldInfo{.name = "l", .type = t});
       })
-      .Case([this](rtl::StructType t) {
+      .Case([this](hw::StructType t) {
         fieldTypes.append(t.getElements().begin(), t.getElements().end());
       })
       .Default([](Type) {});
@@ -277,8 +278,8 @@ uint64_t TypeSchemaImpl::capnpTypeID() const {
 static bool isSupported(Type type, bool outer = false) {
   return llvm::TypeSwitch<::mlir::Type, bool>(type)
       .Case([](IntegerType t) { return t.getWidth() <= 64; })
-      .Case([](rtl::ArrayType t) { return isSupported(t.getElementType()); })
-      .Case([outer](rtl::StructType t) {
+      .Case([](hw::ArrayType t) { return isSupported(t.getElementType()); })
+      .Case([outer](hw::StructType t) {
         // We don't yet support structs containing structs.
         if (!outer)
           return false;
@@ -296,7 +297,7 @@ static bool isSupported(Type type, bool outer = false) {
 bool TypeSchemaImpl::isSupported() const { return ::isSupported(type, true); }
 
 /// Returns the expected size of an array (capnp list) in 64-bit words.
-static int64_t size(rtl::ArrayType mType, capnp::schema::Field::Reader cField) {
+static int64_t size(hw::ArrayType mType, capnp::schema::Field::Reader cField) {
   assert(cField.isSlot());
   auto cType = cField.getSlot().getType();
   assert(cType.isList());
@@ -307,7 +308,7 @@ static int64_t size(rtl::ArrayType mType, capnp::schema::Field::Reader cField) {
 
 /// Compute the size of a capnp struct, in 64-bit words.
 static int64_t size(capnp::schema::Node::Struct::Reader cStruct,
-                    ArrayRef<rtl::StructType::FieldInfo> mFields) {
+                    ArrayRef<hw::StructType::FieldInfo> mFields) {
   using namespace capnp::schema;
   int64_t size = (1 + // Header
                   cStruct.getDataWordCount() + cStruct.getPointerCount());
@@ -322,7 +323,7 @@ static int64_t size(capnp::schema::Node::Struct::Reader cStruct,
     int64_t pointedToSize =
         TypeSwitch<mlir::Type, int64_t>(mFields[cField.getCodeOrder()].type)
             .Case([](IntegerType) { return 0; })
-            .Case([cField](rtl::ArrayType mType) {
+            .Case([cField](hw::ArrayType mType) {
               return ::size(mType, cField);
             });
     size += pointedToSize;
@@ -347,11 +348,11 @@ static void emitName(Type type, uint64_t id, llvm::raw_ostream &os) {
         intName[0] = toupper(intName[0]);
         os << intName;
       })
-      .Case([&os](rtl::ArrayType arrTy) {
+      .Case([&os](hw::ArrayType arrTy) {
         os << "ArrayOf" << arrTy.getSize() << 'x';
         emitName(arrTy.getElementType(), 0, os);
       })
-      .Case([&os, id](rtl::StructType t) { os << "Struct" << id; })
+      .Case([&os, id](hw::StructType t) { os << "Struct" << id; })
       .Default([](Type) {
         assert(false && "Type not supported. Please check support first with "
                         "isSupported()");
@@ -398,12 +399,12 @@ static void emitCapnpType(Type type, IndentingOStream &os) {
                             "check support first with isSupported()");
         }
       })
-      .Case([&os](rtl::ArrayType arrTy) {
+      .Case([&os](hw::ArrayType arrTy) {
         os << "List(";
         emitCapnpType(arrTy.getElementType(), os);
         os << ')';
       })
-      .Case([](rtl::StructType structTy) {
+      .Case([](hw::StructType structTy) {
         assert(false && "Struct containing structs not supported");
       })
       .Default([](Type) {
@@ -516,7 +517,7 @@ public:
 
   /// Construct a bitcast.
   GasketComponent cast(Type t) const {
-    auto dst = builder->create<rtl::BitcastOp>(loc(), t, s);
+    auto dst = builder->create<hw::BitcastOp>(loc(), t, s);
     auto gc = GasketComponent(*builder, dst);
     StringRef name = getName();
     if (name.empty())
@@ -530,12 +531,12 @@ public:
 
   /// Downcast an int, accounting for signedness.
   GasketComponent downcast(IntegerType t) const {
-    // Since the RTL dialect operators only operate on signless integers, we
+    // Since the HW dialect operators only operate on signless integers, we
     // have to cast to signless first, then cast the sign back.
     assert(s.getType().isa<IntegerType>());
     Value signlessVal = s;
     if (!signlessVal.getType().isSignlessInteger())
-      signlessVal = builder->create<rtl::BitcastOp>(
+      signlessVal = builder->create<hw::BitcastOp>(
           loc(), builder->getIntegerType(s.getType().getIntOrFloatBitWidth()),
           s);
 
@@ -558,7 +559,7 @@ public:
   GasketComponent padTo(uint64_t finalBits) const;
 
   /// Returns the bit width of this value.
-  uint64_t size() const { return rtl::getBitWidth(s.getType()); }
+  uint64_t size() const { return hw::getBitWidth(s.getType()); }
 
   /// Build a component by concatenating some values.
   static GasketComponent concat(ArrayRef<GasketComponent> concatValues);
@@ -588,31 +589,31 @@ private:
   Slice(const Slice *parent, llvm::Optional<int64_t> offset, Value val)
       : GasketComponent(*parent->builder, val), parent(parent),
         offsetIntoParent(offset) {
-    type = val.getType().dyn_cast<rtl::ArrayType>();
+    type = val.getType().dyn_cast<hw::ArrayType>();
     assert(type && "Value must be array type");
   }
 
 public:
   Slice(OpBuilder &b, Value val)
       : GasketComponent(b, val), parent(nullptr), offsetIntoParent(0) {
-    type = val.getType().dyn_cast<rtl::ArrayType>();
+    type = val.getType().dyn_cast<hw::ArrayType>();
     assert(type && "Value must be array type");
   }
   Slice(GasketComponent gc)
       : GasketComponent(gc), parent(nullptr), offsetIntoParent(0) {
-    type = gc.getValue().getType().dyn_cast<rtl::ArrayType>();
+    type = gc.getValue().getType().dyn_cast<hw::ArrayType>();
     assert(type && "Value must be array type");
   }
 
   /// Create an op to slice the array from lsb to lsb + size. Return a new slice
   /// with that op.
   Slice slice(int64_t lsb, int64_t size) const {
-    rtl::ArrayType dstTy = rtl::ArrayType::get(type.getElementType(), size);
+    hw::ArrayType dstTy = hw::ArrayType::get(type.getElementType(), size);
     IntegerType idxTy =
         builder->getIntegerType(llvm::Log2_64_Ceil(type.getSize()));
-    Value lsbConst = builder->create<rtl::ConstantOp>(loc(), idxTy, lsb);
+    Value lsbConst = builder->create<hw::ConstantOp>(loc(), idxTy, lsb);
     Value newSlice =
-        builder->create<rtl::ArraySliceOp>(loc(), dstTy, s, lsbConst);
+        builder->create<hw::ArraySliceOp>(loc(), dstTy, s, lsbConst);
     return Slice(this, lsb, newSlice);
   }
 
@@ -629,8 +630,8 @@ public:
           loc(), builder->getIntegerType(expIdxWidth), lsb, 0);
     else if (lsbWidth < expIdxWidth)
       assert(false && "LSB Value must not be smaller than expected.");
-    auto dstTy = rtl::ArrayType::get(type.getElementType(), size);
-    Value newSlice = builder->create<rtl::ArraySliceOp>(loc(), dstTy, s, lsb);
+    auto dstTy = hw::ArrayType::get(type.getElementType(), size);
+    Value newSlice = builder->create<hw::ArraySliceOp>(loc(), dstTy, s, lsb);
     return Slice(this, llvm::Optional<int64_t>(), newSlice);
   }
   Slice &name(const Twine &name) { return GasketComponent::name<Slice>(name); }
@@ -639,7 +640,7 @@ public:
   }
   Slice castToSlice(Type elemTy, size_t size, StringRef name = StringRef(),
                     Twine nameSuffix = Twine()) const {
-    auto arrTy = rtl::ArrayType::get(elemTy, size);
+    auto arrTy = hw::ArrayType::get(elemTy, size);
     GasketComponent rawCast =
         GasketComponent::cast(arrTy).name(name + nameSuffix);
     return Slice(*builder, rawCast);
@@ -647,15 +648,15 @@ public:
 
   GasketComponent operator[](Value idx) const {
     return GasketComponent(*builder,
-                           builder->create<rtl::ArrayGetOp>(loc(), s, idx));
+                           builder->create<hw::ArrayGetOp>(loc(), s, idx));
   }
 
   GasketComponent operator[](size_t idx) const {
     IntegerType idxTy =
         builder->getIntegerType(llvm::Log2_32_Ceil(type.getSize()));
-    auto idxVal = builder->create<rtl::ConstantOp>(loc(), idxTy, idx);
+    auto idxVal = builder->create<hw::ConstantOp>(loc(), idxTy, idx);
     return GasketComponent(*builder,
-                           builder->create<rtl::ArrayGetOp>(loc(), s, idxVal));
+                           builder->create<hw::ArrayGetOp>(loc(), s, idxVal));
   }
 
   /// Return the root of this slice hierarchy.
@@ -677,7 +678,7 @@ public:
   uint64_t size() const { return type.getSize(); }
 
 private:
-  rtl::ArrayType type;
+  hw::ArrayType type;
   const Slice *parent;
   llvm::Optional<int64_t> offsetIntoParent;
 };
@@ -688,12 +689,12 @@ private:
 
 GasketComponent GasketBuilder::zero(uint64_t width) const {
   return GasketComponent(*builder,
-                         builder->create<rtl::ConstantOp>(
+                         builder->create<hw::ConstantOp>(
                              loc(), builder->getIntegerType(width), 0));
 }
 GasketComponent GasketBuilder::constant(uint64_t width, uint64_t value) const {
   return GasketComponent(*builder,
-                         builder->create<rtl::ConstantOp>(
+                         builder->create<hw::ConstantOp>(
                              loc(), builder->getIntegerType(width), value));
 }
 
@@ -704,10 +705,10 @@ Slice GasketBuilder::padding(uint64_t p) const {
 
 Slice GasketComponent::castBitArray() const {
   auto dstTy =
-      rtl::ArrayType::get(builder->getI1Type(), rtl::getBitWidth(s.getType()));
+      hw::ArrayType::get(builder->getI1Type(), hw::getBitWidth(s.getType()));
   if (s.getType() == dstTy)
     return Slice(*builder, s);
-  auto dst = builder->create<rtl::BitcastOp>(loc(), dstTy, s);
+  auto dst = builder->create<hw::BitcastOp>(loc(), dstTy, s);
   return Slice(*builder, dst);
 }
 
@@ -724,7 +725,7 @@ GasketComponent::concat(ArrayRef<GasketComponent> concatValues) {
   // reverse ourselves.
   std::reverse(values.begin(), values.end());
   return GasketComponent(*builder,
-                         builder->create<rtl::ArrayConcatOp>(loc, values));
+                         builder->create<hw::ArrayConcatOp>(loc, values));
 }
 namespace {
 /// Utility class for building sv::AssertOps. Since SV assertions need to be in
@@ -740,7 +741,7 @@ public:
       return;
     }
 
-    auto valTy = veg.getValue().getType().dyn_cast<rtl::ArrayType>();
+    auto valTy = veg.getValue().getType().dyn_cast<hw::ArrayType>();
     assert(valTy && valTy.getElementType() == veg.b().getIntegerType(1) &&
            "Can only compare ints and bit arrays");
     assertPred(veg.cast(veg.b().getIntegerType(valTy.getSize())).getValue(),
@@ -753,7 +754,7 @@ public:
 
 private:
   void assertPred(Value val, ICmpPredicate pred, int64_t expected) {
-    auto expectedVal = create<rtl::ConstantOp>(loc, val.getType(), expected);
+    auto expectedVal = create<hw::ConstantOp>(loc, val.getType(), expected);
     create<sv::AssertOp>(
         loc, create<comb::ICmpOp>(loc, getI1Type(), pred, val, expectedVal));
   }
@@ -762,7 +763,7 @@ private:
 } // anonymous namespace
 
 //===----------------------------------------------------------------------===//
-// Capnp encode "gasket" RTL builders.
+// Capnp encode "gasket" HW builders.
 //
 // These have the potential to get large and complex as we add more types. The
 // encoding spec is here: https://capnproto.org/encoding.html
@@ -814,8 +815,8 @@ private:
   /// manage 'memory allocations' (figuring out where to place pointed to
   /// objects) separately from the data contained in those values, some of which
   /// are pointers themselves.
-  llvm::IntervalMap<uint64_t, GasketComponent, 2048>::Allocator allocator;
-  llvm::IntervalMap<uint64_t, GasketComponent, 2048> segmentValues;
+  llvm::IntervalMap<uint64_t, GasketComponent>::Allocator allocator;
+  llvm::IntervalMap<uint64_t, GasketComponent> segmentValues;
 
   /// Track the allocated message size. Increase to 'alloc' more.
   uint64_t messageSize;
@@ -834,7 +835,7 @@ void CapnpSegmentBuilder::encodeFieldAt(uint64_t offset, GasketComponent val,
                                         ::capnp::schema::Type::Reader type) {
   TypeSwitch<Type>(val.getValue().getType())
       .Case([&](IntegerType it) { insert(offset, val); })
-      .Case([&](rtl::ArrayType arrTy) {
+      .Case([&](hw::ArrayType arrTy) {
         uint64_t listOffset = buildList(Slice(val), type);
         int32_t relativeOffset = (listOffset - offset - 64) / 64;
         insert(offset,
@@ -847,7 +848,7 @@ void CapnpSegmentBuilder::encodeFieldAt(uint64_t offset, GasketComponent val,
 
 uint64_t CapnpSegmentBuilder::buildList(Slice val,
                                         ::capnp::schema::Type::Reader type) {
-  rtl::ArrayType arrTy = val.getValue().getType().cast<rtl::ArrayType>();
+  hw::ArrayType arrTy = val.getValue().getType().cast<hw::ArrayType>();
   auto elemType = type.getList().getElementType();
   size_t elemWidth = bits(elemType);
   uint64_t listSize = elemWidth * arrTy.getSize();
@@ -931,10 +932,10 @@ CapnpSegmentBuilder::build(::capnp::schema::Node::Struct::Reader cStruct,
   return compile();
 }
 
-/// Build an RTL/SV dialect capnp encoder module for this type. Inputs need to
+/// Build an HW/SV dialect capnp encoder module for this type. Inputs need to
 /// be packed and unpadded.
-rtl::RTLModuleOp TypeSchemaImpl::buildEncoder(Value clk, Value valid,
-                                              Value operandVal) {
+hw::HWModuleOp TypeSchemaImpl::buildEncoder(Value clk, Value valid,
+                                            Value operandVal) {
   Location loc = operandVal.getDefiningOp()->getLoc();
   ModuleOp topMod = operandVal.getDefiningOp()->getParentOfType<ModuleOp>();
   OpBuilder b = OpBuilder::atBlockEnd(topMod.getBody());
@@ -942,19 +943,18 @@ rtl::RTLModuleOp TypeSchemaImpl::buildEncoder(Value clk, Value valid,
   SmallString<64> modName;
   modName.append("encode");
   modName.append(name());
-  SmallVector<rtl::ModulePortInfo, 4> ports;
-  ports.push_back(rtl::ModulePortInfo{
-      b.getStringAttr("clk"), rtl::PortDirection::INPUT, clk.getType(), 0});
-  ports.push_back(rtl::ModulePortInfo{
-      b.getStringAttr("valid"), rtl::PortDirection::INPUT, valid.getType(), 1});
-  ports.push_back(rtl::ModulePortInfo{b.getStringAttr("unencodedInput"),
-                                      rtl::PortDirection::INPUT,
-                                      operandVal.getType(), 2});
-  rtl::ArrayType modOutputType = rtl::ArrayType::get(b.getI1Type(), size());
-  ports.push_back(rtl::ModulePortInfo{b.getStringAttr("encoded"),
-                                      rtl::PortDirection::OUTPUT, modOutputType,
-                                      0});
-  rtl::RTLModuleOp retMod = b.create<rtl::RTLModuleOp>(
+  SmallVector<hw::ModulePortInfo, 4> ports;
+  ports.push_back(hw::ModulePortInfo{
+      b.getStringAttr("clk"), hw::PortDirection::INPUT, clk.getType(), 0});
+  ports.push_back(hw::ModulePortInfo{
+      b.getStringAttr("valid"), hw::PortDirection::INPUT, valid.getType(), 1});
+  ports.push_back(hw::ModulePortInfo{b.getStringAttr("unencodedInput"),
+                                     hw::PortDirection::INPUT,
+                                     operandVal.getType(), 2});
+  hw::ArrayType modOutputType = hw::ArrayType::get(b.getI1Type(), size());
+  ports.push_back(hw::ModulePortInfo{
+      b.getStringAttr("encoded"), hw::PortDirection::OUTPUT, modOutputType, 0});
+  hw::HWModuleOp retMod = b.create<hw::HWModuleOp>(
       operandVal.getLoc(), b.getStringAttr(modName), ports);
 
   Block *innerBlock = retMod.getBodyBlock();
@@ -971,10 +971,10 @@ rtl::RTLModuleOp TypeSchemaImpl::buildEncoder(Value clk, Value valid,
   // The values in the struct we are encoding.
   SmallVector<GasketComponent, 16> fieldValues;
   assert(operand.getValue().getType() == type);
-  if (auto structTy = type.dyn_cast<rtl::StructType>()) {
+  if (auto structTy = type.dyn_cast<hw::StructType>()) {
     for (auto field : structTy.getElements()) {
       fieldValues.push_back(GasketComponent(
-          b, b.create<rtl::StructExtractOp>(loc, operand, field)));
+          b, b.create<hw::StructExtractOp>(loc, operand, field)));
     }
   } else {
     fieldValues.push_back(GasketComponent(b, operand));
@@ -983,12 +983,12 @@ rtl::RTLModuleOp TypeSchemaImpl::buildEncoder(Value clk, Value valid,
 
   innerBlock->getTerminator()->erase();
   b.setInsertionPointToEnd(innerBlock);
-  b.create<rtl::OutputOp>(loc, ValueRange{ret});
+  b.create<hw::OutputOp>(loc, ValueRange{ret});
   return retMod;
 }
 
 //===----------------------------------------------------------------------===//
-// Capnp decode "gasket" RTL builders.
+// Capnp decode "gasket" HW builders.
 //
 // These have the potential to get large and complex as we add more types. The
 // encoding spec is here: https://capnproto.org/encoding.html
@@ -997,7 +997,7 @@ rtl::RTLModuleOp TypeSchemaImpl::buildEncoder(Value clk, Value valid,
 /// Construct the proper operations to decode a capnp list. This only works for
 /// arrays of ints or bools. Will need to be updated for structs and lists of
 /// lists.
-static GasketComponent decodeList(rtl::ArrayType type,
+static GasketComponent decodeList(hw::ArrayType type,
                                   capnp::schema::Field::Reader field,
                                   Slice ptrSection, AssertBuilder &asserts) {
   capnp::schema::Type::Reader capnpType = field.getSlot().getType();
@@ -1083,7 +1083,7 @@ static GasketComponent decodeList(rtl::ArrayType type,
                        .name(field.getName(), "_elem");
     arrayValues.push_back(esiElem);
   }
-  auto array = b.create<rtl::ArrayCreateOp>(loc, arrayValues);
+  auto array = b.create<hw::ArrayCreateOp>(loc, arrayValues);
   return GasketComponent(b, array);
 }
 
@@ -1100,17 +1100,17 @@ static GasketComponent decodeField(Type type,
                                            it.getWidth());
             return slice.name(field.getName(), "_bits").cast(type);
           })
-          .Case([&](rtl::ArrayType at) {
+          .Case([&](hw::ArrayType at) {
             return decodeList(at, field, ptrSection, asserts);
           });
   esiValue.name(field.getName().cStr(), "Value");
   return esiValue;
 }
 
-/// Build an RTL/SV dialect capnp decoder module for this type. Outputs packed
+/// Build an HW/SV dialect capnp decoder module for this type. Outputs packed
 /// and unpadded data.
-rtl::RTLModuleOp TypeSchemaImpl::buildDecoder(Value clk, Value valid,
-                                              Value operandVal) {
+hw::HWModuleOp TypeSchemaImpl::buildDecoder(Value clk, Value valid,
+                                            Value operandVal) {
   auto loc = operandVal.getDefiningOp()->getLoc();
   auto topMod = operandVal.getDefiningOp()->getParentOfType<ModuleOp>();
   OpBuilder b = OpBuilder::atBlockEnd(topMod.getBody());
@@ -1118,17 +1118,17 @@ rtl::RTLModuleOp TypeSchemaImpl::buildDecoder(Value clk, Value valid,
   SmallString<64> modName;
   modName.append("decode");
   modName.append(name());
-  SmallVector<rtl::ModulePortInfo, 4> ports;
-  ports.push_back(rtl::ModulePortInfo{
-      b.getStringAttr("clk"), rtl::PortDirection::INPUT, clk.getType(), 0});
-  ports.push_back(rtl::ModulePortInfo{
-      b.getStringAttr("valid"), rtl::PortDirection::INPUT, valid.getType(), 1});
-  ports.push_back(rtl::ModulePortInfo{b.getStringAttr("encodedInput"),
-                                      rtl::PortDirection::INPUT,
-                                      operandVal.getType(), 2});
-  ports.push_back(rtl::ModulePortInfo{
-      b.getStringAttr("decoded"), rtl::PortDirection::OUTPUT, getType(), 0});
-  rtl::RTLModuleOp retMod = b.create<rtl::RTLModuleOp>(
+  SmallVector<hw::ModulePortInfo, 4> ports;
+  ports.push_back(hw::ModulePortInfo{
+      b.getStringAttr("clk"), hw::PortDirection::INPUT, clk.getType(), 0});
+  ports.push_back(hw::ModulePortInfo{
+      b.getStringAttr("valid"), hw::PortDirection::INPUT, valid.getType(), 1});
+  ports.push_back(hw::ModulePortInfo{b.getStringAttr("encodedInput"),
+                                     hw::PortDirection::INPUT,
+                                     operandVal.getType(), 2});
+  ports.push_back(hw::ModulePortInfo{b.getStringAttr("decoded"),
+                                     hw::PortDirection::OUTPUT, getType(), 0});
+  hw::HWModuleOp retMod = b.create<hw::HWModuleOp>(
       operandVal.getLoc(), b.getStringAttr(modName), ports);
 
   Block *innerBlock = retMod.getBodyBlock();
@@ -1141,7 +1141,7 @@ rtl::RTLModuleOp TypeSchemaImpl::buildDecoder(Value clk, Value valid,
   auto i16 = b.getIntegerType(16);
 
   size_t size = this->size();
-  rtl::ArrayType operandType = operandVal.getType().dyn_cast<rtl::ArrayType>();
+  hw::ArrayType operandType = operandVal.getType().dyn_cast<hw::ArrayType>();
   assert(operandType && operandType.getSize() == size &&
          "Operand type and length must match the type's capnp size.");
 
@@ -1199,18 +1199,18 @@ rtl::RTLModuleOp TypeSchemaImpl::buildDecoder(Value clk, Value valid,
   GasketComponent ret =
       TypeSwitch<Type, GasketComponent>(type)
           .Case([&fieldValues](IntegerType) { return fieldValues[0]; })
-          .Case([&fieldValues](rtl::ArrayType) { return fieldValues[0]; })
-          .Case([&](rtl::StructType) {
+          .Case([&fieldValues](hw::ArrayType) { return fieldValues[0]; })
+          .Case([&](hw::StructType) {
             SmallVector<Value, 8> rawValues(llvm::map_range(
                 fieldValues, [](GasketComponent c) { return c.getValue(); }));
             return GasketComponent(
-                b, b.create<rtl::StructCreateOp>(loc, type, rawValues));
+                b, b.create<hw::StructCreateOp>(loc, type, rawValues));
           });
   ret.name(name());
 
   innerBlock->getTerminator()->erase();
   b.setInsertionPointToEnd(innerBlock);
-  auto outputOp = b.create<rtl::OutputOp>(loc, ValueRange{ret.getValue()});
+  auto outputOp = b.create<hw::OutputOp>(loc, ValueRange{ret.getValue()});
   alwaysAt->moveBefore(outputOp);
   return retMod;
 }
@@ -1219,9 +1219,9 @@ rtl::RTLModuleOp TypeSchemaImpl::buildDecoder(Value clk, Value valid,
 // TypeSchema wrapper.
 //===----------------------------------------------------------------------===//
 
-llvm::SmallDenseMap<Type, rtl::RTLModuleOp>
+llvm::SmallDenseMap<Type, hw::HWModuleOp>
     circt::esi::capnp::TypeSchema::decImplMods;
-llvm::SmallDenseMap<Type, rtl::RTLModuleOp>
+llvm::SmallDenseMap<Type, hw::HWModuleOp>
     circt::esi::capnp::TypeSchema::encImplMods;
 
 circt::esi::capnp::TypeSchema::TypeSchema(Type type) {
@@ -1252,7 +1252,7 @@ bool circt::esi::capnp::TypeSchema::operator==(const TypeSchema &that) const {
 Value circt::esi::capnp::TypeSchema::buildEncoder(OpBuilder &builder, Value clk,
                                                   Value valid,
                                                   Value operand) const {
-  rtl::RTLModuleOp encImplMod;
+  hw::HWModuleOp encImplMod;
   auto encImplIT = encImplMods.find(getType());
   if (encImplIT == encImplMods.end()) {
     encImplMod = s->buildEncoder(clk, valid, operand);
@@ -1265,17 +1265,17 @@ Value circt::esi::capnp::TypeSchema::buildEncoder(OpBuilder &builder, Value clk,
   instName.append("encode");
   instName.append(name());
   instName.append("Inst");
-  auto resTypes = rtl::getModuleType(encImplMod).getResults();
-  auto encodeInst = builder.create<rtl::InstanceOp>(
+  auto resTypes = hw::getModuleType(encImplMod).getResults();
+  auto encodeInst = builder.create<hw::InstanceOp>(
       operand.getLoc(), resTypes, instName, encImplMod.getName(),
-      ValueRange{clk, valid, operand}, DictionaryAttr());
+      ValueRange{clk, valid, operand}, DictionaryAttr(), StringAttr());
   return encodeInst.getResult(0);
 }
 
 Value circt::esi::capnp::TypeSchema::buildDecoder(OpBuilder &builder, Value clk,
                                                   Value valid,
                                                   Value operand) const {
-  rtl::RTLModuleOp decImplMod;
+  hw::HWModuleOp decImplMod;
   auto decImplIT = decImplMods.find(getType());
   if (decImplIT == decImplMods.end()) {
     decImplMod = s->buildDecoder(clk, valid, operand);
@@ -1288,9 +1288,9 @@ Value circt::esi::capnp::TypeSchema::buildDecoder(OpBuilder &builder, Value clk,
   instName.append("decode");
   instName.append(name());
   instName.append("Inst");
-  auto resTypes = rtl::getModuleType(decImplMod).getResults();
-  auto decodeInst = builder.create<rtl::InstanceOp>(
+  auto resTypes = hw::getModuleType(decImplMod).getResults();
+  auto decodeInst = builder.create<hw::InstanceOp>(
       operand.getLoc(), resTypes, instName, decImplMod.getName(),
-      ValueRange{clk, valid, operand}, DictionaryAttr());
+      ValueRange{clk, valid, operand}, DictionaryAttr(), StringAttr());
   return decodeInst.getResult(0);
 }
