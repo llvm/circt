@@ -1959,7 +1959,6 @@ ParseResult FIRStmtParser::parsePrintf() {
     APInt constOne(1, 1, false);
     auto constTrue = builder.create<ConstantOp>(
         info.getLoc(), UIntType::get(getContext(), 1), constOne);
-    llvm::errs() << "\n create assume:";
     builder.create<AssumeOp>(info.getLoc(), clock, condition, constTrue,
                              builder.getStringAttr(formatStrUnescaped));
     return success();
