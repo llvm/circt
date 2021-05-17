@@ -396,10 +396,19 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     en <= not(reset)
     ; CHECK: firrtl.assert %clock, %pred, %en, "X equals Y when Z is valid"
     assert(clock, pred, en, "X equals Y when Z is valid")
+    ; CHECK: [[C:%.+]] = firrtl.constant 1 : !firrtl.uint<1>
+    ; CHECK-NEXT: firrtl.assert %clock, %pred, [[C]], "assert:X equals Y when Z is valid"
+    printf(clock, pred, "assert:X equals Y when Z is valid")
     ; CHECK: firrtl.assume %clock, %pred, %en, "X equals Y when Z is valid"
     assume(clock, pred, en, "X equals Y when Z is valid")
+    ; CHECK: [[C2:%.+]] = firrtl.constant 1 : !firrtl.uint<1>
+    ; CHECK-NEXT: firrtl.assume %clock, %pred, [[C2]], "assume:X equals Y when Z is valid"
+    printf(clock, pred, "assume:X equals Y when Z is valid")
     ; CHECK: firrtl.cover %clock, %pred, %en, "X equals Y when Z is valid"
     cover(clock, pred, en, "X equals Y when Z is valid")
+    ; CHECK: [[C3:%.+]] = firrtl.constant 1 : !firrtl.uint<1>
+    ; CHECK-NEXT: firrtl.cover %clock, %pred, [[C3]], "cover:X equals Y when Z is valid"
+    printf(clock, pred, "cover:X equals Y when Z is valid")
 
   ; CHECK-LABEL: firrtl.module @type_handling(
   module type_handling :
