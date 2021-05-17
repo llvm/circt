@@ -1904,6 +1904,17 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
   return addSymbolEntry(id, result, info.getFIRLoc());
 }
 
+/// Returns true if \p base begins with \p s. This shold be a special cased
+/// implementation of std::string::find, where the string match is performed
+/// only at the beggining of the base. Should be more efficient than the find.
+static bool stringBeginsWith(const std::string base, const std::string &s) {
+  for (unsigned i = 0, e = s.size(); i < e; ++i) {
+    if (base[i] != s[i])
+      return false;
+  }
+  return true;
+}
+
 /// printf ::= 'printf(' exp exp StringLit exp* ')' info?
 ParseResult FIRStmtParser::parsePrintf() {
   LocWithInfo info(getToken().getLoc(), this);
@@ -1930,13 +1941,29 @@ ParseResult FIRStmtParser::parsePrintf() {
     return failure();
 
   auto formatStrUnescaped = FIRToken::getStringValue(formatString);
-  if (formatStrUnescaped.find_first_of("cover:") == 0) {
-    APInt constOne(1,1,false);
-    auto constTrue = builder.create<ConstantOp>(info.getLoc(), UIntType::get(getContext(), 1), constOne);
-    builder.create<CoverOp>(info.getLoc(), clock, condition,constTrue ,       builder.getStringAttr(formatStrUnescaped));
+  if (stringBeginsWith(formatStrUnescaped, "cover:")) {
+    APInt constOne(1, 1, false);
+    auto constTrue = builder.create<ConstantOp>(
+        info.getLoc(), UIntType::get(getContext(), 1), constOne);
+    builder.create<CoverOp>(info.getLoc(), clock, condition, constTrue,
+                            builder.getStringAttr(formatStrUnescaped));
+    return success();
+  } else if (stringBeginsWith(formatStrUnescaped, "assert:")) {
+    APInt constOne(1, 1, false);
+    auto constTrue = builder.create<ConstantOp>(
+        info.getLoc(), UIntType::get(getContext(), 1), constOne);
+    builder.create<AssertOp>(info.getLoc(), clock, condition, constTrue,
+                             builder.getStringAttr(formatStrUnescaped));
+    return success();
+  } else if (stringBeginsWith(formatStrUnescaped, "assume:")) {
+    APInt constOne(1, 1, false);
+    auto constTrue = builder.create<ConstantOp>(
+        info.getLoc(), UIntType::get(getContext(), 1), constOne);
+    llvm::errs() << "\n create assume:";
+    builder.create<AssumeOp>(info.getLoc(), clock, condition, constTrue,
+                             builder.getStringAttr(formatStrUnescaped));
     return success();
   }
-  llvm::errs() << "\n formatStrUnescaped::" << formatStrUnescaped;
   builder.create<PrintFOp>(info.getLoc(), clock, condition,
                            builder.getStringAttr(formatStrUnescaped), operands);
   return success();
