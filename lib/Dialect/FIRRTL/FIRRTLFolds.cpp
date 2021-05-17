@@ -119,8 +119,9 @@ constFoldFIRRTLBinaryOp(Operation *op, ArrayRef<Attribute> operands,
                         const function_ref<APInt(APInt, APInt)> &calculate) {
   assert(operands.size() == 2 && "binary op takes two operands");
 
+  // We cannot fold something to an unknown or zero width.
   auto resultType = op->getResult(0).getType().cast<IntType>();
-  if (!resultType.hasWidth())
+  if (resultType.getWidthOrSentinel() <= 0)
     return {};
 
   // Compares extend the operands to the widest of the operand types, not to the

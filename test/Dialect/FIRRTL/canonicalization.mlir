@@ -309,6 +309,7 @@ firrtl.module @Shr(in %in1u: !firrtl.uint<1>,
                    in %in4u: !firrtl.uint<4>,
                    in %in1s: !firrtl.sint<1>,
                    in %in4s: !firrtl.sint<4>,
+                   in %in0u: !firrtl.uint<0>,
                    out %out1s: !firrtl.sint<1>,
                    out %out1u: !firrtl.uint<1>,
                    out %outu: !firrtl.uint<4>) {
@@ -356,6 +357,11 @@ firrtl.module @Shr(in %in1u: !firrtl.uint<1>,
   // CHECK: firrtl.connect %out1s, %in1s : !firrtl.sint<1>, !firrtl.sint<1>
   %8 = firrtl.shr %in1s, 42 : (!firrtl.sint<1>) -> !firrtl.sint<1>
   firrtl.connect %out1s, %8 : !firrtl.sint<1>, !firrtl.sint<1>
+
+  // Issue #1064: https://github.com/llvm/circt/issues/1064
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  %9 = firrtl.dshr %in0u, %c1_ui1 : (!firrtl.uint<0>, !firrtl.uint<1>) -> !firrtl.uint<0>
+  firrtl.connect %out1u, %9 : !firrtl.uint<1>, !firrtl.uint<0>
 }
 
 // CHECK-LABEL: firrtl.module @Tail
