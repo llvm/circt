@@ -3,7 +3,7 @@ set(LLVM_OPTIONAL_SOURCES
   Comb.cpp
   ESI.cpp
   MSFT.cpp
-  RTL.cpp
+  HW.cpp
   Seq.cpp
   SV.cpp
 )
@@ -45,16 +45,16 @@ add_circt_library(CIRCTCAPIMSFT
   CIRCTMSFTExportTcl
   )
 
-add_circt_library(CIRCTCAPIRTL
+add_circt_library(CIRCTCAPIHW
 
-  RTL.cpp
+  HW.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${MLIR_MAIN_INCLUDE_DIR}/mlir-c
 
   LINK_LIBS PUBLIC
   MLIRCAPIIR
-  CIRCTRTL
+  CIRCTHW
   )
 
 add_circt_library(CIRCTCAPISeq

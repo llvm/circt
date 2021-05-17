@@ -1,7 +1,7 @@
 // REQUIRES: ieee-sim
 // RUN: circt-opt %s --create-dataflow --simple-canonicalizer --cse --handshake-insert-buffer > %mac-handshake.mlir
-// RUN: circt-opt %mac-handshake.mlir --lower-handshake-to-firrtl --firrtl-lower-types --firrtl-imconstprop --lower-firrtl-to-rtl --rtl-memory-sim --rtl-cleanup --simple-canonicalizer --cse --rtl-legalize-names > %mac-rtl.mlir
-// RUN: circt-translate %mac-rtl.mlir --export-verilog > %mac-export.sv
+// RUN: circt-opt %mac-handshake.mlir --lower-handshake-to-firrtl --firrtl-lower-types --firrtl-imconstprop --lower-firrtl-to-hw --hw-memory-sim --hw-cleanup --simple-canonicalizer --cse --hw-legalize-names > %mac-hw.mlir
+// RUN: circt-translate %mac-hw.mlir --export-verilog > %mac-export.sv
 // RUN: circt-rtl-sim.py %mac-export.sv %S/driver.sv --sim %ieee-sim --no-default-driver --top driver | FileCheck %s
 // CHECK: Result={{.*}}912
 

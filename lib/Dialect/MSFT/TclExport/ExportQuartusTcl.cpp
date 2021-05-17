@@ -10,9 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
-#include "circt/Dialect/RTL/RTLOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Translation.h"
 #include "llvm/ADT/StringSet.h"
@@ -20,7 +20,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 using namespace circt;
-using namespace rtl;
+using namespace hw;
 using namespace msft;
 
 // TODO: Currently assumes Stratix 10 and QuartusPro. Make more general.
@@ -71,7 +71,7 @@ struct Entity {
 } // anonymous namespace
 
 Optional<Entity> Entity::enter(InstanceOp inst) {
-  auto mod = dyn_cast_or_null<rtl::RTLModuleOp>(inst.getReferencedModule());
+  auto mod = dyn_cast_or_null<hw::HWModuleOp>(inst.getReferencedModule());
   if (!mod) // Could be an extern module, which we should ignore.
     return {};
   bool modEmitted = insideEmittedModule ||
@@ -144,12 +144,12 @@ void Entity::emitPath() {
 /// Export the TCL for a particular entity, corresponding to op. Do this
 /// recusively, assume that all descendants are in the same entity. When this is
 /// no longer a sound assuption, we'll have to refactor this code. For now, only
-/// RTLModule instances create a new entity.
+/// HWModule instances create a new entity.
 static LogicalResult exportTcl(Entity &entity, Operation *op) {
   // Instances require a new child entity and trigger a descent of the
   // instantiated module in the new entity.
   StringRef instName;
-  if (auto inst = dyn_cast<rtl::InstanceOp>(op)) {
+  if (auto inst = dyn_cast<hw::InstanceOp>(op)) {
     instName = inst.instanceName();
     Optional<Entity> inModule = entity.enter(inst);
     if (inModule && failed(exportTcl(*inModule, inst.getReferencedModule())))
@@ -185,12 +185,12 @@ LogicalResult circt::msft::exportQuartusTcl(ModuleOp module,
   TclOutputState state(os);
 
   for (auto &op : module.getBody()->getOperations()) {
-    auto rtlMod = dyn_cast<RTLModuleOp>(op);
-    if (!rtlMod)
+    auto hwMod = dyn_cast<HWModuleOp>(op);
+    if (!hwMod)
       continue;
-    os << "proc " << rtlMod.getName() << "_config { parent } {\n";
+    os << "proc " << hwMod.getName() << "_config { parent } {\n";
     Entity entity(state);
-    if (failed(exportTcl(entity, rtlMod)))
+    if (failed(exportTcl(entity, hwMod)))
       return failure();
     os << "}\n\n";
   }
@@ -201,6 +201,6 @@ void circt::msft::registerMSFTTclTranslation() {
   mlir::TranslateFromMLIRRegistration toQuartusTcl(
       "export-quartus-tcl", exportQuartusTcl,
       [](mlir::DialectRegistry &registry) {
-        registry.insert<MSFTDialect, RTLDialect>();
+        registry.insert<MSFTDialect, HWDialect>();
       });
 }

@@ -15,31 +15,31 @@ sv.ifdef.procedural "VERILATOR" {
 }
 sv.verbatim ""
 
-rtl.type_scope @__rtl_typedecls {
-  rtl.typedecl @foo : i1
+hw.type_scope @__hw_typedecls {
+  hw.typedecl @foo : i1
 }
 
-rtl.module @foo(%a: i1) -> (%b: i1) {
-  rtl.output %a : i1
+hw.module @foo(%a: i1) -> (%b: i1) {
+  hw.output %a : i1
 }
-rtl.module @bar(%x: i1) -> (%y: i1) {
-  rtl.output %x : i1
+hw.module @bar(%x: i1) -> (%y: i1) {
+  hw.output %x : i1
 }
 sv.interface @usb {
   sv.interface.signal @valid : i1
   sv.interface.signal @ready : i1
 }
-rtl.module.extern @pll ()
+hw.module.extern @pll ()
 
-rtl.module @inout(%inout: i1) -> (%output: i1) {
-  rtl.output %inout : i1
+hw.module @inout(%inout: i1) -> (%output: i1) {
+  hw.output %inout : i1
 }
 
 // This is made collide with the first renaming attempt of the `@inout` module
 // above.
-rtl.module.extern @inout_0 () -> ()
-rtl.module.extern @inout_1 () -> ()
-rtl.module.extern @inout_2 () -> ()
+hw.module.extern @inout_0 () -> ()
+hw.module.extern @inout_1 () -> ()
+hw.module.extern @inout_2 () -> ()
 
 // LIST:      foo.sv
 // LIST-NEXT: bar.sv

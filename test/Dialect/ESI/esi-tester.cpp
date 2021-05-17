@@ -28,8 +28,8 @@ struct TestESIModWrap
     auto mlirMod = getOperation();
     auto b = mlir::OpBuilder::atBlockEnd(mlirMod.getBody());
 
-    SmallVector<rtl::RTLModuleOp, 8> mods;
-    for (Operation *mod : mlirMod.getOps<rtl::RTLModuleExternOp>()) {
+    SmallVector<hw::HWModuleOp, 8> mods;
+    for (Operation *mod : mlirMod.getOps<hw::HWModuleExternOp>()) {
       SmallVector<ESIPortValidReadyMapping, 32> liPorts;
       findValidReadySignals(mod, liPorts);
       if (!liPorts.empty())
@@ -41,7 +41,7 @@ struct TestESIModWrap
 
 int main(int argc, char **argv) {
   mlir::DialectRegistry registry;
-  registry.insert<comb::CombDialect, esi::ESIDialect, rtl::RTLDialect>();
+  registry.insert<comb::CombDialect, esi::ESIDialect, hw::HWDialect>();
 
   mlir::PassRegistration<TestESIModWrap>(
       "test-mod-wrap", "Test the ESI find and wrap functionality");

@@ -276,14 +276,12 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
   let verifier = [{
     VERIFY_RESULT_TYPE_RET(input().getType().cast<FIRRTLType>());
   }];
+
+  let hasFolder = 1;
 }
 
-def AsSIntPrimOp : UnaryPrimOp<"asSInt", FIRRTLType, SIntType> {
-  let hasFolder = 1;
-}
-def AsUIntPrimOp : UnaryPrimOp<"asUInt", FIRRTLType, UIntType> {
-  let hasFolder = 1;
-}
+def AsSIntPrimOp : UnaryPrimOp<"asSInt", FIRRTLType, SIntType>;
+def AsUIntPrimOp : UnaryPrimOp<"asUInt", FIRRTLType, UIntType>;
 def AsAsyncResetPrimOp
   : UnaryPrimOp<"asAsyncReset", OneBitCastableType, AsyncResetType>;
 def AsClockPrimOp : UnaryPrimOp<"asClock", OneBitCastableType, ClockType>;
@@ -577,14 +575,14 @@ def AnalogInOutCastOp : FIRRTLOp<"analogInOutCast", [NoSideEffect]> {
 
 // This operation converts from a struct to a bundle
 // type, or visa-versa.  FIRRTL source/destination types must be passive.
-def RTLStructCastOp : FIRRTLOp<"rtlStructCast", [NoSideEffect]> {
+def HWStructCastOp : FIRRTLOp<"hwStructCast", [NoSideEffect]> {
   let arguments = (ins AnyType:$input);
   let results = (outs AnyType:$result);
 
   let assemblyFormat =
     "$input attr-dict `:` functional-type($input, $result)";
 
-  let verifier = "return ::verifyRTLStructCastOp(*this);";
+  let verifier = "return ::verifyHWStructCastOp(*this);";
 }
 
 // MLIR specific pseudo ops.

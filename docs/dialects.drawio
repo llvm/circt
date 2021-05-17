@@ -77,7 +77,7 @@
             </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="NUFGH_hVGk4y_TYJHu7n-5" value="RTL" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+        <mxCell id="NUFGH_hVGk4y_TYJHu7n-5" value="HW" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
           <mxGeometry x="230" y="400" width="120" height="60" as="geometry" />
         </mxCell>
         <mxCell id="NUFGH_hVGk4y_TYJHu7n-33" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=-0.043;entryY=0.875;entryDx=0;entryDy=0;entryPerimeter=0;" parent="1" source="NUFGH_hVGk4y_TYJHu7n-6" target="NUFGH_hVGk4y_TYJHu7n-7" edge="1">
@@ -113,7 +113,7 @@
         <mxCell id="NUFGH_hVGk4y_TYJHu7n-35" value="2." style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" parent="1" vertex="1">
           <mxGeometry x="190" y="280" width="20" height="20" as="geometry" />
         </mxCell>
-        <mxCell id="NUFGH_hVGk4y_TYJHu7n-36" value="1. Handshake to FIRRTL&lt;br&gt;2. Lowering within FIRRTL&lt;br&gt;3. FIRRTL to LLHD&lt;br&gt;4. FIRRTL to RTL&lt;br&gt;5. Mid FIRRTL to RTL (hypothetical)&lt;br&gt;6. Mid FIRRTL to SV (hypothetical)&lt;br&gt;7. EmitVerilog&lt;br&gt;8. Desequentialization / Process Lowering&lt;br&gt;9. LLHD to LLVM (simulation model)&lt;br&gt;10. LLHD to RTL promotion (hypothetical; fallible)&lt;br&gt;11. RTL to LLHD (hypothetical)&lt;br&gt;12. Likely almost identical; eventually merge?" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;" parent="1" vertex="1">
+        <mxCell id="NUFGH_hVGk4y_TYJHu7n-36" value="1. Handshake to FIRRTL&lt;br&gt;2. Lowering within FIRRTL&lt;br&gt;3. FIRRTL to LLHD&lt;br&gt;4. FIRRTL to HW&lt;br&gt;5. Mid FIRRTL to HW (hypothetical)&lt;br&gt;6. Mid FIRRTL to SV (hypothetical)&lt;br&gt;7. EmitVerilog&lt;br&gt;8. Desequentialization / Process Lowering&lt;br&gt;9. LLHD to LLVM (simulation model)&lt;br&gt;10. LLHD to HW promotion (hypothetical; fallible)&lt;br&gt;11. HW to LLHD (hypothetical)&lt;br&gt;12. Likely almost identical; eventually merge?" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;" parent="1" vertex="1">
           <mxGeometry x="370" y="30" width="280" height="180" as="geometry" />
         </mxCell>
         <mxCell id="NUFGH_hVGk4y_TYJHu7n-37" value="3." style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" parent="1" vertex="1">
@@ -182,7 +182,7 @@
         <mxCell id="NqzIvoFGnlJUJ6ZqDgtP-24" value="8." style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" parent="1" vertex="1">
           <mxGeometry x="-50" y="380" width="20" height="20" as="geometry" />
         </mxCell>
-        <mxCell id="NqzIvoFGnlJUJ6ZqDgtP-28" value="RTL and Testbench" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" parent="1" vertex="1">
+        <mxCell id="NqzIvoFGnlJUJ6ZqDgtP-28" value="HW and Testbench" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" parent="1" vertex="1">
           <mxGeometry x="-110" y="125" width="60" height="30" as="geometry" />
         </mxCell>
         <mxCell id="NqzIvoFGnlJUJ6ZqDgtP-29" value="9." style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" parent="1" vertex="1">

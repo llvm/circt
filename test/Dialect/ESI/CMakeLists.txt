@@ -17,7 +17,7 @@ llvm_update_compile_flags(esi-tester)
 target_link_libraries(esi-tester
   PRIVATE
   CIRCTESI
-  CIRCTRTL
+  CIRCTHW
   CIRCTSV
 
   MLIRParser

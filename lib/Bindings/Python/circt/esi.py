@@ -7,7 +7,7 @@ import mlir.ir
 
 from _circt._esi import *
 import circt
-from circt.dialects import rtl
+from circt.dialects import hw
 from circt.dialects.esi import *
 
 import typing
@@ -18,8 +18,8 @@ class System(CppSystem):
 
   mod = None
   passes = [
-      "lower-esi-ports", "lower-esi-to-physical", "lower-esi-to-rtl",
-      "rtl-legalize-names", "rtl.module(rtl-cleanup)"
+      "lower-esi-ports", "lower-esi-to-physical", "lower-esi-to-hw",
+      "hw-legalize-names", "hw.module(hw-cleanup)"
   ]
   passed = False
 
@@ -33,7 +33,7 @@ class System(CppSystem):
 
       with mlir.ir.InsertionPoint(self.body):
         self.declare_externs()
-        rtl.RTLModuleOp(name='top',
+        hw.HWModuleOp(name='top',
                         input_ports=[('clk', self.i1), ('rstn', self.i1)],
                         output_ports=[],
                         body_builder=self.build_top)
@@ -43,7 +43,7 @@ class System(CppSystem):
 
   def build_top(self, topMod):
     self.build(topMod)
-    rtl.OutputOp([])
+    hw.OutputOp([])
 
   def get_types(self):
     self.i1 = mlir.ir.IntegerType.get_signless(1)

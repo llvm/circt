@@ -33,10 +33,10 @@ def ChannelBuffer : ESI_Abstract_Op<"buffer", [NoSideEffect]> {
     Example:
 
     ```mlir
-    %esiChan = rtl.instance "sender" @Sender () : () -> (!esi.channel<i1>)
+    %esiChan = hw.instance "sender" @Sender () : () -> (!esi.channel<i1>)
     // Allow automatic selection of options.
     %bufferedChan = esi.buffer %esiChan { } : i1
-    rtl.instance "recv" @Reciever (%bufferedChan) : (!esi.channel<i1>) -> ()
+    hw.instance "recv" @Reciever (%bufferedChan) : (!esi.channel<i1>) -> ()
 
     // Alternatively, specify the number of stages.
     %fourStageBufferedChan = esi.buffer %esiChan { stages = 4 } : i1
@@ -95,12 +95,12 @@ def CosimEndpoint : ESI_Physical_Op<"cosim", []> {
   }];
 }
 
-def RtlBitArray : Type<CPred<"$_self.isa<::circt::rtl::ArrayType>()"
- " && $_self.cast<::circt::rtl::ArrayType>().getElementType() =="
- "   ::mlir::IntegerType::get($_self.getContext(), 1)">, "an RTL bit array">;
+def RtlBitArray : Type<CPred<"$_self.isa<::circt::hw::ArrayType>()"
+ " && $_self.cast<::circt::hw::ArrayType>().getElementType() =="
+ "   ::mlir::IntegerType::get($_self.getContext(), 1)">, "an HW bit array">;
 
 def CapnpDecode : ESI_Physical_Op<"decode.capnp", [NoSideEffect]> {
-  let summary = "Translate bits in Cap'nProto messages to RTL typed data";
+  let summary = "Translate bits in Cap'nProto messages to HW typed data";
 
   let arguments = (ins I1:$clk, I1:$valid, RtlBitArray:$capnpBits);
   let results = (outs AnyType:$decodedData);
@@ -111,7 +111,7 @@ def CapnpDecode : ESI_Physical_Op<"decode.capnp", [NoSideEffect]> {
 }
 
 def CapnpEncode : ESI_Physical_Op<"encode.capnp", [NoSideEffect]> {
-  let summary = "Translate RTL typed data to Cap'nProto";
+  let summary = "Translate HW typed data to Cap'nProto";
 
   let arguments = (ins I1:$clk, I1:$valid, AnyType:$dataToEncode);
   let results = (outs RtlBitArray:$capnpBits);

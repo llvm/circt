@@ -10,7 +10,8 @@ firrtl.module @Div(in %a: !firrtl.uint<4>,
                    in %e: !firrtl.uint,
                    out %f: !firrtl.uint,
                    in %g: !firrtl.sint,
-                   out %h: !firrtl.sint) {
+                   out %h: !firrtl.sint,
+                   out %i: !firrtl.uint<4>) {
 
   // CHECK-DAG: [[ONE_i4:%.+]] = firrtl.constant 1 : !firrtl.uint<4>
   // CHECK-DAG: [[ONE_s5:%.+]] = firrtl.constant 1 : !firrtl.sint<5>
@@ -43,6 +44,11 @@ firrtl.module @Div(in %a: !firrtl.uint<4>,
   %4 = firrtl.div %a, %c1_ui2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<4>
   firrtl.connect %b, %4 : !firrtl.uint<4>, !firrtl.uint<4>
 
+  // CHECK: firrtl.connect %i, %c5_ui4
+  %c1_ui4 = firrtl.constant 15 : !firrtl.uint<4>
+  %c3_ui4 = firrtl.constant 3 : !firrtl.uint<4>
+  %5 = firrtl.div %c1_ui4, %c3_ui4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.connect %i, %5 : !firrtl.uint<4>, !firrtl.uint<4>
 }
 
 // CHECK-LABEL: firrtl.module @And
@@ -181,14 +187,21 @@ firrtl.module @NEQ(in %in: !firrtl.uint<1>,
 
 // CHECK-LABEL: firrtl.module @Cat
 firrtl.module @Cat(in %in4: !firrtl.uint<4>,
-                   out %out4: !firrtl.uint<4>) {
+                   out %out4: !firrtl.uint<4>,
+                   out %outcst: !firrtl.uint<8>) {
 
   // CHECK: firrtl.connect %out4, %in4
   %0 = firrtl.bits %in4 3 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<2>
   %1 = firrtl.bits %in4 1 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<2>
   %2 = firrtl.cat %0, %1 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<4>
   firrtl.connect %out4, %2 : !firrtl.uint<4>, !firrtl.uint<4>
-}
+
+  // CHECK: firrtl.connect %outcst, %c243_ui8
+  %c15_ui4 = firrtl.constant 15 : !firrtl.uint<4>
+  %c3_ui4 = firrtl.constant 3 : !firrtl.uint<4>
+  %3 = firrtl.cat %c15_ui4, %c3_ui4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<8>
+  firrtl.connect %outcst, %3 : !firrtl.uint<8>, !firrtl.uint<8>
+ }
 
 // CHECK-LABEL: firrtl.module @Bits
 firrtl.module @Bits(in %in1: !firrtl.uint<1>,

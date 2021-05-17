@@ -134,8 +134,12 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
     // Check to see if the operation containing the arguments has 'firrtl.name'
     // attributes for them.  If so, use that as the name.
     auto *parentOp = block->getParentOp();
-
     auto argAttr = getModulePortNames(parentOp);
+
+    // Do not crash on invalid IR.
+    if (!argAttr || argAttr.size() != block->getNumArguments())
+      return;
+
     for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
       auto str = argAttr[i].cast<StringAttr>().getValue();
       if (!str.empty())

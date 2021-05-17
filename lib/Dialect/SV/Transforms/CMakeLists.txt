@@ -1,10 +1,10 @@
 add_circt_dialect_library(CIRCTSVTransforms
   GeneratorCallout.cpp
+  HWCleanup.cpp
+  HWStubExternalModules.cpp
+  HWLegalizeNames.cpp
+  HWMemSimImpl.cpp
   PrettifyVerilog.cpp
-  RTLCleanup.cpp
-  RTLStubExternalModules.cpp
-  RTLLegalizeNames.cpp
-  RTLMemSimImpl.cpp
 
   DEPENDS
   CIRCTSVTransformsIncGen

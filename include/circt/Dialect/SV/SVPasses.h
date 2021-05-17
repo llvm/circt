@@ -27,11 +27,11 @@ namespace circt {
 namespace sv {
 
 std::unique_ptr<mlir::Pass> createPrettifyVerilogPass();
-std::unique_ptr<mlir::Pass> createRTLCleanupPass();
-std::unique_ptr<mlir::Pass> createRTLStubExternalModulesPass();
-std::unique_ptr<mlir::Pass> createRTLLegalizeNamesPass();
-std::unique_ptr<mlir::Pass> createRTLGeneratorCalloutPass();
-std::unique_ptr<mlir::Pass> createRTLMemSimImplPass();
+std::unique_ptr<mlir::Pass> createHWCleanupPass();
+std::unique_ptr<mlir::Pass> createHWStubExternalModulesPass();
+std::unique_ptr<mlir::Pass> createHWLegalizeNamesPass();
+std::unique_ptr<mlir::Pass> createHWGeneratorCalloutPass();
+std::unique_ptr<mlir::Pass> createHWMemSimImplPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

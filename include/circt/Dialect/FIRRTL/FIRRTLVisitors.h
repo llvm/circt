@@ -44,8 +44,8 @@ public:
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
             TailPrimOp, AsPassivePrimOp, AsNonPassivePrimOp,
 
-            // Conversion from FIRRTL to RTL dialect types.
-            StdIntCastOp, RTLStructCastOp, AnalogInOutCastOp>(
+            // Conversion from FIRRTL to HW dialect types.
+            StdIntCastOp, HWStructCastOp, AnalogInOutCastOp>(
             [&](auto expr) -> ResultType {
               return thisCast->visitExpr(expr, args...);
             })
@@ -138,9 +138,9 @@ public:
   HANDLE(AsPassivePrimOp, Unhandled);
   HANDLE(AsNonPassivePrimOp, Unhandled);
 
-  // Conversion from FIRRTL to RTL dialect types.
+  // Conversion from FIRRTL to HW dialect types.
   HANDLE(StdIntCastOp, Unhandled);
-  HANDLE(RTLStructCastOp, Unhandled);
+  HANDLE(HWStructCastOp, Unhandled);
   HANDLE(AnalogInOutCastOp, Unhandled);
 #undef HANDLE
 };

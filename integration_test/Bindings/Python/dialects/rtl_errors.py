@@ -2,7 +2,7 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
 import circt
-from circt.dialects import rtl
+from circt.dialects import hw
 
 from mlir.ir import *
 from mlir.passmanager import PassManager
@@ -16,22 +16,22 @@ with Context() as ctx, Location.unknown():
 
   m = Module.create()
   with InsertionPoint(m.body):
-    one_input = rtl.RTLModuleOp(
+    one_input = hw.HWModuleOp(
         name="one_input",
         input_ports=[("a", i32)],
-        body_builder=lambda m: rtl.OutputOp([]),
+        body_builder=lambda m: hw.OutputOp([]),
     )
-    one_output = rtl.RTLModuleOp(
+    one_output = hw.HWModuleOp(
         name="one_output",
         output_ports=[("a", i32)],
-        body_builder=lambda m: rtl.OutputOp(
-            [rtl.ConstantOp(i32, IntegerAttr.get(i32, 46)).result]),
+        body_builder=lambda m: hw.OutputOp(
+            [hw.ConstantOp(i32, IntegerAttr.get(i32, 46)).result]),
     )
-    input_output = rtl.RTLModuleOp(
+    input_output = hw.HWModuleOp(
         name="input_output",
         input_ports=[("a", i32)],
         output_ports=[("b", i32)],
-        body_builder=lambda m: rtl.OutputOp([m.entry_block.arguments[0]]),
+        body_builder=lambda m: hw.OutputOp([m.entry_block.arguments[0]]),
     )
 
     def instance_builder_body(module):
@@ -60,12 +60,12 @@ with Context() as ctx, Location.unknown():
       # Note, the error here is actually caught and printed below.
       # CHECK: Uninitialized ports remain in circuit!
       # CHECK: Port:     %[[PORT_NAME:.+]]
-      # CHECK: Module:   rtl.module @one_input(%[[PORT_NAME]]: i32)
-      # CHECK: Instance: rtl.instance "inst1" @one_input({{.+}})
+      # CHECK: Module:   hw.module @one_input(%[[PORT_NAME]]: i32)
+      # CHECK: Instance: hw.instance "inst1" @one_input({{.+}})
       inst1 = one_input.create(module, "inst1")
 
     try:
-      instance_builder_tests = rtl.RTLModuleOp(
+      instance_builder_tests = hw.HWModuleOp(
           name="instance_builder_tests", body_builder=instance_builder_body)
     except RuntimeError as e:
       print(e)

@@ -68,10 +68,10 @@ def InterfaceOp : SVOp<"interface",
   }];
 }
 
-def SignalTypeAttr : TypeAttrBase<"::mlir::Type", "Any SV/RTL type"> {
+def SignalTypeAttr : TypeAttrBase<"::mlir::Type", "Any SV/HW type"> {
   let predicate = And<[
       CPred<"$_self.isa<::mlir::TypeAttr>()">,
-      CPred<"::circt::rtl::getBitWidth(" #
+      CPred<"::circt::hw::getBitWidth(" #
               "$_self.cast<::mlir::TypeAttr>().getValue()) != -1">
   ]>;
 }

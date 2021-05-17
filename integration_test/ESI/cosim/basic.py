@@ -41,29 +41,29 @@ class BasicSystemTester(cosim.CosimBase):
 
   def testCrypto(self, num_msgs):
     ep = self.openEP(3,
-                     sendType=self.schema.Struct12811887160382076992,
-                     recvType=self.schema.Struct12811887160382076992)
+                     sendType=self.schema.Struct15822124641382404136,
+                     recvType=self.schema.Struct15822124641382404136)
     cfg = self.openEP(4,
                       sendType=self.schema.I1,
-                      recvType=self.schema.Struct14590566522150786282)
+                      recvType=self.schema.Struct14745270011869700302)
 
     cfgWritten = False
     for _ in range(num_msgs):
       blob = [random.randint(0, 255) for x in range(32)]
       print(f"Sending data {blob}")
       ep.send(
-          self.schema.Struct12811887160382076992.new_message(encrypted=False,
+          self.schema.Struct15822124641382404136.new_message(encrypted=False,
                                                              blob=blob))
 
       if not cfgWritten:
         # Check that messages queue up properly waiting for the config.
         otp = [random.randint(0, 255) for x in range(32)]
         cfg.send(
-            self.schema.Struct14590566522150786282.new_message(encrypt=True,
+            self.schema.Struct14745270011869700302.new_message(encrypt=True,
                                                                otp=otp))
         cfgWritten = True
 
-      result = self.readMsg(ep, self.schema.Struct12811887160382076992)
+      result = self.readMsg(ep, self.schema.Struct15822124641382404136)
       expectedResults = [x ^ y for (x, y) in zip(otp, blob)]
       print(f"Got {blob}")
       print(f"Exp {expectedResults}")

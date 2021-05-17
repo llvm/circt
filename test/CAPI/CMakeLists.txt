@@ -11,7 +11,7 @@ target_link_libraries(circt-capi-ir-test
   MLIRCAPIRegistration
   MLIRPublicAPI
   CIRCTCAPIComb
-  CIRCTCAPIRTL
+  CIRCTCAPIHW
   CIRCTCAPISeq
   CIRCTCAPISV
   CIRCTCAPIExportVerilog

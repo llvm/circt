@@ -2,7 +2,7 @@
 // RUN: circt-translate --lowering-options= --split-input-file --export-verilog %s | FileCheck %s --check-prefix=CLEAR
 // RUN: circt-translate --lowering-options=noAlwaysFF --split-input-file --export-verilog %s | FileCheck %s --check-prefix=NOALWAYSFF
 
-rtl.module @test(%clock : i1, %cond : i1) {
+hw.module @test(%clock : i1, %cond : i1) {
   sv.alwaysff(posedge %clock) {
   }
 }
@@ -19,7 +19,7 @@ rtl.module @test(%clock : i1, %cond : i1) {
 // -----
 
 module attributes {circt.loweringOptions = "noAlwaysFF"} {
-rtl.module @test(%clock : i1, %cond : i1) {
+hw.module @test(%clock : i1, %cond : i1) {
   sv.alwaysff(posedge %clock) {
   }
 }

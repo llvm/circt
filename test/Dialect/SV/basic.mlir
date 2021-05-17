@@ -1,8 +1,8 @@
 // RUN: circt-opt %s | FileCheck %s
 // RUN: circt-opt %s | circt-opt | FileCheck %s
 
-// CHECK-LABEL: rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
-rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
+// CHECK-LABEL: hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
+hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
 
   // This corresponds to this block of system verilog code:
   //    always @(posedge arg0) begin
@@ -137,8 +137,8 @@ rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
     }
   }
 
-  // CHECK-NEXT: %combWire = sv.wire : !rtl.inout<i1> 
-  %combWire = sv.wire : !rtl.inout<i1>
+  // CHECK-NEXT: %combWire = sv.wire : !hw.inout<i1> 
+  %combWire = sv.wire : !hw.inout<i1>
   // CHECK-NEXT: sv.alwayscomb {
   sv.alwayscomb {
     // CHECK-NEXT: %x_i1 = sv.constantX : i1
@@ -148,15 +148,15 @@ rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
     // CHECK-NEXT: }
   }
 
-  // CHECK-NEXT: %reg23 = sv.reg : !rtl.inout<i23>
-  // CHECK-NEXT: %regStruct23 = sv.reg : !rtl.inout<struct<foo: i23>>
-  // CHECK-NEXT: %reg24 = sv.reg sym @regSym1 : !rtl.inout<i23>
-  // CHECK-NEXT: %wire25 = sv.wire sym @wireSym1 : !rtl.inout<i23>
-  %reg23       = sv.reg  : !rtl.inout<i23>
-  %regStruct23 = sv.reg  : !rtl.inout<struct<foo: i23>>
-  %reg24       = sv.reg sym @regSym1 : !rtl.inout<i23>
-  %wire25      = sv.wire sym @wireSym1 : !rtl.inout<i23>
+  // CHECK-NEXT: %reg23 = sv.reg : !hw.inout<i23>
+  // CHECK-NEXT: %regStruct23 = sv.reg : !hw.inout<struct<foo: i23>>
+  // CHECK-NEXT: %reg24 = sv.reg sym @regSym1 : !hw.inout<i23>
+  // CHECK-NEXT: %wire25 = sv.wire sym @wireSym1 : !hw.inout<i23>
+  %reg23       = sv.reg  : !hw.inout<i23>
+  %regStruct23 = sv.reg  : !hw.inout<struct<foo: i23>>
+  %reg24       = sv.reg sym @regSym1 : !hw.inout<i23>
+  %wire25      = sv.wire sym @wireSym1 : !hw.inout<i23>
 
-  // CHECK-NEXT: rtl.output
-  rtl.output
+  // CHECK-NEXT: hw.output
+  hw.output
 }
