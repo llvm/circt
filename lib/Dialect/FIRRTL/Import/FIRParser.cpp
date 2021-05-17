@@ -1904,17 +1904,6 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
   return addSymbolEntry(id, result, info.getFIRLoc());
 }
 
-/// Returns true if \p base begins with \p s. This shold be a special cased
-/// implementation of std::string::find, where the string match is performed
-/// only at the beggining of the base. Should be more efficient than the find.
-static bool stringBeginsWith(const std::string &base, const std::string &s) {
-  for (unsigned i = 0, e = s.size(); i < e; ++i) {
-    if (base[i] != s[i])
-      return false;
-  }
-  return true;
-}
-
 /// printf ::= 'printf(' exp exp StringLit exp* ')' info?
 ParseResult FIRStmtParser::parsePrintf() {
   LocWithInfo info(getToken().getLoc(), this);
