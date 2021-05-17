@@ -17,6 +17,8 @@ with Context() as ctx, Location.unknown():
   # CHECK: !hw.array<5xi32>
   array_i32 = hw.ArrayType.get(i32, 5)
   print(array_i32)
+  # CHECK: i32
+  print(array_i32.element_type)
 
   # CHECK: !hw.struct<foo: i32, bar: !hw.array<5xi32>>
   struct = hw.StructType.get([("foo", i32), ("bar", array_i32)])
