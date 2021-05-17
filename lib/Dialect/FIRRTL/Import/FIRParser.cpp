@@ -1930,6 +1930,13 @@ ParseResult FIRStmtParser::parsePrintf() {
     return failure();
 
   auto formatStrUnescaped = FIRToken::getStringValue(formatString);
+  if (formatStrUnescaped.find_first_of("cover:") == 0) {
+    APInt constOne(1,1,false);
+    auto constTrue = builder.create<ConstantOp>(info.getLoc(), UIntType::get(getContext(), 1), constOne);
+    builder.create<CoverOp>(info.getLoc(), clock, condition,constTrue ,       builder.getStringAttr(formatStrUnescaped));
+    return success();
+  }
+  llvm::errs() << "\n formatStrUnescaped::" << formatStrUnescaped;
   builder.create<PrintFOp>(info.getLoc(), clock, condition,
                            builder.getStringAttr(formatStrUnescaped), operands);
   return success();

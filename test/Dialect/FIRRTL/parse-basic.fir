@@ -5,7 +5,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   ; CHECK-LABEL: firrtl.module @MyModule(in %in: !firrtl.uint, out %out: !firrtl.uint<8>) {
   module MyModule :   @[FooBar.scala 369:27]
     input in: UInt
+    input clock : Clock
     output out: UInt<8>
+    wire en : UInt<1>[12]
+    printf(clock, in, "cover:X equals Y when Z is valid")
+    cover(clock, in, UInt(1), "X equals Y when Z is valid")
 
     ; CHECK: firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint
     out <= in
@@ -400,6 +404,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     assume(clock, pred, en, "X equals Y when Z is valid")
     ; CHECK: firrtl.cover %clock, %pred, %en, "X equals Y when Z is valid"
     cover(clock, pred, en, "X equals Y when Z is valid")
+    printf(clock, pred, "cover:X equals Y when Z is valid")
 
   ; CHECK-LABEL: firrtl.module @type_handling(
   module type_handling :
