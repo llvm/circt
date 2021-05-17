@@ -39,10 +39,12 @@ static IntegerAttr getIntAttr(Type type, const APInt &value) {
   return IntegerAttr::get(intType, value);
 }
 
-/// Return true if this operation's operands and results all have known width.
+/// Return true if this operation's operands and results all have known width,
+/// or if the result has zero width result (which we cannot constant fold).
 /// This only works for integer types.
-static bool hasKnownWidthIntegerTypes(Operation *op) {
-  if (!op->getResult(0).getType().cast<IntType>().hasWidth())
+static bool hasKnownWidthIntTypesAndNonZeroResult(Operation *op) {
+  auto resultType = op->getResult(0).getType().cast<IntType>();
+  if (!resultType.hasWidth() || resultType.getWidth() == 0)
     return false;
   for (Value operand : op->getOperands())
     if (!operand.getType().cast<IntType>().hasWidth())
@@ -624,7 +626,7 @@ OpFoldResult AsClockPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult CvtPrimOp::fold(ArrayRef<Attribute> operands) {
-  if (!hasKnownWidthIntegerTypes(*this))
+  if (!hasKnownWidthIntTypesAndNonZeroResult(*this))
     return {};
 
   // Signed to signed is a noop, unsigned operands prepend a zero bit.
@@ -637,7 +639,7 @@ OpFoldResult CvtPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult NegPrimOp::fold(ArrayRef<Attribute> operands) {
-  if (!hasKnownWidthIntegerTypes(*this))
+  if (!hasKnownWidthIntTypesAndNonZeroResult(*this))
     return {};
 
   // FIRRTL negate always adds a bit.
@@ -651,7 +653,7 @@ OpFoldResult NegPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult NotPrimOp::fold(ArrayRef<Attribute> operands) {
-  if (!hasKnownWidthIntegerTypes(*this))
+  if (!hasKnownWidthIntTypesAndNonZeroResult(*this))
     return {};
 
   if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
@@ -661,7 +663,7 @@ OpFoldResult NotPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult AndRPrimOp::fold(ArrayRef<Attribute> operands) {
-  if (!hasKnownWidthIntegerTypes(*this))
+  if (!hasKnownWidthIntTypesAndNonZeroResult(*this))
     return {};
 
   // x == -1
@@ -671,7 +673,7 @@ OpFoldResult AndRPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult OrRPrimOp::fold(ArrayRef<Attribute> operands) {
-  if (!hasKnownWidthIntegerTypes(*this))
+  if (!hasKnownWidthIntTypesAndNonZeroResult(*this))
     return {};
 
   // x != 0
@@ -681,7 +683,7 @@ OpFoldResult OrRPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult XorRPrimOp::fold(ArrayRef<Attribute> operands) {
-  if (!hasKnownWidthIntegerTypes(*this))
+  if (!hasKnownWidthIntTypesAndNonZeroResult(*this))
     return {};
 
   // popcount(x) & 1
@@ -696,7 +698,7 @@ OpFoldResult XorRPrimOp::fold(ArrayRef<Attribute> operands) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult CatPrimOp::fold(ArrayRef<Attribute> operands) {
-  if (!hasKnownWidthIntegerTypes(*this))
+  if (!hasKnownWidthIntTypesAndNonZeroResult(*this))
     return {};
 
   // Constant fold cat.
@@ -735,7 +737,7 @@ OpFoldResult BitsPrimOp::fold(ArrayRef<Attribute> operands) {
     return input();
 
   // Constant fold.
-  if (hasKnownWidthIntegerTypes(*this))
+  if (hasKnownWidthIntTypesAndNonZeroResult(*this))
     if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
       return getIntAttr(
           getType(), attr.getValue().lshr(lo()).truncOrSelf(hi() - lo() + 1));
@@ -938,12 +940,22 @@ LogicalResult HeadPrimOp::canonicalize(HeadPrimOp op,
 }
 
 OpFoldResult HeadPrimOp::fold(ArrayRef<Attribute> operands) {
-  // TODO: Constant fold.
+  if (hasKnownWidthIntTypesAndNonZeroResult(*this))
+    if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>()) {
+      int shiftAmount =
+          input().getType().cast<IntType>().getWidthOrSentinel() - amount();
+      return getIntAttr(
+          getType(), attr.getValue().lshr(shiftAmount).truncOrSelf(amount()));
+    }
+
   return {};
 }
 
 OpFoldResult TailPrimOp::fold(ArrayRef<Attribute> operands) {
-  // TODO: Constant fold.
+  if (hasKnownWidthIntTypesAndNonZeroResult(*this))
+    if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
+      return getIntAttr(getType(), attr.getValue().truncOrSelf(
+                                       getType().getWidthOrSentinel()));
   return {};
 }
 

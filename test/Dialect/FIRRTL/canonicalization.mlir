@@ -218,8 +218,8 @@ firrtl.module @Bits(in %in1: !firrtl.uint<1>,
   firrtl.connect %out4, %1 : !firrtl.uint<4>, !firrtl.uint<4>
 
   // CHECK: firrtl.connect %out2, %c1_ui2
-  %c7_ui4 = firrtl.constant 10 : !firrtl.uint<4>
-  %2 = firrtl.bits %c7_ui4 2 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+  %c10_ui4 = firrtl.constant 10 : !firrtl.uint<4>
+  %2 = firrtl.bits %c10_ui4 2 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<2>
   firrtl.connect %out2, %2 : !firrtl.uint<2>, !firrtl.uint<2>
 
 
@@ -247,6 +247,11 @@ firrtl.module @Head(in %in4u: !firrtl.uint<4>,
   // CHECK-NEXT: firrtl.connect %out3u, [[BITS]]
   %1 = firrtl.head %in4u, 3 : (!firrtl.uint<4>) -> !firrtl.uint<3>
   firrtl.connect %out3u, %1 : !firrtl.uint<3>, !firrtl.uint<3>
+
+  // CHECK: firrtl.connect %out3u, %c5_ui3
+  %c10_ui4 = firrtl.constant 10 : !firrtl.uint<4>
+  %2 = firrtl.head %c10_ui4, 3 : (!firrtl.uint<4>) -> !firrtl.uint<3>
+  firrtl.connect %out3u, %2 : !firrtl.uint<3>, !firrtl.uint<3>
 }
 
 // CHECK-LABEL: firrtl.module @Mux
@@ -377,6 +382,12 @@ firrtl.module @Tail(in %in4u: !firrtl.uint<4>,
   // CHECK-NEXT: firrtl.connect %out3u, [[BITS]]
   %1 = firrtl.tail %in4u, 1 : (!firrtl.uint<4>) -> !firrtl.uint<3>
   firrtl.connect %out3u, %1 : !firrtl.uint<3>, !firrtl.uint<3>
+
+
+  // CHECK: firrtl.connect %out3u, %c2_ui3
+  %c10_ui4 = firrtl.constant 10 : !firrtl.uint<4>
+  %2 = firrtl.tail %c10_ui4, 1 : (!firrtl.uint<4>) -> !firrtl.uint<3>
+  firrtl.connect %out3u, %2 : !firrtl.uint<3>, !firrtl.uint<3>
 }
 
 // CHECK-LABEL: firrtl.module @issue326
