@@ -14,8 +14,8 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
+#include "circt/Dialect/FIRRTL/FieldRef.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
-#include "circt/Dialect/FIRRTL/SinkLocation.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
 
@@ -33,7 +33,7 @@ namespace {
 
 class ExpandWhensVisitor : public FIRRTLVisitor<ExpandWhensVisitor> {
 public:
-  ExpandWhensVisitor(llvm::MapVector<SinkLocation, Operation *> &scope,
+  ExpandWhensVisitor(llvm::MapVector<FieldRef, Operation *> &scope,
                      Value condition)
       : scope(scope), condition(condition) {}
 
@@ -70,7 +70,7 @@ private:
 
   /// Records a connection to a destination. This will delete a previous
   /// connection to a destination if there was one.
-  void setLastConnect(SinkLocation dest, Operation *connection) {
+  void setLastConnect(FieldRef dest, Operation *connection) {
     // Try to insert, if it doesn't insert, replace the previous value.
     auto itAndInserted = scope.insert({dest, connection});
     if (!std::get<1>(itAndInserted)) {
@@ -113,8 +113,7 @@ private:
     auto type = value.getType();
 
     // A sink location which will be modified as we traverse any bundle type.
-    SinkLocation sink(value);
-    auto &path = sink.getPath();
+    FieldRef sink(value);
 
     // Recurse through a bundle and declare each leaf sink node.
     std::function<void(Type, Flow)> declare = [&](Type type, Flow flow) {
@@ -123,16 +122,16 @@ private:
         type = flip.getElementType();
         flow = swapFlow(flow);
       }
-      // This is a bundle type. Recurse to each of the fields.
+      // If this is a bundle type, recurse to each of the fields.
       if (auto bundleType = type.dyn_cast<BundleType>()) {
         for (auto &it : llvm::enumerate(bundleType.getElements())) {
-          path.push_back(it.index());
+          sink.setFieldID(sink.getFieldID() + 1);
           declare(it.value().type, flow);
-          path.pop_back();
         }
         return;
       }
-      // If its a leaf node with Flow::Source must be initialized.
+      // If it is a leaf node with Flow::Sink or Flow::Duplex, it must be
+      // initialized.
       if (flow != Flow::Source)
         scope[sink] = nullptr;
     };
@@ -170,7 +169,7 @@ private:
   /// Map of destinations and the operation which is driving a value to it in
   /// the current scope. This is used for resolving last connect semantics, and
   /// for retrieving the responsible connect operation.
-  llvm::MapVector<SinkLocation, Operation *> &scope;
+  llvm::MapVector<FieldRef, Operation *> &scope;
 
   /// The current wrapping condition. If null, we are in the outer scope.
   Value condition;
@@ -178,7 +177,7 @@ private:
 } // namespace
 
 LogicalResult ExpandWhensVisitor::run(FModuleOp module) {
-  llvm::MapVector<SinkLocation, Operation *> outerScope;
+  llvm::MapVector<FieldRef, Operation *> outerScope;
   ExpandWhensVisitor(outerScope, nullptr).visitDecl(module);
 
   // Check for any incomplete initialization.
@@ -294,14 +293,14 @@ void ExpandWhensVisitor::visitStmt(WhenOp whenOp) {
   // returns the set of connects in each side of the when op.
 
   // Process the `then` block.
-  llvm::MapVector<SinkLocation, Operation *> thenScope;
+  llvm::MapVector<FieldRef, Operation *> thenScope;
   auto thenCondition = andWithCondition(whenOp, whenOp.condition());
   auto &thenBlock = whenOp.getThenBlock();
   ExpandWhensVisitor(thenScope, thenCondition).process(thenBlock);
   mergeBlock(*parentBlock, Block::iterator(whenOp), thenBlock);
 
   // Process the `else` block.
-  llvm::MapVector<SinkLocation, Operation *> elseScope;
+  llvm::MapVector<FieldRef, Operation *> elseScope;
   if (whenOp.hasElseRegion()) {
     auto condition = whenOp.condition();
     auto notOp = b.createOrFold<NotPrimOp>(whenOp.getLoc(), condition.getType(),

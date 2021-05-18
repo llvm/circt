@@ -604,12 +604,21 @@ struct BundleTypeStorage : mlir::TypeStorage {
   BundleTypeStorage(KeyTy elements)
       : elements(elements.begin(), elements.end()) {
     bool isPassive = true, containsAnalog = false;
+    unsigned fieldID = 0;
+    fieldIDs.reserve(elements.size());
     for (auto &element : elements) {
       auto type = element.type;
       auto eltInfo = type.getRecursiveTypeProperties();
       isPassive &= eltInfo.first;
       containsAnalog |= eltInfo.second;
+      fieldID += 1;
+      // If the element is a bundle type, increment the field id by the number
+      // of sub-fields, so that each field gets a unique number.
+      if (auto bundleType = type.dyn_cast<BundleType>())
+        fieldID += bundleType.getMaxFieldID();
+      fieldIDs.push_back(fieldID);
     }
+    maxFieldID = fieldID;
     unsigned flags = 0;
     if (isPassive)
       flags |= IsPassiveBitMask;
@@ -630,6 +639,8 @@ struct BundleTypeStorage : mlir::TypeStorage {
   }
 
   SmallVector<BundleType::BundleElement, 4> elements;
+  SmallVector<unsigned, 4> fieldIDs;
+  unsigned maxFieldID;
 
   /// This holds two bits indicating whether the current type is passive and
   /// if it contains an analog type, and can hold a pointer to a passive type if
@@ -703,6 +714,14 @@ auto BundleType::getElement(StringRef name) -> Optional<BundleElement> {
 FIRRTLType BundleType::getElementType(StringRef name) {
   auto element = getElement(name);
   return element.hasValue() ? element.getValue().type : FIRRTLType();
+}
+
+unsigned BundleType::getFieldID(unsigned index) {
+  return getImpl()->fieldIDs[index];
+}
+
+unsigned BundleType::getMaxFieldID() {
+  return getImpl()->maxFieldID;
 }
 
 //===----------------------------------------------------------------------===//

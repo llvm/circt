@@ -253,7 +253,8 @@ class BundleType : public FIRRTLType::TypeBase<BundleType, FIRRTLType,
 public:
   using Base::Base;
 
-  // Each element of a bundle, which is a name and type.
+  // Each element of a bundle, which is a name, type, and a unique identifier in
+  // the bundle.
   struct BundleElement {
     StringAttr name;
     FIRRTLType type;
@@ -286,6 +287,17 @@ public:
 
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLType getPassiveType();
+
+  /// Get an integer ID for the field. Field IDs start at 1, and are assigned
+  /// to each field in a bundle in a recursive pre-order walk of all fields,
+  /// visiting all nested bundle fields.  A field ID of 0 is used to reference the
+  /// bundle itself. The ID can be used to uniquely identify any specific field
+  /// in this bundle.
+  unsigned getFieldID(unsigned index);
+
+  /// Get the maximum field ID in this bundle.  This is helpful for constructing
+  /// field IDs when this BundleType is nested in another aggregate type.
+  unsigned getMaxFieldID();
 };
 
 //===----------------------------------------------------------------------===//
