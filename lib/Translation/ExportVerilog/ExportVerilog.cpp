@@ -209,7 +209,7 @@ static Type stripUnpackedTypes(Type type) {
 /// to print a base type for (logic) for inteters or whether the caller will
 /// have handled this (with logic, wire, reg, etc).
 /// Returns whether anything was printed out
-static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
+static bool printPackedTypeImpl(Type type, raw_ostream &os, Operation *op,
                                 SmallVectorImpl<size_t> &dims,
                                 bool implicitIntType) {
   return TypeSwitch<Type, bool>(type)
@@ -229,14 +229,14 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         return !dims.empty() || !implicitIntType;
       })
       .Case<InOutType>([&](InOutType inoutType) {
-        return printPackedTypeImpl(inoutType.getElementType(), os, loc, dims,
+        return printPackedTypeImpl(inoutType.getElementType(), os, op, dims,
                                    implicitIntType);
       })
       .Case<StructType>([&](StructType structType) {
         os << "struct packed {";
         for (auto &element : structType.getElements()) {
           SmallVector<size_t, 8> structDims;
-          printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc,
+          printPackedTypeImpl(stripUnpackedTypes(element.type), os, op,
                               structDims, /*implicitIntType=*/false);
           os << ' ' << element.name << "; ";
         }
@@ -245,27 +245,26 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
       })
       .Case<ArrayType>([&](ArrayType arrayType) {
         dims.push_back(arrayType.getSize());
-        return printPackedTypeImpl(arrayType.getElementType(), os, loc, dims,
+        return printPackedTypeImpl(arrayType.getElementType(), os, op, dims,
                                    implicitIntType);
       })
       .Case<InterfaceType>([](InterfaceType ifaceType) { return false; })
       .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
         os << "<<unexpected unpacked array>>";
-        emitError(loc, "Unexpected unpacked array in packed type ")
-            << arrayType;
+        op->emitError("Unexpected unpacked array in packed type ") << arrayType;
         return true;
       })
       .Default([&](Type type) {
         os << "<<invalid type>>";
-        emitError(loc, "value has an unsupported verilog type ") << type;
+        op->emitError("value has an unsupported verilog type ") << type;
         return true;
       });
 }
 
-static bool printPackedType(Type type, raw_ostream &os, Location loc,
+static bool printPackedType(Type type, raw_ostream &os, Operation *op,
                             bool implicitIntType = true) {
   SmallVector<size_t, 8> packedDimensions;
-  return printPackedTypeImpl(type, os, loc, packedDimensions, implicitIntType);
+  return printPackedTypeImpl(type, os, op, packedDimensions, implicitIntType);
 }
 
 /// Output the unpacked array dimensions.  This is the part of the type that is
@@ -1469,7 +1468,7 @@ void NameCollector::collectNames(Block &block) {
       {
         llvm::raw_svector_ostream stringStream(typeString);
         printPackedType(stripUnpackedTypes(result.getType()), stringStream,
-                        op.getLoc());
+                        &op);
       }
       maxTypeWidth = std::max(typeString.size(), maxTypeWidth);
     }
@@ -1520,7 +1519,7 @@ void TypeScopeEmitter::emitTypeScopeBlock(Block &body) {
 
 LogicalResult TypeScopeEmitter::visitTypeScope(TypedeclOp op) {
   indent() << "typedef ";
-  printPackedType(stripUnpackedTypes(op.type()), os, op.getLoc(), false);
+  printPackedType(stripUnpackedTypes(op.type()), os, op, false);
   printUnpackedTypePostfix(op.type(), os);
   os << ' ' << op.sym_name();
   os << ";\n";
@@ -1553,8 +1552,7 @@ public:
   /// and semicolon, e.g. `localparam K = 1'h0`, and return true.
   bool emitDeclarationForTemporary(Operation *op) {
     indent() << getVerilogDeclWord(op) << " ";
-    if (printPackedType(stripUnpackedTypes(op->getResult(0).getType()), os,
-                        op->getLoc()))
+    if (printPackedType(stripUnpackedTypes(op->getResult(0).getType()), os, op))
       os << ' ';
     os << emitter.getName(op->getResult(0));
 
@@ -2303,7 +2301,7 @@ LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
 
 LogicalResult StmtEmitter::visitSV(InterfaceSignalOp op) {
   indent();
-  printPackedType(op.type(), os, op.getLoc(), false);
+  printPackedType(op.type(), os, op, false);
   os << ' ' << op.sym_name();
   printUnpackedTypePostfix(op.type(), os);
   os << ";\n";
@@ -2725,8 +2723,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     portTypeStrings.push_back({});
     {
       llvm::raw_svector_ostream stringStream(portTypeStrings.back());
-      printPackedType(stripUnpackedTypes(port.type), stringStream,
-                      module.getLoc());
+      printPackedType(stripUnpackedTypes(port.type), stringStream, module);
     }
 
     maxTypeWidth = std::max(portTypeStrings.back().size(), maxTypeWidth);
