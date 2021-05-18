@@ -20,9 +20,12 @@
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/PostOrderIterator.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "infer-widths"
+
+using mlir::InferTypeOpInterface;
 
 using namespace circt;
 using namespace firrtl;
@@ -328,6 +331,8 @@ public:
   VarExpr *var() {
     auto v = vars.alloc();
     exprs.push_back(v);
+    if (currentInfo)
+      info[v].insert(currentInfo);
     return v;
   }
   KnownExpr *known(int32_t value) { return alloc<KnownExpr>(knowns, value); }
@@ -344,7 +349,11 @@ public:
   }
 
   void dumpConstraints(llvm::raw_ostream &os);
-  void solve();
+  LogicalResult solve();
+
+  using ContextInfo = DenseMap<Expr *, llvm::SmallSetVector<Value, 1>>;
+  const ContextInfo &getContextInfo() const { return info; }
+  void setCurrentContextInfo(Value value) { currentInfo = value; }
 
 private:
   // Allocator for constraint expressions.
@@ -364,8 +373,15 @@ private:
     auto it = allocator.template alloc<R>(std::forward<Args>(args)...);
     if (it.second)
       exprs.push_back(it.first);
+    if (currentInfo)
+      info[it.first].insert(currentInfo);
     return it.first;
   }
+
+  /// Contextual information for each expression, indicating which values in the
+  /// IR lead to this expression.
+  ContextInfo info;
+  Value currentInfo = {};
 
   // Forbid copyign or moving the solver, which would invalidate the refs to
   // allocator held by the allocators.
@@ -390,26 +406,314 @@ void ConstraintSolver::dumpConstraints(llvm::raw_ostream &os) {
 }
 
 // Helper function to compute unary expressions if the operand has a solution.
-static void solveUnary(UnaryExpr *expr, std::function<int32_t(int32_t)> f) {
+static void solveUnary(UnaryExpr *expr,
+                       std::function<int32_t(int32_t)> callback) {
   if (expr->arg->solution.hasValue())
-    expr->solution = f(expr->arg->solution.getValue());
+    expr->solution = callback(expr->arg->solution.getValue());
 }
 
 // Helper function to compute binary expressions if both operands have a
 // solution.
 static void solveBinary(BinaryExpr *expr,
-                        std::function<int32_t(int32_t, int32_t)> f) {
+                        std::function<int32_t(int32_t, int32_t)> callback) {
   if (expr->lhs()->solution.hasValue() && expr->rhs()->solution.hasValue())
-    expr->solution =
-        f(expr->lhs()->solution.getValue(), expr->rhs()->solution.getValue());
+    expr->solution = callback(expr->lhs()->solution.getValue(),
+                              expr->rhs()->solution.getValue());
+  else if (expr->lhs()->solution.hasValue())
+    expr->solution = expr->lhs()->solution;
+  else if (expr->rhs()->solution.hasValue())
+    expr->solution = expr->rhs()->solution;
+}
+
+/// A canonicalized linear inequality that maps an constraint on var `x` to the
+/// linear inequality `x >= max(a*x+b, c) + (failed ? ∞ : 0)`.
+///
+/// The inequality separately tracks recursive (a, b) and non-recursive (c)
+/// constraints on `x`. This allows it to properly identify the combination of
+/// the two constraints constraints `x >= x-1` and `x >= 4` to be satisfiable as
+/// `x >= max(x-1, 4)`. If it only tracked inequality as `x >= a*x+b`, the
+/// combination of these two constraints would be `x >= x+4` (due to max(-1,4) =
+/// 4), which would be unsatisfiable.
+///
+/// The `failed` flag acts as an additional `∞` term that renders the inequality
+/// unsatisfiable. It is used as a tombstone value in case an operation renders
+/// the equality unsatisfiable (e.g. `x >= 2**x` would be represented as the
+/// inequality `x >= ∞`).
+///
+/// Inequalities represented in this form can easily be checked for
+/// unsatisfiability in the presence of recursion by inspecting the coefficients
+/// a and b. The `sat` function performs this action.
+struct LinIneq {
+  // x >= max(a*x+b, c) + (failed ? ∞ : 0)
+  int32_t rec_scale = 0;   // a
+  int32_t rec_bias = 0;    // b
+  int32_t nonrec_bias = 0; // c
+  bool failed = false;
+
+  /// Create a new unsatisfiable inequality `x >= ∞`.
+  static LinIneq unsat() { return LinIneq(true); }
+
+  /// Create a new inequality `x >= (failed ? ∞ : 0)`.
+  explicit LinIneq(bool failed = false) : failed(failed) {}
+
+  /// Create a new inequality `x >= bias`.
+  explicit LinIneq(int32_t bias) : nonrec_bias(bias) {}
+
+  /// Create a new inequality `x >= scale*x+bias`.
+  explicit LinIneq(int32_t scale, int32_t bias) {
+    if (scale != 0) {
+      rec_scale = scale;
+      rec_bias = bias;
+    } else {
+      nonrec_bias = bias;
+    }
+  }
+
+  /// Create a new inequality `x >= max(rec_scale*x+rec_bias, nonrec_bias) +
+  /// (failed ? ∞ : 0)`.
+  explicit LinIneq(int32_t rec_scale, int32_t rec_bias, int32_t nonrec_bias,
+                   bool failed = false)
+      : failed(failed) {
+    if (rec_scale != 0) {
+      this->rec_scale = rec_scale;
+      this->rec_bias = rec_bias;
+      this->nonrec_bias = nonrec_bias;
+    } else {
+      this->nonrec_bias = std::max(rec_bias, nonrec_bias);
+    }
+  }
+
+  /// Combine two inequalities by taking the maxima of corresponding
+  /// coefficients.
+  ///
+  /// This essentially combines `x >= max(a1*x+b1, c1)` and `x >= max(a2*x+b2,
+  /// c2)` into a new `x >= max(max(a1,a2)*x+max(b1,b2), max(c1,c2))`. This is
+  /// a pessimistic upper bound, since e.g. `x >= 2x-10` and `x >= x-5` may both
+  /// hold, but the resulting `x >= 2x-5` may pessimistically not hold.
+  static LinIneq max(const LinIneq &lhs, const LinIneq &rhs) {
+    return LinIneq(std::max(lhs.rec_scale, rhs.rec_scale),
+                   std::max(lhs.rec_bias, rhs.rec_bias),
+                   std::max(lhs.nonrec_bias, rhs.nonrec_bias),
+                   lhs.failed || rhs.failed);
+  }
+
+  /// Combine two inequalities by summing up the two right hand sides.
+  ///
+  /// This essentially combines `x >= max(a1*x+b1, c1)` and `x >= max(a2*x+b2,
+  /// c2)` into a new `x >= max((a1+a2)*x+b1+b2+c1+c2, 0)`.
+  static LinIneq add(const LinIneq &lhs, const LinIneq &rhs) {
+    return LinIneq(lhs.rec_scale + rhs.rec_scale,
+                   lhs.rec_bias + rhs.rec_bias + lhs.nonrec_bias +
+                       rhs.nonrec_bias,
+                   0, lhs.failed || rhs.failed);
+  }
+
+  /// Check if the inequality is satisfiable.
+  ///
+  /// The inequality becomes unsatisfiable if the RHS is ∞, or a>1, or a==1 and
+  /// b <= 0. Otherwise there exists as solution for `x` that satisfies the
+  /// inequality.
+  bool sat() const {
+    if (failed)
+      return false;
+    if (rec_scale > 1)
+      return false;
+    if (rec_scale == 1 && rec_bias > 0)
+      return false;
+    return true;
+  }
+
+  /// Dump the inequality in human-readable form.
+  void print(llvm::raw_ostream &os) const {
+    bool any = false;
+    bool both = (rec_scale != 0 || rec_bias != 0) && nonrec_bias != 0;
+    os << "x >= ";
+    if (both)
+      os << "max(";
+    if (rec_scale != 0) {
+      any = true;
+      if (rec_scale != 1)
+        os << rec_scale << "*";
+      os << "x";
+    }
+    if (rec_bias != 0) {
+      if (any) {
+        if (rec_bias < 0)
+          os << " - " << -rec_bias;
+        else
+          os << " + " << rec_bias;
+      } else {
+        any = true;
+        os << rec_bias;
+      }
+    }
+    if (both)
+      os << ", ";
+    if (nonrec_bias != 0) {
+      any = true;
+      os << nonrec_bias;
+    }
+    if (both)
+      os << ")";
+    if (failed) {
+      if (any)
+        os << " + ";
+      os << "∞";
+    }
+    if (!any)
+      os << "0";
+  }
+};
+
+inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const LinIneq &l) {
+  l.print(os);
+  return os;
+}
+
+/// Compute the canonicalized linear inequality expression starting at `expr`,
+/// for the `var` as the left hand side `x` of the inequality. `seenVars` is
+/// used as a recursion breaker. Occurrences of `var` itself within the
+/// expression are mapped to the `a` coefficient in the inequality. Any other
+/// variables are substituted and, in the presence of a recursion in a variable
+/// other than `var`, treated as zero. `info` is a mapping from constraint
+/// expressions to values and operations that produced the expression, and is
+/// used during error reporting. If `reportInto` is present, the function will
+/// additionally attach unsatisfiable inequalities as notes to the diagnostic as
+/// it encounters them.
+static LinIneq checkCycles(VarExpr *var, Expr *expr,
+                           SmallPtrSetImpl<Expr *> &seenVars,
+                           const ConstraintSolver::ContextInfo &info,
+                           InFlightDiagnostic *reportInto = nullptr) {
+  auto ineq =
+      TypeSwitch<Expr *, LinIneq>(expr)
+          .Case<KnownExpr>([&](auto *expr) { return LinIneq(*expr->solution); })
+          .Case<VarExpr>([&](auto *expr) {
+            if (expr == var)
+              return LinIneq(1, 0); // x >= 1*x + 0
+            if (!seenVars.insert(expr).second)
+              // Count recursions in other variables as 0. This is sane
+              // since the cycle is either breakable, in which case the
+              // recursion does not modify the resulting value of the
+              // variable, or it is not breakable and will be caught by
+              // this very function once it is called on that variable.
+              return LinIneq(0);
+            auto l =
+                checkCycles(var, expr->constraint, seenVars, info, reportInto);
+            seenVars.erase(expr);
+            return l;
+          })
+          .Case<PowExpr>([&](auto *expr) {
+            // If we can evaluate `2**arg` to a sensible constant, do
+            // so. This is the case if a == 0 and if c <= 32 such that 2**c is
+            // representable.
+            auto arg = checkCycles(var, expr->arg, seenVars, info, reportInto);
+            if (arg.rec_scale != 0 || arg.nonrec_bias < 0 ||
+                arg.nonrec_bias >= 32)
+              return LinIneq::unsat();
+            return LinIneq(1 << arg.nonrec_bias); // x >= 2**arg
+          })
+          .Case<AddExpr>([&](auto *expr) {
+            return LinIneq::add(
+                checkCycles(var, expr->lhs(), seenVars, info, reportInto),
+                checkCycles(var, expr->rhs(), seenVars, info, reportInto));
+          })
+          .Case<MaxExpr, MinExpr>([&](auto *expr) {
+            // Combine the inequalities of the LHS and RHS into a single overly
+            // pessimistic inequality. We treat `MinExpr` the same as `MaxExpr`,
+            // since `max(a,b)` is an upper bound to `min(a,b)`.
+            return LinIneq::max(
+                checkCycles(var, expr->lhs(), seenVars, info, reportInto),
+                checkCycles(var, expr->rhs(), seenVars, info, reportInto));
+          })
+          .Default([](auto) { return LinIneq::unsat(); });
+
+  // If we were passed an in-flight diagnostic and the current inequality is
+  // unsatisfiable, attach notes to the diagnostic indicating the values or
+  // operations that contributed to this part of the constraint expression.
+  if (reportInto && !ineq.sat()) {
+    auto it = info.find(expr);
+    if (it != info.end())
+      for (auto value : it->second) {
+        auto &note = reportInto->attachNote(value.getLoc());
+        note << "constrained width W >= ";
+        if (ineq.rec_scale == -1)
+          note << "-";
+        if (ineq.rec_scale != 1)
+          note << ineq.rec_scale;
+        note << "W";
+        if (ineq.rec_bias < 0)
+          note << "-" << -ineq.rec_bias;
+        if (ineq.rec_bias > 0)
+          note << "+" << ineq.rec_bias;
+        note << " here:";
+      }
+  }
+  if (!reportInto)
+    LLVM_DEBUG(llvm::dbgs() << "  - Visited " << *expr << ": " << ineq << "\n");
+
+  return ineq;
 }
 
 /// Solve the constraint problem. This is a very simple implementation that
 /// does not fully solve the problem if there are weird dependency cycles
 /// present.
-void ConstraintSolver::solve() {
+LogicalResult ConstraintSolver::solve() {
+  // Ensure that there are no adverse cycles around.
+  LLVM_DEBUG(llvm::dbgs() << "Checking for unbreakable loops\n");
+  SmallPtrSet<Expr *, 16> seenVars;
+  bool anyFailed = false;
+
+  for (auto *expr : exprs) {
+    // Only work on variables.
+    auto *var = dyn_cast<VarExpr>(expr);
+    if (!var)
+      continue;
+    LLVM_DEBUG(llvm::dbgs()
+               << "- Checking " << *var << " >= " << *var->constraint << "\n");
+
+    // Canonicalize the variable's constraint expression into a form that allows
+    // us to easily determine if any recursion leads to an unsatisfiable
+    // constraint. The `seenVars` set acts as a recursion breaker.
+    seenVars.insert(var);
+    auto ineq = checkCycles(var, var->constraint, seenVars, info);
+    seenVars.clear();
+
+    // If the constraint is satisfiable, we're done.
+    // TODO: It's possible that this result is already sufficient to arrive at a
+    // solution for the constraint, and the second pass further down is not
+    // necessary. This would require more proper handling of `MinExpr` in the
+    // cycle checking code.
+    if (ineq.sat()) {
+      LLVM_DEBUG(llvm::dbgs()
+                 << "  - Breakable since " << ineq << " satisfiable\n");
+      continue;
+    }
+
+    // If we arrive here, the constraint is not satisfiable at all. To provide
+    // some guidance to the user, we call the cycle checking code again, but
+    // this time with an in-flight diagnostic to attach notes indicating
+    // unsatisfiable paths in the cycle.
+    LLVM_DEBUG(llvm::dbgs()
+               << "  - UNBREAKABLE since " << ineq << " unsatisfiable\n");
+    anyFailed = true;
+    for (auto value : info.find(var)->second) {
+      // Depending on whether this value stems from an operation or not, create
+      // an appropriate diagnostic identifying the value.
+      auto op = value.getDefiningOp();
+      auto diag =
+          op ? op->emitOpError() : mlir::emitError(value.getLoc()) << "value ";
+      diag << "is constrained to be wider than itself";
+
+      // Re-run the cycle checking, but this time reporting into the diagnostic.
+      seenVars.insert(var);
+      checkCycles(var, var->constraint, seenVars, info, &diag);
+      seenVars.clear();
+    }
+  }
+
   // Iterate over the expressions in depth-first order and start substituting in
   // solutions.
+  LLVM_DEBUG(llvm::dbgs() << "Solving constraints\n");
   for (auto *expr : llvm::post_order(cast<Expr>(&root))) {
     if (expr->solution.hasValue())
       continue;
@@ -437,14 +741,17 @@ void ConstraintSolver::solve() {
             return std::min(lhs, rhs);
           });
         });
+
+    // TODO: We might want to complain about unconstrained widths here.
     LLVM_DEBUG({
       if (expr->solution.hasValue())
-        llvm::dbgs() << "Setting " << *expr << " = "
+        llvm::dbgs() << "- Setting " << *expr << " = "
                      << expr->solution.getValue() << "\n";
       else
-        llvm::dbgs() << "Leaving " << *expr << " unsolved\n";
+        llvm::dbgs() << "- Leaving " << *expr << " unsolved\n";
     });
   }
+  return failure(anyFailed);
 }
 
 //===----------------------------------------------------------------------===//
@@ -496,8 +803,10 @@ LogicalResult InferenceMapping::map(CircuitOp op) {
 
 LogicalResult InferenceMapping::map(FModuleOp module) {
   // Ensure we have constraint variables for the module ports.
-  for (auto arg : module.getArguments())
+  for (auto arg : module.getArguments()) {
+    solver.setCurrentContextInfo(arg);
     declareVars(arg);
+  }
 
   // Go through operations, creating type variables for results, and generating
   // constraints.
@@ -509,6 +818,8 @@ LogicalResult InferenceMapping::map(FModuleOp module) {
 
 LogicalResult InferenceMapping::mapOperation(Operation *op) {
   bool mappingFailed = false;
+  solver.setCurrentContextInfo(op->getNumResults() > 0 ? op->getResults()[0]
+                                                       : Value{});
   TypeSwitch<Operation *>(op)
       .Case<ConstantOp>([&](auto op) {
         // If the constant has a known width, use that. Otherwise pick the
@@ -526,7 +837,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         }
         setExpr(op.getResult(), e);
       })
-      .Case<WireOp, InvalidValueOp>(
+      .Case<WireOp, InvalidValueOp, RegOp>(
           [&](auto op) { declareVars(op.getResult()); })
 
       // Arithmetic and Logical Binary Primitives
@@ -665,7 +976,6 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         mappingFailed = true;
       });
   // TODO: Handle PartialConnect
-  // TODO: Handle DefRegister
   // TODO: Handle Attach
   // TODO: Handle Conditionally
   return failure(mappingFailed);
@@ -686,7 +996,7 @@ Expr *InferenceMapping::declareVars(Type type) {
   // TODO: Once we support compound types, non-FIRRTL types will just map to
   // an empty list of expressions in the solver. At that point we'll have
   // something proper to return here.
-  llvm_unreachable("non-FIRRTL ops not supported");
+  llvm_unreachable("non-FIRRTL types not supported");
 }
 
 /// Declare free variables for a FIRRTL type.
@@ -700,10 +1010,8 @@ Expr *InferenceMapping::declareVars(FIRRTLType type) {
   } else if (auto inner = type.dyn_cast<FlipType>()) {
     return declareVars(inner.getElementType());
   } else {
-    // TODO: Once we support compound types, non-FIRRTL types will just map to
-    // an empty list of expressions in the solver. At that point we'll have
-    // something proper to return here.
-    llvm_unreachable("non-FIRRTL ops not supported");
+    // TODO: Once we support compound types, this will go away.
+    llvm_unreachable("compound types not supported");
   }
 }
 
@@ -753,20 +1061,26 @@ class InferenceTypeUpdate {
 public:
   InferenceTypeUpdate(InferenceMapping &mapping) : mapping(mapping) {}
 
-  void update(CircuitOp op);
+  LogicalResult update(CircuitOp op);
   bool updateOperation(Operation *op);
   bool updateValue(Value value);
   FIRRTLType updateType(FIRRTLType type, uint32_t solution);
 
 private:
+  bool anyFailed;
   InferenceMapping &mapping;
 };
 
 } // namespace
 
 /// Update the types throughout a circuit.
-void InferenceTypeUpdate::update(CircuitOp op) {
-  op.walk([&](Operation *op) { updateOperation(op); });
+LogicalResult InferenceTypeUpdate::update(CircuitOp op) {
+  anyFailed = false;
+  op.walk([&](Operation *op) {
+    updateOperation(op);
+    return WalkResult(failure(anyFailed));
+  });
+  return failure(anyFailed);
 }
 
 /// Update the result types of an operation.
@@ -774,6 +1088,8 @@ bool InferenceTypeUpdate::updateOperation(Operation *op) {
   bool anyChanged = false;
   for (Value v : op->getResults()) {
     anyChanged |= updateValue(v);
+    if (anyFailed)
+      return false;
   }
 
   // If this is a connect operation, width inference might have inferred a RHS
@@ -805,6 +1121,8 @@ bool InferenceTypeUpdate::updateOperation(Operation *op) {
     for (auto arg : module.getArguments()) {
       argsChanged |= updateValue(arg);
       argTypes.push_back(arg.getType());
+      if (anyFailed)
+        return false;
     }
 
     // Update the module function type if needed.
@@ -837,6 +1155,27 @@ bool InferenceTypeUpdate::updateValue(Value value) {
   auto type = value.getType().dyn_cast<FIRRTLType>();
   if (!type)
     return false;
+
+  // If this is an operation that does not generate any free variables that are
+  // determined during width inference, simply update the value type based on
+  // the operation arguments.
+  if (auto op = dyn_cast_or_null<InferTypeOpInterface>(value.getDefiningOp())) {
+    SmallVector<Type, 2> types;
+    auto res =
+        op.inferReturnTypes(op->getContext(), op->getLoc(), op->getOperands(),
+                            op->getAttrDictionary(), op->getRegions(), types);
+    if (failed(res)) {
+      anyFailed = true;
+      return false;
+    }
+    assert(types.size() == op->getNumResults());
+    for (auto it : llvm::zip(op->getResults(), types)) {
+      LLVM_DEBUG(llvm::dbgs() << "Inferring " << std::get<0>(it) << " as "
+                              << std::get<1>(it) << "\n");
+      std::get<0>(it).setType(std::get<1>(it));
+    }
+    return true;
+  }
 
   // Get the inferred width.
   Expr *expr = mapping.getExprOrNull(value);
@@ -931,10 +1270,14 @@ void InferWidthsPass::runOnOperation() {
   });
 
   // Solve the constraints.
-  solver.solve();
+  if (failed(solver.solve())) {
+    signalPassFailure();
+    return;
+  }
 
   // Update the types with the inferred widths.
-  InferenceTypeUpdate(mapping).update(getOperation());
+  if (failed(InferenceTypeUpdate(mapping).update(getOperation())))
+    signalPassFailure();
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createInferWidthsPass() {
