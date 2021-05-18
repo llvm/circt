@@ -532,13 +532,21 @@ LogicalResult llhd::DrvOp::fold(ArrayRef<Attribute> operands,
   if (!enable())
     return failure();
 
-  if (matchPattern(enable(), m_Zero())) {
-    erase();
+  if (matchPattern(enable(), m_One())) {
+    enableMutable().clear();
     return success();
   }
 
-  if (matchPattern(enable(), m_One())) {
-    enableMutable().clear();
+  return failure();
+}
+
+LogicalResult llhd::DrvOp::canonicalize(llhd::DrvOp op,
+                                        PatternRewriter &rewriter) {
+  if (!op.enable())
+    return failure();
+
+  if (matchPattern(op.enable(), m_Zero())) {
+    rewriter.eraseOp(op);
     return success();
   }
 
@@ -971,14 +979,11 @@ FunctionType llhd::InstOp::getCalleeType() {
 // ConnectOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult llhd::ConnectOp::fold(ArrayRef<Attribute> operands,
-                                    SmallVectorImpl<OpFoldResult> &results) {
-  if (lhs() == rhs()) {
-    erase();
-    return success();
-  }
-
-  return failure();
+LogicalResult llhd::ConnectOp::canonicalize(llhd::ConnectOp op,
+                                            PatternRewriter &rewriter) {
+  if (op.lhs() == op.rhs())
+    rewriter.eraseOp(op);
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
