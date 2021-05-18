@@ -285,6 +285,7 @@ if(CIRCT_BINDINGS_PYTHON_ENABLED)
   find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
   message(STATUS "Found Python include dirs: ${Python3_INCLUDE_DIRS}")
   message(STATUS "Found Python libraries: ${Python3_LIBRARIES}")
+  message(STATUS "Found Python executable: ${Python3_EXECUTABLE}")
 
   mlir_detect_pybind11_install()
   find_package(pybind11 2.6 CONFIG REQUIRED)
