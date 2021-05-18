@@ -631,7 +631,9 @@ static ParseResult parseEntityOp(OpAsmParser &parser, OperationState &result) {
                       TypeAttr::get(type));
 
   auto *body = result.addRegion();
-  parser.parseRegion(*body, args, argTypes);
+  if(parser.parseRegion(*body, args, argTypes))
+    return failure();
+
   llhd::EntityOp::ensureTerminator(*body, parser.getBuilder(), result.location);
   return success();
 }
