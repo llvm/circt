@@ -637,12 +637,18 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         auto e = solver.max(high, low);
         setExpr(op.getResult(), e);
       })
+
       // Handle the various connect statements that imply a type constraint.
       .Case<ConnectOp>([&](auto op) {
         auto dest = getExpr(op.dest());
         auto src = getExpr(op.src());
         constrainTypes(dest, src);
       })
+
+      // Handle the no-ops that don't interact with width inference.
+      .Case<PrintFOp, SkipOp, StopOp, WhenOp, AssertOp, AssumeOp, CoverOp>(
+          [&](auto) {})
+
       .Default([&](auto op) {
         op->emitOpError("not supported in width inference");
         mappingFailed = true;
