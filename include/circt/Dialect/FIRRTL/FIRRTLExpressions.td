@@ -10,6 +10,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+def APSIntAttr : Attr<CPred<"$_self.isa<::mlir::IntegerAttr>()">,
+                      "arbitrary integer attribute with sign"> {
+  let storageType = [{ ::mlir::IntegerAttr }];
+  let returnType = [{ ::llvm::APSInt }];
+  let constBuilderCall = "getIntegerAttrFromAPSInt($0, $_builder.getContext())";
+  let convertFromStorage = "APSInt($_self.getValue(), !getType().isSigned())";
+}
+
 def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
                                        FirstAttrDerivedResultType]> {
   let summary = "Produce a constant value";
@@ -21,7 +29,7 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
     ```
     }];
 
-  let arguments = (ins APIntAttr:$value);
+  let arguments = (ins APSIntAttr:$value);
   let results = (outs NonZeroIntType:$result);
 
   // Need a custom parser/printer to avoid redundant type for the attribute and
@@ -30,7 +38,8 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
   let printer = "print$cppClass(p, *this);";
 
   let builders = [
-    OpBuilder<(ins "IntType":$type, "const APInt &":$value)>
+    OpBuilder<(ins "IntType":$type, "const APInt &":$value)>,
+    OpBuilder<(ins "const APSInt &":$value)>
   ];
   let hasFolder = 1;
   let verifier = "return ::verifyConstantOp(*this);";

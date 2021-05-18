@@ -125,6 +125,9 @@ enum class DeclKind { Port, Instance, Other };
 
 DeclKind getDeclarationKind(Value val);
 
+/// Return an IntegerAttr for the specified APSInt for use with firrtl.constant.
+IntegerAttr getIntegerAttrFromAPSInt(const APSInt &value, MLIRContext *context);
+
 } // namespace firrtl
 } // namespace circt
 
