@@ -24,9 +24,11 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Translation.h"
+#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Parallel.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/SaveAndRestore.h"
@@ -2822,18 +2824,166 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
 
 namespace {
 
+/// Information to control the emission of a single operation into a file.
+struct OpFileInfo {
+  /// The operation to be emitted.
+  Operation *op;
+
+  /// Where among the replicated per-file operations the `op` above should be
+  /// emitted.
+  size_t position = 0;
+};
+
+/// Information to control the emission of a list of operations into a file.
+struct FileInfo {
+  /// The operations to be emitted into a separate file, and where among the
+  /// replicated per-file operations the operation should be emitted.
+  SmallVector<OpFileInfo, 1> ops;
+
+  /// Whether to emit the replicated per-file operations.
+  bool emitReplicatedOps = true;
+
+  /// Whether to include this file as part of the emitted file list.
+  bool addToFilelist = true;
+};
+
 /// A base class for all MLIR module emitters.
 struct RootEmitterBase {
   /// The MLIR module to emit.
   ModuleOp rootOp;
 
+  /// The main file that collects all operations that are neither replicated
+  /// per-file ops nor specifically assigned to a file.
+  FileInfo rootFile;
+
+  /// The additional files to emit, with the output file name as the key into
+  /// the map.
+  llvm::MapVector<Identifier, FileInfo> files;
+
+  /// A list of operations replicated in each output file (e.g., `sv.verbatim`
+  /// or `sv.ifdef` without dedicated output file).
+  SmallVector<Operation *, 0> replicatedOps;
+
   /// Whether any error has been encountered during emission.
   std::atomic<bool> encounteredError = {};
 
   explicit RootEmitterBase(ModuleOp rootOp) : rootOp(rootOp) {}
+  void gatherFiles(bool separateModules);
+  void emitFile(const FileInfo &fileInfo, VerilogEmitterState &state);
+  void emitOperation(VerilogEmitterState &state, Operation *op);
 };
 
 } // namespace
+
+/// Organize the operations in the root MLIR module into output files to be
+/// generated. If `separateModules` is true, a handful of top-level declarations
+/// will be split into separate output files even in the absence of an explicit
+/// output file attribute.
+void RootEmitterBase::gatherFiles(bool separateModules) {
+  for (auto &op : *rootOp.getBody()) {
+    auto info = OpFileInfo{&op, replicatedOps.size()};
+
+    // Check if the operation has an explicit `output_file` attribute set. If it
+    // does, use the information there to push the operation into a dedicated
+    // output file.
+    auto attr = op.getAttrOfType<hw::OutputFileAttr>("output_file");
+    if (attr) {
+      llvm::errs() << "Found output_file attribute " << attr << " on " << op
+                   << "\n";
+      auto &file =
+          files[Identifier::get(attr.path().getValue(), op.getContext())];
+      file.ops.push_back(info);
+      file.emitReplicatedOps = !attr.exclude_replicated_ops().getValue();
+      file.addToFilelist = !attr.exclude_from_filelist().getValue();
+      continue;
+    }
+
+    // Otherwise implicitly assign the operation to a dedicated output file or
+    // mark it as a replicated operation.
+    auto maybeSeparate = [&](Operation *op, Twine fileName) {
+      if (separateModules) {
+        SmallString<32> fileNameStr;
+        fileName.toVector(fileNameStr);
+        auto fileNameAttr = Identifier::get(fileNameStr, op->getContext());
+        auto &file = files[fileNameAttr];
+        file.ops.push_back(info);
+      } else {
+        rootFile.ops.push_back(info);
+      }
+    };
+
+    TypeSwitch<Operation *>(&op)
+        .Case<HWModuleOp>([&](auto &mod) {
+          // Emit into a separate file named after the module.
+          maybeSeparate(mod, mod.getName() + ".sv");
+        })
+        .Case<InterfaceOp>([&](auto &intf) {
+          // Emit into a separate file named after the interface.
+          maybeSeparate(intf, intf.sym_name() + ".sv");
+        })
+        .Case<VerbatimOp, IfDefProceduralOp, TypeScopeOp, HWModuleExternOp>(
+            [&](auto &) {
+              // Replicate in each outputfile.
+              replicatedOps.push_back(&op);
+            })
+        .Case<HWGeneratorSchemaOp>([&](auto &) {
+          // Empty.
+        })
+        .Default([&](auto *) {
+          op.emitError("unknown operation");
+          encounteredError = true;
+        });
+  }
+}
+
+/// Emit the operations in a `FileInfo` to an output stream. This handles the
+/// correct interpolation of replicated operations.
+void RootEmitterBase::emitFile(const FileInfo &file,
+                               VerilogEmitterState &state) {
+  size_t lastReplicatedOp = 0;
+
+  // Emit each operation in the file preceded by the replicated ops not yet
+  // printed.
+  for (const auto &opInfo : file.ops) {
+    // Emit the replicated per-file operations before the main operation's
+    // position (if enabled).
+    if (file.emitReplicatedOps)
+      for (; lastReplicatedOp < std::min(opInfo.position, replicatedOps.size());
+           ++lastReplicatedOp)
+        emitOperation(state, replicatedOps[lastReplicatedOp]);
+
+    // Emit the operation itself.
+    emitOperation(state, opInfo.op);
+  }
+
+  // Emit the replicated per-file operations after the last operation (if
+  // enabled).
+  if (file.emitReplicatedOps)
+    for (; lastReplicatedOp < replicatedOps.size(); lastReplicatedOp++)
+      emitOperation(state, replicatedOps[lastReplicatedOp]);
+
+  if (state.encounteredError)
+    encounteredError = true;
+}
+
+void RootEmitterBase::emitOperation(VerilogEmitterState &state, Operation *op) {
+  TypeSwitch<Operation *>(op)
+      .Case<HWModuleOp>([&](auto op) { ModuleEmitter(state).emitHWModule(op); })
+      .Case<HWModuleExternOp>(
+          [&](auto op) { ModuleEmitter(state).emitHWExternModule(op); })
+      .Case<HWModuleGeneratedOp>(
+          [&](auto op) { ModuleEmitter(state).emitHWGeneratedModule(op); })
+      .Case<HWGeneratorSchemaOp>([&](auto op) { /* Empty */ })
+      .Case<InterfaceOp, VerbatimOp, IfDefProceduralOp>(
+          [&](auto op) { ModuleEmitter(state).emitStatement(op); })
+      .Case<TypeScopeOp>([&](auto typedecls) {
+        TypeScopeEmitter(state).emitTypeScopeBlock(*typedecls.getBodyBlock());
+      })
+      .Default([&](auto *op) {
+        encounteredError = true;
+        op->emitError("unknown operation");
+      });
+}
 
 //===----------------------------------------------------------------------===//
 // Unified Emitter
@@ -2856,30 +3006,21 @@ struct UnifiedEmitter : public RootEmitterBase {
 
 void UnifiedEmitter::emitMLIRModule() {
   VerilogEmitterState state(os);
+  gatherFiles(false);
 
   // Read the emitter options out of the module.
   state.options.parseFromAttribute(rootOp);
 
-  for (auto &op : *rootOp.getBody()) {
-    if (auto rootOp = dyn_cast<HWModuleOp>(op))
-      ModuleEmitter(state).emitHWModule(rootOp);
-    else if (auto rootOp = dyn_cast<HWModuleExternOp>(op))
-      ModuleEmitter(state).emitHWExternModule(rootOp);
-    else if (auto rootOp = dyn_cast<HWModuleGeneratedOp>(op))
-      ModuleEmitter(state).emitHWGeneratedModule(rootOp);
-    else if (auto typedecls = dyn_cast<TypeScopeOp>(op))
-      TypeScopeEmitter(state).emitTypeScopeBlock(*typedecls.getBodyBlock());
-    else if (isa<HWGeneratorSchemaOp>(op)) { /* Empty */
-    } else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) ||
-               isa<IfDefProceduralOp>(op))
-      ModuleEmitter(state).emitStatement(&op);
-    else {
-      encounteredError = true;
-      op.emitError("unknown operation");
-    }
+  // Emit the main file. This is a container for anything not explicitly split
+  // out into a separate file.
+  emitFile(rootFile, state);
+
+  // Emit the separate files.
+  for (const auto &it : files) {
+    state.os << "\n// ----- 8< ----- FILE \"" << it.first
+             << "\" ----- 8< -----\n\n";
+    emitFile(it.second, state);
   }
-  if (state.encounteredError)
-    encounteredError = true;
 }
 
 //===----------------------------------------------------------------------===//
@@ -2893,80 +3034,47 @@ struct SplitEmitter : public RootEmitterBase {
   explicit SplitEmitter(StringRef dirname, ModuleOp rootOp)
       : RootEmitterBase(rootOp), dirname(dirname) {}
 
-  /// A list of modules and their position within the per-file operations.
-  struct EmittedModule {
-    Operation *op;
-    size_t position;
-    SmallString<32> filename;
-  };
-  SmallVector<EmittedModule, 0> moduleOps;
-
-  void emitMLIRModule();
-
-private:
   /// The directory to emit files into.
   StringRef dirname;
 
-  /// A list of per-file operations (e.g., `sv.verbatim` or `sv.ifdef`).
-  SmallVector<Operation *, 0> perFileOps;
-
-  void emitModule(const LoweringOptions &options, EmittedModule &mod);
+  void emitMLIRModule();
+  void createFile(const LoweringOptions &options, Identifier fileName,
+                  FileInfo &file);
 };
 
 } // namespace
 
 void SplitEmitter::emitMLIRModule() {
+  gatherFiles(true);
+
   // Load any emitter options from the top-level module.
   LoweringOptions options(rootOp);
 
-  // Partition the MLIR module into modules and interfaces for which we create
-  // separate output files, and the remaining top-level verbatim SV/ifdef
-  // business that needs to go into each file.
-  for (auto &op : *rootOp.getBody()) {
-    TypeSwitch<Operation *>(&op)
-        .Case<HWModuleOp, InterfaceOp>([&](auto &) {
-          moduleOps.push_back({&op, perFileOps.size(), {}});
-        })
-        .Case<VerbatimOp, IfDefProceduralOp, TypeScopeOp>(
-            [&](auto &) { perFileOps.push_back(&op); })
-        .Case<HWGeneratorSchemaOp, HWModuleExternOp>([&](auto &) {})
-        .Default([&](auto *) {
-          op.emitError("unknown operation");
-          encounteredError = true;
-        });
-  }
-
-  // In parallel, emit each module into its separate file, embedded within the
-  // per-file operations.
-  llvm::parallelForEach(moduleOps.begin(), moduleOps.end(),
-                        [&](EmittedModule &mod) { emitModule(options, mod); });
+  // Emit operations to separate files in parallel if enabled.
+  if (rootOp.getContext()->isMultithreadingEnabled())
+    llvm::parallelForEach(files.begin(), files.end(), [&](auto &it) {
+      createFile(options, it.first, it.second);
+    });
+  else
+    for (auto &it : files)
+      createFile(options, it.first, it.second);
 }
 
-void SplitEmitter::emitModule(const LoweringOptions &options,
-                              EmittedModule &mod) {
-  auto op = mod.op;
-
-  // Given the operation, determine the file stem name and how to emit it.
-  std::function<void(VerilogEmitterState &)> emit;
-
-  if (auto module = dyn_cast<HWModuleOp>(op)) {
-    mod.filename = module.getNameAttr().getValue();
-    emit = [=](VerilogEmitterState &state) {
-      ModuleEmitter(state).emitHWModule(module);
-    };
-  } else if (auto intfOp = dyn_cast<InterfaceOp>(op)) {
-    mod.filename = intfOp.sym_name();
-    emit = [=](VerilogEmitterState &state) {
-      ModuleEmitter(state).emitStatement(op);
-    };
-  } else {
-    llvm_unreachable("only emissible ops should be in moduleOps list");
-  }
-
-  // Determine the output file name.
-  mod.filename.append(".sv");
+void SplitEmitter::createFile(const LoweringOptions &options,
+                              Identifier fileName, FileInfo &file) {
+  // Determine the output path from the output directory and filename.
   SmallString<128> outputFilename(dirname);
-  llvm::sys::path::append(outputFilename, mod.filename);
+  llvm::sys::path::append(outputFilename, fileName.strref());
+  auto outputDir = llvm::sys::path::parent_path(outputFilename);
+
+  // Create the output directory if needed.
+  std::error_code error = llvm::sys::fs::create_directory(outputDir);
+  if (error) {
+    mlir::emitError(file.ops[0].op->getLoc(),
+                    "cannot create output directory \"" + outputDir +
+                        "\": " + error.message());
+    encounteredError = true;
+  }
 
   // Open the output file.
   std::string errorMessage;
@@ -2977,33 +3085,10 @@ void SplitEmitter::emitModule(const LoweringOptions &options,
     return;
   }
 
-  // Emit the prolog of per-file operations, the module itself, and the epilog
-  // of per-file operations.
+  // Emit the file, copying the global options into the individual module state.
   VerilogEmitterState state(output->os());
-
-  // Copy the global options in to the individual module state.
   state.options = options;
-
-  for (size_t i = 0; i < std::min(mod.position, perFileOps.size()); ++i) {
-    TypeSwitch<Operation *>(perFileOps[i])
-        .Case<VerbatimOp, IfDefProceduralOp>(
-            [&](auto &op) { ModuleEmitter(state).emitStatement(op); })
-        .Case<TypeScopeOp>([&](auto &op) {
-          TypeScopeEmitter(state).emitTypeScopeBlock(*op.getBodyBlock());
-        });
-  }
-  emit(state);
-  for (size_t i = mod.position; i < perFileOps.size(); i++) {
-    TypeSwitch<Operation *>(perFileOps[i])
-        .Case<VerbatimOp, IfDefProceduralOp>(
-            [&](auto &op) { ModuleEmitter(state).emitStatement(op); })
-        .Case<TypeScopeOp>([&](auto &op) {
-          TypeScopeEmitter(state).emitTypeScopeBlock(*op.getBodyBlock());
-        });
-  }
-
-  if (state.encounteredError)
-    encounteredError = true;
+  emitFile(file, state);
   output->keep();
 }
 
@@ -3032,8 +3117,9 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
     return failure();
   }
 
-  for (auto mod : std::move(emitter.moduleOps)) {
-    output->os() << mod.filename << "\n";
+  for (const auto &it : emitter.files) {
+    if (it.second.addToFilelist)
+      output->os() << it.first << "\n";
   }
   output->keep();
 
