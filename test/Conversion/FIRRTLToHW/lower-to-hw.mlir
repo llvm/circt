@@ -177,7 +177,7 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: [[SHIFT:%.+]] = comb.shl {{.*}}, {{.*}} : i15
     %30 = firrtl.dshl %in3, %29 : (!firrtl.sint<8>, !firrtl.uint<3>) -> !firrtl.sint<15>
 
-    // CHECK-NEXT: = comb.shru [[DSHR]], [[DSHR]] : i3
+    // CHECK-NEXT: = comb.shl [[DSHR]], [[DSHR]] : i3
     %dshlw = firrtl.dshlw %29, %29 : (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
 
     // Issue #367: https://github.com/llvm/circt/issues/367

@@ -79,7 +79,7 @@ static cl::opt<bool> imconstprop(
     cl::init(false));
 
 static cl::opt<bool>
-    enableLowerTypes("lower-types",
+    disableLowerTypes("disable-lower-types",
                      cl::desc("run the lower-types pass within lower-to-hw"),
                      cl::init(false));
 
@@ -171,37 +171,25 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     firrtl::FIRParserOptions options;
     options.ignoreInfoLocators = ignoreFIRLocations;
     module = importFIRRTL(sourceMgr, &context, options);
-
-    if (enableLowerTypes) {
-      pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass());
-      auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
-      // Only enable expand whens if lower types is also enabled.
-      if (expandWhens)
-        modulePM.addPass(firrtl::createExpandWhensPass());
-    }
-    // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
-    if (!disableOptimization) {
-      auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
-      modulePM.addPass(createCSEPass());
-      modulePM.addPass(createSimpleCanonicalizerPass());
-    }
   } else {
     auto parserTimer = ts.nest("MLIR Parser");
     assert(inputFormat == InputMLIRFile);
     module = parseSourceFile(sourceMgr, &context);
-
-    if (enableLowerTypes) {
-      pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass());
-      auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
-      // Only enable expand whens if lower types is also enabled.
-      if (expandWhens)
-        modulePM.addPass(firrtl::createExpandWhensPass());
-      // If we are running FIRRTL passes, clean up the output.
-      if (!disableOptimization) {
-        modulePM.addPass(createCSEPass());
-        modulePM.addPass(createSimpleCanonicalizerPass());
-      }
-    }
+  }
+  // The input mlir file could be firrtl dialect so we might need to clean
+  // things up.
+  if (!disableLowerTypes) {
+    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass());
+    auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
+    // Only enable expand whens if lower types is also enabled.
+    if (expandWhens)
+      modulePM.addPass(firrtl::createExpandWhensPass());
+  }
+  // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
+  if (!disableOptimization) {
+    auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
+     modulePM.addPass(createCSEPass());
+    modulePM.addPass(createSimpleCanonicalizerPass());
   }
 
   if (!module)

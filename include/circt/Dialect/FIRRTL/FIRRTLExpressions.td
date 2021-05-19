@@ -14,7 +14,7 @@ def APSIntAttr : Attr<CPred<"$_self.isa<::mlir::IntegerAttr>()">,
                       "arbitrary integer attribute with sign"> {
   let storageType = [{ ::mlir::IntegerAttr }];
   let returnType = [{ ::llvm::APSInt }];
-  let constBuilderCall = "getIntegerAttrFromAPSInt($0, $_builder.getContext())";
+  let constBuilderCall = "IntegerAttr::get($_builder.getContext(), $0)";
   let convertFromStorage = "APSInt($_self.getValue(), !getType().isSigned())";
 }
 
@@ -251,8 +251,18 @@ def NEQPrimOp : BinaryPrimOp<"neq", IntType, IntType, UInt1Type, [Commutative]>;
 def CatPrimOp   : BinaryPrimOp<"cat", IntType, IntType, UIntType> {
   let hasCanonicalizeMethod = true;
 }
-def DShlPrimOp  : BinaryPrimOp<"dshl", IntType, UIntType, IntType>;
-def DShlwPrimOp : BinaryPrimOp<"dshlw", IntType, UIntType, IntType>;
+def DShlPrimOp  : BinaryPrimOp<"dshl", IntType, UIntType, IntType>  {
+  let description = [{
+    A dynamic shift left operation. The width of `$result` is expanded to
+    `width($lhs) + 1 << width($rhs) - 1`.
+  }];
+}
+def DShlwPrimOp : BinaryPrimOp<"dshlw", IntType, UIntType, IntType> {
+  let description = [{
+    A dynamic shift left operation same as 'dshl' but with different width rule.
+    The width of `$result` is equal to `$lhs`.
+  }];
+}
 def DShrPrimOp  : BinaryPrimOp<"dshr", IntType, UIntType, IntType>;
 
 //===----------------------------------------------------------------------===//

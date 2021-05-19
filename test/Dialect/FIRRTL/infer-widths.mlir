@@ -327,5 +327,28 @@ firrtl.circuit "Foo" {
     firrtl.connect %ui, %c0_ui5 : !firrtl.uint, !firrtl.uint<5>
   }
 
+  // CHECK-LABEL: @TransparentOps
+  firrtl.module @TransparentOps(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>) {
+    %false = firrtl.constant 0 : !firrtl.uint<1>
+    %true = firrtl.constant 1 : !firrtl.uint<1>
+    %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
+    %c0_ui5 = firrtl.constant 0 : !firrtl.uint<5>
+
+    // CHECK: %ui = firrtl.wire : !firrtl.uint<5>
+    %ui = firrtl.wire : !firrtl.uint
+
+    firrtl.printf %clk, %false, "foo"
+    firrtl.skip
+    firrtl.stop %clk, %false, 0
+    firrtl.when %a  {
+      firrtl.connect %ui, %c0_ui4 : !firrtl.uint, !firrtl.uint<4>
+    } else  {
+      firrtl.connect %ui, %c0_ui5 : !firrtl.uint, !firrtl.uint<5>
+    }
+    firrtl.assert %clk, %true, %true, "foo"
+    firrtl.assume %clk, %true, %true, "foo"
+    firrtl.cover %clk, %true, %true, "foo"
+  }
+
   firrtl.module @Foo() {}
 }

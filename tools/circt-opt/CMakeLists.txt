@@ -29,11 +29,12 @@ target_link_libraries(circt-opt
   CIRCTSVTransforms
   CIRCTTransforms
 
-  MLIRParser
-  MLIRSupport
   MLIRIR
-  MLIROptLib
-  MLIRStandard
-  MLIRTransforms
   MLIRLLVMIR
+  MLIRMemRef
+  MLIROptLib
+  MLIRParser
+  MLIRStandard
+  MLIRSupport
+  MLIRTransforms
   )

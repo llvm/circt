@@ -25,10 +25,6 @@
 // include the header directly.
 #include "mlir/Support/LogicalResult.h"
 
-namespace llvm {
-class APSInt;
-}
-
 // Import classes from the `mlir` namespace into the `circt` namespace.  All of
 // the following classes have been already forward declared and imported from
 // `llvm` in to the `mlir` namespace. For classes with default template
@@ -39,9 +35,9 @@ class APSInt;
 // classes here should be imported from the `mlir` namespace, not the `llvm`
 // namespace.
 namespace circt {
-using llvm::APSInt;
 using mlir::APFloat;
 using mlir::APInt;
+using mlir::APSInt;
 using mlir::ArrayRef;
 using mlir::cast;
 using mlir::cast_or_null;

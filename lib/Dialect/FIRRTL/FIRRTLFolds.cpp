@@ -58,28 +58,21 @@ static bool hasKnownWidthIntTypesAndNonZeroResult(Operation *op) {
 /// This makes constant folding significantly easier, as we can simply pass the
 /// operands to an operation through this function to appropriately replace any
 /// zero-width dynamic values with a constant of value 0.
-static Optional<APInt> getExtendedConstant(Value operand, Attribute constant,
-                                           int32_t destWidth) {
+static Optional<APSInt> getExtendedConstant(Value operand, Attribute constant,
+                                            int32_t destWidth) {
   // We never support constant folding to unknown or zero width values: APInt
   // can't do it.
   if (destWidth <= 0)
     return {};
 
-  if (IntegerAttr result = constant.dyn_cast_or_null<IntegerAttr>()) {
-    APInt resultVal = result.getValue();
-    if (resultVal.getBitWidth() == (unsigned)destWidth)
-      return resultVal;
-
-    // Extension signedness follows the operand sign.
-    bool sextOperand = operand.getType().cast<IntType>().isSigned();
-    auto extOrTrunc = sextOperand ? &APInt::sextOrTrunc : &APInt::zextOrTrunc;
-    return (resultVal.*extOrTrunc)(destWidth);
-  }
+  // Extension signedness follows the operand sign.
+  if (IntegerAttr result = constant.dyn_cast_or_null<IntegerAttr>())
+    return result.getAPSInt().extOrTrunc(destWidth);
 
   // If the operand is zero bits, then we can return a zero of the result
   // type.
   if (operand.getType().cast<IntType>().getWidth() == 0)
-    return APInt(destWidth, 0);
+    return APSInt(destWidth, operand.getType().cast<IntType>().isUnsigned());
   return {};
 }
 
@@ -266,12 +259,9 @@ OpFoldResult DShlPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult DShlwPrimOp::fold(ArrayRef<Attribute> operands) {
-  // This follows LowerToHW's precedent.
-  // TODO: Verify this: https://github.com/llvm/circt/issues/1062
   return constFoldFIRRTLBinaryOp(
-      *this, operands, BinOpKind::DivideOrShift, [=](APInt a, APInt b) {
-        return getType().isSigned() ? a.ashr(b) : a.lshr(b);
-      });
+      *this, operands, BinOpKind::DivideOrShift,
+      [=](APInt a, APInt b) -> APInt { return a << b; });
 }
 
 OpFoldResult DShrPrimOp::fold(ArrayRef<Attribute> operands) {
