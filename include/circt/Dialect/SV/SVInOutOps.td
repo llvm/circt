@@ -40,7 +40,8 @@ def WireOp : SVOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>,
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
-                      CArg<"StringAttr", "StringAttr()">:$name)>,
+                      CArg<"StringAttr", "StringAttr()">:$name,
+                      CArg<"StringAttr", "StringAttr()">:$sym_name)>,
     OpBuilder<(ins "::mlir::Type":$elementType, CArg<"StringRef">:$name), [{
       return build($_builder, $_state, elementType,
                    $_builder.getStringAttr(name));
