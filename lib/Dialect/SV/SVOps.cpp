@@ -797,9 +797,11 @@ LogicalResult verifySignalExists(Value ifaceVal, FlatSymbolRefAttr signalName) {
 //===----------------------------------------------------------------------===//
 
 void WireOp::build(OpBuilder &odsBuilder, OperationState &odsState,
-                   Type elementType, StringAttr name) {
+                   Type elementType, StringAttr name, StringAttr sym_name) {
   if (!name)
     name = odsBuilder.getStringAttr("");
+  if (sym_name)
+    odsState.addAttribute("sym_name", sym_name);
 
   odsState.addAttribute("name", name);
   odsState.addTypes(InOutType::get(elementType));
