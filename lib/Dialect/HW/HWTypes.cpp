@@ -40,10 +40,13 @@ FieldInfo FieldInfo::allocateInto(mlir::TypeStorageAllocator &alloc) const {
 /// Return true if the specified type is a value HW Integer type.  This checks
 /// that it is a signless standard dialect type, that it isn't zero bits.
 bool circt::hw::isHWIntegerType(mlir::Type type) {
+  Type canonicalType;
   if (auto typeAlias = type.dyn_cast<TypeAliasType>())
-    type = typeAlias.getCanonicalType();
+    canonicalType = typeAlias.getCanonicalType();
+  else
+    canonicalType = type;
 
-  auto intType = type.dyn_cast<IntegerType>();
+  auto intType = canonicalType.dyn_cast<IntegerType>();
   if (!intType || !intType.isSignless())
     return false;
 
