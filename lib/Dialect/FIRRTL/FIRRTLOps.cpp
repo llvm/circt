@@ -1287,15 +1287,6 @@ static LogicalResult verifyConstantOp(ConstantOp constant) {
   return success();
 }
 
-/// Return an IntegerAttr for the specified APSInt for use with firrtl.constant.
-IntegerAttr firrtl::getIntegerAttrFromAPSInt(const APSInt &value,
-                                             MLIRContext *context) {
-  auto signedness =
-      value.isSigned() ? IntegerType::Signed : IntegerType::Unsigned;
-  Type attrType = IntegerType::get(context, value.getBitWidth(), signedness);
-  return IntegerAttr::get(attrType, value);
-}
-
 /// Build a ConstantOp from an APInt and a FIRRTL type, handling the attribute
 /// formation for the 'value' attribute.
 void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
@@ -1305,8 +1296,8 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
   assert((width == -1 || (int32_t)value.getBitWidth() == width) &&
          "incorrect attribute bitwidth for firrtl.constant");
 
-  auto attr = getIntegerAttrFromAPSInt(APSInt(value, !type.isSigned()),
-                                       type.getContext());
+  auto attr =
+      IntegerAttr::get(type.getContext(), APSInt(value, !type.isSigned()));
   return build(builder, result, type, attr);
 }
 
@@ -1314,9 +1305,9 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
 /// 'value' attribute and inferring the FIRRTL type.
 void ConstantOp::build(OpBuilder &builder, OperationState &result,
                        const APSInt &value) {
+  auto attr = IntegerAttr::get(builder.getContext(), value);
   auto type =
       IntType::get(builder.getContext(), value.isSigned(), value.getBitWidth());
-  auto attr = getIntegerAttrFromAPSInt(value, builder.getContext());
   return build(builder, result, type, attr);
 }
 
