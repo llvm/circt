@@ -39,29 +39,6 @@ struct HWGeneratorCalloutPass
 };
 } // end anonymous namespace
 
-// Parse the \p genExec string, to extract the program executable, the path to
-// the executable and all the required arguments from \p genExecArgs.
-llvm::ErrorOr<std::string> static parseProgramArgs(const std::string &genExec) {
-  std::string execName, execPath;
-
-  // TODO: Find a platform independent way to parse the path from the executable
-  // string. Does LLVM have such a method already ? The executable name can
-  // contain one of the following characters.
-  auto pathLoc = genExec.find_last_of("/\\");
-  if (pathLoc != std::string::npos)
-    execPath = genExec.substr(0, pathLoc + 1);
-  else
-    execPath = "";
-  execName = genExec.substr(pathLoc + 1);
-
-  auto generatorExe = llvm::sys::findProgramByName(execName, {execPath});
-  // If the executable was not found in the provided path (when the path is
-  // empty), then search it in the $PATH.
-  if (!generatorExe)
-    generatorExe = llvm::sys::findProgramByName(execName);
-  return generatorExe;
-}
-
 void HWGeneratorCalloutPass::runOnOperation() {
   ModuleOp root = getOperation();
   SmallVector<StringRef> genOptions;
