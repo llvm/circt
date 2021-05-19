@@ -14,7 +14,7 @@ def APSIntAttr : Attr<CPred<"$_self.isa<::mlir::IntegerAttr>()">,
                       "arbitrary integer attribute with sign"> {
   let storageType = [{ ::mlir::IntegerAttr }];
   let returnType = [{ ::llvm::APSInt }];
-  let constBuilderCall = "getIntegerAttrFromAPSInt($0, $_builder.getContext())";
+  let constBuilderCall = "IntegerAttr::get($_builder.getContext(), $0)";
   let convertFromStorage = "APSInt($_self.getValue(), !getType().isSigned())";
 }
 
