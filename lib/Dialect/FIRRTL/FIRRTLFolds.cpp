@@ -259,12 +259,9 @@ OpFoldResult DShlPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult DShlwPrimOp::fold(ArrayRef<Attribute> operands) {
-  // This follows LowerToHW's precedent.
-  // TODO: Verify this: https://github.com/llvm/circt/issues/1062
   return constFoldFIRRTLBinaryOp(
-      *this, operands, BinOpKind::DivideOrShift, [=](APInt a, APInt b) {
-        return getType().isSigned() ? a.ashr(b) : a.lshr(b);
-      });
+      *this, operands, BinOpKind::DivideOrShift,
+      [=](APInt a, APInt b) -> APInt { return a << b; });
 }
 
 OpFoldResult DShrPrimOp::fold(ArrayRef<Attribute> operands) {
