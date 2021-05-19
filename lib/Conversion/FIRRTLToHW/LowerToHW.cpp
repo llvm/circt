@@ -1004,7 +1004,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
     return lowerDivLikeOp<comb::ShrSOp, comb::ShrUOp>(op);
   }
   LogicalResult visitExpr(DShlwPrimOp op) {
-    return lowerDivLikeOp<comb::ShrSOp, comb::ShrUOp>(op);
+    return lowerDivLikeOp<comb::ShlOp, comb::ShlOp>(op);
   }
   LogicalResult visitExpr(TailPrimOp op);
   LogicalResult visitExpr(MuxPrimOp op);
