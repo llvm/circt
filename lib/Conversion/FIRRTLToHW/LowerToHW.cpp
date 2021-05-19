@@ -1002,7 +1002,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
     return lowerDivLikeOp<comb::ShrSOp, comb::ShrUOp>(op);
   }
   LogicalResult visitExpr(DShlwPrimOp op) {
-    return lowerDivLikeOp<comb::ShrSOp, comb::ShrUOp>(op);
+    return lowerDivLikeOp<comb::ShlOp, comb::ShlOp>(op);
   }
   LogicalResult visitExpr(TailPrimOp op);
   LogicalResult visitExpr(MuxPrimOp op);
@@ -1732,10 +1732,9 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     auto portName = op.getPortName(i).getValue();
     auto portKind = op.getPortKind(i);
 
-    auto &portKindNum =
-        portKind == MemOp::PortKind::Read
-            ? readCount
-            : portKind == MemOp::PortKind::Write ? writeCount : readwriteCount;
+    auto &portKindNum = portKind == MemOp::PortKind::Read    ? readCount
+                        : portKind == MemOp::PortKind::Write ? writeCount
+                                                             : readwriteCount;
 
     auto addInput = [&](SmallVectorImpl<Value> &operands, StringRef field,
                         size_t width) {
