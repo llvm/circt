@@ -141,3 +141,9 @@ rtl.module @Cover(%arg0: i1) {
   // expected-error @+1 {{sv.cover should be in a procedural region}}
   sv.cover %arg0: i1
 }
+
+// -----
+rtl.module.extern @test1(%arg0: i1, %arg1: i1, %arg8: i8)
+func @test2(%arg0: i1, %arg1: i1, %arg8: i8) { return }
+// expected-error @+1 {{'sv.bind' op attribute 'child' failed to satisfy constraint: flat symbol reference attribute is module like}}
+sv.bind "testinst" @test1 @test2

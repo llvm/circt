@@ -300,6 +300,23 @@ static StringRef getVerilogDeclWord(Operation *op) {
   return isProcedural ? "automatic logic" : "wire";
 }
 
+/// Return the name of a value without using the name map.  This is needed when
+/// looking into an instance from a different module as happens with bind.  It
+/// may return "" when unable to determine a name.
+static StringRef getNameRemotely(Value &value,
+                                 ArrayRef<ModulePortInfo> modulePorts) {
+  if (auto barg = value.dyn_cast<BlockArgument>()) {
+    return modulePorts[barg.getArgNumber()].getName();
+  } else if (auto readinout = dyn_cast<ReadInOutOp>(value.getDefiningOp())) {
+    if (auto wire = dyn_cast<WireOp>(readinout.input().getDefiningOp())) {
+      return wire.name();
+    } else if (auto reg = dyn_cast<RegOp>(readinout.input().getDefiningOp())) {
+      return reg.name();
+    }
+  }
+  return "";
+}
+
 namespace {
 /// This enum keeps track of the precedence level of various binary operators,
 /// where a lower number binds tighter.
@@ -1604,6 +1621,7 @@ private:
   LogicalResult visitSV(AliasOp op);
   LogicalResult visitStmt(OutputOp op);
   LogicalResult visitStmt(InstanceOp op);
+  LogicalResult visitBoundInstance(InstanceOp op);
 
   LogicalResult emitIfDef(Operation *op, StringRef cond);
   LogicalResult visitSV(IfDefOp op) { return emitIfDef(op, op.cond()); }
@@ -1627,6 +1645,9 @@ private:
   LogicalResult visitSV(InterfaceSignalOp op);
   LogicalResult visitSV(InterfaceModportOp op);
   LogicalResult visitSV(AssignInterfaceSignalOp op);
+  LogicalResult visitSV(BindOp op);
+  LogicalResult visitSV(BindExplicitOp op);
+
   void emitStatementExpression(Operation *op);
 
   void emitBlockAsStatement(Block *block,
@@ -2175,7 +2196,51 @@ LogicalResult StmtEmitter::visitSV(CaseZOp op) {
   return success();
 }
 
+LogicalResult StmtEmitter::visitBoundInstance(InstanceOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  auto *moduleOp = op.getReferencedModule();
+  assert(moduleOp && "Invalid IR");
+  auto verilogName = getVerilogModuleNameAttr(moduleOp);
+
+  // os << ' ' << emitter.getName(ModuleEmitter::ValueOrOp(op)) << " (";
+
+  SmallVector<ModulePortInfo> portInfo = getModulePortInfo(moduleOp);
+
+  // Emit the argument and result ports.
+  auto opArgs = op.inputs();
+  for (auto &elt : portInfo) {
+    // Figure out which value we are emitting.
+    if (elt.isOutput()) {
+      emitOpError(op, "Cannot bind to a module with an output port");
+      continue;
+    }
+    Value portVal = opArgs[elt.argNum];
+    bool isZeroWidth = isZeroBitType(elt.type);
+
+    if (!isZeroWidth) {
+      // Emit the value as an expression in a wire if needed.
+      ops.clear();
+      auto name = getNameRemotely(portVal, portInfo);
+      if (name.empty()) {
+        // Non stable names will come from expressions.  Since we are lowering
+        // the instance also, we can ensure that expressions feeding bound
+        // instances will be lowered consistently to verilog-namable entities.
+        indent() << "wire " << verilogName.getValue() << '_' << op.getName()
+                 << '_' << elt.getName() << " = ";
+        emitExpression(portVal, ops);
+        os << "\n";
+      }
+    }
+  }
+  return success();
+}
+
 LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
+  if (op->hasAttr("emitAsBind"))
+    return visitBoundInstance(op);
+
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -2329,6 +2394,107 @@ LogicalResult StmtEmitter::visitSV(AssignInterfaceSignalOp op) {
   os << '.' << op.signalName() << " = ";
   emitExpression(op.rhs(), emitted);
   os << ";\n";
+  return success();
+}
+
+LogicalResult StmtEmitter::visitSV(BindOp op) {
+  indent() << "bind "
+           << getVerilogModuleNameAttr(op.getReferencedModuleBase()).getValue()
+           << " "
+           << getVerilogModuleNameAttr(op.getReferencedModuleChild()).getValue()
+           << " " << op.instanceName() << " (.*);\n";
+  return success();
+}
+
+// This may be called in the top-level, not in an rtlmodule.  Thus we can't use
+// the name map to find expression names for arguments to the instance, nor do
+// we need to emit subexpressions.
+LogicalResult StmtEmitter::visitSV(BindExplicitOp op) {
+  InstanceOp inst = op.getReferencedInstance();
+
+  RTLModuleOp parentMod = inst->getParentOfType<rtl::RTLModuleOp>();
+  auto parentVerilogName = getVerilogModuleNameAttr(parentMod);
+  emitter.verifyModuleName(op, parentVerilogName);
+
+  Operation *childMod = inst.getReferencedModule();
+  auto childVerilogName = getVerilogModuleNameAttr(childMod);
+  emitter.verifyModuleName(op, childVerilogName);
+
+  indent() << "bind " << parentVerilogName.getValue() << " "
+           << childVerilogName.getValue() << ' ' << inst.getName() << " (";
+
+  SmallVector<ModulePortInfo> parentPortInfo = parentMod.getPorts();
+  SmallVector<ModulePortInfo> childPortInfo = getModulePortInfo(childMod);
+
+  // Get the max port name length so we can align the '('.
+  size_t maxNameLength = 0;
+  for (auto &elt : childPortInfo) {
+    maxNameLength = std::max(maxNameLength, elt.getName().size());
+  }
+
+  // Emit the argument and result ports.
+  auto opArgs = inst.inputs();
+  auto opResults = inst.getResults();
+  bool isFirst = true; // True until we print a port.
+  for (auto &elt : childPortInfo) {
+    // Figure out which value we are emitting.
+    Value portVal = elt.isOutput() ? opResults[elt.argNum] : opArgs[elt.argNum];
+    bool isZeroWidth = isZeroBitType(elt.type);
+
+    // Decide if we should print a comma.  We can't do this if we're the first
+    // port or if all the subsequent ports are zero width.
+    if (!isFirst) {
+      bool shouldPrintComma = true;
+      if (isZeroWidth) {
+        shouldPrintComma = false;
+        for (size_t i = (&elt - childPortInfo.data()) + 1,
+                    e = childPortInfo.size();
+             i != e; ++i)
+          if (!isZeroBitType(childPortInfo[i].type)) {
+            shouldPrintComma = true;
+            break;
+          }
+      }
+
+      if (shouldPrintComma)
+        os << ',';
+    }
+    os << "\n";
+
+    // Emit the port's name.
+    indent();
+    if (!isZeroWidth) {
+      // If this is a real port we're printing, then it isn't the first one. Any
+      // subsequent ones will need a comma.
+      isFirst = false;
+      os << "  ";
+    } else {
+      // We comment out zero width ports, so their presence and initializer
+      // expressions are still emitted textually.
+      os << "//";
+    }
+
+    os << '.' << elt.getName();
+    os.indent(maxNameLength - elt.getName().size()) << " (";
+
+    // Emit the value as an expression.
+    auto name = getNameRemotely(portVal, parentPortInfo);
+    if (name.empty()) {
+      // Non stable names will come from expressions.  Since we are lowering the
+      // instance also, we can ensure that expressions feeding bound instances
+      // will be lowered consistently to verilog-namable entities.
+      os << childVerilogName.getValue() << '_' << inst.getName() << '_'
+         << elt.getName() << ')';
+    } else {
+      os << name << ')';
+    }
+  }
+  if (!isFirst) {
+    os << "\n";
+    indent();
+  }
+  os << ");\n";
+
   return success();
 }
 
@@ -2874,7 +3040,8 @@ void UnifiedEmitter::emitMLIRModule() {
       TypeScopeEmitter(state).emitTypeScopeBlock(*typedecls.getBodyBlock());
     else if (isa<RTLGeneratorSchemaOp>(op)) { /* Empty */
     } else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) ||
-               isa<IfDefProceduralOp>(op))
+               isa<IfDefProceduralOp>(op) || isa<BindOp>(op) ||
+               isa<BindExplicitOp>(op))
       ModuleEmitter(state).emitStatement(&op);
     else {
       encounteredError = true;

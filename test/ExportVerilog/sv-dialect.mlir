@@ -728,3 +728,43 @@ rtl.module @ConstantEmissionAtTopOfBlock() {
     }
   }
 }
+
+//CHECK-LABEL: bind ConstantDefAfterUse ConstantEmissionAtTopOfBlock foobar_inst (.*)
+sv.bind "foobar_inst" @ConstantDefAfterUse @ConstantEmissionAtTopOfBlock
+
+// CHECK-LABEL: module extInst
+rtl.module.extern @extInst(%_h: i1, %_i: i1, %_j: i1, %_k: i1) -> ()
+
+// CHECK-LABEL: module remoteInstDut
+rtl.module @remoteInstDut(%i: i1, %j: i1) -> () {
+  %mywire = sv.wire : !rtl.inout<i1>
+  %mywire_rd = sv.read_inout %mywire : !rtl.inout<i1>
+  %myreg = sv.reg : !rtl.inout<i1>
+  %myreg_rd = sv.read_inout %myreg : !rtl.inout<i1>
+  %0 = rtl.constant 1 : i1
+  rtl.instance "a1" sym @bindInst @extInst(%mywire_rd, %myreg_rd, %j, %0) {emitAsBind=1}: (i1, i1, i1, i1) -> ()
+  rtl.instance "a2" sym @bindInst @extInst(%mywire_rd, %myreg_rd, %j, %0) : (i1, i1, i1, i1) -> ()
+// CHECK: wire extInst_a1__k
+// CHECK-NEXT: extInst a2
+}
+
+sv.bind.explicit @bindInst
+//CHECK-LABEL: bind remoteInstDut extInst a1 (
+//CHECK-NEXT:  ._h (mywire),
+//CHECK-NEXT:  ._i (myreg),
+//CHECK-NEXT:  ._j (j),
+//CHECK-NEXT:  ._k (extInst_a1__k)
+//CHECK-NEXT:);
+
+rtl.module @bindInMod() -> () {
+  sv.bind.explicit @bindInst
+  sv.bind "foobar2_inst"  @ConstantDefAfterUse @ConstantEmissionAtTopOfBlock
+}
+//CHECK-LABEL: bindInMod
+//CHECK-NEXT:  bind remoteInstDut extInst a1 (
+//CHECK-NEXT:    ._h (mywire),
+//CHECK-NEXT:    ._i (myreg),
+//CHECK-NEXT:    ._j (j),
+//CHECK-NEXT:    ._k (extInst_a1__k)
+//CHECK-NEXT:  );
+//CHECK-NEXT:  bind ConstantDefAfterUse ConstantEmissionAtTopOfBlock foobar2_inst (.*);

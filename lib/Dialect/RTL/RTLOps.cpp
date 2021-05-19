@@ -718,13 +718,6 @@ static LogicalResult verifyInstanceOpTypes(InstanceOp op,
 }
 
 static LogicalResult verifyInstanceOp(InstanceOp op) {
-  // Check that this instance is inside a module.
-  auto module = dyn_cast<RTLModuleOp>(op->getParentOp());
-  if (!module) {
-    op.emitOpError("should be embedded in an 'rtl.module'");
-    return failure();
-  }
-
   auto referencedModule = op.getReferencedModule();
   if (referencedModule == nullptr)
     return op.emitError("Cannot find module definition '")
@@ -746,7 +739,7 @@ static LogicalResult verifyInstanceOp(InstanceOp op) {
       return failure();
   }
 
-  // If the referenced moudle is internal, check that input and result types are
+  // If the referenced module is internal, check that input and result types are
   // consistent with the referenced module.
   if (!isa<RTLModuleOp>(referencedModule))
     return success();

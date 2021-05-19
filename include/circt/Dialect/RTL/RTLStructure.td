@@ -279,7 +279,7 @@ def RTLModuleGeneratedOp : RTLOp<"module.generated",
 
 def InstanceOp : RTLOp<"instance",
                        [DeclareOpInterfaceMethods<OpAsmOpInterface>,
-                        Symbol]> {
+                       HasParent<"RTLModuleOp">, Symbol]> {
   let summary = "Create an instance of a module";
   let description = [{
     This represents an instance of a module. The inputs and results are 

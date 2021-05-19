@@ -160,3 +160,22 @@ rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   // CHECK-NEXT: rtl.output
   rtl.output
 }
+
+//CHECK-LABEL: sv.bind "testinst" @test1 @test2
+//CHECK-NEXT: rtl.module.extern @test2
+sv.bind "testinst" @test1 @test2
+rtl.module.extern @test2(%arg0: i1, %arg1: i1, %arg8: i8)
+
+
+rtl.module.extern @ExternDestMod(%a: i1, %b: i2)
+rtl.module.extern @InternalDestMod(%a: i1, %b: i2)
+
+rtl.module @AB(%a: i1, %b: i2) -> () {
+  rtl.instance "whatever" sym @a1 @ExternDestMod(%a, %b) {doNotPrint=1}: (i1, i2) -> ()
+  rtl.instance "yo" sym @b1 @InternalDestMod(%a, %b) {doNotPrint=1} : (i1, i2) -> ()
+  rtl.output
+}
+
+sv.bind.explicit @a1
+sv.bind.explicit @b1
+sv.bind "instname" @AB @ExternDestMod
