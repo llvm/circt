@@ -106,6 +106,12 @@ struct VarExpr : public ExprBase<VarExpr, Expr::Kind::Var> {
     // this is just for debug dumping, we wrap around at 4096 variables.
     os << "var" << ((size_t)this / llvm::PowerOf2Ceil(sizeof(*this)) & 0xFFF);
   }
+  iterator begin() const { return &constraint; }
+  iterator end() const { return &constraint + 1; }
+
+  /// The constraint expression this variable is supposed to be greater than or
+  /// equal to. This is not part of the variable's hash and equality property.
+  Expr *constraint = nullptr;
 };
 
 /// A known constant value.
@@ -327,17 +333,15 @@ public:
   MaxExpr *max(Expr *lhs, Expr *rhs) { return alloc<MaxExpr>(bins, lhs, rhs); }
   MinExpr *min(Expr *lhs, Expr *rhs) { return alloc<MinExpr>(bins, lhs, rhs); }
 
-  /// Add a constraint `lhs >= rhs`.
+  /// Add a constraint `lhs >= rhs`. Multiple constraints on the same variable
+  /// are coalesced into a `max(a, b)` expr.
   Expr *addGeqConstraint(VarExpr *lhs, Expr *rhs) {
-    auto &con = constraints[lhs];
-    con = con ? max(con, rhs) : rhs;
-    return con;
+    lhs->constraint = lhs->constraint ? max(lhs->constraint, rhs) : rhs;
+    return lhs->constraint;
   }
 
   void dumpConstraints(llvm::raw_ostream &os);
   void solve();
-  void gatherDepthFirstExprs(Expr *expr, llvm::SetVector<Expr *> &dfs,
-                             llvm::DenseSet<Expr *> &cycleBreaker);
 
 private:
   // Allocator for constraint expressions.
@@ -360,10 +364,6 @@ private:
     return it.first;
   }
 
-  /// The constraint imposed on each variable. Multiple constraints on the same
-  /// variable are coalesced into a `max(a, b)` expr.
-  llvm::MapVector<VarExpr *, Expr *> constraints;
-
   // Forbid copyign or moving the solver, which would invalidate the refs to
   // allocator held by the allocators.
   ConstraintSolver(ConstraintSolver &&) = delete;
@@ -376,8 +376,13 @@ private:
 
 /// Print all constraints in the solver to an output stream.
 void ConstraintSolver::dumpConstraints(llvm::raw_ostream &os) {
-  for (const auto &c : constraints) {
-    os << *c.first << " >= " << *c.second << "\n";
+  for (auto *e : exprs) {
+    if (auto *v = dyn_cast<VarExpr>(e)) {
+      if (v->constraint)
+        os << "- " << *v << " >= " << *v->constraint << "\n";
+      else
+        os << "- " << *v << " unconstrained\n";
+    }
   }
 }
 
@@ -407,9 +412,8 @@ void ConstraintSolver::solve() {
       continue;
     TypeSwitch<Expr *>(expr)
         .Case<VarExpr>([&](auto *var) {
-          auto it = constraints.find(var);
-          if (it != constraints.end())
-            var->solution = it->second->solution;
+          if (var->constraint)
+            var->solution = var->constraint->solution;
         })
         .Case<PowExpr>([&](auto *expr) {
           solveUnary(expr, [](int32_t arg) {
@@ -633,12 +637,18 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         auto e = solver.max(high, low);
         setExpr(op.getResult(), e);
       })
+
       // Handle the various connect statements that imply a type constraint.
       .Case<ConnectOp>([&](auto op) {
         auto dest = getExpr(op.dest());
         auto src = getExpr(op.src());
         constrainTypes(dest, src);
       })
+
+      // Handle the no-ops that don't interact with width inference.
+      .Case<PrintFOp, SkipOp, StopOp, WhenOp, AssertOp, AssumeOp, CoverOp>(
+          [&](auto) {})
+
       .Default([&](auto op) {
         op->emitOpError("not supported in width inference");
         mappingFailed = true;

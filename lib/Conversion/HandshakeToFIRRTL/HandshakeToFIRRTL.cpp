@@ -217,7 +217,7 @@ static Value createMuxTree(ArrayRef<Value> inputs, Value select,
 
   // Keep a vector of ValueRanges to represent the mux tree. Each value in the
   // range is the output of a mux.
-  SmallVector<ArrayRef<Value>, 2> muxes;
+  SmallVector<SmallVector<Value, 4>, 2> muxes;
 
   // Helpers for repetetive calls.
   auto createBits = [&](Value select, size_t idx) {
@@ -233,7 +233,7 @@ static Value createMuxTree(ArrayRef<Value> inputs, Value select,
   auto selectBit = createBits(select, selectIdx);
 
   // Create the first layer of muxes for the inputs.
-  SmallVector<Value, 4> initialValues;
+  auto &initialValues = muxes.emplace_back();
   for (size_t i = 0; i < numInputs - 1; i += 2)
     initialValues.push_back(createMux(selectBit, inputs, i));
 
@@ -241,19 +241,17 @@ static Value createMuxTree(ArrayRef<Value> inputs, Value select,
   if (numInputs % 2)
     initialValues.push_back(inputs[numInputs - 1]);
 
-  muxes.push_back(initialValues);
-
   // Create any inner layers of muxes.
   for (size_t layer = 1; layer < numLayers; ++layer, ++selectIdx) {
     // Get the previous layer of muxes.
-    ArrayRef<Value> prevLayer = muxes[layer - 1];
+    auto &prevLayer = muxes[layer - 1];
     size_t prevSize = prevLayer.size();
 
     // Create an op to extract the select bit.
     selectBit = createBits(select, selectIdx);
 
     // Create this layer of muxes.
-    SmallVector<Value, 4> values;
+    auto &values = muxes.emplace_back();
     for (size_t i = 0; i < prevSize - 1; i += 2)
       values.push_back(createMux(selectBit, prevLayer, i));
 
@@ -266,7 +264,7 @@ static Value createMuxTree(ArrayRef<Value> inputs, Value select,
   }
 
   // Get the last layer of muxes, which has a single value, and return it.
-  ArrayRef<Value> lastLayer = muxes.back();
+  auto &lastLayer = muxes.back();
   assert(lastLayer.size() == 1 && "mux tree didn't result in a single value");
   return lastLayer[0];
 }

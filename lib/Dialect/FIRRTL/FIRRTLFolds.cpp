@@ -39,33 +39,17 @@ static IntegerAttr getIntAttr(Type type, const APInt &value) {
   return IntegerAttr::get(intType, value);
 }
 
-/// Return true if this operation's operands and results all have known width.
+/// Return true if this operation's operands and results all have known width,
+/// or if the result has zero width result (which we cannot constant fold).
 /// This only works for integer types.
-static bool hasKnownWidthIntegerTypes(Operation *op) {
-  if (!op->getResult(0).getType().cast<IntType>().hasWidth())
+static bool hasKnownWidthIntTypesAndNonZeroResult(Operation *op) {
+  auto resultType = op->getResult(0).getType().cast<IntType>();
+  if (!resultType.hasWidth() || resultType.getWidth() == 0)
     return false;
   for (Value operand : op->getOperands())
     if (!operand.getType().cast<IntType>().hasWidth())
       return false;
   return true;
-}
-
-namespace {
-struct ConstantIntMatcher {
-  APInt &value;
-  ConstantIntMatcher(APInt &value) : value(value) {}
-  bool match(Operation *op) {
-    if (auto cst = dyn_cast<ConstantOp>(op)) {
-      value = cst.value();
-      return true;
-    }
-    return false;
-  }
-};
-} // end anonymous namespace
-
-static inline ConstantIntMatcher m_FConstant(APInt &value) {
-  return ConstantIntMatcher(value);
 }
 
 /// Implicitly replace the operand to a constant folding operation with a const
@@ -74,28 +58,21 @@ static inline ConstantIntMatcher m_FConstant(APInt &value) {
 /// This makes constant folding significantly easier, as we can simply pass the
 /// operands to an operation through this function to appropriately replace any
 /// zero-width dynamic values with a constant of value 0.
-static Optional<APInt> getExtendedConstant(Value operand, Attribute constant,
-                                           int32_t destWidth) {
+static Optional<APSInt> getExtendedConstant(Value operand, Attribute constant,
+                                            int32_t destWidth) {
   // We never support constant folding to unknown or zero width values: APInt
   // can't do it.
   if (destWidth <= 0)
     return {};
 
-  if (IntegerAttr result = constant.dyn_cast_or_null<IntegerAttr>()) {
-    APInt resultVal = result.getValue();
-    if (resultVal.getBitWidth() == (unsigned)destWidth)
-      return resultVal;
-
-    // Extension signedness follows the operand sign.
-    bool sextOperand = operand.getType().cast<IntType>().isSigned();
-    auto extOrTrunc = sextOperand ? &APInt::sextOrTrunc : &APInt::zextOrTrunc;
-    return (resultVal.*extOrTrunc)(destWidth);
-  }
+  // Extension signedness follows the operand sign.
+  if (IntegerAttr result = constant.dyn_cast_or_null<IntegerAttr>())
+    return result.getAPSInt().extOrTrunc(destWidth);
 
   // If the operand is zero bits, then we can return a zero of the result
   // type.
   if (operand.getType().cast<IntType>().getWidth() == 0)
-    return APInt(destWidth, 0);
+    return APSInt(destWidth, operand.getType().cast<IntType>().isUnsigned());
   return {};
 }
 
@@ -119,8 +96,9 @@ constFoldFIRRTLBinaryOp(Operation *op, ArrayRef<Attribute> operands,
                         const function_ref<APInt(APInt, APInt)> &calculate) {
   assert(operands.size() == 2 && "binary op takes two operands");
 
+  // We cannot fold something to an unknown or zero width.
   auto resultType = op->getResult(0).getType().cast<IntType>();
-  if (!resultType.hasWidth())
+  if (resultType.getWidthOrSentinel() <= 0)
     return {};
 
   // Compares extend the operands to the widest of the operand types, not to the
@@ -228,8 +206,6 @@ OpFoldResult MulPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult DivPrimOp::fold(ArrayRef<Attribute> operands) {
-  APInt value;
-
   /// div(x, x) -> 1
   ///
   /// Division by zero is undefined in the FIRRTL specification. This
@@ -247,9 +223,9 @@ OpFoldResult DivPrimOp::fold(ArrayRef<Attribute> operands) {
   /// UInt division by one returns the numerator. SInt division can't
   /// be folded here because it increases the return type bitwidth by
   /// one and requires sign extension (a new op).
-  if (matchPattern(rhs(), m_FConstant(value)) && value.isOneValue() &&
-      lhs().getType() == getType())
-    return lhs();
+  if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>())
+    if (rhsCst.getValue().isOneValue() && lhs().getType() == getType())
+      return lhs();
 
   return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::DivideOrShift,
                                  [=](APInt a, APInt b) -> APInt {
@@ -300,17 +276,16 @@ OpFoldResult DShrPrimOp::fold(ArrayRef<Attribute> operands) {
 
 // TODO: Move to DRR.
 OpFoldResult AndPrimOp::fold(ArrayRef<Attribute> operands) {
-  APInt value;
+  if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
+    /// and(x, 0) -> 0
+    if (rhsCst.getValue().isNullValue() && rhs().getType() == getType())
+      return rhs();
 
-  /// and(x, 0) -> 0
-  if (matchPattern(rhs(), m_FConstant(value)) && value.isNullValue() &&
-      rhs().getType() == getType())
-    return rhs();
-
-  /// and(x, -1) -> x
-  if (matchPattern(rhs(), m_FConstant(value)) && value.isAllOnesValue() &&
-      lhs().getType() == getType() && rhs().getType() == getType())
-    return lhs();
+    /// and(x, -1) -> x
+    if (rhsCst.getValue().isAllOnesValue() && lhs().getType() == getType() &&
+        rhs().getType() == getType())
+      return lhs();
+  }
 
   /// and(x, x) -> x
   if (lhs() == rhs() && rhs().getType() == getType())
@@ -321,17 +296,16 @@ OpFoldResult AndPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult OrPrimOp::fold(ArrayRef<Attribute> operands) {
-  APInt value;
+  if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
+    /// or(x, 0) -> x
+    if (rhsCst.getValue().isNullValue() && lhs().getType() == getType())
+      return lhs();
 
-  /// or(x, 0) -> x
-  if (matchPattern(rhs(), m_FConstant(value)) && value.isNullValue() &&
-      lhs().getType() == getType())
-    return lhs();
-
-  /// or(x, -1) -> -1
-  if (matchPattern(rhs(), m_FConstant(value)) && value.isAllOnesValue() &&
-      rhs().getType() == getType() && lhs().getType() == getType())
-    return rhs();
+    /// or(x, -1) -> -1
+    if (rhsCst.getValue().isAllOnesValue() && rhs().getType() == getType() &&
+        lhs().getType() == getType())
+      return rhs();
+  }
 
   /// or(x, x) -> x
   if (lhs() == rhs() && rhs().getType() == getType())
@@ -342,12 +316,10 @@ OpFoldResult OrPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult XorPrimOp::fold(ArrayRef<Attribute> operands) {
-  APInt value;
-
   /// xor(x, 0) -> x
-  if (matchPattern(rhs(), m_FConstant(value)) && value.isNullValue() &&
-      lhs().getType() == getType())
-    return lhs();
+  if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>())
+    if (rhsCst.getValue().isNullValue() && lhs().getType() == getType())
+      return lhs();
 
   /// xor(x, x) -> 0
   if (lhs() == rhs()) {
@@ -366,7 +338,6 @@ void LEQPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 OpFoldResult LEQPrimOp::fold(ArrayRef<Attribute> operands) {
-  APInt value;
   bool isUnsigned = lhs().getType().isa<UIntType>();
 
   // leq(x, x) -> 1
@@ -375,8 +346,9 @@ OpFoldResult LEQPrimOp::fold(ArrayRef<Attribute> operands) {
 
   // Comparison against constant outside type bounds.
   if (auto width = lhs().getType().cast<IntType>().getWidth()) {
-    if (matchPattern(rhs(), m_FConstant(value))) {
-      auto commonWidth = std::max<int32_t>(*width, value.getBitWidth());
+    if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
+      auto commonWidth =
+          std::max<int32_t>(*width, rhsCst.getValue().getBitWidth());
       commonWidth = std::max(commonWidth, 1);
 
       // leq(x, const) -> 0 where const < minValue of the unsigned type of x
@@ -384,19 +356,22 @@ OpFoldResult LEQPrimOp::fold(ArrayRef<Attribute> operands) {
 
       // leq(x, const) -> 0 where const < minValue of the signed type of x
       if (!isUnsigned &&
-          value.sextOrSelf(commonWidth)
+          rhsCst.getValue()
+              .sextOrSelf(commonWidth)
               .slt(getMinSignedValue(*width).sextOrSelf(commonWidth)))
         return getIntAttr(getType(), APInt(1, 0));
 
       // leq(x, const) -> 1 where const >= maxValue of the unsigned type of x
       if (isUnsigned &&
-          value.zextOrSelf(commonWidth)
+          rhsCst.getValue()
+              .zextOrSelf(commonWidth)
               .uge(getMaxUnsignedValue(*width).zextOrSelf(commonWidth)))
         return getIntAttr(getType(), APInt(1, 1));
 
       // leq(x, const) -> 1 where const >= maxValue of the signed type of x
       if (!isUnsigned &&
-          value.sextOrSelf(commonWidth)
+          rhsCst.getValue()
+              .sextOrSelf(commonWidth)
               .sge(getMaxSignedValue(*width).sextOrSelf(commonWidth)))
         return getIntAttr(getType(), APInt(1, 1));
     }
@@ -414,7 +389,6 @@ void LTPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 OpFoldResult LTPrimOp::fold(ArrayRef<Attribute> operands) {
-  APInt value;
   bool isUnsigned = lhs().getType().isa<UIntType>();
 
   // lt(x, x) -> 0
@@ -422,15 +396,16 @@ OpFoldResult LTPrimOp::fold(ArrayRef<Attribute> operands) {
     return getIntAttr(getType(), APInt(1, 0));
 
   // lt(x, 0) -> 0 when x is unsigned
-  if (matchPattern(rhs(), m_FConstant(value))) {
-    if (value.isNullValue() && lhs().getType().isa<UIntType>())
+  if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
+    if (rhsCst.getValue().isNullValue() && lhs().getType().isa<UIntType>())
       return getIntAttr(getType(), APInt(1, 0));
   }
 
   // Comparison against constant outside type bounds.
   if (auto width = lhs().getType().cast<IntType>().getWidth()) {
-    if (matchPattern(rhs(), m_FConstant(value))) {
-      auto commonWidth = std::max<int32_t>(*width, value.getBitWidth());
+    if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
+      auto commonWidth =
+          std::max<int32_t>(*width, rhsCst.getValue().getBitWidth());
       commonWidth = std::max(commonWidth, 1);
 
       // lt(x, const) -> 0 where const <= minValue of the unsigned type of x
@@ -438,19 +413,22 @@ OpFoldResult LTPrimOp::fold(ArrayRef<Attribute> operands) {
 
       // lt(x, const) -> 0 where const <= minValue of the signed type of x
       if (!isUnsigned &&
-          value.sextOrSelf(commonWidth)
+          rhsCst.getValue()
+              .sextOrSelf(commonWidth)
               .sle(getMinSignedValue(*width).sextOrSelf(commonWidth)))
         return getIntAttr(getType(), APInt(1, 0));
 
       // lt(x, const) -> 1 where const > maxValue of the unsigned type of x
       if (isUnsigned &&
-          value.zextOrSelf(commonWidth)
+          rhsCst.getValue()
+              .zextOrSelf(commonWidth)
               .ugt(getMaxUnsignedValue(*width).zextOrSelf(commonWidth)))
         return getIntAttr(getType(), APInt(1, 1));
 
       // lt(x, const) -> 1 where const > maxValue of the signed type of x
       if (!isUnsigned &&
-          value.sextOrSelf(commonWidth)
+          rhsCst.getValue()
+              .sextOrSelf(commonWidth)
               .sgt(getMaxSignedValue(*width).sextOrSelf(commonWidth)))
         return getIntAttr(getType(), APInt(1, 1));
     }
@@ -468,7 +446,6 @@ void GEQPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 OpFoldResult GEQPrimOp::fold(ArrayRef<Attribute> operands) {
-  APInt value;
   bool isUnsigned = lhs().getType().isa<UIntType>();
 
   // geq(x, x) -> 1
@@ -476,26 +453,29 @@ OpFoldResult GEQPrimOp::fold(ArrayRef<Attribute> operands) {
     return getIntAttr(getType(), APInt(1, 1));
 
   // geq(x, 0) -> 1 when x is unsigned
-  if (matchPattern(rhs(), m_FConstant(value))) {
-    if (value.isNullValue() && lhs().getType().isa<UIntType>())
+  if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
+    if (rhsCst.getValue().isNullValue() && lhs().getType().isa<UIntType>())
       return getIntAttr(getType(), APInt(1, 1));
   }
 
   // Comparison against constant outside type bounds.
   if (auto width = lhs().getType().cast<IntType>().getWidth()) {
-    if (matchPattern(rhs(), m_FConstant(value))) {
-      auto commonWidth = std::max<int32_t>(*width, value.getBitWidth());
+    if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
+      auto commonWidth =
+          std::max<int32_t>(*width, rhsCst.getValue().getBitWidth());
       commonWidth = std::max(commonWidth, 1);
 
       // geq(x, const) -> 0 where const > maxValue of the unsigned type of x
       if (isUnsigned &&
-          value.zextOrSelf(commonWidth)
+          rhsCst.getValue()
+              .zextOrSelf(commonWidth)
               .ugt(getMaxUnsignedValue(*width).zextOrSelf(commonWidth)))
         return getIntAttr(getType(), APInt(1, 0));
 
       // geq(x, const) -> 0 where const > maxValue of the signed type of x
       if (!isUnsigned &&
-          value.sextOrSelf(commonWidth)
+          rhsCst.getValue()
+              .sextOrSelf(commonWidth)
               .sgt(getMaxSignedValue(*width).sextOrSelf(commonWidth)))
         return getIntAttr(getType(), APInt(1, 0));
 
@@ -504,7 +484,8 @@ OpFoldResult GEQPrimOp::fold(ArrayRef<Attribute> operands) {
 
       // geq(x, const) -> 1 where const <= minValue of the signed type of x
       if (!isUnsigned &&
-          value.sextOrSelf(commonWidth)
+          rhsCst.getValue()
+              .sextOrSelf(commonWidth)
               .sle(getMinSignedValue(*width).sextOrSelf(commonWidth)))
         return getIntAttr(getType(), APInt(1, 1));
     }
@@ -522,7 +503,6 @@ void GTPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 OpFoldResult GTPrimOp::fold(ArrayRef<Attribute> operands) {
-  APInt value;
   bool isUnsigned = lhs().getType().isa<UIntType>();
 
   // gt(x, x) -> 0
@@ -531,19 +511,22 @@ OpFoldResult GTPrimOp::fold(ArrayRef<Attribute> operands) {
 
   // Comparison against constant outside type bounds.
   if (auto width = lhs().getType().cast<IntType>().getWidth()) {
-    if (matchPattern(rhs(), m_FConstant(value))) {
-      auto commonWidth = std::max<int32_t>(*width, value.getBitWidth());
+    if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
+      auto commonWidth =
+          std::max<int32_t>(*width, rhsCst.getValue().getBitWidth());
       commonWidth = std::max(commonWidth, 1);
 
       // gt(x, const) -> 0 where const >= maxValue of the unsigned type of x
       if (isUnsigned &&
-          value.zextOrSelf(commonWidth)
+          rhsCst.getValue()
+              .zextOrSelf(commonWidth)
               .uge(getMaxUnsignedValue(*width).zextOrSelf(commonWidth)))
         return getIntAttr(getType(), APInt(1, 0));
 
       // gt(x, const) -> 0 where const >= maxValue of the signed type of x
       if (!isUnsigned &&
-          value.sextOrSelf(commonWidth)
+          rhsCst.getValue()
+              .sextOrSelf(commonWidth)
               .sge(getMaxSignedValue(*width).sextOrSelf(commonWidth)))
         return getIntAttr(getType(), APInt(1, 0));
 
@@ -552,7 +535,8 @@ OpFoldResult GTPrimOp::fold(ArrayRef<Attribute> operands) {
 
       // gt(x, const) -> 1 where const < minValue of the signed type of x
       if (!isUnsigned &&
-          value.sextOrSelf(commonWidth)
+          rhsCst.getValue()
+              .sextOrSelf(commonWidth)
               .slt(getMinSignedValue(*width).sextOrSelf(commonWidth)))
         return getIntAttr(getType(), APInt(1, 1));
     }
@@ -565,16 +549,14 @@ OpFoldResult GTPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult EQPrimOp::fold(ArrayRef<Attribute> operands) {
-  APInt value;
-
   // eq(x, x) -> 1
   if (lhs() == rhs())
     return getIntAttr(getType(), APInt(1, 1));
 
-  if (matchPattern(rhs(), m_FConstant(value))) {
+  if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
     /// eq(x, 1) -> x when x is 1 bit.
     /// TODO: Support SInt<1> on the LHS etc.
-    if (value.isAllOnesValue() && lhs().getType() == getType() &&
+    if (rhsCst.getValue().isAllOnesValue() && lhs().getType() == getType() &&
         rhs().getType() == getType())
       return lhs();
 
@@ -589,16 +571,14 @@ OpFoldResult EQPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
-  APInt value;
-
   // neq(x, x) -> 0
   if (lhs() == rhs())
     return getIntAttr(getType(), APInt(1, 0));
 
-  if (matchPattern(rhs(), m_FConstant(value))) {
+  if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
     /// neq(x, 0) -> x when x is 1 bit.
     /// TODO: Support SInt<1> on the LHS etc.
-    if (value.isNullValue() && lhs().getType() == getType() &&
+    if (rhsCst.getValue().isNullValue() && lhs().getType() == getType() &&
         rhs().getType() == getType())
       return lhs();
 
@@ -639,7 +619,7 @@ OpFoldResult AsClockPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult CvtPrimOp::fold(ArrayRef<Attribute> operands) {
-  if (!hasKnownWidthIntegerTypes(*this))
+  if (!hasKnownWidthIntTypesAndNonZeroResult(*this))
     return {};
 
   // Signed to signed is a noop, unsigned operands prepend a zero bit.
@@ -652,7 +632,7 @@ OpFoldResult CvtPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult NegPrimOp::fold(ArrayRef<Attribute> operands) {
-  if (!hasKnownWidthIntegerTypes(*this))
+  if (!hasKnownWidthIntTypesAndNonZeroResult(*this))
     return {};
 
   // FIRRTL negate always adds a bit.
@@ -666,7 +646,7 @@ OpFoldResult NegPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult NotPrimOp::fold(ArrayRef<Attribute> operands) {
-  if (!hasKnownWidthIntegerTypes(*this))
+  if (!hasKnownWidthIntTypesAndNonZeroResult(*this))
     return {};
 
   if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
@@ -676,7 +656,7 @@ OpFoldResult NotPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult AndRPrimOp::fold(ArrayRef<Attribute> operands) {
-  if (!hasKnownWidthIntegerTypes(*this))
+  if (!hasKnownWidthIntTypesAndNonZeroResult(*this))
     return {};
 
   // x == -1
@@ -686,7 +666,7 @@ OpFoldResult AndRPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult OrRPrimOp::fold(ArrayRef<Attribute> operands) {
-  if (!hasKnownWidthIntegerTypes(*this))
+  if (!hasKnownWidthIntTypesAndNonZeroResult(*this))
     return {};
 
   // x != 0
@@ -696,7 +676,7 @@ OpFoldResult OrRPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult XorRPrimOp::fold(ArrayRef<Attribute> operands) {
-  if (!hasKnownWidthIntegerTypes(*this))
+  if (!hasKnownWidthIntTypesAndNonZeroResult(*this))
     return {};
 
   // popcount(x) & 1
@@ -711,7 +691,7 @@ OpFoldResult XorRPrimOp::fold(ArrayRef<Attribute> operands) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult CatPrimOp::fold(ArrayRef<Attribute> operands) {
-  if (!hasKnownWidthIntegerTypes(*this))
+  if (!hasKnownWidthIntTypesAndNonZeroResult(*this))
     return {};
 
   // Constant fold cat.
@@ -746,15 +726,14 @@ LogicalResult CatPrimOp::canonicalize(CatPrimOp op, PatternRewriter &rewriter) {
 OpFoldResult BitsPrimOp::fold(ArrayRef<Attribute> operands) {
   auto inputType = input().getType().cast<FIRRTLType>();
   // If we are extracting the entire input, then return it.
-  if (inputType == getType() &&
-      inputType.cast<IntType>().getWidthOrSentinel() != -1)
+  if (inputType == getType() && getType().hasWidth())
     return input();
 
   // Constant fold.
-  APInt value;
-  if (inputType.cast<IntType>().hasWidth() &&
-      matchPattern(input(), m_FConstant(value)))
-    return getIntAttr(getType(), value.lshr(lo()).truncOrSelf(hi() - lo() + 1));
+  if (hasKnownWidthIntTypesAndNonZeroResult(*this))
+    if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
+      return getIntAttr(
+          getType(), attr.getValue().lshr(lo()).truncOrSelf(hi() - lo() + 1));
 
   return {};
 }
@@ -791,23 +770,7 @@ static void replaceWithBits(Operation *op, Value value, unsigned hiBit,
   rewriter.replaceOp(op, value);
 }
 
-LogicalResult HeadPrimOp::canonicalize(HeadPrimOp op,
-                                       PatternRewriter &rewriter) {
-  auto inputWidth = op.input().getType().cast<IntType>().getWidthOrSentinel();
-  if (inputWidth == -1)
-    return failure();
-
-  // If we know the input width, we can canonicalize this into a BitsPrimOp.
-  unsigned keepAmount = op.amount();
-  if (keepAmount)
-    replaceWithBits(op, op.input(), inputWidth - 1, inputWidth - keepAmount,
-                    rewriter);
-  return success();
-}
-
 OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
-  APInt value;
-
   // mux(cond, x, invalid) -> x
   // mux(cond, invalid, x) -> x
   if (high().getDefiningOp<InvalidValueOp>())
@@ -816,10 +779,10 @@ OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
     return high();
 
   /// mux(0/1, x, y) -> x or y
-  if (matchPattern(sel(), m_FConstant(value))) {
-    if (value.isNullValue() && low().getType() == getType())
+  if (auto cond = operands[0].dyn_cast_or_null<IntegerAttr>()) {
+    if (cond.getValue().isNullValue() && low().getType() == getType())
       return low();
-    if (!value.isNullValue() && high().getType() == getType())
+    if (!cond.getValue().isNullValue() && high().getType() == getType())
       return high();
   }
 
@@ -828,12 +791,11 @@ OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
     return high();
 
   // mux(cond, x, cst)
-  if (matchPattern(low(), m_FConstant(value))) {
-    APInt c1;
+  if (auto lowCst = operands[2].dyn_cast_or_null<IntegerAttr>()) {
     // mux(cond, c1, c2)
-    if (matchPattern(high(), m_FConstant(c1))) {
+    if (auto highCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
       // mux(cond, 1, 0) -> cond
-      if (c1.isOneValue() && value.isNullValue() &&
+      if (highCst.getValue().isOneValue() && lowCst.getValue().isNullValue() &&
           getType() == sel().getType())
         return sel();
 
@@ -844,7 +806,6 @@ OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
   }
 
   // TODO: "x ? c1 : y" -> "~x ? y : c1"
-
   return {};
 }
 
@@ -868,15 +829,15 @@ OpFoldResult PadPrimOp::fold(ArrayRef<Attribute> operands) {
     return {};
 
   // Constant fold.
-  APInt value;
-  if (matchPattern(input, m_FConstant(value))) {
+
+  if (auto cst = operands[0].dyn_cast_or_null<IntegerAttr>()) {
     auto destWidth = getType().getWidthOrSentinel();
     if (destWidth == -1)
       return {};
 
     if (inputType.isSigned())
-      return getIntAttr(getType(), value.sext(destWidth));
-    return getIntAttr(getType(), value.zext(destWidth));
+      return getIntAttr(getType(), cst.getValue().sext(destWidth));
+    return getIntAttr(getType(), cst.getValue().zext(destWidth));
   }
 
   return {};
@@ -892,13 +853,13 @@ OpFoldResult ShlPrimOp::fold(ArrayRef<Attribute> operands) {
     return input;
 
   // Constant fold.
-  APInt value;
-  if (matchPattern(input, m_FConstant(value))) {
+  if (auto cst = operands[0].dyn_cast_or_null<IntegerAttr>()) {
     auto inputWidth = inputType.getWidthOrSentinel();
     if (inputWidth != -1) {
       auto resultWidth = inputWidth + shiftAmount;
       shiftAmount = std::min(shiftAmount, resultWidth);
-      return getIntAttr(getType(), value.zext(resultWidth).shl(shiftAmount));
+      return getIntAttr(getType(),
+                        cst.getValue().zext(resultWidth).shl(shiftAmount));
     }
   }
   return {};
@@ -923,12 +884,12 @@ OpFoldResult ShrPrimOp::fold(ArrayRef<Attribute> operands) {
     return getIntAttr(getType(), APInt(1, 0));
 
   // Constant fold.
-  APInt value;
-  if (matchPattern(input, m_FConstant(value))) {
-    if (!inputType.isSigned())
-      value = value.lshr(std::min(shiftAmount, inputWidth));
+  if (auto cst = operands[0].dyn_cast_or_null<IntegerAttr>()) {
+    APInt value;
+    if (inputType.isSigned())
+      value = cst.getValue().ashr(std::min(shiftAmount, inputWidth - 1));
     else
-      value = value.ashr(std::min(shiftAmount, inputWidth - 1));
+      value = cst.getValue().lshr(std::min(shiftAmount, inputWidth));
     auto resultWidth = std::max(inputWidth - shiftAmount, 1);
     return getIntAttr(getType(), value.truncOrSelf(resultWidth));
   }
@@ -955,6 +916,40 @@ LogicalResult ShrPrimOp::canonicalize(ShrPrimOp op, PatternRewriter &rewriter) {
 
   replaceWithBits(op, op.input(), inputWidth - 1, shiftAmount, rewriter);
   return success();
+}
+
+LogicalResult HeadPrimOp::canonicalize(HeadPrimOp op,
+                                       PatternRewriter &rewriter) {
+  auto inputWidth = op.input().getType().cast<IntType>().getWidthOrSentinel();
+  if (inputWidth == -1)
+    return failure();
+
+  // If we know the input width, we can canonicalize this into a BitsPrimOp.
+  unsigned keepAmount = op.amount();
+  if (keepAmount)
+    replaceWithBits(op, op.input(), inputWidth - 1, inputWidth - keepAmount,
+                    rewriter);
+  return success();
+}
+
+OpFoldResult HeadPrimOp::fold(ArrayRef<Attribute> operands) {
+  if (hasKnownWidthIntTypesAndNonZeroResult(*this))
+    if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>()) {
+      int shiftAmount =
+          input().getType().cast<IntType>().getWidthOrSentinel() - amount();
+      return getIntAttr(
+          getType(), attr.getValue().lshr(shiftAmount).truncOrSelf(amount()));
+    }
+
+  return {};
+}
+
+OpFoldResult TailPrimOp::fold(ArrayRef<Attribute> operands) {
+  if (hasKnownWidthIntTypesAndNonZeroResult(*this))
+    if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
+      return getIntAttr(getType(), attr.getValue().truncOrSelf(
+                                       getType().getWidthOrSentinel()));
+  return {};
 }
 
 LogicalResult TailPrimOp::canonicalize(TailPrimOp op,

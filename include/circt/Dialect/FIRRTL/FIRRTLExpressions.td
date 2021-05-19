@@ -10,6 +10,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+def APSIntAttr : Attr<CPred<"$_self.isa<::mlir::IntegerAttr>()">,
+                      "arbitrary integer attribute with sign"> {
+  let storageType = [{ ::mlir::IntegerAttr }];
+  let returnType = [{ ::llvm::APSInt }];
+  let constBuilderCall = "IntegerAttr::get($_builder.getContext(), $0)";
+  let convertFromStorage = "APSInt($_self.getValue(), !getType().isSigned())";
+}
+
 def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
                                        FirstAttrDerivedResultType]> {
   let summary = "Produce a constant value";
@@ -21,7 +29,7 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
     ```
     }];
 
-  let arguments = (ins APIntAttr:$value);
+  let arguments = (ins APSIntAttr:$value);
   let results = (outs NonZeroIntType:$result);
 
   // Need a custom parser/printer to avoid redundant type for the attribute and
@@ -30,7 +38,8 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
   let printer = "print$cppClass(p, *this);";
 
   let builders = [
-    OpBuilder<(ins "IntType":$type, "const APInt &":$value)>
+    OpBuilder<(ins "IntType":$type, "const APInt &":$value)>,
+    OpBuilder<(ins "const APSInt &":$value)>
   ];
   let hasFolder = 1;
   let verifier = "return ::verifyConstantOp(*this);";
@@ -167,7 +176,9 @@ def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect,
 
 /// PrimOp is a FIRRTLOp without side effects.
 class PrimOp<string mnemonic, list<OpTrait> traits = []> :
-    FIRRTLOp<mnemonic, traits # [NoSideEffect]>;
+    FIRRTLOp<mnemonic, traits # [NoSideEffect]> {
+  let hasFolder = 1;
+}
 
 //===----------------------------------------------------------------------===//
 // Binary Operations
@@ -179,7 +190,6 @@ class BinaryPrimOp<string mnemonic, Type lhsType, Type rhsType, Type resultType,
     PrimOp<mnemonic, traits> {
   let arguments = (ins lhsType:$lhs, rhsType:$rhs);
   let results = (outs resultType:$result);
-  let hasFolder = 1;
 
   let assemblyFormat = [{
     $lhs `,` $rhs  attr-dict `:`
@@ -276,8 +286,6 @@ class UnaryPrimOp<string mnemonic, Type srcType, Type resultType,
   let verifier = [{
     VERIFY_RESULT_TYPE_RET(input().getType().cast<FIRRTLType>());
   }];
-
-  let hasFolder = 1;
 }
 
 def AsSIntPrimOp : UnaryPrimOp<"asSInt", FIRRTLType, SIntType>;
@@ -330,7 +338,6 @@ def BitsPrimOp : PrimOp<"bits"> {
   }];
 
   let hasCanonicalizeMethod = true;
-  let hasFolder = 1;
 
   let builders = [
     OpBuilder<(ins "Value":$input, "unsigned":$high, "unsigned":$low)>
@@ -392,7 +399,6 @@ def MuxPrimOp : PrimOp<"mux"> {
   let assemblyFormat =
     "`(` operands `)` attr-dict `:` functional-type(operands, $result)";
 
-  let hasFolder = 1;
   let hasCanonicalizer = true;
 
   let extraClassDeclaration = [{
@@ -431,8 +437,6 @@ def PadPrimOp : PrimOp<"pad"> {
     extending according to `input`s type.  If `amount` is less than the existing
     width of `input`, then input is unmodified.
   }];
-
-  let hasFolder = 1;
 
   let extraClassDeclaration = [{
     /// Return the result for inputs with the specified type, returning a null
@@ -487,8 +491,6 @@ def ShlPrimOp : ShiftPrimOp<"shl"> {
     The `shl` operation concatenates `amount` zero bits to the least significant
     end of `input`. `amount` must be non-negative.
   }];
-
-  let hasFolder = 1;
 }
 
 def ShrPrimOp : ShiftPrimOp<"shr"> {
@@ -499,7 +501,6 @@ def ShrPrimOp : ShiftPrimOp<"shr"> {
     non-negative.
   }];
 
-  let hasFolder = 1;
   let hasCanonicalizeMethod = true;
 }
 

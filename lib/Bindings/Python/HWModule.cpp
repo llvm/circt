@@ -29,12 +29,16 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
   m.doc() = "HW dialect Python native extension";
 
   mlir_type_subclass(m, "ArrayType", hwTypeIsAArrayType)
-      .def_staticmethod("get", [](MlirType elementType, intptr_t size) {
-        return py::cast(hwArrayTypeGet(elementType, size));
+      .def_classmethod("get",
+                       [](py::object cls, MlirType elementType, intptr_t size) {
+                         return cls(hwArrayTypeGet(elementType, size));
+                       })
+      .def_property_readonly("element_type", [](MlirType self) {
+        return hwArrayTypeGetElementType(self);
       });
 
   mlir_type_subclass(m, "StructType", hwTypeIsAStructType)
-      .def_staticmethod("get", [](py::list pyFieldInfos) {
+      .def_classmethod("get", [](py::object cls, py::list pyFieldInfos) {
         llvm::SmallVector<HWStructFieldInfo> mlirFieldInfos;
         MlirContext ctx;
 
@@ -50,7 +54,7 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
               mlirStringRefCreate(names[i].data(), names[i].size()),
               mlirTypeAttrGet(type)});
         }
-        return py::cast(
+        return cls(
             hwStructTypeGet(ctx, mlirFieldInfos.size(), mlirFieldInfos.data()));
       });
 }

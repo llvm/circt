@@ -37,6 +37,7 @@
 namespace circt {
 using mlir::APFloat;
 using mlir::APInt;
+using mlir::APSInt;
 using mlir::ArrayRef;
 using mlir::cast;
 using mlir::cast_or_null;

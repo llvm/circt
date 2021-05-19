@@ -218,7 +218,7 @@ def LLHD_ConnectOp : LLHD_Op<"con", [
     operands attr-dict `:` type($lhs)
   }];
 
-  let hasFolder = 1;
+  let hasCanonicalizeMethod = 1;
 }
 
 //===----------------------------------------------------------------------===//

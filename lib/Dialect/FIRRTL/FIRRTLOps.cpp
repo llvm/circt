@@ -1291,16 +1291,23 @@ static LogicalResult verifyConstantOp(ConstantOp constant) {
 /// formation for the 'value' attribute.
 void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
                        const APInt &value) {
-
   int32_t width = type.getWidthOrSentinel();
+  (void)width;
   assert((width == -1 || (int32_t)value.getBitWidth() == width) &&
          "incorrect attribute bitwidth for firrtl.constant");
 
-  auto signedness =
-      type.isSigned() ? IntegerType::Signed : IntegerType::Unsigned;
-  Type attrType =
-      IntegerType::get(type.getContext(), value.getBitWidth(), signedness);
-  auto attr = builder.getIntegerAttr(attrType, value);
+  auto attr =
+      IntegerAttr::get(type.getContext(), APSInt(value, !type.isSigned()));
+  return build(builder, result, type, attr);
+}
+
+/// Build a ConstantOp from an APSInt, handling the attribute formation for the
+/// 'value' attribute and inferring the FIRRTL type.
+void ConstantOp::build(OpBuilder &builder, OperationState &result,
+                       const APSInt &value) {
+  auto attr = IntegerAttr::get(builder.getContext(), value);
+  auto type =
+      IntType::get(builder.getContext(), value.isSigned(), value.getBitWidth());
   return build(builder, result, type, attr);
 }
 

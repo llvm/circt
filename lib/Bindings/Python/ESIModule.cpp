@@ -120,10 +120,10 @@ void circt::python::populateDialectESISubmodule(py::module &m) {
            "Print the cosim RPC schema");
 
   mlir_type_subclass(m, "ChannelType", circtESITypeIsAChannelType)
-      .def_staticmethod("get",
-                        [](MlirType inner) {
-                          return py::cast(circtESIChannelTypeGet(inner));
-                        })
+      .def_classmethod("get",
+                       [](py::object cls, MlirType inner) {
+                         return cls(circtESIChannelTypeGet(inner));
+                       })
       .def_property_readonly(
           "inner", [](MlirType self) { return circtESIChannelGetInner(self); });
 }
