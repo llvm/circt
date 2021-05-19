@@ -34,9 +34,9 @@ class System(CppSystem):
       with mlir.ir.InsertionPoint(self.body):
         self.declare_externs()
         hw.HWModuleOp(name='top',
-                        input_ports=[('clk', self.i1), ('rstn', self.i1)],
-                        output_ports=[],
-                        body_builder=self.build_top)
+                      input_ports=[('clk', self.i1), ('rstn', self.i1)],
+                      output_ports=[],
+                      body_builder=self.build_top)
 
   def declare_externs(self):
     pass
@@ -79,3 +79,22 @@ class System(CppSystem):
                        mlir.ir.Attribute.parse(str(id)))
     ep.operation.attributes["name"] = mlir.ir.StringAttr.get(name)
     return ep
+
+
+class Types:
+  """Python syntactic sugar to get types"""
+
+  @staticmethod
+  def __getattr__(name: str) -> mlir.ir.Type:
+    return mlir.ir.Type.parse(name)
+
+  @staticmethod
+  def array(inner: mlir.ir.Type, size: int) -> hw.ArrayType:
+    return hw.ArrayType(inner, size)
+
+  @staticmethod
+  def chan(inner: mlir.ir.Type) -> mlir.ir.Type:
+    return ChannelType.get(inner)
+
+
+types = Types()

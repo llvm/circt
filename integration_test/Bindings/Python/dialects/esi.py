@@ -4,6 +4,7 @@
 
 import circt
 from circt import esi
+from circt.esi import types
 from circt.dialects import hw
 
 from mlir.ir import *
@@ -23,25 +24,20 @@ class TestESISys(esi.System):
     self.load_mlir(path.join(thisDir, "esi_load2.mlir"))
 
     op = hw.HWModuleOp(name='MyWidget',
-                         input_ports=[('foo', self.i32),
-                                      ('foo_valid', self.i1)],
-                         output_ports=[('foo_ready', self.i1)],
+                         input_ports=[('foo', types.i32),
+                                      ('foo_valid', types.i1)],
+                         output_ports=[('foo_ready', types.i1)],
                          body_builder=lambda module: hw.OutputOp(
                              [module.entry_block.arguments[1]]))
 
+    i32chan = types.chan(types.i32)
     hw.HWModuleOp(name='I32Snoop',
-                    input_ports=[('foo_in', self.i32_chan)],
-                    output_ports=[('foo_out', self.i32_chan)],
+                    input_ports=[('foo_in', i32chan)],
+                    output_ports=[('foo_out', i32chan)],
                     body_builder=lambda module: hw.OutputOp(
                         [module.entry_block.arguments[0]]))
 
     esi.buildWrapper(op.operation, ["foo"])
-
-  def get_types(self):
-    """Get all the CIRCT types we need"""
-    super().get_types()
-    self.i32 = IntegerType.get_signless(32)
-    self.i32_chan = esi.ChannelType.get(self.i32)
 
   def build(self, topModule):
     pass
