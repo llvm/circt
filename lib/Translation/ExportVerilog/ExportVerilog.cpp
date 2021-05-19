@@ -255,24 +255,11 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Operation *op,
         return true;
       })
       .Case<TypeAliasType>([&](TypeAliasType typeRef) {
-        SymbolRefAttr ref = typeRef.getRef();
-        auto moduleOp = op->getParentOfType<ModuleOp>();
-
-        auto typeScope =
-            moduleOp.lookupSymbol<TypeScopeOp>(ref.getRootReference());
-        if (!typeScope) {
-          op->emitError("unable to resolve scope for type reference");
+        auto typedecl = typeRef.getDecl(op);
+        if (!typedecl.hasValue())
           return false;
-        }
 
-        auto typedecl =
-            typeScope.lookupSymbol<TypedeclOp>(ref.getLeafReference());
-        if (!typedecl) {
-          op->emitError("unable to resolve declaration for type reference");
-          return false;
-        }
-
-        os << typedecl.verilogName().getValueOr(typedecl.getName());
+        os << typedecl.getValue().getPreferredName();
         return true;
       })
       .Default([&](Type type) {
@@ -1542,7 +1529,7 @@ LogicalResult TypeScopeEmitter::visitTypeScope(TypedeclOp op) {
   indent() << "typedef ";
   printPackedType(stripUnpackedTypes(op.type()), os, op, false);
   printUnpackedTypePostfix(op.type(), os);
-  os << ' ' << op.verilogName().getValueOr(op.sym_name());
+  os << ' ' << op.getPreferredName();
   os << ";\n";
   return success();
 }

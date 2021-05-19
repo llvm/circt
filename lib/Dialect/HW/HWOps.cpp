@@ -1159,6 +1159,14 @@ void ArrayGetOp::build(OpBuilder &builder, OperationState &result, Value input,
 }
 
 //===----------------------------------------------------------------------===//
+// TypedeclOp
+//===----------------------------------------------------------------------===//
+
+StringRef TypedeclOp::getPreferredName() {
+  return verilogName().getValueOr(getName());
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

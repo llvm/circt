@@ -164,4 +164,8 @@ def TypeAliasType : HWType<"TypeAlias"> {
     TypeBuilderWithInferredContext<(ins
       "mlir::SymbolRefAttr":$ref, "mlir::Type":$innerType)>
   ];
+
+  let extraClassDeclaration = [{
+    Optional<TypedeclOp> getDecl(Operation *op);
+  }];
 }
