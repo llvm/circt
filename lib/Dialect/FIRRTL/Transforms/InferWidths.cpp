@@ -106,6 +106,12 @@ struct VarExpr : public ExprBase<VarExpr, Expr::Kind::Var> {
     // this is just for debug dumping, we wrap around at 4096 variables.
     os << "var" << ((size_t)this / llvm::PowerOf2Ceil(sizeof(*this)) & 0xFFF);
   }
+  iterator begin() const { return &constraint; }
+  iterator end() const { return &constraint + 1; }
+
+  /// The constraint expression this variable is supposed to be greater than or
+  /// equal to. This is not part of the variable's hash and equality property.
+  Expr *constraint = nullptr;
 };
 
 /// A known constant value.
@@ -327,17 +333,15 @@ public:
   MaxExpr *max(Expr *lhs, Expr *rhs) { return alloc<MaxExpr>(bins, lhs, rhs); }
   MinExpr *min(Expr *lhs, Expr *rhs) { return alloc<MinExpr>(bins, lhs, rhs); }
 
-  /// Add a constraint `lhs >= rhs`.
+  /// Add a constraint `lhs >= rhs`. Multiple constraints on the same variable
+  /// are coalesced into a `max(a, b)` expr.
   Expr *addGeqConstraint(VarExpr *lhs, Expr *rhs) {
-    auto &con = constraints[lhs];
-    con = con ? max(con, rhs) : rhs;
-    return con;
+    lhs->constraint = lhs->constraint ? max(lhs->constraint, rhs) : rhs;
+    return lhs->constraint;
   }
 
   void dumpConstraints(llvm::raw_ostream &os);
   void solve();
-  void gatherDepthFirstExprs(Expr *expr, llvm::SetVector<Expr *> &dfs,
-                             llvm::DenseSet<Expr *> &cycleBreaker);
 
 private:
   // Allocator for constraint expressions.
@@ -360,10 +364,6 @@ private:
     return it.first;
   }
 
-  /// The constraint imposed on each variable. Multiple constraints on the same
-  /// variable are coalesced into a `max(a, b)` expr.
-  llvm::MapVector<VarExpr *, Expr *> constraints;
-
   // Forbid copyign or moving the solver, which would invalidate the refs to
   // allocator held by the allocators.
   ConstraintSolver(ConstraintSolver &&) = delete;
@@ -376,8 +376,13 @@ private:
 
 /// Print all constraints in the solver to an output stream.
 void ConstraintSolver::dumpConstraints(llvm::raw_ostream &os) {
-  for (const auto &c : constraints) {
-    os << *c.first << " >= " << *c.second << "\n";
+  for (auto *e : exprs) {
+    if (auto *v = dyn_cast<VarExpr>(e)) {
+      if (v->constraint)
+        os << "- " << *v << " >= " << *v->constraint << "\n";
+      else
+        os << "- " << *v << " unconstrained\n";
+    }
   }
 }
 
@@ -407,9 +412,8 @@ void ConstraintSolver::solve() {
       continue;
     TypeSwitch<Expr *>(expr)
         .Case<VarExpr>([&](auto *var) {
-          auto it = constraints.find(var);
-          if (it != constraints.end())
-            var->solution = it->second->solution;
+          if (var->constraint)
+            var->solution = var->constraint->solution;
         })
         .Case<PowExpr>([&](auto *expr) {
           solveUnary(expr, [](int32_t arg) {
@@ -504,9 +508,19 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
   bool mappingFailed = false;
   TypeSwitch<Operation *>(op)
       .Case<ConstantOp>([&](auto op) {
-        // Constants just use the bit width of the APInt. This is guaranteed to
-        // match the width of the type if the latter has a width assigned.
-        auto e = solver.known(op.value().getBitWidth());
+        // If the constant has a known width, use that. Otherwise pick the
+        // smallest number of bits necessary to represent the constant.
+        Expr *e;
+        if (auto width = op.getType().getWidth())
+          e = solver.known(*width);
+        else {
+          auto v = op.value();
+          auto w = v.getBitWidth() - (v.isNegative() ? v.countLeadingOnes()
+                                                     : v.countLeadingZeros());
+          if (v.isSigned())
+            w += 1;
+          e = solver.known(std::max(w, 1u));
+        }
         setExpr(op.getResult(), e);
       })
       .Case<WireOp, InvalidValueOp>(
@@ -633,12 +647,18 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         auto e = solver.max(high, low);
         setExpr(op.getResult(), e);
       })
+
       // Handle the various connect statements that imply a type constraint.
       .Case<ConnectOp>([&](auto op) {
         auto dest = getExpr(op.dest());
         auto src = getExpr(op.src());
         constrainTypes(dest, src);
       })
+
+      // Handle the no-ops that don't interact with width inference.
+      .Case<PrintFOp, SkipOp, StopOp, WhenOp, AssertOp, AssumeOp, CoverOp>(
+          [&](auto) {})
+
       .Default([&](auto op) {
         op->emitOpError("not supported in width inference");
         mappingFailed = true;
@@ -755,6 +775,26 @@ bool InferenceTypeUpdate::updateOperation(Operation *op) {
     anyChanged |= updateValue(v);
   }
 
+  // If this is a connect operation, width inference might have inferred a RHS
+  // that is wider than the LHS, in which case an additional BitsPrimOp is
+  // necessary to truncate the value.
+  if (auto con = dyn_cast<ConnectOp>(op)) {
+    auto lhs = con.dest().getType().cast<FIRRTLType>();
+    auto rhs = con.src().getType().cast<FIRRTLType>();
+    auto lhsWidth = lhs.getBitWidthOrSentinel();
+    auto rhsWidth = rhs.getBitWidthOrSentinel();
+    if (lhsWidth > 0 && rhsWidth > 0 && lhsWidth < rhsWidth) {
+      OpBuilder builder(op);
+      auto trunc = builder.createOrFold<BitsPrimOp>(con.getLoc(), con.src(),
+                                                    lhsWidth - 1, 0);
+      if (rhs.isa<SIntType>())
+        trunc = builder.createOrFold<AsSIntPrimOp>(con.getLoc(), lhs, trunc);
+      LLVM_DEBUG(llvm::dbgs()
+                 << "Truncating RHS to " << lhs << " in " << con << "\n");
+      con->replaceUsesOfWith(con.src(), trunc);
+    }
+  }
+
   // If this is a module, update its ports.
   if (auto module = dyn_cast<FModuleOp>(op)) {
     // Update the block argument types.
@@ -809,6 +849,16 @@ bool InferenceTypeUpdate::updateValue(Value value) {
   auto newType = updateType(type, solution);
   LLVM_DEBUG(llvm::dbgs() << "Update " << value << " to " << newType << "\n");
   value.setType(newType);
+
+  // If this is a ConstantOp, adjust the width of the underlying APInt. Unsized
+  // constants have APInts which are *at least* wide enough to hold the value,
+  // but may be larger. This can trip up the verifier.
+  if (auto op = value.getDefiningOp<ConstantOp>()) {
+    auto k = op.value();
+    if (k.getBitWidth() > unsigned(solution))
+      k = k.trunc(solution);
+    op->setAttr("value", IntegerAttr::get(op.getContext(), k));
+  }
 
   return newType != type;
 }

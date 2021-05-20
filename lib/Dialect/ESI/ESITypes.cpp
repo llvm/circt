@@ -34,40 +34,6 @@ void ChannelPort::print(DialectAsmPrinter &p) const {
   p << ">";
 }
 
-Type StructType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
-  if (p.parseLess())
-    return Type();
-  StringRef structName;
-  if (p.parseKeyword(&structName) || p.parseComma())
-    return Type();
-
-  llvm::SmallVector<hw::StructType::FieldInfo, 4> fields;
-  StringRef fieldName;
-  while (mlir::succeeded(p.parseOptionalKeyword(&fieldName))) {
-    Type type;
-    if (p.parseColon() || p.parseType(type))
-      return Type();
-    fields.push_back(hw::StructType::FieldInfo{fieldName, type});
-    if (p.parseOptionalComma())
-      break;
-  }
-  if (p.parseGreater())
-    return Type();
-
-  auto inner = hw::StructType::get(ctxt, fields);
-  return get(ctxt, structName, inner);
-}
-
-void StructType::print(DialectAsmPrinter &p) const {
-  p << "struct<";
-  p << getName() << ", ";
-  llvm::interleaveComma(getInner().getElements(), p,
-                        [&](const hw::StructType::FieldInfo &field) {
-                          p << field.name << ": " << field.type;
-                        });
-  p << ">";
-}
-
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/ESI/ESITypes.cpp.inc"
 

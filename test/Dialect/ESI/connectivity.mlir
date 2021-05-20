@@ -11,7 +11,7 @@ hw.module @Reciever(%a: !esi.channel<i1>) {
   // Recieve bits.
   %data, %valid = esi.unwrap.vr %a, %rdy : i1
 }
-!FooStruct = type !esi.struct<FooStruct, a: si4, b: !hw.array<3 x ui4>>
+!FooStruct = type !hw.struct<a: si4, b: !hw.array<3 x ui4>>
 hw.module @StructRcvr(%a: !esi.channel<!FooStruct>) {
   %rdy = constant 1 : i1
   // Recieve bits.
@@ -22,7 +22,7 @@ hw.module @StructRcvr(%a: !esi.channel<!FooStruct>) {
 // CHECK:        %chanOutput, %ready = esi.wrap.vr %false, %false : i1
 // CHECK-LABEL: hw.module @Reciever(%a: !esi.channel<i1>) {
 // CHECK:        %rawOutput, %valid = esi.unwrap.vr %a, %true : i1
-// CHECK-LABEL: hw.module @StructRcvr(%a: !esi.channel<!esi.struct<FooStruct, a: si4, b: !hw.array<3xui4>>>)
+// CHECK-LABEL: hw.module @StructRcvr(%a: !esi.channel<!hw.struct<a: si4, b: !hw.array<3xui4>>>)
 
 hw.module @test(%clk: i1, %rstn: i1) {
   %esiChan = hw.instance "sender" @Sender () : () -> (!esi.channel<i1>)

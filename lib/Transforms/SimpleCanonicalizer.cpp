@@ -143,9 +143,17 @@ void GreedyPatternRewriteDriver::simplify(MutableArrayRef<Region> regions,
   bool changed = false;
   int i = 0;
   do {
+
     // Add all nested operations to the worklist.
     for (auto &region : regions)
-      region.walk(collectOps);
+      region.walk<mlir::WalkOrder::PreOrder>(
+          [this](Operation *op) { worklist.push_back(op); });
+
+    // Reverse the list so our pop-back loop processes them in-order.
+    std::reverse(worklist.begin(), worklist.end());
+    // Remember the reverse index.
+    for (size_t i = 0, e = worklist.size(); i != e; ++i)
+      worklistMap[worklist[i]] = i;
 
     // These are scratch vectors used in the folding loop below.
     SmallVector<Value, 8> originalOperands, resultValues;

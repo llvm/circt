@@ -57,7 +57,7 @@ static FirMemory analyzeMemOp(hw::HWModuleGeneratedOp op) {
   mem.readUnderWrite =
       op->getAttrOfType<IntegerAttr>("readUnderWrite").getUInt();
   return mem;
-};
+}
 
 static Value addPipelineStages(ImplicitLocOpBuilder &b, size_t stages,
                                Value clock, Value data) {

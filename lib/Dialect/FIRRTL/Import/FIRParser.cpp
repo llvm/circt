@@ -105,6 +105,10 @@ struct GlobalFIRParserState {
   /// A mapping of targets to annotations
   llvm::StringMap<ArrayAttr> annotationMap;
 
+  /// A global identifier that can be used to link multiple annotations
+  /// together.  This should be incremented on use.
+  unsigned annotationID = 0;
+
   /// The lexer for the source file we're parsing.
   FIRLexer lex;
 
@@ -837,6 +841,10 @@ ParseResult FIRParser::importAnnotations(SMLoc loc, StringRef annotationsStr) {
     diag.attachNote() << jsonErrorMessage;
     return failure();
   }
+
+  if (!scatterCustomAnnotations(annotationMap, getContext(), state.annotationID,
+                                translateLocation(loc)))
+    return failure();
 
   for (auto a : annotationMap.keys()) {
     auto &entry = state.annotationMap[a];

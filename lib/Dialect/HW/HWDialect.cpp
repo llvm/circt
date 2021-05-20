@@ -14,6 +14,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
 
@@ -86,3 +87,4 @@ Operation *HWDialect::materializeConstant(OpBuilder &builder, Attribute value,
 
 // Provide implementations for the enums we use.
 #include "circt/Dialect/HW/HWEnums.cpp.inc"
+#include "circt/Dialect/HW/HWStructs.cpp.inc"

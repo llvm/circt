@@ -6,5 +6,7 @@ add_circt_translation_library(CIRCTExportLLHD
 
   LINK_LIBS PUBLIC
   CIRCTLLHD
+  MLIRMemRef
+  MLIRStandard
   MLIRTranslation
   )

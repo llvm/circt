@@ -58,28 +58,21 @@ static bool hasKnownWidthIntTypesAndNonZeroResult(Operation *op) {
 /// This makes constant folding significantly easier, as we can simply pass the
 /// operands to an operation through this function to appropriately replace any
 /// zero-width dynamic values with a constant of value 0.
-static Optional<APInt> getExtendedConstant(Value operand, Attribute constant,
-                                           int32_t destWidth) {
+static Optional<APSInt> getExtendedConstant(Value operand, Attribute constant,
+                                            int32_t destWidth) {
   // We never support constant folding to unknown or zero width values: APInt
   // can't do it.
   if (destWidth <= 0)
     return {};
 
-  if (IntegerAttr result = constant.dyn_cast_or_null<IntegerAttr>()) {
-    APInt resultVal = result.getValue();
-    if (resultVal.getBitWidth() == (unsigned)destWidth)
-      return resultVal;
-
-    // Extension signedness follows the operand sign.
-    bool sextOperand = operand.getType().cast<IntType>().isSigned();
-    auto extOrTrunc = sextOperand ? &APInt::sextOrTrunc : &APInt::zextOrTrunc;
-    return (resultVal.*extOrTrunc)(destWidth);
-  }
+  // Extension signedness follows the operand sign.
+  if (IntegerAttr result = constant.dyn_cast_or_null<IntegerAttr>())
+    return result.getAPSInt().extOrTrunc(destWidth);
 
   // If the operand is zero bits, then we can return a zero of the result
   // type.
   if (operand.getType().cast<IntType>().getWidth() == 0)
-    return APInt(destWidth, 0);
+    return APSInt(destWidth, operand.getType().cast<IntType>().isUnsigned());
   return {};
 }
 
@@ -100,7 +93,7 @@ enum class BinOpKind {
 static Attribute
 constFoldFIRRTLBinaryOp(Operation *op, ArrayRef<Attribute> operands,
                         BinOpKind opKind,
-                        const function_ref<APInt(APInt, APInt)> &calculate) {
+                        const function_ref<APInt(APSInt, APSInt)> &calculate) {
   assert(operands.size() == 2 && "binary op takes two operands");
 
   // We cannot fold something to an unknown or zero width.
@@ -159,6 +152,8 @@ constFoldFIRRTLBinaryOp(Operation *op, ArrayRef<Attribute> operands,
   if (opKind == BinOpKind::DivideOrShift)
     resultValue = resultValue.truncOrSelf(resultType.getWidthOrSentinel());
 
+  assert((unsigned)resultType.getWidthOrSentinel() ==
+         resultValue.getBitWidth());
   return getIntAttr(resultType, resultValue);
 }
 
@@ -199,17 +194,17 @@ OpFoldResult AddPrimOp::fold(ArrayRef<Attribute> operands) {
   /// If both operands are constant, and the result is integer with known
   /// widths, then perform constant folding.
   return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::Normal,
-                                 [=](APInt a, APInt b) { return a + b; });
+                                 [=](APSInt a, APSInt b) { return a + b; });
 }
 
 OpFoldResult SubPrimOp::fold(ArrayRef<Attribute> operands) {
   return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::Normal,
-                                 [=](APInt a, APInt b) { return a - b; });
+                                 [=](APSInt a, APSInt b) { return a - b; });
 }
 
 OpFoldResult MulPrimOp::fold(ArrayRef<Attribute> operands) {
   return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::Normal,
-                                 [=](APInt a, APInt b) { return a * b; });
+                                 [=](APSInt a, APSInt b) { return a * b; });
 }
 
 OpFoldResult DivPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -235,50 +230,46 @@ OpFoldResult DivPrimOp::fold(ArrayRef<Attribute> operands) {
       return lhs();
 
   return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::DivideOrShift,
-                                 [=](APInt a, APInt b) -> APInt {
+                                 [=](APSInt a, APSInt b) -> APInt {
                                    // Fold divide by zero to zero.  Would be
                                    // better to fold it to invalid when we
                                    // supports this as a constant.
-                                   if (!b)
-                                     return APInt(a.getBitWidth(), 0);
-                                   return getType().isSigned() ? a.sdiv(b)
-                                                               : a.udiv(b);
+                                   if (!!b)
+                                     return a / b;
+                                   return APInt(a.getBitWidth(), 0);
                                  });
 }
 
 OpFoldResult RemPrimOp::fold(ArrayRef<Attribute> operands) {
   return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::DivideOrShift,
-                                 [=](APInt a, APInt b) -> APInt {
+                                 [=](APSInt a, APSInt b) -> APInt {
                                    // Fold divide by zero to zero.  Would be
                                    // better to fold it to invalid when we
                                    // supports this as a constant.
-                                   if (!b)
-                                     return APInt(a.getBitWidth(), 0);
-                                   return getType().isSigned() ? a.srem(b)
-                                                               : a.urem(b);
+                                   if (!!b)
+                                     return a % b;
+                                   return APInt(a.getBitWidth(), 0);
                                  });
 }
 
 OpFoldResult DShlPrimOp::fold(ArrayRef<Attribute> operands) {
   return constFoldFIRRTLBinaryOp(
       *this, operands, BinOpKind::DivideOrShift,
-      [=](APInt a, APInt b) -> APInt { return a << b; });
+      [=](APSInt a, APSInt b) -> APInt { return a.shl(b); });
 }
 
 OpFoldResult DShlwPrimOp::fold(ArrayRef<Attribute> operands) {
-  // This follows LowerToHW's precedent.
-  // TODO: Verify this: https://github.com/llvm/circt/issues/1062
   return constFoldFIRRTLBinaryOp(
-      *this, operands, BinOpKind::DivideOrShift, [=](APInt a, APInt b) {
-        return getType().isSigned() ? a.ashr(b) : a.lshr(b);
-      });
+      *this, operands, BinOpKind::DivideOrShift,
+      [=](APSInt a, APSInt b) -> APInt { return a.shl(b); });
 }
 
 OpFoldResult DShrPrimOp::fold(ArrayRef<Attribute> operands) {
-  return constFoldFIRRTLBinaryOp(
-      *this, operands, BinOpKind::DivideOrShift, [=](APInt a, APInt b) {
-        return getType().isSigned() ? a.ashr(b) : a.lshr(b);
-      });
+  return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::DivideOrShift,
+                                 [=](APSInt a, APSInt b) -> APInt {
+                                   return getType().isUnsigned() ? a.lshr(b)
+                                                                 : a.ashr(b);
+                                 });
 }
 
 // TODO: Move to DRR.
@@ -298,8 +289,9 @@ OpFoldResult AndPrimOp::fold(ArrayRef<Attribute> operands) {
   if (lhs() == rhs() && rhs().getType() == getType())
     return rhs();
 
-  return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::Normal,
-                                 [](APInt a, APInt b) { return a & b; });
+  return constFoldFIRRTLBinaryOp(
+      *this, operands, BinOpKind::Normal,
+      [](APSInt a, APSInt b) -> APInt { return a & b; });
 }
 
 OpFoldResult OrPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -318,8 +310,9 @@ OpFoldResult OrPrimOp::fold(ArrayRef<Attribute> operands) {
   if (lhs() == rhs() && rhs().getType() == getType())
     return rhs();
 
-  return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::Normal,
-                                 [](APInt a, APInt b) { return a | b; });
+  return constFoldFIRRTLBinaryOp(
+      *this, operands, BinOpKind::Normal,
+      [](APSInt a, APSInt b) -> APInt { return a | b; });
 }
 
 OpFoldResult XorPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -335,8 +328,9 @@ OpFoldResult XorPrimOp::fold(ArrayRef<Attribute> operands) {
       return getIntAttr(getType(), APInt(width, 0));
   }
 
-  return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::Normal,
-                                 [](APInt a, APInt b) { return a ^ b; });
+  return constFoldFIRRTLBinaryOp(
+      *this, operands, BinOpKind::Normal,
+      [](APSInt a, APSInt b) -> APInt { return a ^ b; });
 }
 
 void LEQPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -385,9 +379,8 @@ OpFoldResult LEQPrimOp::fold(ArrayRef<Attribute> operands) {
   }
 
   return constFoldFIRRTLBinaryOp(
-      *this, operands, BinOpKind::Compare, [=](APInt a, APInt b) {
-        return APInt(1, isUnsigned ? a.ule(b) : a.sle(b));
-      });
+      *this, operands, BinOpKind::Compare,
+      [=](APSInt a, APSInt b) -> APInt { return APInt(1, a <= b); });
 }
 
 void LTPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -442,9 +435,8 @@ OpFoldResult LTPrimOp::fold(ArrayRef<Attribute> operands) {
   }
 
   return constFoldFIRRTLBinaryOp(
-      *this, operands, BinOpKind::Compare, [=](APInt a, APInt b) {
-        return APInt(1, isUnsigned ? a.ult(b) : a.slt(b));
-      });
+      *this, operands, BinOpKind::Compare,
+      [=](APSInt a, APSInt b) -> APInt { return APInt(1, a < b); });
 }
 
 void GEQPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -499,9 +491,8 @@ OpFoldResult GEQPrimOp::fold(ArrayRef<Attribute> operands) {
   }
 
   return constFoldFIRRTLBinaryOp(
-      *this, operands, BinOpKind::Compare, [=](APInt a, APInt b) {
-        return APInt(1, isUnsigned ? a.uge(b) : a.sge(b));
-      });
+      *this, operands, BinOpKind::Compare,
+      [=](APSInt a, APSInt b) -> APInt { return APInt(1, a >= b); });
 }
 
 void GTPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
@@ -550,9 +541,8 @@ OpFoldResult GTPrimOp::fold(ArrayRef<Attribute> operands) {
   }
 
   return constFoldFIRRTLBinaryOp(
-      *this, operands, BinOpKind::Compare, [=](APInt a, APInt b) {
-        return APInt(1, isUnsigned ? a.ugt(b) : a.sgt(b));
-      });
+      *this, operands, BinOpKind::Compare,
+      [=](APSInt a, APSInt b) -> APInt { return APInt(1, a > b); });
 }
 
 OpFoldResult EQPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -574,7 +564,7 @@ OpFoldResult EQPrimOp::fold(ArrayRef<Attribute> operands) {
 
   return constFoldFIRRTLBinaryOp(
       *this, operands, BinOpKind::Compare,
-      [=](APInt a, APInt b) { return APInt(1, a.eq(b)); });
+      [=](APSInt a, APSInt b) -> APInt { return APInt(1, a == b); });
 }
 
 OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -588,15 +578,11 @@ OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
     if (rhsCst.getValue().isNullValue() && lhs().getType() == getType() &&
         rhs().getType() == getType())
       return lhs();
-
-    /// TODO: neq(x, 0) -> not(orr(x)) when x is >1 bit
-    /// TODO: neq(x, 1) -> not(x) when x is 1 bit.
-    /// TODO: neq(x, ~0) -> andr(x)) when x is >1 bit
   }
 
   return constFoldFIRRTLBinaryOp(
       *this, operands, BinOpKind::Compare,
-      [=](APInt a, APInt b) { return APInt(1, a.ne(b)); });
+      [=](APSInt a, APSInt b) -> APInt { return APInt(1, a != b); });
 }
 
 //===----------------------------------------------------------------------===//
@@ -678,7 +664,7 @@ OpFoldResult OrRPrimOp::fold(ArrayRef<Attribute> operands) {
 
   // x != 0
   if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
-    return getIntAttr(getType(), APInt(1, !attr.getValue()));
+    return getIntAttr(getType(), APInt(1, !attr.getValue().isNullValue()));
   return {};
 }
 
@@ -1178,8 +1164,16 @@ LogicalResult PartialConnectOp::canonicalize(PartialConnectOp op,
 
   if (destType.isa<IntType>() && srcType.isa<IntType>() && srcWidth > 0 &&
       destWidth > 0 && destWidth < srcWidth) {
+    // firrtl.tail always returns uint even for sint operands.
+    IntType tmpType = destType.cast<IntType>();
+    if (tmpType.isSigned())
+      tmpType = UIntType::get(destType.getContext(), destWidth);
     auto shortened = rewriter.createOrFold<TailPrimOp>(
-        op.getLoc(), destType, op.getOperand(1), srcWidth - destWidth);
+        op.getLoc(), tmpType, op.getOperand(1), srcWidth - destWidth);
+    // Insert the cast back to signed if needed.
+    if (tmpType != destType)
+      shortened =
+          rewriter.createOrFold<AsSIntPrimOp>(op.getLoc(), destType, shortened);
     rewriter.create<ConnectOp>(op.getLoc(), op.getOperand(0), shortened);
     rewriter.eraseOp(op);
     return success();
