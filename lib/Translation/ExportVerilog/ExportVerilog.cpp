@@ -2891,18 +2891,27 @@ void RootEmitterBase::gatherFiles(bool separateModules) {
   for (auto &op : *rootOp.getBody()) {
     auto info = OpFileInfo{&op, replicatedOps.size()};
 
+    SmallString<32> outputPath;
+
+    auto dirAttr = op.getAttrOfType<hw::OutputDirAttr>("output_dir");
+    if (dirAttr) {
+      llvm::errs() << "Found output_dir attribute " << dirAttr << " on " << op
+                   << "\n";
+      llvm::sys::path::append(outputPath, dirAttr.path().getValue());
+    }
+
     // Check if the operation has an explicit `output_file` attribute set. If it
     // does, use the information there to push the operation into a dedicated
     // output file.
-    auto attr = op.getAttrOfType<hw::OutputFileAttr>("output_file");
-    if (attr) {
-      llvm::errs() << "Found output_file attribute " << attr << " on " << op
+    auto fileAttr = op.getAttrOfType<hw::OutputFileAttr>("output_file");
+    if (fileAttr) {
+      llvm::errs() << "Found output_file attribute " << fileAttr << " on " << op
                    << "\n";
-      auto &file =
-          files[Identifier::get(attr.path().getValue(), op.getContext())];
+      llvm::sys::path::append(outputPath, fileAttr.path().getValue());
+      auto &file = files[Identifier::get(outputPath, op.getContext())];
       file.ops.push_back(info);
-      file.emitReplicatedOps = !attr.exclude_replicated_ops().getValue();
-      file.addToFilelist = !attr.exclude_from_filelist().getValue();
+      file.emitReplicatedOps = !fileAttr.exclude_replicated_ops().getValue();
+      file.addToFilelist = !fileAttr.exclude_from_filelist().getValue();
       continue;
     }
 
@@ -2912,8 +2921,7 @@ void RootEmitterBase::gatherFiles(bool separateModules) {
       if (separateModules) {
         SmallString<32> fileNameStr;
         fileName.toVector(fileNameStr);
-        auto fileNameAttr = Identifier::get(fileNameStr, op->getContext());
-        auto &file = files[fileNameAttr];
+        auto &file = files[Identifier::get(fileNameStr, op->getContext())];
         file.ops.push_back(info);
       } else {
         rootFile.ops.push_back(info);
@@ -2923,11 +2931,13 @@ void RootEmitterBase::gatherFiles(bool separateModules) {
     TypeSwitch<Operation *>(&op)
         .Case<HWModuleOp>([&](auto &mod) {
           // Emit into a separate file named after the module.
-          maybeSeparate(mod, mod.getName() + ".sv");
+          llvm::sys::path::append(outputPath, mod.getName() + ".sv");
+          maybeSeparate(mod, outputPath);
         })
         .Case<InterfaceOp>([&](auto &intf) {
           // Emit into a separate file named after the interface.
-          maybeSeparate(intf, intf.sym_name() + ".sv");
+          llvm::sys::path::append(outputPath, intf.sym_name() + ".sv");
+          maybeSeparate(intf, outputPath);
         })
         .Case<VerbatimOp, IfDefProceduralOp, TypeScopeOp, HWModuleExternOp>(
             [&](auto &) {
