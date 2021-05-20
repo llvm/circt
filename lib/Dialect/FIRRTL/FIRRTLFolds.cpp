@@ -578,10 +578,6 @@ OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
     if (rhsCst.getValue().isNullValue() && lhs().getType() == getType() &&
         rhs().getType() == getType())
       return lhs();
-
-    /// TODO: neq(x, 0) -> not(orr(x)) when x is >1 bit
-    /// TODO: neq(x, 1) -> not(x) when x is 1 bit.
-    /// TODO: neq(x, ~0) -> andr(x)) when x is >1 bit
   }
 
   return constFoldFIRRTLBinaryOp(
@@ -668,7 +664,7 @@ OpFoldResult OrRPrimOp::fold(ArrayRef<Attribute> operands) {
 
   // x != 0
   if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
-    return getIntAttr(getType(), APInt(1, !attr.getValue()));
+    return getIntAttr(getType(), APInt(1, !attr.getValue().isNullValue()));
   return {};
 }
 

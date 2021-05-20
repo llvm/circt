@@ -1426,4 +1426,12 @@ firrtl.module @MuxInvalidTypeOpt(in %in : !firrtl.uint<1>, out %out : !firrtl.ui
 // CHECK: firrtl.mux(%in, %c7_ui4, %c0_ui2) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<4>
 // CHECK: firrtl.mux(%in, %c1_ui2, %0) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<4>) -> !firrtl.uint<4>
 
+
+// CHECK-LABEL: firrtl.module @issue1100
+// CHECK: firrtl.connect %tmp62, %c1_ui1
+  firrtl.module @issue1100(out %tmp62: !firrtl.uint<1>) {
+    %c-1_si2 = firrtl.constant -1 : !firrtl.sint<2>
+    %0 = firrtl.orr %c-1_si2 : (!firrtl.sint<2>) -> !firrtl.uint<1>
+    firrtl.connect %tmp62, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
 }
