@@ -1117,21 +1117,3 @@ hw.module @IncompleteRead(%clock1: i1) {
   sv.connect %.read.clk.wire, %clock1 : i1
   hw.output
 }
-
-hw.module.extern @FIRRTLMem_1_0_0_32_1_0_1_1(%ro_clock_0: i1, %ro_en_0: i1, %ro_addr_0: i1) -> (%ro_data_0: i32)
-hw.module @MemDepth1(%clock: i1, %en: i1, %addr: i1) -> (%data: i32) {
-  %.load0.clk.wire = sv.wire  : !hw.inout<i1>
-  %0 = sv.read_inout %.load0.clk.wire : !hw.inout<i1>
-  %.load0.en.wire = sv.wire  : !hw.inout<i1>
-  %1 = sv.read_inout %.load0.en.wire : !hw.inout<i1>
-  %.load0.addr.wire = sv.wire  : !hw.inout<i1>
-  %2 = sv.read_inout %.load0.addr.wire : !hw.inout<i1>
-  %mem0.ro_data_0 = hw.instance "mem0" @FIRRTLMem_1_0_0_32_1_0_1_1(%0, %1, %2) : (i1, i1, i1) -> i32
-  %3 = sv.read_inout %.load0.clk.wire : !hw.inout<i1>
-  sv.connect %.load0.clk.wire, %clock : i1
-  %4 = sv.read_inout %.load0.addr.wire : !hw.inout<i1>
-  sv.connect %.load0.addr.wire, %addr : i1
-  %5 = sv.read_inout %.load0.en.wire : !hw.inout<i1>
-  sv.connect %.load0.en.wire, %en : i1
-  hw.output %mem0.ro_data_0 : i32
-}
