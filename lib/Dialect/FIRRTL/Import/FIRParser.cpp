@@ -2457,7 +2457,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     }
   }
 
-  // The FIRRTL dialect requires mems to have at least one port.  Since pohwess
+  // The FIRRTL dialect requires mems to have at least one port.  Since portless
   // mems can never be referenced, it is always safe to drop them.
   if (ports.empty())
     return success();
