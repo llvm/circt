@@ -169,7 +169,6 @@ def TypeAliasType : HWType<"TypeAlias"> {
     Optional<TypedeclOp> getDecl(Operation *op);
   }];
 }
-}
 
 //===----------------------------------------------------------------------===//
 // Attributes
