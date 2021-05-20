@@ -174,15 +174,9 @@ def TypeAliasType : HWType<"TypeAlias"> {
 // Attributes
 //===----------------------------------------------------------------------===//
 
-def NonEmptyStrAttr : 
-    StringBasedAttr<And<[
-      CPred<"$_self.isa<::mlir::StringAttr>()">,
-      CPred<"!$_self.cast<::mlir::StringAttr>().getValue().empty()">]>,
-    "non-empty string attribute">;
-
 /// An attribute to indicate the output file an operation should be emitted to.
 def OutputFileAttr : StructAttr<"OutputFileAttr", HWDialect, [
-  StructFieldAttr<"path", NonEmptyStrAttr>,
+  StructFieldAttr<"path", StrAttr>,
   StructFieldAttr<"exclude_from_filelist",
     DefaultValuedAttr<BoolAttr, "false">>,
   StructFieldAttr<"exclude_replicated_ops",
@@ -192,5 +186,5 @@ def OutputFileAttr : StructAttr<"OutputFileAttr", HWDialect, [
 /// An attribute to indicate the output directory an operation should be emitted
 /// to.
 def OutputDirAttr : StructAttr<"OutputDirAttr", HWDialect, [
-  StructFieldAttr<"path", NonEmptyStrAttr>
+  StructFieldAttr<"path", StrAttr>
 ]>;
