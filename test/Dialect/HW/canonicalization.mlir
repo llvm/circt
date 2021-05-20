@@ -1017,11 +1017,11 @@ hw.module @ZeroWidthInstance(%iA: i4) -> (%oA: i4) {
 }
 
 // CHECK-LABEL:  hw.module @MemSimple(%clock1: i1, %clock2: i1, %inpred: i1, %indata: i42) -> (%result: i42, %result2: i42) {
-// CHECK-NEXT:    %true = hw.constant true
 // CHECK-NEXT:    %c0_i4 = hw.constant 0 : i4
+// CHECK-NEXT:    %true = hw.constant true
 // CHECK-NEXT:    %.rw.wdata.wire = sv.wire sym @aWire  : !hw.inout<i42>
 // CHECK-NEXT:    %0 = sv.read_inout %.rw.wdata.wire : !hw.inout<i42>
-// CHECK-NEXT:    @FIRRTLMem_1_1_1_42_12_0_1_0(%clock1, %true, %c0_i4, %clock1, %true, %c0_i4, %true, %true, %0, %clock2, %inpred, %c0_i4, %true, %indata) : (i1, i1, i4, i1, i1, i4, i1, i1, i42, i1, i1, i4, i1, i42) -> (i42, i42)
+// CHECK-NEXT:    %_M.ro_data_0, %_M.1 = hw.instance "_M" @FIRRTLMem_1_1_1_42_12_0_1_0(%clock1, %true, %c0_i4, %clock1, %true, %c0_i4, %true, %true, %0, %clock2, %inpred, %c0_i4, %true, %indata) : (i1, i1, i4, i1, i1, i4, i1, i1, i42, i1, i1, i4, i1, i42) -> (i42, i42)
 // CHECK-NEXT:    hw.output %_M.ro_data_0, %_M.1 : i42, i42
 // CHECK-NEXT:  }
 hw.module.extern @FIRRTLMem_1_1_1_42_12_0_1_0(%ro_clock_0: i1, %ro_en_0: i1, %ro_addr_0: i4) -> (%ro_data_0: i42)
@@ -1091,8 +1091,8 @@ hw.module @MemSimple(%clock1: i1, %clock2: i1, %inpred: i1, %indata: i42) -> (%r
 }
 
 // CHECK-LABEL:  hw.module @IncompleteRead(%clock1: i1) {
-// CHECK-NEXT:    %true = hw.constant true
 // CHECK-NEXT:    %c0_i4 = hw.constant 0 : i4
+// CHECK-NEXT:    %true = hw.constant true
 // CHECK-NEXT:    %_M.ro_data_0 = hw.instance "_M" @FIRRTLMem_1_0_0_42_12_0_1_0(%clock1, %true, %c0_i4) : (i1, i1, i4) -> i42
 // CHECK-NEXT:    hw.output
 // CHECK-NEXT:  }
