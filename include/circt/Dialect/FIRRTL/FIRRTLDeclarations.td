@@ -156,6 +156,16 @@ def NodeOp : FIRRTLOp<"node", [SameOperandsAndResultType]> {
         DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
   let results = (outs FIRRTLType:$result);
 
+  let builders = [
+    OpBuilder<(ins "::mlir::Type":$elementType,
+                   "::mlir::Value":$input,
+                   CArg<"StringRef", "{}">:$name,
+                   CArg<"ArrayRef<Attribute>","{}">:$annotations), [{
+      return build($_builder, $_state, elementType, input, name,
+                   $_builder.getArrayAttr(annotations));
+    }]>
+  ];
+
   let assemblyFormat = "$input custom<ImplicitSSAName>(attr-dict) `:` type($input)";
 
   let hasCanonicalizer = true;
