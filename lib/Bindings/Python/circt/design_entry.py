@@ -3,11 +3,15 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from circt.dialects import hw
+from .support import UnconnectedSignalError
 
 import mlir.ir
 
 
 class Output:
+  """Represents an output port on a design module. Call the 'set' method to set
+  the output value during implementation."""
+
   __slots__ = [
       "type",
       "value"
@@ -18,6 +22,8 @@ class Output:
     self.value = None
 
   def set(self, val):
+    """Sets the final output signal. Should only be called by the implementation
+    code."""
     if type(val) is mlir.ir.OpResult:
       self.value = val
     else:
@@ -33,16 +39,14 @@ class Input:
     self.type = type
 
 
-class UnconnectedOutputError(Exception):
-  def __init__(self, module: str, port_name: str):
-    super().__init__(f"Port {port_name} unconnected in design module {module}.")
-
-
 def module(cls):
-  class Module(cls):
+  """The CIRCT design entry module class decorator."""
+
+  class __Module(cls):
     def __init__(self, *args, **kwargs):
       super().__init__(*args, **kwargs)
 
+      # After the wrapped class' construct, all the IO should be known.
       input_ports = []
       output_ports = []
       for attr_name in dir(self):
@@ -52,6 +56,8 @@ def module(cls):
         if type(attr) is Output:
           output_ports.append((attr_name, attr))
 
+      # This function sets up the inputs to construct, then connects the
+      # outputs.
       def body_build(mod):
         inputs = dict()
         for index, (name, _) in enumerate(input_ports):
@@ -60,19 +66,20 @@ def module(cls):
         self.construct(**inputs)
 
         outputs = []
+        unconnected_ports = []
         for (name, output) in output_ports:
           if output.value is None:
-            raise UnconnectedOutputError(cls.__name__, name)
+            unconnected_ports.append(name)
           outputs.append(output.value)
+        if len(unconnected_ports) > 0:
+          raise UnconnectedSignalError(cls.__name__, unconnected_ports)
         hw.OutputOp(outputs)
 
+      # Construct things as HWModules.
       self.module = hw.HWModuleOp(
           name=cls.__name__,
           input_ports=[(name, port.type) for (name, port) in input_ports],
           output_ports=[(name, port.type) for (name, port) in output_ports],
           body_builder=body_build)
 
-    def __setattr__(self, name: str, value) -> None:
-        return super().__setattr__(name, value)
-
-  return Module
+  return __Module

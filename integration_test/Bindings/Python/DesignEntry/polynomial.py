@@ -8,6 +8,7 @@ from circt import esi
 from circt.esi import types
 from circt.dialects import comb, hw
 
+import sys
 
 @circt.module
 class PolynomialCompute:
@@ -54,24 +55,25 @@ class PolynomialCompute:
     self.y.set(taps[-1])
 
 
-class ExampleSystem(esi.System):
-  def top_module(self):
-    return PolynomialCompute([62, 42, 6])
+with mlir.ir.Context() as ctxt, mlir.ir.Location.unknown():
+  circt.register_dialects(ctxt)
+  mod = mlir.ir.Module.create()
+  with mlir.ir.InsertionPoint(mod.body):
+    PolynomialCompute([62, 42, 6])
 
+  mod.operation.print()
+  # CHECK:  hw.module @PolynomialCompute(%x: i32) -> (%y: i32) {
+  # CHECK:    [[REG0:%.+]] = comb.mul %{{.+}}, %x : i32
+  # CHECK:    %1 = comb.add %c62_i32, [[REG0]] : i32
+  # CHECK:    hw.output %{{.+}} : i32
 
-exsys = ExampleSystem()
-exsys.print()
-# CHECK:  hw.module @PolynomialCompute(%x: i32) -> (%y: i32) {
-# CHECK:    [[REG0:%.+]] = comb.mul %{{.+}}, %x : i32
-# CHECK:    %1 = comb.add %c62_i32, [[REG0]] : i32
-# CHECK:    hw.output %{{.+}} : i32
+  print("\n\n=== Verilog ===")
+  # CHECK-LABEL: === Verilog ===
 
-print("\n\n=== Verilog ===")
-# CHECK-LABEL: === Verilog ===
-
-exsys.print_verilog()
-
-# CHECK:  module PolynomialCompute(
-# CHECK:    input  [31:0] x,
-# CHECK:    output [31:0] y);
-# CHECK:    assign y = 32'h3E + 32'h2A * x + 32'h6 * x * x;
+  pm = mlir.passmanager.PassManager.parse("hw-legalize-names,hw.module(hw-cleanup)")
+  pm.run(mod)
+  circt.export_verilog(mod, sys.stdout)
+  # CHECK:  module PolynomialCompute(
+  # CHECK:    input  [31:0] x,
+  # CHECK:    output [31:0] y);
+  # CHECK:    assign y = 32'h3E + 32'h2A * x + 32'h6 * x * x;

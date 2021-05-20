@@ -5,6 +5,12 @@
 from contextlib import AbstractContextManager
 
 
+class UnconnectedSignalError(RuntimeError):
+  def __init__(self, module: str, port_names: list[str]):
+    super().__init__(
+        f"Ports {port_names} unconnected in design module {module}.")
+
+
 class BackedgeBuilder(AbstractContextManager):
 
   def __init__(self):
@@ -40,6 +46,7 @@ class BackedgeBuilder(AbstractContextManager):
 
       assert port_name, "Could not look up port name for backedge"
 
+      # TODO: Make this use `UnconnectedSignalError`.
       msg = "Port:     " + port_name + "\n"
       msg += "Module:   " + str(module).split(" {")[0] + "\n"
       msg += "Instance: " + str(instance)
