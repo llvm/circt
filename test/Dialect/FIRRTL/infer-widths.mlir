@@ -7,6 +7,16 @@ firrtl.circuit "Foo" {
   firrtl.module @InferConstant(out %out0: !firrtl.uint, out %out1: !firrtl.sint) {
     %0 = firrtl.constant 1 : !firrtl.uint<42>
     %1 = firrtl.constant 2 : !firrtl.sint<42>
+    // CHECK: {{.+}} = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK: {{.+}} = firrtl.constant 0 : !firrtl.sint<1>
+    // CHECK: {{.+}} = firrtl.constant 200 : !firrtl.uint<8>
+    // CHECK: {{.+}} = firrtl.constant 200 : !firrtl.sint<9>
+    // CHECK: {{.+}} = firrtl.constant -200 : !firrtl.sint<9>
+    %2 = firrtl.constant 0 : !firrtl.uint
+    %3 = firrtl.constant 0 : !firrtl.sint
+    %4 = firrtl.constant 200 : !firrtl.uint
+    %5 = firrtl.constant 200 : !firrtl.sint
+    %6 = firrtl.constant -200 : !firrtl.sint
     firrtl.connect %out0, %0 : !firrtl.uint, !firrtl.uint<42>
     firrtl.connect %out1, %1 : !firrtl.sint, !firrtl.sint<42>
   }
@@ -349,6 +359,22 @@ firrtl.circuit "Foo" {
     firrtl.assume %clk, %true, %true, "foo"
     firrtl.cover %clk, %true, %true, "foo"
   }
+
+  // Issue #1088
+  // CHECK-LABEL: @Issue1088
+  firrtl.module @Issue1088(out %y: !firrtl.sint<4>) {
+    // CHECK: %x = firrtl.wire : !firrtl.sint<9>
+    // CHECK: %c200_si9 = firrtl.constant 200 : !firrtl.sint<9>
+    // CHECK: %0 = firrtl.bits %x 3 to 0 : (!firrtl.sint<9>) -> !firrtl.uint<4>
+    // CHECK: %1 = firrtl.asSInt %0 : (!firrtl.uint<4>) -> !firrtl.sint<4>
+    // CHECK: firrtl.connect %y, %1 : !firrtl.sint<4>, !firrtl.sint<4>
+    // CHECK: firrtl.connect %x, %c200_si9 : !firrtl.sint<9>, !firrtl.sint<9>
+    %x = firrtl.wire : !firrtl.sint
+    %c200_si = firrtl.constant 200 : !firrtl.sint
+    firrtl.connect %y, %x : !firrtl.sint<4>, !firrtl.sint
+    firrtl.connect %x, %c200_si : !firrtl.sint, !firrtl.sint
+  }
+
 
   firrtl.module @Foo() {}
 }

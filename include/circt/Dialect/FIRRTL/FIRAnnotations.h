@@ -15,6 +15,7 @@
 
 #include "circt/Support/LLVM.h"
 #include "llvm/ADT/StringMap.h"
+#include "llvm/Support/SMLoc.h"
 
 namespace llvm {
 namespace json {
@@ -33,6 +34,10 @@ namespace firrtl {
 bool fromJSON(llvm::json::Value &value,
               llvm::StringMap<ArrayAttr> &annotationMap, llvm::json::Path path,
               MLIRContext *context);
+
+bool scatterCustomAnnotations(llvm::StringMap<ArrayAttr> &annotationMao,
+                              MLIRContext *context, unsigned &annotationID,
+                              Location loc);
 
 } // namespace firrtl
 } // namespace circt

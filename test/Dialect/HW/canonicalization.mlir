@@ -757,8 +757,8 @@ hw.module @mux_canonicalize3(%a: i1, %b: i4) -> (i4) {
 }
 
 // CHECK-LABEL: hw.module @mux_canonicalize4(%a: i1, %b: i1, %c: i4) -> (i1, i1, i4, i4) {
-// CHECK-NEXT:   %true = hw.constant true
-// CHECK-NEXT:   %c-1_i4 = hw.constant -1 : i4
+// CHECK-DAG:   %c-1_i4 = hw.constant -1 : i4
+// CHECK-DAG:   %true = hw.constant true
 // CHECK-NEXT:   %0 = comb.xor %a, %true : i1
 // CHECK-NEXT:   %1 = comb.and %0, %b : i1
 // CHECK-NEXT:   %2 = comb.xor %a, %true : i1
@@ -841,13 +841,13 @@ hw.module @issue955() -> (i100, i100) {
   %0 = hw.constant 18446744073709551616 : i100
   %1 = comb.and %0, %0 : i100
 
-  // CHECK: = hw.constant 18446744073709551616 : i100
+  // CHECK-DAG: = hw.constant 18446744073709551616 : i100
   
   // (1 << 64) + 1
   %2 = hw.constant 18446744073709551617 : i100
   %3 = comb.and %2, %2 : i100
 
-  // CHECK: = hw.constant 18446744073709551617 : i100
+  // CHECK-DAG: = hw.constant 18446744073709551617 : i100
   hw.output %1, %3 : i100, i100
 }
 
