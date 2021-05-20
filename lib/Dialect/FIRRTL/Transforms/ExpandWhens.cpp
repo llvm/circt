@@ -124,9 +124,9 @@ private:
       }
       // If this is a bundle type, recurse to each of the fields.
       if (auto bundleType = type.dyn_cast<BundleType>()) {
-        for (auto &it : llvm::enumerate(bundleType.getElements())) {
+        for (auto &element : bundleType.getElements()) {
           sink.setFieldID(sink.getFieldID() + 1);
-          declare(it.value().type, flow);
+          declare(element.type, flow);
         }
         return;
       }

@@ -28,8 +28,6 @@ FieldRef::FieldRef(Value val) : value(val) {
   // each level. At each stage, it must take the current id, and re-index it as
   // a nested bundle under the parent field.. This is accomplished by using the
   // parent field's ID as a base, and adding the field ID of the child.
-  //
-  // a (0) { b (1) c (2) }
   while (val) {
     Operation *op = val.getDefiningOp();
 
@@ -76,24 +74,6 @@ static void getDeclName(Value value, SmallString<64> &string) {
 }
 
 std::string FieldRef::getFieldName() const {
-  // This will find the index of the bundle element with a field ID which
-  // contains the searched for ID.  This means that it returns the index of the
-  // greatest less-than field ID.
-  auto findIndexForFieldID = [](BundleType bundleType, unsigned id) {
-    assert(bundleType.getElements().size() && "Bundle must have >0 fields");
-    // Find the field corresponding to this element using a binary search.
-    unsigned l = 0;
-    unsigned r = bundleType.getElements().size() - 1;
-    while (l < r) {
-      auto m = l + (r - l + 1) / 2;
-      if (id < bundleType.getFieldID(m)) {
-        r = m - 1;
-      } else {
-        l = m;
-      }
-    }
-    return l;
-  };
 
   SmallString<64> name;
   getDeclName(value, name);
@@ -106,7 +86,7 @@ std::string FieldRef::getFieldName() const {
       type = flipType.getElementType();
     // TODO: support vector types.
     auto bundleType = type.cast<BundleType>();
-    auto index = findIndexForFieldID(bundleType, localID);
+    auto index = bundleType.getIndexForFieldID(localID);
     // Add the current field string, and recurse into a subfield.
     auto &element = bundleType.getElements()[index];
     name += ".";

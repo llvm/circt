@@ -720,6 +720,13 @@ unsigned BundleType::getFieldID(unsigned index) {
   return getImpl()->fieldIDs[index];
 }
 
+unsigned BundleType::getIndexForFieldID(unsigned fieldID) {
+  assert(getElements().size() && "Bundle must have >0 fields");
+  auto fieldIDs = getImpl()->fieldIDs;
+  auto it = std::prev(std::upper_bound(fieldIDs.begin(), fieldIDs.end(), fieldID));
+  return std::distance(fieldIDs.begin(), it);
+}
+
 unsigned BundleType::getMaxFieldID() {
   return getImpl()->maxFieldID;
 }
