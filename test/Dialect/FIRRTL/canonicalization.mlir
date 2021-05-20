@@ -1440,7 +1440,9 @@ firrtl.module @MuxInvalidTypeOpt(in %in : !firrtl.uint<1>, out %out : !firrtl.ui
     %c9_si10 = firrtl.constant 9 : !firrtl.sint<10>
     firrtl.partialconnect %y, %c9_si10 : !firrtl.sint<4>, !firrtl.sint<10>
   }
-
+  
+// CHECK-LABEL: firrtl.module @zeroWidthMem
+// CHECK-NEXT:  }
 firrtl.module @zeroWidthMem(in %clock: !firrtl.clock) {
   %_M__T_10, %_M__T_11, %_M__T_18 = firrtl.mem Undefined  {depth = 8 : i64, name = "_M", portNames = ["_T_10", "_T_11", "_T_18"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>, !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>, !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: flip<bundle<id: uint<4>>>>>
   %0 = firrtl.subfield %_M__T_18("addr") : (!firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: flip<bundle<id: uint<4>>>>>) -> !firrtl.uint<3>
@@ -1486,7 +1488,5 @@ firrtl.module @zeroWidthMem(in %clock: !firrtl.clock) {
   firrtl.connect %16, %invalid_ui4_7 : !firrtl.uint<4>, !firrtl.uint<4>
   // COM: Check that missing is fine %17 = firrtl.subfield %_M__T_11("mask") : (!firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>) -> !firrtl.bundle<id: uint<1>>
 }
-// CHECK-LABEL: firrtl.module @zeroWidthMem
-// CHECK-NEXT:  }
 }
 
