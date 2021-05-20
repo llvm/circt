@@ -138,6 +138,34 @@ def UnionType : HWType<"Union"> {
   }];
 }
 
+def TypeAliasType : HWType<"TypeAlias"> {
+  let summary = "An symbolic reference to a type declaration";
+  let description = [{
+    A TypeAlias is parameterized by a SymbolRefAttr, which points to a
+    TypedeclOp. The root reference should refer to a TypeScope within the same
+    outer ModuleOp, and the leaf reference should refer to a type within that
+    TypeScope. A TypeAlias is further parameterized by the inner type, which is
+    needed to be known at the time the type is parsed.
+
+    Upon construction, a TypeAlias stores the symbol reference and type, and
+    canonicalizes the type to resolve any nested type aliases. The canonical
+    type is also cached to avoid recomputing it when needed.
+  }];
+
+  let mnemonic = "typealias";
+
+  let parameters = (ins
+    "mlir::SymbolRefAttr":$ref,
+    "mlir::Type":$innerType,
+    "mlir::Type":$canonicalType
+  );
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins
+      "mlir::SymbolRefAttr":$ref, "mlir::Type":$innerType)>
+  ];
+}
+
 //===----------------------------------------------------------------------===//
 // Attributes
 //===----------------------------------------------------------------------===//
@@ -150,3 +178,4 @@ def OutputFileAttr : StructAttr<"OutputFileAttr", HWDialect, [
   StructFieldAttr<"exclude_replicated_ops",
     DefaultValuedAttr<BoolAttr, "true">>,
 ]>;
+
