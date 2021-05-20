@@ -83,3 +83,11 @@ def module(cls):
           body_builder=body_build)
 
   return __Module
+
+
+def connect(destination, source):
+  builder = destination.builder
+  index = destination.index
+  builder.operation.operands[index] = source.value
+  if index in builder.backedges:
+    builder.parent_module.remove_backedge(builder.backedges[index])

@@ -37,10 +37,10 @@ with Context() as ctx, Location.unknown():
     def instance_builder_body(module):
       constant_value = one_output.create(module, "inst1").a
 
-      # CHECK: unknown input port name b
+      # CHECK: unknown port name b
       try:
         inst2 = one_input.create(module, "inst2", {"a": constant_value})
-        inst2.set_input_port("b", None)
+        circt.connect(inst2.b, constant_value)
       except AttributeError as e:
         print(e)
 

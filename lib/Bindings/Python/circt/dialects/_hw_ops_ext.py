@@ -2,7 +2,7 @@ from typing import Dict, Optional, Sequence
 
 import inspect
 
-from circt.support import BackedgeBuilder
+from circt.support import BackedgeBuilder, BuilderValue
 
 from mlir.ir import *
 
@@ -37,7 +37,7 @@ class InstanceBuilder:
       self.operand_indices[arg_name] = i
 
       if arg_name in input_port_mapping:
-        self.operand_values.append(input_port_mapping[arg_name])
+        self.operand_values.append(input_port_mapping[arg_name].value)
       else:
         type = module.type.inputs[i]
         backedge = self.parent_module.create_backedge(type, self)
@@ -71,27 +71,17 @@ class InstanceBuilder:
     # Check for the attribute in the arg name set.
     if name in self.operand_indices:
       index = self.operand_indices[name]
-      return self.instance.inputs[index]
+      value = self.instance.inputs[index]
+      return BuilderValue(value, self, index)
 
     # Check for the attribute in the result name set.
     if name in self.result_indices:
       index = self.result_indices[name]
-      return self.instance.results[index]
+      value = self.instance.results[index]
+      return BuilderValue(value, self, index)
 
     # If we fell through to here, the name isn't a result.
     raise AttributeError(f"unknown port name {name}")
-
-  def set_input_port(self, name, value):
-    # Check for the attribute in the arg name set.
-    if name in self.operand_indices:
-      # Put the value into the instance.
-      index = self.operand_indices[name]
-      self.instance.inputs[index] = value
-      self.parent_module.remove_backedge(self.backedges[index])
-      return
-
-    # If we fell through to here, the name isn't an arg.
-    raise AttributeError(f"unknown input port name {name}")
 
   @property
   def operation(self):
