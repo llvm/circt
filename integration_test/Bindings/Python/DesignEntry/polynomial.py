@@ -9,12 +9,13 @@ from circt.esi import types
 from circt.dialects import comb, hw
 
 import sys
+from typing import List
 
 @circt.module
 class PolynomialCompute:
   """Module to compute ax^3 + bx^2 + cx + d for design-time coefficients"""
 
-  def __init__(self, coefficients: list[int]):
+  def __init__(self, coefficients: List[int]):
     """coefficients is in 'd' -> 'a' order."""
     self.__coefficients = coefficients
 

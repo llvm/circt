@@ -3,10 +3,11 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from contextlib import AbstractContextManager
+from typing import List
 
 
 class UnconnectedSignalError(RuntimeError):
-  def __init__(self, module: str, port_names: list[str]):
+  def __init__(self, module: str, port_names: List[str]):
     super().__init__(
         f"Ports {port_names} unconnected in design module {module}.")
 
