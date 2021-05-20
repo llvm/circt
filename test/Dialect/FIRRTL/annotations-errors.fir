@@ -37,3 +37,18 @@ circuit Foo: %[[{"a":"a"},[{"b":"b"}]]]
 circuit Foo: %[[{"a":"a"},]]]
   module Foo:
     skip
+
+; // -----
+
+; COM: A custom annotation fails to parse because it is missing fields
+
+; expected-error @+2 {{did not contain required key}}
+; expected-note @+1 {{}}
+circuit Foo: %[
+[
+  {
+    "class": "sifive.enterprise.grandcentral.DataTapsAnnotation"
+  }
+]]
+  module Foo:
+    skip
