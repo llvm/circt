@@ -832,8 +832,7 @@ ParseResult FIRParser::importAnnotations(SMLoc loc, StringRef annotationsStr) {
 
   json::Path::Root root;
   llvm::StringMap<ArrayAttr> annotationMap;
-  if (!fromJSON(annotations.get(), annotationMap, root, getContext(),
-                state.annotationID)) {
+  if (!fromJSON(annotations.get(), annotationMap, root, getContext())) {
     auto diag = emitError(loc, "Invalid/unsupported annotation format");
     std::string jsonErrorMessage =
         "See inline comments for problem area in JSON:\n";
@@ -842,6 +841,10 @@ ParseResult FIRParser::importAnnotations(SMLoc loc, StringRef annotationsStr) {
     diag.attachNote() << jsonErrorMessage;
     return failure();
   }
+
+  if (!scatterCustomAnnotations(annotationMap, getContext(), state.annotationID,
+                                translateLocation(loc)))
+    return failure();
 
   for (auto a : annotationMap.keys()) {
     auto &entry = state.annotationMap[a];
