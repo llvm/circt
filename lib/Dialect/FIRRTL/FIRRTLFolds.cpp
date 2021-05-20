@@ -1185,3 +1185,25 @@ void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
   results.insert<patterns::EmptyNode>(context);
 }
+
+LogicalResult MemOp::canonicalize(MemOp op, PatternRewriter &rewriter) {
+  // If memory has known, but zero width, eliminate it.
+  if (op.getDataType().getBitWidthOrSentinel() != 0)
+    return failure();
+  //Make sure are users are safe to replace
+  for (auto port : op->getResults())
+    for (auto user : port.getUsers())
+      if (!isa<SubfieldOp>(user))
+        return failure();
+
+  // Annoyingly, there isn't a good replacement for the port as a whole, since
+  // they have an outer flip type.
+  for (auto port : op->getResults()) {
+    for (auto user : llvm::make_early_inc_range(port.getUsers())) {
+      SubfieldOp sfop = cast<SubfieldOp>(user);
+      rewriter.replaceOpWithNewOp<WireOp>(sfop, sfop.result().getType());
+    }
+  }
+  rewriter.eraseOp(op);
+  return success();
+}
