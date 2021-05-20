@@ -21,7 +21,13 @@ using namespace comb;
 /// Return true if the specified type is a signless non-zero width integer type,
 /// the only type which the comb ops operate.
 static bool isCombIntegerType(mlir::Type type) {
-  auto intType = type.dyn_cast<IntegerType>();
+  Type canonicalType;
+  if (auto typeAlias = type.dyn_cast<hw::TypeAliasType>())
+    canonicalType = typeAlias.getCanonicalType();
+  else
+    canonicalType = type;
+
+  auto intType = canonicalType.dyn_cast<IntegerType>();
   if (!intType || !intType.isSignless())
     return false;
 

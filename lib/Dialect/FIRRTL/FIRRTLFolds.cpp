@@ -578,10 +578,6 @@ OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
     if (rhsCst.getValue().isNullValue() && lhs().getType() == getType() &&
         rhs().getType() == getType())
       return lhs();
-
-    /// TODO: neq(x, 0) -> not(orr(x)) when x is >1 bit
-    /// TODO: neq(x, 1) -> not(x) when x is 1 bit.
-    /// TODO: neq(x, ~0) -> andr(x)) when x is >1 bit
   }
 
   return constFoldFIRRTLBinaryOp(
@@ -668,7 +664,7 @@ OpFoldResult OrRPrimOp::fold(ArrayRef<Attribute> operands) {
 
   // x != 0
   if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
-    return getIntAttr(getType(), APInt(1, !attr.getValue()));
+    return getIntAttr(getType(), APInt(1, !attr.getValue().isNullValue()));
   return {};
 }
 
@@ -1168,8 +1164,16 @@ LogicalResult PartialConnectOp::canonicalize(PartialConnectOp op,
 
   if (destType.isa<IntType>() && srcType.isa<IntType>() && srcWidth > 0 &&
       destWidth > 0 && destWidth < srcWidth) {
+    // firrtl.tail always returns uint even for sint operands.
+    IntType tmpType = destType.cast<IntType>();
+    if (tmpType.isSigned())
+      tmpType = UIntType::get(destType.getContext(), destWidth);
     auto shortened = rewriter.createOrFold<TailPrimOp>(
-        op.getLoc(), destType, op.getOperand(1), srcWidth - destWidth);
+        op.getLoc(), tmpType, op.getOperand(1), srcWidth - destWidth);
+    // Insert the cast back to signed if needed.
+    if (tmpType != destType)
+      shortened =
+          rewriter.createOrFold<AsSIntPrimOp>(op.getLoc(), destType, shortened);
     rewriter.create<ConnectOp>(op.getLoc(), op.getOperand(0), shortened);
     rewriter.eraseOp(op);
     return success();
