@@ -887,8 +887,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   // Create a temporary wire at the current insertion point, and try to
   // eliminate it later as part of lowering post processing.
   sv::WireOp createTmpWireOp(Type type, StringRef name) {
-    // This is a locally visible, private wire created by the compiler, so donot
-    // attach a symbol name.
+    // This is a locally visible, private wire created by the compiler, so do not attach a symbol name.
     auto result = builder.create<sv::WireOp>(type, name);
     tmpWiresToOptimize.push_back(result);
     return result;
@@ -1570,10 +1569,11 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
 
   // Name attr is required on sv.wire but optional on firrtl.wire.
   auto nameAttr = op.nameAttr() ? op.nameAttr() : builder.getStringAttr("");
+  auto symName = op.nameAttr() ? op.nameAttr() : StringAttr();
   // This is not a temporary wire created by the compiler, so attach a symbol
   // name.
   // TODO: How to ensure there's no symbol name conflict ?
-  return setLoweringTo<sv::WireOp>(op, resultType, nameAttr, nameAttr);
+  return setLoweringTo<sv::WireOp>(op, resultType, nameAttr, symName);
 }
 
 LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
@@ -1588,7 +1588,7 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   if (auto name = op->getAttrOfType<StringAttr>("name")) {
     if (!name.getValue().empty()) {
       // This is a locally visible, private wire created by the compiler, so
-      // donot attach a symbol name.
+      // do not attach a symbol name.
       auto wire = builder.create<sv::WireOp>(operand.getType(), name);
       builder.create<sv::ConnectOp>(wire, operand);
     }
@@ -2211,8 +2211,7 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValueOp op) {
   // type.  We do that by lowering to a wire and return that.  As with the
   // SFC, we do not connect anything to this, because it is bidirectional.
   if (op.getType().isa<AnalogType>())
-    // This is a locally visible, private wire created by the compiler, so donot
-    // attach a symbol name.
+    // This is a locally visible, private wire created by the compiler, so do not attach a symbol name.
     return setLoweringTo<sv::WireOp>(op, resultTy, ".invalid_analog");
 
   // We lower invalid to 0.  TODO: the FIRRTL spec mentions something about
