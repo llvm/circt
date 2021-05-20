@@ -887,7 +887,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   // Create a temporary wire at the current insertion point, and try to
   // eliminate it later as part of lowering post processing.
   sv::WireOp createTmpWireOp(Type type, StringRef name) {
-    // This is a locally visible, private wire created by the compiler, so do not attach a symbol name.
+    // This is a locally visible, private wire created by the compiler, so do
+    // not attach a symbol name.
     auto result = builder.create<sv::WireOp>(type, name);
     tmpWiresToOptimize.push_back(result);
     return result;
@@ -1136,7 +1137,7 @@ void FIRRTLLowering::optimizeTemporaryWire(sv::WireOp wire) {
   if (!write)
     return;
 
-  // If the write is happening at the model level then we don't have any
+  // If the write is happening at the module level then we don't have any
   // use-before-def checking to do, so we only handle that for now.
   if (!isa<hw::HWModuleOp>(write->getParentOp()))
     return;
@@ -2211,7 +2212,8 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValueOp op) {
   // type.  We do that by lowering to a wire and return that.  As with the
   // SFC, we do not connect anything to this, because it is bidirectional.
   if (op.getType().isa<AnalogType>())
-    // This is a locally visible, private wire created by the compiler, so do not attach a symbol name.
+    // This is a locally visible, private wire created by the compiler, so do
+    // not attach a symbol name.
     return setLoweringTo<sv::WireOp>(op, resultTy, ".invalid_analog");
 
   // We lower invalid to 0.  TODO: the FIRRTL spec mentions something about
