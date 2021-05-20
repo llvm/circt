@@ -775,6 +775,26 @@ bool InferenceTypeUpdate::updateOperation(Operation *op) {
     anyChanged |= updateValue(v);
   }
 
+  // If this is a connect operation, width inference might have inferred a RHS
+  // that is wider than the LHS, in which case an additional BitsPrimOp is
+  // necessary to truncate the value.
+  if (auto con = dyn_cast<ConnectOp>(op)) {
+    auto lhs = con.dest().getType().cast<FIRRTLType>();
+    auto rhs = con.src().getType().cast<FIRRTLType>();
+    auto lhsWidth = lhs.getBitWidthOrSentinel();
+    auto rhsWidth = rhs.getBitWidthOrSentinel();
+    if (lhsWidth > 0 && rhsWidth > 0 && lhsWidth < rhsWidth) {
+      OpBuilder builder(op);
+      auto trunc = builder.createOrFold<BitsPrimOp>(con.getLoc(), con.src(),
+                                                    lhsWidth - 1, 0);
+      if (rhs.isa<SIntType>())
+        trunc = builder.createOrFold<AsSIntPrimOp>(con.getLoc(), lhs, trunc);
+      LLVM_DEBUG(llvm::dbgs()
+                 << "Truncating RHS to " << lhs << " in " << con << "\n");
+      con->replaceUsesOfWith(con.src(), trunc);
+    }
+  }
+
   // If this is a module, update its ports.
   if (auto module = dyn_cast<FModuleOp>(op)) {
     // Update the block argument types.
