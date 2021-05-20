@@ -23,4 +23,20 @@
 // Pull in all enum type definitions and utility function declarations.
 #include "circt/Dialect/FIRRTL/FIRRTLEnums.h.inc"
 
+namespace circt {
+class FieldRef;
+
+namespace firrtl {
+
+/// Get the FieldRef from a value.  This will travel backwards to through the
+/// IR, following Subfield and Subindex to find the op which declares the
+/// location.
+FieldRef getFieldRefFromValue(Value value);
+
+/// Get a string identifier representing the FieldRef.
+std::string getFieldName(const FieldRef &fieldRef);
+
+} // namespace firrtl
+} // namespace circt
+
 #endif // CIRCT_DIALECT_FIRRTL_IR_DIALECT_H

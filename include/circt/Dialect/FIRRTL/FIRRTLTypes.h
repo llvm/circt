@@ -253,8 +253,7 @@ class BundleType : public FIRRTLType::TypeBase<BundleType, FIRRTLType,
 public:
   using Base::Base;
 
-  // Each element of a bundle, which is a name, type, and a unique identifier in
-  // the bundle.
+  // Each element of a bundle, which is a name and type.
   struct BundleElement {
     StringAttr name;
     FIRRTLType type;

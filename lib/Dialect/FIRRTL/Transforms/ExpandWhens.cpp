@@ -14,8 +14,8 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
-#include "circt/Dialect/FIRRTL/FieldRef.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Support/FieldRef.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
 
@@ -111,9 +111,7 @@ private:
   /// initialized.
   void declareSinks(Value value, Flow flow) {
     auto type = value.getType();
-
-    // A sink location which will be modified as we traverse any bundle type.
-    FieldRef sink(value);
+    unsigned id = 0;
 
     // Recurse through a bundle and declare each leaf sink node.
     std::function<void(Type, Flow)> declare = [&](Type type, Flow flow) {
@@ -125,7 +123,7 @@ private:
       // If this is a bundle type, recurse to each of the fields.
       if (auto bundleType = type.dyn_cast<BundleType>()) {
         for (auto &element : bundleType.getElements()) {
-          sink.setFieldID(sink.getFieldID() + 1);
+          id++;
           declare(element.type, flow);
         }
         return;
@@ -133,7 +131,7 @@ private:
       // If it is a leaf node with Flow::Sink or Flow::Duplex, it must be
       // initialized.
       if (flow != Flow::Source)
-        scope[sink] = nullptr;
+        scope[{value, id}] = nullptr;
     };
     declare(type, flow);
   }
@@ -193,7 +191,7 @@ LogicalResult ExpandWhensVisitor::run(FModuleOp module) {
 
     // Get the op which defines the sink.
     auto dest = std::get<0>(destAndConnect);
-    dest.getDefiningOp()->emitError("sink \"" + dest.getFieldName() +
+    dest.getDefiningOp()->emitError("sink \"" + getFieldName(dest) +
                                     "\" not fully initialized");
   }
 
@@ -229,7 +227,7 @@ void ExpandWhensVisitor::visitDecl(RegOp op) {
          "registers can't be bundle type");
   auto connect = OpBuilder(op->getBlock(), ++Block::iterator(op))
                      .create<ConnectOp>(op.getLoc(), op, op);
-  scope[{op.result()}] = connect;
+  scope[getFieldRefFromValue(op.result())] = connect;
 }
 
 void ExpandWhensVisitor::visitDecl(RegResetOp op) {
@@ -239,7 +237,7 @@ void ExpandWhensVisitor::visitDecl(RegResetOp op) {
          "registers can't be bundle type");
   auto connect = OpBuilder(op->getBlock(), ++Block::iterator(op))
                      .create<ConnectOp>(op.getLoc(), op, op);
-  scope[{op.result()}] = connect;
+  scope[getFieldRefFromValue(op.result())] = connect;
 }
 
 void ExpandWhensVisitor::visitDecl(InstanceOp op) {
@@ -257,11 +255,11 @@ void ExpandWhensVisitor::visitDecl(MemOp op) {
 }
 
 void ExpandWhensVisitor::visitStmt(PartialConnectOp op) {
-  setLastConnect(op.dest(), op);
+  setLastConnect(getFieldRefFromValue(op.dest()), op);
 }
 
 void ExpandWhensVisitor::visitStmt(ConnectOp op) {
-  setLastConnect(op.dest(), op);
+  setLastConnect(getFieldRefFromValue(op.dest()), op);
 }
 
 void ExpandWhensVisitor::visitStmt(PrintFOp op) {
