@@ -508,9 +508,19 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
   bool mappingFailed = false;
   TypeSwitch<Operation *>(op)
       .Case<ConstantOp>([&](auto op) {
-        // Constants just use the bit width of the APInt. This is guaranteed to
-        // match the width of the type if the latter has a width assigned.
-        auto e = solver.known(op.value().getBitWidth());
+        // If the constant has a known width, use that. Otherwise pick the
+        // smallest number of bits necessary to represent the constant.
+        Expr *e;
+        if (auto width = op.getType().getWidth())
+          e = solver.known(*width);
+        else {
+          auto v = op.value();
+          auto w = v.getBitWidth() - (v.isNegative() ? v.countLeadingOnes()
+                                                     : v.countLeadingZeros());
+          if (v.isSigned())
+            w += 1;
+          e = solver.known(std::max(w, 1u));
+        }
         setExpr(op.getResult(), e);
       })
       .Case<WireOp, InvalidValueOp>(
@@ -765,6 +775,26 @@ bool InferenceTypeUpdate::updateOperation(Operation *op) {
     anyChanged |= updateValue(v);
   }
 
+  // If this is a connect operation, width inference might have inferred a RHS
+  // that is wider than the LHS, in which case an additional BitsPrimOp is
+  // necessary to truncate the value.
+  if (auto con = dyn_cast<ConnectOp>(op)) {
+    auto lhs = con.dest().getType().cast<FIRRTLType>();
+    auto rhs = con.src().getType().cast<FIRRTLType>();
+    auto lhsWidth = lhs.getBitWidthOrSentinel();
+    auto rhsWidth = rhs.getBitWidthOrSentinel();
+    if (lhsWidth > 0 && rhsWidth > 0 && lhsWidth < rhsWidth) {
+      OpBuilder builder(op);
+      auto trunc = builder.createOrFold<BitsPrimOp>(con.getLoc(), con.src(),
+                                                    lhsWidth - 1, 0);
+      if (rhs.isa<SIntType>())
+        trunc = builder.createOrFold<AsSIntPrimOp>(con.getLoc(), lhs, trunc);
+      LLVM_DEBUG(llvm::dbgs()
+                 << "Truncating RHS to " << lhs << " in " << con << "\n");
+      con->replaceUsesOfWith(con.src(), trunc);
+    }
+  }
+
   // If this is a module, update its ports.
   if (auto module = dyn_cast<FModuleOp>(op)) {
     // Update the block argument types.
@@ -819,6 +849,16 @@ bool InferenceTypeUpdate::updateValue(Value value) {
   auto newType = updateType(type, solution);
   LLVM_DEBUG(llvm::dbgs() << "Update " << value << " to " << newType << "\n");
   value.setType(newType);
+
+  // If this is a ConstantOp, adjust the width of the underlying APInt. Unsized
+  // constants have APInts which are *at least* wide enough to hold the value,
+  // but may be larger. This can trip up the verifier.
+  if (auto op = value.getDefiningOp<ConstantOp>()) {
+    auto k = op.value();
+    if (k.getBitWidth() > unsigned(solution))
+      k = k.trunc(solution);
+    op->setAttr("value", IntegerAttr::get(op.getContext(), k));
+  }
 
   return newType != type;
 }
