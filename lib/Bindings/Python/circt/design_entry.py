@@ -6,7 +6,6 @@ from circt.dialects import hw
 from .support import BuilderValue, UnconnectedSignalError
 import circt
 
-
 import mlir.ir
 
 import atexit
