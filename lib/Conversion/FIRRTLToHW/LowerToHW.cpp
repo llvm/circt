@@ -1751,8 +1751,16 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
           IntegerType::get(op.getContext(), std::max((size_t)1, width));
       auto accesses = getAllFieldAccesses(op.getResult(i), field);
 
-      Value wire = createTmpWireOp(
-          portType, ("." + portName + "." + field + ".wire").str());
+      auto wireName = ("." + portName + "." + field + ".wire").str();
+      // If no access to the subfield, then the wire cannot be optimized away,
+      // attach a symbol to it. It cannot be optimized because no rd/wr to it,
+      // no source value to replace it with.
+
+      Value wire = accesses.empty()
+                       ? builder.create<sv::WireOp>(
+                             portType, builder.getStringAttr(wireName),
+                             builder.getStringAttr(wireName))
+                       : createTmpWireOp(portType, wireName);
 
       for (auto a : accesses) {
         if (a.getType()
