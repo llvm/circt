@@ -21,23 +21,27 @@ class UnconnectedSignalError(RuntimeError):
 class BackedgeBuilder(AbstractContextManager):
 
   class Edge:
-    def __init__(self, type: ir.Type, port_name: str,
+    def __init__(self, creator, type: ir.Type, port_name: str,
                  op_view, instance_of: ir.Operation):
+      self.creator: BackedgeBuilder = creator
       self.dummy_op = ir.Operation.create("TemporaryBackedge", [type])
       self.instance_of = instance_of
       self.op_view = op_view
       self.port_name = port_name
+      self.erased = False
 
     @property
     def result(self):
       return self.dummy_op.result
 
     def erase(self):
+      if self.erased:
+        return
+      self.creator.edges.remove(self)
       self.dummy_op.operation.erase()
 
   def __init__(self):
     self.edges = set[BackedgeBuilder.Edge]()
-    self.old_bb_token = _current_backedge_builder.set(self)
 
   @staticmethod
   def current():
@@ -48,18 +52,17 @@ class BackedgeBuilder(AbstractContextManager):
 
   def create(self, type: ir.Type, port_name: str,
              op_view, instance_of: ir.Operation = None):
-    edge = BackedgeBuilder.Edge(type, port_name, op_view, instance_of)
+    edge = BackedgeBuilder.Edge(self, type, port_name, op_view, instance_of)
     self.edges.add(edge)
     return edge
 
-  def remove(self, edge):
-    self.edges.remove(edge)
-    edge.erase()
+  def __enter__(self):
+    self.old_bb_token = _current_backedge_builder.set(self)
 
   def __exit__(self, exc_type, exc_value, traceback):
     _current_backedge_builder.reset(self.old_bb_token)
     errors = []
-    for edge in self.edges:
+    for edge in list(self.edges):
       # TODO: Make this use `UnconnectedSignalError`.
       msg = "Port:       " + edge.port_name + "\n"
       if edge.instance_of is not None:

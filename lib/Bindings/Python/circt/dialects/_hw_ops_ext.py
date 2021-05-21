@@ -40,7 +40,7 @@ class InstanceBuilder:
         self.operand_values.append(input_port_mapping[arg_name])
       else:
         type = module.type.inputs[i]
-        backedge = self.parent_module.create_backedge(
+        backedge = BackedgeBuilder.current().create(
             type, arg_name, self, instance_of=module)
         self.backedges[i] = backedge
         self.operand_values.append(backedge.result)
@@ -68,11 +68,6 @@ class InstanceBuilder:
         ip=ip,
     )
 
-  # To look like an OpView.
-  @property
-  def operation():
-    return self.instance
-
   def __getattr__(self, name):
     # Check for the attribute in the arg name set.
     if name in self.operand_indices:
@@ -93,7 +88,7 @@ class InstanceBuilder:
       # Put the value into the instance.
       index = self.operand_indices[name]
       self.instance.inputs[index] = value
-      self.parent_module.remove_backedge(self.backedges[index])
+      self.backedges[index].erase()
       return
 
     # If we fell through to here, the name isn't an arg.
@@ -174,8 +169,7 @@ class ModuleLike:
     if body_builder:
       entry_block = self.add_entry_block()
       with InsertionPoint(entry_block):
-        with BackedgeBuilder() as bb:
-          self.backedge_builder = bb
+        with BackedgeBuilder():
           body_builder(self)
 
   @property
@@ -204,14 +198,6 @@ class ModuleLike:
                            parameters=parameters,
                            loc=loc,
                            ip=ip)
-
-  def create_backedge(self, *args, **kwargs):
-    assert self.backedge_builder, "No backedge builder initialized."
-    return self.backedge_builder.create(*args, **kwargs)
-
-  def remove_backedge(self, backedge):
-    assert self.backedge_builder, "No backedge builder initialized."
-    self.backedge_builder.remove(backedge)
 
 
 class HWModuleOp(ModuleLike):
