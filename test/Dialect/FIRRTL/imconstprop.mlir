@@ -19,7 +19,8 @@ firrtl.circuit "Test" {
                       out %result4: !firrtl.uint<2>,
                       out %result5: !firrtl.uint<2>,
                       out %result6: !firrtl.uint<4>,
-                      out %result7: !firrtl.uint<4>) {
+                      out %result7: !firrtl.uint<4>,
+                      out %result8: !firrtl.uint<4>) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 
@@ -79,6 +80,23 @@ firrtl.circuit "Test" {
     %unconnectedWire = firrtl.wire : !firrtl.uint<2>
     // CHECK: firrtl.connect %result7, %invalid_ui2
     firrtl.connect %result7, %unconnectedWire: !firrtl.uint<4>, !firrtl.uint<2>
+
+    // CHECK-NEXT: firrtl.constant 1
+    %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
+    // CHECK-NEXT: firrtl.constant 2
+    %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
+
+    // Multiple operations that fold to constants shouldn't leave dead constants
+    // around.
+    // CHECK-NEXT: firrtl.constant 0
+    %a = firrtl.and %extWire, %c2_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+    // CHECK-NEXT: firrtl.constant 1
+    %b = firrtl.or %a, %c1_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+    // CHECK-NEXT: firrtl.constant 3
+    %c = firrtl.xor %b, %c2_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+
+    // CHECK-NEXT: firrtl.connect %result8, %c3_ui2
+    firrtl.connect %result8, %c: !firrtl.uint<4>, !firrtl.uint<2>
 
 
     // Constant propagation through instance.

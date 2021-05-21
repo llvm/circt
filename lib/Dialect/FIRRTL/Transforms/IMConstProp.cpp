@@ -520,16 +520,34 @@ void IMConstPropPass::visitOperation(Operation *op) {
   if (llvm::all_of(op->getResults(), isOverdefinedFn))
     return;
 
+  bool anyFIRRTLInvalidOperands = false;
+
   // Collect all of the constant operands feeding into this operation. If any
   // are not ready to be resolved, bail out and wait for them to resolve.
   SmallVector<Attribute, 8> operandConstants;
   operandConstants.reserve(op->getNumOperands());
   for (Value operand : op->getOperands()) {
     // Make sure all of the operands are resolved first.
+    // TODO: Support folding partial ops, like mux(false, variable, cst).
     auto &operandLattice = latticeValues[operand];
     if (operandLattice.isUnknown())
       return;
-    operandConstants.push_back(operandLattice.getConstant());
+    if (operandLattice.isConstant())
+      operandConstants.push_back(operandLattice.getConstant());
+    if (operandLattice.isFIRRTLInvalid())
+      anyFIRRTLInvalidOperands = true;
+  }
+
+  // If any operands are a firrtl.invalid value (e.g. due to an unconnected-yet
+  // wire), then constant fold to firrtl.invalid.
+  if (anyFIRRTLInvalidOperands && op->getNumResults() == 1 &&
+      wouldOpBeTriviallyDead(op)) {
+    // TODO: This is incorrect for mux's, and(invalid,x), etc.  Need a
+    // proper undef-like model and to integrate this into the general FIRRTL
+    // constant lattice.  SFC probably doesn't do this though so it may not be
+    // required.
+    mergeLatticeValue(op->getResult(0), LatticeValue::getFIRRTLInvalid());
+    return;
   }
 
   // Save the original operands and attributes just in case the operation folds
@@ -601,9 +619,8 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
       replacement =
           builder.create<InvalidValueOp>(value.getLoc(), value.getType());
     } else {
+      // TODO: Unique constants into the entry block of the module.
       Attribute constantValue = it->second.getConstant();
-
-      // FIXME: Unique constants into the entry block of the module.
       auto *cst = module->getDialect()->materializeConstant(
           builder, constantValue, value.getType(), value.getLoc());
       if (!cst)
