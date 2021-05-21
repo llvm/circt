@@ -16,12 +16,12 @@ from typing import List
 class PolynomialCompute:
   """Module to compute ax^3 + bx^2 + cx + d for design-time coefficients"""
 
-  def __init__(self, coefficients: List[int]):
+  # Evaluate polynomial for 'x'.
+  x = Input(types.i32)
+
+  def __init__(self, coefficients: list[int], **kwargs):
     """coefficients is in 'd' -> 'a' order."""
     self.__coefficients = coefficients
-
-    # Evaluate polynomial for 'x'.
-    self.x = Input(types.i32)
     # Full result.
     self.y = Output(types.i32)
 
@@ -57,9 +57,21 @@ class PolynomialCompute:
     self.y.set(taps[-1])
 
 
+def build(top):
+  i32 = mlir.ir.Type.parse("i32")
+  c23 = mlir.ir.IntegerAttr.get(i32, 23)
+  x = hw.ConstantOp(i32, c23)
+  PolynomialCompute([62, 42, 6], x=x)
+  hw.OutputOp([])
+
+
 mod = mlir.ir.Module.create()
-with mlir.ir.InsertionPoint(mod.body):
-  PolynomialCompute([62, 42, 6])
+with mlir.ir.InsertionPoint(mod.body), circt.support.BackedgeBuilder():
+  hw.HWModuleOp(name='top',
+                input_ports=[],
+                output_ports=[],
+                body_builder=build)
+
 
 mod.operation.print()
 # CHECK:  hw.module @PolynomialCompute(%x: i32) -> (%y: i32) {

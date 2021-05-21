@@ -2,8 +2,7 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from circt.dialects import hw
-from .support import BuilderValue, UnconnectedSignalError
+from circt.support import BuilderValue, BackedgeBuilder
 import circt
 
 import mlir.ir
@@ -14,7 +13,7 @@ import atexit
 DefaultContext = mlir.ir.Context()
 DefaultContext.__enter__()
 circt.register_dialects(DefaultContext)
-
+DefaultContext.allow_unregistered_dialects = True
 
 @atexit.register
 def __exit_ctxt():
@@ -36,11 +35,16 @@ class Output:
   """Represents an output port on a design module. Call the 'set' method to set
   the output value during implementation."""
 
-  __slots__ = ["type", "value"]
+  __slots__ = [
+      "name",
+      "type",
+      "value"
+  ]
 
-  def __init__(self, type: mlir.ir.Type):
-    self.type = type
-    self.value = None
+  def __init__(self, type: mlir.ir.Type, name: str = None):
+    self.name: str = name
+    self.type: mlir.ir.Type = type
+    self.value: mlir.ir.Value = None
 
   def set(self, val):
     """Sets the final output signal. Should only be called by the implementation
@@ -52,56 +56,95 @@ class Output:
 
 
 class Input:
-  __slots__ = ["type"]
+  __slots__ = [
+      "name",
+      "type",
+      "value"
+  ]
 
-  def __init__(self, type: mlir.ir.Type):
+  def __init__(self, type: mlir.ir.Type, name: str = None):
+    self.name = name
     self.type = type
+    self.value = None
 
 
 def module(cls):
   """The CIRCT design entry module class decorator."""
 
-  class __Module(cls):
+  class __Module(cls, mlir.ir.OpView):
+    OPERATION_NAME = "circt.design_entry." + cls.__name__
+    _ODS_REGIONS = (0, True)
 
     def __init__(self, *args, **kwargs):
-      super().__init__(*args, **kwargs)
+
+      # Copy the classmember Input/Output declarations to be instance members.
+      for attr_name in dir(cls):
+        attr = self.__getattribute__(attr_name)
+        if isinstance(attr, Input):
+          self.__setattr__(attr_name, Input(attr.type, attr_name))
+        if isinstance(attr, Output):
+          self.__setattr__(attr_name, Output(attr.type, attr_name))
+
+      cls.__init__(self, *args, **kwargs)
 
       # After the wrapped class' construct, all the IO should be known.
-      input_ports = []
-      output_ports = []
+      input_ports = list[Input]()
+      output_ports = list[Output]()
+      dont_touch = set([x for x in dir(mlir.ir.OpView)])
       for attr_name in dir(self):
+        if attr_name in dont_touch:
+          continue
         attr = self.__getattribute__(attr_name)
-        if type(attr) is Input:
+        if isinstance(attr, Input):
+          attr.name = attr_name
+          input_ports.append(attr)
+        if isinstance(attr, Output):
+          attr.name = attr_name
+          output_ports.append(attr)
 
-          input_ports.append((attr_name, attr))
-        if type(attr) is Output:
-          output_ports.append((attr_name, attr))
+      for input in input_ports:
+        if input.name in kwargs:
+          input.value = kwargs[input.name]
+          if isinstance(input.value, mlir.ir.OpView):
+            input.value = input.value.operation.result
+          elif isinstance(input.value, mlir.ir.Operation):
+            input.value = input.value.result
+          assert isinstance(input.value, mlir.ir.Value)
+        else:
+          input.value = BackedgeBuilder.current().create(
+              input.type, input.name, self).result
 
-      # This function sets up the inputs to construct, then connects the
-      # outputs.
-      def body_build(mod):
-        inputs = dict()
-        for index, (name, _) in enumerate(input_ports):
-          inputs[name] = mod.entry_block.arguments[index]
+      mlir.ir.OpView.__init__(self, self.build_generic(
+          attributes={},
+          results=[x.type for x in output_ports],
+          operands=[x.value for x in input_ports]
+      ))
 
-        self.construct(**inputs)
+      # # This function sets up the inputs to construct, then connects the
+      # # outputs.
+      # def body_build(mod):
+      #   inputs = dict()
+      #   for index, (name, _) in enumerate(input_ports):
+      #     inputs[name] = mod.entry_block.arguments[index]
 
-        outputs = []
-        unconnected_ports = []
-        for (name, output) in output_ports:
-          if output.value is None:
-            unconnected_ports.append(name)
-          outputs.append(output.value)
-        if len(unconnected_ports) > 0:
-          raise UnconnectedSignalError(cls.__name__, unconnected_ports)
-        hw.OutputOp(outputs)
+      #   self.construct(**inputs)
 
-      # Construct things as HWModules.
-      self.module = hw.HWModuleOp(
-          name=cls.__name__,
-          input_ports=[(name, port.type) for (name, port) in input_ports],
-          output_ports=[(name, port.type) for (name, port) in output_ports],
-          body_builder=body_build)
+      #   outputs = []
+      #   unconnected_ports = []
+      #   for (name, output) in output_ports:
+      #     if output.value is None:
+      #       unconnected_ports.append(name)
+      #     outputs.append(output.value)
+      #   if len(unconnected_ports) > 0:
+      #     raise UnconnectedSignalError(cls.__name__, unconnected_ports)
+      #   hw.OutputOp(outputs)
+
+      # # Construct things as HWModules.
+      # self.module = hw.HWModuleOp(
+      #     name=cls.__name__,
+      #     input_ports=[(name, port.type) for (name, port) in input_ports],
+      #     output_ports=[(name, port.type) for (name, port) in output_ports],
+      #     body_builder=body_build)
 
   return __Module
 
