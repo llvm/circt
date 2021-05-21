@@ -40,9 +40,10 @@ class InstanceBuilder:
         self.operand_values.append(input_port_mapping[arg_name])
       else:
         type = module.type.inputs[i]
-        backedge = self.parent_module.create_backedge(type, self)
+        backedge = self.parent_module.create_backedge(
+            type, arg_name, self, instance_of=module)
         self.backedges[i] = backedge
-        self.operand_values.append(backedge)
+        self.operand_values.append(backedge.result)
 
     result_names = ArrayAttr(module.attributes["resultNames"])
     for i in range(len(result_names)):
@@ -66,6 +67,11 @@ class InstanceBuilder:
         loc=loc,
         ip=ip,
     )
+
+  # To look like an OpView.
+  @property
+  def operation():
+    return self.instance
 
   def __getattr__(self, name):
     # Check for the attribute in the arg name set.
@@ -199,9 +205,9 @@ class ModuleLike:
                            loc=loc,
                            ip=ip)
 
-  def create_backedge(self, type, builder):
+  def create_backedge(self, *args, **kwargs):
     assert self.backedge_builder, "No backedge builder initialized."
-    return self.backedge_builder.create(type, builder)
+    return self.backedge_builder.create(*args, **kwargs)
 
   def remove_backedge(self, backedge):
     assert self.backedge_builder, "No backedge builder initialized."
