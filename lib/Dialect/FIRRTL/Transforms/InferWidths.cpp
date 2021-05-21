@@ -107,7 +107,7 @@ struct VarExpr : public ExprBase<VarExpr, Expr::Kind::Var> {
     os << "var" << ((size_t)this / llvm::PowerOf2Ceil(sizeof(*this)) & 0xFFF);
   }
   iterator begin() const { return &constraint; }
-  iterator end() const { return &constraint + 1; }
+  iterator end() const { return &constraint + (constraint ? 1 : 0); }
 
   /// The constraint expression this variable is supposed to be greater than or
   /// equal to. This is not part of the variable's hash and equality property.
@@ -142,7 +142,7 @@ struct UnaryExpr : public Expr {
   Expr *const arg;
 
 protected:
-  UnaryExpr(Kind kind, Expr *arg) : Expr(kind), arg(arg) {}
+  UnaryExpr(Kind kind, Expr *arg) : Expr(kind), arg(arg) { assert(arg); }
 };
 
 /// Helper class to CRTP-derive common functions.
@@ -178,7 +178,10 @@ struct BinaryExpr : public Expr {
   Expr *const args[2];
 
 protected:
-  BinaryExpr(Kind kind, Expr *lhs, Expr *rhs) : Expr(kind), args{lhs, rhs} {}
+  BinaryExpr(Kind kind, Expr *lhs, Expr *rhs) : Expr(kind), args{lhs, rhs} {
+    assert(lhs);
+    assert(rhs);
+  }
 };
 
 /// Helper class to CRTP-derive common functions.
@@ -407,7 +410,7 @@ static void solveBinary(BinaryExpr *expr,
 void ConstraintSolver::solve() {
   // Iterate over the expressions in depth-first order and start substituting in
   // solutions.
-  for (auto *expr : llvm::post_order(static_cast<Expr *>(&root))) {
+  for (auto *expr : llvm::post_order(cast<Expr>(&root))) {
     if (expr->solution.hasValue())
       continue;
     TypeSwitch<Expr *>(expr)
