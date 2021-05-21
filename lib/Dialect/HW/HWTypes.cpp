@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -411,6 +412,30 @@ Type TypeAliasType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
 
 void TypeAliasType::print(DialectAsmPrinter &p) const {
   p << getMnemonic() << "<" << getRef() << ", " << getInnerType() << ">";
+}
+
+Optional<TypedeclOp> TypeAliasType::getDecl(Operation *op) {
+  SymbolRefAttr ref = getRef();
+  auto moduleOp = op->getParentOfType<ModuleOp>();
+
+  auto typeScope = moduleOp.lookupSymbol<TypeScopeOp>(ref.getRootReference());
+  if (!typeScope) {
+    op->emitError("unable to resolve scope for type reference");
+    return llvm::None;
+  }
+
+  auto typedecl = typeScope.lookupSymbol<TypedeclOp>(ref.getLeafReference());
+  if (!typedecl) {
+    op->emitError("unable to resolve declaration for type reference");
+    return llvm::None;
+  }
+
+  if (typedecl.type() != getInnerType()) {
+    op->emitError("declared type did not match aliased type");
+    return llvm::None;
+  }
+
+  return typedecl;
 }
 
 /// Parses a type registered to this dialect. Parse out the mnemonic then invoke

@@ -256,6 +256,14 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Operation *op,
         op->emitError("Unexpected unpacked array in packed type ") << arrayType;
         return true;
       })
+      .Case<TypeAliasType>([&](TypeAliasType typeRef) {
+        auto typedecl = typeRef.getDecl(op);
+        if (!typedecl.hasValue())
+          return false;
+
+        os << typedecl.getValue().getPreferredName();
+        return true;
+      })
       .Default([&](Type type) {
         os << "<<invalid type>>";
         op->emitError("value has an unsupported verilog type ") << type;
@@ -1523,7 +1531,7 @@ LogicalResult TypeScopeEmitter::visitTypeScope(TypedeclOp op) {
   indent() << "typedef ";
   printPackedType(stripUnpackedTypes(op.type()), os, op, false);
   printUnpackedTypePostfix(op.type(), os);
-  os << ' ' << op.sym_name();
+  os << ' ' << op.getPreferredName();
   os << ";\n";
   return success();
 }

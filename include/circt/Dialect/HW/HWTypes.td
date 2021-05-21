@@ -164,6 +164,10 @@ def TypeAliasType : HWType<"TypeAlias"> {
     TypeBuilderWithInferredContext<(ins
       "mlir::SymbolRefAttr":$ref, "mlir::Type":$innerType)>
   ];
+
+  let extraClassDeclaration = [{
+    Optional<TypedeclOp> getDecl(Operation *op);
+  }];
 }
 
 //===----------------------------------------------------------------------===//
@@ -178,4 +182,3 @@ def OutputFileAttr : StructAttr<"OutputFileAttr", HWDialect, [
   StructFieldAttr<"exclude_replicated_ops",
     DefaultValuedAttr<BoolAttr, "true">>,
 ]>;
-
