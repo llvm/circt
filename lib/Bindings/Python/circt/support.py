@@ -50,8 +50,12 @@ class BackedgeBuilder(AbstractContextManager):
       raise RuntimeError("No backedge builder found in context!")
     return bb
 
-  def create(self, type: ir.Type, port_name: str,
-             op_view, instance_of: ir.Operation = None):
+  @staticmethod
+  def create(*args, **kwargs):
+    return BackedgeBuilder.current()._create(*args, **kwargs)
+
+  def _create(self, type: ir.Type, port_name: str,
+              op_view, instance_of: ir.Operation = None):
     edge = BackedgeBuilder.Edge(self, type, port_name, op_view, instance_of)
     self.edges.add(edge)
     return edge

@@ -40,7 +40,7 @@ class InstanceBuilder:
         self.operand_values.append(input_port_mapping[arg_name])
       else:
         type = module.type.inputs[i]
-        backedge = BackedgeBuilder.current().create(
+        backedge = BackedgeBuilder.create(
             type, arg_name, self, instance_of=module)
         self.backedges[i] = backedge
         self.operand_values.append(backedge.result)
