@@ -40,8 +40,10 @@ def FVectorType : DialectType<FIRRTLDialect, CPred<"$_self.isa<FVectorType>()">,
   "FVectorType", "::circt::firrtl::FVectorType">;
 
 def UInt1Type : DialectType<FIRRTLDialect,
-  CPred<"$_self.isa<UIntType>() && $_self.cast<UIntType>().getWidth() == 1">,
-   "UInt<1>", "::circt::firrtl::UIntType">,
+  CPred<"$_self.isa<UIntType>() && "
+        "($_self.cast<UIntType>().getWidth() == 1 ||"
+        " $_self.cast<UIntType>().getWidth() == None)">,
+   "UInt<1> or UInt", "::circt::firrtl::UIntType">,
    BuildableType<"UIntType::get($_builder.getContext(), 1)">;
 
 def AsyncResetType : DialectType<FIRRTLDialect,

@@ -827,3 +827,14 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NEXT: firrtl.connect %w, %wData
     infer mport w = a[wAddr], clock
     w <= wData
+
+  ; Test that a mux with an unknown width select line parses.  This is a check
+  ; of the predicate enforced on UInt1Type.
+  module MuxUnknownWidthSelect_Issue1108:
+    input a: UInt<1>
+    input b: UInt<1>
+    input sel: UInt
+    output c: UInt<8>
+    c <= mux(sel, a, b)
+
+    ; CHECK-LABEL: firrtl.module @MuxUnknownWidthSelect_Issue1108
