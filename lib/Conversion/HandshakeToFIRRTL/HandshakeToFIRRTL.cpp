@@ -276,8 +276,7 @@ static Value createOneHotMuxTree(ArrayRef<Value> inputs, Value select,
                                  ConversionPatternRewriter &rewriter) {
   // Confirm the select input can be a one-hot encoding for the inputs.
   int32_t numInputs = inputs.size();
-  auto selectType = select.getType().cast<UIntType>();
-  assert(numInputs == selectType.getWidthOrSentinel() &&
+  assert(numInputs == select.getType().cast<UIntType>().getWidthOrSentinel() &&
          "one-hot select can't mux inputs");
 
   // Start the mux tree with zero value.

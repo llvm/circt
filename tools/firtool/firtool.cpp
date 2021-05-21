@@ -316,6 +316,7 @@ static LogicalResult executeFirtool(MLIRContext &context) {
     case OutputSplitVerilog:
       return exportSplitVerilog(module.get(), outputFilename);
     }
+    return failure();
   };
 
   auto result = processBuffer(std::move(input), inputAnnotationFilename, ts,
