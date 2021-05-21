@@ -574,8 +574,6 @@ firrtl.circuit "Simple" {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %c0_ui3 = firrtl.constant 0 : !firrtl.uint<3>
     %_M_read, %_M_rw, %_M_write = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read", "rw", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<sint<42>>>>, !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata: flip<sint<42>>, wdata: sint<42>, wmask: uint<1>>>, !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>
-  // CHECK: %.rw.wdata.wire = sv.wire sym @".rw.wdata.wire"  : !hw.inout<i42>
-  // CHECK: %0 = sv.read_inout %.rw.wdata.wire : !hw.inout<i42>
   // CHECK: %_M.ro_data_0, %_M.rw_rdata_0 = hw.instance "_M" @FIRRTLMem_1_1_1_42_12_0_1_0(%clock1, %true, %c0_i4, %clock1, %true, %c0_i4_0, %true, %true, %0, %clock2, %inpred, %c0_i4_1, %[[mask:.+]], %[[data:.+]]) : (i1, i1, i4, i1, i1, i4, i1, i1, i42, i1, i1, i4, i1, i42) -> (i42, i42)
   // CHECK: hw.output %_M.ro_data_0, %_M.rw_rdata_0 : i42, i42
 

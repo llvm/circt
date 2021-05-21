@@ -1019,7 +1019,7 @@ hw.module @ZeroWidthInstance(%iA: i4) -> (%oA: i4) {
 // CHECK-LABEL:  hw.module @MemSimple(%clock1: i1, %clock2: i1, %inpred: i1, %indata: i42) -> (%result: i42, %result2: i42) {
 // CHECK-NEXT:    %c0_i4 = hw.constant 0 : i4
 // CHECK-NEXT:    %true = hw.constant true
-// CHECK-NEXT:    %.rw.wdata.wire = sv.wire sym @aWire  : !hw.inout<i42>
+// CHECK-NEXT:    %.rw.wdata.wire = sv.wire : !hw.inout<i42>
 // CHECK-NEXT:    %0 = sv.read_inout %.rw.wdata.wire : !hw.inout<i42>
 // CHECK-NEXT:    %_M.ro_data_0, %_M.1 = hw.instance "_M" @FIRRTLMem_1_1_1_42_12_0_1_0(%clock1, %true, %c0_i4, %clock1, %true, %c0_i4, %true, %true, %0, %clock2, %inpred, %c0_i4, %true, %indata) : (i1, i1, i4, i1, i1, i4, i1, i1, i42, i1, i1, i4, i1, i42) -> (i42, i42)
 // CHECK-NEXT:    hw.output %_M.ro_data_0, %_M.1 : i42, i42
@@ -1045,7 +1045,7 @@ hw.module @MemSimple(%clock1: i1, %clock2: i1, %inpred: i1, %indata: i42) -> (%r
   %6 = sv.read_inout %.rw.wmode.wire : !hw.inout<i1>
   %.rw.wmask.wire = sv.wire  : !hw.inout<i1>
   %7 = sv.read_inout %.rw.wmask.wire : !hw.inout<i1>
-  %.rw.wdata.wire = sv.wire sym @aWire : !hw.inout<i42>
+  %.rw.wdata.wire = sv.wire : !hw.inout<i42>
   %8 = sv.read_inout %.rw.wdata.wire : !hw.inout<i42>
   %.write.clk.wire = sv.wire  : !hw.inout<i1>
   %9 = sv.read_inout %.write.clk.wire : !hw.inout<i1>
@@ -1115,5 +1115,24 @@ hw.module @IncompleteRead(%clock1: i1) {
   sv.connect %.read.en.wire, %true : i1
   %5 = sv.read_inout %.read.clk.wire : !hw.inout<i1>
   sv.connect %.read.clk.wire, %clock1 : i1
+  hw.output
+}
+
+// CHECK-LABEL:  hw.module @foo() {
+// CHECK-NEXT:    %io_cpu_flush.wire = sv.wire sym @io_cpu_flush.wire  : !hw.inout<i1>
+// CHECK-NEXT:    hw.instance "fetch" @bar(%0) : (i1) -> ()
+// CHECK-NEXT:    %0 = sv.read_inout %io_cpu_flush.wire : !hw.inout<i1>
+// CHECK-NEXT:    hw.output
+hw.module.extern @bar(%io_cpu_flush: i1)
+hw.module @foo() {
+  %io_cpu_flush.wire = sv.wire sym @io_cpu_flush.wire  : !hw.inout<i1>
+  %.io_cpu_flush.wire = sv.wire  : !hw.inout<i1>
+  %0 = sv.read_inout %.io_cpu_flush.wire : !hw.inout<i1>
+  hw.instance "fetch" @bar(%0) : (i1) -> ()
+  %1 = sv.read_inout %io_cpu_flush.wire : !hw.inout<i1>
+  sv.connect %.io_cpu_flush.wire, %1 : i1
+  %2 = sv.read_inout %io_cpu_flush.wire : !hw.inout<i1>
+  %hits_1_7 = sv.wire  : !hw.inout<i1>
+  sv.connect %hits_1_7, %2 : i1
   hw.output
 }
