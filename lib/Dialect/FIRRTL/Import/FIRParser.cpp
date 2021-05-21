@@ -1343,14 +1343,16 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result,
 
   // Make sure the field name matches up with the input value's type and
   // compute the result type for the expression.
-  auto fieldNameAttr = builder.getStringAttr(fieldName);
-  auto resultType = result.getType().cast<FIRRTLType>();
-  resultType = SubfieldOp::getResultType(resultType, fieldNameAttr, loc);
+  // TODO: This should ideally be folded into a `tryCreate` method on the
+  // builder (https://llvm.discourse.group/t/3504).
+  NamedAttribute attrs = {builder.getIdentifier("fieldname"),
+                          builder.getStringAttr(fieldName)};
+  auto resultType = SubfieldOp::inferReturnType({result}, attrs, loc);
   if (!resultType)
     return failure();
 
   // Create the result operation.
-  auto op = builder.create<SubfieldOp>(loc, resultType, result, fieldNameAttr);
+  auto op = builder.create<SubfieldOp>(loc, resultType, result, attrs);
   subOps.push_back(op);
   result = op.getResult();
   return success();
@@ -1363,6 +1365,7 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result,
 ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result,
                                                     SubOpVector &subOps) {
   auto indexLoc = getToken().getLoc();
+  auto tindexLoc = translateLocation(indexLoc);
   int64_t indexNo;
   if (parseIntLit(indexNo, "expected index") ||
       parseToken(FIRToken::r_square, "expected ']'"))
@@ -1373,16 +1376,16 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result,
 
   // Make sure the index expression is valid and compute the result type for the
   // expression.
-  auto resultType = result.getType().cast<FIRRTLType>();
-  resultType = SubindexOp::getResultType(resultType, indexNo,
-                                         translateLocation(indexLoc));
+  // TODO: This should ideally be folded into a `tryCreate` method on the
+  // builder (https://llvm.discourse.group/t/3504).
+  NamedAttribute attrs = {builder.getIdentifier("index"),
+                          builder.getI32IntegerAttr(indexNo)};
+  auto resultType = SubindexOp::inferReturnType({result}, attrs, tindexLoc);
   if (!resultType)
     return failure();
 
   // Create the result operation.
-  auto op =
-      builder.create<SubindexOp>(translateLocation(indexLoc), resultType,
-                                 result, builder.getI32IntegerAttr(indexNo));
+  auto op = builder.create<SubindexOp>(tindexLoc, resultType, result, attrs);
   subOps.push_back(op);
   result = op.getResult();
   return success();
@@ -1395,6 +1398,7 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result,
 ParseResult FIRStmtParser::parsePostFixDynamicSubscript(Value &result,
                                                         SubOpVector &subOps) {
   auto indexLoc = getToken().getLoc();
+  auto tindexLoc = translateLocation(indexLoc);
   Value index;
   if (parseExp(index, subOps, "expected subscript index expression") ||
       parseToken(FIRToken::r_square, "expected ']' in subscript"))
@@ -1403,19 +1407,19 @@ ParseResult FIRStmtParser::parsePostFixDynamicSubscript(Value &result,
   // If the index expression is a flip type, strip it off.
   auto indexType = index.getType().cast<FIRRTLType>();
   indexType = indexType.getPassiveType();
-  index = convertToPassive(index, translateLocation(indexLoc));
+  index = convertToPassive(index, tindexLoc);
 
   // Make sure the index expression is valid and compute the result type for the
   // expression.
-  auto resultType = result.getType().cast<FIRRTLType>();
-  resultType = SubaccessOp::getResultType(resultType, indexType,
-                                          translateLocation(indexLoc));
+  // TODO: This should ideally be folded into a `tryCreate` method on the
+  // builder (https://llvm.discourse.group/t/3504).
+  auto resultType =
+      SubaccessOp::inferReturnType({result, index}, {}, tindexLoc);
   if (!resultType)
     return failure();
 
   // Create the result operation.
-  auto op = builder.create<SubaccessOp>(translateLocation(indexLoc), resultType,
-                                        result, index);
+  auto op = builder.create<SubaccessOp>(tindexLoc, resultType, result, index);
   subOps.push_back(op);
   result = op.getResult();
   return success();
@@ -1495,12 +1499,11 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
 
 #define TOK_LPKEYWORD_PRIM(SPELLING, CLASS)                                    \
   case FIRToken::lp_##SPELLING: {                                              \
-    auto resultTy =                                                            \
-        CLASS::getResultType(opTypes, integers, translateLocation(loc));       \
+    auto tloc = translateLocation(loc);                                        \
+    auto resultTy = CLASS::validateAndInferReturnType(operands, attrs, tloc);  \
     if (!resultTy)                                                             \
       return failure();                                                        \
-    result = builder.create<CLASS>(translateLocation(loc), resultTy,           \
-                                   ValueRange(operands), attrs);               \
+    result = builder.create<CLASS>(tloc, resultTy, operands, attrs);           \
     break;                                                                     \
   }
 #include "FIRTokenKinds.def"

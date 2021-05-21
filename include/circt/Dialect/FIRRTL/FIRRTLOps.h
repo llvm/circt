@@ -19,6 +19,7 @@
 #include "mlir/IR/FunctionSupport.h"
 #include "mlir/IR/RegionKindInterface.h"
 #include "mlir/IR/SymbolTable.h"
+#include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 namespace circt {
@@ -124,6 +125,51 @@ Flow foldFlow(Value val, Flow accumulatedFlow = Flow::Source);
 enum class DeclKind { Port, Instance, Other };
 
 DeclKind getDeclarationKind(Value val);
+
+// Out-of-line implementation of various trait verification methods and
+// functions commonly used among operations.
+namespace impl {
+LogicalResult verifySameOperandsIntTypeKind(Operation *op);
+
+// Type inference adaptor for FIRRTL operations.
+LogicalResult inferReturnTypes(
+    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::RegionRange regions,
+    SmallVectorImpl<Type> &results,
+    llvm::function_ref<FIRRTLType(ValueRange, ArrayRef<NamedAttribute>,
+                                  Optional<Location>)>
+        callback);
+
+// Common type ineference functions.
+FIRRTLType inferAddSubResult(FIRRTLType lhs, FIRRTLType rhs,
+                             Optional<Location> loc);
+FIRRTLType inferBitwiseResult(FIRRTLType lhs, FIRRTLType rhs,
+                              Optional<Location> loc);
+FIRRTLType inferComparisonResult(FIRRTLType lhs, FIRRTLType rhs,
+                                 Optional<Location> loc);
+FIRRTLType inferReductionResult(FIRRTLType arg, Optional<Location> loc);
+
+// Common parsed argument validation functions.
+LogicalResult validateBinaryOpArguments(ValueRange operands,
+                                        ArrayRef<NamedAttribute> attrs,
+                                        Location loc);
+LogicalResult validateUnaryOpArguments(ValueRange operands,
+                                       ArrayRef<NamedAttribute> attrs,
+                                       Location loc);
+LogicalResult validateOneOperandOneConst(ValueRange operands,
+                                         ArrayRef<NamedAttribute> attrs,
+                                         Location loc);
+} // namespace impl
+
+/// A binary operation where the operands have the same integer kind.
+template <typename ConcreteOp>
+class SameOperandsIntTypeKind
+    : public OpTrait::TraitBase<ConcreteOp, SameOperandsIntTypeKind> {
+public:
+  static LogicalResult verifyTrait(Operation *op) {
+    return impl::verifySameOperandsIntTypeKind(op);
+  }
+};
 
 } // namespace firrtl
 } // namespace circt
