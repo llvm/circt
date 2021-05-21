@@ -25,13 +25,21 @@ class Test:
   def construct(self):
     const = hw.ConstantOp(types.i32, mlir.ir.IntegerAttr.get(types.i32, 0))
     dummy = Dummy()
-    dummy.module.create("d", {"x": const.result})
+    inst = dummy.module.create("d", {"x": const.result})
+    try:
+        # CHECK: cannot connect from source of type
+        circt.connect(inst.y, None)
+    except TypeError as e:
+        print(e)
+    try:
+        # CHECK: cannot connect to destination of type
+        circt.connect(None, inst.x)
+    except TypeError as e:
+        print(e)
 
 
 with mlir.ir.Context() as ctxt, mlir.ir.Location.unknown():
   circt.register_dialects(ctxt)
   m = mlir.ir.Module.create()
   with mlir.ir.InsertionPoint(m.body):
-    # CHECK: hw.module
     Test()
-  print(m)
