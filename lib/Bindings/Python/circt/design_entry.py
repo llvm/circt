@@ -90,4 +90,4 @@ def connect(destination, source):
   index = destination.index
   builder.operation.operands[index] = source.value
   if index in builder.backedges:
-    builder.parent_module.remove_backedge(builder.backedges[index])
+    builder.backedges[index].erase()

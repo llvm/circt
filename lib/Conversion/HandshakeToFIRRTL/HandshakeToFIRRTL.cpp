@@ -276,8 +276,7 @@ static Value createOneHotMuxTree(ArrayRef<Value> inputs, Value select,
                                  ConversionPatternRewriter &rewriter) {
   // Confirm the select input can be a one-hot encoding for the inputs.
   int32_t numInputs = inputs.size();
-  auto selectType = select.getType().cast<UIntType>();
-  assert(numInputs == selectType.getWidthOrSentinel() &&
+  assert(numInputs == select.getType().cast<UIntType>().getWidthOrSentinel() &&
          "one-hot select can't mux inputs");
 
   // Start the mux tree with zero value.
@@ -315,11 +314,8 @@ static Value createDecoder(Value input, Location insertLoc,
   auto bit =
       rewriter.create<firrtl::ConstantOp>(insertLoc, bitType, APInt(1, 1));
 
-  auto resultType =
-      DShlPrimOp::getResultType(bit.getType().cast<FIRRTLType>(),
-                                input.getType().cast<FIRRTLType>(), insertLoc);
   // Shift the bit dynamically by the input amount.
-  auto shift = rewriter.create<DShlPrimOp>(insertLoc, resultType, bit, input);
+  auto shift = rewriter.create<DShlPrimOp>(insertLoc, bit, input);
 
   return shift;
 }
@@ -643,12 +639,8 @@ void StdExprBuilder::buildBinaryLogic() {
   Value resultData = resultSubfields[2];
 
   // Carry out the binary operation.
-  auto resultTy =
-      OpType::getResultType(arg0Data.getType().cast<FIRRTLType>(),
-                            arg1Data.getType().cast<FIRRTLType>(), insertLoc);
-  assert(resultTy && "invalid binary operands");
-  Value resultDataOp =
-      rewriter.create<OpType>(insertLoc, resultTy, arg0Data, arg1Data);
+  Value resultDataOp = rewriter.create<OpType>(insertLoc, arg0Data, arg1Data);
+  auto resultTy = resultDataOp.getType().cast<FIRRTLType>();
 
   // Truncate the result type down if needed.
   auto resultWidth = resultData.getType()

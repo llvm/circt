@@ -2259,13 +2259,13 @@ LogicalResult FIRRTLLowering::visitExpr(ShrPrimOp op) {
   // Handle the special degenerate cases.
   auto inWidth = input.getType().cast<IntegerType>().getWidth();
   auto shiftAmount = op.amount();
-  if (shiftAmount == inWidth) {
+  if (shiftAmount >= inWidth) {
     // Unsigned shift by full width returns a single-bit zero.
     if (op.input().getType().cast<IntType>().isUnsigned())
       return setLowering(op, getOrCreateIntConstant(1, 0));
 
     // Signed shift by full width is equivalent to extracting the sign bit.
-    --shiftAmount;
+    shiftAmount = inWidth - 1;
   }
 
   Type resultType = builder.getIntegerType(inWidth - shiftAmount);

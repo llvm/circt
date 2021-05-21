@@ -108,27 +108,20 @@ constFoldFIRRTLBinaryOp(Operation *op, ArrayRef<Attribute> operands,
   case BinOpKind::Normal:
     operandWidth = resultType.getWidthOrSentinel();
     break;
-  case BinOpKind::Compare:
+  case BinOpKind::Compare: {
     // Compares compute with the widest operand, not at the destination type
     // (which is always i1).
-    operandWidth = std::max(
-        op->getOperand(0).getType().cast<IntType>().getWidthOrSentinel(),
-        op->getOperand(1).getType().cast<IntType>().getWidthOrSentinel());
-
-    // If both operands have unknown width but we have two constants, then we
-    // can use the widest one as the result width.
-    if (operandWidth == -1) {
-      if (auto lhsC = operands[0].dyn_cast_or_null<IntegerAttr>())
-        if (auto rhsC = operands[1].dyn_cast_or_null<IntegerAttr>())
-          operandWidth = std::max(lhsC.getValue().getBitWidth(),
-                                  rhsC.getValue().getBitWidth());
-    } else if (operandWidth == 0) {
-      // If both operands have zero width, then compare the zeros as bitwidth=1.
-      operandWidth = 1;
-    }
-
+    auto lhsWidth =
+        op->getOperand(0).getType().cast<IntType>().getWidthOrSentinel();
+    auto rhsWidth =
+        op->getOperand(1).getType().cast<IntType>().getWidthOrSentinel();
+    if (auto lhs = operands[0].dyn_cast_or_null<IntegerAttr>())
+      lhsWidth = std::max<int32_t>(lhsWidth, lhs.getValue().getBitWidth());
+    if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>())
+      rhsWidth = std::max<int32_t>(rhsWidth, rhs.getValue().getBitWidth());
+    operandWidth = std::max(1, std::max(lhsWidth, rhsWidth));
     break;
-
+  }
   case BinOpKind::DivideOrShift:
     operandWidth = std::max(
         std::max(
@@ -590,14 +583,22 @@ OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult AsSIntPrimOp::fold(ArrayRef<Attribute> operands) {
+  // Be careful to only fold the cast into the constant if the size is known.
+  // Otherwise width inference may produce differently-sized constants if the
+  // sign changes.
   if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
-    return getIntAttr(getType(), attr.getValue());
+    if (getType().hasWidth())
+      return getIntAttr(getType(), attr.getValue());
   return {};
 }
 
 OpFoldResult AsUIntPrimOp::fold(ArrayRef<Attribute> operands) {
+  // Be careful to only fold the cast into the constant if the size is known.
+  // Otherwise width inference may produce differently-sized constants if the
+  // sign changes.
   if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
-    return getIntAttr(getType(), attr.getValue());
+    if (getType().hasWidth())
+      return getIntAttr(getType(), attr.getValue());
   return {};
 }
 
@@ -958,6 +959,21 @@ LogicalResult TailPrimOp::canonicalize(TailPrimOp op,
   return success();
 }
 
+LogicalResult SubaccessOp::canonicalize(SubaccessOp op,
+                                        PatternRewriter &rewriter) {
+  if (auto index = op.index().getDefiningOp()) {
+    if (auto constIndex = dyn_cast<ConstantOp>(index)) {
+      // The SubindexOp require the index value to be unsigned 32-bits integer.
+      auto value = constIndex.value().getExtValue();
+      auto valueAttr = rewriter.getI32IntegerAttr(value);
+      rewriter.replaceOpWithNewOp<SubindexOp>(op, op.result().getType(),
+                                              op.input(), valueAttr);
+      return success();
+    }
+  }
+  return failure();
+}
+
 //===----------------------------------------------------------------------===//
 // Declarations
 //===----------------------------------------------------------------------===//
@@ -1190,7 +1206,7 @@ LogicalResult MemOp::canonicalize(MemOp op, PatternRewriter &rewriter) {
   // If memory has known, but zero width, eliminate it.
   if (op.getDataType().getBitWidthOrSentinel() != 0)
     return failure();
-  //Make sure are users are safe to replace
+  // Make sure are users are safe to replace
   for (auto port : op->getResults())
     for (auto user : port.getUsers())
       if (!isa<SubfieldOp>(user))

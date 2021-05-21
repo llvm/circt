@@ -59,9 +59,9 @@ with Context() as ctx, Location.unknown():
 
       # Note, the error here is actually caught and printed below.
       # CHECK: Uninitialized ports remain in circuit!
-      # CHECK: Port:     %[[PORT_NAME:.+]]
-      # CHECK: Module:   hw.module @one_input(%[[PORT_NAME]]: i32)
-      # CHECK: Instance: hw.instance "inst1" @one_input({{.+}})
+      # CHECK: Port:       [[PORT_NAME:.+]]
+      # CHECK: InstanceOf: hw.module @one_input(%[[PORT_NAME]]: i32)
+      # CHECK: Instance:   hw.instance "inst1" @one_input({{.+}})
       inst1 = one_input.create(module, "inst1")
 
     try:

@@ -286,13 +286,15 @@ firrtl.circuit "Foo" {
   }
 
   // CHECK-LABEL: @MuxOp
-  firrtl.module @MuxOp(in %a: !firrtl.uint<1>) {
+  firrtl.module @MuxOp() {
     // CHECK: %0 = firrtl.wire : !firrtl.uint<2>
     // CHECK: %1 = firrtl.wire : !firrtl.uint<3>
-    // CHECK: %2 = firrtl.mux{{.*}} -> !firrtl.uint<3>
+    // CHECK: %2 = firrtl.wire : !firrtl.uint<1>
+    // CHECK: %3 = firrtl.mux{{.*}} -> !firrtl.uint<3>
     %0 = firrtl.wire : !firrtl.uint
     %1 = firrtl.wire : !firrtl.uint
-    %2 = firrtl.mux(%a, %0, %1) : (!firrtl.uint<1>, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
+    %2 = firrtl.wire : !firrtl.uint
+    %3 = firrtl.mux(%2, %0, %1) : (!firrtl.uint, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
     %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
     %c2_ui3 = firrtl.constant 2 : !firrtl.uint<3>
     firrtl.connect %0, %c1_ui2 : !firrtl.uint, !firrtl.uint<2>
@@ -375,6 +377,21 @@ firrtl.circuit "Foo" {
     firrtl.connect %x, %c200_si : !firrtl.sint, !firrtl.sint
   }
 
+  // Issue #1110: Width inference should infer 0 width when appropriate
+  // CHECK-LABEL: @Issue1110
+  // CHECK-SAME: out %y: !firrtl.uint<0>
+  firrtl.module @Issue1110(in %x: !firrtl.uint<0>, out %y: !firrtl.uint) {
+    firrtl.connect %y, %x : !firrtl.uint, !firrtl.uint<0>
+  }
+
+  // Issue #1118: Width inference should infer 0 width when appropriate
+  // CHECK-LABEL: @Issue1118
+  // CHECK-SAME: out %x: !firrtl.sint<13>
+  firrtl.module @Issue1118(out %x: !firrtl.sint) {
+    %c4232_ui = firrtl.constant 4232 : !firrtl.uint
+    %0 = firrtl.asSInt %c4232_ui : (!firrtl.uint) -> !firrtl.sint
+    firrtl.connect %x, %0 : !firrtl.sint, !firrtl.sint
+  }
 
   firrtl.module @Foo() {}
 }

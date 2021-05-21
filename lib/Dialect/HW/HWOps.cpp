@@ -26,7 +26,7 @@ bool hw::isCombinatorial(Operation *op) {
     bool visitUnhandledTypeOp(Operation *op) { return true; }
   };
 
-  return op->getDialect()->getNamespace() == "comb" ||
+  return (op->getDialect() && op->getDialect()->getNamespace() == "comb") ||
          IsCombClassifier().dispatchTypeOpVisitor(op);
 }
 
@@ -1149,6 +1149,14 @@ void ArrayGetOp::build(OpBuilder &builder, OperationState &result, Value input,
                        Value index) {
   auto resultType = input.getType().cast<ArrayType>().getElementType();
   build(builder, result, resultType, input, index);
+}
+
+//===----------------------------------------------------------------------===//
+// TypedeclOp
+//===----------------------------------------------------------------------===//
+
+StringRef TypedeclOp::getPreferredName() {
+  return verilogName().getValueOr(getName());
 }
 
 //===----------------------------------------------------------------------===//

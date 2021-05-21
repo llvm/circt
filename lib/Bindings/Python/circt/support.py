@@ -2,8 +2,14 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+import mlir.ir as ir
+
 from contextlib import AbstractContextManager
+from contextvars import ContextVar
 from typing import List
+
+
+_current_backedge_builder = ContextVar("current_bb")
 
 
 class UnconnectedSignalError(RuntimeError):
@@ -14,48 +20,64 @@ class UnconnectedSignalError(RuntimeError):
 
 class BackedgeBuilder(AbstractContextManager):
 
+  class Edge:
+    def __init__(self, creator, type: ir.Type, port_name: str,
+                 op_view, instance_of: ir.Operation):
+      self.creator: BackedgeBuilder = creator
+      self.dummy_op = ir.Operation.create("TemporaryBackedge", [type])
+      self.instance_of = instance_of
+      self.op_view = op_view
+      self.port_name = port_name
+      self.erased = False
+
+    @property
+    def result(self):
+      return self.dummy_op.result
+
+    def erase(self):
+      if self.erased:
+        return
+      self.creator.edges.remove(self)
+      self.dummy_op.operation.erase()
+
   def __init__(self):
-    self.edges = []
-    self.builders = {}
+    self.edges = set()
 
-  def create(self, type, instance_builder):
-    from mlir.ir import Operation
+  @staticmethod
+  def current():
+    bb = _current_backedge_builder.get(None)
+    if bb is None:
+      raise RuntimeError("No backedge builder found in context!")
+    return bb
 
-    edge = Operation.create("TemporaryBackedge", [type]).result
-    self.edges.append(edge)
-    self.builders[id(edge)] = instance_builder
+  @staticmethod
+  def create(*args, **kwargs):
+    return BackedgeBuilder.current()._create(*args, **kwargs)
+
+  def _create(self, type: ir.Type, port_name: str,
+              op_view, instance_of: ir.Operation = None):
+    edge = BackedgeBuilder.Edge(self, type, port_name, op_view, instance_of)
+    self.edges.add(edge)
     return edge
 
-  def remove(self, edge):
-    self.edges.remove(edge)
-    self.builders.pop(id(edge))
-    edge.owner.erase()
+  def __enter__(self):
+    self.old_bb_token = _current_backedge_builder.set(self)
 
   def __exit__(self, exc_type, exc_value, traceback):
+    _current_backedge_builder.reset(self.old_bb_token)
     errors = []
-    for edge in self.edges:
-      # Build a nice error message about the uninitialized port.
-      builder = self.builders[id(edge)]
-      instance = builder.operation
-      module = builder.module
-
-      for i in range(len(instance.operands)):
-        if instance.operands[i] == edge:
-          from mlir.ir import ArrayAttr, StringAttr
-          arg_names = ArrayAttr(module.attributes["argNames"])
-          port_name = "%" + StringAttr(arg_names[i]).value
-
-      assert port_name, "Could not look up port name for backedge"
-
+    for edge in list(self.edges):
       # TODO: Make this use `UnconnectedSignalError`.
-      msg = "Port:     " + port_name + "\n"
-      msg += "Module:   " + str(module).split(" {")[0] + "\n"
-      msg += "Instance: " + str(instance)
+      msg = "Port:       " + edge.port_name + "\n"
+      if edge.instance_of is not None:
+        msg += "InstanceOf: " + str(edge.instance_of).split(" {")[0] + "\n"
+      if edge.op_view is not None:
+        op = edge.op_view.operation
+        msg += "Instance:   " + str(op)
+        op.erase()
+      edge.erase()
 
       # Clean up the IR and Python references.
-      instance.erase()
-      self.remove(edge)
-
       errors.append(msg)
 
     if errors:

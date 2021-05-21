@@ -171,6 +171,7 @@ public:
   void visitExpr(SubfieldOp op);
   void visitExpr(SubindexOp op);
   void visitExpr(SubaccessOp op);
+  void visitExpr(MuxPrimOp op);
   void visitStmt(ConnectOp op);
   void visitStmt(WhenOp op);
   void visitStmt(PartialConnectOp op);
@@ -682,7 +683,6 @@ void TypeLoweringVisitor::visitDecl(NodeOp op) {
     auto initializer = getBundleLowering(op.input(), suffix);
     auto node = builder->create<NodeOp>(field.type, initializer, loweredName, loweredAttrs);
     setBundleLowering(result, suffix, node);
-    node.dump();
   }
 
   // Remember to remove the original op.
@@ -886,6 +886,40 @@ void TypeLoweringVisitor::visitExpr(SubindexOp op) {
   }
 
   // Remember to remove the original op.
+  opsToRemove.push_back(op);
+}
+
+void TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
+  // Attempt to get the bundle types, potentially unwrapping an outer flip type
+  // that wraps the whole bundle.
+  FIRRTLType resultType = getCanonicalAggregateType(op.getType());
+
+  // If the wire is not a bundle, there is nothing to do.
+  if (!resultType)
+    return;
+
+  // Get a string name for each result.
+  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
+  flattenType(resultType, "", false, fieldTypes);
+
+  // Get each lhs value.
+  SmallVector<std::pair<Value, bool>, 8> highValues;
+  getAllBundleLowerings(op.high(), highValues);
+
+  // Get each rhs value.
+  SmallVector<std::pair<Value, bool>, 8> lowValues;
+  getAllBundleLowerings(op.low(), lowValues);
+
+  // Create a mux op for each element.
+  auto result = op.result();
+  auto sel = op.sel();
+  for (auto it : llvm::zip(highValues, lowValues, fieldTypes)) {
+    auto field = std::get<2>(it);
+    auto suffix = StringRef(field.suffix).drop_front(1);
+    auto muxOp = builder->create<MuxPrimOp>(
+        field.type, sel, std::get<0>(it).first, std::get<1>(it).first);
+    setBundleLowering(result, suffix, muxOp);
+  }
   opsToRemove.push_back(op);
 }
 
@@ -1110,7 +1144,17 @@ Value TypeLoweringVisitor::getBundleLowering(Value oldValue,
                                              StringRef flatField) {
   auto flatFieldId = builder->getIdentifier(flatField);
   auto &entry = loweredBundleValues[ValueIdentifier(oldValue, flatFieldId)];
-  assert(entry && "bundle lowering was not set");
+#ifndef NDEBUG
+  if (!entry) {
+    {
+      auto diag =
+          mlir::emitError(oldValue.getLoc(), "bundle lowering was not set");
+      if (auto op = oldValue.getDefiningOp())
+        diag.attachNote(op->getLoc()) << "see current operation: " << op;
+    }
+    llvm::report_fatal_error("bundle lowering was not set");
+  }
+#endif
   return entry;
 }
 

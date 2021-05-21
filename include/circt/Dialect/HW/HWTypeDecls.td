@@ -46,4 +46,8 @@ def TypedeclOp : HWOp<"typedecl", [Symbol, HasParent<"TypeScopeOp">]> {
   );
 
   let assemblyFormat = "$sym_name (`,` $verilogName^)? `:` $type attr-dict";
+
+  let extraClassDeclaration = [{
+    StringRef getPreferredName();
+  }];
 }

@@ -35,6 +35,7 @@
 #include "mlir/Transforms/Passes.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
 
@@ -80,8 +81,8 @@ static cl::opt<bool> imconstprop(
 
 static cl::opt<bool>
     disableLowerTypes("disable-lower-types",
-                     cl::desc("run the lower-types pass within lower-to-hw"),
-                     cl::init(false));
+                      cl::desc("run the lower-types pass within lower-to-hw"),
+                      cl::init(false));
 
 static cl::opt<bool>
     expandWhens("expand-whens", cl::desc("run the expand-whens pass on firrtl"),
@@ -188,7 +189,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
   if (!disableOptimization) {
     auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
-     modulePM.addPass(createCSEPass());
+    modulePM.addPass(createCSEPass());
     modulePM.addPass(createSimpleCanonicalizerPass());
   }
 
@@ -209,6 +210,10 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
   if (blackboxMemory)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxMemoryPass());
+
+  // Read black box source files into the IR.
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxReaderPass(
+      llvm::sys::path::parent_path(inputFilename), {""}));
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (lowerToHW || outputFormat == OutputVerilog ||
@@ -316,6 +321,7 @@ static LogicalResult executeFirtool(MLIRContext &context) {
     case OutputSplitVerilog:
       return exportSplitVerilog(module.get(), outputFilename);
     }
+    return failure();
   };
 
   auto result = processBuffer(std::move(input), inputAnnotationFilename, ts,

@@ -40,9 +40,10 @@ class InstanceBuilder:
         self.operand_values.append(input_port_mapping[arg_name].value)
       else:
         type = module.type.inputs[i]
-        backedge = self.parent_module.create_backedge(type, self)
+        backedge = BackedgeBuilder.create(
+            type, arg_name, self, instance_of=module)
         self.backedges[i] = backedge
-        self.operand_values.append(backedge)
+        self.operand_values.append(backedge.result)
 
     result_names = ArrayAttr(module.attributes["resultNames"])
     for i in range(len(result_names)):
@@ -158,8 +159,7 @@ class ModuleLike:
     if body_builder:
       entry_block = self.add_entry_block()
       with InsertionPoint(entry_block):
-        with BackedgeBuilder() as bb:
-          self.backedge_builder = bb
+        with BackedgeBuilder():
           body_builder(self)
 
   @property
@@ -188,14 +188,6 @@ class ModuleLike:
                            parameters=parameters,
                            loc=loc,
                            ip=ip)
-
-  def create_backedge(self, type, builder):
-    assert self.backedge_builder, "No backedge builder initialized."
-    return self.backedge_builder.create(type, builder)
-
-  def remove_backedge(self, backedge):
-    assert self.backedge_builder, "No backedge builder initialized."
-    self.backedge_builder.remove(backedge)
 
 
 class HWModuleOp(ModuleLike):

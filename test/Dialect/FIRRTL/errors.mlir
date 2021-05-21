@@ -272,7 +272,7 @@ firrtl.module @X(in %a : !firrtl.uint<4>) {
 firrtl.circuit "X" {
 
 firrtl.module @X(in %a : !firrtl.uint<4>) {
-  // expected-error @+1 {{'firrtl.bits' op result type should be '!firrtl.uint<3>'}}
+  // expected-error @+1 {{'firrtl.bits' op inferred type(s) '!firrtl.uint<3>' are incompatible with return type(s) of operation '!firrtl.uint<2>'}}
   %0 = firrtl.bits %a 3 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<2>
 }
 
@@ -299,7 +299,7 @@ firrtl.circuit "BadPort" {
 
 firrtl.circuit "BadAdd" {
   firrtl.module @BadAdd(in %a : !firrtl.uint<1>) {
-    // expected-error @+1 {{'firrtl.add' op result type should be '!firrtl.uint<2>'}}
+    // expected-error @+1 {{'firrtl.add' op inferred type(s) '!firrtl.uint<2>' are incompatible with return type(s) of operation '!firrtl.uint<1>'}}
     firrtl.add %a, %a : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   }
 }
