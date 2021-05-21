@@ -74,7 +74,7 @@ class BackedgeBuilder(AbstractContextManager):
       if edge.op_view is not None:
         op = edge.op_view.operation
         msg += "Instance:   " + str(op)
-      edge.op_view.operation.erase()
+        op.erase()
       edge.erase()
 
       # Clean up the IR and Python references.
