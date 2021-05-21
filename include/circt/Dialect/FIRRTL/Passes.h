@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_FIRRTL_PASSES_H
 #define CIRCT_DIALECT_FIRRTL_PASSES_H
 
+#include "llvm/ADT/Optional.h"
 #include <memory>
 
 namespace mlir {
@@ -35,6 +36,10 @@ std::unique_ptr<mlir::Pass> createExpandWhensPass();
 std::unique_ptr<mlir::Pass> createCheckWidthsPass();
 
 std::unique_ptr<mlir::Pass> createInferWidthsPass();
+
+std::unique_ptr<mlir::Pass>
+createBlackBoxReaderPass(llvm::Optional<StringRef> inputPrefix = {},
+                         llvm::Optional<StringRef> resourcePrefix = {});
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

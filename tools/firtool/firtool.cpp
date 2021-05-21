@@ -35,6 +35,7 @@
 #include "mlir/Transforms/Passes.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
 
@@ -209,6 +210,10 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
   if (blackboxMemory)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxMemoryPass());
+
+  // Read black box source files into the IR.
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxReaderPass(
+      llvm::sys::path::parent_path(inputFilename), {""}));
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (lowerToHW || outputFormat == OutputVerilog ||

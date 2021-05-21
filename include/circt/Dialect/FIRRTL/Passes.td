@@ -111,4 +111,67 @@ def InferWidths : Pass<"firrtl-infer-widths", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createInferWidthsPass()";
 }
 
+def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
+  let summary = "Load source files for black boxes into the IR";
+  let description = [{
+    This pass handles reads the Verilog source files for black boxes and adds
+    them as `sv.verbatim.file` operations into the IR. Later passes can then
+    write these files back to disk to ensure that they can be accessed by other
+    tools down the line in a well-known location. Supports inline, resource, and
+    path annotations for black box source files.
+
+    The supported `firrtl.circuit` annotations are:
+
+    - `{class = "firrtl.transforms.BlackBoxTargetDirAnno", targetDir = "..."}`
+      Overrides the target directory into which black box source files are
+      emitted.
+    - `{class = "firrtl.transforms.BlackBoxResourceFileNameAnno", resourceFileName = "xyz.f"}`
+      Specifies the output file name for the list of black box source files that
+      is generated as a collateral of the pass.
+
+    The supported `firrtl.extmodule` annotations are:
+
+    - ```
+      {
+        class = "firrtl.transforms.BlackBoxInlineAnno",
+        name = "myfile.v",
+        text = "..."
+      }
+      ```
+      Specifies the black box source code (`text`) inline. Generates a file with
+      the given `name` in the target directory.
+    - ```
+      {
+        class = "firrtl.transforms.BlackBoxPathAnno",
+        path = "myfile.v"
+      }
+      ```
+      Specifies the file `path` as source code for the module. Copies the file
+      to the target directory.
+    - ```
+      {
+        class = "firrtl.transforms.BlackBoxResourceAnno",
+        resourceId = "myfile.v"
+      }
+      ```
+      Specifies the file `path` as source code for the module. In contrast to
+      the `BlackBoxPathAnno`, the file is searched for in the black box resource
+      search path. This is a remnant of the Scala origins of FIRRTL. Copies the
+      file to the target directory.
+  }];
+
+  let constructor = "circt::firrtl::createBlackBoxReaderPass()";
+  let options = [
+    Option<"inputPrefix", "input-prefix", "std::string", "",
+      "Prefix for input paths in black box annotations. This should be the "
+      "directory where the input file was located, to allow for annotations "
+      "relative to the input file.">,
+    Option<"resourcePrefix", "resource-prefix", "std::string",
+      "\"src/main/resources\"",
+      "Search path for black box sources specified via the "
+      "`BlackBoxResourceAnno` annotation.">
+  ];
+  let dependentDialects = ["sv::SVDialect"];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD
