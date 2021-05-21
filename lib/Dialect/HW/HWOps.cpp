@@ -26,7 +26,7 @@ bool hw::isCombinatorial(Operation *op) {
     bool visitUnhandledTypeOp(Operation *op) { return true; }
   };
 
-  return op->getDialect()->getNamespace() == "comb" ||
+  return (op->getDialect() && op->getDialect()->getNamespace() == "comb") ||
          IsCombClassifier().dispatchTypeOpVisitor(op);
 }
 
