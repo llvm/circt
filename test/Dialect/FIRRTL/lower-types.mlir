@@ -415,6 +415,20 @@ module  {
 
 // -----
 
+// Check that a non-bundled mux ops are untouched.
+firrtl.circuit "Mux" {
+    // check-label: firrtl.module @Mux
+    firrtl.module @Mux(in %p: !firrtl.uint<1>, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>) {
+      // check-next: %0 = firrtl.mux(%p, %a, %b) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+      // check-next: firrtl.connect %c, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+      %0 = firrtl.mux(%p, %a, %b) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+      firrtl.connect %c, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    }
+}
+
+// -----
+
+
 firrtl.circuit "MuxBundle" {
     // CHECK-LABEL: firrtl.module @MuxBundle
     firrtl.module @MuxBundle(in %p: !firrtl.uint<1>, in %a: !firrtl.bundle<a: uint<1>>, in %b: !firrtl.bundle<a: uint<1>>, out %c: !firrtl.bundle<a: uint<1>>) {
