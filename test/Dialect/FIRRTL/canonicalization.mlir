@@ -390,6 +390,15 @@ firrtl.module @Tail(in %in4u: !firrtl.uint<4>,
   firrtl.connect %out3u, %2 : !firrtl.uint<3>, !firrtl.uint<3>
 }
 
+// CHECK-LABEL: firrtl.module @subaccess
+firrtl.module @subaccess(out %result: !firrtl.uint<8>, in %vec0: !firrtl.vector<uint<8>, 16>) {
+  %c11_ui8 = firrtl.constant 11 : !firrtl.uint<8>
+
+  // CHECK: firrtl.subindex %vec0[11]
+  %0 = firrtl.subaccess %vec0[%c11_ui8] : !firrtl.vector<uint<8>, 16>, !firrtl.uint<8>
+  firrtl.connect %result, %0 :!firrtl.uint<8>, !firrtl.uint<8>
+}
+
 // CHECK-LABEL: firrtl.module @issue326
 firrtl.module @issue326(out %tmp57: !firrtl.sint<1>) {
   %c29_si7 = firrtl.constant 29 : !firrtl.sint<7>

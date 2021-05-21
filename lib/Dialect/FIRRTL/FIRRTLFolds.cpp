@@ -958,6 +958,21 @@ LogicalResult TailPrimOp::canonicalize(TailPrimOp op,
   return success();
 }
 
+LogicalResult SubaccessOp::canonicalize(SubaccessOp op,
+                                        PatternRewriter &rewriter) {
+  if (auto index = op.index().getDefiningOp()) {
+    if (auto constIndex = dyn_cast<ConstantOp>(index)) {
+      // The SubindexOp require the index value to be unsigned 32-bits integer.
+      auto value = constIndex.value().getExtValue();
+      auto valueAttr = rewriter.getI32IntegerAttr(value);
+      rewriter.replaceOpWithNewOp<SubindexOp>(op, op.result().getType(),
+                                              op.input(), valueAttr);
+      return success();
+    }
+  }
+  return failure();
+}
+
 //===----------------------------------------------------------------------===//
 // Declarations
 //===----------------------------------------------------------------------===//
@@ -1190,7 +1205,7 @@ LogicalResult MemOp::canonicalize(MemOp op, PatternRewriter &rewriter) {
   // If memory has known, but zero width, eliminate it.
   if (op.getDataType().getBitWidthOrSentinel() != 0)
     return failure();
-  //Make sure are users are safe to replace
+  // Make sure are users are safe to replace
   for (auto port : op->getResults())
     for (auto user : port.getUsers())
       if (!isa<SubfieldOp>(user))
