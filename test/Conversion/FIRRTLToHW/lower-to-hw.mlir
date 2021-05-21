@@ -630,12 +630,12 @@ firrtl.circuit "Simple" {
     firrtl.connect %8, %clock1 : !firrtl.clock, !firrtl.clock
   }
 
-  // CHECK-LABEL: hw.module @top_mod() -> (%tmp27: i23) {
+  // CHECK-LABEL: hw.module @top_modx() -> (%tmp27: i23) {
   // CHECK-NEXT:    %c0_i23 = hw.constant 0 : i23
   // CHECK-NEXT:    %c42_i23 = hw.constant 42 : i23
   // CHECK-NEXT:    hw.output %c0_i23 : i23
   // CHECK-NEXT:  }
-  firrtl.module @top_mod(out %tmp27: !firrtl.uint<23>) {
+  firrtl.module @top_modx(out %tmp27: !firrtl.uint<23>) {
     %0 = firrtl.wire : !firrtl.uint<0>
     %c42_ui23 = firrtl.constant 42 : !firrtl.uint<23>
     %1 = firrtl.tail %c42_ui23, 23 : (!firrtl.uint<23>) -> !firrtl.uint<0>
@@ -723,4 +723,10 @@ firrtl.circuit "Simple" {
     firrtl.connect %3, %en : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
+  // https://github.com/llvm/circt/issues/1115
+  // CHECK-LABEL: hw.module @issue1115
+  firrtl.module @issue1115(in %a: !firrtl.sint<20>, out %tmp59: !firrtl.sint<2>) {
+    %0 = firrtl.shr %a, 21 : (!firrtl.sint<20>) -> !firrtl.sint<1>
+    firrtl.connect %tmp59, %0 : !firrtl.sint<2>, !firrtl.sint<1>
+  }
 }

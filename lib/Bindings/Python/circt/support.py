@@ -3,6 +3,13 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from contextlib import AbstractContextManager
+from typing import List
+
+
+class UnconnectedSignalError(RuntimeError):
+  def __init__(self, module: str, port_names: List[str]):
+    super().__init__(
+        f"Ports {port_names} unconnected in design module {module}.")
 
 
 class BackedgeBuilder(AbstractContextManager):
@@ -40,6 +47,7 @@ class BackedgeBuilder(AbstractContextManager):
 
       assert port_name, "Could not look up port name for backedge"
 
+      # TODO: Make this use `UnconnectedSignalError`.
       msg = "Port:     " + port_name + "\n"
       msg += "Module:   " + str(module).split(" {")[0] + "\n"
       msg += "Instance: " + str(instance)

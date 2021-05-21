@@ -163,6 +163,7 @@ public:
   void visitDecl(FModuleOp op);
   void visitDecl(InstanceOp op);
   void visitDecl(MemOp op);
+  void visitDecl(NodeOp op);
   void visitDecl(RegOp op);
   void visitDecl(WireOp op);
   void visitDecl(RegResetOp op);
@@ -653,6 +654,40 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
   opsToRemove.push_back(op);
 }
 
+void TypeLoweringVisitor::visitDecl(NodeOp op) {
+  Value result = op.result();
+
+  // Attempt to get the bundle types, potentially unwrapping an outer flip type
+  // that wraps the whole bundle.
+  FIRRTLType resultType = getCanonicalAggregateType(result.getType());
+
+  // If the node is not a bundle, there is nothing to do.
+  if (!resultType)
+    return;
+
+  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
+  flattenType(resultType, "", false, fieldTypes);
+
+  // Loop over the leaf aggregates.
+  auto name = op.name().str();
+  for (auto field : fieldTypes) {
+    SmallString<16> loweredName;
+    if (!name.empty())
+      loweredName = name + field.suffix;
+    auto suffix = StringRef(field.suffix).drop_front(1);
+    // For all annotations on the parent op, filter them based on the target
+    // attribute.
+    SmallVector<Attribute> loweredAttrs;
+    filterAnnotations(op.annotations(), loweredAttrs, field.suffix, context);
+    auto initializer = getBundleLowering(op.input(), suffix);
+    auto node = builder->create<NodeOp>(field.type, initializer, loweredName, loweredAttrs);
+    setBundleLowering(result, suffix, node);
+  }
+
+  // Remember to remove the original op.
+  opsToRemove.push_back(op);
+}
+
 /// Lower a wire op with a bundle to mutliple non-bundled wires.
 void TypeLoweringVisitor::visitDecl(WireOp op) {
   Value result = op.result();
@@ -1074,7 +1109,17 @@ Value TypeLoweringVisitor::getBundleLowering(Value oldValue,
                                              StringRef flatField) {
   auto flatFieldId = builder->getIdentifier(flatField);
   auto &entry = loweredBundleValues[ValueIdentifier(oldValue, flatFieldId)];
-  assert(entry && "bundle lowering was not set");
+#ifndef NDEBUG
+  if (!entry) {
+    {
+      auto diag =
+          mlir::emitError(oldValue.getLoc(), "bundle lowering was not set");
+      if (auto op = oldValue.getDefiningOp())
+        diag.attachNote(op->getLoc()) << "see current operation: " << op;
+    }
+    llvm::report_fatal_error("bundle lowering was not set");
+  }
+#endif
   return entry;
 }
 

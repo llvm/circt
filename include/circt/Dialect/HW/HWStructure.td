@@ -279,7 +279,7 @@ def HWModuleGeneratedOp : HWOp<"module.generated",
 
 def InstanceOp : HWOp<"instance",
                        [DeclareOpInterfaceMethods<OpAsmOpInterface>,
-                        Symbol]> {
+                        HasParent<"HWModuleOp">, Symbol]> {
   let summary = "Create an instance of a module";
   let description = [{
     This represents an instance of a module. The inputs and results are 
