@@ -890,9 +890,17 @@ void TypeLoweringVisitor::visitExpr(SubindexOp op) {
 }
 
 void TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
+  // Attempt to get the bundle types, potentially unwrapping an outer flip type
+  // that wraps the whole bundle.
+  FIRRTLType resultType = getCanonicalAggregateType(op.getType());
+
+  // If the wire is not a bundle, there is nothing to do.
+  if (!resultType)
+    return;
+
   // Get a string name for each result.
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  flattenType(op.getType(), "", false, fieldTypes);
+  flattenType(resultType, "", false, fieldTypes);
 
   // Get each lhs value.
   SmallVector<std::pair<Value, bool>, 8> highValues;
