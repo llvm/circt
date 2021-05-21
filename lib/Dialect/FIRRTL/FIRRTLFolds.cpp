@@ -583,14 +583,22 @@ OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult AsSIntPrimOp::fold(ArrayRef<Attribute> operands) {
+  // Be careful to only fold the cast into the constant if the size is known.
+  // Otherwise width inference may produce differently-sized constants if the
+  // sign changes.
   if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
-    return getIntAttr(getType(), attr.getValue());
+    if (getType().hasWidth())
+      return getIntAttr(getType(), attr.getValue());
   return {};
 }
 
 OpFoldResult AsUIntPrimOp::fold(ArrayRef<Attribute> operands) {
+  // Be careful to only fold the cast into the constant if the size is known.
+  // Otherwise width inference may produce differently-sized constants if the
+  // sign changes.
   if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
-    return getIntAttr(getType(), attr.getValue());
+    if (getType().hasWidth())
+      return getIntAttr(getType(), attr.getValue());
   return {};
 }
 

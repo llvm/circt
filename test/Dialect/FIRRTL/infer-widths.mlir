@@ -384,5 +384,14 @@ firrtl.circuit "Foo" {
     firrtl.connect %y, %x : !firrtl.uint, !firrtl.uint<0>
   }
 
+  // Issue #1118: Width inference should infer 0 width when appropriate
+  // CHECK-LABEL: @Issue1118
+  // CHECK-SAME: out %x: !firrtl.sint<13>
+  firrtl.module @Issue1118(out %x: !firrtl.sint) {
+    %c4232_ui = firrtl.constant 4232 : !firrtl.uint
+    %0 = firrtl.asSInt %c4232_ui : (!firrtl.uint) -> !firrtl.sint
+    firrtl.connect %x, %0 : !firrtl.sint, !firrtl.sint
+  }
+
   firrtl.module @Foo() {}
 }

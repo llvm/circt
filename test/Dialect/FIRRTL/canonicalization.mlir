@@ -1493,4 +1493,19 @@ firrtl.module @issue1116(out %z: !firrtl.uint<1>) {
   firrtl.connect %z, %0 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
+// Sign casts must not be folded into unsized constants.
+// CHECK-LABEL: firrtl.module @issue1118
+firrtl.module @issue1118(out %z0: !firrtl.uint, out %z1: !firrtl.sint) {
+  // CHECK: %0 = firrtl.asUInt %c4232_si : (!firrtl.sint) -> !firrtl.uint
+  // CHECK: %1 = firrtl.asSInt %c4232_ui : (!firrtl.uint) -> !firrtl.sint
+  // CHECK: firrtl.connect %z0, %0 : !firrtl.uint, !firrtl.uint
+  // CHECK: firrtl.connect %z1, %1 : !firrtl.sint, !firrtl.sint
+  %c4232_si = firrtl.constant 4232 : !firrtl.sint
+  %c4232_ui = firrtl.constant 4232 : !firrtl.uint
+  %0 = firrtl.asUInt %c4232_si : (!firrtl.sint) -> !firrtl.uint
+  %1 = firrtl.asSInt %c4232_ui : (!firrtl.uint) -> !firrtl.sint
+  firrtl.connect %z0, %0 : !firrtl.uint, !firrtl.uint
+  firrtl.connect %z1, %1 : !firrtl.sint, !firrtl.sint
+}
+
 }
