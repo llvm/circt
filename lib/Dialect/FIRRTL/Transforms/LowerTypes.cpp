@@ -1110,7 +1110,17 @@ Value TypeLoweringVisitor::getBundleLowering(Value oldValue,
                                              StringRef flatField) {
   auto flatFieldId = builder->getIdentifier(flatField);
   auto &entry = loweredBundleValues[ValueIdentifier(oldValue, flatFieldId)];
-  assert(entry && "bundle lowering was not set");
+#ifndef NDEBUG
+  if (!entry) {
+    {
+      auto diag =
+          mlir::emitError(oldValue.getLoc(), "bundle lowering was not set");
+      if (auto op = oldValue.getDefiningOp())
+        diag.attachNote(op->getLoc()) << "see current operation: " << op;
+    }
+    llvm::report_fatal_error("bundle lowering was not set");
+  }
+#endif
   return entry;
 }
 
