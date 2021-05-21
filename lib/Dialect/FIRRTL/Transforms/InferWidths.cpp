@@ -638,10 +638,8 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       })
 
       .Case<MuxPrimOp>([&](auto op) {
-        // Caveat: The Scala implementation imposes a constraint on the select
-        // signal to be at least 1 bit wide. The FIRRTL MLIR dialect requries
-        // the select signal to be exactly `uint<1>` anyway, so this constraint
-        // is not needed here.
+        auto sel = getExpr(op.sel());
+        solver.addGeqConstraint(dyn_cast<VarExpr>(sel), solver.known(1));
         auto high = getExpr(op.high());
         auto low = getExpr(op.low());
         auto e = solver.max(high, low);
