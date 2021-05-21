@@ -4,4 +4,3 @@
 
 # Simply a wrapper around the extension module of the same name.
 from _circt import *
-from .design_entry import *
