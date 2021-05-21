@@ -37,8 +37,9 @@ class BackedgeBuilder(AbstractContextManager):
     def erase(self):
       if self.erased:
         return
-      self.creator.edges.remove(self)
-      self.dummy_op.operation.erase()
+      if self in self.creator.edges:
+        self.creator.edges.remove(self)
+        self.dummy_op.operation.erase()
 
   def __init__(self):
     self.edges = set()

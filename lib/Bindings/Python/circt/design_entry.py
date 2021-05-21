@@ -86,10 +86,19 @@ def connect(destination, source):
   if not isinstance(destination, BuilderValue):
     raise TypeError(
         f"cannot connect to destination of type {type(destination)}")
-  if not isinstance(source, BuilderValue):
+  if not isinstance(source, BuilderValue) and not isinstance(
+      source, mlir.ir.Value) and not (isinstance(source, mlir.ir.OpView) and
+                                      hasattr(source, "result")):
     raise TypeError(f"cannot connect from source of type {type(source)}")
   builder = destination.builder
   index = destination.index
-  builder.operation.operands[index] = source.value
+  if isinstance(source, BuilderValue):
+    value = source.value
+  elif isinstance(source, mlir.ir.Value):
+    value = source
+  elif isinstance(source, mlir.ir.OpView):
+    value = source.result
+
+  builder.operation.operands[index] = value
   if index in builder.backedges:
     builder.backedges[index].erase()

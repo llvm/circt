@@ -22,19 +22,14 @@ class Dummy:
 class Test:
 
   def construct(self):
+    # CHECK: %[[C0:.+]] = hw.constant 0
     const = hw.ConstantOp(types.i32, mlir.ir.IntegerAttr.get(types.i32, 0))
     dummy = Dummy()
-    inst = dummy.module.create("d", {"x": const.result})
-    try:
-      # CHECK: cannot connect from source of type
-      circt.connect(inst.y, None)
-    except TypeError as e:
-      print(e)
-    try:
-      # CHECK: cannot connect to destination of type
-      circt.connect(None, inst.x)
-    except TypeError as e:
-      print(e)
+    inst = dummy.module.create("d")
+    circt.connect(inst.x, inst.y)
+    circt.connect(inst.x, const)
+    circt.connect(inst.x, const.result)
+    # CHECK: hw.instance "d" @Dummy(%[[C0]])
 
 
 with mlir.ir.Context() as ctxt, mlir.ir.Location.unknown():
@@ -42,3 +37,4 @@ with mlir.ir.Context() as ctxt, mlir.ir.Location.unknown():
   m = mlir.ir.Module.create()
   with mlir.ir.InsertionPoint(m.body):
     Test()
+  print(m)
