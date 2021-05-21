@@ -938,6 +938,7 @@ hw.module @wire5() -> () {
   hw.output
 }
 
+// == Begin: test cases from LowerToHW ==
 
 // CHECK-LABEL:  hw.module @instance_ooo(%arg0: i2, %arg1: i2, %arg2: i3) -> (%out0: i8) {
 // CHECK-NEXT:    %false = hw.constant false
@@ -1136,3 +1137,27 @@ hw.module @foo() {
   sv.connect %hits_1_7, %2 : i1
   hw.output
 }
+
+// CHECK-LABEL:  hw.module @MemDepth1(%clock: i1, %en: i1, %addr: i1) -> (%data: i32) {
+// CHECK-NEXT:    %mem0.0 = hw.instance "mem0" @FIRRTLMem_1_0_0_32_1_0_1_1(%clock, %en, %addr) : (i1, i1, i1) -> i32
+// CHECK-NEXT:    hw.output %mem0.0 : i32
+// CHECK-NEXT:  }
+hw.module.extern @FIRRTLMem_1_0_0_32_1_0_1_1(i1, i1, i1) -> (i32)
+hw.module @MemDepth1(%clock: i1, %en: i1, %addr: i1) -> (%data: i32) {
+  %.load0.clk.wire = sv.wire  : !hw.inout<i1>
+  %0 = sv.read_inout %.load0.clk.wire : !hw.inout<i1>
+  %.load0.en.wire = sv.wire  : !hw.inout<i1>
+  %1 = sv.read_inout %.load0.en.wire : !hw.inout<i1>
+  %.load0.addr.wire = sv.wire  : !hw.inout<i1>
+  %2 = sv.read_inout %.load0.addr.wire : !hw.inout<i1>
+  %mem0.ro_data_0 = hw.instance "mem0" @FIRRTLMem_1_0_0_32_1_0_1_1(%0, %1, %2) : (i1, i1, i1) -> i32
+  %3 = sv.read_inout %.load0.clk.wire : !hw.inout<i1>
+  sv.connect %.load0.clk.wire, %clock : i1
+  %4 = sv.read_inout %.load0.addr.wire : !hw.inout<i1>
+  sv.connect %.load0.addr.wire, %addr : i1
+  %5 = sv.read_inout %.load0.en.wire : !hw.inout<i1>
+  sv.connect %.load0.en.wire, %en : i1
+  hw.output %mem0.ro_data_0 : i32
+}
+
+// == End: test cases from LowerToHW ==
