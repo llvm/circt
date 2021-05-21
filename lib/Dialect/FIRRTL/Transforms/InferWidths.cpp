@@ -840,7 +840,7 @@ bool InferenceTypeUpdate::updateValue(Value value) {
   if (!expr || !expr->solution.hasValue())
     return false;
   int32_t solution = expr->solution.getValue();
-  if (solution <= 0)
+  if (solution < 0)
     return false;
 
   // Update the type.
