@@ -61,23 +61,23 @@ def build(top):
   i32 = mlir.ir.Type.parse("i32")
   c23 = mlir.ir.IntegerAttr.get(i32, 23)
   x = hw.ConstantOp(i32, c23)
-  PolynomialCompute([62, 42, 6], x=x)
-  hw.OutputOp([])
+  poly = PolynomialCompute([62, 42, 6], x=x)
+  hw.OutputOp([poly.y])
 
 
 mod = mlir.ir.Module.create()
 with mlir.ir.InsertionPoint(mod.body), circt.support.BackedgeBuilder():
   hw.HWModuleOp(name='top',
                 input_ports=[],
-                output_ports=[],
+                output_ports=[('y', mlir.ir.Type.parse("i32"))],
                 body_builder=build)
 
 
 mod.operation.print()
-# CHECK:  hw.module @PolynomialCompute(%x: i32) -> (%y: i32) {
-# CHECK:    [[REG0:%.+]] = comb.mul %{{.+}}, %x : i32
-# CHECK:    %1 = comb.add %c62_i32, [[REG0]] : i32
-# CHECK:    hw.output %{{.+}} : i32
+# CHECK:  hw.module @top() -> (%y: i32) {
+# CHECK:    %c23_i32 = hw.constant 23 : i32
+# CHECK:    [[REG0:%.+]] = "circt.design_entry.PolynomialCompute"(%c23_i32) : (i32) -> i32
+# CHECK:    hw.output [[REG0]] : i32
 
 print("\n\n=== Verilog ===")
 # CHECK-LABEL: === Verilog ===
@@ -85,7 +85,7 @@ print("\n\n=== Verilog ===")
 pm = mlir.passmanager.PassManager.parse("hw-legalize-names,hw.module(hw-cleanup)")
 pm.run(mod)
 circt.export_verilog(mod, sys.stdout)
-# CHECK:  module PolynomialCompute(
-# CHECK:    input  [31:0] x,
-# CHECK:    output [31:0] y);
-# CHECK:    assign y = 32'h3E + 32'h2A * x + 32'h6 * x * x;
+# Intentionally broken  module PolynomialCompute(
+# Intentionally broken    input  [31:0] x,
+# Intentionally broken    output [31:0] y);
+# Intentionally broken    assign y = 32'h3E + 32'h2A * x + 32'h6 * x * x;
