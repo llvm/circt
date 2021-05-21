@@ -602,6 +602,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
           builder.create<InvalidValueOp>(value.getLoc(), value.getType());
     } else {
       Attribute constantValue = it->second.getConstant();
+
       // FIXME: Unique constants into the entry block of the module.
       auto *cst = module->getDialect()->materializeConstant(
           builder, constantValue, value.getType(), value.getLoc());
@@ -634,7 +635,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
       continue;
 
     // Don't "refold" constants.  TODO: Unique in the module entry block.
-    if (isa<ConstantOp>(op) && !isa<InvalidValueOp>(op))
+    if (isa<ConstantOp>(op) || isa<InvalidValueOp>(op))
       continue;
 
     // If the op had any constants folded, replace them.

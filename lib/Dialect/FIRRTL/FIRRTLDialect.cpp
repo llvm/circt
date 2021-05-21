@@ -179,8 +179,12 @@ Operation *FIRRTLDialect::materializeConstant(OpBuilder &builder,
                                               Location loc) {
   // Integer constants.
   if (auto intType = type.dyn_cast<IntType>())
-    if (auto attrValue = value.dyn_cast<IntegerAttr>())
+    if (auto attrValue = value.dyn_cast<IntegerAttr>()) {
+      assert((!intType.hasWidth() || (unsigned)intType.getWidthOrSentinel() ==
+                                         attrValue.getValue().getBitWidth()) &&
+             "type/value width mismatch materializing constant");
       return builder.create<ConstantOp>(loc, type, attrValue);
+    }
 
   return nullptr;
 }
