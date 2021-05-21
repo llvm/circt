@@ -1,6 +1,6 @@
 // REQUIRES: ieee-sim
 // RUN: circt-opt %s --create-dataflow --simple-canonicalizer --cse --handshake-insert-buffer > %memory-handshake.mlir
-// RUN: circt-opt %memory-handshake.mlir --lower-handshake-to-firrtl --firrtl-lower-types --firrtl-imconstprop --lower-firrtl-to-hw --hw-memory-sim --hw-cleanup --simple-canonicalizer --cse --hw-legalize-names > %memory-hw.mlir
+// RUN: circt-opt %memory-handshake.mlir --lower-handshake-to-firrtl --firrtl-lower-types --lower-firrtl-to-hw --hw-memory-sim --hw-cleanup --simple-canonicalizer --cse --hw-legalize-names > %memory-hw.mlir
 // RUN: circt-translate %memory-hw.mlir --export-verilog > %memory-export.sv
 // RUN: circt-rtl-sim.py %memory-export.sv %S/driver.sv --sim %ieee-sim --no-default-driver --top driver | FileCheck %s
 // CHECK: Result={{.*}}34

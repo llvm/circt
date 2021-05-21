@@ -41,7 +41,7 @@ class BackedgeBuilder(AbstractContextManager):
       self.dummy_op.operation.erase()
 
   def __init__(self):
-    self.edges = set[BackedgeBuilder.Edge]()
+    self.edges = set()
 
   @staticmethod
   def current():
