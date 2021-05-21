@@ -169,6 +169,8 @@ def SubaccessOp : FIRRTLOp<"subaccess", [NoSideEffect,
     VERIFY_RESULT_TYPE_RET(input().getType().cast<FIRRTLType>(),
                            index().getType().cast<FIRRTLType>());
   }];
+
+  let hasCanonicalizeMethod = true;
 }
 //===----------------------------------------------------------------------===//
 // Primitive Operations
