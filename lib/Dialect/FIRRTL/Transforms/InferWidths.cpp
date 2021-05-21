@@ -639,7 +639,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
 
       .Case<MuxPrimOp>([&](auto op) {
         auto sel = getExpr(op.sel());
-        solver.addGeqConstraint(dyn_cast<VarExpr>(sel), solver.known(1));
+        constrainTypes(sel, solver.known(1));
         auto high = getExpr(op.high());
         auto low = getExpr(op.low());
         auto e = solver.max(high, low);
