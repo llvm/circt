@@ -713,7 +713,7 @@ void InferenceMapping::constrainTypes(Expr *larger, Expr *smaller) {
   // long as we don't want to do type checking itself here, but only width
   // inference, we should be fine ignoring expr we cannot constraint anyway.
   if (auto largerVar = dyn_cast<VarExpr>(larger)) {
-    auto c = solver.addGeqConstraint(largerVar, smaller);
+    LLVM_ATTRIBUTE_UNUSED auto c = solver.addGeqConstraint(largerVar, smaller);
     LLVM_DEBUG(llvm::dbgs()
                << "Constrained " << *largerVar << " >= " << *c << "\n");
   }
@@ -840,7 +840,7 @@ bool InferenceTypeUpdate::updateValue(Value value) {
   if (!expr || !expr->solution.hasValue())
     return false;
   int32_t solution = expr->solution.getValue();
-  if (solution <= 0)
+  if (solution < 0)
     return false;
 
   // Update the type.

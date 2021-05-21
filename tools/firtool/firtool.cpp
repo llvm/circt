@@ -80,8 +80,8 @@ static cl::opt<bool> imconstprop(
 
 static cl::opt<bool>
     disableLowerTypes("disable-lower-types",
-                     cl::desc("run the lower-types pass within lower-to-hw"),
-                     cl::init(false));
+                      cl::desc("run the lower-types pass within lower-to-hw"),
+                      cl::init(false));
 
 static cl::opt<bool>
     expandWhens("expand-whens", cl::desc("run the expand-whens pass on firrtl"),
@@ -188,7 +188,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
   if (!disableOptimization) {
     auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
-     modulePM.addPass(createCSEPass());
+    modulePM.addPass(createCSEPass());
     modulePM.addPass(createSimpleCanonicalizerPass());
   }
 
@@ -316,6 +316,7 @@ static LogicalResult executeFirtool(MLIRContext &context) {
     case OutputSplitVerilog:
       return exportSplitVerilog(module.get(), outputFilename);
     }
+    return failure();
   };
 
   auto result = processBuffer(std::move(input), inputAnnotationFilename, ts,
