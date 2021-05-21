@@ -35,18 +35,18 @@ with Context() as ctx, Location.unknown():
     )
 
     def instance_builder_body(module):
-      constant_value = one_output.create(module, "inst1").a
+      constant_value = one_output.create("inst1").a
 
       # CHECK: unknown input port name b
       try:
-        inst2 = one_input.create(module, "inst2", {"a": constant_value})
+        inst2 = one_input.create("inst2", {"a": constant_value})
         inst2.set_input_port("b", None)
       except AttributeError as e:
         print(e)
 
       # CHECK: unknown port name b
       try:
-        inst3 = one_output.create(module, "inst3")
+        inst3 = one_output.create("inst3")
         inst3.b
       except AttributeError as e:
         print(e)
@@ -62,7 +62,7 @@ with Context() as ctx, Location.unknown():
       # CHECK: Port:       [[PORT_NAME:.+]]
       # CHECK: InstanceOf: hw.module @one_input(%[[PORT_NAME]]: i32)
       # CHECK: Instance:   hw.instance "inst1" @one_input({{.+}})
-      inst1 = one_input.create(module, "inst1")
+      inst1 = one_input.create("inst1")
 
     try:
       instance_builder_tests = hw.HWModuleOp(
