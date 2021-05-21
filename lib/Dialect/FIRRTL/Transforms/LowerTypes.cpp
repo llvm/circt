@@ -682,7 +682,6 @@ void TypeLoweringVisitor::visitDecl(NodeOp op) {
     auto initializer = getBundleLowering(op.input(), suffix);
     auto node = builder->create<NodeOp>(field.type, initializer, loweredName, loweredAttrs);
     setBundleLowering(result, suffix, node);
-    node.dump();
   }
 
   // Remember to remove the original op.
