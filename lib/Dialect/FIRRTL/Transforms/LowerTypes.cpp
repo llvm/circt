@@ -1074,6 +1074,7 @@ Value TypeLoweringVisitor::getBundleLowering(Value oldValue,
                                              StringRef flatField) {
   auto flatFieldId = builder->getIdentifier(flatField);
   auto &entry = loweredBundleValues[ValueIdentifier(oldValue, flatFieldId)];
+#ifndef NDEBUG
   if (!entry) {
     {
       auto diag =
@@ -1083,6 +1084,7 @@ Value TypeLoweringVisitor::getBundleLowering(Value oldValue,
     }
     llvm::report_fatal_error("bundle lowering was not set");
   }
+#endif
   return entry;
 }
 
