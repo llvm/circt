@@ -40,12 +40,12 @@ class System(CppSystem):
 
   def top_module(self):
     return hw.HWModuleOp(name='top',
-                         input_ports=[('clk', self.i1), ('rstn', self.i1)],
+                         input_ports=[('clk', self.i1), ('rst', self.i1)],
                          output_ports=[],
                          body_builder=self.build_top)
 
-  def build_top(self, topMod):
-    self.build(topMod)
+  def build_top(self, topMod, **kwargs):
+    self.build(topMod, **kwargs)
     hw.OutputOp([])
 
   def get_types(self):

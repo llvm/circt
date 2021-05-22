@@ -77,31 +77,12 @@ def module(cls):
         if type(attr) is Output:
           output_ports.append((attr_name, attr))
 
-      # This function sets up the inputs to construct, then connects the
-      # outputs.
-      def body_build(mod):
-        inputs = dict()
-        for index, (name, _) in enumerate(input_ports):
-          inputs[name] = mod.entry_block.arguments[index]
-
-        self.construct(**inputs)
-
-        outputs = []
-        unconnected_ports = []
-        for (name, output) in output_ports:
-          if output.value is None:
-            unconnected_ports.append(name)
-          outputs.append(output.value)
-        if len(unconnected_ports) > 0:
-          raise UnconnectedSignalError(cls.__name__, unconnected_ports)
-        hw.OutputOp(outputs)
-
       # Construct things as HWModules.
       self.module = hw.HWModuleOp(
           name=cls.__name__,
           input_ports=[(name, port.type) for (name, port) in input_ports],
           output_ports=[(name, port.type) for (name, port) in output_ports],
-          body_builder=body_build)
+          body_builder=lambda _, **kwargs: self.construct(**kwargs))
 
   return __Module
 

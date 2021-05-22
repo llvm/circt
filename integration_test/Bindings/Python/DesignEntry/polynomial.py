@@ -54,7 +54,7 @@ class PolynomialCompute:
       taps.append(newPartialSum)
 
     # Final output
-    self.y.set(taps[-1])
+    return [taps[-1]]
 
 
 mod = mlir.ir.Module.create()

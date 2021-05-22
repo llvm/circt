@@ -36,8 +36,8 @@ with Context() as ctx, Location.unknown():
     op = hw.HWModuleOp(name='MyWidget',
                        input_ports=[('my_input', i32)],
                        output_ports=[('my_output', i32)],
-                       body_builder=lambda module: hw.OutputOp(
-                           [module.entry_block.arguments[0]]))
+                       body_builder=lambda module, my_input:
+                           hw.OutputOp([my_input]))
 
     # CHECK: hw.module.extern @FancyThing(%input0: i32) -> (%output0: i32)
     extern = hw.HWModuleExternOp(name="FancyThing",
@@ -63,12 +63,12 @@ with Context() as ctx, Location.unknown():
     one_input = hw.HWModuleOp(
         name="one_input",
         input_ports=[("a", i32)],
-        body_builder=lambda m: hw.OutputOp([]),
+        body_builder=lambda m, a: hw.OutputOp([]),
     )
     two_inputs = hw.HWModuleOp(
         name="two_inputs",
         input_ports=[("a", i32), ("b", i32)],
-        body_builder=lambda m: hw.OutputOp([]),
+        body_builder=lambda m, a, b: hw.OutputOp([]),
     )
     one_output = hw.HWModuleOp(
         name="one_output",
@@ -106,7 +106,7 @@ with Context() as ctx, Location.unknown():
     hw.HWModuleOp(name="block_args_test",
                   input_ports=[("foo", i32)],
                   output_ports=[("bar", i32)],
-                  body_builder=lambda module: hw.OutputOp([module.foo]))
+                  body_builder=lambda module, foo: hw.OutputOp([foo]))
 
   print(m)
 

@@ -2,6 +2,7 @@ from typing import Dict, Optional, Sequence
 
 import inspect
 
+from circt.dialects import hw
 from circt.support import BackedgeBuilder, BuilderValue
 
 from mlir.ir import *
@@ -159,9 +160,14 @@ class ModuleLike:
 
     if body_builder:
       entry_block = self.add_entry_block()
+      inputs = dict()
+      for index, (name, _) in enumerate(input_ports):
+        inputs[name] = entry_block.arguments[index]
+
       with InsertionPoint(entry_block):
         with BackedgeBuilder():
-          body_builder(self)
+          outputs = body_builder(self, **inputs)
+          _create_output_op(name, output_ports, entry_block, outputs)
 
   @property
   def type(self):
@@ -187,6 +193,55 @@ class ModuleLike:
                            parameters=parameters,
                            loc=loc,
                            ip=ip)
+
+
+def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
+  """Create the hw.OutputOp from the body_builder return."""
+
+  # Determine if the body already has an output op.
+  block_len = len(entry_block.operations)
+  if block_len > 0:
+    last_op = entry_block.operations[block_len - 1]
+    if isinstance(last_op, hw.OutputOp):
+      # If it does, the return from body_builder must be None.
+      if bb_ret is not None and bb_ret != last_op:
+        raise ConnectionError(
+          "Cannot return value from body_builder and create hw.OutputOp")
+      return
+
+  # If builder didn't create an output op and didn't return anything, this op
+  # mustn't have any outputs.
+  if bb_ret is None:
+    if len(output_ports) == 0:
+      return
+    raise ConnectionError("Must return module output values")
+
+  # Now create the output op depending on the object type returned
+  outputs = list[Value]()
+  if isinstance(bb_ret, Operation):
+    bb_ret = bb_ret.result
+  if isinstance(bb_ret, Value):
+    if len(output_ports) != 1:
+      raise ConnectionError(
+        "Can only return one value from body_builder if module has one output")
+    outputs = [bb_ret]
+  elif isinstance(bb_ret, list):
+    outputs = bb_ret
+  elif isinstance(bb_ret, dict):
+    unconnected_ports = []
+    for (name, _) in output_ports:
+      if name not in bb_ret:
+        unconnected_ports.append(name)
+        outputs.append(None)
+      else:
+        val = bb_ret[name]
+        if isinstance(val, Operation):
+          val = val.result
+        outputs.append(val)
+    if len(unconnected_ports) > 0:
+      raise UnconnectedSignalError(cls_name, unconnected_ports)
+
+  hw.OutputOp(outputs)
 
 
 class HWModuleOp(ModuleLike):

@@ -16,7 +16,7 @@ class Dummy:
     self.y = Output(types.i32)
 
   def construct(self, x):
-    self.y.set(x)
+    return x
 
 
 @module
