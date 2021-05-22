@@ -126,11 +126,20 @@ public:
     }
 
     // Otherwise, if this value doesn't match rhs go straight to overdefined.
+    // This happens when we merge "3" and "4" from two different instance sites
+    // for example.
     if (valueAndTag != rhs.valueAndTag) {
       markOverdefined();
       return true;
     }
     return false;
+  }
+
+  bool operator==(const LatticeValue &other) const {
+    return valueAndTag == other.valueAndTag;
+  }
+  bool operator!=(const LatticeValue &other) const {
+    return valueAndTag != other.valueAndTag;
   }
 
 private:
@@ -186,6 +195,24 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     if (it == latticeValues.end())
       return;
     mergeLatticeValue(result, it->second);
+  }
+
+  /// setLatticeValue - This is used when a new LatticeValue is computed for
+  /// the result of the specified value that replaces any previous knowledge,
+  /// e.g. because a fold() function on an op returned a new thing.  This should
+  /// not be used on operations that have multiple contributors to it, e.g.
+  /// wires or ports.
+  void setLatticeValue(Value value, LatticeValue source) {
+    // Don't even do a map lookup if from has no info in it.
+    if (source.isUnknown())
+      return;
+
+    // If we've changed this value then revisit all the users.
+    auto &valueEntry = latticeValues[value];
+    if (valueEntry != source) {
+      changedLatticeValueWorklist.push_back(value);
+      valueEntry = source;
+    }
   }
 
   /// Return the lattice value for the specified SSA value, extended to the
@@ -528,12 +555,6 @@ void IMConstPropPass::visitOperation(Operation *op) {
       operandConstants.push_back({});
   }
 
-  // Save the original operands and attributes just in case the operation folds
-  // in-place. The constant passed in may not correspond to the real runtime
-  // value, so in-place updates are not allowed.
-  SmallVector<Value, 8> originalOperands(op->getOperands());
-  DictionaryAttr originalAttrs = op->getAttrDictionary();
-
   // Simulate the result of folding this operation to a constant. If folding
   // fails or was an in-place fold, mark the results as overdefined.
   SmallVector<OpFoldResult, 8> foldResults;
@@ -544,16 +565,10 @@ void IMConstPropPass::visitOperation(Operation *op) {
     return;
   }
 
-  // If the folding was in-place, mark the results as overdefined and reset the
-  // operation. We don't allow in-place folds as the desire here is for
-  // simulated execution, and not general folding.
-  if (foldResults.empty()) {
-    op->setOperands(originalOperands);
-    op->setAttrs(originalAttrs);
-    for (auto value : op->getResults())
-      markOverdefined(value);
-    return;
-  }
+  // Fold functions in general are allowed to do in-place updates, but FIRRTL
+  // does not do this and supporting it costs more.
+  assert(!foldResults.empty() &&
+         "FIRRTL fold functions shouldn't do in-place updates!");
 
   // Merge the fold results into the lattice for this operation.
   assert(foldResults.size() == op->getNumResults() && "invalid result size");
@@ -564,12 +579,18 @@ void IMConstPropPass::visitOperation(Operation *op) {
     if (Attribute foldAttr = foldResult.dyn_cast<Attribute>()) {
       if (auto intAttr = foldAttr.dyn_cast<IntegerAttr>())
         resultLattice = LatticeValue(intAttr);
+      else if (auto invalidValueAttr = foldAttr.dyn_cast<InvalidValueAttr>())
+        resultLattice = invalidValueAttr;
       else // Treat non integer constants as overdefined.
         resultLattice = LatticeValue::getOverdefined();
     } else { // Folding to an operand results in its value.
       resultLattice = latticeValues[foldResult.get<Value>()];
     }
-    mergeLatticeValue(op->getResult(i), resultLattice);
+
+    // We do not "merge" the lattice value in, we set it.  This is because the
+    // fold functions can produce different values over time, e.g. in the
+    // presence of InvalidValue operands that get resolved to other constants.
+    setLatticeValue(op->getResult(i), resultLattice);
   }
 }
 
