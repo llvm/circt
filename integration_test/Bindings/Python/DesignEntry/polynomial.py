@@ -82,10 +82,11 @@ mod.operation.print()
 print("\n\n=== Verilog ===")
 # CHECK-LABEL: === Verilog ===
 
-pm = mlir.passmanager.PassManager.parse("hw-legalize-names,hw.module(hw-cleanup)")
+pm = mlir.passmanager.PassManager.parse(
+  "hw-legalize-names,hw.module(hw-cleanup)")
 pm.run(mod)
 circt.export_verilog(mod, sys.stdout)
-# Intentionally broken  module PolynomialCompute(
-# Intentionally broken    input  [31:0] x,
-# Intentionally broken    output [31:0] y);
-# Intentionally broken    assign y = 32'h3E + 32'h2A * x + 32'h6 * x * x;
+# Temporarily broken  module PolynomialCompute(
+# Temporarily broken    input  [31:0] x,
+# Temporarily broken    output [31:0] y);
+# Temporarily broken    assign y = 32'h3E + 32'h2A * x + 32'h6 * x * x;
