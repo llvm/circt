@@ -1,4 +1,4 @@
-from typing import Dict, Optional, Sequence
+from typing import Dict, Optional, Sequence, Type
 
 import inspect
 
@@ -213,16 +213,20 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
       return
     raise ConnectionError("Must return module output values")
 
+  def get_val(obj) -> Value:
+    """Resolve a Value from a few supported types."""
+
+    if isinstance(obj, Value):
+      return obj
+    if isinstance(obj, Operation):
+      return obj.result
+    if isinstance(obj, BuilderValue):
+      return obj.value
+    raise TypeError(f"body_builder return doesn't support type '{type(obj)}'")
+
   # Now create the output op depending on the object type returned
   outputs = list[Value]()
-  if isinstance(bb_ret, Operation):
-    bb_ret = bb_ret.result
-  if isinstance(bb_ret, Value):
-    if len(output_ports) != 1:
-      raise ConnectionError(
-        "Can only return one value from body_builder if module has one output")
-    outputs = [bb_ret]
-  elif isinstance(bb_ret, list):
+  if isinstance(bb_ret, list):
     outputs = bb_ret
   elif isinstance(bb_ret, dict):
     unconnected_ports = []
@@ -237,7 +241,12 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
         outputs.append(val)
     if len(unconnected_ports) > 0:
       raise UnconnectedSignalError(cls_name, unconnected_ports)
-
+  else:
+    output = get_val(bb_ret)
+    if len(output_ports) != 1:
+      raise ConnectionError(
+        "Can only return one value from body_builder if module has one output")
+    outputs = [output]
   hw.OutputOp(outputs)
 
 
