@@ -222,6 +222,7 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
   # mustn't have any outputs.
   if bb_ret is None:
     if len(output_ports) == 0:
+      hw.OutputOp([])
       return
     raise ConnectionError("Must return module output values")
 
