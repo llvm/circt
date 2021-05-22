@@ -606,20 +606,21 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
   auto builder = OpBuilder::atBlockBegin(body);
 
   // If the lattice value for the specified value is a constant or
-  // FIRRTLInvalid, update it.
-  auto replaceValueIfPossible = [&](Value value) {
+  // InvalidValue, update it and return true.  Otherwise return false.
+  auto replaceValueIfPossible = [&](Value value) -> bool {
     auto it = latticeValues.find(value);
     if (it == latticeValues.end() || it->second.isOverdefined() ||
         it->second.isUnknown())
-      return;
+      return false;
 
     // TODO: Unique constants into the entry block of the module.
     Attribute constantValue = it->second.getValue();
     auto *cst = module->getDialect()->materializeConstant(
         builder, constantValue, value.getType(), value.getLoc());
     if (!cst)
-      return;
+      return false;
     value.replaceAllUsesWith(cst->getResult(0));
+    return true;
   };
 
   // Constant propagate any ports that are always constant.
@@ -627,32 +628,45 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     replaceValueIfPossible(port);
 
   // TODO: Walk 'when's preorder with `walk`.
-  for (auto &op : llvm::make_early_inc_range(*body)) {
-    // Connects to values that we found to be constant can be dropped.  These
-    // will already have been replaced since we're walking top-down.
+
+  // Walk the IR bottom-up when folding.  We often fold entire chains of
+  // operations into constants, which make the intermediate nodes dead.  Going
+  // bottom up eliminates the users of the intermediate ops, allowing us to
+  // aggressively delete them.
+  for (auto &op : llvm::make_early_inc_range(llvm::reverse(*body))) {
+    // Connects to values that we found to be constant can be dropped.
     if (auto connect = dyn_cast<ConnectOp>(op)) {
-      if (auto *destOp = connect.dest().getDefiningOp()) {
-        if (isa<ConstantOp>(destOp) || isa<InvalidValueOp>(destOp)) {
-          connect.erase();
-          continue;
-        }
-      }
+      if (!connect.dest().isa<BlockArgument>() &&
+          !connect.dest().getDefiningOp<InstanceOp>() &&
+          !latticeValues[connect.dest()].isOverdefined())
+        connect.erase();
+      continue;
     }
 
-    // Other ops with no results don't need processing.
-    if (op.getNumResults() == 0)
+    // We only fold single-result ops and instances in practice, because they
+    // are the expressions.
+    if (op.getNumResults() != 1 && !isa<InstanceOp>(op))
       continue;
+
+    // If this operation is already dead, then go ahead and remove it.
+    if (op.use_empty() && (wouldOpBeTriviallyDead(&op) || isWireOrReg(&op))) {
+      op.erase();
+      continue;
+    }
 
     // Don't "refold" constants.  TODO: Unique in the module entry block.
     if (isa<ConstantOp>(op) || isa<InvalidValueOp>(op))
       continue;
 
     // If the op had any constants folded, replace them.
-    for (auto result : op.getResults()) {
-      builder.setInsertionPoint(&op);
-      replaceValueIfPossible(result);
-    }
-    if (op.use_empty() && (wouldOpBeTriviallyDead(&op) || isWireOrReg(&op))) {
+    builder.setInsertionPoint(&op);
+    bool foldedAny = false;
+    for (auto result : op.getResults())
+      foldedAny |= replaceValueIfPossible(result);
+
+    // If the operation folded to a constant then we can probably nuke it.
+    if (foldedAny && op.use_empty() &&
+        (wouldOpBeTriviallyDead(&op) || isWireOrReg(&op))) {
       op.erase();
       continue;
     }
