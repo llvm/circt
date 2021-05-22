@@ -25,9 +25,10 @@ class PolynomialCompute:
     # Full result.
     self.y = Output(types.i32)
 
-  def construct(self, x: mlir.ir.Value):
+  def construct(self, mod):
     """Implement this module for input 'x'."""
 
+    x = mod.x
     taps: list[mlir.ir.Value] = list()
     runningPower: list[mlir.ir.Value] = list()
     for power, coeff in enumerate(self.__coefficients):

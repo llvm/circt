@@ -27,19 +27,19 @@ class TestESISys(esi.System):
                          input_ports=[('foo', types.i32),
                                       ('foo_valid', types.i1)],
                          output_ports=[('foo_ready', types.i1)],
-                         body_builder=lambda module, foo, foo_valid: hw.OutputOp(
-                             [foo_valid]))
+                         body_builder=lambda module: hw.OutputOp(
+                             [module.foo_valid]))
 
     i32chan = types.chan(types.i32)
     hw.HWModuleOp(name='I32Snoop',
                     input_ports=[('foo_in', i32chan)],
                     output_ports=[('foo_out', i32chan)],
-                    body_builder=lambda module, foo_in: hw.OutputOp(
-                        [foo_in]))
+                    body_builder=lambda module: hw.OutputOp(
+                        [module.foo_in]))
 
     esi.buildWrapper(op.operation, ["foo"])
 
-  def build(self, top, clk, rst):
+  def build(self, top):
     return
 
 

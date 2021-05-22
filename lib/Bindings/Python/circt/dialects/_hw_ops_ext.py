@@ -160,13 +160,10 @@ class ModuleLike:
 
     if body_builder:
       entry_block = self.add_entry_block()
-      inputs = dict()
-      for index, (name, _) in enumerate(input_ports):
-        inputs[name] = entry_block.arguments[index]
 
       with InsertionPoint(entry_block):
         with BackedgeBuilder():
-          outputs = body_builder(self, **inputs)
+          outputs = body_builder(self)
           _create_output_op(name, output_ports, entry_block, outputs)
 
   @property

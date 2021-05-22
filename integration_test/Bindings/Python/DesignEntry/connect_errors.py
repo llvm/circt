@@ -15,13 +15,13 @@ class Dummy:
     self.x = Input(types.i32)
     self.y = Output(types.i32)
 
-  def construct(self, x):
-    return {'y': x}
+  def construct(self, mod):
+    return {'y': mod.x}
 
 @module
 class Test:
 
-  def construct(self):
+  def construct(self, mod):
     const = hw.ConstantOp(types.i32, mlir.ir.IntegerAttr.get(types.i32, 0))
     dummy = Dummy()
     inst = dummy.module.create("d", {"x": const.result})

@@ -20,7 +20,7 @@ with Context() as ctx, Location.unknown():
     one_input = hw.HWModuleOp(
         name="one_input",
         input_ports=[("a", i32)],
-        body_builder=lambda m, a: hw.OutputOp([]),
+        body_builder=lambda m: hw.OutputOp([]),
     )
     one_output = hw.HWModuleOp(
         name="one_output",
@@ -32,7 +32,7 @@ with Context() as ctx, Location.unknown():
         name="input_output",
         input_ports=[("a", i32)],
         output_ports=[("b", i32)],
-        body_builder=lambda m, a: hw.OutputOp([m.entry_block.arguments[0]]),
+        body_builder=lambda m: hw.OutputOp([m.a]),
     )
 
     def instance_builder_body(module):

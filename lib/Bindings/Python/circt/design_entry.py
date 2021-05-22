@@ -82,7 +82,7 @@ def module(cls):
           name=cls.__name__,
           input_ports=[(name, port.type) for (name, port) in input_ports],
           output_ports=[(name, port.type) for (name, port) in output_ports],
-          body_builder=lambda _, **kwargs: self.construct(**kwargs))
+          body_builder=self.construct)
 
   return __Module
 
