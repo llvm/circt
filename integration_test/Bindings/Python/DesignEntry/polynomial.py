@@ -80,6 +80,13 @@ with mlir.ir.InsertionPoint(mod.body), circt.support.BackedgeBuilder():
                 output_ports=[('y', mlir.ir.Type.parse("i32"))],
                 body_builder=build)
 
+def cb(op: mlir.ir.Operation, into: mlir.ir.Operation):
+  print(f"py cb! {repr(into)} {into.name}")
+  return True
+circt.msft.register_generator("PolynomialCompute", "test", cb)
+
+pm = mlir.passmanager.PassManager.parse("run-generators")
+pm.run(mod)
 
 mod.operation.print()
 # CHECK:  hw.module @top() -> (%y: i32) {
@@ -90,14 +97,9 @@ mod.operation.print()
 print("\n\n=== Verilog ===")
 # CHECK-LABEL: === Verilog ===
 
-def cb(op: mlir.ir.Operation):
-  print(f"py cb! {op}")
-  return False
-circt.msft.register_generator("hw.module", "test", cb)
-
-pm = mlir.passmanager.PassManager.parse(
-  "run-generators,hw-legalize-names,hw.module(hw-cleanup)")
-pm.run(mod)
+# pm = mlir.passmanager.PassManager.parse(
+#   "hw-legalize-names,hw.module(hw-cleanup)")
+# pm.run(mod)
 # circt.export_verilog(mod, sys.stdout)
 # CHECK:  module PolynomialCompute(
 # CHECK:    input  [31:0] x,

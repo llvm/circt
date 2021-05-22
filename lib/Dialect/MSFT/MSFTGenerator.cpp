@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/MSFT/MSFTDialect.h"
 
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
 
@@ -26,13 +27,24 @@ public:
   GeneratorName() : generate(nullptr) {}
   GeneratorName(GeneratorCallback cb) : generate(cb) {}
 
-  LogicalResult runOnOperation(mlir::Operation *op) {
-    auto result = generate(op);
-    if (failed(result))
-      op->emitError("Failed generator on ") << op->getName();
-    return result;
-  }
+  LogicalResult runOnOperation(mlir::Operation *op);
 };
+
+LogicalResult GeneratorName::runOnOperation(mlir::Operation *op) {
+  ImplicitLocOpBuilder builder = ImplicitLocOpBuilder::atBlockEnd(
+      op->getLoc(), op->getParentOfType<ModuleOp>().getBody());
+
+  StringAttr name = builder.getStringAttr(op->getName().getStringRef());
+  SmallVector<hw::ModulePortInfo, 8> ports;
+  // for (auto operand : op->getOperands())
+  //   ports.push_back(hw::ModulePortInfo{});
+  hw::HWModuleOp intoMod = builder.create<hw::HWModuleOp>(name, ports);
+
+  auto result = generate(op, intoMod);
+  if (failed(result))
+    op->emitError("Failed generator on ") << op->getName();
+  return result;
+}
 
 class OpGenerator {
   llvm::StringMap<GeneratorName> generators;
@@ -73,11 +85,15 @@ struct RunGeneratorsPass : public RunGeneratorsBase<RunGeneratorsPass> {
 };
 } // anonymous namespace
 
+static constexpr StringRef DesignEntryPrefix = "circt.design_entry.";
 void RunGeneratorsPass::runOnOperation() {
   Operation *top = getOperation();
   top->walk([this](Operation *op) {
-    auto opName = op->getName();
-    auto opGenerator = registeredOpGenerators.find(opName.getStringRef());
+    StringRef opName = op->getName().getStringRef();
+    if (!opName.startswith(DesignEntryPrefix))
+      return;
+    StringRef designModuleName = opName.substr(DesignEntryPrefix.size());
+    auto opGenerator = registeredOpGenerators.find(designModuleName);
     if (opGenerator != registeredOpGenerators.end()) {
       auto rc = opGenerator->second.runOnOperation(op);
       if (failed(rc))

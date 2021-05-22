@@ -25,7 +25,8 @@ MlirLogicalResult mlirMSFTExportTcl(MlirModule module,
 void mlirMSFTRegisterGenerator(const char *opName, const char *generatorName,
                                mlirMSFTGeneratorCallback cb) {
   registerGenerator(llvm::StringRef(opName), llvm::StringRef(generatorName),
-                    [cb](mlir::Operation *op) {
-                      return unwrap(cb.callback(wrap(op), cb.userData));
+                    [cb](mlir::Operation *op, circt::hw::HWModuleOp into) {
+                      return unwrap(cb.callback(
+                          wrap(op), wrap(into.getOperation()), cb.userData));
                     });
 }

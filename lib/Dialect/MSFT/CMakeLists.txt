@@ -22,6 +22,7 @@ add_circt_dialect_library(CIRCTMSFT
   Support
 
   LINK_LIBS PUBLIC
+  CIRCTHW
   MLIRIR
   MLIRTransforms
    )

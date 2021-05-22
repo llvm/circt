@@ -13,7 +13,9 @@
 #ifndef CIRCT_DIALECT_MSFT_MSFTDIALECT_H
 #define CIRCT_DIALECT_MSFT_MSFTDIALECT_H
 
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
+
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
 
@@ -25,7 +27,8 @@ namespace circt {
 namespace msft {
 void registerMSFTPasses();
 
-typedef function_ref<LogicalResult(Operation *)> GeneratorCallback;
+typedef function_ref<LogicalResult(Operation *, hw::HWModuleOp)>
+    GeneratorCallback;
 void registerGenerator(StringRef opName, StringRef generatorName,
                        GeneratorCallback cb);
 

@@ -46,9 +46,10 @@ static void addPhysLocationAttr(MlirOperation cOp, std::string entityName,
 
 static llvm::SmallPtrSet<py::function *, 32> generatorCallbacks;
 
-static MlirLogicalResult callPyFunc(MlirOperation op, void *userData) {
+static MlirLogicalResult callPyFunc(MlirOperation op, MlirOperation into,
+                                    void *userData) {
   py::gil_scoped_acquire gil;
-  auto rc = (*(py::function *)userData)(op);
+  auto rc = (*(py::function *)userData)(op, into);
   if (rc.cast<bool>())
     return mlirLogicalResultSuccess();
   return mlirLogicalResultFailure();
