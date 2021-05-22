@@ -37,12 +37,16 @@ class ModuleDecl:
 
   __slots__ = [
       "name",
-      "type"
+      "_type"
   ]
 
   def __init__(self, type: mlir.ir.Type, name: str = None):
     self.name: str = name
-    self.type: mlir.ir.Type = type
+    self._type: mlir.ir.Type = type
+
+  @property
+  def type(self):
+    return self._type
 
 
 class Output(ModuleDecl):
