@@ -3,22 +3,23 @@
 import mlir
 import circt
 
+from circt.design_entry import module, Input, Output, connect
 from circt.dialects import hw
 from circt.esi import types
 
 
-@circt.module
+@module
 class Dummy:
 
   def __init__(self):
-    self.x = circt.Input(types.i32)
-    self.y = circt.Output(types.i32)
+    self.x = Input(types.i32)
+    self.y = Output(types.i32)
 
   def construct(self, x):
     self.y.set(x)
 
 
-@circt.module
+@module
 class Test:
 
   def construct(self):
@@ -26,9 +27,9 @@ class Test:
     const = hw.ConstantOp(types.i32, mlir.ir.IntegerAttr.get(types.i32, 0))
     dummy = Dummy()
     inst = dummy.module.create("d")
-    circt.connect(inst.x, inst.y)
-    circt.connect(inst.x, const)
-    circt.connect(inst.x, const.result)
+    connect(inst.x, inst.y)
+    connect(inst.x, const)
+    connect(inst.x, const.result)
     # CHECK: hw.instance "d" @Dummy(%[[C0]])
 
 

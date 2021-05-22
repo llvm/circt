@@ -3,22 +3,22 @@
 import mlir
 import circt
 
+from circt.design_entry import module, Input, Output, connect
 from circt.dialects import hw
 from circt.esi import types
 
 
-@circt.module
+@module
 class Dummy:
 
   def __init__(self):
-    self.x = circt.Input(types.i32)
-    self.y = circt.Output(types.i32)
+    self.x = Input(types.i32)
+    self.y = Output(types.i32)
 
   def construct(self, x):
     self.y.set(x)
 
-
-@circt.module
+@module
 class Test:
 
   def construct(self):
@@ -27,12 +27,12 @@ class Test:
     inst = dummy.module.create("d", {"x": const.result})
     try:
       # CHECK: cannot connect from source of type
-      circt.connect(inst.y, None)
+      connect(inst.y, None)
     except TypeError as e:
       print(e)
     try:
       # CHECK: cannot connect to destination of type
-      circt.connect(None, inst.x)
+      connect(None, inst.x)
     except TypeError as e:
       print(e)
 

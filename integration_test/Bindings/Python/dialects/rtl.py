@@ -2,6 +2,7 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
 import circt
+from circt.design_entry import connect
 from circt.dialects import hw
 
 from mlir.ir import *
@@ -86,11 +87,11 @@ with Context() as ctx, Location.unknown():
 
       # CHECK: hw.instance "inst4" @two_inputs(%[[INST1_RESULT]], %[[INST1_RESULT]])
       inst4 = two_inputs.create("inst4", {"a": inst1.a})
-      circt.connect(inst4.b, inst1.a)
+      connect(inst4.b, inst1.a)
 
       # CHECK: %[[INST5_RESULT:.+]] = hw.instance "inst5" @MyWidget(%[[INST5_RESULT]])
       inst5 = op.create("inst5")
-      circt.connect(inst5.my_input, inst5.my_output)
+      connect(inst5.my_input, inst5.my_output)
 
       # CHECK: hw.instance "inst6" {{.*}} {BANKS = 2 : i64}
       one_input.create("inst6", {"a": inst1.a}, parameters={"BANKS": 2})

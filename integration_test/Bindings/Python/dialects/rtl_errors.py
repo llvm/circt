@@ -2,6 +2,7 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
 import circt
+from circt.design_entry import connect
 from circt.dialects import hw
 
 from mlir.ir import *
@@ -40,7 +41,7 @@ with Context() as ctx, Location.unknown():
       # CHECK: unknown port name b
       try:
         inst2 = one_input.create("inst2", {"a": constant_value})
-        circt.connect(inst2.b, constant_value)
+        connect(inst2.b, constant_value)
       except AttributeError as e:
         print(e)
 
