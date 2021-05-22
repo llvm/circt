@@ -1448,49 +1448,7 @@ firrtl.module @MuxInvalidTypeOpt(in %in : !firrtl.uint<1>, out %out : !firrtl.ui
 // CHECK-LABEL: firrtl.module @zeroWidthMem
 // CHECK-NEXT:  }
 firrtl.module @zeroWidthMem(in %clock: !firrtl.clock) {
-  %_M__T_10, %_M__T_11, %_M__T_18 = firrtl.mem Undefined  {depth = 8 : i64, name = "_M", portNames = ["_T_10", "_T_11", "_T_18"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>, !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>, !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: flip<bundle<id: uint<4>>>>>
-  %0 = firrtl.subfield %_M__T_18("addr") : (!firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: flip<bundle<id: uint<4>>>>>) -> !firrtl.uint<3>
-  %invalid_ui3 = firrtl.invalidvalue : !firrtl.uint<3>
-  firrtl.connect %0, %invalid_ui3 : !firrtl.uint<3>, !firrtl.uint<3>
-  %1 = firrtl.subfield %_M__T_18("en") : (!firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: flip<bundle<id: uint<4>>>>>) -> !firrtl.uint<1>
-  %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
-  firrtl.connect %1, %invalid_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-  %2 = firrtl.subfield %_M__T_18("clk") : (!firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: flip<bundle<id: uint<4>>>>>) -> !firrtl.clock
-  %invalid_clock = firrtl.invalidvalue : !firrtl.clock
-  firrtl.connect %2, %invalid_clock : !firrtl.clock, !firrtl.clock
-  %3 = firrtl.subfield %_M__T_18("data") : (!firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: flip<bundle<id: uint<4>>>>>) -> !firrtl.bundle<id: uint<4>>
-  %4 = firrtl.subfield %3("id") : (!firrtl.bundle<id: uint<4>>) -> !firrtl.uint<4>
-  %5 = firrtl.subfield %_M__T_10("addr") : (!firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>) -> !firrtl.uint<3>
-  %invalid_ui3_0 = firrtl.invalidvalue : !firrtl.uint<3>
-  firrtl.connect %5, %invalid_ui3_0 : !firrtl.uint<3>, !firrtl.uint<3>
-  %6 = firrtl.subfield %_M__T_10("en") : (!firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>) -> !firrtl.uint<1>
-  %invalid_ui1_1 = firrtl.invalidvalue : !firrtl.uint<1>
-  firrtl.connect %6, %invalid_ui1_1 : !firrtl.uint<1>, !firrtl.uint<1>
-  %7 = firrtl.subfield %_M__T_10("clk") : (!firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>) -> !firrtl.clock
-  %invalid_clock_2 = firrtl.invalidvalue : !firrtl.clock
-  firrtl.connect %7, %invalid_clock_2 : !firrtl.clock, !firrtl.clock
-  %8 = firrtl.subfield %_M__T_10("data") : (!firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>) -> !firrtl.bundle<id: uint<4>>
-  %9 = firrtl.subfield %8("id") : (!firrtl.bundle<id: uint<4>>) -> !firrtl.uint<4>
-  %invalid_ui4 = firrtl.invalidvalue : !firrtl.uint<4>
-  firrtl.connect %9, %invalid_ui4 : !firrtl.uint<4>, !firrtl.uint<4>
-  %10 = firrtl.subfield %_M__T_10("mask") : (!firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>) -> !firrtl.bundle<id: uint<1>>
-  %11 = firrtl.subfield %10("id") : (!firrtl.bundle<id: uint<1>>) -> !firrtl.uint<1>
-  %invalid_ui1_3 = firrtl.invalidvalue : !firrtl.uint<1>
-  firrtl.connect %11, %invalid_ui1_3 : !firrtl.uint<1>, !firrtl.uint<1>
-  %12 = firrtl.subfield %_M__T_11("addr") : (!firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>) -> !firrtl.uint<3>
-  %invalid_ui3_4 = firrtl.invalidvalue : !firrtl.uint<3>
-  firrtl.connect %12, %invalid_ui3_4 : !firrtl.uint<3>, !firrtl.uint<3>
-  %13 = firrtl.subfield %_M__T_11("en") : (!firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>) -> !firrtl.uint<1>
-  %invalid_ui1_5 = firrtl.invalidvalue : !firrtl.uint<1>
-  firrtl.connect %13, %invalid_ui1_5 : !firrtl.uint<1>, !firrtl.uint<1>
-  %14 = firrtl.subfield %_M__T_11("clk") : (!firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>) -> !firrtl.clock
-  %invalid_clock_6 = firrtl.invalidvalue : !firrtl.clock
-  firrtl.connect %14, %invalid_clock_6 : !firrtl.clock, !firrtl.clock
-  %15 = firrtl.subfield %_M__T_11("data") : (!firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>) -> !firrtl.bundle<id: uint<4>>
-  %16 = firrtl.subfield %15("id") : (!firrtl.bundle<id: uint<4>>) -> !firrtl.uint<4>
-  %invalid_ui4_7 = firrtl.invalidvalue : !firrtl.uint<4>
-  firrtl.connect %16, %invalid_ui4_7 : !firrtl.uint<4>, !firrtl.uint<4>
-  // COM: Check that missing is fine %17 = firrtl.subfield %_M__T_11("mask") : (!firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>) -> !firrtl.bundle<id: uint<1>>
+  // FIXME(Issue #1125): Add a test for zero width memory elimination.
 }
 
 // CHECK-LABEL: firrtl.module @issue1116
