@@ -772,10 +772,10 @@ static void replaceWithBits(Operation *op, Value value, unsigned hiBit,
 OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
   // mux(cond, x, invalid) -> x
   // mux(cond, invalid, x) -> x
-  if (high().getDefiningOp<InvalidValueOp>())
-    return low();
-  if (low().getDefiningOp<InvalidValueOp>())
-    return high();
+  if (operands[2].dyn_cast_or_null<InvalidValueAttr>())
+    return getOperand(1);
+  if (operands[1].dyn_cast_or_null<InvalidValueAttr>())
+    return getOperand(2);
 
   /// mux(0/1, x, y) -> x or y
   if (auto cond = operands[0].dyn_cast_or_null<IntegerAttr>()) {
@@ -828,7 +828,6 @@ OpFoldResult PadPrimOp::fold(ArrayRef<Attribute> operands) {
     return {};
 
   // Constant fold.
-
   if (auto cst = operands[0].dyn_cast_or_null<IntegerAttr>()) {
     auto destWidth = getType().getWidthOrSentinel();
     if (destWidth == -1)
