@@ -21,3 +21,11 @@ MlirLogicalResult mlirMSFTExportTcl(MlirModule module,
   mlir::detail::CallbackOstream stream(callback, userData);
   return wrap(exportQuartusTcl(unwrap(module), stream));
 }
+
+void mlirMSFTRegisterGenerator(const char *opName, const char *generatorName,
+                               mlirMSFTGeneratorCallback cb) {
+  registerGenerator(llvm::StringRef(opName), llvm::StringRef(generatorName),
+                    [cb](mlir::Operation *op) {
+                      return unwrap(cb.callback(wrap(op), cb.userData));
+                    });
+}

@@ -15,6 +15,7 @@
 
 include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Pass/PassBase.td"
 
 def MSFTDialect : Dialect {
   let name = "msft";
@@ -63,6 +64,12 @@ def PhysLocation : MSFT_Attr<"PhysLocation"> {
   let parameters = (ins
     "DeviceTypeAttr":$devType,
     "uint64_t":$x, "uint64_t":$y, "uint64_t":$num);
+}
+
+def RunGenerators: Pass<"run-generators", "mlir::ModuleOp"> {
+  let summary = "Run the MSFT design entry generators";
+  let constructor = "circt::msft::createRunGeneratorsPass()";
+  let dependentDialects = [];
 }
 
 #endif // MSFT_TD

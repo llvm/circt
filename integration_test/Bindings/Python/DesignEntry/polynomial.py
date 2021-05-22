@@ -12,6 +12,7 @@ from circt.dialects import comb, hw
 import sys
 
 
+
 @module
 class PolynomialCompute:
   """Module to compute ax^3 + bx^2 + cx + d for design-time coefficients"""
@@ -89,11 +90,16 @@ mod.operation.print()
 print("\n\n=== Verilog ===")
 # CHECK-LABEL: === Verilog ===
 
+def cb(op: mlir.ir.Operation):
+  print(f"py cb! {op}")
+  return False
+circt.msft.register_generator("hw.module", "test", cb)
+
 pm = mlir.passmanager.PassManager.parse(
-  "hw-legalize-names,hw.module(hw-cleanup)")
+  "run-generators,hw-legalize-names,hw.module(hw-cleanup)")
 pm.run(mod)
-circt.export_verilog(mod, sys.stdout)
-# Temporarily broken  module PolynomialCompute(
-# Temporarily broken    input  [31:0] x,
-# Temporarily broken    output [31:0] y);
-# Temporarily broken    assign y = 32'h3E + 32'h2A * x + 32'h6 * x * x;
+# circt.export_verilog(mod, sys.stdout)
+# CHECK:  module PolynomialCompute(
+# CHECK:    input  [31:0] x,
+# CHECK:    output [31:0] y);
+# CHECK:    assign y = 32'h3E + 32'h2A * x + 32'h6 * x * x;

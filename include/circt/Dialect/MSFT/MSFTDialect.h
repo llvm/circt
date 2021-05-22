@@ -21,4 +21,15 @@
 
 #include "circt/Dialect/MSFT/MSFTEnums.h.inc"
 
+namespace circt {
+namespace msft {
+void registerMSFTPasses();
+
+typedef function_ref<LogicalResult(Operation *)> GeneratorCallback;
+void registerGenerator(StringRef opName, StringRef generatorName,
+                       GeneratorCallback cb);
+
+} // namespace msft
+} // namespace circt
+
 #endif // CIRCT_DIALECT_MSFT_MSFTDIALECT_H

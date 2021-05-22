@@ -16,7 +16,10 @@
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Support.h"
 
+#include "llvm/ADT/SmallPtrSet.h"
+
 #include "PybindUtils.h"
+#include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 namespace py = pybind11;
@@ -41,8 +44,36 @@ static void addPhysLocationAttr(MlirOperation cOp, std::string entityName,
   op->setAttr(entity, loc);
 }
 
+static llvm::SmallPtrSet<py::function *, 32> generatorCallbacks;
+
+static MlirLogicalResult callPyFunc(MlirOperation op, void *userData) {
+  py::gil_scoped_acquire gil;
+  auto rc = (*(py::function *)userData)(op);
+  if (rc.cast<bool>())
+    return mlirLogicalResultSuccess();
+  return mlirLogicalResultFailure();
+}
+
+static void registerGenerator(std::string opName, std::string generatorName,
+                              py::function cb) {
+  py::function *cbPtr = new py::function(cb);
+  generatorCallbacks.insert(cbPtr);
+  mlirMSFTRegisterGenerator(opName.c_str(), generatorName.c_str(),
+                            mlirMSFTGeneratorCallback{&callPyFunc, cbPtr});
+}
+
+static void test(MlirOperation op) {
+  py::gil_scoped_acquire gil;
+  for (auto entry : generatorCallbacks) {
+    auto rc = (*entry)(op);
+    assert(rc);
+  }
+}
+
 /// Populate the msft python module.
 void circt::python::populateDialectMSFTSubmodule(py::module &m) {
+  ::registerMSFTPasses();
+
   m.doc() = "MSFT dialect Python native extension";
   m.def("locate", &addPhysLocationAttr,
         "Attach a physical location to an op's entity.",
@@ -58,4 +89,8 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
     py::gil_scoped_release();
     mlirMSFTExportTcl(mod, accum.getCallback(), accum.getUserData());
   });
+
+  m.def("register_generator", &::registerGenerator,
+        "Register a generator for a design module");
+  m.def("test", &test);
 }
