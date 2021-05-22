@@ -2,6 +2,7 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
 import circt
+from circt.design_entry import connect
 from circt.dialects import hw
 
 from mlir.ir import *
@@ -33,15 +34,15 @@ with Context() as ctx, Location.unknown():
     # CHECK: hw.module @MyWidget(%my_input: i32) -> (%my_output: i32)
     # CHECK:   hw.output %my_input : i32
     op = hw.HWModuleOp(name='MyWidget',
-                         input_ports=[('my_input', i32)],
-                         output_ports=[('my_output', i32)],
-                         body_builder=lambda module: hw.OutputOp(
-                             [module.entry_block.arguments[0]]))
+                       input_ports=[('my_input', i32)],
+                       output_ports=[('my_output', i32)],
+                       body_builder=lambda module: hw.OutputOp(
+                           [module.entry_block.arguments[0]]))
 
     # CHECK: hw.module.extern @FancyThing(%input0: i32) -> (%output0: i32)
     extern = hw.HWModuleExternOp(name="FancyThing",
-                                   input_ports=[("input0", i32)],
-                                   output_ports=[("output0", i32)])
+                                 input_ports=[("input0", i32)],
+                                 output_ports=[("output0", i32)])
 
     # CHECK: hw.module @swap(%a: i32, %b: i32) -> (%{{.+}}: i32, %{{.+}}: i32)
     # CHECK:   hw.output %b, %a : i32, i32
@@ -79,33 +80,33 @@ with Context() as ctx, Location.unknown():
     # CHECK-LABEL: hw.module @instance_builder_tests
     def instance_builder_body(module):
       # CHECK: %[[INST1_RESULT:.+]] = hw.instance "inst1" @one_output()
-      inst1 = one_output.create(module, "inst1")
+      inst1 = one_output.create("inst1")
 
       # CHECK: hw.instance "inst2" @one_input(%[[INST1_RESULT]])
-      inst2 = one_input.create(module, "inst2", {"a": inst1.a})
+      inst2 = one_input.create("inst2", {"a": inst1.a})
 
       # CHECK: hw.instance "inst4" @two_inputs(%[[INST1_RESULT]], %[[INST1_RESULT]])
-      inst4 = two_inputs.create(module, "inst4", {"a": inst1.a})
-      inst4.set_input_port("b", inst1.a)
+      inst4 = two_inputs.create("inst4", {"a": inst1.a})
+      connect(inst4.b, inst1.a)
 
       # CHECK: %[[INST5_RESULT:.+]] = hw.instance "inst5" @MyWidget(%[[INST5_RESULT]])
-      inst5 = op.create(module, "inst5")
-      inst5.set_input_port("my_input", inst5.my_output)
+      inst5 = op.create("inst5")
+      connect(inst5.my_input, inst5.my_output)
 
       # CHECK: hw.instance "inst6" {{.*}} {BANKS = 2 : i64}
-      one_input.create(module, "inst6", {"a": inst1.a}, parameters={"BANKS": 2})
+      one_input.create("inst6", {"a": inst1.a}, parameters={"BANKS": 2})
 
       hw.OutputOp([])
 
     instance_builder_tests = hw.HWModuleOp(name="instance_builder_tests",
-                                             body_builder=instance_builder_body)
+                                           body_builder=instance_builder_body)
 
     # CHECK: hw.module @block_args_test(%[[PORT_NAME:.+]]: i32) ->
     # CHECK: hw.output %[[PORT_NAME]]
     hw.HWModuleOp(name="block_args_test",
-                    input_ports=[("foo", i32)],
-                    output_ports=[("bar", i32)],
-                    body_builder=lambda module: hw.OutputOp([module.foo]))
+                  input_ports=[("foo", i32)],
+                  output_ports=[("bar", i32)],
+                  body_builder=lambda module: hw.OutputOp([module.foo]))
 
   print(m)
 

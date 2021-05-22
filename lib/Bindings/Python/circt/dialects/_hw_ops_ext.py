@@ -2,7 +2,7 @@ from typing import Dict, Optional, Sequence
 
 import inspect
 
-from circt.support import BackedgeBuilder
+from circt.support import BackedgeBuilder, BuilderValue
 
 from mlir.ir import *
 
@@ -11,7 +11,6 @@ class InstanceBuilder:
   """Helper class to incrementally construct an instance of a module."""
 
   def __init__(self,
-               parent_module,
                module,
                name,
                input_port_mapping,
@@ -24,7 +23,6 @@ class InstanceBuilder:
     from ._hw_ops_gen import InstanceOp
 
     # Create mappings from port name to value, index, and potentially backedge.
-    self.parent_module = parent_module
     self.mod = module
     self.operand_indices = {}
     self.operand_values = []
@@ -37,7 +35,10 @@ class InstanceBuilder:
       self.operand_indices[arg_name] = i
 
       if arg_name in input_port_mapping:
-        self.operand_values.append(input_port_mapping[arg_name])
+        value = input_port_mapping[arg_name]
+        if not isinstance(value, Value):
+          value = input_port_mapping[arg_name].value
+        self.operand_values.append(value)
       else:
         type = module.type.inputs[i]
         backedge = BackedgeBuilder.create(
@@ -72,27 +73,17 @@ class InstanceBuilder:
     # Check for the attribute in the arg name set.
     if name in self.operand_indices:
       index = self.operand_indices[name]
-      return self.instance.inputs[index]
+      value = self.instance.inputs[index]
+      return BuilderValue(value, self, index)
 
     # Check for the attribute in the result name set.
     if name in self.result_indices:
       index = self.result_indices[name]
-      return self.instance.results[index]
+      value = self.instance.results[index]
+      return BuilderValue(value, self, index)
 
     # If we fell through to here, the name isn't a result.
     raise AttributeError(f"unknown port name {name}")
-
-  def set_input_port(self, name, value):
-    # Check for the attribute in the arg name set.
-    if name in self.operand_indices:
-      # Put the value into the instance.
-      index = self.operand_indices[name]
-      self.instance.inputs[index] = value
-      self.backedges[index].erase()
-      return
-
-    # If we fell through to here, the name isn't an arg.
-    raise AttributeError(f"unknown input port name {name}")
 
   @property
   def operation(self):
@@ -185,14 +176,12 @@ class ModuleLike:
     return len(self.regions[0].blocks) == 0
 
   def create(self,
-             module,
              name: str,
              input_port_mapping: Dict[str, Value] = {},
              parameters: Dict[str, object] = {},
              loc=None,
              ip=None):
-    return InstanceBuilder(module,
-                           self,
+    return InstanceBuilder(self,
                            name,
                            input_port_mapping,
                            parameters=parameters,

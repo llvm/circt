@@ -37,8 +37,9 @@ class BackedgeBuilder(AbstractContextManager):
     def erase(self):
       if self.erased:
         return
-      self.creator.edges.remove(self)
-      self.dummy_op.operation.erase()
+      if self in self.creator.edges:
+        self.creator.edges.remove(self)
+        self.dummy_op.operation.erase()
 
   def __init__(self):
     self.edges = set()
@@ -83,3 +84,14 @@ class BackedgeBuilder(AbstractContextManager):
     if errors:
       errors.insert(0, "Uninitialized ports remain in circuit!")
       raise RuntimeError("\n".join(errors))
+
+
+class BuilderValue:
+  """Class that holds a value, as well as builder and index of this value in
+     the operand or result list. This can represent an OpOperand and index into
+     OpOperandList or a OpResult and index into an OpResultList"""
+
+  def __init__(self, value, builder, index):
+    self.value = value
+    self.builder = builder
+    self.index = index
