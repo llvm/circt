@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Matchers.h"
@@ -175,6 +176,10 @@ static APInt getMaxSignedValue(unsigned bitWidth) {
 OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
   assert(operands.empty() && "constant has no operands");
   return valueAttr();
+}
+
+OpFoldResult InvalidValueOp::fold(ArrayRef<Attribute> operands) {
+  return InvalidValueAttr::get(getType());
 }
 
 //===----------------------------------------------------------------------===//
