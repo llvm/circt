@@ -108,9 +108,17 @@ def module(cls):
               input.type, input.name, self).result
         input_ports_values.append(value)
 
+      op_names_attr = mlir.ir.ArrayAttr.get(
+          [mlir.ir.StringAttr.get(x.name) for x in input_ports])
+      result_names_attr = mlir.ir.ArrayAttr.get(
+          [mlir.ir.StringAttr.get(x.name) for x in output_ports])
+
       # Init the OpView, which creates the operation.
       mlir.ir.OpView.__init__(self, self.build_generic(
-          attributes={},
+          attributes={
+            "opNames": op_names_attr,
+            "resultNames": result_names_attr
+          },
           results=[x.type for x in output_ports],
           operands=[x for x in input_ports_values]
       ))

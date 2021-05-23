@@ -27,7 +27,7 @@ MlirLogicalResult mlirMSFTExportTcl(MlirModule, MlirStringCallback,
                                     void *userData);
 
 typedef struct {
-  MlirLogicalResult (*callback)(MlirOperation, MlirOperation, void *userData);
+  MlirOperation (*callback)(MlirOperation, void *userData);
   void *userData;
 } mlirMSFTGeneratorCallback;
 

@@ -12,7 +12,6 @@ from circt.dialects import comb, hw
 import sys
 
 
-
 @module
 class PolynomialCompute:
   """Module to compute ax^3 + bx^2 + cx + d for design-time coefficients"""
@@ -26,13 +25,14 @@ class PolynomialCompute:
     # Full result.
     self.y = Output(types.i32)
 
-  def construct(self, mod):
+  @staticmethod
+  def construct(mod):
     """Implement this module for input 'x'."""
 
     x = mod.x
     taps: list[mlir.ir.Value] = list()
     runningPower: list[mlir.ir.Value] = list()
-    for power, coeff in enumerate(self.__coefficients):
+    for power, coeff in enumerate([1, 2, 3]):
       coeffVal = hw.ConstantOp.create(types.i32, coeff)
       if power == 0:
         newPartialSum = coeffVal.result
@@ -80,11 +80,33 @@ with mlir.ir.InsertionPoint(mod.body), circt.support.BackedgeBuilder():
                 output_ports=[('y', mlir.ir.Type.parse("i32"))],
                 body_builder=build)
 
-def cb(op: mlir.ir.Operation, into: mlir.ir.Operation):
-  print(f"py cb! {repr(into)} {into.name}")
-  return True
-circt.msft.register_generator("PolynomialCompute", "test", cb)
+def construct(op: mlir.ir.Operation):
+  mod = op
+  while mod.name != "module":
+    mod = mod.parent
 
+  op_names_attrs = mlir.ir.ArrayAttr(op.attributes["opNames"])
+  op_names = [mlir.ir.StringAttr(x) for x in op_names_attrs]
+  input_ports = [(n.value, o.type) for (n, o) in zip(op_names, op.operands)]
+
+  result_names_attrs = mlir.ir.ArrayAttr(op.attributes["resultNames"])
+  result_names = [mlir.ir.StringAttr(x) for x in result_names_attrs]
+  output_ports = [(n.value, o.type) for (n, o) in zip(result_names, op.results)]
+
+  with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
+    mod = hw.HWModuleOp(
+        op.name,
+        input_ports=input_ports,
+        output_ports=output_ports,
+        body_builder=PolynomialCompute.construct)
+  with mlir.ir.InsertionPoint(op):
+    mapping = {name.value: op.operands[i] for i, name in enumerate(op_names)}
+    return mod.create(op.name, mapping).operation
+  print(f"py cb! {mod}")
+  return True
+
+circt.msft.register_generator("PolynomialCompute", "test", construct)
+mod.operation.print()
 pm = mlir.passmanager.PassManager.parse("run-generators")
 pm.run(mod)
 

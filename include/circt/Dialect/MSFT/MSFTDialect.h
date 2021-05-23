@@ -23,12 +23,13 @@
 
 #include "circt/Dialect/MSFT/MSFTEnums.h.inc"
 
+#include <functional>
+
 namespace circt {
 namespace msft {
 void registerMSFTPasses();
 
-typedef function_ref<LogicalResult(Operation *, hw::HWModuleOp)>
-    GeneratorCallback;
+typedef std::function<Operation *(Operation *)> GeneratorCallback;
 void registerGenerator(StringRef opName, StringRef generatorName,
                        GeneratorCallback cb);
 

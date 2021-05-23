@@ -8,7 +8,7 @@
 
 #include "circt/Dialect/MSFT/MSFTDialect.h"
 
-#include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
 
@@ -31,19 +31,12 @@ public:
 };
 
 LogicalResult GeneratorName::runOnOperation(mlir::Operation *op) {
-  ImplicitLocOpBuilder builder = ImplicitLocOpBuilder::atBlockEnd(
-      op->getLoc(), op->getParentOfType<ModuleOp>().getBody());
-
-  StringAttr name = builder.getStringAttr(op->getName().getStringRef());
-  SmallVector<hw::ModulePortInfo, 8> ports;
-  // for (auto operand : op->getOperands())
-  //   ports.push_back(hw::ModulePortInfo{});
-  hw::HWModuleOp intoMod = builder.create<hw::HWModuleOp>(name, ports);
-
-  auto result = generate(op, intoMod);
-  if (failed(result))
-    op->emitError("Failed generator on ") << op->getName();
-  return result;
+  mlir::IRRewriter rewriter(op->getContext());
+  Operation *replacement = generate(op);
+  if (replacement == nullptr)
+    return op->emitError("Failed generator on ") << op->getName();
+  rewriter.replaceOp(op, replacement->getResults());
+  return success();
 }
 
 class OpGenerator {
