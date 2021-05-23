@@ -25,7 +25,7 @@
 namespace circt {
 namespace firrtl {
 
-enum class Direction { Input, Output };
+enum class Direction { Input = 0, Output };
 
 namespace direction {
 
@@ -38,7 +38,11 @@ Direction get(bool isOutput);
 
 /// Return a \p IntegerAttr containing the packed representation of an array of
 /// directions.
-IntegerAttr packIntegerAttribute(ArrayRef<Direction> a, MLIRContext *b);
+IntegerAttr packAttribute(ArrayRef<Direction> a, MLIRContext *b);
+
+/// Turn a packed representation of port attributes into a vector that can be
+/// worked with.
+SmallVector<Direction> unpackAttribute(Operation *module);
 
 } // namespace direction
 

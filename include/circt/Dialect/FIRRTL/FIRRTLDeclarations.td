@@ -28,13 +28,18 @@ def InstanceOp : FIRRTLOp<"instance"> {
   let verifier = "return ::verifyInstanceOp(*this);";
 
   let builders = [
-    OpBuilder<(ins "::mlir::TypeRange":$elementType,
-                      "::mlir::StringRef":$moduleName,
-                      CArg<"StringRef", "{}">:$name,
-                      CArg<"ArrayRef<Attribute>", "{}">:$annotations), [{
-      return build($_builder, $_state, elementType, moduleName, name,
+    OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
+                   "::mlir::StringRef":$moduleName,
+                   CArg<"StringRef", "{}">:$name,
+                   CArg<"ArrayRef<Attribute>", "{}">:$annotations), [{
+      return build($_builder, $_state, resultTypes, moduleName, name,
                    $_builder.getArrayAttr(annotations));
-    }]>
+    }]>,
+
+    /// Constructor that creates a version of the specified instance, but that
+    /// erases some number of results from it.
+    OpBuilder<(ins "InstanceOp":$existingInstance,
+                   "::mlir::ArrayRef<unsigned>":$resultsToErase)>
   ];
 
   let extraClassDeclaration = [{

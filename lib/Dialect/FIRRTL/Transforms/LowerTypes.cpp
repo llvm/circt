@@ -269,9 +269,9 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
 
   newModuleAttrs.push_back(NamedAttribute(Identifier::get("portNames", context),
                                           builder->getArrayAttr(newArgNames)));
-  newModuleAttrs.push_back(NamedAttribute(
-      Identifier::get(direction::attrKey, context),
-      direction::packIntegerAttribute(newArgDirections, context)));
+  newModuleAttrs.push_back(
+      NamedAttribute(Identifier::get(direction::attrKey, context),
+                     direction::packAttribute(newArgDirections, context)));
 
   // Attach new argument attributes.
   SmallVector<Attribute, 8> newArgDictAttrs;
@@ -403,9 +403,8 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
        builder.getArrayAttr(argAttrDicts)});
   attributes.push_back(
       {Identifier::get("portNames", context), builder.getArrayAttr(portNames)});
-  attributes.push_back(
-      {Identifier::get(direction::attrKey, context),
-       direction::packIntegerAttribute(portDirections, context)});
+  attributes.push_back({Identifier::get(direction::attrKey, context),
+                        direction::packAttribute(portDirections, context)});
 
   // Copy over any lingering attributes which are not "portNames", directions,
   // or argument attributes.
@@ -681,7 +680,8 @@ void TypeLoweringVisitor::visitDecl(NodeOp op) {
     SmallVector<Attribute> loweredAttrs;
     filterAnnotations(op.annotations(), loweredAttrs, field.suffix, context);
     auto initializer = getBundleLowering(op.input(), suffix);
-    auto node = builder->create<NodeOp>(field.type, initializer, loweredName, loweredAttrs);
+    auto node = builder->create<NodeOp>(field.type, initializer, loweredName,
+                                        loweredAttrs);
     setBundleLowering(result, suffix, node);
   }
 
