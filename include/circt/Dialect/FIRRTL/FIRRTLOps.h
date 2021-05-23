@@ -73,7 +73,7 @@ struct ModulePortInfo {
   }
 
   /// Return true if this is an inout port.  This will be true if the port
-  /// contains either bi-directional signals or ananlog types.
+  /// contains either bi-directional signals or analog types.
   bool isInOut() { return !isOutput() && !isInput(); }
 };
 
@@ -144,7 +144,7 @@ LogicalResult inferReturnTypes(
                                   Optional<Location>)>
         callback);
 
-// Common type ineference functions.
+// Common type inference functions.
 FIRRTLType inferAddSubResult(FIRRTLType lhs, FIRRTLType rhs,
                              Optional<Location> loc);
 FIRRTLType inferBitwiseResult(FIRRTLType lhs, FIRRTLType rhs,
