@@ -8,4 +8,5 @@ add_circt_translation_library(CIRCTHIRToVerilog
 
   LINK_LIBS PUBLIC
   CIRCTHIR
+  MLIRTranslation
   )

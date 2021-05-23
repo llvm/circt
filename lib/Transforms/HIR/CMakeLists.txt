@@ -9,5 +9,6 @@ add_circt_dialect_library(CIRCTHIRTransforms
   CIRCTHIRTransformsIncGen
 
   LINK_LIBS PUBLIC
+  MLIRTransformUtils
   CIRCTHIR
   )
