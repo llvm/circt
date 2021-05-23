@@ -164,6 +164,7 @@ void BlackBoxReaderPass::runOnOperation() {
   // documents the additional annotation-controlled file listing to be
   // created.
   if (!emittedFiles.empty()) {
+    auto directoryAttr = StringAttr::get(cx, targetDir);
     auto trueAttr = BoolAttr::get(cx, true);
     std::string output;
     llvm::raw_string_ostream os(output);
@@ -173,17 +174,19 @@ void BlackBoxReaderPass::runOnOperation() {
       // explicitly by compiler directives in other source files.
       auto ext = llvm::sys::path::extension(fileName);
       bool exclude = (ext == ".h" || ext == ".vh" || ext == ".svh");
-      file.op->setAttr(
-          "output_file",
-          OutputFileAttr::get(file.fileName, BoolAttr::get(cx, exclude),
-                              /*exclude_replicated_ops=*/trueAttr, cx));
+      file.op->setAttr("output_file",
+                       OutputFileAttr::get(directoryAttr, file.fileName,
+                                           BoolAttr::get(cx, exclude),
+                                           /*exclude_replicated_ops=*/trueAttr,
+                                           cx));
       if (!exclude)
         os << fileName << "\n";
     }
     auto op =
         builder.create<VerbatimOp>(circuitOp->getLoc(), std::move(output));
     op->setAttr("output_file",
-                OutputFileAttr::get(StringAttr::get(cx, resourceFileName),
+                OutputFileAttr::get(directoryAttr,
+                                    StringAttr::get(cx, resourceFileName),
                                     /*exclude_from_filelist=*/trueAttr,
                                     /*exclude_replicated_ops=*/trueAttr, cx));
   }
@@ -256,10 +259,8 @@ void BlackBoxReaderPass::runOnAnnotation(Operation *op, DictionaryAttr anno,
 /// directory.
 void BlackBoxReaderPass::loadFile(Operation *op, StringRef inputPath,
                                   OpBuilder &builder) {
-  SmallString<128> outputPath(targetDir);
-  llvm::sys::path::append(outputPath, llvm::sys::path::filename(inputPath));
-  LLVM_DEBUG(llvm::dbgs() << "Add black box source `" << outputPath
-                          << "` from `" << inputPath << "`\n");
+  LLVM_DEBUG(llvm::dbgs() << "Add black box source from `" << inputPath
+                          << "`\n");
 
   // Open and read the input file.
   std::string errorMessage;
@@ -273,7 +274,7 @@ void BlackBoxReaderPass::loadFile(Operation *op, StringRef inputPath,
   // Create an IR node to hold the contents.
   emittedFiles.push_back(
       {builder.create<VerbatimOp>(op->getLoc(), input->getBuffer()),
-       builder.getStringAttr(outputPath)});
+       builder.getStringAttr(llvm::sys::path::filename(inputPath))});
 }
 
 //===----------------------------------------------------------------------===//
