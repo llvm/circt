@@ -41,6 +41,8 @@ using namespace comb;
 using namespace hw;
 using namespace sv;
 
+#define DEBUG_TYPE "export-verilog"
+
 //===----------------------------------------------------------------------===//
 // Helper routines
 //===----------------------------------------------------------------------===//
@@ -2890,62 +2892,79 @@ struct RootEmitterBase {
 void RootEmitterBase::gatherFiles(bool separateModules) {
   for (auto &op : *rootOp.getBody()) {
     auto info = OpFileInfo{&op, replicatedOps.size()};
+    auto attr = op.getAttrOfType<hw::OutputFileAttr>("output_file");
 
     SmallString<32> outputPath;
-
-    auto dirAttr = op.getAttrOfType<hw::OutputDirAttr>("output_dir");
-    if (dirAttr) {
-      llvm::errs() << "Found output_dir attribute " << dirAttr << " on " << op
-                   << "\n";
-      llvm::sys::path::append(outputPath, dirAttr.path().getValue());
-    }
+    bool hasFileName = false;
+    bool emitReplicatedOps = true;
+    bool addToFilelist = true;
 
     // Check if the operation has an explicit `output_file` attribute set. If it
-    // does, use the information there to push the operation into a dedicated
-    // output file.
-    auto fileAttr = op.getAttrOfType<hw::OutputFileAttr>("output_file");
-    if (fileAttr) {
-      llvm::errs() << "Found output_file attribute " << fileAttr << " on " << op
-                   << "\n";
-      llvm::sys::path::append(outputPath, fileAttr.path().getValue());
-      auto &file = files[Identifier::get(outputPath, op.getContext())];
-      file.ops.push_back(info);
-      file.emitReplicatedOps = !fileAttr.exclude_replicated_ops().getValue();
-      file.addToFilelist = !fileAttr.exclude_from_filelist().getValue();
-      continue;
+    // does, extract the information from the attribute.
+    if (attr) {
+      LLVM_DEBUG(llvm::dbgs() << "Found output_file attribute " << attr
+                              << " on " << op << "\n";);
+
+      if (auto directory = attr.directory())
+        llvm::sys::path::append(outputPath, directory.getValue());
+
+      if (auto name = attr.name()) {
+        llvm::sys::path::append(outputPath, name.getValue());
+        hasFileName = true;
+      }
+
+      emitReplicatedOps = !attr.exclude_replicated_ops().getValue();
+      addToFilelist = !attr.exclude_from_filelist().getValue();
     }
 
-    // Otherwise implicitly assign the operation to a dedicated output file or
-    // mark it as a replicated operation.
-    auto maybeSeparate = [&](Operation *op, Twine fileName) {
-      if (separateModules) {
-        SmallString<32> fileNameStr;
-        fileName.toVector(fileNameStr);
-        auto &file = files[Identifier::get(fileNameStr, op->getContext())];
-        file.ops.push_back(info);
-      } else {
-        rootFile.ops.push_back(info);
-      }
+    auto separateFile = [&](Operation *op, Twine fileName = "") {
+      if (!hasFileName)
+        llvm::sys::path::append(outputPath, fileName);
+
+      auto &file = files[Identifier::get(outputPath, op->getContext())];
+      file.ops.push_back(info);
+      file.emitReplicatedOps = emitReplicatedOps;
+      file.addToFilelist = addToFilelist;
     };
 
+    // Separate the operation into dedicated output file, or emit into the root
+    // file, or replicate in all output files.
     TypeSwitch<Operation *>(&op)
         .Case<HWModuleOp>([&](auto &mod) {
           // Emit into a separate file named after the module.
-          llvm::sys::path::append(outputPath, mod.getName() + ".sv");
-          maybeSeparate(mod, outputPath);
+          if (attr || separateModules)
+            separateFile(mod, mod.getName() + ".sv");
+          else
+            rootFile.ops.push_back(info);
         })
         .Case<InterfaceOp>([&](auto &intf) {
           // Emit into a separate file named after the interface.
-          llvm::sys::path::append(outputPath, intf.sym_name() + ".sv");
-          maybeSeparate(intf, outputPath);
+          if (attr || separateModules)
+            separateFile(intf, intf.sym_name() + ".sv");
+          else
+            rootFile.ops.push_back(info);
         })
         .Case<VerbatimOp, IfDefProceduralOp, TypeScopeOp, HWModuleExternOp>(
             [&](auto &) {
-              // Replicate in each outputfile.
-              replicatedOps.push_back(&op);
+              // Emit into a separate file using the specified file name or
+              // replicate the operation in each outputfile.
+              if (attr) {
+                if (!hasFileName) {
+                  op.emitError("file name unspecified");
+                  encounteredError = true;
+                } else
+                  separateFile(&op);
+              } else
+                replicatedOps.push_back(&op);
             })
         .Case<HWGeneratorSchemaOp>([&](auto &) {
-          // Empty.
+          if (attr) {
+            if (!hasFileName) {
+              op.emitError("file name unspecified");
+              encounteredError = true;
+            } else
+              separateFile(&op);
+          }
         })
         .Default([&](auto *) {
           op.emitError("unknown operation");
