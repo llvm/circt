@@ -25,7 +25,7 @@
 namespace circt {
 namespace firrtl {
 
-enum class Direction { Input, Output };
+enum class Direction { Input = 0, Output };
 
 namespace direction {
 
@@ -38,7 +38,11 @@ Direction get(bool isOutput);
 
 /// Return a \p IntegerAttr containing the packed representation of an array of
 /// directions.
-IntegerAttr packIntegerAttribute(ArrayRef<Direction> a, MLIRContext *b);
+IntegerAttr packAttribute(ArrayRef<Direction> a, MLIRContext *b);
+
+/// Turn a packed representation of port attributes into a vector that can be
+/// worked with.
+SmallVector<Direction> unpackAttribute(Operation *module);
 
 } // namespace direction
 
@@ -69,7 +73,7 @@ struct ModulePortInfo {
   }
 
   /// Return true if this is an inout port.  This will be true if the port
-  /// contains either bi-directional signals or ananlog types.
+  /// contains either bi-directional signals or analog types.
   bool isInOut() { return !isOutput() && !isInput(); }
 };
 
@@ -140,7 +144,7 @@ LogicalResult inferReturnTypes(
                                   Optional<Location>)>
         callback);
 
-// Common type ineference functions.
+// Common type inference functions.
 FIRRTLType inferAddSubResult(FIRRTLType lhs, FIRRTLType rhs,
                              Optional<Location> loc);
 FIRRTLType inferBitwiseResult(FIRRTLType lhs, FIRRTLType rhs,
