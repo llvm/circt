@@ -1,3 +1,5 @@
+# REQUIRES: bindings_python
+# XFAIL: true
 # RUN: %PYTHON% %s | FileCheck %s
 
 import mlir
@@ -23,14 +25,14 @@ class Dummy:
 class Test:
 
   def construct(self):
-    # Temporarily broken: %[[C0:.+]] = hw.constant 0
+    # CHECK: %[[C0:.+]] = hw.constant 0
     const = hw.ConstantOp(types.i32, mlir.ir.IntegerAttr.get(types.i32, 0))
     dummy = Dummy()
     inst = dummy.module.create("d")
     connect(inst.x, inst.y)
     connect(inst.x, const)
     connect(inst.x, const.result)
-    # Temporarily broken: hw.instance "d" @Dummy(%[[C0]])
+    # CHECK: hw.instance "d" @Dummy(%[[C0]])
 
 
 with mlir.ir.Context() as ctxt, mlir.ir.Location.unknown():

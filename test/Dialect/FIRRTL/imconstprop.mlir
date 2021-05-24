@@ -81,16 +81,12 @@ firrtl.circuit "Test" {
     // CHECK: firrtl.connect %result7, %invalid_ui2
     firrtl.connect %result7, %unconnectedWire: !firrtl.uint<4>, !firrtl.uint<2>
 
-    // CHECK-NEXT: firrtl.constant 1
     %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
-    // CHECK-NEXT: firrtl.constant 2
     %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
 
     // Multiple operations that fold to constants shouldn't leave dead constants
     // around.
-    // CHECK-NEXT: firrtl.constant 0
     %a = firrtl.and %extWire, %c2_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-    // CHECK-NEXT: firrtl.constant 1
     %b = firrtl.or %a, %c1_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
     // CHECK-NEXT: firrtl.constant 3
     %c = firrtl.xor %b, %c2_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>

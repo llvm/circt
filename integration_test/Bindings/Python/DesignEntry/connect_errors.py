@@ -1,4 +1,6 @@
-# RUN: %PYTHON% %s
+# REQUIRES: bindings_python
+# XFAIL: true
+# RUN: %PYTHON% %s | FileCheck %s
 
 import mlir
 import circt
@@ -26,12 +28,12 @@ class Test:
     dummy = Dummy()
     inst = dummy.module.create("d", {"x": const.result})
     try:
-      # Temporarily broken: cannot connect from source of type
+      # CHECK: cannot connect from source of type
       connect(inst.y, None)
     except TypeError as e:
       print(e)
     try:
-      # Temporarily broken: cannot connect to destination of type
+      # CHECK: Temporarily broken: cannot connect to destination of type
       connect(None, inst.x)
     except TypeError as e:
       print(e)

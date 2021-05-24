@@ -27,6 +27,43 @@ using mlir::RegionRange;
 using namespace circt;
 using namespace firrtl;
 
+/// Remove elements at the specified indices from the input array, returning the
+/// elements not mentioned.  The indices array is expected to be sorted and
+/// unique.
+template <typename T>
+static SmallVector<T>
+removeElementsAtIndices(ArrayRef<T> input, ArrayRef<unsigned> indicesToDrop) {
+#ifndef NDEBUG // Check sortedness.
+  if (!input.empty()) {
+    for (size_t i = 1, e = indicesToDrop.size(); i != e; ++i)
+      assert(indicesToDrop[i - 1] < indicesToDrop[i] &&
+             "indicesToDrop isn't sorted and unique");
+    assert(indicesToDrop.back() < input.size() && "index out of range");
+  }
+#endif
+
+  // Copy over the live chunks.
+  size_t lastCopied = 0;
+  SmallVector<T> result;
+  result.reserve(input.size() - indicesToDrop.size());
+
+  for (unsigned indexToDrop : indicesToDrop) {
+    // If we skipped over some valid elements, copy them over.
+    if (indexToDrop > lastCopied) {
+      result.append(input.begin() + lastCopied, input.begin() + indexToDrop);
+      lastCopied = indexToDrop;
+    }
+    // Ignore this value so we don't copy it in the next iteration.
+    ++lastCopied;
+  }
+
+  // If there are live elements at the end, copy them over.
+  if (lastCopied < input.size())
+    result.append(input.begin() + lastCopied, input.end());
+
+  return result;
+}
+
 bool firrtl::isBundleType(Type type) {
   if (auto flipType = type.dyn_cast<FlipType>())
     return flipType.getElementType().isa<FlipType>();
@@ -288,6 +325,35 @@ Direction firrtl::getModulePortDirection(Operation *op, size_t portIndex) {
   return direction::get(getModulePortDirections(op).getValue()[portIndex]);
 }
 
+// Return the port with the specified name.
+BlockArgument FModuleOp::getPortArgument(size_t portNumber) {
+  return getBodyBlock()->getArgument(portNumber);
+}
+
+/// Erases the ports listed in `portIndices`.  `portIndices` is expected to
+/// be in order and unique.
+void FModuleOp::erasePorts(ArrayRef<unsigned> portIndices) {
+  if (portIndices.empty())
+    return;
+
+  // Drop the direction markers for dead ports.
+  SmallVector<Direction> directions = direction::unpackAttribute(*this);
+  ArrayRef<Attribute> portNames = this->portNames().getValue();
+  assert(directions.size() == portNames.size());
+
+  SmallVector<Direction> newDirections =
+      removeElementsAtIndices<Direction>(directions, portIndices);
+  SmallVector<Attribute> newPortNames =
+      removeElementsAtIndices(portNames, portIndices);
+  (*this)->setAttr(direction::attrKey,
+                   direction::packAttribute(newDirections, getContext()));
+  (*this)->setAttr("portNames", ArrayAttr::get(getContext(), newPortNames));
+
+  // Erase the common function-like stuff, including the block arguments, and
+  // argument attributes (incl port annotations).
+  eraseArguments(portIndices);
+}
+
 static void buildModule(OpBuilder &builder, OperationState &result,
                         StringAttr name, ArrayRef<ModulePortInfo> ports) {
   using namespace mlir::function_like_impl;
@@ -322,7 +388,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
   result.addAttribute(
       direction::attrKey,
-      direction::packIntegerAttribute(portDirections, builder.getContext()));
+      direction::packAttribute(portDirections, builder.getContext()));
 
   result.addRegion();
 }
@@ -343,11 +409,6 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
 
   if (annotations)
     result.addAttribute("annotations", annotations);
-}
-
-// Return the port with the specified name.
-BlockArgument FModuleOp::getPortArgument(size_t portNumber) {
-  return getBodyBlock()->getArgument(portNumber);
 }
 
 void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
@@ -619,7 +680,7 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
 
   // Add the port directions attribute indiciating which port is.
   result.addAttribute(direction::attrKey,
-                      direction::packIntegerAttribute(argDirections, context));
+                      direction::packAttribute(argDirections, context));
 
   SmallVector<Attribute> portNames;
   if (!result.attributes.get("portNames")) {
@@ -730,6 +791,21 @@ Operation *InstanceOp::getReferencedModule() {
     return nullptr;
 
   return circuit.lookupSymbol(moduleName());
+}
+
+/// Create a copy of the specified instance operation with some result removed.
+void InstanceOp::build(OpBuilder &builder, OperationState &result,
+                       InstanceOp existingInstance,
+                       ArrayRef<unsigned> resultsToErase) {
+
+  // Drop the direction markers for dead ports.
+  auto resultTypes = SmallVector<Type>(existingInstance.getResultTypes());
+
+  SmallVector<Type> newResultTypes =
+      removeElementsAtIndices<Type>(resultTypes, resultsToErase);
+
+  build(builder, result, newResultTypes, existingInstance.moduleNameAttr(),
+        existingInstance.nameAttr(), existingInstance.annotationsAttr());
 }
 
 /// Verify the correctness of an InstanceOp.
@@ -2184,25 +2260,43 @@ static void printMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
 
 Direction direction::get(bool a) { return (Direction)a; }
 
-IntegerAttr direction::packIntegerAttribute(ArrayRef<Direction> a,
-                                            MLIRContext *b) {
+IntegerAttr direction::packAttribute(ArrayRef<Direction> directions,
+                                     MLIRContext *ctx) {
 
   // If the module contaions no ports (parameter a is empty), then use an APInt
   // of size 1 with value 0 to store the ports.  This works around an issue
   // where APInt cannot be zero-sized.  This aligns with port name storage which
   // will use a zero-element array.
-  auto size = a.size();
+  auto size = directions.size();
   if (size == 0)
     size = 1;
 
   // Pack the array of directions into an APInt.  Input is zero, output is one.
   APInt portDirections(size, 0);
-  for (size_t i = 0, e = a.size(); i != e; ++i)
-    if (a[i] == Direction::Output)
+  for (size_t i = 0, e = directions.size(); i != e; ++i)
+    if (directions[i] == Direction::Output)
       portDirections.setBit(i);
 
-  return IntegerAttr::get(IntegerType::get(b, size, IntegerType::Unsigned),
-                          portDirections);
+  return IntegerAttr::get(IntegerType::get(ctx, size), portDirections);
+}
+
+/// Turn a packed representation of port attributes into a vector that can be
+/// worked with.
+SmallVector<Direction> direction::unpackAttribute(Operation *module) {
+  const APInt &value =
+      module->getAttr(direction::attrKey).cast<IntegerAttr>().getValue();
+
+  SmallVector<Direction> result;
+
+  // The integer attribute will be a single bit in the case where the module has
+  // no ports because APInt can't hold zero bits.
+  if (getModuleType(module).getInputs().empty())
+    return result;
+
+  result.reserve(value.getBitWidth());
+  for (size_t i = 0, e = value.getBitWidth(); i != e; ++i)
+    result.push_back(direction::get(value[i]));
+  return result;
 }
 
 //===----------------------------------------------------------------------===//

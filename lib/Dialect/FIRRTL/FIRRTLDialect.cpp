@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/IR/DialectImplementation.h"
 
@@ -150,8 +151,9 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
 } // end anonymous namespace
 
 void FIRRTLDialect::initialize() {
-  // Register types.
+  // Register types and attributes.
   registerTypes();
+  registerAttributes();
 
   // Register operations.
   addOperations<
@@ -178,13 +180,17 @@ Operation *FIRRTLDialect::materializeConstant(OpBuilder &builder,
                                               Attribute value, Type type,
                                               Location loc) {
   // Integer constants.
-  if (auto intType = type.dyn_cast<IntType>())
-    if (auto attrValue = value.dyn_cast<IntegerAttr>()) {
-      assert((!intType.hasWidth() || (unsigned)intType.getWidthOrSentinel() ==
-                                         attrValue.getValue().getBitWidth()) &&
-             "type/value width mismatch materializing constant");
-      return builder.create<ConstantOp>(loc, type, attrValue);
-    }
+  if (auto attrValue = value.dyn_cast<IntegerAttr>()) {
+    auto intType = type.cast<IntType>();
+    assert((!intType.hasWidth() || (unsigned)intType.getWidthOrSentinel() ==
+                                       attrValue.getValue().getBitWidth()) &&
+           "type/value width mismatch materializing constant");
+    return builder.create<ConstantOp>(loc, type, attrValue);
+  }
+
+  // InvalidValue constants.
+  if (auto invalidValue = value.dyn_cast<InvalidValueAttr>())
+    return builder.create<InvalidValueOp>(loc, type);
 
   return nullptr;
 }

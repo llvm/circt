@@ -1,4 +1,5 @@
 # REQUIRES: bindings_python
+# XFAIL: true
 # RUN: %PYTHON% %s | FileCheck %s
 
 import mlir
@@ -86,7 +87,7 @@ pm = mlir.passmanager.PassManager.parse(
   "hw-legalize-names,hw.module(hw-cleanup)")
 pm.run(mod)
 circt.export_verilog(mod, sys.stdout)
-# Temporarily broken  module PolynomialCompute(
-# Temporarily broken    input  [31:0] x,
-# Temporarily broken    output [31:0] y);
-# Temporarily broken    assign y = 32'h3E + 32'h2A * x + 32'h6 * x * x;
+# CHECK:  module PolynomialCompute(
+# CHECK:    input  [31:0] x,
+# CHECK:    output [31:0] y);
+# CHECK:    assign y = 32'h3E + 32'h2A * x + 32'h6 * x * x;

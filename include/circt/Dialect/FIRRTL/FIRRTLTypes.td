@@ -111,3 +111,20 @@ def MemDirAttr: I32EnumAttr<"MemDirAttr", "Memory Direction Enum",
 
 def AnnotationArrayAttr : TypedArrayAttrBase<DictionaryAttr,
                                              "An array of FIRRTL Annotations">;
+
+def InvalidValueAttr
+  : AttrDef<FIRRTLDialect, "InvalidValue", [], "::mlir::Attribute"> {
+  let summary = "A constant value of firrtl.invalid type";
+  let description = [{
+    Represents an firrtl.invalidvalue value, whose type is specified by the
+    type of the attribute.
+  }];
+  let mnemonic = "invalidvalue";
+  let parameters = (ins  AttributeSelfTypeParameter<"">:$type);
+
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "Type":$type),
+                                   "return $_get(type.getContext(), type);">
+  ];
+}
+
