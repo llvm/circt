@@ -713,7 +713,8 @@ OpFoldResult AndRPrimOp::fold(ArrayRef<Attribute> operands) {
 
   // x == -1
   if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
-    return getIntOnesAttr(getType());
+    return getIntAttr(getType(), APInt(1, attr.getValue().isAllOnesValue()));
+
   return {};
 }
 
