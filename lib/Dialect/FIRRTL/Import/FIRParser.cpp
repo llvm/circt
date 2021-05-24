@@ -90,7 +90,8 @@ struct GlobalFIRParserState {
                        FIRParserOptions options,
                        const llvm::MemoryBuffer *annotationsBuf)
       : context(context), options(options), lex(sourceMgr, context),
-        curToken(lex.lexToken()), annotationsBuf(annotationsBuf) {
+        curToken(lex.lexToken()), annotationsBuf(annotationsBuf),
+        locatorFilenameCache(Identifier::get("x", context)) {
     dontTouchAnnotation =
         getAnnotationOfClass(context, "firrtl.transforms.DontTouchAnnotation");
     emptyArrayAttr = ArrayAttr::get(context, {});
@@ -125,10 +126,10 @@ struct GlobalFIRParserState {
   /// A mutable reference to the current ModuleTarget.
   StringRef moduleTarget;
 
-  // Cached annotation for DontTouch.
+  /// Cached annotation for DontTouch.
   DictionaryAttr dontTouchAnnotation;
 
-  // An empty array attribute.
+  /// An empty array attribute.
   ArrayAttr emptyArrayAttr;
 
   class BacktraceState {
@@ -150,9 +151,39 @@ struct GlobalFIRParserState {
 
   BacktraceState getBacktrackState() { return BacktraceState(*this); }
 
+  /// Return an FileLineColLoc for the specified location, but use a bit of
+  /// caching to reduce thrasing the MLIRContext.
+  FileLineColLoc getFileLineColLoc(StringRef filename, unsigned lineNo,
+                                   unsigned columnNo) {
+    // Check our single-entry cache for this filename.
+    Identifier filenameId = locatorFilenameCache;
+    if (filenameId.str() != filename) {
+      // We missed!  Get the right identifier.
+      locatorFilenameCache = filenameId = Identifier::get(filename, context);
+
+      // If we miss in the filename cache, we also miss in the FileLineColLoc
+      // cache.
+      return fileLineColLocCache =
+                 FileLineColLoc::get(filenameId, lineNo, columnNo);
+    }
+
+    // If we hit the filename cache, check the FileLineColLoc cache.
+    auto result = fileLineColLocCache;
+    if (result && result.getLine() == lineNo && result.getColumn() == columnNo)
+      return result;
+
+    return fileLineColLocCache =
+               FileLineColLoc::get(filenameId, lineNo, columnNo);
+  }
+
 private:
   GlobalFIRParserState(const GlobalFIRParserState &) = delete;
   void operator=(const GlobalFIRParserState &) = delete;
+
+  /// This is a single-entry cache for filenames in locators.
+  Identifier locatorFilenameCache;
+  /// This is a single-entry cache for FileLineCol locations.
+  FileLineColLoc fileLineColLocCache;
 };
 
 } // end anonymous namespace
@@ -473,8 +504,8 @@ ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result,
 
     // On success, remember what we already parsed (Bar.Scala / 309:14), and
     // move on to the next chunk.
-    auto loc = FileLineColLoc::get(
-        getContext(), filename.drop_front(spaceLoc + 1), lineNo, columnNo);
+    auto loc = state.getFileLineColLoc(filename.drop_front(spaceLoc + 1),
+                                       lineNo, columnNo);
     extraLocs.push_back(loc);
     filename = nextFilename;
     lineNo = nextLineNo;
@@ -482,8 +513,7 @@ ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result,
     spaceLoc = filename.find_last_of(' ');
   }
 
-  Location resultLoc =
-      FileLineColLoc::get(getContext(), filename, lineNo, columnNo);
+  Location resultLoc = state.getFileLineColLoc(filename, lineNo, columnNo);
   if (!extraLocs.empty()) {
     extraLocs.push_back(resultLoc);
     std::reverse(extraLocs.begin(), extraLocs.end());
@@ -492,9 +522,8 @@ ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result,
   result.setInfoLocation(resultLoc);
 
   // Now that we have a symbolic location, apply it to any subOps specified.
-  for (auto *op : subOps) {
+  for (auto *op : subOps)
     op->setLoc(resultLoc);
-  }
 
   return success();
 }
