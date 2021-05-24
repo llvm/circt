@@ -68,7 +68,7 @@ with Context() as ctx, Location.unknown():
     two_inputs = hw.HWModuleOp(
         name="two_inputs",
         input_ports=[("a", i32), ("b", i32)],
-        body_builder=lambda m: [],
+        body_builder=lambda m: None,
     )
     one_output = hw.HWModuleOp(
         name="one_output",
@@ -80,13 +80,13 @@ with Context() as ctx, Location.unknown():
         name="two_outputs",
         input_ports=[("a", i32)],
         output_ports=[("x", i32), ("y", i32)],
-        body_builder=lambda m: [m.a, m.a]
+        body_builder=lambda m: dict(x=m.a, y=m.a)
     )
     three_outputs = hw.HWModuleOp(
         name="three_outputs",
         input_ports=[("a", i32)],
         output_ports=[("x", i32), ("y", i32), ("z", i32)],
-        body_builder=lambda m: {'z': m.a, 'x': m.a, 'y': m.a}
+        body_builder=lambda m: {"z": m.a, "x": m.a, "y": m.a}
     )
 
     # CHECK-LABEL: hw.module @instance_builder_tests

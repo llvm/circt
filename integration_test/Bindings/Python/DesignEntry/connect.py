@@ -18,7 +18,7 @@ class Dummy:
     self.y = Output(types.i32)
 
   def construct(self, mod):
-    return mod.x
+    return {"y": mod.x}
 
 
 @module

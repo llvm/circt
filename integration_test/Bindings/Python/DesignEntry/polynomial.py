@@ -56,7 +56,7 @@ class PolynomialCompute:
       taps.append(newPartialSum)
 
     # Final output
-    return [taps[-1]]
+    return {"y": taps[-1]}
 
 
 def build(top):

@@ -204,36 +204,27 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
   # Now create the output op depending on the object type returned
   outputs = list[Value]()
 
-  # A list is simple. Just map it to values.
-  if isinstance(bb_ret, list):
-    outputs = [_get_val(x) for x in bb_ret]
+  # Only acceptable return is a dict of port, value mappings.
+  if not isinstance(bb_ret, dict):
+    raise ConnectionError(
+        "Can only return a dict of port, value mappings from body_builder.")
 
   # A dict of `OutputPortName` -> ValueLike must be converted to a list in port
   # order.
-  elif isinstance(bb_ret, dict):
-    unconnected_ports = []
-    for (name, _) in output_ports:
-      if name not in bb_ret:
-        unconnected_ports.append(name)
-        outputs.append(None)
-      else:
-        val = _get_val(bb_ret[name])
-        outputs.append(val)
-      bb_ret.pop(name)
-    if len(unconnected_ports) > 0:
-      raise UnconnectedSignalError(cls_name, unconnected_ports)
-    if len(bb_ret) > 0:
-      raise ConnectionError(
-        f"Could not map the follow to ports in {cls_name}: {bb_ret.keys}")
-
-  # If the return value isn't a list or dict, assume it's a single value to the
-  # sole output.
-  else:
-    output = _get_val(bb_ret)
-    if len(output_ports) != 1:
-      raise ConnectionError(
-        "Can only return one value from body_builder if module has one output")
-    outputs = [output]
+  unconnected_ports = []
+  for (name, _) in output_ports:
+    if name not in bb_ret:
+      unconnected_ports.append(name)
+      outputs.append(None)
+    else:
+      val = _get_val(bb_ret[name])
+      outputs.append(val)
+    bb_ret.pop(name)
+  if len(unconnected_ports) > 0:
+    raise UnconnectedSignalError(cls_name, unconnected_ports)
+  if len(bb_ret) > 0:
+    raise ConnectionError(
+      f"Could not map the follow to ports in {cls_name}: {bb_ret.keys}")
 
   hw.OutputOp(outputs)
 
