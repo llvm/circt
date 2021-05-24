@@ -34,6 +34,8 @@ def FIRRTLDialect : Dialect {
   let extraClassDeclaration = [{
     /// Register all FIRRTL types.
     void registerTypes();
+    /// Register all attributes.
+    void registerAttributes();
   }];
 }
 

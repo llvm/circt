@@ -1,3 +1,4 @@
+// RUN: rm -rf %t
 // RUN: firtool %s --format=mlir --split-verilog -o=%t
 // RUN: FileCheck %s --check-prefix=VERILOG-TOP < %t/test_mod.sv
 // RUN: FileCheck %s --check-prefix=VERILOG-FOO < %t/magic/blackbox-inline.v

@@ -1,3 +1,5 @@
+# REQUIRES: bindings_python
+# XFAIL: true
 # RUN: %PYTHON% %s | FileCheck %s
 
 import mlir
