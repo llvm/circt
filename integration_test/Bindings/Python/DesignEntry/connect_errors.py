@@ -33,7 +33,7 @@ class Test:
     except TypeError as e:
       print(e)
     try:
-      # CHECK: Temporarily broken: cannot connect to destination of type
+      # CHECK: cannot connect to destination of type
       connect(None, inst.x)
     except TypeError as e:
       print(e)
