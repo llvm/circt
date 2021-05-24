@@ -2958,13 +2958,7 @@ void RootEmitterBase::gatherFiles(bool separateModules) {
                 replicatedOps.push_back(&op);
             })
         .Case<HWGeneratorSchemaOp>([&](auto &) {
-          if (attr) {
-            if (!hasFileName) {
-              op.emitError("file name unspecified");
-              encounteredError = true;
-            } else
-              separateFile(&op);
-          }
+          // Empty.
         })
         .Default([&](auto *) {
           op.emitError("unknown operation");
