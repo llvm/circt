@@ -100,8 +100,8 @@ firrtl.circuit "Simple" {
                              out %outD: !firrtl.uint<4>,
                              in %inE: !firrtl.uint<3>,
                              out %outE: !firrtl.uint<4>) {
-    // CHECK: [[OUTC:%.+]] = sv.wire sym @".outC.output" : !hw.inout<i4>
-    // CHECK: [[OUTD:%.+]] = sv.wire sym @".outD.output" : !hw.inout<i4>
+    // CHECK: [[OUTC:%.+]] = sv.wire sym @__PortMadness__.outC.output : !hw.inout<i4>
+    // CHECK: [[OUTD:%.+]] = sv.wire sym @__PortMadness__.outD.output : !hw.inout<i4>
 
     // Normal
     firrtl.connect %outA, %inA : !firrtl.uint<4>, !firrtl.uint<4>
