@@ -95,3 +95,35 @@ class BuilderValue:
     self.value = value
     self.builder = builder
     self.index = index
+
+
+class NamedValueOpView:
+  """Helper class to incrementally construct an instance of an operation that
+     names its operands and results"""
+
+  def __init__(self, opview, operand_indices, result_indices, backedges):
+    self.opview = opview
+    self.operand_indices = operand_indices
+    self.result_indices = result_indices
+    self.backedges = backedges
+
+  def __getattr__(self, name):
+    # Check for the attribute in the arg name set.
+    if name in self.operand_indices:
+      index = self.operand_indices[name]
+      value = self.opview.operands[index]
+      return BuilderValue(value, self, index)
+
+    # Check for the attribute in the result name set.
+    if name in self.result_indices:
+      index = self.result_indices[name]
+      value = self.opview.results[index]
+      return BuilderValue(value, self, index)
+
+    # If we fell through to here, the name isn't a result.
+    raise AttributeError(f"unknown port name {name}")
+
+  @property
+  def operation(self):
+    """Get the operation associated with this builder."""
+    return self.opview.operation

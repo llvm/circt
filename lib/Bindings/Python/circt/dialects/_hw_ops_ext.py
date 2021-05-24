@@ -2,12 +2,12 @@ from typing import Dict, Optional, Sequence
 
 import inspect
 
-from circt.support import BackedgeBuilder, BuilderValue
+from circt.support import BackedgeBuilder, NamedValueOpView
 
 from mlir.ir import *
 
 
-class InstanceBuilder:
+class InstanceBuilder(NamedValueOpView):
   """Helper class to incrementally construct an instance of a module."""
 
   def __init__(self,
@@ -23,77 +23,52 @@ class InstanceBuilder:
     from ._hw_ops_gen import InstanceOp
 
     # Create mappings from port name to value, index, and potentially backedge.
-    self.mod = module
-    self.operand_indices = {}
-    self.operand_values = []
-    self.result_indices = {}
-    self.backedges = {}
+    operand_indices = {}
+    operand_values = []
+    result_indices = {}
+    backedges = {}
 
     arg_names = ArrayAttr(module.attributes["argNames"])
     for i in range(len(arg_names)):
       arg_name = StringAttr(arg_names[i]).value
-      self.operand_indices[arg_name] = i
+      operand_indices[arg_name] = i
 
       if arg_name in input_port_mapping:
         value = input_port_mapping[arg_name]
         if not isinstance(value, Value):
           value = input_port_mapping[arg_name].value
-        self.operand_values.append(value)
+        operand_values.append(value)
       else:
         type = module.type.inputs[i]
         backedge = BackedgeBuilder.create(
             type, arg_name, self, instance_of=module)
-        self.backedges[i] = backedge
-        self.operand_values.append(backedge.result)
+        backedges[i] = backedge
+        operand_values.append(backedge.result)
 
     result_names = ArrayAttr(module.attributes["resultNames"])
     for i in range(len(result_names)):
       result_name = StringAttr(result_names[i]).value
-      self.result_indices[result_name] = i
+      result_indices[result_name] = i
 
     # Actually build the InstanceOp.
     instance_name = StringAttr.get(name)
-    module_name = FlatSymbolRefAttr.get(StringAttr(self.mod.name).value)
+    module_name = FlatSymbolRefAttr.get(StringAttr(module.name).value)
     parameters = {k: Attribute.parse(str(v)) for (k, v) in parameters.items()}
     parameters = DictAttr.get(parameters)
     if sym_name:
       sym_name = StringAttr.get(sym_name)
-    self.instance = InstanceOp(
-        self.mod.type.results,
+    instance = InstanceOp(
+        module.type.results,
         instance_name,
         module_name,
-        self.operand_values,
+        operand_values,
         parameters,
         sym_name,
         loc=loc,
         ip=ip,
     )
 
-  def __getattr__(self, name):
-    # Check for the attribute in the arg name set.
-    if name in self.operand_indices:
-      index = self.operand_indices[name]
-      value = self.instance.inputs[index]
-      return BuilderValue(value, self, index)
-
-    # Check for the attribute in the result name set.
-    if name in self.result_indices:
-      index = self.result_indices[name]
-      value = self.instance.results[index]
-      return BuilderValue(value, self, index)
-
-    # If we fell through to here, the name isn't a result.
-    raise AttributeError(f"unknown port name {name}")
-
-  @property
-  def operation(self):
-    """Get the operation associated with this builder."""
-    return self.instance.operation
-
-  @property
-  def module(self):
-    """Get the module associated with this builder."""
-    return self.mod.operation
+    super().__init__(instance, operand_indices, result_indices, backedges)
 
 
 class ModuleLike:
