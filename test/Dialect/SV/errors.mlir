@@ -142,8 +142,3 @@ hw.module @Cover(%arg0: i1) {
   sv.cover %arg0: i1
 }
 
-// -----
-hw.module.extern @test1(%arg0: i1, %arg1: i1, %arg8: i8)
-func @test2(%arg0: i1, %arg1: i1, %arg8: i8) { return }
-// expected-error @+1 {{'sv.bind' op attribute 'child' failed to satisfy constraint: flat symbol reference attribute is module like}}
-sv.bind "testinst" @test1 @test2

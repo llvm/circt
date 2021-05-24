@@ -964,27 +964,7 @@ LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
 // BindOp
 //===----------------------------------------------------------------------===//
 
-/// Lookup the module or extmodule for the symbol.  This returns null on
-/// invalid IR.
-Operation *BindOp::getReferencedModuleBase() {
-  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
-  if (!topLevelModuleOp)
-    return nullptr;
-
-  return topLevelModuleOp.lookupSymbol(base());
-}
-
-/// Lookup the module or extmodule for the symbol.  This returns null on
-/// invalid IR.
-Operation *BindOp::getReferencedModuleChild() {
-  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
-  if (!topLevelModuleOp)
-    return nullptr;
-
-  return topLevelModuleOp.lookupSymbol(child());
-}
-
-hw::InstanceOp BindExplicitOp::getReferencedInstance() {
+hw::InstanceOp BindOp::getReferencedInstance() {
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
   if (!topLevelModuleOp)
     return nullptr;
