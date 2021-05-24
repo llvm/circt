@@ -752,7 +752,7 @@ bool circt::firrtl::scatterCustomAnnotations(
           !parseAugmentedType(context, viewAttr, dict, newAnnotations,
                               companion, {}, {}, loc, clazz, "view"))
         return false;
-      break;
+      continue;
     }
 
     // Just copy over any annotation we don't understand.
