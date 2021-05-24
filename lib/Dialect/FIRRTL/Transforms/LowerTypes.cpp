@@ -167,6 +167,7 @@ public:
   void visitDecl(RegOp op);
   void visitDecl(WireOp op);
   void visitDecl(RegResetOp op);
+  void visitExpr(BundleOp op);
   void visitExpr(InvalidValueOp op);
   void visitExpr(SubfieldOp op);
   void visitExpr(SubindexOp op);
@@ -786,6 +787,34 @@ void TypeLoweringVisitor::visitDecl(RegResetOp op) {
   }
 
   // Remember to remove the original op.
+  opsToRemove.push_back(op);
+}
+
+void TypeLoweringVisitor::visitExpr(BundleOp op) {
+  // Flatten any nested bundle types the usual way.
+  SmallVector<FlatBundleFieldEntry, 8> fields;
+  flattenType(op.result().getType().cast<FIRRTLType>(), "", false, fields);
+  // BundleOp is a aggregation of other values, and is just replaced with its
+  // operands.
+  auto fieldIt = fields.begin();
+  for (auto operand : op.getOperands()) {
+    auto operandType = getCanonicalAggregateType(operand.getType());
+    if (!operandType) {
+      // The operand is not a bundle type, and we can use the operand itself as
+      // the lowered result.
+      auto fieldName = StringRef((fieldIt++)->suffix).drop_front(1);
+      setBundleLowering(op, fieldName, operand);
+    } else {
+      // The operand is a bundle, and we need to use the expanded bundle
+      // lowerings.
+      SmallVector<std::pair<Value, bool>, 8> inputs;
+      getAllBundleLowerings(operand, inputs);
+      for (auto input : inputs) {
+        auto fieldName = StringRef((fieldIt++)->suffix).drop_front(1);
+        setBundleLowering(op, fieldName, input.first);
+      }
+    }
+  }
   opsToRemove.push_back(op);
 }
 

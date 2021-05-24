@@ -127,6 +127,35 @@ def InvalidValueOp : FIRRTLOp<"invalidvalue", [NoSideEffect]> {
   let assemblyFormat = "attr-dict `:` type($result)";
 }
 
+def BundleOp : FIRRTLOp<"bundle", [NoSideEffect]> {
+  let summary = "Create a bundle from constituent parts.";
+  let description = [{
+    This operation takes several values and combines them into a single
+    bundle value.
+
+    ```
+      %0 = firrtl.bundle %0, %1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.bundle<a: uint<1>, b: uint<1>>
+    ```
+
+    Each operand must appear in the output bundle, and the type of each element
+    in the output bundle must match the type of operand. The name of each
+    bundle element is up to the user.
+
+    The result of the `firrtl.bundle` operation is always considered to have
+    source flow.  This means that the result can only appear on the right hand
+    side of a connect operation.
+
+    If an operand has Sink flow, it must be flipped in the output bundle.  If
+    an operand has Source flow, it must not be flipped in the output bundle. If
+    the operand has Duplex flow, then it can be either.
+  }];
+  let arguments = (ins Variadic<FIRRTLType>:$inputs);
+  let results = (outs BundleType:$result);
+  let assemblyFormat =
+    "$inputs attr-dict `:` functional-type($inputs, $result)";
+  let verifier = "return ::verifyBundleOp(*this);";
+}
+
 def SubfieldOp : FIRRTLExprOp<"subfield"> {
   let summary = "Extract a subfield of another value";
   let description = [{

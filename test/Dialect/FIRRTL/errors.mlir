@@ -306,6 +306,42 @@ firrtl.circuit "BadAdd" {
 
 // -----
 
+firrtl.circuit "BadBundle" {
+  firrtl.module @BadBundle(in %x : !firrtl.uint<8>) {
+    // expected-error @+1 {{expected 1 operands, but got 0}}
+    %0 = firrtl.bundle : () -> !firrtl.bundle<a: flip<uint<8>>>
+  }
+}
+
+// -----
+
+firrtl.circuit "BadBundle" {
+  firrtl.module @BadBundle(in %x : !firrtl.uint<8>) {
+    // expected-error @+1 {{result element "a" should not be flipped}}
+    %0 = firrtl.bundle %x : (!firrtl.uint<8>) -> !firrtl.bundle<a: flip<uint<8>>>
+  }
+}
+
+// -----
+
+firrtl.circuit "BadBundle" {
+  firrtl.module @BadBundle(out %x : !firrtl.uint<8>) {
+    // expected-error @+1 {{result element "a" should be flipped}}
+    %0 = firrtl.bundle %x : (!firrtl.uint<8>) -> !firrtl.bundle<a: uint<8>>
+  }
+}
+
+// -----
+
+firrtl.circuit "BadBundle" {
+  firrtl.module @BadBundle(out %x : !firrtl.sint<42>) {
+    // expected-error @+1 {{result element "a" has a different type than than the operand}}
+    %0 = firrtl.bundle %x : (!firrtl.sint<42>) -> !firrtl.bundle<a: flip<uint<8>>>
+  }
+}
+
+// -----
+
 firrtl.circuit "NodeMustBePassive" {
   firrtl.module @Sub(in %a: !firrtl.uint<1>) {}
   firrtl.module @NodeMustBePassive() {

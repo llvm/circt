@@ -560,6 +560,19 @@ firrtl.circuit "ExternalModule" {
 }
 
 // -----
+firrtl.circuit "bundleop" {
+  firrtl.module @bundleop(in %x : !firrtl.bundle<a: flip<uint<8>>>, in %y : !firrtl.uint<8>) {
+    // check: %w_a_a = firrtl.wire  : !firrtl.uint<8>
+    // check: %w_b = firrtl.wire  : !firrtl.uint<8>
+    // check: firrtl.connect %x_a, %w_a_a : !firrtl.uint<8>, !firrtl.uint<8>
+    // check: firrtl.connect %w_b, %y : !firrtl.uint<8>, !firrtl.uint<8>
+    %w = firrtl.wire : !firrtl.bundle<a: bundle<a: flip<uint<8>>>, b: uint<8>>
+    %0 = firrtl.bundle %x, %y : (!firrtl.bundle<a: flip<uint<8>>>, !firrtl.uint<8>) -> !firrtl.bundle<a: bundle<a: flip<uint<8>>>, b: uint<8>>
+    firrtl.connect %w, %0 : !firrtl.bundle<a: bundle<a: flip<uint<8>>>, b: uint<8>>, !firrtl.bundle<a: bundle<a: flip<uint<8>>>, b: uint<8>>
+  }
+}
+
+// -----
 
 // Test RegResetOp lowering
 firrtl.circuit "LowerRegResetOp" {

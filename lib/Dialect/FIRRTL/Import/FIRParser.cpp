@@ -1258,9 +1258,35 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, SubOpVector &subOps,
 
     assert(symtabEntry.is<UnbundledID>() && "should be an instance");
 
-    // Otherwise we referred to an implicitly bundled value.  We *must* be in
-    // the midst of processing a field ID reference or 'is invalid'.  If not,
-    // this is an error.
+    // Handle the normal "instance.x" reference.
+    StringRef fieldName;
+    if (consumeIf(FIRToken::period)) {
+      if (parseFieldId(fieldName, "expected field name") ||
+          resolveSymbolEntry(result, symtabEntry, fieldName, loc))
+        return failure();
+      break;
+    }
+
+    // Handle a reference to the entire result of an instance.  The instance
+    // results need to be combined in to a single bundle.
+    unsigned unbundledId = symtabEntry.get<UnbundledID>() - 1;
+    assert(unbundledId < unbundledValues.size());
+    UnbundledValueEntry &ubEntry = unbundledValues[unbundledId];
+    SmallVector<Value, 4> operands;
+    SmallVector<BundleType::BundleElement, 4> elements;
+    for (auto elt : ubEntry) {
+      // Get the type of the bundle element, output ports should be flipped.
+      // TODO: When instance input ports aren't represented as FlipTypes, this
+      // won't work anymore.  This is going to have to figure out the flip of
+      // the field based on the instance or related module.
+      auto type = elt.second.getType().cast<FIRRTLType>();
+      operands.push_back(elt.second);
+      elements.push_back({elt.first.cast<StringAttr>(), type});
+    }
+    auto bundleType = BundleType::get(elements, getContext());
+    result = builder.create<BundleOp>(translateLocation(loc), bundleType, operands);
+
+    // Check if we are invalidating the instance.
     if (isLeadingStmt && consumeIf(FIRToken::kw_is)) {
       LocWithInfo info(loc, this);
       if (parseToken(FIRToken::kw_invalid, "expected 'invalid'") ||
@@ -1268,24 +1294,12 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, SubOpVector &subOps,
         return failure();
 
       // Invalidate all of the results of the bundled value.
-      unsigned unbundledId = symtabEntry.get<UnbundledID>() - 1;
-      assert(unbundledId < unbundledValues.size());
-      UnbundledValueEntry &ubEntry = unbundledValues[unbundledId];
-      for (auto elt : ubEntry) {
-        emitInvalidate(elt.second, info.getLoc());
-      }
+      emitInvalidate(result, info.getLoc());
 
       // Signify that we parsed the whole statement.
       result = Value();
       return success();
     }
-
-    // Handle the normal "instance.x" reference.
-    StringRef fieldName;
-    if (parseToken(FIRToken::period, "expected '.' in field reference") ||
-        parseFieldId(fieldName, "expected field name") ||
-        resolveSymbolEntry(result, symtabEntry, fieldName, loc))
-      return failure();
     break;
   }
   }

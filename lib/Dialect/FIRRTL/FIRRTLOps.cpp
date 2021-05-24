@@ -1324,6 +1324,57 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
   return build(builder, result, type, attr);
 }
 
+static LogicalResult verifyBundleOp(BundleOp op) {
+  auto bundleType = op.getType().cast<BundleType>();
+  auto elements = bundleType.getElements();
+
+  // Check that the number of inputs matches the number of fields in the output
+  // bundle.
+  if (op->getNumOperands() != elements.size()) {
+    op.emitOpError("expected ")
+        << elements.size() << " operands, but got " << op->getNumOperands();
+    return failure();
+  }
+
+  // For each operand, check that its type is compatible with the type of the
+  // corresponding field in the bundle.
+  for (auto it : llvm::zip(op.getOperands(), elements)) {
+    auto in = std::get<0>(it);
+    auto inFlow = foldFlow(in);
+    auto outElement = std::get<1>(it);
+    auto outType = outElement.type;
+    auto outName = outElement.name.getValue();
+
+    auto emitFieldError = [&](const Twine &msg) {
+      op.emitOpError(Twine("result element \"") + outName + "\" " + msg);
+      return failure();
+    };
+
+    // Check the flip-ness of the field in the bundle. BundleOp's result always
+    // has Source flow, this means:
+    // If the operand has Sink flow, it must be flipped in the bundle.
+    // If the operand has Source flow, it must not be flipped in the bundle.
+    // If the operand has Duplex flow, it can be either.
+    if (inFlow == Flow::Sink && !outType.isa<FlipType>()) {
+      return emitFieldError("should be flipped");
+    } else if (inFlow == Flow::Source && outType.isa<FlipType>()) {
+      return emitFieldError("should not be flipped");
+    }
+
+    // Check that the field type without flip matches the input type.
+    auto inType = in.getType();
+    if (auto flipType = inType.dyn_cast<FlipType>())
+      inType = flipType.getElementType();
+    if (auto flipType = outType.dyn_cast<FlipType>())
+      outType = flipType.getElementType();
+    if (inType != outType) {
+      return emitFieldError("has a different type than than the operand");
+    }
+  }
+
+  return success();
+}
+
 FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
                                        ArrayRef<NamedAttribute> attrs,
                                        Optional<Location> loc) {
