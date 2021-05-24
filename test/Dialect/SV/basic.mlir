@@ -160,3 +160,28 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   // CHECK-NEXT: hw.output
   hw.output
 }
+
+//CHECK-LABEL: sv.bind "testinst" @test1 @test2
+sv.bind "testinst" @test1 @test2
+//CHECK-NEXT: hw.module.extern @test2(%arg0: i1, %arg1: i1, %arg8: i8)
+//CHECK-NEXT: hw.module.extern @ExternDestMod(%a: i1, %b: i2)
+//CHECK-NEXT: hw.module.extern @InternalDestMod(%a: i1, %b: i2)
+hw.module.extern @test2(%arg0: i1, %arg1: i1, %arg8: i8)
+hw.module.extern @ExternDestMod(%a: i1, %b: i2)
+hw.module.extern @InternalDestMod(%a: i1, %b: i2)
+//CHECK-NEXT: hw.module @AB(%a: i1, %b: i2) {
+//CHECK-NEXT:   hw.instance "whatever" sym @a1 @ExternDestMod(%a, %b) {doNotPrint = 1 : i64} : (i1, i2) -> ()
+//CHECK-NEXT:   hw.instance "yo" sym @b1 @InternalDestMod(%a, %b) {doNotPrint = 1 : i64} : (i1, i2) -> ()
+//CHECK-NEXT:   hw.output
+//CHECK-NEXT: }
+hw.module @AB(%a: i1, %b: i2) -> () {
+  hw.instance "whatever" sym @a1 @ExternDestMod(%a, %b) {doNotPrint=1}: (i1, i2) -> ()
+  hw.instance "yo" sym @b1 @InternalDestMod(%a, %b) {doNotPrint=1} : (i1, i2) -> ()
+  hw.output
+}
+//CHECK-NEXT: sv.bind.explicit @a1
+//CHECK-NEXT: sv.bind.explicit @b1
+//CHECK-NEXT: sv.bind "instname" @AB @ExternDestMod
+sv.bind.explicit @a1
+sv.bind.explicit @b1
+sv.bind "instname" @AB @ExternDestMod

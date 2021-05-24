@@ -10,6 +10,13 @@
 //
 //===----------------------------------------------------------------------===//
 
+/// Ensure symbol is one of the hw module.* types
+def isModuleSymbol : AttrConstraint<
+  CPred<
+    "hw::isAnyModule(::mlir::SymbolTable::lookupNearestSymbolFrom("
+      "&$_op, $_self.cast<::mlir::FlatSymbolRefAttr>().getValue()))"
+  >, "is module like">;
+
 //===----------------------------------------------------------------------===//
 // Control flow like-operations
 //===----------------------------------------------------------------------===//
@@ -479,4 +486,54 @@ def CoverOp : SVOp<"cover", [ProceduralOp]> {
   let arguments = (ins AnyType:$property);
   let results = (outs);
   let assemblyFormat = "attr-dict $property `:` type($property)";
+}
+
+def BindExplicitOp : SVOp<"bind.explicit", []> {
+  let summary = "indirect instantiation statement";
+  let description = [{
+    Indirectly instantiate a module in the context of another module.
+      This operation pairs with rtl.instance which tracks all information except
+      the emission point for the bind. Use this flavor of bind when the
+      instantiation location can be explicitly tracked.
+    See 23.11 of SV 2017 spec.
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$bind);
+  let results = (outs);
+
+  let assemblyFormat = [{ $bind attr-dict }];
+
+  let extraClassDeclaration = [{
+    /// Lookup the instance for the bind.  This returns null on
+    /// invalid IR.
+    hw::InstanceOp getReferencedInstance();
+  }];
+}
+
+
+def BindOp : SVOp<"bind", []> {
+  let summary = "indirect instantiation statement";
+  let description = [{
+    Indirectly instantiate a module in the context of another module.  This
+    implements all-instance module binding in system verilog.  This will
+    generate ".*" name binding, but not validate names.
+    See 23.11 of SV 2017 spec.
+  }];
+
+  let arguments = (ins StrAttr:$instanceName, 
+                       Confined<FlatSymbolRefAttr, [isModuleSymbol]>:$base, 
+                       Confined<FlatSymbolRefAttr, [isModuleSymbol]>:$child);
+  let results = (outs);
+
+  let assemblyFormat = [{$instanceName $base $child attr-dict}];
+
+  let extraClassDeclaration = [{
+    /// Lookup the module or extmodule for the src symbol.  This returns null on
+    /// invalid IR.
+    Operation *getReferencedModuleBase();
+
+    /// Lookup the module or extmodule for the dest symbol.  This returns null on
+    /// invalid IR.
+    Operation *getReferencedModuleChild();
+  }];
 }

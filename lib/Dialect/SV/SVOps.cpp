@@ -44,6 +44,30 @@ LogicalResult sv::verifyInNonProceduralRegion(Operation *op) {
   return failure();
 }
 
+/// Returns the operation registered with the given symbol name with the regions
+/// of 'symbolTableOp'. recurse through nested regions which don't contain the
+/// symboltable trait. Returns nullptr if no valid symbol was found.
+static Operation* lookupSymbolInNested(Operation* symbolTableOp, StringRef symbol) {
+  Region &region = symbolTableOp->getRegion(0);
+  if (region.empty())
+    return nullptr;
+
+  // Look for a symbol with the given name.
+  Identifier symbolNameId = Identifier::get(SymbolTable::getSymbolAttrName(),
+                                            symbolTableOp->getContext());
+  for (Block &block : region)
+    for (Operation &nestedOp : block) {
+      auto nameAttr = nestedOp.getAttrOfType<StringAttr>(symbolNameId);
+      if (nameAttr && nameAttr.getValue() == symbol)
+        return &nestedOp;
+  if (!nestedOp.hasTrait<OpTrait::SymbolTable>() && nestedOp.getNumRegions()) {
+    if (auto* nop = lookupSymbolInNested(&nestedOp, symbol))
+    return nop;
+  }
+  }
+  return nullptr;
+}
+
 //===----------------------------------------------------------------------===//
 // ImplicitSSAName Custom Directive
 //===----------------------------------------------------------------------===//
@@ -934,6 +958,41 @@ LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
   // Remove the wire.
   rewriter.eraseOp(op);
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// BindOp
+//===----------------------------------------------------------------------===//
+
+/// Lookup the module or extmodule for the symbol.  This returns null on
+/// invalid IR.
+Operation *BindOp::getReferencedModuleBase() {
+  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
+  if (!topLevelModuleOp)
+    return nullptr;
+
+  return topLevelModuleOp.lookupSymbol(base());
+}
+
+/// Lookup the module or extmodule for the symbol.  This returns null on
+/// invalid IR.
+Operation *BindOp::getReferencedModuleChild() {
+  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
+  if (!topLevelModuleOp)
+    return nullptr;
+
+  return topLevelModuleOp.lookupSymbol(child());
+}
+
+hw::InstanceOp BindExplicitOp::getReferencedInstance() {
+  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
+  if (!topLevelModuleOp)
+    return nullptr;
+
+  /// Lookup the instance for the symbol.  This returns null on
+  /// invalid IR.
+  auto inst = lookupSymbolInNested(topLevelModuleOp, bind());
+  return dyn_cast_or_null<hw::InstanceOp>(inst);
 }
 
 //===----------------------------------------------------------------------===//
