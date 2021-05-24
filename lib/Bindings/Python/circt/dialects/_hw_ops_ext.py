@@ -2,7 +2,7 @@ from typing import Dict, Optional, Sequence
 
 import inspect
 
-from circt.support import BackedgeBuilder, BuilderValue, NamedValueBuilder
+from circt.support import BackedgeBuilder, NamedValueBuilder
 
 from mlir.ir import *
 
@@ -69,11 +69,6 @@ class InstanceBuilder(NamedValueBuilder):
     )
 
     super().__init__(instance, operand_indices, result_indices, backedges)
-
-  @property
-  def operation(self):
-    """Get the operation associated with this builder."""
-    return self.opview.operation
 
 
 class ModuleLike:

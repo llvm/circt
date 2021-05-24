@@ -111,7 +111,7 @@ class NamedValueBuilder:
     # Check for the attribute in the arg name set.
     if name in self.operand_indices:
       index = self.operand_indices[name]
-      value = self.opview.inputs[index]
+      value = self.opview.operands[index]
       return BuilderValue(value, self, index)
 
     # Check for the attribute in the result name set.
@@ -122,3 +122,8 @@ class NamedValueBuilder:
 
     # If we fell through to here, the name isn't a result.
     raise AttributeError(f"unknown port name {name}")
+
+  @property
+  def operation(self):
+    """Get the operation associated with this builder."""
+    return self.opview.operation
