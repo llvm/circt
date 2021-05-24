@@ -2,12 +2,12 @@ from typing import Dict, Optional, Sequence
 
 import inspect
 
-from circt.support import BackedgeBuilder, NamedValueBuilder
+from circt.support import BackedgeBuilder, NamedValueOpView
 
 from mlir.ir import *
 
 
-class InstanceBuilder(NamedValueBuilder):
+class InstanceBuilder(NamedValueOpView):
   """Helper class to incrementally construct an instance of a module."""
 
   def __init__(self,

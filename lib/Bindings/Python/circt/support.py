@@ -97,7 +97,7 @@ class BuilderValue:
     self.index = index
 
 
-class NamedValueBuilder:
+class NamedValueOpView:
   """Helper class to incrementally construct an instance of an operation that
      names its operands and results"""
 
