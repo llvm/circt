@@ -2,8 +2,7 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from circt.dialects import hw
-from .support import BuilderValue, UnconnectedSignalError
+from circt.support import BuilderValue, BackedgeBuilder, OpOperand
 import circt
 
 import mlir.ir
@@ -14,6 +13,7 @@ import atexit
 DefaultContext = mlir.ir.Context()
 DefaultContext.__enter__()
 circt.register_dialects(DefaultContext)
+DefaultContext.allow_unregistered_dialects = True
 
 
 @atexit.register
@@ -32,97 +32,129 @@ def __exit_loc():
   DefaultLocation.__exit__(None, None, None)
 
 
-class Output:
-  """Represents an output port on a design module. Call the 'set' method to set
-  the output value during implementation."""
+class ModuleDecl:
+  """Represents an input or output port on a design module."""
 
-  __slots__ = ["type", "value"]
+  __slots__ = [
+      "name",
+      "_type"
+  ]
 
-  def __init__(self, type: mlir.ir.Type):
-    self.type = type
-    self.value = None
+  def __init__(self, type: mlir.ir.Type, name: str = None):
+    self.name: str = name
+    self._type: mlir.ir.Type = type
 
-  def set(self, val):
-    """Sets the final output signal. Should only be called by the implementation
-    code."""
-    if isinstance(val, mlir.ir.Value):
-      self.value = val
-    else:
-      self.value = val.result
+  @property
+  def type(self):
+    return self._type
 
 
-class Input:
-  __slots__ = ["type"]
+class Output(ModuleDecl):
+  pass
 
-  def __init__(self, type: mlir.ir.Type):
-    self.type = type
+
+class Input(ModuleDecl):
+  pass
 
 
 def module(cls):
   """The CIRCT design entry module class decorator."""
 
-  class __Module(cls):
+  class __Module(cls, mlir.ir.OpView):
+    OPERATION_NAME = "circt.design_entry." + cls.__name__
+    _ODS_REGIONS = (0, True)
+
+    # Default mappings to operand/result numbers.
+    input_ports = dict[str, int]()
+    output_ports = dict[str, int]()
 
     def __init__(self, *args, **kwargs):
-      super().__init__(*args, **kwargs)
+      """Scan the class and eventually instance for Input/Output members and
+      treat the inputs as operands and outputs as results."""
+      cls.__init__(self, *args, **kwargs)
+
+      # The OpView attributes cannot be touched before OpView is constructed.
+      # Get a list and don't touch them.
+      dont_touch = set([x for x in dir(mlir.ir.OpView)])
 
       # After the wrapped class' construct, all the IO should be known.
-      input_ports = []
-      output_ports = []
+      input_ports = list[Input]()
+      output_ports = list[Output]()
+      # Scan for them.
       for attr_name in dir(self):
+        if attr_name in dont_touch:
+          continue
         attr = self.__getattribute__(attr_name)
-        if type(attr) is Input:
+        if isinstance(attr, Input):
+          attr.name = attr_name
+          input_ports.append(attr)
+        if isinstance(attr, Output):
+          attr.name = attr_name
+          output_ports.append(attr)
 
-          input_ports.append((attr_name, attr))
-        if type(attr) is Output:
-          output_ports.append((attr_name, attr))
+      # Build a list of operand values for the operation we're gonna create.
+      input_ports_values = list[mlir.ir.Value]()
+      for input in input_ports:
+        if input.name in kwargs:
+          value = kwargs[input.name]
+          if isinstance(value, mlir.ir.OpView):
+            value = value.operation.result
+          elif isinstance(value, mlir.ir.Operation):
+            value = value.result
+          assert isinstance(value, mlir.ir.Value)
+        else:
+          value = BackedgeBuilder.current().create(
+              input.type, input.name, self).result
+        input_ports_values.append(value)
 
-      # This function sets up the inputs to construct, then connects the
-      # outputs.
-      def body_build(mod):
-        inputs = dict()
-        for index, (name, _) in enumerate(input_ports):
-          inputs[name] = mod.entry_block.arguments[index]
+      # Init the OpView, which creates the operation.
+      mlir.ir.OpView.__init__(self, self.build_generic(
+          attributes={},
+          results=[x.type for x in output_ports],
+          operands=[x for x in input_ports_values]
+      ))
 
-        self.construct(**inputs)
+      # Build the mappings for __getattribute__.
+      self.input_ports = {port.name: i for i, port in enumerate(input_ports)}
+      self.output_ports = {port.name: i for i, port in enumerate(output_ports)}
 
-        outputs = []
-        unconnected_ports = []
-        for (name, output) in output_ports:
-          if output.value is None:
-            unconnected_ports.append(name)
-          outputs.append(output.value)
-        if len(unconnected_ports) > 0:
-          raise UnconnectedSignalError(cls.__name__, unconnected_ports)
-        hw.OutputOp(outputs)
+    def __getattribute__(self, name: str):
+      # Base case.
+      if name == "input_ports" or name == "output_ports" or \
+         name == "operands" or name == "results":
+        return super().__getattribute__(name)
 
-      # Construct things as HWModules.
-      self.module = hw.HWModuleOp(
-          name=cls.__name__,
-          input_ports=[(name, port.type) for (name, port) in input_ports],
-          output_ports=[(name, port.type) for (name, port) in output_ports],
-          body_builder=body_build)
+      # To emulate OpView, if 'name' is either an input or output port,
+      # redirect.
+      if name in self.input_ports:
+        op_num = self.input_ports[name]
+        operand = self.operands[op_num]
+        return OpOperand(self, op_num, operand)
+      if name in self.output_ports:
+        op_num = self.output_ports[name]
+        return self.results[op_num]
+      return super().__getattribute__(name)
 
   return __Module
 
 
 def connect(destination, source):
-  if not isinstance(destination, BuilderValue):
+  if not isinstance(destination, OpOperand):
     raise TypeError(
         f"cannot connect to destination of type {type(destination)}")
-  if not isinstance(source, BuilderValue) and not isinstance(
-      source, mlir.ir.Value) and not (isinstance(source, mlir.ir.OpView) and
+  if not isinstance(source, OpOperand) and not isinstance(
+      source, mlir.ir.Value) and not (isinstance(source, mlir.ir.Operation) and
                                       hasattr(source, "result")):
     raise TypeError(f"cannot connect from source of type {type(source)}")
-  builder = destination.builder
   index = destination.index
-  if isinstance(source, BuilderValue):
+  if isinstance(source, OpOperand):
     value = source.value
   elif isinstance(source, mlir.ir.Value):
     value = source
   elif isinstance(source, mlir.ir.OpView):
     value = source.result
 
-  builder.operation.operands[index] = value
-  if index in builder.backedges:
-    builder.backedges[index].erase()
+  destination.operation.operands[index] = value
+  if isinstance(destination, BuilderValue) and \
+     index in destination.builder.backedges:
+    destination.builder.backedges[index].erase()

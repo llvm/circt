@@ -1,4 +1,5 @@
 # REQUIRES: bindings_python
+# XFAIL: true
 # RUN: %PYTHON% %s | FileCheck %s
 
 import mlir
@@ -39,4 +40,5 @@ with mlir.ir.Context() as ctxt, mlir.ir.Location.unknown():
   m = mlir.ir.Module.create()
   with mlir.ir.InsertionPoint(m.body):
     Test()
+    # CHECK:  "circt.design_entry.Test"() : () -> ()
   print(m)

@@ -86,15 +86,28 @@ class BackedgeBuilder(AbstractContextManager):
       raise RuntimeError("\n".join(errors))
 
 
-class BuilderValue:
+class OpOperand:
+  __slots__ = [
+    "index"
+    "operation"
+    "value"
+  ]
+
+  def __init__(self, operation, index, value):
+    self.index = index
+    self.operation = operation
+    self.value = value
+
+
+# Are there any situations in which this needs to be used to index into results?
+class BuilderValue(OpOperand):
   """Class that holds a value, as well as builder and index of this value in
      the operand or result list. This can represent an OpOperand and index into
      OpOperandList or a OpResult and index into an OpResultList"""
 
   def __init__(self, value, builder, index):
-    self.value = value
+    super().__init__(builder.operation, index, value)
     self.builder = builder
-    self.index = index
 
 
 class NamedValueOpView:
