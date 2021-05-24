@@ -3086,7 +3086,7 @@ void SplitEmitter::createFile(const LoweringOptions &options,
 
   // Open the output file.
   std::string errorMessage;
-  auto output = openOutputFile(outputFilename, &errorMessage);
+  auto output = mlir::openOutputFile(outputFilename, &errorMessage);
   if (!output) {
     encounteredError = true;
     llvm::errs() << errorMessage << "\n";
@@ -3148,7 +3148,7 @@ void circt::registerToVerilogTranslation() {
         applyLoweringCLOptions(module);
         return exportVerilog(module, os);
       },
-      [](DialectRegistry &registry) {
+      [](mlir::DialectRegistry &registry) {
         registry.insert<CombDialect, HWDialect, SVDialect>();
       });
 }
