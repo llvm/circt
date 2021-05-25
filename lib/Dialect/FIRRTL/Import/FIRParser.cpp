@@ -1614,7 +1614,25 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
   for (auto v : operands)
     opTypes.push_back(v.getType().cast<FIRRTLType>());
 
+  unsigned numOperandsExpected;
   SmallVector<Identifier, 2> attrNames;
+
+  // Get information about the primitive in question.
+  switch (kind) {
+  default:
+    emitError(loc, "primitive not supported yet");
+    return failure();
+  case FIRToken::lp_validif:
+    numOperandsExpected = 2;
+    break;
+#define TOK_LPKEYWORD_PRIM(SPELLING, CLASS, NUMOPERANDS)                       \
+  case FIRToken::lp_##SPELLING:                                                \
+    numOperandsExpected = NUMOPERANDS;                                         \
+    break;
+#include "FIRTokenKinds.def"
+  }
+  // Don't add code here, we want these two switch statements to be fused by
+  // the compiler.
   switch (kind) {
   default:
     break;
@@ -1631,9 +1649,16 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
     break;
   }
 
+  if (operands.size() != numOperandsExpected) {
+    assert(numOperandsExpected <= 3);
+    const char *numberName[] = {"zero", "one", "two", "three"};
+    const char *optionalS = &"s"[numOperandsExpected == 1];
+    return emitError(loc, "operation requires ")
+           << numberName[numOperandsExpected] << " operand" << optionalS;
+  }
+
   if (integers.size() != attrNames.size()) {
-    emitError(loc,
-              "expected " + Twine(attrNames.size()) + " constant arguments");
+    emitError(loc, "expected ") << attrNames.size() << " constant arguments";
     return failure();
   }
 
@@ -1646,13 +1671,15 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
     emitError(loc, "primitive not supported yet");
     return failure();
 
-    // FIXME: Don't call translateLocation eagerly!
-#define TOK_LPKEYWORD_PRIM(SPELLING, CLASS)                                    \
+#define TOK_LPKEYWORD_PRIM(SPELLING, CLASS, NUMOPERANDS)                       \
   case FIRToken::lp_##SPELLING: {                                              \
-    auto tloc = translateLocation(loc);                                        \
-    auto resultTy = CLASS::validateAndInferReturnType(operands, attrs, tloc);  \
-    if (!resultTy)                                                             \
+    auto resultTy = CLASS::inferReturnType(operands, attrs, {});               \
+    if (!resultTy) {                                                           \
+      /* only call translateLocation on an error case, it is expensive. */     \
+      (void)CLASS::validateAndInferReturnType(operands, attrs,                 \
+                                              translateLocation(loc));         \
       return failure();                                                        \
+    }                                                                          \
     result = builder.create<CLASS>(resultTy, operands, attrs);                 \
     return success();                                                          \
   }
