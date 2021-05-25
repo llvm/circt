@@ -22,6 +22,20 @@ class UnconnectedSignalError(ConnectionError):
         f"Ports {port_names} unconnected in design module {module}.")
 
 
+def get_value(obj) -> ir.Value:
+  """Resolve a Value from a few supported types."""
+
+  if isinstance(obj, ir.Value):
+    return obj
+  if isinstance(obj, ir.Operation):
+    return obj.result
+  if isinstance(obj, ir.OpView):
+    return obj.result
+  if isinstance(obj, OpOperand):
+    return obj.value
+  return None
+
+
 class BackedgeBuilder(AbstractContextManager):
 
   class Edge:
