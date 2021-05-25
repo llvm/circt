@@ -94,6 +94,8 @@ struct GlobalFIRParserState {
         loIdentifier(Identifier::get("lo", context)),
         hiIdentifier(Identifier::get("hi", context)),
         amountIdentifier(Identifier::get("amount", context)),
+        fieldnameIdentifier(Identifier::get("fieldname", context)),
+        indexIdentifier(Identifier::get("index", context)),
         locatorFilenameCache(loIdentifier /*arbitrary non-null identifier*/) {
     dontTouchAnnotation =
         getAnnotationOfClass(context, "firrtl.transforms.DontTouchAnnotation");
@@ -135,8 +137,9 @@ struct GlobalFIRParserState {
   /// An empty array attribute.
   ArrayAttr emptyArrayAttr;
 
-  /// Cached identifiers for 'lo', 'hi', and 'amount' used in primitives.
-  Identifier loIdentifier, hiIdentifier, amountIdentifier;
+  /// Cached identifiers used in primitives.
+  Identifier loIdentifier, hiIdentifier, amountIdentifier, fieldnameIdentifier;
+  Identifier indexIdentifier;
 
   class BacktraceState {
   public:
@@ -1019,9 +1022,6 @@ public:
 /// is already defined.
 ParseResult FIRScopedParser::addSymbolEntry(StringRef name,
                                             SymbolValueEntry entry, SMLoc loc) {
-  // TODO(firrtl spec): Should we support name shadowing?  This will reject
-  // cases where we try to define a new wire in a conditional where an outer
-  // name defined the same name.
   auto nameId = Identifier::get(name, getContext());
   auto prev = symbolTable.lookup(nameId);
   if (prev.first.isValid()) {
@@ -1380,7 +1380,7 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result,
   // compute the result type for the expression.
   // TODO: This should ideally be folded into a `tryCreate` method on the
   // builder (https://llvm.discourse.group/t/3504).
-  NamedAttribute attrs = {builder.getIdentifier("fieldname"),
+  NamedAttribute attrs = {getState().fieldnameIdentifier,
                           builder.getStringAttr(fieldName)};
   auto resultType = SubfieldOp::inferReturnType({result}, attrs, loc);
   if (!resultType)
@@ -1413,7 +1413,7 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result,
   // expression.
   // TODO: This should ideally be folded into a `tryCreate` method on the
   // builder (https://llvm.discourse.group/t/3504).
-  NamedAttribute attrs = {builder.getIdentifier("index"),
+  NamedAttribute attrs = {getState().indexIdentifier,
                           builder.getI32IntegerAttr(indexNo)};
   auto resultType = SubindexOp::inferReturnType({result}, attrs, tindexLoc);
   if (!resultType)
@@ -1564,23 +1564,20 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
       return failure();
     }
 
-    // If the condition is known to be a constant already, don't bother emitting
-    // the InvalidValue.
+    // We always skip emitting the validif mux because it always folds to the
+    // non-invalid operand.  However, if we know the validif would always return
+    // invalid, then fold to invalid instead.
     if (auto cst = operands[0].getDefiningOp<ConstantOp>()) {
       // validif(0, x) -> always invalid.
       if (cst.value().isNullValue()) {
         result = builder.create<InvalidValueOp>(tloc, opTypes[1]);
         break;
-      } else { // validif(1, value) -> always `value`.
-        result = operands[1];
-        return success(); // Don't add the operand to subOps.
       }
     }
 
     // Otherwise, fold to the non-invalid value.
     result = operands[1];
-    // Don't add this to subOps.
-    return success();
+    return success(); // Don't add this to subOps.
   }
   }
 
