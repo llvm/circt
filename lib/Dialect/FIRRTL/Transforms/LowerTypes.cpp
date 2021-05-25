@@ -834,20 +834,163 @@ void TypeLoweringVisitor::visitExpr(SubfieldOp op) {
   opsToRemove.push_back(op);
 }
 
+static IntegerAttr getIntAttr(const APInt &value, MLIRContext *context) {
+  return IntegerAttr::get(
+      IntegerType::get(context, value.getBitWidth(), IntegerType::Unsigned),
+      value);
+}
+
 // Gracefully die on subaccess operations
 void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
-  op.emitError("SubaccessOp not handled.");
+  Value inputVector = op.input();
+  bool isOutput = inputVector.getType().cast<FIRRTLType>().isa<FlipType>();
+  if (auto blockArg = inputVector.dyn_cast<BlockArgument>()) {
+    auto modOp = inputVector.getParentBlock()->getParentOp();
+    auto direction = (Direction)getModulePortDirections(modOp)
+                         .getValue()[blockArg.getArgNumber()];
+    isOutput = direction == Direction::Output;
+  }
+  FIRRTLType vectorElementType = inputVector.getType()
+                                     .cast<FIRRTLType>()
+                                     .cast<FVectorType>()
+                                     .getElementType();
+  // If this is a multi-dim vector, then substitution will happen at the leaf
+  // node, when the non-vector subelement is accessed.
+  if (vectorElementType.isa<FVectorType>()) {
+    opsToRemove.push_back(op);
+    return;
+  }
+  // Record all the indices used for a multidim access. Default is a 1D vector.
+  SmallVector<SubaccessOp, 8> allDims(1, op);
+  // This is used to build the loop index vector and check all possible values
+  // of the loop indices and select the appropriate vector element after
+  // flattening. For example, all the constants with which to compare with in
+  // this expression : i == 1 ? a_1 : i == 2? a_2 : i == 3 ? a_3 : a_0. For
+  // multi-dim case, the pair of constants such as, <0,1>, <1,0>, <1,1>, <0,0>.
+  // i==0 && j == 1? a_0_1: i == 1 && j == 1 ? a_1_1 and so on.
+  SmallVector<size_t, 8> indicesRange(1, 1);
 
-  // We need to do enough transformation to not segfault
-  // Lower operation to an access of item 0
-  Value input = op.input();
-  std::string fieldname = "0";
-  FIRRTLType resultType = op.getType();
+  // This loop walks back to get the parent vector input on which a multi-dim
+  // access could be performed. If this is a 1D vector, then the loop is  not
+  // executed.
+  while (auto multiDimOp = inputVector.getDefiningOp<SubaccessOp>()) {
+    // Iterate until the input is itself a SubAccess Op.
+    allDims.push_back(multiDimOp);
+    indicesRange.push_back(0);
+    inputVector = multiDimOp.input();
+  }
+  SmallVector<std::pair<Value, bool>, 8> loweredVector;
+  // Flatten the vector and bundle type recursively and populate the
+  // loweredVector with individual elements after lowering. For example, a[2] is
+  // lowered to a_0,a_1 and  a: {data, valid}[2] is lowered to a_0_data,
+  // a_0_valid, a_1_data, a_1_valid, in that order and the order is important.
+  getAllBundleLowerings(inputVector, loweredVector);
+  // This records all the mux trees generated after lowering op. One mux tree
+  // for each bundle field element.
+  SmallVector<Value, 8> muxTreeVec(1, loweredVector[0].first);
+  // This records a map of bundle subfield name and the corresponding subfield
+  // operation.
+  DenseMap<Attribute, SubfieldOp> subfieldUsers;
+  BundleType vectorOfBundleType = vectorElementType.dyn_cast<BundleType>();
 
-  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  flattenType(resultType, fieldname, false, fieldTypes);
+  if (vectorOfBundleType) {
+    // If the vector element is not a bundle, then only one mux tree generated,
+    // else one mux tree for each bundle element. This loop initializes the mux
+    // tree with the first element of the vector (for each element of the
+    // bundle).
+    for (size_t elem = 1, e = vectorOfBundleType.getNumElements(); elem != e;
+         ++elem) {
+      muxTreeVec.push_back(loweredVector[elem].first);
+    }
+    // User of a vector of bundles is a SubfieldOp.
+    for (auto u : op->getUsers()) {
+      auto subField = dyn_cast<SubfieldOp>(u);
+      assert(subField && "User of a SubaccessOp of vector of bundles must be a "
+                         "subfield operation.");
+      subfieldUsers[subField.fieldnameAttr()] = subField;
+    }
+  }
 
-  op.replaceAllUsesWith(getBundleLowering(input, fieldTypes[0].suffix));
+  SmallVector<WireOp, 8> tmpOutputWires;
+  if (isOutput) {
+    tmpOutputWires.resize(muxTreeVec.size());
+    for (size_t i = 0, e = muxTreeVec.size(); i != e; ++i)
+      tmpOutputWires[i] = builder->create<WireOp>(
+          muxTreeVec[i].getType().cast<FIRRTLType>().getPassiveType());
+  }
+
+  // Create a true constant.
+  Value constTrue =
+      builder->create<ConstantOp>(UIntType::get(op.getContext(), 1),
+                                  getIntAttr(APInt(1, 1), op.getContext()));
+
+  size_t dimRange = 0;
+  // auto tmpWire = builder->create<WireOp>(
+  //              op.getResult().getType().cast<FIRRTLType>().getPassiveType());
+  for (size_t elem = muxTreeVec.size(), e = loweredVector.size(),
+              numMuxs = muxTreeVec.size();
+       elem != e; elem += numMuxs) {
+    Value isIndexEq = constTrue;
+    for (size_t ind = 0, size = allDims.size(); ind != size; ++ind) {
+      // Get the index variable.
+      auto index = allDims[ind].index();
+      // Get the constnat int, with which to compare the index.
+      auto indexInt = indicesRange[ind];
+      auto selectWidth =
+          index.getType().cast<FIRRTLType>().getBitWidthOrSentinel();
+      // Create " && index == indexInt?"
+      isIndexEq = builder->create<AndPrimOp>(
+          UIntType::get(op.getContext(), 1), isIndexEq,
+          builder->create<EQPrimOp>(
+              UIntType::get(op.getContext(), 1), index,
+              builder->create<ConstantOp>(
+                  UIntType::get(op.getContext(), selectWidth),
+                  getIntAttr(APInt(selectWidth, indexInt), op.getContext()))));
+      // This is the logic to generate the range of constant integers, with
+      // which to compare the index.
+      if (ind == dimRange) {
+        size_t maxElems = 1ULL << selectWidth;
+        // Make sure, we donot perform out of bounds access here ?
+        indicesRange[ind] = (indicesRange[ind] + 1) % maxElems;
+        if (!indicesRange[ind])
+          ++dimRange;
+        else
+          dimRange = 0;
+      }
+    }
+
+    // Generate the mux tree for each element of the bundle.
+    for (size_t m = 0, s = muxTreeVec.size(); m != s; ++m) {
+      if (isOutput) {
+        builder->create<ConnectOp>(
+            loweredVector[elem + m].first,
+            builder->create<MuxPrimOp>(
+                muxTreeVec[m].getType().cast<FIRRTLType>(), isIndexEq,
+                tmpOutputWires[m], loweredVector[elem + m].first));
+        muxTreeVec[m] = tmpOutputWires[m];
+      } else {
+        muxTreeVec[m] = builder->create<MuxPrimOp>(
+            muxTreeVec[m].getType().cast<FIRRTLType>(), isIndexEq,
+            loweredVector[elem + m].first, muxTreeVec[m]);
+      }
+    }
+  }
+  if (vectorOfBundleType) {
+    size_t elemNum = 0;
+    for (auto bundleElem : vectorOfBundleType.getElements()) {
+      StringAttr fieldName = bundleElem.name;
+      auto iter = subfieldUsers.find(fieldName);
+      // If one of the bundle elements has no use, we can ignore it, then there
+      // is no entry for the field name in the map
+      if (iter != subfieldUsers.end()) {
+        setBundleLowering(iter->getSecond().input(), fieldName.getValue(),
+                          muxTreeVec[elemNum]);
+      }
+      ++elemNum;
+    }
+  } else {
+    op.replaceAllUsesWith(muxTreeVec[0]);
+  }
   opsToRemove.push_back(op);
 }
 
