@@ -1571,18 +1571,16 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   // Name attr is required on sv.wire but optional on firrtl.wire.
   auto nameAttr = op.nameAttr() ? op.nameAttr() : builder.getStringAttr("");
 
+  auto symName = op.nameAttr();
+  if (symName) {
   // Prepend the name of the module to make the symbol name unique in the symbol
   // table, it is already unique in the module. Checking if the name is unique
   // in the SymbolTable is non-trivial.
-  auto symName =
-      op.nameAttr()
-          ? builder.getStringAttr("__" +
-                                  cast<hw::HWModuleOp>(op->getParentOp())
-                                      .getNameAttr()
-                                      .getValue()
-                                      .str() +
-                                  "__" + nameAttr.getValue().str())
-          : StringAttr();
+    auto moduleName =
+        cast<hw::HWModuleOp>(op->getParentOp()).getNameAttr().getValue().str();
+    symName = builder.getStringAttr("__" + moduleName + "__" +
+                                    symName.getValue().str());
+  }
   // This is not a temporary wire created by the compiler, so attach a symbol
   // name.
   return setLoweringTo<sv::WireOp>(op, resultType, nameAttr, symName);

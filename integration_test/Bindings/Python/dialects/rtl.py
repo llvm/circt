@@ -36,8 +36,8 @@ with Context() as ctx, Location.unknown():
     op = hw.HWModuleOp(name='MyWidget',
                        input_ports=[('my_input', i32)],
                        output_ports=[('my_output', i32)],
-                       body_builder=lambda module: hw.OutputOp(
-                           [module.entry_block.arguments[0]]))
+                       body_builder=lambda module:
+                           hw.OutputOp([module.my_input]))
 
     # CHECK: hw.module.extern @FancyThing(%input0: i32) -> (%output0: i32)
     extern = hw.HWModuleExternOp(name="FancyThing",
@@ -68,13 +68,25 @@ with Context() as ctx, Location.unknown():
     two_inputs = hw.HWModuleOp(
         name="two_inputs",
         input_ports=[("a", i32), ("b", i32)],
-        body_builder=lambda m: hw.OutputOp([]),
+        body_builder=lambda m: None,
     )
     one_output = hw.HWModuleOp(
         name="one_output",
         output_ports=[("a", i32)],
         body_builder=lambda m: hw.OutputOp(
             [hw.ConstantOp(i32, IntegerAttr.get(i32, 46)).result]),
+    )
+    two_outputs = hw.HWModuleOp(
+        name="two_outputs",
+        input_ports=[("a", i32)],
+        output_ports=[("x", i32), ("y", i32)],
+        body_builder=lambda m: dict(x=m.a, y=m.a)
+    )
+    three_outputs = hw.HWModuleOp(
+        name="three_outputs",
+        input_ports=[("a", i32)],
+        output_ports=[("x", i32), ("y", i32), ("z", i32)],
+        body_builder=lambda m: {"z": m.a, "x": m.a, "y": m.a}
     )
 
     # CHECK-LABEL: hw.module @instance_builder_tests
@@ -95,8 +107,6 @@ with Context() as ctx, Location.unknown():
 
       # CHECK: hw.instance "inst6" {{.*}} {BANKS = 2 : i64}
       one_input.create("inst6", {"a": inst1.a}, parameters={"BANKS": 2})
-
-      hw.OutputOp([])
 
     instance_builder_tests = hw.HWModuleOp(name="instance_builder_tests",
                                            body_builder=instance_builder_body)

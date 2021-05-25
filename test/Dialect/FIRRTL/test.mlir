@@ -99,4 +99,20 @@ firrtl.module @TestNodeName(in %in1 : !firrtl.uint<8>) {
   // CHECK: %n1_0 = firrtl.node %in1 {name = "n1"} : !firrtl.uint<8>
   %n2 = firrtl.node %in1 {name = "n1"} : !firrtl.uint<8>
 }
+
+// CHECK-LABEL: @TestInvalidAttr
+firrtl.module @TestInvalidAttr() {
+  // This just shows we can parse and print the InvalidAttr.
+
+  // CHECK: firrtl.constant 42 : !firrtl.uint<8>
+  %x = firrtl.constant 42 : !firrtl.uint<8> {
+    // CHECK-SAME: {test.thing1 = #firrtl.invalidvalue<!firrtl.clock>,
+    test.thing1 = #firrtl.invalidvalue<!firrtl.clock>,
+    // CHECK-SAME: test.thing2 = #firrtl.invalidvalue<!firrtl.sint<3>>,
+    test.thing2 = #firrtl.invalidvalue<!firrtl.sint<3>>,
+    // CHECK-SAME: test.thing3 = #firrtl.invalidvalue<!firrtl.uint>}
+    test.thing3 = #firrtl.invalidvalue<!firrtl.uint>
+  }
+}
+
 }

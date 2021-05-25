@@ -109,7 +109,7 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
   let verifier = "return ::verifyConstantOp(*this);";
 }
 
-def InvalidValueOp : FIRRTLOp<"invalidvalue", [NoSideEffect]> {
+def InvalidValueOp : FIRRTLOp<"invalidvalue", [NoSideEffect, ConstantLike]> {
   let summary = "InvalidValue primitive";
   let description = [{
     The InvalidValue operation returns an invalid value of a specified type:
@@ -124,6 +124,7 @@ def InvalidValueOp : FIRRTLOp<"invalidvalue", [NoSideEffect]> {
   let arguments = (ins);
   let results = (outs FIRRTLType:$result);
 
+  let hasFolder = 1;
   let assemblyFormat = "attr-dict `:` type($result)";
 }
 

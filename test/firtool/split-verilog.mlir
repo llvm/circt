@@ -43,8 +43,8 @@ hw.module.extern @inout_0 () -> ()
 hw.module.extern @inout_1 () -> ()
 hw.module.extern @inout_2 () -> ()
 
-sv.verbatim "// Foo" {output_file = {path = "custom1.sv"}}
-sv.verbatim "// Bar" {output_file = {path = "custom2.sv", exclude_from_filelist = true}}
+sv.verbatim "// Foo" {output_file = {name = "custom1.sv"}}
+sv.verbatim "// Bar" {output_file = {name = "custom2.sv", exclude_from_filelist = true}}
 
 // LIST:      foo.sv
 // LIST-NEXT: bar.sv

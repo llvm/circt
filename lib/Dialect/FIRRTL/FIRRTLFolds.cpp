@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Matchers.h"
@@ -28,15 +29,29 @@ using namespace circt;
 using namespace firrtl;
 
 static IntegerAttr getIntAttr(Type type, const APInt &value) {
-  auto firType = type.cast<IntType>();
-  assert((!firType.hasWidth() ||
-          (unsigned)firType.getWidthOrSentinel() == value.getBitWidth()) &&
+  auto intType = type.cast<IntType>();
+  assert((!intType.hasWidth() ||
+          (unsigned)intType.getWidthOrSentinel() == value.getBitWidth()) &&
          "value / type width mismatch");
   auto intSign =
-      firType.isSigned() ? IntegerType::Signed : IntegerType::Unsigned;
-  auto intType =
+      intType.isSigned() ? IntegerType::Signed : IntegerType::Unsigned;
+  auto attrType =
       IntegerType::get(type.getContext(), value.getBitWidth(), intSign);
-  return IntegerAttr::get(intType, value);
+  return IntegerAttr::get(attrType, value);
+}
+
+/// Return an IntegerAttr filled with zeros for the specified FIRRTL integer
+/// type.  This handles both the known width and unknown width case.
+static IntegerAttr getIntZerosAttr(Type type) {
+  int32_t width = abs(type.cast<IntType>().getWidthOrSentinel());
+  return getIntAttr(type, APInt(width, 0));
+}
+
+/// Return an IntegerAttr filled with ones for the specified FIRRTL integer
+/// type.  This handles both the known width and unknown width case.
+static IntegerAttr getIntOnesAttr(Type type) {
+  int32_t width = abs(type.cast<IntType>().getWidthOrSentinel());
+  return getIntAttr(type, APInt(width, -1ULL, /*isSigned*/ true));
 }
 
 /// Return true if this operation's operands and results all have known width,
@@ -177,12 +192,21 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
   return valueAttr();
 }
 
+OpFoldResult InvalidValueOp::fold(ArrayRef<Attribute> operands) {
+  return InvalidValueAttr::get(getType());
+}
+
 //===----------------------------------------------------------------------===//
 // Binary Operators
 //===----------------------------------------------------------------------===//
 
 OpFoldResult AddPrimOp::fold(ArrayRef<Attribute> operands) {
   /// Any folding here requires a bitwidth extension.
+
+  // add(x, invalid) -> invalid
+  if (operands[1].dyn_cast_or_null<InvalidValueAttr>() ||
+      operands[0].dyn_cast_or_null<InvalidValueAttr>())
+    return InvalidValueAttr::get(getType());
 
   /// If both operands are constant, and the result is integer with known
   /// widths, then perform constant folding.
@@ -191,16 +215,30 @@ OpFoldResult AddPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult SubPrimOp::fold(ArrayRef<Attribute> operands) {
+  // sub(x, invalid) -> invalid
+  if (operands[1].dyn_cast_or_null<InvalidValueAttr>() ||
+      operands[0].dyn_cast_or_null<InvalidValueAttr>())
+    return InvalidValueAttr::get(getType());
+
   return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::Normal,
                                  [=](APSInt a, APSInt b) { return a - b; });
 }
 
 OpFoldResult MulPrimOp::fold(ArrayRef<Attribute> operands) {
+  // mul(x, invalid) -> invalid
+  if (operands[1].dyn_cast_or_null<InvalidValueAttr>() ||
+      operands[0].dyn_cast_or_null<InvalidValueAttr>())
+    return InvalidValueAttr::get(getType());
   return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::Normal,
                                  [=](APSInt a, APSInt b) { return a * b; });
 }
 
 OpFoldResult DivPrimOp::fold(ArrayRef<Attribute> operands) {
+  // div(x, invalid) -> zero
+  if (operands[1].dyn_cast_or_null<InvalidValueAttr>() ||
+      operands[0].dyn_cast_or_null<InvalidValueAttr>())
+    return getIntZerosAttr(getType());
+
   /// div(x, x) -> 1
   ///
   /// Division by zero is undefined in the FIRRTL specification. This
@@ -234,6 +272,11 @@ OpFoldResult DivPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult RemPrimOp::fold(ArrayRef<Attribute> operands) {
+  // div(x, invalid) -> zero
+  if (operands[1].dyn_cast_or_null<InvalidValueAttr>() ||
+      operands[0].dyn_cast_or_null<InvalidValueAttr>())
+    return getIntZerosAttr(getType());
+
   return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::DivideOrShift,
                                  [=](APSInt a, APSInt b) -> APInt {
                                    // Fold divide by zero to zero.  Would be
@@ -267,6 +310,11 @@ OpFoldResult DShrPrimOp::fold(ArrayRef<Attribute> operands) {
 
 // TODO: Move to DRR.
 OpFoldResult AndPrimOp::fold(ArrayRef<Attribute> operands) {
+  // and(x, invalid) -> 0
+  if (operands[1].dyn_cast_or_null<InvalidValueAttr>() ||
+      operands[0].dyn_cast_or_null<InvalidValueAttr>())
+    return getIntZerosAttr(getType());
+
   if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
     /// and(x, 0) -> 0
     if (rhsCst.getValue().isNullValue() && rhs().getType() == getType())
@@ -288,6 +336,11 @@ OpFoldResult AndPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult OrPrimOp::fold(ArrayRef<Attribute> operands) {
+  // or(x, invalid) -> -1
+  if (operands[1].dyn_cast_or_null<InvalidValueAttr>() ||
+      operands[0].dyn_cast_or_null<InvalidValueAttr>())
+    return getIntOnesAttr(getType());
+
   if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
     /// or(x, 0) -> x
     if (rhsCst.getValue().isNullValue() && lhs().getType() == getType())
@@ -309,6 +362,11 @@ OpFoldResult OrPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult XorPrimOp::fold(ArrayRef<Attribute> operands) {
+  // xor(x, invalid) -> invalid
+  if (operands[1].dyn_cast_or_null<InvalidValueAttr>() ||
+      operands[0].dyn_cast_or_null<InvalidValueAttr>())
+    return InvalidValueAttr::get(getType());
+
   /// xor(x, 0) -> x
   if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>())
     if (rhsCst.getValue().isNullValue() && lhs().getType() == getType())
@@ -656,6 +714,7 @@ OpFoldResult AndRPrimOp::fold(ArrayRef<Attribute> operands) {
   // x == -1
   if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
     return getIntAttr(getType(), APInt(1, attr.getValue().isAllOnesValue()));
+
   return {};
 }
 
@@ -767,10 +826,10 @@ static void replaceWithBits(Operation *op, Value value, unsigned hiBit,
 OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
   // mux(cond, x, invalid) -> x
   // mux(cond, invalid, x) -> x
-  if (high().getDefiningOp<InvalidValueOp>())
-    return low();
-  if (low().getDefiningOp<InvalidValueOp>())
-    return high();
+  if (operands[2].dyn_cast_or_null<InvalidValueAttr>())
+    return getOperand(1);
+  if (operands[1].dyn_cast_or_null<InvalidValueAttr>())
+    return getOperand(2);
 
   /// mux(0/1, x, y) -> x or y
   if (auto cond = operands[0].dyn_cast_or_null<IntegerAttr>()) {
@@ -823,7 +882,6 @@ OpFoldResult PadPrimOp::fold(ArrayRef<Attribute> operands) {
     return {};
 
   // Constant fold.
-
   if (auto cst = operands[0].dyn_cast_or_null<IntegerAttr>()) {
     auto destWidth = getType().getWidthOrSentinel();
     if (destWidth == -1)
