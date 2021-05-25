@@ -17,14 +17,14 @@ class Dummy:
     self.x = Input(types.i32)
     self.y = Output(types.i32)
 
-  def construct(self, x):
-    self.y.set(x)
+  def construct(self, mod):
+    return {"y": mod.x}
 
 
 @module
 class Test:
 
-  def construct(self):
+  def construct(self, mod):
     # CHECK: %[[C0:.+]] = hw.constant 0
     const = hw.ConstantOp(types.i32, mlir.ir.IntegerAttr.get(types.i32, 0))
     dummy = Dummy()

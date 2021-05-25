@@ -12,7 +12,11 @@ from typing import List
 _current_backedge_builder = ContextVar("current_bb")
 
 
-class UnconnectedSignalError(RuntimeError):
+class ConnectionError(RuntimeError):
+  pass
+
+
+class UnconnectedSignalError(ConnectionError):
   def __init__(self, module: str, port_names: List[str]):
     super().__init__(
         f"Ports {port_names} unconnected in design module {module}.")
