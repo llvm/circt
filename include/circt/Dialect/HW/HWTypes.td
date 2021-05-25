@@ -172,9 +172,10 @@ def TypeAliasType : HWType<"TypeAlias"> {
 
 // Type constraint that supports a type alias or an inner type.
 class TypeAliasOrConstraint<Type innerType> : TypeConstraint<Or<[
-    innerType.predicate, And<[TypeAliasType.predicate,
-    CPred<"$_self.cast<TypeAliasType>().getCanonicalType().isa<" #
-    innerType.cppClassName # ">()">]>]>>;
+    innerType.predicate,
+    And<[TypeAliasType.predicate,
+        CPred<"$_self.cast<TypeAliasType>().getCanonicalType().isa<" #
+            innerType.cppClassName # ">()">]>]>>;
 
 // Type that supports a type alias or inner type.
 class TypeAliasOr<Type innerType> :
