@@ -144,6 +144,16 @@ bool circt::hw::hasHWInOutType(Type type) {
   return type.isa<InOutType>();
 }
 
+ArrayType circt::hw::castArrayType(Type type) {
+  if (auto arrayType = type.dyn_cast<ArrayType>())
+    return arrayType;
+
+  if (auto aliasType = type.dyn_cast<TypeAliasType>())
+    return aliasType.getCanonicalType().cast<ArrayType>();
+
+  return ArrayType();
+}
+
 /// Parse and print nested HW types nicely.  These helper methods allow eliding
 /// the "hw." prefix on array, inout, and other types when in a context that
 /// expects HW subelement types.
@@ -156,7 +166,8 @@ static ParseResult parseHWElementType(Type &result, DialectAsmParser &p) {
       StringRef(curPtr, fullString.size() - (curPtr - fullString.data()));
 
   if (typeString.startswith("array<") || typeString.startswith("inout<") ||
-      typeString.startswith("uarray<") || typeString.startswith("struct<")) {
+      typeString.startswith("uarray<") || typeString.startswith("struct<") ||
+      typeString.startswith("typealias<")) {
     llvm::StringRef mnemonic;
     if (p.parseKeyword(&mnemonic))
       llvm_unreachable("should have an array or inout keyword here");

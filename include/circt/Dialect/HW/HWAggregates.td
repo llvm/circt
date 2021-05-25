@@ -30,7 +30,7 @@ def ArrayCreateOp : HWOp<"array_create", [NoSideEffect, SameTypeOperands]> {
   }];
 
   let arguments = (ins Variadic<HWNonInOutType>:$inputs);
-  let results = (outs ArrayType:$result);
+  let results = (outs ArrayOrAliasType:$result);
 
   let verifier = [{
     unsigned returnSize = getType().cast<ArrayType>().getSize();
@@ -62,8 +62,8 @@ def ArrayConcatOp : HWOp<"array_concat", [NoSideEffect]> {
     See the HW-SV rationale document for details on operand ordering.
   }];
 
-  let arguments = (ins Variadic<ArrayType>:$inputs);
-  let results = (outs ArrayType:$result);
+  let arguments = (ins Variadic<ArrayOrAliasType>:$inputs);
+  let results = (outs ArrayOrAliasType:$result);
 
   let assemblyFormat = [{
     $inputs attr-dict `:` custom<ArrayConcatTypes>(type($inputs), type($result))
@@ -101,10 +101,10 @@ def ArraySliceOp : HWOp<"array_slice", [NoSideEffect]> {
     behavior.
   }];
 
-  let arguments = (ins ArrayType:$input, HWIntegerType:$lowIndex);
-  let results = (outs ArrayType:$dst);
+  let arguments = (ins ArrayOrAliasType:$input, HWIntegerType:$lowIndex);
+  let results = (outs ArrayOrAliasType:$dst);
   let verifier = [{
-    unsigned inputSize = input().getType().cast<ArrayType>().getSize();
+    unsigned inputSize = castArrayType(input().getType()).getSize();
     if (llvm::Log2_64_Ceil(inputSize) !=
           lowIndex().getType().getIntOrFloatBitWidth())
       return emitOpError(
@@ -123,20 +123,20 @@ class IndexBitWidthConstraint<string index, string input>
                    input, index,
                    [{
     IntegerType::get($_self.getContext(),
-                     llvm::Log2_64_Ceil($_self.cast<ArrayType>().getSize()))
+                     llvm::Log2_64_Ceil(castArrayType($_self).getSize()))
                    }]>;
 
 class ArrayElementTypeConstraint<string result, string input>
   : TypesMatchWith<"Result must be arrays element type",
                    input, result,
-                   "$_self.cast<ArrayType>().getElementType()">;
+                   "castArrayType($_self).getElementType()">;
 
 // hw.array_get does not work with unpacked arrays.
 def ArrayGetOp : HWOp<"array_get",
     [NoSideEffect, IndexBitWidthConstraint<"index", "input">,
      ArrayElementTypeConstraint<"result", "input">]> {
   let summary = "Get the value in an array at the specified index";
-  let arguments = (ins ArrayType:$input, HWIntegerType:$index);
+  let arguments = (ins ArrayOrAliasType:$input, HWIntegerType:$index);
   let results = (outs HWNonInOutType:$result);
 
   let assemblyFormat = [{

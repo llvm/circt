@@ -59,6 +59,10 @@ int64_t getBitWidth(mlir::Type type);
 /// false on known InOut types, rather than any unknown types.
 bool hasHWInOutType(mlir::Type type);
 
+/// Cast to an ArrayType from a type that may be an ArrayType or a TypeAliasType
+/// wrapping an ArrayType. Returns null in any other case.
+ArrayType castArrayType(Type type);
+
 } // namespace hw
 } // namespace circt
 
