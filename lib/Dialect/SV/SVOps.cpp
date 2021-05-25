@@ -846,7 +846,9 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
   if (!write) {
 
     bool canErase = true;
+    //Operation *xOp = rewriter.create<ConstantXOp>(wire.getLoc(),*wire->getResultTypes().begin());
     // Remove all uses of the wire.
+    //wire.replaceAllUsesWith(xOp);
     for (auto &use : make_early_inc_range(wire.getResult().getUses())) {
       if (use.getOwner()->use_empty())
         rewriter.eraseOp(use.getOwner());
