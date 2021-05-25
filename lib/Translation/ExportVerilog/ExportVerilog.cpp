@@ -1187,8 +1187,7 @@ SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
 // for slicing operations.
 SubExprInfo ExprEmitter::visitTypeOp(ArraySliceOp op) {
   auto arrayPrec = emitSubExpr(op.input(), Selection, OOLUnary);
-  auto arrayType = castArrayType(op.getType());
-  unsigned dstWidth = arrayType.getSize();
+  unsigned dstWidth = castArrayType(op.getType()).getSize();
   os << '[';
   emitSubExpr(op.lowIndex(), LowestPrecedence, OOLBinary);
   os << "+:" << dstWidth << ']';
