@@ -49,6 +49,7 @@ firrtl.module @Div(in %a: !firrtl.uint<4>,
   %c3_ui4 = firrtl.constant 3 : !firrtl.uint<4>
   %5 = firrtl.div %c1_ui4, %c3_ui4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %i, %5 : !firrtl.uint<4>, !firrtl.uint<4>
+
 }
 
 // CHECK-LABEL: firrtl.module @And
@@ -414,6 +415,21 @@ firrtl.circuit "Andr" {
     firrtl.connect %d, %3 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
+
+// CHECK-LABEL: firrtl.module @Reduce
+firrtl.module @Reduce(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>,
+                     out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
+  %0 = firrtl.andr %a : (!firrtl.uint<1>) -> !firrtl.uint<1>
+  %1 = firrtl.orr %a : (!firrtl.uint<1>) -> !firrtl.uint<1>
+  %2 = firrtl.xorr %a : (!firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %b, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: firrtl.connect %b, %a
+  firrtl.connect %c, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: firrtl.connect %c, %a
+  firrtl.connect %d, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: firrtl.connect %d, %a
+}
+
 
 // CHECK-LABEL: firrtl.module @subaccess
 firrtl.module @subaccess(out %result: !firrtl.uint<8>, in %vec0: !firrtl.vector<uint<8>, 16>) {
