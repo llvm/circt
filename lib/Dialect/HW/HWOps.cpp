@@ -830,16 +830,12 @@ static LogicalResult verifyOutputOp(OutputOp *op) {
 
 static ParseResult parseSliceTypes(OpAsmParser &p, Type &srcType,
                                    Type &idxType) {
-  Type type;
-  if (p.parseType(type))
-    return failure();
-
-  ArrayType arrType = type.cast<TypeAliasOr<ArrayType>>().getCanonicalType();
-  if (!arrType)
+  TypeAliasOr<ArrayType> arrType;
+  if (p.parseType(arrType))
     return p.emitError(p.getCurrentLocation(),
                        "Expected !hw.array type or alias");
-  srcType = type;
-  unsigned idxWidth = llvm::Log2_64_Ceil(arrType.getSize());
+  srcType = arrType;
+  unsigned idxWidth = llvm::Log2_64_Ceil(arrType.getCanonicalType().getSize());
   idxType = IntegerType::get(p.getBuilder().getContext(), idxWidth);
   return success();
 }
@@ -895,20 +891,17 @@ static ParseResult parseArrayConcatTypes(OpAsmParser &p,
   Type elemType;
   uint64_t resultSize = 0;
   do {
-    Type ty;
+    TypeAliasOr<ArrayType> ty;
     if (p.parseType(ty))
-      return p.emitError(p.getCurrentLocation(), "Expected type");
-    ArrayType arrTy = ty.cast<TypeAliasOr<ArrayType>>().getCanonicalType();
-    if (!arrTy)
       return p.emitError(p.getCurrentLocation(),
                          "Expected !hw.array type or alias");
-    if (elemType && elemType != arrTy.getElementType())
+    if (elemType && elemType != ty.getCanonicalType().getElementType())
       return p.emitError(p.getCurrentLocation(), "Expected array element type ")
              << elemType;
 
-    elemType = arrTy.getElementType();
+    elemType = ty.getCanonicalType().getElementType();
     inputTypes.push_back(ty);
-    resultSize += arrTy.getSize();
+    resultSize += ty.getCanonicalType().getSize();
   } while (!p.parseOptionalComma());
 
   resultType = ArrayType::get(elemType, resultSize);
