@@ -155,7 +155,7 @@ def ArrayGetOp : HWOp<"array_get",
 def StructCreateOp : HWOp<"struct_create", [NoSideEffect]> {
   let summary = "Create a struct from constituent parts.";
   let arguments = (ins Variadic<HWNonInOutType>:$input);
-  let results = (outs StructType:$result);
+  let results = (outs StructOrAliasType:$result);
 
   let parser = "return ::parse$cppClass(parser, result);";
   let printer = "return ::print(p, *this);";
@@ -165,7 +165,7 @@ def StructCreateOp : HWOp<"struct_create", [NoSideEffect]> {
 def StructExtractOp : HWOp<"struct_extract", [NoSideEffect]> {
   let summary = "Extract a named field from a struct.";
 
-  let arguments = (ins StructType:$input, StrAttr:$field);
+  let arguments = (ins StructOrAliasType:$input, StrAttr:$field);
   let results = (outs HWNonInOutType:$result);
 
   let parser = "return ::parse$cppClass(parser, result);";
@@ -181,9 +181,9 @@ def StructInjectOp : HWOp<"struct_inject", [NoSideEffect,
                            AllTypesMatch<["input", "result"]>]> {
   let summary = "Inject a value into a named field of a struct.";
 
-  let arguments = (ins StructType:$input, StrAttr:$field,
+  let arguments = (ins StructOrAliasType:$input, StrAttr:$field,
                    HWNonInOutType:$newValue);
-  let results = (outs StructType:$result);
+  let results = (outs StructOrAliasType:$result);
 
   let parser = "return ::parse$cppClass(parser, result);";
   let printer = "return ::print(p, *this);";
@@ -191,7 +191,7 @@ def StructInjectOp : HWOp<"struct_inject", [NoSideEffect,
 
 def StructExplodeOp : HWOp<"struct_explode", [NoSideEffect]> {
   let summary = "Expand a struct into its constituent parts.";
-  let arguments = (ins StructType:$input);
+  let arguments = (ins StructOrAliasType:$input);
   let results = (outs Variadic<HWNonInOutType>:$result);
    let parser = "return ::parse$cppClass(parser, result);";
    let printer = "return ::print(p, *this);";
@@ -214,7 +214,7 @@ def UnionCreateOp : HWOp<"union_create", [NoSideEffect]> {
   }];
 
   let arguments = (ins StrAttr:$field, HWNonInOutType:$input);
-  let results = (outs UnionType:$result);
+  let results = (outs UnionOrAliasType:$result);
 
   let parser = "return ::parse$cppClass(parser, result);";
   let printer = "return ::print(p, *this);";
@@ -234,7 +234,7 @@ def UnionExtractOp : HWOp<"union_extract", [NoSideEffect]> {
     ```
   }];
 
-  let arguments = (ins UnionType:$input, StrAttr:$field);
+  let arguments = (ins UnionOrAliasType:$input, StrAttr:$field);
   let results = (outs HWNonInOutType:$result);
 
   let parser = "return ::parse$cppClass(parser, result);";

@@ -1324,7 +1324,8 @@ SubExprInfo ExprEmitter::visitComb(MuxOp op) {
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(StructCreateOp op) {
-  StructType stype = op.getType();
+  StructType stype =
+      op.getType().cast<TypeAliasOr<StructType>>().getCanonicalType();
   os << "'{";
   size_t i = 0;
   llvm::interleaveComma(stype.getElements(), os,
