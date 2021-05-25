@@ -91,7 +91,10 @@ struct GlobalFIRParserState {
                        const llvm::MemoryBuffer *annotationsBuf)
       : context(context), options(options), lex(sourceMgr, context),
         curToken(lex.lexToken()), annotationsBuf(annotationsBuf),
-        locatorFilenameCache(Identifier::get("x", context)) {
+        loIdentifier(Identifier::get("lo", context)),
+        hiIdentifier(Identifier::get("hi", context)),
+        amountIdentifier(Identifier::get("amount", context)),
+        locatorFilenameCache(loIdentifier /*arbitrary non-null identifier*/) {
     dontTouchAnnotation =
         getAnnotationOfClass(context, "firrtl.transforms.DontTouchAnnotation");
     emptyArrayAttr = ArrayAttr::get(context, {});
@@ -131,6 +134,9 @@ struct GlobalFIRParserState {
 
   /// An empty array attribute.
   ArrayAttr emptyArrayAttr;
+
+  /// Cached identifiers for 'lo', 'hi', and 'amount' used in primitives.
+  Identifier loIdentifier, hiIdentifier, amountIdentifier;
 
   class BacktraceState {
   public:
@@ -1494,20 +1500,20 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
   for (auto v : operands)
     opTypes.push_back(v.getType().cast<FIRRTLType>());
 
-  SmallVector<StringRef, 2> attrNames;
+  SmallVector<Identifier, 2> attrNames;
   switch (kind) {
   default:
     break;
   case FIRToken::lp_bits:
-    attrNames.push_back("hi");
-    attrNames.push_back("lo");
+    attrNames.push_back(getState().hiIdentifier); // "hi"
+    attrNames.push_back(getState().loIdentifier); // "lo"
     break;
   case FIRToken::lp_head:
   case FIRToken::lp_pad:
   case FIRToken::lp_shl:
   case FIRToken::lp_shr:
   case FIRToken::lp_tail:
-    attrNames.push_back("amount");
+    attrNames.push_back(getState().amountIdentifier);
     break;
   }
 
