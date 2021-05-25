@@ -190,7 +190,7 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
     raise support.ConnectionError("Must return module output values")
 
   # Now create the output op depending on the object type returned
-  outputs = list[Value]()
+  outputs: list[value] = list()
 
   # Only acceptable return is a dict of port, value mappings.
   if not isinstance(bb_ret, dict):
