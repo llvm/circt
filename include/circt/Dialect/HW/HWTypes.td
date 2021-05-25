@@ -178,8 +178,8 @@ class TypeAliasOrConstraint<Type innerType> : TypeConstraint<Or<[
 
 // Type that supports a type alias or inner type.
 class TypeAliasOr<Type innerType> :
-    Type<TypeAliasOrConstraint<innerType>.predicate,
-         "Type alias or " # innerType>;
+    DialectType<HWDialect, TypeAliasOrConstraint<innerType>.predicate,
+        "Type alias or " # innerType>;
 
 // Define some types using TypeAliasOr.
 def ArrayOrAliasType : TypeAliasOr<ArrayType>;
