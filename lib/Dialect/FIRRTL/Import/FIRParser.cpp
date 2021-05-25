@@ -1564,8 +1564,20 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
       return failure();
     }
 
+    // If the condition is known to be a constant already, don't bother emitting
+    // the InvalidValue.
+    if (auto cst = operands[0].getDefiningOp<ConstantOp>()) {
+      // validif(0, x) -> always invalid.
+      if (cst.value().isNullValue())
+        result = builder.create<InvalidValueOp>(tloc, opTypes[1]);
+      else // validif(1, value) -> always `value`.
+        result = operands[1];
+      break;
+    }
+
+    // Otherwise, emit invalidValue and fold.
     auto inv = builder.create<InvalidValueOp>(tloc, opTypes[1]);
-    result = builder.create<MuxPrimOp>(
+    result = builder.createOrFold<MuxPrimOp>(
         tloc, opTypes[1], ValueRange({operands[0], operands[1], inv}), attrs);
     break;
   }
