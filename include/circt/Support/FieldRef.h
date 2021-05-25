@@ -43,9 +43,6 @@ public:
   /// a specific field in a bundle.
   unsigned getFieldID() const { return id; }
 
-  /// Set the field ID number of this FieldRef.
-  void setFieldID(unsigned fieldID) { id = fieldID; }
-
   bool operator==(const FieldRef &other) const {
     return value == other.value && id == other.id;
   }
