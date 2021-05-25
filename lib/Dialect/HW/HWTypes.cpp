@@ -144,18 +144,6 @@ bool circt::hw::hasHWInOutType(Type type) {
   return type.isa<InOutType>();
 }
 
-/// Cast to an ArrayType from a type that may be an ArrayType or a TypeAliasType
-/// wrapping an ArrayType. Returns null in any other case.
-ArrayType circt::hw::castArrayType(Type type) {
-  if (auto arrayType = type.dyn_cast<ArrayType>())
-    return arrayType;
-
-  if (auto aliasType = type.dyn_cast<TypeAliasType>())
-    return aliasType.getCanonicalType().dyn_cast<ArrayType>();
-
-  return ArrayType();
-}
-
 /// Parse and print nested HW types nicely.  These helper methods allow eliding
 /// the "hw." prefix on array, inout, and other types when in a context that
 /// expects HW subelement types.

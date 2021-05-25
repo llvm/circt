@@ -20,6 +20,34 @@
 namespace circt {
 namespace hw {
 class TypedeclOp;
+class TypeAliasType;
+
+template <typename BaseTy>
+class TypeAliasOr
+    : public ::mlir::Type::TypeBase<TypeAliasOr<BaseTy>, mlir::Type,
+                                    mlir::TypeStorage> {
+  using mlir::Type::TypeBase<TypeAliasOr<BaseTy>, mlir::Type,
+                             mlir::TypeStorage>::Base::Base;
+
+public:
+  // Support casting to either the base type or a type alias.
+  static bool classof(Type other) {
+    return other.isa<BaseTy>() || other.isa<TypeAliasType>();
+  }
+
+  // Either cast to the base type or get the alias's canonical type and cast
+  // that to the base type. Returns null if the alias does not canonicalize to
+  // the correct base type.
+  BaseTy getCanonicalType() {
+    if (auto base = this->template dyn_cast<BaseTy>())
+      return base;
+
+    return this->template cast<TypeAliasType>()
+        .getCanonicalType()
+        .template dyn_cast<BaseTy>();
+  }
+};
+
 namespace detail {
 /// Struct defining a field. Used in structs and unions.
 struct FieldInfo {
@@ -58,10 +86,6 @@ int64_t getBitWidth(mlir::Type type);
 /// InOutType.  Unlike isHWValueType, this is not conservative, it only returns
 /// false on known InOut types, rather than any unknown types.
 bool hasHWInOutType(mlir::Type type);
-
-/// Cast to an ArrayType from a type that may be an ArrayType or a TypeAliasType
-/// wrapping an ArrayType. Returns null in any other case.
-ArrayType castArrayType(Type type);
 
 } // namespace hw
 } // namespace circt

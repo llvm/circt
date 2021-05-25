@@ -834,7 +834,7 @@ static ParseResult parseSliceTypes(OpAsmParser &p, Type &srcType,
   if (p.parseType(type))
     return failure();
 
-  ArrayType arrType = castArrayType(type);
+  ArrayType arrType = type.cast<TypeAliasOr<ArrayType>>().getCanonicalType();
   if (!arrType)
     return p.emitError(p.getCurrentLocation(),
                        "Expected !hw.array type or alias");
@@ -898,7 +898,7 @@ static ParseResult parseArrayConcatTypes(OpAsmParser &p,
     Type ty;
     if (p.parseType(ty))
       return p.emitError(p.getCurrentLocation(), "Expected type");
-    ArrayType arrTy = castArrayType(ty);
+    ArrayType arrTy = ty.cast<TypeAliasOr<ArrayType>>().getCanonicalType();
     if (!arrTy)
       return p.emitError(p.getCurrentLocation(),
                          "Expected !hw.array type or alias");
