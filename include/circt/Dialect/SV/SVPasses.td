@@ -92,5 +92,17 @@ def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
   let dependentDialects = ["circt::sv::SVDialect"];
 }
 
+def HWDeclareTypedecls : Pass<"hw-declare-typedecls", "ModuleOp"> {
+  let summary = "Declare TypedeclOps for any TypeAlias types";
+  let description = [{
+    This pass finds any TypeAlias types uses as operands, results, or block
+    arguments, and declares TypedeclOps in the top-level module using the name
+    and type from the TypeAlias. This should be used as a pre-processing step
+    before Verilog emission to ensure TypeAliases used throughout the circuit
+    have a typedecl.
+  }];
+
+  let constructor = "circt::sv::createHWDeclareTypedeclsPass()";
+}
 
 #endif // CIRCT_DIALECT_SV_SVPASSES
