@@ -5,6 +5,8 @@
 // RUN: FileCheck %s --check-prefix=VERILOG-BAR < %t/bar.sv
 // RUN: FileCheck %s --check-prefix=VERILOG-USB < %t/usb.sv
 // RUN: FileCheck %s --check-prefix=VERILOG-INOUT-3 < %t/inout_3.sv
+// RUN: FileCheck %s --check-prefix=VERILOG-CUSTOM-1 < %t/custom1.sv
+// RUN: FileCheck %s --check-prefix=VERILOG-CUSTOM-2 < %t/custom2.sv
 // RUN: FileCheck %s --check-prefix=LIST < %t/filelist.f
 
 sv.verbatim "// I'm everywhere"
@@ -15,36 +17,41 @@ sv.ifdef.procedural "VERILATOR" {
 }
 sv.verbatim ""
 
-rtl.type_scope @__rtl_typedecls {
-  rtl.typedecl @foo : i1
+hw.type_scope @__hw_typedecls {
+  hw.typedecl @foo : i1
 }
 
-rtl.module @foo(%a: i1) -> (%b: i1) {
-  rtl.output %a : i1
+hw.module @foo(%a: i1) -> (%b: i1) {
+  hw.output %a : i1
 }
-rtl.module @bar(%x: i1) -> (%y: i1) {
-  rtl.output %x : i1
+hw.module @bar(%x: i1) -> (%y: i1) {
+  hw.output %x : i1
 }
 sv.interface @usb {
   sv.interface.signal @valid : i1
   sv.interface.signal @ready : i1
 }
-rtl.module.extern @pll ()
+hw.module.extern @pll ()
 
-rtl.module @inout(%inout: i1) -> (%output: i1) {
-  rtl.output %inout : i1
+hw.module @inout(%inout: i1) -> (%output: i1) {
+  hw.output %inout : i1
 }
 
-// This is made collide with the first renaming attempt of the `@inout` module
-// above.
-rtl.module.extern @inout_0 () -> ()
-rtl.module.extern @inout_1 () -> ()
-rtl.module.extern @inout_2 () -> ()
+// This is made to collide with the first renaming attempt of the `@inout`
+// module above.
+hw.module.extern @inout_0 () -> ()
+hw.module.extern @inout_1 () -> ()
+hw.module.extern @inout_2 () -> ()
+
+sv.verbatim "// Foo" {output_file = {name = "custom1.sv"}}
+sv.verbatim "// Bar" {output_file = {name = "custom2.sv", exclude_from_filelist = true}}
 
 // LIST:      foo.sv
 // LIST-NEXT: bar.sv
 // LIST-NEXT: usb.sv
 // LIST-NEXT: inout_3.sv
+// LIST-NEXT: custom1.sv
+// LIST-NOT:  custom2.sv
 
 // VERILOG-FOO:       // I'm everywhere
 // VERILOG-FOO-NEXT:  `ifdef VERILATOR
@@ -86,6 +93,9 @@ rtl.module.extern @inout_2 () -> ()
 // VERILOG-INOUT-3-LABEL: module inout_3(
 // VERILOG-INOUT-3:       endmodule
 
+// VERILOG-CUSTOM-1: // Foo
+// VERILOG-CUSTOM-2: // Bar
+
 // VERILOG:       // I'm everywhere
 // VERILOG-NEXT:  `ifdef VERILATOR
 // VERILOG-NEXT:    // Hello
@@ -103,3 +113,7 @@ rtl.module.extern @inout_2 () -> ()
 // VERILOG:       // external module inout_0
 // VERILOG:       // external module inout_1
 // VERILOG:       // external module inout_2
+// VERILOG-LABEL: FILE "custom1.sv"
+// VERILOG:       // Foo
+// VERILOG-LABEL: FILE "custom2.sv"
+// VERILOG:       // Bar

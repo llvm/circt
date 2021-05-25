@@ -288,7 +288,7 @@ def CaseZOp : SVOp<"casez", [SingleBlock, NoTerminator, NoRegionArguments,
   let description = "See SystemVerilog 2017 12.5.1.";
 
   let regions = (region VariadicRegion<SizedRegion<1>>:$caseRegions);
-  let arguments = (ins RTLIntegerType:$cond, ArrayAttr:$casePatterns);
+  let arguments = (ins HWIntegerType:$cond, ArrayAttr:$casePatterns);
   let results = (outs);
 
   let parser = "return parseCaseZOp(parser, result);";
@@ -425,8 +425,12 @@ def FatalOp : SVOp<"fatal", [ProceduralOp]> {
 }
 
 def VerbatimOp : SVOp<"verbatim"> {
-  let summary = "verbatim opaque text emitted to SystemVerilog file.";
-  let summary = "sv.verbatim allows operand substitutions with {{0}} syntax.";
+  let summary = "Verbatim opaque text emitted inline.";
+  let description = [{
+    This operation produces opaque text inline in the SystemVerilog output.
+
+    sv.verbatim allows operand substitutions with {{0}} syntax.
+  }];
   let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands);
 
   let assemblyFormat =
@@ -434,6 +438,8 @@ def VerbatimOp : SVOp<"verbatim"> {
 
   let builders = [
     OpBuilder<(ins "StringRef":$string),
+                 "build(odsBuilder, odsState, string, ValueRange{});">,
+    OpBuilder<(ins "StringAttr":$string),
                  "build(odsBuilder, odsState, string, ValueRange{});">
   ];
 }

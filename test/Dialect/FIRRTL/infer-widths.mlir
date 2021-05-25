@@ -7,6 +7,16 @@ firrtl.circuit "Foo" {
   firrtl.module @InferConstant(out %out0: !firrtl.uint, out %out1: !firrtl.sint) {
     %0 = firrtl.constant 1 : !firrtl.uint<42>
     %1 = firrtl.constant 2 : !firrtl.sint<42>
+    // CHECK: {{.+}} = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK: {{.+}} = firrtl.constant 0 : !firrtl.sint<1>
+    // CHECK: {{.+}} = firrtl.constant 200 : !firrtl.uint<8>
+    // CHECK: {{.+}} = firrtl.constant 200 : !firrtl.sint<9>
+    // CHECK: {{.+}} = firrtl.constant -200 : !firrtl.sint<9>
+    %2 = firrtl.constant 0 : !firrtl.uint
+    %3 = firrtl.constant 0 : !firrtl.sint
+    %4 = firrtl.constant 200 : !firrtl.uint
+    %5 = firrtl.constant 200 : !firrtl.sint
+    %6 = firrtl.constant -200 : !firrtl.sint
     firrtl.connect %out0, %0 : !firrtl.uint, !firrtl.uint<42>
     firrtl.connect %out1, %1 : !firrtl.sint, !firrtl.sint<42>
   }
@@ -276,13 +286,15 @@ firrtl.circuit "Foo" {
   }
 
   // CHECK-LABEL: @MuxOp
-  firrtl.module @MuxOp(in %a: !firrtl.uint<1>) {
+  firrtl.module @MuxOp() {
     // CHECK: %0 = firrtl.wire : !firrtl.uint<2>
     // CHECK: %1 = firrtl.wire : !firrtl.uint<3>
-    // CHECK: %2 = firrtl.mux{{.*}} -> !firrtl.uint<3>
+    // CHECK: %2 = firrtl.wire : !firrtl.uint<1>
+    // CHECK: %3 = firrtl.mux{{.*}} -> !firrtl.uint<3>
     %0 = firrtl.wire : !firrtl.uint
     %1 = firrtl.wire : !firrtl.uint
-    %2 = firrtl.mux(%a, %0, %1) : (!firrtl.uint<1>, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
+    %2 = firrtl.wire : !firrtl.uint
+    %3 = firrtl.mux(%2, %0, %1) : (!firrtl.uint, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
     %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
     %c2_ui3 = firrtl.constant 2 : !firrtl.uint<3>
     firrtl.connect %0, %c1_ui2 : !firrtl.uint, !firrtl.uint<2>
@@ -325,6 +337,60 @@ firrtl.circuit "Foo" {
     firrtl.connect %0, %2 : !firrtl.uint, !firrtl.uint
     %c0_ui5 = firrtl.constant 0 : !firrtl.uint<5>
     firrtl.connect %ui, %c0_ui5 : !firrtl.uint, !firrtl.uint<5>
+  }
+
+  // CHECK-LABEL: @TransparentOps
+  firrtl.module @TransparentOps(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>) {
+    %false = firrtl.constant 0 : !firrtl.uint<1>
+    %true = firrtl.constant 1 : !firrtl.uint<1>
+    %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
+    %c0_ui5 = firrtl.constant 0 : !firrtl.uint<5>
+
+    // CHECK: %ui = firrtl.wire : !firrtl.uint<5>
+    %ui = firrtl.wire : !firrtl.uint
+
+    firrtl.printf %clk, %false, "foo"
+    firrtl.skip
+    firrtl.stop %clk, %false, 0
+    firrtl.when %a  {
+      firrtl.connect %ui, %c0_ui4 : !firrtl.uint, !firrtl.uint<4>
+    } else  {
+      firrtl.connect %ui, %c0_ui5 : !firrtl.uint, !firrtl.uint<5>
+    }
+    firrtl.assert %clk, %true, %true, "foo"
+    firrtl.assume %clk, %true, %true, "foo"
+    firrtl.cover %clk, %true, %true, "foo"
+  }
+
+  // Issue #1088
+  // CHECK-LABEL: @Issue1088
+  firrtl.module @Issue1088(out %y: !firrtl.sint<4>) {
+    // CHECK: %x = firrtl.wire : !firrtl.sint<9>
+    // CHECK: %c200_si9 = firrtl.constant 200 : !firrtl.sint<9>
+    // CHECK: %0 = firrtl.bits %x 3 to 0 : (!firrtl.sint<9>) -> !firrtl.uint<4>
+    // CHECK: %1 = firrtl.asSInt %0 : (!firrtl.uint<4>) -> !firrtl.sint<4>
+    // CHECK: firrtl.connect %y, %1 : !firrtl.sint<4>, !firrtl.sint<4>
+    // CHECK: firrtl.connect %x, %c200_si9 : !firrtl.sint<9>, !firrtl.sint<9>
+    %x = firrtl.wire : !firrtl.sint
+    %c200_si = firrtl.constant 200 : !firrtl.sint
+    firrtl.connect %y, %x : !firrtl.sint<4>, !firrtl.sint
+    firrtl.connect %x, %c200_si : !firrtl.sint, !firrtl.sint
+  }
+
+  // Issue #1110: Width inference should infer 0 width when appropriate
+  // CHECK-LABEL: @Issue1110
+  // CHECK-SAME: out %y: !firrtl.uint<0>
+  firrtl.module @Issue1110(in %x: !firrtl.uint<0>, out %y: !firrtl.uint) {
+    firrtl.connect %y, %x : !firrtl.uint, !firrtl.uint<0>
+  }
+
+  // Issue #1118: Width inference should infer 0 width when appropriate
+  // CHECK-LABEL: @Issue1118
+  // CHECK-SAME: out %x: !firrtl.sint<13>
+  firrtl.module @Issue1118(out %x: !firrtl.sint) {
+    %c4232_ui = firrtl.constant 4232 : !firrtl.uint
+    %0 = firrtl.asSInt %c4232_ui : (!firrtl.uint) -> !firrtl.sint
+    firrtl.connect %x, %0 : !firrtl.sint, !firrtl.sint
   }
 
   firrtl.module @Foo() {}

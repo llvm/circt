@@ -1,4 +1,5 @@
 add_circt_dialect_library(CIRCTFIRRTLTransforms
+  BlackBoxReader.cpp
   BlackboxMemory.cpp
   CheckWidths.cpp
   ExpandWhens.cpp
@@ -12,6 +13,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
 
   LINK_LIBS PUBLIC
   CIRCTFIRRTL
+  CIRCTSV
   MLIRIR
   MLIRPass
   MLIRTransformUtils

@@ -19,7 +19,8 @@ firrtl.circuit "Test" {
                       out %result4: !firrtl.uint<2>,
                       out %result5: !firrtl.uint<2>,
                       out %result6: !firrtl.uint<4>,
-                      out %result7: !firrtl.uint<4>) {
+                      out %result7: !firrtl.uint<4>,
+                      out %result8: !firrtl.uint<4>) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 
@@ -79,6 +80,23 @@ firrtl.circuit "Test" {
     %unconnectedWire = firrtl.wire : !firrtl.uint<2>
     // CHECK: firrtl.connect %result7, %invalid_ui2
     firrtl.connect %result7, %unconnectedWire: !firrtl.uint<4>, !firrtl.uint<2>
+
+    %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
+    %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
+
+    // Multiple operations that fold to constants shouldn't leave dead constants
+    // around.
+    %a = firrtl.and %extWire, %c2_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+    %b = firrtl.or %a, %c1_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+    // CHECK-NEXT: firrtl.constant 3
+    %c = firrtl.xor %b, %c2_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+
+    // CHECK-NEXT: firrtl.connect %result8, %c3_ui2
+    firrtl.connect %result8, %c: !firrtl.uint<4>, !firrtl.uint<2>
+
+
+    // Constant propagation through instance.
+    firrtl.instance @ReadMem {name = "ReadMem"}
   }
 
   // Unused modules should be completely dropped.
@@ -87,5 +105,21 @@ firrtl.circuit "Test" {
   firrtl.module @UnusedModule(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>) {
     firrtl.connect %dest, %source : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK-NEXT: }
+  }
+
+
+  // CHECK-LABEL: ReadMem
+  firrtl.module @ReadMem() {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+
+    %0 = firrtl.mem Undefined {depth = 16 : i64, name = "ReadMemory", portNames = ["read0"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<sint<8>>>>
+
+    %1 = firrtl.subfield %0("data") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<sint<8>>>>) -> !firrtl.sint<8>
+    %2 = firrtl.subfield %0("addr") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<sint<8>>>>) -> !firrtl.uint<4>
+    firrtl.connect %2, %c0_ui1 : !firrtl.uint<4>, !firrtl.uint<1>
+    %3 = firrtl.subfield %0("en") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<sint<8>>>>) -> !firrtl.uint<1>
+    firrtl.connect %3, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    %4 = firrtl.subfield %0("clk") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<sint<8>>>>) -> !firrtl.clock
   }
 }

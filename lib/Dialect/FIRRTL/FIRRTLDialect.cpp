@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/IR/DialectImplementation.h"
 
@@ -134,8 +135,12 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
     // Check to see if the operation containing the arguments has 'firrtl.name'
     // attributes for them.  If so, use that as the name.
     auto *parentOp = block->getParentOp();
-
     auto argAttr = getModulePortNames(parentOp);
+
+    // Do not crash on invalid IR.
+    if (!argAttr || argAttr.size() != block->getNumArguments())
+      return;
+
     for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
       auto str = argAttr[i].cast<StringAttr>().getValue();
       if (!str.empty())
@@ -146,8 +151,9 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
 } // end anonymous namespace
 
 void FIRRTLDialect::initialize() {
-  // Register types.
+  // Register types and attributes.
   registerTypes();
+  registerAttributes();
 
   // Register operations.
   addOperations<
@@ -174,9 +180,17 @@ Operation *FIRRTLDialect::materializeConstant(OpBuilder &builder,
                                               Attribute value, Type type,
                                               Location loc) {
   // Integer constants.
-  if (auto intType = type.dyn_cast<IntType>())
-    if (auto attrValue = value.dyn_cast<IntegerAttr>())
-      return builder.create<ConstantOp>(loc, type, attrValue);
+  if (auto attrValue = value.dyn_cast<IntegerAttr>()) {
+    auto intType = type.cast<IntType>();
+    assert((!intType.hasWidth() || (unsigned)intType.getWidthOrSentinel() ==
+                                       attrValue.getValue().getBitWidth()) &&
+           "type/value width mismatch materializing constant");
+    return builder.create<ConstantOp>(loc, type, attrValue);
+  }
+
+  // InvalidValue constants.
+  if (auto invalidValue = value.dyn_cast<InvalidValueAttr>())
+    return builder.create<InvalidValueOp>(loc, type);
 
   return nullptr;
 }

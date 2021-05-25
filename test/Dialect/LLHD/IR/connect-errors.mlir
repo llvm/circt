@@ -4,7 +4,6 @@
 llhd.entity @connect_different_types(%in: !llhd.sig<i8>) -> (%out: !llhd.sig<i32>) {
   // expected-error @+1 {{use of value '%out' expects different type}}
   llhd.con %in, %out : !llhd.sig<i8>
-  // expected-error @+1 {{expected operation}}
 }
 
 // -----

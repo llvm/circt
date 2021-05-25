@@ -126,3 +126,6 @@ in performance.
 
 Consult the [Getting Started](docs/GettingStarted.md) page for detailed 
 information on configuring and compiling CIRCT.
+
+Consult the [Python Bindings](docs/PythonBindings.md) page if you are mainly
+interested in using CIRCT from a Python prompt or script.

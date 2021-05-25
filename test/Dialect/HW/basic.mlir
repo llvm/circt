@@ -1,0 +1,138 @@
+// RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
+
+// CHECK-LABEL: hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (i50) {
+hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (i50) {
+  // CHECK-NEXT:    %c42_i12 = hw.constant 42 : i12
+  // CHECK-NEXT:    [[RES0:%[0-9]+]] = comb.add %c42_i12, %c42_i12 : i12
+  // CHECK-NEXT:    [[RES1:%[0-9]+]] = comb.mul %c42_i12, [[RES0]] : i12
+  %a = hw.constant 42 : i12
+  %b = comb.add %a, %a : i12
+  %c = comb.mul %a, %b : i12
+
+  // CHECK-NEXT:    [[RES2:%[0-9]+]] = comb.sext %arg0 : (i3) -> i7
+  %d = comb.sext %arg0 : (i3) -> i7
+
+  // CHECK-NEXT:    [[RES4:%[0-9]+]] = comb.concat %c42_i12 : (i12) -> i12
+  %conc1 = comb.concat %a : (i12) -> i12
+
+  // CHECK-NEXT:    [[RES7:%[0-9]+]] = comb.parity [[RES4]] : i12
+  %parity1 = comb.parity %conc1 : i12
+
+  // CHECK-NEXT:    [[RES8:%[0-9]+]] = comb.concat [[RES4]], [[RES0]], [[RES1]], [[RES2]], [[RES2]] : (i12, i12, i12, i7, i7) -> i50
+  %result = comb.concat %conc1, %b, %c, %d, %d : (i12, i12, i12, i7, i7) -> i50
+
+  // CHECK-NEXT: [[RES9:%[0-9]+]] = comb.extract [[RES8]] from 4 : (i50) -> i19
+  %small1 = comb.extract %result from 4 : (i50) -> i19
+
+  // CHECK-NEXT: [[RES10:%[0-9]+]] = comb.extract [[RES8]] from 31 : (i50) -> i19
+  %small2 = comb.extract %result from 31 : (i50) -> i19
+
+  // CHECK-NEXT: comb.add [[RES9]], [[RES10]] : i19
+  %add = comb.add %small1, %small2 : i19
+
+  // CHECK-NEXT: comb.icmp eq [[RES9]], [[RES10]] : i19
+  %eq = comb.icmp eq %small1, %small2 : i19
+
+  // CHECK-NEXT: comb.icmp ne [[RES9]], [[RES10]] : i19
+  %neq = comb.icmp ne %small1, %small2 : i19
+
+  // CHECK-NEXT: comb.icmp slt [[RES9]], [[RES10]] : i19
+  %lt = comb.icmp slt %small1, %small2 : i19
+
+  // CHECK-NEXT: comb.icmp ult [[RES9]], [[RES10]] : i19
+  %ult = comb.icmp ult %small1, %small2 : i19
+
+  // CHECK-NEXT: comb.icmp sle [[RES9]], [[RES10]] : i19
+  %leq = comb.icmp sle %small1, %small2 : i19
+
+  // CHECK-NEXT: comb.icmp ule [[RES9]], [[RES10]] : i19
+  %uleq = comb.icmp ule %small1, %small2 : i19
+
+  // CHECK-NEXT: comb.icmp sgt [[RES9]], [[RES10]] : i19
+  %gt = comb.icmp sgt %small1, %small2 : i19
+
+  // CHECK-NEXT: comb.icmp ugt [[RES9]], [[RES10]] : i19
+  %ugt = comb.icmp ugt %small1, %small2 : i19
+
+  // CHECK-NEXT: comb.icmp sge [[RES9]], [[RES10]] : i19
+  %geq = comb.icmp sge %small1, %small2 : i19
+
+  // CHECK-NEXT: comb.icmp uge [[RES9]], [[RES10]] : i19
+  %ugeq = comb.icmp uge %small1, %small2 : i19
+
+  // CHECK-NEXT: %w = sv.wire : !hw.inout<i4>
+  %w = sv.wire : !hw.inout<i4>
+
+  // CHECK-NEXT: %after1 = sv.wire : !hw.inout<i4>
+  %before1 = sv.wire {name = "after1"} : !hw.inout<i4>
+
+  // CHECK-NEXT: sv.read_inout %after1 : !hw.inout<i4>
+  %read_before1 = sv.read_inout %before1 : !hw.inout<i4>
+
+  // CHECK-NEXT: %after2_conflict = sv.wire : !hw.inout<i4>
+  // CHECK-NEXT: %after2_conflict_0 = sv.wire {name = "after2_conflict"} : !hw.inout<i4>
+  %before2_0 = sv.wire {name = "after2_conflict"} : !hw.inout<i4>
+  %before2_1 = sv.wire {name = "after2_conflict"} : !hw.inout<i4>
+
+  // CHECK-NEXT: %after3 = sv.wire {someAttr = "foo"} : !hw.inout<i4>
+  %before3 = sv.wire {name = "after3", someAttr = "foo"} : !hw.inout<i4>
+
+  // CHECK-NEXT: = comb.mux %arg1, [[RES2]], [[RES2]] : i7
+  %mux = comb.mux %arg1, %d, %d : i7
+  
+  // CHECK-NEXT: [[STR:%[0-9]+]] = hw.struct_create ({{.*}}, {{.*}}) : !hw.struct<foo: i19, bar: i7>
+  %s0 = hw.struct_create (%small1, %mux) : !hw.struct<foo: i19, bar: i7>
+
+  // CHECK-NEXT: = hw.struct_extract [[STR]]["foo"] : !hw.struct<foo: i19, bar: i7>
+  %sf1 = hw.struct_extract %s0["foo"] : !hw.struct<foo: i19, bar: i7>
+
+  // CHECK-NEXT: = hw.struct_inject [[STR]]["foo"], {{.*}} : !hw.struct<foo: i19, bar: i7>
+  %s1 = hw.struct_inject %s0["foo"], %sf1 : !hw.struct<foo: i19, bar: i7>
+  
+  // CHECK-NEXT: :2 = hw.struct_explode [[STR]] : !hw.struct<foo: i19, bar: i7>
+  %se:2 = hw.struct_explode %s0 : !hw.struct<foo: i19, bar: i7>
+
+  // CHECK-NEXT: hw.bitcast [[STR]] : (!hw.struct<foo: i19, bar: i7>)
+  %structBits = hw.bitcast %s0 : (!hw.struct<foo: i19, bar: i7>) -> i26
+
+  // CHECK-NEXT: = constant 13 : i10
+  %idx = constant 13 : i10
+  // CHECK-NEXT: = hw.array_slice %arg2 at %c13_i10 : (!hw.array<1000xi8>) -> !hw.array<24xi8>
+  %subArray = hw.array_slice %arg2 at %idx : (!hw.array<1000xi8>) -> !hw.array<24xi8>
+  // CHECK-NEXT: [[ARR1:%.+]] = hw.array_create [[RES9]], [[RES10]] : (i19)
+  %arrCreated = hw.array_create %small1, %small2 : (i19)
+  // CHECK-NEXT: [[ARR2:%.+]] = hw.array_create [[RES9]], [[RES10]], {{.+}} : (i19)
+  %arr2 = hw.array_create %small1, %small2, %add : (i19)
+  // CHECK-NEXT: = hw.array_concat [[ARR1]], [[ARR2]] : !hw.array<2xi19>, !hw.array<3xi19>
+  %bigArray = hw.array_concat %arrCreated, %arr2 : !hw.array<2 x i19>, !hw.array<3 x i19>
+
+  // CHECK-NEXT:    hw.output [[RES8]] : i50
+  hw.output %result : i50
+}
+// CHECK-NEXT:  }
+
+hw.module @UnionOps(%a: !hw.union<foo: i1, bar: i3>) -> (%x: i3, %z: !hw.union<bar: i3, baz: i8>) {
+  %x = hw.union_extract %a["bar"] : !hw.union<foo: i1, bar: i3>
+  %z = hw.union_create "bar", %x : !hw.union<bar: i3, baz: i8>
+  hw.output %x, %z : i3, !hw.union<bar: i3, baz: i8>
+}
+// CHECK-LABEL: hw.module @UnionOps(%a: !hw.union<foo: i1, bar: i3>) -> (%x: i3, %z: !hw.union<bar: i3, baz: i8>) {
+// CHECK-NEXT:    [[I3REG:%.+]] = hw.union_extract %a["bar"] : !hw.union<foo: i1, bar: i3>
+// CHECK-NEXT:    [[UREG:%.+]] = hw.union_create "bar", [[I3REG]] : !hw.union<bar: i3, baz: i8>
+// CHECK-NEXT:    hw.output [[I3REG]], [[UREG]] : i3, !hw.union<bar: i3, baz: i8>
+
+// https://github.com/llvm/circt/issues/863
+// CHECK-LABEL: hw.module @signed_arrays
+hw.module @signed_arrays(%arg0: si8) -> (%out: !hw.array<2xsi8>) {
+  // CHECK-NEXT:  %wireArray = sv.wire  : !hw.inout<array<2xsi8>>
+  %wireArray = sv.wire : !hw.inout<!hw.array<2xsi8>>
+
+  // CHECK-NEXT: %0 = hw.array_create %arg0, %arg0 : (si8)
+  %0 = hw.array_create %arg0, %arg0 : (si8)
+
+  // CHECK-NEXT: sv.connect %wireArray, %0 : !hw.array<2xsi8>
+  sv.connect %wireArray, %0 : !hw.array<2xsi8>
+
+  %result = sv.read_inout %wireArray : !hw.inout<!hw.array<2xsi8>>
+  hw.output %result : !hw.array<2xsi8>
+}

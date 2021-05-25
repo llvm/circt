@@ -16,7 +16,7 @@ package Cosim_DpiPkg;
 
 // --------------------- Cosim RPC Server --------------------------------------
 
-// Start cosimserver (spawns server for RTL-initiated work, listens for
+// Start cosimserver (spawns server for HW-initiated work, listens for
 // connections from new SW-clients).
 import "DPI-C" sv2cCosimserverInit = function int cosim_init();
 

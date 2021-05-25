@@ -47,7 +47,7 @@ def ConstantXOp : SVOp<"constantX", [NoSideEffect, HasCustomSSAName]> {
     }];
 
   let arguments = (ins);
-  let results = (outs RTLIntegerType:$result);
+  let results = (outs HWIntegerType:$result);
   let assemblyFormat = " attr-dict `:` type($result)";
 }
 
@@ -59,6 +59,6 @@ def ConstantZOp : SVOp<"constantZ", [NoSideEffect, HasCustomSSAName]> {
     }];
 
   let arguments = (ins);
-  let results = (outs RTLIntegerType:$result);
+  let results = (outs HWIntegerType:$result);
   let assemblyFormat = " attr-dict `:` type($result)";
 }

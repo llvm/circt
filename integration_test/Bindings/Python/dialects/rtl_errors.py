@@ -2,7 +2,8 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
 import circt
-from circt.dialects import rtl
+from circt.design_entry import connect
+from circt.dialects import hw
 
 from mlir.ir import *
 from mlir.passmanager import PassManager
@@ -16,37 +17,37 @@ with Context() as ctx, Location.unknown():
 
   m = Module.create()
   with InsertionPoint(m.body):
-    one_input = rtl.RTLModuleOp(
+    one_input = hw.HWModuleOp(
         name="one_input",
         input_ports=[("a", i32)],
-        body_builder=lambda m: rtl.OutputOp([]),
+        body_builder=lambda m: hw.OutputOp([]),
     )
-    one_output = rtl.RTLModuleOp(
+    one_output = hw.HWModuleOp(
         name="one_output",
         output_ports=[("a", i32)],
-        body_builder=lambda m: rtl.OutputOp(
-            [rtl.ConstantOp(i32, IntegerAttr.get(i32, 46)).result]),
+        body_builder=lambda m: hw.OutputOp(
+            [hw.ConstantOp(i32, IntegerAttr.get(i32, 46)).result]),
     )
-    input_output = rtl.RTLModuleOp(
+    input_output = hw.HWModuleOp(
         name="input_output",
         input_ports=[("a", i32)],
         output_ports=[("b", i32)],
-        body_builder=lambda m: rtl.OutputOp([m.entry_block.arguments[0]]),
+        body_builder=lambda m: hw.OutputOp([m.a]),
     )
 
     def instance_builder_body(module):
-      constant_value = one_output.create(module, "inst1").a
+      constant_value = one_output.create("inst1").a
 
-      # CHECK: unknown input port name b
+      # CHECK: unknown port name b
       try:
-        inst2 = one_input.create(module, "inst2", {"a": constant_value})
-        inst2.set_input_port("b", None)
+        inst2 = one_input.create("inst2", {"a": constant_value})
+        connect(inst2.b, constant_value)
       except AttributeError as e:
         print(e)
 
       # CHECK: unknown port name b
       try:
-        inst3 = one_output.create(module, "inst3")
+        inst3 = one_output.create("inst3")
         inst3.b
       except AttributeError as e:
         print(e)
@@ -59,13 +60,13 @@ with Context() as ctx, Location.unknown():
 
       # Note, the error here is actually caught and printed below.
       # CHECK: Uninitialized ports remain in circuit!
-      # CHECK: Port:     %[[PORT_NAME:.+]]
-      # CHECK: Module:   rtl.module @one_input(%[[PORT_NAME]]: i32)
-      # CHECK: Instance: rtl.instance "inst1" @one_input({{.+}})
-      inst1 = one_input.create(module, "inst1")
+      # CHECK: Port:       [[PORT_NAME:.+]]
+      # CHECK: InstanceOf: hw.module @one_input(%[[PORT_NAME]]: i32)
+      # CHECK: Instance:   hw.instance "inst1" @one_input({{.+}})
+      inst1 = one_input.create("inst1")
 
     try:
-      instance_builder_tests = rtl.RTLModuleOp(
+      instance_builder_tests = hw.HWModuleOp(
           name="instance_builder_tests", body_builder=instance_builder_body)
     except RuntimeError as e:
       print(e)

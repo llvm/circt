@@ -261,13 +261,13 @@ operands, and makes the IR much easier to analyze and work with.
 ### Module bodies require def-before-use dominance instead of allowing graphs
 
 MLIR allows regions with arbitrary graphs in their bodies, and this is used by
-the RTL dialect to allow direct expression of cyclic graphs etc.  While this
+the HW dialect to allow direct expression of cyclic graphs etc.  While this
 makes sense for hardware in general, the FIRRTL dialect is intended to be a
-pragmatic infrastructure focused on lowering of Chisel code to the RTL dialect,
+pragmatic infrastructure focused on lowering of Chisel code to the HW dialect,
 it isn't intended to be a "generally useful IR for hardware".
 
-We recommend that non-Chisel frontends target the RTL dialect, or a higher level
-dialect of their own creation that lowers to RTL as appropriate.
+We recommend that non-Chisel frontends target the HW dialect, or a higher level
+dialect of their own creation that lowers to HW as appropriate.
 
 ### `input` and `output` Module Ports
 

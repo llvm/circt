@@ -36,6 +36,7 @@ using namespace firrtl;
 
 using llvm::SMLoc;
 using llvm::SourceMgr;
+using mlir::LocationAttr;
 
 namespace json = llvm::json;
 
@@ -90,7 +91,13 @@ struct GlobalFIRParserState {
                        FIRParserOptions options,
                        const llvm::MemoryBuffer *annotationsBuf)
       : context(context), options(options), lex(sourceMgr, context),
-        curToken(lex.lexToken()), annotationsBuf(annotationsBuf) {
+        curToken(lex.lexToken()), annotationsBuf(annotationsBuf),
+        loIdentifier(Identifier::get("lo", context)),
+        hiIdentifier(Identifier::get("hi", context)),
+        amountIdentifier(Identifier::get("amount", context)),
+        fieldnameIdentifier(Identifier::get("fieldname", context)),
+        indexIdentifier(Identifier::get("index", context)),
+        locatorFilenameCache(loIdentifier /*arbitrary non-null identifier*/) {
     dontTouchAnnotation =
         getAnnotationOfClass(context, "firrtl.transforms.DontTouchAnnotation");
     emptyArrayAttr = ArrayAttr::get(context, {});
@@ -104,6 +111,10 @@ struct GlobalFIRParserState {
 
   /// A mapping of targets to annotations
   llvm::StringMap<ArrayAttr> annotationMap;
+
+  /// A global identifier that can be used to link multiple annotations
+  /// together.  This should be incremented on use.
+  unsigned annotationID = 0;
 
   /// The lexer for the source file we're parsing.
   FIRLexer lex;
@@ -121,11 +132,15 @@ struct GlobalFIRParserState {
   /// A mutable reference to the current ModuleTarget.
   StringRef moduleTarget;
 
-  // Cached annotation for DontTouch.
+  /// Cached annotation for DontTouch.
   DictionaryAttr dontTouchAnnotation;
 
-  // An empty array attribute.
+  /// An empty array attribute.
   ArrayAttr emptyArrayAttr;
+
+  /// Cached identifiers used in primitives.
+  Identifier loIdentifier, hiIdentifier, amountIdentifier, fieldnameIdentifier;
+  Identifier indexIdentifier;
 
   class BacktraceState {
   public:
@@ -146,9 +161,39 @@ struct GlobalFIRParserState {
 
   BacktraceState getBacktrackState() { return BacktraceState(*this); }
 
+  /// Return an FileLineColLoc for the specified location, but use a bit of
+  /// caching to reduce thrasing the MLIRContext.
+  FileLineColLoc getFileLineColLoc(StringRef filename, unsigned lineNo,
+                                   unsigned columnNo) {
+    // Check our single-entry cache for this filename.
+    Identifier filenameId = locatorFilenameCache;
+    if (filenameId.str() != filename) {
+      // We missed!  Get the right identifier.
+      locatorFilenameCache = filenameId = Identifier::get(filename, context);
+
+      // If we miss in the filename cache, we also miss in the FileLineColLoc
+      // cache.
+      return fileLineColLocCache =
+                 FileLineColLoc::get(filenameId, lineNo, columnNo);
+    }
+
+    // If we hit the filename cache, check the FileLineColLoc cache.
+    auto result = fileLineColLocCache;
+    if (result && result.getLine() == lineNo && result.getColumn() == columnNo)
+      return result;
+
+    return fileLineColLocCache =
+               FileLineColLoc::get(filenameId, lineNo, columnNo);
+  }
+
 private:
   GlobalFIRParserState(const GlobalFIRParserState &) = delete;
   void operator=(const GlobalFIRParserState &) = delete;
+
+  /// This is a single-entry cache for filenames in locators.
+  Identifier locatorFilenameCache;
+  /// This is a single-entry cache for FileLineCol locations.
+  FileLineColLoc fileLineColLocCache;
 };
 
 } // end anonymous namespace
@@ -199,10 +244,9 @@ struct FIRParser {
     return state.lex.translateLocation(loc);
   }
 
-  /// Parse an @info marker if present.  If so, apply the symbolic location
-  /// specified it to all of the operations listed in subOps.
-  ParseResult parseOptionalInfo(LocWithInfo &result,
-                                ArrayRef<Operation *> subOps = {});
+  /// Parse an @info marker if present.  If so, fill in the specified Location,
+  /// if not, ignore it.
+  ParseResult parseOptionalInfoLocator(LocationAttr &result);
 
   //===--------------------------------------------------------------------===//
   // Annotation Parsing
@@ -362,13 +406,23 @@ public:
 
   SMLoc getFIRLoc() const { return firLoc; }
 
-  Location getLoc() const {
+  Location getLoc() {
     if (infoLoc.hasValue())
       return infoLoc.getValue();
-    return parser->translateLocation(firLoc);
+    auto result = parser->translateLocation(firLoc);
+    infoLoc = result;
+    return result;
   }
 
-  void setInfoLocation(Location loc) { infoLoc = loc; }
+  /// Parse an @info marker if present and update our location.
+  ParseResult parseOptionalInfo() {
+    LocationAttr loc;
+    if (failed(parser->parseOptionalInfoLocator(loc)))
+      return failure();
+    if (loc)
+      infoLoc = loc;
+    return success();
+  }
 
 private:
   FIRParser *const parser;
@@ -381,13 +435,9 @@ private:
   Optional<Location> infoLoc;
 };
 
-/// Parse an @info marker if present.  If so, apply the symbolic location
-/// specified it to all of the operations listed in subOps.
-///
-/// info ::= FileInfo
-///
-ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result,
-                                         ArrayRef<Operation *> subOps) {
+/// Parse an @info marker if present.  If so, fill in the specified Location,
+/// if not, ignore it.
+ParseResult FIRParser::parseOptionalInfoLocator(LocationAttr &result) {
   if (getToken().isNot(FIRToken::fileinfo))
     return success();
 
@@ -469,8 +519,8 @@ ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result,
 
     // On success, remember what we already parsed (Bar.Scala / 309:14), and
     // move on to the next chunk.
-    auto loc = FileLineColLoc::get(
-        getContext(), filename.drop_front(spaceLoc + 1), lineNo, columnNo);
+    auto loc = state.getFileLineColLoc(filename.drop_front(spaceLoc + 1),
+                                       lineNo, columnNo);
     extraLocs.push_back(loc);
     filename = nextFilename;
     lineNo = nextLineNo;
@@ -478,20 +528,12 @@ ParseResult FIRParser::parseOptionalInfo(LocWithInfo &result,
     spaceLoc = filename.find_last_of(' ');
   }
 
-  Location resultLoc =
-      FileLineColLoc::get(getContext(), filename, lineNo, columnNo);
+  result = state.getFileLineColLoc(filename, lineNo, columnNo);
   if (!extraLocs.empty()) {
-    extraLocs.push_back(resultLoc);
+    extraLocs.push_back(result);
     std::reverse(extraLocs.begin(), extraLocs.end());
-    resultLoc = FusedLoc::get(getContext(), extraLocs);
+    result = FusedLoc::get(getContext(), extraLocs);
   }
-  result.setInfoLocation(resultLoc);
-
-  // Now that we have a symbolic location, apply it to any subOps specified.
-  for (auto *op : subOps) {
-    op->setLoc(resultLoc);
-  }
-
   return success();
 }
 
@@ -838,6 +880,10 @@ ParseResult FIRParser::importAnnotations(SMLoc loc, StringRef annotationsStr) {
     return failure();
   }
 
+  if (!scatterCustomAnnotations(annotationMap, getContext(), state.annotationID,
+                                translateLocation(loc)))
+    return failure();
+
   for (auto a : annotationMap.keys()) {
     auto &entry = state.annotationMap[a];
     if (!entry) {
@@ -976,9 +1022,6 @@ public:
 /// is already defined.
 ParseResult FIRScopedParser::addSymbolEntry(StringRef name,
                                             SymbolValueEntry entry, SMLoc loc) {
-  // TODO(firrtl spec): Should we support name shadowing?  This will reject
-  // cases where we try to define a new wire in a conditional where an outer
-  // name defined the same name.
   auto nameId = Identifier::get(name, getContext());
   auto prev = symbolTable.lookup(nameId);
   if (prev.first.isValid()) {
@@ -1078,6 +1121,8 @@ struct FIRStmtParser : public FIRScopedParser {
                         parentParser.memoryScopeTable),
         builder(builder), moduleContext(moduleContext) {}
 
+  class StmtLocWithInfo;
+
   ParseResult parseSimpleStmt(unsigned stmtIndent);
   ParseResult parseSimpleStmtBlock(unsigned indent);
 
@@ -1155,7 +1200,7 @@ private:
   ParseResult parseIntegerLiteralExp(Value &result, SubOpVector &subOps);
 
   Optional<ParseResult> parseExpWithLeadingKeyword(StringRef keyword,
-                                                   const LocWithInfo &info);
+                                                   const StmtLocWithInfo &info);
 
   // Stmt Parsing
   ParseResult parseAttach();
@@ -1186,6 +1231,52 @@ private:
 };
 
 } // end anonymous namespace
+
+/// This helper class is used to handle Info records, which specify higher level
+/// symbolic source location, that may be missing from the file.  If the higher
+/// level source information is missing, we fall back to the location in the
+/// .fir file.
+class FIRStmtParser::StmtLocWithInfo {
+public:
+  explicit StmtLocWithInfo(SMLoc firLoc, FIRStmtParser *parser)
+      : parser(parser), firLoc(firLoc) {}
+
+  SMLoc getFIRLoc() const { return firLoc; }
+
+  Location getLoc() const {
+    if (infoLoc.hasValue())
+      return infoLoc.getValue();
+    return parser->translateLocation(firLoc);
+  }
+
+  /// Parse an @info marker if present.  If so, apply the symbolic location
+  /// specified it to all of the operations listed in subOps.
+  ParseResult parseOptionalInfo(ArrayRef<Operation *> subOps = {}) {
+    LocationAttr loc;
+    if (failed(parser->parseOptionalInfoLocator(loc)))
+      return failure();
+    if (!loc)
+      return success();
+
+    // If we parsed the locator, apply it to subOps.
+    infoLoc = loc;
+
+    // Now that we have a symbolic location, apply it to any subOps specified.
+    for (auto *op : subOps)
+      op->setLoc(loc);
+    return success();
+  }
+
+private:
+  FIRStmtParser *const parser;
+
+  /// This is the designated location in the .fir file for use when there is no
+  /// @ info marker.
+  SMLoc firLoc;
+
+  /// This is the location specified by the @ marker if present.
+  Optional<Location> infoLoc;
+};
 
 /// Return the input operand if it has passive type, otherwise convert to
 /// a passive-typed value and return that.
@@ -1256,7 +1347,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, SubOpVector &subOps,
     if (isLeadingStmt && consumeIf(FIRToken::kw_is)) {
       LocWithInfo info(loc, this);
       if (parseToken(FIRToken::kw_invalid, "expected 'invalid'") ||
-          parseOptionalInfo(info))
+          info.parseOptionalInfo())
         return failure();
 
       // Invalidate all of the results of the bundled value.
@@ -1335,14 +1426,16 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result,
 
   // Make sure the field name matches up with the input value's type and
   // compute the result type for the expression.
-  auto fieldNameAttr = builder.getStringAttr(fieldName);
-  auto resultType = result.getType().cast<FIRRTLType>();
-  resultType = SubfieldOp::getResultType(resultType, fieldNameAttr, loc);
+  // TODO: This should ideally be folded into a `tryCreate` method on the
+  // builder (https://llvm.discourse.group/t/3504).
+  NamedAttribute attrs = {getState().fieldnameIdentifier,
+                          builder.getStringAttr(fieldName)};
+  auto resultType = SubfieldOp::inferReturnType({result}, attrs, loc);
   if (!resultType)
     return failure();
 
   // Create the result operation.
-  auto op = builder.create<SubfieldOp>(loc, resultType, result, fieldNameAttr);
+  auto op = builder.create<SubfieldOp>(loc, resultType, result, attrs);
   subOps.push_back(op);
   result = op.getResult();
   return success();
@@ -1355,6 +1448,7 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result,
 ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result,
                                                     SubOpVector &subOps) {
   auto indexLoc = getToken().getLoc();
+  auto tindexLoc = translateLocation(indexLoc);
   int64_t indexNo;
   if (parseIntLit(indexNo, "expected index") ||
       parseToken(FIRToken::r_square, "expected ']'"))
@@ -1365,16 +1459,16 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result,
 
   // Make sure the index expression is valid and compute the result type for the
   // expression.
-  auto resultType = result.getType().cast<FIRRTLType>();
-  resultType = SubindexOp::getResultType(resultType, indexNo,
-                                         translateLocation(indexLoc));
+  // TODO: This should ideally be folded into a `tryCreate` method on the
+  // builder (https://llvm.discourse.group/t/3504).
+  NamedAttribute attrs = {getState().indexIdentifier,
+                          builder.getI32IntegerAttr(indexNo)};
+  auto resultType = SubindexOp::inferReturnType({result}, attrs, tindexLoc);
   if (!resultType)
     return failure();
 
   // Create the result operation.
-  auto op =
-      builder.create<SubindexOp>(translateLocation(indexLoc), resultType,
-                                 result, builder.getI32IntegerAttr(indexNo));
+  auto op = builder.create<SubindexOp>(tindexLoc, resultType, result, attrs);
   subOps.push_back(op);
   result = op.getResult();
   return success();
@@ -1387,6 +1481,7 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result,
 ParseResult FIRStmtParser::parsePostFixDynamicSubscript(Value &result,
                                                         SubOpVector &subOps) {
   auto indexLoc = getToken().getLoc();
+  auto tindexLoc = translateLocation(indexLoc);
   Value index;
   if (parseExp(index, subOps, "expected subscript index expression") ||
       parseToken(FIRToken::r_square, "expected ']' in subscript"))
@@ -1395,19 +1490,19 @@ ParseResult FIRStmtParser::parsePostFixDynamicSubscript(Value &result,
   // If the index expression is a flip type, strip it off.
   auto indexType = index.getType().cast<FIRRTLType>();
   indexType = indexType.getPassiveType();
-  index = convertToPassive(index, translateLocation(indexLoc));
+  index = convertToPassive(index, tindexLoc);
 
   // Make sure the index expression is valid and compute the result type for the
   // expression.
-  auto resultType = result.getType().cast<FIRRTLType>();
-  resultType = SubaccessOp::getResultType(resultType, indexType,
-                                          translateLocation(indexLoc));
+  // TODO: This should ideally be folded into a `tryCreate` method on the
+  // builder (https://llvm.discourse.group/t/3504).
+  auto resultType =
+      SubaccessOp::inferReturnType({result, index}, {}, tindexLoc);
   if (!resultType)
     return failure();
 
   // Create the result operation.
-  auto op = builder.create<SubaccessOp>(translateLocation(indexLoc), resultType,
-                                        result, index);
+  auto op = builder.create<SubaccessOp>(tindexLoc, resultType, result, index);
   subOps.push_back(op);
   result = op.getResult();
   return success();
@@ -1453,20 +1548,20 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
   for (auto v : operands)
     opTypes.push_back(v.getType().cast<FIRRTLType>());
 
-  SmallVector<StringRef, 2> attrNames;
+  SmallVector<Identifier, 2> attrNames;
   switch (kind) {
   default:
     break;
   case FIRToken::lp_bits:
-    attrNames.push_back("hi");
-    attrNames.push_back("lo");
+    attrNames.push_back(getState().hiIdentifier); // "hi"
+    attrNames.push_back(getState().loIdentifier); // "lo"
     break;
   case FIRToken::lp_head:
   case FIRToken::lp_pad:
   case FIRToken::lp_shl:
   case FIRToken::lp_shr:
   case FIRToken::lp_tail:
-    attrNames.push_back("amount");
+    attrNames.push_back(getState().amountIdentifier);
     break;
   }
 
@@ -1487,12 +1582,11 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
 
 #define TOK_LPKEYWORD_PRIM(SPELLING, CLASS)                                    \
   case FIRToken::lp_##SPELLING: {                                              \
-    auto resultTy =                                                            \
-        CLASS::getResultType(opTypes, integers, translateLocation(loc));       \
+    auto tloc = translateLocation(loc);                                        \
+    auto resultTy = CLASS::validateAndInferReturnType(operands, attrs, tloc);  \
     if (!resultTy)                                                             \
       return failure();                                                        \
-    result = builder.create<CLASS>(translateLocation(loc), resultTy,           \
-                                   ValueRange(operands), attrs);               \
+    result = builder.create<CLASS>(tloc, resultTy, operands, attrs);           \
     break;                                                                     \
   }
 #include "FIRTokenKinds.def"
@@ -1518,10 +1612,20 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result, SubOpVector &subOps) {
       return failure();
     }
 
-    auto inv = builder.create<InvalidValueOp>(tloc, opTypes[1]);
-    result = builder.create<MuxPrimOp>(
-        tloc, opTypes[1], ValueRange({operands[0], operands[1], inv}), attrs);
-    break;
+    // We always skip emitting the validif mux because it always folds to the
+    // non-invalid operand.  However, if we know the validif would always return
+    // invalid, then fold to invalid instead.
+    if (auto cst = operands[0].getDefiningOp<ConstantOp>()) {
+      // validif(0, x) -> always invalid.
+      if (cst.value().isNullValue()) {
+        result = builder.create<InvalidValueOp>(tloc, opTypes[1]);
+        break;
+      }
+    }
+
+    // Otherwise, fold to the non-invalid value.
+    result = operands[1];
+    return success(); // Don't add this to subOps.
   }
   }
 
@@ -1632,7 +1736,7 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result,
 /// normal.
 Optional<ParseResult>
 FIRStmtParser::parseExpWithLeadingKeyword(StringRef keyword,
-                                          const LocWithInfo &info) {
+                                          const StmtLocWithInfo &info) {
   switch (getToken().getKind()) {
   default:
     // This isn't part of an expression, and isn't part of a statement.
@@ -1775,7 +1879,7 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
 /// attach ::= 'attach' '(' exp+ ')' info?
 ParseResult FIRStmtParser::parseAttach() {
   auto spelling = getTokenSpelling();
-  LocWithInfo info(getToken().getLoc(), this);
+  StmtLocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_attach);
 
   // If this was actually the start of a connect or something else handle
@@ -1794,7 +1898,7 @@ ParseResult FIRStmtParser::parseAttach() {
       return failure();
   } while (!consumeIf(FIRToken::r_paren));
 
-  if (parseOptionalInfo(info, subOps))
+  if (info.parseOptionalInfo(subOps))
     return failure();
 
   builder.create<AttachOp>(info.getLoc(), operands);
@@ -1807,7 +1911,7 @@ ParseResult FIRStmtParser::parseAttach() {
 ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
   auto spelling = getTokenSpelling();
   auto mdirIndent = getIndentation();
-  LocWithInfo info(getToken().getLoc(), this);
+  StmtLocWithInfo info(getToken().getLoc(), this);
   consumeToken();
 
   // If this was actually the start of a connect or something else handle
@@ -1830,7 +1934,7 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
       parseExp(indexExp, subOps, "expected index expression") ||
       parseToken(FIRToken::r_square, "expected ']' in memory port") ||
       parseExp(clock, subOps, "expected clock expression") ||
-      parseOptionalInfo(info, subOps))
+      info.parseOptionalInfo(subOps))
     return failure();
 
   auto memVType = memory.getType().dyn_cast<FVectorType>();
@@ -1906,7 +2010,7 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
 
 /// printf ::= 'printf(' exp exp StringLit exp* ')' info?
 ParseResult FIRStmtParser::parsePrintf() {
-  LocWithInfo info(getToken().getLoc(), this);
+  StmtLocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::lp_printf);
 
   SmallVector<Operation *, 8> subOps;
@@ -1926,10 +2030,35 @@ ParseResult FIRStmtParser::parsePrintf() {
       return failure();
   }
 
-  if (parseOptionalInfo(info, subOps))
+  if (info.parseOptionalInfo(subOps))
     return failure();
 
   auto formatStrUnescaped = FIRToken::getStringValue(formatString);
+  StringRef formatStringRef(formatStrUnescaped);
+  if (formatStringRef.startswith("cover:")) {
+    APInt constOne(1, 1, false);
+    auto constTrue = builder.create<ConstantOp>(
+        info.getLoc(), UIntType::get(getContext(), 1), constOne);
+    builder.create<CoverOp>(info.getLoc(), clock, condition, constTrue,
+                            builder.getStringAttr(formatStrUnescaped));
+    return success();
+  }
+  if (formatStringRef.startswith("assert:")) {
+    APInt constOne(1, 1, false);
+    auto constTrue = builder.create<ConstantOp>(
+        info.getLoc(), UIntType::get(getContext(), 1), constOne);
+    builder.create<AssertOp>(info.getLoc(), clock, condition, constTrue,
+                             builder.getStringAttr(formatStrUnescaped));
+    return success();
+  }
+  if (formatStringRef.startswith("assume:")) {
+    APInt constOne(1, 1, false);
+    auto constTrue = builder.create<ConstantOp>(
+        info.getLoc(), UIntType::get(getContext(), 1), constOne);
+    builder.create<AssumeOp>(info.getLoc(), clock, condition, constTrue,
+                             builder.getStringAttr(formatStrUnescaped));
+    return success();
+  }
   builder.create<PrintFOp>(info.getLoc(), clock, condition,
                            builder.getStringAttr(formatStrUnescaped), operands);
   return success();
@@ -1937,7 +2066,7 @@ ParseResult FIRStmtParser::parsePrintf() {
 
 /// skip ::= 'skip' info?
 ParseResult FIRStmtParser::parseSkip() {
-  LocWithInfo info(getToken().getLoc(), this);
+  StmtLocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_skip);
 
   // If this was actually the start of a connect or something else handle
@@ -1945,7 +2074,7 @@ ParseResult FIRStmtParser::parseSkip() {
   if (auto isExpr = parseExpWithLeadingKeyword("skip", info))
     return isExpr.getValue();
 
-  if (parseOptionalInfo(info))
+  if (info.parseOptionalInfo())
     return failure();
 
   builder.create<SkipOp>(info.getLoc());
@@ -1954,7 +2083,7 @@ ParseResult FIRStmtParser::parseSkip() {
 
 /// stop ::= 'stop(' exp exp intLit ')' info?
 ParseResult FIRStmtParser::parseStop() {
-  LocWithInfo info(getToken().getLoc(), this);
+  StmtLocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::lp_stop);
 
   SmallVector<Operation *, 8> subOps;
@@ -1965,7 +2094,7 @@ ParseResult FIRStmtParser::parseStop() {
       parseExp(condition, subOps, "expected condition in 'stop'") ||
       parseIntLit(exitCode, "expected exit code in 'stop'") ||
       parseToken(FIRToken::r_paren, "expected ')' in 'stop'") ||
-      parseOptionalInfo(info, subOps))
+      info.parseOptionalInfo(subOps))
     return failure();
 
   builder.create<StopOp>(info.getLoc(), clock, condition,
@@ -1975,7 +2104,7 @@ ParseResult FIRStmtParser::parseStop() {
 
 /// assert ::= 'assert(' exp exp exp StringLit ')' info?
 ParseResult FIRStmtParser::parseAssert() {
-  LocWithInfo info(getToken().getLoc(), this);
+  StmtLocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::lp_assert);
 
   SmallVector<Operation *, 8> subOps;
@@ -1988,7 +2117,7 @@ ParseResult FIRStmtParser::parseAssert() {
       parseGetSpelling(message) ||
       parseToken(FIRToken::string, "expected message in 'assert'") ||
       parseToken(FIRToken::r_paren, "expected ')' in 'assert'") ||
-      parseOptionalInfo(info, subOps))
+      info.parseOptionalInfo(subOps))
     return failure();
 
   auto messageUnescaped = FIRToken::getStringValue(message);
@@ -1999,7 +2128,7 @@ ParseResult FIRStmtParser::parseAssert() {
 
 /// assume ::= 'assume(' exp exp exp StringLit ')' info?
 ParseResult FIRStmtParser::parseAssume() {
-  LocWithInfo info(getToken().getLoc(), this);
+  StmtLocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::lp_assume);
 
   SmallVector<Operation *, 8> subOps;
@@ -2012,7 +2141,7 @@ ParseResult FIRStmtParser::parseAssume() {
       parseGetSpelling(message) ||
       parseToken(FIRToken::string, "expected message in 'assume'") ||
       parseToken(FIRToken::r_paren, "expected ')' in 'assume'") ||
-      parseOptionalInfo(info, subOps))
+      info.parseOptionalInfo(subOps))
     return failure();
 
   auto messageUnescaped = FIRToken::getStringValue(message);
@@ -2023,7 +2152,7 @@ ParseResult FIRStmtParser::parseAssume() {
 
 /// cover ::= 'cover(' exp exp exp StringLit ')' info?
 ParseResult FIRStmtParser::parseCover() {
-  LocWithInfo info(getToken().getLoc(), this);
+  StmtLocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::lp_cover);
 
   SmallVector<Operation *, 8> subOps;
@@ -2036,7 +2165,7 @@ ParseResult FIRStmtParser::parseCover() {
       parseGetSpelling(message) ||
       parseToken(FIRToken::string, "expected message in 'cover'") ||
       parseToken(FIRToken::r_paren, "expected ')' in 'cover'") ||
-      parseOptionalInfo(info, subOps))
+      info.parseOptionalInfo(subOps))
     return failure();
 
   auto messageUnescaped = FIRToken::getStringValue(message);
@@ -2048,7 +2177,7 @@ ParseResult FIRStmtParser::parseCover() {
 /// when  ::= 'when' exp ':' info? suite? ('else' ( when | ':' info? suite?)
 /// )? suite ::= simple_stmt | INDENT simple_stmt+ DEDENT
 ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
-  LocWithInfo info(getToken().getLoc(), this);
+  StmtLocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_when);
 
   // If this was actually the start of a connect or something else handle
@@ -2060,7 +2189,7 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   SmallVector<Operation *, 8> subOps;
   if (parseExp(condition, subOps, "expected condition in 'when'") ||
       parseToken(FIRToken::colon, "expected ':' in when") ||
-      parseOptionalInfo(info, subOps))
+      info.parseOptionalInfo(subOps))
     return failure();
 
   condition = convertToPassive(condition, info.getLoc());
@@ -2120,7 +2249,7 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   if (elseIndent.hasValue() && elseIndent.getValue() < whenIndent)
     return success();
 
-  LocWithInfo elseInfo(getToken().getLoc(), this);
+  StmtLocWithInfo elseInfo(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_else);
 
   // Create an else block to parse into.
@@ -2139,7 +2268,7 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
 
   // Parse the 'else' body into the 'else' region.
   if (parseToken(FIRToken::colon, "expected ':' after 'else'") ||
-      parseOptionalInfo(elseInfo) || parseSuite(whenStmt.getElseBodyBuilder()))
+      elseInfo.parseOptionalInfo() || parseSuite(whenStmt.getElseBodyBuilder()))
     return failure();
 
   // TODO(firrtl spec): There is no reason for the 'else :' grammar to take an
@@ -2152,12 +2281,12 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
 ///                  ::= exp 'is' 'invalid' info?
 ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs, SubOpVector &subOps) {
   // Figure out which kind of statement it is.
-  LocWithInfo info(getToken().getLoc(), this);
+  StmtLocWithInfo info(getToken().getLoc(), this);
 
   // If 'is' grammar is special.
   if (consumeIf(FIRToken::kw_is)) {
     if (parseToken(FIRToken::kw_invalid, "expected 'invalid'") ||
-        parseOptionalInfo(info, subOps))
+        info.parseOptionalInfo(subOps))
       return failure();
 
     emitInvalidate(lhs, info.getLoc());
@@ -2171,7 +2300,7 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs, SubOpVector &subOps) {
 
   Value rhs;
   if (parseExp(rhs, subOps, "unexpected token in statement") ||
-      parseOptionalInfo(info, subOps))
+      info.parseOptionalInfo(subOps))
     return failure();
 
   if (kind == FIRToken::less_equal) {
@@ -2199,7 +2328,7 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs, SubOpVector &subOps) {
 
 /// instance ::= 'inst' id 'of' id info?
 ParseResult FIRStmtParser::parseInstance() {
-  LocWithInfo info(getToken().getLoc(), this);
+  StmtLocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_inst);
 
   // If this was actually the start of a connect or something else handle
@@ -2211,7 +2340,7 @@ ParseResult FIRStmtParser::parseInstance() {
   StringRef moduleName;
   if (parseId(id, "expected instance name") ||
       parseToken(FIRToken::kw_of, "expected 'of' in instance") ||
-      parseId(moduleName, "expected module name") || parseOptionalInfo(info))
+      parseId(moduleName, "expected module name") || info.parseOptionalInfo())
     return failure();
 
   // Look up the module that is being referenced.
@@ -2261,7 +2390,7 @@ ParseResult FIRStmtParser::parseInstance() {
 /// cmem ::= 'cmem' id ':' type info?
 ParseResult FIRStmtParser::parseCMem() {
   // TODO(firrtl spec) cmem is completely undocumented.
-  LocWithInfo info(getToken().getLoc(), this);
+  StmtLocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_cmem);
 
   // If this was actually the start of a connect or something else handle
@@ -2273,7 +2402,7 @@ ParseResult FIRStmtParser::parseCMem() {
   FIRRTLType type;
   if (parseId(id, "expected cmem name") ||
       parseToken(FIRToken::colon, "expected ':' in cmem") ||
-      parseType(type, "expected cmem type") || parseOptionalInfo(info))
+      parseType(type, "expected cmem type") || info.parseOptionalInfo())
     return failure();
 
   ArrayAttr annotations = getState().emptyArrayAttr;
@@ -2293,7 +2422,7 @@ ParseResult FIRStmtParser::parseCMem() {
 /// smem ::= 'smem' id ':' type ruw? info?
 ParseResult FIRStmtParser::parseSMem() {
   // TODO(firrtl spec) smem is completely undocumented.
-  LocWithInfo info(getToken().getLoc(), this);
+  StmtLocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_smem);
 
   // If this was actually the start of a connect or something else handle
@@ -2308,7 +2437,7 @@ ParseResult FIRStmtParser::parseSMem() {
   if (parseId(id, "expected cmem name") ||
       parseToken(FIRToken::colon, "expected ':' in cmem") ||
       parseType(type, "expected cmem type") || parseOptionalRUW(ruw) ||
-      parseOptionalInfo(info))
+      info.parseOptionalInfo())
     return failure();
 
   ArrayAttr annotations = getState().emptyArrayAttr;
@@ -2336,7 +2465,7 @@ ParseResult FIRStmtParser::parseSMem() {
 /// 	       ::= 'writer' '=>' id+ NEWLINE
 /// 	       ::= 'readwriter' '=>' id+ NEWLINE
 ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
-  LocWithInfo info(getToken().getLoc(), this);
+  StmtLocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_mem);
 
   // If this was actually the start of a connect or something else handle
@@ -2347,7 +2476,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
   StringRef id;
   if (parseId(id, "expected mem name") ||
       parseToken(FIRToken::colon, "expected ':' in mem") ||
-      parseOptionalInfo(info))
+      info.parseOptionalInfo())
     return failure();
 
   FIRRTLType type;
@@ -2472,7 +2601,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
 /// node ::= 'node' id '=' exp info?
 ParseResult FIRStmtParser::parseNode() {
   auto loc = getToken().getLoc();
-  LocWithInfo info(loc, this);
+  StmtLocWithInfo info(loc, this);
   consumeToken(FIRToken::kw_node);
 
   // If this was actually the start of a connect or something else handle
@@ -2486,7 +2615,7 @@ ParseResult FIRStmtParser::parseNode() {
   if (parseId(id, "expected node name") ||
       parseToken(FIRToken::equal, "expected '=' in node") ||
       parseExp(initializer, subOps, "expected expression for node") ||
-      parseOptionalInfo(info, subOps))
+      info.parseOptionalInfo(subOps))
     return failure();
 
   // Error out in the following conditions:
@@ -2533,7 +2662,7 @@ ParseResult FIRStmtParser::parseNode() {
 
 /// wire ::= 'wire' id ':' type info?
 ParseResult FIRStmtParser::parseWire() {
-  LocWithInfo info(getToken().getLoc(), this);
+  StmtLocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_wire);
 
   // If this was actually the start of a connect or something else handle
@@ -2545,7 +2674,7 @@ ParseResult FIRStmtParser::parseWire() {
   FIRRTLType type;
   if (parseId(id, "expected wire name") ||
       parseToken(FIRToken::colon, "expected ':' in wire") ||
-      parseType(type, "expected wire type") || parseOptionalInfo(info))
+      parseType(type, "expected wire type") || info.parseOptionalInfo())
     return failure();
 
   ArrayAttr annotations = getState().emptyArrayAttr;
@@ -2567,7 +2696,7 @@ ParseResult FIRStmtParser::parseWire() {
 /// simple_reset0:  'reset' '=>' '(' exp exp ')'
 ///
 ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
-  LocWithInfo info(getToken().getLoc(), this);
+  StmtLocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_reg);
 
   // If this was actually the start of a connect or something else handle
@@ -2623,13 +2752,13 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
     if (getTokenSpelling() == id) {
       consumeToken();
       if (parseToken(FIRToken::r_paren, "expected ')' in reset specifier") ||
-          parseOptionalInfo(info, subOps))
+          info.parseOptionalInfo(subOps))
         return failure();
       resetSignal = Value();
     } else {
       if (parseExp(resetValue, subOps, "expected expression for reset value") ||
           parseToken(FIRToken::r_paren, "expected ')' in reset specifier") ||
-          parseOptionalInfo(info, subOps))
+          info.parseOptionalInfo(subOps))
         return failure();
       resetValue = convertToPassive(resetValue, resetValue.getLoc());
     }
@@ -2641,7 +2770,7 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
 
   // Finally, handle the last info if present, providing location info for the
   // clock expression.
-  if (parseOptionalInfo(info, subOps))
+  if (info.parseOptionalInfo(subOps))
     return failure();
 
   ArrayAttr annotations = getState().emptyArrayAttr;
@@ -2692,7 +2821,7 @@ private:
 
 } // end anonymous namespace
 
-/// portlist ::= port*
+/// pohwist ::= port*
 /// port     ::= dir id ':' type info? NEWLINE
 /// dir      ::= 'input' | 'output'
 ///
@@ -2726,7 +2855,7 @@ FIRModuleParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
     if (parseId(name, "expected port name") ||
         parseToken(FIRToken::colon, "expected ':' in port definition") ||
         parseType(type, "expected a type in port declaration") ||
-        parseOptionalInfo(info))
+        info.parseOptionalInfo())
       return failure();
 
     ArrayAttr annotations = ArrayAttr({});
@@ -2742,7 +2871,7 @@ FIRModuleParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
 }
 
 /// module    ::=
-///        'extmodule' id ':' info? INDENT portlist defname? parameter* DEDENT
+///        'extmodule' id ':' info? INDENT pohwist defname? parameter* DEDENT
 /// defname   ::= 'defname' '=' id NEWLINE
 ///
 /// parameter ::= 'parameter' id '=' intLit NEWLINE
@@ -2762,7 +2891,7 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   getState().moduleTarget = moduleTarget;
 
   if (parseToken(FIRToken::colon, "expected ':' in extmodule definition") ||
-      parseOptionalInfo(info) ||
+      info.parseOptionalInfo() ||
       parsePortList(portListAndLoc, indent, moduleTarget))
     return failure();
 
@@ -2853,7 +2982,7 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   return success();
 }
 
-/// module ::= 'module' id ':' info? INDENT portlist simple_stmt_block
+/// module ::= 'module' id ':' info? INDENT pohwist simple_stmt_block
 /// DEDENT
 ///
 ParseResult FIRModuleParser::parseModule(unsigned indent) {
@@ -2869,7 +2998,7 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
   getState().moduleTarget = moduleTarget;
 
   if (parseToken(FIRToken::colon, "expected ':' in module definition") ||
-      parseOptionalInfo(info) ||
+      info.parseOptionalInfo() ||
       parsePortList(portListAndLoc, indent, moduleTarget))
     return failure();
 
@@ -2940,7 +3069,7 @@ ParseResult FIRCircuitParser::parseCircuit() {
       parseId(name, "expected circuit name") ||
       parseToken(FIRToken::colon, "expected ':' in circuit definition") ||
       parseOptionalAnnotations(inlineAnnotationsLoc, inlineAnnotations) ||
-      parseOptionalInfo(info))
+      info.parseOptionalInfo())
     return failure();
 
   auto circuitTarget = "~" + name.getValue().str();

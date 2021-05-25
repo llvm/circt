@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/SV/SVTypes.h"
-#include "circt/Dialect/RTL/RTLTypes.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVDialect.h"
 
 #include "mlir/IR/DialectImplementation.h"
@@ -22,12 +22,12 @@ using namespace circt::sv;
 
 /// Return the element type of an ArrayType or UnpackedArrayType, or null if the
 /// operand isn't an array.
-Type circt::sv::getAnyRTLArrayElementType(Type type) {
+Type circt::sv::getAnyHWArrayElementType(Type type) {
   if (!type)
     return {};
-  if (auto array = type.dyn_cast<rtl::ArrayType>())
+  if (auto array = type.dyn_cast<hw::ArrayType>())
     return array.getElementType();
-  if (auto array = type.dyn_cast<rtl::UnpackedArrayType>())
+  if (auto array = type.dyn_cast<hw::UnpackedArrayType>())
     return array.getElementType();
   return {};
 }
@@ -96,7 +96,7 @@ Type SVDialect::parseType(DialectAsmParser &parser) const {
 void SVDialect::printType(Type type, DialectAsmPrinter &printer) const {
   if (succeeded(generatedTypePrinter(type, printer)))
     return;
-  llvm_unreachable("unexpected 'rtl' type kind");
+  llvm_unreachable("unexpected 'hw' type kind");
 }
 
 void SVDialect::registerTypes() {

@@ -13,17 +13,3 @@
 //===----------------------------------------------------------------------===//
 
 class ESI_Type<string name> : TypeDef<ESI_Dialect, name> { }
-
-def Struct : ESI_Type<"Struct"> {
-  let summary = "An RTL struct with a name";
-  let mnemonic = "struct";
-  let parameters = (ins
-    StringRefParameter<"struct name">:$name,
-    "::circt::rtl::StructType":$inner);
-
-  let extraClassDeclaration = [{
-    ArrayRef<::circt::rtl::StructType::FieldInfo> getElements() const {
-      return getInner().getElements();
-    }
-  }];
-}

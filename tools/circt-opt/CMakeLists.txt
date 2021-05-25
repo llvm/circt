@@ -12,15 +12,15 @@ target_link_libraries(circt-opt
   CIRCTESI
   CIRCTFIRRTL
   CIRCTFIRRTLToLLHD
-  CIRCTFIRRTLToRTL
+  CIRCTFIRRTLToHW
   CIRCTHandshakeOps
   CIRCTHandshakeToFIRRTL
   CIRCTLLHD
   CIRCTLLHDToLLVM
   CIRCTLLHDTransforms
   CIRCTMSFT
-  CIRCTRTL
-  CIRCTRTLToLLHD
+  CIRCTHW
+  CIRCTHWToLLHD
   CIRCTSeq
   CIRCTStandardToHandshake
   CIRCTStandardToStaticLogic
@@ -29,11 +29,12 @@ target_link_libraries(circt-opt
   CIRCTSVTransforms
   CIRCTTransforms
 
-  MLIRParser
-  MLIRSupport
   MLIRIR
-  MLIROptLib
-  MLIRStandard
-  MLIRTransforms
   MLIRLLVMIR
+  MLIRMemRef
+  MLIROptLib
+  MLIRParser
+  MLIRStandard
+  MLIRSupport
+  MLIRTransforms
   )

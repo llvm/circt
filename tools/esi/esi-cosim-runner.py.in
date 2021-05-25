@@ -276,7 +276,7 @@ def isPortOpen(port):
 
 def __main__(args):
   argparser = argparse.ArgumentParser(
-      description="RTL cosimulation runner for ESI")
+      description="HW cosimulation runner for ESI")
   argparser.add_argument("--schema", default="", help="The schema file to use.")
   argparser.add_argument("source", help="The source run spec file")
   argparser.add_argument("addlArgs",

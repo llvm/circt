@@ -40,8 +40,10 @@ def FVectorType : DialectType<FIRRTLDialect, CPred<"$_self.isa<FVectorType>()">,
   "FVectorType", "::circt::firrtl::FVectorType">;
 
 def UInt1Type : DialectType<FIRRTLDialect,
-  CPred<"$_self.isa<UIntType>() && $_self.cast<UIntType>().getWidth() == 1">,
-   "UInt<1>", "::circt::firrtl::UIntType">,
+  CPred<"$_self.isa<UIntType>() && "
+        "($_self.cast<UIntType>().getWidth() == 1 ||"
+        " $_self.cast<UIntType>().getWidth() == None)">,
+   "UInt<1> or UInt", "::circt::firrtl::UIntType">,
    BuildableType<"UIntType::get($_builder.getContext(), 1)">;
 
 def AsyncResetType : DialectType<FIRRTLDialect,
@@ -109,3 +111,20 @@ def MemDirAttr: I32EnumAttr<"MemDirAttr", "Memory Direction Enum",
 
 def AnnotationArrayAttr : TypedArrayAttrBase<DictionaryAttr,
                                              "An array of FIRRTL Annotations">;
+
+def InvalidValueAttr
+  : AttrDef<FIRRTLDialect, "InvalidValue", [], "::mlir::Attribute"> {
+  let summary = "A constant value of firrtl.invalid type";
+  let description = [{
+    Represents an firrtl.invalidvalue value, whose type is specified by the
+    type of the attribute.
+  }];
+  let mnemonic = "invalidvalue";
+  let parameters = (ins  AttributeSelfTypeParameter<"">:$type);
+
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "Type":$type),
+                                   "return $_get(type.getContext(), type);">
+  ];
+}
+

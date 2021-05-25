@@ -7,7 +7,7 @@ import mlir.ir
 
 from _circt._esi import *
 import circt
-from circt.dialects import rtl
+from circt.dialects import hw
 from circt.dialects.esi import *
 
 import typing
@@ -18,8 +18,8 @@ class System(CppSystem):
 
   mod = None
   passes = [
-      "lower-esi-ports", "lower-esi-to-physical", "lower-esi-to-rtl",
-      "rtl-legalize-names", "rtl.module(rtl-cleanup)"
+      "lower-esi-ports", "lower-esi-to-physical", "lower-esi-to-hw",
+      "hw-legalize-names", "hw.module(hw-cleanup)"
   ]
   passed = False
 
@@ -33,17 +33,20 @@ class System(CppSystem):
 
       with mlir.ir.InsertionPoint(self.body):
         self.declare_externs()
-        rtl.RTLModuleOp(name='top',
-                        input_ports=[('clk', self.i1), ('rstn', self.i1)],
-                        output_ports=[],
-                        body_builder=self.build_top)
+        self.top_module()
 
   def declare_externs(self):
     pass
 
+  def top_module(self):
+    return hw.HWModuleOp(name='top',
+                         input_ports=[('clk', self.i1), ('rstn', self.i1)],
+                         output_ports=[],
+                         body_builder=self.build_top)
+
   def build_top(self, topMod):
     self.build(topMod)
-    rtl.OutputOp([])
+    hw.OutputOp([])
 
   def get_types(self):
     self.i1 = mlir.ir.IntegerType.get_signless(1)
@@ -79,3 +82,22 @@ class System(CppSystem):
                        mlir.ir.Attribute.parse(str(id)))
     ep.operation.attributes["name"] = mlir.ir.StringAttr.get(name)
     return ep
+
+
+class Types:
+  """Python syntactic sugar to get types"""
+
+  @staticmethod
+  def __getattr__(name: str) -> mlir.ir.Type:
+    return mlir.ir.Type.parse(name)
+
+  @staticmethod
+  def array(inner: mlir.ir.Type, size: int) -> hw.ArrayType:
+    return hw.ArrayType.get(inner, size)
+
+  @staticmethod
+  def chan(inner: mlir.ir.Type) -> mlir.ir.Type:
+    return ChannelType.get(inner)
+
+
+types = Types()

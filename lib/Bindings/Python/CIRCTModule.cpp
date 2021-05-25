@@ -10,8 +10,8 @@
 
 #include "circt-c/Dialect/Comb.h"
 #include "circt-c/Dialect/ESI.h"
+#include "circt-c/Dialect/HW.h"
 #include "circt-c/Dialect/MSFT.h"
-#include "circt-c/Dialect/RTL.h"
 #include "circt-c/Dialect/SV.h"
 #include "circt-c/Dialect/Seq.h"
 #include "circt-c/ExportVerilog.h"
@@ -57,9 +57,9 @@ PYBIND11_MODULE(_circt, m) {
         mlirDialectHandleRegisterDialect(msft, context);
         mlirDialectHandleLoadDialect(msft, context);
 
-        MlirDialectHandle rtl = mlirGetDialectHandle__rtl__();
-        mlirDialectHandleRegisterDialect(rtl, context);
-        mlirDialectHandleLoadDialect(rtl, context);
+        MlirDialectHandle hw = mlirGetDialectHandle__hw__();
+        mlirDialectHandleRegisterDialect(hw, context);
+        mlirDialectHandleLoadDialect(hw, context);
 
         MlirDialectHandle seq = mlirGetDialectHandle__seq__();
         mlirDialectHandleRegisterDialect(seq, context);
@@ -81,6 +81,6 @@ PYBIND11_MODULE(_circt, m) {
   circt::python::populateDialectESISubmodule(esi);
   py::module msft = m.def_submodule("msft", "MSFT API");
   circt::python::populateDialectMSFTSubmodule(msft);
-  py::module rtl = m.def_submodule("_rtl", "RTL API");
-  circt::python::populateDialectRTLSubmodule(rtl);
+  py::module hw = m.def_submodule("_hw", "HW API");
+  circt::python::populateDialectHWSubmodule(hw);
 }

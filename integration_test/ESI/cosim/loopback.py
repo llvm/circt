@@ -57,7 +57,7 @@ class LoopbackTester(cosim.CosimBase):
     assert dataSent == dataRecv
 
   def test_keytext(self, num_msgs=50):
-    cStructType = self.schema.Struct12387990283439066727
+    cStructType = self.schema.Struct17798359158705484171
     ep = self.openEP(epNum=2, sendType=cStructType, recvType=cStructType)
     kts = []
     for i in range(num_msgs):

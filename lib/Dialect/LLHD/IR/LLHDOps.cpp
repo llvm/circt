@@ -532,13 +532,21 @@ LogicalResult llhd::DrvOp::fold(ArrayRef<Attribute> operands,
   if (!enable())
     return failure();
 
-  if (matchPattern(enable(), m_Zero())) {
-    erase();
+  if (matchPattern(enable(), m_One())) {
+    enableMutable().clear();
     return success();
   }
 
-  if (matchPattern(enable(), m_One())) {
-    enableMutable().clear();
+  return failure();
+}
+
+LogicalResult llhd::DrvOp::canonicalize(llhd::DrvOp op,
+                                        PatternRewriter &rewriter) {
+  if (!op.enable())
+    return failure();
+
+  if (matchPattern(op.enable(), m_Zero())) {
+    rewriter.eraseOp(op);
     return success();
   }
 
@@ -623,7 +631,9 @@ static ParseResult parseEntityOp(OpAsmParser &parser, OperationState &result) {
                       TypeAttr::get(type));
 
   auto *body = result.addRegion();
-  parser.parseRegion(*body, args, argTypes);
+  if(parser.parseRegion(*body, args, argTypes))
+    return failure();
+
   llhd::EntityOp::ensureTerminator(*body, parser.getBuilder(), result.location);
   return success();
 }
@@ -971,14 +981,11 @@ FunctionType llhd::InstOp::getCalleeType() {
 // ConnectOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult llhd::ConnectOp::fold(ArrayRef<Attribute> operands,
-                                    SmallVectorImpl<OpFoldResult> &results) {
-  if (lhs() == rhs()) {
-    erase();
-    return success();
-  }
-
-  return failure();
+LogicalResult llhd::ConnectOp::canonicalize(llhd::ConnectOp op,
+                                            PatternRewriter &rewriter) {
+  if (op.lhs() == op.rhs())
+    rewriter.eraseOp(op);
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

@@ -13,9 +13,9 @@
 #include "circt/Translation/ExportVerilog.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
-#include "circt/Dialect/RTL/RTLOps.h"
-#include "circt/Dialect/RTL/RTLTypes.h"
-#include "circt/Dialect/RTL/RTLVisitors.h"
+#include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Support/LLVM.h"
@@ -24,9 +24,11 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Translation.h"
+#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Parallel.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/SaveAndRestore.h"
@@ -36,8 +38,10 @@
 using namespace circt;
 
 using namespace comb;
-using namespace rtl;
+using namespace hw;
 using namespace sv;
+
+#define DEBUG_TYPE "export-verilog"
 
 //===----------------------------------------------------------------------===//
 // Helper routines
@@ -87,7 +91,7 @@ static bool isVerilogExpression(Operation *op) {
   if (isa<ReadInOutOp>(op) || isa<ArrayIndexInOutOp>(op))
     return true;
 
-  // All RTL combinatorial logic ops and SV expression ops are Verilog
+  // All HW combinatorial logic ops and SV expression ops are Verilog
   // expressions.
   return isCombinatorial(op) || isExpression(op);
 }
@@ -110,9 +114,9 @@ static int getBitWidthOrSentinel(Type type) {
 /// Push this type's dimension into a vector.
 static void getTypeDims(SmallVectorImpl<int64_t> &dims, Type type,
                         Location loc) {
-  if (auto inout = type.dyn_cast<rtl::InOutType>())
+  if (auto inout = type.dyn_cast<hw::InOutType>())
     return getTypeDims(dims, inout.getElementType(), loc);
-  if (auto uarray = type.dyn_cast<rtl::UnpackedArrayType>())
+  if (auto uarray = type.dyn_cast<hw::UnpackedArrayType>())
     return getTypeDims(dims, uarray.getElementType(), loc);
   if (type.isa<InterfaceType>())
     return;
@@ -120,7 +124,7 @@ static void getTypeDims(SmallVectorImpl<int64_t> &dims, Type type,
     return;
 
   int width;
-  if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
+  if (auto arrayType = type.dyn_cast<hw::ArrayType>()) {
     width = arrayType.getSize();
   } else {
     width = getBitWidthOrSentinel(type);
@@ -131,7 +135,7 @@ static void getTypeDims(SmallVectorImpl<int64_t> &dims, Type type,
   if (width != 1) // Width 1 is implicit.
     dims.push_back(width);
 
-  if (auto arrayType = type.dyn_cast<rtl::ArrayType>()) {
+  if (auto arrayType = type.dyn_cast<hw::ArrayType>()) {
     getTypeDims(dims, arrayType.getElementType(), loc);
   }
 }
@@ -179,11 +183,11 @@ static bool haveMatchingDims(Type a, Type b, Location loc) {
 static bool isZeroBitType(Type type) {
   if (auto intType = type.dyn_cast<IntegerType>())
     return intType.getWidth() == 0;
-  if (auto inout = type.dyn_cast<rtl::InOutType>())
+  if (auto inout = type.dyn_cast<hw::InOutType>())
     return isZeroBitType(inout.getElementType());
-  if (auto uarray = type.dyn_cast<rtl::UnpackedArrayType>())
+  if (auto uarray = type.dyn_cast<hw::UnpackedArrayType>())
     return isZeroBitType(uarray.getElementType());
-  if (auto array = type.dyn_cast<rtl::ArrayType>())
+  if (auto array = type.dyn_cast<hw::ArrayType>())
     return isZeroBitType(array.getElementType());
 
   // We have an open type system, so assume it is ok.
@@ -209,7 +213,7 @@ static Type stripUnpackedTypes(Type type) {
 /// to print a base type for (logic) for inteters or whether the caller will
 /// have handled this (with logic, wire, reg, etc).
 /// Returns whether anything was printed out
-static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
+static bool printPackedTypeImpl(Type type, raw_ostream &os, Operation *op,
                                 SmallVectorImpl<size_t> &dims,
                                 bool implicitIntType) {
   return TypeSwitch<Type, bool>(type)
@@ -229,14 +233,14 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         return !dims.empty() || !implicitIntType;
       })
       .Case<InOutType>([&](InOutType inoutType) {
-        return printPackedTypeImpl(inoutType.getElementType(), os, loc, dims,
+        return printPackedTypeImpl(inoutType.getElementType(), os, op, dims,
                                    implicitIntType);
       })
       .Case<StructType>([&](StructType structType) {
         os << "struct packed {";
         for (auto &element : structType.getElements()) {
           SmallVector<size_t, 8> structDims;
-          printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc,
+          printPackedTypeImpl(stripUnpackedTypes(element.type), os, op,
                               structDims, /*implicitIntType=*/false);
           os << ' ' << element.name << "; ";
         }
@@ -245,27 +249,34 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
       })
       .Case<ArrayType>([&](ArrayType arrayType) {
         dims.push_back(arrayType.getSize());
-        return printPackedTypeImpl(arrayType.getElementType(), os, loc, dims,
+        return printPackedTypeImpl(arrayType.getElementType(), os, op, dims,
                                    implicitIntType);
       })
       .Case<InterfaceType>([](InterfaceType ifaceType) { return false; })
       .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
         os << "<<unexpected unpacked array>>";
-        emitError(loc, "Unexpected unpacked array in packed type ")
-            << arrayType;
+        op->emitError("Unexpected unpacked array in packed type ") << arrayType;
+        return true;
+      })
+      .Case<TypeAliasType>([&](TypeAliasType typeRef) {
+        auto typedecl = typeRef.getDecl(op);
+        if (!typedecl.hasValue())
+          return false;
+
+        os << typedecl.getValue().getPreferredName();
         return true;
       })
       .Default([&](Type type) {
         os << "<<invalid type>>";
-        emitError(loc, "value has an unsupported verilog type ") << type;
+        op->emitError("value has an unsupported verilog type ") << type;
         return true;
       });
 }
 
-static bool printPackedType(Type type, raw_ostream &os, Location loc,
+static bool printPackedType(Type type, raw_ostream &os, Operation *op,
                             bool implicitIntType = true) {
   SmallVector<size_t, 8> packedDimensions;
-  return printPackedTypeImpl(type, os, loc, packedDimensions, implicitIntType);
+  return printPackedTypeImpl(type, os, op, packedDimensions, implicitIntType);
 }
 
 /// Output the unpacked array dimensions.  This is the part of the type that is
@@ -572,10 +583,10 @@ class ModuleEmitter : public EmitterBase {
 public:
   explicit ModuleEmitter(VerilogEmitterState &state) : EmitterBase(state) {}
 
-  void emitRTLModule(RTLModuleOp module);
-  void prepareRTLModule(Block &block);
-  void emitRTLExternModule(RTLModuleExternOp module);
-  void emitRTLGeneratedModule(RTLModuleGeneratedOp module);
+  void emitHWModule(HWModuleOp module);
+  void prepareHWModule(Block &block);
+  void emitHWExternModule(HWModuleExternOp module);
+  void emitHWGeneratedModule(HWModuleGeneratedOp module);
 
   // Statements.
   void emitStatement(Operation *op);
@@ -1469,7 +1480,7 @@ void NameCollector::collectNames(Block &block) {
       {
         llvm::raw_svector_ostream stringStream(typeString);
         printPackedType(stripUnpackedTypes(result.getType()), stringStream,
-                        op.getLoc());
+                        &op);
       }
       maxTypeWidth = std::max(typeString.size(), maxTypeWidth);
     }
@@ -1494,7 +1505,7 @@ namespace {
 /// This emits typescope-related operations.
 class TypeScopeEmitter
     : public EmitterBase,
-      public rtl::TypeScopeVisitor<TypeScopeEmitter, LogicalResult> {
+      public hw::TypeScopeVisitor<TypeScopeEmitter, LogicalResult> {
 public:
   /// Create a TypeScopeEmitter for the specified module emitter.
   TypeScopeEmitter(VerilogEmitterState &state) : EmitterBase(state) {}
@@ -1520,9 +1531,9 @@ void TypeScopeEmitter::emitTypeScopeBlock(Block &body) {
 
 LogicalResult TypeScopeEmitter::visitTypeScope(TypedeclOp op) {
   indent() << "typedef ";
-  printPackedType(stripUnpackedTypes(op.type()), os, op.getLoc(), false);
+  printPackedType(stripUnpackedTypes(op.type()), os, op, false);
   printUnpackedTypePostfix(op.type(), os);
-  os << ' ' << op.sym_name();
+  os << ' ' << op.getPreferredName();
   os << ";\n";
   return success();
 }
@@ -1534,7 +1545,7 @@ LogicalResult TypeScopeEmitter::visitTypeScope(TypedeclOp op) {
 namespace {
 /// This emits statement-related operations.
 class StmtEmitter : public EmitterBase,
-                    public rtl::StmtVisitor<StmtEmitter, LogicalResult>,
+                    public hw::StmtVisitor<StmtEmitter, LogicalResult>,
                     public sv::Visitor<StmtEmitter, LogicalResult> {
 public:
   /// Create an ExprEmitter for the specified module emitter, and keeping track
@@ -1553,8 +1564,7 @@ public:
   /// and semicolon, e.g. `localparam K = 1'h0`, and return true.
   bool emitDeclarationForTemporary(Operation *op) {
     indent() << getVerilogDeclWord(op) << " ";
-    if (printPackedType(stripUnpackedTypes(op->getResult(0).getType()), os,
-                        op->getLoc()))
+    if (printPackedType(stripUnpackedTypes(op->getResult(0).getType()), os, op))
       os << ' ';
     os << emitter.getName(op->getResult(0));
 
@@ -1580,7 +1590,7 @@ private:
 
   using StmtVisitor::visitStmt;
   using Visitor::visitSV;
-  friend class rtl::StmtVisitor<StmtEmitter, LogicalResult>;
+  friend class hw::StmtVisitor<StmtEmitter, LogicalResult>;
   friend class sv::Visitor<StmtEmitter, LogicalResult>;
 
   // Visitor methods.
@@ -1791,7 +1801,7 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
   --numStatementsEmitted; // Count emitted statements manually.
 
   SmallPtrSet<Operation *, 8> ops;
-  RTLModuleOp parent = op->getParentOfType<RTLModuleOp>();
+  HWModuleOp parent = op->getParentOfType<HWModuleOp>();
 
   size_t operandIndex = 0;
   for (ModulePortInfo port : parent.getPorts()) {
@@ -2303,7 +2313,7 @@ LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
 
 LogicalResult StmtEmitter::visitSV(InterfaceSignalOp op) {
   indent();
-  printPackedType(op.type(), os, op.getLoc(), false);
+  printPackedType(op.type(), os, op, false);
   os << ' ' << op.sym_name();
   printUnpackedTypePostfix(op.type(), os);
   os << ";\n";
@@ -2348,7 +2358,7 @@ void StmtEmitter::emitStatement(Operation *op) {
 
   ++numStatementsEmitted;
 
-  // Handle RTL statements.
+  // Handle HW statements.
   if (succeeded(dispatchStmtVisitor(op)))
     return;
 
@@ -2454,13 +2464,13 @@ void ModuleEmitter::emitStatementBlock(Block &body) {
 // Module Driver
 //===----------------------------------------------------------------------===//
 
-void ModuleEmitter::emitRTLExternModule(RTLModuleExternOp module) {
+void ModuleEmitter::emitHWExternModule(HWModuleExternOp module) {
   auto verilogName = module.getVerilogModuleNameAttr();
   verifyModuleName(module, verilogName);
   os << "// external module " << verilogName.getValue() << "\n\n";
 }
 
-void ModuleEmitter::emitRTLGeneratedModule(RTLModuleGeneratedOp module) {
+void ModuleEmitter::emitHWGeneratedModule(HWModuleGeneratedOp module) {
   auto verilogName = module.getVerilogModuleNameAttr();
   verifyModuleName(module, verilogName);
   os << "// external generated module " << verilogName.getValue() << "\n\n";
@@ -2521,7 +2531,7 @@ static void lowerAlwaysInlineOperation(Operation *op) {
 /// We lower the Merge operation to a wire at the top level along with connects
 /// to it and a ReadInOut.
 static Value lowerMergeOp(MergeOp merge) {
-  auto module = merge->getParentOfType<RTLModuleOp>();
+  auto module = merge->getParentOfType<HWModuleOp>();
   assert(module && "merges should only be in a module");
 
   // Start with the wire at the top level.
@@ -2595,12 +2605,12 @@ static void lowerUsersToTemporaryWire(Operation &op) {
 
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
-void ModuleEmitter::prepareRTLModule(Block &block) {
+void ModuleEmitter::prepareHWModule(Block &block) {
   for (auto &op : llvm::make_early_inc_range(block)) {
     // If the operations has regions, lower each of the regions.
     for (auto &region : op.getRegions()) {
       if (!region.empty())
-        prepareRTLModule(region.front());
+        prepareHWModule(region.front());
     }
 
     // Duplicate "always inline" expression for each of their users and move
@@ -2685,9 +2695,9 @@ void ModuleEmitter::prepareRTLModule(Block &block) {
   }
 }
 
-void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
+void ModuleEmitter::emitHWModule(HWModuleOp module) {
   // Perform lowerings to make it easier to emit the module.
-  prepareRTLModule(*module.getBodyBlock());
+  prepareHWModule(*module.getBodyBlock());
 
   // Add all the ports to the name table.
   SmallVector<ModulePortInfo> portInfo = module.getPorts();
@@ -2725,8 +2735,7 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
     portTypeStrings.push_back({});
     {
       llvm::raw_svector_ostream stringStream(portTypeStrings.back());
-      printPackedType(stripUnpackedTypes(port.type), stringStream,
-                      module.getLoc());
+      printPackedType(stripUnpackedTypes(port.type), stringStream, module);
     }
 
     maxTypeWidth = std::max(portTypeStrings.back().size(), maxTypeWidth);
@@ -2825,18 +2834,187 @@ void ModuleEmitter::emitRTLModule(RTLModuleOp module) {
 
 namespace {
 
+/// Information to control the emission of a single operation into a file.
+struct OpFileInfo {
+  /// The operation to be emitted.
+  Operation *op;
+
+  /// Where among the replicated per-file operations the `op` above should be
+  /// emitted.
+  size_t position = 0;
+};
+
+/// Information to control the emission of a list of operations into a file.
+struct FileInfo {
+  /// The operations to be emitted into a separate file, and where among the
+  /// replicated per-file operations the operation should be emitted.
+  SmallVector<OpFileInfo, 1> ops;
+
+  /// Whether to emit the replicated per-file operations.
+  bool emitReplicatedOps = true;
+
+  /// Whether to include this file as part of the emitted file list.
+  bool addToFilelist = true;
+};
+
 /// A base class for all MLIR module emitters.
 struct RootEmitterBase {
   /// The MLIR module to emit.
   ModuleOp rootOp;
 
+  /// The main file that collects all operations that are neither replicated
+  /// per-file ops nor specifically assigned to a file.
+  FileInfo rootFile;
+
+  /// The additional files to emit, with the output file name as the key into
+  /// the map.
+  llvm::MapVector<Identifier, FileInfo> files;
+
+  /// A list of operations replicated in each output file (e.g., `sv.verbatim`
+  /// or `sv.ifdef` without dedicated output file).
+  SmallVector<Operation *, 0> replicatedOps;
+
   /// Whether any error has been encountered during emission.
   std::atomic<bool> encounteredError = {};
 
   explicit RootEmitterBase(ModuleOp rootOp) : rootOp(rootOp) {}
+  void gatherFiles(bool separateModules);
+  void emitFile(const FileInfo &fileInfo, VerilogEmitterState &state);
+  void emitOperation(VerilogEmitterState &state, Operation *op);
 };
 
 } // namespace
+
+/// Organize the operations in the root MLIR module into output files to be
+/// generated. If `separateModules` is true, a handful of top-level declarations
+/// will be split into separate output files even in the absence of an explicit
+/// output file attribute.
+void RootEmitterBase::gatherFiles(bool separateModules) {
+  for (auto &op : *rootOp.getBody()) {
+    auto info = OpFileInfo{&op, replicatedOps.size()};
+    auto attr = op.getAttrOfType<hw::OutputFileAttr>("output_file");
+
+    SmallString<32> outputPath;
+    bool hasFileName = false;
+    bool emitReplicatedOps = true;
+    bool addToFilelist = true;
+
+    // Check if the operation has an explicit `output_file` attribute set. If it
+    // does, extract the information from the attribute.
+    if (attr) {
+      LLVM_DEBUG(llvm::dbgs() << "Found output_file attribute " << attr
+                              << " on " << op << "\n";);
+
+      if (auto directory = attr.directory())
+        llvm::sys::path::append(outputPath, directory.getValue());
+
+      if (auto name = attr.name()) {
+        llvm::sys::path::append(outputPath, name.getValue());
+        hasFileName = true;
+      }
+
+      emitReplicatedOps = !attr.exclude_replicated_ops().getValue();
+      addToFilelist = !attr.exclude_from_filelist().getValue();
+    }
+
+    auto separateFile = [&](Operation *op, Twine fileName = "") {
+      if (!hasFileName)
+        llvm::sys::path::append(outputPath, fileName);
+
+      auto &file = files[Identifier::get(outputPath, op->getContext())];
+      file.ops.push_back(info);
+      file.emitReplicatedOps = emitReplicatedOps;
+      file.addToFilelist = addToFilelist;
+    };
+
+    // Separate the operation into dedicated output file, or emit into the root
+    // file, or replicate in all output files.
+    TypeSwitch<Operation *>(&op)
+        .Case<HWModuleOp>([&](auto &mod) {
+          // Emit into a separate file named after the module.
+          if (attr || separateModules)
+            separateFile(mod, mod.getName() + ".sv");
+          else
+            rootFile.ops.push_back(info);
+        })
+        .Case<InterfaceOp>([&](auto &intf) {
+          // Emit into a separate file named after the interface.
+          if (attr || separateModules)
+            separateFile(intf, intf.sym_name() + ".sv");
+          else
+            rootFile.ops.push_back(info);
+        })
+        .Case<VerbatimOp, IfDefProceduralOp, TypeScopeOp, HWModuleExternOp>(
+            [&](auto &) {
+              // Emit into a separate file using the specified file name or
+              // replicate the operation in each outputfile.
+              if (attr) {
+                if (!hasFileName) {
+                  op.emitError("file name unspecified");
+                  encounteredError = true;
+                } else
+                  separateFile(&op);
+              } else
+                replicatedOps.push_back(&op);
+            })
+        .Case<HWGeneratorSchemaOp>([&](auto &) {
+          // Empty.
+        })
+        .Default([&](auto *) {
+          op.emitError("unknown operation");
+          encounteredError = true;
+        });
+  }
+}
+
+/// Emit the operations in a `FileInfo` to an output stream. This handles the
+/// correct interpolation of replicated operations.
+void RootEmitterBase::emitFile(const FileInfo &file,
+                               VerilogEmitterState &state) {
+  size_t lastReplicatedOp = 0;
+
+  // Emit each operation in the file preceded by the replicated ops not yet
+  // printed.
+  for (const auto &opInfo : file.ops) {
+    // Emit the replicated per-file operations before the main operation's
+    // position (if enabled).
+    if (file.emitReplicatedOps)
+      for (; lastReplicatedOp < std::min(opInfo.position, replicatedOps.size());
+           ++lastReplicatedOp)
+        emitOperation(state, replicatedOps[lastReplicatedOp]);
+
+    // Emit the operation itself.
+    emitOperation(state, opInfo.op);
+  }
+
+  // Emit the replicated per-file operations after the last operation (if
+  // enabled).
+  if (file.emitReplicatedOps)
+    for (; lastReplicatedOp < replicatedOps.size(); lastReplicatedOp++)
+      emitOperation(state, replicatedOps[lastReplicatedOp]);
+
+  if (state.encounteredError)
+    encounteredError = true;
+}
+
+void RootEmitterBase::emitOperation(VerilogEmitterState &state, Operation *op) {
+  TypeSwitch<Operation *>(op)
+      .Case<HWModuleOp>([&](auto op) { ModuleEmitter(state).emitHWModule(op); })
+      .Case<HWModuleExternOp>(
+          [&](auto op) { ModuleEmitter(state).emitHWExternModule(op); })
+      .Case<HWModuleGeneratedOp>(
+          [&](auto op) { ModuleEmitter(state).emitHWGeneratedModule(op); })
+      .Case<HWGeneratorSchemaOp>([&](auto op) { /* Empty */ })
+      .Case<InterfaceOp, VerbatimOp, IfDefProceduralOp>(
+          [&](auto op) { ModuleEmitter(state).emitStatement(op); })
+      .Case<TypeScopeOp>([&](auto typedecls) {
+        TypeScopeEmitter(state).emitTypeScopeBlock(*typedecls.getBodyBlock());
+      })
+      .Default([&](auto *op) {
+        encounteredError = true;
+        op->emitError("unknown operation");
+      });
+}
 
 //===----------------------------------------------------------------------===//
 // Unified Emitter
@@ -2859,30 +3037,21 @@ struct UnifiedEmitter : public RootEmitterBase {
 
 void UnifiedEmitter::emitMLIRModule() {
   VerilogEmitterState state(os);
+  gatherFiles(false);
 
   // Read the emitter options out of the module.
   state.options.parseFromAttribute(rootOp);
 
-  for (auto &op : *rootOp.getBody()) {
-    if (auto rootOp = dyn_cast<RTLModuleOp>(op))
-      ModuleEmitter(state).emitRTLModule(rootOp);
-    else if (auto rootOp = dyn_cast<RTLModuleExternOp>(op))
-      ModuleEmitter(state).emitRTLExternModule(rootOp);
-    else if (auto rootOp = dyn_cast<RTLModuleGeneratedOp>(op))
-      ModuleEmitter(state).emitRTLGeneratedModule(rootOp);
-    else if (auto typedecls = dyn_cast<TypeScopeOp>(op))
-      TypeScopeEmitter(state).emitTypeScopeBlock(*typedecls.getBodyBlock());
-    else if (isa<RTLGeneratorSchemaOp>(op)) { /* Empty */
-    } else if (isa<InterfaceOp>(op) || isa<VerbatimOp>(op) ||
-               isa<IfDefProceduralOp>(op))
-      ModuleEmitter(state).emitStatement(&op);
-    else {
-      encounteredError = true;
-      op.emitError("unknown operation");
-    }
+  // Emit the main file. This is a container for anything not explicitly split
+  // out into a separate file.
+  emitFile(rootFile, state);
+
+  // Emit the separate files.
+  for (const auto &it : files) {
+    state.os << "\n// ----- 8< ----- FILE \"" << it.first
+             << "\" ----- 8< -----\n\n";
+    emitFile(it.second, state);
   }
-  if (state.encounteredError)
-    encounteredError = true;
 }
 
 //===----------------------------------------------------------------------===//
@@ -2896,117 +3065,61 @@ struct SplitEmitter : public RootEmitterBase {
   explicit SplitEmitter(StringRef dirname, ModuleOp rootOp)
       : RootEmitterBase(rootOp), dirname(dirname) {}
 
-  /// A list of modules and their position within the per-file operations.
-  struct EmittedModule {
-    Operation *op;
-    size_t position;
-    SmallString<32> filename;
-  };
-  SmallVector<EmittedModule, 0> moduleOps;
-
-  void emitMLIRModule();
-
-private:
   /// The directory to emit files into.
   StringRef dirname;
 
-  /// A list of per-file operations (e.g., `sv.verbatim` or `sv.ifdef`).
-  SmallVector<Operation *, 0> perFileOps;
-
-  void emitModule(const LoweringOptions &options, EmittedModule &mod);
+  void emitMLIRModule();
+  void createFile(const LoweringOptions &options, Identifier fileName,
+                  FileInfo &file);
 };
 
 } // namespace
 
 void SplitEmitter::emitMLIRModule() {
+  gatherFiles(true);
+
   // Load any emitter options from the top-level module.
   LoweringOptions options(rootOp);
 
-  // Partition the MLIR module into modules and interfaces for which we create
-  // separate output files, and the remaining top-level verbatim SV/ifdef
-  // business that needs to go into each file.
-  for (auto &op : *rootOp.getBody()) {
-    TypeSwitch<Operation *>(&op)
-        .Case<RTLModuleOp, InterfaceOp>([&](auto &) {
-          moduleOps.push_back({&op, perFileOps.size(), {}});
-        })
-        .Case<VerbatimOp, IfDefProceduralOp, TypeScopeOp>(
-            [&](auto &) { perFileOps.push_back(&op); })
-        .Case<RTLGeneratorSchemaOp, RTLModuleExternOp>([&](auto &) {})
-        .Default([&](auto *) {
-          op.emitError("unknown operation");
-          encounteredError = true;
-        });
-  }
-
-  // In parallel, emit each module into its separate file, embedded within the
-  // per-file operations.
-  llvm::parallelForEach(moduleOps.begin(), moduleOps.end(),
-                        [&](EmittedModule &mod) { emitModule(options, mod); });
+  // Emit operations to separate files in parallel if enabled.
+  if (rootOp.getContext()->isMultithreadingEnabled())
+    llvm::parallelForEach(files.begin(), files.end(), [&](auto &it) {
+      createFile(options, it.first, it.second);
+    });
+  else
+    for (auto &it : files)
+      createFile(options, it.first, it.second);
 }
 
-void SplitEmitter::emitModule(const LoweringOptions &options,
-                              EmittedModule &mod) {
-  auto op = mod.op;
-
-  // Given the operation, determine the file stem name and how to emit it.
-  std::function<void(VerilogEmitterState &)> emit;
-
-  if (auto module = dyn_cast<RTLModuleOp>(op)) {
-    mod.filename = module.getNameAttr().getValue();
-    emit = [=](VerilogEmitterState &state) {
-      ModuleEmitter(state).emitRTLModule(module);
-    };
-  } else if (auto intfOp = dyn_cast<InterfaceOp>(op)) {
-    mod.filename = intfOp.sym_name();
-    emit = [=](VerilogEmitterState &state) {
-      ModuleEmitter(state).emitStatement(op);
-    };
-  } else {
-    llvm_unreachable("only emissible ops should be in moduleOps list");
-  }
-
-  // Determine the output file name.
-  mod.filename.append(".sv");
+void SplitEmitter::createFile(const LoweringOptions &options,
+                              Identifier fileName, FileInfo &file) {
+  // Determine the output path from the output directory and filename.
   SmallString<128> outputFilename(dirname);
-  llvm::sys::path::append(outputFilename, mod.filename);
+  llvm::sys::path::append(outputFilename, fileName.strref());
+  auto outputDir = llvm::sys::path::parent_path(outputFilename);
+
+  // Create the output directory if needed.
+  std::error_code error = llvm::sys::fs::create_directory(outputDir);
+  if (error) {
+    mlir::emitError(file.ops[0].op->getLoc(),
+                    "cannot create output directory \"" + outputDir +
+                        "\": " + error.message());
+    encounteredError = true;
+  }
 
   // Open the output file.
   std::string errorMessage;
-  auto output = openOutputFile(outputFilename, &errorMessage);
+  auto output = mlir::openOutputFile(outputFilename, &errorMessage);
   if (!output) {
     encounteredError = true;
     llvm::errs() << errorMessage << "\n";
     return;
   }
 
-  // Emit the prolog of per-file operations, the module itself, and the epilog
-  // of per-file operations.
+  // Emit the file, copying the global options into the individual module state.
   VerilogEmitterState state(output->os());
-
-  // Copy the global options in to the individual module state.
   state.options = options;
-
-  for (size_t i = 0; i < std::min(mod.position, perFileOps.size()); ++i) {
-    TypeSwitch<Operation *>(perFileOps[i])
-        .Case<VerbatimOp, IfDefProceduralOp>(
-            [&](auto &op) { ModuleEmitter(state).emitStatement(op); })
-        .Case<TypeScopeOp>([&](auto &op) {
-          TypeScopeEmitter(state).emitTypeScopeBlock(*op.getBodyBlock());
-        });
-  }
-  emit(state);
-  for (size_t i = mod.position; i < perFileOps.size(); i++) {
-    TypeSwitch<Operation *>(perFileOps[i])
-        .Case<VerbatimOp, IfDefProceduralOp>(
-            [&](auto &op) { ModuleEmitter(state).emitStatement(op); })
-        .Case<TypeScopeOp>([&](auto &op) {
-          TypeScopeEmitter(state).emitTypeScopeBlock(*op.getBodyBlock());
-        });
-  }
-
-  if (state.encounteredError)
-    encounteredError = true;
+  emitFile(file, state);
   output->keep();
 }
 
@@ -3035,8 +3148,9 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
     return failure();
   }
 
-  for (auto mod : std::move(emitter.moduleOps)) {
-    output->os() << mod.filename << "\n";
+  for (const auto &it : emitter.files) {
+    if (it.second.addToFilelist)
+      output->os() << it.first << "\n";
   }
   output->keep();
 
@@ -3057,7 +3171,7 @@ void circt::registerToVerilogTranslation() {
         applyLoweringCLOptions(module);
         return exportVerilog(module, os);
       },
-      [](DialectRegistry &registry) {
-        registry.insert<CombDialect, RTLDialect, SVDialect>();
+      [](mlir::DialectRegistry &registry) {
+        registry.insert<CombDialect, HWDialect, SVDialect>();
       });
 }

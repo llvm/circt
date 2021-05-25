@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Comb/CombOps.h"
-#include "circt/Dialect/RTL/RTLOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/PatternMatch.h"
 
@@ -21,7 +21,13 @@ using namespace comb;
 /// Return true if the specified type is a signless non-zero width integer type,
 /// the only type which the comb ops operate.
 static bool isCombIntegerType(mlir::Type type) {
-  auto intType = type.dyn_cast<IntegerType>();
+  Type canonicalType;
+  if (auto typeAlias = type.dyn_cast<hw::TypeAliasType>())
+    canonicalType = typeAlias.getCanonicalType();
+  else
+    canonicalType = type;
+
+  auto intType = canonicalType.dyn_cast<IntegerType>();
   if (!intType || !intType.isSignless())
     return false;
 
@@ -65,7 +71,7 @@ bool ICmpOp::isEqualAllOnes() {
     return false;
 
   if (auto op1 =
-          dyn_cast_or_null<rtl::ConstantOp>(getOperand(1).getDefiningOp()))
+          dyn_cast_or_null<hw::ConstantOp>(getOperand(1).getDefiningOp()))
     return op1.getValue().isAllOnesValue();
   return false;
 }
@@ -77,7 +83,7 @@ bool ICmpOp::isNotEqualZero() {
     return false;
 
   if (auto op1 =
-          dyn_cast_or_null<rtl::ConstantOp>(getOperand(1).getDefiningOp()))
+          dyn_cast_or_null<hw::ConstantOp>(getOperand(1).getDefiningOp()))
     return op1.getValue().isNullValue();
   return false;
 }
@@ -115,7 +121,7 @@ bool XorOp::isBinaryNot() {
   if (getNumOperands() != 2)
     return false;
   if (auto cst =
-          dyn_cast_or_null<rtl::ConstantOp>(getOperand(1).getDefiningOp()))
+          dyn_cast_or_null<hw::ConstantOp>(getOperand(1).getDefiningOp()))
     if (cst.getValue().isAllOnesValue())
       return true;
   return false;

@@ -124,8 +124,7 @@ jobs:
             -DCMAKE_CXX_COMPILER=$CXX \
             -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-            -DCIRCT_BINDINGS_PYTHON_ENABLED=$BINDINGS_PYTHON \
-            -DPYTHON_EXECUTABLE=/usr/bin/python3
+            -DCIRCT_BINDINGS_PYTHON_ENABLED=$BINDINGS_PYTHON
       - name: Build CIRCT
         run: |
           cd build

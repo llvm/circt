@@ -28,13 +28,18 @@ def InstanceOp : FIRRTLOp<"instance"> {
   let verifier = "return ::verifyInstanceOp(*this);";
 
   let builders = [
-    OpBuilder<(ins "::mlir::TypeRange":$elementType,
-                      "::mlir::StringRef":$moduleName,
-                      CArg<"StringRef", "{}">:$name,
-                      CArg<"ArrayRef<Attribute>", "{}">:$annotations), [{
-      return build($_builder, $_state, elementType, moduleName, name,
+    OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
+                   "::mlir::StringRef":$moduleName,
+                   CArg<"StringRef", "{}">:$name,
+                   CArg<"ArrayRef<Attribute>", "{}">:$annotations), [{
+      return build($_builder, $_state, resultTypes, moduleName, name,
                    $_builder.getArrayAttr(annotations));
-    }]>
+    }]>,
+
+    /// Constructor that creates a version of the specified instance, but that
+    /// erases some number of results from it.
+    OpBuilder<(ins "InstanceOp":$existingInstance,
+                   "::mlir::ArrayRef<unsigned>":$resultsToErase)>
   ];
 
   let extraClassDeclaration = [{
@@ -99,6 +104,8 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
 
   let verifier = "return ::verifyMemOp(*this);";
 
+  let hasCanonicalizeMethod = true;
+
   let extraClassDeclaration = [{
     enum class PortKind { Read, Write, ReadWrite };
 
@@ -135,6 +142,7 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
       return getPortNamed(StringAttr::get(getContext(), name));
     }
     Value getPortNamed(StringAttr name);
+
   }];
 }
 
@@ -155,6 +163,16 @@ def NodeOp : FIRRTLOp<"node", [SameOperandsAndResultType]> {
     ins PassiveType:$input, StrAttr:$name,
         DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
   let results = (outs FIRRTLType:$result);
+
+  let builders = [
+    OpBuilder<(ins "::mlir::Type":$elementType,
+                   "::mlir::Value":$input,
+                   CArg<"StringRef", "{}">:$name,
+                   CArg<"ArrayRef<Attribute>","{}">:$annotations), [{
+      return build($_builder, $_state, elementType, input, name,
+                   $_builder.getArrayAttr(annotations));
+    }]>
+  ];
 
   let assemblyFormat = "$input custom<ImplicitSSAName>(attr-dict) `:` type($input)";
 

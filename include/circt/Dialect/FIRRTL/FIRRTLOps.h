@@ -19,12 +19,13 @@
 #include "mlir/IR/FunctionSupport.h"
 #include "mlir/IR/RegionKindInterface.h"
 #include "mlir/IR/SymbolTable.h"
+#include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 namespace circt {
 namespace firrtl {
 
-enum class Direction { Input, Output };
+enum class Direction { Input = 0, Output };
 
 namespace direction {
 
@@ -37,7 +38,11 @@ Direction get(bool isOutput);
 
 /// Return a \p IntegerAttr containing the packed representation of an array of
 /// directions.
-IntegerAttr packIntegerAttribute(ArrayRef<Direction> a, MLIRContext *b);
+IntegerAttr packAttribute(ArrayRef<Direction> a, MLIRContext *b);
+
+/// Turn a packed representation of port attributes into a vector that can be
+/// worked with.
+SmallVector<Direction> unpackAttribute(Operation *module);
 
 } // namespace direction
 
@@ -68,7 +73,7 @@ struct ModulePortInfo {
   }
 
   /// Return true if this is an inout port.  This will be true if the port
-  /// contains either bi-directional signals or ananlog types.
+  /// contains either bi-directional signals or analog types.
   bool isInOut() { return !isOutput() && !isInput(); }
 };
 
@@ -124,6 +129,51 @@ Flow foldFlow(Value val, Flow accumulatedFlow = Flow::Source);
 enum class DeclKind { Port, Instance, Other };
 
 DeclKind getDeclarationKind(Value val);
+
+// Out-of-line implementation of various trait verification methods and
+// functions commonly used among operations.
+namespace impl {
+LogicalResult verifySameOperandsIntTypeKind(Operation *op);
+
+// Type inference adaptor for FIRRTL operations.
+LogicalResult inferReturnTypes(
+    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::RegionRange regions,
+    SmallVectorImpl<Type> &results,
+    llvm::function_ref<FIRRTLType(ValueRange, ArrayRef<NamedAttribute>,
+                                  Optional<Location>)>
+        callback);
+
+// Common type inference functions.
+FIRRTLType inferAddSubResult(FIRRTLType lhs, FIRRTLType rhs,
+                             Optional<Location> loc);
+FIRRTLType inferBitwiseResult(FIRRTLType lhs, FIRRTLType rhs,
+                              Optional<Location> loc);
+FIRRTLType inferComparisonResult(FIRRTLType lhs, FIRRTLType rhs,
+                                 Optional<Location> loc);
+FIRRTLType inferReductionResult(FIRRTLType arg, Optional<Location> loc);
+
+// Common parsed argument validation functions.
+LogicalResult validateBinaryOpArguments(ValueRange operands,
+                                        ArrayRef<NamedAttribute> attrs,
+                                        Location loc);
+LogicalResult validateUnaryOpArguments(ValueRange operands,
+                                       ArrayRef<NamedAttribute> attrs,
+                                       Location loc);
+LogicalResult validateOneOperandOneConst(ValueRange operands,
+                                         ArrayRef<NamedAttribute> attrs,
+                                         Location loc);
+} // namespace impl
+
+/// A binary operation where the operands have the same integer kind.
+template <typename ConcreteOp>
+class SameOperandsIntTypeKind
+    : public OpTrait::TraitBase<ConcreteOp, SameOperandsIntTypeKind> {
+public:
+  static LogicalResult verifyTrait(Operation *op) {
+    return impl::verifySameOperandsIntTypeKind(op);
+  }
+};
 
 } // namespace firrtl
 } // namespace circt

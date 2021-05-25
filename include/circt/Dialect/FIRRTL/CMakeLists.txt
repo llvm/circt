@@ -4,6 +4,8 @@ add_circt_doc(FIRRTL -gen-dialect-doc FIRRTL Dialects/)
 set(LLVM_TARGET_DEFINITIONS FIRRTL.td)
 mlir_tablegen(FIRRTLEnums.h.inc -gen-enum-decls)
 mlir_tablegen(FIRRTLEnums.cpp.inc -gen-enum-defs)
+mlir_tablegen(FIRRTLAttributes.h.inc -gen-attrdef-decls)
+mlir_tablegen(FIRRTLAttributes.cpp.inc -gen-attrdef-defs)
 add_public_tablegen_target(MLIRFIRRTLEnumsIncGen)
 
 set(LLVM_TARGET_DEFINITIONS Passes.td)

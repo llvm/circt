@@ -58,8 +58,9 @@ def FModuleOp : FIRRTLOp<"module",
     name, a list of ports, and a body that represents the connections within
     the module.
   }];
-  let arguments = (
-    ins DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
+  let arguments =
+            (ins StrArrayAttr:$portNames,
+                 DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
 
@@ -91,6 +92,10 @@ def FModuleOp : FIRRTLOp<"module",
       Block &bodyBlock = body().front();
       return OpBuilder::atBlockEnd(&bodyBlock);
     }
+
+    /// Erases the ports listed in `portIndices`.  `portIndices` is expected to
+    /// be in order and unique.
+    void erasePorts(ArrayRef<unsigned> portIndices);
 
   private:
     // This trait needs access to the hooks defined below.
@@ -127,7 +132,8 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
     The "firrtl.extmodule" operation represents an external reference to a
     Verilog module, including a given name and a list of ports.
   }];
-  let arguments = (ins OptionalAttr<StrAttr>:$defname,
+  let arguments = (ins StrArrayAttr:$portNames,
+                       OptionalAttr<StrAttr>:$defname,
                        OptionalAttr<DictionaryAttr>:$parameters,
                        DefaultValuedAttr<AnnotationArrayAttr,
                                          "{}">:$annotations);
