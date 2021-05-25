@@ -838,6 +838,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
   ; CHECK-LABEL: firrtl.module @InvalidIfFolding
   module InvalidIfFolding:
+    input value: UInt<1>
+
     node thing1 = validif(UInt<1>("h1"), UInt<1>("h0"))
     ; CHECK-NOT: firrtl.invalidvalue
     ; CHECK: %thing1 = firrtl.node %c0_ui1
@@ -845,3 +847,6 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     node thing2 = validif(UInt<1>("h0"), UInt<1>("h0"))
     ; CHECK: %invalid_ui1 = firrtl.invalidvalue
     ; CHECK: %thing2 = firrtl.node %invalid_ui1
+
+    node thing3 = validif(value, value) @[Locator.scala 229:17]
+    ; CHECK: %thing3 = firrtl.node %value
