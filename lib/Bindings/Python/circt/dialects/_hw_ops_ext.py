@@ -1,13 +1,14 @@
-from typing import Dict, Optional, Sequence
+from typing import Dict, Optional, Sequence, Type
 
 import inspect
 
-from circt.support import BackedgeBuilder, NamedValueOpView
+from circt.dialects import hw
+import circt.support as support
 
 from mlir.ir import *
 
 
-class InstanceBuilder(NamedValueOpView):
+class InstanceBuilder(support.NamedValueOpView):
   """Helper class to incrementally construct an instance of a module."""
 
   def __init__(self,
@@ -40,7 +41,7 @@ class InstanceBuilder(NamedValueOpView):
         operand_values.append(value)
       else:
         type = module.type.inputs[i]
-        backedge = BackedgeBuilder.create(
+        backedge = support.BackedgeBuilder.create(
             type, arg_name, self, instance_of=module)
         backedges[i] = backedge
         operand_values.append(backedge.result)
@@ -134,9 +135,11 @@ class ModuleLike:
 
     if body_builder:
       entry_block = self.add_entry_block()
+
       with InsertionPoint(entry_block):
-        with BackedgeBuilder():
-          body_builder(self)
+        with support.BackedgeBuilder():
+          outputs = body_builder(self)
+          _create_output_op(name, output_ports, entry_block, outputs)
 
   @property
   def type(self):
@@ -162,6 +165,59 @@ class ModuleLike:
                            parameters=parameters,
                            loc=loc,
                            ip=ip)
+
+
+def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
+  """Create the hw.OutputOp from the body_builder return."""
+
+  # Determine if the body already has an output op.
+  block_len = len(entry_block.operations)
+  if block_len > 0:
+    last_op = entry_block.operations[block_len - 1]
+    if isinstance(last_op, hw.OutputOp):
+      # If it does, the return from body_builder must be None.
+      if bb_ret is not None and bb_ret != last_op:
+        raise support.ConnectionError(
+          "Cannot return value from body_builder and create hw.OutputOp")
+      return
+
+  # If builder didn't create an output op and didn't return anything, this op
+  # mustn't have any outputs.
+  if bb_ret is None:
+    if len(output_ports) == 0:
+      hw.OutputOp([])
+      return
+    raise support.ConnectionError("Must return module output values")
+
+  # Now create the output op depending on the object type returned
+  outputs: list[value] = list()
+
+  # Only acceptable return is a dict of port, value mappings.
+  if not isinstance(bb_ret, dict):
+    raise support.ConnectionError(
+        "Can only return a dict of port, value mappings from body_builder.")
+
+  # A dict of `OutputPortName` -> ValueLike must be converted to a list in port
+  # order.
+  unconnected_ports = []
+  for (name, _) in output_ports:
+    if name not in bb_ret:
+      unconnected_ports.append(name)
+      outputs.append(None)
+    else:
+      val = support.get_value(bb_ret[name])
+      if val is None:
+        raise TypeError(
+            f"body_builder return doesn't support type '{type(bb_ret[name])}'")
+      outputs.append(val)
+    bb_ret.pop(name)
+  if len(unconnected_ports) > 0:
+    raise support.UnconnectedSignalError(cls_name, unconnected_ports)
+  if len(bb_ret) > 0:
+    raise support.ConnectionError(
+      f"Could not map the follow to ports in {cls_name}: {bb_ret.keys}")
+
+  hw.OutputOp(outputs)
 
 
 class HWModuleOp(ModuleLike):
@@ -245,8 +301,8 @@ class HWModuleOp(ModuleLike):
         output_ports = zip([None] * len(result_types), result_types)
 
       module_op = HWModuleOp(name=symbol_name,
-                              input_ports=input_ports,
-                              output_ports=output_ports)
+                             input_ports=input_ports,
+                             output_ports=output_ports)
       with InsertionPoint(module_op.add_entry_block()):
         module_args = module_op.entry_block.arguments
         module_kwargs = {}
@@ -280,8 +336,8 @@ class HWModuleOp(ModuleLike):
 
       def emit_instance_op(*call_args):
         call_op = hw.InstanceOp(return_types, StringAttr.get(''),
-                                 FlatSymbolRefAttr.get(symbol_name), call_args,
-                                 DictAttr.get({}), None)
+                                FlatSymbolRefAttr.get(symbol_name), call_args,
+                                DictAttr.get({}), None)
         if return_types is None:
           return None
         elif len(return_types) == 1:

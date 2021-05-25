@@ -887,6 +887,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   // Create a temporary wire at the current insertion point, and try to
   // eliminate it later as part of lowering post processing.
   sv::WireOp createTmpWireOp(Type type, StringRef name) {
+    // This is a locally visible, private wire created by the compiler, so do
+    // not attach a symbol name.
     auto result = builder.create<sv::WireOp>(type, name);
     tmpWiresToOptimize.push_back(result);
     return result;
@@ -1135,7 +1137,7 @@ void FIRRTLLowering::optimizeTemporaryWire(sv::WireOp wire) {
   if (!write)
     return;
 
-  // If the write is happening at the model level then we don't have any
+  // If the write is happening at the module level then we don't have any
   // use-before-def checking to do, so we only handle that for now.
   if (!isa<hw::HWModuleOp>(write->getParentOp()))
     return;
@@ -1566,9 +1568,22 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   if (resultType.isInteger(0))
     return setLowering(op, Value());
 
-  // Name attr is requires on sv.wire but optional on firrtl.wire.
+  // Name attr is required on sv.wire but optional on firrtl.wire.
   auto nameAttr = op.nameAttr() ? op.nameAttr() : builder.getStringAttr("");
-  return setLoweringTo<sv::WireOp>(op, resultType, nameAttr);
+
+  auto symName = op.nameAttr();
+  if (symName) {
+  // Prepend the name of the module to make the symbol name unique in the symbol
+  // table, it is already unique in the module. Checking if the name is unique
+  // in the SymbolTable is non-trivial.
+    auto moduleName =
+        cast<hw::HWModuleOp>(op->getParentOp()).getNameAttr().getValue().str();
+    symName = builder.getStringAttr("__" + moduleName + "__" +
+                                    symName.getValue().str());
+  }
+  // This is not a temporary wire created by the compiler, so attach a symbol
+  // name.
+  return setLoweringTo<sv::WireOp>(op, resultType, nameAttr, symName);
 }
 
 LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
@@ -1582,6 +1597,8 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   // drop it.
   if (auto name = op->getAttrOfType<StringAttr>("name")) {
     if (!name.getValue().empty()) {
+      // This is a locally visible, private wire created by the compiler, so
+      // do not attach a symbol name.
       auto wire = builder.create<sv::WireOp>(operand.getType(), name);
       builder.create<sv::ConnectOp>(wire, operand);
     }
@@ -2204,6 +2221,8 @@ LogicalResult FIRRTLLowering::visitExpr(InvalidValueOp op) {
   // type.  We do that by lowering to a wire and return that.  As with the
   // SFC, we do not connect anything to this, because it is bidirectional.
   if (op.getType().isa<AnalogType>())
+    // This is a locally visible, private wire created by the compiler, so do
+    // not attach a symbol name.
     return setLoweringTo<sv::WireOp>(op, resultTy, ".invalid_analog");
 
   // We lower invalid to 0.  TODO: the FIRRTL spec mentions something about
