@@ -2,6 +2,7 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+from circt import support
 from circt.support import BuilderValue, BackedgeBuilder, OpOperand
 import circt
 
@@ -142,18 +143,11 @@ def connect(destination, source):
   if not isinstance(destination, OpOperand):
     raise TypeError(
         f"cannot connect to destination of type {type(destination)}")
-  if not isinstance(source, OpOperand) and not isinstance(
-      source, mlir.ir.Value) and not (isinstance(source, mlir.ir.Operation) and
-                                      hasattr(source, "result")):
+  value = support.get_value(source)
+  if value is None:
     raise TypeError(f"cannot connect from source of type {type(source)}")
-  index = destination.index
-  if isinstance(source, OpOperand):
-    value = source.value
-  elif isinstance(source, mlir.ir.Value):
-    value = source
-  elif isinstance(source, mlir.ir.OpView):
-    value = source.result
 
+  index = destination.index
   destination.operation.operands[index] = value
   if isinstance(destination, BuilderValue) and \
      index in destination.builder.backedges:

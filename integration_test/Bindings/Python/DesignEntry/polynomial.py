@@ -10,7 +10,6 @@ from circt.esi import types
 from circt.dialects import comb, hw
 
 import sys
-from typing import List
 
 
 @module
