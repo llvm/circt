@@ -417,8 +417,9 @@ firrtl.circuit "Andr" {
 }
 
 // CHECK-LABEL: firrtl.module @Reduce
-firrtl.module @Reduce(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>,
-                     out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
+firrtl.module @Reduce(in %a: !firrtl.uint<1>, in %aS: !firrtl.sint<1>, 
+                      out %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, 
+                      out %d: !firrtl.uint<1>, out %e: !firrtl.uint<1>) {
   %0 = firrtl.andr %a : (!firrtl.uint<1>) -> !firrtl.uint<1>
   %1 = firrtl.orr %a : (!firrtl.uint<1>) -> !firrtl.uint<1>
   %2 = firrtl.xorr %a : (!firrtl.uint<1>) -> !firrtl.uint<1>
@@ -428,6 +429,9 @@ firrtl.module @Reduce(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>,
   // CHECK: firrtl.connect %c, %a
   firrtl.connect %d, %2 : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK: firrtl.connect %d, %a
+
+  %3 = firrtl.andr %aS : (!firrtl.sint<1>) -> !firrtl.uint<1>
+  firrtl.connect %e, %3 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
 
