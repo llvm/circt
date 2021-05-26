@@ -16,13 +16,6 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
 
-namespace circt {
-namespace comb {
-// TODO: remove this
-using namespace mlir;
-} // namespace comb
-} // namespace circt
-
 // Pull in the Dialect definition.
 #include "circt/Dialect/Comb/CombDialect.h.inc"
 

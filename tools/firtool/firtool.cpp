@@ -136,7 +136,7 @@ static LogicalResult
 processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
               StringRef annotationFilename, TimingScope &ts,
               MLIRContext &context,
-              std::function<LogicalResult(OwningModuleRef)> callback) {
+              std::function<LogicalResult(ModuleOp)> callback) {
   // Register our dialects.
   context.loadDialect<firrtl::FIRRTLDialect, hw::HWDialect, comb::CombDialect,
                       sv::SVDialect>();
@@ -177,6 +177,16 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     assert(inputFormat == InputMLIRFile);
     module = parseSourceFile(sourceMgr, &context);
   }
+  if (!module)
+    return failure();
+
+  // Allow optimizations to run multithreaded.
+  context.enableMultithreading(isMultithreaded);
+
+  // Width inference creates canonicalization opportunities.
+  if (inferWidths)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidthsPass());
+
   // The input mlir file could be firrtl dialect so we might need to clean
   // things up.
   if (!disableLowerTypes) {
@@ -186,21 +196,13 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     if (expandWhens)
       modulePM.addPass(firrtl::createExpandWhensPass());
   }
+
   // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
   if (!disableOptimization) {
     auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
     modulePM.addPass(createCSEPass());
     modulePM.addPass(createSimpleCanonicalizerPass());
   }
-
-  if (!module)
-    return failure();
-
-  // Allow optimizations to run multithreaded.
-  context.enableMultithreading(isMultithreaded);
-
-  if (inferWidths)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidthsPass());
 
   if (inliner)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
@@ -252,7 +254,11 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     return failure();
 
   auto outputTimer = ts.nest("Output");
-  return callback(std::move(module));
+
+  // Note that we intentionally "leak" the Module into the MLIRContext instead
+  // of deallocating it.  There is no need to deallocate it right before
+  // process exit.
+  return callback(module.release());
 }
 
 /// This implements the top-level logic for the firtool command, invoked once
@@ -309,7 +315,7 @@ static LogicalResult executeFirtool(MLIRContext &context) {
   }
 
   // Emit a single file or multiple files depending on the output format.
-  auto emitCallback = [&](OwningModuleRef module) -> LogicalResult {
+  auto emitCallback = [&](ModuleOp module) -> LogicalResult {
     switch (outputFormat) {
     case OutputMLIR:
       module->print(outputFile.getValue()->os());
@@ -317,9 +323,9 @@ static LogicalResult executeFirtool(MLIRContext &context) {
     case OutputDisabled:
       return success();
     case OutputVerilog:
-      return exportVerilog(module.get(), outputFile.getValue()->os());
+      return exportVerilog(module, outputFile.getValue()->os());
     case OutputSplitVerilog:
-      return exportSplitVerilog(module.get(), outputFilename);
+      return exportSplitVerilog(module, outputFilename);
     }
     return failure();
   };

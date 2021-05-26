@@ -19,8 +19,8 @@ firrtl.circuit "Simple" {
     %c2_si3 = firrtl.constant 2 : !firrtl.sint<3>
 
 
-    // CHECK: %out4 = sv.wire  : !hw.inout<i4>
-    // CHECK: %out5 = sv.wire  : !hw.inout<i4>
+    // CHECK: %out4 = sv.wire sym @__Simple__out4 : !hw.inout<i4>
+    // CHECK: %out5 = sv.wire sym @__Simple__out5 : !hw.inout<i4>
     %out4 = firrtl.wire : !firrtl.uint<4>
     %out5 = firrtl.wire : !firrtl.uint<4>
 
@@ -73,10 +73,10 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: sv.connect %out4, [[ZEXT]] : i4
     firrtl.connect %out4, %in2 : !firrtl.uint<4>, !firrtl.uint<2>
 
-    // CHECK-NEXT: %test-name = sv.wire : !hw.inout<i4>
+    // CHECK-NEXT: %test-name = sv.wire sym @"__Simple__test-name" : !hw.inout<i4>
     firrtl.wire {name = "test-name"} : !firrtl.uint<4>
 
-    // CHECK-NEXT: = sv.wire : !hw.inout<i2>
+    // CHECK-NEXT: = sv.wire sym @__Simple___t_1 : !hw.inout<i2>
     %_t_1 = firrtl.wire : !firrtl.uint<2>
 
     // CHECK-NEXT: = firrtl.wire : !firrtl.vector<uint<1>, 13>
@@ -347,7 +347,7 @@ firrtl.circuit "Simple" {
 
   // CHECK-LABEL: hw.module @foo
   firrtl.module @foo() {
-    // CHECK-NEXT:  %io_cpu_flush.wire = sv.wire : !hw.inout<i1>
+    // CHECK-NEXT:  %io_cpu_flush.wire = sv.wire sym @__foo__io_cpu_flush.wire : !hw.inout<i1>
     %io_cpu_flush.wire = firrtl.wire : !firrtl.uint<1>
     // CHECK-NEXT: hw.instance "fetch" @bar([[IO:%[0-9]+]])
     %i = firrtl.instance @bar {name = "fetch", portNames=["io_cpu_flush"]} : !firrtl.flip<uint<1>>
@@ -365,7 +365,7 @@ firrtl.circuit "Simple" {
   // CHECK-LABEL: hw.module @issue314
   firrtl.module @issue314(in %inp_2: !firrtl.uint<27>, in %inpi: !firrtl.uint<65>) {
     // CHECK: %c0_i38 = hw.constant 0 : i38
-    // CHECK: %tmp48 = sv.wire : !hw.inout<i27>
+    // CHECK: %tmp48 = sv.wire sym @__issue314__tmp48 : !hw.inout<i27>
     %tmp48 = firrtl.wire : !firrtl.uint<27>
 
     // CHECK-NEXT: %0 = comb.concat %c0_i38, %inp_2 : (i38, i27) -> i65
@@ -574,7 +574,7 @@ firrtl.circuit "Simple" {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %c0_ui3 = firrtl.constant 0 : !firrtl.uint<3>
     %_M_read, %_M_rw, %_M_write = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read", "rw", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<sint<42>>>>, !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata: flip<sint<42>>, wdata: sint<42>, wmask: uint<1>>>, !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>>
-  // CHECK:      %_M.ro_data_0, %_M.rw_rdata_0 = hw.instance "_M" @FIRRTLMem_1_1_1_42_12_0_1_0(%clock1, %true, %c0_i4, %clock1, %true, %c0_i4_0, %true, %true, %0, %clock2, %inpred, %c0_i4_1, %[[mask:.+]], %[[data:.+]]) : (i1, i1, i4, i1, i1, i4, i1, i1, i42, i1, i1, i4, i1, i42) -> (i42, i42)
+  // CHECK: %_M.ro_data_0, %_M.rw_rdata_0 = hw.instance "_M" @FIRRTLMem_1_1_1_42_12_0_1_0(%clock1, %true, %c0_i4, %clock1, %true, %c0_i4_0, %true, %true, %0, %clock2, %inpred, %c0_i4_1, %[[mask:.+]], %[[data:.+]]) : (i1, i1, i4, i1, i1, i4, i1, i1, i42, i1, i1, i4, i1, i42) -> (i42, i42)
   // CHECK: hw.output %_M.ro_data_0, %_M.rw_rdata_0 : i42, i42
 
       %0 = firrtl.subfield %_M_read("data") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<sint<42>>>>) -> !firrtl.sint<42>

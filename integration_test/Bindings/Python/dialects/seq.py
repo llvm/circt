@@ -4,6 +4,7 @@
 import sys
 
 import circt
+from circt.design_entry import connect
 from circt.dialects import hw, seq
 
 from mlir.ir import *
@@ -19,8 +20,7 @@ with Context() as ctx, Location.unknown():
   m = Module.create()
   with InsertionPoint(m.body):
 
-    @hw.HWModuleOp.from_py_func(i1, i1)
-    def top(clk, rstn):
+    def top(module):
       # CHECK: %[[RESET_VAL:.+]] = hw.constant 0
       reg_reset = hw.ConstantOp(i32, IntegerAttr.get(i32, 0)).result
       # CHECK: %[[INPUT_VAL:.+]] = hw.constant 45
@@ -28,24 +28,41 @@ with Context() as ctx, Location.unknown():
       # CHECK: %[[DATA_VAL:.+]] = seq.compreg %[[INPUT_VAL]], %clk, %rstn, %[[RESET_VAL]]
       reg = seq.CompRegOp(i32,
                           reg_input,
-                          clk,
-                          reset=rstn,
+                          module.clk,
+                          reset=module.rstn,
                           reset_value=reg_reset,
                           name="my_reg")
 
       # CHECK: seq.compreg %[[INPUT_VAL]], %clk
-      seq.reg(reg_input, clk)
+      seq.reg(reg_input, module.clk)
       # CHECK: seq.compreg %[[INPUT_VAL]], %clk, %rstn, %{{.+}}
-      seq.reg(reg_input, clk, reset=rstn)
+      seq.reg(reg_input, module.clk, reset=module.rstn)
       # CHECK: %[[RESET_VALUE:.+]] = hw.constant 123
       # CHECK: seq.compreg %[[INPUT_VAL]], %clk, %rstn, %[[RESET_VALUE]]
       custom_reset = hw.ConstantOp(i32, IntegerAttr.get(i32, 123)).result
-      seq.reg(reg_input, clk, reset=rstn, reset_value=custom_reset)
+      seq.reg(reg_input,
+              module.clk,
+              reset=module.rstn,
+              reset_value=custom_reset)
       # CHECK: seq.compreg {{.+}} {name = "FuBar"}
-      seq.reg(reg_input, clk, name="FuBar")
+      seq.reg(reg_input, module.clk, name="FuBar")
+
+      # CHECK: seq.compreg %[[INPUT_VAL]], %clk {name = "reg1"}
+      reg1 = seq.CompRegOp.create(i32, {"clk": module.clk}, name="reg1")
+      connect(reg1.input, reg_input)
+
+      # CHECK: seq.compreg %[[INPUT_VAL]], %clk {name = "reg2"}
+      reg2 = seq.CompRegOp.create(i32, name="reg2")
+      connect(reg2.input, reg_input)
+      connect(reg2.clk, module.clk)
 
       # CHECK: hw.output %[[DATA_VAL]]
-      return reg.data
+      hw.OutputOp([reg.data])
+
+    hw.HWModuleOp(name="top",
+                  input_ports=[("clk", i1), ("rstn", i1)],
+                  output_ports=[("result", i32)],
+                  body_builder=top)
 
   print("=== MLIR ===")
   print(m)

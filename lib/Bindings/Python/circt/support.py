@@ -12,10 +12,28 @@ from typing import List
 _current_backedge_builder = ContextVar("current_bb")
 
 
-class UnconnectedSignalError(RuntimeError):
+class ConnectionError(RuntimeError):
+  pass
+
+
+class UnconnectedSignalError(ConnectionError):
   def __init__(self, module: str, port_names: List[str]):
     super().__init__(
         f"Ports {port_names} unconnected in design module {module}.")
+
+
+def get_value(obj) -> ir.Value:
+  """Resolve a Value from a few supported types."""
+
+  if isinstance(obj, ir.Value):
+    return obj
+  if isinstance(obj, ir.Operation):
+    return obj.result
+  if isinstance(obj, ir.OpView):
+    return obj.result
+  if isinstance(obj, OpOperand):
+    return obj.value
+  return None
 
 
 class BackedgeBuilder(AbstractContextManager):
@@ -86,12 +104,57 @@ class BackedgeBuilder(AbstractContextManager):
       raise RuntimeError("\n".join(errors))
 
 
-class BuilderValue:
+class OpOperand:
+  __slots__ = [
+    "index"
+    "operation"
+    "value"
+  ]
+
+  def __init__(self, operation, index, value):
+    self.index = index
+    self.operation = operation
+    self.value = value
+
+
+# Are there any situations in which this needs to be used to index into results?
+class BuilderValue(OpOperand):
   """Class that holds a value, as well as builder and index of this value in
      the operand or result list. This can represent an OpOperand and index into
      OpOperandList or a OpResult and index into an OpResultList"""
 
   def __init__(self, value, builder, index):
-    self.value = value
+    super().__init__(builder.operation, index, value)
     self.builder = builder
-    self.index = index
+
+
+class NamedValueOpView:
+  """Helper class to incrementally construct an instance of an operation that
+     names its operands and results"""
+
+  def __init__(self, opview, operand_indices, result_indices, backedges):
+    self.opview = opview
+    self.operand_indices = operand_indices
+    self.result_indices = result_indices
+    self.backedges = backedges
+
+  def __getattr__(self, name):
+    # Check for the attribute in the arg name set.
+    if name in self.operand_indices:
+      index = self.operand_indices[name]
+      value = self.opview.operands[index]
+      return BuilderValue(value, self, index)
+
+    # Check for the attribute in the result name set.
+    if name in self.result_indices:
+      index = self.result_indices[name]
+      value = self.opview.results[index]
+      return BuilderValue(value, self, index)
+
+    # If we fell through to here, the name isn't a result.
+    raise AttributeError(f"unknown port name {name}")
+
+  @property
+  def operation(self):
+    """Get the operation associated with this builder."""
+    return self.opview.operation

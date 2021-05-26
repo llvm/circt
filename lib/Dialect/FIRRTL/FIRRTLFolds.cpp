@@ -67,6 +67,14 @@ static bool hasKnownWidthIntTypesAndNonZeroResult(Operation *op) {
   return true;
 }
 
+/// Return true if this value is 1 bit UInt.
+static bool isUInt1(Type type) {
+  auto t = type.dyn_cast<UIntType>();
+  if (!t || !t.hasWidth() || t.getWidth() != 1)
+    return false;
+  return true;
+}
+
 /// Implicitly replace the operand to a constant folding operation with a const
 /// 0 in case the operand is non-constant but has a bit width 0.
 ///
@@ -116,6 +124,18 @@ constFoldFIRRTLBinaryOp(Operation *op, ArrayRef<Attribute> operands,
   if (resultType.getWidthOrSentinel() <= 0)
     return {};
 
+  // Determine the operand widths. This is either dictated by the operand type,
+  // or if that type is an unsized integer, by the actual bits necessary to
+  // represent the constant value.
+  auto lhsWidth =
+      op->getOperand(0).getType().cast<IntType>().getWidthOrSentinel();
+  auto rhsWidth =
+      op->getOperand(1).getType().cast<IntType>().getWidthOrSentinel();
+  if (auto lhs = operands[0].dyn_cast_or_null<IntegerAttr>())
+    lhsWidth = std::max<int32_t>(lhsWidth, lhs.getValue().getBitWidth());
+  if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>())
+    rhsWidth = std::max<int32_t>(rhsWidth, rhs.getValue().getBitWidth());
+
   // Compares extend the operands to the widest of the operand types, not to the
   // result type.
   int32_t operandWidth;
@@ -123,26 +143,14 @@ constFoldFIRRTLBinaryOp(Operation *op, ArrayRef<Attribute> operands,
   case BinOpKind::Normal:
     operandWidth = resultType.getWidthOrSentinel();
     break;
-  case BinOpKind::Compare: {
+  case BinOpKind::Compare:
     // Compares compute with the widest operand, not at the destination type
     // (which is always i1).
-    auto lhsWidth =
-        op->getOperand(0).getType().cast<IntType>().getWidthOrSentinel();
-    auto rhsWidth =
-        op->getOperand(1).getType().cast<IntType>().getWidthOrSentinel();
-    if (auto lhs = operands[0].dyn_cast_or_null<IntegerAttr>())
-      lhsWidth = std::max<int32_t>(lhsWidth, lhs.getValue().getBitWidth());
-    if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>())
-      rhsWidth = std::max<int32_t>(rhsWidth, rhs.getValue().getBitWidth());
     operandWidth = std::max(1, std::max(lhsWidth, rhsWidth));
     break;
-  }
   case BinOpKind::DivideOrShift:
-    operandWidth = std::max(
-        std::max(
-            op->getOperand(0).getType().cast<IntType>().getWidthOrSentinel(),
-            op->getOperand(1).getType().cast<IntType>().getWidthOrSentinel()),
-        resultType.getWidthOrSentinel());
+    operandWidth =
+        std::max(std::max(lhsWidth, rhsWidth), resultType.getWidthOrSentinel());
     break;
   }
 
@@ -713,7 +721,13 @@ OpFoldResult AndRPrimOp::fold(ArrayRef<Attribute> operands) {
 
   // x == -1
   if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
-    return getIntOnesAttr(getType());
+    return getIntAttr(getType(), APInt(1, attr.getValue().isAllOnesValue()));
+
+  // one bit is identity.  Only applies to UInt since we cann't make a cast
+  // here.
+  if (isUInt1(input().getType()))
+    return input();
+
   return {};
 }
 
@@ -724,6 +738,12 @@ OpFoldResult OrRPrimOp::fold(ArrayRef<Attribute> operands) {
   // x != 0
   if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
     return getIntAttr(getType(), APInt(1, !attr.getValue().isNullValue()));
+
+  // one bit is identity.  Only applies to UInt since we cann't make a cast
+  // here.
+  if (isUInt1(input().getType()))
+    return input();
+
   return {};
 }
 
@@ -735,6 +755,11 @@ OpFoldResult XorRPrimOp::fold(ArrayRef<Attribute> operands) {
   if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
     return getIntAttr(getType(),
                       APInt(1, attr.getValue().countPopulation() & 1));
+
+  // one bit is identity.  Only applies to UInt since we can't make a cast here.
+  if (isUInt1(input().getType()))
+    return input();
+
   return {};
 }
 
@@ -830,17 +855,23 @@ OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
   if (operands[1].dyn_cast_or_null<InvalidValueAttr>())
     return getOperand(2);
 
-  /// mux(0/1, x, y) -> x or y
+  // mux(cond, x, x) -> x
+  if (high() == low())
+    return high();
+
+  // The following folds require that the result has a known width. Otherwise
+  // the mux requires an additional padding operation to be inserted, which is
+  // not possible in a fold.
+  if (getType().getBitWidthOrSentinel() < 0)
+    return {};
+
+  // mux(0/1, x, y) -> x or y
   if (auto cond = operands[0].dyn_cast_or_null<IntegerAttr>()) {
     if (cond.getValue().isNullValue() && low().getType() == getType())
       return low();
     if (!cond.getValue().isNullValue() && high().getType() == getType())
       return high();
   }
-
-  // mux(cond, x, x) -> x
-  if (high() == low())
-    return high();
 
   // mux(cond, x, cst)
   if (auto lowCst = operands[2].dyn_cast_or_null<IntegerAttr>()) {
@@ -861,10 +892,38 @@ OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
   return {};
 }
 
+static LogicalResult canonicalizeMux(MuxPrimOp op, PatternRewriter &rewriter) {
+  // If the mux has a known output width, pad the operands up to this width.
+  // Most folds on mux require that folded operands are of the same width as the
+  // mux itself.
+  auto width = op.getType().getBitWidthOrSentinel();
+  if (width < 0)
+    return failure();
+
+  auto pad = [&](Value input) {
+    auto inputWidth =
+        input.getType().cast<FIRRTLType>().getBitWidthOrSentinel();
+    if (inputWidth < 0 || width == inputWidth)
+      return input;
+    return rewriter.create<PadPrimOp>(op.getLoc(), op.getType(), input, width)
+        .getResult();
+  };
+
+  auto newHigh = pad(op.high());
+  auto newLow = pad(op.low());
+  if (newHigh == op.high() && newLow == op.low())
+    return failure();
+
+  rewriter.replaceOpWithNewOp<MuxPrimOp>(
+      op, op.getType(), ValueRange{op.sel(), newHigh, newLow}, op->getAttrs());
+  return success();
+}
+
 void MuxPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
-  results.insert<patterns::MuxSameCondLow>(context);
-  results.insert<patterns::MuxSameCondHigh>(context);
+  results.add(canonicalizeMux);
+  results.add<patterns::MuxSameCondLow>(context);
+  results.add<patterns::MuxSameCondHigh>(context);
 }
 
 OpFoldResult PadPrimOp::fold(ArrayRef<Attribute> operands) {

@@ -13,10 +13,93 @@
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Support/FieldRef.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace firrtl;
+
+//===----------------------------------------------------------------------===//
+// FieldRef helpers
+//===----------------------------------------------------------------------===//
+
+FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
+  // This code walks upwards from the subfield and calculates the field ID at
+  // each level. At each stage, it must take the current id, and re-index it as
+  // a nested bundle under the parent field.. This is accomplished by using the
+  // parent field's ID as a base, and adding the field ID of the child.
+  unsigned id = 0;
+  while (value) {
+    Operation *op = value.getDefiningOp();
+
+    // If this is a block argument, we are done.
+    if (!op)
+      break;
+
+    // TODO: implement subindex op.
+    if (auto subfieldOp = dyn_cast<SubfieldOp>(op)) {
+      value = subfieldOp.input();
+      auto bundleType = value.getType().template cast<BundleType>();
+      auto index =
+          bundleType.getElementIndex(subfieldOp.fieldname()).getValue();
+      // Rebase the current index on the parent field's index.
+      id += bundleType.getFieldID(index);
+    } else {
+      break;
+    }
+  }
+  return {value, id};
+}
+
+/// Get the string name of a value which is a direct child of a declaration op.
+static void getDeclName(Value value, SmallString<64> &string) {
+  if (auto arg = value.dyn_cast<BlockArgument>()) {
+    // Get the module ports and get the name.
+    auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
+    SmallVector<ModulePortInfo> ports = module.getPorts();
+    string += ports[arg.getArgNumber()].name.getValue();
+    return;
+  }
+
+  auto *op = value.getDefiningOp();
+  TypeSwitch<Operation *>(op)
+      .Case<InstanceOp, MemOp>([&](auto op) {
+        string += op.name();
+        string += ".";
+        string +=
+            op.getPortName(value.cast<OpResult>().getResultNumber()).getValue();
+      })
+      .Case<WireOp, RegOp, RegResetOp>([&](auto op) { string += op.name(); });
+}
+
+std::string circt::firrtl::getFieldName(const FieldRef &fieldRef) {
+
+  SmallString<64> name;
+  auto value = fieldRef.getValue();
+  getDeclName(value, name);
+
+  auto type = value.getType();
+  auto localID = fieldRef.getFieldID();
+  while (localID) {
+    // Strip off the flip type if there is one.
+    if (auto flipType = type.dyn_cast<FlipType>())
+      type = flipType.getElementType();
+    // TODO: support vector types.
+    auto bundleType = type.cast<BundleType>();
+    auto index = bundleType.getIndexForFieldID(localID);
+    // Add the current field string, and recurse into a subfield.
+    auto &element = bundleType.getElements()[index];
+    name += ".";
+    name += element.name.getValue();
+    type = element.type;
+    // Get a field localID for the nested bundle.
+    localID = localID - bundleType.getFieldID(index);
+  }
+
+  return name.str().str();
+}
 
 //===----------------------------------------------------------------------===//
 // Dialect specification.
