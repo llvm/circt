@@ -844,21 +844,11 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
 
   // If no write and only reads, then optimize away the wire.
   if (!write) {
-
-    bool canErase = true;
-    //Operation *xOp = rewriter.create<ConstantXOp>(wire.getLoc(),*wire->getResultTypes().begin());
+    Operation *xOp =
+        rewriter.create<ConstantXOp>(wire.getLoc(), wire.getResult().getType());
     // Remove all uses of the wire.
-    //wire.replaceAllUsesWith(xOp);
-    for (auto &use : make_early_inc_range(wire.getResult().getUses())) {
-      if (use.getOwner()->use_empty())
-        rewriter.eraseOp(use.getOwner());
-      else
-        canErase = false;
-    }
-
-    // Remove the wire if no user.
-    if (canErase)
-      rewriter.eraseOp(wire);
+    wire.replaceAllUsesWith(xOp);
+    rewriter.eraseOp(wire);
     return success();
   }
 
