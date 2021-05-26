@@ -848,12 +848,12 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
     connected = rewriter.create<ConstantXOp>(
         wire.getLoc(),
         wire.getResult().getType().cast<InOutType>().getElementType());
-  } else if (!isa<hw::HWModuleOp>(write->getParentOp()))
+  } else if (isa<hw::HWModuleOp>(write->getParentOp()))
+    connected = write.src();
+  else
     // If the write is happening at the module level then we don't have any
     // use-before-def checking to do, so we only handle that for now.
     return failure();
-  else
-    connected = write.src();
 
   // Ok, we can do this.  Replace all the reads with the connected value.
   for (auto read : make_early_inc_range(reads))
