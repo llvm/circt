@@ -855,17 +855,23 @@ OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
   if (operands[1].dyn_cast_or_null<InvalidValueAttr>())
     return getOperand(2);
 
-  /// mux(0/1, x, y) -> x or y
+  // mux(cond, x, x) -> x
+  if (high() == low())
+    return high();
+
+  // The following folds require that the result has a known width. Otherwise
+  // the mux requires an additional padding operation to be inserted, which is
+  // not possible in a fold.
+  if (getType().getBitWidthOrSentinel() < 0)
+    return {};
+
+  // mux(0/1, x, y) -> x or y
   if (auto cond = operands[0].dyn_cast_or_null<IntegerAttr>()) {
     if (cond.getValue().isNullValue() && low().getType() == getType())
       return low();
     if (!cond.getValue().isNullValue() && high().getType() == getType())
       return high();
   }
-
-  // mux(cond, x, x) -> x
-  if (high() == low())
-    return high();
 
   // mux(cond, x, cst)
   if (auto lowCst = operands[2].dyn_cast_or_null<IntegerAttr>()) {
