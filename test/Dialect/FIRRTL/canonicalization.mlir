@@ -1528,4 +1528,41 @@ firrtl.module @issue1118(out %z0: !firrtl.uint, out %z1: !firrtl.sint) {
   firrtl.connect %z1, %1 : !firrtl.sint, !firrtl.sint
 }
 
+// CHECK-LABEL: firrtl.module @issue1139
+firrtl.module @issue1139(out %z: !firrtl.uint<4>) {
+  // CHECK-NEXT: %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
+  // CHECK-NEXT: firrtl.connect %z, %c0_ui4 : !firrtl.uint<4>, !firrtl.uint<4>
+  %c4_ui4 = firrtl.constant 4 : !firrtl.uint<4>
+  %c674_ui = firrtl.constant 674 : !firrtl.uint
+  %0 = firrtl.dshr %c4_ui4, %c674_ui : (!firrtl.uint<4>, !firrtl.uint) -> !firrtl.uint<4>
+  firrtl.connect %z, %0 : !firrtl.uint<4>, !firrtl.uint<4>
+}
+
+// CHECK-LABEL: firrtl.module @issue1142
+firrtl.module @issue1142(in %cond: !firrtl.uint<1>, out %z: !firrtl.uint) {
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  %c42_ui = firrtl.constant 42 : !firrtl.uint
+  %c43_ui = firrtl.constant 43 : !firrtl.uint
+
+  // Don't fold away constant selects if widths are unknown.
+  // CHECK: %0 = firrtl.mux(%c0_ui1, %c42_ui, %c43_ui) : (!firrtl.uint<1>, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
+  // CHECK: %1 = firrtl.mux(%c1_ui1, %c42_ui, %c43_ui) : (!firrtl.uint<1>, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
+  %0 = firrtl.mux(%c0_ui1, %c42_ui, %c43_ui) : (!firrtl.uint<1>, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
+  %1 = firrtl.mux(%c1_ui1, %c42_ui, %c43_ui) : (!firrtl.uint<1>, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
+
+  // Don't fold nested muxes with same condition if widths are unknown.
+  // CHECK: %2 = firrtl.mux(%cond, %c42_ui, %c43_ui) : (!firrtl.uint<1>, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
+  // CHECK: %3 = firrtl.mux(%cond, %2, %c43_ui) : (!firrtl.uint<1>, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
+  // CHECK: %4 = firrtl.mux(%cond, %c42_ui, %2) : (!firrtl.uint<1>, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
+  %2 = firrtl.mux(%cond, %c42_ui, %c43_ui) : (!firrtl.uint<1>, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
+  %3 = firrtl.mux(%cond, %2, %c43_ui) : (!firrtl.uint<1>, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
+  %4 = firrtl.mux(%cond, %c42_ui, %2) : (!firrtl.uint<1>, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
+
+  firrtl.connect %z, %0 : !firrtl.uint, !firrtl.uint
+  firrtl.connect %z, %1 : !firrtl.uint, !firrtl.uint
+  firrtl.connect %z, %3 : !firrtl.uint, !firrtl.uint
+  firrtl.connect %z, %4 : !firrtl.uint, !firrtl.uint
+}
+
 }
