@@ -134,15 +134,14 @@ static cl::opt<std::string>
 static cl::opt<std::string> blackBoxRootPath(
     "blackbox-path",
     cl::desc("Optional path to use as the root of blackbox annotations"),
-    cl::value_desc("path"),
-    cl::init(""));
+    cl::value_desc("path"), cl::init(""));
 
-    /// Process a single buffer of the input.
-    static LogicalResult
-    processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
-                  StringRef annotationFilename, TimingScope &ts,
-                  MLIRContext &context,
-                  std::function<LogicalResult(ModuleOp)> callback) {
+/// Process a single buffer of the input.
+static LogicalResult
+processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
+              StringRef annotationFilename, TimingScope &ts,
+              MLIRContext &context,
+              std::function<LogicalResult(ModuleOp)> callback) {
   // Register our dialects.
   context.loadDialect<firrtl::FIRRTLDialect, hw::HWDialect, comb::CombDialect,
                       sv::SVDialect>();
@@ -221,7 +220,8 @@ static cl::opt<std::string> blackBoxRootPath(
 
   // Read black box source files into the IR.
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxReaderPass(
-      blackBoxRootPath.empty() ? llvm::sys::path::parent_path(inputFilename) : blackBoxRootPath,
+      blackBoxRootPath.empty() ? llvm::sys::path::parent_path(inputFilename)
+                               : blackBoxRootPath,
       {""}));
 
   // Lower if we are going to verilog or if lowering was specifically requested.
