@@ -842,29 +842,26 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
     write = connect;
   }
 
-  // If no write and only reads, then optimize away the wire.
+  Value connected;
   if (!write) {
-    Operation *xOp =
-        rewriter.create<ConstantXOp>(wire.getLoc(), wire.getResult().getType());
-    // Remove all uses of the wire.
-    wire.replaceAllUsesWith(xOp);
-    rewriter.eraseOp(wire);
-    return success();
-  }
-
-  // If the write is happening at the module level then we don't have any
-  // use-before-def checking to do, so we only handle that for now.
-  if (!isa<hw::HWModuleOp>(write->getParentOp()))
+    // If no write and only reads, then replace with XOp.
+    connected = rewriter.create<ConstantXOp>(
+        wire.getLoc(),
+        wire.getResult().getType().cast<InOutType>().getElementType());
+  } else if (!isa<hw::HWModuleOp>(write->getParentOp()))
+    // If the write is happening at the module level then we don't have any
+    // use-before-def checking to do, so we only handle that for now.
     return failure();
-
-  auto connected = write.src();
+  else
+    connected = write.src();
 
   // Ok, we can do this.  Replace all the reads with the connected value.
   for (auto read : make_early_inc_range(reads))
     rewriter.replaceOp(read, connected);
 
   // And remove the write and wire itself.
-  rewriter.eraseOp(write);
+  if (write)
+    rewriter.eraseOp(write);
   rewriter.eraseOp(wire);
   return success();
 }
