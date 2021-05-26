@@ -124,6 +124,18 @@ constFoldFIRRTLBinaryOp(Operation *op, ArrayRef<Attribute> operands,
   if (resultType.getWidthOrSentinel() <= 0)
     return {};
 
+  // Determine the operand widths. This is either dictated by the operand type,
+  // or if that type is an unsized integer, by the actual bits necessary to
+  // represent the constant value.
+  auto lhsWidth =
+      op->getOperand(0).getType().cast<IntType>().getWidthOrSentinel();
+  auto rhsWidth =
+      op->getOperand(1).getType().cast<IntType>().getWidthOrSentinel();
+  if (auto lhs = operands[0].dyn_cast_or_null<IntegerAttr>())
+    lhsWidth = std::max<int32_t>(lhsWidth, lhs.getValue().getBitWidth());
+  if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>())
+    rhsWidth = std::max<int32_t>(rhsWidth, rhs.getValue().getBitWidth());
+
   // Compares extend the operands to the widest of the operand types, not to the
   // result type.
   int32_t operandWidth;
@@ -131,26 +143,14 @@ constFoldFIRRTLBinaryOp(Operation *op, ArrayRef<Attribute> operands,
   case BinOpKind::Normal:
     operandWidth = resultType.getWidthOrSentinel();
     break;
-  case BinOpKind::Compare: {
+  case BinOpKind::Compare:
     // Compares compute with the widest operand, not at the destination type
     // (which is always i1).
-    auto lhsWidth =
-        op->getOperand(0).getType().cast<IntType>().getWidthOrSentinel();
-    auto rhsWidth =
-        op->getOperand(1).getType().cast<IntType>().getWidthOrSentinel();
-    if (auto lhs = operands[0].dyn_cast_or_null<IntegerAttr>())
-      lhsWidth = std::max<int32_t>(lhsWidth, lhs.getValue().getBitWidth());
-    if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>())
-      rhsWidth = std::max<int32_t>(rhsWidth, rhs.getValue().getBitWidth());
     operandWidth = std::max(1, std::max(lhsWidth, rhsWidth));
     break;
-  }
   case BinOpKind::DivideOrShift:
-    operandWidth = std::max(
-        std::max(
-            op->getOperand(0).getType().cast<IntType>().getWidthOrSentinel(),
-            op->getOperand(1).getType().cast<IntType>().getWidthOrSentinel()),
-        resultType.getWidthOrSentinel());
+    operandWidth =
+        std::max(std::max(lhsWidth, rhsWidth), resultType.getWidthOrSentinel());
     break;
   }
 

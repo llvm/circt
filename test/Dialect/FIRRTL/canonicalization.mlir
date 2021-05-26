@@ -1520,4 +1520,14 @@ firrtl.module @issue1118(out %z0: !firrtl.uint, out %z1: !firrtl.sint) {
   firrtl.connect %z1, %1 : !firrtl.sint, !firrtl.sint
 }
 
+// CHECK-LABEL: firrtl.module @issue1139
+firrtl.module @issue1139(out %z: !firrtl.uint<4>) {
+  // CHECK-NEXT: %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
+  // CHECK-NEXT: firrtl.connect %z, %c0_ui4 : !firrtl.uint<4>, !firrtl.uint<4>
+  %c4_ui4 = firrtl.constant 4 : !firrtl.uint<4>
+  %c674_ui = firrtl.constant 674 : !firrtl.uint
+  %0 = firrtl.dshr %c4_ui4, %c674_ui : (!firrtl.uint<4>, !firrtl.uint) -> !firrtl.uint<4>
+  firrtl.connect %z, %0 : !firrtl.uint<4>, !firrtl.uint<4>
+}
+
 }
