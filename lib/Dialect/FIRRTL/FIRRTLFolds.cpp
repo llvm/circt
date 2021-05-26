@@ -826,6 +826,7 @@ LogicalResult BitsPrimOp::canonicalize(BitsPrimOp op,
                                             newLo);
     return success();
   }
+  return failure();
   // Mux narrowing
   // bits(mux(x,a,b)) -> mux(x,bits(a),bits(b))
   if (auto innerMux = dyn_cast_or_null<MuxPrimOp>(inputOp)) {
