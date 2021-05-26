@@ -698,7 +698,7 @@ llvm::Optional<unsigned> BundleType::getElementIndex(StringRef name) {
   for (auto it : llvm::enumerate(getElements())) {
     auto element = it.value();
     if (element.name.getValue() == name) {
-      return {it.index()};
+      return unsigned(it.index());
     }
   }
   return None;
@@ -723,13 +723,12 @@ unsigned BundleType::getFieldID(unsigned index) {
 unsigned BundleType::getIndexForFieldID(unsigned fieldID) {
   assert(getElements().size() && "Bundle must have >0 fields");
   auto fieldIDs = getImpl()->fieldIDs;
-  auto it = std::prev(std::upper_bound(fieldIDs.begin(), fieldIDs.end(), fieldID));
+  auto it =
+      std::prev(std::upper_bound(fieldIDs.begin(), fieldIDs.end(), fieldID));
   return std::distance(fieldIDs.begin(), it);
 }
 
-unsigned BundleType::getMaxFieldID() {
-  return getImpl()->maxFieldID;
-}
+unsigned BundleType::getMaxFieldID() { return getImpl()->maxFieldID; }
 
 //===----------------------------------------------------------------------===//
 // Vector Type
