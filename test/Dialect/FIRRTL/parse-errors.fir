@@ -77,7 +77,7 @@ circuit test :
   module invalid_add :
    input in : SInt<8>
    input c : Clock
-   ; expected-error @+1 {{operation requires two operands and no constants}}
+   ; expected-error @+1 {{operation requires two operands}}
    node n = add(in, in, in)
 
 ;// -----
@@ -160,7 +160,7 @@ circuit Issue418:
     input a: UInt<1>
     output b: UInt<1>
 
-    ; expected-error @+1 {{operation requires one operand and no constants}}
+    ; expected-error @+1 {{operation requires one operand}}
     b <= not(a, a)
 
 ;// -----
@@ -234,4 +234,4 @@ circuit Issue886:
   module Issue886 :
     input a: UInt<1>
     input b: UInt<42>
-    node n = validif(a, b, b)  ; expected-error {{operation requires two operands and no constants}}
+    node n = validif(a, b, b)  ; expected-error {{operation requires two operands}}

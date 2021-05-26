@@ -604,12 +604,21 @@ struct BundleTypeStorage : mlir::TypeStorage {
   BundleTypeStorage(KeyTy elements)
       : elements(elements.begin(), elements.end()) {
     bool isPassive = true, containsAnalog = false;
+    unsigned fieldID = 0;
+    fieldIDs.reserve(elements.size());
     for (auto &element : elements) {
       auto type = element.type;
       auto eltInfo = type.getRecursiveTypeProperties();
       isPassive &= eltInfo.first;
       containsAnalog |= eltInfo.second;
+      fieldID += 1;
+      // If the element is a bundle type, increment the field id by the number
+      // of sub-fields, so that each field gets a unique number.
+      if (auto bundleType = type.dyn_cast<BundleType>())
+        fieldID += bundleType.getMaxFieldID();
+      fieldIDs.push_back(fieldID);
     }
+    maxFieldID = fieldID;
     unsigned flags = 0;
     if (isPassive)
       flags |= IsPassiveBitMask;
@@ -630,6 +639,8 @@ struct BundleTypeStorage : mlir::TypeStorage {
   }
 
   SmallVector<BundleType::BundleElement, 4> elements;
+  SmallVector<unsigned, 4> fieldIDs;
+  unsigned maxFieldID;
 
   /// This holds two bits indicating whether the current type is passive and
   /// if it contains an analog type, and can hold a pointer to a passive type if
@@ -683,18 +694,41 @@ FIRRTLType BundleType::getPassiveType() {
   return passiveType;
 }
 
+llvm::Optional<unsigned> BundleType::getElementIndex(StringRef name) {
+  for (auto it : llvm::enumerate(getElements())) {
+    auto element = it.value();
+    if (element.name.getValue() == name) {
+      return {it.index()};
+    }
+  }
+  return None;
+}
+
 /// Look up an element by name.  This returns a BundleElement with.
 auto BundleType::getElement(StringRef name) -> Optional<BundleElement> {
-  for (const auto &element : getElements()) {
-    if (element.name.getValue() == name)
-      return element;
-  }
+  if (auto maybeIndex = getElementIndex(name))
+    return getElements()[*maybeIndex];
   return None;
 }
 
 FIRRTLType BundleType::getElementType(StringRef name) {
   auto element = getElement(name);
   return element.hasValue() ? element.getValue().type : FIRRTLType();
+}
+
+unsigned BundleType::getFieldID(unsigned index) {
+  return getImpl()->fieldIDs[index];
+}
+
+unsigned BundleType::getIndexForFieldID(unsigned fieldID) {
+  assert(getElements().size() && "Bundle must have >0 fields");
+  auto fieldIDs = getImpl()->fieldIDs;
+  auto it = std::prev(std::upper_bound(fieldIDs.begin(), fieldIDs.end(), fieldID));
+  return std::distance(fieldIDs.begin(), it);
+}
+
+unsigned BundleType::getMaxFieldID() {
+  return getImpl()->maxFieldID;
 }
 
 //===----------------------------------------------------------------------===//

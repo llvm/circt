@@ -67,6 +67,14 @@ static bool hasKnownWidthIntTypesAndNonZeroResult(Operation *op) {
   return true;
 }
 
+/// Return true if this value is 1 bit UInt.
+static bool isUInt1(Type type) {
+  auto t = type.dyn_cast<UIntType>();
+  if (!t || !t.hasWidth() || t.getWidth() != 1)
+    return false;
+  return true;
+}
+
 /// Implicitly replace the operand to a constant folding operation with a const
 /// 0 in case the operand is non-constant but has a bit width 0.
 ///
@@ -715,6 +723,11 @@ OpFoldResult AndRPrimOp::fold(ArrayRef<Attribute> operands) {
   if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
     return getIntAttr(getType(), APInt(1, attr.getValue().isAllOnesValue()));
 
+  // one bit is identity.  Only applies to UInt since we cann't make a cast
+  // here.
+  if (isUInt1(input().getType()))
+    return input();
+
   return {};
 }
 
@@ -725,6 +738,12 @@ OpFoldResult OrRPrimOp::fold(ArrayRef<Attribute> operands) {
   // x != 0
   if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
     return getIntAttr(getType(), APInt(1, !attr.getValue().isNullValue()));
+
+  // one bit is identity.  Only applies to UInt since we cann't make a cast
+  // here.
+  if (isUInt1(input().getType()))
+    return input();
+
   return {};
 }
 
@@ -736,6 +755,11 @@ OpFoldResult XorRPrimOp::fold(ArrayRef<Attribute> operands) {
   if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
     return getIntAttr(getType(),
                       APInt(1, attr.getValue().countPopulation() & 1));
+
+  // one bit is identity.  Only applies to UInt since we can't make a cast here.
+  if (isUInt1(input().getType()))
+    return input();
+
   return {};
 }
 
