@@ -272,8 +272,13 @@ public:
 
   size_t getNumElements() { return getElements().size(); }
 
+  /// Look up an element's index by name.  This returns None on failure.
+  llvm::Optional<unsigned> getElementIndex(StringRef name);
+
   /// Look up an element by name.  This returns None on failure.
   llvm::Optional<BundleElement> getElement(StringRef name);
+
+  /// Look up an element type by name.
   FIRRTLType getElementType(StringRef name);
 
   /// Return a pair with the 'isPassive' and 'containsAnalog' bits.
@@ -281,6 +286,22 @@ public:
 
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLType getPassiveType();
+
+  /// Get an integer ID for the field. Field IDs start at 1, and are assigned
+  /// to each field in a bundle in a recursive pre-order walk of all fields,
+  /// visiting all nested bundle fields.  A field ID of 0 is used to reference
+  /// the bundle itself. The ID can be used to uniquely identify any specific
+  /// field in this bundle.
+  unsigned getFieldID(unsigned index);
+
+  /// Find the element index corresponding to the desired fieldID.  If the
+  /// fieldID corresponds to a field in a nested bundle, it will return the
+  /// index of the parent field.
+  unsigned getIndexForFieldID(unsigned fieldID);
+
+  /// Get the maximum field ID in this bundle.  This is helpful for constructing
+  /// field IDs when this BundleType is nested in another aggregate type.
+  unsigned getMaxFieldID();
 };
 
 //===----------------------------------------------------------------------===//
