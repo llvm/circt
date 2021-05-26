@@ -4,7 +4,7 @@ If you are mainly interested in using CIRCT from Python scripts, you need to com
 
 ```
 # in the LLVM/MLIR build directory
-cmake [...] -DMLIR_BINDINGS_PYTHON_ENABLED=ON
+cmake [...] -DMLIR_ENABLE_BINDINGS_PYTHON=ON
 
 # in the CIRCT build directory
 cmake [...] -DCIRCT_BINDINGS_PYTHON_ENABLED=ON
