@@ -827,37 +827,6 @@ LogicalResult BitsPrimOp::canonicalize(BitsPrimOp op,
     return success();
   }
   return failure();
-  // Mux narrowing
-  // bits(mux(x,a,b)) -> mux(x,bits(a),bits(b))
-  if (auto innerMux = dyn_cast_or_null<MuxPrimOp>(inputOp)) {
-    auto muxTypeWidth = innerMux.getResult()
-                            .getType()
-                            .cast<FIRRTLType>()
-                            .getBitWidthOrSentinel();
-    if (muxTypeWidth > 0 && innerMux->hasOneUse() == 1) {
-      // FIRRTL lets constants to muxes be narrower than the mux, which means we
-      // may need to extend the arguments when we move the bitsPrimOp.
-      auto newHi = innerMux.high();
-      if (newHi.getType().cast<FIRRTLType>().getBitWidthOrSentinel() <
-          muxTypeWidth)
-        newHi = rewriter.createOrFold<PadPrimOp>(innerMux->getLoc(), newHi,
-                                                 muxTypeWidth);
-      newHi = rewriter.createOrFold<BitsPrimOp>(innerMux->getLoc(), newHi,
-                                                op.hi(), op.lo());
-      auto newLow = innerMux.low();
-      if (newLow.getType().cast<FIRRTLType>().getBitWidthOrSentinel() <
-          muxTypeWidth)
-        newLow = rewriter.createOrFold<PadPrimOp>(innerMux->getLoc(), newLow,
-                                                  muxTypeWidth);
-      newLow = rewriter.createOrFold<BitsPrimOp>(innerMux->getLoc(), newLow,
-                                                 op.hi(), op.lo());
-      // Finally replace the op
-      rewriter.replaceOpWithNewOp<MuxPrimOp>(op, op.getType(), innerMux.sel(),
-                                             newHi, newLow);
-      return success();
-    }
-  }
-  return failure();
 }
 
 /// Replace the specified operation with a 'bits' op from the specified hi/lo
