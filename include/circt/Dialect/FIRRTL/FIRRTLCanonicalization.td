@@ -71,4 +71,20 @@ def EmptyNode : Pat<
   (replaceWithValue $x),
   [(EmptyAttrDict $annotations)]>;
 
+// regreset(clock, invalidvalue, resetValue, name, {}) -> reg(clock, name, {})
+def RegresetWithInvalidReset : Pat<
+  (RegResetOp $clock, (InvalidValueOp), $resetValue, $name, $annotations),
+  (RegOp $clock, $name, $annotations),
+  []>;
+
+// Constraint that has a constant zero value.
+def ZeroValueAttr : Constraint<CPred<"$0.getAPSInt().getExtValue() == 0">>;
+
+// regreset(clock, constant_zero, resetValue, name, {}) -> reg(clock, name, {})
+def RegresetWithZeroReset : Pat<
+  (RegResetOp $clock, (AsAsyncResetPrimOp (ConstantOp $value)), $resetValue,
+   $name, $annotations),
+  (RegOp $clock, $name, $annotations),
+  [(ZeroValueAttr $value)]>;
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD

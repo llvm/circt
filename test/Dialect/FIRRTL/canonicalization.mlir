@@ -1462,6 +1462,23 @@ firrtl.module @EmptyNode(in %d1: !firrtl.uint<5>, out %foo: !firrtl.uint<5>, out
 // CHECK-NEXT: firrtl.connect %foo, %d1
 // CHECK-NEXT: firrtl.connect %foo2, %bar2
 
+// CHECK-LABEL: firrtl.module @RegresetToReg
+firrtl.module @RegresetToReg(in %clock: !firrtl.clock, out %foo1: !firrtl.uint<1>, out %foo2: !firrtl.uint<1>) {
+  %c0_ui95 = firrtl.constant 7 : !firrtl.uint<95>
+
+  %c1_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %zero_asyncreset = firrtl.asAsyncReset %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
+  // CHECK: %bar1 = firrtl.reg %clock : (!firrtl.clock) -> !firrtl.uint<1>
+  %bar1 = firrtl.regreset %clock, %zero_asyncreset, %c0_ui95  : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<95>) -> !firrtl.uint<1>
+
+  %invalid_asyncreset = firrtl.invalidvalue : !firrtl.asyncreset
+  // CHECK: %bar2 = firrtl.reg %clock : (!firrtl.clock) -> !firrtl.uint<1>
+  %bar2 = firrtl.regreset %clock, %invalid_asyncreset, %c0_ui95  : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<95>) -> !firrtl.uint<1>
+  
+  firrtl.connect %foo1, %bar1 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.connect %foo2, %bar2 : !firrtl.uint<1>, !firrtl.uint<1>
+}
+
 // COM: https://github.com/llvm/circt/issues/929
 // CHECK-LABEL: firrtl.module @MuxInvalidTypeOpt
 firrtl.module @MuxInvalidTypeOpt(in %in : !firrtl.uint<1>, out %out : !firrtl.uint<4>) {
