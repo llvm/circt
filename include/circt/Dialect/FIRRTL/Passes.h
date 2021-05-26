@@ -43,6 +43,8 @@ std::unique_ptr<mlir::Pass>
 createBlackBoxReaderPass(llvm::Optional<StringRef> inputPrefix = {},
                          llvm::Optional<StringRef> resourcePrefix = {});
 
+std::unique_ptr<mlir::Pass> createGrandCentralPass();
+
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/FIRRTL/Passes.h.inc"

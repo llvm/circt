@@ -107,6 +107,10 @@ static cl::opt<bool>
 static cl::opt<bool> extractTestCode("extract-test-code",
                                      cl::desc("run the extract test code pass"),
                                      cl::init(false));
+static cl::opt<bool> grandCentral(
+    "firrtl-grand-central",
+    cl::desc("create interfaces from SiFive Grand Central Annotations"),
+    cl::init(false));
 
 enum OutputFormatKind {
   OutputMLIR,
@@ -230,6 +234,9 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
       blackBoxRoot, blackBoxRootResourcePath.empty()
                         ? blackBoxRoot
                         : blackBoxRootResourcePath));
+
+  if (grandCentral)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createGrandCentralPass());
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (lowerToHW || outputFormat == OutputVerilog ||

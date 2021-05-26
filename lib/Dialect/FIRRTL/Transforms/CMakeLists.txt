@@ -3,6 +3,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   BlackBoxReader.cpp
   CheckWidths.cpp
   ExpandWhens.cpp
+  GrandCentral.cpp
   IMConstProp.cpp
   InferWidths.cpp
   LowerTypes.cpp
@@ -14,6 +15,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
 
   LINK_LIBS PUBLIC
   CIRCTFIRRTL
+  CIRCTHW
   CIRCTSV
   CIRCTSupport
   MLIRIR
