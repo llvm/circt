@@ -840,16 +840,8 @@ static IntegerAttr getIntAttr(const APInt &value, MLIRContext *context) {
       value);
 }
 
-// Gracefully die on subaccess operations
 void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   Value inputVector = op.input();
-  bool isOutput = inputVector.getType().cast<FIRRTLType>().isa<FlipType>();
-  if (auto blockArg = inputVector.dyn_cast<BlockArgument>()) {
-    auto modOp = inputVector.getParentBlock()->getParentOp();
-    auto direction = (Direction)getModulePortDirections(modOp)
-                         .getValue()[blockArg.getArgNumber()];
-    isOutput = direction == Direction::Output;
-  }
   FIRRTLType vectorElementType = inputVector.getType()
                                      .cast<FIRRTLType>()
                                      .cast<FVectorType>()
@@ -878,6 +870,13 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
     allDims.push_back(multiDimOp);
     indicesRange.push_back(0);
     inputVector = multiDimOp.input();
+  }
+  bool isOutput = inputVector.getType().cast<FIRRTLType>().isa<FlipType>();
+  if (auto blockArg = inputVector.dyn_cast<BlockArgument>()) {
+    auto modOp = inputVector.getParentBlock()->getParentOp();
+    auto direction = (Direction)getModulePortDirections(modOp)
+                         .getValue()[blockArg.getArgNumber()];
+    isOutput = direction == Direction::Output;
   }
   SmallVector<std::pair<Value, bool>, 8> loweredVector;
   // Flatten the vector and bundle type recursively and populate the
