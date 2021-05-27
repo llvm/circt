@@ -856,7 +856,7 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
     return failure();
 
   // Ok, we can do this.  Replace all the reads with the connected value.
-  for (auto read : make_early_inc_range(reads))
+  for (auto read : reads)
     rewriter.replaceOp(read, connected);
 
   // And remove the write and wire itself.
