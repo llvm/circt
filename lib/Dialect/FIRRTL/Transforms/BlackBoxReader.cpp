@@ -245,8 +245,7 @@ void BlackBoxReaderPass::runOnAnnotation(Operation *op, DictionaryAttr anno,
       signalPassFailure();
       return;
     }
-    SmallString<128> inputPath(inputPrefix);
-    appendPossiblyAbsolutePath(inputPath, resourcePrefix);
+    SmallString<128> inputPath(resourcePrefix);
     // Note that we always treat `resourceId` as a relative path, as the
     // previous Scala implementation tended to emit `/foo.v` as resourceId.
     llvm::sys::path::append(inputPath, resourceId.getValue());

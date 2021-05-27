@@ -1,5 +1,5 @@
 // RUN: rm -rf %t
-// RUN: firtool %s --format=mlir --split-verilog -o=%t
+// RUN: firtool %s --format=mlir --split-verilog -o=%t --blackbox-resource-path=%S/..
 // RUN: FileCheck %s --check-prefix=VERILOG-TOP < %t/test_mod.sv
 // RUN: FileCheck %s --check-prefix=VERILOG-FOO < %t/magic/blackbox-inline.v
 // RUN: FileCheck %s --check-prefix=VERILOG-HDR < %t/magic/blackbox-inline.svh
@@ -52,7 +52,7 @@ firrtl.circuit "test_mod" attributes {annotations = [
   // VERILOG-BAR-LABEL: module ExtResource(); endmodule
   firrtl.extmodule @ExtResource() attributes {annotations = [{
     class = "firrtl.transforms.BlackBoxResourceAnno",
-    resourceId = "blackbox-resource.v"
+    resourceId = "firtool/blackbox-resource.v"
   }]}
 
   // VERILOG-GIB-LABEL: module ExtPath(); endmodule

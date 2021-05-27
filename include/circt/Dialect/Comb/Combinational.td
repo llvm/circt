@@ -193,6 +193,7 @@ def ExtractOp : CombOp<"extract", [NoSideEffect]> {
 
   let hasFolder = true;
   let verifier = "return ::verifyExtractOp(*this);";
+  let hasCanonicalizeMethod = true;
 }
 
 def SExtOp : CombOp<"sext", [NoSideEffect]> {
