@@ -2329,7 +2329,7 @@ LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
 
 LogicalResult StmtEmitter::visitSV(InterfaceSignalOp op) {
   indent();
-  printPackedType(op.type(), os, op, false);
+  printPackedType(stripUnpackedTypes(op.type()), os, op, false);
   os << ' ' << op.sym_name();
   printUnpackedTypePostfix(op.type(), os);
   os << ";\n";
