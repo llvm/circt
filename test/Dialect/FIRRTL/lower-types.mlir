@@ -973,3 +973,99 @@ module  {
     // CHECK-NOT: firrtl.world
   }
 }
+
+// -----
+// Test lowering of SubAccessOp
+module  {
+firrtl.circuit "write1D"  {
+  firrtl.module @write1D(in %b: !firrtl.uint<1>, in %sel: !firrtl.uint<2>, in %default: !firrtl.vector<uint<1>, 4>, out %a: !firrtl.vector<uint<1>, 4>) {
+    firrtl.connect %a, %default : !firrtl.vector<uint<1>, 4>, !firrtl.vector<uint<1>, 4>
+    %0 = firrtl.subaccess %a[%sel] : !firrtl.vector<uint<1>, 4>, !firrtl.uint<2>
+    firrtl.connect %0, %b : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+// CHECK: firrtl.module @write1D(in %b: !firrtl.uint<1>, in %sel: !firrtl.uint<2>, in %default_0: !firrtl.uint<1>, in %default_1: !firrtl.uint<1>, in %default_2: !firrtl.uint<1>, in %default_3: !firrtl.uint<1>, out %a_0: !firrtl.uint<1>, out %a_1: !firrtl.uint<1>, out %a_2: !firrtl.uint<1>, out %a_3: !firrtl.uint<1>) {
+// CHECK:   firrtl.connect %a_0, %default_0 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:   firrtl.connect %a_1, %default_1 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:   firrtl.connect %a_2, %default_2 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:   firrtl.connect %a_3, %default_3 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:   %0 = firrtl.wire  : !firrtl.uint<1>
+// CHECK:   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+// CHECK:   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
+// CHECK:   %1 = firrtl.eq %sel, %c1_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK:   %2 = firrtl.and %c1_ui1, %1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   %3 = firrtl.mux(%2, %0, %a_1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   firrtl.connect %a_1, %3 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:   %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
+// CHECK:   %4 = firrtl.eq %sel, %c2_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK:   %5 = firrtl.and %c1_ui1, %4 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   %6 = firrtl.mux(%5, %0, %a_2) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   firrtl.connect %a_2, %6 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:   %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
+// CHECK:   %7 = firrtl.eq %sel, %c3_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK:   %8 = firrtl.and %c1_ui1, %7 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   %9 = firrtl.mux(%8, %0, %a_3) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   firrtl.connect %a_3, %9 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:   firrtl.connect %0, %b : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK: }
+
+
+// circuit read1D:
+//   module read1D:
+//     input a: UInt<2>[4]
+//     input sel: UInt<2>
+//     input default: UInt<2>[4]
+//     output b: UInt<2>
+// 
+//     wire z : UInt<2>[4]
+//     z <= default 
+//     b <= sub(a[sel],z[sel])
+firrtl.circuit "read1D"  {
+  firrtl.module @read1D(in %a: !firrtl.vector<uint<2>, 4>, in %sel: !firrtl.uint<2>, in %default: !firrtl.vector<uint<2>, 4>, out %b: !firrtl.uint<2>) {
+    %z = firrtl.wire  : !firrtl.vector<uint<2>, 4>
+    firrtl.connect %z, %default : !firrtl.vector<uint<2>, 4>, !firrtl.vector<uint<2>, 4>
+    %0 = firrtl.subaccess %a[%sel] : !firrtl.vector<uint<2>, 4>, !firrtl.uint<2>
+    %1 = firrtl.subaccess %z[%sel] : !firrtl.vector<uint<2>, 4>, !firrtl.uint<2>
+    %2 = firrtl.sub %0, %1 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<3>
+    firrtl.partialconnect %b, %2 : !firrtl.uint<2>, !firrtl.uint<3>
+  }
+}
+// CHECK: firrtl.module @read1D(in %a_0: !firrtl.uint<2>, in %a_1: !firrtl.uint<2>, in %a_2: !firrtl.uint<2>, in %a_3: !firrtl.uint<2>, in %sel: !firrtl.uint<2>, in %default_0: !firrtl.uint<2>, in %default_1: !firrtl.uint<2>, in %default_2: !firrtl.uint<2>, in %default_3: !firrtl.uint<2>, out %b: !firrtl.uint<2>) {
+// CHECK:   %z_0 = firrtl.wire  : !firrtl.uint<2>
+// CHECK:   %z_1 = firrtl.wire  : !firrtl.uint<2>
+// CHECK:   %z_2 = firrtl.wire  : !firrtl.uint<2>
+// CHECK:   %z_3 = firrtl.wire  : !firrtl.uint<2>
+// CHECK:   firrtl.connect %z_0, %default_0 : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK:   firrtl.connect %z_1, %default_1 : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK:   firrtl.connect %z_2, %default_2 : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK:   firrtl.connect %z_3, %default_3 : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK:   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+// CHECK:   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
+// CHECK:   %0 = firrtl.eq %sel, %c1_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK:   %1 = firrtl.and %c1_ui1, %0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   %2 = firrtl.mux(%1, %a_1, %a_0) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+// CHECK:   %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
+// CHECK:   %3 = firrtl.eq %sel, %c2_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK:   %4 = firrtl.and %c1_ui1, %3 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   %5 = firrtl.mux(%4, %a_2, %2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+// CHECK:   %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
+// CHECK:   %6 = firrtl.eq %sel, %c3_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK:   %7 = firrtl.and %c1_ui1, %6 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   %8 = firrtl.mux(%7, %a_3, %5) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+// CHECK:   %c1_ui1_0 = firrtl.constant 1 : !firrtl.uint<1>
+// CHECK:   %c1_ui2_1 = firrtl.constant 1 : !firrtl.uint<2>
+// CHECK:   %9 = firrtl.eq %sel, %c1_ui2_1 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK:   %10 = firrtl.and %c1_ui1_0, %9 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   %11 = firrtl.mux(%10, %z_1, %z_0) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+// CHECK:   %c2_ui2_2 = firrtl.constant 2 : !firrtl.uint<2>
+// CHECK:   %12 = firrtl.eq %sel, %c2_ui2_2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK:   %13 = firrtl.and %c1_ui1_0, %12 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   %14 = firrtl.mux(%13, %z_2, %11) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+// CHECK:   %c3_ui2_3 = firrtl.constant 3 : !firrtl.uint<2>
+// CHECK:   %15 = firrtl.eq %sel, %c3_ui2_3 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK:   %16 = firrtl.and %c1_ui1_0, %15 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   %17 = firrtl.mux(%16, %z_3, %14) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+// CHECK:   %18 = firrtl.sub %8, %17 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<3>
+// CHECK:   firrtl.partialconnect %b, %18 : !firrtl.uint<2>, !firrtl.uint<3>
+// CHECK: }
+}
