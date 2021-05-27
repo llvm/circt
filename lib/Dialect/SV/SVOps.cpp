@@ -817,23 +817,52 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 // If this wire is only written to, delete the wire and all writers.
-LogicalResult WireOp::canonicalize(WireOp op, PatternRewriter &rewriter) {
-  // If the wire is named, then we can't delete it.
-  if (!op.name().empty())
+LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
+  // If the wire has a symbol, then we can't delete it.
+  if (wire.sym_nameAttr())
     return failure();
 
-  // Check that all operations on the wire are sv.connects. All other wire
-  // operations will have been handled by other canonicalization.
-  for (auto &use : op.getResult().getUses())
-    if (!isa<ConnectOp>(use.getOwner()))
+  // Wires have inout type, so they'll have connects and read_inout operations
+  // that work on them.  If anything unexpected is found then leave it alone.
+  SmallVector<sv::ReadInOutOp> reads;
+  sv::ConnectOp write;
+
+  for (auto *user : wire->getUsers()) {
+    if (auto read = dyn_cast<sv::ReadInOutOp>(user)) {
+      reads.push_back(read);
+      continue;
+    }
+
+    // Otherwise must be a connect, and we must not have seen a write yet.
+    auto connect = dyn_cast<sv::ConnectOp>(user);
+    // Either the wire has more than one write or another kind of Op (other than
+    // ConectOp and ReadInOutOp), then can't optimize.
+    if (!connect || write)
       return failure();
+    write = connect;
+  }
 
-  // Remove all uses of the wire.
-  for (auto &use : make_early_inc_range(op.getResult().getUses()))
-    rewriter.eraseOp(use.getOwner());
+  Value connected;
+  if (!write) {
+    // If no write and only reads, then replace with XOp.
+    connected = rewriter.create<ConstantXOp>(
+        wire.getLoc(),
+        wire.getResult().getType().cast<InOutType>().getElementType());
+  } else if (isa<hw::HWModuleOp>(write->getParentOp()))
+    connected = write.src();
+  else
+    // If the write is happening at the module level then we don't have any
+    // use-before-def checking to do, so we only handle that for now.
+    return failure();
 
-  // Remove the wire.
-  rewriter.eraseOp(op);
+  // Ok, we can do this.  Replace all the reads with the connected value.
+  for (auto read : reads)
+    rewriter.replaceOp(read, connected);
+
+  // And remove the write and wire itself.
+  if (write)
+    rewriter.eraseOp(write);
+  rewriter.eraseOp(wire);
   return success();
 }
 
