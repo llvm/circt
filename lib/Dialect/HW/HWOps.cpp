@@ -852,8 +852,7 @@ static ParseResult parseArrayCreateOp(OpAsmParser &parser,
 
   if (parser.parseOperandList(operands) ||
       parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
-      parser.parseLParen() || parser.parseType(elemType) ||
-      parser.parseRParen())
+      parser.parseType(elemType))
     return failure();
 
   if (operands.size() == 0)
@@ -870,7 +869,7 @@ static ParseResult parseArrayCreateOp(OpAsmParser &parser,
 static void print(OpAsmPrinter &p, ArrayCreateOp op) {
   p << "hw.array_create ";
   p.printOperands(op.inputs());
-  p << " : (" << op.inputs()[0].getType() << ")";
+  p << " : " << op.inputs()[0].getType();
 }
 
 void ArrayCreateOp::build(OpBuilder &b, OperationState &state,
