@@ -32,8 +32,8 @@ def CompareOp(predicate):
     class _Class(cls):
 
       @staticmethod
-      def create(*args, **kwargs):
-        return ICmpOpBuilder(predicate, *args, **kwargs)
+      def create(result_type, **kwargs):
+        return ICmpOpBuilder(predicate, result_type, kwargs)
 
     return _Class
 

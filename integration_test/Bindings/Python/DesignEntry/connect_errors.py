@@ -26,7 +26,7 @@ class Test:
   def construct(self, mod):
     const = hw.ConstantOp.create(types.i32, 0)
     dummy = Dummy()
-    inst = dummy.module.create("d", {"x": const.result})
+    inst = dummy.module.create("d", x=const.result)
     try:
       # CHECK: cannot connect from source of type
       connect(inst.y, None)

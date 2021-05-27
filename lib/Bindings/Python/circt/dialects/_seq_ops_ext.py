@@ -56,5 +56,15 @@ class CompRegOp:
     )
 
   @classmethod
-  def create(cls, *args, **kwargs):
-    return CompRegBuilder(cls, *args, **kwargs)
+  def create(cls,
+             result_type,
+             reset=None,
+             reset_value=None,
+             name=None,
+             **kwargs):
+    return CompRegBuilder(cls,
+                          result_type,
+                          kwargs,
+                          reset=reset,
+                          reset_value=reset_value,
+                          name=name)

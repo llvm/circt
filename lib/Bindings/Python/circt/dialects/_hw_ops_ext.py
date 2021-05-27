@@ -139,13 +139,13 @@ class ModuleLike:
 
   def create(self,
              name: str,
-             input_port_mapping: Dict[str, Value] = {},
              parameters: Dict[str, object] = {},
              loc=None,
-             ip=None):
+             ip=None,
+             **kwargs):
     return InstanceBuilder(self,
                            name,
-                           input_port_mapping,
+                           kwargs,
                            parameters=parameters,
                            loc=loc,
                            ip=ip)
