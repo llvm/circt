@@ -979,8 +979,11 @@ hw::InstanceOp BindOp::getReferencedInstance() {
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
 static LogicalResult verifyBindOp(BindOp op) {
-  if (!op.getReferencedInstance())
+  auto inst = op.getReferencedInstance();
+  if (!inst)
     return op.emitError("Referenced instance doesn't exist");
+  if (!inst->getAttr("doNotPrint"))
+    return op.emitError("Referenced instance isn't marked as doNotPrint");
   return success();
 }
 
