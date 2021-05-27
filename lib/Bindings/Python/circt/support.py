@@ -132,8 +132,45 @@ class NamedValueOpView:
   """Helper class to incrementally construct an instance of an operation that
      names its operands and results"""
 
-  def __init__(self, opview, operand_indices, result_indices, backedges):
-    self.opview = opview
+  def __init__(self,
+               cls,
+               data_type,
+               input_port_mapping={},
+               pre_args=[],
+               post_args=[],
+               **kwargs):
+    # Set result_indices to name each result.
+    result_names = self.result_names()
+    result_indices = {}
+    for i in range(len(result_names)):
+      result_indices[result_names[i]] = i
+
+    # Set operand_indices to name each operand. Give them an initial value,
+    # either from input_port_mapping or a default value.
+    backedges = {}
+    operand_indices = {}
+    operand_values = []
+    operand_names = self.operand_names()
+    for i in range(len(operand_names)):
+      arg_name = operand_names[i]
+      operand_indices[arg_name] = i
+      if arg_name in input_port_mapping:
+        value = input_port_mapping[arg_name]
+        if not isinstance(value, ir.Value):
+          value = input_port_mapping[arg_name].value
+        operand = value
+      else:
+        backedge = self.create_default_value(i, data_type, arg_name)
+        backedges[i] = backedge
+        operand = backedge.result
+      operand_values.append(operand)
+
+    # Some ops take a list of operand values rather than splatting them out.
+    if isinstance(data_type, list):
+      operand_values = [operand_values]
+
+    self.opview = cls(data_type, *pre_args, *operand_values, *post_args,
+                      **kwargs)
     self.operand_indices = operand_indices
     self.result_indices = result_indices
     self.backedges = backedges
@@ -153,6 +190,9 @@ class NamedValueOpView:
 
     # If we fell through to here, the name isn't a result.
     raise AttributeError(f"unknown port name {name}")
+
+  def create_default_value(self, index, data_type, arg_name):
+    return BackedgeBuilder.create(data_type, arg_name, self)
 
   @property
   def operation(self):
