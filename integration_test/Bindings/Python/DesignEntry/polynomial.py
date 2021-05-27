@@ -32,8 +32,7 @@ class PolynomialCompute:
     taps: list[mlir.ir.Value] = list()
     runningPower: list[mlir.ir.Value] = list()
     for power, coeff in enumerate(self.__coefficients):
-      coeffVal = hw.ConstantOp(types.i32,
-                               mlir.ir.IntegerAttr.get(types.i32, coeff))
+      coeffVal = hw.ConstantOp.create(types.i32, coeff)
       if power == 0:
         newPartialSum = coeffVal.result
       else:
@@ -60,8 +59,7 @@ class PolynomialCompute:
 
 def build(top):
   i32 = mlir.ir.Type.parse("i32")
-  c23 = mlir.ir.IntegerAttr.get(i32, 23)
-  x = hw.ConstantOp(i32, c23)
+  x = hw.ConstantOp.create(i32, 23)
   poly = PolynomialCompute([62, 42, 6], x=x)
   hw.OutputOp([poly.y])
 
