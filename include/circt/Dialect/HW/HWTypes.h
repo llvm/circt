@@ -43,7 +43,7 @@ public:
       return base;
 
     return this->template cast<TypeAliasType>()
-        .getCanonicalType()
+        .getInnerType()
         .template dyn_cast<BaseTy>();
   }
 };
