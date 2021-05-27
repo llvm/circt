@@ -142,3 +142,6 @@ hw.module @Cover(%arg0: i1) {
   sv.cover %arg0: i1
 }
 
+// -----
+// expected-error @+1 {{Referenced instance doesn't exist}}
+sv.bind @A

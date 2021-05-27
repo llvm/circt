@@ -195,7 +195,7 @@ def StructExplodeOp : HWOp<"struct_explode", [NoSideEffect]> {
   let results = (outs Variadic<HWNonInOutType>:$result);
    let parser = "return ::parse$cppClass(parser, result);";
    let printer = "return ::print(p, *this);";
-}
+ }
 
 //===----------------------------------------------------------------------===//
 // Union operations

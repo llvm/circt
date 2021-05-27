@@ -491,15 +491,15 @@ def CoverOp : SVOp<"cover", [ProceduralOp]> {
 def BindOp : SVOp<"bind", []> {
   let summary = "indirect instantiation statement";
   let description = [{
-    Indirectly instantiate a module in the context of another module.
-      This operation pairs with rtl.instance which tracks all information except
-      the emission point for the bind.  This requires that the parent module of
-      the bind exist in the IR.
-    See 23.11 of SV 2017 spec.
+    Indirectly instantiate a module in the context of another module. This
+    operation pairs with rtl.instance which tracks all information except the
+    emission point for the bind.  This requires that the parent module of the
+    bind exist in the IR. See 23.11 of SV 2017 spec.
   }];
 
   let arguments = (ins FlatSymbolRefAttr:$bind);
   let results = (outs);
+  let verifier = "return ::verify$cppClass(*this);";
 
   let assemblyFormat = [{ $bind attr-dict }];
 

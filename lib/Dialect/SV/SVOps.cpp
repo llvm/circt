@@ -47,7 +47,8 @@ LogicalResult sv::verifyInNonProceduralRegion(Operation *op) {
 /// Returns the operation registered with the given symbol name with the regions
 /// of 'symbolTableOp'. recurse through nested regions which don't contain the
 /// symboltable trait. Returns nullptr if no valid symbol was found.
-static Operation* lookupSymbolInNested(Operation* symbolTableOp, StringRef symbol) {
+static Operation *lookupSymbolInNested(Operation *symbolTableOp,
+                                       StringRef symbol) {
   Region &region = symbolTableOp->getRegion(0);
   if (region.empty())
     return nullptr;
@@ -60,11 +61,12 @@ static Operation* lookupSymbolInNested(Operation* symbolTableOp, StringRef symbo
       auto nameAttr = nestedOp.getAttrOfType<StringAttr>(symbolNameId);
       if (nameAttr && nameAttr.getValue() == symbol)
         return &nestedOp;
-  if (!nestedOp.hasTrait<OpTrait::SymbolTable>() && nestedOp.getNumRegions()) {
-    if (auto* nop = lookupSymbolInNested(&nestedOp, symbol))
-    return nop;
-  }
-  }
+      if (!nestedOp.hasTrait<OpTrait::SymbolTable>() &&
+          nestedOp.getNumRegions()) {
+        if (auto *nop = lookupSymbolInNested(&nestedOp, symbol))
+          return nop;
+      }
+    }
   return nullptr;
 }
 
@@ -973,6 +975,13 @@ hw::InstanceOp BindOp::getReferencedInstance() {
   /// invalid IR.
   auto inst = lookupSymbolInNested(topLevelModuleOp, bind());
   return dyn_cast_or_null<hw::InstanceOp>(inst);
+}
+
+/// Ensure that the symbol being instantiated exists and is an InterfaceOp.
+static LogicalResult verifyBindOp(BindOp op) {
+  if (!op.getReferencedInstance())
+    return op.emitError("Referenced instance doesn't exist");
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
