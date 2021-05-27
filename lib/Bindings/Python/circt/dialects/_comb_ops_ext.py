@@ -14,6 +14,17 @@ class UnaryOpBuilder(NamedValueOpView):
     return ["result"]
 
 
+def UnaryOp(base):
+
+  class _Class(base):
+
+    @classmethod
+    def create(cls, *args, **kwargs):
+      return UnaryOpBuilder(cls, *args, **kwargs)
+
+  return _Class
+
+
 class ExtractOpBuilder(UnaryOpBuilder):
 
   def __init__(self, low_bit, data_type, input_port_mapping={}, **kwargs):
@@ -31,6 +42,17 @@ class BinaryOpBuilder(NamedValueOpView):
     return ["result"]
 
 
+def BinaryOp(base):
+
+  class _Class(base):
+
+    @classmethod
+    def create(cls, *args, **kwargs):
+      return BinaryOpBuilder(cls, *args, **kwargs)
+
+  return _Class
+
+
 # Sugar classes for the various non-variadic unary ops.
 class ExtractOp:
 
@@ -39,72 +61,52 @@ class ExtractOp:
     return ExtractOpBuilder(low_bit, *args, **kwargs)
 
 
+@UnaryOp
 class ParityOp:
-
-  @classmethod
-  def create(cls, *args, **kwargs):
-    return UnaryOpBuilder(cls, *args, **kwargs)
+  pass
 
 
+@UnaryOp
 class SExtOp:
-
-  @classmethod
-  def create(cls, *args, **kwargs):
-    return UnaryOpBuilder(cls, *args, **kwargs)
+  pass
 
 
 # Sugar classes for the various non-variadic binary ops.
+@BinaryOp
 class DivSOp:
-
-  @classmethod
-  def create(cls, *args, **kwargs):
-    return BinaryOpBuilder(cls, *args, **kwargs)
+  pass
 
 
+@BinaryOp
 class DivUOp:
-
-  @classmethod
-  def create(cls, *args, **kwargs):
-    return BinaryOpBuilder(cls, *args, **kwargs)
+  pass
 
 
+@BinaryOp
 class ModSOp:
-
-  @classmethod
-  def create(cls, *args, **kwargs):
-    return BinaryOpBuilder(cls, *args, **kwargs)
+  pass
 
 
+@BinaryOp
 class ModUOp:
-
-  @classmethod
-  def create(cls, *args, **kwargs):
-    return BinaryOpBuilder(cls, *args, **kwargs)
+  pass
 
 
+@BinaryOp
 class ShlOp:
-
-  @classmethod
-  def create(cls, *args, **kwargs):
-    return BinaryOpBuilder(cls, *args, **kwargs)
+  pass
 
 
+@BinaryOp
 class ShrSOp:
-
-  @classmethod
-  def create(cls, *args, **kwargs):
-    return BinaryOpBuilder(cls, *args, **kwargs)
+  pass
 
 
+@BinaryOp
 class ShrUOp:
-
-  @classmethod
-  def create(cls, *args, **kwargs):
-    return BinaryOpBuilder(cls, *args, **kwargs)
+  pass
 
 
+@BinaryOp
 class SubOp:
-
-  @classmethod
-  def create(cls, *args, **kwargs):
-    return BinaryOpBuilder(cls, *args, **kwargs)
+  pass

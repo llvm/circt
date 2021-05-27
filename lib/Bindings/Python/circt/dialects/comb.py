@@ -25,78 +25,66 @@ class ICmpOpBuilder(NamedValueOpView):
                      **kwargs)
 
 
+def CompareOp(predicate):
+
+  def decorated(cls):
+
+    class _Class(cls):
+
+      @staticmethod
+      def create(*args, **kwargs):
+        return ICmpOpBuilder(predicate, *args, **kwargs)
+
+    return _Class
+
+  return decorated
+
+
+@CompareOp(0)
 class EqOp:
-
-  @staticmethod
-  def create(*args, **kwargs):
-    return ICmpOpBuilder(0, *args, **kwargs)
+  pass
 
 
-class EqOp:
-
-  @staticmethod
-  def create(*args, **kwargs):
-    return ICmpOpBuilder(0, *args, **kwargs)
-
-
+@CompareOp(1)
 class NeOp:
-
-  @staticmethod
-  def create(*args, **kwargs):
-    return ICmpOpBuilder(1, *args, **kwargs)
+  pass
 
 
+@CompareOp(2)
 class LtSOp:
-
-  @staticmethod
-  def create(*args, **kwargs):
-    return ICmpOpBuilder(2, *args, **kwargs)
+  pass
 
 
+@CompareOp(3)
 class LeSOp:
-
-  @staticmethod
-  def create(*args, **kwargs):
-    return ICmpOpBuilder(3, *args, **kwargs)
+  pass
 
 
+@CompareOp(4)
 class GtSOp:
-
-  @staticmethod
-  def create(*args, **kwargs):
-    return ICmpOpBuilder(4, *args, **kwargs)
+  pass
 
 
+@CompareOp(5)
 class GeSOp:
-
-  @staticmethod
-  def create(*args, **kwargs):
-    return ICmpOpBuilder(5, *args, **kwargs)
+  pass
 
 
+@CompareOp(6)
 class LtUOp:
-
-  @staticmethod
-  def create(*args, **kwargs):
-    return ICmpOpBuilder(6, *args, **kwargs)
+  pass
 
 
+@CompareOp(7)
 class LeUOp:
-
-  @staticmethod
-  def create(*args, **kwargs):
-    return ICmpOpBuilder(7, *args, **kwargs)
+  pass
 
 
+@CompareOp(8)
 class GtUOp:
-
-  @staticmethod
-  def create(*args, **kwargs):
-    return ICmpOpBuilder(8, *args, **kwargs)
+  pass
 
 
+@CompareOp(9)
 class GeUOp:
-
-  @staticmethod
-  def create(*args, **kwargs):
-    return ICmpOpBuilder(9, *args, **kwargs)
+  pass
