@@ -23,7 +23,7 @@ def ArrayCreateOp : HWOp<"array_create", [NoSideEffect, SameTypeOperands]> {
 
     ```
     // %a, %b, %c are all i4
-    %array = hw.array_create %a, %b, %c : (i4)
+    %array = hw.array_create %a, %b, %c : i4
     ```
 
     See the HW-SV rationale document for details on operand ordering.

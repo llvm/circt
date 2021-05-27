@@ -74,7 +74,7 @@ with Context() as ctx, Location.unknown():
         name="one_output",
         output_ports=[("a", i32)],
         body_builder=lambda m: hw.OutputOp(
-            [hw.ConstantOp(i32, IntegerAttr.get(i32, 46)).result]),
+            [hw.ConstantOp.create(i32, 46).result]),
     )
     two_outputs = hw.HWModuleOp(
         name="two_outputs",

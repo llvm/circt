@@ -136,6 +136,12 @@ static cl::opt<std::string> blackBoxRootPath(
     cl::desc("Optional path to use as the root of blackbox annotations"),
     cl::value_desc("path"), cl::init(""));
 
+static cl::opt<std::string> blackBoxRootResourcePath(
+    "blackbox-resource-path",
+    cl::desc(
+        "Optional path to use as the root of blackbox resource annotations"),
+    cl::value_desc("path"), cl::init(""));
+
 /// Process a single buffer of the input.
 static LogicalResult
 processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
@@ -219,10 +225,13 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxMemoryPass());
 
   // Read black box source files into the IR.
+  StringRef blackBoxRoot = blackBoxRootPath.empty()
+                               ? llvm::sys::path::parent_path(inputFilename)
+                               : blackBoxRootPath;
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxReaderPass(
-      blackBoxRootPath.empty() ? llvm::sys::path::parent_path(inputFilename)
-                               : blackBoxRootPath,
-      {""}));
+      blackBoxRoot, blackBoxRootResourcePath.empty()
+                        ? blackBoxRoot
+                        : blackBoxRootResourcePath));
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (lowerToHW || outputFormat == OutputVerilog ||
