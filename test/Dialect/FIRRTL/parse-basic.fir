@@ -797,12 +797,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input in2: UInt<42>
     input en: UInt<1>
 
-    ; CHECK:      %invalid_clock = firrtl.invalidvalue : !firrtl.clock
-    ; CHECK-NEXT: firrtl.mux(%en, %in1, %invalid_clock) : (!firrtl.uint<1>, !firrtl.clock, !firrtl.clock) -> !firrtl.clock
+    ; CHECK: %out1 = firrtl.node %in1
     node out1 = validif(en, in1)
 
-    ; CHECK:      %invalid_ui42 = firrtl.invalidvalue : !firrtl.uint<42>
-    ; CHECK-NEXT: firrtl.mux(%en, %in2, %invalid_ui42) : (!firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>) -> !firrtl.uint<42>
+    ; CHECK: %out2 = firrtl.node %in2 
     node out2 = validif(en, in2)
 
   ; Test that behavioral memory reads and writes both work and that flow checks
@@ -830,6 +828,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
   ; Test that a mux with an unknown width select line parses.  This is a check
   ; of the predicate enforced on UInt1Type.
+  ; CHECK-LABEL: firrtl.module @MuxUnknownWidthSelect_Issue1108
   module MuxUnknownWidthSelect_Issue1108:
     input a: UInt<1>
     input b: UInt<1>
@@ -837,4 +836,17 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     output c: UInt<8>
     c <= mux(sel, a, b)
 
-    ; CHECK-LABEL: firrtl.module @MuxUnknownWidthSelect_Issue1108
+  ; CHECK-LABEL: firrtl.module @InvalidIfFolding
+  module InvalidIfFolding:
+    input value: UInt<1>
+
+    node thing1 = validif(UInt<1>("h1"), UInt<1>("h0"))
+    ; CHECK-NOT: firrtl.invalidvalue
+    ; CHECK: %thing1 = firrtl.node %c0_ui1
+ 
+    node thing2 = validif(UInt<1>("h0"), UInt<1>("h0"))
+    ; CHECK: %invalid_ui1 = firrtl.invalidvalue
+    ; CHECK: %thing2 = firrtl.node %invalid_ui1
+
+    node thing3 = validif(value, value) @[Locator.scala 229:17]
+    ; CHECK: %thing3 = firrtl.node %value

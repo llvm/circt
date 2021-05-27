@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Support/FieldRef.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
 
@@ -32,7 +33,7 @@ namespace {
 
 class ExpandWhensVisitor : public FIRRTLVisitor<ExpandWhensVisitor> {
 public:
-  ExpandWhensVisitor(llvm::MapVector<Value, Operation *> &scope,
+  ExpandWhensVisitor(llvm::MapVector<FieldRef, Operation *> &scope,
                      Value condition)
       : scope(scope), condition(condition) {}
 
@@ -69,17 +70,29 @@ private:
 
   /// Records a connection to a destination. This will delete a previous
   /// connection to a destination if there was one.
-  void setLastConnect(Value dest, Operation *connection) {
+  void setLastConnect(FieldRef dest, Operation *connection) {
     // Try to insert, if it doesn't insert, replace the previous value.
     auto itAndInserted = scope.insert({dest, connection});
     if (!std::get<1>(itAndInserted)) {
       auto iterator = std::get<0>(itAndInserted);
       // Delete the old connection if it exists. Null connections are inserted
       // on declarations.
-      if (auto oldConnect = iterator->second)
+      if (auto *oldConnect = iterator->second)
         oldConnect->erase();
       iterator->second = connection;
     }
+  }
+
+  /// Get the destination value from a connection.  This supports any operation
+  /// which is capable of driving a value.
+  static Value getDestinationValue(Operation *op) {
+    return TypeSwitch<Operation *, Value>(op)
+        .Case<ConnectOp>([](auto op) { return op.dest(); })
+        .Case<PartialConnectOp>([](auto op) { return op.dest(); })
+        .Default([](Operation *op) {
+          llvm_unreachable("unknown operation");
+          return nullptr;
+        });
   }
 
   /// Get the source value from a connection. This supports any operation which
@@ -92,6 +105,35 @@ private:
           llvm_unreachable("unknown operation");
           return nullptr;
         });
+  }
+
+  /// For every leaf field in the sink, record that it exists and should be
+  /// initialized.
+  void declareSinks(Value value, Flow flow) {
+    auto type = value.getType();
+    unsigned id = 0;
+
+    // Recurse through a bundle and declare each leaf sink node.
+    std::function<void(Type, Flow)> declare = [&](Type type, Flow flow) {
+      // If the field is flipped, flip the flow and use the real type.
+      if (auto flip = type.dyn_cast<FlipType>()) {
+        type = flip.getElementType();
+        flow = swapFlow(flow);
+      }
+      // If this is a bundle type, recurse to each of the fields.
+      if (auto bundleType = type.dyn_cast<BundleType>()) {
+        for (auto &element : bundleType.getElements()) {
+          id++;
+          declare(element.type, flow);
+        }
+        return;
+      }
+      // If it is a leaf node with Flow::Sink or Flow::Duplex, it must be
+      // initialized.
+      if (flow != Flow::Source)
+        scope[{value, id}] = nullptr;
+    };
+    declare(type, flow);
   }
 
   /// And a 1-bit value with the current condition.  If we are in the outer
@@ -107,10 +149,10 @@ private:
 
   /// Take two connection operations and merge them in to a new connect under a
   /// condition.  Destination of both connects should be `dest`.
-  Operation *flattenConditionalConnections(OpBuilder &b, Location loc,
-                                           Value dest, Value cond,
-                                           Operation *whenTrueConn,
-                                           Operation *whenFalseConn) {
+  ConnectOp flattenConditionalConnections(OpBuilder &b, Location loc,
+                                          Value dest, Value cond,
+                                          Operation *whenTrueConn,
+                                          Operation *whenFalseConn) {
     auto whenTrue = getConnectedValue(whenTrueConn);
     auto whenFalse = getConnectedValue(whenFalseConn);
     auto newValue = b.createOrFold<MuxPrimOp>(loc, whenTrue.getType(), cond,
@@ -125,7 +167,7 @@ private:
   /// Map of destinations and the operation which is driving a value to it in
   /// the current scope. This is used for resolving last connect semantics, and
   /// for retrieving the responsible connect operation.
-  llvm::MapVector<Value, Operation *> &scope;
+  llvm::MapVector<FieldRef, Operation *> &scope;
 
   /// The current wrapping condition. If null, we are in the outer scope.
   Value condition;
@@ -133,53 +175,24 @@ private:
 } // namespace
 
 LogicalResult ExpandWhensVisitor::run(FModuleOp module) {
-  llvm::MapVector<Value, Operation *> outerScope;
+  llvm::MapVector<FieldRef, Operation *> outerScope;
   ExpandWhensVisitor(outerScope, nullptr).visitDecl(module);
 
   // Check for any incomplete initialization.
   LogicalResult result = success();
   for (auto destAndConnect : outerScope) {
-    // Check if there is valid connection to this destination.
-    auto connect = std::get<1>(destAndConnect);
+    // If there is valid connection to this destination, everything is good.
+    auto *connect = std::get<1>(destAndConnect);
     if (connect)
       continue;
 
-    // This pass has failed, and there is an incompletely initialized sink. We
-    // have to find the type of the sink and print a useful error message.
+    // There is an incompletely initialized sink and this pass has failed.
     result = failure();
+
+    // Get the op which defines the sink.
     auto dest = std::get<0>(destAndConnect);
-    auto op = dest.getDefiningOp();
-
-    // Module ports.
-    if (auto arg = dest.dyn_cast<BlockArgument>()) {
-      // Get the module ports and get the name.
-      SmallVector<ModulePortInfo> ports = module.getPorts();
-      module.emitError("module port ")
-          << ports[arg.getArgNumber()].name << " not fully initialized.";
-      continue;
-    }
-
-    // Instance operation.
-    if (auto instance = dyn_cast<InstanceOp>(op)) {
-      auto result = dest.cast<OpResult>();
-      instance->emitError("instance port ")
-          << instance.getPortName(result.getResultNumber())
-          << " not fully initialized.";
-      continue;
-    }
-
-    // Memory operation.
-    // TODO: Memories currently are capable of returning bundles. The pass is
-    // not capable of tracking individual fields in a bundle, and can only
-    // detect connections to the bundle as a whole.  After issue #888 is solved,
-    // LowerTypes will transform memories to only return ground types.
-    if (auto memory = dyn_cast<MemOp>(op)) {
-      result = success();
-      continue;
-    }
-
-    // Registers and Wires.
-    op->emitError("sink not fully initialized.");
+    dest.getDefiningOp()->emitError("sink \"" + getFieldName(dest) +
+                                    "\" not fully initialized");
   }
 
   return result;
@@ -193,54 +206,60 @@ void ExpandWhensVisitor::process(Block &block) {
 
 void ExpandWhensVisitor::visitDecl(FModuleOp op) {
   // Track any results (flipped arguments) of the module for init coverage.
-  size_t i = 0;
-  for (auto arg : op.getArguments())
-    if (getModulePortDirection(op, i++) == Direction::Output)
-      scope[arg] = nullptr;
+  for (auto it : llvm::enumerate(op.getArguments())) {
+    auto flow = getModulePortDirection(op, it.index()) == Direction::Input
+                    ? Flow::Source
+                    : Flow::Sink;
+    declareSinks(it.value(), flow);
+  }
 
   process(*op.getBodyBlock());
 }
 
-void ExpandWhensVisitor::visitDecl(WireOp op) { scope[op.result()] = nullptr; }
+void ExpandWhensVisitor::visitDecl(WireOp op) {
+  declareSinks(op.result(), Flow::Duplex);
+}
 
 void ExpandWhensVisitor::visitDecl(RegOp op) {
   // Registers are initialized to themselves.
+  // TODO: register of bundle type are not supported.
+  assert(!op.result().getType().isa<BundleType>() &&
+         "registers can't be bundle type");
   auto connect = OpBuilder(op->getBlock(), ++Block::iterator(op))
                      .create<ConnectOp>(op.getLoc(), op, op);
-  scope[op.result()] = connect;
+  scope[getFieldRefFromValue(op.result())] = connect;
 }
 
 void ExpandWhensVisitor::visitDecl(RegResetOp op) {
   // Registers are initialized to themselves.
+  // TODO: register of bundle type are not supported.
+  assert(!op.result().getType().isa<BundleType>() &&
+         "registers can't be bundle type");
   auto connect = OpBuilder(op->getBlock(), ++Block::iterator(op))
                      .create<ConnectOp>(op.getLoc(), op, op);
-  scope[op.result()] = connect;
+  scope[getFieldRefFromValue(op.result())] = connect;
 }
 
 void ExpandWhensVisitor::visitDecl(InstanceOp op) {
   // Track any instance inputs which need to be connected to for init coverage.
   for (auto result : op.results()) {
-    auto type = result.getType().cast<FIRRTLType>();
-    if (!type.isPassive())
-      scope[result] = nullptr;
+    declareSinks(result, Flow::Source);
   }
 }
 
 void ExpandWhensVisitor::visitDecl(MemOp op) {
   // Track any memory inputs which require connections.
   for (auto result : op.results()) {
-    auto type = result.getType().cast<FIRRTLType>();
-    if (!type.isPassive())
-      scope[result] = nullptr;
+    declareSinks(result, Flow::Source);
   }
 }
 
 void ExpandWhensVisitor::visitStmt(PartialConnectOp op) {
-  setLastConnect(op.dest(), op);
+  setLastConnect(getFieldRefFromValue(op.dest()), op);
 }
 
 void ExpandWhensVisitor::visitStmt(ConnectOp op) {
-  setLastConnect(op.dest(), op);
+  setLastConnect(getFieldRefFromValue(op.dest()), op);
 }
 
 void ExpandWhensVisitor::visitStmt(PrintFOp op) {
@@ -272,14 +291,14 @@ void ExpandWhensVisitor::visitStmt(WhenOp whenOp) {
   // returns the set of connects in each side of the when op.
 
   // Process the `then` block.
-  llvm::MapVector<Value, Operation *> thenScope;
+  llvm::MapVector<FieldRef, Operation *> thenScope;
   auto thenCondition = andWithCondition(whenOp, whenOp.condition());
   auto &thenBlock = whenOp.getThenBlock();
   ExpandWhensVisitor(thenScope, thenCondition).process(thenBlock);
   mergeBlock(*parentBlock, Block::iterator(whenOp), thenBlock);
 
   // Process the `else` block.
-  llvm::MapVector<Value, Operation *> elseScope;
+  llvm::MapVector<FieldRef, Operation *> elseScope;
   if (whenOp.hasElseRegion()) {
     auto condition = whenOp.condition();
     auto notOp = b.createOrFold<NotPrimOp>(whenOp.getLoc(), condition.getType(),
@@ -324,8 +343,9 @@ void ExpandWhensVisitor::visitStmt(WhenOp whenOp) {
       // Create a new connect with `mux(p, then, else)`.
       OpBuilder connectBuilder(elseConnect);
       auto newConnect = flattenConditionalConnections(
-          connectBuilder, elseConnect->getLoc(), dest, thenCondition,
-          thenConnect, elseConnect);
+          connectBuilder, elseConnect->getLoc(),
+          getDestinationValue(thenConnect), thenCondition, thenConnect,
+          elseConnect);
       setLastConnect(dest, newConnect);
       // Do not process connect in the else scope.
       elseScope.erase(dest);
@@ -343,8 +363,8 @@ void ExpandWhensVisitor::visitStmt(WhenOp whenOp) {
     // Create a new connect with mux(p, then, outer)
     OpBuilder connectBuilder(thenConnect);
     auto newConnect = flattenConditionalConnections(
-        connectBuilder, thenConnect->getLoc(), dest, thenCondition, thenConnect,
-        outerConnect);
+        connectBuilder, thenConnect->getLoc(), getDestinationValue(thenConnect),
+        thenCondition, thenConnect, outerConnect);
     outerIt->second = newConnect;
   }
 
@@ -369,9 +389,10 @@ void ExpandWhensVisitor::visitStmt(WhenOp whenOp) {
     // `dest` is set in the outer scope.
     // Create a new connect with mux(p, outer, else).
     OpBuilder connectBuilder(elseConnect);
-    auto newConnect = flattenConditionalConnections(
-        connectBuilder, elseConnect->getLoc(), dest, thenCondition,
-        outerConnect, elseConnect);
+    auto newConnect =
+        flattenConditionalConnections(connectBuilder, elseConnect->getLoc(),
+                                      getDestinationValue(outerConnect),
+                                      thenCondition, outerConnect, elseConnect);
     outerIt->second = newConnect;
   }
 

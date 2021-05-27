@@ -14,6 +14,7 @@
 #define FIRTOMLIR_FIRLEXER_H
 
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/Identifier.h"
 #include "llvm/Support/SourceMgr.h"
 
 namespace mlir {
@@ -126,6 +127,7 @@ private:
 
   const llvm::SourceMgr &sourceMgr;
   mlir::MLIRContext *context;
+  mlir::Identifier bufferNameIdentifier;
 
   StringRef curBuffer;
   const char *curPtr;

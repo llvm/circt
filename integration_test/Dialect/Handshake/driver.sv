@@ -24,6 +24,10 @@ module driver();
     @(posedge clock);
     reset = 0;
 
+    // Hold valid high for one clock cycle.
+    @(posedge clock);
+    arg0_valid = 0;
+
     wait(arg1_valid == 1);
 
     $display("Result=%d", arg1_data);

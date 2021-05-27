@@ -1,13 +1,14 @@
-from typing import Dict, Optional, Sequence
+from typing import Dict, Optional, Sequence, Type
 
 import inspect
 
-from circt.support import BackedgeBuilder, BuilderValue
+from circt.dialects import hw
+import circt.support as support
 
 from mlir.ir import *
 
 
-class InstanceBuilder:
+class InstanceBuilder(support.NamedValueOpView):
   """Helper class to incrementally construct an instance of a module."""
 
   def __init__(self,
@@ -23,77 +24,52 @@ class InstanceBuilder:
     from ._hw_ops_gen import InstanceOp
 
     # Create mappings from port name to value, index, and potentially backedge.
-    self.mod = module
-    self.operand_indices = {}
-    self.operand_values = []
-    self.result_indices = {}
-    self.backedges = {}
+    operand_indices = {}
+    operand_values = []
+    result_indices = {}
+    backedges = {}
 
     arg_names = ArrayAttr(module.attributes["argNames"])
     for i in range(len(arg_names)):
       arg_name = StringAttr(arg_names[i]).value
-      self.operand_indices[arg_name] = i
+      operand_indices[arg_name] = i
 
       if arg_name in input_port_mapping:
         value = input_port_mapping[arg_name]
         if not isinstance(value, Value):
           value = input_port_mapping[arg_name].value
-        self.operand_values.append(value)
+        operand_values.append(value)
       else:
         type = module.type.inputs[i]
-        backedge = BackedgeBuilder.create(
+        backedge = support.BackedgeBuilder.create(
             type, arg_name, self, instance_of=module)
-        self.backedges[i] = backedge
-        self.operand_values.append(backedge.result)
+        backedges[i] = backedge
+        operand_values.append(backedge.result)
 
     result_names = ArrayAttr(module.attributes["resultNames"])
     for i in range(len(result_names)):
       result_name = StringAttr(result_names[i]).value
-      self.result_indices[result_name] = i
+      result_indices[result_name] = i
 
     # Actually build the InstanceOp.
     instance_name = StringAttr.get(name)
-    module_name = FlatSymbolRefAttr.get(StringAttr(self.mod.name).value)
+    module_name = FlatSymbolRefAttr.get(StringAttr(module.name).value)
     parameters = {k: Attribute.parse(str(v)) for (k, v) in parameters.items()}
     parameters = DictAttr.get(parameters)
     if sym_name:
       sym_name = StringAttr.get(sym_name)
-    self.instance = InstanceOp(
-        self.mod.type.results,
+    instance = InstanceOp(
+        module.type.results,
         instance_name,
         module_name,
-        self.operand_values,
+        operand_values,
         parameters,
         sym_name,
         loc=loc,
         ip=ip,
     )
 
-  def __getattr__(self, name):
-    # Check for the attribute in the arg name set.
-    if name in self.operand_indices:
-      index = self.operand_indices[name]
-      value = self.instance.inputs[index]
-      return BuilderValue(value, self, index)
-
-    # Check for the attribute in the result name set.
-    if name in self.result_indices:
-      index = self.result_indices[name]
-      value = self.instance.results[index]
-      return BuilderValue(value, self, index)
-
-    # If we fell through to here, the name isn't a result.
-    raise AttributeError(f"unknown port name {name}")
-
-  @property
-  def operation(self):
-    """Get the operation associated with this builder."""
-    return self.instance.operation
-
-  @property
-  def module(self):
-    """Get the module associated with this builder."""
-    return self.mod.operation
+    super().__init__(instance, operand_indices, result_indices, backedges)
 
 
 class ModuleLike:
@@ -159,9 +135,11 @@ class ModuleLike:
 
     if body_builder:
       entry_block = self.add_entry_block()
+
       with InsertionPoint(entry_block):
-        with BackedgeBuilder():
-          body_builder(self)
+        with support.BackedgeBuilder():
+          outputs = body_builder(self)
+          _create_output_op(name, output_ports, entry_block, outputs)
 
   @property
   def type(self):
@@ -187,6 +165,59 @@ class ModuleLike:
                            parameters=parameters,
                            loc=loc,
                            ip=ip)
+
+
+def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
+  """Create the hw.OutputOp from the body_builder return."""
+
+  # Determine if the body already has an output op.
+  block_len = len(entry_block.operations)
+  if block_len > 0:
+    last_op = entry_block.operations[block_len - 1]
+    if isinstance(last_op, hw.OutputOp):
+      # If it does, the return from body_builder must be None.
+      if bb_ret is not None and bb_ret != last_op:
+        raise support.ConnectionError(
+          "Cannot return value from body_builder and create hw.OutputOp")
+      return
+
+  # If builder didn't create an output op and didn't return anything, this op
+  # mustn't have any outputs.
+  if bb_ret is None:
+    if len(output_ports) == 0:
+      hw.OutputOp([])
+      return
+    raise support.ConnectionError("Must return module output values")
+
+  # Now create the output op depending on the object type returned
+  outputs: list[value] = list()
+
+  # Only acceptable return is a dict of port, value mappings.
+  if not isinstance(bb_ret, dict):
+    raise support.ConnectionError(
+        "Can only return a dict of port, value mappings from body_builder.")
+
+  # A dict of `OutputPortName` -> ValueLike must be converted to a list in port
+  # order.
+  unconnected_ports = []
+  for (name, _) in output_ports:
+    if name not in bb_ret:
+      unconnected_ports.append(name)
+      outputs.append(None)
+    else:
+      val = support.get_value(bb_ret[name])
+      if val is None:
+        raise TypeError(
+            f"body_builder return doesn't support type '{type(bb_ret[name])}'")
+      outputs.append(val)
+    bb_ret.pop(name)
+  if len(unconnected_ports) > 0:
+    raise support.UnconnectedSignalError(cls_name, unconnected_ports)
+  if len(bb_ret) > 0:
+    raise support.ConnectionError(
+      f"Could not map the follow to ports in {cls_name}: {bb_ret.keys}")
+
+  hw.OutputOp(outputs)
 
 
 class HWModuleOp(ModuleLike):
@@ -270,8 +301,8 @@ class HWModuleOp(ModuleLike):
         output_ports = zip([None] * len(result_types), result_types)
 
       module_op = HWModuleOp(name=symbol_name,
-                              input_ports=input_ports,
-                              output_ports=output_ports)
+                             input_ports=input_ports,
+                             output_ports=output_ports)
       with InsertionPoint(module_op.add_entry_block()):
         module_args = module_op.entry_block.arguments
         module_kwargs = {}
@@ -305,8 +336,8 @@ class HWModuleOp(ModuleLike):
 
       def emit_instance_op(*call_args):
         call_op = hw.InstanceOp(return_types, StringAttr.get(''),
-                                 FlatSymbolRefAttr.get(symbol_name), call_args,
-                                 DictAttr.get({}), None)
+                                FlatSymbolRefAttr.get(symbol_name), call_args,
+                                DictAttr.get({}), None)
         if return_types is None:
           return None
         elif len(return_types) == 1:
