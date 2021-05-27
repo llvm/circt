@@ -977,6 +977,16 @@ module  {
 // -----
 // Test lowering of SubAccessOp
 module  {
+
+// COM:  module Foo:
+// COM:    input b: UInt<1>
+// COM:    input sel: UInt<2>
+// COM:    input default: UInt<1>[4]
+// COM:    output a: UInt<1>[4]
+// COM: 
+// COM:     a <= default
+// COM:     a[sel] <= b
+
 firrtl.circuit "write1D"  {
   firrtl.module @write1D(in %b: !firrtl.uint<1>, in %sel: !firrtl.uint<2>, in %default: !firrtl.vector<uint<1>, 4>, out %a: !firrtl.vector<uint<1>, 4>) {
     firrtl.connect %a, %default : !firrtl.vector<uint<1>, 4>, !firrtl.vector<uint<1>, 4>
@@ -1010,16 +1020,17 @@ firrtl.circuit "write1D"  {
 // CHECK: }
 
 
-// circuit read1D:
-//   module read1D:
-//     input a: UInt<2>[4]
-//     input sel: UInt<2>
-//     input default: UInt<2>[4]
-//     output b: UInt<2>
-// 
-//     wire z : UInt<2>[4]
-//     z <= default 
-//     b <= sub(a[sel],z[sel])
+// COM: circuit read1D:
+// COM:   module read1D:
+// COM:     input a: UInt<2>[4]
+// COM:     input sel: UInt<2>
+// COM:     input default: UInt<2>[4]
+// COM:     output b: UInt<2>
+// COM: 
+// COM:     wire z : UInt<2>[4]
+// COM:     z <= default 
+// COM:     b <= sub(a[sel],z[sel])
+
 firrtl.circuit "read1D"  {
   firrtl.module @read1D(in %a: !firrtl.vector<uint<2>, 4>, in %sel: !firrtl.uint<2>, in %default: !firrtl.vector<uint<2>, 4>, out %b: !firrtl.uint<2>) {
     %z = firrtl.wire  : !firrtl.vector<uint<2>, 4>
@@ -1069,6 +1080,16 @@ firrtl.circuit "read1D"  {
 // CHECK:   firrtl.partialconnect %b, %18 : !firrtl.uint<2>, !firrtl.uint<3>
 // CHECK: }
 
+
+// COM: circuit Foo:
+// COM:   module Foo:
+// COM:     input a: {wo: UInt<1>, valid: UInt<2>}
+// COM:     input def: {wo: UInt<1>, valid: UInt<2>}[4]
+// COM:     input sel: UInt<2>
+// COM:     output b: {wo: UInt<1>, valid: UInt<2>}[4]
+// COM: 
+// COM:     b <= def 
+// COM:     b[sel].wo <= a.wo
 firrtl.circuit "writeVectorOfBundle1D"  {
   firrtl.module @writeVectorOfBundle1D(in %a: !firrtl.bundle<wo: uint<1>, valid: uint<2>>, in %def: !firrtl.vector<bundle<wo: uint<1>, valid: uint<2>>, 4>, in %sel: !firrtl.uint<2>, out %b: !firrtl.vector<bundle<wo: uint<1>, valid: uint<2>>, 4>) {
     firrtl.connect %b, %def : !firrtl.vector<bundle<wo: uint<1>, valid: uint<2>>, 4>, !firrtl.vector<bundle<wo: uint<1>, valid: uint<2>>, 4>
@@ -1114,8 +1135,18 @@ firrtl.circuit "writeVectorOfBundle1D"  {
 // CHECK:   firrtl.connect %0, %a_wo : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK: }
 
-firrtl.circuit "readVectorOfBundle1D"  {
-  firrtl.module @readVectorOfBundle1D(in %a: !firrtl.bundle<wo: vector<uint<1>, 4>, valid: vector<uint<2>, 4>>, in %sel: !firrtl.uint<2>, out %b: !firrtl.bundle<wo: uint<1>, valid: uint<2>>) {
+
+// COM:  circuit Foo:
+// COM:    module Foo:
+// COM:      input a: {wo: UInt<1>[4], valid: UInt<2>[4]}
+// COM:      input sel: UInt<2>
+// COM:      output b: {wo: UInt<1>, valid: UInt<2>}
+// COM:  
+// COM:      b.wo <= a.wo[sel]
+// COM:      b.valid <= a.valid[sel]
+
+firrtl.circuit "readBundleOfVector1D"  {
+  firrtl.module @readBundleOfVector1D(in %a: !firrtl.bundle<wo: vector<uint<1>, 4>, valid: vector<uint<2>, 4>>, in %sel: !firrtl.uint<2>, out %b: !firrtl.bundle<wo: uint<1>, valid: uint<2>>) {
     %0 = firrtl.subfield %b("wo") : (!firrtl.bundle<wo: uint<1>, valid: uint<2>>) -> !firrtl.uint<1>
     %1 = firrtl.subfield %a("wo") : (!firrtl.bundle<wo: vector<uint<1>, 4>, valid: vector<uint<2>, 4>>) -> !firrtl.vector<uint<1>, 4>
     %2 = firrtl.subaccess %1[%sel] : !firrtl.vector<uint<1>, 4>, !firrtl.uint<2>
@@ -1126,7 +1157,7 @@ firrtl.circuit "readVectorOfBundle1D"  {
     firrtl.connect %3, %5 : !firrtl.uint<2>, !firrtl.uint<2>
   }
 }
-// CHECK: firrtl.module @readVectorOfBundle1D(in %a_wo_0: !firrtl.uint<1>, in %a_wo_1: !firrtl.uint<1>, in %a_wo_2: !firrtl.uint<1>, in %a_wo_3: !firrtl.uint<1>, in %a_valid_0: !firrtl.uint<2>, in %a_valid_1: !firrtl.uint<2>, in %a_valid_2: !firrtl.uint<2>, in %a_valid_3: !firrtl.uint<2>, in %sel: !firrtl.uint<2>, out %b_wo: !firrtl.uint<1>, out %b_valid: !firrtl.uint<2>) {
+// CHECK: firrtl.module @readBundleOfVector1D(in %a_wo_0: !firrtl.uint<1>, in %a_wo_1: !firrtl.uint<1>, in %a_wo_2: !firrtl.uint<1>, in %a_wo_3: !firrtl.uint<1>, in %a_valid_0: !firrtl.uint<2>, in %a_valid_1: !firrtl.uint<2>, in %a_valid_2: !firrtl.uint<2>, in %a_valid_3: !firrtl.uint<2>, in %sel: !firrtl.uint<2>, out %b_wo: !firrtl.uint<1>, out %b_valid: !firrtl.uint<2>) {
 // CHECK:   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 // CHECK:   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
 // CHECK:   %0 = firrtl.eq %sel, %c1_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
@@ -1156,6 +1187,16 @@ firrtl.circuit "readVectorOfBundle1D"  {
 // CHECK:   %17 = firrtl.mux(%16, %a_valid_3, %14) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
 // CHECK:   firrtl.connect %b_valid, %17 : !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK: }
+
+// COM: circuit Foo:
+// COM:   module Foo:
+// COM:     input a: UInt<2>[4]
+// COM:     input z: UInt<2>[4]
+// COM:     input sel: UInt<2>
+// COM:     output b: UInt<2>
+// COM: 
+// COM:     b <= a[z[sel]]
+
 firrtl.circuit "readIndirect1d"  {
   firrtl.module @readIndirect1d(in %a: !firrtl.vector<uint<2>, 4>, in %z: !firrtl.vector<uint<2>, 4>, in %sel: !firrtl.uint<2>, out %b: !firrtl.uint<2>) {
     %0 = firrtl.subaccess %z[%sel] : !firrtl.vector<uint<2>, 4>, !firrtl.uint<2>
@@ -1192,6 +1233,15 @@ firrtl.circuit "readIndirect1d"  {
 // CHECK:   %17 = firrtl.mux(%16, %a_3, %14) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
 // CHECK:   firrtl.connect %b, %17 : !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK: }
+
+// COM: circuit Foo:
+// COM:   module Foo:
+// COM:     input a: UInt<2>[4][4]
+// COM:     input sel: UInt<2>
+// COM:     output b: UInt<2>
+// COM: 
+// COM:     b <= a[sel][sel]
+
 firrtl.circuit "multidimRead"  {
   firrtl.module @multidimRead(in %a: !firrtl.vector<vector<uint<2>, 4>, 4>, in %sel: !firrtl.uint<2>, out %b: !firrtl.uint<2>) {
     %0 = firrtl.subaccess %a[%sel] : !firrtl.vector<vector<uint<2>, 4>, 4>, !firrtl.uint<2>
@@ -1308,6 +1358,15 @@ firrtl.circuit "multidimRead"  {
 // CHECK:   %74 = firrtl.mux(%73, %a_3_3, %69) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
 // CHECK:   firrtl.connect %b, %74 : !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK: }
+
+
+// COM: circuit Foo:
+// COM:   module Foo:
+// COM:     input sel: UInt<1>
+// COM:     input b: UInt<2>
+// COM:     output a: UInt<2>[2][2]
+// COM: 
+// COM:     a[sel][sel] <= b
 
 firrtl.circuit "multidimWrite"  {
   firrtl.module @multidimWrite(in %sel: !firrtl.uint<1>, in %b: !firrtl.uint<2>, out %a: !firrtl.vector<vector<uint<2>, 2>, 2>) {
