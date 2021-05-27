@@ -1,3 +1,4 @@
+from circt.dialects import comb
 from circt.support import NamedValueOpView
 
 from mlir.ir import IntegerAttr, IntegerType
@@ -17,9 +18,8 @@ class ExtractOpBuilder(UnaryOpBuilder):
 
   def __init__(self, low_bit, data_type, input_port_mapping={}, **kwargs):
     low_bit = IntegerAttr.get(IntegerType.get_signless(32), low_bit)
-    import circt
-    super().__init__(circt.dialects.comb.ExtractOp, data_type,
-                     input_port_mapping, [], [low_bit], **kwargs)
+    super().__init__(comb.ExtractOp, data_type, input_port_mapping, [],
+                     [low_bit], **kwargs)
 
 
 class BinaryOpBuilder(NamedValueOpView):

@@ -21,9 +21,8 @@ class ICmpOpBuilder(NamedValueOpView):
 
   def __init__(self, predicate, data_type, input_port_mapping={}, **kwargs):
     predicate = IntegerAttr.get(IntegerType.get_signless(64), predicate)
-    import circt
-    super().__init__(circt.dialects.comb.ICmpOp, data_type, input_port_mapping,
-                     [predicate], **kwargs)
+    super().__init__(ICmpOp, data_type, input_port_mapping, [predicate],
+                     **kwargs)
 
 
 class EqOp:

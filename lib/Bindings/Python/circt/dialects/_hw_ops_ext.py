@@ -12,7 +12,6 @@ class InstanceBuilder(support.NamedValueOpView):
   """Helper class to incrementally construct an instance of a module."""
 
   def __init__(self,
-               cls,
                module,
                name,
                input_port_mapping,
@@ -31,7 +30,7 @@ class InstanceBuilder(support.NamedValueOpView):
     pre_args = [instance_name, module_name]
     post_args = [parameters, sym_name]
 
-    super().__init__(cls,
+    super().__init__(hw.InstanceOp,
                      module.type.results,
                      input_port_mapping,
                      pre_args,
@@ -144,9 +143,7 @@ class ModuleLike:
              parameters: Dict[str, object] = {},
              loc=None,
              ip=None):
-    import circt
-    return InstanceBuilder(circt.dialects.hw.InstanceOp,
-                           self,
+    return InstanceBuilder(self,
                            name,
                            input_port_mapping,
                            parameters=parameters,
