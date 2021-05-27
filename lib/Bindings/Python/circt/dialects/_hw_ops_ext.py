@@ -12,6 +12,7 @@ class InstanceBuilder(support.NamedValueOpView):
   """Helper class to incrementally construct an instance of a module."""
 
   def __init__(self,
+               cls,
                module,
                name,
                input_port_mapping,
@@ -20,56 +21,40 @@ class InstanceBuilder(support.NamedValueOpView):
                sym_name=None,
                loc=None,
                ip=None):
-    # Lazily import dependencies to avoid cyclic dependencies.
-    from ._hw_ops_gen import InstanceOp
-
-    # Create mappings from port name to value, index, and potentially backedge.
-    operand_indices = {}
-    operand_values = []
-    result_indices = {}
-    backedges = {}
-
-    arg_names = ArrayAttr(module.attributes["argNames"])
-    for i in range(len(arg_names)):
-      arg_name = StringAttr(arg_names[i]).value
-      operand_indices[arg_name] = i
-
-      if arg_name in input_port_mapping:
-        value = input_port_mapping[arg_name]
-        if not isinstance(value, Value):
-          value = input_port_mapping[arg_name].value
-        operand_values.append(value)
-      else:
-        type = module.type.inputs[i]
-        backedge = support.BackedgeBuilder.create(
-            type, arg_name, self, instance_of=module)
-        backedges[i] = backedge
-        operand_values.append(backedge.result)
-
-    result_names = ArrayAttr(module.attributes["resultNames"])
-    for i in range(len(result_names)):
-      result_name = StringAttr(result_names[i]).value
-      result_indices[result_name] = i
-
-    # Actually build the InstanceOp.
+    self.module = module
     instance_name = StringAttr.get(name)
     module_name = FlatSymbolRefAttr.get(StringAttr(module.name).value)
     parameters = {k: Attribute.parse(str(v)) for (k, v) in parameters.items()}
     parameters = DictAttr.get(parameters)
     if sym_name:
       sym_name = StringAttr.get(sym_name)
-    instance = InstanceOp(
-        module.type.results,
-        instance_name,
-        module_name,
-        operand_values,
-        parameters,
-        sym_name,
-        loc=loc,
-        ip=ip,
-    )
+    pre_args = [instance_name, module_name]
+    post_args = [parameters, sym_name]
 
-    super().__init__(instance, operand_indices, result_indices, backedges)
+    super().__init__(cls,
+                     module.type.results,
+                     input_port_mapping,
+                     pre_args,
+                     post_args,
+                     loc=loc,
+                     ip=ip)
+
+  def create_default_value(self, index, data_type, arg_name):
+    type = self.module.type.inputs[index]
+    return support.BackedgeBuilder.create(type,
+                                          arg_name,
+                                          self,
+                                          instance_of=self.module)
+
+  def operand_names(self):
+    arg_names = ArrayAttr(self.module.attributes["argNames"])
+    arg_name_attrs = map(StringAttr, arg_names)
+    return list(map(lambda s: s.value, arg_name_attrs))
+
+  def result_names(self):
+    arg_names = ArrayAttr(self.module.attributes["resultNames"])
+    arg_name_attrs = map(StringAttr, arg_names)
+    return list(map(lambda s: s.value, arg_name_attrs))
 
 
 class ModuleLike:
@@ -159,7 +144,9 @@ class ModuleLike:
              parameters: Dict[str, object] = {},
              loc=None,
              ip=None):
-    return InstanceBuilder(self,
+    import circt
+    return InstanceBuilder(circt.dialects.hw.InstanceOp,
+                           self,
                            name,
                            input_port_mapping,
                            parameters=parameters,
