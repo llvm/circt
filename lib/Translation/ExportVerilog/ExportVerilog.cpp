@@ -429,6 +429,22 @@ getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
   return sstr.str();
 }
 
+/// Append a path to an existing path, replacing it if the other path is
+/// absolute. This mimicks the behaviour of `foo/bar` and `/foo/bar` being used
+/// in a working directory `/home`, resulting in `/home/foo/bar` and `/foo/bar`,
+/// respectively.
+// TODO: This also exists in BlackBoxReader.cpp. Maybe we should move this to
+// some CIRCT-wide file system utility source file?
+static void appendPossiblyAbsolutePath(SmallVectorImpl<char> &base,
+                                       const Twine &suffix) {
+  if (llvm::sys::path::is_absolute(suffix)) {
+    base.clear();
+    suffix.toVector(base);
+  } else {
+    llvm::sys::path::append(base, suffix);
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // VerilogEmitter
 //===----------------------------------------------------------------------===//
@@ -2906,10 +2922,10 @@ void RootEmitterBase::gatherFiles(bool separateModules) {
                               << " on " << op << "\n";);
 
       if (auto directory = attr.directory())
-        llvm::sys::path::append(outputPath, directory.getValue());
+        appendPossiblyAbsolutePath(outputPath, directory.getValue());
 
       if (auto name = attr.name()) {
-        llvm::sys::path::append(outputPath, name.getValue());
+        appendPossiblyAbsolutePath(outputPath, name.getValue());
         hasFileName = true;
       }
 
@@ -3095,7 +3111,7 @@ void SplitEmitter::createFile(const LoweringOptions &options,
                               Identifier fileName, FileInfo &file) {
   // Determine the output path from the output directory and filename.
   SmallString<128> outputFilename(dirname);
-  llvm::sys::path::append(outputFilename, fileName.strref());
+  appendPossiblyAbsolutePath(outputFilename, fileName.strref());
   auto outputDir = llvm::sys::path::parent_path(outputFilename);
 
   // Create the output directory if needed.
