@@ -19,6 +19,24 @@ with Context() as ctx, Location.unknown():
       # CHECK: %[[CONST:.+]] = hw.constant 1 : i32
       const = hw.ConstantOp(i32, IntegerAttr.get(i32, 1))
 
+      # CHECK: comb.extract %[[CONST]] from 14
+      comb.ExtractOp.create(14, i32, {"input": const.result})
+      # CHECK: comb.extract %[[CONST]] from 14
+      extract = comb.ExtractOp.create(14, i32)
+      connect(extract.input, const.result)
+
+      # CHECK: comb.parity %[[CONST]]
+      comb.ParityOp.create(i32, {"input": const.result})
+      # CHECK: comb.parity %[[CONST]]
+      parity = comb.ParityOp.create(i32)
+      connect(parity.input, const.result)
+
+      # CHECK: comb.sext %[[CONST]]
+      comb.SExtOp.create(i32, {"input": const.result})
+      # CHECK: comb.sext %[[CONST]]
+      sext = comb.SExtOp.create(i32)
+      connect(sext.input, const.result)
+
       # CHECK: comb.divs %[[CONST]], %[[CONST]]
       comb.DivSOp.create(i32, {"lhs": const.result, "rhs": const.result})
       # CHECK: comb.divs %[[CONST]], %[[CONST]]
