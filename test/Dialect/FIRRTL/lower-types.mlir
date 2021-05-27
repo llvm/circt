@@ -978,47 +978,6 @@ module  {
 // Test lowering of SubAccessOp
 module  {
 
-// COM:  module Foo:
-// COM:    input b: UInt<1>
-// COM:    input sel: UInt<2>
-// COM:    input default: UInt<1>[4]
-// COM:    output a: UInt<1>[4]
-// COM: 
-// COM:     a <= default
-// COM:     a[sel] <= b
-
-firrtl.circuit "write1D"  {
-  firrtl.module @write1D(in %b: !firrtl.uint<1>, in %sel: !firrtl.uint<2>, in %default: !firrtl.vector<uint<1>, 4>, out %a: !firrtl.vector<uint<1>, 4>) {
-    firrtl.connect %a, %default : !firrtl.vector<uint<1>, 4>, !firrtl.vector<uint<1>, 4>
-    %0 = firrtl.subaccess %a[%sel] : !firrtl.vector<uint<1>, 4>, !firrtl.uint<2>
-    firrtl.connect %0, %b : !firrtl.uint<1>, !firrtl.uint<1>
-  }
-}
-// CHECK: firrtl.module @write1D(in %b: !firrtl.uint<1>, in %sel: !firrtl.uint<2>, in %default_0: !firrtl.uint<1>, in %default_1: !firrtl.uint<1>, in %default_2: !firrtl.uint<1>, in %default_3: !firrtl.uint<1>, out %a_0: !firrtl.uint<1>, out %a_1: !firrtl.uint<1>, out %a_2: !firrtl.uint<1>, out %a_3: !firrtl.uint<1>) {
-// CHECK:   firrtl.connect %a_0, %default_0 : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:   firrtl.connect %a_1, %default_1 : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:   firrtl.connect %a_2, %default_2 : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:   firrtl.connect %a_3, %default_3 : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:   %0 = firrtl.wire  : !firrtl.uint<1>
-// CHECK:   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK:   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
-// CHECK:   %1 = firrtl.eq %sel, %c1_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
-// CHECK:   %2 = firrtl.and %c1_ui1, %1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   %3 = firrtl.mux(%2, %0, %a_1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   firrtl.connect %a_1, %3 : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:   %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
-// CHECK:   %4 = firrtl.eq %sel, %c2_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
-// CHECK:   %5 = firrtl.and %c1_ui1, %4 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   %6 = firrtl.mux(%5, %0, %a_2) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   firrtl.connect %a_2, %6 : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:   %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
-// CHECK:   %7 = firrtl.eq %sel, %c3_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
-// CHECK:   %8 = firrtl.and %c1_ui1, %7 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   %9 = firrtl.mux(%8, %0, %a_3) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   firrtl.connect %a_3, %9 : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:   firrtl.connect %0, %b : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK: }
-
 
 // COM: circuit read1D:
 // COM:   module read1D:
@@ -1078,61 +1037,6 @@ firrtl.circuit "read1D"  {
 // CHECK:   %17 = firrtl.mux(%16, %z_3, %14) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
 // CHECK:   %18 = firrtl.sub %8, %17 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<3>
 // CHECK:   firrtl.partialconnect %b, %18 : !firrtl.uint<2>, !firrtl.uint<3>
-// CHECK: }
-
-
-// COM: circuit Foo:
-// COM:   module Foo:
-// COM:     input a: {wo: UInt<1>, valid: UInt<2>}
-// COM:     input def: {wo: UInt<1>, valid: UInt<2>}[4]
-// COM:     input sel: UInt<2>
-// COM:     output b: {wo: UInt<1>, valid: UInt<2>}[4]
-// COM: 
-// COM:     b <= def 
-// COM:     b[sel].wo <= a.wo
-firrtl.circuit "writeVectorOfBundle1D"  {
-  firrtl.module @writeVectorOfBundle1D(in %a: !firrtl.bundle<wo: uint<1>, valid: uint<2>>, in %def: !firrtl.vector<bundle<wo: uint<1>, valid: uint<2>>, 4>, in %sel: !firrtl.uint<2>, out %b: !firrtl.vector<bundle<wo: uint<1>, valid: uint<2>>, 4>) {
-    firrtl.connect %b, %def : !firrtl.vector<bundle<wo: uint<1>, valid: uint<2>>, 4>, !firrtl.vector<bundle<wo: uint<1>, valid: uint<2>>, 4>
-    %0 = firrtl.subaccess %b[%sel] : !firrtl.vector<bundle<wo: uint<1>, valid: uint<2>>, 4>, !firrtl.uint<2>
-    %1 = firrtl.subfield %0("wo") : (!firrtl.bundle<wo: uint<1>, valid: uint<2>>) -> !firrtl.uint<1>
-    %2 = firrtl.subfield %a("wo") : (!firrtl.bundle<wo: uint<1>, valid: uint<2>>) -> !firrtl.uint<1>
-    firrtl.connect %1, %2 : !firrtl.uint<1>, !firrtl.uint<1>
-  }
-}
-// CHECK: firrtl.module @writeVectorOfBundle1D(in %a_wo: !firrtl.uint<1>, in %a_valid: !firrtl.uint<2>, in %def_0_wo: !firrtl.uint<1>, in %def_0_valid: !firrtl.uint<2>, in %def_1_wo: !firrtl.uint<1>, in %def_1_valid: !firrtl.uint<2>, in %def_2_wo: !firrtl.uint<1>, in %def_2_valid: !firrtl.uint<2>, in %def_3_wo: !firrtl.uint<1>, in %def_3_valid: !firrtl.uint<2>, in %sel: !firrtl.uint<2>, out %b_0_wo: !firrtl.uint<1>, out %b_0_valid: !firrtl.uint<2>, out %b_1_wo: !firrtl.uint<1>, out %b_1_valid: !firrtl.uint<2>, out %b_2_wo: !firrtl.uint<1>, out %b_2_valid: !firrtl.uint<2>, out %b_3_wo: !firrtl.uint<1>, out %b_3_valid: !firrtl.uint<2>) {
-// CHECK:   firrtl.connect %b_0_wo, %def_0_wo : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:   firrtl.connect %b_0_valid, %def_0_valid : !firrtl.uint<2>, !firrtl.uint<2>
-// CHECK:   firrtl.connect %b_1_wo, %def_1_wo : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:   firrtl.connect %b_1_valid, %def_1_valid : !firrtl.uint<2>, !firrtl.uint<2>
-// CHECK:   firrtl.connect %b_2_wo, %def_2_wo : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:   firrtl.connect %b_2_valid, %def_2_valid : !firrtl.uint<2>, !firrtl.uint<2>
-// CHECK:   firrtl.connect %b_3_wo, %def_3_wo : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:   firrtl.connect %b_3_valid, %def_3_valid : !firrtl.uint<2>, !firrtl.uint<2>
-// CHECK:   %0 = firrtl.wire  : !firrtl.uint<1>
-// CHECK:   %1 = firrtl.wire  : !firrtl.uint<2>
-// CHECK:   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK:   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
-// CHECK:   %2 = firrtl.eq %sel, %c1_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
-// CHECK:   %3 = firrtl.and %c1_ui1, %2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   %4 = firrtl.mux(%3, %0, %b_1_wo) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   firrtl.connect %b_1_wo, %4 : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:   %5 = firrtl.mux(%3, %1, %b_1_valid) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK:   firrtl.connect %b_1_valid, %5 : !firrtl.uint<2>, !firrtl.uint<2>
-// CHECK:   %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
-// CHECK:   %6 = firrtl.eq %sel, %c2_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
-// CHECK:   %7 = firrtl.and %c1_ui1, %6 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   %8 = firrtl.mux(%7, %0, %b_2_wo) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   firrtl.connect %b_2_wo, %8 : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:   %9 = firrtl.mux(%7, %1, %b_2_valid) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK:   firrtl.connect %b_2_valid, %9 : !firrtl.uint<2>, !firrtl.uint<2>
-// CHECK:   %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
-// CHECK:   %10 = firrtl.eq %sel, %c3_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
-// CHECK:   %11 = firrtl.and %c1_ui1, %10 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   %12 = firrtl.mux(%11, %0, %b_3_wo) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   firrtl.connect %b_3_wo, %12 : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:   %13 = firrtl.mux(%11, %1, %b_3_valid) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK:   firrtl.connect %b_3_valid, %13 : !firrtl.uint<2>, !firrtl.uint<2>
-// CHECK:   firrtl.connect %0, %a_wo : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK: }
 
 
@@ -1359,6 +1263,50 @@ firrtl.circuit "multidimRead"  {
 // CHECK:   firrtl.connect %b, %74 : !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK: }
 
+// COM:  module Foo:
+// COM:    input b: UInt<1>
+// COM:    input sel: UInt<2>
+// COM:    input default: UInt<1>[4]
+// COM:    output a: UInt<1>[4]
+// COM: 
+// COM:     a <= default
+// COM:     a[sel] <= b
+
+firrtl.circuit "write1D"  {
+  firrtl.module @write1D(in %b: !firrtl.uint<1>, in %sel: !firrtl.uint<2>, in %default: !firrtl.vector<uint<1>, 4>, out %a: !firrtl.vector<uint<1>, 4>) {
+    firrtl.connect %a, %default : !firrtl.vector<uint<1>, 4>, !firrtl.vector<uint<1>, 4>
+    %0 = firrtl.subaccess %a[%sel] : !firrtl.vector<uint<1>, 4>, !firrtl.uint<2>
+    firrtl.connect %0, %b : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+// CHECK:    firrtl.module @write1D(in %b: !firrtl.uint<1>, in %sel: !firrtl.uint<2>, in %default_0: !firrtl.uint<1>, in %default_1: !firrtl.uint<1>, in %default_2: !firrtl.uint<1>, in %default_3: !firrtl.uint<1>, out %a_0: !firrtl.uint<1>, out %a_1: !firrtl.uint<1>, out %a_2: !firrtl.uint<1>, out %a_3: !firrtl.uint<1>) {
+// CHECK:      firrtl.connect %a_0, %default_0 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:      firrtl.connect %a_1, %default_1 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:      firrtl.connect %a_2, %default_2 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:      firrtl.connect %a_3, %default_3 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:      %0 = firrtl.wire  : !firrtl.uint<1>
+// CHECK:      %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+// CHECK:      %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
+// CHECK:      %1 = firrtl.eq %sel, %c1_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK:      %2 = firrtl.and %c1_ui1, %1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:      firrtl.when %2  {
+// CHECK:        firrtl.connect %a_1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:      }
+// CHECK:      %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
+// CHECK:      %3 = firrtl.eq %sel, %c2_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK:      %4 = firrtl.and %c1_ui1, %3 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:      firrtl.when %4  {
+// CHECK:        firrtl.connect %a_2, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:      }
+// CHECK:      %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
+// CHECK:      %5 = firrtl.eq %sel, %c3_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK:      %6 = firrtl.and %c1_ui1, %5 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:      firrtl.when %6  {
+// CHECK:        firrtl.connect %a_3, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:      }
+// CHECK:      firrtl.connect %0, %b : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:    }
+
 
 // COM: circuit Foo:
 // COM:   module Foo:
@@ -1375,33 +1323,99 @@ firrtl.circuit "multidimWrite"  {
     firrtl.connect %1, %b : !firrtl.uint<2>, !firrtl.uint<2>
   }
 }
-// CHECK: firrtl.module @multidimWrite(in %sel: !firrtl.uint<1>, in %b: !firrtl.uint<2>, out %a_0_0: !firrtl.uint<2>, out %a_0_1: !firrtl.uint<2>, out %a_1_0: !firrtl.uint<2>, out %a_1_1: !firrtl.uint<2>) {
-// CHECK:   %0 = firrtl.wire  : !firrtl.uint<2>
-// CHECK:   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK:   %c1_ui1_0 = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK:   %1 = firrtl.eq %sel, %c1_ui1_0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   %2 = firrtl.and %c1_ui1, %1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-// CHECK:   %3 = firrtl.eq %sel, %c0_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   %4 = firrtl.and %2, %3 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   %5 = firrtl.mux(%4, %0, %a_0_1) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK:   firrtl.connect %a_0_1, %5 : !firrtl.uint<2>, !firrtl.uint<2>
-// CHECK:   %c0_ui1_1 = firrtl.constant 0 : !firrtl.uint<1>
-// CHECK:   %6 = firrtl.eq %sel, %c0_ui1_1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   %7 = firrtl.and %c1_ui1, %6 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   %c1_ui1_2 = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK:   %8 = firrtl.eq %sel, %c1_ui1_2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   %9 = firrtl.and %7, %8 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   %10 = firrtl.mux(%9, %0, %a_1_0) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK:   firrtl.connect %a_1_0, %10 : !firrtl.uint<2>, !firrtl.uint<2>
-// CHECK:   %c1_ui1_3 = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK:   %11 = firrtl.eq %sel, %c1_ui1_3 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   %12 = firrtl.and %c1_ui1, %11 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   %c1_ui1_4 = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK:   %13 = firrtl.eq %sel, %c1_ui1_4 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   %14 = firrtl.and %12, %13 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:   %15 = firrtl.mux(%14, %0, %a_1_1) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK:   firrtl.connect %a_1_1, %15 : !firrtl.uint<2>, !firrtl.uint<2>
-// CHECK:   firrtl.connect %0, %b : !firrtl.uint<2>, !firrtl.uint<2>
-// CHECK: }
+// CHECK:  firrtl.circuit "multidimWrite"  {
+// CHECK:    firrtl.module @multidimWrite(in %sel: !firrtl.uint<1>, in %b: !firrtl.uint<2>, out %a_0_0: !firrtl.uint<2>, out %a_0_1: !firrtl.uint<2>, out %a_1_0: !firrtl.uint<2>, out %a_1_1: !firrtl.uint<2>) {
+// CHECK:      %0 = firrtl.wire  : !firrtl.uint<2>
+// CHECK:      %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+// CHECK:      %c1_ui1_0 = firrtl.constant 1 : !firrtl.uint<1>
+// CHECK:      %1 = firrtl.eq %sel, %c1_ui1_0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:      %2 = firrtl.and %c1_ui1, %1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:      %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+// CHECK:      %3 = firrtl.eq %sel, %c0_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:      %4 = firrtl.and %2, %3 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:      firrtl.when %4  {
+// CHECK:        firrtl.connect %a_0_1, %0 : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK:      }
+// CHECK:      %c0_ui1_1 = firrtl.constant 0 : !firrtl.uint<1>
+// CHECK:      %5 = firrtl.eq %sel, %c0_ui1_1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:      %6 = firrtl.and %c1_ui1, %5 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:      %c1_ui1_2 = firrtl.constant 1 : !firrtl.uint<1>
+// CHECK:      %7 = firrtl.eq %sel, %c1_ui1_2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:      %8 = firrtl.and %6, %7 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:      firrtl.when %8  {
+// CHECK:        firrtl.connect %a_1_0, %0 : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK:      }
+// CHECK:      %c1_ui1_3 = firrtl.constant 1 : !firrtl.uint<1>
+// CHECK:      %9 = firrtl.eq %sel, %c1_ui1_3 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:      %10 = firrtl.and %c1_ui1, %9 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:      %c1_ui1_4 = firrtl.constant 1 : !firrtl.uint<1>
+// CHECK:      %11 = firrtl.eq %sel, %c1_ui1_4 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:      %12 = firrtl.and %10, %11 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:      firrtl.when %12  {
+// CHECK:        firrtl.connect %a_1_1, %0 : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK:      }
+// CHECK:      firrtl.connect %0, %b : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK:    }
+// CHECK:  }
+
+// COM: circuit Foo:
+// COM:   module Foo:
+// COM:     input a: {wo: UInt<1>, valid: UInt<2>}
+// COM:     input def: {wo: UInt<1>, valid: UInt<2>}[4]
+// COM:     input sel: UInt<2>
+// COM:     output b: {wo: UInt<1>, valid: UInt<2>}[4]
+// COM: 
+// COM:     b <= def 
+// COM:     b[sel].wo <= a.wo
+firrtl.circuit "writeVectorOfBundle1D"  {
+  firrtl.module @writeVectorOfBundle1D(in %a: !firrtl.bundle<wo: uint<1>, valid: uint<2>>, in %def: !firrtl.vector<bundle<wo: uint<1>, valid: uint<2>>, 4>, in %sel: !firrtl.uint<2>, out %b: !firrtl.vector<bundle<wo: uint<1>, valid: uint<2>>, 4>) {
+    firrtl.connect %b, %def : !firrtl.vector<bundle<wo: uint<1>, valid: uint<2>>, 4>, !firrtl.vector<bundle<wo: uint<1>, valid: uint<2>>, 4>
+    %0 = firrtl.subaccess %b[%sel] : !firrtl.vector<bundle<wo: uint<1>, valid: uint<2>>, 4>, !firrtl.uint<2>
+    %1 = firrtl.subfield %0("wo") : (!firrtl.bundle<wo: uint<1>, valid: uint<2>>) -> !firrtl.uint<1>
+    %2 = firrtl.subfield %a("wo") : (!firrtl.bundle<wo: uint<1>, valid: uint<2>>) -> !firrtl.uint<1>
+    firrtl.connect %1, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+// CHECK:     firrtl.module @writeVectorOfBundle1D(in %a_wo: !firrtl.uint<1>, in %a_valid: !firrtl.uint<2>, in %def_0_wo: !firrtl.uint<1>, in %def_0_valid: !firrtl.uint<2>, in %def_1_wo: !firrtl.uint<1>, in %def_1_valid: !firrtl.uint<2>, in %def_2_wo: !firrtl.uint<1>, in %def_2_valid: !firrtl.uint<2>, in %def_3_wo: !firrtl.uint<1>, in %def_3_valid: !firrtl.uint<2>, in %sel: !firrtl.uint<2>, out %b_0_wo: !firrtl.uint<1>, out %b_0_valid: !firrtl.uint<2>, out %b_1_wo: !firrtl.uint<1>, out %b_1_valid: !firrtl.uint<2>, out %b_2_wo: !firrtl.uint<1>, out %b_2_valid: !firrtl.uint<2>, out %b_3_wo: !firrtl.uint<1>, out %b_3_valid: !firrtl.uint<2>) {
+// CHECK:       firrtl.connect %b_0_wo, %def_0_wo : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:       firrtl.connect %b_0_valid, %def_0_valid : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK:       firrtl.connect %b_1_wo, %def_1_wo : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:       firrtl.connect %b_1_valid, %def_1_valid : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK:       firrtl.connect %b_2_wo, %def_2_wo : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:       firrtl.connect %b_2_valid, %def_2_valid : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK:       firrtl.connect %b_3_wo, %def_3_wo : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:       firrtl.connect %b_3_valid, %def_3_valid : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK:       %0 = firrtl.wire  : !firrtl.uint<1>
+// CHECK:       %1 = firrtl.wire  : !firrtl.uint<2>
+// CHECK:       %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+// CHECK:       %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
+// CHECK:       %2 = firrtl.eq %sel, %c1_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK:       %3 = firrtl.and %c1_ui1, %2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:       firrtl.when %3  {
+// CHECK:         firrtl.connect %b_1_wo, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:       }
+// CHECK:       firrtl.when %3  {
+// CHECK:         firrtl.connect %b_1_valid, %1 : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK:       }
+// CHECK:       %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
+// CHECK:       %4 = firrtl.eq %sel, %c2_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK:       %5 = firrtl.and %c1_ui1, %4 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:       firrtl.when %5  {
+// CHECK:         firrtl.connect %b_2_wo, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:       }
+// CHECK:       firrtl.when %5  {
+// CHECK:         firrtl.connect %b_2_valid, %1 : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK:       }
+// CHECK:       %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
+// CHECK:       %6 = firrtl.eq %sel, %c3_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK:       %7 = firrtl.and %c1_ui1, %6 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:       firrtl.when %7  {
+// CHECK:         firrtl.connect %b_3_wo, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:       }
+// CHECK:       firrtl.when %7  {
+// CHECK:         firrtl.connect %b_3_valid, %1 : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK:       }
+// CHECK:       firrtl.connect %0, %a_wo : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:     }
+
 }

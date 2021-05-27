@@ -961,11 +961,10 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
     // Generate the mux tree for each element of the bundle.
     for (size_t m = 0, s = muxTreeVec.size(); m != s; ++m) {
       if (isOutput) {
-        builder->create<ConnectOp>(
-            loweredVector[elem + m].first,
-            builder->create<MuxPrimOp>(
-                muxTreeVec[m].getType().cast<FIRRTLType>(), isIndexEq,
-                tmpOutputWires[m], loweredVector[elem + m].first));
+        auto whenCond = builder->create<WhenOp>(isIndexEq, false);
+        OpBuilder whenBuilder = whenCond.getThenBodyBuilder();
+        whenBuilder.create<ConnectOp>(
+            op.getLoc(), loweredVector[elem + m].first, tmpOutputWires[m]);
         muxTreeVec[m] = tmpOutputWires[m];
       } else {
         muxTreeVec[m] = builder->create<MuxPrimOp>(
