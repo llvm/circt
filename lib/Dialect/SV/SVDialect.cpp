@@ -89,7 +89,7 @@ StringRef circt::sv::resolveKeywordConflict(StringRef origName,
     auto suffix = llvm::utostr(nextGeneratedNameID++);
     nameBuffer.append(suffix.begin(), suffix.end());
 
-    // The name may be uniq.  No keywords have and underscore followed by a
+    // The name may be uniq.  No keywords have an underscore followed by a
     // number, so don't check that again.
     auto itAndInserted = recordNames.insert(nameBuffer);
     if (itAndInserted.second)
