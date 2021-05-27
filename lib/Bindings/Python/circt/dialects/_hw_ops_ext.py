@@ -356,3 +356,10 @@ class HWModuleOp(ModuleLike):
 class HWModuleExternOp(ModuleLike):
   """Specialization for the HW module op class."""
   pass
+
+
+class ConstantOp:
+
+  @staticmethod
+  def create(data_type, value):
+    return hw.ConstantOp(data_type, IntegerAttr.get(data_type, value))

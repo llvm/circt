@@ -10,7 +10,7 @@ from circt.esi import types
 
 def build(mod, dummy_mod):
   # CHECK: %[[C0:.+]] = hw.constant 0
-  const = hw.ConstantOp(types.i32, mlir.ir.IntegerAttr.get(types.i32, 0))
+  const = hw.ConstantOp.create(types.i32, 0)
   inst = dummy_mod.create("d")
   connect(inst.x, inst.y)
   connect(inst.x, const)

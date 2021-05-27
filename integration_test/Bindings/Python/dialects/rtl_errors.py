@@ -26,7 +26,7 @@ with Context() as ctx, Location.unknown():
         name="one_output",
         output_ports=[("a", i32)],
         body_builder=lambda m: hw.OutputOp(
-            [hw.ConstantOp(i32, IntegerAttr.get(i32, 46)).result]),
+            [hw.ConstantOp.create(i32, 46).result]),
     )
     input_output = hw.HWModuleOp(
         name="input_output",
@@ -66,7 +66,7 @@ with Context() as ctx, Location.unknown():
       inst1 = one_input.create("inst1")
 
     try:
-      instance_builder_tests = hw.HWModuleOp(
-          name="instance_builder_tests", body_builder=instance_builder_body)
+      instance_builder_tests = hw.HWModuleOp(name="instance_builder_tests",
+                                             body_builder=instance_builder_body)
     except RuntimeError as e:
       print(e)

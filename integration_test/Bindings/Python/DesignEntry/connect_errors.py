@@ -24,7 +24,7 @@ class Dummy:
 class Test:
 
   def construct(self, mod):
-    const = hw.ConstantOp(types.i32, mlir.ir.IntegerAttr.get(types.i32, 0))
+    const = hw.ConstantOp.create(types.i32, 0)
     dummy = Dummy()
     inst = dummy.module.create("d", {"x": const.result})
     try:
