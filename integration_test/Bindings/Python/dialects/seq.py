@@ -48,7 +48,7 @@ with Context() as ctx, Location.unknown():
       seq.reg(reg_input, module.clk, name="FuBar")
 
       # CHECK: seq.compreg %[[INPUT_VAL]], %clk {name = "reg1"}
-      reg1 = seq.CompRegOp.create(i32, {"clk": module.clk}, name="reg1")
+      reg1 = seq.CompRegOp.create(i32, clk=module.clk, name="reg1")
       connect(reg1.input, reg_input)
 
       # CHECK: seq.compreg %[[INPUT_VAL]], %clk {name = "reg2"}

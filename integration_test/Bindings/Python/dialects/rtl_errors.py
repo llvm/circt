@@ -40,7 +40,7 @@ with Context() as ctx, Location.unknown():
 
       # CHECK: unknown port name b
       try:
-        inst2 = one_input.create("inst2", {"a": constant_value})
+        inst2 = one_input.create("inst2", a=constant_value)
         connect(inst2.b, constant_value)
       except AttributeError as e:
         print(e)

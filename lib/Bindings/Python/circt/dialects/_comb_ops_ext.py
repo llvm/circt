@@ -19,8 +19,8 @@ def UnaryOp(base):
   class _Class(base):
 
     @classmethod
-    def create(cls, *args, **kwargs):
-      return UnaryOpBuilder(cls, *args, **kwargs)
+    def create(cls, result_type, **kwargs):
+      return UnaryOpBuilder(cls, result_type, kwargs)
 
   return _Class
 
@@ -47,8 +47,8 @@ def BinaryOp(base):
   class _Class(base):
 
     @classmethod
-    def create(cls, *args, **kwargs):
-      return BinaryOpBuilder(cls, *args, **kwargs)
+    def create(cls, result_type, **kwargs):
+      return BinaryOpBuilder(cls, result_type, kwargs)
 
   return _Class
 
@@ -57,8 +57,8 @@ def BinaryOp(base):
 class ExtractOp:
 
   @staticmethod
-  def create(low_bit, *args, **kwargs):
-    return ExtractOpBuilder(low_bit, *args, **kwargs)
+  def create(low_bit, result_type, **kwargs):
+    return ExtractOpBuilder(low_bit, result_type, kwargs)
 
 
 @UnaryOp
