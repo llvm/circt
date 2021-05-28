@@ -85,8 +85,9 @@ static cl::opt<bool>
                       cl::init(false));
 
 static cl::opt<bool>
-    expandWhens("expand-whens", cl::desc("run the expand-whens pass on firrtl"),
-                cl::init(false));
+    disableExpandWhens("disable-expand-whens",
+                       cl::desc("disable the expand-whens pass"),
+                       cl::init(false));
 
 static cl::opt<bool>
     blackboxMemory("blackbox-memory",
@@ -204,7 +205,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass());
     auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
     // Only enable expand whens if lower types is also enabled.
-    if (expandWhens)
+    if (!disableExpandWhens)
       modulePM.addPass(firrtl::createExpandWhensPass());
   }
 
