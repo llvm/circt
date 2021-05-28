@@ -30,7 +30,6 @@ class PolynomialCompute:
 
     x = mod.x
     taps: list[mlir.ir.Value] = list()
-    runningPower: list[mlir.ir.Value] = list()
     for power, coeff in enumerate([1, 2, 3]):
       coeffVal = hw.ConstantOp.create(types.i32, coeff)
       if power == 0:
@@ -40,16 +39,14 @@ class PolynomialCompute:
         if power == 1:
           currPow = x
         else:
-          x_power = [x for i in range(power - 1)]
-          currPow = comb.MulOp(types.i32, x_power + [runningPower[-1]]).result
+          x_power = [x for i in range(power)]
+          currPow = comb.MulOp(types.i32, x_power).result
         newPartialSum = comb.AddOp(
             types.i32,
             [
                 partialSum,
                 comb.MulOp(types.i32, [coeffVal.result, currPow]).result
             ]).result
-
-        runningPower.append(currPow)
 
       taps.append(newPartialSum)
 
