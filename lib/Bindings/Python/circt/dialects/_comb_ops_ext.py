@@ -3,6 +3,8 @@ from circt.support import NamedValueOpView
 
 from mlir.ir import IntegerAttr, IntegerType
 
+from functools import reduce
+
 
 # Builder base classes for non-variadic unary and binary ops.
 class UnaryOpBuilder(NamedValueOpView):
@@ -47,7 +49,16 @@ def BinaryOp(base):
   class _Class(base):
 
     @classmethod
-    def create(cls, result_type, **kwargs):
+    def create(cls, result_type=None, **kwargs):
+      if not result_type:
+        types = list(map(lambda arg: arg.type, kwargs.values()))
+        if not types:
+          raise TypeError("result type must be specified")
+        all_equal = reduce(lambda t1, t2: t1 == t2, types)
+        if not all_equal:
+          raise TypeError(
+              f"expected same input port types, but received {types}")
+        result_type = types[0]
       return BinaryOpBuilder(cls, result_type, kwargs)
 
   return _Class

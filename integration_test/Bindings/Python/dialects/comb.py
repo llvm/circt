@@ -38,118 +38,118 @@ with Context() as ctx, Location.unknown():
       connect(sext.input, const.result)
 
       # CHECK: comb.divs %[[CONST]], %[[CONST]]
-      comb.DivSOp.create(i32, lhs=const.result, rhs=const.result)
+      comb.DivSOp.create(lhs=const.result, rhs=const.result)
       # CHECK: comb.divs %[[CONST]], %[[CONST]]
       divs = comb.DivSOp.create(i32)
       connect(divs.lhs, const.result)
       connect(divs.rhs, const.result)
 
       # CHECK: comb.divu %[[CONST]], %[[CONST]]
-      comb.DivUOp.create(i32, lhs=const.result, rhs=const.result)
+      comb.DivUOp.create(lhs=const.result, rhs=const.result)
       # CHECK: comb.divu %[[CONST]], %[[CONST]]
       divu = comb.DivUOp.create(i32)
       connect(divu.lhs, const.result)
       connect(divu.rhs, const.result)
 
       # CHECK: comb.mods %[[CONST]], %[[CONST]]
-      comb.ModSOp.create(i32, lhs=const.result, rhs=const.result)
+      comb.ModSOp.create(lhs=const.result, rhs=const.result)
       # CHECK: comb.mods %[[CONST]], %[[CONST]]
       mods = comb.ModSOp.create(i32)
       connect(mods.lhs, const.result)
       connect(mods.rhs, const.result)
 
       # CHECK: comb.modu %[[CONST]], %[[CONST]]
-      comb.ModUOp.create(i32, lhs=const.result, rhs=const.result)
+      comb.ModUOp.create(lhs=const.result, rhs=const.result)
       # CHECK: comb.modu %[[CONST]], %[[CONST]]
       modu = comb.ModUOp.create(i32)
       connect(modu.lhs, const.result)
       connect(modu.rhs, const.result)
 
       # CHECK: comb.shl %[[CONST]], %[[CONST]]
-      comb.ShlOp.create(i32, lhs=const.result, rhs=const.result)
+      comb.ShlOp.create(lhs=const.result, rhs=const.result)
       # CHECK: comb.shl %[[CONST]], %[[CONST]]
       shl = comb.ShlOp.create(i32)
       connect(shl.lhs, const.result)
       connect(shl.rhs, const.result)
 
       # CHECK: comb.shrs %[[CONST]], %[[CONST]]
-      comb.ShrSOp.create(i32, lhs=const.result, rhs=const.result)
+      comb.ShrSOp.create(lhs=const.result, rhs=const.result)
       # CHECK: comb.shrs %[[CONST]], %[[CONST]]
       shrs = comb.ShrSOp.create(i32)
       connect(shrs.lhs, const.result)
       connect(shrs.rhs, const.result)
 
       # CHECK: comb.shru %[[CONST]], %[[CONST]]
-      comb.ShrUOp.create(i32, lhs=const.result, rhs=const.result)
+      comb.ShrUOp.create(lhs=const.result, rhs=const.result)
       # CHECK: comb.shru %[[CONST]], %[[CONST]]
       shru = comb.ShrUOp.create(i32)
       connect(shru.lhs, const.result)
       connect(shru.rhs, const.result)
 
       # CHECK: comb.sub %[[CONST]], %[[CONST]]
-      comb.SubOp.create(i32, lhs=const.result, rhs=const.result)
+      comb.SubOp.create(lhs=const.result, rhs=const.result)
       # CHECK: comb.sub %[[CONST]], %[[CONST]]
       sub = comb.SubOp.create(i32)
       connect(sub.lhs, const.result)
       connect(sub.rhs, const.result)
 
       # CHECK: comb.icmp eq %[[CONST]], %[[CONST]]
-      comb.EqOp.create(i32, lhs=const.result, rhs=const.result)
-      eq = comb.EqOp.create(i32)
+      comb.EqOp.create(lhs=const.result, rhs=const.result)
+      eq = comb.EqOp.create()
       connect(eq.lhs, const.result)
       connect(eq.rhs, const.result)
 
       # CHECK: comb.icmp ne %[[CONST]], %[[CONST]]
-      comb.NeOp.create(i32, lhs=const.result, rhs=const.result)
-      ne = comb.NeOp.create(i32)
+      comb.NeOp.create(lhs=const.result, rhs=const.result)
+      ne = comb.NeOp.create()
       connect(ne.lhs, const.result)
       connect(ne.rhs, const.result)
 
       # CHECK: comb.icmp slt %[[CONST]], %[[CONST]]
-      comb.LtSOp.create(i32, lhs=const.result, rhs=const.result)
-      lts = comb.LtSOp.create(i32)
+      comb.LtSOp.create(lhs=const.result, rhs=const.result)
+      lts = comb.LtSOp.create()
       connect(lts.lhs, const.result)
       connect(lts.rhs, const.result)
 
       # CHECK: comb.icmp sle %[[CONST]], %[[CONST]]
-      comb.LeSOp.create(i32, lhs=const.result, rhs=const.result)
-      les = comb.LeSOp.create(i32)
+      comb.LeSOp.create(lhs=const.result, rhs=const.result)
+      les = comb.LeSOp.create()
       connect(les.lhs, const.result)
       connect(les.rhs, const.result)
 
       # CHECK: comb.icmp sgt %[[CONST]], %[[CONST]]
-      comb.GtSOp.create(i32, lhs=const.result, rhs=const.result)
-      gts = comb.GtSOp.create(i32)
+      comb.GtSOp.create(lhs=const.result, rhs=const.result)
+      gts = comb.GtSOp.create()
       connect(gts.lhs, const.result)
       connect(gts.rhs, const.result)
 
       # CHECK: comb.icmp sge %[[CONST]], %[[CONST]]
-      comb.GeSOp.create(i32, lhs=const.result, rhs=const.result)
-      ges = comb.GeSOp.create(i32)
+      comb.GeSOp.create(lhs=const.result, rhs=const.result)
+      ges = comb.GeSOp.create()
       connect(ges.lhs, const.result)
       connect(ges.rhs, const.result)
 
       # CHECK: comb.icmp ult %[[CONST]], %[[CONST]]
-      comb.LtUOp.create(i32, lhs=const.result, rhs=const.result)
-      ltu = comb.LtUOp.create(i32)
+      comb.LtUOp.create(lhs=const.result, rhs=const.result)
+      ltu = comb.LtUOp.create()
       connect(ltu.lhs, const.result)
       connect(ltu.rhs, const.result)
 
       # CHECK: comb.icmp ule %[[CONST]], %[[CONST]]
-      comb.LeUOp.create(i32, lhs=const.result, rhs=const.result)
-      leu = comb.LeUOp.create(i32)
+      comb.LeUOp.create(lhs=const.result, rhs=const.result)
+      leu = comb.LeUOp.create()
       connect(leu.lhs, const.result)
       connect(leu.rhs, const.result)
 
       # CHECK: comb.icmp ugt %[[CONST]], %[[CONST]]
-      comb.GtUOp.create(i32, lhs=const.result, rhs=const.result)
-      gtu = comb.GtUOp.create(i32)
+      comb.GtUOp.create(lhs=const.result, rhs=const.result)
+      gtu = comb.GtUOp.create()
       connect(gtu.lhs, const.result)
       connect(gtu.rhs, const.result)
 
       # CHECK: comb.icmp uge %[[CONST]], %[[CONST]]
-      comb.GeUOp.create(i32, lhs=const.result, rhs=const.result)
-      geu = comb.GeUOp.create(i32)
+      comb.GeUOp.create(lhs=const.result, rhs=const.result)
+      geu = comb.GeUOp.create()
       connect(geu.lhs, const.result)
       connect(geu.rhs, const.result)
 
