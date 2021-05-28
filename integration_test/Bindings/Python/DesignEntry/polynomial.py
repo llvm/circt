@@ -1,11 +1,10 @@
 # REQUIRES: bindings_python
-# XFAIL: true
 # RUN: %PYTHON% %s | FileCheck %s
 
 import mlir
 import circt
 
-from circt.design_entry import Input, Output, module
+from circt.design_entry import Input, Output, module, generator
 from circt.esi import types
 from circt.dialects import comb, hw
 
@@ -25,7 +24,7 @@ class PolynomialCompute:
     # Full result.
     self.y = Output(types.i32)
 
-  @staticmethod
+  @generator
   def construct(mod):
     """Implement this module for input 'x'."""
 
@@ -65,14 +64,6 @@ def build(top):
   hw.OutputOp([poly.y])
 
 
-def build(top):
-  i32 = mlir.ir.Type.parse("i32")
-  c23 = mlir.ir.IntegerAttr.get(i32, 23)
-  x = hw.ConstantOp(i32, c23)
-  poly = PolynomialCompute([62, 42, 6], x=x)
-  hw.OutputOp([poly.y])
-
-
 mod = mlir.ir.Module.create()
 with mlir.ir.InsertionPoint(mod.body), circt.support.BackedgeBuilder():
   hw.HWModuleOp(name='top',
@@ -80,32 +71,6 @@ with mlir.ir.InsertionPoint(mod.body), circt.support.BackedgeBuilder():
                 output_ports=[('y', mlir.ir.Type.parse("i32"))],
                 body_builder=build)
 
-def construct(op: mlir.ir.Operation):
-  mod = op
-  while mod.name != "module":
-    mod = mod.parent
-
-  op_names_attrs = mlir.ir.ArrayAttr(op.attributes["opNames"])
-  op_names = [mlir.ir.StringAttr(x) for x in op_names_attrs]
-  input_ports = [(n.value, o.type) for (n, o) in zip(op_names, op.operands)]
-
-  result_names_attrs = mlir.ir.ArrayAttr(op.attributes["resultNames"])
-  result_names = [mlir.ir.StringAttr(x) for x in result_names_attrs]
-  output_ports = [(n.value, o.type) for (n, o) in zip(result_names, op.results)]
-
-  with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
-    mod = hw.HWModuleOp(
-        op.name,
-        input_ports=input_ports,
-        output_ports=output_ports,
-        body_builder=PolynomialCompute.construct)
-  with mlir.ir.InsertionPoint(op):
-    mapping = {name.value: op.operands[i] for i, name in enumerate(op_names)}
-    return mod.create(op.name, mapping).operation
-  print(f"py cb! {mod}")
-  return True
-
-circt.msft.register_generator("PolynomialCompute", "test", construct)
 mod.operation.print()
 pm = mlir.passmanager.PassManager.parse("run-generators")
 pm.run(mod)
@@ -113,17 +78,17 @@ pm.run(mod)
 mod.operation.print()
 # CHECK:  hw.module @top() -> (%y: i32) {
 # CHECK:    %c23_i32 = hw.constant 23 : i32
-# CHECK:    [[REG0:%.+]] = "circt.design_entry.PolynomialCompute"(%c23_i32) : (i32) -> i32
+# CHECK:    [[REG0:%.+]] = "circt.PolynomialCompute"(%c23_i32) {opNames = ["x"], resultNames = ["y"]} : (i32) -> i32
 # CHECK:    hw.output [[REG0]] : i32
 
 print("\n\n=== Verilog ===")
 # CHECK-LABEL: === Verilog ===
 
-# pm = mlir.passmanager.PassManager.parse(
-#   "hw-legalize-names,hw.module(hw-cleanup)")
-# pm.run(mod)
-# circt.export_verilog(mod, sys.stdout)
-# CHECK:  module PolynomialCompute(
+pm = mlir.passmanager.PassManager.parse(
+  "hw-legalize-names,hw.module(hw-cleanup)")
+pm.run(mod)
+circt.export_verilog(mod, sys.stdout)
+# CHECK:  module circt_PolynomialCompute(
 # CHECK:    input  [31:0] x,
 # CHECK:    output [31:0] y);
-# CHECK:    assign y = 32'h3E + 32'h2A * x + 32'h6 * x * x;
+# CHECK:    assign y = 32'h1 + 32'h2 * x + 32'h3 * x * x;

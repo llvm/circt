@@ -78,15 +78,11 @@ struct RunGeneratorsPass : public RunGeneratorsBase<RunGeneratorsPass> {
 };
 } // anonymous namespace
 
-static constexpr StringRef DesignEntryPrefix = "circt.design_entry.";
 void RunGeneratorsPass::runOnOperation() {
   Operation *top = getOperation();
   top->walk([this](Operation *op) {
     StringRef opName = op->getName().getStringRef();
-    if (!opName.startswith(DesignEntryPrefix))
-      return;
-    StringRef designModuleName = opName.substr(DesignEntryPrefix.size());
-    auto opGenerator = registeredOpGenerators.find(designModuleName);
+    auto opGenerator = registeredOpGenerators.find(opName);
     if (opGenerator != registeredOpGenerators.end()) {
       auto rc = opGenerator->second.runOnOperation(op);
       if (failed(rc))

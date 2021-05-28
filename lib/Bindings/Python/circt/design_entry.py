@@ -33,6 +33,9 @@ def __exit_loc():
   DefaultLocation.__exit__(None, None, None)
 
 
+OPERATION_NAMESPACE = "circt."
+
+
 class ModuleDecl:
   """Represents an input or output port on a design module."""
 
@@ -62,7 +65,7 @@ def module(cls):
   """The CIRCT design entry module class decorator."""
 
   class __Module(cls, mlir.ir.OpView):
-    OPERATION_NAME = "circt.design_entry." + cls.__name__
+    OPERATION_NAME = OPERATION_NAMESPACE + cls.__name__
     _ODS_REGIONS = (0, True)
 
     # Default mappings to operand/result numbers.
@@ -144,7 +147,52 @@ def module(cls):
         return self.results[op_num]
       return super().__getattribute__(name)
 
+  _register_generators(cls)
   return __Module
+
+
+def _register_generators(cls):
+  for member in cls.__dict__.items():
+    if isinstance(member[1], _Generate):
+      _register_generator(cls.__name__, member[0], member[1])
+
+
+def _register_generator(class_name, generator_name, generator):
+  circt.msft.register_generator(
+    OPERATION_NAMESPACE + class_name, generator_name, generator)
+
+
+class _Generate:
+  def __init__(self, gen_func):
+    self.gen_func = gen_func
+
+  def __call__(self, op):
+    mod = op
+    while mod.name != "module":
+      mod = mod.parent
+
+    op_names_attrs = mlir.ir.ArrayAttr(op.attributes["opNames"])
+    op_names = [mlir.ir.StringAttr(x) for x in op_names_attrs]
+    input_ports = [(n.value, o.type) for (n, o) in zip(op_names, op.operands)]
+
+    result_names_attrs = mlir.ir.ArrayAttr(op.attributes["resultNames"])
+    result_names = [mlir.ir.StringAttr(x) for x in result_names_attrs]
+    output_ports = [
+        (n.value, o.type) for (n, o) in zip(result_names, op.results)]
+
+    with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
+      mod = circt.dialects.hw.HWModuleOp(
+          op.name,
+          input_ports=input_ports,
+          output_ports=output_ports,
+          body_builder=self.gen_func)
+    with mlir.ir.InsertionPoint(op):
+      mapping = {name.value: op.operands[i] for i, name in enumerate(op_names)}
+      return mod.create(op.name, **mapping).operation
+
+
+def generator(func):
+  return _Generate(func)
 
 
 def connect(destination, source):
