@@ -1,4 +1,4 @@
-//===- GrandCentralDataTaps.cpp ---------------------------------*- C++ -*-===//
+//===- GrandCentralTaps.cpp -------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines the GrandCentralDataTaps pass.
+// This file defines the GrandCentralTaps pass.
 //
 //===----------------------------------------------------------------------===//
 
@@ -77,12 +77,11 @@ struct AnnotatedExtModule {
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
 
-class GrandCentralDataTapsPass
-    : public GrandCentralDataTapsBase<GrandCentralDataTapsPass> {
+class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
   void runOnOperation() override;
 };
 
-void GrandCentralDataTapsPass::runOnOperation() {
+void GrandCentralTapsPass::runOnOperation() {
   auto circuitOp = getOperation();
   LLVM_DEBUG(llvm::dbgs() << "Running the GCT Data Taps pass\n");
 
@@ -153,6 +152,6 @@ void GrandCentralDataTapsPass::runOnOperation() {
   }
 }
 
-std::unique_ptr<mlir::Pass> circt::firrtl::createGrandCentralDataTapsPass() {
-  return std::make_unique<GrandCentralDataTapsPass>();
+std::unique_ptr<mlir::Pass> circt::firrtl::createGrandCentralTapsPass() {
+  return std::make_unique<GrandCentralTapsPass>();
 }

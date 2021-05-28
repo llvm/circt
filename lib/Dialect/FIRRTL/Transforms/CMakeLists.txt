@@ -4,7 +4,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   CheckWidths.cpp
   ExpandWhens.cpp
   GrandCentral.cpp
-  GrandCentralDataTaps.cpp
+  GrandCentralTaps.cpp
   IMConstProp.cpp
   InferWidths.cpp
   LowerTypes.cpp

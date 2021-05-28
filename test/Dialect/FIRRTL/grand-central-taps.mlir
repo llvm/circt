@@ -1,4 +1,4 @@
-// RUN: circt-opt --grand-central-data-taps %s | FileCheck %s
+// RUN: circt-opt --sifive-gct-taps %s | FileCheck %s
 
 firrtl.circuit "TestHarness" attributes {
   annotations = [{
