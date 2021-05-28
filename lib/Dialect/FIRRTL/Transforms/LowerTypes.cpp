@@ -834,12 +834,6 @@ void TypeLoweringVisitor::visitExpr(SubfieldOp op) {
   opsToRemove.push_back(op);
 }
 
-static IntegerAttr getIntAttr(const APInt &value, MLIRContext *context) {
-  return IntegerAttr::get(
-      IntegerType::get(context, value.getBitWidth(), IntegerType::Unsigned),
-      value);
-}
-
 void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   Value inputVector = op.input();
   FIRRTLType vectorElementType = inputVector.getType()
@@ -914,18 +908,15 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   if (isOutput) {
     tmpOutputWires.resize(muxTreeVec.size());
     for (size_t i = 0, e = muxTreeVec.size(); i != e; ++i)
-      tmpOutputWires[i] = builder->create<WireOp>(
-          muxTreeVec[i].getType().cast<FIRRTLType>().getPassiveType());
+      tmpOutputWires[i] =
+          builder->create<WireOp>(muxTreeVec[i].getType().cast<FIRRTLType>());
   }
 
   // Create a true constant.
-  Value constTrue =
-      builder->create<ConstantOp>(UIntType::get(op.getContext(), 1),
-                                  getIntAttr(APInt(1, 1), op.getContext()));
+  Value constTrue = builder->create<ConstantOp>(
+      UIntType::get(op.getContext(), 1), APInt(1, 1));
 
   size_t dimRange = 0;
-  // auto tmpWire = builder->create<WireOp>(
-  //              op.getResult().getType().cast<FIRRTLType>().getPassiveType());
   for (size_t elem = muxTreeVec.size(), e = loweredVector.size(),
               numMuxs = muxTreeVec.size();
        elem != e; elem += numMuxs) {
@@ -939,12 +930,10 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
           index.getType().cast<FIRRTLType>().getBitWidthOrSentinel();
       // Create " && index == indexInt?"
       isIndexEq = builder->create<AndPrimOp>(
-          UIntType::get(op.getContext(), 1), isIndexEq,
-          builder->create<EQPrimOp>(
-              UIntType::get(op.getContext(), 1), index,
-              builder->create<ConstantOp>(
-                  UIntType::get(op.getContext(), selectWidth),
-                  getIntAttr(APInt(selectWidth, indexInt), op.getContext()))));
+          isIndexEq, builder->create<EQPrimOp>(
+                         index, builder->create<ConstantOp>(
+                                    UIntType::get(op.getContext(), selectWidth),
+                                    APInt(selectWidth, indexInt))));
       // This is the logic to generate the range of constant integers, with
       // which to compare the index.
       if (ind == dimRange) {
@@ -968,8 +957,7 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
         muxTreeVec[m] = tmpOutputWires[m];
       } else {
         muxTreeVec[m] = builder->create<MuxPrimOp>(
-            muxTreeVec[m].getType().cast<FIRRTLType>(), isIndexEq,
-            loweredVector[elem + m].first, muxTreeVec[m]);
+            isIndexEq, loweredVector[elem + m].first, muxTreeVec[m]);
       }
     }
   }
