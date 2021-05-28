@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/FieldRef.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
@@ -115,6 +116,7 @@ struct AnnotatedPort {
 struct AnnotatedExtModule {
   FExtModuleOp extModule;
   SmallVector<AnnotatedPort, 4> portAnnos;
+  ArrayAttr filteredModuleAnnos; // module annotations without data tap stuff
 };
 
 /// A value annotated to be tapped.
@@ -240,6 +242,16 @@ struct PortWiring {
   SmallString<16> suffix;
 };
 
+/// Return a version of `path` that skips all front instances it has in common
+/// with `other`.
+static InstancePath stripCommonPrefix(InstancePath path, InstancePath other) {
+  while (!path.empty() && !other.empty() && path.front() == other.front()) {
+    path = path.drop_front();
+    other = other.drop_front();
+  }
+  return path;
+}
+
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
@@ -289,7 +301,7 @@ void GrandCentralTapsPass::runOnOperation() {
       continue;
 
     // Go through the module ports and collect the annotated ones.
-    AnnotatedExtModule result{extModule, {}};
+    AnnotatedExtModule result{extModule, {}, {}};
     for (unsigned argNum = 0; argNum < extModule.getNumArguments(); ++argNum) {
       auto attrs =
           extModule.getArgAttrOfType<ArrayAttr>(argNum, strings.fannos);
@@ -309,6 +321,31 @@ void GrandCentralTapsPass::runOnOperation() {
           result.portAnnos.push_back({argNum, anno});
       }
     }
+
+    // If there are data tap annotations on the module, which is likely the
+    // case, create a filtered array of annotations with them removed.
+    if (auto attrs = extModule->getAttrOfType<ArrayAttr>(strings.annos)) {
+      auto isBad = [&](Attribute attr) {
+        if (auto anno = attr.dyn_cast<DictionaryAttr>())
+          if (anno.getAs<StringAttr>("class") == strings.dataTapsClass)
+            return true;
+        return false;
+      };
+      bool anyBad = llvm::any_of(attrs, isBad);
+      if (anyBad) {
+        SmallVector<Attribute, 8> filteredAttrs;
+        filteredAttrs.reserve(attrs.size());
+        for (auto attr : attrs) {
+          if (!isBad(attr))
+            filteredAttrs.push_back(attr);
+        }
+        result.filteredModuleAnnos =
+            ArrayAttr::get(&getContext(), filteredAttrs);
+      } else {
+        result.filteredModuleAnnos = attrs;
+      }
+    }
+
     if (!result.portAnnos.empty())
       modules.push_back(std::move(result));
   }
@@ -559,10 +596,76 @@ void GrandCentralTapsPass::runOnOperation() {
     // instances.) To solve this issue, create a dedicated implementation for
     // every data tap instance, and among the possible targets for the data taps
     // choose the one with the shortest relative path to the data tap instance.
+    OpBuilder builder(blackBox.extModule);
     unsigned implIdx = 0;
     for (auto path : paths) {
-      LLVM_DEBUG(llvm::dbgs() << "Implementing " << blackBox.extModule.getName()
-                              << " for " << path << "\n");
+      builder.setInsertionPointAfter(blackBox.extModule);
+
+      // Create a new firrtl.module that implements the data tap.
+      auto name = StringAttr::get(
+          &getContext(),
+          llvm::formatv("{0}_impl_{1}", blackBox.extModule.getName(), implIdx++)
+              .str());
+      LLVM_DEBUG(llvm::dbgs()
+                 << "Implementing " << name << " ("
+                 << blackBox.extModule.getName() << " for " << path << ")\n");
+      auto impl = builder.create<FModuleOp>(blackBox.extModule->getLoc(), name,
+                                            blackBox.extModule.getPorts(),
+                                            blackBox.filteredModuleAnnos);
+      builder.setInsertionPointToEnd(impl.getBodyBlock());
+
+      // Connect the output ports to the appropriate tapped object.
+      for (auto port : portWiring) {
+        LLVM_DEBUG(llvm::dbgs() << "- Wiring up port " << port.portNum << "\n");
+        // Determine the shortest hierarchical prefix from this black box
+        // instance to the tapped object.
+        Optional<InstancePath> shortestPrefix;
+        for (auto prefix : port.prefices) {
+          auto relative = stripCommonPrefix(prefix, path);
+          if (!shortestPrefix.hasValue() ||
+              relative.size() < shortestPrefix->size())
+            shortestPrefix = relative;
+        }
+        if (!shortestPrefix.hasValue()) {
+          LLVM_DEBUG(llvm::dbgs() << "  - Has no prefix, skipping\n");
+          continue;
+        }
+        LLVM_DEBUG(llvm::dbgs()
+                   << "  - Shortest prefix " << *shortestPrefix << "\n");
+
+        // Concatenate the prefix into a proper full hierarchical name.
+        SmallString<128> hname;
+        for (auto inst : shortestPrefix.getValue()) {
+          if (!hname.empty())
+            hname += '.';
+          hname += inst.name();
+        }
+        if (!hname.empty())
+          hname += '.';
+        hname += port.suffix;
+        LLVM_DEBUG(llvm::dbgs() << "  - Connecting as " << hname << "\n");
+
+        // Add a verbatim op that assigns this module port.
+        auto portName = getModulePortName(blackBox.extModule, port.portNum);
+        auto arg = impl.getArgument(port.portNum);
+        auto argType = arg.getType().cast<FIRRTLType>();
+        auto width = argType.getBitWidthOrSentinel();
+        if (width < 0) {
+          blackBox.extModule->emitError(llvm::formatv(
+              "data/mem tap \"{0}\" has unsupported type {1} (module port {2})",
+              hname, argType, portName));
+          signalPassFailure();
+          continue;
+        }
+
+        // Create the `connect(port, cast(verbatim("foo.bar")))` chain.
+        auto intType = builder.getIntegerType(width);
+        auto hnameVerbatim = builder.create<sv::VerbatimExprOp>(
+            blackBox.extModule->getLoc(), intType, hname);
+        auto hnameCast = builder.create<StdIntCastOp>(
+            blackBox.extModule->getLoc(), argType, hnameVerbatim);
+        builder.create<ConnectOp>(blackBox.extModule->getLoc(), arg, hnameCast);
+      }
     }
   }
 }

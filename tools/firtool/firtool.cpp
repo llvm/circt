@@ -235,8 +235,11 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
                         ? blackBoxRoot
                         : blackBoxRootResourcePath));
 
-  if (grandCentral)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createGrandCentralPass());
+  if (grandCentral) {
+    auto &circuitPM = pm.nest<firrtl::CircuitOp>();
+    circuitPM.addPass(firrtl::createGrandCentralPass());
+    circuitPM.addPass(firrtl::createGrandCentralTapsPass());
+  }
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (lowerToHW || outputFormat == OutputVerilog ||
