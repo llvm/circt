@@ -20,8 +20,11 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/FormatVariadic.h"
 
 #define DEBUG_TYPE "gct"
+
+using llvm::SmallDenseMap;
 
 using namespace circt;
 using namespace firrtl;
@@ -230,6 +233,13 @@ InstancePath InstanceGraph::appendInstance(InstancePath path, InstanceOp inst) {
   return InstancePath(newPath, n);
 }
 
+/// Necessary information to wire up a port with tapped data or memory location.
+struct PortWiring {
+  unsigned portNum;
+  ArrayRef<InstancePath> prefices;
+  SmallString<16> suffix;
+};
+
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
@@ -317,8 +327,8 @@ void GrandCentralTapsPass::runOnOperation() {
 
   // Gather the annotated ports and operations throughout the design that we are
   // supposed to tap in one way or another.
-  DenseMap<Attribute, Value> tappedData;
-  DenseMap<Attribute, Operation *> tappedMems;
+  DenseMap<Attribute, BlockArgument> tappedArgs;
+  DenseMap<Attribute, Operation *> tappedOps;
   circuitOp.walk([&](Operation *op) {
     if (auto module = dyn_cast<FModuleOp>(op)) {
       // Go through the module ports and collect the annotated ones.
@@ -334,19 +344,13 @@ void GrandCentralTapsPass::runOnOperation() {
           if (!anno)
             continue;
           auto cls = anno.getAs<StringAttr>("class");
-          if (cls == strings.deletedKeyClass ||
-              cls == strings.literalKeyClass ||
-              cls == strings.referenceKeyClass ||
-              cls == strings.internalKeyClass)
+          if (cls == strings.referenceKeyClass)
             assert(
-                tappedData.insert({anno, module.getArgument(argNum)}).second &&
-                "ambiguous data tap annotation");
+                tappedArgs.insert({anno, module.getArgument(argNum)}).second &&
+                "ambiguous tap annotation");
         }
       }
     } else {
-      // We only support tapping single result operations.
-      if (op->getNumResults() != 1)
-        return;
       auto attrs = op->getAttrOfType<ArrayAttr>(strings.annos);
       if (!attrs)
         return;
@@ -360,24 +364,19 @@ void GrandCentralTapsPass::runOnOperation() {
         if (!anno)
           continue;
         auto cls = anno.getAs<StringAttr>("class");
-        if (cls == strings.memTapClass)
-          assert(tappedMems.insert({anno, op}).second &&
-                 "ambiguous mem tap annotation");
-        else if (cls == strings.deletedKeyClass ||
-                 cls == strings.literalKeyClass ||
-                 cls == strings.referenceKeyClass ||
-                 cls == strings.internalKeyClass)
-          assert(tappedData.insert({anno, op->getResult(0)}).second &&
-                 "ambiguous data tap annotation");
+        if (cls == strings.memTapClass || cls == strings.referenceKeyClass ||
+            cls == strings.internalKeyClass)
+          assert(tappedOps.insert({anno, op}).second &&
+                 "ambiguous tap annotation");
       }
     }
   });
 
-  LLVM_DEBUG(llvm::dbgs() << "Tapped data:\n");
-  for (auto it : tappedData)
+  LLVM_DEBUG(llvm::dbgs() << "Tapped values:\n");
+  for (auto it : tappedArgs)
     LLVM_DEBUG(llvm::dbgs() << "- " << it.first << ": " << it.second << "\n");
-  LLVM_DEBUG(llvm::dbgs() << "Tapped mems:\n");
-  for (auto it : tappedMems)
+  LLVM_DEBUG(llvm::dbgs() << "Tapped ops:\n");
+  for (auto it : tappedOps)
     LLVM_DEBUG(llvm::dbgs() << "- " << it.first << ": " << *it.second << "\n");
 
   // Process each black box independently.
@@ -390,12 +389,182 @@ void GrandCentralTapsPass::runOnOperation() {
     auto paths = instanceGraph.getAbsolutePaths(blackBox.extModule);
     for (auto path : paths)
       LLVM_DEBUG(llvm::dbgs() << "- " << path << "\n");
-  }
 
-  // Gather the absolute paths to all instances of every annotated extmodule.
-  // Since the contents of the generated taps module are sensitive to the where
-  // the module is instantiated, this will inform what different variations of
-  // the taps module need to be generated.
+    // Go through the port annotations of the tap module and generate a
+    // hierarchical path for each.
+    SmallVector<PortWiring, 8> portWiring;
+    SmallDenseMap<Attribute, unsigned, 2> memPortIdx;
+    portWiring.reserve(blackBox.portAnnos.size());
+    for (auto portAnno : blackBox.portAnnos) {
+      LLVM_DEBUG(llvm::dbgs() << "- Processing port " << portAnno.portNum
+                              << " anno " << portAnno.anno << "\n");
+      auto portName = getModulePortName(blackBox.extModule, portAnno.portNum);
+      auto cls = portAnno.anno.getAs<StringAttr>("class");
+      PortWiring wiring = {portAnno.portNum, {}, {}};
+
+      // Handle data taps on signals and ports.
+      if (cls == strings.referenceKeyClass) {
+        // Handle block arguments.
+        if (auto blockArg = tappedArgs.lookup(portAnno.anno)) {
+          auto parentModule = blockArg.getOwner()->getParentOp();
+          wiring.prefices = instanceGraph.getAbsolutePaths(parentModule);
+          wiring.suffix =
+              getModulePortName(parentModule, blockArg.getArgNumber())
+                  .getValue();
+          portWiring.push_back(std::move(wiring));
+          continue;
+        }
+
+        // Handle operations.
+        if (auto op = tappedOps.lookup(portAnno.anno)) {
+          // We currently require the target to be a wire.
+          // TODO: This should probably also allow wires?
+          auto wire = dyn_cast<WireOp>(op);
+          if (!wire) {
+            auto diag = blackBox.extModule.emitError(llvm::formatv(
+                "ReferenceDataTapKey on port {0} must be a wire", portName));
+            diag.attachNote(op->getLoc()) << "referenced operation is here:";
+            signalPassFailure();
+            continue;
+          }
+
+          // We currently require the target to be named.
+          // TODO: If we were to use proper cross-module reference ops in the IR
+          // then this could be anonymous, with ExportVerilog resolving the name
+          // at the last moment.
+          auto name = wire.nameAttr();
+          if (!name) {
+            auto diag =
+                wire.emitError("wire targeted by data tap must have a name");
+            diag.attachNote(blackBox.extModule->getLoc()) << llvm::formatv(
+                "used by ReferenceDataTapKey on port {0} here:", portName);
+            signalPassFailure();
+            continue;
+          }
+
+          wiring.prefices = instanceGraph.getAbsolutePaths(
+              wire->getParentOfType<FModuleOp>());
+          wiring.suffix = name.getValue();
+          portWiring.push_back(std::move(wiring));
+          continue;
+        }
+
+        // The annotation scattering must have placed this annotation on some
+        // target operation or block argument, which we should have picked up in
+        // the tapped args or ops maps.
+        signalPassFailure();
+        llvm::report_fatal_error(
+            llvm::formatv("ReferenceDataTapKey annotation was not scattered to "
+                          "an operation: {0}",
+                          portAnno.anno)
+                .str());
+      }
+
+      // Handle data taps on black boxes.
+      if (cls == strings.internalKeyClass) {
+        auto op = tappedOps.lookup(portAnno.anno);
+        if (!op) {
+          signalPassFailure();
+          llvm::report_fatal_error(
+              llvm::formatv(
+                  "DataTapModuleSignalKey annotation was not scattered to "
+                  "an operation: {0}",
+                  portAnno.anno)
+                  .str());
+        }
+
+        // Extract the internal path we're supposed to append.
+        auto internalPath = portAnno.anno.getAs<StringAttr>("internalPath");
+        if (!internalPath) {
+          blackBox.extModule.emitOpError(
+              llvm::formatv("DataTapModuleSignalKey annotation on port {0} "
+                            "missing \"internalPath\" attribute",
+                            portName));
+          signalPassFailure();
+          continue;
+        }
+
+        wiring.prefices = instanceGraph.getAbsolutePaths(op);
+        wiring.suffix = internalPath.getValue();
+        portWiring.push_back(std::move(wiring));
+        continue;
+      }
+
+      // Handle data taps with literals.
+      if (cls == strings.literalKeyClass) {
+        blackBox.extModule.emitOpError(llvm::formatv(
+            "LiteralDataTapKey annotations not yet supported (on port {0})",
+            portName));
+        signalPassFailure();
+        continue;
+      }
+
+      // Handle memory taps.
+      if (cls == strings.memTapClass) {
+        auto op = tappedOps.lookup(portAnno.anno);
+        if (!op) {
+          signalPassFailure();
+          llvm::report_fatal_error(
+              llvm::formatv(
+                  "DataTapModuleSignalKey annotation was not scattered to "
+                  "an operation: {0}",
+                  portAnno.anno)
+                  .str());
+        }
+
+        // Extract the name of the memory.
+        // TODO: This would be better handled through a proper cross-module
+        // reference preserved in the IR, such that ExportVerilog can insert a
+        // proper name here at the last moment.
+        auto name = op->getAttrOfType<StringAttr>("name");
+        if (!name) {
+          auto diag = op->emitError("target of memory tap must have a name");
+          diag.attachNote(blackBox.extModule->getLoc()) << llvm::formatv(
+              "used by MemTapAnnotation on port {0} here:", portName);
+          signalPassFailure();
+          continue;
+        }
+
+        // Formulate a hierarchical reference into the memory.
+        // CAVEAT: This just assumes that the memory will map to something that
+        // can be indexed in the final Verilog. If the memory gets turned into
+        // an instance of some sort, we lack the information necessary to go in
+        // and access individual elements of it.
+        wiring.prefices =
+            instanceGraph.getAbsolutePaths(op->getParentOfType<FModuleOp>());
+        wiring.suffix = llvm::formatv("{0}[{1}]", name.getValue(),
+                                      memPortIdx[portAnno.anno]++);
+        portWiring.push_back(std::move(wiring));
+        continue;
+      }
+
+      llvm_unreachable(
+          llvm::formatv("unknown annotation {}", portAnno.anno).str().c_str());
+    }
+
+    LLVM_DEBUG(llvm::dbgs() << "- Wire up as follows:\n");
+    for (auto wiring : portWiring) {
+      LLVM_DEBUG(llvm::dbgs() << "- Port " << wiring.portNum << ":\n");
+      for (auto path : wiring.prefices) {
+        LLVM_DEBUG(llvm::dbgs()
+                   << "  - " << path << "." << wiring.suffix << "\n");
+      }
+    }
+
+    // Now we have an awkward mapping problem. We have multiple data tap module
+    // instances, which reference things in modules that in turn have multiple
+    // instances. This is a side-effect of how Grand Central annotates things on
+    // modules rather than instances. (However in practice these will have a
+    // one-to-one correspondence due to CHIRRTL having fully uniquified
+    // instances.) To solve this issue, create a dedicated implementation for
+    // every data tap instance, and among the possible targets for the data taps
+    // choose the one with the shortest relative path to the data tap instance.
+    unsigned implIdx = 0;
+    for (auto path : paths) {
+      LLVM_DEBUG(llvm::dbgs() << "Implementing " << blackBox.extModule.getName()
+                              << " for " << path << "\n");
+    }
+  }
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createGrandCentralTapsPass() {
