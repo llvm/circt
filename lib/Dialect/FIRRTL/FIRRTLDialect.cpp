@@ -41,7 +41,11 @@ FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
     // TODO: implement subindex op.
     if (auto subfieldOp = dyn_cast<SubfieldOp>(op)) {
       value = subfieldOp.input();
-      auto bundleType = value.getType().template cast<BundleType>();
+      // Strip any flip wrapping the bundle type.
+      auto type = value.getType();
+      if (auto flipType = type.dyn_cast<FlipType>())
+          type = flipType.getElementType();
+      auto bundleType = type.cast<BundleType>();
       auto index =
           bundleType.getElementIndex(subfieldOp.fieldname()).getValue();
       // Rebase the current index on the parent field's index.

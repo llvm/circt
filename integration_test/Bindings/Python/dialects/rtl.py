@@ -74,7 +74,7 @@ with Context() as ctx, Location.unknown():
         name="one_output",
         output_ports=[("a", i32)],
         body_builder=lambda m: hw.OutputOp(
-            [hw.ConstantOp(i32, IntegerAttr.get(i32, 46)).result]),
+            [hw.ConstantOp.create(i32, 46).result]),
     )
     two_outputs = hw.HWModuleOp(
         name="two_outputs",
@@ -95,10 +95,10 @@ with Context() as ctx, Location.unknown():
       inst1 = one_output.create("inst1")
 
       # CHECK: hw.instance "inst2" @one_input(%[[INST1_RESULT]])
-      inst2 = one_input.create("inst2", {"a": inst1.a})
+      inst2 = one_input.create("inst2", a=inst1.a)
 
       # CHECK: hw.instance "inst4" @two_inputs(%[[INST1_RESULT]], %[[INST1_RESULT]])
-      inst4 = two_inputs.create("inst4", {"a": inst1.a})
+      inst4 = two_inputs.create("inst4", a=inst1.a)
       connect(inst4.b, inst1.a)
 
       # CHECK: %[[INST5_RESULT:.+]] = hw.instance "inst5" @MyWidget(%[[INST5_RESULT]])
@@ -106,7 +106,7 @@ with Context() as ctx, Location.unknown():
       connect(inst5.my_input, inst5.my_output)
 
       # CHECK: hw.instance "inst6" {{.*}} {BANKS = 2 : i64}
-      one_input.create("inst6", {"a": inst1.a}, parameters={"BANKS": 2})
+      one_input.create("inst6", a=inst1.a, parameters={"BANKS": 2})
 
     instance_builder_tests = hw.HWModuleOp(name="instance_builder_tests",
                                            body_builder=instance_builder_body)

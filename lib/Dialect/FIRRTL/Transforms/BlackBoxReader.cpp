@@ -57,7 +57,7 @@ struct EmittedFile {
 
 struct BlackBoxReaderPass : public BlackBoxReaderBase<BlackBoxReaderPass> {
   void runOnOperation() override;
-  void runOnAnnotation(Operation *op, DictionaryAttr anno, OpBuilder &builder);
+  bool runOnAnnotation(Operation *op, DictionaryAttr anno, OpBuilder &builder);
   void loadFile(Operation *op, StringRef inputPath, OpBuilder &builder);
 
   using BlackBoxReaderBase::inputPrefix;
@@ -106,7 +106,9 @@ void BlackBoxReaderPass::runOnOperation() {
   resourceFileName = "firrtl_black_box_resource_files.f";
 
   if (auto attrs = circuitOp->getAttrOfType<ArrayAttr>("annotations")) {
+    SmallVector<Attribute, 4> filteredAnnos;
     for (auto attr : attrs) {
+      filteredAnnos.push_back(attr);
       auto anno = attr.dyn_cast<DictionaryAttr>();
       if (!anno)
         continue;
@@ -114,6 +116,7 @@ void BlackBoxReaderPass::runOnOperation() {
 
       // Handle target dir annotation.
       if (cls == targetDirAnnoClass) {
+        filteredAnnos.pop_back();
         auto x = anno.getAs<StringAttr>("targetDir");
         if (!x) {
           circuitOp->emitError(targetDirAnnoClass.getValue() +
@@ -127,6 +130,7 @@ void BlackBoxReaderPass::runOnOperation() {
 
       // Handle resource file name annotation.
       if (cls == resourceFileNameAnnoClass) {
+        filteredAnnos.pop_back();
         auto x = anno.getAs<StringAttr>("resourceFileName");
         if (!x) {
           circuitOp->emitError(
@@ -139,6 +143,12 @@ void BlackBoxReaderPass::runOnOperation() {
         continue;
       }
     }
+
+    // Update the circuit annotations to exclude the ones we have consumed.
+    if (filteredAnnos.empty())
+      circuitOp->removeAttr("annotations");
+    else
+      circuitOp->setAttr("annotations", ArrayAttr::get(cx, filteredAnnos));
   }
 
   LLVM_DEBUG(llvm::dbgs() << "Black box target directory: " << targetDir << "\n"
@@ -153,10 +163,19 @@ void BlackBoxReaderPass::runOnOperation() {
     if (!isa<FModuleOp>(op) && !isa<FExtModuleOp>(op))
       continue;
     if (auto attrs = op.getAttrOfType<ArrayAttr>("annotations")) {
+      SmallVector<Attribute, 4> filteredAnnos;
       for (auto attr : attrs) {
+        filteredAnnos.push_back(attr);
         if (auto anno = attr.dyn_cast<DictionaryAttr>())
-          runOnAnnotation(&op, anno, builder);
+          if (runOnAnnotation(&op, anno, builder))
+            filteredAnnos.pop_back();
       }
+
+      // Update the operation annotations to exclude the ones we have consumed.
+      if (filteredAnnos.empty())
+        op.removeAttr("annotations");
+      else
+        op.setAttr("annotations", ArrayAttr::get(cx, filteredAnnos));
     }
   }
 
@@ -197,8 +216,10 @@ void BlackBoxReaderPass::runOnOperation() {
   emittedFiles.clear();
 }
 
-/// Run on an operation annotated with a black box annotation.
-void BlackBoxReaderPass::runOnAnnotation(Operation *op, DictionaryAttr anno,
+/// Run on an operation-annotation pair. The annotation need not be a black box
+/// annotation. Returns `true` if the annotation was indeed a black box
+/// annotation (even if it was incomplete) and should be removed from the op.
+bool BlackBoxReaderPass::runOnAnnotation(Operation *op, DictionaryAttr anno,
                                          OpBuilder &builder) {
   auto cls = anno.getAs<StringAttr>("class");
 
@@ -210,7 +231,7 @@ void BlackBoxReaderPass::runOnAnnotation(Operation *op, DictionaryAttr anno,
       op->emitError(inlineAnnoClass.getValue() +
                     " annotation missing \"name\" or \"text\" attribute");
       signalPassFailure();
-      return;
+      return true;
     }
 
     LLVM_DEBUG(llvm::dbgs()
@@ -219,7 +240,7 @@ void BlackBoxReaderPass::runOnAnnotation(Operation *op, DictionaryAttr anno,
     // Create an IR node to hold the contents.
     emittedFiles.push_back({builder.create<VerbatimOp>(op->getLoc(), text),
                             builder.getStringAttr(name.getValue())});
-    return;
+    return true;
   }
 
   // Handle path annotation.
@@ -229,11 +250,12 @@ void BlackBoxReaderPass::runOnAnnotation(Operation *op, DictionaryAttr anno,
       op->emitError(pathAnnoClass.getValue() +
                     " annotation missing \"path\" attribute");
       signalPassFailure();
-      return;
+      return true;
     }
     SmallString<128> inputPath(inputPrefix);
     appendPossiblyAbsolutePath(inputPath, path.getValue());
-    return loadFile(op, inputPath, builder);
+    loadFile(op, inputPath, builder);
+    return true;
   }
 
   // Handle resource annotation.
@@ -243,15 +265,18 @@ void BlackBoxReaderPass::runOnAnnotation(Operation *op, DictionaryAttr anno,
       op->emitError(pathAnnoClass.getValue() +
                     " annotation missing \"resourceId\" attribute");
       signalPassFailure();
-      return;
+      return true;
     }
-    SmallString<128> inputPath(inputPrefix);
-    appendPossiblyAbsolutePath(inputPath, resourcePrefix);
+    SmallString<128> inputPath(resourcePrefix);
     // Note that we always treat `resourceId` as a relative path, as the
     // previous Scala implementation tended to emit `/foo.v` as resourceId.
     llvm::sys::path::append(inputPath, resourceId.getValue());
-    return loadFile(op, inputPath, builder);
+    loadFile(op, inputPath, builder);
+    return true;
   }
+
+  // Annotation was not concerned with black boxes.
+  return false;
 }
 
 /// Copies a black box source file to the appropriate location in the target

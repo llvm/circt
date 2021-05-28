@@ -1318,6 +1318,12 @@ void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results.insert<patterns::EmptyNode>(context);
 }
 
+void RegResetOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                             MLIRContext *context) {
+  results.insert<patterns::RegresetWithZeroReset,
+                 patterns::RegresetWithInvalidReset>(context);
+}
+
 LogicalResult MemOp::canonicalize(MemOp op, PatternRewriter &rewriter) {
   // If memory has known, but zero width, eliminate it.
   if (op.getDataType().getBitWidthOrSentinel() != 0)
