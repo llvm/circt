@@ -75,7 +75,6 @@ def PhysLocation : MSFT_Attr<"PhysLocation"> {
 def RunGenerators: Pass<"run-generators", "mlir::ModuleOp"> {
   let summary = "Run the MSFT design entry generators";
   let constructor = "circt::msft::createRunGeneratorsPass()";
-  let dependentDialects = ["circt::hw::HWDialect"];
 }
 
 #endif // MSFT_TD

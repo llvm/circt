@@ -44,8 +44,6 @@ static void addPhysLocationAttr(MlirOperation cOp, std::string entityName,
   op->setAttr(entity, loc);
 }
 
-static llvm::SmallPtrSet<py::function *, 32> generatorCallbacks;
-
 static MlirOperation callPyFunc(MlirOperation op, void *userData) {
   py::gil_scoped_acquire gil;
   auto replacement = (*(py::function *)userData)(op);
@@ -54,18 +52,10 @@ static MlirOperation callPyFunc(MlirOperation op, void *userData) {
 
 static void registerGenerator(MlirContext ctxt, std::string opName,
                               std::string generatorName, py::function cb) {
+  // Since we don't have an 'unregister' call, just allocate in forget about it.
   py::function *cbPtr = new py::function(cb);
-  generatorCallbacks.insert(cbPtr);
   mlirMSFTRegisterGenerator(ctxt, opName.c_str(), generatorName.c_str(),
                             mlirMSFTGeneratorCallback{&callPyFunc, cbPtr});
-}
-
-static void test(MlirOperation op) {
-  py::gil_scoped_acquire gil;
-  for (auto entry : generatorCallbacks) {
-    auto rc = (*entry)(op);
-    assert(rc);
-  }
 }
 
 /// Populate the msft python module.
@@ -90,5 +80,4 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
 
   m.def("register_generator", &::registerGenerator,
         "Register a generator for a design module");
-  m.def("test", &test);
 }

@@ -91,6 +91,8 @@ struct RunGeneratorsPass : public RunGeneratorsBase<RunGeneratorsPass> {
 void RunGeneratorsPass::runOnOperation() {
   MLIRContext *ctxt = &getContext();
   MSFTDialect *msft = ctxt->getLoadedDialect<MSFTDialect>();
+  if (!msft)
+    return;
   detail::Generators *generators = msft->generators;
   if (!generators)
     return;
