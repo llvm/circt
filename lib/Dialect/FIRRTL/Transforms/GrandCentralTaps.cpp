@@ -566,7 +566,10 @@ void GrandCentralTapsPass::runOnOperation() {
         // CAVEAT: This just assumes that the memory will map to something that
         // can be indexed in the final Verilog. If the memory gets turned into
         // an instance of some sort, we lack the information necessary to go in
-        // and access individual elements of it.
+        // and access individual elements of it. This will break horribly since
+        // we generate memory impls out-of-line already, and memories coming
+        // from an external generator are even worse. This needs a special node
+        // in the IR that can properly inject the memory array on emission.
         wiring.prefices =
             instanceGraph.getAbsolutePaths(op->getParentOfType<FModuleOp>());
         wiring.suffix = llvm::formatv("{0}[{1}]", name.getValue(),
@@ -666,7 +669,17 @@ void GrandCentralTapsPass::runOnOperation() {
             blackBox.extModule->getLoc(), argType, hnameVerbatim);
         builder.create<ConnectOp>(blackBox.extModule->getLoc(), arg, hnameCast);
       }
+
+      // Switch the instance from the original extmodule to this implementation.
+      // CAVEAT: If the same black box data tap module is instantiated in a
+      // parent module that itself is instantiated in different locations, this
+      // will pretty arbitrarily pick one of those locations.
+      path.back()->setAttr("moduleName",
+                           builder.getSymbolRefAttr(name.getValue()));
     }
+
+    // Drop the original black box module.
+    blackBox.extModule.erase();
   }
 }
 
