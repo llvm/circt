@@ -19,49 +19,59 @@ using namespace circt;
 using namespace msft;
 
 namespace {
-
-class GeneratorName {
-  GeneratorCallback generate;
+/// Holds the set of registered generators for each operation.
+class OpGenerator {
+  llvm::StringMap<GeneratorCallback> generators;
 
 public:
-  GeneratorName() : generate(nullptr) {}
-  GeneratorName(GeneratorCallback cb) : generate(cb) {}
+  void registerOpGenerator(StringRef generatorName, GeneratorCallback cb) {
+    generators[generatorName] = cb;
+  }
 
   LogicalResult runOnOperation(mlir::Operation *op);
 };
 
-LogicalResult GeneratorName::runOnOperation(mlir::Operation *op) {
+} // namespace
+
+LogicalResult OpGenerator::runOnOperation(mlir::Operation *op) {
+  // Use the first one, if there is one registered.
+  // TODO: select based on some criteria.
+  if (generators.size() == 0)
+    return failure();
+  GeneratorCallback gen = generators.begin()->second;
+
   mlir::IRRewriter rewriter(op->getContext());
-  Operation *replacement = generate(op);
+  Operation *replacement = gen(op);
   if (replacement == nullptr)
     return op->emitError("Failed generator on ") << op->getName();
   rewriter.replaceOp(op, replacement->getResults());
   return success();
 }
 
-class OpGenerator {
-  llvm::StringMap<GeneratorName> generators;
-
-public:
-  void registerOpGenerator(StringRef generatorName, GeneratorCallback cb) {
-    generators[generatorName] = GeneratorName(cb);
-  }
+namespace circt {
+namespace msft {
+namespace detail {
+struct Generators {
+  llvm::StringMap<OpGenerator> registeredOpGenerators;
 
   LogicalResult runOnOperation(mlir::Operation *op) {
-    // Use the first one, if there is one registered.
-    if (generators.size() > 0)
-      return generators.begin()->second.runOnOperation(op);
-    return failure();
+    StringRef opName = op->getName().getStringRef();
+    auto opGenerator = registeredOpGenerators.find(opName);
+    if (opGenerator == registeredOpGenerators.end())
+      return success(); // If we don't have a generator registered, just return.
+    return opGenerator->second.runOnOperation(op);
   }
 };
+} // namespace detail
+} // namespace msft
+} // namespace circt
 
-} // namespace
-
-static llvm::StringMap<OpGenerator> registeredOpGenerators;
-
-void circt::msft::registerGenerator(StringRef opName, StringRef generatorName,
+void MSFTDialect::registerGenerator(StringRef opName, StringRef generatorName,
                                     GeneratorCallback cb) {
-  registeredOpGenerators[opName].registerOpGenerator(generatorName, cb);
+  if (generators == nullptr)
+    generators = new detail::Generators();
+  generators->registeredOpGenerators[opName].registerOpGenerator(generatorName,
+                                                                 cb);
 }
 
 namespace circt {
@@ -79,15 +89,16 @@ struct RunGeneratorsPass : public RunGeneratorsBase<RunGeneratorsPass> {
 } // anonymous namespace
 
 void RunGeneratorsPass::runOnOperation() {
+  MLIRContext *ctxt = &getContext();
+  MSFTDialect *msft = ctxt->getLoadedDialect<MSFTDialect>();
+  detail::Generators *generators = msft->generators;
+  if (!generators)
+    return;
+
   Operation *top = getOperation();
-  top->walk([this](Operation *op) {
-    StringRef opName = op->getName().getStringRef();
-    auto opGenerator = registeredOpGenerators.find(opName);
-    if (opGenerator != registeredOpGenerators.end()) {
-      auto rc = opGenerator->second.runOnOperation(op);
-      if (failed(rc))
-        signalPassFailure();
-    }
+  top->walk([this, generators](Operation *op) {
+    if (failed(generators->runOnOperation(op)))
+      signalPassFailure();
   });
 }
 

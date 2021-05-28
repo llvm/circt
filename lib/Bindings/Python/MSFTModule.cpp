@@ -52,11 +52,11 @@ static MlirOperation callPyFunc(MlirOperation op, void *userData) {
   return replacement.cast<MlirOperation>();
 }
 
-static void registerGenerator(std::string opName, std::string generatorName,
-                              py::function cb) {
+static void registerGenerator(MlirContext ctxt, std::string opName,
+                              std::string generatorName, py::function cb) {
   py::function *cbPtr = new py::function(cb);
   generatorCallbacks.insert(cbPtr);
-  mlirMSFTRegisterGenerator(opName.c_str(), generatorName.c_str(),
+  mlirMSFTRegisterGenerator(ctxt, opName.c_str(), generatorName.c_str(),
                             mlirMSFTGeneratorCallback{&callPyFunc, cbPtr});
 }
 

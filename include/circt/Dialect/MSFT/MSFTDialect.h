@@ -19,10 +19,6 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
 
-#include "circt/Dialect/MSFT/MSFTDialect.h.inc"
-
-#include "circt/Dialect/MSFT/MSFTEnums.h.inc"
-
 #include <functional>
 
 namespace circt {
@@ -30,10 +26,15 @@ namespace msft {
 void registerMSFTPasses();
 
 typedef std::function<Operation *(Operation *)> GeneratorCallback;
-void registerGenerator(StringRef opName, StringRef generatorName,
-                       GeneratorCallback cb);
+
+namespace detail {
+struct Generators;
+} // namespace detail
 
 } // namespace msft
 } // namespace circt
+
+#include "circt/Dialect/MSFT/MSFTDialect.h.inc"
+#include "circt/Dialect/MSFT/MSFTEnums.h.inc"
 
 #endif // CIRCT_DIALECT_MSFT_MSFTDIALECT_H

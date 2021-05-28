@@ -5,6 +5,7 @@
 #include "circt-c/Dialect/MSFT.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
+#include "circt/Support/LLVM.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Registration.h"
 #include "mlir/CAPI/Support.h"
@@ -22,10 +23,14 @@ MlirLogicalResult mlirMSFTExportTcl(MlirModule module,
   return wrap(exportQuartusTcl(unwrap(module), stream));
 }
 
-void mlirMSFTRegisterGenerator(const char *opName, const char *generatorName,
+void mlirMSFTRegisterGenerator(MlirContext cCtxt, const char *opName,
+                               const char *generatorName,
                                mlirMSFTGeneratorCallback cb) {
-  registerGenerator(llvm::StringRef(opName), llvm::StringRef(generatorName),
-                    [cb](mlir::Operation *op) {
-                      return unwrap(cb.callback(wrap(op), cb.userData));
-                    });
+  mlir::MLIRContext *ctxt = unwrap(cCtxt);
+  MSFTDialect *msft = ctxt->getLoadedDialect<MSFTDialect>();
+  msft->registerGenerator(llvm::StringRef(opName),
+                          llvm::StringRef(generatorName),
+                          [cb](mlir::Operation *op) {
+                            return unwrap(cb.callback(wrap(op), cb.userData));
+                          });
 }

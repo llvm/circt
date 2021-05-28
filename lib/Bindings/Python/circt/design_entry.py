@@ -159,7 +159,8 @@ def _register_generators(cls):
 
 def _register_generator(class_name, generator_name, generator):
   circt.msft.register_generator(
-    OPERATION_NAMESPACE + class_name, generator_name, generator)
+      mlir.ir.Context.current, OPERATION_NAMESPACE + class_name,
+      generator_name, generator)
 
 
 class _Generate:

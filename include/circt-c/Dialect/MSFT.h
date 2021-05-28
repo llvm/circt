@@ -33,7 +33,8 @@ typedef struct {
 
 /// Register a generator callback (function pointer, user data pointer). Returns
 /// the callback it replaced, if any.
-void mlirMSFTRegisterGenerator(const char *opName, const char *generatorName,
+void mlirMSFTRegisterGenerator(MlirContext, const char *opName,
+                               const char *generatorName,
                                mlirMSFTGeneratorCallback cb);
 
 #ifdef __cplusplus
