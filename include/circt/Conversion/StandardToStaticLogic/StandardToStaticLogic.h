@@ -22,6 +22,8 @@ class Pass;
 
 namespace circt {
 std::unique_ptr<mlir::Pass> createCreatePipelinePass();
+
+std::unique_ptr<mlir::Pass> createSchedulePipelinePass();
 } // namespace circt
 
 #endif // CIRCT_CONVERSION_STANDARDTOSTATICLOGIC_H_

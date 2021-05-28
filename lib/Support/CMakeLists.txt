@@ -13,3 +13,5 @@ add_circt_library(CIRCTSupport
   LINK_LIBS PUBLIC
   MLIRIR
   )
+
+add_subdirectory(Scheduling)

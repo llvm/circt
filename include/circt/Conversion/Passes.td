@@ -116,4 +116,9 @@ def CreatePipeline : Pass<"create-pipeline", "mlir::FuncOp"> {
   let dependentDialects = ["staticlogic::StaticLogicDialect"];
 }
 
+def SchedulePipeline : Pass<"schedule-pipeline", "mlir::FuncOp"> {
+  let summary = "Annotate start times to operations inside pipeline operations";
+  let constructor = "circt::createSchedulePipelinePass()";
+}
+
 #endif // CIRCT_CONVERSION_PASSES_TD

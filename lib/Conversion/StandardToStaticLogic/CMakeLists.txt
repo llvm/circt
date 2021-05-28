@@ -10,5 +10,6 @@ add_circt_library(CIRCTStandardToStaticLogic
   MLIRStandard
   MLIRSupport
   MLIRTransforms
+  CIRCTScheduling
   CIRCTStaticLogicOps
   )

@@ -13,6 +13,7 @@
 #include "circt/Conversion/StandardToStaticLogic/StandardToStaticLogic.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
+#include "circt/Support/Scheduling/ASAPScheduler.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 
 using namespace circt;
@@ -119,6 +120,62 @@ struct CreatePipelinePass : public CreatePipelineBase<CreatePipelinePass> {
 
 } // namespace
 
+static LogicalResult schedulePipeline(PipelineOp pipe, OpBuilder &builder) {
+  auto &blockToSchedule = pipe.getRegion().getBlocks().front();
+  auto &operationsToSchedule = blockToSchedule.getOperations();
+
+  sched::Scheduler::OperatorTypeHandle unitLatencyOperator = 0;
+
+  sched::ASAPScheduler scheduler;
+  scheduler.registerOperatorType(unitLatencyOperator);
+  scheduler.setLatency(unitLatencyOperator, 1);
+
+  for (Operation &op : operationsToSchedule) {
+    scheduler.registerOperation(&op);
+    scheduler.setAssociatedOperatorType(&op, unitLatencyOperator);
+    for (Value operand : op.getOperands()) {
+      if (operand.isa<BlockArgument>())
+        continue; // block arguments are always available w.r.t the schedule
+      Operation *operandOp = operand.getDefiningOp();
+      scheduler.registerDependence(
+          sched::Scheduler::makeDependence(operandOp, &op));
+    }
+  }
+
+  if (failed(scheduler.schedule()) || failed(scheduler.verify())) {
+    pipe->emitError("scheduling failed");
+    return failure();
+  }
+
+  for (Operation &op : operationsToSchedule) {
+    unsigned startTime = scheduler.getStartTime(&op);
+    op.setAttr("startTime", builder.getIndexAttr(startTime));
+  }
+
+  return success();
+}
+
+namespace {
+
+struct SchedulePipelinePass
+    : public SchedulePipelineBase<SchedulePipelinePass> {
+  void runOnOperation() override {
+    mlir::FuncOp f = getOperation();
+    OpBuilder builder(f.getContext());
+
+    for (PipelineOp op : f.getOps<PipelineOp>()) {
+      if (failed(schedulePipeline(op, builder)))
+        return signalPassFailure();
+    }
+  }
+};
+
+} // anonymous namespace
+
 std::unique_ptr<mlir::Pass> circt::createCreatePipelinePass() {
   return std::make_unique<CreatePipelinePass>();
+}
+
+std::unique_ptr<mlir::Pass> circt::createSchedulePipelinePass() {
+  return std::make_unique<SchedulePipelinePass>();
 }
