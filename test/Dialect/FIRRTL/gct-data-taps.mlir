@@ -2,15 +2,9 @@
 
 firrtl.circuit "TestHarness" attributes {
   annotations = [{
-    class = "sifive.enterprise.firrtl.TestBenchDirAnnotation",
-    dirname = "builds/sandbox/dataTaps/firrtl"
-  }, {
     class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
     directory = "builds/sandbox/dataTaps/firrtl",
     filename = "builds/sandbox/dataTaps/firrtl/bindings.sv"
-  }, {
-    class = "firrtl.stage.RunFirrtlTransformAnnotation",
-    transform = "sifive.enterprise.grandcentral.GrandCentralTransform"
   }]
 } {
   firrtl.module @Bar(
