@@ -364,5 +364,14 @@ firrtl.module @bundle_types(in %p : !firrtl.uint<1>, in %clock: !firrtl.clock) {
   }
 }
 
+// This is exercising a bug in field reference creation when the bundle is
+// wrapped in an outer flip. See https://github.com/llvm/circt/issues/1172.
+firrtl.module @simple(in %in : !firrtl.bundle<a: uint<1>>) { }
+firrtl.module @bundle_ports() {
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  %simple_in = firrtl.instance @simple {name = "test0"}: !firrtl.flip<bundle<a: uint<1>>>
+  %0 = firrtl.subfield %simple_in("a") : (!firrtl.flip<bundle<a: uint<1>>>) -> !firrtl.uint<1>
+  firrtl.connect %0, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+}
 
 }
