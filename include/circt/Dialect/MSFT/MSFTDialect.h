@@ -25,6 +25,7 @@ namespace circt {
 namespace msft {
 void registerMSFTPasses();
 
+/// Operation to be lowered to replacement operation.
 typedef std::function<Operation *(Operation *)> GeneratorCallback;
 
 namespace detail {

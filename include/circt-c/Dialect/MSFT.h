@@ -26,13 +26,14 @@ MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(MSFT, msft);
 MlirLogicalResult mlirMSFTExportTcl(MlirModule, MlirStringCallback,
                                     void *userData);
 
+/// This callback constructs a replacement for the operation argument and
+/// returns it.
 typedef struct {
   MlirOperation (*callback)(MlirOperation, void *userData);
   void *userData;
 } mlirMSFTGeneratorCallback;
 
-/// Register a generator callback (function pointer, user data pointer). Returns
-/// the callback it replaced, if any.
+/// Register a generator callback (function pointer, user data pointer).
 void mlirMSFTRegisterGenerator(MlirContext, const char *opName,
                                const char *generatorName,
                                mlirMSFTGeneratorCallback cb);
