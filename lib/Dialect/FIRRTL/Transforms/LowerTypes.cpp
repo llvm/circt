@@ -644,22 +644,44 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
           fieldTypes.size() > 1) {
 
         unsigned loBit = 0;
+        auto memSF =
+            builder->create<SubfieldOp>(theType, newMem.getResult(i), elt.name);
+        WireOp writerTempWire;
+        if (kind == MemOp::PortKind::Write && oldName.contains("data")) {
+          writerTempWire = builder->create<WireOp>(fieldType);
+          builder->create<ConnectOp>(memSF, writerTempWire);
+        }
+        SmallVector<WireOp, 4> tempCatWires;
         for (auto field : fieldTypes) {
-          auto memSF = builder->create<SubfieldOp>(theType, newMem.getResult(i),
-                                                   elt.name);
           if (oldName.contains("mask")) {
             setBundleLowering(op.getResult(j), (oldName + field.suffix).str(),
                               memSF);
           } else {
             unsigned hiBit = loBit + field.type.getBitWidthOrSentinel() - 1;
+            auto fType =
+                UIntType::get(context, field.type.getBitWidthOrSentinel());
 
-            setBundleLowering(
-                op.getResult(j), (oldName + field.suffix).str(),
-                builder->create<BitsPrimOp>(
-                    UIntType::get(context, field.type.getBitWidthOrSentinel()),
-                    memSF, hiBit, loBit));
+            if (kind == MemOp::PortKind::Write) {
+              auto f1 = builder->create<WireOp>(
+                  fType, "_mem_writer_" + (oldName + field.suffix).str());
+              tempCatWires.push_back(f1);
+              setBundleLowering(op.getResult(j), (oldName + field.suffix).str(),
+                                f1);
+
+            } else {
+              setBundleLowering(
+                  op.getResult(j), (oldName + field.suffix).str(),
+                  builder->create<BitsPrimOp>(fType, memSF, hiBit, loBit));
+            }
             loBit = hiBit + 1;
           }
+        }
+        if (tempCatWires.size() > 0) {
+          Value tempWire1 = tempCatWires[0];
+          for (size_t i = 1, e = tempCatWires.size(); i != e; ++i) {
+            tempWire1 = builder->create<CatPrimOp>(tempWire1, tempCatWires[i]);
+          }
+          builder->create<ConnectOp>(writerTempWire, tempWire1);
         }
       } else {
         setBundleLowering(op.getResult(j), (oldName + fieldSuffix).str(),
