@@ -16,8 +16,6 @@
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/SV/SVOps.h"
-#include "circt/Support/FieldRef.h"
-#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/Debug.h"
@@ -35,39 +33,36 @@ using namespace firrtl;
 //===----------------------------------------------------------------------===//
 
 namespace llvm {
-// IdentifierOps hash just like Operation pointers.
+
+// Make InstanceOp behave like the underlying `Operation *`.
 template <>
-struct DenseMapInfo<InstanceOp> {
-  static InstanceOp getEmptyKey() {
-    return InstanceOp(llvm::DenseMapInfo<Operation *>::getEmptyKey());
+struct PointerLikeTypeTraits<InstanceOp> {
+  static inline void *getAsVoidPointer(InstanceOp value) {
+    return const_cast<void *>(value.getAsOpaquePointer());
   }
-  static InstanceOp getTombstoneKey() {
-    return InstanceOp(llvm::DenseMapInfo<Operation *>::getTombstoneKey());
+  static inline InstanceOp getFromVoidPointer(void *pointer) {
+    return InstanceOp::getFromOpaquePointer(pointer);
   }
-  static unsigned getHashValue(InstanceOp op) {
-    return DenseMapInfo<Operation *>::getHashValue(op);
-  }
-  static bool isEqual(InstanceOp lhs, InstanceOp rhs) {
-    return lhs.getOperation() == rhs.getOperation();
-  }
+  enum {
+    NumLowBitsAvailable =
+        PointerLikeTypeTraits<Operation *>::NumLowBitsAvailable
+  };
 };
 
+// Make DictionaryAttr behave like the underlying `Attribute`.
 template <>
-struct DenseMapInfo<DictionaryAttr> {
-  static DictionaryAttr getEmptyKey() {
-    return llvm::DenseMapInfo<Attribute>::getEmptyKey().cast<DictionaryAttr>();
+struct PointerLikeTypeTraits<DictionaryAttr> {
+  static inline void *getAsVoidPointer(DictionaryAttr value) {
+    return const_cast<void *>(value.getAsOpaquePointer());
   }
-  static DictionaryAttr getTombstoneKey() {
-    return llvm::DenseMapInfo<Attribute>::getTombstoneKey()
-        .cast<DictionaryAttr>();
+  static inline DictionaryAttr getFromVoidPointer(void *pointer) {
+    return DictionaryAttr::getFromOpaquePointer(pointer);
   }
-  static unsigned getHashValue(DictionaryAttr op) {
-    return DenseMapInfo<Attribute>::getHashValue(op);
-  }
-  static bool isEqual(DictionaryAttr lhs, DictionaryAttr rhs) {
-    return lhs == rhs;
-  }
+  enum {
+    NumLowBitsAvailable = PointerLikeTypeTraits<Attribute>::NumLowBitsAvailable
+  };
 };
+
 } // namespace llvm
 
 //===----------------------------------------------------------------------===//
@@ -149,7 +144,7 @@ struct InstanceGraph {
   /// The main module in the circuit.
   Operation *mainModule;
   /// A mapping from a module to all its instances in the design.
-  DenseMap<Operation *, DenseSet<InstanceOp>> moduleInstances;
+  DenseMap<Operation *, SmallPtrSet<InstanceOp, 1>> moduleInstances;
 
   InstanceGraph(CircuitOp circuitOp);
   ArrayRef<InstancePath> getAbsolutePaths(Operation *op);
