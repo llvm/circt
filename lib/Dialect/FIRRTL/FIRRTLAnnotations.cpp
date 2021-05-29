@@ -43,3 +43,10 @@ bool AnnotationSet::hasAnnotationImpl(StringRef className) const {
 bool AnnotationSet::hasDontTouch() const {
   return hasAnnotation("firrtl.transforms.DontTouchAnnotation");
 }
+
+/// Return the 'class' that this annotation is representing.
+StringRef Annotation::getClass() const {
+  if (auto classAttr = ((DictionaryAttr)attrDict).getAs<StringAttr>("class"))
+    return classAttr.getValue();
+  return {};
+}

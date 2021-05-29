@@ -15,9 +15,13 @@
 
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
+#include "llvm/ADT/STLExtras.h"
 
 namespace circt {
 namespace firrtl {
+
+class Annotation;
+class AnnotationSetIterator;
 
 /// This class provides a read-only projection over the MLIR attributes that
 /// represent a set of annotations.  It is intended to make this work less
@@ -47,10 +51,21 @@ public:
     return getAnnotationImpl(className);
   }
 
+  using iterator = AnnotationSetIterator;
+  iterator begin() const;
+  iterator end() const;
+
   // Support for widely used annotations.
 
   /// firrtl.transforms.DontTouchAnnotation
   bool hasDontTouch() const;
+
+  bool operator==(const AnnotationSet &other) const {
+    return annotations == other.annotations;
+  }
+  bool operator!=(const AnnotationSet &other) const {
+    return !(*this == other);
+  }
 
 private:
   bool hasAnnotationImpl(StringRef className) const;
@@ -59,8 +74,56 @@ private:
   ArrayRef<Attribute> annotations;
 };
 
-/// Return the
-AnnotationSet getAnnotations(Operation *op);
+/// This class provides a read-only projection of an annotation.
+class Annotation {
+public:
+  Annotation(DictionaryAttr attrDict) : attrDict(attrDict) {
+    assert(attrDict && "null dictionaries not allowed");
+  }
+
+  DictionaryAttr getDict() const { return attrDict; }
+
+  /// Return the 'class' that this annotation is representing.
+  StringRef getClass() const;
+
+  /// Return true if this annotation matches the specified class name.
+  bool isClass(StringRef name) const { return getClass() == name; }
+
+  template <typename AttrClass = Attribute>
+  AttrClass getMember(StringRef name) {
+    return attrDict.getAs<AttrClass>(name);
+  }
+
+private:
+  DictionaryAttr attrDict;
+};
+
+// Iteration over the annotation set.
+class AnnotationSetIterator
+    : public llvm::indexed_accessor_iterator<AnnotationSetIterator,
+                                             AnnotationSet, Annotation> {
+public:
+  // Index into this iterator.
+  Annotation operator*() const {
+    return Annotation(
+        this->getBase().getRaw()[this->getIndex()].cast<DictionaryAttr>());
+  }
+
+private:
+  AnnotationSetIterator(AnnotationSet owner, ptrdiff_t curIndex)
+      : llvm::indexed_accessor_iterator<AnnotationSetIterator, AnnotationSet,
+                                        Annotation>(owner, curIndex) {}
+  friend llvm::indexed_accessor_iterator<AnnotationSetIterator, AnnotationSet,
+                                         Annotation>;
+  friend class AnnotationSet;
+};
+
+inline auto AnnotationSet::begin() const -> iterator {
+  return AnnotationSetIterator(*this, 0);
+}
+inline auto AnnotationSet::end() const -> iterator {
+  return iterator(*this, annotations.size());
+}
 
 } // namespace firrtl
 } // namespace circt
