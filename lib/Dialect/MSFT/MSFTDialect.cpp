@@ -23,10 +23,7 @@ using namespace msft;
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
-void MSFTDialect::initialize() {
-  registerAttributes();
-  generators = nullptr;
-}
+void MSFTDialect::initialize() { registerAttributes(); }
 
 /// Registered hook to materialize a single constant operation from a given
 /// attribute value with the desired resultant type. This method should use

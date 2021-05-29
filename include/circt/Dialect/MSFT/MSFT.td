@@ -37,7 +37,7 @@ def MSFTDialect : Dialect {
                            GeneratorCallback cb);
 
     /// Generator details don't need to be exposed.
-    detail::Generators *generators;
+    llvm::ManagedStatic<detail::Generators> generators;
   }];
 }
 

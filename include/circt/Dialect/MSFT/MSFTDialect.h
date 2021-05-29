@@ -19,6 +19,8 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
 
+#include "llvm/Support/ManagedStatic.h"
+
 #include <functional>
 
 namespace circt {

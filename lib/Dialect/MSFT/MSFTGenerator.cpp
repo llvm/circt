@@ -68,8 +68,6 @@ struct Generators {
 
 void MSFTDialect::registerGenerator(StringRef opName, StringRef generatorName,
                                     GeneratorCallback cb) {
-  if (generators == nullptr)
-    generators = new detail::Generators();
   generators->registeredOpGenerators[opName].registerOpGenerator(generatorName,
                                                                  cb);
 }
@@ -93,13 +91,10 @@ void RunGeneratorsPass::runOnOperation() {
   MSFTDialect *msft = ctxt->getLoadedDialect<MSFTDialect>();
   if (!msft)
     return;
-  detail::Generators *generators = msft->generators;
-  if (!generators)
-    return;
 
   Operation *top = getOperation();
-  top->walk([this, generators](Operation *op) {
-    if (failed(generators->runOnOperation(op)))
+  top->walk([this, msft](Operation *op) {
+    if (failed(msft->generators->runOnOperation(op)))
       signalPassFailure();
   });
 }

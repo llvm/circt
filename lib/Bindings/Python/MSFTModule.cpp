@@ -16,8 +16,6 @@
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Support.h"
 
-#include "llvm/ADT/SmallPtrSet.h"
-
 #include "PybindUtils.h"
 #include <pybind11/functional.h>
 #include <pybind11/pybind11.h>

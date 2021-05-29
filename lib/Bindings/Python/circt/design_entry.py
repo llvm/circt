@@ -154,9 +154,9 @@ def module(cls):
 
 def _register_generators(cls):
   """Scan the class, looking for and registering _Generators."""
-  for member in cls.__dict__.items():
-    if isinstance(member[1], _Generate):
-      _register_generator(cls.__name__, member[0], member[1])
+  for (name, member) in cls.__dict__.items():
+    if isinstance(member, _Generate):
+      _register_generator(cls.__name__, name, member)
 
 
 def _register_generator(class_name, generator_name, generator):
