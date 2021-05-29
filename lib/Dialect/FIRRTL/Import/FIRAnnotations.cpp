@@ -10,8 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/FIRRTL/FIRAnnotations.h"
-#include "circt/Support/LLVM.h"
+#include "FIRAnnotations.h"
 
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -513,7 +512,8 @@ static bool parseAugmentedType(
   mlir::emitError(
       loc, "Unknown AugmentedType '" + classAttr.getValue() +
                "'. Either this is unsupported or maybe you mispelled it?")
-    .attachNote() << "See the full Annotation her: " << augmentedType;
+          .attachNote()
+      << "See the full Annotation her: " << augmentedType;
   return false;
 }
 

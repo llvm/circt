@@ -12,8 +12,8 @@
 
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 
+#include "FIRAnnotations.h"
 #include "FIRLexer.h"
-#include "circt/Dialect/FIRRTL/FIRAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
