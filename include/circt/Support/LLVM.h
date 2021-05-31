@@ -68,6 +68,19 @@ using mlir::Twine;
 using mlir::TypeSwitch;
 } // namespace circt
 
+// Forward declarations of LLVM classes to be imported in to the circt
+// namespace.
+namespace llvm {
+template <typename KeyT, typename ValueT, unsigned InlineBuckets,
+          typename KeyInfoT, typename BucketT>
+class SmallDenseMap;
+} // namespace llvm
+
+// Import things we want into our namespace.
+namespace circt {
+using llvm::SmallDenseMap;
+} // namespace circt
+
 // Forward declarations of classes to be imported in to the circt namespace.
 namespace mlir {
 class ArrayAttr;
