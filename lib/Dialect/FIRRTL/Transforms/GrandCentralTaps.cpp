@@ -351,8 +351,10 @@ void GrandCentralTapsPass::runOnOperation() {
   }
 
   // Fast path if there's nothing to do.
-  if (modules.empty())
+  if (modules.empty()) {
+    markAllAnalysesPreserved();
     return;
+  }
 
   // Build an instance graph.
   InstanceGraph instanceGraph(circuitOp);
