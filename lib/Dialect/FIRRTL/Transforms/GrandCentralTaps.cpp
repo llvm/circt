@@ -644,25 +644,11 @@ void GrandCentralTapsPass::runOnOperation() {
         LLVM_DEBUG(llvm::dbgs() << "  - Connecting as " << hname << "\n");
 
         // Add a verbatim op that assigns this module port.
-        auto portName = getModulePortName(blackBox.extModule, port.portNum);
         auto arg = impl.getArgument(port.portNum);
-        auto argType = arg.getType().cast<FIRRTLType>();
-        auto width = argType.getBitWidthOrSentinel();
-        if (width < 0) {
-          blackBox.extModule->emitError(llvm::formatv(
-              "data/mem tap \"{0}\" has unsupported type {1} (module port {2})",
-              hname, argType, portName));
-          signalPassFailure();
-          continue;
-        }
-
-        // Create the `connect(port, cast(verbatim("foo.bar")))` chain.
-        auto intType = builder.getIntegerType(width);
-        auto hnameVerbatim = builder.create<sv::VerbatimExprOp>(
-            blackBox.extModule->getLoc(), intType, hname);
-        auto hnameCast = builder.create<StdIntCastOp>(
-            blackBox.extModule->getLoc(), argType, hnameVerbatim);
-        builder.create<ConnectOp>(blackBox.extModule->getLoc(), arg, hnameCast);
+        auto hnameExpr = builder.create<VerbatimExprOp>(
+            blackBox.extModule->getLoc(), arg.getType().cast<FIRRTLType>(),
+            hname);
+        builder.create<ConnectOp>(blackBox.extModule->getLoc(), arg, hnameExpr);
       }
 
       // Switch the instance from the original extmodule to this implementation.

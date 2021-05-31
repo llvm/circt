@@ -1,4 +1,4 @@
-// RUN: firtool %s --sifive-grand-central --verilog | FileCheck %s
+// RUN: circt-opt %s --sifive-gct-taps | FileCheck %s
 
 firrtl.circuit "TestHarness" attributes {
   annotations = [{
@@ -67,11 +67,19 @@ firrtl.circuit "TestHarness" attributes {
     firrtl.connect %out, %bar_out : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
-  // CHECK: module [[DT:DataTap.*]](
-  // CHECK: assign _3 = bigScary.schwarzschild.no.more;
-  // CHECK: assign _2 = foo.bar.reset;
-  // CHECK: assign _1 = foo.bar.clock;
-  // CHECK: assign _0 = foo.bar.wire;
+  // CHECK: firrtl.module [[DT:@DataTap.*]](
+  // CHECK-SAME: out %_3: !firrtl.uint<1>,
+  // CHECK-SAME: out %_2: !firrtl.uint<1>,
+  // CHECK-SAME: out %_1: !firrtl.clock,
+  // CHECK-SAME: out %_0: !firrtl.uint<1>)
+  // CHECK-NEXT: [[V3:%.+]] = firrtl.verbatim.expr "bigScary.schwarzschild.no.more"
+  // CHECK-NEXT: firrtl.connect %_3, [[V3]]
+  // CHECK-NEXT: [[V2:%.+]] = firrtl.verbatim.expr "foo.bar.reset"
+  // CHECK-NEXT: firrtl.connect %_2, [[V2]]
+  // CHECK-NEXT: [[V1:%.+]] = firrtl.verbatim.expr "foo.bar.clock"
+  // CHECK-NEXT: firrtl.connect %_1, [[V1]]
+  // CHECK-NEXT: [[V0:%.+]] = firrtl.verbatim.expr "foo.bar.wire"
+  // CHECK-NEXT: firrtl.connect %_0, [[V0]]
   firrtl.extmodule @DataTap(
     out %_3: !firrtl.uint<1> {firrtl.annotations = [{
       class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey",
@@ -98,9 +106,13 @@ firrtl.circuit "TestHarness" attributes {
     defname = "DataTap"
   }
 
-  // CHECK: module [[MT:MemTap.*]](
-  // CHECK: assign mem_0 = foo.bar.mem[0];
-  // CHECK: assign mem_1 = foo.bar.mem[1];
+  // CHECK: firrtl.module [[MT:@MemTap.*]](
+  // CHECK-SAME: out %mem_0: !firrtl.uint<1>,
+  // CHECK-SAME: out %mem_1: !firrtl.uint<1>)
+  // CHECK-NEXT: [[V0:%.+]] = firrtl.verbatim.expr "foo.bar.mem[0]"
+  // CHECK-NEXT: firrtl.connect %mem_0, [[V0:%.+]]
+  // CHECK-NEXT: [[V1:%.+]] = firrtl.verbatim.expr "foo.bar.mem[1]"
+  // CHECK-NEXT: firrtl.connect %mem_1, [[V1:%.+]]
   firrtl.extmodule @MemTap(
     out %mem_0: !firrtl.uint<1> {firrtl.annotations = [{
       class = "sifive.enterprise.grandcentral.MemTapAnnotation",
@@ -123,7 +135,7 @@ firrtl.circuit "TestHarness" attributes {
       portID = 4 : i64 }]
   }
 
-  // CHECK-LABEL: module TestHarness
+  // CHECK-LABEL: firrtl.module @TestHarness
   firrtl.module @TestHarness(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
     %foo_clock, %foo_reset, %foo_in, %foo_out = firrtl.instance @Foo {name = "foo"} : !firrtl.flip<clock>, !firrtl.flip<reset>, !firrtl.flip<uint<1>>, !firrtl.uint<1>
     firrtl.connect %foo_clock, %clock : !firrtl.flip<clock>, !firrtl.clock
@@ -131,9 +143,9 @@ firrtl.circuit "TestHarness" attributes {
     firrtl.connect %foo_in, %in : !firrtl.flip<uint<1>>, !firrtl.uint<1>
     firrtl.connect %out, %foo_out : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.instance @BlackHole {name = "bigScary"}
-    // CHECK: [[DT]] dataTap (
+    // CHECK: firrtl.instance [[DT]] {name = "dataTap"}
     %DataTap_3, %DataTap_2, %DataTap_1, %DataTap_0 = firrtl.instance @DataTap {name = "dataTap"} : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.clock, !firrtl.uint<1>
-    // CHECK: [[MT]] memTap (
+    // CHECK: firrtl.instance [[MT]] {name = "memTap"}
     %MemTap_mem_0, %MemTap_mem_1 = firrtl.instance @MemTap {name = "memTap"} : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
