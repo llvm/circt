@@ -254,18 +254,16 @@ void GrandCentralTapsPass::runOnOperation() {
 
     // Go through the module ports and collect the annotated ones.
     AnnotatedExtModule result{extModule, {}, {}};
-    for (unsigned argNum = 0; argNum < extModule.getNumArguments(); ++argNum) {
-      auto attrs =
+    for (unsigned argNum = 0, e = extModule.getNumArguments(); argNum < e;
+         ++argNum) {
+      auto annos =
           extModule.getArgAttrOfType<ArrayAttr>(argNum, strings.fannos);
-      if (!attrs)
+      if (!annos)
         continue;
 
       // Go through all annotations on this port and add the data tap key and
       // mem tap ones to the list.
-      for (auto attr : attrs) {
-        auto anno = attr.dyn_cast<DictionaryAttr>();
-        if (!anno)
-          continue;
+      for (auto anno : annos.getAsRange<DictionaryAttr>()) {
         auto cls = anno.getAs<StringAttr>("class");
         if (cls == strings.memTapClass || cls == strings.deletedKeyClass ||
             cls == strings.literalKeyClass ||
@@ -278,9 +276,9 @@ void GrandCentralTapsPass::runOnOperation() {
     // case, create a filtered array of annotations with them removed.
     if (auto attrs = extModule->getAttrOfType<ArrayAttr>(strings.annos)) {
       auto isBad = [&](Attribute attr) {
-        if (auto anno = attr.dyn_cast<DictionaryAttr>())
-          if (anno.getAs<StringAttr>("class") == strings.dataTapsClass)
-            return true;
+        if (attr.cast<DictionaryAttr>().getAs<StringAttr>("class") ==
+            strings.dataTapsClass)
+          return true;
         return false;
       };
       bool anyBad = llvm::any_of(attrs, isBad);
@@ -323,17 +321,15 @@ void GrandCentralTapsPass::runOnOperation() {
   circuitOp.walk([&](Operation *op) {
     if (auto module = dyn_cast<FModuleOp>(op)) {
       // Go through the module ports and collect the annotated ones.
-      for (unsigned argNum = 0; argNum < module.getNumArguments(); ++argNum) {
-        auto attrs = module.getArgAttrOfType<ArrayAttr>(argNum, strings.fannos);
-        if (!attrs)
+      for (unsigned argNum = 0, e = module.getNumArguments(); argNum < e;
+           ++argNum) {
+        auto annos = module.getArgAttrOfType<ArrayAttr>(argNum, strings.fannos);
+        if (!annos)
           continue;
 
         // Go through all annotations on this port and extract the interesting
         // ones.
-        for (auto attr : attrs) {
-          auto anno = attr.dyn_cast<DictionaryAttr>();
-          if (!anno)
-            continue;
+        for (auto anno : annos.getAsRange<DictionaryAttr>()) {
           auto cls = anno.getAs<StringAttr>("class");
           if (cls == strings.referenceKeyClass)
             assert(
@@ -342,18 +338,15 @@ void GrandCentralTapsPass::runOnOperation() {
         }
       }
     } else {
-      auto attrs = op->getAttrOfType<ArrayAttr>(strings.annos);
-      if (!attrs)
+      auto annos = op->getAttrOfType<ArrayAttr>(strings.annos);
+      if (!annos)
         return;
 
       // Go through all annotations on this op and extract the interesting ones.
       // Note that the way tap annotations are scattered to their targets, we
       // should never see multiple values or memories annotated with the exact
       // same annotation (hence the asserts).
-      for (auto attr : attrs) {
-        auto anno = attr.dyn_cast<DictionaryAttr>();
-        if (!anno)
-          continue;
+      for (auto anno : annos.getAsRange<DictionaryAttr>()) {
         auto cls = anno.getAs<StringAttr>("class");
         if (cls == strings.memTapClass || cls == strings.referenceKeyClass ||
             cls == strings.internalKeyClass)
@@ -409,7 +402,7 @@ void GrandCentralTapsPass::runOnOperation() {
         // Handle operations.
         if (auto op = tappedOps.lookup(portAnno.anno)) {
           // We currently require the target to be a wire.
-          // TODO: This should probably also allow wires?
+          // TODO: This should probably also allow other things?
           auto wire = dyn_cast<WireOp>(op);
           if (!wire) {
             auto diag = blackBox.extModule.emitError(llvm::formatv(
