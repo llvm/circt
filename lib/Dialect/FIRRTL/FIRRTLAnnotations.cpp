@@ -69,6 +69,16 @@ DictionaryAttr AnnotationSet::getArgumentAttrDict(
   return DictionaryAttr::get(context, allPortAttrs);
 }
 
+DictionaryAttr AnnotationSet::getAnnotationImpl(StringAttr className) const {
+  for (auto annotation : annotations) {
+    auto annotDict = annotation.cast<DictionaryAttr>();
+    if (auto annotClass = annotDict.get("class"))
+      if (annotClass == className)
+        return annotDict;
+  }
+  return {};
+}
+
 DictionaryAttr AnnotationSet::getAnnotationImpl(StringRef className) const {
   for (auto annotation : annotations) {
     auto annotDict = annotation.cast<DictionaryAttr>();
@@ -78,6 +88,10 @@ DictionaryAttr AnnotationSet::getAnnotationImpl(StringRef className) const {
           return annotDict;
   }
   return {};
+}
+
+bool AnnotationSet::hasAnnotationImpl(StringAttr className) const {
+  return getAnnotationImpl(className) != DictionaryAttr();
 }
 
 bool AnnotationSet::hasAnnotationImpl(StringRef className) const {
@@ -110,8 +124,13 @@ void AnnotationSet::addAnnotations(ArrayAttr newAnnotations) {
 //===----------------------------------------------------------------------===//
 
 /// Return the 'class' that this annotation is representing.
+StringAttr Annotation::getClassAttr() const {
+  return ((DictionaryAttr)attrDict).getAs<StringAttr>("class");
+}
+
+/// Return the 'class' that this annotation is representing.
 StringRef Annotation::getClass() const {
-  if (auto classAttr = ((DictionaryAttr)attrDict).getAs<StringAttr>("class"))
+  if (auto classAttr = getClassAttr())
     return classAttr.getValue();
   return {};
 }

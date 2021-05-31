@@ -67,10 +67,18 @@ public:
   bool hasAnnotation(StringRef className) const {
     return !annotations.empty() && hasAnnotationImpl(className);
   }
+  bool hasAnnotation(StringAttr className) const {
+    return !annotations.empty() && hasAnnotationImpl(className);
+  }
 
   /// If this annotation set has an annotation with the specified class name,
   /// return it.  Otherwise return a null DictionaryAttr.
   DictionaryAttr getAnnotation(StringRef className) const {
+    if (annotations.empty())
+      return {};
+    return getAnnotationImpl(className);
+  }
+  DictionaryAttr getAnnotation(StringAttr className) const {
     if (annotations.empty())
       return {};
     return getAnnotationImpl(className);
@@ -103,7 +111,9 @@ public:
   void addAnnotations(ArrayAttr annotations);
 
 private:
+  bool hasAnnotationImpl(StringAttr className) const;
   bool hasAnnotationImpl(StringRef className) const;
+  DictionaryAttr getAnnotationImpl(StringAttr className) const;
   DictionaryAttr getAnnotationImpl(StringRef className) const;
 
   ArrayAttr annotations;
@@ -119,11 +129,20 @@ public:
   DictionaryAttr getDict() const { return attrDict; }
 
   /// Return the 'class' that this annotation is representing.
+  StringAttr getClassAttr() const;
   StringRef getClass() const;
 
-  /// Return true if this annotation matches the specified class name.
-  bool isClass(StringRef name) const { return getClass() == name; }
+  /// Return true if this annotation matches any of the specified class names.
+  template <typename... Args>
+  bool isClass(Args... names) const {
+    return ClassIsa{getClassAttr()}(names...);
+  }
 
+  /// Return a member of the annotation.
+  template <typename AttrClass = Attribute>
+  AttrClass getMember(StringAttr name) {
+    return attrDict.getAs<AttrClass>(name);
+  }
   template <typename AttrClass = Attribute>
   AttrClass getMember(StringRef name) {
     return attrDict.getAs<AttrClass>(name);
@@ -131,6 +150,21 @@ public:
 
 private:
   DictionaryAttr attrDict;
+
+  /// Helper struct to perform variadic class equality check.
+  struct ClassIsa {
+    StringAttr cls;
+
+    bool operator()() { return false; }
+    template <typename T, typename... Rest>
+    bool operator()(T name, Rest... rest) {
+      return compare(name) || (*this)(rest...);
+    }
+
+  private:
+    bool compare(StringAttr name) { return cls == name; }
+    bool compare(StringRef name) { return cls && cls.getValue() == name; }
+  };
 };
 
 // Iteration over the annotation set.
