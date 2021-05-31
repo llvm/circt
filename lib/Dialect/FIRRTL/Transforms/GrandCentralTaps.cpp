@@ -23,8 +23,6 @@
 
 #define DEBUG_TYPE "gct"
 
-using llvm::SmallDenseMap;
-
 using namespace circt;
 using namespace firrtl;
 
