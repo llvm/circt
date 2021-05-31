@@ -30,60 +30,18 @@ using namespace firrtl;
 // Utilities
 //===----------------------------------------------------------------------===//
 
-namespace llvm {
+/// An absolute instance path.
+using InstancePath = ArrayRef<InstanceOp>;
 
-// Make InstanceOp behave like the underlying `Operation *`.
-template <>
-struct PointerLikeTypeTraits<InstanceOp> {
-  static inline void *getAsVoidPointer(InstanceOp value) {
-    return const_cast<void *>(value.getAsOpaquePointer());
-  }
-  static inline InstanceOp getFromVoidPointer(void *pointer) {
-    return InstanceOp::getFromOpaquePointer(pointer);
-  }
-  enum {
-    NumLowBitsAvailable =
-        PointerLikeTypeTraits<Operation *>::NumLowBitsAvailable
-  };
-};
-
-} // namespace llvm
-
-//===----------------------------------------------------------------------===//
-// Static information gathered once upfront
-//===----------------------------------------------------------------------===//
+template <typename T>
+T &operator<<(T &os, const InstancePath &path) {
+  os << "$root";
+  for (auto inst : path)
+    os << "." << inst.name();
+  return os;
+}
 
 namespace {
-/// Attributes used throughout the annotations.
-struct Strings {
-  MLIRContext *const cx;
-  Strings(MLIRContext *cx) : cx(cx) {}
-
-  Identifier annos = Identifier::get("annotations", cx);
-  Identifier fannos = Identifier::get("firrtl.annotations", cx);
-
-  StringAttr dataTapsClass =
-      StringAttr::get(cx, "sifive.enterprise.grandcentral.DataTapsAnnotation");
-  StringAttr memTapClass =
-      StringAttr::get(cx, "sifive.enterprise.grandcentral.MemTapAnnotation");
-
-  StringAttr deletedKeyClass =
-      StringAttr::get(cx, "sifive.enterprise.grandcentral.DeletedDataTapKey");
-  StringAttr literalKeyClass =
-      StringAttr::get(cx, "sifive.enterprise.grandcentral.LiteralDataTapKey");
-  StringAttr referenceKeyClass =
-      StringAttr::get(cx, "sifive.enterprise.grandcentral.ReferenceDataTapKey");
-  StringAttr internalKeyClass = StringAttr::get(
-      cx, "sifive.enterprise.grandcentral.DataTapModuleSignalKey");
-};
-} // namespace
-
-//===----------------------------------------------------------------------===//
-// Data Taps Implementation
-//===----------------------------------------------------------------------===//
-
-// static LogicalResult processDataTapAnnotation(FExtModuleOp module,
-//                                               DictionaryAttr anno) {}
 
 /// A port annotated with a data tap key or mem tap.
 struct AnnotatedPort {
@@ -104,22 +62,6 @@ struct TappedValue {
   DictionaryAttr anno;
 };
 
-/// An absolute instance path.
-using InstancePath = ArrayRef<InstanceOp>;
-
-template <typename T>
-T &operator<<(T &os, const InstancePath &path) {
-  os << "$root";
-  for (auto inst : path)
-    os << "." << inst.name();
-  // if (path.empty())
-  //   return os << "$root";
-  // llvm::interleave(
-  //     path.begin(), path.end(), [&](InstanceOp op) { os << op.name(); },
-  //     [&] { os << "."; });
-  return os;
-}
-
 /// A data structure that tracks the instances of modules and can provide
 /// absolute paths to these instances.
 struct InstanceGraph {
@@ -128,7 +70,7 @@ struct InstanceGraph {
   /// The main module in the circuit.
   Operation *mainModule;
   /// A mapping from a module to all its instances in the design.
-  DenseMap<Operation *, SmallPtrSet<InstanceOp, 1>> moduleInstances;
+  DenseMap<Operation *, SmallVector<InstanceOp, 1>> moduleInstances;
 
   InstanceGraph(CircuitOp circuitOp);
   ArrayRef<InstancePath> getAbsolutePaths(Operation *op);
@@ -144,13 +86,22 @@ private:
   InstancePath appendInstance(InstancePath path, InstanceOp inst);
 };
 
+/// Necessary information to wire up a port with tapped data or memory location.
+struct PortWiring {
+  unsigned portNum;
+  ArrayRef<InstancePath> prefices;
+  SmallString<16> suffix;
+};
+
+} // namespace
+
 InstanceGraph::InstanceGraph(CircuitOp circuitOp) : circuitOp(circuitOp) {
   mainModule = circuitOp.getMainModule();
 
   // Gather all instances in the circuit.
   circuitOp.walk([&](Operation *op) {
     if (auto instOp = dyn_cast<InstanceOp>(op))
-      moduleInstances[instOp.getReferencedModule()].insert(instOp);
+      moduleInstances[instOp.getReferencedModule()].push_back(instOp);
   });
 
   LLVM_DEBUG(llvm::dbgs() << "Instance graph:\n");
@@ -214,13 +165,6 @@ InstancePath InstanceGraph::appendInstance(InstancePath path, InstanceOp inst) {
   return InstancePath(newPath, n);
 }
 
-/// Necessary information to wire up a port with tapped data or memory location.
-struct PortWiring {
-  unsigned portNum;
-  ArrayRef<InstancePath> prefices;
-  SmallString<16> suffix;
-};
-
 /// Return a version of `path` that skips all front instances it has in common
 /// with `other`.
 static InstancePath stripCommonPrefix(InstancePath path, InstancePath other) {
@@ -230,6 +174,35 @@ static InstancePath stripCommonPrefix(InstancePath path, InstancePath other) {
   }
   return path;
 }
+
+//===----------------------------------------------------------------------===//
+// Static information gathered once upfront
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// Attributes used throughout the annotations.
+struct Strings {
+  MLIRContext *const context;
+  Strings(MLIRContext *context) : context(context) {}
+
+  Identifier annos = Identifier::get("annotations", context);
+  Identifier fannos = Identifier::get("firrtl.annotations", context);
+
+  StringAttr dataTapsClass = StringAttr::get(
+      context, "sifive.enterprise.grandcentral.DataTapsAnnotation");
+  StringAttr memTapClass = StringAttr::get(
+      context, "sifive.enterprise.grandcentral.MemTapAnnotation");
+
+  StringAttr deletedKeyClass = StringAttr::get(
+      context, "sifive.enterprise.grandcentral.DeletedDataTapKey");
+  StringAttr literalKeyClass = StringAttr::get(
+      context, "sifive.enterprise.grandcentral.LiteralDataTapKey");
+  StringAttr referenceKeyClass = StringAttr::get(
+      context, "sifive.enterprise.grandcentral.ReferenceDataTapKey");
+  StringAttr internalKeyClass = StringAttr::get(
+      context, "sifive.enterprise.grandcentral.DataTapModuleSignalKey");
+};
+} // namespace
 
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
