@@ -17,6 +17,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FormatVariadic.h"
@@ -300,10 +301,12 @@ void GrandCentralTapsPass::runOnOperation() {
       modules.push_back(std::move(result));
   }
 
+#ifndef NDEBUG
   for (auto m : modules) {
     LLVM_DEBUG(llvm::dbgs() << "Extmodule " << m.extModule.getName() << " has "
                             << m.portAnnos.size() << " port annotations\n");
   }
+#endif
 
   // Fast path if there's nothing to do.
   if (modules.empty()) {
@@ -356,12 +359,14 @@ void GrandCentralTapsPass::runOnOperation() {
     }
   });
 
+#ifndef NDEBUG
   LLVM_DEBUG(llvm::dbgs() << "Tapped values:\n");
   for (auto it : tappedArgs)
     LLVM_DEBUG(llvm::dbgs() << "- " << it.first << ": " << it.second << "\n");
   LLVM_DEBUG(llvm::dbgs() << "Tapped ops:\n");
   for (auto it : tappedOps)
     LLVM_DEBUG(llvm::dbgs() << "- " << it.first << ": " << *it.second << "\n");
+#endif
 
   // Process each black box independently.
   for (auto blackBox : modules) {
@@ -405,8 +410,9 @@ void GrandCentralTapsPass::runOnOperation() {
           // TODO: This should probably also allow other things?
           auto wire = dyn_cast<WireOp>(op);
           if (!wire) {
-            auto diag = blackBox.extModule.emitError(llvm::formatv(
-                "ReferenceDataTapKey on port {0} must be a wire", portName));
+            auto diag =
+                blackBox.extModule.emitError("ReferenceDataTapKey on port ")
+                << portName << " must be a wire";
             diag.attachNote(op->getLoc()) << "referenced operation is here:";
             signalPassFailure();
             continue;
@@ -420,8 +426,9 @@ void GrandCentralTapsPass::runOnOperation() {
           if (!name) {
             auto diag =
                 wire.emitError("wire targeted by data tap must have a name");
-            diag.attachNote(blackBox.extModule->getLoc()) << llvm::formatv(
-                "used by ReferenceDataTapKey on port {0} here:", portName);
+            diag.attachNote(blackBox.extModule->getLoc())
+                << "used by ReferenceDataTapKey on port " << portName
+                << " here:";
             signalPassFailure();
             continue;
           }
@@ -436,34 +443,32 @@ void GrandCentralTapsPass::runOnOperation() {
         // The annotation scattering must have placed this annotation on some
         // target operation or block argument, which we should have picked up in
         // the tapped args or ops maps.
+        blackBox.extModule.emitOpError(
+            "ReferenceDataTapKey annotation was not scattered to "
+            "an operation: ")
+            << portAnno.anno;
         signalPassFailure();
-        llvm::report_fatal_error(
-            llvm::formatv("ReferenceDataTapKey annotation was not scattered to "
-                          "an operation: {0}",
-                          portAnno.anno)
-                .str());
+        continue;
       }
 
       // Handle data taps on black boxes.
       if (cls == strings.internalKeyClass) {
         auto op = tappedOps.lookup(portAnno.anno);
         if (!op) {
+          blackBox.extModule.emitOpError(
+              "DataTapModuleSignalKey annotation was not scattered to "
+              "an operation: ")
+              << portAnno.anno;
           signalPassFailure();
-          llvm::report_fatal_error(
-              llvm::formatv(
-                  "DataTapModuleSignalKey annotation was not scattered to "
-                  "an operation: {0}",
-                  portAnno.anno)
-                  .str());
+          continue;
         }
 
         // Extract the internal path we're supposed to append.
         auto internalPath = portAnno.anno.getAs<StringAttr>("internalPath");
         if (!internalPath) {
-          blackBox.extModule.emitOpError(
-              llvm::formatv("DataTapModuleSignalKey annotation on port {0} "
-                            "missing \"internalPath\" attribute",
-                            portName));
+          blackBox.extModule.emitError(
+              "DataTapModuleSignalKey annotation on port ")
+              << portName << " missing \"internalPath\" attribute";
           signalPassFailure();
           continue;
         }
@@ -476,9 +481,9 @@ void GrandCentralTapsPass::runOnOperation() {
 
       // Handle data taps with literals.
       if (cls == strings.literalKeyClass) {
-        blackBox.extModule.emitOpError(llvm::formatv(
-            "LiteralDataTapKey annotations not yet supported (on port {0})",
-            portName));
+        blackBox.extModule.emitError(
+            "LiteralDataTapKey annotations not yet supported (on port ")
+            << portName << ")";
         signalPassFailure();
         continue;
       }
@@ -487,13 +492,12 @@ void GrandCentralTapsPass::runOnOperation() {
       if (cls == strings.memTapClass) {
         auto op = tappedOps.lookup(portAnno.anno);
         if (!op) {
+          blackBox.extModule.emitOpError(
+              "DataTapModuleSignalKey annotation was not scattered to "
+              "an operation: ")
+              << portAnno.anno;
           signalPassFailure();
-          llvm::report_fatal_error(
-              llvm::formatv(
-                  "DataTapModuleSignalKey annotation was not scattered to "
-                  "an operation: {0}",
-                  portAnno.anno)
-                  .str());
+          continue;
         }
 
         // Extract the name of the memory.
@@ -503,8 +507,8 @@ void GrandCentralTapsPass::runOnOperation() {
         auto name = op->getAttrOfType<StringAttr>("name");
         if (!name) {
           auto diag = op->emitError("target of memory tap must have a name");
-          diag.attachNote(blackBox.extModule->getLoc()) << llvm::formatv(
-              "used by MemTapAnnotation on port {0} here:", portName);
+          diag.attachNote(blackBox.extModule->getLoc())
+              << "used by MemTapAnnotation on port " << portName << " here:";
           signalPassFailure();
           continue;
         }
@@ -519,16 +523,18 @@ void GrandCentralTapsPass::runOnOperation() {
         // in the IR that can properly inject the memory array on emission.
         wiring.prefices =
             instanceGraph.getAbsolutePaths(op->getParentOfType<FModuleOp>());
-        wiring.suffix = llvm::formatv("{0}[{1}]", name.getValue(),
-                                      memPortIdx[portAnno.anno]++);
+        wiring.suffix = name.getValue();
+        wiring.suffix += '[';
+        wiring.suffix += llvm::utostr(memPortIdx[portAnno.anno]++);
+        wiring.suffix += ']';
         portWiring.push_back(std::move(wiring));
         continue;
       }
 
-      llvm_unreachable(
-          llvm::formatv("unknown annotation {}", portAnno.anno).str().c_str());
+      llvm_unreachable("only accepted annos added to portAnnos list");
     }
 
+#ifndef NDEBUG
     LLVM_DEBUG(llvm::dbgs() << "- Wire up as follows:\n");
     for (auto wiring : portWiring) {
       LLVM_DEBUG(llvm::dbgs() << "- Port " << wiring.portNum << ":\n");
@@ -537,6 +543,7 @@ void GrandCentralTapsPass::runOnOperation() {
                    << "  - " << path << "." << wiring.suffix << "\n");
       }
     }
+#endif
 
     // Now we have an awkward mapping problem. We have multiple data tap module
     // instances, which reference things in modules that in turn have multiple
@@ -552,10 +559,10 @@ void GrandCentralTapsPass::runOnOperation() {
       builder.setInsertionPointAfter(blackBox.extModule);
 
       // Create a new firrtl.module that implements the data tap.
-      auto name = StringAttr::get(
-          &getContext(),
-          llvm::formatv("{0}_impl_{1}", blackBox.extModule.getName(), implIdx++)
-              .str());
+      SmallString<32> nameBuffer(blackBox.extModule.getName());
+      nameBuffer += "_impl_";
+      nameBuffer += llvm::utostr(implIdx++);
+      auto name = StringAttr::get(&getContext(), nameBuffer);
       LLVM_DEBUG(llvm::dbgs()
                  << "Implementing " << name << " ("
                  << blackBox.extModule.getName() << " for " << path << ")\n");
