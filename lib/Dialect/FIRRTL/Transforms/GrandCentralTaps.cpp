@@ -47,20 +47,6 @@ struct PointerLikeTypeTraits<InstanceOp> {
   };
 };
 
-// Make DictionaryAttr behave like the underlying `Attribute`.
-template <>
-struct PointerLikeTypeTraits<DictionaryAttr> {
-  static inline void *getAsVoidPointer(DictionaryAttr value) {
-    return const_cast<void *>(value.getAsOpaquePointer());
-  }
-  static inline DictionaryAttr getFromVoidPointer(void *pointer) {
-    return DictionaryAttr::getFromOpaquePointer(pointer);
-  }
-  enum {
-    NumLowBitsAvailable = PointerLikeTypeTraits<Attribute>::NumLowBitsAvailable
-  };
-};
-
 } // namespace llvm
 
 //===----------------------------------------------------------------------===//
