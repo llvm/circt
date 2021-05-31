@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "./PassDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
@@ -47,7 +48,7 @@ namespace {
 /// A port annotated with a data tap key or mem tap.
 struct AnnotatedPort {
   unsigned portNum;
-  DictionaryAttr anno;
+  Annotation anno;
 };
 
 /// An extmodule that has annotated ports.
@@ -60,7 +61,7 @@ struct AnnotatedExtModule {
 /// A value annotated to be tapped.
 struct TappedValue {
   Value value;
-  DictionaryAttr anno;
+  Annotation anno;
 };
 
 /// A data structure that tracks the instances of modules and can provide
@@ -257,18 +258,14 @@ void GrandCentralTapsPass::runOnOperation() {
     AnnotatedExtModule result{extModule, {}, {}};
     for (unsigned argNum = 0, e = extModule.getNumArguments(); argNum < e;
          ++argNum) {
-      auto annos =
-          extModule.getArgAttrOfType<ArrayAttr>(argNum, strings.fannos);
-      if (!annos)
-        continue;
-
       // Go through all annotations on this port and add the data tap key and
       // mem tap ones to the list.
-      for (auto anno : annos.getAsRange<DictionaryAttr>()) {
-        auto cls = anno.getAs<StringAttr>("class");
-        if (cls == strings.memTapClass || cls == strings.deletedKeyClass ||
-            cls == strings.literalKeyClass ||
-            cls == strings.referenceKeyClass || cls == strings.internalKeyClass)
+      auto annos = AnnotationSet(
+          extModule.getArgAttrOfType<ArrayAttr>(argNum, strings.fannos));
+      for (auto anno : annos) {
+        if (anno.isClass(strings.memTapClass, strings.deletedKeyClass,
+                         strings.literalKeyClass, strings.referenceKeyClass,
+                         strings.internalKeyClass))
           result.portAnnos.push_back({argNum, anno});
       }
     }
@@ -386,15 +383,15 @@ void GrandCentralTapsPass::runOnOperation() {
     portWiring.reserve(blackBox.portAnnos.size());
     for (auto portAnno : blackBox.portAnnos) {
       LLVM_DEBUG(llvm::dbgs() << "- Processing port " << portAnno.portNum
-                              << " anno " << portAnno.anno << "\n");
+                              << " anno " << portAnno.anno.getDict() << "\n");
       auto portName = getModulePortName(blackBox.extModule, portAnno.portNum);
-      auto cls = portAnno.anno.getAs<StringAttr>("class");
+      auto cls = portAnno.anno.getClassAttr();
       PortWiring wiring = {portAnno.portNum, {}, {}};
 
       // Handle data taps on signals and ports.
       if (cls == strings.referenceKeyClass) {
         // Handle block arguments.
-        if (auto blockArg = tappedArgs.lookup(portAnno.anno)) {
+        if (auto blockArg = tappedArgs.lookup(portAnno.anno.getDict())) {
           auto parentModule = blockArg.getOwner()->getParentOp();
           wiring.prefices = instanceGraph.getAbsolutePaths(parentModule);
           wiring.suffix =
@@ -405,7 +402,7 @@ void GrandCentralTapsPass::runOnOperation() {
         }
 
         // Handle operations.
-        if (auto op = tappedOps.lookup(portAnno.anno)) {
+        if (auto op = tappedOps.lookup(portAnno.anno.getDict())) {
           // We currently require the target to be a wire.
           // TODO: This should probably also allow other things?
           auto wire = dyn_cast<WireOp>(op);
@@ -446,25 +443,25 @@ void GrandCentralTapsPass::runOnOperation() {
         blackBox.extModule.emitOpError(
             "ReferenceDataTapKey annotation was not scattered to "
             "an operation: ")
-            << portAnno.anno;
+            << portAnno.anno.getDict();
         signalPassFailure();
         continue;
       }
 
       // Handle data taps on black boxes.
       if (cls == strings.internalKeyClass) {
-        auto op = tappedOps.lookup(portAnno.anno);
+        auto op = tappedOps.lookup(portAnno.anno.getDict());
         if (!op) {
           blackBox.extModule.emitOpError(
               "DataTapModuleSignalKey annotation was not scattered to "
               "an operation: ")
-              << portAnno.anno;
+              << portAnno.anno.getDict();
           signalPassFailure();
           continue;
         }
 
         // Extract the internal path we're supposed to append.
-        auto internalPath = portAnno.anno.getAs<StringAttr>("internalPath");
+        auto internalPath = portAnno.anno.getMember<StringAttr>("internalPath");
         if (!internalPath) {
           blackBox.extModule.emitError(
               "DataTapModuleSignalKey annotation on port ")
@@ -490,12 +487,12 @@ void GrandCentralTapsPass::runOnOperation() {
 
       // Handle memory taps.
       if (cls == strings.memTapClass) {
-        auto op = tappedOps.lookup(portAnno.anno);
+        auto op = tappedOps.lookup(portAnno.anno.getDict());
         if (!op) {
           blackBox.extModule.emitOpError(
               "DataTapModuleSignalKey annotation was not scattered to "
               "an operation: ")
-              << portAnno.anno;
+              << portAnno.anno.getDict();
           signalPassFailure();
           continue;
         }
@@ -525,7 +522,7 @@ void GrandCentralTapsPass::runOnOperation() {
             instanceGraph.getAbsolutePaths(op->getParentOfType<FModuleOp>());
         wiring.suffix = name.getValue();
         wiring.suffix += '[';
-        wiring.suffix += llvm::utostr(memPortIdx[portAnno.anno]++);
+        wiring.suffix += llvm::utostr(memPortIdx[portAnno.anno.getDict()]++);
         wiring.suffix += ']';
         portWiring.push_back(std::move(wiring));
         continue;
