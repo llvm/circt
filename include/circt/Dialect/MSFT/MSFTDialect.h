@@ -13,12 +13,31 @@
 #ifndef CIRCT_DIALECT_MSFT_MSFTDIALECT_H
 #define CIRCT_DIALECT_MSFT_MSFTDIALECT_H
 
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
+
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
 
-#include "circt/Dialect/MSFT/MSFTDialect.h.inc"
+#include "llvm/Support/ManagedStatic.h"
 
+#include <functional>
+
+namespace circt {
+namespace msft {
+void registerMSFTPasses();
+
+/// Operation to be lowered to replacement operation.
+typedef std::function<Operation *(Operation *)> GeneratorCallback;
+
+namespace detail {
+struct Generators;
+} // namespace detail
+
+} // namespace msft
+} // namespace circt
+
+#include "circt/Dialect/MSFT/MSFTDialect.h.inc"
 #include "circt/Dialect/MSFT/MSFTEnums.h.inc"
 
 #endif // CIRCT_DIALECT_MSFT_MSFTDIALECT_H

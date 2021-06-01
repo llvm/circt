@@ -14,6 +14,10 @@ mlir_tablegen(MSFTEnums.h.inc -gen-enum-decls)
 mlir_tablegen(MSFTEnums.cpp.inc -gen-enum-defs)
 mlir_tablegen(MSFTAttributes.h.inc -gen-attrdef-decls)
 mlir_tablegen(MSFTAttributes.cpp.inc -gen-attrdef-defs)
+mlir_tablegen(MSFTPasses.h.inc -gen-pass-decls)
+
 add_public_tablegen_target(MLIRMSFTExtraIncGen)
+
+add_circt_doc(MSFT -gen-pass-doc MSFTPasses ./)
 
 add_dependencies(circt-headers MLIRMSFTExtraIncGen)

@@ -83,6 +83,8 @@ class BackedgeBuilder(AbstractContextManager):
     self.old_bb_token = _current_backedge_builder.set(self)
 
   def __exit__(self, exc_type, exc_value, traceback):
+    if exc_value is not None:
+      return
     _current_backedge_builder.reset(self.old_bb_token)
     errors = []
     for edge in list(self.edges):
@@ -106,8 +108,8 @@ class BackedgeBuilder(AbstractContextManager):
 
 class OpOperand:
   __slots__ = [
-    "index"
-    "operation"
+    "index",
+    "operation",
     "value"
   ]
 

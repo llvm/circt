@@ -33,6 +33,9 @@ def __exit_loc():
   DefaultLocation.__exit__(None, None, None)
 
 
+OPERATION_NAMESPACE = "circt."
+
+
 class ModuleDecl:
   """Represents an input or output port on a design module."""
 
@@ -62,7 +65,7 @@ def module(cls):
   """The CIRCT design entry module class decorator."""
 
   class __Module(cls, mlir.ir.OpView):
-    OPERATION_NAME = "circt.design_entry." + cls.__name__
+    OPERATION_NAME = OPERATION_NAMESPACE + cls.__name__
     _ODS_REGIONS = (0, True)
 
     # Default mappings to operand/result numbers.
@@ -108,9 +111,18 @@ def module(cls):
               input.type, input.name, self).result
         input_ports_values.append(value)
 
+      # Store the port names as attributes.
+      op_names_attr = mlir.ir.ArrayAttr.get(
+          [mlir.ir.StringAttr.get(x.name) for x in input_ports])
+      result_names_attr = mlir.ir.ArrayAttr.get(
+          [mlir.ir.StringAttr.get(x.name) for x in output_ports])
+
       # Init the OpView, which creates the operation.
       mlir.ir.OpView.__init__(self, self.build_generic(
-          attributes={},
+          attributes={
+            "opNames": op_names_attr,
+            "resultNames": result_names_attr
+          },
           results=[x.type for x in output_ports],
           operands=[x for x in input_ports_values]
       ))
@@ -136,7 +148,65 @@ def module(cls):
         return self.results[op_num]
       return super().__getattribute__(name)
 
+  _register_generators(cls)
   return __Module
+
+
+def _register_generators(cls):
+  """Scan the class, looking for and registering _Generators."""
+  for (name, member) in cls.__dict__.items():
+    if isinstance(member, _Generate):
+      _register_generator(cls.__name__, name, member)
+
+
+def _register_generator(class_name, generator_name, generator):
+  circt.msft.register_generator(
+      mlir.ir.Context.current, OPERATION_NAMESPACE + class_name,
+      generator_name, generator)
+
+
+class _Generate:
+  """Represents a generator. Stores the generate function and wraps it with the
+  necessary logic to build an HWModule."""
+
+  def __init__(self, gen_func):
+    self.gen_func = gen_func
+
+  def __call__(self, op):
+    """Build an HWModuleOp and run the generator as the body builder."""
+
+    # Find the top MLIR module.
+    mod = op
+    while mod.name != "module":
+      mod = mod.parent
+
+    # Get the port names from the attributes we stored them in.
+    op_names_attrs = mlir.ir.ArrayAttr(op.attributes["opNames"])
+    op_names = [mlir.ir.StringAttr(x) for x in op_names_attrs]
+    input_ports = [(n.value, o.type) for (n, o) in zip(op_names, op.operands)]
+
+    result_names_attrs = mlir.ir.ArrayAttr(op.attributes["resultNames"])
+    result_names = [mlir.ir.StringAttr(x) for x in result_names_attrs]
+    output_ports = [
+        (n.value, o.type) for (n, o) in zip(result_names, op.results)]
+
+    # Build the replacement HWModuleOp in the outer module.
+    with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
+      mod = circt.dialects.hw.HWModuleOp(
+          op.name,
+          input_ports=input_ports,
+          output_ports=output_ports,
+          body_builder=self.gen_func)
+
+    # Build a replacement instance at the op to be replaced.
+    with mlir.ir.InsertionPoint(op):
+      mapping = {name.value: op.operands[i] for i, name in enumerate(op_names)}
+      return mod.create(op.name, **mapping).operation
+
+
+def generator(func):
+  # Convert the generator function to a _Generate class
+  return _Generate(func)
 
 
 def connect(destination, source):
