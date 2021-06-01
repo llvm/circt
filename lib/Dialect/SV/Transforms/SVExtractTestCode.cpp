@@ -17,7 +17,6 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/SV/SVVisitors.h"
-#include "mlir/Analysis/SliceAnalysis.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/Builders.h"
 
@@ -31,11 +30,60 @@ using namespace sv;
 // StubExternalModules Helpers
 //===----------------------------------------------------------------------===//
 
+// Reimplemented from SliceAnalysis to use a worklist rather than recursion and
+// non-insert ordered set.
+static void getBackwardSliceSimple(Operation *rootOp,
+                                   SmallPtrSetImpl<Operation *> &backwardSlice,
+                                   std::function<bool(Operation *)> filter) {
+  SmallVector<Operation *> worklist;
+  worklist.push_back(rootOp);
+
+  while (!worklist.empty()) {
+    Operation *op = worklist.back();
+    worklist.pop_back();
+
+    if (!op || op->hasTrait<OpTrait::IsIsolatedFromAbove>())
+      continue;
+
+    // Evaluate whether we should keep this def.
+    // This is useful in particular to implement scoping; i.e. return the
+    // transitive backwardSlice in the current scope.
+    if (filter && !filter(op))
+      continue;
+
+    for (auto en : llvm::enumerate(op->getOperands())) {
+      auto operand = en.value();
+      if (auto *definingOp = operand.getDefiningOp()) {
+        if (backwardSlice.count(definingOp) == 0)
+          worklist.push_back(definingOp);
+      } else if (auto blockArg = operand.dyn_cast<BlockArgument>()) {
+        Block *block = blockArg.getOwner();
+        Operation *parentOp = block->getParentOp();
+        // TODO: determine whether we want to recurse backward into the other
+        // blocks of parentOp, which are not technically backward unless they
+        // flow into us. For now, just bail.
+        assert(parentOp->getNumRegions() == 1 &&
+               parentOp->getRegion(0).getBlocks().size() == 1);
+        if (backwardSlice.count(parentOp) == 0)
+          worklist.push_back(parentOp);
+      } else {
+        llvm_unreachable("No definingOp and not a block argument.");
+      }
+    }
+
+    backwardSlice.insert(op);
+  }
+
+  // Don't insert the top level operation, we just queried on it and don't
+  // want it in the results.
+  backwardSlice.erase(rootOp);
+}
+
 // Compute the dataflow for a set of ops.
-static void dataflowSlice(ArrayRef<Operation *> ops,
-                          SetVector<Operation *> &results) {
+static void dataflowSlice(SmallPtrSetImpl<Operation *> &ops,
+                          SmallPtrSetImpl<Operation *> &results) {
   for (auto op : ops) {
-    getBackwardSlice(op, &results, [](Operation *testOp) -> bool {
+    getBackwardSliceSimple(op, results, [](Operation *testOp) -> bool {
       return !isa<sv::ReadInOutOp>(testOp) && !isa<hw::InstanceOp>(testOp) &&
              !isa<sv::PAssignOp>(testOp) && !isa<sv::BPAssignOp>(testOp);
     });
@@ -43,8 +91,8 @@ static void dataflowSlice(ArrayRef<Operation *> ops,
 }
 
 // Compute the ops defining the blocks a set of ops are in.
-static void blockSlice(ArrayRef<Operation *> ops,
-                       SetVector<Operation *> &blocks) {
+static void blockSlice(SmallPtrSetImpl<Operation *> &ops,
+                       SmallPtrSetImpl<Operation *> &blocks) {
   for (auto op : ops) {
     while (!isa<hw::HWModuleOp>(op->getParentOp())) {
       op = op->getParentOp();
@@ -54,26 +102,39 @@ static void blockSlice(ArrayRef<Operation *> ops,
 }
 
 // Aggressively mark operations to be moved to the new module.  This leaves
-// maximum flexibility for optimization after removal of the nodes from the old
-// module.
-static SetVector<Operation *> computeCloneSet(ArrayRef<Operation *> roots) {
-  SetVector<Operation *> results;
+// maximum flexibility for optimization after removal of the nodes from the
+// old module.
+static SmallPtrSet<Operation *, 16>
+computeCloneSet(SmallPtrSetImpl<Operation *> &roots) {
+  SmallPtrSet<Operation *, 16> results;
   // Get Dataflow for roots
   dataflowSlice(roots, results);
 
   // Get Blocks
-  SetVector<Operation *> blocks;
+  SmallPtrSet<Operation *, 8> blocks;
   blockSlice(roots, blocks);
-  blockSlice(results.getArrayRef(), blocks);
+  blockSlice(results, blocks);
 
   // Make sure dataflow to block args (if conds, etc) is included
-  dataflowSlice(blocks.getArrayRef(), results);
+  dataflowSlice(blocks, results);
 
   // include the blocks and roots to clone
   results.insert(roots.begin(), roots.end());
   results.insert(blocks.begin(), blocks.end());
 
   return results;
+}
+
+StringRef getNameForPort(Value val, ArrayAttr modulePorts) {
+  if (auto readinout = dyn_cast_or_null<ReadInOutOp>(val.getDefiningOp())) {
+    if (auto wire = dyn_cast<WireOp>(readinout.input().getDefiningOp()))
+      return wire.name();
+    if (auto reg = dyn_cast<RegOp>(readinout.input().getDefiningOp()))
+      return reg.name();
+  } else if (auto bv = val.dyn_cast<BlockArgument>()) {
+    return modulePorts[bv.getArgNumber()].cast<StringAttr>().getValue();
+  }
+  return "";
 }
 
 // Given a set of values, construct a module and bind instance of that module
@@ -87,17 +148,20 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
 
   // Construct the ports, this is just the input Values
   SmallVector<hw::ModulePortInfo> ports;
-  for (auto port : llvm::enumerate(inputs))
-    ports.push_back(
-        {b.getStringAttr(""), hw::INPUT, port.value().getType(), port.index()});
+  {
+    auto srcPorts = op.argNames();
+    for (auto port : llvm::enumerate(inputs))
+      ports.push_back({b.getStringAttr(getNameForPort(port.value(), srcPorts)),
+                       hw::INPUT, port.value().getType(), port.index()});
+  }
 
   // Create the module, setting the output path if indicated
-  std::array<NamedAttribute, 1> pathAttr = {
-      b.getNamedAttr("outputPath", b.getStringAttr(path))};
   auto newMod = b.create<hw::HWModuleOp>(
       op.getLoc(),
       b.getStringAttr((getVerilogModuleNameAttr(op).getValue() + suffix).str()),
-      ports, path.empty() ? ArrayRef<NamedAttribute>() : pathAttr);
+      ports);
+  if (!path.empty())
+    newMod->setAttr("outputPath", b.getStringAttr(path));
 
   // Update the mapping from old values to cloned values
   for (auto port : llvm::enumerate(inputs))
@@ -120,14 +184,14 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
 
 // Some blocks have terminators, some don't
 static void setInsertPointToEndOrTerminator(OpBuilder &builder, Block *block) {
-  if (!block->empty() && block->back().mightHaveTrait<OpTrait::IsTerminator>())
+  if (!block->empty() && isa<hw::HWModuleOp>(block->getParentOp()))
     builder.setInsertionPoint(&block->back());
   else
     builder.setInsertionPointToEnd(block);
 }
 
-// Shallow clone, which we use to not clone the content of blocks, doesn't clone
-// the regions, so create all the blocks we need and update the mapping.
+// Shallow clone, which we use to not clone the content of blocks, doesn't
+// clone the regions, so create all the blocks we need and update the mapping.
 static void addBlockMapping(BlockAndValueMapping &cutMap, Operation *oldOp,
                             Operation *newOp) {
   assert(oldOp->getNumRegions() == newOp->getNumRegions());
@@ -143,7 +207,7 @@ static void addBlockMapping(BlockAndValueMapping &cutMap, Operation *oldOp,
 // Do the cloning, which is just a pre-order traversal over the module looking
 // for marked ops.
 static void migrateOps(hw::HWModuleOp oldMod, hw::HWModuleOp newMod,
-                       SetVector<Operation *> &depOps,
+                       SmallPtrSetImpl<Operation *> &depOps,
                        BlockAndValueMapping &cutMap) {
   OpBuilder b = OpBuilder::atBlockBegin(newMod.getBodyBlock());
   oldMod.walk<WalkOrder::PreOrder>([&](Operation *op) {
@@ -169,10 +233,10 @@ private:
   void doModule(hw::HWModuleOp module, std::function<bool(Operation *)> fn,
                 StringRef suffix, StringRef path) {
     // Find Operations of interest.
-    SmallVector<Operation *> roots;
+    SmallPtrSet<Operation *, 8> roots;
     module->walk([&fn, &roots](Operation *op) {
       if (fn(op))
-        roots.push_back(op);
+        roots.insert(op);
     });
     // No Ops?  No problem.
     if (roots.empty())
@@ -206,16 +270,14 @@ void SVExtractTestCodeImplPass::runOnOperation() {
   for (auto &op : topLevelModule->getOperations())
     if (auto rtlmod = dyn_cast<hw::HWModuleOp>(op)) {
       // Extract two sets of ops to different modules
-      doModule(
-          rtlmod,
-          [](Operation *op) -> bool {
-            return isa<AssertOp>(op) || isa<AssumeOp>(op) ||
-                   isa<FinishOp>(op) || isa<FWriteOp>(op);
-          },
-          "_assert", "generated/asserts");
-      doModule(
-          rtlmod, [](Operation *op) -> bool { return isa<CoverOp>(op); },
-          "_cover", "generated/covers/*  */");
+      auto isAssert = [](Operation *op) -> bool {
+        return isa<AssertOp>(op) || isa<AssumeOp>(op) || isa<FinishOp>(op) ||
+               isa<FWriteOp>(op);
+      };
+      auto isCover = [](Operation *op) -> bool { return isa<CoverOp>(op); };
+
+      doModule(rtlmod, isAssert, "_assert", "generated/asserts");
+      doModule(rtlmod, isCover, "_cover", "generated/covers");
     }
 }
 
