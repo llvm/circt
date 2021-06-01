@@ -105,4 +105,16 @@ def HWDeclareTypedecls : Pass<"hw-declare-typedecls", "ModuleOp"> {
   let constructor = "circt::sv::createHWDeclareTypedeclsPass()";
 }
 
+def SVExtractTestCode : Pass<"sv-extract-test-code", "ModuleOp"> {
+  let summary = "Extract simulation only constructs to modules and bind";
+  let description = [{
+    This pass extracts cover, assume, assert operations to a module, along with
+    any ops feeding them only, to modules which are instantiated with a bind
+    statement.
+  }];
+
+  let constructor = "circt::sv::createSVExtractTestCodePass()";
+  let dependentDialects = ["circt::sv::SVDialect"];
+}
+
 #endif // CIRCT_DIALECT_SV_SVPASSES

@@ -141,3 +141,16 @@ hw.module @Cover(%arg0: i1) {
   // expected-error @+1 {{sv.cover should be in a procedural region}}
   sv.cover %arg0: i1
 }
+
+// -----
+// expected-error @+1 {{Referenced instance doesn't exist}}
+sv.bind @A
+
+// -----
+hw.module.extern @ExternDestMod()
+hw.module @InternSrcMod() {
+  hw.instance "whatever" sym @A @ExternDestMod() : () -> ()
+  hw.output
+}
+// expected-error @+1 {{Referenced instance isn't marked as doNotPrint}}
+sv.bind @A

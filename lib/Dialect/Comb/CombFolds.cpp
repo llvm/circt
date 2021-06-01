@@ -136,6 +136,22 @@ OpFoldResult ExtractOp::fold(ArrayRef<Attribute> constants) {
   return {};
 }
 
+LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
+  // Narrow Mux
+  // extract(mux(c,a,b)) -> mux(c,extract(a),extract(b))
+  if (auto mux = dyn_cast_or_null<MuxOp>(op.input().getDefiningOp())) {
+    if (mux->hasOneUse()) {
+      auto newT = rewriter.createOrFold<ExtractOp>(
+          mux.getLoc(), op.getType(), mux.trueValue(), op.lowBit());
+      auto newF = rewriter.createOrFold<ExtractOp>(
+          mux.getLoc(), op.getType(), mux.falseValue(), op.lowBit());
+      rewriter.replaceOpWithNewOp<MuxOp>(op, mux.cond(), newT, newF);
+      return success();
+    }
+  }
+  return failure();
+}
+
 //===----------------------------------------------------------------------===//
 // Variadic operations
 //===----------------------------------------------------------------------===//
@@ -213,8 +229,9 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
       return success();
     }
 
-    // TODO: Combine multiple constants together even if they aren't at the end.
-    // and(..., c1, c2) -> and(..., c3) where c3 = c1 & c2 -- constant folding
+    // TODO: Combine multiple constants together even if they aren't at the
+    // end. and(..., c1, c2) -> and(..., c3) where c3 = c1 & c2 -- constant
+    // folding
     APInt value2;
     if (matchPattern(inputs[size - 2], m_RConstant(value2))) {
       auto cst = rewriter.create<hw::ConstantOp>(op.getLoc(), value & value2);
@@ -226,8 +243,8 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
 
     // Handle 'and' with a single bit constant on the RHS.
     if (size == 2 && value.isPowerOf2()) {
-      // If the LHS is a sign extend from a single bit, we can 'concat' it into
-      // place.  e.g.:
+      // If the LHS is a sign extend from a single bit, we can 'concat' it
+      // into place.  e.g.:
       //   `sext(x) & 4` -> `concat(zeros, x, zeros)`
       if (auto sext = inputs[0].getDefiningOp<SExtOp>()) {
         auto sextOperand = sext.getOperand();
@@ -602,8 +619,9 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
 
-  // This function is used when we flatten neighboring operands of a (variadic)
-  // concat into a new vesion of the concat.  first/last indices are inclusive.
+  // This function is used when we flatten neighboring operands of a
+  // (variadic) concat into a new vesion of the concat.  first/last indices
+  // are inclusive.
   auto flattenConcat = [&](size_t firstOpIndex, size_t lastOpIndex,
                            ValueRange replacements) -> LogicalResult {
     SmallVector<Value, 4> newOperands;
@@ -684,9 +702,9 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
     if (extract.input() == inputs.back() && isSignBitExtract(extract)) {
       // Check intermediate bits.
       bool allMatch = true;
-      // The intermediate bits are allowed to be difference instances of extract
-      // (because canonicalize doesn't do CSE automatically) so long as they are
-      // getting the sign bit.
+      // The intermediate bits are allowed to be difference instances of
+      // extract (because canonicalize doesn't do CSE automatically) so long
+      // as they are getting the sign bit.
       for (size_t i = 1, e = inputs.size() - 1; i != e; ++i) {
         auto extractInner = inputs[i].getDefiningOp<ExtractOp>();
         if (!extractInner || extractInner.input() != inputs.back() ||
@@ -775,6 +793,7 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
       return success();
     }
   }
+
   return failure();
 }
 

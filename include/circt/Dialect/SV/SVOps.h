@@ -20,6 +20,9 @@
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 namespace circt {
+namespace hw {
+  class InstanceOp;
+}
 namespace sv {
 
 /// Return true if the specified operation is an expression.

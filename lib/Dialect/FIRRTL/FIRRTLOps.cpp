@@ -64,12 +64,6 @@ removeElementsAtIndices(ArrayRef<T> input, ArrayRef<unsigned> indicesToDrop) {
   return result;
 }
 
-bool firrtl::isBundleType(Type type) {
-  if (auto flipType = type.dyn_cast<FlipType>())
-    return flipType.getElementType().isa<FlipType>();
-  return type.isa<BundleType>();
-}
-
 bool firrtl::isDuplexValue(Value val) {
   Operation *op = val.getDefiningOp();
   // Block arguments are not duplex values.

@@ -35,12 +35,12 @@ jobs:
         uses: actions/cache@v2
         with:
           path: llvm
-          key: ${{ runner.os }}-llvm-sharedlibs-python-${{ steps.get-llvm-hash.outputs.hash }}
+          key: ${{ runner.os }}-llvm-python-${{ steps.get-llvm-hash.outputs.hash }}
 
       # Build LLVM if we didn't hit in the cache.
       - name: Rebuild and Install LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: utils/build-llvm.sh build install Release -DMLIR_BINDINGS_PYTHON_ENABLED=ON
+        run: utils/build-llvm.sh build install Release -DMLIR_ENABLE_BINDINGS_PYTHON=ON
 
   # Build CIRCT and run its tests using a Docker container with all the
   # integration testing prerequisite installed.
@@ -92,12 +92,12 @@ jobs:
         uses: actions/cache@v2
         with:
           path: llvm
-          key: ${{ runner.os }}-llvm-sharedlibs-python-${{ steps.get-llvm-hash.outputs.hash }}
+          key: ${{ runner.os }}-llvm-python-${{ steps.get-llvm-hash.outputs.hash }}
 
       # Build LLVM if we didn't hit in the cache.
       - name: Rebuild and Install LLVM
         if: steps.cache-llvm.outputs.cache-hit != 'true'
-        run: utils/build-llvm.sh build install Release -DMLIR_BINDINGS_PYTHON_ENABLED=ON
+        run: utils/build-llvm.sh build install Release -DMLIR_ENABLE_BINDINGS_PYTHON=ON
 
       # --------
       # Build and test CIRCT

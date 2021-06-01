@@ -1,11 +1,10 @@
 # REQUIRES: bindings_python
-# XFAIL: true
 # RUN: %PYTHON% %s | FileCheck %s
 
 import mlir
 import circt
 
-from circt.design_entry import Input, Output, module
+from circt.design_entry import Input, Output, module, generator
 from circt.esi import types
 from circt.dialects import comb, hw
 
@@ -25,15 +24,14 @@ class PolynomialCompute:
     # Full result.
     self.y = Output(types.i32)
 
-  def construct(self, mod):
+  @generator
+  def construct(mod):
     """Implement this module for input 'x'."""
 
     x = mod.x
     taps: list[mlir.ir.Value] = list()
-    runningPower: list[mlir.ir.Value] = list()
-    for power, coeff in enumerate(self.__coefficients):
-      coeffVal = hw.ConstantOp(types.i32,
-                               mlir.ir.IntegerAttr.get(types.i32, coeff))
+    for power, coeff in enumerate([1, 2, 3]):
+      coeffVal = hw.ConstantOp.create(types.i32, coeff)
       if power == 0:
         newPartialSum = coeffVal.result
       else:
@@ -41,16 +39,14 @@ class PolynomialCompute:
         if power == 1:
           currPow = x
         else:
-          x_power = [x for i in range(power - 1)]
-          currPow = comb.MulOp(types.i32, x_power + [runningPower[-1]]).result
+          x_power = [x for i in range(power)]
+          currPow = comb.MulOp(types.i32, x_power).result
         newPartialSum = comb.AddOp(
             types.i32,
             [
                 partialSum,
                 comb.MulOp(types.i32, [coeffVal.result, currPow]).result
             ]).result
-
-        runningPower.append(currPow)
 
       taps.append(newPartialSum)
 
@@ -60,8 +56,7 @@ class PolynomialCompute:
 
 def build(top):
   i32 = mlir.ir.Type.parse("i32")
-  c23 = mlir.ir.IntegerAttr.get(i32, 23)
-  x = hw.ConstantOp(i32, c23)
+  x = hw.ConstantOp.create(i32, 23)
   poly = PolynomialCompute([62, 42, 6], x=x)
   hw.OutputOp([poly.y])
 
@@ -73,11 +68,14 @@ with mlir.ir.InsertionPoint(mod.body), circt.support.BackedgeBuilder():
                 output_ports=[('y', mlir.ir.Type.parse("i32"))],
                 body_builder=build)
 
+mod.operation.print()
+pm = mlir.passmanager.PassManager.parse("run-generators")
+pm.run(mod)
 
 mod.operation.print()
 # CHECK:  hw.module @top() -> (%y: i32) {
 # CHECK:    %c23_i32 = hw.constant 23 : i32
-# CHECK:    [[REG0:%.+]] = "circt.design_entry.PolynomialCompute"(%c23_i32) : (i32) -> i32
+# CHECK:    [[REG0:%.+]] = "circt.PolynomialCompute"(%c23_i32) {opNames = ["x"], resultNames = ["y"]} : (i32) -> i32
 # CHECK:    hw.output [[REG0]] : i32
 
 print("\n\n=== Verilog ===")
@@ -87,7 +85,7 @@ pm = mlir.passmanager.PassManager.parse(
   "hw-legalize-names,hw.module(hw-cleanup)")
 pm.run(mod)
 circt.export_verilog(mod, sys.stdout)
-# CHECK:  module PolynomialCompute(
+# CHECK:  module circt_PolynomialCompute(
 # CHECK:    input  [31:0] x,
 # CHECK:    output [31:0] y);
-# CHECK:    assign y = 32'h3E + 32'h2A * x + 32'h6 * x * x;
+# CHECK:    assign y = 32'h1 + 32'h2 * x + 32'h3 * x * x;

@@ -309,8 +309,9 @@ void TypeLoweringVisitor::lowerArg(FModuleOp module, BlockArgument arg,
     // Create new block arguments.
     auto type = field.type;
     // Flip the direction if the field is an output.
-    auto direction = (Direction)(
-        (unsigned)getModulePortDirection(module, argNumber) ^ field.isOutput);
+    auto direction =
+        (Direction)((unsigned)getModulePortDirection(module, argNumber) ^
+                    field.isOutput);
     auto newValue = addArg(module, type, argNumber, direction, field.suffix);
 
     // If this field was flattened from a bundle.
@@ -370,9 +371,9 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
         pName = builder.getStringAttr("");
       portNames.push_back(pName);
       // Flip the direction if the field is an output.
-      portDirections.push_back((Direction)(
-          (unsigned)getModulePortDirection(extModule, oldArgNumber) ^
-          field.isOutput));
+      portDirections.push_back((
+          Direction)((unsigned)getModulePortDirection(extModule, oldArgNumber) ^
+                     field.isOutput));
 
       // Populate newAnnotations with the old annotations filtered to those
       // associated with just this field.
@@ -620,27 +621,23 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
               setBundleLowering(op.getResult(j), "wmode", wmode);
             Value gate;
             if (kind == MemOp::PortKind::Read)
-              gate = builder->create<NotPrimOp>(wmode.getType(), wmode);
+              gate = builder->create<NotPrimOp>(wmode);
             else
               gate = wmode;
-            wire = builder->create<AndPrimOp>(wire.getType(), wire, gate);
+            wire = builder->create<AndPrimOp>(wire, gate);
           }
 
           builder->create<ConnectOp>(
-              builder->create<SubfieldOp>(theType, newMem.getResult(i),
-                                          elt.name),
-              wire);
+              builder->create<SubfieldOp>(newMem.getResult(i), elt.name), wire);
           continue;
         }
 
         // Data ports ("data", "mask") are trivially lowered because
         // each data leaf winds up in a new, separate memory. No wire
         // creation is needed.
-        FIRRTLType theType = elt.type.getPassiveType();
-
-        setBundleLowering(op.getResult(j), (oldName + field.suffix).str(),
-                          builder->create<SubfieldOp>(
-                              theType, newMem.getResult(i), elt.name));
+        setBundleLowering(
+            op.getResult(j), (oldName + field.suffix).str(),
+            builder->create<SubfieldOp>(newMem.getResult(i), elt.name));
       }
 
       // Don't increment the index of the old memory if this is the
@@ -916,8 +913,8 @@ void TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
   for (auto it : llvm::zip(highValues, lowValues, fieldTypes)) {
     auto field = std::get<2>(it);
     auto suffix = StringRef(field.suffix).drop_front(1);
-    auto muxOp = builder->create<MuxPrimOp>(
-        field.type, sel, std::get<0>(it).first, std::get<1>(it).first);
+    auto muxOp = builder->create<MuxPrimOp>(sel, std::get<0>(it).first,
+                                            std::get<1>(it).first);
     setBundleLowering(result, suffix, muxOp);
   }
   opsToRemove.push_back(op);

@@ -5,6 +5,8 @@ module {
   // CHECK:         logic [31:0] data;
   // CHECK:         logic valid;
   // CHECK:         logic ready;
+  // CHECK:         logic [3:0][7:0] arrayData;
+  // CHECK:         logic [7:0] uarrayData[0:3];
   // CHECK:         modport data_in(input data, input valid, output ready);
   // CHECK:         modport data_out(output data, output valid, input ready);
   // CHECK:       endinterface
@@ -13,7 +15,8 @@ module {
     sv.interface.signal @data : i32
     sv.interface.signal @valid : i1
     sv.interface.signal @ready : i1
-    sv.interface.signal @arrayData : !hw.array<8xi8>
+    sv.interface.signal @arrayData : !hw.array<4xi8>
+    sv.interface.signal @uarrayData : !hw.uarray<4xi8>
     sv.interface.modport @data_in ("input" @data, "input" @valid, "output" @ready)
     sv.interface.modport @data_out ("output" @data, "output" @valid, "input" @ready)
   }

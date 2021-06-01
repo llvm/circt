@@ -6,6 +6,7 @@ add_circt_dialect_library(CIRCTSVTransforms
   HWMemSimImpl.cpp
   HWDeclareTypedecls.cpp
   PrettifyVerilog.cpp
+  SVExtractTestCode.cpp
 
   DEPENDS
   CIRCTSVTransformsIncGen

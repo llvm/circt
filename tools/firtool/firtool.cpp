@@ -85,8 +85,9 @@ static cl::opt<bool>
                       cl::init(false));
 
 static cl::opt<bool>
-    expandWhens("expand-whens", cl::desc("run the expand-whens pass on firrtl"),
-                cl::init(false));
+    disableExpandWhens("disable-expand-whens",
+                       cl::desc("disable the expand-whens pass"),
+                       cl::init(false));
 
 static cl::opt<bool>
     blackboxMemory("blackbox-memory",
@@ -130,6 +131,17 @@ static cl::opt<std::string>
     inputAnnotationFilename("annotation-file",
                             cl::desc("Optional input annotation file"),
                             cl::value_desc("filename"));
+
+static cl::opt<std::string> blackBoxRootPath(
+    "blackbox-path",
+    cl::desc("Optional path to use as the root of blackbox annotations"),
+    cl::value_desc("path"), cl::init(""));
+
+static cl::opt<std::string> blackBoxRootResourcePath(
+    "blackbox-resource-path",
+    cl::desc(
+        "Optional path to use as the root of blackbox resource annotations"),
+    cl::value_desc("path"), cl::init(""));
 
 /// Process a single buffer of the input.
 static LogicalResult
@@ -177,30 +189,32 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     assert(inputFormat == InputMLIRFile);
     module = parseSourceFile(sourceMgr, &context);
   }
-  // The input mlir file could be firrtl dialect so we might need to clean
-  // things up.
-  if (!disableLowerTypes) {
-    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass());
-    auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
-    // Only enable expand whens if lower types is also enabled.
-    if (expandWhens)
-      modulePM.addPass(firrtl::createExpandWhensPass());
-  }
-  // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
-  if (!disableOptimization) {
-    auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
-    modulePM.addPass(createCSEPass());
-    modulePM.addPass(createSimpleCanonicalizerPass());
-  }
-
   if (!module)
     return failure();
 
   // Allow optimizations to run multithreaded.
   context.enableMultithreading(isMultithreaded);
 
+  // Width inference creates canonicalization opportunities.
   if (inferWidths)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidthsPass());
+
+  // The input mlir file could be firrtl dialect so we might need to clean
+  // things up.
+  if (!disableLowerTypes) {
+    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass());
+    auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
+    // Only enable expand whens if lower types is also enabled.
+    if (!disableExpandWhens)
+      modulePM.addPass(firrtl::createExpandWhensPass());
+  }
+
+  // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
+  if (!disableOptimization) {
+    auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
+    modulePM.addPass(createCSEPass());
+    modulePM.addPass(createSimpleCanonicalizerPass());
+  }
 
   if (inliner)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
@@ -212,8 +226,13 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxMemoryPass());
 
   // Read black box source files into the IR.
+  StringRef blackBoxRoot = blackBoxRootPath.empty()
+                               ? llvm::sys::path::parent_path(inputFilename)
+                               : blackBoxRootPath;
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxReaderPass(
-      llvm::sys::path::parent_path(inputFilename), {""}));
+      blackBoxRoot, blackBoxRootResourcePath.empty()
+                        ? blackBoxRoot
+                        : blackBoxRootResourcePath));
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (lowerToHW || outputFormat == OutputVerilog ||
