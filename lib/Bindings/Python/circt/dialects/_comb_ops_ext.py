@@ -1,7 +1,7 @@
 from circt.dialects import comb
 from circt.support import NamedValueOpView, get_value
 
-from mlir.ir import IntegerAttr, IntegerType
+from mlir.ir import IntegerAttr, IntegerType, Type
 
 from functools import reduce
 
@@ -31,8 +31,9 @@ def UnaryOp(base):
   class _Class(base):
 
     @classmethod
-    def create(cls, result_type, **kwargs):
-      return UnaryOpBuilder(cls, result_type, kwargs)
+    def create(cls, result_type, input=None):
+      mapping = {"input": input} if input else {}
+      return UnaryOpBuilder(cls, result_type, mapping)
 
   return _Class
 
@@ -59,10 +60,19 @@ def BinaryOp(base):
   class _Class(base):
 
     @classmethod
-    def create(cls, result_type=None, **kwargs):
-      if not result_type:
-        result_type = infer_result_type(kwargs.values())
-      return BinaryOpBuilder(cls, result_type, kwargs)
+    def create(cls, result_type=None, lhs=None, rhs=None):
+      if not isinstance(result_type, Type):
+        if not lhs and not rhs:
+          raise TypeError("result type must be specified")
+        rhs = lhs
+        lhs = result_type
+        result_type = infer_result_type([lhs, rhs])
+      mapping = {}
+      if lhs:
+        mapping["lhs"] = lhs
+      if rhs:
+        mapping["rhs"] = rhs
+      return BinaryOpBuilder(cls, result_type, mapping)
 
   return _Class
 
@@ -97,8 +107,9 @@ def CreatableOp(base):
 class ExtractOp:
 
   @staticmethod
-  def create(low_bit, result_type, **kwargs):
-    return ExtractOpBuilder(low_bit, result_type, kwargs)
+  def create(low_bit, result_type, input=None):
+    mapping = {"input": input} if input else {}
+    return ExtractOpBuilder(low_bit, result_type, mapping)
 
 
 @UnaryOp
