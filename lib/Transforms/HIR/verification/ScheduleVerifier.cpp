@@ -370,7 +370,7 @@ bool ScheduleVerifier::inspectOp(hir::SubtractOp op) {
 bool ScheduleVerifier::inspectOp(hir::ReturnOp op) {
   auto operands = op.operands();
   bool ok = true;
-  for (int i = 0; i < operands.size(); i++) {
+  for (int i = 0; i < (int)operands.size(); i++) {
     Value operand = operands[i];
     int delay = this->outputDelays[i].dyn_cast<IntegerAttr>().getInt();
     ok &= schedule.check(op.getLoc(), getDefiningLoc(operand), operand,
