@@ -259,18 +259,18 @@ circuit Foo: %[[{"target": "Foo|Foo>_T_0", "a": "a"},
 
     ; CHECK: %0 = firrtl.wire  {annotations = [{a = "a"}]}
     wire _T_0 : UInt<1>
-    ; CHECK-NOT: firrtl.node
+    ; CHECK: %1 = firrtl.node
     node _T_1 = _T_0
-    ; CHECK: %1 = firrtl.reg %clock  {annotations = [{a = "a"}]}
+    ; CHECK: %2 = firrtl.reg %clock  {annotations = [{a = "a"}]}
     reg _T_2 : UInt<1>, clock
-    ; CHECK: %2 = firrtl.regreset %clock, %reset, %c0_ui4  {annotations = [{a = "a"}]}
+    ; CHECK: %3 = firrtl.regreset %clock, %reset, %c0_ui4  {annotations = [{a = "a"}]}
     reg _T_3 : UInt<4>, clock with :
       reset => (reset, UInt<4>("h0"))
-    ; CHECK: %3 = firrtl.smem Undefined  {annotations = [{a = "a"}], name = ""}
+    ; CHECK: %4 = firrtl.smem Undefined  {annotations = [{a = "a"}], name = ""}
     smem _T_4 : UInt<1>[9] [256]
-    ; CHECK: %4 = firrtl.cmem  {annotations = [{a = "a"}], name = ""}
+    ; CHECK: %5 = firrtl.cmem  {annotations = [{a = "a"}], name = ""}
     cmem _T_5 : UInt<1>[9] [256]
-    ; CHECK: %5 = firrtl.memoryport Infer %4, %reset, %clock {annotations = [{a = "a"}], name = ""}
+    ; CHECK: %6 = firrtl.memoryport Infer %5, %reset, %clock {annotations = [{a = "a"}], name = ""}
     infer mport _T_6 = _T_5[reset], clock
     ; CHECK: firrtl.instance @Bar  {annotations = [{a = "a"}], name = ""}
     inst _T_7 of Bar
@@ -326,6 +326,20 @@ circuit Foo: %[[{"target": "Foo|Foo>_T_0", "class": "firrtl.transforms.DontTouch
         read-latency => 0
         write-latency => 1
         read-under-write => undefined
+
+; // -----
+
+; Test that an annotated, anonymous node is preserved if annotated.  Normally,
+; the FIRRTL parser will aggressively eliminate these.
+circuit AnnotationsBlockNodePruning: %[[
+  {"a": null, "target": "~AnnotationsBlockNodePruning|AnnotationsBlockNodePruning>_T"}
+]]
+  module AnnotationsBlockNodePruning:
+    input a: UInt<1>
+    node _T = not(a)
+
+    ; CHECK-LABEL: firrtl.module @AnnotationsBlockNodePruning
+    ; CHECK: firrtl.node
 
 ; // -----
 

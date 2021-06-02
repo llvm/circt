@@ -2731,9 +2731,9 @@ ParseResult FIRStmtParser::parseNode() {
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
   // The entire point of a node declaration is to carry a name.  If it got
-  // dropped, then we don't even need to create a result.
+  // dropped, then we don't even need to create a result unless it is annotated.
   Value result;
-  if (!name.empty()) {
+  if (!name.empty() || !annotations.empty()) {
     result = builder.create<NodeOp>(initializer.getType(), initializer, name,
                                     annotations);
   } else
