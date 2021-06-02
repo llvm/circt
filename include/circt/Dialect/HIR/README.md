@@ -29,19 +29,22 @@ HIR is an mlir dialect for hardware description.
 ## TimeType
 * Allow casting between group<i1> and TimeType.
 
-##GroupType
-* Syntax : `!hir.group<(@in i1, i32, @out v1)>`
-* Operations: hir.send, hir.recv, hir.select, hir.cast, hir.group
-* Indices must be constants.
-
-##ModuleType
+##FuncType
 * Syntax: `!hir.func<()->()>`
 * Operations: hir.call, hir.cast
 
-##ArrayType
-* Syntax: `!hir.array<"in" [2x4xf32]>`
-* Operations: hir.select, hir.array, hir.assign.
-* Indices can be IndexType or Constants.
+## Protocols
+* Syntax: `!hir.protocol<
+    bus=("valid" : out i1, "data" : out), 
+    split="m_valid_split">`
+* If type is undefined then the corresponding element's width will be passed as
+    a verilog parameter to the split function.
+
+##BusType
+* Syntax: `!hir.bus<in/out BuiltinType, ..., proto #protocol>`
+* Operations: hir.send, hir.recv.
+* Allow nesting between Tensor, Tuple and BusType but all buses in the tensor 
+    must have the same direction.
 
 #Lowerings
 
@@ -50,8 +53,11 @@ HIR is an mlir dialect for hardware description.
     or group.
 
 ## MemrefType lowering
-* Convert `!hir.memref` to `!hir.func` or `!hir.array<[...xfunc(...)->(...)]>`
-* Convert LoadOp/StoreOp to SelectOp and CallOp.
+* Convert `!hir.memref` to 
+    `Tuple<
+    Tensor<!hir.bus<out i1, out i8>, proto valid>, 
+    Tensor< !hir.bus<in i32>>>`
+* Convert LoadOp/StoreOp to SelectOp + SendOp + RecvOp.
 
 ##CallOp lowering
 * Convert CallOp-on-symbol to AllocaOp + CallOp-on-var.
@@ -78,38 +84,4 @@ HIR is an mlir dialect for hardware description.
 * Only support array of BuiltinTypes.
 * No MemrefType and CallOp.
 
-## Protocols
-* Syntax:
-`
-hir.protocol @axis ("data") {
-  send "data" => { ctrl<send i1 "valid", recv i1 "ready">,
-                   send = "axis_send"("data","valid","ready"),
-                   ready = "axis_ready"("ready"),
-                   valid = "axis_valid" (<"valid">)
-                 }
-  recv "data" => { ctrl<send i1 "ready", recv i1 "valid">,
-                   recv= "axis_recv"("data","valid","ready"),
-                   valid = "axis_valid" (<"valid">)
-                   ready = "axis_ready"("ready"),
-                 }
-}
-`
-`
-hir.protocol @m_axi ("addr","data") {
-  send "data" => { ctrl<send i1 "valid", recv i1 "ready">,
-                   send = "axis_send"("data","valid","ready"),
-                   ready = "axis_ready"("ready")
-                 }
-  send "addr" => { ctrl<send i1 "valid", recv i1 "ready">,
-                   send = "axis_send"("addr","valid","ready"),
-                   ready = "axis_ready"("ready")
-                 }
-}
-`
-
-* Protocols are used to define the interface in GroupTypes and ArrayTypes.
-* They have the same benefit as the memref type. They abstract over the exact
-    protocol for transmission.
-* The verilog name for the signal is the variable_name + payload_name + ctrl_signal_name. For
-    example, "v1_data_valid" or "v2_addr_ready".
 
