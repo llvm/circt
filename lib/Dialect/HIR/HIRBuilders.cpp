@@ -2,6 +2,7 @@
 #include "circt/Dialect/HIR/HIRDialect.h"
 using namespace mlir;
 using namespace hir;
+
 Block *ForOp::addEntryBlock(MLIRContext *context, Type inductionVarTy) {
   Block *entry = new Block;
   entry->addArgument(inductionVarTy);              // induction var
