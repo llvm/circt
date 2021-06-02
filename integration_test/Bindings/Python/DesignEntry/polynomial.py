@@ -1,6 +1,8 @@
 # REQUIRES: bindings_python
 # RUN: %PYTHON% %s | FileCheck %s
 
+from __future__ import annotations
+
 import mlir
 import circt
 

@@ -2,6 +2,8 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+from __future__ import annotations
+
 from circt import support
 from circt.support import BuilderValue, BackedgeBuilder, OpOperand
 import circt
@@ -69,8 +71,8 @@ def module(cls):
     _ODS_REGIONS = (0, True)
 
     # Default mappings to operand/result numbers.
-    input_ports = dict[str, int]()
-    output_ports = dict[str, int]()
+    input_ports: dict[str, int] = {}
+    output_ports: dict[str, int] = {}
 
     def __init__(self, *args, **kwargs):
       """Scan the class and eventually instance for Input/Output members and
@@ -82,8 +84,8 @@ def module(cls):
       dont_touch = set([x for x in dir(mlir.ir.OpView)])
 
       # After the wrapped class' construct, all the IO should be known.
-      input_ports = list[Input]()
-      output_ports = list[Output]()
+      input_ports: list[Input] = []
+      output_ports: list[Output] = []
       # Scan for them.
       for attr_name in dir(self):
         if attr_name in dont_touch:
@@ -97,7 +99,7 @@ def module(cls):
           output_ports.append(attr)
 
       # Build a list of operand values for the operation we're gonna create.
-      input_ports_values = list[mlir.ir.Value]()
+      input_ports_values: list[mlir.ir.Value] = []
       for input in input_ports:
         if input.name in kwargs:
           value = kwargs[input.name]
