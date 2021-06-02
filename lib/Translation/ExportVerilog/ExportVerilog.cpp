@@ -615,7 +615,7 @@ public:
     return addName(valueOrOp, nameAttr ? nameAttr.getValue() : "");
   }
 
-  bool addLegalName(ValueOrOp valueOrOp, StringRef name);
+  StringRef addLegalName(ValueOrOp valueOrOp, StringRef name, Operation *op);
 
   StringRef getName(Value value) { return getName(ValueOrOp(value)); }
   StringRef getName(ValueOrOp valueOrOp) {
@@ -664,13 +664,16 @@ StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
   return updatedName;
 }
 
-/// Add the specified name to the name table, returning if the name
-/// empty or is changed by uniqing.
-bool ModuleEmitter::addLegalName(ValueOrOp valueOrOp, StringRef name) {
+/// Add the specified name to the name table, emitting an error message if the
+/// name empty or is changed by uniqing.
+StringRef ModuleEmitter::addLegalName(ValueOrOp valueOrOp, StringRef name,
+                                      Operation *op) {
   auto updatedName = addName(valueOrOp, name);
-  if (name.empty() || updatedName != name)
-    return false;
-  return true;
+  if (name.empty())
+    emitOpError(op, "should have non-empty name");
+  else if (updatedName != name)
+    emitOpError(op, "name '") << name << "' changed during emission";
+  return updatedName;
 }
 
 /// Check if the given module name \p nameAttr is a valid SV name (does not
@@ -2676,14 +2679,11 @@ void ModuleEmitter::prepareHWModule(Block &block) {
     // them now ensures any temporary generated will not use one of the names
     // previously declared.
     if (auto instance = dyn_cast<InstanceOp>(op))
-      if (!addLegalName(ValueOrOp(&op), instance.instanceName()))
-        emitOpError(instance, "Instance name changed durring emission.");
+      addLegalName(ValueOrOp(&op), instance.instanceName(), &op);
     if (auto wire = dyn_cast<WireOp>(op))
-      if (!addLegalName(ValueOrOp(op.getResult(0)), wire.name()))
-        emitOpError(wire, "Wire name changed durring emission");
+      addLegalName(ValueOrOp(op.getResult(0)), wire.name(), &op);
     if (auto regOp = dyn_cast<RegOp>(op))
-      if (!addLegalName(ValueOrOp(op.getResult(0)), regOp.name()))
-        emitOpError(regOp, "Register name changed durring emission");
+      addLegalName(ValueOrOp(op.getResult(0)), regOp.name(), &op);
   }
 
   // Now that all the basic ops are settled, check for any use-before def issues
@@ -2751,15 +2751,10 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
                   "Verilog synthesis.\n");
       name = "<<NO-NAME-FOUND>>";
     }
-    if (port.isOutput()) {
-      auto legalname = addName(ValueOrOp(), name);
-      if (legalname != name)
-        emitOpError(module, "Output port name changed durring emission");
-      outputNames.push_back(legalname);
-    } else {
-      if (!addLegalName(module.getArgument(port.argNum), name))
-        emitOpError(module, "Port name changed durring emission");
-    }
+    if (port.isOutput())
+      outputNames.push_back(addLegalName(ValueOrOp(), name, module));
+    else
+      addLegalName(module.getArgument(port.argNum), name, module);
   }
 
   auto moduleNameAttr = module.getNameAttr();

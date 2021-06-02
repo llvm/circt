@@ -16,8 +16,8 @@ module attributes {circt.loweringOptions = "badOption,anotherOne"} {}
 
 // -----
 
-// expected-error @+2 {{Port name changed durring emission}}
-// expected-error @+1 {{Output port name changed durring emission}}
+// expected-error @+2 {{name 'casex' changed during emission}}
+// expected-error @+1 {{name 'if' changed during emission}}
 hw.module @namechange(%casex: i4) -> (%if: i4) {
   hw.output %casex : i4
 }
