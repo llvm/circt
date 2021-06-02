@@ -38,6 +38,17 @@ class Input(ModuleDecl):
   pass
 
 
+class Parameter:
+  __slots__ = [
+    "name",
+    "attr"
+  ]
+
+  def __init__(self, value, name: str = None):
+    self.attr = support.var_to_attribute(value)
+    self.name = name
+
+
 def module(cls):
   """The CIRCT design entry module class decorator."""
 
@@ -61,6 +72,8 @@ def module(cls):
       # After the wrapped class' construct, all the IO should be known.
       input_ports: list[Input] = []
       output_ports: list[Output] = []
+      parameters: list[Parameter] = []
+
       # Scan for them.
       for attr_name in dir(self):
         if attr_name in dont_touch:
@@ -72,6 +85,9 @@ def module(cls):
         if isinstance(attr, Output):
           attr.name = attr_name
           output_ports.append(attr)
+        if isinstance(attr, Parameter):
+          attr.name = attr_name
+          parameters.append(attr)
 
       # Build a list of operand values for the operation we're gonna create.
       input_ports_values: list[mlir.ir.Value] = []
@@ -94,12 +110,14 @@ def module(cls):
       result_names_attr = mlir.ir.ArrayAttr.get(
           [mlir.ir.StringAttr.get(x.name) for x in output_ports])
 
+      # Set up the op attributes.
+      attributes = {p.name: p.attr for p in parameters}
+      attributes["opNames"] = op_names_attr
+      attributes["resultNames"] = result_names_attr
+
       # Init the OpView, which creates the operation.
       mlir.ir.OpView.__init__(self, self.build_generic(
-          attributes={
-            "opNames": op_names_attr,
-            "resultNames": result_names_attr
-          },
+          attributes=attributes,
           results=[x.type for x in output_ports],
           operands=[x for x in input_ports_values]
       ))
@@ -149,6 +167,9 @@ class _Generate:
   def __init__(self, gen_func):
     self.gen_func = gen_func
 
+  def _generate(self, mod):
+    return self.gen_func(mod, self.params)
+
   def __call__(self, op):
     """Build an HWModuleOp and run the generator as the body builder."""
 
@@ -167,13 +188,19 @@ class _Generate:
     output_ports = [
         (n.value, o.type) for (n, o) in zip(result_names, op.results)]
 
+    # Assemble the attributes and present them as parameters.
+    params = {nattr.name: nattr.attr
+              for nattr in op.attributes
+              if nattr.name not in ["opNames", "resultNames"]}
+    self.params = type(f"{op.name}_params", (object,), params)
+
     # Build the replacement HWModuleOp in the outer module.
     with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
       mod = circt.dialects.hw.HWModuleOp(
           op.name,
           input_ports=input_ports,
           output_ports=output_ports,
-          body_builder=self.gen_func)
+          body_builder=self._generate)
 
     # Build a replacement instance at the op to be replaced.
     with mlir.ir.InsertionPoint(op):
