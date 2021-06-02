@@ -468,9 +468,9 @@ circuit GCTInterface : %[
 
     ; The interface definitions should show up as circuit annotations.
     ; CHECK-SAME: annotations
-    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "_0", elements = [{name = "_1"}, {name = "_0"}]}
-    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "register", elements = [{name = "_2"}, {name = "_0"}]}
-    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "ViewName", elements = [{description = "the register in GCTInterface", name = "register"}, {description = "the port 'a' in GCTInterface", name = "port"}]}
+    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "_0", elements = [{name = "_1", tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}, {name = "_0", tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]}
+    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "register", elements = [{name = "_2", tpe = "sifive.enterprise.grandcentral.AugmentedVectorType"}, {name = "_0", tpe = "sifive.enterprise.grandcentral.AugmentedBundleType"}]}
+    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "ViewName", elements = [{description = "the register in GCTInterface", name = "register", tpe = "sifive.enterprise.grandcentral.AugmentedBundleType"}, {description = "the port 'a' in GCTInterface", name = "port", tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]}
 
     ; The companion should be marked.
     ; CHECK: firrtl.module @view_companion
