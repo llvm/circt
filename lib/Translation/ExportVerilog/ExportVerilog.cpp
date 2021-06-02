@@ -615,6 +615,8 @@ public:
     return addName(valueOrOp, nameAttr ? nameAttr.getValue() : "");
   }
 
+  bool addLegalName(ValueOrOp valueOrOp, StringRef name);
+
   StringRef getName(Value value) { return getName(ValueOrOp(value)); }
   StringRef getName(ValueOrOp valueOrOp) {
     auto entry = nameTable.find(valueOrOp);
@@ -622,6 +624,8 @@ public:
            "value expected a name but doesn't have one");
     return entry->getSecond();
   }
+
+  bool hasName(Value value) { return nameTable.count(ValueOrOp(value)); }
 
   void verifyModuleName(Operation *, StringAttr nameAttr);
 
@@ -658,6 +662,15 @@ StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
   if (valueOrOp)
     nameTable[valueOrOp] = updatedName;
   return updatedName;
+}
+
+/// Add the specified name to the name table, returning if the name
+/// empty or is changed by uniqing. 
+bool ModuleEmitter::addLegalName(ValueOrOp valueOrOp, StringRef name) {
+  auto updatedName = addName(valueOrOp, name);
+  if (name.empty() || updatedName != name)
+    return false;
+  return true;
 }
 
 /// Check if the given module name \p nameAttr is a valid SV name (does not
@@ -1435,8 +1448,6 @@ void NameCollector::collectNames(Block &block) {
     // If the op is an instance, add its name to the name table as an op.
     auto instance = dyn_cast<InstanceOp>(&op);
     if (instance) {
-      moduleEmitter.addName(ValueOrOp(instance), instance.instanceName());
-
       // The names for instance results is handled specially.
       nameTmp = moduleEmitter.getName(ValueOrOp(instance)).str() + "_";
       auto namePrefixSize = nameTmp.size();
@@ -1471,7 +1482,7 @@ void NameCollector::collectNames(Block &block) {
       // Otherwise, it must be an expression or a declaration like a
       // RegOp/WireOp.  Remember and unique the name for this result.  Instances
       // are handled separately.
-      if (!instance)
+      if (!instance && !moduleEmitter.hasName(result))
         moduleEmitter.addName(result, op.getAttrOfType<StringAttr>("name"));
 
       // Don't measure or emit wires that are emitted inline (i.e. the wire
@@ -2658,6 +2669,21 @@ void ModuleEmitter::prepareHWModule(Block &block) {
       op.erase();
       continue;
     }
+
+    // Name legalization should have happened in a different pass for these sv
+    // elements and we don't want to change their name through re-legalization
+    // (e.g. letting a temporary take the name of an unvisited wire). Adding
+    // them now ensures any temporary generated will not use one of the names
+    // previously declared.
+    if (auto instance = dyn_cast<InstanceOp>(op))
+      if (!addLegalName(ValueOrOp(instance), instance.instanceName()))
+        emitOpError(instance, "Instance name changed durring emission.");
+    if (auto wire = dyn_cast<WireOp>(op))
+      if (!addLegalName(ValueOrOp(wire), wire.name()))
+      emitOpError(wire, "Wire name changed durring emission");
+      if (auto regOp = dyn_cast<RegOp>(op))
+      if(!addLegalName(ValueOrOp(regOp), regOp.name()))
+      emitOpError(regOp, "Register name changed durring emission");
   }
 
   // Now that all the basic ops are settled, check for any use-before def issues
@@ -2725,10 +2751,15 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
                   "Verilog synthesis.\n");
       name = "<<NO-NAME-FOUND>>";
     }
-    if (port.isOutput())
-      outputNames.push_back(addName(ValueOrOp(), name));
-    else
-      addName(module.getArgument(port.argNum), name);
+    if (port.isOutput()) {
+      auto legalname = addName(ValueOrOp(), name);
+      if (legalname != name)
+        emitOpError(module, "Output port name changed durring emission");
+      outputNames.push_back(legalname);
+    } else {
+      if (!addLegalName(module.getArgument(port.argNum), name))
+        emitOpError(module, "Port name changed durring emission");
+    }
   }
 
   auto moduleNameAttr = module.getNameAttr();

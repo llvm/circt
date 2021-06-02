@@ -13,3 +13,11 @@ hw.module @parameter() {
 // expected-error @+2 {{unknown style option 'badOption'}}
 // expected-error @+1 {{unknown style option 'anotherOne'}}
 module attributes {circt.loweringOptions = "badOption,anotherOne"} {}
+
+// -----
+
+// expected-error @+2 {{Port name changed durring emission}}
+// expected-error @+1 {{Output port name changed durring emission}}
+hw.module @namechange(%casex: i4) -> (%if: i4) {
+  hw.output %casex : i4
+}
