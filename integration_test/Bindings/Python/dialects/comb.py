@@ -10,6 +10,7 @@ from mlir.ir import Context, Location, InsertionPoint, IntegerType, IntegerAttr,
 with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)
 
+  i1 = IntegerType.get_signless(1)
   i32 = IntegerType.get_signless(32)
 
   m = Module.create()
@@ -18,6 +19,9 @@ with Context() as ctx, Location.unknown():
     def build(module):
       # CHECK: %[[CONST:.+]] = hw.constant 1 : i32
       const = hw.ConstantOp(i32, IntegerAttr.get(i32, 1))
+
+      # CHECK: %[[BIT:.+]] = hw.constant true
+      bit = hw.ConstantOp(i1, IntegerAttr.get(i1, 1))
 
       # CHECK: comb.extract %[[CONST]] from 14
       comb.ExtractOp.create(14, i32, input=const.result)
@@ -152,6 +156,30 @@ with Context() as ctx, Location.unknown():
       geu = comb.GeUOp.create()
       connect(geu.lhs, const.result)
       connect(geu.rhs, const.result)
+
+      # CHECK: comb.add %[[CONST]], %[[CONST]]
+      comb.AddOp.create(const.result, const.result)
+
+      # CHECK: comb.mul %[[CONST]], %[[CONST]]
+      comb.MulOp.create(const.result, const.result)
+
+      # CHECK: comb.and %[[CONST]], %[[CONST]]
+      comb.AndOp.create(const.result, const.result)
+
+      # CHECK: comb.or %[[CONST]], %[[CONST]]
+      comb.OrOp.create(const.result, const.result)
+
+      # CHECK: comb.xor %[[CONST]], %[[CONST]]
+      comb.XorOp.create(const.result, const.result)
+
+      # CHECK: comb.merge %[[CONST]], %[[CONST]]
+      comb.MergeOp.create(const.result, const.result)
+
+      # CHECK: comb.concat %[[CONST]], %[[CONST]]
+      comb.ConcatOp.create(i32, const.result, const.result)
+
+      # CHECK: comb.mux %[[BIT]], %[[CONST]], %[[CONST]]
+      comb.MuxOp.create(i32, bit.result, const.result, const.result)
 
     hw.HWModuleOp(name="test", body_builder=build)
 

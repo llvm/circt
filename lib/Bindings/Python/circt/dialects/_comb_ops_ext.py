@@ -1,9 +1,19 @@
 from circt.dialects import comb
-from circt.support import NamedValueOpView
+from circt.support import NamedValueOpView, get_value
 
 from mlir.ir import IntegerAttr, IntegerType
 
 from functools import reduce
+
+
+def infer_result_type(operands):
+  types = list(map(lambda arg: get_value(arg).type, operands))
+  if not types:
+    raise TypeError("result type must be specified")
+  all_equal = reduce(lambda t1, t2: t1 == t2, types)
+  if not all_equal:
+    raise TypeError(f"expected same input port types, but received {types}")
+  return types[0]
 
 
 # Builder base classes for non-variadic unary and binary ops.
@@ -51,15 +61,34 @@ def BinaryOp(base):
     @classmethod
     def create(cls, result_type=None, **kwargs):
       if not result_type:
-        types = list(map(lambda arg: arg.type, kwargs.values()))
-        if not types:
-          raise TypeError("result type must be specified")
-        all_equal = reduce(lambda t1, t2: t1 == t2, types)
-        if not all_equal:
-          raise TypeError(
-              f"expected same input port types, but received {types}")
-        result_type = types[0]
+        result_type = infer_result_type(kwargs.values())
       return BinaryOpBuilder(cls, result_type, kwargs)
+
+  return _Class
+
+
+# Base classes for the variadic ops.
+def VariadicOp(base):
+
+  class _Class(base):
+
+    @classmethod
+    def create(cls, *args):
+      result_type = infer_result_type(args)
+      return cls(result_type, args)
+
+  return _Class
+
+
+# Base class for miscellaneous ops that can't be abstracted but should provide a
+# create method for uniformity.
+def CreatableOp(base):
+
+  class _Class(base):
+
+    @classmethod
+    def create(cls, *args, **kwargs):
+      return cls(*args, **kwargs)
 
   return _Class
 
@@ -120,4 +149,48 @@ class ShrUOp:
 
 @BinaryOp
 class SubOp:
+  pass
+
+
+# Sugar classes for the variadic ops.
+@VariadicOp
+class AddOp:
+  pass
+
+
+@VariadicOp
+class MulOp:
+  pass
+
+
+@VariadicOp
+class AndOp:
+  pass
+
+
+@VariadicOp
+class OrOp:
+  pass
+
+
+@VariadicOp
+class XorOp:
+  pass
+
+
+@VariadicOp
+class MergeOp:
+  pass
+
+
+# Sugar classes for miscellaneous ops.
+class ConcatOp:
+
+  @classmethod
+  def create(cls, result_type, *args, **kwargs):
+    return cls(result_type, args, **kwargs)
+
+
+@CreatableOp
+class MuxOp:
   pass
