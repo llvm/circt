@@ -665,7 +665,7 @@ StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
 }
 
 /// Add the specified name to the name table, returning if the name
-/// empty or is changed by uniqing. 
+/// empty or is changed by uniqing.
 bool ModuleEmitter::addLegalName(ValueOrOp valueOrOp, StringRef name) {
   auto updatedName = addName(valueOrOp, name);
   if (name.empty() || updatedName != name)
@@ -2676,14 +2676,14 @@ void ModuleEmitter::prepareHWModule(Block &block) {
     // them now ensures any temporary generated will not use one of the names
     // previously declared.
     if (auto instance = dyn_cast<InstanceOp>(op))
-      if (!addLegalName(ValueOrOp(instance), instance.instanceName()))
+      if (!addLegalName(ValueOrOp(&op), instance.instanceName()))
         emitOpError(instance, "Instance name changed durring emission.");
     if (auto wire = dyn_cast<WireOp>(op))
-      if (!addLegalName(ValueOrOp(wire), wire.name()))
-      emitOpError(wire, "Wire name changed durring emission");
-      if (auto regOp = dyn_cast<RegOp>(op))
-      if(!addLegalName(ValueOrOp(regOp), regOp.name()))
-      emitOpError(regOp, "Register name changed durring emission");
+      if (!addLegalName(ValueOrOp(op.getResult(0)), wire.name()))
+        emitOpError(wire, "Wire name changed durring emission");
+    if (auto regOp = dyn_cast<RegOp>(op))
+      if (!addLegalName(ValueOrOp(op.getResult(0)), regOp.name()))
+        emitOpError(regOp, "Register name changed durring emission");
   }
 
   // Now that all the basic ops are settled, check for any use-before def issues
