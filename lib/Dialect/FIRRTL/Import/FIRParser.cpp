@@ -1705,17 +1705,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
     }
 
     // We always skip emitting the validif mux because it always folds to the
-    // non-invalid operand.  However, if we know the validif would always return
-    // invalid, then fold to invalid instead.
-    if (auto cst = operands[0].getDefiningOp<ConstantOp>()) {
-      // validif(0, x) -> always invalid.
-      if (cst.value().isNullValue()) {
-        result = builder.create<InvalidValueOp>(opTypes[1]);
-        return success();
-      }
-    }
-
-    // Otherwise, fold to the non-invalid value.
+    // non-invalid operand. 
     result = operands[1];
     return success();
   }

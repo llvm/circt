@@ -803,6 +803,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %out2 = firrtl.node %in2 
     node out2 = validif(en, in2)
 
+    ; This is required for SFC compatibility. 
+    ; https://github.com/llvm/circt/issues/1186
+    ; CHECK: %out3 = firrtl.node %in1
+    node out3 = validif(UInt<1>(0), in1)
+
   ; Test that behavioral memory reads and writes both work and that flow checks
   ; don't fail here.  (A memory port should have duplex flow.)
   ; See: https://github.com/llvm/circt/issues/1058
@@ -836,17 +841,3 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     output c: UInt<8>
     c <= mux(sel, a, b)
 
-  ; CHECK-LABEL: firrtl.module @InvalidIfFolding
-  module InvalidIfFolding:
-    input value: UInt<1>
-
-    node thing1 = validif(UInt<1>("h1"), UInt<1>("h0"))
-    ; CHECK-NOT: firrtl.invalidvalue
-    ; CHECK: %thing1 = firrtl.node %c0_ui1
- 
-    node thing2 = validif(UInt<1>("h0"), UInt<1>("h0"))
-    ; CHECK: %invalid_ui1 = firrtl.invalidvalue
-    ; CHECK: %thing2 = firrtl.node %invalid_ui1
-
-    node thing3 = validif(value, value) @[Locator.scala 229:17]
-    ; CHECK: %thing3 = firrtl.node %value
