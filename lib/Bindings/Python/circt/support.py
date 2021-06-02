@@ -157,9 +157,7 @@ class NamedValueOpView:
       arg_name = operand_names[i]
       operand_indices[arg_name] = i
       if arg_name in input_port_mapping:
-        value = input_port_mapping[arg_name]
-        if not isinstance(value, ir.Value):
-          value = input_port_mapping[arg_name].value
+        value = get_value(input_port_mapping[arg_name])
         operand = value
       else:
         backedge = self.create_default_value(i, data_type, arg_name)
