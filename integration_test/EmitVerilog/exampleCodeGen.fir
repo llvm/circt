@@ -10,7 +10,7 @@ circuit top :
     output io_out3 : UInt<3>
 
     reg D0123456 : UInt<6>, clock with :
-      reset => (UInt<1>("h0"), D0123456) @[main.scala 16:25]
+      reset => (reset, UInt<6>("h0")) @[main.scala 16:25]
     node _T = bits(D0123456, 4, 0) @[main.scala 20:30]
     node _T_1 = bits(D0123456, 5, 5) @[main.scala 20:47]
     node _T_2 = cat(_T, _T_1) @[main.scala 20:36]
