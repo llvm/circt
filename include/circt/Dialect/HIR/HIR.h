@@ -13,6 +13,9 @@
 
 namespace mlir {
 namespace hir {
+
+enum WireDirection { in = 0, out = 1, inout = 2 };
+
 namespace Details {
 enum PortKind { r = 0, w = 1, rw = 2 };
 
@@ -60,6 +63,7 @@ struct MemrefTypeStorage : public TypeStorage {
   DictionaryAttr portAttrs;
 };
 
+/// Storage class for FuncType.
 struct FuncTypeStorage : public TypeStorage {
   FuncTypeStorage(FunctionType functionTy, ArrayAttr inputDelays,
                   ArrayAttr outputDelays)
@@ -172,6 +176,49 @@ struct GroupTypeStorage : public TypeStorage {
   ArrayRef<Type> elementTypes;
   ArrayRef<Attribute> attrs;
 };
+
+/// Storage class for BusType.
+struct BusTypeStorage : public TypeStorage {
+  BusTypeStorage(ArrayRef<Type> elementTypes,
+                 ArrayRef<WireDirection> directions, DictionaryAttr proto)
+      : elementTypes(elementTypes), directions(directions), proto(proto) {}
+
+  /// The hash key for this storage is a pair of the integer and type params.
+  using KeyTy =
+      std::tuple<ArrayRef<Type>, ArrayRef<WireDirection>, DictionaryAttr>;
+
+  /// Define the comparison function for the key type.
+  bool operator==(const KeyTy &key) const {
+    return key == KeyTy(elementTypes, directions, proto);
+  }
+
+  /// Define a hash function for the key type.
+  static llvm::hash_code hashKey(const KeyTy &key) {
+    return llvm::hash_combine(std::get<0>(key), std::get<1>(key),
+                              std::get<2>(key));
+  }
+
+  /// Define a construction function for the key type.
+  static KeyTy getKey(ArrayRef<Type> elementTypes,
+                      ArrayRef<WireDirection> directions,
+                      DictionaryAttr proto) {
+    return KeyTy(elementTypes, directions, proto);
+  }
+
+  /// Define a construction method for creating a new instance of this storage.
+  static BusTypeStorage *construct(TypeStorageAllocator &allocator,
+                                   const KeyTy &key) {
+    ArrayRef<Type> elementTypes = allocator.copyInto(std::get<0>(key));
+    ArrayRef<WireDirection> directions = allocator.copyInto(std::get<1>(key));
+    DictionaryAttr proto = std::get<2>(key);
+    return new (allocator.allocate<BusTypeStorage>())
+        BusTypeStorage(elementTypes, directions, proto);
+  }
+
+  ArrayRef<Type> elementTypes;
+  ArrayRef<WireDirection> directions;
+  DictionaryAttr proto;
+};
 } // namespace Details.
 
 /// This class defines hir.time type in the dialect.
@@ -256,8 +303,7 @@ public:
   ArrayAttr getOutputDelays() { return getImpl()->outputDelays; }
 };
 
-/// This class defines array type which is only accessible inside
-/// hir.interface.
+/// This class defines array type.
 class ArrayType
     : public Type::TypeBase<ArrayType, Type, Details::ArrayTypeStorage> {
 public:
@@ -276,8 +322,7 @@ public:
   Attribute getAttribute() { return getImpl()->attr; }
 };
 
-/// This class defines group type which is only accessible inside
-/// hir.interface.
+/// This class defines group type.
 class GroupType
     : public Type::TypeBase<GroupType, Type, Details::GroupTypeStorage> {
 public:
@@ -291,6 +336,24 @@ public:
   ArrayRef<Type> getElementTypes() { return getImpl()->elementTypes; }
   ArrayRef<Attribute> getAttributes() { return getImpl()->attrs; }
 };
+
+/// This class defines bus type.
+class BusType : public Type::TypeBase<BusType, Type, Details::BusTypeStorage> {
+public:
+  using Base::Base;
+
+  static StringRef getKeyword() { return "bus"; }
+  static BusType get(MLIRContext *context, ArrayRef<Type> elementTypes,
+                     ArrayRef<WireDirection> directions, DictionaryAttr proto) {
+    return Base::get(context, elementTypes, directions, proto);
+  }
+  ArrayRef<Type> getElementTypes() { return getImpl()->elementTypes; }
+  ArrayRef<WireDirection> getElementDirections() {
+    return getImpl()->directions;
+  }
+  DictionaryAttr getProto() { return getImpl()->proto; }
+};
+
 } // namespace hir.
 #define GET_OP_CLASSES
 #include "circt/Dialect/HIR/HIR.h.inc"

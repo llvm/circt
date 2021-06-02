@@ -329,6 +329,49 @@ static Type parseArrayType(DialectAsmParser &parser, MLIRContext *context) {
   return arrayTy;
 }
 
+static Type parseBusType(DialectAsmParser &parser, MLIRContext *context) {
+  if (parser.parseLess())
+    return Type();
+
+  SmallVector<Type> elementTypes;
+  SmallVector<WireDirection> directions;
+  DictionaryAttr proto;
+
+  do {
+    Type ty;
+
+    if (!parser.parseOptionalKeyword("in")) {
+      if (parser.parseType(ty))
+        return Type();
+      directions.push_back(WireDirection::in);
+      elementTypes.push_back(ty);
+    } else if (!parser.parseOptionalKeyword("out")) {
+      if (parser.parseType(ty))
+        return Type();
+      directions.push_back(WireDirection::out);
+      elementTypes.push_back(ty);
+    } else if (!parser.parseOptionalKeyword("proto")) {
+      if (parser.parseAttribute(proto))
+        return Type();
+      break;
+    } else {
+      if (parser.parseType(ty))
+        return Type();
+      directions.push_back(WireDirection::inout);
+      elementTypes.push_back(ty);
+    }
+  } while (!parser.parseOptionalComma());
+
+  // Finish parsing the group.
+  if (parser.parseGreater())
+    return Type();
+
+  if (!proto)
+    proto = DictionaryAttr::get(context, SmallVector<NamedAttribute, 4>());
+
+  return hir::BusType::get(context, elementTypes, directions, proto);
+}
+
 // parseType and printType.
 Type HIRDialect::parseType(DialectAsmParser &parser) const {
   StringRef typeKeyword;
@@ -349,6 +392,9 @@ Type HIRDialect::parseType(DialectAsmParser &parser) const {
 
   if (typeKeyword == ArrayType::getKeyword())
     return parseArrayType(parser, getContext());
+
+  if (typeKeyword == BusType::getKeyword())
+    return parseBusType(parser, getContext());
 
   if (typeKeyword == ConstType::getKeyword())
     return ConstType::get(getContext());
@@ -408,6 +454,32 @@ static void printArrayType(ArrayType arrayTy, DialectAsmPrinter &printer) {
   helper::printElementType(elementTy, printer);
   printer << ">";
 }
+
+static void printBusType(BusType busTy, DialectAsmPrinter &printer) {
+  ArrayRef<Type> elementTypes = busTy.getElementTypes();
+  ArrayRef<WireDirection> directions = busTy.getElementDirections();
+  DictionaryAttr proto = busTy.getProto();
+
+  printer << "bus<";
+  for (int i = 0; i < (int)elementTypes.size(); i++) {
+    Type elementTy = elementTypes[i];
+    WireDirection direction = directions[i];
+
+    if (i > 0)
+      printer << ", ";
+
+    if (direction == WireDirection::in)
+      printer << "in ";
+    else if (direction == WireDirection::out)
+      printer << "out ";
+
+    printer << elementTy;
+  }
+  if (!proto.empty())
+    printer << ", proto " << proto;
+  printer << ">";
+}
+
 void HIRDialect::printType(Type type, DialectAsmPrinter &printer) const {
   if (TimeType timeTy = type.dyn_cast<TimeType>()) {
     printer << timeTy.getKeyword();
@@ -427,6 +499,10 @@ void HIRDialect::printType(Type type, DialectAsmPrinter &printer) const {
   }
   if (ArrayType arrayTy = type.dyn_cast<ArrayType>()) {
     printArrayType(arrayTy, printer);
+    return;
+  }
+  if (BusType busTy = type.dyn_cast<BusType>()) {
+    printBusType(busTy, printer);
     return;
   }
   if (ConstType constTy = type.dyn_cast<ConstType>()) {
