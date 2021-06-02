@@ -615,6 +615,8 @@ public:
     return addName(valueOrOp, nameAttr ? nameAttr.getValue() : "");
   }
 
+  StringRef addLegalName(ValueOrOp valueOrOp, StringRef name, Operation *op);
+
   StringRef getName(Value value) { return getName(ValueOrOp(value)); }
   StringRef getName(ValueOrOp valueOrOp) {
     auto entry = nameTable.find(valueOrOp);
@@ -622,6 +624,8 @@ public:
            "value expected a name but doesn't have one");
     return entry->getSecond();
   }
+
+  bool hasName(Value value) { return nameTable.count(ValueOrOp(value)); }
 
   void verifyModuleName(Operation *, StringAttr nameAttr);
 
@@ -657,6 +661,18 @@ StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
   auto updatedName = legalizeName(name, usedNames, nextGeneratedNameID);
   if (valueOrOp)
     nameTable[valueOrOp] = updatedName;
+  return updatedName;
+}
+
+/// Add the specified name to the name table, emitting an error message if the
+/// name empty or is changed by uniqing.
+StringRef ModuleEmitter::addLegalName(ValueOrOp valueOrOp, StringRef name,
+                                      Operation *op) {
+  auto updatedName = addName(valueOrOp, name);
+  if (name.empty())
+    emitOpError(op, "should have non-empty name");
+  else if (updatedName != name)
+    emitOpError(op, "name '") << name << "' changed during emission";
   return updatedName;
 }
 
@@ -1435,8 +1451,6 @@ void NameCollector::collectNames(Block &block) {
     // If the op is an instance, add its name to the name table as an op.
     auto instance = dyn_cast<InstanceOp>(&op);
     if (instance) {
-      moduleEmitter.addName(ValueOrOp(instance), instance.instanceName());
-
       // The names for instance results is handled specially.
       nameTmp = moduleEmitter.getName(ValueOrOp(instance)).str() + "_";
       auto namePrefixSize = nameTmp.size();
@@ -1471,7 +1485,7 @@ void NameCollector::collectNames(Block &block) {
       // Otherwise, it must be an expression or a declaration like a
       // RegOp/WireOp.  Remember and unique the name for this result.  Instances
       // are handled separately.
-      if (!instance)
+      if (!instance && !moduleEmitter.hasName(result))
         moduleEmitter.addName(result, op.getAttrOfType<StringAttr>("name"));
 
       // Don't measure or emit wires that are emitted inline (i.e. the wire
@@ -2658,6 +2672,18 @@ void ModuleEmitter::prepareHWModule(Block &block) {
       op.erase();
       continue;
     }
+
+    // Name legalization should have happened in a different pass for these sv
+    // elements and we don't want to change their name through re-legalization
+    // (e.g. letting a temporary take the name of an unvisited wire). Adding
+    // them now ensures any temporary generated will not use one of the names
+    // previously declared.
+    if (auto instance = dyn_cast<InstanceOp>(op))
+      addLegalName(ValueOrOp(&op), instance.instanceName(), &op);
+    if (auto wire = dyn_cast<WireOp>(op))
+      addLegalName(ValueOrOp(op.getResult(0)), wire.name(), &op);
+    if (auto regOp = dyn_cast<RegOp>(op))
+      addLegalName(ValueOrOp(op.getResult(0)), regOp.name(), &op);
   }
 
   // Now that all the basic ops are settled, check for any use-before def issues
@@ -2726,9 +2752,9 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
       name = "<<NO-NAME-FOUND>>";
     }
     if (port.isOutput())
-      outputNames.push_back(addName(ValueOrOp(), name));
+      outputNames.push_back(addLegalName(ValueOrOp(), name, module));
     else
-      addName(module.getArgument(port.argNum), name);
+      addLegalName(module.getArgument(port.argNum), name, module);
   }
 
   auto moduleNameAttr = module.getNameAttr();
