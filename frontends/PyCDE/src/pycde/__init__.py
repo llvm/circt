@@ -5,8 +5,8 @@
 from .module import *
 from .system import *
 
-__all__ = ['module', 'generator', 'Input', 'Output', 'Parameter', 'System']
-
+import mlir.ir
+import circt
 import atexit
 
 # Push a default context onto the context stack at import time.

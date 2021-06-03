@@ -3,6 +3,8 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 import mlir
+import mlir.ir
+import mlir.passmanager
 
 import circt
 from circt.dialects import hw

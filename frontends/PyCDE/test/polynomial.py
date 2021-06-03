@@ -3,14 +3,11 @@
 from __future__ import annotations
 
 import mlir
-import circt
 
 import pycde
 from pycde import Input, Output, Parameter, module, generator
 from circt.esi import types
 from circt.dialects import comb, hw
-
-import sys
 
 
 @module
