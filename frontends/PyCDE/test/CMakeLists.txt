@@ -31,7 +31,3 @@ add_lit_testsuite(check-pycde "Running the PyCDE tests"
   DEPENDS ${PyCDE_TEST_DEPENDS}
   )
 set_target_properties(check-pycde PROPERTIES FOLDER "PyCDETests")
-
-# add_lit_testsuites(PyCDE ${CMAKE_CURRENT_SOURCE_DIR}
-#   DEPENDS ${PyCDE_TEST_DEPENDS}
-# )
