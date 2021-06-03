@@ -52,6 +52,20 @@ def connect(destination, source):
     destination.builder.backedges[index].erase()
 
 
+def var_to_attribute(obj) -> ir.Attribute:
+  """Create an MLIR attribute from a Python object for a few common cases."""
+  if isinstance(obj, ir.Attribute):
+    return obj
+  if isinstance(obj, int):
+    attrTy = ir.IntegerType.get_signless(64)
+    return ir.IntegerAttr.get(attrTy, obj)
+  if isinstance(obj, str):
+    return ir.StringAttr.get(obj)
+  if isinstance(obj, list):
+    return ir.ArrayAttr.get([var_to_attribute(x) for x in obj])
+  raise TypeError(f"Cannot convert type '{type(obj)}' to MLIR attribute")
+
+
 class BackedgeBuilder(AbstractContextManager):
 
   class Edge:
