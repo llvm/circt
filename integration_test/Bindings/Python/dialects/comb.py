@@ -30,70 +30,70 @@ with Context() as ctx, Location.unknown():
       connect(extract.input, const.result)
 
       # CHECK: comb.parity %[[CONST]]
-      comb.ParityOp.create(i32, const.result)
+      comb.ParityOp.create(const.result, result_type=i32)
       # CHECK: comb.parity %[[CONST]]
-      parity = comb.ParityOp.create(i32)
+      parity = comb.ParityOp.create(result_type=i32)
       connect(parity.input, const.result)
 
       # CHECK: comb.sext %[[CONST]]
-      comb.SExtOp.create(i32, const.result)
+      comb.SExtOp.create(const.result, result_type=i32)
       # CHECK: comb.sext %[[CONST]]
-      sext = comb.SExtOp.create(i32)
+      sext = comb.SExtOp.create(result_type=i32)
       connect(sext.input, const.result)
 
       # CHECK: comb.divs %[[CONST]], %[[CONST]]
       comb.DivSOp.create(const.result, const.result)
       # CHECK: comb.divs %[[CONST]], %[[CONST]]
-      divs = comb.DivSOp.create(i32)
+      divs = comb.DivSOp.create(result_type=i32)
       connect(divs.lhs, const.result)
       connect(divs.rhs, const.result)
 
       # CHECK: comb.divu %[[CONST]], %[[CONST]]
       comb.DivUOp.create(const.result, const.result)
       # CHECK: comb.divu %[[CONST]], %[[CONST]]
-      divu = comb.DivUOp.create(i32)
+      divu = comb.DivUOp.create(result_type=i32)
       connect(divu.lhs, const.result)
       connect(divu.rhs, const.result)
 
       # CHECK: comb.mods %[[CONST]], %[[CONST]]
       comb.ModSOp.create(const.result, const.result)
       # CHECK: comb.mods %[[CONST]], %[[CONST]]
-      mods = comb.ModSOp.create(i32)
+      mods = comb.ModSOp.create(result_type=i32)
       connect(mods.lhs, const.result)
       connect(mods.rhs, const.result)
 
       # CHECK: comb.modu %[[CONST]], %[[CONST]]
       comb.ModUOp.create(const.result, const.result)
       # CHECK: comb.modu %[[CONST]], %[[CONST]]
-      modu = comb.ModUOp.create(i32)
+      modu = comb.ModUOp.create(result_type=i32)
       connect(modu.lhs, const.result)
       connect(modu.rhs, const.result)
 
       # CHECK: comb.shl %[[CONST]], %[[CONST]]
       comb.ShlOp.create(const.result, const.result)
       # CHECK: comb.shl %[[CONST]], %[[CONST]]
-      shl = comb.ShlOp.create(i32)
+      shl = comb.ShlOp.create(result_type=i32)
       connect(shl.lhs, const.result)
       connect(shl.rhs, const.result)
 
       # CHECK: comb.shrs %[[CONST]], %[[CONST]]
       comb.ShrSOp.create(const.result, const.result)
       # CHECK: comb.shrs %[[CONST]], %[[CONST]]
-      shrs = comb.ShrSOp.create(i32)
+      shrs = comb.ShrSOp.create(result_type=i32)
       connect(shrs.lhs, const.result)
       connect(shrs.rhs, const.result)
 
       # CHECK: comb.shru %[[CONST]], %[[CONST]]
       comb.ShrUOp.create(const.result, const.result)
       # CHECK: comb.shru %[[CONST]], %[[CONST]]
-      shru = comb.ShrUOp.create(i32)
+      shru = comb.ShrUOp.create(result_type=i32)
       connect(shru.lhs, const.result)
       connect(shru.rhs, const.result)
 
       # CHECK: comb.sub %[[CONST]], %[[CONST]]
       comb.SubOp.create(const.result, const.result)
       # CHECK: comb.sub %[[CONST]], %[[CONST]]
-      sub = comb.SubOp.create(i32)
+      sub = comb.SubOp.create(result_type=i32)
       connect(sub.lhs, const.result)
       connect(sub.rhs, const.result)
 
@@ -157,11 +157,11 @@ with Context() as ctx, Location.unknown():
       connect(geu.lhs, const.result)
       connect(geu.rhs, const.result)
 
-      # CHECK: comb.add %[[CONST]], %[[CONST]]
-      comb.AddOp.create(const.result, const.result)
+      # CHECK: comb.add %[[CONST]]
+      comb.AddOp.create(const.result)
 
-      # CHECK: comb.mul %[[CONST]], %[[CONST]]
-      comb.MulOp.create(const.result, const.result)
+      # CHECK: comb.mul %[[CONST]], %[[CONST]], %[[CONST]]
+      comb.MulOp.create(const.result, const.result, const.result)
 
       # CHECK: comb.and %[[CONST]], %[[CONST]]
       comb.AndOp.create(const.result, const.result)

@@ -3,14 +3,12 @@ from circt.support import NamedValueOpView, get_value
 
 from mlir.ir import IntegerAttr, IntegerType, Type
 
-from functools import reduce
-
 
 def infer_result_type(operands):
   types = list(map(lambda arg: get_value(arg).type, operands))
   if not types:
     raise TypeError("result type must be specified")
-  all_equal = reduce(lambda t1, t2: t1 == t2, types)
+  all_equal = all(type == types[0] for type in types)
   if not all_equal:
     raise TypeError(f"expected same input port types, but received {types}")
   return types[0]
@@ -31,7 +29,7 @@ def UnaryOp(base):
   class _Class(base):
 
     @classmethod
-    def create(cls, result_type, input=None):
+    def create(cls, input=None, result_type=None):
       mapping = {"input": input} if input else {}
       return UnaryOpBuilder(cls, result_type, mapping)
 
@@ -60,12 +58,10 @@ def BinaryOp(base):
   class _Class(base):
 
     @classmethod
-    def create(cls, result_type=None, lhs=None, rhs=None):
-      if not isinstance(result_type, Type):
+    def create(cls, lhs=None, rhs=None, result_type=None):
+      if not result_type:
         if not lhs and not rhs:
           raise TypeError("result type must be specified")
-        rhs = lhs
-        lhs = result_type
         result_type = infer_result_type([lhs, rhs])
       mapping = {}
       if lhs:
