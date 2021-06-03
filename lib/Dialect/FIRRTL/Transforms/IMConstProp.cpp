@@ -549,11 +549,22 @@ void IMConstPropPass::visitOperation(Operation *op) {
   SmallVector<Attribute, 8> operandConstants;
   operandConstants.reserve(op->getNumOperands());
   for (Value operand : op->getOperands()) {
-    // Make sure all of the operands are resolved first.
-    // TODO: Support folding partial ops, like mux(false, variable, cst).
     auto &operandLattice = latticeValues[operand];
-    if (operandLattice.isUnknown())
-      return;
+
+    // If the operand is an unknown value, then we generally don't want to
+    // process it - we want to wait until the value is resolved to by the SCCP
+    // algorithm.  However, some operations are defined on partial operations,
+    // including firrtl.mux in particular.  We resolve these eagerly because the
+    // fold hooks know how to deal with them, and they often form cycles.
+    if (operandLattice.isUnknown()) {
+      if (!isa<MuxPrimOp>(op))
+        return;
+      operandConstants.push_back(InvalidValueAttr::get(operand.getType()));
+      continue;
+    }
+
+    // Otherwise, it must be constant, invalid, or overdefined.  Translate them
+    // into attributes that the fold hook can look at.
     if (operandLattice.isConstant() || operandLattice.isInvalidValue())
       operandConstants.push_back(operandLattice.getValue());
     else
