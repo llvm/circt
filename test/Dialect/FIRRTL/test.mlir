@@ -115,4 +115,14 @@ firrtl.module @TestInvalidAttr() {
   }
 }
 
+// CHECK-LABEL: @VerbatimExpr
+firrtl.module @VerbatimExpr() {
+  // CHECK: %[[TMP:.+]] = firrtl.verbatim.expr "FOO" : () -> !firrtl.uint<42>
+  // CHECK: %[[TMP2:.+]] = firrtl.verbatim.expr "$bits({{[{][{]0[}][}]}})"(%[[TMP]]) : (!firrtl.uint<42>) -> !firrtl.uint<32>
+  // CHECK: firrtl.add %[[TMP]], %[[TMP2]] : (!firrtl.uint<42>, !firrtl.uint<32>) -> !firrtl.uint<43>
+  %0 = firrtl.verbatim.expr "FOO" : () -> !firrtl.uint<42>
+  %1 = firrtl.verbatim.expr "$bits({{0}})"(%0) : (!firrtl.uint<42>) -> !firrtl.uint<32>
+  %2 = firrtl.add %0, %1 : (!firrtl.uint<42>, !firrtl.uint<32>) -> !firrtl.uint<43>
+}
+
 }
