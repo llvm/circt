@@ -36,6 +36,36 @@ def get_value(obj) -> ir.Value:
   return None
 
 
+def connect(destination, source):
+  """A convenient way to use BackedgeBuilder."""
+  if not isinstance(destination, OpOperand):
+    raise TypeError(
+        f"cannot connect to destination of type {type(destination)}")
+  value = get_value(source)
+  if value is None:
+    raise TypeError(f"cannot connect from source of type {type(source)}")
+
+  index = destination.index
+  destination.operation.operands[index] = value
+  if isinstance(destination, BuilderValue) and \
+     index in destination.builder.backedges:
+    destination.builder.backedges[index].erase()
+
+
+def var_to_attribute(obj) -> ir.Attribute:
+  """Create an MLIR attribute from a Python object for a few common cases."""
+  if isinstance(obj, ir.Attribute):
+    return obj
+  if isinstance(obj, int):
+    attrTy = ir.IntegerType.get_signless(64)
+    return ir.IntegerAttr.get(attrTy, obj)
+  if isinstance(obj, str):
+    return ir.StringAttr.get(obj)
+  if isinstance(obj, list):
+    return ir.ArrayAttr.get([var_to_attribute(x) for x in obj])
+  raise TypeError(f"Cannot convert type '{type(obj)}' to MLIR attribute")
+
+
 class BackedgeBuilder(AbstractContextManager):
 
   class Edge:

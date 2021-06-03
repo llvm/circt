@@ -465,44 +465,6 @@ hw.module @TestZeroInstance(%aa: i4, %azeroBit: i0, %aarrZero: !hw.array<3xi0>)
   hw.output %o1, %o2, %o3 : i4, i0, !hw.array<3xi0>
 }
 
-// CHECK-LABEL: TestDupInstanceName
-hw.module @TestDupInstanceName(%a: i1) {
-  // CHECK: B name (
-  %w1, %y1 = hw.instance "name" @B(%a) : (i1) -> (i1, i1)
-
-  // CHECK: B name_0 (
-  %w2, %y2 = hw.instance "name" @B(%a) : (i1) -> (i1, i1)
-}
-
-// CHECK-LABEL: TestEmptyInstanceName
-hw.module @TestEmptyInstanceName(%a: i1) {
-  // CHECK: B _T (
-  %w1, %y1 = hw.instance "" @B(%a) : (i1) -> (i1, i1)
-
-  // CHECK: B _T_0 (
-  %w2, %y2 = hw.instance "" @B(%a) : (i1) -> (i1, i1)
-}
-
-// CHECK-LABEL: TestInstanceNameValueConflict
-hw.module @TestInstanceNameValueConflict(%a: i1) {
-  // CHECK: wire name
-  %name = sv.wire : !hw.inout<i1>
-
-  // CHECK: B name_0 (
-  %w, %y = hw.instance "name" @B(%a) : (i1) -> (i1, i1)
-}
-
-// https://github.com/llvm/circt/issues/525
-hw.module @issue525(%struct: i2, %else: i2) -> (%casex: i2) {
-  %2 = comb.add %struct, %else : i2
-  hw.output %2 : i2
-}
-// CHECK-LABEL: module issue525(
-// CHECK-NEXT: input  [1:0] struct_0, else_1,
-// CHECK-NEXT: output [1:0] casex_2);
-// CHECK: assign casex_2 = struct_0 + else_1;
-
-
 // https://github.com/llvm/circt/issues/438
 // CHECK-LABEL: module cyclic
 hw.module @cyclic(%a: i1) -> (%b: i1) {

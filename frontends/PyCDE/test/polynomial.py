@@ -1,4 +1,3 @@
-# REQUIRES: bindings_python
 # RUN: %PYTHON% %s | FileCheck %s
 
 from __future__ import annotations
@@ -6,7 +5,8 @@ from __future__ import annotations
 import mlir
 import circt
 
-from circt.design_entry import Input, Output, module, generator
+import pycde
+from pycde import Input, Output, Parameter, module, generator
 from circt.esi import types
 from circt.dialects import comb, hw
 
@@ -22,17 +22,18 @@ class PolynomialCompute:
 
   def __init__(self, coefficients: list[int], **kwargs):
     """coefficients is in 'd' -> 'a' order."""
-    self.__coefficients = coefficients
+    self.coefficients = Parameter(coefficients)
     # Full result.
     self.y = Output(types.i32)
 
   @generator
-  def construct(mod):
+  def construct(mod, params):
     """Implement this module for input 'x'."""
 
     x = mod.x
     taps: list[mlir.ir.Value] = list()
-    for power, coeff in enumerate([1, 2, 3]):
+    # TODO: use the coefficient parameter, once its usable.
+    for power, coeff in enumerate([62, 42, 6]):
       coeffVal = hw.ConstantOp.create(types.i32, coeff)
       if power == 0:
         newPartialSum = coeffVal.result
@@ -77,7 +78,7 @@ pm.run(mod)
 mod.operation.print()
 # CHECK:  hw.module @top() -> (%y: i32) {
 # CHECK:    %c23_i32 = hw.constant 23 : i32
-# CHECK:    [[REG0:%.+]] = "circt.PolynomialCompute"(%c23_i32) {opNames = ["x"], resultNames = ["y"]} : (i32) -> i32
+# CHECK:    [[REG0:%.+]] = "pycde.PolynomialCompute"(%c23_i32) {coefficients = [62, 42, 6], opNames = ["x"], resultNames = ["y"]} : (i32) -> i32
 # CHECK:    hw.output [[REG0]] : i32
 
 print("\n\n=== Verilog ===")
@@ -87,7 +88,7 @@ pm = mlir.passmanager.PassManager.parse(
   "hw-legalize-names,hw.module(hw-cleanup)")
 pm.run(mod)
 circt.export_verilog(mod, sys.stdout)
-# CHECK:  module circt_PolynomialCompute(
+# CHECK:  module pycde_PolynomialCompute(
 # CHECK:    input  [31:0] x,
 # CHECK:    output [31:0] y);
-# CHECK:    assign y = 32'h1 + 32'h2 * x + 32'h3 * x * x;
+# CHECK:    assign y = 32'h3E + 32'h2A * x + 32'h6 * x * x;
