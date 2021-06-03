@@ -1,9 +1,17 @@
 from circt.dialects import comb
-from circt.support import NamedValueOpView
+from circt.support import NamedValueOpView, get_value
 
-from mlir.ir import IntegerAttr, IntegerType
+from mlir.ir import IntegerAttr, IntegerType, Type
 
-from functools import reduce
+
+def infer_result_type(operands):
+  types = list(map(lambda arg: get_value(arg).type, operands))
+  if not types:
+    raise TypeError("result type must be specified")
+  all_equal = all(type == types[0] for type in types)
+  if not all_equal:
+    raise TypeError(f"expected same input port types, but received {types}")
+  return types[0]
 
 
 # Builder base classes for non-variadic unary and binary ops.
@@ -21,8 +29,9 @@ def UnaryOp(base):
   class _Class(base):
 
     @classmethod
-    def create(cls, result_type, **kwargs):
-      return UnaryOpBuilder(cls, result_type, kwargs)
+    def create(cls, input=None, result_type=None):
+      mapping = {"input": input} if input else {}
+      return UnaryOpBuilder(cls, result_type, mapping)
 
   return _Class
 
@@ -49,17 +58,43 @@ def BinaryOp(base):
   class _Class(base):
 
     @classmethod
-    def create(cls, result_type=None, **kwargs):
+    def create(cls, lhs=None, rhs=None, result_type=None):
       if not result_type:
-        types = list(map(lambda arg: arg.type, kwargs.values()))
-        if not types:
+        if not lhs and not rhs:
           raise TypeError("result type must be specified")
-        all_equal = reduce(lambda t1, t2: t1 == t2, types)
-        if not all_equal:
-          raise TypeError(
-              f"expected same input port types, but received {types}")
-        result_type = types[0]
-      return BinaryOpBuilder(cls, result_type, kwargs)
+        result_type = infer_result_type([lhs, rhs])
+      mapping = {}
+      if lhs:
+        mapping["lhs"] = lhs
+      if rhs:
+        mapping["rhs"] = rhs
+      return BinaryOpBuilder(cls, result_type, mapping)
+
+  return _Class
+
+
+# Base classes for the variadic ops.
+def VariadicOp(base):
+
+  class _Class(base):
+
+    @classmethod
+    def create(cls, *args):
+      result_type = infer_result_type(args)
+      return cls(result_type, args)
+
+  return _Class
+
+
+# Base class for miscellaneous ops that can't be abstracted but should provide a
+# create method for uniformity.
+def CreatableOp(base):
+
+  class _Class(base):
+
+    @classmethod
+    def create(cls, *args, **kwargs):
+      return cls(*args, **kwargs)
 
   return _Class
 
@@ -68,8 +103,9 @@ def BinaryOp(base):
 class ExtractOp:
 
   @staticmethod
-  def create(low_bit, result_type, **kwargs):
-    return ExtractOpBuilder(low_bit, result_type, kwargs)
+  def create(low_bit, result_type, input=None):
+    mapping = {"input": input} if input else {}
+    return ExtractOpBuilder(low_bit, result_type, mapping)
 
 
 @UnaryOp
@@ -120,4 +156,48 @@ class ShrUOp:
 
 @BinaryOp
 class SubOp:
+  pass
+
+
+# Sugar classes for the variadic ops.
+@VariadicOp
+class AddOp:
+  pass
+
+
+@VariadicOp
+class MulOp:
+  pass
+
+
+@VariadicOp
+class AndOp:
+  pass
+
+
+@VariadicOp
+class OrOp:
+  pass
+
+
+@VariadicOp
+class XorOp:
+  pass
+
+
+@VariadicOp
+class MergeOp:
+  pass
+
+
+# Sugar classes for miscellaneous ops.
+class ConcatOp:
+
+  @classmethod
+  def create(cls, result_type, *args, **kwargs):
+    return cls(result_type, args, **kwargs)
+
+
+@CreatableOp
+class MuxOp:
   pass
