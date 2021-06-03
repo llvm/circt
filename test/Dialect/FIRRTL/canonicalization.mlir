@@ -1624,4 +1624,18 @@ firrtl.module @PadMuxOperands(
   firrtl.connect %z, %7 : !firrtl.uint, !firrtl.uint<17>
 }
 
+// CHECK-LABEL: firrtl.module @regsyncreset
+firrtl.module @regsyncreset(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %foo : !firrtl.uint<2>, out %bar: !firrtl.uint<2>) {
+  // CHECK: %[[const:.*]] = firrtl.constant 1
+  // CHECK-NEXT: firrtl.regreset %clock, %reset, %[[const]]
+  // CHECK-NEXT:  firrtl.connect %bar, %d : !firrtl.uint<2>, !firrtl.uint<2>
+  // CHECK-NEXT:  firrtl.connect %d, %foo : !firrtl.uint<2>, !firrtl.uint<2>
+  // CHECK-NEXT: }
+  %d = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<2>
+  firrtl.connect %bar, %d : !firrtl.uint<2>, !firrtl.uint<2>
+  %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
+  %1 = firrtl.mux(%reset, %c1_ui2, %foo) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+  firrtl.connect %d, %1 : !firrtl.uint<2>, !firrtl.uint<2>
+}
+
 }

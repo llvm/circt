@@ -1169,12 +1169,64 @@ static LogicalResult foldSingleSetConnect(ConnectOp op,
   return success();
 }
 
+// Turn synchronous reset looking register updates to registers with resets
+static LogicalResult foldHiddenResetConnect(ConnectOp op,
+                                            PatternRewriter &rewriter) {
+  // reg ; connect(reg, mux(port, const, val)) ->
+  // reg.reset(port, const); connect(reg, val)
+
+  auto reg = dyn_cast_or_null<RegOp>(op.dest().getDefiningOp());
+  if (!reg)
+    return failure();
+
+  auto mux = dyn_cast_or_null<MuxPrimOp>(op.src().getDefiningOp());
+  if (!mux)
+    return failure();
+
+  // Reset value must be constant
+  auto constOp = dyn_cast_or_null<ConstantOp>(mux.high().getDefiningOp());
+  if (!constOp)
+    return failure();
+
+  // reset should be a module port (heuristic to limit to intended reset lines)
+  if (!mux.sel().isa<BlockArgument>())
+    return failure();
+
+  // Check all types should be typed by now
+  if (op.dest().getType() != op.src().getType() ||
+      mux.high().getType() != reg.getType() ||
+      mux.low().getType() != reg.getType())
+    return failure();
+
+  // check that there is only one connect.
+  if (!isOnlyConnectToValue(op, op.dest()))
+    return failure();
+
+  // Ok, we know we are doing the transformation.
+
+  // Make sure the constant dominates all users.
+  if (constOp != &op->getBlock()->front())
+    constOp->moveBefore(&op->getBlock()->front());
+
+  auto pt = rewriter.saveInsertionPoint();
+  rewriter.setInsertionPoint(reg);
+  rewriter.replaceOpWithNewOp<RegResetOp>(reg, reg.getType(), reg.clockVal(),
+                                          mux.sel(), mux.high(), reg.name(),
+                                          reg.annotations());
+  rewriter.restoreInsertionPoint(pt);
+  rewriter.replaceOpWithNewOp<ConnectOp>(op, op.dest(), mux.low());
+  return success();
+}
+
 LogicalResult ConnectOp::canonicalize(ConnectOp op, PatternRewriter &rewriter) {
   // TODO: Canonicalize towards explicit extensions and flips here.
 
   // If there is a simple value connected to a foldable decl like a wire or reg,
   // see if we can eliminate the decl.
   if (succeeded(foldSingleSetConnect(op, rewriter)))
+    return success();
+
+  if (succeeded(foldHiddenResetConnect(op, rewriter)))
     return success();
 
   return failure();
