@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-imconstprop)' %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-imconstprop)' --split-input-file  %s | FileCheck %s
 
 firrtl.circuit "Test" {
 
@@ -128,5 +128,31 @@ firrtl.circuit "Test" {
     %3 = firrtl.subfield %0("en") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<sint<8>>>>) -> !firrtl.uint<1>
     firrtl.connect %3, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     %4 = firrtl.subfield %0("clk") : (!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<sint<8>>>>) -> !firrtl.clock
+  }
+}
+
+// -----
+
+// CHECK-LABEL: firrtl.module @Issue1188
+// https://github.com/llvm/circt/issues/1188
+// Make sure that we handle recursion through muxes correctly.
+firrtl.circuit "Issue1188"  {
+  firrtl.module @Issue1188(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %io_out: !firrtl.uint<6>, out %io_out3: !firrtl.uint<3>) {
+    %c1_ui6 = firrtl.constant 1 : !firrtl.uint<6>
+    %D0123456 = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<6>
+    %0 = firrtl.bits %D0123456 4 to 0 : (!firrtl.uint<6>) -> !firrtl.uint<5>
+    %1 = firrtl.bits %D0123456 5 to 5 : (!firrtl.uint<6>) -> !firrtl.uint<1>
+    %2 = firrtl.cat %0, %1 : (!firrtl.uint<5>, !firrtl.uint<1>) -> !firrtl.uint<6>
+    %3 = firrtl.bits %D0123456 4 to 4 : (!firrtl.uint<6>) -> !firrtl.uint<1>
+    %4 = firrtl.xor %2, %3 : (!firrtl.uint<6>, !firrtl.uint<1>) -> !firrtl.uint<6>
+    %5 = firrtl.bits %D0123456 1 to 1 : (!firrtl.uint<6>) -> !firrtl.uint<1>
+    %6 = firrtl.bits %D0123456 3 to 3 : (!firrtl.uint<6>) -> !firrtl.uint<1>
+    %7 = firrtl.cat %5, %6 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+    %8 = firrtl.cat %7, %1 : (!firrtl.uint<2>, !firrtl.uint<1>) -> !firrtl.uint<3>
+    firrtl.connect %io_out, %D0123456 : !firrtl.uint<6>, !firrtl.uint<6>
+    firrtl.connect %io_out3, %8 : !firrtl.uint<3>, !firrtl.uint<3>
+    // CHECK: firrtl.mux(%reset, %c1_ui6, %4)
+    %9 = firrtl.mux(%reset, %c1_ui6, %4) : (!firrtl.uint<1>, !firrtl.uint<6>, !firrtl.uint<6>) -> !firrtl.uint<6>
+    firrtl.connect %D0123456, %9 : !firrtl.uint<6>, !firrtl.uint<6>
   }
 }

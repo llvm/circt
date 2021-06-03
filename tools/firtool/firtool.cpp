@@ -77,7 +77,7 @@ static cl::opt<bool> imconstprop(
     "imconstprop",
     cl::desc(
         "Enable intermodule constant propagation and dead code elimination"),
-    cl::init(false));
+    cl::init(true));
 
 static cl::opt<bool>
     disableLowerTypes("disable-lower-types",
@@ -374,6 +374,11 @@ int main(int argc, char **argv) {
   registerLoweringCLOptions();
   // Parse pass names in main to ensure static initialization completed.
   cl::ParseCommandLineOptions(argc, argv, "circt modular optimizer driver\n");
+
+  // -disable-opt turns off constant propagation (unless it was explicitly
+  // enabled).
+  if (disableOptimization && imconstprop.getNumOccurrences() == 0)
+    imconstprop = false;
 
   MLIRContext context;
 

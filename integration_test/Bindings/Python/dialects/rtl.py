@@ -2,7 +2,7 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
 import circt
-from circt.design_entry import connect
+from circt.support import connect
 from circt.dialects import hw
 
 from mlir.ir import *
@@ -33,11 +33,11 @@ with Context() as ctx, Location.unknown():
   with InsertionPoint(m.body):
     # CHECK: hw.module @MyWidget(%my_input: i32) -> (%my_output: i32)
     # CHECK:   hw.output %my_input : i32
-    op = hw.HWModuleOp(name='MyWidget',
-                       input_ports=[('my_input', i32)],
-                       output_ports=[('my_output', i32)],
-                       body_builder=lambda module:
-                           hw.OutputOp([module.my_input]))
+    op = hw.HWModuleOp(
+        name='MyWidget',
+        input_ports=[('my_input', i32)],
+        output_ports=[('my_output', i32)],
+        body_builder=lambda module: hw.OutputOp([module.my_input]))
 
     # CHECK: hw.module.extern @FancyThing(%input0: i32) -> (%output0: i32)
     extern = hw.HWModuleExternOp(name="FancyThing",
@@ -76,18 +76,19 @@ with Context() as ctx, Location.unknown():
         body_builder=lambda m: hw.OutputOp(
             [hw.ConstantOp.create(i32, 46).result]),
     )
-    two_outputs = hw.HWModuleOp(
-        name="two_outputs",
-        input_ports=[("a", i32)],
-        output_ports=[("x", i32), ("y", i32)],
-        body_builder=lambda m: dict(x=m.a, y=m.a)
-    )
-    three_outputs = hw.HWModuleOp(
-        name="three_outputs",
-        input_ports=[("a", i32)],
-        output_ports=[("x", i32), ("y", i32), ("z", i32)],
-        body_builder=lambda m: {"z": m.a, "x": m.a, "y": m.a}
-    )
+    two_outputs = hw.HWModuleOp(name="two_outputs",
+                                input_ports=[("a", i32)],
+                                output_ports=[("x", i32), ("y", i32)],
+                                body_builder=lambda m: dict(x=m.a, y=m.a))
+    three_outputs = hw.HWModuleOp(name="three_outputs",
+                                  input_ports=[("a", i32)],
+                                  output_ports=[("x", i32), ("y", i32),
+                                                ("z", i32)],
+                                  body_builder=lambda m: {
+                                      "z": m.a,
+                                      "x": m.a,
+                                      "y": m.a
+                                  })
 
     # CHECK-LABEL: hw.module @instance_builder_tests
     def instance_builder_body(module):

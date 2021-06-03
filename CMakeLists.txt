@@ -307,6 +307,7 @@ add_subdirectory(tools)
 #add_subdirectory(unittests)
 add_subdirectory(test)
 add_subdirectory(integration_test)
+add_subdirectory(frontends)
 
 option(CIRCT_INCLUDE_DOCS "Generate build targets for the CIRCT docs.")
 if (CIRCT_INCLUDE_DOCS)

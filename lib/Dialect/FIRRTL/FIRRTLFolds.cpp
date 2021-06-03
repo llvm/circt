@@ -41,9 +41,12 @@ static IntegerAttr getIntAttr(Type type, const APInt &value) {
 }
 
 /// Return an IntegerAttr filled with zeros for the specified FIRRTL integer
-/// type.  This handles both the known width and unknown width case.
+/// type.  This handles both the known width and unknown width case, but returns
+/// a null attribute for zero width results.
 static IntegerAttr getIntZerosAttr(Type type) {
   int32_t width = abs(type.cast<IntType>().getWidthOrSentinel());
+  if (width == 0)
+    return {};
   return getIntAttr(type, APInt(width, 0));
 }
 
@@ -51,6 +54,8 @@ static IntegerAttr getIntZerosAttr(Type type) {
 /// type.  This handles both the known width and unknown width case.
 static IntegerAttr getIntOnesAttr(Type type) {
   int32_t width = abs(type.cast<IntType>().getWidthOrSentinel());
+  if (width == 0)
+    return {};
   return getIntAttr(type, APInt(width, -1ULL, /*isSigned*/ true));
 }
 

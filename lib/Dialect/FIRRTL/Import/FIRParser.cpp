@@ -1705,17 +1705,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
     }
 
     // We always skip emitting the validif mux because it always folds to the
-    // non-invalid operand.  However, if we know the validif would always return
-    // invalid, then fold to invalid instead.
-    if (auto cst = operands[0].getDefiningOp<ConstantOp>()) {
-      // validif(0, x) -> always invalid.
-      if (cst.value().isNullValue()) {
-        result = builder.create<InvalidValueOp>(opTypes[1]);
-        return success();
-      }
-    }
-
-    // Otherwise, fold to the non-invalid value.
+    // non-invalid operand. 
     result = operands[1];
     return success();
   }
@@ -2731,9 +2721,9 @@ ParseResult FIRStmtParser::parseNode() {
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
   // The entire point of a node declaration is to carry a name.  If it got
-  // dropped, then we don't even need to create a result.
+  // dropped, then we don't even need to create a result unless it is annotated.
   Value result;
-  if (!name.empty()) {
+  if (!name.empty() || !annotations.empty()) {
     result = builder.create<NodeOp>(initializer.getType(), initializer, name,
                                     annotations);
   } else

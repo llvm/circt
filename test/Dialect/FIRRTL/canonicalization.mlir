@@ -1417,25 +1417,27 @@ firrtl.module @mul_cst_prop3(out %out_b: !firrtl.sint<15>) {
 
 // CHECK-LABEL: firrtl.module @MuxInvalidOpt
 firrtl.module @MuxInvalidOpt(in %cond: !firrtl.uint<1>, in %data: !firrtl.uint<4>, out %out1: !firrtl.uint<4>, out %out2: !firrtl.uint<4>, out %out3: !firrtl.uint<4>, out %out4: !firrtl.uint<4>) {
+  %invalid = firrtl.invalidvalue : !firrtl.uint<4>
 
   // We can optimize out these mux's since the invalid value can take on any input.
-  %tmp1 = firrtl.invalidvalue : !firrtl.uint<4>
-  %a = firrtl.mux(%cond, %data, %tmp1) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
-  // CHECK:         firrtl.connect %out1, %data
+  %a = firrtl.mux(%cond, %data, %invalid) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  // CHECK: firrtl.connect %out1, %data
   firrtl.connect %out1, %a : !firrtl.uint<4>, !firrtl.uint<4>
 
-  %b = firrtl.mux(%cond, %tmp1, %data) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
-  // CHECK:         firrtl.connect %out2, %data
+  %b = firrtl.mux(%cond, %invalid, %data) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  // CHECK: firrtl.connect %out2, %data
   firrtl.connect %out2, %b : !firrtl.uint<4>, !firrtl.uint<4>
 
+  // This fold is required to return %data for SFC compatibility.
   %false = firrtl.constant 0 : !firrtl.uint<1>
-  %c = firrtl.mux(%false, %data, %tmp1) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
-  // CHECK:         firrtl.connect %out3, %data
+  %c = firrtl.mux(%false, %data, %invalid) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  // CHECK: firrtl.connect %out3, %data
   firrtl.connect %out3, %c : !firrtl.uint<4>, !firrtl.uint<4>
 
+  // This fold is required to return %data for SFC compatibility.
   %true = firrtl.constant 1 : !firrtl.uint<1>
-  %d = firrtl.mux(%false, %tmp1, %data) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
-  // CHECK:         firrtl.connect %out4, %data
+  %d = firrtl.mux(%true, %invalid, %data) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  // CHECK: firrtl.connect %out4, %data
   firrtl.connect %out4, %d : !firrtl.uint<4>, !firrtl.uint<4>
 }
 
