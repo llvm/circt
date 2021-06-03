@@ -52,7 +52,7 @@ def connect(destination, source):
     destination.builder.backedges[index].erase()
 
 
-def var_to_attribute(obj) -> ir.Attribute:
+def var_to_attribute(obj, none_on_fail: bool = False) -> ir.Attribute:
   """Create an MLIR attribute from a Python object for a few common cases."""
   if isinstance(obj, ir.Attribute):
     return obj
@@ -63,6 +63,8 @@ def var_to_attribute(obj) -> ir.Attribute:
     return ir.StringAttr.get(obj)
   if isinstance(obj, list):
     return ir.ArrayAttr.get([var_to_attribute(x) for x in obj])
+  if none_on_fail:
+    return None
   raise TypeError(f"Cannot convert type '{type(obj)}' to MLIR attribute")
 
 
