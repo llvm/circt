@@ -4,7 +4,7 @@
 import sys
 
 import circt
-from circt.design_entry import connect
+from circt.support import connect
 from circt.dialects import hw, seq
 
 from mlir.ir import *

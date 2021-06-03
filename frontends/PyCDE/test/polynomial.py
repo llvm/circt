@@ -1,4 +1,3 @@
-# REQUIRES: bindings_python
 # RUN: %PYTHON% %s | FileCheck %s
 
 from __future__ import annotations
@@ -6,7 +5,8 @@ from __future__ import annotations
 import mlir
 import circt
 
-from circt.design_entry import Input, Output, module, generator
+import pycde
+from pycde import Input, Output, module, generator
 from circt.esi import types
 from circt.dialects import comb, hw
 
@@ -77,7 +77,7 @@ pm.run(mod)
 mod.operation.print()
 # CHECK:  hw.module @top() -> (%y: i32) {
 # CHECK:    %c23_i32 = hw.constant 23 : i32
-# CHECK:    [[REG0:%.+]] = "circt.PolynomialCompute"(%c23_i32) {opNames = ["x"], resultNames = ["y"]} : (i32) -> i32
+# CHECK:    [[REG0:%.+]] = "pycde.PolynomialCompute"(%c23_i32) {opNames = ["x"], resultNames = ["y"]} : (i32) -> i32
 # CHECK:    hw.output [[REG0]] : i32
 
 print("\n\n=== Verilog ===")
@@ -87,7 +87,7 @@ pm = mlir.passmanager.PassManager.parse(
   "hw-legalize-names,hw.module(hw-cleanup)")
 pm.run(mod)
 circt.export_verilog(mod, sys.stdout)
-# CHECK:  module circt_PolynomialCompute(
+# CHECK:  module pycde_PolynomialCompute(
 # CHECK:    input  [31:0] x,
 # CHECK:    output [31:0] y);
 # CHECK:    assign y = 32'h1 + 32'h2 * x + 32'h3 * x * x;

@@ -36,6 +36,22 @@ def get_value(obj) -> ir.Value:
   return None
 
 
+def connect(destination, source):
+  """A convenient way to use BackedgeBuilder."""
+  if not isinstance(destination, OpOperand):
+    raise TypeError(
+        f"cannot connect to destination of type {type(destination)}")
+  value = get_value(source)
+  if value is None:
+    raise TypeError(f"cannot connect from source of type {type(source)}")
+
+  index = destination.index
+  destination.operation.operands[index] = value
+  if isinstance(destination, BuilderValue) and \
+     index in destination.builder.backedges:
+    destination.builder.backedges[index].erase()
+
+
 class BackedgeBuilder(AbstractContextManager):
 
   class Edge:

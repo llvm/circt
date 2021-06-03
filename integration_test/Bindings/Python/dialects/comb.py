@@ -2,7 +2,7 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
 import circt
-from circt.design_entry import connect
+from circt.support import connect
 from circt.dialects import comb, hw
 
 from mlir.ir import Context, Location, InsertionPoint, IntegerType, IntegerAttr, Module
