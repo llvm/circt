@@ -44,12 +44,10 @@ class PolynomialCompute:
         else:
           x_power = [x for i in range(power)]
           currPow = comb.MulOp(types.i32, x_power).result
-        newPartialSum = comb.AddOp(
-            types.i32,
-            [
-                partialSum,
-                comb.MulOp(types.i32, [coeffVal.result, currPow]).result
-            ]).result
+        newPartialSum = comb.AddOp(types.i32, [
+            partialSum,
+            comb.MulOp(types.i32, [coeffVal.result, currPow]).result
+        ]).result
 
       taps.append(newPartialSum)
 
@@ -85,7 +83,7 @@ print("\n\n=== Verilog ===")
 # CHECK-LABEL: === Verilog ===
 
 pm = mlir.passmanager.PassManager.parse(
-  "hw-legalize-names,hw.module(hw-cleanup)")
+    "hw-legalize-names,hw.module(hw-cleanup)")
 pm.run(mod)
 circt.export_verilog(mod, sys.stdout)
 # CHECK:  module pycde_PolynomialCompute(

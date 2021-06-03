@@ -162,7 +162,7 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
       # If it does, the return from body_builder must be None.
       if bb_ret is not None and bb_ret != last_op:
         raise support.ConnectionError(
-          "Cannot return value from body_builder and create hw.OutputOp")
+            "Cannot return value from body_builder and create hw.OutputOp")
       return
 
   # If builder didn't create an output op and didn't return anything, this op
@@ -199,7 +199,7 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
     raise support.UnconnectedSignalError(cls_name, unconnected_ports)
   if len(bb_ret) > 0:
     raise support.ConnectionError(
-      f"Could not map the follow to ports in {cls_name}: {bb_ret.keys}")
+        f"Could not map the follow to ports in {cls_name}: {bb_ret.keys}")
 
   hw.OutputOp(outputs)
 

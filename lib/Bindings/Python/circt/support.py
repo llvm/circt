@@ -8,7 +8,6 @@ from contextlib import AbstractContextManager
 from contextvars import ContextVar
 from typing import List
 
-
 _current_backedge_builder = ContextVar("current_bb")
 
 
@@ -17,6 +16,7 @@ class ConnectionError(RuntimeError):
 
 
 class UnconnectedSignalError(ConnectionError):
+
   def __init__(self, module: str, port_names: List[str]):
     super().__init__(
         f"Ports {port_names} unconnected in design module {module}.")
@@ -69,8 +69,9 @@ def var_to_attribute(obj) -> ir.Attribute:
 class BackedgeBuilder(AbstractContextManager):
 
   class Edge:
-    def __init__(self, creator, type: ir.Type, port_name: str,
-                 op_view, instance_of: ir.Operation):
+
+    def __init__(self, creator, type: ir.Type, port_name: str, op_view,
+                 instance_of: ir.Operation):
       self.creator: BackedgeBuilder = creator
       self.dummy_op = ir.Operation.create("TemporaryBackedge", [type])
       self.instance_of = instance_of
@@ -103,8 +104,11 @@ class BackedgeBuilder(AbstractContextManager):
   def create(*args, **kwargs):
     return BackedgeBuilder.current()._create(*args, **kwargs)
 
-  def _create(self, type: ir.Type, port_name: str,
-              op_view, instance_of: ir.Operation = None):
+  def _create(self,
+              type: ir.Type,
+              port_name: str,
+              op_view,
+              instance_of: ir.Operation = None):
     edge = BackedgeBuilder.Edge(self, type, port_name, op_view, instance_of)
     self.edges.add(edge)
     return edge
@@ -137,11 +141,7 @@ class BackedgeBuilder(AbstractContextManager):
 
 
 class OpOperand:
-  __slots__ = [
-    "index",
-    "operation",
-    "value"
-  ]
+  __slots__ = ["index", "operation", "value"]
 
   def __init__(self, operation, index, value):
     self.index = index
