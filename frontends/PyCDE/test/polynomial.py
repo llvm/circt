@@ -55,37 +55,32 @@ class PolynomialCompute:
     return {"y": taps[-1]}
 
 
-def build(top):
-  i32 = mlir.ir.Type.parse("i32")
-  x = hw.ConstantOp.create(i32, 23)
-  poly = PolynomialCompute([62, 42, 6], x=x)
-  hw.OutputOp([poly.y])
+class Polynomial(pycde.System):
+  inputs = []
+  outputs = [('y', types.i32)]
+
+  def build(self, top):
+    i32 = types.i32
+    x = hw.ConstantOp.create(i32, 23)
+    poly = PolynomialCompute([62, 42, 6], x=x)
+    hw.OutputOp([poly.y])
 
 
-mod = mlir.ir.Module.create()
-with mlir.ir.InsertionPoint(mod.body), circt.support.BackedgeBuilder():
-  hw.HWModuleOp(name='top',
-                input_ports=[],
-                output_ports=[('y', mlir.ir.Type.parse("i32"))],
-                body_builder=build)
+poly = Polynomial()
 
-mod.operation.print()
-pm = mlir.passmanager.PassManager.parse("run-generators")
-pm.run(mod)
-
-mod.operation.print()
+poly.print()
 # CHECK:  hw.module @top() -> (%y: i32) {
 # CHECK:    %c23_i32 = hw.constant 23 : i32
 # CHECK:    [[REG0:%.+]] = "pycde.PolynomialCompute"(%c23_i32) {coefficients = [62, 42, 6], opNames = ["x"], resultNames = ["y"]} : (i32) -> i32
 # CHECK:    hw.output [[REG0]] : i32
 
+poly.generate()
+poly.print()
+
 print("\n\n=== Verilog ===")
 # CHECK-LABEL: === Verilog ===
+poly.print_verilog()
 
-pm = mlir.passmanager.PassManager.parse(
-    "hw-legalize-names,hw.module(hw-cleanup)")
-pm.run(mod)
-circt.export_verilog(mod, sys.stdout)
 # CHECK:  module pycde_PolynomialCompute(
 # CHECK:    input  [31:0] x,
 # CHECK:    output [31:0] y);

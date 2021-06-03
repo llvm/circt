@@ -3,6 +3,9 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from .module import *
+from .system import *
+
+__all__ = ['module', 'generator', 'Input', 'Output', 'Parameter', 'System']
 
 import atexit
 
