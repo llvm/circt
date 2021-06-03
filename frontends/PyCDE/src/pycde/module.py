@@ -69,7 +69,7 @@ def module(cls):
       input_ports: list[Input] = []
       output_ports: list[Output] = []
       parameters: list[Parameter] = []
-      attributes: dict[str: mlir.ir.Attribute] = {}
+      attributes: dict[str:mlir.ir.Attribute] = {}
       # Scan for them.
       for attr_name in dir(self):
         if attr_name in dont_touch:
