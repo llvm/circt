@@ -1,5 +1,21 @@
 // RUN: circt-opt -hw-legalize-names %s | FileCheck %s
 
+// CHECK-LABEL: hw.type_scope @myscope
+// CHECK-DAG: hw.typedecl @foo : i1
+// CHECK-DAG: hw.typedecl @bar : !hw.array<4xi32>
+// CHECK-DAG: hw.typedecl @baz : i128
+
+sv.interface @iface {
+  sv.interface.signal @data : !hw.typealias<@myscope::@bar, !hw.array<4xi32>>
+}
+
+hw.module @test(%arg0: !hw.typealias<@myscope::@foo, i1>) -> (%out0: !hw.typealias<@myscope::@baz, i128>) {
+  %ifaceInst = sv.interface.instance : !sv.interface<@iface>
+  %data = sv.interface.signal.read %ifaceInst(@iface::@data) : !hw.typealias<@myscope::@bar, !hw.array<4xi32>>
+  %garbage = hw.bitcast %data : (!hw.typealias<@myscope::@bar, !hw.array<4xi32>>) -> !hw.typealias<@myscope::@baz, i128>
+  hw.output %garbage : !hw.typealias<@myscope::@baz, i128>
+}
+
 hw.module @B(%a: i1) -> () {
 }
 

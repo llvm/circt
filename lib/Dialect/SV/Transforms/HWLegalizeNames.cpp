@@ -12,8 +12,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "SVPassDetail.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
+#include "circt/Support/LLVM.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 
 using namespace circt;
 using namespace sv;
@@ -52,6 +55,48 @@ StringRef NameCollisionResolver::getLegalName(StringAttr originalName) {
 }
 
 //===----------------------------------------------------------------------===//
+// Type declarations
+//===----------------------------------------------------------------------===//
+
+/// Given an operation and a type, check if the type is a type alias, and if so,
+/// if it needs to have a type declaration generated.
+void maybeDeclareTypeAlias(Operation *op, Type type) {
+  // Look for only TypeAliasTypes.
+  auto alias = type.dyn_cast<TypeAliasType>();
+  if (!alias)
+    return;
+
+  ModuleOp parentModule = op->getParentOfType<ModuleOp>();
+  ImplicitLocOpBuilder builder(op->getLoc(), &parentModule.getBody()->front());
+
+  // If no scope exists, create one in the parent module.
+  StringRef scopeName = alias.getRef().getRootReference();
+  TypeScopeOp scope = parentModule.lookupSymbol<TypeScopeOp>(scopeName);
+  if (!scope) {
+    scope = builder.create<TypeScopeOp>(op->getLoc(), scopeName);
+    scope.body().emplaceBlock();
+  }
+
+  // If no typedecl exists, create one in the scope.
+  StringRef symbolName = alias.getRef().getLeafReference();
+  TypedeclOp typeDecl = scope.lookupSymbol<TypedeclOp>(symbolName);
+  if (!typeDecl) {
+    // TODO: The insertion point should generate type aliases of type aliases in
+    // an order that respects def-before-use, or fails on mutually recursive
+    // type aliases. For now, insert at the end as we go.
+    builder.setInsertionPointToEnd(scope.getBodyBlock());
+    builder.create<TypedeclOp>(op->getLoc(), symbolName, alias.getInnerType(),
+                               StringAttr());
+    return;
+  }
+
+  // If a typedecl exists with a different type for the same name, emit an
+  // error.
+  if (typeDecl.type() != alias.getInnerType())
+    op->emitOpError("redefining type definition for ") << typeDecl;
+}
+
+//===----------------------------------------------------------------------===//
 // HWLegalizeNamesPass
 //===----------------------------------------------------------------------===//
 
@@ -64,6 +109,7 @@ private:
   bool anythingChanged;
 
   void runOnModule(hw::HWModuleOp module);
+  void runOnModuleExtern(hw::HWModuleExternOp extMod);
   void runOnInterface(sv::InterfaceOp intf, mlir::SymbolUserMap &symbolUsers);
 };
 } // end anonymous namespace
@@ -112,10 +158,7 @@ void HWLegalizeNamesPass::runOnOperation() {
     } else if (auto intf = dyn_cast<InterfaceOp>(op)) {
       runOnInterface(intf, symbolUsers);
     } else if (auto extMod = dyn_cast<HWModuleExternOp>(op)) {
-      auto name = extMod.getVerilogModuleName();
-      if (!sv::isNameValid(name)) {
-        extMod->emitOpError("with invalid name \"" + name + "\"");
-      }
+      runOnModuleExtern(extMod);
     }
   }
 
@@ -144,6 +187,8 @@ void HWLegalizeNamesPass::runOnModule(hw::HWModuleOp module) {
       changedBool = true;
       namesVector.push_back(StringAttr::get(module.getContext(), newName));
     }
+
+    maybeDeclareTypeAlias(module, port.type);
   }
 
   if (changedArgNames) {
@@ -171,7 +216,22 @@ void HWLegalizeNamesPass::runOnModule(hw::HWModuleOp module) {
         anythingChanged = true;
       }
     }
+
+    for (auto type : op.getOperandTypes())
+      maybeDeclareTypeAlias(&op, type);
+    for (auto type : op.getResultTypes())
+      maybeDeclareTypeAlias(&op, type);
   }
+}
+
+void HWLegalizeNamesPass::runOnModuleExtern(hw::HWModuleExternOp extMod) {
+  auto name = extMod.getVerilogModuleName();
+  if (!sv::isNameValid(name)) {
+    extMod->emitOpError("with invalid name \"" + name + "\"");
+  }
+
+  for (const ModulePortInfo &port : getModulePortInfo(extMod))
+    maybeDeclareTypeAlias(extMod, port.type);
 }
 
 void HWLegalizeNamesPass::runOnInterface(InterfaceOp interface,
@@ -183,6 +243,10 @@ void HWLegalizeNamesPass::runOnInterface(InterfaceOp interface,
   for (auto &op : *interface.getBodyBlock()) {
     if (!isa<InterfaceSignalOp>(op) && !isa<InterfaceModportOp>(op))
       continue;
+
+    for (auto attr : op.getAttrs())
+      if (auto typeAttr = attr.second.dyn_cast<TypeAttr>())
+        maybeDeclareTypeAlias(&op, typeAttr.getValue());
 
     StringAttr oldName = op.getAttrOfType<StringAttr>(symbolAttrName);
     auto newName = localNames.getLegalName(oldName);

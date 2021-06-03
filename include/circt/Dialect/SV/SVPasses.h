@@ -32,9 +32,7 @@ std::unique_ptr<mlir::Pass> createHWStubExternalModulesPass();
 std::unique_ptr<mlir::Pass> createHWLegalizeNamesPass();
 std::unique_ptr<mlir::Pass> createHWGeneratorCalloutPass();
 std::unique_ptr<mlir::Pass> createHWMemSimImplPass();
-std::unique_ptr<mlir::Pass> createHWDeclareTypedeclsPass();
 std::unique_ptr<mlir::Pass> createSVExtractTestCodePass();
-
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/SV/SVPasses.h.inc"

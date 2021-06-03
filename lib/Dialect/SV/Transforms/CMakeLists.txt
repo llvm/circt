@@ -4,7 +4,6 @@ add_circt_dialect_library(CIRCTSVTransforms
   HWStubExternalModules.cpp
   HWLegalizeNames.cpp
   HWMemSimImpl.cpp
-  HWDeclareTypedecls.cpp
   PrettifyVerilog.cpp
   SVExtractTestCode.cpp
 

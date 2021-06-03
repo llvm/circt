@@ -56,8 +56,13 @@ def HWLegalizeNames : Pass<"hw-legalize-names", "ModuleOp"> {
   let summary = "Legalize module/variable names in hw.modules and their bodies";
   let description = [{
     This pass modifies the names of modules and names such that they do not
-    cause conflicts with SV keywords. This is a good thing to run before
-    Verilog emission.
+    cause conflicts with SV keywords.
+
+    This pass also finds any TypeAlias types uses as operands, results, block
+    arguments, or attributes, and declares TypedeclOps in the top-level module
+    using the name and type from the TypeAlias.
+
+    This is a required pass to run before Verilog emission.
   }];
 
   let constructor = "circt::sv::createHWLegalizeNamesPass()";
@@ -90,19 +95,6 @@ def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
 
   let constructor = "circt::sv::createHWMemSimImplPass()";
   let dependentDialects = ["circt::sv::SVDialect"];
-}
-
-def HWDeclareTypedecls : Pass<"hw-declare-typedecls", "ModuleOp"> {
-  let summary = "Declare TypedeclOps for any TypeAlias types";
-  let description = [{
-    This pass finds any TypeAlias types uses as operands, results, or block
-    arguments, and declares TypedeclOps in the top-level module using the name
-    and type from the TypeAlias. This should be used as a pre-processing step
-    before Verilog emission to ensure TypeAliases used throughout the circuit
-    have a typedecl.
-  }];
-
-  let constructor = "circt::sv::createHWDeclareTypedeclsPass()";
 }
 
 def SVExtractTestCode : Pass<"sv-extract-test-code", "ModuleOp"> {
