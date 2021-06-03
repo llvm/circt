@@ -61,13 +61,15 @@ def module(cls):
 
       # The OpView attributes cannot be touched before OpView is constructed.
       # Get a list and don't touch them.
-      dont_touch = set([x for x in dir(mlir.ir.OpView)])
+      dont_touch = set()
+      dont_touch.update([x for x in dir(mlir.ir.OpView)])
+      dont_touch.update(["OPERATION_NAME", "_ODS_REGIONS"])
 
       # After the wrapped class' construct, all the IO should be known.
       input_ports: list[Input] = []
       output_ports: list[Output] = []
       parameters: list[Parameter] = []
-
+      attributes: dict[str:mlir.ir.Attribute] = {}
       # Scan for them.
       for attr_name in dir(self):
         if attr_name in dont_touch:
@@ -76,12 +78,16 @@ def module(cls):
         if isinstance(attr, Input):
           attr.name = attr_name
           input_ports.append(attr)
-        if isinstance(attr, Output):
+        elif isinstance(attr, Output):
           attr.name = attr_name
           output_ports.append(attr)
-        if isinstance(attr, Parameter):
+        elif isinstance(attr, Parameter):
           attr.name = attr_name
           parameters.append(attr)
+        else:
+          mlir_attr = support.var_to_attribute(attr, True)
+          if mlir_attr is not None:
+            attributes[attr_name] = mlir_attr
 
       # Build a list of operand values for the operation we're gonna create.
       input_ports_values: list[mlir.ir.Value] = []
@@ -105,7 +111,8 @@ def module(cls):
           [mlir.ir.StringAttr.get(x.name) for x in output_ports])
 
       # Set up the op attributes.
-      attributes = {p.name: p.attr for p in parameters}
+      parameters = {p.name: p.attr for p in parameters}
+      attributes["parameters"] = mlir.ir.DictAttr.get(parameters)
       attributes["opNames"] = op_names_attr
       attributes["resultNames"] = result_names_attr
 
@@ -183,13 +190,18 @@ class _Generate:
         (n.value, o.type) for (n, o) in zip(result_names, op.results)
     ]
 
-    # Assemble the attributes and present them as parameters.
+    # Assemble the parameters.
     params = {
         nattr.name: nattr.attr
-        for nattr in op.attributes
-        if nattr.name not in ["opNames", "resultNames"]
+        for nattr in mlir.ir.DictAttr(op.attributes["parameters"])
     }
     self.params = type(f"{op.name}_params", (object,), params)
+
+    attrs = {
+        nattr.name: nattr.attr
+        for nattr in op.attributes
+        if nattr.name not in ["opNames", "resultNames", "parameters"]
+    }
 
     # Build the replacement HWModuleOp in the outer module.
     with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
@@ -201,7 +213,10 @@ class _Generate:
     # Build a replacement instance at the op to be replaced.
     with mlir.ir.InsertionPoint(op):
       mapping = {name.value: op.operands[i] for i, name in enumerate(op_names)}
-      return mod.create(op.name, **mapping).operation
+      inst = mod.create(op.name, **mapping).operation
+      for (name, attr) in attrs.items():
+        inst.attributes[name] = attr
+      return inst
 
 
 def generator(func):

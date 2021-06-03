@@ -17,8 +17,9 @@ class PolynomialCompute:
   # Evaluate polynomial for 'x'.
   x = Input(types.i32)
 
-  def __init__(self, coefficients: list[int], **kwargs):
+  def __init__(self, name: str, coefficients: list[int], **kwargs):
     """coefficients is in 'd' -> 'a' order."""
+    self.instanceName = name
     self.coefficients = Parameter(coefficients)
     # Full result.
     self.y = Output(types.i32)
@@ -59,7 +60,8 @@ class Polynomial(pycde.System):
   def build(self, top):
     i32 = types.i32
     x = hw.ConstantOp.create(i32, 23)
-    poly = PolynomialCompute([62, 42, 6], x=x)
+    poly = PolynomialCompute("example", [62, 42, 6], x=x)
+    # PolynomialCompute("example", [62, 42, 6], x=poly.y)
     hw.OutputOp([poly.y])
 
 
@@ -68,7 +70,7 @@ poly = Polynomial()
 poly.print()
 # CHECK:  hw.module @top() -> (%y: i32) {
 # CHECK:    %c23_i32 = hw.constant 23 : i32
-# CHECK:    [[REG0:%.+]] = "pycde.PolynomialCompute"(%c23_i32) {coefficients = [62, 42, 6], opNames = ["x"], resultNames = ["y"]} : (i32) -> i32
+# CHECK:    [[REG0:%.+]] = "pycde.PolynomialCompute"(%c23_i32) {instanceName = "example", opNames = ["x"], parameters = {coefficients = [62, 42, 6]},  resultNames = ["y"]} : (i32) -> i32
 # CHECK:    hw.output [[REG0]] : i32
 
 poly.generate()
