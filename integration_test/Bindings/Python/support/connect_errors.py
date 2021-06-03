@@ -1,3 +1,4 @@
+# REQUIRES: bindings_python
 # RUN: %PYTHON% %s | FileCheck %s
 
 import mlir
