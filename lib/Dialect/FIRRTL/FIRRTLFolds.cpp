@@ -620,15 +620,41 @@ OpFoldResult EQPrimOp::fold(ArrayRef<Attribute> operands) {
     if (rhsCst.getValue().isAllOnesValue() && lhs().getType() == getType() &&
         rhs().getType() == getType())
       return lhs();
-
-    /// TODO: eq(x, 0) -> not(x) when x is 1 bit.
-    /// TODO: eq(x, 0) -> not(orr(x)) when x is >1 bit
-    /// TODO: eq(x, ~0) -> andr(x)) when x is >1 bit
   }
 
   return constFoldFIRRTLBinaryOp(
       *this, operands, BinOpKind::Compare,
       [=](APSInt a, APSInt b) -> APInt { return APInt(1, a == b); });
+}
+
+LogicalResult EQPrimOp::canonicalize(EQPrimOp op, PatternRewriter &rewriter) {
+
+  if (auto rhsCst = dyn_cast_or_null<ConstantOp>(op.rhs().getDefiningOp())) {
+    auto width = op.lhs().getType().cast<IntType>().getBitWidthOrSentinel();
+
+    // eq(x, 0) ->  not(x) when x is 1 bit.
+    if (rhsCst.value().isNullValue() && op.lhs().getType() == op.getType() &&
+        op.rhs().getType() == op.getType()) {
+      rewriter.replaceOpWithNewOp<NotPrimOp>(op, op.lhs());
+      return success();
+    }
+
+    // eq(x, 0) -> not(orr(x)) when x is >1 bit
+    if (rhsCst.value().isNullValue() && width > 1) {
+      auto orrOp = rewriter.create<OrRPrimOp>(op.getLoc(), op.lhs());
+      rewriter.replaceOpWithNewOp<NotPrimOp>(op, orrOp);
+      return success();
+    }
+
+    // eq(x, ~0) -> andr(x) when x is >1 bit
+    if (rhsCst.value().isAllOnesValue() && width > 1 &&
+        op.lhs().getType() == op.rhs().getType()) {
+      rewriter.replaceOpWithNewOp<AndRPrimOp>(op, op.lhs());
+      return success();
+    }
+  }
+
+  return failure();
 }
 
 OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
@@ -647,6 +673,34 @@ OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
   return constFoldFIRRTLBinaryOp(
       *this, operands, BinOpKind::Compare,
       [=](APSInt a, APSInt b) -> APInt { return APInt(1, a != b); });
+}
+
+LogicalResult NEQPrimOp::canonicalize(NEQPrimOp op, PatternRewriter &rewriter) {
+  if (auto rhsCst = dyn_cast_or_null<ConstantOp>(op.rhs().getDefiningOp())) {
+    auto width = op.lhs().getType().cast<IntType>().getBitWidthOrSentinel();
+    // neq(x, 1) -> not(x) when x is 1 bit
+    if (rhsCst.value().isAllOnesValue() && op.lhs().getType() == op.getType() &&
+        op.rhs().getType() == op.getType()) {
+      rewriter.replaceOpWithNewOp<NotPrimOp>(op, op.lhs());
+      return success();
+    }
+
+    // neq(x, 0) -> orr(x) when x is >1 bit
+    if (rhsCst.value().isNullValue() && width > 1) {
+      rewriter.replaceOpWithNewOp<OrRPrimOp>(op, op.lhs());
+      return success();
+    }
+
+    // neq(x, ~0) -> not(andr(x))) when x is >1 bit
+    if (rhsCst.value().isAllOnesValue() && width > 1 &&
+        op.lhs().getType() == op.rhs().getType()) {
+      auto andrOp = rewriter.create<AndRPrimOp>(op.getLoc(), op.lhs());
+      rewriter.replaceOpWithNewOp<NotPrimOp>(op, andrOp);
+      return success();
+    }
+  }
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
