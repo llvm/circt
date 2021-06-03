@@ -168,6 +168,10 @@ class _Generate:
   def __init__(self, gen_func):
     self.gen_func = gen_func
 
+    # Track generated modules so we don't create unnecessary duplicates of
+    # modules that are structurally equivalent.
+    self.generated_modules = {}
+
   def _generate(self, mod):
     return self.gen_func(mod, self.params)
 
@@ -182,13 +186,13 @@ class _Generate:
     # Get the port names from the attributes we stored them in.
     op_names_attrs = mlir.ir.ArrayAttr(op.attributes["opNames"])
     op_names = [mlir.ir.StringAttr(x) for x in op_names_attrs]
-    input_ports = [(n.value, o.type) for (n, o) in zip(op_names, op.operands)]
+    op_types = [operand.type for operand in op.operands]
+    input_ports = [(n.value, t) for (n, t) in zip(op_names, op_types)]
 
     result_names_attrs = mlir.ir.ArrayAttr(op.attributes["resultNames"])
     result_names = [mlir.ir.StringAttr(x) for x in result_names_attrs]
-    output_ports = [
-        (n.value, o.type) for (n, o) in zip(result_names, op.results)
-    ]
+    result_types = [result.type for result in op.results]
+    output_ports = [(n.value, t) for (n, t) in zip(result_names, result_types)]
 
     # Assemble the parameters.
     params = {
@@ -204,16 +208,21 @@ class _Generate:
     }
 
     # Build the replacement HWModuleOp in the outer module.
+    module_key = str((op.name, sorted(op_types), sorted(result_types),
+                      sorted(params.items())))
     with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
-      mod = circt.dialects.hw.HWModuleOp(op.name,
-                                         input_ports=input_ports,
-                                         output_ports=output_ports,
-                                         body_builder=self._generate)
+      if not module_key in self.generated_modules:
+        gen_mod = circt.dialects.hw.HWModuleOp(op.name,
+                                               input_ports=input_ports,
+                                               output_ports=output_ports,
+                                               body_builder=self._generate)
+        self.generated_modules[module_key] = gen_mod
 
     # Build a replacement instance at the op to be replaced.
     with mlir.ir.InsertionPoint(op):
       mapping = {name.value: op.operands[i] for i, name in enumerate(op_names)}
-      inst = mod.create(op.name, **mapping).operation
+      inst = self.generated_modules[module_key].create(op.name,
+                                                       **mapping).operation
       for (name, attr) in attrs.items():
         inst.attributes[name] = attr
       return inst

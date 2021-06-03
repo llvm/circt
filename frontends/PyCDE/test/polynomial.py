@@ -61,7 +61,7 @@ class Polynomial(pycde.System):
     i32 = types.i32
     x = hw.ConstantOp.create(i32, 23)
     poly = PolynomialCompute("example", [62, 42, 6], x=x)
-    # PolynomialCompute("example", [62, 42, 6], x=poly.y)
+    PolynomialCompute("example", [62, 42, 6], x=poly.y)
     hw.OutputOp([poly.y])
 
 
@@ -75,6 +75,11 @@ poly.print()
 
 poly.generate()
 poly.print()
+# CHECK: hw.module @top
+# CHECK: hw.instance "example" @pycde.PolynomialCompute
+# CHECK: hw.instance "example" @pycde.PolynomialCompute
+# CHECK: hw.module @pycde.PolynomialCompute
+# CHECK-NOT: hw.module @pycde.PolynomialCompute
 
 print("\n\n=== Verilog ===")
 # CHECK-LABEL: === Verilog ===
