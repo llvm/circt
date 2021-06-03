@@ -37,8 +37,53 @@ def HWNonInOutType : DialectType<HWDialect, CPred<"!hasHWInOutType($_self)">,
 // Type declarations
 //===----------------------------------------------------------------------===//
 
+def TypeAliasType : HWType<"TypeAlias"> {
+  let summary = "An symbolic reference to a type declaration";
+  let description = [{
+    A TypeAlias is parameterized by a SymbolRefAttr, which points to a
+    TypedeclOp. The root reference should refer to a TypeScope within the same
+    outer ModuleOp, and the leaf reference should refer to a type within that
+    TypeScope. A TypeAlias is further parameterized by the inner type, which is
+    needed to be known at the time the type is parsed.
+
+    Upon construction, a TypeAlias stores the symbol reference and type, and
+    canonicalizes the type to resolve any nested type aliases. The canonical
+    type is also cached to avoid recomputing it when needed.
+  }];
+
+  let mnemonic = "typealias";
+
+  let parameters = (ins
+    "mlir::SymbolRefAttr":$ref,
+    "mlir::Type":$innerType,
+    "mlir::Type":$canonicalType
+  );
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins
+      "mlir::SymbolRefAttr":$ref, "mlir::Type":$innerType)>
+  ];
+
+  let extraClassDeclaration = [{
+    Optional<TypedeclOp> getDecl(Operation *op);
+  }];
+}
+
+// Type constraint that supports a type alias or an inner type.
+class TypeAliasOrConstraint<Type innerType> : TypeConstraint<Or<[
+    innerType.predicate,
+    And<[TypeAliasType.predicate,
+        CPred<"$_self.cast<TypeAliasType>().getCanonicalType().isa<" #
+            innerType.cppClassName # ">()">]>]>>;
+
+// Type that supports a type alias or inner type.
+class TypeAliasOr<Type innerType> :
+    DialectType<HWDialect, TypeAliasOrConstraint<innerType>.predicate,
+        "Type alias or " # innerType,
+        "TypeAliasOr<" # innerType.cppClassName # ">">;
+
 // A simple fixed size array.
-def ArrayType : HWType<"Array"> {
+def ArrayTypeImpl : HWType<"Array"> {
   let summary = "fixed-sized array";
   let description = [{
     Fixed sized HW arrays are roughly similar to C arrays. On the wire (vs.
@@ -57,6 +102,8 @@ def ArrayType : HWType<"Array"> {
     }
   }];
 }
+
+def ArrayType: TypeAliasOr<ArrayTypeImpl>;
 
 // An 'unpacked' array of fixed size.
 def UnpackedArrayType : HWType<"UnpackedArray"> {
@@ -137,54 +184,6 @@ def UnionType : HWType<"Union"> {
     mlir::Type getFieldType(mlir::StringRef fieldName);
   }];
 }
-
-def TypeAliasType : HWType<"TypeAlias"> {
-  let summary = "An symbolic reference to a type declaration";
-  let description = [{
-    A TypeAlias is parameterized by a SymbolRefAttr, which points to a
-    TypedeclOp. The root reference should refer to a TypeScope within the same
-    outer ModuleOp, and the leaf reference should refer to a type within that
-    TypeScope. A TypeAlias is further parameterized by the inner type, which is
-    needed to be known at the time the type is parsed.
-
-    Upon construction, a TypeAlias stores the symbol reference and type, and
-    canonicalizes the type to resolve any nested type aliases. The canonical
-    type is also cached to avoid recomputing it when needed.
-  }];
-
-  let mnemonic = "typealias";
-
-  let parameters = (ins
-    "mlir::SymbolRefAttr":$ref,
-    "mlir::Type":$innerType,
-    "mlir::Type":$canonicalType
-  );
-
-  let builders = [
-    TypeBuilderWithInferredContext<(ins
-      "mlir::SymbolRefAttr":$ref, "mlir::Type":$innerType)>
-  ];
-
-  let extraClassDeclaration = [{
-    Optional<TypedeclOp> getDecl(Operation *op);
-  }];
-}
-
-// Type constraint that supports a type alias or an inner type.
-class TypeAliasOrConstraint<Type innerType> : TypeConstraint<Or<[
-    innerType.predicate,
-    And<[TypeAliasType.predicate,
-        CPred<"$_self.cast<TypeAliasType>().getCanonicalType().isa<" #
-            innerType.cppClassName # ">()">]>]>>;
-
-// Type that supports a type alias or inner type.
-class TypeAliasOr<Type innerType> :
-    DialectType<HWDialect, TypeAliasOrConstraint<innerType>.predicate,
-        "Type alias or " # innerType,
-        "TypeAliasOr<" # innerType.cppClassName # ">">;
-
-// Define some types using TypeAliasOr.
-def ArrayOrAliasType : TypeAliasOr<ArrayType>;
 
 //===----------------------------------------------------------------------===//
 // Attributes
