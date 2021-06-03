@@ -1,9 +1,9 @@
-# REQUIRES: bindings_python
 # RUN: %PYTHON% %s | FileCheck %s
 
 import mlir
+import pycde
 
-from circt.design_entry import connect
+from circt.support import connect
 from circt.dialects import hw
 from circt.esi import types
 

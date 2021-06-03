@@ -10,32 +10,7 @@ import circt
 
 import mlir.ir
 
-import atexit
-
-# Push a default context onto the context stack at import time.
-DefaultContext = mlir.ir.Context()
-DefaultContext.__enter__()
-circt.register_dialects(DefaultContext)
-DefaultContext.allow_unregistered_dialects = True
-
-
-@atexit.register
-def __exit_ctxt():
-  DefaultContext.__exit__(None, None, None)
-
-
-# Until we get source location based on Python stack traces, default to unknown
-# locations.
-DefaultLocation = mlir.ir.Location.unknown()
-DefaultLocation.__enter__()
-
-
-@atexit.register
-def __exit_loc():
-  DefaultLocation.__exit__(None, None, None)
-
-
-OPERATION_NAMESPACE = "circt."
+OPERATION_NAMESPACE = "pycde."
 
 
 class ModuleDecl:
