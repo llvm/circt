@@ -300,10 +300,12 @@ SmallVector<ModulePortInfo> firrtl::getModulePortInfo(Operation *op) {
 
   auto portNamesAttr = getModulePortNames(op);
   auto portDirections = getModulePortDirections(op).getValue();
+  auto portAnnotations = getModulePortAnnotations(op);
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     auto type = argTypes[i].cast<FIRRTLType>();
     auto direction = direction::get(portDirections[i]);
-    results.push_back({portNamesAttr[i].cast<StringAttr>(), type, direction});
+    results.push_back({portNamesAttr[i].cast<StringAttr>(), type, direction,
+                       portAnnotations[i]});
   }
   return results;
 }
@@ -317,6 +319,11 @@ StringAttr firrtl::getModulePortName(Operation *op, size_t portIndex) {
 Direction firrtl::getModulePortDirection(Operation *op, size_t portIndex) {
   assert(isa<FModuleOp>(op) || isa<FExtModuleOp>(op));
   return direction::get(getModulePortDirections(op).getValue()[portIndex]);
+}
+
+ArrayAttr getModulePortAnnotation(Operation *op, size_t portIndex) {
+  assert(isa<FModuleOp>(op) || isa<FExtModuleOp>(op));
+  return getModulePortAnnotations(op)[portIndex].cast<ArrayAttr>();
 }
 
 // Return the port with the specified name.
