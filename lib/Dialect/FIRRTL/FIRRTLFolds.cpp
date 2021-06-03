@@ -1195,7 +1195,8 @@ static LogicalResult foldHiddenResetConnect(ConnectOp op,
   // Check all types should be typed by now
   if (op.dest().getType() != op.src().getType() ||
       mux.high().getType() != reg.getType() ||
-      mux.low().getType() != reg.getType())
+      mux.low().getType() != reg.getType() ||
+      reg.getType().getBitWidthOrSentinel() < 1)
     return failure();
 
   // check that there is only one connect.
