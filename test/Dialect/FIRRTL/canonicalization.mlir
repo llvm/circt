@@ -1664,4 +1664,34 @@ firrtl.module @PadMuxOperands(
   firrtl.connect %z, %7 : !firrtl.uint, !firrtl.uint<17>
 }
 
+// CHECK-LABEL: firrtl.module @regsyncreset
+firrtl.module @regsyncreset(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %foo : !firrtl.uint<2>, out %bar: !firrtl.uint<2>) {
+  // CHECK: %[[const:.*]] = firrtl.constant 1
+  // CHECK-NEXT: firrtl.regreset %clock, %reset, %[[const]]
+  // CHECK-NEXT:  firrtl.connect %bar, %d : !firrtl.uint<2>, !firrtl.uint<2>
+  // CHECK-NEXT:  firrtl.connect %d, %foo : !firrtl.uint<2>, !firrtl.uint<2>
+  // CHECK-NEXT: }
+  %d = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<2>
+  firrtl.connect %bar, %d : !firrtl.uint<2>, !firrtl.uint<2>
+  %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
+  %1 = firrtl.mux(%reset, %c1_ui2, %foo) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+  firrtl.connect %d, %1 : !firrtl.uint<2>, !firrtl.uint<2>
+}
+
+// CHECK-LABEL: firrtl.module @regsyncreset_no
+firrtl.module @regsyncreset_no(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %foo : !firrtl.uint, out %bar: !firrtl.uint) {
+  // CHECK: %[[const:.*]] = firrtl.constant 1
+  // CHECK: firrtl.reg %clock
+  // CHECK-NEXT:  firrtl.connect %bar, %d : !firrtl.uint, !firrtl.uint
+  // CHECK-NEXT:  %0 = firrtl.mux(%reset, %[[const]], %foo) : (!firrtl.uint<1>, !firrtl.uint, !firrtl.uint) -> !firrtl.uint 
+  // CHECK-NEXT:  firrtl.connect %d, %0 : !firrtl.uint, !firrtl.uint
+  // CHECK-NEXT: }
+  %d = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint
+  firrtl.connect %bar, %d : !firrtl.uint, !firrtl.uint
+  %c1_ui2 = firrtl.constant 1 : !firrtl.uint
+  %1 = firrtl.mux(%reset, %c1_ui2, %foo) : (!firrtl.uint<1>, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
+  firrtl.connect %d, %1 : !firrtl.uint, !firrtl.uint
+}
+
+
 }

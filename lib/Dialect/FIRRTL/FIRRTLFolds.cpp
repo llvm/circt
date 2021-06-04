@@ -1404,3 +1404,72 @@ LogicalResult MemOp::canonicalize(MemOp op, PatternRewriter &rewriter) {
   rewriter.eraseOp(op);
   return success();
 }
+
+//===----------------------------------------------------------------------===//
+// Declarations
+//===----------------------------------------------------------------------===//
+
+// Turn synchronous reset looking register updates to registers with resets
+static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
+  // reg ; connect(reg, mux(port, const, val)) ->
+  // reg.reset(port, const); connect(reg, val)
+
+  // Find the one true connect, or bail
+  ConnectOp con;
+  for (Operation *user : reg->getUsers()) {
+    // If we see a partial connect or attach, just conservatively fail.
+    if (isa<PartialConnectOp>(user) || isa<AttachOp>(user))
+      return failure();
+
+    auto aConnect = dyn_cast<ConnectOp>(user);
+    if (aConnect && aConnect.dest().getDefiningOp() == reg) {
+      if (con)
+        return failure();
+      con = aConnect;
+    }
+  }
+  if (!con)
+    return failure();
+
+  auto mux = dyn_cast_or_null<MuxPrimOp>(con.src().getDefiningOp());
+  if (!mux)
+    return failure();
+
+  // Reset value must be constant
+  auto constOp = dyn_cast_or_null<ConstantOp>(mux.high().getDefiningOp());
+  if (!constOp)
+    return failure();
+
+  // reset should be a module port (heuristic to limit to intended reset lines)
+  if (!mux.sel().isa<BlockArgument>())
+    return failure();
+
+  // Check all types should be typed by now
+  auto regTy = reg.getType();
+  if (con.dest().getType() != regTy || con.src().getType() != regTy ||
+      mux.high().getType() != regTy || mux.low().getType() != regTy ||
+      regTy.getBitWidthOrSentinel() < 1)
+    return failure();
+
+  // Ok, we know we are doing the transformation.
+
+  // Make sure the constant dominates all users.
+  if (constOp != &con->getBlock()->front())
+    constOp->moveBefore(&con->getBlock()->front());
+
+  rewriter.replaceOpWithNewOp<RegResetOp>(reg, reg.getType(), reg.clockVal(),
+                                          mux.sel(), mux.high(), reg.name(),
+                                          reg.annotations());
+  auto pt = rewriter.saveInsertionPoint();
+  rewriter.setInsertionPoint(con);
+  rewriter.replaceOpWithNewOp<ConnectOp>(con, con.dest(), mux.low());
+  rewriter.restoreInsertionPoint(pt);
+  return success();
+}
+
+LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
+  if (succeeded(foldHiddenReset(op, rewriter)))
+    return success();
+
+  return failure();
+}
