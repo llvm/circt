@@ -223,8 +223,8 @@ firrtl.circuit "FooBundle" {
     // CHECK-DAG:  %[[CONST11:.+]] = firrtl.constant 1
     // CHECK:  %[[MUX1:.+]] = firrtl.mux(%[[TEMPWIRE3:.+]], %[[CONST11]], %[[CONST10]])
     // CHECK:  %[[TEMPWIRE4:.+]] = firrtl.wire
-    // CHECK:  %[[CONST20:.+]] = firrtl.constant 0
-    // CHECK:  %[[CONST21:.+]] = firrtl.constant 1
+    // CHECK-DAG:  %[[CONST21:.+]] = firrtl.constant 1
+    // CHECK-DAG:  %[[CONST20:.+]] = firrtl.constant 0
     // CHECK:  %[[MUX2:.+]] = firrtl.mux(%[[TEMPWIRE4]], %[[CONST21]], %[[CONST20]])
     // CHECK:  %[[MUXCAT:.+]] = firrtl.cat %[[MUX1]], %[[MUX2]]
     // CHECK: firrtl.connect %[[TEMPWIRE2]], %[[MUXCAT]]
