@@ -186,13 +186,13 @@ class _Generate:
     # Get the port names from the attributes we stored them in.
     op_names_attrs = mlir.ir.ArrayAttr(op.attributes["opNames"])
     op_names = [mlir.ir.StringAttr(x) for x in op_names_attrs]
-    op_types = [operand.type for operand in op.operands]
-    input_ports = [(n.value, t) for (n, t) in zip(op_names, op_types)]
+    input_ports = [(n.value, o.type) for (n, o) in zip(op_names, op.operands)]
 
     result_names_attrs = mlir.ir.ArrayAttr(op.attributes["resultNames"])
     result_names = [mlir.ir.StringAttr(x) for x in result_names_attrs]
-    result_types = [result.type for result in op.results]
-    output_ports = [(n.value, t) for (n, t) in zip(result_names, result_types)]
+    output_ports = [
+        (n.value, o.type) for (n, o) in zip(result_names, op.results)
+    ]
 
     # Assemble the parameters.
     params = {
@@ -208,10 +208,10 @@ class _Generate:
     }
 
     # Build the replacement HWModuleOp in the outer module.
-    module_key = str((op.name, sorted(op_types), sorted(result_types),
+    module_key = str((op.name, sorted(input_ports), sorted(output_ports),
                       sorted(params.items())))
-    with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
-      if not module_key in self.generated_modules:
+    if not module_key in self.generated_modules:
+      with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
         gen_mod = circt.dialects.hw.HWModuleOp(op.name,
                                                input_ports=input_ports,
                                                output_ports=output_ports,
