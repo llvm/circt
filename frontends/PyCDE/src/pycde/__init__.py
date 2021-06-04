@@ -3,7 +3,10 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from .module import *
+from .system import *
 
+import mlir.ir
+import circt
 import atexit
 
 # Push a default context onto the context stack at import time.

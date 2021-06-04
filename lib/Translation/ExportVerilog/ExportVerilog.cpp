@@ -2515,7 +2515,11 @@ static void lowerBoundInstance(InstanceOp op) {
 }
 
 static bool onlyUseIsConnect(Value v) {
-  return false;
+  if (!v.hasOneUse())
+    return false;
+  if (!dyn_cast_or_null<ConnectOp>(v.getDefiningOp()))
+    return false;
+  return true;
 }
 
 //Ensure that each output of an instance are used only by a wire

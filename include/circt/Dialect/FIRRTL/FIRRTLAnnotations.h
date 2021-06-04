@@ -67,6 +67,10 @@ public:
     return !(*this == other);
   }
 
+  bool empty() const { return annotations.empty(); }
+
+  size_t size() const { return annotations.size(); }
+
 private:
   bool hasAnnotationImpl(StringRef className) const;
   DictionaryAttr getAnnotationImpl(StringRef className) const;

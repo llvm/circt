@@ -3,14 +3,11 @@
 from __future__ import annotations
 
 import mlir
-import circt
 
 import pycde
-from pycde import Input, Output, module, generator
+from pycde import Input, Output, Parameter, module, generator
 from circt.esi import types
 from circt.dialects import comb, hw
-
-import sys
 
 
 @module
@@ -20,19 +17,21 @@ class PolynomialCompute:
   # Evaluate polynomial for 'x'.
   x = Input(types.i32)
 
-  def __init__(self, coefficients: list[int], **kwargs):
+  def __init__(self, name: str, coefficients: list[int], **kwargs):
     """coefficients is in 'd' -> 'a' order."""
-    self.__coefficients = coefficients
+    self.instanceName = name
+    self.coefficients = Parameter(coefficients)
     # Full result.
     self.y = Output(types.i32)
 
   @generator
-  def construct(mod):
+  def construct(mod, params):
     """Implement this module for input 'x'."""
 
     x = mod.x
     taps: list[mlir.ir.Value] = list()
-    for power, coeff in enumerate([1, 2, 3]):
+    # TODO: use the coefficient parameter, once its usable.
+    for power, coeff in enumerate([62, 42, 6]):
       coeffVal = hw.ConstantOp.create(types.i32, coeff)
       if power == 0:
         newPartialSum = coeffVal.result
@@ -43,12 +42,10 @@ class PolynomialCompute:
         else:
           x_power = [x for i in range(power)]
           currPow = comb.MulOp(types.i32, x_power).result
-        newPartialSum = comb.AddOp(
-            types.i32,
-            [
-                partialSum,
-                comb.MulOp(types.i32, [coeffVal.result, currPow]).result
-            ]).result
+        newPartialSum = comb.AddOp(types.i32, [
+            partialSum,
+            comb.MulOp(types.i32, [coeffVal.result, currPow]).result
+        ]).result
 
       taps.append(newPartialSum)
 
@@ -56,38 +53,39 @@ class PolynomialCompute:
     return {"y": taps[-1]}
 
 
-def build(top):
-  i32 = mlir.ir.Type.parse("i32")
-  x = hw.ConstantOp.create(i32, 23)
-  poly = PolynomialCompute([62, 42, 6], x=x)
-  hw.OutputOp([poly.y])
+class Polynomial(pycde.System):
+  inputs = []
+  outputs = [('y', types.i32)]
+
+  def build(self, top):
+    i32 = types.i32
+    x = hw.ConstantOp.create(i32, 23)
+    poly = PolynomialCompute("example", [62, 42, 6], x=x)
+    PolynomialCompute("example2", [62, 42, 6], x=poly.y)
+    hw.OutputOp([poly.y])
 
 
-mod = mlir.ir.Module.create()
-with mlir.ir.InsertionPoint(mod.body), circt.support.BackedgeBuilder():
-  hw.HWModuleOp(name='top',
-                input_ports=[],
-                output_ports=[('y', mlir.ir.Type.parse("i32"))],
-                body_builder=build)
+poly = Polynomial()
 
-mod.operation.print()
-pm = mlir.passmanager.PassManager.parse("run-generators")
-pm.run(mod)
-
-mod.operation.print()
+poly.print()
 # CHECK:  hw.module @top() -> (%y: i32) {
 # CHECK:    %c23_i32 = hw.constant 23 : i32
-# CHECK:    [[REG0:%.+]] = "pycde.PolynomialCompute"(%c23_i32) {opNames = ["x"], resultNames = ["y"]} : (i32) -> i32
+# CHECK:    [[REG0:%.+]] = "pycde.PolynomialCompute"(%c23_i32) {instanceName = "example", opNames = ["x"], parameters = {coefficients = [62, 42, 6]},  resultNames = ["y"]} : (i32) -> i32
 # CHECK:    hw.output [[REG0]] : i32
+
+poly.generate()
+poly.print()
+# CHECK: hw.module @top
+# CHECK: hw.instance "example" @pycde.PolynomialCompute
+# CHECK: hw.instance "example2" @pycde.PolynomialCompute
+# CHECK: hw.module @pycde.PolynomialCompute
+# CHECK-NOT: hw.module @pycde.PolynomialCompute
 
 print("\n\n=== Verilog ===")
 # CHECK-LABEL: === Verilog ===
+poly.print_verilog()
 
-pm = mlir.passmanager.PassManager.parse(
-  "hw-legalize-names,hw.module(hw-cleanup)")
-pm.run(mod)
-circt.export_verilog(mod, sys.stdout)
 # CHECK:  module pycde_PolynomialCompute(
 # CHECK:    input  [31:0] x,
 # CHECK:    output [31:0] y);
-# CHECK:    assign y = 32'h1 + 32'h2 * x + 32'h3 * x * x;
+# CHECK:    assign y = 32'h3E + 32'h2A * x + 32'h6 * x * x;

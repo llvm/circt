@@ -372,6 +372,29 @@ Since there is no precedence of this `validIf` being used anywhere in the Chisel
 
 A canonicalization then folds this combination of `firrtl.invalidvalue` and `firrtl.mux` to the "high" operand of the multiplexer to facilitate downstream transformation passes.
 
+### Inline SystemVerilog through `verbatim.expr` operation
+
+The FIRRTL dialect offers a `firrtl.verbatim.expr` operation that allows for SystemVerilog expressions to be embedded verbatim in the IR. It is lowered to the corresponding `sv.verbatim.expr` operation of the underlying SystemVerilog dialect, which embeds it in the emitted output. The operation has a FIRRTL result type, and a variadic number of operands can be accessed from within the inline SystemVerilog source text through string interpolation of `{{0}}`-style placeholders.
+
+The rationale behind this verbatim operation is to offer an escape hatch analogous to `asm ("...")` in C/C++ and other languages, giving the user or compiler passes full control of what exactly gets embedded in the output. Usually, though, you would rather add a new operation to the IR to properly represent additional constructs.
+
+As an example, a verbatim expression could be used to interact with yet-unsupported SystemVerilog constructs such as parametrized class typedef members:
+
+```mlir
+firrtl.module @Magic (out %n : !firrtl.uint<32>) {
+  %0 = firrtl.verbatim.expr "$bits(SomeClass #(.Param(1))::SomeTypedef)" : !firrtl.uint<32>
+  firrtl.connect %n, %0 : !firrtl.uint<32>, !firrtl.uint<32>
+}
+```
+
+This would lower through the other dialects to SystemVerilog as you would expect:
+
+```systemverilog
+module Magic (output [31:0] n);
+  assign n = $bits(SomeClass #(.Param(1))::SomeTypedef);
+endmodule
+```
+
 ## Annotations
 
 The SFC provides a mechanism to encode arbitrary metadata and associate it with

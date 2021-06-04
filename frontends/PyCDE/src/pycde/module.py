@@ -16,10 +16,7 @@ OPERATION_NAMESPACE = "pycde."
 class ModuleDecl:
   """Represents an input or output port on a design module."""
 
-  __slots__ = [
-      "name",
-      "_type"
-  ]
+  __slots__ = ["name", "_type"]
 
   def __init__(self, type: mlir.ir.Type, name: str = None):
     self.name: str = name
@@ -36,6 +33,14 @@ class Output(ModuleDecl):
 
 class Input(ModuleDecl):
   pass
+
+
+class Parameter:
+  __slots__ = ["name", "attr"]
+
+  def __init__(self, value, name: str = None):
+    self.attr = support.var_to_attribute(value)
+    self.name = name
 
 
 def module(cls):
@@ -56,11 +61,15 @@ def module(cls):
 
       # The OpView attributes cannot be touched before OpView is constructed.
       # Get a list and don't touch them.
-      dont_touch = set([x for x in dir(mlir.ir.OpView)])
+      dont_touch = set()
+      dont_touch.update([x for x in dir(mlir.ir.OpView)])
+      dont_touch.update(["OPERATION_NAME", "_ODS_REGIONS"])
 
       # After the wrapped class' construct, all the IO should be known.
       input_ports: list[Input] = []
       output_ports: list[Output] = []
+      parameters: list[Parameter] = []
+      attributes: dict[str:mlir.ir.Attribute] = {}
       # Scan for them.
       for attr_name in dir(self):
         if attr_name in dont_touch:
@@ -69,9 +78,16 @@ def module(cls):
         if isinstance(attr, Input):
           attr.name = attr_name
           input_ports.append(attr)
-        if isinstance(attr, Output):
+        elif isinstance(attr, Output):
           attr.name = attr_name
           output_ports.append(attr)
+        elif isinstance(attr, Parameter):
+          attr.name = attr_name
+          parameters.append(attr)
+        else:
+          mlir_attr = support.var_to_attribute(attr, True)
+          if mlir_attr is not None:
+            attributes[attr_name] = mlir_attr
 
       # Build a list of operand values for the operation we're gonna create.
       input_ports_values: list[mlir.ir.Value] = []
@@ -84,8 +100,8 @@ def module(cls):
             value = value.result
           assert isinstance(value, mlir.ir.Value)
         else:
-          value = BackedgeBuilder.current().create(
-              input.type, input.name, self).result
+          value = BackedgeBuilder.current().create(input.type, input.name,
+                                                   self).result
         input_ports_values.append(value)
 
       # Store the port names as attributes.
@@ -94,15 +110,18 @@ def module(cls):
       result_names_attr = mlir.ir.ArrayAttr.get(
           [mlir.ir.StringAttr.get(x.name) for x in output_ports])
 
+      # Set up the op attributes.
+      parameters = {p.name: p.attr for p in parameters}
+      attributes["parameters"] = mlir.ir.DictAttr.get(parameters)
+      attributes["opNames"] = op_names_attr
+      attributes["resultNames"] = result_names_attr
+
       # Init the OpView, which creates the operation.
-      mlir.ir.OpView.__init__(self, self.build_generic(
-          attributes={
-            "opNames": op_names_attr,
-            "resultNames": result_names_attr
-          },
-          results=[x.type for x in output_ports],
-          operands=[x for x in input_ports_values]
-      ))
+      mlir.ir.OpView.__init__(
+          self,
+          self.build_generic(attributes=attributes,
+                             results=[x.type for x in output_ports],
+                             operands=[x for x in input_ports_values]))
 
       # Build the mappings for __getattribute__.
       self.input_ports = {port.name: i for i, port in enumerate(input_ports)}
@@ -137,9 +156,9 @@ def _register_generators(cls):
 
 
 def _register_generator(class_name, generator_name, generator):
-  circt.msft.register_generator(
-      mlir.ir.Context.current, OPERATION_NAMESPACE + class_name,
-      generator_name, generator)
+  circt.msft.register_generator(mlir.ir.Context.current,
+                                OPERATION_NAMESPACE + class_name,
+                                generator_name, generator)
 
 
 class _Generate:
@@ -148,6 +167,13 @@ class _Generate:
 
   def __init__(self, gen_func):
     self.gen_func = gen_func
+
+    # Track generated modules so we don't create unnecessary duplicates of
+    # modules that are structurally equivalent.
+    self.generated_modules = {}
+
+  def _generate(self, mod):
+    return self.gen_func(mod, self.params)
 
   def __call__(self, op):
     """Build an HWModuleOp and run the generator as the body builder."""
@@ -165,20 +191,41 @@ class _Generate:
     result_names_attrs = mlir.ir.ArrayAttr(op.attributes["resultNames"])
     result_names = [mlir.ir.StringAttr(x) for x in result_names_attrs]
     output_ports = [
-        (n.value, o.type) for (n, o) in zip(result_names, op.results)]
+        (n.value, o.type) for (n, o) in zip(result_names, op.results)
+    ]
+
+    # Assemble the parameters.
+    params = {
+        nattr.name: nattr.attr
+        for nattr in mlir.ir.DictAttr(op.attributes["parameters"])
+    }
+    self.params = type(f"{op.name}_params", (object,), params)
+
+    attrs = {
+        nattr.name: nattr.attr
+        for nattr in op.attributes
+        if nattr.name not in ["opNames", "resultNames", "parameters"]
+    }
 
     # Build the replacement HWModuleOp in the outer module.
-    with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
-      mod = circt.dialects.hw.HWModuleOp(
-          op.name,
-          input_ports=input_ports,
-          output_ports=output_ports,
-          body_builder=self.gen_func)
+    module_key = str((op.name, sorted(input_ports), sorted(output_ports),
+                      sorted(params.items())))
+    if not module_key in self.generated_modules:
+      with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
+        gen_mod = circt.dialects.hw.HWModuleOp(op.name,
+                                               input_ports=input_ports,
+                                               output_ports=output_ports,
+                                               body_builder=self._generate)
+        self.generated_modules[module_key] = gen_mod
 
     # Build a replacement instance at the op to be replaced.
     with mlir.ir.InsertionPoint(op):
       mapping = {name.value: op.operands[i] for i, name in enumerate(op_names)}
-      return mod.create(op.name, **mapping).operation
+      inst = self.generated_modules[module_key].create(op.name,
+                                                       **mapping).operation
+      for (name, attr) in attrs.items():
+        inst.attributes[name] = attr
+      return inst
 
 
 def generator(func):
