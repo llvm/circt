@@ -8,7 +8,6 @@ from contextlib import AbstractContextManager
 from contextvars import ContextVar
 from typing import List
 
-
 _current_backedge_builder = ContextVar("current_bb")
 
 
@@ -17,6 +16,7 @@ class ConnectionError(RuntimeError):
 
 
 class UnconnectedSignalError(ConnectionError):
+
   def __init__(self, module: str, port_names: List[str]):
     super().__init__(
         f"Ports {port_names} unconnected in design module {module}.")
@@ -36,11 +36,44 @@ def get_value(obj) -> ir.Value:
   return None
 
 
+def connect(destination, source):
+  """A convenient way to use BackedgeBuilder."""
+  if not isinstance(destination, OpOperand):
+    raise TypeError(
+        f"cannot connect to destination of type {type(destination)}")
+  value = get_value(source)
+  if value is None:
+    raise TypeError(f"cannot connect from source of type {type(source)}")
+
+  index = destination.index
+  destination.operation.operands[index] = value
+  if isinstance(destination, BuilderValue) and \
+     index in destination.builder.backedges:
+    destination.builder.backedges[index].erase()
+
+
+def var_to_attribute(obj, none_on_fail: bool = False) -> ir.Attribute:
+  """Create an MLIR attribute from a Python object for a few common cases."""
+  if isinstance(obj, ir.Attribute):
+    return obj
+  if isinstance(obj, int):
+    attrTy = ir.IntegerType.get_signless(64)
+    return ir.IntegerAttr.get(attrTy, obj)
+  if isinstance(obj, str):
+    return ir.StringAttr.get(obj)
+  if isinstance(obj, list):
+    return ir.ArrayAttr.get([var_to_attribute(x) for x in obj])
+  if none_on_fail:
+    return None
+  raise TypeError(f"Cannot convert type '{type(obj)}' to MLIR attribute")
+
+
 class BackedgeBuilder(AbstractContextManager):
 
   class Edge:
-    def __init__(self, creator, type: ir.Type, port_name: str,
-                 op_view, instance_of: ir.Operation):
+
+    def __init__(self, creator, type: ir.Type, port_name: str, op_view,
+                 instance_of: ir.Operation):
       self.creator: BackedgeBuilder = creator
       self.dummy_op = ir.Operation.create("TemporaryBackedge", [type])
       self.instance_of = instance_of
@@ -73,8 +106,11 @@ class BackedgeBuilder(AbstractContextManager):
   def create(*args, **kwargs):
     return BackedgeBuilder.current()._create(*args, **kwargs)
 
-  def _create(self, type: ir.Type, port_name: str,
-              op_view, instance_of: ir.Operation = None):
+  def _create(self,
+              type: ir.Type,
+              port_name: str,
+              op_view,
+              instance_of: ir.Operation = None):
     edge = BackedgeBuilder.Edge(self, type, port_name, op_view, instance_of)
     self.edges.add(edge)
     return edge
@@ -83,6 +119,8 @@ class BackedgeBuilder(AbstractContextManager):
     self.old_bb_token = _current_backedge_builder.set(self)
 
   def __exit__(self, exc_type, exc_value, traceback):
+    if exc_value is not None:
+      return
     _current_backedge_builder.reset(self.old_bb_token)
     errors = []
     for edge in list(self.edges):
@@ -105,11 +143,7 @@ class BackedgeBuilder(AbstractContextManager):
 
 
 class OpOperand:
-  __slots__ = [
-    "index"
-    "operation"
-    "value"
-  ]
+  __slots__ = ["index", "operation", "value"]
 
   def __init__(self, operation, index, value):
     self.index = index
@@ -155,9 +189,7 @@ class NamedValueOpView:
       arg_name = operand_names[i]
       operand_indices[arg_name] = i
       if arg_name in input_port_mapping:
-        value = input_port_mapping[arg_name]
-        if not isinstance(value, ir.Value):
-          value = input_port_mapping[arg_name].value
+        value = get_value(input_port_mapping[arg_name])
         operand = value
       else:
         backedge = self.create_default_value(i, data_type, arg_name)

@@ -203,6 +203,15 @@ firrtl.circuit "Simple" {
     %47 = firrtl.asClock %44 : (!firrtl.uint<1>) -> !firrtl.clock
     %48 = firrtl.asAsyncReset %44 : (!firrtl.uint<1>) -> !firrtl.asyncreset
 
+    // CHECK: [[VERB1:%.+]] = sv.verbatim.expr "MAGIC_CONSTANT" : () -> i42
+    // CHECK: [[VERB2:%.+]] = sv.verbatim.expr "$bits({{[{][{]0[}][}]}})"([[VERB1]]) : (i42) -> i32
+    // CHECK: [[VERB1EXT:%.+]] = comb.concat {{%.+}}, [[VERB1]] : (i1, i42) -> i43
+    // CHECK: [[VERB2EXT:%.+]] = comb.concat {{%.+}}, [[VERB2]] : (i11, i32) -> i43
+    // CHECK: = comb.add [[VERB1EXT]], [[VERB2EXT]] : i43
+    %56 = firrtl.verbatim.expr "MAGIC_CONSTANT" : () -> !firrtl.uint<42>
+    %57 = firrtl.verbatim.expr "$bits({{0}})"(%56) : (!firrtl.uint<42>) -> !firrtl.uint<32>
+    %58 = firrtl.add %56, %57 : (!firrtl.uint<42>, !firrtl.uint<32>) -> !firrtl.uint<43>
+
     // Issue #353
     // CHECK: [[PADRES_EXT:%.+]] = comb.sext [[PADRES]] : (i3) -> i8
     // CHECK: = comb.and %in3, [[PADRES_EXT]] : i8

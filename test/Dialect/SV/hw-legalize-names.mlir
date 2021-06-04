@@ -57,6 +57,14 @@ hw.module @inout_inst(%a: i1) -> () {
   %0 = hw.instance "foo" @inout (%a) : (i1) -> (i1)
 }
 
+// https://github.com/llvm/circt/issues/525
+// CHECK-LABEL: hw.module @issue525(%struct_0: i2, %else_1: i2) -> (%casex_2: i2)
+// CHECK-NEXT: %0 = comb.add %struct_0, %else_1 : i2
+hw.module @issue525(%struct: i2, %else: i2) -> (%casex: i2) {
+  %2 = comb.add %struct, %else : i2
+  hw.output %2 : i2
+}
+
 // https://github.com/llvm/circt/issues/855
 // CHECK-LABEL: hw.module @nameless_reg
 // CHECK-NEXT: %_T = sv.reg : !hw.inout<i4>
@@ -84,8 +92,6 @@ hw.module @ModuleWithCollision(%reg: i1) -> (%wire: i1) {
 hw.module @InstanceWithCollisions(%a: i1) {
   hw.instance "parameter" @ModuleWithCollision(%a) : (i1) -> (i1)
 }
-
-
 
 // TODO: Renaming the above interface declarations currently does not rename
 // their use in the following types.

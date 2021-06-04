@@ -454,6 +454,7 @@ static bool parseAugmentedType(
       if (auto maybeDescription = field.get("description"))
         attrs.append("description", maybeDescription.cast<StringAttr>());
       attrs.append("name", name);
+      attrs.append("tpe", tpe.getAs<StringAttr>("class"));
       elements.push_back(DictionaryAttr::getWithSorted(context, attrs));
     }
     // Add an annotation that stores information necessary to construct the

@@ -1015,6 +1015,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   }
   LogicalResult visitExpr(TailPrimOp op);
   LogicalResult visitExpr(MuxPrimOp op);
+  LogicalResult visitExpr(VerbatimExprOp op);
 
   // Statements
   LogicalResult visitStmt(SkipOp op);
@@ -2319,6 +2320,24 @@ LogicalResult FIRRTLLowering::visitExpr(MuxPrimOp op) {
 
   return setLoweringTo<comb::MuxOp>(op, ifTrue.getType(), cond, ifTrue,
                                     ifFalse);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(VerbatimExprOp op) {
+  auto resultTy = lowerType(op.getType());
+  if (!resultTy)
+    return failure();
+
+  SmallVector<Value, 4> operands;
+  operands.reserve(op.operands().size());
+  for (auto operand : op.operands()) {
+    auto lowered = getLoweredValue(operand);
+    if (!lowered)
+      return failure();
+    operands.push_back(lowered);
+  }
+
+  return setLoweringTo<sv::VerbatimExprOp>(op, resultTy, op.textAttr(),
+                                           operands);
 }
 
 //===----------------------------------------------------------------------===//
