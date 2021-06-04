@@ -608,8 +608,6 @@ public:
   void emitStatement(Operation *op);
   void emitStatementBlock(Block &block);
 
-  void emitBind(BindOp op);
-
   using ValueOrOp = PointerUnion<Value, Operation *>;
 
   StringRef addName(ValueOrOp valueOrOp, StringRef name);
@@ -2503,19 +2501,12 @@ void ModuleEmitter::emitHWGeneratedModule(HWModuleGeneratedOp module) {
   os << "// external generated module " << verilogName.getValue() << "\n\n";
 }
 
-void ModuleEmitter::emitBind(BindOp bind) {
-  os << "// bind\n\n";
-}
-
-// Given an invisible instance, make sure all inputs and outputs are tied to
-// wires or ports.
-static void lowerBoundInstance(InstanceOp op) {
-  Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
-  auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
-}
-
 static bool onlyUseIsConnect(Value v) {
-  return false;
+  if (!v.hasOneUse())
+    return false;
+  if (!dyn_cast_or_null<ConnectOp>(v.getDefiningOp()))
+    return false;
+  return true;
 }
 
 //Ensure that each output of an instance are used only by a wire
@@ -2733,9 +2724,6 @@ void ModuleEmitter::prepareHWModule(Block &block) {
     if (auto instance = dyn_cast<InstanceOp>(op)) {
       // Anchor return values to wires early
       lowerInstanceResults(instance);
-      // Anchor ports of bound instances
-      if (instance->hasAttr("doNotPrint"))
-        lowerBoundInstance(instance);
       addLegalName(ValueOrOp(&op), instance.instanceName(), &op);
     } else if (auto wire = dyn_cast<WireOp>(op))
       addLegalName(ValueOrOp(op.getResult(0)), wire.name(), &op);
@@ -3059,16 +3047,6 @@ void RootEmitterBase::gatherFiles(bool separateModules) {
         .Case<HWGeneratorSchemaOp>([&](auto &) {
           // Empty.
         })
-        .Case<BindOp>([&](auto &op) {
-          if (attr) {
-            if (!hasFileName) {
-              op.emitError("file name unspecified");
-              encounteredError = true;
-            } else
-              separateFile(op);
-          } else
-            separateFile(op, "bindfile");
-        })
         .Default([&](auto *) {
           op.emitError("unknown operation");
           encounteredError = true;
@@ -3114,8 +3092,6 @@ void RootEmitterBase::emitOperation(VerilogEmitterState &state, Operation *op) {
       .Case<HWModuleGeneratedOp>(
           [&](auto op) { ModuleEmitter(state).emitHWGeneratedModule(op); })
       .Case<HWGeneratorSchemaOp>([&](auto op) { /* Empty */ })
-      .Case<BindOp>(
-        [&](auto op) { ModuleEmitter(state).emitBind(op); })
       .Case<InterfaceOp, VerbatimOp, IfDefProceduralOp>(
           [&](auto op) { ModuleEmitter(state).emitStatement(op); })
       .Case<TypeScopeOp>([&](auto typedecls) {
