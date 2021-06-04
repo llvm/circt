@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "./PassDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "llvm/ADT/TinyPtrVector.h"
@@ -16,6 +17,11 @@ using namespace firrtl;
 /// Return true if this is a wire or register.
 static bool isWireOrReg(Operation *op) {
   return isa<WireOp>(op) || isa<RegResetOp>(op) || isa<RegOp>(op);
+}
+
+/// Return true if this is a wire or register we're allowed to delete.
+static bool isDeletableWireOrReg(Operation *op) {
+  return isWireOrReg(op) && !AnnotationSet(op).hasDontTouch();
 }
 
 //===----------------------------------------------------------------------===//
@@ -257,8 +263,7 @@ private:
 };
 } // end anonymous namespace
 
-// TODO: handle annotations: [[OptimizableExtModuleAnnotation]],
-//  [[DontTouchAnnotation]]
+// TODO: handle annotations: [[OptimizableExtModuleAnnotation]]
 void IMConstPropPass::runOnOperation() {
   auto circuit = getOperation();
 
@@ -544,11 +549,22 @@ void IMConstPropPass::visitOperation(Operation *op) {
   SmallVector<Attribute, 8> operandConstants;
   operandConstants.reserve(op->getNumOperands());
   for (Value operand : op->getOperands()) {
-    // Make sure all of the operands are resolved first.
-    // TODO: Support folding partial ops, like mux(false, variable, cst).
     auto &operandLattice = latticeValues[operand];
-    if (operandLattice.isUnknown())
-      return;
+
+    // If the operand is an unknown value, then we generally don't want to
+    // process it - we want to wait until the value is resolved to by the SCCP
+    // algorithm.  However, some operations are defined on partial operations,
+    // including firrtl.mux in particular.  We resolve these eagerly because the
+    // fold hooks know how to deal with them, and they often form cycles.
+    if (operandLattice.isUnknown()) {
+      if (!isa<MuxPrimOp>(op))
+        return;
+      operandConstants.push_back(InvalidValueAttr::get(operand.getType()));
+      continue;
+    }
+
+    // Otherwise, it must be constant, invalid, or overdefined.  Translate them
+    // into attributes that the fold hook can look at.
     if (operandLattice.isConstant() || operandLattice.isInvalidValue())
       operandConstants.push_back(operandLattice.getValue());
     else
@@ -617,9 +633,16 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     Attribute constantValue = it->second.getValue();
     auto *cst = module->getDialect()->materializeConstant(
         builder, constantValue, value.getType(), value.getLoc());
-    if (!cst)
-      return false;
-    value.replaceAllUsesWith(cst->getResult(0));
+    assert(cst && "all FIRRTL constants can be materialized");
+    auto cstValue = cst->getResult(0);
+
+    // Replace all uses of this value with the constant, unless this is the
+    // destination of a connect.  We leave those alone to avoid upsetting flow.
+    value.replaceUsesWithIf(cstValue, [](OpOperand &operand) {
+      if (isa<ConnectOp>(operand.getOwner()) && operand.getOperandNumber() == 0)
+        return false;
+      return true;
+    });
     return true;
   };
 
@@ -636,10 +659,11 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
   for (auto &op : llvm::make_early_inc_range(llvm::reverse(*body))) {
     // Connects to values that we found to be constant can be dropped.
     if (auto connect = dyn_cast<ConnectOp>(op)) {
-      if (!connect.dest().isa<BlockArgument>() &&
-          !connect.dest().getDefiningOp<InstanceOp>() &&
-          !latticeValues[connect.dest()].isOverdefined())
-        connect.erase();
+      if (auto *destOp = connect.dest().getDefiningOp()) {
+        if (isDeletableWireOrReg(destOp) &&
+            !latticeValues[connect.dest()].isOverdefined())
+          connect.erase();
+      }
       continue;
     }
 
@@ -649,7 +673,8 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
       continue;
 
     // If this operation is already dead, then go ahead and remove it.
-    if (op.use_empty() && (wouldOpBeTriviallyDead(&op) || isWireOrReg(&op))) {
+    if (op.use_empty() &&
+        (wouldOpBeTriviallyDead(&op) || isDeletableWireOrReg(&op))) {
       op.erase();
       continue;
     }
@@ -666,7 +691,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
 
     // If the operation folded to a constant then we can probably nuke it.
     if (foldedAny && op.use_empty() &&
-        (wouldOpBeTriviallyDead(&op) || isWireOrReg(&op))) {
+        (wouldOpBeTriviallyDead(&op) || isDeletableWireOrReg(&op))) {
       op.erase();
       continue;
     }

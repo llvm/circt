@@ -5,6 +5,8 @@
 # Generated tablegen dialects end up in the mlir.dialects package for now.
 from mlir.dialects._seq_ops_gen import *
 
+from .seq import CompRegOp
+
 
 # Create a computational register whose input is the given value, and is clocked
 # by the given clock. If a reset is provided, the register will be reset by that
@@ -19,11 +21,12 @@ def reg(value, clock, reset=None, reset_value=None, name=None):
     if not reset_value:
       zero = IntegerAttr.get(value_type, 0)
       reset_value = hw.ConstantOp(value_type, zero).result
-    return CompRegOp(value_type,
-                     value,
-                     clock,
-                     reset=reset,
-                     reset_value=reset_value,
-                     name=name).result
+    return CompRegOp.create(value_type,
+                            input=value,
+                            clk=clock,
+                            reset=reset,
+                            reset_value=reset_value,
+                            name=name).data.value
   else:
-    return CompRegOp(value_type, value, clock, name=name).result
+    return CompRegOp.create(value_type, input=value, clk=clock,
+                            name=name).data.value

@@ -11,6 +11,8 @@
 #ifndef CIRCT_C_DIALECT_MSFT_H
 #define CIRCT_C_DIALECT_MSFT_H
 
+#include "mlir-c/IR.h"
+#include "mlir-c/Pass.h"
 #include "mlir-c/Registration.h"
 
 #ifdef __cplusplus
@@ -23,6 +25,18 @@ MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(MSFT, msft);
 /// data
 MlirLogicalResult mlirMSFTExportTcl(MlirModule, MlirStringCallback,
                                     void *userData);
+
+/// This callback constructs a replacement for the operation argument and
+/// returns it.
+typedef struct {
+  MlirOperation (*callback)(MlirOperation, void *userData);
+  void *userData;
+} mlirMSFTGeneratorCallback;
+
+/// Register a generator callback (function pointer, user data pointer).
+void mlirMSFTRegisterGenerator(MlirContext, const char *opName,
+                               const char *generatorName,
+                               mlirMSFTGeneratorCallback cb);
 
 #ifdef __cplusplus
 }

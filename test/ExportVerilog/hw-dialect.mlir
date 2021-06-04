@@ -57,13 +57,13 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   %allone = hw.constant 15 : i4
   %34 = comb.xor %a, %allone : i4
 
-  %arrCreated = hw.array_create %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone : (i4)
+  %arrCreated = hw.array_create %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone, %allone : i4
   %slice1 = hw.array_slice %arrCreated at %a : (!hw.array<9xi4>) -> !hw.array<3xi4>
   %slice2 = hw.array_slice %arrCreated at %b : (!hw.array<9xi4>) -> !hw.array<3xi4>
   %35 = comb.mux %cond, %slice1, %slice2 : !hw.array<3xi4>
 
   %ab = comb.add %a, %b : i4
-  %subArr = hw.array_create %allone, %ab, %allone : (i4)
+  %subArr = hw.array_create %allone, %ab, %allone : i4
   %38 = hw.array_concat %subArr, %subArr : !hw.array<3 x i4>, !hw.array<3 x i4>
 
   %elem2d = hw.array_get %array2d[%a] : !hw.array<12 x array<10xi4>>
@@ -208,17 +208,16 @@ hw.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2:
 // CHECK-NEXT: // input  /*Zero Width*/ i3,
 // CHECK-NEXT:    output                y, z, p, p2);
 // CHECK-EMPTY:
-// CHECK-NEXT:    wire _T;
-// CHECK-NEXT:    wire _T_0;
-// CHECK-NEXT:    wire a1_f;
+
+// CHECK-NEXT:    wire paramd2_out;
+// CHECK-NEXT:    wire paramd_out;
 // CHECK-NEXT:    wire b1_b;
 // CHECK-NEXT:    wire b1_c;
-// CHECK-NEXT:    wire paramd_out;
-// CHECK-NEXT:    wire paramd2_out;
+// CHECK-NEXT:    wire a1_f;
 // CHECK-EMPTY:
 // CHECK-NEXT:    A a1 (
 // CHECK-NEXT:      .d (w),
-// CHECK-NEXT:      .e (_T),
+// CHECK-NEXT:      .e (b1_b),
 // CHECK-NEXT:      .f (a1_f)
 // CHECK-NEXT:    )
 // CHECK-NEXT:    B b1 (
@@ -226,8 +225,6 @@ hw.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2:
 // CHECK-NEXT:      .b (b1_b),
 // CHECK-NEXT:      .c (b1_c)
 // CHECK-NEXT:    )
-// CHECK-NEXT:    assign _T_0 = b1_c;
-// CHECK-NEXT:    assign _T = b1_b;
 // CHECK-NEXT:    FooModule #(
 // CHECK-NEXT:      .DEFAULT(64'd14000240888948784983),
 // CHECK-NEXT:      .DEPTH(3.242000e+01),
@@ -244,7 +241,7 @@ hw.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2:
 // CHECK-NEXT:      .a   (i2),
 // CHECK-NEXT:      .out (paramd2_out)
 // CHECK-NEXT:    );
-// CHECK-NEXT:    assign y = _T_0;
+// CHECK-NEXT:    assign y = b1_c;
 // CHECK-NEXT:    assign z = x;
 // CHECK-NEXT:    assign p = paramd_out;
 // CHECK-NEXT:    assign p2 = paramd2_out;
@@ -465,44 +462,6 @@ hw.module @TestZeroInstance(%aa: i4, %azeroBit: i0, %aarrZero: !hw.array<3xi0>)
   hw.output %o1, %o2, %o3 : i4, i0, !hw.array<3xi0>
 }
 
-// CHECK-LABEL: TestDupInstanceName
-hw.module @TestDupInstanceName(%a: i1) {
-  // CHECK: B name (
-  %w1, %y1 = hw.instance "name" @B(%a) : (i1) -> (i1, i1)
-
-  // CHECK: B name_0 (
-  %w2, %y2 = hw.instance "name" @B(%a) : (i1) -> (i1, i1)
-}
-
-// CHECK-LABEL: TestEmptyInstanceName
-hw.module @TestEmptyInstanceName(%a: i1) {
-  // CHECK: B _T (
-  %w1, %y1 = hw.instance "" @B(%a) : (i1) -> (i1, i1)
-
-  // CHECK: B _T_0 (
-  %w2, %y2 = hw.instance "" @B(%a) : (i1) -> (i1, i1)
-}
-
-// CHECK-LABEL: TestInstanceNameValueConflict
-hw.module @TestInstanceNameValueConflict(%a: i1) {
-  // CHECK: wire name
-  %name = sv.wire : !hw.inout<i1>
-
-  // CHECK: B name_0 (
-  %w, %y = hw.instance "name" @B(%a) : (i1) -> (i1, i1)
-}
-
-// https://github.com/llvm/circt/issues/525
-hw.module @issue525(%struct: i2, %else: i2) -> (%casex: i2) {
-  %2 = comb.add %struct, %else : i2
-  hw.output %2 : i2
-}
-// CHECK-LABEL: module issue525(
-// CHECK-NEXT: input  [1:0] struct_0, else_1,
-// CHECK-NEXT: output [1:0] casex_2);
-// CHECK: assign casex_2 = struct_0 + else_1;
-
-
 // https://github.com/llvm/circt/issues/438
 // CHECK-LABEL: module cyclic
 hw.module @cyclic(%a: i1) -> (%b: i1) {
@@ -659,16 +618,14 @@ hw.module.extern @DifferentResultMod() -> (%out1: i1, %out2: i2)
 
 // CHECK-LABEL: module out_of_order_multi_result(
 hw.module @out_of_order_multi_result() -> (%b: i1, %c: i2) {
-  // CHECK: wire       _T;
-  // CHECK: wire [1:0] _T_0;
+  // CHECK: wire       b1_out1;
+  // CHECK: wire [1:0] b1_out2;
   %b = comb.add %out1, %out1 : i1
   %c = comb.add %out2, %out2 : i2
 
   %out1, %out2 = hw.instance "b1" @DifferentResultMod() : () -> (i1, i2)
 
-  // CHECK: assign _T_0 = b1_out2;
-  // CHECK: assign _T = b1_out1;
-  // CHECK: assign b = _T + _T;
-  // CHECK: assign c = _T_0 + _T_0;
+  // CHECK: assign b = b1_out1 + b1_out1;
+  // CHECK: assign c = b1_out2 + b1_out2;
   hw.output %b, %c : i1, i2
 }

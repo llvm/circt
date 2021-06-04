@@ -1,6 +1,6 @@
 <p align="center"><img src="docs/includes/img/circt-logo.svg"/></p>
 
-[![](https://github.com/circt/circt/workflows/Build%20and%20Test/badge.svg?event=push)](https://github.com/llvm/circt/actions?query=workflow%3A%22Build+and+Test%22)
+[![](https://github.com/llvm/circt/workflows/Build%20and%20Test/badge.svg?event=push)](https://github.com/llvm/circt/actions?query=workflow%3A%22Build+and+Test%22)
 [![Nightly integration tests](https://github.com/llvm/circt/workflows/Nightly%20integration%20tests/badge.svg)](https://github.com/llvm/circt/actions?query=workflow%3A%22Nightly+integration+tests%22)
 
 # ⚡️ "CIRCT" / Circuit IR Compilers and Tools
@@ -68,7 +68,7 @@ so feel free to use the current version of LLVM, but APIs may have
 changed.
 
 ```
-$ git clone git@github.com:circt/circt.git
+$ git clone git@github.com:llvm/circt.git
 $ cd circt
 $ git submodule init
 $ git submodule update

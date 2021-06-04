@@ -23,8 +23,14 @@ def NonConstantOp : Constraint<CPred<"!$0.getDefiningOp<ConstantOp>()">>;
 // there are no FIRRTL annotation on an operation.
 def EmptyAttrDict : Constraint<CPred<"$0.empty()">>;
 
-// Constraint that enforces equal EqualTypes
+// Constraint that enforces equal types
 def EqualTypes : Constraint<CPred<"$0.getType() == $1.getType()">>;
+
+// Constraint that enforces types of known width
+def KnownWidth : Constraint<CPred<[{
+  $0.getType().isa<FIRRTLType>() &&
+    $0.getType().cast<FIRRTLType>().getBitWidthOrSentinel() >= 0
+  }]>>;
 
 // leq(const, x) -> geq(x, const)
 def LEQWithConstLHS : Pat<
@@ -53,22 +59,37 @@ def GTWithConstLHS : Pat<
 // mux(cond, x, mux(cond, y, z)) -> mux(cond, x, z)
 def MuxSameCondLow : Pat<
   (MuxPrimOp $cond, $x, (MuxPrimOp $cond, $y, $z)),
-  (MuxPrimOp $cond, $x, $z),
-  [(EqualTypes $x, $y),(EqualTypes $x, $z)]
-  >;
+  (MuxPrimOp $cond, $x, $z), [
+    (EqualTypes $x, $y), (EqualTypes $x, $z), (KnownWidth $x)
+  ]>;
 
 // mux(cond, mux(cond, y, z), x) -> mux(cond, y, x)
 def MuxSameCondHigh : Pat<
   (MuxPrimOp $cond, (MuxPrimOp $cond, $y, $z), $x),
-  (MuxPrimOp $cond, $y, $x),
-  [(EqualTypes $x, $y),(EqualTypes $x, $z)]
-
-  >;
+  (MuxPrimOp $cond, $y, $x), [
+    (EqualTypes $x, $y), (EqualTypes $x, $z), (KnownWidth $x)
+  ]>;
 
 // node(x, name, {}) -> x
 def EmptyNode : Pat<
   (NodeOp $x, $name, $annotations),
   (replaceWithValue $x),
   [(EmptyAttrDict $annotations)]>;
+
+// regreset(clock, invalidvalue, resetValue, name, {}) -> reg(clock, name, {})
+def RegresetWithInvalidReset : Pat<
+  (RegResetOp $clock, (InvalidValueOp), $resetValue, $name, $annotations),
+  (RegOp $clock, $name, $annotations),
+  []>;
+
+// Constraint that has a constant zero value.
+def ZeroValueAttr : Constraint<CPred<"$0.getAPSInt().getExtValue() == 0">>;
+
+// regreset(clock, constant_zero, resetValue, name, {}) -> reg(clock, name, {})
+def RegresetWithZeroReset : Pat<
+  (RegResetOp $clock, (AsAsyncResetPrimOp (ConstantOp $value)), $resetValue,
+   $name, $annotations),
+  (RegOp $clock, $name, $annotations),
+  [(ZeroValueAttr $value)]>;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD

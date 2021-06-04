@@ -99,10 +99,10 @@ hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (i50) {
   %idx = constant 13 : i10
   // CHECK-NEXT: = hw.array_slice %arg2 at %c13_i10 : (!hw.array<1000xi8>) -> !hw.array<24xi8>
   %subArray = hw.array_slice %arg2 at %idx : (!hw.array<1000xi8>) -> !hw.array<24xi8>
-  // CHECK-NEXT: [[ARR1:%.+]] = hw.array_create [[RES9]], [[RES10]] : (i19)
-  %arrCreated = hw.array_create %small1, %small2 : (i19)
-  // CHECK-NEXT: [[ARR2:%.+]] = hw.array_create [[RES9]], [[RES10]], {{.+}} : (i19)
-  %arr2 = hw.array_create %small1, %small2, %add : (i19)
+  // CHECK-NEXT: [[ARR1:%.+]] = hw.array_create [[RES9]], [[RES10]] : i19
+  %arrCreated = hw.array_create %small1, %small2 : i19
+  // CHECK-NEXT: [[ARR2:%.+]] = hw.array_create [[RES9]], [[RES10]], {{.+}} : i19
+  %arr2 = hw.array_create %small1, %small2, %add : i19
   // CHECK-NEXT: = hw.array_concat [[ARR1]], [[ARR2]] : !hw.array<2xi19>, !hw.array<3xi19>
   %bigArray = hw.array_concat %arrCreated, %arr2 : !hw.array<2 x i19>, !hw.array<3 x i19>
 
@@ -127,8 +127,8 @@ hw.module @signed_arrays(%arg0: si8) -> (%out: !hw.array<2xsi8>) {
   // CHECK-NEXT:  %wireArray = sv.wire  : !hw.inout<array<2xsi8>>
   %wireArray = sv.wire : !hw.inout<!hw.array<2xsi8>>
 
-  // CHECK-NEXT: %0 = hw.array_create %arg0, %arg0 : (si8)
-  %0 = hw.array_create %arg0, %arg0 : (si8)
+  // CHECK-NEXT: %0 = hw.array_create %arg0, %arg0 : si8
+  %0 = hw.array_create %arg0, %arg0 : si8
 
   // CHECK-NEXT: sv.connect %wireArray, %0 : !hw.array<2xsi8>
   sv.connect %wireArray, %0 : !hw.array<2xsi8>

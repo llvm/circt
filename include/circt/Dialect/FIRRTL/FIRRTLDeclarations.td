@@ -204,6 +204,7 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
 
   let assemblyFormat =
     "operands custom<ImplicitSSAName>(attr-dict) `:` functional-type(operands, $result)";
+  let hasCanonicalizeMethod = true;
 }
 
 def RegResetOp : FIRRTLOp<"regreset", [/*MemAlloc*/]> {
@@ -234,6 +235,8 @@ def RegResetOp : FIRRTLOp<"regreset", [/*MemAlloc*/]> {
 
   let assemblyFormat =
      "operands custom<ImplicitSSAName>(attr-dict) `:` functional-type(operands, $result)";
+
+  let hasCanonicalizer = true;
 }
 
 def WireOp : FIRRTLOp<"wire", []> {

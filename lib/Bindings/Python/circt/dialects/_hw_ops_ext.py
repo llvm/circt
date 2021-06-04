@@ -20,56 +20,40 @@ class InstanceBuilder(support.NamedValueOpView):
                sym_name=None,
                loc=None,
                ip=None):
-    # Lazily import dependencies to avoid cyclic dependencies.
-    from ._hw_ops_gen import InstanceOp
-
-    # Create mappings from port name to value, index, and potentially backedge.
-    operand_indices = {}
-    operand_values = []
-    result_indices = {}
-    backedges = {}
-
-    arg_names = ArrayAttr(module.attributes["argNames"])
-    for i in range(len(arg_names)):
-      arg_name = StringAttr(arg_names[i]).value
-      operand_indices[arg_name] = i
-
-      if arg_name in input_port_mapping:
-        value = input_port_mapping[arg_name]
-        if not isinstance(value, Value):
-          value = input_port_mapping[arg_name].value
-        operand_values.append(value)
-      else:
-        type = module.type.inputs[i]
-        backedge = support.BackedgeBuilder.create(
-            type, arg_name, self, instance_of=module)
-        backedges[i] = backedge
-        operand_values.append(backedge.result)
-
-    result_names = ArrayAttr(module.attributes["resultNames"])
-    for i in range(len(result_names)):
-      result_name = StringAttr(result_names[i]).value
-      result_indices[result_name] = i
-
-    # Actually build the InstanceOp.
+    self.module = module
     instance_name = StringAttr.get(name)
     module_name = FlatSymbolRefAttr.get(StringAttr(module.name).value)
     parameters = {k: Attribute.parse(str(v)) for (k, v) in parameters.items()}
     parameters = DictAttr.get(parameters)
     if sym_name:
       sym_name = StringAttr.get(sym_name)
-    instance = InstanceOp(
-        module.type.results,
-        instance_name,
-        module_name,
-        operand_values,
-        parameters,
-        sym_name,
-        loc=loc,
-        ip=ip,
-    )
+    pre_args = [instance_name, module_name]
+    post_args = [parameters, sym_name]
 
-    super().__init__(instance, operand_indices, result_indices, backedges)
+    super().__init__(hw.InstanceOp,
+                     module.type.results,
+                     input_port_mapping,
+                     pre_args,
+                     post_args,
+                     loc=loc,
+                     ip=ip)
+
+  def create_default_value(self, index, data_type, arg_name):
+    type = self.module.type.inputs[index]
+    return support.BackedgeBuilder.create(type,
+                                          arg_name,
+                                          self,
+                                          instance_of=self.module)
+
+  def operand_names(self):
+    arg_names = ArrayAttr(self.module.attributes["argNames"])
+    arg_name_attrs = map(StringAttr, arg_names)
+    return list(map(lambda s: s.value, arg_name_attrs))
+
+  def result_names(self):
+    arg_names = ArrayAttr(self.module.attributes["resultNames"])
+    arg_name_attrs = map(StringAttr, arg_names)
+    return list(map(lambda s: s.value, arg_name_attrs))
 
 
 class ModuleLike:
@@ -155,13 +139,13 @@ class ModuleLike:
 
   def create(self,
              name: str,
-             input_port_mapping: Dict[str, Value] = {},
              parameters: Dict[str, object] = {},
              loc=None,
-             ip=None):
+             ip=None,
+             **kwargs):
     return InstanceBuilder(self,
                            name,
-                           input_port_mapping,
+                           kwargs,
                            parameters=parameters,
                            loc=loc,
                            ip=ip)
@@ -178,7 +162,7 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
       # If it does, the return from body_builder must be None.
       if bb_ret is not None and bb_ret != last_op:
         raise support.ConnectionError(
-          "Cannot return value from body_builder and create hw.OutputOp")
+            "Cannot return value from body_builder and create hw.OutputOp")
       return
 
   # If builder didn't create an output op and didn't return anything, this op
@@ -215,7 +199,7 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
     raise support.UnconnectedSignalError(cls_name, unconnected_ports)
   if len(bb_ret) > 0:
     raise support.ConnectionError(
-      f"Could not map the follow to ports in {cls_name}: {bb_ret.keys}")
+        f"Could not map the follow to ports in {cls_name}: {bb_ret.keys}")
 
   hw.OutputOp(outputs)
 
@@ -356,3 +340,10 @@ class HWModuleOp(ModuleLike):
 class HWModuleExternOp(ModuleLike):
   """Specialization for the HW module op class."""
   pass
+
+
+class ConstantOp:
+
+  @staticmethod
+  def create(data_type, value):
+    return hw.ConstantOp(data_type, IntegerAttr.get(data_type, value))

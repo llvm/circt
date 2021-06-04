@@ -429,6 +429,22 @@ getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
   return sstr.str();
 }
 
+/// Append a path to an existing path, replacing it if the other path is
+/// absolute. This mimicks the behaviour of `foo/bar` and `/foo/bar` being used
+/// in a working directory `/home`, resulting in `/home/foo/bar` and `/foo/bar`,
+/// respectively.
+// TODO: This also exists in BlackBoxReader.cpp. Maybe we should move this to
+// some CIRCT-wide file system utility source file?
+static void appendPossiblyAbsolutePath(SmallVectorImpl<char> &base,
+                                       const Twine &suffix) {
+  if (llvm::sys::path::is_absolute(suffix)) {
+    base.clear();
+    suffix.toVector(base);
+  } else {
+    llvm::sys::path::append(base, suffix);
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // VerilogEmitter
 //===----------------------------------------------------------------------===//
@@ -599,6 +615,8 @@ public:
     return addName(valueOrOp, nameAttr ? nameAttr.getValue() : "");
   }
 
+  StringRef addLegalName(ValueOrOp valueOrOp, StringRef name, Operation *op);
+
   StringRef getName(Value value) { return getName(ValueOrOp(value)); }
   StringRef getName(ValueOrOp valueOrOp) {
     auto entry = nameTable.find(valueOrOp);
@@ -606,6 +624,8 @@ public:
            "value expected a name but doesn't have one");
     return entry->getSecond();
   }
+
+  bool hasName(Value value) { return nameTable.count(ValueOrOp(value)); }
 
   void verifyModuleName(Operation *, StringAttr nameAttr);
 
@@ -641,6 +661,18 @@ StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
   auto updatedName = legalizeName(name, usedNames, nextGeneratedNameID);
   if (valueOrOp)
     nameTable[valueOrOp] = updatedName;
+  return updatedName;
+}
+
+/// Add the specified name to the name table, emitting an error message if the
+/// name empty or is changed by uniqing.
+StringRef ModuleEmitter::addLegalName(ValueOrOp valueOrOp, StringRef name,
+                                      Operation *op) {
+  auto updatedName = addName(valueOrOp, name);
+  if (name.empty())
+    emitOpError(op, "should have non-empty name");
+  else if (updatedName != name)
+    emitOpError(op, "name '") << name << "' changed during emission";
   return updatedName;
 }
 
@@ -1416,29 +1448,10 @@ void NameCollector::collectNames(Block &block) {
   for (auto &op : block) {
     bool isExpr = isVerilogExpression(&op);
 
-    // If the op is an instance, add its name to the name table as an op.
+    // Instances are handled in prepareHWModule
     auto instance = dyn_cast<InstanceOp>(&op);
-    if (instance) {
-      moduleEmitter.addName(ValueOrOp(instance), instance.instanceName());
-
-      // The names for instance results is handled specially.
-      nameTmp = moduleEmitter.getName(ValueOrOp(instance)).str() + "_";
-      auto namePrefixSize = nameTmp.size();
-
-      size_t nextResultNo = 0;
-      for (auto &port : getModulePortInfo(instance.getReferencedModule())) {
-        if (!port.isOutput())
-          continue;
-
-        nameTmp.resize(namePrefixSize);
-        if (port.name)
-          nameTmp += port.name.getValue().str();
-        else
-          nameTmp += std::to_string(nextResultNo);
-        moduleEmitter.addName(instance.getResult(nextResultNo), nameTmp);
-        ++nextResultNo;
-      }
-    }
+    if (instance)      
+      continue;
 
     for (auto result : op.getResults()) {
       // If this is an expression emitted inline or unused, it doesn't need a
@@ -1455,7 +1468,7 @@ void NameCollector::collectNames(Block &block) {
       // Otherwise, it must be an expression or a declaration like a
       // RegOp/WireOp.  Remember and unique the name for this result.  Instances
       // are handled separately.
-      if (!instance)
+      if (!instance && !moduleEmitter.hasName(result))
         moduleEmitter.addName(result, op.getAttrOfType<StringAttr>("name"));
 
       // Don't measure or emit wires that are emitted inline (i.e. the wire
@@ -1745,6 +1758,11 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
 }
 
 LogicalResult StmtEmitter::visitSV(ConnectOp op) {
+  // prepare connects wires to instance outputs, but these are logically handled
+  // in the port binding list when outputing an instance.
+  if (dyn_cast_or_null<InstanceOp>(op.src().getDefiningOp()))
+    return success();
+
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -2245,6 +2263,10 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     maxNameLength = std::max(maxNameLength, elt.getName().size());
   }
 
+  auto getWireForValue = [&](Value result) {
+    return result.getUsers().begin()->getOperand(0);
+  };
+
   // Emit the argument and result ports.
   auto opArgs = op.inputs();
   auto opResults = op.getResults();
@@ -2291,6 +2313,9 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 
     // Emit the value as an expression.
     ops.clear();
+    // output ports were lowered to wire
+    if (elt.isOutput())
+      portVal = getWireForValue(portVal);
     emitExpression(portVal, ops);
     os << ')';
   }
@@ -2313,7 +2338,7 @@ LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
 
 LogicalResult StmtEmitter::visitSV(InterfaceSignalOp op) {
   indent();
-  printPackedType(op.type(), os, op, false);
+  printPackedType(stripUnpackedTypes(op.type()), os, op, false);
   os << ' ' << op.sym_name();
   printUnpackedTypePostfix(op.type(), os);
   os << ";\n";
@@ -2476,8 +2501,55 @@ void ModuleEmitter::emitHWGeneratedModule(HWModuleGeneratedOp module) {
   os << "// external generated module " << verilogName.getValue() << "\n\n";
 }
 
-// Given a side effect free "always inline" operation, make sure that it exists
-// in the same block as its users and that it has one use for each one.
+static bool onlyUseIsConnect(Value v) {
+  if (!v.hasOneUse())
+    return false;
+  if (!dyn_cast_or_null<ConnectOp>(v.getDefiningOp()))
+    return false;
+  return true;
+}
+
+//Ensure that each output of an instance are used only by a wire
+static void lowerInstanceResults(InstanceOp op) {
+  Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
+  auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
+
+  SmallString<32> nameTmp;
+  nameTmp = (op.instanceName() + "_").str();
+  auto namePrefixSize = nameTmp.size();
+
+  size_t nextResultNo = 0;
+  for (auto &port : getModulePortInfo(op.getReferencedModule())) {
+    if (!port.isOutput())
+      continue;
+
+    auto result = op.getResult(nextResultNo);
+    ++nextResultNo;
+
+    if (onlyUseIsConnect(result))
+      continue;
+
+    nameTmp.resize(namePrefixSize);
+    if (port.name)
+      nameTmp += port.name.getValue().str();
+    else
+      nameTmp += std::to_string(nextResultNo-1);
+
+    auto newWire = builder.create<WireOp>(result.getType(), nameTmp);
+    while (!result.use_empty()) {
+      auto newWireRead = builder.create<ReadInOutOp>(newWire);
+      OpOperand &use = *result.getUses().begin();
+      use.set(newWireRead);
+      newWireRead->moveBefore(use.getOwner());
+    }
+
+    auto connect = builder.create<ConnectOp>(newWire, result);
+    connect->moveAfter(op);
+  }
+}
+
+// Given a side effect free "always inline" operation, make sure that it
+// exists in the same block as its users and that it has one use for each one.
 static void lowerAlwaysInlineOperation(Operation *op) {
   assert(op->getNumResults() == 1 &&
          "only support 'always inline' ops with one result");
@@ -2488,9 +2560,9 @@ static void lowerAlwaysInlineOperation(Operation *op) {
     return;
   }
 
-  // Moving/cloning an op should pull along its operand tree with it if they are
-  // always inline.  This happens when an array index has a constant operand for
-  // example.
+  // Moving/cloning an op should pull along its operand tree with it if they
+  // are always inline.  This happens when an array index has a constant
+  // operand for example.
   auto recursivelyHandleOperands = [](Operation *op) {
     for (auto operand : op->getOperands()) {
       if (auto *operandOp = operand.getDefiningOp())
@@ -2499,7 +2571,8 @@ static void lowerAlwaysInlineOperation(Operation *op) {
     }
   };
 
-  // If this operation has multiple uses, duplicate it into N-1 of them in turn.
+  // If this operation has multiple uses, duplicate it into N-1 of them in
+  // turn.
   while (!op->hasOneUse()) {
     OpOperand &use = *op->getUses().begin();
     Operation *user = use.getOwner();
@@ -2528,8 +2601,8 @@ static void lowerAlwaysInlineOperation(Operation *op) {
   return;
 }
 
-/// We lower the Merge operation to a wire at the top level along with connects
-/// to it and a ReadInOut.
+/// We lower the Merge operation to a wire at the top level along with
+/// connects to it and a ReadInOut.
 static Value lowerMergeOp(MergeOp merge) {
   auto module = merge->getParentOfType<HWModuleOp>();
   assert(module && "merges should only be in a module");
@@ -2642,6 +2715,20 @@ void ModuleEmitter::prepareHWModule(Block &block) {
       op.erase();
       continue;
     }
+
+    // Name legalization should have happened in a different pass for these sv
+    // elements and we don't want to change their name through re-legalization
+    // (e.g. letting a temporary take the name of an unvisited wire). Adding
+    // them now ensures any temporary generated will not use one of the names
+    // previously declared.
+    if (auto instance = dyn_cast<InstanceOp>(op)) {
+      // Anchor return values to wires early
+      lowerInstanceResults(instance);
+      addLegalName(ValueOrOp(&op), instance.instanceName(), &op);
+    } else if (auto wire = dyn_cast<WireOp>(op))
+      addLegalName(ValueOrOp(op.getResult(0)), wire.name(), &op);
+    else if (auto regOp = dyn_cast<RegOp>(op))
+      addLegalName(ValueOrOp(op.getResult(0)), regOp.name(), &op);
   }
 
   // Now that all the basic ops are settled, check for any use-before def issues
@@ -2710,9 +2797,9 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
       name = "<<NO-NAME-FOUND>>";
     }
     if (port.isOutput())
-      outputNames.push_back(addName(ValueOrOp(), name));
+      outputNames.push_back(addLegalName(ValueOrOp(), name, module));
     else
-      addName(module.getArgument(port.argNum), name);
+      addLegalName(module.getArgument(port.argNum), name, module);
   }
 
   auto moduleNameAttr = module.getNameAttr();
@@ -2906,10 +2993,10 @@ void RootEmitterBase::gatherFiles(bool separateModules) {
                               << " on " << op << "\n";);
 
       if (auto directory = attr.directory())
-        llvm::sys::path::append(outputPath, directory.getValue());
+        appendPossiblyAbsolutePath(outputPath, directory.getValue());
 
       if (auto name = attr.name()) {
-        llvm::sys::path::append(outputPath, name.getValue());
+        appendPossiblyAbsolutePath(outputPath, name.getValue());
         hasFileName = true;
       }
 
@@ -3095,7 +3182,7 @@ void SplitEmitter::createFile(const LoweringOptions &options,
                               Identifier fileName, FileInfo &file) {
   // Determine the output path from the output directory and filename.
   SmallString<128> outputFilename(dirname);
-  llvm::sys::path::append(outputFilename, fileName.strref());
+  appendPossiblyAbsolutePath(outputFilename, fileName.strref());
   auto outputDir = llvm::sys::path::parent_path(outputFilename);
 
   // Create the output directory if needed.

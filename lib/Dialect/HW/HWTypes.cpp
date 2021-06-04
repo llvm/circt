@@ -94,7 +94,7 @@ int64_t circt::hw::getBitWidth(mlir::Type type) {
   return llvm::TypeSwitch<::mlir::Type, size_t>(type)
       .Case<IntegerType>(
           [](IntegerType t) { return t.getIntOrFloatBitWidth(); })
-      .Case<ArrayType>([](ArrayType a) {
+      .Case<ArrayType, UnpackedArrayType>([](auto a) {
         int64_t elementBitWidth = getBitWidth(a.getElementType());
         if (elementBitWidth < 0)
           return elementBitWidth;

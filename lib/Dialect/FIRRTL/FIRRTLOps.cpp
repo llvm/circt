@@ -21,6 +21,7 @@
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using mlir::RegionRange;
@@ -62,12 +63,6 @@ removeElementsAtIndices(ArrayRef<T> input, ArrayRef<unsigned> indicesToDrop) {
     result.append(input.begin() + lastCopied, input.end());
 
   return result;
-}
-
-bool firrtl::isBundleType(Type type) {
-  if (auto flipType = type.dyn_cast<FlipType>())
-    return flipType.getElementType().isa<FlipType>();
-  return type.isa<BundleType>();
 }
 
 bool firrtl::isDuplexValue(Value val) {
@@ -306,10 +301,12 @@ SmallVector<ModulePortInfo> firrtl::getModulePortInfo(Operation *op) {
 
   auto portNamesAttr = getModulePortNames(op);
   auto portDirections = getModulePortDirections(op).getValue();
+  auto portAnnotations = getModulePortAnnotations(op);
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     auto type = argTypes[i].cast<FIRRTLType>();
     auto direction = direction::get(portDirections[i]);
-    results.push_back({portNamesAttr[i].cast<StringAttr>(), type, direction});
+    results.push_back({portNamesAttr[i].cast<StringAttr>(), type, direction,
+                       portAnnotations[i]});
   }
   return results;
 }
@@ -323,6 +320,11 @@ StringAttr firrtl::getModulePortName(Operation *op, size_t portIndex) {
 Direction firrtl::getModulePortDirection(Operation *op, size_t portIndex) {
   assert(isa<FModuleOp>(op) || isa<FExtModuleOp>(op));
   return direction::get(getModulePortDirections(op).getValue()[portIndex]);
+}
+
+ArrayAttr getModulePortAnnotation(Operation *op, size_t portIndex) {
+  assert(isa<FModuleOp>(op) || isa<FExtModuleOp>(op));
+  return getModulePortAnnotations(op)[portIndex].cast<ArrayAttr>();
 }
 
 // Return the port with the specified name.
@@ -2015,6 +2017,25 @@ FIRRTLType TailPrimOp::inferReturnType(ValueRange operands,
   }
 
   return IntType::get(input.getContext(), false, width);
+}
+
+//===----------------------------------------------------------------------===//
+// VerbatimExprOp
+//===----------------------------------------------------------------------===//
+
+void VerbatimExprOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  // If the text is macro like, then use a pretty name.  We only take the
+  // text up to a weird character (like a paren) and currently ignore
+  // parenthesized expressions.
+  auto isOkCharacter = [](char c) { return llvm::isAlnum(c) || c == '_'; };
+  auto name = text();
+  // Ignore a leading ` in macro name.
+  if (name.startswith("`"))
+    name = name.drop_front();
+  name = name.take_while(isOkCharacter);
+  if (!name.empty())
+    setNameFn(getResult(), name);
 }
 
 //===----------------------------------------------------------------------===//

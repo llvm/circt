@@ -23,19 +23,17 @@ class TestESISys(esi.System):
     self.load_mlir(path.join(thisDir, "esi_load1.mlir"))
     self.load_mlir(path.join(thisDir, "esi_load2.mlir"))
 
-    op = hw.HWModuleOp(name='MyWidget',
-                         input_ports=[('foo', types.i32),
-                                      ('foo_valid', types.i1)],
-                         output_ports=[('foo_ready', types.i1)],
-                         body_builder=lambda module: hw.OutputOp(
-                             [module.foo_valid]))
+    op = hw.HWModuleOp(
+        name='MyWidget',
+        input_ports=[('foo', types.i32), ('foo_valid', types.i1)],
+        output_ports=[('foo_ready', types.i1)],
+        body_builder=lambda module: hw.OutputOp([module.foo_valid]))
 
     i32chan = types.chan(types.i32)
     hw.HWModuleOp(name='I32Snoop',
-                    input_ports=[('foo_in', i32chan)],
-                    output_ports=[('foo_out', i32chan)],
-                    body_builder=lambda module: hw.OutputOp(
-                        [module.foo_in]))
+                  input_ports=[('foo_in', i32chan)],
+                  output_ports=[('foo_out', i32chan)],
+                  body_builder=lambda module: hw.OutputOp([module.foo_in]))
 
     esi.buildWrapper(op.operation, ["foo"])
 

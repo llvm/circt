@@ -259,18 +259,18 @@ circuit Foo: %[[{"target": "Foo|Foo>_T_0", "a": "a"},
 
     ; CHECK: %0 = firrtl.wire  {annotations = [{a = "a"}]}
     wire _T_0 : UInt<1>
-    ; CHECK-NOT: firrtl.node
+    ; CHECK: %1 = firrtl.node
     node _T_1 = _T_0
-    ; CHECK: %1 = firrtl.reg %clock  {annotations = [{a = "a"}]}
+    ; CHECK: %2 = firrtl.reg %clock  {annotations = [{a = "a"}]}
     reg _T_2 : UInt<1>, clock
-    ; CHECK: %2 = firrtl.regreset %clock, %reset, %c0_ui4  {annotations = [{a = "a"}]}
+    ; CHECK: %3 = firrtl.regreset %clock, %reset, %c0_ui4  {annotations = [{a = "a"}]}
     reg _T_3 : UInt<4>, clock with :
       reset => (reset, UInt<4>("h0"))
-    ; CHECK: %3 = firrtl.smem Undefined  {annotations = [{a = "a"}], name = ""}
+    ; CHECK: %4 = firrtl.smem Undefined  {annotations = [{a = "a"}], name = ""}
     smem _T_4 : UInt<1>[9] [256]
-    ; CHECK: %4 = firrtl.cmem  {annotations = [{a = "a"}], name = ""}
+    ; CHECK: %5 = firrtl.cmem  {annotations = [{a = "a"}], name = ""}
     cmem _T_5 : UInt<1>[9] [256]
-    ; CHECK: %5 = firrtl.memoryport Infer %4, %reset, %clock {annotations = [{a = "a"}], name = ""}
+    ; CHECK: %6 = firrtl.memoryport Infer %5, %reset, %clock {annotations = [{a = "a"}], name = ""}
     infer mport _T_6 = _T_5[reset], clock
     ; CHECK: firrtl.instance @Bar  {annotations = [{a = "a"}], name = ""}
     inst _T_7 of Bar
@@ -329,6 +329,20 @@ circuit Foo: %[[{"target": "Foo|Foo>_T_0", "class": "firrtl.transforms.DontTouch
 
 ; // -----
 
+; Test that an annotated, anonymous node is preserved if annotated.  Normally,
+; the FIRRTL parser will aggressively eliminate these.
+circuit AnnotationsBlockNodePruning: %[[
+  {"a": null, "target": "~AnnotationsBlockNodePruning|AnnotationsBlockNodePruning>_T"}
+]]
+  module AnnotationsBlockNodePruning:
+    input a: UInt<1>
+    node _T = not(a)
+
+    ; CHECK-LABEL: firrtl.module @AnnotationsBlockNodePruning
+    ; CHECK: firrtl.node
+
+; // -----
+
 ; --------------------------------------------------------------------------------
 ; SiFive-custom annotations related to the GrandCentral utility.  These
 ; annotations do not conform to standard SingleTarget or NoTarget format and
@@ -364,6 +378,9 @@ circuit GCTDataTap : %[
         "portName":"~GCTDataTap|DataTap>_3"
       }
     ]
+  },
+  {
+    "unrelatedAnnotation": null
   }
 ]]
   extmodule DataTap :
@@ -388,6 +405,7 @@ circuit GCTDataTap : %[
     inst Blackbox of Blackbox
 
     ; CHECK-LABEL: firrtl.circuit "GCTDataTap"
+    ; CHECK-SAME: annotations = [{unrelatedAnnotation}]
     ; CHECK: firrtl.extmodule @DataTap
     ; CHECK-SAME: %_0: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = [[ID:[0-9]+]] : i64, portID = [[PORT_ID:[0-9]+]] : i64}]},
     ; CHECK-SAME: %_1: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey", id = [[ID]] : i64}]},
@@ -414,6 +432,9 @@ circuit GCTMemTap : %[
       "GCTMemTap.MemTap.mem[1]"
     ],
     "source":"~GCTMemTap|GCTMemTap>mem"
+  },
+  {
+    "unrelatedAnnotation": null
   }
 ]]
   extmodule MemTap :
@@ -433,6 +454,7 @@ circuit GCTMemTap : %[
     memTap[1] <= MemTap.mem[1]
 
     ; CHECK-LABEL: firrtl.circuit "GCTMemTap"
+    ; CHECK-SAME: annotations = [{unrelatedAnnotation}]
     ; CHECK: firrtl.extmodule @MemTap
     ; CHECK-SAME: %mem: [[A:.+]] {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = [[ID:.+]] : i64, target = ["[0]"]}, {class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = [[ID]] : i64, target = ["[1]"]}]
     ; CHECK: firrtl.module @GCTMemTap
@@ -450,6 +472,9 @@ circuit GCTInterface : %[
     "companion": "~GCTInterface|view_companion",
     "parent": "~GCTInterface|GCTInterface",
     "view": "{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"ViewName\",\"elements\":[{\"name\":\"register\",\"description\":\"the register in GCTInterface\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"register\",\"elements\":[{\"name\":\"_2\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedVectorType\",\"elements\":[{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"r\",\"component\":[{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_2\"},{\"class\":\"firrtl.annotations.TargetToken$Index\",\"value\":0}]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}},{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"r\",\"component\":[{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_2\"},{\"class\":\"firrtl.annotations.TargetToken$Index\",\"value\":1}]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}}]}},{\"name\":\"_0\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"_0\",\"elements\":[{\"name\":\"_1\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"r\",\"component\":[{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_0\"},{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_1\"}]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}}},{\"name\":\"_0\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"r\",\"component\":[{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_0\"},{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_0\"}]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}}}]}}]}},{\"name\":\"port\",\"description\":\"the port 'a' in GCTInterface\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"a\",\"component\":[]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}}}]}"
+  },
+  {
+    "unrelatedAnnotation": null
   }
 ]
 ]
@@ -468,9 +493,10 @@ circuit GCTInterface : %[
 
     ; The interface definitions should show up as circuit annotations.
     ; CHECK-SAME: annotations
-    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "_0", elements = [{name = "_1"}, {name = "_0"}]}
-    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "register", elements = [{name = "_2"}, {name = "_0"}]}
-    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "ViewName", elements = [{description = "the register in GCTInterface", name = "register"}, {description = "the port 'a' in GCTInterface", name = "port"}]}
+    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "_0", elements = [{name = "_1", tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}, {name = "_0", tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]}
+    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "register", elements = [{name = "_2", tpe = "sifive.enterprise.grandcentral.AugmentedVectorType"}, {name = "_0", tpe = "sifive.enterprise.grandcentral.AugmentedBundleType"}]}
+    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "ViewName", elements = [{description = "the register in GCTInterface", name = "register", tpe = "sifive.enterprise.grandcentral.AugmentedBundleType"}, {description = "the port 'a' in GCTInterface", name = "port", tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]}
+    ; CHECK-SAME: {unrelatedAnnotation}
 
     ; The companion should be marked.
     ; CHECK: firrtl.module @view_companion

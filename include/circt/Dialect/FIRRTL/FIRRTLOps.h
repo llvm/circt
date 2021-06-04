@@ -17,6 +17,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionSupport.h"
+#include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/RegionKindInterface.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
@@ -99,8 +100,11 @@ IntegerAttr getModulePortDirections(Operation *module);
 /// number.
 Direction getModulePortDirection(Operation *op, size_t portIndex);
 
-/// Returns true if the type is a bundle or a flip of a bundle.
-bool isBundleType(Type type);
+/// Return an array of the Annotations on each port of an FModule or ExtModule.
+SmallVector<ArrayAttr> getModulePortAnnotations(Operation *module);
+
+/// Return the annotations for a specific port of an FModule or ExtModule..
+ArrayAttr getModulePortAnnotation(Operation *op, size_t portIndex);
 
 /// Returns true if the value results from an expression with duplex flow.
 /// Duplex values have special treatment in bundle connect operations, and their
