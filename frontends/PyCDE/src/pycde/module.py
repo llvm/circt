@@ -168,6 +168,10 @@ class _Generate:
   def __init__(self, gen_func):
     self.gen_func = gen_func
 
+    # Track generated modules so we don't create unnecessary duplicates of
+    # modules that are structurally equivalent.
+    self.generated_modules = {}
+
   def _generate(self, mod):
     return self.gen_func(mod, self.params)
 
@@ -204,16 +208,21 @@ class _Generate:
     }
 
     # Build the replacement HWModuleOp in the outer module.
-    with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
-      mod = circt.dialects.hw.HWModuleOp(op.name,
-                                         input_ports=input_ports,
-                                         output_ports=output_ports,
-                                         body_builder=self._generate)
+    module_key = str((op.name, sorted(input_ports), sorted(output_ports),
+                      sorted(params.items())))
+    if not module_key in self.generated_modules:
+      with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
+        gen_mod = circt.dialects.hw.HWModuleOp(op.name,
+                                               input_ports=input_ports,
+                                               output_ports=output_ports,
+                                               body_builder=self._generate)
+        self.generated_modules[module_key] = gen_mod
 
     # Build a replacement instance at the op to be replaced.
     with mlir.ir.InsertionPoint(op):
       mapping = {name.value: op.operands[i] for i, name in enumerate(op_names)}
-      inst = mod.create(op.name, **mapping).operation
+      inst = self.generated_modules[module_key].create(op.name,
+                                                       **mapping).operation
       for (name, attr) in attrs.items():
         inst.attributes[name] = attr
       return inst
