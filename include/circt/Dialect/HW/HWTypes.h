@@ -14,38 +14,29 @@
 #ifndef CIRCT_DIALECT_HW_TYPES_H
 #define CIRCT_DIALECT_HW_TYPES_H
 
+#include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Types.h"
 
 namespace circt {
 namespace hw {
+class ArrayType;
 class TypedeclOp;
-class TypeAliasType;
 
-template <typename BaseTy>
-class TypeAliasOr
-    : public ::mlir::Type::TypeBase<TypeAliasOr<BaseTy>, mlir::Type,
-                                    mlir::TypeStorage> {
-  using mlir::Type::TypeBase<TypeAliasOr<BaseTy>, mlir::Type,
-                             mlir::TypeStorage>::Base::Base;
+/// Base class for all concrete HW dialect types.
+class HWType
+    : public ::mlir::Type::TypeBase<HWType, mlir::Type, mlir::TypeStorage> {
+  using Base::Base;
 
 public:
-  // Support casting to either the base type or a type alias.
-  static bool classof(Type other) {
-    return other.isa<BaseTy>() || other.isa<TypeAliasType>();
-  }
+  /// Support method to enable LLVM-style type casting.
+  static bool classof(Type type);
 
-  // Either cast to the base type or get the alias's canonical type and cast
-  // that to the base type. Returns null if the alias does not canonicalize to
-  // the correct base type.
-  BaseTy getCanonicalType() {
-    if (auto base = this->template dyn_cast<BaseTy>())
-      return base;
+  /// Predicates to support querying the concrete type.
+  bool isArrayType();
 
-    return this->template cast<TypeAliasType>()
-        .getInnerType()
-        .template dyn_cast<BaseTy>();
-  }
+  /// Getters to support casting to the concrete type.
+  ArrayType getAsArrayType();
 };
 
 namespace detail {

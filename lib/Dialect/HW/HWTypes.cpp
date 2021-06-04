@@ -22,6 +22,7 @@
 #include "mlir/IR/Types.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/ErrorHandling.h"
 
 using namespace circt;
 using namespace circt::hw;
@@ -173,6 +174,40 @@ static void printHWElementType(Type element, DialectAsmPrinter &p) {
   if (succeeded(generatedTypePrinter(element, p)))
     return;
   p.printType(element);
+}
+
+//===----------------------------------------------------------------------===//
+// Base HWType
+//===----------------------------------------------------------------------===//
+
+/// Support method to enable LLVM-style type casting.
+bool circt::hw::HWType::classof(Type type) {
+  return llvm::isa<HWDialect>(type.getDialect());
+}
+
+/// Predicates to support querying the concrete type.
+bool circt::hw::HWType::isArrayType() {
+  if (isa<ArrayType>())
+    return true;
+
+  if (auto alias = dyn_cast<TypeAliasType>())
+    return alias.getInnerType().isa<ArrayType>();
+
+  return false;
+}
+
+/// Getters to support casting to the concrete type.
+ArrayType circt::hw::HWType::getAsArrayType() {
+  assert(isArrayType() && "concrete type must be convertible to ArrayType");
+
+  if (isa<ArrayType>())
+    return cast<ArrayType>();
+
+  if (auto alias = dyn_cast<TypeAliasType>())
+    if (auto arrayAlias = alias.getInnerType().cast<ArrayType>())
+      return arrayAlias;
+
+  llvm_unreachable("unhandled ArrayType");
 }
 
 //===----------------------------------------------------------------------===//

@@ -104,8 +104,8 @@ def ArraySliceOp : HWOp<"array_slice", [NoSideEffect]> {
   let arguments = (ins ArrayType:$input, HWIntegerType:$lowIndex);
   let results = (outs ArrayType:$dst);
   let verifier = [{
-    unsigned inputSize = input().getType().cast<TypeAliasOr<ArrayType>>()
-        .getCanonicalType().getSize();
+    unsigned inputSize = input().getType().cast<HWType>()
+        .getAsArrayType().getSize();
     if (llvm::Log2_64_Ceil(inputSize) !=
           lowIndex().getType().getIntOrFloatBitWidth())
       return emitOpError(
@@ -124,15 +124,14 @@ class IndexBitWidthConstraint<string index, string input>
                    input, index,
                    [{
     IntegerType::get($_self.getContext(),
-                     llvm::Log2_64_Ceil($_self.cast<TypeAliasOr<ArrayType>>()
-                         .getCanonicalType().getSize()))
+                     llvm::Log2_64_Ceil($_self.cast<HWType>()
+                         .getAsArrayType().getSize()))
                    }]>;
 
 class ArrayElementTypeConstraint<string result, string input>
   : TypesMatchWith<"Result must be arrays element type",
                    input, result,
-                   "$_self.cast<TypeAliasOr<ArrayType>>()" #
-                       ".getCanonicalType().getElementType()">;
+                   "$_self.cast<HWType>().getAsArrayType().getElementType()">;
 
 // hw.array_get does not work with unpacked arrays.
 def ArrayGetOp : HWOp<"array_get",
