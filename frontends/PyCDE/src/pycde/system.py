@@ -45,7 +45,12 @@ class System:
 
   def generate(self):
     pm = mlir.passmanager.PassManager.parse("run-generators")
-    pm.run(self.mod)
+    try:
+      pm.run(self.mod)
+    except Exception as e:
+      print("!!!!! IR dump on generator exception")
+      self.print()
+      raise e
 
   def run_passes(self):
     if self.passed:

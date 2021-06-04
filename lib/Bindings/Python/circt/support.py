@@ -47,15 +47,17 @@ def connect(destination, source):
 
   index = destination.index
   destination.operation.operands[index] = value
-  if isinstance(destination, BuilderValue) and \
-     index in destination.builder.backedges:
-    destination.builder.backedges[index].erase()
+  if destination.backedge_owner and \
+     index in destination.backedge_owner.backedges:
+    destination.backedge_owner.backedges[index].erase()
 
 
 def var_to_attribute(obj, none_on_fail: bool = False) -> ir.Attribute:
   """Create an MLIR attribute from a Python object for a few common cases."""
   if isinstance(obj, ir.Attribute):
     return obj
+  if isinstance(obj, bool):
+    return ir.BoolAttr.get(obj)
   if isinstance(obj, int):
     attrTy = ir.IntegerType.get_signless(64)
     return ir.IntegerAttr.get(attrTy, obj)
@@ -131,10 +133,6 @@ class BackedgeBuilder(AbstractContextManager):
       if edge.op_view is not None:
         op = edge.op_view.operation
         msg += "Instance:   " + str(op)
-        op.erase()
-      edge.erase()
-
-      # Clean up the IR and Python references.
       errors.append(msg)
 
     if errors:
@@ -143,23 +141,24 @@ class BackedgeBuilder(AbstractContextManager):
 
 
 class OpOperand:
-  __slots__ = ["index", "operation", "value"]
+  __slots__ = ["index", "operation", "value", "backedge_owner"]
 
-  def __init__(self, operation, index, value):
+  def __init__(self, operation, index, value, backedge_owner=None):
     self.index = index
     self.operation = operation
     self.value = value
+    self.backedge_owner = backedge_owner
 
 
-# Are there any situations in which this needs to be used to index into results?
-class BuilderValue(OpOperand):
-  """Class that holds a value, as well as builder and index of this value in
-     the operand or result list. This can represent an OpOperand and index into
-     OpOperandList or a OpResult and index into an OpResultList"""
+# # Are there any situations in which this needs to be used to index into results?
+# class BuilderValue(OpOperand):
+#   """Class that holds a value, as well as builder and index of this value in
+#      the operand or result list. This can represent an OpOperand and index into
+#      OpOperandList or a OpResult and index into an OpResultList"""
 
-  def __init__(self, value, builder, index):
-    super().__init__(builder.operation, index, value)
-    self.builder = builder
+#   def __init__(self, value, builder, index):
+#     super().__init__(builder.operation, index, value)
+#     self.builder = builder
 
 
 class NamedValueOpView:
@@ -212,13 +211,13 @@ class NamedValueOpView:
     if name in self.operand_indices:
       index = self.operand_indices[name]
       value = self.opview.operands[index]
-      return BuilderValue(value, self, index)
+      return OpOperand(value, index, self)
 
     # Check for the attribute in the result name set.
     if name in self.result_indices:
       index = self.result_indices[name]
       value = self.opview.results[index]
-      return BuilderValue(value, self, index)
+      return OpOperand(value, index, self)
 
     # If we fell through to here, the name isn't a result.
     raise AttributeError(f"unknown port name {name}")

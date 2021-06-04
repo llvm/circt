@@ -174,7 +174,7 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
     raise support.ConnectionError("Must return module output values")
 
   # Now create the output op depending on the object type returned
-  outputs: list[value] = list()
+  outputs: list[Value] = list()
 
   # Only acceptable return is a dict of port, value mappings.
   if not isinstance(bb_ret, dict):
@@ -221,6 +221,12 @@ class HWModuleOp(ModuleLike):
       index = self.input_indices[name]
       return self.entry_block.arguments[index]
     raise AttributeError(f"unknown input port name {name}")
+
+  def inputs(self) -> dict[str:Value]:
+    ret = {}
+    for (name, idx) in self.input_indices.items():
+      ret[name] = self.entry_block.arguments[idx]
+    return ret
 
   def add_entry_block(self):
     if not self.is_external:
