@@ -20,6 +20,7 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/Parallel.h"
 #include <algorithm>
 
@@ -487,10 +488,16 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
 
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
   flattenType(type, "", false, fieldTypes);
-  unsigned mergedBitwidth = 0;
+  size_t mergedBitwidth = 0;
   std::string fieldSuffix;
+  size_t maskSize = fieldTypes.size() == 1 ? 1 : 0;
   for (auto fT : fieldTypes) {
-    mergedBitwidth += fT.type.getBitWidthOrSentinel();
+    auto bits = fT.type.getBitWidthOrSentinel();
+    if (maskSize == 0)
+      maskSize = bits;
+    else
+      maskSize = llvm::GreatestCommonDivisor64(maskSize, bits);
+    mergedBitwidth += bits;
   }
   auto fieldType = UIntType::get(context, mergedBitwidth);
 
@@ -523,16 +530,16 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     // Any read or write ports are just added.
     if (kind != MemOp::PortKind::ReadWrite) {
       resultPortTypes.push_back(
-          FlipType::get(op.getTypeForPort(depth, fieldType, kind)));
+          FlipType::get(op.getTypeForPort(depth, fieldType, kind, maskSize)));
       uniquePortName(name.getValue());
       continue;
     }
 
     // Any readwrite ports are lowered to 1x read and 1x write.
     resultPortTypes.push_back(FlipType::get(
-        op.getTypeForPort(depth, fieldType, MemOp::PortKind::Read)));
+        op.getTypeForPort(depth, fieldType, MemOp::PortKind::Read, maskSize)));
     resultPortTypes.push_back(FlipType::get(
-        op.getTypeForPort(depth, fieldType, MemOp::PortKind::Write)));
+        op.getTypeForPort(depth, fieldType, MemOp::PortKind::Write, maskSize)));
 
     auto nameStr = name.getValue().str();
     uniquePortName(nameStr + "_r");
@@ -551,6 +558,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
       builder->getArrayAttr(resultPortNames.getArrayRef()),
       builder->getStringAttr(newName), op.annotations());
 
+  SmallVector<Value, 4> tempMaskBits;
   // Setup the lowering to the new memory. We need to track both the
   // new memory index ("i") and the old memory index ("j") to deal
   // with the situation where readwrite ports have been split into
@@ -650,12 +658,28 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
         if (kind == MemOp::PortKind::Write && oldName.contains("data")) {
           writerTempWire = builder->create<WireOp>(fieldType);
           builder->create<ConnectOp>(memSF, writerTempWire);
+        } else if (oldName.contains("mask")) {
+          writerTempWire =
+              builder->create<WireOp>(UIntType::get(context, maskSize));
+          builder->create<ConnectOp>(memSF, writerTempWire);
         }
         SmallVector<WireOp, 4> tempCatWires;
         for (auto field : fieldTypes) {
           if (oldName.contains("mask")) {
+            auto tempMaskWire =
+                builder->create<WireOp>(UIntType::get(context, 1));
             setBundleLowering(op.getResult(j), (oldName + field.suffix).str(),
-                              memSF);
+                              tempMaskWire);
+            auto numBitsReq = field.type.getBitWidthOrSentinel() / maskSize;
+            APInt constOne(numBitsReq, 1, false);
+            APInt constZero(numBitsReq, 0, false);
+            auto maskMux = builder->create<MuxPrimOp>(
+                tempMaskWire,
+                builder->create<ConstantOp>(UIntType::get(context, numBitsReq),
+                                            constOne),
+                builder->create<ConstantOp>(UIntType::get(context, numBitsReq),
+                                            constZero));
+            tempMaskBits.push_back(maskMux);
           } else {
             unsigned hiBit = loBit + field.type.getBitWidthOrSentinel() - 1;
             auto fType =
@@ -676,11 +700,17 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
             loBit = hiBit + 1;
           }
         }
-        if (tempCatWires.size() > 0) {
+
+        if (tempMaskBits.size()) {
+          Value catOp0 = tempMaskBits[0];
+          for (size_t i = 1, e = tempMaskBits.size(); i != e; ++i)
+            catOp0 = builder->create<CatPrimOp>(catOp0, tempMaskBits[i]);
+          builder->create<ConnectOp>(writerTempWire, catOp0);
+        } else if (tempCatWires.size()) {
           Value tempWire1 = tempCatWires[0];
-          for (size_t i = 1, e = tempCatWires.size(); i != e; ++i) {
+          for (size_t i = 1, e = tempCatWires.size(); i != e; ++i)
             tempWire1 = builder->create<CatPrimOp>(tempWire1, tempCatWires[i]);
-          }
+
           builder->create<ConnectOp>(writerTempWire, tempWire1);
         }
       } else {
@@ -962,8 +992,8 @@ void TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
   for (auto it : llvm::zip(highValues, lowValues, fieldTypes)) {
     auto field = std::get<2>(it);
     auto suffix = StringRef(field.suffix).drop_front(1);
-    auto muxOp = builder->create<MuxPrimOp>(
-        field.type, sel, std::get<0>(it).first, std::get<1>(it).first);
+    auto muxOp = builder->create<MuxPrimOp>(sel, std::get<0>(it).first,
+                                            std::get<1>(it).first);
     setBundleLowering(result, suffix, muxOp);
   }
   opsToRemove.push_back(op);

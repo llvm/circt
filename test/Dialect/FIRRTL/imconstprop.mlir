@@ -6,8 +6,15 @@ firrtl.circuit "Test" {
   // CHECK: (in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>)
   firrtl.module @PassThrough(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>) {
     // CHECK-NEXT: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK-NEXT: firrtl.connect %dest, %c0_ui1
-    firrtl.connect %dest, %source : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK-NEXT: %c0_ui1_0 = firrtl.constant 0 : !firrtl.uint<1>
+
+    %dontTouchWire = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
+    // CHECK-NEXT: %dontTouchWire = firrtl.wire
+    firrtl.connect %dontTouchWire, %source : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.connect %dontTouchWire, %c0_ui1
+
+    // CHECK-NEXT: firrtl.connect %dest, %c0_ui1_0
+    firrtl.connect %dest, %dontTouchWire : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK-NEXT: }
   }
 
