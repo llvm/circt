@@ -162,28 +162,68 @@ firrtl.module @Xor(in %in: !firrtl.uint<4>,
 }
 
 // CHECK-LABEL: firrtl.module @EQ
-firrtl.module @EQ(in %in: !firrtl.uint<1>,
+firrtl.module @EQ(in %in1: !firrtl.uint<1>,
+                  in %in4: !firrtl.uint<4>,
                   out %out: !firrtl.uint<1>) {
-  // CHECK: firrtl.connect %out, %in
+  // CHECK: firrtl.connect %out, %in1
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-  %0 = firrtl.eq %in, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  %0 = firrtl.eq %in1, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<1>
 
   // Issue #368: https://github.com/llvm/circt/issues/368
   %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
-  %1 = firrtl.eq %in, %c3_ui2 : (!firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<1>
+  %1 = firrtl.eq %in1, %c3_ui2 : (!firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<1>
   firrtl.connect %out, %1 : !firrtl.uint<1>, !firrtl.uint<1>
-  // CHECK: firrtl.eq %in, %c3_ui2
-  // CHECK: firrtl.connect
+  // CHECK: firrtl.eq %in1, %c3_ui2
+  // CHECK-NEXT: firrtl.connect
+
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %2 = firrtl.eq %in1, %c0_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %out, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK-NEXT: firrtl.not %in1
+  // CHECK-NEXT: firrtl.connect
+
+  %c15_ui4 = firrtl.constant 15 : !firrtl.uint<4>
+  %3 = firrtl.eq %in4, %c15_ui4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
+  firrtl.connect %out, %3 : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: firrtl.andr %in4
+  // CHECK-NEXT: firrtl.connect
+
+  %4 = firrtl.eq %in4, %c0_ui1 : (!firrtl.uint<4>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %out, %4 : !firrtl.uint<1>, !firrtl.uint<1>
+
+  // CHECK: [[ORR:%.+]] = firrtl.orr %in4
+  // CHECK-NEXT: firrtl.not [[ORR]]
+  // CHECK-NEXT: firrtl.connect
 }
 
 // CHECK-LABEL: firrtl.module @NEQ
-firrtl.module @NEQ(in %in: !firrtl.uint<1>,
+firrtl.module @NEQ(in %in1: !firrtl.uint<1>,
+                   in %in4: !firrtl.uint<4>,
                    out %out: !firrtl.uint<1>) {
   // CHECK: firrtl.connect %out, %in
-  %c1_ui0 = firrtl.constant 0 : !firrtl.uint<1>
-  %0 = firrtl.neq %in, %c1_ui0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %0 = firrtl.neq %in1, %c0_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  %1 = firrtl.neq %in1, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %out, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK-NEXT: firrtl.not %in1
+  // CHECK-NEXT: firrtl.connect
+
+  %2 = firrtl.neq %in4, %c0_ui1 : (!firrtl.uint<4>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %out, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: firrtl.orr %in4
+  // CHECK-NEXT: firrtl.connec
+
+  %c15_ui4 = firrtl.constant 15 : !firrtl.uint<4>
+  %3 = firrtl.neq %in4, %c15_ui4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<1>
+  firrtl.connect %out, %3 : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: [[ANDR:%.+]] = firrtl.andr %in4
+  // CHECK-NEXT: firrtl.not [[ANDR]]
+  // CHECK-NEXT: firrtl.connect
+
 }
 
 // CHECK-LABEL: firrtl.module @Cat

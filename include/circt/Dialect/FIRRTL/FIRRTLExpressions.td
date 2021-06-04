@@ -286,8 +286,10 @@ let inferType = "impl::inferComparisonResult" in {
     def GEQPrimOp : IntBinaryPrimOp<"geq", UInt1Type>;
     def GTPrimOp  : IntBinaryPrimOp<"gt",  UInt1Type>;
   }
-  def EQPrimOp  : IntBinaryPrimOp<"eq",  UInt1Type, [Commutative]>;
-  def NEQPrimOp : IntBinaryPrimOp<"neq", UInt1Type, [Commutative]>;
+  let hasCanonicalizeMethod = true in {
+    def EQPrimOp  : IntBinaryPrimOp<"eq",  UInt1Type, [Commutative]>;
+    def NEQPrimOp : IntBinaryPrimOp<"neq", UInt1Type, [Commutative]>;
+  }
 }
 
 def CatPrimOp : IntBinaryPrimOp<"cat", UIntType> {
