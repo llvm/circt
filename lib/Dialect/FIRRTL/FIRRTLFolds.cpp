@@ -1371,8 +1371,7 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
     if (aConnect && aConnect.dest().getDefiningOp() == reg) {
       if (con)
         return failure();
-      else
-        con = aConnect;
+      con = aConnect;
     }
   }
   if (!con)
