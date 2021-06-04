@@ -21,7 +21,7 @@ with Context() as ctx, Location.unknown():
 
       # CHECK: expected same input port types, but received [Type(i32), Type(i31)]
       try:
-        comb.DivSOp.create(lhs=const1.result, rhs=const2.result)
+        comb.DivSOp.create(const1.result, const2.result)
       except TypeError as e:
         print(e)
 
