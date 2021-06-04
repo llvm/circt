@@ -13,6 +13,7 @@
 #include "../PassDetail.h"
 #include "circt/Conversion/FIRRTLToHW/FIRRTLToHW.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -1572,16 +1573,24 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   // Name attr is required on sv.wire but optional on firrtl.wire.
   auto nameAttr = op.nameAttr() ? op.nameAttr() : builder.getStringAttr("");
 
+  if (!AnnotationSet(op).hasDontTouch())
+    return setLoweringTo<sv::WireOp>(op, resultType, nameAttr);
+  auto moduleName =
+      cast<hw::HWModuleOp>(op->getParentOp()).getNameAttr().getValue().str();
   auto symName = op.nameAttr();
-  if (symName) {
   // Prepend the name of the module to make the symbol name unique in the symbol
   // table, it is already unique in the module. Checking if the name is unique
   // in the SymbolTable is non-trivial.
-    auto moduleName =
-        cast<hw::HWModuleOp>(op->getParentOp()).getNameAttr().getValue().str();
+  if (symName && !symName.getValue().empty())
     symName = builder.getStringAttr("__" + moduleName + "__" +
                                     symName.getValue().str());
-  }
+  else
+    // If marked with DontTouch but does not have a name, then add a symbol
+    // name.
+    // TODO: Add an id to make the symbol name unique, what's the best way to
+    // generate the id?
+    symName = builder.getStringAttr("__" + moduleName + "__");
+
   // This is not a temporary wire created by the compiler, so attach a symbol
   // name.
   return setLoweringTo<sv::WireOp>(op, resultType, nameAttr, symName);
