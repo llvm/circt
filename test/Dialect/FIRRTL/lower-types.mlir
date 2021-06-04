@@ -219,8 +219,8 @@ firrtl.circuit "FooBundle" {
     // CHECK:  %[[TEMPWIRE2:.+]] = firrtl.wire  : !firrtl.uint<8>
     // CHECK:  firrtl.connect %[[MEMORY_W_MASK]], %[[TEMPWIRE2]]
     // CHECK:  %[[TEMPWIRE3:.+]] = firrtl.wire
-    // CHECK:  %[[CONST10:.+]] = firrtl.constant 0
-    // CHECK:  %[[CONST11:.+]] = firrtl.constant 1
+    // CHECK-DAG:  %[[CONST10:.+]] = firrtl.constant 0
+    // CHECK-DAG:  %[[CONST11:.+]] = firrtl.constant 1
     // CHECK:  %[[MUX1:.+]] = firrtl.mux(%[[TEMPWIRE3:.+]], %[[CONST11]], %[[CONST10]])
     // CHECK:  %[[TEMPWIRE4:.+]] = firrtl.wire
     // CHECK:  %[[CONST20:.+]] = firrtl.constant 0
