@@ -470,7 +470,8 @@ static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
     return failure();
 
   auto functionTy = builder.getFunctionType(argTypes, resultTypes);
-  result.addAttribute(impl::getTypeAttrName(), TypeAttr::get(functionTy));
+  result.addAttribute(function_like_impl::getTypeAttrName(),
+                      TypeAttr::get(functionTy));
   result.addAttribute("funcTy", TypeAttr::get(funcTy));
 
   // If additional attributes are present, parse them.
@@ -480,8 +481,8 @@ static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
   // Add the attributes to the function arguments.
   assert(argAttrs.size() == argTypes.size());
   assert(resultAttrs.size() == resultTypes.size());
-  impl::addArgAndResultAttrs(builder, result, argAttrs, resultAttrs);
-
+  function_like_impl::addArgAndResultAttrs(builder, result, argAttrs,
+                                           resultAttrs);
   // Parse the optional function body.
   auto *body = result.addRegion();
   entryArgs.push_back(tstart);

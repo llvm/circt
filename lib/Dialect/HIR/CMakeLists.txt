@@ -1,4 +1,3 @@
-#add_subdirectory(Verification)
 add_circt_dialect_library(CIRCTHIR
   helper.cpp  
   HIR.cpp  
@@ -16,9 +15,9 @@ add_circt_dialect_library(CIRCTHIR
   MLIRHIRIncGen
 
   LINK_LIBS PUBLIC
-  MLIREDSC
   MLIRIR
   MLIRSideEffectInterfaces
   MLIRControlFlowInterfaces
   MLIRCallInterfaces
+  MLIRStandard
   )
