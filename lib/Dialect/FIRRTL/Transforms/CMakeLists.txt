@@ -7,6 +7,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   IMConstProp.cpp
   InferWidths.cpp
   LowerTypes.cpp
+  PrintInstanceGraph.cpp
 
   DEPENDS
   CIRCTFIRRTLTransformsIncGen

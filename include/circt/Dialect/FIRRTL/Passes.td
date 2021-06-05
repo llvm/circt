@@ -174,4 +174,10 @@ def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
   let dependentDialects = ["sv::SVDialect"];
 }
 
+def PrintInstanceGraph
+    : Pass<"firrtl-print-instance-graph", "firrtl::CircuitOp"> {
+  let summary = "Print a DOT graph of the module hierarchy.";
+  let constructor =  "circt::firrtl::createPrintInstanceGraphPass()";
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD
