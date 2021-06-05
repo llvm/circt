@@ -592,7 +592,7 @@ template <class Op, bool isSigned>
 static OpFoldResult foldDiv(Op op, ArrayRef<Attribute> constants) {
   APInt value;
   if (matchPattern(op.rhs(), m_RConstant(value))) {
-    // divu(x, 1) -> x, divs(x, 1) -> y
+    // divu(x, 1) -> x, divs(x, 1) -> x
     if (value == 1)
       return op.lhs();
 
