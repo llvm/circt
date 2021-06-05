@@ -1452,7 +1452,7 @@ void NameCollector::collectNames(Block &block) {
 
     // Instances are handled in prepareHWModule
     auto instance = dyn_cast<InstanceOp>(&op);
-    if (instance)      
+    if (instance)
       continue;
 
     for (auto result : op.getResults()) {
@@ -2206,6 +2206,10 @@ LogicalResult StmtEmitter::visitSV(CaseZOp op) {
 }
 
 LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
+  StringRef prefix = "";
+  if (op->hasAttr("doNotPrint"))
+    prefix = "// ";
+
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -2215,7 +2219,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   // Use the specified name or the symbol name as appropriate.
   auto verilogName = getVerilogModuleNameAttr(moduleOp);
   emitter.verifyModuleName(op, verilogName);
-  indent() << verilogName.getValue();
+  indent() << prefix << verilogName.getValue();
 
   // Helper that prints a parameter constant value in a Verilog compatible way.
   auto printParmValue = [&](Attribute value) {
@@ -2245,13 +2249,14 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
       llvm::interleave(
           paramDict, os,
           [&](NamedAttribute elt) {
-            os.indent(state.currentIndent + 2) << '.' << elt.first << '(';
+            os.indent(state.currentIndent + 2)
+                << prefix << '.' << elt.first << '(';
             printParmValue(elt.second);
             os << ')';
           },
           ",\n");
       os << '\n';
-      indent() << ')';
+      indent() << prefix << ')';
     }
   }
 
@@ -2298,7 +2303,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     emitLocationInfoAndNewLine(ops);
 
     // Emit the port's name.
-    indent();
+    indent() << prefix;
     if (!isZeroWidth) {
       // If this is a real port we're printing, then it isn't the first one. Any
       // subsequent ones will need a comma.
@@ -2324,7 +2329,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   if (!isFirst) {
     emitLocationInfoAndNewLine(ops);
     ops.clear();
-    indent();
+    indent() << prefix;
   }
   os << ");";
   emitLocationInfoAndNewLine(ops);
@@ -2503,15 +2508,52 @@ void ModuleEmitter::emitHWGeneratedModule(HWModuleGeneratedOp module) {
   os << "// external generated module " << verilogName.getValue() << "\n\n";
 }
 
-void ModuleEmitter::emitBind(BindOp bind) {
-  os << "// bind\n\n";
+void ModuleEmitter::emitBind(BindOp bind) { os << "// bind\n\n"; }
+
+static bool isSimpleReadOrPort(Value v) {
+  if (v.isa<BlockArgument>())
+    return true;
+  auto read = dyn_cast_or_null<ReadInOutOp>(v.getDefiningOp());
+  if (!read)
+    return false;
+  return dyn_cast_or_null<WireOp>(read.input().getDefiningOp()) ||
+         dyn_cast_or_null<RegOp>(read.input().getDefiningOp());
 }
 
-// Given an invisible instance, make sure all inputs and outputs are tied to
+// Given an invisible instance, make sure all inputs are driven from
 // wires or ports.
 static void lowerBoundInstance(InstanceOp op) {
   Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
+
+  SmallString<32> nameTmp;
+  nameTmp = (op.instanceName() + "_").str();
+  auto namePrefixSize = nameTmp.size();
+
+  size_t nextOpNo = 0;
+  for (auto &port : getModulePortInfo(op.getReferencedModule())) {
+    if (port.isOutput())
+      continue;
+
+    auto src = op.getOperand(nextOpNo);
+    ++nextOpNo;
+
+    if (isSimpleReadOrPort(src))
+      continue;
+
+    nameTmp.resize(namePrefixSize);
+    if (port.name)
+      nameTmp += port.name.getValue().str();
+    else
+      nameTmp += std::to_string(nextOpNo - 1);
+
+    auto newWire = builder.create<WireOp>(src.getType(), nameTmp);
+    auto newWireRead = builder.create<ReadInOutOp>(newWire);
+    auto connect = builder.create<ConnectOp>(newWire, src);
+    newWireRead->moveBefore(op);
+    connect->moveBefore(op);
+    op.setOperand(nextOpNo - 1, newWireRead);
+  }
 }
 
 static bool onlyUseIsConnect(Value v) {
@@ -2522,7 +2564,7 @@ static bool onlyUseIsConnect(Value v) {
   return true;
 }
 
-//Ensure that each output of an instance are used only by a wire
+// Ensure that each output of an instance are used only by a wire
 static void lowerInstanceResults(InstanceOp op) {
   Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
@@ -2546,7 +2588,7 @@ static void lowerInstanceResults(InstanceOp op) {
     if (port.name)
       nameTmp += port.name.getValue().str();
     else
-      nameTmp += std::to_string(nextResultNo-1);
+      nameTmp += std::to_string(nextResultNo - 1);
 
     auto newWire = builder.create<WireOp>(result.getType(), nameTmp);
     while (!result.use_empty()) {
@@ -3118,8 +3160,7 @@ void RootEmitterBase::emitOperation(VerilogEmitterState &state, Operation *op) {
       .Case<HWModuleGeneratedOp>(
           [&](auto op) { ModuleEmitter(state).emitHWGeneratedModule(op); })
       .Case<HWGeneratorSchemaOp>([&](auto op) { /* Empty */ })
-      .Case<BindOp>(
-        [&](auto op) { ModuleEmitter(state).emitBind(op); })
+      .Case<BindOp>([&](auto op) { ModuleEmitter(state).emitBind(op); })
       .Case<InterfaceOp, VerbatimOp, IfDefProceduralOp>(
           [&](auto op) { ModuleEmitter(state).emitStatement(op); })
       .Case<TypeScopeOp>([&](auto typedecls) {
