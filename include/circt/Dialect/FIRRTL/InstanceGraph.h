@@ -148,6 +148,9 @@ public:
   /// Get the node corresponding to the top-level module of a circuit.
   InstanceGraphNode *getTopLevelNode();
 
+  /// Get the module corresponding to the top-lebel module of a circuit.
+  FModuleLike getTopLevelModule();
+
   /// Look up an InstanceGraphNode for a module. Operation must be an FModuleOp
   /// or an FExtModuleOp.
   InstanceGraphNode *lookup(Operation *op);
