@@ -601,11 +601,6 @@ static OpFoldResult foldDiv(Op op, ArrayRef<Attribute> constants) {
       return {};
   }
 
-  // divu(x, x) -> 1, divs(x, x) -> 1
-  if (op.rhs() == op.lhs())
-    return getIntAttr(APInt(op.getType().getIntOrFloatBitWidth(), 1),
-                      op.getContext());
-
   return constFoldBinaryOp<IntegerAttr>(constants, [](APInt a, APInt b) {
     return isSigned ? a.sdiv(b) : a.udiv(b);
   });
@@ -632,11 +627,6 @@ static OpFoldResult foldMod(Op op, ArrayRef<Attribute> constants) {
     if (value.isNullValue())
       return {};
   }
-
-  // modu(x, x) -> 0, mods(x, x) -> 0
-  if (op.rhs() == op.lhs())
-    return getIntAttr(APInt(op.getType().getIntOrFloatBitWidth(), 0),
-                      op.getContext());
 
   return constFoldBinaryOp<IntegerAttr>(constants, [](APInt a, APInt b) {
     return isSigned ? a.srem(b) : a.urem(b);
