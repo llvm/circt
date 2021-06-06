@@ -590,14 +590,13 @@ LogicalResult MulOp::canonicalize(MulOp op, PatternRewriter &rewriter) {
 
 template <class Op, bool isSigned>
 static OpFoldResult foldDiv(Op op, ArrayRef<Attribute> constants) {
-  APInt value;
-  if (matchPattern(op.rhs(), m_RConstant(value))) {
+  if (auto rhs_value = constants[1].dyn_cast_or_null<IntegerAttr>()) {
     // divu(x, 1) -> x, divs(x, 1) -> x
-    if (value == 1)
+    if (rhs_value.getValue() == 1)
       return op.lhs();
 
     // If the divisor is zero, do not fold for now.
-    if (value.isNullValue())
+    if (rhs_value.getValue().isNullValue())
       return {};
   }
 
@@ -616,15 +615,14 @@ OpFoldResult DivSOp::fold(ArrayRef<Attribute> constants) {
 
 template <class Op, bool isSigned>
 static OpFoldResult foldMod(Op op, ArrayRef<Attribute> constants) {
-  APInt value;
-  if (matchPattern(op.rhs(), m_RConstant(value))) {
+  if (auto rhs_value = constants[1].dyn_cast_or_null<IntegerAttr>()) {
     // modu(x, 1) -> 0, mods(x, 1) -> 0
-    if (value == 1)
+    if (rhs_value.getValue() == 1)
       return getIntAttr(APInt(op.getType().getIntOrFloatBitWidth(), 0),
                         op.getContext());
 
     // If the divisor is zero, do not fold for now.
-    if (value.isNullValue())
+    if (rhs_value.getValue().isNullValue())
       return {};
   }
 
