@@ -35,7 +35,7 @@ std::string gen_bram(string name, const VerilogValue ra,
   static int bram_number = 0;
   string out;
   assert(isEqual(ra.getShape(), rb.getShape()));
-  assert(isEqual(ra.getPacking(), rb.getPacking()));
+  assert(isEqual(ra.getPackedDims(), rb.getPackedDims()));
   assert(ra.getElementType() == rb.getElementType());
   SmallVector<unsigned, 4> distDims = ra.getMemrefDistDims();
   int i = 0;
@@ -47,7 +47,7 @@ std::string gen_bram(string name, const VerilogValue ra,
     dimSel += "[i" + str_i + "]";
     i++;
   }
-  if (ra.getPacking().size() == 0) {
+  if (ra.getPackedDims().size() == 0) {
     out += "always@(posedge clk) begin\n";
     out += "  if($web) $doa <= $dib;\n";
     out += "end\n";

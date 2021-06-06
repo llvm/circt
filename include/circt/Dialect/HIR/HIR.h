@@ -14,10 +14,9 @@
 namespace mlir {
 namespace hir {
 
-enum WireDirection { in = 0, out = 1, inout = 2 };
+enum PortKind { rd = 0, wr = 1, rw = 2 };
 
 namespace Details {
-enum PortKind { r = 0, w = 1, rw = 2 };
 
 /// Storage class for MemrefType.
 struct MemrefTypeStorage : public TypeStorage {
@@ -179,13 +178,12 @@ struct GroupTypeStorage : public TypeStorage {
 
 /// Storage class for BusType.
 struct BusTypeStorage : public TypeStorage {
-  BusTypeStorage(ArrayRef<Type> elementTypes,
-                 ArrayRef<WireDirection> directions, DictionaryAttr proto)
+  BusTypeStorage(ArrayRef<Type> elementTypes, ArrayRef<PortKind> directions,
+                 DictionaryAttr proto)
       : elementTypes(elementTypes), directions(directions), proto(proto) {}
 
   /// The hash key for this storage is a pair of the integer and type params.
-  using KeyTy =
-      std::tuple<ArrayRef<Type>, ArrayRef<WireDirection>, DictionaryAttr>;
+  using KeyTy = std::tuple<ArrayRef<Type>, ArrayRef<PortKind>, DictionaryAttr>;
 
   /// Define the comparison function for the key type.
   bool operator==(const KeyTy &key) const {
@@ -200,8 +198,7 @@ struct BusTypeStorage : public TypeStorage {
 
   /// Define a construction function for the key type.
   static KeyTy getKey(ArrayRef<Type> elementTypes,
-                      ArrayRef<WireDirection> directions,
-                      DictionaryAttr proto) {
+                      ArrayRef<PortKind> directions, DictionaryAttr proto) {
     return KeyTy(elementTypes, directions, proto);
   }
 
@@ -209,14 +206,14 @@ struct BusTypeStorage : public TypeStorage {
   static BusTypeStorage *construct(TypeStorageAllocator &allocator,
                                    const KeyTy &key) {
     ArrayRef<Type> elementTypes = allocator.copyInto(std::get<0>(key));
-    ArrayRef<WireDirection> directions = allocator.copyInto(std::get<1>(key));
+    ArrayRef<PortKind> directions = allocator.copyInto(std::get<1>(key));
     DictionaryAttr proto = std::get<2>(key);
     return new (allocator.allocate<BusTypeStorage>())
         BusTypeStorage(elementTypes, directions, proto);
   }
 
   ArrayRef<Type> elementTypes;
-  ArrayRef<WireDirection> directions;
+  ArrayRef<PortKind> directions;
   DictionaryAttr proto;
 };
 } // namespace Details.
@@ -261,18 +258,52 @@ public:
   Type getElementType() { return getImpl()->elementType; }
   ArrayAttr getBankedDims() { return getImpl()->bankedDims; }
   DictionaryAttr getPortAttrs() { return getImpl()->portAttrs; }
-  Details::PortKind getPort() {
+  PortKind getPort() {
     DictionaryAttr portAttrs = getPortAttrs();
-    auto rd = portAttrs.getNamed("rd");
-    auto wr = portAttrs.getNamed("wr");
-    if (rd && wr)
-      return Details::rw;
-    if (rd)
-      return Details::r;
-    return Details::w;
+    auto rdAttr = portAttrs.getNamed("rd");
+    auto wrAttr = portAttrs.getNamed("wr");
+    if (rdAttr && wrAttr)
+      return PortKind::rw;
+    if (rdAttr)
+      return PortKind::rd;
+    return PortKind::wr;
   }
 
-  SmallVector<int, 4> getPacking() {
+  int getDepth() {
+    int depth = 1;
+    auto packedDims = getPackedDims();
+    auto shape = getShape();
+    for (auto dim : packedDims) {
+      depth *= shape[shape.size() - 1 - dim];
+    }
+    return depth;
+  }
+
+  int getNumBanks() {
+    int numBanks = 1;
+    auto bankedDims = getBankedDims();
+    auto shape = getShape();
+    for (auto dim : bankedDims) {
+      numBanks *=
+          shape[shape.size() - 1 - dim.dyn_cast<IntegerAttr>().getInt()];
+    }
+    return numBanks;
+  }
+  SmallVector<int64_t, 4> getBankShape() {
+    auto shape = getShape();
+    SmallVector<int64_t, 4> bankShape;
+    for (size_t i = 0; i < getShape().size(); i++) {
+      bool isBankedDim = false;
+      for (auto dim : getBankedDims())
+        if (i == (size_t)dim.dyn_cast<IntegerAttr>().getInt())
+          isBankedDim = true;
+      if (isBankedDim)
+        bankShape.push_back(shape[shape.size() - 1 - i]);
+    }
+    return bankShape;
+  }
+
+  SmallVector<int, 4> getPackedDims() {
     SmallVector<int, 4> packedDims;
     for (size_t i = 0; i < getShape().size(); i++) {
       bool isBankedDim = false;
@@ -344,13 +375,11 @@ public:
 
   static StringRef getKeyword() { return "bus"; }
   static BusType get(MLIRContext *context, ArrayRef<Type> elementTypes,
-                     ArrayRef<WireDirection> directions, DictionaryAttr proto) {
+                     ArrayRef<PortKind> directions, DictionaryAttr proto) {
     return Base::get(context, elementTypes, directions, proto);
   }
   ArrayRef<Type> getElementTypes() { return getImpl()->elementTypes; }
-  ArrayRef<WireDirection> getElementDirections() {
-    return getImpl()->directions;
-  }
+  ArrayRef<PortKind> getElementDirections() { return getImpl()->directions; }
   DictionaryAttr getProto() { return getImpl()->proto; }
 };
 

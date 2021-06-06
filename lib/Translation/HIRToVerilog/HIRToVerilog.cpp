@@ -201,7 +201,7 @@ void VerilogPrinter::printLoadOp(hir::LoadOp op, unsigned indentAmount) {
   SmallVector<VerilogValue *, 4> addr = convertToVerilog(op.addr());
   Value mem = op.mem();
   auto shape = mem.getType().dyn_cast<hir::MemrefType>().getShape();
-  auto packing = mem.getType().dyn_cast<hir::MemrefType>().getPacking();
+  auto packing = mem.getType().dyn_cast<hir::MemrefType>().getPackedDims();
 
   assert(addr.size() == shape.size());
 
@@ -276,28 +276,28 @@ void VerilogPrinter::printCallOp(hir::CallOp op, unsigned indentAmount) {
 
   for (Value operand : operands) {
     if (auto memrefType = operand.getType().dyn_cast<MemrefType>()) {
-      Details::PortKind port = memrefType.getPort();
+      PortKind port = memrefType.getPort();
       VerilogValue *vOperand = verilogMapper.getMutable(operand);
-      if (memrefType.getPacking().size() > 0) {
+      if (memrefType.getPackedDims().size() > 0) {
         if (!firstArg) {
           outBuffer << ",\n";
         }
         firstArg = false;
         outBuffer << vOperand->strMemrefAddrInputIf(vOperand->maxNumAccess());
       }
-      if (port == Details::PortKind::r || port == Details::PortKind::rw) {
+      if (port == rd || port == rw) {
         if (!firstArg) {
           outBuffer << ",\n";
         }
         firstArg = false;
-        if (memrefType.getPacking().size() > 0) {
+        if (memrefType.getPackedDims().size() > 0) {
           outBuffer << vOperand->strMemrefRdEnInputIf(vOperand->maxNumReads());
         } else {
           outBuffer << "/*Ignored*/";
         }
         outBuffer << ",\n" << vOperand->strMemrefRdData();
       }
-      if (port == Details::PortKind::w || port == Details::PortKind::rw) {
+      if (port == wr || port == rw) {
         if (!firstArg) {
           outBuffer << ",\n";
         }
@@ -311,15 +311,15 @@ void VerilogPrinter::printCallOp(hir::CallOp op, unsigned indentAmount) {
             vOperand->strMemrefWrEnInputIf(vOperand->maxNumWrites()) + ";\n";
       }
 
-      if (memrefType.getPacking().size() > 0) {
+      if (memrefType.getPackedDims().size() > 0) {
         strEpilogue +=
             "assign " +
             vOperand->strMemrefAddrValidIf(vOperand->maxNumAccess()) + " = ";
-        if (port == Details::PortKind::rw) {
+        if (port == rw) {
           strEpilogue +=
               vOperand->strMemrefRdEnInputIf(vOperand->maxNumReads()) + "|" +
               vOperand->strMemrefWrEnInputIf(vOperand->maxNumWrites());
-        } else if (port == Details::PortKind::r) {
+        } else if (port == rd) {
           strEpilogue +=
               vOperand->strMemrefRdEnInputIf(vOperand->maxNumReads());
         } else {
@@ -328,10 +328,10 @@ void VerilogPrinter::printCallOp(hir::CallOp op, unsigned indentAmount) {
         }
         strEpilogue += ";\n";
       }
-      if (port == Details::PortKind::r || port == Details::PortKind::rw) {
+      if (port == rd || port == rw) {
         vOperand->incMemrefNumReads();
       }
-      if (port == Details::PortKind::w || port == Details::PortKind::rw) {
+      if (port == wr || port == rw) {
         vOperand->incMemrefNumWrites();
       }
     } else {
@@ -418,8 +418,8 @@ void VerilogPrinter::printAllocOp(hir::AllocaOp op, unsigned indentAmount) {
       Value r1 = result[1];
       assert(r1.getType().isa<MemrefType>());
       // For now only support below set.
-      assert(r0.getType().dyn_cast<MemrefType>().getPort() == Details::r);
-      assert(r1.getType().dyn_cast<MemrefType>().getPort() == Details::w);
+      assert(r0.getType().dyn_cast<MemrefType>().getPort() == rd);
+      assert(r1.getType().dyn_cast<MemrefType>().getPort() == wr);
       for (int i = 0; i < 2; i++) {
         string str_id_result = to_string(newValueNumber());
         VerilogValue vResult(result[i], "v" + str_id_result);
@@ -457,7 +457,7 @@ void VerilogPrinter::printStoreOp(hir::StoreOp op, unsigned indentAmount) {
     vOffset = verilogMapper.getMutable(offset);
 
   auto shape = mem.getType().dyn_cast<hir::MemrefType>().getShape();
-  auto packing = mem.getType().dyn_cast<hir::MemrefType>().getPacking();
+  auto packing = mem.getType().dyn_cast<hir::MemrefType>().getPackedDims();
   if (shape.size() != addr.size()) {
     emitError(op.getLoc(), "Dimension mismatch. Number of addresses is wrong.");
     assert(shape.size() == addr.size());

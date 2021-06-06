@@ -4,6 +4,7 @@
 // returns the bitwidth of the type.
 namespace helper {
 unsigned getBitWidth(mlir::Type);
+unsigned clog2(int);
 
 mlir::IntegerAttr getIntegerAttr(mlir::MLIRContext *context, int width,
                                  int value);

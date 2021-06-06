@@ -20,7 +20,7 @@ VerilogValue::VerilogValue(Value value, string name)
   string out;
   auto size = 1;
   if (type.isa<MemrefType>()) {
-    auto packing = type.dyn_cast<hir::MemrefType>().getPacking();
+    auto packing = type.dyn_cast<hir::MemrefType>().getPackedDims();
     auto shape = type.dyn_cast<hir::MemrefType>().getShape();
     for (size_t i = 0; i < shape.size(); i++) {
       bool isDistDim = true;
@@ -102,7 +102,7 @@ SmallVector<unsigned, 4> VerilogValue::getMemrefPackedDims() const {
   SmallVector<unsigned, 4> out;
   auto memrefType = type.dyn_cast<hir::MemrefType>();
   auto shape = memrefType.getShape();
-  auto packing = memrefType.getPacking();
+  auto packing = memrefType.getPackedDims();
   for (size_t i = 0; i < shape.size(); i++) {
     bool dimIsPacked = false;
     for (auto p : packing) {
@@ -319,7 +319,7 @@ string
 VerilogValue::strMemrefDistDimAccess(ArrayRef<VerilogValue *> addr) const {
   assert(type.isa<hir::MemrefType>());
   string out;
-  auto packing = type.dyn_cast<hir::MemrefType>().getPacking();
+  auto packing = type.dyn_cast<hir::MemrefType>().getPackedDims();
   for (size_t i = 0; i < addr.size(); i++) {
     bool isDistDim = true;
     for (auto p : packing) {
@@ -347,7 +347,7 @@ SmallVector<unsigned, 4> VerilogValue::getMemrefDistDims() const {
   SmallVector<unsigned, 4> out;
   auto memrefType = type.dyn_cast<hir::MemrefType>();
   auto shape = memrefType.getShape();
-  auto packing = memrefType.getPacking();
+  auto packing = memrefType.getPackedDims();
   for (size_t i = 0; i < shape.size(); i++) {
     bool dimIsPacked = false;
     for (auto p : packing) {
@@ -457,10 +457,8 @@ string VerilogValue::strConstOrWire() const {
 string VerilogValue::strMemrefArgDecl() {
   string out;
   MemrefType memrefTy = type.dyn_cast<MemrefType>();
-  hir::Details::PortKind port = memrefTy.getPort();
-  string portString = ((port == hir::Details::r)   ? "r"
-                       : (port == hir::Details::w) ? "w"
-                                                   : "rw");
+  PortKind port = memrefTy.getPort();
+  string portString = ((port == rd) ? "r" : (port == wr) ? "w" : "rw");
   out += "//MemrefType : port = " + portString + ".\n";
   unsigned addrWidth = helper::calcAddrWidth(memrefTy);
   string distDimsStr = strMemrefDistDims();
@@ -471,7 +469,7 @@ string VerilogValue::strMemrefArgDecl() {
            distDimsStr;
     printComma = true;
   }
-  if (port == hir::Details::r || port == hir::Details::rw) {
+  if (port == rd || port == rw) {
     if (printComma)
       out += ",\n";
     out += "output wire " + strMemrefRdEn() + distDimsStr;
@@ -479,7 +477,7 @@ string VerilogValue::strMemrefArgDecl() {
            strMemrefRdData() + distDimsStr;
     printComma = true;
   }
-  if (port == hir::Details::w || port == hir::Details::rw) {
+  if (port == wr || port == rw) {
     if (printComma)
       out += ",\n";
     out += "output wire " + strMemrefWrEn() + distDimsStr;
@@ -557,10 +555,8 @@ string VerilogValue::strArrayArgDecl() {
 string VerilogValue::strMemrefInstDecl() const {
   string out_decls;
   MemrefType memrefTy = type.dyn_cast<MemrefType>();
-  hir::Details::PortKind port = memrefTy.getPort();
-  string portString = ((port == hir::Details::r)   ? "r"
-                       : (port == hir::Details::w) ? "w"
-                                                   : "rw");
+  PortKind port = memrefTy.getPort();
+  string portString = ((port == rd) ? "r" : (port == wr) ? "w" : "rw");
   unsigned addrWidth = helper::calcAddrWidth(memrefTy);
   string distDimsStr = strMemrefDistDims();
   unsigned dataWidth = helper::getBitWidth(memrefTy.getElementType());
@@ -568,13 +564,13 @@ string VerilogValue::strMemrefInstDecl() const {
     out_decls += "reg[" + to_string(addrWidth - 1) + ":0] " + strMemrefAddr() +
                  distDimsStr + ";\n";
   }
-  if (port == hir::Details::r || port == hir::Details::rw) {
+  if (port == rd || port == rw) {
     out_decls += "wire " + strMemrefRdEn() + distDimsStr + ";\n";
     out_decls += "logic[" + to_string(dataWidth - 1) + ":0] " +
                  strMemrefRdData(SmallVector<VerilogValue *, 4>()) +
                  distDimsStr + ";\n";
   }
-  if (port == hir::Details::w || port == hir::Details::rw) {
+  if (port == wr || port == rw) {
     out_decls += " wire " + strMemrefWrEn() + distDimsStr + ";\n";
     out_decls += "reg[" + to_string(dataWidth - 1) + ":0] " +
                  strMemrefWrData() + distDimsStr + ";\n";
@@ -588,9 +584,9 @@ ArrayRef<int64_t> VerilogValue::getShape() const {
   assert(type.isa<MemrefType>());
   return type.dyn_cast<MemrefType>().getShape();
 }
-SmallVector<int, 4> VerilogValue::getPacking() const {
+SmallVector<int, 4> VerilogValue::getPackedDims() const {
   assert(type.isa<MemrefType>());
-  return type.dyn_cast<MemrefType>().getPacking();
+  return type.dyn_cast<MemrefType>().getPackedDims();
 }
 
 Type VerilogValue::getElementType() const {

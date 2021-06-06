@@ -334,21 +334,21 @@ static Type parseBusType(DialectAsmParser &parser, MLIRContext *context) {
     return Type();
 
   SmallVector<Type> elementTypes;
-  SmallVector<WireDirection> directions;
+  SmallVector<PortKind> directions;
   DictionaryAttr proto;
 
   do {
     Type ty;
 
-    if (!parser.parseOptionalKeyword("in")) {
+    if (!parser.parseOptionalKeyword("rd")) {
       if (parser.parseType(ty))
         return Type();
-      directions.push_back(WireDirection::in);
+      directions.push_back(PortKind::rd);
       elementTypes.push_back(ty);
-    } else if (!parser.parseOptionalKeyword("out")) {
+    } else if (!parser.parseOptionalKeyword("wr")) {
       if (parser.parseType(ty))
         return Type();
-      directions.push_back(WireDirection::out);
+      directions.push_back(PortKind::wr);
       elementTypes.push_back(ty);
     } else if (!parser.parseOptionalKeyword("proto")) {
       if (parser.parseAttribute(proto))
@@ -357,7 +357,7 @@ static Type parseBusType(DialectAsmParser &parser, MLIRContext *context) {
     } else {
       if (parser.parseType(ty))
         return Type();
-      directions.push_back(WireDirection::inout);
+      directions.push_back(PortKind::rw);
       elementTypes.push_back(ty);
     }
   } while (!parser.parseOptionalComma());
@@ -457,21 +457,21 @@ static void printArrayType(ArrayType arrayTy, DialectAsmPrinter &printer) {
 
 static void printBusType(BusType busTy, DialectAsmPrinter &printer) {
   ArrayRef<Type> elementTypes = busTy.getElementTypes();
-  ArrayRef<WireDirection> directions = busTy.getElementDirections();
+  ArrayRef<PortKind> directions = busTy.getElementDirections();
   DictionaryAttr proto = busTy.getProto();
 
   printer << "bus<";
   for (int i = 0; i < (int)elementTypes.size(); i++) {
     Type elementTy = elementTypes[i];
-    WireDirection direction = directions[i];
+    PortKind direction = directions[i];
 
     if (i > 0)
       printer << ", ";
 
-    if (direction == WireDirection::in)
-      printer << "in ";
-    else if (direction == WireDirection::out)
-      printer << "out ";
+    if (direction == PortKind::rd)
+      printer << "rd ";
+    else if (direction == PortKind::wr)
+      printer << "wr ";
 
     printer << elementTy;
   }

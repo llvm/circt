@@ -23,6 +23,20 @@ unsigned getBitWidth(Type type) {
     return intTy.getWidth();
   if (auto floatTy = type.dyn_cast<FloatType>())
     return floatTy.getWidth();
+  if (auto tupleTy = type.dyn_cast<TupleType>()) {
+    int width = 1;
+    for (Type ty : tupleTy.getTypes()) {
+      width *= getBitWidth(ty);
+    }
+    return width;
+  }
+  if (auto tensorTy = type.dyn_cast<TensorType>()) {
+    int size = 1;
+    for (auto szDim : tensorTy.getShape()) {
+      size *= szDim;
+    }
+    return size * getBitWidth(tensorTy.getElementType());
+  }
 
   // error
   fprintf(stderr, "\nERROR: Can't calculate getBitWidth for type %s.\n",
@@ -30,6 +44,8 @@ unsigned getBitWidth(Type type) {
   assert(false);
   return 0;
 }
+
+unsigned clog2(int value) { return (int)(ceil(log2(((double)value)))); }
 
 IntegerAttr getIntegerAttr(MLIRContext *context, int width, int value) {
   return IntegerAttr::get(IntegerType::get(context, width),

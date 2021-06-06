@@ -500,7 +500,8 @@ def ReturnOp : HIR_Op<"return", [HasParent<"FuncOp">,NoSideEffect,
       let assemblyFormat = "(`(`$operands^`)` `:` `(`type($operands)`)`)? attr-dict";
     }
 
-def AllocaOp :HIR_Op<"alloca", [NoSideEffect]> {
+//, [NoSideEffect]
+def AllocaOp :HIR_Op<"alloca"> {
   let summary = "Instantiate new hardware.";
 
   let description = [{

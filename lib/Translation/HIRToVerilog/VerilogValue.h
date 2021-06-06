@@ -37,7 +37,7 @@ public:
 
   Type getType();
   ArrayRef<int64_t> getShape() const;
-  SmallVector<int, 4> getPacking() const;
+  SmallVector<int, 4> getPackedDims() const;
   Type getElementType() const;
 
 private:
