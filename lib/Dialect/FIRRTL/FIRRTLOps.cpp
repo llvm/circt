@@ -305,7 +305,7 @@ SmallVector<ModulePortInfo> firrtl::getModulePortInfo(Operation *op) {
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     auto type = argTypes[i].cast<FIRRTLType>();
     auto direction = direction::get(portDirections[i]);
-    auto annots = AnnotationSet::forPort(op, i).getArrayAttr(type.getContext());
+    auto annots = AnnotationSet::forPort(op, i).getArrayAttr();
     results.push_back(
         {portNamesAttr[i].cast<StringAttr>(), type, direction, annots});
   }
@@ -374,8 +374,8 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   for (size_t i = 0, e = ports.size(); i != e; ++i) {
     portNames.push_back(ports[i].name);
     portDirections.push_back(ports[i].direction);
-    argAttrs.push_back(AnnotationSet(ports[i].annotations)
-                           .getArgumentAttrDict(builder.getContext()));
+    argAttrs.push_back(AnnotationSet(ports[i].annotations, builder.getContext())
+                           .getArgumentAttrDict());
   }
 
   // Both attributes are added, even if the module has no ports.

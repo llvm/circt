@@ -16,15 +16,19 @@
 using namespace circt;
 using namespace firrtl;
 
-static ArrayRef<Attribute> getAnnotationsFrom(Operation *op) {
-  if (ArrayAttr array = op->getAttrOfType<ArrayAttr>("annotations"))
-    return array.getValue();
-  return {};
+static ArrayAttr getAnnotationsFrom(Operation *op) {
+  if (auto annots = op->getAttrOfType<ArrayAttr>("annotations"))
+    return annots;
+  return ArrayAttr::get(op->getContext(), {});
 }
+
+/// Form an annotation set with a possibly-null ArrayAttr.
+AnnotationSet::AnnotationSet(ArrayAttr annotations, MLIRContext *context)
+    : AnnotationSet(annotations ? annotations : ArrayAttr::get(context, {})) {}
 
 /// Get an annotation set for the specified operation.
 AnnotationSet::AnnotationSet(Operation *op)
-    : annotations(getAnnotationsFrom(op)) {}
+    : AnnotationSet(getAnnotationsFrom(op)) {}
 
 /// Get an annotation set for the specified module port.
 AnnotationSet AnnotationSet::forPort(Operation *module, size_t portNo) {
@@ -32,12 +36,13 @@ AnnotationSet AnnotationSet::forPort(Operation *module, size_t portNo) {
     if (a.first == "firrtl.annotations")
       return AnnotationSet(a.second.cast<ArrayAttr>());
   }
-  return AnnotationSet(ArrayRef<Attribute>());
+  return AnnotationSet(ArrayAttr::get(module->getContext(), {}));
 }
 
 /// Return this annotation set as an argument attribute dictionary for a port.
 DictionaryAttr AnnotationSet::getArgumentAttrDict(
-    MLIRContext *context, ArrayRef<NamedAttribute> otherPortAttrs) const {
+    ArrayRef<NamedAttribute> otherPortAttrs) const {
+  auto *context = getContext();
   if (empty())
     return DictionaryAttr::get(context, otherPortAttrs);
 
@@ -45,7 +50,7 @@ DictionaryAttr AnnotationSet::getArgumentAttrDict(
                                            otherPortAttrs.end());
   // Annotations are stored as under the "firrtl.annotations" key.
   allPortAttrs.push_back(
-      {Identifier::get("firrtl.annotations", context), getArrayAttr(context)});
+      {Identifier::get("firrtl.annotations", context), getArrayAttr()});
   return DictionaryAttr::get(context, allPortAttrs);
 }
 
