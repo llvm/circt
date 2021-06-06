@@ -322,11 +322,6 @@ Direction firrtl::getModulePortDirection(Operation *op, size_t portIndex) {
   return direction::get(getModulePortDirections(op).getValue()[portIndex]);
 }
 
-ArrayAttr getModulePortAnnotation(Operation *op, size_t portIndex) {
-  assert(isa<FModuleOp>(op) || isa<FExtModuleOp>(op));
-  return getModulePortAnnotations(op)[portIndex].cast<ArrayAttr>();
-}
-
 // Return the port with the specified name.
 BlockArgument FModuleOp::getPortArgument(size_t portNumber) {
   return getBodyBlock()->getArgument(portNumber);
