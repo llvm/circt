@@ -39,6 +39,21 @@ AnnotationSet AnnotationSet::forPort(Operation *module, size_t portNo) {
   return AnnotationSet(ArrayAttr::get(module->getContext(), {}));
 }
 
+/// Get an annotation set for the specified module port, as well as other
+/// argument attributes.
+AnnotationSet
+AnnotationSet::forPort(Operation *module, size_t portNo,
+                       SmallVectorImpl<NamedAttribute> &otherAttributes) {
+  ArrayAttr annotations;
+  for (auto a : mlir::function_like_impl::getArgAttrs(module, portNo)) {
+    if (a.first == "firrtl.annotations")
+      annotations = a.second.cast<ArrayAttr>();
+    else
+      otherAttributes.push_back(a);
+  }
+  return AnnotationSet(annotations, module->getContext());
+}
+
 /// Return this annotation set as an argument attribute dictionary for a port.
 DictionaryAttr AnnotationSet::getArgumentAttrDict(
     ArrayRef<NamedAttribute> otherPortAttrs) const {

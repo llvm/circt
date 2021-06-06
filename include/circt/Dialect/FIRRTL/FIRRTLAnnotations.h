@@ -47,6 +47,12 @@ public:
   /// Get an annotation set for the specified module port.
   static AnnotationSet forPort(Operation *module, size_t portNo);
 
+  /// Get an annotation set for the specified module port, as well as other
+  /// argument attributes.
+  static AnnotationSet
+  forPort(Operation *module, size_t portNo,
+          SmallVectorImpl<NamedAttribute> &otherAttributes);
+
   /// Return all the raw annotations that exist.
   ArrayRef<Attribute> getArray() const { return annotations.getValue(); }
 
