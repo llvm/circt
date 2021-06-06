@@ -588,6 +588,56 @@ LogicalResult MulOp::canonicalize(MulOp op, PatternRewriter &rewriter) {
   return failure();
 }
 
+template <class Op, bool isSigned>
+static OpFoldResult foldDiv(Op op, ArrayRef<Attribute> constants) {
+  if (auto rhs_value = constants[1].dyn_cast_or_null<IntegerAttr>()) {
+    // divu(x, 1) -> x, divs(x, 1) -> x
+    if (rhs_value.getValue() == 1)
+      return op.lhs();
+
+    // If the divisor is zero, do not fold for now.
+    if (rhs_value.getValue().isNullValue())
+      return {};
+  }
+
+  return constFoldBinaryOp<IntegerAttr>(constants, [](APInt a, APInt b) {
+    return isSigned ? a.sdiv(b) : a.udiv(b);
+  });
+}
+
+OpFoldResult DivUOp::fold(ArrayRef<Attribute> constants) {
+  return foldDiv<DivUOp, /*isSigned=*/false>(*this, constants);
+}
+
+OpFoldResult DivSOp::fold(ArrayRef<Attribute> constants) {
+  return foldDiv<DivSOp, /*isSigned=*/true>(*this, constants);
+}
+
+template <class Op, bool isSigned>
+static OpFoldResult foldMod(Op op, ArrayRef<Attribute> constants) {
+  if (auto rhs_value = constants[1].dyn_cast_or_null<IntegerAttr>()) {
+    // modu(x, 1) -> 0, mods(x, 1) -> 0
+    if (rhs_value.getValue() == 1)
+      return getIntAttr(APInt(op.getType().getIntOrFloatBitWidth(), 0),
+                        op.getContext());
+
+    // If the divisor is zero, do not fold for now.
+    if (rhs_value.getValue().isNullValue())
+      return {};
+  }
+
+  return constFoldBinaryOp<IntegerAttr>(constants, [](APInt a, APInt b) {
+    return isSigned ? a.srem(b) : a.urem(b);
+  });
+}
+
+OpFoldResult ModUOp::fold(ArrayRef<Attribute> constants) {
+  return foldMod<ModUOp, /*isSigned=*/false>(*this, constants);
+}
+
+OpFoldResult ModSOp::fold(ArrayRef<Attribute> constants) {
+  return foldMod<ModSOp, /*isSigned=*/true>(*this, constants);
+}
 //===----------------------------------------------------------------------===//
 // ConcatOp
 //===----------------------------------------------------------------------===//

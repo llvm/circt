@@ -218,11 +218,11 @@ firrtl.circuit "Simple" {
     %49 = firrtl.and %in3, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.uint<8>
 
     // Issue #355: https://github.com/llvm/circt/issues/355
-    // CHECK: [[DIV:%.+]] = comb.divu %c104_i10, %c306_i10 : i10
-    // CHECK: = comb.extract [[DIV]] from 0 : (i10) -> i8
-    %c104_ui8 = firrtl.constant 104 : !firrtl.uint<8>
+    // CHECK: [[IN1:%.+]] = comb.concat %c0_i6, %in1 : (i6, i4) -> i10
+    // CHECK: [[DIV:%.+]] = comb.divu [[IN1]], %c306_i10 : i10
+    // CHECK: = comb.extract [[DIV]] from 0 : (i10) -> i4
     %c306_ui10 = firrtl.constant 306 : !firrtl.uint<10>
-    %50 = firrtl.div %c104_ui8, %c306_ui10 : (!firrtl.uint<8>, !firrtl.uint<10>) -> !firrtl.uint<8>
+    %50 = firrtl.div %in1, %c306_ui10 : (!firrtl.uint<4>, !firrtl.uint<10>) -> !firrtl.uint<4>
 
     %c1175_ui11 = firrtl.constant 1175 : !firrtl.uint<11>
     %51 = firrtl.neg %c1175_ui11 : (!firrtl.uint<11>) -> !firrtl.sint<12>
