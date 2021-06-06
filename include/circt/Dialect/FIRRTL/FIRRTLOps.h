@@ -100,9 +100,6 @@ IntegerAttr getModulePortDirections(Operation *module);
 /// number.
 Direction getModulePortDirection(Operation *op, size_t portIndex);
 
-/// Return an array of the Annotations on each port of an FModule or ExtModule.
-SmallVector<ArrayAttr> getModulePortAnnotations(Operation *module);
-
 /// Returns true if the value results from an expression with duplex flow.
 /// Duplex values have special treatment in bundle connect operations, and their
 /// flip orientation is not used to determine the direction of each pairwise

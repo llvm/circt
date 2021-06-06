@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
+#include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/Operation.h"
 using namespace circt;
 using namespace firrtl;
@@ -24,6 +25,15 @@ static ArrayRef<Attribute> getAnnotationsFrom(Operation *op) {
 /// Get an annotation set for the specified operation.
 AnnotationSet::AnnotationSet(Operation *op)
     : annotations(getAnnotationsFrom(op)) {}
+
+/// Get an annotation set for the specified module port.
+AnnotationSet AnnotationSet::forPort(Operation *module, size_t portNo) {
+  for (auto a : mlir::function_like_impl::getArgAttrs(module, portNo)) {
+    if (a.first == "firrtl.annotations")
+      return AnnotationSet(a.second.cast<ArrayAttr>().getValue());
+  }
+  return AnnotationSet(ArrayRef<Attribute>());
+}
 
 DictionaryAttr AnnotationSet::getAnnotationImpl(StringRef className) const {
   for (auto annotation : annotations) {

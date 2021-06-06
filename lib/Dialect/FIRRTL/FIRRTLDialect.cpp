@@ -119,22 +119,6 @@ mlir::IntegerAttr firrtl::getModulePortDirections(Operation *module) {
   return module->getAttrOfType<mlir::IntegerAttr>(direction::attrKey);
 }
 
-SmallVector<ArrayAttr> firrtl::getModulePortAnnotations(Operation *module) {
-  SmallVector<ArrayAttr> portAnnotations;
-  for (size_t i = 0, e = getModuleType(module).getInputs().size(); i != e;
-       ++i) {
-    ArrayAttr annotations = {};
-    for (auto a : mlir::function_like_impl::getArgAttrs(module, i)) {
-      if (a.first != "firrtl.annotations")
-        continue;
-      annotations = a.second.cast<ArrayAttr>();
-      break;
-    }
-    portAnnotations.push_back(annotations);
-  }
-  return portAnnotations;
-}
-
 namespace {
 
 // We implement the OpAsmDialectInterface so that FIRRTL dialect operations

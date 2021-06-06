@@ -29,14 +29,21 @@ class AnnotationSetIterator;
 ///
 class AnnotationSet {
 public:
-  /// Get an annotation set for the specified operation.
-  explicit AnnotationSet(Operation *op);
-
   explicit AnnotationSet(ArrayRef<Attribute> annotations)
       : annotations(annotations) {}
 
+  /// Get an annotation set for the specified operation.
+  explicit AnnotationSet(Operation *op);
+
+  /// Get an annotation set for the specified module port.
+  static AnnotationSet forPort(Operation *module, size_t portNo);
+
   /// Return all the raw annotations that exist.
   ArrayRef<Attribute> getRaw() const { return annotations; }
+
+  ArrayAttr getArrayAttr(MLIRContext *context) const {
+    return ArrayAttr::get(context, annotations);
+  }
 
   /// Return true if we have an annotation with the specified class name.
   bool hasAnnotation(StringRef className) const {

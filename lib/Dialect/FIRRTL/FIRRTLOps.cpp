@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/HW/HWTypes.h"
@@ -301,12 +302,12 @@ SmallVector<ModulePortInfo> firrtl::getModulePortInfo(Operation *op) {
 
   auto portNamesAttr = getModulePortNames(op);
   auto portDirections = getModulePortDirections(op).getValue();
-  auto portAnnotations = getModulePortAnnotations(op);
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     auto type = argTypes[i].cast<FIRRTLType>();
     auto direction = direction::get(portDirections[i]);
-    results.push_back({portNamesAttr[i].cast<StringAttr>(), type, direction,
-                       portAnnotations[i]});
+    auto annots = AnnotationSet::forPort(op, i).getArrayAttr(type.getContext());
+    results.push_back(
+        {portNamesAttr[i].cast<StringAttr>(), type, direction, annots});
   }
   return results;
 }
