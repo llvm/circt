@@ -73,6 +73,27 @@ bool AnnotationSet::hasDontTouch() const {
   return hasAnnotation("firrtl.transforms.DontTouchAnnotation");
 }
 
+/// Add more annotations to this AttributeSet.
+void AnnotationSet::addAnnotations(ArrayAttr newAnnotations) {
+  if (!newAnnotations)
+    return;
+
+  if (empty()) {
+    annotations = newAnnotations;
+    return;
+  }
+
+  SmallVector<Attribute> annotationVec;
+  annotationVec.reserve(annotations.size() + newAnnotations.size());
+  annotationVec.append(annotations.begin(), annotations.end());
+  annotationVec.append(newAnnotations.begin(), newAnnotations.end());
+  annotations = ArrayAttr::get(getContext(), annotationVec);
+}
+
+//===----------------------------------------------------------------------===//
+// Annotation
+//===----------------------------------------------------------------------===//
+
 /// Return the 'class' that this annotation is representing.
 StringRef Annotation::getClass() const {
   if (auto classAttr = ((DictionaryAttr)attrDict).getAs<StringAttr>("class"))

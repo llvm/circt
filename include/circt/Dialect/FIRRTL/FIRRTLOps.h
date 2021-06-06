@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_FIRRTL_OPS_H
 #define CIRCT_DIALECT_FIRRTL_OPS_H
 
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "mlir/IR/Builders.h"
@@ -55,7 +56,7 @@ struct ModulePortInfo {
   StringAttr name;
   FIRRTLType type;
   Direction direction;
-  ArrayAttr annotations = ArrayAttr();
+  AnnotationSet annotations = AnnotationSet(type.getContext());
 
   StringRef getName() const { return name ? name.getValue() : ""; }
 

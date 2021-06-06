@@ -343,6 +343,9 @@ struct FIRParser {
   /// parameter is non-empty, then this will be appended to.
   void getAnnotations(Twine target, ArrayAttr &annotations);
 
+  /// Add any annotations for a given target to the specified AnnotationSet.
+  void getAnnotations(Twine target, AnnotationSet &annotations);
+
   /// Returns true if the annotation list contains the DontTouchAnnotation. This
   /// method is slightly more efficient than other lookup methods, because it
   /// uses a stashed copy of the annotation for lookup.
@@ -925,11 +928,13 @@ ParseResult FIRParser::importAnnotationFile(SMLoc loc) {
   return result;
 }
 
+/// Populate a vector of annotations for a given Target.  If the annotations
+/// parameter is non-empty, then this will be appended to.
 void FIRParser::getAnnotations(Twine target, ArrayAttr &annotations) {
   // Early exit if no annotations exist.  This avoids the cost of
   // constructing strings representing targets if no annotation can
   // possibly exist.
-  if (state.annotationMap.begin() == state.annotationMap.end())
+  if (state.annotationMap.empty())
     return;
 
   // Input annotations is empty.  Just do the lookup and return.
@@ -952,6 +957,17 @@ void FIRParser::getAnnotations(Twine target, ArrayAttr &annotations) {
     annotationVec.push_back(a);
 
   annotations = ArrayAttr::get(state.context, annotationVec);
+}
+
+/// Add any annotations for a given target to the specified AnnotationSet.
+void FIRParser::getAnnotations(Twine target, AnnotationSet &annotations) {
+  // Early exit if no annotations exist.  This avoids the cost of
+  // constructing strings representing targets if no annotation can
+  // possibly exist.
+  if (state.annotationMap.empty())
+    return;
+
+  annotations.addAnnotations(state.annotationMap.lookup(target.str()));
 }
 
 //===----------------------------------------------------------------------===//
@@ -1705,7 +1721,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
     }
 
     // We always skip emitting the validif mux because it always folds to the
-    // non-invalid operand. 
+    // non-invalid operand.
     result = operands[1];
     return success();
   }
@@ -2927,7 +2943,7 @@ FIRModuleParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
         info.parseOptionalInfo())
       return failure();
 
-    ArrayAttr annotations = ArrayAttr({});
+    AnnotationSet annotations(getState().emptyArrayAttr);
     getAnnotations(getModuleTarget() + ">" + name.getValue(), annotations);
 
     // FIXME: We should persist the info loc into the IR, not just the name

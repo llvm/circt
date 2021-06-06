@@ -30,6 +30,10 @@ class AnnotationSetIterator;
 class AnnotationSet {
 public:
   /// Form an annotation set with a non-null ArrayAttr.
+  explicit AnnotationSet(MLIRContext *context)
+      : annotations(ArrayAttr::get(context, {})) {}
+
+  /// Form an annotation set with a non-null ArrayAttr.
   explicit AnnotationSet(ArrayAttr annotations) : annotations(annotations) {
     assert(annotations && "Cannot use null attribute set");
   }
@@ -88,6 +92,9 @@ public:
   bool empty() const { return annotations.empty(); }
 
   size_t size() const { return annotations.size(); }
+
+  /// Add more annotations to this AttributeSet.
+  void addAnnotations(ArrayAttr annotations);
 
 private:
   bool hasAnnotationImpl(StringRef className) const;
