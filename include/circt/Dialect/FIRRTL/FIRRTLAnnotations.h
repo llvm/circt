@@ -31,6 +31,9 @@ class AnnotationSet {
 public:
   explicit AnnotationSet(ArrayRef<Attribute> annotations)
       : annotations(annotations) {}
+  explicit AnnotationSet(ArrayAttr annotationsAttr)
+      : annotations(annotationsAttr ? annotationsAttr.getValue()
+                                    : ArrayRef<Attribute>()) {}
 
   /// Get an annotation set for the specified operation.
   explicit AnnotationSet(Operation *op);
@@ -41,9 +44,15 @@ public:
   /// Return all the raw annotations that exist.
   ArrayRef<Attribute> getRaw() const { return annotations; }
 
+  /// Return this annotation set as an ArrayAttr.
   ArrayAttr getArrayAttr(MLIRContext *context) const {
     return ArrayAttr::get(context, annotations);
   }
+
+  /// Return this annotation set as an argument attribute dictionary for a port.
+  DictionaryAttr
+  getArgumentAttrDict(MLIRContext *context,
+                      ArrayRef<NamedAttribute> otherPortAttrs = {}) const;
 
   /// Return true if we have an annotation with the specified class name.
   bool hasAnnotation(StringRef className) const {

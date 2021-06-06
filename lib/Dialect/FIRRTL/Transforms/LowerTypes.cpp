@@ -352,8 +352,7 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
     // annotations.  Populate oldAnnotations with the current annotations.
     SmallVector<NamedAttribute> argAttrs;
     ArrayAttr oldAnnotations;
-    for (auto oldArgAttr :
-         builder.getDictionaryAttr(extModule.getArgAttrs(oldArgNumber))) {
+    for (auto oldArgAttr : extModule.getArgAttrs(oldArgNumber)) {
       if (oldArgAttr.first == "firrtl.annotations") {
         oldAnnotations = oldArgAttr.second.cast<ArrayAttr>();
         continue;

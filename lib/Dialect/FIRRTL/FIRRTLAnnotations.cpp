@@ -30,9 +30,23 @@ AnnotationSet::AnnotationSet(Operation *op)
 AnnotationSet AnnotationSet::forPort(Operation *module, size_t portNo) {
   for (auto a : mlir::function_like_impl::getArgAttrs(module, portNo)) {
     if (a.first == "firrtl.annotations")
-      return AnnotationSet(a.second.cast<ArrayAttr>().getValue());
+      return AnnotationSet(a.second.cast<ArrayAttr>());
   }
   return AnnotationSet(ArrayRef<Attribute>());
+}
+
+/// Return this annotation set as an argument attribute dictionary for a port.
+DictionaryAttr AnnotationSet::getArgumentAttrDict(
+    MLIRContext *context, ArrayRef<NamedAttribute> otherPortAttrs) const {
+  if (empty())
+    return DictionaryAttr::get(context, otherPortAttrs);
+
+  SmallVector<NamedAttribute> allPortAttrs(otherPortAttrs.begin(),
+                                           otherPortAttrs.end());
+  // Annotations are stored as under the "firrtl.annotations" key.
+  allPortAttrs.push_back(
+      {Identifier::get("firrtl.annotations", context), getArrayAttr(context)});
+  return DictionaryAttr::get(context, allPortAttrs);
 }
 
 DictionaryAttr AnnotationSet::getAnnotationImpl(StringRef className) const {
