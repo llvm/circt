@@ -1,6 +1,13 @@
 #HIR
 HIR is an mlir dialect for hardware description.
 
+#TODO
+
+* Match data type between function call and function def.
+* Support external def.
+
+
+
 #Enhancement proposals : Ops
 
 ##AllocaOp
@@ -57,7 +64,14 @@ HIR is an mlir dialect for hardware description.
     `Tuple<
     Tensor<!hir.bus<out i1, out i8>, proto valid>, 
     Tensor< !hir.bus<in i32>>>`
+* For each use of the memref, use an hir.split function.
 * Convert LoadOp/StoreOp to SelectOp + SendOp + RecvOp.
+
+## BusType lowering
+* perform loop-unrolling.
+* Find number of uses per bus.
+* For each bus that is used multiple times, use the split function to create an
+    array and use the array elements.
 
 ##CallOp lowering
 * Convert CallOp-on-symbol to AllocaOp + CallOp-on-var.

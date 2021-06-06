@@ -1,6 +1,6 @@
-//=========- CanonicalizationPass.cpp - Canonicalize varius instructions---===//
+//=========- MemrefLoweringPass.cpp - Lower memref type---===//
 //
-// This file implements the HIR canonicalization pass.
+// This file implements lowering pass for memref type.
 //
 //===----------------------------------------------------------------------===//
 
@@ -9,8 +9,7 @@
 using namespace mlir;
 namespace {
 
-class CanonicalizationPass
-    : public hir::CanonicalizationBase<CanonicalizationPass> {
+class MemrefLoweringPass : public hir::MemrefLoweringBase<MemrefLoweringPass> {
 public:
   void runOnOperation() override;
 };
@@ -32,25 +31,21 @@ void inspectOp(hir::DelayOp op) {}
 void inspectOp(hir::CallOp op) {}
 
 void processLoadOp(hir::LoadOp op) {
-  /*if (op.offset()) {
-    mlir::OpBuilder builder(op.getOperation()->getParentOp()->getContext());
-    builder.setInsertionPoint(op);
-    hir::DelayOp newDelayOp = builder.create<hir::DelayOp>(
-        op.getLoc(), op.tstart().getType(), op.tstart(), op.offset(),
-        op.tstart(), mlir::Value());
-    hir::LoadOp newLoadOp =
-        builder.create<hir::LoadOp>(op.getLoc(), op.res().getType(), op.mem(),
-                                    op.addr(), newDelayOp, mlir::Value());
-    op.replaceAllUsesWith(newLoadOp.getOperation());
-    op.getOperation()->dropAllReferences();
-    op.getOperation()->dropAllUses();
-    op.getOperation()->erase();
-  }
-  */
+  mlir::OpBuilder builder(op.getOperation()->getParentOp()->getContext());
+  builder.setInsertionPoint(op);
+  hir::DelayOp newDelayOp = builder.create<hir::DelayOp>(
+      op.getLoc(), op.tstart().getType(), op.tstart(), op.offset(), op.tstart(),
+      mlir::Value());
+  hir::LoadOp newLoadOp =
+      builder.create<hir::LoadOp>(op.getLoc(), op.res().getType(), op.mem(),
+                                  op.addr(), newDelayOp, mlir::Value());
+  op.replaceAllUsesWith(newLoadOp.getOperation());
+  op.getOperation()->dropAllReferences();
+  op.getOperation()->dropAllUses();
+  op.getOperation()->erase();
 }
 
-void CanonicalizationPass::runOnOperation() {
-  /*
+void MemrefLoweringPass::runOnOperation() {
   hir::FuncOp funcOp = getOperation();
   WalkResult result = funcOp.walk([](Operation *operation) -> WalkResult {
     if (hir::LoadOp op = dyn_cast<hir::LoadOp>(operation))
@@ -62,13 +57,12 @@ void CanonicalizationPass::runOnOperation() {
     signalPassFailure();
     return;
   }
-  */
 }
 
 namespace mlir {
 namespace hir {
-std::unique_ptr<OperationPass<hir::FuncOp>> createCanonicalizationPass() {
-  return std::make_unique<CanonicalizationPass>();
+std::unique_ptr<OperationPass<hir::FuncOp>> createMemrefLoweringPass() {
+  return std::make_unique<MemrefLoweringPass>();
 }
 } // namespace hir
 } // namespace mlir

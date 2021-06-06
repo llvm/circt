@@ -1,13 +1,12 @@
 #ifndef CIRCT_DIALECT_HIR_TRANSFORMS_PASSES
 #define CIRCT_DIALECT_HIR_TRANSFORMS_PASSES
 include "mlir/Pass/PassBase.td"
-def Canonicalization : Pass<"hir-canonicalization", "hir::FuncOp"> {
+def MemrefLowering : Pass<"hir-memref-lowering", "hir::FuncOp"> {
   let summary = "Move time offsets into separate 'delay' op";
-  let description = [{This pass removes the time offset parameter into a
-  separate hir.delay op to ensure all other ops have just one time parameter.
-  }];
+  let description = [{This pass lowers memrefs into bus types and function
+  calls.  }];
 
-  let constructor = "mlir::hir::createCanonicalizationPass()";
+  let constructor = "mlir::hir::createMemrefLoweringPass()";
 }
 
 def ScheduleVerifier : Pass<"hir-schedule-verifier", "hir::FuncOp"> {
