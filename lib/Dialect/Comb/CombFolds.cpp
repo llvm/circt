@@ -606,11 +606,11 @@ static OpFoldResult foldDiv(Op op, ArrayRef<Attribute> constants) {
 }
 
 OpFoldResult DivUOp::fold(ArrayRef<Attribute> constants) {
-  return foldDiv<DivUOp, /* isSigned=*/false>(*this, constants);
+  return foldDiv<DivUOp, /*isSigned=*/false>(*this, constants);
 }
 
 OpFoldResult DivSOp::fold(ArrayRef<Attribute> constants) {
-  return foldDiv<DivSOp, /* isSigned=*/true>(*this, constants);
+  return foldDiv<DivSOp, /*isSigned=*/true>(*this, constants);
 }
 
 template <class Op, bool isSigned>
@@ -632,11 +632,11 @@ static OpFoldResult foldMod(Op op, ArrayRef<Attribute> constants) {
 }
 
 OpFoldResult ModUOp::fold(ArrayRef<Attribute> constants) {
-  return foldMod<ModUOp, /* isSigned=*/false>(*this, constants);
+  return foldMod<ModUOp, /*isSigned=*/false>(*this, constants);
 }
 
 OpFoldResult ModSOp::fold(ArrayRef<Attribute> constants) {
-  return foldMod<ModSOp, /* isSigned=*/true>(*this, constants);
+  return foldMod<ModSOp, /*isSigned=*/true>(*this, constants);
 }
 //===----------------------------------------------------------------------===//
 // ConcatOp
