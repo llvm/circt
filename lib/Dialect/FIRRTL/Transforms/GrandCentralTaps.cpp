@@ -17,6 +17,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Allocator.h"
@@ -36,7 +37,7 @@ using namespace firrtl;
 using InstancePath = ArrayRef<InstanceOp>;
 
 template <typename T>
-T &operator<<(T &os, const InstancePath &path) {
+static T &operator<<(T &os, const InstancePath &path) {
   os << "$root";
   for (auto inst : path)
     os << "." << inst.name();
@@ -106,6 +107,7 @@ InstanceGraph::InstanceGraph(CircuitOp circuitOp) : circuitOp(circuitOp) {
       moduleInstances[instOp.getReferencedModule()].push_back(instOp);
   });
 
+#ifndef NDEBUG
   LLVM_DEBUG(llvm::dbgs() << "Instance graph:\n");
   for (auto it : moduleInstances) {
     LLVM_DEBUG(llvm::dbgs()
@@ -116,6 +118,7 @@ InstanceGraph::InstanceGraph(CircuitOp circuitOp) : circuitOp(circuitOp) {
                  << "  - " << inst.nameAttr() << " in \""
                  << inst->getParentOfType<FModuleOp>().getName() << "\"\n");
   }
+#endif
 }
 
 ArrayRef<InstancePath> InstanceGraph::getAbsolutePaths(Operation *op) {
@@ -373,8 +376,10 @@ void GrandCentralTapsPass::runOnOperation() {
     // As a first step, gather a list of all absolute paths to instances of this
     // black box.
     auto paths = instanceGraph.getAbsolutePaths(blackBox.extModule);
+#ifndef NDEBUG
     for (auto path : paths)
       LLVM_DEBUG(llvm::dbgs() << "- " << path << "\n");
+#endif
 
     // Go through the port annotations of the tap module and generate a
     // hierarchical path for each.
@@ -520,15 +525,17 @@ void GrandCentralTapsPass::runOnOperation() {
         // in the IR that can properly inject the memory array on emission.
         wiring.prefices =
             instanceGraph.getAbsolutePaths(op->getParentOfType<FModuleOp>());
-        wiring.suffix = name.getValue();
-        wiring.suffix += '[';
-        wiring.suffix += llvm::utostr(memPortIdx[portAnno.anno.getDict()]++);
-        wiring.suffix += ']';
+        (Twine(name.getValue()) + "[" +
+         llvm::utostr(memPortIdx[portAnno.anno.getDict()]++) + "]")
+            .toVector(wiring.suffix);
         portWiring.push_back(std::move(wiring));
         continue;
       }
 
-      llvm_unreachable("only accepted annos added to portAnnos list");
+      // We never arrive here since the above code that populates the portAnnos
+      // list only adds annotations that we handle in one of the if statements
+      // above.
+      llvm_unreachable("portAnnos is never populated with unsupported annos");
     }
 
 #ifndef NDEBUG
@@ -550,21 +557,21 @@ void GrandCentralTapsPass::runOnOperation() {
     // instances.) To solve this issue, create a dedicated implementation for
     // every data tap instance, and among the possible targets for the data taps
     // choose the one with the shortest relative path to the data tap instance.
-    OpBuilder builder(blackBox.extModule);
+    ImplicitLocOpBuilder builder(blackBox.extModule->getLoc(),
+                                 blackBox.extModule);
     unsigned implIdx = 0;
     for (auto path : paths) {
       builder.setInsertionPointAfter(blackBox.extModule);
 
       // Create a new firrtl.module that implements the data tap.
-      SmallString<32> nameBuffer(blackBox.extModule.getName());
-      nameBuffer += "_impl_";
-      nameBuffer += llvm::utostr(implIdx++);
-      auto name = StringAttr::get(&getContext(), nameBuffer);
+      auto name =
+          StringAttr::get(&getContext(), (Twine(blackBox.extModule.getName()) +
+                                          "_impl_" + llvm::utostr(implIdx++))
+                                             .str());
       LLVM_DEBUG(llvm::dbgs()
                  << "Implementing " << name << " ("
                  << blackBox.extModule.getName() << " for " << path << ")\n");
-      auto impl = builder.create<FModuleOp>(blackBox.extModule->getLoc(), name,
-                                            blackBox.extModule.getPorts(),
+      auto impl = builder.create<FModuleOp>(name, blackBox.extModule.getPorts(),
                                             blackBox.filteredModuleAnnos);
       builder.setInsertionPointToEnd(impl.getBodyBlock());
 
@@ -602,9 +609,8 @@ void GrandCentralTapsPass::runOnOperation() {
         // Add a verbatim op that assigns this module port.
         auto arg = impl.getArgument(port.portNum);
         auto hnameExpr = builder.create<VerbatimExprOp>(
-            blackBox.extModule->getLoc(), arg.getType().cast<FIRRTLType>(),
-            hname);
-        builder.create<ConnectOp>(blackBox.extModule->getLoc(), arg, hnameExpr);
+            arg.getType().cast<FIRRTLType>(), hname);
+        builder.create<ConnectOp>(arg, hnameExpr);
       }
 
       // Switch the instance from the original extmodule to this implementation.
