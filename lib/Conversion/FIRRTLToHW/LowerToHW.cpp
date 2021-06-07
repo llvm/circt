@@ -1609,6 +1609,14 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
       // do not attach a symbol name.
       auto wire = builder.create<sv::WireOp>(operand.getType(), name);
       builder.create<sv::ConnectOp>(wire, operand);
+
+      if (AnnotationSet(op).hasDontTouch()) {
+        auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
+        auto symName = builder.getStringAttr(
+            (Twine("__") + moduleName + Twine("__") + name.getValue())
+                .str());
+        wire->setAttr("sym_name", symName);
+      }
     }
   }
 

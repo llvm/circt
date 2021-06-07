@@ -28,6 +28,9 @@ firrtl.circuit "Simple" {
     %500 = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
     %501 = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<5>
 
+    // CHECK: sv.wire sym @__Simple__dntnode
+    %dntnode = firrtl.node %in1 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
+
     // CHECK: sv.connect %out5, %c0_i4 : i4
     %tmp1 = firrtl.invalidvalue : !firrtl.uint<4>
     firrtl.connect %out5, %tmp1 : !firrtl.uint<4>, !firrtl.uint<4>
