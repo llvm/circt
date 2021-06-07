@@ -140,12 +140,16 @@ public:
 
   /// Return a member of the annotation.
   template <typename AttrClass = Attribute>
-  AttrClass getMember(StringAttr name) {
-    return attrDict.getAs<AttrClass>(name);
+  AttrClass getMember(StringAttr name) const {
+    // TODO: Once https://reviews.llvm.org/D103822 lands, the `const_cast` can
+    // go away.
+    return const_cast<DictionaryAttr &>(attrDict).getAs<AttrClass>(name);
   }
   template <typename AttrClass = Attribute>
-  AttrClass getMember(StringRef name) {
-    return attrDict.getAs<AttrClass>(name);
+  AttrClass getMember(StringRef name) const {
+    // TODO: Once https://reviews.llvm.org/D103822 lands, the `const_cast` can
+    // go away.
+    return const_cast<DictionaryAttr &>(attrDict).getAs<AttrClass>(name);
   }
 
 private:
@@ -155,15 +159,15 @@ private:
   struct ClassIsa {
     StringAttr cls;
 
-    bool operator()() { return false; }
+    bool operator()() const { return false; }
     template <typename T, typename... Rest>
-    bool operator()(T name, Rest... rest) {
+    bool operator()(T name, Rest... rest) const {
       return compare(name) || (*this)(rest...);
     }
 
   private:
-    bool compare(StringAttr name) { return cls == name; }
-    bool compare(StringRef name) { return cls && cls.getValue() == name; }
+    bool compare(StringAttr name) const { return cls == name; }
+    bool compare(StringRef name) const { return cls && cls.getValue() == name; }
   };
 };
 
