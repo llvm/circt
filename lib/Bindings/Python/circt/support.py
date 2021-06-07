@@ -6,7 +6,7 @@ import mlir.ir as ir
 
 from contextlib import AbstractContextManager
 from contextvars import ContextVar
-from typing import List, Type
+from typing import List
 
 _current_backedge_builder = ContextVar("current_bb")
 
@@ -40,7 +40,8 @@ def connect(destination, source):
   """A convenient way to use BackedgeBuilder."""
   if not isinstance(destination, OpOperand):
     raise TypeError(
-        f"cannot connect to destination of type {type(destination)}")
+        f"cannot connect to destination of type {type(destination)}. "
+         "Must by OpOperand.")
   value = get_value(source)
   if value is None:
     raise TypeError(f"cannot connect from source of type {type(source)}")
@@ -158,17 +159,6 @@ class OpOperand:
 
     self.value = value
     self.backedge_owner = backedge_owner
-
-
-# # Are there any situations in which this needs to be used to index into results?
-# class BuilderValue(OpOperand):
-#   """Class that holds a value, as well as builder and index of this value in
-#      the operand or result list. This can represent an OpOperand and index into
-#      OpOperandList or a OpResult and index into an OpResultList"""
-
-#   def __init__(self, value, builder, index):
-#     super().__init__(builder.operation, index, value)
-#     self.builder = builder
 
 
 class NamedValueOpView:
