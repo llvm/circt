@@ -1377,45 +1377,37 @@ firrtl.circuit "writeVectorOfBundle1D"  {
   }
 }
 // CHECK:     firrtl.module @writeVectorOfBundle1D(in %a_wo: !firrtl.uint<1>, in %a_valid: !firrtl.uint<2>, in %def_0_wo: !firrtl.uint<1>, in %def_0_valid: !firrtl.uint<2>, in %def_1_wo: !firrtl.uint<1>, in %def_1_valid: !firrtl.uint<2>, in %def_2_wo: !firrtl.uint<1>, in %def_2_valid: !firrtl.uint<2>, in %def_3_wo: !firrtl.uint<1>, in %def_3_valid: !firrtl.uint<2>, in %sel: !firrtl.uint<2>, out %b_0_wo: !firrtl.uint<1>, out %b_0_valid: !firrtl.uint<2>, out %b_1_wo: !firrtl.uint<1>, out %b_1_valid: !firrtl.uint<2>, out %b_2_wo: !firrtl.uint<1>, out %b_2_valid: !firrtl.uint<2>, out %b_3_wo: !firrtl.uint<1>, out %b_3_valid: !firrtl.uint<2>) {
-// CHECK:       firrtl.connect %b_0_wo, %def_0_wo : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:       firrtl.connect %b_0_valid, %def_0_valid : !firrtl.uint<2>, !firrtl.uint<2>
-// CHECK:       firrtl.connect %b_1_wo, %def_1_wo : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:       firrtl.connect %b_1_valid, %def_1_valid : !firrtl.uint<2>, !firrtl.uint<2>
-// CHECK:       firrtl.connect %b_2_wo, %def_2_wo : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:       firrtl.connect %b_2_valid, %def_2_valid : !firrtl.uint<2>, !firrtl.uint<2>
-// CHECK:       firrtl.connect %b_3_wo, %def_3_wo : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK:       firrtl.connect %b_3_valid, %def_3_valid : !firrtl.uint<2>, !firrtl.uint<2>
-// CHECK:       %0 = firrtl.wire  : !firrtl.uint<1>
-// CHECK:       %1 = firrtl.wire  : !firrtl.uint<2>
-// CHECK:       %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK:       %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
-// CHECK:       %2 = firrtl.eq %sel, %c1_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
-// CHECK:       %3 = firrtl.and %c1_ui1, %2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:       firrtl.when %3  {
-// CHECK:         firrtl.connect %b_1_wo, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:       %[[WIRE1:.+]] = firrtl.wire  : !firrtl.uint<1>
+// CHECK:       %[[WIRE2:.+]]= firrtl.wire  : !firrtl.uint<2>
+// CHECK:       %[[CONST1:.+]] = firrtl.constant 1 : !firrtl.uint<1>
+// CHECK:       %[[CONST2:.+]] = firrtl.constant 1 : !firrtl.uint<2>
+// CHECK:       %[[COND1:.+]] = firrtl.eq %sel, %[[CONST2]] : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK:       %[[COND2:.+]] = firrtl.and %[[CONST1]], %[[COND1]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:       firrtl.when %[[COND2]]  {
+// CHECK:         firrtl.connect %b_1_wo, %[[WIRE1]] : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:       }
-// CHECK:       firrtl.when %3  {
-// CHECK:         firrtl.connect %b_1_valid, %1 : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK:       firrtl.when %[[COND2]] {
+// CHECK:         firrtl.connect %b_1_valid, %[[WIRE2]]: !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK:       }
-// CHECK:       %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
-// CHECK:       %4 = firrtl.eq %sel, %c2_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
-// CHECK:       %5 = firrtl.and %c1_ui1, %4 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:       firrtl.when %5  {
-// CHECK:         firrtl.connect %b_2_wo, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:       %[[CONST3:.+]] = firrtl.constant 2 : !firrtl.uint<2>
+// CHECK:       %[[SEL1:.+]] = firrtl.eq %sel, %[[CONST3]] : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK:       %[[COND3:.+]] = firrtl.and %[[CONST1]], %[[SEL1]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:       firrtl.when %[[COND3]]  {
+// CHECK:         firrtl.connect %b_2_wo, %[[WIRE1]] : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:       }
-// CHECK:       firrtl.when %5  {
-// CHECK:         firrtl.connect %b_2_valid, %1 : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK:       firrtl.when %[[COND3]] {
+// CHECK:         firrtl.connect %b_2_valid, %[[WIRE2]]: !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK:       }
-// CHECK:       %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
-// CHECK:       %6 = firrtl.eq %sel, %c3_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
-// CHECK:       %7 = firrtl.and %c1_ui1, %6 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK:       firrtl.when %7  {
-// CHECK:         firrtl.connect %b_3_wo, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:       %[[CONST4:.+]] = firrtl.constant 3 : !firrtl.uint<2>
+// CHECK:       %[[SEL2:.+]] = firrtl.eq %sel, %[[CONST4]] : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK:       %[[COND4:.+]] = firrtl.and %[[CONST1]], %[[SEL2]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:       firrtl.when %[[COND4]] {
+// CHECK:         firrtl.connect %b_3_wo, %[[WIRE1]] : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:       }
-// CHECK:       firrtl.when %7  {
-// CHECK:         firrtl.connect %b_3_valid, %1 : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK:       firrtl.when %[[COND4]]  {
+// CHECK:         firrtl.connect %b_3_valid, %[[WIRE2]]: !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK:       }
-// CHECK:       firrtl.connect %0, %a_wo : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:       firrtl.connect %[[WIRE1]], %a_wo : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:     }
 
 }
