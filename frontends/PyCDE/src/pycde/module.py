@@ -144,6 +144,15 @@ def module(cls):
         return self.results[op_num]
       return super().__getattribute__(name)
 
+    @staticmethod
+    def inputs() -> dict[str:mlir.ir.Type]:
+      input_ports: dict[str:mlir.ir.Type] = {}
+      for attr_name in dir(cls):
+        attr = getattr(cls, attr_name)
+        if isinstance(attr, Input):
+          input_ports[attr_name] = attr.type
+      return input_ports
+
   _register_generators(cls)
   return __Module
 
