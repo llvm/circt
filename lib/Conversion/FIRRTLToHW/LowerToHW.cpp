@@ -1575,21 +1575,19 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
 
   if (!AnnotationSet(op).hasDontTouch())
     return setLoweringTo<sv::WireOp>(op, resultType, nameAttr);
-  auto moduleName =
-      cast<hw::HWModuleOp>(op->getParentOp()).getNameAttr().getValue().str();
+  auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
   auto symName = op.nameAttr();
   // Prepend the name of the module to make the symbol name unique in the symbol
   // table, it is already unique in the module. Checking if the name is unique
   // in the SymbolTable is non-trivial.
   if (symName && !symName.getValue().empty())
-    symName = builder.getStringAttr("__" + moduleName + "__" +
-                                    symName.getValue().str());
+    symName = builder.getStringAttr(
+        (Twine("__") + moduleName + Twine("__") + symName.getValue()).str());
   else
     // If marked with DontTouch but does not have a name, then add a symbol
-    // name.
-    // TODO: Add an id to make the symbol name unique, what's the best way to
-    // generate the id?
-    symName = builder.getStringAttr("__" + moduleName + "__");
+    // name. Note: Same symbol name for all such wires in the module.
+    symName =
+        builder.getStringAttr((Twine("__") + moduleName + Twine("__")).str());
 
   // This is not a temporary wire created by the compiler, so attach a symbol
   // name.
