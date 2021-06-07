@@ -6,7 +6,7 @@ import mlir.ir as ir
 
 from contextlib import AbstractContextManager
 from contextvars import ContextVar
-from typing import List, Type
+from typing import List
 
 _current_backedge_builder = ContextVar("current_bb")
 
