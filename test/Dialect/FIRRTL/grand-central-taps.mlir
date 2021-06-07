@@ -68,10 +68,10 @@ firrtl.circuit "TestHarness" attributes {
   }
 
   // CHECK: firrtl.module [[DT:@DataTap.*]](
-  // CHECK-SAME: out %_3: !firrtl.uint<1>,
-  // CHECK-SAME: out %_2: !firrtl.uint<1>,
-  // CHECK-SAME: out %_1: !firrtl.clock,
-  // CHECK-SAME: out %_0: !firrtl.uint<1>)
+  // CHECK-SAME: out %_3: !firrtl.uint<1>
+  // CHECK-SAME: out %_2: !firrtl.uint<1>
+  // CHECK-SAME: out %_1: !firrtl.clock
+  // CHECK-SAME: out %_0: !firrtl.uint<1>
   // CHECK-NEXT: [[V3:%.+]] = firrtl.verbatim.expr "bigScary.schwarzschild.no.more"
   // CHECK-NEXT: firrtl.connect %_3, [[V3]]
   // CHECK-NEXT: [[V2:%.+]] = firrtl.verbatim.expr "foo.bar.reset"
@@ -107,8 +107,8 @@ firrtl.circuit "TestHarness" attributes {
   }
 
   // CHECK: firrtl.module [[MT:@MemTap.*]](
-  // CHECK-SAME: out %mem_0: !firrtl.uint<1>,
-  // CHECK-SAME: out %mem_1: !firrtl.uint<1>)
+  // CHECK-SAME: out %mem_0: !firrtl.uint<1>
+  // CHECK-SAME: out %mem_1: !firrtl.uint<1>
   // CHECK-NEXT: [[V0:%.+]] = firrtl.verbatim.expr "foo.bar.mem[0]"
   // CHECK-NEXT: firrtl.connect %mem_0, [[V0:%.+]]
   // CHECK-NEXT: [[V1:%.+]] = firrtl.verbatim.expr "foo.bar.mem[1]"
@@ -135,7 +135,7 @@ firrtl.circuit "TestHarness" attributes {
       portID = 4 : i64 }]
   }
 
-  // CHECK-LABEL: firrtl.module @TestHarness
+  // CHECK: firrtl.module @TestHarness
   firrtl.module @TestHarness(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
     %foo_clock, %foo_reset, %foo_in, %foo_out = firrtl.instance @Foo {name = "foo"} : !firrtl.flip<clock>, !firrtl.flip<reset>, !firrtl.flip<uint<1>>, !firrtl.uint<1>
     firrtl.connect %foo_clock, %clock : !firrtl.flip<clock>, !firrtl.clock
