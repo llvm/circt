@@ -56,7 +56,10 @@ struct AnnotatedPort {
 struct AnnotatedExtModule {
   FExtModuleOp extModule;
   SmallVector<AnnotatedPort, 4> portAnnos;
-  ArrayAttr filteredModuleAnnos; // module annotations without data tap stuff
+  // Module annotations without data tap stuff.
+  ArrayAttr filteredModuleAnnos;
+  /// Port annotations without data tap stuff.
+  SmallVector<AnnotationSet, 8> filteredPortAnnos;
 };
 
 /// A value annotated to be tapped.
@@ -267,42 +270,49 @@ void GrandCentralTapsPass::runOnOperation() {
       continue;
 
     // Go through the module ports and collect the annotated ones.
-    AnnotatedExtModule result{extModule, {}, {}};
+    AnnotatedExtModule result{extModule, {}, {}, {}};
+    result.filteredPortAnnos.reserve(extModule.getNumArguments());
     for (unsigned argNum = 0, e = extModule.getNumArguments(); argNum < e;
          ++argNum) {
       // Go through all annotations on this port and add the data tap key and
       // mem tap ones to the list.
-      auto annos = AnnotationSet(
-          extModule.getArgAttrOfType<ArrayAttr>(argNum, strings.fannos));
+      auto annos = AnnotationSet::forPort(extModule, argNum);
+      SmallVector<Attribute, 8> filteredAnnos;
+      filteredAnnos.reserve(annos.size());
       for (auto anno : annos) {
         if (anno.isClass(strings.memTapClass, strings.deletedKeyClass,
                          strings.literalKeyClass, strings.referenceKeyClass,
                          strings.internalKeyClass))
           result.portAnnos.push_back({argNum, anno});
+        else
+          filteredAnnos.push_back(anno.getDict());
       }
+      if (!filteredAnnos.empty())
+        result.filteredPortAnnos.push_back(
+            AnnotationSet(ArrayAttr::get(&getContext(), filteredAnnos)));
+      else
+        result.filteredPortAnnos.push_back(AnnotationSet(&getContext()));
     }
 
     // If there are data tap annotations on the module, which is likely the
     // case, create a filtered array of annotations with them removed.
-    if (auto attrs = extModule->getAttrOfType<ArrayAttr>(strings.annos)) {
-      auto isBad = [&](Attribute attr) {
-        if (attr.cast<DictionaryAttr>().getAs<StringAttr>("class") ==
-            strings.dataTapsClass)
-          return true;
-        return false;
+    AnnotationSet annos(extModule.getOperation());
+    if (!annos.empty()) {
+      auto dropAnno = [&](Annotation anno) {
+        return anno.isClass(strings.dataTapsClass);
       };
-      bool anyBad = llvm::any_of(attrs, isBad);
-      if (anyBad) {
-        SmallVector<Attribute, 8> filteredAttrs;
-        filteredAttrs.reserve(attrs.size());
-        for (auto attr : attrs) {
-          if (!isBad(attr))
-            filteredAttrs.push_back(attr);
+      bool anyDrop = llvm::any_of(annos, dropAnno);
+      if (anyDrop) {
+        SmallVector<Attribute, 8> filteredAnnos;
+        filteredAnnos.reserve(annos.size());
+        for (auto anno : annos) {
+          if (!dropAnno(anno))
+            filteredAnnos.push_back(anno.getDict());
         }
         result.filteredModuleAnnos =
-            ArrayAttr::get(&getContext(), filteredAttrs);
+            ArrayAttr::get(&getContext(), filteredAnnos);
       } else {
-        result.filteredModuleAnnos = attrs;
+        result.filteredModuleAnnos = annos.getArrayAttr();
       }
     }
 
@@ -333,36 +343,45 @@ void GrandCentralTapsPass::runOnOperation() {
   circuitOp.walk([&](Operation *op) {
     if (auto module = dyn_cast<FModuleOp>(op)) {
       // Go through the module ports and collect the annotated ones.
+      SmallVector<DictionaryAttr, 8> filteredArgAttrs;
+      filteredArgAttrs.reserve(module.getNumArguments());
       for (unsigned argNum = 0, e = module.getNumArguments(); argNum < e;
            ++argNum) {
-        auto annos = module.getArgAttrOfType<ArrayAttr>(argNum, strings.fannos);
-        if (!annos)
+        auto annos = AnnotationSet::forPort(module, argNum);
+        if (annos.empty()) {
+          // filteredArgAttrs.push_back(
+          //     mlir::function_like_impl::getArgAttrs(module, argNum));
           continue;
+        }
 
         // Go through all annotations on this port and extract the interesting
         // ones.
-        for (auto anno : annos.getAsRange<DictionaryAttr>()) {
-          auto cls = anno.getAs<StringAttr>("class");
-          if (cls == strings.referenceKeyClass)
+        SmallVector<Attribute, 8> filteredAnnos;
+        filteredAnnos.reserve(annos.size());
+        for (auto anno : annos) {
+          if (anno.isClass(strings.referenceKeyClass))
             assert(
-                tappedArgs.insert({anno, module.getArgument(argNum)}).second &&
+                tappedArgs.insert({anno.getDict(), module.getArgument(argNum)})
+                    .second &&
                 "ambiguous tap annotation");
+          else
+            filteredAnnos.push_back(anno.getDict());
         }
+        // TODO: Apply the filtered annotations.
       }
     } else {
-      auto annos = op->getAttrOfType<ArrayAttr>(strings.annos);
-      if (!annos)
+      AnnotationSet annos(op);
+      if (annos.empty())
         return;
 
       // Go through all annotations on this op and extract the interesting ones.
       // Note that the way tap annotations are scattered to their targets, we
       // should never see multiple values or memories annotated with the exact
       // same annotation (hence the asserts).
-      for (auto anno : annos.getAsRange<DictionaryAttr>()) {
-        auto cls = anno.getAs<StringAttr>("class");
-        if (cls == strings.memTapClass || cls == strings.referenceKeyClass ||
-            cls == strings.internalKeyClass)
-          assert(tappedOps.insert({anno, op}).second &&
+      for (auto anno : annos) {
+        if (anno.isClass(strings.memTapClass, strings.referenceKeyClass,
+                         strings.internalKeyClass))
+          assert(tappedOps.insert({anno.getDict(), op}).second &&
                  "ambiguous tap annotation");
       }
     }
@@ -423,6 +442,13 @@ void GrandCentralTapsPass::runOnOperation() {
     for (auto path : paths) {
       builder.setInsertionPointAfter(blackBox.extModule);
 
+      // Get the list of ports from the original extmodule, and update the
+      // annotations such that they no longer contain any data/mem taps.
+      auto ports = blackBox.extModule.getPorts();
+      for (auto port : llvm::zip(ports, blackBox.filteredPortAnnos)) {
+        std::get<0>(port).annotations = std::get<1>(port);
+      }
+
       // Create a new firrtl.module that implements the data tap.
       auto name =
           StringAttr::get(&getContext(), (Twine(blackBox.extModule.getName()) +
@@ -431,8 +457,8 @@ void GrandCentralTapsPass::runOnOperation() {
       LLVM_DEBUG(llvm::dbgs()
                  << "Implementing " << name << " ("
                  << blackBox.extModule.getName() << " for " << path << ")\n");
-      auto impl = builder.create<FModuleOp>(name, blackBox.extModule.getPorts(),
-                                            blackBox.filteredModuleAnnos);
+      auto impl =
+          builder.create<FModuleOp>(name, ports, blackBox.filteredModuleAnnos);
       builder.setInsertionPointToEnd(impl.getBodyBlock());
 
       // Connect the output ports to the appropriate tapped object.
