@@ -102,9 +102,8 @@ InstanceGraph::InstanceGraph(CircuitOp circuitOp) : circuitOp(circuitOp) {
   mainModule = circuitOp.getMainModule();
 
   // Gather all instances in the circuit.
-  circuitOp.walk([&](Operation *op) {
-    if (auto instOp = dyn_cast<InstanceOp>(op))
-      moduleInstances[instOp.getReferencedModule()].push_back(instOp);
+  circuitOp.walk([&](InstanceOp op) {
+    moduleInstances[op.getReferencedModule()].push_back(op);
   });
 
 #ifndef NDEBUG
