@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from circt import support
 from circt.support import BuilderValue, BackedgeBuilder, OpOperand
+from circt.dialects import hw
 import circt
 
 import mlir.ir
@@ -168,6 +169,61 @@ def _register_generator(class_name, generator_name, generator):
   circt.msft.register_generator(mlir.ir.Context.current,
                                 OPERATION_NAMESPACE + class_name,
                                 generator_name, generator)
+
+
+def _externmodule(cls, module_name: str):
+
+  class ExternModule(module(cls)):
+    _extern_mod = None
+
+    @staticmethod
+    def _instantiate(op):
+      # Get the port names from the attributes we stored them in.
+      op_names_attrs = mlir.ir.ArrayAttr(op.attributes["opNames"])
+      op_names = [mlir.ir.StringAttr(x) for x in op_names_attrs]
+      input_ports = [
+          (n.value, o.type) for (n, o) in zip(op_names, op.operands)
+      ]
+
+      if ExternModule._extern_mod is None:
+        # Find the top MLIR module.
+        mod = op
+        while mod.name != "module":
+          mod = mod.parent
+
+        result_names_attrs = mlir.ir.ArrayAttr(op.attributes["resultNames"])
+        result_names = [mlir.ir.StringAttr(x) for x in result_names_attrs]
+        output_ports = [
+            (n.value, o.type) for (n, o) in zip(result_names, op.results)
+        ]
+
+        with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
+          ExternModule._extern_mod = hw.HWModuleExternOp(
+              module_name, input_ports, output_ports)
+
+      attrs = {
+          nattr.name: nattr.attr
+          for nattr in op.attributes
+          if nattr.name not in ["opNames", "resultNames"]
+      }
+      with mlir.ir.InsertionPoint(op):
+        mapping = {
+            name.value: op.operands[i] for i, name in enumerate(op_names)
+        }
+        inst = ExternModule._extern_mod.create(op.name, **mapping).operation
+        for (name, attr) in attrs.items():
+          inst.attributes[name] = attr
+        return inst
+
+  _register_generator(cls.__name__, "extern_instantiate",
+                      ExternModule._instantiate)
+  return ExternModule
+
+
+def externmodule(cls_or_name):
+  if isinstance(cls_or_name, str):
+    return lambda cls: _externmodule(cls, cls_or_name)
+  return _externmodule(cls_or_name, cls_or_name.__name__)
 
 
 class _Generate:
