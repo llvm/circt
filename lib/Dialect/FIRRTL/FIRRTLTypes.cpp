@@ -336,6 +336,18 @@ std::pair<FIRRTLType, bool> FIRRTLType::stripFlip() {
   return {*this, false};
 }
 
+unsigned FIRRTLType::getMaxFieldID() {
+  return TypeSwitch<FIRRTLType, int32_t>(*this)
+      .Case<AnalogType, ClockType, ResetType, AsyncResetType, SIntType,
+            UIntType>([](Type) { return 0; })
+      .Case<FlipType, BundleType, FVectorType>(
+          [](auto type) { return type.getMaxFieldID(); })
+      .Default([](Type) {
+        llvm_unreachable("unknown FIRRTL type");
+        return -1;
+      });
+}
+
 /// Helper to implement the equivalence logic for a pair of bundle elements.
 /// Note that the FIRRTL spec requires bundle elements to have the same
 /// orientation, but this only compares their passive types. The FIRRTL dialect
@@ -576,6 +588,8 @@ FIRRTLType FlipType::get(FIRRTLType element) {
 
 FIRRTLType FlipType::getElementType() { return getImpl()->element; }
 
+unsigned FlipType::getMaxFieldID() { return getElementType().getMaxFieldID(); }
+
 //===----------------------------------------------------------------------===//
 // Bundle Type
 //===----------------------------------------------------------------------===//
@@ -612,11 +626,9 @@ struct BundleTypeStorage : mlir::TypeStorage {
       isPassive &= eltInfo.first;
       containsAnalog |= eltInfo.second;
       fieldID += 1;
-      // If the element is a bundle type, increment the field id by the number
-      // of sub-fields, so that each field gets a unique number.
-      if (auto bundleType = type.dyn_cast<BundleType>())
-        fieldID += bundleType.getMaxFieldID();
       fieldIDs.push_back(fieldID);
+      // Increment the field ID for the next field by the number of subfields.
+      fieldID += type.getMaxFieldID();
     }
     maxFieldID = fieldID;
     unsigned flags = 0;
@@ -809,6 +821,24 @@ FIRRTLType FVectorType::getPassiveType() {
   impl->passiveContainsAnalogTypeInfo.setPointer(passiveType);
   return passiveType;
 }
+
+unsigned FVectorType::getFieldID(unsigned index) {
+  return 1 + index * (getElementType().getMaxFieldID() + 1);
+}
+
+unsigned FVectorType::getIndexForFieldID(unsigned fieldID) {
+  assert(fieldID &&  "fieldID must be at least 1");
+  // Divide the field ID by the number of fieldID's per element.
+  return (fieldID - 1) / (getElementType().getMaxFieldID() + 1);
+}
+
+unsigned FVectorType::getMaxFieldID() {
+  return getNumElements() * (getElementType().getMaxFieldID() + 1);
+}
+
+//===----------------------------------------------------------------------===//
+// FIRRTLDialect
+//===----------------------------------------------------------------------===//
 
 void FIRRTLDialect::registerTypes() {
   addTypes<SIntType, UIntType, ClockType, ResetType, AsyncResetType, AnalogType,
