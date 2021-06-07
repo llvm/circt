@@ -29,14 +29,39 @@ class AnnotationSetIterator;
 ///
 class AnnotationSet {
 public:
+  /// Form an annotation set with a non-null ArrayAttr.
+  explicit AnnotationSet(MLIRContext *context)
+      : annotations(ArrayAttr::get(context, {})) {}
+
+  /// Form an annotation set with a non-null ArrayAttr.
+  explicit AnnotationSet(ArrayAttr annotations) : annotations(annotations) {
+    assert(annotations && "Cannot use null attribute set");
+  }
+
+  /// Form an annotation set with a possibly-null ArrayAttr.
+  explicit AnnotationSet(ArrayAttr annotations, MLIRContext *context);
+
   /// Get an annotation set for the specified operation.
   explicit AnnotationSet(Operation *op);
 
-  explicit AnnotationSet(ArrayRef<Attribute> annotations)
-      : annotations(annotations) {}
+  /// Get an annotation set for the specified module port.
+  static AnnotationSet forPort(Operation *module, size_t portNo);
+
+  /// Get an annotation set for the specified module port, as well as other
+  /// argument attributes.
+  static AnnotationSet
+  forPort(Operation *module, size_t portNo,
+          SmallVectorImpl<NamedAttribute> &otherAttributes);
 
   /// Return all the raw annotations that exist.
-  ArrayRef<Attribute> getRaw() const { return annotations; }
+  ArrayRef<Attribute> getArray() const { return annotations.getValue(); }
+
+  /// Return this annotation set as an ArrayAttr.
+  ArrayAttr getArrayAttr() const { return annotations; }
+
+  /// Return this annotation set as an argument attribute dictionary for a port.
+  DictionaryAttr
+  getArgumentAttrDict(ArrayRef<NamedAttribute> otherPortAttrs = {}) const;
 
   /// Return true if we have an annotation with the specified class name.
   bool hasAnnotation(StringRef className) const {
@@ -55,6 +80,9 @@ public:
   iterator begin() const;
   iterator end() const;
 
+  /// Return the MLIRContext corresponding to this AnnotationSet.
+  MLIRContext *getContext() const { return annotations.getContext(); }
+
   // Support for widely used annotations.
 
   /// firrtl.transforms.DontTouchAnnotation
@@ -71,11 +99,14 @@ public:
 
   size_t size() const { return annotations.size(); }
 
+  /// Add more annotations to this AttributeSet.
+  void addAnnotations(ArrayAttr annotations);
+
 private:
   bool hasAnnotationImpl(StringRef className) const;
   DictionaryAttr getAnnotationImpl(StringRef className) const;
 
-  ArrayRef<Attribute> annotations;
+  ArrayAttr annotations;
 };
 
 /// This class provides a read-only projection of an annotation.
@@ -110,7 +141,7 @@ public:
   // Index into this iterator.
   Annotation operator*() const {
     return Annotation(
-        this->getBase().getRaw()[this->getIndex()].cast<DictionaryAttr>());
+        this->getBase().getArray()[this->getIndex()].cast<DictionaryAttr>());
   }
 
 private:

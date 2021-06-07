@@ -280,8 +280,8 @@ hw.module.extern @MyParameterizedExtModule(%in: i8) -> (%out: i1)
 // CHECK-LABEL: module UseInstances
 hw.module @UseInstances(%a_in: i8) -> (%a_out: i1) {
   // CHECK: wire _T;
-  // CHECK: wire xyz_out; 
   // CHECK: wire xyz2_out;
+  // CHECK: wire xyz_out; 
   // CHECK: FooExtModule xyz (
   // CHECK:   .in  (a_in),
   // CHECK:   .out (xyz_out)

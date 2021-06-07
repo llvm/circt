@@ -11,19 +11,63 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
+#include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/Operation.h"
 using namespace circt;
 using namespace firrtl;
 
-static ArrayRef<Attribute> getAnnotationsFrom(Operation *op) {
-  if (ArrayAttr array = op->getAttrOfType<ArrayAttr>("annotations"))
-    return array.getValue();
-  return {};
+static ArrayAttr getAnnotationsFrom(Operation *op) {
+  if (auto annots = op->getAttrOfType<ArrayAttr>("annotations"))
+    return annots;
+  return ArrayAttr::get(op->getContext(), {});
 }
+
+/// Form an annotation set with a possibly-null ArrayAttr.
+AnnotationSet::AnnotationSet(ArrayAttr annotations, MLIRContext *context)
+    : AnnotationSet(annotations ? annotations : ArrayAttr::get(context, {})) {}
 
 /// Get an annotation set for the specified operation.
 AnnotationSet::AnnotationSet(Operation *op)
-    : annotations(getAnnotationsFrom(op)) {}
+    : AnnotationSet(getAnnotationsFrom(op)) {}
+
+/// Get an annotation set for the specified module port.
+AnnotationSet AnnotationSet::forPort(Operation *module, size_t portNo) {
+  for (auto a : mlir::function_like_impl::getArgAttrs(module, portNo)) {
+    if (a.first == "firrtl.annotations")
+      return AnnotationSet(a.second.cast<ArrayAttr>());
+  }
+  return AnnotationSet(ArrayAttr::get(module->getContext(), {}));
+}
+
+/// Get an annotation set for the specified module port, as well as other
+/// argument attributes.
+AnnotationSet
+AnnotationSet::forPort(Operation *module, size_t portNo,
+                       SmallVectorImpl<NamedAttribute> &otherAttributes) {
+  ArrayAttr annotations;
+  for (auto a : mlir::function_like_impl::getArgAttrs(module, portNo)) {
+    if (a.first == "firrtl.annotations")
+      annotations = a.second.cast<ArrayAttr>();
+    else
+      otherAttributes.push_back(a);
+  }
+  return AnnotationSet(annotations, module->getContext());
+}
+
+/// Return this annotation set as an argument attribute dictionary for a port.
+DictionaryAttr AnnotationSet::getArgumentAttrDict(
+    ArrayRef<NamedAttribute> otherPortAttrs) const {
+  auto *context = getContext();
+  if (empty())
+    return DictionaryAttr::get(context, otherPortAttrs);
+
+  SmallVector<NamedAttribute> allPortAttrs(otherPortAttrs.begin(),
+                                           otherPortAttrs.end());
+  // Annotations are stored as under the "firrtl.annotations" key.
+  allPortAttrs.push_back(
+      {Identifier::get("firrtl.annotations", context), getArrayAttr()});
+  return DictionaryAttr::get(context, allPortAttrs);
+}
 
 DictionaryAttr AnnotationSet::getAnnotationImpl(StringRef className) const {
   for (auto annotation : annotations) {
@@ -43,6 +87,27 @@ bool AnnotationSet::hasAnnotationImpl(StringRef className) const {
 bool AnnotationSet::hasDontTouch() const {
   return hasAnnotation("firrtl.transforms.DontTouchAnnotation");
 }
+
+/// Add more annotations to this AttributeSet.
+void AnnotationSet::addAnnotations(ArrayAttr newAnnotations) {
+  if (!newAnnotations)
+    return;
+
+  if (empty()) {
+    annotations = newAnnotations;
+    return;
+  }
+
+  SmallVector<Attribute> annotationVec;
+  annotationVec.reserve(annotations.size() + newAnnotations.size());
+  annotationVec.append(annotations.begin(), annotations.end());
+  annotationVec.append(newAnnotations.begin(), newAnnotations.end());
+  annotations = ArrayAttr::get(getContext(), annotationVec);
+}
+
+//===----------------------------------------------------------------------===//
+// Annotation
+//===----------------------------------------------------------------------===//
 
 /// Return the 'class' that this annotation is representing.
 StringRef Annotation::getClass() const {

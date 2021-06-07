@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/HW/HWTypes.h"
@@ -301,12 +302,11 @@ SmallVector<ModulePortInfo> firrtl::getModulePortInfo(Operation *op) {
 
   auto portNamesAttr = getModulePortNames(op);
   auto portDirections = getModulePortDirections(op).getValue();
-  auto portAnnotations = getModulePortAnnotations(op);
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
+    auto name = portNamesAttr[i].cast<StringAttr>();
     auto type = argTypes[i].cast<FIRRTLType>();
     auto direction = direction::get(portDirections[i]);
-    results.push_back({portNamesAttr[i].cast<StringAttr>(), type, direction,
-                       portAnnotations[i]});
+    results.push_back({name, type, direction, AnnotationSet::forPort(op, i)});
   }
   return results;
 }
@@ -320,11 +320,6 @@ StringAttr firrtl::getModulePortName(Operation *op, size_t portIndex) {
 Direction firrtl::getModulePortDirection(Operation *op, size_t portIndex) {
   assert(isa<FModuleOp>(op) || isa<FExtModuleOp>(op));
   return direction::get(getModulePortDirections(op).getValue()[portIndex]);
-}
-
-ArrayAttr getModulePortAnnotation(Operation *op, size_t portIndex) {
-  assert(isa<FModuleOp>(op) || isa<FExtModuleOp>(op));
-  return getModulePortAnnotations(op)[portIndex].cast<ArrayAttr>();
 }
 
 // Return the port with the specified name.
@@ -378,11 +373,8 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   for (size_t i = 0, e = ports.size(); i != e; ++i) {
     portNames.push_back(ports[i].name);
     portDirections.push_back(ports[i].direction);
-    argAttrs.push_back(ports[i].annotations
-                           ? builder.getDictionaryAttr(
-                                 {{builder.getIdentifier("firrtl.annotations"),
-                                   ports[i].annotations}})
-                           : builder.getDictionaryAttr({}));
+    argAttrs.push_back(
+        AnnotationSet(ports[i].annotations).getArgumentAttrDict());
   }
 
   // Both attributes are added, even if the module has no ports.

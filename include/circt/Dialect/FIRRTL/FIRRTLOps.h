@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_FIRRTL_OPS_H
 #define CIRCT_DIALECT_FIRRTL_OPS_H
 
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "mlir/IR/Builders.h"
@@ -55,7 +56,7 @@ struct ModulePortInfo {
   StringAttr name;
   FIRRTLType type;
   Direction direction;
-  ArrayAttr annotations = ArrayAttr();
+  AnnotationSet annotations = AnnotationSet(type.getContext());
 
   StringRef getName() const { return name ? name.getValue() : ""; }
 
@@ -99,12 +100,6 @@ IntegerAttr getModulePortDirections(Operation *module);
 /// Given an FModule or ExtModule, return the direction of the specified port
 /// number.
 Direction getModulePortDirection(Operation *op, size_t portIndex);
-
-/// Return an array of the Annotations on each port of an FModule or ExtModule.
-SmallVector<ArrayAttr> getModulePortAnnotations(Operation *module);
-
-/// Return the annotations for a specific port of an FModule or ExtModule..
-ArrayAttr getModulePortAnnotation(Operation *op, size_t portIndex);
 
 /// Returns true if the value results from an expression with duplex flow.
 /// Duplex values have special treatment in bundle connect operations, and their

@@ -208,17 +208,16 @@ hw.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2:
 // CHECK-NEXT: // input  /*Zero Width*/ i3,
 // CHECK-NEXT:    output                y, z, p, p2);
 // CHECK-EMPTY:
-// CHECK-NEXT:    wire _T;
-// CHECK-NEXT:    wire _T_0;
-// CHECK-NEXT:    wire a1_f;
+
+// CHECK-NEXT:    wire paramd2_out;
+// CHECK-NEXT:    wire paramd_out;
 // CHECK-NEXT:    wire b1_b;
 // CHECK-NEXT:    wire b1_c;
-// CHECK-NEXT:    wire paramd_out;
-// CHECK-NEXT:    wire paramd2_out;
+// CHECK-NEXT:    wire a1_f;
 // CHECK-EMPTY:
 // CHECK-NEXT:    A a1 (
 // CHECK-NEXT:      .d (w),
-// CHECK-NEXT:      .e (_T),
+// CHECK-NEXT:      .e (b1_b),
 // CHECK-NEXT:      .f (a1_f)
 // CHECK-NEXT:    )
 // CHECK-NEXT:    B b1 (
@@ -226,8 +225,6 @@ hw.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2:
 // CHECK-NEXT:      .b (b1_b),
 // CHECK-NEXT:      .c (b1_c)
 // CHECK-NEXT:    )
-// CHECK-NEXT:    assign _T_0 = b1_c;
-// CHECK-NEXT:    assign _T = b1_b;
 // CHECK-NEXT:    FooModule #(
 // CHECK-NEXT:      .DEFAULT(64'd14000240888948784983),
 // CHECK-NEXT:      .DEPTH(3.242000e+01),
@@ -244,7 +241,7 @@ hw.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2:
 // CHECK-NEXT:      .a   (i2),
 // CHECK-NEXT:      .out (paramd2_out)
 // CHECK-NEXT:    );
-// CHECK-NEXT:    assign y = _T_0;
+// CHECK-NEXT:    assign y = b1_c;
 // CHECK-NEXT:    assign z = x;
 // CHECK-NEXT:    assign p = paramd_out;
 // CHECK-NEXT:    assign p2 = paramd2_out;
@@ -621,16 +618,14 @@ hw.module.extern @DifferentResultMod() -> (%out1: i1, %out2: i2)
 
 // CHECK-LABEL: module out_of_order_multi_result(
 hw.module @out_of_order_multi_result() -> (%b: i1, %c: i2) {
-  // CHECK: wire       _T;
-  // CHECK: wire [1:0] _T_0;
+  // CHECK: wire       b1_out1;
+  // CHECK: wire [1:0] b1_out2;
   %b = comb.add %out1, %out1 : i1
   %c = comb.add %out2, %out2 : i2
 
   %out1, %out2 = hw.instance "b1" @DifferentResultMod() : () -> (i1, i2)
 
-  // CHECK: assign _T_0 = b1_out2;
-  // CHECK: assign _T = b1_out1;
-  // CHECK: assign b = _T + _T;
-  // CHECK: assign c = _T_0 + _T_0;
+  // CHECK: assign b = b1_out1 + b1_out1;
+  // CHECK: assign c = b1_out2 + b1_out2;
   hw.output %b, %c : i1, i2
 }
