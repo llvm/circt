@@ -6,7 +6,7 @@ import mlir.ir as ir
 
 from contextlib import AbstractContextManager
 from contextvars import ContextVar
-from typing import List
+from typing import List, Type
 
 _current_backedge_builder = ContextVar("current_bb")
 
@@ -143,9 +143,19 @@ class BackedgeBuilder(AbstractContextManager):
 class OpOperand:
   __slots__ = ["index", "operation", "value", "backedge_owner"]
 
-  def __init__(self, operation, index, value, backedge_owner=None):
+  def __init__(self,
+               operation: ir.Operation,
+               index: int,
+               value,
+               backedge_owner=None):
+    if not isinstance(index, int):
+      raise TypeError("Index must be int")
     self.index = index
+
+    if not isinstance(operation, ir.Operation):
+      raise TypeError("Operation must be mlir.ir.Operation")
     self.operation = operation
+
     self.value = value
     self.backedge_owner = backedge_owner
 
@@ -211,13 +221,13 @@ class NamedValueOpView:
     if name in self.operand_indices:
       index = self.operand_indices[name]
       value = self.opview.operands[index]
-      return OpOperand(value, index, self)
+      return OpOperand(self.opview.operation, index, value, self)
 
     # Check for the attribute in the result name set.
     if name in self.result_indices:
       index = self.result_indices[name]
       value = self.opview.results[index]
-      return OpOperand(value, index, self)
+      return OpOperand(self.opview.operation, index, value, self)
 
     # If we fell through to here, the name isn't a result.
     raise AttributeError(f"unknown port name {name}")
