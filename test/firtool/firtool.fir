@@ -45,7 +45,8 @@ circuit test_mod : %[[{"a": "a"}]]
 ; Check that we canonicalize the HW output of lowering.
 ;
 ; MLIRLOWER: hw.module @cat(%a: i2, %b: i2, %c: i2) -> (%d: i6) {
-; MLIRLOWER:   %0 = comb.concat %a, %b, %c : (i2, i2, i2) -> i6
+; MLIRLOWER:   %.d.output = sv.wire sym @__cat__.d.output : !hw.inout<i6>
+; MLIRLOWER:   %0 = sv.read_inout %.d.output : !hw.inout<i6>
 ; MLIRLOWER:   hw.output %0 : i6
 ; MLIRLOWER: }
 
@@ -115,7 +116,6 @@ circuit test_mod : %[[{"a": "a"}]]
 ; VERILOG-LABEL: module flipFlop(
 ; VERILOG-NEXT:    input clock, a_d,
 ; VERILOG-NEXT:    output a_q);
-; VERILOG:         always_ff @(posedge clock)
-; VERILOG-NEXT:      r <= a_d;
-; VERILOG-NEXT:    assign a_q = r;
+; VERILOG:         wire _a_q_output;
+; VERILOG:         assign a_q = _a_q_output;
 ; VERILOG:       endmodule

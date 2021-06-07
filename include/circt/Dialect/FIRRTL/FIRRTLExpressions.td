@@ -286,8 +286,10 @@ let inferType = "impl::inferComparisonResult" in {
     def GEQPrimOp : IntBinaryPrimOp<"geq", UInt1Type>;
     def GTPrimOp  : IntBinaryPrimOp<"gt",  UInt1Type>;
   }
-  def EQPrimOp  : IntBinaryPrimOp<"eq",  UInt1Type, [Commutative]>;
-  def NEQPrimOp : IntBinaryPrimOp<"neq", UInt1Type, [Commutative]>;
+  let hasCanonicalizeMethod = true in {
+    def EQPrimOp  : IntBinaryPrimOp<"eq",  UInt1Type, [Commutative]>;
+    def NEQPrimOp : IntBinaryPrimOp<"neq", UInt1Type, [Commutative]>;
+  }
 }
 
 def CatPrimOp : IntBinaryPrimOp<"cat", UIntType> {
@@ -476,6 +478,41 @@ def TailPrimOp : PrimOp<"tail"> {
   let hasCanonicalizeMethod = true;
   let parseValidator = "impl::validateOneOperandOneConst";
 }
+
+//===----------------------------------------------------------------------===//
+// Verbatim
+//===----------------------------------------------------------------------===//
+
+def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface>;
+
+def VerbatimExprOp : FIRRTLOp<"verbatim.expr",
+                              [NoSideEffect, HasCustomSSAName]> {
+  let summary = "Expression that expands to a value given SystemVerilog text";
+  let description = [{
+    This operation produces a typed value expressed by a string of
+    SystemVerilog.  This can be used to access macros and other values that are
+    only sensible as Verilog text.
+
+    The text string is expected to have the highest precedence, so you should
+    include parentheses in the string if it isn't a single token.  This is also
+    assumed to not have side effects (use `sv.verbatim` if you need them).
+
+    `firrtl.verbatim.expr` allows operand substitutions with `{{0}}` syntax.
+  }];
+
+  let arguments = (ins StrAttr:$text, Variadic<AnyType>:$operands);
+  let results = (outs FIRRTLType:$result);
+  let assemblyFormat = [{
+    $text attr-dict (`(` $operands^ `)`)?
+      `:` functional-type($operands, $result)
+  }];
+
+  let builders = [
+    OpBuilder<(ins "Type":$resultType, "StringRef":$text),
+               "build(odsBuilder, odsState, resultType, text, ValueRange{});">
+  ];
+}
+
 
 //===----------------------------------------------------------------------===//
 // Conversions to/from fixed-width signless integer types in standard dialect.

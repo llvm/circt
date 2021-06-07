@@ -203,17 +203,26 @@ firrtl.circuit "Simple" {
     %47 = firrtl.asClock %44 : (!firrtl.uint<1>) -> !firrtl.clock
     %48 = firrtl.asAsyncReset %44 : (!firrtl.uint<1>) -> !firrtl.asyncreset
 
+    // CHECK: [[VERB1:%.+]] = sv.verbatim.expr "MAGIC_CONSTANT" : () -> i42
+    // CHECK: [[VERB2:%.+]] = sv.verbatim.expr "$bits({{[{][{]0[}][}]}})"([[VERB1]]) : (i42) -> i32
+    // CHECK: [[VERB1EXT:%.+]] = comb.concat {{%.+}}, [[VERB1]] : (i1, i42) -> i43
+    // CHECK: [[VERB2EXT:%.+]] = comb.concat {{%.+}}, [[VERB2]] : (i11, i32) -> i43
+    // CHECK: = comb.add [[VERB1EXT]], [[VERB2EXT]] : i43
+    %56 = firrtl.verbatim.expr "MAGIC_CONSTANT" : () -> !firrtl.uint<42>
+    %57 = firrtl.verbatim.expr "$bits({{0}})"(%56) : (!firrtl.uint<42>) -> !firrtl.uint<32>
+    %58 = firrtl.add %56, %57 : (!firrtl.uint<42>, !firrtl.uint<32>) -> !firrtl.uint<43>
+
     // Issue #353
     // CHECK: [[PADRES_EXT:%.+]] = comb.sext [[PADRES]] : (i3) -> i8
     // CHECK: = comb.and %in3, [[PADRES_EXT]] : i8
     %49 = firrtl.and %in3, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.uint<8>
 
     // Issue #355: https://github.com/llvm/circt/issues/355
-    // CHECK: [[DIV:%.+]] = comb.divu %c104_i10, %c306_i10 : i10
-    // CHECK: = comb.extract [[DIV]] from 0 : (i10) -> i8
-    %c104_ui8 = firrtl.constant 104 : !firrtl.uint<8>
+    // CHECK: [[IN1:%.+]] = comb.concat %c0_i6, %in1 : (i6, i4) -> i10
+    // CHECK: [[DIV:%.+]] = comb.divu [[IN1]], %c306_i10 : i10
+    // CHECK: = comb.extract [[DIV]] from 0 : (i10) -> i4
     %c306_ui10 = firrtl.constant 306 : !firrtl.uint<10>
-    %50 = firrtl.div %c104_ui8, %c306_ui10 : (!firrtl.uint<8>, !firrtl.uint<10>) -> !firrtl.uint<8>
+    %50 = firrtl.div %in1, %c306_ui10 : (!firrtl.uint<4>, !firrtl.uint<10>) -> !firrtl.uint<4>
 
     %c1175_ui11 = firrtl.constant 1175 : !firrtl.uint<11>
     %51 = firrtl.neg %c1175_ui11 : (!firrtl.uint<11>) -> !firrtl.sint<12>

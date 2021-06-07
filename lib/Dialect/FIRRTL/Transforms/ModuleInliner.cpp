@@ -10,7 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "./PassDetails.h"
+#include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
@@ -117,9 +118,6 @@ public:
   void run();
 
 private:
-  /// Returns the annotations of the operation.
-  ArrayAttr getAnnotations(Operation *op);
-
   /// Returns true if the operation is annotated to be flattened.
   bool shouldFlatten(Operation *op);
 
@@ -150,12 +148,6 @@ private:
   // A symbol table with references to each module in a circuit.
   SymbolTable symbolTable;
 
-  /// A cached attribute for the inline annotation.
-  DictionaryAttr inlineAttr;
-
-  /// A cached attribute for the flatten annotation.
-  DictionaryAttr flattenAttr;
-
   /// The set of live modules.  Anything not recorded in this set will be
   /// removed by dead code elimination.
   DenseSet<Operation *> liveModules;
@@ -165,22 +157,12 @@ private:
 };
 } // namespace
 
-ArrayAttr Inliner::getAnnotations(Operation *op) {
-  return op->getAttrOfType<ArrayAttr>("annotations");
-}
-
 bool Inliner::shouldFlatten(Operation *op) {
-  if (auto annotations = getAnnotations(op)) {
-    return llvm::is_contained(getAnnotations(op), flattenAttr);
-  }
-  return false;
+  return AnnotationSet(op).hasAnnotation("firrtl.transforms.FlattenAnnotation");
 }
 
 bool Inliner::shouldInline(Operation *op) {
-  if (auto annotations = getAnnotations(op)) {
-    return llvm::is_contained(getAnnotations(op), inlineAttr);
-  }
-  return false;
+  return AnnotationSet(op).hasAnnotation("firrtl.passes.InlineAnnotation");
 }
 
 void Inliner::flattenInto(StringRef prefix, OpBuilder &b,
@@ -331,17 +313,7 @@ void Inliner::inlineInstances(FModuleOp module) {
 }
 
 Inliner::Inliner(CircuitOp circuit)
-    : circuit(circuit), context(circuit.getContext()), symbolTable(circuit) {
-  // Saving these attributes here makes lookup faster later.
-  auto inlineId = NamedAttribute(
-      Identifier::get("class", context),
-      StringAttr::get(context, "firrtl.passes.InlineAnnotation"));
-  inlineAttr = DictionaryAttr::getWithSorted(context, {inlineId});
-  auto flattenId = NamedAttribute(
-      Identifier::get("class", context),
-      StringAttr::get(context, "firrtl.transforms.FlattenAnnotation"));
-  flattenAttr = DictionaryAttr::getWithSorted(context, {flattenId});
-}
+    : circuit(circuit), context(circuit.getContext()), symbolTable(circuit) {}
 
 void Inliner::run() {
   auto topModule = circuit.getMainModule();

@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/HW/HWTypes.h"
@@ -21,6 +22,7 @@
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using mlir::RegionRange;
@@ -62,12 +64,6 @@ removeElementsAtIndices(ArrayRef<T> input, ArrayRef<unsigned> indicesToDrop) {
     result.append(input.begin() + lastCopied, input.end());
 
   return result;
-}
-
-bool firrtl::isBundleType(Type type) {
-  if (auto flipType = type.dyn_cast<FlipType>())
-    return flipType.getElementType().isa<FlipType>();
-  return type.isa<BundleType>();
 }
 
 bool firrtl::isDuplexValue(Value val) {
@@ -307,9 +303,10 @@ SmallVector<ModulePortInfo> firrtl::getModulePortInfo(Operation *op) {
   auto portNamesAttr = getModulePortNames(op);
   auto portDirections = getModulePortDirections(op).getValue();
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
+    auto name = portNamesAttr[i].cast<StringAttr>();
     auto type = argTypes[i].cast<FIRRTLType>();
     auto direction = direction::get(portDirections[i]);
-    results.push_back({portNamesAttr[i].cast<StringAttr>(), type, direction});
+    results.push_back({name, type, direction, AnnotationSet::forPort(op, i)});
   }
   return results;
 }
@@ -376,11 +373,8 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   for (size_t i = 0, e = ports.size(); i != e; ++i) {
     portNames.push_back(ports[i].name);
     portDirections.push_back(ports[i].direction);
-    argAttrs.push_back(ports[i].annotations
-                           ? builder.getDictionaryAttr(
-                                 {{builder.getIdentifier("firrtl.annotations"),
-                                   ports[i].annotations}})
-                           : builder.getDictionaryAttr({}));
+    argAttrs.push_back(
+        AnnotationSet(ports[i].annotations).getArgumentAttrDict());
   }
 
   // Both attributes are added, even if the module has no ports.
@@ -2015,6 +2009,25 @@ FIRRTLType TailPrimOp::inferReturnType(ValueRange operands,
   }
 
   return IntType::get(input.getContext(), false, width);
+}
+
+//===----------------------------------------------------------------------===//
+// VerbatimExprOp
+//===----------------------------------------------------------------------===//
+
+void VerbatimExprOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  // If the text is macro like, then use a pretty name.  We only take the
+  // text up to a weird character (like a paren) and currently ignore
+  // parenthesized expressions.
+  auto isOkCharacter = [](char c) { return llvm::isAlnum(c) || c == '_'; };
+  auto name = text();
+  // Ignore a leading ` in macro name.
+  if (name.startswith("`"))
+    name = name.drop_front();
+  name = name.take_while(isOkCharacter);
+  if (!name.empty())
+    setNameFn(getResult(), name);
 }
 
 //===----------------------------------------------------------------------===//

@@ -1,4 +1,4 @@
-//===- FIRAnnotations.h - FIRRTL Annotation Utilities ---------------------===//
+//===- FIRAnnotations.h - .fir file annotation interface --------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,16 +6,15 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Provide utilities related to dealing with FIRRTL Annotations.
+// This file contains private APIs the parser uses to load annotations.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_FIRRTL_FIRANNOTATIONS_H
-#define CIRCT_DIALECT_FIRRTL_FIRANNOTATIONS_H
+#ifndef FIRANNOTATIONS_H
+#define FIRANNOTATIONS_H
 
 #include "circt/Support/LLVM.h"
 #include "llvm/ADT/StringMap.h"
-#include "llvm/Support/SMLoc.h"
 
 namespace llvm {
 namespace json {
@@ -42,4 +41,4 @@ bool scatterCustomAnnotations(llvm::StringMap<ArrayAttr> &annotationMao,
 } // namespace firrtl
 } // namespace circt
 
-#endif // CIRCT_DIALECT_FIRRTL_FIRANNOTATIONS_H
+#endif // FIRANNOTATIONS_H

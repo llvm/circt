@@ -12,8 +12,8 @@
 
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 
+#include "FIRAnnotations.h"
 #include "FIRLexer.h"
-#include "circt/Dialect/FIRRTL/FIRAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -342,6 +342,9 @@ struct FIRParser {
   /// Populate a vector of annotations for a given Target.  If the annotations
   /// parameter is non-empty, then this will be appended to.
   void getAnnotations(Twine target, ArrayAttr &annotations);
+
+  /// Add any annotations for a given target to the specified AnnotationSet.
+  void getAnnotations(Twine target, AnnotationSet &annotations);
 
   /// Returns true if the annotation list contains the DontTouchAnnotation. This
   /// method is slightly more efficient than other lookup methods, because it
@@ -925,11 +928,13 @@ ParseResult FIRParser::importAnnotationFile(SMLoc loc) {
   return result;
 }
 
+/// Populate a vector of annotations for a given Target.  If the annotations
+/// parameter is non-empty, then this will be appended to.
 void FIRParser::getAnnotations(Twine target, ArrayAttr &annotations) {
   // Early exit if no annotations exist.  This avoids the cost of
   // constructing strings representing targets if no annotation can
   // possibly exist.
-  if (state.annotationMap.begin() == state.annotationMap.end())
+  if (state.annotationMap.empty())
     return;
 
   // Input annotations is empty.  Just do the lookup and return.
@@ -952,6 +957,17 @@ void FIRParser::getAnnotations(Twine target, ArrayAttr &annotations) {
     annotationVec.push_back(a);
 
   annotations = ArrayAttr::get(state.context, annotationVec);
+}
+
+/// Add any annotations for a given target to the specified AnnotationSet.
+void FIRParser::getAnnotations(Twine target, AnnotationSet &annotations) {
+  // Early exit if no annotations exist.  This avoids the cost of
+  // constructing strings representing targets if no annotation can
+  // possibly exist.
+  if (state.annotationMap.empty())
+    return;
+
+  annotations.addAnnotations(state.annotationMap.lookup(target.str()));
 }
 
 //===----------------------------------------------------------------------===//
@@ -1705,17 +1721,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
     }
 
     // We always skip emitting the validif mux because it always folds to the
-    // non-invalid operand.  However, if we know the validif would always return
-    // invalid, then fold to invalid instead.
-    if (auto cst = operands[0].getDefiningOp<ConstantOp>()) {
-      // validif(0, x) -> always invalid.
-      if (cst.value().isNullValue()) {
-        result = builder.create<InvalidValueOp>(opTypes[1]);
-        return success();
-      }
-    }
-
-    // Otherwise, fold to the non-invalid value.
+    // non-invalid operand.
     result = operands[1];
     return success();
   }
@@ -2731,9 +2737,9 @@ ParseResult FIRStmtParser::parseNode() {
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
   // The entire point of a node declaration is to carry a name.  If it got
-  // dropped, then we don't even need to create a result.
+  // dropped, then we don't even need to create a result unless it is annotated.
   Value result;
-  if (!name.empty()) {
+  if (!name.empty() || !annotations.empty()) {
     result = builder.create<NodeOp>(initializer.getType(), initializer, name,
                                     annotations);
   } else
@@ -2937,7 +2943,7 @@ FIRModuleParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
         info.parseOptionalInfo())
       return failure();
 
-    ArrayAttr annotations = ArrayAttr({});
+    AnnotationSet annotations(getState().emptyArrayAttr);
     getAnnotations(getModuleTarget() + ">" + name.getValue(), annotations);
 
     // FIXME: We should persist the info loc into the IR, not just the name

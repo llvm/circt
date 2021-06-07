@@ -42,7 +42,7 @@ public:
             CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
-            TailPrimOp, AsPassivePrimOp, AsNonPassivePrimOp,
+            TailPrimOp, VerbatimExprOp, AsPassivePrimOp, AsNonPassivePrimOp,
 
             // Conversion from FIRRTL to HW dialect types.
             StdIntCastOp, HWStructCastOp, AnalogInOutCastOp>(
@@ -135,6 +135,7 @@ public:
   HANDLE(ShlPrimOp, Unhandled);
   HANDLE(ShrPrimOp, Unhandled);
   HANDLE(TailPrimOp, Unhandled);
+  HANDLE(VerbatimExprOp, Unhandled);
   HANDLE(AsPassivePrimOp, Unhandled);
   HANDLE(AsNonPassivePrimOp, Unhandled);
 

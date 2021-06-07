@@ -77,7 +77,7 @@ static cl::opt<bool> imconstprop(
     "imconstprop",
     cl::desc(
         "Enable intermodule constant propagation and dead code elimination"),
-    cl::init(false));
+    cl::init(true));
 
 static cl::opt<bool>
     disableLowerTypes("disable-lower-types",
@@ -85,8 +85,9 @@ static cl::opt<bool>
                       cl::init(false));
 
 static cl::opt<bool>
-    expandWhens("expand-whens", cl::desc("run the expand-whens pass on firrtl"),
-                cl::init(false));
+    disableExpandWhens("disable-expand-whens",
+                       cl::desc("disable the expand-whens pass"),
+                       cl::init(false));
 
 static cl::opt<bool>
     blackboxMemory("blackbox-memory",
@@ -204,7 +205,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass());
     auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
     // Only enable expand whens if lower types is also enabled.
-    if (expandWhens)
+    if (!disableExpandWhens)
       modulePM.addPass(firrtl::createExpandWhensPass());
   }
 
@@ -373,6 +374,11 @@ int main(int argc, char **argv) {
   registerLoweringCLOptions();
   // Parse pass names in main to ensure static initialization completed.
   cl::ParseCommandLineOptions(argc, argv, "circt modular optimizer driver\n");
+
+  // -disable-opt turns off constant propagation (unless it was explicitly
+  // enabled).
+  if (disableOptimization && imconstprop.getNumOccurrences() == 0)
+    imconstprop = false;
 
   MLIRContext context;
 

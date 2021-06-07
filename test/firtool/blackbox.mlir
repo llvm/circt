@@ -1,5 +1,5 @@
 // RUN: rm -rf %t
-// RUN: firtool %s --format=mlir --split-verilog -o=%t --blackbox-resource-path=%S/..
+// RUN: firtool %s --blackbox-resource-path=%S/.. | firtool --format=mlir --split-verilog -o=%t --blackbox-path=%S --blackbox-resource-path=%S/..
 // RUN: FileCheck %s --check-prefix=VERILOG-TOP < %t/test_mod.sv
 // RUN: FileCheck %s --check-prefix=VERILOG-FOO < %t/magic/blackbox-inline.v
 // RUN: FileCheck %s --check-prefix=VERILOG-HDR < %t/magic/blackbox-inline.svh
@@ -33,7 +33,9 @@ firrtl.circuit "test_mod" attributes {annotations = [
   }
 
   // VERILOG-FOO-LABEL: module ExtInline(); endmodule
+  // VERILOG-FOO-NOT:   module ExtInline(); endmodule
   // VERILOG-HDR-LABEL: `define SOME_MACRO
+  // VERILOG-HDR-NOT:   `define SOME_MACRO
   firrtl.extmodule @ExtInline() attributes {annotations = [
     // Both files shall be emitted, but the Verilog header `*.svh` shall be
     // excluded from the file list.
@@ -50,12 +52,14 @@ firrtl.circuit "test_mod" attributes {annotations = [
   ]}
 
   // VERILOG-BAR-LABEL: module ExtResource(); endmodule
+  // VERILOG-BAR-NOT:   module ExtResource(); endmodule
   firrtl.extmodule @ExtResource() attributes {annotations = [{
     class = "firrtl.transforms.BlackBoxResourceAnno",
     resourceId = "firtool/blackbox-resource.v"
   }]}
 
   // VERILOG-GIB-LABEL: module ExtPath(); endmodule
+  // VERILOG-GIB-NOT:   module ExtPath(); endmodule
   firrtl.extmodule @ExtPath() attributes {annotations = [{
     class = "firrtl.transforms.BlackBoxPathAnno",
     path = "blackbox-path.v"

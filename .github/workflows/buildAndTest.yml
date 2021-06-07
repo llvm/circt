@@ -256,6 +256,7 @@ jobs:
       # Run yapf to check Python formatting.
       - name: python-format
         if: ${{ always() }}
+        shell: bash -e {0}
         run: |
           files=$(git diff --name-only $DIFF_COMMIT | grep .py || echo -n)
           if [[ ! -z $files ]]; then
