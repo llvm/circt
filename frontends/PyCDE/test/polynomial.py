@@ -5,8 +5,7 @@ from __future__ import annotations
 import mlir
 
 import pycde
-from pycde import Input, Output, Parameter, module, generator
-from circt.esi import types
+from pycde import Input, Output, Parameter, module, generator, types
 from circt.dialects import comb, hw
 
 
@@ -22,7 +21,7 @@ class PolynomialCompute:
     self.instanceName = name
     self.coefficients = Parameter(coefficients)
     # Full result.
-    self.y = Output(types.i32)
+    self.y = Output(types.int(8 * 4))
 
   @generator
   def construct(mod, params):
