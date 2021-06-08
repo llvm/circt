@@ -2510,14 +2510,20 @@ void ModuleEmitter::emitHWGeneratedModule(HWModuleGeneratedOp module) {
 
 void ModuleEmitter::emitBind(BindOp bind) { os << "// bind\n\n"; }
 
+// Check if the value is from read of a wire or reg or is a port.
 static bool isSimpleReadOrPort(Value v) {
   if (v.isa<BlockArgument>())
     return true;
-  auto read = dyn_cast_or_null<ReadInOutOp>(v.getDefiningOp());
+  auto vOp = v.getDefiningOp();
+  if (!vOp)
+    return false;
+  auto read = dyn_cast<ReadInOutOp>(vOp);
   if (!read)
     return false;
-  return dyn_cast_or_null<WireOp>(read.input().getDefiningOp()) ||
-         dyn_cast_or_null<RegOp>(read.input().getDefiningOp());
+  auto readSrc = read.input().getDefiningOp();
+  if (!readSrc)
+    return false;
+  return isa<WireOp, RegOp>(readSrc);
 }
 
 // Given an invisible instance, make sure all inputs are driven from
