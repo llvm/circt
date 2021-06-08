@@ -131,7 +131,7 @@ VerilogPrinter::registerResults(ResultRange results) {
 void VerilogPrinter::printSendOp(hir::SendOp op, unsigned indentAmount) {
   Value value = op.value();
   VerilogValue vValue = verilogMapper.get(value);
-  Value var = op.var();
+  Value var = op.bus();
   VerilogValue vVar = verilogMapper.get(var);
   SmallVector<VerilogValue *, 4> addr = convertToVerilog(op.addr());
 
@@ -165,7 +165,7 @@ void VerilogPrinter::printRecvOp(hir::RecvOp op, unsigned indentAmount) {
   VerilogValue *vResult = verilogMapper.getMutable(result);
 
   SmallVector<VerilogValue *, 4> addr = convertToVerilog(op.addr());
-  Value var = op.var();
+  Value var = op.bus();
   Type varTy = var.getType();
   VerilogValue vVar = verilogMapper.get(var);
   assert(varTy.isa<GroupType>() || varTy.isa<ArrayType>());

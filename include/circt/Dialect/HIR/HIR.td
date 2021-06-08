@@ -106,6 +106,11 @@ def LoadOp : HIR_Op<"load", [NoSideEffect,AttrSizedOperandSegments]> {
   let assemblyFormat = [{$mem `[`  $addr `]` `at` $tstart (`+` $offset^)? 
     attr-dict `:` type($mem) `[` type($addr) `]` `->` type($res)}];
   let hasCanonicalizeMethod = true;
+  let extraClassDeclaration = [{
+  public:
+  SmallVector<Value> getBankedIdx();
+  SmallVector<Value> getPackedIdx();
+  }];
 }
 
 def StoreOp : HIR_Op<"store", [AttrSizedOperandSegments]> {
@@ -137,13 +142,13 @@ def SendOp : HIR_Op<"send", [AttrSizedOperandSegments]> {
       ```
   }];
 
-  let arguments = (ins AnyType:$value, AnyType:$var,
+  let arguments = (ins AnyType:$value, AnyType:$bus,
       Variadic<AnyType>:$addr, 
       TimeType :$tstart, Optional<ConstType>:$offset);
   let results = (outs );
-  let assemblyFormat = [{$value `to` $var  `[` $addr `]` `at` $tstart 
+  let assemblyFormat = [{$value `to` $bus  `[` $addr `]` `at` $tstart 
     (`+` $offset^ )? attr-dict 
-      `:` type($value) `to` type($var)`[`type($addr) `]` }];
+      `:` type($value) `to` type($bus)`[`type($addr) `]` }];
   let hasCanonicalizeMethod = true;
 }
 
@@ -154,14 +159,14 @@ def RecvOp : HIR_Op<"recv", [AttrSizedOperandSegments]> {
       ```
   }];
 
-  let arguments = (ins AnyType:$var,
+  let arguments = (ins AnyType:$bus,
       Variadic<AnyType>:$addr, 
       TimeType :$tstart, Optional<ConstType>:$offset);
   let results = (outs AnyType:$res);
 
-  let assemblyFormat = [{$var  `[` $addr `]` `at` $tstart 
+  let assemblyFormat = [{$bus  `[` $addr `]` `at` $tstart 
     (`+` $offset^ )? attr-dict 
-      `:` type($var)`[`type($addr) `]` `->` type($res) }];
+      `:` type($bus)`[`type($addr) `]` `->` type($res) }];
   let hasCanonicalizeMethod = true;
 }
 
@@ -171,11 +176,11 @@ def SelectOp : HIR_Op<"select", [NoSideEffect]> {
     This Op selects from hir.array or hir.group. 
   }];
 
-  let arguments = (ins AnyType:$var, 
+  let arguments = (ins AnyType:$bus, 
       Variadic<AnyType>:$addr);
   let results = (outs AnyType: $res);
-  let assemblyFormat = [{$var
-  `[` $addr `]` attr-dict `:` type($var) `[` type($addr) `]` `->` type($res) }];
+  let assemblyFormat = [{$bus
+  `[` $addr `]` attr-dict `:` type($bus) `[` type($addr) `]` `->` type($res) }];
 
   let verifier = [{return verifySelectOp(*this);}];
 }
@@ -423,7 +428,7 @@ def YieldOp : HIR_Op<"yield", [AttrSizedOperandSegments] > {
   let hasCanonicalizeMethod = true;
 }
 
-def ConstantOp : HIR_Op<"constant" > {
+def ConstantOp : HIR_Op<"constant",[NoSideEffect]> {
   let summary = "Get an ssa var with a constant value";
   let description = [{
     This Op calls a function/module. 
@@ -500,8 +505,7 @@ def ReturnOp : HIR_Op<"return", [HasParent<"FuncOp">,NoSideEffect,
       let assemblyFormat = "(`(`$operands^`)` `:` `(`type($operands)`)`)? attr-dict";
     }
 
-//, [NoSideEffect]
-def AllocaOp :HIR_Op<"alloca"> {
+def AllocaOp :HIR_Op<"alloca",[NoSideEffect]> {
   let summary = "Instantiate new hardware.";
 
   let description = [{
@@ -604,6 +608,20 @@ Examples:
 
   let assemblyFormat = [{ `(` $left `,` $right`)` attr-dict `:` `(`
       type($left) `,` type($right) `)` `->` `(` type($res) `)`}];
+}
+
+def TupleOp:HIR_Op<"tuple",[NoSideEffect]>{
+  let summary = "creates a tuple from inputs";
+  let description = [{
+Examples:
+    ```mlir %1 = hir.tuple (%x, %y) : (i1, i32) -> Tuple<i1,i32>```
+  }];
+
+  let arguments = (ins Variadic<AnyType>: $args);
+  let results = (outs AnyType: $res);
+
+  let assemblyFormat = [{ `(` $args`)` attr-dict `:` `(`
+      type($args) `)` `->` type($res) }];
 }
 
 #endif // HIR_OPS

@@ -15,28 +15,45 @@ namespace {
 class MemrefLoweringPass : public hir::MemrefLoweringBase<MemrefLoweringPass> {
 public:
   void runOnOperation() override;
+  void inspectOp(hir::FuncOp op);
+  void inspectOp(hir::ConstantOp op);
+  void inspectOp(hir::ForOp op);
+  void inspectOp(hir::UnrollForOp op);
+  void inspectOp(hir::AddOp op);
+  void inspectOp(hir::SubtractOp op);
+  void inspectOp(hir::LoadOp op);
+  void inspectOp(hir::StoreOp op);
+  void inspectOp(hir::ReturnOp op);
+  void inspectOp(hir::YieldOp op);
+  void inspectOp(hir::SendOp op);
+  void inspectOp(hir::RecvOp op);
+  void inspectOp(hir::DelayOp op);
+  void inspectOp(hir::CallOp op);
+  void inspectOp(hir::AllocaOp op);
+
+private:
+  llvm::DenseMap<Value, Value> mapMemrefRdAddrSend;
+  llvm::DenseMap<Value, Value> mapMemrefRdDataRecv;
+  llvm::DenseMap<Value, Value> mapMemrefWrSend;
 };
 } // end anonymous namespace
 
-void inspectOp(hir::FuncOp op) {}
-void inspectOp(hir::ConstantOp op) {}
-void inspectOp(hir::ForOp op) {}
-void inspectOp(hir::UnrollForOp op) {}
-void inspectOp(hir::AddOp op) {}
-void inspectOp(hir::SubtractOp op) {}
-void inspectOp(hir::StoreOp op) {}
-void inspectOp(hir::ReturnOp op) {}
-void inspectOp(hir::YieldOp op) {}
-void inspectOp(hir::SendOp op) {}
-void inspectOp(hir::RecvOp op) {}
-void inspectOp(hir::DelayOp op) {}
-void inspectOp(hir::CallOp op) {}
+Type buildBusTensor(MLIRContext *context, SmallVector<Type> busTypes,
+                    SmallVector<PortKind> portKinds, DictionaryAttr proto,
+                    int numBanks, ArrayRef<int64_t> bankShape) {
+  Type tyRdAddrSend = hir::BusType::get(context, busTypes, portKinds, proto);
+  if (numBanks > 1)
+    tyRdAddrSend = RankedTensorType::get(bankShape, tyRdAddrSend);
+  return tyRdAddrSend;
+}
 
-void inspectOp(hir::AllocaOp op) {
+void MemrefLoweringPass::inspectOp(hir::AllocaOp op) {
   std::string moduleAttr =
       op.moduleAttr().dyn_cast<StringAttr>().getValue().str();
   if (moduleAttr != "bram" && moduleAttr != "reg")
     return;
+
+  SmallVector<Value, 4> bramCallArgs;
 
   mlir::OpBuilder builder(op.getOperation()->getParentOp()->getContext());
   MLIRContext *context = builder.getContext();
@@ -65,80 +82,146 @@ void inspectOp(hir::AllocaOp op) {
     Type tyIAddrAndData =
         TupleType::get(context, SmallVector<Type>({tyIAddr, tyIData}));
 
-    Type tyRdAddrSend =
-        hir::BusType::get(context, SmallVector<Type>({tyI1, tyIAddr}),
-                          SmallVector<PortKind>({wr, wr}), protoValid);
-    if (numBanks > 1) {
-      tyRdAddrSend = RankedTensorType::get(ty.getBankShape(), tyRdAddrSend);
-    }
+    Type tyRdAddrSend = buildBusTensor(context, {tyI1, tyIAddr}, {wr, wr},
+                                       protoValid, numBanks, ty.getBankShape());
+    Type tyRdAddrRecv = buildBusTensor(context, {tyI1, tyIAddr}, {rd, rd},
+                                       protoEmpty, numBanks, ty.getBankShape());
 
-    Type tyRdAddrRecv =
-        hir::BusType::get(context, SmallVector<Type>({tyI1, tyIAddr}),
-                          SmallVector<PortKind>({rd, rd}), protoEmpty);
-    if (numBanks > 1) {
-      tyRdAddrRecv = RankedTensorType::get(ty.getBankShape(), tyRdAddrRecv);
-    }
-    Type tyRdDataSend =
-        hir::BusType::get(context, SmallVector<Type>({tyIData}),
-                          SmallVector<PortKind>({wr}), protoEmpty);
-    if (numBanks > 1) {
-      tyRdDataSend = RankedTensorType::get(ty.getBankShape(), tyRdDataSend);
-    }
-    Type tyRdDataRecv =
-        hir::BusType::get(context, SmallVector<Type>({tyIData}),
-                          SmallVector<PortKind>({rd}), protoEmpty);
-    if (numBanks > 1) {
-      tyRdDataRecv = RankedTensorType::get(ty.getBankShape(), tyRdDataRecv);
-    }
-    Type tyWrSend =
-        hir::BusType::get(context, SmallVector<Type>({tyI1, tyIAddrAndData}),
-                          SmallVector<PortKind>({wr, wr}), protoValid);
-    if (numBanks > 1) {
-      tyWrSend = RankedTensorType::get(ty.getBankShape(), tyWrSend);
-    }
-    Type tyWrRecv =
-        hir::BusType::get(context, SmallVector<Type>({tyI1, tyIAddrAndData}),
-                          SmallVector<PortKind>({rd, rd}), protoEmpty);
-    if (numBanks > 1) {
-      tyWrRecv = RankedTensorType::get(ty.getBankShape(), tyWrRecv);
-    }
+    Type tyRdDataSend = buildBusTensor(context, {tyIData}, {wr}, protoEmpty,
+                                       numBanks, ty.getBankShape());
+    Type tyRdDataRecv = buildBusTensor(context, {tyIData}, {rd}, protoEmpty,
+                                       numBanks, ty.getBankShape());
+
+    Type tyWrSend = buildBusTensor(context, {tyI1, tyIAddrAndData}, {wr, wr},
+                                   protoValid, numBanks, ty.getBankShape());
+    Type tyWrRecv = buildBusTensor(context, {tyI1, tyIAddrAndData}, {rd, rd},
+                                   protoEmpty, numBanks, ty.getBankShape());
 
     if (port == rd) {
-      auto rdAddrBuses = builder.create<hir::AllocaOp>(
-          op.getLoc(), SmallVector<Type>({tyRdAddrSend, tyRdAddrRecv}),
-          builder.getStringAttr("bus"));
-      auto rdDataBuses = builder.create<hir::AllocaOp>(
-          op.getLoc(), SmallVector<Type>({tyRdDataSend, tyRdDataRecv}),
-          builder.getStringAttr("bus"));
+      auto rdAddrBuses =
+          builder
+              .create<hir::AllocaOp>(
+                  op.getLoc(), SmallVector<Type>({tyRdAddrSend, tyRdAddrRecv}),
+                  builder.getStringAttr("bus"))
+              .getResults();
+      auto rdDataBuses =
+          builder
+              .create<hir::AllocaOp>(
+                  op.getLoc(), SmallVector<Type>({tyRdDataSend, tyRdDataRecv}),
+                  builder.getStringAttr("bus"))
+              .getResults();
+
+      // push the addr bus recv and data bus send into the call args.
+      bramCallArgs.push_back(rdAddrBuses[1]);
+      bramCallArgs.push_back(rdDataBuses[0]);
+      mapMemrefRdAddrSend[res] = rdAddrBuses[0];
+      mapMemrefRdDataRecv[res] = rdDataBuses[1];
+
     } else if (port == wr) {
-      auto wrBuses = builder.create<hir::AllocaOp>(
-          op.getLoc(), SmallVector<Type>({tyWrSend, tyWrRecv}),
-          builder.getStringAttr("bus"));
+      auto wrBuses =
+          builder
+              .create<hir::AllocaOp>(op.getLoc(),
+                                     SmallVector<Type>({tyWrSend, tyWrRecv}),
+                                     builder.getStringAttr("bus"))
+              .getResults();
+      bramCallArgs.push_back(wrBuses[1]);
+      mapMemrefWrSend[res] = wrBuses[0];
     } else {
-      assert(false && "rw is not supported yet");
+      assert(false && "rw is not supported yet!");
     }
   }
+
+  SmallVector<Type, 4> bramCallArgTypes;
+  SmallVector<Attribute> inputDelays;
+  for (auto bramCallArg : bramCallArgs) {
+    bramCallArgTypes.push_back(bramCallArg.getType());
+    inputDelays.push_back(helper::getIntegerAttr(context, 64, 0));
+  }
+
+  Value tstart = getOperation().getBody().front().getArguments().back();
+
+  FuncType funcTy = hir::FuncType::get(
+      context,
+      FunctionType::get(context, bramCallArgTypes, SmallVector<Type>({})),
+      ArrayAttr::get(context, inputDelays),
+      ArrayAttr::get(context, SmallVector<Attribute>({})));
+  builder.create<hir::CallOp>(op.getLoc(), SmallVector<Type>({}),
+                              FlatSymbolRefAttr::get(context, moduleAttr),
+                              funcTy, Value(), bramCallArgs, tstart, Value());
 }
 
-void processLoadOp(hir::LoadOp op) {
-  // mlir::OpBuilder builder(op.getOperation()->getParentOp()->getContext());
-  // builder.setInsertionPoint(op);
-  // hir::DelayOp newDelayOp = builder.create<hir::DelayOp>(
-  //    op.getLoc(), op.tstart().getType(), op.tstart(), op.offset(),
-  //    op.tstart(), mlir::Value());
-  // hir::LoadOp newLoadOp =
-  //    builder.create<hir::LoadOp>(op.getLoc(), op.res().getType(), op.mem(),
-  //                                op.addr(), newDelayOp, mlir::Value());
-  // op.replaceAllUsesWith(newLoadOp.getOperation());
-  // op.getOperation()->dropAllReferences();
-  // op.getOperation()->dropAllUses();
-  // op.getOperation()->erase();
+void MemrefLoweringPass::inspectOp(hir::LoadOp op) {
+  mlir::OpBuilder builder(op.getOperation()->getParentOp()->getContext());
+  MLIRContext *context = builder.getContext();
+  builder.setInsertionPoint(op);
+
+  Value mem = op.mem();
+  Value c0 = builder
+                 .create<hir::ConstantOp>(
+                     op.getLoc(), helper::getConstIntType(context),
+                     helper::getIntegerAttr(context, 64, 0))
+                 .getResult();
+  Value c1 = builder
+                 .create<hir::ConstantOp>(
+                     op.getLoc(), helper::getConstIntType(context),
+                     helper::getIntegerAttr(context, 64, 1))
+                 .getResult();
+  Value addrBus = mapMemrefRdAddrSend[mem];
+  Value dataBus = mapMemrefRdDataRecv[mem];
+
+  Value tstart = op.tstart();
+  Value offset = op.offset();
+  assert(!offset);
+  SmallVector<Value, 4> bankAddr = op.getBankedIdx();
+  bankAddr.push_back(c0);
+  builder.create<hir::SendOp>(op.getLoc(), c1, addrBus, bankAddr, tstart,
+                              Value());
+  bankAddr.pop_back();
+
+  SmallVector<Value, 4> packedIdx = op.getPackedIdx();
+
+  Value packedAddr;
+  if (packedIdx.size() > 1) {
+    SmallVector<Type, 4> packedIdxTypes;
+    for (auto idx : packedIdx) {
+      packedIdxTypes.push_back(idx.getType());
+    }
+    packedAddr = builder
+                     .create<hir::TupleOp>(op.getLoc(),
+                                           builder.getTupleType(packedIdxTypes),
+                                           packedIdx)
+                     .getResult();
+  } else if (packedIdx.size() == 1) {
+    packedAddr = packedIdx[0];
+  } else {
+    assert(false && "Dont support registers yet!");
+  }
+
+  bankAddr.push_back(c1);
+  builder.create<hir::SendOp>(op.getLoc(), packedAddr, addrBus, bankAddr,
+                              tstart, Value());
+  bankAddr.pop_back();
+
+  bankAddr.push_back(c0);
+  Value tstartPlus1 =
+      builder
+          .create<hir::DelayOp>(op.getLoc(), helper::getTimeType(context),
+                                tstart, c1, tstart, Value())
+          .getResult();
+  auto recvOp = builder.create<hir::RecvOp>(
+      op.getLoc(), op.res().getType(), dataBus, bankAddr, tstartPlus1, Value());
+  op.replaceAllUsesWith(recvOp.getOperation());
+  op.getOperation()->dropAllReferences();
+  op.getOperation()->dropAllUses();
+  op.getOperation()->erase();
 }
 
 void MemrefLoweringPass::runOnOperation() {
   hir::FuncOp funcOp = getOperation();
-  WalkResult result = funcOp.walk([](Operation *operation) -> WalkResult {
-    if (hir::AllocaOp op = dyn_cast<hir::AllocaOp>(operation))
+  WalkResult result = funcOp.walk([this](Operation *operation) -> WalkResult {
+    if (auto op = dyn_cast<hir::AllocaOp>(operation))
+      inspectOp(op);
+    else if (auto op = dyn_cast<LoadOp>(operation))
       inspectOp(op);
     return WalkResult::advance();
   });
