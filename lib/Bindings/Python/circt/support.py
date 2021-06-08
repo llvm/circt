@@ -41,7 +41,7 @@ def connect(destination, source):
   if not isinstance(destination, OpOperand):
     raise TypeError(
         f"cannot connect to destination of type {type(destination)}. "
-         "Must by OpOperand.")
+        "Must be OpOperand.")
   value = get_value(source)
   if value is None:
     raise TypeError(f"cannot connect from source of type {type(source)}")
