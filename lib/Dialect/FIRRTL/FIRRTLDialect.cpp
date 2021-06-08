@@ -38,7 +38,6 @@ FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
     if (!op)
       break;
 
-    // TODO: implement subindex op.
     if (auto subfieldOp = dyn_cast<SubfieldOp>(op)) {
       value = subfieldOp.input();
       // Strip any flip wrapping the bundle type.

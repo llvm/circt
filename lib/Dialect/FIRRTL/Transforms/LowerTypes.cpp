@@ -586,12 +586,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
       // have been split, this only needs to deal with the fields of
       // read or write ports. If the port is replacing a readwrite
       // port, then this is linked against the old field.
-      for (unsigned index = 0, indexEnd = underlying.getNumElements();
-           index < indexEnd; ++index) {
-        auto elt = underlying.getElements()[index];
-        // auto elementID = field.fieldID + index;
-        // auto elementID = underlying.getFieldID(index);
-        auto elementID = oldType.getFieldID(index);
+      for (auto elt : underlying.getElements()) {
 
         auto oldName = elt.name.getValue();
         if (oldKind == MemOp::PortKind::ReadWrite) {
@@ -602,7 +597,8 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
           if (oldName == "data" && kind == MemOp::PortKind::Write)
             oldName = "wdata";
         }
-        elementID = oldType.getFieldID(*oldType.getElementIndex(oldName));
+        // Get the element ID of the old port.
+        auto elementID = oldType.getFieldID(*oldType.getElementIndex(oldName));
 
         auto getWire = [&](FIRRTLType type,
                            const std::string &wireName) -> Value {
@@ -630,20 +626,18 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
               (op.getPortName(j).getValue().str() + "_" + oldName).str();
           auto wire = getWire(theType, wireName);
 
-          // if (!skip) {
           if (!(oldKind == MemOp::PortKind::ReadWrite &&
-                kind == MemOp::PortKind::Write)) {
+                kind == MemOp::PortKind::Write))
             setBundleLowering(FieldRef(op.getResult(j), elementID), wire);
-          }
 
           // Handle "en" specially if this used to be a readwrite port.
           if (oldKind == MemOp::PortKind::ReadWrite && oldName == "en") {
             auto wmode =
                 getWire(theType, op.getPortName(j).getValue().str() + "_wmode");
             if (!skip) {
-              auto wmodeFieldID =
+              auto wmodeID =
                   oldType.getFieldID(*oldType.getElementIndex("wmode"));
-              setBundleLowering(FieldRef(op.getResult(j), wmodeFieldID), wmode);
+              setBundleLowering(FieldRef(op.getResult(j), wmodeID), wmode);
             }
             Value gate;
             if (kind == MemOp::PortKind::Read)
@@ -830,7 +824,8 @@ void TypeLoweringVisitor::visitExpr(SubfieldOp op) {
   auto bundleType = inputType.cast<BundleType>();
 
   // Get the base element ID of input bundle.
-  auto parentID = bundleType.getFieldID(*bundleType.getElementIndex(op.fieldname()));
+  auto parentID =
+      bundleType.getFieldID(*bundleType.getElementIndex(op.fieldname()));
 
   for (auto field : fieldTypes) {
     // Get the lowered value of the current field from the input value.
@@ -856,7 +851,7 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   // Lower operation to an access of item 0
   auto input = op.input();
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  flattenType(input.getType().cast<FVectorType>(), fieldTypes);
+  flattenType(input.getType().cast<FIRRTLType>(), fieldTypes);
   op.replaceAllUsesWith(
       getBundleLowering(FieldRef(input, fieldTypes[0].fieldID)));
   opsToRemove.push_back(op);
@@ -884,7 +879,7 @@ void TypeLoweringVisitor::visitExpr(SubindexOp op) {
   auto parentID = vectorType.getFieldID(op.index());
 
   for (auto field : fieldTypes) {
-    // Look up the mapping for this suffix.
+    // Get the lowered value of the current field from the input value.
     auto newValue =
         getBundleLowering(FieldRef(input, parentID + field.fieldID));
 

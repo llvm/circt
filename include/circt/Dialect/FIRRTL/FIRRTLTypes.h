@@ -338,13 +338,12 @@ public:
 
   /// Get an integer ID for the field. Field IDs start at 1, and are assigned
   /// to each field in a vector in a recursive depth-first walk of all elements.
-  /// A field ID of 0 is used to reference the vector itself. The ID can be used
-  /// to uniquely identify any specific field in this bundle.
+  /// A field ID of 0 is used to reference the vector itself.
   unsigned getFieldID(unsigned index);
 
   /// Find the element index corresponding to the desired fieldID.  If the
   /// fieldID corresponds to a field in nested under an element, it will return
-  /// the index of the parent field.
+  /// the index of the parent element.
   unsigned getIndexForFieldID(unsigned fieldID);
 
   /// Get the maximum field ID in this vector.  This is helpful for constructing
