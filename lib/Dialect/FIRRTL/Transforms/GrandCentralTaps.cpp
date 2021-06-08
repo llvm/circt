@@ -194,9 +194,6 @@ struct Strings {
   MLIRContext *const context;
   Strings(MLIRContext *context) : context(context) {}
 
-  Identifier annos = Identifier::get("annotations", context);
-  Identifier fannos = Identifier::get("firrtl.annotations", context);
-
   StringAttr dataTapsClass = StringAttr::get(
       context, "sifive.enterprise.grandcentral.DataTapsAnnotation");
   StringAttr memTapClass = StringAttr::get(
