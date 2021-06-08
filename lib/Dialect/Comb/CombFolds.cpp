@@ -362,6 +362,13 @@ OpFoldResult XorOp::fold(ArrayRef<Attribute> constants) {
       constants[1].cast<IntegerAttr>().getValue().isNullValue())
     return inputs()[0];
 
+  // xor(xor(x,1),1) -> x
+  if (isBinaryNot()) {
+    XorOp arg = dyn_cast_or_null<XorOp>(inputs()[0].getDefiningOp());
+    if (arg && arg.isBinaryNot())
+      return arg.inputs()[0];
+  }
+
   // Constant fold
   return constFoldVariadicOp<IntegerAttr>(
       constants, [](APInt &a, const APInt &b) { a ^= b; });
