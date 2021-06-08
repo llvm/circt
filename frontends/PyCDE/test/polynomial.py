@@ -5,7 +5,8 @@ from __future__ import annotations
 import mlir
 
 import pycde
-from pycde import Input, Output, Parameter, module, generator, types
+from pycde import (Input, Output, Parameter, module, externmodule, generator,
+                   types)
 from circt.dialects import comb, hw
 
 
@@ -52,6 +53,15 @@ class PolynomialCompute:
     return {"y": taps[-1]}
 
 
+@externmodule("supercooldevice")
+class CoolPolynomialCompute:
+  x = Input(types.i32)
+  y = Output(types.i32)
+
+  def __init__(self, coefficients, **kwargs):
+    self.coefficients = coefficients
+
+
 class Polynomial(pycde.System):
   inputs = []
   outputs = [('y', types.i32)]
@@ -61,6 +71,8 @@ class Polynomial(pycde.System):
     x = hw.ConstantOp.create(i32, 23)
     poly = PolynomialCompute("example", [62, 42, 6], x=x)
     PolynomialCompute("example2", [62, 42, 6], x=poly.y)
+
+    CoolPolynomialCompute([4, 42], x=x)
     hw.OutputOp([poly.y])
 
 
@@ -70,6 +82,7 @@ poly.print()
 # CHECK:  hw.module @top() -> (%y: i32) {
 # CHECK:    %c23_i32 = hw.constant 23 : i32
 # CHECK:    [[REG0:%.+]] = "pycde.PolynomialCompute"(%c23_i32) {instanceName = "example", opNames = ["x"], parameters = {coefficients = [62, 42, 6]},  resultNames = ["y"]} : (i32) -> i32
+# CHECK:    [[REG2:%.+]] = "pycde.CoolPolynomialCompute"(%c23_i32) {coefficients = [4, 42], opNames = ["x"], parameters = {}, resultNames = ["y"]} : (i32) -> i32
 # CHECK:    hw.output [[REG0]] : i32
 
 poly.generate()
@@ -77,6 +90,7 @@ poly.print()
 # CHECK: hw.module @top
 # CHECK: hw.instance "example" @pycde.PolynomialCompute
 # CHECK: hw.instance "example2" @pycde.PolynomialCompute
+# CHECK: hw.instance "pycde.CoolPolynomialCompute" @supercooldevice(%c23_i32) {coefficients = [4, 42], parameters = {}} : (i32) -> i32
 # CHECK: hw.module @pycde.PolynomialCompute
 # CHECK-NOT: hw.module @pycde.PolynomialCompute
 

@@ -184,9 +184,7 @@ def _externmodule(cls, module_name: str):
       # Get the port names from the attributes we stored them in.
       op_names_attrs = mlir.ir.ArrayAttr(op.attributes["opNames"])
       op_names = [mlir.ir.StringAttr(x) for x in op_names_attrs]
-      input_ports = [
-          (n.value, o.type) for (n, o) in zip(op_names, op.operands)
-      ]
+      input_ports = [(n.value, o.type) for (n, o) in zip(op_names, op.operands)]
 
       if ExternModule._extern_mod is None:
         # Find the top MLIR module.

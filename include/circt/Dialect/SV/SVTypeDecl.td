@@ -10,15 +10,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-def HasTypeDeclTerminator :
-    SingleBlockImplicitTerminator<"TypeDeclTerminatorOp">;
-
 //===----------------------------------------------------------------------===//
 // Interface operations
 //===----------------------------------------------------------------------===//
 
 def InterfaceOp : SVOp<"interface",
-    [Symbol, SymbolTable, HasTypeDeclTerminator]> {
+    [NoTerminator, Symbol, SymbolTable]> {
   let summary = "Operation to define a SystemVerilog interface";
 
   let description = [{
@@ -237,9 +234,9 @@ def AssignInterfaceSignalOp : SVOp<"interface.signal.assign", []> {
   let description = [{
     Use this to continuously assign a signal inside an interface to a
     value or other signal.
-  
+
     ```
-      sv.interface.signal.assign %iface(@handshake_example::@data) 
+      sv.interface.signal.assign %iface(@handshake_example::@data)
         = %zero32 : i32
     ```
 
@@ -264,7 +261,7 @@ def ReadInterfaceSignalOp : SVOp<"interface.signal.read", [NoSideEffect]> {
   let summary = "Access the data in an interface's signal.";
   let description = [{
     This is an expression to access a signal inside of an interface.
-  
+
     ```
       %ifaceData = sv.interface.signal.read %iface
           (@handshake_example::@data) : i32
@@ -289,11 +286,4 @@ def ReadInterfaceSignalOp : SVOp<"interface.signal.read", [NoSideEffect]> {
   ];
 
   let verifier = "return ::verifySignalExists(iface(), signalNameAttr());";
-}
-
-def TypeDeclTerminatorOp : SVOp<"type_decl_terminator",
-    [NoSideEffect, Terminator, ParentOneOf<["InterfaceOp"]>]> {
-  let summary = "Terminator for type declaration operations";
-
-  let arguments = (ins);
 }

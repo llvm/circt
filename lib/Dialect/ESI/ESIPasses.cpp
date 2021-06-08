@@ -240,7 +240,6 @@ InterfaceOp ESIHWBuilder::constructInterface(ChannelPort chan) {
       sourceStr,
       /*inputs=*/ArrayRef<StringRef>{validStr, dataStr},
       /*outputs=*/ArrayRef<StringRef>{readyStr});
-  ib.create<TypeDeclTerminatorOp>();
   return iface;
 }
 

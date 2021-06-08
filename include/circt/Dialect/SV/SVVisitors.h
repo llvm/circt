@@ -45,9 +45,7 @@ public:
             // Verification statements.
             AssertOp, AssumeOp, CoverOp,
             // Bind Statements
-            BindOp,
-            // Terminators.
-            TypeDeclTerminatorOp>([&](auto expr) -> ResultType {
+            BindOp>([&](auto expr) -> ResultType {
           return thisCast->visitSV(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -119,9 +117,6 @@ public:
 
   // Bind statements.
   HANDLE(BindOp, Unhandled);
-
-  // Terminators.
-  HANDLE(TypeDeclTerminatorOp, Unhandled);
 #undef HANDLE
 };
 
