@@ -13,9 +13,8 @@ using namespace firrtl;
 
 InstanceRecord *InstanceGraphNode::recordInstance(InstanceOp instance,
                                                   InstanceGraphNode *target) {
-  auto *record = new InstanceRecord(instance, this, target);
-  moduleInstances.emplace_back(record);
-  return record;
+  moduleInstances.emplace_back(instance, this, target);
+  return &moduleInstances.back();
 }
 
 void InstanceGraphNode::recordUse(InstanceRecord *record) {
@@ -49,20 +48,20 @@ InstanceGraph::InstanceGraph(Operation *operation) {
   }
 }
 
-InstanceGraphNode *InstanceGraph::getTopLevelNode() const {
+InstanceGraphNode *InstanceGraph::getTopLevelNode() {
   // The graph always puts the top level module in the array first.
   if (!nodes.size())
     return nullptr;
-  return nodes[0].get();
+  return &nodes[0];
 }
 
-InstanceGraphNode *InstanceGraph::lookup(StringRef name) const {
+InstanceGraphNode *InstanceGraph::lookup(StringRef name) {
   auto it = nodeMap.find(name);
   assert(it != nodeMap.end() && "Module not in InstanceGraph!");
-  return nodes[it->second].get();
+  return &nodes[it->second];
 }
 
-InstanceGraphNode *InstanceGraph::lookup(Operation *op) const {
+InstanceGraphNode *InstanceGraph::lookup(Operation *op) {
   if (auto extModule = dyn_cast<FExtModuleOp>(op)) {
     return lookup(extModule.getName());
   }
@@ -79,15 +78,14 @@ InstanceGraphNode *InstanceGraph::getOrAddNode(StringRef name) {
   auto &index = itAndInserted.first->second;
   if (itAndInserted.second) {
     // This is a new node, we have to add an element to the NodeVec.
-    auto *node = new InstanceGraphNode();
-    nodes.emplace_back(node);
+    nodes.emplace_back();
     // Store the node storage index in to the map.
     index = nodes.size() - 1;
-    return node;
+    return &nodes.back();
   }
-  return nodes[index].get();
+  return &nodes[index];
 }
 
-Operation *InstanceGraph::getReferencedModule(InstanceOp op) const {
+Operation *InstanceGraph::getReferencedModule(InstanceOp op) {
   return lookup(op.moduleName())->getModule();
 }

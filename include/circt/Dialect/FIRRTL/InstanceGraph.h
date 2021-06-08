@@ -16,6 +16,7 @@
 #include "circt/Support/LLVM.h"
 #include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/iterator.h"
+#include <deque>
 
 namespace circt {
 namespace firrtl {
@@ -26,6 +27,10 @@ class InstanceGraphNode;
 /// of a module.
 class InstanceRecord {
 public:
+  InstanceRecord(InstanceOp instance, InstanceGraphNode *parent,
+                 InstanceGraphNode *target)
+      : instance(instance), parent(parent), target(target) {}
+
   /// Get the InstanceOp that this is tracking.
   InstanceOp getInstance() const { return instance; }
 
@@ -36,10 +41,6 @@ public:
   InstanceGraphNode *getTarget() const { return target; }
 
 private:
-  InstanceRecord(InstanceOp instance, InstanceGraphNode *parent,
-                 InstanceGraphNode *target)
-      : instance(instance), parent(parent), target(target) {}
-
   /// The InstanceOp that this is tracking.
   InstanceOp instance;
 
@@ -48,9 +49,6 @@ private:
 
   /// This is the module which the InstanceOp is instantiating.
   InstanceGraphNode *target;
-
-  // Provide access to the constructor.
-  friend class InstanceGraphNode;
 };
 
 /// This is a Node in the InstanceGraph.  Each node represents a Module in a
@@ -58,26 +56,24 @@ private:
 /// this class. It is possible to efficiently iterate all modules instantiated
 /// by this module, as well as all instantiations of this module.
 class InstanceGraphNode {
-  using EdgeVec = std::vector<std::unique_ptr<InstanceRecord>>;
+  using EdgeVec = std::deque<InstanceRecord>;
   using UseVec = std::vector<InstanceRecord *>;
 
+  static InstanceRecord *unwrap(EdgeVec::value_type &value) {
+    return &value;
+  }
   class InstanceIterator final
-      : public llvm::mapped_iterator<
-            EdgeVec::const_iterator,
-            InstanceRecord *(*)(const EdgeVec::value_type &)> {
-    static InstanceRecord *unwrap(const EdgeVec::value_type &value) {
-      return value.get();
-    }
-
+      : public llvm::mapped_iterator<EdgeVec::iterator, decltype(&unwrap)> {
   public:
     /// Initializes the result type iterator to the specified result iterator.
-    InstanceIterator(EdgeVec::const_iterator it)
-        : llvm::mapped_iterator<
-              EdgeVec::const_iterator,
-              InstanceRecord *(*)(const EdgeVec::value_type &)>(it, &unwrap) {}
+    InstanceIterator(EdgeVec::iterator it)
+        : llvm::mapped_iterator<EdgeVec::iterator, decltype(&unwrap)>(
+              it, &unwrap) {}
   };
 
 public:
+  InstanceGraphNode() : module(nullptr) {}
+
   /// Get the module that this node is tracking.
   Operation *getModule() const { return module; }
 
@@ -90,7 +86,7 @@ public:
   }
 
   /// Iterate the instance records which instantiate this module.
-  using use_iterator = UseVec::const_iterator;
+  using use_iterator = UseVec::iterator;
   use_iterator uses_begin() { return moduleUses.begin(); }
   use_iterator uses_end() { return moduleUses.end(); }
   llvm::iterator_range<use_iterator> uses() {
@@ -98,8 +94,6 @@ public:
   }
 
 private:
-  InstanceGraphNode() : module(nullptr) {}
-
   /// Record a new instance op in the body of this module. Returns a newly
   /// allocated InstanceRecord which will be owned by this node.
   InstanceRecord *recordInstance(InstanceOp instance,
@@ -132,18 +126,18 @@ private:
 class InstanceGraph {
 
   /// Storage for InstanceGraphNodes.
-  using NodeVec = std::vector<std::unique_ptr<InstanceGraphNode>>;
+  using NodeVec = std::deque<InstanceGraphNode>;
 
   /// Iterator that unwraps a unique_ptr to return a regular pointer.
-  static InstanceGraphNode *unwrap(const NodeVec::value_type &value) {
-    return value.get();
+  static InstanceGraphNode *unwrap(NodeVec::value_type &value) {
+    return &value;
   }
   struct NodeIterator final
-      : public llvm::mapped_iterator<NodeVec::const_iterator,
+      : public llvm::mapped_iterator<NodeVec::iterator,
                                      decltype(&unwrap)> {
     /// Initializes the result type iterator to the specified result iterator.
-    NodeIterator(NodeVec::const_iterator it)
-        : llvm::mapped_iterator<NodeVec::const_iterator, decltype(&unwrap)>(
+    NodeIterator(NodeVec::iterator it)
+        : llvm::mapped_iterator<NodeVec::iterator, decltype(&unwrap)>(
               it, &unwrap) {}
   };
 
@@ -153,25 +147,25 @@ public:
   explicit InstanceGraph(Operation *operation);
 
   /// Get the node corresponding to the top-level module of a circuit.
-  InstanceGraphNode *getTopLevelNode() const;
+  InstanceGraphNode *getTopLevelNode();
 
   /// Look up an InstanceGraphNode for a module. Operation must be an FModuleOp
   /// or an FExtModuleOp.
-  InstanceGraphNode *lookup(Operation *op) const;
+  InstanceGraphNode *lookup(Operation *op);
 
   /// Lookup an InstanceGraphNode for a module. Operation must be an FModuleOp
   /// or an FExtModuleOp.
-  InstanceGraphNode *operator[](Operation *op) const { return lookup(op); }
+  InstanceGraphNode *operator[](Operation *op) { return lookup(op); }
 
   /// Look up the referenced module from an InstanceOp. This will use a
   /// hashtable lookup to find the module, where
   /// InstanceOp.getReferencedModule() will be a linear search through the IR.
-  Operation *getReferencedModule(InstanceOp op) const;
+  Operation *getReferencedModule(InstanceOp op);
 
   /// Iterate through all modules.
   using iterator = NodeIterator;
-  iterator begin() const { return nodes.begin(); }
-  iterator end() const { return nodes.end(); }
+  iterator begin() { return nodes.begin(); }
+  iterator end() { return nodes.end(); }
 
 private:
   /// Get the node corresponding to the module.  If the node has does not exist
@@ -179,7 +173,7 @@ private:
   InstanceGraphNode *getOrAddNode(StringRef name);
 
   /// Lookup an module by name.
-  InstanceGraphNode *lookup(StringRef name) const;
+  InstanceGraphNode *lookup(StringRef name);
 
   /// The storage for graph nodes, with deterministic iteration.
   NodeVec nodes;
@@ -219,8 +213,7 @@ struct GraphTraits<circt::firrtl::InstanceGraph *>
     : public GraphTraits<circt::firrtl::InstanceGraphNode> {
   using nodes_iterator = circt::firrtl::InstanceGraph::iterator;
 
-  static NodeRef
-  getEntryNode(circt::firrtl::InstanceGraph *instanceGraph) {
+  static NodeRef getEntryNode(circt::firrtl::InstanceGraph *instanceGraph) {
     return instanceGraph->getTopLevelNode();
   }
   static nodes_iterator
