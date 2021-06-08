@@ -7,6 +7,8 @@ firrtl.circuit "TestHarness" attributes {
     filename = "builds/sandbox/dataTaps/firrtl/bindings.sv"
   }]
 } {
+  // CHECK-LABEL: firrtl.module @Bar
+  // CHECK-NOT: class = "sifive.enterprise.grandcentral.ReferenceDataTapKey"
   firrtl.module @Bar(
     in %clock: !firrtl.clock {firrtl.annotations = [{
       class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
@@ -21,6 +23,9 @@ firrtl.circuit "TestHarness" attributes {
     in %in: !firrtl.uint<1>,
     out %out: !firrtl.uint<1>
   ) {
+    // CHECK-LABEL: %wire = firrtl.wire
+    // CHECK-NOT: class = "sifive.enterprise.grandcentral.ReferenceDataTapKey"
+    // CHECK-SAME: class = "firrtl.transforms.DontTouchAnnotation"
     %wire = firrtl.wire {annotations = [{
       class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
       id = 0 : i64,
@@ -29,6 +34,9 @@ firrtl.circuit "TestHarness" attributes {
       class = "firrtl.transforms.DontTouchAnnotation"
     }]} : !firrtl.uint<1>
 
+    // CHECK-LABEL: firrtl.mem Undefined
+    // CHECK-NOT: class = "sifive.enterprise.grandcentral.MemTapAnnotation"
+    // CHECK-SAME: class = "firrtl.transforms.DontTouchAnnotation"
     %mem = firrtl.mem Undefined {
       annotations = [{
         class = "sifive.enterprise.grandcentral.MemTapAnnotation",
@@ -107,8 +115,10 @@ firrtl.circuit "TestHarness" attributes {
   }
 
   // CHECK: firrtl.module [[MT:@MemTap.*]](
+  // CHECK-NOT: class = "sifive.enterprise.grandcentral.MemTapAnnotation"
   // CHECK-SAME: out %mem_0: !firrtl.uint<1>
   // CHECK-SAME: out %mem_1: !firrtl.uint<1>
+  // CHECK-SAME: class = "firrtl.transforms.NoDedupAnnotation"
   // CHECK-NEXT: [[V0:%.+]] = firrtl.verbatim.expr "foo.bar.mem[0]"
   // CHECK-NEXT: firrtl.connect %mem_0, [[V0:%.+]]
   // CHECK-NEXT: [[V1:%.+]] = firrtl.verbatim.expr "foo.bar.mem[1]"
@@ -127,6 +137,8 @@ firrtl.circuit "TestHarness" attributes {
     defname = "MemTap"
   }
 
+  // CHECK-LABEL: firrtl.extmodule @BlackHole()
+  // CHECK-NOT: class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey"
   firrtl.extmodule @BlackHole() attributes {
     annotations = [{
       class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey",

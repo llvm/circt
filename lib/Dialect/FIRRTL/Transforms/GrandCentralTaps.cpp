@@ -28,6 +28,8 @@
 
 using namespace circt;
 using namespace firrtl;
+using mlir::function_like_impl::getArgAttrDict;
+using mlir::function_like_impl::setAllArgAttrDicts;
 
 //===----------------------------------------------------------------------===//
 // Utilities
@@ -277,44 +279,24 @@ void GrandCentralTapsPass::runOnOperation() {
       // Go through all annotations on this port and add the data tap key and
       // mem tap ones to the list.
       auto annos = AnnotationSet::forPort(extModule, argNum);
-      SmallVector<Attribute, 8> filteredAnnos;
-      filteredAnnos.reserve(annos.size());
-      for (auto anno : annos) {
+      annos.removeAnnotations([&](Annotation anno) {
         if (anno.isClass(strings.memTapClass, strings.deletedKeyClass,
                          strings.literalKeyClass, strings.referenceKeyClass,
-                         strings.internalKeyClass))
+                         strings.internalKeyClass)) {
           result.portAnnos.push_back({argNum, anno});
-        else
-          filteredAnnos.push_back(anno.getDict());
-      }
-      if (!filteredAnnos.empty())
-        result.filteredPortAnnos.push_back(
-            AnnotationSet(ArrayAttr::get(&getContext(), filteredAnnos)));
-      else
-        result.filteredPortAnnos.push_back(AnnotationSet(&getContext()));
+          return true;
+        }
+        return false;
+      });
+      result.filteredPortAnnos.push_back(annos);
     }
 
     // If there are data tap annotations on the module, which is likely the
     // case, create a filtered array of annotations with them removed.
     AnnotationSet annos(extModule.getOperation());
-    if (!annos.empty()) {
-      auto dropAnno = [&](Annotation anno) {
-        return anno.isClass(strings.dataTapsClass);
-      };
-      bool anyDrop = llvm::any_of(annos, dropAnno);
-      if (anyDrop) {
-        SmallVector<Attribute, 8> filteredAnnos;
-        filteredAnnos.reserve(annos.size());
-        for (auto anno : annos) {
-          if (!dropAnno(anno))
-            filteredAnnos.push_back(anno.getDict());
-        }
-        result.filteredModuleAnnos =
-            ArrayAttr::get(&getContext(), filteredAnnos);
-      } else {
-        result.filteredModuleAnnos = annos.getArrayAttr();
-      }
-    }
+    annos.removeAnnotations(
+        [&](Annotation anno) { return anno.isClass(strings.dataTapsClass); });
+    result.filteredModuleAnnos = annos.getArrayAttr();
 
     if (!result.portAnnos.empty())
       modules.push_back(std::move(result));
@@ -347,28 +329,28 @@ void GrandCentralTapsPass::runOnOperation() {
       filteredArgAttrs.reserve(module.getNumArguments());
       for (unsigned argNum = 0, e = module.getNumArguments(); argNum < e;
            ++argNum) {
-        auto annos = AnnotationSet::forPort(module, argNum);
+        SmallVector<NamedAttribute, 8> otherAttrs;
+        auto annos = AnnotationSet::forPort(module, argNum, otherAttrs);
         if (annos.empty()) {
-          // filteredArgAttrs.push_back(
-          //     mlir::function_like_impl::getArgAttrs(module, argNum));
+          filteredArgAttrs.push_back(getArgAttrDict(module, argNum));
           continue;
         }
 
         // Go through all annotations on this port and extract the interesting
         // ones.
-        SmallVector<Attribute, 8> filteredAnnos;
-        filteredAnnos.reserve(annos.size());
-        for (auto anno : annos) {
-          if (anno.isClass(strings.referenceKeyClass))
+        annos.removeAnnotations([&](Annotation anno) {
+          if (anno.isClass(strings.referenceKeyClass)) {
             assert(
                 tappedArgs.insert({anno.getDict(), module.getArgument(argNum)})
                     .second &&
                 "ambiguous tap annotation");
-          else
-            filteredAnnos.push_back(anno.getDict());
-        }
-        // TODO: Apply the filtered annotations.
+            return true;
+          }
+          return false;
+        });
+        filteredArgAttrs.push_back(annos.getArgumentAttrDict(otherAttrs));
       }
+      setAllArgAttrDicts(module, filteredArgAttrs);
     } else {
       AnnotationSet annos(op);
       if (annos.empty())
@@ -378,12 +360,16 @@ void GrandCentralTapsPass::runOnOperation() {
       // Note that the way tap annotations are scattered to their targets, we
       // should never see multiple values or memories annotated with the exact
       // same annotation (hence the asserts).
-      for (auto anno : annos) {
+      annos.removeAnnotations([&](Annotation anno) {
         if (anno.isClass(strings.memTapClass, strings.referenceKeyClass,
-                         strings.internalKeyClass))
+                         strings.internalKeyClass)) {
           assert(tappedOps.insert({anno.getDict(), op}).second &&
                  "ambiguous tap annotation");
-      }
+          return true;
+        }
+        return false;
+      });
+      annos.updateOperation(op);
     }
   });
 
