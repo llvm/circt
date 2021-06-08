@@ -25,13 +25,13 @@ class PolynomialCompute:
     self.y = Output(types.int(8 * 4))
 
   @generator
-  def construct(mod, params):
+  def construct(mod, coefficients):
     """Implement this module for input 'x'."""
 
     x = mod.x
     taps: list[mlir.ir.Value] = list()
     # TODO: use the coefficient parameter, once its usable.
-    for power, coeff in enumerate([62, 42, 6]):
+    for power, coeff in enumerate(coefficients):
       coeffVal = hw.ConstantOp.create(types.i32, coeff)
       if power == 0:
         newPartialSum = coeffVal.result
