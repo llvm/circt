@@ -203,6 +203,17 @@ OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
   if (llvm::all_of(inputs(), [&](auto in) { return in == this->inputs()[0]; }))
     return inputs()[0];
 
+  // and(..., x, ..., ~x, ...) -> 0
+  for (Value arg : inputs())
+    if (auto xorOp = dyn_cast_or_null<XorOp>(arg.getDefiningOp()))
+      if (xorOp.isBinaryNot()) {
+        // isBinaryOp checks for the constant on operand 0.
+        auto srcVal = xorOp.getOperand(0);
+        for (Value arg2 : inputs())
+          if (arg2 == srcVal)
+            return getIntAttr(APInt(getType().getWidth(), 0), getContext());
+      }
+
   // Constant fold
   return constFoldVariadicOp<IntegerAttr>(
       constants, [](APInt &a, const APInt &b) { a &= b; });

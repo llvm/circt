@@ -28,3 +28,15 @@ hw.module @notNot(%a: i1) -> (%o: i1) {
   hw.output %1 : i1
 }
 
+
+// CHECK-LABEL: @andCancel
+hw.module @andCancel(%a: i4, %b : i4) -> (%o1: i4, %o2: i4) {
+// CHECK-NEXT: hw.constant 0 : i4
+// CHECK-NEXT: hw.output %c0_i4, %c0_i4 : i4, i4
+  %c1 = hw.constant 15 : i4
+  %anot = comb.xor %a, %c1 : i4
+  %1 = comb.and %a, %anot : i4
+  %2 = comb.and %b, %a, %b, %anot, %b : i4
+  hw.output %1, %2 : i4, i4
+}
+
