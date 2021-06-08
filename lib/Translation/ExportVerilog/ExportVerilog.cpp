@@ -1616,7 +1616,6 @@ private:
     return success();
   }
 
-  LogicalResult visitSV(TypeDeclTerminatorOp op) { return emitNoop(); }
   LogicalResult visitSV(WireOp op) { return emitNoop(); }
   LogicalResult visitSV(RegOp op) { return emitNoop(); }
   LogicalResult visitSV(InterfaceInstanceOp op) { return emitNoop(); }
