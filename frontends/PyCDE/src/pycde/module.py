@@ -62,9 +62,8 @@ def module(cls):
 
       # The OpView attributes cannot be touched before OpView is constructed.
       # Get a list and don't touch them.
-      dont_touch = set()
-      dont_touch.update([x for x in dir(mlir.ir.OpView)])
-      dont_touch.add("OPERATION_NAME")
+      dont_touch = [x for x in dir(mlir.ir.OpView)]
+      dont_touch.append("OPERATION_NAME")
 
       # After the wrapped class' construct, all the IO should be known.
       input_ports: list[Input] = []
@@ -73,7 +72,7 @@ def module(cls):
       attributes: dict[str:mlir.ir.Attribute] = {}
       # Scan for them.
       for attr_name in dir(self):
-        if attr_name in dont_touch or attr_name.startswith('_'):
+        if attr_name in dont_touch or attr_name.startswith("_"):
           continue
         attr = self.__getattribute__(attr_name)
         if isinstance(attr, Input):
