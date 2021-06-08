@@ -10,3 +10,12 @@ hw.module @narrowMux(%a: i8, %b: i8, %c: i1) -> (%o: i4) {
   hw.output %1 : i4
 }
 
+// CHECK-LABEL: @notMux
+hw.module @notMux(%a: i4, %b: i4, %c: i1) -> (%o: i4) {
+// CHECK-NEXT: comb.mux %c, %b, %a : i4 
+  %c1 = hw.constant 1 : i1
+  %0 = comb.xor %c, %c1 : i1
+  %1 = comb.mux %0, %a, %b : i4
+  hw.output %1 : i4
+}
+

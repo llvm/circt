@@ -844,6 +844,14 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
     }
   }
 
+  // mux(!a, b, c) -> mux(a, c, b)
+  if (auto xorOp = dyn_cast_or_null<XorOp>(op.cond().getDefiningOp())) {
+    if (xorOp.isBinaryNot()) {
+      Value newOperands[]{xorOp.inputs()[0], op.falseValue(), op.trueValue()};
+      rewriter.replaceOpWithNewOp<MuxOp>(op, op.getType(), newOperands);
+      return success();
+    }
+  }
   return failure();
 }
 
