@@ -1600,22 +1600,19 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
     return handleZeroBit(op.input(),
                          [&]() { return setLowering(op, Value()); });
 
-  // Node operations are logical noops, but can carry a name.  If a name is
-  // present then we lower this into a wire and a connect, otherwise we just
-  // drop it.
-  if (auto name = op->getAttrOfType<StringAttr>("name")) {
-    if (!name.getValue().empty()) {
-      // This is a locally visible, private wire created by the compiler, so
-      // do not attach a symbol name.
-      auto wire = builder.create<sv::WireOp>(operand.getType(), name);
-      builder.create<sv::ConnectOp>(wire, operand);
-    }
+  // Node operations are logical noops, but may carry annotations.  Don't touch
+  // indicates we should keep it as a wire.
+  if (AnnotationSet(op).hasDontTouch()) {
+    // name may be empty
+    auto name = op->getAttrOfType<StringAttr>("name");
+    auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
+    auto symName = builder.getStringAttr(
+        (Twine("__") + moduleName + Twine("__") + name.getValue()).str());
+
+    auto wire = builder.create<sv::WireOp>(operand.getType(), name, symName);
+    builder.create<sv::ConnectOp>(wire, operand);
   }
 
-  // TODO(clattner): This is dropping the location information from unnamed
-  // node ops.  I suspect that this falls below the fold in terms of things we
-  // care about given how Chisel works, but we should reevaluate with more
-  // information.
   return setLowering(op, operand);
 }
 

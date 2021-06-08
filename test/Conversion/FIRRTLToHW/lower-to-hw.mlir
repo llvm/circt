@@ -28,6 +28,9 @@ firrtl.circuit "Simple" {
     %500 = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
     %501 = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<5>
 
+    // CHECK: sv.wire sym @__Simple__dntnode
+    %dntnode = firrtl.node %in1 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
+
     // CHECK: sv.connect %out5, %c0_i4 : i4
     %tmp1 = firrtl.invalidvalue : !firrtl.uint<4>
     firrtl.connect %out5, %tmp1 : !firrtl.uint<4>, !firrtl.uint<4>
@@ -138,12 +141,15 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: = comb.extract [[MOD2]] from 0 : (i8) -> i3
     %21 = firrtl.rem %3, %in3 : (!firrtl.sint<3>, !firrtl.sint<8>) -> !firrtl.sint<3>
 
-    // CHECK-NEXT: [[WIRE:%n1]] = sv.wire : !hw.inout<i2>
-    // CHECK-NEXT: sv.connect [[WIRE]], %in2 : i2
+    // Nodes with names but no attribute are just dropped.
     %n1 = firrtl.node %in2  {name = "n1"} : !firrtl.uint<2>
 
+    // CHECK-NEXT: [[WIRE:%n2]] = sv.wire sym @__Simple__n2 : !hw.inout<i2>
+    // CHECK-NEXT: sv.connect [[WIRE]], %in2 : i2
+    %n2 = firrtl.node %in2  {name = "n2", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<2>
+
     // Nodes with no names are just dropped.
-    %22 = firrtl.node %n1 {name = ""} : !firrtl.uint<2>
+    %22 = firrtl.node %in2 {name = ""} : !firrtl.uint<2>
 
     // CHECK-NEXT: [[CVT:%.+]] = comb.concat %false, %in2 : (i1, i2) -> i3
     %23 = firrtl.cvt %22 : (!firrtl.uint<2>) -> !firrtl.sint<3>
@@ -366,11 +372,11 @@ firrtl.circuit "Simple" {
     %i = firrtl.instance @bar {name = "fetch", portNames=["io_cpu_flush"]} : !firrtl.flip<uint<1>>
     firrtl.connect %i, %io_cpu_flush.wire : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 
-    %hits_1_7 = firrtl.node %io_cpu_flush.wire {name = "hits_1_7"} : !firrtl.uint<1>
+    %hits_1_7 = firrtl.node %io_cpu_flush.wire {name = "hits_1_7", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
     // CHECK-NEXT:  [[IO]] = sv.read_inout %io_cpu_flush.wire
-    // CHECK-NEXT:  [[IO:%.+]] = sv.read_inout %io_cpu_flush.wire
-    // CHECK-NEXT:  %hits_1_7 = sv.wire : !hw.inout<i1>
-    // CHECK-NEXT:  sv.connect %hits_1_7, [[IO]] : i1
+    // CHECK-NEXT:  [[IO2:%.+]] = sv.read_inout %io_cpu_flush.wire
+    // CHECK-NEXT:  %hits_1_7 = sv.wire sym @__foo__hits_1_7
+    // CHECK-NEXT:  sv.connect %hits_1_7, [[IO2]] : i1
     %1455 = firrtl.asPassive %hits_1_7 : !firrtl.uint<1>
   }
 
