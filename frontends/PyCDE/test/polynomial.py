@@ -21,6 +21,8 @@ class PolynomialCompute:
     """coefficients is in 'd' -> 'a' order."""
     self.instanceName = name
     self.coefficients = Parameter(coefficients)
+    self.module_name = Parameter("PolyComputeForCoeff_" +
+                                 '_'.join([str(x) for x in coefficients]))
     # Full result.
     self.y = Output(types.int(8 * 4))
 
@@ -71,6 +73,7 @@ class Polynomial(pycde.System):
     x = hw.ConstantOp.create(i32, 23)
     poly = PolynomialCompute("example", [62, 42, 6], x=x)
     PolynomialCompute("example2", [62, 42, 6], x=poly.y)
+    PolynomialCompute("example2", [1, 2, 3, 4, 5], x=poly.y)
 
     CoolPolynomialCompute([4, 42], x=x)
     hw.OutputOp([poly.y])

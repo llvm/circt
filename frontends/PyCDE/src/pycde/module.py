@@ -274,9 +274,14 @@ class _Generate:
     # Build the replacement HWModuleOp in the outer module.
     module_key = str((op.name, sorted(input_ports), sorted(output_ports),
                       sorted(self.params.items())))
+    if "module_name" in self.params:
+      module_name = self.params["module_name"]
+      self.params.pop("module_name")
+    else:
+      module_name = op.name
     if module_key not in self.generated_modules:
       with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
-        gen_mod = circt.dialects.hw.HWModuleOp(op.name,
+        gen_mod = circt.dialects.hw.HWModuleOp(module_name,
                                                input_ports=input_ports,
                                                output_ports=output_ports,
                                                body_builder=self._generate)
