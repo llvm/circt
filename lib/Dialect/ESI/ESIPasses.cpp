@@ -225,22 +225,18 @@ InterfaceOp ESIHWBuilder::getOrConstructInterface(ChannelPort t) {
 }
 
 InterfaceOp ESIHWBuilder::constructInterface(ChannelPort chan) {
-  InterfaceOp iface = create<InterfaceOp>(constructInterfaceName(chan));
-  ImplicitLocOpBuilder ib(getLoc(), iface.getRegion());
-  ib.createBlock(&iface.getRegion());
-
-  InterfaceSignalOp s;
-  ib.create<InterfaceSignalOp>(validStr, getI1Type());
-  ib.create<InterfaceSignalOp>(readyStr, getI1Type());
-  ib.create<InterfaceSignalOp>(dataStr, chan.getInner());
-  ib.create<InterfaceModportOp>(
-      sinkStr, /*inputs=*/ArrayRef<StringRef>{readyStr},
-      /*outputs=*/ArrayRef<StringRef>{validStr, dataStr});
-  ib.create<InterfaceModportOp>(
-      sourceStr,
-      /*inputs=*/ArrayRef<StringRef>{validStr, dataStr},
-      /*outputs=*/ArrayRef<StringRef>{readyStr});
-  return iface;
+  return create<InterfaceOp>(constructInterfaceName(chan).getValue(), [&]() {
+    create<InterfaceSignalOp>(validStr, getI1Type());
+    create<InterfaceSignalOp>(readyStr, getI1Type());
+    create<InterfaceSignalOp>(dataStr, chan.getInner());
+    create<InterfaceModportOp>(
+        sinkStr, /*inputs=*/ArrayRef<StringRef>{readyStr},
+        /*outputs=*/ArrayRef<StringRef>{validStr, dataStr});
+    create<InterfaceModportOp>(
+        sourceStr,
+        /*inputs=*/ArrayRef<StringRef>{validStr, dataStr},
+        /*outputs=*/ArrayRef<StringRef>{readyStr});
+  });
 }
 
 //===----------------------------------------------------------------------===//

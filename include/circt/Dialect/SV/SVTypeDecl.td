@@ -42,6 +42,12 @@ def InterfaceOp : SVOp<"interface",
 
   let assemblyFormat = "attr-dict $sym_name $body";
 
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "StringRef":$sym_name,
+               CArg<"std::function<void()>", "{}">:$body)>
+  ];
+
   let extraClassDeclaration = [{
     Block *getBodyBlock() { return &body().front(); }
 
