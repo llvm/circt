@@ -648,6 +648,16 @@ static LogicalResult verifyCaseZOp(CaseZOp op) {
 // TypeDecl operations
 //===----------------------------------------------------------------------===//
 
+void InterfaceOp::build(OpBuilder &builder, OperationState &result,
+                        StringRef sym_name, std::function<void()> body) {
+  OpBuilder::InsertionGuard guard(builder);
+
+  result.addAttribute("sym_name", builder.getStringAttr(sym_name));
+  builder.createBlock(result.addRegion());
+  if (body)
+    body();
+}
+
 ModportType InterfaceOp::getModportType(StringRef modportName) {
   assert(lookupSymbol<InterfaceModportOp>(modportName) &&
          "Modport symbol not found.");
