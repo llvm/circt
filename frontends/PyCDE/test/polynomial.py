@@ -17,7 +17,7 @@ class PolynomialCompute:
   # Evaluate polynomial for 'x'.
   x = Input(types.i32)
 
-  def __init__(self, name: str, coefficients: list[int], **kwargs):
+  def __init__(self, name: str, coefficients: list[int]):
     """coefficients is in 'd' -> 'a' order."""
     self.instanceName = name
     self.coefficients = Parameter(coefficients)
@@ -58,7 +58,7 @@ class CoolPolynomialCompute:
   x = Input(types.i32)
   y = Output(types.i32)
 
-  def __init__(self, coefficients, **kwargs):
+  def __init__(self, coefficients):
     self.coefficients = coefficients
 
 
