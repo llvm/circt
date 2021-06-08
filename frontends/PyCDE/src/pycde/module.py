@@ -2,7 +2,7 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from __future__ import annotations
+from .hacks import attribute_to_var
 
 from circt import support
 from circt.dialects import hw
@@ -238,7 +238,7 @@ class _Generate:
     self.generated_modules = {}
 
   def _generate(self, mod):
-    return self.gen_func(mod, self.params)
+    return self.gen_func(mod, **self.params)
 
   def __call__(self, op):
     """Build an HWModuleOp and run the generator as the body builder."""
@@ -260,11 +260,10 @@ class _Generate:
     ]
 
     # Assemble the parameters.
-    params = {
-        nattr.name: nattr.attr
+    self.params = {
+        nattr.name: attribute_to_var(nattr.attr)
         for nattr in mlir.ir.DictAttr(op.attributes["parameters"])
     }
-    self.params = type(f"{op.name}_params", (object,), params)
 
     attrs = {
         nattr.name: nattr.attr
@@ -274,7 +273,7 @@ class _Generate:
 
     # Build the replacement HWModuleOp in the outer module.
     module_key = str((op.name, sorted(input_ports), sorted(output_ports),
-                      sorted(params.items())))
+                      sorted(self.params.items())))
     if module_key not in self.generated_modules:
       with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
         gen_mod = circt.dialects.hw.HWModuleOp(op.name,
