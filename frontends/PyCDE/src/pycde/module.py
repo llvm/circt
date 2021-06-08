@@ -2,7 +2,7 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from .hacks import attribute_to_var
+from __future__ import annotations
 
 from circt import support
 from circt.dialects import hw
