@@ -56,7 +56,8 @@ inline llvm::hash_code hash_value(const T &e) {
 } // namespace mlir
 
 namespace {
-#define EXPR_NAMES(x) Root##x, Var##x, Known##x, Add##x, Pow##x, Max##x, Min##x
+#define EXPR_NAMES(x)                                                          \
+  Root##x, Nil##x, Var##x, Known##x, Add##x, Pow##x, Max##x, Min##x
 #define EXPR_KINDS EXPR_NAMES()
 #define EXPR_CLASSES EXPR_NAMES(Expr)
 
@@ -100,6 +101,11 @@ struct RootExpr : public ExprBase<RootExpr, Expr::Kind::Root> {
   iterator begin() const { return &exprs[0]; }
   iterator end() const { return &exprs[0] + exprs.size(); }
   std::vector<Expr *> &exprs;
+};
+
+/// A free variable.
+struct NilExpr : public ExprBase<NilExpr, Expr::Kind::Nil> {
+  void print(llvm::raw_ostream &os) const { os << "nil"; }
 };
 
 /// A free variable.
@@ -328,6 +334,7 @@ class ConstraintSolver {
 public:
   ConstraintSolver() = default;
 
+  NilExpr *nil() { return &singletonNil; }
   VarExpr *var() {
     auto v = vars.alloc();
     exprs.push_back(v);
@@ -358,6 +365,7 @@ public:
 private:
   // Allocator for constraint expressions.
   llvm::BumpPtrAllocator allocator;
+  static NilExpr singletonNil;
   VarAllocator vars = {allocator};
   InternedAllocator<KnownExpr> knowns = {allocator};
   InternedAllocator<UnaryExpr> uns = {allocator};
@@ -392,6 +400,8 @@ private:
 };
 
 } // namespace
+
+NilExpr ConstraintSolver::singletonNil;
 
 /// Print all constraints in the solver to an output stream.
 void ConstraintSolver::dumpConstraints(llvm::raw_ostream &os) {
@@ -586,6 +596,7 @@ static LinIneq checkCycles(VarExpr *var, Expr *expr,
                            InFlightDiagnostic *reportInto = nullptr) {
   auto ineq =
       TypeSwitch<Expr *, LinIneq>(expr)
+          .Case<NilExpr>([](auto) { return LinIneq(0); })
           .Case<KnownExpr>([&](auto *expr) { return LinIneq(*expr->solution); })
           .Case<VarExpr>([&](auto *expr) {
             if (expr == var)
@@ -666,7 +677,7 @@ LogicalResult ConstraintSolver::solve() {
   for (auto *expr : exprs) {
     // Only work on variables.
     auto *var = dyn_cast<VarExpr>(expr);
-    if (!var)
+    if (!var || !var->constraint)
       continue;
     LLVM_DEBUG(llvm::dbgs()
                << "- Checking " << *var << " >= " << *var->constraint << "\n");
@@ -770,9 +781,9 @@ public:
   LogicalResult map(FModuleOp op);
   LogicalResult mapOperation(Operation *op);
 
-  Expr *declareVars(Value value);
-  Expr *declareVars(Type type);
-  Expr *declareVars(FIRRTLType type);
+  Expr *declareVars(Value value, Location loc);
+  Expr *declareVars(Type type, Location loc);
+  Expr *declareVars(FIRRTLType type, Location loc);
 
   void constrainTypes(Expr *larger, Expr *smaller);
 
@@ -792,6 +803,13 @@ private:
 
 } // namespace
 
+/// Check if a type contains any FIRRTL type with uninferred widths.
+static bool hasUninferredWidth(Type type) {
+  if (auto ftype = type.dyn_cast<FIRRTLType>())
+    return ftype.hasUninferredWidth();
+  return false;
+}
+
 LogicalResult InferenceMapping::map(CircuitOp op) {
   for (auto &op : *op.getBody()) {
     if (auto module = dyn_cast<FModuleOp>(&op))
@@ -805,7 +823,7 @@ LogicalResult InferenceMapping::map(FModuleOp module) {
   // Ensure we have constraint variables for the module ports.
   for (auto arg : module.getArguments()) {
     solver.setCurrentContextInfo(arg);
-    declareVars(arg);
+    declareVars(arg, module.getLoc());
   }
 
   // Go through operations, creating type variables for results, and generating
@@ -817,6 +835,22 @@ LogicalResult InferenceMapping::map(FModuleOp module) {
 }
 
 LogicalResult InferenceMapping::mapOperation(Operation *op) {
+  // In case the operation result has a type without uninferred widths, don't
+  // even bother to populate the constraint problem and treat that as a known
+  // size directly. This is done in `declareVars`, which will generate
+  // `KnownExpr` nodes for all known widths -- which are the only ones in this
+  // case.
+  bool allWidthsKnown = true;
+  for (auto result : op->getResults()) {
+    if (!hasUninferredWidth(result.getType()))
+      declareVars(result, op->getLoc());
+    else
+      allWidthsKnown = false;
+  }
+  if (allWidthsKnown && !isa<ConnectOp, PartialConnectOp>(op))
+    return success();
+
+  // Actually generate the necessary constraint expressions.
   bool mappingFailed = false;
   solver.setCurrentContextInfo(op->getNumResults() > 0 ? op->getResults()[0]
                                                        : Value{});
@@ -838,7 +872,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         setExpr(op.getResult(), e);
       })
       .Case<WireOp, InvalidValueOp, RegOp>(
-          [&](auto op) { declareVars(op.getResult()); })
+          [&](auto op) { declareVars(op.getResult(), op.getLoc()); })
 
       // Arithmetic and Logical Binary Primitives
       .Case<AddPrimOp, SubPrimOp>([&](auto op) {
@@ -966,6 +1000,12 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         auto src = getExpr(op.src());
         constrainTypes(dest, src);
       })
+      .Case<PartialConnectOp>([&](auto op) {
+        if (!hasUninferredWidth(op.dest().getType()))
+          return;
+        op.emitOpError("not supported in width inference");
+        mappingFailed = true;
+      })
 
       // Handle the no-ops that don't interact with width inference.
       .Case<PrintFOp, SkipOp, StopOp, WhenOp, AssertOp, AssumeOp, CoverOp>(
@@ -975,32 +1015,30 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         op->emitOpError("not supported in width inference");
         mappingFailed = true;
       });
-  // TODO: Handle PartialConnect
-  // TODO: Handle Attach
-  // TODO: Handle Conditionally
+
   return failure(mappingFailed);
 }
 
 /// Declare free variables for the type of a value, and associate the resulting
 /// set of variables with that value.
-Expr *InferenceMapping::declareVars(Value value) {
-  Expr *e = declareVars(value.getType());
+Expr *InferenceMapping::declareVars(Value value, Location loc) {
+  Expr *e = declareVars(value.getType(), loc);
   setExpr(value, e);
   return e;
 }
 
 /// Declare free variables for a type.
-Expr *InferenceMapping::declareVars(Type type) {
+Expr *InferenceMapping::declareVars(Type type, Location loc) {
   if (auto ftype = type.dyn_cast<FIRRTLType>())
-    return declareVars(ftype);
-  // TODO: Once we support compound types, non-FIRRTL types will just map to
-  // an empty list of expressions in the solver. At that point we'll have
-  // something proper to return here.
-  llvm_unreachable("non-FIRRTL types not supported");
+    return declareVars(ftype, loc);
+  // TODO: Non-FIRRTL types should probably map to an empty list of constraint
+  // expressions, rather than `nil`. Update this once this function returns a
+  // list of constraints for compound types.
+  return solver.nil();
 }
 
 /// Declare free variables for a FIRRTL type.
-Expr *InferenceMapping::declareVars(FIRRTLType type) {
+Expr *InferenceMapping::declareVars(FIRRTLType type, Location loc) {
   // TODO: Support aggregate and compound types as well.
   auto width = type.getBitWidthOrSentinel();
   if (width >= 0) {
@@ -1008,10 +1046,10 @@ Expr *InferenceMapping::declareVars(FIRRTLType type) {
   } else if (width == -1) {
     return solver.var();
   } else if (auto inner = type.dyn_cast<FlipType>()) {
-    return declareVars(inner.getElementType());
+    return declareVars(inner.getElementType(), loc);
   } else {
-    // TODO: Once we support compound types, this will go away.
-    llvm_unreachable("compound types not supported");
+    // TODO: Once we support compound types, this will return something useful.
+    return solver.nil();
   }
 }
 
@@ -1156,6 +1194,10 @@ bool InferenceTypeUpdate::updateValue(Value value) {
   if (!type)
     return false;
 
+  // Fast path for types that have fully inferred widths.
+  if (!hasUninferredWidth(type))
+    return false;
+
   // If this is an operation that does not generate any free variables that are
   // determined during width inference, simply update the value type based on
   // the operation arguments.
@@ -1179,11 +1221,28 @@ bool InferenceTypeUpdate::updateValue(Value value) {
 
   // Get the inferred width.
   Expr *expr = mapping.getExprOrNull(value);
-  if (!expr || !expr->solution.hasValue())
+  if (!expr || !expr->solution.hasValue()) {
+    anyFailed = true;
+    // Emit an error that indicates where we have failed to infer a width. Note
+    // that we only get here if the IR contained some operation or FIRRTL type
+    // that is not yet supported by width inference. Errors related to widths
+    // not being inferrable due to contradictory constraints are handled earlier
+    // in the solver, and the pass never proceeds to perform this type update.
+    // TL;DR: This is for compiler hackers.
+    // TODO: Convert this to an assertion once we support all operations and
+    // types for width inference.
+    auto diag = mlir::emitError(value.getLoc(), "failed to infer width");
+    if (auto blockArg = value.dyn_cast<BlockArgument>())
+      diag << " for port #" << blockArg.getArgNumber();
+    else if (auto op = value.getDefiningOp())
+      diag << " for op '" << op->getName() << "'";
+    else
+      diag << " for value";
+    diag << " of type '" << type << "'";
     return false;
+  }
   int32_t solution = expr->solution.getValue();
-  if (solution < 0)
-    return false;
+  assert(solution >= 0); // TODO: This should never happen -- corner cases?
 
   // Update the type.
   auto newType = updateType(type, solution);
