@@ -15,21 +15,37 @@ SmallVector<Value> LoadOp::getBankedIdx() {
   operand_range addr = this->addr();
   MemrefType memTy = this->mem().getType().dyn_cast<hir::MemrefType>();
   auto bankedDims = memTy.getBankedDims();
-  for (auto dim : bankedDims) {
-    auto idx = addr[addr.size() - 1 - dim.dyn_cast<IntegerAttr>().getInt()];
-    bankIdx.push_back(idx);
+  for (int i = (int)memTy.getShape().size() - 1; i >= 0; i--) {
+    bool isBankedDim = false;
+    for (auto dim : bankedDims) {
+      if (i == dim.dyn_cast<IntegerAttr>().getInt())
+        isBankedDim = true;
+    }
+
+    if (isBankedDim) {
+      auto idx = addr[addr.size() - 1 - i];
+      bankIdx.push_back(idx);
+    }
   }
   return bankIdx;
 }
 
 SmallVector<Value> LoadOp::getPackedIdx() {
-  SmallVector<Value> packedIdx;
+  SmallVector<Value> packIdx;
   operand_range addr = this->addr();
   MemrefType memTy = this->mem().getType().dyn_cast<hir::MemrefType>();
   auto packedDims = memTy.getPackedDims();
-  for (auto dim : packedDims) {
-    auto idx = addr[addr.size() - 1 - dim];
-    packedIdx.push_back(idx);
+  for (int i = (int)memTy.getShape().size() - 1; i >= 0; i--) {
+    bool isPackedDim = false;
+    for (auto dim : packedDims) {
+      if (i == dim)
+        isPackedDim = true;
+    }
+
+    if (isPackedDim) {
+      auto idx = addr[addr.size() - 1 - i];
+      packIdx.push_back(idx);
+    }
   }
-  return packedIdx;
+  return packIdx;
 }

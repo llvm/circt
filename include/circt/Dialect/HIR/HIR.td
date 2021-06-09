@@ -447,17 +447,16 @@ def ConstantOp : HIR_Op<"constant",[NoSideEffect]> {
 def CastOp : HIR_Op<"cast">{
   let summary = "Cast a value to another type";
   let description = [{
-    This Op casts one ssa value to another type
+    This Op casts value of one type to another type
       Example:
 
-      ```mlir %1 = hir.cast %0 at %ti : !hir.const -> !hir.val```
+      ```mlir %1 = hir.cast %0: i32 -> i4```
   }];
 
   let arguments = (ins AnyType:$input);
   let results = (outs AnyType : $res);
 
-  let assemblyFormat = [{ $input  attr-dict
-    `:` type($input) `->` type($res)}];
+  let assemblyFormat = [{ $input  attr-dict `:` type($input) `->` type($res)}];
 
 }
 

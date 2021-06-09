@@ -303,6 +303,20 @@ public:
     return bankShape;
   }
 
+  SmallVector<int64_t, 4> getPackedShape() {
+    auto shape = getShape();
+    SmallVector<int64_t, 4> packedShape;
+    for (size_t i = 0; i < getShape().size(); i++) {
+      bool isPackedDim = false;
+      for (auto dim : getPackedDims())
+        if (i == (size_t)dim)
+          isPackedDim = true;
+      if (isPackedDim)
+        packedShape.push_back(shape[shape.size() - 1 - i]);
+    }
+    return packedShape;
+  }
+
   SmallVector<int, 4> getPackedDims() {
     SmallVector<int, 4> packedDims;
     for (size_t i = 0; i < getShape().size(); i++) {

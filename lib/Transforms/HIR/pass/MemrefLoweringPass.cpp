@@ -166,6 +166,20 @@ void MemrefLoweringPass::inspectOp(hir::LoadOp op) {
                      op.getLoc(), helper::getConstIntType(context),
                      helper::getIntegerAttr(context, 64, 1))
                  .getResult();
+  MemrefType memTy = mem.getType().dyn_cast<MemrefType>();
+  Attribute memrefRdDelayAttr = memTy.getPortAttrs().get("rd");
+
+  assert(memrefRdDelayAttr);
+
+  Value cMemrefRdDelay =
+      builder
+          .create<hir::ConstantOp>(
+              op.getLoc(), helper::getConstIntType(context),
+              helper::getIntegerAttr(
+                  context, 64,
+                  memrefRdDelayAttr.dyn_cast<IntegerAttr>().getInt()))
+          .getResult();
+
   Value addrBus = mapMemrefRdAddrSend[mem];
   Value dataBus = mapMemrefRdDataRecv[mem];
 
@@ -182,14 +196,21 @@ void MemrefLoweringPass::inspectOp(hir::LoadOp op) {
 
   Value packedAddr;
   if (packedIdx.size() > 1) {
-    SmallVector<Type, 4> packedIdxTypes;
-    for (auto idx : packedIdx) {
-      packedIdxTypes.push_back(idx.getType());
+    SmallVector<Type, 4> castedIdxTypes;
+    SmallVector<Value, 4> castedIdx;
+    auto packedShape = memTy.getPackedShape();
+    for (int i = 0; i < packedShape.size(); i++) {
+      auto dimShape = packedShape[i];
+      auto idx = builder.create<hir::CastOp>(
+          op.getLoc(), helper::getIntegerType(context, helper::clog2(dimShape)),
+          packedIdx[i]);
+      castedIdx.push_back(idx);
+      castedIdxTypes.push_back(idx.getType());
     }
     packedAddr = builder
                      .create<hir::TupleOp>(op.getLoc(),
-                                           builder.getTupleType(packedIdxTypes),
-                                           packedIdx)
+                                           builder.getTupleType(castedIdxTypes),
+                                           castedIdx)
                      .getResult();
   } else if (packedIdx.size() == 1) {
     packedAddr = packedIdx[0];
@@ -206,7 +227,7 @@ void MemrefLoweringPass::inspectOp(hir::LoadOp op) {
   Value tstartPlus1 =
       builder
           .create<hir::DelayOp>(op.getLoc(), helper::getTimeType(context),
-                                tstart, c1, tstart, Value())
+                                tstart, cMemrefRdDelay, tstart, Value())
           .getResult();
   auto recvOp = builder.create<hir::RecvOp>(
       op.getLoc(), op.res().getType(), dataBus, bankAddr, tstartPlus1, Value());
