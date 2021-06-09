@@ -27,7 +27,7 @@ class Top(System):
 
 # CHECK: hw.constant 1
 top1 = Top()
-top1.generate()
+top1.generate(["generator_a"])
 top1.print()
 
 # CHECK: hw.constant 2
@@ -38,6 +38,20 @@ top2.print()
 # CHECK: generator exception
 top3 = Top()
 try:
-  top3.generate(["generator_a", "generator_b"])
+  top3.generate()
+except RuntimeError:
+  pass
+
+# CHECK: generator exception
+top4 = Top()
+try:
+  top4.generate(["generator_a", "generator_b"])
+except RuntimeError:
+  pass
+
+# CHECK: generator exception
+top5 = Top()
+try:
+  top5.generate(["nonexistant"])
 except RuntimeError:
   pass

@@ -39,10 +39,11 @@ LogicalResult OpGenerator::runOnOperation(mlir::Operation *op,
                                           GeneratorSet generatorSet) {
   if (generators.size() == 0)
     return failure();
+  if (generators.size() > 1 && generatorSet.size() < 1)
+    return op->emitError("at least one generator must be selected");
 
-  // Select the generator specified in the generator set. If none were
-  // specified, take the first generator. If multiple candidate generators are
-  // present, raise an error.
+  // Check if any of the generators were selected in the generator set. If more
+  // than one candidate is present in the generator set, raise an error.
   GeneratorCallback gen;
   for (auto &generatorPair : generators) {
     if (generatorSet.contains(generatorPair.first())) {
@@ -51,8 +52,15 @@ LogicalResult OpGenerator::runOnOperation(mlir::Operation *op,
       gen = generatorPair.second;
     }
   }
-  if (!gen)
-    gen = generators.begin()->second;
+
+  // If no generator was selected by the generator set, and there is just one
+  // generator, default to using that. Otherwise raise an error.
+  if (!gen) {
+    if (generators.size() == 1)
+      gen = generators.begin()->second;
+    else
+      return op->emitError("unable to select a generator");
+  }
 
   mlir::IRRewriter rewriter(op->getContext());
   Operation *replacement = gen(op);
@@ -103,7 +111,8 @@ struct RunGeneratorsPass : public RunGeneratorsBase<RunGeneratorsPass> {
 void RunGeneratorsPass::runOnOperation() {
   GeneratorSet generatorSet;
   for (auto &generator : generators)
-    generatorSet.insert(StringRef(generator));
+    if (!generator.empty())
+      generatorSet.insert(StringRef(generator));
   MLIRContext *ctxt = &getContext();
   MSFTDialect *msft = ctxt->getLoadedDialect<MSFTDialect>();
   if (!msft)
