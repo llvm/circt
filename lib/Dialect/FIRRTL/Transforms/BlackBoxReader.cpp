@@ -62,12 +62,12 @@ struct BlackBoxReaderPass : public BlackBoxReaderBase<BlackBoxReaderPass> {
   using BlackBoxReaderBase::resourcePrefix;
 
 private:
-  /// A set of the files encountered so far.  This is used to prevent two
+  /// A set of the files generated so far. This is used to prevent two
   /// annotations from generating the same file.
   SmallPtrSet<Attribute, 8> emittedFiles;
 
   /// A list of all files which will be included in the file list.  This is
-  /// subset of all fileNames.
+  /// subset of all emitted files.
   SmallVector<StringRef> fileListFiles;
 
   /// The target directory to output black boxes into. Can be changed
@@ -126,7 +126,6 @@ void BlackBoxReaderPass::runOnOperation() {
       continue;
     }
 
-    // If it is not a black box annotation, it will be reattached to the op.
     filteredAnnos.push_back(annot.getDict());
   }
 
@@ -168,8 +167,8 @@ void BlackBoxReaderPass::runOnOperation() {
     // Output the file list in sorted order.
     llvm::sort(fileListFiles.begin(), fileListFiles.end());
 
-    // Create the file list contents by putting each file on its own line.
-    // Append the targetDir to the filename for the file list.
+    // Create the file list contents by prepending the file name with the target
+    // directory, and putting each file on its own line.
     std::string output;
     llvm::raw_string_ostream os(output);
     llvm::interleave(
@@ -213,7 +212,6 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
   if (anno.isClass(inlineAnnoClass)) {
     auto name = anno.getMember<StringAttr>("name");
     auto text = anno.getMember<StringAttr>("text");
-
     if (!name || !text) {
       op->emitError(inlineAnnoClass)
           << " annotation missing \"name\" or \"text\" attribute";
@@ -278,6 +276,11 @@ void BlackBoxReaderPass::loadFile(Operation *op, StringRef inputPath,
   LLVM_DEBUG(llvm::dbgs() << "Add black box source  `" << fileName << "` from `"
                           << inputPath << "`\n");
 
+  // Skip this annotation if the target is already loaded.
+  auto fileNameAttr = builder.getStringAttr(fileName);
+  if (emittedFiles.count(fileNameAttr))
+    return;
+
   // Open and read the input file.
   std::string errorMessage;
   auto input = mlir::openInputFile(inputPath, &errorMessage);
@@ -286,11 +289,6 @@ void BlackBoxReaderPass::loadFile(Operation *op, StringRef inputPath,
     signalPassFailure();
     return;
   }
-
-  // Skip this annotation if the target is already loaded.
-  auto fileNameAttr = builder.getStringAttr(fileName);
-  if (emittedFiles.count(fileNameAttr))
-    return;
 
   // Create an IR node to hold the contents.
   auto verbatimOp =
@@ -301,7 +299,7 @@ void BlackBoxReaderPass::loadFile(Operation *op, StringRef inputPath,
 /// This function is called for every file generated.  It does the following
 /// things:
 ///  1. Attaches the output file attribute to the VerbatimOp.
-///  2. Record that the file has been generated.
+///  2. Record that the file has been generated to avoid duplicates.
 ///  3. Add each file name to the generated "file list" file.
 void BlackBoxReaderPass::setOutputFile(VerbatimOp op, StringAttr fileNameAttr) {
   auto *context = &getContext();
@@ -317,7 +315,7 @@ void BlackBoxReaderPass::setOutputFile(VerbatimOp op, StringAttr fileNameAttr) {
                   /*exclude_from_filelist=*/BoolAttr::get(context, exclude),
                   /*exclude_replicated_ops=*/trueAttr, context));
 
-  // Record this file as generated.
+  // Record that this file has been generated.
   assert(!emittedFiles.count(fileNameAttr) &&
          "Can't generate the same file twice.");
   emittedFiles.insert(fileNameAttr);
