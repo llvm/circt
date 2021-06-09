@@ -73,11 +73,14 @@ void MemrefLoweringPass::inspectOp(hir::AllocaOp op) {
     hir::MemrefType ty = res.getType().dyn_cast<hir::MemrefType>();
     assert(ty);
     int dataWidth = helper::getBitWidth(ty.getElementType());
-    int depth = ty.getDepth();
     int numBanks = ty.getNumBanks();
     auto port = ty.getPort();
-    int addrWidth = helper::clog2(depth);
-    Type tyIAddr = helper::getIntegerType(context, addrWidth);
+    SmallVector<Type, 4> addrTypes;
+    for (auto dimShape : ty.getPackedShape()) {
+      Type addrTy = helper::getIntegerType(context, helper::clog2(dimShape));
+      addrTypes.push_back(addrTy);
+    }
+    Type tyIAddr = builder.getTupleType(addrTypes);
     Type tyIData = helper::getIntegerType(context, dataWidth);
     Type tyIAddrAndData =
         TupleType::get(context, SmallVector<Type>({tyIAddr, tyIData}));
@@ -150,6 +153,59 @@ void MemrefLoweringPass::inspectOp(hir::AllocaOp op) {
                               funcTy, Value(), bramCallArgs, tstart, Value());
 }
 
+Value createAddrTuple(OpBuilder &builder, Location loc, ArrayRef<Value> indices,
+                      ArrayRef<int64_t> shape) {
+  Value addr;
+  MLIRContext *context = builder.getContext();
+
+  // FIXME: Dont support registers yet!
+  assert(indices.size() > 0);
+
+  SmallVector<Type, 4> castedIdxTypes;
+  SmallVector<Value, 4> castedIdx;
+  for (int i = 0; i < (int)shape.size(); i++) {
+    auto dimShape = shape[i];
+    auto idx = builder.create<hir::CastOp>(
+        loc, helper::getIntegerType(context, helper::clog2(dimShape)),
+        indices[i]);
+    castedIdx.push_back(idx);
+    castedIdxTypes.push_back(idx.getType());
+  }
+  addr = builder
+             .create<hir::TupleOp>(loc, builder.getTupleType(castedIdxTypes),
+                                   castedIdx)
+             .getResult();
+  return addr;
+}
+
+Value createAddrAndDataTuple(OpBuilder &builder, Location loc,
+                             ArrayRef<Value> indices, ArrayRef<int64_t> shape,
+                             Value data) {
+  Value addr;
+  MLIRContext *context = builder.getContext();
+
+  // FIXME: Dont support registers yet!
+  assert(indices.size() > 0);
+  SmallVector<Type, 4> castedIdxTypes;
+  SmallVector<Value, 4> castedIdx;
+  for (int i = 0; i < (int)shape.size(); i++) {
+    auto dimShape = shape[i];
+    auto idx = builder.create<hir::CastOp>(
+        loc, helper::getIntegerType(context, helper::clog2(dimShape)),
+        indices[i]);
+    castedIdx.push_back(idx);
+    castedIdxTypes.push_back(idx.getType());
+  }
+  castedIdx.push_back(data);
+  castedIdxTypes.push_back(data.getType());
+  addr = builder
+             .create<hir::TupleOp>(loc, builder.getTupleType(castedIdxTypes),
+                                   castedIdx)
+             .getResult();
+
+  return addr;
+}
+
 void MemrefLoweringPass::inspectOp(hir::LoadOp op) {
   mlir::OpBuilder builder(op.getOperation()->getParentOp()->getContext());
   MLIRContext *context = builder.getContext();
@@ -194,29 +250,8 @@ void MemrefLoweringPass::inspectOp(hir::LoadOp op) {
 
   SmallVector<Value, 4> packedIdx = op.getPackedIdx();
 
-  Value packedAddr;
-  if (packedIdx.size() > 1) {
-    SmallVector<Type, 4> castedIdxTypes;
-    SmallVector<Value, 4> castedIdx;
-    auto packedShape = memTy.getPackedShape();
-    for (int i = 0; i < packedShape.size(); i++) {
-      auto dimShape = packedShape[i];
-      auto idx = builder.create<hir::CastOp>(
-          op.getLoc(), helper::getIntegerType(context, helper::clog2(dimShape)),
-          packedIdx[i]);
-      castedIdx.push_back(idx);
-      castedIdxTypes.push_back(idx.getType());
-    }
-    packedAddr = builder
-                     .create<hir::TupleOp>(op.getLoc(),
-                                           builder.getTupleType(castedIdxTypes),
-                                           castedIdx)
-                     .getResult();
-  } else if (packedIdx.size() == 1) {
-    packedAddr = packedIdx[0];
-  } else {
-    assert(false && "Dont support registers yet!");
-  }
+  Value packedAddr = createAddrTuple(builder, op.getLoc(), op.getPackedIdx(),
+                                     memTy.getPackedShape());
 
   bankAddr.push_back(c1);
   builder.create<hir::SendOp>(op.getLoc(), packedAddr, addrBus, bankAddr,
@@ -237,12 +272,51 @@ void MemrefLoweringPass::inspectOp(hir::LoadOp op) {
   op.getOperation()->erase();
 }
 
+void MemrefLoweringPass::inspectOp(hir::StoreOp op) {
+  mlir::OpBuilder builder(op.getOperation()->getParentOp()->getContext());
+  MLIRContext *context = builder.getContext();
+  builder.setInsertionPoint(op);
+
+  Value mem = op.mem();
+  Value value = op.value();
+  Value c0 = builder
+                 .create<hir::ConstantOp>(
+                     op.getLoc(), helper::getConstIntType(context),
+                     helper::getIntegerAttr(context, 64, 0))
+                 .getResult();
+  Value c1 = builder
+                 .create<hir::ConstantOp>(
+                     op.getLoc(), helper::getConstIntType(context),
+                     helper::getIntegerAttr(context, 64, 1))
+                 .getResult();
+  MemrefType memTy = mem.getType().dyn_cast<MemrefType>();
+  Value wrBus = mapMemrefWrSend[mem];
+  Value tstart = op.tstart();
+  Value offset = op.offset();
+  assert(!offset);
+  SmallVector<Value, 4> bankAddr = op.getBankedIdx();
+  bankAddr.push_back(c0);
+  builder.create<hir::SendOp>(op.getLoc(), c1, wrBus, bankAddr, tstart,
+                              Value());
+  bankAddr.pop_back();
+  Value packedAddr = createAddrAndDataTuple(
+      builder, op.getLoc(), op.getPackedIdx(), memTy.getPackedShape(), value);
+  bankAddr.push_back(c1);
+  builder.create<hir::SendOp>(op.getLoc(), packedAddr, wrBus, bankAddr, tstart,
+                              Value());
+  op.getOperation()->dropAllReferences();
+  op.getOperation()->dropAllUses();
+  op.getOperation()->erase();
+}
+
 void MemrefLoweringPass::runOnOperation() {
   hir::FuncOp funcOp = getOperation();
   WalkResult result = funcOp.walk([this](Operation *operation) -> WalkResult {
     if (auto op = dyn_cast<hir::AllocaOp>(operation))
       inspectOp(op);
     else if (auto op = dyn_cast<LoadOp>(operation))
+      inspectOp(op);
+    else if (auto op = dyn_cast<StoreOp>(operation))
       inspectOp(op);
     return WalkResult::advance();
   });

@@ -133,6 +133,11 @@ def StoreOp : HIR_Op<"store", [AttrSizedOperandSegments]> {
     (`+` $offset^ )? attr-dict 
       `:` `(`type($value) `,` type($mem)`[`type($addr) `]` `)`}];
   let hasCanonicalizeMethod = true;
+  let extraClassDeclaration = [{
+  public:
+  SmallVector<Value> getBankedIdx();
+  SmallVector<Value> getPackedIdx();
+  }];
 }
 
 def SendOp : HIR_Op<"send", [AttrSizedOperandSegments]> {
