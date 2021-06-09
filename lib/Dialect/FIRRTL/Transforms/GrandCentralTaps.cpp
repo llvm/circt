@@ -326,8 +326,7 @@ void GrandCentralTapsPass::runOnOperation() {
       filteredArgAttrs.reserve(module.getNumArguments());
       for (unsigned argNum = 0, e = module.getNumArguments(); argNum < e;
            ++argNum) {
-        SmallVector<NamedAttribute, 8> otherAttrs;
-        auto annos = AnnotationSet::forPort(module, argNum, otherAttrs);
+        auto annos = AnnotationSet::forPort(module, argNum);
         if (annos.empty()) {
           filteredArgAttrs.push_back(getArgAttrDict(module, argNum));
           continue;
@@ -345,7 +344,8 @@ void GrandCentralTapsPass::runOnOperation() {
           }
           return false;
         });
-        filteredArgAttrs.push_back(annos.getArgumentAttrDict(otherAttrs));
+        filteredArgAttrs.push_back(
+            annos.applyToPortDictionaryAttr(getArgAttrDict(module, argNum)));
       }
       setAllArgAttrDicts(module, filteredArgAttrs);
     } else {
@@ -366,7 +366,7 @@ void GrandCentralTapsPass::runOnOperation() {
         }
         return false;
       });
-      annos.updateOperation(op);
+      annos.applyToOperation(op);
     }
   });
 
