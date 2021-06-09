@@ -43,8 +43,9 @@ class System:
   def print(self):
     self.mod.operation.print()
 
-  def generate(self):
-    pm = mlir.passmanager.PassManager.parse("run-generators")
+  def generate(self, generator_names=[]):
+    pm = mlir.passmanager.PassManager.parse("run-generators{generators=" +
+                                            ",".join(generator_names) + "}")
     try:
       pm.run(self.mod)
     except Exception as e:

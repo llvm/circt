@@ -12,11 +12,13 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
 
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringMap.h"
 
 using namespace circt;
 using namespace msft;
+using GeneratorSet = llvm::SmallSet<StringRef, 8>;
 
 namespace {
 /// Holds the set of registered generators for each operation.
@@ -28,17 +30,29 @@ public:
     generators[generatorName] = cb;
   }
 
-  LogicalResult runOnOperation(mlir::Operation *op);
+  LogicalResult runOnOperation(mlir::Operation *op, GeneratorSet generatorSet);
 };
 
 } // namespace
 
-LogicalResult OpGenerator::runOnOperation(mlir::Operation *op) {
-  // Use the first one, if there is one registered.
-  // TODO: select based on some criteria.
+LogicalResult OpGenerator::runOnOperation(mlir::Operation *op,
+                                          GeneratorSet generatorSet) {
   if (generators.size() == 0)
     return failure();
-  GeneratorCallback gen = generators.begin()->second;
+
+  // Select the generator specified in the generator set. If none were
+  // specified, take the first generator. If multiple candidate generators are
+  // present, raise an error.
+  GeneratorCallback gen;
+  for (auto &generatorPair : generators) {
+    if (generatorSet.contains(generatorPair.first())) {
+      if (gen)
+        return op->emitError("multiple generators selected");
+      gen = generatorPair.second;
+    }
+  }
+  if (!gen)
+    gen = generators.begin()->second;
 
   mlir::IRRewriter rewriter(op->getContext());
   Operation *replacement = gen(op);
@@ -54,12 +68,12 @@ namespace detail {
 struct Generators {
   llvm::StringMap<OpGenerator> registeredOpGenerators;
 
-  LogicalResult runOnOperation(mlir::Operation *op) {
+  LogicalResult runOnOperation(mlir::Operation *op, GeneratorSet generatorSet) {
     StringRef opName = op->getName().getStringRef();
     auto opGenerator = registeredOpGenerators.find(opName);
     if (opGenerator == registeredOpGenerators.end())
       return success(); // If we don't have a generator registered, just return.
-    return opGenerator->second.runOnOperation(op);
+    return opGenerator->second.runOnOperation(op, generatorSet);
   }
 };
 } // namespace detail
@@ -87,14 +101,17 @@ struct RunGeneratorsPass : public RunGeneratorsBase<RunGeneratorsPass> {
 } // anonymous namespace
 
 void RunGeneratorsPass::runOnOperation() {
+  GeneratorSet generatorSet;
+  for (auto &generator : generators)
+    generatorSet.insert(StringRef(generator));
   MLIRContext *ctxt = &getContext();
   MSFTDialect *msft = ctxt->getLoadedDialect<MSFTDialect>();
   if (!msft)
     return;
 
   Operation *top = getOperation();
-  top->walk([this, msft](Operation *op) {
-    if (failed(msft->generators->runOnOperation(op)))
+  top->walk([this, msft, generatorSet](Operation *op) {
+    if (failed(msft->generators->runOnOperation(op, generatorSet)))
       signalPassFailure();
   });
 }
