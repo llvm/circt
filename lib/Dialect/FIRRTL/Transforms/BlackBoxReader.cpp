@@ -51,7 +51,7 @@ SmallVector<StringRef> splitString(std::string &s, char delim) {
   size_t start = 0U;
   size_t end;
   do {
-    end = s.find(delim);
+    end = s.find(delim, start);
     if (end == std::string::npos)
       break;
     retval.emplace_back(&s.data()[start], end - start);
