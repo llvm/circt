@@ -1450,7 +1450,7 @@ void NameCollector::collectNames(Block &block) {
 
     // Instances are handled in prepareHWModule
     auto instance = dyn_cast<InstanceOp>(&op);
-    if (instance)
+    if (instance)      
       continue;
 
     for (auto result : op.getResults()) {
@@ -2509,7 +2509,7 @@ static bool onlyUseIsConnect(Value v) {
   return true;
 }
 
-// Ensure that each output of an instance are used only by a wire
+//Ensure that each output of an instance are used only by a wire
 static void lowerInstanceResults(InstanceOp op) {
   Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
@@ -2533,7 +2533,7 @@ static void lowerInstanceResults(InstanceOp op) {
     if (port.name)
       nameTmp += port.name.getValue().str();
     else
-      nameTmp += std::to_string(nextResultNo - 1);
+      nameTmp += std::to_string(nextResultNo-1);
 
     auto newWire = builder.create<WireOp>(result.getType(), nameTmp);
     while (!result.use_empty()) {

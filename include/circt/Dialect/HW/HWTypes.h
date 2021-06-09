@@ -20,7 +20,6 @@
 namespace circt {
 namespace hw {
 class TypedeclOp;
-
 namespace detail {
 /// Struct defining a field. Used in structs and unions.
 struct FieldInfo {
