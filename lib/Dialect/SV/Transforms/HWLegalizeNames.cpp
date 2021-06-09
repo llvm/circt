@@ -12,7 +12,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "SVPassDetail.h"
-#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
 

@@ -13,7 +13,7 @@
 #include "SVPassDetail.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
-#include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/Builders.h"
 
 using namespace circt;
 
