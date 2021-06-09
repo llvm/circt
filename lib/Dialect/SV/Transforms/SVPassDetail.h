@@ -12,11 +12,20 @@
 #ifndef DIALECT_SV_TRANSFORMS_SVPASSDETAIL_H
 #define DIALECT_SV_TRANSFORMS_SVPASSDETAIL_H
 
-#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/Pass/Pass.h"
 
 namespace circt {
+
+namespace comb {
+class CombDialect;
+}
+
+namespace hw {
+class HWDialect;
+class HWModuleOp;
+} // namespace hw
+
 namespace sv {
 
 #define GEN_PASS_CLASSES

@@ -15,6 +15,7 @@
 
 #include "SVPassDetail.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "mlir/IR/BlockAndValueMapping.h"
