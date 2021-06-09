@@ -69,10 +69,12 @@ class Polynomial(pycde.System):
   def build(self, top):
     i32 = types.i32
     x = hw.ConstantOp.create(i32, 23)
-    poly = PolynomialCompute("example", [62, 42, 6], x=x)
-    PolynomialCompute("example2", [62, 42, 6], x=poly.y)
+    poly = PolynomialCompute("example", [62, 42, 6], inputs={"x": x})
+    PolynomialCompute("example2",
+                      coefficients=[62, 42, 6],
+                      inputs={"x": poly.y})
 
-    CoolPolynomialCompute([4, 42], x=x)
+    CoolPolynomialCompute([4, 42], inputs={"x": x})
     hw.OutputOp([poly.y])
 
 

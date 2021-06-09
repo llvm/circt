@@ -55,7 +55,7 @@ def module(cls):
     input_ports: dict[str, int] = {}
     output_ports: dict[str, int] = {}
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, inputs={}, **kwargs):
       """Scan the class and eventually instance for Input/Output members and
       treat the inputs as operands and outputs as results."""
       cls.__init__(self, *args, **kwargs)
@@ -93,8 +93,8 @@ def module(cls):
       input_ports_values: list[mlir.ir.Value] = []
       self.backedges: dict[int:BackedgeBuilder.Edge] = {}
       for (idx, input) in enumerate(input_ports):
-        if input.name in kwargs:
-          value = kwargs[input.name]
+        if input.name in inputs:
+          value = inputs[input.name]
           if isinstance(value, mlir.ir.OpView):
             value = value.operation.result
           elif isinstance(value, mlir.ir.Operation):
