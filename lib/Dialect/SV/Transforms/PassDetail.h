@@ -9,8 +9,8 @@
 // clang-tidy seems to expect the absolute path in the header guard on some
 // systems, so just disable it.
 // NOLINTNEXTLINE(llvm-header-guard)
-#ifndef DIALECT_SV_TRANSFORMS_SVPASSDETAIL_H
-#define DIALECT_SV_TRANSFORMS_SVPASSDETAIL_H
+#ifndef DIALECT_SV_TRANSFORMS_PASSDETAIL_H
+#define DIALECT_SV_TRANSFORMS_PASSDETAIL_H
 
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/Pass/Pass.h"
@@ -34,4 +34,4 @@ namespace sv {
 } // namespace sv
 } // namespace circt
 
-#endif // DIALECT_FIRRTL_TRANSFORMS_SVPASSDETAIL_H
+#endif // DIALECT_FIRRTL_TRANSFORMS_PASSDETAIL_H
