@@ -14,30 +14,12 @@
 #ifndef CIRCT_DIALECT_HW_TYPES_H
 #define CIRCT_DIALECT_HW_TYPES_H
 
-#include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Types.h"
 
 namespace circt {
 namespace hw {
-class ArrayType;
 class TypedeclOp;
-
-/// Base class for all concrete HW dialect types.
-class HWType
-    : public ::mlir::Type::TypeBase<HWType, mlir::Type, mlir::TypeStorage> {
-  using Base::Base;
-
-public:
-  /// Support method to enable LLVM-style type casting.
-  static bool classof(Type type);
-
-  /// Predicates to support querying the concrete type.
-  bool isArrayType();
-
-  /// Getters to support casting to the concrete type.
-  ArrayType getAsArrayType();
-};
 
 namespace detail {
 /// Struct defining a field. Used in structs and unions.
@@ -77,6 +59,31 @@ int64_t getBitWidth(mlir::Type type);
 /// InOutType.  Unlike isHWValueType, this is not conservative, it only returns
 /// false on known InOut types, rather than any unknown types.
 bool hasHWInOutType(mlir::Type type);
+
+template <typename BaseTy>
+bool type_isa(Type type) {
+  // First check if the type is the requested type.
+  if (type.isa<BaseTy>())
+    return true;
+
+  // Then check if it is a type alias wrapping the requested type.
+  if (auto alias = type.dyn_cast<TypeAliasType>())
+    return alias.getInnerType().isa<BaseTy>();
+
+  return false;
+}
+
+template <typename BaseTy>
+BaseTy type_cast(Type type) {
+  assert(type_isa<BaseTy>(type) && "type must convert to requested type");
+
+  // If the type is the requested type, return it.
+  if (type.isa<BaseTy>())
+    return type.cast<BaseTy>();
+
+  // Otherwise, it must be a type alias wrapping the requested type.
+  return type.cast<TypeAliasType>().getInnerType().cast<BaseTy>();
+}
 
 } // namespace hw
 } // namespace circt

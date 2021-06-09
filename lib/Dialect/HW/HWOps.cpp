@@ -830,13 +830,14 @@ static LogicalResult verifyOutputOp(OutputOp *op) {
 
 static ParseResult parseSliceTypes(OpAsmParser &p, Type &srcType,
                                    Type &idxType) {
-  HWType arrType;
+  Type arrType;
   if (p.parseType(arrType))
     return p.emitError(p.getCurrentLocation(), "Expected type");
-  if (!arrType.isArrayType())
+  if (!type_isa<ArrayType>(arrType))
     return p.emitError(p.getCurrentLocation(), "Expected !hw.array type");
   srcType = arrType;
-  unsigned idxWidth = llvm::Log2_64_Ceil(arrType.getAsArrayType().getSize());
+  unsigned idxWidth =
+      llvm::Log2_64_Ceil(type_cast<ArrayType>(arrType).getSize());
   idxType = IntegerType::get(p.getBuilder().getContext(), idxWidth);
   return success();
 }
@@ -891,18 +892,19 @@ static ParseResult parseArrayConcatTypes(OpAsmParser &p,
   Type elemType;
   uint64_t resultSize = 0;
   do {
-    HWType ty;
+    Type ty;
     if (p.parseType(ty))
       return p.emitError(p.getCurrentLocation(), "Expected type");
-    if (!ty.isArrayType())
+    if (!type_isa<ArrayType>(ty))
       return p.emitError(p.getCurrentLocation(), "Expected !hw.array type");
-    if (elemType && elemType != ty.getAsArrayType().getElementType())
+    ArrayType arrTy = type_cast<ArrayType>(ty);
+    if (elemType && elemType != arrTy.getElementType())
       return p.emitError(p.getCurrentLocation(), "Expected array element type ")
              << elemType;
 
-    elemType = ty.getAsArrayType().getElementType();
+    elemType = arrTy.getElementType();
     inputTypes.push_back(ty);
-    resultSize += ty.getAsArrayType().getSize();
+    resultSize += arrTy.getSize();
   } while (!p.parseOptionalComma());
 
   resultType = ArrayType::get(elemType, resultSize);
@@ -1150,8 +1152,7 @@ static void print(OpAsmPrinter &printer, hw::UnionExtractOp op) {
 
 void ArrayGetOp::build(OpBuilder &builder, OperationState &result, Value input,
                        Value index) {
-  auto resultType =
-      input.getType().cast<HWType>().getAsArrayType().getElementType();
+  auto resultType = type_cast<ArrayType>(input.getType()).getElementType();
   build(builder, result, resultType, input, index);
 }
 

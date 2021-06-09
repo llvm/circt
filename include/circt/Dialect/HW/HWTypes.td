@@ -11,8 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 // Base class for other typedefs. Provides dialact-specific defaults.
-class HWType<string name> : TypeDef<HWDialect, name, /*traits=*/[],
-                                     /*baseCppClass=*/"HWType"> { }
+class HWType<string name> : TypeDef<HWDialect, name> { }
 
 //===----------------------------------------------------------------------===//
 // Type predicates
@@ -61,7 +60,7 @@ def ArrayTypeImpl : HWType<"Array"> {
 
 // A handle to refer to hw::ArrayType in ODS.
 def ArrayType : DialectType<HWDialect,
-    CPred<"$_self.cast<HWType>().isArrayType()">, "an ArrayType", "HWType">;
+    CPred<"type_isa<ArrayType>($_self)">, "an ArrayType">;
 
 // An 'unpacked' array of fixed size.
 def UnpackedArrayType : HWType<"UnpackedArray"> {
