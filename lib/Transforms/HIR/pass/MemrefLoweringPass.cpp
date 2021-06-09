@@ -15,21 +15,21 @@ namespace {
 class MemrefLoweringPass : public hir::MemrefLoweringBase<MemrefLoweringPass> {
 public:
   void runOnOperation() override;
-  void inspectOp(hir::FuncOp op);
-  void inspectOp(hir::ConstantOp op);
-  void inspectOp(hir::ForOp op);
-  void inspectOp(hir::UnrollForOp op);
-  void inspectOp(hir::AddOp op);
-  void inspectOp(hir::SubtractOp op);
-  void inspectOp(hir::LoadOp op);
-  void inspectOp(hir::StoreOp op);
-  void inspectOp(hir::ReturnOp op);
-  void inspectOp(hir::YieldOp op);
-  void inspectOp(hir::SendOp op);
-  void inspectOp(hir::RecvOp op);
-  void inspectOp(hir::DelayOp op);
-  void inspectOp(hir::CallOp op);
-  void inspectOp(hir::AllocaOp op);
+  void lowerOp(hir::FuncOp op);
+  void lowerOp(hir::ConstantOp op);
+  void lowerOp(hir::ForOp op);
+  void lowerOp(hir::UnrollForOp op);
+  void lowerOp(hir::AddOp op);
+  void lowerOp(hir::SubtractOp op);
+  void lowerOp(hir::LoadOp op);
+  void lowerOp(hir::StoreOp op);
+  void lowerOp(hir::ReturnOp op);
+  void lowerOp(hir::YieldOp op);
+  void lowerOp(hir::SendOp op);
+  void lowerOp(hir::RecvOp op);
+  void lowerOp(hir::DelayOp op);
+  void lowerOp(hir::CallOp op);
+  void lowerOp(hir::AllocaOp op);
 
 private:
   llvm::DenseMap<Value, Value> mapMemrefRdAddrSend;
@@ -47,7 +47,7 @@ Type buildBusTensor(MLIRContext *context, SmallVector<Type> busTypes,
   return tyRdAddrSend;
 }
 
-void MemrefLoweringPass::inspectOp(hir::AllocaOp op) {
+void MemrefLoweringPass::lowerOp(hir::AllocaOp op) {
   std::string moduleAttr =
       op.moduleAttr().dyn_cast<StringAttr>().getValue().str();
   if (moduleAttr != "bram" && moduleAttr != "reg")
@@ -114,10 +114,13 @@ void MemrefLoweringPass::inspectOp(hir::AllocaOp op) {
                   builder.getStringAttr("bus"))
               .getResults();
 
-      // push the addr bus recv and data bus send into the call args.
+      // push the addr-recv and data-send bus into call args.
+      // insert addr-send and data-recv buses into map for LoadOp/StoreOp
+      // lowering.
+
       bramCallArgs.push_back(rdAddrBuses[1]);
-      bramCallArgs.push_back(rdDataBuses[0]);
       mapMemrefRdAddrSend[res] = rdAddrBuses[0];
+      bramCallArgs.push_back(rdDataBuses[0]);
       mapMemrefRdDataRecv[res] = rdDataBuses[1];
 
     } else if (port == wr) {
@@ -148,6 +151,7 @@ void MemrefLoweringPass::inspectOp(hir::AllocaOp op) {
       FunctionType::get(context, bramCallArgTypes, SmallVector<Type>({})),
       ArrayAttr::get(context, inputDelays),
       ArrayAttr::get(context, SmallVector<Attribute>({})));
+
   builder.create<hir::CallOp>(op.getLoc(), SmallVector<Type>({}),
                               FlatSymbolRefAttr::get(context, moduleAttr),
                               funcTy, Value(), bramCallArgs, tstart, Value());
@@ -155,11 +159,12 @@ void MemrefLoweringPass::inspectOp(hir::AllocaOp op) {
 
 Value createAddrTuple(OpBuilder &builder, Location loc, ArrayRef<Value> indices,
                       ArrayRef<int64_t> shape) {
+  assert(indices.size() == shape.size());
+  if (indices.size() == 0)
+    return Value();
+
   Value addr;
   MLIRContext *context = builder.getContext();
-
-  // FIXME: Dont support registers yet!
-  assert(indices.size() > 0);
 
   SmallVector<Type, 4> castedIdxTypes;
   SmallVector<Value, 4> castedIdx;
@@ -181,11 +186,9 @@ Value createAddrTuple(OpBuilder &builder, Location loc, ArrayRef<Value> indices,
 Value createAddrAndDataTuple(OpBuilder &builder, Location loc,
                              ArrayRef<Value> indices, ArrayRef<int64_t> shape,
                              Value data) {
-  Value addr;
+  Value addrAndData;
   MLIRContext *context = builder.getContext();
 
-  // FIXME: Dont support registers yet!
-  assert(indices.size() > 0);
   SmallVector<Type, 4> castedIdxTypes;
   SmallVector<Value, 4> castedIdx;
   for (int i = 0; i < (int)shape.size(); i++) {
@@ -198,15 +201,15 @@ Value createAddrAndDataTuple(OpBuilder &builder, Location loc,
   }
   castedIdx.push_back(data);
   castedIdxTypes.push_back(data.getType());
-  addr = builder
-             .create<hir::TupleOp>(loc, builder.getTupleType(castedIdxTypes),
-                                   castedIdx)
-             .getResult();
+  addrAndData = builder
+                    .create<hir::TupleOp>(
+                        loc, builder.getTupleType(castedIdxTypes), castedIdx)
+                    .getResult();
 
-  return addr;
+  return addrAndData;
 }
 
-void MemrefLoweringPass::inspectOp(hir::LoadOp op) {
+void MemrefLoweringPass::lowerOp(hir::LoadOp op) {
   mlir::OpBuilder builder(op.getOperation()->getParentOp()->getContext());
   MLIRContext *context = builder.getContext();
   builder.setInsertionPoint(op);
@@ -253,10 +256,12 @@ void MemrefLoweringPass::inspectOp(hir::LoadOp op) {
   Value packedAddr = createAddrTuple(builder, op.getLoc(), op.getPackedIdx(),
                                      memTy.getPackedShape());
 
-  bankAddr.push_back(c1);
-  builder.create<hir::SendOp>(op.getLoc(), packedAddr, addrBus, bankAddr,
-                              tstart, Value());
-  bankAddr.pop_back();
+  if (packedAddr) { // bram.
+    bankAddr.push_back(c1);
+    builder.create<hir::SendOp>(op.getLoc(), packedAddr, addrBus, bankAddr,
+                                tstart, Value());
+    bankAddr.pop_back();
+  }
 
   bankAddr.push_back(c0);
   Value tstartPlus1 =
@@ -272,7 +277,7 @@ void MemrefLoweringPass::inspectOp(hir::LoadOp op) {
   op.getOperation()->erase();
 }
 
-void MemrefLoweringPass::inspectOp(hir::StoreOp op) {
+void MemrefLoweringPass::lowerOp(hir::StoreOp op) {
   mlir::OpBuilder builder(op.getOperation()->getParentOp()->getContext());
   MLIRContext *context = builder.getContext();
   builder.setInsertionPoint(op);
@@ -313,11 +318,11 @@ void MemrefLoweringPass::runOnOperation() {
   hir::FuncOp funcOp = getOperation();
   WalkResult result = funcOp.walk([this](Operation *operation) -> WalkResult {
     if (auto op = dyn_cast<hir::AllocaOp>(operation))
-      inspectOp(op);
+      lowerOp(op);
     else if (auto op = dyn_cast<LoadOp>(operation))
-      inspectOp(op);
+      lowerOp(op);
     else if (auto op = dyn_cast<StoreOp>(operation))
-      inspectOp(op);
+      lowerOp(op);
     return WalkResult::advance();
   });
 
