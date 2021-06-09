@@ -21,8 +21,8 @@ class PolynomialCompute:
     """coefficients is in 'd' -> 'a' order."""
     self.instanceName = name
     self.coefficients = Parameter(coefficients)
-    self.module_name = Parameter("PolyComputeForCoeff_" +
-                                 '_'.join([str(x) for x in coefficients]))
+    self.set_module_name("PolyComputeForCoeff_" +
+                         '_'.join([str(x) for x in coefficients]))
     # Full result.
     self.y = Output(types.int(8 * 4))
 

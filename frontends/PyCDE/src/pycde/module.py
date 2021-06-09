@@ -130,6 +130,11 @@ def module(cls):
       self.input_ports = {port.name: i for i, port in enumerate(input_ports)}
       self.output_ports = {port.name: i for i, port in enumerate(output_ports)}
 
+    def set_module_name(self, name):
+      """Set the name of the generated module. Must be used when more than one
+      module is generated as a result of parameterization. Must be unique."""
+      self.module_name = Parameter(name)
+
     def __getattribute__(self, name: str):
       # Base case.
       if name == "input_ports" or name == "output_ports" or \
