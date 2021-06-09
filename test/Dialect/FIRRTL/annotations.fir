@@ -364,7 +364,7 @@ circuit GCTDataTap : %[
       },
       {
         "class":"sifive.enterprise.grandcentral.DataTapModuleSignalKey",
-        "module":"~GCTDataTap|Blackbox",
+        "module":"~GCTDataTap|BlackBox",
         "internalPath":"baz.qux",
         "portName":"~GCTDataTap|DataTap>_1"
       },
@@ -391,8 +391,8 @@ circuit GCTDataTap : %[
 
     defname = DataTap
 
-  extmodule Blackbox:
-    defname = Blackbox
+  extmodule BlackBox:
+    defname = BlackBox
 
   module GCTDataTap :
     input clock : Clock
@@ -402,7 +402,7 @@ circuit GCTDataTap : %[
 
     reg r : UInt<1>, clock
     inst DataTap of DataTap
-    inst Blackbox of Blackbox
+    inst BlackBox of BlackBox
 
     ; CHECK-LABEL: firrtl.circuit "GCTDataTap"
     ; CHECK-SAME: annotations = [{unrelatedAnnotation}]
@@ -413,7 +413,7 @@ circuit GCTDataTap : %[
     ; CHECK-SAME: %_3: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.LiteralDataTapKey", literal = "UInt<16>(\22h2a\22)"}]}
     ; CHECK-SAME: annotations = [{class = "sifive.enterprise.grandcentral.DataTapsAnnotation"}]
 
-    ; CHECK: firrtl.extmodule @Blackbox
+    ; CHECK: firrtl.extmodule @BlackBox
     ; CHECK-SAME: annotations = [{class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey", id = [[ID]] : i64, internalPath = "baz.qux"}]
 
     ; CHECK: firrtl.module @GCTDataTap
