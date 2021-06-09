@@ -58,7 +58,7 @@ def module(cls):
     def __init__(self, *args, **kwargs):
       """Scan the class and eventually instance for Input/Output members and
       treat the inputs as operands and outputs as results."""
-      cls.__init__(self, *args)
+      cls.__init__(self, *args, **kwargs)
 
       # The OpView attributes cannot be touched before OpView is constructed.
       # Get a list and don't touch them.
