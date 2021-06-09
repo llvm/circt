@@ -160,6 +160,20 @@ def module(cls):
   return __Module
 
 
+def _parameterize_module_name(base_name: str, params: dict):
+  module_name = base_name
+  for (name, value) in params.items():
+    module_name += "_" + name + "_"
+    if isinstance(value, list):
+      module_name += "_".join(map(str, value))
+    elif isinstance(value, dict):
+      module_name += "_".join(
+          [str(k) + "_" + str(v) for (k, v) in value.items()])
+    else:
+      module_name += str(value)
+  return module_name
+
+
 def _register_generators(cls):
   """Scan the class, looking for and registering _Generators."""
   for (name, member) in cls.__dict__.items():
@@ -276,7 +290,8 @@ class _Generate:
                       sorted(self.params.items())))
     if module_key not in self.generated_modules:
       with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
-        gen_mod = circt.dialects.hw.HWModuleOp(op.name,
+        module_name = _parameterize_module_name(op.name, self.params)
+        gen_mod = circt.dialects.hw.HWModuleOp(module_name,
                                                input_ports=input_ports,
                                                output_ports=output_ports,
                                                body_builder=self._generate)

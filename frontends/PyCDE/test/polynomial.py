@@ -71,6 +71,7 @@ class Polynomial(pycde.System):
     x = hw.ConstantOp.create(i32, 23)
     poly = PolynomialCompute("example", [62, 42, 6], x=x)
     PolynomialCompute("example2", [62, 42, 6], x=poly.y)
+    PolynomialCompute("example3", [64, 46, 2], x=poly.y)
 
     CoolPolynomialCompute([4, 42], x=x)
     hw.OutputOp([poly.y])
@@ -88,17 +89,18 @@ poly.print()
 poly.generate()
 poly.print()
 # CHECK: hw.module @top
-# CHECK: hw.instance "example" @pycde.PolynomialCompute
-# CHECK: hw.instance "example2" @pycde.PolynomialCompute
+# CHECK: hw.instance "example" @pycde.PolynomialCompute_coefficients_62_42_6
+# CHECK: hw.instance "example2" @pycde.PolynomialCompute_coefficients_62_42_6
+# CHECK: hw.instance "example3" @pycde.PolynomialCompute_coefficients_64_46_2
 # CHECK: hw.instance "pycde.CoolPolynomialCompute" @supercooldevice(%c23_i32) {coefficients = [4, 42], parameters = {}} : (i32) -> i32
-# CHECK: hw.module @pycde.PolynomialCompute
-# CHECK-NOT: hw.module @pycde.PolynomialCompute
+# CHECK: hw.module @pycde.PolynomialCompute_coefficients_62_42_6
+# CHECK-NOT: hw.module @pycde.PolynomialCompute_coefficients_62_42_6
 
 print("\n\n=== Verilog ===")
 # CHECK-LABEL: === Verilog ===
 poly.print_verilog()
 
-# CHECK:  module pycde_PolynomialCompute(
+# CHECK:  module pycde_PolynomialCompute_coefficients_62_42_6(
 # CHECK:    input  [31:0] x,
 # CHECK:    output [31:0] y);
 # CHECK:    assign y = 32'h3E + 32'h2A * x + 32'h6 * x * x;
