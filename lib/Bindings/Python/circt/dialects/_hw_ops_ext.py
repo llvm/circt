@@ -377,7 +377,7 @@ class ArrayCreateOp:
   @staticmethod
   def create(elements):
     if not elements:
-      raise ValueError("Cannot 'create' an array of length zero.")
+      raise ValueError("Cannot 'create' an array of length zero")
     vals = []
     type = None
     for arg in elements:
@@ -388,7 +388,7 @@ class ArrayCreateOp:
       elif type != arg_val.type:
         raise TypeError(
             "All arguments must be the same type to create an array")
-    return hw.ArrayCreateOp(hw.ArrayType.get(vals[0].type, len(vals)), vals)
+    return hw.ArrayCreateOp(hw.ArrayType.get(type, len(vals)), vals)
 
 
 class StructCreateOp:

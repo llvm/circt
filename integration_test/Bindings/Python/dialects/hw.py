@@ -16,11 +16,24 @@ with Context() as ctx, Location.unknown():
   with InsertionPoint(m.body):
 
     def build(module):
-      # CHECK: %[[CONST:.+]] = hw.constant 1 : i32
       constI32 = hw.ConstantOp(i32, IntegerAttr.get(i32, 1))
       constI1 = hw.ConstantOp.create(i1, 1)
 
-      # CHECK: [[ARRAY1:%.+]] = hw.array_create %c1_i32, %c1_i32, %c1_i32 : i32
+      # CHECK: All arguments must be the same type to create an array
+      try:
+        hw.ArrayCreateOp.create([constI1, constI32])
+      except TypeError as e:
+        print(e)
+
+      # CHECK: Cannot 'create' an array of length zero
+      try:
+        hw.ArrayCreateOp.create([])
+      except ValueError as e:
+        print(e)
+
+      # CHECK: %[[CONST:.+]] = hw.constant 1 : i32
+
+      # CHECK: [[ARRAY1:%.+]] = hw.array_create %[[CONST]], %[[CONST]], %[[CONST]] : i32
       array1 = hw.ArrayCreateOp.create([constI32, constI32, constI32])
 
       # CHECK: hw.array_get [[ARRAY1]][%c1_i32] : !hw.array<3xi32>
