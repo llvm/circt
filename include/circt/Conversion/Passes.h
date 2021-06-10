@@ -14,7 +14,6 @@
 #define CIRCT_CONVERSION_PASSES_H
 
 #include "circt/Conversion/FIRRTLToHW/FIRRTLToHW.h"
-#include "circt/Conversion/FIRRTLToLLHD/FIRRTLToLLHD.h"
 #include "circt/Conversion/HWToLLHD/HWToLLHD.h"
 #include "circt/Conversion/HandshakeToFIRRTL/HandshakeToFIRRTL.h"
 #include "circt/Conversion/LLHDToLLVM/LLHDToLLVM.h"

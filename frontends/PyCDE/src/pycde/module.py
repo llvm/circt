@@ -55,7 +55,7 @@ def module(cls):
     input_ports: dict[str, int] = {}
     output_ports: dict[str, int] = {}
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, inputs={}, **kwargs):
       """Scan the class and eventually instance for Input/Output members and
       treat the inputs as operands and outputs as results."""
       cls.__init__(self, *args, **kwargs)
@@ -93,8 +93,8 @@ def module(cls):
       input_ports_values: list[mlir.ir.Value] = []
       self.backedges: dict[int:BackedgeBuilder.Edge] = {}
       for (idx, input) in enumerate(input_ports):
-        if input.name in kwargs:
-          value = kwargs[input.name]
+        if input.name in inputs:
+          value = inputs[input.name]
           if isinstance(value, mlir.ir.OpView):
             value = value.operation.result
           elif isinstance(value, mlir.ir.Operation):
@@ -238,7 +238,7 @@ class _Generate:
     self.generated_modules = {}
 
   def _generate(self, mod):
-    return self.gen_func(mod, self.params)
+    return self.gen_func(mod, **self.params)
 
   def __call__(self, op):
     """Build an HWModuleOp and run the generator as the body builder."""
@@ -260,11 +260,10 @@ class _Generate:
     ]
 
     # Assemble the parameters.
-    params = {
-        nattr.name: nattr.attr
+    self.params = {
+        nattr.name: support.attribute_to_var(nattr.attr)
         for nattr in mlir.ir.DictAttr(op.attributes["parameters"])
     }
-    self.params = type(f"{op.name}_params", (object,), params)
 
     attrs = {
         nattr.name: nattr.attr
@@ -274,7 +273,7 @@ class _Generate:
 
     # Build the replacement HWModuleOp in the outer module.
     module_key = str((op.name, sorted(input_ports), sorted(output_ports),
-                      sorted(params.items())))
+                      sorted(self.params.items())))
     if module_key not in self.generated_modules:
       with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
         gen_mod = circt.dialects.hw.HWModuleOp(op.name,
