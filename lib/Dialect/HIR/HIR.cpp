@@ -411,7 +411,7 @@ static ParseResult parseFuncSignature(
         resultTypes.push_back(resultType);
 
         // Parse delayAttr
-        if (resultType.isa<IntegerType>() &&
+        if (helper::isPrimitiveType(resultType) &&
             !parser.parseOptionalKeyword("delay")) {
           IntegerAttr delayAttr;
           NamedAttrList tempAttrs;
