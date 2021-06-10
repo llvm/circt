@@ -379,6 +379,24 @@ def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">,
   let assemblyFormat = "$dest `,` $src  attr-dict `:` type($src)";
 }
 
+def ForcePAssignOp : SVOp<"force", [InOutTypeConstraint<"src", "dest">,
+                                   ProceduralOp]> {
+  let summary = "Force procedural statement";
+  let description = [{
+    A SystemVerilog force procedural statement 'force x = y;'.  These
+    occur in initial, always, task, and function blocks.  
+    A force statement shall override a procedural assignment until
+    a release statement is executed on the variable. 
+    The left-hand side of the assignment can be avariable, a net,
+    a constant bit-select of a vector net, a part-select of a vector 
+    net or a concatenation. It cannot be a memory word or a bit-select 
+    or part-select of a vector variable. See SV Spec 9.3.2.
+  }];
+  let arguments = (ins InOutType:$dest, InOutElementType:$src);
+  let results = (outs);
+  let assemblyFormat = "$dest `,` $src  attr-dict `:` type($src)";
+}
+
 def AliasOp : SVOp<"alias"> {
   let summary = "SystemVerilog 'alias' statement";
   let description = [{
