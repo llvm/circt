@@ -240,8 +240,7 @@ class _Generate:
     self.generated_modules = {}
 
   def _generate(self, mod):
-    (gf_args, gf_varargs, gf_kwargs,
-     gf_defaults) = inspect.getargspec(self.gen_func)
+    gf_args = inspect.getfullargspec(self.gen_func).args
     call_args = {}
     for argname in gf_args[1:]:
       if argname in self.params:
