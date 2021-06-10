@@ -76,3 +76,8 @@ MlirType hwStructTypeGet(MlirContext ctx, intptr_t numElements,
   }
   return wrap(StructType::get(unwrap(ctx), fieldInfos));
 }
+
+MlirType hwStructTypeGetField(MlirType structType, MlirStringRef fieldName) {
+  StructType st = unwrap(structType).cast<StructType>();
+  return wrap(st.getFieldType(unwrap(fieldName)));
+}

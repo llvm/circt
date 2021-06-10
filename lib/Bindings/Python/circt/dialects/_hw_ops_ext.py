@@ -355,3 +355,61 @@ class ConstantOp:
   @staticmethod
   def create(data_type, value):
     return hw.ConstantOp(data_type, IntegerAttr.get(data_type, value))
+
+
+class ArrayGetOp:
+
+  @staticmethod
+  def create(array_value, idx):
+    array_value = support.get_value(array_value)
+    array_type = hw.ArrayType(array_value.type)
+    if isinstance(idx, int):
+      idx_width = (array_type.size - 1).bit_length()
+      idx_val = ConstantOp.create(IntegerType.get_signless(idx_width),
+                                  idx).result
+    else:
+      idx_val = support.get_value(idx)
+    return hw.ArrayGetOp(array_type.element_type, array_value, idx_val)
+
+
+class ArrayCreateOp:
+
+  @staticmethod
+  def create(elements):
+    if not elements:
+      raise ValueError("Cannot 'create' an array of length zero")
+    vals = []
+    type = None
+    for arg in elements:
+      arg_val = support.get_value(arg)
+      vals.append(arg_val)
+      if type is None:
+        type = arg_val.type
+      elif type != arg_val.type:
+        raise TypeError(
+            "All arguments must be the same type to create an array")
+    return hw.ArrayCreateOp(hw.ArrayType.get(type, len(vals)), vals)
+
+
+class StructCreateOp:
+
+  @staticmethod
+  def create(elements: list[(str, Type)]):
+    elem_name_values = [
+        (name, support.get_value(value)) for (name, value) in elements
+    ]
+    struct_type = hw.StructType.get([
+        (name, value.type) for (name, value) in elem_name_values
+    ])
+    return hw.StructCreateOp(struct_type,
+                             [value for (_, value) in elem_name_values])
+
+
+class StructExtractOp:
+
+  @staticmethod
+  def create(struct_value, field_name: str):
+    struct_value = support.get_value(struct_value)
+    struct_type = hw.StructType(struct_value.type)
+    return hw.StructExtractOp(struct_type, struct_value,
+                              StringAttr.get(field_name))

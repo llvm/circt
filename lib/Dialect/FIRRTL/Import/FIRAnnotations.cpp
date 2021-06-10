@@ -62,7 +62,10 @@ static StringRef parseSubFieldSubIndexAnnotations(StringRef target,
 /// Return an input \p target string in canonical form.  This converts a Legacy
 /// Annotation (e.g., A.B.C) into a modern annotation (e.g., ~A|B>C).  Trailing
 /// subfield/subindex references are preserved.
-static std::string canonicalizeTarget(StringRef target) {
+static llvm::Optional<std::string> canonicalizeTarget(StringRef target) {
+
+  if (target.empty())
+    return {};
 
   // If this is a normal Target (not a Named), erase that field in the JSON
   // object and return that Target.
@@ -92,7 +95,7 @@ static std::string canonicalizeTarget(StringRef target) {
       s << a;
     }
   }
-  return newTarget;
+  return llvm::Optional<std::string>(newTarget);
 }
 
 /// Implements the same behavior as DictionaryAttr::getAs<A> to return the value
@@ -160,7 +163,18 @@ bool circt::firrtl::fromJSON(json::Value &value,
       return llvm::Optional<std::string>("~");
 
     // Find the target.
-    auto target = canonicalizeTarget(maybeTarget->getAsString().getValue());
+    auto maybeTargetStr = maybeTarget->getAsString();
+    if (!maybeTargetStr) {
+      p.field("target").report("target must be a string type");
+      return {};
+    }
+    auto canonTargetStr = canonicalizeTarget(maybeTargetStr.getValue());
+    if (!canonTargetStr) {
+      p.field("target").report("invalid target string");
+      return {};
+    }
+
+    auto target = canonTargetStr.getValue();
 
     // If the target is something that we know we don't support, then error.
     bool unsupported = std::any_of(target.begin(), target.end(),
@@ -589,7 +603,9 @@ bool circt::firrtl::scatterCustomAnnotations(
       if (!blackBoxAttr)
         return false;
       auto target = canonicalizeTarget(blackBoxAttr.getValue());
-      newAnnotations[target].push_back(
+      if (!target)
+        return false;
+      newAnnotations[target.getValue()].push_back(
           DictionaryAttr::getWithSorted(context, attrs));
 
       // Process all the taps.
@@ -612,6 +628,8 @@ bool circt::firrtl::scatterCustomAnnotations(
         if (!portNameAttr)
           return false;
         auto portTarget = canonicalizeTarget(portNameAttr.getValue());
+        if (!portTarget)
+          return false;
         port.append("class", classAttr);
         port.append("id", id);
 
@@ -626,10 +644,13 @@ bool circt::firrtl::scatterCustomAnnotations(
               tryGetAs<StringAttr>(bDict, dict, "source", loc, clazz, path);
           if (!sourceAttr)
             return false;
-          newAnnotations[canonicalizeTarget(sourceAttr.getValue())].push_back(
+          auto sourceTarget = canonicalizeTarget(sourceAttr.getValue());
+          if (!sourceTarget)
+            return false;
+          newAnnotations[sourceTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, source));
           port.append("portID", portID);
-          newAnnotations[portTarget].push_back(
+          newAnnotations[portTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, port));
           continue;
         }
@@ -646,16 +667,19 @@ bool circt::firrtl::scatterCustomAnnotations(
           if (!internalPathAttr || !moduleAttr)
             return false;
           module.append("internalPath", internalPathAttr);
-          newAnnotations[canonicalizeTarget(moduleAttr.getValue())].push_back(
+          auto moduleTarget = canonicalizeTarget(moduleAttr.getValue());
+          if (!moduleTarget)
+            return false;
+          newAnnotations[moduleTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, module));
-          newAnnotations[portTarget].push_back(
+          newAnnotations[portTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, port));
           continue;
         }
 
         if (classAttr.getValue() ==
             "sifive.enterprise.grandcentral.DeletedDataTapKey") {
-          newAnnotations[portTarget].push_back(
+          newAnnotations[portTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, port));
           continue;
         }
@@ -671,7 +695,10 @@ bool circt::firrtl::scatterCustomAnnotations(
           if (!literalAttr || !portNameAttr)
             return false;
           literal.append("literal", literalAttr);
-          newAnnotations[canonicalizeTarget(portNameAttr.getValue())].push_back(
+          auto portNameTarget = canonicalizeTarget(portNameAttr.getValue());
+          if (!portNameTarget)
+            return false;
+          newAnnotations[portNameTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, literal));
           continue;
         }
@@ -695,9 +722,12 @@ bool circt::firrtl::scatterCustomAnnotations(
       if (!sourceAttr)
         return false;
       auto target = canonicalizeTarget(sourceAttr.getValue());
+      if (!target)
+        return false;
       attrs.append(dict.getNamed("class").getValue());
       attrs.append("id", id);
-      newAnnotations[target].push_back(DictionaryAttr::get(context, attrs));
+      newAnnotations[target.getValue()].push_back(
+          DictionaryAttr::get(context, attrs));
       auto tapsAttr = tryGetAs<ArrayAttr>(dict, dict, "taps", loc, clazz);
       if (!tapsAttr)
         return false;
@@ -717,8 +747,10 @@ bool circt::firrtl::scatterCustomAnnotations(
         foo.append("id", id);
         ArrayAttr subTargets;
         auto canonTarget = canonicalizeTarget(tap.getValue());
-        auto target =
-            parseSubFieldSubIndexAnnotations(canonTarget, subTargets, context);
+        if (!canonTarget)
+          return false;
+        auto target = parseSubFieldSubIndexAnnotations(canonTarget.getValue(),
+                                                       subTargets, context);
         if (subTargets && !subTargets.empty())
           foo.append("target", subTargets);
         newAnnotations[target].push_back(DictionaryAttr::get(context, foo));

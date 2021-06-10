@@ -23,6 +23,7 @@ class PolynomialCompute:
     self.coefficients = Parameter(coefficients)
     self.set_module_name("PolyComputeForCoeff_" +
                          '_'.join([str(x) for x in coefficients]))
+    self.unused_parameter = Parameter(True)
     # Full result.
     self.y = Output(types.int(8 * 4))
 
@@ -71,11 +72,11 @@ class Polynomial(pycde.System):
   def build(self, top):
     i32 = types.i32
     x = hw.ConstantOp.create(i32, 23)
-    poly = PolynomialCompute("example", [62, 42, 6], x=x)
-    PolynomialCompute("example2", [62, 42, 6], x=poly.y)
-    PolynomialCompute("example2", [1, 2, 3, 4, 5], x=poly.y)
+    poly = PolynomialCompute("example", [62, 42, 6], inputs={"x": x})
+    PolynomialCompute("example2", coefficients=[62, 42, 6], inputs={"x": poly.y})
+    PolynomialCompute("example2", [1, 2, 3, 4, 5], inputs={"x": poly.y})
 
-    CoolPolynomialCompute([4, 42], x=x)
+    CoolPolynomialCompute([4, 42], inputs={"x": x})
     hw.OutputOp([poly.y])
 
 
@@ -83,9 +84,9 @@ poly = Polynomial()
 
 poly.print()
 # CHECK-LABEL:  hw.module @top() -> (%y: i32)
-# CHECK:    [[REG0:%.+]] = "pycde.PolynomialCompute"(%c23_i32) {instanceName = "example", opNames = ["x"], parameters = {coefficients = [62, 42, 6], module_name = "PolyComputeForCoeff_62_42_6"}, resultNames = ["y"]} : (i32) -> i32
-# CHECK:    [[REG1:%.+]] = "pycde.PolynomialCompute"([[REG0]]) {instanceName = "example2", opNames = ["x"], parameters = {coefficients = [62, 42, 6], module_name = "PolyComputeForCoeff_62_42_6"}, resultNames = ["y"]} : (i32) -> i32
-# CHECK:    [[REG2:%.+]] = "pycde.PolynomialCompute"([[REG0]]) {instanceName = "example2", opNames = ["x"], parameters = {coefficients = [1, 2, 3, 4, 5], module_name = "PolyComputeForCoeff_1_2_3_4_5"}, resultNames = ["y"]} : (i32) -> i32
+# CHECK:    [[REG0:%.+]] = "pycde.PolynomialCompute"(%c23_i32) {instanceName = "example", opNames = ["x"], parameters = {coefficients = [62, 42, 6], module_name = "PolyComputeForCoeff_62_42_6", unused_parameter = true}, resultNames = ["y"]} : (i32) -> i32
+# CHECK:    [[REG1:%.+]] = "pycde.PolynomialCompute"([[REG0]]) {instanceName = "example2", opNames = ["x"], parameters = {coefficients = [62, 42, 6], module_name = "PolyComputeForCoeff_62_42_6", unused_parameter = true}, resultNames = ["y"]} : (i32) -> i32
+# CHECK:    [[REG2:%.+]] = "pycde.PolynomialCompute"([[REG0]]) {instanceName = "example2", opNames = ["x"], parameters = {coefficients = [1, 2, 3, 4, 5], module_name = "PolyComputeForCoeff_1_2_3_4_5", unused_parameter = true}, resultNames = ["y"]} : (i32) -> i32
 # CHECK:    [[REG3:%.+]] = "pycde.CoolPolynomialCompute"(%c23_i32) {coefficients = [4, 42], opNames = ["x"], parameters = {}, resultNames = ["y"]} : (i32) -> i32
 # CHECK:    hw.output [[REG0]] : i32
 

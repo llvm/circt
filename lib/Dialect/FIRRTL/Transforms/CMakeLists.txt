@@ -1,6 +1,6 @@
 add_circt_dialect_library(CIRCTFIRRTLTransforms
   BlackBoxReader.cpp
-  BlackboxMemory.cpp
+  BlackBoxMemory.cpp
   CheckWidths.cpp
   ExpandWhens.cpp
   ModuleInliner.cpp

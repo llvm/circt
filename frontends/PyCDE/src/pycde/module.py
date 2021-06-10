@@ -11,6 +11,8 @@ import circt
 
 import mlir.ir
 
+import inspect
+
 OPERATION_NAMESPACE = "pycde."
 
 
@@ -55,7 +57,7 @@ def module(cls):
     input_ports: dict[str, int] = {}
     output_ports: dict[str, int] = {}
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, inputs={}, **kwargs):
       """Scan the class and eventually instance for Input/Output members and
       treat the inputs as operands and outputs as results."""
       cls.__init__(self, *args, **kwargs)
@@ -93,8 +95,8 @@ def module(cls):
       input_ports_values: list[mlir.ir.Value] = []
       self.backedges: dict[int:BackedgeBuilder.Edge] = {}
       for (idx, input) in enumerate(input_ports):
-        if input.name in kwargs:
-          value = kwargs[input.name]
+        if input.name in inputs:
+          value = inputs[input.name]
           if isinstance(value, mlir.ir.OpView):
             value = value.operation.result
           elif isinstance(value, mlir.ir.Operation):
@@ -243,7 +245,15 @@ class _Generate:
     self.generated_modules = {}
 
   def _generate(self, mod):
-    return self.gen_func(mod, **self.params)
+    gf_args = inspect.getfullargspec(self.gen_func).args
+    call_args = {}
+    for argname in gf_args[1:]:
+      if argname in self.params:
+        call_args[argname] = self.params[argname]
+      else:
+        raise ValueError("Cannot find parameter requested by generator func "
+                         f"args: {argname}")
+    return self.gen_func(mod, **call_args)
 
   def __call__(self, op):
     """Build an HWModuleOp and run the generator as the body builder."""
@@ -281,7 +291,6 @@ class _Generate:
                       sorted(self.params.items())))
     if "module_name" in self.params:
       module_name = self.params["module_name"]
-      self.params.pop("module_name")
     else:
       module_name = op.name
     if module_key not in self.generated_modules:
