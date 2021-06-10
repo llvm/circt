@@ -23,8 +23,6 @@ class Pass;
 namespace circt {
 namespace firrtl {
 
-
-
 std::unique_ptr<mlir::Pass> createLowerFIRRTLTypesPass();
 
 std::unique_ptr<mlir::Pass> createLowerBundleVectorTypesPass();
