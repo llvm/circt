@@ -11,6 +11,8 @@ import circt
 
 import mlir.ir
 
+import inspect
+
 OPERATION_NAMESPACE = "pycde."
 
 
@@ -238,7 +240,15 @@ class _Generate:
     self.generated_modules = {}
 
   def _generate(self, mod):
-    return self.gen_func(mod, **self.params)
+    gf_args = inspect.getfullargspec(self.gen_func).args
+    call_args = {}
+    for argname in gf_args[1:]:
+      if argname in self.params:
+        call_args[argname] = self.params[argname]
+      else:
+        raise ValueError("Cannot find parameter requested by generator func "
+                         f"args: {argname}")
+    return self.gen_func(mod, **call_args)
 
   def __call__(self, op):
     """Build an HWModuleOp and run the generator as the body builder."""

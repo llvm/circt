@@ -21,6 +21,7 @@ class PolynomialCompute:
     """coefficients is in 'd' -> 'a' order."""
     self.instanceName = name
     self.coefficients = Parameter(coefficients)
+    self.unused_parameter = Parameter(True)
     # Full result.
     self.y = Output(types.int(8 * 4))
 
@@ -83,7 +84,7 @@ poly = Polynomial()
 poly.print()
 # CHECK:  hw.module @top() -> (%y: i32) {
 # CHECK:    %c23_i32 = hw.constant 23 : i32
-# CHECK:    [[REG0:%.+]] = "pycde.PolynomialCompute"(%c23_i32) {instanceName = "example", opNames = ["x"], parameters = {coefficients = [62, 42, 6]},  resultNames = ["y"]} : (i32) -> i32
+# CHECK:    [[REG0:%.+]] = "pycde.PolynomialCompute"(%c23_i32) {instanceName = "example", opNames = ["x"], parameters = {coefficients = [62, 42, 6], unused_parameter = true},  resultNames = ["y"]} : (i32) -> i32
 # CHECK:    [[REG2:%.+]] = "pycde.CoolPolynomialCompute"(%c23_i32) {coefficients = [4, 42], opNames = ["x"], parameters = {}, resultNames = ["y"]} : (i32) -> i32
 # CHECK:    hw.output [[REG0]] : i32
 
