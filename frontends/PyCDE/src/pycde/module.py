@@ -132,6 +132,11 @@ def module(cls):
       self.input_ports = {port.name: i for i, port in enumerate(input_ports)}
       self.output_ports = {port.name: i for i, port in enumerate(output_ports)}
 
+    def set_module_name(self, name):
+      """Set the name of the generated module. Must be used when more than one
+      module is generated as a result of parameterization. Must be unique."""
+      self.module_name = Parameter(name)
+
     def __getattribute__(self, name: str):
       # Base case.
       if name == "input_ports" or name == "output_ports" or \
@@ -284,9 +289,13 @@ class _Generate:
     # Build the replacement HWModuleOp in the outer module.
     module_key = str((op.name, sorted(input_ports), sorted(output_ports),
                       sorted(self.params.items())))
+    if "module_name" in self.params:
+      module_name = self.params["module_name"]
+    else:
+      module_name = op.name
     if module_key not in self.generated_modules:
       with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
-        gen_mod = circt.dialects.hw.HWModuleOp(op.name,
+        gen_mod = circt.dialects.hw.HWModuleOp(module_name,
                                                input_ports=input_ports,
                                                output_ports=output_ports,
                                                body_builder=self._generate)
