@@ -55,7 +55,7 @@ namespace {
 struct BlackBoxReaderPass : public BlackBoxReaderBase<BlackBoxReaderPass> {
   void runOnOperation() override;
   bool runOnAnnotation(Operation *op, Annotation anno, OpBuilder &builder);
-  void loadFile(Operation *op, StringRef inputPath, OpBuilder &builder);
+  bool loadFile(Operation *op, StringRef inputPath, OpBuilder &builder);
   void setOutputFile(VerbatimOp op, StringAttr fileNameAttr);
 
   using BlackBoxReaderBase::inputPrefix;
@@ -242,8 +242,11 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
     }
     SmallString<128> inputPath(inputPrefix);
     appendPossiblyAbsolutePath(inputPath, path.getValue());
-    loadFile(op, inputPath, builder);
-    return true;
+    if (loadFile(op, inputPath, builder))
+      return true;
+    op->emitError("Cannot find file ") << inputPath;
+    signalPassFailure();
+    return false;
   }
 
   // Handle resource annotation.
@@ -255,13 +258,22 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
       signalPassFailure();
       return true;
     }
-    SmallString<128> inputPath(resourcePrefix);
-    // Note that we always treat `resourceId` as a relative path, as the
-    // previous Scala implementation tended to emit `/foo.v` as resourceId.
-    llvm::sys::path::append(inputPath, resourceId.getValue());
 
-    loadFile(op, inputPath, builder);
-    return true;
+    SmallVector<StringRef> roots;
+    StringRef(resourcePrefix).split(roots, ':');
+    for (auto root : roots) {
+      SmallString<128> inputPath(root);
+      // Note that we always treat `resourceId` as a relative path, as the
+      // previous Scala implementation tended to emit `/foo.v` as resourceId.
+      llvm::sys::path::append(inputPath, resourceId.getValue());
+      auto fileName = llvm::sys::path::filename(inputPath);
+
+      if (loadFile(op, inputPath, builder))
+        return true; // found file
+    }
+    op->emitError("Cannot find file ") << resourceId.getValue();
+    signalPassFailure();
+    return false;
   }
 
   // Annotation was not concerned with black boxes.
@@ -270,7 +282,7 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
 
 /// Copies a black box source file to the appropriate location in the target
 /// directory.
-void BlackBoxReaderPass::loadFile(Operation *op, StringRef inputPath,
+bool BlackBoxReaderPass::loadFile(Operation *op, StringRef inputPath,
                                   OpBuilder &builder) {
   auto fileName = llvm::sys::path::filename(inputPath);
   LLVM_DEBUG(llvm::dbgs() << "Add black box source  `" << fileName << "` from `"
@@ -279,21 +291,19 @@ void BlackBoxReaderPass::loadFile(Operation *op, StringRef inputPath,
   // Skip this annotation if the target is already loaded.
   auto fileNameAttr = builder.getStringAttr(fileName);
   if (emittedFiles.count(fileNameAttr))
-    return;
+    return true;
 
   // Open and read the input file.
   std::string errorMessage;
   auto input = mlir::openInputFile(inputPath, &errorMessage);
-  if (!input) {
-    op->emitError(errorMessage);
-    signalPassFailure();
-    return;
-  }
+  if (!input)
+    return false;
 
   // Create an IR node to hold the contents.
   auto verbatimOp =
       builder.create<VerbatimOp>(op->getLoc(), input->getBuffer());
   setOutputFile(verbatimOp, fileNameAttr);
+  return true;
 }
 
 /// This function is called for every file generated.  It does the following
