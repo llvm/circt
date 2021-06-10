@@ -148,12 +148,12 @@ def SendOp : HIR_Op<"send", [AttrSizedOperandSegments]> {
   }];
 
   let arguments = (ins AnyType:$value, AnyType:$bus,
-      Variadic<AnyType>:$addr, 
+      Variadic<ConstType>:$addr, 
       TimeType :$tstart, Optional<ConstType>:$offset);
   let results = (outs );
-  let assemblyFormat = [{$value `to` $bus  `[` $addr `]` `at` $tstart 
+  let assemblyFormat = [{$value `to` $bus  (`[` $addr^ `]`)? `at` $tstart 
     (`+` $offset^ )? attr-dict 
-      `:` type($value) `to` type($bus)`[`type($addr) `]` }];
+      `:` type($value) `to` type($bus) }];
   let hasCanonicalizeMethod = true;
 }
 
@@ -165,13 +165,13 @@ def RecvOp : HIR_Op<"recv", [AttrSizedOperandSegments]> {
   }];
 
   let arguments = (ins AnyType:$bus,
-      Variadic<AnyType>:$addr, 
+      Variadic<ConstType>:$addr, 
       TimeType :$tstart, Optional<ConstType>:$offset);
   let results = (outs AnyType:$res);
 
-  let assemblyFormat = [{$bus  `[` $addr `]` `at` $tstart 
+  let assemblyFormat = [{$bus  (`[` $addr^ `]`)? `at` $tstart 
     (`+` $offset^ )? attr-dict 
-      `:` type($bus)`[`type($addr) `]` `->` type($res) }];
+      `:` type($bus) `->` type($res) }];
   let hasCanonicalizeMethod = true;
 }
 
@@ -637,4 +637,17 @@ Examples:
       type($args) `)` `->` type($res) }];
 }
 
+def SplitOp:HIR_Op<"split",[NoSideEffect]>{
+  let summary = "splits a bus into two";
+  let description = [{
+Examples:
+    ```mlir %b2 = hir.split (%b[%i]) : Tensor<!hir.bus<...>> -> !hir.bus<...>```
+  }];
+
+  let arguments = (ins AnyType: $bus, Variadic<ConstType>: $indices);
+  let results = (outs AnyType: $res);
+
+  let assemblyFormat = [{ $bus (`[` $indices^ `]`)? attr-dict `:` 
+      type($bus)  `->` type($res) }];
+}
 #endif // HIR_OPS
