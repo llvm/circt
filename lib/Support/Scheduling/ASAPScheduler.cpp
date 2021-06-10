@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 #include "circt/Support/Scheduling/ASAPScheduler.h"
 
-#include <list>
+#include <deque>
 
 using namespace circt;
 using namespace circt::sched;
@@ -29,7 +29,7 @@ LogicalResult ASAPScheduler::schedule() {
   }
 
   // initialize a worklist with the block's operations
-  std::list<OperationHandle> worklist;
+  std::deque<OperationHandle> worklist;
   worklist.insert(worklist.begin(), getOperations().begin(),
                   getOperations().end());
 
