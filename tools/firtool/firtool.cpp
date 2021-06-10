@@ -73,6 +73,7 @@ static cl::opt<bool> inliner("inline",
 
 static cl::opt<bool> lowerToHW("lower-to-hw",
                                cl::desc("run the lower-to-hw pass"));
+
 static cl::opt<bool> imconstprop(
     "imconstprop",
     cl::desc(
@@ -80,14 +81,13 @@ static cl::opt<bool> imconstprop(
     cl::init(true));
 
 static cl::opt<bool>
-    disableLowerTypes("disable-lower-types",
-                      cl::desc("run the lower-types pass within lower-to-hw"),
-                      cl::init(false));
+    lowerTypes("lower-types",
+               cl::desc("run the lower-types pass within lower-to-hw"),
+               cl::init(true));
 
-static cl::opt<bool>
-    disableExpandWhens("disable-expand-whens",
-                       cl::desc("disable the expand-whens pass"),
-                       cl::init(false));
+static cl::opt<bool> expandWhens("expand-whens",
+                                 cl::desc("disable the expand-whens pass"),
+                                 cl::init(true));
 
 static cl::opt<bool>
     blackBoxMemory("blackbox-memory",
@@ -103,6 +103,10 @@ static cl::opt<bool>
     inferWidths("infer-widths",
                 cl::desc("run the width inference pass on firrtl"),
                 cl::init(false));
+
+static cl::opt<bool> extractTestCode("extract-test-code",
+                                     cl::desc("run the extract test code pass"),
+                                     cl::init(false));
 
 enum OutputFormatKind {
   OutputMLIR,
@@ -201,11 +205,11 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
   // The input mlir file could be firrtl dialect so we might need to clean
   // things up.
-  if (!disableLowerTypes) {
+  if (lowerTypes) {
     pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass());
     auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
     // Only enable expand whens if lower types is also enabled.
-    if (!disableExpandWhens)
+    if (expandWhens)
       modulePM.addPass(firrtl::createExpandWhensPass());
   }
 
@@ -241,6 +245,9 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
         firrtl::createCheckWidthsPass());
     pm.addPass(createLowerFIRRTLToHWPass());
     pm.addPass(sv::createHWMemSimImplPass());
+
+    if (extractTestCode)
+      pm.addPass(sv::createSVExtractTestCodePass());
 
     // If enabled, run the optimizer.
     if (!disableOptimization) {
