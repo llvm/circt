@@ -58,21 +58,21 @@ def Inliner : Pass<"firrtl-inliner", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createInlinerPass()";
 }
 
-def BlackboxMemory : Pass<"firrtl-blackbox-memory", "firrtl::CircuitOp"> {
-  let summary = "Replace all FIRRTL memories with an external module blackbox.";
+def BlackBoxMemory : Pass<"firrtl-blackbox-memory", "firrtl::CircuitOp"> {
+  let summary = "Replace all FIRRTL memories with an external module black box.";
   let description = [{
     This pass replaces all sequential memory operations with an external module
-    blackbox.  For each memory operation, it creates a FModuleOp which
+    black box.  For each memory operation, it creates a FModuleOp which
     replicates the return types of the memory operation, and replaces the
     MemoryOp with an instance of the module.  Inside the new module, an
-    instance of an FExtModule blackbox is created.  The blackbox module must
+    instance of an FExtModule black box is created.  The black box module must
     use the same parameter naming conventions used by the ReplaceSeqMemories
     pass in the Scala FIRRTL compiler.
   }];
   let constructor = "circt::firrtl::createBlackBoxMemoryPass()";
   let options = [
     Option<"emitWrapper", "emit-wrapper", "bool", "true",
-           "Create a wrapper module around the blackbox external module.">
+           "Create a wrapper module around the black box external module.">
   ];
 }
 
@@ -180,6 +180,12 @@ def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
       "`BlackBoxResourceAnno` annotation.">
   ];
   let dependentDialects = ["sv::SVDialect"];
+}
+
+def PrintInstanceGraph
+    : Pass<"firrtl-print-instance-graph", "firrtl::CircuitOp"> {
+  let summary = "Print a DOT graph of the module hierarchy.";
+  let constructor =  "circt::firrtl::createPrintInstanceGraphPass()";
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

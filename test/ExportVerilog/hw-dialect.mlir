@@ -629,3 +629,27 @@ hw.module @out_of_order_multi_result() -> (%b: i1, %c: i2) {
   // CHECK: assign c = b1_out2 + b1_out2;
   hw.output %b, %c : i1, i2
 }
+
+
+hw.module.extern @ExternDestMod(%a: i1, %b: i2) -> (%c: i3, %d: i4)
+hw.module @InternalDestMod(%a: i1, %b: i3) {}
+// CHECK-LABEL module ABC
+hw.module @ABC(%a: i1, %b: i2) -> (%c: i4) {
+  // CHECK: wire [2:0] whatever_c;
+  // CHECK: wire [3:0] whatever_d;
+  %0,%1 = hw.instance "whatever" sym @a1 @ExternDestMod(%a, %b) {doNotPrint=1}: (i1, i2) -> (i3, i4)
+  // CHECK: // ExternDestMod whatever (
+  // CHECK-NEXT: //   .a (a),
+  // CHECK-NEXT: //   .b (b),
+  // CHECK-NEXT: //   .c (whatever_c),
+  // CHECK-NEXT: //   .d (whatever_d)
+  // CHECK-NEXT: // );
+  hw.instance "yo" sym @b1 @InternalDestMod(%a, %0) {doNotPrint=1} : (i1, i3) -> ()
+  // CHECK-NEXT: // InternalDestMod yo (
+  // CHECK-NEXT: //   .a (a),
+  // CHECK-NEXT: //   .b (whatever_c)
+  // CHECK-NEXT: // );
+  hw.output %1 : i4
+  // CHECK-NEXT: assign c = whatever_d;
+  // CHECK-NEXT: endmodule
+}

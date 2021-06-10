@@ -90,8 +90,8 @@ static cl::opt<bool>
                        cl::init(false));
 
 static cl::opt<bool>
-    blackboxMemory("blackbox-memory",
-                   cl::desc("Create a blackbox for all memory operations"),
+    blackBoxMemory("blackbox-memory",
+                   cl::desc("Create a black box for all memory operations"),
                    cl::init(false));
 
 static cl::opt<bool>
@@ -134,13 +134,13 @@ static cl::opt<std::string>
 
 static cl::opt<std::string> blackBoxRootPath(
     "blackbox-path",
-    cl::desc("Optional path to use as the root of blackbox annotations"),
+    cl::desc("Optional path to use as the root of black box annotations"),
     cl::value_desc("path"), cl::init(""));
 
 static cl::opt<std::string> blackBoxRootResourcePath(
     "blackbox-resource-path",
     cl::desc(
-        "Optional path to use as the root of blackbox resource annotations"),
+        "Optional path to use as the root of black box resource annotations"),
     cl::value_desc("path"), cl::init(""));
 
 /// Process a single buffer of the input.
@@ -222,7 +222,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   if (imconstprop)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
 
-  if (blackboxMemory)
+  if (blackBoxMemory)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxMemoryPass());
 
   // Read black box source files into the IR.

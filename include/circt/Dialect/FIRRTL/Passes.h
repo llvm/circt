@@ -41,6 +41,8 @@ std::unique_ptr<mlir::Pass> createCheckWidthsPass();
 
 std::unique_ptr<mlir::Pass> createInferWidthsPass();
 
+std::unique_ptr<mlir::Pass> createPrintInstanceGraphPass();
+
 std::unique_ptr<mlir::Pass>
 createBlackBoxReaderPass(llvm::Optional<StringRef> inputPrefix = {},
                          llvm::Optional<StringRef> resourcePrefix = {});

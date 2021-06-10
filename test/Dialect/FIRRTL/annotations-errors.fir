@@ -52,3 +52,24 @@ circuit Foo: %[
 ]]
   module Foo:
     skip
+
+; // -----
+
+; COM: An empty target should report an error (and not crash)
+
+
+; expected-error @+2 {{Invalid/unsupported annotation format}}
+; expected-note @+1 {{"target": /* error: invalid target string */}}
+circuit Foo: %[[{"target":""}]]
+  module Foo:
+    skip
+
+; // -----
+
+; COM: A null target should report an error (and not crash)
+
+; expected-error @+2 {{Invalid/unsupported annotation format}}
+; expected-note @+1 {{"target": /* error: target must be a string type */}}
+circuit Foo: %[[{"target":null}]]
+  module Foo:
+    skip

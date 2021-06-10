@@ -203,6 +203,17 @@ OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
   if (llvm::all_of(inputs(), [&](auto in) { return in == this->inputs()[0]; }))
     return inputs()[0];
 
+  // and(..., x, ..., ~x, ...) -> 0
+  for (Value arg : inputs())
+    if (auto xorOp = dyn_cast_or_null<XorOp>(arg.getDefiningOp()))
+      if (xorOp.isBinaryNot()) {
+        // isBinaryOp checks for the constant on operand 0.
+        auto srcVal = xorOp.getOperand(0);
+        for (Value arg2 : inputs())
+          if (arg2 == srcVal)
+            return getIntAttr(APInt(getType().getWidth(), 0), getContext());
+      }
+
   // Constant fold
   return constFoldVariadicOp<IntegerAttr>(
       constants, [](APInt &a, const APInt &b) { a &= b; });
@@ -361,6 +372,13 @@ OpFoldResult XorOp::fold(ArrayRef<Attribute> constants) {
   if (constants.size() == 2 && constants[1] &&
       constants[1].cast<IntegerAttr>().getValue().isNullValue())
     return inputs()[0];
+
+  // xor(xor(x,1),1) -> x
+  if (isBinaryNot()) {
+    XorOp arg = dyn_cast_or_null<XorOp>(inputs()[0].getDefiningOp());
+    if (arg && arg.isBinaryNot())
+      return arg.inputs()[0];
+  }
 
   // Constant fold
   return constFoldVariadicOp<IntegerAttr>(
@@ -844,6 +862,14 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
     }
   }
 
+  // mux(!a, b, c) -> mux(a, c, b)
+  if (auto xorOp = dyn_cast_or_null<XorOp>(op.cond().getDefiningOp())) {
+    if (xorOp.isBinaryNot()) {
+      Value newOperands[]{xorOp.inputs()[0], op.falseValue(), op.trueValue()};
+      rewriter.replaceOpWithNewOp<MuxOp>(op, op.getType(), newOperands);
+      return success();
+    }
+  }
   return failure();
 }
 

@@ -1,6 +1,6 @@
 add_circt_dialect_library(CIRCTFIRRTLTransforms
   BlackBoxReader.cpp
-  BlackboxMemory.cpp
+  BlackBoxMemory.cpp
   CheckWidths.cpp
   ExpandWhens.cpp
   ModuleInliner.cpp
@@ -8,6 +8,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   InferWidths.cpp
   LowerTypes.cpp
   LowerBundleVectorTypes.cpp
+  PrintInstanceGraph.cpp
 
   DEPENDS
   CIRCTFIRRTLTransformsIncGen

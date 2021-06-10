@@ -25,13 +25,13 @@ class PolynomialCompute:
     self.y = Output(types.int(8 * 4))
 
   @generator
-  def construct(mod, params):
+  def construct(mod, coefficients):
     """Implement this module for input 'x'."""
 
     x = mod.x
     taps: list[mlir.ir.Value] = list()
     # TODO: use the coefficient parameter, once its usable.
-    for power, coeff in enumerate([62, 42, 6]):
+    for power, coeff in enumerate(coefficients):
       coeffVal = hw.ConstantOp.create(types.i32, coeff)
       if power == 0:
         newPartialSum = coeffVal.result
@@ -69,10 +69,12 @@ class Polynomial(pycde.System):
   def build(self, top):
     i32 = types.i32
     x = hw.ConstantOp.create(i32, 23)
-    poly = PolynomialCompute("example", [62, 42, 6], x=x)
-    PolynomialCompute("example2", [62, 42, 6], x=poly.y)
+    poly = PolynomialCompute("example", [62, 42, 6], inputs={"x": x})
+    PolynomialCompute("example2",
+                      coefficients=[62, 42, 6],
+                      inputs={"x": poly.y})
 
-    CoolPolynomialCompute([4, 42], x=x)
+    CoolPolynomialCompute([4, 42], inputs={"x": x})
     hw.OutputOp([poly.y])
 
 
