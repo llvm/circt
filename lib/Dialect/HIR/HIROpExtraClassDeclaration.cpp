@@ -89,3 +89,21 @@ SmallVector<Value> StoreOp::getPackedIdx() {
   }
   return packIdx;
 }
+
+SmallVector<Value, 4> hir::FuncOp::getOperands() {
+  SmallVector<Value, 4> operands;
+
+  auto &entryBlock = this->getBody().front();
+  for (Value arg :
+       entryBlock.getArguments().slice(0, entryBlock.getNumArguments() - 1))
+    operands.push_back(arg);
+  return operands;
+}
+
+SmallVector<Value, 4> hir::CallOp::getOperands() {
+  ;
+  SmallVector<Value, 4> operands;
+  for (Value arg : this->operands().slice(0, this->getNumOperands() - 1))
+    operands.push_back(arg);
+  return operands;
+}

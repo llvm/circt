@@ -180,7 +180,7 @@ static Type parseInnerFuncType(DialectAsmParser &parser, MLIRContext *context) {
       if (parser.parseType(type))
         return Type();
       argTypes.push_back(type);
-      if (type.isa<IntegerType>() &&
+      if (helper::isPrimitiveType(type) &&
           succeeded(parser.parseOptionalKeyword("delay"))) {
         if (parser.parseAttribute(
                 delayAttr,

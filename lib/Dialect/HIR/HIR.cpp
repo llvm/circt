@@ -344,7 +344,6 @@ LogicalResult UnrollForOp::moveOutOfLoop(ArrayRef<Operation *> ops) {
 /// FuncOp
 /// Example:
 /// hir.def @foo at %t (%x :!hir.int, %y:!hir.int) ->(!hir.int){}
-
 static ParseResult parseFuncSignature(
     OpAsmParser &parser, hir::FuncType &funcTy,
     SmallVectorImpl<OpAsmParser::OperandType> &entryArgs,
@@ -361,16 +360,16 @@ static ParseResult parseFuncSignature(
     while (1) {
       // Parse operand and type
       OpAsmParser::OperandType operand;
-      Type operandType;
+      Type operandTy;
       if (parser.parseOperand(operand) || parser.parseColon() ||
-          parser.parseType(operandType))
+          parser.parseType(operandTy))
         return failure();
       entryArgs.push_back(operand);
-      argTypes.push_back(operandType);
+      argTypes.push_back(operandTy);
 
       // Parse argAttr
-      if (operandType.isa<IntegerType>() &&
-          !parser.parseOptionalKeyword("delay")) {
+      if (helper::isPrimitiveType(operandTy) &&
+          succeeded(parser.parseOptionalKeyword("delay"))) {
         NamedAttrList tempAttrs;
         IntegerAttr delayAttr;
         if (parser.parseAttribute(

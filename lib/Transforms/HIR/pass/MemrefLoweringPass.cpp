@@ -18,22 +18,10 @@ public:
   void dispatchOp(Operation *);
   void addFuncArgs(hir::FuncOp);
   void removeFuncArgs(hir::FuncOp);
-  void lowerOp(hir::ConstantOp);
-  void lowerOp(hir::ForOp);
-  void lowerOp(hir::UnrollForOp) {
-    assert(false && "This should already be unrolled");
-  }
-  void lowerOp(hir::AddOp);
-  void lowerOp(hir::SubtractOp);
-  void lowerOp(hir::LoadOp);
-  void lowerOp(hir::StoreOp);
-  void lowerOp(hir::ReturnOp);
-  void lowerOp(hir::YieldOp);
-  void lowerOp(hir::SendOp);
-  void lowerOp(hir::RecvOp);
-  void lowerOp(hir::DelayOp);
-  void lowerOp(hir::CallOp);
-  void lowerOp(hir::AllocaOp);
+  void updateOp(hir::LoadOp);
+  void updateOp(hir::StoreOp);
+  void updateOp(hir::CallOp);
+  void updateOp(hir::AllocaOp);
 
 private:
   llvm::DenseMap<Value, Value> mapMemrefRdAddrSend;
@@ -67,7 +55,7 @@ bool isWriteOnlyMemref(hir::MemrefType memTy) {
   return false;
 }
 
-void MemrefLoweringPass::lowerOp(hir::AllocaOp op) {
+void MemrefLoweringPass::updateOp(hir::AllocaOp op) {
   std::string moduleAttr =
       op.moduleAttr().dyn_cast<StringAttr>().getValue().str();
   if (moduleAttr != "bram" && moduleAttr != "reg")
@@ -237,7 +225,7 @@ Value createAddrAndDataTuple(OpBuilder &builder, Location loc,
   return addrAndData;
 }
 
-void MemrefLoweringPass::lowerOp(hir::LoadOp op) {
+void MemrefLoweringPass::updateOp(hir::LoadOp op) {
   mlir::OpBuilder builder(op.getOperation()->getParentOp()->getContext());
   MLIRContext *context = builder.getContext();
   builder.setInsertionPoint(op);
@@ -306,7 +294,7 @@ void MemrefLoweringPass::lowerOp(hir::LoadOp op) {
   op.getOperation()->erase();
 }
 
-void MemrefLoweringPass::lowerOp(hir::StoreOp op) {
+void MemrefLoweringPass::updateOp(hir::StoreOp op) {
   mlir::OpBuilder builder(op.getOperation()->getParentOp()->getContext());
   MLIRContext *context = builder.getContext();
   builder.setInsertionPoint(op);
@@ -343,13 +331,75 @@ void MemrefLoweringPass::lowerOp(hir::StoreOp op) {
   op.getOperation()->erase();
 }
 
+hir::FuncType updateFuncType(OpBuilder &builder, hir::FuncType oldFuncTy,
+                             ArrayRef<Value> arguments, ArrayAttr inputDelays) {
+
+  MLIRContext *context = builder.getContext();
+  SmallVector<Type, 4> argumentTypes;
+  for (Value argument : arguments)
+    argumentTypes.push_back(argument.getType());
+
+  FunctionType oldFunctionTy = oldFuncTy.getFunctionType();
+  auto resultTypes = oldFunctionTy.getResults();
+
+  FunctionType newFunctionTy =
+      builder.getFunctionType(argumentTypes, resultTypes);
+
+  hir::FuncType newFuncTy = hir::FuncType::get(
+      context, newFunctionTy, inputDelays, oldFuncTy.getOutputDelays());
+
+  return newFuncTy;
+}
+
+void MemrefLoweringPass::updateOp(hir::CallOp op) {
+  mlir::OpBuilder builder(op.getOperation()->getParentOp()->getContext());
+  MLIRContext *context = builder.getContext();
+  builder.setInsertionPoint(op);
+
+  auto oldFuncTy = op.funcTy().dyn_cast<hir::FuncType>();
+
+  auto oldInputDelays = oldFuncTy.getInputDelays();
+  SmallVector<Attribute, 4> newInputDelays;
+
+  // Calculate an array of new operands, replacing memref with busses.
+  SmallVector<Value> newOperands;
+  auto operands = op.getOperands();
+  for (int i = 0; i < (int)operands.size(); i++) {
+    Value operand = operands[i];
+    auto memTy = operand.getType().dyn_cast<hir::MemrefType>();
+    if (!memTy) {
+      newOperands.push_back(operand);
+      newInputDelays.push_back(oldInputDelays[i]);
+    } else if (memTy.getPort() == rd) {
+      newOperands.push_back(mapMemrefRdAddrSend[operand]);
+      newOperands.push_back(mapMemrefRdDataRecv[operand]);
+      newInputDelays.push_back(helper::getIntegerAttr(context, 64, 0));
+      newInputDelays.push_back(helper::getIntegerAttr(context, 64, 0));
+    } else if (memTy.getPort() == wr) {
+      newOperands.push_back(mapMemrefWrSend[operand]);
+    } else {
+      assert(false && "We dont yet support rw access");
+    }
+  }
+  // remove the old operands and add the new array of operands.
+  op.operandsMutable().clear();
+  op.operandsMutable().append(newOperands);
+
+  // update the FuncType.
+  auto newFuncTy = updateFuncType(builder, oldFuncTy, op.getOperands(),
+                                  ArrayAttr::get(context, newInputDelays));
+  op->setAttr("funcTy", TypeAttr::get(newFuncTy));
+}
+
 void MemrefLoweringPass::dispatchOp(Operation *operation) {
   if (auto op = dyn_cast<hir::AllocaOp>(operation))
-    lowerOp(op);
+    updateOp(op);
   else if (auto op = dyn_cast<LoadOp>(operation))
-    lowerOp(op);
+    updateOp(op);
   else if (auto op = dyn_cast<StoreOp>(operation))
-    lowerOp(op);
+    updateOp(op);
+  else if (auto op = dyn_cast<CallOp>(operation))
+    updateOp(op);
 }
 
 struct ArgReplacementInfo {
@@ -357,27 +407,6 @@ struct ArgReplacementInfo {
   Value originalArg;
   SmallVector<Type, 4> tyReplacementArgs;
 };
-
-void updateFuncOpTypes(hir::FuncOp op, OpBuilder &builder,
-                       ArrayAttr inputDelays, ArrayAttr outputDelays) {
-  MLIRContext *context = builder.getContext();
-  SmallVector<Type, 4> argumentTypes;
-  auto argumentAndTimeTypes = op.getArgumentTypes();
-  for (int i = 0; i < (int)argumentAndTimeTypes.size() - 1; i++) {
-    argumentTypes.push_back(argumentAndTimeTypes[i]);
-  }
-
-  auto resultTypes = op.type().dyn_cast<FunctionType>().getResults();
-
-  FunctionType updatedFunctionTy =
-      builder.getFunctionType(argumentTypes, resultTypes);
-
-  hir::FuncType funcTy =
-      hir::FuncType::get(context, updatedFunctionTy, inputDelays, outputDelays);
-
-  op.setType(updatedFunctionTy);
-  op->setAttr("funcTy", TypeAttr::get(funcTy));
-}
 
 void MemrefLoweringPass::addFuncArgs(hir::FuncOp op) {
   Block &entryBlock = op.getBody().front();
@@ -416,13 +445,6 @@ void MemrefLoweringPass::addFuncArgs(hir::FuncOp op) {
     Type memTyRdAddrSend =
         buildBusTensor(context, {memTyI1, memTyIAddr}, {wr, wr}, protoValid,
                        numBanks, memTy.getBankShape());
-    Type memTyRdAddrRecv =
-        buildBusTensor(context, {memTyI1, memTyIAddr}, {rd, rd}, protoEmpmemTy,
-                       numBanks, memTy.getBankShape());
-
-    Type memTyRdDataSend =
-        buildBusTensor(context, {memTyIData}, {wr}, protoEmpmemTy, numBanks,
-                       memTy.getBankShape());
     Type memTyRdDataRecv =
         buildBusTensor(context, {memTyIData}, {rd}, protoEmpmemTy, numBanks,
                        memTy.getBankShape());
@@ -430,15 +452,10 @@ void MemrefLoweringPass::addFuncArgs(hir::FuncOp op) {
     Type memTyWrSend =
         buildBusTensor(context, {memTyI1, memTyIAddrAndData}, {wr, wr},
                        protoValid, numBanks, memTy.getBankShape());
-    Type memTyWrRecv =
-        buildBusTensor(context, {memTyI1, memTyIAddrAndData}, {rd, rd},
-                       protoEmpmemTy, numBanks, memTy.getBankShape());
 
     if (port == rd) {
       SmallVector<Type, 4> tyRdBuses;
       tyRdBuses.push_back(memTyRdAddrSend);
-      tyRdBuses.push_back(memTyRdAddrRecv);
-      tyRdBuses.push_back(memTyRdDataSend);
       tyRdBuses.push_back(memTyRdDataRecv);
       argReplacementArray.push_back(
           {.argLoc = i, .originalArg = arg, .tyReplacementArgs = tyRdBuses});
@@ -446,7 +463,6 @@ void MemrefLoweringPass::addFuncArgs(hir::FuncOp op) {
     } else if (port == wr) {
       SmallVector<Type, 4> tyWrBuses;
       tyWrBuses.push_back(memTyWrSend);
-      tyWrBuses.push_back(memTyWrRecv);
       argReplacementArray.push_back(
           {.argLoc = i, .originalArg = arg, .tyReplacementArgs = tyWrBuses});
 
@@ -454,10 +470,8 @@ void MemrefLoweringPass::addFuncArgs(hir::FuncOp op) {
       assert(false && "rw is not supported yet!");
     }
   }
-
-  auto inputDelayAttrs = op.funcTy().dyn_cast<hir::FuncType>().getInputDelays();
-  auto outputDelayAttrs =
-      op.funcTy().dyn_cast<hir::FuncType>().getOutputDelays();
+  hir::FuncType oldFuncTy = op.funcTy().dyn_cast<hir::FuncType>();
+  auto inputDelayAttrs = oldFuncTy.getInputDelays();
   SmallVector<Attribute, 4> updatedInputDelays;
 
   for (Attribute delay : inputDelayAttrs) {
@@ -470,11 +484,9 @@ void MemrefLoweringPass::addFuncArgs(hir::FuncOp op) {
     Value originalArg = argReplacementArray[i].originalArg;
     ArrayRef<Type> tyReplacementArgs = argReplacementArray[i].tyReplacementArgs;
     if (originalArg.getType().dyn_cast<MemrefType>().getPort() == rd) {
-      assert(tyReplacementArgs.size() == 4);
+      assert(tyReplacementArgs.size() == 2);
       Type tyRdAddrSend = tyReplacementArgs[0];
-      Type tyRdAddrRecv = tyReplacementArgs[1];
-      Type tyRdDataSend = tyReplacementArgs[2];
-      Type tyRdDataRecv = tyReplacementArgs[3];
+      Type tyRdDataRecv = tyReplacementArgs[1];
 
       updatedInputDelays.insert(updatedInputDelays.begin() + argLoc,
                                 helper::getIntegerAttr(context, 64, 0));
@@ -483,35 +495,25 @@ void MemrefLoweringPass::addFuncArgs(hir::FuncOp op) {
 
       updatedInputDelays.insert(updatedInputDelays.begin() + argLoc,
                                 helper::getIntegerAttr(context, 64, 0));
-      entryBlock.insertArgument(argLoc++, tyRdAddrRecv);
-
-      updatedInputDelays.insert(updatedInputDelays.begin() + argLoc,
-                                helper::getIntegerAttr(context, 64, 0));
-      entryBlock.insertArgument(argLoc++, tyRdDataSend);
-
-      updatedInputDelays.insert(updatedInputDelays.begin() + argLoc,
-                                helper::getIntegerAttr(context, 64, 0));
       mapMemrefRdDataRecv[originalArg] =
           entryBlock.insertArgument(argLoc++, tyRdDataRecv);
 
     } else if (originalArg.getType().dyn_cast<MemrefType>().getPort() == wr) {
-
+      assert(tyReplacementArgs.size() == 1);
       Type tyWrSend = tyReplacementArgs[0];
-      Type tyWrRecv = tyReplacementArgs[1];
       updatedInputDelays.insert(updatedInputDelays.begin() + argLoc,
                                 helper::getIntegerAttr(context, 64, 0));
       mapMemrefWrSend[originalArg] =
           entryBlock.insertArgument(argLoc++, tyWrSend);
-      updatedInputDelays.insert(updatedInputDelays.begin() + argLoc,
-                                helper::getIntegerAttr(context, 64, 0));
-      entryBlock.insertArgument(argLoc++, tyWrRecv);
     } else {
       assert(false && "rw is not supported yet!");
     }
   }
 
-  updateFuncOpTypes(op, builder, ArrayAttr::get(context, updatedInputDelays),
-                    outputDelayAttrs);
+  auto newFuncTy = updateFuncType(builder, oldFuncTy, op.getOperands(),
+                                  ArrayAttr::get(context, updatedInputDelays));
+  op.setType(newFuncTy.getFunctionType());
+  op->setAttr("funcTy", TypeAttr::get(newFuncTy));
 }
 
 void MemrefLoweringPass::removeFuncArgs(hir::FuncOp op) {
@@ -522,9 +524,8 @@ void MemrefLoweringPass::removeFuncArgs(hir::FuncOp op) {
   MLIRContext *context = builder.getContext();
   builder.setInsertionPoint(op);
 
-  auto inputDelayAttrs = op.funcTy().dyn_cast<hir::FuncType>().getInputDelays();
-  auto outputDelayAttrs =
-      op.funcTy().dyn_cast<hir::FuncType>().getOutputDelays();
+  hir::FuncType oldFuncTy = op.funcTy().dyn_cast<hir::FuncType>();
+  auto inputDelayAttrs = oldFuncTy.getInputDelays();
   SmallVector<Attribute, 4> updatedInputDelays;
 
   for (Attribute delay : inputDelayAttrs) {
@@ -539,8 +540,10 @@ void MemrefLoweringPass::removeFuncArgs(hir::FuncOp op) {
     entryBlock.eraseArgument(i);
     updatedInputDelays.erase(updatedInputDelays.begin() + i);
   }
-  updateFuncOpTypes(op, builder, ArrayAttr::get(context, updatedInputDelays),
-                    outputDelayAttrs);
+  auto newFuncTy = updateFuncType(builder, oldFuncTy, op.getOperands(),
+                                  ArrayAttr::get(context, updatedInputDelays));
+  op.setType(newFuncTy.getFunctionType());
+  op->setAttr("funcTy", TypeAttr::get(newFuncTy));
 }
 
 void MemrefLoweringPass::runOnOperation() {

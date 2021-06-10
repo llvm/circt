@@ -52,6 +52,22 @@ IntegerAttr getIntegerAttr(MLIRContext *context, int width, int value) {
                           APInt(width, value));
 }
 
+bool isPrimitiveType(Type ty) {
+  if (ty.isa<IntegerType>() || ty.isa<FloatType>())
+    return true;
+  if (ty.isa<TupleType>()) {
+    bool tupleMembersArePrimitive = true;
+    for (auto memberTy : ty.dyn_cast<TupleType>().getTypes())
+      tupleMembersArePrimitive &= isPrimitiveType(memberTy);
+    if (tupleMembersArePrimitive)
+      return true;
+  }
+  if (ty.isa<TensorType>() &&
+      isPrimitiveType(ty.dyn_cast<TensorType>().getElementType()))
+    return true;
+  return false;
+}
+
 Type getIntegerType(MLIRContext *context, int bitwidth) {
   return IntegerType::get(context, bitwidth);
 }

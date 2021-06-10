@@ -28,12 +28,12 @@ def ConstType: Type<CPred<"$_self.isa<ConstType>()">
   BuildableType<"ConstType::get($_builder.getContext())">;
 
 def MemrefType: Type<CPred<"$_self.isa<MemrefType>()">,
-  "HIR memref type ">,
-  BuildableType<"MemrefType::get($_builder.getContext())">;
+    "HIR memref type ">,
+    BuildableType<"MemrefType::get($_builder.getContext())">;
 
 def FuncType: Type<CPred<"$_self.isa<FuncType>()">,
-  "HIR interface type ">,
-  BuildableType<"FuncType::get($_builder.getContext())">;
+    "HIR interface type ">,
+    BuildableType<"FuncType::get($_builder.getContext())">;
 
 // Ops
 class HIR_Op<string mnemonic, list<OpTrait> traits = []>
@@ -107,9 +107,9 @@ def LoadOp : HIR_Op<"load", [NoSideEffect,AttrSizedOperandSegments]> {
     attr-dict `:` type($mem) `[` type($addr) `]` `->` type($res)}];
   let hasCanonicalizeMethod = true;
   let extraClassDeclaration = [{
-  public:
-  SmallVector<Value> getBankedIdx();
-  SmallVector<Value> getPackedIdx();
+    public:
+      SmallVector<Value> getBankedIdx();
+      SmallVector<Value> getPackedIdx();
   }];
 }
 
@@ -121,7 +121,7 @@ def StoreOp : HIR_Op<"store", [AttrSizedOperandSegments]> {
 
       ```
       mlir hir.mem_write %v to %A[%x,%y] at %t 
-        : (i32, !hir.memref<...>[i32,i32])
+      : (i32, !hir.memref<...>[i32,i32])
       ```
   }];
 
@@ -134,9 +134,9 @@ def StoreOp : HIR_Op<"store", [AttrSizedOperandSegments]> {
       `:` `(`type($value) `,` type($mem)`[`type($addr) `]` `)`}];
   let hasCanonicalizeMethod = true;
   let extraClassDeclaration = [{
-  public:
-  SmallVector<Value> getBankedIdx();
-  SmallVector<Value> getPackedIdx();
+    public:
+      SmallVector<Value> getBankedIdx();
+      SmallVector<Value> getPackedIdx();
   }];
 }
 
@@ -185,7 +185,7 @@ def SelectOp : HIR_Op<"select", [NoSideEffect]> {
       Variadic<AnyType>:$addr);
   let results = (outs AnyType: $res);
   let assemblyFormat = [{$bus
-  `[` $addr `]` attr-dict `:` type($bus) `[` type($addr) `]` `->` type($res) }];
+    `[` $addr `]` attr-dict `:` type($bus) `[` type($addr) `]` `->` type($res) }];
 
   let verifier = [{return verifySelectOp(*this);}];
 }
@@ -253,22 +253,22 @@ Example:
 
 
 def IfOp : HIR_Op<"if", [ImplicitTerminator, RecursiveSideEffects]> {
-      let summary = "if operation";
-      let description = [{
-        This op implements an if statement.
-          ```mlir
-          hir.if(%b) at %t {...}        ```
-      }];
+  let summary = "if operation";
+  let description = [{
+    This op implements an if statement.
+      ```mlir
+      hir.if(%b) at %t {...}        ```
+  }];
 
-      let arguments = (ins AnyType : $cond, TimeType : $tstart);
-      let regions = (region SizedRegion<1>:$if_region);
-      let results = (outs );
+  let arguments = (ins AnyType : $cond, TimeType : $tstart);
+  let regions = (region SizedRegion<1>:$if_region);
+  let results = (outs );
 
-      let extraClassDeclaration = [{
-      }];
-      let parser = [{return parse$cppClass(parser,result);}];
-      let printer = [{return print$cppClass(p,*this);}];
-    }
+  let extraClassDeclaration = [{
+  }];
+  let parser = [{return parse$cppClass(parser,result);}];
+  let printer = [{return print$cppClass(p,*this);}];
+}
 
 def ForOp : HIR_Op<"for", 
     [ImplicitTerminator, RecursiveSideEffects,
@@ -283,7 +283,7 @@ def ForOp : HIR_Op<"for",
                 %yy = hir.delay %xx by 1 at %tj
                   hir.yield %yy at %tj offset 1;
               }
-              hir.yield at %ti offset 1;
+            hir.yield at %ti offset 1;
           }
         ```
       }];
@@ -296,9 +296,9 @@ def ForOp : HIR_Op<"for",
       let parser = [{return parse$cppClass(parser,result);}];
       let printer = [{return print$cppClass(p,*this);}];
       let builders = [OpBuilder<(ins "Value":$lb, "Value":$ub, "Value":$step,
-      "Value":$tstart, "Value":$offset,"Type":$inductionVarTy),[{
+          "Value":$tstart, "Value":$offset,"Type":$inductionVarTy),[{
         build($_builder,$_state,hir::TimeType::get($_builder.getContext()),lb,ub,step,tstart,offset);
-         
+
       }]>];
       let extraClassDeclaration = [{
         Value getInductionVar() { return getBody()->getArgument(0); }
@@ -364,56 +364,65 @@ def CallOp : HIR_Op<"call",[AttrSizedOperandSegments] > {
   let parser = [{return parse$cppClass(parser,result);}];
   let printer = [{return print$cppClass(p,*this);}];
   let hasCanonicalizeMethod = true;
+  let extraClassDeclaration=[{
+    public:
+      ///Get the function arguments (excluding tstart).
+      SmallVector<Value,4> getOperands();
+  }];
 }
 
 def FuncOp : HIR_Op<"func", [
-    Symbol, 
-    FunctionLike, 
-    IsolatedFromAbove, 
-    DeclareOpInterfaceMethods<CallableOpInterface>
-    ]> {
-      let summary = "Function definition";
-      let description = [{
-        This Op creates a new function 
-          Example:
+  Symbol, 
+  FunctionLike, 
+  IsolatedFromAbove, 
+  DeclareOpInterfaceMethods<CallableOpInterface>
+]> {
+  let summary = "Function definition";
+  let description = [{
+    This Op creates a new function 
+      Example:
 
-          ```mlir 
-          hir.func @foo (%x, %A) at %t : (!hir.val,!hir.memref) -> (!hir.val,!hir.val)
-          ```
-      }];
+      ```mlir 
+      hir.func @foo (%x, %A) at %t : (!hir.val,!hir.memref) -> (!hir.val,!hir.val)
+      ```
+  }];
 
-      let arguments = (ins
-          TypeAttr:$type,
-          StrAttr:$sym_name,
-          TypeAttr:$funcTy 
-          );
+  let arguments = (ins
+      TypeAttr:$type,
+      StrAttr:$sym_name,
+      TypeAttr:$funcTy 
+      );
 
-      let regions = (region SizedRegion<1>:$region);
-      let results = (outs );
-      let parser = [{return parse$cppClass(parser,result);}];
-      let printer = [{return print$cppClass(p,*this);}];
-      let extraClassDeclaration = [{
-        private:
-          // This trait needs access to the hooks defined below.
-          friend class OpTrait::FunctionLike<FuncOp>;
+  let regions = (region SizedRegion<1>:$region);
+  let results = (outs );
+  let parser = [{return parse$cppClass(parser,result);}];
+  let printer = [{return print$cppClass(p,*this);}];
+  let extraClassDeclaration = [{
+    private:
+      // This trait needs access to the hooks defined below.
+      friend class OpTrait::FunctionLike<FuncOp>;
 
-          /// Returns the number of arguments. Hook for OpTrait::FunctionLike.
-          unsigned getNumFuncArguments() { return getType().getNumInputs(); }
+      /// Returns the number of arguments. Hook for OpTrait::FunctionLike.
+      unsigned getNumFuncArguments() { return getType().getNumInputs(); }
 
-          /// Returns the number of results. Hook for OpTrait::FunctionLike.
-          unsigned getNumFuncResults() { return getType().getNumResults(); }
+      /// Returns the number of results. Hook for OpTrait::FunctionLike.
+      unsigned getNumFuncResults() { return getType().getNumResults(); }
 
-          /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
-          /// attribute is present and checks if it holds a function type. Ensures
-          /// getType, getNumFuncArguments, and getNumFuncResults can be called safely
-          LogicalResult verifyType();
-          Region& body(){ return getOperation()->getRegion(0);}
+      /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
+      /// attribute is present and checks if it holds a function type. Ensures
+      /// getType, getNumFuncArguments, and getNumFuncResults can be called safely
+      LogicalResult verifyType();
+      Region& body(){ return getOperation()->getRegion(0);}
 
-          /// Hook for OpTrait::FunctionLike, called after verifying the function
-          /// type and the presence of the (potentially empty) function body.
-          LogicalResult verifyBody();
-      }];
-    }
+      /// Hook for OpTrait::FunctionLike, called after verifying the function
+      /// type and the presence of the (potentially empty) function body.
+      LogicalResult verifyBody();
+
+    public:
+      ///Get the function arguments (excluding tstart).
+      SmallVector<Value,4> getOperands();
+  }];
+}
 
 def YieldOp : HIR_Op<"yield", [AttrSizedOperandSegments] > {
   let summary = "Yield from loops";
@@ -470,7 +479,7 @@ def AddOp : HIR_Op<"add",[NoSideEffect]>{
   let description = [{
 Examples:
     ```mlir %1 = hir.add (%x, %y) : (i32, i32) -> (i32)```
-    ```mlir %1 = hir.add (%x, %y) : (!hir.const<i32>, !hir.conts<i32>) -> (!hir.const<i32>)```
+                                     ```mlir %1 = hir.add (%x, %y) : (!hir.const<i32>, !hir.conts<i32>) -> (!hir.const<i32>)```
   }];
 
   let arguments = (ins AnyType: $left, AnyType:$right);
@@ -485,7 +494,7 @@ def SubtractOp : HIR_Op<"subtract",[NoSideEffect]>{
   let description = [{
 Examples:
     ```mlir %1 = hir.subtract (%x, %y) : (i32, i32) -> (i32)```
-    ```mlir %1 = hir.subtract (%x, %y) : (!hir.const<i32>, !hir.conts<i32>) -> (!hir.const<i32>)```
+                                          ```mlir %1 = hir.subtract (%x, %y) : (!hir.const<i32>, !hir.conts<i32>) -> (!hir.const<i32>)```
   }];
 
   let arguments = (ins AnyType: $left, AnyType:$right);
@@ -521,7 +530,7 @@ def AllocaOp :HIR_Op<"alloca",[NoSideEffect]> {
   let results = (outs Variadic<AnyType>:$res);
 
   let assemblyFormat = [{`(`$moduleAttr`)`attr-dict 
-                        `:` type($res)}];
+    `:` type($res)}];
 }
 
 def EQOp : HIR_Op<"eq",[NoSideEffect]>{
@@ -529,7 +538,7 @@ def EQOp : HIR_Op<"eq",[NoSideEffect]>{
   let description = [{
 Examples:
     ```mlir %1 = hir.eq (%x, %y) : (i32, i32) -> (i1)```
-    ```mlir %1 = hir.eq (%x, %y) :  (!hir.const, !hir.const) -> (!hir.const)```
+                                    ```mlir %1 = hir.eq (%x, %y) :  (!hir.const, !hir.const) -> (!hir.const)```
   }];
 
   let arguments = (ins AnyType: $left, AnyType:$right);
@@ -544,7 +553,7 @@ def NEQOp : HIR_Op<"neq",[NoSideEffect]>{
   let description = [{
 Examples:
     ```mlir %1 = hir.neq (%x, %y) : (i32, i32) -> (i1)```
-    ```mlir %1 = hir.neq (%x, %y) :  (!hir.const, !hir.const) -> (!hir.const)```
+                                     ```mlir %1 = hir.neq (%x, %y) :  (!hir.const, !hir.const) -> (!hir.const)```
   }];
 
   let arguments = (ins AnyType: $left, AnyType:$right);
@@ -559,7 +568,7 @@ def GTOp : HIR_Op<"gt",[NoSideEffect]>{
   let description = [{
 Examples:
     ```mlir %1 = hir.gt (%x, %y) : (i32, i32) -> (i1)```
-    ```mlir %1 = hir.gt (%x, %y) :  (!hir.const, !hir.const) -> (!hir.const)```
+                                    ```mlir %1 = hir.gt (%x, %y) :  (!hir.const, !hir.const) -> (!hir.const)```
   }];
 
   let arguments = (ins AnyType: $left, AnyType:$right);
@@ -574,7 +583,7 @@ def LTOp : HIR_Op<"lt",[NoSideEffect]>{
   let description = [{
 Examples:
     ```mlir %1 = hir.gt (%x, %y) : (i32, i32) -> (i1)```
-    ```mlir %1 = hir.gt (%x, %y) :  (!hir.const, !hir.const) -> (!hir.const)```
+                                    ```mlir %1 = hir.gt (%x, %y) :  (!hir.const, !hir.const) -> (!hir.const)```
   }];
 
   let arguments = (ins AnyType: $left, AnyType:$right);
@@ -589,7 +598,7 @@ def AndOp : HIR_Op<"and",[NoSideEffect]>{
   let description = [{
 Examples:
     ```mlir %1 = hir.gt (%x, %y) : (i1, i1) -> (i1)```
-    ```mlir %1 = hir.gt (%x, %y) :  (!hir.const, !hir.const) -> (!hir.const)```
+                                    ```mlir %1 = hir.gt (%x, %y) :  (!hir.const, !hir.const) -> (!hir.const)```
   }];
 
   let arguments = (ins AnyType: $left, AnyType:$right);
@@ -604,7 +613,7 @@ def OrOp : HIR_Op<"or",[NoSideEffect]>{
   let description = [{
 Examples:
     ```mlir %1 = hir.gt (%x, %y) : (i1, i1) -> (i1)```
-    ```mlir %1 = hir.gt (%x, %y) :  (!hir.const, !hir.const) -> (!hir.const)```
+                                    ```mlir %1 = hir.gt (%x, %y) :  (!hir.const, !hir.const) -> (!hir.const)```
   }];
 
   let arguments = (ins AnyType: $left, AnyType:$right);
