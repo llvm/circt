@@ -46,21 +46,6 @@ static void appendPossiblyAbsolutePath(SmallVectorImpl<char> &base,
   }
 }
 
-SmallVector<StringRef> splitString(std::string &s, char delim) {
-  SmallVector<StringRef> retval;
-  size_t start = 0U;
-  size_t end;
-  do {
-    end = s.find(delim);
-    if (end == std::string::npos)
-      break;
-    retval.emplace_back(&s.data()[start], end - start);
-    start = end + 1;
-  } while (1);
-  retval.emplace_back(&s.data()[start], s.size() - start);
-  return retval;
-}
-
 //===----------------------------------------------------------------------===//
 // Pass Implementation
 //===----------------------------------------------------------------------===//
@@ -261,7 +246,8 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
       return true;
     }
 
-    SmallVector<StringRef> roots = splitString(resourcePrefix, ':');
+    SmallVector<StringRef> roots;
+    StringRef(resourcePrefix).split(roots, ':');
     for (auto root : roots) {
       SmallString<128> inputPath(root);
       // Note that we always treat `resourceId` as a relative path, as the
