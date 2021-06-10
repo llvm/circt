@@ -14,4 +14,5 @@ namespace hir {
 
 } // namespace hir
 } // namespace mlir
+
 #endif // DIALECT_HIR_TRANSFORMS_PASSDETAILS_H

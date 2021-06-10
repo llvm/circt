@@ -6,5 +6,7 @@ namespace {
 #include "circt/Transforms/HIR/Passes.h.inc"
 } // namespace
 
-void mlir::hir::initHIRTransformationPasses() { registerPasses(); }
-
+void mlir::hir::initHIRTransformationPasses() {
+  registerPasses();
+  registerHIRLoweringPassPipeline();
+}
