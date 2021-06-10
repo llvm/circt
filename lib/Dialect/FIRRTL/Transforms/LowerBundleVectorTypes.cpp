@@ -121,9 +121,9 @@ static AnnotationSet filterAnnotations(AnnotationSet annotations,
 
 namespace {
 using LoweredValues = SmallVector<std::pair<Value, bool>>;
-class doLowering {
+class DoLowering {
 public:
-  doLowering(FModuleOp &m, ImplicitLocOpBuilder *b, MLIRContext *c)
+  DoLowering(FModuleOp &m, ImplicitLocOpBuilder *b, MLIRContext *c)
       : module(m), builder(*b), context(*c) {
 
     auto *body = module.getBodyBlock();
@@ -134,6 +134,7 @@ public:
         worklist.push_back(arg);
 
     runLowering();
+    // Update the module with the new arguments.
     cleanupModule();
   }
 
@@ -144,7 +145,6 @@ private:
   ImplicitLocOpBuilder &builder;
   MLIRContext &context;
   DenseMap<Value, LoweredValues> loweredValueMap;
-  SmallVector<Operation *> listOfUses;
   // State to track the new attributes for the module.
   SmallVector<NamedAttribute, 8> newModuleAttrs;
   SmallVector<Attribute> newArgNames;
@@ -152,34 +152,37 @@ private:
   SmallVector<Attribute, 8> newArgAttrs;
   SmallVector<unsigned, 8> argsToRemove;
 
+  // Delete the removed arguments and fix the module type and copy the
+  // annotations.
   void cleanupModule();
+  // This is the top level function, which iterates over the worklist and
+  // updates the IR.
   void runLowering();
+  // Lower the block argument.
   void lowerArg(BlockArgument arg);
-  void lowerSubfieldOp(SubfieldOp op);
-  void lowerConnectOp(ConnectOp op);
+  // Lower the SubfieldOp and return true, if the op was lowered and removed.
+  bool lowerSubfieldOp(SubfieldOp op);
+  // Lower the ConnectOp and return true, if the op was lowered and removed.
+  bool lowerConnectOp(ConnectOp op);
+  // Add a new argument with the given type and append the suffix to the name.
   Value addArg(FModuleOp module, Type type, unsigned oldArgNumber,
                Direction direction, StringRef nameSuffix);
-  // Convert an aggregate type into a flat list of fields.  This is used
-  // when working with instances and mems to flatten them.
+  // Convert an aggregate type into a flat list of its fields. The fields can
+  // themselves be of aggregate type.
   void flattenType(FIRRTLType type, bool isFlipped,
                    SmallVectorImpl<FlatBundleFieldEntry> &results);
-  void setBundleLowering(Value item, LoweredValues &l) {
-    auto &s = loweredValueMap[item];
-    llvm::errs() << "setting lowered for " << item;
-    assert(s.empty() && "Bundle lowering already set");
-    s = l;
-  }
-  bool isLowered(Value item) { return loweredValueMap.count(item); }
+  // Keep track of the lowered values.
+  void setBundleLowering(Value item, LoweredValues &l);
+  // Check if a value has already been lowered.
+  bool isLowered(Value item);
+  // Get the lowered fields for the value.
+  bool getBundleLowering(Value item, LoweredValues &l);
 
-  bool getBundleLowering(Value item, LoweredValues &l) {
-    if (!isLowered(item))
-      return false;
-    l = loweredValueMap[item];
-    return true;
-  }
+  // Remove the item from map to lowred types, after it has been erased from IR.
+  void removeOpFromMap(Value item);
 };
 
-void doLowering::cleanupModule() {
+void DoLowering::cleanupModule() {
   if (argsToRemove.empty())
     return;
 
@@ -223,7 +226,7 @@ void doLowering::cleanupModule() {
   module->setAttr(module.getTypeAttrName(), TypeAttr::get(moduleType));
 }
 
-void doLowering::lowerSubfieldOp(SubfieldOp op) {
+bool DoLowering::lowerSubfieldOp(SubfieldOp op) {
 
   Value input = op.input();
   StringRef fieldname = op.fieldname();
@@ -232,7 +235,6 @@ void doLowering::lowerSubfieldOp(SubfieldOp op) {
   // Flatten any nested bundle types the usual way.
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
   flattenType(resultType, false, fieldTypes);
-  llvm::errs() << "\n replace subfield : " << input;
   LoweredValues updatedInputs;
   if (!getBundleLowering(input, updatedInputs))
     assert("Not yet lowered");
@@ -247,13 +249,13 @@ void doLowering::lowerSubfieldOp(SubfieldOp op) {
   auto newValue = updatedInputs[fieldIndex.getValue()].first;
   op.replaceAllUsesWith(newValue);
   op.erase();
+  return true;
 }
 
-void doLowering::lowerConnectOp(ConnectOp op) {
+bool DoLowering::lowerConnectOp(ConnectOp op) {
   Value dest = op.dest();
   Value src = op.src();
 
-  // llvm::errs() << "\n connect;" << op;
   // Attempt to get the bundle types, potentially unwrapping an outer flip
   // type that wraps the whole bundle.
   FIRRTLType destType = getCanonicalAggregateType(dest.getType());
@@ -261,7 +263,7 @@ void doLowering::lowerConnectOp(ConnectOp op) {
 
   // If we aren't connecting two bundles, there is nothing to do.
   if (!destType || !srcType)
-    return;
+    return false;
 
   // SmallVector<std::pair<Value, bool>, 8> destValues;
   LoweredValues destValues;
@@ -286,9 +288,10 @@ void doLowering::lowerConnectOp(ConnectOp op) {
     builder.create<ConnectOp>(newDest, newSrc);
   }
   op.erase();
+  return true;
 }
 
-void doLowering::runLowering() {
+void DoLowering::runLowering() {
   while (!worklist.empty()) {
     auto item = worklist.front();
     worklist.erase(worklist.begin());
@@ -299,35 +302,38 @@ void doLowering::runLowering() {
       builder.setLoc(module.getLoc());
       lowerArg(arg);
     }
+    bool allUsersRemoved = true;
     for (auto user : item.getUsers()) {
       auto &u = *user;
-      listOfUses.push_back(&u);
       builder.setInsertionPoint(&u);
       builder.setLoc(u.getLoc());
-      TypeSwitch<Operation *>(&u)
-                   .Case<ConnectOp>([&](auto op) {
-                     bool ready = true;
-                     for (auto operand : op.getOperands()) {
-                       if (!isLowered(operand)) {
-                         ready = false;
-                         worklist.push_back(operand);
-                       }
-                     }
-                     if (ready)
-                       lowerConnectOp(op);
-                   })
-                   .Case<SubfieldOp>([&](auto op) {
-                     lowerSubfieldOp(op);
-                   })
-                   .Default([](Operation *op) { 
-                       op->emitError(" operation not handled ");
-                       });
-
+      bool opRemoved =
+          TypeSwitch<Operation *, bool>(&u)
+              .Case<ConnectOp>([&](auto op) {
+                bool ready = true;
+                for (auto operand : op.getOperands()) {
+                  if (!isLowered(operand)) {
+                    ready = false;
+                    worklist.push_back(operand);
+                  }
+                }
+                if (ready)
+                  return lowerConnectOp(op);
+                return false;
+              })
+              .Case<SubfieldOp>([&](auto op) { return lowerSubfieldOp(op); })
+              .Default([](Operation *op) {
+                op->emitError(" operation not handled ");
+                return false;
+              });
+      allUsersRemoved &= opRemoved;
     }
+    if (item.getUsers().empty())
+      removeOpFromMap(item);
   }
 }
 
-void doLowering::lowerArg(BlockArgument arg) {
+void DoLowering::lowerArg(BlockArgument arg) {
   unsigned argNumber = arg.getArgNumber();
   // Flatten any bundle types.
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
@@ -357,7 +363,7 @@ void doLowering::lowerArg(BlockArgument arg) {
 // Creates and returns a new block argument of the specified type to the
 // module. This also maintains the name attribute for the new argument,
 // possibly with a new suffix appended.
-Value doLowering::addArg(FModuleOp module, Type type, unsigned oldArgNumber,
+Value DoLowering::addArg(FModuleOp module, Type type, unsigned oldArgNumber,
                          Direction direction, StringRef nameSuffix) {
   Block *body = module.getBodyBlock();
 
@@ -382,7 +388,7 @@ Value doLowering::addArg(FModuleOp module, Type type, unsigned oldArgNumber,
   return newValue;
 }
 
-void doLowering::flattenType(FIRRTLType type, bool isFlipped,
+void DoLowering::flattenType(FIRRTLType type, bool isFlipped,
                              SmallVectorImpl<FlatBundleFieldEntry> &results) {
   if (auto flip = type.dyn_cast<FlipType>())
     return flattenType(flip.getElementType(), !isFlipped, results);
@@ -414,6 +420,26 @@ void doLowering::flattenType(FIRRTLType type, bool isFlipped,
       });
 
   return;
+}
+
+void DoLowering::setBundleLowering(Value item, LoweredValues &l) {
+  auto &s = loweredValueMap[item];
+  assert(s.empty() && "Bundle lowering already set");
+  s = l;
+}
+
+bool DoLowering::isLowered(Value item) { return loweredValueMap.count(item); }
+
+bool DoLowering::getBundleLowering(Value item, LoweredValues &l) {
+  if (!isLowered(item))
+    return false;
+  l = loweredValueMap[item];
+  return true;
+}
+
+void DoLowering::removeOpFromMap(Value item) {
+  if (loweredValueMap.count(item))
+    loweredValueMap.erase(loweredValueMap.find(item));
 }
 
 class IRVisitor : public FIRRTLVisitor<IRVisitor> {
@@ -449,7 +475,12 @@ void IRVisitor::visitDecl(FModuleOp module) {
 
   // Lower the module block arguments.
   SmallVector<BlockArgument, 8> args(body->args_begin(), body->args_end());
-  doLowering d(module, builder, context);
+  // Update the module arguments by removing the top level aggregate type.
+  // This also updates all the uses and other dependent operations.
+  // TODO: Iterate over the arguments, until we reach ground type.
+  // DoLowering updates the module type and annotations, after every iteration
+  // of lowering.
+  DoLowering d(module, builder, context);
 }
 
 //

@@ -29,5 +29,18 @@ firrtl.circuit "Simple" {
       firrtl.connect %1, %4 : !firrtl.uint<1>, !firrtl.uint<1>
     }
   }
+}
+
+// -----
+
+firrtl.circuit "Top" {
+
+  // CHECK-LABEL: firrtl.module @Top
+  firrtl.module @Top(in %in : !firrtl.bundle<a: uint<1>, b: uint<1>>,
+                     out %out : !firrtl.bundle<a: uint<1>, b: uint<1>>) {
+    // CHECK: firrtl.connect %out_a, %in_a : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %out_b, %in_b : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %out, %in : !firrtl.bundle<a: uint<1>, b: uint<1>>, !firrtl.bundle<a: uint<1>, b: uint<1>>
+  }
 
 }
