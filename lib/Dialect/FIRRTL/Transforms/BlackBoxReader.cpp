@@ -232,8 +232,11 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
     }
     SmallString<128> inputPath(inputPrefix);
     appendPossiblyAbsolutePath(inputPath, path.getValue());
-    loadFile(op, inputPath, builder);
-    return true;
+    if (loadFile(op, inputPath, builder))
+      return true;
+    op->emitError("Cannot find file ") << inputPath;
+    signalPassFailure();
+    return false;
   }
 
   // Handle resource annotation.
@@ -258,6 +261,7 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
     }
     op->emitError("Cannot find file ") << resourceId.getValue();
     signalPassFailure();
+    return false;
   }
 
   // Annotation was not concerned with black boxes.
