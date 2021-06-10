@@ -124,9 +124,9 @@ static LogicalResult schedulePipeline(PipelineOp pipe, OpBuilder &builder) {
   auto &blockToSchedule = pipe.getRegion().getBlocks().front();
   auto &operationsToSchedule = blockToSchedule.getOperations();
 
-  sched::Scheduler::OperatorTypeHandle unitLatencyOperator = 0;
+  sched::OperatorTypeId unitLatencyOperator = 0;
 
-  sched::ASAPScheduler scheduler;
+  sched::ASAPScheduler scheduler(pipe);
   scheduler.registerOperatorType(unitLatencyOperator);
   scheduler.setLatency(unitLatencyOperator, 1);
 
@@ -137,8 +137,7 @@ static LogicalResult schedulePipeline(PipelineOp pipe, OpBuilder &builder) {
       if (operand.isa<BlockArgument>())
         continue; // block arguments are always available w.r.t the schedule
       Operation *operandOp = operand.getDefiningOp();
-      scheduler.registerDependence(
-          sched::Scheduler::makeDependence(operandOp, &op));
+      scheduler.registerDependence(sched::Dependence(operandOp, &op));
     }
   }
 

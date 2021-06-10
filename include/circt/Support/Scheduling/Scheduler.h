@@ -18,6 +18,7 @@
 #define CIRCT_SUPPORT_SCHEDULING_SCHEDULER_H
 
 #include "circt/Support/LLVM.h"
+#include "circt/Support/Scheduling/Dependence.h"
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SetVector.h"
@@ -25,23 +26,22 @@
 namespace circt {
 namespace sched {
 
+/// Represents a distinct operator type in a scheduling problem.
+using OperatorTypeId = unsigned;
+
 /// This class models the most basic scheduling problem.
 ///
 /// A problem instance is comprised of:
 ///
-///  - *Operations*: The vertices in the data-flow graph to be scheduled.
-///    Using `mlir::Operation*` is the obvious mapping, but other data types can
-///    be used as the scheduler treats them as opaque handles. We use the
-///    abbreviation `op` to mean operation (handle) in the scheduling API.
+///  - *Operations*: The vertices in the data-flow graph to be scheduled. We use
+///    the abbreviation `op` in the scheduling API.
 ///  - *Dependences*: The edges in the data-flow graph to be scheduled, modeling
 ///    a precedence relation between the involved operations. Individual operand
-///    and result indices can be distinguished. We use the abbreviation `dep` to
-///    in the scheduling API.
+///    and result indices can be distinguished. Abbreviation: `dep`
 ///  - *Operator types*: An abstraction of the characteristics of the target
 ///    representation, e.g. modules in the  HLS component library, available
 ///    functional units, etc. -- operations are executed on instances/units of
-///    an operator type. Again, these are opaque handles for the scheduler. We
-///    use `opr` to denote operator type handles in the API.
+///    an operator type. Abbreviation: `opr`
 ///
 /// All components of the problem (ops, deps, oprs, as well as the problem
 /// itself) can be annotated with *properties*. In this basic problem, we model
@@ -67,43 +67,25 @@ namespace sched {
 /// for each registered operation, and the precedence constraints as modeled by
 /// the dependences are satisfied.
 class Scheduler {
-  //===--------------------------------------------------------------------===//
-  // Aliases for API types
-  //===--------------------------------------------------------------------===//
 public:
-  /// Opaque handle for operations
-  using OperationHandle = void *;
-  /// Dependences are tuples: (from, fromResultIdx, to, toOperandIdx)
-  using Dependence =
-      std::tuple<OperationHandle, unsigned, OperationHandle, unsigned>;
-  /// Opaque handle for operator types
-  using OperatorTypeHandle = unsigned;
-
-  static Dependence makeDependence(OperationHandle from, unsigned fromResultIdx,
-                                   OperationHandle to, unsigned toOperandIdx) {
-    return std::make_tuple(from, fromResultIdx, to, toOperandIdx);
-  }
-
-  static Dependence makeDependence(OperationHandle from, OperationHandle to) {
-    return makeDependence(from, 0, to, 0);
-  }
-
+  /// Initialize a scheduling problem corresponding to \p containingOp.
+  Scheduler(Operation *containingOp) : containingOp(containingOp) {}
   virtual ~Scheduler() = default;
 
   //===--------------------------------------------------------------------===//
   // Aliases for containers storing the problem components and properties
   //===--------------------------------------------------------------------===//
 protected:
-  using OpSet = llvm::SetVector<OperationHandle>;
+  using OpSet = llvm::SetVector<Operation *>;
   using DepSet = llvm::SetVector<Dependence>;
-  using OprSet = llvm::SetVector<OperatorTypeHandle>;
+  using OprSet = llvm::SetVector<OperatorTypeId>;
 
   template <typename T>
-  using OpProp = llvm::DenseMap<OperationHandle, T>;
+  using OpProp = llvm::DenseMap<Operation *, T>;
   template <typename T>
   using DepProp = llvm::DenseMap<Dependence, T>;
   template <typename T>
-  using OprProp = llvm::DenseMap<OperatorTypeHandle, T>;
+  using OprProp = llvm::DenseMap<OperatorTypeId, T>;
   template <typename T>
   using ProbProp = Optional<T>;
 
@@ -111,13 +93,17 @@ protected:
   // Containers for problem components and properties
   //===--------------------------------------------------------------------===//
 private:
+  // operation containing the ops for this scheduling problem. Used solely to
+  // emit diagnostics.
+  Operation *containingOp;
+
   // problem components
   OpSet ops;
   DepSet deps;
   OprSet oprs;
 
   // operation properties
-  OpProp<OperatorTypeHandle> assocOpr;
+  OpProp<OperatorTypeId> assocOpr;
   OpProp<unsigned> startTime;
 
   // operator type properties
@@ -127,64 +113,62 @@ private:
   // Client interface to construct problem
   //===--------------------------------------------------------------------===//
 public:
-  void registerOperation(OperationHandle op) { ops.insert(op); }
+  void registerOperation(Operation *op) { ops.insert(op); }
   void registerDependence(Dependence dep) { deps.insert(dep); }
-  void registerOperatorType(OperatorTypeHandle opr) { oprs.insert(opr); }
+  void registerOperatorType(OperatorTypeId opr) { oprs.insert(opr); }
 
   //===--------------------------------------------------------------------===//
   // Subclass access to problem components
   //===--------------------------------------------------------------------===//
 protected:
-  bool hasOperation(OperationHandle op) { return ops.contains(op); }
+  bool hasOperation(Operation *op) { return ops.contains(op); }
   const OpSet &getOperations() { return ops; }
 
   bool hasDependence(Dependence dep) { return deps.contains(dep); }
   const DepSet &getDependences() { return deps; }
 
-  bool hasOperatorType(OperatorTypeHandle opr) { return oprs.contains(opr); }
+  bool hasOperatorType(OperatorTypeId opr) { return oprs.contains(opr); }
   const OprSet &getOperatorTypes() { return oprs; }
 
   //===--------------------------------------------------------------------===//
   // Subclass access to properties: retrieve problem, set solution
   //===--------------------------------------------------------------------===//
 protected:
-  bool hasAssociatedOperatorType(OperationHandle op) {
-    return assocOpr.count(op);
-  }
-  OperatorTypeHandle getAssociatedOperatorType(OperationHandle op) {
+  bool hasAssociatedOperatorType(Operation *op) { return assocOpr.count(op); }
+  OperatorTypeId getAssociatedOperatorType(Operation *op) {
     return assocOpr.lookup(op);
   }
 
-  bool hasLatency(OperatorTypeHandle opr) { return latency.count(opr); }
-  unsigned getLatency(OperatorTypeHandle opr) { return latency.lookup(opr); }
+  bool hasLatency(OperatorTypeId opr) { return latency.count(opr); }
+  unsigned getLatency(OperatorTypeId opr) { return latency.lookup(opr); }
 
-  void setStartTime(OperationHandle op, unsigned val) { startTime[op] = val; }
+  void setStartTime(Operation *op, unsigned val) { startTime[op] = val; }
 
   //===--------------------------------------------------------------------===//
   // Client access to properties: specify problem, retrieve solution
   //===--------------------------------------------------------------------===//
-public: //
-  void setAssociatedOperatorType(OperationHandle op, OperatorTypeHandle opr) {
+public:
+  void setAssociatedOperatorType(Operation *op, OperatorTypeId opr) {
     assocOpr[op] = opr;
   }
 
-  void setLatency(OperatorTypeHandle opr, unsigned val) { latency[opr] = val; }
+  void setLatency(OperatorTypeId opr, unsigned val) { latency[opr] = val; }
 
-  bool hasStartTime(OperationHandle op) { return startTime.count(op); }
-  unsigned getStartTime(OperationHandle op) { return startTime.lookup(op); }
+  bool hasStartTime(Operation *op) { return startTime.count(op); }
+  unsigned getStartTime(Operation *op) { return startTime.lookup(op); }
 
   //===--------------------------------------------------------------------===//
   // Hooks to check/verify the different problem components
   //===--------------------------------------------------------------------===//
 protected:
-  virtual LogicalResult checkOp(OperationHandle op);
+  virtual LogicalResult checkOp(Operation *op);
   virtual LogicalResult checkDep(Dependence dep);
-  virtual LogicalResult checkOpr(OperatorTypeHandle opr);
+  virtual LogicalResult checkOpr(OperatorTypeId opr);
   virtual LogicalResult checkProb();
 
-  virtual LogicalResult verifyOp(OperationHandle op);
+  virtual LogicalResult verifyOp(Operation *op);
   virtual LogicalResult verifyDep(Dependence dep);
-  virtual LogicalResult verifyOpr(OperatorTypeHandle opr);
+  virtual LogicalResult verifyOpr(OperatorTypeId opr);
   virtual LogicalResult verifyProb();
 
 public:

@@ -19,6 +19,7 @@ namespace circt {
 namespace sched {
 
 struct ASAPScheduler : public virtual Scheduler {
+  ASAPScheduler(Operation *containingOp) : Scheduler(containingOp) {}
   LogicalResult schedule() override;
 };
 

@@ -12,39 +12,35 @@
 
 #include "circt/Support/Scheduling/Scheduler.h"
 
-#include "llvm/Support/Debug.h"
-#include "llvm/Support/raw_ostream.h"
-
-#define DEBUG_TYPE "scheduler"
+#include "mlir/IR/Operation.h"
 
 using namespace circt;
 using namespace circt::sched;
 
-LogicalResult Scheduler::checkOp(Scheduler::OperationHandle op) {
+LogicalResult Scheduler::checkOp(Operation *op) {
   if (!hasAssociatedOperatorType(op)) {
-    LLVM_DEBUG(llvm::dbgs() << "Operation '" << op
-                            << "' is not associated with an operator type\n");
+    op->emitError("Operation is not associated with an operator type");
     return failure();
   }
   return success();
 }
 
-LogicalResult Scheduler::checkDep(Scheduler::Dependence dep) {
-  OperationHandle i, j;
-  unsigned fri, toi;
-  std::tie(i, fri, j, toi) = dep;
+LogicalResult Scheduler::checkDep(Dependence dep) {
+  Operation *i = dep.getSrc();
+  Operation *j = dep.getDst();
   if (!(hasOperation(i) && hasOperation(j))) {
-    LLVM_DEBUG(llvm::dbgs()
-               << "Dependence '" << i << "':" << fri << " --> '" << j
-               << "':" << toi << " references unregistered operations\n");
+    containingOp->emitError()
+        << "Scheduling problem contains dependence with unregistered endpoints."
+        << "\n  from: " << *i << (hasOperation(i) ? "" : " (unregistered)")
+        << "\n  to:   " << *j << (hasOperation(j) ? "" : " (unregistered)");
     return failure();
   }
   return success();
 }
 
-LogicalResult Scheduler::checkOpr(Scheduler::OperatorTypeHandle opr) {
+LogicalResult Scheduler::checkOpr(OperatorTypeId opr) {
   if (!hasLatency(opr)) {
-    LLVM_DEBUG(llvm::dbgs() << "Operator '" << opr << "' has no latency\n");
+    containingOp->emitError() << "Operator type '" << opr << "' has no latency";
     return failure();
   }
   return success();
@@ -72,18 +68,17 @@ LogicalResult Scheduler::check() {
   return checkProb();
 }
 
-LogicalResult Scheduler::verifyOp(Scheduler::OperationHandle op) {
+LogicalResult Scheduler::verifyOp(Operation *op) {
   if (!hasStartTime(op)) {
-    LLVM_DEBUG(llvm::dbgs() << "Operation '" << op << "' has no start time\n");
+    op->emitError("Operation has no start time");
     return failure();
   }
   return success();
 }
 
-LogicalResult Scheduler::verifyDep(Scheduler::Dependence dep) {
-  OperationHandle i, j;
-  unsigned fri, toi;
-  std::tie(i, fri, j, toi) = dep;
+LogicalResult Scheduler::verifyDep(Dependence dep) {
+  Operation *i = dep.getSrc();
+  Operation *j = dep.getDst();
 
   unsigned stI, latI, stJ;
   stI = getStartTime(i);
@@ -92,18 +87,16 @@ LogicalResult Scheduler::verifyDep(Scheduler::Dependence dep) {
 
   // check if i's result is available before j starts
   if (!(stI + latI <= stJ)) {
-    LLVM_DEBUG(llvm::dbgs()
-               << "Precedence violated for dependence '" << i << "':" << fri
-               << " --> '" << j << "':" << toi << ", " << stI << '+' << latI
-               << '>' << stJ << '\n');
+    containingOp->emitError()
+        << "Precedence violated for dependence."
+        << "\n  from: " << *i << ", result available in t=" << (stI + latI)
+        << "\n  to:   " << *j << ", starts in t=" << stJ;
     return failure();
   }
   return success();
 }
 
-LogicalResult Scheduler::verifyOpr(Scheduler::OperatorTypeHandle opr) {
-  return success();
-}
+LogicalResult Scheduler::verifyOpr(OperatorTypeId opr) { return success(); }
 
 LogicalResult Scheduler::verifyProb() { return success(); }
 

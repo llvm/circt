@@ -21,21 +21,18 @@ LogicalResult ASAPScheduler::schedule() {
     return failure();
 
   // determine each op's predecessors
-  OpProp<SmallVector<OperationHandle, 4>> preds;
-  for (auto dep : getDependences()) {
-    OperationHandle i, j;
-    std::tie(i, std::ignore, j, std::ignore) = dep;
-    preds[j].push_back(i);
-  }
+  OpProp<SmallVector<Operation *, 4>> preds;
+  for (auto &dep : getDependences())
+    preds[dep.getDst()].push_back(dep.getSrc());
 
   // initialize a worklist with the block's operations
-  std::deque<OperationHandle> worklist;
+  std::deque<Operation *> worklist;
   worklist.insert(worklist.begin(), getOperations().begin(),
                   getOperations().end());
 
   // iterate until all operations are scheduled
   while (!worklist.empty()) {
-    auto op = worklist.front();
+    Operation *op = worklist.front();
     worklist.pop_front();
     if (preds[op].empty()) {
       // operations with no predecessors are scheduled at time step 0
@@ -47,7 +44,7 @@ LogicalResult ASAPScheduler::schedule() {
     //   max_{p : preds} startTime[p] + latency[p]
     unsigned startTime = 0;
     bool startTimeIsValid = true;
-    for (auto pred : preds[op]) {
+    for (Operation *pred : preds[op]) {
       if (hasStartTime(pred)) {
         // pred is already scheduled
         unsigned predStart = getStartTime(pred);
