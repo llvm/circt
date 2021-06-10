@@ -1625,6 +1625,7 @@ private:
   LogicalResult visitSV(BPAssignOp op);
   LogicalResult visitSV(PAssignOp op);
   LogicalResult visitSV(ForcePAssignOp op);
+  LogicalResult visitSV(ReleaseOp op);
   LogicalResult visitSV(AliasOp op);
   LogicalResult visitStmt(OutputOp op);
   LogicalResult visitStmt(InstanceOp op);
@@ -1810,6 +1811,17 @@ LogicalResult StmtEmitter::visitSV(ForcePAssignOp op) {
   emitExpression(op.dest(), ops);
   os << " = ";
   emitExpression(op.src(), ops);
+  os << ';';
+  emitLocationInfoAndNewLine(ops);
+  return success();
+}
+
+LogicalResult StmtEmitter::visitSV(ReleaseOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  indent() << "release";
+  emitExpression(op.dest(), ops);
   os << ';';
   emitLocationInfoAndNewLine(ops);
   return success();

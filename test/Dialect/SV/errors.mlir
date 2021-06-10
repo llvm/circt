@@ -53,10 +53,17 @@ hw.module @Passign(%arg0: i1) {
 }
 
 // -----
-hw.module @Passign(%arg0: i1) {
+hw.module @ForcePassign(%arg0: i1) {
   %reg = sv.reg : !hw.inout<i1>
   // expected-error @+1 {{sv.force should be in a procedural region}}
   sv.force %reg, %arg0 : i1
+}
+
+// -----
+hw.module @ReleasePassign(%arg0: i1) {
+  %reg = sv.reg : !hw.inout<i1>
+  // expected-error @+1 {{sv.release should be in a procedural region}}
+  sv.release %reg : !hw.inout<i1>
 }
 
 // -----
