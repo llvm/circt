@@ -128,6 +128,11 @@ private:
         }
         return;
       }
+
+      // If this is an analog type, it does not need to be tracked.
+      if (auto analogType = type.dyn_cast<AnalogType>())
+        return;
+
       // If it is a leaf node with Flow::Sink or Flow::Duplex, it must be
       // initialized.
       if (flow != Flow::Source)

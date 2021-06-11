@@ -374,4 +374,15 @@ firrtl.module @bundle_ports() {
   firrtl.connect %0, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
+// Test that analog types are not tracked by ExpandWhens
+firrtl.module @analog(out %analog : !firrtl.analog<1>) {
+  // Should not complain about the output
+
+  // Should not complain about the embeded analog.
+  %c1 = firrtl.constant 0 : !firrtl.uint<1>
+  %w = firrtl.wire : !firrtl.bundle<a: uint<1>, b: analog<1>>
+  %w_a = firrtl.subfield %w("a") : (!firrtl.bundle<a : uint<1>, b : analog<1>>) -> !firrtl.uint<1>
+  firrtl.connect %w_a, %c1 : !firrtl.uint<1>, !firrtl.uint<1>
+}
+
 }
