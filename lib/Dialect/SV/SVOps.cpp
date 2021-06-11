@@ -189,6 +189,9 @@ void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 // If this reg is only written to, delete the reg and all writers.
 LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
+  // If the reg has a symbol, then we can't delete it.
+  if (op.sym_nameAttr())
+    return failure();
   // Check that all operations on the wire are sv.connects. All other wire
   // operations will have been handled by other canonicalization.
   for (auto &use : op.getResult().getUses())
