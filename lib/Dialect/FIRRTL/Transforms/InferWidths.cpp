@@ -886,6 +886,10 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         auto resetValue = getExpr(op.resetValue());
         constrainTypes(e, resetValue);
       })
+      .Case<NodeOp>([&](auto op) {
+        // Nodes have the same type as their input.
+        setExpr(op.getResult(), getExpr(op.input()));
+      })
 
       // Arithmetic and Logical Binary Primitives
       .Case<AddPrimOp, SubPrimOp>([&](auto op) {
