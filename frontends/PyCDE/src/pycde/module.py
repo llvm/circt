@@ -55,14 +55,14 @@ def _module_base(cls, caller=None):
     # Default mappings to operand/result numbers.
     _input_ports: list[(str, mlir.ir.Type)] = []
     _output_ports: list[(str, mlir.ir.Type)] = []
-    _parameters: dict[str, mlir.ir.PyAttribute] = []
+    _parameters: dict[str, mlir.ir.PyAttribute] = {}
 
     def __init__(self, *args, **kwargs):
       """Scan the class and eventually instance for Input/Output members and
       treat the inputs as operands and outputs as results."""
 
       inputs = {
-          i.name: kwargs[i.name] for i in mod._input_ports if i.name in kwargs
+          name: kwargs[name] for (name, _) in mod._input_ports if name in kwargs
       }
       pass_up_kwargs = {n: v for (n, v) in kwargs.items() if n not in inputs}
       cls.__init__(self, *args, **pass_up_kwargs)
@@ -70,14 +70,10 @@ def _module_base(cls, caller=None):
       # Build a list of operand values for the operation we're gonna create.
       input_ports_values: list[mlir.ir.Value] = []
       self.backedges: dict[int:BackedgeBuilder.Edge] = {}
-      for (idx, input) in enumerate(mod._input_ports):
-        if input.name in inputs:
-          value = inputs[input.name]
-          if isinstance(value, mlir.ir.OpView):
-            value = value.operation.result
-          elif isinstance(value, mlir.ir.Operation):
-            value = value.result
-          assert isinstance(value, mlir.ir.Value)
+      for (idx, (name, _)) in enumerate(mod._input_ports):
+        if name in inputs:
+          value = support.get_value(inputs[name])
+          assert value is not None
         else:
           backedge = BackedgeBuilder.current().create(input.type, input.name,
                                                       self)
@@ -94,37 +90,25 @@ def _module_base(cls, caller=None):
         mlir_attr = support.var_to_attribute(attr, True)
         if mlir_attr is not None:
           attributes[attr_name] = mlir_attr
-      parameters = {p.name: p.attr for p in self._parameters}
-      parameters["module_name"] = mlir.ir.StringAttr.get(self.get_module_name())
-      attributes["parameters"] = mlir.ir.DictAttr.get(parameters)
+      attributes["parameters"] = mlir.ir.DictAttr.get(mod._parameters)
 
       # Store the port names as attributes.
       attributes["opNames"] = mlir.ir.ArrayAttr.get(
-          [mlir.ir.StringAttr.get(x.name) for x in mod._input_ports])
+          [mlir.ir.StringAttr.get(name) for (name, _) in mod._input_ports])
       attributes["resultNames"] = mlir.ir.ArrayAttr.get(
-          [mlir.ir.StringAttr.get(x.name) for x in mod._output_ports])
+          [mlir.ir.StringAttr.get(name) for (name, _) in mod._output_ports])
 
       # Init the OpView, which creates the operation.
       mlir.ir.OpView.__init__(
           self,
           self.build_generic(attributes=attributes,
-                             results=[x.type for x in mod._output_ports],
-                             operands=[x for x in input_ports_values]))
+                             results=[type for (_, type) in mod._output_ports],
+                             operands=input_ports_values))
 
     @staticmethod
-    def inputs() -> dict[str:mlir.ir.Type]:
+    def inputs() -> list[(str, mlir.ir.Type)]:
       """Return the list of input ports."""
       return mod._input_ports
-
-    # If 'cls' doesn't know how to set its own module name, use the class name.
-    if "get_module_name" not in dir(cls):
-
-      @staticmethod
-      def get_module_name():
-        """Get the name of the generated module. Must be implemented when more
-        than one module is generated as a result of parameterization. Must be
-        unique."""
-        return cls.__name__
 
   mod.__name__ = cls.__name__
   mod.OPERATION_NAME = OPERATION_NAMESPACE + cls.__name__
@@ -138,13 +122,13 @@ def _module_base(cls, caller=None):
     attr = getattr(cls, attr_name)
     if isinstance(attr, Input):
       attr.name = attr_name
-      mod._input_ports.append(attr)
+      mod._input_ports.append((attr.name, attr.type))
     elif isinstance(attr, Output):
       attr.name = attr_name
-      mod._output_ports.append(attr)
+      mod._output_ports.append((attr.name, attr.type))
     elif isinstance(attr, Parameter):
       attr.name = attr_name
-      mod._parameters.append(attr)
+      mod._parameters[attr.name] = attr.attr
 
   # Second, add the calling function's local variables as parameters.
   if caller is not None:
@@ -152,7 +136,13 @@ def _module_base(cls, caller=None):
       for (name, value) in caller.frame.f_locals.items():
         value = support.var_to_attribute(value, True)
         if value is not None:
-          mod._parameters.append(Parameter(value, name))
+          mod._parameters[name] = value
+          setattr(mod, name, Parameter(value, name))
+
+  # Third, add the module name, if specified.
+  if "get_module_name" in dir(cls):
+    mod._parameters["module_name"] = mlir.ir.StringAttr.get(
+        mod.get_module_name())
 
   # Keep a special "don't touch" to skip over as attributes.
   cls._dont_touch = set()
@@ -163,12 +153,12 @@ def _module_base(cls, caller=None):
   # subclasses. Add the names to "don't touch" since they can't be touched
   # (since they implictly call an OpView property) when the attributes are being
   # scanned in the `mod` constructor.
-  for (idx, port) in enumerate(mod._input_ports):
-    setattr(mod, port.name, property(lambda self: self.operands[idx]))
-    cls._dont_touch.add(port.name)
-  for (idx, port) in enumerate(mod._output_ports):
-    setattr(mod, port.name, property(lambda self: self.results[idx]))
-    cls._dont_touch.add(port.name)
+  for (idx, (name, _)) in enumerate(mod._input_ports):
+    setattr(mod, name, property(lambda self: self.operands[idx]))
+    cls._dont_touch.add(name)
+  for (idx, (name, _)) in enumerate(mod._output_ports):
+    setattr(mod, name, property(lambda self: self.results[idx]))
+    cls._dont_touch.add(name)
 
   return mod
 
@@ -233,11 +223,6 @@ def _externmodule(cls, module_name: str, frame):
           for nattr in op.attributes
           if nattr.name not in ["opNames", "resultNames"]
       }
-      attrs["parameters"] = mlir.ir.DictAttr.get({
-          param.name: param.value
-          for param in mlir.ir.DictAttr(attrs["parameters"])
-          if param.name != "module_name"
-      })
 
       with mlir.ir.InsertionPoint(op):
         mapping = {
