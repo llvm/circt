@@ -255,39 +255,43 @@ void MemrefLoweringPass::updateOp(hir::LoadOp op) {
                   memrefRdDelayAttr.dyn_cast<IntegerAttr>().getInt()))
           .getResult();
 
-  Value addrBus = mapMemrefRdAddrSend[mem];
-  Value dataBus = mapMemrefRdDataRecv[mem];
-  assert(addrBus);
-  assert(dataBus);
+  Value originalAddrBus = mapMemrefRdAddrSend[mem];
+  Value originalDataBus = mapMemrefRdDataRecv[mem];
+  assert(originalAddrBus);
+  assert(originalDataBus);
+  SmallVector<Value, 4> bank = op.getBankedIdx();
+  Value addrBus =
+      builder
+          .create<hir::SplitOp>(op.getLoc(), originalAddrBus.getType(),
+                                originalAddrBus, bank)
+          .getResult();
+  Value dataBus =
+      builder
+          .create<hir::SplitOp>(op.getLoc(), originalDataBus.getType(),
+                                originalDataBus, bank)
+          .getResult();
   Value tstart = op.tstart();
   Value offset = op.offset();
   assert(!offset);
-  SmallVector<Value, 4> bankAddr = op.getBankedIdx();
-  bankAddr.push_back(c0);
-  builder.create<hir::SendOp>(op.getLoc(), c1, addrBus, bankAddr, tstart,
-                              Value());
-  bankAddr.pop_back();
+  builder.create<hir::SendOp>(op.getLoc(), c1, addrBus,
+                              SmallVector<Value, 1>({c0}), tstart, Value());
 
-  SmallVector<Value, 4> packedIdx = op.getPackedIdx();
+  Value addr = createAddrTuple(builder, op.getLoc(), op.getPackedIdx(),
+                               memTy.getPackedShape());
 
-  Value packedAddr = createAddrTuple(builder, op.getLoc(), op.getPackedIdx(),
-                                     memTy.getPackedShape());
-
-  if (packedAddr) { // bram.
-    bankAddr.push_back(c1);
-    builder.create<hir::SendOp>(op.getLoc(), packedAddr, addrBus, bankAddr,
-                                tstart, Value());
-    bankAddr.pop_back();
+  if (addr) { // bram.
+    builder.create<hir::SendOp>(op.getLoc(), addr, addrBus,
+                                SmallVector<Value, 1>({c1}), tstart, Value());
   }
 
-  bankAddr.push_back(c0);
   Value tstartPlus1 =
       builder
           .create<hir::DelayOp>(op.getLoc(), helper::getTimeType(context),
                                 tstart, cMemrefRdDelay, tstart, Value())
           .getResult();
   auto recvOp = builder.create<hir::RecvOp>(
-      op.getLoc(), op.res().getType(), dataBus, bankAddr, tstartPlus1, Value());
+      op.getLoc(), op.res().getType(), dataBus, SmallVector<Value, 1>({c0}),
+      tstartPlus1, Value());
   op.replaceAllUsesWith(recvOp.getOperation());
   op.getOperation()->dropAllReferences();
   op.getOperation()->dropAllUses();
@@ -312,20 +316,24 @@ void MemrefLoweringPass::updateOp(hir::StoreOp op) {
                      helper::getIntegerAttr(context, 64, 1))
                  .getResult();
   MemrefType memTy = mem.getType().dyn_cast<MemrefType>();
-  Value wrBus = mapMemrefWrSend[mem];
+
+  SmallVector<Value, 4> bank = op.getBankedIdx();
+  Value originalWriteBus = mapMemrefWrSend[mem];
+  Value writeBus =
+      builder
+          .create<hir::SplitOp>(op.getLoc(), originalWriteBus.getType(),
+                                originalWriteBus, bank)
+          .getResult();
+
   Value tstart = op.tstart();
   Value offset = op.offset();
   assert(!offset);
-  SmallVector<Value, 4> bankAddr = op.getBankedIdx();
-  bankAddr.push_back(c0);
-  builder.create<hir::SendOp>(op.getLoc(), c1, wrBus, bankAddr, tstart,
-                              Value());
-  bankAddr.pop_back();
-  Value packedAddr = createAddrAndDataTuple(
-      builder, op.getLoc(), op.getPackedIdx(), memTy.getPackedShape(), value);
-  bankAddr.push_back(c1);
-  builder.create<hir::SendOp>(op.getLoc(), packedAddr, wrBus, bankAddr, tstart,
-                              Value());
+  builder.create<hir::SendOp>(op.getLoc(), c1, writeBus,
+                              SmallVector<Value, 1>({c0}), tstart, Value());
+  Value addr = createAddrAndDataTuple(builder, op.getLoc(), op.getPackedIdx(),
+                                      memTy.getPackedShape(), value);
+  builder.create<hir::SendOp>(op.getLoc(), addr, writeBus,
+                              SmallVector<Value, 1>({c1}), tstart, Value());
   op.getOperation()->dropAllReferences();
   op.getOperation()->dropAllUses();
   op.getOperation()->erase();
@@ -371,12 +379,32 @@ void MemrefLoweringPass::updateOp(hir::CallOp op) {
       newOperands.push_back(operand);
       newInputDelays.push_back(oldInputDelays[i]);
     } else if (memTy.getPort() == rd) {
-      newOperands.push_back(mapMemrefRdAddrSend[operand]);
-      newOperands.push_back(mapMemrefRdDataRecv[operand]);
+      Value originalAddrBus = mapMemrefRdAddrSend[operand];
+      Value originalDataBus = mapMemrefRdDataRecv[operand];
+      Value addrBus =
+          builder
+              .create<hir::SplitOp>(op.getLoc(), originalAddrBus.getType(),
+                                    originalAddrBus, SmallVector<Value>({}))
+              .getResult();
+      Value dataBus =
+          builder
+              .create<hir::SplitOp>(op.getLoc(), originalDataBus.getType(),
+                                    originalDataBus, SmallVector<Value>({}))
+              .getResult();
+
+      newOperands.push_back(addrBus);
+      newOperands.push_back(dataBus);
       newInputDelays.push_back(helper::getIntegerAttr(context, 64, 0));
       newInputDelays.push_back(helper::getIntegerAttr(context, 64, 0));
     } else if (memTy.getPort() == wr) {
-      newOperands.push_back(mapMemrefWrSend[operand]);
+      Value originalWriteBus = mapMemrefWrSend[operand];
+      Value writeBus =
+          builder
+              .create<hir::SplitOp>(op.getLoc(), originalWriteBus.getType(),
+                                    originalWriteBus, SmallVector<Value>({}))
+              .getResult();
+
+      newOperands.push_back(writeBus);
     } else {
       assert(false && "We dont yet support rw access");
     }
