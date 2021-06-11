@@ -16,6 +16,10 @@ class GeneratorOptions:
   def generator_b(mod):
     hw.ConstantOp.create(types.i32, 2)
 
+  @generator
+  def generator_c(mod, not_present_param):
+    pass
+
 
 class Top(System):
   inputs = []
@@ -55,3 +59,10 @@ try:
   top5.generate(["nonexistant"])
 except RuntimeError:
   pass
+
+# CHECK: Cannot find parameter requested by generator func args: not_present_param
+top5 = Top()
+try:
+  top5.generate(["generator_c"])
+except ValueError as e:
+  print(e)

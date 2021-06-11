@@ -3,10 +3,13 @@
 // CHECK-LABEL: module M1(
 hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
   %wire42 = sv.wire : !hw.inout<i42>
+  %forceWire = sv.wire : !hw.inout<i1>
 
   // CHECK:      always @(posedge clock) begin
-  // CHECK-NEXT:   `ifndef SYNTHESIS
   sv.always posedge %clock {
+    // CHECK-NEXT: force forceWire = cond;
+    sv.force %forceWire, %cond : i1
+  // CHECK-NEXT:   `ifndef SYNTHESIS
     sv.ifdef.procedural "SYNTHESIS" {
     } else {
   // CHECK-NEXT:     if (PRINTF_COND_ & 1'bx & 1'bz & 1'bz & cond)
@@ -26,6 +29,8 @@ hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
       } else {
         sv.fwrite "Bye\n"
       }
+  // CHECK-NEXT: release forceWire;
+    sv.release %forceWire : !hw.inout<i1>
   // CHECK-NEXT:   `endif
   // CHECK-NEXT: end // always @(posedge)
     }

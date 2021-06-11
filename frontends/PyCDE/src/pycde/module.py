@@ -11,6 +11,8 @@ import circt
 
 import mlir.ir
 
+import inspect
+
 OPERATION_NAMESPACE = "pycde."
 
 
@@ -130,6 +132,11 @@ def module(cls):
       self.input_ports = {port.name: i for i, port in enumerate(input_ports)}
       self.output_ports = {port.name: i for i, port in enumerate(output_ports)}
 
+    def set_module_name(self, name):
+      """Set the name of the generated module. Must be used when more than one
+      module is generated as a result of parameterization. Must be unique."""
+      self.module_name = Parameter(name)
+
     def __getattribute__(self, name: str):
       # Base case.
       if name == "input_ports" or name == "output_ports" or \
@@ -238,7 +245,15 @@ class _Generate:
     self.generated_modules = {}
 
   def _generate(self, mod):
-    return self.gen_func(mod, **self.params)
+    gf_args = inspect.getfullargspec(self.gen_func).args
+    call_args = {}
+    for argname in gf_args[1:]:
+      if argname in self.params:
+        call_args[argname] = self.params[argname]
+      else:
+        raise ValueError("Cannot find parameter requested by generator func "
+                         f"args: {argname}")
+    return self.gen_func(mod, **call_args)
 
   def __call__(self, op):
     """Build an HWModuleOp and run the generator as the body builder."""
@@ -274,9 +289,13 @@ class _Generate:
     # Build the replacement HWModuleOp in the outer module.
     module_key = str((op.name, sorted(input_ports), sorted(output_ports),
                       sorted(self.params.items())))
+    if "module_name" in self.params:
+      module_name = self.params["module_name"]
+    else:
+      module_name = op.name
     if module_key not in self.generated_modules:
       with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
-        gen_mod = circt.dialects.hw.HWModuleOp(op.name,
+        gen_mod = circt.dialects.hw.HWModuleOp(module_name,
                                                input_ports=input_ports,
                                                output_ports=output_ports,
                                                body_builder=self._generate)

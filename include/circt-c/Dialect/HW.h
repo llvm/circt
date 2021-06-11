@@ -87,6 +87,9 @@ MLIR_CAPI_EXPORTED MlirType
 hwStructTypeGet(MlirContext ctx, intptr_t numElements,
                 struct HWStructFieldInfo const *elements);
 
+MLIR_CAPI_EXPORTED MlirType hwStructTypeGetField(MlirType structType,
+                                                 MlirStringRef fieldName);
+
 #ifdef __cplusplus
 }
 #endif
