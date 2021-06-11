@@ -233,6 +233,12 @@ def _externmodule(cls, module_name: str, frame):
           for nattr in op.attributes
           if nattr.name not in ["opNames", "resultNames"]
       }
+      attrs["parameters"] = mlir.ir.DictAttr.get({
+          param.name: param.value
+          for param in mlir.ir.DictAttr(attrs["parameters"])
+          if param.name != "module_name"
+      })
+
       with mlir.ir.InsertionPoint(op):
         mapping = {
             name.value: op.operands[i] for i, name in enumerate(op_names)
