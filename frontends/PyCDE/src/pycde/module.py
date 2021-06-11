@@ -41,60 +41,35 @@ class Input(ModuleDecl):
 class Parameter:
   __slots__ = ["name", "attr"]
 
-  def __init__(self, value, name: str = None):
-    self.attr = support.var_to_attribute(value)
+  def __init__(self, value=None, name: str = None):
+    if value is not None:
+      self.attr = support.var_to_attribute(value)
     self.name = name
 
 
-def module(cls):
+def _module_base(cls, caller=None):
   """The CIRCT design entry module class decorator."""
 
-  class __Module(cls, mlir.ir.OpView):
-    OPERATION_NAME = OPERATION_NAMESPACE + cls.__name__
-    _ODS_REGIONS = (0, True)
+  class mod(cls, mlir.ir.OpView):
 
     # Default mappings to operand/result numbers.
-    input_ports: dict[str, int] = {}
-    output_ports: dict[str, int] = {}
+    _input_ports: dict[str, int] = {}
+    _output_ports: dict[str, int] = {}
 
-    def __init__(self, *args, inputs={}, **kwargs):
+    def __init__(self, *args, **kwargs):
       """Scan the class and eventually instance for Input/Output members and
       treat the inputs as operands and outputs as results."""
-      cls.__init__(self, *args, **kwargs)
 
-      # The OpView attributes cannot be touched before OpView is constructed.
-      # Get a list and don't touch them.
-      dont_touch = [x for x in dir(mlir.ir.OpView)]
-      dont_touch.append("OPERATION_NAME")
-
-      # After the wrapped class' construct, all the IO should be known.
-      input_ports: list[Input] = []
-      output_ports: list[Output] = []
-      parameters: list[Parameter] = []
-      attributes: dict[str:mlir.ir.Attribute] = {}
-      # Scan for them.
-      for attr_name in dir(self):
-        if attr_name in dont_touch or attr_name.startswith("_"):
-          continue
-        attr = self.__getattribute__(attr_name)
-        if isinstance(attr, Input):
-          attr.name = attr_name
-          input_ports.append(attr)
-        elif isinstance(attr, Output):
-          attr.name = attr_name
-          output_ports.append(attr)
-        elif isinstance(attr, Parameter):
-          attr.name = attr_name
-          parameters.append(attr)
-        else:
-          mlir_attr = support.var_to_attribute(attr, True)
-          if mlir_attr is not None:
-            attributes[attr_name] = mlir_attr
+      inputs = {
+          i.name: kwargs[i.name] for i in mod._input_ports if i.name in kwargs
+      }
+      pass_up_kwargs = {n: v for (n, v) in kwargs.items() if n not in inputs}
+      cls.__init__(self, *args, **pass_up_kwargs)
 
       # Build a list of operand values for the operation we're gonna create.
       input_ports_values: list[mlir.ir.Value] = []
       self.backedges: dict[int:BackedgeBuilder.Edge] = {}
-      for (idx, input) in enumerate(input_ports):
+      for (idx, input) in enumerate(mod._input_ports):
         if input.name in inputs:
           value = inputs[input.name]
           if isinstance(value, mlir.ir.OpView):
@@ -109,62 +84,96 @@ def module(cls):
           value = backedge.result
         input_ports_values.append(value)
 
-      # Store the port names as attributes.
-      op_names_attr = mlir.ir.ArrayAttr.get(
-          [mlir.ir.StringAttr.get(x.name) for x in input_ports])
-      result_names_attr = mlir.ir.ArrayAttr.get(
-          [mlir.ir.StringAttr.get(x.name) for x in output_ports])
-
       # Set up the op attributes.
-      parameters = {p.name: p.attr for p in parameters}
-      attributes["parameters"] = mlir.ir.DictAttr.get(parameters)
-      attributes["opNames"] = op_names_attr
-      attributes["resultNames"] = result_names_attr
+      attributes: dict[str:mlir.ir.Attribute] = {}
+      for attr_name in dir(self):
+        if attr_name.startswith('_') or attr_name in cls._dont_touch:
+          continue
+        attr = getattr(self, attr_name)
+        mlir_attr = support.var_to_attribute(attr, True)
+        if mlir_attr is not None:
+          attributes[attr_name] = mlir_attr
+      attributes["parameters"] = mlir.ir.DictAttr.get(
+          {p.name: p.attr for p in self._parameters})
+
+      # Store the port names as attributes.
+      attributes["opNames"] = mlir.ir.ArrayAttr.get(
+          [mlir.ir.StringAttr.get(x.name) for x in mod._input_ports])
+      attributes["resultNames"] = mlir.ir.ArrayAttr.get(
+          [mlir.ir.StringAttr.get(x.name) for x in mod._output_ports])
 
       # Init the OpView, which creates the operation.
       mlir.ir.OpView.__init__(
           self,
           self.build_generic(attributes=attributes,
-                             results=[x.type for x in output_ports],
+                             results=[x.type for x in mod._output_ports],
                              operands=[x for x in input_ports_values]))
-
-      # Build the mappings for __getattribute__.
-      self.input_ports = {port.name: i for i, port in enumerate(input_ports)}
-      self.output_ports = {port.name: i for i, port in enumerate(output_ports)}
 
     def set_module_name(self, name):
       """Set the name of the generated module. Must be used when more than one
       module is generated as a result of parameterization. Must be unique."""
       self.module_name = Parameter(name)
 
-    def __getattribute__(self, name: str):
-      # Base case.
-      if name == "input_ports" or name == "output_ports" or \
-         name == "operands" or name == "results":
-        return super().__getattribute__(name)
-
-      # To emulate OpView, if 'name' is either an input or output port,
-      # redirect.
-      if name in self.input_ports:
-        op_num = self.input_ports[name]
-        operand = self.operands[op_num]
-        return OpOperand(self, op_num, operand, self)
-      if name in self.output_ports:
-        op_num = self.output_ports[name]
-        return self.results[op_num]
-      return super().__getattribute__(name)
-
     @staticmethod
     def inputs() -> dict[str:mlir.ir.Type]:
-      input_ports: dict[str:mlir.ir.Type] = {}
-      for attr_name in dir(cls):
-        attr = getattr(cls, attr_name)
-        if isinstance(attr, Input):
-          input_ports[attr_name] = attr.type
-      return input_ports
+      return mod._input_ports
 
+  mod.__name__ = cls.__name__
+  mod.OPERATION_NAME = OPERATION_NAMESPACE + cls.__name__
+  mod._ODS_REGIONS = (0, True)
+
+  # Inputs and Outputs are all class members.
+  mod._input_ports = []
+  mod._output_ports = []
+  mod._parameters = []
+
+  # Scan for them.
+  for attr_name in dir(cls):
+    if attr_name.startswith("_"):
+      continue
+    attr = getattr(cls, attr_name)
+    if isinstance(attr, Input):
+      attr.name = attr_name
+      mod._input_ports.append(attr)
+    elif isinstance(attr, Output):
+      attr.name = attr_name
+      mod._output_ports.append(attr)
+    elif isinstance(attr, Parameter):
+      attr.name = attr_name
+      mod._parameters.append(attr)
+
+  # Get the stack, and add the calling function's local variables as parameters.
+  if caller is not None:
+    if caller.function == cls.__name__:
+      for (name, value) in caller.frame.f_locals.items():
+        value = support.var_to_attribute(value, True)
+        if value is not None:
+          mod._parameters.append(Parameter(value, name))
+
+  cls._dont_touch = set()
+  cls._dont_touch.update(dir(mlir.ir.OpView))
+  cls._dont_touch.add("OPERATION_NAME")
+
+  # Add functions to match an OpView generated class.
+  for (idx, port) in enumerate(mod._input_ports):
+    setattr(mod, port.name, property(lambda self: self.operands[idx]))
+    cls._dont_touch.add(port.name)
+  for (idx, port) in enumerate(mod._output_ports):
+    setattr(mod, port.name, property(lambda self: self.results[idx]))
+    cls._dont_touch.add(port.name)
+
+  return mod
+
+
+def module(cls):
+  caller = None
+  stack = inspect.stack()
+  if len(stack) >= 2:
+    caller = stack[1]
+
+  mod = _module_base(cls, caller)
   _register_generators(cls)
-  return __Module
+  return mod
 
 
 def _register_generators(cls):
@@ -180,9 +189,12 @@ def _register_generator(class_name, generator_name, generator):
                                 generator_name, generator)
 
 
-def _externmodule(cls, module_name: str):
+def _externmodule(cls, module_name: str, frame):
 
-  class ExternModule(module(cls)):
+  mod = _module_base(cls, frame)
+  _register_generators(cls)
+
+  class ExternModule(mod):
     _extern_mod = None
 
     @staticmethod
@@ -224,13 +236,19 @@ def _externmodule(cls, module_name: str):
 
   _register_generator(cls.__name__, "extern_instantiate",
                       ExternModule._instantiate)
+  ExternModule.__name__ = cls.__name__
   return ExternModule
 
 
 def externmodule(cls_or_name):
+  caller = None
+  stack = inspect.stack()
+  if len(stack) >= 2:
+    caller = stack[1]
+
   if isinstance(cls_or_name, str):
-    return lambda cls: _externmodule(cls, cls_or_name)
-  return _externmodule(cls_or_name, cls_or_name.__name__)
+    return lambda cls: _externmodule(cls, cls_or_name, caller)
+  return _externmodule(cls_or_name, cls_or_name.__name__, caller)
 
 
 class _Generate:

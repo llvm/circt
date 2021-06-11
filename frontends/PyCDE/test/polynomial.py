@@ -10,50 +10,53 @@ from pycde import (Input, Output, Parameter, module, externmodule, generator,
 from circt.dialects import comb, hw
 
 
-@module
-class PolynomialCompute:
-  """Module to compute ax^3 + bx^2 + cx + d for design-time coefficients"""
+def PolynomialCompute(coefficients):
 
-  # Evaluate polynomial for 'x'.
-  x = Input(types.i32)
+  @module
+  class PolynomialCompute:
+    """Module to compute ax^3 + bx^2 + cx + d for design-time coefficients"""
 
-  def __init__(self, name: str, coefficients: list[int], **kwargs):
-    """coefficients is in 'd' -> 'a' order."""
-    self.instanceName = name
-    self.coefficients = Parameter(coefficients)
-    self.set_module_name("PolyComputeForCoeff_" +
-                         '_'.join([str(x) for x in coefficients]))
-    self.unused_parameter = Parameter(True)
-    # Full result.
-    self.y = Output(types.int(8 * 4))
+    # Evaluate polynomial for 'x'.
+    x = Input(types.i32)
+    y = Output(types.int(8 * 4))
 
-  @generator
-  def construct(mod, coefficients):
-    """Implement this module for input 'x'."""
+    module_name = Parameter("PolyComputeForCoeff_" +
+                            '_'.join([str(x) for x in coefficients]))
+    unused_parameter = Parameter(True)
 
-    x = mod.x
-    taps: list[mlir.ir.Value] = list()
-    # TODO: use the coefficient parameter, once its usable.
-    for power, coeff in enumerate(coefficients):
-      coeffVal = hw.ConstantOp.create(types.i32, coeff)
-      if power == 0:
-        newPartialSum = coeffVal.result
-      else:
-        partialSum = taps[-1]
-        if power == 1:
-          currPow = x
+    def __init__(self, name: str):
+      """coefficients is in 'd' -> 'a' order."""
+      self.instanceName = name
+
+    @generator
+    def construct(mod, coefficients):
+      """Implement this module for input 'x'."""
+
+      x = mod.x
+      taps: list[mlir.ir.Value] = list()
+      # TODO: use the coefficient parameter, once its usable.
+      for power, coeff in enumerate(coefficients):
+        coeffVal = hw.ConstantOp.create(types.i32, coeff)
+        if power == 0:
+          newPartialSum = coeffVal.result
         else:
-          x_power = [x for i in range(power)]
-          currPow = comb.MulOp(types.i32, x_power).result
-        newPartialSum = comb.AddOp(types.i32, [
-            partialSum,
-            comb.MulOp(types.i32, [coeffVal.result, currPow]).result
-        ]).result
+          partialSum = taps[-1]
+          if power == 1:
+            currPow = x
+          else:
+            x_power = [x for i in range(power)]
+            currPow = comb.MulOp(types.i32, x_power).result
+          newPartialSum = comb.AddOp(types.i32, [
+              partialSum,
+              comb.MulOp(types.i32, [coeffVal.result, currPow]).result
+          ]).result
 
-      taps.append(newPartialSum)
+        taps.append(newPartialSum)
 
-    # Final output
-    return {"y": taps[-1]}
+      # Final output
+      return {"y": taps[-1]}
+
+  return PolynomialCompute
 
 
 @externmodule("supercooldevice")
@@ -61,7 +64,7 @@ class CoolPolynomialCompute:
   x = Input(types.i32)
   y = Output(types.i32)
 
-  def __init__(self, coefficients, **kwargs):
+  def __init__(self, coefficients):
     self.coefficients = coefficients
 
 
@@ -72,11 +75,11 @@ class Polynomial(pycde.System):
   def build(self, top):
     i32 = types.i32
     x = hw.ConstantOp.create(i32, 23)
-    poly = PolynomialCompute("example", [62, 42, 6], inputs={"x": x})
-    PolynomialCompute("example2", coefficients=[62, 42, 6], inputs={"x": poly.y})
-    PolynomialCompute("example2", [1, 2, 3, 4, 5], inputs={"x": poly.y})
+    poly = PolynomialCompute([62, 42, 6])("example", x=x)
+    PolynomialCompute(coefficients=[62, 42, 6])("example2", x=poly.y)
+    PolynomialCompute([1, 2, 3, 4, 5])("example2", x=poly.y)
 
-    CoolPolynomialCompute([4, 42], inputs={"x": x})
+    CoolPolynomialCompute([4, 42], x=x)
     hw.OutputOp([poly.y])
 
 
