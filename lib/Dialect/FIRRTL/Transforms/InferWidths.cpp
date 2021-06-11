@@ -878,6 +878,14 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       })
       .Case<WireOp, InvalidValueOp, RegOp>(
           [&](auto op) { declareVars(op.getResult(), op.getLoc()); })
+      .Case<RegResetOp>([&](auto op) {
+        // The original Scala code also constrains the reset signal to be at
+        // least 1 bit wide. We don't do this here since the MLIR FIRRTL dialect
+        // enforces the reset signal to be an async reset or a `uint<1>`.
+        auto e = declareVars(op.getResult(), op.getLoc());
+        auto resetValue = getExpr(op.resetValue());
+        constrainTypes(e, resetValue);
+      })
 
       // Arithmetic and Logical Binary Primitives
       .Case<AddPrimOp, SubPrimOp>([&](auto op) {
