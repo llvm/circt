@@ -38,7 +38,6 @@ FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
     if (!op)
       break;
 
-    // TODO: implement subindex op.
     if (auto subfieldOp = dyn_cast<SubfieldOp>(op)) {
       value = subfieldOp.input();
       // Strip any flip wrapping the bundle type.
@@ -50,6 +49,14 @@ FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
           bundleType.getElementIndex(subfieldOp.fieldname()).getValue();
       // Rebase the current index on the parent field's index.
       id += bundleType.getFieldID(index);
+    } else if (auto subindexOp = dyn_cast<SubindexOp>(op)) {
+      auto type = subindexOp.input().getType();
+      // Strip any flip wrapping the vector type.
+      if (auto flipType = type.dyn_cast<FlipType>())
+        type = flipType.getElementType();
+      auto vecType = type.cast<FVectorType>();
+      // Rebase the current index on the parent field's index.
+      id += vecType.getFieldID(subindexOp.index());
     } else {
       break;
     }
@@ -90,16 +97,30 @@ std::string circt::firrtl::getFieldName(const FieldRef &fieldRef) {
     // Strip off the flip type if there is one.
     if (auto flipType = type.dyn_cast<FlipType>())
       type = flipType.getElementType();
-    // TODO: support vector types.
-    auto bundleType = type.cast<BundleType>();
-    auto index = bundleType.getIndexForFieldID(localID);
-    // Add the current field string, and recurse into a subfield.
-    auto &element = bundleType.getElements()[index];
-    name += ".";
-    name += element.name.getValue();
-    type = element.type;
-    // Get a field localID for the nested bundle.
-    localID = localID - bundleType.getFieldID(index);
+    if (auto bundleType = type.dyn_cast<BundleType>()) {
+      auto index = bundleType.getIndexForFieldID(localID);
+      // Add the current field string, and recurse into a subfield.
+      auto &element = bundleType.getElements()[index];
+      name += ".";
+      name += element.name.getValue();
+      // Recurse in to the element type.
+      type = element.type;
+      localID = localID - bundleType.getFieldID(index);
+    } else if (auto vecType = type.dyn_cast<FVectorType>()) {
+      auto index = vecType.getIndexForFieldID(localID);
+      name += "[";
+      name += std::to_string(index);
+      name += "]";
+      // Recurse in to the element type.
+      type = vecType.getElementType();
+      localID = localID - vecType.getFieldID(index);
+    } else {
+      // If we reach here, the field ref is pointing inside some aggregate type
+      // that isn't a bundle or a vector. If the type is a ground type, then the
+      // localID should be 0 at this point, and we should have broken from the
+      // loop.
+      llvm_unreachable("unsupported type");
+    }
   }
 
   return name.str().str();

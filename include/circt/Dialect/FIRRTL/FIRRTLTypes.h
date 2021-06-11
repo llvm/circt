@@ -84,6 +84,13 @@ public:
   /// outer flip was stripped.
   std::pair<FIRRTLType, bool> stripFlip();
 
+  /// Get the maximum field ID of this type.  For integers and other ground
+  /// types, there are no subfields and the maximum field ID is 0.  For bundle
+  /// types and vector types, each field is assigned a field ID in a depth-first
+  /// walk order. This function is used to calculate field IDs when this type is
+  /// nested under another type.
+  unsigned getMaxFieldID();
+
 protected:
   using Type::Type;
 };
@@ -239,6 +246,10 @@ public:
 
   FIRRTLType getElementType();
 
+  /// Get the maximum field ID in this type.  Since FlipTypes are not assigned
+  /// field IDs, this is just the max ID of the element type.
+  unsigned getMaxFieldID();
+
   static FIRRTLType get(FIRRTLType element);
 };
 
@@ -324,6 +335,20 @@ public:
 
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLType getPassiveType();
+
+  /// Get an integer ID for the field. Field IDs start at 1, and are assigned
+  /// to each field in a vector in a recursive depth-first walk of all elements.
+  /// A field ID of 0 is used to reference the vector itself.
+  unsigned getFieldID(unsigned index);
+
+  /// Find the element index corresponding to the desired fieldID.  If the
+  /// fieldID corresponds to a field in nested under an element, it will return
+  /// the index of the parent element.
+  unsigned getIndexForFieldID(unsigned fieldID);
+
+  /// Get the maximum field ID in this vector.  This is helpful for constructing
+  /// field IDs when this VectorType is nested in another aggregate type.
+  unsigned getMaxFieldID();
 };
 
 } // namespace firrtl
