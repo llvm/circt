@@ -266,8 +266,6 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
       // Note that we always treat `resourceId` as a relative path, as the
       // previous Scala implementation tended to emit `/foo.v` as resourceId.
       llvm::sys::path::append(inputPath, resourceId.getValue());
-      auto fileName = llvm::sys::path::filename(inputPath);
-
       if (loadFile(op, inputPath, builder))
         return true; // found file
     }
