@@ -2051,6 +2051,10 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
   auto nextIndent = getIndentation();
   if (getToken().is(FIRToken::kw_skip) && mdirIndent.hasValue() &&
       nextIndent.hasValue() && mdirIndent.getValue() == nextIndent.getValue()) {
+    // End the location for the MemPort, and start the location processing for
+    // the skip op.
+    locationProcessor.endStatement(*this);
+    locationProcessor.startStatement();
     if (parseSkip())
       return failure();
 
