@@ -1675,7 +1675,11 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
   if (resultType.isInteger(0))
     return setLowering(op, Value());
 
-  auto regResult = builder.create<sv::RegOp>(resultType, op.nameAttr());
+  // Add symbol if DontTouch annotation present.
+  auto regResult =
+      AnnotationSet(op).hasDontTouch()
+          ? builder.create<sv::RegOp>(resultType, op.nameAttr(), op.nameAttr())
+          : builder.create<sv::RegOp>(resultType, op.nameAttr());
   (void)setLowering(op, regResult);
 
   initializeRegister(regResult, Value());
