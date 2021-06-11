@@ -130,8 +130,10 @@ ArrayRef<InstancePath> InstanceGraph::getAbsolutePaths(Operation *op) {
     return {};
 
   // If we have reached the circuit root, we're done.
-  if (mainModule == op)
-    return InstancePath{}; // array with single empty path
+  if (mainModule == op) {
+    static InstancePath empty{};
+    return empty; // array with single empty path
+  }
 
   // Otherwise look up the instances of this module.
   auto it = moduleInstances.find(op);
