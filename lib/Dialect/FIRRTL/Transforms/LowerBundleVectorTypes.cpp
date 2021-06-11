@@ -49,6 +49,7 @@ struct FlatBundleFieldEntry {
   FIRRTLType getPortType() { return isOutput ? FlipType::get(type) : type; }
 };
 } // end anonymous namespace
+
 /// Copy annotations from \p annotations to \p loweredAttrs, except annotations
 /// with "target" key, that do not match the field suffix.
 static void filterAnnotations(ArrayAttr annotations,
@@ -139,7 +140,6 @@ public:
   }
 
 private:
-  // using ArgOrOperation = llvm::PointerUnion<BlockArgument, Operation>;
   SmallVector<Value> worklist;
   FModuleOp &module;
   ImplicitLocOpBuilder &builder;
@@ -246,8 +246,7 @@ bool DoLowering::lowerSubfieldOp(SubfieldOp op) {
   assert(updatedInputs.size() > fieldIndex.getValue() &&
          "flattened array small");
 
-  auto newValue = updatedInputs[fieldIndex.getValue()].first;
-  op.replaceAllUsesWith(newValue);
+  op.replaceAllUsesWith(updatedInputs[fieldIndex.getValue()].first);
   op.erase();
   return true;
 }
@@ -265,13 +264,14 @@ bool DoLowering::lowerConnectOp(ConnectOp op) {
   if (!destType || !srcType)
     return false;
 
-  // SmallVector<std::pair<Value, bool>, 8> destValues;
   LoweredValues destValues;
-  assert(getBundleLowering(dest, destValues) && "Not yet lowered");
+  auto l1 = getBundleLowering(dest, destValues);
+  assert(l1 && "Not yet lowered");
 
   // allVector<std::pair<Value, bool>, 8> srcValues;
   LoweredValues srcValues;
-  assert(getBundleLowering(src, srcValues) && "not yet lowered");
+  auto l2 = getBundleLowering(src, srcValues);
+  assert(l2 && "not yet lowered");
 
   for (auto tuple : llvm::zip_first(destValues, srcValues)) {
 
@@ -292,16 +292,24 @@ bool DoLowering::lowerConnectOp(ConnectOp op) {
 }
 
 void DoLowering::runLowering() {
+  // Iterate till the worklist is empty.
   while (!worklist.empty()) {
     auto item = worklist.front();
     worklist.erase(worklist.begin());
+    // Ignore if the operation is already lowered.
     if (isLowered(item))
       continue;
+    // Step 1: Lower the operation which generates an aggregate type result.
+    // ==
+    // Special handling of BlockArguments. 
     if (auto arg = item.dyn_cast<BlockArgument>()) {
       builder.setInsertionPoint(module);
       builder.setLoc(module.getLoc());
       lowerArg(arg);
     }
+    // Step 2: After lowering, replace all uses of the item with the lowered values. 
+    //         ( For certain ops like ConnectOp, we cannot replace an operand with the lowered values, unless all the source operands of the operation are lowered.
+    // ==
     bool allUsersRemoved = true;
     for (auto user : item.getUsers()) {
       auto &u = *user;
