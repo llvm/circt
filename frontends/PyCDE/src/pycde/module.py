@@ -70,13 +70,12 @@ def _module_base(cls, caller=None):
       # Build a list of operand values for the operation we're gonna create.
       input_ports_values: list[mlir.ir.Value] = []
       self.backedges: dict[int:BackedgeBuilder.Edge] = {}
-      for (idx, (name, _)) in enumerate(mod._input_ports):
+      for (idx, (name, type)) in enumerate(mod._input_ports):
         if name in inputs:
           value = support.get_value(inputs[name])
           assert value is not None
         else:
-          backedge = BackedgeBuilder.current().create(input.type, input.name,
-                                                      self)
+          backedge = BackedgeBuilder.current().create(type, name, self)
           self.backedges[idx] = backedge
           value = backedge.result
         input_ports_values.append(value)
