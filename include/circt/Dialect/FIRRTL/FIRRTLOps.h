@@ -23,7 +23,6 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
-#include "llvm/ADT/APSInt.h"
 
 namespace circt {
 namespace firrtl {
