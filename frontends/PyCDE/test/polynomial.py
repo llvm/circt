@@ -5,8 +5,8 @@ from __future__ import annotations
 import mlir
 
 import pycde
-from pycde import (Input, Output, Parameter, module, externmodule, generator,
-                   types)
+from pycde import (Input, Output, Parameter, modparam, module, externmodule,
+                   generator, types)
 from circt.dialects import comb, hw
 
 
@@ -31,7 +31,7 @@ def PolynomialCompute(coefficients):
       return "PolyComputeForCoeff_" + '_'.join([str(x) for x in coefficients])
 
     @generator
-    def construct(mod, coefficients):
+    def construct(mod):
       """Implement this module for input 'x'."""
 
       x = mod.x
@@ -113,4 +113,3 @@ poly.print_verilog()
 # CHECK-LABEL:   module PolyComputeForCoeff_62_42_6(
 # CHECK:    input  [31:0] x,
 # CHECK:    output [31:0] y);
-# CHECK:    assign y = 32'h3E + 32'h2A * x + 32'h6 * x * x;

@@ -47,6 +47,12 @@ class Parameter:
     self.name = name
 
 
+class modparam:
+
+  def __call__(self, func):
+    return func()
+
+
 def _module_base(cls, caller=None):
   """The CIRCT design entry module class decorator."""
 
@@ -260,17 +266,6 @@ class _Generate:
     # modules that are structurally equivalent.
     self.generated_modules = {}
 
-  def _generate(self, mod):
-    gf_args = inspect.getfullargspec(self.gen_func).args
-    call_args = {}
-    for argname in gf_args[1:]:
-      if argname in self.params:
-        call_args[argname] = self.params[argname]
-      else:
-        raise ValueError("Cannot find parameter requested by generator func "
-                         f"args: {argname}")
-    return self.gen_func(mod, **call_args)
-
   def __call__(self, op):
     """Build an HWModuleOp and run the generator as the body builder."""
 
@@ -314,7 +309,7 @@ class _Generate:
         gen_mod = circt.dialects.hw.HWModuleOp(module_name,
                                                input_ports=input_ports,
                                                output_ports=output_ports,
-                                               body_builder=self._generate)
+                                               body_builder=self.gen_func)
         self.generated_modules[module_key] = gen_mod
 
     # Build a replacement instance at the op to be replaced.
