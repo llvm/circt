@@ -1820,7 +1820,7 @@ LogicalResult StmtEmitter::visitSV(ReleaseOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  indent() << "release";
+  indent() << "release ";
   emitExpression(op.dest(), ops);
   os << ';';
   emitLocationInfoAndNewLine(ops);
