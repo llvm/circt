@@ -53,8 +53,9 @@ def _module_base(cls, caller=None):
   class mod(cls, mlir.ir.OpView):
 
     # Default mappings to operand/result numbers.
-    _input_ports: dict[str, int] = {}
-    _output_ports: dict[str, int] = {}
+    _input_ports: list[(str, mlir.ir.Type)] = []
+    _output_ports: list[(str, mlir.ir.Type)] = []
+    _parameters: dict[str, mlir.ir.PyAttribute] = []
 
     def __init__(self, *args, **kwargs):
       """Scan the class and eventually instance for Input/Output members and
@@ -93,8 +94,9 @@ def _module_base(cls, caller=None):
         mlir_attr = support.var_to_attribute(attr, True)
         if mlir_attr is not None:
           attributes[attr_name] = mlir_attr
-      attributes["parameters"] = mlir.ir.DictAttr.get(
-          {p.name: p.attr for p in self._parameters})
+      parameters = {p.name: p.attr for p in self._parameters}
+      parameters["module_name"] = mlir.ir.StringAttr.get(self.get_module_name())
+      attributes["parameters"] = mlir.ir.DictAttr.get(parameters)
 
       # Store the port names as attributes.
       attributes["opNames"] = mlir.ir.ArrayAttr.get(
@@ -109,25 +111,27 @@ def _module_base(cls, caller=None):
                              results=[x.type for x in mod._output_ports],
                              operands=[x for x in input_ports_values]))
 
-    def set_module_name(self, name):
-      """Set the name of the generated module. Must be used when more than one
-      module is generated as a result of parameterization. Must be unique."""
-      self.module_name = Parameter(name)
-
     @staticmethod
     def inputs() -> dict[str:mlir.ir.Type]:
+      """Return the list of input ports."""
       return mod._input_ports
+
+    # If 'cls' doesn't know how to set its own module name, use the class name.
+    if "get_module_name" not in dir(cls):
+
+      @staticmethod
+      def get_module_name():
+        """Get the name of the generated module. Must be implemented when more
+        than one module is generated as a result of parameterization. Must be
+        unique."""
+        return cls.__name__
 
   mod.__name__ = cls.__name__
   mod.OPERATION_NAME = OPERATION_NAMESPACE + cls.__name__
   mod._ODS_REGIONS = (0, True)
 
-  # Inputs and Outputs are all class members.
-  mod._input_ports = []
-  mod._output_ports = []
-  mod._parameters = []
-
-  # Scan for them.
+  # Inputs, Outputs, and parameters are all class members. We must populate them.
+  # First, scan 'cls' for them.
   for attr_name in dir(cls):
     if attr_name.startswith("_"):
       continue
@@ -142,7 +146,7 @@ def _module_base(cls, caller=None):
       attr.name = attr_name
       mod._parameters.append(attr)
 
-  # Get the stack, and add the calling function's local variables as parameters.
+  # Second, add the calling function's local variables as parameters.
   if caller is not None:
     if caller.function == cls.__name__:
       for (name, value) in caller.frame.f_locals.items():
@@ -150,11 +154,15 @@ def _module_base(cls, caller=None):
         if value is not None:
           mod._parameters.append(Parameter(value, name))
 
+  # Keep a special "don't touch" to skip over as attributes.
   cls._dont_touch = set()
   cls._dont_touch.update(dir(mlir.ir.OpView))
   cls._dont_touch.add("OPERATION_NAME")
 
-  # Add functions to match an OpView generated class.
+  # Add accessors for each input and output port to emulate generated OpView
+  # subclasses. Add the names to "don't touch" since they can't be touched
+  # (since they implictly call an OpView property) when the attributes are being
+  # scanned in the `mod` constructor.
   for (idx, port) in enumerate(mod._input_ports):
     setattr(mod, port.name, property(lambda self: self.operands[idx]))
     cls._dont_touch.add(port.name)

@@ -20,13 +20,15 @@ def PolynomialCompute(coefficients):
     x = Input(types.i32)
     y = Output(types.int(8 * 4))
 
-    module_name = Parameter("PolyComputeForCoeff_" +
-                            '_'.join([str(x) for x in coefficients]))
     unused_parameter = Parameter(True)
 
     def __init__(self, name: str):
       """coefficients is in 'd' -> 'a' order."""
       self.instanceName = name
+
+    @staticmethod
+    def get_module_name():
+      return "PolyComputeForCoeff_" + '_'.join([str(x) for x in coefficients])
 
     @generator
     def construct(mod, coefficients):
