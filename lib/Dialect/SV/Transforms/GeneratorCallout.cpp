@@ -101,7 +101,7 @@ void HWGeneratorCalloutPass::processGenerator(
     // Get the value for the corresponding port name.
     auto v = generatedModuleOp->getAttr(portName);
     if (auto intV = v.dyn_cast<IntegerAttr>())
-      generatorArgs.push_back(intV.getValue().toString(10, false));
+      generatorArgs.push_back(std::to_string(intV.getValue().getZExtValue()));
     else if (auto strV = v.dyn_cast<StringAttr>())
       generatorArgs.push_back(strV.getValue().str());
     else {

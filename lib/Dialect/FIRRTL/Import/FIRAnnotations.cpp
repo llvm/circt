@@ -395,7 +395,8 @@ static bool parseAugmentedType(
                "target token.");
         componentAttrs.push_back(StringAttr::get(
             context,
-            (Twine("[") + index.getValue().toString(10, false) + "]").str()));
+            (Twine("[") + std::to_string(index.getValue().getZExtValue()) + "]")
+                .str()));
         continue;
       }
 
