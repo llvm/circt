@@ -379,7 +379,7 @@ def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">,
   let assemblyFormat = "$dest `,` $src  attr-dict `:` type($src)";
 }
 
-def ForcePAssignOp : SVOp<"force", [InOutTypeConstraint<"src", "dest">,
+def ForceOp : SVOp<"force", [InOutTypeConstraint<"src", "dest">,
                                    ProceduralOp]> {
   let summary = "Force procedural statement";
   let description = [{

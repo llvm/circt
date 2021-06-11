@@ -1624,7 +1624,7 @@ private:
   LogicalResult visitSV(ConnectOp op);
   LogicalResult visitSV(BPAssignOp op);
   LogicalResult visitSV(PAssignOp op);
-  LogicalResult visitSV(ForcePAssignOp op);
+  LogicalResult visitSV(ForceOp op);
   LogicalResult visitSV(ReleaseOp op);
   LogicalResult visitSV(AliasOp op);
   LogicalResult visitStmt(OutputOp op);
@@ -1803,7 +1803,7 @@ LogicalResult StmtEmitter::visitSV(PAssignOp op) {
   return success();
 }
 
-LogicalResult StmtEmitter::visitSV(ForcePAssignOp op) {
+LogicalResult StmtEmitter::visitSV(ForceOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
