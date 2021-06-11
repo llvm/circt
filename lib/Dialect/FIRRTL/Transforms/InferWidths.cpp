@@ -26,6 +26,7 @@
 #define DEBUG_TYPE "infer-widths"
 
 using mlir::InferTypeOpInterface;
+using mlir::WalkOrder;
 
 using namespace circt;
 using namespace firrtl;
@@ -811,21 +812,25 @@ static bool hasUninferredWidth(Type type) {
 }
 
 LogicalResult InferenceMapping::map(CircuitOp op) {
-  for (auto &op : *op.getBody()) {
-    if (auto module = dyn_cast<FModuleOp>(&op))
-      if (failed(map(module)))
-        return failure();
-  }
-  return success();
+  // Ensure we have constraint variables established for all module ports.
+  op.walk<WalkOrder::PostOrder>([&](FModuleOp module) {
+    for (auto arg : module.getArguments()) {
+      solver.setCurrentContextInfo(arg);
+      declareVars(arg, module.getLoc());
+    }
+    return WalkResult::skip(); // no need to look inside the module
+  });
+
+  // Go through the module bodies and populate the constraint problem.
+  auto result = op.walk<WalkOrder::PostOrder>([&](FModuleOp module) {
+    if (failed(map(module)))
+      return WalkResult::interrupt();
+    return WalkResult::skip();
+  });
+  return failure(result.wasInterrupted());
 }
 
 LogicalResult InferenceMapping::map(FModuleOp module) {
-  // Ensure we have constraint variables for the module ports.
-  for (auto arg : module.getArguments()) {
-    solver.setCurrentContextInfo(arg);
-    declareVars(arg, module.getLoc());
-  }
-
   // Go through operations, creating type variables for results, and generating
   // constraints.
   auto result = module.getBody().walk(
@@ -1011,6 +1016,32 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       .Case<PrintFOp, SkipOp, StopOp, WhenOp, AssertOp, AssumeOp, CoverOp>(
           [&](auto) {})
 
+      // Handle instances of other modules.
+      .Case<InstanceOp>([&](auto op) {
+        auto refdModule = op.getReferencedModule();
+        auto module = dyn_cast<FModuleOp>(refdModule);
+        if (!module) {
+          auto diag = mlir::emitError(op.getLoc());
+          diag << "extern module `" << op.moduleName()
+               << "` has ports of uninferred width";
+          diag.attachNote(op.getLoc())
+              << "Only non-extern FIRRTL modules may contain unspecified "
+                 "widths to be inferred automatically.";
+          diag.attachNote(refdModule->getLoc())
+              << "Module `" << op.moduleName() << "` defined here:";
+          mappingFailed = true;
+          return;
+        }
+        // Simply look up the free variables created for the instantiated
+        // module's ports, and use them for instance port wires. This way,
+        // constraints imposed onto the ports of the instance will transparently
+        // apply to the ports of the instantiated module.
+        for (auto it : llvm::zip(op->getResults(), module.getArguments())) {
+          auto e = getExpr(std::get<1>(it));
+          setExpr(std::get<0>(it), e);
+        }
+      })
+
       .Default([&](auto op) {
         op->emitOpError("not supported in width inference");
         mappingFailed = true;
@@ -1114,7 +1145,7 @@ private:
 /// Update the types throughout a circuit.
 LogicalResult InferenceTypeUpdate::update(CircuitOp op) {
   anyFailed = false;
-  op.walk([&](Operation *op) {
+  op.walk<WalkOrder::PreOrder>([&](Operation *op) {
     updateOperation(op);
     return WalkResult(failure(anyFailed));
   });
