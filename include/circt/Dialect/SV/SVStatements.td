@@ -379,6 +379,41 @@ def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">,
   let assemblyFormat = "$dest `,` $src  attr-dict `:` type($src)";
 }
 
+def ForceOp : SVOp<"force", [InOutTypeConstraint<"src", "dest">,
+                                   ProceduralOp]> {
+  let summary = "Force procedural statement";
+  let description = [{
+    A SystemVerilog force procedural statement 'force x = y;'.  These
+    occur in initial, always, task, and function blocks.  
+    A force statement shall override a procedural assignment until
+    a release statement is executed on the variable. 
+    The left-hand side of the assignment can be avariable, a net,
+    a constant bit-select of a vector net, a part-select of a vector 
+    net or a concatenation. It cannot be a memory word or a bit-select 
+    or part-select of a vector variable. See SV Spec 9.3.2.
+  }];
+  let arguments = (ins InOutType:$dest, InOutElementType:$src);
+  let results = (outs);
+  let assemblyFormat = "$dest `,` $src  attr-dict `:` type($src)";
+}
+
+def ReleaseOp : SVOp<"release", [ProceduralOp]> {
+  let summary = "Release procedural statement";
+  let description = [{
+    Release is used in conjunction with force. When released,
+    then if the variable does not currently have an active assign 
+    procedural continuous assignment, the variable shall not immediately 
+    change value. The variable shall maintain its current value until 
+    the next procedural assignment or procedural continuous assignment 
+    to the variable. Releasing a variable that currently has an
+    active assign procedural continuous assignment shall immediately 
+    reestablish that assignment. See SV Spec 9.3.2.
+  }];
+  let arguments = (ins InOutType:$dest);
+  let results = (outs);
+  let assemblyFormat = "$dest attr-dict `:` type($dest)";
+}
+
 def AliasOp : SVOp<"alias"> {
   let summary = "SystemVerilog 'alias' statement";
   let description = [{
