@@ -125,19 +125,11 @@ using LoweredValues = SmallVector<std::pair<Value, bool>>;
 class DoLowering {
 public:
   DoLowering(FModuleOp &m, ImplicitLocOpBuilder *b, MLIRContext *c)
-      : module(m), builder(*b), context(*c) {
+      : module(m), builder(*b), context(*c) {}
 
-    auto *body = module.getBodyBlock();
-    SmallVector<BlockArgument, 8> args(body->args_begin(), body->args_end());
-    // Initialize the worklist with block arguments.
-    for (BlockArgument arg : args)
-      if (arg.getType().isa<FIRRTLType>())
-        worklist.push_back(arg);
-
-    runLowering();
-    // Update the module with the new arguments.
-    cleanupModule();
-  }
+  // This is the top level function, which iterates over the worklist and
+  // updates the IR.
+  void runLowering();
 
 private:
   SmallVector<Value> worklist;
@@ -155,9 +147,8 @@ private:
   // Delete the removed arguments and fix the module type and copy the
   // annotations.
   void cleanupModule();
-  // This is the top level function, which iterates over the worklist and
-  // updates the IR.
-  void runLowering();
+
+  void lowerWorklist();
   // Lower the block argument.
   void lowerArg(BlockArgument arg);
   // Lower the SubfieldOp and return true, if the op was lowered and removed.
@@ -292,6 +283,20 @@ bool DoLowering::lowerConnectOp(ConnectOp op) {
 }
 
 void DoLowering::runLowering() {
+
+  auto *body = module.getBodyBlock();
+  SmallVector<BlockArgument, 8> args(body->args_begin(), body->args_end());
+  // Initialize the worklist with block arguments.
+  for (BlockArgument arg : args)
+    if (arg.getType().isa<FIRRTLType>())
+      worklist.push_back(arg);
+
+  lowerWorklist();
+  // Update the module with the new arguments.
+  cleanupModule();
+}
+
+void DoLowering::lowerWorklist() {
   // Iterate till the worklist is empty.
   while (!worklist.empty()) {
     auto item = worklist.front();
@@ -301,14 +306,17 @@ void DoLowering::runLowering() {
       continue;
     // Step 1: Lower the operation which generates an aggregate type result.
     // ==
-    // Special handling of BlockArguments. 
+    // Special handling of BlockArguments.
     if (auto arg = item.dyn_cast<BlockArgument>()) {
       builder.setInsertionPoint(module);
       builder.setLoc(module.getLoc());
       lowerArg(arg);
     }
-    // Step 2: After lowering, replace all uses of the item with the lowered values. 
-    //         ( For certain ops like ConnectOp, we cannot replace an operand with the lowered values, unless all the source operands of the operation are lowered.
+    // Step 2: After lowering, replace all uses of the item with the lowered
+    // values.
+    //         ( For certain ops like ConnectOp, we cannot replace an operand
+    //         with the lowered values, unless all the source operands of the
+    //         operation are lowered.
     // ==
     bool allUsersRemoved = true;
     for (auto user : item.getUsers()) {
@@ -489,6 +497,7 @@ void IRVisitor::visitDecl(FModuleOp module) {
   // DoLowering updates the module type and annotations, after every iteration
   // of lowering.
   DoLowering d(module, builder, context);
+  d.runLowering();
 }
 
 //
