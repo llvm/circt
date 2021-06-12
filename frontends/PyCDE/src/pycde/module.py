@@ -49,18 +49,27 @@ class Parameter:
 
 
 class module:
-  cls = None
-  func = None
-  _extern_mod = None
+  """Decorator for module classes or functions which parameterize module
+  classes."""
 
+  mod = None
+  func = None
+  extern_mod = None
+
+  # When the decorator is attached, this runs.
   def __init__(self, func_or_class, extern_name=None):
     self.extern_name = extern_name
     if inspect.isclass(func_or_class):
-      self.cls = func_or_class
+      # If it's just a module class, we should wrap it immediately
+      self.mod = _module_base(func_or_class)
+      _register_generator(self.mod.__name__, "extern_instantiate",
+                          self._instantiate)
       return
     elif not inspect.isfunction(func_or_class):
       raise TypeError("@module got invalid object")
 
+    # If it's a module parameterization function, inspect the arguments to
+    # ensure sanity.
     self.func = func_or_class
     self.sig = inspect.signature(self.func)
     for (_, param) in self.sig.parameters.items():
@@ -69,29 +78,37 @@ class module:
       if param.kind == param.VAR_POSITIONAL:
         raise TypeError("Module parameter definitions cannot have *args")
 
+  # This function gets executed in two situations:
+  #   - In the case of a module function parameterizer, it is called when the
+  #   user wants to apply specific parameters to the module. In this case, we
+  #   should call the function, wrap the returned module class, and return it.
+  #   We _could_ also cache it, though that's not strictly necessary unless the
+  #   user is breaking the rules. TODO: cache it (requires all the parameters to
+  #   be hashable).
+  #   - A simple (non-parameterized) module has been wrapped and the user wants
+  #   to construct one. Just forward to the module class' constructor.
   def __call__(self, *args, **kwargs):
     if self.func is not None:
       param_values = self.sig.bind(*args, **kwargs)
       param_values.apply_defaults()
       cls = self.func(*args, **kwargs)
-      cls = _module_base(cls, param_values.arguments)
-    else:
-      cls = _module_base(self.cls)
+      mod = _module_base(cls, param_values.arguments)
 
-    if self.extern_name:
-      _register_generator(cls.__name__, "extern_instantiate", self._instantiate)
+      if self.extern_name:
+        _register_generator(cls.__name__, "extern_instantiate",
+                            self._instantiate)
+      return mod
 
-    if self.func is not None:
-      return cls
-    return cls(*args, **kwargs)
+    return self.mod(*args, **kwargs)
 
+  # Generator for external modules.
   def _instantiate(self, op):
     # Get the port names from the attributes we stored them in.
     op_names_attrs = mlir.ir.ArrayAttr(op.attributes["opNames"])
     op_names = [mlir.ir.StringAttr(x) for x in op_names_attrs]
     input_ports = [(n.value, o.type) for (n, o) in zip(op_names, op.operands)]
 
-    if self._extern_mod is None:
+    if self.extern_mod is None:
       # Find the top MLIR module.
       mod = op
       while mod.name != "module":
@@ -104,8 +121,8 @@ class module:
       ]
 
       with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
-        self._extern_mod = hw.HWModuleExternOp(self.extern_name, input_ports,
-                                               output_ports)
+        self.extern_mod = hw.HWModuleExternOp(self.extern_name, input_ports,
+                                              output_ports)
 
     attrs = {
         nattr.name: nattr.attr
@@ -115,18 +132,23 @@ class module:
 
     with mlir.ir.InsertionPoint(op):
       mapping = {name.value: op.operands[i] for i, name in enumerate(op_names)}
-      inst = self._extern_mod.create(op.name, **mapping).operation
+      inst = self.extern_mod.create(op.name, **mapping).operation
       for (name, attr) in attrs.items():
         inst.attributes[name] = attr
       return inst
 
 
 def externmodule(cls_or_name):
+  """Wrap an externally implemented module. If no name given in the decorator
+  argument, use the class name."""
+
   if isinstance(cls_or_name, str):
     return lambda cls: module(cls, cls_or_name)
   return module(cls_or_name, cls_or_name.__name__)
 
 
+# The real workhorse of this package. Wraps a module class, making it implement
+# MLIR's OpView parent class.
 def _module_base(cls, params={}):
   """The CIRCT design entry module class decorator."""
 
@@ -193,8 +215,8 @@ def _module_base(cls, params={}):
   mod.OPERATION_NAME = OPERATION_NAMESPACE + cls.__name__
   mod._ODS_REGIONS = (0, True)
 
-  # Inputs, Outputs, and parameters are all class members. We must populate them.
-  # First, scan 'cls' for them.
+  # Inputs, Outputs, and parameters are all class members. We must populate
+  # them.  First, scan 'cls' for them.
   for attr_name in dir(cls):
     if attr_name.startswith("_"):
       continue
