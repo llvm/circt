@@ -35,6 +35,17 @@ firrtl.circuit "Foo" {
     %node = firrtl.node %w : !firrtl.uint
   }
 
+  firrtl.module @InferNode2() {
+    %c2_ui3 = firrtl.constant 2 : !firrtl.uint<3>
+    %w = firrtl.wire : !firrtl.uint
+    firrtl.connect %w, %c2_ui3 : !firrtl.uint, !firrtl.uint<3>
+
+    %node2 = firrtl.node %w : !firrtl.uint
+
+    %w1 = firrtl.wire : !firrtl.uint
+    firrtl.connect %w1, %node2 : !firrtl.uint, !firrtl.uint
+  }
+
   // CHECK-LABEL: @AddSubOp
   firrtl.module @AddSubOp() {
     // CHECK: %0 = firrtl.wire : !firrtl.uint<2>
