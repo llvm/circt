@@ -1245,9 +1245,16 @@ bool InferenceTypeUpdate::updateValue(Value value) {
   if (!hasUninferredWidth(type))
     return false;
 
-  // If this is an operation that does not generate any free variables that are
-  // determined during width inference, simply update the value type based on
-  // the operation arguments.
+  // Ignore `InvalidValueOp`, as we generally lack the information to infer a
+  // type for them. They tend to end up on one side of a multiplexer, and are
+  // removed at a later canonicalization stage. Since they are directly used as
+  // a multiplexer input, there are now constraints on their size.
+  if (isa_and_nonnull<InvalidValueOp>(value.getDefiningOp()))
+    return false;
+
+  // If this is an operation that does not generate any free variables that
+  // are determined during width inference, simply update the value type based
+  // on the operation arguments.
   if (auto op = dyn_cast_or_null<InferTypeOpInterface>(value.getDefiningOp())) {
     SmallVector<Type, 2> types;
     auto res =

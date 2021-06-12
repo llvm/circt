@@ -467,6 +467,17 @@ firrtl.circuit "Foo" {
     firrtl.connect %4, %x : !firrtl.uint, !firrtl.uint<6>
   }
 
+  // Don't infer a width for `firrtl.invalidvalue`, and don't complain about the
+  // op not having a type inferred.
+  // CHECK-LABEL: @IgnoreInvalidValue
+  firrtl.module @IgnoreInvalidValue(out %out: !firrtl.uint) {
+    // CHECK: %invalid_ui = firrtl.invalidvalue : !firrtl.uint
+    %invalid_ui = firrtl.invalidvalue : !firrtl.uint
+    %c42_ui = firrtl.constant 42 : !firrtl.uint
+    firrtl.connect %out, %invalid_ui : !firrtl.uint, !firrtl.uint
+    firrtl.connect %out, %c42_ui : !firrtl.uint, !firrtl.uint
+  }
+
   // Inter-module width inference for one-to-one module-instance correspondence.
   // CHECK-LABEL: @InterModuleSimpleFoo
   // CHECK-SAME: in %in: !firrtl.uint<42>
