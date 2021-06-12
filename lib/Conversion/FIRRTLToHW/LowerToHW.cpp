@@ -1886,7 +1886,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
 
     // If we can find the connects to this port, then we can directly
     // materialize it.
-    auto portResult = oldInstance.getResult(portIndicesByName[port.name]);
+    auto portResult = oldInstance.getResult(portIndex);
     assert(portResult && "invalid IR, couldn't find port");
 
     // Create a wire for each input/inout operand, so there is
