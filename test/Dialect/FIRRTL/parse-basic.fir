@@ -361,7 +361,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.andr %n12
     node value = andr(_GEN_43)    ;; Uses n12 directly.
 
-    ; CHECK: = firrtl.not %auto : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    ; CHECK: %[[PASSIVE_AUTO:.+]] = firrtl.asPassive %auto
+    ; CHECK-NEXT: = firrtl.not %[[PASSIVE_AUTO]] : (!firrtl.uint<1>) -> !firrtl.uint<1>
     node n13 = not(auto)
 
 

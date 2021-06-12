@@ -1255,6 +1255,9 @@ private:
   /// a passive-typed value and return that.
   Value convertToPassive(Value input);
 
+  /// Convert the input operand to a passive-typed value and return that.
+  Value forcePassive(Value input);
+
   /// Attach invalid values to every element of the value.
   void emitInvalidate(Value val, Flow flow);
 
@@ -1367,6 +1370,14 @@ Value FIRStmtParser::convertToPassive(Value input) {
   if (inType.isPassive())
     return input;
 
+  return builder.create<AsPassivePrimOp>(inType.getPassiveType(), input);
+}
+
+/// Convert the input operand to a passive-typed value and return that.  This
+/// does not check if the input type is already passive and will always wrap the
+/// input in a passive type.
+Value FIRStmtParser::forcePassive(Value input) {
+  auto inType = input.getType().cast<FIRRTLType>();
   return builder.create<AsPassivePrimOp>(inType.getPassiveType(), input);
 }
 
@@ -1613,10 +1624,13 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
         if (parseExp(operand, "expected expression in primitive operand"))
           return failure();
 
-        // If the operand contains a flip, strip it out with an asPassive op.
-        if (!operand.getType().cast<FIRRTLType>().isPassive()) {
+        // If the operand flow is sink, then forcibly cast this to passive.
+        // This avoids a problem where when this type will be lowered an
+        // asPassive would need to be created.  This is difficult to check at
+        // that point, but trivial here.
+        if (foldFlow(operand) == Flow::Sink) {
           locationProcessor.setLoc(loc);
-          operand = convertToPassive(operand);
+          operand = forcePassive(operand);
         }
 
         operands.push_back(operand);
