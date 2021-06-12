@@ -1923,7 +1923,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
 
     Value resultVal = newInstance.getResult(resultNo);
 
-    auto oldPortResult = oldInstance.getResult(portIndicesByName[port.name]);
+    auto oldPortResult = oldInstance.getResult(portIndex);
     (void)setLowering(oldPortResult, resultVal);
     ++resultNo;
   }
