@@ -361,7 +361,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.andr %n12
     node value = andr(_GEN_43)    ;; Uses n12 directly.
 
-    ; CHECK: = firrtl.not %auto : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    ; CHECK: %[[PASSIVE_AUTO:.+]] = firrtl.asPassive %auto
+    ; CHECK-NEXT: = firrtl.not %[[PASSIVE_AUTO]] : (!firrtl.uint<1>) -> !firrtl.uint<1>
     node n13 = not(auto)
 
 
@@ -854,3 +855,23 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     output c: UInt<8>
     c <= mux(sel, a, b)
 
+
+  ; Test that operands that are sinks are cast to passive.  This avoids
+  ; downstream issues where LowerTypes wants to lower these expressions blindly,
+  ; but doesn't have sufficient context to know that it needs an asPassive cast.
+  ;
+  ; See: https://github.com/llvm/circt/issues/1181
+  ;
+  ; CHECK-LABEL: firrtl.module @SinkFlowInOperand_Issue1181
+  module SinkFlowInOperandSub_Issue1181:
+    output a: { flip a: UInt<1> }
+    input b: UInt<1>
+  module SinkFlowInOperand_Issue1181:
+    ; CHECK: %[[sub_a:.+]], %[[sub_b:.+]] = firrtl.instance
+    inst sub of SinkFlowInOperandSub_Issue1181
+
+    ; CHECK: %[[sub_a_a:.+]] = firrtl.subfield %[[sub_a]]("a")
+    ; CHECK: %[[sub_a_a_P:.+]] = firrtl.asPassive %[[sub_a_a]]
+    ; CHECK: %[[sub_b_P:.+]] = firrtl.asPassive %[[sub_b]]
+    ; CHECK: firrtl.and %[[sub_a_a_P]], %[[sub_b_P]]
+    node x = and(sub.a.a, sub.b)
