@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Support/FieldRef.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/GraphTraits.h"
@@ -23,6 +24,7 @@
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/ErrorHandling.h"
 
 #define DEBUG_TYPE "infer-widths"
 
@@ -786,15 +788,50 @@ public:
   LogicalResult map(FModuleOp op);
   LogicalResult mapOperation(Operation *op);
 
-  Expr *declareVars(Value value, Location loc);
-  Expr *declareVars(Type type, Location loc);
-  Expr *declareVars(FIRRTLType type, Location loc);
+  /// Declare all the variables in the value. If the value is a ground type,
+  /// there is a single variable declared.  If the value is an aggregate type,
+  /// it sets up variables for each unknown width.
+  void declareVars(Value value, Location loc);
 
+  /// Declare a variable associated with a specific field of an aggregate.
+  Expr *declareVar(FieldRef fieldRef, Location loc);
+
+  /// Declarate a variable for a type with an unknown width.  The type must be a
+  /// non-aggregate.
+  Expr *declareVar(FIRRTLType type, Location loc);
+
+  /// Constrain the value "larger" to be greater than or equal to "smaller".
+  /// These may be aggregate values.
+  void constrainTypes(Value larger, Value smaller);
+
+  /// Constrain the expression "larger" to be greater than or equals to
+  /// the expression "smaller".
   void constrainTypes(Expr *larger, Expr *smaller);
 
+  /// Recusively set the two types to equal.
+  void unifyTypes(FieldRef lhs, Value rhs);
+
+  /// Get the expr associated with the value.  The value must be a non-aggregate
+  /// type.
   Expr *getExpr(Value value);
+
+  /// Get the expr associated with a specific field in a value.
+  Expr *getExpr(FieldRef fieldRef);
+
+  /// Get the expr associated with the value. If value is NULL, then this
+  /// returns NULL. The value must be a non-aggregate type.
   Expr *getExprOrNull(Value value);
+
+  /// Get the expr associated with a specific field in a value. If value is
+  /// NULL, then this returns NULL.
+  Expr *getExprOrNull(FieldRef fieldRef);
+
+  /// Set the expr associated with the value. The value must be a non-aggregate
+  /// type.
   void setExpr(Value value, Expr *expr);
+
+  /// Set the expr associated with a specific field in a value.
+  void setExpr(FieldRef fieldRef, Expr *expr);
 
 private:
   /// The constraint solver into which we emit variables and constraints.
@@ -803,7 +840,7 @@ private:
   /// The constraint exprs for each result type of an operation.
   // TODO: This should actually not map to `Expr *` directly, but rather a
   // view class that can represent aggregate exprs for bundles/arrays as well.
-  DenseMap<Value, Expr *> opExprs;
+  DenseMap<FieldRef, Expr *> opExprs;
 };
 
 } // namespace
@@ -884,15 +921,37 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
           [&](auto op) { declareVars(op.getResult(), op.getLoc()); })
       .Case<RegResetOp>([&](auto op) {
         // The original Scala code also constrains the reset signal to be at
-        // least 1 bit wide. We don't do this here since the MLIR FIRRTL dialect
-        // enforces the reset signal to be an async reset or a `uint<1>`.
-        auto e = declareVars(op.getResult(), op.getLoc());
-        auto resetValue = getExpr(op.resetValue());
-        constrainTypes(e, resetValue);
+        // least 1 bit wide. We don't do this here since the MLIR FIRRTL
+        // dialect enforces the reset signal to be an async reset or a
+        // `uint<1>`.
+        declareVars(op.getResult(), op.getLoc());
+        // Contrain the register to be greater than or equal to the reset
+        // signal.
+        constrainTypes(op.getResult(), op.resetValue());
       })
       .Case<NodeOp>([&](auto op) {
         // Nodes have the same type as their input.
-        setExpr(op.getResult(), getExpr(op.input()));
+        declareVars(op.getResult(), op.getLoc());
+        unifyTypes(FieldRef(op.getResult(), 0), op.input());
+      })
+
+      // Aggregate Values
+      .Case<SubfieldOp>([&](auto op) {
+        auto type = op.input().getType();
+        if (auto flipType = type.template dyn_cast<FlipType>())
+          type = flipType.getElementType();
+        auto bundleType = type.template cast<BundleType>();
+        auto index = bundleType.getElementIndex(op.fieldname()).getValue();
+        auto fieldID = bundleType.getFieldID(index);
+        unifyTypes(FieldRef(op.input(), fieldID), op.getResult());
+      })
+      .Case<SubindexOp>([&](auto op) {
+        auto type = op.input().getType();
+        if (auto flipType = type.template dyn_cast<FlipType>())
+          type = flipType.getElementType();
+        // All vec fields unify to the same thing. Always use the first element
+        // of the vector, which has a field ID of 1.
+        unifyTypes(FieldRef(op.input(), 1), op.getResult());
       })
 
       // Arithmetic and Logical Binary Primitives
@@ -1017,10 +1076,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
 
       // Handle the various connect statements that imply a type constraint.
       .Case<ConnectOp>([&](auto op) {
-        auto dest = getExpr(op.dest());
-        auto src = getExpr(op.src());
-        constrainTypes(dest, src);
-      })
+        constrainTypes(op.dest(), op.src()); })
       .Case<PartialConnectOp>([&](auto op) {
         if (!hasUninferredWidth(op.dest().getType()))
           return;
@@ -1052,9 +1108,8 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // module's ports, and use them for instance port wires. This way,
         // constraints imposed onto the ports of the instance will transparently
         // apply to the ports of the instantiated module.
-        for (auto it : llvm::zip(op->getResults(), module.getArguments())) {
-          auto e = getExpr(std::get<1>(it));
-          setExpr(std::get<0>(it), e);
+        for (auto it : llvm::zip(module.getArguments(), op->getResults())) {
+          unifyTypes(FieldRef(std::get<0>(it), 0), std::get<1>(it));
         }
       })
 
@@ -1068,41 +1123,82 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
 
 /// Declare free variables for the type of a value, and associate the resulting
 /// set of variables with that value.
-Expr *InferenceMapping::declareVars(Value value, Location loc) {
-  Expr *e = declareVars(value.getType(), loc);
-  setExpr(value, e);
-  return e;
+void InferenceMapping::declareVars(Value value, Location loc) {
+  auto ftype = value.getType().dyn_cast<FIRRTLType>();
+
+  // Unknown types are set to nil.
+  if (!ftype)
+    setExpr(FieldRef(value, 0), solver.nil());
+
+  // Declare a variable for every unknown width in the type. If this is a Bundle
+  // type or a FVector type, we will have to potentially create many variables.
+  unsigned fieldID = 0;
+  std::function<void(FIRRTLType)> declare = [&](FIRRTLType type) {
+    auto width = type.getBitWidthOrSentinel();
+    if (width >= 0) {
+      // Known width integer create a known expression.
+      setExpr(FieldRef(value, fieldID), solver.known(width));
+    } else if (width == -1) {
+      // Unkown width integers create a variable.
+      setExpr(FieldRef(value, fieldID), solver.var());
+    } else if (auto inner = type.dyn_cast<FlipType>()) {
+      // Flip types declare unknown widths in their element type.
+      return declare(inner.getElementType());
+    } else if (auto bundleType = type.dyn_cast<BundleType>()) {
+      // Bundle types recursively declare all bundle elements.
+      for (auto &element : bundleType.getElements()) {
+        fieldID++;
+        declare(element.type);
+      }
+    } else if (auto vecType = type.dyn_cast<FVectorType>()) {
+      fieldID++;
+      declare(vecType.getElementType());
+    } else {
+      llvm_unreachable("Unknown type inside a bundle!");
+    }
+  };
+  declare(ftype);
 }
 
-/// Declare free variables for a type.
-Expr *InferenceMapping::declareVars(Type type, Location loc) {
-  if (auto ftype = type.dyn_cast<FIRRTLType>())
-    return declareVars(ftype, loc);
-  // TODO: Non-FIRRTL types should probably map to an empty list of constraint
-  // expressions, rather than `nil`. Update this once this function returns a
-  // list of constraints for compound types.
-  return solver.nil();
-}
+/// Establishes constraints to ensure the sizes in the `larger` type are greater
+/// than or equal to the sizes in the `smaller` type.
+void InferenceMapping::constrainTypes(Value larger, Value smaller) {
+    auto type = larger.getType().dyn_cast<FIRRTLType>();
+  // Strip an outer flip off the type if there is one.  We don't want to interpret an outerflip the same way as a flip in a bundle.
+  if (auto flipType = type.dyn_cast<FlipType>())
+    type = flipType.getElementType();
+  // Recurse to every leaf element and set larger >= smaller.
+  auto fieldID = 0;
+  std::function<void(FIRRTLType, Value, Value)> constrain =
+      [&](FIRRTLType type, Value larger, Value smaller) {
+        if (auto flipType = type.dyn_cast<FlipType>()) {
+          // Flip the LHS and RHS.
+          constrain(flipType.getElementType(), smaller, larger);
+        } else if (auto bundleType = type.dyn_cast<BundleType>()) {
+          for (auto &element : bundleType.getElements()) {
+            fieldID++;
+            constrain(element.type, larger, smaller);
+          }
+        } else if (auto vecType = type.dyn_cast<FVectorType>()) {
+          fieldID++;
+          constrain(vecType.getElementType(), larger, smaller);
+        } else if (type.isGround()) {
+          // Leaf element, look up their expressions, and create the constraint.
+          constrainTypes(getExpr(FieldRef(larger, fieldID)),
+                         getExpr(FieldRef(smaller, fieldID)));
+        } else {
+      llvm_unreachable("Unknown type inside a bundle!");
+    }
+      };
 
-/// Declare free variables for a FIRRTL type.
-Expr *InferenceMapping::declareVars(FIRRTLType type, Location loc) {
-  // TODO: Support aggregate and compound types as well.
-  auto width = type.getBitWidthOrSentinel();
-  if (width >= 0) {
-    return solver.known(width);
-  } else if (width == -1) {
-    return solver.var();
-  } else if (auto inner = type.dyn_cast<FlipType>()) {
-    return declareVars(inner.getElementType(), loc);
-  } else {
-    // TODO: Once we support compound types, this will return something useful.
-    return solver.nil();
-  }
+  constrain(type, larger, smaller);
 }
 
 /// Establishes constraints to ensure the sizes in the `larger` type are greater
 /// than or equal to the sizes in the `smaller` type.
 void InferenceMapping::constrainTypes(Expr *larger, Expr *smaller) {
+  assert(larger && "Larger expression should be specified");
+  assert(smaller && "Smaller expression should be specified");
   // Mimic the Scala implementation here by simply doing nothing if the larger
   // expr is not a free variable. Apparently there are many cases where
   // useless constraints can be added, e.g. on multiple well-known values. As
@@ -1115,9 +1211,59 @@ void InferenceMapping::constrainTypes(Expr *larger, Expr *smaller) {
   }
 }
 
+// TODO: idea is `lhs.x == rhs`. lhs is the input type, rhs is the output
+// type.  Technically in the IR the return value is on the far left side.
+void InferenceMapping::unifyTypes(FieldRef lhsRef, Value rhs) {
+
+  // We assume that the RHS is a sub element of the LHS, and that we are
+  // going to be recursing through the types.
+  auto type = rhs.getType().dyn_cast<FIRRTLType>();
+    // Strip an outer flip off the type if there is one.  We don't want to interpret an outerflip the same way as a flip in a bundle.
+  if (auto flipType = type.dyn_cast<FlipType>())
+    type = flipType.getElementType();
+
+  /// This will be the index in to the RHS value.
+  auto rhsID = 0;
+  // Steal the fields out of the lhs field ref.
+  auto lhs = lhsRef.getValue();
+  auto lhsID = lhsRef.getFieldID();
+
+  // Recurse to every leaf element and set them equal.
+  std::function<void(FIRRTLType)> unify = [&](FIRRTLType type) {
+    if (auto inner = type.dyn_cast<FlipType>()) {
+      return unify(inner.getElementType());
+    } else if (auto bundleType = type.dyn_cast<BundleType>()) {
+      for (auto &element : bundleType.getElements()) {
+        rhsID++;
+        unify(element.type);
+      }
+    } else if (auto vecType = type.dyn_cast<FVectorType>()) {
+      rhsID++;
+      unify(vecType.getElementType());
+    } else if (type.isGround()) {
+      // Leaf element, unify the fields!
+      LLVM_DEBUG(llvm::dbgs()
+                 << "Unify: " << getFieldName(FieldRef(lhs, lhsID + rhsID))
+                 << "\n");
+      auto lhsExpr = getExpr(FieldRef(lhs, lhsID + rhsID));
+      setExpr(FieldRef(rhs, rhsID), lhsExpr);
+    } else {
+      llvm_unreachable("Unknown type inside a bundle!");
+    }
+  };
+  unify(type);
+}
+
 /// Get the constraint expression for a value.
 Expr *InferenceMapping::getExpr(Value value) {
-  auto expr = getExprOrNull(value);
+  assert(value.getType().cast<FIRRTLType>().isGround());
+  // A field ID of 0 indicates the entire value.
+  return getExpr(FieldRef(value, 0));
+}
+
+/// Get the constraint expression for a value.
+Expr *InferenceMapping::getExpr(FieldRef fieldRef) {
+  auto expr = getExprOrNull(fieldRef);
   assert(expr && "constraint expr should have been constructed for value");
   return expr;
 }
@@ -1125,14 +1271,27 @@ Expr *InferenceMapping::getExpr(Value value) {
 /// Get the constraint expression for a value, or null if no expression exists
 /// for the value.
 Expr *InferenceMapping::getExprOrNull(Value value) {
-  auto it = opExprs.find(value);
+  assert(value.getType().cast<FIRRTLType>().isGround());
+  return getExprOrNull(FieldRef(value, 0));
+}
+
+Expr *InferenceMapping::getExprOrNull(FieldRef fieldRef) {
+  auto it = opExprs.find(fieldRef);
   return it != opExprs.end() ? it->second : nullptr;
 }
 
 /// Associate a constraint expression with a value.
 void InferenceMapping::setExpr(Value value, Expr *expr) {
-  LLVM_DEBUG(llvm::dbgs() << "Expr " << *expr << " for " << value << "\n");
-  opExprs.insert(std::make_pair(value, expr));
+  assert(value.getType().cast<FIRRTLType>().isGround());
+  // A field ID of 0 indicates the entire value.
+  setExpr(FieldRef(value, 0), expr);
+}
+
+/// Associate a constraint expression with a value.
+void InferenceMapping::setExpr(FieldRef fieldRef, Expr *expr) {
+  LLVM_DEBUG(llvm::dbgs() << "Expr " << *expr << " for "
+                          << getFieldName(fieldRef) << "\n");
+  opExprs.insert(std::make_pair(fieldRef, expr));
 }
 
 //===----------------------------------------------------------------------===//
@@ -1149,7 +1308,7 @@ public:
   LogicalResult update(CircuitOp op);
   bool updateOperation(Operation *op);
   bool updateValue(Value value);
-  FIRRTLType updateType(FIRRTLType type, uint32_t solution);
+  FIRRTLType updateType(FieldRef fieldRef, FIRRTLType type);
 
 private:
   bool anyFailed;
@@ -1273,16 +1432,71 @@ bool InferenceTypeUpdate::updateValue(Value value) {
     return true;
   }
 
+  // Recreate the type, substituting the solved widths.
+  auto context = type.getContext();
+  unsigned fieldID = 0;
+  std::function<FIRRTLType(FIRRTLType)> update = [&](FIRRTLType type) {
+    auto width = type.getBitWidthOrSentinel();
+    if (width >= 0) {
+      // Known width integers return themselves.
+      return type;
+    } else if (width == -1) {
+      // Unkown width integers return the solved type.
+      auto newType = updateType(FieldRef(value, fieldID), type);
+      assert(newType && "Type was not inferred.");
+      return newType;
+    } else if (auto flipType = type.dyn_cast<FlipType>()) {
+      // Flip types update unknown widths in their element type.
+      return FlipType::get(update(flipType.getElementType()));
+    } else if (auto bundleType = type.dyn_cast<BundleType>()) {
+      // Bundle types recursively update all bundle elements.
+      llvm::SmallVector<BundleType::BundleElement, 3> elements;
+      for (auto &element : bundleType.getElements()) {
+        fieldID++;
+        elements.emplace_back(element.name, update(element.type));
+      }
+      return BundleType::get(elements, context);
+    } else if (auto vecType = type.dyn_cast<FVectorType>()) {
+      fieldID++;
+      return FVectorType::get(update(vecType.getElementType()),
+                              vecType.getNumElements());
+    }
+    llvm_unreachable("Unknown type inside a bundle!");
+  };
+
+  // Update the type.
+  auto newType = update(type);
+  LLVM_DEBUG(llvm::dbgs() << "Update " << value << " to " << newType << "\n");
+  value.setType(newType);
+
+  // If this is a ConstantOp, adjust the width of the underlying APInt.
+  // Unsized constants have APInts which are *at least* wide enough to hold
+  // the value, but may be larger. This can trip up the verifier.
+  if (auto op = value.getDefiningOp<ConstantOp>()) {
+    auto k = op.value();
+    auto bitwidth = op.getType().cast<FIRRTLType>().getBitWidthOrSentinel();
+    if (k.getBitWidth() > unsigned(bitwidth))
+      k = k.trunc(bitwidth);
+    op->setAttr("value", IntegerAttr::get(op.getContext(), k));
+  }
+
+  return newType != type;
+}
+
+/// Update a type.
+FIRRTLType InferenceTypeUpdate::updateType(FieldRef fieldRef, FIRRTLType type) {
+  assert(type.isGround() && "Can only pass in ground types.");
+  auto value = fieldRef.getValue();
   // Get the inferred width.
-  Expr *expr = mapping.getExprOrNull(value);
+  Expr *expr = mapping.getExprOrNull(fieldRef);
   if (!expr || !expr->solution.hasValue()) {
     anyFailed = true;
-    // Emit an error that indicates where we have failed to infer a width. Note
-    // that we only get here if the IR contained some operation or FIRRTL type
-    // that is not yet supported by width inference. Errors related to widths
-    // not being inferrable due to contradictory constraints are handled earlier
-    // in the solver, and the pass never proceeds to perform this type update.
-    // TL;DR: This is for compiler hackers.
+    // Emit an error that indicates where we have failed to infer a width.
+    // Note that we only get here if the IR contained some operation or FIRRTL
+    // type that is not yet supported by width inference. Errors related to
+    // widths not being inferrable due to contradictory constraints are
+    // handled earlier in the solver, and the pass never proceeds to perform
+    // this type update. TL;DR: This is for compiler hackers.
     // TODO: Convert this to an assertion once we support all operations and
     // types for width inference.
     auto diag = mlir::emitError(value.getLoc(), "failed to infer width");
@@ -1293,40 +1507,12 @@ bool InferenceTypeUpdate::updateValue(Value value) {
     else
       diag << " for value";
     diag << " of type '" << type << "'";
-    return false;
+    // Return the original unsolved type.
+    return type;
   }
   int32_t solution = expr->solution.getValue();
   assert(solution >= 0); // TODO: This should never happen -- corner cases?
-
-  // Update the type.
-  auto newType = updateType(type, solution);
-  LLVM_DEBUG(llvm::dbgs() << "Update " << value << " to " << newType << "\n");
-  value.setType(newType);
-
-  // If this is a ConstantOp, adjust the width of the underlying APInt. Unsized
-  // constants have APInts which are *at least* wide enough to hold the value,
-  // but may be larger. This can trip up the verifier.
-  if (auto op = value.getDefiningOp<ConstantOp>()) {
-    auto k = op.value();
-    if (k.getBitWidth() > unsigned(solution))
-      k = k.trunc(solution);
-    op->setAttr("value", IntegerAttr::get(op.getContext(), k));
-  }
-
-  return newType != type;
-}
-
-/// Update a type.
-FIRRTLType InferenceTypeUpdate::updateType(FIRRTLType type, uint32_t solution) {
-  // TODO: This should actually take an aggregate bunch of constraint
-  // expressions such that aggregate types can pick them apart appropriately.
-  if (auto flip = type.dyn_cast<FlipType>()) {
-    return FlipType::get(updateType(flip.getElementType(), solution));
-  } else if (type.getBitWidthOrSentinel() == -1) {
-    return resizeType(type, solution);
-  } else {
-    return type;
-  }
+  return resizeType(type, solution);
 }
 
 //===----------------------------------------------------------------------===//

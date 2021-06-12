@@ -517,5 +517,47 @@ firrtl.circuit "Foo" {
     firrtl.connect %out, %0 : !firrtl.uint, !firrtl.uint
   }
 
+  // CHECK-LABEL: @InferBundle
+  firrtl.module @InferBundle(in %in : !firrtl.uint<3>) {
+    // CHECK: firrtl.wire : !firrtl.bundle<a: uint<3>>
+    %w = firrtl.wire : !firrtl.bundle<a: uint>
+    %w_a = firrtl.subfield %w("a") : (!firrtl.bundle<a: uint>) -> !firrtl.uint
+    firrtl.connect %w_a, %in : !firrtl.uint, !firrtl.uint<3>
+  }
+
+  // CHECK-LABEL: @InferBundlePort
+  firrtl.module @InferBundlePort(in %in: !firrtl.bundle<a: uint<2>, b: uint<3>>, out %out: !firrtl.bundle<a: uint, b: uint>) {
+    // CHECK: firrtl.connect %out, %in : !firrtl.bundle<a: uint<2>, b: uint<3>>, !firrtl.bundle<a: uint<2>, b: uint<3>>
+    firrtl.connect %out, %in : !firrtl.bundle<a: uint, b: uint>, !firrtl.bundle<a: uint<2>, b: uint<3>>
+  }
+
+  // CHECK-LABEL: @InferVector
+  firrtl.module @InferVector(in %in : !firrtl.uint<4>) {
+    // CHECK: firrtl.wire : !firrtl.vector<uint<4>, 10>
+    %w = firrtl.wire : !firrtl.vector<uint, 10>
+    %w_5 = firrtl.subindex %w[5] : !firrtl.vector<uint, 10>
+    firrtl.connect %w_5, %in : !firrtl.uint, !firrtl.uint<4>
+  }
+
+  // CHECK-LABEL: @InferVectorPort
+  firrtl.module @InferVectorPort(in %in: !firrtl.vector<uint<4>, 2>, out %out: !firrtl.vector<uint, 2>) {
+    // CHECK: firrtl.connect %out, %in : !firrtl.vector<uint<4>, 2>, !firrtl.vector<uint<4>, 2>
+    firrtl.connect %out, %in : !firrtl.vector<uint, 2>, !firrtl.vector<uint<4>, 2>
+  }
+
+  firrtl.module @InferVectorFancy(in %in : !firrtl.uint<4>) {
+    // CHECK: firrtl.wire : !firrtl.vector<uint<4>, 10>
+    %wv = firrtl.wire : !firrtl.vector<uint, 10>
+    %wv_5 = firrtl.subindex %wv[5] : !firrtl.vector<uint, 10>
+    firrtl.connect %wv_5, %in : !firrtl.uint, !firrtl.uint<4>
+
+    // CHECK: firrtl.wire : !firrtl.bundle<a: uint<4>>
+    %wb = firrtl.wire : !firrtl.bundle<a: uint>
+    %wb_a = firrtl.subfield %wb("a") : (!firrtl.bundle<a: uint>) -> !firrtl.uint
+
+    %wv_2 = firrtl.subindex %wv[2] : !firrtl.vector<uint, 10>
+    firrtl.connect %wb_a, %wv_2 : !firrtl.uint, !firrtl.uint
+  }
+
   firrtl.module @Foo() {}
 }
