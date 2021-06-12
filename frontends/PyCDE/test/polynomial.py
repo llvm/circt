@@ -5,12 +5,12 @@ from __future__ import annotations
 import mlir
 
 import pycde
-from pycde import (Input, Output, Parameter, modparam, module, externmodule,
-                   generator, types)
+from pycde import (Input, Output, Parameter, module, externmodule, generator,
+                   types)
 from circt.dialects import comb, hw
 
 
-@modparam
+@module
 def PolynomialCompute(coefficients):
 
   class PolynomialCompute:
@@ -69,8 +69,6 @@ class CoolPolynomialCompute:
   def __init__(self, coefficients):
     self.coefficients = coefficients
 
-
-# polycom = PolynomialCompute([1])
 
 class Polynomial(pycde.System):
   inputs = []

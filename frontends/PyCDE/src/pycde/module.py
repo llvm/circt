@@ -3,6 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
+from typing import Type
 
 from circt import support
 from circt.dialects import hw
@@ -47,24 +48,83 @@ class Parameter:
     self.name = name
 
 
-class modparam:
+class module:
+  cls = None
+  func = None
+  _extern_mod = None
 
-  def __init__(self, func):
-    self.func = func
-    self.sig = inspect.signature(func)
-    for (name, param) in self.sig.parameters.items():
+  def __init__(self, func_or_class, extern_name=None):
+    self.extern_name = extern_name
+    if inspect.isclass(func_or_class):
+      self.cls = func_or_class
+      return
+    elif not inspect.isfunction(func_or_class):
+      raise TypeError("@module got invalid object")
+
+    self.func = func_or_class
+    self.sig = inspect.signature(self.func)
+    for (_, param) in self.sig.parameters.items():
       if param.kind == param.VAR_KEYWORD:
         raise TypeError("Module parameter definitions cannot have **kwargs")
       if param.kind == param.VAR_POSITIONAL:
         raise TypeError("Module parameter definitions cannot have *args")
 
   def __call__(self, *args, **kwargs):
-    param_values = self.sig.bind(*args, **kwargs)
-    param_values.apply_defaults()
-    cls = self.func(*args, **kwargs)
-    cls = _module_base(cls, param_values.arguments)
-    _register_generators(cls)
-    return cls
+    if self.func is not None:
+      param_values = self.sig.bind(*args, **kwargs)
+      param_values.apply_defaults()
+      cls = self.func(*args, **kwargs)
+      cls = _module_base(cls, param_values.arguments)
+    else:
+      cls = _module_base(self.cls)
+
+    if self.extern_name:
+      _register_generator(cls.__name__, "extern_instantiate", self._instantiate)
+
+    if self.func is not None:
+      return cls
+    return cls(*args, **kwargs)
+
+  def _instantiate(self, op):
+    # Get the port names from the attributes we stored them in.
+    op_names_attrs = mlir.ir.ArrayAttr(op.attributes["opNames"])
+    op_names = [mlir.ir.StringAttr(x) for x in op_names_attrs]
+    input_ports = [(n.value, o.type) for (n, o) in zip(op_names, op.operands)]
+
+    if self._extern_mod is None:
+      # Find the top MLIR module.
+      mod = op
+      while mod.name != "module":
+        mod = mod.parent
+
+      result_names_attrs = mlir.ir.ArrayAttr(op.attributes["resultNames"])
+      result_names = [mlir.ir.StringAttr(x) for x in result_names_attrs]
+      output_ports = [
+          (n.value, o.type) for (n, o) in zip(result_names, op.results)
+      ]
+
+      with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
+        self._extern_mod = hw.HWModuleExternOp(self.extern_name, input_ports,
+                                               output_ports)
+
+    attrs = {
+        nattr.name: nattr.attr
+        for nattr in op.attributes
+        if nattr.name not in ["opNames", "resultNames"]
+    }
+
+    with mlir.ir.InsertionPoint(op):
+      mapping = {name.value: op.operands[i] for i, name in enumerate(op_names)}
+      inst = self._extern_mod.create(op.name, **mapping).operation
+      for (name, attr) in attrs.items():
+        inst.attributes[name] = attr
+      return inst
+
+
+def externmodule(cls_or_name):
+  if isinstance(cls_or_name, str):
+    return lambda cls: module(cls, cls_or_name)
+  return module(cls_or_name, cls_or_name.__name__)
 
 
 def _module_base(cls, params={}):
@@ -181,11 +241,6 @@ def _module_base(cls, params={}):
   return mod
 
 
-def module(cls):
-  mod = _module_base(cls)
-  return mod
-
-
 def _register_generators(cls):
   """Scan the class, looking for and registering _Generators."""
   for name in dir(cls):
@@ -198,63 +253,6 @@ def _register_generator(class_name, generator_name, generator):
   circt.msft.register_generator(mlir.ir.Context.current,
                                 OPERATION_NAMESPACE + class_name,
                                 generator_name, generator)
-
-
-def _externmodule(cls, module_name: str):
-
-  mod = _module_base(cls)
-
-  class ExternModule(mod):
-    _extern_mod = None
-
-    @staticmethod
-    def _instantiate(op):
-      # Get the port names from the attributes we stored them in.
-      op_names_attrs = mlir.ir.ArrayAttr(op.attributes["opNames"])
-      op_names = [mlir.ir.StringAttr(x) for x in op_names_attrs]
-      input_ports = [(n.value, o.type) for (n, o) in zip(op_names, op.operands)]
-
-      if ExternModule._extern_mod is None:
-        # Find the top MLIR module.
-        mod = op
-        while mod.name != "module":
-          mod = mod.parent
-
-        result_names_attrs = mlir.ir.ArrayAttr(op.attributes["resultNames"])
-        result_names = [mlir.ir.StringAttr(x) for x in result_names_attrs]
-        output_ports = [
-            (n.value, o.type) for (n, o) in zip(result_names, op.results)
-        ]
-
-        with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
-          ExternModule._extern_mod = hw.HWModuleExternOp(
-              module_name, input_ports, output_ports)
-
-      attrs = {
-          nattr.name: nattr.attr
-          for nattr in op.attributes
-          if nattr.name not in ["opNames", "resultNames"]
-      }
-
-      with mlir.ir.InsertionPoint(op):
-        mapping = {
-            name.value: op.operands[i] for i, name in enumerate(op_names)
-        }
-        inst = ExternModule._extern_mod.create(op.name, **mapping).operation
-        for (name, attr) in attrs.items():
-          inst.attributes[name] = attr
-        return inst
-
-  _register_generator(cls.__name__, "extern_instantiate",
-                      ExternModule._instantiate)
-  ExternModule.__name__ = cls.__name__
-  return ExternModule
-
-
-def externmodule(cls_or_name):
-  if isinstance(cls_or_name, str):
-    return lambda cls: _externmodule(cls, cls_or_name)
-  return _externmodule(cls_or_name, cls_or_name.__name__)
 
 
 class _Generate:
