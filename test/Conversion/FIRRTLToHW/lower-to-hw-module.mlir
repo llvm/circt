@@ -192,7 +192,11 @@ firrtl.circuit "Simple" {
     // CHECK: [[OUTAC:%.+]] = hw.constant 0 : i4
     // CHECK-NEXT: hw.output [[OUTAC]] : i4
   }
-
+  firrtl.extmodule @SameNamePorts(in %inA: !firrtl.uint<4>,
+                                in %inA: !firrtl.uint<1>,
+                                in %inA: !firrtl.analog<1>,
+                                out %outa: !firrtl.uint<4>,
+                                out %outa: !firrtl.uint<1>)
   // CHECK-LABEL: hw.module @ZeroWidthInstance
   firrtl.module @ZeroWidthInstance(in %iA: !firrtl.uint<4>,
                                    in %iB: !firrtl.uint<0>,
@@ -203,6 +207,9 @@ firrtl.circuit "Simple" {
     // CHECK: %myinst.outa = hw.instance "myinst" @ZeroWidthPorts(%iA) : (i4) -> i4
     %myinst:5 = firrtl.instance @ZeroWidthPorts {name = "myinst", portNames=["inA", "inB", "inC", "outa", "outb"]}
       : !firrtl.flip<uint<4>>, !firrtl.flip<uint<0>>, !firrtl.analog<0>, !firrtl.uint<4>, !firrtl.uint<0>
+    // CHECK: = hw.instance "myinst" @SameNamePorts({{.+}}, {{.+}} {{.+}}) : (i4, i1, !hw.inout<i1>) -> (i4, i1)
+    %myinst_sameName:5 = firrtl.instance @SameNamePorts {name = "myinst"}
+      : !firrtl.flip<uint<4>>, !firrtl.flip<uint<1>>, !firrtl.analog<1>, !firrtl.uint<4>, !firrtl.uint<1>
 
     // Output of the instance is fed into the input!
     firrtl.connect %myinst#0, %iA : !firrtl.flip<uint<4>>, !firrtl.uint<4>
