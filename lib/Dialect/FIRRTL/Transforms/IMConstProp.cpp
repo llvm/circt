@@ -10,7 +10,9 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/TinyPtrVector.h"
+
 using namespace circt;
 using namespace firrtl;
 

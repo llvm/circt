@@ -192,7 +192,7 @@ static std::string getSubModuleName(Operation *oldOp) {
 
   // Add buffer information.
   if (auto bufferOp = dyn_cast<handshake::BufferOp>(oldOp)) {
-    subModuleName += "_" + bufferOp.getNumSlots().toString(10, false) + "slots";
+    subModuleName += "_" + std::to_string(bufferOp.slots()) + "slots";
     if (bufferOp.isSequential())
       subModuleName += "_seq";
   }
@@ -1676,7 +1676,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   for (auto p : ports) {
     resultTypes.push_back(
         FlipType::get(MemOp::getTypeForPort(depth, dataType, p.second)));
-    resultNames.push_back(rewriter.getStringAttr(p.first));
+    resultNames.push_back(rewriter.getStringAttr(p.first.str()));
   }
 
   auto memOp = rewriter.create<MemOp>(

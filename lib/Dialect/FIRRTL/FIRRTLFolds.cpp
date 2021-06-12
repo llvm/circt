@@ -15,6 +15,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/APSInt.h"
 
 // Declarative canonicalization patterns
 namespace circt {
