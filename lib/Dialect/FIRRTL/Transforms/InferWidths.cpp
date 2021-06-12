@@ -102,8 +102,8 @@ struct ExprBase : public Expr {
 struct RootExpr : public ExprBase<RootExpr, Expr::Kind::Root> {
   RootExpr(std::vector<Expr *> &exprs) : exprs(exprs) {}
   void print(llvm::raw_ostream &os) const { os << "root"; }
-  iterator begin() const { return &exprs[0]; }
-  iterator end() const { return &exprs[0] + exprs.size(); }
+  iterator begin() const { return exprs.data(); }
+  iterator end() const { return exprs.data() + exprs.size(); }
   std::vector<Expr *> &exprs;
 };
 
