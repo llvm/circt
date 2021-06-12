@@ -102,7 +102,7 @@ static cl::opt<bool>
 static cl::opt<bool>
     inferWidths("infer-widths",
                 cl::desc("run the width inference pass on firrtl"),
-                cl::init(false));
+                cl::init(true));
 
 static cl::opt<bool> extractTestCode("extract-test-code",
                                      cl::desc("run the extract test code pass"),
