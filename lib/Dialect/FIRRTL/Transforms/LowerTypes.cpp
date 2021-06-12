@@ -340,9 +340,8 @@ void TypeLoweringVisitor::lowerArg(FModuleOp module, BlockArgument arg,
     // Create new block arguments.
     auto type = field.type;
     // Flip the direction if the field is an output.
-    auto direction =
-        (Direction)((unsigned)getModulePortDirection(module, argNumber) ^
-                    field.isOutput);
+    auto direction = (Direction)(
+        (unsigned)getModulePortDirection(module, argNumber) ^ field.isOutput);
     auto newValue = addArg(module, type, argNumber, direction, field.suffix);
 
     // If this field was flattened from a bundle.
@@ -392,9 +391,9 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
         pName = builder.getStringAttr("");
       portNames.push_back(pName);
       // Flip the direction if the field is an output.
-      portDirections.push_back((
-          Direction)((unsigned)getModulePortDirection(extModule, oldArgNumber) ^
-                     field.isOutput));
+      portDirections.push_back((Direction)(
+          (unsigned)getModulePortDirection(extModule, oldArgNumber) ^
+          field.isOutput));
 
       // Populate newAnnotations with the old annotations filtered to those
       // associated with just this field.
@@ -975,25 +974,21 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
     size_t elemNum = 0;
     for (auto bundleElem : vectorOfBundleType.getElements()) {
       StringAttr fieldName = bundleElem.name;
+      auto parentID = vectorOfBundleType.getFieldID(
+          *vectorOfBundleType.getElementIndex(fieldName.getValue()));
       auto iter = subfieldUsers.find(fieldName);
       // If one of the bundle elements has no use, we can ignore it, then there
       // is no entry for the field name in the map
       if (iter != subfieldUsers.end()) {
-        setBundleLowering(FieldRef(iter->getSecond().input(), elemNum),muxTreeVec[elemNum]);
+        setBundleLowering(
+            FieldRef(iter->getSecond().input(), parentID + elemNum),
+            muxTreeVec[elemNum]);
       }
       ++elemNum;
     }
   } else {
     op.replaceAllUsesWith(muxTreeVec[0]);
   }
-  op.emitError("SubaccessOp not handled.");
-  // We need to do enough transformation to not segfault
-  // Lower operation to an access of item 0
-  auto input = op.input();
-  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  flattenType(input.getType().cast<FIRRTLType>(), fieldTypes);
-  op.replaceAllUsesWith(
-      getBundleLowering(FieldRef(input, fieldTypes[0].fieldID)));
   opsToRemove.push_back(op);
 }
 
