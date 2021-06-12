@@ -1148,6 +1148,12 @@ static LogicalResult verifyConnectOp(ConnectOp connect) {
   // Analog types cannot be connected and must be attached.
   if (destType.isa<AnalogType>() || srcType.isa<AnalogType>())
     return connect.emitError("analog types may not be connected");
+  if (auto destBundle = destType.dyn_cast<BundleType>())
+    if (destBundle.containsAnalog())
+      return connect.emitError("analog types may not be connected");
+  if (auto srcBundle = srcType.dyn_cast<BundleType>())
+    if (srcBundle.containsAnalog())
+      return connect.emitError("analog types may not be connected");
 
   // Destination and source types must be equivalent.
   if (!areTypesEquivalent(destType, srcType))

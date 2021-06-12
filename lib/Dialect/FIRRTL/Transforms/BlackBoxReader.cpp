@@ -259,15 +259,16 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
       return true;
     }
 
+    // Note that we always treat `resourceId` as a relative path, as the
+    // previous Scala implementation tended to emit `/foo.v` as resourceId.
+    auto relativeResourceId =
+        llvm::sys::path::relative_path(resourceId.getValue());
+
     SmallVector<StringRef> roots;
     StringRef(resourcePrefix).split(roots, ':');
     for (auto root : roots) {
       SmallString<128> inputPath(root);
-      // Note that we always treat `resourceId` as a relative path, as the
-      // previous Scala implementation tended to emit `/foo.v` as resourceId.
-      llvm::sys::path::append(inputPath, resourceId.getValue());
-      auto fileName = llvm::sys::path::filename(inputPath);
-
+      llvm::sys::path::append(inputPath, relativeResourceId);
       if (loadFile(op, inputPath, builder))
         return true; // found file
     }

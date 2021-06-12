@@ -139,12 +139,24 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
 
   // CHECK-NEXT: %combWire = sv.wire : !hw.inout<i1> 
   %combWire = sv.wire : !hw.inout<i1>
+  // CHECK-NEXT: %combWire2 = sv.wire : !hw.inout<i1> 
+  %combWire2 = sv.wire : !hw.inout<i1>
+  // CHECK-NEXT: %regForce = sv.reg : !hw.inout<i1>
+  %regForce = sv.reg  : !hw.inout<i1>
   // CHECK-NEXT: sv.alwayscomb {
   sv.alwayscomb {
     // CHECK-NEXT: %x_i1 = sv.constantX : i1
     %tmpx = sv.constantX : i1
     // CHECK-NEXT: sv.passign %combWire, %x_i1 : i1
     sv.passign %combWire, %tmpx : i1
+    // CHECK-NEXT: sv.force %combWire2, %x_i1 : i1
+    sv.force %combWire2, %tmpx : i1
+    // CHECK-NEXT: sv.force %regForce, %x_i1 : i1
+    sv.force %regForce, %tmpx : i1
+    sv.release %combWire2 : !hw.inout<i1>
+    sv.release %regForce : !hw.inout<i1>
+    // CHECK-NEXT: sv.release %combWire2 : !hw.inout<i1>
+    // CHECK-NEXT: sv.release %regForce : !hw.inout<i1>
     // CHECK-NEXT: }
   }
 

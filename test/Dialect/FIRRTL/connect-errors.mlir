@@ -23,6 +23,15 @@ firrtl.module @test(in %a : !firrtl.analog, out %b : !firrtl.analog) {
 // -----
 
 firrtl.circuit "test" {
+firrtl.module @test(in %a : !firrtl.bundle<a: analog>, out %b : !firrtl.bundle<a: analog>) {
+  // expected-error @+1 {{analog types may not be connected}}
+  firrtl.connect %b, %a : !firrtl.bundle<a: analog>, !firrtl.bundle<a: analog>
+}
+}
+
+// -----
+
+firrtl.circuit "test" {
 firrtl.module @test(in %a : !firrtl.analog, out %b : !firrtl.uint<1>) {
   // expected-error @+1 {{analog types may not be connected}}
   firrtl.connect %b, %a : !firrtl.uint<1>, !firrtl.analog
