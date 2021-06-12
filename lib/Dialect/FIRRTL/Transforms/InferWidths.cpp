@@ -610,6 +610,9 @@ static LinIneq checkCycles(VarExpr *var, Expr *expr,
               // variable, or it is not breakable and will be caught by
               // this very function once it is called on that variable.
               return LinIneq(0);
+            if (!expr->constraint)
+              // Count unconstrained variables as `x >= 0`.
+              return LinIneq(0);
             auto l =
                 checkCycles(var, expr->constraint, seenVars, info, reportInto);
             seenVars.erase(expr);
