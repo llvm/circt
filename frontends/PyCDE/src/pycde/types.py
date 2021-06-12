@@ -31,3 +31,14 @@ class _Types:
 
 
 types = _Types()
+
+
+def dim(inner_type_or_bitwidth, *size: int) -> hw.ArrayType:
+  """Creates a multidimensional array from innermost to outermost dimension."""
+  if isinstance(inner_type_or_bitwidth, int):
+    ret = types.int(inner_type_or_bitwidth)
+  else:
+    ret = inner_type_or_bitwidth
+  for s in size:
+    ret = hw.ArrayType.get(ret, s)
+  return ret
