@@ -27,10 +27,10 @@ static Type parseMemrefType(DialectAsmParser &parser, MLIRContext *context) {
   if (parser.parseComma())
     return Type();
 
-  bool hasBankedDims = false;
+  bool hasMultipleBanks = false;
   mlir::Attribute attr1, attr2;
   llvm::SMLoc loc1, loc2;
-  ArrayAttr bankedDims;
+  ArrayAttr bankDims;
   DictionaryAttr portAttr;
   loc1 = parser.getCurrentLocation();
   if (parser.parseAttribute(attr1))
@@ -38,18 +38,18 @@ static Type parseMemrefType(DialectAsmParser &parser, MLIRContext *context) {
   if (parser.parseOptionalGreater()) {
     if (parser.parseComma())
       return Type();
-    hasBankedDims = true;
+    hasMultipleBanks = true;
     loc2 = parser.getCurrentLocation();
     parser.parseAttribute(attr2);
     if (parser.parseGreater())
       return Type();
   }
 
-  if (hasBankedDims) {
-    bankedDims = attr1.dyn_cast<ArrayAttr>();
+  if (hasMultipleBanks) {
+    bankDims = attr1.dyn_cast<ArrayAttr>();
     portAttr = attr2.dyn_cast<DictionaryAttr>();
-    if (!bankedDims) {
-      parser.emitError(loc1, "expected banked dims!");
+    if (!bankDims) {
+      parser.emitError(loc1, "expected bank dims!");
       return Type();
     }
     if (!portAttr) {
@@ -58,15 +58,15 @@ static Type parseMemrefType(DialectAsmParser &parser, MLIRContext *context) {
     }
   } else {
     portAttr = attr1.dyn_cast<DictionaryAttr>();
-    bankedDims = ArrayAttr::get(context, SmallVector<Attribute>());
+    bankDims = ArrayAttr::get(context, SmallVector<Attribute>());
     if (!portAttr) {
       parser.emitError(loc1, "expected port attributes!");
       return Type();
     }
   }
-  assert(bankedDims);
+  assert(bankDims);
   assert(portAttr);
-  return MemrefType::get(context, shape, elementType, bankedDims, portAttr);
+  return MemrefType::get(context, shape, elementType, bankDims, portAttr);
 }
 
 static void printMemrefType(MemrefType memrefTy, DialectAsmPrinter &printer) {
@@ -74,14 +74,14 @@ static void printMemrefType(MemrefType memrefTy, DialectAsmPrinter &printer) {
   printer << "<";
   auto shape = memrefTy.getShape();
   auto elementType = memrefTy.getElementType();
-  auto bankedDims = memrefTy.getBankedDims();
+  auto bankDims = memrefTy.getBankDims();
   auto portAttrs = memrefTy.getPortAttrs();
   for (auto dim : shape)
     printer << dim << "x";
 
   printer << elementType << ", ";
-  if (!bankedDims.empty())
-    printer << bankedDims << ", ";
+  if (!bankDims.empty())
+    printer << bankDims << ", ";
   printer << portAttrs << ">";
 }
 

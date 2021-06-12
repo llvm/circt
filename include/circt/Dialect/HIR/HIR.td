@@ -108,8 +108,8 @@ def LoadOp : HIR_Op<"load", [NoSideEffect,AttrSizedOperandSegments]> {
   let hasCanonicalizeMethod = true;
   let extraClassDeclaration = [{
     public:
-      SmallVector<Value> getBankedIdx();
-      SmallVector<Value> getPackedIdx();
+      SmallVector<Value> getBankIdx();
+      SmallVector<Value> getAddrIdx();
   }];
 }
 
@@ -135,8 +135,8 @@ def StoreOp : HIR_Op<"store", [AttrSizedOperandSegments]> {
   let hasCanonicalizeMethod = true;
   let extraClassDeclaration = [{
     public:
-      SmallVector<Value> getBankedIdx();
-      SmallVector<Value> getPackedIdx();
+      SmallVector<Value> getBankIdx();
+      SmallVector<Value> getAddrIdx();
   }];
 }
 

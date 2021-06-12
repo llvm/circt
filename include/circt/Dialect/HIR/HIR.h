@@ -21,8 +21,8 @@ namespace Details {
 /// Storage class for MemrefType.
 struct MemrefTypeStorage : public TypeStorage {
   MemrefTypeStorage(ArrayRef<int64_t> shape, Type elementType,
-                    ArrayAttr bankedDims, DictionaryAttr portAttrs)
-      : shape(shape), elementType(elementType), bankedDims(bankedDims),
+                    ArrayAttr bankDims, DictionaryAttr portAttrs)
+      : shape(shape), elementType(elementType), bankDims(bankDims),
         portAttrs(portAttrs) {}
 
   /// The hash key for this storage is a pair of the integer and type params.
@@ -30,7 +30,7 @@ struct MemrefTypeStorage : public TypeStorage {
 
   /// Define the comparison function for the key type.
   bool operator==(const KeyTy &key) const {
-    return key == KeyTy(shape, elementType, bankedDims, portAttrs);
+    return key == KeyTy(shape, elementType, bankDims, portAttrs);
   }
 
   /// Define a hash function for the key type.
@@ -41,8 +41,8 @@ struct MemrefTypeStorage : public TypeStorage {
 
   /// Define a construction function for the key type.
   static KeyTy getKey(ArrayRef<int64_t> shape, Type elementType,
-                      ArrayAttr bankedDims, DictionaryAttr portAttrs) {
-    return KeyTy(shape, elementType, bankedDims, portAttrs);
+                      ArrayAttr bankDims, DictionaryAttr portAttrs) {
+    return KeyTy(shape, elementType, bankDims, portAttrs);
   }
 
   /// Define a construction method for creating a new instance of this storage.
@@ -50,15 +50,15 @@ struct MemrefTypeStorage : public TypeStorage {
                                       const KeyTy &key) {
     ArrayRef<int64_t> shape = allocator.copyInto(std::get<0>(key));
     Type elementType = std::get<1>(key);
-    ArrayAttr bankedDims = std::get<2>(key);
+    ArrayAttr bankDims = std::get<2>(key);
     DictionaryAttr portAttrs = std::get<3>(key);
     return new (allocator.allocate<MemrefTypeStorage>())
-        MemrefTypeStorage(shape, elementType, bankedDims, portAttrs);
+        MemrefTypeStorage(shape, elementType, bankDims, portAttrs);
   }
 
   ArrayRef<int64_t> shape;
   Type elementType;
-  ArrayAttr bankedDims;
+  ArrayAttr bankDims;
   DictionaryAttr portAttrs;
 };
 
@@ -247,16 +247,16 @@ public:
   // static bool kindof(unsigned kind) { return kind == MemrefKind; }
   static StringRef getKeyword() { return "memref"; }
   static MemrefType get(MLIRContext *context, ArrayRef<int64_t> shape,
-                        Type elementType, ArrayAttr bankedDims,
+                        Type elementType, ArrayAttr bankDims,
                         DictionaryAttr portDims) {
-    assert(bankedDims);
+    assert(bankDims);
     assert(portDims);
-    return Base::get(context, shape, elementType, bankedDims, portDims);
+    return Base::get(context, shape, elementType, bankDims, portDims);
   }
 
   ArrayRef<int64_t> getShape() { return getImpl()->shape; }
   Type getElementType() { return getImpl()->elementType; }
-  ArrayAttr getBankedDims() { return getImpl()->bankedDims; }
+  ArrayAttr getBankedDims() { return getImpl()->bankDims; }
   DictionaryAttr getPortAttrs() { return getImpl()->portAttrs; }
   PortKind getPort() {
     DictionaryAttr portAttrs = getPortAttrs();
@@ -271,9 +271,9 @@ public:
 
   int getDepth() {
     int depth = 1;
-    auto packedDims = getPackedDims();
+    auto addrDims = getAddrDims();
     auto shape = getShape();
-    for (auto dim : packedDims) {
+    for (auto dim : addrDims) {
       depth *= shape[shape.size() - 1 - dim];
     }
     return depth;
@@ -281,9 +281,9 @@ public:
 
   int getNumBanks() {
     int numBanks = 1;
-    auto bankedDims = getBankedDims();
+    auto bankDims = getBankedDims();
     auto shape = getShape();
-    for (auto dim : bankedDims) {
+    for (auto dim : bankDims) {
       numBanks *=
           shape[shape.size() - 1 - dim.dyn_cast<IntegerAttr>().getInt()];
     }
@@ -293,41 +293,41 @@ public:
     auto shape = getShape();
     SmallVector<int64_t, 4> bankShape;
     for (size_t i = 0; i < getShape().size(); i++) {
-      bool isBankedDim = false;
+      bool isBankDim = false;
       for (auto dim : getBankedDims())
         if (i == (size_t)dim.dyn_cast<IntegerAttr>().getInt())
-          isBankedDim = true;
-      if (isBankedDim)
+          isBankDim = true;
+      if (isBankDim)
         bankShape.push_back(shape[shape.size() - 1 - i]);
     }
     return bankShape;
   }
 
-  SmallVector<int64_t, 4> getPackedShape() {
+  SmallVector<int64_t, 4> getAddrShape() {
     auto shape = getShape();
-    SmallVector<int64_t, 4> packedShape;
+    SmallVector<int64_t, 4> addrShape;
     for (size_t i = 0; i < getShape().size(); i++) {
-      bool isPackedDim = false;
-      for (auto dim : getPackedDims())
+      bool isAddrDim = false;
+      for (auto dim : getAddrDims())
         if (i == (size_t)dim)
-          isPackedDim = true;
-      if (isPackedDim)
-        packedShape.push_back(shape[shape.size() - 1 - i]);
+          isAddrDim = true;
+      if (isAddrDim)
+        addrShape.push_back(shape[shape.size() - 1 - i]);
     }
-    return packedShape;
+    return addrShape;
   }
 
-  SmallVector<int, 4> getPackedDims() {
-    SmallVector<int, 4> packedDims;
+  SmallVector<int, 4> getAddrDims() {
+    SmallVector<int, 4> addrDims;
     for (size_t i = 0; i < getShape().size(); i++) {
-      bool isBankedDim = false;
+      bool isBankDim = false;
       for (auto dim : getBankedDims())
         if (i == (size_t)dim.dyn_cast<IntegerAttr>().getInt())
-          isBankedDim = true;
-      if (!isBankedDim)
-        packedDims.push_back(i);
+          isBankDim = true;
+      if (!isBankDim)
+        addrDims.push_back(i);
     }
-    return packedDims;
+    return addrDims;
   }
 };
 

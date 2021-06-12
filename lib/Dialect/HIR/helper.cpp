@@ -68,6 +68,17 @@ bool isPrimitiveType(Type ty) {
   return false;
 }
 
+unsigned getSizeFromShape(ArrayRef<int64_t> shape) {
+  if (shape.size() == 0)
+    return 0;
+
+  unsigned size = 1;
+  for (auto dimSize : shape) {
+    size *= dimSize;
+  }
+  return size;
+}
+
 Type getIntegerType(MLIRContext *context, int bitwidth) {
   return IntegerType::get(context, bitwidth);
 }

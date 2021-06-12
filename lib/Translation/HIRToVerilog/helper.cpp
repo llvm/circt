@@ -39,7 +39,7 @@ void findAndReplaceAll(string &data, string toSearch, string replaceStr) {
 unsigned calcAddrWidth(hir::MemrefType memrefTy) {
   // FIXME: Currently we assume that all dims are power of two.
   auto shape = memrefTy.getShape();
-  auto packing = memrefTy.getPackedDims();
+  auto packing = memrefTy.getAddrDims();
   int maxDim = shape.size() - 1;
   unsigned addrWidth = 0;
   for (auto dim : packing) {

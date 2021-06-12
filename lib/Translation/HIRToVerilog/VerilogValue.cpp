@@ -20,7 +20,7 @@ VerilogValue::VerilogValue(Value value, string name)
   string out;
   auto size = 1;
   if (type.isa<MemrefType>()) {
-    auto packing = type.dyn_cast<hir::MemrefType>().getPackedDims();
+    auto packing = type.dyn_cast<hir::MemrefType>().getAddrDims();
     auto shape = type.dyn_cast<hir::MemrefType>().getShape();
     for (size_t i = 0; i < shape.size(); i++) {
       bool isDistDim = true;
@@ -102,7 +102,7 @@ SmallVector<unsigned, 4> VerilogValue::getMemrefPackedDims() const {
   SmallVector<unsigned, 4> out;
   auto memrefType = type.dyn_cast<hir::MemrefType>();
   auto shape = memrefType.getShape();
-  auto packing = memrefType.getPackedDims();
+  auto packing = memrefType.getAddrDims();
   for (size_t i = 0; i < shape.size(); i++) {
     bool dimIsPacked = false;
     for (auto p : packing) {
@@ -319,7 +319,7 @@ string
 VerilogValue::strMemrefDistDimAccess(ArrayRef<VerilogValue *> addr) const {
   assert(type.isa<hir::MemrefType>());
   string out;
-  auto packing = type.dyn_cast<hir::MemrefType>().getPackedDims();
+  auto packing = type.dyn_cast<hir::MemrefType>().getAddrDims();
   for (size_t i = 0; i < addr.size(); i++) {
     bool isDistDim = true;
     for (auto p : packing) {
@@ -347,7 +347,7 @@ SmallVector<unsigned, 4> VerilogValue::getMemrefDistDims() const {
   SmallVector<unsigned, 4> out;
   auto memrefType = type.dyn_cast<hir::MemrefType>();
   auto shape = memrefType.getShape();
-  auto packing = memrefType.getPackedDims();
+  auto packing = memrefType.getAddrDims();
   for (size_t i = 0; i < shape.size(); i++) {
     bool dimIsPacked = false;
     for (auto p : packing) {
@@ -586,7 +586,7 @@ ArrayRef<int64_t> VerilogValue::getShape() const {
 }
 SmallVector<int, 4> VerilogValue::getPackedDims() const {
   assert(type.isa<MemrefType>());
-  return type.dyn_cast<MemrefType>().getPackedDims();
+  return type.dyn_cast<MemrefType>().getAddrDims();
 }
 
 Type VerilogValue::getElementType() const {

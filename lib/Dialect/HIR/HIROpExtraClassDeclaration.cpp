@@ -10,7 +10,7 @@
 using namespace mlir;
 using namespace hir;
 
-SmallVector<Value> LoadOp::getBankedIdx() {
+SmallVector<Value> LoadOp::getBankIdx() {
   SmallVector<Value> bankIdx;
   operand_range addr = this->addr();
   MemrefType memTy = this->mem().getType().dyn_cast<hir::MemrefType>();
@@ -30,27 +30,27 @@ SmallVector<Value> LoadOp::getBankedIdx() {
   return bankIdx;
 }
 
-SmallVector<Value> LoadOp::getPackedIdx() {
-  SmallVector<Value> packIdx;
+SmallVector<Value> LoadOp::getAddrIdx() {
+  SmallVector<Value> addrIdx;
   operand_range addr = this->addr();
   MemrefType memTy = this->mem().getType().dyn_cast<hir::MemrefType>();
-  auto packedDims = memTy.getPackedDims();
+  auto addrDims = memTy.getAddrDims();
   for (int i = (int)memTy.getShape().size() - 1; i >= 0; i--) {
-    bool isPackedDim = false;
-    for (auto dim : packedDims) {
+    bool isAddrDim = false;
+    for (auto dim : addrDims) {
       if (i == dim)
-        isPackedDim = true;
+        isAddrDim = true;
     }
 
-    if (isPackedDim) {
+    if (isAddrDim) {
       auto idx = addr[addr.size() - 1 - i];
-      packIdx.push_back(idx);
+      addrIdx.push_back(idx);
     }
   }
-  return packIdx;
+  return addrIdx;
 }
 
-SmallVector<Value> StoreOp::getBankedIdx() {
+SmallVector<Value> StoreOp::getBankIdx() {
   SmallVector<Value> bankIdx;
   operand_range addr = this->addr();
   MemrefType memTy = this->mem().getType().dyn_cast<hir::MemrefType>();
@@ -70,24 +70,24 @@ SmallVector<Value> StoreOp::getBankedIdx() {
   return bankIdx;
 }
 
-SmallVector<Value> StoreOp::getPackedIdx() {
-  SmallVector<Value> packIdx;
+SmallVector<Value> StoreOp::getAddrIdx() {
+  SmallVector<Value> addrIdx;
   operand_range addr = this->addr();
   MemrefType memTy = this->mem().getType().dyn_cast<hir::MemrefType>();
-  auto packedDims = memTy.getPackedDims();
+  auto addrDims = memTy.getAddrDims();
   for (int i = (int)memTy.getShape().size() - 1; i >= 0; i--) {
-    bool isPackedDim = false;
-    for (auto dim : packedDims) {
+    bool isAddrDim = false;
+    for (auto dim : addrDims) {
       if (i == dim)
-        isPackedDim = true;
+        isAddrDim = true;
     }
 
-    if (isPackedDim) {
+    if (isAddrDim) {
       auto idx = addr[addr.size() - 1 - i];
-      packIdx.push_back(idx);
+      addrIdx.push_back(idx);
     }
   }
-  return packIdx;
+  return addrIdx;
 }
 
 SmallVector<Value, 4> hir::FuncOp::getOperands() {

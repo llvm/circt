@@ -8,6 +8,7 @@ unsigned clog2(int);
 
 /// A primitive type is integer, float or a tuple/tensor of a primitive type.
 bool isPrimitiveType(mlir::Type);
+unsigned getSizeFromShape(mlir::ArrayRef<int64_t> shape);
 mlir::IntegerAttr getIntegerAttr(mlir::MLIRContext *context, int width,
                                  int value);
 mlir::Type getIntegerType(mlir::MLIRContext *context, int bitwidth);

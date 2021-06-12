@@ -84,7 +84,7 @@ void MemrefLoweringPass::updateOp(hir::AllocaOp op) {
     int numBanks = memTy.getNumBanks();
     auto port = memTy.getPort();
     SmallVector<Type, 4> addrTypes;
-    for (auto dimShape : memTy.getPackedShape()) {
+    for (auto dimShape : memTy.getAddrShape()) {
       Type addrTy = helper::getIntegerType(context, helper::clog2(dimShape));
       addrTypes.push_back(addrTy);
     }
@@ -259,7 +259,7 @@ void MemrefLoweringPass::updateOp(hir::LoadOp op) {
   Value originalDataBus = mapMemrefRdDataRecv[mem];
   assert(originalAddrBus);
   assert(originalDataBus);
-  SmallVector<Value, 4> bank = op.getBankedIdx();
+  SmallVector<Value, 4> bank = op.getBankIdx();
   Value addrBus =
       builder
           .create<hir::SplitOp>(op.getLoc(), originalAddrBus.getType(),
@@ -276,8 +276,8 @@ void MemrefLoweringPass::updateOp(hir::LoadOp op) {
   builder.create<hir::SendOp>(op.getLoc(), c1, addrBus,
                               SmallVector<Value, 1>({c0}), tstart, Value());
 
-  Value addr = createAddrTuple(builder, op.getLoc(), op.getPackedIdx(),
-                               memTy.getPackedShape());
+  Value addr = createAddrTuple(builder, op.getLoc(), op.getAddrIdx(),
+                               memTy.getAddrShape());
 
   if (addr) { // bram.
     builder.create<hir::SendOp>(op.getLoc(), addr, addrBus,
@@ -317,7 +317,7 @@ void MemrefLoweringPass::updateOp(hir::StoreOp op) {
                  .getResult();
   MemrefType memTy = mem.getType().dyn_cast<MemrefType>();
 
-  SmallVector<Value, 4> bank = op.getBankedIdx();
+  SmallVector<Value, 4> bank = op.getBankIdx();
   Value originalWriteBus = mapMemrefWrSend[mem];
   Value writeBus =
       builder
@@ -330,8 +330,8 @@ void MemrefLoweringPass::updateOp(hir::StoreOp op) {
   assert(!offset);
   builder.create<hir::SendOp>(op.getLoc(), c1, writeBus,
                               SmallVector<Value, 1>({c0}), tstart, Value());
-  Value addr = createAddrAndDataTuple(builder, op.getLoc(), op.getPackedIdx(),
-                                      memTy.getPackedShape(), value);
+  Value addr = createAddrAndDataTuple(builder, op.getLoc(), op.getAddrIdx(),
+                                      memTy.getAddrShape(), value);
   builder.create<hir::SendOp>(op.getLoc(), addr, writeBus,
                               SmallVector<Value, 1>({c1}), tstart, Value());
   op.getOperation()->dropAllReferences();
@@ -461,7 +461,7 @@ void MemrefLoweringPass::addFuncArgs(hir::FuncOp op) {
     int numBanks = memTy.getNumBanks();
     auto port = memTy.getPort();
     SmallVector<Type, 4> addrTypes;
-    for (auto dimShape : memTy.getPackedShape()) {
+    for (auto dimShape : memTy.getAddrShape()) {
       Type addrTy = helper::getIntegerType(context, helper::clog2(dimShape));
       addrTypes.push_back(addrTy);
     }
