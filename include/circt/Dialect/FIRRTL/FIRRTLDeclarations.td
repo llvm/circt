@@ -146,7 +146,8 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
   }];
 }
 
-def NodeOp : FIRRTLOp<"node", [SameOperandsAndResultType]> {
+def NodeOp : FIRRTLOp<"node",
+                      [SameOperandsAndResultType, InferTypeOpInterface]> {
   let summary = "No-op to name a value";
   let description = [{
     A node is simply a named intermediate value in a circuit. The node must
@@ -177,6 +178,16 @@ def NodeOp : FIRRTLOp<"node", [SameOperandsAndResultType]> {
   let assemblyFormat = "$input custom<ImplicitSSAName>(attr-dict) `:` type($input)";
 
   let hasCanonicalizer = true;
+
+  let extraClassDeclaration = [{
+    /// Infer the return types of this operation.
+    static LogicalResult inferReturnTypes(MLIRContext *context,
+                                          Optional<Location> loc,
+                                          ValueRange operands,
+                                          DictionaryAttr attrs,
+                                          mlir::RegionRange regions,
+                                          SmallVectorImpl<Type> &results);
+  }];
 }
 
 def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {

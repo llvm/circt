@@ -1122,6 +1122,17 @@ Value MemOp::getPortNamed(StringAttr name) {
   return Value();
 }
 
+/// Infer the return types of this operation.
+LogicalResult NodeOp::inferReturnTypes(MLIRContext *context,
+                                       Optional<Location> loc,
+                                       ValueRange operands,
+                                       DictionaryAttr attrs,
+                                       mlir::RegionRange regions,
+                                       SmallVectorImpl<Type> &results) {
+  results.push_back(operands[0].getType());
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Statements
 //===----------------------------------------------------------------------===//
