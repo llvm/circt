@@ -10,9 +10,9 @@ from pycde import (Input, Output, Parameter, modparam, module, externmodule,
 from circt.dialects import comb, hw
 
 
+@modparam
 def PolynomialCompute(coefficients):
 
-  @module
   class PolynomialCompute:
     """Module to compute ax^3 + bx^2 + cx + d for design-time coefficients"""
 
@@ -69,6 +69,8 @@ class CoolPolynomialCompute:
   def __init__(self, coefficients):
     self.coefficients = coefficients
 
+
+# polycom = PolynomialCompute([1])
 
 class Polynomial(pycde.System):
   inputs = []

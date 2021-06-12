@@ -49,11 +49,25 @@ class Parameter:
 
 class modparam:
 
-  def __call__(self, func):
-    return func()
+  def __init__(self, func):
+    self.func = func
+    self.sig = inspect.signature(func)
+    for (name, param) in self.sig.parameters.items():
+      if param.kind == param.VAR_KEYWORD:
+        raise TypeError("Module parameter definitions cannot have **kwargs")
+      if param.kind == param.VAR_POSITIONAL:
+        raise TypeError("Module parameter definitions cannot have *args")
+
+  def __call__(self, *args, **kwargs):
+    param_values = self.sig.bind(*args, **kwargs)
+    param_values.apply_defaults()
+    cls = self.func(*args, **kwargs)
+    cls = _module_base(cls, param_values.arguments)
+    _register_generators(cls)
+    return cls
 
 
-def _module_base(cls, caller=None):
+def _module_base(cls, params={}):
   """The CIRCT design entry module class decorator."""
 
   class mod(cls, mlir.ir.OpView):
@@ -135,14 +149,12 @@ def _module_base(cls, caller=None):
       attr.name = attr_name
       mod._parameters[attr.name] = attr.attr
 
-  # Second, add the calling function's local variables as parameters.
-  if caller is not None:
-    if caller.function == cls.__name__:
-      for (name, value) in caller.frame.f_locals.items():
-        value = support.var_to_attribute(value, True)
-        if value is not None:
-          mod._parameters[name] = value
-          setattr(mod, name, Parameter(value, name))
+  # Second, the specified parameters.
+  for (name, value) in params.items():
+    value = support.var_to_attribute(value, True)
+    if value is not None:
+      mod._parameters[name] = value
+      setattr(mod, name, Parameter(value, name))
 
   # Third, add the module name, if specified.
   if "get_module_name" in dir(cls):
@@ -165,23 +177,19 @@ def _module_base(cls, caller=None):
     setattr(mod, name, property(lambda self: self.results[idx]))
     cls._dont_touch.add(name)
 
+  _register_generators(cls)
   return mod
 
 
 def module(cls):
-  caller = None
-  stack = inspect.stack()
-  if len(stack) >= 2:
-    caller = stack[1]
-
-  mod = _module_base(cls, caller)
-  _register_generators(cls)
+  mod = _module_base(cls)
   return mod
 
 
 def _register_generators(cls):
   """Scan the class, looking for and registering _Generators."""
-  for (name, member) in cls.__dict__.items():
+  for name in dir(cls):
+    member = getattr(cls, name)
     if isinstance(member, _Generate):
       _register_generator(cls.__name__, name, member)
 
@@ -192,10 +200,9 @@ def _register_generator(class_name, generator_name, generator):
                                 generator_name, generator)
 
 
-def _externmodule(cls, module_name: str, frame):
+def _externmodule(cls, module_name: str):
 
-  mod = _module_base(cls, frame)
-  _register_generators(cls)
+  mod = _module_base(cls)
 
   class ExternModule(mod):
     _extern_mod = None
@@ -245,14 +252,9 @@ def _externmodule(cls, module_name: str, frame):
 
 
 def externmodule(cls_or_name):
-  caller = None
-  stack = inspect.stack()
-  if len(stack) >= 2:
-    caller = stack[1]
-
   if isinstance(cls_or_name, str):
-    return lambda cls: _externmodule(cls, cls_or_name, caller)
-  return _externmodule(cls_or_name, cls_or_name.__name__, caller)
+    return lambda cls: _externmodule(cls, cls_or_name)
+  return _externmodule(cls_or_name, cls_or_name.__name__)
 
 
 class _Generate:
