@@ -478,7 +478,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input foo : UInt
     input clock : Clock
 
-    ; CHECK: [[HACKWIRE:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
+    ; CHECK: [[HACKWIRE0:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
+    ; CHECK: [[HACKWIRE1:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
     ; CHECK: [[HACKWIRE2:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
     ; CHECK: %memory = firrtl.smem Undefined {name = "memory"} : !firrtl.vector<vector<uint<1>, 9>, 256>
     smem memory : UInt<1>[9] [256]
@@ -486,11 +487,21 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.when %cond {
     when cond :
       node idx = foo
-      ; CHECK: %xyz = firrtl.memoryport Read %memory, %idx
-      ; CHECK: firrtl.connect [[HACKWIRE]], %xyz
-      read mport xyz = memory[idx], clock
+      ; CHECK: %xyz0 = firrtl.memoryport Read %memory, %idx
+      ; CHECK: firrtl.connect [[HACKWIRE0]], %xyz
+      read mport xyz0 = memory[idx], clock
     ; CHECK: }
     node sometest = eq(foo, UInt(42))
+
+    ; This tests that the location parsing from mport doesn't crash when the
+    ; skip op is eaten as a substatement.
+    ; CHECK: firrtl.when %cond {
+    when cond :
+      ; CHECK: %xyz1 = firrtl.memoryport Read %memory, %foo
+      ; CHECK: firrtl.connect [[HACKWIRE1]], %xyz
+      read mport xyz1 = memory[foo], clock  @[SRAM.scala 321:27]
+      skip
+    ; CHECK: }
 
     ; CHECK: firrtl.when %cond {
     when cond :
@@ -505,9 +516,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; CHECK: firrtl.when %sometest {
     when sometest :
-      ; CHECK: %awesome = firrtl.node [[HACKWIRE]]
+      ; CHECK: %awesome0 = firrtl.node [[HACKWIRE0]]
+      ; CHECK: %awesome1 = firrtl.node [[HACKWIRE1]]
       ; CHECK: %awesome2 = firrtl.node [[HACKWIRE2]]
-      node awesome = xyz
+      node awesome0 = xyz0
+      node awesome1 = xyz1
       node awesome2 = xyz2
 
 
