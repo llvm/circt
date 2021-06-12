@@ -256,7 +256,7 @@ public:
 
   ArrayRef<int64_t> getShape() { return getImpl()->shape; }
   Type getElementType() { return getImpl()->elementType; }
-  ArrayAttr getBankedDims() { return getImpl()->bankDims; }
+  ArrayAttr getBankDims() { return getImpl()->bankDims; }
   DictionaryAttr getPortAttrs() { return getImpl()->portAttrs; }
   PortKind getPort() {
     DictionaryAttr portAttrs = getPortAttrs();
@@ -281,7 +281,7 @@ public:
 
   int getNumBanks() {
     int numBanks = 1;
-    auto bankDims = getBankedDims();
+    auto bankDims = getBankDims();
     auto shape = getShape();
     for (auto dim : bankDims) {
       numBanks *=
@@ -294,7 +294,7 @@ public:
     SmallVector<int64_t, 4> bankShape;
     for (size_t i = 0; i < getShape().size(); i++) {
       bool isBankDim = false;
-      for (auto dim : getBankedDims())
+      for (auto dim : getBankDims())
         if (i == (size_t)dim.dyn_cast<IntegerAttr>().getInt())
           isBankDim = true;
       if (isBankDim)
@@ -321,13 +321,30 @@ public:
     SmallVector<int, 4> addrDims;
     for (size_t i = 0; i < getShape().size(); i++) {
       bool isBankDim = false;
-      for (auto dim : getBankedDims())
+      for (auto dim : getBankDims())
         if (i == (size_t)dim.dyn_cast<IntegerAttr>().getInt())
           isBankDim = true;
       if (!isBankDim)
         addrDims.push_back(i);
     }
     return addrDims;
+  }
+  enum DimKind { ADDR = 0, BANK = 1 };
+  SmallVector<DimKind, 4> getDimensionKinds() {
+    SmallVector<DimKind, 4> dimensionKinds;
+    auto bankDims = getBankDims();
+    for (auto i = 0; i < (int)getShape().size(); i++) {
+      bool isBankDim = false;
+      for (auto bankDim : bankDims) {
+        if (i == bankDim.dyn_cast<IntegerAttr>().getInt())
+          isBankDim = true;
+      }
+      if (isBankDim)
+        dimensionKinds.push_back(BANK);
+      else
+        dimensionKinds.push_back(ADDR);
+    }
+    return dimensionKinds;
   }
 };
 

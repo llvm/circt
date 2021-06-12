@@ -42,6 +42,6 @@ parseOptionalArrayAccess(OpAsmParser &parser,
 void printOptionalArrayAccess(OpAsmPrinter &printer, Operation *op,
                               OperandRange varAddrs, ArrayAttr constAddrs);
 
-// parser and printer for Module Type.
-// ParseResult parseModuleType(OpAsmParser &parser, Attribute &moduleAttr);
-// void printModuleType(OpAsmPrinter &printer, Attribute moduleAttr);
+ParseResult parseMemrefAndElementType(OpAsmParser &, OpAsmParser::OperandType,
+                                      Type &, Type &);
+void printMemrefAndElementType(OpAsmPrinter &, Operation *, Value, Type, Type);

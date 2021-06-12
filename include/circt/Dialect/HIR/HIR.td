@@ -96,15 +96,16 @@ def LoadOp : HIR_Op<"load", [NoSideEffect,AttrSizedOperandSegments]> {
     This Op reads from a memory interface. 
       Example:
 
-      ```mlir hir.load %A[%x,%y] at %t : !hir.memref<...>[i32,i32] -> i32```
+      ```mlir hir.load %A[%x,%y] at %t : !hir.memref<...>[i32,i32]```
   }];
 
   let arguments = (ins MemrefType:$mem, 
-      Variadic<AnyType>:$addr, TimeType : $tstart,
+      Variadic<AnyType>:$indices, TimeType : $tstart,
       Optional<ConstType>: $offset);
   let results = (outs AnyType: $res);
-  let assemblyFormat = [{$mem `[`  $addr `]` `at` $tstart (`+` $offset^)? 
-    attr-dict `:` type($mem) `[` type($addr) `]` `->` type($res)}];
+  let assemblyFormat = [{$mem `[`  $indices `]` `at` $tstart (`+` $offset^)? 
+    attr-dict `:`custom<MemrefAndElementType>(ref($mem),type($mem),type($res)) 
+    `[` type($indices)`]`}];
   let hasCanonicalizeMethod = true;
   let extraClassDeclaration = [{
     public:
@@ -121,17 +122,18 @@ def StoreOp : HIR_Op<"store", [AttrSizedOperandSegments]> {
 
       ```
       mlir hir.mem_write %v to %A[%x,%y] at %t 
-      : (i32, !hir.memref<...>[i32,i32])
+      : !hir.memref<...>[i32,i32]
       ```
   }];
 
   let arguments = (ins AnyType:$value, MemrefType:$mem,
-      Variadic<AnyType>:$addr, 
+      Variadic<AnyType>:$indices, 
       TimeType :$tstart, Optional<ConstType>:$offset);
   let results = (outs );
-  let assemblyFormat = [{$value `to` $mem  `[` $addr `]` `at` $tstart 
+  let assemblyFormat = [{$value `to` $mem  `[` $indices `]` `at` $tstart 
     (`+` $offset^ )? attr-dict 
-      `:` `(`type($value) `,` type($mem)`[`type($addr) `]` `)`}];
+      `:` custom<MemrefAndElementType>(ref($mem), type($mem), type($value) )
+      `[`type($indices) `]` }];
   let hasCanonicalizeMethod = true;
   let extraClassDeclaration = [{
     public:
@@ -148,10 +150,10 @@ def SendOp : HIR_Op<"send", [AttrSizedOperandSegments]> {
   }];
 
   let arguments = (ins AnyType:$value, AnyType:$bus,
-      Variadic<ConstType>:$addr, 
+      Variadic<ConstType>:$indices, 
       TimeType :$tstart, Optional<ConstType>:$offset);
   let results = (outs );
-  let assemblyFormat = [{$value `to` $bus  (`[` $addr^ `]`)? `at` $tstart 
+  let assemblyFormat = [{$value `to` $bus  (`[` $indices^ `]`)? `at` $tstart 
     (`+` $offset^ )? attr-dict 
       `:` type($value) `to` type($bus) }];
   let hasCanonicalizeMethod = true;
@@ -165,11 +167,11 @@ def RecvOp : HIR_Op<"recv", [AttrSizedOperandSegments]> {
   }];
 
   let arguments = (ins AnyType:$bus,
-      Variadic<ConstType>:$addr, 
+      Variadic<ConstType>:$indices, 
       TimeType :$tstart, Optional<ConstType>:$offset);
   let results = (outs AnyType:$res);
 
-  let assemblyFormat = [{$bus  (`[` $addr^ `]`)? `at` $tstart 
+  let assemblyFormat = [{$bus  (`[` $indices^ `]`)? `at` $tstart 
     (`+` $offset^ )? attr-dict 
       `:` type($bus) `->` type($res) }];
   let hasCanonicalizeMethod = true;
@@ -182,10 +184,10 @@ def SelectOp : HIR_Op<"select", [NoSideEffect]> {
   }];
 
   let arguments = (ins AnyType:$bus, 
-      Variadic<AnyType>:$addr);
+      Variadic<AnyType>:$indices);
   let results = (outs AnyType: $res);
   let assemblyFormat = [{$bus
-    `[` $addr `]` attr-dict `:` type($bus) `[` type($addr) `]` `->` type($res) }];
+    `[` $indices `]` attr-dict `:` type($bus) `[` type($indices) `]` `->` type($res) }];
 
   let verifier = [{return verifySelectOp(*this);}];
 }
@@ -455,7 +457,7 @@ def ConstantOp : HIR_Op<"constant",[NoSideEffect]> {
   let arguments = (ins AnyAttr:$value);
   let results = (outs AnyType : $res);
 
-  let assemblyFormat = [{ `(` $value `)` attr-dict `:` type($res)}];
+  let assemblyFormat = [{  `(` $value `)` attr-dict `:` type($res)}];
 }
 
 def CastOp : HIR_Op<"cast">{

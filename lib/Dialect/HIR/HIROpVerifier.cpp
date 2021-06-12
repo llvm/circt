@@ -2,8 +2,8 @@
 namespace mlir {
 namespace hir {
 LogicalResult verifySelectOp(hir::SelectOp op) {
-  for (auto addr : op.addr()) {
-    if (addr.getType().isa<IndexType>() || addr.getType().isa<hir::ConstType>())
+  for (auto idx : op.indices()) {
+    if (idx.getType().isa<IndexType>() || idx.getType().isa<hir::ConstType>())
       continue;
     return op.emitError("Indices can only be constants or index types!");
   }

@@ -284,7 +284,7 @@ bool ScheduleVerifier::inspectOp(UnrollForOp op) {
 }
 
 bool ScheduleVerifier::inspectOp(hir::LoadOp op) {
-  auto addr = op.addr();
+  auto indices = op.indices();
   Value result = op.res();
   Value tstart = op.tstart();
   int delay = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
@@ -292,9 +292,9 @@ bool ScheduleVerifier::inspectOp(hir::LoadOp op) {
 
   bool ok = true;
   int c = 1;
-  for (auto addrI : addr) {
-    ok &= schedule.check(op.getLoc(), getDefiningLoc(addrI), addrI, tstart,
-                         delay, "address " + std::to_string(c));
+  for (auto idx : indices) {
+    ok &= schedule.check(op.getLoc(), getDefiningLoc(idx), idx, tstart, delay,
+                         "indicesess " + std::to_string(c));
     c++;
   }
   auto memrefTy = op.mem().getType().dyn_cast<hir::MemrefType>();
@@ -308,7 +308,7 @@ bool ScheduleVerifier::inspectOp(hir::LoadOp op) {
 }
 
 bool ScheduleVerifier::inspectOp(hir::StoreOp op) {
-  auto addr = op.addr();
+  auto indices = op.indices();
   Value value = op.value();
   Value tstart = op.tstart();
   int delay = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
@@ -317,10 +317,10 @@ bool ScheduleVerifier::inspectOp(hir::StoreOp op) {
   ok &= schedule.check(op.getLoc(), getDefiningLoc(value), value, tstart, delay,
                        "input var");
   int c = 1;
-  for (auto addrI : addr) {
-    mlir::Location locAddrI = getDefiningLoc(addrI);
-    ok &= schedule.check(op.getLoc(), locAddrI, addrI, tstart, delay,
-                         "address " + std::to_string(c));
+  for (auto idx : indices) {
+    mlir::Location locAddrI = getDefiningLoc(idx);
+    ok &= schedule.check(op.getLoc(), locAddrI, idx, tstart, delay,
+                         "indicesess " + std::to_string(c));
     c++;
   }
   return ok;

@@ -138,3 +138,21 @@ void printOptionalArrayAccessTypes(OpAsmPrinter &printer, Operation *op,
   }
   printer << "]";
 }
+
+ParseResult parseMemrefAndElementType(OpAsmParser &parser,
+                                      OpAsmParser::OperandType mem,
+                                      Type &memrefTy, Type &resTy) {
+  if (parser.parseType(memrefTy))
+    return failure();
+  auto memTyLoc = parser.getCurrentLocation();
+  auto memTy = memrefTy.dyn_cast<hir::MemrefType>();
+  if (!memTy)
+    return parser.emitError(memTyLoc, "Expected hir.memref type!");
+  resTy = memTy.getElementType();
+  return success();
+}
+
+void printMemrefAndElementType(OpAsmPrinter &printer, Operation *op, Value mem,
+                               Type memrefTy, Type resTy) {
+  printer << memrefTy;
+}

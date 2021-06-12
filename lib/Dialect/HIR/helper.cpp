@@ -79,7 +79,7 @@ unsigned getSizeFromShape(ArrayRef<int64_t> shape) {
   return size;
 }
 
-Type getIntegerType(MLIRContext *context, int bitwidth) {
+IntegerType getIntegerType(MLIRContext *context, int bitwidth) {
   return IntegerType::get(context, bitwidth);
 }
 
@@ -87,7 +87,7 @@ ConstType getConstIntType(MLIRContext *context) {
   return ConstType::get(context);
 }
 
-Type getTimeType(MLIRContext *context) { return TimeType::get(context); }
+TimeType getTimeType(MLIRContext *context) { return TimeType::get(context); }
 
 ParseResult parseIntegerAttr(IntegerAttr &value, int bitwidth,
                              StringRef attrName, OpAsmParser &parser,
