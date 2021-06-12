@@ -11,8 +11,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "SVPassDetail.h"
+#include "PassDetail.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 

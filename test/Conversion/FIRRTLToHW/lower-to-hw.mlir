@@ -20,9 +20,16 @@ firrtl.circuit "Simple" {
 
 
     // CHECK: %out4 = sv.wire sym @__Simple__out4 : !hw.inout<i4>
-    // CHECK: %out5 = sv.wire sym @__Simple__out5 : !hw.inout<i4>
-    %out4 = firrtl.wire : !firrtl.uint<4>
+    // CHECK: %out5 = sv.wire : !hw.inout<i4>
+    %out4 = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
     %out5 = firrtl.wire : !firrtl.uint<4>
+    // CHECK: sv.wire sym @__Simple{{.*}} 
+    // CHECK: sv.wire sym @__Simple{{.*}} 
+    %500 = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
+    %501 = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<5>
+
+    // CHECK: sv.wire sym @__Simple__dntnode
+    %dntnode = firrtl.node %in1 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
 
     // CHECK: sv.connect %out5, %c0_i4 : i4
     %tmp1 = firrtl.invalidvalue : !firrtl.uint<4>
@@ -74,9 +81,9 @@ firrtl.circuit "Simple" {
     firrtl.connect %out4, %in2 : !firrtl.uint<4>, !firrtl.uint<2>
 
     // CHECK-NEXT: %test-name = sv.wire sym @"__Simple__test-name" : !hw.inout<i4>
-    firrtl.wire {name = "test-name"} : !firrtl.uint<4>
+    firrtl.wire {name = "test-name", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
 
-    // CHECK-NEXT: = sv.wire sym @__Simple___t_1 : !hw.inout<i2>
+    // CHECK-NEXT: = sv.wire : !hw.inout<i2>
     %_t_1 = firrtl.wire : !firrtl.uint<2>
 
     // CHECK-NEXT: = firrtl.wire : !firrtl.vector<uint<1>, 13>
@@ -134,12 +141,15 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: = comb.extract [[MOD2]] from 0 : (i8) -> i3
     %21 = firrtl.rem %3, %in3 : (!firrtl.sint<3>, !firrtl.sint<8>) -> !firrtl.sint<3>
 
-    // CHECK-NEXT: [[WIRE:%n1]] = sv.wire : !hw.inout<i2>
-    // CHECK-NEXT: sv.connect [[WIRE]], %in2 : i2
+    // Nodes with names but no attribute are just dropped.
     %n1 = firrtl.node %in2  {name = "n1"} : !firrtl.uint<2>
 
+    // CHECK-NEXT: [[WIRE:%n2]] = sv.wire sym @__Simple__n2 : !hw.inout<i2>
+    // CHECK-NEXT: sv.connect [[WIRE]], %in2 : i2
+    %n2 = firrtl.node %in2  {name = "n2", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<2>
+
     // Nodes with no names are just dropped.
-    %22 = firrtl.node %n1 {name = ""} : !firrtl.uint<2>
+    %22 = firrtl.node %in2 {name = ""} : !firrtl.uint<2>
 
     // CHECK-NEXT: [[CVT:%.+]] = comb.concat %false, %in2 : (i1, i2) -> i3
     %23 = firrtl.cvt %22 : (!firrtl.uint<2>) -> !firrtl.sint<3>
@@ -357,16 +367,16 @@ firrtl.circuit "Simple" {
   // CHECK-LABEL: hw.module @foo
   firrtl.module @foo() {
     // CHECK-NEXT:  %io_cpu_flush.wire = sv.wire sym @__foo__io_cpu_flush.wire : !hw.inout<i1>
-    %io_cpu_flush.wire = firrtl.wire : !firrtl.uint<1>
+    %io_cpu_flush.wire = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
     // CHECK-NEXT: hw.instance "fetch" @bar([[IO:%[0-9]+]])
     %i = firrtl.instance @bar {name = "fetch", portNames=["io_cpu_flush"]} : !firrtl.flip<uint<1>>
     firrtl.connect %i, %io_cpu_flush.wire : !firrtl.flip<uint<1>>, !firrtl.uint<1>
 
-    %hits_1_7 = firrtl.node %io_cpu_flush.wire {name = "hits_1_7"} : !firrtl.uint<1>
+    %hits_1_7 = firrtl.node %io_cpu_flush.wire {name = "hits_1_7", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
     // CHECK-NEXT:  [[IO]] = sv.read_inout %io_cpu_flush.wire
-    // CHECK-NEXT:  [[IO:%.+]] = sv.read_inout %io_cpu_flush.wire
-    // CHECK-NEXT:  %hits_1_7 = sv.wire : !hw.inout<i1>
-    // CHECK-NEXT:  sv.connect %hits_1_7, [[IO]] : i1
+    // CHECK-NEXT:  [[IO2:%.+]] = sv.read_inout %io_cpu_flush.wire
+    // CHECK-NEXT:  %hits_1_7 = sv.wire sym @__foo__hits_1_7
+    // CHECK-NEXT:  sv.connect %hits_1_7, [[IO2]] : i1
     %1455 = firrtl.asPassive %hits_1_7 : !firrtl.uint<1>
   }
 
@@ -374,7 +384,7 @@ firrtl.circuit "Simple" {
   // CHECK-LABEL: hw.module @issue314
   firrtl.module @issue314(in %inp_2: !firrtl.uint<27>, in %inpi: !firrtl.uint<65>) {
     // CHECK: %c0_i38 = hw.constant 0 : i38
-    // CHECK: %tmp48 = sv.wire sym @__issue314__tmp48 : !hw.inout<i27>
+    // CHECK: %tmp48 = sv.wire : !hw.inout<i27>
     %tmp48 = firrtl.wire : !firrtl.uint<27>
 
     // CHECK-NEXT: %0 = comb.concat %c0_i38, %inp_2 : (i38, i27) -> i65
@@ -442,8 +452,8 @@ firrtl.circuit "Simple" {
                             in %cond: !firrtl.uint<1>, in %value: !firrtl.uint<2>) {
     // CHECK-NEXT: %c0_i2 = hw.constant 0 : i2
     %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
-    // CHECK-NEXT: %count = sv.reg : !hw.inout<i2>
-    %count = firrtl.reg %clock {name = "count"} : (!firrtl.clock) -> !firrtl.uint<2>
+    // CHECK-NEXT: %count = sv.reg sym @count : !hw.inout<i2>
+    %count = firrtl.reg %clock {name = "count", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : (!firrtl.clock) -> !firrtl.uint<2>
 
     // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
     // CHECK-NEXT:   } else {

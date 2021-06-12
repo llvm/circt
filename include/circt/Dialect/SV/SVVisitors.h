@@ -36,8 +36,8 @@ public:
             IfDefOp, IfDefProceduralOp, IfOp, AlwaysOp, AlwaysCombOp,
             AlwaysFFOp, InitialOp, CaseZOp,
             // Other Statements.
-            ConnectOp, BPAssignOp, PAssignOp, AliasOp, FWriteOp, FatalOp,
-            FinishOp, VerbatimOp,
+            ConnectOp, BPAssignOp, PAssignOp, ForceOp, ReleaseOp,
+            AliasOp, FWriteOp, FatalOp, FinishOp, VerbatimOp,
             // Type declarations.
             InterfaceOp, InterfaceSignalOp, InterfaceModportOp,
             InterfaceInstanceOp, GetModportOp, AssignInterfaceSignalOp,
@@ -45,9 +45,7 @@ public:
             // Verification statements.
             AssertOp, AssumeOp, CoverOp,
             // Bind Statements
-            BindOp,
-            // Terminators.
-            TypeDeclTerminatorOp>([&](auto expr) -> ResultType {
+            BindOp>([&](auto expr) -> ResultType {
           return thisCast->visitSV(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -97,6 +95,8 @@ public:
   HANDLE(ConnectOp, Unhandled);
   HANDLE(BPAssignOp, Unhandled);
   HANDLE(PAssignOp, Unhandled);
+  HANDLE(ForceOp, Unhandled);
+  HANDLE(ReleaseOp, Unhandled);
   HANDLE(AliasOp, Unhandled);
   HANDLE(FWriteOp, Unhandled);
   HANDLE(FatalOp, Unhandled);
@@ -119,9 +119,6 @@ public:
 
   // Bind statements.
   HANDLE(BindOp, Unhandled);
-
-  // Terminators.
-  HANDLE(TypeDeclTerminatorOp, Unhandled);
 #undef HANDLE
 };
 

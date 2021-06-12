@@ -100,7 +100,7 @@ static InstanceOp createInstance(OpBuilder builder, Location loc,
 /// external module must be compatible with the modules which are generated for
 /// `vlsi_mem_gen`, which can be found in the rocketchip project.
 static void
-getBlackboxPortsForMemOp(MemOp op, ArrayRef<MemOp::NamedPort> memPorts,
+getBlackBoxPortsForMemOp(MemOp op, ArrayRef<MemOp::NamedPort> memPorts,
                          SmallVectorImpl<ModulePortInfo> &extPorts) {
   OpBuilder builder(op);
   unsigned readPorts = 0;
@@ -137,7 +137,7 @@ getBlackboxPortsForMemOp(MemOp op, ArrayRef<MemOp::NamedPort> memPorts,
   }
 }
 
-/// Create an external module blackbox representing the memory operation.
+/// Create an external module black box representing the memory operation.
 /// Returns the port list of the external module.
 static FExtModuleOp
 createBlackboxModuleForMem(MemOp op, ArrayRef<ModulePortInfo> extPorts) {
@@ -150,7 +150,7 @@ createBlackboxModuleForMem(MemOp op, ArrayRef<ModulePortInfo> extPorts) {
     memName = "mem";
   std::string extName = memName + "_ext";
 
-  // Create the blackbox external module.
+  // Create the black box external module.
   auto extModuleOp = builder.create<FExtModuleOp>(
       op.getLoc(), builder.getStringAttr(extName), extPorts);
 
@@ -303,10 +303,10 @@ replaceMemWithWrapperModule(DenseMap<MemOp, FModuleOp, MemOpInfo> &knownMems,
     // memory port created by the MemOp.
     auto memPorts = memOp.getPorts();
 
-    // Get the pohwist for a module which represents the blackbox memory.
+    // Get the pohwist for a module which represents the black box memory.
     // Typically has 1R + 1W memory port, which has 4+5=9 fields.
     SmallVector<ModulePortInfo, 9> extPortList;
-    getBlackboxPortsForMemOp(memOp, memPorts, extPortList);
+    getBlackBoxPortsForMemOp(memOp, memPorts, extPortList);
     auto extModuleOp = createBlackboxModuleForMem(memOp, extPortList);
     moduleOp = createWrapperModule(memOp, memPorts, extModuleOp, extPortList,
                                    modPorts);
@@ -365,9 +365,9 @@ replaceMemWithExtModule(DenseMap<MemOp, FExtModuleOp, MemOpInfo> &knownMems,
     // memory port created by the MemOp.
     auto memPorts = memOp.getPorts();
 
-    // Get the pohwist for a module which represents the blackbox memory.
+    // Get the pohwist for a module which represents the black box memory.
     // Typically has 1R + 1W memory port, which has 4+5=9 fields.
-    getBlackboxPortsForMemOp(memOp, memPorts, extPortList);
+    getBlackBoxPortsForMemOp(memOp, memPorts, extPortList);
     extModuleOp = createBlackboxModuleForMem(memOp, extPortList);
     knownMems[memOp] = extModuleOp;
   }
@@ -413,7 +413,7 @@ static void replaceMemsWithExtModules(CircuitOp circuit,
 }
 
 namespace {
-struct BlackboxMemoryPass : public BlackboxMemoryBase<BlackboxMemoryPass> {
+struct BlackBoxMemoryPass : public BlackBoxMemoryBase<BlackBoxMemoryPass> {
   void runOnOperation() override {
     // A memory must have read and write latencies of 1 in order to be
     // blackboxed. In the future this will probably be configurable.
@@ -429,5 +429,5 @@ struct BlackboxMemoryPass : public BlackboxMemoryBase<BlackboxMemoryPass> {
 } // end anonymous namespace
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createBlackBoxMemoryPass() {
-  return std::make_unique<BlackboxMemoryPass>();
+  return std::make_unique<BlackBoxMemoryPass>();
 }

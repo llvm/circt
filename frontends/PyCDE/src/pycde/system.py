@@ -43,9 +43,15 @@ class System:
   def print(self):
     self.mod.operation.print()
 
-  def generate(self):
-    pm = mlir.passmanager.PassManager.parse("run-generators")
-    pm.run(self.mod)
+  def generate(self, generator_names=[]):
+    pm = mlir.passmanager.PassManager.parse("run-generators{generators=" +
+                                            ",".join(generator_names) + "}")
+    try:
+      pm.run(self.mod)
+    except Exception as e:
+      print("!!!!! IR dump on generator exception")
+      self.print()
+      raise e
 
   def run_passes(self):
     if self.passed:

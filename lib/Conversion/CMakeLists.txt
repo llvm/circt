@@ -1,4 +1,3 @@
-add_subdirectory(FIRRTLToLLHD)
 add_subdirectory(FIRRTLToHW)
 add_subdirectory(HWToLLHD)
 add_subdirectory(HandshakeToFIRRTL)

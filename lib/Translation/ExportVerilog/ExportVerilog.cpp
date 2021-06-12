@@ -608,6 +608,8 @@ public:
   void emitStatement(Operation *op);
   void emitStatementBlock(Block &block);
 
+  void emitBind(BindOp op);
+
   using ValueOrOp = PointerUnion<Value, Operation *>;
 
   StringRef addName(ValueOrOp valueOrOp, StringRef name);
@@ -1616,13 +1618,14 @@ private:
     return success();
   }
 
-  LogicalResult visitSV(TypeDeclTerminatorOp op) { return emitNoop(); }
   LogicalResult visitSV(WireOp op) { return emitNoop(); }
   LogicalResult visitSV(RegOp op) { return emitNoop(); }
   LogicalResult visitSV(InterfaceInstanceOp op) { return emitNoop(); }
   LogicalResult visitSV(ConnectOp op);
   LogicalResult visitSV(BPAssignOp op);
   LogicalResult visitSV(PAssignOp op);
+  LogicalResult visitSV(ForceOp op);
+  LogicalResult visitSV(ReleaseOp op);
   LogicalResult visitSV(AliasOp op);
   LogicalResult visitStmt(OutputOp op);
   LogicalResult visitStmt(InstanceOp op);
@@ -1795,6 +1798,30 @@ LogicalResult StmtEmitter::visitSV(PAssignOp op) {
   emitExpression(op.dest(), ops);
   os << " <= ";
   emitExpression(op.src(), ops);
+  os << ';';
+  emitLocationInfoAndNewLine(ops);
+  return success();
+}
+
+LogicalResult StmtEmitter::visitSV(ForceOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  indent() << "force ";
+  emitExpression(op.dest(), ops);
+  os << " = ";
+  emitExpression(op.src(), ops);
+  os << ';';
+  emitLocationInfoAndNewLine(ops);
+  return success();
+}
+
+LogicalResult StmtEmitter::visitSV(ReleaseOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  indent() << "release ";
+  emitExpression(op.dest(), ops);
   os << ';';
   emitLocationInfoAndNewLine(ops);
   return success();
@@ -2203,6 +2230,10 @@ LogicalResult StmtEmitter::visitSV(CaseZOp op) {
 }
 
 LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
+  StringRef prefix = "";
+  if (op->hasAttr("doNotPrint"))
+    prefix = "// ";
+
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
@@ -2212,7 +2243,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   // Use the specified name or the symbol name as appropriate.
   auto verilogName = getVerilogModuleNameAttr(moduleOp);
   emitter.verifyModuleName(op, verilogName);
-  indent() << verilogName.getValue();
+  indent() << prefix << verilogName.getValue();
 
   // Helper that prints a parameter constant value in a Verilog compatible way.
   auto printParmValue = [&](Attribute value) {
@@ -2242,13 +2273,14 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
       llvm::interleave(
           paramDict, os,
           [&](NamedAttribute elt) {
-            os.indent(state.currentIndent + 2) << '.' << elt.first << '(';
+            os.indent(state.currentIndent + 2)
+                << prefix << '.' << elt.first << '(';
             printParmValue(elt.second);
             os << ')';
           },
           ",\n");
       os << '\n';
-      indent() << ')';
+      indent() << prefix << ')';
     }
   }
 
@@ -2295,7 +2327,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     emitLocationInfoAndNewLine(ops);
 
     // Emit the port's name.
-    indent();
+    indent() << prefix;
     if (!isZeroWidth) {
       // If this is a real port we're printing, then it isn't the first one. Any
       // subsequent ones will need a comma.
@@ -2321,7 +2353,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   if (!isFirst) {
     emitLocationInfoAndNewLine(ops);
     ops.clear();
-    indent();
+    indent() << prefix;
   }
   os << ");";
   emitLocationInfoAndNewLine(ops);
@@ -2498,6 +2530,60 @@ void ModuleEmitter::emitHWGeneratedModule(HWModuleGeneratedOp module) {
   auto verilogName = module.getVerilogModuleNameAttr();
   verifyModuleName(module, verilogName);
   os << "// external generated module " << verilogName.getValue() << "\n\n";
+}
+
+void ModuleEmitter::emitBind(BindOp bind) { os << "// bind\n\n"; }
+
+// Check if the value is from read of a wire or reg or is a port.
+static bool isSimpleReadOrPort(Value v) {
+  if (v.isa<BlockArgument>())
+    return true;
+  auto vOp = v.getDefiningOp();
+  if (!vOp)
+    return false;
+  auto read = dyn_cast<ReadInOutOp>(vOp);
+  if (!read)
+    return false;
+  auto readSrc = read.input().getDefiningOp();
+  if (!readSrc)
+    return false;
+  return isa<WireOp, RegOp>(readSrc);
+}
+
+// Given an invisible instance, make sure all inputs are driven from
+// wires or ports.
+static void lowerBoundInstance(InstanceOp op) {
+  Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
+  auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
+
+  SmallString<32> nameTmp;
+  nameTmp = (op.instanceName() + "_").str();
+  auto namePrefixSize = nameTmp.size();
+
+  size_t nextOpNo = 0;
+  for (auto &port : getModulePortInfo(op.getReferencedModule())) {
+    if (port.isOutput())
+      continue;
+
+    auto src = op.getOperand(nextOpNo);
+    ++nextOpNo;
+
+    if (isSimpleReadOrPort(src))
+      continue;
+
+    nameTmp.resize(namePrefixSize);
+    if (port.name)
+      nameTmp += port.name.getValue().str();
+    else
+      nameTmp += std::to_string(nextOpNo - 1);
+
+    auto newWire = builder.create<WireOp>(src.getType(), nameTmp);
+    auto newWireRead = builder.create<ReadInOutOp>(newWire);
+    auto connect = builder.create<ConnectOp>(newWire, src);
+    newWireRead->moveBefore(op);
+    connect->moveBefore(op);
+    op.setOperand(nextOpNo - 1, newWireRead);
+  }
 }
 
 static bool onlyUseIsConnect(Value v) {
@@ -2723,6 +2809,9 @@ void ModuleEmitter::prepareHWModule(Block &block) {
     if (auto instance = dyn_cast<InstanceOp>(op)) {
       // Anchor return values to wires early
       lowerInstanceResults(instance);
+      // Anchor ports of bound instances
+      if (instance->hasAttr("doNotPrint"))
+        lowerBoundInstance(instance);
       addLegalName(ValueOrOp(&op), instance.instanceName(), &op);
     } else if (auto wire = dyn_cast<WireOp>(op))
       addLegalName(ValueOrOp(op.getResult(0)), wire.name(), &op);
@@ -3046,6 +3135,16 @@ void RootEmitterBase::gatherFiles(bool separateModules) {
         .Case<HWGeneratorSchemaOp>([&](auto &) {
           // Empty.
         })
+        .Case<BindOp>([&](auto &op) {
+          if (attr) {
+            if (!hasFileName) {
+              op.emitError("file name unspecified");
+              encounteredError = true;
+            } else
+              separateFile(op);
+          } else
+            separateFile(op, "bindfile");
+        })
         .Default([&](auto *) {
           op.emitError("unknown operation");
           encounteredError = true;
@@ -3091,6 +3190,7 @@ void RootEmitterBase::emitOperation(VerilogEmitterState &state, Operation *op) {
       .Case<HWModuleGeneratedOp>(
           [&](auto op) { ModuleEmitter(state).emitHWGeneratedModule(op); })
       .Case<HWGeneratorSchemaOp>([&](auto op) { /* Empty */ })
+      .Case<BindOp>([&](auto op) { ModuleEmitter(state).emitBind(op); })
       .Case<InterfaceOp, VerbatimOp, IfDefProceduralOp>(
           [&](auto op) { ModuleEmitter(state).emitStatement(op); })
       .Case<TypeScopeOp>([&](auto typedecls) {

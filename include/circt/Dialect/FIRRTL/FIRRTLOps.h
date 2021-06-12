@@ -64,14 +64,16 @@ struct ModulePortInfo {
   /// direction of the port, use the \p direction parameter.
   bool isOutput() {
     auto flags = type.getRecursiveTypeProperties();
-    return flags.first && !flags.second && direction == Direction::Output;
+    return flags.isPassive && !flags.containsAnalog &&
+           direction == Direction::Output;
   }
 
   /// Return true if this is a simple input-only port.  If you want the
   /// direction of the port, use the \p direction parameter.
   bool isInput() {
     auto flags = type.getRecursiveTypeProperties();
-    return flags.first && !flags.second && direction == Direction::Input;
+    return flags.isPassive && !flags.containsAnalog &&
+           direction == Direction::Input;
   }
 
   /// Return true if this is an inout port.  This will be true if the port

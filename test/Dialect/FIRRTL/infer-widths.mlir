@@ -434,5 +434,69 @@ firrtl.circuit "Foo" {
     firrtl.connect %1, %4 : !firrtl.uint, !firrtl.uint
   }
 
+  // CHECK-LABEL: @RegResetSimple
+  firrtl.module @RegResetSimple(
+    in %clk: !firrtl.clock,
+    in %rst: !firrtl.asyncreset,
+    in %x: !firrtl.uint<6>
+  ) {
+    // CHECK: %0 = firrtl.regreset %clk, %rst, %c0_ui1 : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>) -> !firrtl.uint<6>
+    // CHECK: %1 = firrtl.regreset %clk, %rst, %c0_ui1 : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>) -> !firrtl.uint<6>
+    // CHECK: %2 = firrtl.regreset %clk, %rst, %c0_ui17 : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<17>) -> !firrtl.uint<17>
+    // CHECK: %3 = firrtl.regreset %clk, %rst, %c0_ui17 : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<17>) -> !firrtl.uint<17>
+    %c0_ui = firrtl.constant 0 : !firrtl.uint
+    %c0_ui17 = firrtl.constant 0 : !firrtl.uint<17>
+    %0 = firrtl.regreset %clk, %rst, %c0_ui : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint) -> !firrtl.uint
+    %1 = firrtl.regreset %clk, %rst, %c0_ui : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint) -> !firrtl.uint
+    %2 = firrtl.regreset %clk, %rst, %c0_ui17 : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<17>) -> !firrtl.uint
+    %3 = firrtl.regreset %clk, %rst, %c0_ui17 : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<17>) -> !firrtl.uint
+    %4 = firrtl.wire : !firrtl.uint
+    %5 = firrtl.xor %1, %4 : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
+    firrtl.connect %0, %x : !firrtl.uint, !firrtl.uint<6>
+    firrtl.connect %1, %5 : !firrtl.uint, !firrtl.uint
+    firrtl.connect %2, %x : !firrtl.uint, !firrtl.uint<6>
+    firrtl.connect %3, %5 : !firrtl.uint, !firrtl.uint
+    firrtl.connect %4, %x : !firrtl.uint, !firrtl.uint<6>
+  }
+
+  // Inter-module width inference for one-to-one module-instance correspondence.
+  // CHECK-LABEL: @InterModuleSimpleFoo
+  // CHECK-SAME: in %in: !firrtl.uint<42>
+  // CHECK-SAME: out %out: !firrtl.uint<43>
+  // CHECK-LABEL: @InterModuleSimpleBar
+  // CHECK-SAME: in %in: !firrtl.uint<42>
+  // CHECK-SAME: out %out: !firrtl.uint<44>
+  firrtl.module @InterModuleSimpleFoo(in %in: !firrtl.uint, out %out: !firrtl.uint) {
+    %0 = firrtl.add %in, %in : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
+    firrtl.connect %out, %0 : !firrtl.uint, !firrtl.uint
+  }
+  firrtl.module @InterModuleSimpleBar(in %in: !firrtl.uint<42>, out %out: !firrtl.uint) {
+    %inst_in, %inst_out = firrtl.instance @InterModuleSimpleFoo {name = "inst"} : !firrtl.flip<uint>, !firrtl.uint
+    %0 = firrtl.add %inst_out, %inst_out : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
+    firrtl.connect %inst_in, %in : !firrtl.flip<uint>, !firrtl.uint<42>
+    firrtl.connect %out, %0 : !firrtl.uint, !firrtl.uint
+  }
+
+  // Inter-module width inference for multiple instances per module.
+  // CHECK-LABEL: @InterModuleMultipleFoo
+  // CHECK-SAME: in %in: !firrtl.uint<42>
+  // CHECK-SAME: out %out: !firrtl.uint<43>
+  // CHECK-LABEL: @InterModuleMultipleBar
+  // CHECK-SAME: in %in1: !firrtl.uint<17>
+  // CHECK-SAME: in %in2: !firrtl.uint<42>
+  // CHECK-SAME: out %out: !firrtl.uint<43>
+  firrtl.module @InterModuleMultipleFoo(in %in: !firrtl.uint, out %out: !firrtl.uint) {
+    %0 = firrtl.add %in, %in : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
+    firrtl.connect %out, %0 : !firrtl.uint, !firrtl.uint
+  }
+  firrtl.module @InterModuleMultipleBar(in %in1: !firrtl.uint<17>, in %in2: !firrtl.uint<42>, out %out: !firrtl.uint) {
+    %inst1_in, %inst1_out = firrtl.instance @InterModuleMultipleFoo {name = "inst1"} : !firrtl.flip<uint>, !firrtl.uint
+    %inst2_in, %inst2_out = firrtl.instance @InterModuleMultipleFoo {name = "inst2"} : !firrtl.flip<uint>, !firrtl.uint
+    %0 = firrtl.xor %inst1_out, %inst2_out : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
+    firrtl.connect %inst1_in, %in1 : !firrtl.flip<uint>, !firrtl.uint<17>
+    firrtl.connect %inst2_in, %in2 : !firrtl.flip<uint>, !firrtl.uint<42>
+    firrtl.connect %out, %0 : !firrtl.uint, !firrtl.uint
+  }
+
   firrtl.module @Foo() {}
 }

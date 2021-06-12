@@ -33,28 +33,36 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
                        [](py::object cls, MlirType elementType, intptr_t size) {
                          return cls(hwArrayTypeGet(elementType, size));
                        })
-      .def_property_readonly("element_type", [](MlirType self) {
-        return hwArrayTypeGetElementType(self);
-      });
+      .def_property_readonly(
+          "element_type",
+          [](MlirType self) { return hwArrayTypeGetElementType(self); })
+      .def_property_readonly(
+          "size", [](MlirType self) { return hwArrayTypeGetSize(self); });
 
   mlir_type_subclass(m, "StructType", hwTypeIsAStructType)
-      .def_classmethod("get", [](py::object cls, py::list pyFieldInfos) {
-        llvm::SmallVector<HWStructFieldInfo> mlirFieldInfos;
-        MlirContext ctx;
+      .def_classmethod(
+          "get",
+          [](py::object cls, py::list pyFieldInfos) {
+            llvm::SmallVector<HWStructFieldInfo> mlirFieldInfos;
+            MlirContext ctx;
 
-        // Since we're just passing string refs to the type constructor, copy
-        // them into a temporary vector to give them all new addresses.
-        llvm::SmallVector<llvm::SmallString<8>> names;
-        for (size_t i = 0, e = pyFieldInfos.size(); i < e; ++i) {
-          auto tuple = pyFieldInfos[i].cast<py::tuple>();
-          auto type = tuple[1].cast<MlirType>();
-          ctx = mlirTypeGetContext(type);
-          names.emplace_back(tuple[0].cast<std::string>());
-          mlirFieldInfos.push_back(HWStructFieldInfo{
-              mlirStringRefCreate(names[i].data(), names[i].size()),
-              mlirTypeAttrGet(type)});
-        }
-        return cls(
-            hwStructTypeGet(ctx, mlirFieldInfos.size(), mlirFieldInfos.data()));
+            // Since we're just passing string refs to the type constructor,
+            // copy them into a temporary vector to give them all new addresses.
+            llvm::SmallVector<llvm::SmallString<8>> names;
+            for (size_t i = 0, e = pyFieldInfos.size(); i < e; ++i) {
+              auto tuple = pyFieldInfos[i].cast<py::tuple>();
+              auto type = tuple[1].cast<MlirType>();
+              ctx = mlirTypeGetContext(type);
+              names.emplace_back(tuple[0].cast<std::string>());
+              mlirFieldInfos.push_back(HWStructFieldInfo{
+                  mlirStringRefCreate(names[i].data(), names[i].size()),
+                  mlirTypeAttrGet(type)});
+            }
+            return cls(hwStructTypeGet(ctx, mlirFieldInfos.size(),
+                                       mlirFieldInfos.data()));
+          })
+      .def("get_field", [](MlirType self, std::string fieldName) {
+        return hwStructTypeGetField(
+            self, mlirStringRefCreateFromCString(fieldName.c_str()));
       });
 }

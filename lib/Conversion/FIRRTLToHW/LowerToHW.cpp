@@ -13,6 +13,7 @@
 #include "../PassDetail.h"
 #include "circt/Conversion/FIRRTLToHW/FIRRTLToHW.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -1572,16 +1573,22 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   // Name attr is required on sv.wire but optional on firrtl.wire.
   auto nameAttr = op.nameAttr() ? op.nameAttr() : builder.getStringAttr("");
 
+  if (!AnnotationSet(op).hasDontTouch())
+    return setLoweringTo<sv::WireOp>(op, resultType, nameAttr);
+  auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
   auto symName = op.nameAttr();
-  if (symName) {
   // Prepend the name of the module to make the symbol name unique in the symbol
   // table, it is already unique in the module. Checking if the name is unique
   // in the SymbolTable is non-trivial.
-    auto moduleName =
-        cast<hw::HWModuleOp>(op->getParentOp()).getNameAttr().getValue().str();
-    symName = builder.getStringAttr("__" + moduleName + "__" +
-                                    symName.getValue().str());
-  }
+  if (symName && !symName.getValue().empty())
+    symName = builder.getStringAttr(
+        (Twine("__") + moduleName + Twine("__") + symName.getValue()).str());
+  else
+    // If marked with DontTouch but does not have a name, then add a symbol
+    // name. Note: Same symbol name for all such wires in the module.
+    symName =
+        builder.getStringAttr((Twine("__") + moduleName + Twine("__")).str());
+
   // This is not a temporary wire created by the compiler, so attach a symbol
   // name.
   return setLoweringTo<sv::WireOp>(op, resultType, nameAttr, symName);
@@ -1593,22 +1600,19 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
     return handleZeroBit(op.input(),
                          [&]() { return setLowering(op, Value()); });
 
-  // Node operations are logical noops, but can carry a name.  If a name is
-  // present then we lower this into a wire and a connect, otherwise we just
-  // drop it.
-  if (auto name = op->getAttrOfType<StringAttr>("name")) {
-    if (!name.getValue().empty()) {
-      // This is a locally visible, private wire created by the compiler, so
-      // do not attach a symbol name.
-      auto wire = builder.create<sv::WireOp>(operand.getType(), name);
-      builder.create<sv::ConnectOp>(wire, operand);
-    }
+  // Node operations are logical noops, but may carry annotations.  Don't touch
+  // indicates we should keep it as a wire.
+  if (AnnotationSet(op).hasDontTouch()) {
+    // name may be empty
+    auto name = op->getAttrOfType<StringAttr>("name");
+    auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
+    auto symName = builder.getStringAttr(
+        (Twine("__") + moduleName + Twine("__") + name.getValue()).str());
+
+    auto wire = builder.create<sv::WireOp>(operand.getType(), name, symName);
+    builder.create<sv::ConnectOp>(wire, operand);
   }
 
-  // TODO(clattner): This is dropping the location information from unnamed
-  // node ops.  I suspect that this falls below the fold in terms of things we
-  // care about given how Chisel works, but we should reevaluate with more
-  // information.
   return setLowering(op, operand);
 }
 
@@ -1671,7 +1675,11 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
   if (resultType.isInteger(0))
     return setLowering(op, Value());
 
-  auto regResult = builder.create<sv::RegOp>(resultType, op.nameAttr());
+  // Add symbol if DontTouch annotation present.
+  auto regResult =
+      AnnotationSet(op).hasDontTouch()
+          ? builder.create<sv::RegOp>(resultType, op.nameAttr(), op.nameAttr())
+          : builder.create<sv::RegOp>(resultType, op.nameAttr());
   (void)setLowering(op, regResult);
 
   initializeRegister(regResult, Value());
