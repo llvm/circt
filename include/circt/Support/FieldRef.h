@@ -67,8 +67,12 @@ namespace llvm {
 /// identity and field ID.
 template <>
 struct DenseMapInfo<circt::FieldRef> {
-  static inline circt::FieldRef getEmptyKey() { return circt::FieldRef(); }
-  static inline circt::FieldRef getTombstoneKey() { return circt::FieldRef(); }
+  static inline circt::FieldRef getEmptyKey() {
+    return circt::FieldRef(DenseMapInfo<mlir::Value>::getEmptyKey(), 0);
+  }
+  static inline circt::FieldRef getTombstoneKey() {
+    return circt::FieldRef(DenseMapInfo<mlir::Value>::getTombstoneKey(), 0);
+  }
   static unsigned getHashValue(const circt::FieldRef &val) {
     return circt::hash_value(val);
   }
