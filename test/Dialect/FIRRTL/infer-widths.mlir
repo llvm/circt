@@ -564,6 +564,7 @@ firrtl.circuit "Foo" {
     firrtl.connect %out, %in : !firrtl.vector<uint, 2>, !firrtl.vector<uint<4>, 2>
   }
 
+  // CHECK-LABEL: @InferVectorFancy
   firrtl.module @InferVectorFancy(in %in : !firrtl.uint<4>) {
     // CHECK: firrtl.wire : !firrtl.vector<uint<4>, 10>
     %wv = firrtl.wire : !firrtl.vector<uint, 10>
@@ -576,6 +577,32 @@ firrtl.circuit "Foo" {
 
     %wv_2 = firrtl.subindex %wv[2] : !firrtl.vector<uint, 10>
     firrtl.connect %wb_a, %wv_2 : !firrtl.uint, !firrtl.uint
+  }
+
+  // CHECK-LABEL: @AttachOne
+  // CHECK-SAME: in %a0: !firrtl.analog<8>
+  firrtl.module @AttachOne(in %a0: !firrtl.analog<8>) {
+    firrtl.attach %a0 : !firrtl.analog<8>
+  }
+
+  // CHECK-LABEL: @AttachTwo
+  // CHECK-SAME: in %a0: !firrtl.analog<8>
+  // CHECK-SAME: in %a1: !firrtl.analog<8>
+  firrtl.module @AttachTwo(in %a0: !firrtl.analog<8>, in %a1: !firrtl.analog) {
+    firrtl.attach %a0, %a1 : !firrtl.analog<8>, !firrtl.analog
+  }
+
+  // CHECK-LABEL: @AttachMany
+  // CHECK-SAME: in %a0: !firrtl.analog<8>
+  // CHECK-SAME: in %a1: !firrtl.analog<8>
+  // CHECK-SAME: in %a2: !firrtl.analog<8>
+  // CHECK-SAME: in %a3: !firrtl.analog<8>
+  firrtl.module @AttachMany(
+    in %a0: !firrtl.analog<8>,
+    in %a1: !firrtl.analog,
+    in %a2: !firrtl.analog<8>,
+    in %a3: !firrtl.analog) {
+    firrtl.attach %a0, %a1, %a2, %a3 : !firrtl.analog<8>, !firrtl.analog, !firrtl.analog<8>, !firrtl.analog
   }
 
   firrtl.module @Foo() {}

@@ -894,7 +894,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
     else
       allWidthsKnown = false;
   }
-  if (allWidthsKnown && !isa<ConnectOp, PartialConnectOp>(op))
+  if (allWidthsKnown && !isa<ConnectOp, PartialConnectOp, AttachOp>(op))
     return success();
 
   // Actually generate the necessary constraint expressions.
@@ -1081,6 +1081,21 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
           return;
         op.emitOpError("not supported in width inference");
         mappingFailed = true;
+      })
+      .Case<AttachOp>([&](auto op) {
+        // Attach connects multiple analog signals together. All signals must
+        // have the same bit width. Signals without bit width inherit from the
+        // other signals.
+        if (op.operands().empty())
+          return;
+        auto prev = op.operands()[0];
+        for (auto operand : op.operands().drop_front()) {
+          auto e1 = getExpr(prev);
+          auto e2 = getExpr(operand);
+          constrainTypes(e1, e2);
+          constrainTypes(e2, e1);
+          prev = operand;
+        }
       })
 
       // Handle the no-ops that don't interact with width inference.
