@@ -243,6 +243,9 @@ private:
   SmallVector<Attribute, 8> newArgAttrs;
   size_t originalNumModuleArgs;
 
+  /// Connect two values, truncating the source value if it is a larger width.
+  ConnectOp emitTruncatingConnect(Value dest, Value src);
+
   void recursivePartialConnect(Value a, FIRRTLType aType, Value b,
                                FIRRTLType bType, unsigned aIndex,
                                unsigned bIndex, bool aFlip = false);
@@ -976,6 +979,33 @@ void TypeLoweringVisitor::visitStmt(ConnectOp op) {
   opsToRemove.push_back(op);
 }
 
+/// This creates a connect operation between two values and emits a truncation
+/// if the LHS is smaller than the RHS.  This code was lifted from a
+/// PartialConnect canonicalization pattern.
+ConnectOp TypeLoweringVisitor::emitTruncatingConnect(Value dest, Value src) {
+  // Get the types.  Strip off any outer flip.
+  auto srcType = src.getType().cast<FIRRTLType>().stripFlip().first;
+  auto destType = dest.getType().cast<FIRRTLType>().stripFlip().first;
+
+  auto srcWidth = srcType.getBitWidthOrSentinel();
+  auto destWidth = destType.getBitWidthOrSentinel();
+
+  // Check if the source is larger than the destination, if so we will have to
+  // emit a truncation.
+  if (destType.isa<IntType>() && srcType.isa<IntType>() && srcWidth >= 0 &&
+      destWidth >= 0 && destWidth < srcWidth) {
+    // firrtl.tail always returns uint even for sint operands.
+    IntType tmpType = destType.cast<IntType>();
+    if (tmpType.isSigned())
+      tmpType = UIntType::get(destType.getContext(), destWidth);
+    src = builder->create<TailPrimOp>(tmpType, src, srcWidth - destWidth);
+    // Insert the cast back to signed if needed.
+    if (tmpType != destType)
+      src = builder->create<AsSIntPrimOp>(destType, src);
+  }
+  return builder->create<ConnectOp>(dest, src);
+}
+
 void TypeLoweringVisitor::recursivePartialConnect(Value a, FIRRTLType aType,
                                                   Value b, FIRRTLType bType,
                                                   unsigned aID, unsigned bID,
@@ -1015,28 +1045,45 @@ void TypeLoweringVisitor::recursivePartialConnect(Value a, FIRRTLType aType,
         recursivePartialConnect(a, FlipType::get(aType), b, bType, aID, bID,
                                 !aFlip);
       })
+      .Case<AnalogType>([&](auto analogType) {
+        SmallVector<Value, 2> operands{getBundleLowering(FieldRef(a, aID)),
+                                       getBundleLowering(FieldRef(b, bID))};
+        builder->create<AttachOp>(operands);
+      })
       .Default([&](auto) {
+        auto newA = getBundleLowering(FieldRef(a, aID));
+        auto newB = getBundleLowering(FieldRef(b, bID));
         if (aFlip)
-          std::swap(a, b);
-        builder->create<PartialConnectOp>(getBundleLowering(FieldRef(a, aID)),
-                                          getBundleLowering(FieldRef(b, bID)));
+          std::swap(newA, newB);
+        // We transform all partial connects into regular connect statements,
+        // however, partial connect allows the LHS statement to be a smaller
+        // width than the RHS. We might need to truncate the RHS value.
+        emitTruncatingConnect(newA, newB);
       });
 }
 
 void TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
   Value dest = op.dest();
   Value src = op.src();
+  auto destType = dest.getType().cast<FIRRTLType>();
+  auto srcType = src.getType().cast<FIRRTLType>();
 
-  // Attempt to get the bundle types, potentially unwrapping an outer flip
-  // type that wraps the whole bundle.
-  FIRRTLType destType = getCanonicalAggregateType(dest.getType());
-  FIRRTLType srcType = getCanonicalAggregateType(src.getType());
-
-  // If we aren't connecting two bundles, there is nothing to do.
-  if (!destType || !srcType)
-    return;
-
-  recursivePartialConnect(dest, destType, src, srcType.getPassiveType(), 0, 0);
+  // Partial connects are completely removed and replaced by regular connects.
+  // This makes this one of the few ops that actually has to do something during
+  // this pass the types are not bundles.
+  auto tmpType = destType.stripFlip().first;
+  if (tmpType.isa<BundleType, FVectorType>()) {
+    // Bundle types have to be recursively lowered.
+    this->recursivePartialConnect(dest, destType, src, srcType.getPassiveType(),
+                                  0, 0);
+  } else if (destType.isa<AnalogType>()) {
+    // If we are connecting analogs, replace with attach.
+    SmallVector<Value, 2> operands{dest, src};
+    builder->create<AttachOp>(operands);
+  } else {
+    // Replace this partial connect with a regular connect.
+    emitTruncatingConnect(dest, src);
+  }
   opsToRemove.push_back(op);
 }
 
