@@ -542,12 +542,20 @@ firrtl.circuit "Foo" {
     firrtl.connect %out, %in : !firrtl.bundle<a: uint, b: uint>, !firrtl.bundle<a: uint<2>, b: uint<3>>
   }
 
-  // CHECK-LABEL: @InferVector
-  firrtl.module @InferVector(in %in : !firrtl.uint<4>) {
+  // CHECK-LABEL: @InferVectorSubindex
+  firrtl.module @InferVectorSubindex(in %in : !firrtl.uint<4>) {
     // CHECK: firrtl.wire : !firrtl.vector<uint<4>, 10>
     %w = firrtl.wire : !firrtl.vector<uint, 10>
     %w_5 = firrtl.subindex %w[5] : !firrtl.vector<uint, 10>
     firrtl.connect %w_5, %in : !firrtl.uint, !firrtl.uint<4>
+  }
+
+  // CHECK-LABEL: @InferVectorSubaccess
+  firrtl.module @InferVectorSubaccess(in %in : !firrtl.uint<4>, in %addr : !firrtl.uint<32>) {
+    // CHECK: firrtl.wire : !firrtl.vector<uint<4>, 10>
+    %w = firrtl.wire : !firrtl.vector<uint, 10>
+    %w_addr = firrtl.subaccess %w[%addr] : !firrtl.vector<uint, 10>, !firrtl.uint<32>
+    firrtl.connect %w_addr, %in : !firrtl.uint, !firrtl.uint<4>
   }
 
   // CHECK-LABEL: @InferVectorPort

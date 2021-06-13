@@ -945,7 +945,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         auto fieldID = bundleType.getFieldID(index);
         unifyTypes(FieldRef(op.input(), fieldID), op.getResult());
       })
-      .Case<SubindexOp>([&](auto op) {
+      .Case<SubindexOp, SubaccessOp>([&](auto op) {
         auto type = op.input().getType();
         if (auto flipType = type.template dyn_cast<FlipType>())
           type = flipType.getElementType();
