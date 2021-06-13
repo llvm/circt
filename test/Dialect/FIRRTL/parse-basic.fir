@@ -559,7 +559,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input bf: { flip int_1 : UInt<1>, int_out : UInt<2>}
     ; CHECK: %0 = firrtl.subfield %bf("int_1")
     node _T = bf.int_1
-    when _T :  ; CHECK: firrtl.when %0 {
+    ; CHECK: %1 = firrtl.asPassive %0
+    when _T :  ; CHECK: firrtl.when %1 {
       skip
 
   ; CHECK-LABEL: firrtl.module @mem_depth_1
