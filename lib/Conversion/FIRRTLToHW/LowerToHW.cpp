@@ -367,12 +367,12 @@ void FIRRTLModuleLowering::lowerMemoryDecls(const SmallVector<FirMemory> &mems,
     size_t inputPin = 0;
     size_t outputPin = 0;
 
-    auto makePortCommon = [&](StringRef prefix, Twine i, Type bAddrType) {
-      ports.push_back({b.getStringAttr((prefix + "_clock_" + i).str()),
+    auto makePortCommon = [&](StringRef prefix, size_t idx, Type bAddrType) {
+      ports.push_back({b.getStringAttr(prefix + "_clock_" + Twine(idx)),
                        hw::INPUT, b1Type, inputPin++});
-      ports.push_back({b.getStringAttr((prefix + "_en_" + i).str()), hw::INPUT,
+      ports.push_back({b.getStringAttr(prefix + "_en_" + Twine(idx)), hw::INPUT,
                        b1Type, inputPin++});
-      ports.push_back({b.getStringAttr((prefix + "_addr_" + i).str()),
+      ports.push_back({b.getStringAttr(prefix + "_addr_" + Twine(idx)),
                        hw::INPUT, bAddrType, inputPin++});
     };
 
@@ -383,28 +383,28 @@ void FIRRTLModuleLowering::lowerMemoryDecls(const SmallVector<FirMemory> &mems,
         &getContext(), std::max(1U, llvm::Log2_64_Ceil(mem.depth)));
 
     for (size_t i = 0; i < mem.numReadPorts; ++i) {
-      makePortCommon("ro", Twine(i), bAddrType);
+      makePortCommon("ro", i, bAddrType);
       ports.push_back({b.getStringAttr(("ro_data_" + Twine(i)).str()),
                        hw::OUTPUT, bDataType, outputPin++});
     }
     for (size_t i = 0; i < mem.numReadWritePorts; ++i) {
-      makePortCommon("rw", Twine(i), bAddrType);
-      ports.push_back({b.getStringAttr(("rw_wmode_" + Twine(i)).str()),
-                       hw::INPUT, b1Type, inputPin++});
-      ports.push_back({b.getStringAttr(("rw_wmask_" + Twine(i)).str()),
-                       hw::INPUT, b1Type, inputPin++});
-      ports.push_back({b.getStringAttr(("rw_wdata_" + Twine(i)).str()),
-                       hw::INPUT, bDataType, inputPin++});
-      ports.push_back({b.getStringAttr(("rw_rdata_" + Twine(i)).str()),
-                       hw::OUTPUT, bDataType, outputPin++});
+      makePortCommon("rw", i, bAddrType);
+      ports.push_back({b.getStringAttr("rw_wmode_" + Twine(i)), hw::INPUT,
+                       b1Type, inputPin++});
+      ports.push_back({b.getStringAttr("rw_wmask_" + Twine(i)), hw::INPUT,
+                       b1Type, inputPin++});
+      ports.push_back({b.getStringAttr("rw_wdata_" + Twine(i)), hw::INPUT,
+                       bDataType, inputPin++});
+      ports.push_back({b.getStringAttr("rw_rdata_" + Twine(i)), hw::OUTPUT,
+                       bDataType, outputPin++});
     }
 
     for (size_t i = 0; i < mem.numWritePorts; ++i) {
-      makePortCommon("wo", Twine(i), bAddrType);
-      ports.push_back({b.getStringAttr(("wo_mask_" + Twine(i)).str()),
-                       hw::INPUT, b1Type, inputPin++});
-      ports.push_back({b.getStringAttr(("wo_data_" + Twine(i)).str()),
-                       hw::INPUT, bDataType, inputPin++});
+      makePortCommon("wo", i, bAddrType);
+      ports.push_back({b.getStringAttr("wo_mask_" + Twine(i)), hw::INPUT,
+                       b1Type, inputPin++});
+      ports.push_back({b.getStringAttr("wo_data_" + Twine(i)), hw::INPUT,
+                       bDataType, inputPin++});
     }
     std::array<NamedAttribute, 8> genAttrs = {
         b.getNamedAttr("depth", b.getI64IntegerAttr(mem.depth)),
@@ -1581,13 +1581,12 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   // table, it is already unique in the module. Checking if the name is unique
   // in the SymbolTable is non-trivial.
   if (symName && !symName.getValue().empty())
-    symName = builder.getStringAttr(
-        (Twine("__") + moduleName + Twine("__") + symName.getValue()).str());
+    symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
+                                    symName.getValue());
   else
     // If marked with DontTouch but does not have a name, then add a symbol
     // name. Note: Same symbol name for all such wires in the module.
-    symName =
-        builder.getStringAttr((Twine("__") + moduleName + Twine("__")).str());
+    symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__"));
 
   // This is not a temporary wire created by the compiler, so attach a symbol
   // name.
@@ -1606,8 +1605,8 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
     // name may be empty
     auto name = op->getAttrOfType<StringAttr>("name");
     auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
-    auto symName = builder.getStringAttr(
-        (Twine("__") + moduleName + Twine("__") + name.getValue()).str());
+    auto symName = builder.getStringAttr(Twine("__") + moduleName +
+                                         Twine("__") + name.getValue());
 
     auto wire = builder.create<sv::WireOp>(operand.getType(), name, symName);
     builder.create<sv::ConnectOp>(wire, operand);
@@ -1758,10 +1757,9 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     auto portName = op.getPortName(i).getValue();
     auto portKind = op.getPortKind(i);
 
-    auto &portKindNum =
-        portKind == MemOp::PortKind::Read
-            ? readCount
-            : portKind == MemOp::PortKind::Write ? writeCount : readwriteCount;
+    auto &portKindNum = portKind == MemOp::PortKind::Read    ? readCount
+                        : portKind == MemOp::PortKind::Write ? writeCount
+                                                             : readwriteCount;
 
     auto addInput = [&](SmallVectorImpl<Value> &operands, StringRef field,
                         size_t width) {

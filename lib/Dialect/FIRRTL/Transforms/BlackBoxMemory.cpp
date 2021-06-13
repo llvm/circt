@@ -18,7 +18,6 @@
 #include "mlir/IR/OperationSupport.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/Hashing.h"
-#include "llvm/ADT/Twine.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -111,13 +110,13 @@ getBlackBoxPortsForMemOp(MemOp op, ArrayRef<MemOp::NamedPort> memPorts,
     std::string prefix;
     switch (memPorts[i].second) {
     case MemOp::PortKind::Read:
-      prefix = (Twine("R") + Twine(readPorts++) + "_").str();
+      prefix = ("R" + Twine(readPorts++) + "_").str();
       break;
     case MemOp::PortKind::Write:
-      prefix = (Twine("W") + Twine(writePorts++) + "_").str();
+      prefix = ("W" + Twine(writePorts++) + "_").str();
       break;
     case MemOp::PortKind::ReadWrite:
-      prefix = (Twine("RW") + Twine(readWritePorts++) + "_").str();
+      prefix = ("RW" + Twine(readWritePorts++) + "_").str();
       break;
     }
     // Flatten the bundle representing a memory port, name-mangling and adding

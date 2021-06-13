@@ -362,7 +362,7 @@ static bool parseAugmentedType(
         tryGetAs<StringAttr>(refTarget, refTarget, "ref", loc, clazz, path);
     SmallVector<Attribute> componentAttrs;
     for (size_t i = 0, e = componentAttr.size(); i != e; ++i) {
-      auto cPath = path + ".component[" + Twine(i) + "]";
+      auto cPath = (path + ".component[" + Twine(i) + "]").str();
       auto component = componentAttr[i];
       auto dict = component.dyn_cast_or_null<DictionaryAttr>();
       if (!dict) {
@@ -384,7 +384,7 @@ static bool parseAugmentedType(
                "A StringAttr target token must be found with a subfield target "
                "token.");
         componentAttrs.push_back(
-            StringAttr::get(context, (Twine(".") + field.getValue()).str()));
+            StringAttr::get(context, Twine(".") + field.getValue()));
         continue;
       }
 
@@ -394,9 +394,7 @@ static bool parseAugmentedType(
                "An IntegerAttr target token must be found with a subindex "
                "target token.");
         componentAttrs.push_back(StringAttr::get(
-            context,
-            (Twine("[") + std::to_string(index.getValue().getZExtValue()) + "]")
-                .str()));
+            context, "[" + Twine(index.getValue().getZExtValue()) + "]"));
         continue;
       }
 
@@ -454,7 +452,7 @@ static bool parseAugmentedType(
             << "The received element was: " << elementsAttr[i] << "\n";
         return false;
       }
-      auto ePath = path + ".elements[" + Twine(i) + "]";
+      auto ePath = (path + ".elements[" + Twine(i) + "]").str();
       auto name = tryGetAs<StringAttr>(field, root, "name", loc, clazz, ePath);
       auto tpe =
           tryGetAs<DictionaryAttr>(field, root, "tpe", loc, clazz, ePath);
@@ -615,7 +613,7 @@ bool circt::firrtl::scatterCustomAnnotations(
         return false;
       for (size_t i = 0, e = keyAttr.size(); i != e; ++i) {
         auto b = keyAttr[i];
-        auto path = "keys[" + Twine(i) + "]";
+        auto path = ("keys[" + Twine(i) + "]").str();
         auto bDict = b.cast<DictionaryAttr>();
         auto classAttr =
             tryGetAs<StringAttr>(bDict, dict, "class", loc, clazz, path);

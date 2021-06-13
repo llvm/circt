@@ -17,7 +17,6 @@
 #include "mlir/IR/Visitors.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Translation.h"
-#include "llvm/ADT/Twine.h"
 #include "llvm/Support/FormattedStream.h"
 
 using namespace mlir;
