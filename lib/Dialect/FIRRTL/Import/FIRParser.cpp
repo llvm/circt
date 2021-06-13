@@ -2298,7 +2298,13 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
-  condition = convertToPassive(condition);
+
+  // If the operand flow is sink, then forcibly cast this to passive.
+  // This avoids a problem where when this type will be lowered an
+  // asPassive would need to be created.  This is difficult to check at
+  // that point, but trivial here.
+  if (foldFlow(condition) == Flow::Sink)
+    condition = forcePassive(condition);
 
   // Create the IR representation for the when.
   auto whenStmt = builder.create<WhenOp>(condition, /*createElse*/ false);
