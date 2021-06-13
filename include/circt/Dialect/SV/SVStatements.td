@@ -479,8 +479,9 @@ def VerbatimOp : SVOp<"verbatim"> {
     "$string attr-dict (`(` $operands^ `)` `:` type($operands))?";
 
   let builders = [
-    OpBuilder<(ins "StringRef":$string),
-                 "build(odsBuilder, odsState, string, ValueRange{});">,
+    OpBuilder<(ins "Twine":$string),
+                 "build(odsBuilder, odsState, "
+                 "odsBuilder.getStringAttr(string), ValueRange{});">,
     OpBuilder<(ins "StringAttr":$string),
                  "build(odsBuilder, odsState, string, ValueRange{});">
   ];
