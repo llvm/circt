@@ -152,14 +152,20 @@ private:
         condition.getLoc(), condition.getType(), condition, value);
   }
 
+  /// If a value has an outer flip, convert the value to passive.
+  Value convertToPassive(OpBuilder &builder, Location loc, Value input) {
+    auto inType = input.getType().cast<FIRRTLType>();
+    return builder.createOrFold<AsPassivePrimOp>(loc, inType.getPassiveType(), input);
+  }
+
   /// Take two connection operations and merge them in to a new connect under a
   /// condition.  Destination of both connects should be `dest`.
   ConnectOp flattenConditionalConnections(OpBuilder &b, Location loc,
                                           Value dest, Value cond,
                                           Operation *whenTrueConn,
                                           Operation *whenFalseConn) {
-    auto whenTrue = getConnectedValue(whenTrueConn);
-    auto whenFalse = getConnectedValue(whenFalseConn);
+    auto whenTrue = convertToPassive(b, loc, getConnectedValue(whenTrueConn));
+    auto whenFalse = convertToPassive(b, loc, getConnectedValue(whenFalseConn));
     auto newValue = b.createOrFold<MuxPrimOp>(loc, cond, whenTrue, whenFalse);
     auto newConnect = b.create<ConnectOp>(loc, dest, newValue);
     whenTrueConn->erase();
