@@ -529,11 +529,15 @@ firrtl.circuit "Foo" {
   }
 
   // CHECK-LABEL: @InferBundle
-  firrtl.module @InferBundle(in %in : !firrtl.uint<3>) {
+  firrtl.module @InferBundle(in %in : !firrtl.uint<3>, in %clk : !firrtl.clock) {
     // CHECK: firrtl.wire : !firrtl.bundle<a: uint<3>>
+    // CHECK: firrtl.reg %clk : (!firrtl.clock) -> !firrtl.bundle<a: uint<3>>
     %w = firrtl.wire : !firrtl.bundle<a: uint>
+    %r = firrtl.reg %clk : (!firrtl.clock) -> !firrtl.bundle<a: uint>
     %w_a = firrtl.subfield %w("a") : (!firrtl.bundle<a: uint>) -> !firrtl.uint
+    %r_a = firrtl.subfield %r("a") : (!firrtl.bundle<a: uint>) -> !firrtl.uint
     firrtl.connect %w_a, %in : !firrtl.uint, !firrtl.uint<3>
+    firrtl.connect %r_a, %in : !firrtl.uint, !firrtl.uint<3>
   }
 
   // CHECK-LABEL: @InferBundlePort
@@ -543,19 +547,27 @@ firrtl.circuit "Foo" {
   }
 
   // CHECK-LABEL: @InferVectorSubindex
-  firrtl.module @InferVectorSubindex(in %in : !firrtl.uint<4>) {
+  firrtl.module @InferVectorSubindex(in %in : !firrtl.uint<4>, in %clk : !firrtl.clock) {
     // CHECK: firrtl.wire : !firrtl.vector<uint<4>, 10>
+    // CHECK: firrtl.reg %clk : (!firrtl.clock) -> !firrtl.vector<uint<4>, 10>
     %w = firrtl.wire : !firrtl.vector<uint, 10>
+    %r = firrtl.reg %clk : (!firrtl.clock) -> !firrtl.vector<uint, 10>
     %w_5 = firrtl.subindex %w[5] : !firrtl.vector<uint, 10>
+    %r_5 = firrtl.subindex %r[5] : !firrtl.vector<uint, 10>
     firrtl.connect %w_5, %in : !firrtl.uint, !firrtl.uint<4>
+    firrtl.connect %r_5, %in : !firrtl.uint, !firrtl.uint<4>
   }
 
   // CHECK-LABEL: @InferVectorSubaccess
-  firrtl.module @InferVectorSubaccess(in %in : !firrtl.uint<4>, in %addr : !firrtl.uint<32>) {
+  firrtl.module @InferVectorSubaccess(in %in : !firrtl.uint<4>, in %addr : !firrtl.uint<32>, in %clk : !firrtl.clock) {
     // CHECK: firrtl.wire : !firrtl.vector<uint<4>, 10>
+    // CHECK: firrtl.reg %clk : (!firrtl.clock) -> !firrtl.vector<uint<4>, 10>
     %w = firrtl.wire : !firrtl.vector<uint, 10>
+    %r = firrtl.reg %clk : (!firrtl.clock) -> !firrtl.vector<uint, 10>
     %w_addr = firrtl.subaccess %w[%addr] : !firrtl.vector<uint, 10>, !firrtl.uint<32>
+    %r_addr = firrtl.subaccess %r[%addr] : !firrtl.vector<uint, 10>, !firrtl.uint<32>
     firrtl.connect %w_addr, %in : !firrtl.uint, !firrtl.uint<4>
+    firrtl.connect %r_addr, %in : !firrtl.uint, !firrtl.uint<4>
   }
 
   // CHECK-LABEL: @InferVectorPort
