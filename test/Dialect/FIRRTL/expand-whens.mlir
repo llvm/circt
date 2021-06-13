@@ -221,6 +221,18 @@ firrtl.module @set_in_else0(in %p : !firrtl.uint<1>, out %out : !firrtl.uint<2>)
 // CHECK-NEXT: }
 
 
+// Test that when there is implicit extension, the mux infers the correct type.
+firrtl.module @check_mux_return_type(in %p : !firrtl.uint<1>, out %out : !firrtl.uint<2>) {
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
+  firrtl.connect %out, %c0_ui1 : !firrtl.uint<2>, !firrtl.uint<1>
+  firrtl.when %p {
+  } else {
+    firrtl.connect %out, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+  }
+  // CHECK: firrtl.mux(%p, %c0_ui1, %c1_ui2) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<2>
+}
+
 // Test that wire written to in only the else block is resolved.
 firrtl.module @set_in_else1(in %clock : !firrtl.clock, in %p : !firrtl.uint<1>, out %out : !firrtl.uint<2>) {
   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>

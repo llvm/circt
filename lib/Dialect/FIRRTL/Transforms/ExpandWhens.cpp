@@ -160,8 +160,7 @@ private:
                                           Operation *whenFalseConn) {
     auto whenTrue = getConnectedValue(whenTrueConn);
     auto whenFalse = getConnectedValue(whenFalseConn);
-    auto newValue = b.createOrFold<MuxPrimOp>(loc, whenTrue.getType(), cond,
-                                              whenTrue, whenFalse);
+    auto newValue = b.createOrFold<MuxPrimOp>(loc, cond, whenTrue, whenFalse);
     auto newConnect = b.create<ConnectOp>(loc, dest, newValue);
     whenTrueConn->erase();
     whenFalseConn->erase();
