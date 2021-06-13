@@ -1074,8 +1074,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       })
 
       // Handle the various connect statements that imply a type constraint.
-      .Case<ConnectOp>([&](auto op) {
-        constrainTypes(op.dest(), op.src()); })
+      .Case<ConnectOp>([&](auto op) { constrainTypes(op.dest(), op.src()); })
       .Case<PartialConnectOp>([&](auto op) {
         if (!hasUninferredWidth(op.dest().getType()))
           return;
@@ -1162,8 +1161,9 @@ void InferenceMapping::declareVars(Value value, Location loc) {
 /// Establishes constraints to ensure the sizes in the `larger` type are greater
 /// than or equal to the sizes in the `smaller` type.
 void InferenceMapping::constrainTypes(Value larger, Value smaller) {
-    auto type = larger.getType().dyn_cast<FIRRTLType>();
-  // Strip an outer flip off the type if there is one.  We don't want to interpret an outerflip the same way as a flip in a bundle.
+  auto type = larger.getType().dyn_cast<FIRRTLType>();
+  // Strip an outer flip off the type if there is one.  We don't want to
+  // interpret an outerflip the same way as a flip in a bundle.
   if (auto flipType = type.dyn_cast<FlipType>())
     type = flipType.getElementType();
   // Recurse to every leaf element and set larger >= smaller.
@@ -1186,8 +1186,8 @@ void InferenceMapping::constrainTypes(Value larger, Value smaller) {
           constrainTypes(getExpr(FieldRef(larger, fieldID)),
                          getExpr(FieldRef(smaller, fieldID)));
         } else {
-      llvm_unreachable("Unknown type inside a bundle!");
-    }
+          llvm_unreachable("Unknown type inside a bundle!");
+        }
       };
 
   constrain(type, larger, smaller);
@@ -1217,7 +1217,8 @@ void InferenceMapping::unifyTypes(FieldRef lhsRef, Value rhs) {
   // We assume that the RHS is a sub element of the LHS, and that we are
   // going to be recursing through the types.
   auto type = rhs.getType().dyn_cast<FIRRTLType>();
-    // Strip an outer flip off the type if there is one.  We don't want to interpret an outerflip the same way as a flip in a bundle.
+  // Strip an outer flip off the type if there is one.  We don't want to
+  // interpret an outerflip the same way as a flip in a bundle.
   if (auto flipType = type.dyn_cast<FlipType>())
     type = flipType.getElementType();
 
@@ -1404,9 +1405,12 @@ bool InferenceTypeUpdate::updateValue(Value value) {
     return false;
 
   // Ignore `InvalidValueOp`, as we generally lack the information to infer a
-  // type for them. They tend to end up on one side of a multiplexer, and are
+  // type for it. These ops tend to end up on one side of a multiplexer, and are
   // removed at a later canonicalization stage. Since they are directly used as
-  // a multiplexer input, there are now constraints on their size.
+  // a multiplexer input, there are no constraints on their size. Inferring them
+  // would involved potentially duplicating them once for each use site, and
+  // then trying to infer their size from context (which we do nowhere else in
+  // FIRRTL).
   if (isa_and_nonnull<InvalidValueOp>(value.getDefiningOp()))
     return false;
 
