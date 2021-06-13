@@ -738,7 +738,8 @@ LogicalResult ConstraintSolver::solve() {
     TypeSwitch<Expr *>(expr)
         .Case<VarExpr>([&](auto *var) {
           if (var->constraint)
-            var->solution = var->constraint->solution;
+            var->solution = var->constraint->solution.map(
+                [](int32_t value) { return std::max(value, 0); });
         })
         .Case<PowExpr>([&](auto *expr) {
           solveUnary(expr, [](int32_t arg) {
@@ -1514,7 +1515,7 @@ FIRRTLType InferenceTypeUpdate::updateType(FieldRef fieldRef, FIRRTLType type) {
     return type;
   }
   int32_t solution = expr->solution.getValue();
-  assert(solution >= 0); // TODO: This should never happen -- corner cases?
+  assert(solution >= 0); // The solver infers variables to be 0 or greater.
   return resizeType(type, solution);
 }
 
