@@ -617,5 +617,59 @@ firrtl.circuit "Foo" {
     firrtl.attach %a0, %a1, %a2, %a3 : !firrtl.analog<8>, !firrtl.analog, !firrtl.analog<8>, !firrtl.analog
   }
 
+  // CHECK-LABEL: @MemScalar
+  // CHECK-SAME: out %out: !firrtl.uint<7>
+  firrtl.module @MemScalar(out %out: !firrtl.uint) {
+    // CHECK: firrtl.mem
+    // CHECK-SAME: data: flip<uint<7>>
+    // CHECK-SAME: data: uint<7>
+    // CHECK-SAME: data: uint<7>
+    %m_p0, %m_p1, %m_p2 = firrtl.mem Undefined {
+      depth = 8 : i64,
+      name = "m",
+      portNames = ["p0", "p1", "p2"],
+      readLatency = 0 : i32,
+      writeLatency = 1 : i32} :
+      !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: flip<uint>>>,
+      !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint, mask: uint<1>>>,
+      !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, wmode: uint<1>, rdata: flip<uint>, wdata: uint, wmask: uint<1>>>
+    %m_p0_data = firrtl.subfield %m_p0("data") : (!firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: flip<uint>>>) -> !firrtl.uint
+    %m_p1_data = firrtl.subfield %m_p1("data") : (!firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint, mask: uint<1>>>) -> !firrtl.uint
+    %m_p2_wdata = firrtl.subfield %m_p2("wdata") : (!firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, wmode: uint<1>, rdata: flip<uint>, wdata: uint, wmask: uint<1>>>) -> !firrtl.uint
+    %c0_ui5 = firrtl.constant 0 : !firrtl.uint<5>
+    %c0_ui7 = firrtl.constant 0 : !firrtl.uint<7>
+    firrtl.connect %m_p1_data, %c0_ui5 : !firrtl.uint, !firrtl.uint<5>
+    firrtl.connect %m_p2_wdata, %c0_ui7 : !firrtl.uint, !firrtl.uint<7>
+    firrtl.connect %out, %m_p0_data : !firrtl.uint, !firrtl.uint
+  }
+
+  // CHECK-LABEL: @MemBundle
+  // CHECK-SAME: out %out: !firrtl.bundle<a: uint<7>>
+  firrtl.module @MemBundle(out %out: !firrtl.bundle<a: uint>) {
+    // CHECK: firrtl.mem
+    // CHECK-SAME: data: flip<bundle<a: uint<7>>>
+    // CHECK-SAME: data: bundle<a: uint<7>>
+    // CHECK-SAME: data: bundle<a: uint<7>>
+    %m_p0, %m_p1, %m_p2 = firrtl.mem Undefined {
+      depth = 8 : i64,
+      name = "m",
+      portNames = ["p0", "p1", "p2"],
+      readLatency = 0 : i32,
+      writeLatency = 1 : i32} :
+      !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: flip<bundle<a: uint>>>>,
+      !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<a: uint>, mask: bundle<a: uint<1>>>>,
+      !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, wmode: uint<1>, rdata: flip<bundle<a: uint>>, wdata: bundle<a: uint>, wmask: bundle<a: uint<1>>>>
+    %m_p0_data = firrtl.subfield %m_p0("data") : (!firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: flip<bundle<a: uint>>>>) -> !firrtl.bundle<a: uint>
+    %m_p1_data = firrtl.subfield %m_p1("data") : (!firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<a: uint>, mask: bundle<a: uint<1>>>>) -> !firrtl.bundle<a: uint>
+    %m_p2_wdata = firrtl.subfield %m_p2("wdata") : (!firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, wmode: uint<1>, rdata: flip<bundle<a: uint>>, wdata: bundle<a: uint>, wmask: bundle<a: uint<1>>>>) -> !firrtl.bundle<a: uint>
+    %m_p1_data_a = firrtl.subfield %m_p1_data("a") : (!firrtl.bundle<a: uint>) -> !firrtl.uint
+    %m_p2_wdata_a = firrtl.subfield %m_p2_wdata("a") : (!firrtl.bundle<a: uint>) -> !firrtl.uint
+    %c0_ui5 = firrtl.constant 0 : !firrtl.uint<5>
+    %c0_ui7 = firrtl.constant 0 : !firrtl.uint<7>
+    firrtl.connect %m_p1_data_a, %c0_ui5 : !firrtl.uint, !firrtl.uint<5>
+    firrtl.connect %m_p2_wdata_a, %c0_ui7 : !firrtl.uint, !firrtl.uint<7>
+    firrtl.connect %out, %m_p0_data : !firrtl.bundle<a: uint>, !firrtl.bundle<a: uint>
+  }
+
   firrtl.module @Foo() {}
 }

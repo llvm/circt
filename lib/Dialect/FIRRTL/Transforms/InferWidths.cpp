@@ -808,8 +808,10 @@ public:
   /// the expression "smaller".
   void constrainTypes(Expr *larger, Expr *smaller);
 
-  /// Recusively set the two types to equal.
-  void unifyTypes(FieldRef lhs, Value rhs);
+  /// Assign the constraint expressions of the fields in the `src` argument as
+  /// the expressions for the `dst` argument. Both fields must be of the given
+  /// `type`.
+  void unifyTypes(FieldRef lhs, FieldRef rhs, FIRRTLType type);
 
   /// Get the expr associated with the value.  The value must be a non-aggregate
   /// type.
@@ -959,7 +961,8 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       })
       .Case<NodeOp>([&](auto op) {
         // Nodes have the same type as their input.
-        unifyTypes(FieldRef(op.input(), 0), op.getResult());
+        unifyTypes(FieldRef(op.getResult(), 0), FieldRef(op.input(), 0),
+                   op.getType());
       })
 
       // Aggregate Values
@@ -970,7 +973,8 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         auto bundleType = type.template cast<BundleType>();
         auto index = bundleType.getElementIndex(op.fieldname()).getValue();
         auto fieldID = bundleType.getFieldID(index);
-        unifyTypes(FieldRef(op.input(), fieldID), op.getResult());
+        unifyTypes(FieldRef(op.getResult(), 0), FieldRef(op.input(), fieldID),
+                   op.getType());
       })
       .Case<SubindexOp, SubaccessOp>([&](auto op) {
         auto type = op.input().getType();
@@ -978,7 +982,8 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
           type = flipType.getElementType();
         // All vec fields unify to the same thing. Always use the first element
         // of the vector, which has a field ID of 1.
-        unifyTypes(FieldRef(op.input(), 1), op.getResult());
+        unifyTypes(FieldRef(op.getResult(), 0), FieldRef(op.input(), 1),
+                   op.getType());
       })
 
       // Arithmetic and Logical Binary Primitives
@@ -1149,8 +1154,51 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // module's ports, and use them for instance port wires. This way,
         // constraints imposed onto the ports of the instance will transparently
         // apply to the ports of the instantiated module.
-        for (auto it : llvm::zip(module.getArguments(), op->getResults())) {
-          unifyTypes(FieldRef(std::get<0>(it), 0), std::get<1>(it));
+        for (auto it : llvm::zip(op->getResults(), module.getArguments())) {
+          unifyTypes(FieldRef(std::get<0>(it), 0), FieldRef(std::get<1>(it), 0),
+                     std::get<0>(it).getType().template cast<FIRRTLType>());
+        }
+      })
+
+      // Handle memories.
+      .Case<MemOp>([&](auto op) {
+        // Create constraint variables for all ports.
+        for (auto result : op.results())
+          declareVars(result, op.getLoc());
+
+        // A helper function that returns the indeces of the "data", "rdata",
+        // and "wdata" fields in the bundle corresponding to a memory port.
+        auto dataFieldIndices = [](MemOp::PortKind kind) {
+          static const unsigned indices[] = {3, 4, 5};
+          switch (kind) {
+          case MemOp::PortKind::Read:
+          case MemOp::PortKind::Write:
+            return ArrayRef<unsigned>(indices, 1); // {3}
+          case MemOp::PortKind::ReadWrite:
+            return ArrayRef<unsigned>(indices + 1, 2); // {4, 5}
+          }
+        };
+
+        // This creates independent variables for every data port. Yet, what we
+        // actually want is for all data ports to share the same variable. To do
+        // this, we find the first data port declared, and use that port's vars
+        // for all the other ports.
+        unsigned firstFieldIndex = dataFieldIndices(op.getPortKind(0))[0];
+        FieldRef firstData(op.getResult(0), op.getPortType(0)
+                                                .getPassiveType()
+                                                .template cast<BundleType>()
+                                                .getFieldID(firstFieldIndex));
+        LLVM_DEBUG(llvm::dbgs() << "Adjusting memory port variables:\n");
+
+        // Reuse data port variables.
+        auto dataType = op.getDataType();
+        for (unsigned i = 0, e = op.results().size(); i < e; ++i) {
+          auto result = op.getResult(i);
+          auto portType =
+              op.getPortType(i).getPassiveType().template cast<BundleType>();
+          for (auto fieldIndex : dataFieldIndices(op.getPortKind(i)))
+            unifyTypes(FieldRef(result, portType.getFieldID(fieldIndex)),
+                       firstData, dataType);
         }
       })
 
@@ -1253,43 +1301,39 @@ void InferenceMapping::constrainTypes(Expr *larger, Expr *smaller) {
   }
 }
 
-// TODO: idea is `lhs.x == rhs`. lhs is the input type, rhs is the output
-// type.  Technically in the IR the return value is on the far left side.
-void InferenceMapping::unifyTypes(FieldRef lhsRef, Value rhs) {
+/// Assign the constraint expressions of the fields in the `src` argument as the
+/// expressions for the `dst` argument. Both fields must be of the given `type`.
+void InferenceMapping::unifyTypes(FieldRef lhs, FieldRef rhs, FIRRTLType type) {
+  // Fast path for `unifyTypes(x, x, _)`.
+  if (lhs == rhs)
+    return;
 
-  // We assume that the RHS is a sub element of the LHS, and that we are
-  // going to be recursing through the types.
-  auto type = rhs.getType().dyn_cast<FIRRTLType>();
   // Strip an outer flip off the type if there is one.  We don't want to
   // interpret an outerflip the same way as a flip in a bundle.
   if (auto flipType = type.dyn_cast<FlipType>())
     type = flipType.getElementType();
 
-  /// This will be the index in to the RHS value.
-  auto rhsID = 0;
-  // Steal the fields out of the lhs field ref.
-  auto lhs = lhsRef.getValue();
-  auto lhsID = lhsRef.getFieldID();
-
-  // Recurse to every leaf element and set them equal.
+  // Co-iterate the two field refs, recurring into every leaf element and set
+  // them equal.
+  auto fieldID = 0;
   std::function<void(FIRRTLType)> unify = [&](FIRRTLType type) {
     if (auto inner = type.dyn_cast<FlipType>()) {
       return unify(inner.getElementType());
     } else if (auto bundleType = type.dyn_cast<BundleType>()) {
       for (auto &element : bundleType.getElements()) {
-        rhsID++;
+        fieldID++;
         unify(element.type);
       }
     } else if (auto vecType = type.dyn_cast<FVectorType>()) {
-      rhsID++;
+      fieldID++;
       unify(vecType.getElementType());
     } else if (type.isGround()) {
       // Leaf element, unify the fields!
-      LLVM_DEBUG(llvm::dbgs()
-                 << "Unify: " << getFieldName(FieldRef(lhs, lhsID + rhsID))
-                 << "\n");
-      auto lhsExpr = getExpr(FieldRef(lhs, lhsID + rhsID));
-      setExpr(FieldRef(rhs, rhsID), lhsExpr);
+      FieldRef lhsFieldRef(lhs.getValue(), lhs.getFieldID() + fieldID);
+      FieldRef rhsFieldRef(rhs.getValue(), rhs.getFieldID() + fieldID);
+      LLVM_DEBUG(llvm::dbgs() << "Unify " << getFieldName(lhsFieldRef) << " = "
+                              << getFieldName(rhsFieldRef) << "\n");
+      setExpr(lhsFieldRef, getExpr(rhsFieldRef));
     } else {
       llvm_unreachable("Unknown type inside a bundle!");
     }
@@ -1332,9 +1376,13 @@ void InferenceMapping::setExpr(Value value, Expr *expr) {
 
 /// Associate a constraint expression with a value.
 void InferenceMapping::setExpr(FieldRef fieldRef, Expr *expr) {
-  LLVM_DEBUG(llvm::dbgs() << "Expr " << *expr << " for "
-                          << getFieldName(fieldRef) << "\n");
-  opExprs.insert(std::make_pair(fieldRef, expr));
+  LLVM_DEBUG({
+    llvm::dbgs() << "Expr " << *expr << " for " << fieldRef.getValue();
+    if (fieldRef.getFieldID())
+      llvm::dbgs() << " '" << getFieldName(fieldRef) << "'";
+    llvm::dbgs() << "\n";
+  });
+  opExprs[fieldRef] = expr;
 }
 
 //===----------------------------------------------------------------------===//
