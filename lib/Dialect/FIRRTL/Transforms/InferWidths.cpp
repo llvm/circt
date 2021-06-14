@@ -786,7 +786,6 @@ public:
   InferenceMapping(ConstraintSolver &solver) : solver(solver) {}
 
   LogicalResult map(CircuitOp op);
-  LogicalResult map(FModuleOp op);
   LogicalResult mapOperation(Operation *op);
 
   /// Declare all the variables in the value. If the value is a ground type,
@@ -834,6 +833,12 @@ public:
   /// Set the expr associated with a specific field in a value.
   void setExpr(FieldRef fieldRef, Expr *expr);
 
+  /// Return whether a module was skipped due to being fully inferred already.
+  bool isModuleSkipped(ModuleOp module) { return skippedModules.count(module); }
+
+  /// Return whether all modules in the mapping were fully inferred.
+  bool areAllModulesSkipped() { return allModulesSkipped; }
+
 private:
   /// The constraint solver into which we emit variables and constraints.
   ConstraintSolver &solver;
@@ -842,6 +847,10 @@ private:
   // TODO: This should actually not map to `Expr *` directly, but rather a
   // view class that can represent aggregate exprs for bundles/arrays as well.
   DenseMap<FieldRef, Expr *> opExprs;
+
+  /// The fully inferred modules that were skipped entirely.
+  SmallPtrSet<Operation *, 16> skippedModules;
+  bool allModulesSkipped = true;
 };
 
 } // namespace
@@ -865,19 +874,37 @@ LogicalResult InferenceMapping::map(CircuitOp op) {
 
   // Go through the module bodies and populate the constraint problem.
   auto result = op.walk<WalkOrder::PostOrder>([&](FModuleOp module) {
-    if (failed(map(module)))
+    // Check if the module contains *any* uninferred widths. This allows us to
+    // do an early skip if the module is already fully inferred.
+    bool anyUninferred = false;
+    for (auto arg : module.getArguments()) {
+      anyUninferred |= hasUninferredWidth(arg.getType());
+      if (anyUninferred)
+        break;
+    }
+    module.walk([&](Operation *op) {
+      for (auto type : op->getResultTypes())
+        anyUninferred |= hasUninferredWidth(type);
+      if (anyUninferred)
+        return WalkResult::interrupt();
+      return WalkResult::advance();
+    });
+    if (!anyUninferred) {
+      LLVM_DEBUG(llvm::dbgs() << "Skipping fully-inferred module '"
+                              << module.getName() << "'\n");
+      skippedModules.insert(module);
+      return WalkResult::skip();
+    }
+    allModulesSkipped = false;
+
+    // Go through operations in the module, creating type variables for results,
+    // and generating constraints.
+    auto result = module.getBody().walk(
+        [&](Operation *op) { return WalkResult(mapOperation(op)); });
+    if (result.wasInterrupted())
       return WalkResult::interrupt();
-    return WalkResult::skip();
+    return WalkResult::skip(); // walk above already visited module body
   });
-  return failure(result.wasInterrupted());
-}
-
-LogicalResult InferenceMapping::map(FModuleOp module) {
-  // Go through operations, creating type variables for results, and generating
-  // constraints.
-  auto result = module.getBody().walk(
-      [&](Operation *op) { return WalkResult(mapOperation(op)); });
-
   return failure(result.wasInterrupted());
 }
 
@@ -1337,6 +1364,11 @@ private:
 LogicalResult InferenceTypeUpdate::update(CircuitOp op) {
   anyFailed = false;
   op.walk<WalkOrder::PreOrder>([&](Operation *op) {
+    // Skip this module if it had no widths to be inferred at all.
+    if (auto module = dyn_cast<ModuleOp>(op))
+      if (mapping.isModuleSkipped(module))
+        return WalkResult::skip();
+
     updateOperation(op);
     return WalkResult(failure(anyFailed));
   });
@@ -1582,6 +1614,8 @@ void InferWidthsPass::runOnOperation() {
     signalPassFailure();
     return;
   }
+  if (mapping.areAllModulesSkipped())
+    return; // fast path if no inferrable widths are around
   LLVM_DEBUG({
     llvm::dbgs() << "Constraints:\n";
     solver.dumpConstraints(llvm::dbgs());
