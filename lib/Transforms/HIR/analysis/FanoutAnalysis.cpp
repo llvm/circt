@@ -38,6 +38,8 @@ BusFanoutInfo::BusFanoutInfo(Operation *op) {
   WalkResult result = funcOp.walk([this](Operation *operation) -> WalkResult {
     if (auto op = dyn_cast<hir::AllocaOp>(operation))
       visitDef(op);
+    else if (auto op = dyn_cast<hir::SendOp>(operation))
+      visitUse(op);
     return WalkResult::advance();
   });
   assert(!result.wasInterrupted());
@@ -63,19 +65,9 @@ void BusFanoutInfo::visitDef(hir::AllocaOp op) {
       mapBusUseCount[bus].push_back(0);
     }
   }
-
-  // update the map with the use count.
-  for (Value bus : buses) {
-    mapBusUseCount[bus] = SmallVector<unsigned, 1>({});
-    for (auto &use : bus.getUses()) {
-      Operation *userOperation = use.getOwner();
-      if (auto sendOp = dyn_cast<hir::SendOp>(userOperation)) {
-        visitUse(sendOp);
-      } else {
-        assert(false && "unsupported op use uselist of bus");
-      }
-    }
-  }
 }
 
-void visitUse(hir::SendOp op) {}
+void visitUse(hir::SendOp op) {
+  Value bus = op.bus();
+  auto indices = op.indices();
+}

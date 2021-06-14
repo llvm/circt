@@ -14,6 +14,7 @@ add_circt_dialect_library(CIRCTHIR
 
   DEPENDS
   MLIRHIRIncGen
+  MLIRHIRInterfacesIncGen
 
   LINK_LIBS PUBLIC
   MLIRIR

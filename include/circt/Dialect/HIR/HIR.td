@@ -7,6 +7,7 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/IR/SymbolInterfaces.td"
+include "circt/Dialect/HIR/HIRInterfaces.td"
 
 // Dialect
 def HIR_Dialect : Dialect {
@@ -105,7 +106,7 @@ def LoadOp : HIR_Op<"load", [NoSideEffect,AttrSizedOperandSegments]> {
   let results = (outs AnyType: $res);
   let assemblyFormat = [{$mem `[`  $indices `]` `at` $tstart (`+` $offset^)? 
     attr-dict `:`custom<MemrefAndElementType>(ref($mem),type($mem),type($res)) 
-    `[` type($indices)`]`}];
+      `[` type($indices)`]`}];
   let hasCanonicalizeMethod = true;
   let extraClassDeclaration = [{
     public:
@@ -476,20 +477,21 @@ def CastOp : HIR_Op<"cast">{
 
 }
 
-def AddOp : HIR_Op<"add",[NoSideEffect]>{
-  let summary = "Add two hir.val values";
-  let description = [{
+def AddOp : HIR_Op<"add",[NoSideEffect,
+    DeclareOpInterfaceMethods<CombBinOpInterface>]>{
+      let summary = "Add two hir.val values";
+      let description = [{
 Examples:
-    ```mlir %1 = hir.add (%x, %y) : (i32, i32) -> (i32)```
-                                     ```mlir %1 = hir.add (%x, %y) : (!hir.const<i32>, !hir.conts<i32>) -> (!hir.const<i32>)```
-  }];
+        ```mlir %1 = hir.add (%x, %y) : (i32, i32) -> (i32)```
+                                         ```mlir %1 = hir.add (%x, %y) : (!hir.const<i32>, !hir.conts<i32>) -> (!hir.const<i32>)```
+      }];
 
-  let arguments = (ins AnyType: $left, AnyType:$right);
-  let results = (outs AnyType: $res);
+      let arguments = (ins AnyType: $left, AnyType:$right);
+      let results = (outs AnyType: $res);
 
-  let assemblyFormat = [{ `(` $left `,` $right`)` attr-dict `:` `(`
-      type($left) `,` type($right) `)` `->` `(` type($res) `)`}];
-}
+      let assemblyFormat = [{ `(` $left `,` $right`)` attr-dict `:` `(`
+          type($left) `,` type($right) `)` `->` `(` type($res) `)`}];
+    }
 
 def SubtractOp : HIR_Op<"subtract",[NoSideEffect]>{
   let summary = "Subtract two hir.val values";
@@ -650,6 +652,6 @@ Examples:
   let results = (outs AnyType: $res);
 
   let assemblyFormat = [{ $bus (`[` $indices^ `]`)? attr-dict `:` 
-      type($bus)  `->` type($res) }];
+    type($bus)  `->` type($res) }];
 }
 #endif // HIR_OPS
