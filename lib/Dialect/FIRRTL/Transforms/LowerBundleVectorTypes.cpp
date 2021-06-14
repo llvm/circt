@@ -288,7 +288,6 @@ void cleanup(FModuleOp module);
   // State to keep track of arguments and operations to clean up at the end.
   SmallVector<Operation *, 16> opsToRemove;
 
-  SmallVector<NamedAttribute, 8> newModuleAttrs;
   SmallVector<Attribute> newArgNames;
   SmallVector<Direction> newArgDirections;
   SmallVector<Attribute, 8> newArgAttrs;
@@ -420,21 +419,24 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
 
   bool argNeedsLowering = false;
   do {
-  argNeedsLowering = false;
-  // Lower the module block arguments.
-  SmallVector<BlockArgument, 8> args(body->args_begin(),       body->args_end()); 
-  for (auto arg : args)
-   if (auto  resultType = getCanonicalAggregateType(arg.getType()))
-     argNeedsLowering = true;
-  if (!argNeedsLowering) 
-    break;
-  for (auto arg : args)
-    if (auto type = arg.getType().dyn_cast<FIRRTLType>())
-      lowerArg(module, arg, type);
+    argNeedsLowering = false;
+    // Lower the module block arguments.
+    SmallVector<BlockArgument, 8> args(body->args_begin(),       body->args_end()); 
+    for (auto arg : args)
+      if (auto  resultType = getCanonicalAggregateType(arg.getType()))
+        argNeedsLowering = true;
+    if (!argNeedsLowering) 
+      break;
+    newArgNames.clear();
+    newArgDirections.clear();
+    newArgAttrs.clear();
+    for (auto arg : args)
+      if (auto type = arg.getType().dyn_cast<FIRRTLType>())
+        lowerArg(module, arg, type);
 
-  if (argsToRemove.empty())
-    return;
-  cleanup(module);
+    if (argsToRemove.empty())
+      return;
+    cleanup(module);
   }while (true);
 
 }
@@ -451,6 +453,7 @@ void TypeLoweringVisitor::cleanup(FModuleOp module){
   // Copy over any attributes that weren't original argument attributes.
   auto *argAttrBegin = originalArgAttrs.begin();
   auto *argAttrEnd = originalArgAttrs.end();
+  SmallVector<NamedAttribute, 8> newModuleAttrs;
   for (auto attr : originalAttrs)
     if (std::lower_bound(argAttrBegin, argAttrEnd, attr) == argAttrEnd)
       // Drop old "portNames", directions, and argument attributes.  These are
