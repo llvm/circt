@@ -215,7 +215,7 @@ void AggregateUserVisitor::visitExpr(SubaccessOp op, ArrayRef<Value> mapping) {
         op.index(), builder->createOrFold<ConstantOp>(
                         UIntType::get(op.getContext(), selectWidth),
                         APInt(selectWidth, index)));
-    auto whenCond = builder->create<WhenOp>(cond, false, [&]() {
+    builder->create<WhenOp>(cond, false, [&]() {
       builder->create<ConnectOp>(builder->create<SubindexOp>(input, index),
                                  mapping[0]);
     });
@@ -251,9 +251,15 @@ void AggregateUserVisitor::visitExpr(SubfieldOp op, ArrayRef<Value> mapping) {
     // type lowering on all operations.
     void lowerModule(Operation *op);
 
+  // Lowering module block arguments.
+  void lowerArg(FModuleOp module, BlockArgument arg, FIRRTLType type);
+
+  // Helpers to manage state.
+  Value addArg(FModuleOp module, Type type, unsigned oldArgNumber,
+               Direction direction, StringRef nameSuffix = "");
     void visitDecl(FExtModuleOp op);
     void visitDecl(FModuleOp op);
-//    void visitDecl(InstanceOp op, ArrayRef<Value> mapping);
+    void visitDecl(InstanceOp op);
 //    void visitDecl(MemOp op, ArrayRef<Value> mapping);
     void visitDecl(NodeOp op);
     void visitDecl(RegOp op);
@@ -271,7 +277,9 @@ void AggregateUserVisitor::visitExpr(SubfieldOp op, ArrayRef<Value> mapping) {
   private:
 
   void processUsers(Operation* op, ArrayRef<Value> mapping);
+  void processUsers(Value *v, ArrayRef<Value> mapping);
 
+void cleanup(FModuleOp module);
   MLIRContext* context;
 
   // The builder is set and maintained in the main loop.
@@ -279,12 +287,26 @@ void AggregateUserVisitor::visitExpr(SubfieldOp op, ArrayRef<Value> mapping) {
 
   // State to keep track of arguments and operations to clean up at the end.
   SmallVector<Operation *, 16> opsToRemove;
+
+  SmallVector<NamedAttribute, 8> newModuleAttrs;
+  SmallVector<Attribute> newArgNames;
+  SmallVector<Direction> newArgDirections;
+  SmallVector<Attribute, 8> newArgAttrs;
+  // State to keep track of arguments and operations to clean up at the end.
+  SmallVector<unsigned, 8> argsToRemove;
 };
 }
 
 void TypeLoweringVisitor::processUsers(Operation *op, ArrayRef<Value> mapping) {
   AggregateUserVisitor aggV(context, builder);
   for (auto user : llvm::make_early_inc_range(op->getUsers())) {
+    aggV.dispatchVisitor(user, mapping);
+  }
+}
+
+void TypeLoweringVisitor::processUsers(Value *v, ArrayRef<Value> mapping) {
+  AggregateUserVisitor aggV(context, builder);
+  for (auto user : llvm::make_early_inc_range(v->getUsers())) {
     aggV.dispatchVisitor(user, mapping);
   }
 }
@@ -374,35 +396,151 @@ void TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
 void TypeLoweringVisitor::visitDecl(FExtModuleOp module) {
 }
 
-  void TypeLoweringVisitor::visitDecl(FModuleOp module) {
-    auto *body = module.getBodyBlock();
+void TypeLoweringVisitor::visitDecl(FModuleOp module) {
+  auto *body = module.getBodyBlock();
 
-    ImplicitLocOpBuilder theBuilder(module.getLoc(), context);
-    builder = &theBuilder;
+  ImplicitLocOpBuilder theBuilder(module.getLoc(), context);
+  builder = &theBuilder;
 
-    // Lower the operations.
-    for (auto iop = body->rbegin(), iep = body->rend(); iop != iep; ++iop) {
-      // We erase old ops eagerly so we don't have dangling uses we've already lowered.
-      for (auto *op : opsToRemove)
-        op->erase();
-      opsToRemove.clear();
-
-      builder->setInsertionPoint(&*iop);
-      builder->setLoc(iop->getLoc());
-      dispatchVisitor(&*iop);
-    }
-
+  // Lower the operations.
+  for (auto iop = body->rbegin(), iep = body->rend(); iop != iep; ++iop) {
+    // We erase old ops eagerly so we don't have dangling uses we've already lowered.
     for (auto *op : opsToRemove)
       op->erase();
-      opsToRemove.clear();
+    opsToRemove.clear();
 
-      // Lower the module block arguments.
-      // SmallVector<BlockArgument, 8> args(body->args_begin(),
-      // body->args_end()); originalNumModuleArgs = args.size(); for (auto arg :
-      // args)
-      //   if (auto type = arg.getType().dyn_cast<FIRRTLType>())
-      //     lowerArg(module, arg, type);
+    builder->setInsertionPoint(&*iop);
+    builder->setLoc(iop->getLoc());
+    dispatchVisitor(&*iop);
   }
+
+  for (auto *op : opsToRemove)
+    op->erase();
+  opsToRemove.clear();
+
+  bool argNeedsLowering = false;
+  do {
+  argNeedsLowering = false;
+  // Lower the module block arguments.
+  SmallVector<BlockArgument, 8> args(body->args_begin(),       body->args_end()); 
+  for (auto arg : args)
+   if (auto  resultType = getCanonicalAggregateType(arg.getType()))
+     argNeedsLowering = true;
+  if (!argNeedsLowering) 
+    break;
+  for (auto arg : args)
+    if (auto type = arg.getType().dyn_cast<FIRRTLType>())
+      lowerArg(module, arg, type);
+
+  if (argsToRemove.empty())
+    return;
+  cleanup(module);
+  }while (true);
+
+}
+
+void TypeLoweringVisitor::cleanup(FModuleOp module){
+  auto *body = module.getBodyBlock();
+  // Remove block args that have been lowered.
+  body->eraseArguments(argsToRemove);
+
+  // Remember the original argument attributess.
+  SmallVector<NamedAttribute, 8> originalArgAttrs;
+  DictionaryAttr originalAttrs = module->getAttrDictionary();
+
+  // Copy over any attributes that weren't original argument attributes.
+  auto *argAttrBegin = originalArgAttrs.begin();
+  auto *argAttrEnd = originalArgAttrs.end();
+  for (auto attr : originalAttrs)
+    if (std::lower_bound(argAttrBegin, argAttrEnd, attr) == argAttrEnd)
+      // Drop old "portNames", directions, and argument attributes.  These are
+      // handled differently below.
+      if (attr.first != "portNames" && attr.first != direction::attrKey &&
+          attr.first != mlir::function_like_impl::getArgDictAttrName())
+        newModuleAttrs.push_back(attr);
+
+  newModuleAttrs.push_back(NamedAttribute(Identifier::get("portNames", context),
+        builder->getArrayAttr(newArgNames)));
+  newModuleAttrs.push_back(
+      NamedAttribute(Identifier::get(direction::attrKey, context),
+        direction::packAttribute(newArgDirections, context)));
+
+  // Attach new argument attributes.
+  newModuleAttrs.push_back(NamedAttribute(
+        builder->getIdentifier(mlir::function_like_impl::getArgDictAttrName()),
+        builder->getArrayAttr(newArgAttrs)));
+
+  // Update the module's attributes.
+  module->setAttrs(newModuleAttrs);
+  newModuleAttrs.clear();
+
+  // Keep the module's type up-to-date.
+  auto moduleType = builder->getFunctionType(body->getArgumentTypes(), {});
+  module->setAttr(module.getTypeAttrName(), TypeAttr::get(moduleType));
+}
+
+// Creates and returns a new block argument of the specified type to the
+// module. This also maintains the name attribute for the new argument,
+// possibly with a new suffix appended.
+Value TypeLoweringVisitor::addArg(FModuleOp module, Type type,
+                                  unsigned oldArgNumber, Direction direction,
+                                  StringRef nameSuffix) {
+  Block *body = module.getBodyBlock();
+
+  // Append the new argument.
+  auto newValue = body->addArgument(type);
+
+  // Save the name attribute for the new argument.
+  StringAttr nameAttr = getModulePortName(module, oldArgNumber);
+  Attribute newArg =
+      builder->getStringAttr(nameAttr.getValue().str() + nameSuffix.str());
+  newArgNames.push_back(newArg);
+  newArgDirections.push_back(direction);
+
+  // Decode the annotations and any additional attributes.
+  SmallVector<NamedAttribute> attributes;
+  auto annotations = AnnotationSet::forPort(module, oldArgNumber, attributes);
+
+  AnnotationSet newAnnotations = filterAnnotations(annotations, nameSuffix);
+
+  // Populate the new arg attributes.
+  newArgAttrs.push_back(newAnnotations.getArgumentAttrDict(attributes));
+  return newValue;
+}
+// Lower arguments with bundle type by flattening them.
+void TypeLoweringVisitor::lowerArg(FModuleOp module, BlockArgument arg,
+                                   FIRRTLType type) {
+  unsigned argNumber = arg.getArgNumber();
+
+  // Flatten any bundle types.
+    SmallVector<FlatBundleFieldEntry, 8> fieldTypes = peelType(type);
+    SmallVector<Value> lowered;
+
+  for (auto field : fieldTypes) {
+
+    // Create new block arguments.
+    auto type = field.type;
+    // Flip the direction if the field is an output.
+    auto direction =
+        (Direction)((unsigned)getModulePortDirection(module, argNumber) ^
+                    field.isOutput);
+    auto newValue = addArg(module, type, argNumber, direction, field.suffix);
+
+    // If this field was flattened from a bundle.
+    if (!field.suffix.empty()) {
+      // Map the flattened suffix for the original bundle to the new value.
+      lowered.push_back(newValue);
+      //setBundleLowering(FieldRef(arg, field.fieldID), newValue);
+    } else {
+      // Lower any other arguments by copying them to keep the relative order.
+      arg.replaceAllUsesWith(newValue);
+    }
+  }
+  processUsers(&arg, lowered);
+
+  // Remember to remove the original block argument.
+  argsToRemove.push_back(argNumber);
+}
 
   /// Lower a wire op with a bundle to multiple non-bundled wires.
   void TypeLoweringVisitor::visitDecl(WireOp op) {
@@ -469,6 +607,47 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp module) {
     processUsers(op, lowered);
     opsToRemove.push_back(op);
   }
+
+  /// Lower a reg op with a bundle to multiple non-bundled regs.
+void TypeLoweringVisitor::visitDecl(InstanceOp op) {
+
+  SmallVector<Type, 8> resultTypes;
+  SmallVector<size_t, 8> numFieldsPerResult;
+  SmallVector<StringAttr, 8> resultNames;
+  for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
+    // Flatten any nested bundle types the usual way.
+    SmallVector<FlatBundleFieldEntry, 8> fieldTypes = peelType(op.getType(i).cast<FIRRTLType>());
+
+    for (auto field : fieldTypes) {
+      // Store the flat type for the new bundle type.
+      resultTypes.push_back(field.getPortType());
+    }
+    numFieldsPerResult.push_back(fieldTypes.size());
+  }
+  auto newInstance = builder->create<InstanceOp>(
+      resultTypes, op.moduleNameAttr(), op.nameAttr(), op.annotations());
+  size_t nextResult = 0;
+  for (size_t i =0, e = op.getNumResults() ; i != e ; ++i) {
+    Value result = op.getResult(i);
+    // Attempt to get the bundle types, potentially unwrapping an outer flip
+    // type that wraps the whole bundle.
+    FIRRTLType resultType = getCanonicalAggregateType(result.getType());
+    if (resultType){
+      SmallVector<Value> lowered;
+      for (size_t j=0, e = numFieldsPerResult[i]; j != e; ++j) {
+        Value newResult = newInstance.getResult(nextResult);
+        lowered.push_back(newResult);
+        ++nextResult;
+      }
+      processUsers(&result, lowered);
+    } else {
+      Value newResult = newInstance.getResult(nextResult);
+      result.replaceAllUsesWith(newResult);
+    ++nextResult;
+    }
+  }
+  opsToRemove.push_back(op);
+}
 
   /// Lower a reg op with a bundle to multiple non-bundled regs.
   void TypeLoweringVisitor::visitDecl(RegResetOp op) {
