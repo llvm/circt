@@ -180,7 +180,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.asClock %reset_async : (!firrtl.asyncreset) -> !firrtl.clock
     node check_c5 = asClock(reset_async)
 
-    ; CHECK: firrtl.node %auto  : !firrtl.uint<1>
+    ; CHECK: %[[AUTO_PASSIVE:.+]] = firrtl.asPassive %auto : !firrtl.uint<1>
+    ; CHECK-NEXT: firrtl.node %[[AUTO_PASSIVE]] : !firrtl.uint<1>
     node check_output = auto
 
     ; CHECK: %c42_ui10 = firrtl.constant 42 : !firrtl.uint<10>
@@ -326,7 +327,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.subaccess %_t[%i8] : !firrtl.vector<uint<1>, 12>, !firrtl.uint<8>
     auto <= _t[i8]
 
-    ; CHECK: firrtl.subaccess %_t{{\[}}%auto] : !firrtl.vector<uint<1>, 12>, !firrtl.uint<1>
+    ; CHECK: %[[AUTO_PASSIVE:.+]] = firrtl.asPassive %auto : !firrtl.uint<1>
+    ; CHECK-NEXT: firrtl.subaccess %_t[%[[AUTO_PASSIVE]]] : !firrtl.vector<uint<1>, 12>, !firrtl.uint<1>
     auto <= _t[auto]
 
     ; CHECK: %myMem = firrtl.cmem {name = "myMem"} : !firrtl.vector<bundle<id: uint<4>, resp: uint<2>>, 8>
@@ -622,7 +624,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input clkIn: Clock
     output clkOut: Clock
     clkOut <= clkIn
-    ; CHECK: firrtl.reg %clkOut
+    ; CHECK: %[[clkOut_passive:.+]] = firrtl.asPassive %clkOut : !firrtl.clock
+    ; CHECK: firrtl.reg %[[clkOut_passive]]
     reg r: UInt<1>, clkOut
 
   ; COM: Check that a register reset sink is converted to passive
@@ -631,7 +634,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input clk: Clock
     output rst: UInt<1>
     rst is invalid
-    ; CHECK: firrtl.regreset %clk, %rst
+    ; CHECK: %[[rst_passive:.+]] = firrtl.asPassive %rst : !firrtl.uint<1>
+    ; CHECK: firrtl.regreset %clk, %[[rst_passive]]
     reg r: UInt<1>, clk with : (reset => (rst, UInt<1>(0)))
 
   ; COM: Check that a register init sink is converted to passive
@@ -641,7 +645,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input rst: UInt<1>
     output init: UInt<1>
     init is invalid
-    ; CHECK: firrtl.regreset %clk, %rst, %init
+    ; CHECK: %[[init_passive:.+]] = firrtl.asPassive %init : !firrtl.uint<1>
+    ; CHECK: firrtl.regreset %clk, %rst, %[[init_passive]]
     reg r: UInt<1>, clk with : (reset => (rst, init))
 
   ; https://github.com/llvm/circt/issues/492
