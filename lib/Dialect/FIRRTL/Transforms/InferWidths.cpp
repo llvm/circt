@@ -1551,13 +1551,16 @@ FIRRTLType InferenceTypeUpdate::updateType(FieldRef fieldRef, FIRRTLType type) {
     // TODO: Convert this to an assertion once we support all operations and
     // types for width inference.
     auto diag = mlir::emitError(value.getLoc(), "failed to infer width");
-    if (auto blockArg = value.dyn_cast<BlockArgument>())
+    auto fieldName = getFieldName(fieldRef);
+    if (!fieldName.empty())
+      diag << " for '" << fieldName << "'";
+    else if (auto blockArg = value.dyn_cast<BlockArgument>())
       diag << " for port #" << blockArg.getArgNumber();
     else if (auto op = value.getDefiningOp())
       diag << " for op '" << op->getName() << "'";
     else
       diag << " for value";
-    diag << " of type '" << type << "'";
+    diag << " of type " << type;
     // Return the original unsolved type.
     return type;
   }
