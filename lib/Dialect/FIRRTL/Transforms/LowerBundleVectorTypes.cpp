@@ -265,7 +265,7 @@ void AggregateUserVisitor::visitExpr(SubfieldOp op, ArrayRef<Value> mapping) {
     void visitDecl(RegOp op);
     void visitDecl(WireOp op);
     void visitDecl(RegResetOp op);
-//    void visitExpr(InvalidValueOp op, ArrayRef<Value> mapping);
+    void visitExpr(InvalidValueOp op);
 //    void visitExpr(SubfieldOp op);
 //    void visitExpr(SubindexOp op);
     void visitExpr(SubaccessOp op);
@@ -744,6 +744,29 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
     opsToRemove.push_back(op);
   }
 
+  /// Lower an InvalidValue op with a bundle to multiple non-bundled InvalidOps.
+  void TypeLoweringVisitor::visitExpr(InvalidValueOp op) {
+    Value result = op.result();
+
+    // Attempt to get the bundle types, potentially unwrapping an outer flip
+    // type that wraps the whole bundle.
+    FIRRTLType resultType = getCanonicalAggregateType(result.getType());
+
+    // If the wire is not a bundle, there is nothing to do.
+    if (!resultType)
+      return;
+
+    SmallVector<FlatBundleFieldEntry, 8> fieldTypes = peelType(resultType);
+    SmallVector<Value> lowered;
+
+    for (auto field : fieldTypes) {
+      auto wire =
+          builder->create<InvalidValueOp>(field.type);
+      lowered.push_back(wire.getResult());
+    }
+    processUsers(op, lowered);
+    opsToRemove.push_back(op);
+  }
 
   void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
     // Get the input bundle type.

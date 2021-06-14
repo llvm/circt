@@ -231,4 +231,41 @@ firrtl.circuit "TopLevel"  {
     firrtl.connect %out1, %2 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %out2, %3 : !firrtl.sint<64>, !firrtl.sint<64>
   }
+
+  // CHECK-LABEL: firrtl.module @portNames_Uniquification
+  // CHECK-SAME: in %[[FLATTENED_ARG:a_b]]: [[FLATTENED_TYPE:!firrtl.uint<1>]],
+  // CHECK-NOT: %[[FLATTENED_ARG]]
+  // CHECK-SAME: in %[[RENAMED_ARG:a_b.+]]: [[RENAMED_TYPE:!firrtl.uint<1>]]
+  // CHECK-SAME: {portNames = ["a_b", "a_b"]}
+  firrtl.module @portNames_Uniquification(in %a: !firrtl.bundle<b: uint<1>>, in %a_b: !firrtl.uint<1>) {
+  }
+
+  // CHECK-LABEL: firrtl.module @TopArgs
+  firrtl.module @TopArgs(in %in : !firrtl.bundle<a: uint<1>, b: uint<1>>,
+                     out %out : !firrtl.bundle<a: uint<1>, b: uint<1>>) {
+    // CHECK: firrtl.connect %out_a, %in_a : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %out_b, %in_b : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %out, %in : !firrtl.bundle<a: uint<1>, b: uint<1>>, !firrtl.bundle<a: uint<1>, b: uint<1>>
+  }
+  // CHECK-LABEL: firrtl.module @FooArgs
+  // CHECK-SAME: in %[[FLAT_ARG_INPUT_NAME:a_b_c]]: [[FLAT_ARG_INPUT_TYPE:!firrtl.uint<1>]]
+  // CHECK-SAME: out %[[FLAT_ARG_OUTPUT_NAME:b_b_c]]: [[FLAT_ARG_OUTPUT_TYPE:!firrtl.uint<1>]]
+  firrtl.module @FooArgs(in %a: !firrtl.bundle<b: bundle<c: uint<1>>>, out %b: !firrtl.bundle<b: bundle<c: uint<1>>>) {
+    // CHECK: firrtl.connect %[[FLAT_ARG_OUTPUT_NAME]], %[[FLAT_ARG_INPUT_NAME]] : [[FLAT_ARG_OUTPUT_TYPE]], [[FLAT_ARG_INPUT_TYPE]]
+    firrtl.connect %b, %a : !firrtl.bundle<b: bundle<c: uint<1>>>, !firrtl.bundle<b: bundle<c: uint<1>>>
+  }
+
+
+  // https://github.com/llvm/circt/issues/593
+    firrtl.module @invalid_mod_2(in %clock: !firrtl.clock, in %inp_a: !firrtl.bundle<inp_d: uint<14>>) {
+    }
+    firrtl.module @Invalid_top_mod(in %clock: !firrtl.clock) {
+      %U0_clock, %U0_inp_a = firrtl.instance @invalid_mod_2 {name = "U0"} : !firrtl.flip<clock>, !firrtl.flip<bundle<inp_d: uint<14>>>
+      %0 = firrtl.invalidvalue : !firrtl.clock
+      firrtl.connect %U0_clock, %0 : !firrtl.flip<clock>, !firrtl.clock
+      %1 = firrtl.invalidvalue : !firrtl.bundle<inp_d: uint<14>>
+      firrtl.connect %U0_inp_a, %1 : !firrtl.flip<bundle<inp_d: uint<14>>>, !firrtl.bundle<inp_d: uint<14>>
+    }
+  
+
 }
