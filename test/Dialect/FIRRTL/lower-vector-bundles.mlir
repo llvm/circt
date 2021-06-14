@@ -1,3 +1,4 @@
+// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-lower-bundle-vectors)' -split-input-file %s | FileCheck %s
 firrtl.circuit "TopLevel"  {
   firrtl.module @TopLevel(out %sink_a : !firrtl.uint<1>, out %sink_b : !firrtl.uint<2>, out %sink_c : !firrtl.uint<3>) {
     %a = firrtl.wire : !firrtl.bundle<a: bundle<a: uint<1>>, b: uint<2>>
@@ -68,7 +69,7 @@ firrtl.circuit "TopLevel"  {
       firrtl.connect %b, %n_a : !firrtl.uint<1>, !firrtl.uint<1>
     }
 
-    // CHECK-LABEL: firrtl.module @RegBundle(in %a_a: !firrtl.uint<1>, in %clk: !firrtl.clock, out %b_a: !firrtl.uint<1>) {
+    // CHECK-LABEL: firrtl.module @RegBundle(in %a_a: !firrtl.uint<1>, in %clk: !firrtl.clock, out %b_a: !firrtl.uint<1>) 
     firrtl.module @RegBundle(in %a: !firrtl.bundle<a: uint<1>>, in %clk: !firrtl.clock, out %b: !firrtl.bundle<a: uint<1>>) {
       // CHECK-NEXT: %x_a = firrtl.reg %clk : (!firrtl.clock) -> !firrtl.uint<1>
       // CHECK-NEXT: firrtl.connect %x_a, %a_a : !firrtl.uint<1>, !firrtl.uint<1>
@@ -82,7 +83,7 @@ firrtl.circuit "TopLevel"  {
       firrtl.connect %2, %3 : !firrtl.uint<1>, !firrtl.uint<1>
     }
 
-    // CHECK-LABEL: firrtl.module @RegBundleWithBulkConnect(in %a_a: !firrtl.uint<1>, in %clk: !firrtl.clock, out %b_a: !firrtl.uint<1>) {
+    // CHECK-LABEL: firrtl.module @RegBundleWithBulkConnect(in %a_a: !firrtl.uint<1>, in %clk: !firrtl.clock, out %b_a: !firrtl.uint<1>)
     firrtl.module @RegBundleWithBulkConnect(in %a: !firrtl.bundle<a: uint<1>>, in %clk: !firrtl.clock, out %b: !firrtl.bundle<a: uint<1>>) {
       // CHECK-NEXT: %x_a = firrtl.reg %clk : (!firrtl.clock) -> !firrtl.uint<1>
       // CHECK-NEXT: firrtl.connect %x_a, %a_a : !firrtl.uint<1>, !firrtl.uint<1>
@@ -211,4 +212,104 @@ firrtl.circuit "TopLevel"  {
 
     firrtl.connect %sink, %sinkV : !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready: flip<uint<1>>, data: uint<64>>
   }
+
+  // CHECK-LABEL: firrtl.module @Recursive
+  // CHECK-SAME: in %[[FLAT_ARG_1_NAME:arg_foo_bar_baz]]: [[FLAT_ARG_1_TYPE:!firrtl.uint<1>]]
+  // CHECK-SAME: in %[[FLAT_ARG_2_NAME:arg_foo_qux]]: [[FLAT_ARG_2_TYPE:!firrtl.sint<64>]]
+  // CHECK-SAME: out %[[OUT_1_NAME:out1]]: [[OUT_1_TYPE:!firrtl.uint<1>]]
+  // CHECK-SAME: out %[[OUT_2_NAME:out2]]: [[OUT_2_TYPE:!firrtl.sint<64>]]
+  firrtl.module @Recursive(in %arg: !firrtl.bundle<foo: bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>>,
+                           out %out1: !firrtl.uint<1>, out %out2: !firrtl.sint<64>) {
+
+    // CHECK-NEXT: firrtl.connect %[[OUT_1_NAME]], %[[FLAT_ARG_1_NAME]] : [[OUT_1_TYPE]], [[FLAT_ARG_1_TYPE]]
+    // CHECK-NEXT: firrtl.connect %[[OUT_2_NAME]], %[[FLAT_ARG_2_NAME]] : [[OUT_2_TYPE]], [[FLAT_ARG_2_TYPE]]
+
+    %0 = firrtl.subfield %arg("foo") : (!firrtl.bundle<foo: bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>>) -> !firrtl.bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>
+    %1 = firrtl.subfield %0("bar") : (!firrtl.bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>) -> !firrtl.bundle<baz: uint<1>>
+    %2 = firrtl.subfield %1("baz") : (!firrtl.bundle<baz: uint<1>>) -> !firrtl.uint<1>
+    %3 = firrtl.subfield %0("qux") : (!firrtl.bundle<bar: bundle<baz: uint<1>>, qux: sint<64>>) -> !firrtl.sint<64>
+    firrtl.connect %out1, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %out2, %3 : !firrtl.sint<64>, !firrtl.sint<64>
+  }
+
+  // CHECK-LABEL: firrtl.module @portNames_Uniquification
+  // CHECK-SAME: in %[[FLATTENED_ARG:a_b]]: [[FLATTENED_TYPE:!firrtl.uint<1>]],
+  // CHECK-NOT: %[[FLATTENED_ARG]]
+  // CHECK-SAME: in %[[RENAMED_ARG:a_b.+]]: [[RENAMED_TYPE:!firrtl.uint<1>]]
+  // CHECK-SAME: {portNames = ["a_b", "a_b"]}
+  firrtl.module @portNames_Uniquification(in %a: !firrtl.bundle<b: uint<1>>, in %a_b: !firrtl.uint<1>) {
+  }
+
+  // CHECK-LABEL: firrtl.module @TopArgs
+  firrtl.module @TopArgs(in %in : !firrtl.bundle<a: uint<1>, b: uint<1>>,
+                     out %out : !firrtl.bundle<a: uint<1>, b: uint<1>>) {
+    // CHECK: firrtl.connect %out_a, %in_a : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %out_b, %in_b : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %out, %in : !firrtl.bundle<a: uint<1>, b: uint<1>>, !firrtl.bundle<a: uint<1>, b: uint<1>>
+  }
+  // CHECK-LABEL: firrtl.module @FooArgs
+  // CHECK-SAME: in %[[FLAT_ARG_INPUT_NAME:a_b_c]]: [[FLAT_ARG_INPUT_TYPE:!firrtl.uint<1>]]
+  // CHECK-SAME: out %[[FLAT_ARG_OUTPUT_NAME:b_b_c]]: [[FLAT_ARG_OUTPUT_TYPE:!firrtl.uint<1>]]
+  firrtl.module @FooArgs(in %a: !firrtl.bundle<b: bundle<c: uint<1>>>, out %b: !firrtl.bundle<b: bundle<c: uint<1>>>) {
+    // CHECK: firrtl.connect %[[FLAT_ARG_OUTPUT_NAME]], %[[FLAT_ARG_INPUT_NAME]] : [[FLAT_ARG_OUTPUT_TYPE]], [[FLAT_ARG_INPUT_TYPE]]
+    firrtl.connect %b, %a : !firrtl.bundle<b: bundle<c: uint<1>>>, !firrtl.bundle<b: bundle<c: uint<1>>>
+  }
+
+
+  // https://github.com/llvm/circt/issues/593
+    firrtl.module @invalid_mod_2(in %clock: !firrtl.clock, in %inp_a: !firrtl.bundle<inp_d: uint<14>>) {
+    }
+    firrtl.module @invalid_top_mod(in %clock: !firrtl.clock) {
+      %U0_clock, %U0_inp_a = firrtl.instance @invalid_mod_2 {name = "U0"} : !firrtl.flip<clock>, !firrtl.flip<bundle<inp_d: uint<14>>>
+      %0 = firrtl.invalidvalue : !firrtl.clock
+      firrtl.connect %U0_clock, %0 : !firrtl.flip<clock>, !firrtl.clock
+      %1 = firrtl.invalidvalue : !firrtl.bundle<inp_d: uint<14>>
+      firrtl.connect %U0_inp_a, %1 : !firrtl.flip<bundle<inp_d: uint<14>>>, !firrtl.bundle<inp_d: uint<14>>
+    }
+//CHECK-LABEL:    firrtl.module @invalid_mod_2(in %clock: !firrtl.clock, in %inp_a_inp_d: !firrtl.uint<14>) {
+//CHECK-NEXT:     }
+//CHECK-NEXT:    firrtl.module @invalid_top_mod(in %clock: !firrtl.clock) 
+//CHECK-NEXT:      %U0_clock, %U0_inp_a_inp_d = firrtl.instance @invalid_mod_2 {name = "U0"} : !firrtl.flip<clock>, !firrtl.flip<uint<14>>
+//CHECK-NEXT:      %invalid_clock = firrtl.invalidvalue : !firrtl.clock
+//CHECK-NEXT:      firrtl.connect %U0_clock, %invalid_clock : !firrtl.flip<clock>, !firrtl.clock
+//CHECK-NEXT:      %invalid_ui14 = firrtl.invalidvalue : !firrtl.uint<14>
+//CHECK-NEXT:      firrtl.connect %U0_inp_a_inp_d, %invalid_ui14 : !firrtl.flip<uint<14>>, !firrtl.uint<14>
+  
+
+// https://github.com/llvm/circt/issues/661
+
+// COM: This test is just checking that the following doesn't error.
+    // CHECK-LABEL: firrtl.module @Issue661
+    firrtl.module @Issue661(in %clock: !firrtl.clock) {
+      %head_MPORT_2, %head_MPORT_6 = firrtl.mem Undefined {depth = 20 : i64, name = "head", portNames = ["MPORT_2", "MPORT_6"], readLatency = 0 : i32, writeLatency = 1 : i32}
+      : !firrtl.flip<bundle<addr: uint<5>, en: uint<1>, clk: clock, data: uint<5>, mask: uint<1>>>,
+        !firrtl.flip<bundle<addr: uint<5>, en: uint<1>, clk: clock, data: uint<5>, mask: uint<1>>>
+      %127 = firrtl.subfield %head_MPORT_6("clk") : (!firrtl.flip<bundle<addr: uint<5>, en: uint<1>, clk: clock, data: uint<5>, mask: uint<1>>>) -> !firrtl.clock
+    }
+
+// Test that WhenOp with regions has its regions lowered.
+  firrtl.module @WhenOp (in %p: !firrtl.uint<1>,
+                         in %in : !firrtl.bundle<a: uint<1>, b: uint<1>>,
+                         out %out : !firrtl.bundle<a: uint<1>, b: uint<1>>) {
+    // No else region.
+    firrtl.when %p {
+      // CHECK: firrtl.connect %out_a, %in_a : !firrtl.uint<1>, !firrtl.uint<1>
+      // CHECK: firrtl.connect %out_b, %in_b : !firrtl.uint<1>, !firrtl.uint<1>
+      firrtl.connect %out, %in : !firrtl.bundle<a: uint<1>, b: uint<1>>, !firrtl.bundle<a: uint<1>, b: uint<1>>
+    }
+
+    // Else region.
+    firrtl.when %p {
+      // CHECK: firrtl.connect %out_a, %in_a : !firrtl.uint<1>, !firrtl.uint<1>
+      // CHECK: firrtl.connect %out_b, %in_b : !firrtl.uint<1>, !firrtl.uint<1>
+      firrtl.connect %out, %in : !firrtl.bundle<a: uint<1>, b: uint<1>>, !firrtl.bundle<a: uint<1>, b: uint<1>>
+    } else {
+      // CHECK: firrtl.connect %out_a, %in_a : !firrtl.uint<1>, !firrtl.uint<1>
+      // CHECK: firrtl.connect %out_b, %in_b : !firrtl.uint<1>, !firrtl.uint<1>
+      firrtl.connect %out, %in : !firrtl.bundle<a: uint<1>, b: uint<1>>, !firrtl.bundle<a: uint<1>, b: uint<1>>
+    }
+  }
+
+
+
 }
