@@ -259,13 +259,21 @@ firrtl.circuit "TopLevel"  {
   // https://github.com/llvm/circt/issues/593
     firrtl.module @invalid_mod_2(in %clock: !firrtl.clock, in %inp_a: !firrtl.bundle<inp_d: uint<14>>) {
     }
-    firrtl.module @Invalid_top_mod(in %clock: !firrtl.clock) {
+    firrtl.module @invalid_top_mod(in %clock: !firrtl.clock) {
       %U0_clock, %U0_inp_a = firrtl.instance @invalid_mod_2 {name = "U0"} : !firrtl.flip<clock>, !firrtl.flip<bundle<inp_d: uint<14>>>
       %0 = firrtl.invalidvalue : !firrtl.clock
       firrtl.connect %U0_clock, %0 : !firrtl.flip<clock>, !firrtl.clock
       %1 = firrtl.invalidvalue : !firrtl.bundle<inp_d: uint<14>>
       firrtl.connect %U0_inp_a, %1 : !firrtl.flip<bundle<inp_d: uint<14>>>, !firrtl.bundle<inp_d: uint<14>>
     }
+//CHECK-LABEL:    firrtl.module @invalid_mod_2(in %clock: !firrtl.clock, in %inp_a_inp_d: !firrtl.uint<14>) {
+//CHECK-NEXT:     }
+//CHECK-NEXT:    firrtl.module @invalid_top_mod(in %clock: !firrtl.clock) {
+//CHECK-NEXT:      %U0_clock, %U0_inp_a_inp_d = firrtl.instance @invalid_mod_2 {name = "U0"} : !firrtl.flip<clock>, !firrtl.flip<uint<14>>
+//CHECK-NEXT:      %invalid_clock = firrtl.invalidvalue : !firrtl.clock
+//CHECK-NEXT:      firrtl.connect %U0_clock, %invalid_clock : !firrtl.flip<clock>, !firrtl.clock
+//CHECK-NEXT:      %invalid_ui14 = firrtl.invalidvalue : !firrtl.uint<14>
+//CHECK-NEXT:      firrtl.connect %U0_inp_a_inp_d, %invalid_ui14 : !firrtl.flip<uint<14>>, !firrtl.uint<14>
   
 
 }
