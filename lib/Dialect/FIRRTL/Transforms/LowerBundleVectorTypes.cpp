@@ -312,6 +312,11 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp module) {
 
     // Lower the operations.
     for (auto iop = body->rbegin(), iep = body->rend(); iop != iep; ++iop) {
+      // We erase old ops eagerly so we don't have dangling uses we've already lowered.
+      for (auto *op : opsToRemove)
+        op->erase();
+      opsToRemove.clear();
+
       builder->setInsertionPoint(&*iop);
       builder->setLoc(iop->getLoc());
       dispatchVisitor(&*iop, ArrayRef<Value>());
@@ -319,6 +324,7 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp module) {
 
     for (auto *op : opsToRemove)
       op->erase();
+      opsToRemove.clear();
   }
 
   /// Lower a wire op with a bundle to multiple non-bundled wires.
@@ -388,10 +394,6 @@ op.erase();
   }
 
   void TypeLoweringVisitor::visitExpr(SubaccessOp op, ArrayRef<Value> mapping) {
-    if (mapping.empty())
-      return;
-      // if we were given a mapping, this is a write and the mapping is the write Value
-
     // Get the input bundle type.
     Value input = op.input();
     auto inputType = input.getType();
@@ -401,6 +403,29 @@ op.erase();
     auto selectWidth =
         op.index().getType().cast<FIRRTLType>().getBitWidthOrSentinel();
 
+    if (mapping.empty()) {
+      //Reads.  All writes have been eliminated before now
+      
+      auto vType = inputType.cast<FVectorType>();
+       Value mux =
+          builder->create<InvalidValueOp>(vType.getElementType());
+       
+          for (size_t index = vType.getNumElements(); index > 0; --index) {
+            auto cond = builder->create<EQPrimOp>(
+            op.index(), builder->createOrFold<ConstantOp>(
+                            UIntType::get(op.getContext(), selectWidth),
+                            APInt(selectWidth, index-1)));
+                            auto access = builder->create<SubindexOp>(input, index-1);
+            mux = builder->create<MuxPrimOp>(cond, access, mux);
+      }
+      op.replaceAllUsesWith(mux);
+      opsToRemove.push_back(op);
+
+
+        return;
+      }
+
+      // if we were given a mapping, this is a write and the mapping is the write Value
     for (size_t index = 0, e = inputType.cast<FVectorType>().getNumElements(); index < e; ++index) {
       auto cond = builder->create<EQPrimOp>(
                          op.index(), builder->createOrFold<ConstantOp>(
