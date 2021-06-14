@@ -380,13 +380,6 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp module) {
     ImplicitLocOpBuilder theBuilder(module.getLoc(), context);
     builder = &theBuilder;
 
-    // Lower the module block arguments.
-    // SmallVector<BlockArgument, 8> args(body->args_begin(), body->args_end());
-    // originalNumModuleArgs = args.size();
-    // for (auto arg : args)
-    //   if (auto type = arg.getType().dyn_cast<FIRRTLType>())
-    //     lowerArg(module, arg, type);
-
     // Lower the operations.
     for (auto iop = body->rbegin(), iep = body->rend(); iop != iep; ++iop) {
       // We erase old ops eagerly so we don't have dangling uses we've already lowered.
@@ -402,6 +395,13 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp module) {
     for (auto *op : opsToRemove)
       op->erase();
       opsToRemove.clear();
+
+      // Lower the module block arguments.
+      // SmallVector<BlockArgument, 8> args(body->args_begin(),
+      // body->args_end()); originalNumModuleArgs = args.size(); for (auto arg :
+      // args)
+      //   if (auto type = arg.getType().dyn_cast<FIRRTLType>())
+      //     lowerArg(module, arg, type);
   }
 
   /// Lower a wire op with a bundle to multiple non-bundled wires.
