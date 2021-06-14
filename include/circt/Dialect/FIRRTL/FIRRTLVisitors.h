@@ -29,7 +29,7 @@ public:
     return TypeSwitch<Operation *, ResultType>(op)
         // Basic Expressions
         .template Case<
-            ConstantOp, SubfieldOp, SubindexOp, SubaccessOp,
+            ConstantOp, InvalidValueOp, SubfieldOp, SubindexOp, SubaccessOp,
             // Arithmetic and Logical Binary Primitives.
             AddPrimOp, SubPrimOp, MulPrimOp, DivPrimOp, RemPrimOp, AndPrimOp,
             OrPrimOp, XorPrimOp,
@@ -41,12 +41,11 @@ public:
             AsSIntPrimOp, AsUIntPrimOp, AsAsyncResetPrimOp, AsClockPrimOp,
             CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
             // Miscellaneous.
-            BitsPrimOp, HeadPrimOp, InvalidValuePrimOp, MuxPrimOp, PadPrimOp,
-            ShlPrimOp, ShrPrimOp, TailPrimOp, AsPassivePrimOp,
-            AsNonPassivePrimOp,
+            BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
+            TailPrimOp, VerbatimExprOp, AsPassivePrimOp, AsNonPassivePrimOp,
 
-            // Conversion from FIRRTL to RTL dialect types.
-            StdIntCastOp, RTLStructCastOp, AnalogInOutCastOp>(
+            // Conversion from FIRRTL to HW dialect types.
+            StdIntCastOp, HWStructCastOp, AnalogInOutCastOp>(
             [&](auto expr) -> ResultType {
               return thisCast->visitExpr(expr, args...);
             })
@@ -130,18 +129,19 @@ public:
   // Miscellaneous.
   HANDLE(BitsPrimOp, Unhandled);
   HANDLE(HeadPrimOp, Unhandled);
-  HANDLE(InvalidValuePrimOp, Unhandled);
+  HANDLE(InvalidValueOp, Unhandled);
   HANDLE(MuxPrimOp, Unhandled);
   HANDLE(PadPrimOp, Unhandled);
   HANDLE(ShlPrimOp, Unhandled);
   HANDLE(ShrPrimOp, Unhandled);
   HANDLE(TailPrimOp, Unhandled);
+  HANDLE(VerbatimExprOp, Unhandled);
   HANDLE(AsPassivePrimOp, Unhandled);
   HANDLE(AsNonPassivePrimOp, Unhandled);
 
-  // Conversion from FIRRTL to RTL dialect types.
+  // Conversion from FIRRTL to HW dialect types.
   HANDLE(StdIntCastOp, Unhandled);
-  HANDLE(RTLStructCastOp, Unhandled);
+  HANDLE(HWStructCastOp, Unhandled);
   HANDLE(AnalogInOutCastOp, Unhandled);
 #undef HANDLE
 };
@@ -154,12 +154,11 @@ public:
   ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<AttachOp, ConnectOp, DoneOp, MemoryPortOp,
-                       PartialConnectOp, PrintFOp, SkipOp, StopOp, WhenOp,
-                       AssertOp, AssumeOp, CoverOp>(
-            [&](auto opNode) -> ResultType {
-              return thisCast->visitStmt(opNode, args...);
-            })
+        .template Case<AttachOp, ConnectOp, MemoryPortOp, PartialConnectOp,
+                       PrintFOp, SkipOp, StopOp, WhenOp, AssertOp, AssumeOp,
+                       CoverOp>([&](auto opNode) -> ResultType {
+          return thisCast->visitStmt(opNode, args...);
+        })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidStmt(op, args...);
         });
@@ -184,7 +183,6 @@ public:
 
   HANDLE(AttachOp);
   HANDLE(ConnectOp);
-  HANDLE(DoneOp);
   HANDLE(MemoryPortOp);
   HANDLE(PartialConnectOp);
   HANDLE(PrintFOp);
@@ -290,7 +288,9 @@ public:
 
   /// visitUnhandledOp is an override point for FIRRTL dialect ops that the
   /// concrete visitor didn't bother to implement.
-  ResultType visitUnhandledOp(Operation *op) { return ResultType(); }
+  ResultType visitUnhandledOp(Operation *op, ExtraArgs... args) {
+    return ResultType(); 
+  }
 };
 } // namespace firrtl
 } // namespace circt

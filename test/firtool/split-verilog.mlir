@@ -1,13 +1,13 @@
 // RUN: firtool %s --format=mlir -verilog | FileCheck %s --check-prefix=VERILOG
-// RUN: firtool %s --format=mlir -split-verilog -o=%t | FileCheck %s --check-prefix=FIRTOOL
-// RUN: FileCheck %s --check-prefix=VERILOG-FOO < %t/foo.v
-// RUN: FileCheck %s --check-prefix=VERILOG-BAR < %t/bar.v
-// RUN: FileCheck %s --check-prefix=VERILOG-USB < %t/usb.v
-// RUN: FileCheck %s --check-prefix=VERILOG-PLL < %t/pll.v
-// RUN: FileCheck %s --check-prefix=VERILOG-INOUT-3 < %t/inout_3.v
-// RUN: FileCheck %s --check-prefix=VERILOG-INOUT-0 < %t/inout_0.v
-// RUN: FileCheck %s --check-prefix=VERILOG-INOUT-1 < %t/inout_1.v
-// RUN: FileCheck %s --check-prefix=VERILOG-INOUT-2 < %t/inout_2.v
+// RUN: rm -rf %t
+// RUN: firtool %s --format=mlir -split-verilog -o=%t
+// RUN: FileCheck %s --check-prefix=VERILOG-FOO < %t/foo.sv
+// RUN: FileCheck %s --check-prefix=VERILOG-BAR < %t/bar.sv
+// RUN: FileCheck %s --check-prefix=VERILOG-USB < %t/usb.sv
+// RUN: FileCheck %s --check-prefix=VERILOG-INOUT-3 < %t/inout_3.sv
+// RUN: FileCheck %s --check-prefix=VERILOG-CUSTOM-1 < %t/custom1.sv
+// RUN: FileCheck %s --check-prefix=VERILOG-CUSTOM-2 < %t/custom2.sv
+// RUN: FileCheck %s --check-prefix=LIST < %t/filelist.f
 
 sv.verbatim "// I'm everywhere"
 sv.ifdef.procedural "VERILATOR" {
@@ -17,36 +17,41 @@ sv.ifdef.procedural "VERILATOR" {
 }
 sv.verbatim ""
 
-rtl.module @foo(%a: i1) -> (%b: i1) {
-  rtl.output %a : i1
+hw.type_scope @__hw_typedecls {
+  hw.typedecl @foo : i1
 }
-rtl.module @bar(%x: i1) -> (%y: i1) {
-  rtl.output %x : i1
+
+hw.module @foo(%a: i1) -> (%b: i1) {
+  hw.output %a : i1
+}
+hw.module @bar(%x: i1) -> (%y: i1) {
+  hw.output %x : i1
 }
 sv.interface @usb {
   sv.interface.signal @valid : i1
   sv.interface.signal @ready : i1
 }
-rtl.module.extern @pll ()
+hw.module.extern @pll ()
 
-rtl.module @inout(%inout: i1) -> (%output: i1) {
-  rtl.output %inout : i1
+hw.module @inout(%inout: i1) -> (%output: i1) {
+  hw.output %inout : i1
 }
 
-// This is made collide with the first renaming attempt of the `@inout` module
-// above.
-rtl.module.extern @inout_0 () -> ()
-rtl.module.extern @inout_1 () -> ()
-rtl.module.extern @inout_2 () -> ()
+// This is made to collide with the first renaming attempt of the `@inout`
+// module above.
+hw.module.extern @inout_0 () -> ()
+hw.module.extern @inout_1 () -> ()
+hw.module.extern @inout_2 () -> ()
 
-// FIRTOOL:      foo.v
-// FIRTOOL-NEXT: bar.v
-// FIRTOOL-NEXT: usb.v
-// FIRTOOL-NEXT: pll.v
-// FIRTOOL-NEXT: inout_3.v
-// FIRTOOL-NEXT: inout_0.v
-// FIRTOOL-NEXT: inout_1.v
-// FIRTOOL-NEXT: inout_2.v
+sv.verbatim "// Foo" {output_file = {name = "custom1.sv"}}
+sv.verbatim "// Bar" {output_file = {name = "custom2.sv", exclude_from_filelist = true}}
+
+// LIST:      foo.sv
+// LIST-NEXT: bar.sv
+// LIST-NEXT: usb.sv
+// LIST-NEXT: inout_3.sv
+// LIST-NEXT: custom1.sv
+// LIST-NOT:  custom2.sv
 
 // VERILOG-FOO:       // I'm everywhere
 // VERILOG-FOO-NEXT:  `ifdef VERILATOR
@@ -54,6 +59,7 @@ rtl.module.extern @inout_2 () -> ()
 // VERILOG-FOO-NEXT:  `else
 // VERILOG-FOO-NEXT:    // World
 // VERILOG-FOO-NEXT:  `endif
+// VERILOG-FOO:       typedef logic foo;
 // VERILOG-FOO-LABEL: module foo(
 // VERILOG-FOO:       endmodule
 
@@ -63,6 +69,7 @@ rtl.module.extern @inout_2 () -> ()
 // VERILOG-BAR-NEXT:  `else
 // VERILOG-BAR-NEXT:    // World
 // VERILOG-BAR-NEXT:  `endif
+// VERILOG-BAR:       typedef logic foo;
 // VERILOG-BAR-LABEL: module bar
 // VERILOG-BAR:       endmodule
 
@@ -72,16 +79,9 @@ rtl.module.extern @inout_2 () -> ()
 // VERILOG-USB-NEXT:  `else
 // VERILOG-USB-NEXT:    // World
 // VERILOG-USB-NEXT:  `endif
+// VERILOG-USB:       typedef logic foo;
 // VERILOG-USB-LABEL: interface usb;
 // VERILOG-USB:       endinterface
-
-// VERILOG-PLL:        // I'm everywhere
-// VERILOG-PLL-NEXT:   `ifdef VERILATOR
-// VERILOG-PLL-NEXT:     // Hello
-// VERILOG-PLL-NEXT:   `else
-// VERILOG-PLL-NEXT:     // World
-// VERILOG-PLL-NEXT:   `endif
-// VERILOG-PLL:        // external module pll
 
 // VERILOG-INOUT-3:       // I'm everywhere
 // VERILOG-INOUT-3-NEXT:  `ifdef VERILATOR
@@ -89,13 +89,12 @@ rtl.module.extern @inout_2 () -> ()
 // VERILOG-INOUT-3-NEXT:  `else
 // VERILOG-INOUT-3-NEXT:    // World
 // VERILOG-INOUT-3-NEXT:  `endif
+// VERILOG-INOUT-3:       typedef logic foo;
 // VERILOG-INOUT-3-LABEL: module inout_3(
 // VERILOG-INOUT-3:       endmodule
 
-// VERILOG-INOUT-0:    // external module inout_0
-// VERILOG-INOUT-1:    // external module inout_1
-// VERILOG-INOUT-2:    // external module inout_2
-
+// VERILOG-CUSTOM-1: // Foo
+// VERILOG-CUSTOM-2: // Bar
 
 // VERILOG:       // I'm everywhere
 // VERILOG-NEXT:  `ifdef VERILATOR
@@ -103,6 +102,7 @@ rtl.module.extern @inout_2 () -> ()
 // VERILOG-NEXT:  `else
 // VERILOG-NEXT:    // World
 // VERILOG-NEXT:  `endif
+// VERILOG:       typedef logic foo;
 // VERILOG-LABEL: module foo(
 // VERILOG:       endmodule
 // VERILOG-LABEL: module bar
@@ -113,3 +113,7 @@ rtl.module.extern @inout_2 () -> ()
 // VERILOG:       // external module inout_0
 // VERILOG:       // external module inout_1
 // VERILOG:       // external module inout_2
+// VERILOG-LABEL: FILE "custom1.sv"
+// VERILOG:       // Foo
+// VERILOG-LABEL: FILE "custom2.sv"
+// VERILOG:       // Bar

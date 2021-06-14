@@ -29,16 +29,12 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/Any.h"
 
+#include "circt/Dialect/Handshake/HandshakeOpsDialect.h.inc"
+
 namespace circt {
 namespace handshake {
 
 class TerminatorOp;
-
-class HandshakeOpsDialect : public Dialect {
-public:
-  HandshakeOpsDialect(MLIRContext *context);
-  static StringRef getDialectNamespace() { return "handshake"; }
-};
 
 #include "circt/Dialect/Handshake/HandshakeInterfaces.h.inc"
 

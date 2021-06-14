@@ -20,6 +20,11 @@
 #include "mlir/Pass/Pass.h"
 
 namespace circt {
+
+namespace sv {
+class SVDialect;
+}
+
 namespace firrtl {
 
 #define GEN_PASS_CLASSES

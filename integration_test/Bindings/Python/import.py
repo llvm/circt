@@ -2,4 +2,4 @@
 # RUN: %PYTHON% %s
 
 import circt
-from circt.dialects import comb, esi, rtl, sv
+from circt.dialects import comb, esi, hw, seq, sv

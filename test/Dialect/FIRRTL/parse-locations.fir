@@ -2,7 +2,7 @@
 
 circuit MyModule :  @[CIRCUIT.scala 127]
 
-  ; CHECK-LABEL: firrtl.module @MyModule(%in: !firrtl.uint, %out: !firrtl.flip<uint<8>>) {
+  ; CHECK-LABEL: firrtl.module @MyModule(in %in: !firrtl.uint, out %out: !firrtl.uint<8>) {
   module MyModule :   @[FooBar.scala 369:27]
     input in: UInt
     output out: UInt<8>
@@ -50,4 +50,17 @@ circuit MyModule :  @[CIRCUIT.scala 127]
     ; CHECK: %other_thing = firrtl.wire{{.*}} loc("File with space.perl":1:23)
     wire other_thing : SInt<4> @[File with space.perl 1:23]
 
-; CIRCUIT: CHECK: } loc("CIRCUIT.scala":127:0)
+  ; CHECK-LABEL: firrtl.module @issue1140
+  ; https://github.com/llvm/circt/issues/1140
+  module issue1140:
+    input mask_bit_2 : UInt<1>
+    node mask_nbit_2 = eq(mask_bit_2, UInt<1>("h0")) @[Misc.scala 210:20]
+
+    ; Make sure the locator is applied to all the subexpressions.
+    ; CHECK:  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1> loc("Misc.scala":210:20)
+    ; CHECK:  %0 = firrtl.eq %mask_bit_2, %c0_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1> loc("Misc.scala":210:20)
+    ; CHECK:  %mask_nbit_2 = firrtl.node %0  : !firrtl.uint<1> loc("Misc.scala":210:20)
+
+
+
+; CHECK: } loc("CIRCUIT.scala":127:0)

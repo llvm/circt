@@ -131,6 +131,7 @@ def LLHD_DrvOp : LLHD_Op<"drv", [
   }];
 
   let hasFolder = 1;
+  let hasCanonicalizeMethod = 1;
 }
 
 def REG_MODE_LOW  : I64EnumAttrCase<"low", 0>;

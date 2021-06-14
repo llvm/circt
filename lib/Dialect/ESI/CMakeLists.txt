@@ -7,6 +7,7 @@
 
 set(srcs
   ESIDialect.cpp
+  ESIFolds.cpp
   ESIOps.cpp
   ESIPasses.cpp
   ESITranslations.cpp
@@ -17,8 +18,7 @@ set(ESI_LinkLibs
   CIRCTSupport
   CIRCTComb
   CIRCTSV
-  CIRCTRTL
-  MLIREDSC
+  CIRCTHW
   MLIRIR
   MLIRTransforms
   MLIRTranslation

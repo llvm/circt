@@ -17,38 +17,26 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
 
-namespace circt {
-namespace firrtl {
-
-class FIRRTLType;
-
-class FIRRTLDialect : public Dialect {
-public:
-  /// Create the dialect in the given `context`.
-  explicit FIRRTLDialect(MLIRContext *context);
-  ~FIRRTLDialect();
-
-  Type parseType(DialectAsmParser &parser) const override;
-  void printType(Type, DialectAsmPrinter &) const override;
-
-  Operation *materializeConstant(OpBuilder &builder, Attribute value, Type type,
-                                 Location loc) override;
-
-  static StringRef getDialectNamespace() { return "firrtl"; }
-
-private:
-  /// Register all FIRRTL types.
-  void registerTypes();
-};
-
-/// If the specified attribute list has a firrtl.name attribute, return its
-/// value.
-StringAttr getFIRRTLNameAttr(ArrayRef<NamedAttribute> attrs);
-
-} // namespace firrtl
-} // namespace circt
+// Pull in the dialect definition.
+#include "circt/Dialect/FIRRTL/FIRRTLDialect.h.inc"
 
 // Pull in all enum type definitions and utility function declarations.
 #include "circt/Dialect/FIRRTL/FIRRTLEnums.h.inc"
+
+namespace circt {
+class FieldRef;
+
+namespace firrtl {
+
+/// Get the FieldRef from a value.  This will travel backwards to through the
+/// IR, following Subfield and Subindex to find the op which declares the
+/// location.
+FieldRef getFieldRefFromValue(Value value);
+
+/// Get a string identifier representing the FieldRef.
+std::string getFieldName(const FieldRef &fieldRef);
+
+} // namespace firrtl
+} // namespace circt
 
 #endif // CIRCT_DIALECT_FIRRTL_IR_DIALECT_H

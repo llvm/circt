@@ -37,6 +37,7 @@
 namespace circt {
 using mlir::APFloat;
 using mlir::APInt;
+using mlir::APSInt;
 using mlir::ArrayRef;
 using mlir::cast;
 using mlir::cast_or_null;
@@ -67,6 +68,19 @@ using mlir::Twine;
 using mlir::TypeSwitch;
 } // namespace circt
 
+// Forward declarations of LLVM classes to be imported in to the circt
+// namespace.
+namespace llvm {
+template <typename KeyT, typename ValueT, unsigned InlineBuckets,
+          typename KeyInfoT, typename BucketT>
+class SmallDenseMap;
+} // namespace llvm
+
+// Import things we want into our namespace.
+namespace circt {
+using llvm::SmallDenseMap;
+} // namespace circt
+
 // Forward declarations of classes to be imported in to the circt namespace.
 namespace mlir {
 class ArrayAttr;
@@ -93,6 +107,7 @@ class FloatAttr;
 class FunctionType;
 class FusedLoc;
 class Identifier;
+class ImplicitLocOpBuilder;
 class IndexType;
 class InFlightDiagnostic;
 class IntegerAttr;
@@ -101,7 +116,6 @@ class Location;
 class MemRefType;
 class MLIRContext;
 class ModuleOp;
-class ModuleTerminatorOp;
 class MutableOperandRange;
 class NamedAttrList;
 class NoneType;
@@ -187,6 +201,7 @@ using mlir::FloatAttr;
 using mlir::FunctionType;
 using mlir::FusedLoc;
 using mlir::Identifier;
+using mlir::ImplicitLocOpBuilder;
 using mlir::IndexType;
 using mlir::InFlightDiagnostic;
 using mlir::IntegerAttr;
@@ -197,7 +212,6 @@ using mlir::MemRefAccess;
 using mlir::MemRefType;
 using mlir::MLIRContext;
 using mlir::ModuleOp;
-using mlir::ModuleTerminatorOp;
 using mlir::MutableOperandRange;
 using mlir::NamedAttribute;
 using mlir::NamedAttrList;

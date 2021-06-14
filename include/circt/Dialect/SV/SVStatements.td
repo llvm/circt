@@ -10,6 +10,13 @@
 //
 //===----------------------------------------------------------------------===//
 
+/// Ensure symbol is one of the hw module.* types
+def isModuleSymbol : AttrConstraint<
+  CPred<
+    "hw::isAnyModule(::mlir::SymbolTable::lookupNearestSymbolFrom("
+      "&$_op, $_self.cast<::mlir::FlatSymbolRefAttr>().getValue()))"
+  >, "is module like">;
+
 //===----------------------------------------------------------------------===//
 // Control flow like-operations
 //===----------------------------------------------------------------------===//
@@ -288,7 +295,7 @@ def CaseZOp : SVOp<"casez", [SingleBlock, NoTerminator, NoRegionArguments,
   let description = "See SystemVerilog 2017 12.5.1.";
 
   let regions = (region VariadicRegion<SizedRegion<1>>:$caseRegions);
-  let arguments = (ins RTLIntegerType:$cond, ArrayAttr:$casePatterns);
+  let arguments = (ins HWIntegerType:$cond, ArrayAttr:$casePatterns);
   let results = (outs);
 
   let parser = "return parseCaseZOp(parser, result);";
@@ -366,9 +373,45 @@ def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">,
     These occur in initial, always, task, and function blocks.  The statement
     can be scheduled without blocking procedural flow.  See SV Spec 10.4.2.
   }];
+  let hasCanonicalizeMethod = true;
   let arguments = (ins InOutType:$dest, InOutElementType:$src);
   let results = (outs);
   let assemblyFormat = "$dest `,` $src  attr-dict `:` type($src)";
+}
+
+def ForceOp : SVOp<"force", [InOutTypeConstraint<"src", "dest">,
+                                   ProceduralOp]> {
+  let summary = "Force procedural statement";
+  let description = [{
+    A SystemVerilog force procedural statement 'force x = y;'.  These
+    occur in initial, always, task, and function blocks.  
+    A force statement shall override a procedural assignment until
+    a release statement is executed on the variable. 
+    The left-hand side of the assignment can be avariable, a net,
+    a constant bit-select of a vector net, a part-select of a vector 
+    net or a concatenation. It cannot be a memory word or a bit-select 
+    or part-select of a vector variable. See SV Spec 9.3.2.
+  }];
+  let arguments = (ins InOutType:$dest, InOutElementType:$src);
+  let results = (outs);
+  let assemblyFormat = "$dest `,` $src  attr-dict `:` type($src)";
+}
+
+def ReleaseOp : SVOp<"release", [ProceduralOp]> {
+  let summary = "Release procedural statement";
+  let description = [{
+    Release is used in conjunction with force. When released,
+    then if the variable does not currently have an active assign 
+    procedural continuous assignment, the variable shall not immediately 
+    change value. The variable shall maintain its current value until 
+    the next procedural assignment or procedural continuous assignment 
+    to the variable. Releasing a variable that currently has an
+    active assign procedural continuous assignment shall immediately 
+    reestablish that assignment. See SV Spec 9.3.2.
+  }];
+  let arguments = (ins InOutType:$dest);
+  let results = (outs);
+  let assemblyFormat = "$dest attr-dict `:` type($dest)";
 }
 
 def AliasOp : SVOp<"alias"> {
@@ -424,15 +467,22 @@ def FatalOp : SVOp<"fatal", [ProceduralOp]> {
 }
 
 def VerbatimOp : SVOp<"verbatim"> {
-  let summary = "verbatim opaque text emitted to SystemVerilog file.";
-  let summary = "sv.verbatim allows operand substitutions with {{0}} syntax.";
+  let summary = "Verbatim opaque text emitted inline.";
+  let description = [{
+    This operation produces opaque text inline in the SystemVerilog output.
+
+    sv.verbatim allows operand substitutions with {{0}} syntax.
+  }];
   let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands);
 
   let assemblyFormat =
     "$string attr-dict (`(` $operands^ `)` `:` type($operands))?";
 
   let builders = [
-    OpBuilder<(ins "StringRef":$string),
+    OpBuilder<(ins "Twine":$string),
+                 "build(odsBuilder, odsState, "
+                 "odsBuilder.getStringAttr(string), ValueRange{});">,
+    OpBuilder<(ins "StringAttr":$string),
                  "build(odsBuilder, odsState, string, ValueRange{});">
   ];
 }
@@ -473,3 +523,26 @@ def CoverOp : SVOp<"cover", [ProceduralOp]> {
   let results = (outs);
   let assemblyFormat = "attr-dict $property `:` type($property)";
 }
+
+def BindOp : SVOp<"bind", []> {
+  let summary = "indirect instantiation statement";
+  let description = [{
+    Indirectly instantiate a module in the context of another module. This
+    operation pairs with rtl.instance which tracks all information except the
+    emission point for the bind.  This requires that the parent module of the
+    bind exist in the IR. See 23.11 of SV 2017 spec.
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$bind);
+  let results = (outs);
+  let verifier = "return ::verify$cppClass(*this);";
+
+  let assemblyFormat = [{ $bind attr-dict }];
+
+  let extraClassDeclaration = [{
+    /// Lookup the instance for the bind.  This returns null on
+    /// invalid IR.
+    hw::InstanceOp getReferencedInstance();
+  }];
+}
+

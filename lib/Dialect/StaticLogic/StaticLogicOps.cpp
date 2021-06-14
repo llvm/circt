@@ -19,9 +19,7 @@ using namespace circt::staticlogic;
 #define GET_OP_CLASSES
 #include "circt/Dialect/StaticLogic/StaticLogic.cpp.inc"
 
-StaticLogicDialect::StaticLogicDialect(MLIRContext *context)
-    : Dialect(getDialectNamespace(), context,
-              ::mlir::TypeID::get<StaticLogicDialect>()) {
+void StaticLogicDialect::initialize() {
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/StaticLogic/StaticLogic.cpp.inc"

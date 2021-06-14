@@ -27,21 +27,18 @@ class ModuleOp;
 
 namespace circt {
 
-/// Export a module containing RTL, and SV dialect code. Requires that the SV
+/// Export a module containing HW, and SV dialect code. Requires that the SV
 /// dialect is loaded in to the context.
 mlir::LogicalResult exportVerilog(mlir::ModuleOp module, llvm::raw_ostream &os);
 
-/// Export a module containing RTL, and SV dialect code, as one file per SV
+/// Export a module containing HW, and SV dialect code, as one file per SV
 /// module. Requires that the SV dialect is loaded in to the context.
 ///
-/// Files are created in the directory indicated by \p dirname. The function
-/// \p emittedFile is called for every emitted file, in the order appropriate
-/// given the input MLIR module.
-mlir::LogicalResult
-exportSplitVerilog(mlir::ModuleOp module, llvm::StringRef dirname,
-                   std::function<void(llvm::StringRef)> emittedFile);
+/// Files are created in the directory indicated by \p dirname.
+mlir::LogicalResult exportSplitVerilog(mlir::ModuleOp module,
+                                       llvm::StringRef dirname);
 
-/// Register a translation for exporting RTL, Comb and SV to SystemVerilog.
+/// Register a translation for exporting HW, Comb and SV to SystemVerilog.
 void registerToVerilogTranslation();
 
 } // namespace circt

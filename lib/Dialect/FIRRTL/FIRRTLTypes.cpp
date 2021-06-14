@@ -192,6 +192,40 @@ Type FIRRTLDialect::parseType(DialectAsmParser &parser) const {
 }
 
 //===----------------------------------------------------------------------===//
+// Recursive Type Properties
+//===----------------------------------------------------------------------===//
+
+enum {
+  /// Bit set if the type only contains passive elements.
+  IsPassiveBitMask = 0x1,
+  /// Bit set if the type contains an analog type.
+  ContainsAnalogBitMask = 0x2,
+  /// Bit set fi the type has any uninferred bit widths.
+  HasUninferredWidthBitMask = 0x4,
+};
+
+/// Unpack `RecursiveTypeProperties` from a bunch of bits.
+RecursiveTypeProperties RecursiveTypeProperties::fromFlags(unsigned flags) {
+  return RecursiveTypeProperties{
+      (flags & IsPassiveBitMask) != 0,
+      (flags & ContainsAnalogBitMask) != 0,
+      (flags & HasUninferredWidthBitMask) != 0,
+  };
+}
+
+/// Pack `RecursiveTypeProperties` as a bunch of bits.
+unsigned RecursiveTypeProperties::toFlags() const {
+  unsigned flags = 0;
+  if (isPassive)
+    flags |= IsPassiveBitMask;
+  if (containsAnalog)
+    flags |= ContainsAnalogBitMask;
+  if (hasUninferredWidth)
+    flags |= HasUninferredWidthBitMask;
+  return flags;
+}
+
+//===----------------------------------------------------------------------===//
 // FIRRTLType Implementation
 //===----------------------------------------------------------------------===//
 
@@ -210,12 +244,20 @@ bool FIRRTLType::isGround() {
 }
 
 /// Return a pair with the 'isPassive' and 'containsAnalog' bits.
-std::pair<bool, bool> FIRRTLType::getRecursiveTypeProperties() {
-  return TypeSwitch<FIRRTLType, std::pair<bool, bool>>(*this)
-      .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType>(
-          [](Type) { return std::make_pair(true, false); })
-      .Case<AnalogType>([](Type) { return std::make_pair(true, true); })
-      .Case<FlipType>([](Type) { return std::make_pair(false, false); })
+RecursiveTypeProperties FIRRTLType::getRecursiveTypeProperties() {
+  return TypeSwitch<FIRRTLType, RecursiveTypeProperties>(*this)
+      .Case<ClockType, ResetType, AsyncResetType>([](Type) {
+        return RecursiveTypeProperties{true, false, false};
+      })
+      .Case<SIntType, UIntType>([](auto type) {
+        return RecursiveTypeProperties{true, false, !type.hasWidth()};
+      })
+      .Case<AnalogType>([](auto type) {
+        return RecursiveTypeProperties{true, true, !type.hasWidth()};
+      })
+      .Case<FlipType>([](FlipType flipType) {
+        return flipType.getRecursiveTypeProperties();
+      })
       .Case<BundleType>([](BundleType bundleType) {
         return bundleType.getRecursiveTypeProperties();
       })
@@ -224,7 +266,7 @@ std::pair<bool, bool> FIRRTLType::getRecursiveTypeProperties() {
       })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
-        return std::make_pair(false, false);
+        return RecursiveTypeProperties{};
       });
 }
 
@@ -234,8 +276,9 @@ FIRRTLType FIRRTLType::getPassiveType() {
       .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
             AnalogType>([&](Type) { return *this; })
       .Case<FlipType>([](FlipType flipType) {
-        // The element of a flip type is always passive.
-        return flipType.getElementType();
+        // Since types are _not_ canonicalized, a FlipType does _not_
+        // guarantee that its elements are passive.
+        return flipType.getElementType().getPassiveType();
       })
       .Case<BundleType>(
           [](BundleType bundleType) { return bundleType.getPassiveType(); })
@@ -329,6 +372,24 @@ bool FIRRTLType::isResetType() {
       .Default([](Type) { return false; });
 }
 
+std::pair<FIRRTLType, bool> FIRRTLType::stripFlip() {
+  if (auto a = this->dyn_cast<FlipType>())
+    return {a.getElementType(), true};
+  return {*this, false};
+}
+
+unsigned FIRRTLType::getMaxFieldID() {
+  return TypeSwitch<FIRRTLType, int32_t>(*this)
+      .Case<AnalogType, ClockType, ResetType, AsyncResetType, SIntType,
+            UIntType>([](Type) { return 0; })
+      .Case<FlipType, BundleType, FVectorType>(
+          [](auto type) { return type.getMaxFieldID(); })
+      .Default([](Type) {
+        llvm_unreachable("unknown FIRRTL type");
+        return -1;
+      });
+}
+
 /// Helper to implement the equivalence logic for a pair of bundle elements.
 /// Note that the FIRRTL spec requires bundle elements to have the same
 /// orientation, but this only compares their passive types. The FIRRTL dialect
@@ -342,18 +403,11 @@ static bool areBundleElementsEquivalent(BundleType::BundleElement destElement,
   return areTypesEquivalent(destElement.type, srcElement.type);
 }
 
-/// Returns whether the two types are equivalent. See the FIRRTL spec for the
-/// full definition of type equivalence. This predicate differs from the spec in
-/// that it only compares passive types. Because of how the FIRRTL dialect uses
-/// flip types in module ports and aggregates, this definition, unlike the spec,
-/// ignores flips.
+/// Returns whether the two types are equivalent.  This implements the exact
+/// definition of type equivalence in the FIRRTL spec.  If the types being
+/// compared have any outer flips that encode FIRRTL module directions (input or
+/// output), these should be stripped before using this method.
 bool firrtl::areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType) {
-  // Ensure we are comparing passive types.
-  if (!destType.isPassive())
-    destType = destType.getPassiveType();
-  if (!srcType.isPassive())
-    srcType = srcType.getPassiveType();
-
   // Reset types can be driven by UInt<1>, AsyncReset, or Reset types.
   if (destType.isa<ResetType>())
     return srcType.isResetType();
@@ -394,18 +448,60 @@ bool firrtl::areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType) {
   return destType.getWidthlessType() == srcType.getWidthlessType();
 }
 
-/// Return the element of an array type or null.  This propagates flip types.
+/// Returns whether the two types are weakly equivalent.
+bool firrtl::areTypesWeaklyEquivalent(FIRRTLType destType, FIRRTLType srcType,
+                                      bool destFlip, bool srcFlip) {
+
+  // Reset types can be driven by UInt<1>, AsyncReset, or Reset types.
+  if (destType.isa<ResetType>())
+    return srcType.isResetType();
+
+  // Reset types can drive UInt<1>, AsyncReset, or Reset types.
+  if (srcType.isa<ResetType>())
+    return destType.isResetType();
+
+  // Vector types can be connected if their element types are weakly equivalent.
+  // Size doesn't matter.
+  auto destVectorType = destType.dyn_cast<FVectorType>();
+  auto srcVectorType = srcType.dyn_cast<FVectorType>();
+  if (destVectorType && srcVectorType)
+    return areTypesWeaklyEquivalent(destVectorType.getElementType(),
+                                    srcVectorType.getElementType(), destFlip,
+                                    srcFlip);
+
+  // Bundle types are weakly equivalent if all common elements are weakly
+  // equivalent.  Non-matching fields are ignored.  Flips are "pushed" into
+  // recursive weak type equivalence checks.
+  auto destBundleType = destType.dyn_cast<BundleType>();
+  auto srcBundleType = srcType.dyn_cast<BundleType>();
+  if (destBundleType && srcBundleType)
+    return llvm::all_of(
+        destBundleType.getElements(), [&](auto destElt) -> bool {
+          auto destField = destElt.name.getValue();
+          auto srcElt = srcBundleType.getElement(destField);
+          // If the src doesn't contain the destination's field, that's okay.
+          if (!srcElt)
+            return true;
+          auto a = destElt.type.stripFlip();
+          auto b = srcElt.getValue().type.stripFlip();
+          return areTypesWeaklyEquivalent(a.first, b.first, destFlip ^ a.second,
+                                          srcFlip ^ b.second);
+        });
+
+  // Ground types can be connected if their passive, widthless versions
+  // are equal and leaf flippedness matches.
+  return destType.getWidthlessType() == srcType.getWidthlessType() &&
+         destFlip == srcFlip;
+}
+
+/// Return the element of an array type or null.  This strips flip types.
 Type firrtl::getVectorElementType(Type array) {
-  bool isFlipped = false;
-  if (auto flip = array.dyn_cast<FlipType>()) {
-    isFlipped = true;
+  if (auto flip = array.dyn_cast<FlipType>())
     array = flip.getElementType();
-  }
   auto vectorType = array.dyn_cast<FVectorType>();
   if (!vectorType)
     return Type();
-  auto elementType = vectorType.getElementType();
-  return isFlipped ? FlipType::get(elementType) : elementType;
+  return vectorType.getElementType();
 }
 
 /// Return the passiver version of a firrtl type
@@ -517,32 +613,9 @@ struct FlipTypeStorage : mlir::TypeStorage {
 } // namespace firrtl
 } // namespace circt
 
-/// Return a bundle type with the specified elements all flipped.  This assumes
-/// the elements list is non-empty.
-static FIRRTLType
-getFlippedBundleType(ArrayRef<BundleType::BundleElement> elements) {
-  assert(!elements.empty());
-  SmallVector<BundleType::BundleElement, 16> flippedelements;
-  flippedelements.reserve(elements.size());
-  for (auto &elt : elements)
-    flippedelements.push_back({elt.name, FlipType::get(elt.type)});
-  return BundleType::get(flippedelements, elements[0].type.getContext());
-}
-
 FIRRTLType FlipType::get(FIRRTLType element) {
-  // We maintain a canonical form for flip types, where we prefer to have the
-  // flip as far outward from an otherwise passive type as possible.  If a flip
-  // is being used with an aggregate type that contains non-passive or analog
-  // elements, then it is forced into the elements to get the canonical form.
   return TypeSwitch<FIRRTLType, FIRRTLType>(element)
-      .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType>(
-          [&](Type) {
-            // TODO: This should maintain a canonical form, digging any flips
-            // out of sub-types.
-            auto *context = element.getContext();
-            return Base::get(context, element);
-          })
-      .Case<FlipType>([](FlipType flipType) {
+      .Case<FlipType>([](auto flipType) {
         // flip(flip(x)) -> x
         return flipType.getElementType();
       })
@@ -550,39 +623,20 @@ FIRRTLType FlipType::get(FIRRTLType element) {
         // flip(analog) -> analog.
         return analogType;
       })
-      .Case<BundleType>([&](BundleType bundleType) {
-        // If the bundle is passive and doesn't contain analog elements, then
-        // we're done because the flip will be at the outer level. Otherwise, it
-        // contains flip types recursively within itself that we should
-        // canonicalize.
-        auto properties = bundleType.getRecursiveTypeProperties();
-        if (properties.first && !properties.second) {
-          return Base::get(element.getContext(), element).cast<FIRRTLType>();
-        }
-
-        return getFlippedBundleType(bundleType.getElements());
-      })
-      .Case<FVectorType>([&](FVectorType vectorType) {
-        // If the vector is passive and doesn't contain analog elements, then
-        // we're done because the flip will be at the outer level. Otherwise, it
-        // contains flip types recursively within itself that we should
-        // canonicalize.
-        auto properties = vectorType.getRecursiveTypeProperties();
-        if (properties.first && !properties.second) {
-          auto *context = element.getContext();
-          return Base::get(context, element).cast<FIRRTLType>();
-        }
-
-        return FVectorType::get(get(vectorType.getElementType()),
-                                vectorType.getNumElements());
-      })
-      .Default([](Type) {
-        llvm_unreachable("unknown FIRRTL type");
-        return FIRRTLType();
+      .Default([](FIRRTLType a) {
+        return Base::get(a.getContext(), a).cast<FIRRTLType>();
       });
 }
 
 FIRRTLType FlipType::getElementType() { return getImpl()->element; }
+
+unsigned FlipType::getMaxFieldID() { return getElementType().getMaxFieldID(); }
+
+/// Return the recursive properties of the type.
+RecursiveTypeProperties FlipType::getRecursiveTypeProperties() {
+  return RecursiveTypeProperties{false, false,
+                                 getImpl()->element.hasUninferredWidth()};
+}
 
 //===----------------------------------------------------------------------===//
 // Bundle Type
@@ -596,13 +650,6 @@ llvm::hash_code hash_value(const BundleType::BundleElement &arg) {
 } // namespace firrtl
 } // namespace circt
 
-enum {
-  /// Bit set if the type only contains passive elements.
-  IsPassiveBitMask = 0x1,
-  /// Bit set if the type contains an analog type.
-  ContainsAnalogBitMask = 0x2,
-};
-
 namespace circt {
 namespace firrtl {
 namespace detail {
@@ -611,19 +658,22 @@ struct BundleTypeStorage : mlir::TypeStorage {
 
   BundleTypeStorage(KeyTy elements)
       : elements(elements.begin(), elements.end()) {
-    bool isPassive = true, containsAnalog = false;
+    RecursiveTypeProperties props{true, false, false};
+    unsigned fieldID = 0;
+    fieldIDs.reserve(elements.size());
     for (auto &element : elements) {
       auto type = element.type;
       auto eltInfo = type.getRecursiveTypeProperties();
-      isPassive &= eltInfo.first;
-      containsAnalog |= eltInfo.second;
+      props.isPassive &= eltInfo.isPassive;
+      props.containsAnalog |= eltInfo.containsAnalog;
+      props.hasUninferredWidth |= eltInfo.hasUninferredWidth;
+      fieldID += 1;
+      fieldIDs.push_back(fieldID);
+      // Increment the field ID for the next field by the number of subfields.
+      fieldID += type.getMaxFieldID();
     }
-    unsigned flags = 0;
-    if (isPassive)
-      flags |= IsPassiveBitMask;
-    if (containsAnalog)
-      flags |= ContainsAnalogBitMask;
-    passiveContainsAnalogTypeInfo.setInt(flags);
+    maxFieldID = fieldID;
+    passiveContainsAnalogTypeInfo.setInt(props.toFlags());
   }
 
   bool operator==(const KeyTy &key) const { return key == KeyTy(elements); }
@@ -638,11 +688,13 @@ struct BundleTypeStorage : mlir::TypeStorage {
   }
 
   SmallVector<BundleType::BundleElement, 4> elements;
+  SmallVector<unsigned, 4> fieldIDs;
+  unsigned maxFieldID;
 
-  /// This holds two bits indicating whether the current type is passive and
-  /// if it contains an analog type, and can hold a pointer to a passive type if
-  /// not.
-  llvm::PointerIntPair<Type, 2, unsigned> passiveContainsAnalogTypeInfo;
+  /// This holds the bits for the type's recursive properties, and can hold a
+  /// pointer to a passive version of the type.
+  llvm::PointerIntPair<Type, RecursiveTypeProperties::numBits, unsigned>
+      passiveContainsAnalogTypeInfo;
 };
 
 } // namespace detail
@@ -651,15 +703,6 @@ struct BundleTypeStorage : mlir::TypeStorage {
 
 FIRRTLType BundleType::get(ArrayRef<BundleElement> elements,
                            MLIRContext *context) {
-  // If all of the elements are flip types, then we canonicalize the flips to
-  // the outer level.
-  if (!elements.empty() &&
-      llvm::all_of(elements, [&](const BundleElement &elt) -> bool {
-        return elt.type.isa<FlipType>();
-      })) {
-    return FlipType::get(getFlippedBundleType(elements));
-  }
-
   return Base::get(context, elements);
 }
 
@@ -668,10 +711,9 @@ auto BundleType::getElements() -> ArrayRef<BundleElement> {
 }
 
 /// Return a pair with the 'isPassive' and 'containsAnalog' bits.
-std::pair<bool, bool> BundleType::getRecursiveTypeProperties() {
+RecursiveTypeProperties BundleType::getRecursiveTypeProperties() {
   auto flags = getImpl()->passiveContainsAnalogTypeInfo.getInt();
-  return std::make_pair((flags & IsPassiveBitMask) != 0,
-                        (flags & ContainsAnalogBitMask) != 0);
+  return RecursiveTypeProperties::fromFlags(flags);
 }
 
 /// Return this type with any flip types recursively removed from itself.
@@ -700,12 +742,20 @@ FIRRTLType BundleType::getPassiveType() {
   return passiveType;
 }
 
+llvm::Optional<unsigned> BundleType::getElementIndex(StringRef name) {
+  for (auto it : llvm::enumerate(getElements())) {
+    auto element = it.value();
+    if (element.name.getValue() == name) {
+      return unsigned(it.index());
+    }
+  }
+  return None;
+}
+
 /// Look up an element by name.  This returns a BundleElement with.
 auto BundleType::getElement(StringRef name) -> Optional<BundleElement> {
-  for (const auto &element : getElements()) {
-    if (element.name.getValue() == name)
-      return element;
-  }
+  if (auto maybeIndex = getElementIndex(name))
+    return getElements()[*maybeIndex];
   return None;
 }
 
@@ -713,6 +763,20 @@ FIRRTLType BundleType::getElementType(StringRef name) {
   auto element = getElement(name);
   return element.hasValue() ? element.getValue().type : FIRRTLType();
 }
+
+unsigned BundleType::getFieldID(unsigned index) {
+  return getImpl()->fieldIDs[index];
+}
+
+unsigned BundleType::getIndexForFieldID(unsigned fieldID) {
+  assert(getElements().size() && "Bundle must have >0 fields");
+  auto fieldIDs = getImpl()->fieldIDs;
+  auto it =
+      std::prev(std::upper_bound(fieldIDs.begin(), fieldIDs.end(), fieldID));
+  return std::distance(fieldIDs.begin(), it);
+}
+
+unsigned BundleType::getMaxFieldID() { return getImpl()->maxFieldID; }
 
 //===----------------------------------------------------------------------===//
 // Vector Type
@@ -726,12 +790,7 @@ struct VectorTypeStorage : mlir::TypeStorage {
 
   VectorTypeStorage(KeyTy value) : value(value) {
     auto properties = value.first.getRecursiveTypeProperties();
-    unsigned flags = 0;
-    if (properties.first)
-      flags |= IsPassiveBitMask;
-    if (properties.second)
-      flags |= ContainsAnalogBitMask;
-    passiveContainsAnalogTypeInfo.setInt(flags);
+    passiveContainsAnalogTypeInfo.setInt(properties.toFlags());
   }
 
   bool operator==(const KeyTy &key) const { return key == value; }
@@ -743,10 +802,10 @@ struct VectorTypeStorage : mlir::TypeStorage {
 
   KeyTy value;
 
-  /// This holds two bits indicating whether the current type is passive and
-  /// if it contains an analog type, and can hold a pointer to a passive type if
-  /// not.
-  llvm::PointerIntPair<Type, 2, unsigned> passiveContainsAnalogTypeInfo;
+  /// This holds the bits for the type's recursive properties, and can hold a
+  /// pointer to a passive version of the type.
+  llvm::PointerIntPair<Type, RecursiveTypeProperties::numBits, unsigned>
+      passiveContainsAnalogTypeInfo;
 };
 
 } // namespace detail
@@ -766,11 +825,10 @@ FIRRTLType FVectorType::getElementType() { return getImpl()->value.first; }
 
 unsigned FVectorType::getNumElements() { return getImpl()->value.second; }
 
-/// Return a pair with the 'isPassive' and 'containsAnalog' bits.
-std::pair<bool, bool> FVectorType::getRecursiveTypeProperties() {
+/// Return the recursive properties of the type.
+RecursiveTypeProperties FVectorType::getRecursiveTypeProperties() {
   auto flags = getImpl()->passiveContainsAnalogTypeInfo.getInt();
-  return std::make_pair((flags & IsPassiveBitMask) != 0,
-                        (flags & ContainsAnalogBitMask) != 0);
+  return RecursiveTypeProperties::fromFlags(flags);
 }
 
 /// Return this type with any flip types recursively removed from itself.
@@ -793,6 +851,24 @@ FIRRTLType FVectorType::getPassiveType() {
   impl->passiveContainsAnalogTypeInfo.setPointer(passiveType);
   return passiveType;
 }
+
+unsigned FVectorType::getFieldID(unsigned index) {
+  return 1 + index * (getElementType().getMaxFieldID() + 1);
+}
+
+unsigned FVectorType::getIndexForFieldID(unsigned fieldID) {
+  assert(fieldID && "fieldID must be at least 1");
+  // Divide the field ID by the number of fieldID's per element.
+  return (fieldID - 1) / (getElementType().getMaxFieldID() + 1);
+}
+
+unsigned FVectorType::getMaxFieldID() {
+  return getNumElements() * (getElementType().getMaxFieldID() + 1);
+}
+
+//===----------------------------------------------------------------------===//
+// FIRRTLDialect
+//===----------------------------------------------------------------------===//
 
 void FIRRTLDialect::registerTypes() {
   addTypes<SIntType, UIntType, ClockType, ResetType, AsyncResetType, AnalogType,

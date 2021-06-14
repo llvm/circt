@@ -62,11 +62,11 @@ class UTVariadicOp<string mnemonic, list<OpTrait> traits = []> :
 // Arithmetic and Logical Operations.
 def AddOp : UTVariadicOp<"add", [Commutative]>;
 def MulOp : UTVariadicOp<"mul", [Commutative]>;
-def DivUOp : UTBinOp<"divu">;
-def DivSOp : UTBinOp<"divs">;
-def ModUOp : UTBinOp<"modu">;
-def ModSOp : UTBinOp<"mods">;
 let hasFolder = true in {
+  def DivUOp : UTBinOp<"divu">;
+  def DivSOp : UTBinOp<"divs">;
+  def ModUOp : UTBinOp<"modu">;
+  def ModSOp : UTBinOp<"mods">;
   def ShlOp : UTBinOp<"shl">;
   def ShrUOp : UTBinOp<"shru">;
   def ShrSOp : UTBinOp<"shrs">;
@@ -75,7 +75,13 @@ let hasFolder = true in {
 
 def AndOp : UTVariadicOp<"and", [Commutative]>;
 def OrOp  : UTVariadicOp<"or", [Commutative]>;
-def XorOp : UTVariadicOp<"xor", [Commutative]>;
+def XorOp : UTVariadicOp<"xor", [Commutative]> {
+  let extraClassDeclaration = [{
+    /// Return true if this is a two operand xor with an all ones constant as
+    /// its RHS operand.
+    bool isBinaryNot();
+  }];
+}
 
 def MergeOp : UTVariadicOp<"merge", [Commutative]> {
   let summary ="Electrically merge signals together as if connected by a wire.";
@@ -86,7 +92,7 @@ def MergeOp : UTVariadicOp<"merge", [Commutative]> {
 
     This operation allows modeling multiconnect semantics in SSA.
     ```
-      %result = rtl.merge %a, %b, %c : t1
+      %result = hw.merge %a, %b, %c : t1
     ```
     }];
   let hasCanonicalizeMethod = false;
@@ -108,7 +114,7 @@ def ICmpPredicateUGT : I64EnumAttrCase<"ugt", 8>;
 def ICmpPredicateUGE : I64EnumAttrCase<"uge", 9>;
 def ICmpPredicate : I64EnumAttr<
     "ICmpPredicate",
-    "rtl.icmp comparison predicate",
+    "hw.icmp comparison predicate",
     [ICmpPredicateEQ, ICmpPredicateNE, ICmpPredicateSLT, ICmpPredicateSLE,
      ICmpPredicateSGT, ICmpPredicateSGE, ICmpPredicateULT, ICmpPredicateULE,
      ICmpPredicateUGT, ICmpPredicateUGE]>;
@@ -121,7 +127,7 @@ def ICmpOp : CombOp<"icmp", [NoSideEffect, SameTypeOperands]> {
     bit wide result.
 
     ```
-        %r = rtl.icmp eq %a, %b : i4
+        %r = hw.icmp eq %a, %b : i4
     ```
   }];
 
@@ -143,6 +149,14 @@ def ICmpOp : CombOp<"icmp", [NoSideEffect, SameTypeOperands]> {
     /// Returns the flipped predicate, reversing the LHS and RHS operands.  The
     /// lhs and rhs operands should be flipped to match the new predicate.
     static ICmpPredicate getFlippedPredicate(ICmpPredicate predicate);
+
+    /// Return true if this is an equality test with -1, which is a "reduction
+    /// and" operation in Verilog.
+    bool isEqualAllOnes();
+
+    /// Return true if this is a not equal test with 0, which is a "reduction
+    /// or" operation in Verilog.
+    bool isNotEqualZero();
   }];
 }
 
@@ -179,6 +193,7 @@ def ExtractOp : CombOp<"extract", [NoSideEffect]> {
 
   let hasFolder = true;
   let verifier = "return ::verifyExtractOp(*this);";
+  let hasCanonicalizeMethod = true;
 }
 
 def SExtOp : CombOp<"sext", [NoSideEffect]> {
@@ -201,7 +216,7 @@ def SExtOp : CombOp<"sext", [NoSideEffect]> {
 def ConcatOp : VariadicOp<"concat"> {
   let summary = "Concatenate a variadic list of operands together.";
   let description = [{
-    See the RTL-SV rationale document for details on operand ordering.
+    See the HW-SV rationale document for details on operand ordering.
   }];
 
   let hasFolder = true;

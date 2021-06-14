@@ -34,8 +34,9 @@ def VerbatimExprOp : SVOp<"verbatim.expr", [NoSideEffect, HasCustomSSAName]> {
   }];
 
   let builders = [
-    OpBuilder<(ins "Type":$resultType, "StringRef":$string),
-               "build(odsBuilder, odsState, resultType, string, ValueRange{});">
+    OpBuilder<(ins "Type":$resultType, "Twine":$string),
+               "build(odsBuilder, odsState, resultType, "
+               "odsBuilder.getStringAttr(string), ValueRange{});">
   ];
 }
 
@@ -47,7 +48,7 @@ def ConstantXOp : SVOp<"constantX", [NoSideEffect, HasCustomSSAName]> {
     }];
 
   let arguments = (ins);
-  let results = (outs RTLIntegerType:$result);
+  let results = (outs HWIntegerType:$result);
   let assemblyFormat = " attr-dict `:` type($result)";
 }
 
@@ -59,6 +60,6 @@ def ConstantZOp : SVOp<"constantZ", [NoSideEffect, HasCustomSSAName]> {
     }];
 
   let arguments = (ins);
-  let results = (outs RTLIntegerType:$result);
+  let results = (outs HWIntegerType:$result);
   let assemblyFormat = " attr-dict `:` type($result)";
 }

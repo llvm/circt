@@ -12,7 +12,7 @@
 
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
-#include "circt/Dialect/RTL/RTLOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -24,18 +24,13 @@ using namespace comb;
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
-CombDialect::CombDialect(MLIRContext *context)
-    : Dialect(getDialectNamespace(), context,
-              ::mlir::TypeID::get<CombDialect>()) {
-
+void CombDialect::initialize() {
   // Register operations.
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/Comb/Comb.cpp.inc"
       >();
 }
-
-CombDialect::~CombDialect() {}
 
 /// Registered hook to materialize a single constant operation from a given
 /// attribute value with the desired resultant type. This method should use
@@ -49,7 +44,7 @@ Operation *CombDialect::materializeConstant(OpBuilder &builder, Attribute value,
   // Integer constants.
   if (auto intType = type.dyn_cast<IntegerType>())
     if (auto attrValue = value.dyn_cast<IntegerAttr>())
-      return builder.create<rtl::ConstantOp>(loc, type, attrValue);
+      return builder.create<hw::ConstantOp>(loc, type, attrValue);
 
   return nullptr;
 }

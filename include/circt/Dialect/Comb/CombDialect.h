@@ -16,23 +16,8 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
 
-namespace circt {
-namespace comb {
-using namespace mlir;
-
-class CombDialect : public Dialect {
-public:
-  explicit CombDialect(MLIRContext *context);
-  ~CombDialect();
-
-  static StringRef getDialectNamespace() { return "comb"; }
-
-  Operation *materializeConstant(OpBuilder &builder, Attribute value, Type type,
-                                 Location loc) override;
-};
-
-} // namespace comb
-} // namespace circt
+// Pull in the Dialect definition.
+#include "circt/Dialect/Comb/CombDialect.h.inc"
 
 // Pull in all enum type definitions and utility function declarations.
 #include "circt/Dialect/Comb/CombEnums.h.inc"

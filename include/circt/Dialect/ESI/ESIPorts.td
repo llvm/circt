@@ -29,8 +29,8 @@ def Channel : ESI_Port<"Channel"> {
     Example:
 
     ```mlir
-    rtl.module.extern @Sender() -> (%x: !esi.channel<i1>)
-    rtl.module @Reciever(%a: !esi.channel<rtl.array<5xi16>>) { }
+    hw.module.extern @Sender() -> (%x: !esi.channel<i1>)
+    hw.module @Reciever(%a: !esi.channel<hw.array<5xi16>>) { }
     ```
   }];
 
@@ -58,6 +58,7 @@ def WrapValidReady : ESI_Op<"wrap.vr", [NoSideEffect]> {
 
   let printer = [{ return ::print(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
+  let hasFolder = 1;
 
   let builders = [
     OpBuilder<(ins "mlir::Value":$data, "mlir::Value":$valid)>

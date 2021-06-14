@@ -2,7 +2,7 @@
 # Set up Python binding tools
 ################################################################################
 
-include(AddMLIRPythonExtension)
+include(AddMLIRPython)
 add_custom_target(CIRCTBindingsPython)
 
 ################################################################################
@@ -15,11 +15,16 @@ add_mlir_python_extension(CIRCTBindingsPythonExtension _circt
   SOURCES
     CIRCTModule.cpp
     ESIModule.cpp
+    HWModule.cpp
+    MSFTModule.cpp
   LINK_LIBS
     CIRCTCAPIComb
     CIRCTCAPIESI
-    CIRCTCAPIRTL
+    CIRCTCAPIMSFT
+    CIRCTCAPIHW
+    CIRCTCAPISeq
     CIRCTCAPISV
+    CIRCTCAPIExportVerilog
 )
 add_dependencies(CIRCTBindingsPython CIRCTBindingsPythonExtension)
 
@@ -102,10 +107,15 @@ add_mlir_dialect_python_bindings(CIRCTBindingsPythonESIOps
   DIALECT_NAME esi)
 add_dependencies(CIRCTBindingsPythonSources CIRCTBindingsPythonESIOps)
 
-add_mlir_dialect_python_bindings(CIRCTBindingsPythonRTLOps
-  TD_FILE RTLOps.td
-  DIALECT_NAME rtl)
-add_dependencies(CIRCTBindingsPythonSources CIRCTBindingsPythonRTLOps)
+add_mlir_dialect_python_bindings(CIRCTBindingsPythonHWOps
+  TD_FILE HWOps.td
+  DIALECT_NAME hw)
+add_dependencies(CIRCTBindingsPythonSources CIRCTBindingsPythonHWOps)
+
+add_mlir_dialect_python_bindings(CIRCTBindingsPythonSeqOps
+  TD_FILE SeqOps.td
+  DIALECT_NAME seq)
+add_dependencies(CIRCTBindingsPythonSources CIRCTBindingsPythonSeqOps)
 
 add_mlir_dialect_python_bindings(CIRCTBindingsPythonSVOps
   TD_FILE SVOps.td

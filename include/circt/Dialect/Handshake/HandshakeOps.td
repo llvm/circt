@@ -25,21 +25,21 @@ include "mlir/IR/RegionKindInterface.td"
 include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
-def Handshake_Dialect : Dialect {
+def HandshakeOps_Dialect : Dialect {
   let name = "handshake";
   let cppNamespace = "::circt::handshake";
 }
 
 // Base class for Handshake dialect ops.
 class Handshake_Op<string mnemonic, list<OpTrait> traits = []>
-    : Op<Handshake_Dialect, mnemonic,
+    : Op<HandshakeOps_Dialect, mnemonic,
          traits # [HasParent<"handshake::FuncOp">]> {
 }
 
 // This is almost exactly like a standard FuncOp, except that it has some
 // extra verification conditions.  In particular, each Value must
 // only have a single use.  Also, it defines a Dominance-Free Scope
-def FuncOp : Op<Handshake_Dialect, "func", [
+def FuncOp : Op<HandshakeOps_Dialect, "func", [
    NativeOpTrait<"IsIsolatedFromAbove">,
    NativeOpTrait<"FunctionLike">,
    Symbol,
@@ -141,17 +141,17 @@ def FuncOp : Op<Handshake_Dialect, "func", [
   }];
   let printer = [{
     FunctionType fnType = getType();
-    mlir::impl::printFunctionLikeOp(p, *this, fnType.getInputs(),
+    mlir::function_like_impl::printFunctionLikeOp(p, *this, fnType.getInputs(),
         /*isVariadic=*/true, fnType.getResults());
   }];
   let parser = [{
     auto buildFuncType =
         [](Builder & builder, ArrayRef<Type> argTypes, ArrayRef<Type> results,
-           mlir::impl::VariadicFlag, std::string &) {
+           mlir::function_like_impl::VariadicFlag, std::string &) {
       return builder.getFunctionType(argTypes, results);
     };
 
-    return mlir::impl::parseFunctionLikeOp(parser, result,
+    return mlir::function_like_impl::parseFunctionLikeOp(parser, result,
         /*allowVariadic=*/true, buildFuncType);
   }];
 }
@@ -246,12 +246,12 @@ def BufferOp : Handshake_Op<"buffer", [NoSideEffect, HasClock]> {
 
   let description = [{
     The "handshake.buffer" operation represents a buffer operation. $slots
-    must be an unsigned integer larger than 0. $sequantial=True indicates a 
-    nontransparent buffer, while $sequantial=False indicates a transparent 
+    must be an unsigned integer larger than 0. $sequantial=True indicates a
+    nontransparent buffer, while $sequantial=False indicates a transparent
     buffer.
   }];
 
-  let arguments = (ins AnyType, BoolAttr:$sequential, BoolAttr:$control, 
+  let arguments = (ins AnyType, BoolAttr:$sequential, BoolAttr:$control,
                    Confined<I32Attr, [IntMinValue<1>]>:$slots);
   let results = (outs AnyType);
 
@@ -438,9 +438,8 @@ def ConditionalBranchOp : Handshake_Op<"conditional_branch", [
   }];
 }
 
-def SinkOp : Handshake_Op<"sink", [
-  NoSideEffect, DeclareOpInterfaceMethods<ExecutableOpInterface>
-]> {
+def SinkOp
+    : Handshake_Op<"sink", [DeclareOpInterfaceMethods<ExecutableOpInterface>]> {
   let summary = "sink operation";
   let description = [{
     The "handshake.sink" operation discards any data that arrives at its
@@ -491,6 +490,7 @@ def ConstantOp : Handshake_Op<"constant", [
   // let skipDefaultBuilders = 1;
   let builders = [OpBuilder<(ins "Attribute":$value, "Value":$operand)>];
 
+  let hasCanonicalizer = 1;
   let extraClassDeclaration = [{
     Attribute getValue() { return (*this)->getAttr("value"); }
   }];
@@ -660,5 +660,9 @@ def EliminateSimpleForksPattern : Pat<(ForkOp
                                        : $op $a, $attr),
                                       (replaceWithValue $a), [(HasOneResult
                                                                : $op)]>;
+
+def EliminateSunkConstantsPattern
+    : Pat<(SinkOp:$sink (ConstantOp $control, $value)),
+          (replaceWithValue $sink)>;
 
 #endif // HANDSHAKE_OPS

@@ -17,7 +17,7 @@ add_circt_dialect_library(CIRCTSeq
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/Seq
 
   DEPENDS
-  CIRCTRTL
+  CIRCTHW
   CIRCTSV
   MLIRSeqIncGen
   MLIRSeqMiscIncGen
@@ -26,7 +26,7 @@ add_circt_dialect_library(CIRCTSeq
   Support
 
   LINK_LIBS PUBLIC
-  CIRCTRTL
+  CIRCTHW
   CIRCTSV
   MLIRPass
   MLIRIR

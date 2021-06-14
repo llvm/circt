@@ -11,17 +11,23 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/PatternMatch.h"
 
-using namespace mlir;
 using namespace circt;
 using namespace comb;
 
 /// Return true if the specified type is a signless non-zero width integer type,
 /// the only type which the comb ops operate.
 static bool isCombIntegerType(mlir::Type type) {
-  auto intType = type.dyn_cast<IntegerType>();
+  Type canonicalType;
+  if (auto typeAlias = type.dyn_cast<hw::TypeAliasType>())
+    canonicalType = typeAlias.getCanonicalType();
+  else
+    canonicalType = type;
+
+  auto intType = canonicalType.dyn_cast<IntegerType>();
   if (!intType || !intType.isSignless())
     return false;
 
@@ -58,6 +64,30 @@ ICmpPredicate ICmpOp::getFlippedPredicate(ICmpPredicate predicate) {
   llvm_unreachable("unknown comparison predicate");
 }
 
+/// Return true if this is an equality test with -1, which is a "reduction
+/// and" operation in Verilog.
+bool ICmpOp::isEqualAllOnes() {
+  if (predicate() != ICmpPredicate::eq)
+    return false;
+
+  if (auto op1 =
+          dyn_cast_or_null<hw::ConstantOp>(getOperand(1).getDefiningOp()))
+    return op1.getValue().isAllOnesValue();
+  return false;
+}
+
+/// Return true if this is a not equal test with 0, which is a "reduction
+/// or" operation in Verilog.
+bool ICmpOp::isNotEqualZero() {
+  if (predicate() != ICmpPredicate::ne)
+    return false;
+
+  if (auto op1 =
+          dyn_cast_or_null<hw::ConstantOp>(getOperand(1).getDefiningOp()))
+    return op1.getValue().isNullValue();
+  return false;
+}
+
 //===----------------------------------------------------------------------===//
 // Unary Operations
 //===----------------------------------------------------------------------===//
@@ -75,19 +105,6 @@ static LogicalResult verifySExtOp(SExtOp op) {
 }
 
 //===----------------------------------------------------------------------===//
-// Other Operations
-//===----------------------------------------------------------------------===//
-
-static LogicalResult verifyExtractOp(ExtractOp op) {
-  unsigned srcWidth = op.input().getType().cast<IntegerType>().getWidth();
-  unsigned dstWidth = op.getType().getWidth();
-  if (op.lowBit() >= srcWidth || srcWidth - op.lowBit() < dstWidth)
-    return op.emitOpError("from bit too large for input"), failure();
-
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
 // Variadic operations
 //===----------------------------------------------------------------------===//
 
@@ -96,6 +113,18 @@ static LogicalResult verifyUTVariadicOp(Operation *op) {
     return op->emitOpError("requires 1 or more args");
 
   return success();
+}
+
+/// Return true if this is a two operand xor with an all ones constant as its
+/// RHS operand.
+bool XorOp::isBinaryNot() {
+  if (getNumOperands() != 2)
+    return false;
+  if (auto cst =
+          dyn_cast_or_null<hw::ConstantOp>(getOperand(1).getDefiningOp()))
+    if (cst.getValue().isAllOnesValue())
+      return true;
+  return false;
 }
 
 //===----------------------------------------------------------------------===//
@@ -109,6 +138,19 @@ void ConcatOp::build(OpBuilder &builder, OperationState &result,
     resultWidth += input.getType().cast<IntegerType>().getWidth();
   }
   build(builder, result, builder.getIntegerType(resultWidth), inputs);
+}
+
+//===----------------------------------------------------------------------===//
+// Other Operations
+//===----------------------------------------------------------------------===//
+
+static LogicalResult verifyExtractOp(ExtractOp op) {
+  unsigned srcWidth = op.input().getType().cast<IntegerType>().getWidth();
+  unsigned dstWidth = op.getType().getWidth();
+  if (op.lowBit() >= srcWidth || srcWidth - op.lowBit() < dstWidth)
+    return op.emitOpError("from bit too large for input"), failure();
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

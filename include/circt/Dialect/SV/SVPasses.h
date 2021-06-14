@@ -13,6 +13,8 @@
 #ifndef CIRCT_DIALECT_SV_SVPASSES_H
 #define CIRCT_DIALECT_SV_SVPASSES_H
 
+#include "mlir/Pass/Pass.h"
+
 #include <memory>
 
 namespace mlir {
@@ -24,11 +26,13 @@ class OperationPass;
 namespace circt {
 namespace sv {
 
-std::unique_ptr<mlir::Pass> createRTLCleanupPass();
-std::unique_ptr<mlir::Pass> createRTLStubExternalModulesPass();
-std::unique_ptr<mlir::Pass> createRTLLegalizeNamesPass();
-std::unique_ptr<mlir::Pass> createRTLMemSimImplPass();
-
+std::unique_ptr<mlir::Pass> createPrettifyVerilogPass();
+std::unique_ptr<mlir::Pass> createHWCleanupPass();
+std::unique_ptr<mlir::Pass> createHWStubExternalModulesPass();
+std::unique_ptr<mlir::Pass> createHWLegalizeNamesPass();
+std::unique_ptr<mlir::Pass> createHWGeneratorCalloutPass();
+std::unique_ptr<mlir::Pass> createHWMemSimImplPass();
+std::unique_ptr<mlir::Pass> createSVExtractTestCodePass();
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/SV/SVPasses.h.inc"

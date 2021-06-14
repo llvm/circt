@@ -14,59 +14,66 @@
 // FIRRTL Types Definitions
 //===----------------------------------------------------------------------===//
 
-def FIRRTLType : Type<CPred<"$_self.isa<FIRRTLType>()">, "FIRRTLType",
-                             "::circt::firrtl::FIRRTLType">;
+def FIRRTLType : DialectType<FIRRTLDialect, CPred<"$_self.isa<FIRRTLType>()">,
+  "FIRRTLType", "::circt::firrtl::FIRRTLType">;
 
-def ClockType : Type<CPred<"$_self.isa<ClockType>()">, "clock",
-                           "::circt::firrtl::ClockType">,
-                BuildableType<"ClockType::get($_builder.getContext())">;
+def ClockType : DialectType<FIRRTLDialect, CPred<"$_self.isa<ClockType>()">,
+ "clock", "::circt::firrtl::ClockType">,
+ BuildableType<"ClockType::get($_builder.getContext())">;
 
-def IntType : Type<CPred<"$_self.isa<IntType>()">, "sint or uint type",
-                         "::circt::firrtl::IntType">;
-def SIntType : Type<CPred<"$_self.isa<SIntType>()">, "sint type",
-                          "::circt::firrtl::SIntType">;
-def UIntType : Type<CPred<"$_self.isa<UIntType>()">, "uint type",
-                          "::circt::firrtl::UIntType">;
-def AnalogType : Type<CPred<"$_self.isa<AnalogType>()">, "analog type",
-                            "::circt::firrtl::AnalogType">;
+def IntType : DialectType<FIRRTLDialect, CPred<"$_self.isa<IntType>()">,
+ "sint or uint type", "::circt::firrtl::IntType">;
 
-def BundleType : Type<CPred<"$_self.isa<BundleType>()">, "BundleType",
-                            "::circt::firrtl::BundleType">;
+def SIntType : DialectType<FIRRTLDialect, CPred<"$_self.isa<SIntType>()">,
+ "sint type", "::circt::firrtl::SIntType">;
 
-def FVectorType : Type<CPred<"$_self.isa<FVectorType>()">, "FVectorType",
-                                 "::circt::firrtl::FVectorType">;
+def UIntType : DialectType<FIRRTLDialect, CPred<"$_self.isa<UIntType>()">,
+ "uint type", "::circt::firrtl::UIntType">;
 
-def UInt1Type : Type<CPred<"$_self.isa<UIntType>() && "
-                           "$_self.cast<UIntType>().getWidth() == 1">,
-                           "UInt<1>", "::circt::firrtl::UIntType">,
-                BuildableType<"UIntType::get($_builder.getContext(), 1)">;
+def AnalogType : DialectType<FIRRTLDialect, CPred<"$_self.isa<AnalogType>()">,
+ "analog type", "::circt::firrtl::AnalogType">;
 
-def AsyncResetType : Type<CPred<"$_self.isa<AsyncResetType>()">, "AsyncReset",
-                          "::circt::firrtl::AsyncResetType">;
+def BundleType : DialectType<FIRRTLDialect, CPred<"$_self.isa<BundleType>()">,
+ "BundleType", "::circt::firrtl::BundleType">;
 
-def PassiveType : Type<CPred<"$_self.isa<FIRRTLType>() && "
-                             "$_self.cast<FIRRTLType>().isPassive()">,
-                       "a passive type (contain no flips)",
-                       "::circt::firrtl::FIRRTLType">;
+def FVectorType : DialectType<FIRRTLDialect, CPred<"$_self.isa<FVectorType>()">,
+  "FVectorType", "::circt::firrtl::FVectorType">;
+
+def UInt1Type : DialectType<FIRRTLDialect,
+  CPred<"$_self.isa<UIntType>() && "
+        "($_self.cast<UIntType>().getWidth() == 1 ||"
+        " $_self.cast<UIntType>().getWidth() == None)">,
+   "UInt<1> or UInt", "::circt::firrtl::UIntType">,
+   BuildableType<"UIntType::get($_builder.getContext(), 1)">;
+
+def AsyncResetType : DialectType<FIRRTLDialect,
+  CPred<"$_self.isa<AsyncResetType>()">,
+  "AsyncReset", "::circt::firrtl::AsyncResetType">;
+
+def PassiveType : DialectType<FIRRTLDialect,
+  CPred<"$_self.isa<FIRRTLType>() && $_self.cast<FIRRTLType>().isPassive()">,
+  "a passive type (contain no flips)", "::circt::firrtl::FIRRTLType">;
+
+def UnflippedType : DialectType<FIRRTLDialect,
+  CPred<"$_self.isa<FIRRTLType>() && !$_self.isa<FlipType>()">,
+  "a type that does not contain an outer flip", "::circt::firrtl::FIRRTLType">;
 
 //===----------------------------------------------------------------------===//
 // FIRRTL Types Predicates
 //===----------------------------------------------------------------------===//
 
-def OneBitType : Type<CPred<"($_self.isa<IntType>() && "
-                            "$_self.cast<IntType>().getWidth() == 1) ||"
-                            "($_self.isa<AnalogType>() && "
-                            "$_self.cast<AnalogType>().getWidth() == 1)">,
-                            "UInt<1>, SInt<1>, or Analog<1>",
-                            "::circt::firrtl::FIRRTLType">;
+def OneBitType : DialectType<FIRRTLDialect,
+ CPred<"($_self.isa<IntType>() && $_self.cast<IntType>().getWidth() == 1) || "
+   "($_self.isa<AnalogType>() && $_self.cast<AnalogType>().getWidth() == 1)">,
+ "UInt<1>, SInt<1>, or Analog<1>", "::circt::firrtl::FIRRTLType">;
 
-def NonZeroIntType : Type<CPred<"$_self.isa<IntType>() && "
-                          "$_self.cast<IntType>().getWidth() != 0">,
-                          "Int", "::circt::firrtl::IntType">;
+def NonZeroIntType : DialectType<FIRRTLDialect,
+  CPred<"$_self.isa<IntType>() && $_self.cast<IntType>().getWidth() != 0">,
+  "Int", "::circt::firrtl::IntType">;
 
-def ResetType : Type<CPred<"$_self.isa<FIRRTLType>() && "
-                           "$_self.cast<FIRRTLType>().isResetType()">,
-                    "Reset", "::circt::firrtl::FIRRTLType">;
+def ResetType : DialectType<FIRRTLDialect,
+  CPred<"$_self.isa<FIRRTLType>() && $_self.cast<FIRRTLType>().isResetType()">,
+  "Reset", "::circt::firrtl::FIRRTLType">;
 
 def UIntSIntClockType : AnyTypeOf<[SIntType, UIntType, ClockType],
                                   "sint, uint, or clock",
@@ -104,3 +111,20 @@ def MemDirAttr: I32EnumAttr<"MemDirAttr", "Memory Direction Enum",
 
 def AnnotationArrayAttr : TypedArrayAttrBase<DictionaryAttr,
                                              "An array of FIRRTL Annotations">;
+
+def InvalidValueAttr
+  : AttrDef<FIRRTLDialect, "InvalidValue", [], "::mlir::Attribute"> {
+  let summary = "A constant value of firrtl.invalid type";
+  let description = [{
+    Represents an firrtl.invalidvalue value, whose type is specified by the
+    type of the attribute.
+  }];
+  let mnemonic = "invalidvalue";
+  let parameters = (ins  AttributeSelfTypeParameter<"">:$type);
+
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "Type":$type),
+                                   "return $_get(type.getContext(), type);">
+  ];
+}
+

@@ -117,9 +117,7 @@ bool tryToExecute(Operation *op,
 // HandshakeOpsDialect
 //===----------------------------------------------------------------------===//
 
-HandshakeOpsDialect::HandshakeOpsDialect(MLIRContext *context)
-    : Dialect(getDialectNamespace(), context,
-              ::mlir::TypeID::get<HandshakeOpsDialect>()) {
+void HandshakeOpsDialect::initialize() {
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/Handshake/HandshakeOps.cpp.inc"
@@ -563,6 +561,11 @@ bool handshake::ConstantOp::tryExecute(
     std::vector<std::vector<llvm::Any>> &store,
     std::vector<mlir::Value> &scheduleList) {
   return tryToExecute(getOperation(), valueMap, timeMap, scheduleList, 0);
+}
+
+void handshake::ConstantOp::getCanonicalizationPatterns(
+    RewritePatternSet &results, MLIRContext *context) {
+  results.insert<circt::handshake::EliminateSunkConstantsPattern>(context);
 }
 
 void handshake::TerminatorOp::build(OpBuilder &builder, OperationState &result,

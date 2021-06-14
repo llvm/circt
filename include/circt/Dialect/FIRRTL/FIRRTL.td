@@ -14,8 +14,10 @@
 #define FIRRTL_TD
 
 include "mlir/IR/OpBase.td"
+include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/IR/RegionKindInterface.td"
 
 def FIRRTLDialect : Dialect {
@@ -28,7 +30,14 @@ def FIRRTLDialect : Dialect {
     [FIRRTL GitHub page](https://github.com/freechipsproject/firrtl).
   }];
 
+  let hasConstantMaterializer = 1;
   let cppNamespace = "::circt::firrtl";
+  let extraClassDeclaration = [{
+    /// Register all FIRRTL types.
+    void registerTypes();
+    /// Register all attributes.
+    void registerAttributes();
+  }];
 }
 
 // Base class for the operation in this dialect.

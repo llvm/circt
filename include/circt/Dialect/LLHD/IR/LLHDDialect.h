@@ -17,6 +17,8 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Dialect.h"
 
+#include "circt/Dialect/LLHD/IR/LLHDDialect.h.inc"
+
 namespace circt {
 namespace llhd {
 
@@ -26,30 +28,6 @@ struct TimeAttrStorage;
 struct ArrayTypeStorage;
 struct PtrTypeStorage;
 } // namespace detail
-
-class LLHDDialect : public Dialect {
-public:
-  explicit LLHDDialect(MLIRContext *context);
-
-  /// Returns the prefix used in the textual IR to refer to LLHD operations
-  static StringRef getDialectNamespace() { return "llhd"; }
-
-  /// Parses a type registered to this dialect
-  Type parseType(DialectAsmParser &parser) const override;
-
-  /// Print a type registered to this dialect
-  void printType(Type type, DialectAsmPrinter &printer) const override;
-
-  /// Parse an attribute regustered to this dialect
-  Attribute parseAttribute(DialectAsmParser &parser, Type type) const override;
-
-  /// Print an attribute registered to this dialect
-  void printAttribute(Attribute attr,
-                      DialectAsmPrinter &printer) const override;
-
-  Operation *materializeConstant(OpBuilder &builder, Attribute value, Type type,
-                                 Location loc) override;
-};
 
 //===----------------------------------------------------------------------===//
 // SigType

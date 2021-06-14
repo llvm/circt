@@ -18,6 +18,7 @@
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/Parser.h"
 #include "llvm/Support/InitLLVM.h"
+#include "llvm/Support/SourceMgr.h"
 
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/Simulation.h"

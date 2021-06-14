@@ -15,6 +15,7 @@
 
 include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Pass/PassBase.td"
 
 def MSFTDialect : Dialect {
   let name = "msft";
@@ -26,7 +27,18 @@ def MSFTDialect : Dialect {
     a candidate for generalization and re-homing.
   }];
 
+  let hasConstantMaterializer = 1;
   let cppNamespace = "::circt::msft";
+  let extraClassDeclaration = [{
+    /// Register all MSFT attributes.
+    void registerAttributes();
+
+    void registerGenerator(StringRef opName, StringRef generatorName,
+                           GeneratorCallback cb);
+
+    /// Generator details don't need to be exposed.
+    llvm::ManagedStatic<detail::Generators> generators;
+  }];
 }
 
 // Base class for the operation in this dialect.
@@ -39,8 +51,9 @@ def DeviceType : I32EnumAttr<"DeviceType",
     I32EnumAttrCase<"DSP", 2>,
   ]>;
 
-class MSFT_Attr<string name, string baseCppClass = "::mlir::Attribute">
-    : AttrDef<MSFTDialect, name, baseCppClass> {
+class MSFT_Attr<string name, list<Trait> traits = [],
+                string baseCppClass = "::mlir::Attribute">
+    : AttrDef<MSFTDialect, name, traits, baseCppClass> {
   let mnemonic = ?;
 }
 
@@ -57,6 +70,26 @@ def PhysLocation : MSFT_Attr<"PhysLocation"> {
   let parameters = (ins
     "DeviceTypeAttr":$devType,
     "uint64_t":$x, "uint64_t":$y, "uint64_t":$num);
+}
+
+def RunGenerators: Pass<"run-generators", "mlir::ModuleOp"> {
+  let summary = "Run the MSFT design entry generators";
+  let description = [{
+    Generators allow designers to model their system with high-level constructs
+    (which they define), then lower them down into synthesizable code.
+    High-level constructs are modeled as MLIR Operations. Generators are
+    essentially lowerings of those operations and they are registered along
+    with the name of an MLIR operation which they lower. Generators also have a
+    name so multiple can be registered per operation then one of them selected
+    by some criteria, allowing the designer to choose a particular
+    implementation of the same logical feature.
+  }];
+  let constructor = "circt::msft::createRunGeneratorsPass()";
+  let options = [
+    ListOption<"generators", "generators", "std::string",
+               "List of possible generators to run.",
+               "llvm::cl::OneOrMore, llvm::cl::MiscFlags::CommaSeparated">
+  ];
 }
 
 #endif // MSFT_TD

@@ -14,7 +14,7 @@ add_circt_dialect_library(CIRCTMSFT
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/MSFT
 
   DEPENDS
-  CIRCTRTL
+  CIRCTHW
   MLIRMSFTIncGen
   MLIRMSFTExtraIncGen
   
@@ -23,6 +23,7 @@ add_circt_dialect_library(CIRCTMSFT
 
   LINK_LIBS PUBLIC
   MLIRIR
+  MLIRTransforms
    )
 
 add_dependencies(circt-headers MLIRMSFTIncGen)

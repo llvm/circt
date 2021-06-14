@@ -1,25 +1,5 @@
 ; RUN: circt-translate -import-firrtl -verify-diagnostics --split-input-file %s
 
-; COM: A ReferenceTarget Annotation with a subindex is unsupported.
-
-; expected-error @+2 {{Invalid/unsupported annotation format}}
-; expected-note @+1 {{"target": /* error: Unsupported target (not a local CircuitTarget, ModuleTarget, or ReferenceTarget without subfield or subindex) */ "~Foo|Foo>a.b"}}
-circuit Foo: %[[{"a":"a","target":"~Foo|Foo>a.b"}]]
-  module Foo:
-    skip
-
-; // -----
-
-; COM: A ReferenceTarget Annotation with a subfield is unsupported.
-
-; expected-error @+2 {{Invalid/unsupported annotation format}}
-; expected-note @+1 {{"target": /* error: Unsupported target (not a local CircuitTarget, ModuleTarget, or ReferenceTarget without subfield or subindex) */ "~Foo|Foo>a[0]"}}
-circuit Foo: %[[{"a":"a","target":"~Foo|Foo>a[0]"}]]
-  module Foo:
-    skip
-
-; // -----
-
 ; COM: A non-local Annotation is unsupported.
 
 ; expected-error @+2 {{Invalid/unsupported annotation format}}
@@ -55,5 +35,41 @@ circuit Foo: %[[{"a":"a"},[{"b":"b"}]]]
 ; expected-error @+2 {{Failed to parse JSON Annotations}}
 ; expected-note @+1 {{}}
 circuit Foo: %[[{"a":"a"},]]]
+  module Foo:
+    skip
+
+; // -----
+
+; COM: A custom annotation fails to parse because it is missing fields
+
+; expected-error @+2 {{did not contain required key}}
+; expected-note @+1 {{}}
+circuit Foo: %[
+[
+  {
+    "class": "sifive.enterprise.grandcentral.DataTapsAnnotation"
+  }
+]]
+  module Foo:
+    skip
+
+; // -----
+
+; COM: An empty target should report an error (and not crash)
+
+
+; expected-error @+2 {{Invalid/unsupported annotation format}}
+; expected-note @+1 {{"target": /* error: invalid target string */}}
+circuit Foo: %[[{"target":""}]]
+  module Foo:
+    skip
+
+; // -----
+
+; COM: A null target should report an error (and not crash)
+
+; expected-error @+2 {{Invalid/unsupported annotation format}}
+; expected-note @+1 {{"target": /* error: target must be a string type */}}
+circuit Foo: %[[{"target":null}]]
   module Foo:
     skip

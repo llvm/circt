@@ -1,9 +1,9 @@
-; RUN: firtool %s --format=fir -lower-types | FileCheck %s
+; RUN: firtool %s --format=fir | FileCheck %s
 
 ; Temporary wires should not be introduced by type lowering, and if they are,
 ; they should be cleaned up by canonicalize.
 
-; CHECK-LABEL: firrtl.module @Issue794(%clock: !firrtl.clock,
+; CHECK-LABEL: firrtl.module @Issue794(in %clock: !firrtl.clock,
 ; CHECK-NOT: firrtl.wire
 ; CHECK: }
 circuit Issue794:

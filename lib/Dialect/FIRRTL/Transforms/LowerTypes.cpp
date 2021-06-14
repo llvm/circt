@@ -10,14 +10,15 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "./PassDetails.h"
+#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
-#include "circt/Support/ImplicitLocOpBuilder.h"
+#include "circt/Support/FieldRef.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/FunctionSupport.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/Parallel.h"
@@ -31,6 +32,8 @@ namespace {
 struct FlatBundleFieldEntry {
   // This is the underlying ground type of the field.
   FIRRTLType type;
+  // This is a reference to the exact field.
+  unsigned fieldID;
   // This is a suffix to add to the field name to make it unique.
   std::string suffix;
   // This indicates whether the field was flipped to be an output.
@@ -43,39 +46,57 @@ struct FlatBundleFieldEntry {
 
 // Convert an aggregate type into a flat list of fields.  This is used
 // when working with instances and mems to flatten them.
-static void flattenType(FIRRTLType type, StringRef suffixSoFar, bool isFlipped,
+static void flattenType(FIRRTLType type,
                         SmallVectorImpl<FlatBundleFieldEntry> &results) {
-  if (auto flip = type.dyn_cast<FlipType>())
-    return flattenType(flip.getElementType(), suffixSoFar, !isFlipped, results);
-
-  TypeSwitch<FIRRTLType>(type)
-      .Case<BundleType>([&](auto bundle) {
-        SmallString<16> tmpSuffix(suffixSoFar);
-
-        // Otherwise, we have a bundle type.  Break it down.
-        for (auto &elt : bundle.getElements()) {
-          // Construct the suffix to pass down.
-          tmpSuffix.resize(suffixSoFar.size());
-          tmpSuffix.push_back('_');
-          tmpSuffix.append(elt.name.getValue());
-          // Recursively process subelements.
-          flattenType(elt.type, tmpSuffix, isFlipped, results);
+  // Field ID is the index of each field when walking aggregate types in a
+  // depth-first order. See FieldRef for more information about how this
+  // works.
+  unsigned fieldID = 0;
+  std::function<void(FIRRTLType, StringRef, bool)> flatten =
+      [&](FIRRTLType type, StringRef suffixSoFar, bool isFlipped) {
+        // Strip off an outer flip type. Flip types don't don't have a field ID,
+        // and so there is no need to increment the field ID.
+        if (auto flip = type.dyn_cast<FlipType>()) {
+          type = flip.getElementType();
+          isFlipped = !isFlipped;
         }
-        return;
-      })
-      .Case<FVectorType>([&](auto vector) {
-        for (size_t i = 0, e = vector.getNumElements(); i != e; ++i)
-          flattenType(vector.getElementType(),
-                      (suffixSoFar + "_" + std::to_string(i)).str(), isFlipped,
-                      results);
-        return;
-      })
-      .Default([&](auto) {
-        results.push_back({type, suffixSoFar.str(), isFlipped});
-        return;
-      });
+        TypeSwitch<FIRRTLType>(type)
+            .Case<BundleType>([&](auto bundle) {
+              SmallString<16> tmpSuffix(suffixSoFar);
+              // Increment the field ID to point to the first element.
+              fieldID++;
 
-  return;
+              // Otherwise, we have a bundle type.  Break it down.
+              for (auto &elt : bundle.getElements()) {
+                // Construct the suffix to pass down.
+                tmpSuffix.resize(suffixSoFar.size());
+                tmpSuffix.push_back('_');
+                tmpSuffix.append(elt.name.getValue());
+                // Recursively process subelements.
+                flatten(elt.type, tmpSuffix, isFlipped);
+              }
+              return;
+            })
+            .Case<FVectorType>([&](auto vector) {
+              // Increment the field ID to point to the first element.
+              fieldID++;
+              for (size_t i = 0, e = vector.getNumElements(); i != e; ++i) {
+                flatten(vector.getElementType(),
+                        (suffixSoFar + "_" + std::to_string(i)).str(),
+                        isFlipped);
+              }
+              return;
+            })
+            .Default([&](auto) {
+              results.push_back({type, fieldID, suffixSoFar.str(), isFlipped});
+              // Increment the field ID past this type. This is important when
+              // this type is nested in an aggregate type.
+              fieldID++;
+              return;
+            });
+      };
+
+  return flatten(type, "", false);
 }
 
 // Helper to peel off the outer most flip type from an aggregate type that has
@@ -91,6 +112,72 @@ static FIRRTLType getCanonicalAggregateType(Type originalType) {
       .Default([](auto) { return nullptr; });
 }
 
+/// Copy annotations from \p annotations to \p loweredAttrs, except annotations
+/// with "target" key, that do not match the field suffix.
+static void filterAnnotations(ArrayAttr annotations,
+                              SmallVector<Attribute> &loweredAttrs,
+                              StringRef suffix) {
+  if (!annotations || annotations.empty())
+    return;
+
+  for (auto opAttr : annotations) {
+    auto di = opAttr.dyn_cast<DictionaryAttr>();
+    if (!di) {
+      loweredAttrs.push_back(opAttr);
+      continue;
+    }
+    auto targetAttr = di.get("target");
+    if (!targetAttr) {
+      loweredAttrs.push_back(opAttr);
+      continue;
+    }
+
+    ArrayAttr subFieldTarget = targetAttr.cast<ArrayAttr>();
+    SmallString<16> targetStr;
+    for (auto fName : subFieldTarget) {
+      std::string fNameStr = fName.cast<StringAttr>().getValue().str();
+      // The fNameStr will begin with either '[' or '.', replace it with an
+      // '_' to construct the suffix.
+      fNameStr[0] = '_';
+      // If it ends with ']', then just remove it.
+      if (fNameStr.back() == ']')
+        fNameStr.erase(fNameStr.size() - 1);
+
+      targetStr += fNameStr;
+    }
+    // If no subfield attribute, then copy the annotation.
+    if (targetStr.empty()) {
+      loweredAttrs.push_back(opAttr);
+      continue;
+    }
+    // If the subfield suffix doesn't match, then ignore the annotation.
+    if (suffix.find(targetStr.str().str()) != 0)
+      continue;
+
+    NamedAttrList modAttr;
+    for (auto attr : di.getValue()) {
+      // Ignore the actual target annotation, but copy the rest of annotations.
+      if (attr.first.str() == "target")
+        continue;
+      modAttr.push_back(attr);
+    }
+    loweredAttrs.push_back(
+        DictionaryAttr::get(annotations.getContext(), modAttr));
+  }
+}
+
+/// Copy annotations from \p annotations into a new AnnotationSet and return it.
+/// This removes annotations with "target" key that does not match the field
+/// suffix.
+static AnnotationSet filterAnnotations(AnnotationSet annotations,
+                                       StringRef suffix) {
+  if (annotations.empty())
+    return annotations;
+  SmallVector<Attribute> loweredAttrs;
+  filterAnnotations(annotations.getArrayAttr(), loweredAttrs, suffix);
+  return AnnotationSet(ArrayAttr::get(annotations.getContext(), loweredAttrs));
+}
+
 //===----------------------------------------------------------------------===//
 // Module Type Lowering
 //===----------------------------------------------------------------------===//
@@ -99,7 +186,6 @@ namespace {
 class TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
 public:
   TypeLoweringVisitor(MLIRContext *context) : context(context) {}
-  using ValueIdentifier = std::pair<Value, Identifier>;
   using FIRRTLVisitor<TypeLoweringVisitor>::visitDecl;
   using FIRRTLVisitor<TypeLoweringVisitor>::visitExpr;
   using FIRRTLVisitor<TypeLoweringVisitor>::visitStmt;
@@ -112,14 +198,18 @@ public:
   void visitDecl(FModuleOp op);
   void visitDecl(InstanceOp op);
   void visitDecl(MemOp op);
+  void visitDecl(NodeOp op);
   void visitDecl(RegOp op);
   void visitDecl(WireOp op);
   void visitDecl(RegResetOp op);
-  void visitExpr(InvalidValuePrimOp op);
+  void visitExpr(InvalidValueOp op);
   void visitExpr(SubfieldOp op);
   void visitExpr(SubindexOp op);
   void visitExpr(SubaccessOp op);
+  void visitExpr(MuxPrimOp op);
   void visitStmt(ConnectOp op);
+  void visitStmt(WhenOp op);
+  void visitStmt(PartialConnectOp op);
 
 private:
   // Lowering module block arguments.
@@ -127,13 +217,12 @@ private:
 
   // Helpers to manage state.
   Value addArg(FModuleOp module, Type type, unsigned oldArgNumber,
-               StringRef nameSuffix = "");
+               Direction direction, StringRef nameSuffix = "");
 
-  void setBundleLowering(Value oldValue, StringRef flatField, Value newValue);
-  Value getBundleLowering(Value oldValue, StringRef flatField);
-  void getAllBundleLowerings(Value oldValue, SmallVectorImpl<Value> &results);
-
-  Identifier getArgAttrName(unsigned newArgNumber);
+  void setBundleLowering(FieldRef fieldRef, Value newValue);
+  Value getBundleLowering(FieldRef fieldRef);
+  void getAllBundleLowerings(Value oldValue,
+                             SmallVectorImpl<std::pair<Value, bool>> &results);
 
   MLIRContext *context;
 
@@ -145,11 +234,18 @@ private:
   SmallVector<Operation *, 16> opsToRemove;
 
   // State to keep a mapping from (Value, Identifier) pairs to flattened values.
-  DenseMap<ValueIdentifier, Value> loweredBundleValues;
+  DenseMap<FieldRef, Value> loweredBundleValues;
 
   // State to track the new attributes for the module.
   SmallVector<NamedAttribute, 8> newModuleAttrs;
+  SmallVector<Attribute> newArgNames;
+  SmallVector<Direction> newArgDirections;
+  SmallVector<Attribute, 8> newArgAttrs;
   size_t originalNumModuleArgs;
+
+  void recursivePartialConnect(Value a, FIRRTLType aType, Value b,
+                               FIRRTLType bType, unsigned aIndex,
+                               unsigned bIndex, bool aFlip = false);
 };
 } // end anonymous namespace
 
@@ -194,17 +290,28 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   // Remember the original argument attributess.
   SmallVector<NamedAttribute, 8> originalArgAttrs;
   DictionaryAttr originalAttrs = module->getAttrDictionary();
-  for (size_t i = 0, e = originalNumModuleArgs; i < e; ++i)
-    originalArgAttrs.push_back(
-        originalAttrs.getNamed(getArgAttrName(i)).getValue());
-  DictionaryAttr::sortInPlace(originalArgAttrs);
 
   // Copy over any attributes that weren't original argument attributes.
   auto *argAttrBegin = originalArgAttrs.begin();
   auto *argAttrEnd = originalArgAttrs.end();
   for (auto attr : originalAttrs)
     if (std::lower_bound(argAttrBegin, argAttrEnd, attr) == argAttrEnd)
-      newModuleAttrs.push_back(attr);
+      // Drop old "portNames", directions, and argument attributes.  These are
+      // handled differently below.
+      if (attr.first != "portNames" && attr.first != direction::attrKey &&
+          attr.first != mlir::function_like_impl::getArgDictAttrName())
+        newModuleAttrs.push_back(attr);
+
+  newModuleAttrs.push_back(NamedAttribute(Identifier::get("portNames", context),
+                                          builder->getArrayAttr(newArgNames)));
+  newModuleAttrs.push_back(
+      NamedAttribute(Identifier::get(direction::attrKey, context),
+                     direction::packAttribute(newArgDirections, context)));
+
+  // Attach new argument attributes.
+  newModuleAttrs.push_back(NamedAttribute(
+      builder->getIdentifier(mlir::function_like_impl::getArgDictAttrName()),
+      builder->getArrayAttr(newArgAttrs)));
 
   // Update the module's attributes.
   module->setAttrs(newModuleAttrs);
@@ -226,21 +333,22 @@ void TypeLoweringVisitor::lowerArg(FModuleOp module, BlockArgument arg,
 
   // Flatten any bundle types.
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  flattenType(type, "", false, fieldTypes);
+  flattenType(type, fieldTypes);
 
   for (auto field : fieldTypes) {
 
     // Create new block arguments.
-    auto type = field.getPortType();
-    auto newValue = addArg(module, type, argNumber, field.suffix);
+    auto type = field.type;
+    // Flip the direction if the field is an output.
+    auto direction =
+        (Direction)((unsigned)getModulePortDirection(module, argNumber) ^
+                    field.isOutput);
+    auto newValue = addArg(module, type, argNumber, direction, field.suffix);
 
     // If this field was flattened from a bundle.
     if (!field.suffix.empty()) {
-      // Remove field separator prefix for consitency with the rest of the pass.
-      auto fieldName = StringRef(field.suffix).drop_front(1);
-
       // Map the flattened suffix for the original bundle to the new value.
-      setBundleLowering(arg, fieldName, newValue);
+      setBundleLowering(FieldRef(arg, field.fieldID), newValue);
     } else {
       // Lower any other arguments by copying them to keep the relative order.
       arg.replaceAllUsesWith(newValue);
@@ -254,35 +362,74 @@ void TypeLoweringVisitor::lowerArg(FModuleOp module, BlockArgument arg,
 void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   OpBuilder builder(context);
 
-  // Cache the named identifer for argument names.
-  auto argNameId = builder.getIdentifier("firrtl.name");
-
   // Create an array of the result types and results names.
   SmallVector<Type, 8> inputTypes;
-  SmallVector<DictionaryAttr, 8> attributes;
+  SmallVector<NamedAttribute, 8> attributes;
+  SmallVector<Attribute, 8> argAttrDicts;
 
+  SmallVector<Attribute> portNames;
+  SmallVector<Direction> portDirections;
+  unsigned oldArgNumber = 0;
+  SmallString<8> attrNameBuf;
   for (auto &port : extModule.getPorts()) {
     // Flatten the port type.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-    flattenType(port.type, port.getName(), false, fieldTypes);
+    flattenType(port.type, fieldTypes);
+
+    // Pre-populate argAttrs with the current arg attributes that are not
+    // annotations.  Populate oldAnnotations with the current annotations.
+    SmallVector<NamedAttribute> argAttrs;
+    AnnotationSet oldAnnotations =
+        AnnotationSet::forPort(extModule, oldArgNumber, argAttrs);
 
     // For each field, add record its name and type.
     for (auto field : fieldTypes) {
-      inputTypes.push_back(field.getPortType());
-      if (port.name) {
-        auto argAttr = builder.getDictionaryAttr(
-            NamedAttribute(argNameId, builder.getStringAttr(field.suffix)));
-        attributes.push_back(argAttr);
-      } else {
-        // If the port didn't have a name, push back an empty name.
-        attributes.push_back({});
-      }
+      Attribute pName;
+      inputTypes.push_back(field.type);
+      if (port.name)
+        pName = builder.getStringAttr((port.getName() + field.suffix).str());
+      else
+        pName = builder.getStringAttr("");
+      portNames.push_back(pName);
+      // Flip the direction if the field is an output.
+      portDirections.push_back((
+          Direction)((unsigned)getModulePortDirection(extModule, oldArgNumber) ^
+                     field.isOutput));
+
+      // Populate newAnnotations with the old annotations filtered to those
+      // associated with just this field.
+      AnnotationSet newAnnotations =
+          filterAnnotations(oldAnnotations, field.suffix);
+
+      // Populate the new arg attributes.
+      argAttrDicts.push_back(newAnnotations.getArgumentAttrDict(argAttrs));
     }
+    ++oldArgNumber;
   }
+
+  // Add port names attribute.
+  attributes.push_back(
+      {Identifier::get(mlir::function_like_impl::getArgDictAttrName(), context),
+       builder.getArrayAttr(argAttrDicts)});
+  attributes.push_back(
+      {Identifier::get("portNames", context), builder.getArrayAttr(portNames)});
+  attributes.push_back({Identifier::get(direction::attrKey, context),
+                        direction::packAttribute(portDirections, context)});
+
+  // Copy over any lingering attributes which are not "portNames", directions,
+  // or argument attributes.
+  for (auto a : extModule->getAttrs()) {
+    if (a.first == "portNames" || a.first == direction::attrKey ||
+        a.first == mlir::function_like_impl::getArgDictAttrName())
+      continue;
+    attributes.push_back(a);
+  }
+
+  // Set the attributes.
+  extModule->setAttrs(builder.getDictionaryAttr(attributes));
 
   // Set the type and then bulk set all the names.
   extModule.setType(builder.getFunctionType(inputTypes, {}));
-  extModule.setAllArgAttrs(attributes);
 }
 
 //===----------------------------------------------------------------------===//
@@ -294,35 +441,34 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
 // ensuring both lowerings are the same, we can process every module in the
 // circuit in parallel, and every instance will have the correct ports.
 void TypeLoweringVisitor::visitDecl(InstanceOp op) {
-  // Create a new, flat bundle type for the new result
+  // Create a new, flat bundle type for the new result.
   SmallVector<Type, 8> resultTypes;
-  SmallVector<Attribute, 8> resultNames;
+  SmallVector<StringAttr, 8> resultNames;
   SmallVector<size_t, 8> numFieldsPerResult;
+  SmallVector<unsigned, 8> resultFieldIDs;
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-    flattenType(op.getType(i).cast<FIRRTLType>(), op.getPortNameStr(i),
-                /*isFlip*/ false, fieldTypes);
+    flattenType(op.getType(i).cast<FIRRTLType>(), fieldTypes);
 
     for (auto field : fieldTypes) {
       // Store the flat type for the new bundle type.
       resultNames.push_back(builder->getStringAttr(field.suffix));
       resultTypes.push_back(field.getPortType());
+      resultFieldIDs.push_back(field.fieldID);
     }
     numFieldsPerResult.push_back(fieldTypes.size());
   }
 
   auto newInstance = builder->create<InstanceOp>(
-      resultTypes, op.moduleNameAttr(), builder->getArrayAttr(resultNames),
-      op.nameAttr(), op.annotations());
+      resultTypes, op.moduleNameAttr(), op.nameAttr(), op.annotations());
 
   // Record the mapping of each old result to each new result.
   size_t nextResult = 0;
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
     // If this result was a non-bundle value, just RAUW it.
-    auto origPortName = op.getPortNameStr(i);
     if (numFieldsPerResult[i] == 1 &&
-        newInstance.getPortNameStr(nextResult) == origPortName) {
+        resultNames[nextResult].getValue().empty()) {
       op.getResult(i).replaceAllUsesWith(newInstance.getResult(nextResult));
       ++nextResult;
       continue;
@@ -330,12 +476,11 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
 
     // Otherwise lower bundles.
     for (size_t j = 0, e = numFieldsPerResult[i]; j != e; ++j) {
-      auto newPortName = newInstance.getPortNameStr(nextResult);
-      // Drop the original port name and the underscore.
-      newPortName = newPortName.drop_front(origPortName.size() + 1);
-
+      auto newPortName = resultNames[nextResult].getValue();
+      // Drop the leading underscore.
+      newPortName = newPortName.drop_front(1);
       // Map the flattened suffix for the original bundle to the new value.
-      setBundleLowering(op.getResult(i), newPortName,
+      setBundleLowering(FieldRef(op.getResult(i), resultFieldIDs[nextResult]),
                         newInstance.getResult(nextResult));
       ++nextResult;
     }
@@ -352,7 +497,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
   auto depth = op.depth();
 
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  flattenType(type, "", false, fieldTypes);
+  flattenType(type, fieldTypes);
 
   // Mutable store of the types of the ports of a new memory. This is
   // cleared and re-used.
@@ -380,7 +525,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     resultPortTypes.clear();
     resultPortNames.clear();
     for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
-      auto kind = op.getPortKind(i).getValue();
+      auto kind = op.getPortKind(i);
       auto name = op.getPortName(i);
 
       // Any read or write ports are just added.
@@ -407,9 +552,10 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     // TODO: Annotations are just copied to the lowered memory.
     // Change this to copy all global annotations and only those which
     // target specific ports.
-    auto newName = op.name().getValue().str() + field.suffix;
+    auto newName = op.name().str() + field.suffix;
     auto newMem = builder->create<MemOp>(
-        resultPortTypes, op.readLatency(), op.writeLatency(), depth, op.ruw(),
+        resultPortTypes, op.readLatencyAttr(), op.writeLatencyAttr(),
+        op.depthAttr(), op.ruwAttr(),
         builder->getArrayAttr(resultPortNames.getArrayRef()),
         builder->getStringAttr(newName), op.annotations());
 
@@ -425,9 +571,13 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
                                   .getPassiveType()
                                   .cast<BundleType>();
 
-      auto kind =
-          newMem.getPortKind(newMem.getPortName(i).getValue()).getValue();
-      auto oldKind = op.getPortKind(op.getPortName(j).getValue()).getValue();
+      auto kind = newMem.getPortKind(newMem.getPortName(i).getValue());
+      auto oldKind = op.getPortKind(op.getPortName(j).getValue());
+      auto oldType = op.getResult(j)
+                         .getType()
+                         .cast<FIRRTLType>()
+                         .getPassiveType()
+                         .cast<BundleType>();
 
       auto skip = kind == MemOp::PortKind::Write &&
                   oldKind == MemOp::PortKind::ReadWrite;
@@ -447,14 +597,15 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
           if (oldName == "data" && kind == MemOp::PortKind::Write)
             oldName = "wdata";
         }
+        // Get the element ID of the old port.
+        auto elementID = oldType.getFieldID(*oldType.getElementIndex(oldName));
 
         auto getWire = [&](FIRRTLType type,
                            const std::string &wireName) -> Value {
           auto wire = newWires[wireName];
           if (!wire) {
-            wire = builder->create<WireOp>(type.getPassiveType(),
-                                           newMem.name().getValue().str() +
-                                               "_" + wireName);
+            wire = builder->create<WireOp>(
+                type.getPassiveType(), newMem.name().str() + "_" + wireName);
             newWires[wireName] = wire;
           }
           return wire;
@@ -468,7 +619,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
         // lowering target, and then connecting every new port
         // subfield to that.
         if (oldName == "clk" || oldName == "en" || oldName == "addr") {
-          FIRRTLType theType = FlipType::get(elt.type);
+          FIRRTLType theType = elt.type.getPassiveType();
 
           // Construct a new wire if needed.
           auto wireName =
@@ -477,39 +628,36 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
 
           if (!(oldKind == MemOp::PortKind::ReadWrite &&
                 kind == MemOp::PortKind::Write))
-            setBundleLowering(op.getResult(j), oldName, wire);
+            setBundleLowering(FieldRef(op.getResult(j), elementID), wire);
 
           // Handle "en" specially if this used to be a readwrite port.
           if (oldKind == MemOp::PortKind::ReadWrite && oldName == "en") {
             auto wmode =
                 getWire(theType, op.getPortName(j).getValue().str() + "_wmode");
-            if (!skip)
-              setBundleLowering(op.getResult(j), "wmode", wmode);
+            if (!skip) {
+              auto wmodeID =
+                  oldType.getFieldID(*oldType.getElementIndex("wmode"));
+              setBundleLowering(FieldRef(op.getResult(j), wmodeID), wmode);
+            }
             Value gate;
             if (kind == MemOp::PortKind::Read)
-              gate = builder->create<NotPrimOp>(wmode.getType(), wmode);
+              gate = builder->create<NotPrimOp>(wmode);
             else
               gate = wmode;
-            wire = builder->create<AndPrimOp>(wire.getType(), wire, gate);
+            wire = builder->create<AndPrimOp>(wire, gate);
           }
 
           builder->create<ConnectOp>(
-              builder->create<SubfieldOp>(theType, newMem.getResult(i),
-                                          elt.name),
-              wire);
+              builder->create<SubfieldOp>(newMem.getResult(i), elt.name), wire);
           continue;
         }
 
         // Data ports ("data", "mask") are trivially lowered because
         // each data leaf winds up in a new, separate memory. No wire
         // creation is needed.
-        FIRRTLType theType = elt.type;
-        if (kind == MemOp::PortKind::Write)
-          theType = FlipType::get(theType);
-
-        setBundleLowering(op.getResult(j), (oldName + field.suffix).str(),
-                          builder->create<SubfieldOp>(
-                              theType, newMem.getResult(i), elt.name));
+        setBundleLowering(
+            FieldRef(op.getResult(j), elementID + field.fieldID),
+            builder->create<SubfieldOp>(newMem.getResult(i), elt.name));
       }
 
       // Don't increment the index of the old memory if this is the
@@ -520,6 +668,40 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     }
   }
 
+  opsToRemove.push_back(op);
+}
+
+void TypeLoweringVisitor::visitDecl(NodeOp op) {
+  Value result = op.result();
+
+  // Attempt to get the bundle types, potentially unwrapping an outer flip type
+  // that wraps the whole bundle.
+  FIRRTLType resultType = getCanonicalAggregateType(result.getType());
+
+  // If the node is not a bundle, there is nothing to do.
+  if (!resultType)
+    return;
+
+  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
+  flattenType(resultType, fieldTypes);
+
+  // Loop over the leaf aggregates.
+  auto name = op.name().str();
+  for (auto field : fieldTypes) {
+    SmallString<16> loweredName;
+    if (!name.empty())
+      loweredName = name + field.suffix;
+    // For all annotations on the parent op, filter them based on the target
+    // attribute.
+    SmallVector<Attribute> loweredAttrs;
+    filterAnnotations(op.annotations(), loweredAttrs, field.suffix);
+    auto initializer = getBundleLowering(FieldRef(op.input(), field.fieldID));
+    auto node = builder->create<NodeOp>(field.type, initializer, loweredName,
+                                        loweredAttrs);
+    setBundleLowering(FieldRef(result, field.fieldID), node);
+  }
+
+  // Remember to remove the original op.
   opsToRemove.push_back(op);
 }
 
@@ -536,22 +718,20 @@ void TypeLoweringVisitor::visitDecl(WireOp op) {
     return;
 
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  flattenType(resultType, "", false, fieldTypes);
-
-  // Create the prefix of the lowered name
-  StringRef wireName = "";
-  if (op.name().hasValue())
-    wireName = op.name().getValue();
+  flattenType(resultType, fieldTypes);
 
   // Loop over the leaf aggregates.
-  SmallString<16> loweredName(wireName);
+  auto name = op.name().str();
   for (auto field : fieldTypes) {
-    loweredName.resize(wireName.size());
-    loweredName += field.suffix;
-    auto wire = builder->create<WireOp>(field.getPortType(),
-                                        builder->getStringAttr(loweredName),
-                                        op.annotations());
-    setBundleLowering(result, StringRef(field.suffix).drop_front(1), wire);
+    SmallString<16> loweredName;
+    if (!name.empty())
+      loweredName = name + field.suffix;
+    SmallVector<Attribute> loweredAttrs;
+    // For all annotations on the parent op, filter them based on the target
+    // attribute.
+    filterAnnotations(op.annotations(), loweredAttrs, field.suffix);
+    auto wire = builder->create<WireOp>(field.type, loweredName, loweredAttrs);
+    setBundleLowering(FieldRef(result, field.fieldID), wire);
   }
 
   // Remember to remove the original op.
@@ -571,18 +751,21 @@ void TypeLoweringVisitor::visitDecl(RegOp op) {
     return;
 
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  flattenType(resultType, "", false, fieldTypes);
+  flattenType(resultType, fieldTypes);
 
   // Loop over the leaf aggregates.
+  auto name = op.name().str();
   for (auto field : fieldTypes) {
-    StringAttr loweredName;
-    if (auto nameAttr = op.nameAttr())
-      loweredName =
-          builder->getStringAttr(nameAttr.getValue().str() + field.suffix);
-
-    setBundleLowering(result, StringRef(field.suffix).drop_front(1),
+    SmallString<16> loweredName;
+    if (!name.empty())
+      loweredName = name + field.suffix;
+    SmallVector<Attribute> loweredAttrs;
+    // For all annotations on the parent op, filter them based on the target
+    // attribute.
+    filterAnnotations(op.annotations(), loweredAttrs, field.suffix);
+    setBundleLowering(FieldRef(result, field.fieldID),
                       builder->create<RegOp>(field.getPortType(), op.clockVal(),
-                                             loweredName, op.annotations()));
+                                             loweredName, loweredAttrs));
   }
 
   // Remember to remove the original op.
@@ -602,17 +785,17 @@ void TypeLoweringVisitor::visitDecl(RegResetOp op) {
     return;
 
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  flattenType(resultType, "", false, fieldTypes);
+  flattenType(resultType, fieldTypes);
 
   // Loop over the leaf aggregates.
+  auto name = op.name().str();
   for (auto field : fieldTypes) {
-    StringAttr loweredName;
-    if (auto nameAttr = op.nameAttr())
-      loweredName =
-          builder->getStringAttr(nameAttr.getValue().str() + field.suffix);
-    auto suffix = StringRef(field.suffix).drop_front(1);
-    auto resetValLowered = getBundleLowering(op.resetValue(), suffix);
-    setBundleLowering(result, suffix,
+    std::string loweredName = "";
+    if (!name.empty())
+      loweredName = name + field.suffix;
+    auto resetValLowered =
+        getBundleLowering(FieldRef(op.resetValue(), field.fieldID));
+    setBundleLowering(FieldRef(result, field.fieldID),
                       builder->create<RegResetOp>(
                           field.getPortType(), op.clockVal(), op.resetSignal(),
                           resetValLowered, loweredName, op.annotations()));
@@ -622,47 +805,41 @@ void TypeLoweringVisitor::visitDecl(RegResetOp op) {
   opsToRemove.push_back(op);
 }
 
-// Lowering subfield operations has to deal with three different cases:
-//   a) the input value is from a module block argument
-//   b) the input value is from another subfield operation's result
-//   c) the input value is from an instance
-//   d) the input value is from a duplex op, such as a wire or register
-//
-// This is accomplished by storing value and suffix mappings that point to the
-// flattened value. If the subfield op is accessing the leaf field of a bundle,
-// it replaces all uses with the flattened value. Otherwise, it flattens the
-// rest of the bundle and adds the flattened values to the mapping for each
-// partial suffix.
+// Lower the subfield operation. This is accomplished by storing value and
+// suffix mappings that point to the flattened value. If the subfield op is
+// accessing the leaf field of a bundle, it replaces all uses with the flattened
+// value. Otherwise, it flattens the rest of the bundle and adds the flattened
+// values to the mapping for each partial suffix
 void TypeLoweringVisitor::visitExpr(SubfieldOp op) {
-  Value input = op.input();
-  StringRef fieldname = op.fieldname();
-  FIRRTLType resultType = op.getType();
-
   // Flatten any nested bundle types the usual way.
+  FIRRTLType resultType = op.getType();
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  flattenType(resultType, fieldname, false, fieldTypes);
+  flattenType(resultType, fieldTypes);
+
+  // Get the input bundle type.
+  Value input = op.input();
+  auto inputType = input.getType();
+  if (auto flipType = inputType.dyn_cast<FlipType>())
+    inputType = flipType.getElementType();
+  auto bundleType = inputType.cast<BundleType>();
+
+  // Get the base element ID of input bundle.
+  auto parentID =
+      bundleType.getFieldID(*bundleType.getElementIndex(op.fieldname()));
 
   for (auto field : fieldTypes) {
-    // Look up the mapping for this suffix.
-    auto newValue = getBundleLowering(input, field.suffix);
-
-    // The prefix is the field name and possibly field separator.
-    auto prefixSize = fieldname.size();
-    if (field.suffix.size() > fieldname.size())
-      prefixSize += 1;
-
-    // Get the remaining field suffix by removing the prefix.
-    auto partialSuffix = StringRef(field.suffix).drop_front(prefixSize);
+    // Get the lowered value of the current field from the input value.
+    auto newValue =
+        getBundleLowering(FieldRef(input, parentID + field.fieldID));
 
     // If we are at the leaf of a bundle.
-    if (partialSuffix.empty())
+    if (field.suffix.empty())
       // Replace the result with the flattened value.
       op.replaceAllUsesWith(newValue);
     else
       // Map the partial suffix for the result value to the flattened value.
-      setBundleLowering(op, partialSuffix, newValue);
+      setBundleLowering(FieldRef(op, field.fieldID), newValue);
   }
-
   // Remember to remove the original op.
   opsToRemove.push_back(op);
 }
@@ -670,17 +847,13 @@ void TypeLoweringVisitor::visitExpr(SubfieldOp op) {
 // Gracefully die on subaccess operations
 void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   op.emitError("SubaccessOp not handled.");
-
   // We need to do enough transformation to not segfault
   // Lower operation to an access of item 0
-  Value input = op.input();
-  std::string fieldname = "0";
-  FIRRTLType resultType = op.getType();
-
+  auto input = op.input();
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  flattenType(resultType, fieldname, false, fieldTypes);
-
-  op.replaceAllUsesWith(getBundleLowering(input, fieldTypes[0].suffix));
+  flattenType(input.getType().cast<FIRRTLType>(), fieldTypes);
+  op.replaceAllUsesWith(
+      getBundleLowering(FieldRef(input, fieldTypes[0].fieldID)));
   opsToRemove.push_back(op);
 }
 
@@ -689,36 +862,69 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
 //
 // TODO: Unify this and SubfieldOp handling.
 void TypeLoweringVisitor::visitExpr(SubindexOp op) {
-  Value input = op.input();
-  std::string fieldname = std::to_string(op.index());
-  FIRRTLType resultType = op.getType();
 
   // Flatten any nested bundle types the usual way.
+  FIRRTLType resultType = op.getType();
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  flattenType(resultType, fieldname, false, fieldTypes);
+  flattenType(resultType, fieldTypes);
+
+  // Get the input vector type.
+  Value input = op.input();
+  auto inputType = input.getType();
+  if (auto flipType = inputType.dyn_cast<FlipType>())
+    inputType = flipType.getElementType();
+  auto vectorType = inputType.cast<FVectorType>();
+
+  // Get the base element ID of the input vector.
+  auto parentID = vectorType.getFieldID(op.index());
 
   for (auto field : fieldTypes) {
-    // Look up the mapping for this suffix.
-    auto newValue = getBundleLowering(input, field.suffix);
-
-    // The prefix is the field name and possibly field separator.
-    auto prefixSize = fieldname.size();
-    if (field.suffix.size() > fieldname.size())
-      prefixSize += 1;
-
-    // Get the remaining field suffix by removing the prefix.
-    auto partialSuffix = StringRef(field.suffix).drop_front(prefixSize);
+    // Get the lowered value of the current field from the input value.
+    auto newValue =
+        getBundleLowering(FieldRef(input, parentID + field.fieldID));
 
     // If we are at the leaf of a bundle.
-    if (partialSuffix.empty())
+    if (field.suffix.empty())
       // Replace the result with the flattened value.
       op.replaceAllUsesWith(newValue);
     else
       // Map the partial suffix for the result value to the flattened value.
-      setBundleLowering(op, partialSuffix, newValue);
+      setBundleLowering(FieldRef(op, field.fieldID), newValue);
   }
-
   // Remember to remove the original op.
+  opsToRemove.push_back(op);
+}
+
+void TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
+  // Attempt to get the bundle types, potentially unwrapping an outer flip type
+  // that wraps the whole bundle.
+  FIRRTLType resultType = getCanonicalAggregateType(op.getType());
+
+  // If the wire is not a bundle, there is nothing to do.
+  if (!resultType)
+    return;
+
+  // Get a string name for each result.
+  SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
+  flattenType(resultType, fieldTypes);
+
+  // Get each lhs value.
+  SmallVector<std::pair<Value, bool>, 8> highValues;
+  getAllBundleLowerings(op.high(), highValues);
+
+  // Get each rhs value.
+  SmallVector<std::pair<Value, bool>, 8> lowValues;
+  getAllBundleLowerings(op.low(), lowValues);
+
+  // Create a mux op for each element.
+  auto result = op.result();
+  auto sel = op.sel();
+  for (auto it : llvm::zip(highValues, lowValues, fieldTypes)) {
+    auto field = std::get<2>(it);
+    auto muxOp = builder->create<MuxPrimOp>(sel, std::get<0>(it).first,
+                                            std::get<1>(it).first);
+    setBundleLowering(FieldRef(result, field.fieldID), muxOp);
+  }
   opsToRemove.push_back(op);
 }
 
@@ -745,35 +951,23 @@ void TypeLoweringVisitor::visitStmt(ConnectOp op) {
   if (!destType || !srcType)
     return;
 
-  // Get the lowered values for each side.
-  SmallVector<Value, 8> destValues;
+  SmallVector<std::pair<Value, bool>, 8> destValues;
   getAllBundleLowerings(dest, destValues);
 
-  SmallVector<Value, 8> srcValues;
+  SmallVector<std::pair<Value, bool>, 8> srcValues;
   getAllBundleLowerings(src, srcValues);
 
-  // Check that we got out the same number of values from each bundle.
-  assert(destValues.size() == srcValues.size() &&
-         "connected bundles don't match");
-
-  // Determine if the LHS expression is the duplex value.
-  auto isDestDuplex = isDuplexValue(destValues.front());
-
   for (auto tuple : llvm::zip_first(destValues, srcValues)) {
-    Value newDest = std::get<0>(tuple);
-    Value newSrc = std::get<1>(tuple);
 
-    // When two bundles are bulk connected, the connect operation becomes a
-    // pair-wise connect of each field. The rules for flow state that a value
-    // from a duplex expression can be used as both a source and sink,
-    // regardless of the flip orientation of the type. To make this work, we
-    // find the non-duplex value and make sure that it is the in the correct
-    // position. Two duplex values cannot be connected, since it is unclear
-    // which side is left or right.
-    if (isDestDuplex ? newSrc.getType().isa<FlipType>()
-                     : !newDest.getType().isa<FlipType>()) {
+    auto newDest = std::get<0>(tuple).first;
+    auto newDestFlipped = std::get<0>(tuple).second;
+    auto newSrc = std::get<1>(tuple).first;
+
+    // Flow checks guarantee that the connection is valid.  Therfore,
+    // no flow checks are needed and just the type of the LHS
+    // determines whether or not this is a reverse connection.
+    if (newDestFlipped)
       std::swap(newSrc, newDest);
-    }
 
     builder->create<ConnectOp>(newDest, newSrc);
   }
@@ -782,8 +976,72 @@ void TypeLoweringVisitor::visitStmt(ConnectOp op) {
   opsToRemove.push_back(op);
 }
 
+void TypeLoweringVisitor::recursivePartialConnect(Value a, FIRRTLType aType,
+                                                  Value b, FIRRTLType bType,
+                                                  unsigned aID, unsigned bID,
+                                                  bool aFlip) {
+  TypeSwitch<FIRRTLType>(aType)
+      .Case<BundleType>([&](auto aType) {
+        auto bBundle = bType.dyn_cast_or_null<BundleType>();
+        if (!bBundle)
+          return;
+        for (unsigned aIndex = 0, e = aType.getNumElements(); aIndex < e;
+             ++aIndex) {
+          auto aField = aType.getElements()[aIndex].name.getValue();
+          auto bIndex = bBundle.getElementIndex(aField);
+          if (!bIndex)
+            continue;
+          auto &aElt = aType.getElements()[aIndex];
+          auto &bElt = bBundle.getElements()[*bIndex];
+          recursivePartialConnect(a, aElt.type, b, bElt.type,
+                                  aID + aType.getFieldID(aIndex),
+                                  bID + bBundle.getFieldID(*bIndex), aFlip);
+        }
+      })
+      .Case<FVectorType>([&](auto aType) {
+        auto bVector = bType.dyn_cast_or_null<FVectorType>();
+        if (!bVector)
+          return;
+
+        auto e = std::min<unsigned>(aType.getNumElements(),
+                                    bVector.getNumElements());
+        for (size_t i = 0; i != e; ++i) {
+          recursivePartialConnect(
+              a, aType.getElementType(), b, bVector.getElementType(),
+              aID + aType.getFieldID(i), bID + bVector.getFieldID(i), aFlip);
+        }
+      })
+      .Case<FlipType>([&](auto aType) {
+        recursivePartialConnect(a, FlipType::get(aType), b, bType, aID, bID,
+                                !aFlip);
+      })
+      .Default([&](auto) {
+        if (aFlip)
+          std::swap(a, b);
+        builder->create<PartialConnectOp>(getBundleLowering(FieldRef(a, aID)),
+                                          getBundleLowering(FieldRef(b, bID)));
+      });
+}
+
+void TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
+  Value dest = op.dest();
+  Value src = op.src();
+
+  // Attempt to get the bundle types, potentially unwrapping an outer flip
+  // type that wraps the whole bundle.
+  FIRRTLType destType = getCanonicalAggregateType(dest.getType());
+  FIRRTLType srcType = getCanonicalAggregateType(src.getType());
+
+  // If we aren't connecting two bundles, there is nothing to do.
+  if (!destType || !srcType)
+    return;
+
+  recursivePartialConnect(dest, destType, src, srcType.getPassiveType(), 0, 0);
+  opsToRemove.push_back(op);
+}
+
 // Lowering invalid may need to create a new invalid for each field
-void TypeLoweringVisitor::visitExpr(InvalidValuePrimOp op) {
+void TypeLoweringVisitor::visitExpr(InvalidValueOp op) {
   Value result = op.result();
 
   // Attempt to get the bundle types, potentially unwrapping an outer flip
@@ -795,61 +1053,79 @@ void TypeLoweringVisitor::visitExpr(InvalidValuePrimOp op) {
     return;
 
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-  flattenType(resultType, "", false, fieldTypes);
+  flattenType(resultType, fieldTypes);
 
   // Loop over the leaf aggregates.
   for (auto field : fieldTypes) {
-    setBundleLowering(result, StringRef(field.suffix).drop_front(1),
-                      builder->create<InvalidValuePrimOp>(field.getPortType()));
+    setBundleLowering(FieldRef(result, field.fieldID),
+                      builder->create<InvalidValueOp>(field.getPortType()));
   }
 
   // Remember to remove the original op.
   opsToRemove.push_back(op);
 }
 
+void TypeLoweringVisitor::visitStmt(WhenOp op) {
+  // The WhenOp itself does not require any lowering, the only value it uses is
+  // a one-bit predicate.  Recursively visit all regions so internal operations
+  // are lowered.
+
+  // Visit operations in the then block.
+  for (auto &op : op.getThenBlock()) {
+    builder->setInsertionPoint(&op);
+    builder->setLoc(op.getLoc());
+    dispatchVisitor(&op);
+  }
+
+  // If there is no else block, return.
+  if (!op.hasElseRegion())
+    return;
+
+  // Visit operations in the else block.
+  for (auto &op : op.getElseBlock()) {
+    builder->setInsertionPoint(&op);
+    builder->setLoc(op.getLoc());
+    dispatchVisitor(&op);
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // Helpers to manage state.
 //===----------------------------------------------------------------------===//
-
-static DictionaryAttr getArgAttrs(StringAttr nameAttr, StringRef suffix,
-                                  OpBuilder *builder) {
-  SmallString<16> newName(nameAttr.getValue());
-  newName += suffix;
-
-  StringAttr newNameAttr = builder->getStringAttr(newName);
-  auto attr = builder->getNamedAttr("firrtl.name", newNameAttr);
-
-  return builder->getDictionaryAttr(attr);
-}
 
 // Creates and returns a new block argument of the specified type to the
 // module. This also maintains the name attribute for the new argument,
 // possibly with a new suffix appended.
 Value TypeLoweringVisitor::addArg(FModuleOp module, Type type,
-                                  unsigned oldArgNumber, StringRef nameSuffix) {
+                                  unsigned oldArgNumber, Direction direction,
+                                  StringRef nameSuffix) {
   Block *body = module.getBodyBlock();
 
   // Append the new argument.
   auto newValue = body->addArgument(type);
 
   // Save the name attribute for the new argument.
-  StringAttr nameAttr = getFIRRTLNameAttr(module.getArgAttrs(oldArgNumber));
-  if (nameAttr) {
-    auto newArgAttrs = getArgAttrs(nameAttr, nameSuffix, builder);
-    auto newArgNumber = newValue.getArgNumber() - originalNumModuleArgs;
-    auto newArgAttrName = getArgAttrName(newArgNumber);
-    newModuleAttrs.push_back(NamedAttribute(newArgAttrName, newArgAttrs));
-  }
+  StringAttr nameAttr = getModulePortName(module, oldArgNumber);
+  Attribute newArg =
+      builder->getStringAttr(nameAttr.getValue().str() + nameSuffix.str());
+  newArgNames.push_back(newArg);
+  newArgDirections.push_back(direction);
 
+  // Decode the annotations and any additional attributes.
+  SmallVector<NamedAttribute> attributes;
+  auto annotations = AnnotationSet::forPort(module, oldArgNumber, attributes);
+
+  AnnotationSet newAnnotations = filterAnnotations(annotations, nameSuffix);
+
+  // Populate the new arg attributes.
+  newArgAttrs.push_back(newAnnotations.getArgumentAttrDict(attributes));
   return newValue;
 }
 
 // Store the mapping from a bundle typed value to a mapping from its field
 // names to flat values.
-void TypeLoweringVisitor::setBundleLowering(Value oldValue, StringRef flatField,
-                                            Value newValue) {
-  auto flatFieldId = builder->getIdentifier(flatField);
-  auto &entry = loweredBundleValues[ValueIdentifier(oldValue, flatFieldId)];
+void TypeLoweringVisitor::setBundleLowering(FieldRef fieldRef, Value newValue) {
+  auto &entry = loweredBundleValues[fieldRef];
   if (entry == newValue)
     return;
   assert(!entry && "bundle lowering has already been set");
@@ -858,40 +1134,41 @@ void TypeLoweringVisitor::setBundleLowering(Value oldValue, StringRef flatField,
 
 // For a mapped bundle typed value and a flat subfield name, retrieve and
 // return the flat value if it exists.
-Value TypeLoweringVisitor::getBundleLowering(Value oldValue,
-                                             StringRef flatField) {
-  auto flatFieldId = builder->getIdentifier(flatField);
-  auto &entry = loweredBundleValues[ValueIdentifier(oldValue, flatFieldId)];
-  assert(entry && "bundle lowering was not set");
+Value TypeLoweringVisitor::getBundleLowering(FieldRef fieldRef) {
+  auto &entry = loweredBundleValues[fieldRef];
+#ifndef NDEBUG
+  if (!entry) {
+    {
+      auto value = fieldRef.getValue();
+      auto diag =
+          mlir::emitError(value.getLoc(), "bundle lowering was not set");
+      if (auto op = value.getDefiningOp())
+        diag.attachNote(op->getLoc()) << "see current operation: " << op;
+    }
+    llvm::report_fatal_error("bundle lowering was not set");
+  }
+#endif
   return entry;
 }
 
 // For a mapped aggregate typed value, retrieve and return the flat values for
 // each field.
 void TypeLoweringVisitor::getAllBundleLowerings(
-    Value value, SmallVectorImpl<Value> &results) {
-
+    Value value, SmallVectorImpl<std::pair<Value, bool>> &results) {
   TypeSwitch<FIRRTLType>(getCanonicalAggregateType(value.getType()))
       .Case<BundleType, FVectorType>([&](auto aggregateType) {
         // Flatten the original value's bundle type.
         SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-        flattenType(aggregateType, "", false, fieldTypes);
+        flattenType(aggregateType, fieldTypes);
 
         for (auto element : fieldTypes) {
-          // Remove the field separator prefix.
-          auto name = StringRef(element.suffix).drop_front(1);
-
           // Store the resulting lowering for this flat value.
-          results.push_back(getBundleLowering(value, name));
+          results.push_back(
+              {getBundleLowering(FieldRef(value, element.fieldID)),
+               element.isOutput});
         }
       })
       .Default([&](auto) {});
-}
-
-Identifier TypeLoweringVisitor::getArgAttrName(unsigned newArgNumber) {
-  SmallString<16> argNameBuffer;
-  mlir::impl::getArgAttrName(newArgNumber, argNameBuffer);
-  return Identifier::get(argNameBuffer, context);
 }
 
 //===----------------------------------------------------------------------===//

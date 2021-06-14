@@ -28,11 +28,8 @@ using namespace circt::sv;
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
-SVDialect::SVDialect(MLIRContext *context)
-    : Dialect(getDialectNamespace(), context,
-              ::mlir::TypeID::get<SVDialect>()) {
-  context->loadDialect<circt::comb::CombDialect>();
-
+void SVDialect::initialize() {
+  // Register types.
   registerTypes();
 
   // Register operations.
@@ -41,8 +38,6 @@ SVDialect::SVDialect(MLIRContext *context)
 #include "circt/Dialect/SV/SV.cpp.inc"
       >();
 }
-
-SVDialect::~SVDialect() {}
 
 //===----------------------------------------------------------------------===//
 // Name conflict resolution
@@ -73,25 +68,32 @@ static llvm::ManagedStatic<StringSet<>, ReservedWordsCreator> reservedWords;
 StringRef circt::sv::resolveKeywordConflict(StringRef origName,
                                             llvm::StringSet<> &recordNames,
                                             size_t &nextGeneratedNameID) {
-  auto name = origName;
   // Get the list of reserved words we need to avoid.  We could prepopulate this
   // into the used words cache, but it is large and immutable, so we just query
   // it when needed.
-  SmallVector<char, 16> nameBuffer(name.begin(), name.end());
+
+  // Fast path: name is valid
+  if (!reservedWords->count(origName)) {
+    auto itAndInserted = recordNames.insert(origName);
+    if (itAndInserted.second)
+      return itAndInserted.first->getKey();
+  }
+
+  // We need to mutate the name, get the copy ready.
+  SmallString<16> nameBuffer(origName.begin(), origName.end());
   nameBuffer.push_back('_');
   auto baseSize = nameBuffer.size();
 
   while (1) {
-    // Loop until we get a name that is not a keyword and is unique.
-    if (!reservedWords->count(name)) {
-      auto itAndInserted = recordNames.insert(name);
-      if (itAndInserted.second)
-        return itAndInserted.first->getKey();
-    }
     // We need to auto-unique it.
     auto suffix = llvm::utostr(nextGeneratedNameID++);
     nameBuffer.append(suffix.begin(), suffix.end());
-    name = StringRef(nameBuffer.data(), nameBuffer.size());
+
+    // The name may be unique.  No keywords have an underscore followed by a
+    // number, so don't check that again.
+    auto itAndInserted = recordNames.insert(nameBuffer);
+    if (itAndInserted.second)
+      return itAndInserted.first->getKey();
 
     // Chop off the suffix and try again until we get a unique name..
     nameBuffer.resize(baseSize);
@@ -112,39 +114,32 @@ static bool isValidVerilogCharacter(char ch) {
 StringRef circt::sv::legalizeName(StringRef name,
                                   llvm::StringSet<> &recordNames,
                                   size_t &nextGeneratedNameID) {
+  // Fastest path: empty name.
   if (name.empty())
-    name = "_T";
+    return resolveKeywordConflict("_T", recordNames, nextGeneratedNameID);
 
-  // Check to see if the name consists of all-valid identifiers.  If not, we
-  // need to escape them.
+  // Check that the name is valid as the semi-fast path.
+  if (llvm::all_of(name, isValidVerilogCharacter) &&
+      isValidVerilogCharacterFirst(name.front()))
+    return resolveKeywordConflict(name, recordNames, nextGeneratedNameID);
+
+  // The name consists of at least one invalid character.  Escape it.
+  SmallString<16> tmpName;
+  if (!isValidVerilogCharacterFirst(name.front()) && name.front() != ' ' &&
+      name.front() != '.')
+    tmpName += '_';
   for (char ch : name) {
     if (isValidVerilogCharacter(ch))
-      continue;
-
-    // Otherwise, we need to escape it.
-    SmallString<16> tmpName;
-    for (char ch : name) {
-      if (isValidVerilogCharacter(ch))
-        tmpName += ch;
-      else if (ch == ' ' || ch == '.')
-        tmpName += '_';
-      else {
-        tmpName += llvm::utohexstr((unsigned char)ch);
-      }
+      tmpName += ch;
+    else if (ch == ' ' || ch == '.')
+      tmpName += '_';
+    else {
+      tmpName += llvm::utohexstr((unsigned char)ch);
     }
-    return legalizeName(tmpName, recordNames, nextGeneratedNameID);
-  }
-
-  // Check to see if this name is valid.  The first character cannot be a
-  // number or some other weird thing.  If it is, start with an underscore.
-  if (!isValidVerilogCharacterFirst(name.front())) {
-    SmallString<16> tmpName("_");
-    tmpName += name;
-    return legalizeName(tmpName, recordNames, nextGeneratedNameID);
   }
 
   // Make sure the new valid name does not conflict with any existing names.
-  return resolveKeywordConflict(name, recordNames, nextGeneratedNameID);
+  return resolveKeywordConflict(tmpName, recordNames, nextGeneratedNameID);
 }
 
 /// Check if a name is valid for use in SV output by only containing characters

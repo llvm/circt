@@ -12,8 +12,8 @@
 
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
-#include "circt/Dialect/RTL/RTLOps.h"
-#include "circt/Dialect/RTL/RTLTypes.h"
+#include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/PatternMatch.h"
@@ -42,6 +42,32 @@ LogicalResult sv::verifyInNonProceduralRegion(Operation *op) {
     return success();
   op->emitError() << op->getName() << " should be in a non-procedural region";
   return failure();
+}
+
+/// Returns the operation registered with the given symbol name with the regions
+/// of 'symbolTableOp'. recurse through nested regions which don't contain the
+/// symboltable trait. Returns nullptr if no valid symbol was found.
+static Operation *lookupSymbolInNested(Operation *symbolTableOp,
+                                       StringRef symbol) {
+  Region &region = symbolTableOp->getRegion(0);
+  if (region.empty())
+    return nullptr;
+
+  // Look for a symbol with the given name.
+  Identifier symbolNameId = Identifier::get(SymbolTable::getSymbolAttrName(),
+                                            symbolTableOp->getContext());
+  for (Block &block : region)
+    for (Operation &nestedOp : block) {
+      auto nameAttr = nestedOp.getAttrOfType<StringAttr>(symbolNameId);
+      if (nameAttr && nameAttr.getValue() == symbol)
+        return &nestedOp;
+      if (!nestedOp.hasTrait<OpTrait::SymbolTable>() &&
+          nestedOp.getNumRegions()) {
+        if (auto *nop = lookupSymbolInNested(&nestedOp, symbol))
+          return nop;
+      }
+    }
+  return nullptr;
 }
 
 //===----------------------------------------------------------------------===//
@@ -85,18 +111,18 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
   SmallString<32> resultNameStr;
   llvm::raw_svector_ostream tmpStream(resultNameStr);
   p.printOperand(op->getResult(0), tmpStream);
-  auto expectedName = op->getAttrOfType<StringAttr>("name");
+  auto expectedName = op->getAttrOfType<StringAttr>("name").getValue();
   auto actualName = tmpStream.str().drop_front();
-  if (actualName != expectedName.getValue()) {
+  if (actualName != expectedName) {
     // Anonymous names are printed as digits, which is fine.
-    if (!expectedName.getValue().empty() || !isdigit(actualName[0]))
+    if (!expectedName.empty() || !isdigit(actualName[0]))
       namesDisagree = true;
   }
 
   if (namesDisagree)
-    p.printOptionalAttrDict(op->getAttrs());
+    p.printOptionalAttrDict(op->getAttrs(), {"sym_name"});
   else
-    p.printOptionalAttrDict(op->getAttrs(), {"name"});
+    p.printOptionalAttrDict(op->getAttrs(), {"name", "sym_name"});
 }
 
 //===----------------------------------------------------------------------===//
@@ -143,11 +169,13 @@ void ConstantZOp::getAsmResultNames(
 //===----------------------------------------------------------------------===//
 
 void RegOp::build(OpBuilder &odsBuilder, OperationState &odsState,
-                  Type elementType, StringAttr name) {
+                  Type elementType, StringAttr name, StringAttr sym_name) {
   if (!name)
     name = odsBuilder.getStringAttr("");
   odsState.addAttribute("name", name);
-  odsState.addTypes(rtl::InOutType::get(elementType));
+  if (sym_name)
+    odsState.addAttribute("sym_name", sym_name);
+  odsState.addTypes(hw::InOutType::get(elementType));
 }
 
 /// Suggest a name for each result value based on the saved result names
@@ -161,6 +189,9 @@ void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 // If this reg is only written to, delete the reg and all writers.
 LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
+  // If the reg has a symbol, then we can't delete it.
+  if (op.sym_nameAttr())
+    return failure();
   // Check that all operations on the wire are sv.connects. All other wire
   // operations will have been handled by other canonicalization.
   for (auto &use : op.getResult().getUses())
@@ -270,7 +301,7 @@ static void replaceOpWithRegion(PatternRewriter &rewriter, Operation *op,
 }
 
 LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
-  if (auto constant = op.cond().getDefiningOp<rtl::ConstantOp>()) {
+  if (auto constant = op.cond().getDefiningOp<hw::ConstantOp>()) {
 
     if (constant.getValue().isAllOnesValue())
       replaceOpWithRegion(rewriter, op, op.thenRegion());
@@ -297,7 +328,7 @@ LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
   // Otherwise, invert the condition and move the 'else' block to the 'then'
   // region.
   auto full =
-      rewriter.create<rtl::ConstantOp>(op.getLoc(), op.cond().getType(), -1);
+      rewriter.create<hw::ConstantOp>(op.getLoc(), op.cond().getType(), -1);
   Value ops[] = {full, op.cond()};
   auto cond =
       rewriter.createOrFold<comb::XorOp>(op.getLoc(), op.cond().getType(), ops);
@@ -620,6 +651,16 @@ static LogicalResult verifyCaseZOp(CaseZOp op) {
 // TypeDecl operations
 //===----------------------------------------------------------------------===//
 
+void InterfaceOp::build(OpBuilder &builder, OperationState &result,
+                        StringRef sym_name, std::function<void()> body) {
+  OpBuilder::InsertionGuard guard(builder);
+
+  result.addAttribute("sym_name", builder.getStringAttr(sym_name));
+  builder.createBlock(result.addRegion());
+  if (body)
+    body();
+}
+
 ModportType InterfaceOp::getModportType(StringRef modportName) {
   assert(lookupSymbol<InterfaceModportOp>(modportName) &&
          "Modport symbol not found.");
@@ -795,9 +836,11 @@ LogicalResult verifySignalExists(Value ifaceVal, FlatSymbolRefAttr signalName) {
 //===----------------------------------------------------------------------===//
 
 void WireOp::build(OpBuilder &odsBuilder, OperationState &odsState,
-                   Type elementType, StringAttr name) {
+                   Type elementType, StringAttr name, StringAttr sym_name) {
   if (!name)
     name = odsBuilder.getStringAttr("");
+  if (sym_name)
+    odsState.addAttribute("sym_name", sym_name);
 
   odsState.addAttribute("name", name);
   odsState.addTypes(InOutType::get(elementType));
@@ -813,25 +856,58 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 // If this wire is only written to, delete the wire and all writers.
-LogicalResult WireOp::canonicalize(WireOp op, PatternRewriter &rewriter) {
-  // Check that all operations on the wire are sv.connects. All other wire
-  // operations will have been handled by other canonicalization.
-  for (auto &use : op.getResult().getUses())
-    if (!isa<ConnectOp>(use.getOwner()))
+LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
+  // If the wire has a symbol, then we can't delete it.
+  if (wire.sym_nameAttr())
+    return failure();
+
+  // Wires have inout type, so they'll have connects and read_inout operations
+  // that work on them.  If anything unexpected is found then leave it alone.
+  SmallVector<sv::ReadInOutOp> reads;
+  sv::ConnectOp write;
+
+  for (auto *user : wire->getUsers()) {
+    if (auto read = dyn_cast<sv::ReadInOutOp>(user)) {
+      reads.push_back(read);
+      continue;
+    }
+
+    // Otherwise must be a connect, and we must not have seen a write yet.
+    auto connect = dyn_cast<sv::ConnectOp>(user);
+    // Either the wire has more than one write or another kind of Op (other than
+    // ConectOp and ReadInOutOp), then can't optimize.
+    if (!connect || write)
       return failure();
+    write = connect;
+  }
 
-  // Remove all uses of the wire.
-  for (auto &use : make_early_inc_range(op.getResult().getUses()))
-    rewriter.eraseOp(use.getOwner());
+  Value connected;
+  if (!write) {
+    // If no write and only reads, then replace with XOp.
+    connected = rewriter.create<ConstantXOp>(
+        wire.getLoc(),
+        wire.getResult().getType().cast<InOutType>().getElementType());
+  } else if (isa<hw::HWModuleOp>(write->getParentOp()))
+    connected = write.src();
+  else
+    // If the write is happening at the module level then we don't have any
+    // use-before-def checking to do, so we only handle that for now.
+    return failure();
 
-  // Remove the wire.
-  rewriter.eraseOp(op);
+  // Ok, we can do this.  Replace all the reads with the connected value.
+  for (auto read : reads)
+    rewriter.replaceOp(read, connected);
+
+  // And remove the write and wire itself.
+  if (write)
+    rewriter.eraseOp(write);
+  rewriter.eraseOp(wire);
   return success();
 }
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
 static LogicalResult verifyWireOp(WireOp op) {
-  if (!isa<rtl::RTLModuleOp>(op->getParentOp()))
+  if (!isa<hw::HWModuleOp>(op->getParentOp()))
     return op.emitError("sv.wire must not be in an always or initial block");
   return success();
 }
@@ -853,7 +929,7 @@ void ReadInOutOp::build(OpBuilder &builder, OperationState &result,
 void ArrayIndexInOutOp::build(OpBuilder &builder, OperationState &result,
                               Value input, Value index) {
   auto resultType = input.getType().cast<InOutType>().getElementType();
-  resultType = getAnyRTLArrayElementType(resultType);
+  resultType = getAnyHWArrayElementType(resultType);
   assert(resultType && "input should have 'inout of an array' type");
   build(builder, result, InOutType::get(resultType), input, index);
 }
@@ -867,6 +943,89 @@ static LogicalResult verifyAliasOp(AliasOp op) {
   if (op.operands().size() < 2)
     return op.emitOpError("alias must have at least two operands");
 
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// PAssignOp
+//===----------------------------------------------------------------------===//
+
+// reg s <= cond ? val : s simplification.
+// Don't assign a register's value to itself, conditionally assign the new value
+// instead.
+LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
+  auto mux = op.src().getDefiningOp<comb::MuxOp>();
+  if (!mux)
+    return failure();
+
+  auto reg = dyn_cast<sv::RegOp>(op.dest().getDefiningOp());
+  if (!reg)
+    return failure();
+
+  bool trueBranch; // did we find the register on the true branch?
+  auto tvread = mux.trueValue().getDefiningOp<sv::ReadInOutOp>();
+  auto fvread = mux.falseValue().getDefiningOp<sv::ReadInOutOp>();
+  if (tvread && reg == tvread.input().getDefiningOp<sv::RegOp>())
+    trueBranch = true;
+  else if (fvread && reg == fvread.input().getDefiningOp<sv::RegOp>())
+    trueBranch = false;
+  else
+    return failure();
+
+  // Check that this is the only write of the register
+  for (auto &use : reg->getUses()) {
+    if (isa<ReadInOutOp>(use.getOwner()))
+      continue;
+    if (use.getOwner() == op)
+      continue;
+    return failure();
+  }
+
+  // Replace a non-blocking procedural assign in a procedural region with a
+  // conditional procedural assign.  We've ensured that this is the only write
+  // of the register.
+  if (trueBranch) {
+    auto one =
+        rewriter.create<hw::ConstantOp>(mux.getLoc(), mux.cond().getType(), -1);
+    Value ops[] = {mux.cond(), one};
+    auto cond = rewriter.createOrFold<comb::XorOp>(mux.getLoc(),
+                                                   mux.cond().getType(), ops);
+    rewriter.create<sv::IfOp>(mux.getLoc(), cond, [&]() {
+      rewriter.create<PAssignOp>(op.getLoc(), reg, mux.falseValue());
+    });
+  } else {
+    rewriter.create<sv::IfOp>(mux.getLoc(), mux.cond(), [&]() {
+      rewriter.create<PAssignOp>(op.getLoc(), reg, mux.trueValue());
+    });
+  }
+
+  // Remove the wire.
+  rewriter.eraseOp(op);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// BindOp
+//===----------------------------------------------------------------------===//
+
+hw::InstanceOp BindOp::getReferencedInstance() {
+  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
+  if (!topLevelModuleOp)
+    return nullptr;
+
+  /// Lookup the instance for the symbol.  This returns null on
+  /// invalid IR.
+  auto inst = lookupSymbolInNested(topLevelModuleOp, bind());
+  return dyn_cast_or_null<hw::InstanceOp>(inst);
+}
+
+/// Ensure that the symbol being instantiated exists and is an InterfaceOp.
+static LogicalResult verifyBindOp(BindOp op) {
+  auto inst = op.getReferencedInstance();
+  if (!inst)
+    return op.emitError("Referenced instance doesn't exist");
+  if (!inst->getAttr("doNotPrint"))
+    return op.emitError("Referenced instance isn't marked as doNotPrint");
   return success();
 }
 

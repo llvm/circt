@@ -9,9 +9,10 @@ llvm_update_compile_flags(firtool)
 target_link_libraries(firtool PRIVATE
   CIRCTExportVerilog
   CIRCTImportFIRRTL
-  CIRCTFIRRTLToRTL
+  CIRCTFIRRTLToHW
   CIRCTFIRRTLTransforms
   CIRCTSVTransforms
+  CIRCTTransforms
 
   MLIRParser
   MLIRSupport

@@ -1,6 +1,6 @@
 {
   "name": "Add code owner for triage",
-  "includes": ["**/Dialect/RTL/**"],
+  "includes": ["**/Dialect/HW/**"],
   "action": "review",
   "users": ["lattner"]
 }

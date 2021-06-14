@@ -105,8 +105,18 @@ std::string FIRToken::getStringValue(StringRef spelling) {
 // FIRLexer
 //===----------------------------------------------------------------------===//
 
+static Identifier getMainBufferNameIdentifier(const llvm::SourceMgr &sourceMgr,
+                                              MLIRContext *context) {
+  auto mainBuffer = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
+  StringRef bufferName = mainBuffer->getBufferIdentifier();
+  if (bufferName.empty())
+    bufferName = "<unknown>";
+  return Identifier::get(bufferName, context);
+}
+
 FIRLexer::FIRLexer(const llvm::SourceMgr &sourceMgr, MLIRContext *context)
-    : sourceMgr(sourceMgr), context(context) {
+    : sourceMgr(sourceMgr), context(context),
+      bufferNameIdentifier(getMainBufferNameIdentifier(sourceMgr, context)) {
   auto bufferID = sourceMgr.getMainFileID();
   curBuffer = sourceMgr.getMemoryBuffer(bufferID)->getBuffer();
   curPtr = curBuffer.begin();
@@ -117,10 +127,8 @@ FIRLexer::FIRLexer(const llvm::SourceMgr &sourceMgr, MLIRContext *context)
 Location FIRLexer::translateLocation(llvm::SMLoc loc) {
   unsigned mainFileID = sourceMgr.getMainFileID();
   auto lineAndColumn = sourceMgr.getLineAndColumn(loc, mainFileID);
-  auto *buffer = sourceMgr.getMemoryBuffer(mainFileID);
-
-  return FileLineColLoc::get(context, buffer->getBufferIdentifier(),
-                             lineAndColumn.first, lineAndColumn.second);
+  return FileLineColLoc::get(bufferNameIdentifier, lineAndColumn.first,
+                             lineAndColumn.second);
 }
 
 /// Emit an error message and return a FIRToken::error token.
@@ -314,10 +322,6 @@ FIRToken FIRLexer::lexInlineAnnotation(const char *tokStart) {
     case 0:
       if (curPtr - 1 != curBuffer.end())
         break;
-      LLVM_FALLTHROUGH;
-    case '\n': // Vertical whitespace isn't allowed in inline annotations.
-    case '\v':
-    case '\f':
       return emitError(tokStart, "unterminated inline annotation");
     default:
       break;

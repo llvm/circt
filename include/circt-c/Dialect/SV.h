@@ -18,6 +18,7 @@ extern "C" {
 #endif
 
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(SystemVerilog, sv);
+MLIR_CAPI_EXPORTED void registerSVPasses();
 
 #ifdef __cplusplus
 }

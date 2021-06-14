@@ -29,7 +29,7 @@ using namespace circt::esi::cosim;
 namespace {
 /// Implements the `EsiDpiEndpoint` interface from the RPC schema. Mostly a
 /// wrapper around an `Endpoint` object. Whereas the `Endpoint`s are long-lived
-/// (associated with the RTL endpoint), this class is constructed/destructed
+/// (associated with the HW endpoint), this class is constructed/destructed
 /// when the client open()s it.
 class EndpointServer final
     : public EsiDpiEndpoint<capnp::AnyPointer, capnp::AnyPointer>::Server {

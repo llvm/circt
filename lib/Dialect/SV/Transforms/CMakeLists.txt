@@ -1,15 +1,19 @@
 add_circt_dialect_library(CIRCTSVTransforms
-  RTLCleanup.cpp
-  RTLStubExternalModules.cpp
-  RTLLegalizeNames.cpp
-  RTLMemSimImpl.cpp
+  GeneratorCallout.cpp
+  HWCleanup.cpp
+  HWStubExternalModules.cpp
+  HWLegalizeNames.cpp
+  HWMemSimImpl.cpp
+  PrettifyVerilog.cpp
+  SVExtractTestCode.cpp
 
   DEPENDS
   CIRCTSVTransformsIncGen
 
   LINK_LIBS PUBLIC
+  CIRCTComb
+  CIRCTHW
   CIRCTSV
-  CIRCTSVAnalyses
   MLIRIR
   MLIRPass
   MLIRTransformUtils

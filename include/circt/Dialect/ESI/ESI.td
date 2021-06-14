@@ -20,6 +20,11 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 def ESI_Dialect : Dialect {
   let name = "esi";
   let cppNamespace = "::circt::esi";
+  let extraClassDeclaration = [{
+    /// Register all ESI types.
+    void registerTypes();
+  }];
+  let hasConstantMaterializer = 1;
 }
 
 class ESI_Op<string mnemonic, list<OpTrait> traits = []> :
@@ -27,9 +32,9 @@ class ESI_Op<string mnemonic, list<OpTrait> traits = []> :
 
 // Divide all ESI ops into abstract and physical. Abstract ops are ones which
 // need to be lowered to physical ops before they get lowered further (into
-// RTL). The abstract to physical lowering may not be fully constrained -- this
+// HW). The abstract to physical lowering may not be fully constrained -- this
 // is where decisions will have to be made concerning implementations. Physical
-// ops are generally trivial to lower to RTL -- they represent concrete
+// ops are generally trivial to lower to HW -- they represent concrete
 // constructs with no decisions left to be made.
 
 class ESI_Abstract_Op<string mnemonic, list<OpTrait> traits = []> :

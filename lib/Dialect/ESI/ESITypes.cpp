@@ -12,7 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/ESI/ESITypes.h"
-#include "circt/Dialect/RTL/RTLTypes.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -31,40 +31,6 @@ Type ChannelPort::parse(MLIRContext *ctxt, DialectAsmParser &p) {
 void ChannelPort::print(DialectAsmPrinter &p) const {
   p << "channel<";
   p.printType(getInner());
-  p << ">";
-}
-
-Type StructType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
-  if (p.parseLess())
-    return Type();
-  StringRef structName;
-  if (p.parseKeyword(&structName) || p.parseComma())
-    return Type();
-
-  llvm::SmallVector<rtl::StructType::FieldInfo, 4> fields;
-  StringRef fieldName;
-  while (mlir::succeeded(p.parseOptionalKeyword(&fieldName))) {
-    Type type;
-    if (p.parseColon() || p.parseType(type))
-      return Type();
-    fields.push_back(rtl::StructType::FieldInfo{fieldName, type});
-    if (p.parseOptionalComma())
-      break;
-  }
-  if (p.parseGreater())
-    return Type();
-
-  auto inner = rtl::StructType::get(ctxt, fields);
-  return get(ctxt, structName, inner);
-}
-
-void StructType::print(DialectAsmPrinter &p) const {
-  p << "struct<";
-  p << getName() << ", ";
-  llvm::interleaveComma(getInner().getElements(), p,
-                        [&](const rtl::StructType::FieldInfo &field) {
-                          p << field.name << ": " << field.type;
-                        });
   p << ">";
 }
 

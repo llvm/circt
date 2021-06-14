@@ -16,30 +16,16 @@
 include "mlir/Pass/PassBase.td"
 
 //===----------------------------------------------------------------------===//
-// FIRRTLToLLHD
+// FIRRTLToHW
 //===----------------------------------------------------------------------===//
 
-def ConvertFIRRTLToLLHD : Pass<"convert-firrtl-to-llhd", "mlir::ModuleOp"> {
-  let summary = "Convert FIRRTL to LLHD";
+def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
+  let summary = "Lower FIRRTL to HW";
   let description = [{
-    This pass translates a FIRRTL design into an equivalent structural LLHD
-    description.
+    Lower a module of FIRRTL dialect to the HW dialect family.
   }];
-  let constructor = "circt::createConvertFIRRTLToLLHDPass()";
-  let dependentDialects = ["llhd::LLHDDialect"];
-}
-
-//===----------------------------------------------------------------------===//
-// FIRRTLToRTL
-//===----------------------------------------------------------------------===//
-
-def LowerFIRRTLToRTL : Pass<"lower-firrtl-to-rtl", "mlir::ModuleOp"> {
-  let summary = "Lower FIRRTL to RTL";
-  let description = [{
-    Lower a module of FIRRTL dialect to the RTL dialect family.
-  }];
-  let constructor = "circt::createLowerFIRRTLToRTLPass()";
-  let dependentDialects = ["comb::CombDialect", "rtl::RTLDialect",
+  let constructor = "circt::createLowerFIRRTLToHWPass()";
+  let dependentDialects = ["comb::CombDialect", "hw::HWDialect",
                            "sv::SVDialect"];
 }
 
@@ -71,16 +57,16 @@ def ConvertLLHDToLLVM : Pass<"convert-llhd-to-llvm", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
-// RTLToLLHD
+// HWToLLHD
 //===----------------------------------------------------------------------===//
 
-def ConvertRTLToLLHD : Pass<"convert-rtl-to-llhd", "mlir::ModuleOp"> {
-  let summary = "Convert RTL to LLHD";
+def ConvertHWToLLHD : Pass<"convert-hw-to-llhd", "mlir::ModuleOp"> {
+  let summary = "Convert HW to LLHD";
   let description = [{
-    This pass translates a RTL design into an equivalent structural LLHD
+    This pass translates a HW design into an equivalent structural LLHD
     description.
   }];
-  let constructor = "circt::createConvertRTLToLLHDPass()";
+  let constructor = "circt::createConvertHWToLLHDPass()";
   let dependentDialects = ["llhd::LLHDDialect"];
 }
 
@@ -113,6 +99,11 @@ def HandshakeInsertBuffer
   : Pass<"handshake-insert-buffer", "handshake::FuncOp"> {
   let summary = "Insert buffers to break graph cycles";
   let constructor = "circt::createHandshakeInsertBufferPass()";
+  let options = [
+    ListOption<"strategies", "strategies", "std::string",
+               "List of strategies to apply. Possible values are: cycles",
+               "llvm::cl::ZeroOrMore, llvm::cl::MiscFlags::CommaSeparated">
+  ];
 }
 
 //===----------------------------------------------------------------------===//

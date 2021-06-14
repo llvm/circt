@@ -10,16 +10,32 @@
 
 #include "circt-c/Dialect/Comb.h"
 #include "circt-c/Dialect/ESI.h"
-#include "circt-c/Dialect/RTL.h"
+#include "circt-c/Dialect/HW.h"
+#include "circt-c/Dialect/MSFT.h"
 #include "circt-c/Dialect/SV.h"
+#include "circt-c/Dialect/Seq.h"
+#include "circt-c/ExportVerilog.h"
 #include "mlir-c/Bindings/Python/Interop.h"
 #include "mlir-c/Registration.h"
+#include "mlir/Bindings/Python/PybindAdaptors.h"
 
+#include "llvm-c/ErrorHandling.h"
+#include "llvm/Support/Signals.h"
+
+#include "PybindUtils.h"
 #include <pybind11/pybind11.h>
 namespace py = pybind11;
 
+static void registerPasses() {
+  registerSeqPasses();
+  registerSVPasses();
+}
+
 PYBIND11_MODULE(_circt, m) {
   m.doc() = "CIRCT Python Native Extension";
+  registerPasses();
+  llvm::sys::PrintStackTraceOnErrorSignal(/*argv=*/"");
+  LLVMEnablePrettyStackTrace();
 
   m.def(
       "register_dialects",
@@ -37,9 +53,17 @@ PYBIND11_MODULE(_circt, m) {
         mlirDialectHandleRegisterDialect(esi, context);
         mlirDialectHandleLoadDialect(esi, context);
 
-        MlirDialectHandle rtl = mlirGetDialectHandle__rtl__();
-        mlirDialectHandleRegisterDialect(rtl, context);
-        mlirDialectHandleLoadDialect(rtl, context);
+        MlirDialectHandle msft = mlirGetDialectHandle__msft__();
+        mlirDialectHandleRegisterDialect(msft, context);
+        mlirDialectHandleLoadDialect(msft, context);
+
+        MlirDialectHandle hw = mlirGetDialectHandle__hw__();
+        mlirDialectHandleRegisterDialect(hw, context);
+        mlirDialectHandleLoadDialect(hw, context);
+
+        MlirDialectHandle seq = mlirGetDialectHandle__seq__();
+        mlirDialectHandleRegisterDialect(seq, context);
+        mlirDialectHandleLoadDialect(seq, context);
 
         MlirDialectHandle sv = mlirGetDialectHandle__sv__();
         mlirDialectHandleRegisterDialect(sv, context);
@@ -47,6 +71,16 @@ PYBIND11_MODULE(_circt, m) {
       },
       "Register CIRCT dialects on a PyMlirContext.");
 
-  py::module esi = m.def_submodule("esi", "ESI API");
+  m.def("export_verilog", [](MlirModule mod, py::object fileObject) {
+    circt::python::PyFileAccumulator accum(fileObject, false);
+    py::gil_scoped_release();
+    mlirExportVerilog(mod, accum.getCallback(), accum.getUserData());
+  });
+
+  py::module esi = m.def_submodule("_esi", "ESI API");
   circt::python::populateDialectESISubmodule(esi);
+  py::module msft = m.def_submodule("msft", "MSFT API");
+  circt::python::populateDialectMSFTSubmodule(msft);
+  py::module hw = m.def_submodule("_hw", "HW API");
+  circt::python::populateDialectHWSubmodule(hw);
 }

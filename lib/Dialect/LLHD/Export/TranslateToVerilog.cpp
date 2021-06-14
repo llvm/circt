@@ -17,7 +17,6 @@
 #include "mlir/IR/Visitors.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Translation.h"
-#include "llvm/ADT/Twine.h"
 #include "llvm/Support/FormattedStream.h"
 
 using namespace mlir;
@@ -43,11 +42,9 @@ private:
 
   /// Prints a SSA value. In case no mapping to a name exists yet, a new one is
   /// added.
-  Twine getVariableName(Value value);
+  raw_ostream &printVariableName(Value value);
 
-  Twine getNewInstantiationName() {
-    return Twine("inst_") + Twine(instCount++);
-  }
+  void printNewInstantiationName() { out << "inst_" << instCount++; }
 
   /// Adds an alias for an existing SSA value. In case doesn't exist, it just
   /// adds the alias as a new value.
@@ -72,7 +69,8 @@ LogicalResult VerilogPrinter::printModule(ModuleOp module) {
       for (unsigned int i = 0, e = entryBlock.getNumArguments(); i < e; ++i) {
         out << (i > 0 ? ", " : "") << (i < entity.ins() ? "input " : "output ");
         (void)printType(entryBlock.getArgument(i).getType());
-        out << " " << getVariableName(entryBlock.getArgument(i));
+        out << " ";
+        printVariableName(entryBlock.getArgument(i));
       }
       out << ")";
     }
@@ -114,9 +112,10 @@ LogicalResult VerilogPrinter::printBinaryOp(Operation *inst, StringRef opSymbol,
   out << "wire ";
   if (failed(printType(inst->getResult(0).getType())))
     return failure();
-  out << " " << getVariableName(inst->getResult(0)) << " = "
-      << getVariableName(inst->getOperand(0)) << " " << opSymbol << " "
-      << getVariableName(inst->getOperand(1)) << ";\n";
+  out << " ";
+  printVariableName(inst->getResult(0)) << " = ";
+  printVariableName(inst->getOperand(0)) << " " << opSymbol << " ";
+  printVariableName(inst->getOperand(1)) << ";\n";
   return success();
 }
 
@@ -148,9 +147,10 @@ LogicalResult VerilogPrinter::printSignedBinaryOp(Operation *inst,
   out << "wire ";
   if (failed(printType(inst->getResult(0).getType())))
     return failure();
-  out << " " << getVariableName(inst->getResult(0)) << " = $signed("
-      << getVariableName(inst->getOperand(0)) << ") " << opSymbol << " $signed("
-      << getVariableName(inst->getOperand(1)) << ");\n";
+  out << " ";
+  printVariableName(inst->getResult(0)) << " = $signed(";
+  printVariableName(inst->getOperand(0)) << ") " << opSymbol << " $signed(";
+  printVariableName(inst->getOperand(1)) << ");\n";
   return success();
 }
 
@@ -171,8 +171,9 @@ LogicalResult VerilogPrinter::printUnaryOp(Operation *inst, StringRef opSymbol,
   out << "wire ";
   if (failed(printType(inst->getResult(0).getType())))
     return failure();
-  out << " " << getVariableName(inst->getResult(0)) << " = " << opSymbol
-      << getVariableName(inst->getOperand(0)) << ";\n";
+  out << " ";
+  printVariableName(inst->getResult(0)) << " = " << opSymbol;
+  printVariableName(inst->getOperand(0)) << ";\n";
   return success();
 }
 
@@ -185,8 +186,9 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
       out << "wire ";
       if (failed(printType(inst->getResult(0).getType())))
         return failure();
-      out << " " << getVariableName(inst->getResult(0)) << " = "
-          << op.getResult().getType().getIntOrFloatBitWidth() << "'d"
+      out << " ";
+      printVariableName(inst->getResult(0))
+          << " = " << op.getResult().getType().getIntOrFloatBitWidth() << "'d"
           << intAttr.getValue().getZExtValue() << ";\n";
       return success();
     }
@@ -210,8 +212,9 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
     out << "var ";
     if (failed(printType(inst->getResult(0).getType())))
       return failure();
-    out << " " << getVariableName(inst->getResult(0)) << " = "
-        << getVariableName(op.init()) << ";\n";
+    out << " ";
+    printVariableName(inst->getResult(0)) << " = ";
+    printVariableName(op.init()) << ";\n";
     return success();
   }
   if (auto op = dyn_cast<llhd::PrbOp>(inst)) {
@@ -221,14 +224,15 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
   }
   if (auto op = dyn_cast<llhd::DrvOp>(inst)) {
     out.PadToColumn(indentAmount);
-    out << "assign " << getVariableName(op.signal()) << " = #("
-        << timeValueMap.lookup(op.time()) << "ns) ";
+    out << "assign ";
+    printVariableName(op.signal())
+        << " = #(" << timeValueMap.lookup(op.time()) << "ns) ";
     if (op.enable()) {
-      out << getVariableName(op.enable()) << " ? "
-          << getVariableName(op.value()) << " : "
-          << getVariableName(op.signal()) << ";\n";
+      printVariableName(op.enable()) << " ? ";
+      printVariableName(op.value()) << " : ";
+      printVariableName(op.signal()) << ";\n";
     } else {
-      out << getVariableName(op.value()) << ";\n";
+      printVariableName(op.value()) << ";\n";
     }
     return success();
   }
@@ -251,24 +255,25 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
     unsigned combinedWidth = baseWidth + hiddenWidth;
 
     out.PadToColumn(indentAmount);
-    out << "wire [" << (combinedWidth - 1) << ":0] "
-        << getVariableName(inst->getResult(0)) << "tmp0 = {"
-        << getVariableName(inst->getOperand(0)) << ", "
-        << getVariableName(inst->getOperand(1)) << "};\n";
+    out << "wire [" << (combinedWidth - 1) << ":0] ";
+    printVariableName(inst->getResult(0)) << "tmp0 = {";
+    printVariableName(inst->getOperand(0)) << ", ";
+    printVariableName(inst->getOperand(1)) << "};\n";
 
     out.PadToColumn(indentAmount);
-    out << "wire [" << (combinedWidth - 1) << ":0] "
-        << getVariableName(inst->getResult(0))
-        << "tmp1 = " << getVariableName(inst->getResult(0)) << "tmp0 << "
-        << getVariableName(inst->getOperand(2)) << ";\n";
+    out << "wire [" << (combinedWidth - 1) << ":0] ";
+    printVariableName(inst->getResult(0)) << "tmp1 = ";
+    printVariableName(inst->getResult(0)) << "tmp0 << ";
+    printVariableName(inst->getOperand(2)) << ";\n";
 
     out.PadToColumn(indentAmount);
     out << "wire ";
     if (failed(printType(inst->getResult(0).getType())))
       return failure();
-    out << " " << getVariableName(inst->getResult(0)) << " = "
-        << getVariableName(inst->getResult(0)) << "tmp1[" << (combinedWidth - 1)
-        << ':' << hiddenWidth << "];\n";
+    out << " ";
+    printVariableName(inst->getResult(0)) << " = ";
+    printVariableName(inst->getResult(0))
+        << "tmp1[" << (combinedWidth - 1) << ':' << hiddenWidth << "];\n";
 
     return success();
   }
@@ -279,24 +284,25 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
     unsigned combinedWidth = baseWidth + hiddenWidth;
 
     out.PadToColumn(indentAmount);
-    out << "wire [" << (combinedWidth - 1) << ":0] "
-        << getVariableName(inst->getResult(0)) << "tmp0 = {"
-        << getVariableName(inst->getOperand(1)) << ", "
-        << getVariableName(inst->getOperand(0)) << "};\n";
+    out << "wire [" << (combinedWidth - 1) << ":0] ";
+    printVariableName(inst->getResult(0)) << "tmp0 = {";
+    printVariableName(inst->getOperand(1)) << ", ";
+    printVariableName(inst->getOperand(0)) << "};\n";
 
     out.PadToColumn(indentAmount);
-    out << "wire [" << (combinedWidth - 1) << ":0] "
-        << getVariableName(inst->getResult(0))
-        << "tmp1 = " << getVariableName(inst->getResult(0)) << "tmp0 << "
-        << getVariableName(inst->getOperand(2)) << ";\n";
+    out << "wire [" << (combinedWidth - 1) << ":0] ";
+    printVariableName(inst->getResult(0)) << "tmp1 = ";
+    printVariableName(inst->getResult(0)) << "tmp0 << ";
+    printVariableName(inst->getOperand(2)) << ";\n";
 
     out.PadToColumn(indentAmount);
     out << "wire ";
     if (failed(printType(inst->getResult(0).getType())))
       return failure();
-    out << " " << getVariableName(inst->getResult(0)) << " = "
-        << getVariableName(inst->getResult(0)) << "tmp1[" << (baseWidth - 1)
-        << ":0];\n";
+    out << " ";
+    printVariableName(inst->getResult(0)) << " = ";
+    printVariableName(inst->getResult(0))
+        << "tmp1[" << (baseWidth - 1) << ":0];\n";
 
     return success();
   }
@@ -357,19 +363,20 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
   }
   if (auto op = dyn_cast<llhd::InstOp>(inst)) {
     out.PadToColumn(indentAmount);
-    out << "_" << op.callee() << " " << getNewInstantiationName();
+    out << "_" << op.callee() << " ";
+    printNewInstantiationName();
     if (op.inputs().size() > 0 || op.outputs().size() > 0)
       out << " (";
     unsigned counter = 0;
     for (Value arg : op.inputs()) {
       if (counter++ > 0)
         out << ", ";
-      out << getVariableName(arg);
+      printVariableName(arg);
     }
     for (Value arg : op.outputs()) {
       if (counter++ > 0)
         out << ", ";
-      out << getVariableName(arg);
+      printVariableName(arg);
     }
     if (op.inputs().size() > 0 || op.outputs().size() > 0)
       out << ")";
@@ -393,12 +400,12 @@ LogicalResult VerilogPrinter::printType(Type type) {
   return failure();
 }
 
-Twine VerilogPrinter::getVariableName(Value value) {
+raw_ostream &VerilogPrinter::printVariableName(Value value) {
   if (!mapValueToName.count(value)) {
     mapValueToName.insert(std::make_pair(value, nextValueNum));
     nextValueNum++;
   }
-  return Twine("_") + Twine(mapValueToName.lookup(value));
+  return out << '_' << mapValueToName.lookup(value);
 }
 
 void VerilogPrinter::addAliasVariable(Value alias, Value existing) {

@@ -34,8 +34,7 @@ config.substitutions.append(('%PATH%', config.environment['PATH']))
 config.substitutions.append(('%shlibext', config.llvm_shlib_ext))
 config.substitutions.append(('%shlibdir', config.circt_shlib_dir))
 
-llvm_config.with_system_environment(
-    ['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP'])
+llvm_config.with_system_environment(['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP'])
 
 llvm_config.use_default_substitutions()
 
@@ -53,16 +52,12 @@ config.test_exec_root = os.path.join(config.circt_obj_root, 'test')
 # Tweak the PATH to include the tools dir.
 llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
 
-tool_dirs = [config.circt_tools_dir,
-             config.mlir_tools_dir, config.llvm_tools_dir]
+tool_dirs = [
+    config.circt_tools_dir, config.mlir_tools_dir, config.llvm_tools_dir
+]
 tools = [
-    'firtool',
-    'handshake-runner',
-    'circt-opt',
-    'circt-translate',
-    'circt-capi-ir-test',
-    'esi-tester',
-    'llhd-sim'
+    'firtool', 'handshake-runner', 'circt-opt', 'circt-translate',
+    'circt-capi-ir-test', 'esi-tester', 'llhd-sim'
 ]
 
 # Enable Verilator if it has been detected.

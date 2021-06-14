@@ -27,6 +27,7 @@ def SeqDialect : Dialect {
     The `seq` dialect is intended to model digital sequential logic.
   }];
 
+  let hasConstantMaterializer = 1;
   let cppNamespace = "::circt::seq";
 }
 

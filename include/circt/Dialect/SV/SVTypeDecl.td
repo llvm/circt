@@ -10,15 +10,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-def HasTypeDeclTerminator :
-    SingleBlockImplicitTerminator<"TypeDeclTerminatorOp">;
-
 //===----------------------------------------------------------------------===//
 // Interface operations
 //===----------------------------------------------------------------------===//
 
 def InterfaceOp : SVOp<"interface",
-    [Symbol, SymbolTable, HasTypeDeclTerminator]> {
+    [NoTerminator, Symbol, SymbolTable]> {
   let summary = "Operation to define a SystemVerilog interface";
 
   let description = [{
@@ -45,6 +42,12 @@ def InterfaceOp : SVOp<"interface",
 
   let assemblyFormat = "attr-dict $sym_name $body";
 
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "StringRef":$sym_name,
+               CArg<"std::function<void()>", "{}">:$body)>
+  ];
+
   let extraClassDeclaration = [{
     Block *getBodyBlock() { return &body().front(); }
 
@@ -68,10 +71,10 @@ def InterfaceOp : SVOp<"interface",
   }];
 }
 
-def SignalTypeAttr : TypeAttrBase<"::mlir::Type", "Any SV/RTL type"> {
+def SignalTypeAttr : TypeAttrBase<"::mlir::Type", "Any SV/HW type"> {
   let predicate = And<[
       CPred<"$_self.isa<::mlir::TypeAttr>()">,
-      CPred<"::circt::rtl::getBitWidth(" #
+      CPred<"::circt::hw::getBitWidth(" #
               "$_self.cast<::mlir::TypeAttr>().getValue()) != -1">
   ]>;
 }
@@ -237,9 +240,9 @@ def AssignInterfaceSignalOp : SVOp<"interface.signal.assign", []> {
   let description = [{
     Use this to continuously assign a signal inside an interface to a
     value or other signal.
-  
+
     ```
-      sv.interface.signal.assign %iface(@handshake_example::@data) 
+      sv.interface.signal.assign %iface(@handshake_example::@data)
         = %zero32 : i32
     ```
 
@@ -264,7 +267,7 @@ def ReadInterfaceSignalOp : SVOp<"interface.signal.read", [NoSideEffect]> {
   let summary = "Access the data in an interface's signal.";
   let description = [{
     This is an expression to access a signal inside of an interface.
-  
+
     ```
       %ifaceData = sv.interface.signal.read %iface
           (@handshake_example::@data) : i32
@@ -289,11 +292,4 @@ def ReadInterfaceSignalOp : SVOp<"interface.signal.read", [NoSideEffect]> {
   ];
 
   let verifier = "return ::verifySignalExists(iface(), signalNameAttr());";
-}
-
-def TypeDeclTerminatorOp : SVOp<"type_decl_terminator",
-    [NoSideEffect, Terminator, ParentOneOf<["InterfaceOp"]>]> {
-  let summary = "Terminator for type declaration operations";
-
-  let arguments = (ins);
 }

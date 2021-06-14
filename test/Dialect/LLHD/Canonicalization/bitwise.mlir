@@ -1,4 +1,4 @@
-// RUN: circt-opt -canonicalize %s | FileCheck %s
+// RUN: circt-opt -simple-canonicalizer %s | FileCheck %s
 
 // CHECK-LABEL: @check_not_folding
 // CHECK-SAME: %[[A:.*]]: i64
@@ -81,9 +81,9 @@ func @check_or_folding(%a : i64, %b : i64) -> (i64, i64, i64, i64, i64, i64, i64
 // CHECK-SAME: %[[A:.*]]: i64,
 // CHECK-SAME: %[[B:.*]]: i64
 func @check_xor_folding(%a : i64, %b : i64) -> (i64, i64, i64, i64, i64, i64, i64) {
-  // CHECK-NEXT: %[[C0:.*]] = llhd.const 0 : i64
+  // CHECK-DAG: %[[C0:.*]] = llhd.const 0 : i64
   %c0 = llhd.const 0 : i64
-  // CHECK-NEXT: %[[CN1:.*]] = llhd.const -1 : i64
+  // CHECK-DAG: %[[CN1:.*]] = llhd.const -1 : i64
   %cn1 = llhd.const -1 : i64
   %na = llhd.not %a : i64
   // CHECK-NEXT: %[[NB:.*]] = llhd.not %[[B]] : i64

@@ -1,4 +1,4 @@
-//===- ESIToRTL.cpp - ESI to RTL/SV conversion passes -----------*- C++ -*-===//
+//===- ESIPasses.cpp - ESI to HW/SV conversion passes -----------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,23 +6,25 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Lower ESI to RTL and SV.
+// Lower ESI to HW and SV.
 //
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/ESI/ESITypes.h"
-#include "circt/Dialect/RTL/RTLOps.h"
-#include "circt/Dialect/RTL/RTLTypes.h"
+#include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/BackedgeBuilder.h"
-#include "circt/Support/ImplicitLocOpBuilder.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
+
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 #include <memory>
@@ -41,7 +43,7 @@ namespace esi {
 using namespace circt;
 using namespace circt::comb;
 using namespace circt::esi;
-using namespace circt::rtl;
+using namespace circt::hw;
 using namespace circt::sv;
 
 //===----------------------------------------------------------------------===//
@@ -50,13 +52,13 @@ using namespace circt::sv;
 
 namespace {
 /// Assist the lowering steps for conversions which need to create auxiliary IR.
-class ESIRTLBuilder : public circt::ImplicitLocOpBuilder {
+class ESIHWBuilder : public circt::ImplicitLocOpBuilder {
 public:
-  ESIRTLBuilder(Operation *top);
+  ESIHWBuilder(Operation *top);
 
-  RTLModuleExternOp declareStage();
+  HWModuleExternOp declareStage();
   // Will be unused when CAPNP is undefined
-  RTLModuleExternOp declareCosimEndpoint() LLVM_ATTRIBUTE_UNUSED;
+  HWModuleExternOp declareCosimEndpoint() LLVM_ATTRIBUTE_UNUSED;
 
   InterfaceOp getOrConstructInterface(ChannelPort);
   InterfaceOp constructInterface(ChannelPort);
@@ -78,19 +80,19 @@ private:
   /// taken in the symbol table.
   StringAttr constructInterfaceName(ChannelPort);
 
-  RTLModuleExternOp declaredStage;
-  RTLModuleExternOp declaredCosimEndpoint;
+  HWModuleExternOp declaredStage;
+  HWModuleExternOp declaredCosimEndpoint;
   llvm::DenseMap<Type, InterfaceOp> portTypeLookup;
 };
 } // anonymous namespace
 
 // C++ requires this for showing it what object file it should store these
 // symbols in. They should be inline but that feature wasn't added until C++17.
-constexpr char ESIRTLBuilder::dataStr[], ESIRTLBuilder::validStr[],
-    ESIRTLBuilder::readyStr[], ESIRTLBuilder::sourceStr[],
-    ESIRTLBuilder::sinkStr[];
+constexpr char ESIHWBuilder::dataStr[], ESIHWBuilder::validStr[],
+    ESIHWBuilder::readyStr[], ESIHWBuilder::sourceStr[],
+    ESIHWBuilder::sinkStr[];
 
-ESIRTLBuilder::ESIRTLBuilder(Operation *top)
+ESIHWBuilder::ESIHWBuilder(Operation *top)
     : ImplicitLocOpBuilder(UnknownLoc::get(top->getContext()), top),
       a(StringAttr::get(getContext(), "a")),
       aValid(StringAttr::get(getContext(), "a_valid")),
@@ -110,14 +112,14 @@ ESIRTLBuilder::ESIRTLBuilder(Operation *top)
 
   auto regions = top->getRegions();
   if (regions.size() == 0) {
-    top->emitError("ESI RTL Builder needs a region to insert RTL.");
+    top->emitError("ESI HW Builder needs a region to insert HW.");
   }
   auto &region = regions.front();
   if (!region.empty())
     setInsertionPoint(&region.front(), region.front().begin());
 }
 
-StringAttr ESIRTLBuilder::constructInterfaceName(ChannelPort port) {
+StringAttr ESIHWBuilder::constructInterfaceName(ChannelPort port) {
   Operation *tableOp =
       getInsertionPoint()->getParentWithTrait<mlir::OpTrait::SymbolTable>();
 
@@ -125,10 +127,10 @@ StringAttr ESIRTLBuilder::constructInterfaceName(ChannelPort port) {
   std::string portTypeName;
   llvm::raw_string_ostream nameOS(portTypeName);
   TypeSwitch<Type>(port.getInner())
-      .Case([&](rtl::ArrayType arr) {
+      .Case([&](hw::ArrayType arr) {
         nameOS << "ArrayOf" << arr.getSize() << 'x' << arr.getElementType();
       })
-      .Case([&](rtl::StructType t) { nameOS << "Struct"; })
+      .Case([&](hw::StructType t) { nameOS << "Struct"; })
       .Default([&](Type t) { nameOS << port.getInner(); });
 
   // Normalize the type name.
@@ -165,7 +167,7 @@ StringAttr ESIRTLBuilder::constructInterfaceName(ChannelPort port) {
 /// module implements pipeline stage, adding 1 cycle latency. This particular
 /// implementation is double-buffered and fully pipelines the reverse-flow ready
 /// signal.
-RTLModuleExternOp ESIRTLBuilder::declareStage() {
+HWModuleExternOp ESIHWBuilder::declareStage() {
   if (declaredStage)
     return declaredStage;
 
@@ -182,14 +184,14 @@ RTLModuleExternOp ESIRTLBuilder::declareStage() {
                             {x, PortDirection::OUTPUT, getNoneType(), 1},
                             {xValid, PortDirection::OUTPUT, getI1Type(), 2},
                             {xReady, PortDirection::INPUT, getI1Type(), 4}};
-  declaredStage = create<RTLModuleExternOp>(name, ports);
+  declaredStage = create<HWModuleExternOp>(name, ports);
   return declaredStage;
 }
 
 /// Write an 'ExternModuleOp' to use a hand-coded SystemVerilog module. Said
 /// module contains a bi-directional Cosimulation DPI interface with valid/ready
 /// semantics.
-RTLModuleExternOp ESIRTLBuilder::declareCosimEndpoint() {
+HWModuleExternOp ESIHWBuilder::declareCosimEndpoint() {
   if (declaredCosimEndpoint)
     return declaredCosimEndpoint;
   auto name = StringAttr::get(getContext(), "Cosim_Endpoint");
@@ -206,14 +208,14 @@ RTLModuleExternOp ESIRTLBuilder::declareCosimEndpoint() {
       {dataInValid, PortDirection::INPUT, getI1Type(), 3},
       {dataInReady, PortDirection::OUTPUT, getI1Type(), 2},
       {dataIn, PortDirection::INPUT, getNoneType(), 4}};
-  declaredCosimEndpoint = create<RTLModuleExternOp>(name, ports);
+  declaredCosimEndpoint = create<HWModuleExternOp>(name, ports);
   return declaredCosimEndpoint;
 }
 
 /// Return the InterfaceType which corresponds to an ESI port type. If it
 /// doesn't exist in the cache, build the InterfaceOp and the corresponding
 /// type.
-InterfaceOp ESIRTLBuilder::getOrConstructInterface(ChannelPort t) {
+InterfaceOp ESIHWBuilder::getOrConstructInterface(ChannelPort t) {
   auto ifaceIter = portTypeLookup.find(t);
   if (ifaceIter != portTypeLookup.end())
     return ifaceIter->second;
@@ -222,24 +224,19 @@ InterfaceOp ESIRTLBuilder::getOrConstructInterface(ChannelPort t) {
   return iface;
 }
 
-InterfaceOp ESIRTLBuilder::constructInterface(ChannelPort chan) {
-  InterfaceOp iface = create<InterfaceOp>(constructInterfaceName(chan));
-  ImplicitLocOpBuilder ib(getLoc(), iface.getRegion());
-  ib.createBlock(&iface.getRegion());
-
-  InterfaceSignalOp s;
-  ib.create<InterfaceSignalOp>(validStr, getI1Type());
-  ib.create<InterfaceSignalOp>(readyStr, getI1Type());
-  ib.create<InterfaceSignalOp>(dataStr, chan.getInner());
-  ib.create<InterfaceModportOp>(
-      sinkStr, /*inputs=*/ArrayRef<StringRef>{readyStr},
-      /*outputs=*/ArrayRef<StringRef>{validStr, dataStr});
-  ib.create<InterfaceModportOp>(
-      sourceStr,
-      /*inputs=*/ArrayRef<StringRef>{validStr, dataStr},
-      /*outputs=*/ArrayRef<StringRef>{readyStr});
-  ib.create<TypeDeclTerminatorOp>();
-  return iface;
+InterfaceOp ESIHWBuilder::constructInterface(ChannelPort chan) {
+  return create<InterfaceOp>(constructInterfaceName(chan).getValue(), [&]() {
+    create<InterfaceSignalOp>(validStr, getI1Type());
+    create<InterfaceSignalOp>(readyStr, getI1Type());
+    create<InterfaceSignalOp>(dataStr, chan.getInner());
+    create<InterfaceModportOp>(
+        sinkStr, /*inputs=*/ArrayRef<StringRef>{readyStr},
+        /*outputs=*/ArrayRef<StringRef>{validStr, dataStr});
+    create<InterfaceModportOp>(
+        sourceStr,
+        /*inputs=*/ArrayRef<StringRef>{validStr, dataStr},
+        /*outputs=*/ArrayRef<StringRef>{readyStr});
+  });
 }
 
 //===----------------------------------------------------------------------===//
@@ -329,24 +326,24 @@ struct ESIPortsPass : public LowerESIPortsBase<ESIPortsPass> {
   void runOnOperation() override;
 
 private:
-  bool updateFunc(RTLModuleOp mod);
-  void updateInstance(RTLModuleOp mod, InstanceOp inst);
+  bool updateFunc(HWModuleOp mod);
+  void updateInstance(HWModuleOp mod, InstanceOp inst);
 
-  bool updateFunc(RTLModuleExternOp mod);
-  void updateInstance(RTLModuleExternOp mod, InstanceOp inst);
-  ESIRTLBuilder *build;
+  bool updateFunc(HWModuleExternOp mod);
+  void updateInstance(HWModuleExternOp mod, InstanceOp inst);
+  ESIHWBuilder *build;
 };
 } // anonymous namespace
 
-/// Iterate through the `rtl.module[.extern]`s and lower their ports.
+/// Iterate through the `hw.module[.extern]`s and lower their ports.
 void ESIPortsPass::runOnOperation() {
   ModuleOp top = getOperation();
-  ESIRTLBuilder b(top);
+  ESIHWBuilder b(top);
   build = &b;
 
   // Find all externmodules and try to modify them. Remember the modified ones.
-  DenseMap<StringRef, RTLModuleExternOp> externModsMutated;
-  for (auto mod : top.getOps<RTLModuleExternOp>())
+  DenseMap<StringRef, HWModuleExternOp> externModsMutated;
+  for (auto mod : top.getOps<HWModuleExternOp>())
     if (updateFunc(mod))
       externModsMutated[mod.getName()] = mod;
 
@@ -359,8 +356,8 @@ void ESIPortsPass::runOnOperation() {
 
   // Find all modules and try to modify them to have wires with valid/ready
   // semantics. Remember the modified ones.
-  DenseMap<StringRef, RTLModuleOp> modsMutated;
-  for (auto mod : top.getOps<RTLModuleOp>())
+  DenseMap<StringRef, HWModuleOp> modsMutated;
+  for (auto mod : top.getOps<HWModuleOp>())
     if (updateFunc(mod))
       modsMutated[mod.getName()] = mod;
 
@@ -382,7 +379,7 @@ static StringAttr appendToRtlName(StringAttr base, StringRef suffix) {
 
 /// Convert all input and output ChannelPorts into valid/ready wires. Try not to
 /// change the order and materialize ops in reasonably intuitive locations.
-bool ESIPortsPass::updateFunc(RTLModuleOp mod) {
+bool ESIPortsPass::updateFunc(HWModuleOp mod) {
   auto *ctxt = &getContext();
   auto funcType = mod.getType();
   // Build ops in the module.
@@ -390,8 +387,8 @@ bool ESIPortsPass::updateFunc(RTLModuleOp mod) {
   Type i1 = modBuilder.getI1Type();
 
   // Get information to be used later on.
-  rtl::OutputOp outOp =
-      dyn_cast<rtl::OutputOp>(mod.getBodyBlock()->getTerminator());
+  hw::OutputOp outOp =
+      dyn_cast<hw::OutputOp>(mod.getBodyBlock()->getTerminator());
 
   bool updated = false;
 
@@ -493,7 +490,7 @@ bool ESIPortsPass::updateFunc(RTLModuleOp mod) {
 
   // A new output op is necessary.
   outOp.erase();
-  modBuilder.create<rtl::OutputOp>(newOutputOperands);
+  modBuilder.create<hw::OutputOp>(newOutputOperands);
 
   // Set the new types.
   auto newFuncType = FunctionType::get(ctxt, newArgTypes, newResultTypes);
@@ -506,7 +503,7 @@ bool ESIPortsPass::updateFunc(RTLModuleOp mod) {
 /// Update an instance of an updated module by adding `esi.[un]wrap.vr`
 /// ops around the instance. Lowering or folding away `[un]wrap` ops is another
 /// pass.
-void ESIPortsPass::updateInstance(RTLModuleOp mod, InstanceOp inst) {
+void ESIPortsPass::updateInstance(HWModuleOp mod, InstanceOp inst) {
   ImplicitLocOpBuilder b(inst.getLoc(), inst);
   BackedgeBuilder beb(b, inst.getLoc());
   Type i1 = b.getI1Type();
@@ -594,7 +591,7 @@ void ESIPortsPass::updateInstance(RTLModuleOp mod, InstanceOp inst) {
 /// to the inputs and remove the output channel from the results. Returns true
 /// if 'mod' was updated. Delay updating the instances to amortize the IR walk
 /// over all the module updates.
-bool ESIPortsPass::updateFunc(RTLModuleExternOp mod) {
+bool ESIPortsPass::updateFunc(HWModuleExternOp mod) {
   auto *ctxt = &getContext();
   auto funcType = mod.getType();
 
@@ -618,7 +615,7 @@ bool ESIPortsPass::updateFunc(RTLModuleExternOp mod) {
     // When we find one, construct an interface, and add the 'source' modport to
     // the type list.
     auto iface = build->getOrConstructInterface(chanTy);
-    newArgTypes.push_back(iface.getModportType(ESIRTLBuilder::sourceStr));
+    newArgTypes.push_back(iface.getModportType(ESIHWBuilder::sourceStr));
     updated = true;
   }
 
@@ -641,7 +638,7 @@ bool ESIPortsPass::updateFunc(RTLModuleExternOp mod) {
     // When we find one, construct an interface, and add the 'sink' modport to
     // the type list.
     InterfaceOp iface = build->getOrConstructInterface(chanTy);
-    ModportType sinkPort = iface.getModportType(ESIRTLBuilder::sinkStr);
+    ModportType sinkPort = iface.getModportType(ESIHWBuilder::sinkStr);
     newArgTypes.push_back(sinkPort);
     newArgNames.push_back(resNameAttr);
     updated = true;
@@ -658,12 +655,39 @@ bool ESIPortsPass::updateFunc(RTLModuleExternOp mod) {
   return true;
 }
 
+/// Create a reasonable name for a SV interface instance.
+static std::string &constructInstanceName(Value operand, InterfaceOp iface,
+                                          std::string &name) {
+  llvm::raw_string_ostream s(name);
+  // Drop the "IValidReady_" part of the interface name.
+  s << llvm::toLower(iface.sym_name()[12]) << iface.sym_name().substr(13);
+
+  // Indicate to where the source is connected.
+  if (operand.hasOneUse()) {
+    Operation *dstOp = *operand.getUsers().begin();
+    if (auto instOp = dyn_cast<InstanceOp>(dstOp))
+      s << "To" << llvm::toUpper(instOp.instanceName()[0])
+        << instOp.instanceName().substr(1);
+    else if (auto dstName = dstOp->getAttrOfType<StringAttr>("name"))
+      s << "To" << dstName.getValue();
+  }
+
+  // Indicate to where the sink is connected.
+  auto srcOp = operand.getDefiningOp();
+  if (auto instOp = dyn_cast<InstanceOp>(srcOp))
+    s << "From" << llvm::toUpper(instOp.instanceName()[0])
+      << instOp.instanceName().substr(1);
+  if (auto srcName = srcOp->getAttrOfType<StringAttr>("name"))
+    s << "From" << srcName.getValue();
+  return s.str();
+}
+
 /// Update an instance of an updated module by adding `esi.(un)wrap.iface`
 /// around the instance. Create a new instance at the end from the lists built
 /// up before.
-void ESIPortsPass::updateInstance(RTLModuleExternOp mod, InstanceOp inst) {
+void ESIPortsPass::updateInstance(HWModuleExternOp mod, InstanceOp inst) {
   using namespace circt::sv;
-  circt::ImplicitLocOpBuilder instBuilder(inst);
+  circt::ImplicitLocOpBuilder instBuilder(inst.getLoc(), inst);
   FunctionType funcTy = mod.getType();
 
   // op counter for error reporting purposes.
@@ -672,6 +696,7 @@ void ESIPortsPass::updateInstance(RTLModuleExternOp mod, InstanceOp inst) {
   SmallVector<Value, 16> newOperands;
 
   // Fill the new operand list with old plain operands and mutated ones.
+  std::string nameStringBuffer; // raw_string_ostream uses std::string.
   for (auto op : inst.getOperands()) {
     auto instChanTy = op.getType().dyn_cast<ChannelPort>();
     if (!instChanTy) {
@@ -683,7 +708,7 @@ void ESIPortsPass::updateInstance(RTLModuleExternOp mod, InstanceOp inst) {
     // Get the interface from the cache, and make sure it's the same one as
     // being used in the module.
     auto iface = build->getOrConstructInterface(instChanTy);
-    if (iface.getModportType(ESIRTLBuilder::sourceStr) !=
+    if (iface.getModportType(ESIHWBuilder::sourceStr) !=
         funcTy.getInput(opNum)) {
       inst.emitOpError("ESI ChannelPort (operand #")
           << opNum << ") doesn't match module!";
@@ -697,11 +722,16 @@ void ESIPortsPass::updateInstance(RTLModuleExternOp mod, InstanceOp inst) {
     // `esi.unwrap.iface` and the other end to the instance.
     auto ifaceInst =
         instBuilder.create<InterfaceInstanceOp>(iface.getInterfaceType());
+    nameStringBuffer.clear();
+    ifaceInst->setAttr(
+        "name",
+        StringAttr::get(mod.getContext(),
+                        constructInstanceName(op, iface, nameStringBuffer)));
     GetModportOp sinkModport =
-        instBuilder.create<GetModportOp>(ifaceInst, ESIRTLBuilder::sinkStr);
+        instBuilder.create<GetModportOp>(ifaceInst, ESIHWBuilder::sinkStr);
     instBuilder.create<UnwrapSVInterface>(op, sinkModport);
     GetModportOp sourceModport =
-        instBuilder.create<GetModportOp>(ifaceInst, ESIRTLBuilder::sourceStr);
+        instBuilder.create<GetModportOp>(ifaceInst, ESIHWBuilder::sourceStr);
     // Finally, add the correct modport to the list of operands.
     newOperands.push_back(sourceModport);
   }
@@ -723,8 +753,7 @@ void ESIPortsPass::updateInstance(RTLModuleExternOp mod, InstanceOp inst) {
     // Get the interface from the cache, and make sure it's the same one as
     // being used in the module.
     auto iface = build->getOrConstructInterface(instChanTy);
-    if (iface.getModportType(ESIRTLBuilder::sinkStr) !=
-        funcTy.getInput(opNum)) {
+    if (iface.getModportType(ESIHWBuilder::sinkStr) != funcTy.getInput(opNum)) {
       inst.emitOpError("ESI ChannelPort (result #")
           << resNum << ", operand #" << opNum << ") doesn't match module!";
       ++opNum;
@@ -739,15 +768,20 @@ void ESIPortsPass::updateInstance(RTLModuleExternOp mod, InstanceOp inst) {
     // operand list.
     auto ifaceInst =
         instBuilder.create<InterfaceInstanceOp>(iface.getInterfaceType());
+    nameStringBuffer.clear();
+    ifaceInst->setAttr(
+        "name",
+        StringAttr::get(mod.getContext(),
+                        constructInstanceName(res, iface, nameStringBuffer)));
     GetModportOp sourceModport =
-        instBuilder.create<GetModportOp>(ifaceInst, ESIRTLBuilder::sourceStr);
+        instBuilder.create<GetModportOp>(ifaceInst, ESIHWBuilder::sourceStr);
     auto newChannel =
         instBuilder.create<WrapSVInterface>(res.getType(), sourceModport);
-    // Connect all the old users of the output channel with the newly wrapped
-    // replacement channel.
+    // Connect all the old users of the output channel with the newly
+    // wrapped replacement channel.
     res.replaceAllUsesWith(newChannel);
     GetModportOp sinkModport =
-        instBuilder.create<GetModportOp>(ifaceInst, ESIRTLBuilder::sinkStr);
+        instBuilder.create<GetModportOp>(ifaceInst, ESIHWBuilder::sinkStr);
     // And add the modport on the other side to the new operand list.
     newOperands.push_back(sinkModport);
   }
@@ -766,16 +800,16 @@ void ESIPortsPass::updateInstance(RTLModuleExternOp mod, InstanceOp inst) {
 }
 
 //===----------------------------------------------------------------------===//
-// Lower to RTL/SV conversions and pass.
+// Lower to HW/SV conversions and pass.
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// Lower PipelineStage ops to an RTL implementation. Unwrap and re-wrap
+/// Lower PipelineStage ops to an HW implementation. Unwrap and re-wrap
 /// appropriately. Another conversion will take care merging the resulting
 /// adjacent wrap/unwrap ops.
 struct PipelineStageLowering : public OpConversionPattern<PipelineStage> {
 public:
-  PipelineStageLowering(ESIRTLBuilder &builder, MLIRContext *ctxt)
+  PipelineStageLowering(ESIHWBuilder &builder, MLIRContext *ctxt)
       : OpConversionPattern(ctxt), builder(builder) {}
   using OpConversionPattern::OpConversionPattern;
 
@@ -784,7 +818,7 @@ public:
                   ConversionPatternRewriter &rewriter) const final;
 
 private:
-  ESIRTLBuilder &builder;
+  ESIHWBuilder &builder;
 };
 } // anonymous namespace
 
@@ -798,7 +832,7 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   auto stageModule = builder.declareStage();
 
   NamedAttrList stageParams;
-  size_t width = circt::rtl::getBitWidth(chPort.getInner());
+  size_t width = circt::hw::getBitWidth(chPort.getInner());
   stageParams.set(builder.width, rewriter.getUI32IntegerAttr(width));
 
   // Unwrap the channel. The ready signal is a Value we haven't created yet, so
@@ -821,7 +855,7 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
                         rewriter.getI1Type()};
   auto stageInst = rewriter.create<InstanceOp>(
       loc, resultTypes, pipeStageName, stageModule.getName(), operands,
-      stageParams.getDictionary(rewriter.getContext()));
+      stageParams.getDictionary(rewriter.getContext()), StringAttr());
   auto stageInstResults = stageInst.getResults();
 
   // Set a_ready (from the unwrap) back edge correctly to its output from stage.
@@ -830,7 +864,7 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   Value x = stageInstResults[1];
   Value xValid = stageInstResults[2];
 
-  // Wrap up the output of the RTL stage module.
+  // Wrap up the output of the HW stage module.
   auto wrap = rewriter.create<WrapValidReady>(loc, chPort, rewriter.getI1Type(),
                                               x, xValid);
   // Set the stages x_ready backedge correctly.
@@ -839,6 +873,39 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   rewriter.replaceOp(stage, wrap.chanOutput());
   return success();
 }
+
+namespace {
+struct NullSourceOpLowering : public OpConversionPattern<NullSourceOp> {
+public:
+  NullSourceOpLowering(MLIRContext *ctxt) : OpConversionPattern(ctxt) {}
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(NullSourceOp nullop, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final;
+};
+} // anonymous namespace
+
+LogicalResult NullSourceOpLowering::matchAndRewrite(
+    NullSourceOp nullop, ArrayRef<Value> stageOperands,
+    ConversionPatternRewriter &rewriter) const {
+  auto innerType = nullop.out().getType().cast<ChannelPort>().getInner();
+  Location loc = nullop.getLoc();
+  int64_t width = hw::getBitWidth(innerType);
+  if (width == -1)
+    return rewriter.notifyMatchFailure(
+        nullop, "NullOp lowering only supports hw types");
+  auto valid =
+      rewriter.create<hw::ConstantOp>(nullop.getLoc(), rewriter.getI1Type(), 0);
+  auto zero =
+      rewriter.create<hw::ConstantOp>(loc, rewriter.getIntegerType(width), 0);
+  auto typedZero = rewriter.create<hw::BitcastOp>(loc, innerType, zero);
+  auto wrap = rewriter.create<WrapValidReady>(loc, typedZero, valid);
+  wrap->setAttr("name", rewriter.getStringAttr("nullsource"));
+  rewriter.replaceOp(nullop, {wrap.chanOutput()});
+  return success();
+}
+
 namespace {
 /// Eliminate back-to-back wrap-unwraps to reduce the number of ESI channels.
 struct RemoveWrapUnwrap : public ConversionPattern {
@@ -853,13 +920,12 @@ public:
     WrapValidReady wrap = dyn_cast<WrapValidReady>(op);
     UnwrapValidReady unwrap = dyn_cast<UnwrapValidReady>(op);
     if (wrap) {
-      unwrap =
-          dyn_cast<UnwrapValidReady>(wrap.chanOutput().use_begin()->getOwner());
-      if (!unwrap)
-        return rewriter.notifyMatchFailure(wrap, [](Diagnostic &d) {
-          d << "This conversion only supports wrap-unwrap back-to-back. "
-               "Could not find 'unwrap'.";
-        });
+      if (!wrap.chanOutput().hasOneUse() ||
+          !(unwrap = dyn_cast<UnwrapValidReady>(
+                wrap.chanOutput().use_begin()->getOwner())))
+        return rewriter.notifyMatchFailure(
+            wrap, "This conversion only supports wrap-unwrap back-to-back. "
+                  "Could not find 'unwrap'.");
       data = operands[0];
       valid = operands[1];
       ready = unwrap.ready();
@@ -867,10 +933,9 @@ public:
       wrap = dyn_cast<WrapValidReady>(operands[0].getDefiningOp());
       if (!wrap)
         return rewriter.notifyMatchFailure(
-            operands[0].getDefiningOp(), [](Diagnostic &d) {
-              d << "This conversion only supports wrap-unwrap back-to-back. "
-                   "Could not find 'wrap'.";
-            });
+            operands[0].getDefiningOp(),
+            "This conversion only supports wrap-unwrap back-to-back. "
+            "Could not find 'wrap'.");
       valid = wrap.valid();
       data = wrap.rawInput();
       ready = operands[1];
@@ -891,7 +956,7 @@ public:
 } // anonymous namespace
 
 namespace {
-struct ESItoRTLPass : public LowerESItoRTLBase<ESItoRTLPass> {
+struct ESItoHWPass : public LowerESItoHWBase<ESItoHWPass> {
   void runOnOperation() override;
 };
 } // anonymous namespace
@@ -927,12 +992,12 @@ WrapInterfaceLower::matchAndRewrite(WrapSVInterface wrap,
 
   auto loc = wrap.getLoc();
   auto validSignal = rewriter.create<ReadInterfaceSignalOp>(
-      loc, ifaceInstance, ESIRTLBuilder::validStr);
+      loc, ifaceInstance, ESIHWBuilder::validStr);
   auto dataSignal = rewriter.create<ReadInterfaceSignalOp>(
-      loc, ifaceInstance, ESIRTLBuilder::dataStr);
+      loc, ifaceInstance, ESIHWBuilder::dataStr);
   auto wrapVR = rewriter.create<WrapValidReady>(loc, dataSignal, validSignal);
   rewriter.create<AssignInterfaceSignalOp>(
-      loc, ifaceInstance, ESIRTLBuilder::readyStr, wrapVR.ready());
+      loc, ifaceInstance, ESIHWBuilder::readyStr, wrapVR.ready());
   rewriter.replaceOp(wrap, {wrapVR.chanOutput()});
   return success();
 }
@@ -970,13 +1035,13 @@ LogicalResult UnwrapInterfaceLower::matchAndRewrite(
 
   auto loc = unwrap.getLoc();
   auto readySignal = rewriter.create<ReadInterfaceSignalOp>(
-      loc, ifaceInstance, ESIRTLBuilder::readyStr);
+      loc, ifaceInstance, ESIHWBuilder::readyStr);
   auto unwrapVR =
       rewriter.create<UnwrapValidReady>(loc, operands[0], readySignal);
   rewriter.create<AssignInterfaceSignalOp>(
-      loc, ifaceInstance, ESIRTLBuilder::validStr, unwrapVR.valid());
+      loc, ifaceInstance, ESIHWBuilder::validStr, unwrapVR.valid());
   rewriter.create<AssignInterfaceSignalOp>(
-      loc, ifaceInstance, ESIRTLBuilder::dataStr, unwrapVR.rawOutput());
+      loc, ifaceInstance, ESIHWBuilder::dataStr, unwrapVR.rawOutput());
   rewriter.eraseOp(unwrap);
   return success();
 }
@@ -986,7 +1051,7 @@ namespace {
 /// gasket op.
 struct CosimLowering : public OpConversionPattern<CosimEndpoint> {
 public:
-  CosimLowering(ESIRTLBuilder &b)
+  CosimLowering(ESIHWBuilder &b)
       : OpConversionPattern(b.getContext(), 1), builder(b) {}
 
   using OpConversionPattern::OpConversionPattern;
@@ -996,7 +1061,7 @@ public:
                   ConversionPatternRewriter &rewriter) const final;
 
 private:
-  ESIRTLBuilder &builder;
+  ESIHWBuilder &builder;
 };
 } // anonymous namespace
 
@@ -1059,9 +1124,9 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
   };
   Type epInstOutputs[] = {rewriter.getI1Type(), ingestBitArrayType,
                           rewriter.getI1Type()};
-  auto cosimEpModule =
-      rewriter.create<InstanceOp>(loc, epInstOutputs, name, "Cosim_Endpoint",
-                                  epInstInputs, params.getDictionary(ctxt));
+  auto cosimEpModule = rewriter.create<InstanceOp>(
+      loc, epInstOutputs, name, "Cosim_Endpoint", epInstInputs,
+      params.getDictionary(ctxt), StringAttr());
   sendReady.setValue(cosimEpModule.getResult(2));
 
   // Set up the injest path.
@@ -1082,7 +1147,7 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
 }
 
 namespace {
-/// Lower the encode gasket to SV/RTL.
+/// Lower the encode gasket to SV/HW.
 struct EncoderLowering : public OpConversionPattern<CapnpEncode> {
 public:
   using OpConversionPattern::OpConversionPattern;
@@ -1109,7 +1174,7 @@ public:
 } // anonymous namespace
 
 namespace {
-/// Lower the decode gasket to SV/RTL.
+/// Lower the decode gasket to SV/HW.
 struct DecoderLowering : public OpConversionPattern<CapnpDecode> {
 public:
   using OpConversionPattern::OpConversionPattern;
@@ -1135,14 +1200,14 @@ public:
 };
 } // namespace
 
-void ESItoRTLPass::runOnOperation() {
+void ESItoHWPass::runOnOperation() {
   auto top = getOperation();
   auto ctxt = &getContext();
 
   // Set up a conversion and give it a set of laws.
   ConversionTarget pass1Target(*ctxt);
   pass1Target.addLegalDialect<CombDialect>();
-  pass1Target.addLegalDialect<RTLDialect>();
+  pass1Target.addLegalDialect<HWDialect>();
   pass1Target.addLegalDialect<SVDialect>();
   pass1Target.addLegalOp<WrapValidReady, UnwrapValidReady>();
   pass1Target.addLegalOp<CapnpDecode, CapnpEncode>();
@@ -1151,12 +1216,13 @@ void ESItoRTLPass::runOnOperation() {
   pass1Target.addIllegalOp<PipelineStage>();
 
   // Add all the conversion patterns.
-  ESIRTLBuilder esiBuilder(top);
+  ESIHWBuilder esiBuilder(top);
   RewritePatternSet pass1Patterns(ctxt);
   pass1Patterns.insert<PipelineStageLowering>(esiBuilder, ctxt);
   pass1Patterns.insert<WrapInterfaceLower>(ctxt);
   pass1Patterns.insert<UnwrapInterfaceLower>(ctxt);
   pass1Patterns.insert<CosimLowering>(esiBuilder);
+  pass1Patterns.insert<NullSourceOpLowering>(ctxt);
 
   // Run the conversion.
   if (failed(
@@ -1165,7 +1231,7 @@ void ESItoRTLPass::runOnOperation() {
 
   ConversionTarget pass2Target(*ctxt);
   pass2Target.addLegalDialect<CombDialect>();
-  pass2Target.addLegalDialect<RTLDialect>();
+  pass2Target.addLegalDialect<HWDialect>();
   pass2Target.addLegalDialect<SVDialect>();
   pass2Target.addIllegalDialect<ESIDialect>();
 
@@ -1186,8 +1252,8 @@ std::unique_ptr<OperationPass<ModuleOp>> createESIPhysicalLoweringPass() {
 std::unique_ptr<OperationPass<ModuleOp>> createESIPortLoweringPass() {
   return std::make_unique<ESIPortsPass>();
 }
-std::unique_ptr<OperationPass<ModuleOp>> createESItoRTLPass() {
-  return std::make_unique<ESItoRTLPass>();
+std::unique_ptr<OperationPass<ModuleOp>> createESItoHWPass() {
+  return std::make_unique<ESItoHWPass>();
 }
 
 } // namespace esi

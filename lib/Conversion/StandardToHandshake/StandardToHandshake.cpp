@@ -22,11 +22,13 @@
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Types.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Support/LLVM.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Passes.h"
 #include "mlir/Transforms/Utils.h"
@@ -38,8 +40,8 @@ using namespace circt;
 using namespace circt::handshake;
 using namespace std;
 
-typedef DenseMap<Block *, vector<Value>> BlockValues;
-typedef DenseMap<Block *, vector<Operation *>> BlockOps;
+typedef DenseMap<Block *, std::vector<Value>> BlockValues;
+typedef DenseMap<Block *, std::vector<Operation *>> BlockOps;
 typedef DenseMap<Value, Operation *> blockArgPairs;
 
 /// Remove basic blocks inside the given FuncOp. This allows the result to be
@@ -233,7 +235,7 @@ BlockValues getBlockDefs(handshake::FuncOp f) {
   return defs;
 }
 
-vector<Value> vectorUnion(vector<Value> v1, vector<Value> v2) {
+std::vector<Value> vectorUnion(std::vector<Value> v1, std::vector<Value> v2) {
   // Returns v1 U v2
   // Assumes unique values in v1
 
@@ -245,9 +247,9 @@ vector<Value> vectorUnion(vector<Value> v1, vector<Value> v2) {
   return v1;
 }
 
-vector<Value> vectorDiff(vector<Value> v1, vector<Value> v2) {
+std::vector<Value> vectorDiff(std::vector<Value> v1, std::vector<Value> v2) {
   // Returns v1 - v2
-  vector<Value> d;
+  std::vector<Value> d;
 
   for (int i = 0, e = v1.size(); i < e; ++i) {
     Value val = v1[i];
@@ -278,7 +280,7 @@ BlockValues livenessAnalysis(handshake::FuncOp f) {
     // liveOuts(b): all liveins of all successors of b
     // liveOuts(b) = U (blockLiveIns(s)) forall successors s of b
     for (Block &block : f) {
-      vector<Value> liveOuts;
+      std::vector<Value> liveOuts;
       for (int i = 0, e = block.getNumSuccessors(); i < e; ++i) {
         Block *succ = block.getSuccessor(i);
         liveOuts = vectorUnion(liveOuts, blockLiveIns[succ]);
@@ -286,10 +288,10 @@ BlockValues livenessAnalysis(handshake::FuncOp f) {
 
       // diff(b):  liveouts of b which are not defined in b
       // diff(b) = liveOuts(b) - blockDefs(b)
-      vector<Value> diff = vectorDiff(liveOuts, blockDefs[&block]);
+      auto diff = vectorDiff(liveOuts, blockDefs[&block]);
 
       // liveIns(b) = blockUses(b) U diff(b)
-      vector<Value> tmpLiveIns = vectorUnion(blockUses[&block], diff);
+      auto tmpLiveIns = vectorUnion(blockUses[&block], diff);
 
       // Update blockLiveIns if new liveins found
       if (tmpLiveIns.size() > blockLiveIns[&block].size()) {
@@ -654,7 +656,7 @@ void connectConstantsToControl(handshake::FuncOp f,
     Operation *cntrlMg =
         block.isEntryBlock() ? getStartOp(&block) : getControlMerge(&block);
     assert(cntrlMg != nullptr);
-    vector<Operation *> cstOps;
+    std::vector<Operation *> cstOps;
     for (Operation &op : block) {
       if (auto constantOp = dyn_cast<mlir::ConstantOp>(op)) {
         rewriter.setInsertionPointAfter(&op);
@@ -688,7 +690,7 @@ void replaceFirstUse(Operation *op, Value oldVal, Value newVal) {
 
 void insertFork(Operation *op, Value result, bool isLazy, OpBuilder &rewriter) {
   // Get successor operations
-  vector<Operation *> opsToProcess;
+  std::vector<Operation *> opsToProcess;
   for (auto &u : result.getUses())
     opsToProcess.push_back(u.getOwner());
 
@@ -856,7 +858,7 @@ bool isMemoryOp(Operation *op) {
              mlir::AffineWriteOpInterface>(op);
 }
 
-typedef llvm::MapVector<Value, vector<Operation *>> MemRefToMemoryAccessOp;
+typedef llvm::MapVector<Value, std::vector<Operation *>> MemRefToMemoryAccessOp;
 
 // Replaces standard memory ops with their handshake version (i.e.,
 // ops which connect to memory/LSQ). Returns a map with an ordered
@@ -867,7 +869,7 @@ MemRefToMemoryAccessOp replaceMemoryOps(handshake::FuncOp f,
   // Map from original memref to new load/store operations.
   MemRefToMemoryAccessOp MemRefOps;
 
-  vector<Operation *> opsToErase;
+  std::vector<Operation *> opsToErase;
 
   // Replace load and store ops with the corresponding handshake ops
   // Need to traverse ops in blocks to store them in MemRefOps in program order
@@ -950,10 +952,10 @@ MemRefToMemoryAccessOp replaceMemoryOps(handshake::FuncOp f,
   return MemRefOps;
 }
 
-vector<Block *> getOperationBlocks(vector<Operation *> ops) {
+std::vector<Block *> getOperationBlocks(std::vector<Operation *> ops) {
   // Get list of (unique) blocks which ops belong to
   // Used to connect control network to memory
-  vector<Block *> blocks;
+  std::vector<Block *> blocks;
 
   for (Operation *op : ops) {
     Block *b = op->getBlock();
@@ -1007,7 +1009,7 @@ void addMemOpForks(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
 }
 
 void removeAllocOps(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
-  vector<Operation *> allocOps;
+  std::vector<Operation *> allocOps;
 
   for (Block &block : f)
     for (Operation &op : block) {
@@ -1028,7 +1030,7 @@ void removeAllocOps(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
 
 void removeRedundantSinks(handshake::FuncOp f,
                           ConversionPatternRewriter &rewriter) {
-  vector<Operation *> redundantSinks;
+  std::vector<Operation *> redundantSinks;
 
   for (Block &block : f)
     for (Operation &op : block) {
@@ -1060,7 +1062,7 @@ Value getMemRefOperand(Value val) {
 }
 
 void addJoinOps(ConversionPatternRewriter &rewriter,
-                vector<Value> controlVals) {
+                std::vector<Value> controlVals) {
   for (auto val : controlVals) {
     assert(val.hasOneUse());
     auto srcOp = val.getDefiningOp();
@@ -1076,8 +1078,8 @@ void addJoinOps(ConversionPatternRewriter &rewriter,
   }
 }
 
-vector<Value> getControlValues(vector<Operation *> memOps) {
-  vector<Value> vals;
+std::vector<Value> getControlValues(std::vector<Operation *> memOps) {
+  std::vector<Value> vals;
 
   for (Operation *op : memOps) {
     // Get block from which the mem op originates
@@ -1099,7 +1101,7 @@ void addValueToOperands(Operation *op, Value val) {
   op->setOperands(results);
 }
 
-void setLoadDataInputs(vector<Operation *> memOps, Operation *memOp) {
+void setLoadDataInputs(std::vector<Operation *> memOps, Operation *memOp) {
   // Set memory outputs as load input data
   int ld_count = 0;
   for (auto *op : memOps) {
@@ -1108,8 +1110,8 @@ void setLoadDataInputs(vector<Operation *> memOps, Operation *memOp) {
   }
 }
 
-void setJoinControlInputs(vector<Operation *> memOps, Operation *memOp,
-                          int offset, vector<int> cntrlInd) {
+void setJoinControlInputs(std::vector<Operation *> memOps, Operation *memOp,
+                          int offset, std::vector<int> cntrlInd) {
   // Connect all memory ops to the join of that block (ensures that all mem
   // ops terminate before a new block starts)
   for (int i = 0, e = memOps.size(); i < e; ++i) {
@@ -1124,10 +1126,10 @@ void setJoinControlInputs(vector<Operation *> memOps, Operation *memOp,
 }
 
 void setMemOpControlInputs(ConversionPatternRewriter &rewriter,
-                           vector<Operation *> memOps, Operation *memOp,
-                           int offset, vector<int> cntrlInd) {
+                           std::vector<Operation *> memOps, Operation *memOp,
+                           int offset, std::vector<int> cntrlInd) {
   for (int i = 0, e = memOps.size(); i < e; ++i) {
-    vector<Value> controlOperands;
+    std::vector<Value> controlOperands;
     Operation *currOp = memOps[i];
     Block *currBlock = currOp->getBlock();
 
@@ -1170,11 +1172,11 @@ void connectToMemory(handshake::FuncOp f, MemRefToMemoryAccessOp MemRefOps,
     // First operand corresponds to memref (alloca or function argument)
     Value memrefOperand = getMemRefOperand(memory.first);
 
-    vector<Value> operands;
+    std::vector<Value> operands;
     // operands.push_back(memrefOperand);
 
     // Get control values which need to connect to memory
-    vector<Value> controlVals = getControlValues(memory.second);
+    std::vector<Value> controlVals = getControlValues(memory.second);
 
     // In case of LSQ interface, set control values as inputs (used to trigger
     // allocation to LSQ)
@@ -1191,7 +1193,7 @@ void connectToMemory(handshake::FuncOp f, MemRefToMemoryAccessOp MemRefOps,
     // ldaddr1, ldaddr2,....) Outputs: all load outputs, ordered the same as
     // load addresses (lddata1, lddata2, ...), followed by all none outputs,
     // ordered as operands (stnone1, stnone2,...ldnone1, ldnone2,...)
-    vector<int> newInd(memory.second.size(), 0);
+    std::vector<int> newInd(memory.second.size(), 0);
     int ind = 0;
     for (int i = 0, e = memory.second.size(); i < e; ++i) {
       auto *op = memory.second[i];
@@ -1425,7 +1427,7 @@ struct FuncOpLowering : public OpConversionPattern<mlir::FuncOp> {
     SmallVector<NamedAttribute, 4> attributes;
     for (const auto &attr : funcOp->getAttrs()) {
       if (attr.first == SymbolTable::getSymbolAttrName() ||
-          attr.first == impl::getTypeAttrName())
+          attr.first == function_like_impl::getTypeAttrName())
         continue;
       attributes.push_back(attr);
     }
@@ -1509,22 +1511,50 @@ namespace {
 struct HandshakeInsertBufferPass
     : public HandshakeInsertBufferBase<HandshakeInsertBufferPass> {
 
-  DenseMap<Operation *, bool> opVisited;
-  DenseMap<Operation *, bool> opOnStack;
+  // Perform a depth first search and insert buffers when cycles are detected.
+  void bufferCyclesStrategy() {
+    auto f = getOperation();
+    DenseSet<Operation *> opVisited;
+    DenseSet<Operation *> opInFlight;
+
+    // Traverse each use of each argument of the entry block.
+    auto builder = OpBuilder(f.getContext());
+    for (auto &arg : f.getBody().front().getArguments()) {
+      for (auto &operand : arg.getUses()) {
+        if (opVisited.count(operand.getOwner()) == 0)
+          insertBufferDFS(operand.getOwner(), builder, opVisited, opInFlight);
+      }
+    }
+  }
+
+  // Perform a depth first search and add a buffer to any un-buffered channel.
+  void bufferAllStrategy() {
+    auto f = getOperation();
+    auto builder = OpBuilder(f.getContext());
+    for (auto &arg : f.getArguments())
+      for (auto &use : arg.getUses())
+        insertBufferRecursive(use, builder, /*numSlots=*/2,
+                              [](Operation *definingOp, Operation *usingOp) {
+                                return !isa_and_nonnull<BufferOp>(definingOp) &&
+                                       !isa<BufferOp>(usingOp);
+                              });
+  }
 
   /// DFS-based graph cycle detection and naive buffer insertion. Exactly one
   /// 2-slot non-transparent buffer will be inserted into each graph cycle.
-  void insertBufferOp(Operation *op, OpBuilder &builder) {
+  void insertBufferDFS(Operation *op, OpBuilder &builder,
+                       DenseSet<Operation *> &opVisited,
+                       DenseSet<Operation *> &opInFlight) {
     // Mark operation as visited and push into the stack.
-    opVisited[op] = true;
-    opOnStack[op] = true;
+    opVisited.insert(op);
+    opInFlight.insert(op);
 
     // Traverse all uses of the current operation.
     for (auto &operand : op->getUses()) {
-      auto user = operand.getOwner();
+      auto *user = operand.getOwner();
 
       // If graph cycle detected, insert a BufferOp into the edge.
-      if (opOnStack[user] && !isa<handshake::BufferOp>(op) &&
+      if (opInFlight.count(user) != 0 && !isa<handshake::BufferOp>(op) &&
           !isa<handshake::BufferOp>(user)) {
         auto value = operand.get();
 
@@ -1539,28 +1569,48 @@ struct HandshakeInsertBufferPass
               return !isa<handshake::BufferOp>(operand.getOwner());
             }));
       }
-      // For unvisited operations, recursively call insertBufferOp() method.
-      else if (!opVisited[user])
-        insertBufferOp(user, builder);
+      // For unvisited operations, recursively call insertBufferDFS() method.
+      else if (opVisited.count(user) == 0)
+        insertBufferDFS(user, builder, opVisited, opInFlight);
     }
     // Pop operation out of the stack.
-    opOnStack[op] = false;
+    opInFlight.erase(op);
+  }
+
+  void
+  insertBufferRecursive(OpOperand &use, OpBuilder builder, size_t numSlots,
+                        function_ref<bool(Operation *, Operation *)> callback) {
+    auto oldValue = use.get();
+    auto *definingOp = oldValue.getDefiningOp();
+    auto *usingOp = use.getOwner();
+    if (callback(definingOp, usingOp)) {
+      builder.setInsertionPoint(usingOp);
+      auto buffer = builder.create<handshake::BufferOp>(
+          oldValue.getLoc(), oldValue.getType(), oldValue, /*sequential=*/true,
+          /*control=*/oldValue.getType().isa<NoneType>(),
+          /*slots=*/numSlots);
+      use.getOwner()->setOperand(use.getOperandNumber(), buffer);
+    }
+
+    for (auto &childUse : usingOp->getUses())
+      if (!isa<handshake::BufferOp>(childUse.getOwner()))
+        insertBufferRecursive(childUse, builder, numSlots, callback);
   }
 
   void runOnOperation() override {
-    auto f = getOperation();
-    for (auto &block : f) {
-      for (auto &op : block) {
-        opVisited[&op] = false;
-        opOnStack[&op] = false;
-      }
-    }
-    // Traverse each use of each argument of the entry block.
-    auto builder = OpBuilder(f.getContext());
-    for (auto &arg : f.getBody().front().getArguments()) {
-      for (auto &operand : arg.getUses()) {
-        if (!opVisited[operand.getOwner()])
-          insertBufferOp(operand.getOwner(), builder);
+    if (strategies.empty())
+      strategies = {"cycles"};
+
+    for (auto strategy : strategies) {
+      if (strategy == "cycles")
+        bufferCyclesStrategy();
+      else if (strategy == "all")
+        bufferAllStrategy();
+      else {
+        emitError(getOperation().getLoc())
+            << "Unknown buffer strategy: " << strategy;
+        signalPassFailure();
+        return;
       }
     }
   }

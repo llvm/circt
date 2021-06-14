@@ -10,19 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-def MemoryPortOp : FIRRTLOp<"memoryport"> {
-  let summary = "Access a memory";
-
-  let arguments = (ins FIRRTLType:$memory, IntType:$index, ClockType:$clock,
-                       MemDirAttr:$direction, OptionalAttr<StrAttr>:$name);
-  let results = (outs FIRRTLType:$result);
-
-  let assemblyFormat = [{
-    $direction $memory `,` $index `,` $clock attr-dict `:`
-       functional-type(operands, $result)
-  }];
-}
-
 def AttachOp : FIRRTLOp<"attach"> {
   let summary = "Analog Attach Statement";
 
@@ -65,6 +52,8 @@ def PartialConnectOp : FIRRTLOp<"partialconnect"> {
   let arguments = (ins FIRRTLType:$dest, FIRRTLType:$src);
   let results = (outs);
   let hasCanonicalizeMethod = true;
+
+  let verifier = "return ::verifyPartialConnectOp(*this);";
 
   let assemblyFormat =
     "$dest `,` $src  attr-dict `:` type($dest) `,` type($src)";
@@ -142,8 +131,8 @@ def CoverOp : FIRRTLOp<"cover"> {
     "$clock `,` $predicate `,` $enable `,` $message attr-dict";
 }
 
-def WhenOp : FIRRTLOp<"when", [SingleBlockImplicitTerminator<"DoneOp">,
-                               NoRegionArguments, RecursiveSideEffects]> {
+def WhenOp : FIRRTLOp<"when", [SingleBlock, NoTerminator, NoRegionArguments,
+                               RecursiveSideEffects]> {
   let summary = "When Statement";
   let description = [{
     The "firrtl.when" operation represents a conditional.  Connections within
@@ -174,7 +163,7 @@ def WhenOp : FIRRTLOp<"when", [SingleBlockImplicitTerminator<"DoneOp">,
 
     OpBuilder getThenBodyBuilder() {
       Block &body = getThenBlock();
-      return OpBuilder(&body, std::prev(body.end()));
+      return OpBuilder::atBlockEnd(&body);
     }
 
     bool hasElseRegion() {
@@ -190,7 +179,7 @@ def WhenOp : FIRRTLOp<"when", [SingleBlockImplicitTerminator<"DoneOp">,
 
     OpBuilder getElseBodyBuilder() {
       Block &body = getElseBlock();
-      return OpBuilder(&body, std::prev(body.end()));
+      return OpBuilder::atBlockEnd(&body);
     }
   }];
 }

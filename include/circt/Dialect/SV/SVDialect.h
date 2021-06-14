@@ -13,31 +13,14 @@
 #ifndef CIRCT_DIALECT_SV_DIALECT_H
 #define CIRCT_DIALECT_SV_DIALECT_H
 
+#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Dialect.h"
 #include "llvm/ADT/StringSet.h"
 
 namespace circt {
 namespace sv {
-
-class SVDialect : public Dialect {
-public:
-  explicit SVDialect(MLIRContext *context);
-  ~SVDialect();
-
-  static StringRef getDialectNamespace() { return "sv"; }
-
-  /// Parses a type registered to this dialect
-  mlir::Type parseType(mlir::DialectAsmParser &parser) const override;
-
-  /// Print a type registered to this dialect
-  void printType(mlir::Type type,
-                 mlir::DialectAsmPrinter &printer) const override;
-
-private:
-  /// Register all SV types.
-  void registerTypes();
-};
 
 /// Given string \p origName, generate a new name if it conflicts with any
 /// keyword or any other name in the set \p recordNames. Use the int \p
@@ -61,5 +44,8 @@ bool isNameValid(llvm::StringRef name);
 
 } // namespace sv
 } // namespace circt
+
+// Pull in the dialect definition.
+#include "circt/Dialect/SV/SVDialect.h.inc"
 
 #endif // CIRCT_DIALECT_SV_DIALECT_H

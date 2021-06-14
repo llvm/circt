@@ -23,13 +23,7 @@ using namespace msft;
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
-MSFTDialect::MSFTDialect(MLIRContext *context)
-    : Dialect(getDialectNamespace(), context,
-              ::mlir::TypeID::get<MSFTDialect>()) {
-  registerAttributes();
-}
-
-MSFTDialect::~MSFTDialect() {}
+void MSFTDialect::initialize() { registerAttributes(); }
 
 /// Registered hook to materialize a single constant operation from a given
 /// attribute value with the desired resultant type. This method should use

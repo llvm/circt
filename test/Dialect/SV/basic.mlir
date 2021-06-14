@@ -1,8 +1,8 @@
 // RUN: circt-opt %s | FileCheck %s
 // RUN: circt-opt %s | circt-opt | FileCheck %s
 
-// CHECK-LABEL: rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
-rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
+// CHECK-LABEL: hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
+hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
 
   // This corresponds to this block of system verilog code:
   //    always @(posedge arg0) begin
@@ -137,22 +137,59 @@ rtl.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
     }
   }
 
-  // CHECK-NEXT: %combWire = sv.wire : !rtl.inout<i1> 
-  %combWire = sv.wire : !rtl.inout<i1>
+  // CHECK-NEXT: %combWire = sv.wire : !hw.inout<i1> 
+  %combWire = sv.wire : !hw.inout<i1>
+  // CHECK-NEXT: %combWire2 = sv.wire : !hw.inout<i1> 
+  %combWire2 = sv.wire : !hw.inout<i1>
+  // CHECK-NEXT: %regForce = sv.reg : !hw.inout<i1>
+  %regForce = sv.reg  : !hw.inout<i1>
   // CHECK-NEXT: sv.alwayscomb {
   sv.alwayscomb {
     // CHECK-NEXT: %x_i1 = sv.constantX : i1
     %tmpx = sv.constantX : i1
     // CHECK-NEXT: sv.passign %combWire, %x_i1 : i1
     sv.passign %combWire, %tmpx : i1
+    // CHECK-NEXT: sv.force %combWire2, %x_i1 : i1
+    sv.force %combWire2, %tmpx : i1
+    // CHECK-NEXT: sv.force %regForce, %x_i1 : i1
+    sv.force %regForce, %tmpx : i1
+    sv.release %combWire2 : !hw.inout<i1>
+    sv.release %regForce : !hw.inout<i1>
+    // CHECK-NEXT: sv.release %combWire2 : !hw.inout<i1>
+    // CHECK-NEXT: sv.release %regForce : !hw.inout<i1>
     // CHECK-NEXT: }
   }
 
-  // CHECK-NEXT: %reg23 = sv.reg : !rtl.inout<i23>
-  // CHECK-NEXT: %regStruct23 = sv.reg : !rtl.inout<struct<foo: i23>>
-  %reg23       = sv.reg  : !rtl.inout<i23>
-  %regStruct23 = sv.reg  : !rtl.inout<struct<foo: i23>>
+  // CHECK-NEXT: %reg23 = sv.reg : !hw.inout<i23>
+  // CHECK-NEXT: %regStruct23 = sv.reg : !hw.inout<struct<foo: i23>>
+  // CHECK-NEXT: %reg24 = sv.reg sym @regSym1 : !hw.inout<i23>
+  // CHECK-NEXT: %wire25 = sv.wire sym @wireSym1 : !hw.inout<i23>
+  %reg23       = sv.reg  : !hw.inout<i23>
+  %regStruct23 = sv.reg  : !hw.inout<struct<foo: i23>>
+  %reg24       = sv.reg sym @regSym1 : !hw.inout<i23>
+  %wire25      = sv.wire sym @wireSym1 : !hw.inout<i23>
 
-  // CHECK-NEXT: rtl.output
-  rtl.output
+  // CHECK-NEXT: hw.output
+  hw.output
+}
+
+//CHECK-LABEL: sv.bind @a1
+//CHECK-NEXT: sv.bind @b1
+sv.bind @a1
+sv.bind @b1
+//CHECK-NEXT: hw.module.extern @ExternDestMod(%a: i1, %b: i2)
+//CHECK-NEXT: hw.module @InternalDestMod(%a: i1, %b: i2) { 
+//CHECK-NEXT:   hw.output
+//CHECK-NEXT: }
+hw.module.extern @ExternDestMod(%a: i1, %b: i2)
+hw.module @InternalDestMod(%a: i1, %b: i2) {}
+//CHECK-NEXT: hw.module @AB(%a: i1, %b: i2) {
+//CHECK-NEXT:   hw.instance "whatever" sym @a1 @ExternDestMod(%a, %b) {doNotPrint = 1 : i64} : (i1, i2) -> ()
+//CHECK-NEXT:   hw.instance "yo" sym @b1 @InternalDestMod(%a, %b) {doNotPrint = 1 : i64} : (i1, i2) -> ()
+//CHECK-NEXT:   hw.output
+//CHECK-NEXT: }
+hw.module @AB(%a: i1, %b: i2) -> () {
+  hw.instance "whatever" sym @a1 @ExternDestMod(%a, %b) {doNotPrint=1}: (i1, i2) -> ()
+  hw.instance "yo" sym @b1 @InternalDestMod(%a, %b) {doNotPrint=1} : (i1, i2) -> ()
+  hw.output
 }

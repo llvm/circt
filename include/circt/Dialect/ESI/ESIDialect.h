@@ -19,7 +19,7 @@
 #ifndef CIRCT_DIALECT_ESI_ESIDIALECT_H
 #define CIRCT_DIALECT_ESI_ESIDIALECT_H
 
-#include "circt/Dialect/RTL/RTLOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
@@ -27,32 +27,14 @@
 namespace circt {
 namespace esi {
 
-class ESIDialect : public ::mlir::Dialect {
-public:
-  explicit ESIDialect(mlir::MLIRContext *context);
-
-  /// Returns the prefix used in the textual IR to refer to ESI operations
-  static llvm::StringRef getDialectNamespace() { return "esi"; }
-
-  /// Parses a type registered to this dialect
-  mlir::Type parseType(mlir::DialectAsmParser &parser) const override;
-
-  /// Print a type registered to this dialect
-  void printType(mlir::Type type,
-                 mlir::DialectAsmPrinter &printer) const override;
-
-private:
-  /// Register all ESI types.
-  void registerTypes();
-};
-
 void registerESIPasses();
 void registerESITranslations();
+LogicalResult exportCosimSchema(ModuleOp module, llvm::raw_ostream &os);
 
 /// A triple of signals which represent a latency insensitive interface with
 /// valid/ready semantics.
 struct ESIPortValidReadyMapping {
-  rtl::ModulePortInfo data, valid, ready;
+  hw::ModulePortInfo data, valid, ready;
 };
 
 /// Find all the port triples on a module which fit the
@@ -74,5 +56,6 @@ Operation *buildESIWrapper(OpBuilder &b, Operation *mod,
 } // namespace circt
 
 #include "circt/Dialect/ESI/ESIAttrs.h.inc"
+#include "circt/Dialect/ESI/ESIDialect.h.inc"
 
 #endif

@@ -11,29 +11,134 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Support/FieldRef.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "llvm/ADT/APSInt.h"
+#include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace firrtl;
 
 //===----------------------------------------------------------------------===//
+// FieldRef helpers
+//===----------------------------------------------------------------------===//
+
+FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
+  // This code walks upwards from the subfield and calculates the field ID at
+  // each level. At each stage, it must take the current id, and re-index it as
+  // a nested bundle under the parent field.. This is accomplished by using the
+  // parent field's ID as a base, and adding the field ID of the child.
+  unsigned id = 0;
+  while (value) {
+    Operation *op = value.getDefiningOp();
+
+    // If this is a block argument, we are done.
+    if (!op)
+      break;
+
+    if (auto subfieldOp = dyn_cast<SubfieldOp>(op)) {
+      value = subfieldOp.input();
+      // Strip any flip wrapping the bundle type.
+      auto type = value.getType();
+      if (auto flipType = type.dyn_cast<FlipType>())
+        type = flipType.getElementType();
+      auto bundleType = type.cast<BundleType>();
+      auto index =
+          bundleType.getElementIndex(subfieldOp.fieldname()).getValue();
+      // Rebase the current index on the parent field's index.
+      id += bundleType.getFieldID(index);
+    } else if (auto subindexOp = dyn_cast<SubindexOp>(op)) {
+      auto type = subindexOp.input().getType();
+      // Strip any flip wrapping the vector type.
+      if (auto flipType = type.dyn_cast<FlipType>())
+        type = flipType.getElementType();
+      auto vecType = type.cast<FVectorType>();
+      // Rebase the current index on the parent field's index.
+      id += vecType.getFieldID(subindexOp.index());
+    } else {
+      break;
+    }
+  }
+  return {value, id};
+}
+
+/// Get the string name of a value which is a direct child of a declaration op.
+static void getDeclName(Value value, SmallString<64> &string) {
+  if (auto arg = value.dyn_cast<BlockArgument>()) {
+    // Get the module ports and get the name.
+    auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
+    SmallVector<ModulePortInfo> ports = module.getPorts();
+    string += ports[arg.getArgNumber()].name.getValue();
+    return;
+  }
+
+  auto *op = value.getDefiningOp();
+  TypeSwitch<Operation *>(op)
+      .Case<InstanceOp, MemOp>([&](auto op) {
+        string += op.name();
+        string += ".";
+        string +=
+            op.getPortName(value.cast<OpResult>().getResultNumber()).getValue();
+      })
+      .Case<WireOp, RegOp, RegResetOp>([&](auto op) { string += op.name(); });
+}
+
+std::string circt::firrtl::getFieldName(const FieldRef &fieldRef) {
+
+  SmallString<64> name;
+  auto value = fieldRef.getValue();
+  getDeclName(value, name);
+
+  auto type = value.getType();
+  auto localID = fieldRef.getFieldID();
+  while (localID) {
+    // Strip off the flip type if there is one.
+    if (auto flipType = type.dyn_cast<FlipType>())
+      type = flipType.getElementType();
+    if (auto bundleType = type.dyn_cast<BundleType>()) {
+      auto index = bundleType.getIndexForFieldID(localID);
+      // Add the current field string, and recurse into a subfield.
+      auto &element = bundleType.getElements()[index];
+      name += ".";
+      name += element.name.getValue();
+      // Recurse in to the element type.
+      type = element.type;
+      localID = localID - bundleType.getFieldID(index);
+    } else if (auto vecType = type.dyn_cast<FVectorType>()) {
+      auto index = vecType.getIndexForFieldID(localID);
+      name += "[";
+      name += std::to_string(index);
+      name += "]";
+      // Recurse in to the element type.
+      type = vecType.getElementType();
+      localID = localID - vecType.getFieldID(index);
+    } else {
+      // If we reach here, the field ref is pointing inside some aggregate type
+      // that isn't a bundle or a vector. If the type is a ground type, then the
+      // localID should be 0 at this point, and we should have broken from the
+      // loop.
+      llvm_unreachable("unsupported type");
+    }
+  }
+
+  return name.str().str();
+}
+
+//===----------------------------------------------------------------------===//
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
-// If the specified attribute set contains the firrtl.name attribute, return it.
-StringAttr firrtl::getFIRRTLNameAttr(ArrayRef<NamedAttribute> attrs) {
-  for (auto &argAttr : attrs) {
-    // FIXME: We currently use firrtl.name instead of name because this makes
-    // the FunctionLike handling in MLIR core happier.  It otherwise doesn't
-    // allow attributes on module parameters.
-    if (argAttr.first != "firrtl.name")
-      continue;
+// If the specified module contains the portNames attribute, return it.
+ArrayAttr firrtl::getModulePortNames(Operation *module) {
+  return module->getAttrOfType<ArrayAttr>("portNames");
+}
 
-    return argAttr.second.dyn_cast<StringAttr>();
-  }
-
-  return StringAttr();
+// If the specified module contains the portDirections attribute, return it.
+mlir::IntegerAttr firrtl::getModulePortDirections(Operation *module) {
+  return module->getAttrOfType<mlir::IntegerAttr>(direction::attrKey);
 }
 
 namespace {
@@ -103,6 +208,34 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
       }
       setNameFn(constant.getResult(), specialName.str());
     }
+
+    // Set invalid values to have a distinct name.
+    if (auto invalid = dyn_cast<InvalidValueOp>(op)) {
+      std::string name;
+      if (auto ty = invalid.getType().dyn_cast<IntType>()) {
+        const char *base = ty.isSigned() ? "invalid_si" : "invalid_ui";
+        auto width = ty.getWidthOrSentinel();
+        if (width == -1)
+          name = base;
+        else
+          name = (Twine(base) + Twine(width)).str();
+      } else if (auto ty = invalid.getType().dyn_cast<AnalogType>()) {
+        auto width = ty.getWidthOrSentinel();
+        if (width == -1)
+          name = "invalid_analog";
+        else
+          name = ("invalid_analog" + Twine(width)).str();
+      } else if (invalid.getType().isa<AsyncResetType>())
+        name = "invalid_asyncreset";
+      else if (invalid.getType().isa<ResetType>())
+        name = "invalid_reset";
+      else if (invalid.getType().isa<ClockType>())
+        name = "invalid_clock";
+      else
+        name = "invalid";
+
+      setNameFn(invalid.getResult(), name);
+    }
   }
 
   /// Get a special name to use when printing the entry block arguments of the
@@ -112,21 +245,25 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
     // Check to see if the operation containing the arguments has 'firrtl.name'
     // attributes for them.  If so, use that as the name.
     auto *parentOp = block->getParentOp();
+    auto argAttr = getModulePortNames(parentOp);
+
+    // Do not crash on invalid IR.
+    if (!argAttr || argAttr.size() != block->getNumArguments())
+      return;
 
     for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
-      // Scan for a 'firrtl.name' attribute.
-      if (auto str = getFIRRTLNameAttr(mlir::impl::getArgAttrs(parentOp, i)))
-        setNameFn(block->getArgument(i), str.getValue());
+      auto str = argAttr[i].cast<StringAttr>().getValue();
+      if (!str.empty())
+        setNameFn(block->getArgument(i), str);
     }
   }
 };
 } // end anonymous namespace
 
-FIRRTLDialect::FIRRTLDialect(MLIRContext *context)
-    : Dialect(getDialectNamespace(), context,
-              ::mlir::TypeID::get<FIRRTLDialect>()) {
-
+void FIRRTLDialect::initialize() {
+  // Register types and attributes.
   registerTypes();
+  registerAttributes();
 
   // Register operations.
   addOperations<
@@ -137,8 +274,6 @@ FIRRTLDialect::FIRRTLDialect(MLIRContext *context)
   // Register interface implementations.
   addInterfaces<FIRRTLOpAsmDialectInterface>();
 }
-
-FIRRTLDialect::~FIRRTLDialect() {}
 
 void FIRRTLDialect::printType(Type type, DialectAsmPrinter &os) const {
   type.cast<FIRRTLType>().print(os.getStream());
@@ -155,9 +290,17 @@ Operation *FIRRTLDialect::materializeConstant(OpBuilder &builder,
                                               Attribute value, Type type,
                                               Location loc) {
   // Integer constants.
-  if (auto intType = type.dyn_cast<IntType>())
-    if (auto attrValue = value.dyn_cast<IntegerAttr>())
-      return builder.create<ConstantOp>(loc, type, attrValue);
+  if (auto attrValue = value.dyn_cast<IntegerAttr>()) {
+    auto intType = type.cast<IntType>();
+    assert((!intType.hasWidth() || (unsigned)intType.getWidthOrSentinel() ==
+                                       attrValue.getValue().getBitWidth()) &&
+           "type/value width mismatch materializing constant");
+    return builder.create<ConstantOp>(loc, type, attrValue);
+  }
+
+  // InvalidValue constants.
+  if (auto invalidValue = value.dyn_cast<InvalidValueAttr>())
+    return builder.create<InvalidValueOp>(loc, type);
 
   return nullptr;
 }

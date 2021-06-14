@@ -11,8 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 def CircuitOp : FIRRTLOp<"circuit",
-      [IsolatedFromAbove, SymbolTable,
-       SingleBlockImplicitTerminator<"DoneOp">]> {
+      [IsolatedFromAbove, SymbolTable, SingleBlock, NoTerminator,
+       NoRegionArguments]> {
   let summary = "FIRRTL Circuit";
   let description = [{
     The "firrtl.circuit" operation represents an overall Verilog circuit,
@@ -33,7 +33,7 @@ def CircuitOp : FIRRTLOp<"circuit",
     OpBuilder getBodyBuilder() {
       assert(!body().empty() && "Unexpected empty 'body' region.");
       Block &bodyBlock = body().front();
-      return OpBuilder(&bodyBlock, std::prev(bodyBlock.end()));
+      return OpBuilder::atBlockEnd(&bodyBlock);
     }
 
     /// Return body of this circuit.
@@ -45,22 +45,22 @@ def CircuitOp : FIRRTLOp<"circuit",
     Operation *getMainModule();
   }];
 
-  let printer = "return ::print(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
+  let assemblyFormat = "$name attr-dict-with-keyword $body";
   let verifier = "return ::verifyCircuitOp(*this);";
 }
 
 def FModuleOp : FIRRTLOp<"module",
-      [IsolatedFromAbove, FunctionLike, Symbol,
-       SingleBlockImplicitTerminator<"DoneOp">]> {
+      [IsolatedFromAbove, FunctionLike, Symbol, SingleBlock, NoTerminator, 
+       HasParent<"CircuitOp">]> {
   let summary = "FIRRTL Module";
   let description = [{
     The "firrtl.module" operation represents a Verilog module, including a given
     name, a list of ports, and a body that represents the connections within
     the module.
   }];
-  let arguments = (
-    ins DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
+  let arguments =
+            (ins StrArrayAttr:$portNames,
+                 DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
 
@@ -77,13 +77,11 @@ def FModuleOp : FIRRTLOp<"module",
 
     // Decode information about the input and output ports on this module.
     SmallVector<ModulePortInfo> getPorts() {
-      SmallVector<ModulePortInfo> ports;
-      getModulePortInfo(*this, ports);
-      return ports;
+      return getModulePortInfo(*this);
     }
 
-    // Return the block argument for the port with the specified name.
-    BlockArgument getPortArgument(StringAttr name);
+    // Return the block argument for the port with the specified index.
+    BlockArgument getPortArgument(size_t portNumber);
 
     // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is
     // squatting on the name.
@@ -92,8 +90,12 @@ def FModuleOp : FIRRTLOp<"module",
     OpBuilder getBodyBuilder() {
       assert(!body().empty() && "Unexpected empty 'body' region.");
       Block &bodyBlock = body().front();
-      return OpBuilder(&bodyBlock, std::prev(bodyBlock.end()));
+      return OpBuilder::atBlockEnd(&bodyBlock);
     }
+
+    /// Erases the ports listed in `portIndices`.  `portIndices` is expected to
+    /// be in order and unique.
+    void erasePorts(ArrayRef<unsigned> portIndices);
 
   private:
     // This trait needs access to the hooks defined below.
@@ -124,13 +126,14 @@ def FModuleOp : FIRRTLOp<"module",
 }
 
 def FExtModuleOp : FIRRTLOp<"extmodule",
-      [IsolatedFromAbove, FunctionLike, Symbol]> {
+      [IsolatedFromAbove, FunctionLike, Symbol, HasParent<"CircuitOp">]> {
   let summary = "FIRRTL extmodule";
   let description = [{
     The "firrtl.extmodule" operation represents an external reference to a
     Verilog module, including a given name and a list of ports.
   }];
-  let arguments = (ins OptionalAttr<StrAttr>:$defname,
+  let arguments = (ins StrArrayAttr:$portNames,
+                       OptionalAttr<StrAttr>:$defname,
                        OptionalAttr<DictionaryAttr>:$parameters,
                        DefaultValuedAttr<AnnotationArrayAttr,
                                          "{}">:$annotations);
@@ -148,9 +151,7 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   let extraClassDeclaration = [{
      // Decode information about the input and output ports on this module.
      SmallVector<ModulePortInfo> getPorts() {
-       SmallVector<ModulePortInfo> ports;
-       getModulePortInfo(*this, ports);
-       return ports;
+       return getModulePortInfo(*this);
      }
 
   private:
@@ -179,13 +180,4 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   let printer = "return ::print(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
   let verifier = "return ::verifyFExtModuleOp(*this);";
-}
-
-def DoneOp : FIRRTLOp<"done", [Terminator]> {
-  let summary = "FIRRTL termination operation";
-  let description = [{
-    "firrtl.done" marks the end of a region in the FIRRTL dialect.
-  }];
-
-  let arguments = (ins);
 }

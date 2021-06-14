@@ -36,6 +36,23 @@ class FlipType;
 class BundleType;
 class FVectorType;
 
+/// A collection of bits indicating the recursive properties of a type.
+struct RecursiveTypeProperties {
+  /// Whether the type only contains passive elements.
+  bool isPassive : 1;
+  /// Whether the type contains an analog type.
+  bool containsAnalog : 1;
+  /// Whether the type has any uninferred bit widths.
+  bool hasUninferredWidth : 1;
+
+  /// The number of bits required to represent a type's recursive properties.
+  static constexpr unsigned numBits = 3;
+  /// Unpack `RecursiveTypeProperties` from a bunch of bits.
+  static RecursiveTypeProperties fromFlags(unsigned bits);
+  /// Pack `RecursiveTypeProperties` as a bunch of bits.
+  unsigned toFlags() const;
+};
+
 // This is a common base class for all FIRRTL types.
 class FIRRTLType : public Type {
 public:
@@ -43,16 +60,22 @@ public:
 
   /// Return true if this is a "passive" type - one that contains no "flip"
   /// types recursively within itself.
-  bool isPassive() { return getRecursiveTypeProperties().first; }
+  bool isPassive() { return getRecursiveTypeProperties().isPassive; }
 
   /// Return true if this is a 'ground' type, aka a non-aggregate type.
   bool isGround();
 
   /// Return true if this is or contains an Analog type.
-  bool containsAnalog() { return getRecursiveTypeProperties().second; }
+  bool containsAnalog() { return getRecursiveTypeProperties().containsAnalog; }
 
-  /// Return a pair with the 'isPassive' and 'containsAnalog' bits.
-  std::pair<bool, bool> getRecursiveTypeProperties();
+  /// Return true if this type contains an uninferred bit width.
+  bool hasUninferredWidth() {
+    return getRecursiveTypeProperties().hasUninferredWidth;
+  }
+
+  /// Return the recursive properties of the type, containing the `isPassive`,
+  /// `containsAnalog`, and `hasUninferredWidth` bits.
+  RecursiveTypeProperties getRecursiveTypeProperties();
 
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLType getPassiveType();
@@ -80,6 +103,17 @@ public:
   /// Return true if this is a valid "reset" type.
   bool isResetType();
 
+  /// Return the type with an outer flip stripped and a bool indicating if an
+  /// outer flip was stripped.
+  std::pair<FIRRTLType, bool> stripFlip();
+
+  /// Get the maximum field ID of this type.  For integers and other ground
+  /// types, there are no subfields and the maximum field ID is 0.  For bundle
+  /// types and vector types, each field is assigned a field ID in a depth-first
+  /// walk order. This function is used to calculate field IDs when this type is
+  /// nested under another type.
+  unsigned getMaxFieldID();
+
 protected:
   using Type::Type;
 };
@@ -90,6 +124,13 @@ protected:
 /// flip types in module ports and aggregates, this definition, unlike the spec,
 /// ignores flips.
 bool areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType);
+
+/// Returns true if two types are weakly equivalent.  See the FIRRTL spec,
+/// Section 4.6, for a full definition of this.  Roughly, the oriented types
+/// (the types with any flips pushed to the leaves) must match.  This allows for
+/// types with flips in different positions to be equivalent.
+bool areTypesWeaklyEquivalent(FIRRTLType destType, FIRRTLType srcType,
+                              bool destFlip = false, bool srcFlip = false);
 
 mlir::Type getVectorElementType(mlir::Type array);
 mlir::Type getPassiveType(mlir::Type anyFIRRTLType);
@@ -135,11 +176,19 @@ public:
   using FIRRTLType::TypeBase<ConcreteType, ParentType,
                              detail::WidthTypeStorage>::Base::Base;
 
+  /// Return the bitwidth of this type or None if unknown.
+  Optional<int32_t> getWidth() {
+    return static_cast<ConcreteType *>(this)->getWidth();
+  }
+
   /// Return the width of this type, or -1 if it has none specified.
   int32_t getWidthOrSentinel() {
-    auto width = static_cast<ConcreteType *>(this)->getWidth();
+    auto width = getWidth();
     return width.hasValue() ? width.getValue() : -1;
   }
+
+  /// Return true if this type has a known width.
+  bool hasWidth() { return getWidth().hasValue(); }
 };
 
 class SIntType;
@@ -220,7 +269,14 @@ public:
 
   FIRRTLType getElementType();
 
+  /// Get the maximum field ID in this type.  Since FlipTypes are not assigned
+  /// field IDs, this is just the max ID of the element type.
+  unsigned getMaxFieldID();
+
   static FIRRTLType get(FIRRTLType element);
+
+  /// Return the recursive properties of the type.
+  RecursiveTypeProperties getRecursiveTypeProperties();
 };
 
 //===----------------------------------------------------------------------===//
@@ -253,15 +309,36 @@ public:
 
   size_t getNumElements() { return getElements().size(); }
 
+  /// Look up an element's index by name.  This returns None on failure.
+  llvm::Optional<unsigned> getElementIndex(StringRef name);
+
   /// Look up an element by name.  This returns None on failure.
   llvm::Optional<BundleElement> getElement(StringRef name);
+
+  /// Look up an element type by name.
   FIRRTLType getElementType(StringRef name);
 
-  /// Return a pair with the 'isPassive' and 'containsAnalog' bits.
-  std::pair<bool, bool> getRecursiveTypeProperties();
+  /// Return the recursive properties of the type.
+  RecursiveTypeProperties getRecursiveTypeProperties();
 
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLType getPassiveType();
+
+  /// Get an integer ID for the field. Field IDs start at 1, and are assigned
+  /// to each field in a bundle in a recursive pre-order walk of all fields,
+  /// visiting all nested bundle fields.  A field ID of 0 is used to reference
+  /// the bundle itself. The ID can be used to uniquely identify any specific
+  /// field in this bundle.
+  unsigned getFieldID(unsigned index);
+
+  /// Find the element index corresponding to the desired fieldID.  If the
+  /// fieldID corresponds to a field in a nested bundle, it will return the
+  /// index of the parent field.
+  unsigned getIndexForFieldID(unsigned fieldID);
+
+  /// Get the maximum field ID in this bundle.  This is helpful for constructing
+  /// field IDs when this BundleType is nested in another aggregate type.
+  unsigned getMaxFieldID();
 };
 
 //===----------------------------------------------------------------------===//
@@ -279,11 +356,25 @@ public:
   FIRRTLType getElementType();
   unsigned getNumElements();
 
-  /// Return a pair with the 'isPassive' and 'containsAnalog' bits.
-  std::pair<bool, bool> getRecursiveTypeProperties();
+  /// Return the recursive properties of the type.
+  RecursiveTypeProperties getRecursiveTypeProperties();
 
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLType getPassiveType();
+
+  /// Get an integer ID for the field. Field IDs start at 1, and are assigned
+  /// to each field in a vector in a recursive depth-first walk of all elements.
+  /// A field ID of 0 is used to reference the vector itself.
+  unsigned getFieldID(unsigned index);
+
+  /// Find the element index corresponding to the desired fieldID.  If the
+  /// fieldID corresponds to a field in nested under an element, it will return
+  /// the index of the parent element.
+  unsigned getIndexForFieldID(unsigned fieldID);
+
+  /// Get the maximum field ID in this vector.  This is helpful for constructing
+  /// field IDs when this VectorType is nested in another aggregate type.
+  unsigned getMaxFieldID();
 };
 
 } // namespace firrtl

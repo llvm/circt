@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Seq/SeqDialect.h"
-#include "circt/Dialect/RTL/RTLOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -24,18 +24,13 @@ using namespace seq;
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
-SeqDialect::SeqDialect(MLIRContext *context)
-    : Dialect(getDialectNamespace(), context,
-              ::mlir::TypeID::get<SeqDialect>()) {
-
+void SeqDialect::initialize() {
   // Register operations.
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/Seq/Seq.cpp.inc"
       >();
 }
-
-SeqDialect::~SeqDialect() {}
 
 /// Registered hook to materialize a single constant operation from a given
 /// attribute value with the desired resultant type. This method should use
@@ -49,7 +44,7 @@ Operation *SeqDialect::materializeConstant(OpBuilder &builder, Attribute value,
   // Integer constants.
   if (auto intType = type.dyn_cast<IntegerType>())
     if (auto attrValue = value.dyn_cast<IntegerAttr>())
-      return builder.create<rtl::ConstantOp>(loc, type, attrValue);
+      return builder.create<hw::ConstantOp>(loc, type, attrValue);
 
   return nullptr;
 }
