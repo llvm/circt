@@ -310,6 +310,19 @@ firrtl.circuit "TopLevel"  {
     }
   }
 
+  firrtl.module @PartialConnectWireSemantics() {
+    %a = firrtl.wire  : !firrtl.bundle<a: bundle<a: uint<1>>>
+    %ax = firrtl.wire  : !firrtl.bundle<a: bundle<a: uint<1>>>
+    firrtl.partialconnect %a, %ax : !firrtl.bundle<a: bundle<a: uint<1>>>, !firrtl.bundle<a: bundle<a: uint<1>>>
+    %0 = firrtl.subfield %a("a") : (!firrtl.bundle<a: bundle<a: uint<1>>>) -> !firrtl.bundle<a: uint<1>>
+    %1 = firrtl.subfield %ax("a") : (!firrtl.bundle<a: bundle<a: uint<1>>>) -> !firrtl.bundle<a: uint<1>>
+    firrtl.partialconnect %1, %0 : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
+   // CHECK:   %a_a_a = firrtl.wire  : !firrtl.uint<1>
+   // CHECK:   %ax_a_a = firrtl.wire  : !firrtl.uint<1>
+   // CHECK:   firrtl.connect %a_a_a, %ax_a_a : !firrtl.uint<1>, !firrtl.uint<1>
+   // CHECK:   firrtl.connect %ax_a_a, %a_a_a : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+
 
 
 }
