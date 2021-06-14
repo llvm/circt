@@ -1,3 +1,4 @@
+// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-lower-bundle-vectors)' -split-input-file %s | FileCheck %s
 firrtl.circuit "TopLevel"  {
   firrtl.module @TopLevel(out %sink_a : !firrtl.uint<1>, out %sink_b : !firrtl.uint<2>, out %sink_c : !firrtl.uint<3>) {
     %a = firrtl.wire : !firrtl.bundle<a: bundle<a: uint<1>>, b: uint<2>>

@@ -614,7 +614,11 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
   SmallVector<Type, 8> resultTypes;
   SmallVector<size_t, 8> numFieldsPerResult;
   SmallVector<StringAttr, 8> resultNames;
+  bool needsLowering = false;
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
+    if ( getCanonicalAggregateType(op.getType(i).cast<FIRRTLType>()))
+      needsLowering = true;
+
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes = peelType(op.getType(i).cast<FIRRTLType>());
 
@@ -624,6 +628,8 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
     }
     numFieldsPerResult.push_back(fieldTypes.size());
   }
+  if (!needsLowering)
+    return ;
   auto newInstance = builder->create<InstanceOp>(
       resultTypes, op.moduleNameAttr(), op.nameAttr(), op.annotations());
   size_t nextResult = 0;
