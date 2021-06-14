@@ -801,8 +801,12 @@ public:
   Expr *declareVar(FIRRTLType type, Location loc);
 
   /// Constrain the value "larger" to be greater than or equal to "smaller".
-  /// These may be aggregate values.
+  /// These may be aggregate values. This is used for regular connects.
   void constrainTypes(Value larger, Value smaller);
+
+  /// Constrain the value "larger" to be greater than or equal to "smaller".
+  /// These may be aggregate values. This is used for partial connects.
+  void partiallyConstrainTypes(Value larger, Value smaller);
 
   /// Constrain the expression "larger" to be greater than or equals to
   /// the expression "smaller".
@@ -1108,12 +1112,8 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
 
       // Handle the various connect statements that imply a type constraint.
       .Case<ConnectOp>([&](auto op) { constrainTypes(op.dest(), op.src()); })
-      .Case<PartialConnectOp>([&](auto op) {
-        if (!hasUninferredWidth(op.dest().getType()))
-          return;
-        op.emitOpError("not supported in width inference");
-        mappingFailed = true;
-      })
+      .Case<PartialConnectOp>(
+          [&](auto op) { partiallyConstrainTypes(op.dest(), op.src()); })
       .Case<AttachOp>([&](auto op) {
         // Attach connects multiple analog signals together. All signals must
         // have the same bit width. Signals without bit width inherit from the
@@ -1250,14 +1250,14 @@ void InferenceMapping::declareVars(Value value, Location loc) {
 }
 
 /// Establishes constraints to ensure the sizes in the `larger` type are greater
-/// than or equal to the sizes in the `smaller` type.
+/// than or equal to the sizes in the `smaller` type. Types have to be
+/// compatible in the sense that they may only differ in the presence or absence
+/// of bit widths.
+///
+/// This function is used to apply regular connects.
 void InferenceMapping::constrainTypes(Value larger, Value smaller) {
-  auto type = larger.getType().dyn_cast<FIRRTLType>();
-  // Strip an outer flip off the type if there is one.  We don't want to
-  // interpret an outerflip the same way as a flip in a bundle.
-  if (auto flipType = type.dyn_cast<FlipType>())
-    type = flipType.getElementType();
   // Recurse to every leaf element and set larger >= smaller.
+  auto type = larger.getType().cast<FIRRTLType>().stripFlip().first;
   auto fieldID = 0;
   std::function<void(FIRRTLType, Value, Value)> constrain =
       [&](FIRRTLType type, Value larger, Value smaller) {
@@ -1282,6 +1282,52 @@ void InferenceMapping::constrainTypes(Value larger, Value smaller) {
       };
 
   constrain(type, larger, smaller);
+}
+
+/// Establishes constraints to ensure the sizes in the `larger` type are greater
+/// than or equal to the sizes in the `smaller` type. The types do not have to
+/// be identical, but they must be similar in the sense that corresponding
+/// fields must have the same kind (scalars, bundles, vectors).
+///
+/// This function is used to apply partial connects.
+void InferenceMapping::partiallyConstrainTypes(Value larger, Value smaller) {
+  // Recurse to every leaf element and set larger >= smaller.
+  std::function<void(FIRRTLType, Value, unsigned, FIRRTLType, Value, unsigned)>
+      constrain = [&](FIRRTLType aType, Value a, unsigned aID, FIRRTLType bType,
+                      Value b, unsigned bID) {
+        if (auto aFlipType = aType.dyn_cast<FlipType>()) {
+          auto bFlipType = bType.cast<FlipType>();
+          // Flip the LHS and RHS.
+          constrain(bFlipType.getElementType(), b, bID,
+                    aFlipType.getElementType(), a, aID);
+        } else if (auto aBundle = aType.dyn_cast<BundleType>()) {
+          auto bBundle = bType.cast<BundleType>();
+          for (unsigned aIndex = 0, e = aBundle.getNumElements(); aIndex < e;
+               ++aIndex) {
+            auto aField = aBundle.getElements()[aIndex].name.getValue();
+            auto bIndex = bBundle.getElementIndex(aField);
+            if (!bIndex)
+              continue;
+            auto &aElt = aBundle.getElements()[aIndex];
+            auto &bElt = bBundle.getElements()[*bIndex];
+            constrain(aElt.type, a, aID + aBundle.getFieldID(aIndex), bElt.type,
+                      b, bID + bBundle.getFieldID(*bIndex));
+          }
+        } else if (auto aVecType = aType.dyn_cast<FVectorType>()) {
+          auto bVecType = bType.cast<FVectorType>();
+          constrain(aVecType.getElementType(), a, aID + 1,
+                    bVecType.getElementType(), b, bID + 1);
+        } else if (aType.isGround()) {
+          // Leaf element, look up their expressions, and create the constraint.
+          constrainTypes(getExpr(FieldRef(a, aID)), getExpr(FieldRef(b, bID)));
+        } else {
+          llvm_unreachable("Unknown type inside a bundle!");
+        }
+      };
+
+  auto largerType = larger.getType().cast<FIRRTLType>().stripFlip().first;
+  auto smallerType = smaller.getType().cast<FIRRTLType>().stripFlip().first;
+  constrain(largerType, larger, 0, smallerType, smaller, 0);
 }
 
 /// Establishes constraints to ensure the sizes in the `larger` type are greater
@@ -1310,8 +1356,7 @@ void InferenceMapping::unifyTypes(FieldRef lhs, FieldRef rhs, FIRRTLType type) {
 
   // Strip an outer flip off the type if there is one.  We don't want to
   // interpret an outerflip the same way as a flip in a bundle.
-  if (auto flipType = type.dyn_cast<FlipType>())
-    type = flipType.getElementType();
+  type = type.stripFlip().first;
 
   // Co-iterate the two field refs, recurring into every leaf element and set
   // them equal.
