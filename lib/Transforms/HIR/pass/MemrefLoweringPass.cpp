@@ -273,15 +273,14 @@ void MemrefLoweringPass::updateOp(hir::LoadOp op) {
   Value tstart = op.tstart();
   Value offset = op.offset();
   assert(!offset);
-  builder.create<hir::SendOp>(op.getLoc(), c1, addrBus,
-                              SmallVector<Value, 1>({c0}), tstart, Value());
+  builder.create<hir::SendOp>(op.getLoc(), c1, addrBus, c0, tstart, Value());
 
   Value addr = createAddrTuple(builder, op.getLoc(), op.getAddrIdx(),
                                memTy.getAddrShape());
 
   if (addr) { // bram.
-    builder.create<hir::SendOp>(op.getLoc(), addr, addrBus,
-                                SmallVector<Value, 1>({c1}), tstart, Value());
+    builder.create<hir::SendOp>(op.getLoc(), addr, addrBus, c1, tstart,
+                                Value());
   }
 
   Value tstartPlus1 =
@@ -289,9 +288,8 @@ void MemrefLoweringPass::updateOp(hir::LoadOp op) {
           .create<hir::DelayOp>(op.getLoc(), helper::getTimeType(context),
                                 tstart, cMemrefRdDelay, tstart, Value())
           .getResult();
-  auto recvOp = builder.create<hir::RecvOp>(
-      op.getLoc(), op.res().getType(), dataBus, SmallVector<Value, 1>({c0}),
-      tstartPlus1, Value());
+  auto recvOp = builder.create<hir::RecvOp>(op.getLoc(), op.res().getType(),
+                                            dataBus, c0, tstartPlus1, Value());
   op.replaceAllUsesWith(recvOp.getOperation());
   op.getOperation()->dropAllReferences();
   op.getOperation()->dropAllUses();
@@ -328,12 +326,10 @@ void MemrefLoweringPass::updateOp(hir::StoreOp op) {
   Value tstart = op.tstart();
   Value offset = op.offset();
   assert(!offset);
-  builder.create<hir::SendOp>(op.getLoc(), c1, writeBus,
-                              SmallVector<Value, 1>({c0}), tstart, Value());
+  builder.create<hir::SendOp>(op.getLoc(), c1, writeBus, c0, tstart, Value());
   Value addr = createAddrAndDataTuple(builder, op.getLoc(), op.getAddrIdx(),
                                       memTy.getAddrShape(), value);
-  builder.create<hir::SendOp>(op.getLoc(), addr, writeBus,
-                              SmallVector<Value, 1>({c1}), tstart, Value());
+  builder.create<hir::SendOp>(op.getLoc(), addr, writeBus, c1, tstart, Value());
   op.getOperation()->dropAllReferences();
   op.getOperation()->dropAllUses();
   op.getOperation()->erase();

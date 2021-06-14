@@ -2,6 +2,7 @@ add_circt_dialect_library(CIRCTHIR
   helper.cpp  
   HIR.cpp  
   HIRDialect.cpp  
+  HIRInterfaces.cpp
   HIROpSyntax.cpp  
   HIROpVerifier.cpp  
   HIROpCanonicalizer.cpp

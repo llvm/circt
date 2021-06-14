@@ -91,18 +91,24 @@ def LoadOp : HIR_Op<"load", [NoSideEffect,AttrSizedOperandSegments]> {
   let summary = "read from a memory.";
   let description = [{
     This Op reads from a memory interface. 
+      Indices for banks should be of index type and indices for address should be
+      integers of correct width (based on the size of the dimension).
+
       Example:
 
-      ```mlir hir.load %A[%x,%y] at %t : !hir.memref<...>[i32,i32]```
+      ```mlir hir.load %A[%x,%y] at %t : !hir.memref<...>```
   }];
 
   let arguments = (ins MemrefType:$mem, 
       Variadic<AnyType>:$indices, TimeType : $tstart,
       Optional<Index>: $offset);
   let results = (outs AnyType: $res);
-  let assemblyFormat = [{$mem `[`  $indices `]` `at` $tstart (`+` $offset^)? 
-    attr-dict `:`custom<MemrefAndElementType>(ref($mem),type($mem),type($res)) 
-      `[` type($indices)`]`}];
+  let assemblyFormat = [{
+    $mem `[`  $indices `]` `at` $tstart (`+` $offset^)? 
+      attr-dict
+      `:`custom<MemrefAndElementType>
+      (type($mem),type($indices),type($res)) 
+  }];
   let hasCanonicalizeMethod = true;
   let extraClassDeclaration = [{
     public:
@@ -115,22 +121,24 @@ def StoreOp : HIR_Op<"store", [AttrSizedOperandSegments]> {
   let summary = "Write to a memory.";
   let description = [{
     This Op writes to memory. 
+      Indices for banks should be of index types and indices for address should be
+      integers of correct width (based on the size of the dimension).
+
       Example:
 
-      ```
-      mlir hir.mem_write %v to %A[%x,%y] at %t 
-      : !hir.memref<...>[i32,i32]
-      ```
+      ```mlir hir.mem_write %v to %A[%x,%y] at %t + %1 : !hir.memref<...>```
   }];
 
   let arguments = (ins AnyType:$value, MemrefType:$mem,
       Variadic<AnyType>:$indices, 
       TimeType :$tstart, Optional<Index>:$offset);
   let results = (outs );
-  let assemblyFormat = [{$value `to` $mem  `[` $indices `]` `at` $tstart 
-    (`+` $offset^ )? attr-dict 
-      `:` custom<MemrefAndElementType>(ref($mem), type($mem), type($value) )
-      `[`type($indices) `]` }];
+  let assemblyFormat = [{
+    $value `to` $mem  `[` $indices `]` `at` $tstart (`+` $offset^ )? attr-dict `:` 
+      custom<MemrefAndElementType>
+      (type($mem),type($indices), type($value))
+  }];
+
   let hasCanonicalizeMethod = true;
   let extraClassDeclaration = [{
     public:
@@ -139,38 +147,42 @@ def StoreOp : HIR_Op<"store", [AttrSizedOperandSegments]> {
   }];
 }
 
-def SendOp : HIR_Op<"send", [AttrSizedOperandSegments]> {
+def SendOp : HIR_Op<"send", []> {
   let summary = "write to an interface.";
   let description = [{
-    This Op writes to group or array. 
-      ```
+    This Op writes to a bus. 
+    Example:
+      ```mlir hir.send %1 to %v[%0] : !hir.bus<...>```
   }];
 
   let arguments = (ins AnyType:$value, AnyType:$bus,
-      Variadic<Index>:$indices, 
+      Index:$index, 
       TimeType :$tstart, Optional<Index>:$offset);
   let results = (outs );
-  let assemblyFormat = [{$value `to` $bus  (`[` $indices^ `]`)? `at` $tstart 
-    (`+` $offset^ )? attr-dict 
-      `:` type($value) `to` type($bus) }];
+  let assemblyFormat = [{
+    $value `to` $bus  `[` $index `]` `at` $tstart (`+` $offset^ )? attr-dict 
+      `:` type($value) `to` type($bus)  
+  }];
   let hasCanonicalizeMethod = true;
 }
 
-def RecvOp : HIR_Op<"recv", [AttrSizedOperandSegments]> {
+def RecvOp : HIR_Op<"recv", []> {
   let summary = "read from a group or array.";
   let description = [{
-    This Op Reads from group or array. 
-      ```
+    This Op Reads from a bus. 
+
+    ```mlir %v = hir.recv %x[%0] : !hir.bus<...> -> i32```
   }];
 
   let arguments = (ins AnyType:$bus,
-      Variadic<Index>:$indices, 
+      Index:$index, 
       TimeType :$tstart, Optional<Index>:$offset);
   let results = (outs AnyType:$res);
 
-  let assemblyFormat = [{$bus  (`[` $indices^ `]`)? `at` $tstart 
-    (`+` $offset^ )? attr-dict 
-      `:` type($bus) `->` type($res) }];
+  let assemblyFormat = [{
+    $bus  `[` $index `]` `at` $tstart (`+` $offset^ )? attr-dict 
+      `:` type($bus) `->` type($res)  
+  }];
   let hasCanonicalizeMethod = true;
 }
 

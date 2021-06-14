@@ -52,11 +52,11 @@ parseOptionalArrayAccess(OpAsmParser &parser,
     return success();
   do {
     int val;
+    auto *context = parser.getBuilder().getContext();
     OpAsmParser::OperandType var;
     OptionalParseResult result = parser.parseOptionalInteger(val);
     if (result.hasValue() && !result.getValue()) {
-      tempConstAddrs.push_back(
-          helper::getIntegerAttr(parser.getBuilder().getContext(), 32, val));
+      tempConstAddrs.push_back(helper::getIntegerAttr(context, 32, val));
     } else if (!parser.parseOperand(var)) {
       varAddrs.push_back(var);
       tempConstAddrs.push_back(helper::getIntegerAttr(
@@ -139,20 +139,33 @@ void printOptionalArrayAccessTypes(OpAsmPrinter &printer, Operation *op,
   printer << "]";
 }
 
-ParseResult parseMemrefAndElementType(OpAsmParser &parser,
-                                      OpAsmParser::OperandType mem,
-                                      Type &memrefTy, Type &resTy) {
+ParseResult parseMemrefAndElementType(OpAsmParser &parser, Type &memrefTy,
+                                      SmallVectorImpl<Type> &idxTypes,
+                                      Type &elementTy) {
+  auto memTyLoc = parser.getCurrentLocation();
   if (parser.parseType(memrefTy))
     return failure();
-  auto memTyLoc = parser.getCurrentLocation();
   auto memTy = memrefTy.dyn_cast<hir::MemrefType>();
   if (!memTy)
     return parser.emitError(memTyLoc, "Expected hir.memref type!");
-  resTy = memTy.getElementType();
+  auto builder = parser.getBuilder();
+  auto *context = builder.getContext();
+  auto shape = memTy.getShape();
+  auto dimKinds = memTy.getDimensionKinds();
+
+  for (int i = 0; i < (int)dimKinds.size(); i++) {
+    if (dimKinds[i] == MemrefType::BANK)
+      idxTypes.push_back(IndexType::get(context));
+    else {
+      idxTypes.push_back(IntegerType::get(context, helper::clog2(shape[i])));
+    }
+  }
+
+  elementTy = memTy.getElementType();
   return success();
 }
 
-void printMemrefAndElementType(OpAsmPrinter &printer, Operation *op, Value mem,
-                               Type memrefTy, Type resTy) {
+void printMemrefAndElementType(OpAsmPrinter &printer, Operation *,
+                               Type memrefTy, TypeRange, Type) {
   printer << memrefTy;
 }

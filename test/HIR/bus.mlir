@@ -28,8 +28,10 @@ hir.func @testBus at %t(%a:i32 delay 2,
   %2 = constant   2  :index
   %3 = constant   3  :index
   %i1 = constant  11 :index
+  %i1_i4 = constant 11  :i4
   %i2 = constant  12 :index
   %j1 = constant  2  :index
+  %j1_i4 = constant  2  :i4
   %j2 = constant  3  :index
 
   hir.call @testBus(%a,%b,%c) at %t
@@ -53,16 +55,14 @@ hir.func @testBus at %t(%a:i32 delay 2,
   //hir.send %i to %br_addr_send[%j][%1] at %t 
   //%v = hir.recv %br_data_recv[%j] at %t+1
 
-  %v =  hir.load %mr[%i1,%j1, %i2,%j2] at %t 
+  %v =  hir.load %mr[%i1_i4,%j1_i4, %i2,%j2] at %t 
   : !hir.memref<16x16x4x4xi32,[0,1],#r_bram>
-  [index,index,index,index]
 
   //hir.send %1 to %bw_send[%j][%0]
   //%iv = hir.tuple (%i,%v)
   //hir.send %iv to %bw_send[%j][%1]
-  hir.store %v to %mw[%i1,%i2, %j1,%j2] at %t+%3
+  hir.store %v to %mw[%i1_i4,%j1_i4, %i2,%j2] at %t+%3
   : !hir.memref<16x16x4x4xi32,[0,1],#w_bram>
-  [index,index,index,index]
 
 
   %regr, %regw= hir.alloca("reg") 
@@ -71,10 +71,9 @@ hir.func @testBus at %t(%a:i32 delay 2,
   
   %v2 =  hir.load %regr[%i1] at %t 
   : !hir.memref<6xi32,[0],#r_reg>
-  [index]
 
   hir.store %v2 to %regw[%j1] at %t
-  : !hir.memref<6xi32,[0],#w_reg> [index]
+  : !hir.memref<6xi32,[0],#w_reg>
 
   %f1 = index_cast %1 : index to i32
   %f2 = constant 2:i32
@@ -83,9 +82,8 @@ hir.func @testBus at %t(%a:i32 delay 2,
   %f5 = index_cast %f4 : index to i32
 
   //
-  hir.store %f5 to %mw[%i1,%i2, %j1,%j2] at %t+%3
+  hir.store %f5 to %mw[%i1_i4,%j1_i4, %i2,%j2] at %t+%3
   : !hir.memref<16x16x4x4xi32,[0,1],#w_bram>
-  [index,index,index,index]
 
   hir.return
 }

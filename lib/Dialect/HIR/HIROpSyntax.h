@@ -42,6 +42,8 @@ parseOptionalArrayAccess(OpAsmParser &parser,
 void printOptionalArrayAccess(OpAsmPrinter &printer, Operation *op,
                               OperandRange varAddrs, ArrayAttr constAddrs);
 
-ParseResult parseMemrefAndElementType(OpAsmParser &, OpAsmParser::OperandType,
-                                      Type &, Type &);
-void printMemrefAndElementType(OpAsmPrinter &, Operation *, Value, Type, Type);
+ParseResult parseMemrefAndElementType(OpAsmParser &, Type &,
+                                      SmallVectorImpl<Type> &, Type &);
+
+void printMemrefAndElementType(OpAsmPrinter &, Operation *, Type, TypeRange,
+                               Type);

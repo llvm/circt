@@ -322,11 +322,13 @@ public:
   SmallVector<DimKind, 4> getDimensionKinds() {
     SmallVector<DimKind, 4> dimensionKinds;
     auto bankDims = getBankDims();
-    for (auto i = 0; i < (int)getShape().size(); i++) {
+    for (auto i = (int)getShape().size() - 1; i >= 0; i--) {
       bool isBankDim = false;
       for (auto bankDim : bankDims) {
-        if (i == bankDim.dyn_cast<IntegerAttr>().getInt())
+        if (i == bankDim.dyn_cast<IntegerAttr>().getInt()) {
           isBankDim = true;
+          break;
+        }
       }
       if (isBankDim)
         dimensionKinds.push_back(BANK);
