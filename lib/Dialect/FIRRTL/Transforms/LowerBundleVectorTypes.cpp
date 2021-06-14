@@ -73,8 +73,12 @@ static SmallVector<FlatBundleFieldEntry> peelType(FIRRTLType type) {
                 tmpSuffix.resize(0);
                 tmpSuffix.push_back('_');
                 tmpSuffix.append(elt.name.getValue());
-                retval.emplace_back(elt.type, tmpSuffix, isFlipped);
-              }
+                if (auto flip = elt.type.template dyn_cast<FlipType>()) {
+                  retval.emplace_back(flip.getElementType(), tmpSuffix, !isFlipped);
+                } else {
+                  retval.emplace_back(elt.type, tmpSuffix, isFlipped);
+                }
+                                          }
             })
             .Case<FVectorType>([&](auto vector) {
               // Increment the field ID to point to the first element.
@@ -185,8 +189,8 @@ static AnnotationSet filterAnnotations(AnnotationSet annotations,
     void visitExpr(SubfieldOp op, ArrayRef<Value> mapping);
     void visitExpr(SubindexOp op, ArrayRef<Value> mapping);
 //    void visitExpr(SubaccessOp op, ArrayRef<Value> mapping);
-//    void visitExpr(MuxPrimOp op, ArrayRef<Value> mapping);
-//    void visitStmt(ConnectOp op, ArrayRef<Value> mapping);
+    void visitExpr(MuxPrimOp op, ArrayRef<Value> mapping);
+    void visitStmt(ConnectOp op, ArrayRef<Value> mapping);
 //    void visitStmt(WhenOp op, ArrayRef<Value> mapping);
 //    void visitStmt(PartialConnectOp op, ArrayRef<Value> mapping);
 
@@ -209,6 +213,82 @@ void TypeLoweringVisitor::lowerModule(Operation *op) {
     return visitDecl(extModule);
 }
 
+// Expand connects of aggregates
+void TypeLoweringVisitor::visitStmt(ConnectOp op, ArrayRef<Value> mapping) {
+  if (!mapping.empty())
+    return;
+  // Attempt to get the bundle types, potentially unwrapping an outer flip
+  // type that wraps the whole bundle.
+  FIRRTLType resultType = getCanonicalAggregateType(op.src().getType());
+
+  // Ground Type
+  if (!resultType)
+    return;
+
+  SmallVector<FlatBundleFieldEntry> fields = peelType(resultType);
+
+  // Loop over the leaf aggregates.
+  for (auto field : llvm::enumerate(fields)) {
+    Value src, dest;
+    if (BundleType bundle = resultType.dyn_cast<BundleType>()) {
+    src = builder->create<SubfieldOp>(op.src(), bundle.getElement(field.index()).name);
+    dest = builder->create<SubfieldOp>(op.dest(),
+                                       bundle.getElement(field.index()).name);
+    } else if (FVectorType fvector = resultType.dyn_cast<FVectorType>()) {
+      src = builder->create<SubindexOp>(op.src(), field.index());
+      dest = builder->create<SubindexOp>(op.dest(), field.index());
+    } else {
+      op->emitError("Unknown aggregate type");
+    }
+    if (field.value().isOutput)
+    std::swap(src,dest);
+    builder->create<ConnectOp>(dest, src);
+  }
+opsToRemove.push_back(op);
+}
+
+// Expand muxes of aggregates
+void TypeLoweringVisitor::visitExpr(MuxPrimOp op, ArrayRef<Value> mapping) {
+  if (!mapping.empty())
+    return;
+
+  Value result = op.result();
+
+  // Attempt to get the bundle types, potentially unwrapping an outer flip
+  // type that wraps the whole bundle.
+  FIRRTLType resultType = getCanonicalAggregateType(result.getType());
+
+  // If the wire is not a bundle, there is nothing to do.
+  if (!resultType)
+    return;
+
+  SmallVector<FlatBundleFieldEntry, 8> fieldTypes = peelType(resultType);
+  SmallVector<Value> lowered;
+
+  // Loop over the leaf aggregates.
+  for (auto field : llvm::enumerate(fieldTypes)) {
+    Value high, low;
+    if (BundleType bundle = resultType.dyn_cast<BundleType>()) {
+      high = builder->create<SubfieldOp>(op.high(),
+                                        bundle.getElement(field.index()).name);
+      low = builder->create<SubfieldOp>(op.low(),
+                                         bundle.getElement(field.index()).name);
+    } else if (FVectorType fvector = resultType.dyn_cast<FVectorType>()) {
+      high = builder->create<SubindexOp>(op.high(), field.index());
+      low = builder->create<SubindexOp>(op.low(), field.index());
+    } else {
+      op->emitError("Unknown aggregate type");
+    }
+
+    auto mux = builder->create<MuxPrimOp>(op.sel(), high, low);
+    lowered.push_back(mux.getResult());
+  }
+  for (auto user : op->getUsers()) {
+    dispatchVisitor(user, lowered);
+  }
+  opsToRemove.push_back(op);
+}
+
 void TypeLoweringVisitor::visitDecl(FExtModuleOp module) {
 }
 
@@ -226,10 +306,10 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp module) {
     //     lowerArg(module, arg, type);
 
     // Lower the operations.
-    for (auto &op : body->getOperations()) {
-      builder->setInsertionPointAfter(&op);
-      builder->setLoc(op.getLoc());
-      dispatchVisitor(&op, ArrayRef<Value>());
+    for (auto iop = body->rbegin(), iep = body->rend(); iop != iep; ++iop) {
+      builder->setInsertionPoint(&*iop);
+      builder->setLoc(iop->getLoc());
+      dispatchVisitor(&*iop, ArrayRef<Value>());
     }
 
     for (auto *op : opsToRemove)
@@ -284,7 +364,7 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp module) {
     op.replaceAllUsesWith(mapping[*bundleType.getElementIndex(op.fieldname())]);
 
     // Remember to remove the original op.
-    op.erase();
+op.erase();
   }
 
   void TypeLoweringVisitor::visitExpr(SubindexOp op, ArrayRef<Value> mapping) {
@@ -295,12 +375,11 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp module) {
     auto inputType = input.getType();
     if (auto flipType = inputType.dyn_cast<FlipType>())
       inputType = flipType.getElementType();
-    auto vectorType = inputType.cast<FVectorType>();
 
     op.replaceAllUsesWith(mapping[op.index()]);
 
     // Remember to remove the original op.
-    op.erase();
+op.erase();
   }
 
   //

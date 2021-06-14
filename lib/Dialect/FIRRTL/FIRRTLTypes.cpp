@@ -759,6 +759,11 @@ auto BundleType::getElement(StringRef name) -> Optional<BundleElement> {
   return None;
 }
 
+/// Look up an element by index.
+BundleType::BundleElement BundleType::getElement(size_t index) {
+  return getElements()[index];
+}
+
 FIRRTLType BundleType::getElementType(StringRef name) {
   auto element = getElement(name);
   return element.hasValue() ? element.getValue().type : FIRRTLType();

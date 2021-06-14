@@ -315,6 +315,9 @@ public:
   /// Look up an element by name.  This returns None on failure.
   llvm::Optional<BundleElement> getElement(StringRef name);
 
+  // Look up an element by index.  Index must be valid.
+  BundleElement getElement(size_t index); 
+
   /// Look up an element type by name.
   FIRRTLType getElementType(StringRef name);
 
