@@ -45,8 +45,8 @@ circuit test_mod : %[[{"a": "a"}]]
 ; Check that we canonicalize the HW output of lowering.
 ;
 ; MLIRLOWER: hw.module @cat(%a: i2, %b: i2, %c: i2) -> (%d: i6) {
-; MLIRLOWER:   %x_i6 = sv.constantX : i6
-; MLIRLOWER:   hw.output %x_i6 : i6
+; MLIRLOWER:   %0 = comb.concat %a, %b, %c : (i2, i2, i2) -> i6
+; MLIRLOWER:   hw.output %0 : i6
 ; MLIRLOWER: }
 
   module implicitTrunc :
@@ -115,5 +115,7 @@ circuit test_mod : %[[{"a": "a"}]]
 ; VERILOG-LABEL: module flipFlop(
 ; VERILOG-NEXT:    input clock, a_d,
 ; VERILOG-NEXT:    output a_q);
-; VERILOG:         assign a_q = 1'bx;
+; VERILOG:         always_ff @(posedge clock)
+; VERILOG-NEXT:      r <= a_d;
+; VERILOG-NEXT:    assign a_q = r;
 ; VERILOG:       endmodule

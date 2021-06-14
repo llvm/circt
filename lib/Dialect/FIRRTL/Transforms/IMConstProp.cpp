@@ -614,12 +614,9 @@ void IMConstPropPass::visitOperation(Operation *op) {
 
 void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
   auto *body = module.getBodyBlock();
-  // If a module is unreachable, then nuke its body.
-  if (!executableBlocks.count(body)) {
-    while (!body->empty())
-      body->back().erase();
+  // If a module is unreachable, just ignore it.
+  if (!executableBlocks.count(body))
     return;
-  }
 
   auto builder = OpBuilder::atBlockBegin(body);
 

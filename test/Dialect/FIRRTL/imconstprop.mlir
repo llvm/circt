@@ -106,10 +106,12 @@ firrtl.circuit "Test" {
     firrtl.instance @ReadMem {name = "ReadMem"}
   }
 
-  // Unused modules should be completely dropped.
+  // Unused modules should NOT be completely dropped.
+  // https://github.com/llvm/circt/issues/1236
 
   // CHECK-LABEL: @UnusedModule(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>)
   firrtl.module @UnusedModule(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>) {
+    // CHECK-NEXT: firrtl.connect %dest, %source
     firrtl.connect %dest, %source : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK-NEXT: }
   }
