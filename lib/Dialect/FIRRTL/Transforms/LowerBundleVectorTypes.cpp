@@ -188,7 +188,7 @@ static AnnotationSet filterAnnotations(AnnotationSet annotations,
 //    void visitExpr(InvalidValueOp op, ArrayRef<Value> mapping);
     void visitExpr(SubfieldOp op, ArrayRef<Value> mapping);
     void visitExpr(SubindexOp op, ArrayRef<Value> mapping);
-//    void visitExpr(SubaccessOp op, ArrayRef<Value> mapping);
+    void visitExpr(SubaccessOp op, ArrayRef<Value> mapping);
     void visitExpr(MuxPrimOp op, ArrayRef<Value> mapping);
     void visitStmt(ConnectOp op, ArrayRef<Value> mapping);
 //    void visitStmt(WhenOp op, ArrayRef<Value> mapping);
@@ -222,8 +222,13 @@ void TypeLoweringVisitor::visitStmt(ConnectOp op, ArrayRef<Value> mapping) {
   FIRRTLType resultType = getCanonicalAggregateType(op.src().getType());
 
   // Ground Type
-  if (!resultType)
+  if (!resultType) {
+    if (SubaccessOp sao = dyn_cast_or_null<SubaccessOp>(op.dest().getDefiningOp())) {
+      visitExpr(sao, ArrayRef<Value>(op.src()));
+      opsToRemove.push_back(op);
+    }
     return;
+  }
 
   SmallVector<FlatBundleFieldEntry> fields = peelType(resultType);
 
@@ -380,6 +385,31 @@ op.erase();
 
     // Remember to remove the original op.
 op.erase();
+  }
+
+  void TypeLoweringVisitor::visitExpr(SubaccessOp op, ArrayRef<Value> mapping) {
+    if (mapping.empty())
+      return;
+      // if we were given a mapping, this is a write and the mapping is the write Value
+
+    // Get the input bundle type.
+    Value input = op.input();
+    auto inputType = input.getType();
+    if (auto flipType = inputType.dyn_cast<FlipType>())
+      inputType = flipType.getElementType();
+
+    auto selectWidth =
+        op.index().getType().cast<FIRRTLType>().getBitWidthOrSentinel();
+
+    for (size_t index = 0, e = inputType.cast<FVectorType>().getNumElements(); index < e; ++index) {
+      auto cond = builder->create<EQPrimOp>(
+                         op.index(), builder->createOrFold<ConstantOp>(
+                                    UIntType::get(op.getContext(), selectWidth),
+                                    APInt(selectWidth, index)));
+      auto whenCond = builder->create<WhenOp>(cond, false, [&]() {
+        builder->create<ConnectOp>(builder->create<SubindexOp>(input, index), mapping[0]);
+      });
+    }
   }
 
   //
