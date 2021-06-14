@@ -1710,8 +1710,11 @@ void InferWidthsPass::runOnOperation() {
     signalPassFailure();
     return;
   }
-  if (mapping.areAllModulesSkipped())
+  if (mapping.areAllModulesSkipped()) {
+    markAllAnalysesPreserved();
     return; // fast path if no inferrable widths are around
+  }
+
   LLVM_DEBUG({
     llvm::dbgs() << "Constraints:\n";
     solver.dumpConstraints(llvm::dbgs());
