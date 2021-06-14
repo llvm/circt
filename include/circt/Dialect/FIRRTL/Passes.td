@@ -23,6 +23,14 @@ def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createLowerFIRRTLTypesPass()";
 }
 
+def LowerBundleVector : Pass<"firrtl-lower-bundle-vectors", "firrtl::CircuitOp"> {
+  let summary = "Lower FIRRTL bundle and vector types to ground types";
+  let description = [{
+    Lower firrtl.module port types to ground types.
+  }];
+  let constructor = "circt::firrtl::createLowerBundleVectorTypesPass()";
+}
+
 def IMConstProp : Pass<"firrtl-imconstprop", "firrtl::CircuitOp"> {
   let summary = "Intermodule constant propagation and dead code elimination";
   let description = [{
