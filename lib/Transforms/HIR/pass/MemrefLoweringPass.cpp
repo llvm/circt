@@ -231,16 +231,16 @@ void MemrefLoweringPass::updateOp(hir::LoadOp op) {
   builder.setInsertionPoint(op);
 
   Value mem = op.mem();
-  Value c0 = builder
-                 .create<hir::ConstantOp>(
-                     op.getLoc(), helper::getConstIntType(context),
-                     helper::getIntegerAttr(context, 64, 0))
-                 .getResult();
-  Value c1 = builder
-                 .create<hir::ConstantOp>(
-                     op.getLoc(), helper::getConstIntType(context),
-                     helper::getIntegerAttr(context, 64, 1))
-                 .getResult();
+  Value c0 =
+      builder
+          .create<hir::ConstantOp>(op.getLoc(), IndexType::get(context),
+                                   helper::getIntegerAttr(context, 64, 0))
+          .getResult();
+  Value c1 =
+      builder
+          .create<hir::ConstantOp>(op.getLoc(), IndexType::get(context),
+                                   helper::getIntegerAttr(context, 64, 1))
+          .getResult();
   MemrefType memTy = mem.getType().dyn_cast<MemrefType>();
   Attribute memrefRdDelayAttr = memTy.getPortAttrs().get("rd");
 
@@ -249,7 +249,7 @@ void MemrefLoweringPass::updateOp(hir::LoadOp op) {
   Value cMemrefRdDelay =
       builder
           .create<hir::ConstantOp>(
-              op.getLoc(), helper::getConstIntType(context),
+              op.getLoc(), IndexType::get(context),
               helper::getIntegerAttr(
                   context, 64,
                   memrefRdDelayAttr.dyn_cast<IntegerAttr>().getInt()))
@@ -305,16 +305,16 @@ void MemrefLoweringPass::updateOp(hir::StoreOp op) {
 
   Value mem = op.mem();
   Value value = op.value();
-  Value c0 = builder
-                 .create<hir::ConstantOp>(
-                     op.getLoc(), helper::getConstIntType(context),
-                     helper::getIntegerAttr(context, 64, 0))
-                 .getResult();
-  Value c1 = builder
-                 .create<hir::ConstantOp>(
-                     op.getLoc(), helper::getConstIntType(context),
-                     helper::getIntegerAttr(context, 64, 1))
-                 .getResult();
+  Value c0 =
+      builder
+          .create<hir::ConstantOp>(op.getLoc(), IndexType::get(context),
+                                   helper::getIntegerAttr(context, 64, 0))
+          .getResult();
+  Value c1 =
+      builder
+          .create<hir::ConstantOp>(op.getLoc(), IndexType::get(context),
+                                   helper::getIntegerAttr(context, 64, 1))
+          .getResult();
   MemrefType memTy = mem.getType().dyn_cast<MemrefType>();
 
   SmallVector<Value, 4> bank = op.getBankIdx();

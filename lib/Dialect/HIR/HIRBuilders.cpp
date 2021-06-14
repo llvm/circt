@@ -20,8 +20,8 @@ void ForOp::endRegion(OpBuilder &builder) {
 
 Block *UnrollForOp::addEntryBlock(MLIRContext *context) {
   Block *entry = new Block;
-  entry->addArgument(hir::ConstType::get(context)); // induction var
-  entry->addArgument(hir::TimeType::get(context));  // iter time
+  entry->addArgument(IndexType::get(context)); // induction var
+  entry->addArgument(TimeType::get(context));  // iter time
   getLoopBody().push_back(entry);
   return entry;
 }

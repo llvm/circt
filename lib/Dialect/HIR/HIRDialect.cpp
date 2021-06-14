@@ -23,8 +23,7 @@ using namespace hir;
 
 HIRDialect::HIRDialect(MLIRContext *context)
     : Dialect(getDialectNamespace(), context, TypeID::get<HIRDialect>()) {
-  addTypes<TimeType, GroupType, ArrayType, BusType, ConstType, FuncType,
-           MemrefType>();
+  addTypes<TimeType, BusType, FuncType, MemrefType>();
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/HIR/HIR.cpp.inc"

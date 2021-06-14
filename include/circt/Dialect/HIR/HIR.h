@@ -227,17 +227,6 @@ public:
   static StringRef getKeyword() { return "time"; }
 };
 
-/// This class defines hir.const type in the dialect.
-class ConstType : public Type::TypeBase<ConstType, Type, TypeStorage> {
-public:
-  using Base::Base;
-  // static bool kindof(unsigned kind) { return kind == ConstKind; }
-  static StringRef getKeyword() { return "const"; }
-  // static ConstType get(MLIRContext *context) {
-  //  return Base::get(context, ConstKind);
-  //}
-};
-
 /// This class defines hir.memref type in the dialect.
 class MemrefType
     : public Type::TypeBase<MemrefType, Type, Details::MemrefTypeStorage> {

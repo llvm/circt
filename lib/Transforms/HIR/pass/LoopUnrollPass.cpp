@@ -41,12 +41,11 @@ void LoopUnrollPass::unrollLoopFull(hir::UnrollForOp unrollForOp) {
 
   // insert the unrolled body.
   for (int i = lb; i < ub; i += step) {
-    Value loopIV =
-        builder
-            .create<hir::ConstantOp>(builder.getUnknownLoc(),
-                                     helper::getConstIntType(context),
-                                     helper::getIntegerAttr(context, 64, 0))
-            .getResult();
+    Value loopIV = builder
+                       .create<hir::ConstantOp>(
+                           builder.getUnknownLoc(), IndexType::get(context),
+                           helper::getIntegerAttr(context, 64, 0))
+                       .getResult();
 
     BlockAndValueMapping operandMap;
     operandMap.map(iterArgs, iterValues);

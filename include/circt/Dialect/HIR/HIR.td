@@ -24,10 +24,6 @@ def HIR_Dialect : Dialect {
 def TimeType : Type<CPred<"$_self.isa<TimeType>()">, "HIR time type">,
     BuildableType<"TimeType::get($_builder.getContext())">;
 
-def ConstType: Type<CPred<"$_self.isa<ConstType>()">
-, "HIR const type">,
-  BuildableType<"ConstType::get($_builder.getContext())">;
-
 def MemrefType: Type<CPred<"$_self.isa<MemrefType>()">,
     "HIR memref type ">,
     BuildableType<"MemrefType::get($_builder.getContext())">;
@@ -102,7 +98,7 @@ def LoadOp : HIR_Op<"load", [NoSideEffect,AttrSizedOperandSegments]> {
 
   let arguments = (ins MemrefType:$mem, 
       Variadic<AnyType>:$indices, TimeType : $tstart,
-      Optional<ConstType>: $offset);
+      Optional<Index>: $offset);
   let results = (outs AnyType: $res);
   let assemblyFormat = [{$mem `[`  $indices `]` `at` $tstart (`+` $offset^)? 
     attr-dict `:`custom<MemrefAndElementType>(ref($mem),type($mem),type($res)) 
@@ -129,7 +125,7 @@ def StoreOp : HIR_Op<"store", [AttrSizedOperandSegments]> {
 
   let arguments = (ins AnyType:$value, MemrefType:$mem,
       Variadic<AnyType>:$indices, 
-      TimeType :$tstart, Optional<ConstType>:$offset);
+      TimeType :$tstart, Optional<Index>:$offset);
   let results = (outs );
   let assemblyFormat = [{$value `to` $mem  `[` $indices `]` `at` $tstart 
     (`+` $offset^ )? attr-dict 
@@ -151,8 +147,8 @@ def SendOp : HIR_Op<"send", [AttrSizedOperandSegments]> {
   }];
 
   let arguments = (ins AnyType:$value, AnyType:$bus,
-      Variadic<ConstType>:$indices, 
-      TimeType :$tstart, Optional<ConstType>:$offset);
+      Variadic<Index>:$indices, 
+      TimeType :$tstart, Optional<Index>:$offset);
   let results = (outs );
   let assemblyFormat = [{$value `to` $bus  (`[` $indices^ `]`)? `at` $tstart 
     (`+` $offset^ )? attr-dict 
@@ -168,29 +164,14 @@ def RecvOp : HIR_Op<"recv", [AttrSizedOperandSegments]> {
   }];
 
   let arguments = (ins AnyType:$bus,
-      Variadic<ConstType>:$indices, 
-      TimeType :$tstart, Optional<ConstType>:$offset);
+      Variadic<Index>:$indices, 
+      TimeType :$tstart, Optional<Index>:$offset);
   let results = (outs AnyType:$res);
 
   let assemblyFormat = [{$bus  (`[` $indices^ `]`)? `at` $tstart 
     (`+` $offset^ )? attr-dict 
       `:` type($bus) `->` type($res) }];
   let hasCanonicalizeMethod = true;
-}
-
-def SelectOp : HIR_Op<"select", [NoSideEffect]> {
-  let summary = "Select a select of the interface.";
-  let description = [{
-    This Op selects from hir.array or hir.group. 
-  }];
-
-  let arguments = (ins AnyType:$bus, 
-      Variadic<AnyType>:$indices);
-  let results = (outs AnyType: $res);
-  let assemblyFormat = [{$bus
-    `[` $indices `]` attr-dict `:` type($bus) `[` type($indices) `]` `->` type($res) }];
-
-  let verifier = [{return verifySelectOp(*this);}];
 }
 
 def ImplicitTerminator
@@ -220,8 +201,8 @@ Example:
     ```mlir %yy = hir.delay %xx by %1 at %tj```
   }];
 
-  let arguments = (ins AnyType : $input, ConstType:$delay, 
-      TimeType:$tstart, Optional<ConstType>: $offset);
+  let arguments = (ins AnyType : $input, Index:$delay, 
+      TimeType:$tstart, Optional<Index>: $offset);
   let results = (outs AnyType : $res);
   let assemblyFormat = [{$input `by` $delay `at` 
     $tstart (`+` $offset^ )? attr-dict `:` type($input) `->` type($res)}];
@@ -292,7 +273,7 @@ def ForOp : HIR_Op<"for",
       }];
 
       let arguments = (ins AnyType: $lb, AnyType: $ub, AnyType: $step, 
-          TimeType:$tstart, ConstType : $offset);
+          TimeType:$tstart, Index : $offset);
       let regions = (region SizedRegion<1>:$region);
       let results = (outs TimeType:$tfinish);
 
@@ -328,7 +309,7 @@ def UnrollForOp : HIR_Op<"unroll_for",
       }];
 
       let arguments = (ins I32Attr: $lb, I32Attr: $ub, I32Attr: $step, 
-          TimeType:$tstart, Optional<ConstType>:$offset);
+          TimeType:$tstart, Optional<Index>:$offset);
       let regions = (region SizedRegion<1>:$region);
       let results = (outs TimeType:$tlast);
 
@@ -360,7 +341,7 @@ def CallOp : HIR_Op<"call",[AttrSizedOperandSegments] > {
       Optional<AnyType>:$callee_var, 
       Variadic<AnyType>:$operands, 
       TimeType:$tstart, 
-      Optional<ConstType>: $offset
+      Optional<Index>: $offset
       );
   let results = (outs Variadic<AnyType> : $res);
 
@@ -425,6 +406,7 @@ def FuncOp : HIR_Op<"func", [
       ///Get the function arguments (excluding tstart).
       SmallVector<Value,4> getOperands();
   }];
+  let verifier =[{return verifyFuncOp(*this);}];
 }
 
 def YieldOp : HIR_Op<"yield", [AttrSizedOperandSegments] > {
@@ -437,7 +419,7 @@ def YieldOp : HIR_Op<"yield", [AttrSizedOperandSegments] > {
   }];
 
   let arguments = (ins Variadic<AnyType> : $operands, TimeType: $tstart,
-      Optional<ConstType>:$offset);
+      Optional<Index>:$offset);
   let results = (outs );
 
   let assemblyFormat = [{ attr-dict (`(` $operands^ `)` `:` type($operands))? 
@@ -477,37 +459,6 @@ def CastOp : HIR_Op<"cast">{
 
 }
 
-def AddOp : HIR_Op<"add",[NoSideEffect,
-    DeclareOpInterfaceMethods<CombBinOpInterface>]>{
-      let summary = "Add two hir.val values";
-      let description = [{
-Examples:
-        ```mlir %1 = hir.add (%x, %y) : (i32, i32) -> (i32)```
-                                         ```mlir %1 = hir.add (%x, %y) : (!hir.const<i32>, !hir.conts<i32>) -> (!hir.const<i32>)```
-      }];
-
-      let arguments = (ins AnyType: $left, AnyType:$right);
-      let results = (outs AnyType: $res);
-
-      let assemblyFormat = [{ `(` $left `,` $right`)` attr-dict `:` `(`
-          type($left) `,` type($right) `)` `->` `(` type($res) `)`}];
-    }
-
-def SubtractOp : HIR_Op<"subtract",[NoSideEffect]>{
-  let summary = "Subtract two hir.val values";
-  let description = [{
-Examples:
-    ```mlir %1 = hir.subtract (%x, %y) : (i32, i32) -> (i32)```
-                                          ```mlir %1 = hir.subtract (%x, %y) : (!hir.const<i32>, !hir.conts<i32>) -> (!hir.const<i32>)```
-  }];
-
-  let arguments = (ins AnyType: $left, AnyType:$right);
-  let results = (outs AnyType: $res);
-
-  let assemblyFormat = [{ `(` $left `,` $right`)` attr-dict `:` `(`
-      type($left) `,` type($right) `)` `->` `(` type($res) `)`}];
-}
-
 def ReturnOp : HIR_Op<"return", [HasParent<"FuncOp">,NoSideEffect,
     Terminator]> {
       let summary = "Return from function";
@@ -537,96 +488,6 @@ def AllocaOp :HIR_Op<"alloca",[NoSideEffect]> {
     `:` type($res)}];
 }
 
-def EQOp : HIR_Op<"eq",[NoSideEffect]>{
-  let summary = "returns true if the values are equal";
-  let description = [{
-Examples:
-    ```mlir %1 = hir.eq (%x, %y) : (i32, i32) -> (i1)```
-                                    ```mlir %1 = hir.eq (%x, %y) :  (!hir.const, !hir.const) -> (!hir.const)```
-  }];
-
-  let arguments = (ins AnyType: $left, AnyType:$right);
-  let results = (outs AnyType: $res);
-
-  let assemblyFormat = [{ `(` $left `,` $right`)` attr-dict `:` `(`
-      type($left) `,` type($right) `)` `->` `(` type($res) `)`}];
-}
-
-def NEQOp : HIR_Op<"neq",[NoSideEffect]>{
-  let summary = "returns true if the values are not equal";
-  let description = [{
-Examples:
-    ```mlir %1 = hir.neq (%x, %y) : (i32, i32) -> (i1)```
-                                     ```mlir %1 = hir.neq (%x, %y) :  (!hir.const, !hir.const) -> (!hir.const)```
-  }];
-
-  let arguments = (ins AnyType: $left, AnyType:$right);
-  let results = (outs AnyType: $res);
-
-  let assemblyFormat = [{ `(` $left `,` $right`)` attr-dict `:` `(`
-      type($left) `,` type($right) `)` `->` `(` type($res) `)`}];
-}
-
-def GTOp : HIR_Op<"gt",[NoSideEffect]>{
-  let summary = "returns an i1 to show if one value is greater than or other";
-  let description = [{
-Examples:
-    ```mlir %1 = hir.gt (%x, %y) : (i32, i32) -> (i1)```
-                                    ```mlir %1 = hir.gt (%x, %y) :  (!hir.const, !hir.const) -> (!hir.const)```
-  }];
-
-  let arguments = (ins AnyType: $left, AnyType:$right);
-  let results = (outs AnyType: $res);
-
-  let assemblyFormat = [{ `(` $left `,` $right`)` attr-dict `:` `(`
-      type($left) `,` type($right) `)` `->` `(` type($res) `)`}];
-}
-
-def LTOp : HIR_Op<"lt",[NoSideEffect]>{
-  let summary = "returns an i1 to show if one value is less than or other";
-  let description = [{
-Examples:
-    ```mlir %1 = hir.gt (%x, %y) : (i32, i32) -> (i1)```
-                                    ```mlir %1 = hir.gt (%x, %y) :  (!hir.const, !hir.const) -> (!hir.const)```
-  }];
-
-  let arguments = (ins AnyType: $left, AnyType:$right);
-  let results = (outs AnyType: $res);
-
-  let assemblyFormat = [{ `(` $left `,` $right`)` attr-dict `:` `(`
-      type($left) `,` type($right) `)` `->` `(` type($res) `)`}];
-}
-
-def AndOp : HIR_Op<"and",[NoSideEffect]>{
-  let summary = "returns and of two i1 inputs";
-  let description = [{
-Examples:
-    ```mlir %1 = hir.gt (%x, %y) : (i1, i1) -> (i1)```
-                                    ```mlir %1 = hir.gt (%x, %y) :  (!hir.const, !hir.const) -> (!hir.const)```
-  }];
-
-  let arguments = (ins AnyType: $left, AnyType:$right);
-  let results = (outs AnyType: $res);
-
-  let assemblyFormat = [{ `(` $left `,` $right`)` attr-dict `:` `(`
-      type($left) `,` type($right) `)` `->` `(` type($res) `)`}];
-}
-
-def OrOp : HIR_Op<"or",[NoSideEffect]>{
-  let summary = "returns 'or' of two i1 inputs";
-  let description = [{
-Examples:
-    ```mlir %1 = hir.gt (%x, %y) : (i1, i1) -> (i1)```
-                                    ```mlir %1 = hir.gt (%x, %y) :  (!hir.const, !hir.const) -> (!hir.const)```
-  }];
-
-  let arguments = (ins AnyType: $left, AnyType:$right);
-  let results = (outs AnyType: $res);
-
-  let assemblyFormat = [{ `(` $left `,` $right`)` attr-dict `:` `(`
-      type($left) `,` type($right) `)` `->` `(` type($res) `)`}];
-}
-
 def TupleOp:HIR_Op<"tuple",[NoSideEffect]>{
   let summary = "creates a tuple from inputs";
   let description = [{
@@ -648,7 +509,7 @@ Examples:
     ```mlir %b2 = hir.split (%b[%i]) : Tensor<!hir.bus<...>> -> !hir.bus<...>```
   }];
 
-  let arguments = (ins AnyType: $bus, Variadic<ConstType>: $indices);
+  let arguments = (ins AnyType: $bus, Variadic<Index>: $indices);
   let results = (outs AnyType: $res);
 
   let assemblyFormat = [{ $bus (`[` $indices^ `]`)? attr-dict `:` 

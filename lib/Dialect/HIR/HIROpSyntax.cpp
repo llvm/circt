@@ -101,15 +101,15 @@ ParseResult parseOptionalArrayAccessTypes(mlir::OpAsmParser &parser,
     i++;
     Type t;
     if (!parser.parseOptionalKeyword("const"))
-      t = helper::getConstIntType(parser.getBuilder().getContext());
+      t = IndexType::get(parser.getBuilder().getContext());
     else if (parser.parseType(t))
       return failure();
 
     if (idx < 0)
       varAddrTypes.push_back(t);
-    else if (!t.isa<hir::ConstType>())
+    else if (!t.isa<IndexType>())
       return parser.emitError(parser.getCurrentLocation(),
-                              "Expected const/!hir.const type");
+                              "Expected index type");
   } while (!parser.parseOptionalComma());
 
   // Finish parsing.
@@ -131,7 +131,7 @@ void printOptionalArrayAccessTypes(OpAsmPrinter &printer, Operation *op,
     int idx = constAddrs[i].dyn_cast<IntegerAttr>().getInt();
     if (idx >= 0)
       printer << "const";
-    else if (varAddrTypes[-idx - 1].isa<hir::ConstType>())
+    else if (varAddrTypes[-idx - 1].isa<IndexType>())
       printer << "const";
     else
       printer << varAddrTypes[-idx - 1];

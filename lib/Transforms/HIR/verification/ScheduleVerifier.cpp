@@ -119,9 +119,9 @@ public:
 
   bool check(mlir::Location opLoc, mlir::Location defLoc, Value v, Value t,
              unsigned delay, std::string useLoc) {
-    // consts are valid at any time.
+    // consts are valid at all time instants.
     Type vType = v.getType();
-    if (vType.isa<hir::ConstType>() || vType.isa<hir::MemrefType>())
+    if (vType.isa<IndexType>() || vType.isa<hir::MemrefType>())
       return true;
     TimeInstant instant = getTimeInstantOrError(v);
     TimeInstant instant2 = getRootTimeInstant(TimeInstant(t, delay));
@@ -156,8 +156,6 @@ private:
   bool inspectOp(ForOp op);
   bool inspectOp(UnrollForOp op);
   bool inspectOp(hir::LoadOp op);
-  bool inspectOp(hir::AddOp op);
-  bool inspectOp(hir::SubtractOp op);
   bool inspectOp(hir::StoreOp op);
   bool inspectOp(hir::ReturnOp op);
   bool inspectOp(hir::YieldOp op);
@@ -326,47 +324,6 @@ bool ScheduleVerifier::inspectOp(hir::StoreOp op) {
   return ok;
 }
 
-bool ScheduleVerifier::inspectOp(hir::AddOp op) {
-  Value result = op.res();
-  Value left = op.left();
-  Value right = op.right();
-  bool ok = true;
-  if (result.getType().isa<hir::ConstType>()) {
-    setIntegerConst(result, getIntegerConstOrError(left) +
-                                getIntegerConstOrError(right));
-  } else {
-    TimeInstant instant = schedule.getTimeInstantOrError(left);
-    if (!instant.t) {
-      fprintf(stderr, "instant.t is empty!");
-      fflush(stderr);
-      assert(false);
-    }
-    ok &= schedule.check(op.getLoc(), getDefiningLoc(right), right, instant.t,
-                         instant.delay, "right operand");
-    schedule.insert(result, instant.t, instant.delay);
-  }
-  return ok;
-}
-
-bool ScheduleVerifier::inspectOp(hir::SubtractOp op) {
-  Value result = op.res();
-  Value left = op.left();
-  Value right = op.right();
-  bool ok = true;
-  if (result.getType().isa<hir::ConstType>()) {
-    setIntegerConst(result, getIntegerConstOrError(left) -
-                                getIntegerConstOrError(right));
-  } else {
-    TimeInstant instant = schedule.getTimeInstantOrError(left);
-    if (!instant.t)
-      return false;
-    ok &= schedule.check(op.getLoc(), getDefiningLoc(right), right, instant.t,
-                         instant.delay, "right operand");
-    schedule.insert(result, instant.t, instant.delay);
-  }
-  return ok;
-}
-
 bool ScheduleVerifier::inspectOp(hir::ReturnOp op) {
   auto operands = op.operands();
   bool ok = true;
@@ -455,10 +412,6 @@ bool ScheduleVerifier::inspectOp(Operation *inst) {
   if (auto op = dyn_cast<hir::RecvOp>(inst))
     return inspectOp(op);
   if (auto op = dyn_cast<hir::SendOp>(inst))
-    return inspectOp(op);
-  if (auto op = dyn_cast<hir::AddOp>(inst))
-    return inspectOp(op);
-  if (auto op = dyn_cast<hir::SubtractOp>(inst))
     return inspectOp(op);
   if (auto op = dyn_cast<hir::YieldOp>(inst))
     return inspectOp(op);

@@ -83,10 +83,6 @@ IntegerType getIntegerType(MLIRContext *context, int bitwidth) {
   return IntegerType::get(context, bitwidth);
 }
 
-ConstType getConstIntType(MLIRContext *context) {
-  return ConstType::get(context);
-}
-
 TimeType getTimeType(MLIRContext *context) { return TimeType::get(context); }
 
 ParseResult parseIntegerAttr(IntegerAttr &value, int bitwidth,

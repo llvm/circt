@@ -396,9 +396,6 @@ Type HIRDialect::parseType(DialectAsmParser &parser) const {
   if (typeKeyword == BusType::getKeyword())
     return parseBusType(parser, getContext());
 
-  if (typeKeyword == ConstType::getKeyword())
-    return ConstType::get(getContext());
-
   return parser.emitError(parser.getNameLoc(), "unknown hir type"), Type();
 }
 
@@ -503,10 +500,6 @@ void HIRDialect::printType(Type type, DialectAsmPrinter &printer) const {
   }
   if (BusType busTy = type.dyn_cast<BusType>()) {
     printBusType(busTy, printer);
-    return;
-  }
-  if (ConstType constTy = type.dyn_cast<ConstType>()) {
-    printer << constTy.getKeyword();
     return;
   }
 }

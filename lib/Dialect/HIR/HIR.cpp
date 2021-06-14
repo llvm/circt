@@ -79,6 +79,7 @@ static ParseResult parseCallOp(OpAsmParser &parser, OperationState &result) {
   if (parser.parseType(calleeTy))
     return failure();
 
+  auto *context = parser.getBuilder().getContext();
   // resolve operands.
   hir::FuncType funcTy = calleeTy.dyn_cast<hir::FuncType>();
   if (!funcTy)
@@ -88,13 +89,9 @@ static ParseResult parseCallOp(OpAsmParser &parser, OperationState &result) {
     parser.resolveOperand(calleeVar, calleeTy, result.operands);
   parser.resolveOperands(operands, funcTy.getFunctionType().getInputs(), argLoc,
                          result.operands);
-  parser.resolveOperand(tstart,
-                        helper::getTimeType(parser.getBuilder().getContext()),
-                        result.operands);
+  parser.resolveOperand(tstart, helper::getTimeType(context), result.operands);
   if (isOffsetPresent)
-    parser.resolveOperand(
-        offset, helper::getConstIntType(parser.getBuilder().getContext()),
-        result.operands);
+    parser.resolveOperand(offset, IndexType::get(context), result.operands);
 
   // add attributes.
   result.addAttribute("operand_segment_sizes",
@@ -177,13 +174,13 @@ static void printForOp(OpAsmPrinter &printer, ForOp op) {
 }
 static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
   auto &builder = parser.getBuilder();
-
-  Type timeTy = helper::getTimeType(parser.getBuilder().getContext());
+  auto *context = parser.getBuilder().getContext();
+  Type timeTy = helper::getTimeType(context);
   Type lbRawType;
   Type ubRawType;
   Type stepRawType;
   Type tstartRawType = timeTy;
-  Type offsetType = helper::getConstIntType(parser.getBuilder().getContext());
+  Type offsetType = IndexType::get(parser.getBuilder().getContext());
   Type regionRawOperandTypes[2];
   ArrayRef<Type> regionOperandTypes(regionRawOperandTypes);
   regionRawOperandTypes[1] = timeTy;
@@ -265,14 +262,14 @@ static void printUnrollForOp(OpAsmPrinter &printer, UnrollForOp op) {
 static ParseResult parseUnrollForOp(OpAsmParser &parser,
                                     OperationState &result) {
   auto &builder = parser.getBuilder();
-  Type timeTypeVar = helper::getTimeType(parser.getBuilder().getContext());
+  auto *context = parser.getBuilder().getContext();
+  Type timeTypeVar = helper::getTimeType(context);
   Type tstartRawType = timeTypeVar;
-  Type offsetType = helper::getConstIntType(parser.getBuilder().getContext());
+  Type offsetType = IndexType::get(context);
 
   Type regionRawOperandTypes[2];
   ArrayRef<Type> regionOperandTypes(regionRawOperandTypes);
-  regionRawOperandTypes[0] =
-      helper::getConstIntType(parser.getBuilder().getContext());
+  regionRawOperandTypes[0] = IndexType::get(context);
   regionRawOperandTypes[1] = timeTypeVar;
 
   IntegerAttr lbAttr;
@@ -325,7 +322,7 @@ static ParseResult parseUnrollForOp(OpAsmParser &parser,
   if (parser.parseRegion(*body, regionOperands, regionOperandTypes))
     return failure();
   ForOp::ensureTerminator(*body, builder, result.location);
-  result.addTypes(helper::getTimeType(parser.getBuilder().getContext()));
+  result.addTypes(helper::getTimeType(context));
   return success();
 }
 
