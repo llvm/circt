@@ -1255,9 +1255,6 @@ private:
   /// a passive-typed value and return that.
   Value convertToPassive(Value input);
 
-  /// Convert the input operand to a passive-typed value and return that.
-  Value forcePassive(Value input);
-
   /// Attach invalid values to every element of the value.
   void emitInvalidate(Value val, Flow flow);
 
@@ -1367,17 +1364,9 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
 /// a passive-typed value and return that.
 Value FIRStmtParser::convertToPassive(Value input) {
   auto inType = input.getType().cast<FIRRTLType>();
-  if (inType.isPassive())
+  if (inType.isPassive() && foldFlow(input) != Flow::Sink)
     return input;
 
-  return builder.create<AsPassivePrimOp>(inType.getPassiveType(), input);
-}
-
-/// Convert the input operand to a passive-typed value and return that.  This
-/// does not check if the input type is already passive and will always wrap the
-/// input in a passive type.
-Value FIRStmtParser::forcePassive(Value input) {
-  auto inType = input.getType().cast<FIRRTLType>();
   return builder.create<AsPassivePrimOp>(inType.getPassiveType(), input);
 }
 
@@ -1579,6 +1568,7 @@ ParseResult FIRStmtParser::parsePostFixDynamicSubscript(Value &result) {
   // If the index expression is a flip type, strip it off.
   auto indexType = index.getType().cast<FIRRTLType>();
   indexType = indexType.getPassiveType();
+  locationProcessor.setLoc(loc);
   index = convertToPassive(index);
 
   // Make sure the index expression is valid and compute the result type for the
@@ -1592,7 +1582,6 @@ ParseResult FIRStmtParser::parsePostFixDynamicSubscript(Value &result) {
   }
 
   // Create the result operation.
-  locationProcessor.setLoc(loc);
   auto op = builder.create<SubaccessOp>(resultType, result, index);
   result = op.getResult();
   return success();
@@ -1624,14 +1613,9 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
         if (parseExp(operand, "expected expression in primitive operand"))
           return failure();
 
-        // If the operand flow is sink, then forcibly cast this to passive.
-        // This avoids a problem where when this type will be lowered an
-        // asPassive would need to be created.  This is difficult to check at
-        // that point, but trivial here.
-        if (foldFlow(operand) == Flow::Sink) {
-          locationProcessor.setLoc(loc);
-          operand = forcePassive(operand);
-        }
+
+        locationProcessor.setLoc(loc);
+        operand = convertToPassive(operand);
 
         operands.push_back(operand);
         return success();
@@ -2298,13 +2282,7 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
-
-  // If the operand flow is sink, then forcibly cast this to passive.
-  // This avoids a problem where when this type will be lowered an
-  // asPassive would need to be created.  This is difficult to check at
-  // that point, but trivial here.
-  if (foldFlow(condition) == Flow::Sink)
-    condition = forcePassive(condition);
+  condition = convertToPassive(condition);
 
   // Create the IR representation for the when.
   auto whenStmt = builder.create<WhenOp>(condition, /*createElse*/ false);
