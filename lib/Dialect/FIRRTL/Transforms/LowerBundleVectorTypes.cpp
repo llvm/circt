@@ -271,7 +271,7 @@ void AggregateUserVisitor::visitExpr(SubfieldOp op, ArrayRef<Value> mapping) {
     void visitExpr(SubaccessOp op);
     void visitExpr(MuxPrimOp op);
     void visitStmt(ConnectOp op);
-//    void visitStmt(WhenOp op, ArrayRef<Value> mapping);
+    void visitStmt(WhenOp op);
 //    void visitStmt(PartialConnectOp op, ArrayRef<Value> mapping);
 
   private:
@@ -352,7 +352,31 @@ void TypeLoweringVisitor::visitStmt(ConnectOp op) {
     std::swap(src,dest);
     builder->create<ConnectOp>(dest, src);
   }
-opsToRemove.push_back(op);
+  opsToRemove.push_back(op);
+}
+
+void TypeLoweringVisitor::visitStmt(WhenOp op) {
+  // The WhenOp itself does not require any lowering, the only value it uses is
+  // a one-bit predicate.  Recursively visit all regions so internal operations
+  // are lowered.
+
+  // Visit operations in the then block.
+  for (auto &op : op.getThenBlock()) {
+    builder->setInsertionPoint(&op);
+    builder->setLoc(op.getLoc());
+    dispatchVisitor(&op);
+  }
+
+  // If there is no else block, return.
+  if (!op.hasElseRegion())
+    return;
+
+  // Visit operations in the else block.
+  for (auto &op : op.getElseBlock()) {
+    builder->setInsertionPoint(&op);
+    builder->setLoc(op.getLoc());
+    dispatchVisitor(&op);
+  }
 }
 
 // Expand muxes of aggregates

@@ -69,7 +69,7 @@ firrtl.circuit "TopLevel"  {
       firrtl.connect %b, %n_a : !firrtl.uint<1>, !firrtl.uint<1>
     }
 
-    // CHECK-LABEL: firrtl.module @RegBundle(in %a_a: !firrtl.uint<1>, in %clk: !firrtl.clock, out %b_a: !firrtl.uint<1>) {
+    // CHECK-LABEL: firrtl.module @RegBundle(in %a_a: !firrtl.uint<1>, in %clk: !firrtl.clock, out %b_a: !firrtl.uint<1>) 
     firrtl.module @RegBundle(in %a: !firrtl.bundle<a: uint<1>>, in %clk: !firrtl.clock, out %b: !firrtl.bundle<a: uint<1>>) {
       // CHECK-NEXT: %x_a = firrtl.reg %clk : (!firrtl.clock) -> !firrtl.uint<1>
       // CHECK-NEXT: firrtl.connect %x_a, %a_a : !firrtl.uint<1>, !firrtl.uint<1>
@@ -83,7 +83,7 @@ firrtl.circuit "TopLevel"  {
       firrtl.connect %2, %3 : !firrtl.uint<1>, !firrtl.uint<1>
     }
 
-    // CHECK-LABEL: firrtl.module @RegBundleWithBulkConnect(in %a_a: !firrtl.uint<1>, in %clk: !firrtl.clock, out %b_a: !firrtl.uint<1>) {
+    // CHECK-LABEL: firrtl.module @RegBundleWithBulkConnect(in %a_a: !firrtl.uint<1>, in %clk: !firrtl.clock, out %b_a: !firrtl.uint<1>)
     firrtl.module @RegBundleWithBulkConnect(in %a: !firrtl.bundle<a: uint<1>>, in %clk: !firrtl.clock, out %b: !firrtl.bundle<a: uint<1>>) {
       // CHECK-NEXT: %x_a = firrtl.reg %clk : (!firrtl.clock) -> !firrtl.uint<1>
       // CHECK-NEXT: firrtl.connect %x_a, %a_a : !firrtl.uint<1>, !firrtl.uint<1>
@@ -268,12 +268,48 @@ firrtl.circuit "TopLevel"  {
     }
 //CHECK-LABEL:    firrtl.module @invalid_mod_2(in %clock: !firrtl.clock, in %inp_a_inp_d: !firrtl.uint<14>) {
 //CHECK-NEXT:     }
-//CHECK-NEXT:    firrtl.module @invalid_top_mod(in %clock: !firrtl.clock) {
+//CHECK-NEXT:    firrtl.module @invalid_top_mod(in %clock: !firrtl.clock) 
 //CHECK-NEXT:      %U0_clock, %U0_inp_a_inp_d = firrtl.instance @invalid_mod_2 {name = "U0"} : !firrtl.flip<clock>, !firrtl.flip<uint<14>>
 //CHECK-NEXT:      %invalid_clock = firrtl.invalidvalue : !firrtl.clock
 //CHECK-NEXT:      firrtl.connect %U0_clock, %invalid_clock : !firrtl.flip<clock>, !firrtl.clock
 //CHECK-NEXT:      %invalid_ui14 = firrtl.invalidvalue : !firrtl.uint<14>
 //CHECK-NEXT:      firrtl.connect %U0_inp_a_inp_d, %invalid_ui14 : !firrtl.flip<uint<14>>, !firrtl.uint<14>
   
+
+// https://github.com/llvm/circt/issues/661
+
+// COM: This test is just checking that the following doesn't error.
+    // CHECK-LABEL: firrtl.module @Issue661
+    firrtl.module @Issue661(in %clock: !firrtl.clock) {
+      %head_MPORT_2, %head_MPORT_6 = firrtl.mem Undefined {depth = 20 : i64, name = "head", portNames = ["MPORT_2", "MPORT_6"], readLatency = 0 : i32, writeLatency = 1 : i32}
+      : !firrtl.flip<bundle<addr: uint<5>, en: uint<1>, clk: clock, data: uint<5>, mask: uint<1>>>,
+        !firrtl.flip<bundle<addr: uint<5>, en: uint<1>, clk: clock, data: uint<5>, mask: uint<1>>>
+      %127 = firrtl.subfield %head_MPORT_6("clk") : (!firrtl.flip<bundle<addr: uint<5>, en: uint<1>, clk: clock, data: uint<5>, mask: uint<1>>>) -> !firrtl.clock
+    }
+
+// Test that WhenOp with regions has its regions lowered.
+  firrtl.module @WhenOp (in %p: !firrtl.uint<1>,
+                         in %in : !firrtl.bundle<a: uint<1>, b: uint<1>>,
+                         out %out : !firrtl.bundle<a: uint<1>, b: uint<1>>) {
+    // No else region.
+    firrtl.when %p {
+      // CHECK: firrtl.connect %out_a, %in_a : !firrtl.uint<1>, !firrtl.uint<1>
+      // CHECK: firrtl.connect %out_b, %in_b : !firrtl.uint<1>, !firrtl.uint<1>
+      firrtl.connect %out, %in : !firrtl.bundle<a: uint<1>, b: uint<1>>, !firrtl.bundle<a: uint<1>, b: uint<1>>
+    }
+
+    // Else region.
+    firrtl.when %p {
+      // CHECK: firrtl.connect %out_a, %in_a : !firrtl.uint<1>, !firrtl.uint<1>
+      // CHECK: firrtl.connect %out_b, %in_b : !firrtl.uint<1>, !firrtl.uint<1>
+      firrtl.connect %out, %in : !firrtl.bundle<a: uint<1>, b: uint<1>>, !firrtl.bundle<a: uint<1>, b: uint<1>>
+    } else {
+      // CHECK: firrtl.connect %out_a, %in_a : !firrtl.uint<1>, !firrtl.uint<1>
+      // CHECK: firrtl.connect %out_b, %in_b : !firrtl.uint<1>, !firrtl.uint<1>
+      firrtl.connect %out, %in : !firrtl.bundle<a: uint<1>, b: uint<1>>, !firrtl.bundle<a: uint<1>, b: uint<1>>
+    }
+  }
+
+
 
 }
