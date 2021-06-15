@@ -390,7 +390,7 @@ def ForceOp : SVOp<"force", [InOutTypeConstraint<"src", "dest">,
     The left-hand side of the assignment can be avariable, a net,
     a constant bit-select of a vector net, a part-select of a vector 
     net or a concatenation. It cannot be a memory word or a bit-select 
-    or part-select of a vector variable. See SV Spec 9.3.2.
+    or part-select of a vector variable. See SV Spec 10.6.2.
   }];
   let arguments = (ins InOutType:$dest, InOutElementType:$src);
   let results = (outs);
@@ -407,7 +407,7 @@ def ReleaseOp : SVOp<"release", [ProceduralOp]> {
     the next procedural assignment or procedural continuous assignment 
     to the variable. Releasing a variable that currently has an
     active assign procedural continuous assignment shall immediately 
-    reestablish that assignment. See SV Spec 9.3.2.
+    reestablish that assignment. See SV Spec 10.6.2.
   }];
   let arguments = (ins InOutType:$dest);
   let results = (outs);

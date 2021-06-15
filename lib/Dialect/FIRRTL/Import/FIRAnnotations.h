@@ -34,7 +34,7 @@ bool fromJSON(llvm::json::Value &value,
               llvm::StringMap<ArrayAttr> &annotationMap, llvm::json::Path path,
               MLIRContext *context);
 
-bool scatterCustomAnnotations(llvm::StringMap<ArrayAttr> &annotationMao,
+bool scatterCustomAnnotations(llvm::StringMap<ArrayAttr> &annotationMap,
                               MLIRContext *context, unsigned &annotationID,
                               Location loc);
 

@@ -65,7 +65,10 @@ def var_to_attribute(obj, none_on_fail: bool = False) -> ir.Attribute:
   if isinstance(obj, str):
     return ir.StringAttr.get(obj)
   if isinstance(obj, list):
-    return ir.ArrayAttr.get([var_to_attribute(x) for x in obj])
+    arr = [var_to_attribute(x, none_on_fail) for x in obj]
+    if all(arr):
+      return ir.ArrayAttr.get(arr)
+    return None
   if none_on_fail:
     return None
   raise TypeError(f"Cannot convert type '{type(obj)}' to MLIR attribute")
