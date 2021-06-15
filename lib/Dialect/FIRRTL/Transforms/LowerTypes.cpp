@@ -984,7 +984,8 @@ void TypeLoweringVisitor::visitStmt(ConnectOp op) {
 /// PartialConnect canonicalization pattern.
 ConnectOp TypeLoweringVisitor::emitTruncatingConnect(Value dest, Value src) {
   // Get the types.  Strip off any outer flip.
-  auto srcType = src.getType().cast<FIRRTLType>().stripFlip().first;
+  auto srcInfo = src.getType().cast<FIRRTLType>().stripFlip();
+  auto srcType = srcInfo.first;
   auto destType = dest.getType().cast<FIRRTLType>().stripFlip().first;
 
   auto srcWidth = srcType.getBitWidthOrSentinel();
@@ -998,6 +999,8 @@ ConnectOp TypeLoweringVisitor::emitTruncatingConnect(Value dest, Value src) {
     IntType tmpType = destType.cast<IntType>();
     if (tmpType.isSigned())
       tmpType = UIntType::get(destType.getContext(), destWidth);
+    if (srcInfo.second)
+      src = builder->create<AsPassivePrimOp>(src);
     src = builder->create<TailPrimOp>(tmpType, src, srcWidth - destWidth);
     // Insert the cast back to signed if needed.
     if (tmpType != destType)
