@@ -16,20 +16,6 @@ firrtl.module @shadow_connects(out %out : !firrtl.uint<1>) {
 // CHECK-NEXT: }
 
 
-// Test that last connect semantics are resolved for partial connects.
-firrtl.module @shadow_partialconnects(out %out : !firrtl.uint<1>) {
-  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-  firrtl.partialconnect %out, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-  firrtl.partialconnect %out, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-}
-// CHECK-LABEL: firrtl.module @shadow_partialconnects(out %out: !firrtl.uint<1>) {
-// CHECK-NEXT:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-// CHECK-NEXT:   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK-NEXT:   firrtl.partialconnect %out, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK-NEXT: }
-
-
 // Test that last connect semantics are resolved in a WhenOp
 firrtl.module @shadow_when(in %p : !firrtl.uint<1>) {
   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
