@@ -326,7 +326,10 @@ replaceMemWithWrapperModule(DenseMap<MemOp, FModuleOp, MemOpInfo> &knownMems,
     memOp->erase();
 }
 
-static void
+/// Replaces all memories which match the predicate function with external
+/// modules and simple wrapper module which instantiates it.  Returns true if
+/// any memories were replaced.
+static bool
 replaceMemsWithWrapperModules(CircuitOp circuit,
                               function_ref<bool(MemOp)> shouldReplace) {
   /// A set of replaced memory operations.  When two memory operations
@@ -343,6 +346,9 @@ replaceMemsWithWrapperModules(CircuitOp circuit,
   // to check if other memory operations were equivalent.
   for (auto it : knownMems)
     it.first.erase();
+
+  // Return true if something changed.
+  return !knownMems.empty();
 }
 
 static void
@@ -393,7 +399,9 @@ replaceMemWithExtModule(DenseMap<MemOp, FExtModuleOp, MemOpInfo> &knownMems,
     memOp->erase();
 }
 
-static void replaceMemsWithExtModules(CircuitOp circuit,
+/// Replaces all memories which match the predicate function with external
+/// modules.  Returns true if any modules were replaced.
+static bool replaceMemsWithExtModules(CircuitOp circuit,
                                       function_ref<bool(MemOp)> shouldReplace) {
   /// A set of replaced memory operations.  When two memory operations
   /// share the same types, they can share the same modules.
@@ -409,6 +417,9 @@ static void replaceMemsWithExtModules(CircuitOp circuit,
   // to check if other memory operations were equivalent.
   for (auto op : knownMems)
     op.first.erase();
+
+  // Return true if something changed.
+  return !knownMems.empty();
 }
 
 namespace {
@@ -419,10 +430,16 @@ struct BlackBoxMemoryPass : public BlackBoxMemoryBase<BlackBoxMemoryPass> {
     auto shouldReplace = [](MemOp memOp) -> bool {
       return memOp.readLatency() == 1 && memOp.writeLatency() == 1;
     };
+    auto anythingChanged = false;
     if (emitWrapper)
-      replaceMemsWithWrapperModules(getOperation(), shouldReplace);
+      anythingChanged =
+          replaceMemsWithWrapperModules(getOperation(), shouldReplace);
     else
-      replaceMemsWithExtModules(getOperation(), shouldReplace);
+      anythingChanged =
+          replaceMemsWithExtModules(getOperation(), shouldReplace);
+
+    if (!anythingChanged)
+      markAllAnalysesPreserved();
   }
 };
 } // end anonymous namespace

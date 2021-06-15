@@ -86,6 +86,9 @@ void BlackBoxReaderPass::runOnOperation() {
   CircuitOp circuitOp = getOperation();
   auto context = &getContext();
 
+  // If this pass has changed anything.
+  bool anythingChanged = false;
+
   // Internalize some string attributes for easy reference later.
   StringRef targetDirAnnoClass = "firrtl.transforms.BlackBoxTargetDirAnno";
   StringRef resourceFileNameAnnoClass =
@@ -98,9 +101,8 @@ void BlackBoxReaderPass::runOnOperation() {
 
   // Process black box annotations on the circuit.  Some of these annotations
   // will affect how the rest of the annotations are resolved.
-  AnnotationSet circuitAnnos(circuitOp);
   SmallVector<Attribute, 4> filteredAnnos;
-  for (auto annot : circuitAnnos) {
+  for (auto annot : AnnotationSet(circuitOp)) {
     // Handle target dir annotation.
     if (annot.isClass(targetDirAnnoClass)) {
       if (auto target = annot.getMember<StringAttr>("targetDir")) {
@@ -128,12 +130,10 @@ void BlackBoxReaderPass::runOnOperation() {
 
     filteredAnnos.push_back(annot.getDict());
   }
-
-  // Update the circuit annotations to exclude the ones we have consumed.
-  if (filteredAnnos.empty())
-    circuitOp->removeAttr("annotations");
-  else
-    circuitOp->setAttr("annotations", ArrayAttr::get(context, filteredAnnos));
+  // Apply the filtered annotations to the circuit.  If we updated the circuit
+  // and record that they changed.
+  anythingChanged |=
+      AnnotationSet(filteredAnnos, context).applyToOperation(circuitOp);
 
   LLVM_DEBUG(llvm::dbgs() << "Black box target directory: " << targetDir << "\n"
                           << "Black box resource file name: "
@@ -154,10 +154,7 @@ void BlackBoxReaderPass::runOnOperation() {
     }
 
     // Update the operation annotations to exclude the ones we have consumed.
-    if (filteredAnnos.empty())
-      op.removeAttr("annotations");
-    else
-      op.setAttr("annotations", ArrayAttr::get(context, filteredAnnos));
+    anythingChanged |= AnnotationSet(filteredAnnos, context).applyToOperation(&op);
   }
 
   // If we have emitted any files, generate a file list operation that
@@ -193,6 +190,10 @@ void BlackBoxReaderPass::runOnOperation() {
                                     /*exclude_replicated_ops=*/trueAttr,
                                     context));
   }
+
+  // If nothing has changed we can preseve the analysis.
+  if (!anythingChanged)
+    markAllAnalysesPreserved();
 
   // Clean up.
   emittedFiles.clear();
