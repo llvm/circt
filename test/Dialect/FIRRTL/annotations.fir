@@ -220,24 +220,24 @@ circuit Foo: %[[{"a":"{\"b\":null}"}]]
 ; // -----
 
 ; COM: Subfield/Subindex annotations should be parsed correctly on wires
-circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.qux"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
+circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0].qux"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
   module Foo:
     wire bar: {baz: UInt<1>, qux: UInt<1>}[2]
 
     ; CHECK-LABEL: module {
-    ; CHECK: %bar = firrtl.wire  {annotations = [{one, target = [".qux"]}, {target = ["[1]", ".baz"], two}]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+    ; CHECK: %bar = firrtl.wire  {annotations = [{fieldID = 3 : i64, one}, {fieldID = 5 : i64, two}]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
 
 
 ; // -----
 
 ; COM: Subfield/Subindex annotations should be parsed correctly on registers
-circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.qux"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
+circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0].qux"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
   module Foo:
     input clock: Clock
     reg bar: {baz: UInt<1>, qux: UInt<1>}[2], clock
 
     ; CHECK-LABEL: module {
-    ; CHECK: %bar = firrtl.reg %clock  {annotations = [{one, target = [".qux"]}, {target = ["[1]", ".baz"], two}]} : (!firrtl.clock) -> !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+    ; CHECK: %bar = firrtl.reg %clock  {annotations = [{fieldID = 3 : i64, one}, {fieldID = 5 : i64, two}]} : (!firrtl.clock) -> !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
 
 ; // -----
 
@@ -456,7 +456,7 @@ circuit GCTMemTap : %[
     ; CHECK-LABEL: firrtl.circuit "GCTMemTap"
     ; CHECK-SAME: annotations = [{unrelatedAnnotation}]
     ; CHECK: firrtl.extmodule @MemTap
-    ; CHECK-SAME: %mem: [[A:.+]] {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = [[ID:.+]] : i64, target = ["[0]"]}, {class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = [[ID]] : i64, target = ["[1]"]}]
+    ; CHECK-SAME: %mem: [[A:.+]] {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.MemTapAnnotation", fieldID = 1 : i64, id = [[ID:.+]] : i64}, {class = "sifive.enterprise.grandcentral.MemTapAnnotation", fieldID = 2 : i64, id = [[ID]] : i64}]
     ; CHECK: firrtl.module @GCTMemTap
     ; CHECK: %mem = firrtl.cmem
     ; CHECK-SAME: annotations = [{class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = [[ID]] : i64}]
@@ -507,11 +507,11 @@ circuit GCTInterface : %[
     ; members of the interface inside the parent.  Both port "a" and register
     ; "r" should be annotated.
     ; CHECK: firrtl.module @GCTInterface
-    ; CHECK-SAME: %a: [[TYPE:.+]] {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "ViewName", name = "port", target = []}]}
+    ; CHECK-SAME: %a: [[TYPE:.+]] {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "ViewName", fieldID = 0 : i64, name = "port"}]}
     ; CHECK-SAME: annotations = [{class = "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation", id = [[ID]] : i64, type = "parent"}]
     ; CHECK: firrtl.reg
     ; CHECK-SAME: annotations
-    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "register", name = "_2", target = ["._2", "[0]"]}
-    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "register", name = "_2", target = ["._2", "[1]"]}
-    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "_0", name = "_1", target = ["._0", "._1"]}
-    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "_0", name = "_0", target = ["._0", "._0"]}]}
+    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "register", fieldID = 5 : i64, name = "_2"}
+    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "register", fieldID = 6 : i64, name = "_2"}
+    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "_0", fieldID = 3 : i64, name = "_1"}
+    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "_0", fieldID = 2 : i64, name = "_0"}]}

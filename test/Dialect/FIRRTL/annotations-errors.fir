@@ -73,3 +73,22 @@ circuit Foo: %[[{"target":""}]]
 circuit Foo: %[[{"target":null}]]
   module Foo:
     skip
+
+; // -----
+
+; COM: Subfield/Subindex annotations should be parsed correctly on wires
+
+circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.qux"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
+  module Foo:
+; expected-error @+1 {{invalid annotation}}
+    wire bar: {baz: UInt<1>, qux: UInt<1>}[2]
+
+; // -----
+
+; COM: Subfield/Subindex annotations should be parsed correctly on registers
+
+circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.qux"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
+  module Foo:
+    input clock: Clock
+; expected-error @+1 {{invalid annotation}}
+    reg bar: {baz: UInt<1>, qux: UInt<1>}[2], clock
