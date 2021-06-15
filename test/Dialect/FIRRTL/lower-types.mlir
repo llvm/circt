@@ -1013,3 +1013,29 @@ module  {
     // CHECK-NOT: firrtl.world
   }
 }
+
+// -----
+
+// Test that a truncating connect emitted during lower types correctly adds an
+// AsPassive cast on a FlipType originating from an instance.
+//
+// See: https://github.com/llvm/circt/issues/1276
+
+module  {
+  // CHECK-LABEL: firrtl.circuit "TruncatingConnectWithFlip"
+  firrtl.circuit "TruncatingConnectWithFlip"  {
+    firrtl.extmodule @Bar(in %a: !firrtl.uint<2>)
+    firrtl.module @TruncatingConnectWithFlip() {
+      // CHECK: %[[a_b:.+]] = firrtl.wire
+      %a = firrtl.wire  : !firrtl.bundle<b: uint<1>>
+      %bar_a = firrtl.instance @Bar  {name = "bar"} : !firrtl.flip<uint<2>>
+      %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
+      firrtl.connect %bar_a, %invalid_ui2 : !firrtl.flip<uint<2>>, !firrtl.uint<2>
+      // CHECK: %[[bar_a_passive:.+]] = firrtl.asPassive %bar_a
+      // CHECK-NEXT: %[[bar_a_tail:.+]] = firrtl.tail %[[bar_a_passive]], 1
+      %0 = firrtl.subfield %a("b") : (!firrtl.bundle<b: uint<1>>) -> !firrtl.uint<1>
+      // CHECK-NEXT: firrtl.connect %[[a_b]], %[[bar_a_tail]]
+      firrtl.partialconnect %0, %bar_a : !firrtl.uint<1>, !firrtl.flip<uint<2>>
+    }
+  }
+}
