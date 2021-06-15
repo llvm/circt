@@ -269,48 +269,56 @@ void AggregateUserVisitor::visitExpr(SubfieldOp op, ArrayRef<Value> mapping) {
   op.erase();
 }
 
-//===----------------------------------------------------------------------===//
-// Module Type Lowering
-//===----------------------------------------------------------------------===//
-namespace {
-struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
+  //===----------------------------------------------------------------------===//
+  // Module Type Lowering
+  //===----------------------------------------------------------------------===//
+  namespace {
+  class TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
+  public:
+    TypeLoweringVisitor(MLIRContext *context) : context(context) {}
+    using FIRRTLVisitor<TypeLoweringVisitor>::visitDecl;
+    using FIRRTLVisitor<TypeLoweringVisitor>::visitExpr;
+    using FIRRTLVisitor<TypeLoweringVisitor>::visitStmt;
 
-  TypeLoweringVisitor(MLIRContext *context) : context(context) {}
-  using FIRRTLVisitor<TypeLoweringVisitor>::visitDecl;
-  using FIRRTLVisitor<TypeLoweringVisitor>::visitExpr;
-  using FIRRTLVisitor<TypeLoweringVisitor>::visitStmt;
+    // If the referenced operation is a FModuleOp or an FExtModuleOp, perform
+    // type lowering on all operations.
+    void lowerModule(Operation *op);
 
-  // If the referenced operation is a FModuleOp or an FExtModuleOp, perform
-  // type lowering on all operations.
-  void lowerModule(Operation *op);
+  // Lowering module block arguments.
+  void lowerArg(FModuleOp module, BlockArgument arg, FIRRTLType type);
 
-  bool lowerArg(FModuleOp module, size_t argIndex,
-                SmallVectorImpl<ModulePortInfo> &newArgs);
-  std::pair<BlockArgument, firrtl::ModulePortInfo>
-  addArg(FModuleOp module, FIRRTLType type, unsigned insertPt, bool isOutput,
-         StringRef nameSuffix, ModulePortInfo &oldArg);
+  // Helpers to manage state.
+  Value addArg(FModuleOp module, Type type, unsigned oldArgNumber,
+               Direction direction, StringRef nameSuffix = "");
+    void visitDecl(FExtModuleOp op);
+    void visitDecl(FModuleOp op);
+    void visitDecl(InstanceOp op);
+//    void visitDecl(MemOp op, ArrayRef<Value> mapping);
+    void visitDecl(NodeOp op);
+    void visitDecl(RegOp op);
+    void visitDecl(WireOp op);
+    void visitDecl(RegResetOp op);
+    void visitExpr(InvalidValueOp op);
+//    void visitExpr(SubfieldOp op);
+//    void visitExpr(SubindexOp op);
+    void visitExpr(SubaccessOp op);
+    void visitExpr(MuxPrimOp op);
+    void visitStmt(ConnectOp op);
+    void visitStmt(WhenOp op);
+    void visitStmt(PartialConnectOp op);
+    void recursivePartialConnect(Value a, FIRRTLType aType, Value b,
+                               FIRRTLType bType, unsigned aIndex,
+                               unsigned bIndex, bool aFlip = false);
+  /// Connect two values, truncating the source value if it is a larger width.
+    ConnectOp emitTruncatingConnect(Value dest, Value src);
 
-  void visitDecl(FExtModuleOp op);
-  void visitDecl(FModuleOp op);
-  void visitDecl(InstanceOp op);
-  //    void visitDecl(MemOp op, ArrayRef<Value> mapping);
-  void visitDecl(NodeOp op);
-  void visitDecl(RegOp op);
-  void visitDecl(WireOp op);
-  void visitDecl(RegResetOp op);
-  void visitExpr(InvalidValueOp op);
-  //    void visitExpr(SubfieldOp op);
-  //    void visitExpr(SubindexOp op);
-  void visitExpr(SubaccessOp op);
-  void visitExpr(MuxPrimOp op);
-  void visitStmt(ConnectOp op);
-  void visitStmt(WhenOp op);
-  //    void visitStmt(PartialConnectOp op, ArrayRef<Value> mapping);
+  private:
 
-private:
-  void processUsers(Value val, ArrayRef<Value> mapping);
+  void processUsers(Operation* op, ArrayRef<Value> mapping);
+  void processUsers(Value *v, ArrayRef<Value> mapping);
 
-  MLIRContext *context;
+void cleanup(FModuleOp module);
+  MLIRContext* context;
 
   // The builder is set and maintained in the main loop.
   ImplicitLocOpBuilder *builder;
@@ -433,6 +441,119 @@ void TypeLoweringVisitor::visitStmt(ConnectOp op) {
     if (field.value().isOutput)
       std::swap(src, dest);
     builder->create<ConnectOp>(dest, src);
+  }
+  opsToRemove.push_back(op);
+}
+
+void TypeLoweringVisitor::recursivePartialConnect(Value a, FIRRTLType aType,
+                                                  Value b, FIRRTLType bType,
+                                                  unsigned aID, unsigned bID,
+                                                  bool aFlip) {
+  
+  TypeSwitch<FIRRTLType>(aType)
+      .Case<BundleType>([&](auto aType) {
+        auto bBundle = bType.dyn_cast_or_null<BundleType>();
+        if (!bBundle)
+          return;
+        for (unsigned aIndex = 0, e = aType.getNumElements(); aIndex < e;
+             ++aIndex) {
+          auto aField = aType.getElements()[aIndex].name;
+          auto bIndex = bBundle.getElementIndex(aField.getValue());
+          if (!bIndex)
+            continue;
+          auto &aElt = aType.getElements()[aIndex];
+          auto &bElt = bBundle.getElements()[*bIndex];
+          if (!aFlip)
+            builder->create<PartialConnectOp>(
+                builder->create<SubfieldOp>(a, aField),
+                builder->create<SubfieldOp>(b, aField)
+                );
+          else
+            builder->create<PartialConnectOp>(
+                builder->create<SubfieldOp>(b, aField),
+                builder->create<SubfieldOp>(a, aField)
+                );
+        }
+      })
+      .Case<FVectorType>([&](auto aType) {
+        auto bVector = bType.dyn_cast_or_null<FVectorType>();
+        if (!bVector)
+          return;
+
+        auto e = std::min<unsigned>(aType.getNumElements(),
+                                    bVector.getNumElements());
+        auto elemType = bVector.getElementType();
+
+        if (aFlip)
+          std::swap(a, b);
+        for (size_t i = 0; i != e; ++i) {
+          builder->create<PartialConnectOp>(
+              builder->create<SubindexOp>(elemType, a, i),
+              builder->create<SubindexOp>(elemType, b, i));
+        }
+      })
+      .Case<FlipType>([&](auto aType) {
+        recursivePartialConnect(a, FlipType::get(aType), b, bType, aID, bID,
+                                !aFlip);
+      })
+      .Default([&](auto) {
+        if (aFlip)
+          std::swap(a, b);
+        // We transform all partial connects into regular connect statements,
+        // however, partial connect allows the LHS statement to be a smaller
+        // width than the RHS. We might need to truncate the RHS value.
+        emitTruncatingConnect(a, b);
+      });
+}
+
+/// This creates a connect operation between two values and emits a truncation
+/// if the LHS is smaller than the RHS.  This code was lifted from a
+/// PartialConnect canonicalization pattern.
+ConnectOp TypeLoweringVisitor::emitTruncatingConnect(Value dest, Value src) {
+  // Get the types.  Strip off any outer flip.
+  auto srcType = src.getType().cast<FIRRTLType>().stripFlip().first;
+  auto destType = dest.getType().cast<FIRRTLType>().stripFlip().first;
+
+  auto srcWidth = srcType.getBitWidthOrSentinel();
+  auto destWidth = destType.getBitWidthOrSentinel();
+
+  // Check if the source is larger than the destination, if so we will have to
+  // emit a truncation.
+  if (destType.isa<IntType>() && srcType.isa<IntType>() && srcWidth >= 0 &&
+      destWidth >= 0 && destWidth < srcWidth) {
+    // firrtl.tail always returns uint even for sint operands.
+    IntType tmpType = destType.cast<IntType>();
+    if (tmpType.isSigned())
+      tmpType = UIntType::get(destType.getContext(), destWidth);
+    src = builder->create<TailPrimOp>(tmpType, src, srcWidth - destWidth);
+    // Insert the cast back to signed if needed.
+    if (tmpType != destType)
+      src = builder->create<AsSIntPrimOp>(destType, src);
+  }
+  return builder->create<ConnectOp>(dest, src);
+}
+
+void TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
+  Value dest = op.dest();
+  Value src = op.src();
+  auto destType = dest.getType().cast<FIRRTLType>();
+  auto srcType = src.getType().cast<FIRRTLType>();
+
+  // Partial connects are completely removed and replaced by regular connects.
+  // This makes this one of the few ops that actually has to do something during
+  // this pass the types are not bundles.
+  auto tmpType = destType.stripFlip().first;
+  if (tmpType.isa<BundleType, FVectorType>()) {
+    // Bundle types have to be recursively lowered.
+    this->recursivePartialConnect(dest, destType, src, srcType.getPassiveType(),
+                                  0, 0);
+  } else if (destType.isa<AnalogType>()) {
+    // If we are connecting analogs, replace with attach.
+    SmallVector<Value, 2> operands{dest, src};
+    builder->create<AttachOp>(operands);
+  } else {
+    // Replace this partial connect with a regular connect.
+    emitTruncatingConnect(dest, src);
   }
   opsToRemove.push_back(op);
 }
