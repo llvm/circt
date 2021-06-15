@@ -450,13 +450,18 @@ firrtl.circuit "Foo" {
     // CHECK: %0 = firrtl.reg %clk : (!firrtl.clock) -> !firrtl.uint<6>
     %0 = firrtl.reg %clk : (!firrtl.clock) -> !firrtl.uint
     %1 = firrtl.reg %clk : (!firrtl.clock) -> !firrtl.uint
-    %2 = firrtl.shl %0, 0 : (!firrtl.uint) -> !firrtl.uint
-    %3 = firrtl.shl %1, 3 : (!firrtl.uint) -> !firrtl.uint
-    %4 = firrtl.shr %3, 3 : (!firrtl.uint) -> !firrtl.uint
+    %2 = firrtl.reg %clk : (!firrtl.clock) -> !firrtl.uint
+    %3 = firrtl.shl %0, 0 : (!firrtl.uint) -> !firrtl.uint
+    %4 = firrtl.shl %1, 3 : (!firrtl.uint) -> !firrtl.uint
+    %5 = firrtl.shr %4, 3 : (!firrtl.uint) -> !firrtl.uint
+    %6 = firrtl.shr %1, 3 : (!firrtl.uint) -> !firrtl.uint
+    %7 = firrtl.shl %6, 3 : (!firrtl.uint) -> !firrtl.uint
     firrtl.connect %0, %x : !firrtl.uint, !firrtl.uint<6>
     firrtl.connect %1, %x : !firrtl.uint, !firrtl.uint<6>
+    firrtl.connect %2, %x : !firrtl.uint, !firrtl.uint<6>
     firrtl.connect %0, %2 : !firrtl.uint, !firrtl.uint
-    firrtl.connect %1, %4 : !firrtl.uint, !firrtl.uint
+    firrtl.connect %1, %5 : !firrtl.uint, !firrtl.uint
+    firrtl.connect %2, %7 : !firrtl.uint, !firrtl.uint
   }
 
   // CHECK-LABEL: @RegResetSimple
@@ -837,6 +842,39 @@ firrtl.circuit "Foo" {
     %14 = firrtl.subfield %b3("b") : (!firrtl.bundle<b: flip<bundle<c: flip<uint<1>>>>>) -> !firrtl.bundle<c: flip<uint<1>>>
     %15 = firrtl.subfield %14("c") : (!firrtl.bundle<c: flip<uint<1>>>) -> !firrtl.uint<1>
     firrtl.partialconnect %13, %15 : !firrtl.uint, !firrtl.uint<1>
+  }
+
+  // Breakable cycles in inter-module width inference.
+  // CHECK-LABEL: @InterModuleGoodCycleFoo
+  // CHECK-SAME: in %in: !firrtl.uint<42>
+  // CHECK-SAME: out %out: !firrtl.uint<39>
+  firrtl.module @InterModuleGoodCycleFoo(in %in: !firrtl.uint, out %out: !firrtl.uint) {
+    %0 = firrtl.shr %in, 3 : (!firrtl.uint) -> !firrtl.uint
+    firrtl.connect %out, %0 : !firrtl.uint, !firrtl.uint
+  }
+  // CHECK-LABEL: @InterModuleGoodCycleBar
+  // CHECK-SAME: out %out: !firrtl.uint<39>
+  firrtl.module @InterModuleGoodCycleBar(in %in: !firrtl.uint<42>, out %out: !firrtl.uint) {
+    %inst_in, %inst_out = firrtl.instance @InterModuleGoodCycleFoo {name = "inst"} : !firrtl.flip<uint>, !firrtl.uint
+    firrtl.connect %inst_in, %in : !firrtl.flip<uint>, !firrtl.uint<42>
+    firrtl.connect %inst_in, %inst_out : !firrtl.flip<uint>, !firrtl.uint
+    firrtl.connect %out, %inst_out : !firrtl.uint, !firrtl.uint
+  }
+
+  // CHECK-LABEL: @Issue1271
+  firrtl.module @Issue1271(in %clock: !firrtl.clock, in %cond: !firrtl.uint<1>) {
+    // CHECK: %a = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<2>
+    // CHECK: %b = firrtl.node %0  : !firrtl.uint<3>
+    // CHECK: %c = firrtl.node %1  : !firrtl.uint<2>
+    %a = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %0 = firrtl.add %a, %c0_ui1 : (!firrtl.uint, !firrtl.uint<1>) -> !firrtl.uint
+    %b = firrtl.node %0  : !firrtl.uint
+    %1 = firrtl.tail %b, 1 : (!firrtl.uint) -> !firrtl.uint
+    %c = firrtl.node %1  : !firrtl.uint
+    %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+    %2 = firrtl.mux(%cond, %c0_ui2, %c) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint) -> !firrtl.uint
+    firrtl.connect %a, %2 : !firrtl.uint, !firrtl.uint
   }
 
   firrtl.module @Foo() {}

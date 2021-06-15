@@ -419,27 +419,7 @@ void ConstraintSolver::dumpConstraints(llvm::raw_ostream &os) {
   }
 }
 
-// Helper function to compute unary expressions if the operand has a solution.
-static void solveUnary(UnaryExpr *expr,
-                       std::function<int32_t(int32_t)> callback) {
-  if (expr->arg->solution.hasValue())
-    expr->solution = callback(expr->arg->solution.getValue());
-}
-
-// Helper function to compute binary expressions if both operands have a
-// solution.
-static void solveBinary(BinaryExpr *expr,
-                        std::function<int32_t(int32_t, int32_t)> callback) {
-  if (expr->lhs()->solution.hasValue() && expr->rhs()->solution.hasValue())
-    expr->solution = callback(expr->lhs()->solution.getValue(),
-                              expr->rhs()->solution.getValue());
-  else if (expr->lhs()->solution.hasValue())
-    expr->solution = expr->lhs()->solution;
-  else if (expr->rhs()->solution.hasValue())
-    expr->solution = expr->rhs()->solution;
-}
-
-/// A canonicalized linear inequality that maps an constraint on var `x` to the
+/// A canonicalized linear inequality that maps a constraint on var `x` to the
 /// linear inequality `x >= max(a*x+b, c) + (failed ? ∞ : 0)`.
 ///
 /// The inequality separately tracks recursive (a, b) and non-recursive (c)
@@ -513,13 +493,92 @@ struct LinIneq {
 
   /// Combine two inequalities by summing up the two right hand sides.
   ///
-  /// This essentially combines `x >= max(a1*x+b1, c1)` and `x >= max(a2*x+b2,
-  /// c2)` into a new `x >= max((a1+a2)*x+b1+b2+c1+c2, 0)`.
+  /// This is a tricky one, since the addition of the two max terms will lead to
+  /// a maximum over four possible terms (similar to a binomial expansion). In
+  /// order to shoehorn this back into a two-term maximum, we have to pick the
+  /// recursive term that will grow the fastest.
+  ///
+  /// As an example for this problem, consider the following addition:
+  ///
+  ///   x >= max(a1*x+b1, c1) + max(a2*x+b2, c2)
+  ///
+  /// We would like to expand and rearrange this again into a maximum:
+  ///
+  ///   x >= max(a1*x+b1 + max(a2*x+b2, c2), c1 + max(a2*x+b2, c2))
+  ///   x >= max(max(a1*x+b1 + a2*x+b2, a1*x+b1 + c2),
+  ///            max(c1 + a2*x+b2, c1 + c2))
+  ///   x >= max((a1+a2)*x+(b1+b2), a1*x+(b1+c2), a2*x+(b2+c1), c1+c2)
+  ///
+  /// Since we are combining two two-term maxima, there are four possible ways
+  /// how the terms can combine, leading to the above four-term maximum. An easy
+  /// upper bound of the form we want would be the following:
+  ///
+  ///   x >= max(max(a1+a2, a1, a2)*x + max(b1+b2, b1+c2, b2+c1), c1+c2)
+  ///
+  /// However, this is a very pessimistic upper-bound that will declare very
+  /// common patterns in the IR as unbreakable cycles, despite them being very
+  /// much breakable. For example:
+  ///
+  ///   x >= max(x, 42) + max(0, -3)  <-- breakable recursion
+  ///   x >= max(max(1+0, 1, 0)*x + max(42+0, -3, 42), 42-2)
+  ///   x >= max(x + 42, 39)          <-- unbreakable recursion!
+  ///
+  /// A better approach is to take the expanded four-term maximum, retain the
+  /// non-recursive term (c1+c2), and estimate which one of the recursive terms
+  /// (first three) will become dominant as we choose greater values for x.
+  /// Since x never is inferred to be negative, the recursive term in the
+  /// maximum with the highest scaling factor for x will end up dominating as
+  /// x tends to ∞:
+  ///
+  ///   x >= max({
+  ///     (a1+a2)*x+(b1+b2) if a1+a2 >= max(a1+a2, a1, a2) and a1>0 and a2>0,
+  ///     a1*x+(b1+c2)      if    a1 >= max(a1+a2, a1, a2) and a1>0,
+  ///     a2*x+(b2+c1)      if    a2 >= max(a1+a2, a1, a2) and a2>0,
+  ///     0                 otherwise
+  ///   }, c1+c2)
+  ///
+  /// In case multiple cases apply, the highest bias of the recursive term is
+  /// picked. With this, the above problematic example triggers the second case
+  /// and becomes:
+  ///
+  ///   x >= max(1*x+(0-3), 42-3) = max(x-3, 39)
+  ///
+  /// Of which the first case is chosen, as it has the lower bias value.
   static LinIneq add(const LinIneq &lhs, const LinIneq &rhs) {
-    return LinIneq(lhs.rec_scale + rhs.rec_scale,
-                   lhs.rec_bias + rhs.rec_bias + lhs.nonrec_bias +
-                       rhs.nonrec_bias,
-                   0, lhs.failed || rhs.failed);
+    // Determine the maximum scaling factor among the three possible recursive
+    // terms.
+    auto enable1 = lhs.rec_scale > 0 && rhs.rec_scale > 0;
+    auto enable2 = lhs.rec_scale > 0;
+    auto enable3 = rhs.rec_scale > 0;
+    auto scale1 = lhs.rec_scale + rhs.rec_scale; // (a1+a2)
+    auto scale2 = lhs.rec_scale;                 // a1
+    auto scale3 = rhs.rec_scale;                 // a2
+    auto bias1 = lhs.rec_bias + rhs.rec_bias;    // (b1+b2)
+    auto bias2 = lhs.rec_bias + rhs.nonrec_bias; // (b1+c2)
+    auto bias3 = rhs.rec_bias + lhs.nonrec_bias; // (b2+c1)
+    auto maxScale = std::max(scale1, std::max(scale2, scale3));
+
+    // Among those terms that have a maximum scaling factor, determine the
+    // largest bias value.
+    Optional<int32_t> maxBias = llvm::None;
+    if (enable1 && scale1 == maxScale)
+      maxBias = bias1;
+    if (enable2 && scale2 == maxScale && (!maxBias || bias2 > *maxBias))
+      maxBias = bias2;
+    if (enable3 && scale3 == maxScale && (!maxBias || bias3 > *maxBias))
+      maxBias = bias3;
+
+    // Pick from the recursive terms the one with maximum scaling factor and
+    // minimum bias value.
+    auto nonrec_bias = lhs.nonrec_bias + rhs.nonrec_bias; // c1+c2
+    auto failed = lhs.failed || rhs.failed;
+    if (enable1 && scale1 == maxScale && bias1 == *maxBias)
+      return LinIneq(scale1, bias1, nonrec_bias, failed);
+    if (enable2 && scale2 == maxScale && bias2 == *maxBias)
+      return LinIneq(scale2, bias2, nonrec_bias, failed);
+    if (enable3 && scale3 == maxScale && bias3 == *maxBias)
+      return LinIneq(scale3, bias3, nonrec_bias, failed);
+    return LinIneq(0, 0, nonrec_bias, failed);
   }
 
   /// Check if the inequality is satisfiable.
@@ -597,7 +656,8 @@ inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const LinIneq &l) {
 static LinIneq checkCycles(VarExpr *var, Expr *expr,
                            SmallPtrSetImpl<Expr *> &seenVars,
                            const ConstraintSolver::ContextInfo &info,
-                           InFlightDiagnostic *reportInto = nullptr) {
+                           InFlightDiagnostic *reportInto = nullptr,
+                           unsigned indent = 1) {
   auto ineq =
       TypeSwitch<Expr *, LinIneq>(expr)
           .Case<NilExpr>([](auto) { return LinIneq(0); })
@@ -615,8 +675,8 @@ static LinIneq checkCycles(VarExpr *var, Expr *expr,
             if (!expr->constraint)
               // Count unconstrained variables as `x >= 0`.
               return LinIneq(0);
-            auto l =
-                checkCycles(var, expr->constraint, seenVars, info, reportInto);
+            auto l = checkCycles(var, expr->constraint, seenVars, info,
+                                 reportInto, indent + 1);
             seenVars.erase(expr);
             return l;
           })
@@ -624,24 +684,27 @@ static LinIneq checkCycles(VarExpr *var, Expr *expr,
             // If we can evaluate `2**arg` to a sensible constant, do
             // so. This is the case if a == 0 and if c <= 32 such that 2**c is
             // representable.
-            auto arg = checkCycles(var, expr->arg, seenVars, info, reportInto);
+            auto arg = checkCycles(var, expr->arg, seenVars, info, reportInto,
+                                   indent + 1);
             if (arg.rec_scale != 0 || arg.nonrec_bias < 0 ||
                 arg.nonrec_bias >= 32)
               return LinIneq::unsat();
             return LinIneq(1 << arg.nonrec_bias); // x >= 2**arg
           })
           .Case<AddExpr>([&](auto *expr) {
-            return LinIneq::add(
-                checkCycles(var, expr->lhs(), seenVars, info, reportInto),
-                checkCycles(var, expr->rhs(), seenVars, info, reportInto));
+            return LinIneq::add(checkCycles(var, expr->lhs(), seenVars, info,
+                                            reportInto, indent + 1),
+                                checkCycles(var, expr->rhs(), seenVars, info,
+                                            reportInto, indent + 1));
           })
           .Case<MaxExpr, MinExpr>([&](auto *expr) {
             // Combine the inequalities of the LHS and RHS into a single overly
             // pessimistic inequality. We treat `MinExpr` the same as `MaxExpr`,
             // since `max(a,b)` is an upper bound to `min(a,b)`.
-            return LinIneq::max(
-                checkCycles(var, expr->lhs(), seenVars, info, reportInto),
-                checkCycles(var, expr->rhs(), seenVars, info, reportInto));
+            return LinIneq::max(checkCycles(var, expr->lhs(), seenVars, info,
+                                            reportInto, indent + 1),
+                                checkCycles(var, expr->rhs(), seenVars, info,
+                                            reportInto, indent + 1));
           })
           .Default([](auto) { return LinIneq::unsat(); });
 
@@ -667,17 +730,141 @@ static LinIneq checkCycles(VarExpr *var, Expr *expr,
       }
   }
   if (!reportInto)
-    LLVM_DEBUG(llvm::dbgs() << "  - Visited " << *expr << ": " << ineq << "\n");
+    LLVM_DEBUG(llvm::dbgs().indent(indent * 2)
+               << "- Visited " << *expr << ": " << ineq << "\n");
 
   return ineq;
+}
+
+using ExprSolution = std::pair<Optional<int32_t>, bool>;
+
+static ExprSolution
+computeUnary(ExprSolution arg, llvm::function_ref<int32_t(int32_t)> operation) {
+  if (arg.first)
+    arg.first = operation(*arg.first);
+  return arg;
+};
+
+static ExprSolution
+computeBinary(ExprSolution lhs, ExprSolution rhs,
+              llvm::function_ref<int32_t(int32_t, int32_t)> operation) {
+  auto result = ExprSolution{llvm::None, lhs.second || rhs.second};
+  if (lhs.first && rhs.first)
+    result.first = operation(*lhs.first, *rhs.first);
+  else if (lhs.first)
+    result.first = lhs.first;
+  else if (rhs.first)
+    result.first = rhs.first;
+  return result;
+};
+
+/// Compute the value of a constraint expression`expr`. `seenVars` is used as a
+/// recursion breaker. Recursive variables are treated as zero. Returns the
+/// computed value and a boolean indicating whether a recursion was detected.
+/// This may be used to memoize the result of expressions in case they were not
+/// involved in a cycle (which may alter their value from the perspective of a
+/// variable).
+static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
+                              unsigned indent = 1) {
+  // See if we have a memoized result we can return.
+  bool isTrivial = isa<NilExpr, KnownExpr>(expr);
+  if (expr->solution) {
+    LLVM_DEBUG({
+      if (!isTrivial)
+        llvm::dbgs().indent(indent * 2)
+            << "- Cached " << *expr << " = " << *expr->solution << "\n";
+    });
+    return {*expr->solution, false};
+  }
+
+  // Otherwise compute the value of the expression.
+  LLVM_DEBUG({
+    if (!isTrivial)
+      llvm::dbgs().indent(indent * 2) << "- Solving " << *expr << "\n";
+  });
+  auto solution =
+      TypeSwitch<Expr *, ExprSolution>(expr)
+          .Case<NilExpr>([](auto) {
+            // TODO: Maybe this can be an assert. Technically no expression for
+            // a variable should contain a `nil`.
+            return ExprSolution{llvm::None, false};
+          })
+          .Case<KnownExpr>([&](auto *expr) {
+            return ExprSolution{*expr->solution, false};
+          })
+          .Case<VarExpr>([&](auto *expr) {
+            // Count recursions in variables as 0. This is sane since the cycle
+            // is breakable and therefore the recursion does not modify the
+            // resulting value of the variable.
+            if (!seenVars.insert(expr).second)
+              return ExprSolution{llvm::None, true};
+            // Set unconstrained variables to 0.
+            if (!expr->constraint)
+              return ExprSolution{0, false};
+            auto solution = solveExpr(expr->constraint, seenVars, indent + 1);
+            seenVars.erase(expr);
+            return solution;
+          })
+          .Case<PowExpr>([&](auto *expr) {
+            auto arg = solveExpr(expr->arg, seenVars, indent + 1);
+            return computeUnary(arg, [](int32_t arg) { return 1 << arg; });
+          })
+          .Case<AddExpr>([&](auto *expr) {
+            auto lhs = solveExpr(expr->lhs(), seenVars, indent + 1);
+            auto rhs = solveExpr(expr->rhs(), seenVars, indent + 1);
+            return computeBinary(
+                lhs, rhs, [](int32_t lhs, int32_t rhs) { return lhs + rhs; });
+          })
+          .Case<MaxExpr>([&](auto *expr) {
+            auto lhs = solveExpr(expr->lhs(), seenVars, indent + 1);
+            auto rhs = solveExpr(expr->rhs(), seenVars, indent + 1);
+            return computeBinary(lhs, rhs, [](int32_t lhs, int32_t rhs) {
+              return std::max(lhs, rhs);
+            });
+          })
+          .Case<MinExpr>([&](auto *expr) {
+            auto lhs = solveExpr(expr->lhs(), seenVars, indent + 1);
+            auto rhs = solveExpr(expr->rhs(), seenVars, indent + 1);
+            return computeBinary(lhs, rhs, [](int32_t lhs, int32_t rhs) {
+              return std::min(lhs, rhs);
+            });
+          })
+          .Default([](auto) {
+            return ExprSolution{llvm::None, false};
+          });
+
+  // Memoize the result.
+  if (solution.first && !solution.second)
+    expr->solution = *solution.first;
+
+  // Produce some useful debug prints.
+  LLVM_DEBUG({
+    if (!isTrivial) {
+      if (solution.first)
+        llvm::dbgs().indent(indent * 2)
+            << "= Solved " << *expr << " = " << *solution.first;
+      else
+        llvm::dbgs().indent(indent * 2) << "= Skipped " << *expr;
+      llvm::dbgs() << " (" << (solution.second ? "cycle broken" : "unique")
+                   << ")\n";
+    }
+  });
+
+  return solution;
 }
 
 /// Solve the constraint problem. This is a very simple implementation that
 /// does not fully solve the problem if there are weird dependency cycles
 /// present.
 LogicalResult ConstraintSolver::solve() {
+  LLVM_DEBUG({
+    llvm::dbgs() << "\n===----- Constraints -----===\n\n";
+    dumpConstraints(llvm::dbgs());
+  });
+
   // Ensure that there are no adverse cycles around.
-  LLVM_DEBUG(llvm::dbgs() << "Checking for unbreakable loops\n");
+  LLVM_DEBUG(
+      llvm::dbgs() << "\n===----- Checking for unbreakable loops -----===\n\n");
   SmallPtrSet<Expr *, 16> seenVars;
   bool anyFailed = false;
 
@@ -703,7 +890,7 @@ LogicalResult ConstraintSolver::solve() {
     // cycle checking code.
     if (ineq.sat()) {
       LLVM_DEBUG(llvm::dbgs()
-                 << "  - Breakable since " << ineq << " satisfiable\n");
+                 << "  = Breakable since " << ineq << " satisfiable\n");
       continue;
     }
 
@@ -712,7 +899,7 @@ LogicalResult ConstraintSolver::solve() {
     // this time with an in-flight diagnostic to attach notes indicating
     // unsatisfiable paths in the cycle.
     LLVM_DEBUG(llvm::dbgs()
-               << "  - UNBREAKABLE since " << ineq << " unsatisfiable\n");
+               << "  = UNBREAKABLE since " << ineq << " unsatisfiable\n");
     anyFailed = true;
     for (auto value : info.find(var)->second) {
       // Depending on whether this value stems from an operation or not, create
@@ -729,47 +916,35 @@ LogicalResult ConstraintSolver::solve() {
     }
   }
 
-  // Iterate over the expressions in depth-first order and start substituting in
-  // solutions.
-  LLVM_DEBUG(llvm::dbgs() << "Solving constraints\n");
-  for (auto *expr : llvm::post_order(cast<Expr>(&root))) {
-    if (expr->solution.hasValue())
+  // Iterate over the constraint variables and solve each.
+  LLVM_DEBUG(llvm::dbgs() << "\n===----- Solving constraints -----===\n\n");
+  for (auto *expr : exprs) {
+    // Only work on variables.
+    auto *var = dyn_cast<VarExpr>(expr);
+    if (!var || !var->constraint)
       continue;
-    TypeSwitch<Expr *>(expr)
-        .Case<VarExpr>([&](auto *var) {
-          if (var->constraint)
-            var->solution = var->constraint->solution.map(
-                [](int32_t value) { return std::max(value, 0); });
-        })
-        .Case<PowExpr>([&](auto *expr) {
-          solveUnary(expr, [](int32_t arg) {
-            assert(arg < 32);
-            return 1 << arg;
-          });
-        })
-        .Case<AddExpr>([&](auto *expr) {
-          solveBinary(expr, [](int32_t lhs, int32_t rhs) { return lhs + rhs; });
-        })
-        .Case<MaxExpr>([&](auto *expr) {
-          solveBinary(expr, [](int32_t lhs, int32_t rhs) {
-            return std::max(lhs, rhs);
-          });
-        })
-        .Case<MinExpr>([&](auto *expr) {
-          solveBinary(expr, [](int32_t lhs, int32_t rhs) {
-            return std::min(lhs, rhs);
-          });
-        });
 
+    // Compute the value for the variable.
+    LLVM_DEBUG(llvm::dbgs()
+               << "- Solving " << *var << " >= " << *var->constraint << "\n");
+    seenVars.insert(var);
+    auto solution = solveExpr(var->constraint, seenVars);
+    seenVars.clear();
+
+    // If successful, store the value as the variable's solution.
     // TODO: We might want to complain about unconstrained widths here.
     LLVM_DEBUG({
-      if (expr->solution.hasValue())
-        llvm::dbgs() << "- Setting " << *expr << " = "
-                     << expr->solution.getValue() << "\n";
+      if (solution.first)
+        llvm::dbgs() << "  - Setting " << *var << " = " << solution.first
+                     << " (" << (solution.second ? "cycle broken" : "unique")
+                     << ")\n";
       else
-        llvm::dbgs() << "- Leaving " << *expr << " unsolved\n";
+        llvm::dbgs() << "  - Leaving " << *var << " unsolved\n";
     });
+    if (solution.first)
+      var->solution = *solution.first;
   }
+
   return failure(anyFailed);
 }
 
@@ -869,6 +1044,9 @@ static bool hasUninferredWidth(Type type) {
 }
 
 LogicalResult InferenceMapping::map(CircuitOp op) {
+  LLVM_DEBUG(llvm::dbgs()
+             << "\n===----- Mapping ops to constraint exprs -----===\n\n");
+
   // Ensure we have constraint variables established for all module ports.
   op.walk<WalkOrder::PostOrder>([&](FModuleOp module) {
     for (auto arg : module.getArguments()) {
@@ -1455,6 +1633,7 @@ private:
 
 /// Update the types throughout a circuit.
 LogicalResult InferenceTypeUpdate::update(CircuitOp op) {
+  LLVM_DEBUG(llvm::dbgs() << "\n===----- Update types -----===\n\n");
   anyFailed = false;
   op.walk<WalkOrder::PreOrder>([&](Operation *op) {
     // Skip this module if it had no widths to be inferred at all.
@@ -1714,11 +1893,6 @@ void InferWidthsPass::runOnOperation() {
     markAllAnalysesPreserved();
     return; // fast path if no inferrable widths are around
   }
-
-  LLVM_DEBUG({
-    llvm::dbgs() << "Constraints:\n";
-    solver.dumpConstraints(llvm::dbgs());
-  });
 
   // Solve the constraints.
   if (failed(solver.solve())) {
