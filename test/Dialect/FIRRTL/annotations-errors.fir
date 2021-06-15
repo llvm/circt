@@ -78,9 +78,9 @@ circuit Foo: %[[{"target":null}]]
 
 ; COM: Subfield/Subindex annotations should be parsed correctly on wires
 
-circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.qux"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
+circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0].qnx"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
   module Foo:
-; expected-error @+1 {{invalid annotation}}
+; expected-error @+1 {{fail to find qnx in the bundle}}
     wire bar: {baz: UInt<1>, qux: UInt<1>}[2]
 
 ; // -----
@@ -90,5 +90,5 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.qux"},{"two":null,"target":"~
 circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.qux"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
   module Foo:
     input clock: Clock
-; expected-error @+1 {{invalid annotation}}
+; expected-error @+1 {{invalid sub-index name .qux}}
     reg bar: {baz: UInt<1>, qux: UInt<1>}[2], clock
