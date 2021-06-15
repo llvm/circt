@@ -1,4 +1,5 @@
 //===- ExpandWhens.cpp - Expand WhenOps into muxed operations ---*- C++ -*-===//
+//
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
@@ -33,7 +34,7 @@ static void mergeBlock(Block &destination, Block::iterator insertPoint,
 }
 
 //===----------------------------------------------------------------------===//
-// Last Connect Visitor
+// Last Connect Resolver
 //===----------------------------------------------------------------------===//
 
 namespace {
@@ -43,7 +44,6 @@ namespace {
 template <typename ConcreteT>
 class LastConnectResolver : public FIRRTLVisitor<ConcreteT> {
 protected:
-  /// Tracks if anything in the IR has changed.
   bool changed = false;
 
   /// Map of destinations and the operation which is driving a value to it in
@@ -59,19 +59,22 @@ public:
   using FIRRTLVisitor<ConcreteT>::visitStmt;
 
   /// Records a connection to a destination. This will delete a previous
-  /// connection to a destination if there was one.
+  /// connection to a destination if there was one. Returns true if an old
+  /// connect was erased.
   bool setLastConnect(FieldRef dest, Operation *connection) {
     // Try to insert, if it doesn't insert, replace the previous value.
     auto itAndInserted = scope.insert({dest, connection});
     if (!std::get<1>(itAndInserted)) {
       auto iterator = std::get<0>(itAndInserted);
+      auto changed = false;
       // Delete the old connection if it exists. Null connections are inserted
       // on declarations.
       if (auto *oldConnect = iterator->second) {
         oldConnect->erase();
+        changed = true;
       }
       iterator->second = connection;
-      return true;
+      return changed;
     }
     return false;
   }
@@ -149,8 +152,6 @@ public:
   void visitDecl(RegOp op) {
     // Registers are initialized to themselves.
     // TODO: register of bundle type are not supported.
-    assert(!op.result().getType().isa<BundleType>() &&
-           "registers can't be bundle type");
     auto connect = OpBuilder(op->getBlock(), ++Block::iterator(op))
                        .create<ConnectOp>(op.getLoc(), op, op);
     scope[getFieldRefFromValue(op.result())] = connect;
@@ -169,24 +170,22 @@ public:
   void visitDecl(InstanceOp op) {
     // Track any instance inputs which need to be connected to for init
     // coverage.
-    for (auto result : op.results()) {
+    for (auto result : op.results())
       declareSinks(result, Flow::Source);
-    }
   }
 
   void visitDecl(MemOp op) {
     // Track any memory inputs which require connections.
-    for (auto result : op.results()) {
+    for (auto result : op.results())
       declareSinks(result, Flow::Source);
-    }
   }
 
   void visitStmt(PartialConnectOp op) {
-    llvm_unreachable("Partial Connects should have been removed.");
+    llvm_unreachable("PartialConnectOps should have been removed.");
   }
 
   void visitStmt(ConnectOp op) {
-    changed |= setLastConnect(getFieldRefFromValue(op.dest()), op);
+    setLastConnect(getFieldRefFromValue(op.dest()), op);
   }
 
   /// Combine the connect statements from each side of the block. There are 5
@@ -393,31 +392,44 @@ void WhenOpVisitor::visitStmt(WhenOp whenOp) {
 namespace {
 class ModuleVisitor : public LastConnectResolver<ModuleVisitor> {
 public:
-  ModuleVisitor(ScopeMap &scope) : LastConnectResolver<ModuleVisitor>(scope) {}
+  ModuleVisitor() : LastConnectResolver<ModuleVisitor>(outerScope) {}
 
   // Unshadow the overloads.
   using LastConnectResolver<ModuleVisitor>::visitExpr;
   using LastConnectResolver<ModuleVisitor>::visitDecl;
   using LastConnectResolver<ModuleVisitor>::visitStmt;
 
-  // Visit a module and return true if anything changed.
-  bool visitDecl(FModuleOp op);
   void visitStmt(WhenOp whenOp);
+  void visitStmt(ConnectOp connectOp);
 
   /// Run expand whens on the Module.  This will emit an error for each
   /// incomplete initialization found. If an initialiazation error was detected,
   /// this will return failure and leave the IR in an inconsistent state.  If
   /// the pass was a success, returns true if nothing changed.
-  static mlir::FailureOr<bool> run(FModuleOp op);
+  mlir::FailureOr<bool> run(FModuleOp op);
 
 private:
+  /// The outermost scope of the module body.
+  ScopeMap outerScope;
+
+  /// Tracks if anything in the IR has changed.
+  bool anythingChanged = false;
 };
 } // namespace
 
 mlir::FailureOr<bool> ModuleVisitor::run(FModuleOp module) {
-  ScopeMap outerScope;
-  ModuleVisitor visitor(outerScope);
-  auto changed = visitor.visitDecl(module);
+  // Track any results (flipped arguments) of the module for init coverage.
+  for (auto it : llvm::enumerate(module.getArguments())) {
+    auto flow = getModulePortDirection(module, it.index()) == Direction::Input
+                    ? Flow::Source
+                    : Flow::Sink;
+    declareSinks(it.value(), flow);
+  }
+
+  // Process the body of the module.
+  for (auto &op : llvm::make_early_inc_range(*module.getBodyBlock())) {
+    dispatchVisitor(&op);
+  }
 
   // Check for any incomplete initialization.
   LogicalResult result = success();
@@ -438,18 +450,23 @@ mlir::FailureOr<bool> ModuleVisitor::run(FModuleOp module) {
 
   // Return Failed or Changed.
   if (succeeded(result)) {
-    return mlir::FailureOr<bool>(changed);
+    return mlir::FailureOr<bool>(anythingChanged);
   }
+
   return result;
+}
+
+void ModuleVisitor::visitStmt(ConnectOp op) {
+  anythingChanged |= setLastConnect(getFieldRefFromValue(op.dest()), op);
 }
 
 void ModuleVisitor::visitStmt(WhenOp whenOp) {
   Block *parentBlock = whenOp->getBlock();
   auto condition = whenOp.condition();
 
-  // Process both sides of the the WhenOp, fixing up all simulation
-  // contructs, and resolving last connect semantics in each block. This process
-  // returns the set of connects in each side of the when op.
+  // Process both sides of the the WhenOp, fixing up all simulation contructs,
+  // and resolving last connect semantics in each block. This process returns
+  // the set of connects in each side of the when op.
 
   // Process the `then` block.
   ScopeMap thenScope;
@@ -471,25 +488,10 @@ void ModuleVisitor::visitStmt(WhenOp whenOp) {
   mergeScopes(thenScope, elseScope, condition);
 
   // If we are deleting a WhenOp something definitely changed.
-  changed = true;
+  anythingChanged = true;
 
   // Delete the now empty WhenOp.
   whenOp.erase();
-}
-
-bool ModuleVisitor::visitDecl(FModuleOp op) {
-  // Track any results (flipped arguments) of the module for init coverage.
-  for (auto it : llvm::enumerate(op.getArguments())) {
-    auto flow = getModulePortDirection(op, it.index()) == Direction::Input
-                    ? Flow::Source
-                    : Flow::Sink;
-    declareSinks(it.value(), flow);
-  }
-
-  for (auto &op : llvm::make_early_inc_range(*op.getBodyBlock())) {
-    dispatchVisitor(&op);
-  }
-  return changed;
 }
 
 //===----------------------------------------------------------------------===//
@@ -503,7 +505,7 @@ class ExpandWhensPass : public ExpandWhensBase<ExpandWhensPass> {
 void ExpandWhensPass::runOnOperation() {
   // Pass returns failure if something went wrong, or a bool indicating whether
   // something changed.
-  auto failureOrChanged = ModuleVisitor::run(getOperation());
+  auto failureOrChanged = ModuleVisitor().run(getOperation());
   if (failed(failureOrChanged)) {
     signalPassFailure();
   } else if (!*failureOrChanged) {
