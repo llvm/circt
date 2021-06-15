@@ -768,16 +768,16 @@ firrtl.circuit "AnnotationsBundle2" {
 
 firrtl.circuit "AnnotationsBundle3" {
   firrtl.module @AnnotationsBundle3(in %clock: !firrtl.clock) {
-    %bar = firrtl.reg %clock  {annotations = [{fieldID = 6 : i64, one}, {fieldID = 13 : i64, two}, {fieldID = 9 : i64, three}]} : (!firrtl.clock) -> !firrtl.vector<bundle<baz: vector<uint<1>, 2>, qux: vector<uint<1>, 2>, yes: bundle<a: uint<1>, b: uint<1>>>, 2>
+    %bar = firrtl.reg %clock  {annotations = [{fieldID = 6 : i64, one}, {fieldID = 12 : i64, fieldIDRange = 2 : i64, two}, {fieldID = 8 : i64, fieldIDRange = 2 : i64, three}]} : (!firrtl.clock) -> !firrtl.vector<bundle<baz: vector<uint<1>, 2>, qux: vector<uint<1>, 2>, yes: bundle<a: uint<1>, b: uint<1>>>, 2>
 
     // CHECK: %bar_0_baz_0 = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
     // CHECK: %bar_0_baz_1 = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
     // CHECK: %bar_0_qux_0 = firrtl.reg %clock  {annotations = [{one}]} : (!firrtl.clock) -> !firrtl.uint<1>
     // CHECK: %bar_0_qux_1 = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
     // CHECK: %bar_0_yes_a = firrtl.reg %clock  {annotations = [{three}]} : (!firrtl.clock) -> !firrtl.uint<1>
-    // %bar_0_yes_b = firrtl.reg %clock  {annotations = [{three}]} : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_0_yes_b = firrtl.reg %clock  {annotations = [{three}]} : (!firrtl.clock) -> !firrtl.uint<1>
     // CHECK: %bar_1_baz_0 = firrtl.reg %clock  {annotations = [{two}]} : (!firrtl.clock) -> !firrtl.uint<1>
-    // %bar_1_baz_1 = firrtl.reg %clock  {annotations = [{two}]} : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_1_baz_1 = firrtl.reg %clock  {annotations = [{two}]} : (!firrtl.clock) -> !firrtl.uint<1>
     // CHECK: %bar_1_qux_0 = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
     // CHECK: %bar_1_qux_1 = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
     // CHECK: %bar_1_yes_a = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>

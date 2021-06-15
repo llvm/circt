@@ -220,24 +220,24 @@ circuit Foo: %[[{"a":"{\"b\":null}"}]]
 ; // -----
 
 ; COM: Subfield/Subindex annotations should be parsed correctly on wires
-circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0].qux"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
+circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0]"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
   module Foo:
     wire bar: {baz: UInt<1>, qux: UInt<1>}[2]
 
     ; CHECK-LABEL: module {
-    ; CHECK: %bar = firrtl.wire  {annotations = [{fieldID = 3 : i64, one}, {fieldID = 5 : i64, two}]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+    ; CHECK: %bar = firrtl.wire  {annotations = [{fieldID = 1 : i64, fieldIDRange = 2 : i64, one}, {fieldID = 5 : i64, two}]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
 
 
 ; // -----
 
 ; COM: Subfield/Subindex annotations should be parsed correctly on registers
-circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0].qux"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
+circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0]"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
   module Foo:
     input clock: Clock
     reg bar: {baz: UInt<1>, qux: UInt<1>}[2], clock
 
     ; CHECK-LABEL: module {
-    ; CHECK: %bar = firrtl.reg %clock  {annotations = [{fieldID = 3 : i64, one}, {fieldID = 5 : i64, two}]} : (!firrtl.clock) -> !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+    ; CHECK: %bar = firrtl.reg %clock  {annotations = [{fieldID = 1 : i64, fieldIDRange = 2 : i64, one}, {fieldID = 5 : i64, two}]} : (!firrtl.clock) -> !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
 
 ; // -----
 

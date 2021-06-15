@@ -937,10 +937,11 @@ ParseResult FIRParser::importAnnotationFile(SMLoc loc) {
   return result;
 }
 
-static Optional<unsigned> getFeildIDFromSubscripts(ArrayAttr subscripts,
-                                                   Type type) {
+static Optional<std::pair<unsigned, unsigned>>
+getFieldIDFromSubscripts(ArrayAttr subscripts, Type type) {
   unsigned id = 0;
-  auto currentType = type;
+  unsigned idRange = 0;
+  auto currentType = type.cast<FIRRTLType>();
 
   for (auto subscript : subscripts) {
     auto nameStr = subscript.cast<StringAttr>().getValue();
@@ -956,10 +957,11 @@ static Optional<unsigned> getFeildIDFromSubscripts(ArrayAttr subscripts,
         if (auto index = bundleType.getElementIndex(nameStr)) {
           id += bundleType.getFieldID(index.getValue());
           currentType = bundleType.getElementType(nameStr);
+          idRange = currentType.getMaxFieldID();
           continue;
         }
       }
-      return Optional<unsigned>();
+      return None;
 
     } else if (auto vectorType = currentType.dyn_cast<FVectorType>()) {
       // Target should begin with "[" and end with "]".
@@ -973,17 +975,18 @@ static Optional<unsigned> getFeildIDFromSubscripts(ArrayAttr subscripts,
           if (index >= 0 && index < vectorType.getNumElements()) {
             id += vectorType.getFieldID(index);
             currentType = vectorType.getElementType();
+            idRange = currentType.getMaxFieldID();
             continue;
           }
         }
       }
-      return Optional<unsigned>();
+      return None;
 
     } else {
-      return Optional<unsigned>();
+      return None;
     }
   }
-  return id;
+  return std::pair<unsigned, unsigned>(id, idRange);
 }
 
 /// Populate a vector of annotations for a given Target.  If the annotations
@@ -1024,7 +1027,7 @@ LogicalResult FIRParser::getAnnotations(Twine target, ArrayAttr &annotations,
     if (!type)
       return failure();
     ArrayAttr subscripts = targetAttr.cast<ArrayAttr>();
-    auto fieldID = getFeildIDFromSubscripts(subscripts, type);
+    auto fieldID = getFieldIDFromSubscripts(subscripts, type);
     if (!fieldID)
       return failure();
 
@@ -1033,9 +1036,12 @@ LogicalResult FIRParser::getAnnotations(Twine target, ArrayAttr &annotations,
     for (auto attr : di.getValue()) {
       // Ignore the actual target annotation, but copy the rest of annotations.
       if (attr.first.str() == "target") {
-        auto i64Type = IntegerType::get(annotations.getContext(), 64);
+        auto IDType = IntegerType::get(annotations.getContext(), 64);
         modAttr.append("fieldID",
-                       IntegerAttr::get(i64Type, fieldID.getValue()));
+                       IntegerAttr::get(IDType, fieldID.getValue().first));
+        if (fieldID.getValue().second)
+          modAttr.append("fieldIDRange",
+                         IntegerAttr::get(IDType, fieldID.getValue().second));
       } else
         modAttr.push_back(attr);
     }

@@ -133,19 +133,28 @@ static void filterAnnotations(ArrayAttr annotations,
     }
 
     auto fieldID = fieldIDAttr.cast<IntegerAttr>().getValue().getSExtValue();
-    // If no subfield attribute, then copy the annotation.
-    if (fieldID == 0) {
-      loweredAttrs.push_back(opAttr);
+    if (fieldID > targetFieldID)
       continue;
+
+    // If the subfield ID doesn't match, then look for the fieldIDRange
+    // attribute.
+    if (fieldID < targetFieldID) {
+      // If fieldIDRange attribute cannot be found, ignore the annotation.
+      auto fieldIDRangeAttr = di.get("fieldIDRange");
+      if (!fieldIDRangeAttr)
+        continue;
+
+      // If the target field ID is not in the range, ignore the annotation.
+      auto fieldIDRange =
+          fieldIDRangeAttr.cast<IntegerAttr>().getValue().getSExtValue();
+      if (fieldID + fieldIDRange < targetFieldID)
+        continue;
     }
-    // If the subfield ID doesn't match, then ignore the annotation.
-    if (targetFieldID != fieldID)
-      continue;
 
     NamedAttrList modAttr;
     for (auto attr : di.getValue()) {
       // Ignore the actual fieldID annotation, but copy the rest of annotations.
-      if (attr.first.str() == "fieldID")
+      if (attr.first.str() == "fieldID" || attr.first.str() == "fieldIDRange")
         continue;
       modAttr.push_back(attr);
     }
