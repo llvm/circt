@@ -206,7 +206,8 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   // The input mlir file could be firrtl dialect so we might need to clean
   // things up.
   if (lowerTypes) {
-    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass());
+    pm.addNestedPass<firrtl::CircuitOp>(
+        firrtl::createLowerBundleVectorTypesPass());
     auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
     // Only enable expand whens if lower types is also enabled.
     if (expandWhens)
