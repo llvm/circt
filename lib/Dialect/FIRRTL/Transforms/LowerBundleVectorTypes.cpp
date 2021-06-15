@@ -350,7 +350,7 @@ TypeLoweringVisitor::addArg(FModuleOp module, unsigned insertPt,
   Block *body = module.getBodyBlock();
 
   // Append the new argument.
-  auto newValue = body->insertArgument(insertPt, oldArg.type);
+  auto newValue = body->insertArgument(insertPt, type);
 
   // Save the name attribute for the new argument.
   auto name =
@@ -704,7 +704,7 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   for (auto *op : opsToRemove)
     op->erase();
   opsToRemove.clear();
-
+  
   // Lower the module block arguments.
   SmallVector<unsigned> argsToRemove;
   // First get all the info for existing ports
