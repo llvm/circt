@@ -269,68 +269,59 @@ void AggregateUserVisitor::visitExpr(SubfieldOp op, ArrayRef<Value> mapping) {
   op.erase();
 }
 
-  //===----------------------------------------------------------------------===//
-  // Module Type Lowering
-  //===----------------------------------------------------------------------===//
-  namespace {
-  class TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
-  public:
-    TypeLoweringVisitor(MLIRContext *context) : context(context) {}
-    using FIRRTLVisitor<TypeLoweringVisitor>::visitDecl;
-    using FIRRTLVisitor<TypeLoweringVisitor>::visitExpr;
-    using FIRRTLVisitor<TypeLoweringVisitor>::visitStmt;
+//===----------------------------------------------------------------------===//
+// Module Type Lowering
+//===----------------------------------------------------------------------===//
+namespace {
+struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
 
-    // If the referenced operation is a FModuleOp or an FExtModuleOp, perform
-    // type lowering on all operations.
-    void lowerModule(Operation *op);
+  TypeLoweringVisitor(MLIRContext *context) : context(context) {}
+  using FIRRTLVisitor<TypeLoweringVisitor>::visitDecl;
+  using FIRRTLVisitor<TypeLoweringVisitor>::visitExpr;
+  using FIRRTLVisitor<TypeLoweringVisitor>::visitStmt;
 
-  // Lowering module block arguments.
-  void lowerArg(FModuleOp module, BlockArgument arg, FIRRTLType type);
+  // If the referenced operation is a FModuleOp or an FExtModuleOp, perform
+  // type lowering on all operations.
+  void lowerModule(Operation *op);
+
+  bool lowerArg(FModuleOp module, size_t argIndex,
+                SmallVectorImpl<ModulePortInfo> &newArgs);
+  std::pair<BlockArgument, firrtl::ModulePortInfo> addArg(FModuleOp module, unsigned insertPt, FIRRTLType type, 
+                    bool isOutput, StringRef nameSuffix, ModulePortInfo& oldArg);
 
   // Helpers to manage state.
-  Value addArg(FModuleOp module, Type type, unsigned oldArgNumber,
-               Direction direction, StringRef nameSuffix = "");
-    void visitDecl(FExtModuleOp op);
-    void visitDecl(FModuleOp op);
-    void visitDecl(InstanceOp op);
-//    void visitDecl(MemOp op, ArrayRef<Value> mapping);
-    void visitDecl(NodeOp op);
-    void visitDecl(RegOp op);
-    void visitDecl(WireOp op);
-    void visitDecl(RegResetOp op);
-    void visitExpr(InvalidValueOp op);
-//    void visitExpr(SubfieldOp op);
-//    void visitExpr(SubindexOp op);
-    void visitExpr(SubaccessOp op);
-    void visitExpr(MuxPrimOp op);
-    void visitStmt(ConnectOp op);
-    void visitStmt(WhenOp op);
-    void visitStmt(PartialConnectOp op);
-    void recursivePartialConnect(Value a, FIRRTLType aType, Value b,
+  void visitDecl(FExtModuleOp op);
+  void visitDecl(FModuleOp op);
+  void visitDecl(InstanceOp op);
+  //    void visitDecl(MemOp op, ArrayRef<Value> mapping);
+  void visitDecl(NodeOp op);
+  void visitDecl(RegOp op);
+  void visitDecl(WireOp op);
+  void visitDecl(RegResetOp op);
+  void visitExpr(InvalidValueOp op);
+  //    void visitExpr(SubfieldOp op);
+  //    void visitExpr(SubindexOp op);
+  void visitExpr(SubaccessOp op);
+  void visitExpr(MuxPrimOp op);
+  void visitStmt(ConnectOp op);
+  void visitStmt(WhenOp op);
+  void visitStmt(PartialConnectOp op);
+  void recursivePartialConnect(Value a, FIRRTLType aType, Value b,
                                FIRRTLType bType, unsigned aIndex,
                                unsigned bIndex, bool aFlip = false);
   /// Connect two values, truncating the source value if it is a larger width.
-    ConnectOp emitTruncatingConnect(Value dest, Value src);
+  ConnectOp emitTruncatingConnect(Value dest, Value src);
 
-  private:
+private:
+  void processUsers(Value val, ArrayRef<Value> mapping);
 
-  void processUsers(Operation* op, ArrayRef<Value> mapping);
-  void processUsers(Value *v, ArrayRef<Value> mapping);
-
-void cleanup(FModuleOp module);
-  MLIRContext* context;
+  MLIRContext *context;
 
   // The builder is set and maintained in the main loop.
   ImplicitLocOpBuilder *builder;
 
   // State to keep track of arguments and operations to clean up at the end.
   SmallVector<Operation *, 16> opsToRemove;
-
-  SmallVector<Attribute> newArgNames;
-  SmallVector<Direction> newArgDirections;
-  SmallVector<Attribute, 8> newArgAttrs;
-  // State to keep track of arguments and operations to clean up at the end.
-  SmallVector<unsigned, 8> argsToRemove;
 };
 } // namespace
 
@@ -352,13 +343,12 @@ void TypeLoweringVisitor::lowerModule(Operation *op) {
 // module. This also maintains the name attribute for the new argument,
 // possibly with a new suffix appended.
 std::pair<BlockArgument, firrtl::ModulePortInfo>
-TypeLoweringVisitor::addArg(FModuleOp module, FIRRTLType type,
-                            unsigned insertPt, bool isOutput,
+TypeLoweringVisitor::addArg(FModuleOp module, unsigned insertPt, FIRRTLType type, bool isOutput,
                             StringRef nameSuffix, ModulePortInfo &oldArg) {
   Block *body = module.getBodyBlock();
 
   // Append the new argument.
-  auto newValue = body->insertArgument(insertPt, type);
+  auto newValue = body->insertArgument(insertPt, oldArg.type);
 
   // Save the name attribute for the new argument.
   auto name =
@@ -392,9 +382,9 @@ bool TypeLoweringVisitor::lowerArg(FModuleOp module, size_t argIndex,
   SmallVector<FlatBundleFieldEntry> fieldTypes = peelType(resultType);
   SmallVector<Value> lowering;
   for (auto field : llvm::enumerate(fieldTypes)) {
-    auto newValue =
-        addArg(module, field.value().type, 1 + argIndex + field.index(),
-               field.value().isOutput, field.value().suffix, newArgs[argIndex]);
+    auto newValue = addArg(module, 1 + argIndex + field.index(),
+                           field.value().type,  field.value().isOutput,
+                           field.value().suffix, newArgs[argIndex]);
     newArgs.insert(newArgs.begin() + 1 + argIndex + field.index(),
                    newValue.second);
     // Lower any other arguments by copying them to keep the relative order.
@@ -449,7 +439,7 @@ void TypeLoweringVisitor::recursivePartialConnect(Value a, FIRRTLType aType,
                                                   Value b, FIRRTLType bType,
                                                   unsigned aID, unsigned bID,
                                                   bool aFlip) {
-  
+
   TypeSwitch<FIRRTLType>(aType)
       .Case<BundleType>([&](auto aType) {
         auto bBundle = bType.dyn_cast_or_null<BundleType>();
@@ -466,13 +456,11 @@ void TypeLoweringVisitor::recursivePartialConnect(Value a, FIRRTLType aType,
           if (!aFlip)
             builder->create<PartialConnectOp>(
                 builder->create<SubfieldOp>(a, aField),
-                builder->create<SubfieldOp>(b, aField)
-                );
+                builder->create<SubfieldOp>(b, aField));
           else
             builder->create<PartialConnectOp>(
                 builder->create<SubfieldOp>(b, aField),
-                builder->create<SubfieldOp>(a, aField)
-                );
+                builder->create<SubfieldOp>(a, aField));
         }
       })
       .Case<FVectorType>([&](auto aType) {
@@ -697,7 +685,7 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
 
   ImplicitLocOpBuilder theBuilder(module.getLoc(), context);
   builder = &theBuilder;
-module.dump();
+
   // Lower the operations.
   for (auto iop = body->rbegin(), iep = body->rend(); iop != iep; ++iop) {
     // We erase old ops eagerly so we don't have dangling uses we've already
@@ -1008,6 +996,7 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
 
   auto selectWidth =
       op.index().getType().cast<FIRRTLType>().getBitWidthOrSentinel();
+
   // Reads.  All writes have been eliminated before now
 
   auto vType = inputType.cast<FVectorType>();
