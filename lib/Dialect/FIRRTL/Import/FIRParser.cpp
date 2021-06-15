@@ -492,8 +492,16 @@ ParseResult FIRParser::parseOptionalInfoLocator(LocationAttr &result) {
     // Decode the line number and the column number if present.
     if (lineStr.getAsInteger(10, resultLineNo))
       return {};
-    if (!colStr.empty() && colStr.getAsInteger(10, resultColNo))
-      return {};
+    if (!colStr.empty()) {
+      if (colStr.front() != '{') {
+        if (colStr.getAsInteger(10, resultColNo))
+          return {};
+      } else {
+        // compound locator, just parse the first part for now
+        if (colStr.drop_front().split(',').first.getAsInteger(10, resultColNo))
+          return {};
+      }
+    }
     return filename;
   };
 
@@ -1612,7 +1620,6 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
         Value operand;
         if (parseExp(operand, "expected expression in primitive operand"))
           return failure();
-
 
         locationProcessor.setLoc(loc);
         operand = convertToPassive(operand);

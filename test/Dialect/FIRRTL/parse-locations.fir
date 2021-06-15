@@ -10,6 +10,9 @@ circuit MyModule :  @[CIRCUIT.scala 127]
     ; CHECK: firrtl.connect {{.*}}loc("Somewhere.galaxy":42:1)
     out <= in   @[Somewhere.galaxy 42:1]
 
+    ; CHECK: firrtl.node {{.*}}loc("Somewhere.galaxy":42:2)
+    node ntest = in  @[Somewhere.galaxy 42:{2,2}]
+
     ; CHECK: firrtl.skip loc("SKipLoc.scala":42:24)
     skip  @[SKipLoc.scala 42:24]
 
