@@ -286,8 +286,9 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
 
   bool lowerArg(FModuleOp module, size_t argIndex,
                 SmallVectorImpl<ModulePortInfo> &newArgs);
-  std::pair<BlockArgument, firrtl::ModulePortInfo> addArg(FModuleOp module, unsigned insertPt, FIRRTLType type, 
-                    bool isOutput, StringRef nameSuffix, ModulePortInfo& oldArg);
+  std::pair<BlockArgument, firrtl::ModulePortInfo>
+  addArg(FModuleOp module, unsigned insertPt, FIRRTLType type, bool isOutput,
+         StringRef nameSuffix, ModulePortInfo &oldArg);
 
   // Helpers to manage state.
   void visitDecl(FExtModuleOp op);
@@ -343,7 +344,8 @@ void TypeLoweringVisitor::lowerModule(Operation *op) {
 // module. This also maintains the name attribute for the new argument,
 // possibly with a new suffix appended.
 std::pair<BlockArgument, firrtl::ModulePortInfo>
-TypeLoweringVisitor::addArg(FModuleOp module, unsigned insertPt, FIRRTLType type, bool isOutput,
+TypeLoweringVisitor::addArg(FModuleOp module, unsigned insertPt,
+                            FIRRTLType type, bool isOutput,
                             StringRef nameSuffix, ModulePortInfo &oldArg) {
   Block *body = module.getBodyBlock();
 
@@ -382,9 +384,9 @@ bool TypeLoweringVisitor::lowerArg(FModuleOp module, size_t argIndex,
   SmallVector<FlatBundleFieldEntry> fieldTypes = peelType(resultType);
   SmallVector<Value> lowering;
   for (auto field : llvm::enumerate(fieldTypes)) {
-    auto newValue = addArg(module, 1 + argIndex + field.index(),
-                           field.value().type,  field.value().isOutput,
-                           field.value().suffix, newArgs[argIndex]);
+    auto newValue =
+        addArg(module, 1 + argIndex + field.index(), field.value().type,
+               field.value().isOutput, field.value().suffix, newArgs[argIndex]);
     newArgs.insert(newArgs.begin() + 1 + argIndex + field.index(),
                    newValue.second);
     // Lower any other arguments by copying them to keep the relative order.
