@@ -112,6 +112,18 @@ def MemDirAttr: I32EnumAttr<"MemDirAttr", "Memory Direction Enum",
 def AnnotationArrayAttr : TypedArrayAttrBase<DictionaryAttr,
                                              "An array of FIRRTL Annotations">;
 
+def SubAnnotationAttr
+  : AttrDef<FIRRTLDialect, "SubAnnotation", [], "::mlir::Attribute"> {
+  let summary = "A sub-target annotation";
+  let description = [{
+    Represents a sub-target annotation, which contains the field ID range of the
+    sub-target and an DictionaryAttr.
+  }];
+  let mnemonic = "subAnno";
+  let parameters = (ins "int64_t":$minFieldID, "int64_t":$maxFieldID,
+                        "DictionaryAttr":$annotations);
+}
+
 def InvalidValueAttr
   : AttrDef<FIRRTLDialect, "InvalidValue", [], "::mlir::Attribute"> {
   let summary = "A constant value of firrtl.invalid type";
