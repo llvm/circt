@@ -553,6 +553,23 @@ firrtl.module @reg_cst_prop1(in %clock: !firrtl.clock, out %out_b: !firrtl.uint<
   firrtl.connect %out_b, %tmp_b : !firrtl.uint<8>, !firrtl.uint<8>
 }
 
+// Check for DontTouch annotation
+// CHECK-LABEL: @reg_cst_prop1_DontTouch
+// CHECK-NEXT:      %c5_ui8 = firrtl.constant 5 : !firrtl.uint<8>
+// CHECK-NEXT:      %tmp_a = firrtl.reg %clock  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : (!firrtl.clock) -> !firrtl.uint<8>
+// CHECK-NEXT:      %tmp_b = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<8>
+// CHECK-NEXT:      firrtl.connect %tmp_a, %c5_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
+// CHECK-NEXT:      firrtl.connect %tmp_b, %tmp_a : !firrtl.uint<8>, !firrtl.uint<8>
+// CHECK-NEXT:      firrtl.connect %out_b, %tmp_b : !firrtl.uint<8>, !firrtl.uint<8>
+
+firrtl.module @reg_cst_prop1_DontTouch(in %clock: !firrtl.clock, out %out_b: !firrtl.uint<8>) {
+  %c5_ui8 = firrtl.constant 5 : !firrtl.uint<8>
+  %tmp_a = firrtl.reg %clock {name = "tmp_a", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}  : (!firrtl.clock) -> !firrtl.uint<8>
+  %tmp_b = firrtl.reg %clock {name = "tmp_b"} : (!firrtl.clock) -> !firrtl.uint<8>
+  firrtl.connect %tmp_a, %c5_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
+  firrtl.connect %tmp_b, %tmp_a : !firrtl.uint<8>, !firrtl.uint<8>
+  firrtl.connect %out_b, %tmp_b : !firrtl.uint<8>, !firrtl.uint<8>
+}
 // CHECK-LABEL: @reg_cst_prop2
 // CHECK-NEXT:   %c5_ui8 = firrtl.constant 5 : !firrtl.uint<8>
 // CHECK-NEXT:   firrtl.connect %out_b, %c5_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
