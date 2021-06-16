@@ -1220,6 +1220,24 @@ private:
 };
 } // end anonymous namespace
 
+void LowerBundleVectorPass::runAsync() {
+  // Collect the operations to iterate in a vector. We can't use parallelFor
+  // with the regular op list, since it requires a RandomAccessIterator. This
+  // also lets us use parallelForEachN, which means we don't have to
+  // llvm::enumerate the ops with their index. TODO(mlir): There should really
+  // be a way to do this without collecting the operations first.
+  auto &body = getOperation().getBody()->getOperations();
+  std::vector<Operation *> ops;
+  llvm::for_each(body, [&](Operation &op) { ops.push_back(&op); });
+
+  mlir::ParallelDiagnosticHandler diagHandler(&getContext());
+  llvm::parallelForEachN(0, ops.size(), [&](auto index) {
+    // Notify the handler the op index and then perform lowering.
+    diagHandler.setOrderIDForThread(index);
+    TypeLoweringVisitor(&getContext()).lowerModule(ops[index]);
+    diagHandler.eraseOrderIDForThread();
+  });
+}
 void LowerBundleVectorPass::runSync() {
   auto circuit = getOperation();
   for (auto &op : circuit.getBody()->getOperations()) {
@@ -1228,7 +1246,15 @@ void LowerBundleVectorPass::runSync() {
 }
 
 // This is the main entrypoint for the lowering pass.
-void LowerBundleVectorPass::runOnOperation() { runSync(); }
+void LowerBundleVectorPass::runOnOperation() { 
+
+  if (getContext().isMultithreadingEnabled()) {
+    runAsync();
+  } else {
+    runSync();
+  }
+
+}
 
 /// This is the pass constructor.
 std::unique_ptr<mlir::Pass> circt::firrtl::createLowerBundleVectorTypesPass() {
