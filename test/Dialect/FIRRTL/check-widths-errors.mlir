@@ -72,3 +72,16 @@ firrtl.circuit "Foo" {
   firrtl.module @Foo (in %a: !firrtl.uint, in %b: !firrtl.sint) {
   }
 }
+
+// -----
+
+firrtl.circuit "Foo"  {
+  firrtl.module @Foo() {
+    %w0 = firrtl.wire  : !firrtl.vector<uint<3>, 10>
+    // expected-error @+2 {{uninferred width: type '!firrtl.vector<uint, 0>' has no known width}}
+    // expected-note @+1 {{in result of `firrtl.wire`}}
+    %w1 = firrtl.wire  : !firrtl.vector<uint, 0>
+    firrtl.partialconnect %w1, %w0 : !firrtl.vector<uint, 0>, !firrtl.vector<uint<3>, 10>
+  }
+}
+
