@@ -132,6 +132,8 @@ static void filterAnnotations(ArrayAttr annotations,
       continue;
     }
 
+    if (!fieldIDAttr.isa<IntegerAttr>())
+      continue;
     auto fieldID = fieldIDAttr.cast<IntegerAttr>().getValue().getSExtValue();
     if (fieldID > targetFieldID)
       continue;
@@ -141,7 +143,7 @@ static void filterAnnotations(ArrayAttr annotations,
     if (fieldID < targetFieldID) {
       // If fieldIDRange attribute cannot be found, ignore the annotation.
       auto fieldIDRangeAttr = di.get("fieldIDRange");
-      if (!fieldIDRangeAttr)
+      if (!fieldIDRangeAttr || !fieldIDRangeAttr.isa<IntegerAttr>())
         continue;
 
       // If the target field ID is not in the range, ignore the annotation.

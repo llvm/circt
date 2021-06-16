@@ -340,7 +340,7 @@ struct FIRParser {
   ParseResult importAnnotationFile(SMLoc loc);
 
   Optional<std::pair<unsigned, unsigned>>
-  getFieldIDFromSubscripts(SMLoc loc, ArrayAttr subscripts, Type type);
+  getFieldIDFromTokens(SMLoc loc, ArrayAttr tokens, Type type);
 
   /// Populate a vector of annotations for a given Target.  If the
   /// annotations parameter is non-empty, then this will be appended to.
@@ -942,16 +942,15 @@ ParseResult FIRParser::importAnnotationFile(SMLoc loc) {
 }
 
 Optional<std::pair<unsigned, unsigned>>
-FIRParser::getFieldIDFromSubscripts(SMLoc loc, ArrayAttr subscripts,
-                                    Type type) {
-  unsigned id = 0;
-  unsigned idRange = 0;
+FIRParser::getFieldIDFromTokens(SMLoc loc, ArrayAttr tokens, Type type) {
   if (!type)
     return None;
   auto currentType = type.cast<FIRRTLType>();
+  unsigned id = 0;
+  unsigned idRange = 0;
 
-  for (auto subscript : subscripts) {
-    auto nameStr = subscript.cast<StringAttr>().getValue();
+  for (auto token : tokens) {
+    auto nameStr = token.cast<StringAttr>().getValue();
     // Unflip if the current type is flipped type.
     if (auto flipType = currentType.dyn_cast<FlipType>())
       currentType = flipType.getElementType();
@@ -993,7 +992,10 @@ FIRParser::getFieldIDFromSubscripts(SMLoc loc, ArrayAttr subscripts,
       idRange = currentType.getMaxFieldID();
 
     } else
-      return emitError(loc, "unexpected operation"), None;
+      return emitError(loc,
+                       "target token " + nameStr +
+                           " expects an aggregate type, but found ground type"),
+             None;
   }
   return std::pair<unsigned, unsigned>(id, idRange);
 }
@@ -1032,11 +1034,11 @@ void FIRParser::getAnnotations(SMLoc loc, Twine target, ArrayAttr &annotations,
       continue;
     }
 
-    // Get field ID from the subscripts.
+    // Get field ID from the tokens.
     if (!type)
       continue;
-    ArrayAttr subscripts = targetAttr.cast<ArrayAttr>();
-    auto fieldID = getFieldIDFromSubscripts(loc, subscripts, type);
+    ArrayAttr tokens = targetAttr.cast<ArrayAttr>();
+    auto fieldID = getFieldIDFromTokens(loc, tokens, type);
     if (!fieldID)
       continue;
 
