@@ -317,9 +317,10 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
   //    void visitExpr(SubindexOp op);
   void visitExpr(SubaccessOp op);
   void visitExpr(MuxPrimOp op);
+  void visitExpr(AsPassivePrimOp op);
   void visitStmt(ConnectOp op);
-  void visitStmt(WhenOp op);
   void visitStmt(PartialConnectOp op);
+  void visitStmt(WhenOp op);
 
 private:
   void processUsers(Value val, ArrayRef<Value> mapping);
@@ -592,6 +593,40 @@ void TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
 
     auto mux = builder->create<MuxPrimOp>(op.sel(), high, low);
     lowered.push_back(mux.getResult());
+  }
+  processUsers(op, lowered);
+  opsToRemove.push_back(op);
+}
+
+// Expand AsPassivePrimOp of aggregates
+void TypeLoweringVisitor::visitExpr(AsPassivePrimOp op) {
+  Value result = op.result();
+
+  // Attempt to get the bundle types, potentially unwrapping an outer flip
+  // type that wraps the whole bundle.
+  FIRRTLType resultType = getCanonicalAggregateType(result.getType());
+
+  // If the wire is not a bundle, there is nothing to do.
+  if (!resultType)
+    return;
+
+  SmallVector<FlatBundleFieldEntry, 8> fieldTypes = peelType(resultType);
+  SmallVector<Value> lowered;
+
+  // Loop over the leaf aggregates.
+  for (auto field : llvm::enumerate(fieldTypes)) {
+    Value input;
+    if (BundleType bundle = resultType.dyn_cast<BundleType>()) {
+      input = builder->create<SubfieldOp>(op.input(),
+                                         bundle.getElement(field.index()).name);
+    } else if (FVectorType fvector = resultType.dyn_cast<FVectorType>()) {
+      input = builder->create<SubindexOp>(op.input(), field.index());
+    } else {
+      op->emitError("Unknown aggregate type");
+    }
+
+    auto passive = builder->create<AsPassivePrimOp>(input);
+    lowered.push_back(passive.getResult());
   }
   processUsers(op, lowered);
   opsToRemove.push_back(op);
