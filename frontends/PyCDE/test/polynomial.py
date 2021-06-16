@@ -6,7 +6,7 @@ import mlir
 
 import pycde
 from pycde import (Input, Output, Parameter, module, externmodule, generator,
-                   types)
+                   types, dim)
 from circt.dialects import comb, hw
 
 
@@ -19,6 +19,7 @@ def PolynomialCompute(coefficients):
     # Evaluate polynomial for 'x'.
     x = Input(types.i32)
     y = Output(types.int(8 * 4))
+    taps = Output(dim(8 * 4, len(coefficients)))
 
     unused_parameter = Parameter(True)
 
@@ -35,7 +36,7 @@ def PolynomialCompute(coefficients):
       """Implement this module for input 'x'."""
 
       x = mod.x
-      taps: list[mlir.ir.Value] = list()
+      taps = list()
       for power, coeff in enumerate(coefficients):
         coeffVal = hw.ConstantOp.create(types.i32, coeff)
         if power == 0:
@@ -46,16 +47,16 @@ def PolynomialCompute(coefficients):
             currPow = x
           else:
             x_power = [x for i in range(power)]
-            currPow = comb.MulOp(types.i32, x_power).result
-          newPartialSum = comb.AddOp(types.i32, [
+            currPow = comb.MulOp.create(*x_power)
+          newPartialSum = comb.AddOp.create(
               partialSum,
-              comb.MulOp(types.i32, [coeffVal.result, currPow]).result
-          ]).result
+              comb.MulOp.create(coeffVal, currPow)
+          )
 
         taps.append(newPartialSum)
 
       # Final output
-      return {"y": taps[-1]}
+      return {"y": taps[-1], "taps": hw.ArrayCreateOp.create(taps)}
 
   return PolynomialCompute
 
@@ -77,11 +78,11 @@ class Polynomial(pycde.System):
     i32 = types.i32
     x = hw.ConstantOp.create(i32, 23)
     poly = PolynomialCompute([62, 42, 6])("example", x=x)
-    PolynomialCompute(coefficients=[62, 42, 6])("example2", x=poly.y)
-    PolynomialCompute([1, 2, 3, 4, 5])("example2", x=poly.y)
+    PolynomialCompute(coefficients=[8, 4, 6])("example2", x=poly.y)
+    # PolynomialCompute([1, 2, 3, 4, 5])("example2", x=poly.y)
 
     CoolPolynomialCompute([4, 42], x=x)
-    hw.OutputOp([poly.y])
+    return {"y": poly.y}
 
 
 poly = Polynomial()
