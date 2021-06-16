@@ -6,6 +6,12 @@ HIR is an mlir dialect for hardware description.
 * Match data type between function call and function def.
 * Support external def.
 
+#Observations
+
+* Optimizations enabled by multiple drivers for bus type.
+    - Loop fusion between producer and consumer.
+    - if two instances of a bus are written-to at time %t1 and %t2 then we know
+        that %t1 != %t2 (can be used to fuse hardware blocks).
 
 
 #Enhancement proposals : Ops

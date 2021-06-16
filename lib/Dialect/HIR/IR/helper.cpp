@@ -93,4 +93,25 @@ ParseResult parseIntegerAttr(IntegerAttr &value, int bitwidth,
       value, getIntegerType(parser.getBuilder().getContext(), bitwidth),
       attrName, result.attributes);
 }
+
+int64_t getConstantIntValue(Value var) {
+  auto constantOp = dyn_cast<ConstantOp>(var.getDefiningOp());
+  assert(constantOp);
+  auto integerAttr = constantOp.value().dyn_cast<IntegerAttr>();
+  assert(integerAttr);
+  return integerAttr.getInt();
+}
+
+int64_t calcLinearIndex(mlir::OperandRange indices,
+                        mlir::ArrayRef<int64_t> dims) {
+  int64_t linearIdx = 0;
+  int64_t stride = 1;
+  assert(indices.size() != 0);
+
+  for (int i = indices.size() - 1; i >= 0; i--) {
+    linearIdx += getConstantIntValue(indices[i]) * stride;
+    stride *= dims[i];
+  }
+  return linearIdx;
+}
 } // namespace helper

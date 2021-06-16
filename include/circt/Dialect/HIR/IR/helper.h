@@ -20,4 +20,7 @@ mlir::ParseResult parseIntegerAttr(mlir::IntegerAttr &value, int bitwidth,
                                    mlir::OpAsmParser &parser,
                                    mlir::OperationState &result);
 
+int64_t getConstantIntValue(mlir::Value var);
+int64_t calcLinearIndex(mlir::OperandRange indices,
+                        mlir::ArrayRef<int64_t> dims);
 } // namespace helper
