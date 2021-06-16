@@ -5,8 +5,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/HIR/HIR.h"
-#include "circt/Dialect/HIR/HIRDialect.h"
+#include "circt/Dialect/HIR/IR/HIR.h"
+#include "circt/Dialect/HIR/IR/HIRDialect.h"
 #include "circt/Dialect/HIR/Verification/SheduleVerifier.h"
 
 #include "mlir/Dialect/CommonFolders.h"
@@ -45,26 +45,17 @@ public:
 };
 /// Checks for out of bound memef access subscripts..
 class BitwidthReductionPass
-    : public PassWrapper<BitwidthReductionPass, OperationPass<hir::DefOp>> {
+    : public PassWrapper<BitwidthReductionPass, OperationPass<hir::FuncOp>> {
 public:
   void runOnOperation() override;
 
 private:
-  bool inspectOp(DefOp op);
+  bool inspectOp(hir::FuncOp op);
   bool inspectOp(hir::ConstantOp op);
   bool inspectOp(ForOp op);
   bool inspectOp(UnrollForOp op);
-  bool inspectOp(MemReadOp op);
-  bool inspectOp(hir::AddOp op);
-  bool inspectOp(hir::SubtractOp op);
-  bool inspectOp(MemWriteOp op);
-  bool inspectOp(hir::ReturnOp op);
-  bool inspectOp(hir::YieldOp op);
-  bool inspectOp(hir::WireWriteOp op);
-  bool inspectOp(hir::WireReadOp op);
-  bool inspectOp(hir::AllocOp op);
-  bool inspectOp(hir::DelayOp op);
-  bool inspectOp(hir::CallOp op);
+  bool inspectOp(LoadOp op);
+  bool inspectOp(StoreOp op);
   bool inspectOp(Operation *op);
   bool inspectBody(Block &body);
 
@@ -110,7 +101,7 @@ private:
   std::vector<Operation *> opsToErase;
 };
 
-bool BitwidthReductionPass::inspectOp(DefOp op) {
+bool BitwidthReductionPass::inspectOp(FuncOp op) {
   Block &entryBlock = op.getBody().front();
   inspectBody(entryBlock);
   return true;
@@ -148,64 +139,47 @@ bool BitwidthReductionPass::inspectOp(UnrollForOp op) {
   return true;
 }
 
-bool BitwidthReductionPass::inspectOp(MemReadOp op) { return true; }
+bool BitwidthReductionPass::inspectOp(LoadOp op) { return true; }
 
-bool BitwidthReductionPass::inspectOp(MemWriteOp op) { return true; }
-
-bool BitwidthReductionPass::inspectOp(hir::AddOp op) { return true; }
-
-bool BitwidthReductionPass::inspectOp(hir::SubtractOp op) { return true; }
-
-bool BitwidthReductionPass::inspectOp(hir::ReturnOp op) { return true; }
-
-bool BitwidthReductionPass::inspectOp(hir::YieldOp op) { return true; }
-
-bool BitwidthReductionPass::inspectOp(hir::WireWriteOp op) { return true; }
-
-bool BitwidthReductionPass::inspectOp(hir::WireReadOp op) { return true; }
-
-bool BitwidthReductionPass::inspectOp(hir::AllocOp op) { return true; }
-
-bool BitwidthReductionPass::inspectOp(hir::DelayOp op) { return true; }
-
-bool BitwidthReductionPass::inspectOp(hir::CallOp op) { return true; }
+bool BitwidthReductionPass::inspectOp(StoreOp op) { return true; }
 
 bool BitwidthReductionPass::inspectOp(Operation *inst) {
   if (auto op = dyn_cast<hir::ConstantOp>(inst)) {
     return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::CallOp>(inst)) {
-    return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::AllocOp>(inst)) {
-    return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::DelayOp>(inst)) {
-    return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::ForOp>(inst)) {
-    return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::UnrollForOp>(inst)) {
-    return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::ReturnOp>(inst)) {
-    return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::MemReadOp>(inst)) {
-    return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::MemWriteOp>(inst)) {
-    return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::WireReadOp>(inst)) {
-    return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::WireWriteOp>(inst)) {
-    return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::AddOp>(inst)) {
-    return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::SubtractOp>(inst)) {
-    return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::YieldOp>(inst)) {
-    return inspectOp(op);
-  } else if (auto op = dyn_cast<hir::TerminatorOp>(inst)) {
-    return true;
-  } else {
-    emitError(inst->getLoc(), "Unsupported Operation for bitwidth reduction!");
-    return false;
   }
+  if (auto op = dyn_cast<hir::CallOp>(inst)) {
+    return inspectOp(op);
+  }
+  if (auto op = dyn_cast<hir::AllocaOp>(inst)) {
+    return inspectOp(op);
+  }
+  if (auto op = dyn_cast<hir::DelayOp>(inst)) {
+    return inspectOp(op);
+  }
+  if (auto op = dyn_cast<hir::ForOp>(inst)) {
+    return inspectOp(op);
+  }
+  if (auto op = dyn_cast<hir::UnrollForOp>(inst)) {
+    return inspectOp(op);
+  }
+  if (auto op = dyn_cast<hir::ReturnOp>(inst)) {
+    return inspectOp(op);
+  }
+  if (auto op = dyn_cast<hir::LoadOp>(inst)) {
+    return inspectOp(op);
+  }
+  if (auto op = dyn_cast<hir::StoreOp>(inst)) {
+    return inspectOp(op);
+  }
+  if (auto op = dyn_cast<hir::YieldOp>(inst)) {
+    return inspectOp(op);
+  }
+  if (auto op = dyn_cast<hir::TerminatorOp>(inst)) {
+    return true;
+  }
+  return true;
 }
+
 bool BitwidthReductionPass::inspectBody(Block &block) {
 
   // Print the operations within the entity.
