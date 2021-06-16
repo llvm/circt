@@ -263,7 +263,10 @@ def _module_base(cls, params={}):
     cls._dont_touch.add(name)
   mod._input_ports_lookup = dict(mod._input_ports)
   for (idx, (name, type)) in enumerate(mod._output_ports):
-    setattr(mod, name, property(lambda self: Value(self.results[idx], type)))
+    setattr(
+        mod, name,
+        property(
+            lambda self, idx=idx, type=type: Value(self.results[idx], type)))
     cls._dont_touch.add(name)
   mod._output_ports_lookup = dict(mod._output_ports)
 

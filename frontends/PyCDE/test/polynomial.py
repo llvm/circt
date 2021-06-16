@@ -19,7 +19,6 @@ def PolynomialCompute(coefficients):
     # Evaluate polynomial for 'x'.
     x = Input(types.i32)
     y = Output(types.int(8 * 4))
-    taps = Output(dim(8 * 4, len(coefficients)))
 
     unused_parameter = Parameter(True)
 
@@ -49,14 +48,12 @@ def PolynomialCompute(coefficients):
             x_power = [x for i in range(power)]
             currPow = comb.MulOp.create(*x_power)
           newPartialSum = comb.AddOp.create(
-              partialSum,
-              comb.MulOp.create(coeffVal, currPow)
-          )
+              partialSum, comb.MulOp.create(coeffVal, currPow))
 
         taps.append(newPartialSum)
 
       # Final output
-      return {"y": taps[-1], "taps": hw.ArrayCreateOp.create(taps)}
+      return {"y": taps[-1]}
 
   return PolynomialCompute
 
@@ -78,8 +75,8 @@ class Polynomial(pycde.System):
     i32 = types.i32
     x = hw.ConstantOp.create(i32, 23)
     poly = PolynomialCompute([62, 42, 6])("example", x=x)
-    PolynomialCompute(coefficients=[8, 4, 6])("example2", x=poly.y)
-    # PolynomialCompute([1, 2, 3, 4, 5])("example2", x=poly.y)
+    PolynomialCompute(coefficients=[62, 42, 6])("example2", x=poly.y)
+    PolynomialCompute([1, 2, 3, 4, 5])("example2", x=poly.y)
 
     CoolPolynomialCompute([4, 42], x=x)
     return {"y": poly.y}
