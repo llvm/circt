@@ -479,7 +479,7 @@ return;
         IntType tmpType = destType.cast<IntType>();
         if (tmpType.isSigned())
           tmpType = UIntType::get(destType.getContext(), destWidth);
-          if (srcInfo.second)
+        if (srcInfo.second)
           src = builder->create<AsPassivePrimOp>(src);
         src = builder->create<TailPrimOp>(tmpType, src, srcWidth - destWidth);
         // Insert the cast back to signed if needed.
@@ -501,10 +501,10 @@ return;
      Value dest = builder->create<SubindexOp>(op.dest(), index);
      if (srcFields[index].isOutput)
         std::swap(src, dest);
-        if (src.getType() == dest.getType())
-          builder->create<ConnectOp>(dest, src);
-          else
-          builder->create<PartialConnectOp>(dest,src);
+      if (src.getType() == dest.getType())
+        builder->create<ConnectOp>(dest, src);
+      else
+        builder->create<PartialConnectOp>(dest,src);
     }
   } else if (BundleType srcBundle = srcType.dyn_cast<BundleType>()) {
     // Pairwise connect on matching field names
@@ -781,12 +781,8 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
         memResultToWire.push_back(memPorts);
       }
     }
-    auto newName = op.name().str() + field.value().suffix;
-    auto newMem = builder->create<MemOp>(
-        resultPortTypes, op.readLatencyAttr(), op.writeLatencyAttr(),
-        op.depthAttr(), op.ruwAttr(),
-        builder->getArrayAttr(resultPortNames.getArrayRef()),
-        builder->getStringAttr(newName), op.annotations());
+    auto newMem = 
+        cloneMemWithNewType(builder, op, field.value().type, field.value().suffix);
     for (size_t i = 0, e = newMem.getNumResults(); i != e; ++i) {
       auto res = newMem.getResult(i);
       for (auto memResultType : llvm::enumerate(res.getType()
