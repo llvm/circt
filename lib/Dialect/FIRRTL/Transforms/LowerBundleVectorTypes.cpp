@@ -542,7 +542,9 @@ void TypeLoweringVisitor::visitStmt(WhenOp op) {
   // are lowered.
 
   // Visit operations in the then block.
-  for (auto &op : op.getThenBlock()) {
+  auto &body = op.getThenBlock();
+  for (auto iter = body.rbegin(), e = body.rend(); iter != e ; ++iter ) {
+    auto &op  = *iter;
     builder->setInsertionPoint(&op);
     builder->setLoc(op.getLoc());
     dispatchVisitor(&op);
@@ -553,7 +555,9 @@ void TypeLoweringVisitor::visitStmt(WhenOp op) {
     return;
 
   // Visit operations in the else block.
-  for (auto &op : op.getElseBlock()) {
+  auto &bodyE = op.getElseBlock();
+  for (auto iter = bodyE.rbegin(), e = bodyE.rend(); iter != e ; ++iter ) {
+    auto &op  = *iter;
     builder->setInsertionPoint(&op);
     builder->setLoc(op.getLoc());
     dispatchVisitor(&op);
@@ -881,6 +885,7 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
     // We erase old ops eagerly so we don't have dangling uses we've already
     // lowered.
     for (auto *op : opsToRemove)
+      //if (op->getUsers().empty())
       op->erase();
 
     opsToRemove.clear();
@@ -891,6 +896,7 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   }
 
   for (auto *op : opsToRemove)
+      //if (op->getUsers().empty())
     op->erase();
   opsToRemove.clear();
   
