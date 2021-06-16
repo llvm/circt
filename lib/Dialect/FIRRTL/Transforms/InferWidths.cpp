@@ -743,7 +743,7 @@ computeUnary(ExprSolution arg, llvm::function_ref<int32_t(int32_t)> operation) {
   if (arg.first)
     arg.first = operation(*arg.first);
   return arg;
-};
+}
 
 static ExprSolution
 computeBinary(ExprSolution lhs, ExprSolution rhs,
@@ -756,7 +756,7 @@ computeBinary(ExprSolution lhs, ExprSolution rhs,
   else if (rhs.first)
     result.first = rhs.first;
   return result;
-};
+}
 
 /// Compute the value of a constraint expression`expr`. `seenVars` is used as a
 /// recursion breaker. Recursive variables are treated as zero. Returns the
@@ -1405,21 +1405,29 @@ void InferenceMapping::declareVars(Value value, Location loc) {
     if (width >= 0) {
       // Known width integer create a known expression.
       setExpr(FieldRef(value, fieldID), solver.known(width));
+      fieldID++;
     } else if (width == -1) {
       // Unkown width integers create a variable.
       setExpr(FieldRef(value, fieldID), solver.var());
+      fieldID++;
     } else if (auto inner = type.dyn_cast<FlipType>()) {
       // Flip types declare unknown widths in their element type.
       return declare(inner.getElementType());
     } else if (auto bundleType = type.dyn_cast<BundleType>()) {
       // Bundle types recursively declare all bundle elements.
+      fieldID++;
       for (auto &element : bundleType.getElements()) {
-        fieldID++;
         declare(element.type);
       }
     } else if (auto vecType = type.dyn_cast<FVectorType>()) {
       fieldID++;
-      declare(vecType.getElementType());
+      auto save = fieldID;
+      // Skip 0 length vectors.
+      if (vecType.getNumElements() > 0) {
+        declare(vecType.getElementType());
+      }
+      // Skip past the rest of the elements
+      fieldID = save + vecType.getMaxFieldID();
     } else {
       llvm_unreachable("Unknown type inside a bundle!");
     }
@@ -1443,17 +1451,23 @@ void InferenceMapping::constrainTypes(Value larger, Value smaller) {
           // Flip the LHS and RHS.
           constrain(flipType.getElementType(), smaller, larger);
         } else if (auto bundleType = type.dyn_cast<BundleType>()) {
+          fieldID++;
           for (auto &element : bundleType.getElements()) {
-            fieldID++;
             constrain(element.type, larger, smaller);
           }
         } else if (auto vecType = type.dyn_cast<FVectorType>()) {
           fieldID++;
-          constrain(vecType.getElementType(), larger, smaller);
+          auto save = fieldID;
+          // Skip 0 length vectors.
+          if (vecType.getNumElements() > 0) {
+            constrain(vecType.getElementType(), larger, smaller);
+          }
+          fieldID = save + vecType.getMaxFieldID();
         } else if (type.isGround()) {
           // Leaf element, look up their expressions, and create the constraint.
           constrainTypes(getExpr(FieldRef(larger, fieldID)),
                          getExpr(FieldRef(smaller, fieldID)));
+          fieldID++;
         } else {
           llvm_unreachable("Unknown type inside a bundle!");
         }
@@ -1492,6 +1506,9 @@ void InferenceMapping::partiallyConstrainTypes(Value larger, Value smaller) {
                       b, bID + bBundle.getFieldID(*bIndex));
           }
         } else if (auto aVecType = aType.dyn_cast<FVectorType>()) {
+          // Do not constrain the elements of a zero length vector.
+          if (aVecType.getNumElements() == 0)
+              return;
           auto bVecType = bType.cast<FVectorType>();
           constrain(aVecType.getElementType(), a, aID + 1,
                     bVecType.getElementType(), b, bID + 1);
@@ -1540,23 +1557,29 @@ void InferenceMapping::unifyTypes(FieldRef lhs, FieldRef rhs, FIRRTLType type) {
   // them equal.
   auto fieldID = 0;
   std::function<void(FIRRTLType)> unify = [&](FIRRTLType type) {
-    if (auto inner = type.dyn_cast<FlipType>()) {
-      return unify(inner.getElementType());
-    } else if (auto bundleType = type.dyn_cast<BundleType>()) {
-      for (auto &element : bundleType.getElements()) {
-        fieldID++;
-        unify(element.type);
-      }
-    } else if (auto vecType = type.dyn_cast<FVectorType>()) {
-      fieldID++;
-      unify(vecType.getElementType());
-    } else if (type.isGround()) {
+    if (type.isGround()) {
       // Leaf element, unify the fields!
       FieldRef lhsFieldRef(lhs.getValue(), lhs.getFieldID() + fieldID);
       FieldRef rhsFieldRef(rhs.getValue(), rhs.getFieldID() + fieldID);
       LLVM_DEBUG(llvm::dbgs() << "Unify " << getFieldName(lhsFieldRef) << " = "
                               << getFieldName(rhsFieldRef) << "\n");
       setExpr(lhsFieldRef, getExpr(rhsFieldRef));
+      fieldID++;
+    } else if (auto inner = type.dyn_cast<FlipType>()) {
+      return unify(inner.getElementType());
+    } else if (auto bundleType = type.dyn_cast<BundleType>()) {
+      fieldID++;
+      for (auto &element : bundleType.getElements()) {
+        unify(element.type);
+      }
+    } else if (auto vecType = type.dyn_cast<FVectorType>()) {
+      fieldID++;
+      auto save = fieldID;
+      // Skip 0 length vectors.
+      if (vecType.getNumElements() > 0) {
+        unify(vecType.getElementType());
+      }
+      fieldID = save + vecType.getMaxFieldID();
     } else {
       llvm_unreachable("Unknown type inside a bundle!");
     }
@@ -1762,27 +1785,37 @@ bool InferenceTypeUpdate::updateValue(Value value) {
     auto width = type.getBitWidthOrSentinel();
     if (width >= 0) {
       // Known width integers return themselves.
+      fieldID++;
       return type;
     } else if (width == -1) {
       // Unkown width integers return the solved type.
       auto newType = updateType(FieldRef(value, fieldID), type);
-      assert(newType && "Type was not inferred.");
+      fieldID++;
       return newType;
     } else if (auto flipType = type.dyn_cast<FlipType>()) {
       // Flip types update unknown widths in their element type.
       return FlipType::get(update(flipType.getElementType()));
     } else if (auto bundleType = type.dyn_cast<BundleType>()) {
       // Bundle types recursively update all bundle elements.
+      fieldID++;
       llvm::SmallVector<BundleType::BundleElement, 3> elements;
       for (auto &element : bundleType.getElements()) {
-        fieldID++;
         elements.emplace_back(element.name, update(element.type));
       }
       return BundleType::get(elements, context);
     } else if (auto vecType = type.dyn_cast<FVectorType>()) {
       fieldID++;
-      return FVectorType::get(update(vecType.getElementType()),
-                              vecType.getNumElements());
+      auto save = fieldID;
+      // TODO: this should recurse into the element type of 0 length vectors and
+      // set any unknown width to 0.
+      if (vecType.getNumElements() > 0) {
+        auto newType = FVectorType::get(update(vecType.getElementType()),
+                                        vecType.getNumElements());
+        fieldID = save + vecType.getMaxFieldID();
+        return newType;
+      }
+      // If this is a 0 length vector return the original type.
+      return type;
     }
     llvm_unreachable("Unknown type inside a bundle!");
   };
