@@ -13,7 +13,7 @@ lit.site.cfg.py
 #Misc
 compile_commands.json
 .clangd
-*.sv
+./*.sv
 *.log
 *.pb
 xsim.dir

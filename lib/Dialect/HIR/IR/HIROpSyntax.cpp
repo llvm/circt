@@ -1,5 +1,5 @@
 #include "HIROpSyntax.h"
-#include "circt/Dialect/HIR/helper.h"
+#include "circt/Dialect/HIR/IR/helper.h"
 
 namespace helper {} // namespace helper.
 

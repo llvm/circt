@@ -17,10 +17,10 @@
 #include "circt/Conversion/Passes.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HIR/Transforms/Passes.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
-#include "circt/Transforms/HIR/Passes.h"
 #include "circt/Transforms/Passes.h"
 
 namespace circt {

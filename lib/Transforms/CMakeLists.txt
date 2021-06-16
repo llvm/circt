@@ -10,5 +10,3 @@ add_circt_library(CIRCTTransforms
   MLIRRewrite
   MLIRTransformUtils
 )
-
-add_subdirectory(HIR)

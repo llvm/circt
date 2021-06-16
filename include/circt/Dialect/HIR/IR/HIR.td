@@ -7,7 +7,7 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/IR/SymbolInterfaces.td"
-include "circt/Dialect/HIR/HIRInterfaces.td"
+include "circt/Dialect/HIR/IR/HIRInterfaces.td"
 
 // Dialect
 def HIR_Dialect : Dialect {

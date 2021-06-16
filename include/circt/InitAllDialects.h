@@ -18,7 +18,7 @@
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
-#include "circt/Dialect/HIR/HIRDialect.h"
+#include "circt/Dialect/HIR/IR/HIRDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"

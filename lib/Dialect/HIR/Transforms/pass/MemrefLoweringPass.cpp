@@ -5,8 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "../PassDetails.h"
-#include "circt/Dialect/HIR/HIR.h"
-#include "circt/Dialect/HIR/helper.h"
+#include "circt/Dialect/HIR/IR/HIR.h"
+#include "circt/Dialect/HIR/IR/helper.h"
 
 using namespace mlir;
 using namespace hir;

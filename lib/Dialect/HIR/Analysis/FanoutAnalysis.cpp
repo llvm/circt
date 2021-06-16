@@ -69,5 +69,5 @@ void BusFanoutInfo::visitDef(hir::AllocaOp op) {
 
 void visitUse(hir::SendOp op) {
   Value bus = op.bus();
-  auto indices = op.indices();
+  auto index = op.index();
 }

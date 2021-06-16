@@ -4,9 +4,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/HIR/HIR.h"
-#include "circt/Dialect/HIR/HIRDialect.h"
-#include "circt/Dialect/HIR/helper.h"
+#include "circt/Dialect/HIR/IR//helper.h"
+#include "circt/Dialect/HIR/IR/HIR.h"
+#include "circt/Dialect/HIR/IR/HIRDialect.h"
 #include "mlir/IR/PatternMatch.h"
 
 using namespace mlir;

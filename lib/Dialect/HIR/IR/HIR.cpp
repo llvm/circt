@@ -4,8 +4,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/HIR/HIR.h"
-#include "circt/Dialect/HIR/HIRDialect.h"
+#include "circt/Dialect/HIR/IR/HIR.h"
+#include "circt/Dialect/HIR/IR/HIRDialect.h"
+#include "circt/Dialect/HIR/IR/helper.h"
 #include "mlir/Dialect/CommonFolders.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
@@ -21,7 +22,6 @@
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/StringMap.h"
 
-#include "circt/Dialect/HIR/helper.h"
 using namespace mlir;
 using namespace hir;
 using namespace llvm;

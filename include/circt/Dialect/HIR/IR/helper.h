@@ -1,5 +1,5 @@
-#include "circt/Dialect/HIR/HIR.h"
-#include "circt/Dialect/HIR/HIRDialect.h"
+#include "circt/Dialect/HIR/IR/HIR.h"
+#include "circt/Dialect/HIR/IR/HIRDialect.h"
 #include "mlir/IR/Dialect.h"
 // returns the bitwidth of the type.
 namespace helper {

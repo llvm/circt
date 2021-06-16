@@ -1,4 +1,4 @@
-#include "circt/Transforms/HIR/Passes.h"
+#include "circt/Dialect/HIR/Transforms/Passes.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/Passes.h"
 
