@@ -82,6 +82,26 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar
 
 ; // -----
 
+; COM: A ReferenceTarget/ComponentName pointing at an Instance should work.
+circuit Foo: %[[{"fooPort":null,"target":"~Foo|Foo>a"},{"barPort":null,"target":"~Foo|Foo>bar.a"}
+]]
+  module Bar:
+    input a: UInt<1>
+    output b: UInt<2>
+  module Foo:
+    input a: UInt<1>
+    output b: UInt<2>
+
+    inst bar of Bar
+    bar.a <= a
+    b <= bar.b
+
+    ; CHECK-LABEL: module {
+    ; CHECK: %bar_a, %bar_b = firrtl.instance @Bar
+    ; CHECK-SAME: annotations = [{barPort, target = [".a"]}], name = "bar"
+
+; // -----
+
 ; COM: A ReferenceTarget/ComponentName pointing at a CMem should work.
 circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar"}]]
   module Foo:
