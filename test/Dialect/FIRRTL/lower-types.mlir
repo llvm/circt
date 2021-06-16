@@ -1050,14 +1050,10 @@ module  {
 module  {
   firrtl.circuit "Foo"  {
 // CHECK-LABEL: firrtl.module @Foo
-    firrtl.module @Foo(out %a: !firrtl.vector<uint<1>, 1>, in %b: !firrtl.vector<uint<1>, 1>, out %c: !firrtl.vector<uint<1>, 1>, in %cond: !firrtl.uint<1>) {
-      %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
-      // CHECK: firrtl.invalidvalue : !firrtl.uint<1>
-      %0 = firrtl.subindex %a[0] : !firrtl.vector<uint<1>, 1>
-      firrtl.connect %0, %invalid_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-      %1 = firrtl.asPassive %a : !firrtl.vector<uint<1>, 1>
-      %2 = firrtl.mux(%cond, %1, %b) : (!firrtl.uint<1>, !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>) -> !firrtl.vector<uint<1>, 1>
-      firrtl.connect %c, %2 : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
+    firrtl.module @Foo(out %arg0: !firrtl.vector<uint<1>, 1>, in %arg1: !firrtl.vector<uint<1>, 1>, out %arg2: !firrtl.vector<uint<1>, 1>, in %arg3: !firrtl.uint<1>) attributes {portNames = ["a", "b", "c", "cond"]} {
+      %1 = firrtl.asPassive %arg0 : !firrtl.vector<uint<1>, 1>
+      %2 = firrtl.mux(%arg3, %1, %arg1) : (!firrtl.uint<1>, !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>) -> !firrtl.vector<uint<1>, 1>
+      firrtl.connect %arg2, %2 : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
     }
   }
 }

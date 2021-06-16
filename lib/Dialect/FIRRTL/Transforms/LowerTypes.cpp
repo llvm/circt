@@ -952,8 +952,8 @@ void TypeLoweringVisitor::visitExpr(AsPassivePrimOp op) {
   auto result = op.result();
   for (auto it : llvm::zip(inputValues, fieldTypes)) {
     auto field = std::get<1>(it);
-    auto muxOp = builder->create<AsPassivePrimOp>(std::get<0>(it).first);
-    setBundleLowering(FieldRef(result, field.fieldID), muxOp);
+    auto passOp = builder->create<AsPassivePrimOp>(std::get<0>(it).first);
+    setBundleLowering(FieldRef(result, field.fieldID), passOp);
   }
   opsToRemove.push_back(op);
 }
