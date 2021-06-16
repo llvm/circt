@@ -597,6 +597,7 @@ void TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
   opsToRemove.push_back(op);
 }
 
+#if 0
 void TypeLoweringVisitor::visitDecl(MemOp op) {
   //We are splitting data, which must be the same across memory ports
   // Attempt to get the bundle types, potentially unwrapping an outer flip
@@ -666,6 +667,127 @@ op->getParentOp()->dump();
 //   lowered.push_back(mux.getResult());
 // }
 // processUsers(op, lowered);
+  opsToRemove.push_back(op);
+}
+#endif
+
+/// Lower memory operations. A new memory is created for every leaf
+/// element in a memory's data type.
+void TypeLoweringVisitor::visitDecl(MemOp op) {
+  auto resultType = op.getDataType();
+  auto depth = op.depth();
+  if (!getCanonicalAggregateType(resultType))
+    return;
+
+  // If the wire is not a bundle, there is nothing to do.
+  if (!resultType)
+    return;
+
+  SmallVector<FlatBundleFieldEntry, 8> fieldTypes = peelType(resultType);
+
+  // Mutable store of the types of the ports of a new memory. This is
+  // cleared and re-used.
+  SmallVector<Type, 4> resultPortTypes;
+  llvm::SmallSetVector<Attribute, 4> resultPortNames;
+
+  // Insert a unique port into resultPortNames with base name nameStr.
+  auto uniquePortName = [&](StringRef baseName) {
+    size_t i = 0;
+    std::string suffix = "";
+    while (!resultPortNames.insert(
+        builder->getStringAttr(baseName.str() + suffix)))
+      suffix = std::to_string(i++);
+  };
+
+  SmallVector<MemOp> newMems;
+  SmallVector<SmallVector<Value, 4>, 8> memResultToWire;
+  for (auto field : llvm::enumerate(fieldTypes)) {
+    // Determine the new port type for this memory. New ports are
+    // constructed by checking the kind of the memory.
+    resultPortTypes.clear();
+    resultPortNames.clear();
+    for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
+
+      auto kind = op.getPortKind(i);
+      auto name = op.getPortName(i);
+      SmallVector<Value, 4> memPorts;
+
+      for (auto memResultType : op.getResult(i)
+                                    .getType()
+                                    .cast<FIRRTLType>()
+                                    .getPassiveType()
+                                    .cast<BundleType>()
+                                    .getElements()) {
+        auto wire = builder->create<WireOp>(
+            memResultType.type); //, op.name().str() + "_" +
+                                 //memResultType.name.getValue());
+        memPorts.push_back(wire.getResult());
+      }
+      processUsers(op.getResult(i), memPorts);
+      // Any read or write ports are just added.
+      if (kind != MemOp::PortKind::ReadWrite) {
+        resultPortTypes.push_back(
+            FlipType::get(op.getTypeForPort(depth, field.value().type, kind)));
+        uniquePortName(name.getValue());
+        if (field.index() == 0)
+          memResultToWire.push_back(memPorts);
+        continue;
+      }
+      resultPortTypes.push_back(FlipType::get(
+          op.getTypeForPort(depth, field.value().type, MemOp::PortKind::Read)));
+      resultPortTypes.push_back(FlipType::get(op.getTypeForPort(
+          depth, field.value().type, MemOp::PortKind::Write)));
+      auto nameStr = name.getValue().str();
+      uniquePortName(nameStr + "_r");
+      uniquePortName(nameStr + "_w");
+      if (field.index() == 0) {
+        memResultToWire.push_back(memPorts);
+        memResultToWire.push_back(memPorts);
+      }
+    }
+    auto newName = op.name().str() + field.value().suffix;
+    auto newMem = builder->create<MemOp>(
+        resultPortTypes, op.readLatencyAttr(), op.writeLatencyAttr(),
+        op.depthAttr(), op.ruwAttr(),
+        builder->getArrayAttr(resultPortNames.getArrayRef()),
+        builder->getStringAttr(newName), op.annotations());
+    for (size_t i = 0, e = newMem.getNumResults(); i != e; ++i) {
+      auto res = newMem.getResult(i);
+      for (auto memResultType : llvm::enumerate(res.getType()
+                                                    .cast<FIRRTLType>()
+                                                    .cast<FlipType>()
+                                                    .getElementType()
+                                                    .cast<BundleType>()
+                                                    .getElements())) {
+        if (memResultType.value().name.getValue().contains("data") ||
+            memResultType.value().name.getValue().contains("mask")) {
+          if (memResultType.value().type.dyn_cast<FlipType>()) {
+            builder->create<ConnectOp>(
+                builder->create<SubfieldOp>(
+                    memResultToWire[i][memResultType.index()],
+                    field.value().suffix.str().drop_front(1)),
+                builder->create<SubfieldOp>(res, memResultType.value().name));
+          } else
+            builder->create<ConnectOp>(
+                builder->create<SubfieldOp>(res, memResultType.value().name),
+                builder->create<SubfieldOp>(
+                    memResultToWire[i][memResultType.index()],
+                    field.value().suffix.str().drop_front(1)));
+        } else {
+          if (memResultType.value().type.dyn_cast<FlipType>()) {
+            builder->create<ConnectOp>(
+                memResultToWire[i][memResultType.index()],
+                builder->create<SubfieldOp>(res, memResultType.value().name));
+          } else
+            builder->create<ConnectOp>(
+                builder->create<SubfieldOp>(res, memResultType.value().name),
+                memResultToWire[i][memResultType.index()]);
+        }
+      }
+    }
+    newMems.push_back(newMem);
+  }
+
   opsToRemove.push_back(op);
 }
 
