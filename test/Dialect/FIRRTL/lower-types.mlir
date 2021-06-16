@@ -1055,8 +1055,9 @@ module  {
       // CHECK: firrtl.invalidvalue : !firrtl.uint<1>
       %0 = firrtl.subindex %a[0] : !firrtl.vector<uint<1>, 1>
       firrtl.connect %0, %invalid_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-      %1 = firrtl.mux(%cond, %a, %b) : (!firrtl.uint<1>, !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>) -> !firrtl.vector<uint<1>, 1>
-      firrtl.connect %c, %1 : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
+      %1 = firrtl.asPassive %a : !firrtl.vector<uint<1>, 1>
+      %2 = firrtl.mux(%cond, %1, %b) : (!firrtl.uint<1>, !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>) -> !firrtl.vector<uint<1>, 1>
+      firrtl.connect %c, %2 : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
     }
   }
 }
