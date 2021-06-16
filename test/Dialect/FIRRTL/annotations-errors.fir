@@ -90,5 +90,5 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0].qnx"},{"two":null,"target"
 circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.qux"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
   module Foo:
     input clock: Clock
-; expected-error @+1 {{invalid sub-index name .qux}}
+; expected-error @+1 {{expect integer sub-index token for vector type}}
     reg bar: {baz: UInt<1>, qux: UInt<1>}[2], clock

@@ -950,51 +950,46 @@ FIRParser::getFieldIDFromTokens(SMLoc loc, ArrayAttr tokens, Type type) {
   unsigned idRange = 0;
 
   for (auto token : tokens) {
-    auto nameStr = token.cast<StringAttr>().getValue();
     // Unflip if the current type is flipped type.
     if (auto flipType = currentType.dyn_cast<FlipType>())
       currentType = flipType.getElementType();
 
     if (auto bundleType = currentType.dyn_cast<BundleType>()) {
-      // Target should begin with ".".
-      if (nameStr.front() != '.')
-        return emitError(loc, "invalid sub-field name " + nameStr), None;
+      auto subFieldAttr = token.dyn_cast<StringAttr>();
+      if (!subFieldAttr)
+        return emitError(loc, "expect string sub-field token for bundle type"),
+               None;
 
-      // Taget should point to valid sub-field.
-      nameStr = nameStr.drop_front();
-      auto index = bundleType.getElementIndex(nameStr);
+      // Token should point to valid sub-field.
+      auto subField = subFieldAttr.getValue();
+      auto index = bundleType.getElementIndex(subField);
       if (!index)
-        return emitError(loc, "fail to find " + nameStr + " in the bundle"),
+        return emitError(loc, "fail to find " + subField + " in the bundle"),
                None;
 
       id += bundleType.getFieldID(index.getValue());
-      currentType = bundleType.getElementType(nameStr);
+      currentType = bundleType.getElementType(subField);
       idRange = currentType.getMaxFieldID();
 
     } else if (auto vectorType = currentType.dyn_cast<FVectorType>()) {
-      // Target should begin with "[" and end with "]".
-      if (nameStr.front() != '[' || nameStr.back() != ']')
-        return emitError(loc, "invalid sub-index name " + nameStr), None;
+      auto subIndexAttr = token.dyn_cast<IntegerAttr>();
+      if (!subIndexAttr)
+        return emitError(loc, "expect integer sub-index token for vector type"),
+               None;
 
-      // Target should be a valid non-empty integer.
-      nameStr = nameStr.drop_front().drop_back();
-      APInt indexValue;
-      if (nameStr.getAsInteger(10, indexValue))
-        return emitError(loc, nameStr + " is not a valid integer"), None;
+      // Token should be a valid index of the vector.
+      auto subIndex = subIndexAttr.getValue().getSExtValue();
+      if (subIndex < 0 || subIndex >= vectorType.getNumElements())
+        return emitError(loc, subIndex + " is out of range in the vector"),
+               None;
 
-      // Target should be a valid index of the vector.
-      auto index = indexValue.getSExtValue();
-      if (index < 0 || index >= vectorType.getNumElements())
-        return emitError(loc, nameStr + " is out of range in the vector"), None;
-
-      id += vectorType.getFieldID(index);
+      id += vectorType.getFieldID(subIndex);
       currentType = vectorType.getElementType();
       idRange = currentType.getMaxFieldID();
 
     } else
-      return emitError(loc,
-                       "target token " + nameStr +
-                           " expects an aggregate type, but found ground type"),
+      return emitError(loc, "target token expects an aggregate type, but found "
+                            "ground type"),
              None;
   }
   return std::pair<unsigned, unsigned>(id, idRange);

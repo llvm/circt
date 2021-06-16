@@ -43,17 +43,27 @@ static StringRef parseSubFieldSubIndexAnnotations(StringRef target,
   target = target.substr(fieldBegin);
   SmallVector<Attribute> annotationVec;
   SmallString<16> temp;
-  temp.push_back(target[0]);
-  for (size_t i = 1, s = target.size(); i < s; ++i) {
-    if (target[i] == '[' || target[i] == '.') {
-      // Create a StringAttr with the previous token.
-      annotationVec.push_back(StringAttr::get(context, temp));
+  for (auto c : target.drop_front()) {
+    if (c == ']') {
+      // Create a IntegerAttr with the previous sub-index token.
+      APInt subIndex;
+      temp.str().getAsInteger(10, subIndex);
+      annotationVec.push_back(IntegerAttr::get(IntegerType::get(context, 64),
+                                               subIndex.getSExtValue()));
       temp.clear();
-    }
-    temp.push_back(target[i]);
+
+    } else if (c == '[' || c == '.') {
+      // Create a StringAttr with the previous token.
+      if (!temp.empty())
+        annotationVec.push_back(StringAttr::get(context, temp));
+      temp.clear();
+
+    } else
+      temp.push_back(c);
   }
   // Save the last token.
-  annotationVec.push_back(StringAttr::get(context, temp));
+  if (!temp.empty())
+    annotationVec.push_back(StringAttr::get(context, temp));
   annotations = ArrayAttr::get(context, annotationVec);
 
   return targetBase;
@@ -383,8 +393,7 @@ static bool parseAugmentedType(
         assert(classAttr.getValue() == "firrtl.annotations.TargetToken$Field" &&
                "A StringAttr target token must be found with a subfield target "
                "token.");
-        componentAttrs.push_back(
-            StringAttr::get(context, Twine(".") + field.getValue()));
+        componentAttrs.push_back(field);
         continue;
       }
 
@@ -393,8 +402,7 @@ static bool parseAugmentedType(
         assert(classAttr.getValue() == "firrtl.annotations.TargetToken$Index" &&
                "An IntegerAttr target token must be found with a subindex "
                "target token.");
-        componentAttrs.push_back(StringAttr::get(
-            context, "[" + Twine(index.getValue().getZExtValue()) + "]"));
+        componentAttrs.push_back(index);
         continue;
       }
 
