@@ -43,6 +43,11 @@ class System:
   def print(self):
     self.mod.operation.print()
 
+  def graph(self):
+    import mlir.all_passes_registration
+    pm = mlir.passmanager.PassManager.parse("view-op-graph")
+    pm.run(self.mod)
+
   def generate(self, generator_names=[]):
     pm = mlir.passmanager.PassManager.parse("run-generators{generators=" +
                                             ",".join(generator_names) + "}")

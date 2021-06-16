@@ -196,7 +196,7 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
         raise TypeError(
             f"body_builder return doesn't support type '{type(bb_ret[name])}'")
       outputs.append(val)
-    bb_ret.pop(name)
+      bb_ret.pop(name)
   if len(unconnected_ports) > 0:
     raise support.UnconnectedSignalError(cls_name, unconnected_ports)
   if len(bb_ret) > 0:
