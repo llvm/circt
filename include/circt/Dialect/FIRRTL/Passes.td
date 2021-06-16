@@ -190,4 +190,10 @@ def GrandCentral : Pass<"firrtl-grand-central", "CircuitOp"> {
   let dependentDialects = ["circt::sv::SVDialect", "circt::hw::HWDialect"];
 }
 
+def GrandCentralTaps : Pass<"firrtl-grand-central-taps", "firrtl::CircuitOp"> {
+  let summary = "Generate code for grand central data and memory taps";
+  let constructor = "circt::firrtl::createGrandCentralTapsPass()";
+  let dependentDialects = ["sv::SVDialect"];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD
