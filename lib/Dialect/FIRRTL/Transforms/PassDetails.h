@@ -21,6 +21,10 @@
 
 namespace circt {
 
+namespace hw {
+class HWDialect;
+}
+
 namespace sv {
 class SVDialect;
 }
