@@ -183,6 +183,16 @@ static void filterAnnotations(ArrayAttr annotations,
   }
 }
 
+static MemOp cloneMemWithNewType(ImplicitLocOpBuilder* b, MemOp op, FIRRTLType type, StringRef suffix) {
+  SmallVector<Type, 8> ports;
+  SmallVector<Attribute, 8> portNames;
+  for (auto port : op.getPorts()) {
+    ports.push_back(FlipType::get(MemOp::getTypeForPort(op.depth(), type, port.second)));
+    portNames.push_back(port.first);
+  }
+  return b->create<MemOp>(ports, op.readLatency(), op.writeLatency(), op.depth(), op.ruw(), b->getArrayAttr(portNames), (op.name() + suffix).str(), op.annotations());
+}
+
 /// Copy annotations from \p annotations into a new AnnotationSet and return it.
 /// This removes annotations with "target" key that does not match the field
 /// suffix.
@@ -297,7 +307,7 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
   void visitDecl(FExtModuleOp op);
   void visitDecl(FModuleOp op);
   void visitDecl(InstanceOp op);
-  //    void visitDecl(MemOp op, ArrayRef<Value> mapping);
+  void visitDecl(MemOp op);
   void visitDecl(NodeOp op);
   void visitDecl(RegOp op);
   void visitDecl(WireOp op);
@@ -453,7 +463,7 @@ return;
     if (SubaccessOp sao =
             dyn_cast_or_null<SubaccessOp>(op.dest().getDefiningOp())) {
       AggregateUserVisitor(builder).visitExpr(sao, ArrayRef<Value>(op.src()));
-    } else {
+          } else {
       //check for truncation
       auto srcInfo = op.src().getType().cast<FIRRTLType>().stripFlip();
       srcType = srcInfo.first;
@@ -509,6 +519,9 @@ return;
               op.dest(), destName);
           if (srcFields[srcIndex].isOutput)
             std::swap(src, dest);
+            if (src.getType().isa<AnalogType>())
+              builder->create<AttachOp>(ArrayRef<Value>{dest, src});
+             else 
           if (src.getType() == dest.getType())
             builder->create<ConnectOp>(dest, src);
           else
@@ -581,6 +594,78 @@ void TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
     lowered.push_back(mux.getResult());
   }
   processUsers(op, lowered);
+  opsToRemove.push_back(op);
+}
+
+void TypeLoweringVisitor::visitDecl(MemOp op) {
+  //We are splitting data, which must be the same across memory ports
+  // Attempt to get the bundle types, potentially unwrapping an outer flip
+  // type that wraps the whole bundle.
+  FIRRTLType resultType = getCanonicalAggregateType(op.getDataType());
+
+  // If the wire is not a bundle, there is nothing to do.
+  if (!resultType)
+    return;
+
+  SmallVector<FlatBundleFieldEntry, 8> fieldTypes = peelType(resultType);
+  SmallVector<Value> lowered;
+  SmallVector<MemOp> newMemories;
+
+  // Loop over the leaf aggregates and make new memories.
+  for (auto field : fieldTypes)
+    newMemories.push_back(cloneMemWithNewType(builder, op, field.type, field.suffix));
+
+  for (int portIndex = 0 , e = op.getNumResults(); portIndex < e; ++portIndex) {
+    auto port = builder->create<WireOp>(op.getResult(portIndex).getType().cast<FIRRTLType>().stripFlip().first);
+    FIRRTLType portType = getCanonicalAggregateType(op.getResult(portIndex).getType());
+    BundleType bundle = portType.cast<BundleType>();
+    SmallVector<FlatBundleFieldEntry, 8> portFields = peelType(portType);
+    for (auto field : llvm::enumerate(portFields)) {
+      Value origPortField = builder->create<SubfieldOp>(
+          port, bundle.getElement(field.index()).name);
+      if (bundle.getElement(field.index()).name.getValue() == "data") {
+        auto comboData = builder->create<WireOp>(resultType);
+        builder->create<ConnectOp>(comboData, origPortField);
+        for (auto newMem : llvm::enumerate(newMemories)) {
+          Value newPortField = builder->create<SubfieldOp>(
+              newMem.value().getResult(portIndex),
+              bundle.getElement(field.index()).name);
+
+          builder->create<ConnectOp>(
+              builder->create<SubfieldOp>(
+                  comboData, resultType.cast<BundleType>().getElement(newMem.index()).name),
+              newPortField);
+        }
+
+      } else {      
+      for (auto newMem : newMemories) {
+        Value newPortField = builder->create<SubfieldOp>(
+            newMem.getResult(portIndex), bundle.getElement(field.index()).name);
+            builder->create<ConnectOp>(origPortField, newPortField);
+      }
+      }
+  }
+    op.getResult(portIndex).replaceAllUsesWith(port);
+  }
+op->getParentOp()->dump();
+//   }
+//   Value high, low;
+//   if (BundleType bundle = resultType.dyn_cast<BundleType>()) {
+//     high = builder->create<SubfieldOp>(op.high(),
+//                                        bundle.getElement(field.index()).name);
+//     low = builder->create<SubfieldOp>(op.low(),
+//                                       bundle.getElement(field.index()).name);
+//   } else if (FVectorType fvector = resultType.dyn_cast<FVectorType>()) {
+//     high = builder->create<SubindexOp>(op.high(), field.index());
+//     low = builder->create<SubindexOp>(op.low(), field.index());
+//   } else {
+//     op->emitError("Unknown aggregate type");
+//   }
+
+//   auto mux = builder->create<MuxPrimOp>(op.sel(), high, low);
+//   lowered.push_back(mux.getResult());
+// }
+// processUsers(op, lowered);
   opsToRemove.push_back(op);
 }
 
@@ -667,13 +752,17 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   for (auto iop = body->rbegin(), iep = body->rend(); iop != iep; ++iop) {
     // We erase old ops eagerly so we don't have dangling uses we've already
     // lowered.
-    for (auto *op : opsToRemove)
+    for (auto *op : opsToRemove) {
+      llvm::errs() << "*** "; op->dump();
       op->erase();
+    }
+
     opsToRemove.clear();
 
     builder->setInsertionPoint(&*iop);
     builder->setLoc(iop->getLoc());
     dispatchVisitor(&*iop);
+    iop->dump();
   }
 
   for (auto *op : opsToRemove)
