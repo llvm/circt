@@ -1039,3 +1039,24 @@ module  {
     }
   }
 }
+
+
+// -----
+
+// Test that a AsPassivePrimOps are handled.
+//
+// See: https://github.com/llvm/circt/issues/1290
+
+module  {
+  firrtl.circuit "Foo"  {
+// CHECK-LABEL: firrtl.module @Foo
+    firrtl.module @Foo(out %a: !firrtl.vector<uint<1>, 1>, in %b: !firrtl.vector<uint<1>, 1>, out %c: !firrtl.vector<uint<1>, 1>, in %cond: !firrtl.uint<1>) {
+      %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
+      // CHECK: firrtl.invalidvalue : !firrtl.uint<1>
+      %0 = firrtl.subindex %a[0] : !firrtl.vector<uint<1>, 1>
+      firrtl.connect %0, %invalid_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+      %1 = firrtl.mux(%cond, %a, %b) : (!firrtl.uint<1>, !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>) -> !firrtl.vector<uint<1>, 1>
+      firrtl.connect %c, %1 : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
+    }
+  }
+}
