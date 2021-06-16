@@ -16,6 +16,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OperationSupport.h"
+#include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/JSON.h"
 
 namespace json = llvm::json;
@@ -414,18 +415,25 @@ static bool parseAugmentedType(
          ArrayAttr::get(context, componentAttrs)});
   };
 
-  /// The package name for all Grand Central Annotations
-  static const char *package = "sifive.enterprise.grandcentral";
-
   auto classAttr =
       tryGetAs<StringAttr>(augmentedType, root, "class", loc, clazz, path);
   if (!classAttr)
     return false;
+  StringRef classBase = classAttr.getValue();
+  if (!classBase.consume_front("sifive.enterprise.grandcentral.Augmented")) {
+    mlir::emitError(loc,
+                    "the 'class' was expected to start with "
+                    "'sifive.enterprise.grandCentral.Augmented*', but was '" +
+                        classAttr.getValue() + "' (Did you misspell it?)")
+            .attachNote()
+        << "see annotation: " << augmentedType;
+    return false;
+  }
 
   // An AugmentedBundleType looks like:
   //   "defName": String
   //   "elements": Seq[AugmentedField]
-  if (classAttr.getValue() == (Twine(package) + ".AugmentedBundleType").str()) {
+  if (classBase == "BundleType") {
     defName =
         tryGetAs<StringAttr>(augmentedType, root, "defName", loc, clazz, path);
     if (!defName)
@@ -488,7 +496,7 @@ static bool parseAugmentedType(
   // The ReferenceTarget is not serialized to a string.  The GroundType will
   // either be an actual FIRRTL ground type or a GrandCentral uninferred type.
   // This can be ignored for us.
-  if (classAttr.getValue() == (Twine(package) + ".AugmentedGroundType").str()) {
+  if (classBase == "GroundType") {
     auto maybeTarget =
         refTargetToString(augmentedType.getAs<DictionaryAttr>("ref"));
     if (!maybeTarget) {
@@ -510,7 +518,7 @@ static bool parseAugmentedType(
 
   // An AugmentedVectorType looks like:
   //   "elements": Seq[AugmentedType]
-  if (classAttr.getValue() == (Twine(package) + ".AugmentedVectorType").str()) {
+  if (classBase == "VectorType") {
     auto elementsAttr =
         tryGetAs<ArrayAttr>(augmentedType, root, "elements", loc, clazz, path);
     if (!elementsAttr)
@@ -523,11 +531,25 @@ static bool parseAugmentedType(
     return true;
   }
 
-  mlir::emitError(
-      loc, "Unknown AugmentedType '" + classAttr.getValue() +
-               "'. Either this is unsupported or maybe you mispelled it?")
+  // Any of the following are known and expected, but are legacy AugmentedTypes
+  // do not have a target:
+  //   - AugmentedStringType
+  //   - AugmentedBooleanType
+  //   - AugmentedIntegerType
+  //   - AugmentedDoubleType
+  bool isIgnorable =
+      llvm::StringSwitch<bool>(classAttr.getValue())
+          .Cases("StringType", "BooleanType", "IntegerType", "DoubleType", true)
+          .Default(false);
+  if (isIgnorable)
+    return true;
+
+  // Anything else is unexpected or a user error if they manually wrote
+  // annotations.  Print an error and error out.
+  mlir::emitError(loc, "found unknown AugmentedType '" + classAttr.getValue() +
+                           "' (Did you misspell it?)")
           .attachNote()
-      << "See the full Annotation her: " << augmentedType;
+      << "see annotation: " << augmentedType;
   return false;
 }
 

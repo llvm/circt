@@ -888,3 +888,21 @@ module  {
     }
   }
 }
+
+
+// -----
+
+// Test that a AsPassivePrimOps are handled.
+//
+// See: https://github.com/llvm/circt/issues/1290
+
+module  {
+  firrtl.circuit "Foo"  {
+// CHECK-LABEL: firrtl.module @Foo
+    firrtl.module @Foo(out %arg0: !firrtl.vector<uint<1>, 1>, in %arg1: !firrtl.vector<uint<1>, 1>, out %arg2: !firrtl.vector<uint<1>, 1>, in %arg3: !firrtl.uint<1>) attributes {portNames = ["a", "b", "c", "cond"]} {
+      %1 = firrtl.asPassive %arg0 : !firrtl.vector<uint<1>, 1>
+      %2 = firrtl.mux(%arg3, %1, %arg1) : (!firrtl.uint<1>, !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>) -> !firrtl.vector<uint<1>, 1>
+      firrtl.connect %arg2, %2 : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
+    }
+  }
+}
