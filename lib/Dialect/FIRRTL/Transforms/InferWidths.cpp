@@ -1508,7 +1508,7 @@ void InferenceMapping::partiallyConstrainTypes(Value larger, Value smaller) {
         } else if (auto aVecType = aType.dyn_cast<FVectorType>()) {
           // Do not constrain the elements of a zero length vector.
           if (aVecType.getNumElements() == 0)
-              return;
+            return;
           auto bVecType = bType.cast<FVectorType>();
           constrain(aVecType.getElementType(), a, aID + 1,
                     bVecType.getElementType(), b, bID + 1);
@@ -1687,12 +1687,13 @@ bool InferenceTypeUpdate::updateOperation(Operation *op) {
     auto rhs = con.src().getType().cast<FIRRTLType>();
     auto lhsWidth = lhs.getBitWidthOrSentinel();
     auto rhsWidth = rhs.getBitWidthOrSentinel();
-    if (lhsWidth > 0 && rhsWidth > 0 && lhsWidth < rhsWidth) {
+    if (lhsWidth >= 0 && rhsWidth >= 0 && lhsWidth < rhsWidth) {
       OpBuilder builder(op);
-      auto trunc = builder.createOrFold<BitsPrimOp>(con.getLoc(), con.src(),
-                                                    lhsWidth - 1, 0);
+      auto trunc = builder.createOrFold<TailPrimOp>(con.getLoc(), con.src(),
+                                                    rhsWidth - lhsWidth);
       if (rhs.isa<SIntType>())
         trunc = builder.createOrFold<AsSIntPrimOp>(con.getLoc(), lhs, trunc);
+
       LLVM_DEBUG(llvm::dbgs()
                  << "Truncating RHS to " << lhs << " in " << con << "\n");
       con->replaceUsesOfWith(con.src(), trunc);
