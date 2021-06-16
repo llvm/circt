@@ -183,14 +183,18 @@ static void filterAnnotations(ArrayAttr annotations,
   }
 }
 
-static MemOp cloneMemWithNewType(ImplicitLocOpBuilder* b, MemOp op, FIRRTLType type, StringRef suffix) {
+static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
+                                 FIRRTLType type, StringRef suffix) {
   SmallVector<Type, 8> ports;
   SmallVector<Attribute, 8> portNames;
   for (auto port : op.getPorts()) {
-    ports.push_back(FlipType::get(MemOp::getTypeForPort(op.depth(), type, port.second)));
+    ports.push_back(
+        FlipType::get(MemOp::getTypeForPort(op.depth(), type, port.second)));
     portNames.push_back(port.first);
   }
-  return b->create<MemOp>(ports, op.readLatency(), op.writeLatency(), op.depth(), op.ruw(), b->getArrayAttr(portNames), (op.name() + suffix).str(), op.annotations());
+  return b->create<MemOp>(ports, op.readLatency(), op.writeLatency(),
+                          op.depth(), op.ruw(), b->getArrayAttr(portNames),
+                          (op.name() + suffix).str(), op.annotations());
 }
 
 /// Copy annotations from \p annotations into a new AnnotationSet and return it.
@@ -255,16 +259,17 @@ void AggregateUserVisitor::visitExpr(SubaccessOp op, ArrayRef<Value> mapping) {
         op.index(), builder->createOrFold<ConstantOp>(
                         UIntType::get(op.getContext(), selectWidth),
                         APInt(selectWidth, index)));
-//                        if (isa<ConnectOp>(mapping[0].getDefiningOp()))
+    //                        if (isa<ConnectOp>(mapping[0].getDefiningOp()))
     builder->create<WhenOp>(cond, false, [&]() {
       builder->create<ConnectOp>(builder->create<SubindexOp>(input, index),
                                  mapping[0]);
     });
-//else
-//  builder->create<WhenOp>(cond, false, [&]() {
-//    builder->create<PartialConnectOp>(builder->create<SubindexOp>(input, index),
-//                               mapping[0]);
-//  });
+    // else
+    //  builder->create<WhenOp>(cond, false, [&]() {
+    //    builder->create<PartialConnectOp>(builder->create<SubindexOp>(input,
+    //    index),
+    //                               mapping[0]);
+    //  });
   }
 }
 
@@ -453,7 +458,7 @@ void TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
   // Should this be an assertion?
   if ((destType && !srcType) || (srcType && !destType)) {
     op.emitError("partial connect of aggregate to non-aggregate");
-return;
+    return;
   }
 
   // Ground Type
@@ -463,8 +468,8 @@ return;
     if (SubaccessOp sao =
             dyn_cast_or_null<SubaccessOp>(op.dest().getDefiningOp())) {
       AggregateUserVisitor(builder).visitExpr(sao, ArrayRef<Value>(op.src()));
-          } else {
-      //check for truncation
+    } else {
+      // check for truncation
       auto srcInfo = op.src().getType().cast<FIRRTLType>().stripFlip();
       srcType = srcInfo.first;
       destType = op.dest().getType().cast<FIRRTLType>().stripFlip().first;
@@ -472,13 +477,13 @@ return;
       auto destWidth = destType.getBitWidthOrSentinel();
       Value src = op.src();
 
-      if (destType.isa<IntType>() && srcType.isa<IntType>() && 
-          destWidth >= 0 && destWidth < srcWidth) {
+      if (destType.isa<IntType>() && srcType.isa<IntType>() && destWidth >= 0 &&
+          destWidth < srcWidth) {
         // firrtl.tail always returns uint even for sint operands.
         IntType tmpType = destType.cast<IntType>();
         if (tmpType.isSigned())
           tmpType = UIntType::get(destType.getContext(), destWidth);
-          if (srcInfo.second)
+        if (srcInfo.second)
           src = builder->create<AsPassivePrimOp>(src);
         src = builder->create<TailPrimOp>(tmpType, src, srcWidth - destWidth);
         // Insert the cast back to signed if needed.
@@ -495,34 +500,34 @@ return;
   SmallVector<FlatBundleFieldEntry> destFields = peelType(destType);
 
   if (FVectorType fvector = srcType.dyn_cast<FVectorType>()) {
-    for (int index = 0, e = std::min(srcFields.size(), destFields.size()); index != e; ++index) {
-     Value src = builder->create<SubindexOp>(op.src(), index);
-     Value dest = builder->create<SubindexOp>(op.dest(), index);
-     if (srcFields[index].isOutput)
+    for (int index = 0, e = std::min(srcFields.size(), destFields.size());
+         index != e; ++index) {
+      Value src = builder->create<SubindexOp>(op.src(), index);
+      Value dest = builder->create<SubindexOp>(op.dest(), index);
+      if (srcFields[index].isOutput)
         std::swap(src, dest);
-        if (src.getType() == dest.getType())
-          builder->create<ConnectOp>(dest, src);
-          else
-          builder->create<PartialConnectOp>(dest,src);
+      if (src.getType() == dest.getType())
+        builder->create<ConnectOp>(dest, src);
+      else
+        builder->create<PartialConnectOp>(dest, src);
     }
   } else if (BundleType srcBundle = srcType.dyn_cast<BundleType>()) {
     // Pairwise connect on matching field names
     BundleType destBundle = destType.cast<BundleType>();
-    for (int srcIndex = 0, srcEnd = srcBundle.getNumElements(); srcIndex < srcEnd; ++srcIndex) {
+    for (int srcIndex = 0, srcEnd = srcBundle.getNumElements();
+         srcIndex < srcEnd; ++srcIndex) {
       auto srcName = srcBundle.getElement(srcIndex).name;
-      for (int destIndex = 0, destEnd = destBundle.getNumElements(); destIndex < destEnd; ++destIndex) {
+      for (int destIndex = 0, destEnd = destBundle.getNumElements();
+           destIndex < destEnd; ++destIndex) {
         auto destName = destBundle.getElement(destIndex).name;
         if (srcName == destName) {
-          Value src = builder->create<SubfieldOp>(
-              op.src(), srcName);
-          Value dest = builder->create<SubfieldOp>(
-              op.dest(), destName);
+          Value src = builder->create<SubfieldOp>(op.src(), srcName);
+          Value dest = builder->create<SubfieldOp>(op.dest(), destName);
           if (srcFields[srcIndex].isOutput)
             std::swap(src, dest);
-            if (src.getType().isa<AnalogType>())
-              builder->create<AttachOp>(ArrayRef<Value>{dest, src});
-             else 
-          if (src.getType() == dest.getType())
+          if (src.getType().isa<AnalogType>())
+            builder->create<AttachOp>(ArrayRef<Value>{dest, src});
+          else if (src.getType() == dest.getType())
             builder->create<ConnectOp>(dest, src);
           else
             builder->create<PartialConnectOp>(dest, src);
@@ -720,7 +725,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
                                       .getElements()) {
           auto wire = builder->create<WireOp>(
               memResultType.type); //, op.name().str() + "_" +
-                                   //memResultType.name.getValue());
+                                   // memResultType.name.getValue());
           memPorts.push_back(wire.getResult());
         }
         processUsers(op.getResult(i), memPorts);
@@ -789,6 +794,10 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
       }
     }
   }
+
+  for (size_t i = 0, e = op.getNumResults(); i != e; ++i)
+    if (!op.getResult(i).getUsers().empty())
+      return;
 
   opsToRemove.push_back(op);
 }
@@ -889,7 +898,7 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   for (auto *op : opsToRemove)
     op->erase();
   opsToRemove.clear();
-  
+
   // Lower the module block arguments.
   SmallVector<unsigned> argsToRemove;
   // First get all the info for existing ports
@@ -1246,14 +1255,13 @@ void LowerBundleVectorPass::runSync() {
 }
 
 // This is the main entrypoint for the lowering pass.
-void LowerBundleVectorPass::runOnOperation() { 
+void LowerBundleVectorPass::runOnOperation() {
 
   if (getContext().isMultithreadingEnabled()) {
     runAsync();
   } else {
     runSync();
   }
-
 }
 
 /// This is the pass constructor.
