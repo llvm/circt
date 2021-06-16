@@ -1506,6 +1506,9 @@ void InferenceMapping::partiallyConstrainTypes(Value larger, Value smaller) {
                       b, bID + bBundle.getFieldID(*bIndex));
           }
         } else if (auto aVecType = aType.dyn_cast<FVectorType>()) {
+          // Do not constrain the elements of a zero length vector.
+          if (aVecType.getNumElements() == 0)
+              return;
           auto bVecType = bType.cast<FVectorType>();
           constrain(aVecType.getElementType(), a, aID + 1,
                     bVecType.getElementType(), b, bID + 1);
