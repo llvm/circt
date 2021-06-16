@@ -172,16 +172,6 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     }
   }
 
-  // Nothing in the parser is threaded.  Disable synchronization overhead.
-  auto isMultithreaded = context.isMultithreadingEnabled();
-  context.disableMultithreading();
-
-  // Apply any pass manager command line options.
-  PassManager pm(&context);
-  pm.enableVerifier(verifyPasses);
-  pm.enableTiming(ts);
-  applyPassManagerCLOptions(pm);
-
   OwningModuleRef module;
   if (inputFormat == InputFIRFile) {
     auto parserTimer = ts.nest("FIR Parser");
@@ -196,8 +186,11 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   if (!module)
     return failure();
 
-  // Allow optimizations to run multithreaded.
-  context.enableMultithreading(isMultithreaded);
+  // Apply any pass manager command line options.
+  PassManager pm(&context);
+  pm.enableVerifier(verifyPasses);
+  pm.enableTiming(ts);
+  applyPassManagerCLOptions(pm);
 
   // Width inference creates canonicalization opportunities.
   if (inferWidths)
@@ -206,7 +199,8 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   // The input mlir file could be firrtl dialect so we might need to clean
   // things up.
   if (lowerTypes) {
-    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass());
+    pm.addNestedPass<firrtl::CircuitOp>(
+        firrtl::createLowerBundleVectorTypesPass());
     auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
     // Only enable expand whens if lower types is also enabled.
     if (expandWhens)

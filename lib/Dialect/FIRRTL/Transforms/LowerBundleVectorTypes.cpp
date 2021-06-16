@@ -25,12 +25,9 @@ using namespace firrtl;
 // Helper to peel off the outer most flip type from an aggregate type that has
 // all flips canonicalized to the outer level, or just return the bundle
 // directly. For any ground type, returns null.
-static FIRRTLType getCanonicalAggregateType(Type originalType) {
-  FIRRTLType unflipped = originalType.dyn_cast<FIRRTLType>();
-  if (auto flipType = originalType.dyn_cast<FlipType>())
-    unflipped = flipType.getElementType();
-
-  return TypeSwitch<FIRRTLType, FIRRTLType>(unflipped)
+static FIRRTLType getCanonicalAggregateType(Type origType) {
+  FIRRTLType type = origType.dyn_cast<FIRRTLType>().stripFlip().first;
+  return TypeSwitch<FIRRTLType, FIRRTLType>(type)
       .Case<BundleType, FVectorType>([](auto a) { return a; })
       .Default([](auto) { return nullptr; });
 }
@@ -248,10 +245,16 @@ void AggregateUserVisitor::visitExpr(SubaccessOp op, ArrayRef<Value> mapping) {
         op.index(), builder->createOrFold<ConstantOp>(
                         UIntType::get(op.getContext(), selectWidth),
                         APInt(selectWidth, index)));
+//                        if (isa<ConnectOp>(mapping[0].getDefiningOp()))
     builder->create<WhenOp>(cond, false, [&]() {
       builder->create<ConnectOp>(builder->create<SubindexOp>(input, index),
                                  mapping[0]);
     });
+//else
+//  builder->create<WhenOp>(cond, false, [&]() {
+//    builder->create<PartialConnectOp>(builder->create<SubindexOp>(input, index),
+//                               mapping[0]);
+//  });
   }
 }
 
@@ -307,11 +310,6 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
   void visitStmt(ConnectOp op);
   void visitStmt(WhenOp op);
   void visitStmt(PartialConnectOp op);
-  void recursivePartialConnect(Value a, FIRRTLType aType, Value b,
-                               FIRRTLType bType, unsigned aIndex,
-                               unsigned bIndex, bool aFlip = false);
-  /// Connect two values, truncating the source value if it is a larger width.
-  ConnectOp emitTruncatingConnect(Value dest, Value src);
 
 private:
   void processUsers(Value val, ArrayRef<Value> mapping);
@@ -406,6 +404,7 @@ void TypeLoweringVisitor::visitStmt(ConnectOp op) {
 
   // Ground Type
   if (!resultType) {
+    // might have aggregate write with variable index (SubaccesOp).
     if (SubaccessOp sao =
             dyn_cast_or_null<SubaccessOp>(op.dest().getDefiningOp())) {
       AggregateUserVisitor(builder).visitExpr(sao, ArrayRef<Value>(op.src()));
@@ -437,114 +436,90 @@ void TypeLoweringVisitor::visitStmt(ConnectOp op) {
   opsToRemove.push_back(op);
 }
 
-void TypeLoweringVisitor::recursivePartialConnect(Value a, FIRRTLType aType,
-                                                  Value b, FIRRTLType bType,
-                                                  unsigned aID, unsigned bID,
-                                                  bool aFlip) {
-
-  TypeSwitch<FIRRTLType>(aType)
-      .Case<BundleType>([&](auto aType) {
-        auto bBundle = bType.dyn_cast_or_null<BundleType>();
-        if (!bBundle)
-          return;
-        for (unsigned aIndex = 0, e = aType.getNumElements(); aIndex < e;
-             ++aIndex) {
-          auto aField = aType.getElements()[aIndex].name;
-          auto bIndex = bBundle.getElementIndex(aField.getValue());
-          if (!bIndex)
-            continue;
-          auto &aElt = aType.getElements()[aIndex];
-          auto &bElt = bBundle.getElements()[*bIndex];
-          if (!aFlip)
-            builder->create<PartialConnectOp>(
-                builder->create<SubfieldOp>(a, aField),
-                builder->create<SubfieldOp>(b, aField));
-          else
-            builder->create<PartialConnectOp>(
-                builder->create<SubfieldOp>(b, aField),
-                builder->create<SubfieldOp>(a, aField));
-        }
-      })
-      .Case<FVectorType>([&](auto aType) {
-        auto bVector = bType.dyn_cast_or_null<FVectorType>();
-        if (!bVector)
-          return;
-
-        auto e = std::min<unsigned>(aType.getNumElements(),
-                                    bVector.getNumElements());
-        auto elemType = bVector.getElementType();
-
-        if (aFlip)
-          std::swap(a, b);
-        for (size_t i = 0; i != e; ++i) {
-          builder->create<PartialConnectOp>(
-              builder->create<SubindexOp>(elemType, a, i),
-              builder->create<SubindexOp>(elemType, b, i));
-        }
-      })
-      .Case<FlipType>([&](auto aType) {
-        recursivePartialConnect(a, FlipType::get(aType), b, bType, aID, bID,
-                                !aFlip);
-      })
-      .Default([&](auto) {
-        if (aFlip)
-          std::swap(a, b);
-        // We transform all partial connects into regular connect statements,
-        // however, partial connect allows the LHS statement to be a smaller
-        // width than the RHS. We might need to truncate the RHS value.
-        emitTruncatingConnect(a, b);
-      });
-}
-
-/// This creates a connect operation between two values and emits a truncation
-/// if the LHS is smaller than the RHS.  This code was lifted from a
-/// PartialConnect canonicalization pattern.
-ConnectOp TypeLoweringVisitor::emitTruncatingConnect(Value dest, Value src) {
-  // Get the types.  Strip off any outer flip.
-  auto srcType = src.getType().cast<FIRRTLType>().stripFlip().first;
-  auto destType = dest.getType().cast<FIRRTLType>().stripFlip().first;
-
-  auto srcWidth = srcType.getBitWidthOrSentinel();
-  auto destWidth = destType.getBitWidthOrSentinel();
-
-  // Check if the source is larger than the destination, if so we will have to
-  // emit a truncation.
-  if (destType.isa<IntType>() && srcType.isa<IntType>() && srcWidth >= 0 &&
-      destWidth >= 0 && destWidth < srcWidth) {
-    // firrtl.tail always returns uint even for sint operands.
-    IntType tmpType = destType.cast<IntType>();
-    if (tmpType.isSigned())
-      tmpType = UIntType::get(destType.getContext(), destWidth);
-    src = builder->create<TailPrimOp>(tmpType, src, srcWidth - destWidth);
-    // Insert the cast back to signed if needed.
-    if (tmpType != destType)
-      src = builder->create<AsSIntPrimOp>(destType, src);
-  }
-  return builder->create<ConnectOp>(dest, src);
-}
-
 void TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
-  Value dest = op.dest();
-  Value src = op.src();
-  auto destType = dest.getType().cast<FIRRTLType>();
-  auto srcType = src.getType().cast<FIRRTLType>();
+  auto destType = getCanonicalAggregateType(op.dest().getType());
+  auto srcType = getCanonicalAggregateType(op.src().getType());
 
-  // Partial connects are completely removed and replaced by regular connects.
-  // This makes this one of the few ops that actually has to do something during
-  // this pass the types are not bundles.
-  auto tmpType = destType.stripFlip().first;
-  if (tmpType.isa<BundleType, FVectorType>()) {
-    // Bundle types have to be recursively lowered.
-    this->recursivePartialConnect(dest, destType, src, srcType.getPassiveType(),
-                                  0, 0);
-  } else if (destType.isa<AnalogType>()) {
-    // If we are connecting analogs, replace with attach.
-    SmallVector<Value, 2> operands{dest, src};
-    builder->create<AttachOp>(operands);
-  } else {
-    // Replace this partial connect with a regular connect.
-    emitTruncatingConnect(dest, src);
+  // Should this be an assertion?
+  if ((destType && !srcType) || (srcType && !destType)) {
+    op.emitError("partial connect of aggregate to non-aggregate");
+return;
   }
+
+  // Ground Type
+  if (!destType) {
+    // might have aggregate write with variable index (SubaccesOp).
+    // FIXME, might have a write of an aggregate
+    if (SubaccessOp sao =
+            dyn_cast_or_null<SubaccessOp>(op.dest().getDefiningOp())) {
+      AggregateUserVisitor(builder).visitExpr(sao, ArrayRef<Value>(op.src()));
+    } else {
+      //check for truncation
+      auto srcInfo = op.src().getType().cast<FIRRTLType>().stripFlip();
+      srcType = srcInfo.first;
+      destType = op.dest().getType().cast<FIRRTLType>().stripFlip().first;
+      auto srcWidth = srcType.getBitWidthOrSentinel();
+      auto destWidth = destType.getBitWidthOrSentinel();
+      Value src = op.src();
+
+      if (destType.isa<IntType>() && srcType.isa<IntType>() && 
+          destWidth >= 0 && destWidth < srcWidth) {
+        // firrtl.tail always returns uint even for sint operands.
+        IntType tmpType = destType.cast<IntType>();
+        if (tmpType.isSigned())
+          tmpType = UIntType::get(destType.getContext(), destWidth);
+          if (srcInfo.second)
+          src = builder->create<AsPassivePrimOp>(src);
+        src = builder->create<TailPrimOp>(tmpType, src, srcWidth - destWidth);
+        // Insert the cast back to signed if needed.
+        if (tmpType != destType)
+          src = builder->create<AsSIntPrimOp>(destType, src);
+      }
+      builder->create<ConnectOp>(op.dest(), src);
+    }
+    opsToRemove.push_back(op);
+    return;
+  }
+
+  SmallVector<FlatBundleFieldEntry> srcFields = peelType(srcType);
+  SmallVector<FlatBundleFieldEntry> destFields = peelType(destType);
+
+  if (FVectorType fvector = srcType.dyn_cast<FVectorType>()) {
+    for (int index = 0, e = std::min(srcFields.size(), destFields.size()); index != e; ++index) {
+     Value src = builder->create<SubindexOp>(op.src(), index);
+     Value dest = builder->create<SubindexOp>(op.dest(), index);
+     if (srcFields[index].isOutput)
+        std::swap(src, dest);
+        if (src.getType() == dest.getType())
+          builder->create<ConnectOp>(dest, src);
+          else
+          builder->create<PartialConnectOp>(dest,src);
+    }
+  } else if (BundleType srcBundle = srcType.dyn_cast<BundleType>()) {
+    // Pairwise connect on matching field names
+    BundleType destBundle = destType.cast<BundleType>();
+    for (int srcIndex = 0, srcEnd = srcBundle.getNumElements(); srcIndex < srcEnd; ++srcIndex) {
+      auto srcName = srcBundle.getElement(srcIndex).name;
+      for (int destIndex = 0, destEnd = destBundle.getNumElements(); destIndex < destEnd; ++destIndex) {
+        auto destName = destBundle.getElement(destIndex).name;
+        if (srcName == destName) {
+          Value src = builder->create<SubfieldOp>(
+              op.src(), srcName);
+          Value dest = builder->create<SubfieldOp>(
+              op.dest(), destName);
+          if (srcFields[srcIndex].isOutput)
+            std::swap(src, dest);
+          if (src.getType() == dest.getType())
+            builder->create<ConnectOp>(dest, src);
+          else
+            builder->create<PartialConnectOp>(dest, src);
+        }
+      }
+    }
+  } else {
+    op.emitError("Unknown aggregate type");
+  }
+
   opsToRemove.push_back(op);
 }
 
