@@ -648,7 +648,6 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
   }
     op.getResult(portIndex).replaceAllUsesWith(port);
   }
-op->getParentOp()->dump();
 //   }
 //   Value high, low;
 //   if (BundleType bundle = resultType.dyn_cast<BundleType>()) {
@@ -874,17 +873,14 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   for (auto iop = body->rbegin(), iep = body->rend(); iop != iep; ++iop) {
     // We erase old ops eagerly so we don't have dangling uses we've already
     // lowered.
-    for (auto *op : opsToRemove) {
-      llvm::errs() << "*** "; op->dump();
+    for (auto *op : opsToRemove)
       op->erase();
-    }
 
     opsToRemove.clear();
 
     builder->setInsertionPoint(&*iop);
     builder->setLoc(iop->getLoc());
     dispatchVisitor(&*iop);
-    iop->dump();
   }
 
   for (auto *op : opsToRemove)
