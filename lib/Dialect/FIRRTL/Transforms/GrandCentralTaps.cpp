@@ -61,7 +61,7 @@ template <typename T>
 static T &operator<<(T &os, const InstancePath &path) {
   os << "$root";
   for (auto inst : path)
-    os << "." << inst.name();
+    os << "/" << inst.name() << ":" << inst.moduleName();
   return os;
 }
 
