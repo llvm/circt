@@ -1949,7 +1949,7 @@ FIRRTLType PadPrimOp::inferReturnType(ValueRange operands,
   auto inputi = input.dyn_cast<IntType>();
   if (amount < 0 || !inputi) {
     if (loc)
-      mlir::emitError(*loc, "input must be integer and amount must be >= 0");
+      mlir::emitError(*loc, "pad input must be integer and amount must be >= 0");
     return {};
   }
 
@@ -1970,7 +1970,7 @@ FIRRTLType ShlPrimOp::inferReturnType(ValueRange operands,
   auto inputi = input.dyn_cast<IntType>();
   if (amount < 0 || !inputi) {
     if (loc)
-      mlir::emitError(*loc, "input must be integer and amount must be >= 0");
+      mlir::emitError(*loc, "shl input must be integer and amount must be >= 0");
     return {};
   }
 
@@ -1990,7 +1990,7 @@ FIRRTLType ShrPrimOp::inferReturnType(ValueRange operands,
   auto inputi = input.dyn_cast<IntType>();
   if (amount < 0 || !inputi) {
     if (loc)
-      mlir::emitError(*loc, "input must be integer and amount must be >= 0");
+      mlir::emitError(*loc, "shr input must be integer and amount must be >= 0");
     return {};
   }
 
@@ -2010,7 +2010,7 @@ FIRRTLType TailPrimOp::inferReturnType(ValueRange operands,
   auto inputi = input.dyn_cast<IntType>();
   if (amount < 0 || !inputi) {
     if (loc)
-      mlir::emitError(*loc, "input must be integer and amount must be >= 0");
+      mlir::emitError(*loc, "tail input must be integer and amount must be >= 0");
     return {};
   }
 
