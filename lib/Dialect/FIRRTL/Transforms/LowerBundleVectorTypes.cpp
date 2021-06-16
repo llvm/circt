@@ -317,9 +317,10 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
   //    void visitExpr(SubindexOp op);
   void visitExpr(SubaccessOp op);
   void visitExpr(MuxPrimOp op);
+  void visitExpr(AsPassivePrimOp op);
   void visitStmt(ConnectOp op);
-  void visitStmt(WhenOp op);
   void visitStmt(PartialConnectOp op);
+  void visitStmt(WhenOp op);
 
 private:
   void processUsers(Value val, ArrayRef<Value> mapping);
@@ -478,7 +479,7 @@ return;
         IntType tmpType = destType.cast<IntType>();
         if (tmpType.isSigned())
           tmpType = UIntType::get(destType.getContext(), destWidth);
-          if (srcInfo.second)
+        if (srcInfo.second)
           src = builder->create<AsPassivePrimOp>(src);
         src = builder->create<TailPrimOp>(tmpType, src, srcWidth - destWidth);
         // Insert the cast back to signed if needed.
@@ -500,10 +501,10 @@ return;
      Value dest = builder->create<SubindexOp>(op.dest(), index);
      if (srcFields[index].isOutput)
         std::swap(src, dest);
-        if (src.getType() == dest.getType())
-          builder->create<ConnectOp>(dest, src);
-          else
-          builder->create<PartialConnectOp>(dest,src);
+      if (src.getType() == dest.getType())
+        builder->create<ConnectOp>(dest, src);
+      else
+        builder->create<PartialConnectOp>(dest,src);
     }
   } else if (BundleType srcBundle = srcType.dyn_cast<BundleType>()) {
     // Pairwise connect on matching field names
@@ -596,6 +597,40 @@ void TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
 
     auto mux = builder->create<MuxPrimOp>(op.sel(), high, low);
     lowered.push_back(mux.getResult());
+  }
+  processUsers(op, lowered);
+  opsToRemove.push_back(op);
+}
+
+// Expand AsPassivePrimOp of aggregates
+void TypeLoweringVisitor::visitExpr(AsPassivePrimOp op) {
+  Value result = op.result();
+
+  // Attempt to get the bundle types, potentially unwrapping an outer flip
+  // type that wraps the whole bundle.
+  FIRRTLType resultType = getCanonicalAggregateType(result.getType());
+
+  // If the wire is not a bundle, there is nothing to do.
+  if (!resultType)
+    return;
+
+  SmallVector<FlatBundleFieldEntry, 8> fieldTypes = peelType(resultType);
+  SmallVector<Value> lowered;
+
+  // Loop over the leaf aggregates.
+  for (auto field : llvm::enumerate(fieldTypes)) {
+    Value input;
+    if (BundleType bundle = resultType.dyn_cast<BundleType>()) {
+      input = builder->create<SubfieldOp>(op.input(),
+                                         bundle.getElement(field.index()).name);
+    } else if (FVectorType fvector = resultType.dyn_cast<FVectorType>()) {
+      input = builder->create<SubindexOp>(op.input(), field.index());
+    } else {
+      op->emitError("Unknown aggregate type");
+    }
+
+    auto passive = builder->create<AsPassivePrimOp>(input);
+    lowered.push_back(passive.getResult());
   }
   processUsers(op, lowered);
   opsToRemove.push_back(op);
@@ -750,12 +785,8 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
         memResultToWire.push_back(memPorts);
       }
     }
-    auto newName = op.name().str() + field.value().suffix;
-    auto newMem = builder->create<MemOp>(
-        resultPortTypes, op.readLatencyAttr(), op.writeLatencyAttr(),
-        op.depthAttr(), op.ruwAttr(),
-        builder->getArrayAttr(resultPortNames.getArrayRef()),
-        builder->getStringAttr(newName), op.annotations());
+    auto newMem = 
+        cloneMemWithNewType(builder, op, field.value().type, field.value().suffix);
     for (size_t i = 0, e = newMem.getNumResults(); i != e; ++i) {
       auto res = newMem.getResult(i);
       for (auto memResultType : llvm::enumerate(res.getType()

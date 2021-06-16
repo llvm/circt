@@ -26,3 +26,4 @@ firrtl.circuit "Foo" {
     firrtl.connect %out, %inst_out : !firrtl.uint, !firrtl.uint
   }
 }
+
