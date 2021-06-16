@@ -1223,6 +1223,8 @@ static LogicalResult foldSingleSetConnect(ConnectOp op,
   // Only support wire and reg for now.
   if (!isa<WireOp>(connectedDecl) && !isa<RegOp>(connectedDecl))
     return failure();
+  if (AnnotationSet(connectedDecl).hasDontTouch())
+    return failure();
 
   // Only forward if the types exactly match and there is one connect.
   if (op.dest().getType() != op.src().getType() ||
@@ -1507,7 +1509,8 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
 }
 
 LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
-  if (succeeded(foldHiddenReset(op, rewriter)))
+  if (!(AnnotationSet(op).hasDontTouch()) &&
+      succeeded(foldHiddenReset(op, rewriter)))
     return success();
 
   return failure();
