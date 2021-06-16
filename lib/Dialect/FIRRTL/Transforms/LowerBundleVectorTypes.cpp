@@ -25,12 +25,9 @@ using namespace firrtl;
 // Helper to peel off the outer most flip type from an aggregate type that has
 // all flips canonicalized to the outer level, or just return the bundle
 // directly. For any ground type, returns null.
-static FIRRTLType getCanonicalAggregateType(Type originalType) {
-  FIRRTLType unflipped = originalType.dyn_cast<FIRRTLType>();
-  if (auto flipType = originalType.dyn_cast<FlipType>())
-    unflipped = flipType.getElementType();
-
-  return TypeSwitch<FIRRTLType, FIRRTLType>(unflipped)
+static FIRRTLType getCanonicalAggregateType(Type origType) {
+  FIRRTLType type = origType.dyn_cast<FIRRTLType>().stripFlip().first;
+  return TypeSwitch<FIRRTLType, FIRRTLType>(type)
       .Case<BundleType, FVectorType>([](auto a) { return a; })
       .Default([](auto) { return nullptr; });
 }
@@ -458,8 +455,9 @@ return;
       AggregateUserVisitor(builder).visitExpr(sao, ArrayRef<Value>(op.src()));
     } else {
       //check for truncation
-      srcType = op.src().getType().cast<FIRRTLType>();
-      destType = op.dest().getType().cast<FIRRTLType>();
+      auto srcInfo = op.src().getType().cast<FIRRTLType>().stripFlip();
+      srcType = srcInfo.first;
+      destType = op.dest().getType().cast<FIRRTLType>().stripFlip().first;
       auto srcWidth = srcType.getBitWidthOrSentinel();
       auto destWidth = destType.getBitWidthOrSentinel();
       Value src = op.src();
@@ -470,6 +468,8 @@ return;
         IntType tmpType = destType.cast<IntType>();
         if (tmpType.isSigned())
           tmpType = UIntType::get(destType.getContext(), destWidth);
+          if (srcInfo.second)
+          src = builder->create<AsPassivePrimOp>(src);
         src = builder->create<TailPrimOp>(tmpType, src, srcWidth - destWidth);
         // Insert the cast back to signed if needed.
         if (tmpType != destType)
