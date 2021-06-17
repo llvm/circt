@@ -282,7 +282,10 @@ void AggregateUserVisitor::visitExpr(SubaccessOp op, ArrayRef<Value> mapping) {
       for (int i = mapping.size() - 2; i > 0; --i)
         leaf = builder->create<SubfieldOp>(
             leaf, cast<SubfieldOp>(mapping[i].getDefiningOp()).fieldname());
-      builder->create<ConnectOp>(leaf, mapping[0]);
+      if (leaf.getType() == mapping[0].getType())
+        builder->create<ConnectOp>(leaf, mapping[0]);
+      else
+        builder->create<PartialConnectOp>(leaf, mapping[0]);
     });
     // else
     //  builder->create<WhenOp>(cond, false, [&]() {
