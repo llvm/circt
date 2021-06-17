@@ -24,7 +24,7 @@ class _Types:
   @staticmethod
   def struct(members) -> hw.StructType:
     if isinstance(members, dict):
-      return hw.StructType.get(members.items())
+      return hw.StructType.get(list(members.items()))
     if isinstance(members, list):
       return hw.StructType.get(members)
     raise TypeError("Expected either list or dict.")

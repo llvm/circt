@@ -81,7 +81,7 @@ def VariadicOp(base):
     @classmethod
     def create(cls, *args):
       result_type = infer_result_type(args)
-      return cls(result_type, args)
+      return cls(result_type, [get_value(a) for a in args])
 
   return _Class
 
