@@ -1,4 +1,3 @@
-// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-lower-types)' %s | FileCheck %s
 // RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-lower-bundle-vectors)' %s | FileCheck %s
 
 firrtl.circuit "TopLevel" {
@@ -788,12 +787,9 @@ firrtl.circuit "TopLevel" {
     // CHECK-NEXT: firrtl.connect %d_1, %c_1
     // CHECK-NOT: firrtl.connect %d_
   }
-}
 
-// -----
 
 // Test partial connect truncation.
-firrtl.circuit "PartialConnectTruncation" {
   firrtl.module @PartialConnectTruncation() {
     // COM: It should not truncate when they are the same
     %a = firrtl.wire : !firrtl.uint<0>
@@ -816,12 +812,9 @@ firrtl.circuit "PartialConnectTruncation" {
     // CHECK: [[CAST:%.*]] = firrtl.asSInt [[TAIL]] : (!firrtl.uint<2>) -> !firrtl.sint<2>
     // CHECK: firrtl.connect %e, [[CAST]] : !firrtl.sint<2>, !firrtl.sint<2>
   }
-}
 
-// -----
 
 // Test partial connect with analogs are transformed to attaches.
-firrtl.circuit "PartialConnectAnalogs" {
   firrtl.module @PartialConnectAnalogs() {
     %a = firrtl.wire : !firrtl.bundle<a: analog<1>>
     %b = firrtl.wire : !firrtl.bundle<a: analog<1>>
@@ -861,23 +854,18 @@ firrtl.circuit "PartialConnectAnalogs" {
     // CHECK-COUNT-2: firrtl.world
     // CHECK-NOT: firrtl.annotations
     // CHECK-NOT: firrtl.world
-}
 
-// -----
 
 // Test that a truncating connect emitted during lower types correctly adds an
 // AsPassive cast on a FlipType originating from an instance.
 //
 // See: https://github.com/llvm/circt/issues/1276
 
-module  {
-  // CHECK-LABEL: firrtl.circuit "TruncatingConnectWithFlip"
-  firrtl.circuit "TruncatingConnectWithFlip"  {
-    firrtl.extmodule @Bar(in %a: !firrtl.uint<2>)
+    firrtl.extmodule @Bar2(in %a: !firrtl.uint<2>)
     firrtl.module @TruncatingConnectWithFlip() {
       // CHECK: %[[a_b:.+]] = firrtl.wire
       %a = firrtl.wire  : !firrtl.bundle<b: uint<1>>
-      %bar_a = firrtl.instance @Bar  {name = "bar"} : !firrtl.flip<uint<2>>
+      %bar_a = firrtl.instance @Bar2  {name = "bar"} : !firrtl.flip<uint<2>>
       %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
       firrtl.connect %bar_a, %invalid_ui2 : !firrtl.flip<uint<2>>, !firrtl.uint<2>
       // CHECK: %[[bar_a_passive:.+]] = firrtl.asPassive %bar_a
@@ -886,34 +874,22 @@ module  {
       // CHECK-NEXT: firrtl.connect %[[a_b]], %[[bar_a_tail]]
       firrtl.partialconnect %0, %bar_a : !firrtl.uint<1>, !firrtl.flip<uint<2>>
     }
-  }
-}
 
-
-// -----
 
 // Test that a AsPassivePrimOps are handled.
 //
 // See: https://github.com/llvm/circt/issues/1290
 
-module  {
-  firrtl.circuit "Foo"  {
-// CHECK-LABEL: firrtl.module @Foo
-    firrtl.module @Foo(out %arg0: !firrtl.vector<uint<1>, 1>, in %arg1: !firrtl.vector<uint<1>, 1>, out %arg2: !firrtl.vector<uint<1>, 1>, in %arg3: !firrtl.uint<1>) attributes {portNames = ["a", "b", "c", "cond"]} {
+// CHECK-LABEL: firrtl.module @Foo1290
+    firrtl.module @Foo1290(out %arg0: !firrtl.vector<uint<1>, 1>, in %arg1: !firrtl.vector<uint<1>, 1>, out %arg2: !firrtl.vector<uint<1>, 1>, in %arg3: !firrtl.uint<1>) attributes {portNames = ["a", "b", "c", "cond"]} {
       %1 = firrtl.asPassive %arg0 : !firrtl.vector<uint<1>, 1>
       %2 = firrtl.mux(%arg3, %1, %arg1) : (!firrtl.uint<1>, !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>) -> !firrtl.vector<uint<1>, 1>
       firrtl.connect %arg2, %2 : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
     }
-  }
-}
-
-// -----
 
 // Test that a vector of bundles with a write works.
 
-module  {
-  firrtl.circuit "Foo"  {
-    firrtl.module @Foo(in %a: !firrtl.uint<1>, in %sel: !firrtl.uint<2>, out %b: !firrtl.vector<bundle<wo: uint<1>>, 4>) {
+    firrtl.module @aofs(in %a: !firrtl.uint<1>, in %sel: !firrtl.uint<2>, out %b: !firrtl.vector<bundle<wo: uint<1>>, 4>) {
       %0 = firrtl.subindex %b[0] : !firrtl.vector<bundle<wo: uint<1>>, 4>
       %1 = firrtl.subfield %0("wo") : (!firrtl.bundle<wo: uint<1>>) -> !firrtl.uint<1>
       %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
@@ -934,5 +910,4 @@ module  {
       %9 = firrtl.subfield %8("wo") : (!firrtl.bundle<wo: uint<1>>) -> !firrtl.uint<1>
       firrtl.connect %9, %a : !firrtl.uint<1>, !firrtl.uint<1>
     }
-  }
 }
