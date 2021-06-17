@@ -813,6 +813,15 @@ firrtl.circuit "TopLevel" {
     // CHECK: firrtl.connect %e, [[CAST]] : !firrtl.sint<2>, !firrtl.sint<2>
   }
 
+// Bug: must strip the flip type from the LHS of a value.
+  firrtl.module @PartialConnectLHSFlip(in %a: !firrtl.bundle<b: bundle<c: flip<uint<2>>>>) { }
+  firrtl.module @Foo(in %a: !firrtl.bundle<b: bundle<c: flip<uint<2>>>>) {
+    %mgmt_a = firrtl.instance @PartialConnectLHSFlip  {name = "mgmt"} : !firrtl.flip<bundle<b: bundle<c: flip<uint<2>>>>>
+    %0 = firrtl.subfield %mgmt_a("b") : (!firrtl.flip<bundle<b: bundle<c: flip<uint<2>>>>>) -> !firrtl.bundle<c: flip<uint<2>>>
+    %1 = firrtl.subfield %0("c") : (!firrtl.bundle<c: flip<uint<2>>>) -> !firrtl.uint<2>
+    // CHECK: firrtl.connect %a_b_c, %mgmt_a_b_c : !firrtl.uint<2>, !firrtl.uint<2>
+    firrtl.partialconnect %mgmt_a, %a : !firrtl.flip<bundle<b: bundle<c: flip<uint<2>>>>>, !firrtl.bundle<b: bundle<c: flip<uint<2>>>>
+  }
 
 // Test partial connect with analogs are transformed to attaches.
   firrtl.module @PartialConnectAnalogs() {

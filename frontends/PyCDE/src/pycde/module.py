@@ -3,7 +3,8 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
-from typing import Type
+
+from .support import Value
 
 from circt import support
 from circt.dialects import hw
@@ -92,6 +93,8 @@ class module:
       param_values = self.sig.bind(*args, **kwargs)
       param_values.apply_defaults()
       cls = self.func(*args, **kwargs)
+      if cls is None:
+        raise ValueError("Parameterization function must return module class")
       mod = _module_base(cls, param_values.arguments)
 
       if self.extern_name:
@@ -167,6 +170,7 @@ def _module_base(cls, params={}):
           name: kwargs[name] for (name, _) in mod._input_ports if name in kwargs
       }
       pass_up_kwargs = {n: v for (n, v) in kwargs.items() if n not in inputs}
+      # TODO: Inspect signature, raise error if __init__ doesn't accept **kwargs
       cls.__init__(self, *args, **pass_up_kwargs)
 
       # Build a list of operand values for the operation we're gonna create.
@@ -213,7 +217,6 @@ def _module_base(cls, params={}):
 
   mod.__name__ = cls.__name__
   mod.OPERATION_NAME = OPERATION_NAMESPACE + cls.__name__
-  mod._ODS_REGIONS = (0, True)
 
   # Inputs, Outputs, and parameters are all class members. We must populate
   # them.  First, scan 'cls' for them.
@@ -253,22 +256,31 @@ def _module_base(cls, params={}):
   # (since they implictly call an OpView property) when the attributes are being
   # scanned in the `mod` constructor.
   for (idx, (name, _)) in enumerate(mod._input_ports):
-    setattr(mod, name, property(lambda self: self.operands[idx]))
+    setattr(
+        mod, name,
+        property(lambda self, idx=idx: OpOperand(self, idx, self.operands[idx],
+                                                 self)))
     cls._dont_touch.add(name)
-  for (idx, (name, _)) in enumerate(mod._output_ports):
-    setattr(mod, name, property(lambda self: self.results[idx]))
+  mod._input_ports_lookup = dict(mod._input_ports)
+  for (idx, (name, type)) in enumerate(mod._output_ports):
+    setattr(
+        mod, name,
+        property(
+            lambda self, idx=idx, type=type: Value(self.results[idx], type)))
     cls._dont_touch.add(name)
+  mod._output_ports_lookup = dict(mod._output_ports)
 
-  _register_generators(cls)
+  _register_generators(mod)
   return mod
 
 
-def _register_generators(cls):
+def _register_generators(modcls):
   """Scan the class, looking for and registering _Generators."""
-  for name in dir(cls):
-    member = getattr(cls, name)
+  for name in dir(modcls):
+    member = getattr(modcls, name)
     if isinstance(member, _Generate):
-      _register_generator(cls.__name__, name, member)
+      member.modcls = modcls
+      _register_generator(modcls.__name__, name, member)
 
 
 def _register_generator(class_name, generator_name, generator):
@@ -283,6 +295,7 @@ class _Generate:
 
   def __init__(self, gen_func):
     self.gen_func = gen_func
+    self.modcls = None
 
     # Track generated modules so we don't create unnecessary duplicates of
     # modules that are structurally equivalent.
@@ -328,10 +341,11 @@ class _Generate:
       module_name = op.name
     if module_key not in self.generated_modules:
       with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
-        gen_mod = circt.dialects.hw.HWModuleOp(module_name,
-                                               input_ports=input_ports,
-                                               output_ports=output_ports,
-                                               body_builder=self.gen_func)
+        gen_mod = ModuleDefinition(self.modcls,
+                                   module_name,
+                                   input_ports=input_ports,
+                                   output_ports=output_ports,
+                                   body_builder=self.gen_func)
         self.generated_modules[module_key] = gen_mod
 
     # Build a replacement instance at the op to be replaced.
@@ -349,16 +363,24 @@ def generator(func):
   return _Generate(func)
 
 
-def connect(destination, source):
-  if not isinstance(destination, OpOperand):
-    raise TypeError(
-        f"cannot connect to destination of type {type(destination)}")
-  value = support.get_value(source)
-  if value is None:
-    raise TypeError(f"cannot connect from source of type {type(source)}")
+class ModuleDefinition(hw.HWModuleOp):
 
-  index = destination.index
-  destination.operation.operands[index] = value
-  if isinstance(destination, OpOperand) and \
-     index in destination.builder.backedges:
-    destination.builder.backedges[index].erase()
+  def __init__(self,
+               modcls,
+               name,
+               input_ports=[],
+               output_ports=[],
+               body_builder=None):
+    self.modcls = modcls
+    super().__init__(name,
+                     input_ports=input_ports,
+                     output_ports=output_ports,
+                     body_builder=body_builder)
+
+  # Support attribute access to block arguments by name
+  def __getattr__(self, name):
+    if name in self.input_indices:
+      index = self.input_indices[name]
+      return Value(self.entry_block.arguments[index],
+                   self.modcls._input_ports_lookup[name])
+    raise AttributeError(f"unknown input port name {name}")

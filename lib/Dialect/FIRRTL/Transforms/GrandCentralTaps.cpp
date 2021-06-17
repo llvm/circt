@@ -441,9 +441,9 @@ void GrandCentralTapsPass::gatherAnnotations(Operation *op) {
       // ones.
       annos.removeAnnotations([&](Annotation anno) {
         if (anno.isClass(referenceKeyClass)) {
-          assert(tappedArgs.insert({anno.getDict(), module.getArgument(argNum)})
-                     .second &&
-                 "ambiguous tap annotation");
+          auto it =
+              tappedArgs.insert({anno.getDict(), module.getArgument(argNum)});
+          assert(it.second && "ambiguous tap annotation");
           return true;
         }
         return false;
@@ -463,8 +463,8 @@ void GrandCentralTapsPass::gatherAnnotations(Operation *op) {
     // same annotation (hence the asserts).
     annos.removeAnnotations([&](Annotation anno) {
       if (anno.isClass(memTapClass, referenceKeyClass, internalKeyClass)) {
-        assert(tappedOps.insert({anno.getDict(), op}).second &&
-               "ambiguous tap annotation");
+        auto it = tappedOps.insert({anno.getDict(), op});
+        assert(it.second && "ambiguous tap annotation");
         return true;
       }
       return false;
@@ -579,7 +579,7 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
     auto op = tappedOps.lookup(portAnno.anno.getDict());
     if (!op) {
       blackBox.extModule.emitOpError(
-          "DataTapModuleSignalKey annotation was not scattered to "
+          "MemTapAnnotation annotation was not scattered to "
           "an operation: ")
           << portAnno.anno.getDict();
       signalPassFailure();
