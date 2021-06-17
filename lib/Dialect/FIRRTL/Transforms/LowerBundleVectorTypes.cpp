@@ -198,18 +198,21 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
 }
 
 // Look through and collect subfields leading to a subaccess
-static SmallVector<Value> getWritePath(Operation *op) {
-  SmallVector<Value> retval;
-  retval.push_back(op->getOperand(1));
+static SmallVector<Operation *> getSAWritePath(Operation *op) {
+  SmallVector<Operation *> retval;
   Value lhs = op->getOperand(0);
-  while (auto field = dyn_cast_or_null<SubfieldOp>(lhs.getDefiningOp())) {
-    retval.push_back(field);
-    lhs = field.input();
+  while (true) {
+    if (lhs.getDefiningOp() &&
+        isa<SubfieldOp, SubindexOp, SubaccessOp>(lhs.getDefiningOp())) {
+      retval.push_back(lhs.getDefiningOp());
+      lhs = lhs.getDefiningOp()->getOperand(0);
+    } else {
+      break;
+    }
   }
-  if (dyn_cast_or_null<SubaccessOp>(lhs.getDefiningOp()))
-    retval.push_back(lhs);
-  else
-    retval.clear();
+  // Trim to the subaccess
+  while (!retval.empty() && !isa<SubaccessOp>(retval.back()))
+    retval.pop_back();
   return retval;
 }
 
@@ -225,7 +228,6 @@ static AnnotationSet filterAnnotations(AnnotationSet annotations,
   return AnnotationSet(ArrayAttr::get(annotations.getContext(), loweredAttrs));
 }
 
-
 namespace {
 class AggregateUserVisitor
     : public FIRRTLVisitor<AggregateUserVisitor, void, ArrayRef<Value>> {
@@ -237,8 +239,8 @@ public:
 
   void visitExpr(SubfieldOp op, ArrayRef<Value> mapping);
   void visitExpr(SubindexOp op, ArrayRef<Value> mapping);
-  void visitExpr(SubaccessOp op, ArrayRef<Value> mapping);
-//  void visitExpr(AsPassivePrimOp op, ArrayRef<Value> mapping);
+  //  void visitExpr(SubaccessOp op, ArrayRef<Value> mapping);
+  //  void visitExpr(AsPassivePrimOp op, ArrayRef<Value> mapping);
 
 private:
   // The builder is set and maintained in the main loop.
@@ -258,8 +260,8 @@ void AggregateUserVisitor::visitExpr(AsPassivePrimOp op, ArrayRef<Value> mapping
 
 void AggregateUserVisitor::visitExpr(SubindexOp op, ArrayRef<Value> mapping) {
   Value repl = mapping[op.index()];
-//  if (repl.getType().isa<FlipType>())
-//    repl = builder->createOrFold<AsPassivePrimOp>(repl);
+  //  if (repl.getType().isa<FlipType>())
+  //    repl = builder->createOrFold<AsPassivePrimOp>(repl);
   op.replaceAllUsesWith(repl);
   op.erase();
 }
@@ -267,17 +269,18 @@ void AggregateUserVisitor::visitExpr(SubindexOp op, ArrayRef<Value> mapping) {
 void AggregateUserVisitor::visitExpr(SubfieldOp op, ArrayRef<Value> mapping) {
   // Get the input bundle type.
   Value input = op.input();
-  auto inputType = input.getType();
-  if (auto flipType = inputType.dyn_cast<FlipType>())
-    inputType = flipType.getElementType();
-  auto bundleType = inputType.cast<BundleType>();
+  // auto inputType = input.getType();
+  // if (auto flipType = inputType.dyn_cast<FlipType>())
+  //   inputType = flipType.getElementType();
+  auto bundleType = input.getType().cast<BundleType>();
   Value repl = mapping[*bundleType.getElementIndex(op.fieldname())];
-//  if (repl.getType().isa<FlipType>())
-//    repl = builder->createOrFold<AsPassivePrimOp>(repl);
+  //  if (repl.getType().isa<FlipType>())
+  //    repl = builder->createOrFold<AsPassivePrimOp>(repl);
   op.replaceAllUsesWith(repl);
   op.erase();
 }
 
+#if 0
 void AggregateUserVisitor::visitExpr(SubaccessOp op, ArrayRef<Value> mapping) {
   // Get the input bundle type.
   Value input = op.input();
@@ -319,6 +322,7 @@ else
     //  });
   }
 }
+#endif
 
 //===----------------------------------------------------------------------===//
 // Module Type Lowering
@@ -362,6 +366,7 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
 
 private:
   void processUsers(Value val, ArrayRef<Value> mapping);
+  void lowerSAWritePath(Operation *, ArrayRef<Operation *> writePath);
 
   MLIRContext *context;
 
@@ -445,6 +450,44 @@ bool TypeLoweringVisitor::lowerArg(FModuleOp module, size_t argIndex,
   return true;
 }
 
+static Value cloneAccess(ImplicitLocOpBuilder *builder, Operation *op,
+                         Value rhs) {
+  if (auto rop = dyn_cast<SubfieldOp>(op))
+    return builder->create<SubfieldOp>(rhs, rop.fieldname());
+  if (auto rop = dyn_cast<SubindexOp>(op))
+    return builder->create<SubindexOp>(rhs, rop.index());
+  if (auto rop = dyn_cast<SubaccessOp>(op))
+    return builder->create<SubaccessOp>(rhs, rop.index());
+  op->emitError("Unknown accessor");
+  return nullptr;
+}
+
+void TypeLoweringVisitor::lowerSAWritePath(Operation *op,
+                                           ArrayRef<Operation *> writePath) {
+  auto sao = cast<SubaccessOp>(writePath.back());
+  auto saoType = sao.getType().cast<FVectorType>();
+  auto selectWidth =
+      sao.index().getType().cast<FIRRTLType>().getBitWidthOrSentinel();
+
+  for (size_t index = 0, e = saoType.getNumElements(); index < e; ++index) {
+    auto cond = builder->create<EQPrimOp>(
+        sao.index(),
+        builder->createOrFold<ConstantOp>(UIntType::get(context, selectWidth),
+                                          APInt(selectWidth, index)));
+    builder->create<WhenOp>(cond, false, [&]() {
+      // Recreate the write Path
+      Value leaf = builder->create<SubindexOp>(sao.input(), index);
+      for (int i = writePath.size() - 2; i >= 0; --i)
+        leaf = cloneAccess(builder, writePath[i], leaf);
+
+      if (isa<ConnectOp>(op))
+        builder->create<ConnectOp>(leaf, writePath[0]->getResult(0));
+      else
+        builder->create<PartialConnectOp>(leaf, writePath[0]->getResult(0));
+    });
+  }
+}
+
 // Expand connects of aggregates
 void TypeLoweringVisitor::visitStmt(ConnectOp op) {
   // Attempt to get the bundle types, potentially unwrapping an outer flip
@@ -452,17 +495,15 @@ void TypeLoweringVisitor::visitStmt(ConnectOp op) {
   FIRRTLType resultType = getCanonicalAggregateType(op.src().getType());
 
   // Is this a write?
-  SmallVector<Value> writePath = getWritePath(op);
+  SmallVector<Operation *> writePath = getSAWritePath(op);
   if (!writePath.empty()) {
-    AggregateUserVisitor(builder).visitExpr(
-        cast<SubaccessOp>(writePath.back().getDefiningOp()), writePath);
+    lowerSAWritePath(op, writePath);
     // unhook the writePath from the connect.  This isn't the right type, but we
     // are deleting the op anyway.
-    op.setOperand(0, writePath.back());
-    for (size_t  i = 1; i < writePath.size() - 1; ++i) {
-      auto pathOp = writePath[i].getDefiningOp();
-      if (pathOp->use_empty())
-        pathOp->erase();
+    op.setOperand(0, writePath.back()->getResult(0));
+    for (size_t i = 1; i < writePath.size() - 1; ++i) {
+      if (writePath[i]->use_empty())
+        writePath[i]->erase();
     }
     opsToRemove.push_back(op);
     return;
@@ -490,7 +531,7 @@ void TypeLoweringVisitor::visitStmt(ConnectOp op) {
     }
     if (field.value().isOutput)
       std::swap(src, dest);
-                      if (foldFlow(dest) == Flow::Source || foldFlow(src) == Flow::Sink)
+    if (foldFlow(dest) == Flow::Source || foldFlow(src) == Flow::Sink)
       std::swap(src, dest);
     builder->create<ConnectOp>(dest, src);
   }
@@ -508,45 +549,51 @@ void TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
   }
 
   // Is this a write?
-  SmallVector<Value> writePath = getWritePath(op);
+  SmallVector<Operation *> writePath = getSAWritePath(op);
   if (!writePath.empty()) {
-    AggregateUserVisitor(builder).visitExpr(
-        cast<SubaccessOp>(writePath.back().getDefiningOp()), writePath);
+    lowerSAWritePath(op, writePath);
+    // unhook the writePath from the connect.  This isn't the right type, but we
+    // are deleting the op anyway.
+    op.setOperand(0, writePath.back()->getResult(0));
+    for (size_t i = 1; i < writePath.size() - 1; ++i) {
+      if (writePath[i]->use_empty())
+        writePath[i]->erase();
+    }
     opsToRemove.push_back(op);
     return;
   }
 
   // Ground Type
   if (!destType) {
-      // check for truncation
-      auto srcInfo = op.src().getType().cast<FIRRTLType>().stripFlip();
-      srcType = srcInfo.first;
-      destType = op.dest().getType().cast<FIRRTLType>().stripFlip().first;
-      auto srcWidth = srcType.getBitWidthOrSentinel();
-      auto destWidth = destType.getBitWidthOrSentinel();
-      Value src = op.src();
-      Value dest = op.dest();
+    // check for truncation
+    auto srcInfo = op.src().getType().cast<FIRRTLType>().stripFlip();
+    srcType = srcInfo.first;
+    destType = op.dest().getType().cast<FIRRTLType>().stripFlip().first;
+    auto srcWidth = srcType.getBitWidthOrSentinel();
+    auto destWidth = destType.getBitWidthOrSentinel();
+    Value src = op.src();
+    Value dest = op.dest();
 
-      if (destType.isa<IntType>() && srcType.isa<IntType>() && destWidth >= 0 &&
-          destWidth < srcWidth) {
-        // firrtl.tail always returns uint even for sint operands.
-        IntType tmpType = destType.cast<IntType>();
-        if (tmpType.isSigned())
-          tmpType = UIntType::get(destType.getContext(), destWidth);
-//        if (srcInfo.second)
-//          src = builder->create<AsPassivePrimOp>(src);
-        assert(!src.getType().isa<FlipType>());
-        src = builder->create<TailPrimOp>(tmpType, src, srcWidth - destWidth);
-        // Insert the cast back to signed if needed.
-        if (tmpType != destType)
-          src = builder->create<AsSIntPrimOp>(destType, src);
-                      if (foldFlow(dest) == Flow::Source || foldFlow(src) == Flow::Sink)
-      std::swap(src, dest);
+    if (destType.isa<IntType>() && srcType.isa<IntType>() && destWidth >= 0 &&
+        destWidth < srcWidth) {
+      // firrtl.tail always returns uint even for sint operands.
+      IntType tmpType = destType.cast<IntType>();
+      if (tmpType.isSigned())
+        tmpType = UIntType::get(destType.getContext(), destWidth);
+      //        if (srcInfo.second)
+      //          src = builder->create<AsPassivePrimOp>(src);
+      assert(!src.getType().isa<FlipType>());
+      src = builder->create<TailPrimOp>(tmpType, src, srcWidth - destWidth);
+      // Insert the cast back to signed if needed.
+      if (tmpType != destType)
+        src = builder->create<AsSIntPrimOp>(destType, src);
+      if (foldFlow(dest) == Flow::Source || foldFlow(src) == Flow::Sink)
+        std::swap(src, dest);
 
       builder->create<ConnectOp>(dest, src);
-    opsToRemove.push_back(op);
-          }
-          return;
+      opsToRemove.push_back(op);
+    }
+    return;
   }
 
   SmallVector<FlatBundleFieldEntry> srcFields = peelType(srcType);
@@ -559,8 +606,8 @@ void TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
       Value dest = builder->create<SubindexOp>(op.dest(), index);
       if (srcFields[index].isOutput)
         std::swap(src, dest);
-                      if (foldFlow(dest) == Flow::Source || foldFlow(src) == Flow::Sink)
-      std::swap(src, dest);
+      if (foldFlow(dest) == Flow::Source || foldFlow(src) == Flow::Sink)
+        std::swap(src, dest);
 
       if (src.getType() == dest.getType())
         builder->create<ConnectOp>(dest, src);
@@ -581,8 +628,8 @@ void TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
           Value dest = builder->create<SubfieldOp>(op.dest(), destName);
           if (srcFields[srcIndex].isOutput)
             std::swap(src, dest);
-                      if (foldFlow(dest) == Flow::Source || foldFlow(src) == Flow::Sink)
-      std::swap(src, dest);
+          if (foldFlow(dest) == Flow::Source || foldFlow(src) == Flow::Sink)
+            std::swap(src, dest);
 
           if (src.getType().isa<AnalogType>())
             builder->create<AttachOp>(ArrayRef<Value>{dest, src});
@@ -785,22 +832,22 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
 
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes = peelType(resultType);
 
-
   SmallVector<MemOp> newMemories;
   SmallVector<Value> wireToOldResult;
   for (auto field : fieldTypes)
-    newMemories.push_back(cloneMemWithNewType(builder, op, field.type, field.suffix));
+    newMemories.push_back(
+        cloneMemWithNewType(builder, op, field.type, field.suffix));
 
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
 
-  SmallVector<Value> lowered;
+    SmallVector<Value> lowered;
     for (auto memResultType : op.getResult(i)
-        .getType()
-        .cast<FIRRTLType>()
-        .getPassiveType()
-        .cast<BundleType>()
-        .getElements()) {
-      auto wire = builder->create<WireOp>(memResultType.type); 
+                                  .getType()
+                                  .cast<FIRRTLType>()
+                                  .getPassiveType()
+                                  .cast<BundleType>()
+                                  .getElements()) {
+      auto wire = builder->create<WireOp>(memResultType.type);
       wireToOldResult.push_back(wire.getResult());
       lowered.push_back(wire.getResult());
     }
@@ -810,7 +857,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
   SmallVector<SmallVector<Value, 4>, 8> memResultToWire;
   for (auto field : llvm::enumerate(fieldTypes)) {
     auto newMem = newMemories[field.index()];
-    size_t tempWireIndex =0;
+    size_t tempWireIndex = 0;
     for (size_t i = 0, e = newMem.getNumResults(); i != e; ++i) {
       auto res = newMem.getResult(i);
       for (auto memResultType : llvm::enumerate(res.getType()
@@ -821,7 +868,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
                                                     .getElements())) {
         auto tempWire = wireToOldResult[tempWireIndex];
         ++tempWireIndex;
-        
+
         auto newMemSub =
             builder->create<SubfieldOp>(res, memResultType.value().name);
         if (memResultType.value().name.getValue().contains("data") ||
@@ -853,7 +900,6 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
 
   opsToRemove.push_back(op);
 }
-
 
 void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   OpBuilder builder(context);
@@ -928,20 +974,21 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   extModule.setType(builder.getFunctionType(inputTypes, {}));
 }
 
-static void hackBody (Block* b) {
-  for (auto& bop : b->getOperations()) {
+static void hackBody(Block *b) {
+  for (auto &bop : b->getOperations()) {
     if (ConnectOp con = dyn_cast<ConnectOp>(bop)) {
-      if (foldFlow(con.dest()) == Flow::Source || foldFlow(con.src()) == Flow::Sink) {
-              Value lhs = con.dest();
-      con.setOperand(0, con.src());
-      con.setOperand(1, lhs);
-}} else if (WhenOp won = dyn_cast<WhenOp>(bop))
-  for (auto r : won.getRegions())
-  if (!r->empty())
-  hackBody(&*r->begin());
-}
-
+      if (foldFlow(con.dest()) == Flow::Source ||
+          foldFlow(con.src()) == Flow::Sink) {
+        Value lhs = con.dest();
+        con.setOperand(0, con.src());
+        con.setOperand(1, lhs);
+      }
+    } else if (WhenOp won = dyn_cast<WhenOp>(bop))
+      for (auto r : won.getRegions())
+        if (!r->empty())
+          hackBody(&*r->begin());
   }
+}
 
 void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   auto *body = module.getBodyBlock();
@@ -1026,7 +1073,6 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   module->setAttr(module.getTypeAttrName(), TypeAttr::get(moduleType));
 
   hackBody(body);
-
 }
 
 /// Lower a wire op with a bundle to multiple non-bundled wires.
@@ -1266,9 +1312,9 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   // Reads.  All writes have been eliminated before now
 
   auto vType = inputType.cast<FVectorType>();
-  Value mux = builder->create<InvalidValueOp>(vType.getElementType());
+  Value mux = builder->create<SubindexOp>(input, vType.getNumElements() - 1);
 
-  for (size_t index = vType.getNumElements(); index > 0; --index) {
+  for (size_t index = vType.getNumElements() - 1; index > 0; --index) {
     auto cond = builder->create<EQPrimOp>(
         op.index(), builder->createOrFold<ConstantOp>(
                         UIntType::get(op.getContext(), selectWidth),
