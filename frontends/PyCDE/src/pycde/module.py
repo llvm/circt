@@ -215,6 +215,11 @@ def _module_base(cls, params={}):
       """Return the list of input ports."""
       return mod._input_ports
 
+    @staticmethod
+    def outputs() -> list[(str, mlir.ir.Type)]:
+      """Return the list of input ports."""
+      return mod._output_ports
+
   mod.__name__ = cls.__name__
   mod.OPERATION_NAME = OPERATION_NAMESPACE + cls.__name__
 
