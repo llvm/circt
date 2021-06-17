@@ -277,7 +277,7 @@ def _module_base(cls, params={}):
     cls._dont_touch.add(name)
   mod._output_ports_lookup = dict(mod._output_ports)
 
-  _register_generators(cls, mlir.ir.DictAttr.get(mod._parameters))
+  _register_generators(mod, mlir.ir.DictAttr.get(mod._parameters))
   return mod
 
 
