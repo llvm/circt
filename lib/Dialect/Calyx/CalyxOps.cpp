@@ -27,7 +27,8 @@ using namespace circt::calyx;
 using namespace mlir;
 
 /// Prints the name and width for Calyx component input and output ports.
-/// For example,
+/// For example, with given dictionary ["p1": 32, "p2": 64]:
+///
 /// ```
 /// p1: 32, p2: 64
 /// ```
@@ -54,7 +55,7 @@ static void printComponentOp(OpAsmPrinter &p, ComponentOp &op) {
   auto outPortNameAndWidth = op->getAttrOfType<DictionaryAttr>("outPortToWidth");
   printComponentPortNameAndWidth(p, outPortNameAndWidth);
 
-  // TODO(calyx): print groups and control.
+  // TODO(calyx): print cells, wires and control.
   p << ") {}";
 }
 
