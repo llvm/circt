@@ -13,6 +13,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/TinyPtrVector.h"
+#include "llvm/Support/Parallel.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -302,10 +303,14 @@ void IMConstPropPass::runOnOperation() {
   }
 
   // Rewrite any constants in the modules.
-  // TODO: parallelize.
-  for (auto &circuitBodyOp : *circuit.getBody())
-    if (auto module = dyn_cast<FModuleOp>(circuitBodyOp))
-      rewriteModuleBody(module);
+  if (circuit.getContext()->isMultithreadingEnabled()) {
+    SmallVector<FModuleOp> ops(circuit.getBody()->getOps<FModuleOp>());
+    llvm::parallelForEach(ops, [&](auto op) { rewriteModuleBody(op); });
+  } else {
+    for (auto &circuitBodyOp : *circuit.getBody())
+      if (auto module = dyn_cast<FModuleOp>(circuitBodyOp))
+        rewriteModuleBody(module);
+  }
 
   // Clean up our state for next time.
   instanceGraph = nullptr;
