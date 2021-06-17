@@ -392,7 +392,7 @@ firrtl.circuit "Foo" {
   firrtl.module @Issue1088(out %y: !firrtl.sint<4>) {
     // CHECK: %x = firrtl.wire : !firrtl.sint<9>
     // CHECK: %c200_si9 = firrtl.constant 200 : !firrtl.sint<9>
-    // CHECK: %0 = firrtl.bits %x 3 to 0 : (!firrtl.sint<9>) -> !firrtl.uint<4>
+    // CHECK: %0 = firrtl.tail %x, 5 : (!firrtl.sint<9>) -> !firrtl.uint<4>
     // CHECK: %1 = firrtl.asSInt %0 : (!firrtl.uint<4>) -> !firrtl.sint<4>
     // CHECK: firrtl.connect %y, %1 : !firrtl.sint<4>, !firrtl.sint<4>
     // CHECK: firrtl.connect %x, %c200_si9 : !firrtl.sint<9>, !firrtl.sint<9>
@@ -400,6 +400,18 @@ firrtl.circuit "Foo" {
     %c200_si = firrtl.constant 200 : !firrtl.sint
     firrtl.connect %y, %x : !firrtl.sint<4>, !firrtl.sint
     firrtl.connect %x, %c200_si : !firrtl.sint, !firrtl.sint
+  }
+
+  // Should truncate all the way to 0 bits if its has to.
+  // CHECK-LABEL: @TruncateConnect
+  firrtl.module @TruncateConnect() {
+    %w = firrtl.wire  : !firrtl.uint
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.connect %w, %c1_ui1 : !firrtl.uint, !firrtl.uint<1>
+    %w1 = firrtl.wire  : !firrtl.uint<0>
+    // CHECK: %0 = firrtl.tail %w, 1 : (!firrtl.uint<1>) -> !firrtl.uint<0>
+    // CHECK: firrtl.connect %w1, %0 : !firrtl.uint<0>, !firrtl.uint<0>
+    firrtl.connect %w1, %w : !firrtl.uint<0>, !firrtl.uint
   }
 
   // Issue #1110: Width inference should infer 0 width when appropriate

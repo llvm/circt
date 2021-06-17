@@ -1,4 +1,4 @@
-# RUN: %PYTHON% %s | FileCheck %s
+# RUN: %PYTHON% %s 2>&1 | FileCheck %s
 
 from __future__ import annotations
 
@@ -85,6 +85,11 @@ class Polynomial(pycde.System):
 
 
 poly = Polynomial()
+
+poly.graph()
+# CHECK-LABEL: digraph "top"
+# CHECK: label="top";
+# CHECK: [shape=record,label="{hw.constant\ni32\n\nvalue: 23 : i32}"];
 
 poly.print()
 # CHECK-LABEL:  hw.module @top() -> (%y: i32)
