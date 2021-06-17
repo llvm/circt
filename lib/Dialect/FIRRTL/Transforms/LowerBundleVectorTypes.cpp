@@ -966,7 +966,6 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
     builder->setInsertionPoint(&*iop);
     builder->setLoc(iop->getLoc());
     dispatchVisitor(&*iop);
-    module->dump();
   }
 
   for (auto *op : opsToRemove)
