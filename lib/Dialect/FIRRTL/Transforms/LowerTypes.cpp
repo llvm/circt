@@ -1101,8 +1101,8 @@ void TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
   // Partial connects are completely removed and replaced by regular connects.
   // This makes this one of the few ops that actually has to do something during
   // this pass the types are not bundles.
-  auto tmpType = destType.stripFlip().first;
-  if (tmpType.isa<BundleType, FVectorType>()) {
+  destType = destType.stripFlip().first;
+  if (destType.isa<BundleType, FVectorType>()) {
     // Bundle types have to be recursively lowered.
     this->recursivePartialConnect(dest, destType, src, srcType.getPassiveType(),
                                   0, 0);
