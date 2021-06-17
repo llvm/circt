@@ -225,6 +225,7 @@ static AnnotationSet filterAnnotations(AnnotationSet annotations,
   return AnnotationSet(ArrayAttr::get(annotations.getContext(), loweredAttrs));
 }
 
+
 namespace {
 class AggregateUserVisitor
     : public FIRRTLVisitor<AggregateUserVisitor, void, ArrayRef<Value>> {
@@ -237,6 +238,7 @@ public:
   void visitExpr(SubfieldOp op, ArrayRef<Value> mapping);
   void visitExpr(SubindexOp op, ArrayRef<Value> mapping);
   void visitExpr(SubaccessOp op, ArrayRef<Value> mapping);
+//  void visitExpr(AsPassivePrimOp op, ArrayRef<Value> mapping);
 
 private:
   // The builder is set and maintained in the main loop.
@@ -244,16 +246,35 @@ private:
 };
 } // namespace
 
+#if 0
+void AggregateUserVisitor::visitExpr(AsPassivePrimOp op, ArrayRef<Value> mapping) {
+  Value repl = mapping[0];
+//  if (repl.getType().isa<FlipType>())
+//    repl = builder->createOrFold<AsPassivePrimOp>(repl);
+  op.replaceAllUsesWith(repl);
+  op.erase();  
+}
+#endif
+
 void AggregateUserVisitor::visitExpr(SubindexOp op, ArrayRef<Value> mapping) {
+  Value repl = mapping[op.index()];
+//  if (repl.getType().isa<FlipType>())
+//    repl = builder->createOrFold<AsPassivePrimOp>(repl);
+  op.replaceAllUsesWith(repl);
+  op.erase();
+}
+
+void AggregateUserVisitor::visitExpr(SubfieldOp op, ArrayRef<Value> mapping) {
   // Get the input bundle type.
   Value input = op.input();
   auto inputType = input.getType();
   if (auto flipType = inputType.dyn_cast<FlipType>())
     inputType = flipType.getElementType();
-
-  op.replaceAllUsesWith(mapping[op.index()]);
-
-  // Remember to remove the original op.
+  auto bundleType = inputType.cast<BundleType>();
+  Value repl = mapping[*bundleType.getElementIndex(op.fieldname())];
+//  if (repl.getType().isa<FlipType>())
+//    repl = builder->createOrFold<AsPassivePrimOp>(repl);
+  op.replaceAllUsesWith(repl);
   op.erase();
 }
 
@@ -283,6 +304,9 @@ void AggregateUserVisitor::visitExpr(SubaccessOp op, ArrayRef<Value> mapping) {
         leaf = builder->create<SubfieldOp>(
             leaf, cast<SubfieldOp>(mapping[i].getDefiningOp()).fieldname());
       if (leaf.getType() == mapping[0].getType())
+                            if (foldFlow(leaf) == Flow::Source || foldFlow(mapping[0]) == Flow::Sink)
+        builder->create<ConnectOp>(mapping[0], leaf);
+else
         builder->create<ConnectOp>(leaf, mapping[0]);
       else
         builder->create<PartialConnectOp>(leaf, mapping[0]);
@@ -294,20 +318,6 @@ void AggregateUserVisitor::visitExpr(SubaccessOp op, ArrayRef<Value> mapping) {
     //                               mapping[0]);
     //  });
   }
-}
-
-void AggregateUserVisitor::visitExpr(SubfieldOp op, ArrayRef<Value> mapping) {
-  // Get the input bundle type.
-  Value input = op.input();
-  auto inputType = input.getType();
-  if (auto flipType = inputType.dyn_cast<FlipType>())
-    inputType = flipType.getElementType();
-  auto bundleType = inputType.cast<BundleType>();
-
-  op.replaceAllUsesWith(mapping[*bundleType.getElementIndex(op.fieldname())]);
-
-  // Remember to remove the original op.
-  op.erase();
 }
 
 //===----------------------------------------------------------------------===//
@@ -480,6 +490,8 @@ void TypeLoweringVisitor::visitStmt(ConnectOp op) {
     }
     if (field.value().isOutput)
       std::swap(src, dest);
+                      if (foldFlow(dest) == Flow::Source || foldFlow(src) == Flow::Sink)
+      std::swap(src, dest);
     builder->create<ConnectOp>(dest, src);
   }
   opsToRemove.push_back(op);
@@ -506,12 +518,6 @@ void TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
 
   // Ground Type
   if (!destType) {
-    // might have aggregate write with variable index (SubaccesOp).
-    // FIXME, might have a write of an aggregate
-    if (SubaccessOp sao =
-            dyn_cast_or_null<SubaccessOp>(op.dest().getDefiningOp())) {
-      AggregateUserVisitor(builder).visitExpr(sao, ArrayRef<Value>(op.src()));
-    } else {
       // check for truncation
       auto srcInfo = op.src().getType().cast<FIRRTLType>().stripFlip();
       srcType = srcInfo.first;
@@ -519,6 +525,7 @@ void TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
       auto srcWidth = srcType.getBitWidthOrSentinel();
       auto destWidth = destType.getBitWidthOrSentinel();
       Value src = op.src();
+      Value dest = op.dest();
 
       if (destType.isa<IntType>() && srcType.isa<IntType>() && destWidth >= 0 &&
           destWidth < srcWidth) {
@@ -526,17 +533,20 @@ void TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
         IntType tmpType = destType.cast<IntType>();
         if (tmpType.isSigned())
           tmpType = UIntType::get(destType.getContext(), destWidth);
-        if (srcInfo.second)
-          src = builder->create<AsPassivePrimOp>(src);
+//        if (srcInfo.second)
+//          src = builder->create<AsPassivePrimOp>(src);
+        assert(!src.getType().isa<FlipType>());
         src = builder->create<TailPrimOp>(tmpType, src, srcWidth - destWidth);
         // Insert the cast back to signed if needed.
         if (tmpType != destType)
           src = builder->create<AsSIntPrimOp>(destType, src);
-      }
-      builder->create<ConnectOp>(op.dest(), src);
-    }
+                      if (foldFlow(dest) == Flow::Source || foldFlow(src) == Flow::Sink)
+      std::swap(src, dest);
+
+      builder->create<ConnectOp>(dest, src);
     opsToRemove.push_back(op);
-    return;
+          }
+          return;
   }
 
   SmallVector<FlatBundleFieldEntry> srcFields = peelType(srcType);
@@ -549,6 +559,9 @@ void TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
       Value dest = builder->create<SubindexOp>(op.dest(), index);
       if (srcFields[index].isOutput)
         std::swap(src, dest);
+                      if (foldFlow(dest) == Flow::Source || foldFlow(src) == Flow::Sink)
+      std::swap(src, dest);
+
       if (src.getType() == dest.getType())
         builder->create<ConnectOp>(dest, src);
       else
@@ -568,6 +581,9 @@ void TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
           Value dest = builder->create<SubfieldOp>(op.dest(), destName);
           if (srcFields[srcIndex].isOutput)
             std::swap(src, dest);
+                      if (foldFlow(dest) == Flow::Source || foldFlow(src) == Flow::Sink)
+      std::swap(src, dest);
+
           if (src.getType().isa<AnalogType>())
             builder->create<AttachOp>(ArrayRef<Value>{dest, src});
           else if (src.getType() == dest.getType())
@@ -952,6 +968,21 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   extModule.setType(builder.getFunctionType(inputTypes, {}));
 }
 
+static void hackBody (Block* b) {
+  for (auto& bop : b->getOperations()) {
+    if (ConnectOp con = dyn_cast<ConnectOp>(bop)) {
+      if (foldFlow(con.dest()) == Flow::Source || foldFlow(con.src()) == Flow::Sink) {
+              Value lhs = con.dest();
+      con.setOperand(0, con.src());
+      con.setOperand(1, lhs);
+}} else if (WhenOp won = dyn_cast<WhenOp>(bop))
+  for (auto r : won.getRegions())
+  if (!r->empty())
+  hackBody(&*r->begin());
+}
+
+  }
+
 void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   auto *body = module.getBodyBlock();
 
@@ -1033,6 +1064,9 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   // Keep the module's type up-to-date.
   auto moduleType = builder->getFunctionType(body->getArgumentTypes(), {});
   module->setAttr(module.getTypeAttrName(), TypeAttr::get(moduleType));
+
+  hackBody(body);
+
 }
 
 /// Lower a wire op with a bundle to multiple non-bundled wires.
