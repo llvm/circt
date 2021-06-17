@@ -449,7 +449,7 @@ void TypeLoweringVisitor::visitStmt(ConnectOp op) {
     // unhook the writePath from the connect.  This isn't the right type, but we
     // are deleting the op anyway.
     op.setOperand(0, writePath.back());
-    for (int i = 1; i < writePath.size() - 1; ++i) {
+    for (size_t  i = 1; i < writePath.size() - 1; ++i) {
       auto pathOp = writePath[i].getDefiningOp();
       if (pathOp->use_empty())
         pathOp->erase();
@@ -871,10 +871,27 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
       }
     }
   }
-
-  for (size_t i = 0, e = op.getNumResults(); i != e; ++i)
-    if (!op.getResult(i).getUsers().empty())
-      return;
+  if (fieldTypes.empty()) {
+      SmallVector<Value, 4> memPorts;
+      SmallVector<WireOp, 4> memPortsWires;
+    for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
+        for (auto memResultType : op.getResult(i)
+                                      .getType()
+                                      .cast<FIRRTLType>()
+                                      .getPassiveType()
+                                      .cast<BundleType>()
+                                      .getElements()) {
+          auto wire = builder->create<WireOp>(
+              memResultType.type); //, op.name().str() + "_" +
+                                   // memResultType.name.getValue());
+          memPorts.push_back(wire.getResult());
+          memPortsWires.push_back(wire);
+        }
+        processUsers(op.getResult(i), memPorts);
+    }
+    for (auto w : memPortsWires)
+      w->remove();
+  }
 
   opsToRemove.push_back(op);
 }
