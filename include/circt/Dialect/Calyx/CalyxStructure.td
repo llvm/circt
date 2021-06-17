@@ -17,33 +17,14 @@ def ComponentOp : CalyxOp<"component", []> {
         Calyx component containing cells, wires, and control.
         ```
     }];
+    let arguments =
+                (ins DictionaryAttr:$inPortToWidth, DictionaryAttr:$outPortToWidth);
     let printer = "return ::print$cppClass(p, *this);";
     let parser = "return ::parse$cppClass(parser, result);";
+    let builders = [
+      OpBuilder<(ins "StringAttr":$name,
+                 CArg<"DictionaryAttr", "DictionaryAttr()">:$inPortToWidth,
+                 CArg<"DictionaryAttr", "DictionaryAttr()">:$outPortToWidth)>
+    ];
 }
 
-def CellsOp : CalyxOp<"cells", [HasParent<"ComponentOp">]> {
-    let summary = "Calyx Cells";
-    let description = [{
-        The "calyx.cells" operation represents the cells of a Calyx component.
-    }];
-    let printer = "return ::print$cppClass(p, *this);";
-    let parser = "return ::parse$cppClass(parser, result);";
-}
-
-def WiresOp : CalyxOp<"wires", [HasParent<"ComponentOp">]> {
-    let summary = "Calyx Wires";
-    let description = [{
-        The "calyx.wires" operation represents the wires of a Calyx component.
-    }];
-    let printer = "return ::print$cppClass(p, *this);";
-    let parser = "return ::parse$cppClass(parser, result);";
-}
-
-def ControlOp : CalyxOp<"control", [HasParent<"ComponentOp">]> {
-    let summary = "Calyx Control";
-    let description = [{
-        The "calyx.control" operation represents the control of a Calyx component.
-    }];
-    let printer = "return ::print$cppClass(p, *this);";
-    let parser = "return ::parse$cppClass(parser, result);";
-}

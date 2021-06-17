@@ -13,14 +13,16 @@
 #ifndef CIRCT_DIALECT_CALYX_CALYXDIALECT_H
 #define CIRCT_DIALECT_CALYX_CALYXDIALECT_H
 
+#include "circt/Support/LLVM.h"
+#include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/Dialect.h"
+
 namespace circt {
 namespace calyx {
 
 } // namespace calyx
 } // namespace circt
 
-#include "mlir/IR/BuiltinAttributes.h"
-#include "mlir/IR/Dialect.h"
 
 // Pull in the Dialect definition.
 #include "circt/Dialect/Calyx/CalyxDialect.h.inc"

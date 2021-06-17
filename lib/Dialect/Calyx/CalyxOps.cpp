@@ -26,48 +26,54 @@ using namespace circt;
 using namespace circt::calyx;
 using namespace mlir;
 
+/// Prints the name and width for Calyx component input and output ports.
+/// For example,
+/// ```
+/// p1: 32, p2: 64
+/// ```
+void printComponentPortNameAndWidth(OpAsmPrinter &p, DictionaryAttr &nameToWidth) {
+  for (auto i = nameToWidth.begin(), e = nameToWidth.end(); i < e; ++i) {
+    p << i->first << ": " << i->second;
+    if (i + 1 != e)
+      p << ", ";
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // ComponentOp
 //===----------------------------------------------------------------------===//
 
 static void printComponentOp(OpAsmPrinter &p, ComponentOp &op) {
-  p << "calyx.component";
+  p << "component (";
+
+  auto inPortNameAndWidth = op->getAttrOfType<DictionaryAttr>("inPortToWidth");
+  printComponentPortNameAndWidth(p, inPortNameAndWidth);
+
+  p << ") -> (";
+
+  auto outPortNameAndWidth = op->getAttrOfType<DictionaryAttr>("outPortToWidth");
+  printComponentPortNameAndWidth(p, outPortNameAndWidth);
+
+  // TODO(calyx): print groups and control.
+  p << ") {}";
+}
+
+void ComponentOp::build(OpBuilder &builder, OperationState &result,
+                        StringAttr name, DictionaryAttr inPortToWidth,
+                        DictionaryAttr outPortToWidth) {
+  // Add an attribute for the name.
+  result.addAttribute(builder.getIdentifier("name"), name);
+
+  if (inPortToWidth)
+    result.addAttribute("inPortToWidth", inPortToWidth);
+  if (outPortToWidth)
+    result.addAttribute("outPortToWidth", outPortToWidth);
+
+  // TODO(calyx): Add scaffolding for cells, wire, & control.
 }
 
 static ParseResult parseComponentOp(OpAsmParser &parser,
                                     OperationState &result) {
-    return failure();
-}
-
-//===----------------------------------------------------------------------===//
-// CellsOp
-//===----------------------------------------------------------------------===//
-
-static void printCellsOp(OpAsmPrinter &p, CellsOp &op) { p << "calyx.cells"; }
-
-static ParseResult parseCellsOp(OpAsmParser &parser, OperationState &result) {
-  return failure();
-}
-
-//===----------------------------------------------------------------------===//
-// WiresOp
-//===----------------------------------------------------------------------===//
-
-static void printWiresOp(OpAsmPrinter &p, WiresOp &op) { p << "calyx.wires"; }
-
-static ParseResult parseWiresOp(OpAsmParser &parser, OperationState &result) {
-  return failure();
-}
-
-//===----------------------------------------------------------------------===//
-// ControlOp
-//===----------------------------------------------------------------------===//
-
-static void printControlOp(OpAsmPrinter &p, ControlOp &op) {
-  p << "calyx.control";
-}
-
-static ParseResult parseControlOp(OpAsmParser &parser, OperationState &result) {
   return failure();
 }
 
