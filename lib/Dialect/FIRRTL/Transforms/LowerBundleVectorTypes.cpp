@@ -760,7 +760,6 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
 /// element in a memory's data type.
 void TypeLoweringVisitor::visitDecl(MemOp op) {
   auto resultType = op.getDataType();
-  auto depth = op.depth();
   if (!getCanonicalAggregateType(resultType))
     return;
 
@@ -770,70 +769,32 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
 
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes = peelType(resultType);
 
-  // Mutable store of the types of the ports of a new memory. This is
-  // cleared and re-used.
-  SmallVector<Type, 4> resultPortTypes;
-  llvm::SmallSetVector<Attribute, 4> resultPortNames;
 
-  // Insert a unique port into resultPortNames with base name nameStr.
-  auto uniquePortName = [&](StringRef baseName) {
-    size_t i = 0;
-    std::string suffix = "";
-    while (!resultPortNames.insert(
-        builder->getStringAttr(baseName.str() + suffix)))
-      suffix = std::to_string(i++);
-  };
+  SmallVector<MemOp> newMemories;
+  SmallVector<Value> wireToOldResult;
+  for (auto field : fieldTypes)
+    newMemories.push_back(cloneMemWithNewType(builder, op, field.type, field.suffix));
+
+  for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
+
+  SmallVector<Value> lowered;
+    for (auto memResultType : op.getResult(i)
+        .getType()
+        .cast<FIRRTLType>()
+        .getPassiveType()
+        .cast<BundleType>()
+        .getElements()) {
+      auto wire = builder->create<WireOp>(memResultType.type); 
+      wireToOldResult.push_back(wire.getResult());
+      lowered.push_back(wire.getResult());
+    }
+    processUsers(op.getResult(i), lowered);
+  }
 
   SmallVector<SmallVector<Value, 4>, 8> memResultToWire;
   for (auto field : llvm::enumerate(fieldTypes)) {
-    // Determine the new port type for this memory. New ports are
-    // constructed by checking the kind of the memory.
-    resultPortTypes.clear();
-    resultPortNames.clear();
-    for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
-
-      auto kind = op.getPortKind(i);
-      auto name = op.getPortName(i);
-      SmallVector<Value, 4> memPorts;
-
-      if (field.index() == 0) {
-
-        for (auto memResultType : op.getResult(i)
-                                      .getType()
-                                      .cast<FIRRTLType>()
-                                      .getPassiveType()
-                                      .cast<BundleType>()
-                                      .getElements()) {
-          auto wire = builder->create<WireOp>(
-              memResultType.type); //, op.name().str() + "_" +
-                                   // memResultType.name.getValue());
-          memPorts.push_back(wire.getResult());
-        }
-        processUsers(op.getResult(i), memPorts);
-      }
-      // Any read or write ports are just added.
-      if (kind != MemOp::PortKind::ReadWrite) {
-        resultPortTypes.push_back(
-            FlipType::get(op.getTypeForPort(depth, field.value().type, kind)));
-        uniquePortName(name.getValue());
-        if (field.index() == 0)
-          memResultToWire.push_back(memPorts);
-        continue;
-      }
-      resultPortTypes.push_back(FlipType::get(
-          op.getTypeForPort(depth, field.value().type, MemOp::PortKind::Read)));
-      resultPortTypes.push_back(FlipType::get(op.getTypeForPort(
-          depth, field.value().type, MemOp::PortKind::Write)));
-      auto nameStr = name.getValue().str();
-      uniquePortName(nameStr + "_r");
-      uniquePortName(nameStr + "_w");
-      if (field.index() == 0) {
-        memResultToWire.push_back(memPorts);
-        memResultToWire.push_back(memPorts);
-      }
-    }
-    auto newMem = cloneMemWithNewType(builder, op, field.value().type,
-                                      field.value().suffix);
+    auto newMem = newMemories[field.index()];
+    size_t tempWireIndex =0;
     for (size_t i = 0, e = newMem.getNumResults(); i != e; ++i) {
       auto res = newMem.getResult(i);
       for (auto memResultType : llvm::enumerate(res.getType()
@@ -842,7 +803,9 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
                                                     .getElementType()
                                                     .cast<BundleType>()
                                                     .getElements())) {
-        auto tempWire = memResultToWire[i][memResultType.index()];
+        auto tempWire = wireToOldResult[tempWireIndex];
+        ++tempWireIndex;
+        
         auto newMemSub =
             builder->create<SubfieldOp>(res, memResultType.value().name);
         if (memResultType.value().name.getValue().contains("data") ||
@@ -872,12 +835,9 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     }
   }
 
-  for (size_t i = 0, e = op.getNumResults(); i != e; ++i)
-    if (!op.getResult(i).getUsers().empty())
-      return;
-
   opsToRemove.push_back(op);
 }
+
 
 void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   OpBuilder builder(context);
