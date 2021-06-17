@@ -906,3 +906,33 @@ module  {
     }
   }
 }
+
+// -----
+
+// Test that a vector of bundles with a write works.
+
+module  {
+  firrtl.circuit "Foo"  {
+    firrtl.module @Foo(in %a: !firrtl.uint<1>, in %sel: !firrtl.uint<2>, out %b: !firrtl.vector<bundle<wo: uint<1>>, 4>) {
+      %0 = firrtl.subindex %b[0] : !firrtl.vector<bundle<wo: uint<1>>, 4>
+      %1 = firrtl.subfield %0("wo") : (!firrtl.bundle<wo: uint<1>>) -> !firrtl.uint<1>
+      %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
+      firrtl.connect %1, %invalid_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+      %2 = firrtl.subindex %b[1] : !firrtl.vector<bundle<wo: uint<1>>, 4>
+      %3 = firrtl.subfield %2("wo") : (!firrtl.bundle<wo: uint<1>>) -> !firrtl.uint<1>
+      %invalid_ui1_0 = firrtl.invalidvalue : !firrtl.uint<1>
+      firrtl.connect %3, %invalid_ui1_0 : !firrtl.uint<1>, !firrtl.uint<1>
+      %4 = firrtl.subindex %b[2] : !firrtl.vector<bundle<wo: uint<1>>, 4>
+      %5 = firrtl.subfield %4("wo") : (!firrtl.bundle<wo: uint<1>>) -> !firrtl.uint<1>
+      %invalid_ui1_1 = firrtl.invalidvalue : !firrtl.uint<1>
+      firrtl.connect %5, %invalid_ui1_1 : !firrtl.uint<1>, !firrtl.uint<1>
+      %6 = firrtl.subindex %b[3] : !firrtl.vector<bundle<wo: uint<1>>, 4>
+      %7 = firrtl.subfield %6("wo") : (!firrtl.bundle<wo: uint<1>>) -> !firrtl.uint<1>
+      %invalid_ui1_2 = firrtl.invalidvalue : !firrtl.uint<1>
+      firrtl.connect %7, %invalid_ui1_2 : !firrtl.uint<1>, !firrtl.uint<1>
+      %8 = firrtl.subaccess %b[%sel] : !firrtl.vector<bundle<wo: uint<1>>, 4>, !firrtl.uint<2>
+      %9 = firrtl.subfield %8("wo") : (!firrtl.bundle<wo: uint<1>>) -> !firrtl.uint<1>
+      firrtl.connect %9, %a : !firrtl.uint<1>, !firrtl.uint<1>
+    }
+  }
+}
