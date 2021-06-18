@@ -30,10 +30,11 @@ using namespace mlir;
 /// For example, with given dictionary ["p1": 32, "p2": 64]:
 ///
 /// ```
-/// p1: 32, p2: 64
+///   p1: 32, p2: 64
 /// ```
-void printComponentPortNameAndWidth(OpAsmPrinter &p, DictionaryAttr &nameToWidth) {
-  for (auto i = nameToWidth.begin(), e = nameToWidth.end(); i < e; ++i) {
+void printComponentPortNameAndWidth(OpAsmPrinter &p,
+                                    DictionaryAttr &nameToWidth) {
+  for (auto i = nameToWidth.begin(), e = nameToWidth.end(); i != e; ++i) {
     p << i->first << ": ";
     if (auto integerValue = i->second.dyn_cast<IntegerAttr>())
       p << integerValue.getValue();
@@ -46,7 +47,6 @@ void printComponentPortNameAndWidth(OpAsmPrinter &p, DictionaryAttr &nameToWidth
 //===----------------------------------------------------------------------===//
 // ComponentOp
 //===----------------------------------------------------------------------===//
-
 static void printComponentOp(OpAsmPrinter &p, ComponentOp &op) {
   auto name = op->getAttrOfType<SymbolRefAttr>("name");
   p << "component " << name << "(";
@@ -57,7 +57,8 @@ static void printComponentOp(OpAsmPrinter &p, ComponentOp &op) {
 
   p << ") -> (";
 
-  auto outPortNameAndWidth = op->getAttrOfType<DictionaryAttr>("outPortToWidth");
+  auto outPortNameAndWidth =
+      op->getAttrOfType<DictionaryAttr>("outPortToWidth");
   if (outPortNameAndWidth)
     printComponentPortNameAndWidth(p, outPortNameAndWidth);
 
@@ -69,11 +70,12 @@ static ParseResult parseComponentOp(OpAsmParser &parser,
                                     OperationState &result) {
   SymbolRefAttr name;
   DictionaryAttr inPorts, outPorts;
-  if (parser.parseAttribute(name, "name", result.attributes) || parser.parseLParen()
-      || parser.parseAttribute(inPorts, "inPortToWidth", result.attributes)
-      || parser.parseRParen() || parser.parseArrow() || parser.parseLParen()
-      || parser.parseAttribute(outPorts, "outPortToWidth", result.attributes)
-      || parser.parseRParen() || parser.parseLBrace() || parser.parseRBrace())
+  if (parser.parseAttribute(name, "name", result.attributes) ||
+      parser.parseLParen() ||
+      parser.parseAttribute(inPorts, "inPortToWidth", result.attributes) ||
+      parser.parseRParen() || parser.parseArrow() || parser.parseLParen() ||
+      parser.parseAttribute(outPorts, "outPortToWidth", result.attributes) ||
+      parser.parseRParen() || parser.parseLBrace() || parser.parseRBrace())
     return failure();
 
   return success();
