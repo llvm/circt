@@ -1,7 +1,6 @@
-##===- CMakeLists.txt - Calyx dialect code ----------------------*- cmake -*-===//
+##===- CMakeLists.txt - Calyx dialect code --------------------*- cmake -*-===//
 ##
-## Implementation files the Calyx dialect. Optionally include the Capnp
-## dependent code.
+## Implementation files the Calyx dialect.
 ##
 ##===----------------------------------------------------------------------===//
 
