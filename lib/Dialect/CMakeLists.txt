@@ -9,6 +9,7 @@
 ##
 ##===----------------------------------------------------------------------===//
 
+add_subdirectory(Calyx)
 add_subdirectory(Comb)
 add_subdirectory(ESI)
 add_subdirectory(FIRRTL)
