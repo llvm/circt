@@ -5,37 +5,37 @@
 ##===----------------------------------------------------------------------===//
 
 set(srcs
-        CalyxDialect.cpp
-        CalyxOps.cpp
-        )
+  CalyxDialect.cpp
+  CalyxOps.cpp
+  )
 
 set(Calyx_LinkLibs
-        CIRCTSupport
-        CIRCTComb
-        CIRCTSV
-        CIRCTHW
-        MLIRIR
-        MLIRTransforms
-        MLIRTranslation
-        )
+  CIRCTSupport
+  CIRCTComb
+  CIRCTSV
+  CIRCTHW
+  MLIRIR
+  MLIRTransforms
+  MLIRTranslation
+  )
 
 set(Calyx_Deps
-        ${Calyx_LinkLibs}
-        MLIRCalyxEnumsIncGen
-        )
+  ${Calyx_LinkLibs}
+  MLIRCalyxEnumsIncGen
+  )
 
 
 
 add_circt_dialect_library(CIRCTCalyx
-        ${srcs}
+  ${srcs}
 
-        DEPENDS
-        ${Calyx_Deps}
+  DEPENDS
+  ${Calyx_Deps}
 
-        LINK_COMPONENTS
-        Core
-        Support
+  LINK_COMPONENTS
+  Core
+  Support
 
-        LINK_LIBS PUBLIC
-        ${Calyx_LinkLibs}
-        )
+  LINK_LIBS PUBLIC
+  ${Calyx_LinkLibs}
+  )
