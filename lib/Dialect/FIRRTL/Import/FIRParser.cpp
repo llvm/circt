@@ -2068,7 +2068,7 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
       /* inject the wire into an outer scope*/ {
         auto insertPoint = builder.saveInsertionPoint();
         builder.setInsertionPoint(scopeAndOperation.second);
-        wireHack = builder.create<WireOp>(result.getType(), "", ArrayAttr());
+        wireHack = builder.create<WireOp>(result.getType());
         builder.restoreInsertionPoint(insertPoint);
       }
       builder.create<ConnectOp>(wireHack, result);

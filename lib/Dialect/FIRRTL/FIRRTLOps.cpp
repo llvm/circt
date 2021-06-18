@@ -171,6 +171,7 @@ static ParseResult parseCircuitOpAttrs(OpAsmParser &parser,
 
 static void printCircuitOpAttrs(OpAsmPrinter &p, Operation *op,
                                 DictionaryAttr attr) {
+  // "name" is always elided.
   SmallVector<StringRef> elidedAttrs = {"name"};
   // Elide "annotations" if it doesn't exist or if it is empty
   auto annotationsAttr = op->getAttrOfType<ArrayAttr>("annotations");
@@ -2195,23 +2196,44 @@ void AsPassivePrimOp::build(OpBuilder &builder, OperationState &result,
 }
 
 //===----------------------------------------------------------------------===//
+// Custom attr-dict Directive that Elides Annotations
+//===----------------------------------------------------------------------===//
+
+/// Parse an optional attribute dictionary, adding an empty 'annotations'
+/// attribute if not specified.
+static ParseResult parseElideAnnotations(OpAsmParser &parser,
+                                         NamedAttrList &resultAttrs) {
+  auto result = parser.parseOptionalAttrDict(resultAttrs);
+  if (!resultAttrs.get("annotations"))
+    resultAttrs.append("annotations", parser.getBuilder().getArrayAttr({}));
+
+  return result;
+}
+
+static void printElideAnnotations(OpAsmPrinter &p, Operation *op,
+                                  DictionaryAttr attr,
+                                  ArrayRef<StringRef> extraElides = {}) {
+  SmallVector<StringRef> elidedAttrs(extraElides.begin(), extraElides.end());
+  // Elide "annotations" if it is empty.
+  if (op->getAttrOfType<ArrayAttr>("annotations").empty())
+    elidedAttrs.push_back("annotations");
+
+  p.printOptionalAttrDict(op->getAttrs(), elidedAttrs);
+}
+
+//===----------------------------------------------------------------------===//
 // ImplicitSSAName Custom Directive
 //===----------------------------------------------------------------------===//
 
 static ParseResult parseImplicitSSAName(OpAsmParser &parser,
                                         NamedAttrList &resultAttrs) {
 
-  if (parser.parseOptionalAttrDict(resultAttrs))
+  if (parseElideAnnotations(parser, resultAttrs))
     return failure();
 
   // If the attribute dictionary contains no 'name' attribute, infer it from
   // the SSA name (if specified).
-  bool hadName = llvm::any_of(
-      resultAttrs, [](NamedAttribute attr) { return attr.first == "name"; });
-
-  // If there was no name specified, check to see if there was a useful name
-  // specified in the asm file.
-  if (hadName)
+  if (resultAttrs.get("name"))
     return success();
 
   auto resultName = parser.getResultName(0).first;
@@ -2241,103 +2263,55 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
       (expectedName.empty() && isdigit(actualName[0])))
     elides.push_back("name");
 
-  // Elide "annotations" if it doesn't exist or if it is empty
-  auto annotationsAttr = op->getAttrOfType<ArrayAttr>("annotations");
-  if (!annotationsAttr || annotationsAttr.empty())
-    elides.push_back("annotations");
-
-  p.printOptionalAttrDict(op->getAttrs(), elides);
-}
-
-//===----------------------------------------------------------------------===//
-// Custom attr-dict Directive that Elides Annotations
-//===----------------------------------------------------------------------===//
-
-static ParseResult parseElideAnnotations(OpAsmParser &parser,
-                                         NamedAttrList &resultAttrs) {
-  return parser.parseOptionalAttrDict(resultAttrs);
-}
-
-static void printElideAnnotations(OpAsmPrinter &p, Operation *op,
-                                  DictionaryAttr attr) {
-  // Elide "annotations" if it doesn't exist or if it is empty
-  auto annotationsAttr = op->getAttrOfType<ArrayAttr>("annotations");
-  if (!annotationsAttr || annotationsAttr.empty())
-    return p.printOptionalAttrDict(op->getAttrs(), {"annotations"});
-
-  p.printOptionalAttrDict(op->getAttrs());
+  printElideAnnotations(p, op, attr, elides);
 }
 
 //===----------------------------------------------------------------------===//
 // InstanceOp Custom attr-dict Directive
 //===----------------------------------------------------------------------===//
 
-/// No change from normal parsing.
 static ParseResult parseInstanceOp(OpAsmParser &parser,
                                    NamedAttrList &resultAttrs) {
-  return parser.parseOptionalAttrDict(resultAttrs);
+  return parseElideAnnotations(parser, resultAttrs);
 }
 
 /// Always elide "moduleName" and elide "annotations" if it exists or
 /// if it is empty.
 static void printInstanceOp(OpAsmPrinter &p, Operation *op,
                             DictionaryAttr attr) {
-
   // "moduleName" is always elided
-  SmallVector<StringRef, 2> elides = {"moduleName"};
-
-  // Elide "annotations" if it doesn't exist or if it is empty
-  auto annotationsAttr = op->getAttrOfType<ArrayAttr>("annotations");
-  if (!annotationsAttr || annotationsAttr.empty())
-    elides.push_back("annotations");
-
-  p.printOptionalAttrDict(op->getAttrs(), elides);
+  printElideAnnotations(p, op, attr, {"moduleName"});
 }
 
 //===----------------------------------------------------------------------===//
 // MemoryPortOp Custom attr-dict Directive
 //===----------------------------------------------------------------------===//
 
-/// No change from normal parsing.
 static ParseResult parseMemoryPortOp(OpAsmParser &parser,
                                      NamedAttrList &resultAttrs) {
-  return parser.parseOptionalAttrDict(resultAttrs);
+  return parseElideAnnotations(parser, resultAttrs);
 }
 
 /// Always elide "direction" and elide "annotations" if it exists or
 /// if it is empty.
 static void printMemoryPortOp(OpAsmPrinter &p, Operation *op,
                               DictionaryAttr attr) {
-
   // "direction" is always elided.
-  SmallVector<StringRef, 2> elides = {"direction"};
-
-  // Elide "annotations" if it doesn't exist or if it is empty.
-  auto annotationsAttr = op->getAttrOfType<ArrayAttr>("annotations");
-  if (!annotationsAttr || annotationsAttr.empty())
-    elides.push_back("annotations");
-
-  p.printOptionalAttrDict(op->getAttrs(), elides);
+  printElideAnnotations(p, op, attr, {"direction"});
 }
 
 //===----------------------------------------------------------------------===//
 // MemOp Custom attr-dict Directive
 //===----------------------------------------------------------------------===//
 
-/// No change from normal parsing.
 static ParseResult parseMemOp(OpAsmParser &parser, NamedAttrList &resultAttrs) {
-  return parser.parseOptionalAttrDict(resultAttrs);
+  return parseElideAnnotations(parser, resultAttrs);
 }
 
 /// Always elide "ruw" and elide "annotations" if it exists or if it is empty.
 static void printMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
-  SmallVector<StringRef, 2> elides = {"ruw"};
-
-  auto annotationsAttr = op->getAttrOfType<ArrayAttr>("annotations");
-  if (!annotationsAttr || annotationsAttr.empty())
-    elides.push_back("annotations");
-
-  p.printOptionalAttrDict(op->getAttrs(), elides);
+  // "ruw" is always elided.
+  printElideAnnotations(p, op, attr, {"ruw"});
 }
 
 //===----------------------------------------------------------------------===//
