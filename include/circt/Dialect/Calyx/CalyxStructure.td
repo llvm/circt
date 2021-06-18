@@ -16,15 +16,14 @@ def ComponentOp : CalyxOp<"component", []> {
         The "calyx.component" operation represents an overall
         Calyx component containing cells, wires, and control.
         ```
+          component @MyComponent(in1: 32) -> (out1: 32) {
+            ...
+          }
+        ```
     }];
     let arguments =
-                (ins DictionaryAttr:$inPortToWidth, DictionaryAttr:$outPortToWidth);
+                (ins SymbolRefAttr:$name, DictionaryAttr:$inPortToWidth, DictionaryAttr:$outPortToWidth);
     let printer = "return ::print$cppClass(p, *this);";
     let parser = "return ::parse$cppClass(parser, result);";
-    let builders = [
-      OpBuilder<(ins "StringAttr":$name,
-                 CArg<"DictionaryAttr", "DictionaryAttr()">:$inPortToWidth,
-                 CArg<"DictionaryAttr", "DictionaryAttr()">:$outPortToWidth)>
-    ];
 }
 

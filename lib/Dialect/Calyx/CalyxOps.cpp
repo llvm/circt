@@ -34,7 +34,10 @@ using namespace mlir;
 /// ```
 void printComponentPortNameAndWidth(OpAsmPrinter &p, DictionaryAttr &nameToWidth) {
   for (auto i = nameToWidth.begin(), e = nameToWidth.end(); i < e; ++i) {
-    p << i->first << ": " << i->second;
+    p << i->first << ": ";
+    if (auto integerValue = i->second.dyn_cast<IntegerAttr>())
+      p << integerValue.getValue();
+
     if (i + 1 != e)
       p << ", ";
   }
@@ -45,37 +48,35 @@ void printComponentPortNameAndWidth(OpAsmPrinter &p, DictionaryAttr &nameToWidth
 //===----------------------------------------------------------------------===//
 
 static void printComponentOp(OpAsmPrinter &p, ComponentOp &op) {
-  p << "component (";
+  auto name = op->getAttrOfType<SymbolRefAttr>("name");
+  p << "component " << name << "(";
 
   auto inPortNameAndWidth = op->getAttrOfType<DictionaryAttr>("inPortToWidth");
-  printComponentPortNameAndWidth(p, inPortNameAndWidth);
+  if (inPortNameAndWidth)
+    printComponentPortNameAndWidth(p, inPortNameAndWidth);
 
   p << ") -> (";
 
   auto outPortNameAndWidth = op->getAttrOfType<DictionaryAttr>("outPortToWidth");
-  printComponentPortNameAndWidth(p, outPortNameAndWidth);
+  if (outPortNameAndWidth)
+    printComponentPortNameAndWidth(p, outPortNameAndWidth);
 
   // TODO(calyx): print cells, wires and control.
   p << ") {}";
 }
 
-void ComponentOp::build(OpBuilder &builder, OperationState &result,
-                        StringAttr name, DictionaryAttr inPortToWidth,
-                        DictionaryAttr outPortToWidth) {
-  // Add an attribute for the name.
-  result.addAttribute(builder.getIdentifier("name"), name);
-
-  if (inPortToWidth)
-    result.addAttribute("inPortToWidth", inPortToWidth);
-  if (outPortToWidth)
-    result.addAttribute("outPortToWidth", outPortToWidth);
-
-  // TODO(calyx): Add scaffolding for cells, wire, & control.
-}
-
 static ParseResult parseComponentOp(OpAsmParser &parser,
                                     OperationState &result) {
-  return failure();
+  SymbolRefAttr name;
+  DictionaryAttr inPorts, outPorts;
+  if (parser.parseAttribute(name, "name", result.attributes) || parser.parseLParen()
+      || parser.parseAttribute(inPorts, "inPortToWidth", result.attributes)
+      || parser.parseRParen() || parser.parseArrow() || parser.parseLParen()
+      || parser.parseAttribute(outPorts, "outPortToWidth", result.attributes)
+      || parser.parseRParen() || parser.parseLBrace() || parser.parseRBrace())
+    return failure();
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
