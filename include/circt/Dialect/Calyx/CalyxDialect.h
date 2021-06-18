@@ -17,13 +17,6 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
 
-namespace circt {
-namespace calyx {
-
-} // namespace calyx
-} // namespace circt
-
-
 // Pull in the Dialect definition.
 #include "circt/Dialect/Calyx/CalyxDialect.h.inc"
 

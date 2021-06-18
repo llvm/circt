@@ -22,12 +22,6 @@
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
-namespace circt {
-namespace calyx {
-
-} // namespace calyx
-} // namespace circt
-
 #define GET_OP_CLASSES
 #include "circt/Dialect/Calyx/Calyx.h.inc"
 

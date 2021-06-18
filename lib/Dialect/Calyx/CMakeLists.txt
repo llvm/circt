@@ -30,7 +30,6 @@ add_circt_dialect_library(CIRCTCalyx
         ${srcs}
 
         DEPENDS
-        MLIRCalyxEnumsIncGen
         ${Calyx_Deps}
 
         LINK_COMPONENTS
