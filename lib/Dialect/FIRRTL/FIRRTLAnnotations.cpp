@@ -94,13 +94,9 @@ DictionaryAttr AnnotationSet::getArgumentAttrDict(
 /// Store the annotations in this set in an operation's `annotations` attribute,
 /// overwriting any existing annotations.
 bool AnnotationSet::applyToOperation(Operation *op) const {
-  if (empty())
-    return bool(op->removeAttr(getAnnotationAttrName()));
-  else {
-    auto before = op->getAttrDictionary();
-    op->setAttr(getAnnotationAttrName(), getArrayAttr());
-    return op->getAttrDictionary() != before;
-  }
+  auto before = op->getAttrDictionary();
+  op->setAttr(getAnnotationAttrName(), getArrayAttr());
+  return op->getAttrDictionary() != before;
 }
 
 static bool applyToAttrListImpl(const AnnotationSet &annoSet, StringRef key,

@@ -76,8 +76,6 @@ static DictionaryAttr getAnnotationOfClass(MLIRContext *context,
 
 /// Checks the annotations array for a matching annotation.
 static bool hasAnnotation(ArrayAttr annotations, DictionaryAttr annotation) {
-  if (!annotations)
-    return false;
   return llvm::is_contained(annotations, annotation);
 }
 
@@ -939,13 +937,15 @@ ArrayAttr FIRParser::getAnnotations(Twine target) {
   // constructing strings representing targets if no annotation can
   // possibly exist.
   if (state.annotationMap.empty())
-    return {};
+    return state.emptyArrayAttr;
 
   // Flatten the input twine into a SmallVector for lookup.
   SmallString<64> targetStr;
   target.toVector(targetStr);
 
-  return state.annotationMap.lookup(targetStr);
+  if (auto result = state.annotationMap.lookup(targetStr))
+    return result;
+  return state.emptyArrayAttr;
 }
 
 //===----------------------------------------------------------------------===//
@@ -2712,7 +2712,7 @@ ParseResult FIRStmtParser::parseNode() {
   // The entire point of a node declaration is to carry a name.  If it got
   // dropped, then we don't even need to create a result unless it is annotated.
   Value result;
-  if (!name.empty() || annotations) {
+  if (!name.empty() || !annotations.empty()) {
     result = builder.create<NodeOp>(initializer.getType(), initializer, name,
                                     annotations);
   } else
@@ -2915,8 +2915,7 @@ FIRModuleParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
       return failure();
 
     AnnotationSet annotations(
-        getAnnotations(getModuleTarget() + ">" + name.getValue()),
-        getContext());
+        getAnnotations(getModuleTarget() + ">" + name.getValue()));
 
     // FIXME: We should persist the info loc into the IR, not just the name
     // and type.
@@ -3147,9 +3146,10 @@ ParseResult FIRCircuitParser::parseCircuit() {
   //   1. Annotations with no target (which we use "~" to identify)
   //   2. Annotations targeting the circuit, e.g., "~Foo"
   ArrayAttr annotations = getAnnotations("~");
-  if (ArrayAttr circuitAnnot = getAnnotations(circuitTarget)) {
+  ArrayAttr circuitAnnot = getAnnotations(circuitTarget);
+  if (!circuitAnnot.empty()) {
     // Merge these arrays if both present.
-    if (!annotations || annotations.empty())
+    if (annotations.empty())
       annotations = circuitAnnot;
     else {
       SmallVector<Attribute> elements;

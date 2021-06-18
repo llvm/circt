@@ -147,8 +147,9 @@ void CircuitOp::build(OpBuilder &builder, OperationState &result,
   // Add an attribute for the name.
   result.addAttribute(builder.getIdentifier("name"), name);
 
-  if (annotations)
-    result.addAttribute("annotations", annotations);
+  if (!annotations)
+    annotations = builder.getArrayAttr({});
+  result.addAttribute("annotations", annotations);
 
   // Create a region and a block for the body.
   Region *bodyRegion = result.addRegion();
@@ -158,6 +159,26 @@ void CircuitOp::build(OpBuilder &builder, OperationState &result,
 
 // Return the main module that is the entry point of the circuit.
 Operation *CircuitOp::getMainModule() { return lookupSymbol(name()); }
+
+static ParseResult parseCircuitOpAttrs(OpAsmParser &parser,
+                                       NamedAttrList &resultAttrs) {
+  auto result = parser.parseOptionalAttrDictWithKeyword(resultAttrs);
+  if (!resultAttrs.get("annotations"))
+    resultAttrs.append("annotations", parser.getBuilder().getArrayAttr({}));
+
+  return result;
+}
+
+static void printCircuitOpAttrs(OpAsmPrinter &p, Operation *op,
+                                DictionaryAttr attr) {
+  SmallVector<StringRef> elidedAttrs = {"name"};
+  // Elide "annotations" if it doesn't exist or if it is empty
+  auto annotationsAttr = op->getAttrOfType<ArrayAttr>("annotations");
+  if (annotationsAttr.empty())
+    elidedAttrs.push_back("annotations");
+
+  p.printOptionalAttrDictWithKeyword(op->getAttrs(), elidedAttrs);
+}
 
 static LogicalResult verifyCircuitOp(CircuitOp circuit) {
   StringRef main = circuit.name();
@@ -352,7 +373,8 @@ void FModuleOp::erasePorts(ArrayRef<unsigned> portIndices) {
 }
 
 static void buildModule(OpBuilder &builder, OperationState &result,
-                        StringAttr name, ArrayRef<ModulePortInfo> ports) {
+                        StringAttr name, ArrayRef<ModulePortInfo> ports,
+                        ArrayAttr annotations) {
   using namespace mlir::function_like_impl;
 
   // Add an attribute for the name.
@@ -373,8 +395,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   for (size_t i = 0, e = ports.size(); i != e; ++i) {
     portNames.push_back(ports[i].name);
     portDirections.push_back(ports[i].direction);
-    argAttrs.push_back(
-        AnnotationSet(ports[i].annotations).getArgumentAttrDict());
+    argAttrs.push_back(ports[i].annotations.getArgumentAttrDict());
   }
 
   // Both attributes are added, even if the module has no ports.
@@ -384,13 +405,17 @@ static void buildModule(OpBuilder &builder, OperationState &result,
       direction::attrKey,
       direction::packAttribute(portDirections, builder.getContext()));
 
+  if (!annotations)
+    annotations = builder.getArrayAttr({});
+  result.addAttribute("annotations", annotations);
+
   result.addRegion();
 }
 
 void FModuleOp::build(OpBuilder &builder, OperationState &result,
                       StringAttr name, ArrayRef<ModulePortInfo> ports,
                       ArrayAttr annotations) {
-  buildModule(builder, result, name, ports);
+  buildModule(builder, result, name, ports, annotations);
 
   // Create a region and a block for the body.
   auto *bodyRegion = result.regions[0].get();
@@ -400,20 +425,14 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
   // Add arguments to the body block.
   for (auto elt : ports)
     body->addArgument(elt.type);
-
-  if (annotations)
-    result.addAttribute("annotations", annotations);
 }
 
 void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name, ArrayRef<ModulePortInfo> ports,
                          StringRef defnameAttr, ArrayAttr annotations) {
-  buildModule(builder, result, name, ports);
+  buildModule(builder, result, name, ports, annotations);
   if (!defnameAttr.empty())
     result.addAttribute("defname", builder.getStringAttr(defnameAttr));
-
-  if (annotations)
-    result.addAttribute("annotations", annotations);
 }
 
 // TODO: This ia a clone of mlir::impl::printFunctionSignature, refactor it to
@@ -609,6 +628,9 @@ static void printModuleLikeOp(OpAsmPrinter &p, Operation *op) {
   SmallVector<StringRef, 3> omittedAttrs({direction::attrKey});
   if (!needportNamesAttr)
     omittedAttrs.push_back("portNames");
+  if (op->getAttrOfType<ArrayAttr>("annotations").empty())
+    omittedAttrs.push_back("annotations");
+
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(),
                           omittedAttrs);
 }
@@ -699,6 +721,10 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
   }
   // Add the attributes to the function arguments.
   addArgAndResultAttrs(builder, result, portNamesAttrs, resultAttrs);
+
+  // The annotations attribute is always present, but not printed when empty.
+  if (!result.attributes.get("annotations"))
+    result.addAttribute("annotations", builder.getArrayAttr({}));
 
   // Parse the optional function body.
   auto *body = result.addRegion();
