@@ -1,6 +1,6 @@
 ##===- CMakeLists.txt - Calyx dialect code --------------------*- cmake -*-===//
 ##
-## Implementation files the Calyx dialect.
+## Implementation files for the Calyx dialect.
 ##
 ##===----------------------------------------------------------------------===//
 

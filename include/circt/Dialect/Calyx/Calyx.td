@@ -36,7 +36,7 @@ def CalyxDialect : Dialect {
   let cppNamespace = "::circt::calyx";
 }
 
-// Base class for the operation in this dialect.
+/// Base class for the operation in this dialect.
 class CalyxOp<string mnemonic, list<OpTrait> traits = []> :
     Op<CalyxDialect, mnemonic, traits>;
 
