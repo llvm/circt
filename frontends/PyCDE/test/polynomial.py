@@ -6,7 +6,7 @@ import mlir
 
 import pycde
 from pycde import (Input, Output, Parameter, module, externmodule, generator,
-                   types)
+                   types, dim)
 from circt.dialects import comb, hw
 
 
@@ -35,7 +35,7 @@ def PolynomialCompute(coefficients):
       """Implement this module for input 'x'."""
 
       x = mod.x
-      taps: list[mlir.ir.Value] = list()
+      taps = list()
       for power, coeff in enumerate(coefficients):
         coeffVal = hw.ConstantOp.create(types.i32, coeff)
         if power == 0:
@@ -46,11 +46,9 @@ def PolynomialCompute(coefficients):
             currPow = x
           else:
             x_power = [x for i in range(power)]
-            currPow = comb.MulOp(types.i32, x_power).result
-          newPartialSum = comb.AddOp(types.i32, [
-              partialSum,
-              comb.MulOp(types.i32, [coeffVal.result, currPow]).result
-          ]).result
+            currPow = comb.MulOp.create(*x_power)
+          newPartialSum = comb.AddOp.create(
+              partialSum, comb.MulOp.create(coeffVal, currPow))
 
         taps.append(newPartialSum)
 
@@ -81,7 +79,7 @@ class Polynomial(pycde.System):
     PolynomialCompute([1, 2, 3, 4, 5])("example2", x=poly.y)
 
     CoolPolynomialCompute([4, 42], x=x)
-    hw.OutputOp([poly.y])
+    return {"y": poly.y}
 
 
 poly = Polynomial()

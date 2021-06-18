@@ -9,9 +9,11 @@
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
+#include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/TinyPtrVector.h"
+#include "llvm/Support/Parallel.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -245,6 +247,9 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   void visitOperation(Operation *op);
 
 private:
+  /// This is the current instance graph for the Circuit.
+  InstanceGraph *instanceGraph = nullptr;
+
   /// This keeps track of the current state of each tracked value.
   DenseMap<Value, LatticeValue> latticeValues;
 
@@ -268,6 +273,8 @@ private:
 // TODO: handle annotations: [[OptimizableExtModuleAnnotation]]
 void IMConstPropPass::runOnOperation() {
   auto circuit = getOperation();
+
+  instanceGraph = &getAnalysis<InstanceGraph>();
 
   // If the top level module is an external module, mark the input ports
   // overdefined.
@@ -296,12 +303,17 @@ void IMConstPropPass::runOnOperation() {
   }
 
   // Rewrite any constants in the modules.
-  // TODO: parallelize.
-  for (auto &circuitBodyOp : *circuit.getBody())
-    if (auto module = dyn_cast<FModuleOp>(circuitBodyOp))
-      rewriteModuleBody(module);
+  if (circuit.getContext()->isMultithreadingEnabled()) {
+    SmallVector<FModuleOp> ops(circuit.getBody()->getOps<FModuleOp>());
+    llvm::parallelForEach(ops, [&](auto op) { rewriteModuleBody(op); });
+  } else {
+    for (auto &circuitBodyOp : *circuit.getBody())
+      if (auto module = dyn_cast<FModuleOp>(circuitBodyOp))
+        rewriteModuleBody(module);
+  }
 
   // Clean up our state for next time.
+  instanceGraph = nullptr;
   latticeValues.clear();
   executableBlocks.clear();
   resultPortToInstanceResultMapping.clear();
@@ -414,7 +426,8 @@ void IMConstPropPass::markInvalidValueOp(InvalidValueOp invalid) {
 /// enclosing block is marked live.  This sets up the def-use edges for ports.
 void IMConstPropPass::markInstanceOp(InstanceOp instance) {
   // Get the module being reference or a null pointer if this is an extmodule.
-  auto module = dyn_cast<FModuleOp>(instance.getReferencedModule());
+  auto module =
+      dyn_cast<FModuleOp>(instanceGraph->getReferencedModule(instance));
 
   // If this is an extmodule, just remember that any results and inouts are
   // overdefined.
@@ -495,7 +508,8 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
   // Driving an instance argument port drives the corresponding argument of the
   // referenced module.
   if (auto instance = dest.getDefiningOp<InstanceOp>()) {
-    auto module = dyn_cast<FModuleOp>(instance.getReferencedModule());
+    auto module =
+        dyn_cast<FModuleOp>(instanceGraph->getReferencedModule(instance));
     if (!module)
       return;
 

@@ -787,12 +787,9 @@ firrtl.circuit "TopLevel" {
     // CHECK-NEXT: firrtl.connect %d_1, %c_1
     // CHECK-NOT: firrtl.connect %d_
   }
-}
 
-// -----
 
 // Test partial connect truncation.
-firrtl.circuit "PartialConnectTruncation" {
   firrtl.module @PartialConnectTruncation() {
     // COM: It should not truncate when they are the same
     %a = firrtl.wire : !firrtl.uint<0>
@@ -815,12 +812,18 @@ firrtl.circuit "PartialConnectTruncation" {
     // CHECK: [[CAST:%.*]] = firrtl.asSInt [[TAIL]] : (!firrtl.uint<2>) -> !firrtl.sint<2>
     // CHECK: firrtl.connect %e, [[CAST]] : !firrtl.sint<2>, !firrtl.sint<2>
   }
-}
 
-// -----
+// Bug: must strip the flip type from the LHS of a value.
+  firrtl.module @PartialConnectLHSFlip(in %a: !firrtl.bundle<b: bundle<c: flip<uint<2>>>>) { }
+  firrtl.module @Foo(in %a: !firrtl.bundle<b: bundle<c: flip<uint<2>>>>) {
+    %mgmt_a = firrtl.instance @PartialConnectLHSFlip  {name = "mgmt"} : !firrtl.flip<bundle<b: bundle<c: flip<uint<2>>>>>
+    %0 = firrtl.subfield %mgmt_a("b") : (!firrtl.flip<bundle<b: bundle<c: flip<uint<2>>>>>) -> !firrtl.bundle<c: flip<uint<2>>>
+    %1 = firrtl.subfield %0("c") : (!firrtl.bundle<c: flip<uint<2>>>) -> !firrtl.uint<2>
+    // CHECK: firrtl.connect %a_b_c, %mgmt_a_b_c : !firrtl.uint<2>, !firrtl.uint<2>
+    firrtl.partialconnect %mgmt_a, %a : !firrtl.flip<bundle<b: bundle<c: flip<uint<2>>>>>, !firrtl.bundle<b: bundle<c: flip<uint<2>>>>
+  }
 
 // Test partial connect with analogs are transformed to attaches.
-firrtl.circuit "PartialConnectAnalogs" {
   firrtl.module @PartialConnectAnalogs() {
     %a = firrtl.wire : !firrtl.bundle<a: analog<1>>
     %b = firrtl.wire : !firrtl.bundle<a: analog<1>>
@@ -860,23 +863,18 @@ firrtl.circuit "PartialConnectAnalogs" {
     // CHECK-COUNT-2: firrtl.world
     // CHECK-NOT: firrtl.annotations
     // CHECK-NOT: firrtl.world
-}
 
-// -----
 
 // Test that a truncating connect emitted during lower types correctly adds an
 // AsPassive cast on a FlipType originating from an instance.
 //
 // See: https://github.com/llvm/circt/issues/1276
 
-module  {
-  // CHECK-LABEL: firrtl.circuit "TruncatingConnectWithFlip"
-  firrtl.circuit "TruncatingConnectWithFlip"  {
-    firrtl.extmodule @Bar(in %a: !firrtl.uint<2>)
+    firrtl.extmodule @Bar2(in %a: !firrtl.uint<2>)
     firrtl.module @TruncatingConnectWithFlip() {
       // CHECK: %[[a_b:.+]] = firrtl.wire
       %a = firrtl.wire  : !firrtl.bundle<b: uint<1>>
-      %bar_a = firrtl.instance @Bar  {name = "bar"} : !firrtl.flip<uint<2>>
+      %bar_a = firrtl.instance @Bar2  {name = "bar"} : !firrtl.flip<uint<2>>
       %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
       firrtl.connect %bar_a, %invalid_ui2 : !firrtl.flip<uint<2>>, !firrtl.uint<2>
       // CHECK: %[[bar_a_passive:.+]] = firrtl.asPassive %bar_a
@@ -885,34 +883,22 @@ module  {
       // CHECK-NEXT: firrtl.connect %[[a_b]], %[[bar_a_tail]]
       firrtl.partialconnect %0, %bar_a : !firrtl.uint<1>, !firrtl.flip<uint<2>>
     }
-  }
-}
 
-
-// -----
 
 // Test that a AsPassivePrimOps are handled.
 //
 // See: https://github.com/llvm/circt/issues/1290
 
-module  {
-  firrtl.circuit "Foo"  {
-// CHECK-LABEL: firrtl.module @Foo
-    firrtl.module @Foo(out %arg0: !firrtl.vector<uint<1>, 1>, in %arg1: !firrtl.vector<uint<1>, 1>, out %arg2: !firrtl.vector<uint<1>, 1>, in %arg3: !firrtl.uint<1>) attributes {portNames = ["a", "b", "c", "cond"]} {
+// CHECK-LABEL: firrtl.module @Foo1290
+    firrtl.module @Foo1290(out %arg0: !firrtl.vector<uint<1>, 1>, in %arg1: !firrtl.vector<uint<1>, 1>, out %arg2: !firrtl.vector<uint<1>, 1>, in %arg3: !firrtl.uint<1>) attributes {portNames = ["a", "b", "c", "cond"]} {
       %1 = firrtl.asPassive %arg0 : !firrtl.vector<uint<1>, 1>
       %2 = firrtl.mux(%arg3, %1, %arg1) : (!firrtl.uint<1>, !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>) -> !firrtl.vector<uint<1>, 1>
       firrtl.connect %arg2, %2 : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
     }
-  }
-}
-
-// -----
 
 // Test that a vector of bundles with a write works.
 
-module  {
-  firrtl.circuit "Foo"  {
-    firrtl.module @Foo(in %a: !firrtl.uint<1>, in %sel: !firrtl.uint<2>, out %b: !firrtl.vector<bundle<wo: uint<1>>, 4>) {
+    firrtl.module @aofs(in %a: !firrtl.uint<1>, in %sel: !firrtl.uint<2>, out %b: !firrtl.vector<bundle<wo: uint<1>>, 4>) {
       %0 = firrtl.subindex %b[0] : !firrtl.vector<bundle<wo: uint<1>>, 4>
       %1 = firrtl.subfield %0("wo") : (!firrtl.bundle<wo: uint<1>>) -> !firrtl.uint<1>
       %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
@@ -961,7 +947,7 @@ firrtl.circuit "read1D"  {
     firrtl.partialconnect %b, %2 : !firrtl.uint<2>, !firrtl.uint<3>
   }
 }
-// CHECK: firrtl.module @read1D(in %a_0: !firrtl.uint<2>, in %a_1: !firrtl.uint<2>, in %a_2: !firrtl.uint<2>, in %a_3: !firrtl.uint<2>, in %sel: !firrtl.uint<2>, in %default_0: !firrtl.uint<2>, in %default_1: !firrtl.uint<2>, in %default_2: !firrtl.uint<2>, in %default_3: !firrtl.uint<2>, out %b: !firrtl.uint<2>) {
+// CHECK: firrtl.module @read1D(in %a_0: !firrtl.uint<2>, in %a_1: !firrtl.uint<2>, in %a_2: !firrtl.uint<2>, in %a_3: !firrtl.uint<2>, in %sel: !firrtl.uint<2>, in %default_0: !firrtl.uint<2>, in %default_1: !firrtl.uint<2>, in %default_2: !firrtl.uint<2>, in %default_3: !firrtl.uint<2>, out %b: !firrtl.uint<2>) 
 // CHECK:   %[[CONST1_1:.+]] = firrtl.constant 1 : !firrtl.uint<1>
 // CHECK:   %[[SEL1:.+]] = firrtl.eq %sel, %{{.*}} : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
 // CHECK:   %[[COND1:.+]] = firrtl.and %[[CONST1_1]], %[[SEL1]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
@@ -1207,7 +1193,7 @@ firrtl.circuit "writeVectorOfBundle1D"  {
     firrtl.connect %1, %2 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
-// CHECK:     firrtl.module @writeVectorOfBundle1D(in %a_wo: !firrtl.uint<1>, in %a_valid: !firrtl.uint<2>, in %def_0_wo: !firrtl.uint<1>, in %def_0_valid: !firrtl.uint<2>, in %def_1_wo: !firrtl.uint<1>, in %def_1_valid: !firrtl.uint<2>, in %def_2_wo: !firrtl.uint<1>, in %def_2_valid: !firrtl.uint<2>, in %def_3_wo: !firrtl.uint<1>, in %def_3_valid: !firrtl.uint<2>, in %sel: !firrtl.uint<2>, out %b_0_wo: !firrtl.uint<1>, out %b_0_valid: !firrtl.uint<2>, out %b_1_wo: !firrtl.uint<1>, out %b_1_valid: !firrtl.uint<2>, out %b_2_wo: !firrtl.uint<1>, out %b_2_valid: !firrtl.uint<2>, out %b_3_wo: !firrtl.uint<1>, out %b_3_valid: !firrtl.uint<2>) {
+// CHECK:     firrtl.module @writeVectorOfBundle1D(in %a_wo: !firrtl.uint<1>, in %a_valid: !firrtl.uint<2>, in %def_0_wo: !firrtl.uint<1>, in %def_0_valid: !firrtl.uint<2>, in %def_1_wo: !firrtl.uint<1>, in %def_1_valid: !firrtl.uint<2>, in %def_2_wo: !firrtl.uint<1>, in %def_2_valid: !firrtl.uint<2>, in %def_3_wo: !firrtl.uint<1>, in %def_3_valid: !firrtl.uint<2>, in %sel: !firrtl.uint<2>, out %b_0_wo: !firrtl.uint<1>, out %b_0_valid: !firrtl.uint<2>, out %b_1_wo: !firrtl.uint<1>, out %b_1_valid: !firrtl.uint<2>, out %b_2_wo: !firrtl.uint<1>, out %b_2_valid: !firrtl.uint<2>, out %b_3_wo: !firrtl.uint<1>, out %b_3_valid: !firrtl.uint<2>) 
 // CHECK:       %[[WIRE1:.+]] = firrtl.wire  : !firrtl.uint<1>
 // CHECK:       %[[WIRE2:.+]]= firrtl.wire  : !firrtl.uint<2>
 // CHECK:       %[[CONST1:.+]] = firrtl.constant 1 : !firrtl.uint<1>
@@ -1263,7 +1249,7 @@ firrtl.circuit "multiSubaccess"  {
 }
 
 
-// CHECK: firrtl.module @multiSubaccess(in %a_0_0: !firrtl.uint<2>, in %a_0_1: !firrtl.uint<2>, in %a_1_0: !firrtl.uint<2>, in %a_1_1: !firrtl.uint<2>, in %sel1: !firrtl.uint<1>, in %sel2: !firrtl.uint<1>, out %b: !firrtl.uint<2>, out %c: !firrtl.uint<2>) {
+// CHECK: firrtl.module @multiSubaccess(in %a_0_0: !firrtl.uint<2>, in %a_0_1: !firrtl.uint<2>, in %a_1_0: !firrtl.uint<2>, in %a_1_1: !firrtl.uint<2>, in %sel1: !firrtl.uint<1>, in %sel2: !firrtl.uint<1>, out %b: !firrtl.uint<2>, out %c: !firrtl.uint<2>) 
 // CHECK:   %[[CONST1_1:.+]] = firrtl.constant 1 : !firrtl.uint<1>
 // CHECK:   %[[CONST0_1:.+]] = firrtl.constant 1 : !firrtl.uint<1>
 // CHECK:   %[[SEL1:.+]] = firrtl.eq %sel1, %[[CONST0_1]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
@@ -1310,4 +1296,5 @@ firrtl.circuit "multiSubaccess"  {
 // CHECK:   %28 = firrtl.and %26, %27 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:   %29 = firrtl.mux(%28, %a_1_1, %24) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
 // CHECK:   firrtl.connect %c, %29 : !firrtl.uint<2>, !firrtl.uint<2>
+
 }
