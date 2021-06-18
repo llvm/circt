@@ -836,6 +836,22 @@ Operation *InstanceOp::getReferencedModule() {
   return circuit.lookupSymbol(moduleName());
 }
 
+void InstanceOp::build(OpBuilder &builder, OperationState &result,
+                       TypeRange resultTypes, StringRef moduleName,
+                       StringRef name, ArrayRef<Attribute> annotations,
+                       ArrayRef<Attribute> resultAnnotations) {
+  result.addAttribute("moduleName", builder.getSymbolRefAttr(moduleName));
+  result.addAttribute("name", builder.getStringAttr(name));
+  result.addAttribute("annotations", builder.getArrayAttr(annotations));
+  result.addTypes(resultTypes);
+
+  if (resultAnnotations.empty())
+    return;
+  assert(resultAnnotations.size() == resultTypes.size());
+  result.addAttribute("resultAnnotations",
+                      builder.getArrayAttr(resultAnnotations));
+}
+
 /// Create a copy of the specified instance operation with some result removed.
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        InstanceOp existingInstance,
@@ -847,8 +863,8 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   SmallVector<Type> newResultTypes =
       removeElementsAtIndices<Type>(resultTypes, resultsToErase);
 
-  build(builder, result, newResultTypes, existingInstance.moduleNameAttr(),
-        existingInstance.nameAttr(), existingInstance.annotationsAttr());
+  build(builder, result, newResultTypes, existingInstance->getOperands(),
+        existingInstance->getAttrs());
 }
 
 /// Verify the correctness of an InstanceOp.
@@ -901,6 +917,12 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
           << "original module declared here";
       return failure();
     }
+  }
+
+  if (auto attr = instance->getAttrOfType<ArrayAttr>("resultAnnotations")) {
+    if (attr.size() != instance.getNumResults())
+      return instance.emitOpError("the number of result annotations should be "
+                                  "equal to the number of results");
   }
 
   return success();

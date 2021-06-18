@@ -30,10 +30,8 @@ def InstanceOp : FIRRTLOp<"instance"> {
     OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
                    "::mlir::StringRef":$moduleName,
                    CArg<"StringRef", "{}">:$name,
-                   CArg<"ArrayRef<Attribute>", "{}">:$annotations), [{
-      return build($_builder, $_state, resultTypes, moduleName, name,
-                   $_builder.getArrayAttr(annotations));
-    }]>,
+                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
+                   CArg<"ArrayRef<Attribute>", "{}">:$resultAnnotations)>,
 
     /// Constructor that creates a version of the specified instance, but that
     /// erases some number of results from it.
