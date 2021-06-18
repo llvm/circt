@@ -76,6 +76,8 @@ static DictionaryAttr getAnnotationOfClass(MLIRContext *context,
 
 /// Checks the annotations array for a matching annotation.
 static bool hasAnnotation(ArrayAttr annotations, DictionaryAttr annotation) {
+  if (!annotations)
+    return false;
   return llvm::is_contained(annotations, annotation);
 }
 
@@ -339,12 +341,8 @@ struct FIRParser {
   /// Add annotations from the source manager, if an annotation file was added.
   ParseResult importAnnotationFile(SMLoc loc);
 
-  /// Populate a vector of annotations for a given Target.  If the annotations
-  /// parameter is non-empty, then this will be appended to.
-  void getAnnotations(Twine target, ArrayAttr &annotations);
-
-  /// Add any annotations for a given target to the specified AnnotationSet.
-  void getAnnotations(Twine target, AnnotationSet &annotations);
+  /// Return the set of annotations for a given Target.
+  ArrayAttr getAnnotations(Twine target);
 
   /// Returns true if the annotation list contains the DontTouchAnnotation. This
   /// method is slightly more efficient than other lookup methods, because it
@@ -923,7 +921,6 @@ ParseResult FIRParser::importAnnotations(SMLoc loc, StringRef annotationsStr) {
 }
 
 ParseResult FIRParser::importAnnotationFile(SMLoc loc) {
-
   if (!state.annotationsBuf)
     return success();
 
@@ -936,46 +933,19 @@ ParseResult FIRParser::importAnnotationFile(SMLoc loc) {
   return result;
 }
 
-/// Populate a vector of annotations for a given Target.  If the annotations
-/// parameter is non-empty, then this will be appended to.
-void FIRParser::getAnnotations(Twine target, ArrayAttr &annotations) {
+/// Return the set of annotations for a given Target.
+ArrayAttr FIRParser::getAnnotations(Twine target) {
   // Early exit if no annotations exist.  This avoids the cost of
   // constructing strings representing targets if no annotation can
   // possibly exist.
   if (state.annotationMap.empty())
-    return;
+    return {};
 
-  // Input annotations is empty.  Just do the lookup and return.
-  if (!annotations) {
-    annotations = state.annotationMap.lookup(target.str());
-    return;
-  }
+  // Flatten the input twine into a SmallVector for lookup.
+  SmallString<64> targetStr;
+  target.toVector(targetStr);
 
-  // Input annotations is non-empty.  Exit quickly if the target doesn't exist.
-  // Otherwise, construct a new ArrayAttr that includes existing and new
-  // annotations.
-  auto newAnnotations = state.annotationMap.lookup(target.str());
-  if (!newAnnotations)
-    return;
-
-  SmallVector<Attribute> annotationVec;
-  for (auto a : annotations)
-    annotationVec.push_back(a);
-  for (auto a : newAnnotations)
-    annotationVec.push_back(a);
-
-  annotations = ArrayAttr::get(state.context, annotationVec);
-}
-
-/// Add any annotations for a given target to the specified AnnotationSet.
-void FIRParser::getAnnotations(Twine target, AnnotationSet &annotations) {
-  // Early exit if no annotations exist.  This avoids the cost of
-  // constructing strings representing targets if no annotation can
-  // possibly exist.
-  if (state.annotationMap.empty())
-    return;
-
-  annotations.addAnnotations(state.annotationMap.lookup(target.str()));
+  return state.annotationMap.lookup(targetStr);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2042,8 +2012,7 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
     return emitError(startLoc, "memory should have vector type");
   auto resultType = memVType.getElementType();
 
-  ArrayAttr annotations = getState().emptyArrayAttr;
-  getAnnotations(getModuleTarget() + ">" + id, annotations);
+  ArrayAttr annotations = getAnnotations(getModuleTarget() + ">" + id);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
   locationProcessor.setLoc(startLoc);
@@ -2462,8 +2431,7 @@ ParseResult FIRStmtParser::parseInstance() {
       portType = FlipType::get(portType);
     resultTypes.push_back(portType);
   }
-  ArrayAttr annotations = getState().emptyArrayAttr;
-  getAnnotations(getModuleTarget() + ">" + id, annotations);
+  ArrayAttr annotations = getAnnotations(getModuleTarget() + ">" + id);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
   auto result =
@@ -2503,8 +2471,7 @@ ParseResult FIRStmtParser::parseCMem() {
 
   locationProcessor.setLoc(startTok.getLoc());
 
-  ArrayAttr annotations = getState().emptyArrayAttr;
-  getAnnotations(getModuleTarget() + ">" + id, annotations);
+  ArrayAttr annotations = getAnnotations(getModuleTarget() + ">" + id);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
   auto result = builder.create<CMemOp>(type, name, annotations);
@@ -2539,8 +2506,7 @@ ParseResult FIRStmtParser::parseSMem() {
 
   locationProcessor.setLoc(startTok.getLoc());
 
-  ArrayAttr annotations = getState().emptyArrayAttr;
-  getAnnotations(getModuleTarget() + ">" + id, annotations);
+  ArrayAttr annotations = getAnnotations(getModuleTarget() + ">" + id);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
   auto result = builder.create<SMemOp>(type, ruw, name, annotations);
@@ -2670,8 +2636,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     resultTypes.push_back(FlipType::get(p.second));
   }
 
-  ArrayAttr annotations = getState().emptyArrayAttr;
-  getAnnotations(getModuleTarget() + ">" + id, annotations);
+  ArrayAttr annotations = getAnnotations(getModuleTarget() + ">" + id);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
   locationProcessor.setLoc(startTok.getLoc());
@@ -2739,8 +2704,7 @@ ParseResult FIRStmtParser::parseNode() {
   // passive.
   initializer = convertToPassive(initializer);
 
-  ArrayAttr annotations = getState().emptyArrayAttr;
-  getAnnotations(getModuleTarget() + ">" + id, annotations);
+  ArrayAttr annotations = getAnnotations(getModuleTarget() + ">" + id);
 
   // Ignore useless names like _T.
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
@@ -2748,7 +2712,7 @@ ParseResult FIRStmtParser::parseNode() {
   // The entire point of a node declaration is to carry a name.  If it got
   // dropped, then we don't even need to create a result unless it is annotated.
   Value result;
-  if (!name.empty() || !annotations.empty()) {
+  if (!name.empty() || annotations) {
     result = builder.create<NodeOp>(initializer.getType(), initializer, name,
                                     annotations);
   } else
@@ -2773,8 +2737,7 @@ ParseResult FIRStmtParser::parseWire() {
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
-  ArrayAttr annotations = getState().emptyArrayAttr;
-  getAnnotations(getModuleTarget() + ">" + id, annotations);
+  ArrayAttr annotations = getAnnotations(getModuleTarget() + ">" + id);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
   auto result = builder.create<WireOp>(type, name, annotations);
@@ -2868,8 +2831,7 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   if (resetValue)
     resetValue = convertToPassive(resetValue);
 
-  ArrayAttr annotations = getState().emptyArrayAttr;
-  getAnnotations(getModuleTarget() + ">" + id, annotations);
+  ArrayAttr annotations = getAnnotations(getModuleTarget() + ">" + id);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
   Value result;
@@ -2952,8 +2914,9 @@ FIRModuleParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
         info.parseOptionalInfo())
       return failure();
 
-    AnnotationSet annotations(getState().emptyArrayAttr);
-    getAnnotations(getModuleTarget() + ">" + name.getValue(), annotations);
+    AnnotationSet annotations(
+        getAnnotations(getModuleTarget() + ">" + name.getValue()),
+        getContext());
 
     // FIXME: We should persist the info loc into the IR, not just the name
     // and type.
@@ -3063,9 +3026,7 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
     parameters.append(nameId, value);
   }
 
-  ArrayAttr annotations;
-  getAnnotations(moduleTarget, annotations);
-
+  ArrayAttr annotations = getAnnotations(moduleTarget);
   auto fmodule = builder.create<FExtModuleOp>(info.getLoc(), name, portList,
                                               defName, annotations);
 
@@ -3103,8 +3064,7 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
   portList.reserve(portListAndLoc.size());
   for (auto &elt : portListAndLoc)
     portList.push_back(elt.first);
-  ArrayAttr annotations;
-  getAnnotations(moduleTarget, annotations);
+  ArrayAttr annotations = getAnnotations(moduleTarget);
   auto fmodule =
       builder.create<FModuleOp>(info.getLoc(), name, portList, annotations);
 
@@ -3181,17 +3141,26 @@ ParseResult FIRCircuitParser::parseCircuit() {
   if (importAnnotationFile(info.getFIRLoc()))
     return failure();
 
+  OpBuilder b(mlirModule.getBodyRegion());
+
   // Get annotations associated with this circuit. These are either:
   //   1. Annotations with no target (which we use "~" to identify)
   //   2. Annotations targeting the circuit, e.g., "~Foo"
-  ArrayAttr annotationVec;
-  getAnnotations("~", annotationVec);
-  getAnnotations(circuitTarget, annotationVec);
-
-  OpBuilder b(mlirModule.getBodyRegion());
+  ArrayAttr annotations = getAnnotations("~");
+  if (ArrayAttr circuitAnnot = getAnnotations(circuitTarget)) {
+    // Merge these arrays if both present.
+    if (!annotations || annotations.empty())
+      annotations = circuitAnnot;
+    else {
+      SmallVector<Attribute> elements;
+      elements.append(annotations.begin(), annotations.end());
+      elements.append(circuitAnnot.begin(), circuitAnnot.end());
+      annotations = b.getArrayAttr(elements);
+    }
+  }
 
   // Create the top-level circuit op in the MLIR module.
-  auto circuit = b.create<CircuitOp>(info.getLoc(), name, annotationVec);
+  auto circuit = b.create<CircuitOp>(info.getLoc(), name, annotations);
 
   // Parse any contained modules.
   while (true) {

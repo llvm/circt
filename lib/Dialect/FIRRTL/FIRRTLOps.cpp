@@ -1949,7 +1949,8 @@ FIRRTLType PadPrimOp::inferReturnType(ValueRange operands,
   auto inputi = input.dyn_cast<IntType>();
   if (amount < 0 || !inputi) {
     if (loc)
-      mlir::emitError(*loc, "pad input must be integer and amount must be >= 0");
+      mlir::emitError(*loc,
+                      "pad input must be integer and amount must be >= 0");
     return {};
   }
 
@@ -1970,7 +1971,8 @@ FIRRTLType ShlPrimOp::inferReturnType(ValueRange operands,
   auto inputi = input.dyn_cast<IntType>();
   if (amount < 0 || !inputi) {
     if (loc)
-      mlir::emitError(*loc, "shl input must be integer and amount must be >= 0");
+      mlir::emitError(*loc,
+                      "shl input must be integer and amount must be >= 0");
     return {};
   }
 
@@ -1990,7 +1992,8 @@ FIRRTLType ShrPrimOp::inferReturnType(ValueRange operands,
   auto inputi = input.dyn_cast<IntType>();
   if (amount < 0 || !inputi) {
     if (loc)
-      mlir::emitError(*loc, "shr input must be integer and amount must be >= 0");
+      mlir::emitError(*loc,
+                      "shr input must be integer and amount must be >= 0");
     return {};
   }
 
@@ -2010,7 +2013,8 @@ FIRRTLType TailPrimOp::inferReturnType(ValueRange operands,
   auto inputi = input.dyn_cast<IntType>();
   if (amount < 0 || !inputi) {
     if (loc)
-      mlir::emitError(*loc, "tail input must be integer and amount must be >= 0");
+      mlir::emitError(*loc,
+                      "tail input must be integer and amount must be >= 0");
     return {};
   }
 
@@ -2257,6 +2261,32 @@ static void printInstanceOp(OpAsmPrinter &p, Operation *op,
   SmallVector<StringRef, 2> elides = {"moduleName"};
 
   // Elide "annotations" if it doesn't exist or if it is empty
+  auto annotationsAttr = op->getAttrOfType<ArrayAttr>("annotations");
+  if (!annotationsAttr || annotationsAttr.empty())
+    elides.push_back("annotations");
+
+  p.printOptionalAttrDict(op->getAttrs(), elides);
+}
+
+//===----------------------------------------------------------------------===//
+// MemoryPortOp Custom attr-dict Directive
+//===----------------------------------------------------------------------===//
+
+/// No change from normal parsing.
+static ParseResult parseMemoryPortOp(OpAsmParser &parser,
+                                     NamedAttrList &resultAttrs) {
+  return parser.parseOptionalAttrDict(resultAttrs);
+}
+
+/// Always elide "direction" and elide "annotations" if it exists or
+/// if it is empty.
+static void printMemoryPortOp(OpAsmPrinter &p, Operation *op,
+                              DictionaryAttr attr) {
+
+  // "direction" is always elided.
+  SmallVector<StringRef, 2> elides = {"direction"};
+
+  // Elide "annotations" if it doesn't exist or if it is empty.
   auto annotationsAttr = op->getAttrOfType<ArrayAttr>("annotations");
   if (!annotationsAttr || annotationsAttr.empty())
     elides.push_back("annotations");

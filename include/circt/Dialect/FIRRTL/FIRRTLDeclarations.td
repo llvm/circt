@@ -85,7 +85,7 @@ def MemoryPortOp : FIRRTLOp<"memoryport"> {
   let results = (outs FIRRTLType:$result);
 
   let assemblyFormat = [{
-    $direction $memory `,` $index `,` $clock attr-dict `:`
+    $direction $memory `,` $index `,` $clock custom<MemoryPortOp>(attr-dict) `:`
        functional-type(operands, $result)
   }];
 }
