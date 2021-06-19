@@ -1,4 +1,4 @@
-//===- CalyxDialect.cpp - Implement the Calyx dialect ---------------------===//
+//===- CalyxAttributes.cpp - Implement Calyx dialect attributes -----------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,34 +6,29 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implements the Calyx dialect.
+// This file implements the Calyx dialect attributes.
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/Calyx/CalyxDialect.h"
 #include "circt/Dialect/Calyx/CalyxAttributes.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
-#include "mlir/IR/Builders.h"
-#include "mlir/IR/BuiltinTypes.h"
+#include "circt/Dialect/Calyx/CalyxDialect.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace circt::calyx;
 
 //===----------------------------------------------------------------------===//
-// Dialect specification.
+// TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
-void CalyxDialect::initialize() {
-  // Register attributes.
-  registerAttributes();
+#define GET_ATTRDEF_CLASSES
+#include "circt/Dialect/Calyx/CalyxAttributes.cpp.inc"
 
-  // Register operations.
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/Calyx/Calyx.cpp.inc"
-      >();
+void CalyxDialect::registerAttributes() {
+  addAttributes<
+#define GET_ATTRDEF_LIST
+#include "circt/Dialect/Calyx/CalyxAttributes.cpp.inc"
+  >();
 }
-
-// Provide implementations for the enums we use.
-#include "circt/Dialect/Calyx/CalyxEnums.cpp.inc"

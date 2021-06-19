@@ -14,15 +14,14 @@
 #define CIRCT_DIALECT_CALYX_CALYXDIALECT_H
 
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
 
 // Pull in the Dialect definition.
 #include "circt/Dialect/Calyx/CalyxDialect.h.inc"
 
-// Pull in all enum type definitions, attributes,
-// and utility function declarations.
+// Pull in all enum type definitions.
 #include "circt/Dialect/Calyx/CalyxEnums.h.inc"
-#include "circt/Dialect/Calyx/CalyxAttrs.h.inc"
 
 #endif // CIRCT_DIALECT_CALYX_CALYXDIALECT_H

@@ -10,19 +10,29 @@
 //
 //===----------------------------------------------------------------------===//
 
-def ComponentOp : CalyxOp<"component", []> {
-    let summary = "Calyx Component";
-    let description = [{
-        The "calyx.component" operation represents an overall
-        Calyx component containing cells, wires, and control.
-        ```
-          component @MyComponent(in1: 32) -> (out1: 32) {
-            ...
-          }
-        ```
-    }];
-    let arguments =
-                (ins SymbolRefAttr:$name, DictionaryAttr:$inPortToWidth, DictionaryAttr:$outPortToWidth);
-    let printer = "return ::print$cppClass(p, *this);";
-    let parser = "return ::parse$cppClass(parser, result);";
+def ComponentOp : CalyxOp<"component", [NoTerminator]> {
+  let summary = "Calyx Component";
+  let description = [{
+    The "calyx.component" operation represents an overall
+    Calyx component containing:
+    (1) In- and output port definitions
+        that define the interface.
+    (2) Cells, wires, and control.
+    ```
+      component @MyComponent(in1: 32) -> (out1: 32) {
+        cells { ... }
+        wires { ... }
+        control { ... }
+      }
+    ```
+  }];
+  let arguments = (ins
+    SymbolRefAttr:$name,
+    I64Attr:$inputPortCount
+  );
+  let regions = (region SizedRegion<1>: $body);
+
+
+  let printer = "return ::print$cppClass(p, *this);";
+  let parser = "return ::parse$cppClass(parser, result);";
 }

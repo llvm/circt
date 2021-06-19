@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Calyx/CalyxOps.h"
+#include "circt/Dialect/Calyx/CalyxAttributes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
@@ -26,56 +27,100 @@ using namespace circt;
 using namespace circt::calyx;
 using namespace mlir;
 
-/// Prints the name and width for Calyx component input and output ports.
-/// For example, with given dictionary ["p1": 32, "p2": 64]:
-///
-/// ```
-///   p1: 32, p2: 64
-/// ```
-void printComponentPortNameAndWidth(OpAsmPrinter &p,
-                                    DictionaryAttr &nameToWidth) {
-  for (auto i = nameToWidth.begin(), e = nameToWidth.end(); i != e; ++i) {
-    p << i->first << ": ";
-    if (auto integerValue = i->second.dyn_cast<IntegerAttr>())
-      p << integerValue.getValue();
-
-    if (i + 1 != e)
-      p << ", ";
-  }
-}
-
 //===----------------------------------------------------------------------===//
 // ComponentOp
 //===----------------------------------------------------------------------===//
+
+static void printPortDefList(OpAsmPrinter &p,
+                             SmallVector<BlockArgument, 8> &portDefs) {
+  p << '(';
+
+  SmallString<32> tempStr;
+  llvm::interleaveComma(portDefs, p, [&](BlockArgument portDef) {
+    // Convert to a temporary stream to drop the `%` symbol.
+    tempStr.clear();
+    llvm::raw_svector_ostream tmpStream(tempStr);
+    p.printOperand(portDef, tmpStream);
+
+    p << tmpStream.str().drop_front() << ": " << portDef.getType();
+  });
+
+  p << ')';
+}
+
 static void printComponentOp(OpAsmPrinter &p, ComponentOp &op) {
   auto name = op->getAttrOfType<SymbolRefAttr>("name");
-  p << "component " << name << "(";
+  p << "component " << name << " ";
 
-  auto inPortNameAndWidth = op->getAttrOfType<DictionaryAttr>("inPortToWidth");
-  if (inPortNameAndWidth)
-    printComponentPortNameAndWidth(p, inPortNameAndWidth);
+  auto portDefs = op.body().front().getArguments();
+  auto numInputPorts = op.inputPortCountAttr().getInt();
+  auto inputPortsEnd = portDefs.begin() + numInputPorts;
 
-  p << ") -> (";
+  SmallVector<BlockArgument, 8> inputPortDefs(portDefs.begin(), inputPortsEnd);
+  SmallVector<BlockArgument, 8> outputPortDefs(inputPortsEnd, portDefs.end());
 
-  auto outPortNameAndWidth =
-      op->getAttrOfType<DictionaryAttr>("outPortToWidth");
-  if (outPortNameAndWidth)
-    printComponentPortNameAndWidth(p, outPortNameAndWidth);
+  printPortDefList(p, inputPortDefs);
+  p << " -> ";
+  printPortDefList(p, outputPortDefs);
 
-  // TODO(calyx): print cells, wires and control.
-  p << ") {}";
+  // TODO(calyx): Cells, wires and control.
+  p.printRegion(op.body(), /*printBlockTerminators=*/false,
+                /*printEmptyBlock=*/false);
+}
+
+static ParseResult
+parsePortDefList(OpAsmParser &parser,
+                 SmallVectorImpl<OpAsmParser::OperandType> &portDefs,
+                 SmallVectorImpl<Type> &portDefTypes) {
+  if (parser.parseLParen())
+    return failure();
+
+  do {
+    OpAsmParser::OperandType portDef;
+    Type portDefType;
+    if (failed(parser.parseOptionalRegionArgument(portDef)) ||
+        failed(parser.parseColonType(portDefType)))
+      continue;
+    portDefs.push_back(portDef);
+    portDefTypes.push_back(portDefType);
+  } while (succeeded(parser.parseOptionalComma()));
+
+  return (parser.parseRParen());
+}
+
+static ParseResult
+parseComponentSignature(OpAsmParser &parser, OperationState &result,
+                        SmallVectorImpl<OpAsmParser::OperandType> &portDefs,
+                        SmallVectorImpl<Type> &portDefTypes) {
+  if (parsePortDefList(parser, portDefs, portDefTypes))
+    return failure();
+
+  // Record the number of input ports.
+  IntegerAttr inputCountAttr =
+      parser.getBuilder().getI64IntegerAttr(portDefs.size());
+  result.addAttribute("inputPortCount", inputCountAttr);
+
+  if (parser.parseArrow() || parsePortDefList(parser, portDefs, portDefTypes))
+    return failure();
+
+  return success();
 }
 
 static ParseResult parseComponentOp(OpAsmParser &parser,
                                     OperationState &result) {
   SymbolRefAttr name;
-  DictionaryAttr inPorts, outPorts;
-  if (parser.parseAttribute(name, "name", result.attributes) ||
-      parser.parseLParen() ||
-      parser.parseAttribute(inPorts, "inPortToWidth", result.attributes) ||
-      parser.parseRParen() || parser.parseArrow() || parser.parseLParen() ||
-      parser.parseAttribute(outPorts, "outPortToWidth", result.attributes) ||
-      parser.parseRParen() || parser.parseLBrace() || parser.parseRBrace())
+  if (parser.parseAttribute(name, "name", result.attributes)) {
+    return failure();
+  }
+
+  SmallVector<OpAsmParser::OperandType, 8> portDefs;
+  SmallVector<Type, 8> portDefTypes;
+  if (parseComponentSignature(parser, result, portDefs, portDefTypes))
+    return failure();
+
+  // TODO(calyx): Cells, wires and control.
+  auto *body = result.addRegion();
+  if (parser.parseRegion(*body, portDefs, portDefTypes))
     return failure();
 
   return success();
