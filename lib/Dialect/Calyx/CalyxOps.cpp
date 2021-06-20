@@ -87,7 +87,8 @@ parsePortDefList(MLIRContext *context, OperationState &result,
     OpAsmParser::OperandType port;
     Type portType;
     if (failed(parser.parseOptionalRegionArgument(port)) ||
-        failed(parser.parseOptionalColon()) || failed(parser.parseType(portType)))
+        failed(parser.parseOptionalColon()) ||
+        failed(parser.parseType(portType)))
       continue;
     ports.push_back(port);
     portTypes.push_back(portType);
