@@ -25,7 +25,6 @@ using namespace circt::calyx;
 //===----------------------------------------------------------------------===//
 
 void CalyxDialect::initialize() {
-  // Register attributes.
   registerAttributes();
 
   // Register operations.

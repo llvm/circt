@@ -67,7 +67,6 @@ static void printComponentOp(OpAsmPrinter &p, ComponentOp &op) {
   auto outputPortNames = op->getAttrOfType<ArrayAttr>("outPortNames");
   printPortDefList(p, outputPortDefs, outputPortNames);
 
-  // TODO(calyx): Cells, wires and control.
   p.printRegion(op.body(), /*printBlockTerminators=*/true,
                 /*printEmptyBlock=*/true);
 }
@@ -143,11 +142,7 @@ static ParseResult parseComponentOp(OpAsmParser &parser,
   // Entry block needs to have same number of input
   // port definitions as the component.
   auto *body = result.addRegion();
-  if (parser.parseRegion(*body, inPorts, inPortTypes))
-    return failure();
-
-  // TODO(calyx): Cells, wires and control.
-  return success();
+  return parser.parseRegion(*body, inPorts, inPortTypes);
 }
 
 //===----------------------------------------------------------------------===//
