@@ -39,9 +39,12 @@ static void printPortDefList(OpAsmPrinter &p, ArrayRef<Type> portDefTypes,
   llvm::interleaveComma(
       llvm::zip(portDefNames, portDefTypes), p, [&](auto nameAndType) {
         if (auto name =
-                std::get<0>(nameAndType).template dyn_cast<StringAttr>())
-          p << name.getValue() << ": ";
-        p.printType(std::get<1>(nameAndType));
+                std::get<0>(nameAndType).template dyn_cast<StringAttr>()) {
+          // Drop the `%`.
+          p << name.getValue().drop_front() << ": ";
+        }
+        // Just get the bit width.
+        p << std::get<1>(nameAndType).getIntOrFloatBitWidth();
       });
 
   p << ')';
