@@ -16,7 +16,9 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/Types.h"
 #include "mlir/IR/Dialect.h"
+#include "mlir/IR/BuiltinOps.h"
 
 // Pull in the Dialect definition.
 #include "circt/Dialect/Calyx/CalyxDialect.h.inc"

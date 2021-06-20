@@ -10,7 +10,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-def ComponentOp : CalyxOp<"component", [NoTerminator]> {
+def ComponentOp : CalyxOp<"component", [
+    Symbol,
+    FunctionLike,
+    IsolatedFromAbove,
+    NoTerminator,
+    SingleBlock
+  ]> {
   let summary = "Calyx Component";
   let description = [{
     The "calyx.component" operation represents an overall
@@ -27,11 +33,25 @@ def ComponentOp : CalyxOp<"component", [NoTerminator]> {
     ```
   }];
   let arguments = (ins
-    SymbolRefAttr:$name,
-    I64Attr:$inputPortCount
+    StrArrayAttr:$inPortNames,
+    StrArrayAttr:$outPortNames
   );
   let regions = (region SizedRegion<1>: $body);
 
+  let extraClassDeclaration = [{
+    // Necessary to avoid name clashing with `front`.
+    using FunctionLike::front;
+
+    private:
+      // This trait needs access to the hooks defined below.
+      friend class OpTrait::FunctionLike<ComponentOp>;
+
+      /// Hooks for the input/output type enumeration in FunctionLike.
+      unsigned getNumFuncArguments() { return getType().getNumInputs(); }
+      unsigned getNumFuncResults() { return getType().getNumResults(); }
+
+    public:
+  }];
 
   let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";

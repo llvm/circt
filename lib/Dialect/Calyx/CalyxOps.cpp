@@ -31,76 +31,90 @@ using namespace mlir;
 // ComponentOp
 //===----------------------------------------------------------------------===//
 
-static void printPortDefList(OpAsmPrinter &p,
-                             SmallVector<BlockArgument, 8> &portDefs) {
+/// Prints the port definitions of a Calyx component signature.
+static void printPortDefList(OpAsmPrinter &p, ArrayRef<Type> portDefTypes,
+                             ArrayAttr portDefNames) {
   p << '(';
 
-  SmallString<32> tempStr;
-  llvm::interleaveComma(portDefs, p, [&](BlockArgument portDef) {
-    // Convert to a temporary stream to drop the `%` symbol.
-    tempStr.clear();
-    llvm::raw_svector_ostream tmpStream(tempStr);
-    p.printOperand(portDef, tmpStream);
-
-    p << tmpStream.str().drop_front() << ": " << portDef.getType();
-  });
+  llvm::interleaveComma(
+      llvm::zip(portDefNames, portDefTypes), p, [&](auto nameAndType) {
+        if (auto name =
+                std::get<0>(nameAndType).template dyn_cast<StringAttr>())
+          p << name.getValue() << ": ";
+        p.printType(std::get<1>(nameAndType));
+      });
 
   p << ')';
 }
 
 static void printComponentOp(OpAsmPrinter &p, ComponentOp &op) {
-  auto name = op->getAttrOfType<SymbolRefAttr>("name");
-  p << "component " << name << " ";
+  auto componentName =
+      op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
+          .getValue();
+  p << "component ";
+  p.printSymbolName(componentName);
+  p << " ";
 
-  auto portDefs = op.body().front().getArguments();
-  auto numInputPorts = op.inputPortCountAttr().getInt();
-  auto inputPortsEnd = portDefs.begin() + numInputPorts;
+  auto typeAttr = op->getAttrOfType<TypeAttr>(ComponentOp::getTypeAttrName());
+  auto functionType = typeAttr.getValue().cast<FunctionType>();
 
-  SmallVector<BlockArgument, 8> inputPortDefs(portDefs.begin(), inputPortsEnd);
-  SmallVector<BlockArgument, 8> outputPortDefs(inputPortsEnd, portDefs.end());
-
-  printPortDefList(p, inputPortDefs);
+  auto inputPortDefs = functionType.getInputs();
+  auto inputPortNames = op->getAttrOfType<ArrayAttr>("inPortNames");
+  printPortDefList(p, inputPortDefs, inputPortNames);
   p << " -> ";
-  printPortDefList(p, outputPortDefs);
+
+  auto outputPortDefs = functionType.getResults();
+  auto outputPortNames = op->getAttrOfType<ArrayAttr>("outPortNames");
+  printPortDefList(p, outputPortDefs, outputPortNames);
 
   // TODO(calyx): Cells, wires and control.
-  p.printRegion(op.body(), /*printBlockTerminators=*/false,
-                /*printEmptyBlock=*/false);
+  p.printRegion(op.body(), /*printBlockTerminators=*/true,
+                /*printEmptyBlock=*/true);
 }
 
+/// Parses the ports of a Calyx component signature, and adds the corresponding
+/// port names to `attrName`.
 static ParseResult
-parsePortDefList(OpAsmParser &parser,
-                 SmallVectorImpl<OpAsmParser::OperandType> &portDefs,
-                 SmallVectorImpl<Type> &portDefTypes) {
+parsePortDefList(MLIRContext *context, OperationState &result,
+                 OpAsmParser &parser,
+                 SmallVectorImpl<OpAsmParser::OperandType> &ports,
+                 SmallVectorImpl<Type> &portTypes, StringRef attrName) {
   if (parser.parseLParen())
     return failure();
 
   do {
-    OpAsmParser::OperandType portDef;
-    Type portDefType;
-    if (failed(parser.parseOptionalRegionArgument(portDef)) ||
-        failed(parser.parseColonType(portDefType)))
+    OpAsmParser::OperandType port;
+    Type portType;
+    if (failed(parser.parseOptionalRegionArgument(port)) ||
+        failed(parser.parseColonType(portType)))
       continue;
-    portDefs.push_back(portDef);
-    portDefTypes.push_back(portDefType);
+    ports.push_back(port);
+    portTypes.push_back(portType);
   } while (succeeded(parser.parseOptionalComma()));
+
+  // Add attribute for port names.
+  SmallVector<Attribute> portNames(ports.size());
+  llvm::transform(ports, portNames.begin(), [&](auto port) -> StringAttr {
+    return StringAttr::get(context, port.name);
+  });
+  result.addAttribute(attrName, ArrayAttr::get(context, portNames));
 
   return (parser.parseRParen());
 }
 
+/// Parses the signature of a Calyx component.
 static ParseResult
 parseComponentSignature(OpAsmParser &parser, OperationState &result,
-                        SmallVectorImpl<OpAsmParser::OperandType> &portDefs,
-                        SmallVectorImpl<Type> &portDefTypes) {
-  if (parsePortDefList(parser, portDefs, portDefTypes))
-    return failure();
-
-  // Record the number of input ports.
-  IntegerAttr inputCountAttr =
-      parser.getBuilder().getI64IntegerAttr(portDefs.size());
-  result.addAttribute("inputPortCount", inputCountAttr);
-
-  if (parser.parseArrow() || parsePortDefList(parser, portDefs, portDefTypes))
+                        SmallVectorImpl<OpAsmParser::OperandType> &inPorts,
+                        SmallVectorImpl<Type> &inPortTypes,
+                        SmallVectorImpl<OpAsmParser::OperandType> &outPorts,
+                        SmallVectorImpl<Type> &outPortTypes) {
+  auto *context = parser.getBuilder().getContext();
+  if (parsePortDefList(context, result, parser, inPorts, inPortTypes,
+                       "inPortNames") ||
+      parser.parseArrow() ||
+      parsePortDefList(context, result, parser, outPorts, outPortTypes,
+                       "outPortNames"))
     return failure();
 
   return success();
@@ -108,21 +122,31 @@ parseComponentSignature(OpAsmParser &parser, OperationState &result,
 
 static ParseResult parseComponentOp(OpAsmParser &parser,
                                     OperationState &result) {
-  SymbolRefAttr name;
-  if (parser.parseAttribute(name, "name", result.attributes)) {
-    return failure();
-  }
+  using namespace mlir::function_like_impl;
 
-  SmallVector<OpAsmParser::OperandType, 8> portDefs;
-  SmallVector<Type, 8> portDefTypes;
-  if (parseComponentSignature(parser, result, portDefs, portDefTypes))
+  StringAttr componentName;
+  if (parser.parseSymbolName(componentName, SymbolTable::getSymbolAttrName(),
+                             result.attributes))
+    return failure();
+
+  SmallVector<OpAsmParser::OperandType> inPorts, outPorts;
+  SmallVector<Type> inPortTypes, outPortTypes;
+  if (parseComponentSignature(parser, result, inPorts, inPortTypes, outPorts,
+                              outPortTypes))
+    return failure();
+
+  // Build the component's type for Function-Like trait.
+  auto &builder = parser.getBuilder();
+  auto type = builder.getFunctionType(inPortTypes, outPortTypes);
+  result.addAttribute(ComponentOp::getTypeAttrName(), TypeAttr::get(type));
+
+  // Entry block needs to have same number of input
+  // port definitions as the component.
+  auto *body = result.addRegion();
+  if (parser.parseRegion(*body, inPorts, inPortTypes))
     return failure();
 
   // TODO(calyx): Cells, wires and control.
-  auto *body = result.addRegion();
-  if (parser.parseRegion(*body, portDefs, portDefTypes))
-    return failure();
-
   return success();
 }
 
