@@ -2857,13 +2857,12 @@ struct FIRModuleParser : public FIRScopedParser {
         circuit(circuit), firstScope(symbolTable),
         firstMemoryScope(memoryScopeTable) {}
 
-  ParseResult parseExtModule(unsigned indent);
   ParseResult parseModule(unsigned indent);
 
 private:
   using PortInfoAndLoc = std::pair<ModulePortInfo, SMLoc>;
   ParseResult parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
-                            unsigned indent, StringRef moduleTarget);
+                            unsigned indent);
 
   CircuitOp circuit;
   SymbolTable symbolTable;
@@ -2883,7 +2882,7 @@ private:
 ///
 ParseResult
 FIRModuleParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
-                               unsigned indent, StringRef moduleTarget) {
+                               unsigned indent) {
   // Parse any ports.
   while (getToken().isAny(FIRToken::kw_input, FIRToken::kw_output) &&
          // Must be nested under the module.
@@ -2926,7 +2925,10 @@ FIRModuleParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
   return success();
 }
 
-/// module    ::=
+/// Parse an external or present module depending on what token we have.
+///
+/// module ::= 'module' id ':' info? INDENT pohwist simple_stmt_block DEDENT
+/// module ::=
 ///        'extmodule' id ':' info? INDENT pohwist defname? parameter* DEDENT
 /// defname   ::= 'defname' '=' id NEWLINE
 ///
@@ -2934,8 +2936,9 @@ FIRModuleParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
 /// parameter ::= 'parameter' id '=' StringLit NEWLINE
 /// parameter ::= 'parameter' id '=' floatingpoint NEWLINE
 /// parameter ::= 'parameter' id '=' RawString NEWLINE
-ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
-  consumeToken(FIRToken::kw_extmodule);
+ParseResult FIRModuleParser::parseModule(unsigned indent) {
+  bool isExtModule = getToken().is(FIRToken::kw_extmodule);
+  consumeToken();
   StringAttr name;
   SmallVector<PortInfoAndLoc, 4> portListAndLoc;
 
@@ -2946,9 +2949,8 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   auto moduleTarget = (getState().circuitTarget + "|" + name.getValue()).str();
   getState().moduleTarget = moduleTarget;
 
-  if (parseToken(FIRToken::colon, "expected ':' in extmodule definition") ||
-      info.parseOptionalInfo() ||
-      parsePortList(portListAndLoc, indent, moduleTarget))
+  if (parseToken(FIRToken::colon, "expected ':' in module definition") ||
+      info.parseOptionalInfo() || parsePortList(portListAndLoc, indent))
     return failure();
 
   auto builder = circuit.getBodyBuilder();
@@ -2958,6 +2960,30 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
   portList.reserve(portListAndLoc.size());
   for (auto &elt : portListAndLoc)
     portList.push_back(elt.first);
+
+  // If this is a normal module, parse the body into an FModuleOp.
+  if (!isExtModule) {
+    ArrayAttr annotations = getAnnotations(moduleTarget);
+    auto fmodule =
+        builder.create<FModuleOp>(info.getLoc(), name, portList, annotations);
+
+    // Install all of the ports into the symbol table, associated with their
+    // block arguments.
+    auto argIt = fmodule.args_begin();
+    for (auto &entry : portListAndLoc) {
+      if (addSymbolEntry(entry.first.getName(), *argIt, entry.second))
+        return failure();
+      ++argIt;
+    }
+
+    FIRModuleContext moduleContext;
+    FIRStmtParser stmtParser(*fmodule.getBodyBlock(), *this, moduleContext);
+
+    // Parse the moduleBlock.
+    return stmtParser.parseSimpleStmtBlock(indent);
+  }
+
+  // Otherwise, handle extmodule specific features like parameters.
 
   // Add all the ports to the symbol table even though there are no SSA values
   // for arguments in an external module.  This detects multiple definitions
@@ -3034,53 +3060,6 @@ ParseResult FIRModuleParser::parseExtModule(unsigned indent) {
                      DictionaryAttr::get(getContext(), parameters));
 
   return success();
-}
-
-/// module ::= 'module' id ':' info? INDENT pohwist simple_stmt_block
-/// DEDENT
-///
-ParseResult FIRModuleParser::parseModule(unsigned indent) {
-  LocWithInfo info(getToken().getLoc(), this);
-  StringAttr name;
-  SmallVector<PortInfoAndLoc, 4> portListAndLoc;
-
-  consumeToken(FIRToken::kw_module);
-  if (parseId(name, "expected module name"))
-    return failure();
-
-  auto moduleTarget = (getState().circuitTarget + "|" + name.getValue()).str();
-  getState().moduleTarget = moduleTarget;
-
-  if (parseToken(FIRToken::colon, "expected ':' in module definition") ||
-      info.parseOptionalInfo() ||
-      parsePortList(portListAndLoc, indent, moduleTarget))
-    return failure();
-
-  auto builder = circuit.getBodyBuilder();
-
-  // Create the module.
-  SmallVector<ModulePortInfo, 4> portList;
-  portList.reserve(portListAndLoc.size());
-  for (auto &elt : portListAndLoc)
-    portList.push_back(elt.first);
-  ArrayAttr annotations = getAnnotations(moduleTarget);
-  auto fmodule =
-      builder.create<FModuleOp>(info.getLoc(), name, portList, annotations);
-
-  // Install all of the ports into the symbol table, associated with their
-  // block arguments.
-  auto argIt = fmodule.args_begin();
-  for (auto &entry : portListAndLoc) {
-    if (addSymbolEntry(entry.first.getName(), *argIt, entry.second))
-      return failure();
-    ++argIt;
-  }
-
-  FIRModuleContext moduleContext;
-  FIRStmtParser stmtParser(*fmodule.getBodyBlock(), *this, moduleContext);
-
-  // Parse the moduleBlock.
-  return stmtParser.parseSimpleStmtBlock(indent);
 }
 
 //===----------------------------------------------------------------------===//
@@ -3189,9 +3168,7 @@ ParseResult FIRCircuitParser::parseCircuit() {
       if (moduleIndent <= circuitIndent)
         return emitError("module should be indented more"), failure();
 
-      FIRModuleParser mp(getState(), circuit);
-      if (getToken().is(FIRToken::kw_module) ? mp.parseModule(moduleIndent)
-                                             : mp.parseExtModule(moduleIndent))
+      if (FIRModuleParser(getState(), circuit).parseModule(moduleIndent))
         return failure();
       break;
     }
