@@ -58,14 +58,14 @@ static void printComponentOp(OpAsmPrinter &p, ComponentOp &op) {
   auto typeAttr = op->getAttrOfType<TypeAttr>(ComponentOp::getTypeAttrName());
   auto functionType = typeAttr.getValue().cast<FunctionType>();
 
-  auto inputPortDefs = functionType.getInputs();
+  auto inputPortTypes = functionType.getInputs();
   auto inputPortNames = op->getAttrOfType<ArrayAttr>("inPortNames");
-  printPortDefList(p, inputPortDefs, inputPortNames);
+  printPortDefList(p, inputPortTypes, inputPortNames);
   p << " -> ";
 
-  auto outputPortDefs = functionType.getResults();
+  auto outputPortTypes = functionType.getResults();
   auto outputPortNames = op->getAttrOfType<ArrayAttr>("outPortNames");
-  printPortDefList(p, outputPortDefs, outputPortNames);
+  printPortDefList(p, outputPortTypes, outputPortNames);
 
   p.printRegion(op.body(), /*printBlockTerminators=*/true,
                 /*printEmptyBlock=*/true);
