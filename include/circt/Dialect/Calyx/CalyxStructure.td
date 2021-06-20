@@ -14,6 +14,8 @@ def ComponentOp : CalyxOp<"component", [
     Symbol,
     FunctionLike,
     IsolatedFromAbove,
+    // TODO(Calyx): This should change, when
+    // the control execution schedule is added.
     NoTerminator,
     SingleBlock
   ]> {

@@ -54,9 +54,8 @@ static void printComponentOp(OpAsmPrinter &p, ComponentOp &op) {
   auto componentName =
       op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
           .getValue();
-  p << "component ";
-  p.printSymbolName(componentName);
-  p << " ";
+  // Print the value directly to avoid the `@` when using `printSymbolName`.
+  p << "component " << componentName << " ";
 
   auto typeAttr = op->getAttrOfType<TypeAttr>(ComponentOp::getTypeAttrName());
   auto functionType = typeAttr.getValue().cast<FunctionType>();
@@ -88,7 +87,7 @@ parsePortDefList(MLIRContext *context, OperationState &result,
     OpAsmParser::OperandType port;
     Type portType;
     if (failed(parser.parseOptionalRegionArgument(port)) ||
-        failed(parser.parseColonType(portType)))
+        failed(parser.parseOptionalColon()) || failed(parser.parseType(portType)))
       continue;
     ports.push_back(port);
     portTypes.push_back(portType);
@@ -137,7 +136,7 @@ static ParseResult parseComponentOp(OpAsmParser &parser,
                               outPortTypes))
     return failure();
 
-  // Build the component's type for Function-Like trait.
+  // Build the component's type for FunctionLike trait.
   auto &builder = parser.getBuilder();
   auto type = builder.getFunctionType(inPortTypes, outPortTypes);
   result.addAttribute(ComponentOp::getTypeAttrName(), TypeAttr::get(type));
