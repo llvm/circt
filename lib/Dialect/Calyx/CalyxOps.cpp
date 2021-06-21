@@ -156,6 +156,86 @@ static ParseResult parseComponentOp(OpAsmParser &parser,
   return success();
 }
 
+static LogicalResult verifyComponentOp(ComponentOp op) {
+  // Verify there is exactly one of each section:
+  // calyx.cells, calyx.wires, and calyx.control.
+  uint32_t numCells = 0, numWires = 0, numControl = 0;
+  for (auto &bodyOp : *op.getBody()) {
+    if (isa<CellsOp>(bodyOp))
+      ++numCells;
+    else if (isa<WiresOp>(bodyOp))
+      ++numWires;
+    else if (isa<ControlOp>(bodyOp))
+      ++numControl;
+  }
+  if (numCells == 1 && numWires == 1 && numControl == 1)
+    return success();
+
+  return op.emitOpError()
+         << "Requires exactly one of each: "
+            "\"calyx.cells\", \"calyx.wires\", \"calyx.control\".";
+}
+
+//===----------------------------------------------------------------------===//
+// CellsOp
+//===----------------------------------------------------------------------===//
+static ParseResult parseCellsOp(OpAsmParser &parser, OperationState &result) {
+  auto *body = result.addRegion();
+  if (parser.parseRegion(*body, {}, {}))
+    return failure();
+
+  if (body->empty())
+    body->push_back(new Block());
+
+  return success();
+}
+
+static void printCellsOp(OpAsmPrinter &p, CellsOp &op) {
+  p << "cells";
+  p.printRegion(op.body(), /*printBlockTerminators=*/false,
+                /*printEmptyBlock=*/false);
+}
+
+//===----------------------------------------------------------------------===//
+// WiresOp
+//===----------------------------------------------------------------------===//
+static ParseResult parseWiresOp(OpAsmParser &parser, OperationState &result) {
+  auto *body = result.addRegion();
+  if (parser.parseRegion(*body, {}, {}))
+    return failure();
+
+  if (body->empty())
+    body->push_back(new Block());
+
+  return success();
+}
+
+static void printWiresOp(OpAsmPrinter &p, WiresOp &op) {
+  p << "wires";
+  p.printRegion(op.body(), /*printBlockTerminators=*/false,
+                /*printEmptyBlock=*/false);
+}
+
+//===----------------------------------------------------------------------===//
+// ControlOp
+//===----------------------------------------------------------------------===//
+static ParseResult parseControlOp(OpAsmParser &parser, OperationState &result) {
+  auto *body = result.addRegion();
+  if (parser.parseRegion(*body, {}, {}))
+    return failure();
+
+  if (body->empty())
+    body->push_back(new Block());
+
+  return success();
+}
+
+static void printControlOp(OpAsmPrinter &p, ControlOp &op) {
+  p << "control";
+  p.printRegion(op.body(), /*printBlockTerminators=*/false,
+                /*printEmptyBlock=*/false);
+}
+
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
