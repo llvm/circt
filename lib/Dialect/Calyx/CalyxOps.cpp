@@ -30,7 +30,9 @@ using namespace mlir;
 // ComponentOp
 //===----------------------------------------------------------------------===//
 
-/// Prints the port definitions of a Calyx component signature.
+/// Prints the port definitions of a Calyx component signature. The port
+/// definitions are defined in the following manner:
+/// <port-name> : <bit-width>
 static void printPortDefList(OpAsmPrinter &p, ArrayRef<Type> portDefTypes,
                              ArrayAttr portDefNames) {
   p << '(';
@@ -68,8 +70,8 @@ static void printComponentOp(OpAsmPrinter &p, ComponentOp &op) {
   auto outputPortNames = op->getAttrOfType<ArrayAttr>("outPortNames");
   printPortDefList(p, outputPortTypes, outputPortNames);
 
-  p.printRegion(op.body(), /*printBlockTerminators=*/true,
-                /*printEmptyBlock=*/true);
+  p.printRegion(op.body(), /*printBlockTerminators=*/false,
+                /*printEmptyBlock=*/false);
 }
 
 /// Parses the ports of a Calyx component signature, and adds the corresponding
@@ -94,7 +96,7 @@ parsePortDefList(MLIRContext *context, OperationState &result,
   } while (succeeded(parser.parseOptionalComma()));
 
   // Add attribute for port names; these are currently
-  // just inferred from the `OperandType` struct.
+  // just inferred from the arguments of the component.
   SmallVector<Attribute> portNames(ports.size());
   llvm::transform(ports, portNames.begin(), [&](auto port) -> StringAttr {
     return StringAttr::get(context, port.name);
@@ -142,10 +144,16 @@ static ParseResult parseComponentOp(OpAsmParser &parser,
   auto type = builder.getFunctionType(inPortTypes, outPortTypes);
   result.addAttribute(ComponentOp::getTypeAttrName(), TypeAttr::get(type));
 
-  // Entry block needs to have same number of input
-  // port definitions as the component.
+  // The entry block needs to have same number of
+  // input port definitions as the component.
   auto *body = result.addRegion();
-  return parser.parseRegion(*body, inPorts, inPortTypes);
+  if (parser.parseRegion(*body, inPorts, inPortTypes))
+    return failure();
+
+  if (body->empty())
+    body->push_back(new Block());
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

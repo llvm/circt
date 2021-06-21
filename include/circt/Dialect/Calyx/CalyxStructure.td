@@ -14,8 +14,7 @@ def ComponentOp : CalyxOp<"component", [
     Symbol,
     FunctionLike,
     IsolatedFromAbove,
-    // TODO(Calyx): Need to somehow define the output ports.
-    //              Use SingleBlockImplicitTerminator<>?
+    // TODO(Calyx): Need to eventually expose the output ports.
     NoTerminator,
     SingleBlock
   ]> {
@@ -25,9 +24,9 @@ def ComponentOp : CalyxOp<"component", [
     Calyx component containing:
     (1) In- and output port definitions
         that define the interface.
-    (2) Cells, wires, and control.
-    ```
-      component @MyComponent(in1: 32) -> (out1: 32) {
+    (2) The cells, wires, and control schedule.
+    ```mlir
+      component MyComponent(in1: 32) -> (out1: 32) {
         cells { ... }
         wires { ... }
         control { ... }
@@ -37,8 +36,8 @@ def ComponentOp : CalyxOp<"component", [
 
   // TODO(Calyx): Allow explicit port naming?
   let arguments = (ins);
-
   let results = (outs);
+
   let regions = (region SizedRegion<1>: $body);
 
   let extraClassDeclaration = [{
