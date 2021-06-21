@@ -146,16 +146,14 @@ struct GlobalFIRParserState {
   class BacktraceState {
   public:
     explicit BacktraceState(GlobalFIRParserState &state)
-        : state(state), curToken(state.curToken),
-          cursor(state.lex.getCursor()) {}
+        : curToken(state.curToken), cursor(state.lex.getCursor()) {}
 
-    void backtrack() {
+    void backtrack(GlobalFIRParserState &state) {
       state.curToken = curToken;
       cursor.restore(state.lex);
     }
 
   private:
-    GlobalFIRParserState &state;
     FIRToken curToken;
     FIRLexerCursor cursor;
   };
@@ -2858,12 +2856,17 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
 namespace {
 /// This class implements logic and state for parsing module bodies.
 struct FIRModuleParser : public FIRScopedParser {
-  explicit FIRModuleParser(GlobalFIRParserState &state)
+  explicit FIRModuleParser(GlobalFIRParserState &state, FModuleOp moduleOp)
       : FIRScopedParser(state, symbolTable, unbundledValueList,
                         memoryScopeTable),
-        firstScope(symbolTable), firstMemoryScope(memoryScopeTable) {}
+        moduleOp(moduleOp), firstScope(symbolTable),
+        firstMemoryScope(memoryScopeTable) {}
+
+  // Parse the body of this module.
+  ParseResult parseBody(ArrayRef<SMLoc> portLocs, unsigned indent);
 
 private:
+  FModuleOp moduleOp;
   SymbolTable symbolTable;
   SymbolTable::ScopeTy firstScope;
 
@@ -2874,6 +2877,28 @@ private:
 };
 
 } // end anonymous namespace
+
+// Parse the body of this module.
+ParseResult FIRModuleParser::parseBody(ArrayRef<SMLoc> portLocs,
+                                       unsigned indent) {
+  auto portList = getModulePortInfo(moduleOp);
+
+  // Install all of the ports into the symbol table, associated with their
+  // block arguments.
+  auto argIt = moduleOp.args_begin();
+  for (auto portAndLoc : llvm::zip(portList, portLocs)) {
+    ModulePortInfo &port = std::get<0>(portAndLoc);
+    if (addSymbolEntry(port.getName(), *argIt, std::get<1>(portAndLoc)))
+      return failure();
+    ++argIt;
+  }
+
+  FIRModuleContext moduleContext;
+  FIRStmtParser stmtParser(*moduleOp.getBodyBlock(), *this, moduleContext);
+
+  // Parse the moduleBlock.
+  return stmtParser.parseSimpleStmtBlock(indent);
+}
 
 //===----------------------------------------------------------------------===//
 // FIRCircuitParser
@@ -2893,8 +2918,18 @@ private:
 
   ParseResult parsePortList(SmallVectorImpl<ModulePortInfo> &resultPorts,
                             SmallVectorImpl<SMLoc> &resultPortLocs,
-                            Location defaultLoc, unsigned indent);
+                            Location defaultLoc, StringRef moduleTarget,
+                            unsigned indent);
 
+  struct DeferredModuleToParse {
+    FModuleOp moduleOp;
+    SmallVector<SMLoc> portLocs;
+    GlobalFIRParserState::BacktraceState parserState;
+    std::string moduleTarget;
+    unsigned indent;
+  };
+
+  std::vector<DeferredModuleToParse> deferredModules;
   ModuleOp mlirModule;
 };
 
@@ -2910,7 +2945,8 @@ private:
 ParseResult
 FIRCircuitParser::parsePortList(SmallVectorImpl<ModulePortInfo> &resultPorts,
                                 SmallVectorImpl<SMLoc> &resultPortLocs,
-                                Location defaultLoc, unsigned indent) {
+                                Location defaultLoc, StringRef moduleTarget,
+                                unsigned indent) {
   // Parse any ports.
   while (getToken().isAny(FIRToken::kw_input, FIRToken::kw_output) &&
          // Must be nested under the module.
@@ -2928,7 +2964,7 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<ModulePortInfo> &resultPorts,
     // If we have something that isn't a keyword then this must be an
     // identifier, not an input/output marker.
     if (!getToken().is(FIRToken::identifier) && !getToken().isKeyword()) {
-      backtrackState.backtrack();
+      backtrackState.backtrack(getState());
       break;
     }
 
@@ -2948,7 +2984,7 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<ModulePortInfo> &resultPorts,
     info.setDefaultLoc(defaultLoc);
 
     AnnotationSet annotations(
-        getAnnotations(getModuleTarget() + ">" + name.getValue()));
+        getAnnotations(moduleTarget + ">" + name.getValue()));
 
     resultPorts.push_back(
         {name, type, direction::get(isOutput), info.getLoc(), annotations});
@@ -2974,26 +3010,25 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, unsigned indent) {
   consumeToken();
   StringAttr name;
   SmallVector<ModulePortInfo, 8> portList;
-  SmallVector<SMLoc, 8> portListLocs;
+  SmallVector<SMLoc> portLocs;
 
   LocWithInfo info(getToken().getLoc(), this);
   if (parseId(name, "expected module name"))
     return failure();
 
   auto moduleTarget = (getState().circuitTarget + "|" + name.getValue()).str();
-  getState().moduleTarget = moduleTarget;
   ArrayAttr annotations = getAnnotations(moduleTarget);
 
   if (parseToken(FIRToken::colon, "expected ':' in module definition") ||
       info.parseOptionalInfo() ||
-      parsePortList(portList, portListLocs, info.getLoc(), indent))
+      parsePortList(portList, portLocs, info.getLoc(), moduleTarget, indent))
     return failure();
 
   auto builder = circuit.getBodyBuilder();
 
   // Check for port name collisions.
   SmallDenseMap<Attribute, SMLoc> portIds;
-  for (auto portAndLoc : llvm::zip(portList, portListLocs)) {
+  for (auto portAndLoc : llvm::zip(portList, portLocs)) {
     ModulePortInfo &port = std::get<0>(portAndLoc);
     auto &entry = portIds[port.name];
     if (!entry.isValid()) {
@@ -3010,30 +3045,35 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, unsigned indent) {
 
   // If this is a normal module, parse the body into an FModuleOp.
   if (!isExtModule) {
-    auto fmodule =
+    auto moduleOp =
         builder.create<FModuleOp>(info.getLoc(), name, portList, annotations);
 
-    FIRModuleParser moduleState(getState());
+    // Parse the body of this module after all prototypes have been parsed. This
+    // allows us to handle forward references correctly.
+    deferredModules.push_back({moduleOp, portLocs,
+                               getState().getBacktrackState(),
+                               std::move(moduleTarget), indent});
 
-    portList = getModulePortInfo(fmodule);
+    // We're going to defer parsing this module, so just skip tokens until we
+    // get to the next module or the end of the file.
+    while (true) {
+      switch (getToken().getKind()) {
 
-    // Install all of the ports into the symbol table, associated with their
-    // block arguments.
-    auto argIt = fmodule.args_begin();
-    for (auto portAndLoc : llvm::zip(portList, portListLocs)) {
-      ModulePortInfo &port = std::get<0>(portAndLoc);
-      if (moduleState.addSymbolEntry(port.getName(), *argIt,
-                                     std::get<1>(portAndLoc)))
-        return failure();
-      ++argIt;
+      // End of file or invalid token will be handled by outer level.
+      case FIRToken::eof:
+      case FIRToken::error:
+        return success();
+
+        // If we got to the next module, then we're done.
+      case FIRToken::kw_module:
+      case FIRToken::kw_extmodule:
+        return success();
+
+      default:
+        consumeToken();
+        break;
+      }
     }
-
-    FIRModuleContext moduleContext;
-    FIRStmtParser stmtParser(*fmodule.getBodyBlock(), moduleState,
-                             moduleContext);
-
-    // Parse the moduleBlock.
-    return stmtParser.parseSimpleStmtBlock(indent);
   }
 
   // Otherwise, handle extmodule specific features like parameters.
@@ -3165,13 +3205,14 @@ ParseResult FIRCircuitParser::parseCircuit() {
 
   // Create the top-level circuit op in the MLIR module.
   auto circuit = b.create<CircuitOp>(info.getLoc(), name, annotations);
+  deferredModules.reserve(16);
 
   // Parse any contained modules.
   while (true) {
     switch (getToken().getKind()) {
     // If we got to the end of the file, then we're done.
     case FIRToken::eof:
-      return success();
+      goto DoneParsing;
 
     // If we got an error token, then the lexer already emitted an error,
     // just stop.  We could introduce error recovery if there was demand for
@@ -3199,6 +3240,25 @@ ParseResult FIRCircuitParser::parseCircuit() {
     }
     }
   }
+
+DoneParsing:
+
+  // Now that we've parsed all the prototypes and created all the module ops,
+  // go ahead and parse all their bodies.
+  for (DeferredModuleToParse deferredModule : deferredModules) {
+    FIRModuleParser moduleState(getState(), deferredModule.moduleOp);
+
+    // FIXME: move to FIRModuleContext
+    getState().moduleTarget = deferredModule.moduleTarget;
+
+    // Reset the parser state to the body of the module.
+    deferredModule.parserState.backtrack(getState());
+
+    // Parse the body into the preallocated module op.
+    if (moduleState.parseBody(deferredModule.portLocs, deferredModule.indent))
+      return failure();
+  }
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
