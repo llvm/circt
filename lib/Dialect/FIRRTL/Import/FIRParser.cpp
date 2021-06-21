@@ -130,9 +130,6 @@ struct GlobalFIRParserState {
   /// A mutable reference to the current CircuitTarget.
   StringRef circuitTarget;
 
-  /// A mutable reference to the current ModuleTarget.
-  StringRef moduleTarget;
-
   /// Cached annotation for DontTouch.
   DictionaryAttr dontTouchAnnotation;
 
@@ -346,9 +343,6 @@ struct FIRParser {
   bool hasDontTouch(ArrayAttr annotations) {
     return hasAnnotation(annotations, state.dontTouchAnnotation);
   }
-
-  /// Return the current modulet target, e.g., "~Foo|Bar".
-  StringRef getModuleTarget() { return getState().moduleTarget; }
 
 private:
   FIRParser(const FIRParser &) = delete;
@@ -1105,6 +1099,9 @@ namespace {
 /// This struct provides context information that is global to the module we're
 /// currently parsing into.
 struct FIRModuleContext {
+  /// This is the module target used by annotations referring to this module.
+  std::string moduleTarget;
+
   // The expression-oriented nature of firrtl syntax produces tons of constant
   // nodes which are obviously redundant.  Instead of literally producing them
   // in the parser, do an implicit CSE to reduce parse time and silliness in the
@@ -1232,6 +1229,9 @@ struct FIRStmtParser : public FIRScopedParser {
   ParseResult parseSimpleStmtBlock(unsigned indent);
 
 private:
+  /// Return the current modulet target, e.g., "~Foo|Bar".
+  StringRef getModuleTarget() { return moduleContext.moduleTarget; }
+
   ParseResult parseSimpleStmtImpl(unsigned stmtIndent);
 
   /// Return the input operand if it has passive type, otherwise convert to
@@ -2863,10 +2863,12 @@ struct FIRModuleParser : public FIRScopedParser {
         firstMemoryScope(memoryScopeTable) {}
 
   // Parse the body of this module.
-  ParseResult parseBody(ArrayRef<SMLoc> portLocs, unsigned indent);
+  ParseResult parseBody(ArrayRef<SMLoc> portLocs, std::string moduleTarget,
+                        unsigned indent);
 
 private:
   FModuleOp moduleOp;
+
   SymbolTable symbolTable;
   SymbolTable::ScopeTy firstScope;
 
@@ -2880,6 +2882,7 @@ private:
 
 // Parse the body of this module.
 ParseResult FIRModuleParser::parseBody(ArrayRef<SMLoc> portLocs,
+                                       std::string moduleTarget,
                                        unsigned indent) {
   auto portList = getModulePortInfo(moduleOp);
 
@@ -2894,6 +2897,7 @@ ParseResult FIRModuleParser::parseBody(ArrayRef<SMLoc> portLocs,
   }
 
   FIRModuleContext moduleContext;
+  moduleContext.moduleTarget = std::move(moduleTarget);
   FIRStmtParser stmtParser(*moduleOp.getBodyBlock(), *this, moduleContext);
 
   // Parse the moduleBlock.
@@ -3248,14 +3252,13 @@ DoneParsing:
   for (DeferredModuleToParse deferredModule : deferredModules) {
     FIRModuleParser moduleState(getState(), deferredModule.moduleOp);
 
-    // FIXME: move to FIRModuleContext
-    getState().moduleTarget = deferredModule.moduleTarget;
-
     // Reset the parser state to the body of the module.
     deferredModule.parserState.backtrack(getState());
 
     // Parse the body into the preallocated module op.
-    if (moduleState.parseBody(deferredModule.portLocs, deferredModule.indent))
+    if (moduleState.parseBody(deferredModule.portLocs,
+                              std::move(deferredModule.moduleTarget),
+                              deferredModule.indent))
       return failure();
   }
   return success();
