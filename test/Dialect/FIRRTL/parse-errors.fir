@@ -235,3 +235,4 @@ circuit Issue886:
     input a: UInt<1>
     input b: UInt<42>
     node n = validif(a, b, b)  ; expected-error {{operation requires two operands}}
+
