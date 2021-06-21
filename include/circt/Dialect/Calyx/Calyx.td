@@ -28,6 +28,8 @@ def CalyxDialect : Dialect {
     [documentation](https://capra.cs.cornell.edu/calyx/).
   }];
   let extraClassDeclaration = [{
+    /// Register all Calyx types.
+    void registerTypes();
     /// Register all Calyx attributes.
     void registerAttributes();
   }];
@@ -38,14 +40,6 @@ def CalyxDialect : Dialect {
 class CalyxOp<string mnemonic, list<OpTrait> traits = []> :
     Op<CalyxDialect, mnemonic, traits>;
 
-/// Base class for the attributes in this dialect.
-class CalyxAttr<string name, list<Trait> traits = [],
-                string baseCppClass = "::mlir::Attribute">
-  : AttrDef<CalyxDialect, name, traits, baseCppClass> {
-  let mnemonic = ?;
-}
-
-include "circt/Dialect/Calyx/CalyxAttributes.td"
 include "circt/Dialect/Calyx/CalyxStructure.td"
 
 #endif // CALYX_TD

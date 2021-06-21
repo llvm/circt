@@ -5,7 +5,6 @@
 ##===----------------------------------------------------------------------===//
 
 set(srcs
-  CalyxAttributes.cpp
   CalyxDialect.cpp
   CalyxOps.cpp
   )
@@ -22,8 +21,8 @@ set(Calyx_LinkLibs
 
 set(Calyx_Deps
   ${Calyx_LinkLibs}
-  MLIRCalyxAttrsIncGen
   MLIRCalyxEnumsIncGen
+  MLIRCalyxAttrsIncGen
   )
 
 add_circt_dialect_library(CIRCTCalyx

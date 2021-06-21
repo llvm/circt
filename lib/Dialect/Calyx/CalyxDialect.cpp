@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Calyx/CalyxDialect.h"
-#include "circt/Dialect/Calyx/CalyxAttributes.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -25,8 +24,6 @@ using namespace circt::calyx;
 //===----------------------------------------------------------------------===//
 
 void CalyxDialect::initialize() {
-  registerAttributes();
-
   // Register operations.
   addOperations<
 #define GET_OP_LIST
@@ -34,5 +31,6 @@ void CalyxDialect::initialize() {
       >();
 }
 
-// Provide implementations for the enums we use.
+// Provide implementations for the enums and attributes we use.
 #include "circt/Dialect/Calyx/CalyxEnums.cpp.inc"
+#include "circt/Dialect/Calyx/CalyxAttrs.cpp.inc"
