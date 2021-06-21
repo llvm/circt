@@ -83,13 +83,3 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[1]"}]]
   module Foo:
     ; expected-error @+1 {{unexpected annotation target [1]}}
     inst bar of Bar
-
-; // -----
-
-; COM: Invalid port reference should report errors
-circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.c"}]]
-  module Bar:
-    input a: UInt<1>
-  module Foo:
-    ; expected-error @+1 {{unexpected annotation target .c}}
-    inst bar of Bar

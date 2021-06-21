@@ -950,35 +950,24 @@ static void print(OpAsmPrinter &p, InstanceOp op) {
 }
 
 DictionaryAttr InstanceOp::getPortAnnotation(unsigned portIdx) {
-  if (portIdx >= getNumResults())
-    return emitOpError("invalid result index"), nullptr;
+  assert(portIdx >= getNumResults() && "index is larger than result number");
 
   if (auto attr = (*this)->getAttrOfType<ArrayAttr>("portAnnotations"))
     return attr[portIdx].cast<DictionaryAttr>();
   return nullptr;
 }
 
-bool InstanceOp::setPortAnnotation(unsigned portIdx,
+void InstanceOp::setPortAnnotation(unsigned portIdx,
                                    DictionaryAttr annotation) {
-  if (portIdx >= getNumResults())
-    return emitOpError("invalid result index"), false;
+  assert(portIdx >= getNumResults() && "index is larger than result number");
 
   mlir::function_like_impl::detail::setArgResAttrDict(
       (*this), "portAnnotations", getNumResults(), portIdx, annotation);
-  return true;
 }
 
-bool InstanceOp::setPortAnnotation(StringRef portName,
-                                   DictionaryAttr annotation) {
-  auto module = getReferencedModule();
-  auto moduleNames = getModulePortNames(module);
-  unsigned portIdx =
-      llvm::find(moduleNames, StringAttr::get(getContext(), portName)) -
-      moduleNames.begin();
-
-  if (portIdx == moduleNames.size())
-    return false;
-  return setPortAnnotation(portIdx, annotation);
+void InstanceOp::setAllPortAnnotations(ArrayRef<Attribute> annotations) {
+  (*this)->setAttr("portAnnotations",
+                   ArrayAttr::get(getContext(), annotations));
 }
 
 /// Verify the correctness of an InstanceOp.

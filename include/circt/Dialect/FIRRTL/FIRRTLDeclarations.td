@@ -53,8 +53,8 @@ def InstanceOp : FIRRTLOp<"instance"> {
 
     /// Hooks for port annotations.
     DictionaryAttr getPortAnnotation(unsigned portIdx);
-    bool setPortAnnotation(unsigned portIdx, DictionaryAttr annotation);
-    bool setPortAnnotation(StringRef portName, DictionaryAttr annotation);
+    void setPortAnnotation(unsigned portIdx, DictionaryAttr annotation);
+    void setAllPortAnnotations(ArrayRef<Attribute> annotations);
   }];
 }
 
