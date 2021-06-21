@@ -31,7 +31,7 @@ def InstanceOp : FIRRTLOp<"instance"> {
                    "::mlir::StringRef":$moduleName,
                    CArg<"StringRef", "{}">:$name,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
-                   CArg<"ArrayRef<Attribute>", "{}">:$resultAnnotations)>,
+                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations)>,
 
     /// Constructor that creates a version of the specified instance, but that
     /// erases some number of results from it.
@@ -51,6 +51,11 @@ def InstanceOp : FIRRTLOp<"instance"> {
     StringRef getPortNameStr(size_t resultNo) {
       return getPortName(resultNo).getValue();
     }
+
+    /// Hooks for port annotations.
+    DictionaryAttr getPortAnnotation(unsigned portIdx);
+    void setPortAnnotation(unsigned portIdx, DictionaryAttr annotation);
+    void setPortAnnotation(StringRef portName, DictionaryAttr annotation);
   }];
 }
 

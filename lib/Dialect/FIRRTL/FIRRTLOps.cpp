@@ -839,17 +839,16 @@ Operation *InstanceOp::getReferencedModule() {
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        TypeRange resultTypes, StringRef moduleName,
                        StringRef name, ArrayRef<Attribute> annotations,
-                       ArrayRef<Attribute> resultAnnotations) {
+                       ArrayRef<Attribute> portAnnotations) {
   result.addAttribute("moduleName", builder.getSymbolRefAttr(moduleName));
   result.addAttribute("name", builder.getStringAttr(name));
   result.addAttribute("annotations", builder.getArrayAttr(annotations));
   result.addTypes(resultTypes);
 
-  if (resultAnnotations.empty())
+  if (portAnnotations.empty())
     return;
-  assert(resultAnnotations.size() == resultTypes.size());
-  result.addAttribute("resultAnnotations",
-                      builder.getArrayAttr(resultAnnotations));
+  assert(portAnnotations.size() == resultTypes.size());
+  result.addAttribute("portAnnotations", builder.getArrayAttr(portAnnotations));
 }
 
 /// Create a copy of the specified instance operation with some result removed.
@@ -865,6 +864,42 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
 
   build(builder, result, newResultTypes, existingInstance->getOperands(),
         existingInstance->getAttrs());
+}
+
+DictionaryAttr InstanceOp::getPortAnnotation(unsigned portIdx) {
+  if (portIdx >= getNumResults())
+    return emitOpError("invalid result index"), nullptr;
+
+  if (auto attr = (*this)->getAttrOfType<ArrayAttr>("portAnnotations"))
+    return attr[portIdx].cast<DictionaryAttr>();
+  return nullptr;
+}
+
+void InstanceOp::setPortAnnotation(unsigned portIdx,
+                                   DictionaryAttr annotation) {
+  if (portIdx >= getNumResults()) {
+    emitOpError("invalid result index");
+    return;
+  }
+
+  mlir::function_like_impl::detail::setArgResAttrDict(
+      (*this), "portAnnotations", getNumResults(), portIdx, annotation);
+}
+
+void InstanceOp::setPortAnnotation(StringRef portName,
+                                   DictionaryAttr annotation) {
+  auto module = getReferencedModule();
+  auto moduleNames = getModulePortNames(module);
+  unsigned portIdx =
+      llvm::find(moduleNames, StringAttr::get(getContext(), portName)) -
+      moduleNames.begin();
+
+  if (portIdx == moduleNames.size()) {
+    emitOpError("invalid result name " + portName);
+    return;
+  }
+
+  setPortAnnotation(portIdx, annotation);
 }
 
 /// Verify the correctness of an InstanceOp.
@@ -919,7 +954,10 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
     }
   }
 
-  if (auto attr = instance->getAttrOfType<ArrayAttr>("resultAnnotations")) {
+  if (auto attr = instance->getAttrOfType<ArrayAttr>("portAnnotations")) {
+    if (!llvm::all_of(attr,
+                      [&](Attribute a) { return a.isa<DictionaryAttr>(); }))
+      return instance.emitOpError("result annotations must be DictionaryAttr");
     if (attr.size() != instance.getNumResults())
       return instance.emitOpError("the number of result annotations should be "
                                   "equal to the number of results");

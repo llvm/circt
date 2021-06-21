@@ -2334,8 +2334,39 @@ ParseResult FIRStmtParser::parseInstance() {
   ArrayAttr annotations = getAnnotations(getModuleTarget() + ">" + id);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
-  auto result =
-      builder.create<InstanceOp>(resultTypes, moduleName, name, annotations);
+  auto result = builder.create<InstanceOp>(resultTypes, moduleName, name);
+
+  SmallVector<Attribute, 16> AnnotationsVec;
+  for (auto attr : annotations) {
+    auto dictAttr = attr.cast<DictionaryAttr>();
+    auto targetAttr = dictAttr.get("target");
+    if (!targetAttr) {
+      AnnotationsVec.push_back(attr);
+      continue;
+    }
+
+    auto targetAttrValue = targetAttr.cast<ArrayAttr>().getValue();
+    auto portName = targetAttrValue[0].cast<StringAttr>().getValue();
+    if (portName.front() != '.')
+      emitError(startTok.getLoc(), "unexpected annotation target");
+
+    SmallVector<NamedAttribute, 8> dictAttrVec;
+    for (auto namedAttr : dictAttr) {
+      if (namedAttr.first == "target") {
+        if (targetAttrValue.size() > 1) {
+          auto newTargetAttr =
+              builder.getArrayAttr(targetAttrValue.drop_front());
+          dictAttrVec.push_back(builder.getNamedAttr("target", newTargetAttr));
+        }
+      } else
+        dictAttrVec.push_back(namedAttr);
+    }
+
+    result.setPortAnnotation(portName.drop_front(),
+                             builder.getDictionaryAttr(dictAttrVec));
+  }
+
+  result->setAttr("annotations", builder.getArrayAttr(AnnotationsVec));
 
   // Since we are implicitly unbundling the instance results, we need to keep
   // track of the mapping from bundle fields to results in the unbundledValues
