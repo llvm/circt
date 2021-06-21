@@ -21,9 +21,8 @@ def InstanceOp : FIRRTLOp<"instance"> {
                        AnnotationArrayAttr:$annotations);
   let results = (outs Variadic<FIRRTLType>:$results);
 
-  let assemblyFormat =
-    "$moduleName custom<InstanceOp>(attr-dict) (`:` type($results)^ )?";
-
+  let printer = "return ::print(p, *this);";
+  let parser = "return ::parse$cppClass(parser, result);";
   let verifier = "return ::verifyInstanceOp(*this);";
 
   let builders = [

@@ -92,7 +92,7 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},{"two":null,"target":"~Fo
 
     ; CHECK-LABEL: module {
     ; CHECK: %bar_a, %bar_b = firrtl.instance @Bar
-    ; CHECK-SAME: portAnnotations = [{one}, {target = [".baz"], two}]
+    ; CHECK-SAME: !firrtl.flip<uint<1>> {one}, !firrtl.bundle<baz: uint<1>, qux: uint<1>> {target = [".baz"], two}
 
 ; // -----
 
