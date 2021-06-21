@@ -958,18 +958,17 @@ DictionaryAttr InstanceOp::getPortAnnotation(unsigned portIdx) {
   return nullptr;
 }
 
-void InstanceOp::setPortAnnotation(unsigned portIdx,
+bool InstanceOp::setPortAnnotation(unsigned portIdx,
                                    DictionaryAttr annotation) {
-  if (portIdx >= getNumResults()) {
-    emitOpError("invalid result index");
-    return;
-  }
+  if (portIdx >= getNumResults())
+    return emitOpError("invalid result index"), false;
 
   mlir::function_like_impl::detail::setArgResAttrDict(
       (*this), "portAnnotations", getNumResults(), portIdx, annotation);
+  return true;
 }
 
-void InstanceOp::setPortAnnotation(StringRef portName,
+bool InstanceOp::setPortAnnotation(StringRef portName,
                                    DictionaryAttr annotation) {
   auto module = getReferencedModule();
   auto moduleNames = getModulePortNames(module);
@@ -977,12 +976,9 @@ void InstanceOp::setPortAnnotation(StringRef portName,
       llvm::find(moduleNames, StringAttr::get(getContext(), portName)) -
       moduleNames.begin();
 
-  if (portIdx == moduleNames.size()) {
-    emitOpError("invalid result name " + portName);
-    return;
-  }
-
-  setPortAnnotation(portIdx, annotation);
+  if (portIdx == moduleNames.size())
+    return false;
+  return setPortAnnotation(portIdx, annotation);
 }
 
 /// Verify the correctness of an InstanceOp.

@@ -2350,8 +2350,10 @@ ParseResult FIRStmtParser::parseInstance() {
     // The first token of targetAttr should always begin with '.'.
     auto targetAttrValue = targetAttr.cast<ArrayAttr>().getValue();
     auto portName = targetAttrValue[0].cast<StringAttr>().getValue();
-    if (portName.front() != '.')
-      emitError(startTok.getLoc(), "unexpected annotation target");
+    if (portName.front() != '.') {
+      return emitError(startTok.getLoc(),
+                       "unexpected annotation target " + portName);
+    }
 
     // If there's more than one tokens, the remaining tokens should be stored as
     // target in the result annotation.
@@ -2367,8 +2369,10 @@ ParseResult FIRStmtParser::parseInstance() {
         dictAttrVec.push_back(namedAttr);
     }
 
-    result.setPortAnnotation(portName.drop_front(),
-                             builder.getDictionaryAttr(dictAttrVec));
+    if (!result.setPortAnnotation(portName.drop_front(),
+                                  builder.getDictionaryAttr(dictAttrVec)))
+      return emitError(startTok.getLoc(),
+                       "unexpected annotation target " + portName);
   }
 
   result->setAttr("annotations", builder.getArrayAttr(AnnotationsVec));
