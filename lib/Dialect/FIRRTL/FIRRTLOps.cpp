@@ -2355,23 +2355,6 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
 }
 
 //===----------------------------------------------------------------------===//
-// InstanceOp Custom attr-dict Directive
-//===----------------------------------------------------------------------===//
-
-// static ParseResult parseInstanceOp(OpAsmParser &parser,
-//                                    NamedAttrList &resultAttrs) {
-//   return parseElideAnnotations(parser, resultAttrs);
-// }
-
-// /// Always elide "moduleName" and elide "annotations" if it exists or
-// /// if it is empty.
-// static void printInstanceOp(OpAsmPrinter &p, Operation *op,
-//                             DictionaryAttr attr) {
-//   // "moduleName" is always elided
-//   printElideAnnotations(p, op, attr, {"moduleName"});
-// }
-
-//===----------------------------------------------------------------------===//
 // MemoryPortOp Custom attr-dict Directive
 //===----------------------------------------------------------------------===//
 

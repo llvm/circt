@@ -82,7 +82,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar
 
 ; // -----
 
-; COM: A ReferenceTarget/ComponentName pointing at an Instance should work.
+; COM: Test result annotations of InstanceOp.
 circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},{"two":null,"target":"~Foo|Foo>bar.b.baz"}]]
   module Bar:
     input a: UInt<1>
