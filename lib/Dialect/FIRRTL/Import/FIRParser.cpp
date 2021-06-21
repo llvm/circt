@@ -349,6 +349,9 @@ struct FIRParser {
     return hasAnnotation(annotations, state.dontTouchAnnotation);
   }
 
+  /// Return the current modulet target, e.g., "~Foo|Bar".
+  StringRef getModuleTarget() { return getState().moduleTarget; }
+
 private:
   FIRParser(const FIRParser &) = delete;
   void operator=(const FIRParser &) = delete;
@@ -1022,9 +1025,6 @@ public:
   /// we need to keep track of the scope (in the `symbolTable`) of each memory.
   /// This keeps track of this.
   MemoryScopeTable &memoryScopeTable;
-
-  /// Return the current modulet target, e.g., "~Foo|Bar".
-  StringRef getModuleTarget() { return getState().moduleTarget; }
 };
 } // end anonymous namespace
 
@@ -2858,20 +2858,12 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
 namespace {
 /// This class implements logic and state for parsing module bodies.
 struct FIRModuleParser : public FIRScopedParser {
-  explicit FIRModuleParser(GlobalFIRParserState &state, CircuitOp circuit)
+  explicit FIRModuleParser(GlobalFIRParserState &state)
       : FIRScopedParser(state, symbolTable, unbundledValueList,
                         memoryScopeTable),
-        circuit(circuit), firstScope(symbolTable),
-        firstMemoryScope(memoryScopeTable) {}
-
-  ParseResult parseModule(unsigned indent);
+        firstScope(symbolTable), firstMemoryScope(memoryScopeTable) {}
 
 private:
-  using PortInfoAndLoc = std::pair<ModulePortInfo, SMLoc>;
-  ParseResult parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
-                            Location defaultLoc, unsigned indent);
-
-  CircuitOp circuit;
   SymbolTable symbolTable;
   SymbolTable::ScopeTy firstScope;
 
@@ -2879,6 +2871,31 @@ private:
 
   MemoryScopeTable memoryScopeTable;
   MemoryScopeTable::ScopeTy firstMemoryScope;
+};
+
+} // end anonymous namespace
+
+//===----------------------------------------------------------------------===//
+// FIRCircuitParser
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// This class implements the outer level of the parser, including things
+/// like circuit and module.
+struct FIRCircuitParser : public FIRParser {
+  explicit FIRCircuitParser(GlobalFIRParserState &state, ModuleOp mlirModule)
+      : FIRParser(state), mlirModule(mlirModule) {}
+
+  ParseResult parseCircuit();
+
+private:
+  ParseResult parseModule(CircuitOp circuit, unsigned indent);
+
+  using PortInfoAndLoc = std::pair<ModulePortInfo, SMLoc>;
+  ParseResult parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
+                            Location defaultLoc, unsigned indent);
+
+  ModuleOp mlirModule;
 };
 
 } // end anonymous namespace
@@ -2891,8 +2908,8 @@ private:
 /// port.
 ///
 ParseResult
-FIRModuleParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
-                               Location defaultLoc, unsigned indent) {
+FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
+                                Location defaultLoc, unsigned indent) {
   // Parse any ports.
   while (getToken().isAny(FIRToken::kw_input, FIRToken::kw_output) &&
          // Must be nested under the module.
@@ -2951,7 +2968,7 @@ FIRModuleParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
 /// parameter ::= 'parameter' id '=' StringLit NEWLINE
 /// parameter ::= 'parameter' id '=' floatingpoint NEWLINE
 /// parameter ::= 'parameter' id '=' RawString NEWLINE
-ParseResult FIRModuleParser::parseModule(unsigned indent) {
+ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, unsigned indent) {
   bool isExtModule = getToken().is(FIRToken::kw_extmodule);
   consumeToken();
   StringAttr name;
@@ -2983,17 +3000,21 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
     auto fmodule =
         builder.create<FModuleOp>(info.getLoc(), name, portList, annotations);
 
+    FIRModuleParser moduleState(getState());
+
     // Install all of the ports into the symbol table, associated with their
     // block arguments.
     auto argIt = fmodule.args_begin();
     for (auto &entry : portListAndLoc) {
-      if (addSymbolEntry(entry.first.getName(), *argIt, entry.second))
+      if (moduleState.addSymbolEntry(entry.first.getName(), *argIt,
+                                     entry.second))
         return failure();
       ++argIt;
     }
 
     FIRModuleContext moduleContext;
-    FIRStmtParser stmtParser(*fmodule.getBodyBlock(), *this, moduleContext);
+    FIRStmtParser stmtParser(*fmodule.getBodyBlock(), moduleState,
+                             moduleContext);
 
     // Parse the moduleBlock.
     return stmtParser.parseSimpleStmtBlock(indent);
@@ -3001,12 +3022,20 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
 
   // Otherwise, handle extmodule specific features like parameters.
 
-  // Add all the ports to the symbol table even though there are no SSA values
-  // for arguments in an external module.  This detects multiple definitions
-  // of the same name.
-  for (auto &entry : portListAndLoc) {
-    if (addSymbolEntry(entry.first.getName(), Value(), entry.second))
-      return failure();
+  // Check for port name collisions.
+  SmallDenseMap<Attribute, SMLoc> portIds;
+  for (auto &portAndLoc : portListAndLoc) {
+    auto &entry = portIds[portAndLoc.first.name];
+    if (!entry.isValid()) {
+      entry = portAndLoc.second;
+      continue;
+    }
+
+    emitError(portAndLoc.second,
+              "redefinition of name '" + portAndLoc.first.getName() + "'")
+            .attachNote(translateLocation(entry))
+        << "previous definition here";
+    return failure();
   }
 
   // Parse a defname if present.
@@ -3076,25 +3105,6 @@ ParseResult FIRModuleParser::parseModule(unsigned indent) {
 
   return success();
 }
-
-//===----------------------------------------------------------------------===//
-// FIRCircuitParser
-//===----------------------------------------------------------------------===//
-
-namespace {
-/// This class implements the outer level of the parser, including things
-/// like circuit and module.
-struct FIRCircuitParser : public FIRParser {
-  explicit FIRCircuitParser(GlobalFIRParserState &state, ModuleOp mlirModule)
-      : FIRParser(state), mlirModule(mlirModule) {}
-
-  ParseResult parseCircuit();
-
-private:
-  ModuleOp mlirModule;
-};
-
-} // end anonymous namespace
 
 /// file ::= circuit
 /// circuit ::= 'circuit' id ':' info? INDENT module* DEDENT EOF
@@ -3183,7 +3193,7 @@ ParseResult FIRCircuitParser::parseCircuit() {
       if (moduleIndent <= circuitIndent)
         return emitError("module should be indented more"), failure();
 
-      if (FIRModuleParser(getState(), circuit).parseModule(moduleIndent))
+      if (parseModule(circuit, moduleIndent))
         return failure();
       break;
     }
