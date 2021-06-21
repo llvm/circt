@@ -2336,6 +2336,8 @@ ParseResult FIRStmtParser::parseInstance() {
 
   auto result = builder.create<InstanceOp>(resultTypes, moduleName, name);
 
+  // Annotations targeting results of instance ops should be attached through
+  // the setPortAnnotation hook.
   SmallVector<Attribute, 16> AnnotationsVec;
   for (auto attr : annotations) {
     auto dictAttr = attr.cast<DictionaryAttr>();
@@ -2345,11 +2347,14 @@ ParseResult FIRStmtParser::parseInstance() {
       continue;
     }
 
+    // The first token of targetAttr should always begin with '.'.
     auto targetAttrValue = targetAttr.cast<ArrayAttr>().getValue();
     auto portName = targetAttrValue[0].cast<StringAttr>().getValue();
     if (portName.front() != '.')
       emitError(startTok.getLoc(), "unexpected annotation target");
 
+    // If there's more than one tokens, the remaining tokens should be stored as
+    // target in the result annotation.
     SmallVector<NamedAttribute, 8> dictAttrVec;
     for (auto namedAttr : dictAttr) {
       if (namedAttr.first == "target") {
