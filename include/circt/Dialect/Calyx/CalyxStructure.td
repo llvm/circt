@@ -109,7 +109,6 @@ def WiresOp : CalyxOp<"wires", [
 }
 
 def ControlOp : CalyxOp<"control", [
-    IsolatedFromAbove,
     // TODO(Calyx): The terminator for the control flow
     // schedule should define that of the component.
     NoTerminator,
