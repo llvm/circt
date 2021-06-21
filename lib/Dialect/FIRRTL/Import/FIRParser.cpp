@@ -2891,8 +2891,8 @@ struct FIRCircuitParser : public FIRParser {
 private:
   ParseResult parseModule(CircuitOp circuit, unsigned indent);
 
-  using PortInfoAndLoc = std::pair<ModulePortInfo, SMLoc>;
-  ParseResult parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
+  ParseResult parsePortList(SmallVectorImpl<ModulePortInfo> &resultPorts,
+                            SmallVectorImpl<SMLoc> &resultPortLocs,
                             Location defaultLoc, unsigned indent);
 
   ModuleOp mlirModule;
@@ -2908,7 +2908,8 @@ private:
 /// port.
 ///
 ParseResult
-FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
+FIRCircuitParser::parsePortList(SmallVectorImpl<ModulePortInfo> &resultPorts,
+                                SmallVectorImpl<SMLoc> &resultPortLocs,
                                 Location defaultLoc, unsigned indent) {
   // Parse any ports.
   while (getToken().isAny(FIRToken::kw_input, FIRToken::kw_output) &&
@@ -2949,9 +2950,9 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfoAndLoc> &result,
     AnnotationSet annotations(
         getAnnotations(getModuleTarget() + ">" + name.getValue()));
 
-    result.push_back(
-        {{name, type, direction::get(isOutput), info.getLoc(), annotations},
-         info.getFIRLoc()});
+    resultPorts.push_back(
+        {name, type, direction::get(isOutput), info.getLoc(), annotations});
+    resultPortLocs.push_back(info.getFIRLoc());
   }
 
   return success();
@@ -2972,7 +2973,8 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, unsigned indent) {
   bool isExtModule = getToken().is(FIRToken::kw_extmodule);
   consumeToken();
   StringAttr name;
-  SmallVector<PortInfoAndLoc, 4> portListAndLoc;
+  SmallVector<ModulePortInfo, 8> portList;
+  SmallVector<SMLoc, 8> portListLocs;
 
   LocWithInfo info(getToken().getLoc(), this);
   if (parseId(name, "expected module name"))
@@ -2984,16 +2986,27 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, unsigned indent) {
 
   if (parseToken(FIRToken::colon, "expected ':' in module definition") ||
       info.parseOptionalInfo() ||
-      parsePortList(portListAndLoc, info.getLoc(), indent))
+      parsePortList(portList, portListLocs, info.getLoc(), indent))
     return failure();
 
   auto builder = circuit.getBodyBuilder();
 
-  // Create the module.
-  SmallVector<ModulePortInfo, 4> portList;
-  portList.reserve(portListAndLoc.size());
-  for (auto &elt : portListAndLoc)
-    portList.push_back(elt.first);
+  // Check for port name collisions.
+  SmallDenseMap<Attribute, SMLoc> portIds;
+  for (auto portAndLoc : llvm::zip(portList, portListLocs)) {
+    ModulePortInfo &port = std::get<0>(portAndLoc);
+    auto &entry = portIds[port.name];
+    if (!entry.isValid()) {
+      entry = std::get<1>(portAndLoc);
+      continue;
+    }
+
+    emitError(std::get<1>(portAndLoc),
+              "redefinition of name '" + port.getName() + "'")
+            .attachNote(translateLocation(entry))
+        << "previous definition here";
+    return failure();
+  }
 
   // If this is a normal module, parse the body into an FModuleOp.
   if (!isExtModule) {
@@ -3002,12 +3015,15 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, unsigned indent) {
 
     FIRModuleParser moduleState(getState());
 
+    portList = getModulePortInfo(fmodule);
+
     // Install all of the ports into the symbol table, associated with their
     // block arguments.
     auto argIt = fmodule.args_begin();
-    for (auto &entry : portListAndLoc) {
-      if (moduleState.addSymbolEntry(entry.first.getName(), *argIt,
-                                     entry.second))
+    for (auto portAndLoc : llvm::zip(portList, portListLocs)) {
+      ModulePortInfo &port = std::get<0>(portAndLoc);
+      if (moduleState.addSymbolEntry(port.getName(), *argIt,
+                                     std::get<1>(portAndLoc)))
         return failure();
       ++argIt;
     }
@@ -3021,22 +3037,6 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, unsigned indent) {
   }
 
   // Otherwise, handle extmodule specific features like parameters.
-
-  // Check for port name collisions.
-  SmallDenseMap<Attribute, SMLoc> portIds;
-  for (auto &portAndLoc : portListAndLoc) {
-    auto &entry = portIds[portAndLoc.first.name];
-    if (!entry.isValid()) {
-      entry = portAndLoc.second;
-      continue;
-    }
-
-    emitError(portAndLoc.second,
-              "redefinition of name '" + portAndLoc.first.getName() + "'")
-            .attachNote(translateLocation(entry))
-        << "previous definition here";
-    return failure();
-  }
 
   // Parse a defname if present.
   // TODO(firrtl spec): defname isn't documented at all, what is it?
