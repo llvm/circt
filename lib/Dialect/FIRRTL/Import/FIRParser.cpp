@@ -823,10 +823,8 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
               parseType(type, "expected bundle field type"))
             return failure();
 
-          if (isFlipped)
-            type = FlipType::get(type);
-
-          elements.push_back({StringAttr::get(getContext(), fieldName), type});
+          elements.push_back(
+              {StringAttr::get(getContext(), fieldName), isFlipped, type});
           return success();
         }))
       return failure();
@@ -1592,7 +1590,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
           return failure();
 
         locationProcessor.setLoc(loc);
-        operand = convertToPassive(operand);
+        // operand = convertToPassive(operand);
 
         operands.push_back(operand);
         return success();
@@ -2702,7 +2700,7 @@ ParseResult FIRStmtParser::parseNode() {
 
   // If the node type isn't passive (it contains an outer flip), then make it
   // passive.
-  initializer = convertToPassive(initializer);
+  // initializer = convertToPassive(initializer);
 
   ArrayAttr annotations = getAnnotations(getModuleTarget() + ">" + id);
 

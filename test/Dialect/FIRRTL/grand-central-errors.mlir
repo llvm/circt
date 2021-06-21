@@ -37,7 +37,7 @@ module  {
     firrtl.module @Foo(in %a: !firrtl.uint<1>) attributes {annotations = [{class = "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation", id = 0 : i64, type = "parent"}]} {
       // expected-error @+2 {{'firrtl.mem' op is marked as a an interface element}}
       // expected-note @+1 {{{class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "View", name = "some_mem", target = []}}}
-      %memory_b_r = firrtl.mem Undefined  {annotations = [{a}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "View", name = "some_mem", target = []}], depth = 16 : i64, name = "memory_b", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<uint<8>>>>
+      %memory_b_r = firrtl.mem Undefined  {annotations = [{a}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "View", name = "some_mem", target = []}], depth = 16 : i64, name = "memory_b", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>>
     }
   }
 }

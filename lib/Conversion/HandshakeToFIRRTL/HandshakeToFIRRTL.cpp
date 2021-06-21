@@ -85,14 +85,14 @@ static FIRRTLType getBundleType(Type type) {
   auto validId = StringAttr::get(context, "valid");
   auto readyId = StringAttr::get(context, "ready");
   auto signalType = UIntType::get(context, 1);
-  elements.push_back(BundleElement(validId, signalType));
-  elements.push_back(BundleElement(readyId, FlipType::get(signalType)));
+  elements.push_back(BundleElement(validId, false, signalType));
+  elements.push_back(BundleElement(readyId, true, signalType));
 
   // Add data subfield to the bundle if dataType is not a null.
   auto dataType = getFIRRTLType(type);
   if (dataType) {
     auto dataId = StringAttr::get(context, "data");
-    elements.push_back(BundleElement(dataId, dataType));
+    elements.push_back(BundleElement(dataId, false, dataType));
   }
 
   auto bundleType = BundleType::get(elements, context);

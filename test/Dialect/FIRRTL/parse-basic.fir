@@ -56,7 +56,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input s4: SInt<4>      ; CHECK: %s4: !firrtl.sint<4>,
     input u: UInt          ; CHECK: %u: !firrtl.uint,
     input bf: { flip int_1 : UInt<1>, int_out : UInt<2>}
-    ; CHECK: %bf: !firrtl.bundle<int_1: flip<uint<1>>, int_out: uint<2>>
+    ; CHECK: %bf: !firrtl.bundle<int_1 flip: uint<1>, int_out: uint<2>>
 
     input vec: UInt<1>[4] ; CHECK: %vec: !firrtl.vector<uint<1>, 4>) {
 
@@ -372,7 +372,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-SAME: readLatency = 0 : i32, writeLatency = 1 : i32} :
     ; CHECK-SAME: !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>,
     ; CHECK-SAME: !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>,
-    ; CHECK-SAME: !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: flip<bundle<id: uint<4>>>>
+    ; CHECK-SAME: !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: bundle<id: uint<4>>>
     mem _M : @[Decoupled.scala 209:24]
         data-type => { id : UInt<4> }
         depth => 8
@@ -418,13 +418,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     wire _t_6 : { flip b : { bits : { source : UInt<7> } } }
     node _t_8 = bits(_t_6.b.bits.source, 5, 0)
 
-    ; CHECK: %flip1 = firrtl.wire : !firrtl.bundle<x: flip<bundle<a: flip<uint>>>>
+    ; CHECK: %flip1 = firrtl.wire : !firrtl.bundle<x flip: bundle<a flip: uint>>
     wire flip1 : { flip x : { flip a : UInt } }
-    ; CHECK: %flip2 = firrtl.wire : !firrtl.bundle<x: flip<bundle<a: flip<uint>, b: analog>>>
+    ; CHECK: %flip2 = firrtl.wire : !firrtl.bundle<x flip: bundle<a flip: uint, b: analog>>
     wire flip2 : { flip x : { flip a : UInt, b: Analog } }
-    ; CHECK: %flip3 = firrtl.wire : !firrtl.bundle<x: flip<bundle<a: flip<uint>, b: analog>>>
+    ; CHECK: %flip3 = firrtl.wire : !firrtl.bundle<x flip: bundle<a flip: uint, b flip: analog>>
     wire flip3 : { flip x : { flip a : UInt, flip b: Analog } }
-    ; CHECK: %flip4 = firrtl.wire : !firrtl.bundle<x: flip<vector<bundle<a: flip<uint>>, 4>>>
+    ; CHECK: %flip4 = firrtl.wire : !firrtl.bundle<x flip: vector<bundle<a flip: uint>, 4>>
     wire flip4 : { flip x : { flip a : UInt }[4] }
 
 
@@ -580,7 +580,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       read-under-write => undefined
       ; CHECK: %bar_MPORT, %bar_io_deq_bits_MPORT = firrtl.mem Undefined {depth = 1 : i64, name = "bar", portNames = ["MPORT", "io_deq_bits_MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} :
       ; CHECK: !firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<3>, mask: uint<1>>>,
-      ; CHECK: !firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: flip<uint<3>>>>
+      ; CHECK: !firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<3>>>
 
   ; CHECK-LABEL: firrtl.module @mem_no_ports() {
   ; CHECK-NEXT: }
@@ -796,7 +796,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input rEn: UInt<1>
     output rData: UInt<8>
 
-    ; CHECK: %mem_r = firrtl.mem Undefined {depth = 16 : i64, name = "mem", portNames = ["r"], readLatency = 2 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<uint<8>>>>
+    ; CHECK: %mem_r = firrtl.mem Undefined {depth = 16 : i64, name = "mem", portNames = ["r"], readLatency = 2 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>>
     mem mem:
       data-type => UInt<8>
       depth => 16

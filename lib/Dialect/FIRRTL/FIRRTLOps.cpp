@@ -945,9 +945,10 @@ static LogicalResult verifyMemOp(MemOp mem) {
         return failure();
       }
       dataType = dataTypeOption.getValue().type;
-      // Read data is expected to have an outer flip, so strip that.
-      if (portKind == MemOp::PortKind::Read)
-        dataType = FlipType::get(dataType);
+      // Read data is expected to ba a flip.
+      if (portKind == MemOp::PortKind::Read) {
+        // FIXME error on missing bundle flip
+      }
     }
 
     // Error if the data type isn't passive.
@@ -1023,25 +1024,25 @@ BundleType MemOp::getTypeForPort(uint64_t depth, FIRRTLType dataType,
   auto addressType =
       UIntType::get(context, std::max(1U, llvm::Log2_64_Ceil(depth)));
 
-  portFields.push_back({getId("addr"), addressType});
-  portFields.push_back({getId("en"), UIntType::get(context, 1)});
-  portFields.push_back({getId("clk"), ClockType::get(context)});
+  portFields.push_back({getId("addr"), false, addressType});
+  portFields.push_back({getId("en"), false, UIntType::get(context, 1)});
+  portFields.push_back({getId("clk"), false, ClockType::get(context)});
 
   switch (portKind) {
   case PortKind::Read:
-    portFields.push_back({getId("data"), FlipType::get(dataType)});
+    portFields.push_back({getId("data"), true, dataType});
     break;
 
   case PortKind::Write:
-    portFields.push_back({getId("data"), dataType});
-    portFields.push_back({getId("mask"), dataType.getMaskType()});
+    portFields.push_back({getId("data"), false, dataType});
+    portFields.push_back({getId("mask"), false, dataType.getMaskType()});
     break;
 
   case PortKind::ReadWrite:
-    portFields.push_back({getId("wmode"), UIntType::get(context, 1)});
-    portFields.push_back({getId("rdata"), FlipType::get(dataType)});
-    portFields.push_back({getId("wdata"), dataType});
-    portFields.push_back({getId("wmask"), dataType.getMaskType()});
+    portFields.push_back({getId("wmode"), false, UIntType::get(context, 1)});
+    portFields.push_back({getId("rdata"), true, dataType});
+    portFields.push_back({getId("wdata"), false, dataType});
+    portFields.push_back({getId("wmask"), false, dataType.getMaskType()});
     break;
   }
 
@@ -1452,7 +1453,7 @@ bool SubfieldOp::isFieldFlipped() {
                     << a;
       return false;
     };
-    return b.getValue().type.isa<FlipType>();
+    return b.getValue().isFlip;
   };
 
   return TypeSwitch<Type, bool>(this->input().getType())

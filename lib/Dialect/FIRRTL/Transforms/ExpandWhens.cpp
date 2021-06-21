@@ -108,6 +108,9 @@ public:
       if (auto bundleType = type.dyn_cast<BundleType>()) {
         for (auto &element : bundleType.getElements()) {
           id++;
+          if (element.isFlip)
+          declare(element.type, swapFlow(flow));
+          else
           declare(element.type, flow);
         }
         return;

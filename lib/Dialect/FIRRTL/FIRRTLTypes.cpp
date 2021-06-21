@@ -57,7 +57,10 @@ void FIRRTLType::print(raw_ostream &os) const {
         os << "bundle<";
         llvm::interleaveComma(bundleType.getElements(), os,
                               [&](BundleType::BundleElement element) {
-                                os << element.name.getValue() << ": ";
+                                os << element.name.getValue();
+                                if (element.isFlip)
+                                  os << " flip";
+                                os << ": ";
                                 element.type.print(os);
                               });
         os << '>';
@@ -155,11 +158,13 @@ static ParseResult parseType(FIRRTLType &result, DialectAsmParser &parser) {
           return success();
         };
 
-        if (parseIntOrStringName() || parser.parseColon() ||
-            parseType(type, parser))
+        if (parseIntOrStringName())
+          return failure();
+        bool isFlip = succeeded(parser.parseOptionalKeyword("flip"));
+        if (parser.parseColon() || parseType(type, parser))
           return failure();
 
-        elements.push_back({StringAttr::get(context, name), type});
+        elements.push_back({StringAttr::get(context, name), isFlip, type});
       } while (!parser.parseOptionalComma());
 
       if (parser.parseGreater())
@@ -304,7 +309,8 @@ FIRRTLType FIRRTLType::getMaskType() {
         SmallVector<BundleType::BundleElement, 4> newElements;
         newElements.reserve(bundleType.getElements().size());
         for (auto elt : bundleType.getElements())
-          newElements.push_back({elt.name, elt.type.getMaskType()});
+          newElements.push_back(
+              {elt.name, false /* FIXME */, elt.type.getMaskType()});
         return BundleType::get(newElements, this->getContext());
       })
       .Case<FVectorType>([](FVectorType vectorType) {
@@ -331,7 +337,8 @@ FIRRTLType FIRRTLType::getWidthlessType() {
         SmallVector<BundleType::BundleElement, 4> newElements;
         newElements.reserve(a.getElements().size());
         for (auto elt : a.getElements())
-          newElements.push_back({elt.name, elt.type.getWidthlessType()});
+          newElements.push_back(
+              {elt.name, elt.isFlip, elt.type.getWidthlessType()});
         return BundleType::get(newElements, this->getContext());
       })
       .Case<FVectorType>([](auto a) {
@@ -482,10 +489,9 @@ bool firrtl::areTypesWeaklyEquivalent(FIRRTLType destType, FIRRTLType srcType,
           // If the src doesn't contain the destination's field, that's okay.
           if (!srcElt)
             return true;
-          auto a = destElt.type.stripFlip();
-          auto b = srcElt.getValue().type.stripFlip();
-          return areTypesWeaklyEquivalent(a.first, b.first, destFlip ^ a.second,
-                                          srcFlip ^ b.second);
+          return areTypesWeaklyEquivalent(destElt.type, srcElt.getValue().type,
+                                          destFlip ^ destElt.isFlip,
+                                          srcFlip ^ srcElt.getValue().isFlip);
         });
 
   // Ground types can be connected if their passive, widthless versions
@@ -664,7 +670,7 @@ struct BundleTypeStorage : mlir::TypeStorage {
     for (auto &element : elements) {
       auto type = element.type;
       auto eltInfo = type.getRecursiveTypeProperties();
-      props.isPassive &= eltInfo.isPassive;
+      props.isPassive &= eltInfo.isPassive & !element.isFlip;
       props.containsAnalog |= eltInfo.containsAnalog;
       props.hasUninferredWidth |= eltInfo.hasUninferredWidth;
       fieldID += 1;
@@ -734,7 +740,7 @@ FIRRTLType BundleType::getPassiveType() {
   SmallVector<BundleType::BundleElement, 16> newElements;
   newElements.reserve(impl->elements.size());
   for (auto &elt : impl->elements) {
-    newElements.push_back({elt.name, elt.type.getPassiveType()});
+    newElements.push_back({elt.name, false, elt.type.getPassiveType()});
   }
 
   auto passiveType = BundleType::get(newElements, getContext());

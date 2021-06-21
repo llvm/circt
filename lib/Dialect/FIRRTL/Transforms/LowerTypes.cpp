@@ -73,7 +73,7 @@ static void flattenType(FIRRTLType type,
                 tmpSuffix.push_back('_');
                 tmpSuffix.append(elt.name.getValue());
                 // Recursively process subelements.
-                flatten(elt.type, tmpSuffix, isFlipped);
+                flatten(elt.type, tmpSuffix, isFlipped ^ elt.isFlip);
               }
               return;
             })
@@ -1053,9 +1053,9 @@ void TypeLoweringVisitor::recursivePartialConnect(Value a, FIRRTLType aType,
             continue;
           auto &aElt = aType.getElements()[aIndex];
           auto &bElt = bBundle.getElements()[*bIndex];
-          recursivePartialConnect(a, aElt.type, b, bElt.type,
-                                  aID + aType.getFieldID(aIndex),
-                                  bID + bBundle.getFieldID(*bIndex), aFlip);
+          recursivePartialConnect(
+              a, aElt.type, b, bElt.type, aID + aType.getFieldID(aIndex),
+              bID + bBundle.getFieldID(*bIndex), aFlip ^ aElt.isFlip);
         }
       })
       .Case<FVectorType>([&](auto aType) {

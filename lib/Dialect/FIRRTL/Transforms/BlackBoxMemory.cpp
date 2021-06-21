@@ -127,10 +127,8 @@ getBlackBoxPortsForMemOp(MemOp op, ArrayRef<MemOp::NamedPort> memPorts,
       auto name = (prefix + bundleElement.name.getValue()).str();
       auto type = bundleElement.type;
       auto direction = Direction::Input;
-      if (type.isa<FlipType>()) {
-        type = FlipType::get(type);
+      if (bundleElement.isFlip)
         direction = Direction::Output;
-      }
       extPorts.push_back({builder.getStringAttr(name), type, direction});
     }
   }
@@ -231,7 +229,7 @@ createWrapperModule(MemOp op, ArrayRef<MemOp::NamedPort> memPorts,
           builder.create<SubfieldOp>(op.getLoc(), memPort, field.name);
       // Create the connection between module arguments and the external module,
       // making sure that sinks are on the LHS
-      if (!field.type.isa<FlipType>())
+      if (!field.isFlip)
         builder.create<ConnectOp>(op.getLoc(), *extResultIt, fieldValue);
       else
         builder.create<ConnectOp>(op.getLoc(), fieldValue, *extResultIt);
@@ -268,7 +266,7 @@ static void createWiresForMemoryPorts(OpBuilder builder, Location loc, MemOp op,
           builder.create<SubfieldOp>(op.getLoc(), wireOp, field.name);
       // Create the connection between module arguments and the external module,
       // making sure that sinks are on the LHS
-      if (field.type.isa<FlipType>())
+      if (field.isFlip)
         builder.create<ConnectOp>(op.getLoc(), fieldValue, *extResultIt);
       else
         builder.create<ConnectOp>(op.getLoc(), *extResultIt, fieldValue);

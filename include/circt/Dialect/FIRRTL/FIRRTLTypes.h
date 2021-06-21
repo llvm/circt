@@ -293,12 +293,14 @@ public:
   // Each element of a bundle, which is a name and type.
   struct BundleElement {
     StringAttr name;
+    bool isFlip;
     FIRRTLType type;
 
-    BundleElement(StringAttr name, FIRRTLType type) : name(name), type(type) {}
+    BundleElement(StringAttr name, bool isFlip, FIRRTLType type)
+        : name(name), isFlip(isFlip), type(type) {}
 
     bool operator==(const BundleElement &rhs) const {
-      return name == rhs.name && type == rhs.type;
+      return name == rhs.name && isFlip == rhs.isFlip && type == rhs.type;
     }
     bool operator!=(const BundleElement &rhs) const { return !operator==(rhs); }
   };

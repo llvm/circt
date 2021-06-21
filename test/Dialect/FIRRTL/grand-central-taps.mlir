@@ -49,10 +49,10 @@ firrtl.circuit "TestHarness" attributes {
       portNames = ["MPORT"],
       readLatency = 0 : i32,
       writeLatency = 1 : i32
-    } : !firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: flip<uint<1>>>>
-    %mem_addr = firrtl.subfield %mem("addr") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: flip<uint<1>>>>) -> !firrtl.uint<1>
-    %mem_en = firrtl.subfield %mem("en") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: flip<uint<1>>>>) -> !firrtl.uint<1>
-    %mem_clk = firrtl.subfield %mem("clk") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: flip<uint<1>>>>) -> !firrtl.clock
+    } : !firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>>
+    %mem_addr = firrtl.subfield %mem("addr") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>>) -> !firrtl.uint<1>
+    %mem_en = firrtl.subfield %mem("en") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>>) -> !firrtl.uint<1>
+    %mem_clk = firrtl.subfield %mem("clk") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>>) -> !firrtl.clock
     firrtl.connect %mem_addr, %in : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %mem_en, %in : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %mem_clk, %clock : !firrtl.clock, !firrtl.clock

@@ -162,7 +162,7 @@ protected:
 template <class DerivedT, Expr::Kind DerivedKind>
 struct UnaryExprBase : public UnaryExpr {
   template <typename... Args>
-  UnaryExprBase(Args &&...args)
+  UnaryExprBase(Args &&... args)
       : UnaryExpr(DerivedKind, std::forward<Args>(args)...) {}
   static bool classof(const Expr *e) { return e->kind == DerivedKind; }
 };
@@ -201,7 +201,7 @@ protected:
 template <class DerivedT, Expr::Kind DerivedKind>
 struct BinaryExprBase : public BinaryExpr {
   template <typename... Args>
-  BinaryExprBase(Args &&...args)
+  BinaryExprBase(Args &&... args)
       : BinaryExpr(DerivedKind, std::forward<Args>(args)...) {}
   static bool classof(const Expr *e) { return e->kind == DerivedKind; }
 };
@@ -296,7 +296,7 @@ public:
   /// existing one. `R` is the type of the object to be allocated. `R` must be
   /// derived from or be the type `T`.
   template <typename R = T, typename... Args>
-  std::pair<R *, bool> alloc(Args &&...args) {
+  std::pair<R *, bool> alloc(Args &&... args) {
     auto stack_value = R(std::forward<Args>(args)...);
     auto stack_slot = Slot(&stack_value);
     auto it = interned.find(stack_slot);
@@ -320,7 +320,7 @@ public:
   /// Allocate a new object. `R` is the type of the object to be allocated. `R`
   /// must be derived from or be the type `T`.
   template <typename R = T, typename... Args>
-  R *alloc(Args &&...args) {
+  R *alloc(Args &&... args) {
     return new (allocator) R(std::forward<Args>(args)...);
   }
 };
@@ -381,7 +381,7 @@ private:
 
   /// Add an allocated expression to the list above.
   template <typename R, typename T, typename... Args>
-  R *alloc(InternedAllocator<T> &allocator, Args &&...args) {
+  R *alloc(InternedAllocator<T> &allocator, Args &&... args) {
     auto it = allocator.template alloc<R>(std::forward<Args>(args)...);
     if (it.second)
       exprs.push_back(it.first);
@@ -1453,7 +1453,10 @@ void InferenceMapping::constrainTypes(Value larger, Value smaller) {
         } else if (auto bundleType = type.dyn_cast<BundleType>()) {
           fieldID++;
           for (auto &element : bundleType.getElements()) {
-            constrain(element.type, larger, smaller);
+            if (element.isFlip)
+              constrain(element.type, smaller, larger);
+            else
+              constrain(element.type, larger, smaller);
           }
         } else if (auto vecType = type.dyn_cast<FVectorType>()) {
           fieldID++;
@@ -1502,8 +1505,12 @@ void InferenceMapping::partiallyConstrainTypes(Value larger, Value smaller) {
               continue;
             auto &aElt = aBundle.getElements()[aIndex];
             auto &bElt = bBundle.getElements()[*bIndex];
-            constrain(aElt.type, a, aID + aBundle.getFieldID(aIndex), bElt.type,
-                      b, bID + bBundle.getFieldID(*bIndex));
+            if (aElt.isFlip)
+              constrain(aElt.type, b, bID + bBundle.getFieldID(*bIndex),
+                        aElt.type, a, aID + aBundle.getFieldID(aIndex));
+            else
+              constrain(aElt.type, a, aID + aBundle.getFieldID(aIndex),
+                        bElt.type, b, bID + bBundle.getFieldID(*bIndex));
           }
         } else if (auto aVecType = aType.dyn_cast<FVectorType>()) {
           // Do not constrain the elements of a zero length vector.
@@ -1801,7 +1808,8 @@ bool InferenceTypeUpdate::updateValue(Value value) {
       fieldID++;
       llvm::SmallVector<BundleType::BundleElement, 3> elements;
       for (auto &element : bundleType.getElements()) {
-        elements.emplace_back(element.name, update(element.type));
+        elements.emplace_back(element.name, element.isFlip,
+                              update(element.type));
       }
       return BundleType::get(elements, context);
     } else if (auto vecType = type.dyn_cast<FVectorType>()) {
