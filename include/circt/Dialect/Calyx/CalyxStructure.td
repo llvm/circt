@@ -14,8 +14,8 @@ def ComponentOp : CalyxOp<"component", [
     Symbol,
     FunctionLike,
     IsolatedFromAbove,
-    // TODO(Calyx): This should change, when
-    // the control execution schedule is added.
+    // TODO(Calyx): Need to somehow define the output ports.
+    //              Use SingleBlockImplicitTerminator<>?
     NoTerminator,
     SingleBlock
   ]> {
@@ -34,10 +34,11 @@ def ComponentOp : CalyxOp<"component", [
       }
     ```
   }];
-  let arguments = (ins
-    StrArrayAttr:$inPortNames,
-    StrArrayAttr:$outPortNames
-  );
+
+  // TODO(Calyx): Allow explicit port naming?
+  let arguments = (ins);
+
+  let results = (outs);
   let regions = (region SizedRegion<1>: $body);
 
   let extraClassDeclaration = [{

@@ -94,7 +94,8 @@ parsePortDefList(MLIRContext *context, OperationState &result,
     portTypes.push_back(portType);
   } while (succeeded(parser.parseOptionalComma()));
 
-  // Add attribute for port names.
+  // Add attribute for port names; these are currently
+  // just inferred from the `OperandType` struct.
   SmallVector<Attribute> portNames(ports.size());
   llvm::transform(ports, portNames.begin(), [&](auto port) -> StringAttr {
     return StringAttr::get(context, port.name);
