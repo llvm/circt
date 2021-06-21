@@ -7,13 +7,10 @@ calyx.component @ComponentWithInAndOutPorts (%in1: i64, %in2: i16) -> (%out1: i3
 }
 
 // CHECK-LABEL: ComponentWithInPort (x: 64) -> () {
-calyx.component @ComponentWithInPort (%x: i64) -> () {
-}
+calyx.component @ComponentWithInPort (%x: i64) -> () {}
 
 // CHECK-LABEL: ComponentWithOutPort () -> (y: 64) {
-calyx.component @ComponentWithOutPort () -> (%y: i64) {
-}
+calyx.component @ComponentWithOutPort () -> (%y: i64) {}
 
 // CHECK-LABEL: ComponentWithNoPorts () -> () {
-calyx.component @ComponentWithNoPorts () -> () {
-}
+calyx.component @ComponentWithNoPorts () -> () {}
