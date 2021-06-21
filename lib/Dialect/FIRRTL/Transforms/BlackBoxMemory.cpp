@@ -131,7 +131,8 @@ getBlackBoxPortsForMemOp(MemOp op, ArrayRef<MemOp::NamedPort> memPorts,
         type = FlipType::get(type);
         direction = Direction::Output;
       }
-      extPorts.push_back({builder.getStringAttr(name), type, direction});
+      extPorts.push_back(
+          {builder.getStringAttr(name), type, direction, op.getLoc()});
     }
   }
 }
@@ -200,7 +201,7 @@ createWrapperModule(MemOp op, ArrayRef<MemOp::NamedPort> memPorts,
   for (size_t i = 0, e = memPorts.size(); i != e; ++i) {
     auto name = op.getPortName(i);
     auto type = op.getPortType(i).cast<FlipType>().getElementType();
-    modPorts.push_back({name, type, Direction::Input});
+    modPorts.push_back({name, type, Direction::Input, op.getLoc()});
   }
   auto moduleOp = builder.create<FModuleOp>(
       op.getLoc(), builder.getStringAttr(memName), modPorts);

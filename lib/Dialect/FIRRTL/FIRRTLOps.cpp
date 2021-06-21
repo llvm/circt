@@ -320,15 +320,32 @@ FunctionType firrtl::getModuleType(Operation *op) {
 /// extmodule.
 SmallVector<ModulePortInfo> firrtl::getModulePortInfo(Operation *op) {
   SmallVector<ModulePortInfo> results;
-  auto argTypes = getModuleType(op).getInputs();
 
   auto portNamesAttr = getModulePortNames(op);
   auto portDirections = getModulePortDirections(op).getValue();
-  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
-    auto name = portNamesAttr[i].cast<StringAttr>();
-    auto type = argTypes[i].cast<FIRRTLType>();
-    auto direction = direction::get(portDirections[i]);
-    results.push_back({name, type, direction, AnnotationSet::forPort(op, i)});
+  if (isa<FExtModuleOp>(op)) {
+    // FExtModuleOp's don't have block arguments or locations for their ports.
+    auto argTypes = getModuleType(op).getInputs();
+    auto loc = op->getLoc();
+    for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
+      auto name = portNamesAttr[i].cast<StringAttr>();
+      auto type = argTypes[i].cast<FIRRTLType>();
+      auto direction = direction::get(portDirections[i]);
+      results.push_back(
+          {name, type, direction, loc, AnnotationSet::forPort(op, i)});
+    }
+  } else {
+    // FModuleOp has the ports as the BlockArgument's of the first block.
+    auto moduleBlock = cast<FModuleOp>(op).getBodyBlock();
+    for (auto portArgAndIndex : llvm::enumerate(moduleBlock->getArguments())) {
+      BlockArgument portArg = portArgAndIndex.value();
+      size_t portIdx = portArgAndIndex.index();
+      auto name = portNamesAttr[portIdx].cast<StringAttr>();
+      auto direction = direction::get(portDirections[portIdx]);
+      results.push_back({name, portArg.getType().cast<FIRRTLType>(), direction,
+                         portArg.getLoc(),
+                         AnnotationSet::forPort(op, portIdx)});
+    }
   }
   return results;
 }
@@ -425,7 +442,7 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
 
   // Add arguments to the body block.
   for (auto elt : ports)
-    body->addArgument(elt.type);
+    body->addArgument(elt.type, elt.loc);
 }
 
 void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
