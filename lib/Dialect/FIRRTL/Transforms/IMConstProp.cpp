@@ -673,8 +673,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     // Connects to values that we found to be constant can be dropped.
     if (auto connect = dyn_cast<ConnectOp>(op)) {
       if (auto *destOp = connect.dest().getDefiningOp()) {
-        if (isDeletableWireOrReg(destOp) &&
-            !latticeValues[connect.dest()].isOverdefined())
+        if (isDeletableWireOrReg(destOp) && !isOverdefined(connect.dest()))
           connect.erase();
       }
       continue;
