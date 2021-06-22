@@ -22,8 +22,9 @@ def InstanceOp : FIRRTLOp<"instance"> {
                        PortAnnotationsAttr:$portAnnotations);
   let results = (outs Variadic<FIRRTLType>:$results);
 
-  let printer = "return ::print(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
+  let assemblyFormat =
+    "$moduleName custom<InstanceOp>(attr-dict) (`:` type($results)^ )?";
+
   let verifier = "return ::verifyInstanceOp(*this);";
 
   let builders = [

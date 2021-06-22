@@ -93,8 +93,7 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},
 
     ; CHECK-LABEL: module {
     ; CHECK: %bar_a, %bar_b = firrtl.instance @Bar
-    ; CHECK-SAME: !firrtl.flip<uint<1>> {[{one}]}, 
-    ; CHECK-SAME: !firrtl.bundle<baz: uint<1>, qux: uint<1>> {[{target = [".baz"], two}]}
+    ; CHECK-SAME: [{one}], [{target = [".baz"], two}]
 
 ; // -----
 

@@ -1078,7 +1078,7 @@ firrtl.circuit "Foo"   {
   firrtl.module @Bar(in %a: !firrtl.uint<1>, out %b: !firrtl.bundle<baz: uint<1>, qux: uint<1>>) {
   }
   firrtl.module @Foo() {
-    // CHECK: !firrtl.flip<uint<1>> {[{one}]}, !firrtl.uint<1> {[{two}]}, !firrtl.uint<1>
-    %bar_a, %bar_b = firrtl.instance @Bar  {name = "bar"} : !firrtl.flip<uint<1>> {[{one}]}, !firrtl.bundle<baz: uint<1>, qux: uint<1>> {[{target = [".baz"], two}]}
+    // CHECK: [{one}], [{two}], []
+    %bar_a, %bar_b = firrtl.instance @Bar  {name = "bar", portAnnotations = [[{one}], [{target = [".baz"], two}]]} : !firrtl.flip<uint<1>>, !firrtl.bundle<baz: uint<1>, qux: uint<1>>
   }
 }
