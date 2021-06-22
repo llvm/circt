@@ -251,6 +251,7 @@ endif()
 # capnp Configuration
 #-------------------------------------------------------------------------------
 
+set(CAPNP_DISABLE "1")
 # If capnp hasn't been explicitly disabled, find it.
 option(CAPNP_DISABLE "Disable Cap'nProto (needed for cosimulation).")
 if (CAPNP_DISABLE)
