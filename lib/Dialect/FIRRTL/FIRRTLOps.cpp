@@ -964,11 +964,12 @@ static void print(OpAsmPrinter &p, InstanceOp op) {
 
 ArrayAttr InstanceOp::getPortAnnotation(unsigned portIdx) {
   assert(portIdx >= getNumResults() && "index is larger than result number");
-
   return portAnnotations()[portIdx].cast<ArrayAttr>();
 }
 
 void InstanceOp::setAllPortAnnotations(ArrayRef<Attribute> annotations) {
+  assert(annotations.size() == getNumResults() &&
+         "number of annotations is not equal to result number");
   (*this)->setAttr("portAnnotations",
                    ArrayAttr::get(getContext(), annotations));
 }

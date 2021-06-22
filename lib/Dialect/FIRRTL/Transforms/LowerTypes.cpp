@@ -336,9 +336,8 @@ void TypeLoweringVisitor::lowerArg(FModuleOp module, BlockArgument arg,
     // Create new block arguments.
     auto type = field.type;
     // Flip the direction if the field is an output.
-    auto direction =
-        (Direction)((unsigned)getModulePortDirection(module, argNumber) ^
-                    field.isOutput);
+    auto direction = (Direction)(
+        (unsigned)getModulePortDirection(module, argNumber) ^ field.isOutput);
     auto newValue = addArg(module, type, argNumber, direction, field.suffix);
 
     // If this field was flattened from a bundle.
@@ -388,9 +387,9 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
         pName = builder.getStringAttr("");
       portNames.push_back(pName);
       // Flip the direction if the field is an output.
-      portDirections.push_back((
-          Direction)((unsigned)getModulePortDirection(extModule, oldArgNumber) ^
-                     field.isOutput));
+      portDirections.push_back((Direction)(
+          (unsigned)getModulePortDirection(extModule, oldArgNumber) ^
+          field.isOutput));
 
       // Populate newAnnotations with the old annotations filtered to those
       // associated with just this field.
@@ -449,7 +448,6 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
     flattenType(op.getType(i).cast<FIRRTLType>(), fieldTypes);
 
     auto annotations = op.portAnnotations()[i].cast<ArrayAttr>();
-
     for (auto field : fieldTypes) {
       // Store the flat type for the new bundle type.
       resultNames.push_back(builder->getStringAttr(field.suffix));
