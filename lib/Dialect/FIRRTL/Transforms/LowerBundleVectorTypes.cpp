@@ -26,7 +26,7 @@ using namespace firrtl;
 // all flips canonicalized to the outer level, or just return the bundle
 // directly. For any ground type, returns null.
 static FIRRTLType getCanonicalAggregateType(Type origType) {
-  FIRRTLType type = origType.dyn_cast<FIRRTLType>().stripFlip().first;
+  FIRRTLType type = origType.dyn_cast<FIRRTLType>();
   return TypeSwitch<FIRRTLType, FIRRTLType>(type)
       .Case<BundleType, FVectorType>([](auto a) { return a; })
       .Default([](auto) { return nullptr; });
@@ -43,7 +43,7 @@ struct FlatBundleFieldEntry {
   bool isOutput;
 
   // Helper to determine if a fully flattened type needs to be flipped.
-  FIRRTLType getPortType() { return isOutput ? FlipType::get(type) : type; }
+  FIRRTLType getPortType() { return type; }
 
   FlatBundleFieldEntry(const FIRRTLType &type, StringRef suffix, bool isOutput)
       : type(type), suffix(suffix), isOutput(isOutput) {}
@@ -54,12 +54,6 @@ struct FlatBundleFieldEntry {
 static SmallVector<FlatBundleFieldEntry> peelType(FIRRTLType type) {
   bool isFlipped = false;
   SmallVector<FlatBundleFieldEntry> retval;
-  // Strip off an outer flip type. Flip types don't don't have a field ID,
-  // and so there is no need to increment the field ID.
-  if (auto flip = type.dyn_cast<FlipType>()) {
-    type = flip.getElementType();
-    isFlipped = !isFlipped;
-  }
   TypeSwitch<FIRRTLType>(type)
       .Case<BundleType>([&](auto bundle) {
         SmallString<16> tmpSuffix;
@@ -69,11 +63,7 @@ static SmallVector<FlatBundleFieldEntry> peelType(FIRRTLType type) {
           tmpSuffix.resize(0);
           tmpSuffix.push_back('_');
           tmpSuffix.append(elt.name.getValue());
-          if (auto flip = elt.type.template dyn_cast<FlipType>()) {
-            retval.emplace_back(flip.getElementType(), tmpSuffix, !isFlipped);
-          } else {
-            retval.emplace_back(elt.type, tmpSuffix, isFlipped);
-          }
+            retval.emplace_back(elt.type, tmpSuffix, isFlipped ^ elt.isFlip);
         }
       })
       .Case<FVectorType>([&](auto vector) {
@@ -94,10 +84,6 @@ static void flattenType(FIRRTLType type,
   std::function<void(FIRRTLType, StringRef, bool)> flatten =
       [&](FIRRTLType type, StringRef suffixSoFar, bool isFlipped) {
         // Strip off an outer flip type.
-        if (auto flip = type.dyn_cast<FlipType>()) {
-          type = flip.getElementType();
-          isFlipped = !isFlipped;
-        }
         TypeSwitch<FIRRTLType>(type)
             .Case<BundleType>([&](auto bundle) {
               SmallString<16> tmpSuffix(suffixSoFar);
@@ -108,7 +94,7 @@ static void flattenType(FIRRTLType type,
                 tmpSuffix.push_back('_');
                 tmpSuffix.append(elt.name.getValue());
                 // Recursively process subelements.
-                flatten(elt.type, tmpSuffix, isFlipped);
+                flatten(elt.type, tmpSuffix, isFlipped ^ elt.isFlip);
               }
               return;
             })
@@ -189,7 +175,7 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
   SmallVector<Attribute, 8> portNames;
   for (auto port : op.getPorts()) {
     ports.push_back(
-        FlipType::get(MemOp::getTypeForPort(op.depth(), type, port.second)));
+        MemOp::getTypeForPort(op.depth(), type, port.second));
     portNames.push_back(port.first);
   }
   return b->create<MemOp>(ports, op.readLatency(), op.writeLatency(),
@@ -269,9 +255,6 @@ void AggregateUserVisitor::visitExpr(SubindexOp op, ArrayRef<Value> mapping) {
 void AggregateUserVisitor::visitExpr(SubfieldOp op, ArrayRef<Value> mapping) {
   // Get the input bundle type.
   Value input = op.input();
-  // auto inputType = input.getType();
-  // if (auto flipType = inputType.dyn_cast<FlipType>())
-  //   inputType = flipType.getElementType();
   auto bundleType = input.getType().cast<BundleType>();
   Value repl = mapping[*bundleType.getElementIndex(op.fieldname())];
   //  if (repl.getType().isa<FlipType>())
@@ -416,7 +399,7 @@ TypeLoweringVisitor::addArg(FModuleOp module, unsigned insertPt,
   auto direction = (Direction)((unsigned)oldArg.direction ^ isOutput);
 
   return std::make_pair(
-      newValue, firrtl::ModulePortInfo{name, type, direction, newAnnotations});
+      newValue, firrtl::ModulePortInfo{name, type, direction, oldArg.loc, newAnnotations});
 }
 
 // Lower arguments with bundle type by flattening them.
@@ -566,9 +549,8 @@ void TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
   // Ground Type
   if (!destType) {
     // check for truncation
-    auto srcInfo = op.src().getType().cast<FIRRTLType>().stripFlip();
-    srcType = srcInfo.first;
-    destType = op.dest().getType().cast<FIRRTLType>().stripFlip().first;
+    srcType = op.src().getType().cast<FIRRTLType>();
+    destType = op.dest().getType().cast<FIRRTLType>();
     auto srcWidth = srcType.getBitWidthOrSentinel();
     auto destWidth = destType.getBitWidthOrSentinel();
     Value src = op.src();
@@ -582,7 +564,7 @@ void TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
         tmpType = UIntType::get(destType.getContext(), destWidth);
       //        if (srcInfo.second)
       //          src = builder->create<AsPassivePrimOp>(src);
-      assert(!src.getType().isa<FlipType>());
+      //assert(!src.getType().isa<FlipType>());
       src = builder->create<TailPrimOp>(tmpType, src, srcWidth - destWidth);
       // Insert the cast back to signed if needed.
       if (tmpType != destType)
@@ -862,8 +844,6 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
       auto res = newMem.getResult(i);
       for (auto memResultType : llvm::enumerate(res.getType()
                                                     .cast<FIRRTLType>()
-                                                    .cast<FlipType>()
-                                                    .getElementType()
                                                     .cast<BundleType>()
                                                     .getElements())) {
         auto tempWire = wireToOldResult[tempWireIndex];
@@ -884,12 +864,12 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
             dataAccess = builder->create<SubfieldOp>(
                 tempWire, field.value().suffix.str().drop_front(1));
           }
-          if (memResultType.value().type.dyn_cast<FlipType>()) {
+          if (memResultType.value().isFlip) {
             builder->create<ConnectOp>(dataAccess, newMemSub);
           } else
             builder->create<ConnectOp>(newMemSub, dataAccess);
         } else {
-          if (memResultType.value().type.dyn_cast<FlipType>()) {
+          if (memResultType.value().isFlip) {
             builder->create<ConnectOp>(tempWire, newMemSub);
           } else
             builder->create<ConnectOp>(newMemSub, tempWire);
@@ -1303,8 +1283,6 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   // Get the input bundle type.
   Value input = op.input();
   auto inputType = input.getType();
-  if (auto flipType = inputType.dyn_cast<FlipType>())
-    inputType = flipType.getElementType();
 
   auto selectWidth =
       op.index().getType().cast<FIRRTLType>().getBitWidthOrSentinel();
