@@ -72,11 +72,10 @@ void PrettifyVerilogPass::sinkOpToUses(Operation *op) {
       continue;
     // Find the block local clone of the operation. If there is not one already,
     // the op will be cloned in to the block.
-    auto localValue = blockLocalValues.lookup(localBlock);
+    auto &localValue = blockLocalValues[localBlock];
     if (!localValue) {
       // Clone the operation and insert it to the beginning of the block.
       localValue = OpBuilder::atBlockBegin(localBlock).clone(*op)->getResult(0);
-      blockLocalValues[localBlock] = localValue;
     }
     // Replace the current use, removing it from the use list.
     use.set(localValue);
