@@ -931,7 +931,7 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
 
   result.addTypes(resultsTypes);
   result.addAttribute("portAnnotations",
-                      ArrayAttr::get(result.getContext(), resultsAttrs));
+                      parser.getBuilder().getArrayAttr(resultsAttrs));
   return success();
 }
 
@@ -952,7 +952,7 @@ static void print(OpAsmPrinter &p, InstanceOp op) {
 
       p.printType(portTypes[i]);
 
-      auto portAnnotation = op.portAnnotations()[i].cast<ArrayAttr>();
+      auto portAnnotation = op.getPortAnnotation(i);
       if (!portAnnotation.empty()) {
         p << " {";
         p.printAttribute(portAnnotation);
@@ -963,7 +963,8 @@ static void print(OpAsmPrinter &p, InstanceOp op) {
 }
 
 ArrayAttr InstanceOp::getPortAnnotation(unsigned portIdx) {
-  assert(portIdx >= getNumResults() && "index is larger than result number");
+  assert(portIdx < getNumResults() &&
+         "index should be smaller than result number");
   return portAnnotations()[portIdx].cast<ArrayAttr>();
 }
 

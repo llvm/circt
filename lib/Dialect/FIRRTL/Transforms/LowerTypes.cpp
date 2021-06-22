@@ -447,7 +447,7 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
     flattenType(op.getType(i).cast<FIRRTLType>(), fieldTypes);
 
-    auto annotations = op.portAnnotations()[i].cast<ArrayAttr>();
+    auto annotations = op.getPortAnnotation(i);
     for (auto field : fieldTypes) {
       // Store the flat type for the new bundle type.
       resultNames.push_back(builder->getStringAttr(field.suffix));
