@@ -25,7 +25,7 @@
 #include "llvm/ADT/SetVector.h"
 
 namespace circt {
-namespace sched {
+namespace scheduling {
 
 class Dependence;
 class OperatorType;
@@ -247,7 +247,7 @@ private:
   StringRef name;
 };
 
-} // namespace sched
+} // namespace scheduling
 } // namespace circt
 
 #endif // CIRCT_SCHEDULING_SCHEDULER_H

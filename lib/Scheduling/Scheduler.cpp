@@ -15,7 +15,7 @@
 #include "mlir/IR/Operation.h"
 
 using namespace circt;
-using namespace circt::sched;
+using namespace circt::scheduling;
 
 Scheduler::Scheduler(Operation *containingOp) : containingOp(containingOp) {
   uniquer.registerParametricStorageType<Dependence>();
