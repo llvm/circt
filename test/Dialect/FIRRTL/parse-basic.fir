@@ -481,9 +481,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input foo : UInt
     input clock : Clock
 
-    ; CHECK: [[HACKWIRE0:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
-    ; CHECK: [[HACKWIRE1:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
     ; CHECK: [[HACKWIRE2:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
+    ; CHECK: [[HACKWIRE1:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
+    ; CHECK: [[HACKWIRE0:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
     ; CHECK: %memory = firrtl.smem Undefined {name = "memory"} : !firrtl.vector<vector<uint<1>, 9>, 256>
     smem memory : UInt<1>[9] [256]
 

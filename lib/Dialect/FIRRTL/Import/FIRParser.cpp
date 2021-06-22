@@ -24,7 +24,6 @@
 #include "mlir/Translation.h"
 #include "llvm/ADT/PointerEmbeddedInt.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -867,16 +866,12 @@ using UnbundledID = llvm::PointerEmbeddedInt<unsigned, 31>;
 using SymbolValueEntry = llvm::PointerUnion<Value, UnbundledID>;
 
 using ModuleSymbolTable =
-    llvm::ScopedHashTable<Identifier, std::pair<SMLoc, SymbolValueEntry>,
-                          DenseMapInfo<Identifier>, llvm::BumpPtrAllocator>;
+    llvm::StringMap<std::pair<SMLoc, SymbolValueEntry>, llvm::BumpPtrAllocator>;
+using ModuleSymbolTableEntry =
+    llvm::StringMapEntry<std::pair<SMLoc, SymbolValueEntry>>;
 
 using UnbundledValueEntry = SmallVector<std::pair<Attribute, Value>>;
 using UnbundledValuesList = std::vector<UnbundledValueEntry>;
-
-using MemoryScopeTable =
-    llvm::ScopedHashTable<Identifier,
-                          std::pair<ModuleSymbolTable::ScopeTy *, Operation *>,
-                          DenseMapInfo<Identifier>, llvm::BumpPtrAllocator>;
 
 namespace {
 /// This struct provides context information that is global to the module we're
@@ -884,8 +879,7 @@ namespace {
 struct FIRModuleContext : public FIRParser {
   explicit FIRModuleContext(SharedParserConstants &constants, FIRLexer &lexer,
                             std::string moduleTarget)
-      : FIRParser(constants, lexer), moduleTarget(std::move(moduleTarget)),
-        firstScope(symbolTable), firstMemoryScope(memoryScopeTable) {}
+      : FIRParser(constants, lexer), moduleTarget(std::move(moduleTarget)) {}
 
   /// This is the module target used by annotations referring to this module.
   std::string moduleTarget;
@@ -898,9 +892,12 @@ struct FIRModuleContext : public FIRParser {
 
   /// Add a symbol entry with the specified name, returning failure if the name
   /// is already defined.
-  ParseResult addSymbolEntry(StringRef name, SymbolValueEntry entry, SMLoc loc);
-  ParseResult addSymbolEntry(StringRef name, Value value, SMLoc loc) {
-    return addSymbolEntry(name, SymbolValueEntry(value), loc);
+  ParseResult addSymbolEntry(StringRef name, SymbolValueEntry entry, SMLoc loc,
+                             bool insertNameIntoGlobalScope = false);
+  ParseResult addSymbolEntry(StringRef name, Value value, SMLoc loc,
+                             bool insertNameIntoGlobalScope = false) {
+    return addSymbolEntry(name, SymbolValueEntry(value), loc,
+                          insertNameIntoGlobalScope);
   }
 
   /// Resolved a symbol table entry to a value.  Emission of error is optional.
@@ -922,40 +919,75 @@ struct FIRModuleContext : public FIRParser {
     return unbundledValues[index];
   }
 
-  /// This symbol table holds the names of ports, wires, and other local decls.
-  /// This is scoped because conditional statements introduce subscopes.
-  ModuleSymbolTable symbolTable;
-  ModuleSymbolTable::ScopeTy firstScope;
-
   /// This contains one entry for each value in FIRRTL that is represented as a
   /// bundle type in the FIRRTL spec but for which we represent as an exploded
   /// set of elements in the FIRRTL dialect.
   UnbundledValuesList unbundledValues;
 
-  /// Chisel is producing mports with invalid scopes.  To work around the bug,
-  /// we need to keep track of the scope (in the `symbolTable`) of each memory.
-  /// This keeps track of this.
-  MemoryScopeTable memoryScopeTable;
-  MemoryScopeTable::ScopeTy firstMemoryScope;
+  /// Provide a symbol table scope that automatically pops all the entries off
+  /// the symbol table when the scope is exited.
+  struct SymbolTableScope {
+    SymbolTableScope(FIRModuleContext &moduleContext)
+        : moduleContext(moduleContext),
+          prevScopedDecls(moduleContext.currentScopeCollector) {
+      moduleContext.currentScopeCollector = &scopedDecls;
+    }
+    ~SymbolTableScope() {
+      // Mark all entries in this scope as being invalid.  We track validity
+      // through the SMLoc field instead of deleting entries.
+      for (auto *entryPtr : scopedDecls)
+        entryPtr->second.first = SMLoc();
+      moduleContext.currentScopeCollector = prevScopedDecls;
+    }
+
+  private:
+    void operator=(const SymbolTableScope &) = delete;
+    SymbolTableScope(const SymbolTableScope &) = delete;
+
+    FIRModuleContext &moduleContext;
+    std::vector<ModuleSymbolTableEntry *> *prevScopedDecls;
+    std::vector<ModuleSymbolTableEntry *> scopedDecls;
+  };
+
+private:
+  /// This symbol table holds the names of ports, wires, and other local decls.
+  /// This is scoped because conditional statements introduce subscopes.
+  ModuleSymbolTable symbolTable;
+
+  /// If non-null, all new entries added to the symbol table are added to this
+  /// list.  This allows us to "pop" the entries by resetting them to null when
+  /// scope is exited.
+  std::vector<ModuleSymbolTableEntry *> *currentScopeCollector = nullptr;
 };
 
 } // end anonymous namespace
 
 /// Add a symbol entry with the specified name, returning failure if the name
 /// is already defined.
+///
+/// When 'insertNameIntoGlobalScope' is true, we don't allow the name to be
+/// popped.  This is a workaround for (firrtl scala bug) that should eventually
+/// be fixed.
 ParseResult FIRModuleContext::addSymbolEntry(StringRef name,
-                                             SymbolValueEntry entry,
-                                             SMLoc loc) {
-  auto nameId = Identifier::get(name, getContext());
-  auto prev = symbolTable.lookup(nameId);
-  if (prev.first.isValid()) {
-    emitError(loc, "redefinition of name '" + name.str() + "'")
-            .attachNote(translateLocation(prev.first))
+                                             SymbolValueEntry entry, SMLoc loc,
+                                             bool insertNameIntoGlobalScope) {
+  // Do a lookup by trying to do an insertion.  Do so in a way that we can tell
+  // if we hit a missing element (SMLoc is null).
+  auto entryIt =
+      symbolTable.try_emplace(name, SMLoc(), SymbolValueEntry()).first;
+  if (entryIt->second.first.isValid()) {
+    emitError(loc, "redefinition of name '" + name + "'")
+            .attachNote(translateLocation(entryIt->second.first))
         << "previous definition here";
     return failure();
   }
 
-  symbolTable.insert(nameId, {loc, entry});
+  // If we didn't have a hit, then record the location, and remember that this
+  // was new to this scope.
+  entryIt->second = {loc, entry};
+  if (currentScopeCollector && !insertNameIntoGlobalScope)
+    currentScopeCollector->push_back(&*entryIt);
+
   return success();
 }
 
@@ -963,11 +995,10 @@ ParseResult FIRModuleContext::addSymbolEntry(StringRef name,
 /// name is unknown.
 ParseResult FIRModuleContext::lookupSymbolEntry(SymbolValueEntry &result,
                                                 StringRef name, SMLoc loc) {
-  auto prev = symbolTable.lookup(Identifier::get(name, getContext()));
-  if (!prev.first.isValid())
-    return emitError(loc, "use of unknown declaration '" + name.str() + "'"),
-           failure();
-  result = prev.second;
+  auto &entry = symbolTable[name];
+  if (!entry.first.isValid())
+    return emitError(loc, "use of unknown declaration '" + name + "'");
+  result = entry.second;
   assert(result && "name in symbol table without definition");
   return success();
 }
@@ -1921,8 +1952,9 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
   locationProcessor.setLoc(startLoc);
-  auto result = builder.create<MemoryPortOp>(
+  auto resultMemoryPort = builder.create<MemoryPortOp>(
       resultType, memory, indexExp, clock, direction, name, annotations);
+  Value result = resultMemoryPort;
 
   // TODO(firrtl scala bug): If the next operation is a skip, just eat it if it
   // is at the same indent level as us.  This is a horrible hack on top of the
@@ -1951,42 +1983,33 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
   // seeing if the next statement is indented less than our memport - if so,
   // this is the last statement at the end of the 'when' block.   Trigger a
   // hacky workaround just in this case.
+  bool insertNameIntoGlobalScope = false;
   if (mdirIndent.hasValue() && nextIndent.hasValue() &&
-      mdirIndent.getValue() > nextIndent.getValue()) {
-    auto memNameId = Identifier::get(memName, getContext());
-
-    // To make this even more gross, we have no efficient way to figure out
-    // what scope a value lives in our scoped hash table.  We keep a shadow
-    // table to track this.
-    auto scopeAndOperation = moduleContext.memoryScopeTable.lookup(memNameId);
-    if (!scopeAndOperation.first) {
-      emitError(startLoc, "unknown memory '") << memNameId << "'";
-      return failure();
-    }
+      mdirIndent.getValue() > nextIndent.getValue() &&
+      !isa<FModuleOp>(resultMemoryPort->getParentOp())) {
 
     // If we need to inject this name into a parent scope, then we have to do
     // some IR hackery.  Create a wire for the id name right before
     // the mem in question, inject its name into that scope, then connect
     // the output of the mport to it.
-    if (scopeAndOperation.first != moduleContext.symbolTable.getCurScope()) {
-      WireOp wireHack;
-      /* inject the wire into an outer scope*/ {
-        auto insertPoint = builder.saveInsertionPoint();
-        builder.setInsertionPoint(scopeAndOperation.second);
-        wireHack = builder.create<WireOp>(result.getType());
-        builder.restoreInsertionPoint(insertPoint);
-      }
-      builder.create<ConnectOp>(wireHack, result);
-
-      // Inject this the wire's name into the same scope as the memory.
-      moduleContext.symbolTable.insertIntoScope(
-          scopeAndOperation.first, Identifier::get(id, getContext()),
-          {startLoc, SymbolValueEntry(wireHack)});
-      return success();
+    WireOp wireHack;
+    /* inject the wire into the enclosing firrtl.module*/ {
+      // TODO: Store this in moduleContext.
+      auto curModule = resultMemoryPort->getParentOfType<FModuleOp>();
+      auto insertPoint = builder.saveInsertionPoint();
+      builder.setInsertionPointToStart(curModule.getBodyBlock());
+      wireHack = builder.create<WireOp>(result.getType());
+      builder.restoreInsertionPoint(insertPoint);
     }
+    builder.create<ConnectOp>(wireHack, result);
+
+    // Inject this the wire's name into the global scope.
+    result = wireHack;
+    insertNameIntoGlobalScope = true;
   }
 
-  return moduleContext.addSymbolEntry(id, result, startLoc);
+  return moduleContext.addSymbolEntry(id, result, startLoc,
+                                      insertNameIntoGlobalScope);
 }
 
 /// printf ::= 'printf(' exp exp StringLit exp* ')' info?
@@ -2171,8 +2194,7 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
   // This is a function to parse a suite body.
   auto parseSuite = [&](Block &blockToInsertInto) -> ParseResult {
     // Declarations within the suite are scoped to within the suite.
-    ModuleSymbolTable::ScopeTy suiteScope(moduleContext.symbolTable);
-    MemoryScopeTable::ScopeTy suiteMemoryScope(moduleContext.memoryScopeTable);
+    FIRModuleContext::SymbolTableScope suiteScope(moduleContext);
 
     // After parsing the when region, we can release any new entries in
     // unbundledValues since the symbol table entries that refer to them will be
@@ -2380,13 +2402,6 @@ ParseResult FIRStmtParser::parseCMem() {
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
   auto result = builder.create<CMemOp>(type, name, annotations);
-
-  // Remember that this memory is in this symbol table scope.
-  // TODO(chisel bug): This should be removed along with memoryScopeTable.
-  moduleContext.memoryScopeTable.insert(
-      Identifier::get(id, getContext()),
-      {moduleContext.symbolTable.getCurScope(), result.getOperation()});
-
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -2416,13 +2431,6 @@ ParseResult FIRStmtParser::parseSMem() {
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
   auto result = builder.create<SMemOp>(type, ruw, name, annotations);
-
-  // Remember that this memory is in this symbol table scope.
-  // TODO(chisel bug): This should be removed along with memoryScopeTable.
-  moduleContext.memoryScopeTable.insert(
-      Identifier::get(id, getContext()),
-      {moduleContext.symbolTable.getCurScope(), result.getOperation()});
-
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -2559,13 +2567,6 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
 
   moduleContext.unbundledValues.push_back(std::move(unbundledValueEntry));
   auto entryID = UnbundledID(moduleContext.unbundledValues.size());
-
-  // Remember that this memory is in this symbol table scope.
-  // TODO(chisel bug): This should be removed along with memoryScopeTable.
-  moduleContext.memoryScopeTable.insert(
-      Identifier::get(id, getContext()),
-      {moduleContext.symbolTable.getCurScope(), result.getOperation()});
-
   return moduleContext.addSymbolEntry(id, entryID, startTok.getLoc());
 }
 
