@@ -36,32 +36,30 @@ OperatorType *Scheduler::getOrInsertOperatorType(StringRef name) {
 }
 
 LogicalResult Scheduler::checkOp(Operation *op) {
-  if (!hasAssociatedOperatorType(op)) {
-    op->emitError("Operation is not associated with an operator type");
-    return failure();
-  }
+  if (!hasAssociatedOperatorType(op))
+    return op->emitError("Operation is not associated with an operator type");
   return success();
 }
 
 LogicalResult Scheduler::checkDep(Dependence *dep) {
   Operation *i = dep->getSource();
   Operation *j = dep->getDestination();
-  if (!(hasOperation(i) && hasOperation(j))) {
-    containingOp->emitError()
-        << "Scheduling problem contains dependence with unregistered endpoints."
-        << "\n  from: " << *i << (hasOperation(i) ? "" : " (unregistered)")
-        << "\n  to:   " << *j << (hasOperation(j) ? "" : " (unregistered)");
-    return failure();
-  }
+
+  if (!(hasOperation(i) && hasOperation(j)))
+    return containingOp->emitError()
+           << "Scheduling problem contains dependence with unregistered "
+              "endpoints."
+           << "\n  from: " << *i << (hasOperation(i) ? "" : " (unregistered)")
+           << "\n  to:   " << *j << (hasOperation(j) ? "" : " (unregistered)");
+
   return success();
 }
 
 LogicalResult Scheduler::checkOpr(OperatorType *opr) {
-  if (!hasLatency(opr)) {
-    containingOp->emitError()
-        << "Operator type '" << opr->getName() << "' has no latency";
-    return failure();
-  }
+  if (!hasLatency(opr))
+    return containingOp->emitError()
+           << "Operator type '" << opr->getName() << "' has no latency";
+
   return success();
 }
 
@@ -69,29 +67,24 @@ LogicalResult Scheduler::checkProb() { return success(); }
 
 /// Check overall problem by delegating to the component-specific checkers.
 LogicalResult Scheduler::check() {
-  for (auto *op : getOperations()) {
+  for (auto *op : getOperations())
     if (failed(checkOp(op)))
       return failure();
-  }
 
-  for (auto *dep : getDependences()) {
+  for (auto *dep : getDependences())
     if (failed(checkDep(dep)))
       return failure();
-  }
 
-  for (auto *opr : getOperatorTypes()) {
+  for (auto *opr : getOperatorTypes())
     if (failed(checkOpr(opr)))
       return failure();
-  }
 
   return checkProb();
 }
 
 LogicalResult Scheduler::verifyOp(Operation *op) {
-  if (!hasStartTime(op)) {
-    op->emitError("Operation has no start time");
-    return failure();
-  }
+  if (!hasStartTime(op))
+    return op->emitError("Operation has no start time");
   return success();
 }
 
@@ -105,13 +98,12 @@ LogicalResult Scheduler::verifyDep(Dependence *dep) {
   stJ = getStartTime(j);
 
   // check if i's result is available before j starts
-  if (!(stI + latI <= stJ)) {
-    containingOp->emitError()
-        << "Precedence violated for dependence."
-        << "\n  from: " << *i << ", result available in t=" << (stI + latI)
-        << "\n  to:   " << *j << ", starts in t=" << stJ;
-    return failure();
-  }
+  if (!(stI + latI <= stJ))
+    return containingOp->emitError()
+           << "Precedence violated for dependence."
+           << "\n  from: " << *i << ", result available in t=" << (stI + latI)
+           << "\n  to:   " << *j << ", starts in t=" << stJ;
+
   return success();
 }
 
@@ -121,20 +113,17 @@ LogicalResult Scheduler::verifyProb() { return success(); }
 
 /// Verify overall solution by delegating to the component-specific verifiers.
 LogicalResult Scheduler::verify() {
-  for (auto *op : getOperations()) {
+  for (auto *op : getOperations())
     if (failed(verifyOp(op)))
       return failure();
-  }
 
-  for (auto *dep : getDependences()) {
+  for (auto *dep : getDependences())
     if (failed(verifyDep(dep)))
       return failure();
-  }
 
-  for (auto *opr : getOperatorTypes()) {
+  for (auto *opr : getOperatorTypes())
     if (failed(verifyOpr(opr)))
       return failure();
-  }
 
   return verifyProb();
 }
