@@ -336,8 +336,9 @@ void TypeLoweringVisitor::lowerArg(FModuleOp module, BlockArgument arg,
     // Create new block arguments.
     auto type = field.type;
     // Flip the direction if the field is an output.
-    auto direction = (Direction)(
-        (unsigned)getModulePortDirection(module, argNumber) ^ field.isOutput);
+    auto direction =
+        (Direction)((unsigned)getModulePortDirection(module, argNumber) ^
+                    field.isOutput);
     auto newValue = addArg(module, type, argNumber, direction, field.suffix);
 
     // If this field was flattened from a bundle.
@@ -387,9 +388,9 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
         pName = builder.getStringAttr("");
       portNames.push_back(pName);
       // Flip the direction if the field is an output.
-      portDirections.push_back((Direction)(
-          (unsigned)getModulePortDirection(extModule, oldArgNumber) ^
-          field.isOutput));
+      portDirections.push_back((
+          Direction)((unsigned)getModulePortDirection(extModule, oldArgNumber) ^
+                     field.isOutput));
 
       // Populate newAnnotations with the old annotations filtered to those
       // associated with just this field.
@@ -441,22 +442,30 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
   SmallVector<StringAttr, 8> resultNames;
   SmallVector<size_t, 8> numFieldsPerResult;
   SmallVector<unsigned, 8> resultFieldIDs;
+  SmallVector<Attribute, 8> lowerPortAnnotations;
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
     flattenType(op.getType(i).cast<FIRRTLType>(), fieldTypes);
+
+    auto annotations = op.portAnnotations()[i].cast<ArrayAttr>();
 
     for (auto field : fieldTypes) {
       // Store the flat type for the new bundle type.
       resultNames.push_back(builder->getStringAttr(field.suffix));
       resultTypes.push_back(field.getPortType());
       resultFieldIDs.push_back(field.fieldID);
+
+      SmallVector<Attribute> loweredAttrs;
+      filterAnnotations(annotations, loweredAttrs, field.suffix);
+      lowerPortAnnotations.push_back(builder->getArrayAttr(loweredAttrs));
     }
     numFieldsPerResult.push_back(fieldTypes.size());
   }
 
   auto newInstance = builder->create<InstanceOp>(
-      resultTypes, op.moduleNameAttr(), op.nameAttr(), op.annotations());
+      resultTypes, op.moduleNameAttr(), op.nameAttr(), op.annotations(),
+      builder->getArrayAttr(lowerPortAnnotations));
 
   // Record the mapping of each old result to each new result.
   size_t nextResult = 0;

@@ -83,7 +83,8 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar
 ; // -----
 
 ; COM: Test result annotations of InstanceOp.
-circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},{"two":null,"target":"~Foo|Foo>bar.b.baz"}]]
+circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},
+                {"two":null,"target":"~Foo|Foo>bar.b.baz"}]]
   module Bar:
     input a: UInt<1>
     output b: {baz: UInt<1>, qux: UInt<1>}
@@ -92,7 +93,8 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},{"two":null,"target":"~Fo
 
     ; CHECK-LABEL: module {
     ; CHECK: %bar_a, %bar_b = firrtl.instance @Bar
-    ; CHECK-SAME: !firrtl.flip<uint<1>> {one}, !firrtl.bundle<baz: uint<1>, qux: uint<1>> {target = [".baz"], two}
+    ; CHECK-SAME: !firrtl.flip<uint<1>> {[{one}]}, 
+    ; CHECK-SAME: !firrtl.bundle<baz: uint<1>, qux: uint<1>> {[{target = [".baz"], two}]}
 
 ; // -----
 

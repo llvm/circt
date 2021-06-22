@@ -125,11 +125,13 @@ firrtl.module @VerbatimExpr() {
   %2 = firrtl.add %0, %1 : (!firrtl.uint<42>, !firrtl.uint<32>) -> !firrtl.uint<43>
 }
 
-firrtl.module @Bar(in %a: !firrtl.uint<1>, out %b: !firrtl.bundle<baz: uint<1>, qux: uint<1>>) {
-}
-firrtl.module @Foo() {
-  // CHECK: !firrtl.flip<uint<1>> {one}, !firrtl.bundle<baz: uint<1>, qux: uint<1>> {target = [".baz"], two}
-  %bar_a, %bar_b = firrtl.instance @Bar  {name = "bar"} : !firrtl.flip<uint<1>> {one}, !firrtl.bundle<baz: uint<1>, qux: uint<1>> {target = [".baz"], two}
+firrtl.circuit "Foo"   {
+  firrtl.module @Bar(in %a: !firrtl.uint<1>, out %b: !firrtl.bundle<baz: uint<1>, qux: uint<1>>) {
+  }
+  firrtl.module @Foo() {
+    // CHECK: !firrtl.flip<uint<1>> {[{one}]}, !firrtl.bundle<baz: uint<1>, qux: uint<1>> {[{target = [".baz"], two}]}
+    %bar_a, %bar_b = firrtl.instance @Bar  {name = "bar"} : !firrtl.flip<uint<1>> {[{one}]}, !firrtl.bundle<baz: uint<1>, qux: uint<1>> {[{target = [".baz"], two}]}
+  }
 }
 
 }

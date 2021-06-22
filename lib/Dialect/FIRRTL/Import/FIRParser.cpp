@@ -2334,10 +2334,8 @@ ParseResult FIRStmtParser::parseInstance() {
   ArrayAttr annotations = getAnnotations(getModuleTarget() + ">" + id);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
-  // Annotations targeting results of instance ops should be attached through
-  // the setPortAnnotation hook.
   SmallVector<Attribute, 16> annotationsVec;
-  llvm::StringMap<Attribute> portAnnotationsMap;
+  llvm::StringMap<SmallVector<Attribute, 4>> portAnnotationsMap;
   for (auto attr : annotations) {
     auto dictAttr = attr.cast<DictionaryAttr>();
     auto targetAttr = dictAttr.get("target");
@@ -2368,16 +2366,14 @@ ParseResult FIRStmtParser::parseInstance() {
         dictAttrVec.push_back(namedAttr);
     }
 
-    portAnnotationsMap[portName.drop_front()] =
-        builder.getDictionaryAttr(dictAttrVec);
+    portAnnotationsMap[portName.drop_front()].push_back(
+        builder.getDictionaryAttr(dictAttrVec));
   }
 
   SmallVector<Attribute, 16> portAnnotationsVec;
   for (auto port : modulePorts) {
-    if (auto annotation = portAnnotationsMap.lookup(port.getName()))
-      portAnnotationsVec.push_back(annotation);
-    else
-      portAnnotationsVec.push_back(builder.getDictionaryAttr({}));
+    auto annotation = portAnnotationsMap.lookup(port.getName());
+    portAnnotationsVec.push_back(builder.getArrayAttr(annotation));
   }
   auto result = builder.create<InstanceOp>(resultTypes, moduleName, name,
                                            annotationsVec, portAnnotationsVec);

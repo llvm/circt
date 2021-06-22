@@ -871,10 +871,17 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   result.addAttribute("annotations", builder.getArrayAttr(annotations));
   result.addTypes(resultTypes);
 
-  if (portAnnotations.empty())
-    return;
-  assert(portAnnotations.size() == resultTypes.size());
-  result.addAttribute("portAnnotations", builder.getArrayAttr(portAnnotations));
+  if (portAnnotations.empty()) {
+    SmallVector<Attribute, 16> portAnnotationsVec;
+    for (unsigned i = 0, e = resultTypes.size(); i < e; ++i)
+      portAnnotationsVec.push_back(builder.getArrayAttr({}));
+    result.addAttribute("portAnnotations",
+                        builder.getArrayAttr(portAnnotationsVec));
+  } else {
+    assert(portAnnotations.size() == resultTypes.size());
+    result.addAttribute("portAnnotations",
+                        builder.getArrayAttr(portAnnotations));
+  }
 }
 
 /// Create a copy of the specified instance operation with some result removed.
@@ -908,13 +915,17 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
   if (succeeded(parser.parseOptionalColon())) {
     do {
       resultsTypes.emplace_back();
-      NamedAttrList annotation;
-      if (parser.parseType(resultsTypes.back()) ||
-          parser.parseOptionalAttrDict(annotation))
+      if (parser.parseType(resultsTypes.back()))
         return failure();
 
-      resultsAttrs.push_back(
-          DictionaryAttr::get(result.getContext(), annotation));
+      if (succeeded(parser.parseOptionalLBrace())) {
+        ArrayAttr annotation;
+        if (parser.parseAttribute(annotation) || parser.parseRBrace())
+          return failure();
+        resultsAttrs.push_back(annotation);
+      } else {
+        resultsAttrs.push_back(parser.getBuilder().getArrayAttr({}));
+      }
     } while (succeeded(parser.parseOptionalComma()));
   }
 
@@ -935,34 +946,26 @@ static void print(OpAsmPrinter &p, InstanceOp op) {
   if (op.getNumResults()) {
     p << " : ";
     auto portTypes = op.getResultTypes();
-    auto portAnnotations = op->getAttrOfType<ArrayAttr>("portAnnotations");
-
     for (unsigned i = 0, e = op.getNumResults(); i < e; ++i) {
       if (i > 0)
         p << ", ";
 
       p.printType(portTypes[i]);
-      if (portAnnotations)
-        p.printOptionalAttrDict(
-            portAnnotations[i].cast<DictionaryAttr>().getValue());
+
+      auto portAnnotation = op.portAnnotations()[i].cast<ArrayAttr>();
+      if (!portAnnotation.empty()) {
+        p << " {";
+        p.printAttribute(portAnnotation);
+        p << "}";
+      }
     }
   }
 }
 
-DictionaryAttr InstanceOp::getPortAnnotation(unsigned portIdx) {
+ArrayAttr InstanceOp::getPortAnnotation(unsigned portIdx) {
   assert(portIdx >= getNumResults() && "index is larger than result number");
 
-  if (auto attr = (*this)->getAttrOfType<ArrayAttr>("portAnnotations"))
-    return attr[portIdx].cast<DictionaryAttr>();
-  return nullptr;
-}
-
-void InstanceOp::setPortAnnotation(unsigned portIdx,
-                                   DictionaryAttr annotation) {
-  assert(portIdx >= getNumResults() && "index is larger than result number");
-
-  mlir::function_like_impl::detail::setArgResAttrDict(
-      (*this), "portAnnotations", getNumResults(), portIdx, annotation);
+  return portAnnotations()[portIdx].cast<ArrayAttr>();
 }
 
 void InstanceOp::setAllPortAnnotations(ArrayRef<Attribute> annotations) {
@@ -1022,14 +1025,9 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
     }
   }
 
-  if (auto attr = instance->getAttrOfType<ArrayAttr>("portAnnotations")) {
-    if (!llvm::all_of(attr,
-                      [&](Attribute a) { return a.isa<DictionaryAttr>(); }))
-      return instance.emitOpError("result annotations must be DictionaryAttr");
-    if (attr.size() != instance.getNumResults())
-      return instance.emitOpError("the number of result annotations should be "
-                                  "equal to the number of results");
-  }
+  if (instance.portAnnotations().size() != instance.getNumResults())
+    return instance.emitOpError("the number of result annotations should be "
+                                "equal to the number of results");
 
   return success();
 }

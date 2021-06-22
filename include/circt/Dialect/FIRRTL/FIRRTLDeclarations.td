@@ -18,7 +18,8 @@ def InstanceOp : FIRRTLOp<"instance"> {
   }];
 
   let arguments = (ins FlatSymbolRefAttr:$moduleName, StrAttr:$name,
-                       AnnotationArrayAttr:$annotations);
+                       AnnotationArrayAttr:$annotations,
+                       PortAnnotationsAttr:$portAnnotations);
   let results = (outs Variadic<FIRRTLType>:$results);
 
   let printer = "return ::print(p, *this);";
@@ -52,8 +53,7 @@ def InstanceOp : FIRRTLOp<"instance"> {
     }
 
     /// Hooks for port annotations.
-    DictionaryAttr getPortAnnotation(unsigned portIdx);
-    void setPortAnnotation(unsigned portIdx, DictionaryAttr annotation);
+    ArrayAttr getPortAnnotation(unsigned portIdx);
     void setAllPortAnnotations(ArrayRef<Attribute> annotations);
   }];
 }
