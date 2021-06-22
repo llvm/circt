@@ -92,7 +92,6 @@ struct GlobalFIRParserState {
   GlobalFIRParserState(const llvm::SourceMgr &sourceMgr, MLIRContext *context,
                        FIRParserOptions options)
       : context(context), options(options), lex(sourceMgr, context),
-        curToken(lex.lexToken()),
         dontTouchAnnotation(getAnnotationOfClass(
             context, "firrtl.transforms.DontTouchAnnotation")),
         emptyArrayAttr(ArrayAttr::get(context, {})),
@@ -114,9 +113,6 @@ struct GlobalFIRParserState {
   /// The lexer for the source file we're parsing.
   FIRLexer lex;
 
-  /// This is the next token that hasn't been consumed yet.
-  FIRToken curToken;
-
   /// Cached annotation for DontTouch.
   const DictionaryAttr dontTouchAnnotation;
 
@@ -127,22 +123,7 @@ struct GlobalFIRParserState {
   const Identifier loIdentifier, hiIdentifier, amountIdentifier;
   const Identifier fieldnameIdentifier, indexIdentifier;
 
-  class BacktraceState {
-  public:
-    explicit BacktraceState(GlobalFIRParserState &state)
-        : curToken(state.curToken), cursor(state.lex.getCursor()) {}
-
-    void backtrack(GlobalFIRParserState &state) {
-      state.curToken = curToken;
-      cursor.restore(state.lex);
-    }
-
-  private:
-    FIRToken curToken;
-    FIRLexerCursor cursor;
-  };
-
-  BacktraceState getBacktrackState() { return BacktraceState(*this); }
+  FIRLexerCursor getLexerCursor() { return lex.getCursor(); }
 
 private:
   GlobalFIRParserState(const GlobalFIRParserState &) = delete;
@@ -170,12 +151,12 @@ struct FIRParser {
 
   /// Return the indentation level of the specified token.
   Optional<unsigned> getIndentation() const {
-    return state.lex.getIndentation(state.curToken);
+    return state.lex.getIndentation(getToken());
   }
 
   /// Return the current token the parser is inspecting.
-  const FIRToken &getToken() const { return state.curToken; }
-  StringRef getTokenSpelling() const { return state.curToken.getSpelling(); }
+  const FIRToken &getToken() const { return state.lex.getToken(); }
+  StringRef getTokenSpelling() const { return getToken().getSpelling(); }
 
   //===--------------------------------------------------------------------===//
   // Error Handling
@@ -183,7 +164,7 @@ struct FIRParser {
 
   /// Emit an error and return failure.
   InFlightDiagnostic emitError(const Twine &message = {}) {
-    return emitError(state.curToken.getLoc(), message);
+    return emitError(getToken().getLoc(), message);
   }
   InFlightDiagnostic emitError(SMLoc loc, const Twine &message = {});
 
@@ -218,7 +199,7 @@ struct FIRParser {
   /// If the current token has the specified kind, consume it and return true.
   /// If not, return false.
   bool consumeIf(FIRToken::Kind kind) {
-    if (state.curToken.isNot(kind))
+    if (getToken().isNot(kind))
       return false;
     consumeToken(kind);
     return true;
@@ -228,10 +209,10 @@ struct FIRParser {
   ///
   /// This returns the consumed token.
   FIRToken consumeToken() {
-    FIRToken consumedToken = state.curToken;
+    FIRToken consumedToken = getToken();
     assert(consumedToken.isNot(FIRToken::eof, FIRToken::error) &&
            "shouldn't advance past EOF or errors");
-    state.curToken = state.lex.lexToken();
+    state.lex.lexToken();
     return consumedToken;
   }
 
@@ -241,7 +222,7 @@ struct FIRParser {
   ///
   /// This returns the consumed token.
   FIRToken consumeToken(FIRToken::Kind kind) {
-    FIRToken consumedToken = state.curToken;
+    FIRToken consumedToken = getToken();
     assert(consumedToken.is(kind) && "consumed an unexpected token");
     consumeToken();
     return consumedToken;
@@ -2800,7 +2781,7 @@ private:
   struct DeferredModuleToParse {
     FModuleOp moduleOp;
     SmallVector<SMLoc> portLocs;
-    GlobalFIRParserState::BacktraceState parserState;
+    FIRLexerCursor parserState;
     std::string moduleTarget;
     unsigned indent;
   };
@@ -2884,7 +2865,7 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<ModulePortInfo> &resultPorts,
     // output foo             ; port
     // output <= input        ; identifier expression
     // output.thing <= input  ; identifier expression
-    auto backtrackState = getState().getBacktrackState();
+    auto backtrackState = getState().getLexerCursor();
 
     bool isOutput = getToken().is(FIRToken::kw_output);
     consumeToken();
@@ -2892,7 +2873,7 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<ModulePortInfo> &resultPorts,
     // If we have something that isn't a keyword then this must be an
     // identifier, not an input/output marker.
     if (!getToken().is(FIRToken::identifier) && !getToken().isKeyword()) {
-      backtrackState.backtrack(getState());
+      backtrackState.restore(getState().lex);
       break;
     }
 
@@ -2980,8 +2961,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
 
     // Parse the body of this module after all prototypes have been parsed. This
     // allows us to handle forward references correctly.
-    deferredModules.push_back({moduleOp, portLocs,
-                               getState().getBacktrackState(),
+    deferredModules.push_back({moduleOp, portLocs, getState().getLexerCursor(),
                                std::move(moduleTarget), indent});
 
     // We're going to defer parsing this module, so just skip tokens until we
@@ -3084,7 +3064,7 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
   auto &moduleTarget = deferredModule.moduleTarget;
 
   // Reset the parser/lexer state back to right after the port list.
-  deferredModule.parserState.backtrack(getState());
+  deferredModule.parserState.restore(getState().lex);
 
   FIRModuleContext moduleContext(getState(), std::move(moduleTarget));
 
