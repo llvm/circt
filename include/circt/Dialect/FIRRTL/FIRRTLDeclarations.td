@@ -262,7 +262,7 @@ def WireOp : FIRRTLOp<"wire", []> {
   let arguments = (
     ins StrAttr:$name,
         DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
-  let results = (outs UnflippedType:$result);
+  let results = (outs FIRRTLType:$result);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,

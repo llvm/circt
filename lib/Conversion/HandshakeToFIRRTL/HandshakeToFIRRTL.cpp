@@ -1675,7 +1675,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   llvm::SmallVector<Attribute> resultNames;
   for (auto p : ports) {
     resultTypes.push_back(
-        FlipType::get(MemOp::getTypeForPort(depth, dataType, p.second)));
+        MemOp::getTypeForPort(depth, dataType, p.second));
     resultNames.push_back(rewriter.getStringAttr(p.first.str()));
   }
 
@@ -1985,14 +1985,8 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
 
   // Bundle all ports of the instance into a new flattened bundle type.
   SmallVector<ModulePortInfo, 8> portInfo = getModulePortInfo(subModuleOp);
-  for (auto &port : portInfo) {
-    // All instance input ports are flipped.
-    if (port.direction == Direction::Input) {
-      resultTypes.push_back(FlipType::get(port.type));
-      continue;
-    }
+  for (auto &port : portInfo)
     resultTypes.push_back(port.type);
-  }
 
   // Create a instance operation.
   auto instanceOp = rewriter.create<firrtl::InstanceOp>(

@@ -100,10 +100,10 @@ void CheckWidthsPass::checkType(
           addContext(error);
         }
       })
-      // Look into `flip<...>` and vector types, but report the entire flip or
-      // vector type upon failure. So `flip<uint>` will have the error mention
-      // `flip<uint>` instead of just `uint`.
-      .template Case<FlipType, FVectorType>([&](auto type) {
+      // Look into vector types, but report the entire
+      // vector type upon failure. So `vector<uint>` will have the error mention
+      // `vector<uint>` instead of just `uint`.
+      .template Case<FVectorType>([&](auto type) {
         checkType(type.getElementType(), reportType, loc, addContext);
       })
       // Look into bundle types. Report only the type of the offending field

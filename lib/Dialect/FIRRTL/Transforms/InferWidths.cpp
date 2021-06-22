@@ -1149,19 +1149,13 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
 
       // Aggregate Values
       .Case<SubfieldOp>([&](auto op) {
-        auto type = op.input().getType();
-        if (auto flipType = type.template dyn_cast<FlipType>())
-          type = flipType.getElementType();
-        auto bundleType = type.template cast<BundleType>();
+        auto bundleType = op.input().getType().template cast<BundleType>();
         auto index = bundleType.getElementIndex(op.fieldname()).getValue();
         auto fieldID = bundleType.getFieldID(index);
         unifyTypes(FieldRef(op.getResult(), 0), FieldRef(op.input(), fieldID),
                    op.getType());
       })
       .Case<SubindexOp, SubaccessOp>([&](auto op) {
-        auto type = op.input().getType();
-        if (auto flipType = type.template dyn_cast<FlipType>())
-          type = flipType.getElementType();
         // All vec fields unify to the same thing. Always use the first element
         // of the vector, which has a field ID of 1.
         unifyTypes(FieldRef(op.getResult(), 0), FieldRef(op.input(), 1),
@@ -1410,9 +1404,6 @@ void InferenceMapping::declareVars(Value value, Location loc) {
       // Unkown width integers create a variable.
       setExpr(FieldRef(value, fieldID), solver.var());
       fieldID++;
-    } else if (auto inner = type.dyn_cast<FlipType>()) {
-      // Flip types declare unknown widths in their element type.
-      return declare(inner.getElementType());
     } else if (auto bundleType = type.dyn_cast<BundleType>()) {
       // Bundle types recursively declare all bundle elements.
       fieldID++;
@@ -1443,14 +1434,11 @@ void InferenceMapping::declareVars(Value value, Location loc) {
 /// This function is used to apply regular connects.
 void InferenceMapping::constrainTypes(Value larger, Value smaller) {
   // Recurse to every leaf element and set larger >= smaller.
-  auto type = larger.getType().cast<FIRRTLType>().stripFlip().first;
+  auto type = larger.getType().cast<FIRRTLType>();
   auto fieldID = 0;
   std::function<void(FIRRTLType, Value, Value)> constrain =
       [&](FIRRTLType type, Value larger, Value smaller) {
-        if (auto flipType = type.dyn_cast<FlipType>()) {
-          // Flip the LHS and RHS.
-          constrain(flipType.getElementType(), smaller, larger);
-        } else if (auto bundleType = type.dyn_cast<BundleType>()) {
+        if (auto bundleType = type.dyn_cast<BundleType>()) {
           fieldID++;
           for (auto &element : bundleType.getElements()) {
             if (element.isFlip)
@@ -1490,12 +1478,7 @@ void InferenceMapping::partiallyConstrainTypes(Value larger, Value smaller) {
   std::function<void(FIRRTLType, Value, unsigned, FIRRTLType, Value, unsigned)>
       constrain = [&](FIRRTLType aType, Value a, unsigned aID, FIRRTLType bType,
                       Value b, unsigned bID) {
-        if (auto aFlipType = aType.dyn_cast<FlipType>()) {
-          auto bFlipType = bType.cast<FlipType>();
-          // Flip the LHS and RHS.
-          constrain(bFlipType.getElementType(), b, bID,
-                    aFlipType.getElementType(), a, aID);
-        } else if (auto aBundle = aType.dyn_cast<BundleType>()) {
+        if (auto aBundle = aType.dyn_cast<BundleType>()) {
           auto bBundle = bType.cast<BundleType>();
           for (unsigned aIndex = 0, e = aBundle.getNumElements(); aIndex < e;
                ++aIndex) {
@@ -1527,8 +1510,8 @@ void InferenceMapping::partiallyConstrainTypes(Value larger, Value smaller) {
         }
       };
 
-  auto largerType = larger.getType().cast<FIRRTLType>().stripFlip().first;
-  auto smallerType = smaller.getType().cast<FIRRTLType>().stripFlip().first;
+  auto largerType = larger.getType().cast<FIRRTLType>();
+  auto smallerType = smaller.getType().cast<FIRRTLType>();
   constrain(largerType, larger, 0, smallerType, smaller, 0);
 }
 
@@ -1556,10 +1539,6 @@ void InferenceMapping::unifyTypes(FieldRef lhs, FieldRef rhs, FIRRTLType type) {
   if (lhs == rhs)
     return;
 
-  // Strip an outer flip off the type if there is one.  We don't want to
-  // interpret an outerflip the same way as a flip in a bundle.
-  type = type.stripFlip().first;
-
   // Co-iterate the two field refs, recurring into every leaf element and set
   // them equal.
   auto fieldID = 0;
@@ -1572,8 +1551,6 @@ void InferenceMapping::unifyTypes(FieldRef lhs, FieldRef rhs, FIRRTLType type) {
                               << getFieldName(rhsFieldRef) << "\n");
       setExpr(lhsFieldRef, getExpr(rhsFieldRef));
       fieldID++;
-    } else if (auto inner = type.dyn_cast<FlipType>()) {
-      return unify(inner.getElementType());
     } else if (auto bundleType = type.dyn_cast<BundleType>()) {
       fieldID++;
       for (auto &element : bundleType.getElements()) {
@@ -1800,9 +1777,6 @@ bool InferenceTypeUpdate::updateValue(Value value) {
       auto newType = updateType(FieldRef(value, fieldID), type);
       fieldID++;
       return newType;
-    } else if (auto flipType = type.dyn_cast<FlipType>()) {
-      // Flip types update unknown widths in their element type.
-      return FlipType::get(update(flipType.getElementType()));
     } else if (auto bundleType = type.dyn_cast<BundleType>()) {
       // Bundle types recursively update all bundle elements.
       fieldID++;

@@ -18,12 +18,12 @@ firrtl.module @CheckInitialization(in %clock : !firrtl.clock, in %en : !firrtl.u
   %w = firrtl.wire : !firrtl.bundle<a : uint<1>, b  flip: uint<1>>
 
   // expected-error @+1 {{sink "test.in" not fully initialized}}
-  %simple_out, %simple_in = firrtl.instance @simple {name = "test", portNames=["in", "out"]}: !firrtl.flip<uint<1>>, !firrtl.uint<1>
+  %simple_out, %simple_in = firrtl.instance @simple {name = "test", portNames=["in", "out"]}: !firrtl.uint<1>, !firrtl.uint<1>
 
   // expected-error @+3 {{sink "memory.r.addr" not fully initialized}}
   // expected-error @+2 {{sink "memory.r.en" not fully initialized}}
   // expected-error @+1 {{sink "memory.r.clk" not fully initialized}}
-  %memory_r = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a: uint<8>, b: uint<8>>>>
+  %memory_r = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a: uint<8>, b: uint<8>>>
 }
 }
 

@@ -21,7 +21,6 @@ namespace circt {
 namespace firrtl {
 namespace detail {
 struct WidthTypeStorage;
-struct FlipTypeStorage;
 struct BundleTypeStorage;
 struct VectorTypeStorage;
 } // namespace detail.
@@ -32,7 +31,6 @@ class AsyncResetType;
 class SIntType;
 class UIntType;
 class AnalogType;
-class FlipType;
 class BundleType;
 class FVectorType;
 
@@ -102,10 +100,6 @@ public:
 
   /// Return true if this is a valid "reset" type.
   bool isResetType();
-
-  /// Return the type with an outer flip stripped and a bool indicating if an
-  /// outer flip was stripped.
-  std::pair<FIRRTLType, bool> stripFlip();
 
   /// Get the maximum field ID of this type.  For integers and other ground
   /// types, there are no subfields and the maximum field ID is 0.  For bundle
@@ -256,27 +250,6 @@ public:
 
   /// Return the bitwidth of this type or None if unknown.
   Optional<int32_t> getWidth();
-};
-
-//===----------------------------------------------------------------------===//
-// Flip Type
-//===----------------------------------------------------------------------===//
-
-class FlipType : public FIRRTLType::TypeBase<FlipType, FIRRTLType,
-                                             detail::FlipTypeStorage> {
-public:
-  using Base::Base;
-
-  FIRRTLType getElementType();
-
-  /// Get the maximum field ID in this type.  Since FlipTypes are not assigned
-  /// field IDs, this is just the max ID of the element type.
-  unsigned getMaxFieldID();
-
-  static FIRRTLType get(FIRRTLType element);
-
-  /// Return the recursive properties of the type.
-  RecursiveTypeProperties getRecursiveTypeProperties();
 };
 
 //===----------------------------------------------------------------------===//

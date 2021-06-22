@@ -253,9 +253,9 @@ firrtl.module @test(in %a : !firrtl.bundle<f1: uint<1>>, in %b : !firrtl.bundle<
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(in %a : !firrtl.bundle<f1: uint<1>>, in %b : !firrtl.bundle<f1: flip<sint<1>>>) {
-  // expected-error @+1 {{type mismatch between destination '!firrtl.bundle<f1: flip<sint<1>>>' and source '!firrtl.bundle<f1: uint<1>>'}}
-  firrtl.connect %b, %a : !firrtl.bundle<f1: flip<sint<1>>>, !firrtl.bundle<f1: uint<1>>
+firrtl.module @test(in %a : !firrtl.bundle<f1: uint<1>>, in %b : !firrtl.bundle<f1 flip: sint<1>>) {
+  // expected-error @+1 {{type mismatch between destination '!firrtl.bundle<f1 flip: sint<1>>' and source '!firrtl.bundle<f1: uint<1>>'}}
+  firrtl.connect %b, %a : !firrtl.bundle<f1 flip: sint<1>>, !firrtl.bundle<f1: uint<1>>
 }
 }
 
@@ -382,9 +382,9 @@ firrtl.module @test(out %a: !firrtl.bundle<a flip: bundle<a flip: uint<1>>>) {
 
 firrtl.circuit "test" {
 firrtl.module @test(out %a: !firrtl.uint<1>) {
-  %memory_r = firrtl.mem Undefined  {depth = 2 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>>
+  %memory_r = firrtl.mem Undefined  {depth = 2 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
   // expected-note @+1 {{the right-hand-side was defined here}}
-  %memory_r_en = firrtl.subfield %memory_r("en") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>>) -> !firrtl.uint<1>
+  %memory_r_en = firrtl.subfield %memory_r("en") : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
   // expected-error @+1 {{invalid flow: the right-hand-side has sink flow}}
   firrtl.connect %a, %memory_r_en : !firrtl.uint<1>, !firrtl.uint<1>
 }
@@ -490,9 +490,9 @@ firrtl.module @test(out %a: !firrtl.bundle<a flip: bundle<a flip: uint<1>>>) {
 
 firrtl.circuit "test" {
 firrtl.module @test(out %a: !firrtl.uint<1>) {
-  %memory_r = firrtl.mem Undefined  {depth = 2 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>>
+  %memory_r = firrtl.mem Undefined  {depth = 2 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
   // expected-note @+1 {{the right-hand-side was defined here}}
-  %memory_r_en = firrtl.subfield %memory_r("en") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>>) -> !firrtl.uint<1>
+  %memory_r_en = firrtl.subfield %memory_r("en") : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
   // expected-error @+1 {{invalid flow: the right-hand-side has sink flow}}
   firrtl.partialconnect %a, %memory_r_en : !firrtl.uint<1>, !firrtl.uint<1>
 }

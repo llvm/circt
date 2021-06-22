@@ -180,8 +180,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.asClock %reset_async : (!firrtl.asyncreset) -> !firrtl.clock
     node check_c5 = asClock(reset_async)
 
-    ; CHECK: %[[AUTO_PASSIVE:.+]] = firrtl.asPassive %auto : !firrtl.uint<1>
-    ; CHECK-NEXT: firrtl.node %[[AUTO_PASSIVE]] : !firrtl.uint<1>
+    ; CHECK: firrtl.node %auto : !firrtl.uint<1>
     node check_output = auto
 
     ; CHECK: %c42_ui10 = firrtl.constant 42 : !firrtl.uint<10>
@@ -303,14 +302,14 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     reg _t_2622 : UInt<4>, clock with :
       reset => (UInt<1>("h0"), _t_2622)
 
-    ; CHECK: %xyz_in = firrtl.instance @circuit {name = "xyz"} : !firrtl.flip<uint<80>>
+    ; CHECK: %xyz_in = firrtl.instance @circuit {name = "xyz"} : !firrtl.uint<80>
     inst xyz of circuit
-    ; CHECK: firrtl.connect %xyz_in, %i8 : !firrtl.flip<uint<80>>, !firrtl.uint<8>
+    ; CHECK: firrtl.connect %xyz_in, %i8 : !firrtl.uint<80>, !firrtl.uint<8>
     xyz.in <= i8
 
     ; CHECK: %myext_in, %myext_out = firrtl.instance @MyExtModule
     ; CHECK: {name = "myext"} :
-    ; CHECK: !firrtl.flip<uint>, !firrtl.uint<8>
+    ; CHECK: !firrtl.uint, !firrtl.uint<8>
     inst myext of MyExtModule
     myext.in <= i8
     printf(clock, reset, "Something interesting! %x", myext.out)
@@ -319,7 +318,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     when reset :
       ; CHECK: %reset_myext_in, %reset_myext_out = firrtl.instance @MyExtModule
       ; CHECK: {name = "reset_myext"} :
-      ; CHECK: !firrtl.flip<uint>, !firrtl.uint<8>
+      ; CHECK: !firrtl.uint, !firrtl.uint<8>
       inst reset_myext of MyExtModule
       reset_myext.in <= i8
     ; CHECK: }
@@ -327,8 +326,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.subaccess %_t[%i8] : !firrtl.vector<uint<1>, 12>, !firrtl.uint<8>
     auto <= _t[i8]
 
-    ; CHECK: %[[AUTO_PASSIVE:.+]] = firrtl.asPassive %auto : !firrtl.uint<1>
-    ; CHECK-NEXT: firrtl.subaccess %_t[%[[AUTO_PASSIVE]]] : !firrtl.vector<uint<1>, 12>, !firrtl.uint<1>
+    ; CHECK: firrtl.subaccess %_t[%auto] : !firrtl.vector<uint<1>, 12>, !firrtl.uint<1>
     auto <= _t[auto]
 
     ; CHECK: %myMem = firrtl.cmem {name = "myMem"} : !firrtl.vector<bundle<id: uint<4>, resp: uint<2>>, 8>
@@ -363,16 +361,15 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.andr %n12
     node value = andr(_GEN_43)    ;; Uses n12 directly.
 
-    ; CHECK: %[[PASSIVE_AUTO:.+]] = firrtl.asPassive %auto
-    ; CHECK-NEXT: = firrtl.not %[[PASSIVE_AUTO]] : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    ; CHECK: = firrtl.not %auto : (!firrtl.uint<1>) -> !firrtl.uint<1>
     node n13 = not(auto)
 
 
     ; CHECK: %_M__T_10, %_M__T_11, %_M__T_18 = firrtl.mem Undefined {depth = 8 : i64, name = "_M", portNames = ["_T_10", "_T_11", "_T_18"]
     ; CHECK-SAME: readLatency = 0 : i32, writeLatency = 1 : i32} :
-    ; CHECK-SAME: !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>,
-    ; CHECK-SAME: !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>,
-    ; CHECK-SAME: !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: bundle<id: uint<4>>>
+    ; CHECK-SAME: !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>,
+    ; CHECK-SAME: !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>,
+    ; CHECK-SAME: !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: bundle<id: uint<4>>
     mem _M : @[Decoupled.scala 209:24]
         data-type => { id : UInt<4> }
         depth => 8
@@ -561,8 +558,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input bf: { flip int_1 : UInt<1>, int_out : UInt<2>}
     ; CHECK: %0 = firrtl.subfield %bf("int_1")
     node _T = bf.int_1
-    ; CHECK: %1 = firrtl.asPassive %0
-    when _T :  ; CHECK: firrtl.when %1 {
+    ; CHECK: firrtl.when %0 {
+    when _T :  
       skip
 
   ; CHECK-LABEL: firrtl.module @mem_depth_1
@@ -579,8 +576,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       writer => MPORT
       read-under-write => undefined
       ; CHECK: %bar_MPORT, %bar_io_deq_bits_MPORT = firrtl.mem Undefined {depth = 1 : i64, name = "bar", portNames = ["MPORT", "io_deq_bits_MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} :
-      ; CHECK: !firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<3>, mask: uint<1>>>,
-      ; CHECK: !firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<3>>>
+      ; CHECK: !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<3>, mask: uint<1>>,
+      ; CHECK: !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<3>>
 
   ; CHECK-LABEL: firrtl.module @mem_no_ports() {
   ; CHECK-NEXT: }
@@ -624,8 +621,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input clkIn: Clock
     output clkOut: Clock
     clkOut <= clkIn
-    ; CHECK: %[[clkOut_passive:.+]] = firrtl.asPassive %clkOut : !firrtl.clock
-    ; CHECK: firrtl.reg %[[clkOut_passive]]
+    ; CHECK: firrtl.reg %clkOut
     reg r: UInt<1>, clkOut
 
   ; COM: Check that a register reset sink is converted to passive
@@ -634,8 +630,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input clk: Clock
     output rst: UInt<1>
     rst is invalid
-    ; CHECK: %[[rst_passive:.+]] = firrtl.asPassive %rst : !firrtl.uint<1>
-    ; CHECK: firrtl.regreset %clk, %[[rst_passive]]
+    ; CHECK: firrtl.regreset %clk, %rst
     reg r: UInt<1>, clk with : (reset => (rst, UInt<1>(0)))
 
   ; COM: Check that a register init sink is converted to passive
@@ -645,8 +640,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input rst: UInt<1>
     output init: UInt<1>
     init is invalid
-    ; CHECK: %[[init_passive:.+]] = firrtl.asPassive %init : !firrtl.uint<1>
-    ; CHECK: firrtl.regreset %clk, %rst, %[[init_passive]]
+    ; CHECK: firrtl.regreset %clk, %rst, %init
     reg r: UInt<1>, clk with : (reset => (rst, init))
 
   ; https://github.com/llvm/circt/issues/492
@@ -796,7 +790,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input rEn: UInt<1>
     output rData: UInt<8>
 
-    ; CHECK: %mem_r = firrtl.mem Undefined {depth = 16 : i64, name = "mem", portNames = ["r"], readLatency = 2 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>>
+    ; CHECK: %mem_r = firrtl.mem Undefined {depth = 16 : i64, name = "mem", portNames = ["r"], readLatency = 2 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
     mem mem:
       data-type => UInt<8>
       depth => 16
@@ -861,23 +855,3 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     output c: UInt<8>
     c <= mux(sel, a, b)
 
-
-  ; Test that operands that are sinks are cast to passive.  This avoids
-  ; downstream issues where LowerTypes wants to lower these expressions blindly,
-  ; but doesn't have sufficient context to know that it needs an asPassive cast.
-  ;
-  ; See: https://github.com/llvm/circt/issues/1181
-  ;
-  ; CHECK-LABEL: firrtl.module @SinkFlowInOperand_Issue1181
-  module SinkFlowInOperandSub_Issue1181:
-    output a: { flip a: UInt<1> }
-    input b: UInt<1>
-  module SinkFlowInOperand_Issue1181:
-    ; CHECK: %[[sub_a:.+]], %[[sub_b:.+]] = firrtl.instance
-    inst sub of SinkFlowInOperandSub_Issue1181
-
-    ; CHECK: %[[sub_a_a:.+]] = firrtl.subfield %[[sub_a]]("a")
-    ; CHECK: %[[sub_a_a_P:.+]] = firrtl.asPassive %[[sub_a_a]]
-    ; CHECK: %[[sub_b_P:.+]] = firrtl.asPassive %[[sub_b]]
-    ; CHECK: firrtl.and %[[sub_a_a_P]], %[[sub_b_P]]
-    node x = and(sub.a.a, sub.b)

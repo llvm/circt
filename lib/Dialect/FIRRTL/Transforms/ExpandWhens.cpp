@@ -99,11 +99,6 @@ public:
 
     // Recurse through a bundle and declare each leaf sink node.
     std::function<void(Type, Flow)> declare = [&](Type type, Flow flow) {
-      // If the field is flipped, flip the flow and use the real type.
-      if (auto flip = type.dyn_cast<FlipType>()) {
-        type = flip.getElementType();
-        flow = swapFlow(flow);
-      }
       // If this is a bundle type, recurse to each of the fields.
       if (auto bundleType = type.dyn_cast<BundleType>()) {
         for (auto &element : bundleType.getElements()) {

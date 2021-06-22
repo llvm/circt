@@ -130,18 +130,18 @@ firrtl.module @InlineMe1(in %in0: !firrtl.uint<4>, in %in1: !firrtl.uint<4>,
                    out %out0: !firrtl.uint<4>,
                    out %out1: !firrtl.uint<4>)
         attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
-  %a_in0, %a_in1, %a_out0, %a_out1 = firrtl.instance @InlineMe0 {name = "a"} : !firrtl.flip<uint<4>>, !firrtl.flip<uint<4>>, !firrtl.uint<4>, !firrtl.uint<4>
-  firrtl.connect %a_in0, %in0 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
-  firrtl.connect %a_in1, %in1 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+  %a_in0, %a_in1, %a_out0, %a_out1 = firrtl.instance @InlineMe0 {name = "a"} : !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<4>
+  firrtl.connect %a_in0, %in0 : !firrtl.uint<4>, !firrtl.uint<4>
+  firrtl.connect %a_in1, %in1 : !firrtl.uint<4>, !firrtl.uint<4>
   firrtl.connect %out0, %a_out0 : !firrtl.uint<4>, !firrtl.uint<4>
   firrtl.connect %out1, %a_out1 : !firrtl.uint<4>, !firrtl.uint<4>
 }
 firrtl.module @TestConnections(in %in0: !firrtl.uint<4>, in %in1: !firrtl.uint<4>,
                    out %out0: !firrtl.uint<4>,
                    out %out1: !firrtl.uint<4>) {
-  %b_in0, %b_in1, %b_out0, %b_out1 = firrtl.instance @InlineMe1 {name = "b"} : !firrtl.flip<uint<4>>, !firrtl.flip<uint<4>>, !firrtl.uint<4>, !firrtl.uint<4>
-  firrtl.connect %b_in0, %in0 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
-  firrtl.connect %b_in1, %in1 : !firrtl.flip<uint<4>>, !firrtl.uint<4>
+  %b_in0, %b_in1, %b_out0, %b_out1 = firrtl.instance @InlineMe1 {name = "b"} : !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<4>
+  firrtl.connect %b_in0, %in0 : !firrtl.uint<4>, !firrtl.uint<4>
+  firrtl.connect %b_in1, %in1 : !firrtl.uint<4>, !firrtl.uint<4>
   firrtl.connect %out0, %b_out0 : !firrtl.uint<4>, !firrtl.uint<4>
   firrtl.connect %out1, %b_out1 : !firrtl.uint<4>, !firrtl.uint<4>
 }
@@ -172,21 +172,21 @@ firrtl.module @TestConnections(in %in0: !firrtl.uint<4>, in %in1: !firrtl.uint<4
 
 // This is testing that bundles with flip types are handled properly by the inliner.
 firrtl.circuit "TestBulkConnections" {
-firrtl.module @InlineMe0(in %in0: !firrtl.bundle<a: uint<4>, b: flip<uint<4>>>,
-                         out %out0: !firrtl.bundle<a: uint<4>, b: flip<uint<4>>>)
+firrtl.module @InlineMe0(in %in0: !firrtl.bundle<a: uint<4>, b flip: uint<4>>,
+                         out %out0: !firrtl.bundle<a: uint<4>, b flip: uint<4>>)
         attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
-  firrtl.connect %out0, %in0 : !firrtl.bundle<a: uint<4>, b: flip<uint<4>>>, !firrtl.bundle<a: uint<4>, b: flip<uint<4>>>
+  firrtl.connect %out0, %in0 : !firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>, b flip: uint<4>>
 }
-firrtl.module @TestBulkConnections(in %in0: !firrtl.bundle<a: uint<4>, b: flip<uint<4>>>,
-                                   out %out0: !firrtl.bundle<a: uint<4>, b: flip<uint<4>>>) {
-  %i_in0, %i_out0 = firrtl.instance @InlineMe0 {name = "i"} : !firrtl.flip<bundle<a: uint<4>, b: flip<uint<4>>>>, !firrtl.bundle<a: uint<4>, b: flip<uint<4>>>
-  firrtl.connect %i_in0, %in0 : !firrtl.flip<bundle<a: uint<4>, b: flip<uint<4>>>>, !firrtl.bundle<a: uint<4>, b: flip<uint<4>>>
-  firrtl.connect %out0, %i_out0 : !firrtl.bundle<a: uint<4>, b: flip<uint<4>>>, !firrtl.bundle<a: uint<4>, b: flip<uint<4>>>
-// CHECK: %i_in0 = firrtl.wire  : !firrtl.bundle<a: uint<4>, b: flip<uint<4>>>
-// CHECK: %i_out0 = firrtl.wire  : !firrtl.bundle<a: uint<4>, b: flip<uint<4>>>
-// CHECK: firrtl.connect %i_out0, %i_in0 : !firrtl.bundle<a: uint<4>, b: flip<uint<4>>>, !firrtl.bundle<a: uint<4>, b: flip<uint<4>>>
-// CHECK: firrtl.connect %i_in0, %in0 : !firrtl.bundle<a: uint<4>, b: flip<uint<4>>>, !firrtl.bundle<a: uint<4>, b: flip<uint<4>>>
-// CHECK: firrtl.connect %out0, %i_out0 : !firrtl.bundle<a: uint<4>, b: flip<uint<4>>>, !firrtl.bundle<a: uint<4>, b: flip<uint<4>>>
+firrtl.module @TestBulkConnections(in %in0: !firrtl.bundle<a: uint<4>, b flip: uint<4>>,
+                                   out %out0: !firrtl.bundle<a: uint<4>, b flip: uint<4>>) {
+  %i_in0, %i_out0 = firrtl.instance @InlineMe0 {name = "i"} : !firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>, b flip: uint<4>>
+  firrtl.connect %i_in0, %in0 : !firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>, b flip: uint<4>>
+  firrtl.connect %out0, %i_out0 : !firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>, b flip: uint<4>>
+// CHECK: %i_in0 = firrtl.wire  : !firrtl.bundle<a: uint<4>, b flip: uint<4>>
+// CHECK: %i_out0 = firrtl.wire  : !firrtl.bundle<a: uint<4>, b flip: uint<4>>
+// CHECK: firrtl.connect %i_out0, %i_in0 : !firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>, b flip: uint<4>>
+// CHECK: firrtl.connect %i_in0, %in0 : !firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>, b flip: uint<4>>
+// CHECK: firrtl.connect %out0, %i_out0 : !firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>, b flip: uint<4>>
 }
 }
 
@@ -194,13 +194,13 @@ firrtl.module @TestBulkConnections(in %in0: !firrtl.bundle<a: uint<4>, b: flip<u
 // Test that all operations with names are renamed.
 firrtl.circuit "renaming" {
 firrtl.module @renaming() {
-  %0, %1, %2 = firrtl.instance @declarations {name = "myinst"} : !firrtl.flip<clock>, !firrtl.flip<uint<8>>, !firrtl.flip<asyncreset>
+  %0, %1, %2 = firrtl.instance @declarations {name = "myinst"} : !firrtl.clock, !firrtl.uint<8>, !firrtl.asyncreset
 }
 firrtl.module @declarations(in %clock : !firrtl.clock, in %u8 : !firrtl.uint<8>, in %reset : !firrtl.asyncreset) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
   // CHECK: %myinst_cmem = firrtl.cmem  {name = "myinst_cmem"} : !firrtl.uint<8>
   %cmem = firrtl.cmem {name = "cmem"} : !firrtl.uint<8>
-  // CHECK: %myinst_mem_read = firrtl.mem Undefined {depth = 1 : i64, name = "myinst_mem", portNames = ["read"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: sint<42>>>
-  %mem = firrtl.mem Undefined {depth = 1 : i64, name = "mem", portNames = ["read"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: sint<42>>>
+  // CHECK: %myinst_mem_read = firrtl.mem Undefined {depth = 1 : i64, name = "myinst_mem", portNames = ["read"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: sint<42>>
+  %mem = firrtl.mem Undefined {depth = 1 : i64, name = "mem", portNames = ["read"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: sint<42>>
   // CHECK: %myinst_memoryport = firrtl.memoryport Infer %myinst_cmem, %myinst_u8, %myinst_clock {name = "myinst_memoryport"} : (!firrtl.uint<8>, !firrtl.uint<8>, !firrtl.clock) -> !firrtl.bundle<id: uint<4>, resp: uint<2>>
   %memport = firrtl.memoryport Infer %cmem, %u8, %clock {name = "memoryport"} : (!firrtl.uint<8>, !firrtl.uint<8>, !firrtl.clock) -> !firrtl.bundle<id: uint<4>, resp: uint<2>>
   // CHECK: %myinst_node = firrtl.node %myinst_u8  : !firrtl.uint<8>

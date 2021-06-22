@@ -42,12 +42,12 @@ firrtl.circuit "Foo" {
 
 firrtl.circuit "Foo" {
   firrtl.module @Foo () {
-    // expected-error @+5 {{uninferred width: type '!firrtl.flip<uint>'}}
+    // expected-error @+5 {{uninferred width: type '!firrtl.uint'}}
     // expected-note @+4 {{in result of `firrtl.wire`}}
     // expected-note @+3 {{in bundle field `a`}}
     // expected-note @+2 {{in bundle field `b`}}
     // expected-note @+1 {{in bundle field `c`}}
-    %0 = firrtl.wire : !firrtl.bundle<a: bundle<b: bundle<c: flip<uint>, d: uint<1>>>>
+    %0 = firrtl.wire : !firrtl.bundle<a: bundle<b: bundle<c flip: uint, d: uint<1>>>>
   }
 }
 

@@ -117,9 +117,11 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
       .Case<RegOp, RegResetOp, WireOp, MemoryPortOp>(
           [](auto) { return Flow::Duplex; })
       .Case<InstanceOp>([&](auto) {
-        return val.getType().isa<FlipType>() ? swap() : accumulatedFlow;
+        return swap();
       })
-      .Case<MemOp>([&](auto op) { return swap(); })
+      .Case<MemOp>([&](auto op) {
+        return swap();
+      })
       // Anything else acts like a universal source.
       .Default([&](auto) { return accumulatedFlow; });
 }
@@ -721,8 +723,6 @@ static LogicalResult verifyModuleSignature(Operation *op) {
   for (auto argType : getModuleType(op).getInputs()) {
     if (!argType.isa<FIRRTLType>())
       return op->emitOpError("all module ports must be firrtl types");
-    if (argType.isa<FlipType>())
-      return op->emitOpError("module ports should not contain an outer flip");
   }
   return success();
 }
@@ -843,8 +843,6 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
   for (size_t i = 0; i != numResults; i++) {
     auto resultType = instance.getResult(i).getType();
     auto expectedType = modulePorts[i].type;
-    if (modulePorts[i].direction == Direction::Input)
-      expectedType = FlipType::get(expectedType);
     if (resultType != expectedType) {
       auto diag = instance.emitOpError()
                   << "result type for " << modulePorts[i].name << " must be "
@@ -880,14 +878,10 @@ static LogicalResult verifyMemOp(MemOp mem) {
         TypeSwitch<FIRRTLType, BundleType>(
             mem.getResult(i).getType().cast<FIRRTLType>())
             .Case<BundleType>([](BundleType a) { return a; })
-            .Case<FlipType>([](FlipType a) {
-              return a.getElementType().dyn_cast<BundleType>();
-            })
             .Default([](auto) { return nullptr; });
     if (!portBundleType) {
       mem.emitOpError() << "has an invalid type on port " << portName
-                        << " (expected either '!firrtl.bundle<...>' or "
-                           "'!firrtl.flip<bundle<...>>')";
+                        << " (expected '!firrtl.bundle<...>')";
       return failure();
     }
 
@@ -909,10 +903,6 @@ static LogicalResult verifyMemOp(MemOp mem) {
       }
       auto firrtlType = elt.getType().cast<FIRRTLType>();
       auto portType = firrtlType.dyn_cast<BundleType>();
-      if (!portType) {
-        if (auto flipType = firrtlType.dyn_cast<FlipType>())
-          portType = flipType.getElementType().dyn_cast<BundleType>();
-      }
       switch (portType.getNumElements()) {
       case 4:
         portKind = MemOp::PortKind::Read;
@@ -970,7 +960,7 @@ static LogicalResult verifyMemOp(MemOp mem) {
     // for this port.  This catches situations of extraneous port
     // fields beind included or the fields being named incorrectly.
     FIRRTLType expectedType =
-        FlipType::get(mem.getTypeForPort(mem.depth(), dataType, portKind));
+        mem.getTypeForPort(mem.depth(), dataType, portKind);
     // Compute the original port type as portBundleType may have
     // stripped outer flip information.
     auto originalType = mem.getResult(i).getType();
@@ -1052,10 +1042,6 @@ BundleType MemOp::getTypeForPort(uint64_t depth, FIRRTLType dataType,
 /// Return the kind of port this is given the port type from a 'mem' decl.
 static MemOp::PortKind getMemPortKindFromType(FIRRTLType type) {
   auto portType = type.dyn_cast<BundleType>();
-  if (!portType) {
-    if (auto flipType = type.dyn_cast<FlipType>())
-      portType = flipType.getElementType().dyn_cast<BundleType>();
-  }
   switch (portType.getNumElements()) {
   case 4:
     return MemOp::PortKind::Read;
@@ -1147,16 +1133,6 @@ static LogicalResult verifyConnectOp(ConnectOp connect) {
     return !op || isa<InstanceOp>(op);
   };
 
-  // If the source or destination is a port or instance port, then an optional
-  // outer flip, indicating the direction (input or output), should be stripped
-  // for type checking.
-  if (isPortOrInstancePort(connect.dest()))
-    if (auto destTypeFlip = destType.dyn_cast<FlipType>())
-      destType = destTypeFlip.getElementType();
-  if (isPortOrInstancePort(connect.src()))
-    if (auto srcTypeFlip = srcType.dyn_cast<FlipType>())
-      srcType = srcTypeFlip.getElementType();
-
   // Analog types cannot be connected and must be attached.
   if (destType.isa<AnalogType>() || srcType.isa<AnalogType>())
     return connect.emitError("analog types may not be connected");
@@ -1209,9 +1185,9 @@ static LogicalResult verifyConnectOp(ConnectOp connect) {
 
 static LogicalResult verifyPartialConnectOp(PartialConnectOp partialConnect) {
   FIRRTLType destType =
-      partialConnect.dest().getType().cast<FIRRTLType>().stripFlip().first;
+      partialConnect.dest().getType().cast<FIRRTLType>();
   FIRRTLType srcType =
-      partialConnect.src().getType().cast<FIRRTLType>().stripFlip().first;
+      partialConnect.src().getType().cast<FIRRTLType>();
 
   if (!areTypesWeaklyEquivalent(destType, srcType))
     return partialConnect.emitError("type mismatch between destination ")
@@ -1418,10 +1394,6 @@ FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
   auto inType = operands[0].getType();
   auto fieldname = getAttr<StringAttr>(attrs, "fieldname");
 
-  // Look through flips.
-  while (auto flipType = inType.dyn_cast<FlipType>())
-    inType = flipType.getElementType();
-
   if (auto bundleType = inType.dyn_cast<BundleType>()) {
     auto elt = bundleType.getElement(fieldname.getValue());
     if (!elt) {
@@ -1433,8 +1405,6 @@ FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
     // FIRRTL puts flips on element fields, not on the underlying
     // types.  The result type of a subfield should strip a flip
     // if one exists.
-    if (auto flipped = elt->type.dyn_cast<FlipType>())
-      return flipped.getElementType().cast<FIRRTLType>();
     return elt->type;
   }
 
@@ -1445,26 +1415,14 @@ FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
 
 bool SubfieldOp::isFieldFlipped() {
   auto fieldname = this->fieldname();
-
-  auto handleBundle = [&](BundleType a) -> bool {
-    auto b = a.getElement(fieldname);
-    if (!b) {
+  auto bundle = input().getType().cast<BundleType>();
+  auto field = bundle.getElement(fieldname);
+    if (!field) {
       emitOpError() << "unknown field '" << fieldname << "' in bundle type "
-                    << a;
+                    << bundle;
       return false;
     };
-    return b.getValue().isFlip;
-  };
-
-  return TypeSwitch<Type, bool>(this->input().getType())
-      .Case<BundleType>([&](auto a) { return handleBundle(a); })
-      .Case<FlipType>([&](auto a) {
-        return handleBundle(a.getElementType().template dyn_cast<BundleType>());
-      })
-      .Default([&](auto) {
-        emitOpError() << "subfield requires bundle operand";
-        return false;
-      });
+    return field.getValue().isFlip;
 }
 
 FIRRTLType SubindexOp::inferReturnType(ValueRange operands,
@@ -1473,10 +1431,6 @@ FIRRTLType SubindexOp::inferReturnType(ValueRange operands,
   auto inType = operands[0].getType();
   auto fieldIdx =
       getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
-
-  // Look through flips.
-  while (auto flipType = inType.dyn_cast<FlipType>())
-    inType = flipType.getElementType();
 
   if (auto vectorType = inType.dyn_cast<FVectorType>()) {
     if (fieldIdx < vectorType.getNumElements())
@@ -1504,10 +1458,6 @@ FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
           << indexType;
     return {};
   }
-
-  // Look through flips.
-  while (auto flipType = inType.dyn_cast<FlipType>())
-    inType = flipType.getElementType();
 
   if (auto vectorType = inType.dyn_cast<FVectorType>())
     return vectorType.getElementType();

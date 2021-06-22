@@ -48,11 +48,6 @@ void FIRRTLType::print(raw_ostream &os) const {
         os << "analog";
         printWidthQualifier(analogType.getWidth());
       })
-      .Case<FlipType>([&](FlipType flipType) {
-        os << "flip<";
-        flipType.getElementType().print(os);
-        os << '>';
-      })
       .Case<BundleType>([&](BundleType bundleType) {
         os << "bundle<";
         llvm::interleaveComma(bundleType.getElements(), os,
@@ -84,7 +79,6 @@ void FIRRTLType::print(raw_ostream &os) const {
 ///   ::= sint ('<' int '>')?
 ///   ::= uint ('<' int '>')?
 ///   ::= analog ('<' int '>')?
-///   ::= flip '<' type '>'
 ///   ::= bundle '<' (bundle-elt (',' bundle-elt)*)? '>'
 ///   ::= vector '<' type ',' int '>'
 ///
@@ -125,12 +119,6 @@ static ParseResult parseType(FIRRTLType &result, DialectAsmParser &parser) {
       result = AnalogType::get(context, width);
     }
     return success();
-  } else if (name.equals("flip")) {
-    FIRRTLType element;
-    if (parser.parseLess() || parseType(element, parser) ||
-        parser.parseGreater())
-      return failure();
-    return result = FlipType::get(element), success();
   } else if (name.equals("bundle")) {
     if (parser.parseLess())
       return failure();
@@ -240,8 +228,6 @@ bool FIRRTLType::isGround() {
       .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
             AnalogType>([](Type) { return true; })
       .Case<BundleType, FVectorType>([](Type) { return false; })
-      .Case<FlipType>(
-          [](FlipType type) { return type.getElementType().isGround(); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return false;
@@ -260,9 +246,6 @@ RecursiveTypeProperties FIRRTLType::getRecursiveTypeProperties() {
       .Case<AnalogType>([](auto type) {
         return RecursiveTypeProperties{true, true, !type.hasWidth()};
       })
-      .Case<FlipType>([](FlipType flipType) {
-        return flipType.getRecursiveTypeProperties();
-      })
       .Case<BundleType>([](BundleType bundleType) {
         return bundleType.getRecursiveTypeProperties();
       })
@@ -280,11 +263,6 @@ FIRRTLType FIRRTLType::getPassiveType() {
   return TypeSwitch<FIRRTLType, FIRRTLType>(*this)
       .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
             AnalogType>([&](Type) { return *this; })
-      .Case<FlipType>([](FlipType flipType) {
-        // Since types are _not_ canonicalized, a FlipType does _not_
-        // guarantee that its elements are passive.
-        return flipType.getElementType().getPassiveType();
-      })
       .Case<BundleType>(
           [](BundleType bundleType) { return bundleType.getPassiveType(); })
       .Case<FVectorType>(
@@ -302,9 +280,6 @@ FIRRTLType FIRRTLType::getMaskType() {
       .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
             AnalogType>(
           [&](Type) { return UIntType::get(this->getContext(), 1); })
-      .Case<FlipType>([](FlipType flipType) {
-        return FlipType::get(flipType.getElementType().getMaskType());
-      })
       .Case<BundleType>([&](BundleType bundleType) {
         SmallVector<BundleType::BundleElement, 4> newElements;
         newElements.reserve(bundleType.getElements().size());
@@ -328,9 +303,6 @@ FIRRTLType FIRRTLType::getMaskType() {
 FIRRTLType FIRRTLType::getWidthlessType() {
   return TypeSwitch<FIRRTLType, FIRRTLType>(*this)
       .Case<ClockType, ResetType, AsyncResetType>([](auto a) { return a; })
-      .Case<FlipType>([](FlipType a) {
-        return FlipType::get(a.getElementType().getWidthlessType());
-      })
       .Case<UIntType, SIntType, AnalogType>(
           [&](auto a) { return a.get(this->getContext(), -1); })
       .Case<BundleType>([&](auto a) {
@@ -362,7 +334,7 @@ int32_t FIRRTLType::getBitWidthOrSentinel() {
           [&](IntType intType) { return intType.getWidthOrSentinel(); })
       .Case<AnalogType>(
           [](AnalogType analogType) { return analogType.getWidthOrSentinel(); })
-      .Case<FlipType, BundleType, FVectorType>([](Type) { return -2; })
+      .Case<BundleType, FVectorType>([](Type) { return -2; })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
         return -2;
@@ -379,17 +351,11 @@ bool FIRRTLType::isResetType() {
       .Default([](Type) { return false; });
 }
 
-std::pair<FIRRTLType, bool> FIRRTLType::stripFlip() {
-  if (auto a = this->dyn_cast<FlipType>())
-    return {a.getElementType(), true};
-  return {*this, false};
-}
-
 unsigned FIRRTLType::getMaxFieldID() {
   return TypeSwitch<FIRRTLType, int32_t>(*this)
       .Case<AnalogType, ClockType, ResetType, AsyncResetType, SIntType,
             UIntType>([](Type) { return 0; })
-      .Case<FlipType, BundleType, FVectorType>(
+      .Case<BundleType, FVectorType>(
           [](auto type) { return type.getMaxFieldID(); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
@@ -502,8 +468,6 @@ bool firrtl::areTypesWeaklyEquivalent(FIRRTLType destType, FIRRTLType srcType,
 
 /// Return the element of an array type or null.  This strips flip types.
 Type firrtl::getVectorElementType(Type array) {
-  if (auto flip = array.dyn_cast<FlipType>())
-    array = flip.getElementType();
   auto vectorType = array.dyn_cast<FVectorType>();
   if (!vectorType)
     return Type();
@@ -594,55 +558,6 @@ Optional<int32_t> AnalogType::getWidth() {
   return getWidthQualifiedTypeWidth(this->getImpl());
 }
 
-//===----------------------------------------------------------------------===//
-// Flip Type
-//===----------------------------------------------------------------------===//
-
-namespace circt {
-namespace firrtl {
-namespace detail {
-struct FlipTypeStorage : mlir::TypeStorage {
-  FlipTypeStorage(FIRRTLType element) : element(element) {}
-  using KeyTy = FIRRTLType;
-
-  bool operator==(const KeyTy &key) const { return key == element; }
-
-  static FlipTypeStorage *construct(TypeStorageAllocator &allocator,
-                                    const KeyTy &key) {
-    return new (allocator.allocate<FlipTypeStorage>()) FlipTypeStorage(key);
-  }
-
-  FIRRTLType element;
-};
-
-} // namespace detail
-} // namespace firrtl
-} // namespace circt
-
-FIRRTLType FlipType::get(FIRRTLType element) {
-  return TypeSwitch<FIRRTLType, FIRRTLType>(element)
-      .Case<FlipType>([](auto flipType) {
-        // flip(flip(x)) -> x
-        return flipType.getElementType();
-      })
-      .Case<AnalogType>([](AnalogType analogType) {
-        // flip(analog) -> analog.
-        return analogType;
-      })
-      .Default([](FIRRTLType a) {
-        return Base::get(a.getContext(), a).cast<FIRRTLType>();
-      });
-}
-
-FIRRTLType FlipType::getElementType() { return getImpl()->element; }
-
-unsigned FlipType::getMaxFieldID() { return getElementType().getMaxFieldID(); }
-
-/// Return the recursive properties of the type.
-RecursiveTypeProperties FlipType::getRecursiveTypeProperties() {
-  return RecursiveTypeProperties{false, false,
-                                 getImpl()->element.hasUninferredWidth()};
-}
 
 //===----------------------------------------------------------------------===//
 // Bundle Type
@@ -819,10 +734,6 @@ struct VectorTypeStorage : mlir::TypeStorage {
 } // namespace circt
 
 FIRRTLType FVectorType::get(FIRRTLType elementType, unsigned numElements) {
-  // If elementType is a flip, then we canonicalize it outwards.
-  if (auto flip = elementType.dyn_cast<FlipType>())
-    return FlipType::get(FVectorType::get(flip.getElementType(), numElements));
-
   return Base::get(elementType.getContext(),
                    std::make_pair(elementType, numElements));
 }
@@ -879,5 +790,5 @@ unsigned FVectorType::getMaxFieldID() {
 void FIRRTLDialect::registerTypes() {
   addTypes<SIntType, UIntType, ClockType, ResetType, AsyncResetType, AnalogType,
            // Derived Types
-           FlipType, BundleType, FVectorType>();
+           BundleType, FVectorType>();
 }

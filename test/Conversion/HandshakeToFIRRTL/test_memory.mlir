@@ -19,7 +19,7 @@
 // CHECK: %[[LD_CONTROL_READY:.+]] = firrtl.subfield %arg5("ready")
 
 // Construct the memory.
-// CHECK: %[[MEM_LOAD:.+]], %[[MEM_STORE:.+]] = firrtl.mem Old {depth = 10 : i64, name = "mem0", portNames = ["load0", "store0"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>>, !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>>
+// CHECK: %[[MEM_LOAD:.+]], %[[MEM_STORE:.+]] = firrtl.mem Old {depth = 10 : i64, name = "mem0", portNames = ["load0", "store0"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
  
 
 // Connect the store clock.
