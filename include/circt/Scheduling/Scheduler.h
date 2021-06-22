@@ -34,21 +34,20 @@ class OperatorType;
 ///
 /// A problem instance is comprised of:
 ///
-///  - *Operations*: The vertices in the data-flow graph to be scheduled. We use
-///    the abbreviation `op` in the scheduling API.
+///  - *Operations*: The vertices in the data-flow graph to be scheduled.
 ///  - *Dependences*: The edges in the data-flow graph to be scheduled, modeling
 ///    a precedence relation between the involved operations. Individual operand
-///    and result indices can be distinguished. Abbreviation: `dep`
+///    and result indices can be distinguished.
 ///  - *Operator types*: An abstraction of the characteristics of the target
 ///    representation, e.g. modules in the  HLS component library, available
 ///    functional units, etc. -- operations are executed on instances/units of
-///    an operator type. Abbreviation: `opr`
+///    an operator type.
 ///
-/// All components of the problem (ops, deps, oprs, as well as the problem
-/// itself) can be annotated with *properties*. In this basic problem, we model
+/// All components of the problem (operations, dependences, operator types, as
+/// well as the problem itself) can be annotated with *properties*. In this
+/// basic problem, we model
 ///
-/// - `assocOpr`, an operation-property that stores the operator type associated
-///   with each operation.
+/// - `linkedOperatorType` maps operations to their operator types.
 /// - `latency`, an operator type-property denoting the number of time steps
 ///   after which the operator's result is available.
 /// - `startTime`, an operation-property for the time step in which an operation
@@ -77,18 +76,18 @@ public:
   // Aliases for containers storing the problem components and properties
   //===--------------------------------------------------------------------===//
 protected:
-  using OpSet = llvm::SetVector<Operation *>;
-  using DepSet = llvm::SetVector<Dependence *>;
-  using OprSet = llvm::SetVector<OperatorType *>;
+  using OperationSet = llvm::SetVector<Operation *>;
+  using DependenceSet = llvm::SetVector<Dependence *>;
+  using OperatorTypeSet = llvm::SetVector<OperatorType *>;
 
   template <typename T>
-  using OpProp = llvm::DenseMap<Operation *, T>;
+  using OperationProperty = llvm::DenseMap<Operation *, T>;
   template <typename T>
-  using DepProp = llvm::DenseMap<Dependence *, T>;
+  using DependenceProperty = llvm::DenseMap<Dependence *, T>;
   template <typename T>
-  using OprProp = llvm::DenseMap<OperatorType *, T>;
+  using OperatorTypeProperty = llvm::DenseMap<OperatorType *, T>;
   template <typename T>
-  using ProbProp = Optional<T>;
+  using ProblemProperty = Optional<T>;
 
   //===--------------------------------------------------------------------===//
   // Containers for problem components and properties
@@ -102,23 +101,23 @@ private:
   mlir::StorageUniquer uniquer;
 
   // problem components
-  OpSet ops;
-  DepSet deps;
-  OprSet oprs;
+  OperationSet operations;
+  DependenceSet dependences;
+  OperatorTypeSet operatorTypes;
 
   // operation properties
-  OpProp<OperatorType *> assocOpr;
-  OpProp<unsigned> startTime;
+  OperationProperty<OperatorType *> linkedOperatorType;
+  OperationProperty<unsigned> startTime;
 
   // operator type properties
-  OprProp<unsigned> latency;
+  OperatorTypeProperty<unsigned> latency;
 
   //===--------------------------------------------------------------------===//
   // Client interface to construct problem
   //===--------------------------------------------------------------------===//
 public:
   /// Add \p op to the scheduling problem.
-  void addOperation(Operation *op) { ops.insert(op); }
+  void addOperation(Operation *op) { operations.insert(op); }
 
   /// Construct a dependence that distinguishes result and operands indices.
   Dependence *getOrInsertDependence(Operation *src, unsigned srcIdx,
@@ -136,22 +135,26 @@ public:
   // Subclass access to problem components
   //===--------------------------------------------------------------------===//
 protected:
-  bool hasOperation(Operation *op) { return ops.contains(op); }
-  const OpSet &getOperations() { return ops; }
+  bool hasOperation(Operation *op) { return operations.contains(op); }
+  const OperationSet &getOperations() { return operations; }
 
-  bool hasDependence(Dependence *dep) { return deps.contains(dep); }
-  const DepSet &getDependences() { return deps; }
+  bool hasDependence(Dependence *dep) { return dependences.contains(dep); }
+  const DependenceSet &getDependences() { return dependences; }
 
-  bool hasOperatorType(OperatorType *opr) { return oprs.contains(opr); }
-  const OprSet &getOperatorTypes() { return oprs; }
+  bool hasOperatorType(OperatorType *opr) {
+    return operatorTypes.contains(opr);
+  }
+  const OperatorTypeSet &getOperatorTypes() { return operatorTypes; }
 
   //===--------------------------------------------------------------------===//
   // Subclass access to properties: retrieve problem, set solution
   //===--------------------------------------------------------------------===//
 protected:
-  bool hasAssociatedOperatorType(Operation *op) { return assocOpr.count(op); }
-  OperatorType *getAssociatedOperatorType(Operation *op) {
-    return assocOpr.lookup(op);
+  bool hasLinkedOperatorType(Operation *op) {
+    return linkedOperatorType.count(op);
+  }
+  OperatorType *getLinkedOperatorType(Operation *op) {
+    return linkedOperatorType.lookup(op);
   }
 
   bool hasLatency(OperatorType *opr) { return latency.count(opr); }
@@ -163,8 +166,8 @@ protected:
   // Client access to properties: specify problem, retrieve solution
   //===--------------------------------------------------------------------===//
 public:
-  void setAssociatedOperatorType(Operation *op, OperatorType *opr) {
-    assocOpr[op] = opr;
+  void setLinkedOperatorType(Operation *op, OperatorType *opr) {
+    linkedOperatorType[op] = opr;
   }
 
   void setLatency(OperatorType *opr, unsigned val) { latency[opr] = val; }
@@ -176,15 +179,15 @@ public:
   // Hooks to check/verify the different problem components
   //===--------------------------------------------------------------------===//
 protected:
-  virtual LogicalResult checkOp(Operation *op);
-  virtual LogicalResult checkDep(Dependence *dep);
-  virtual LogicalResult checkOpr(OperatorType *opr);
-  virtual LogicalResult checkProb();
+  virtual LogicalResult checkOperation(Operation *op);
+  virtual LogicalResult checkDependence(Dependence *dep);
+  virtual LogicalResult checkOperatorType(OperatorType *opr);
+  virtual LogicalResult checkProblem();
 
-  virtual LogicalResult verifyOp(Operation *op);
-  virtual LogicalResult verifyDep(Dependence *dep);
-  virtual LogicalResult verifyOpr(OperatorType *opr);
-  virtual LogicalResult verifyProb();
+  virtual LogicalResult verifyOperation(Operation *op);
+  virtual LogicalResult verifyDependence(Dependence *dep);
+  virtual LogicalResult verifyOperatorType(OperatorType *opr);
+  virtual LogicalResult verifyProblem();
 
 public:
   /// Return success if the constructed scheduling problem is valid.

@@ -25,23 +25,23 @@ Scheduler::Scheduler(Operation *containingOp) : containingOp(containingOp) {
 Dependence *Scheduler::getOrInsertDependence(Operation *src, unsigned srcIdx,
                                              Operation *dst, unsigned dstIdx) {
   auto *dep = uniquer.get<Dependence>({}, src, dst, 0, 0);
-  deps.insert(dep);
+  dependences.insert(dep);
   return dep;
 }
 
 OperatorType *Scheduler::getOrInsertOperatorType(StringRef name) {
   auto *opr = uniquer.get<OperatorType>({}, name);
-  oprs.insert(opr);
+  operatorTypes.insert(opr);
   return opr;
 }
 
-LogicalResult Scheduler::checkOp(Operation *op) {
-  if (!hasAssociatedOperatorType(op))
-    return op->emitError("Operation is not associated with an operator type");
+LogicalResult Scheduler::checkOperation(Operation *op) {
+  if (!hasLinkedOperatorType(op))
+    return op->emitError("Operation is not linked to an operator type");
   return success();
 }
 
-LogicalResult Scheduler::checkDep(Dependence *dep) {
+LogicalResult Scheduler::checkDependence(Dependence *dep) {
   Operation *i = dep->getSource();
   Operation *j = dep->getDestination();
 
@@ -55,7 +55,7 @@ LogicalResult Scheduler::checkDep(Dependence *dep) {
   return success();
 }
 
-LogicalResult Scheduler::checkOpr(OperatorType *opr) {
+LogicalResult Scheduler::checkOperatorType(OperatorType *opr) {
   if (!hasLatency(opr))
     return containingOp->emitError()
            << "Operator type '" << opr->getName() << "' has no latency";
@@ -63,38 +63,38 @@ LogicalResult Scheduler::checkOpr(OperatorType *opr) {
   return success();
 }
 
-LogicalResult Scheduler::checkProb() { return success(); }
+LogicalResult Scheduler::checkProblem() { return success(); }
 
 /// Check overall problem by delegating to the component-specific checkers.
 LogicalResult Scheduler::check() {
   for (auto *op : getOperations())
-    if (failed(checkOp(op)))
+    if (failed(checkOperation(op)))
       return failure();
 
   for (auto *dep : getDependences())
-    if (failed(checkDep(dep)))
+    if (failed(checkDependence(dep)))
       return failure();
 
   for (auto *opr : getOperatorTypes())
-    if (failed(checkOpr(opr)))
+    if (failed(checkOperatorType(opr)))
       return failure();
 
-  return checkProb();
+  return checkProblem();
 }
 
-LogicalResult Scheduler::verifyOp(Operation *op) {
+LogicalResult Scheduler::verifyOperation(Operation *op) {
   if (!hasStartTime(op))
     return op->emitError("Operation has no start time");
   return success();
 }
 
-LogicalResult Scheduler::verifyDep(Dependence *dep) {
+LogicalResult Scheduler::verifyDependence(Dependence *dep) {
   Operation *i = dep->getSource();
   Operation *j = dep->getDestination();
 
   unsigned stI, latI, stJ;
   stI = getStartTime(i);
-  latI = getLatency(getAssociatedOperatorType(i));
+  latI = getLatency(getLinkedOperatorType(i));
   stJ = getStartTime(j);
 
   // check if i's result is available before j starts
@@ -107,25 +107,27 @@ LogicalResult Scheduler::verifyDep(Dependence *dep) {
   return success();
 }
 
-LogicalResult Scheduler::verifyOpr(OperatorType *opr) { return success(); }
+LogicalResult Scheduler::verifyOperatorType(OperatorType *opr) {
+  return success();
+}
 
-LogicalResult Scheduler::verifyProb() { return success(); }
+LogicalResult Scheduler::verifyProblem() { return success(); }
 
 /// Verify overall solution by delegating to the component-specific verifiers.
 LogicalResult Scheduler::verify() {
   for (auto *op : getOperations())
-    if (failed(verifyOp(op)))
+    if (failed(verifyOperation(op)))
       return failure();
 
   for (auto *dep : getDependences())
-    if (failed(verifyDep(dep)))
+    if (failed(verifyDependence(dep)))
       return failure();
 
   for (auto *opr : getOperatorTypes())
-    if (failed(verifyOpr(opr)))
+    if (failed(verifyOperatorType(opr)))
       return failure();
 
-  return verifyProb();
+  return verifyProblem();
 }
 
 Dependence *
