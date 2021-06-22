@@ -64,7 +64,8 @@ class module:
       # If it's just a module class, we should wrap it immediately
       self.mod = _module_base(func_or_class)
       _register_generator(self.mod.__name__, "extern_instantiate",
-                          self._instantiate)
+                          self._instantiate,
+                          mlir.ir.DictAttr.get(self.mod._parameters))
       return
     elif not inspect.isfunction(func_or_class):
       raise TypeError("@module got invalid object")
@@ -99,7 +100,8 @@ class module:
 
       if self.extern_name:
         _register_generator(cls.__name__, "extern_instantiate",
-                            self._instantiate)
+                            self._instantiate,
+                            mlir.ir.DictAttr.get(mod._parameters))
       return mod
 
     return self.mod(*args, **kwargs)
@@ -215,6 +217,11 @@ def _module_base(cls, params={}):
       """Return the list of input ports."""
       return mod._input_ports
 
+    @staticmethod
+    def outputs() -> list[(str, mlir.ir.Type)]:
+      """Return the list of input ports."""
+      return mod._output_ports
+
   mod.__name__ = cls.__name__
   mod.OPERATION_NAME = OPERATION_NAMESPACE + cls.__name__
 
@@ -270,23 +277,23 @@ def _module_base(cls, params={}):
     cls._dont_touch.add(name)
   mod._output_ports_lookup = dict(mod._output_ports)
 
-  _register_generators(mod)
+  _register_generators(mod, mlir.ir.DictAttr.get(mod._parameters))
   return mod
 
 
-def _register_generators(modcls):
+def _register_generators(modcls, parameters: mlir.ir.Attribute):
   """Scan the class, looking for and registering _Generators."""
   for name in dir(modcls):
     member = getattr(modcls, name)
     if isinstance(member, _Generate):
       member.modcls = modcls
-      _register_generator(modcls.__name__, name, member)
+      _register_generator(modcls.__name__, name, member, parameters)
 
 
-def _register_generator(class_name, generator_name, generator):
+def _register_generator(class_name, generator_name, generator, parameters):
   circt.msft.register_generator(mlir.ir.Context.current,
                                 OPERATION_NAMESPACE + class_name,
-                                generator_name, generator)
+                                generator_name, generator, parameters)
 
 
 class _Generate:

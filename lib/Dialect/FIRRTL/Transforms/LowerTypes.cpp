@@ -40,7 +40,7 @@ struct FlatBundleFieldEntry {
   bool isOutput;
 
   // Helper to determine if a fully flattened type needs to be flipped.
-  FIRRTLType getPortType() { return isOutput ? FlipType::get(type) : type; }
+  FIRRTLType getPortType() { return type; }
 };
 } // end anonymous namespace
 
@@ -54,12 +54,6 @@ static void flattenType(FIRRTLType type,
   unsigned fieldID = 0;
   std::function<void(FIRRTLType, StringRef, bool)> flatten =
       [&](FIRRTLType type, StringRef suffixSoFar, bool isFlipped) {
-        // Strip off an outer flip type. Flip types don't don't have a field ID,
-        // and so there is no need to increment the field ID.
-        if (auto flip = type.dyn_cast<FlipType>()) {
-          type = flip.getElementType();
-          isFlipped = !isFlipped;
-        }
         TypeSwitch<FIRRTLType>(type)
             .Case<BundleType>([&](auto bundle) {
               SmallString<16> tmpSuffix(suffixSoFar);
@@ -73,7 +67,7 @@ static void flattenType(FIRRTLType type,
                 tmpSuffix.push_back('_');
                 tmpSuffix.append(elt.name.getValue());
                 // Recursively process subelements.
-                flatten(elt.type, tmpSuffix, isFlipped);
+                flatten(elt.type, tmpSuffix, isFlipped ^ elt.isFlip);
               }
               return;
             })
@@ -104,8 +98,6 @@ static void flattenType(FIRRTLType type,
 // directly. For any ground type, returns null.
 static FIRRTLType getCanonicalAggregateType(Type originalType) {
   FIRRTLType unflipped = originalType.dyn_cast<FIRRTLType>();
-  if (auto flipType = originalType.dyn_cast<FlipType>())
-    unflipped = flipType.getElementType();
 
   return TypeSwitch<FIRRTLType, FIRRTLType>(unflipped)
       .Case<BundleType, FVectorType>([](auto a) { return a; })
@@ -533,17 +525,16 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
 
       // Any read or write ports are just added.
       if (kind != MemOp::PortKind::ReadWrite) {
-        resultPortTypes.push_back(
-            FlipType::get(op.getTypeForPort(depth, field.type, kind)));
+        resultPortTypes.push_back(op.getTypeForPort(depth, field.type, kind));
         uniquePortName(name.getValue());
         continue;
       }
 
       // Any readwrite ports are lowered to 1x read and 1x write.
-      resultPortTypes.push_back(FlipType::get(
-          op.getTypeForPort(depth, field.type, MemOp::PortKind::Read)));
-      resultPortTypes.push_back(FlipType::get(
-          op.getTypeForPort(depth, field.type, MemOp::PortKind::Write)));
+      resultPortTypes.push_back(
+          op.getTypeForPort(depth, field.type, MemOp::PortKind::Read));
+      resultPortTypes.push_back(
+          op.getTypeForPort(depth, field.type, MemOp::PortKind::Write));
 
       auto nameStr = name.getValue().str();
       uniquePortName(nameStr + "_r");
@@ -820,11 +811,7 @@ void TypeLoweringVisitor::visitExpr(SubfieldOp op) {
   flattenType(resultType, fieldTypes);
 
   // Get the input bundle type.
-  Value input = op.input();
-  auto inputType = input.getType();
-  if (auto flipType = inputType.dyn_cast<FlipType>())
-    inputType = flipType.getElementType();
-  auto bundleType = inputType.cast<BundleType>();
+  auto bundleType = op.input().getType().cast<BundleType>();
 
   // Get the base element ID of input bundle.
   auto parentID =
@@ -833,7 +820,7 @@ void TypeLoweringVisitor::visitExpr(SubfieldOp op) {
   for (auto field : fieldTypes) {
     // Get the lowered value of the current field from the input value.
     auto newValue =
-        getBundleLowering(FieldRef(input, parentID + field.fieldID));
+        getBundleLowering(FieldRef(op.input(), parentID + field.fieldID));
 
     // If we are at the leaf of a bundle.
     if (field.suffix.empty())
@@ -872,11 +859,7 @@ void TypeLoweringVisitor::visitExpr(SubindexOp op) {
   flattenType(resultType, fieldTypes);
 
   // Get the input vector type.
-  Value input = op.input();
-  auto inputType = input.getType();
-  if (auto flipType = inputType.dyn_cast<FlipType>())
-    inputType = flipType.getElementType();
-  auto vectorType = inputType.cast<FVectorType>();
+  auto vectorType = op.input().getType().cast<FVectorType>();
 
   // Get the base element ID of the input vector.
   auto parentID = vectorType.getFieldID(op.index());
@@ -884,7 +867,7 @@ void TypeLoweringVisitor::visitExpr(SubindexOp op) {
   for (auto field : fieldTypes) {
     // Get the lowered value of the current field from the input value.
     auto newValue =
-        getBundleLowering(FieldRef(input, parentID + field.fieldID));
+        getBundleLowering(FieldRef(op.input(), parentID + field.fieldID));
 
     // If we are at the leaf of a bundle.
     if (field.suffix.empty())
@@ -1010,10 +993,9 @@ void TypeLoweringVisitor::visitStmt(ConnectOp op) {
 /// if the LHS is smaller than the RHS.  This code was lifted from a
 /// PartialConnect canonicalization pattern.
 ConnectOp TypeLoweringVisitor::emitTruncatingConnect(Value dest, Value src) {
-  // Get the types.  Strip off any outer flip.
-  auto srcInfo = src.getType().cast<FIRRTLType>().stripFlip();
-  auto srcType = srcInfo.first;
-  auto destType = dest.getType().cast<FIRRTLType>().stripFlip().first;
+  // Get the types.
+  auto srcType = src.getType().cast<FIRRTLType>();
+  auto destType = dest.getType().cast<FIRRTLType>();
 
   auto srcWidth = srcType.getBitWidthOrSentinel();
   auto destWidth = destType.getBitWidthOrSentinel();
@@ -1026,8 +1008,6 @@ ConnectOp TypeLoweringVisitor::emitTruncatingConnect(Value dest, Value src) {
     IntType tmpType = destType.cast<IntType>();
     if (tmpType.isSigned())
       tmpType = UIntType::get(destType.getContext(), destWidth);
-    if (srcInfo.second)
-      src = builder->create<AsPassivePrimOp>(src);
     src = builder->create<TailPrimOp>(tmpType, src, srcWidth - destWidth);
     // Insert the cast back to signed if needed.
     if (tmpType != destType)
@@ -1053,9 +1033,9 @@ void TypeLoweringVisitor::recursivePartialConnect(Value a, FIRRTLType aType,
             continue;
           auto &aElt = aType.getElements()[aIndex];
           auto &bElt = bBundle.getElements()[*bIndex];
-          recursivePartialConnect(a, aElt.type, b, bElt.type,
-                                  aID + aType.getFieldID(aIndex),
-                                  bID + bBundle.getFieldID(*bIndex), aFlip);
+          recursivePartialConnect(
+              a, aElt.type, b, bElt.type, aID + aType.getFieldID(aIndex),
+              bID + bBundle.getFieldID(*bIndex), aFlip ^ aElt.isFlip);
         }
       })
       .Case<FVectorType>([&](auto aType) {
@@ -1070,10 +1050,6 @@ void TypeLoweringVisitor::recursivePartialConnect(Value a, FIRRTLType aType,
               a, aType.getElementType(), b, bVector.getElementType(),
               aID + aType.getFieldID(i), bID + bVector.getFieldID(i), aFlip);
         }
-      })
-      .Case<FlipType>([&](auto aType) {
-        recursivePartialConnect(a, FlipType::get(aType), b, bType, aID, bID,
-                                !aFlip);
       })
       .Case<AnalogType>([&](auto analogType) {
         SmallVector<Value, 2> operands{getBundleLowering(FieldRef(a, aID)),
@@ -1101,7 +1077,6 @@ void TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
   // Partial connects are completely removed and replaced by regular connects.
   // This makes this one of the few ops that actually has to do something during
   // this pass the types are not bundles.
-  destType = destType.stripFlip().first;
   if (destType.isa<BundleType, FVectorType>()) {
     // Bundle types have to be recursively lowered.
     this->recursivePartialConnect(dest, destType, src, srcType.getPassiveType(),

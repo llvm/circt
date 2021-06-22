@@ -41,21 +41,13 @@ FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
 
     if (auto subfieldOp = dyn_cast<SubfieldOp>(op)) {
       value = subfieldOp.input();
-      // Strip any flip wrapping the bundle type.
-      auto type = value.getType();
-      if (auto flipType = type.dyn_cast<FlipType>())
-        type = flipType.getElementType();
-      auto bundleType = type.cast<BundleType>();
+      auto bundleType = value.getType().cast<BundleType>();
       auto index =
           bundleType.getElementIndex(subfieldOp.fieldname()).getValue();
       // Rebase the current index on the parent field's index.
       id += bundleType.getFieldID(index);
     } else if (auto subindexOp = dyn_cast<SubindexOp>(op)) {
-      auto type = subindexOp.input().getType();
-      // Strip any flip wrapping the vector type.
-      if (auto flipType = type.dyn_cast<FlipType>())
-        type = flipType.getElementType();
-      auto vecType = type.cast<FVectorType>();
+      auto vecType = subindexOp.input().getType().cast<FVectorType>();
       // Rebase the current index on the parent field's index.
       id += vecType.getFieldID(subindexOp.index());
     } else {
@@ -95,9 +87,6 @@ std::string circt::firrtl::getFieldName(const FieldRef &fieldRef) {
   auto type = value.getType();
   auto localID = fieldRef.getFieldID();
   while (localID) {
-    // Strip off the flip type if there is one.
-    if (auto flipType = type.dyn_cast<FlipType>())
-      type = flipType.getElementType();
     if (auto bundleType = type.dyn_cast<BundleType>()) {
       auto index = bundleType.getIndexForFieldID(localID);
       // Add the current field string, and recurse into a subfield.

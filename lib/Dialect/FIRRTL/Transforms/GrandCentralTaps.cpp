@@ -426,32 +426,16 @@ void GrandCentralTapsPass::runOnOperation() {
 /// `tappedArgs` maps.
 void GrandCentralTapsPass::gatherAnnotations(Operation *op) {
   if (auto module = dyn_cast<FModuleOp>(op)) {
-    // Go through the module ports and collect the annotated ones.
-    SmallVector<DictionaryAttr, 8> filteredArgAttrs;
-    filteredArgAttrs.reserve(module.getNumArguments());
-    for (unsigned argNum = 0, e = module.getNumArguments(); argNum < e;
-         ++argNum) {
-      auto annos = AnnotationSet::forPort(module, argNum);
-      if (annos.empty()) {
-        filteredArgAttrs.push_back(getArgAttrDict(module, argNum));
-        continue;
-      }
-
-      // Go through all annotations on this port and extract the interesting
-      // ones.
-      annos.removeAnnotations([&](Annotation anno) {
-        if (anno.isClass(referenceKeyClass)) {
-          auto it =
-              tappedArgs.insert({anno.getDict(), module.getArgument(argNum)});
-          assert(it.second && "ambiguous tap annotation");
-          return true;
-        }
-        return false;
-      });
-      filteredArgAttrs.push_back(
-          annos.applyToPortDictionaryAttr(getArgAttrDict(module, argNum)));
-    }
-    setAllArgAttrDicts(module, filteredArgAttrs);
+    AnnotationSet::removePortAnnotations(
+        module, [&](unsigned argNum, Annotation anno) {
+          if (anno.isClass(referenceKeyClass)) {
+            auto it =
+                tappedArgs.insert({anno.getDict(), module.getArgument(argNum)});
+            assert(it.second && "ambiguous tap annotation");
+            return true;
+          }
+          return false;
+        });
   } else {
     AnnotationSet annos(op);
     if (annos.empty())

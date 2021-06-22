@@ -49,11 +49,13 @@ static MlirOperation callPyFunc(MlirOperation op, void *userData) {
 }
 
 static void registerGenerator(MlirContext ctxt, std::string opName,
-                              std::string generatorName, py::function cb) {
+                              std::string generatorName, py::function cb,
+                              MlirAttribute parameters) {
   // Since we don't have an 'unregister' call, just allocate in forget about it.
   py::function *cbPtr = new py::function(cb);
   mlirMSFTRegisterGenerator(ctxt, opName.c_str(), generatorName.c_str(),
-                            mlirMSFTGeneratorCallback{&callPyFunc, cbPtr});
+                            mlirMSFTGeneratorCallback{&callPyFunc, cbPtr},
+                            parameters);
 }
 
 /// Populate the msft python module.

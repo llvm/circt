@@ -116,8 +116,15 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
       // Registers, Wires, and behavioral memory ports are always Duplex.
       .Case<RegOp, RegResetOp, WireOp, MemoryPortOp>(
           [](auto) { return Flow::Duplex; })
-      .Case<InstanceOp>([&](auto) {
-        return val.getType().isa<FlipType>() ? swap() : accumulatedFlow;
+      .Case<InstanceOp>([&](auto inst) {
+        for (auto arg : llvm::enumerate(inst.getResults()))
+          if (arg.value() == val)
+            if (getModulePortDirection(inst.getReferencedModule(),
+                                       arg.index()) == Direction::Output)
+              return accumulatedFlow;
+            else
+              return swap();
+        llvm_unreachable("couldn't find result in results");
       })
       .Case<MemOp>([&](auto op) { return swap(); })
       // Anything else acts like a universal source.
@@ -147,8 +154,9 @@ void CircuitOp::build(OpBuilder &builder, OperationState &result,
   // Add an attribute for the name.
   result.addAttribute(builder.getIdentifier("name"), name);
 
-  if (annotations)
-    result.addAttribute("annotations", annotations);
+  if (!annotations)
+    annotations = builder.getArrayAttr({});
+  result.addAttribute("annotations", annotations);
 
   // Create a region and a block for the body.
   Region *bodyRegion = result.addRegion();
@@ -158,6 +166,27 @@ void CircuitOp::build(OpBuilder &builder, OperationState &result,
 
 // Return the main module that is the entry point of the circuit.
 Operation *CircuitOp::getMainModule() { return lookupSymbol(name()); }
+
+static ParseResult parseCircuitOpAttrs(OpAsmParser &parser,
+                                       NamedAttrList &resultAttrs) {
+  auto result = parser.parseOptionalAttrDictWithKeyword(resultAttrs);
+  if (!resultAttrs.get("annotations"))
+    resultAttrs.append("annotations", parser.getBuilder().getArrayAttr({}));
+
+  return result;
+}
+
+static void printCircuitOpAttrs(OpAsmPrinter &p, Operation *op,
+                                DictionaryAttr attr) {
+  // "name" is always elided.
+  SmallVector<StringRef> elidedAttrs = {"name"};
+  // Elide "annotations" if it doesn't exist or if it is empty
+  auto annotationsAttr = op->getAttrOfType<ArrayAttr>("annotations");
+  if (annotationsAttr.empty())
+    elidedAttrs.push_back("annotations");
+
+  p.printOptionalAttrDictWithKeyword(op->getAttrs(), elidedAttrs);
+}
 
 static LogicalResult verifyCircuitOp(CircuitOp circuit) {
   StringRef main = circuit.name();
@@ -298,15 +327,32 @@ FunctionType firrtl::getModuleType(Operation *op) {
 /// extmodule.
 SmallVector<ModulePortInfo> firrtl::getModulePortInfo(Operation *op) {
   SmallVector<ModulePortInfo> results;
-  auto argTypes = getModuleType(op).getInputs();
 
   auto portNamesAttr = getModulePortNames(op);
   auto portDirections = getModulePortDirections(op).getValue();
-  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
-    auto name = portNamesAttr[i].cast<StringAttr>();
-    auto type = argTypes[i].cast<FIRRTLType>();
-    auto direction = direction::get(portDirections[i]);
-    results.push_back({name, type, direction, AnnotationSet::forPort(op, i)});
+  if (isa<FExtModuleOp>(op)) {
+    // FExtModuleOp's don't have block arguments or locations for their ports.
+    auto argTypes = getModuleType(op).getInputs();
+    auto loc = op->getLoc();
+    for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
+      auto name = portNamesAttr[i].cast<StringAttr>();
+      auto type = argTypes[i].cast<FIRRTLType>();
+      auto direction = direction::get(portDirections[i]);
+      results.push_back(
+          {name, type, direction, loc, AnnotationSet::forPort(op, i)});
+    }
+  } else {
+    // FModuleOp has the ports as the BlockArgument's of the first block.
+    auto moduleBlock = cast<FModuleOp>(op).getBodyBlock();
+    for (auto portArgAndIndex : llvm::enumerate(moduleBlock->getArguments())) {
+      BlockArgument portArg = portArgAndIndex.value();
+      size_t portIdx = portArgAndIndex.index();
+      auto name = portNamesAttr[portIdx].cast<StringAttr>();
+      auto direction = direction::get(portDirections[portIdx]);
+      results.push_back({name, portArg.getType().cast<FIRRTLType>(), direction,
+                         portArg.getLoc(),
+                         AnnotationSet::forPort(op, portIdx)});
+    }
   }
   return results;
 }
@@ -352,7 +398,8 @@ void FModuleOp::erasePorts(ArrayRef<unsigned> portIndices) {
 }
 
 static void buildModule(OpBuilder &builder, OperationState &result,
-                        StringAttr name, ArrayRef<ModulePortInfo> ports) {
+                        StringAttr name, ArrayRef<ModulePortInfo> ports,
+                        ArrayAttr annotations) {
   using namespace mlir::function_like_impl;
 
   // Add an attribute for the name.
@@ -373,8 +420,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   for (size_t i = 0, e = ports.size(); i != e; ++i) {
     portNames.push_back(ports[i].name);
     portDirections.push_back(ports[i].direction);
-    argAttrs.push_back(
-        AnnotationSet(ports[i].annotations).getArgumentAttrDict());
+    argAttrs.push_back(ports[i].annotations.getArgumentAttrDict());
   }
 
   // Both attributes are added, even if the module has no ports.
@@ -384,13 +430,17 @@ static void buildModule(OpBuilder &builder, OperationState &result,
       direction::attrKey,
       direction::packAttribute(portDirections, builder.getContext()));
 
+  if (!annotations)
+    annotations = builder.getArrayAttr({});
+  result.addAttribute("annotations", annotations);
+
   result.addRegion();
 }
 
 void FModuleOp::build(OpBuilder &builder, OperationState &result,
                       StringAttr name, ArrayRef<ModulePortInfo> ports,
                       ArrayAttr annotations) {
-  buildModule(builder, result, name, ports);
+  buildModule(builder, result, name, ports, annotations);
 
   // Create a region and a block for the body.
   auto *bodyRegion = result.regions[0].get();
@@ -399,21 +449,15 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
 
   // Add arguments to the body block.
   for (auto elt : ports)
-    body->addArgument(elt.type);
-
-  if (annotations)
-    result.addAttribute("annotations", annotations);
+    body->addArgument(elt.type, elt.loc);
 }
 
 void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name, ArrayRef<ModulePortInfo> ports,
                          StringRef defnameAttr, ArrayAttr annotations) {
-  buildModule(builder, result, name, ports);
+  buildModule(builder, result, name, ports, annotations);
   if (!defnameAttr.empty())
     result.addAttribute("defname", builder.getStringAttr(defnameAttr));
-
-  if (annotations)
-    result.addAttribute("annotations", annotations);
 }
 
 // TODO: This ia a clone of mlir::impl::printFunctionSignature, refactor it to
@@ -609,6 +653,9 @@ static void printModuleLikeOp(OpAsmPrinter &p, Operation *op) {
   SmallVector<StringRef, 3> omittedAttrs({direction::attrKey});
   if (!needportNamesAttr)
     omittedAttrs.push_back("portNames");
+  if (op->getAttrOfType<ArrayAttr>("annotations").empty())
+    omittedAttrs.push_back("annotations");
+
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(),
                           omittedAttrs);
 }
@@ -700,6 +747,10 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
   // Add the attributes to the function arguments.
   addArgAndResultAttrs(builder, result, portNamesAttrs, resultAttrs);
 
+  // The annotations attribute is always present, but not printed when empty.
+  if (!result.attributes.get("annotations"))
+    result.addAttribute("annotations", builder.getArrayAttr({}));
+
   // Parse the optional function body.
   auto *body = result.addRegion();
   if (!isExtModule) {
@@ -721,8 +772,6 @@ static LogicalResult verifyModuleSignature(Operation *op) {
   for (auto argType : getModuleType(op).getInputs()) {
     if (!argType.isa<FIRRTLType>())
       return op->emitOpError("all module ports must be firrtl types");
-    if (argType.isa<FlipType>())
-      return op->emitOpError("module ports should not contain an outer flip");
   }
   return success();
 }
@@ -843,8 +892,6 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
   for (size_t i = 0; i != numResults; i++) {
     auto resultType = instance.getResult(i).getType();
     auto expectedType = modulePorts[i].type;
-    if (modulePorts[i].direction == Direction::Input)
-      expectedType = FlipType::get(expectedType);
     if (resultType != expectedType) {
       auto diag = instance.emitOpError()
                   << "result type for " << modulePorts[i].name << " must be "
@@ -880,14 +927,10 @@ static LogicalResult verifyMemOp(MemOp mem) {
         TypeSwitch<FIRRTLType, BundleType>(
             mem.getResult(i).getType().cast<FIRRTLType>())
             .Case<BundleType>([](BundleType a) { return a; })
-            .Case<FlipType>([](FlipType a) {
-              return a.getElementType().dyn_cast<BundleType>();
-            })
             .Default([](auto) { return nullptr; });
     if (!portBundleType) {
       mem.emitOpError() << "has an invalid type on port " << portName
-                        << " (expected either '!firrtl.bundle<...>' or "
-                           "'!firrtl.flip<bundle<...>>')";
+                        << " (expected '!firrtl.bundle<...>')";
       return failure();
     }
 
@@ -909,10 +952,6 @@ static LogicalResult verifyMemOp(MemOp mem) {
       }
       auto firrtlType = elt.getType().cast<FIRRTLType>();
       auto portType = firrtlType.dyn_cast<BundleType>();
-      if (!portType) {
-        if (auto flipType = firrtlType.dyn_cast<FlipType>())
-          portType = flipType.getElementType().dyn_cast<BundleType>();
-      }
       switch (portType.getNumElements()) {
       case 4:
         portKind = MemOp::PortKind::Read;
@@ -945,9 +984,10 @@ static LogicalResult verifyMemOp(MemOp mem) {
         return failure();
       }
       dataType = dataTypeOption.getValue().type;
-      // Read data is expected to have an outer flip, so strip that.
-      if (portKind == MemOp::PortKind::Read)
-        dataType = FlipType::get(dataType);
+      // Read data is expected to ba a flip.
+      if (portKind == MemOp::PortKind::Read) {
+        // FIXME error on missing bundle flip
+      }
     }
 
     // Error if the data type isn't passive.
@@ -969,7 +1009,7 @@ static LogicalResult verifyMemOp(MemOp mem) {
     // for this port.  This catches situations of extraneous port
     // fields beind included or the fields being named incorrectly.
     FIRRTLType expectedType =
-        FlipType::get(mem.getTypeForPort(mem.depth(), dataType, portKind));
+        mem.getTypeForPort(mem.depth(), dataType, portKind);
     // Compute the original port type as portBundleType may have
     // stripped outer flip information.
     auto originalType = mem.getResult(i).getType();
@@ -1023,25 +1063,25 @@ BundleType MemOp::getTypeForPort(uint64_t depth, FIRRTLType dataType,
   auto addressType =
       UIntType::get(context, std::max(1U, llvm::Log2_64_Ceil(depth)));
 
-  portFields.push_back({getId("addr"), addressType});
-  portFields.push_back({getId("en"), UIntType::get(context, 1)});
-  portFields.push_back({getId("clk"), ClockType::get(context)});
+  portFields.push_back({getId("addr"), false, addressType});
+  portFields.push_back({getId("en"), false, UIntType::get(context, 1)});
+  portFields.push_back({getId("clk"), false, ClockType::get(context)});
 
   switch (portKind) {
   case PortKind::Read:
-    portFields.push_back({getId("data"), FlipType::get(dataType)});
+    portFields.push_back({getId("data"), true, dataType});
     break;
 
   case PortKind::Write:
-    portFields.push_back({getId("data"), dataType});
-    portFields.push_back({getId("mask"), dataType.getMaskType()});
+    portFields.push_back({getId("data"), false, dataType});
+    portFields.push_back({getId("mask"), false, dataType.getMaskType()});
     break;
 
   case PortKind::ReadWrite:
-    portFields.push_back({getId("wmode"), UIntType::get(context, 1)});
-    portFields.push_back({getId("rdata"), FlipType::get(dataType)});
-    portFields.push_back({getId("wdata"), dataType});
-    portFields.push_back({getId("wmask"), dataType.getMaskType()});
+    portFields.push_back({getId("wmode"), false, UIntType::get(context, 1)});
+    portFields.push_back({getId("rdata"), true, dataType});
+    portFields.push_back({getId("wdata"), false, dataType});
+    portFields.push_back({getId("wmask"), false, dataType.getMaskType()});
     break;
   }
 
@@ -1051,10 +1091,6 @@ BundleType MemOp::getTypeForPort(uint64_t depth, FIRRTLType dataType,
 /// Return the kind of port this is given the port type from a 'mem' decl.
 static MemOp::PortKind getMemPortKindFromType(FIRRTLType type) {
   auto portType = type.dyn_cast<BundleType>();
-  if (!portType) {
-    if (auto flipType = type.dyn_cast<FlipType>())
-      portType = flipType.getElementType().dyn_cast<BundleType>();
-  }
   switch (portType.getNumElements()) {
   case 4:
     return MemOp::PortKind::Read;
@@ -1146,16 +1182,6 @@ static LogicalResult verifyConnectOp(ConnectOp connect) {
     return !op || isa<InstanceOp>(op);
   };
 
-  // If the source or destination is a port or instance port, then an optional
-  // outer flip, indicating the direction (input or output), should be stripped
-  // for type checking.
-  if (isPortOrInstancePort(connect.dest()))
-    if (auto destTypeFlip = destType.dyn_cast<FlipType>())
-      destType = destTypeFlip.getElementType();
-  if (isPortOrInstancePort(connect.src()))
-    if (auto srcTypeFlip = srcType.dyn_cast<FlipType>())
-      srcType = srcTypeFlip.getElementType();
-
   // Analog types cannot be connected and must be attached.
   if (destType.isa<AnalogType>() || srcType.isa<AnalogType>())
     return connect.emitError("analog types may not be connected");
@@ -1207,10 +1233,8 @@ static LogicalResult verifyConnectOp(ConnectOp connect) {
 }
 
 static LogicalResult verifyPartialConnectOp(PartialConnectOp partialConnect) {
-  FIRRTLType destType =
-      partialConnect.dest().getType().cast<FIRRTLType>().stripFlip().first;
-  FIRRTLType srcType =
-      partialConnect.src().getType().cast<FIRRTLType>().stripFlip().first;
+  FIRRTLType destType = partialConnect.dest().getType().cast<FIRRTLType>();
+  FIRRTLType srcType = partialConnect.src().getType().cast<FIRRTLType>();
 
   if (!areTypesWeaklyEquivalent(destType, srcType))
     return partialConnect.emitError("type mismatch between destination ")
@@ -1417,10 +1441,6 @@ FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
   auto inType = operands[0].getType();
   auto fieldname = getAttr<StringAttr>(attrs, "fieldname");
 
-  // Look through flips.
-  while (auto flipType = inType.dyn_cast<FlipType>())
-    inType = flipType.getElementType();
-
   if (auto bundleType = inType.dyn_cast<BundleType>()) {
     auto elt = bundleType.getElement(fieldname.getValue());
     if (!elt) {
@@ -1432,8 +1452,6 @@ FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
     // FIRRTL puts flips on element fields, not on the underlying
     // types.  The result type of a subfield should strip a flip
     // if one exists.
-    if (auto flipped = elt->type.dyn_cast<FlipType>())
-      return flipped.getElementType().cast<FIRRTLType>();
     return elt->type;
   }
 
@@ -1444,26 +1462,14 @@ FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
 
 bool SubfieldOp::isFieldFlipped() {
   auto fieldname = this->fieldname();
-
-  auto handleBundle = [&](BundleType a) -> bool {
-    auto b = a.getElement(fieldname);
-    if (!b) {
-      emitOpError() << "unknown field '" << fieldname << "' in bundle type "
-                    << a;
-      return false;
-    };
-    return b.getValue().type.isa<FlipType>();
+  auto bundle = input().getType().cast<BundleType>();
+  auto field = bundle.getElement(fieldname);
+  if (!field) {
+    emitOpError() << "unknown field '" << fieldname << "' in bundle type "
+                  << bundle;
+    return false;
   };
-
-  return TypeSwitch<Type, bool>(this->input().getType())
-      .Case<BundleType>([&](auto a) { return handleBundle(a); })
-      .Case<FlipType>([&](auto a) {
-        return handleBundle(a.getElementType().template dyn_cast<BundleType>());
-      })
-      .Default([&](auto) {
-        emitOpError() << "subfield requires bundle operand";
-        return false;
-      });
+  return field.getValue().isFlip;
 }
 
 FIRRTLType SubindexOp::inferReturnType(ValueRange operands,
@@ -1472,10 +1478,6 @@ FIRRTLType SubindexOp::inferReturnType(ValueRange operands,
   auto inType = operands[0].getType();
   auto fieldIdx =
       getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
-
-  // Look through flips.
-  while (auto flipType = inType.dyn_cast<FlipType>())
-    inType = flipType.getElementType();
 
   if (auto vectorType = inType.dyn_cast<FVectorType>()) {
     if (fieldIdx < vectorType.getNumElements())
@@ -1503,10 +1505,6 @@ FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
           << indexType;
     return {};
   }
-
-  // Look through flips.
-  while (auto flipType = inType.dyn_cast<FlipType>())
-    inType = flipType.getElementType();
 
   if (auto vectorType = inType.dyn_cast<FVectorType>())
     return vectorType.getElementType();
@@ -1949,7 +1947,8 @@ FIRRTLType PadPrimOp::inferReturnType(ValueRange operands,
   auto inputi = input.dyn_cast<IntType>();
   if (amount < 0 || !inputi) {
     if (loc)
-      mlir::emitError(*loc, "pad input must be integer and amount must be >= 0");
+      mlir::emitError(*loc,
+                      "pad input must be integer and amount must be >= 0");
     return {};
   }
 
@@ -1970,7 +1969,8 @@ FIRRTLType ShlPrimOp::inferReturnType(ValueRange operands,
   auto inputi = input.dyn_cast<IntType>();
   if (amount < 0 || !inputi) {
     if (loc)
-      mlir::emitError(*loc, "shl input must be integer and amount must be >= 0");
+      mlir::emitError(*loc,
+                      "shl input must be integer and amount must be >= 0");
     return {};
   }
 
@@ -1990,7 +1990,8 @@ FIRRTLType ShrPrimOp::inferReturnType(ValueRange operands,
   auto inputi = input.dyn_cast<IntType>();
   if (amount < 0 || !inputi) {
     if (loc)
-      mlir::emitError(*loc, "shr input must be integer and amount must be >= 0");
+      mlir::emitError(*loc,
+                      "shr input must be integer and amount must be >= 0");
     return {};
   }
 
@@ -2010,7 +2011,8 @@ FIRRTLType TailPrimOp::inferReturnType(ValueRange operands,
   auto inputi = input.dyn_cast<IntType>();
   if (amount < 0 || !inputi) {
     if (loc)
-      mlir::emitError(*loc, "tail input must be integer and amount must be >= 0");
+      mlir::emitError(*loc,
+                      "tail input must be integer and amount must be >= 0");
     return {};
   }
 
@@ -2165,23 +2167,44 @@ void AsPassivePrimOp::build(OpBuilder &builder, OperationState &result,
 }
 
 //===----------------------------------------------------------------------===//
+// Custom attr-dict Directive that Elides Annotations
+//===----------------------------------------------------------------------===//
+
+/// Parse an optional attribute dictionary, adding an empty 'annotations'
+/// attribute if not specified.
+static ParseResult parseElideAnnotations(OpAsmParser &parser,
+                                         NamedAttrList &resultAttrs) {
+  auto result = parser.parseOptionalAttrDict(resultAttrs);
+  if (!resultAttrs.get("annotations"))
+    resultAttrs.append("annotations", parser.getBuilder().getArrayAttr({}));
+
+  return result;
+}
+
+static void printElideAnnotations(OpAsmPrinter &p, Operation *op,
+                                  DictionaryAttr attr,
+                                  ArrayRef<StringRef> extraElides = {}) {
+  SmallVector<StringRef> elidedAttrs(extraElides.begin(), extraElides.end());
+  // Elide "annotations" if it is empty.
+  if (op->getAttrOfType<ArrayAttr>("annotations").empty())
+    elidedAttrs.push_back("annotations");
+
+  p.printOptionalAttrDict(op->getAttrs(), elidedAttrs);
+}
+
+//===----------------------------------------------------------------------===//
 // ImplicitSSAName Custom Directive
 //===----------------------------------------------------------------------===//
 
 static ParseResult parseImplicitSSAName(OpAsmParser &parser,
                                         NamedAttrList &resultAttrs) {
 
-  if (parser.parseOptionalAttrDict(resultAttrs))
+  if (parseElideAnnotations(parser, resultAttrs))
     return failure();
 
   // If the attribute dictionary contains no 'name' attribute, infer it from
   // the SSA name (if specified).
-  bool hadName = llvm::any_of(
-      resultAttrs, [](NamedAttribute attr) { return attr.first == "name"; });
-
-  // If there was no name specified, check to see if there was a useful name
-  // specified in the asm file.
-  if (hadName)
+  if (resultAttrs.get("name"))
     return success();
 
   auto resultName = parser.getResultName(0).first;
@@ -2211,77 +2234,55 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
       (expectedName.empty() && isdigit(actualName[0])))
     elides.push_back("name");
 
-  // Elide "annotations" if it doesn't exist or if it is empty
-  auto annotationsAttr = op->getAttrOfType<ArrayAttr>("annotations");
-  if (!annotationsAttr || annotationsAttr.empty())
-    elides.push_back("annotations");
-
-  p.printOptionalAttrDict(op->getAttrs(), elides);
-}
-
-//===----------------------------------------------------------------------===//
-// Custom attr-dict Directive that Elides Annotations
-//===----------------------------------------------------------------------===//
-
-static ParseResult parseElideAnnotations(OpAsmParser &parser,
-                                         NamedAttrList &resultAttrs) {
-  return parser.parseOptionalAttrDict(resultAttrs);
-}
-
-static void printElideAnnotations(OpAsmPrinter &p, Operation *op,
-                                  DictionaryAttr attr) {
-  // Elide "annotations" if it doesn't exist or if it is empty
-  auto annotationsAttr = op->getAttrOfType<ArrayAttr>("annotations");
-  if (!annotationsAttr || annotationsAttr.empty())
-    return p.printOptionalAttrDict(op->getAttrs(), {"annotations"});
-
-  p.printOptionalAttrDict(op->getAttrs());
+  printElideAnnotations(p, op, attr, elides);
 }
 
 //===----------------------------------------------------------------------===//
 // InstanceOp Custom attr-dict Directive
 //===----------------------------------------------------------------------===//
 
-/// No change from normal parsing.
 static ParseResult parseInstanceOp(OpAsmParser &parser,
                                    NamedAttrList &resultAttrs) {
-  return parser.parseOptionalAttrDict(resultAttrs);
+  return parseElideAnnotations(parser, resultAttrs);
 }
 
 /// Always elide "moduleName" and elide "annotations" if it exists or
 /// if it is empty.
 static void printInstanceOp(OpAsmPrinter &p, Operation *op,
                             DictionaryAttr attr) {
-
   // "moduleName" is always elided
-  SmallVector<StringRef, 2> elides = {"moduleName"};
+  printElideAnnotations(p, op, attr, {"moduleName"});
+}
 
-  // Elide "annotations" if it doesn't exist or if it is empty
-  auto annotationsAttr = op->getAttrOfType<ArrayAttr>("annotations");
-  if (!annotationsAttr || annotationsAttr.empty())
-    elides.push_back("annotations");
+//===----------------------------------------------------------------------===//
+// MemoryPortOp Custom attr-dict Directive
+//===----------------------------------------------------------------------===//
 
-  p.printOptionalAttrDict(op->getAttrs(), elides);
+static ParseResult parseMemoryPortOp(OpAsmParser &parser,
+                                     NamedAttrList &resultAttrs) {
+  return parseElideAnnotations(parser, resultAttrs);
+}
+
+/// Always elide "direction" and elide "annotations" if it exists or
+/// if it is empty.
+static void printMemoryPortOp(OpAsmPrinter &p, Operation *op,
+                              DictionaryAttr attr) {
+  // "direction" is always elided.
+  printElideAnnotations(p, op, attr, {"direction"});
 }
 
 //===----------------------------------------------------------------------===//
 // MemOp Custom attr-dict Directive
 //===----------------------------------------------------------------------===//
 
-/// No change from normal parsing.
 static ParseResult parseMemOp(OpAsmParser &parser, NamedAttrList &resultAttrs) {
-  return parser.parseOptionalAttrDict(resultAttrs);
+  return parseElideAnnotations(parser, resultAttrs);
 }
 
 /// Always elide "ruw" and elide "annotations" if it exists or if it is empty.
 static void printMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
-  SmallVector<StringRef, 2> elides = {"ruw"};
-
-  auto annotationsAttr = op->getAttrOfType<ArrayAttr>("annotations");
-  if (!annotationsAttr || annotationsAttr.empty())
-    elides.push_back("annotations");
-
-  p.printOptionalAttrDict(op->getAttrs(), elides);
+  // "ruw" is always elided.
+  printElideAnnotations(p, op, attr, {"ruw"});
 }
 
 //===----------------------------------------------------------------------===//

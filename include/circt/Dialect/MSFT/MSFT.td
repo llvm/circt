@@ -34,7 +34,7 @@ def MSFTDialect : Dialect {
     void registerAttributes();
 
     void registerGenerator(StringRef opName, StringRef generatorName,
-                           GeneratorCallback cb);
+                           GeneratorCallback cb, Attribute parameters);
 
     /// Generator details don't need to be exposed.
     llvm::ManagedStatic<detail::Generators> generators;

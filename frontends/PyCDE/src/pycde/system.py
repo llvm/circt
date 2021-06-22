@@ -16,7 +16,7 @@ import typing
 class System:
 
   mod = None
-  passes = ["hw-legalize-names", "hw.module(hw-cleanup)"]
+  passes = ["lower-seq-to-sv", "hw-legalize-names", "hw.module(hw-cleanup)"]
   passed = False
 
   def __init__(self):
