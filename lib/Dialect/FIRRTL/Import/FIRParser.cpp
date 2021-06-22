@@ -3198,7 +3198,7 @@ DoneParsing:
 
   // Now that we've parsed all the prototypes and created all the module ops,
   // go ahead and parse all their bodies.  This can be done in parallel.
-  if (false && getContext()->isMultithreadingEnabled()) {
+  if (getContext()->isMultithreadingEnabled()) {
     mlir::ParallelDiagnosticHandler diagHandler(getContext());
     std::atomic<bool> anyFailed{false};
     llvm::parallelForEachN(0, deferredModules.size(), [&](size_t index) {
