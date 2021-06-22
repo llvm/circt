@@ -85,7 +85,7 @@ static InstanceOp createInstance(OpBuilder builder, Location loc,
   SmallVector<Type, 4> resultTypes;
   resultTypes.reserve(modulePorts.size());
   for (auto port : modulePorts)
-      resultTypes.push_back(port.type);
+    resultTypes.push_back(port.type);
 
   return builder.create<InstanceOp>(loc, resultTypes, moduleName,
                                     instanceName.getValue());
@@ -249,8 +249,7 @@ static void createWiresForMemoryPorts(OpBuilder builder, Location loc, MemOp op,
 
   for (auto memPort : op.getResults()) {
     // Create  a wire bundle for each memory port
-    auto wireOp = builder.create<WireOp>(
-        loc, memPort.getType());
+    auto wireOp = builder.create<WireOp>(loc, memPort.getType());
     results.push_back(wireOp.getResult());
 
     // Connect each wire to the corresponding ports in the external module

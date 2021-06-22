@@ -54,7 +54,6 @@ static void flattenType(FIRRTLType type,
   unsigned fieldID = 0;
   std::function<void(FIRRTLType, StringRef, bool)> flatten =
       [&](FIRRTLType type, StringRef suffixSoFar, bool isFlipped) {
-
         TypeSwitch<FIRRTLType>(type)
             .Case<BundleType>([&](auto bundle) {
               SmallString<16> tmpSuffix(suffixSoFar);
@@ -526,8 +525,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
 
       // Any read or write ports are just added.
       if (kind != MemOp::PortKind::ReadWrite) {
-        resultPortTypes.push_back(
-            op.getTypeForPort(depth, field.type, kind));
+        resultPortTypes.push_back(op.getTypeForPort(depth, field.type, kind));
         uniquePortName(name.getValue());
         continue;
       }

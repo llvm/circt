@@ -2403,7 +2403,7 @@ ParseResult FIRStmtParser::parseInstance() {
 
   for (auto port : modulePorts)
     resultTypes.push_back(port.type);
-  
+
   ArrayAttr annotations = getAnnotations(getModuleTarget() + ">" + id);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
@@ -2662,10 +2662,9 @@ ParseResult FIRStmtParser::parseNode() {
   // Note: (1) is more restictive than normal NodeOp verification, but
   // this is added to align with the SFC. (2) is less restrictive than
   // the SFC to accomodate for situations where the node is something
-  // weird like a module output or an instance input. 
+  // weird like a module output or an instance input.
   auto initializerType = initializer.getType().cast<FIRRTLType>();
-  if (initializerType.isa<AnalogType>() ||
-      !initializerType.isPassive()) {
+  if (initializerType.isa<AnalogType>() || !initializerType.isPassive()) {
     emitError(startTok.getLoc())
         << "Node cannot be analog and must be passive or passive under a flip "
         << initializer.getType();

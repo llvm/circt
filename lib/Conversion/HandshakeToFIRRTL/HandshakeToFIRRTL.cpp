@@ -1674,8 +1674,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   llvm::SmallVector<Type> resultTypes;
   llvm::SmallVector<Attribute> resultNames;
   for (auto p : ports) {
-    resultTypes.push_back(
-        MemOp::getTypeForPort(depth, dataType, p.second));
+    resultTypes.push_back(MemOp::getTypeForPort(depth, dataType, p.second));
     resultNames.push_back(rewriter.getStringAttr(p.first.str()));
   }
 

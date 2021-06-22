@@ -104,9 +104,9 @@ public:
         for (auto &element : bundleType.getElements()) {
           id++;
           if (element.isFlip)
-          declare(element.type, swapFlow(flow));
+            declare(element.type, swapFlow(flow));
           else
-          declare(element.type, flow);
+            declare(element.type, flow);
         }
         return;
       }
@@ -169,10 +169,11 @@ public:
     // Track any instance inputs which need to be connected to for init
     // coverage.
     for (auto result : llvm::enumerate(op.results()))
-if ( getModulePortDirection(op.getReferencedModule(), result.index()) == Direction::Output)
-      declareSinks(result.value(), Flow::Source);
-  else
-      declareSinks(result.value(), Flow::Sink);
+      if (getModulePortDirection(op.getReferencedModule(), result.index()) ==
+          Direction::Output)
+        declareSinks(result.value(), Flow::Source);
+      else
+        declareSinks(result.value(), Flow::Sink);
   }
 
   void visitDecl(MemOp op) {

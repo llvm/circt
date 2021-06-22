@@ -117,17 +117,16 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
       .Case<RegOp, RegResetOp, WireOp, MemoryPortOp>(
           [](auto) { return Flow::Duplex; })
       .Case<InstanceOp>([&](auto inst) {
-        for (auto arg: llvm::enumerate(inst.getResults()))
+        for (auto arg : llvm::enumerate(inst.getResults()))
           if (arg.value() == val)
-            if (getModulePortDirection(inst.getReferencedModule(), arg.index()) == Direction::Output)
+            if (getModulePortDirection(inst.getReferencedModule(),
+                                       arg.index()) == Direction::Output)
               return accumulatedFlow;
-              else
-        return swap();
+            else
+              return swap();
         llvm_unreachable("couldn't find result in results");
       })
-      .Case<MemOp>([&](auto op) {
-        return swap();
-      })
+      .Case<MemOp>([&](auto op) { return swap(); })
       // Anything else acts like a universal source.
       .Default([&](auto) { return accumulatedFlow; });
 }
@@ -1190,10 +1189,8 @@ static LogicalResult verifyConnectOp(ConnectOp connect) {
 }
 
 static LogicalResult verifyPartialConnectOp(PartialConnectOp partialConnect) {
-  FIRRTLType destType =
-      partialConnect.dest().getType().cast<FIRRTLType>();
-  FIRRTLType srcType =
-      partialConnect.src().getType().cast<FIRRTLType>();
+  FIRRTLType destType = partialConnect.dest().getType().cast<FIRRTLType>();
+  FIRRTLType srcType = partialConnect.src().getType().cast<FIRRTLType>();
 
   if (!areTypesWeaklyEquivalent(destType, srcType))
     return partialConnect.emitError("type mismatch between destination ")
@@ -1423,12 +1420,12 @@ bool SubfieldOp::isFieldFlipped() {
   auto fieldname = this->fieldname();
   auto bundle = input().getType().cast<BundleType>();
   auto field = bundle.getElement(fieldname);
-    if (!field) {
-      emitOpError() << "unknown field '" << fieldname << "' in bundle type "
-                    << bundle;
-      return false;
-    };
-    return field.getValue().isFlip;
+  if (!field) {
+    emitOpError() << "unknown field '" << fieldname << "' in bundle type "
+                  << bundle;
+    return false;
+  };
+  return field.getValue().isFlip;
 }
 
 FIRRTLType SubindexOp::inferReturnType(ValueRange operands,
