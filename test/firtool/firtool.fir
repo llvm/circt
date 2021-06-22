@@ -115,7 +115,7 @@ circuit test_mod : %[[{"a": "a"}]]
 ; VERILOG-LABEL: module flipFlop(
 ; VERILOG-NEXT:    input clock, a_d,
 ; VERILOG-NEXT:    output a_q);
-; VERILOG:         always_ff @(posedge clock)
+; VERILOG:         always @(posedge clock)
 ; VERILOG-NEXT:      r <= a_d;
 ; VERILOG-NEXT:    assign a_q = r;
 ; VERILOG:       endmodule
