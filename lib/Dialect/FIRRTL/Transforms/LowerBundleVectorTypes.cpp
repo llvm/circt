@@ -464,8 +464,8 @@ static Value cloneAccess(ImplicitLocOpBuilder *builder, Operation *op,
 
 void TypeLoweringVisitor::lowerSAWritePath(Operation *op,
                                            ArrayRef<Operation *> writePath) {
-  auto sao = cast<SubaccessOp>(writePath.back());
-  auto saoType = sao.getType().cast<FVectorType>();
+  SubaccessOp sao = cast<SubaccessOp>(writePath.back());
+  auto saoType = sao.input().getType().cast<FVectorType>();
   auto selectWidth =
       sao.index().getType().cast<FIRRTLType>().getBitWidthOrSentinel();
 
