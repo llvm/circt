@@ -11,8 +11,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/Operation.h"
+
+using mlir::function_like_impl::getArgAttrDict;
+using mlir::function_like_impl::setAllArgAttrDicts;
+
 using namespace circt;
 using namespace firrtl;
 
@@ -312,6 +317,48 @@ bool AnnotationSet::removeAnnotations(
   }
   annotations = ArrayAttr::get(getContext(), filteredAnnos);
   return true;
+}
+
+/// Remove all port annotations from a module for which `predicate` returns
+/// true.
+bool AnnotationSet::removePortAnnotations(
+    FModuleOp module,
+    llvm::function_ref<bool(unsigned, Annotation)> predicate) {
+  // We need to reserve some space to gather the remaining attributes, without
+  // the removed ones.
+  SmallVector<DictionaryAttr, 8> filteredArgAttrs;
+  filteredArgAttrs.reserve(module.getNumArguments());
+
+  // Filter the annotations on each argument.
+  bool changed = false;
+  for (unsigned argNum = 0, argNumEnd = module.getNumArguments();
+       argNum < argNumEnd; ++argNum) {
+    auto annos = AnnotationSet::forPort(module, argNum);
+
+    // Fast path if there are no annotations that we could possibly remove.
+    if (annos.empty()) {
+      filteredArgAttrs.push_back(getArgAttrDict(module, argNum));
+      continue;
+    }
+
+    // Go through all annotations on this port and extract the interesting
+    // ones. If any modifications were done, keep a reduced set of attributes
+    // around for the port, otherwise just stick with the existing ones.
+    bool argChanged = annos.removeAnnotations(
+        [&](Annotation anno) { return predicate(argNum, anno); });
+    if (argChanged) {
+      changed = true;
+      filteredArgAttrs.push_back(
+          annos.applyToPortDictionaryAttr(getArgAttrDict(module, argNum)));
+    } else {
+      filteredArgAttrs.push_back(getArgAttrDict(module, argNum));
+    }
+  }
+
+  // If we have made any changes, apply them to the operation.
+  if (changed)
+    setAllArgAttrDicts(module, filteredArgAttrs);
+  return changed;
 }
 
 //===----------------------------------------------------------------------===//
