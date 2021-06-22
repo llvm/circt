@@ -132,10 +132,8 @@ firrtl.circuit "TopLevel" {
 // COM:     memory.w.mask <= wMask
 // COM:     memory.w.data <= wData
 
-firrtl.circuit "Foo" {
-
-  // CHECK-LABEL: firrtl.module @Foo
-  firrtl.module @Foo(in %clock: !firrtl.clock, in %rAddr: !firrtl.uint<4>, in %rEn: !firrtl.uint<1>, out %rData: !firrtl.bundle<a: uint<8>, b: uint<8>>, in %wAddr: !firrtl.uint<4>, in %wEn: !firrtl.uint<1>, in %wMask: !firrtl.bundle<a: uint<1>, b: uint<1>>, in %wData: !firrtl.bundle<a: uint<8>, b: uint<8>>) {
+  // CHECK-LABEL: firrtl.module @Mem2
+  firrtl.module @Mem2(in %clock: !firrtl.clock, in %rAddr: !firrtl.uint<4>, in %rEn: !firrtl.uint<1>, out %rData: !firrtl.bundle<a: uint<8>, b: uint<8>>, in %wAddr: !firrtl.uint<4>, in %wEn: !firrtl.uint<1>, in %wMask: !firrtl.bundle<a: uint<1>, b: uint<1>>, in %wData: !firrtl.bundle<a: uint<8>, b: uint<8>>) {
     %memory_r, %memory_w = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r", "w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a: uint<8>, b: uint<8>>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<a: uint<8>, b: uint<8>>, mask: bundle<a: uint<1>, b: uint<1>>>
     %0 = firrtl.subfield %memory_r("clk") : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a: uint<8>, b: uint<8>>>) -> !firrtl.clock
     firrtl.connect %0, %clock : !firrtl.clock, !firrtl.clock
@@ -249,7 +247,6 @@ firrtl.circuit "Foo" {
 //    memory.rw.wdata <= rwDataIn
 //    rwDataOut <= memory.rw.rdata
 
-firrtl.circuit "MemoryRWSplit" {
   firrtl.module @MemoryRWSplit(in %clock: !firrtl.clock, in %rwEn: !firrtl.uint<1>, in %rwMode: !firrtl.uint<1>, in %rwAddr: !firrtl.uint<4>, in %rwMask: !firrtl.uint<1>, in %rwDataIn: !firrtl.uint<8>, out %rwDataOut: !firrtl.uint<8>) {
     %memory_rw = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["rw"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata flip: uint<8>, wdata: uint<8>, wmask: uint<1>>
     %0 = firrtl.subfield %memory_rw("clk") : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata flip: uint<8>, wdata: uint<8>, wmask: uint<1>>) -> !firrtl.clock
@@ -268,72 +265,12 @@ firrtl.circuit "MemoryRWSplit" {
     firrtl.connect %rwDataOut, %6 : !firrtl.uint<8>, !firrtl.uint<8>
   }
 
-  // CHECK-LABEL: firrtl.module @MemoryRWSplit
-  // COM: ---------------------------------------------------------------------------------
-  // COM: The read write port, "rw", was split into "rw_r" and "rw_w"
-  // CHECK: %memory_rw_r, %memory_rw_w = firrtl.mem
-  // COM:   - port names are updated correctly
-  // CHECK-SAME: portNames = ["rw_r", "rw_w"]
-  // COM:   - the types are correct for read and write ports
-  // CHECK-SAME: !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
-  // COM: ---------------------------------------------------------------------------------
-  // COM: Read port is hooked up correctly
-  // COM:   - address is "rw_addr"
-  // CHECK: %memory_rw_addr = firrtl.wire
-  // CHECK: %[[R_ADDR:.+]] = firrtl.subfield %memory_rw_r("addr")
-  // CHECK: firrtl.connect %[[R_ADDR]], %memory_rw_addr
-  // COM:   - enable is "rw_en && !rw_wmode"
-  // CHECK: %memory_rw_en = firrtl.wire
-  // CHECK: %memory_rw_wmode = firrtl.wire
-  // CHECK: %[[NOT_WRITE:.+]] = firrtl.not %memory_rw_wmode
-  // CHECK: %[[EN_AND_NOT_WRITE:.+]] = firrtl.and %memory_rw_en, %[[NOT_WRITE]]
-  // CHECK: %[[R_EN:.+]] = firrtl.subfield %memory_rw_r("en")
-  // CHECK: firrtl.connect %[[R_EN]], %[[EN_AND_NOT_WRITE]]
-  // COM:   - clk is "rw_clk"
-  // CHECK: %memory_rw_clk = firrtl.wire
-  // CHECK: %[[R_CLK:.+]] = firrtl.subfield %memory_rw_r("clk")
-  // CHECK: firrtl.connect %[[R_CLK]], %memory_rw_clk
-  // COM:   - data has a reference
-  // CHECK: %[[R_DATA:.+]] = firrtl.subfield %memory_rw_r("data")
-  // COM: ---------------------------------------------------------------------------------
-  // COM: Write port is hooked up correctly.
-  // COM:   - address is "rw_addr"
-  // CHECK: %[[W_ADDR:.+]] = firrtl.subfield %memory_rw_w("addr")
-  // CHECK: firrtl.connect %[[W_ADDR]], %memory_rw_addr
-  // COM:   - enable is "rw_en && rw_wmode"
-  // CHECK: %[[EN_AND_WRITE:.+]] = firrtl.and %memory_rw_en, %memory_rw_wmode
-  // CHECK: %[[W_EN:.+]] = firrtl.subfield %memory_rw_w("en")
-  // CHECK: firrtl.connect %[[W_EN]], %[[EN_AND_WRITE]]
-  // COM:   - clk is "rw_clk"
-  // CHECK: %[[W_CLK:.+]] = firrtl.subfield %memory_rw_w("clk")
-  // CHECK: firrtl.connect %[[W_CLK]], %memory_rw_clk
-  // COM:   - data has a reference
-  // CHECK: %[[W_DATA:.+]] = firrtl.subfield %memory_rw_w("data")
-  // COM:   - mask has a reference
-  // CHECK: %[[W_MASK:.+]] = firrtl.subfield %memory_rw_w("mask")
-  // COM: ---------------------------------------------------------------------------------
-  // COM: Check that the lowering is worked.
-  // CHECK: firrtl.connect %memory_rw_clk, %clock
-  // CHECK: firrtl.connect %memory_rw_en, %rwEn
-  // CHECK: firrtl.connect %memory_rw_addr, %rwAddr
-  // CHECK: firrtl.connect %memory_rw_wmode, %rwMode
-  // CHECK: firrtl.connect %[[W_MASK]], %rwMask
-  // CHECK: firrtl.connect %[[W_DATA]], %rwDataIn
-  // CHECK: firrtl.connect %rwDataOut, %[[R_DATA]]
-}
 
-// -----
 
-firrtl.circuit "MemoryRWSplitUnique" {
+
   firrtl.module @MemoryRWSplitUnique() {
     %memory_rw, %memory_rw_r, %memory_rw_w = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["rw", "rw_r", "rw_w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata flip: uint<8>, wdata: uint<8>, wmask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
   }
-
-  // TODO: Enable this
-  // HECK-LABEL: firrtl.module @MemoryRWSplitUnique
-  // HECK: %memory_rw_r, %memory_rw_w, %memory_rw_r0, %memory_rw_w0 = firrtl.mem
-  // OM:   - port names are updated correctly
-  // HECK-SAME: portNames = ["rw_r", "rw_w", "rw_r0", "rw_w0"]
 
 
 // https://github.com/llvm/circt/issues/593
@@ -347,22 +284,16 @@ firrtl.circuit "MemoryRWSplitUnique" {
       %1 = firrtl.invalidvalue : !firrtl.bundle<inp_d: uint<14>>
       firrtl.connect %U0_inp_a, %1 : !firrtl.bundle<inp_d: uint<14>>, !firrtl.bundle<inp_d: uint<14>>
     }
-  }
-}
+ 
 
-//CHECK-LABEL: module  {
-//CHECK-NEXT:   firrtl.circuit "top_mod" {
-//CHECK-NEXT:     firrtl.module @mod_2(in %clock: !firrtl.clock, in %inp_a_inp_d: !firrtl.uint<14>) {
-//CHECK-NEXT:     }
-//CHECK-NEXT:    firrtl.module @top_mod(in %clock: !firrtl.clock) {
+
+//CHECK-LABEL:     firrtl.module @mod_2(in %clock: !firrtl.clock, in %inp_a_inp_d: !firrtl.uint<14>) 
+//CHECK:    firrtl.module @top_mod(in %clock: !firrtl.clock)
 //CHECK-NEXT:      %U0_clock, %U0_inp_a_inp_d = firrtl.instance @mod_2 {name = "U0"} : !firrtl.clock, !firrtl.uint<14>
 //CHECK-NEXT:      %invalid_clock = firrtl.invalidvalue : !firrtl.clock
 //CHECK-NEXT:      firrtl.connect %U0_clock, %invalid_clock : !firrtl.clock, !firrtl.clock
 //CHECK-NEXT:      %invalid_ui14 = firrtl.invalidvalue : !firrtl.uint<14>
 //CHECK-NEXT:      firrtl.connect %U0_inp_a_inp_d, %invalid_ui14 : !firrtl.uint<14>, !firrtl.uint<14>
-//CHECK-NEXT:    }
-//CHECK-NEXT:  }
-//CHECK-NEXT:}
 
 // https://github.com/llvm/circt/issues/661
 
@@ -464,8 +395,7 @@ firrtl.circuit "MemoryRWSplitUnique" {
   // CHECK: firrtl.connect %b_1, %a_1
 
 // COM: Test vector of bundles lowering
-firrtl.circuit "LowerVectorsOfBundles" {
-  // CHECK-LABEL: firrtl.module @LowerVectorsOfBundles(in %in_0_a: !firrtl.uint<1>, out %in_0_b: !firrtl.uint<1>, in %in_1_a: !firrtl.uint<1>, out %in_1_b: !firrtl.uint<1>, out %out_0_a: !firrtl.uint<1>, in %out_0_b: !firrtl.uint<1>, out %out_1_a: !firrtl.uint<1>, in %out_1_b: !firrtl.uint<1>) {
+  // CHECK-LABEL: firrtl.module @LowerVectorsOfBundles(in %in_0_a: !firrtl.uint<1>, out %in_0_b: !firrtl.uint<1>, in %in_1_a: !firrtl.uint<1>, out %in_1_b: !firrtl.uint<1>, out %out_0_a: !firrtl.uint<1>, in %out_0_b: !firrtl.uint<1>, out %out_1_a: !firrtl.uint<1>, in %out_1_b: !firrtl.uint<1>)
   firrtl.module @LowerVectorsOfBundles(in %in: !firrtl.vector<bundle<a : uint<1>, b  flip: uint<1>>, 2>,
                                        out %out: !firrtl.vector<bundle<a : uint<1>, b  flip: uint<1>>, 2>) {
     // CHECK: firrtl.connect %out_0_a, %in_0_a : !firrtl.uint<1>, !firrtl.uint<1>
@@ -831,9 +761,8 @@ firrtl.circuit "LowerVectorsOfBundles" {
   }
 
 // Bug: must strip the flip type from the LHS of a value.
-firrtl.circuit "PartialConnectLHSFlip"  {
   firrtl.module @PartialConnectLHSFlip(in %a: !firrtl.bundle<b: bundle<c flip: uint<2>>>) { }
-  firrtl.module @Foo(in %a: !firrtl.bundle<b: bundle<c flip: uint<2>>>) {
+  firrtl.module @FooFlipType(in %a: !firrtl.bundle<b: bundle<c flip: uint<2>>>) {
     %mgmt_a = firrtl.instance @PartialConnectLHSFlip  {name = "mgmt"} : !firrtl.bundle<b: bundle<c flip: uint<2>>>
     %0 = firrtl.subfield %mgmt_a("b") : (!firrtl.bundle<b: bundle<c flip: uint<2>>>) -> !firrtl.bundle<c flip: uint<2>>
     %1 = firrtl.subfield %0("c") : (!firrtl.bundle<c flip: uint<2>>) -> !firrtl.uint<2>
@@ -944,15 +873,16 @@ firrtl.circuit "PartialConnectLHSFlip"  {
 
 // Test that annotations on aggregate ports are copied.
 firrtl.circuit "Port" {
-  firrtl.extmodule @Sub(in %a: !firrtl.vector<uint<1>, 2> {firrtl.annotations = [{a}]})
+  firrtl.extmodule @Sub1(in %a: !firrtl.vector<uint<1>, 2> {firrtl.annotations = [{a}]})
   // CHECK: firrtl.extmodule
   // CHECK-COUNT-2: firrtl.annotations = [{a}]
   // CHECK-NOT: firrtl.annotations = [{a}]
   firrtl.module @Port(in %a: !firrtl.vector<uint<1>, 2> {firrtl.annotations = [{b}]}) {
-    %sub_a = firrtl.instance @Sub  {name = "sub", portNames = ["a"]} : !firrtl.vector<uint<1>, 2>
+    %sub_a = firrtl.instance @Sub1  {name = "sub", portNames = ["a"]} : !firrtl.vector<uint<1>, 2>
     firrtl.connect %sub_a, %a : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
   }
 }
+
 
 // -----
 
