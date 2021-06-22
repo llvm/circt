@@ -872,9 +872,8 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   result.addTypes(resultTypes);
 
   if (portAnnotations.empty()) {
-    SmallVector<Attribute, 16> portAnnotationsVec;
-    for (unsigned i = 0, e = resultTypes.size(); i < e; ++i)
-      portAnnotationsVec.push_back(builder.getArrayAttr({}));
+    SmallVector<Attribute, 16> portAnnotationsVec(resultTypes.size(),
+                                                  builder.getArrayAttr({}));
     result.addAttribute("portAnnotations",
                         builder.getArrayAttr(portAnnotationsVec));
   } else {
