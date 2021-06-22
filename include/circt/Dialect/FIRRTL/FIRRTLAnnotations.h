@@ -16,6 +16,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/PointerLikeTypeTraits.h"
 
 namespace circt {
 namespace firrtl {
@@ -297,5 +298,45 @@ inline auto AnnotationSet::end() const -> iterator {
 
 } // namespace firrtl
 } // namespace circt
+
+//===----------------------------------------------------------------------===//
+// Traits
+//===----------------------------------------------------------------------===//
+
+namespace llvm {
+
+/// Make `Annotation` behave like a `Attribute` in terms of pointer-likeness.
+template <>
+struct PointerLikeTypeTraits<circt::firrtl::Annotation>
+    : PointerLikeTypeTraits<mlir::Attribute> {
+public:
+  static inline void *getAsVoidPointer(circt::firrtl::Annotation v) {
+    return const_cast<void *>(v.getDict().getAsOpaquePointer());
+  }
+  static inline circt::firrtl::Annotation getFromVoidPointer(void *p) {
+    return circt::firrtl::Annotation(
+        mlir::DictionaryAttr::getFromOpaquePointer(p));
+  }
+};
+
+/// Make `Annotation` hash just like `Attribute`.
+template <>
+struct DenseMapInfo<circt::firrtl::Annotation> {
+  using Annotation = circt::firrtl::Annotation;
+  static Annotation getEmptyKey() {
+    return PointerLikeTypeTraits<Annotation>::getFromVoidPointer(
+        llvm::DenseMapInfo<void *>::getEmptyKey());
+  }
+  static Annotation getTombstoneKey() {
+    return PointerLikeTypeTraits<Annotation>::getFromVoidPointer(
+        llvm::DenseMapInfo<void *>::getTombstoneKey());
+  }
+  static unsigned getHashValue(Annotation val) {
+    return mlir::hash_value(val.getDict());
+  }
+  static bool isEqual(Annotation LHS, Annotation RHS) { return LHS == RHS; }
+};
+
+} // namespace llvm
 
 #endif // CIRCT_DIALECT_FIRRTL_ANNOTATIONS_H
