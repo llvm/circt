@@ -59,6 +59,8 @@ static bool isVerilogUnaryOperator(Operation *op) {
 /// operation so it can be sunk into multiple blocks. If there are no more uses
 /// in the current block, the op will be removed.
 void PrettifyVerilogPass::sinkOpToUses(Operation *op) {
+  assert(mlir::MemoryEffectOpInterface::hasNoEffect(op) &&
+         "Op with side effects cannot be sunk to its uses.");
   auto block = op->getBlock();
   for (auto it = op->use_begin(), end = op->use_end(); it != end;) {
     // If the current use is not in the same block as the operation, we are
