@@ -478,9 +478,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input foo : UInt
     input clock : Clock
 
-    ; CHECK: [[HACKWIRE0:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
-    ; CHECK: [[HACKWIRE1:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
     ; CHECK: [[HACKWIRE2:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
+    ; CHECK: [[HACKWIRE1:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
+    ; CHECK: [[HACKWIRE0:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
     ; CHECK: %memory = firrtl.smem Undefined {name = "memory"} : !firrtl.vector<vector<uint<1>, 9>, 256>
     smem memory : UInt<1>[9] [256]
 
@@ -676,14 +676,6 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
 
 
-  module mod_0_563 :
-    input in0: UInt<5>
-    input in1: { a : UInt<5> }
-    output out0: UInt<5>
-    output out1: { a : UInt<5> }
-    out0 <= in0
-    out1 <= in1
-
   ; CHECK-LABEL: firrtl.module @CheckInvalids
   module CheckInvalids :
     input in0 : UInt<1>
@@ -772,6 +764,16 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
     ; CHECK: firrtl.connect [[U0_IN1_A]], [[INV]]
     U0 is invalid
+
+  ; This reference is declared after its first use.
+  ; https://github.com/llvm/circt/issues/163
+  module mod_0_563 :
+    input in0: UInt<5>
+    input in1: { a : UInt<5> }
+    output out0: UInt<5>
+    output out1: { a : UInt<5> }
+    out0 <= in0
+    out1 <= in1
 
   ; https://github.com/llvm/circt/issues/606
   ; CHECK-LABEL: firrtl.module @mutableSubIndex606

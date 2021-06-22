@@ -154,8 +154,9 @@ void CircuitOp::build(OpBuilder &builder, OperationState &result,
   // Add an attribute for the name.
   result.addAttribute(builder.getIdentifier("name"), name);
 
-  if (annotations)
-    result.addAttribute("annotations", annotations);
+  if (!annotations)
+    annotations = builder.getArrayAttr({});
+  result.addAttribute("annotations", annotations);
 
   // Create a region and a block for the body.
   Region *bodyRegion = result.addRegion();
@@ -165,6 +166,27 @@ void CircuitOp::build(OpBuilder &builder, OperationState &result,
 
 // Return the main module that is the entry point of the circuit.
 Operation *CircuitOp::getMainModule() { return lookupSymbol(name()); }
+
+static ParseResult parseCircuitOpAttrs(OpAsmParser &parser,
+                                       NamedAttrList &resultAttrs) {
+  auto result = parser.parseOptionalAttrDictWithKeyword(resultAttrs);
+  if (!resultAttrs.get("annotations"))
+    resultAttrs.append("annotations", parser.getBuilder().getArrayAttr({}));
+
+  return result;
+}
+
+static void printCircuitOpAttrs(OpAsmPrinter &p, Operation *op,
+                                DictionaryAttr attr) {
+  // "name" is always elided.
+  SmallVector<StringRef> elidedAttrs = {"name"};
+  // Elide "annotations" if it doesn't exist or if it is empty
+  auto annotationsAttr = op->getAttrOfType<ArrayAttr>("annotations");
+  if (annotationsAttr.empty())
+    elidedAttrs.push_back("annotations");
+
+  p.printOptionalAttrDictWithKeyword(op->getAttrs(), elidedAttrs);
+}
 
 static LogicalResult verifyCircuitOp(CircuitOp circuit) {
   StringRef main = circuit.name();
@@ -305,15 +327,32 @@ FunctionType firrtl::getModuleType(Operation *op) {
 /// extmodule.
 SmallVector<ModulePortInfo> firrtl::getModulePortInfo(Operation *op) {
   SmallVector<ModulePortInfo> results;
-  auto argTypes = getModuleType(op).getInputs();
 
   auto portNamesAttr = getModulePortNames(op);
   auto portDirections = getModulePortDirections(op).getValue();
-  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
-    auto name = portNamesAttr[i].cast<StringAttr>();
-    auto type = argTypes[i].cast<FIRRTLType>();
-    auto direction = direction::get(portDirections[i]);
-    results.push_back({name, type, direction, AnnotationSet::forPort(op, i)});
+  if (isa<FExtModuleOp>(op)) {
+    // FExtModuleOp's don't have block arguments or locations for their ports.
+    auto argTypes = getModuleType(op).getInputs();
+    auto loc = op->getLoc();
+    for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
+      auto name = portNamesAttr[i].cast<StringAttr>();
+      auto type = argTypes[i].cast<FIRRTLType>();
+      auto direction = direction::get(portDirections[i]);
+      results.push_back(
+          {name, type, direction, loc, AnnotationSet::forPort(op, i)});
+    }
+  } else {
+    // FModuleOp has the ports as the BlockArgument's of the first block.
+    auto moduleBlock = cast<FModuleOp>(op).getBodyBlock();
+    for (auto portArgAndIndex : llvm::enumerate(moduleBlock->getArguments())) {
+      BlockArgument portArg = portArgAndIndex.value();
+      size_t portIdx = portArgAndIndex.index();
+      auto name = portNamesAttr[portIdx].cast<StringAttr>();
+      auto direction = direction::get(portDirections[portIdx]);
+      results.push_back({name, portArg.getType().cast<FIRRTLType>(), direction,
+                         portArg.getLoc(),
+                         AnnotationSet::forPort(op, portIdx)});
+    }
   }
   return results;
 }
@@ -359,7 +398,8 @@ void FModuleOp::erasePorts(ArrayRef<unsigned> portIndices) {
 }
 
 static void buildModule(OpBuilder &builder, OperationState &result,
-                        StringAttr name, ArrayRef<ModulePortInfo> ports) {
+                        StringAttr name, ArrayRef<ModulePortInfo> ports,
+                        ArrayAttr annotations) {
   using namespace mlir::function_like_impl;
 
   // Add an attribute for the name.
@@ -380,8 +420,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   for (size_t i = 0, e = ports.size(); i != e; ++i) {
     portNames.push_back(ports[i].name);
     portDirections.push_back(ports[i].direction);
-    argAttrs.push_back(
-        AnnotationSet(ports[i].annotations).getArgumentAttrDict());
+    argAttrs.push_back(ports[i].annotations.getArgumentAttrDict());
   }
 
   // Both attributes are added, even if the module has no ports.
@@ -391,13 +430,17 @@ static void buildModule(OpBuilder &builder, OperationState &result,
       direction::attrKey,
       direction::packAttribute(portDirections, builder.getContext()));
 
+  if (!annotations)
+    annotations = builder.getArrayAttr({});
+  result.addAttribute("annotations", annotations);
+
   result.addRegion();
 }
 
 void FModuleOp::build(OpBuilder &builder, OperationState &result,
                       StringAttr name, ArrayRef<ModulePortInfo> ports,
                       ArrayAttr annotations) {
-  buildModule(builder, result, name, ports);
+  buildModule(builder, result, name, ports, annotations);
 
   // Create a region and a block for the body.
   auto *bodyRegion = result.regions[0].get();
@@ -406,21 +449,15 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
 
   // Add arguments to the body block.
   for (auto elt : ports)
-    body->addArgument(elt.type);
-
-  if (annotations)
-    result.addAttribute("annotations", annotations);
+    body->addArgument(elt.type, elt.loc);
 }
 
 void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name, ArrayRef<ModulePortInfo> ports,
                          StringRef defnameAttr, ArrayAttr annotations) {
-  buildModule(builder, result, name, ports);
+  buildModule(builder, result, name, ports, annotations);
   if (!defnameAttr.empty())
     result.addAttribute("defname", builder.getStringAttr(defnameAttr));
-
-  if (annotations)
-    result.addAttribute("annotations", annotations);
 }
 
 // TODO: This ia a clone of mlir::impl::printFunctionSignature, refactor it to
@@ -616,6 +653,9 @@ static void printModuleLikeOp(OpAsmPrinter &p, Operation *op) {
   SmallVector<StringRef, 3> omittedAttrs({direction::attrKey});
   if (!needportNamesAttr)
     omittedAttrs.push_back("portNames");
+  if (op->getAttrOfType<ArrayAttr>("annotations").empty())
+    omittedAttrs.push_back("annotations");
+
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(),
                           omittedAttrs);
 }
@@ -706,6 +746,10 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
   }
   // Add the attributes to the function arguments.
   addArgAndResultAttrs(builder, result, portNamesAttrs, resultAttrs);
+
+  // The annotations attribute is always present, but not printed when empty.
+  if (!result.attributes.get("annotations"))
+    result.addAttribute("annotations", builder.getArrayAttr({}));
 
   // Parse the optional function body.
   auto *body = result.addRegion();
@@ -2123,23 +2167,44 @@ void AsPassivePrimOp::build(OpBuilder &builder, OperationState &result,
 }
 
 //===----------------------------------------------------------------------===//
+// Custom attr-dict Directive that Elides Annotations
+//===----------------------------------------------------------------------===//
+
+/// Parse an optional attribute dictionary, adding an empty 'annotations'
+/// attribute if not specified.
+static ParseResult parseElideAnnotations(OpAsmParser &parser,
+                                         NamedAttrList &resultAttrs) {
+  auto result = parser.parseOptionalAttrDict(resultAttrs);
+  if (!resultAttrs.get("annotations"))
+    resultAttrs.append("annotations", parser.getBuilder().getArrayAttr({}));
+
+  return result;
+}
+
+static void printElideAnnotations(OpAsmPrinter &p, Operation *op,
+                                  DictionaryAttr attr,
+                                  ArrayRef<StringRef> extraElides = {}) {
+  SmallVector<StringRef> elidedAttrs(extraElides.begin(), extraElides.end());
+  // Elide "annotations" if it is empty.
+  if (op->getAttrOfType<ArrayAttr>("annotations").empty())
+    elidedAttrs.push_back("annotations");
+
+  p.printOptionalAttrDict(op->getAttrs(), elidedAttrs);
+}
+
+//===----------------------------------------------------------------------===//
 // ImplicitSSAName Custom Directive
 //===----------------------------------------------------------------------===//
 
 static ParseResult parseImplicitSSAName(OpAsmParser &parser,
                                         NamedAttrList &resultAttrs) {
 
-  if (parser.parseOptionalAttrDict(resultAttrs))
+  if (parseElideAnnotations(parser, resultAttrs))
     return failure();
 
   // If the attribute dictionary contains no 'name' attribute, infer it from
   // the SSA name (if specified).
-  bool hadName = llvm::any_of(
-      resultAttrs, [](NamedAttribute attr) { return attr.first == "name"; });
-
-  // If there was no name specified, check to see if there was a useful name
-  // specified in the asm file.
-  if (hadName)
+  if (resultAttrs.get("name"))
     return success();
 
   auto resultName = parser.getResultName(0).first;
@@ -2169,103 +2234,55 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
       (expectedName.empty() && isdigit(actualName[0])))
     elides.push_back("name");
 
-  // Elide "annotations" if it doesn't exist or if it is empty
-  auto annotationsAttr = op->getAttrOfType<ArrayAttr>("annotations");
-  if (!annotationsAttr || annotationsAttr.empty())
-    elides.push_back("annotations");
-
-  p.printOptionalAttrDict(op->getAttrs(), elides);
-}
-
-//===----------------------------------------------------------------------===//
-// Custom attr-dict Directive that Elides Annotations
-//===----------------------------------------------------------------------===//
-
-static ParseResult parseElideAnnotations(OpAsmParser &parser,
-                                         NamedAttrList &resultAttrs) {
-  return parser.parseOptionalAttrDict(resultAttrs);
-}
-
-static void printElideAnnotations(OpAsmPrinter &p, Operation *op,
-                                  DictionaryAttr attr) {
-  // Elide "annotations" if it doesn't exist or if it is empty
-  auto annotationsAttr = op->getAttrOfType<ArrayAttr>("annotations");
-  if (!annotationsAttr || annotationsAttr.empty())
-    return p.printOptionalAttrDict(op->getAttrs(), {"annotations"});
-
-  p.printOptionalAttrDict(op->getAttrs());
+  printElideAnnotations(p, op, attr, elides);
 }
 
 //===----------------------------------------------------------------------===//
 // InstanceOp Custom attr-dict Directive
 //===----------------------------------------------------------------------===//
 
-/// No change from normal parsing.
 static ParseResult parseInstanceOp(OpAsmParser &parser,
                                    NamedAttrList &resultAttrs) {
-  return parser.parseOptionalAttrDict(resultAttrs);
+  return parseElideAnnotations(parser, resultAttrs);
 }
 
 /// Always elide "moduleName" and elide "annotations" if it exists or
 /// if it is empty.
 static void printInstanceOp(OpAsmPrinter &p, Operation *op,
                             DictionaryAttr attr) {
-
   // "moduleName" is always elided
-  SmallVector<StringRef, 2> elides = {"moduleName"};
-
-  // Elide "annotations" if it doesn't exist or if it is empty
-  auto annotationsAttr = op->getAttrOfType<ArrayAttr>("annotations");
-  if (!annotationsAttr || annotationsAttr.empty())
-    elides.push_back("annotations");
-
-  p.printOptionalAttrDict(op->getAttrs(), elides);
+  printElideAnnotations(p, op, attr, {"moduleName"});
 }
 
 //===----------------------------------------------------------------------===//
 // MemoryPortOp Custom attr-dict Directive
 //===----------------------------------------------------------------------===//
 
-/// No change from normal parsing.
 static ParseResult parseMemoryPortOp(OpAsmParser &parser,
                                      NamedAttrList &resultAttrs) {
-  return parser.parseOptionalAttrDict(resultAttrs);
+  return parseElideAnnotations(parser, resultAttrs);
 }
 
 /// Always elide "direction" and elide "annotations" if it exists or
 /// if it is empty.
 static void printMemoryPortOp(OpAsmPrinter &p, Operation *op,
                               DictionaryAttr attr) {
-
   // "direction" is always elided.
-  SmallVector<StringRef, 2> elides = {"direction"};
-
-  // Elide "annotations" if it doesn't exist or if it is empty.
-  auto annotationsAttr = op->getAttrOfType<ArrayAttr>("annotations");
-  if (!annotationsAttr || annotationsAttr.empty())
-    elides.push_back("annotations");
-
-  p.printOptionalAttrDict(op->getAttrs(), elides);
+  printElideAnnotations(p, op, attr, {"direction"});
 }
 
 //===----------------------------------------------------------------------===//
 // MemOp Custom attr-dict Directive
 //===----------------------------------------------------------------------===//
 
-/// No change from normal parsing.
 static ParseResult parseMemOp(OpAsmParser &parser, NamedAttrList &resultAttrs) {
-  return parser.parseOptionalAttrDict(resultAttrs);
+  return parseElideAnnotations(parser, resultAttrs);
 }
 
 /// Always elide "ruw" and elide "annotations" if it exists or if it is empty.
 static void printMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
-  SmallVector<StringRef, 2> elides = {"ruw"};
-
-  auto annotationsAttr = op->getAttrOfType<ArrayAttr>("annotations");
-  if (!annotationsAttr || annotationsAttr.empty())
-    elides.push_back("annotations");
-
-  p.printOptionalAttrDict(op->getAttrs(), elides);
+  // "ruw" is always elided.
+  printElideAnnotations(p, op, attr, {"ruw"});
 }
 
 //===----------------------------------------------------------------------===//

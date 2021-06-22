@@ -18,7 +18,7 @@ circuit test test : ; expected-error {{expected ':' in circuit definition}}
 
 ;// -----
 
-circuit test :
+circuit nameConflict :
   module nameConflict :
     input c: Clock   ; expected-note {{previous definition here}}
     input r: Reset
@@ -26,7 +26,7 @@ circuit test :
 
 ;// -----
 
-circuit test :
+circuit nameConflict :
   extmodule nameConflict :
     input c: Clock   ; expected-note {{previous definition here}}
     input r: Reset
@@ -34,21 +34,21 @@ circuit test :
 
 ;// -----
 
-circuit test :
+circuit invalid_name :
   module invalid_name :
     input c: UInt
     out <= c         ; expected-error {{use of unknown declaration 'out'}}
 
 ;// -----
 
-circuit test :
+circuit invalid_name :
   module invalid_name :
     output out: UInt
     out <= c         ; expected-error {{use of unknown declaration 'c'}}
 
 ;// -----
 
-circuit test :
+circuit invalid_name :
   module invalid_name :
    input out_0 : { member : { 0 : { clock : Clock, reset : UInt<1>}}}
    ; expected-error @+1 {{unknown field 'xx' in bundle type '!firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>'}}
@@ -56,7 +56,7 @@ circuit test :
 
 ;// -----
 
-circuit test :
+circuit invalid_name :
   module invalid_name :
    input out_0 : SInt<8>[5]
    ; expected-error @+1 {{out of range index '5' in vector type '!firrtl.vector<sint<8>, 5>'}}
@@ -64,7 +64,7 @@ circuit test :
 
 ;// -----
 
-circuit test :
+circuit invalid_add :
   module invalid_add :
    input in : SInt<8>
    input c : Clock
@@ -73,7 +73,7 @@ circuit test :
 
 ;// -----
 
-circuit test :
+circuit invalid_add :
   module invalid_add :
    input in : SInt<8>
    input c : Clock
@@ -82,13 +82,13 @@ circuit test :
 
 ;// -----
 
-circuit test :
+circuit invalid_int_literal :
   module invalid_int_literal :
    node n = add(UInt<8>("hAX"), UInt<10>(42))  ; expected-error {{invalid character in integer literal}}
 
 ;// -----
 ; When scopes are local to the body
-circuit test :
+circuit invalid_name :
   module invalid_name :
     input reset : UInt<1>
     output out : UInt<1>
@@ -98,7 +98,7 @@ circuit test :
 
 ;// -----
 
-circuit test :
+circuit invalid_inst :
   module invalid_inst :
 
     ; expected-error @+1 {{use of undefined module name 'some_module' in instance}}
@@ -106,21 +106,21 @@ circuit test :
 
 ;// -----
 
-circuit test :
+circuit MyParameterizedExtModule :
   extmodule MyParameterizedExtModule :
     parameter DEFAULT = 0
     parameter DEFAULT = 32 ; expected-error {{redefinition of parameter 'DEFAULT'}}
 
 ;// -----
 
-circuit test :
+circuit invalid_name :
   module invalid_name :
     input bf: { flip int_1 : UInt<1>, int_out : UInt<2>}
     node n4 = add(bf, bf)  ; expected-error {{operands must be integer types, not '!firrtl.bundle<int_1 flip: uint<1>, int_out: uint<2>>' and '!firrtl.bundle<int_1 flip: uint<1>, int_out: uint<2>>'}}
 
 ;// -----
 
-circuit test :
+circuit invalid_bits :
   module invalid_bits:
      input a: UInt<8>
      output b: UInt<4>
@@ -235,3 +235,4 @@ circuit Issue886:
     input a: UInt<1>
     input b: UInt<42>
     node n = validif(a, b, b)  ; expected-error {{operation requires two operands}}
+

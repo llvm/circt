@@ -18,8 +18,7 @@ def InstanceOp : FIRRTLOp<"instance"> {
   }];
 
   let arguments = (ins FlatSymbolRefAttr:$moduleName, StrAttr:$name,
-                       DefaultValuedAttr<AnnotationArrayAttr,
-                                         "{}">:$annotations);
+                       AnnotationArrayAttr:$annotations);
   let results = (outs Variadic<FIRRTLType>:$results);
 
   let assemblyFormat =
@@ -59,8 +58,7 @@ def InstanceOp : FIRRTLOp<"instance"> {
 
 def CMemOp : FIRRTLOp<"cmem", [/*MemAlloc*/]> {
   let summary = "Define a new cmem";
-  let arguments = (ins StrAttr:$name,
-        DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
+  let arguments = (ins StrAttr:$name, AnnotationArrayAttr:$annotations);
   let results = (outs FIRRTLType:$result);
 
   let assemblyFormat = "custom<ElideAnnotations>(attr-dict) `:` type($result)";
@@ -69,7 +67,7 @@ def CMemOp : FIRRTLOp<"cmem", [/*MemAlloc*/]> {
 def SMemOp : FIRRTLOp<"smem", [/*MemAlloc*/]> {
   let summary = "Define a new smem";
   let arguments = (ins RUWAttr:$ruw, StrAttr:$name,
-        DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
+                       AnnotationArrayAttr:$annotations);
   let results = (outs FIRRTLType:$result);
 
   let assemblyFormat =
@@ -81,7 +79,7 @@ def MemoryPortOp : FIRRTLOp<"memoryport"> {
 
   let arguments = (ins FIRRTLType:$memory, IntType:$index, ClockType:$clock,
                     MemDirAttr:$direction, StrAttr:$name,
-                    DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
+                    AnnotationArrayAttr:$annotations);
   let results = (outs FIRRTLType:$result);
 
   let assemblyFormat = [{
@@ -92,12 +90,12 @@ def MemoryPortOp : FIRRTLOp<"memoryport"> {
 
 def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
   let summary = "Define a new mem";
-  let arguments = (
-    ins Confined<I32Attr, [IntMinValue<0>]>:$readLatency,
-        Confined<I32Attr, [IntMinValue<1>]>:$writeLatency,
-        Confined<I64Attr, [IntMinValue<1>]>:$depth, RUWAttr:$ruw,
-        StrArrayAttr:$portNames, StrAttr:$name,
-        DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
+  let arguments =
+    (ins Confined<I32Attr, [IntMinValue<0>]>:$readLatency,
+         Confined<I32Attr, [IntMinValue<1>]>:$writeLatency,
+         Confined<I64Attr, [IntMinValue<1>]>:$depth, RUWAttr:$ruw,
+         StrArrayAttr:$portNames, StrAttr:$name,
+         AnnotationArrayAttr:$annotations);
   let results = (outs Variadic<FIRRTLType>:$results);
 
   let assemblyFormat = "$ruw custom<MemOp>(attr-dict) `:` type($results)";
@@ -160,9 +158,8 @@ def NodeOp : FIRRTLOp<"node",
     ```
     }];
 
-  let arguments = (
-    ins PassiveType:$input, StrAttr:$name,
-        DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
+  let arguments = (ins PassiveType:$input, StrAttr:$name, 
+                       AnnotationArrayAttr:$annotations);
   let results = (outs FIRRTLType:$result);
 
   let builders = [
@@ -199,9 +196,8 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
     ```
     }];
 
-  let arguments = (
-    ins ClockType:$clockVal, StrAttr:$name,
-      DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
+  let arguments = 
+    (ins ClockType:$clockVal, StrAttr:$name, AnnotationArrayAttr:$annotations);
   let results = (outs PassiveType:$result);
 
   let builders = [
@@ -228,9 +224,8 @@ def RegResetOp : FIRRTLOp<"regreset", [/*MemAlloc*/]> {
     }];
 
   let arguments = (
-    ins ClockType:$clockVal, ResetType:$resetSignal,
-        PassiveType:$resetValue, StrAttr:$name,
-        DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
+    ins ClockType:$clockVal, ResetType:$resetSignal, PassiveType:$resetValue,
+        StrAttr:$name, AnnotationArrayAttr:$annotations);
   let results = (outs PassiveType:$result);
 
   let builders = [
@@ -259,9 +254,7 @@ def WireOp : FIRRTLOp<"wire", []> {
     ```
     }];
 
-  let arguments = (
-    ins StrAttr:$name,
-        DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
+  let arguments = (ins StrAttr:$name, AnnotationArrayAttr:$annotations);
   let results = (outs FIRRTLType:$result);
 
   let builders = [
