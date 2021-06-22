@@ -62,32 +62,24 @@ void PrettifyVerilogPass::sinkOpToUses(Operation *op) {
   assert(mlir::MemoryEffectOpInterface::hasNoEffect(op) &&
          "Op with side effects cannot be sunk to its uses.");
   auto block = op->getBlock();
-  for (auto it = op->use_begin(), end = op->use_end(); it != end;) {
-    // If the current use is not in the same block as the operation, we are
-    // going to clone the op into the use's block.
-    auto &use = *it;
-    auto useBlock = use.getOwner()->getBlock();
-    if (block == useBlock) {
-      ++it;
+  // This maps a block to the block local instance of the op.
+  SmallDenseMap<Block *, Value, 8> blockLocalValues;
+  for (auto &use : llvm::make_early_inc_range(op->getUses())) {
+    // If the current use is in the same block as the operation, there is
+    // nothing to do.
+    auto localBlock = use.getOwner()->getBlock();
+    if (block == localBlock)
       continue;
+    // Find the block local clone of the operation. If there is not one already,
+    // the op will be cloned in to the block.
+    auto localValue = blockLocalValues.lookup(localBlock);
+    if (!localValue) {
+      // Clone the operation and insert it to the beginning of the block.
+      localValue = OpBuilder::atBlockBegin(localBlock).clone(*op)->getResult(0);
+      blockLocalValues[localBlock] = localValue;
     }
-    // Clone the operation and insert it to the beginning of the block.
-    auto *cloned = OpBuilder::atBlockBegin(useBlock).clone(*op);
-    // Scan the use-list for any more uses in the local block and modify them to
-    // use the newly cloned operation. This will only scan forward from the
-    // current use list iterator.
-    for (auto scanIt = std::next(it); scanIt != end;) {
-      auto &scan = *scanIt;
-      ++scanIt;
-      if (useBlock == scan.getOwner()->getBlock()) {
-        scan.set(cloned->getResult(0));
-      }
-    }
-    // Advance the iterator to the next use. This has to happen before
-    // removing the current use from the list, but after removing other uses.
-    ++it;
     // Replace the current use, removing it from the use list.
-    use.set(cloned->getResult(0));
+    use.set(localValue);
     anythingChanged = true;
   }
   // If this op is no longer used, drop it.
