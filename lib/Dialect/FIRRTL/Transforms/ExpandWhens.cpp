@@ -440,22 +440,13 @@ mlir::FailureOr<bool> ModuleVisitor::run(FModuleOp module) {
     auto *connect = std::get<1>(destAndConnect);
     if (connect)
       continue;
-
-    // There is an incompletely initialized sink and this pass has failed.
-    result = failure();
-
-    // Get the op which defines the sink.
+    // Get the op which defines the sink, and emit an error.
     auto dest = std::get<0>(destAndConnect);
     dest.getDefiningOp()->emitError("sink \"" + getFieldName(dest) +
                                     "\" not fully initialized");
+    return failure();
   }
-
-  // Return Failed or Changed.
-  if (succeeded(result)) {
-    return mlir::FailureOr<bool>(anythingChanged);
-  }
-
-  return result;
+  return mlir::FailureOr<bool>(anythingChanged);
 }
 
 void ModuleVisitor::visitStmt(ConnectOp op) {
