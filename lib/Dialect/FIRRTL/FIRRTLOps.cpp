@@ -116,8 +116,14 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
       // Registers, Wires, and behavioral memory ports are always Duplex.
       .Case<RegOp, RegResetOp, WireOp, MemoryPortOp>(
           [](auto) { return Flow::Duplex; })
-      .Case<InstanceOp>([&](auto) {
+      .Case<InstanceOp>([&](auto inst) {
+        for (auto arg: llvm::enumerate(inst.getResults()))
+          if (arg.value() == val)
+            if (getModulePortDirection(inst.getReferencedModule(), arg.index()) == Direction::Output)
+              return accumulatedFlow;
+              else
         return swap();
+        llvm_unreachable("couldn't find result in results");
       })
       .Case<MemOp>([&](auto op) {
         return swap();
