@@ -29,6 +29,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/JSON.h"
+#include "llvm/Support/Parallel.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -91,16 +92,16 @@ struct GlobalFIRParserState {
   GlobalFIRParserState(const llvm::SourceMgr &sourceMgr, MLIRContext *context,
                        FIRParserOptions options)
       : context(context), options(options), lex(sourceMgr, context),
-        curToken(lex.lexToken()), loIdentifier(Identifier::get("lo", context)),
+        curToken(lex.lexToken()),
+        dontTouchAnnotation(getAnnotationOfClass(
+            context, "firrtl.transforms.DontTouchAnnotation")),
+        emptyArrayAttr(ArrayAttr::get(context, {})),
+        loIdentifier(Identifier::get("lo", context)),
         hiIdentifier(Identifier::get("hi", context)),
         amountIdentifier(Identifier::get("amount", context)),
         fieldnameIdentifier(Identifier::get("fieldname", context)),
         indexIdentifier(Identifier::get("index", context)),
-        locatorFilenameCache(loIdentifier /*arbitrary non-null identifier*/) {
-    dontTouchAnnotation =
-        getAnnotationOfClass(context, "firrtl.transforms.DontTouchAnnotation");
-    emptyArrayAttr = ArrayAttr::get(context, {});
-  }
+        locatorFilenameCache(loIdentifier /*arbitrary non-null identifier*/) {}
 
   /// The context we're parsing into.
   MLIRContext *const context;
@@ -111,28 +112,21 @@ struct GlobalFIRParserState {
   /// A mapping of targets to annotations
   llvm::StringMap<ArrayAttr> annotationMap;
 
-  /// A global identifier that can be used to link multiple annotations
-  /// together.  This should be incremented on use.
-  unsigned annotationID = 0;
-
   /// The lexer for the source file we're parsing.
   FIRLexer lex;
 
   /// This is the next token that hasn't been consumed yet.
   FIRToken curToken;
 
-  /// A mutable reference to the current CircuitTarget.
-  StringRef circuitTarget;
-
   /// Cached annotation for DontTouch.
-  DictionaryAttr dontTouchAnnotation;
+  const DictionaryAttr dontTouchAnnotation;
 
   /// An empty array attribute.
-  ArrayAttr emptyArrayAttr;
+  const ArrayAttr emptyArrayAttr;
 
   /// Cached identifiers used in primitives.
-  Identifier loIdentifier, hiIdentifier, amountIdentifier, fieldnameIdentifier;
-  Identifier indexIdentifier;
+  const Identifier loIdentifier, hiIdentifier, amountIdentifier;
+  const Identifier fieldnameIdentifier, indexIdentifier;
 
   class BacktraceState {
   public:
@@ -2793,7 +2787,8 @@ private:
   /// message
   ParseResult importAnnotations(SMLoc loc, StringRef annotationsStr);
 
-  ParseResult parseModule(CircuitOp circuit, unsigned indent);
+  ParseResult parseModule(CircuitOp circuit, StringRef circuitTarget,
+                          unsigned indent);
 
   ParseResult parsePortList(SmallVectorImpl<ModulePortInfo> &resultPorts,
                             SmallVectorImpl<SMLoc> &resultPortLocs,
@@ -2812,6 +2807,10 @@ private:
 
   std::vector<DeferredModuleToParse> deferredModules;
   ModuleOp mlirModule;
+
+  /// A global identifier that can be used to link multiple annotations
+  /// together.  This should be incremented on use.
+  unsigned annotationID = 0;
 };
 
 } // end anonymous namespace
@@ -2840,24 +2839,23 @@ ParseResult FIRCircuitParser::importAnnotations(SMLoc loc,
     return failure();
   }
 
-  if (!scatterCustomAnnotations(thisAnnotationMap, getContext(),
-                                getState().annotationID,
+  if (!scatterCustomAnnotations(thisAnnotationMap, getContext(), annotationID,
                                 translateLocation(loc)))
     return failure();
 
-  for (auto a : thisAnnotationMap.keys()) {
-    auto &entry = getState().annotationMap[a];
-    if (!entry) {
-      entry = thisAnnotationMap[a];
+  // Merge the attributes we just parsed into the global set we're accumulating.
+  llvm::StringMap<ArrayAttr> &resultAnnotationMap = getState().annotationMap;
+  for (auto &thisEntry : thisAnnotationMap) {
+    auto &existing = resultAnnotationMap[thisEntry.getKey()];
+    if (!existing) {
+      existing = thisEntry.getValue();
       continue;
     }
 
-    SmallVector<Attribute> annotationVec;
-    auto arrayRef = getState().annotationMap[a].getValue();
-    annotationVec.append(arrayRef.begin(), arrayRef.end());
-    arrayRef = thisAnnotationMap[a].getValue();
-    annotationVec.append(arrayRef.begin(), arrayRef.end());
-    getState().annotationMap[a] = ArrayAttr::get(getContext(), annotationVec);
+    SmallVector<Attribute> annotationVec(existing.begin(), existing.end());
+    annotationVec.append(thisEntry.getValue().begin(),
+                         thisEntry.getValue().end());
+    existing = ArrayAttr::get(getContext(), annotationVec);
   }
 
   return success();
@@ -2933,7 +2931,9 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<ModulePortInfo> &resultPorts,
 /// parameter ::= 'parameter' id '=' StringLit NEWLINE
 /// parameter ::= 'parameter' id '=' floatingpoint NEWLINE
 /// parameter ::= 'parameter' id '=' RawString NEWLINE
-ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, unsigned indent) {
+ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
+                                          StringRef circuitTarget,
+                                          unsigned indent) {
   bool isExtModule = getToken().is(FIRToken::kw_extmodule);
   consumeToken();
   StringAttr name;
@@ -2944,7 +2944,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit, unsigned indent) {
   if (parseId(name, "expected module name"))
     return failure();
 
-  auto moduleTarget = (getState().circuitTarget + "|" + name.getValue()).str();
+  auto moduleTarget = (circuitTarget + "|" + name.getValue()).str();
   ArrayAttr annotations = getAnnotations(moduleTarget);
 
   if (parseToken(FIRToken::colon, "expected ':' in module definition") ||
@@ -3130,8 +3130,7 @@ FIRCircuitParser::parseCircuit(const llvm::MemoryBuffer *annotationsBuf) {
       info.parseOptionalInfo())
     return failure();
 
-  auto circuitTarget = "~" + name.getValue().str();
-  getState().circuitTarget = circuitTarget;
+  std::string circuitTarget = "~" + name.getValue().str();
 
   // Deal with any inline annotations, if they exist.  These are processed first
   // to place any annotations from an annotation file *after* the inline
@@ -3197,7 +3196,7 @@ FIRCircuitParser::parseCircuit(const llvm::MemoryBuffer *annotationsBuf) {
       if (moduleIndent <= circuitIndent)
         return emitError("module should be indented more"), failure();
 
-      if (parseModule(circuit, moduleIndent))
+      if (parseModule(circuit, circuitTarget, moduleIndent))
         return failure();
       break;
     }
@@ -3208,9 +3207,21 @@ DoneParsing:
 
   // Now that we've parsed all the prototypes and created all the module ops,
   // go ahead and parse all their bodies.  This can be done in parallel.
-  for (DeferredModuleToParse &deferredModule : deferredModules) {
-    if (parseModuleBody(deferredModule))
+  if (false && getContext()->isMultithreadingEnabled()) {
+    mlir::ParallelDiagnosticHandler diagHandler(getContext());
+    std::atomic<bool> anyFailed{false};
+    llvm::parallelForEachN(0, deferredModules.size(), [&](size_t index) {
+      diagHandler.setOrderIDForThread(index);
+      if (parseModuleBody(deferredModules[index]))
+        anyFailed = true;
+    });
+    if (anyFailed)
       return failure();
+  } else {
+    for (DeferredModuleToParse &deferredModule : deferredModules) {
+      if (parseModuleBody(deferredModule))
+        return failure();
+    }
   }
   return success();
 }
