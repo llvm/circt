@@ -81,17 +81,16 @@ static bool hasAnnotation(ArrayAttr annotations, DictionaryAttr annotation) {
 }
 
 //===----------------------------------------------------------------------===//
-// GlobalFIRParserState
+// SharedParserConstants
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// This class refers to all of the state maintained globally by the parser,
-/// such as the current lexer position.  This is separated out from the parser
-/// so that individual subparsers can refer to the same state.
-struct GlobalFIRParserState {
-  GlobalFIRParserState(const llvm::SourceMgr &sourceMgr, MLIRContext *context,
-                       FIRParserOptions options)
-      : context(context), options(options), lex(sourceMgr, context),
+/// This class refers to immutable values and annotations maintained globally by
+/// the parser which can be referred to by any active parser, even those running
+/// in parallel.  This is shared by all active parsers.
+struct SharedParserConstants {
+  SharedParserConstants(MLIRContext *context, FIRParserOptions options)
+      : context(context), options(options),
         dontTouchAnnotation(getAnnotationOfClass(
             context, "firrtl.transforms.DontTouchAnnotation")),
         emptyArrayAttr(ArrayAttr::get(context, {})),
@@ -107,11 +106,10 @@ struct GlobalFIRParserState {
   // Options that control the behavior of the parser.
   const FIRParserOptions options;
 
-  /// A mapping of targets to annotations
+  /// A mapping of targets to annotations.
+  /// NOTE: Clients (other than the top level Circuit parser) should not mutate
+  /// this.  Do not use `annotationMap[key]`, use `aM.lookup(key)` instead.
   llvm::StringMap<ArrayAttr> annotationMap;
-
-  /// The lexer for the source file we're parsing.
-  FIRLexer lex;
 
   /// Cached annotation for DontTouch.
   const DictionaryAttr dontTouchAnnotation;
@@ -123,11 +121,9 @@ struct GlobalFIRParserState {
   const Identifier loIdentifier, hiIdentifier, amountIdentifier;
   const Identifier fieldnameIdentifier, indexIdentifier;
 
-  FIRLexerCursor getLexerCursor() { return lex.getCursor(); }
-
 private:
-  GlobalFIRParserState(const GlobalFIRParserState &) = delete;
-  void operator=(const GlobalFIRParserState &) = delete;
+  SharedParserConstants(const SharedParserConstants &) = delete;
+  void operator=(const SharedParserConstants &) = delete;
 };
 
 } // end anonymous namespace
@@ -140,22 +136,24 @@ namespace {
 /// This class implements logic common to all levels of the parser, including
 /// things like types and helper logic.
 struct FIRParser {
-  FIRParser(GlobalFIRParserState &state)
-      : state(state),
-        locatorFilenameCache(state.loIdentifier /*arbitrary non-null id*/) {}
+  FIRParser(SharedParserConstants &constants, FIRLexer &lexer)
+      : constants(constants), lexer(lexer),
+        locatorFilenameCache(constants.loIdentifier /*arbitrary non-null id*/) {
+  }
 
-  // Helper methods to get stuff from the parser-global state.
-  GlobalFIRParserState &getState() const { return state; }
-  MLIRContext *getContext() const { return state.context; }
-  const llvm::SourceMgr &getSourceMgr() { return state.lex.getSourceMgr(); }
+  // Helper methods to get stuff from the shared parser constants.
+  SharedParserConstants &getConstants() const { return constants; }
+  MLIRContext *getContext() const { return constants.context; }
+
+  FIRLexer &getLexer() { return lexer; }
 
   /// Return the indentation level of the specified token.
   Optional<unsigned> getIndentation() const {
-    return state.lex.getIndentation(getToken());
+    return lexer.getIndentation(getToken());
   }
 
   /// Return the current token the parser is inspecting.
-  const FIRToken &getToken() const { return state.lex.getToken(); }
+  const FIRToken &getToken() const { return lexer.getToken(); }
   StringRef getTokenSpelling() const { return getToken().getSpelling(); }
 
   //===--------------------------------------------------------------------===//
@@ -177,7 +175,7 @@ struct FIRParser {
   /// Encode the specified source location information into an attribute for
   /// attachment to the IR.
   Location translateLocation(llvm::SMLoc loc) {
-    return state.lex.translateLocation(loc);
+    return lexer.translateLocation(loc);
   }
 
   /// Parse an @info marker if present.  If so, fill in the specified Location,
@@ -212,7 +210,7 @@ struct FIRParser {
     FIRToken consumedToken = getToken();
     assert(consumedToken.isNot(FIRToken::eof, FIRToken::error) &&
            "shouldn't advance past EOF or errors");
-    state.lex.lexToken();
+    lexer.lexToken();
     return consumedToken;
   }
 
@@ -273,7 +271,7 @@ struct FIRParser {
   /// method is slightly more efficient than other lookup methods, because it
   /// uses a stashed copy of the annotation for lookup.
   bool hasDontTouch(ArrayAttr annotations) {
-    return hasAnnotation(annotations, state.dontTouchAnnotation);
+    return hasAnnotation(annotations, constants.dontTouchAnnotation);
   }
 
 private:
@@ -281,8 +279,9 @@ private:
   void operator=(const FIRParser &) = delete;
 
   /// FIRParser is subclassed and reinstantiated.  Do not add additional
-  /// non-trivial state here, add it to the GlobalFIRParserState class.
-  GlobalFIRParserState &state;
+  /// non-trivial state here, add it to SharedParserConstants.
+  SharedParserConstants &constants;
+  FIRLexer &lexer;
 
   /// This is a single-entry cache for filenames in locators.
   Identifier locatorFilenameCache;
@@ -448,7 +447,7 @@ ParseResult FIRParser::parseOptionalInfoLocator(LocationAttr &result) {
 
   // If info locators are ignored, don't actually apply them.  We still do all
   // the verification above though.
-  if (state.options.ignoreInfoLocators)
+  if (constants.options.ignoreInfoLocators)
     return success();
 
   /// Return an FileLineColLoc for the specified location, but use a bit of
@@ -843,16 +842,18 @@ ArrayAttr FIRParser::getAnnotations(Twine target) {
   // Early exit if no annotations exist.  This avoids the cost of
   // constructing strings representing targets if no annotation can
   // possibly exist.
-  if (state.annotationMap.empty())
-    return state.emptyArrayAttr;
+  if (constants.annotationMap.empty())
+    return constants.emptyArrayAttr;
 
   // Flatten the input twine into a SmallVector for lookup.
   SmallString<64> targetStr;
   target.toVector(targetStr);
 
-  if (auto result = state.annotationMap.lookup(targetStr))
+  // Note: We are not allowed to mutate annotationMap here.  Make sure to only
+  // use non-mutating methods like `lookup`, not mutating ones like `am[key]`.
+  if (auto result = constants.annotationMap.lookup(targetStr))
     return result;
-  return state.emptyArrayAttr;
+  return constants.emptyArrayAttr;
 }
 
 //===----------------------------------------------------------------------===//
@@ -881,9 +882,9 @@ namespace {
 /// This struct provides context information that is global to the module we're
 /// currently parsing into.
 struct FIRModuleContext : public FIRParser {
-  explicit FIRModuleContext(GlobalFIRParserState &state,
+  explicit FIRModuleContext(SharedParserConstants &constants, FIRLexer &lexer,
                             std::string moduleTarget)
-      : FIRParser(state), moduleTarget(std::move(moduleTarget)),
+      : FIRParser(constants, lexer), moduleTarget(std::move(moduleTarget)),
         firstScope(symbolTable), firstMemoryScope(memoryScopeTable) {}
 
   /// This is the module target used by annotations referring to this module.
@@ -1118,7 +1119,7 @@ namespace {
 struct FIRStmtParser : public FIRParser {
   explicit FIRStmtParser(Block &blockToInsertInto,
                          FIRModuleContext &moduleContext)
-      : FIRParser(moduleContext.getState()),
+      : FIRParser(moduleContext.getConstants(), moduleContext.getLexer()),
         builder(mlir::ImplicitLocOpBuilder::atBlockEnd(
             UnknownLoc::get(getContext()), &blockToInsertInto)),
         locationProcessor(this->builder), moduleContext(moduleContext) {}
@@ -1386,7 +1387,7 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
 
   // Make sure the field name matches up with the input value's type and
   // compute the result type for the expression.
-  NamedAttribute attrs = {getState().fieldnameIdentifier,
+  NamedAttribute attrs = {getConstants().fieldnameIdentifier,
                           builder.getStringAttr(fieldName)};
   auto resultType = SubfieldOp::inferReturnType({result}, attrs, {});
   if (!resultType) {
@@ -1420,7 +1421,7 @@ ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result) {
   // expression.
   // TODO: This should ideally be folded into a `tryCreate` method on the
   // builder (https://llvm.discourse.group/t/3504).
-  NamedAttribute attrs = {getState().indexIdentifier,
+  NamedAttribute attrs = {getConstants().indexIdentifier,
                           builder.getI32IntegerAttr(indexNo)};
   auto resultType = SubindexOp::inferReturnType({result}, attrs, {});
   if (!resultType) {
@@ -1532,15 +1533,15 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
   default:
     break;
   case FIRToken::lp_bits:
-    attrNames.push_back(getState().hiIdentifier); // "hi"
-    attrNames.push_back(getState().loIdentifier); // "lo"
+    attrNames.push_back(getConstants().hiIdentifier); // "hi"
+    attrNames.push_back(getConstants().loIdentifier); // "lo"
     break;
   case FIRToken::lp_head:
   case FIRToken::lp_pad:
   case FIRToken::lp_shl:
   case FIRToken::lp_shr:
   case FIRToken::lp_tail:
-    attrNames.push_back(getState().amountIdentifier);
+    attrNames.push_back(getConstants().amountIdentifier);
     break;
   }
 
@@ -2759,8 +2760,9 @@ namespace {
 /// This class implements the outer level of the parser, including things
 /// like circuit and module.
 struct FIRCircuitParser : public FIRParser {
-  explicit FIRCircuitParser(GlobalFIRParserState &state, ModuleOp mlirModule)
-      : FIRParser(state), mlirModule(mlirModule) {}
+  explicit FIRCircuitParser(SharedParserConstants &state, FIRLexer &lexer,
+                            ModuleOp mlirModule)
+      : FIRParser(state, lexer), mlirModule(mlirModule) {}
 
   ParseResult parseCircuit(const llvm::MemoryBuffer *annotationsBuf);
 
@@ -2781,7 +2783,7 @@ private:
   struct DeferredModuleToParse {
     FModuleOp moduleOp;
     SmallVector<SMLoc> portLocs;
-    FIRLexerCursor parserState;
+    FIRLexerCursor lexerCursor;
     std::string moduleTarget;
     unsigned indent;
   };
@@ -2827,9 +2829,9 @@ ParseResult FIRCircuitParser::importAnnotations(SMLoc loc,
     return failure();
 
   // Merge the attributes we just parsed into the global set we're accumulating.
-  llvm::StringMap<ArrayAttr> &resultAnnotationMap = getState().annotationMap;
+  llvm::StringMap<ArrayAttr> &resultAnnoMap = getConstants().annotationMap;
   for (auto &thisEntry : thisAnnotationMap) {
-    auto &existing = resultAnnotationMap[thisEntry.getKey()];
+    auto &existing = resultAnnoMap[thisEntry.getKey()];
     if (!existing) {
       existing = thisEntry.getValue();
       continue;
@@ -2865,7 +2867,7 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<ModulePortInfo> &resultPorts,
     // output foo             ; port
     // output <= input        ; identifier expression
     // output.thing <= input  ; identifier expression
-    auto backtrackState = getState().getLexerCursor();
+    auto backtrackState = getLexer().getCursor();
 
     bool isOutput = getToken().is(FIRToken::kw_output);
     consumeToken();
@@ -2873,7 +2875,7 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<ModulePortInfo> &resultPorts,
     // If we have something that isn't a keyword then this must be an
     // identifier, not an input/output marker.
     if (!getToken().is(FIRToken::identifier) && !getToken().isKeyword()) {
-      backtrackState.restore(getState().lex);
+      backtrackState.restore(getLexer());
       break;
     }
 
@@ -2961,7 +2963,8 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
 
     // Parse the body of this module after all prototypes have been parsed. This
     // allows us to handle forward references correctly.
-    deferredModules.push_back({moduleOp, portLocs, getState().getLexerCursor(),
+
+    deferredModules.push_back({moduleOp, portLocs, getLexer().getCursor(),
                                std::move(moduleTarget), indent});
 
     // We're going to defer parsing this module, so just skip tokens until we
@@ -3063,10 +3066,15 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
   auto &portLocs = deferredModule.portLocs;
   auto &moduleTarget = deferredModule.moduleTarget;
 
-  // Reset the parser/lexer state back to right after the port list.
-  deferredModule.parserState.restore(getState().lex);
+  // We parse the body of this module with its own lexer, enabling parallel
+  // parsing with the rest of the other module bodies.
+  FIRLexer moduleBodyLexer(getLexer().getSourceMgr(), getContext());
 
-  FIRModuleContext moduleContext(getState(), std::move(moduleTarget));
+  // Reset the parser/lexer state back to right after the port list.
+  deferredModule.lexerCursor.restore(moduleBodyLexer);
+
+  FIRModuleContext moduleContext(getConstants(), moduleBodyLexer,
+                                 std::move(moduleTarget));
 
   // Install all of the ports into the symbol table, associated with their
   // block arguments.
@@ -3228,8 +3236,9 @@ OwningModuleRef circt::firrtl::importFIRRTL(SourceMgr &sourceMgr,
       FileLineColLoc::get(context, sourceBuf->getBufferIdentifier(), /*line=*/0,
                           /*column=*/0)));
 
-  GlobalFIRParserState state(sourceMgr, context, options);
-  if (FIRCircuitParser(state, *module).parseCircuit(annotationsBuf))
+  SharedParserConstants state(context, options);
+  FIRLexer lexer(sourceMgr, context);
+  if (FIRCircuitParser(state, lexer, *module).parseCircuit(annotationsBuf))
     return nullptr;
 
   // Make sure the parse module has no other structural problems detected by
