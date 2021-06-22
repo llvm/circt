@@ -16,20 +16,6 @@ firrtl.module @shadow_connects(out %out : !firrtl.uint<1>) {
 // CHECK-NEXT: }
 
 
-// Test that last connect semantics are resolved for partial connects.
-firrtl.module @shadow_partialconnects(out %out : !firrtl.uint<1>) {
-  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-  firrtl.partialconnect %out, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-  firrtl.partialconnect %out, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-}
-// CHECK-LABEL: firrtl.module @shadow_partialconnects(out %out: !firrtl.uint<1>) {
-// CHECK-NEXT:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-// CHECK-NEXT:   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK-NEXT:   firrtl.partialconnect %out, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK-NEXT: }
-
-
 // Test that last connect semantics are resolved in a WhenOp
 firrtl.module @shadow_when(in %p : !firrtl.uint<1>) {
   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
@@ -351,27 +337,27 @@ firrtl.module @bundle_types(in %p : !firrtl.uint<1>, in %clock: !firrtl.clock) {
 
   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
-  %w = firrtl.wire  : !firrtl.bundle<a: uint<2>, b : flip<uint<2>>>
+  %w = firrtl.wire  : !firrtl.bundle<a: uint<2>, b flip: uint<2>>
 
   // CHECK: [[W_A:%.*]] = firrtl.subfield %w("a")
   // CHECK: [[MUX:%.*]] = firrtl.mux(%p, %c1_ui2, %c0_ui2)
   // CHECK: firrtl.connect [[W_A]], [[MUX]]
   firrtl.when %p {
-    %w_a = firrtl.subfield %w("a") : (!firrtl.bundle<a : uint<2>, b : flip<uint<2>>>) -> !firrtl.uint<2>
+    %w_a = firrtl.subfield %w("a") : (!firrtl.bundle<a : uint<2>, b flip: uint<2>>) -> !firrtl.uint<2>
     firrtl.connect %w_a, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   } else {
-    %w_a = firrtl.subfield %w("a") : (!firrtl.bundle<a : uint<2>, b : flip<uint<2>>>) -> !firrtl.uint<2>
+    %w_a = firrtl.subfield %w("a") : (!firrtl.bundle<a : uint<2>, b flip: uint<2>>) -> !firrtl.uint<2>
     firrtl.connect %w_a, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   }
 
   // CHECK: [[W_B:%.*]] = firrtl.subfield %w("b")
   // CHECK: [[MUX:%.*]] = firrtl.mux(%p, %c1_ui2, %c0_ui2)
   // CHECK: firrtl.connect [[W_B]], [[MUX]]
-  %w_b0 = firrtl.subfield %w("b") : (!firrtl.bundle<a : uint<2>, b : flip<uint<2>>>) -> !firrtl.uint<2>
+  %w_b0 = firrtl.subfield %w("b") : (!firrtl.bundle<a : uint<2>, b flip: uint<2>>) -> !firrtl.uint<2>
   firrtl.connect %w_b0, %c1_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   firrtl.when %p {
   } else {
-    %w_b1 = firrtl.subfield %w("b") : (!firrtl.bundle<a : uint<2>, b : flip<uint<2>>>) -> !firrtl.uint<2>
+    %w_b1 = firrtl.subfield %w("b") : (!firrtl.bundle<a : uint<2>, b flip: uint<2>>) -> !firrtl.uint<2>
     firrtl.connect %w_b1, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   }
 }
@@ -382,8 +368,8 @@ firrtl.module @bundle_types(in %p : !firrtl.uint<1>, in %clock: !firrtl.clock) {
 firrtl.module @simple(in %in : !firrtl.bundle<a: uint<1>>) { }
 firrtl.module @bundle_ports() {
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-  %simple_in = firrtl.instance @simple {name = "test0"}: !firrtl.flip<bundle<a: uint<1>>>
-  %0 = firrtl.subfield %simple_in("a") : (!firrtl.flip<bundle<a: uint<1>>>) -> !firrtl.uint<1>
+  %simple_in = firrtl.instance @simple {name = "test0"}: !firrtl.bundle<a: uint<1>>
+  %0 = firrtl.subfield %simple_in("a") : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
   firrtl.connect %0, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
@@ -392,19 +378,18 @@ firrtl.module @simple2(in %in : !firrtl.uint<3>) { }
 firrtl.module @as_passive(in %p : !firrtl.uint<1>) {
   %c2_ui3 = firrtl.constant 2 : !firrtl.uint<3>
   %c3_ui3 = firrtl.constant 3 : !firrtl.uint<3>
-  %simple0_in = firrtl.instance @simple2 {name = "test0"}: !firrtl.flip<uint<3>>
-  firrtl.connect %simple0_in, %c2_ui3 : !firrtl.flip<uint<3>>, !firrtl.uint<3>
+  %simple0_in = firrtl.instance @simple2 {name = "test0"}: !firrtl.uint<3>
+  firrtl.connect %simple0_in, %c2_ui3 : !firrtl.uint<3>, !firrtl.uint<3>
 
-  %simple1_in = firrtl.instance @simple2 {name = "test0"}: !firrtl.flip<uint<3>>
+  %simple1_in = firrtl.instance @simple2 {name = "test0"}: !firrtl.uint<3>
   firrtl.when %p {
     // This is the tricky part, connect the input ports together.
-    firrtl.connect %simple1_in, %simple0_in : !firrtl.flip<uint<3>>, !firrtl.flip<uint<3>>
+    firrtl.connect %simple1_in, %simple0_in : !firrtl.uint<3>, !firrtl.uint<3>
   } else {
-    firrtl.connect %simple1_in, %c3_ui3 : !firrtl.flip<uint<3>>, !firrtl.uint<3>
+    firrtl.connect %simple1_in, %c3_ui3 : !firrtl.uint<3>, !firrtl.uint<3>
   }
-  // CHECK: [[PASSIVE:%.*]] = firrtl.asPassive %test0_in : !firrtl.flip<uint<3>>
-  // CHECK: [[MUX:%.*]] = firrtl.mux(%p, [[PASSIVE]], %c3_ui3) : (!firrtl.uint<1>, !firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
-  // CHECK: firrtl.connect %test0_in_0, [[MUX]] : !firrtl.flip<uint<3>>, !firrtl.uint<3>
+  // CHECK: [[MUX:%.*]] = firrtl.mux(%p, %test0_in, %c3_ui3) : (!firrtl.uint<1>, !firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
+  // CHECK: firrtl.connect %test0_in_0, [[MUX]] : !firrtl.uint<3>, !firrtl.uint<3>
 }
 
 

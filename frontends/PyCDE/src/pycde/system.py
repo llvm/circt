@@ -16,7 +16,7 @@ import typing
 class System:
 
   mod = None
-  passes = ["hw-legalize-names", "hw.module(hw-cleanup)"]
+  passes = ["lower-seq-to-sv", "hw-legalize-names", "hw.module(hw-cleanup)"]
   passed = False
 
   def __init__(self):
@@ -42,6 +42,12 @@ class System:
 
   def print(self):
     self.mod.operation.print()
+
+  def graph(self, short_names=True):
+    import mlir.all_passes_registration
+    pm = mlir.passmanager.PassManager.parse("view-op-graph{short-names=" +
+                                            ("1" if short_names else "0") + "}")
+    pm.run(self.mod)
 
   def generate(self, generator_names=[]):
     pm = mlir.passmanager.PassManager.parse("run-generators{generators=" +

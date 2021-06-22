@@ -16,12 +16,14 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/PointerLikeTypeTraits.h"
 
 namespace circt {
 namespace firrtl {
 
 class Annotation;
 class AnnotationSetIterator;
+class FModuleOp;
 
 /// Return the name of the attribute used for annotations on FIRRTL ops.
 inline StringRef getAnnotationAttrName() { return "annotations"; }
@@ -195,6 +197,23 @@ public:
   template <typename... Args>
   bool removeAnnotationsWithClass(Args... names);
 
+  /// Remove all annotations from an operation for which `predicate` returns
+  /// true. The predicate is guaranteed to be called on every annotation, such
+  /// that this method can be used to partition the set by extracting and
+  /// removing annotations at the same time. Returns true if any annotations
+  /// were removed, false otherwise.
+  static bool removeAnnotations(Operation *op,
+                                llvm::function_ref<bool(Annotation)> predicate);
+
+  /// Remove all port annotations from a module for which `predicate` returns
+  /// true. The predicate is guaranteed to be called on every annotation, such
+  /// that this method can be used to partition a module's port annotations by
+  /// extracting and removing annotations at the same time. Returns true if any
+  /// annotations were removed, false otherwise.
+  static bool removePortAnnotations(
+      FModuleOp module,
+      llvm::function_ref<bool(unsigned, Annotation)> predicate);
+
 private:
   bool hasAnnotationImpl(StringAttr className) const;
   bool hasAnnotationImpl(StringRef className) const;
@@ -297,5 +316,45 @@ inline auto AnnotationSet::end() const -> iterator {
 
 } // namespace firrtl
 } // namespace circt
+
+//===----------------------------------------------------------------------===//
+// Traits
+//===----------------------------------------------------------------------===//
+
+namespace llvm {
+
+/// Make `Annotation` behave like a `Attribute` in terms of pointer-likeness.
+template <>
+struct PointerLikeTypeTraits<circt::firrtl::Annotation>
+    : PointerLikeTypeTraits<mlir::Attribute> {
+public:
+  static inline void *getAsVoidPointer(circt::firrtl::Annotation v) {
+    return const_cast<void *>(v.getDict().getAsOpaquePointer());
+  }
+  static inline circt::firrtl::Annotation getFromVoidPointer(void *p) {
+    return circt::firrtl::Annotation(
+        mlir::DictionaryAttr::getFromOpaquePointer(p));
+  }
+};
+
+/// Make `Annotation` hash just like `Attribute`.
+template <>
+struct DenseMapInfo<circt::firrtl::Annotation> {
+  using Annotation = circt::firrtl::Annotation;
+  static Annotation getEmptyKey() {
+    return PointerLikeTypeTraits<Annotation>::getFromVoidPointer(
+        llvm::DenseMapInfo<void *>::getEmptyKey());
+  }
+  static Annotation getTombstoneKey() {
+    return PointerLikeTypeTraits<Annotation>::getFromVoidPointer(
+        llvm::DenseMapInfo<void *>::getTombstoneKey());
+  }
+  static unsigned getHashValue(Annotation val) {
+    return mlir::hash_value(val.getDict());
+  }
+  static bool isEqual(Annotation LHS, Annotation RHS) { return LHS == RHS; }
+};
+
+} // namespace llvm
 
 #endif // CIRCT_DIALECT_FIRRTL_ANNOTATIONS_H

@@ -27,11 +27,9 @@ def get_value(obj) -> ir.Value:
 
   if isinstance(obj, ir.Value):
     return obj
-  if isinstance(obj, ir.Operation):
+  if hasattr(obj, "result"):
     return obj.result
-  if isinstance(obj, ir.OpView):
-    return obj.result
-  if isinstance(obj, OpOperand):
+  if hasattr(obj, "value"):
     return obj.value
   return None
 
@@ -182,8 +180,8 @@ class OpOperand:
       raise TypeError("Index must be int")
     self.index = index
 
-    if not isinstance(operation, ir.Operation):
-      raise TypeError("Operation must be mlir.ir.Operation")
+    if not hasattr(operation, "operands"):
+      raise TypeError("Operation must be have 'operands' attribute")
     self.operation = operation
 
     self.value = value

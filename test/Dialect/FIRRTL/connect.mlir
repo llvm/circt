@@ -71,14 +71,14 @@ firrtl.module @vect0(in %a : !firrtl.vector<uint<1>, 3>, out %b : !firrtl.vector
 /// Bundle types can be connected if they have the same size, element names, and
 /// element types.
 
-firrtl.module @bundle0(in %a : !firrtl.bundle<f1: uint<1>, f2: flip<sint<1>>>, out %b : !firrtl.bundle<f1: uint<1>, f2: flip<sint<1>>>) {
+firrtl.module @bundle0(in %a : !firrtl.bundle<f1: uint<1>, f2 flip: sint<1>>, out %b : !firrtl.bundle<f1: uint<1>, f2 flip: sint<1>>) {
   // CHECK: firrtl.connect %b, %a
-  firrtl.connect %b, %a : !firrtl.bundle<f1: uint<1>, f2: flip<sint<1>>>, !firrtl.bundle<f1: uint<1>, f2: flip<sint<1>>>
+  firrtl.connect %b, %a : !firrtl.bundle<f1: uint<1>, f2 flip: sint<1>>, !firrtl.bundle<f1: uint<1>, f2 flip: sint<1>>
 }
 
-firrtl.module @bundle1(in %a : !firrtl.bundle<f1: uint<1>, f2: flip<sint<2>>>, out %b : !firrtl.bundle<f1: uint<2>, f2: flip<sint<1>>>) {
+firrtl.module @bundle1(in %a : !firrtl.bundle<f1: uint<1>, f2 flip: sint<2>>, out %b : !firrtl.bundle<f1: uint<2>, f2 flip: sint<1>>) {
   // CHECK: firrtl.connect %b, %a
-  firrtl.connect %b, %a : !firrtl.bundle<f1: uint<2>, f2: flip<sint<1>>>, !firrtl.bundle<f1: uint<1>, f2: flip<sint<2>>>
+  firrtl.connect %b, %a : !firrtl.bundle<f1: uint<2>, f2 flip: sint<1>>, !firrtl.bundle<f1: uint<1>, f2 flip: sint<2>>
 }
 
 /// Destination bitwidth must be greater than or equal to source bitwidth.

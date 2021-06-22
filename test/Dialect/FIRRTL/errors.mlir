@@ -88,26 +88,6 @@ firrtl.circuit "Foo" {
   }
 }
 
-
-// -----
-
-firrtl.circuit "Foo" {
-  firrtl.module @Foo(in %clk: !firrtl.clock) {
-    // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive type (contain no flips)}}
-    %a = firrtl.reg %clk {name = "a"} : (!firrtl.clock) -> !firrtl.flip<uint<1>>
-  }
-}
-
-// -----
-
-firrtl.circuit "Foo" {
-  firrtl.module @Foo(in %clk: !firrtl.clock, in %reset: !firrtl.uint<1>) {
-    %zero = firrtl.constant 0 : !firrtl.uint<1>
-    // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive type (contain no flips)}}
-    %a = firrtl.regreset %clk, %reset, %zero {name = "a"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.flip<uint<1>>
-  }
-}
-
 // -----
 
 firrtl.circuit "Foo" {
@@ -215,7 +195,7 @@ firrtl.circuit "Foo" {
   // expected-note @+1 {{original module declared here}}
   firrtl.module @Callee(in %arg0: !firrtl.uint<1>) { }
   firrtl.module @Foo() {
-    // expected-error @+1 {{'firrtl.instance' op result type for "arg0" must be '!firrtl.flip<uint<1>>', but got '!firrtl.uint<2>'}}
+    // expected-error @+1 {{'firrtl.instance' op result type for "arg0" must be '!firrtl.uint<1>', but got '!firrtl.uint<2>'}}
     %a = firrtl.instance @Callee {name = ""} : !firrtl.uint<2>
   }
 }
@@ -239,7 +219,7 @@ firrtl.circuit "Foo" {
   // expected-note @+1 {{original module declared here}}
   firrtl.module @Callee(in %arg0: !firrtl.uint<1>, in %arg1: !firrtl.bundle<valid: uint<1>>) { }
   firrtl.module @Foo() {
-    // expected-error @+1 {{'firrtl.instance' op result type for "arg0" must be '!firrtl.flip<uint<1>>', but got '!firrtl.uint<1>'}}
+    // expected-error @+1 {{'firrtl.instance' op result type for "arg1" must be '!firrtl.bundle<valid: uint<1>>', but got '!firrtl.bundle<valid: uint<2>>'}}
     %a:2 = firrtl.instance @Callee {name = ""}
     : !firrtl.uint<1>, !firrtl.bundle<valid: uint<2>>
   }
@@ -306,17 +286,6 @@ firrtl.circuit "BadAdd" {
 
 // -----
 
-firrtl.circuit "NodeMustBePassive" {
-  firrtl.module @Sub(in %a: !firrtl.uint<1>) {}
-  firrtl.module @NodeMustBePassive() {
-    %a = firrtl.instance @Sub {name = "sub"} : !firrtl.flip<uint<1>>
-    // expected-error @+1 {{'firrtl.node' op operand #0 must be a passive type}}
-    %b = firrtl.node %a  : !firrtl.flip<uint<1>>
-  }
-}
-
-// -----
-
 firrtl.circuit "StructCast" {
   firrtl.module @StructCast() {
     %a = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<64>>
@@ -361,7 +330,7 @@ firrtl.circuit "OutOfOrder" {
 firrtl.circuit "MemoryNegativeReadLatency" {
   firrtl.module @MemoryNegativeReadLatency() {
     // expected-error @+1 {{'firrtl.mem' op attribute 'readLatency' failed to satisfy constraint}}
-    %memory_r = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r", "rw", "w"], readLatency = -1 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<uint<8>>>>
+    %memory_r = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r", "rw", "w"], readLatency = -1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
   }
 }
 
@@ -370,7 +339,7 @@ firrtl.circuit "MemoryNegativeReadLatency" {
 firrtl.circuit "MemoryZeroWriteLatency" {
   firrtl.module @MemoryZeroWriteLatency() {
     // expected-error @+1 {{'firrtl.mem' op attribute 'writeLatency' failed to satisfy constraint}}
-    %memory_r = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r", "rw", "w"], readLatency = 0 : i32, writeLatency = 0 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<uint<8>>>>
+    %memory_r = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r", "rw", "w"], readLatency = 0 : i32, writeLatency = 0 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
   }
 }
 
@@ -379,7 +348,7 @@ firrtl.circuit "MemoryZeroWriteLatency" {
 firrtl.circuit "MemoryZeroDepth" {
   firrtl.module @MemoryZeroDepth() {
     // expected-error @+1 {{'firrtl.mem' op attribute 'depth' failed to satisfy constraint}}
-    %memory_r = firrtl.mem Undefined {depth = 0 : i64, name = "memory", portNames = ["r", "rw", "w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<uint<8>>>>
+    %memory_r = firrtl.mem Undefined {depth = 0 : i64, name = "memory", portNames = ["r", "rw", "w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
   }
 }
 
@@ -387,7 +356,7 @@ firrtl.circuit "MemoryZeroDepth" {
 
 firrtl.circuit "MemoryBadPortType" {
   firrtl.module @MemoryBadPortType() {
-    // expected-error @+1 {{'firrtl.mem' op has an invalid type on port "r" (expected either '!firrtl.bundle<...>' or '!firrtl.flip<bundle<...>>'}}
+    // expected-error @+1 {{'firrtl.mem' op has an invalid type on port "r" (expected '!firrtl.bundle<...>'}}
     %memory_r = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.uint<1>
   }
 }
@@ -397,7 +366,7 @@ firrtl.circuit "MemoryBadPortType" {
 firrtl.circuit "MemoryPortNamesCollide" {
   firrtl.module @MemoryPortNamesCollide() {
     // expected-error @+1 {{'firrtl.mem' op has non-unique port name "r"}}
-    %memory_r, %memory_r_0 = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r", "r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<uint<8>>>>, !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<uint<8>>>>
+    %memory_r, %memory_r_0 = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r", "r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
   }
 }
 
@@ -415,7 +384,7 @@ firrtl.circuit "MemoryUnexpectedNumberOfFields" {
 firrtl.circuit "MemoryMissingDataField" {
   firrtl.module @MemoryMissingDataField() {
     // expected-error @+1 {{'firrtl.mem' op has no data field on port "r" (expected to see "data" for a read or write port or "rdata" for a read/write port)}}
-    %memory_r = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata: flip<uint<8>>>>
+    %memory_r = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>>
   }
 }
 
@@ -424,7 +393,7 @@ firrtl.circuit "MemoryMissingDataField" {
 firrtl.circuit "MemoryMissingDataField2" {
   firrtl.module @MemoryMissingDataField2() {
     // expected-error @+1 {{'firrtl.mem' op has no data field on port "rw" (expected to see "data" for a read or write port or "rdata" for a read/write port)}}
-    %memory_rw = firrtl.mem Undefined {depth = 16 : i64, name = "memory2", portNames = ["rw"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata: flip<uint<8>>, writedata: uint<8>, wmask: uint<1>>>
+    %memory_rw = firrtl.mem Undefined {depth = 16 : i64, name = "memory2", portNames = ["rw"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata flip: uint<8>, writedata: uint<8>, wmask: uint<1>>
   }
 }
 
@@ -433,7 +402,7 @@ firrtl.circuit "MemoryMissingDataField2" {
 firrtl.circuit "MemoryDataNotPassive" {
   firrtl.module @MemoryDataNotPassive() {
     // expected-error @+1 {{'firrtl.mem' op has non-passive data type on port "r" (memory types must be passive)}}
-    %memory_r = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<bundle<a: flip<uint<8>>, b: uint<8>>>>>
+    %memory_r = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a flip: uint<8>, b: uint<8>>>
   }
 }
 
@@ -442,7 +411,7 @@ firrtl.circuit "MemoryDataNotPassive" {
 firrtl.circuit "MemoryDataContainsAnalog" {
   firrtl.module @MemoryDataContainsAnalog() {
     // expected-error @+1 {{'firrtl.mem' op has a data type that contains an analog type on port "r" (memory types cannot contain analog types)}}
-    %memory_r = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<bundle<a: uint<8>, b: analog<8>>>>>
+    %memory_r = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a: uint<8>, b: analog<8>>>
   }
 }
 
@@ -450,8 +419,8 @@ firrtl.circuit "MemoryDataContainsAnalog" {
 
 firrtl.circuit "MemoryPortInvalidReadKind" {
   firrtl.module @MemoryPortInvalidReadKind() {
-    // expected-error @+1 {{'firrtl.mem' op has an invalid type for port "r" of determined kind "read" (expected '!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<uint<8>>>>', but got '!firrtl.flip<bundle<BAD: uint<4>, en: uint<1>, clk: clock, data: flip<uint<8>>>>')}}
-    %memory_r= firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<BAD: uint<4>, en: uint<1>, clk: clock, data: flip<uint<8>>>>
+    // expected-error @+1 {{'firrtl.mem' op has an invalid type for port "r" of determined kind "read" (expected '!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>', but got '!firrtl.bundle<BAD: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>')}}
+    %memory_r= firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<BAD: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
   }
 }
 
@@ -459,8 +428,8 @@ firrtl.circuit "MemoryPortInvalidReadKind" {
 
 firrtl.circuit "MemoryPortInvalidWriteKind" {
   firrtl.module @MemoryPortInvalidWriteKind() {
-    // expected-error @+1 {{'firrtl.mem' op has an invalid type for port "w" of determined kind "write" (expected '!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>>', but got '!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, BAD: uint<1>>>')}}
-    %memory_r= firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, BAD: uint<1>>>
+    // expected-error @+1 {{'firrtl.mem' op has an invalid type for port "w" of determined kind "write" (expected '!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>', but got '!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, BAD: uint<1>>')}}
+    %memory_r= firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, BAD: uint<1>>
   }
 }
 
@@ -468,8 +437,8 @@ firrtl.circuit "MemoryPortInvalidWriteKind" {
 
 firrtl.circuit "MemoryPortInvalidReadWriteKind" {
   firrtl.module @MemoryPortInvalidReadWriteKind() {
-    // expected-error @+1 {{'firrtl.mem' op has an invalid type for port "rw" of determined kind "readwrite" (expected '!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata: flip<uint<8>>, wdata: uint<8>, wmask: uint<1>>>', but got '!firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata: flip<uint<8>>, wdata: uint<8>, BAD: uint<1>>>')}}
-    %memory_r= firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["rw"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata: flip<uint<8>>, wdata: uint<8>, BAD: uint<1>>>
+    // expected-error @+1 {{'firrtl.mem' op has an invalid type for port "rw" of determined kind "readwrite" (expected '!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata flip: uint<8>, wdata: uint<8>, wmask: uint<1>>', but got '!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata flip: uint<8>, wdata: uint<8>, BAD: uint<1>>')}}
+    %memory_r= firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["rw"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata flip: uint<8>, wdata: uint<8>, BAD: uint<1>>
   }
 }
 
@@ -478,6 +447,6 @@ firrtl.circuit "MemoryPortInvalidReadWriteKind" {
 firrtl.circuit "MemoryPortsWithDifferentTypes" {
   firrtl.module @MemoryPortsWithDifferentTypes() {
     // expected-error @+1 {{'firrtl.mem' op port "r1" has a different type than port "r0" (expected '!firrtl.uint<8>', but got '!firrtl.sint<8>')}}
-    %memory_r0, %memory_r1 = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r0", "r1"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<uint<8>>>>, !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<sint<8>>>>
+    %memory_r0, %memory_r1 = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r0", "r1"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<8>>
   }
 }

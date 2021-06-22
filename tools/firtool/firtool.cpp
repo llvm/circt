@@ -107,6 +107,11 @@ static cl::opt<bool>
 static cl::opt<bool> extractTestCode("extract-test-code",
                                      cl::desc("run the extract test code pass"),
                                      cl::init(false));
+static cl::opt<bool>
+    grandCentral("firrtl-grand-central",
+                 cl::desc("create interfaces and data/memory taps from SiFive "
+                          "Grand Central annotations"),
+                 cl::init(false));
 
 enum OutputFormatKind {
   OutputMLIR,
@@ -172,16 +177,6 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     }
   }
 
-  // Nothing in the parser is threaded.  Disable synchronization overhead.
-  auto isMultithreaded = context.isMultithreadingEnabled();
-  context.disableMultithreading();
-
-  // Apply any pass manager command line options.
-  PassManager pm(&context);
-  pm.enableVerifier(verifyPasses);
-  pm.enableTiming(ts);
-  applyPassManagerCLOptions(pm);
-
   OwningModuleRef module;
   if (inputFormat == InputFIRFile) {
     auto parserTimer = ts.nest("FIR Parser");
@@ -196,8 +191,16 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   if (!module)
     return failure();
 
-  // Allow optimizations to run multithreaded.
-  context.enableMultithreading(isMultithreaded);
+  // Apply any pass manager command line options.
+  PassManager pm(&context);
+  pm.enableVerifier(verifyPasses);
+  pm.enableTiming(ts);
+  applyPassManagerCLOptions(pm);
+
+  if (!disableOptimization) {
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        createCSEPass());
+  }
 
   // Width inference creates canonicalization opportunities.
   if (inferWidths)
@@ -216,7 +219,6 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
   if (!disableOptimization) {
     auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
-    modulePM.addPass(createCSEPass());
     modulePM.addPass(createSimpleCanonicalizerPass());
   }
 
@@ -237,6 +239,12 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
       blackBoxRoot, blackBoxRootResourcePath.empty()
                         ? blackBoxRoot
                         : blackBoxRootResourcePath));
+
+  if (grandCentral) {
+    auto &circuitPM = pm.nest<firrtl::CircuitOp>();
+    circuitPM.addPass(firrtl::createGrandCentralPass());
+    circuitPM.addPass(firrtl::createGrandCentralTapsPass());
+  }
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (lowerToHW || outputFormat == OutputVerilog ||

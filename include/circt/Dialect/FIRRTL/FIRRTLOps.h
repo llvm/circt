@@ -56,6 +56,7 @@ struct ModulePortInfo {
   StringAttr name;
   FIRRTLType type;
   Direction direction;
+  Location loc;
   AnnotationSet annotations = AnnotationSet(type.getContext());
 
   StringRef getName() const { return name ? name.getValue() : ""; }

@@ -97,7 +97,10 @@ public:
 
   const llvm::SourceMgr &getSourceMgr() const { return sourceMgr; }
 
-  FIRToken lexToken();
+  /// Move to the next valid token.
+  void lexToken() { curToken = lexTokenImpl(); }
+
+  const FIRToken &getToken() const { return curToken; }
 
   mlir::Location translateLocation(llvm::SMLoc loc);
 
@@ -109,6 +112,8 @@ public:
   FIRLexerCursor getCursor() const;
 
 private:
+  FIRToken lexTokenImpl();
+
   // Helpers.
   FIRToken formToken(FIRToken::Kind kind, const char *tokStart) {
     return FIRToken(kind, StringRef(tokStart, curPtr - tokStart));
@@ -126,11 +131,14 @@ private:
   FIRToken lexString(const char *tokStart);
 
   const llvm::SourceMgr &sourceMgr;
-  mlir::MLIRContext *context;
-  mlir::Identifier bufferNameIdentifier;
+  mlir::MLIRContext *const context;
+  const mlir::Identifier bufferNameIdentifier;
 
   StringRef curBuffer;
   const char *curPtr;
+
+  /// This is the next token that hasn't been consumed yet.
+  FIRToken curToken;
 
   FIRLexer(const FIRLexer &) = delete;
   void operator=(const FIRLexer &) = delete;
@@ -140,16 +148,17 @@ private:
 /// This is the state captured for a lexer cursor.
 class FIRLexerCursor {
 public:
-  FIRLexerCursor(const FIRLexer &lexer) : state(lexer.curPtr) {}
+  FIRLexerCursor(const FIRLexer &lexer)
+      : state(lexer.curPtr), curToken(lexer.getToken()) {}
 
   void restore(FIRLexer &lexer) {
-    assert(state && "can't restore state multiple times");
     lexer.curPtr = state;
-    state = nullptr;
+    lexer.curToken = curToken;
   }
 
 private:
   const char *state;
+  FIRToken curToken;
 };
 
 inline FIRLexerCursor FIRLexer::getCursor() const {

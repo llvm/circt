@@ -138,7 +138,7 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
     ```
     }];
 
-  let arguments = (ins FIRRTLType:$input, StrAttr:$fieldname);
+  let arguments = (ins BundleType:$input, StrAttr:$fieldname);
   let results = (outs FIRRTLType:$result);
 
   // TODO: Could drop the result type, inferring it from the source.

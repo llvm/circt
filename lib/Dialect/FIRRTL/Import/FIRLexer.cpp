@@ -116,11 +116,12 @@ static Identifier getMainBufferNameIdentifier(const llvm::SourceMgr &sourceMgr,
 
 FIRLexer::FIRLexer(const llvm::SourceMgr &sourceMgr, MLIRContext *context)
     : sourceMgr(sourceMgr), context(context),
-      bufferNameIdentifier(getMainBufferNameIdentifier(sourceMgr, context)) {
-  auto bufferID = sourceMgr.getMainFileID();
-  curBuffer = sourceMgr.getMemoryBuffer(bufferID)->getBuffer();
-  curPtr = curBuffer.begin();
-}
+      bufferNameIdentifier(getMainBufferNameIdentifier(sourceMgr, context)),
+      curBuffer(
+          sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID())->getBuffer()),
+      curPtr(curBuffer.begin()),
+      // Prime the first token.
+      curToken(lexTokenImpl()) {}
 
 /// Encode the specified source location information into a Location object
 /// for attachment to the IR or error reporting.
@@ -165,7 +166,7 @@ Optional<unsigned> FIRLexer::getIndentation(const FIRToken &tok) const {
 // Lexer Implementation Methods
 //===----------------------------------------------------------------------===//
 
-FIRToken FIRLexer::lexToken() {
+FIRToken FIRLexer::lexTokenImpl() {
   while (true) {
     const char *tokStart = curPtr;
     switch (*curPtr++) {

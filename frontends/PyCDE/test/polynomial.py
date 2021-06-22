@@ -1,4 +1,4 @@
-# RUN: %PYTHON% %s | FileCheck %s
+# RUN: %PYTHON% %s 2>&1 | FileCheck %s
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import mlir
 
 import pycde
 from pycde import (Input, Output, Parameter, module, externmodule, generator,
-                   types)
+                   types, dim)
 from circt.dialects import comb, hw
 
 
@@ -35,7 +35,7 @@ def PolynomialCompute(coefficients):
       """Implement this module for input 'x'."""
 
       x = mod.x
-      taps: list[mlir.ir.Value] = list()
+      taps = list()
       for power, coeff in enumerate(coefficients):
         coeffVal = hw.ConstantOp.create(types.i32, coeff)
         if power == 0:
@@ -46,11 +46,9 @@ def PolynomialCompute(coefficients):
             currPow = x
           else:
             x_power = [x for i in range(power)]
-            currPow = comb.MulOp(types.i32, x_power).result
-          newPartialSum = comb.AddOp(types.i32, [
-              partialSum,
-              comb.MulOp(types.i32, [coeffVal.result, currPow]).result
-          ]).result
+            currPow = comb.MulOp.create(*x_power)
+          newPartialSum = comb.AddOp.create(
+              partialSum, comb.MulOp.create(coeffVal, currPow))
 
         taps.append(newPartialSum)
 
@@ -81,10 +79,15 @@ class Polynomial(pycde.System):
     PolynomialCompute([1, 2, 3, 4, 5])("example2", x=poly.y)
 
     CoolPolynomialCompute([4, 42], x=x)
-    hw.OutputOp([poly.y])
+    return {"y": poly.y}
 
 
 poly = Polynomial()
+
+poly.graph()
+# CHECK-LABEL: digraph "top"
+# CHECK: label="top";
+# CHECK: [shape=record,label="{hw.constant\ni32\n\nvalue: 23 : i32}"];
 
 poly.print()
 # CHECK-LABEL:  hw.module @top() -> (%y: i32)
@@ -101,8 +104,16 @@ poly.print()
 # CHECK: %example2.y = hw.instance "example2" @PolyComputeForCoeff_62_42_6(%example.y) {parameters = {}} : (i32) -> i32
 # CHECK: %example2.y_0 = hw.instance "example2" @PolyComputeForCoeff_1_2_3_4_5(%example.y) {parameters = {}} : (i32) -> i32
 # CHECK: %pycde.CoolPolynomialCompute.y = hw.instance "pycde.CoolPolynomialCompute" @supercooldevice(%c23_i32) {coefficients = [4, 42], parameters = {}} : (i32) -> i32
-# CHECK: hw.module @PolyComputeForCoeff_62_42_6(%x: i32) -> (%y: i32)
-# CHECK: hw.module @PolyComputeForCoeff_1_2_3_4_5(%x: i32) -> (%y: i32)
+# CHECK-LABEL: hw.module @PolyComputeForCoeff_62_42_6(%x: i32) -> (%y: i32)
+# CHECK: hw.constant 62
+# CHECK: hw.constant 42
+# CHECK: hw.constant 6
+# CHECK-LABEL: hw.module @PolyComputeForCoeff_1_2_3_4_5(%x: i32) -> (%y: i32)
+# CHECK: hw.constant 1
+# CHECK: hw.constant 2
+# CHECK: hw.constant 3
+# CHECK: hw.constant 4
+# CHECK: hw.constant 5
 # CHECK-NOT: hw.module @pycde.PolynomialCompute
 
 print("\n\n=== Verilog ===")

@@ -54,10 +54,6 @@ def PassiveType : DialectType<FIRRTLDialect,
   CPred<"$_self.isa<FIRRTLType>() && $_self.cast<FIRRTLType>().isPassive()">,
   "a passive type (contain no flips)", "::circt::firrtl::FIRRTLType">;
 
-def UnflippedType : DialectType<FIRRTLDialect,
-  CPred<"$_self.isa<FIRRTLType>() && !$_self.isa<FlipType>()">,
-  "a type that does not contain an outer flip", "::circt::firrtl::FIRRTLType">;
-
 //===----------------------------------------------------------------------===//
 // FIRRTL Types Predicates
 //===----------------------------------------------------------------------===//
