@@ -197,6 +197,14 @@ public:
   template <typename... Args>
   bool removeAnnotationsWithClass(Args... names);
 
+  /// Remove all annotations from an operation for which `predicate` returns
+  /// true. The predicate is guaranteed to be called on every annotation, such
+  /// that this method can be used to partition the set by extracting and
+  /// removing annotations at the same time. Returns true if any annotations
+  /// were removed, false otherwise.
+  static bool removeAnnotations(Operation *op,
+                                llvm::function_ref<bool(Annotation)> predicate);
+
   /// Remove all port annotations from a module for which `predicate` returns
   /// true. The predicate is guaranteed to be called on every annotation, such
   /// that this method can be used to partition a module's port annotations by

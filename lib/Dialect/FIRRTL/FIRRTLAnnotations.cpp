@@ -319,6 +319,17 @@ bool AnnotationSet::removeAnnotations(
   return true;
 }
 
+/// Remove all annotations from an operation for which `predicate` returns true.
+bool AnnotationSet::removeAnnotations(
+    Operation *op, llvm::function_ref<bool(Annotation)> predicate) {
+  AnnotationSet annos(op);
+  if (!annos.empty() && annos.removeAnnotations(predicate)) {
+    annos.applyToOperation(op);
+    return true;
+  }
+  return false;
+}
+
 /// Remove all port annotations from a module for which `predicate` returns
 /// true.
 bool AnnotationSet::removePortAnnotations(
