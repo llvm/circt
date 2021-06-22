@@ -100,8 +100,7 @@ struct GlobalFIRParserState {
         hiIdentifier(Identifier::get("hi", context)),
         amountIdentifier(Identifier::get("amount", context)),
         fieldnameIdentifier(Identifier::get("fieldname", context)),
-        indexIdentifier(Identifier::get("index", context)),
-        locatorFilenameCache(loIdentifier /*arbitrary non-null identifier*/) {}
+        indexIdentifier(Identifier::get("index", context)) {}
 
   /// The context we're parsing into.
   MLIRContext *const context;
@@ -145,39 +144,9 @@ struct GlobalFIRParserState {
 
   BacktraceState getBacktrackState() { return BacktraceState(*this); }
 
-  /// Return an FileLineColLoc for the specified location, but use a bit of
-  /// caching to reduce thrasing the MLIRContext.
-  FileLineColLoc getFileLineColLoc(StringRef filename, unsigned lineNo,
-                                   unsigned columnNo) {
-    // Check our single-entry cache for this filename.
-    Identifier filenameId = locatorFilenameCache;
-    if (filenameId.str() != filename) {
-      // We missed!  Get the right identifier.
-      locatorFilenameCache = filenameId = Identifier::get(filename, context);
-
-      // If we miss in the filename cache, we also miss in the FileLineColLoc
-      // cache.
-      return fileLineColLocCache =
-                 FileLineColLoc::get(filenameId, lineNo, columnNo);
-    }
-
-    // If we hit the filename cache, check the FileLineColLoc cache.
-    auto result = fileLineColLocCache;
-    if (result && result.getLine() == lineNo && result.getColumn() == columnNo)
-      return result;
-
-    return fileLineColLocCache =
-               FileLineColLoc::get(filenameId, lineNo, columnNo);
-  }
-
 private:
   GlobalFIRParserState(const GlobalFIRParserState &) = delete;
   void operator=(const GlobalFIRParserState &) = delete;
-
-  /// This is a single-entry cache for filenames in locators.
-  Identifier locatorFilenameCache;
-  /// This is a single-entry cache for FileLineCol locations.
-  FileLineColLoc fileLineColLocCache;
 };
 
 } // end anonymous namespace
@@ -190,7 +159,9 @@ namespace {
 /// This class implements logic common to all levels of the parser, including
 /// things like types and helper logic.
 struct FIRParser {
-  FIRParser(GlobalFIRParserState &state) : state(state) {}
+  FIRParser(GlobalFIRParserState &state)
+      : state(state),
+        locatorFilenameCache(state.loIdentifier /*arbitrary non-null id*/) {}
 
   // Helper methods to get stuff from the parser-global state.
   GlobalFIRParserState &getState() const { return state; }
@@ -331,6 +302,11 @@ private:
   /// FIRParser is subclassed and reinstantiated.  Do not add additional
   /// non-trivial state here, add it to the GlobalFIRParserState class.
   GlobalFIRParserState &state;
+
+  /// This is a single-entry cache for filenames in locators.
+  Identifier locatorFilenameCache;
+  /// This is a single-entry cache for FileLineCol locations.
+  FileLineColLoc fileLineColLocCache;
 };
 
 } // end anonymous namespace
@@ -494,6 +470,32 @@ ParseResult FIRParser::parseOptionalInfoLocator(LocationAttr &result) {
   if (state.options.ignoreInfoLocators)
     return success();
 
+  /// Return an FileLineColLoc for the specified location, but use a bit of
+  /// caching to reduce thrasing the MLIRContext.
+  auto getFileLineColLoc = [&](StringRef filename, unsigned lineNo,
+                               unsigned columnNo) -> FileLineColLoc {
+    // Check our single-entry cache for this filename.
+    Identifier filenameId = locatorFilenameCache;
+    if (filenameId.str() != filename) {
+      // We missed!  Get the right identifier.
+      locatorFilenameCache = filenameId =
+          Identifier::get(filename, getContext());
+
+      // If we miss in the filename cache, we also miss in the FileLineColLoc
+      // cache.
+      return fileLineColLocCache =
+                 FileLineColLoc::get(filenameId, lineNo, columnNo);
+    }
+
+    // If we hit the filename cache, check the FileLineColLoc cache.
+    auto result = fileLineColLocCache;
+    if (result && result.getLine() == lineNo && result.getColumn() == columnNo)
+      return result;
+
+    return fileLineColLocCache =
+               FileLineColLoc::get(filenameId, lineNo, columnNo);
+  };
+
   // Compound locators will be combined with spaces, like:
   //  @[Foo.scala 123:4 Bar.scala 309:14]
   // and at this point will be parsed as a-long-string-with-two-spaces at
@@ -517,8 +519,8 @@ ParseResult FIRParser::parseOptionalInfoLocator(LocationAttr &result) {
 
     // On success, remember what we already parsed (Bar.Scala / 309:14), and
     // move on to the next chunk.
-    auto loc = state.getFileLineColLoc(filename.drop_front(spaceLoc + 1),
-                                       lineNo, columnNo);
+    auto loc =
+        getFileLineColLoc(filename.drop_front(spaceLoc + 1), lineNo, columnNo);
     extraLocs.push_back(loc);
     filename = nextFilename;
     lineNo = nextLineNo;
@@ -526,7 +528,7 @@ ParseResult FIRParser::parseOptionalInfoLocator(LocationAttr &result) {
     spaceLoc = filename.find_last_of(' ');
   }
 
-  result = state.getFileLineColLoc(filename, lineNo, columnNo);
+  result = getFileLineColLoc(filename, lineNo, columnNo);
   if (!extraLocs.empty()) {
     extraLocs.push_back(result);
     std::reverse(extraLocs.begin(), extraLocs.end());
