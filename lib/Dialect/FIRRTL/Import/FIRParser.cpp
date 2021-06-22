@@ -784,10 +784,8 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
               parseType(type, "expected bundle field type"))
             return failure();
 
-          if (isFlipped)
-            type = FlipType::get(type);
-
-          elements.push_back({StringAttr::get(getContext(), fieldName), type});
+          elements.push_back(
+              {StringAttr::get(getContext(), fieldName), isFlipped, type});
           return success();
         }))
       return failure();
@@ -1164,10 +1162,6 @@ private:
 
   ParseResult parseSimpleStmtImpl(unsigned stmtIndent);
 
-  /// Return the input operand if it has passive type, otherwise convert to
-  /// a passive-typed value and return that.
-  Value convertToPassive(Value input);
-
   /// Attach invalid values to every element of the value.
   void emitInvalidate(Value val, Flow flow);
 
@@ -1238,11 +1232,7 @@ private:
 
 /// Attach invalid values to every element of the value.
 void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
-  // Strip an outer flip.  This is associated with an output port, but this
-  // was already included in flow calculation.
   auto tpe = val.getType().cast<FIRRTLType>();
-  if (auto flip = tpe.dyn_cast<FlipType>())
-    tpe = flip.getElementType();
 
   // Recurse until we hit leaves.  Connect any leaves which have sink or
   // duplex flow.
@@ -1271,16 +1261,6 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
         if (flow != Flow::Source)
           builder.create<ConnectOp>(val, builder.create<InvalidValueOp>(tpe));
       });
-}
-
-/// Return the input operand if it has passive type, otherwise convert to
-/// a passive-typed value and return that.
-Value FIRStmtParser::convertToPassive(Value input) {
-  auto inType = input.getType().cast<FIRRTLType>();
-  if (inType.isPassive() && foldFlow(input) != Flow::Sink)
-    return input;
-
-  return builder.create<AsPassivePrimOp>(inType.getPassiveType(), input);
 }
 
 //===-------------------------------
@@ -1483,7 +1463,6 @@ ParseResult FIRStmtParser::parsePostFixDynamicSubscript(Value &result) {
   auto indexType = index.getType().cast<FIRRTLType>();
   indexType = indexType.getPassiveType();
   locationProcessor.setLoc(loc);
-  index = convertToPassive(index);
 
   // Make sure the index expression is valid and compute the result type for the
   // expression.
@@ -1528,7 +1507,6 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
           return failure();
 
         locationProcessor.setLoc(loc);
-        operand = convertToPassive(operand);
 
         operands.push_back(operand);
         return success();
@@ -2186,8 +2164,6 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
-  condition = convertToPassive(condition);
-
   // Create the IR representation for the when.
   auto whenStmt = builder.create<WhenOp>(condition, /*createElse*/ false);
 
@@ -2352,12 +2328,9 @@ ParseResult FIRStmtParser::parseInstance() {
   SmallVector<Type, 4> resultTypes;
   resultTypes.reserve(modulePorts.size());
 
-  for (auto port : modulePorts) {
-    auto portType = port.type;
-    if (port.direction == Direction::Input)
-      portType = FlipType::get(portType);
-    resultTypes.push_back(portType);
-  }
+  for (auto port : modulePorts)
+    resultTypes.push_back(port.type);
+
   ArrayAttr annotations = getAnnotations(getModuleTarget() + ">" + id);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
@@ -2548,7 +2521,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
   SmallVector<Type, 4> resultTypes;
   for (auto p : ports) {
     resultNames.push_back(p.first);
-    resultTypes.push_back(FlipType::get(p.second));
+    resultTypes.push_back(p.second);
   }
 
   ArrayAttr annotations = getAnnotations(getModuleTarget() + ">" + id);
@@ -2598,20 +2571,14 @@ ParseResult FIRStmtParser::parseNode() {
   // Note: (1) is more restictive than normal NodeOp verification, but
   // this is added to align with the SFC. (2) is less restrictive than
   // the SFC to accomodate for situations where the node is something
-  // weird like a module output or an instance input. This one
-  // situation is cleaned up with 'convertToPassive' following.
+  // weird like a module output or an instance input.
   auto initializerType = initializer.getType().cast<FIRRTLType>();
-  if (initializerType.isa<AnalogType>() ||
-      (!initializerType.isPassive() && !initializerType.isa<FlipType>())) {
+  if (initializerType.isa<AnalogType>() || !initializerType.isPassive()) {
     emitError(startTok.getLoc())
         << "Node cannot be analog and must be passive or passive under a flip "
         << initializer.getType();
     return failure();
   }
-
-  // If the node type isn't passive (it contains an outer flip), then make it
-  // passive.
-  initializer = convertToPassive(initializer);
 
   ArrayAttr annotations = getAnnotations(getModuleTarget() + ">" + id);
 
@@ -2734,11 +2701,6 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
-  clock = convertToPassive(clock);
-  if (resetSignal)
-    resetSignal = convertToPassive(resetSignal);
-  if (resetValue)
-    resetValue = convertToPassive(resetValue);
 
   ArrayAttr annotations = getAnnotations(getModuleTarget() + ">" + id);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);

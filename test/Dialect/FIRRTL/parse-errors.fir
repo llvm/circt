@@ -116,7 +116,7 @@ circuit MyParameterizedExtModule :
 circuit invalid_name :
   module invalid_name :
     input bf: { flip int_1 : UInt<1>, int_out : UInt<2>}
-    node n4 = add(bf, bf)  ; expected-error {{operands must be integer types, not '!firrtl.bundle<int_1: uint<1>, int_out: uint<2>>' and '!firrtl.bundle<int_1: uint<1>, int_out: uint<2>>'}}
+    node n4 = add(bf, bf)  ; expected-error {{operands must be integer types, not '!firrtl.bundle<int_1 flip: uint<1>, int_out: uint<2>>' and '!firrtl.bundle<int_1 flip: uint<1>, int_out: uint<2>>'}}
 
 ;// -----
 

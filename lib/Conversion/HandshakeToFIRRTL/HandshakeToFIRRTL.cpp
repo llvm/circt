@@ -85,14 +85,14 @@ static FIRRTLType getBundleType(Type type) {
   auto validId = StringAttr::get(context, "valid");
   auto readyId = StringAttr::get(context, "ready");
   auto signalType = UIntType::get(context, 1);
-  elements.push_back(BundleElement(validId, signalType));
-  elements.push_back(BundleElement(readyId, FlipType::get(signalType)));
+  elements.push_back(BundleElement(validId, false, signalType));
+  elements.push_back(BundleElement(readyId, true, signalType));
 
   // Add data subfield to the bundle if dataType is not a null.
   auto dataType = getFIRRTLType(type);
   if (dataType) {
     auto dataId = StringAttr::get(context, "data");
-    elements.push_back(BundleElement(dataId, dataType));
+    elements.push_back(BundleElement(dataId, false, dataType));
   }
 
   auto bundleType = BundleType::get(elements, context);
@@ -1680,8 +1680,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   llvm::SmallVector<Type> resultTypes;
   llvm::SmallVector<Attribute> resultNames;
   for (auto p : ports) {
-    resultTypes.push_back(
-        FlipType::get(MemOp::getTypeForPort(depth, dataType, p.second)));
+    resultTypes.push_back(MemOp::getTypeForPort(depth, dataType, p.second));
     resultNames.push_back(rewriter.getStringAttr(p.first.str()));
   }
 
@@ -1991,14 +1990,8 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
 
   // Bundle all ports of the instance into a new flattened bundle type.
   SmallVector<ModulePortInfo, 8> portInfo = getModulePortInfo(subModuleOp);
-  for (auto &port : portInfo) {
-    // All instance input ports are flipped.
-    if (port.direction == Direction::Input) {
-      resultTypes.push_back(FlipType::get(port.type));
-      continue;
-    }
+  for (auto &port : portInfo)
     resultTypes.push_back(port.type);
-  }
 
   // Create a instance operation.
   auto instanceOp = rewriter.create<firrtl::InstanceOp>(

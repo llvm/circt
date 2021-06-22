@@ -49,10 +49,10 @@ firrtl.circuit "TestHarness" attributes {
       portNames = ["MPORT"],
       readLatency = 0 : i32,
       writeLatency = 1 : i32
-    } : !firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: flip<uint<1>>>>
-    %mem_addr = firrtl.subfield %mem("addr") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: flip<uint<1>>>>) -> !firrtl.uint<1>
-    %mem_en = firrtl.subfield %mem("en") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: flip<uint<1>>>>) -> !firrtl.uint<1>
-    %mem_clk = firrtl.subfield %mem("clk") : (!firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: flip<uint<1>>>>) -> !firrtl.clock
+    } : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
+    %mem_addr = firrtl.subfield %mem("addr") : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
+    %mem_en = firrtl.subfield %mem("en") : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
+    %mem_clk = firrtl.subfield %mem("clk") : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.clock
     firrtl.connect %mem_addr, %in : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %mem_en, %in : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %mem_clk, %clock : !firrtl.clock, !firrtl.clock
@@ -68,10 +68,10 @@ firrtl.circuit "TestHarness" attributes {
     in %in: !firrtl.uint<1>,
     out %out: !firrtl.uint<1>
   ) {
-    %bar_clock, %bar_reset, %bar_in, %bar_out = firrtl.instance @Bar  {name = "bar"} : !firrtl.flip<clock>, !firrtl.flip<reset>, !firrtl.flip<uint<1>>, !firrtl.uint<1>
-    firrtl.connect %bar_clock, %clock : !firrtl.flip<clock>, !firrtl.clock
-    firrtl.connect %bar_reset, %reset : !firrtl.flip<reset>, !firrtl.reset
-    firrtl.connect %bar_in, %in : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    %bar_clock, %bar_reset, %bar_in, %bar_out = firrtl.instance @Bar  {name = "bar"} : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %bar_clock, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %bar_reset, %reset : !firrtl.reset, !firrtl.reset
+    firrtl.connect %bar_in, %in : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %out, %bar_out : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
@@ -149,10 +149,10 @@ firrtl.circuit "TestHarness" attributes {
 
   // CHECK: firrtl.module @TestHarness
   firrtl.module @TestHarness(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
-    %foo_clock, %foo_reset, %foo_in, %foo_out = firrtl.instance @Foo {name = "foo"} : !firrtl.flip<clock>, !firrtl.flip<reset>, !firrtl.flip<uint<1>>, !firrtl.uint<1>
-    firrtl.connect %foo_clock, %clock : !firrtl.flip<clock>, !firrtl.clock
-    firrtl.connect %foo_reset, %reset : !firrtl.flip<reset>, !firrtl.uint<1>
-    firrtl.connect %foo_in, %in : !firrtl.flip<uint<1>>, !firrtl.uint<1>
+    %foo_clock, %foo_reset, %foo_in, %foo_out = firrtl.instance @Foo {name = "foo"} : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %foo_clock, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %foo_reset, %reset : !firrtl.reset, !firrtl.uint<1>
+    firrtl.connect %foo_in, %in : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %out, %foo_out : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.instance @BlackHole {name = "bigScary"}
     // CHECK: firrtl.instance [[DT]] {name = "dataTap"}

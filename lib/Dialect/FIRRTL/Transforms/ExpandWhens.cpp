@@ -99,16 +99,14 @@ public:
 
     // Recurse through a bundle and declare each leaf sink node.
     std::function<void(Type, Flow)> declare = [&](Type type, Flow flow) {
-      // If the field is flipped, flip the flow and use the real type.
-      if (auto flip = type.dyn_cast<FlipType>()) {
-        type = flip.getElementType();
-        flow = swapFlow(flow);
-      }
       // If this is a bundle type, recurse to each of the fields.
       if (auto bundleType = type.dyn_cast<BundleType>()) {
         for (auto &element : bundleType.getElements()) {
           id++;
-          declare(element.type, flow);
+          if (element.isFlip)
+            declare(element.type, swapFlow(flow));
+          else
+            declare(element.type, flow);
         }
         return;
       }
@@ -170,14 +168,18 @@ public:
   void visitDecl(InstanceOp op) {
     // Track any instance inputs which need to be connected to for init
     // coverage.
-    for (auto result : op.results())
-      declareSinks(result, Flow::Source);
+    for (auto result : llvm::enumerate(op.results()))
+      if (getModulePortDirection(op.getReferencedModule(), result.index()) ==
+          Direction::Output)
+        declareSinks(result.value(), Flow::Source);
+      else
+        declareSinks(result.value(), Flow::Sink);
   }
 
   void visitDecl(MemOp op) {
     // Track any memory inputs which require connections.
     for (auto result : op.results())
-      declareSinks(result, Flow::Source);
+      declareSinks(result, Flow::Sink);
   }
 
   void visitStmt(PartialConnectOp op) {
