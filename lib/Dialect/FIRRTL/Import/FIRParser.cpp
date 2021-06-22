@@ -89,11 +89,9 @@ namespace {
 /// so that individual subparsers can refer to the same state.
 struct GlobalFIRParserState {
   GlobalFIRParserState(const llvm::SourceMgr &sourceMgr, MLIRContext *context,
-                       FIRParserOptions options,
-                       const llvm::MemoryBuffer *annotationsBuf)
+                       FIRParserOptions options)
       : context(context), options(options), lex(sourceMgr, context),
-        curToken(lex.lexToken()), annotationsBuf(annotationsBuf),
-        loIdentifier(Identifier::get("lo", context)),
+        curToken(lex.lexToken()), loIdentifier(Identifier::get("lo", context)),
         hiIdentifier(Identifier::get("hi", context)),
         amountIdentifier(Identifier::get("amount", context)),
         fieldnameIdentifier(Identifier::get("fieldname", context)),
@@ -122,10 +120,6 @@ struct GlobalFIRParserState {
 
   /// This is the next token that hasn't been consumed yet.
   FIRToken curToken;
-
-  /// A pointer to a buffer of annotations (the contents of a JSON
-  /// file).  This is null if no annotations were provided.
-  const llvm::MemoryBuffer *annotationsBuf;
 
   /// A mutable reference to the current CircuitTarget.
   StringRef circuitTarget;
@@ -325,14 +319,6 @@ struct FIRParser {
   //===--------------------------------------------------------------------===//
   // Annotation Utilities
   //===--------------------------------------------------------------------===//
-
-  /// Add annotations from a string to the internal annotation map.  Report
-  /// errors using a provided source manager location and with a provided error
-  /// message
-  ParseResult importAnnotations(SMLoc loc, StringRef annotationsStr);
-
-  /// Add annotations from the source manager, if an annotation file was added.
-  ParseResult importAnnotationFile(SMLoc loc);
 
   /// Return the set of annotations for a given Target.
   ArrayAttr getAnnotations(Twine target);
@@ -873,64 +859,6 @@ ParseResult FIRParser::parseOptionalRUW(RUWAttr &result) {
   }
 
   return success();
-}
-
-ParseResult FIRParser::importAnnotations(SMLoc loc, StringRef annotationsStr) {
-
-  auto annotations = json::parse(annotationsStr);
-  if (auto err = annotations.takeError()) {
-    handleAllErrors(std::move(err), [&](const json::ParseError &a) {
-      auto diag = emitError(loc, "Failed to parse JSON Annotations");
-      diag.attachNote() << a.message();
-    });
-    return failure();
-  }
-
-  json::Path::Root root;
-  llvm::StringMap<ArrayAttr> annotationMap;
-  if (!fromJSON(annotations.get(), annotationMap, root, getContext())) {
-    auto diag = emitError(loc, "Invalid/unsupported annotation format");
-    std::string jsonErrorMessage =
-        "See inline comments for problem area in JSON:\n";
-    llvm::raw_string_ostream s(jsonErrorMessage);
-    root.printErrorContext(annotations.get(), s);
-    diag.attachNote() << jsonErrorMessage;
-    return failure();
-  }
-
-  if (!scatterCustomAnnotations(annotationMap, getContext(), state.annotationID,
-                                translateLocation(loc)))
-    return failure();
-
-  for (auto a : annotationMap.keys()) {
-    auto &entry = state.annotationMap[a];
-    if (!entry) {
-      entry = annotationMap[a];
-      continue;
-    }
-
-    SmallVector<Attribute> annotationVec;
-    auto arrayRef = state.annotationMap[a].getValue();
-    annotationVec.append(arrayRef.begin(), arrayRef.end());
-    arrayRef = annotationMap[a].getValue();
-    annotationVec.append(arrayRef.begin(), arrayRef.end());
-    state.annotationMap[a] = ArrayAttr::get(getContext(), annotationVec);
-  }
-
-  return success();
-}
-
-ParseResult FIRParser::importAnnotationFile(SMLoc loc) {
-  if (!state.annotationsBuf)
-    return success();
-
-  ParseResult result = success();
-  result = importAnnotations(loc, (state.annotationsBuf)->getBuffer());
-
-  if (!result)
-    state.annotationsBuf = nullptr;
-
-  return result;
 }
 
 /// Return the set of annotations for a given Target.
@@ -2857,9 +2785,14 @@ struct FIRCircuitParser : public FIRParser {
   explicit FIRCircuitParser(GlobalFIRParserState &state, ModuleOp mlirModule)
       : FIRParser(state), mlirModule(mlirModule) {}
 
-  ParseResult parseCircuit();
+  ParseResult parseCircuit(const llvm::MemoryBuffer *annotationsBuf);
 
 private:
+  /// Add annotations from a string to the internal annotation map.  Report
+  /// errors using a provided source manager location and with a provided error
+  /// message
+  ParseResult importAnnotations(SMLoc loc, StringRef annotationsStr);
+
   ParseResult parseModule(CircuitOp circuit, unsigned indent);
 
   ParseResult parsePortList(SmallVectorImpl<ModulePortInfo> &resultPorts,
@@ -2882,6 +2815,53 @@ private:
 };
 
 } // end anonymous namespace
+
+ParseResult FIRCircuitParser::importAnnotations(SMLoc loc,
+                                                StringRef annotationsStr) {
+
+  auto annotations = json::parse(annotationsStr);
+  if (auto err = annotations.takeError()) {
+    handleAllErrors(std::move(err), [&](const json::ParseError &a) {
+      auto diag = emitError(loc, "Failed to parse JSON Annotations");
+      diag.attachNote() << a.message();
+    });
+    return failure();
+  }
+
+  json::Path::Root root;
+  llvm::StringMap<ArrayAttr> thisAnnotationMap;
+  if (!fromJSON(annotations.get(), thisAnnotationMap, root, getContext())) {
+    auto diag = emitError(loc, "Invalid/unsupported annotation format");
+    std::string jsonErrorMessage =
+        "See inline comments for problem area in JSON:\n";
+    llvm::raw_string_ostream s(jsonErrorMessage);
+    root.printErrorContext(annotations.get(), s);
+    diag.attachNote() << jsonErrorMessage;
+    return failure();
+  }
+
+  if (!scatterCustomAnnotations(thisAnnotationMap, getContext(),
+                                getState().annotationID,
+                                translateLocation(loc)))
+    return failure();
+
+  for (auto a : thisAnnotationMap.keys()) {
+    auto &entry = getState().annotationMap[a];
+    if (!entry) {
+      entry = thisAnnotationMap[a];
+      continue;
+    }
+
+    SmallVector<Attribute> annotationVec;
+    auto arrayRef = getState().annotationMap[a].getValue();
+    annotationVec.append(arrayRef.begin(), arrayRef.end());
+    arrayRef = thisAnnotationMap[a].getValue();
+    annotationVec.append(arrayRef.begin(), arrayRef.end());
+    getState().annotationMap[a] = ArrayAttr::get(getContext(), annotationVec);
+  }
+
+  return success();
+}
 
 /// pohwist ::= port*
 /// port     ::= dir id ':' type info? NEWLINE
@@ -3127,7 +3107,10 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
 /// file ::= circuit
 /// circuit ::= 'circuit' id ':' info? INDENT module* DEDENT EOF
 ///
-ParseResult FIRCircuitParser::parseCircuit() {
+/// If non-null, annotationsBuf is a memory buffer containing JSON annotations.
+///
+ParseResult
+FIRCircuitParser::parseCircuit(const llvm::MemoryBuffer *annotationsBuf) {
   auto indent = getIndentation();
   if (!indent.hasValue())
     return emitError("'circuit' must be first token on its line"), failure();
@@ -3159,8 +3142,10 @@ ParseResult FIRCircuitParser::parseCircuit() {
       return failure();
 
   // Deal with the annotation file if one was specified
-  if (importAnnotationFile(info.getFIRLoc()))
-    return failure();
+  if (annotationsBuf) {
+    if (importAnnotations(info.getFIRLoc(), annotationsBuf->getBuffer()))
+      return failure();
+  }
 
   OpBuilder b(mlirModule.getBodyRegion());
 
@@ -3222,8 +3207,8 @@ ParseResult FIRCircuitParser::parseCircuit() {
 DoneParsing:
 
   // Now that we've parsed all the prototypes and created all the module ops,
-  // go ahead and parse all their bodies.
-  for (DeferredModuleToParse deferredModule : deferredModules) {
+  // go ahead and parse all their bodies.  This can be done in parallel.
+  for (DeferredModuleToParse &deferredModule : deferredModules) {
     if (parseModuleBody(deferredModule))
       return failure();
   }
@@ -3250,8 +3235,8 @@ OwningModuleRef circt::firrtl::importFIRRTL(SourceMgr &sourceMgr,
       FileLineColLoc::get(context, sourceBuf->getBufferIdentifier(), /*line=*/0,
                           /*column=*/0)));
 
-  GlobalFIRParserState state(sourceMgr, context, options, annotationsBuf);
-  if (FIRCircuitParser(state, *module).parseCircuit())
+  GlobalFIRParserState state(sourceMgr, context, options);
+  if (FIRCircuitParser(state, *module).parseCircuit(annotationsBuf))
     return nullptr;
 
   // Make sure the parse module has no other structural problems detected by
