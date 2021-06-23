@@ -631,6 +631,15 @@ firrtl.module @AttachOpts(in %a: !firrtl.analog<1>) {
   firrtl.attach %b, %a : !firrtl.analog<1>, !firrtl.analog<1>
 }
 
+// CHECK-LABEL: @AttachDeadWireDontTouch
+firrtl.module @AttachDeadWireDontTouch(in %a: !firrtl.analog<1>, in %b: !firrtl.analog<1>) {
+  // CHECK-NEXT: %c = firrtl.wire
+  // CHECK-NEXT: firrtl.attach %a, %b, %c :
+  // CHECK-NEXT: }
+  %c = firrtl.wire  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}: !firrtl.analog<1>
+  firrtl.attach %a, %b, %c : !firrtl.analog<1>, !firrtl.analog<1>, !firrtl.analog<1>
+}
+
 // CHECK-LABEL: @wire_cst_prop1
 // CHECK-NEXT:   %c10_ui9 = firrtl.constant 10 : !firrtl.uint<9>
 // CHECK-NEXT:   firrtl.connect %out_b, %c10_ui9 : !firrtl.uint<9>, !firrtl.uint<9>
