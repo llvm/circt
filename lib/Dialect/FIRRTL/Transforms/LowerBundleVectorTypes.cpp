@@ -63,7 +63,7 @@ static SmallVector<FlatBundleFieldEntry> peelType(FIRRTLType type) {
           tmpSuffix.resize(0);
           tmpSuffix.push_back('_');
           tmpSuffix.append(elt.name.getValue());
-            retval.emplace_back(elt.type, tmpSuffix, isFlipped ^ elt.isFlip);
+          retval.emplace_back(elt.type, tmpSuffix, isFlipped ^ elt.isFlip);
         }
       })
       .Case<FVectorType>([&](auto vector) {
@@ -120,8 +120,7 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
   SmallVector<Type, 8> ports;
   SmallVector<Attribute, 8> portNames;
   for (auto port : op.getPorts()) {
-    ports.push_back(
-        MemOp::getTypeForPort(op.depth(), type, port.second));
+    ports.push_back(MemOp::getTypeForPort(op.depth(), type, port.second));
     portNames.push_back(port.first);
   }
   return b->create<MemOp>(ports, op.readLatency(), op.writeLatency(),
@@ -389,19 +388,19 @@ TypeLoweringVisitor::addArg(FModuleOp module, unsigned insertPt,
 
   auto nameStr = oldArg.name.getValue().str() + nameSuffix.str();
   // Save the name attribute for the new argument.
-  auto name =
-      builder->getStringAttr(nameStr);
+  auto name = builder->getStringAttr(nameStr);
 
   // Populate the new arg attributes.
   AnnotationSet newAnnotations = oldArg.annotations;
   if (!getCanonicalAggregateType(type))
-      newAnnotations = filterAnnotations(oldArg.annotations, nameStr);
+    newAnnotations = filterAnnotations(oldArg.annotations, nameStr);
 
   // Flip the direction if the field is an output.
   auto direction = (Direction)((unsigned)oldArg.direction ^ isOutput);
 
-  return std::make_pair(
-      newValue, firrtl::ModulePortInfo{name, type, direction, oldArg.loc, newAnnotations});
+  return std::make_pair(newValue,
+                        firrtl::ModulePortInfo{name, type, direction,
+                                               oldArg.loc, newAnnotations});
 }
 
 // Lower arguments with bundle type by flattening them.
@@ -566,7 +565,7 @@ void TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
         tmpType = UIntType::get(destType.getContext(), destWidth);
       //        if (srcInfo.second)
       //          src = builder->create<AsPassivePrimOp>(src);
-      //assert(!src.getType().isa<FlipType>());
+      // assert(!src.getType().isa<FlipType>());
       src = builder->create<TailPrimOp>(tmpType, src, srcWidth - destWidth);
       // Insert the cast back to signed if needed.
       if (tmpType != destType)
@@ -910,12 +909,11 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
     for (auto field : fieldTypes) {
       Attribute pName;
       inputTypes.push_back(field.type);
-      std::string nameStr ;
+      std::string nameStr;
       if (port.name) {
         nameStr = port.name.getValue().str();
         pName = builder.getStringAttr((port.getName() + field.suffix).str());
-      }
-      else
+      } else
         pName = builder.getStringAttr("");
       nameStr += field.suffix;
       portNames.push_back(pName);
@@ -926,9 +924,9 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
 
       // Populate newAnnotations with the old annotations filtered to those
       // associated with just this field.
-  AnnotationSet newAnnotations = oldAnnotations;
-  if (!getCanonicalAggregateType(field.type))
-      newAnnotations = filterAnnotations(oldAnnotations, nameStr);
+      AnnotationSet newAnnotations = oldAnnotations;
+      if (!getCanonicalAggregateType(field.type))
+        newAnnotations = filterAnnotations(oldAnnotations, nameStr);
 
       // Populate the new arg attributes.
       argAttrDicts.push_back(newAnnotations.getArgumentAttrDict(argAttrs));
@@ -1087,7 +1085,8 @@ void TypeLoweringVisitor::visitDecl(WireOp op) {
     // For all annotations on the parent op, filter them based on the target
     // attribute.
     bool isGroundType = !getCanonicalAggregateType(field.type);
-      filterAnnotations(op.annotations(), loweredAttrs, loweredName, isGroundType);
+    filterAnnotations(op.annotations(), loweredAttrs, loweredName,
+                      isGroundType);
     auto wire = builder->create<WireOp>(field.type, loweredName, loweredAttrs);
     lowered.push_back(wire.getResult());
   }
@@ -1120,7 +1119,8 @@ void TypeLoweringVisitor::visitDecl(RegOp op) {
     // For all annotations on the parent op, filter them based on the target
     // attribute.
     bool isGroundType = !getCanonicalAggregateType(field.type);
-    filterAnnotations(op.annotations(), loweredAttrs, loweredName, isGroundType);
+    filterAnnotations(op.annotations(), loweredAttrs, loweredName,
+                      isGroundType);
     auto reg = builder->create<RegOp>(field.getPortType(), op.clockVal(),
                                       loweredName, loweredAttrs);
     lowered.push_back(reg.getResult());
@@ -1202,7 +1202,8 @@ void TypeLoweringVisitor::visitDecl(RegResetOp op) {
     // For all annotations on the parent op, filter them based on the
     // target attribute.
     bool isGroundType = !getCanonicalAggregateType(field.value().type);
-    filterAnnotations(op.annotations(), loweredAttrs, loweredName, isGroundType);
+    filterAnnotations(op.annotations(), loweredAttrs, loweredName,
+                      isGroundType);
     Value resetVal;
     if (BundleType bundle = resultType.dyn_cast<BundleType>()) {
       resetVal = builder->create<SubfieldOp>(
@@ -1247,7 +1248,8 @@ void TypeLoweringVisitor::visitDecl(NodeOp op) {
     // For all annotations on the parent op, filter them based on the target
     // attribute.
     bool isGroundType = !getCanonicalAggregateType(field.value().type);
-    filterAnnotations(op.annotations(), loweredAttrs, loweredName, isGroundType);
+    filterAnnotations(op.annotations(), loweredAttrs, loweredName,
+                      isGroundType);
     Value input;
     if (BundleType bundle = resultType.dyn_cast<BundleType>()) {
       input = builder->create<SubfieldOp>(
