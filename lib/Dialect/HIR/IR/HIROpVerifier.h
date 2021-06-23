@@ -3,10 +3,10 @@
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Dialect/HIR/IR/HIRDialect.h"
 
-namespace mlir {
+namespace circt {
 namespace hir {
 LogicalResult verifyFuncOp(hir::FuncOp op);
 } // namespace hir
-} // namespace mlir
+} // namespace circt
 
 #endif

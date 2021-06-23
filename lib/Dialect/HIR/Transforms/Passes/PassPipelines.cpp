@@ -2,12 +2,12 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/Passes.h"
 
-void mlir::hir::registerHIRLoweringPassPipeline() {
+void circt::hir::registerHIRLoweringPassPipeline() {
   // Register an inline pipeline builder.
-  PassPipelineRegistration<>(
+  mlir::PassPipelineRegistration<>(
       "hir-simplify",
       "Simplify HIR dialect to a bare minimum for lowering to verilog.",
-      [](OpPassManager &pm) {
+      [](mlir::OpPassManager &pm) {
         pm.addPass(mlir::createCanonicalizerPass());
         pm.addPass(createMemrefLoweringPass());
         pm.addPass(mlir::createCSEPass());

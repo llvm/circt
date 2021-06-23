@@ -11,7 +11,7 @@ namespace llvm {
 class raw_ostream;
 } // namespace llvm
 
-namespace mlir {
+namespace circt {
 
 struct LogicalResult;
 class ModuleOp;
@@ -19,12 +19,13 @@ class ModuleOp;
 namespace hir {
 
 /// Translate HIR "module" into verilog and output it to "os".
-mlir::LogicalResult printVerilog(mlir::ModuleOp module, llvm::raw_ostream &os);
+circt::LogicalResult printVerilog(circt::ModuleOp module,
+                                  llvm::raw_ostream &os);
 
 /// Register the HIR to Verilog Translation pass.
 void registerHIRToVerilogTranslation();
 
 } // namespace hir.
-} // namespace mlir.
+} // namespace circt
 
 #endif // CIRCT_TARGET_VERILOG_HIRTOVERILOG_H.

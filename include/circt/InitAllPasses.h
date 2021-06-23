@@ -36,7 +36,7 @@ inline void registerAllPasses() {
   seq::registerSeqPasses();
   sv::registerPasses();
   circt::registerPasses();
-  mlir::hir::initHIRTransformationPasses();
+  hir::initHIRTransformationPasses();
 }
 
 } // namespace circt

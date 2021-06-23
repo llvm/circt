@@ -7,11 +7,11 @@
 #ifndef CIRCT_TARGET_VERILOG_HIRBITWIDTHREDUCTION_H
 #define CIRCT_TARGET_VERILOG_HIRBITWIDTHREDUCTION_H
 
-namespace llvm {
+namespace circt {
 class raw_ostream;
-} // namespace llvm
+} // namespace circt
 
-namespace mlir {
+namespace circt {
 
 struct LogicalResult;
 class ModuleOp;
@@ -22,6 +22,6 @@ namespace hir {
 void registerBitwidthReductionPass();
 
 } // namespace hir.
-} // namespace mlir.
+} // namespace circt
 
 #endif // CIRCT_TARGET_VERILOG_HIRBITWIDTHREDUCTION_H.

@@ -11,7 +11,7 @@
 #include "mlir/Interfaces/LoopLikeInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
-namespace mlir {
+namespace circt {
 namespace hir {
 #include "circt/Dialect/HIR/IR/HIRInterfaces.h.inc"
 enum PortKind { rd = 0, wr = 1, rw = 2 };
@@ -46,7 +46,7 @@ struct MemrefTypeStorage : public TypeStorage {
   }
 
   /// Define a construction method for creating a new instance of this storage.
-  static MemrefTypeStorage *construct(TypeStorageAllocator &allocator,
+  static MemrefTypeStorage *construct(mlir::TypeStorageAllocator &allocator,
                                       const KeyTy &key) {
     ArrayRef<int64_t> shape = allocator.copyInto(std::get<0>(key));
     Type elementType = std::get<1>(key);
@@ -89,7 +89,7 @@ struct FuncTypeStorage : public TypeStorage {
   }
 
   /// Define a construction method for creating a new instance of this storage.
-  static FuncTypeStorage *construct(TypeStorageAllocator &allocator,
+  static FuncTypeStorage *construct(mlir::TypeStorageAllocator &allocator,
                                     const KeyTy &key) {
     FunctionType functionTy = std::get<0>(key);
     ArrayAttr inputDelays = std::get<1>(key);
@@ -127,7 +127,7 @@ struct ArrayTypeStorage : public TypeStorage {
   }
 
   /// Define a construction method for creating a new instance of this storage.
-  static ArrayTypeStorage *construct(TypeStorageAllocator &allocator,
+  static ArrayTypeStorage *construct(mlir::TypeStorageAllocator &allocator,
                                      const KeyTy &key) {
     ArrayRef<int64_t> dims = allocator.copyInto(std::get<0>(key));
     Type elementType = std::get<1>(key);
@@ -164,7 +164,7 @@ struct GroupTypeStorage : public TypeStorage {
   }
 
   /// Define a construction method for creating a new instance of this storage.
-  static GroupTypeStorage *construct(TypeStorageAllocator &allocator,
+  static GroupTypeStorage *construct(mlir::TypeStorageAllocator &allocator,
                                      const KeyTy &key) {
     ArrayRef<Type> elementTypes = allocator.copyInto(std::get<0>(key));
     ArrayRef<Attribute> attrs = allocator.copyInto(std::get<1>(key));
@@ -203,7 +203,7 @@ struct BusTypeStorage : public TypeStorage {
   }
 
   /// Define a construction method for creating a new instance of this storage.
-  static BusTypeStorage *construct(TypeStorageAllocator &allocator,
+  static BusTypeStorage *construct(mlir::TypeStorageAllocator &allocator,
                                    const KeyTy &key) {
     ArrayRef<Type> elementTypes = allocator.copyInto(std::get<0>(key));
     ArrayRef<PortKind> directions = allocator.copyInto(std::get<1>(key));
@@ -408,6 +408,6 @@ public:
 } // namespace hir.
 #define GET_OP_CLASSES
 #include "circt/Dialect/HIR/IR/HIR.h.inc"
-} // namespace mlir.
+} // namespace circt
 
 #endif // HIR_HIR_H.

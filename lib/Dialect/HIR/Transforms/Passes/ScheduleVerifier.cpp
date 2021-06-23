@@ -6,7 +6,6 @@
 
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Dialect/HIR/IR/HIRDialect.h"
-#include "circt/Dialect/HIR/Verification/SheduleVerifier.h"
 
 #include "mlir/Dialect/CommonFolders.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -32,7 +31,7 @@
 #include <list>
 #include <stack>
 
-using namespace mlir;
+using namespace circt;
 using namespace hir;
 using namespace llvm;
 
@@ -79,8 +78,8 @@ public:
     assert(t);
     assert(t.getType().isa<TimeType>());
     assert(v);
-    if (!(v.getType().isa<IntegerType>() || v.getType().isa<FloatType>() ||
-          v.getType().isa<TimeType>())) {
+    if (!(v.getType().isa<IntegerType>() ||
+          v.getType().isa<mlir::FloatType>() || v.getType().isa<TimeType>())) {
       assert(false);
     }
     if (v != t)
@@ -369,7 +368,7 @@ bool ScheduleVerifier::inspectOp(hir::DelayOp op) {
 }
 
 bool ScheduleVerifier::inspectOp(hir::CallOp op) {
-  ResultRange results = op.res();
+  mlir::ResultRange results = op.res();
   auto operands = op.operands();
   unsigned tstartDelay = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
   ArrayAttr inputDelays = op->getAttrOfType<ArrayAttr>("inputDelays");
@@ -439,10 +438,10 @@ bool ScheduleVerifier::inspectBody(Block &block) {
 
 void ScheduleVerifier::runOnOperation() { inspectOp(getOperation()); }
 
-namespace mlir {
+namespace circt {
 namespace hir {
 std::unique_ptr<OperationPass<hir::FuncOp>> createScheduleVerificationPass() {
   return std::make_unique<ScheduleVerifier>();
 }
 } // namespace hir
-} // namespace mlir
+} // namespace circt

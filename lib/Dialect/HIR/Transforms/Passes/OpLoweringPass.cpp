@@ -9,7 +9,7 @@
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Dialect/HIR/IR/helper.h"
 
-using namespace mlir;
+using namespace circt;
 using namespace hir;
 namespace {
 
@@ -87,10 +87,10 @@ void OpLoweringPass::runOnOperation() {
   }
 }
 
-namespace mlir {
+namespace circt {
 namespace hir {
 std::unique_ptr<OperationPass<hir::FuncOp>> createOpLoweringPass() {
   return std::make_unique<OpLoweringPass>();
 }
 } // namespace hir
-} // namespace mlir
+} // namespace circt

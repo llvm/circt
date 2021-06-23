@@ -1,9 +1,9 @@
 #include "HIROpVerifier.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
-namespace mlir {
+namespace circt {
 namespace hir {
 
-LogicalResult verifyStandardOp(IndexCastOp op) {
+LogicalResult verifyStandardOp(mlir::IndexCastOp op) {
   if (op.getType().isa<IndexType>())
     return op.emitError(
         "index_cast op can only cast from index type to an integer type.");
@@ -12,7 +12,7 @@ LogicalResult verifyStandardOp(IndexCastOp op) {
 
 LogicalResult verifyFuncOp(hir::FuncOp funcOp) {
   WalkResult result = funcOp.walk([](Operation *operation) -> WalkResult {
-    if (auto op = dyn_cast<IndexCastOp>(operation))
+    if (auto op = dyn_cast<mlir::IndexCastOp>(operation))
       if (failed(verifyStandardOp(op)))
         return WalkResult::interrupt();
     return WalkResult::advance();
@@ -23,4 +23,4 @@ LogicalResult verifyFuncOp(hir::FuncOp funcOp) {
 }
 
 } // namespace hir
-} // namespace mlir
+} // namespace circt

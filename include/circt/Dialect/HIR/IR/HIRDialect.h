@@ -6,7 +6,7 @@
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/FunctionSupport.h"
 
-namespace mlir {
+namespace circt {
 namespace hir {
 class HIRDialect : public Dialect {
 public:
@@ -16,6 +16,6 @@ public:
   void printType(Type type, DialectAsmPrinter &printer) const override;
 };
 } // namespace hir
-} // namespace mlir
+} // namespace circt
 
 #endif // HIR_HIRDIALECT_H

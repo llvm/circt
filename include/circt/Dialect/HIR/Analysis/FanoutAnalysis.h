@@ -1,5 +1,5 @@
 #include "circt/Dialect/HIR/IR/HIR.h"
-namespace mlir {
+namespace circt {
 namespace hir {
 
 class BusFanoutInfo {
@@ -21,4 +21,4 @@ public:
 };
 
 } // namespace hir
-} // namespace mlir
+} // namespace circt

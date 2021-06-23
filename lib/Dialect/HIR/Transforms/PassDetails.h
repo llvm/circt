@@ -6,13 +6,13 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/Pass/Pass.h"
-namespace mlir {
+namespace circt {
 namespace hir {
 
 #define GEN_PASS_CLASSES
 #include "circt/Dialect/HIR/Transforms/Passes.h.inc"
 
 } // namespace hir
-} // namespace mlir
+} // namespace circt
 
 #endif // DIALECT_HIR_TRANSFORMS_PASSDETAILS_H

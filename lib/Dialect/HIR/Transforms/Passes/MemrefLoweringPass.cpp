@@ -8,7 +8,7 @@
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Dialect/HIR/IR/helper.h"
 
-using namespace mlir;
+using namespace circt;
 using namespace hir;
 namespace {
 
@@ -33,7 +33,7 @@ private:
 Type buildBusTensor(MLIRContext *context, SmallVector<Type> busTypes,
                     SmallVector<PortKind> portKinds, DictionaryAttr proto,
                     int numBanks, ArrayRef<int64_t> bankShape) {
-  return RankedTensorType::get(
+  return mlir::RankedTensorType::get(
       bankShape, hir::BusType::get(context, busTypes, portKinds, proto));
 }
 
@@ -251,10 +251,11 @@ void MemrefLoweringPass::updateOp(hir::LoadOp op) {
 
   Value addrBus =
       builder
-          .create<hir::TensorExtractOp>(
-              op.getLoc(),
-              addrBusTensor.getType().dyn_cast<TensorType>().getElementType(),
-              addrBusTensor, bank)
+          .create<hir::TensorExtractOp>(op.getLoc(),
+                                        addrBusTensor.getType()
+                                            .dyn_cast<mlir::TensorType>()
+                                            .getElementType(),
+                                        addrBusTensor, bank)
           .getResult();
 
   SmallVector<Type, 4> unpackedAddrBusTypes =
@@ -266,10 +267,11 @@ void MemrefLoweringPass::updateOp(hir::LoadOp op) {
           .getResults();
   Value dataBus =
       builder
-          .create<hir::TensorExtractOp>(
-              op.getLoc(),
-              dataBusTensor.getType().dyn_cast<TensorType>().getElementType(),
-              dataBusTensor, bank)
+          .create<hir::TensorExtractOp>(op.getLoc(),
+                                        dataBusTensor.getType()
+                                            .dyn_cast<mlir::TensorType>()
+                                            .getElementType(),
+                                        dataBusTensor, bank)
           .getResult();
 
   Value tstart = op.tstart();
@@ -316,10 +318,11 @@ void MemrefLoweringPass::updateOp(hir::StoreOp op) {
   Value writeBusTensor = mapMemrefWrSend[mem];
   Value writeBus =
       builder
-          .create<hir::TensorExtractOp>(
-              op.getLoc(),
-              writeBusTensor.getType().dyn_cast<TensorType>().getElementType(),
-              writeBusTensor, bank)
+          .create<hir::TensorExtractOp>(op.getLoc(),
+                                        writeBusTensor.getType()
+                                            .dyn_cast<mlir::TensorType>()
+                                            .getElementType(),
+                                        writeBusTensor, bank)
           .getResult();
 
   SmallVector<Type, 4> unpackedWriteBusTypes =
@@ -581,10 +584,10 @@ void MemrefLoweringPass::runOnOperation() {
   }
 }
 
-namespace mlir {
+namespace circt {
 namespace hir {
 std::unique_ptr<OperationPass<hir::FuncOp>> createMemrefLoweringPass() {
   return std::make_unique<MemrefLoweringPass>();
 }
 } // namespace hir
-} // namespace mlir
+} // namespace circt

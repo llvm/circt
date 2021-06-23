@@ -9,7 +9,7 @@
 #include "circt/Dialect/HIR/IR/HIRDialect.h"
 #include "mlir/IR/PatternMatch.h"
 
-using namespace mlir;
+using namespace circt;
 using namespace hir;
 using namespace llvm;
 

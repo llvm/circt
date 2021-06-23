@@ -19,7 +19,7 @@ parseTimeAndOffset(mlir::OpAsmParser &parser, OpAsmParser::OperandType &tstart,
     return success();
 
   // try to parse varOffset
-  OptionalParseResult result = parser.parseOptionalOperand(tempOffset);
+  mlir::OptionalParseResult result = parser.parseOptionalOperand(tempOffset);
   if (result.hasValue() && succeeded(result.getValue()))
     varOffset = tempOffset;
   // otherwise constOffset
@@ -54,7 +54,7 @@ parseOptionalArrayAccess(OpAsmParser &parser,
     int val;
     auto *context = parser.getBuilder().getContext();
     OpAsmParser::OperandType var;
-    OptionalParseResult result = parser.parseOptionalInteger(val);
+    mlir::OptionalParseResult result = parser.parseOptionalInteger(val);
     if (result.hasValue() && !result.getValue()) {
       tempConstAddrs.push_back(helper::getIntegerAttr(context, 32, val));
     } else if (!parser.parseOperand(var)) {

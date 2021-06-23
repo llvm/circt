@@ -10,7 +10,7 @@
 #include <locale>
 #include <stack>
 
-using namespace mlir;
+using namespace circt;
 using namespace hir;
 using namespace std;
 

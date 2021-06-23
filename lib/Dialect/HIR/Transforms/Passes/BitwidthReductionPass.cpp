@@ -7,7 +7,6 @@
 
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Dialect/HIR/IR/HIRDialect.h"
-#include "circt/Dialect/HIR/Verification/SheduleVerifier.h"
 
 #include "mlir/Dialect/CommonFolders.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -31,9 +30,9 @@
 #include <functional>
 #include <list>
 
-using namespace mlir;
-using namespace hir;
 using namespace llvm;
+using namespace circt;
+using namespace hir;
 
 namespace {
 class TimeInstant {
@@ -45,7 +44,8 @@ public:
 };
 /// Checks for out of bound memef access subscripts..
 class BitwidthReductionPass
-    : public PassWrapper<BitwidthReductionPass, OperationPass<hir::FuncOp>> {
+    : public mlir::PassWrapper<BitwidthReductionPass,
+                               OperationPass<hir::FuncOp>> {
 public:
   void runOnOperation() override;
 
@@ -65,8 +65,7 @@ private:
       int val = std::abs(getIntegerConstOrError(v));
       if (val > 0)
         return std::ceil(std::log2(val + 1));
-      else
-        return 1;
+      return 1;
     }
     IntegerType integerType = v.getType().dyn_cast<IntegerType>();
     assert(integerType);
@@ -108,7 +107,7 @@ bool BitwidthReductionPass::inspectOp(FuncOp op) {
 }
 
 bool BitwidthReductionPass::inspectOp(hir::ConstantOp op) {
-  setIntegerConst(op.res(), op.value());
+  setIntegerConst(op.res(), op.value().dyn_cast<IntegerAttr>().getInt());
   return true;
 }
 
@@ -117,16 +116,16 @@ bool BitwidthReductionPass::inspectOp(ForOp op) {
   Value ub = op.ub();
   Value step = op.step();
 
-  unsigned min_bitwidth =
+  unsigned minBitWidth =
       std::max(getBitWidth(lb), std::max(getBitWidth(ub), getBitWidth(step)));
 
   Block *body = op.getBody();
-  BlockArgument new_idx =
-      body->addArgument(IntegerType::get(op.getContext(), min_bitwidth));
-  BlockArgument new_tloop =
+  BlockArgument newIdx =
+      body->addArgument(IntegerType::get(op.getContext(), minBitWidth));
+  BlockArgument newTLoop =
       body->addArgument(hir::TimeType::get(op.getContext()));
-  body->getArgument(0).replaceAllUsesWith(new_idx);
-  body->getArgument(1).replaceAllUsesWith(new_tloop);
+  body->getArgument(0).replaceAllUsesWith(newIdx);
+  body->getArgument(1).replaceAllUsesWith(newTLoop);
   body->eraseArgument(0);
   body->eraseArgument(0);
 
@@ -188,7 +187,7 @@ bool BitwidthReductionPass::inspectBody(Block &block) {
       return false;
     }
   }
-  for (auto operation : opsToErase) {
+  for (auto *operation : opsToErase) {
     operation->erase();
   }
   return true;
@@ -196,11 +195,11 @@ bool BitwidthReductionPass::inspectBody(Block &block) {
 } // end anonymous namespace
 
 void BitwidthReductionPass::runOnOperation() { inspectOp(getOperation()); }
-namespace mlir {
+namespace circt {
 namespace hir {
 void registerBitwidthReductionPass() {
-  PassRegistration<BitwidthReductionPass>(
+  mlir::PassRegistration<BitwidthReductionPass>(
       "hir-reduce-bitwidth", "Reduce bitwidth of integers when safe.");
 }
 } // namespace hir
-} // namespace mlir
+} // namespace circt

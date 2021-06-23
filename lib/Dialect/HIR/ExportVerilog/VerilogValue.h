@@ -1,12 +1,12 @@
 #ifndef __HIRVERILOGVALUE__
 #define __HIRVERILOGVALUE__
 
-#include "circt/Dialect/HIR/HIR.h"
-#include "circt/Translation/HIRToVerilog.h"
+#include "circt/Dialect/HIR/ExportVerilog/HIRToVerilog.h"
+#include "circt/Dialect/HIR/IR/HIR.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include <string>
 
-using namespace mlir;
+using namespace circt;
 using namespace hir;
 using namespace std;
 

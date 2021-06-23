@@ -13,7 +13,7 @@ mlir::IntegerAttr getIntegerAttr(mlir::MLIRContext *context, int width,
                                  int value);
 mlir::IntegerType getIntegerType(mlir::MLIRContext *context, int bitwidth);
 
-mlir::hir::TimeType getTimeType(mlir::MLIRContext *context);
+circt::hir::TimeType getTimeType(mlir::MLIRContext *context);
 
 mlir::ParseResult parseIntegerAttr(mlir::IntegerAttr &value, int bitwidth,
                                    mlir::StringRef attrName,

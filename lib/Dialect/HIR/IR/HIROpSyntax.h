@@ -13,7 +13,7 @@
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/StringMap.h"
 
-using namespace mlir;
+using namespace circt;
 using namespace hir;
 using namespace llvm;
 

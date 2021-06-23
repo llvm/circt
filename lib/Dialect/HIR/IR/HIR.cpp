@@ -22,7 +22,7 @@
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/StringMap.h"
 
-using namespace mlir;
+using namespace circt;
 using namespace hir;
 using namespace llvm;
 
@@ -41,7 +41,7 @@ static ParseResult parseCallOp(OpAsmParser &parser, OperationState &result) {
   FlatSymbolRefAttr calleeAttr;
   bool calleeIsSymbol = false;
 
-  OptionalParseResult res = parser.parseOptionalOperand(calleeVar);
+  mlir::OptionalParseResult res = parser.parseOptionalOperand(calleeVar);
   if ((!res.hasValue()) || res.getValue()) {
     if (parser.parseAttribute(calleeAttr,
                               parser.getBuilder().getType<::mlir::NoneType>(),
@@ -466,7 +466,7 @@ static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
     return failure();
 
   auto functionTy = builder.getFunctionType(argTypes, resultTypes);
-  result.addAttribute(function_like_impl::getTypeAttrName(),
+  result.addAttribute(mlir::function_like_impl::getTypeAttrName(),
                       TypeAttr::get(functionTy));
   result.addAttribute("funcTy", TypeAttr::get(funcTy));
 
@@ -477,8 +477,8 @@ static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
   // Add the attributes to the function arguments.
   assert(argAttrs.size() == argTypes.size());
   assert(resultAttrs.size() == resultTypes.size());
-  function_like_impl::addArgAndResultAttrs(builder, result, argAttrs,
-                                           resultAttrs);
+  mlir::function_like_impl::addArgAndResultAttrs(builder, result, argAttrs,
+                                                 resultAttrs);
   // Parse the optional function body.
   auto *body = result.addRegion();
   entryArgs.push_back(tstart);
@@ -571,7 +571,7 @@ LogicalResult hir::FuncOp::verifyBody() { return success(); }
 #include "HIROpSyntax.h"
 #include "HIROpVerifier.h"
 
-namespace mlir {
+namespace circt {
 #define GET_OP_CLASSES
 #include "circt/Dialect/HIR/IR/HIR.cpp.inc"
-} // namespace mlir
+} // namespace circt

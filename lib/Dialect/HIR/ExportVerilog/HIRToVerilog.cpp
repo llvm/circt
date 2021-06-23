@@ -4,7 +4,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "Generators.h"
+#include "IR/Generators.h"
 #include "VerilogValue.h"
 #include "circt/Dialect/HIR/HIR.h"
 #include "circt/Dialect/HIR/HIRDialect.h"
@@ -25,7 +25,7 @@
 #include <list>
 #include <string>
 
-using namespace mlir;
+using namespace circt;
 using namespace hir;
 using namespace std;
 

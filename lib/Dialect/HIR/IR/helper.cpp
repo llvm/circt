@@ -4,7 +4,7 @@
 #include "mlir/IR/PatternMatch.h"
 #include <string>
 
-using namespace mlir;
+using namespace circt;
 using namespace hir;
 using namespace llvm;
 
@@ -21,7 +21,7 @@ unsigned getBitWidth(Type type) {
     return 1;
   if (auto intTy = type.dyn_cast<IntegerType>())
     return intTy.getWidth();
-  if (auto floatTy = type.dyn_cast<FloatType>())
+  if (auto floatTy = type.dyn_cast<mlir::FloatType>())
     return floatTy.getWidth();
   if (auto tupleTy = type.dyn_cast<TupleType>()) {
     int width = 1;
@@ -30,7 +30,7 @@ unsigned getBitWidth(Type type) {
     }
     return width;
   }
-  if (auto tensorTy = type.dyn_cast<TensorType>()) {
+  if (auto tensorTy = type.dyn_cast<mlir::TensorType>()) {
     int size = 1;
     for (auto szDim : tensorTy.getShape()) {
       size *= szDim;
@@ -53,7 +53,7 @@ IntegerAttr getIntegerAttr(MLIRContext *context, int width, int value) {
 }
 
 bool isPrimitiveType(Type ty) {
-  if (ty.isa<IntegerType>() || ty.isa<FloatType>())
+  if (ty.isa<IntegerType>() || ty.isa<mlir::FloatType>())
     return true;
   if (ty.isa<TupleType>()) {
     bool tupleMembersArePrimitive = true;
@@ -62,8 +62,8 @@ bool isPrimitiveType(Type ty) {
     if (tupleMembersArePrimitive)
       return true;
   }
-  if (ty.isa<TensorType>() &&
-      isPrimitiveType(ty.dyn_cast<TensorType>().getElementType()))
+  if (ty.isa<mlir::TensorType>() &&
+      isPrimitiveType(ty.dyn_cast<mlir::TensorType>().getElementType()))
     return true;
   return false;
 }

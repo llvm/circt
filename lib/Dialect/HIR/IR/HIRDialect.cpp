@@ -17,7 +17,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 
-using namespace mlir;
+using namespace circt;
 using namespace hir;
 
 HIRDialect::HIRDialect(MLIRContext *context)

@@ -11,7 +11,7 @@
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Support/LLVM.h"
 #include <memory>
-namespace mlir {
+namespace circt {
 namespace hir {
 
 std::unique_ptr<OperationPass<hir::FuncOp>> createOpLoweringPass();
@@ -21,5 +21,5 @@ std::unique_ptr<OperationPass<hir::FuncOp>> createLoopUnrollPass();
 void registerHIRLoweringPassPipeline();
 void initHIRTransformationPasses();
 } // namespace hir
-} // namespace mlir
+} // namespace circt
 #endif // CIRCT_DIALECT_HIR_TRANSFORMS_PASSES_H

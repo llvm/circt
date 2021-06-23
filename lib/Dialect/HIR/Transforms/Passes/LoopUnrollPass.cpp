@@ -9,7 +9,7 @@
 #include "circt/Dialect/HIR/IR/helper.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 
-using namespace mlir;
+using namespace circt;
 namespace {
 
 class LoopUnrollPass : public hir::LoopUnrollBase<LoopUnrollPass> {
@@ -88,10 +88,10 @@ void LoopUnrollPass::runOnOperation() {
   }
 }
 
-namespace mlir {
+namespace circt {
 namespace hir {
 std::unique_ptr<OperationPass<hir::FuncOp>> createLoopUnrollPass() {
   return std::make_unique<LoopUnrollPass>();
 }
 } // namespace hir
-} // namespace mlir
+} // namespace circt

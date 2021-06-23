@@ -5,7 +5,7 @@ def OpLowering : Pass<"hir-op-lowering", "hir::FuncOp"> {
   let summary = "Lower ops for codegen.";
   let description = [{This pass lowers ops into simpler forms for codegen.  }];
 
-  let constructor = "mlir::hir::createMemrefLoweringPass()";
+  let constructor = "circt::hir::createMemrefLoweringPass()";
 }
 
 
@@ -14,14 +14,14 @@ def MemrefLowering : Pass<"hir-memref-lowering", "hir::FuncOp"> {
   let description = [{This pass lowers memrefs into bus types and function
   calls.  }];
 
-  let constructor = "mlir::hir::createMemrefLoweringPass()";
+  let constructor = "circt::hir::createMemrefLoweringPass()";
 }
 
 def ScheduleVerifier : Pass<"hir-schedule-verifier", "hir::FuncOp"> {
   let summary = "Verify that the schedule is correct";
   let description = [{This pass finds anomalies in HIR schedules.}];
 
-  let constructor = "mlir::hir::createScheduleVerificationPass()";
+  let constructor = "circt::hir::createScheduleVerificationPass()";
 }
 
 def LoopUnroll : Pass<"hir-loop-unroll", "hir::FuncOp"> {
@@ -30,6 +30,6 @@ def LoopUnroll : Pass<"hir-loop-unroll", "hir::FuncOp"> {
   the op.
   }];
 
-  let constructor = "mlir::hir::createLoopUnrollPass()";
+  let constructor = "circt::hir::createLoopUnrollPass()";
 }
 #endif // CIRCT_DIALECT_HIR_TRANSFORMS_PASSES

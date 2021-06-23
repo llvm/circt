@@ -9,7 +9,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
-using namespace mlir;
+using namespace circt;
 using namespace hir;
 
 // Types.
@@ -113,8 +113,8 @@ void printElementTypeWithOptionalAttr(DialectAsmPrinter &printer,
 // Implementations.
 
 static bool isValidElementType(Type t) {
-  if (t.isa<IntegerType>() || t.isa<FloatType>() || t.isa<hir::TimeType>() ||
-      t.isa<hir::MemrefType>())
+  if (t.isa<IntegerType>() || t.isa<mlir::FloatType>() ||
+      t.isa<hir::TimeType>() || t.isa<hir::MemrefType>())
     return true;
   return false;
 }

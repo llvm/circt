@@ -8,7 +8,7 @@
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Dialect/HIR/IR/helper.h"
 
-using namespace mlir;
+using namespace circt;
 using namespace hir;
 
 BusFanoutInfo::BusFanoutInfo(Operation *op) {
@@ -35,7 +35,7 @@ void BusFanoutInfo::visitOp(hir::FuncOp op) {
   auto &entryBlock = op.getBody().front();
   auto arguments = entryBlock.getArguments();
   for (auto arg : arguments) {
-    if (auto tensorTy = arg.getType().dyn_cast<TensorType>()) {
+    if (auto tensorTy = arg.getType().dyn_cast<mlir::TensorType>()) {
       if (auto busTy = arg.getType().dyn_cast<hir::BusType>()) {
 
         mapBusTensor2Uses[arg].append(
@@ -57,7 +57,7 @@ void BusFanoutInfo::visitOp(hir::AllocaOp op) {
   // initialize the map with a vector of usage count filled with zeros.
   auto buses = op.getResults();
   for (Value bus : buses) {
-    if (auto tensorTy = bus.getType().dyn_cast<TensorType>()) {
+    if (auto tensorTy = bus.getType().dyn_cast<mlir::TensorType>()) {
       Type busTy = tensorTy.getElementType().dyn_cast<hir::BusType>();
       assert(busTy);
       mapBusTensor2Uses[bus].append(
@@ -73,7 +73,7 @@ void BusFanoutInfo::visitOp(hir::AllocaOp op) {
 
 void BusFanoutInfo::visitOp(hir::TensorExtractOp op) {
   Value bus = op.bus();
-  auto tensorTy = bus.getType().dyn_cast<TensorType>();
+  auto tensorTy = bus.getType().dyn_cast<mlir::TensorType>();
   assert(mapBusTensor2Uses.find(bus) != mapBusTensor2Uses.end());
   int64_t linearIdx =
       helper::calcLinearIndex(op.indices(), tensorTy.getShape());
