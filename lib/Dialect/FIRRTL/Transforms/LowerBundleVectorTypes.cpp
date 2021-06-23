@@ -1257,7 +1257,6 @@ void TypeLoweringVisitor::visitDecl(NodeOp op) {
 
 /// Lower an InvalidValue op with a bundle to multiple non-bundled InvalidOps.
 void TypeLoweringVisitor::visitExpr(InvalidValueOp op) {
-  return;
   Value result = op.result();
 
   // Attempt to get the bundle types, potentially unwrapping an outer flip
@@ -1271,9 +1270,11 @@ void TypeLoweringVisitor::visitExpr(InvalidValueOp op) {
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes = peelType(resultType);
   SmallVector<Value> lowered;
 
-  for (auto field : fieldTypes) {
-    auto invalidVal = builder->create<InvalidValueOp>(field.type);
-    lowered.push_back(invalidVal.getResult());
+  // Loop over the leaf aggregates.
+  for (auto field : llvm::enumerate(fieldTypes)) {
+
+    auto node = builder->create<InvalidValueOp>(field.value().type);
+    lowered.push_back(node.getResult());
   }
   processUsers(op, lowered);
   opsToRemove.push_back(op);
