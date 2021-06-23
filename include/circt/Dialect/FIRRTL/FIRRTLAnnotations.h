@@ -327,13 +327,12 @@ namespace llvm {
 template <>
 struct PointerLikeTypeTraits<circt::firrtl::Annotation>
     : PointerLikeTypeTraits<mlir::Attribute> {
-public:
-  static inline void *getAsVoidPointer(circt::firrtl::Annotation v) {
+  using Annotation = circt::firrtl::Annotation;
+  static inline void *getAsVoidPointer(Annotation v) {
     return const_cast<void *>(v.getDict().getAsOpaquePointer());
   }
-  static inline circt::firrtl::Annotation getFromVoidPointer(void *p) {
-    return circt::firrtl::Annotation(
-        mlir::DictionaryAttr::getFromOpaquePointer(p));
+  static inline Annotation getFromVoidPointer(void *p) {
+    return Annotation(mlir::DictionaryAttr::getFromOpaquePointer(p));
   }
 };
 
@@ -342,12 +341,14 @@ template <>
 struct DenseMapInfo<circt::firrtl::Annotation> {
   using Annotation = circt::firrtl::Annotation;
   static Annotation getEmptyKey() {
-    return PointerLikeTypeTraits<Annotation>::getFromVoidPointer(
-        llvm::DenseMapInfo<void *>::getEmptyKey());
+    return Annotation(
+        mlir::DictionaryAttr(static_cast<mlir::Attribute::ImplType *>(
+            DenseMapInfo<void *>::getEmptyKey())));
   }
   static Annotation getTombstoneKey() {
-    return PointerLikeTypeTraits<Annotation>::getFromVoidPointer(
-        llvm::DenseMapInfo<void *>::getTombstoneKey());
+    return Annotation(
+        mlir::DictionaryAttr(static_cast<mlir::Attribute::ImplType *>(
+            llvm::DenseMapInfo<void *>::getTombstoneKey())));
   }
   static unsigned getHashValue(Annotation val) {
     return mlir::hash_value(val.getDict());
