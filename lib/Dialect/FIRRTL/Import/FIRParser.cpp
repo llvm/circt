@@ -2334,8 +2334,49 @@ ParseResult FIRStmtParser::parseInstance() {
   ArrayAttr annotations = getAnnotations(getModuleTarget() + ">" + id);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
-  auto result =
-      builder.create<InstanceOp>(resultTypes, moduleName, name, annotations);
+  SmallVector<Attribute, 16> annotationsVec;
+  llvm::StringMap<SmallVector<Attribute, 4>> portAnnotationsMap;
+  for (auto attr : annotations) {
+    auto dictAttr = attr.cast<DictionaryAttr>();
+    auto targetAttr = dictAttr.get("target");
+    if (!targetAttr) {
+      annotationsVec.push_back(attr);
+      continue;
+    }
+
+    // The first token of targetAttr should always begin with '.'.
+    auto targetAttrValue = targetAttr.cast<ArrayAttr>().getValue();
+    auto portName = targetAttrValue[0].cast<StringAttr>().getValue();
+    if (!portName.consume_front(".")) {
+      return emitError(startTok.getLoc(),
+                       "unexpected annotation target " + portName);
+    }
+
+    // If there's more than one tokens, the remaining tokens should be stored as
+    // target in the result annotation.
+    SmallVector<NamedAttribute, 8> dictAttrVec;
+    for (auto namedAttr : dictAttr) {
+      if (namedAttr.first == "target") {
+        if (targetAttrValue.size() > 1) {
+          auto newTargetAttr =
+              builder.getArrayAttr(targetAttrValue.drop_front());
+          dictAttrVec.push_back(builder.getNamedAttr("target", newTargetAttr));
+        }
+      } else
+        dictAttrVec.push_back(namedAttr);
+    }
+
+    portAnnotationsMap[portName].push_back(
+        builder.getDictionaryAttr(dictAttrVec));
+  }
+
+  SmallVector<Attribute, 16> portAnnotationsVec;
+  for (auto port : modulePorts) {
+    auto annotation = portAnnotationsMap.lookup(port.getName());
+    portAnnotationsVec.push_back(builder.getArrayAttr(annotation));
+  }
+  auto result = builder.create<InstanceOp>(resultTypes, moduleName, name,
+                                           annotationsVec, portAnnotationsVec);
 
   // Since we are implicitly unbundling the instance results, we need to keep
   // track of the mapping from bundle fields to results in the unbundledValues

@@ -108,6 +108,9 @@ def MemDirAttr: I32EnumAttr<"MemDirAttr", "Memory Direction Enum",
 def AnnotationArrayAttr : TypedArrayAttrBase<DictionaryAttr,
                                              "An array of FIRRTL Annotations">;
 
+def PortAnnotationsAttr : TypedArrayAttrBase<AnnotationArrayAttr,
+                                             "FIRRTL port annotations">;
+
 def InvalidValueAttr
   : AttrDef<FIRRTLDialect, "InvalidValue", [], "::mlir::Attribute"> {
   let summary = "A constant value of firrtl.invalid type";

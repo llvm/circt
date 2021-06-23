@@ -18,7 +18,8 @@ def InstanceOp : FIRRTLOp<"instance"> {
   }];
 
   let arguments = (ins FlatSymbolRefAttr:$moduleName, StrAttr:$name,
-                       AnnotationArrayAttr:$annotations);
+                       AnnotationArrayAttr:$annotations,
+                       PortAnnotationsAttr:$portAnnotations);
   let results = (outs Variadic<FIRRTLType>:$results);
 
   let assemblyFormat =
@@ -30,10 +31,8 @@ def InstanceOp : FIRRTLOp<"instance"> {
     OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
                    "::mlir::StringRef":$moduleName,
                    CArg<"StringRef", "{}">:$name,
-                   CArg<"ArrayRef<Attribute>", "{}">:$annotations), [{
-      return build($_builder, $_state, resultTypes, moduleName, name,
-                   $_builder.getArrayAttr(annotations));
-    }]>,
+                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
+                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations)>,
 
     /// Constructor that creates a version of the specified instance, but that
     /// erases some number of results from it.
@@ -53,6 +52,10 @@ def InstanceOp : FIRRTLOp<"instance"> {
     StringRef getPortNameStr(size_t resultNo) {
       return getPortName(resultNo).getValue();
     }
+
+    /// Hooks for port annotations.
+    ArrayAttr getPortAnnotation(unsigned portIdx);
+    void setAllPortAnnotations(ArrayRef<Attribute> annotations);
   }];
 }
 

@@ -1069,3 +1069,16 @@ module  {
     }
   }
 }
+
+// -----
+
+// Test InstanceOp with port annotations.
+
+firrtl.circuit "Foo"   {
+  firrtl.module @Bar(in %a: !firrtl.uint<1>, out %b: !firrtl.bundle<baz: uint<1>, qux: uint<1>>) {
+  }
+  firrtl.module @Foo() {
+    // CHECK: [{one}], [{two}], []
+    %bar_a, %bar_b = firrtl.instance @Bar  {name = "bar", portAnnotations = [[{one}], [{target = [".baz"], two}]]} : !firrtl.uint<1>, !firrtl.bundle<baz: uint<1>, qux: uint<1>>
+  }
+}

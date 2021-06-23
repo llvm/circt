@@ -441,22 +441,29 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
   SmallVector<StringAttr, 8> resultNames;
   SmallVector<size_t, 8> numFieldsPerResult;
   SmallVector<unsigned, 8> resultFieldIDs;
+  SmallVector<Attribute, 8> lowerPortAnnotations;
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
     flattenType(op.getType(i).cast<FIRRTLType>(), fieldTypes);
 
+    auto annotations = op.getPortAnnotation(i);
     for (auto field : fieldTypes) {
       // Store the flat type for the new bundle type.
       resultNames.push_back(builder->getStringAttr(field.suffix));
       resultTypes.push_back(field.getPortType());
       resultFieldIDs.push_back(field.fieldID);
+
+      SmallVector<Attribute> loweredAttrs;
+      filterAnnotations(annotations, loweredAttrs, field.suffix);
+      lowerPortAnnotations.push_back(builder->getArrayAttr(loweredAttrs));
     }
     numFieldsPerResult.push_back(fieldTypes.size());
   }
 
   auto newInstance = builder->create<InstanceOp>(
-      resultTypes, op.moduleNameAttr(), op.nameAttr(), op.annotations());
+      resultTypes, op.moduleNameAttr(), op.nameAttr(), op.annotations(),
+      builder->getArrayAttr(lowerPortAnnotations));
 
   // Record the mapping of each old result to each new result.
   size_t nextResult = 0;

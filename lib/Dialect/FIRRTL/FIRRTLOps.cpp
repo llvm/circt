@@ -837,6 +837,27 @@ Operation *InstanceOp::getReferencedModule() {
   return circuit.lookupSymbol(moduleName());
 }
 
+void InstanceOp::build(OpBuilder &builder, OperationState &result,
+                       TypeRange resultTypes, StringRef moduleName,
+                       StringRef name, ArrayRef<Attribute> annotations,
+                       ArrayRef<Attribute> portAnnotations) {
+  result.addAttribute("moduleName", builder.getSymbolRefAttr(moduleName));
+  result.addAttribute("name", builder.getStringAttr(name));
+  result.addAttribute("annotations", builder.getArrayAttr(annotations));
+  result.addTypes(resultTypes);
+
+  if (portAnnotations.empty()) {
+    SmallVector<Attribute, 16> portAnnotationsVec(resultTypes.size(),
+                                                  builder.getArrayAttr({}));
+    result.addAttribute("portAnnotations",
+                        builder.getArrayAttr(portAnnotationsVec));
+  } else {
+    assert(portAnnotations.size() == resultTypes.size());
+    result.addAttribute("portAnnotations",
+                        builder.getArrayAttr(portAnnotations));
+  }
+}
+
 /// Create a copy of the specified instance operation with some result removed.
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        InstanceOp existingInstance,
@@ -848,8 +869,21 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   SmallVector<Type> newResultTypes =
       removeElementsAtIndices<Type>(resultTypes, resultsToErase);
 
-  build(builder, result, newResultTypes, existingInstance.moduleNameAttr(),
-        existingInstance.nameAttr(), existingInstance.annotationsAttr());
+  build(builder, result, newResultTypes, existingInstance->getOperands(),
+        existingInstance->getAttrs());
+}
+
+ArrayAttr InstanceOp::getPortAnnotation(unsigned portIdx) {
+  assert(portIdx < getNumResults() &&
+         "index should be smaller than result number");
+  return portAnnotations()[portIdx].cast<ArrayAttr>();
+}
+
+void InstanceOp::setAllPortAnnotations(ArrayRef<Attribute> annotations) {
+  assert(annotations.size() == getNumResults() &&
+         "number of annotations is not equal to result number");
+  (*this)->setAttr("portAnnotations",
+                   ArrayAttr::get(getContext(), annotations));
 }
 
 /// Verify the correctness of an InstanceOp.
@@ -903,6 +937,10 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
       return failure();
     }
   }
+
+  if (instance.portAnnotations().size() != instance.getNumResults())
+    return instance.emitOpError("the number of result annotations should be "
+                                "equal to the number of results");
 
   return success();
 }
@@ -2239,15 +2277,29 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
 
 static ParseResult parseInstanceOp(OpAsmParser &parser,
                                    NamedAttrList &resultAttrs) {
-  return parseElideAnnotations(parser, resultAttrs);
+  auto result = parseElideAnnotations(parser, resultAttrs);
+
+  if (!resultAttrs.get("portAnnotations")) {
+    SmallVector<Attribute, 16> portAnnotations(
+        parser.getNumResults(), parser.getBuilder().getArrayAttr({}));
+    resultAttrs.append("portAnnotations",
+                       parser.getBuilder().getArrayAttr(portAnnotations));
+  }
+  return result;
 }
 
 /// Always elide "moduleName" and elide "annotations" if it exists or
 /// if it is empty.
 static void printInstanceOp(OpAsmPrinter &p, Operation *op,
                             DictionaryAttr attr) {
-  // "moduleName" is always elided
-  printElideAnnotations(p, op, attr, {"moduleName"});
+  SmallVector<StringRef, 2> elidedAttrs;
+  // "moduleName" is always elided.
+  elidedAttrs.push_back("moduleName");
+
+  if (llvm::all_of(op->getAttrOfType<ArrayAttr>("portAnnotations"),
+                   [&](Attribute a) { return a.cast<ArrayAttr>().empty(); }))
+    elidedAttrs.push_back("portAnnotations");
+  printElideAnnotations(p, op, attr, elidedAttrs);
 }
 
 //===----------------------------------------------------------------------===//

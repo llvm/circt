@@ -73,3 +73,13 @@ circuit Foo: %[[{"target":""}]]
 circuit Foo: %[[{"target":null}]]
   module Foo:
     skip
+
+; // -----
+
+; COM: Invalid port reference should report errors
+circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[1]"}]]
+  module Bar:
+    input a: UInt<1>
+  module Foo:
+    ; expected-error @+1 {{unexpected annotation target [1]}}
+    inst bar of Bar
