@@ -538,7 +538,7 @@ static bool parseAugmentedType(
   //   - AugmentedIntegerType
   //   - AugmentedDoubleType
   bool isIgnorable =
-      llvm::StringSwitch<bool>(classAttr.getValue())
+      llvm::StringSwitch<bool>(classBase)
           .Cases("StringType", "BooleanType", "IntegerType", "DoubleType", true)
           .Default(false);
   if (isIgnorable)
