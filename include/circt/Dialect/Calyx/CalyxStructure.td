@@ -87,7 +87,8 @@ def CellsOp : CalyxOp<"cells", [
 
 def WiresOp : CalyxOp<"wires", [
     NoTerminator,
-    HasParent<"ComponentOp">
+    HasParent<"ComponentOp">,
+    SingleBlock
   ]> {
   let summary = "Calyx Wires";
   let description = [{
