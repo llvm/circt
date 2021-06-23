@@ -559,10 +559,10 @@ firrtl.circuit "TopLevel" {
     %bar = firrtl.wire  {annotations = [{one, target = [".qux"]}, {target = ["[1]", ".baz"], two}]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
 
       // TODO: Enable this
-      // HECK: %bar_0_baz = firrtl.wire  : !firrtl.uint<1>
-      // HECK: %bar_0_qux = firrtl.wire  : !firrtl.uint<1>
-      // HECK: %bar_1_baz = firrtl.wire  {annotations = [{two}]} : !firrtl.uint<1>
-      // HECK: %bar_1_qux = firrtl.wire  : !firrtl.uint<1>
+      // CHECK: %bar_0_baz = firrtl.wire  : !firrtl.uint<1>
+      // CHECK: %bar_0_qux = firrtl.wire  : !firrtl.uint<1>
+      // CHECK: %bar_1_baz = firrtl.wire  {annotations = [{two}]} : !firrtl.uint<1>
+      // CHECK: %bar_1_qux = firrtl.wire  : !firrtl.uint<1>
   }
 
 // Test that subfield annotations on reg are lowred to appropriate instance based on target.
@@ -570,10 +570,10 @@ firrtl.circuit "TopLevel" {
     %bar = firrtl.reg %clock  {annotations = [{one, target = [".qux"]}, {target = ["[1]", ".baz"], two}]} : (!firrtl.clock) -> !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
 
     // TODO: Enable this
-    // HECK: %bar_0_baz = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
-    // HECK: %bar_0_qux = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
-    // HECK: %bar_1_baz = firrtl.reg %clock  {annotations = [{two}]} : (!firrtl.clock) -> !firrtl.uint<1>
-    // HECK: %bar_1_qux = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_0_baz = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_0_qux = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_1_baz = firrtl.reg %clock  {annotations = [{two}]} : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_1_qux = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
   }
 
 // Test that subfield annotations on reg are lowred to appropriate instance based on target. Ignore un-flattened array targets
@@ -583,18 +583,18 @@ firrtl.circuit "TopLevel" {
     %bar = firrtl.reg %clock  {annotations = [{one, target = ["[0]", ".qux", "[0]"]}, {target = ["[1]", ".baz"], two}, {target = ["[0]", ".yes"], three}]} : (!firrtl.clock) -> !firrtl.vector<bundle<baz: vector<uint<1>, 2>, qux: vector<uint<1>, 2>, yes: bundle<a: uint<1>, b: uint<1>>>, 2>
 
     // TODO: Enable this
-    // HECK: %bar_0_baz_0 = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
-    // HECK: %bar_0_baz_1 = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
-    // HECK: %bar_0_qux_0 = firrtl.reg %clock  {annotations = [{one}]} : (!firrtl.clock) -> !firrtl.uint<1>
-    // HECK: %bar_0_qux_1 = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
-    // HECK: %bar_0_yes_a = firrtl.reg %clock  {annotations = [{three}]} : (!firrtl.clock) -> !firrtl.uint<1>
-    // HECK: %bar_0_yes_b = firrtl.reg %clock  {annotations = [{three}]} : (!firrtl.clock) -> !firrtl.uint<1>
-    // HECK: %bar_1_baz_0 = firrtl.reg %clock  {annotations = [{two}]} : (!firrtl.clock) -> !firrtl.uint<1>
-    // HECK: %bar_1_baz_1 = firrtl.reg %clock  {annotations = [{two}]} : (!firrtl.clock) -> !firrtl.uint<1>
-    // HECK: %bar_1_qux_0 = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
-    // HECK: %bar_1_qux_1 = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
-    // HECK: %bar_1_yes_a = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
-    // HECK: %bar_1_yes_b = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_0_baz_0 = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_0_baz_1 = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_0_qux_0 = firrtl.reg %clock  {annotations = [{one}]} : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_0_qux_1 = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_0_yes_a = firrtl.reg %clock  {annotations = [{three}]} : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_0_yes_b = firrtl.reg %clock  {annotations = [{three}]} : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_1_baz_0 = firrtl.reg %clock  {annotations = [{two}]} : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_1_baz_1 = firrtl.reg %clock  {annotations = [{two}]} : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_1_qux_0 = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_1_qux_1 = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_1_yes_a = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_1_yes_b = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
   }
 
 // Test wire connection semantics.  Based on the flippedness of the destination
@@ -605,17 +605,17 @@ firrtl.circuit "TopLevel" {
     firrtl.connect %a, %ax : !firrtl.bundle<a: bundle<a: uint<1>>>, !firrtl.bundle<a: bundle<a: uint<1>>>
     firrtl.partialconnect %a, %ax : !firrtl.bundle<a: bundle<a: uint<1>>>, !firrtl.bundle<a: bundle<a: uint<1>>>
     // COM: a <= ax
-    // HECK: firrtl.connect %a_a_a, %ax_a_a
+    // CHECK: firrtl.connect %a_a_a, %ax_a_a
     // COM: a <- ax
-    // HECK:-NEXT: firrtl.connect %a_a_a, %ax_a_a
+    // CHECK:-NEXT: firrtl.connect %a_a_a, %ax_a_a
     %0 = firrtl.subfield %a("a") : (!firrtl.bundle<a: bundle<a: uint<1>>>) -> !firrtl.bundle<a: uint<1>>
     %1 = firrtl.subfield %ax("a") : (!firrtl.bundle<a: bundle<a: uint<1>>>) -> !firrtl.bundle<a: uint<1>>
     firrtl.connect %0, %1 : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
     firrtl.partialconnect %0, %1 : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
     // COM: a.a <= ax.a
-    // HECK: firrtl.connect %a_a_a, %ax_a_a
+    // CHECK: firrtl.connect %a_a_a, %ax_a_a
     // COM: a.a <- ax.a
-    // HECK:-NEXT: firrtl.connect %a_a_a, %ax_a_a
+    // CHECK:-NEXT: firrtl.connect %a_a_a, %ax_a_a
     %2 = firrtl.subfield %a("a") : (!firrtl.bundle<a: bundle<a: uint<1>>>) -> !firrtl.bundle<a: uint<1>>
     %3 = firrtl.subfield %2("a") : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
     %4 = firrtl.subfield %ax("a") : (!firrtl.bundle<a: bundle<a: uint<1>>>) -> !firrtl.bundle<a: uint<1>>
@@ -623,7 +623,7 @@ firrtl.circuit "TopLevel" {
     firrtl.connect %3, %5 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.partialconnect %3, %5 : !firrtl.uint<1>, !firrtl.uint<1>
     // COM: a.a.a <= ax.a.a
-    // HECK: firrtl.connect %a_a_a, %ax_a_a
+    // CHECK: firrtl.connect %a_a_a, %ax_a_a
     // COM: a.a.a <- ax.a.a
     // CHECK-NEXT: firrtl.connect %a_a_a, %ax_a_a
     %b = firrtl.wire  : !firrtl.bundle<a: bundle<a flip: uint<1>>>
@@ -631,7 +631,7 @@ firrtl.circuit "TopLevel" {
     firrtl.connect %b, %bx : !firrtl.bundle<a: bundle<a flip: uint<1>>>, !firrtl.bundle<a: bundle<a flip: uint<1>>>
     firrtl.partialconnect %b, %bx : !firrtl.bundle<a: bundle<a flip: uint<1>>>, !firrtl.bundle<a: bundle<a flip: uint<1>>>
     // COM: b <= bx
-    // HECK: firrtl.connect %bx_a_a, %b_a_a
+    // CHECK: firrtl.connect %bx_a_a, %b_a_a
     // COM: b <- bx
     // CHECK: firrtl.connect %bx_a_a, %b_a_a
     %6 = firrtl.subfield %b("a") : (!firrtl.bundle<a: bundle<a flip: uint<1>>>) -> !firrtl.bundle<a flip: uint<1>>
@@ -639,7 +639,7 @@ firrtl.circuit "TopLevel" {
     firrtl.connect %6, %7 : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
     firrtl.partialconnect %6, %7 : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
     // COM: b.a <= bx.a
-    // HECK: firrtl.connect %bx_a_a, %b_a_a
+    // CHECK: firrtl.connect %bx_a_a, %b_a_a
     // COM: b.a <- bx.a
     // CHECK: firrtl.connect %bx_a_a, %b_a_a
     %8 = firrtl.subfield %b("a") : (!firrtl.bundle<a: bundle<a flip: uint<1>>>) -> !firrtl.bundle<a flip: uint<1>>
@@ -649,7 +649,7 @@ firrtl.circuit "TopLevel" {
     firrtl.connect %9, %11 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.partialconnect %9, %11 : !firrtl.uint<1>, !firrtl.uint<1>
     // COM: b.a.a <= bx.a.a
-    // HECK: firrtl.connect %b_a_a, %bx_a_a
+    // CHECK: firrtl.connect %b_a_a, %bx_a_a
     // COM: b.a.a <- bx.a.a
     // CHECK: firrtl.connect %b_a_a, %bx_a_a
     %c = firrtl.wire  : !firrtl.bundle<a flip: bundle<a: uint<1>>>
@@ -657,7 +657,7 @@ firrtl.circuit "TopLevel" {
     firrtl.connect %c, %cx : !firrtl.bundle<a flip: bundle<a: uint<1>>>, !firrtl.bundle<a flip: bundle<a: uint<1>>>
     firrtl.partialconnect %c, %cx : !firrtl.bundle<a flip: bundle<a: uint<1>>>, !firrtl.bundle<a flip: bundle<a: uint<1>>>
     // COM: c <= cx
-    // HECK: firrtl.connect %cx_a_a, %c_a_a
+    // CHECK: firrtl.connect %cx_a_a, %c_a_a
     // COM: c <- cx
     // CHECK: firrtl.connect %cx_a_a, %c_a_a
     %12 = firrtl.subfield %c("a") : (!firrtl.bundle<a flip: bundle<a: uint<1>>>) -> !firrtl.bundle<a: uint<1>>
@@ -665,7 +665,7 @@ firrtl.circuit "TopLevel" {
     firrtl.connect %12, %13 : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
     firrtl.partialconnect %12, %13 : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
     // COM: c.a <= cx.a
-    // HECK: firrtl.connect %c_a_a, %cx_a_a
+    // CHECK: firrtl.connect %c_a_a, %cx_a_a
     // COM: c.a <- cx.a
     // CHECK: firrtl.connect %c_a_a, %cx_a_a
     %14 = firrtl.subfield %c("a") : (!firrtl.bundle<a flip: bundle<a: uint<1>>>) -> !firrtl.bundle<a: uint<1>>
@@ -675,7 +675,7 @@ firrtl.circuit "TopLevel" {
     firrtl.connect %15, %17 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.partialconnect %15, %17 : !firrtl.uint<1>, !firrtl.uint<1>
     // COM: c.a.a <= cx.a.a
-    // HECK: firrtl.connect %c_a_a, %cx_a_a
+    // CHECK: firrtl.connect %c_a_a, %cx_a_a
     // COM: c.a.a <- cx.a.a
     // CHECK: firrtl.connect %c_a_a, %cx_a_a
     %d = firrtl.wire  : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
@@ -683,7 +683,7 @@ firrtl.circuit "TopLevel" {
     firrtl.connect %d, %dx : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>, !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
     firrtl.partialconnect %d, %dx : !firrtl.bundle<a flip: bundle<a flip: uint<1>>>, !firrtl.bundle<a flip: bundle<a flip: uint<1>>>
     // COM: d <= dx
-    // HECK: firrtl.connect %d_a_a, %dx_a_a
+    // CHECK: firrtl.connect %d_a_a, %dx_a_a
     // COM: d <- dx
     // CHECK: firrtl.connect %d_a_a, %dx_a_a
     %18 = firrtl.subfield %d("a") : (!firrtl.bundle<a flip: bundle<a flip: uint<1>>>) -> !firrtl.bundle<a flip: uint<1>>
@@ -691,7 +691,7 @@ firrtl.circuit "TopLevel" {
     firrtl.connect %18, %19 : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
     firrtl.partialconnect %18, %19 : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
     // COM: d.a <= dx.a
-    // HECK: firrtl.connect %dx_a_a, %d_a_a
+    // CHECK: firrtl.connect %dx_a_a, %d_a_a
     // COM: d.a <- dx.a
     // CHECK: firrtl.connect %dx_a_a, %d_a_a
     %20 = firrtl.subfield %d("a") : (!firrtl.bundle<a flip: bundle<a flip: uint<1>>>) -> !firrtl.bundle<a flip: uint<1>>
@@ -701,9 +701,9 @@ firrtl.circuit "TopLevel" {
     firrtl.connect %21, %23 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.partialconnect %21, %23 : !firrtl.uint<1>, !firrtl.uint<1>
     // COM: d.a.a <= dx.a.a
-    // HECK: firrtl.connect %d_a_a, %dx_a_a
+    // CHECK: firrtl.connect %d_a_a, %dx_a_a
     // COM: d.a.a <- dx.a.a
-    // HECK: firrtl.connect %d_a_a, %dx_a_a
+    // CHECK: firrtl.connect %d_a_a, %dx_a_a
   }
 
 // Test corner cases of partial connect semantics.
@@ -783,7 +783,7 @@ firrtl.circuit "TopLevel" {
 //  firrtl.extmodule @Sub(in %a: !firrtl.vector<uint<1>, 2> {firrtl.annotations = [{a}]})
 //  // CECK: firrtl.extmodule @Sub
 //  // CECK-COUNT-2: firrtl.annotations = [{a}]
-//  // HECK-NOT: firrtl.annotations = [{a}]
+//  // CHECK-NOT: firrtl.annotations = [{a}]
 //  firrtl.module @Port(in %a: !firrtl.vector<uint<1>, 2> {firrtl.annotations = [{b}]}) {
 //    %sub_a = firrtl.instance @Sub  {name = "sub", portNames = ["a"]} : !firrtl.flip<vector<uint<1>, 2>>
 //    firrtl.connect %sub_a, %a : !firrtl.flip<vector<uint<1>, 2>>, !firrtl.vector<uint<1>, 2>
@@ -837,7 +837,7 @@ firrtl.circuit "TopLevel" {
 ////
 //// See: https://github.com/llvm/circt/issues/1290
 //
-//// HECK-LABEL: firrtl.module @Foo1290
+//// CHECK-LABEL: firrtl.module @Foo1290
 //    firrtl.module @Foo1290(out %arg0: !firrtl.vector<uint<1>, 1>, in %arg1: !firrtl.vector<uint<1>, 1>, out %arg2: !firrtl.vector<uint<1>, 1>, in %arg3: !firrtl.uint<1>) attributes {portNames = ["a", "b", "c", "cond"]} {
 //      %1 = firrtl.asPassive %arg0 : !firrtl.vector<uint<1>, 1>
 //      %2 = firrtl.mux(%arg3, %1, %arg1) : (!firrtl.uint<1>, !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>) -> !firrtl.vector<uint<1>, 1>
