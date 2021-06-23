@@ -573,5 +573,5 @@ LogicalResult hir::FuncOp::verifyBody() { return success(); }
 
 namespace mlir {
 #define GET_OP_CLASSES
-#include "circt/Dialect/HIR/HIR.cpp.inc"
+#include "circt/Dialect/HIR/IR/HIR.cpp.inc"
 } // namespace mlir

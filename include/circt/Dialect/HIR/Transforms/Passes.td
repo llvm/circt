@@ -1,8 +1,16 @@
 #ifndef CIRCT_DIALECT_HIR_TRANSFORMS_PASSES
 #define CIRCT_DIALECT_HIR_TRANSFORMS_PASSES
 include "mlir/Pass/PassBase.td"
+def OpLowering : Pass<"hir-op-lowering", "hir::FuncOp"> {
+  let summary = "Lower ops for codegen.";
+  let description = [{This pass lowers ops into simpler forms for codegen.  }];
+
+  let constructor = "mlir::hir::createMemrefLoweringPass()";
+}
+
+
 def MemrefLowering : Pass<"hir-memref-lowering", "hir::FuncOp"> {
-  let summary = "Move time offsets into separate 'delay' op";
+  let summary = "Lower memrefs into buses.";
   let description = [{This pass lowers memrefs into bus types and function
   calls.  }];
 

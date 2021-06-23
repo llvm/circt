@@ -13,7 +13,7 @@
 
 namespace mlir {
 namespace hir {
-#include "circt/Dialect/HIR/HIRInterfaces.h.inc"
+#include "circt/Dialect/HIR/IR/HIRInterfaces.h.inc"
 enum PortKind { rd = 0, wr = 1, rw = 2 };
 
 namespace Details {
@@ -407,7 +407,7 @@ public:
 
 } // namespace hir.
 #define GET_OP_CLASSES
-#include "circt/Dialect/HIR/HIR.h.inc"
+#include "circt/Dialect/HIR/IR/HIR.h.inc"
 } // namespace mlir.
 
 #endif // HIR_HIR_H.

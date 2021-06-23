@@ -1,4 +1,5 @@
-#s_axis = {"split"="s_axis_split"}
+#s_axis = {"merge"="s_axis_merge"}
+#valid = {"merge"="valid_merge"}
 #r_bram = {"rd"=3}
 #w_bram = {"wr"=1}
 #r_reg = {"rd"=0}
@@ -42,14 +43,16 @@ hir.func @testBus at %t(%a:i32 delay 2,
   :!hir.memref<16x16x4x4xi32,[0,1], #r_bram>,
   !hir.memref<16x16x4x4xi32,[0,1], #w_bram>
 
-  %x = hir.alloca("bus"):!hir.bus<rd i32>
+  %x = hir.alloca("bus"):!hir.bus<wr i1, wr i32, proto #valid>
   %y = hir.alloca("bus"):!hir.bus<rd i1, wr i1, wr f32, proto #s_axis>
   %z = hir.alloca("bus"):tensor<1x!hir.bus<wr f32>>
   //only tensor<bus> is allowed at the moment.
   //%u = hir.alloca("bus"):tuple<!hir.bus<wr i32, rd i1>, !hir.bus<i32>>
 
-  %b1 = hir.split %x : !hir.bus<rd i32> -> !hir.bus<rd i32>
-  %b2 = hir.split %z[%0]: tensor<1x!hir.bus<wr f32>> -> !hir.bus<wr f32>
+  %b1,%b2 = hir.bus.unpack %x 
+  : !hir.bus<wr i1, wr i32, proto #valid> -> (!hir.bus<wr i1>, !hir.bus<wr i32>)
+
+  %b3 = hir.tensor.extract %z[%0]: tensor<1x!hir.bus<wr f32>> -> !hir.bus<wr f32>
 
   //hir.send %1 to %br_addr_send[%j][%0] at %t 
   //hir.send %i to %br_addr_send[%j][%1] at %t 
@@ -75,11 +78,11 @@ hir.func @testBus at %t(%a:i32 delay 2,
   hir.store %v2 to %regw[%j1] at %t
   : !hir.memref<6xi32,[0],#w_reg>
 
-  %f1 = index_cast %1 : index to i32
+  %f1 = hir.cast %1 : index to i32
   %f2 = constant 2:i32
 
   %f4 = addi %i1,%i2: index
-  %f5 = index_cast %f4 : index to i32
+  %f5 = hir.cast %f4 : index to i32
 
   //
   hir.store %f5 to %mw[%i1_i4,%j1_i4, %i2,%j2] at %t+%3

@@ -32,6 +32,9 @@ def FuncType: Type<CPred<"$_self.isa<FuncType>()">,
     "HIR interface type ">,
     BuildableType<"FuncType::get($_builder.getContext())">;
 
+def BusType: Type<CPred<"$_self.isa<BusType>()">,
+    "HIR bus type ">,
+    BuildableType<"BusType::get($_builder.getContext())">;
 // Ops
 class HIR_Op<string mnemonic, list<OpTrait> traits = []>
 : Op<HIR_Dialect, mnemonic, traits>;
@@ -151,16 +154,15 @@ def SendOp : HIR_Op<"send", []> {
   let summary = "write to an interface.";
   let description = [{
     This Op writes to a bus. 
-    Example:
+      Example:
       ```mlir hir.send %1 to %v[%0] : !hir.bus<...>```
   }];
 
   let arguments = (ins AnyType:$value, AnyType:$bus,
-      Index:$index, 
       TimeType :$tstart, Optional<Index>:$offset);
   let results = (outs );
   let assemblyFormat = [{
-    $value `to` $bus  `[` $index `]` `at` $tstart (`+` $offset^ )? attr-dict 
+    $value `to` $bus `at` $tstart (`+` $offset^ )? attr-dict 
       `:` type($value) `to` type($bus)  
   }];
   let hasCanonicalizeMethod = true;
@@ -171,16 +173,15 @@ def RecvOp : HIR_Op<"recv", []> {
   let description = [{
     This Op Reads from a bus. 
 
-    ```mlir %v = hir.recv %x[%0] : !hir.bus<...> -> i32```
+      ```mlir %v = hir.recv %x[%0] : !hir.bus<...> -> i32```
   }];
 
   let arguments = (ins AnyType:$bus,
-      Index:$index, 
       TimeType :$tstart, Optional<Index>:$offset);
   let results = (outs AnyType:$res);
 
   let assemblyFormat = [{
-    $bus  `[` $index `]` `at` $tstart (`+` $offset^ )? attr-dict 
+    $bus  `at` $tstart (`+` $offset^ )? attr-dict 
       `:` type($bus) `->` type($res)  
   }];
   let hasCanonicalizeMethod = true;
@@ -514,17 +515,33 @@ Examples:
       type($args) `)` `->` type($res) }];
 }
 
-def SplitOp:HIR_Op<"split",[NoSideEffect]>{
-  let summary = "splits a bus into two";
+def TensorExtractOp:HIR_Op<"tensor.extract",[NoSideEffect]>{
+  let summary = "Extract a bus from a tensor of bus";
   let description = [{
 Examples:
-    ```mlir %b2 = hir.split (%b[%i]) : Tensor<!hir.bus<...>> -> !hir.bus<...>```
+    ```mlir %b2 = hir.tensor.extract %b[%i] : Tensor<2x!hir.bus<...>> -> !hir.bus<...>```
   }];
 
   let arguments = (ins AnyType: $bus, Variadic<Index>: $indices);
-  let results = (outs AnyType: $res);
+  let results = (outs BusType: $res);
 
   let assemblyFormat = [{ $bus (`[` $indices^ `]`)? attr-dict `:` 
     type($bus)  `->` type($res) }];
+}
+
+def BusUnpackOp:HIR_Op<"bus.unpack",[NoSideEffect]>{
+  let summary = "unpack all elements of a bus into individual buses.";
+  let description = [{
+Examples:
+    ```mlir 
+      %valid,%data = hir.bus.unpack %b 
+      : hir.bus<in i32, out f32> -> (!hir.bus<in i32>, !hir.bus<out f32>)
+      ```
+  }];
+
+  let arguments = (ins BusType: $bus);
+  let results = (outs Variadic<BusType>: $res);
+
+  let assemblyFormat = [{ $bus attr-dict `:`  type($bus) `->` `(`type($res)`)` }];
 }
 #endif // HIR_OPS

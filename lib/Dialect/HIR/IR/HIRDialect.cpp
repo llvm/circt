@@ -25,6 +25,6 @@ HIRDialect::HIRDialect(MLIRContext *context)
   addTypes<TimeType, BusType, FuncType, MemrefType>();
   addOperations<
 #define GET_OP_LIST
-#include "circt/Dialect/HIR/HIR.cpp.inc"
+#include "circt/Dialect/HIR/IR/HIR.cpp.inc"
       >();
 }
