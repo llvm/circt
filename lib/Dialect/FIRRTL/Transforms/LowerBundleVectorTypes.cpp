@@ -117,6 +117,38 @@ static void flattenType(FIRRTLType type,
   return flatten(type, "", false);
 }
 
+static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
+                                 FIRRTLType type, StringRef suffix) {
+  SmallVector<Type, 8> ports;
+  SmallVector<Attribute, 8> portNames;
+  for (auto port : op.getPorts()) {
+    ports.push_back(MemOp::getTypeForPort(op.depth(), type, port.second));
+    portNames.push_back(port.first);
+  }
+  return b->create<MemOp>(ports, op.readLatency(), op.writeLatency(),
+                          op.depth(), op.ruw(), b->getArrayAttr(portNames),
+                          (op.name() + suffix).str(), op.annotations());
+}
+
+// Look through and collect subfields leading to a subaccess
+static SmallVector<Operation *> getSAWritePath(Operation *op) {
+  SmallVector<Operation *> retval;
+  Value lhs = op->getOperand(0);
+  while (true) {
+    if (lhs.getDefiningOp() &&
+        isa<SubfieldOp, SubindexOp, SubaccessOp>(lhs.getDefiningOp())) {
+      retval.push_back(lhs.getDefiningOp());
+      lhs = lhs.getDefiningOp()->getOperand(0);
+    } else {
+      break;
+    }
+  }
+  // Trim to the subaccess
+  while (!retval.empty() && !isa<SubaccessOp>(retval.back()))
+    retval.pop_back();
+  return retval;
+}
+
 /// Copy annotations from \p annotations to \p loweredAttrs, except annotations
 /// with "target" key, that do not match the field suffix.
 static SmallVector<Attribute> filterAnnotations(ArrayAttr annotations,
@@ -156,7 +188,7 @@ static SmallVector<Attribute> filterAnnotations(ArrayAttr annotations,
       continue;
     }
     // If the subfield suffix doesn't match, then ignore the annotation.
-    if (suffix.find(targetStr.str().str()) != 0)
+    if (suffix.find(targetStr.str().str()) == StringRef::npos)
       continue;
 
     NamedAttrList modAttr;
@@ -181,38 +213,6 @@ static AnnotationSet filterAnnotations(AnnotationSet annotations,
   SmallVector<Attribute> loweredAttrs =
       filterAnnotations(annotations.getArrayAttr(), suffix);
   return AnnotationSet(ArrayAttr::get(annotations.getContext(), loweredAttrs));
-}
-
-static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
-                                 FIRRTLType type, StringRef suffix) {
-  SmallVector<Type, 8> ports;
-  SmallVector<Attribute, 8> portNames;
-  for (auto port : op.getPorts()) {
-    ports.push_back(MemOp::getTypeForPort(op.depth(), type, port.second));
-    portNames.push_back(port.first);
-  }
-  return b->create<MemOp>(ports, op.readLatency(), op.writeLatency(),
-                          op.depth(), op.ruw(), b->getArrayAttr(portNames),
-                          (op.name() + suffix).str(), op.annotations());
-}
-
-// Look through and collect subfields leading to a subaccess
-static SmallVector<Operation *> getSAWritePath(Operation *op) {
-  SmallVector<Operation *> retval;
-  Value lhs = op->getOperand(0);
-  while (true) {
-    if (lhs.getDefiningOp() &&
-        isa<SubfieldOp, SubindexOp, SubaccessOp>(lhs.getDefiningOp())) {
-      retval.push_back(lhs.getDefiningOp());
-      lhs = lhs.getDefiningOp()->getOperand(0);
-    } else {
-      break;
-    }
-  }
-  // Trim to the subaccess
-  while (!retval.empty() && !isa<SubaccessOp>(retval.back()))
-    retval.pop_back();
-  return retval;
 }
 
 namespace {
@@ -444,13 +444,14 @@ TypeLoweringVisitor::addArg(FModuleOp module, unsigned insertPt,
   // Append the new argument.
   auto newValue = body->insertArgument(insertPt, type);
 
+  auto nameStr = oldArg.name.getValue().str() + nameSuffix.str();
   // Save the name attribute for the new argument.
-  auto name =
-      builder->getStringAttr(oldArg.name.getValue().str() + nameSuffix.str());
+  auto name = builder->getStringAttr(nameStr);
 
   // Populate the new arg attributes.
-  AnnotationSet newAnnotations =
-      filterAnnotations(oldArg.annotations, nameSuffix);
+  AnnotationSet newAnnotations = oldArg.annotations;
+  if (!getCanonicalAggregateType(type))
+    newAnnotations = filterAnnotations(oldArg.annotations, nameStr);
 
   // Flip the direction if the field is an output.
   auto direction = (Direction)((unsigned)oldArg.direction ^ isOutput);
@@ -966,10 +967,13 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
     for (auto field : fieldTypes) {
       Attribute pName;
       inputTypes.push_back(field.type);
-      if (port.name)
+      std::string nameStr;
+      if (port.name) {
+        nameStr = port.name.getValue().str();
         pName = builder.getStringAttr((port.getName() + field.suffix).str());
-      else
+      } else
         pName = builder.getStringAttr("");
+      nameStr += field.suffix;
       portNames.push_back(pName);
       // Flip the direction if the field is an output.
       portDirections.push_back((Direction)(
@@ -978,8 +982,9 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
 
       // Populate newAnnotations with the old annotations filtered to those
       // associated with just this field.
-      AnnotationSet newAnnotations =
-          filterAnnotations(oldAnnotations, field.suffix);
+      AnnotationSet newAnnotations = oldAnnotations;
+      if (!getCanonicalAggregateType(field.type))
+        newAnnotations = filterAnnotations(oldAnnotations, nameStr);
 
       // Populate the new arg attributes.
       argAttrDicts.push_back(newAnnotations.getArgumentAttrDict(argAttrs));

@@ -556,7 +556,7 @@ firrtl.circuit "TopLevel" {
 
 // Test that subfield annotations on wire are lowred to appropriate instance based on target.
   firrtl.module @AnnotationsBundle() {
-    %bar = firrtl.wire  {annotations = [{one, target = [".qux"]}, {target = ["[1]", ".baz"], two}]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+    %bar = firrtl.wire  {annotations = [{target = ["[1]", ".baz"], two}]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
 
       // TODO: Enable this
       // CHECK: %bar_0_baz = firrtl.wire  : !firrtl.uint<1>
@@ -567,7 +567,7 @@ firrtl.circuit "TopLevel" {
 
 // Test that subfield annotations on reg are lowred to appropriate instance based on target.
   firrtl.module @AnnotationsBundle2(in %clock: !firrtl.clock) {
-    %bar = firrtl.reg %clock  {annotations = [{one, target = [".qux"]}, {target = ["[1]", ".baz"], two}]} : (!firrtl.clock) -> !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+    %bar = firrtl.reg %clock  {annotations = [{target = ["[1]", ".baz"], two}]} : (!firrtl.clock) -> !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
 
     // TODO: Enable this
     // CHECK: %bar_0_baz = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
@@ -742,7 +742,7 @@ firrtl.circuit "TopLevel" {
     %a = firrtl.wire : !firrtl.uint<0>
     %b = firrtl.wire : !firrtl.uint<0>
     firrtl.partialconnect %a, %b : !firrtl.uint<0>, !firrtl.uint<0>
-    // CECK: firrtl.connect %a, %b : !firrtl.uint<0>, !firrtl.uint<0>
+    // CHECK: firrtl.connect %a, %b : !firrtl.uint<0>, !firrtl.uint<0>
 
     // COM: It should truncate the larger source.
     %c = firrtl.wire : !firrtl.uint<2>
@@ -778,71 +778,6 @@ firrtl.circuit "TopLevel" {
     firrtl.partialconnect %a, %b : !firrtl.bundle<a: analog<1>>, !firrtl.bundle<a: analog<1>>
     // CHECK: firrtl.attach %a_a, %b_a : !firrtl.analog<1>, !firrtl.analog<1>
   }
-
-//// Test that annotations on aggregate ports are copied.
-//  firrtl.extmodule @Sub(in %a: !firrtl.vector<uint<1>, 2> {firrtl.annotations = [{a}]})
-//  // CECK: firrtl.extmodule @Sub
-//  // CECK-COUNT-2: firrtl.annotations = [{a}]
-//  // CHECK-NOT: firrtl.annotations = [{a}]
-//  firrtl.module @Port(in %a: !firrtl.vector<uint<1>, 2> {firrtl.annotations = [{b}]}) {
-//    %sub_a = firrtl.instance @Sub  {name = "sub", portNames = ["a"]} : !firrtl.flip<vector<uint<1>, 2>>
-//    firrtl.connect %sub_a, %a : !firrtl.flip<vector<uint<1>, 2>>, !firrtl.vector<uint<1>, 2>
-//  }
-//  // CECK: firrtl.module
-//  // CECK-COUNT-2: firrtl.annotations = [{b}]
-//  // CECK-NOT: firrtl.annotations = [{b}]
-//
-//// Test that annotations on subfield/subindices of ports are only applied to
-//// matching targets.  Any other arg attributes should be copied.
-//    // The annotation should be copied to just a.a.  The firrtl.hello arg
-//    // attribute should be copied to each new port.
-//    firrtl.module @PortBundle(in %a: !firrtl.bundle<a: uint<1>, b: flip<uint<1>>> {firrtl.annotations = [{a, target = [".a"]}], firrtl.hello}) {}
-//    // CECK: firrtl.module @PortBundle
-//    // CECK-COUNT-1: firrtl.annotations = [{a}]
-//    // CECK-COUNT-2: firrtl.hello
-//    // CECK-NOT: firrtl.annotations
-//    // CECK-NOT: firrtl.hello
-//
-//    // The annotation should be copied to just a[0].  The firrtl.world arg
-//    // attribute should be copied to each port.
-//    firrtl.extmodule @PortVector(in %a: !firrtl.vector<uint<1>, 2> {firrtl.annotations = [{b, target = ["[0]"]}], firrtl.world})
-//    // CECK: firrtl.extmodule @PortVector
-//    // CECK-COUNT-1: firrtl.annotations = [{b}]
-//    // CECK-COUNT-2: firrtl.world
-//    // CECK-NOT: firrtl.annotations
-//    // CECK-NOT: firrtl.world
-//
-//
-//// Test that a truncating connect emitted during lower types correctly adds an
-//// AsPassive cast on a FlipType originating from an instance.
-////
-//// See: https://github.com/llvm/circt/issues/1276
-//// TODO: Enable this !
-////     firrtl.extmodule @Bar2(in %a: !firrtl.uint<2>)
-////     firrtl.module @TruncatingConnectWithFlip() {
-////       // CECK: %[[a_b:.+]] = firrtl.wire
-////       %a = firrtl.wire  : !firrtl.bundle<b: uint<1>>
-////       %bar_a = firrtl.instance @Bar2  {name = "bar"} : !firrtl.flip<uint<2>>
-////       %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
-////       firrtl.connect %bar_a, %invalid_ui2 : !firrtl.flip<uint<2>>, !firrtl.uint<2>
-////       // CECK: %[[bar_a_passive:.+]] = firrtl.asPassive %bar_a
-////       // CECK-NEXT: %[[bar_a_tail:.+]] = firrtl.tail %[[bar_a_passive]], 1
-////       %0 = firrtl.subfield %a("b") : (!firrtl.bundle<b: uint<1>>) -> !firrtl.uint<1>
-////       // CECK-NEXT: firrtl.connect %[[a_b]], %[[bar_a_tail]]
-////       firrtl.partialconnect %0, %bar_a : !firrtl.uint<1>, !firrtl.flip<uint<2>>
-////     }
-//
-//
-//// Test that a AsPassivePrimOps are handled.
-////
-//// See: https://github.com/llvm/circt/issues/1290
-//
-//// CHECK-LABEL: firrtl.module @Foo1290
-//    firrtl.module @Foo1290(out %arg0: !firrtl.vector<uint<1>, 1>, in %arg1: !firrtl.vector<uint<1>, 1>, out %arg2: !firrtl.vector<uint<1>, 1>, in %arg3: !firrtl.uint<1>) attributes {portNames = ["a", "b", "c", "cond"]} {
-//      %1 = firrtl.asPassive %arg0 : !firrtl.vector<uint<1>, 1>
-//      %2 = firrtl.mux(%arg3, %1, %arg1) : (!firrtl.uint<1>, !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>) -> !firrtl.vector<uint<1>, 1>
-//      firrtl.connect %arg2, %2 : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
-//    }
 
 // Test that a vector of bundles with a write works.
 
