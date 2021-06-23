@@ -350,8 +350,8 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
 
 private:
   void processUsers(Value val, ArrayRef<Value> mapping);
+  void lowerBlock(Block*);
   void lowerSAWritePath(Operation *, ArrayRef<Operation *> writePath);
-
   void lowerProducer(Operation *op,
                      std::function<Operation *(FlatBundleFieldEntry, StringRef,
                                                SmallVector<Attribute> &)>
@@ -376,6 +376,25 @@ Value TypeLoweringVisitor::getSubWhatever(Value val, size_t index) {
   }
   llvm_unreachable("Unknown aggregate type");
   return nullptr;
+}
+
+void TypeLoweringVisitor::lowerBlock(Block* block) {
+  // Lower the operations.
+  for (auto iop = block->rbegin(), iep = block->rend(); iop != iep; ++iop) {
+    // We erase old ops eagerly so we don't have dangling uses we've already
+    // lowered.
+    for (auto *op : opsToRemove)
+      op->erase();
+    opsToRemove.clear();
+
+    builder->setInsertionPoint(&*iop);
+    builder->setLoc(iop->getLoc());
+    dispatchVisitor(&*iop);
+  }
+
+  for (auto *op : opsToRemove)
+    op->erase();
+  opsToRemove.clear();
 }
 
 void TypeLoweringVisitor::lowerProducer(
@@ -699,26 +718,14 @@ void TypeLoweringVisitor::visitStmt(WhenOp op) {
   // are lowered.
 
   // Visit operations in the then block.
-  auto &body = op.getThenBlock();
-  for (auto iter = body.rbegin(), e = body.rend(); iter != e; ++iter) {
-    auto &op = *iter;
-    builder->setInsertionPoint(&op);
-    builder->setLoc(op.getLoc());
-    dispatchVisitor(&op);
-  }
+  lowerBlock(&op.getThenBlock());
 
   // If there is no else block, return.
   if (!op.hasElseRegion())
     return;
 
   // Visit operations in the else block.
-  auto &bodyE = op.getElseBlock();
-  for (auto iter = bodyE.rbegin(), e = bodyE.rend(); iter != e; ++iter) {
-    auto &op = *iter;
-    builder->setInsertionPoint(&op);
-    builder->setLoc(op.getLoc());
-    dispatchVisitor(&op);
-  }
+  lowerBlock(&op.getElseBlock());
 }
 
 #if 0
@@ -974,21 +981,7 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   builder = &theBuilder;
 
   // Lower the operations.
-  for (auto iop = body->rbegin(), iep = body->rend(); iop != iep; ++iop) {
-    // We erase old ops eagerly so we don't have dangling uses we've already
-    // lowered.
-    for (auto *op : opsToRemove)
-      op->erase();
-    opsToRemove.clear();
-
-    builder->setInsertionPoint(&*iop);
-    builder->setLoc(iop->getLoc());
-    dispatchVisitor(&*iop);
-  }
-
-  for (auto *op : opsToRemove)
-    op->erase();
-  opsToRemove.clear();
+  lowerBlock(body);
 
   // Lower the module block arguments.
   SmallVector<unsigned> argsToRemove;
