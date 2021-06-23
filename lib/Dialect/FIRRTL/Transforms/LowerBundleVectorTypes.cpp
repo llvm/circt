@@ -617,7 +617,10 @@ void TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
     Value src = op.src();
     Value dest = op.dest();
 
-    if (destType.isa<IntType>() && srcType.isa<IntType>() && destWidth >= 0 &&
+    if (destType == srcType) {
+      builder->create<ConnectOp>(dest, src);
+      opsToRemove.push_back(op);
+    } else if (destType.isa<IntType>() && srcType.isa<IntType>() && destWidth >= 0 &&
         destWidth < srcWidth) {
       // firrtl.tail always returns uint even for sint operands.
       IntType tmpType = destType.cast<IntType>();
@@ -716,77 +719,6 @@ void TypeLoweringVisitor::visitStmt(WhenOp op) {
     builder->setLoc(op.getLoc());
     dispatchVisitor(&op);
   }
-}
-
-// Expand muxes of aggregates
-void TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
-  Value result = op.result();
-
-  // Attempt to get the bundle types, potentially unwrapping an outer flip
-  // type that wraps the whole bundle.
-  FIRRTLType resultType = getCanonicalAggregateType(result.getType());
-
-  // If the wire is not a bundle, there is nothing to do.
-  if (!resultType)
-    return;
-
-  SmallVector<FlatBundleFieldEntry, 8> fieldTypes = peelType(resultType);
-  SmallVector<Value> lowered;
-
-  // Loop over the leaf aggregates.
-  for (auto field : llvm::enumerate(fieldTypes)) {
-    Value high, low;
-    if (BundleType bundle = resultType.dyn_cast<BundleType>()) {
-      high = builder->create<SubfieldOp>(op.high(),
-                                         bundle.getElement(field.index()).name);
-      low = builder->create<SubfieldOp>(op.low(),
-                                        bundle.getElement(field.index()).name);
-    } else if (FVectorType fvector = resultType.dyn_cast<FVectorType>()) {
-      high = builder->create<SubindexOp>(op.high(), field.index());
-      low = builder->create<SubindexOp>(op.low(), field.index());
-    } else {
-      op->emitError("Unknown aggregate type");
-    }
-
-    auto mux = builder->create<MuxPrimOp>(op.sel(), high, low);
-    lowered.push_back(mux.getResult());
-  }
-  processUsers(op, lowered);
-  opsToRemove.push_back(op);
-}
-
-// Expand AsPassivePrimOp of aggregates
-void TypeLoweringVisitor::visitExpr(AsPassivePrimOp op) {
-  Value result = op.result();
-
-  // Attempt to get the bundle types, potentially unwrapping an outer flip
-  // type that wraps the whole bundle.
-  FIRRTLType resultType = getCanonicalAggregateType(result.getType());
-
-  // If the wire is not a bundle, there is nothing to do.
-  if (!resultType)
-    return;
-
-  SmallVector<FlatBundleFieldEntry, 8> fieldTypes = peelType(resultType);
-  SmallVector<Value> lowered;
-
-  // Loop over the leaf aggregates.
-  for (auto field : llvm::enumerate(fieldTypes)) {
-    Value input;
-    if (BundleType bundle = resultType.dyn_cast<BundleType>()) {
-      input = builder->create<SubfieldOp>(
-          op.input(), bundle.getElement(field.index()).name);
-    } else if (FVectorType fvector = resultType.dyn_cast<FVectorType>()) {
-      input = builder->create<SubindexOp>(op.input(), field.index());
-    } else {
-      op->emitError("Unknown aggregate type");
-    }
-
-    auto passive = builder->create<AsPassivePrimOp>(input);
-    lowered.push_back(passive.getResult());
-  }
-  processUsers(op, lowered);
-  opsToRemove.push_back(op);
 }
 
 #if 0
@@ -1164,6 +1096,27 @@ void TypeLoweringVisitor::visitExpr(InvalidValueOp op) {
   auto clone = [&](FlatBundleFieldEntry field, StringRef name,
                    SmallVector<Attribute> &attrs) -> Operation * {
     return builder->create<InvalidValueOp>(field.type);
+  };
+  lowerProducer(op, clone);
+}
+
+// Expand muxes of aggregates
+void TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
+  auto clone = [&](FlatBundleFieldEntry field, StringRef name,
+                   SmallVector<Attribute> &attrs) -> Operation * {
+    auto high = getSubWhatever(op.high(), field.index);
+    auto low = getSubWhatever(op.low(), field.index);
+    return builder->create<MuxPrimOp>(op.sel(), high, low);
+  };
+  lowerProducer(op, clone);
+}
+
+// Expand AsPassivePrimOp of aggregates
+void TypeLoweringVisitor::visitExpr(AsPassivePrimOp op) {
+  auto clone = [&](FlatBundleFieldEntry field, StringRef name,
+                   SmallVector<Attribute> &attrs) -> Operation * {
+    auto input = getSubWhatever(op.input(), field.index);
+    return builder->create<AsPassivePrimOp>(field.type, op.input());
   };
   lowerProducer(op, clone);
 }
