@@ -599,15 +599,18 @@ firrtl.circuit "TopLevel" {
 
 // Test wire connection semantics.  Based on the flippedness of the destination
 // type, the connection may be reversed.
+// CHECK-LABEL firrtl.module WireSemantics
   firrtl.module @WireSemantics() {
     %a = firrtl.wire  : !firrtl.bundle<a: bundle<a: uint<1>>>
     %ax = firrtl.wire  : !firrtl.bundle<a: bundle<a: uint<1>>>
+    // CHECK:  %a_a_a = firrtl.wire
+    // CHECK-NEXT:  %ax_a_a = firrtl.wire
     firrtl.connect %a, %ax : !firrtl.bundle<a: bundle<a: uint<1>>>, !firrtl.bundle<a: bundle<a: uint<1>>>
     firrtl.partialconnect %a, %ax : !firrtl.bundle<a: bundle<a: uint<1>>>, !firrtl.bundle<a: bundle<a: uint<1>>>
     // COM: a <= ax
-    // CHECK: firrtl.connect %a_a_a, %ax_a_a
+    // CHECK-NEXT: firrtl.connect %a_a_a, %ax_a_a
     // COM: a <- ax
-    // CHECK:-NEXT: firrtl.connect %a_a_a, %ax_a_a
+    // CHECK-NEXT: firrtl.connect %a_a_a, %ax_a_a
     %0 = firrtl.subfield %a("a") : (!firrtl.bundle<a: bundle<a: uint<1>>>) -> !firrtl.bundle<a: uint<1>>
     %1 = firrtl.subfield %ax("a") : (!firrtl.bundle<a: bundle<a: uint<1>>>) -> !firrtl.bundle<a: uint<1>>
     firrtl.connect %0, %1 : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
@@ -615,7 +618,7 @@ firrtl.circuit "TopLevel" {
     // COM: a.a <= ax.a
     // CHECK: firrtl.connect %a_a_a, %ax_a_a
     // COM: a.a <- ax.a
-    // CHECK:-NEXT: firrtl.connect %a_a_a, %ax_a_a
+    // CHECK-NEXT: firrtl.connect %a_a_a, %ax_a_a
     %2 = firrtl.subfield %a("a") : (!firrtl.bundle<a: bundle<a: uint<1>>>) -> !firrtl.bundle<a: uint<1>>
     %3 = firrtl.subfield %2("a") : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
     %4 = firrtl.subfield %ax("a") : (!firrtl.bundle<a: bundle<a: uint<1>>>) -> !firrtl.bundle<a: uint<1>>

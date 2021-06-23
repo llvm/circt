@@ -170,34 +170,36 @@ static SmallVector<Attribute> filterAnnotations(ArrayAttr annotations,
     }
 
     ArrayAttr subFieldTarget = targetAttr.cast<ArrayAttr>();
-    SmallString<16> targetStr;
-    for (auto fName : subFieldTarget) {
-      std::string fNameStr = fName.cast<StringAttr>().getValue().str();
+    SmallString<16> targetStr = subFieldTarget[0].cast<StringAttr>().getValue();
       // The fNameStr will begin with either '[' or '.', replace it with an
       // '_' to construct the suffix.
-      fNameStr[0] = '_';
+      targetStr[0] = '_';
       // If it ends with ']', then just remove it.
-      if (fNameStr.back() == ']')
-        fNameStr.erase(fNameStr.size() - 1);
-
-      targetStr += fNameStr;
-    }
+      if (targetStr.back() == ']')
+        targetStr.pop_back();
+    
     // If no subfield attribute, then copy the annotation.
     if (targetStr.empty()) {
+      assert(0);
       retval.push_back(opAttr);
       continue;
     }
     // If the subfield suffix doesn't match, then ignore the annotation.
-    if (suffix.find(targetStr.str().str()) == StringRef::npos)
+    if (!targetStr.equals(suffix))
       continue;
-
+    
     NamedAttrList modAttr;
     for (auto attr : di.getValue()) {
       // Ignore the actual target annotation, but copy the rest of annotations.
-      if (attr.first.str() == "target")
-        continue;
+      if (attr.first.str() == "target") {
+        if (subFieldTarget.size() > 1)
+          modAttr.append(attr.first, ArrayAttr::get(annotations.getContext(),
+                                           subFieldTarget.getValue().slice(1)));
+
+              } else {
       modAttr.push_back(attr);
-    }
+        }
+            }
     retval.push_back(DictionaryAttr::get(annotations.getContext(), modAttr));
   }
   return retval;
