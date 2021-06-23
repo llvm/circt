@@ -26,10 +26,10 @@ def ComponentOp : CalyxOp<"component", [
         that define the interface.
     (2) The cells, wires, and control schedule.
     ```mlir
-      component MyComponent(in1: 32) -> (out1: 32) {
-        cells { ... }
-        wires { ... }
-        control { ... }
+      calyx.component @MyComponent(%in1: i32) -> (%out1: i8) {
+        calyx.cells { ... }
+        calyx.wires { ... }
+        calyx.control { ... }
       }
     ```
   }];
@@ -56,16 +56,16 @@ def ComponentOp : CalyxOp<"component", [
       Block *getBody() { return &getOperation()->getRegion(0).front(); }
   }];
 
+  let verifier = "return ::verify$cppClass(*this);";
   let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
-  let verifier = "return ::verify$cppClass(*this);";
 }
 
-def CellsOp : CalyxOp<"cells", [
+def CellsOp : CalyxContainer<"cells", [
+    HasParent<"ComponentOp">,
     IsolatedFromAbove,
     SingleBlock,
-    NoTerminator,
-    HasParent<"ComponentOp">
+    NoTerminator
   ]> {
   let summary = "Calyx Cells";
   let description = [{
@@ -74,20 +74,17 @@ def CellsOp : CalyxOp<"cells", [
     component.
 
     ```mlir
-      cells {
-        adder = std_add(32);
-        myComp = MyComponent();
+      calyx.cells {
+       // TODO(Calyx): Add `cell` examples once
+       // CellOps are added.
       }
     ```
   }];
-  let regions = (region SizedRegion<1>: $body);
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
 }
 
-def WiresOp : CalyxOp<"wires", [
-    NoTerminator,
+def WiresOp : CalyxContainer<"wires", [
     HasParent<"ComponentOp">,
+    NoTerminator,
     SingleBlock
   ]> {
   let summary = "Calyx Wires";
@@ -97,23 +94,19 @@ def WiresOp : CalyxOp<"wires", [
     which may be placed within groups.
 
     ```mlir
-      wires {
-        group compute_add { ... };
-        ...
-        out1 = adder.out;
+      calyx.wires {
+        // TODO(Calyx): Add `group` examples once
+        // GroupOps are added.
       }
     ```
   }];
-  let regions = (region SizedRegion<1>: $body);
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
 }
 
-def ControlOp : CalyxOp<"control", [
+def ControlOp : CalyxContainer<"control", [
+    HasParent<"ComponentOp">,
     // TODO(Calyx): The terminator for the control flow
     // schedule should define that of the component.
-    NoTerminator,
-    HasParent<"ComponentOp">
+    NoTerminator
   ]> {
   let summary = "Calyx Control";
   let description = [{
@@ -122,12 +115,10 @@ def ControlOp : CalyxOp<"control", [
     component, i.e. when each group executes.
 
     ```mlir
-      control {
-        seq { compute_add; }
+      calyx.control {
+        // TODO(Calyx): Add `control` examples
+        // once control flow ops are added.
       }
     ```
   }];
-  let regions = (region SizedRegion<1>: $body);
-  let printer = "return ::print$cppClass(p, *this);";
-  let parser = "return ::parse$cppClass(parser, result);";
 }

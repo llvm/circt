@@ -3,12 +3,14 @@
 // CHECK-LABEL: component ComponentWithInAndOutPorts (in1: 64, in2: 16) -> (out1: 32, out2: 8) {
 calyx.component @ComponentWithInAndOutPorts (%in1: i64, %in2: i16) -> (%out1: i32, %out2: i8) {
 
-  // CHECK: cells {
+  // CHECK: calyx.cells {
   calyx.cells { }
-  // CHECK: wires {
+  // CHECK: calyx.wires {
   calyx.wires { }
-  // CHECK: control {
-  calyx.control { }
+  // CHECK: calyx.control {
+  calyx.control {
+    ^body:
+  }
 
 }
 
@@ -17,7 +19,9 @@ calyx.component @ComponentWithInPort (%x: i64) -> () {
 
   calyx.cells {}
   calyx.wires {}
-  calyx.control {}
+  calyx.control {
+    ^body:
+  }
 
 }
 
@@ -26,7 +30,9 @@ calyx.component @ComponentWithOutPort () -> (%y: i64) {
 
   calyx.cells {}
   calyx.wires {}
-  calyx.control {}
+  calyx.control {
+    ^body:
+  }
 
 }
 
@@ -35,6 +41,8 @@ calyx.component @ComponentWithNoPorts () -> () {
 
   calyx.cells {}
   calyx.wires {}
-  calyx.control {}
+  calyx.control {
+    ^body:
+  }
 
 }

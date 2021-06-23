@@ -177,66 +177,6 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
 }
 
 //===----------------------------------------------------------------------===//
-// CellsOp
-//===----------------------------------------------------------------------===//
-static ParseResult parseCellsOp(OpAsmParser &parser, OperationState &result) {
-  auto *body = result.addRegion();
-  if (parser.parseRegion(*body, {}, {}))
-    return failure();
-
-  if (body->empty())
-    body->push_back(new Block());
-
-  return success();
-}
-
-static void printCellsOp(OpAsmPrinter &p, CellsOp &op) {
-  p << "cells";
-  p.printRegion(op.body(), /*printBlockTerminators=*/false,
-                /*printEmptyBlock=*/false);
-}
-
-//===----------------------------------------------------------------------===//
-// WiresOp
-//===----------------------------------------------------------------------===//
-static ParseResult parseWiresOp(OpAsmParser &parser, OperationState &result) {
-  auto *body = result.addRegion();
-  if (parser.parseRegion(*body, {}, {}))
-    return failure();
-
-  if (body->empty())
-    body->push_back(new Block());
-
-  return success();
-}
-
-static void printWiresOp(OpAsmPrinter &p, WiresOp &op) {
-  p << "wires";
-  p.printRegion(op.body(), /*printBlockTerminators=*/false,
-                /*printEmptyBlock=*/false);
-}
-
-//===----------------------------------------------------------------------===//
-// ControlOp
-//===----------------------------------------------------------------------===//
-static ParseResult parseControlOp(OpAsmParser &parser, OperationState &result) {
-  auto *body = result.addRegion();
-  if (parser.parseRegion(*body, {}, {}))
-    return failure();
-
-  if (body->empty())
-    body->push_back(new Block());
-
-  return success();
-}
-
-static void printControlOp(OpAsmPrinter &p, ControlOp &op) {
-  p << "control";
-  p.printRegion(op.body(), /*printBlockTerminators=*/false,
-                /*printEmptyBlock=*/false);
-}
-
-//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
