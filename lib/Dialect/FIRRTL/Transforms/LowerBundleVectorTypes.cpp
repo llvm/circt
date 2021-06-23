@@ -18,6 +18,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/Support/Parallel.h"
+#include <deque>
 
 using namespace circt;
 using namespace firrtl;
@@ -117,21 +118,21 @@ static void flattenType(FIRRTLType type,
 
 /// Copy annotations from \p annotations to \p loweredAttrs, except annotations
 /// with "target" key, that do not match the field suffix.
-static void filterAnnotations(ArrayAttr annotations,
-                              SmallVector<Attribute> &loweredAttrs,
+static SmallVector<Attribute> filterAnnotations(ArrayAttr annotations,
                               StringRef suffix) {
+  SmallVector<Attribute> retval;
   if (!annotations || annotations.empty())
-    return;
+    return retval;
 
   for (auto opAttr : annotations) {
     auto di = opAttr.dyn_cast<DictionaryAttr>();
     if (!di) {
-      loweredAttrs.push_back(opAttr);
+      retval.push_back(opAttr);
       continue;
     }
     auto targetAttr = di.get("target");
     if (!targetAttr) {
-      loweredAttrs.push_back(opAttr);
+      retval.push_back(opAttr);
       continue;
     }
 
@@ -150,7 +151,7 @@ static void filterAnnotations(ArrayAttr annotations,
     }
     // If no subfield attribute, then copy the annotation.
     if (targetStr.empty()) {
-      loweredAttrs.push_back(opAttr);
+      retval.push_back(opAttr);
       continue;
     }
     // If the subfield suffix doesn't match, then ignore the annotation.
@@ -164,9 +165,21 @@ static void filterAnnotations(ArrayAttr annotations,
         continue;
       modAttr.push_back(attr);
     }
-    loweredAttrs.push_back(
+    retval.push_back(
         DictionaryAttr::get(annotations.getContext(), modAttr));
   }
+  return retval;
+}
+
+/// Copy annotations from \p annotations into a new AnnotationSet and return it.
+/// This removes annotations with "target" key that does not match the field
+/// suffix.
+static AnnotationSet filterAnnotations(AnnotationSet annotations,
+                                       StringRef suffix) {
+  if (annotations.empty())
+    return annotations;
+  SmallVector<Attribute> loweredAttrs = filterAnnotations(annotations.getArrayAttr(), suffix);
+  return AnnotationSet(ArrayAttr::get(annotations.getContext(), loweredAttrs));
 }
 
 static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
@@ -200,18 +213,6 @@ static SmallVector<Operation *> getSAWritePath(Operation *op) {
   while (!retval.empty() && !isa<SubaccessOp>(retval.back()))
     retval.pop_back();
   return retval;
-}
-
-/// Copy annotations from \p annotations into a new AnnotationSet and return it.
-/// This removes annotations with "target" key that does not match the field
-/// suffix.
-static AnnotationSet filterAnnotations(AnnotationSet annotations,
-                                       StringRef suffix) {
-  if (annotations.empty())
-    return annotations;
-  SmallVector<Attribute> loweredAttrs;
-  filterAnnotations(annotations.getArrayAttr(), loweredAttrs, suffix);
-  return AnnotationSet(ArrayAttr::get(annotations.getContext(), loweredAttrs));
 }
 
 namespace {
@@ -351,6 +352,8 @@ private:
   void processUsers(Value val, ArrayRef<Value> mapping);
   void lowerSAWritePath(Operation *, ArrayRef<Operation *> writePath);
 
+  SmallVector<Value> lowerProducer(Operation* op, std::function<Operation*(Operation*, FIRRTLType, StringRef, SmallVector<Attribute>&)>& clone);
+
   MLIRContext *context;
 
   // The builder is set and maintained in the main loop.
@@ -360,6 +363,38 @@ private:
   SmallVector<Operation *, 16> opsToRemove;
 };
 } // namespace
+
+SmallVector<Value> TypeLoweringVisitor::lowerProducer(Operation* op, 
+std::function<Operation*(Operation*, FIRRTLType, StringRef, SmallVector<Attribute>&)>& clone) {
+  Value result = op->getResult(0);
+
+  // Attempt to get the bundle types, potentially unwrapping an outer flip
+  // type that wraps the whole bundle.
+  FIRRTLType resultType = getCanonicalAggregateType(result.getType());
+
+  // If the wire is not a bundle, there is nothing to do.
+  if (!resultType)
+    return {};
+
+  SmallVector<FlatBundleFieldEntry, 8> fieldTypes = peelType(resultType);
+  SmallVector<Value> lowered;
+
+  // Loop over the leaf aggregates.
+  auto name = op->getAttr("name").cast<StringAttr>().getValue();
+  SmallString<16> loweredName = name;
+  auto baseNameLen = loweredName.size();
+  for (auto field : fieldTypes) {
+    loweredName.resize(baseNameLen);
+    if (!name.empty())
+      loweredName += field.suffix;
+    // For all annotations on the parent op, filter them based on the target
+    // attribute.
+    SmallVector<Attribute> loweredAttrs = filterAnnotations(op->getAttr("annotations").cast<ArrayAttr>(), field.suffix);
+    auto newOp = clone(op, field.getPortType(), loweredName, loweredAttrs);
+    lowered.push_back(newOp->getResult(0));
+  }
+  return lowered;
+}
 
 void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
   AggregateUserVisitor aggV(builder);
@@ -1076,10 +1111,9 @@ void TypeLoweringVisitor::visitDecl(WireOp op) {
     SmallString<16> loweredName;
     if (!name.empty())
       loweredName = (name + field.suffix).str();
-    SmallVector<Attribute> loweredAttrs;
     // For all annotations on the parent op, filter them based on the target
     // attribute.
-    filterAnnotations(op.annotations(), loweredAttrs, field.suffix);
+    SmallVector<Attribute> loweredAttrs = filterAnnotations(op.annotations(), field.suffix);
     auto wire = builder->create<WireOp>(field.type, loweredName, loweredAttrs);
     lowered.push_back(wire.getResult());
   }
@@ -1103,15 +1137,14 @@ void TypeLoweringVisitor::visitDecl(RegOp op) {
   SmallVector<Value> lowered;
 
   // Loop over the leaf aggregates.
-  auto name = op.name().str();
+  auto name = op.name();
   for (auto field : fieldTypes) {
     SmallString<16> loweredName;
     if (!name.empty())
       loweredName = (name + field.suffix).str();
-    SmallVector<Attribute> loweredAttrs;
     // For all annotations on the parent op, filter them based on the target
     // attribute.
-    filterAnnotations(op.annotations(), loweredAttrs, field.suffix);
+    SmallVector<Attribute> loweredAttrs = filterAnnotations(op.annotations(), field.suffix);
     auto reg = builder->create<RegOp>(field.getPortType(), op.clockVal(),
                                       loweredName, loweredAttrs);
     lowered.push_back(reg.getResult());
@@ -1189,10 +1222,9 @@ void TypeLoweringVisitor::visitDecl(RegResetOp op) {
     SmallString<16> loweredName;
     if (!name.empty())
       loweredName = (name + field.value().suffix).str();
-    SmallVector<Attribute> loweredAttrs;
     // For all annotations on the parent op, filter them based on the
     // target attribute.
-    filterAnnotations(op.annotations(), loweredAttrs, field.value().suffix);
+    SmallVector<Attribute> loweredAttrs = filterAnnotations(op.annotations(), field.value().suffix);
     Value resetVal;
     if (BundleType bundle = resultType.dyn_cast<BundleType>()) {
       resetVal = builder->create<SubfieldOp>(
@@ -1233,10 +1265,9 @@ void TypeLoweringVisitor::visitDecl(NodeOp op) {
     SmallString<16> loweredName;
     if (!name.empty())
       loweredName = (name + field.value().suffix).str();
-    SmallVector<Attribute> loweredAttrs;
     // For all annotations on the parent op, filter them based on the target
     // attribute.
-    filterAnnotations(op.annotations(), loweredAttrs, field.value().suffix);
+    SmallVector<Attribute> loweredAttrs = filterAnnotations(op.annotations(), field.value().suffix);
     Value input;
     if (BundleType bundle = resultType.dyn_cast<BundleType>()) {
       input = builder->create<SubfieldOp>(
@@ -1257,7 +1288,6 @@ void TypeLoweringVisitor::visitDecl(NodeOp op) {
 
 /// Lower an InvalidValue op with a bundle to multiple non-bundled InvalidOps.
 void TypeLoweringVisitor::visitExpr(InvalidValueOp op) {
-  return;
   Value result = op.result();
 
   // Attempt to get the bundle types, potentially unwrapping an outer flip
@@ -1318,20 +1348,18 @@ struct LowerBundleVectorPass
   void runOnOperation() override;
 
 private:
-  void runAsync();
-  void runSync();
+  void runParallel();
 };
 } // end anonymous namespace
 
-void LowerBundleVectorPass::runAsync() {
+void LowerBundleVectorPass::runParallel() {
   // Collect the operations to iterate in a vector. We can't use parallelFor
   // with the regular op list, since it requires a RandomAccessIterator. This
   // also lets us use parallelForEachN, which means we don't have to
   // llvm::enumerate the ops with their index. TODO(mlir): There should really
   // be a way to do this without collecting the operations first.
-  auto &body = getOperation().getBody()->getOperations();
-  std::vector<Operation *> ops;
-  llvm::for_each(body, [&](Operation &op) { ops.push_back(&op); });
+  std::deque<Operation *> ops;
+  llvm::for_each(getOperation().getBody()->getOperations(), [&](Operation &op) { ops.push_back(&op); });
 
   mlir::ParallelDiagnosticHandler diagHandler(&getContext());
   llvm::parallelForEachN(0, ops.size(), [&](auto index) {
@@ -1342,21 +1370,14 @@ void LowerBundleVectorPass::runAsync() {
   });
 }
 
-void LowerBundleVectorPass::runSync() {
-  auto circuit = getOperation();
-  for (auto &op : circuit.getBody()->getOperations()) {
-    TypeLoweringVisitor(&getContext()).lowerModule(&op);
-  }
-}
-
 // This is the main entrypoint for the lowering pass.
 void LowerBundleVectorPass::runOnOperation() {
-
-  if (getContext().isMultithreadingEnabled()) {
-    runAsync();
-  } else {
-    runSync();
-  }
+  auto* context = &getContext();
+  if (context->isMultithreadingEnabled())
+    runParallel();
+  else
+  for (auto &op : getOperation().getBody()->getOperations())
+    TypeLoweringVisitor(context).lowerModule(&op);
 }
 
 /// This is the pass constructor.
