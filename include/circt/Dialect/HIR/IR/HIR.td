@@ -468,7 +468,7 @@ def CastOp : HIR_Op<"cast">{
   let arguments = (ins AnyType:$input);
   let results = (outs AnyType : $res);
 
-  let assemblyFormat = [{ $input  attr-dict `:` type($input) `->` type($res)}];
+  let assemblyFormat = [{ $input  attr-dict `:` type($input) `to` type($res)}];
 
 }
 
