@@ -118,12 +118,13 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
           [](auto) { return Flow::Duplex; })
       .Case<InstanceOp>([&](auto inst) {
         for (auto arg : llvm::enumerate(inst.getResults()))
-          if (arg.value() == val)
+          if (arg.value() == val) {
             if (getModulePortDirection(inst.getReferencedModule(),
                                        arg.index()) == Direction::Output)
               return accumulatedFlow;
             else
               return swap();
+          }
         llvm_unreachable("couldn't find result in results");
       })
       .Case<MemOp>([&](auto op) { return swap(); })
@@ -1176,11 +1177,6 @@ LogicalResult NodeOp::inferReturnTypes(MLIRContext *context,
 static LogicalResult verifyConnectOp(ConnectOp connect) {
   FIRRTLType destType = connect.dest().getType().cast<FIRRTLType>();
   FIRRTLType srcType = connect.src().getType().cast<FIRRTLType>();
-
-  auto isPortOrInstancePort = [](Value a) -> bool {
-    auto op = a.getDefiningOp();
-    return !op || isa<InstanceOp>(op);
-  };
 
   // Analog types cannot be connected and must be attached.
   if (destType.isa<AnalogType>() || srcType.isa<AnalogType>())

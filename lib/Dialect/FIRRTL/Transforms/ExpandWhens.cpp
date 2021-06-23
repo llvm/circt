@@ -434,7 +434,6 @@ mlir::FailureOr<bool> ModuleVisitor::run(FModuleOp module) {
   }
 
   // Check for any incomplete initialization.
-  LogicalResult result = success();
   for (auto destAndConnect : outerScope) {
     // If there is valid connection to this destination, everything is good.
     auto *connect = std::get<1>(destAndConnect);
