@@ -106,7 +106,10 @@ def ControlOp : CalyxContainer<"control", [
     HasParent<"ComponentOp">,
     // TODO(Calyx): The terminator for the control flow
     // schedule should define that of the component.
-    NoTerminator
+    NoTerminator,
+    // TODO(Calyx): This may change depending on how
+    // we decide to represent Groups in the Dialect.
+    SingleBlock
   ]> {
   let summary = "Calyx Control";
   let description = [{

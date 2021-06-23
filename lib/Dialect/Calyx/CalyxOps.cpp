@@ -30,24 +30,18 @@ using namespace mlir;
 // ComponentOp
 //===----------------------------------------------------------------------===//
 
-/// Prints the port definitions of a Calyx component signature. The port
-/// definitions are defined in the following manner:
-/// <port-name> : <bit-width>
+/// Prints the port definitions of a Calyx component signature.
 static void printPortDefList(OpAsmPrinter &p, ArrayRef<Type> portDefTypes,
                              ArrayAttr portDefNames) {
   p << '(';
-
   llvm::interleaveComma(
       llvm::zip(portDefNames, portDefTypes), p, [&](auto nameAndType) {
         if (auto name =
                 std::get<0>(nameAndType).template dyn_cast<StringAttr>()) {
-          // Drop the `%`.
-          p << name.getValue().drop_front() << ": ";
+          p << name.getValue() << ": ";
         }
-        // Just get the bit width.
-        p << std::get<1>(nameAndType).getIntOrFloatBitWidth();
+        p << std::get<1>(nameAndType);
       });
-
   p << ')';
 }
 
@@ -55,8 +49,8 @@ static void printComponentOp(OpAsmPrinter &p, ComponentOp &op) {
   auto componentName =
       op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
           .getValue();
-  // Print the value directly to avoid the `@` when using `printSymbolName`.
-  p << "component " << componentName << " ";
+  p << "calyx.component ";
+  p.printSymbolName(componentName);
 
   auto typeAttr = op->getAttrOfType<TypeAttr>(ComponentOp::getTypeAttrName());
   auto functionType = typeAttr.getValue().cast<FunctionType>();
@@ -65,7 +59,6 @@ static void printComponentOp(OpAsmPrinter &p, ComponentOp &op) {
   auto inputPortNames = op->getAttrOfType<ArrayAttr>("inPortNames");
   printPortDefList(p, inputPortTypes, inputPortNames);
   p << " -> ";
-
   auto outputPortTypes = functionType.getResults();
   auto outputPortNames = op->getAttrOfType<ArrayAttr>("outPortNames");
   printPortDefList(p, outputPortTypes, outputPortNames);
@@ -77,8 +70,8 @@ static void printComponentOp(OpAsmPrinter &p, ComponentOp &op) {
 /// Parses the ports of a Calyx component signature, and adds the corresponding
 /// port names to `attrName`.
 static ParseResult
-parsePortDefList(MLIRContext *context, OperationState &result,
-                 OpAsmParser &parser,
+parsePortDefList(OpAsmParser &parser, MLIRContext *context,
+                 OperationState &result,
                  SmallVectorImpl<OpAsmParser::OperandType> &ports,
                  SmallVectorImpl<Type> &portTypes, StringRef attrName) {
   if (parser.parseLParen())
@@ -114,10 +107,10 @@ parseComponentSignature(OpAsmParser &parser, OperationState &result,
                         SmallVectorImpl<OpAsmParser::OperandType> &outPorts,
                         SmallVectorImpl<Type> &outPortTypes) {
   auto *context = parser.getBuilder().getContext();
-  if (parsePortDefList(context, result, parser, inPorts, inPortTypes,
+  if (parsePortDefList(parser, context, result, inPorts, inPortTypes,
                        "inPortNames") ||
       parser.parseArrow() ||
-      parsePortDefList(context, result, parser, outPorts, outPortTypes,
+      parsePortDefList(parser, context, result, outPorts, outPortTypes,
                        "outPortNames"))
     return failure();
 
