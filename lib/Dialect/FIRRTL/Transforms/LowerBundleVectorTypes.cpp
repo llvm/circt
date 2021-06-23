@@ -115,60 +115,6 @@ static void flattenType(FIRRTLType type,
   return flatten(type, "", false);
 }
 
-/// Copy annotations from \p annotations to \p loweredAttrs, except annotations
-/// with "target" key, that do not match the field suffix.
-static void filterAnnotations(ArrayAttr annotations,
-                              SmallVector<Attribute> &loweredAttrs,
-                              StringRef suffix) {
-  if (!annotations || annotations.empty())
-    return;
-
-  for (auto opAttr : annotations) {
-    auto di = opAttr.dyn_cast<DictionaryAttr>();
-    if (!di) {
-      loweredAttrs.push_back(opAttr);
-      continue;
-    }
-    auto targetAttr = di.get("target");
-    if (!targetAttr) {
-      loweredAttrs.push_back(opAttr);
-      continue;
-    }
-
-    ArrayAttr subFieldTarget = targetAttr.cast<ArrayAttr>();
-    SmallString<16> targetStr;
-    for (auto fName : subFieldTarget) {
-      std::string fNameStr = fName.cast<StringAttr>().getValue().str();
-      // The fNameStr will begin with either '[' or '.', replace it with an
-      // '_' to construct the suffix.
-      fNameStr[0] = '_';
-      // If it ends with ']', then just remove it.
-      if (fNameStr.back() == ']')
-        fNameStr.erase(fNameStr.size() - 1);
-
-      targetStr += fNameStr;
-    }
-    // If no subfield attribute, then copy the annotation.
-    if (targetStr.empty()) {
-      loweredAttrs.push_back(opAttr);
-      continue;
-    }
-    // If the subfield suffix doesn't match, then ignore the annotation.
-    if (suffix.find(targetStr.str().str()) != 0)
-      continue;
-
-    NamedAttrList modAttr;
-    for (auto attr : di.getValue()) {
-      // Ignore the actual target annotation, but copy the rest of annotations.
-      if (attr.first.str() == "target")
-        continue;
-      modAttr.push_back(attr);
-    }
-    loweredAttrs.push_back(
-        DictionaryAttr::get(annotations.getContext(), modAttr));
-  }
-}
-
 static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
                                  FIRRTLType type, StringRef suffix) {
   SmallVector<Type, 8> ports;
@@ -200,6 +146,60 @@ static SmallVector<Operation *> getSAWritePath(Operation *op) {
   while (!retval.empty() && !isa<SubaccessOp>(retval.back()))
     retval.pop_back();
   return retval;
+}
+
+/// Copy annotations from \p annotations to \p loweredAttrs, except annotations
+/// with "target" key, that do not match the field suffix.
+static void filterAnnotations(ArrayAttr annotations,
+                              SmallVector<Attribute> &loweredAttrs,
+                              StringRef suffix, bool isGroundType = true) {
+  if (!annotations || annotations.empty())
+    return;
+
+  for (auto opAttr : annotations) {
+    auto di = opAttr.dyn_cast<DictionaryAttr>();
+    if (!di || !isGroundType) {
+      loweredAttrs.push_back(opAttr);
+      continue;
+    }
+    auto targetAttr = di.get("target");
+    if (!targetAttr) {
+      loweredAttrs.push_back(opAttr);
+      continue;
+    }
+
+    ArrayAttr subFieldTarget = targetAttr.cast<ArrayAttr>();
+    SmallString<16> targetStr;
+    for (auto fName : subFieldTarget) {
+      std::string fNameStr = fName.cast<StringAttr>().getValue().str();
+      // The fNameStr will begin with either '[' or '.', replace it with an
+      // '_' to construct the suffix.
+      fNameStr[0] = '_';
+      // If it ends with ']', then just remove it.
+      if (fNameStr.back() == ']')
+        fNameStr.erase(fNameStr.size() - 1);
+
+      targetStr += fNameStr;
+    }
+    // If no subfield attribute, then copy the annotation.
+    if (targetStr.empty()) {
+      loweredAttrs.push_back(opAttr);
+      continue;
+    }
+    // If the subfield suffix doesn't match, then ignore the annotation.
+    if (suffix.find(targetStr.str().str()) == StringRef::npos)
+      continue;
+
+    NamedAttrList modAttr;
+    for (auto attr : di.getValue()) {
+      // Ignore the actual target annotation, but copy the rest of annotations.
+      if (attr.first.str() == "target")
+        continue;
+      modAttr.push_back(attr);
+    }
+    loweredAttrs.push_back(
+        DictionaryAttr::get(annotations.getContext(), modAttr));
+  }
 }
 
 /// Copy annotations from \p annotations into a new AnnotationSet and return it.
@@ -387,13 +387,15 @@ TypeLoweringVisitor::addArg(FModuleOp module, unsigned insertPt,
   // Append the new argument.
   auto newValue = body->insertArgument(insertPt, type);
 
+  auto nameStr = oldArg.name.getValue().str() + nameSuffix.str();
   // Save the name attribute for the new argument.
   auto name =
-      builder->getStringAttr(oldArg.name.getValue().str() + nameSuffix.str());
+      builder->getStringAttr(nameStr);
 
   // Populate the new arg attributes.
-  AnnotationSet newAnnotations =
-      filterAnnotations(oldArg.annotations, nameSuffix);
+  AnnotationSet newAnnotations = oldArg.annotations;
+  if (!getCanonicalAggregateType(type))
+      newAnnotations = filterAnnotations(oldArg.annotations, nameStr);
 
   // Flip the direction if the field is an output.
   auto direction = (Direction)((unsigned)oldArg.direction ^ isOutput);
@@ -908,10 +910,14 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
     for (auto field : fieldTypes) {
       Attribute pName;
       inputTypes.push_back(field.type);
-      if (port.name)
+      std::string nameStr ;
+      if (port.name) {
+        nameStr = port.name.getValue().str();
         pName = builder.getStringAttr((port.getName() + field.suffix).str());
+      }
       else
         pName = builder.getStringAttr("");
+      nameStr += field.suffix;
       portNames.push_back(pName);
       // Flip the direction if the field is an output.
       portDirections.push_back((Direction)(
@@ -920,8 +926,9 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
 
       // Populate newAnnotations with the old annotations filtered to those
       // associated with just this field.
-      AnnotationSet newAnnotations =
-          filterAnnotations(oldAnnotations, field.suffix);
+  AnnotationSet newAnnotations = oldAnnotations;
+  if (!getCanonicalAggregateType(field.type))
+      newAnnotations = filterAnnotations(oldAnnotations, nameStr);
 
       // Populate the new arg attributes.
       argAttrDicts.push_back(newAnnotations.getArgumentAttrDict(argAttrs));
@@ -1079,7 +1086,8 @@ void TypeLoweringVisitor::visitDecl(WireOp op) {
     SmallVector<Attribute> loweredAttrs;
     // For all annotations on the parent op, filter them based on the target
     // attribute.
-    filterAnnotations(op.annotations(), loweredAttrs, field.suffix);
+    bool isGroundType = !getCanonicalAggregateType(field.type);
+      filterAnnotations(op.annotations(), loweredAttrs, loweredName, isGroundType);
     auto wire = builder->create<WireOp>(field.type, loweredName, loweredAttrs);
     lowered.push_back(wire.getResult());
   }
@@ -1111,7 +1119,8 @@ void TypeLoweringVisitor::visitDecl(RegOp op) {
     SmallVector<Attribute> loweredAttrs;
     // For all annotations on the parent op, filter them based on the target
     // attribute.
-    filterAnnotations(op.annotations(), loweredAttrs, field.suffix);
+    bool isGroundType = !getCanonicalAggregateType(field.type);
+    filterAnnotations(op.annotations(), loweredAttrs, loweredName, isGroundType);
     auto reg = builder->create<RegOp>(field.getPortType(), op.clockVal(),
                                       loweredName, loweredAttrs);
     lowered.push_back(reg.getResult());
@@ -1192,7 +1201,8 @@ void TypeLoweringVisitor::visitDecl(RegResetOp op) {
     SmallVector<Attribute> loweredAttrs;
     // For all annotations on the parent op, filter them based on the
     // target attribute.
-    filterAnnotations(op.annotations(), loweredAttrs, field.value().suffix);
+    bool isGroundType = !getCanonicalAggregateType(field.value().type);
+    filterAnnotations(op.annotations(), loweredAttrs, loweredName, isGroundType);
     Value resetVal;
     if (BundleType bundle = resultType.dyn_cast<BundleType>()) {
       resetVal = builder->create<SubfieldOp>(
@@ -1236,7 +1246,8 @@ void TypeLoweringVisitor::visitDecl(NodeOp op) {
     SmallVector<Attribute> loweredAttrs;
     // For all annotations on the parent op, filter them based on the target
     // attribute.
-    filterAnnotations(op.annotations(), loweredAttrs, field.value().suffix);
+    bool isGroundType = !getCanonicalAggregateType(field.value().type);
+    filterAnnotations(op.annotations(), loweredAttrs, loweredName, isGroundType);
     Value input;
     if (BundleType bundle = resultType.dyn_cast<BundleType>()) {
       input = builder->create<SubfieldOp>(
