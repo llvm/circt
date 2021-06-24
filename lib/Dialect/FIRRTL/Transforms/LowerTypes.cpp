@@ -302,8 +302,9 @@ void TypeLoweringVisitor::lowerArg(FModuleOp module, BlockArgument arg,
     // Create new block arguments.
     auto type = field.type;
     // Flip the direction if the field is an output.
-    auto direction = (Direction)(
-        (unsigned)getModulePortDirection(module, argNumber) ^ field.isOutput);
+    auto direction =
+        (Direction)((unsigned)getModulePortDirection(module, argNumber) ^
+                    field.isOutput);
     auto newValue =
         addArg(module, type, argNumber, direction, field.fieldID, field.suffix);
 
@@ -354,9 +355,9 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
         pName = builder.getStringAttr("");
       portNames.push_back(pName);
       // Flip the direction if the field is an output.
-      portDirections.push_back((Direction)(
-          (unsigned)getModulePortDirection(extModule, oldArgNumber) ^
-          field.isOutput));
+      portDirections.push_back((
+          Direction)((unsigned)getModulePortDirection(extModule, oldArgNumber) ^
+                     field.isOutput));
 
       // Populate newAnnotations with the old annotations filtered to those
       // associated with just this field.
@@ -408,7 +409,7 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
   SmallVector<StringAttr, 8> resultNames;
   SmallVector<size_t, 8> numFieldsPerResult;
   SmallVector<unsigned, 8> resultFieldIDs;
-  SmallVector<Attribute, 8> lowerPortAnnotations;
+  SmallVector<Attribute, 8> loweredPortAnnotations;
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
@@ -423,14 +424,14 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
 
       SmallVector<Attribute> loweredAttrs;
       filterAnnotations(annotations, loweredAttrs, field.fieldID);
-      lowerPortAnnotations.push_back(builder->getArrayAttr(loweredAttrs));
+      loweredPortAnnotations.push_back(builder->getArrayAttr(loweredAttrs));
     }
     numFieldsPerResult.push_back(fieldTypes.size());
   }
 
   auto newInstance = builder->create<InstanceOp>(
       resultTypes, op.moduleNameAttr(), op.nameAttr(), op.annotations(),
-      builder->getArrayAttr(lowerPortAnnotations));
+      builder->getArrayAttr(loweredPortAnnotations));
 
   // Record the mapping of each old result to each new result.
   size_t nextResult = 0;
@@ -472,6 +473,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
   // cleared and re-used.
   SmallVector<Type, 4> resultPortTypes;
   llvm::SmallSetVector<Attribute, 4> resultPortNames;
+  SmallVector<Attribute, 8> loweredPortAnnotations;
 
   // Insert a unique port into resultPortNames with base name nameStr.
   auto uniquePortName = [&](StringRef baseName) {
@@ -493,20 +495,33 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     // constructed by checking the kind of the memory.
     resultPortTypes.clear();
     resultPortNames.clear();
+    loweredPortAnnotations.clear();
+
     for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
       auto kind = op.getPortKind(i);
       auto name = op.getPortName(i);
+      auto annotations = op.getPortAnnotation(i);
 
       // Any read or write ports are just added.
       if (kind != MemOp::PortKind::ReadWrite) {
+        SmallVector<Attribute> loweredAttrs;
+        filterAnnotations(annotations, loweredAttrs, field.fieldID);
+
+        loweredPortAnnotations.push_back(builder->getArrayAttr(loweredAttrs));
         resultPortTypes.push_back(op.getTypeForPort(depth, field.type, kind));
         uniquePortName(name.getValue());
         continue;
       }
 
       // Any readwrite ports are lowered to 1x read and 1x write.
+      SmallVector<Attribute> loweredAttrs;
+      filterAnnotations(annotations, loweredAttrs, field.fieldID);
+
+      loweredPortAnnotations.push_back(builder->getArrayAttr(loweredAttrs));
       resultPortTypes.push_back(
           op.getTypeForPort(depth, field.type, MemOp::PortKind::Read));
+
+      loweredPortAnnotations.push_back(builder->getArrayAttr(loweredAttrs));
       resultPortTypes.push_back(
           op.getTypeForPort(depth, field.type, MemOp::PortKind::Write));
 
@@ -525,7 +540,8 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
         resultPortTypes, op.readLatencyAttr(), op.writeLatencyAttr(),
         op.depthAttr(), op.ruwAttr(),
         builder->getArrayAttr(resultPortNames.getArrayRef()),
-        builder->getStringAttr(newName), op.annotations());
+        builder->getStringAttr(newName), op.annotations(),
+        builder->getArrayAttr(loweredPortAnnotations));
 
     // Setup the lowering to the new memory. We need to track both the
     // new memory index ("i") and the old memory index ("j") to deal

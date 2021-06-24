@@ -134,6 +134,24 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar
 
 ; // -----
 
+; COM: Test result annotations of MemOp.
+circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar.r.baz"},{"b":"b","target":"~Foo|Foo>bar.w"}]]
+  module Foo:
+    mem bar:
+      data-type => {baz: UInt<8>, qux: UInt<8>}
+      depth => 16
+      reader => r
+      writer => w
+      read-latency => 0
+      write-latency => 1
+      read-under-write => undefined
+
+    ; CHECK-LABEL: module {
+    ; CHECK: firrtl.mem
+    ; CHECK-SAME: [{a = "a", target = [".baz"]}], [{b = "b"}]
+
+; // -----
+
 ; COM: A ReferenceTarget/ComponentName pointing at a node should work.
 ; COM: This shouldn't crash if the node is in a nested block.
 circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.baz"}]]

@@ -946,6 +946,51 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
   return success();
 }
 
+void MemOp::build(OpBuilder &builder, OperationState &result,
+                  TypeRange resultTypes, uint32_t readLatency,
+                  uint32_t writeLatency, uint64_t depth, RUWAttr ruw,
+                  ArrayRef<Attribute> portNames, StringRef name,
+                  ArrayRef<Attribute> annotations,
+                  ArrayRef<Attribute> portAnnotations) {
+  result.addAttribute(
+      "readLatency",
+      builder.getIntegerAttr(builder.getIntegerType(32), readLatency));
+  result.addAttribute(
+      "writeLatency",
+      builder.getIntegerAttr(builder.getIntegerType(32), writeLatency));
+  result.addAttribute(
+      "depth", builder.getIntegerAttr(builder.getIntegerType(64), depth));
+  result.addAttribute("ruw", ::RUWAttrAttr::get(builder.getContext(), ruw));
+  result.addAttribute("portNames", builder.getArrayAttr(portNames));
+  result.addAttribute("name", builder.getStringAttr(name));
+  result.addAttribute("annotations", builder.getArrayAttr(annotations));
+  result.addTypes(resultTypes);
+
+  if (portAnnotations.empty()) {
+    SmallVector<Attribute, 16> portAnnotationsVec(resultTypes.size(),
+                                                  builder.getArrayAttr({}));
+    result.addAttribute("portAnnotations",
+                        builder.getArrayAttr(portAnnotationsVec));
+  } else {
+    assert(portAnnotations.size() == resultTypes.size());
+    result.addAttribute("portAnnotations",
+                        builder.getArrayAttr(portAnnotations));
+  }
+}
+
+ArrayAttr MemOp::getPortAnnotation(unsigned portIdx) {
+  assert(portIdx < getNumResults() &&
+         "index should be smaller than result number");
+  return portAnnotations()[portIdx].cast<ArrayAttr>();
+}
+
+void MemOp::setAllPortAnnotations(ArrayRef<Attribute> annotations) {
+  assert(annotations.size() == getNumResults() &&
+         "number of annotations is not equal to result number");
+  (*this)->setAttr("portAnnotations",
+                   ArrayAttr::get(getContext(), annotations));
+}
+
 /// Verify the correctness of a MemOp.
 static LogicalResult verifyMemOp(MemOp mem) {
 
@@ -1085,6 +1130,10 @@ static LogicalResult verifyMemOp(MemOp mem) {
 
     oldDataType = dataType;
   }
+
+  if (mem.portAnnotations().size() != mem.getNumResults())
+    return mem.emitOpError("the number of result annotations should be "
+                           "equal to the number of results");
 
   return success();
 }
@@ -2227,6 +2276,33 @@ static void printElideAnnotations(OpAsmPrinter &p, Operation *op,
   p.printOptionalAttrDict(op->getAttrs(), elidedAttrs);
 }
 
+/// Parse an optional attribute dictionary, adding empty 'annotations' and
+/// 'portAnnotations' attributes if not specified.
+static ParseResult parseElidePortAnnotations(OpAsmParser &parser,
+                                             NamedAttrList &resultAttrs) {
+  auto result = parseElideAnnotations(parser, resultAttrs);
+
+  if (!resultAttrs.get("portAnnotations")) {
+    SmallVector<Attribute, 16> portAnnotations(
+        parser.getNumResults(), parser.getBuilder().getArrayAttr({}));
+    resultAttrs.append("portAnnotations",
+                       parser.getBuilder().getArrayAttr(portAnnotations));
+  }
+  return result;
+}
+
+// Elide 'annotations' and 'portAnnotations' attributes if they are empty.
+static void printElidePortAnnotations(OpAsmPrinter &p, Operation *op,
+                                      DictionaryAttr attr,
+                                      ArrayRef<StringRef> extraElides = {}) {
+  SmallVector<StringRef, 2> elidedAttrs(extraElides.begin(), extraElides.end());
+
+  if (llvm::all_of(op->getAttrOfType<ArrayAttr>("portAnnotations"),
+                   [&](Attribute a) { return a.cast<ArrayAttr>().empty(); }))
+    elidedAttrs.push_back("portAnnotations");
+  printElideAnnotations(p, op, attr, elidedAttrs);
+}
+
 //===----------------------------------------------------------------------===//
 // ImplicitSSAName Custom Directive
 //===----------------------------------------------------------------------===//
@@ -2278,29 +2354,14 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
 
 static ParseResult parseInstanceOp(OpAsmParser &parser,
                                    NamedAttrList &resultAttrs) {
-  auto result = parseElideAnnotations(parser, resultAttrs);
-
-  if (!resultAttrs.get("portAnnotations")) {
-    SmallVector<Attribute, 16> portAnnotations(
-        parser.getNumResults(), parser.getBuilder().getArrayAttr({}));
-    resultAttrs.append("portAnnotations",
-                       parser.getBuilder().getArrayAttr(portAnnotations));
-  }
-  return result;
+  return parseElidePortAnnotations(parser, resultAttrs);
 }
 
 /// Always elide "moduleName" and elide "annotations" if it exists or
 /// if it is empty.
 static void printInstanceOp(OpAsmPrinter &p, Operation *op,
                             DictionaryAttr attr) {
-  SmallVector<StringRef, 2> elidedAttrs;
-  // "moduleName" is always elided.
-  elidedAttrs.push_back("moduleName");
-
-  if (llvm::all_of(op->getAttrOfType<ArrayAttr>("portAnnotations"),
-                   [&](Attribute a) { return a.cast<ArrayAttr>().empty(); }))
-    elidedAttrs.push_back("portAnnotations");
-  printElideAnnotations(p, op, attr, elidedAttrs);
+  printElidePortAnnotations(p, op, attr, {"moduleName"});
 }
 
 //===----------------------------------------------------------------------===//
@@ -2321,17 +2382,31 @@ static void printMemoryPortOp(OpAsmPrinter &p, Operation *op,
 }
 
 //===----------------------------------------------------------------------===//
+// SMemOp Custom attr-dict Directive
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseSMemOp(OpAsmParser &parser,
+                               NamedAttrList &resultAttrs) {
+  return parseElideAnnotations(parser, resultAttrs);
+}
+
+/// Always elide "ruw" and elide "annotations" if it exists or if it is empty.
+static void printSMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
+  printElideAnnotations(p, op, attr, {"ruw"});
+}
+
+//===----------------------------------------------------------------------===//
 // MemOp Custom attr-dict Directive
 //===----------------------------------------------------------------------===//
 
 static ParseResult parseMemOp(OpAsmParser &parser, NamedAttrList &resultAttrs) {
-  return parseElideAnnotations(parser, resultAttrs);
+  return parseElidePortAnnotations(parser, resultAttrs);
 }
 
 /// Always elide "ruw" and elide "annotations" if it exists or if it is empty.
 static void printMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
   // "ruw" is always elided.
-  printElideAnnotations(p, op, attr, {"ruw"});
+  printElidePortAnnotations(p, op, attr, {"ruw"});
 }
 
 //===----------------------------------------------------------------------===//
