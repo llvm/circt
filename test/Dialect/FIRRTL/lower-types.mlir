@@ -735,13 +735,13 @@ firrtl.circuit "WhenOp" {
 
 // -----
 
-// Test that subfield annotations on wire are lowred to appropriate instance based on target.
+// Test that subfield annotations on wire are lowred to appropriate instance based on fieldID.
 firrtl.circuit "AnnotationsBundle" {
   firrtl.module @AnnotationsBundle() {
-    %bar = firrtl.wire  {annotations = [{one, target = [".qux"]}, {target = ["[1]", ".baz"], two}]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+    %bar = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [3, 3], {one}>, #firrtl.subAnno<fieldID = [5, 5], {two}>]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
 
       // CHECK: %bar_0_baz = firrtl.wire  : !firrtl.uint<1>
-      // CHECK: %bar_0_qux = firrtl.wire  : !firrtl.uint<1>
+      // CHECK: %bar_0_qux = firrtl.wire  {annotations = [{one}]} : !firrtl.uint<1>
       // CHECK: %bar_1_baz = firrtl.wire  {annotations = [{two}]} : !firrtl.uint<1>
       // CHECK: %bar_1_qux = firrtl.wire  : !firrtl.uint<1>
   }
@@ -749,13 +749,13 @@ firrtl.circuit "AnnotationsBundle" {
 
 // -----
 
-// Test that subfield annotations on reg are lowred to appropriate instance based on target.
+// Test that subfield annotations on reg are lowred to appropriate instance based on fieldID.
 firrtl.circuit "AnnotationsBundle2" {
   firrtl.module @AnnotationsBundle2(in %clock: !firrtl.clock) {
-    %bar = firrtl.reg %clock  {annotations = [{one, target = [".qux"]}, {target = ["[1]", ".baz"], two}]} : (!firrtl.clock) -> !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+    %bar = firrtl.reg %clock  {annotations = [#firrtl.subAnno<fieldID = [3, 3], {one}>, #firrtl.subAnno<fieldID = [5, 5], {two}>]} : (!firrtl.clock) -> !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
 
     // CHECK: %bar_0_baz = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
-    // CHECK: %bar_0_qux = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK: %bar_0_qux = firrtl.reg %clock  {annotations = [{one}]} : (!firrtl.clock) -> !firrtl.uint<1>
     // CHECK: %bar_1_baz = firrtl.reg %clock  {annotations = [{two}]} : (!firrtl.clock) -> !firrtl.uint<1>
     // CHECK: %bar_1_qux = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
   }
@@ -763,12 +763,12 @@ firrtl.circuit "AnnotationsBundle2" {
 
 // -----
 
-// Test that subfield annotations on reg are lowred to appropriate instance based on target. Ignore un-flattened array targets
+// Test that subfield annotations on reg are lowred to appropriate instance based on fieldID. Ignore un-flattened array targets
 // circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0].qux[0]"},{"two":null,"target":"~Foo|Foo>bar[1].baz"},{"three":null,"target":"~Foo|Foo>bar[0].yes"} ]]
 
 firrtl.circuit "AnnotationsBundle3" {
   firrtl.module @AnnotationsBundle3(in %clock: !firrtl.clock) {
-    %bar = firrtl.reg %clock  {annotations = [{one, target = ["[0]", ".qux", "[0]"]}, {target = ["[1]", ".baz"], two}, {target = ["[0]", ".yes"], three}]} : (!firrtl.clock) -> !firrtl.vector<bundle<baz: vector<uint<1>, 2>, qux: vector<uint<1>, 2>, yes: bundle<a: uint<1>, b: uint<1>>>, 2>
+    %bar = firrtl.reg %clock  {annotations = [#firrtl.subAnno<fieldID = [6, 6], {one}>, #firrtl.subAnno<fieldID = [12, 14], {two}>, #firrtl.subAnno<fieldID = [8, 10], {three}>]} : (!firrtl.clock) -> !firrtl.vector<bundle<baz: vector<uint<1>, 2>, qux: vector<uint<1>, 2>, yes: bundle<a: uint<1>, b: uint<1>>>, 2>
 
     // CHECK: %bar_0_baz_0 = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
     // CHECK: %bar_0_baz_1 = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
@@ -1004,12 +1004,12 @@ firrtl.circuit "Port" {
 // -----
 
 // Test that annotations on subfield/subindices of ports are only applied to
-// matching targets.  Any other arg attributes should be copied.
+// matching fieldIDs.  Any other arg attributes should be copied.
 module  {
   firrtl.circuit "PortBundle"  {
     // The annotation should be copied to just a.a.  The firrtl.hello arg
     // attribute should be copied to each new port.
-    firrtl.module @PortBundle(in %a: !firrtl.bundle<a: uint<1>, b flip: uint<1>> {firrtl.annotations = [{a, target = [".a"]}], firrtl.hello}) {}
+    firrtl.module @PortBundle(in %a: !firrtl.bundle<a: uint<1>, b flip: uint<1>> {firrtl.annotations = [#firrtl.subAnno<fieldID = [1, 1], {a}>], firrtl.hello}) {}
     // CHECK: firrtl.module @PortBundle
     // CHECK-COUNT-1: firrtl.annotations = [{a}]
     // CHECK-COUNT-2: firrtl.hello
@@ -1018,7 +1018,7 @@ module  {
 
     // The annotation should be copied to just a[0].  The firrtl.world arg
     // attribute should be copied to each port.
-    firrtl.extmodule @PortVector(in %a: !firrtl.vector<uint<1>, 2> {firrtl.annotations = [{b, target = ["[0]"]}], firrtl.world})
+    firrtl.extmodule @PortVector(in %a: !firrtl.vector<uint<1>, 2> {firrtl.annotations = [#firrtl.subAnno<fieldID = [1, 1], {b}>], firrtl.world})
     // CHECK: firrtl.extmodule @PortVector
     // CHECK-COUNT-1: firrtl.annotations = [{b}]
     // CHECK-COUNT-2: firrtl.world
@@ -1079,6 +1079,6 @@ firrtl.circuit "Foo"   {
   }
   firrtl.module @Foo() {
     // CHECK: [{one}], [{two}], []
-    %bar_a, %bar_b = firrtl.instance @Bar  {name = "bar", portAnnotations = [[{one}], [{target = [".baz"], two}]]} : !firrtl.uint<1>, !firrtl.bundle<baz: uint<1>, qux: uint<1>>
+    %bar_a, %bar_b = firrtl.instance @Bar  {name = "bar", portAnnotations = [[{one}], [#firrtl.subAnno<fieldID = [1, 1], {two}>]]} : !firrtl.uint<1>, !firrtl.bundle<baz: uint<1>, qux: uint<1>>
   }
 }
