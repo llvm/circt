@@ -79,6 +79,11 @@ def ComponentOp : CalyxOp<"component", [
     public:
       /// Returns the body of a Calyx component.
       Block *getBody() { return &getOperation()->getRegion(0).front(); }
+
+      // Returns information about the input and output ports for the component.
+      SmallVector<ComponentPortInfo> getPorts() {
+        return getComponentPortInfo(*this);
+      }
   }];
 
   let verifier = "return ::verify$cppClass(*this);";
@@ -159,7 +164,7 @@ def CellOp : CalyxOp<"cell", [
     optionally have parameters.
 
     ```mlir
-      %out1 = calyx.cell "foo" @MyComponent(%in0) : i32 -> i64
+      %in1, %out1 = calyx.cell "name" @MyComponent : i64, i16
     ```
   }];
 
@@ -169,18 +174,16 @@ def CellOp : CalyxOp<"cell", [
     Operation *getReferencedComponent();
   }];
 
-  // TODO(Calyx): Add parameters attribute for
+  // TODO(Calyx): Add `parameters` attribute for
   // SystemVerilog-wrapped primitives.
   let arguments = (ins
     StrAttr:$instanceName,
-    FlatSymbolRefAttr:$componentName,
-    Variadic<AnyType>:$inputs
+    FlatSymbolRefAttr:$componentName
   );
-  let results = (outs Variadic<AnyType>);
+  let results = (outs Variadic<AnyType>:$results);
 
   let assemblyFormat = [{
-    $instanceName $componentName `(` $inputs `)`
-    attr-dict `:` functional-type($inputs, results)
+    $instanceName $componentName attr-dict (`:` type($results)^)?
   }];
   let verifier = "return ::verify$cppClass(*this);";
 }
