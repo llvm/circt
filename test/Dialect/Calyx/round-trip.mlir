@@ -33,10 +33,7 @@ calyx.program {
   }
 
   calyx.component @main() -> () {
-    calyx.cells {
-      // CHECK: %0 = calyx.cell "c0" @ComponentWithOutPort() : () -> i64
-      %0 = calyx.cell "c0" @ComponentWithOutPort() : () -> i64
-    }
+    calyx.cells {}
     calyx.wires {}
     calyx.control {}
   }

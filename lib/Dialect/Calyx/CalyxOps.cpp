@@ -192,10 +192,9 @@ static LogicalResult verifyCellsOp(CellsOp cells) {
   if (!component)
     return cells.emitOpError("Should be embedded in 'calyx.component'.");
 
-  for (auto &op : *cells.getBody()) {
-    if (!isa<CellOp>(op))
-      return cells.emitOpError("Should only contain 'calyx.cell' instances.");
-  }
+  if (!llvm::all_of(*cells.getBody(), [](auto &op) { return isa<CellOp>(op); }))
+    return cells.emitOpError("Should only contain 'calyx.cell' instances.");
+
   return success();
 }
 
