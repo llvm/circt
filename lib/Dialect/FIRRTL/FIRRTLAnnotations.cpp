@@ -330,6 +330,11 @@ bool AnnotationSet::removeAnnotations(
   return false;
 }
 
+bool AnnotationSet::removeAnnotations(Operation *op, StringRef className) {
+  return removeAnnotations(
+      op, [&](Annotation a) { return (a.getClass() == className); });
+}
+
 /// Remove all port annotations from a module for which `predicate` returns
 /// true.
 bool AnnotationSet::removePortAnnotations(

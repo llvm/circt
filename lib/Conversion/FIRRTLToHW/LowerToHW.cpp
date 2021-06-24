@@ -1573,7 +1573,8 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   // Name attr is required on sv.wire but optional on firrtl.wire.
   auto nameAttr = op.nameAttr() ? op.nameAttr() : builder.getStringAttr("");
 
-  if (!AnnotationSet(op).hasDontTouch())
+  if (!AnnotationSet::removeAnnotations(
+          op, "firrtl.transforms.DontTouchAnnotation"))
     return setLoweringTo<sv::WireOp>(op, resultType, nameAttr);
   auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
   auto symName = op.nameAttr();
@@ -1601,7 +1602,8 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
 
   // Node operations are logical noops, but may carry annotations.  Don't touch
   // indicates we should keep it as a wire.
-  if (AnnotationSet(op).hasDontTouch()) {
+  if (AnnotationSet::removeAnnotations(
+          op, "firrtl.transforms.DontTouchAnnotation")) {
     // name may be empty
     auto name = op->getAttrOfType<StringAttr>("name");
     auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
@@ -1676,7 +1678,8 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
 
   // Add symbol if DontTouch annotation present.
   auto regResult =
-      AnnotationSet(op).hasDontTouch()
+      AnnotationSet::removeAnnotations(op,
+                                       "firrtl.transforms.DontTouchAnnotation")
           ? builder.create<sv::RegOp>(resultType, op.nameAttr(), op.nameAttr())
           : builder.create<sv::RegOp>(resultType, op.nameAttr());
   (void)setLowering(op, regResult);
