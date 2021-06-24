@@ -96,11 +96,12 @@ def WiresOp : CalyxContainer<"wires", []> {
   }];
 }
 
-// TODO(Calyx): The terminator for the control flow
+// TODO1(Calyx): The terminator for the control flow
 // schedule should define that of the component.
-// While it currently carries the SingleBlock trait,
-// this may change depending on how we decide
-// to represent Groups in the dialect.
+// TODO2(Calyx): While it currently carries the
+// SingleBlock trait, this may change depending
+// on how we decide to represent Groups in the
+// dialect.
 def ControlOp : CalyxContainer<"control", []> {
   let summary = "Calyx Control";
   let description = [{
