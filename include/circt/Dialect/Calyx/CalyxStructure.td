@@ -35,7 +35,10 @@ def ComponentOp : CalyxOp<"component", [
   }];
 
   // TODO(Calyx): Allow explicit port naming?
-  let arguments = (ins);
+  let arguments = (ins
+    ArrayAttr:$inPortNames,
+    ArrayAttr:$outPortNames
+  );
   let results = (outs);
 
   let regions = (region SizedRegion<1>: $body);
@@ -61,12 +64,7 @@ def ComponentOp : CalyxOp<"component", [
   let parser = "return ::parse$cppClass(parser, result);";
 }
 
-def CellsOp : CalyxContainer<"cells", [
-    HasParent<"ComponentOp">,
-    IsolatedFromAbove,
-    SingleBlock,
-    NoTerminator
-  ]> {
+def CellsOp : CalyxContainer<"cells", [IsolatedFromAbove]> {
   let summary = "Calyx Cells";
   let description = [{
     The "calyx.cells" operation represents a container for
@@ -82,11 +80,7 @@ def CellsOp : CalyxContainer<"cells", [
   }];
 }
 
-def WiresOp : CalyxContainer<"wires", [
-    HasParent<"ComponentOp">,
-    NoTerminator,
-    SingleBlock
-  ]> {
+def WiresOp : CalyxContainer<"wires", []> {
   let summary = "Calyx Wires";
   let description = [{
     The "calyx.wires" operation represents a set of
@@ -102,15 +96,12 @@ def WiresOp : CalyxContainer<"wires", [
   }];
 }
 
-def ControlOp : CalyxContainer<"control", [
-    HasParent<"ComponentOp">,
-    // TODO(Calyx): The terminator for the control flow
-    // schedule should define that of the component.
-    NoTerminator,
-    // TODO(Calyx): This may change depending on how
-    // we decide to represent Groups in the Dialect.
-    SingleBlock
-  ]> {
+// TODO(Calyx): The terminator for the control flow
+// schedule should define that of the component.
+// While it currently carries the SingleBlock trait,
+// this may change depending on how we decide
+// to represent Groups in the dialect.
+def ControlOp : CalyxContainer<"control", []> {
   let summary = "Calyx Control";
   let description = [{
     The "calyx.control" operation represents the
