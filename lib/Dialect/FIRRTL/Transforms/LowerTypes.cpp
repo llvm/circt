@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
@@ -108,53 +109,17 @@ static FIRRTLType getCanonicalAggregateType(Type originalType) {
 /// with "target" key, that do not match the field suffix.
 static void filterAnnotations(ArrayAttr annotations,
                               SmallVector<Attribute> &loweredAttrs,
-                              StringRef suffix) {
+                              unsigned targetFieldID) {
   if (!annotations || annotations.empty())
     return;
 
   for (auto opAttr : annotations) {
-    auto di = opAttr.dyn_cast<DictionaryAttr>();
-    if (!di) {
+    if (auto subAnno = opAttr.dyn_cast<SubAnnotationAttr>()) {
+      if (targetFieldID >= subAnno.getMinFieldID() &&
+          targetFieldID <= subAnno.getMaxFieldID())
+        loweredAttrs.push_back(subAnno.getAnnotations());
+    } else
       loweredAttrs.push_back(opAttr);
-      continue;
-    }
-    auto targetAttr = di.get("target");
-    if (!targetAttr) {
-      loweredAttrs.push_back(opAttr);
-      continue;
-    }
-
-    ArrayAttr subFieldTarget = targetAttr.cast<ArrayAttr>();
-    SmallString<16> targetStr;
-    for (auto fName : subFieldTarget) {
-      std::string fNameStr = fName.cast<StringAttr>().getValue().str();
-      // The fNameStr will begin with either '[' or '.', replace it with an
-      // '_' to construct the suffix.
-      fNameStr[0] = '_';
-      // If it ends with ']', then just remove it.
-      if (fNameStr.back() == ']')
-        fNameStr.erase(fNameStr.size() - 1);
-
-      targetStr += fNameStr;
-    }
-    // If no subfield attribute, then copy the annotation.
-    if (targetStr.empty()) {
-      loweredAttrs.push_back(opAttr);
-      continue;
-    }
-    // If the subfield suffix doesn't match, then ignore the annotation.
-    if (suffix.find(targetStr.str().str()) != 0)
-      continue;
-
-    NamedAttrList modAttr;
-    for (auto attr : di.getValue()) {
-      // Ignore the actual target annotation, but copy the rest of annotations.
-      if (attr.first.str() == "target")
-        continue;
-      modAttr.push_back(attr);
-    }
-    loweredAttrs.push_back(
-        DictionaryAttr::get(annotations.getContext(), modAttr));
   }
 }
 
@@ -162,11 +127,11 @@ static void filterAnnotations(ArrayAttr annotations,
 /// This removes annotations with "target" key that does not match the field
 /// suffix.
 static AnnotationSet filterAnnotations(AnnotationSet annotations,
-                                       StringRef suffix) {
+                                       unsigned targetFieldID) {
   if (annotations.empty())
     return annotations;
   SmallVector<Attribute> loweredAttrs;
-  filterAnnotations(annotations.getArrayAttr(), loweredAttrs, suffix);
+  filterAnnotations(annotations.getArrayAttr(), loweredAttrs, targetFieldID);
   return AnnotationSet(ArrayAttr::get(annotations.getContext(), loweredAttrs));
 }
 
@@ -210,7 +175,8 @@ private:
 
   // Helpers to manage state.
   Value addArg(FModuleOp module, Type type, unsigned oldArgNumber,
-               Direction direction, StringRef nameSuffix = "");
+               Direction direction, unsigned targetFieldID,
+               StringRef nameSuffix = "");
 
   void setBundleLowering(FieldRef fieldRef, Value newValue);
   Value getBundleLowering(FieldRef fieldRef);
@@ -336,9 +302,11 @@ void TypeLoweringVisitor::lowerArg(FModuleOp module, BlockArgument arg,
     // Create new block arguments.
     auto type = field.type;
     // Flip the direction if the field is an output.
-    auto direction = (Direction)(
-        (unsigned)getModulePortDirection(module, argNumber) ^ field.isOutput);
-    auto newValue = addArg(module, type, argNumber, direction, field.suffix);
+    auto direction =
+        (Direction)((unsigned)getModulePortDirection(module, argNumber) ^
+                    field.isOutput);
+    auto newValue =
+        addArg(module, type, argNumber, direction, field.fieldID, field.suffix);
 
     // If this field was flattened from a bundle.
     if (!field.suffix.empty()) {
@@ -387,14 +355,14 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
         pName = builder.getStringAttr("");
       portNames.push_back(pName);
       // Flip the direction if the field is an output.
-      portDirections.push_back((Direction)(
-          (unsigned)getModulePortDirection(extModule, oldArgNumber) ^
-          field.isOutput));
+      portDirections.push_back((
+          Direction)((unsigned)getModulePortDirection(extModule, oldArgNumber) ^
+                     field.isOutput));
 
       // Populate newAnnotations with the old annotations filtered to those
       // associated with just this field.
       AnnotationSet newAnnotations =
-          filterAnnotations(oldAnnotations, field.suffix);
+          filterAnnotations(oldAnnotations, field.fieldID);
 
       // Populate the new arg attributes.
       argAttrDicts.push_back(newAnnotations.getArgumentAttrDict(argAttrs));
@@ -455,7 +423,7 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
       resultFieldIDs.push_back(field.fieldID);
 
       SmallVector<Attribute> loweredAttrs;
-      filterAnnotations(annotations, loweredAttrs, field.suffix);
+      filterAnnotations(annotations, loweredAttrs, field.fieldID);
       lowerPortAnnotations.push_back(builder->getArrayAttr(loweredAttrs));
     }
     numFieldsPerResult.push_back(fieldTypes.size());
@@ -695,7 +663,7 @@ void TypeLoweringVisitor::visitDecl(NodeOp op) {
     // For all annotations on the parent op, filter them based on the target
     // attribute.
     SmallVector<Attribute> loweredAttrs;
-    filterAnnotations(op.annotations(), loweredAttrs, field.suffix);
+    filterAnnotations(op.annotations(), loweredAttrs, field.fieldID);
     auto initializer = getBundleLowering(FieldRef(op.input(), field.fieldID));
     auto node = builder->create<NodeOp>(field.type, initializer, loweredName,
                                         loweredAttrs);
@@ -730,7 +698,7 @@ void TypeLoweringVisitor::visitDecl(WireOp op) {
     SmallVector<Attribute> loweredAttrs;
     // For all annotations on the parent op, filter them based on the target
     // attribute.
-    filterAnnotations(op.annotations(), loweredAttrs, field.suffix);
+    filterAnnotations(op.annotations(), loweredAttrs, field.fieldID);
     auto wire = builder->create<WireOp>(field.type, loweredName, loweredAttrs);
     setBundleLowering(FieldRef(result, field.fieldID), wire);
   }
@@ -763,7 +731,7 @@ void TypeLoweringVisitor::visitDecl(RegOp op) {
     SmallVector<Attribute> loweredAttrs;
     // For all annotations on the parent op, filter them based on the target
     // attribute.
-    filterAnnotations(op.annotations(), loweredAttrs, field.suffix);
+    filterAnnotations(op.annotations(), loweredAttrs, field.fieldID);
     setBundleLowering(FieldRef(result, field.fieldID),
                       builder->create<RegOp>(field.getPortType(), op.clockVal(),
                                              loweredName, loweredAttrs));
@@ -1157,6 +1125,7 @@ void TypeLoweringVisitor::visitStmt(WhenOp op) {
 // possibly with a new suffix appended.
 Value TypeLoweringVisitor::addArg(FModuleOp module, Type type,
                                   unsigned oldArgNumber, Direction direction,
+                                  unsigned targetFieldID,
                                   StringRef nameSuffix) {
   Block *body = module.getBodyBlock();
 
@@ -1174,7 +1143,7 @@ Value TypeLoweringVisitor::addArg(FModuleOp module, Type type,
   SmallVector<NamedAttribute> attributes;
   auto annotations = AnnotationSet::forPort(module, oldArgNumber, attributes);
 
-  AnnotationSet newAnnotations = filterAnnotations(annotations, nameSuffix);
+  AnnotationSet newAnnotations = filterAnnotations(annotations, targetFieldID);
 
   // Populate the new arg attributes.
   newArgAttrs.push_back(newAnnotations.getArgumentAttrDict(attributes));

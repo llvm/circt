@@ -99,7 +99,7 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},
 
     ; CHECK-LABEL: module {
     ; CHECK: %bar_a, %bar_b = firrtl.instance @Bar
-    ; CHECK-SAME: [{one}], [{target = [".baz"], two}, {target = [".qux"], three}]
+    ; CHECK-SAME: [{one}], [#firrtl.subAnno<fieldID = [1, 1], {two}>], [#firrtl.subAnno<fieldID = [2, 2], {three}>]
 
 ; // -----
 
@@ -241,24 +241,24 @@ circuit Foo: %[[{"a":"{\"b\":null}"}]]
 ; // -----
 
 ; COM: Subfield/Subindex annotations should be parsed correctly on wires
-circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.qux"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
+circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0]"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
   module Foo:
     wire bar: {baz: UInt<1>, qux: UInt<1>}[2]
 
     ; CHECK-LABEL: module {
-    ; CHECK: %bar = firrtl.wire  {annotations = [{one, target = [".qux"]}, {target = ["[1]", ".baz"], two}]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+    ; CHECK: %bar = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [1, 3], {one}>, #firrtl.subAnno<fieldID = [5, 5], {two}>]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
 
 
 ; // -----
 
 ; COM: Subfield/Subindex annotations should be parsed correctly on registers
-circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.qux"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
+circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0]"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
   module Foo:
     input clock: Clock
     reg bar: {baz: UInt<1>, qux: UInt<1>}[2], clock
 
     ; CHECK-LABEL: module {
-    ; CHECK: %bar = firrtl.reg %clock  {annotations = [{one, target = [".qux"]}, {target = ["[1]", ".baz"], two}]} : (!firrtl.clock) -> !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+    ; CHECK: %bar = firrtl.reg %clock  {annotations = [#firrtl.subAnno<fieldID = [1, 3], {one}>, #firrtl.subAnno<fieldID = [5, 5], {two}>]} : (!firrtl.clock) -> !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
 
 ; // -----
 
@@ -477,7 +477,7 @@ circuit GCTMemTap : %[
     ; CHECK-LABEL: firrtl.circuit "GCTMemTap"
     ; CHECK-SAME: annotations = [{unrelatedAnnotation}]
     ; CHECK: firrtl.extmodule @MemTap
-    ; CHECK-SAME: %mem: [[A:.+]] {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = [[ID:.+]] : i64, target = ["[0]"]}, {class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = [[ID]] : i64, target = ["[1]"]}]
+    ; CHECK-SAME: %mem: [[A:.+]] {firrtl.annotations = [#firrtl.subAnno<fieldID = [1, 1], {class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = 0 : i64}>, #firrtl.subAnno<fieldID = [2, 2], {class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = 0 : i64}>]
     ; CHECK: firrtl.module @GCTMemTap
     ; CHECK: %mem = firrtl.cmem
     ; CHECK-SAME: annotations = [{class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = [[ID]] : i64}]
@@ -528,14 +528,14 @@ circuit GCTInterface : %[
     ; members of the interface inside the parent.  Both port "a" and register
     ; "r" should be annotated.
     ; CHECK: firrtl.module @GCTInterface
-    ; CHECK-SAME: %a: [[TYPE:.+]] {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "ViewName", name = "port", target = []}]}
+    ; CHECK-SAME: %a: [[TYPE:.+]] {firrtl.annotations = [#firrtl.subAnno<fieldID = [0, 0], {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "ViewName", name = "port"}>]}
     ; CHECK-SAME: annotations = [{class = "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation", id = [[ID]] : i64, type = "parent"}]
     ; CHECK: firrtl.reg
     ; CHECK-SAME: annotations
-    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "register", name = "_2", target = ["._2", "[0]"]}
-    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "register", name = "_2", target = ["._2", "[1]"]}
-    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "_0", name = "_1", target = ["._0", "._1"]}
-    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "_0", name = "_0", target = ["._0", "._0"]}]}
+    ; CHECK-SAME: #firrtl.subAnno<fieldID = [5, 5], {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "register", name = "_2"}>
+    ; CHECK-SAME: #firrtl.subAnno<fieldID = [6, 6], {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "register", name = "_2"}>
+    ; CHECK-SAME: #firrtl.subAnno<fieldID = [3, 3], {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "_0", name = "_1"}>
+    ; CHECK-SAME: #firrtl.subAnno<fieldID = [2, 2], {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "_0", name = "_0"}>
 
 ; // -----
 
