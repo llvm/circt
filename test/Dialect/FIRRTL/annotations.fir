@@ -90,16 +90,18 @@ circuit Foo: %[[
 ; COM: Test result annotations of InstanceOp.
 circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},
                 {"two":null,"target":"~Foo|Foo>bar.b.baz"},
-                {"three":null,"target":"~Foo|Foo/bar:Bar>b.qux"}]]
+                {"three":null,"target":"~Foo|Foo/bar:Bar>b.qux"},
+                {"four":null,"target":"Foo.Foo.bar.c"}]]
   module Bar:
     input a: UInt<1>
     output b: {baz: UInt<1>, qux: UInt<1>}
+    output c: UInt<1>
   module Foo:
     inst bar of Bar
 
     ; CHECK-LABEL: module {
-    ; CHECK: %bar_a, %bar_b = firrtl.instance @Bar
-    ; CHECK-SAME: [{one}], [#firrtl.subAnno<fieldID = [1, 1], {two}>, #firrtl.subAnno<fieldID = [2, 2], {three}>]
+    ; CHECK: %bar_a, %bar_b, %bar_c = firrtl.instance @Bar
+    ; CHECK-SAME: [{one}], [#firrtl.subAnno<fieldID = [1, 1], {two}>, #firrtl.subAnno<fieldID = [2, 2], {three}>], [{four}]
 
 ; // -----
 
