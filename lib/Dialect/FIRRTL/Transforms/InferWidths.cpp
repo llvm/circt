@@ -1496,7 +1496,7 @@ void InferenceMapping::partiallyConstrainTypes(Value larger, Value smaller) {
             auto &aElt = aBundle.getElements()[aIndex];
             auto &bElt = bBundle.getElements()[*bIndex];
             if (aElt.isFlip)
-              constrain(aElt.type, b, bID + bBundle.getFieldID(*bIndex),
+              constrain(bElt.type, b, bID + bBundle.getFieldID(*bIndex),
                         aElt.type, a, aID + aBundle.getFieldID(aIndex));
             else
               constrain(aElt.type, a, aID + aBundle.getFieldID(aIndex),
