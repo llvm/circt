@@ -79,11 +79,6 @@ def ComponentOp : CalyxOp<"component", [
     public:
       /// Returns the body of a Calyx component.
       Block *getBody() { return &getOperation()->getRegion(0).front(); }
-
-      // Returns information about the input and output ports for the component.
-      SmallVector<ComponentPortInfo> getPorts() {
-        return getComponentPortInfo(*this);
-      }
   }];
 
   let verifier = "return ::verify$cppClass(*this);";
@@ -160,8 +155,8 @@ def CellOp : CalyxOp<"cell", [
   let summary = "Calyx Cell";
   let description = [{
     Represents a cell (or instance) of a Calyx component or
-    primitive, which may include state. Some instances may
-    optionally have parameters.
+    primitive, which may include state. Some cells may
+    optionally have parameters attributed to them.
 
     ```mlir
       %in1, %out1 = calyx.cell "name" @MyComponent : i64, i16

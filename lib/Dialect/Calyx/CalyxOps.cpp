@@ -230,7 +230,7 @@ static LogicalResult verifyCellsOp(CellsOp cells) {
     return cells.emitOpError("should be embedded in 'calyx.component'.");
 
   if (!llvm::all_of(*cells.getBody(), [](auto &op) { return isa<CellOp>(op); }))
-    return cells.emitOpError("should only contain 'calyx.cell' instances.");
+    return cells.emitOpError("should only contain 'calyx.cell' ops.");
 
   return success();
 }
