@@ -50,6 +50,33 @@ void FIRRTLDialect::printAttribute(Attribute attr, DialectAsmPrinter &p) const {
   llvm_unreachable("Unexpected attribute");
 }
 
+//===----------------------------------------------------------------------===//
+// SubAnnotationAttr
+//===----------------------------------------------------------------------===//
+
+Attribute SubAnnotationAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
+                                   Type type) {
+  int64_t minFieldID, maxFieldID;
+  DictionaryAttr annotations;
+  StringRef fieldIDKeyword;
+
+  if (p.parseLess() || p.parseKeyword(&fieldIDKeyword) || p.parseEqual() ||
+      p.parseLSquare() || p.parseInteger(minFieldID) || p.parseComma() ||
+      p.parseInteger(maxFieldID) || p.parseRSquare() || p.parseComma() ||
+      p.parseAttribute<DictionaryAttr>(annotations) || p.parseGreater())
+    return Attribute();
+
+  if (fieldIDKeyword != "fieldID")
+    return Attribute();
+
+  return SubAnnotationAttr::get(ctxt, minFieldID, maxFieldID, annotations);
+}
+
+void SubAnnotationAttr::print(DialectAsmPrinter &p) const {
+  p << getMnemonic() << "<fieldID = [" << getMinFieldID() << ", "
+    << getMaxFieldID() << "], " << getAnnotations() << ">";
+}
+
 void FIRRTLDialect::registerAttributes() {
   addAttributes<
 #define GET_ATTRDEF_LIST

@@ -81,5 +81,36 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[1]"}]]
   module Bar:
     input a: UInt<1>
   module Foo:
-    ; expected-error @+1 {{unexpected annotation target [1]}}
+    ; expected-error @+1 {{the first token is invalid}}
     inst bar of Bar
+
+; // -----
+
+; COM: Invalid sub-target annotation should report an error
+
+circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[a].baz"}, {"two":null,"target":"~Foo|Foo>bar[2].baz"}]]
+  module Foo:
+; expected-error @+2 {{expect an integer for the 1-th token of .a.baz}}
+; expected-error @+1 {{the 1-th token of [2].baz is out of range in the vector}}
+    wire bar: {baz: UInt<1>, qux: UInt<1>}[2]
+
+; // -----
+
+; COM: Invalid sub-target annotation should report an error
+
+circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[1][0]"},{"two":null,"target":"~Foo|Foo>bar[1].qnx"}]]
+  module Foo:
+    input clock: Clock
+; expected-error @+2 {{expect a string for the 2-th token of [1][0]}}
+; expected-error @+1 {{the 2-th token of [1].qnx is not found in the bundle}}
+    reg bar: {baz: UInt<1>, qux: UInt<1>}[2], clock
+
+; // -----
+
+; COM: Invalid sub-target annotation should report an error
+
+circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[1].baz[0]"}]]
+  module Foo:
+    input clock: Clock
+; expected-error @+1 {{the 3-th token of [1].baz[0] expects an aggregate type}}
+    reg bar: {baz: UInt<1>, qux: UInt<1>}[2], clock
