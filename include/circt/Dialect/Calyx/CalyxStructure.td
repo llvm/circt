@@ -10,7 +10,35 @@
 //
 //===----------------------------------------------------------------------===//
 
+def ProgramOp : CalyxOp<"program", [
+    IsolatedFromAbove,
+    NoRegionArguments,
+    NoTerminator,
+    SymbolTable,
+    SingleBlock
+  ]> {
+  let summary = "Calyx Program";
+  let description = [{
+    The "calyx.program" operation represents an overall Calyx program,
+    containing a list of Calyx components. This must include a "main"
+    component, the entry point of the program.
+  }];
+  let arguments = (ins);
+
+  let extraClassDeclaration = [{
+    /// Returns the main component, representing the
+    /// entry point of the Calyx program.
+    Operation *getMainComponent() { return lookupSymbol("main"); }
+  }];
+
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = "$body attr-dict";
+  let verifier = "return ::verify$cppClass(*this);";
+}
+
+
 def ComponentOp : CalyxOp<"component", [
+    HasParent<"ProgramOp">,
     Symbol,
     FunctionLike,
     IsolatedFromAbove,
@@ -78,6 +106,8 @@ def CellsOp : CalyxContainer<"cells", [IsolatedFromAbove]> {
       }
     ```
   }];
+
+  let verifier = "return ::verify$cppClass(*this);";
 }
 
 def WiresOp : CalyxContainer<"wires", []> {
@@ -116,4 +146,39 @@ def ControlOp : CalyxContainer<"control", []> {
       }
     ```
   }];
+}
+
+def CellOp : CalyxOp<"cell", [
+    HasParent<"CellsOp">
+  ]> {
+  let summary = "Instantiates an instance of a component or primitive.";
+  let description = [{
+    Represents an instance of a Calyx component or primitive, which may
+    include state. Some instances may optionally have parameters.
+
+    ```mlir
+      %out1 = calyx.cell "foo" @MyComponent(%in0) : i32 -> i64
+    ```
+  }];
+
+  let extraClassDeclaration = [{
+    /// Lookup the component for the symbol. This returns null on
+    /// invalid IR.
+    Operation *getReferencedComponent();
+  }];
+
+  // TODO(Calyx): Add parameters attribute for
+  // SystemVerilog-wrapped primitives.
+  let arguments = (ins
+    StrAttr:$instanceName,
+    FlatSymbolRefAttr:$componentName,
+    Variadic<AnyType>:$inputs
+  );
+  let results = (outs Variadic<AnyType>);
+
+  let assemblyFormat = [{
+    $instanceName $componentName `(` $inputs `)`
+    attr-dict `:` functional-type($inputs, results)
+  }];
+  let verifier = "return ::verify$cppClass(*this);";
 }

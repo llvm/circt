@@ -27,6 +27,17 @@ using namespace circt::calyx;
 using namespace mlir;
 
 //===----------------------------------------------------------------------===//
+// ProgramOp
+//===----------------------------------------------------------------------===//
+
+static LogicalResult verifyProgramOp(ProgramOp program) {
+  if (!program.getMainComponent())
+    return program.emitOpError("Must contain one component named "
+                               "\"main\" as the entry point.");
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // ComponentOp
 //===----------------------------------------------------------------------===//
 
@@ -150,6 +161,10 @@ static ParseResult parseComponentOp(OpAsmParser &parser,
 }
 
 static LogicalResult verifyComponentOp(ComponentOp op) {
+  auto program = op->getParentOfType<ProgramOp>();
+  if (!program)
+    return op.emitOpError("Should be embedded in 'calyx.program'.");
+
   // Verify there is exactly one of each section:
   // calyx.cells, calyx.wires, and calyx.control.
   uint32_t numCells = 0, numWires = 0, numControl = 0;
@@ -167,6 +182,58 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
   return op.emitOpError()
          << "Requires exactly one of each: "
             "\"calyx.cells\", \"calyx.wires\", \"calyx.control\".";
+}
+
+//===----------------------------------------------------------------------===//
+// CellsOp
+//===----------------------------------------------------------------------===//
+static LogicalResult verifyCellsOp(CellsOp cells) {
+  auto component = cells->getParentOfType<ComponentOp>();
+  if (!component)
+    return cells.emitOpError("Should be embedded in 'calyx.component'.");
+
+  for (auto &op : *cells.getBody()) {
+    if (!isa<CellOp>(op))
+      return cells.emitOpError("Should only contain 'calyx.cell' instances.");
+  }
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// CellOp
+//===----------------------------------------------------------------------===//
+
+/// Lookup the component for the symbol. This returns null on
+/// invalid IR.
+Operation *CellOp::getReferencedComponent() {
+  auto program = (*this)->getParentOfType<ProgramOp>();
+  if (!program)
+    return nullptr;
+
+  return program.lookupSymbol(componentName());
+}
+
+static LogicalResult verifyCellOp(CellOp cell) {
+  // Verify the cell is within the "calyx.cells" sub-section.
+  auto cells = cell->getParentOfType<CellsOp>();
+  if (!cells)
+    return cell.emitOpError("Should be embedded in 'calyx.cells'.");
+
+  // Verify the referenced component exists in this program.
+  auto referencedComponent = cell.getReferencedComponent();
+  if (!referencedComponent)
+    return cell.emitOpError()
+           << "Referenced component: " << cell.componentName()
+           << " does not exist.";
+
+  // Verify the referenced component is not instantiating itself.
+  auto parentComponent = cells->getParentOfType<ComponentOp>();
+  if (parentComponent == referencedComponent)
+    return cell.emitOpError()
+           << "Recursive instantiation of its parent component: "
+           << cell.componentName();
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

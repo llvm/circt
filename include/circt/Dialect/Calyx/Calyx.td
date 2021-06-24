@@ -49,6 +49,11 @@ class CalyxContainer<string mnemonic, list<OpTrait> traits = []> :
   ])> {
   let assemblyFormat = "$body attr-dict";
   let regions = (region SizedRegion<1>: $body);
+
+  let extraClassDeclaration = [{
+    /// Returns the body of a Calyx component.
+    Block *getBody() { return &getOperation()->getRegion(0).front(); }
+  }];
 }
 
 include "circt/Dialect/Calyx/CalyxStructure.td"
