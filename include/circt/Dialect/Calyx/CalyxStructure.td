@@ -152,10 +152,11 @@ def ControlOp : CalyxContainer<"control", [
 def CellOp : CalyxOp<"cell", [
     HasParent<"CellsOp">
   ]> {
-  let summary = "Instantiates an instance of a component or primitive.";
+  let summary = "Calyx Cell";
   let description = [{
-    Represents an instance of a Calyx component or primitive, which may
-    include state. Some instances may optionally have parameters.
+    Represents a cell (or instance) of a Calyx component or
+    primitive, which may include state. Some instances may
+    optionally have parameters.
 
     ```mlir
       %out1 = calyx.cell "foo" @MyComponent(%in0) : i32 -> i64
