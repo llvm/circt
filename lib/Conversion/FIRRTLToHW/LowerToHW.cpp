@@ -1082,12 +1082,9 @@ void FIRRTLLowering::run() {
   for (auto &op : body->getOperations()) {
     builder.setInsertionPoint(&op);
     builder.setLoc(op.getLoc());
-    auto done = succeeded(dispatchVisitor(&op));
-    if (!AnnotationSet(&op).empty())
-      op.emitWarning("Unprocessed annotations still remaining after LowerToHW");
-    if (done)
+    if (succeeded(dispatchVisitor(&op))) {
       opsToRemove.push_back(&op);
-    else {
+    } else {
       switch (handleUnloweredOp(&op)) {
       case AlreadyLowered:
         break;         // Something like hw.output, which is already lowered.
