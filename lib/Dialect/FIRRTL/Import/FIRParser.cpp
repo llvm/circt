@@ -288,14 +288,14 @@ struct FIRParser {
                    ArrayRef<std::pair<StringAttr, Type>> ports);
 
   /// Return the set of annotations for a given Target.
-  ArrayAttr getAnnotations(ArrayRef<Twine> target, SMLoc loc, Type type);
+  ArrayAttr getAnnotations(ArrayRef<Twine> targets, SMLoc loc, Type type);
 
   /// Return the set of annotations for a given Target. If the operation has
   /// variadic results, such as MemOp and InstanceOp, this method should be used
   /// to get annotations.
   std::pair<ArrayAttr, ArrayAttr>
-  getSplittedAnnotations(ArrayRef<Twine> target, SMLoc loc,
-                         ArrayRef<std::pair<StringAttr, Type>> ports);
+  getSplitAnnotations(ArrayRef<Twine> targets, SMLoc loc,
+                      ArrayRef<std::pair<StringAttr, Type>> ports);
 
   /// Returns true if the annotation list contains the DontTouchAnnotation. This
   /// method is slightly more efficient than other lookup methods, because it
@@ -1089,8 +1089,8 @@ ArrayAttr FIRParser::getAnnotations(ArrayRef<Twine> targets, SMLoc loc,
 /// variadic results, such as MemOp and InstanceOp, this method should be used
 /// to get annotations.
 std::pair<ArrayAttr, ArrayAttr>
-FIRParser::getSplittedAnnotations(ArrayRef<Twine> targets, SMLoc loc,
-                                  ArrayRef<std::pair<StringAttr, Type>> ports) {
+FIRParser::getSplitAnnotations(ArrayRef<Twine> targets, SMLoc loc,
+                               ArrayRef<std::pair<StringAttr, Type>> ports) {
   // Early exit if no annotations exist.  This avoids the cost of constructing
   // strings representing targets if no annotation can possibly exist.
   if (constants.annotationMap.empty()) {
@@ -2612,10 +2612,16 @@ ParseResult FIRStmtParser::parseInstance() {
   //     ~Foo|Foo>bar
   //     ~Foo|Foo/bar:Bar
   auto annotations =
-      getSplittedAnnotations({getModuleTarget() + ">" + id,
-                              getModuleTarget() + "/" + id + ":" + moduleName},
-                             startTok.getLoc(), resultNamesAndTypes);
-  auto name = hasDontTouch(annotations.first) ? id : filterUselessName(id);
+      getSplitAnnotations({getModuleTarget() + ">" + id,
+                           getModuleTarget() + "/" + id + ":" + moduleName},
+                          startTok.getLoc(), resultNamesAndTypes);
+
+  // Keep the name if a dont touch exist on either the instance or its ports.
+  auto dontTouch = hasDontTouch(annotations.first) ||
+                   llvm::any_of(annotations.second, [&](Attribute a) {
+                     return hasDontTouch(a.cast<ArrayAttr>());
+                   });
+  auto name = dontTouch ? id : filterUselessName(id);
 
   auto result = builder.create<InstanceOp>(
       resultTypes, moduleName, name, annotations.first, annotations.second);
