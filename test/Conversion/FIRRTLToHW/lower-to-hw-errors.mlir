@@ -19,4 +19,8 @@ firrtl.circuit "InvalidBundle" {
   func private @UnknownFunction() {
     return
   }
+  firrtl.module @unprocessedAnnotations() {
+  // expected-warning @+1 {{Unprocessed annotations}}
+    %io_cpu_flush.wire = firrtl.wire {annotations = [{class = "firrtl.transforms.RemainingAnnotation"}]} : !firrtl.uint<1>
+  }
 }
