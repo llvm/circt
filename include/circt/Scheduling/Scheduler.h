@@ -19,16 +19,17 @@
 
 #include "circt/Support/LLVM.h"
 
+#include "mlir/IR/Identifier.h"
 #include "mlir/Support/StorageUniquer.h"
 
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SetVector.h"
 
 namespace circt {
 namespace scheduling {
 
 class Dependence;
-class OperatorType;
 
 /// This class models the most basic scheduling problem.
 ///
@@ -68,6 +69,11 @@ class OperatorType;
 /// the dependences are satisfied.
 class Scheduler {
 public:
+  /// Operator types, in the context of this scheduling problem, are modeled
+  /// as a client-chosen name, which is used as a handle to access the
+  /// problem-specific property maps.
+  using OperatorType = mlir::Identifier;
+
   /// Initialize a scheduling problem corresponding to \p containingOp.
   Scheduler(Operation *containingOp);
   virtual ~Scheduler() = default;
@@ -78,14 +84,14 @@ public:
 protected:
   using OperationSet = llvm::SetVector<Operation *>;
   using DependenceSet = llvm::SetVector<Dependence *>;
-  using OperatorTypeSet = llvm::SetVector<OperatorType *>;
+  using OperatorTypeSet = llvm::SetVector<OperatorType>;
 
   template <typename T>
-  using OperationProperty = llvm::DenseMap<Operation *, T>;
+  using OperationProperty = llvm::DenseMap<Operation *, Optional<T>>;
   template <typename T>
-  using DependenceProperty = llvm::DenseMap<Dependence *, T>;
+  using DependenceProperty = llvm::DenseMap<Dependence *, Optional<T>>;
   template <typename T>
-  using OperatorTypeProperty = llvm::DenseMap<OperatorType *, T>;
+  using OperatorTypeProperty = llvm::DenseMap<OperatorType, Optional<T>>;
   template <typename T>
   using ProblemProperty = Optional<T>;
 
@@ -93,11 +99,11 @@ protected:
   // Containers for problem components and properties
   //===--------------------------------------------------------------------===//
 private:
-  // operation containing the ops for this scheduling problem. Used solely to
-  // emit diagnostics.
+  // operation containing the ops for this scheduling problem. Used for its
+  // MLIRContext and to emit diagnostics.
   Operation *containingOp;
 
-  // storage for dependences and operator types
+  // storage for dependences
   mlir::StorageUniquer uniquer;
 
   // problem components
@@ -106,7 +112,7 @@ private:
   OperatorTypeSet operatorTypes;
 
   // operation properties
-  OperationProperty<OperatorType *> linkedOperatorType;
+  OperationProperty<OperatorType> linkedOperatorType;
   OperationProperty<unsigned> startTime;
 
   // operator type properties
@@ -129,7 +135,7 @@ public:
   }
 
   /// Register an operator type identified by \p name.
-  OperatorType *getOrInsertOperatorType(StringRef name);
+  OperatorType getOrInsertOperatorType(StringRef name);
 
   //===--------------------------------------------------------------------===//
   // Subclass access to problem components
@@ -141,24 +147,20 @@ protected:
   bool hasDependence(Dependence *dep) { return dependences.contains(dep); }
   const DependenceSet &getDependences() { return dependences; }
 
-  bool hasOperatorType(OperatorType *opr) {
-    return operatorTypes.contains(opr);
-  }
+  bool hasOperatorType(OperatorType opr) { return operatorTypes.contains(opr); }
   const OperatorTypeSet &getOperatorTypes() { return operatorTypes; }
 
   //===--------------------------------------------------------------------===//
   // Subclass access to properties: retrieve problem, set solution
   //===--------------------------------------------------------------------===//
 protected:
-  bool hasLinkedOperatorType(Operation *op) {
-    return linkedOperatorType.count(op);
-  }
-  OperatorType *getLinkedOperatorType(Operation *op) {
+  Optional<OperatorType> getLinkedOperatorType(Operation *op) {
     return linkedOperatorType.lookup(op);
   }
 
-  bool hasLatency(OperatorType *opr) { return latency.count(opr); }
-  unsigned getLatency(OperatorType *opr) { return latency.lookup(opr); }
+  Optional<unsigned> getLatency(OperatorType opr) {
+    return latency.lookup(opr);
+  }
 
   void setStartTime(Operation *op, unsigned val) { startTime[op] = val; }
 
@@ -166,14 +168,15 @@ protected:
   // Client access to properties: specify problem, retrieve solution
   //===--------------------------------------------------------------------===//
 public:
-  void setLinkedOperatorType(Operation *op, OperatorType *opr) {
+  void setLinkedOperatorType(Operation *op, OperatorType opr) {
     linkedOperatorType[op] = opr;
   }
 
-  void setLatency(OperatorType *opr, unsigned val) { latency[opr] = val; }
+  void setLatency(OperatorType opr, unsigned val) { latency[opr] = val; }
 
-  bool hasStartTime(Operation *op) { return startTime.count(op); }
-  unsigned getStartTime(Operation *op) { return startTime.lookup(op); }
+  Optional<unsigned> getStartTime(Operation *op) {
+    return startTime.lookup(op);
+  }
 
   //===--------------------------------------------------------------------===//
   // Hooks to check/verify the different problem components
@@ -181,12 +184,12 @@ public:
 protected:
   virtual LogicalResult checkOperation(Operation *op);
   virtual LogicalResult checkDependence(Dependence *dep);
-  virtual LogicalResult checkOperatorType(OperatorType *opr);
+  virtual LogicalResult checkOperatorType(OperatorType opr);
   virtual LogicalResult checkProblem();
 
   virtual LogicalResult verifyOperation(Operation *op);
   virtual LogicalResult verifyDependence(Dependence *dep);
-  virtual LogicalResult verifyOperatorType(OperatorType *opr);
+  virtual LogicalResult verifyOperatorType(OperatorType opr);
   virtual LogicalResult verifyProblem();
 
 public:
@@ -228,26 +231,6 @@ private:
   Dependence() = default;
   Operation *src, *dst;
   unsigned srcIdx, dstIdx;
-};
-
-/// This class models a distinct *operator type* in the context of a scheduling
-/// problem. It is identified by name and serves as a handle to access the
-/// problem-specific property maps.
-class OperatorType : public mlir::StorageUniquer::BaseStorage {
-public:
-  using KeyTy = StringRef;
-
-  bool operator==(const KeyTy &key) const { return key == name; }
-
-  static OperatorType *
-  construct(mlir::StorageUniquer::StorageAllocator &allocator,
-            const KeyTy &key);
-
-  StringRef getName() { return name; }
-
-private:
-  OperatorType() = default;
-  StringRef name;
 };
 
 } // namespace scheduling

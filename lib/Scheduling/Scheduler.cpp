@@ -19,7 +19,6 @@ using namespace circt::scheduling;
 
 Scheduler::Scheduler(Operation *containingOp) : containingOp(containingOp) {
   uniquer.registerParametricStorageType<Dependence>();
-  uniquer.registerParametricStorageType<OperatorType>();
 }
 
 Dependence *Scheduler::getOrInsertDependence(Operation *src, unsigned srcIdx,
@@ -29,14 +28,14 @@ Dependence *Scheduler::getOrInsertDependence(Operation *src, unsigned srcIdx,
   return dep;
 }
 
-OperatorType *Scheduler::getOrInsertOperatorType(StringRef name) {
-  auto *opr = uniquer.get<OperatorType>({}, name);
+Scheduler::OperatorType Scheduler::getOrInsertOperatorType(StringRef name) {
+  auto opr = OperatorType::get(name, containingOp->getContext());
   operatorTypes.insert(opr);
   return opr;
 }
 
 LogicalResult Scheduler::checkOperation(Operation *op) {
-  if (!hasLinkedOperatorType(op))
+  if (!getLinkedOperatorType(op))
     return op->emitError("Operation is not linked to an operator type");
   return success();
 }
@@ -55,10 +54,10 @@ LogicalResult Scheduler::checkDependence(Dependence *dep) {
   return success();
 }
 
-LogicalResult Scheduler::checkOperatorType(OperatorType *opr) {
-  if (!hasLatency(opr))
+LogicalResult Scheduler::checkOperatorType(OperatorType opr) {
+  if (!getLatency(opr))
     return containingOp->emitError()
-           << "Operator type '" << opr->getName() << "' has no latency";
+           << "Operator type '" << opr << "' has no latency";
 
   return success();
 }
@@ -75,7 +74,7 @@ LogicalResult Scheduler::check() {
     if (failed(checkDependence(dep)))
       return failure();
 
-  for (auto *opr : getOperatorTypes())
+  for (auto opr : getOperatorTypes())
     if (failed(checkOperatorType(opr)))
       return failure();
 
@@ -83,7 +82,7 @@ LogicalResult Scheduler::check() {
 }
 
 LogicalResult Scheduler::verifyOperation(Operation *op) {
-  if (!hasStartTime(op))
+  if (!getStartTime(op))
     return op->emitError("Operation has no start time");
   return success();
 }
@@ -93,9 +92,9 @@ LogicalResult Scheduler::verifyDependence(Dependence *dep) {
   Operation *j = dep->getDestination();
 
   unsigned stI, latI, stJ;
-  stI = getStartTime(i);
-  latI = getLatency(getLinkedOperatorType(i));
-  stJ = getStartTime(j);
+  stI = *getStartTime(i);
+  latI = *getLatency(*getLinkedOperatorType(i));
+  stJ = *getStartTime(j);
 
   // check if i's result is available before j starts
   if (!(stI + latI <= stJ))
@@ -107,7 +106,7 @@ LogicalResult Scheduler::verifyDependence(Dependence *dep) {
   return success();
 }
 
-LogicalResult Scheduler::verifyOperatorType(OperatorType *opr) {
+LogicalResult Scheduler::verifyOperatorType(OperatorType opr) {
   return success();
 }
 
@@ -123,7 +122,7 @@ LogicalResult Scheduler::verify() {
     if (failed(verifyDependence(dep)))
       return failure();
 
-  for (auto *opr : getOperatorTypes())
+  for (auto opr : getOperatorTypes())
     if (failed(verifyOperatorType(opr)))
       return failure();
 
@@ -135,13 +134,5 @@ Dependence::construct(mlir::StorageUniquer::StorageAllocator &allocator,
                       const KeyTy &key) {
   auto *result = allocator.allocate<Dependence>();
   std::tie(result->src, result->dst, result->srcIdx, result->dstIdx) = key;
-  return result;
-}
-
-OperatorType *
-OperatorType::construct(mlir::StorageUniquer::StorageAllocator &allocator,
-                        const KeyTy &key) {
-  auto *result = allocator.allocate<OperatorType>();
-  result->name = allocator.copyInto(key);
   return result;
 }
