@@ -116,20 +116,23 @@ static llvm::Optional<std::string> canonicalizeTarget(StringRef target) {
   //   3. ComponentName => ReferenceTarget, e.g., A.B.C -> ~A|B>C
   std::string newTarget = "~";
   llvm::raw_string_ostream s(newTarget);
-  bool isModule = true;
+  unsigned tokenIdx = 0;
   for (auto a : target) {
-    switch (a) {
-    case '.':
-      if (isModule) {
+    if (a == '.') {
+      switch (tokenIdx) {
+      case 0:
         s << "|";
-        isModule = false;
+        break;
+      case 1:
+        s << ">";
+        break;
+      default:
+        s << ".";
         break;
       }
-      s << ">";
-      break;
-    default:
+      ++tokenIdx;
+    } else
       s << a;
-    }
   }
   return llvm::Optional<std::string>(newTarget);
 }
