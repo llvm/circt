@@ -881,18 +881,22 @@ FIRParser::getFieldIDFromTokens(ArrayAttr tokens, SMLoc loc, Type type) {
   auto currentType = type.cast<FIRRTLType>();
   unsigned id = 0, idRange = 0;
 
-  // Construct a string for error emission.
-  SmallString<16> tokensStr;
-  for (auto token : tokens) {
-    if (auto intAttr = token.dyn_cast<IntegerAttr>()) {
-      tokensStr.push_back('[');
-      intAttr.getValue().toStringSigned(tokensStr);
-      tokensStr.push_back(']');
-    } else if (auto strAttr = token.dyn_cast<StringAttr>()) {
-      tokensStr.push_back('.');
-      tokensStr.append(strAttr.getValue());
+  auto getMessage = [&](unsigned tokenIdx) {
+    // Construct a string for error emission.
+    SmallString<16> message("the " + std::to_string(tokenIdx) +
+                            "-th token of ");
+    for (auto token : tokens) {
+      if (auto intAttr = token.dyn_cast<IntegerAttr>()) {
+        message.push_back('[');
+        intAttr.getValue().toStringSigned(message);
+        message.push_back(']');
+      } else if (auto strAttr = token.dyn_cast<StringAttr>()) {
+        message.push_back('.');
+        message.append(strAttr.getValue());
+      }
     }
-  }
+    return message;
+  };
 
   unsigned tokenIdx = 0;
   for (auto token : tokens) {
@@ -900,8 +904,7 @@ FIRParser::getFieldIDFromTokens(ArrayAttr tokens, SMLoc loc, Type type) {
     if (auto bundleType = currentType.dyn_cast<BundleType>()) {
       auto subFieldAttr = token.dyn_cast<StringAttr>();
       if (!subFieldAttr) {
-        emitError(loc, "expect a string for the " + std::to_string(tokenIdx) +
-                           "-th token of " + tokensStr);
+        emitError(loc, "expect a string for " + getMessage(tokenIdx));
         return None;
       }
 
@@ -909,8 +912,7 @@ FIRParser::getFieldIDFromTokens(ArrayAttr tokens, SMLoc loc, Type type) {
       auto subField = subFieldAttr.getValue();
       auto index = bundleType.getElementIndex(subField);
       if (!index) {
-        emitError(loc, "the " + std::to_string(tokenIdx) + "-th token of " +
-                           tokensStr + " is not found in the bundle");
+        emitError(loc, getMessage(tokenIdx) + " is not found in the bundle");
         return None;
       }
 
@@ -923,16 +925,14 @@ FIRParser::getFieldIDFromTokens(ArrayAttr tokens, SMLoc loc, Type type) {
     if (auto vectorType = currentType.dyn_cast<FVectorType>()) {
       auto subIndexAttr = token.dyn_cast<IntegerAttr>();
       if (!subIndexAttr) {
-        emitError(loc, "expect an integer for the " + std::to_string(tokenIdx) +
-                           "-th token of " + tokensStr);
+        emitError(loc, "expect an integer for " + getMessage(tokenIdx));
         return None;
       }
 
       // Token should be a valid index of the vector.
       auto subIndex = subIndexAttr.getValue().getSExtValue();
       if (subIndex < 0 || subIndex >= vectorType.getNumElements()) {
-        emitError(loc, "the " + std::to_string(tokenIdx) + "-th token of " +
-                           tokensStr + " is out of range in the vector");
+        emitError(loc, getMessage(tokenIdx) + " is out of range in the vector");
         return None;
       }
 
@@ -942,8 +942,7 @@ FIRParser::getFieldIDFromTokens(ArrayAttr tokens, SMLoc loc, Type type) {
       continue;
     }
 
-    emitError(loc, "the " + std::to_string(tokenIdx) + "-th token of " +
-                       tokensStr + " expects an aggregate type");
+    emitError(loc, getMessage(tokenIdx) + " expects an aggregate type");
     return None;
   }
 
