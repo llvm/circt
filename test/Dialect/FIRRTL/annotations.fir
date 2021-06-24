@@ -69,8 +69,13 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Bar"}]]
 
 ; // -----
 
-; COM: A ReferenceTarget/ComponentName pointing at an Instance should work.
-circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar"}]]
+; COM: A ReferenceTarget, ComponentName, or InstanceTarget pointing at an
+; COM: Instance should work.
+circuit Foo: %[[
+{"a":"a","target":"~Foo|Foo>bar"},
+{"b":"b","target":"Foo.Foo.bar"},
+{"c":"c","target":"~Foo|Foo/bar:Bar"}
+]]
   module Bar:
     skip
   module Foo:
@@ -78,13 +83,14 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar
 
     ; CHECK-LABEL: module {
     ; CHECK: firrtl.instance @Bar
-    ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}]
+    ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}, {c = "c"}]
 
 ; // -----
 
 ; COM: Test result annotations of InstanceOp.
 circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},
-                {"two":null,"target":"~Foo|Foo>bar.b.baz"}]]
+                {"two":null,"target":"~Foo|Foo>bar.b.baz"},
+                {"three":null,"target":"~Foo|Foo/bar:Bar>b.qux"}]]
   module Bar:
     input a: UInt<1>
     output b: {baz: UInt<1>, qux: UInt<1>}
@@ -93,7 +99,7 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},
 
     ; CHECK-LABEL: module {
     ; CHECK: %bar_a, %bar_b = firrtl.instance @Bar
-    ; CHECK-SAME: [{one}], [{target = [".baz"], two}]
+    ; CHECK-SAME: [{one}], [{target = [".baz"], two}, {target = [".qux"], three}]
 
 ; // -----
 

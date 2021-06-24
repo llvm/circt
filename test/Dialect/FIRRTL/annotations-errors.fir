@@ -3,8 +3,8 @@
 ; COM: A non-local Annotation is unsupported.
 
 ; expected-error @+2 {{Invalid/unsupported annotation format}}
-; expected-note @+1 {{"target": /* error: Unsupported target (not a local CircuitTarget, ModuleTarget, or ReferenceTarget without subfield or subindex) */ "~Foo|Foo/bar:Bar"}}
-circuit Foo: %[[{"a":"a","target":"~Foo|Foo/bar:Bar"}]]
+; expected-note @+1 {{"target": /* error: unsupported non-local target */ "~Foo|Foo/bar:Bar/baz:Baz"}}
+circuit Foo: %[[{"a":"a","target":"~Foo|Foo/bar:Bar/baz:Baz"}]]
   module Foo:
     skip
 

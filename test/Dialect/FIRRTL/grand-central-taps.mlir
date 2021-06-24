@@ -119,9 +119,9 @@ firrtl.circuit "TestHarness" attributes {
   // CHECK-SAME: out %mem_0: !firrtl.uint<1>
   // CHECK-SAME: out %mem_1: !firrtl.uint<1>
   // CHECK-SAME: class = "firrtl.transforms.NoDedupAnnotation"
-  // CHECK-NEXT: [[V0:%.+]] = firrtl.verbatim.expr "foo.bar.mem[0]"
+  // CHECK-NEXT: [[V0:%.+]] = firrtl.verbatim.expr "foo.bar.mem.Memory[0]"
   // CHECK-NEXT: firrtl.connect %mem_0, [[V0:%.+]]
-  // CHECK-NEXT: [[V1:%.+]] = firrtl.verbatim.expr "foo.bar.mem[1]"
+  // CHECK-NEXT: [[V1:%.+]] = firrtl.verbatim.expr "foo.bar.mem.Memory[1]"
   // CHECK-NEXT: firrtl.connect %mem_1, [[V1:%.+]]
   firrtl.extmodule @MemTap(
     out %mem_0: !firrtl.uint<1> {firrtl.annotations = [{

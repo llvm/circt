@@ -593,7 +593,7 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
     // in the IR that can properly inject the memory array on emission.
     wiring.prefices =
         instancePaths.getAbsolutePaths(op->getParentOfType<FModuleOp>());
-    (Twine(name.getValue()) + "[" +
+    (Twine(name.getValue()) + ".Memory[" +
      llvm::utostr(memPortIdx[portAnno.anno.getDict()]++) + "]")
         .toVector(wiring.suffix);
     portWiring.push_back(std::move(wiring));

@@ -34,7 +34,30 @@ static StringRef parseSubFieldSubIndexAnnotations(StringRef target,
   if (target.empty())
     return target;
 
-  auto fieldBegin = target.find_first_of(".[");
+  // Find the string index where the target can be partitioned into the "base
+  // target" and the "target".  The "base target" is the module or instance and
+  // the "target" is everything else.  This has two variants that need to be
+  // considered:
+  //
+  //   1) A Local target, e.g., ~Foo|Foo>bar.baz
+  //   2) An instance target, e.g., ~Foo|Foo/bar:Bar>baz.qux
+  //
+  // In (1), this should be partitioned into ["~Foo|Foo>bar", ".baz"].  In (2),
+  // this should be partitioned into ["~Foo|Foo/bar:Bar", ">baz.qux"].
+  bool isInstance = false;
+  size_t fieldBegin = target.find_if_not([&isInstance](char c) {
+    switch (c) {
+    case '/':
+      return isInstance = true;
+    case '>':
+      return !isInstance;
+    case '[':
+    case '.':
+      return false;
+    default:
+      return true;
+    };
+  });
 
   // Exit if the target does not contain a subfield or subindex.
   if (fieldBegin == StringRef::npos)
@@ -177,13 +200,16 @@ bool circt::firrtl::fromJSON(json::Value &value,
 
     auto target = canonTargetStr.getValue();
 
-    // If the target is something that we know we don't support, then error.
-    bool unsupported = std::any_of(target.begin(), target.end(),
-                                   [](char a) { return a == '/' || a == ':'; });
+    // Allow targets through that are instance targets.  Error on anything which
+    // is actually non-local.  E.g., this is allowing:
+    //     ~Foo|Foo/bar:Bar
+    // But, this is disallowing:
+    //     ~Foo|Foo/bar:Bar/baz:Baz
+    bool unsupported = std::count_if(target.begin(), target.end(), [](char a) {
+                         return a == '/' || a == ':';
+                       }) > 2;
     if (unsupported) {
-      p.field("target").report(
-          "Unsupported target (not a local CircuitTarget, ModuleTarget, or "
-          "ReferenceTarget without subfield or subindex)");
+      p.field("target").report("unsupported non-local target");
       return {};
     }
 

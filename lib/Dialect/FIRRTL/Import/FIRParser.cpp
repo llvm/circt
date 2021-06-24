@@ -2331,10 +2331,22 @@ ParseResult FIRStmtParser::parseInstance() {
   for (auto port : modulePorts)
     resultTypes.push_back(port.type);
 
-  ArrayAttr annotations = getAnnotations(getModuleTarget() + ">" + id);
+  // Combine annotations that are ReferenceTargets and InstanceTargets.  By
+  // example, this will lookup all annotations with either of the following
+  // formats:
+  //     ~Foo|Foo>bar
+  //     ~Foo|Foo/bar:Bar
+  SmallVector<Attribute, 16> annotationsVec;
+  for (auto a : getAnnotations(getModuleTarget() + ">" + id))
+    annotationsVec.push_back(a);
+  for (auto a : getAnnotations(getModuleTarget() + "/" + id + ":" + moduleName))
+    annotationsVec.push_back(a);
+
+  ArrayAttr annotations = builder.getArrayAttr(annotationsVec);
+  annotationsVec.clear();
+
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
-  SmallVector<Attribute, 16> annotationsVec;
   llvm::StringMap<SmallVector<Attribute, 4>> portAnnotationsMap;
   for (auto attr : annotations) {
     auto dictAttr = attr.cast<DictionaryAttr>();
@@ -2344,10 +2356,10 @@ ParseResult FIRStmtParser::parseInstance() {
       continue;
     }
 
-    // The first token of targetAttr should always begin with '.'.
+    // The first token of targetAttr should always begin with '.' or '>'.
     auto targetAttrValue = targetAttr.cast<ArrayAttr>().getValue();
     auto portName = targetAttrValue[0].cast<StringAttr>().getValue();
-    if (!portName.consume_front(".")) {
+    if (!portName.consume_front(".") && !portName.consume_front(">")) {
       return emitError(startTok.getLoc(),
                        "unexpected annotation target " + portName);
     }
