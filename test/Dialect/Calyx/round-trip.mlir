@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -verify-diagnostics | FileCheck %s
+// RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 
 // CHECK: calyx.program {
 calyx.program {
