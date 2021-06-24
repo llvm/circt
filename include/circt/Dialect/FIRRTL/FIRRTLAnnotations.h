@@ -204,6 +204,7 @@ public:
   /// were removed, false otherwise.
   static bool removeAnnotations(Operation *op,
                                 llvm::function_ref<bool(Annotation)> predicate);
+  static bool removeAnnotations(Operation *op, StringRef className);
 
   /// Remove all port annotations from a module for which `predicate` returns
   /// true. The predicate is guaranteed to be called on every annotation, such
