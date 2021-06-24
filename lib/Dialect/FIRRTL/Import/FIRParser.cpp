@@ -288,13 +288,13 @@ struct FIRParser {
                    ArrayRef<std::pair<StringAttr, Type>> ports);
 
   /// Return the set of annotations for a given Target.
-  ArrayAttr getAnnotations(Twine target, SMLoc loc, Type type);
+  ArrayAttr getAnnotations(ArrayRef<Twine> target, SMLoc loc, Type type);
 
   /// Return the set of annotations for a given Target. If the operation has
   /// variadic results, such as MemOp and InstanceOp, this method should be used
   /// to get annotations.
   std::pair<ArrayAttr, ArrayAttr>
-  getSplittedAnnotations(Twine target, SMLoc loc,
+  getSplittedAnnotations(ArrayRef<Twine> target, SMLoc loc,
                          ArrayRef<std::pair<StringAttr, Type>> ports);
 
   /// Returns true if the annotation list contains the DontTouchAnnotation. This
@@ -1058,21 +1058,30 @@ FIRParser::splitAnnotations(ArrayRef<Attribute> annotations, SMLoc loc,
 }
 
 /// Return the set of annotations for a given Target.
-ArrayAttr FIRParser::getAnnotations(Twine target, SMLoc loc,
+ArrayAttr FIRParser::getAnnotations(ArrayRef<Twine> targets, SMLoc loc,
                                     Type type = nullptr) {
   // Early exit if no annotations exist.  This avoids the cost of constructing
   // strings representing targets if no annotation can possibly exist.
   if (constants.annotationMap.empty())
     return constants.emptyArrayAttr;
 
-  // Flatten the input twine into a SmallVector for lookup.
-  SmallString<64> targetStr;
-  target.toVector(targetStr);
+  // Stack the annotations for all targets.
+  SmallVector<Attribute, 4> annotations;
+  for (auto target : targets) {
+    // Flatten the input twine into a SmallVector for lookup.
+    SmallString<64> targetStr;
+    target.toVector(targetStr);
 
-  // Note: We are not allowed to mutate annotationMap here.  Make sure to only
-  // use non-mutating methods like `lookup`, not mutating ones like `am[key]`.
-  if (auto result = constants.annotationMap.lookup(targetStr))
-    return convertSubAnnotations(result.getValue(), loc, type);
+    // Note: We are not allowed to mutate annotationMap here.  Make sure to only
+    // use non-mutating methods like `lookup`, not mutating ones like `am[key]`.
+    if (auto result = constants.annotationMap.lookup(targetStr)) {
+      if (!result.empty())
+        annotations.append(result.begin(), result.end());
+    }
+  }
+
+  if (!annotations.empty())
+    return convertSubAnnotations(annotations, loc, type);
   return constants.emptyArrayAttr;
 }
 
@@ -1080,7 +1089,7 @@ ArrayAttr FIRParser::getAnnotations(Twine target, SMLoc loc,
 /// variadic results, such as MemOp and InstanceOp, this method should be used
 /// to get annotations.
 std::pair<ArrayAttr, ArrayAttr>
-FIRParser::getSplittedAnnotations(Twine target, SMLoc loc,
+FIRParser::getSplittedAnnotations(ArrayRef<Twine> targets, SMLoc loc,
                                   ArrayRef<std::pair<StringAttr, Type>> ports) {
   // Early exit if no annotations exist.  This avoids the cost of constructing
   // strings representing targets if no annotation can possibly exist.
@@ -1091,14 +1100,23 @@ FIRParser::getSplittedAnnotations(Twine target, SMLoc loc,
             ArrayAttr::get(constants.context, portAnnotations)};
   }
 
-  // Flatten the input twine into a SmallVector for lookup.
-  SmallString<64> targetStr;
-  target.toVector(targetStr);
+  // Stack the annotations for all targets.
+  SmallVector<Attribute, 4> annotations;
+  for (auto target : targets) {
+    // Flatten the input twine into a SmallVector for lookup.
+    SmallString<64> targetStr;
+    target.toVector(targetStr);
 
-  // Note: We are not allowed to mutate annotationMap here.  Make sure to only
-  // use non-mutating methods like `lookup`, not mutating ones like `am[key]`.
-  if (auto result = constants.annotationMap.lookup(targetStr))
-    return splitAnnotations(result.getValue(), loc, ports);
+    // Note: We are not allowed to mutate annotationMap here.  Make sure to only
+    // use non-mutating methods like `lookup`, not mutating ones like `am[key]`.
+    if (auto result = constants.annotationMap.lookup(targetStr)) {
+      if (!result.empty())
+        annotations.append(result.begin(), result.end());
+    }
+  }
+
+  if (!annotations.empty())
+    return splitAnnotations(annotations, loc, ports);
 
   SmallVector<Attribute, 4> portAnnotations(
       ports.size(), ArrayAttr::get(constants.context, {}));
@@ -2585,27 +2603,18 @@ ParseResult FIRStmtParser::parseInstance() {
 
   for (auto port : modulePorts) {
     resultTypes.push_back(port.type);
-
-    // // Combine annotations that are ReferenceTargets and InstanceTargets.  By
-    // // example, this will lookup all annotations with either of the following
-    // // formats:
-    // //     ~Foo|Foo>bar
-    // //     ~Foo|Foo/bar:Bar
-    // SmallVector<Attribute, 16> annotationsVec;
-    // for (auto a : getAnnotations(getModuleTarget() + ">" + id))
-    //   annotationsVec.push_back(a);
-    // for (auto a : getAnnotations(getModuleTarget() + "/" + id + ":" +
-    // moduleName))
-    //   annotationsVec.push_back(a);
-
-    // ArrayAttr annotations = builder.getArrayAttr(annotationsVec);
-    // annotationsVec.clear();
-
     resultNamesAndTypes.push_back({port.name, port.type});
   }
 
-  auto annotations = getSplittedAnnotations(
-      getModuleTarget() + ">" + id, startTok.getLoc(), resultNamesAndTypes);
+  // Combine annotations that are ReferenceTargets and InstanceTargets.  By
+  // example, this will lookup all annotations with either of the following
+  // formats:
+  //     ~Foo|Foo>bar
+  //     ~Foo|Foo/bar:Bar
+  auto annotations =
+      getSplittedAnnotations({getModuleTarget() + ">" + id,
+                              getModuleTarget() + "/" + id + ":" + moduleName},
+                             startTok.getLoc(), resultNamesAndTypes);
   auto name = hasDontTouch(annotations.first) ? id : filterUselessName(id);
 
   auto result = builder.create<InstanceOp>(
@@ -3175,7 +3184,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
     return failure();
 
   auto moduleTarget = (circuitTarget + "|" + name.getValue()).str();
-  ArrayAttr annotations = getAnnotations(moduleTarget, info.getFIRLoc());
+  ArrayAttr annotations = getAnnotations({moduleTarget}, info.getFIRLoc());
 
   if (parseToken(FIRToken::colon, "expected ':' in module definition") ||
       info.parseOptionalInfo() ||
@@ -3386,19 +3395,8 @@ FIRCircuitParser::parseCircuit(const llvm::MemoryBuffer *annotationsBuf) {
   // Get annotations associated with this circuit. These are either:
   //   1. Annotations with no target (which we use "~" to identify)
   //   2. Annotations targeting the circuit, e.g., "~Foo"
-  ArrayAttr annotations = getAnnotations("~", info.getFIRLoc());
-  ArrayAttr circuitAnnot = getAnnotations(circuitTarget, info.getFIRLoc());
-  if (!circuitAnnot.empty()) {
-    // Merge these arrays if both present.
-    if (annotations.empty())
-      annotations = circuitAnnot;
-    else {
-      SmallVector<Attribute> elements;
-      elements.append(annotations.begin(), annotations.end());
-      elements.append(circuitAnnot.begin(), circuitAnnot.end());
-      annotations = b.getArrayAttr(elements);
-    }
-  }
+  ArrayAttr annotations =
+      getAnnotations({"~", circuitTarget}, info.getFIRLoc());
 
   // Create the top-level circuit op in the MLIR module.
   auto circuit = b.create<CircuitOp>(info.getLoc(), name, annotations);

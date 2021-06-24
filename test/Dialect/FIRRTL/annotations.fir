@@ -99,7 +99,7 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},
 
     ; CHECK-LABEL: module {
     ; CHECK: %bar_a, %bar_b = firrtl.instance @Bar
-    ; CHECK-SAME: [{one}], [#firrtl.subAnno<fieldID = [1, 1], {two}>], [#firrtl.subAnno<fieldID = [2, 2], {three}>]
+    ; CHECK-SAME: [{one}], [#firrtl.subAnno<fieldID = [1, 1], {two}>, #firrtl.subAnno<fieldID = [2, 2], {three}>]
 
 ; // -----
 
