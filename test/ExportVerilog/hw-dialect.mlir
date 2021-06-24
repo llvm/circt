@@ -7,7 +7,9 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
                         %array2d: !hw.array<12 x array<10xi4>>,
                         %uarray: !hw.uarray<16xi8>,
                         %postUArray: i8,
-                        %structA: !hw.struct<foo: i2, bar:i4>) -> (
+                        %structA: !hw.struct<foo: i2, bar:i4>,
+                        %arrOfStructA: !hw.array<5 x struct<foo: i2>>
+                        ) -> (
   %r0: i4, %r2: i4, %r4: i4, %r6: i4,
   %r7: i4, %r8: i4, %r9: i4, %r10: i4,
   %r11: i4, %r12: i4, %r13: i4, %r14: i4,
@@ -91,6 +93,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:   input  [11:0][9:0][3:0]                                   array2d,
 // CHECK-NEXT:   input  [7:0]                                              uarray[0:15], postUArray,
 // CHECK-NEXT:   input  struct packed {logic [1:0] foo; logic [3:0] bar; } structA,
+// CHECK-NEXT:   input  struct packed {logic [1:0] foo; }[4:0]             arrOfStructA,
 // CHECK-NEXT:   output [3:0]                                              r0, r2, r4, r6, r7, r8, r9,
 // CHECK-NEXT:   output [3:0]                                              r10, r11, r12, r13, r14, r15,
 // CHECK-NEXT:   output                                                    r16, r17, r18, r19, r20, r21,

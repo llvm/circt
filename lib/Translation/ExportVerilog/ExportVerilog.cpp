@@ -140,31 +140,27 @@ static void getTypeDims(SmallVectorImpl<int64_t> &dims, Type type,
   }
 }
 
-/// Emit a type's packed dimensions, returning whether or not text was emitted.
-static bool emitTypeDims(Type type, Location loc, raw_ostream &os) {
-  SmallVector<int64_t, 4> dims;
-  getTypeDims(dims, type, loc);
-
-  bool emitted = false;
+/// Emit a list of dimensions.
+static void emitDims(ArrayRef<int64_t> dims, raw_ostream &os) {
   for (int64_t width : dims)
     switch (width) {
     case -1: // -1 is an invalid type.
       os << "<<invalid type>>";
-      emitted = true;
-      return true;
-    case 1: // Width 1 is implicit.
-      assert(false && "Width 1 shouldn't be in the dim vector");
-      break;
+      return;
     case 0:
       os << "/*Zero Width*/";
-      emitted = true;
       break;
     default:
       os << '[' << (width - 1) << ":0]";
-      emitted = true;
       break;
     }
-  return emitted;
+}
+
+/// Emit a type's packed dimensions, returning whether or not text was emitted.
+static void emitTypeDims(Type type, Location loc, raw_ostream &os) {
+  SmallVector<int64_t, 4> dims;
+  getTypeDims(dims, type, loc);
+  emitDims(dims, os);
 }
 
 /// True iff 'a' and 'b' have the same wire dims.
@@ -214,7 +210,7 @@ static Type stripUnpackedTypes(Type type) {
 /// have handled this (with logic, wire, reg, etc).
 /// Returns whether anything was printed out
 static bool printPackedTypeImpl(Type type, raw_ostream &os, Operation *op,
-                                SmallVectorImpl<size_t> &dims,
+                                SmallVectorImpl<int64_t> &dims,
                                 bool implicitIntType) {
   return TypeSwitch<Type, bool>(type)
       .Case<IntegerType>([&](IntegerType integerType) {
@@ -225,11 +221,7 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Operation *op,
         if (!dims.empty() && !implicitIntType)
           os << ' ';
 
-        for (auto dim : dims)
-          if (dim)
-            os << '[' << (dim - 1) << ":0]";
-          else
-            os << "/*Zero Width*/";
+        emitDims(dims, os);
         return !dims.empty() || !implicitIntType;
       })
       .Case<InOutType>([&](InOutType inoutType) {
@@ -239,12 +231,13 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Operation *op,
       .Case<StructType>([&](StructType structType) {
         os << "struct packed {";
         for (auto &element : structType.getElements()) {
-          SmallVector<size_t, 8> structDims;
+          SmallVector<int64_t, 8> structDims;
           printPackedTypeImpl(stripUnpackedTypes(element.type), os, op,
                               structDims, /*implicitIntType=*/false);
           os << ' ' << element.name << "; ";
         }
         os << '}';
+        emitDims(dims, os);
         return true;
       })
       .Case<ArrayType>([&](ArrayType arrayType) {
@@ -275,7 +268,7 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Operation *op,
 
 static bool printPackedType(Type type, raw_ostream &os, Operation *op,
                             bool implicitIntType = true) {
-  SmallVector<size_t, 8> packedDimensions;
+  SmallVector<int64_t, 8> packedDimensions;
   return printPackedTypeImpl(type, os, op, packedDimensions, implicitIntType);
 }
 
