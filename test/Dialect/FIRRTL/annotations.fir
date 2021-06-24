@@ -135,7 +135,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar
 ; // -----
 
 ; COM: Test result annotations of MemOp.
-circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar.r.baz"},{"b":"b","target":"~Foo|Foo>bar.w"}]]
+circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar.r"},{"b":"b","target":"~Foo|Foo>bar.w"}]]
   module Foo:
     mem bar:
       data-type => {baz: UInt<8>, qux: UInt<8>}
@@ -148,7 +148,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar.r.baz"},{"b":"b","target":"~Foo|
 
     ; CHECK-LABEL: module {
     ; CHECK: firrtl.mem
-    ; CHECK-SAME: [{a = "a", target = [".baz"]}], [{b = "b"}]
+    ; CHECK-SAME: [{a = "a"}], [{b = "b"}]
 
 ; // -----
 

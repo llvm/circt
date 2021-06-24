@@ -1090,9 +1090,9 @@ firrtl.circuit "Foo"   {
 firrtl.circuit "Foo"   {
   firrtl.module @Foo() {
     // CHECK: firrtl.mem
-    // CHECK-SAME: [{a = "a"}], [{b = "b"}]
+    // CHECK: [{a = "a"}], [{b = "b"}]
     // CHECK: firrtl.mem
-    // CHECK-SAME: [], [{b = "b"}]
-    %bar_r, %bar_w = firrtl.mem Undefined  {depth = 16 : i64, name = "bar", portAnnotations = [[{a = "a", target = [".baz"]}], [{b = "b"}]], portNames = ["r", "w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<baz: uint<8>, qux: uint<8>>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<baz: uint<8>, qux: uint<8>>, mask: bundle<baz: uint<1>, qux: uint<1>>>
+    // CHECK: [{a = "a"}], [{b = "b"}]
+    %bar_r, %bar_w = firrtl.mem Undefined  {depth = 16 : i64, name = "bar", portAnnotations = [[{a = "a"}], [{b = "b"}]], portNames = ["r", "w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<baz: uint<8>, qux: uint<8>>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<baz: uint<8>, qux: uint<8>>, mask: bundle<baz: uint<1>, qux: uint<1>>>
   }
 }
