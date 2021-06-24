@@ -43,7 +43,7 @@ class CalyxOp<string mnemonic, list<OpTrait> traits = []> :
 /// Base class for Calyx containers.
 class CalyxContainer<string mnemonic, list<OpTrait> traits = []> :
   Op<CalyxDialect, mnemonic, !listconcat(traits, [
-      HasParent<"ComponentOp">,
+      NoRegionArguments,
       NoTerminator,
       SingleBlock
   ])> {
@@ -51,7 +51,7 @@ class CalyxContainer<string mnemonic, list<OpTrait> traits = []> :
   let regions = (region SizedRegion<1>: $body);
 
   let extraClassDeclaration = [{
-    /// Returns the body of a Calyx component.
+    /// Returns the body of a Calyx container.
     Block *getBody() { return &getOperation()->getRegion(0).front(); }
   }];
 }

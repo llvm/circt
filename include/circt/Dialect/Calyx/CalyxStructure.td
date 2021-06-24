@@ -10,12 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-def ProgramOp : CalyxOp<"program", [
+def ProgramOp : CalyxContainer<"program", [
     IsolatedFromAbove,
-    NoRegionArguments,
-    NoTerminator,
-    SymbolTable,
-    SingleBlock
+    SymbolTable
   ]> {
   let summary = "Calyx Program";
   let description = [{
@@ -30,9 +27,6 @@ def ProgramOp : CalyxOp<"program", [
     /// entry point of the Calyx program.
     Operation *getMainComponent() { return lookupSymbol("main"); }
   }];
-
-  let regions = (region SizedRegion<1>:$body);
-  let assemblyFormat = "$body attr-dict";
   let verifier = "return ::verify$cppClass(*this);";
 }
 
@@ -92,7 +86,10 @@ def ComponentOp : CalyxOp<"component", [
   let parser = "return ::parse$cppClass(parser, result);";
 }
 
-def CellsOp : CalyxContainer<"cells", [IsolatedFromAbove]> {
+def CellsOp : CalyxContainer<"cells", [
+    HasParent<"ComponentOp">,
+    IsolatedFromAbove
+  ]> {
   let summary = "Calyx Cells";
   let description = [{
     The "calyx.cells" operation represents a container for
@@ -110,7 +107,9 @@ def CellsOp : CalyxContainer<"cells", [IsolatedFromAbove]> {
   let verifier = "return ::verify$cppClass(*this);";
 }
 
-def WiresOp : CalyxContainer<"wires", []> {
+def WiresOp : CalyxContainer<"wires", [
+    HasParent<"ComponentOp">
+  ]> {
   let summary = "Calyx Wires";
   let description = [{
     The "calyx.wires" operation represents a set of
@@ -132,7 +131,9 @@ def WiresOp : CalyxContainer<"wires", []> {
 // SingleBlock trait, this may change depending
 // on how we decide to represent Groups in the
 // dialect.
-def ControlOp : CalyxContainer<"control", []> {
+def ControlOp : CalyxContainer<"control", [
+    HasParent<"ComponentOp">
+  ]> {
   let summary = "Calyx Control";
   let description = [{
     The "calyx.control" operation represents the

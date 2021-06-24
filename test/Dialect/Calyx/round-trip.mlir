@@ -1,5 +1,6 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 
+// CHECK: calyx.program {
 calyx.program {
 
   // CHECK-LABEL:  calyx.component @ComponentWithInAndOutPorts(%in1: i64, %in2: i16) -> (%out1: i32, %out2: i8) {
