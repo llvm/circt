@@ -574,7 +574,8 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
     }
     ports.push_back(hwPort);
     if (!firrtlPort.annotations.empty())
-      moduleOp->emitWarning("unprocessed annotations still remaining on port after LowerToHW");
+      moduleOp->emitWarning(
+          "unprocessed annotations still remaining on port after LowerToHW");
   }
   return success();
 }
@@ -593,7 +594,8 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
     verilogName = defName.getValue();
 
   if (!AnnotationSet(oldModule).empty())
-      oldModule.emitWarning("unprocessed annotations still remaining on external module after LowerToHW");
+    oldModule.emitWarning("unprocessed annotations still remaining on external "
+                          "module after LowerToHW");
   // Build the new hw.module op.
   OpBuilder builder(topLevelModule->getParent()->getContext());
   builder.setInsertionPointToEnd(topLevelModule);
@@ -613,7 +615,8 @@ hw::HWModuleOp FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
     return {};
 
   if (!AnnotationSet(oldModule).empty())
-      oldModule.emitWarning("unprocessed annotations still remaining on module after LowerToHW");
+    oldModule.emitWarning(
+        "unprocessed annotations still remaining on module after LowerToHW");
   // Build the new hw.module op.
   OpBuilder builder(topLevelModule->getParent()->getContext());
   builder.setInsertionPointToEnd(topLevelModule);
