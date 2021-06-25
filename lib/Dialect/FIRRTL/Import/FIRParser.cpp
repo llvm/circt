@@ -3029,7 +3029,7 @@ private:
   /// Add annotations from a string to the internal annotation map.  Report
   /// errors using a provided source manager location and with a provided error
   /// message
-  ParseResult importAnnotations(SMLoc loc, StringRef circuitName,
+  ParseResult importAnnotations(SMLoc loc, StringRef circuitTarget,
                                 StringRef annotationsStr);
 
   ParseResult parseModule(CircuitOp circuit, StringRef circuitTarget,
@@ -3061,7 +3061,7 @@ private:
 } // end anonymous namespace
 
 ParseResult FIRCircuitParser::importAnnotations(SMLoc loc,
-                                                StringRef circuitName,
+                                                StringRef circuitTarget,
                                                 StringRef annotationsStr) {
 
   auto annotations = json::parse(annotationsStr);
@@ -3075,7 +3075,7 @@ ParseResult FIRCircuitParser::importAnnotations(SMLoc loc,
 
   json::Path::Root root;
   llvm::StringMap<ArrayAttr> thisAnnotationMap;
-  if (!fromJSON(annotations.get(), circuitName, thisAnnotationMap, root,
+  if (!fromJSON(annotations.get(), circuitTarget, thisAnnotationMap, root,
                 getContext())) {
     auto diag = emitError(loc, "Invalid/unsupported annotation format");
     std::string jsonErrorMessage =

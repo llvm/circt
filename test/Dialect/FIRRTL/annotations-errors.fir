@@ -3,7 +3,7 @@
 ; COM: Invalid circuit should report an error
 
 ; expected-error @+2 {{Invalid/unsupported annotation format}}
-; expected-note @+1 {{/* error: Annotation has invalid circuit name */}}
+; expected-note @+1 {{/* error: annotation has invalid circuit name */}}
 circuit Foo: %[[{"one":null,"target":"~Fooo|Foo>bar"}]]
   module Foo:
     skip
