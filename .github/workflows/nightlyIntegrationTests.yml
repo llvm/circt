@@ -1,139 +1,139 @@
-#name: Nightly integration tests
-#
-## Run on request and every day at 12 noon UTC
-#on:
-#  workflow_dispatch:
-#  schedule:
-#    - cron: 0 12 * * *
-#
-#jobs:
-#  # Build the LLVM submodule then cache it. Do not rebuild if hit in the
-#  # cache.
-#  build-llvm:
-#    name: Build LLVM
-#    runs-on: ubuntu-latest
-#    container:
-#      image: ghcr.io/circt/images/circt-integration-test:v5
-#    steps:
-#      # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
-#      # time.
-#      - name: Get CIRCT
-#        uses: actions/checkout@v2
-#        with:
-#          fetch-depth: 2
-#          submodules: "true"
-#
-#      # Extract the LLVM submodule hash for use in the cache key.
-#      - name: Get LLVM Hash
-#        id: get-llvm-hash
-#        run: echo "::set-output name=hash::$(git rev-parse @:./llvm)"
-#        shell: bash
-#
-#      # Try to fetch LLVM from the cache.
-#      - name: Cache LLVM
-#        id: cache-llvm
-#        uses: actions/cache@v2
-#        with:
-#          path: llvm
-#          key: ${{ runner.os }}-llvm-python-${{ steps.get-llvm-hash.outputs.hash }}
-#
-#      # Build LLVM if we didn't hit in the cache.
-#      - name: Rebuild and Install LLVM
-#        if: steps.cache-llvm.outputs.cache-hit != 'true'
-#        run: utils/build-llvm.sh build install Release -DMLIR_ENABLE_BINDINGS_PYTHON=ON
-#
-#  # Build CIRCT and run its tests using a Docker container with all the
-#  # integration testing prerequisite installed.
-#  build-circt:
-#    name: Build and Test
-#    needs: build-llvm
-#    runs-on: ubuntu-18.04
-#    container:
-#      image: ghcr.io/circt/images/circt-integration-test:v5
-#    strategy:
-#      matrix:
-#        build-assert: [ON, OFF]
-#        build-shared: [ON, OFF]
-#        build-type: [Debug, Release]
-#        compiler:
-#          - cc: clang
-#            cxx: clang++
-#          - cc: gcc
-#            cxx: g++
-#        include:
-#          - build-shared: ON
-#            bindings-python: ON
-#
-#    steps:
-#      - name: Configure Environment
-#        run: echo "$GITHUB_WORKSPACE/llvm/install/bin" >> $GITHUB_PATH
-#
-#      # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
-#      # time.
-#      - name: Get CIRCT
-#        uses: actions/checkout@v2
-#        with:
-#          fetch-depth: 1
-#          submodules: true
-#
-#      # --------
-#      # Restore LLVM from cache and build if it's not in there.
-#      # --------
-#
-#      # Extract the LLVM submodule hash for use in the cache key.
-#      - name: Get LLVM Hash
-#        id: get-llvm-hash
-#        run: echo "::set-output name=hash::$(git rev-parse @:./llvm)"
-#        shell: bash
-#
-#      # Try to fetch LLVM from the cache.
-#      - name: Cache LLVM
-#        id: cache-llvm
-#        uses: actions/cache@v2
-#        with:
-#          path: llvm
-#          key: ${{ runner.os }}-llvm-python-${{ steps.get-llvm-hash.outputs.hash }}
-#
-#      # Build LLVM if we didn't hit in the cache.
-#      - name: Rebuild and Install LLVM
-#        if: steps.cache-llvm.outputs.cache-hit != 'true'
-#        run: utils/build-llvm.sh build install Release -DMLIR_ENABLE_BINDINGS_PYTHON=ON
-#
-#      # --------
-#      # Build and test CIRCT
-#      # --------
-#
-#      - name: Configure CIRCT
-#        env:
-#          CC: ${{ matrix.compiler.cc }}
-#          CXX: ${{ matrix.compiler.cxx }}
-#          BUILD_ASSERT: ${{ matrix.build-assert }}
-#          BUILD_SHARED: ${{ matrix.build-shared }}
-#          BUILD_TYPE: ${{ matrix.build-type }}
-#          BINDINGS_PYTHON: ${{matrix.bindings-python}}
-#        run: |
-#          mkdir build && cd build
-#          cmake .. \
-#            -DBUILD_SHARED_LIBS=$BUILD_SHARED \
-#            -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
-#            -DLLVM_ENABLE_ASSERTIONS=$BUILD_ASSERT \
-#            -DMLIR_DIR=../llvm/install/lib/cmake/mlir/ \
-#            -DLLVM_DIR=../llvm/install/lib/cmake/llvm/ \
-#            -DCMAKE_LINKER=lld \
-#            -DCMAKE_C_COMPILER=$CC \
-#            -DCMAKE_CXX_COMPILER=$CXX \
-#            -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit \
-#            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-#            -DCIRCT_BINDINGS_PYTHON_ENABLED=$BINDINGS_PYTHON
-#      - name: Build CIRCT
-#        run: |
-#          cd build
-#          make -j$(nproc)
-#      - name: Test CIRCT
-#        run: |
-#          cd build
-#          make check-circt -j$(nproc)
-#      - name: Integration Test CIRCT
-#        run: |
-#          cd build
-#          make check-circt-integration
+name: Nightly integration tests
+
+# Run on request and every day at 12 noon UTC
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: 0 12 * * *
+
+jobs:
+  # Build the LLVM submodule then cache it. Do not rebuild if hit in the
+  # cache.
+  build-llvm:
+    name: Build LLVM
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/circt/images/circt-integration-test:v5
+    steps:
+      # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
+      # time.
+      - name: Get CIRCT
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 2
+          submodules: "true"
+
+      # Extract the LLVM submodule hash for use in the cache key.
+      - name: Get LLVM Hash
+        id: get-llvm-hash
+        run: echo "::set-output name=hash::$(git rev-parse @:./llvm)"
+        shell: bash
+
+      # Try to fetch LLVM from the cache.
+      - name: Cache LLVM
+        id: cache-llvm
+        uses: actions/cache@v2
+        with:
+          path: llvm
+          key: ${{ runner.os }}-llvm-python-${{ steps.get-llvm-hash.outputs.hash }}
+
+      # Build LLVM if we didn't hit in the cache.
+      - name: Rebuild and Install LLVM
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        run: utils/build-llvm.sh build install Release -DMLIR_ENABLE_BINDINGS_PYTHON=ON
+
+  # Build CIRCT and run its tests using a Docker container with all the
+  # integration testing prerequisite installed.
+  build-circt:
+    name: Build and Test
+    needs: build-llvm
+    runs-on: ubuntu-18.04
+    container:
+      image: ghcr.io/circt/images/circt-integration-test:v5
+    strategy:
+      matrix:
+        build-assert: [ON, OFF]
+        build-shared: [ON, OFF]
+        build-type: [Debug, Release]
+        compiler:
+          - cc: clang
+            cxx: clang++
+          - cc: gcc
+            cxx: g++
+        include:
+          - build-shared: ON
+            bindings-python: ON
+
+    steps:
+      - name: Configure Environment
+        run: echo "$GITHUB_WORKSPACE/llvm/install/bin" >> $GITHUB_PATH
+
+      # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
+      # time.
+      - name: Get CIRCT
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 1
+          submodules: true
+
+      # --------
+      # Restore LLVM from cache and build if it's not in there.
+      # --------
+
+      # Extract the LLVM submodule hash for use in the cache key.
+      - name: Get LLVM Hash
+        id: get-llvm-hash
+        run: echo "::set-output name=hash::$(git rev-parse @:./llvm)"
+        shell: bash
+
+      # Try to fetch LLVM from the cache.
+      - name: Cache LLVM
+        id: cache-llvm
+        uses: actions/cache@v2
+        with:
+          path: llvm
+          key: ${{ runner.os }}-llvm-python-${{ steps.get-llvm-hash.outputs.hash }}
+
+      # Build LLVM if we didn't hit in the cache.
+      - name: Rebuild and Install LLVM
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        run: utils/build-llvm.sh build install Release -DMLIR_ENABLE_BINDINGS_PYTHON=ON
+
+      # --------
+      # Build and test CIRCT
+      # --------
+
+      - name: Configure CIRCT
+        env:
+          CC: ${{ matrix.compiler.cc }}
+          CXX: ${{ matrix.compiler.cxx }}
+          BUILD_ASSERT: ${{ matrix.build-assert }}
+          BUILD_SHARED: ${{ matrix.build-shared }}
+          BUILD_TYPE: ${{ matrix.build-type }}
+          BINDINGS_PYTHON: ${{matrix.bindings-python}}
+        run: |
+          mkdir build && cd build
+          cmake .. \
+            -DBUILD_SHARED_LIBS=$BUILD_SHARED \
+            -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
+            -DLLVM_ENABLE_ASSERTIONS=$BUILD_ASSERT \
+            -DMLIR_DIR=../llvm/install/lib/cmake/mlir/ \
+            -DLLVM_DIR=../llvm/install/lib/cmake/llvm/ \
+            -DCMAKE_LINKER=lld \
+            -DCMAKE_C_COMPILER=$CC \
+            -DCMAKE_CXX_COMPILER=$CXX \
+            -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DCIRCT_BINDINGS_PYTHON_ENABLED=$BINDINGS_PYTHON
+      - name: Build CIRCT
+        run: |
+          cd build
+          make -j$(nproc)
+      - name: Test CIRCT
+        run: |
+          cd build
+          make check-circt -j$(nproc)
+      - name: Integration Test CIRCT
+        run: |
+          cd build
+          make check-circt-integration
