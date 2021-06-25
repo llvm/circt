@@ -10,7 +10,29 @@
 //
 //===----------------------------------------------------------------------===//
 
+def ProgramOp : CalyxContainer<"program", [
+    IsolatedFromAbove,
+    SymbolTable
+  ]> {
+  let summary = "Calyx Program";
+  let description = [{
+    The "calyx.program" operation represents an overall Calyx program,
+    containing a list of Calyx components. This must include a "main"
+    component, the entry point of the program.
+  }];
+  let arguments = (ins);
+
+  let extraClassDeclaration = [{
+    /// Returns the main component, representing the
+    /// entry point of the Calyx program.
+    ComponentOp getMainComponent() { return lookupSymbol<ComponentOp>("main"); }
+  }];
+  let verifier = "return ::verify$cppClass(*this);";
+}
+
+
 def ComponentOp : CalyxOp<"component", [
+    HasParent<"ProgramOp">,
     Symbol,
     FunctionLike,
     IsolatedFromAbove,
@@ -64,7 +86,10 @@ def ComponentOp : CalyxOp<"component", [
   let parser = "return ::parse$cppClass(parser, result);";
 }
 
-def CellsOp : CalyxContainer<"cells", [IsolatedFromAbove]> {
+def CellsOp : CalyxContainer<"cells", [
+    HasParent<"ComponentOp">,
+    IsolatedFromAbove
+  ]> {
   let summary = "Calyx Cells";
   let description = [{
     The "calyx.cells" operation represents a container for
@@ -78,9 +103,13 @@ def CellsOp : CalyxContainer<"cells", [IsolatedFromAbove]> {
       }
     ```
   }];
+
+  let verifier = "return ::verify$cppClass(*this);";
 }
 
-def WiresOp : CalyxContainer<"wires", []> {
+def WiresOp : CalyxContainer<"wires", [
+    HasParent<"ComponentOp">
+  ]> {
   let summary = "Calyx Wires";
   let description = [{
     The "calyx.wires" operation represents a set of
@@ -102,7 +131,9 @@ def WiresOp : CalyxContainer<"wires", []> {
 // SingleBlock trait, this may change depending
 // on how we decide to represent Groups in the
 // dialect.
-def ControlOp : CalyxContainer<"control", []> {
+def ControlOp : CalyxContainer<"control", [
+    HasParent<"ComponentOp">
+  ]> {
   let summary = "Calyx Control";
   let description = [{
     The "calyx.control" operation represents the
@@ -116,4 +147,38 @@ def ControlOp : CalyxContainer<"control", []> {
       }
     ```
   }];
+}
+
+def CellOp : CalyxOp<"cell", [
+    HasParent<"CellsOp">
+  ]> {
+  let summary = "Calyx Cell";
+  let description = [{
+    Represents a cell (or instance) of a Calyx component or
+    primitive, which may include state. Some cells may
+    optionally have parameters attributed to them.
+
+    ```mlir
+      %in1, %out1 = calyx.cell "name" @MyComponent : i64, i16
+    ```
+  }];
+
+  let extraClassDeclaration = [{
+    /// Lookup the component for the symbol. This returns null on
+    /// invalid IR.
+    ComponentOp getReferencedComponent();
+  }];
+
+  // TODO(Calyx): Add `parameters` attribute for
+  // SystemVerilog-wrapped primitives.
+  let arguments = (ins
+    StrAttr:$instanceName,
+    FlatSymbolRefAttr:$componentName
+  );
+  let results = (outs Variadic<AnyType>:$results);
+
+  let assemblyFormat = [{
+    $instanceName $componentName attr-dict (`:` type($results)^)?
+  }];
+  let verifier = "return ::verify$cppClass(*this);";
 }
