@@ -27,6 +27,7 @@ calyx.program {
     calyx.control {}
   }
 
+  // CHECK-LABEL: calyx.component @ComponentWithNoPorts() -> () {
   calyx.component @ComponentWithNoPorts() -> () {
     calyx.cells {}
     calyx.wires {}
