@@ -172,7 +172,14 @@ def _module_base(cls, params={}):
           name: kwargs[name] for (name, _) in mod._input_ports if name in kwargs
       }
       pass_up_kwargs = {n: v for (n, v) in kwargs.items() if n not in inputs}
-      # TODO: Inspect signature, raise error if __init__ doesn't accept **kwargs
+      if len(pass_up_kwargs) > 0:
+        init_sig = inspect.signature(cls.__init__)
+        if not any(
+          [x == inspect.Parameter.VAR_KEYWORD for x in init_sig.parameters]):
+          raise ValueError("Module constructor doesn't have a **kwargs"
+                           " parameter, so the following are likely inputs"
+                           " which don't have a port: " + ",".join(
+                             pass_up_kwargs.keys()))
       cls.__init__(self, *args, **pass_up_kwargs)
 
       # Build a list of operand values for the operation we're gonna create.
