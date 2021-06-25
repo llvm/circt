@@ -265,15 +265,15 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0]"},{"two":null,"target":"~F
 ; // -----
 
 ; COM: Annotations should apply even when the target's name is dropped.
-circuit Foo: %[[{"target": "Foo|Foo>_T_0", "a": "a"},
-                {"target": "Foo|Foo>_T_1", "a": "a"},
-                {"target": "Foo|Foo>_T_2", "a": "a"},
-                {"target": "Foo|Foo>_T_3", "a": "a"},
-                {"target": "Foo|Foo>_T_4", "a": "a"},
-                {"target": "Foo|Foo>_T_5", "a": "a"},
-                {"target": "Foo|Foo>_T_6", "a": "a"},
-                {"target": "Foo|Foo>_T_7", "a": "a"},
-                {"target": "Foo|Foo>_T_8", "a": "a"}]]
+circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "a": "a"},
+                {"target": "~Foo|Foo>_T_1", "a": "a"},
+                {"target": "~Foo|Foo>_T_2", "a": "a"},
+                {"target": "~Foo|Foo>_T_3", "a": "a"},
+                {"target": "~Foo|Foo>_T_4", "a": "a"},
+                {"target": "~Foo|Foo>_T_5", "a": "a"},
+                {"target": "~Foo|Foo>_T_6", "a": "a"},
+                {"target": "~Foo|Foo>_T_7", "a": "a"},
+                {"target": "~Foo|Foo>_T_8", "a": "a"}]]
   module Bar:
     skip
   module Foo:
@@ -309,15 +309,15 @@ circuit Foo: %[[{"target": "Foo|Foo>_T_0", "a": "a"},
 ; // -----
 
 ; COM: DontTouch annotation preserves temporary names
-circuit Foo: %[[{"target": "Foo|Foo>_T_0", "class": "firrtl.transforms.DontTouchAnnotation"},
-                {"target": "Foo|Foo>_T_1", "class": "firrtl.transforms.DontTouchAnnotation"},
-                {"target": "Foo|Foo>_T_2", "class": "firrtl.transforms.DontTouchAnnotation"},
-                {"target": "Foo|Foo>_T_3", "class": "firrtl.transforms.DontTouchAnnotation"},
-                {"target": "Foo|Foo>_T_4", "class": "firrtl.transforms.DontTouchAnnotation"},
-                {"target": "Foo|Foo>_T_5", "class": "firrtl.transforms.DontTouchAnnotation"},
-                {"target": "Foo|Foo>_T_6", "class": "firrtl.transforms.DontTouchAnnotation"},
-                {"target": "Foo|Foo>_T_7", "class": "firrtl.transforms.DontTouchAnnotation"},
-                {"target": "Foo|Foo>_T_8", "class": "firrtl.transforms.DontTouchAnnotation"}]]
+circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "class": "firrtl.transforms.DontTouchAnnotation"},
+                {"target": "~Foo|Foo>_T_1", "class": "firrtl.transforms.DontTouchAnnotation"},
+                {"target": "~Foo|Foo>_T_2", "class": "firrtl.transforms.DontTouchAnnotation"},
+                {"target": "~Foo|Foo>_T_3", "class": "firrtl.transforms.DontTouchAnnotation"},
+                {"target": "~Foo|Foo>_T_4", "class": "firrtl.transforms.DontTouchAnnotation"},
+                {"target": "~Foo|Foo>_T_5", "class": "firrtl.transforms.DontTouchAnnotation"},
+                {"target": "~Foo|Foo>_T_6", "class": "firrtl.transforms.DontTouchAnnotation"},
+                {"target": "~Foo|Foo>_T_7", "class": "firrtl.transforms.DontTouchAnnotation"},
+                {"target": "~Foo|Foo>_T_8", "class": "firrtl.transforms.DontTouchAnnotation"}]]
   module Bar:
     skip
   module Foo:
