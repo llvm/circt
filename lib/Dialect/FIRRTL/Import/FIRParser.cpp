@@ -3029,7 +3029,8 @@ private:
   /// Add annotations from a string to the internal annotation map.  Report
   /// errors using a provided source manager location and with a provided error
   /// message
-  ParseResult importAnnotations(SMLoc loc, StringRef annotationsStr);
+  ParseResult importAnnotations(SMLoc loc, StringRef circuitName,
+                                StringRef annotationsStr);
 
   ParseResult parseModule(CircuitOp circuit, StringRef circuitTarget,
                           unsigned indent);
@@ -3060,6 +3061,7 @@ private:
 } // end anonymous namespace
 
 ParseResult FIRCircuitParser::importAnnotations(SMLoc loc,
+                                                StringRef circuitName,
                                                 StringRef annotationsStr) {
 
   auto annotations = json::parse(annotationsStr);
@@ -3073,7 +3075,8 @@ ParseResult FIRCircuitParser::importAnnotations(SMLoc loc,
 
   json::Path::Root root;
   llvm::StringMap<ArrayAttr> thisAnnotationMap;
-  if (!fromJSON(annotations.get(), thisAnnotationMap, root, getContext())) {
+  if (!fromJSON(annotations.get(), circuitName, thisAnnotationMap, root,
+                getContext())) {
     auto diag = emitError(loc, "Invalid/unsupported annotation format");
     std::string jsonErrorMessage =
         "See inline comments for problem area in JSON:\n";
@@ -3386,12 +3389,14 @@ FIRCircuitParser::parseCircuit(const llvm::MemoryBuffer *annotationsBuf) {
   // annotations.  While arbitrary, this makes the annotation file have "append"
   // semantics.
   if (!inlineAnnotations.empty())
-    if (importAnnotations(inlineAnnotationsLoc, inlineAnnotations))
+    if (importAnnotations(inlineAnnotationsLoc, circuitTarget,
+                          inlineAnnotations))
       return failure();
 
   // Deal with the annotation file if one was specified
   if (annotationsBuf) {
-    if (importAnnotations(info.getFIRLoc(), annotationsBuf->getBuffer()))
+    if (importAnnotations(info.getFIRLoc(), circuitTarget,
+                          annotationsBuf->getBuffer()))
       return failure();
   }
 

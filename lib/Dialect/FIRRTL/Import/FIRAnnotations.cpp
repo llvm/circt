@@ -183,7 +183,7 @@ static A tryGetAs(DictionaryAttr &dict, DictionaryAttr &root, StringRef key,
 /// represented as a Target-keyed arrays of attributes.  The input JSON value is
 /// checked, at runtime, to be an array of objects.  Returns true if successful,
 /// false if unsuccessful.
-bool circt::firrtl::fromJSON(json::Value &value,
+bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
                              llvm::StringMap<ArrayAttr> &annotationMap,
                              json::Path path, MLIRContext *context) {
 
@@ -314,6 +314,14 @@ bool circt::firrtl::fromJSON(json::Value &value,
     if (!optTarget)
       return false;
     StringRef targetStrRef = optTarget.getValue();
+
+    auto circuitFieldEnd = targetStrRef.find_first_of('|');
+    if (circuitFieldEnd != StringRef::npos) {
+      if (circuitTarget != targetStrRef.take_front(circuitFieldEnd)) {
+        p.report("Annotation has invalid circuit name");
+        return false;
+      }
+    }
 
     // Build up the Attribute to represent the Annotation and store it in the
     // global Target -> Attribute mapping.
