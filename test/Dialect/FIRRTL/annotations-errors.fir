@@ -10,6 +10,16 @@ circuit Foo: %[[{"one":null,"target":"~Fooo|Foo>bar"}]]
 
 ; // -----
 
+; COM: Invalid circuit should report an error
+
+; expected-error @+2 {{Invalid/unsupported annotation format}}
+; expected-note @+1 {{/* error: annotation has invalid circuit name */}}
+circuit Foo: %[[{"one":null,"target":"~Fooo"}]]
+  module Foo:
+    skip
+
+; // -----
+
 ; COM: A non-local Annotation is unsupported.
 
 ; expected-error @+2 {{Invalid/unsupported annotation format}}

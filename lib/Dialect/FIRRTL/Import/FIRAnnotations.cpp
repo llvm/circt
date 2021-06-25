@@ -315,8 +315,8 @@ bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
       return false;
     StringRef targetStrRef = optTarget.getValue();
 
-    auto circuitFieldEnd = targetStrRef.find_first_of('|');
-    if (circuitFieldEnd != StringRef::npos) {
+    if (targetStrRef != "~") {
+      auto circuitFieldEnd = targetStrRef.find_first_of('|');
       if (circuitTarget != targetStrRef.take_front(circuitFieldEnd)) {
         p.report("annotation has invalid circuit name");
         return false;
