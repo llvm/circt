@@ -24,15 +24,8 @@ firrtl.circuit "InvalidBundle" {
 // -----
 
 firrtl.circuit "unprocessedAnnotations" {
-  // expected-warning @+1 {{unprocessed annotations}}
-  firrtl.module @bar(in %io_cpu_flush: !firrtl.uint<1> {firrtl.annotations = [{a}]}  ){
+  firrtl.module @bar(in %io_cpu_flush: !firrtl.uint<1>){
   }
-  // expected-warning @+1 {{unprocessed annotations}}
-  firrtl.extmodule @extModPorts(in %io_cpu_flush: !firrtl.uint<1> {firrtl.annotations = [{a}]} )
-  // expected-warning @+1 {{unprocessed annotations}}
-  firrtl.extmodule @extMod(in %io_cpu_flush: !firrtl.uint<1>) attributes { annotations = [{class = "a"}] }
-  // expected-warning @+1 {{unprocessed annotations}}
-  firrtl.module @foo(in %io_cpu_flush: !firrtl.uint<1>) attributes { annotations = [{class = "a"}] } {}
   firrtl.module @unprocessedAnnotations(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
                             in %cond: !firrtl.uint<1>, in %value: !firrtl.uint<2>) {
     // expected-warning @+1 {{unprocessed annotations}}
@@ -48,4 +41,20 @@ firrtl.circuit "unprocessedAnnotations" {
     // expected-warning @+1 {{unprocessed annotations}}
     %5 = firrtl.instance @bar {name = "fetch", portNames=["io_cpu_flush"], annotations = [{class = "firrtl.transforms.RemainingAnnotation"}] } : !firrtl.uint<1>
   }
+}
+
+// -----
+
+firrtl.circuit "moduleAnno" {
+  // expected-warning @+1 {{unprocessed annotations}}
+  firrtl.module @moduleAnno(in %io_cpu_flush: !firrtl.uint<1> 
+    {firrtl.annotations = [{a}]}  ){  }
+  // expected-warning @+1 {{unprocessed annotations}}
+  firrtl.extmodule @extModPorts(in %io_cpu_flush: !firrtl.uint<1> {firrtl.annotations = [{a}]} )
+  // expected-warning @+1 {{unprocessed annotations}}
+  firrtl.extmodule @extMod(in %io_cpu_flush: !firrtl.uint<1>) 
+    attributes { annotations = [{class = "a"}] }
+  // expected-warning @+1 {{unprocessed annotations}}
+  firrtl.module @foo(in %io_cpu_flush: !firrtl.uint<1>) 
+    attributes { annotations = [{class = "a"}] } {}
 }
