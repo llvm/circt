@@ -6,6 +6,7 @@
 
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Dialect/HIR/IR/HIRDialect.h"
+#include "circt/Dialect/HIR/IR/helper.h"
 
 #include "mlir/Dialect/CommonFolders.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -218,15 +219,20 @@ bool ScheduleVerifier::inspectOp(hir::FuncOp op) {
   Value tstart = args.back();
   this->tstart = tstart;
   hir::FuncType funcTy = op.funcTy().dyn_cast<hir::FuncType>();
-  auto inputDelays = funcTy.getInputDelays();
+  auto inputAttrs = funcTy.getInputAttrs();
   this->outputDelays = funcTy.getOutputDelays();
   // Indentity map for root level time vars.
   schedule.insert(tstart, tstart, 0);
-  for (unsigned i = 0; i < inputDelays.size(); i++) {
+  for (unsigned i = 0; i < inputAttrs.size(); i++) {
     mapValueToDefiningLoc.insert(std::make_pair(args[i], op.getLoc()));
-    if (!args[i].getType().isa<IntegerType>())
+    if (!helper::isPrimitiveType(args[i].getType()))
       continue;
-    int delay = inputDelays[i].dyn_cast<IntegerAttr>().getInt();
+    int delay = inputAttrs[i]
+                    .dyn_cast<DictionaryAttr>()
+                    .getNamed("delay")
+                    .getValue()
+                    .second.dyn_cast<IntegerAttr>()
+                    .getInt();
     schedule.insert(args[i], tstart, delay);
   }
   return inspectBody(entryBlock);
@@ -284,23 +290,19 @@ bool ScheduleVerifier::inspectOp(hir::LoadOp op) {
   auto indices = op.indices();
   Value result = op.res();
   Value tstart = op.tstart();
-  int delay = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
-  assert(delay >= 0);
+  int offset = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
+  assert(offset >= 0);
 
   bool ok = true;
   int c = 1;
   for (auto idx : indices) {
-    ok &= schedule.check(op.getLoc(), getDefiningLoc(idx), idx, tstart, delay,
+    ok &= schedule.check(op.getLoc(), getDefiningLoc(idx), idx, tstart, offset,
                          "indicesess " + std::to_string(c));
     c++;
   }
-  auto memrefTy = op.mem().getType().dyn_cast<hir::MemrefType>();
-  auto portAttrs = memrefTy.getPortAttrs();
-  auto rdAttr = portAttrs.getNamed("rd");
-  assert(rdAttr);
-  auto rdDelay = rdAttr->second.dyn_cast<IntegerAttr>().getInt();
+  auto delay = op.delay();
 
-  schedule.insert(result, tstart, delay + rdDelay);
+  schedule.insert(result, tstart, offset + delay);
   return ok;
 }
 
@@ -308,15 +310,15 @@ bool ScheduleVerifier::inspectOp(hir::StoreOp op) {
   auto indices = op.indices();
   Value value = op.value();
   Value tstart = op.tstart();
-  int delay = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
-  assert(delay >= 0);
+  int offset = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
+  assert(offset >= 0);
   bool ok = true;
-  ok &= schedule.check(op.getLoc(), getDefiningLoc(value), value, tstart, delay,
-                       "input var");
+  ok &= schedule.check(op.getLoc(), getDefiningLoc(value), value, tstart,
+                       offset, "input var");
   int c = 1;
   for (auto idx : indices) {
     mlir::Location locAddrI = getDefiningLoc(idx);
-    ok &= schedule.check(op.getLoc(), locAddrI, idx, tstart, delay,
+    ok &= schedule.check(op.getLoc(), locAddrI, idx, tstart, offset,
                          "indicesess " + std::to_string(c));
     c++;
   }
@@ -338,32 +340,32 @@ bool ScheduleVerifier::inspectOp(hir::ReturnOp op) {
 
 bool ScheduleVerifier::inspectOp(hir::YieldOp op) {
   Value tstart = op.tstart();
-  unsigned delay = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
+  unsigned offset = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
   yieldPoints.top().t = tstart;
-  yieldPoints.top().delay = delay;
+  yieldPoints.top().delay = offset;
   return true;
 }
 
 bool ScheduleVerifier::inspectOp(hir::SendOp op) {
-  unsigned delay = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
+  unsigned offset = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
   return schedule.check(op.getLoc(), getDefiningLoc(op.value()), op.value(),
-                        op.tstart(), delay, "input var");
+                        op.tstart(), offset, "input var");
 }
 
 bool ScheduleVerifier::inspectOp(hir::RecvOp op) {
-  unsigned delay = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
-  schedule.insert(op.res(), op.tstart(), delay);
+  unsigned offset = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
+  schedule.insert(op.res(), op.tstart(), offset);
   return true;
 }
 
 bool ScheduleVerifier::inspectOp(hir::AllocaOp op) { return true; }
 
 bool ScheduleVerifier::inspectOp(hir::DelayOp op) {
-  unsigned delay = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
+  unsigned offset = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
   unsigned latency = getIntegerConstOrError(op.delay());
   bool ok = schedule.check(op.getLoc(), getDefiningLoc(op.input()), op.input(),
-                           op.tstart(), delay, "input var");
-  schedule.insert(op.res(), op.tstart(), delay + latency);
+                           op.tstart(), offset, "input var");
+  schedule.insert(op.res(), op.tstart(), offset + latency);
   return ok;
 }
 

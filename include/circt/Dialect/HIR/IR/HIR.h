@@ -15,34 +15,33 @@ namespace circt {
 namespace hir {
 #include "circt/Dialect/HIR/IR/HIRInterfaces.h.inc"
 enum PortKind { rd = 0, wr = 1, rw = 2 };
+enum BusDirection { SAME = 0, FLIP = 1 };
 
+enum DimKind { ADDR = 0, BANK = 1 };
 namespace Details {
 
 /// Storage class for MemrefType.
 struct MemrefTypeStorage : public TypeStorage {
   MemrefTypeStorage(ArrayRef<int64_t> shape, Type elementType,
-                    ArrayAttr bankDims, DictionaryAttr portAttrs)
-      : shape(shape), elementType(elementType), bankDims(bankDims),
-        portAttrs(portAttrs) {}
+                    ArrayRef<DimKind> dimKinds)
+      : shape(shape), elementType(elementType), dimKinds(dimKinds) {}
 
-  /// The hash key for this storage is a pair of the integer and type params.
-  using KeyTy = std::tuple<ArrayRef<int64_t>, Type, ArrayAttr, DictionaryAttr>;
+  using KeyTy = std::tuple<ArrayRef<int64_t>, Type, ArrayRef<DimKind>>;
 
   /// Define the comparison function for the key type.
   bool operator==(const KeyTy &key) const {
-    return key == KeyTy(shape, elementType, bankDims, portAttrs);
+    return key == KeyTy(shape, elementType, dimKinds);
   }
 
-  /// Define a hash function for the key type.
   static llvm::hash_code hashKey(const KeyTy &key) {
     return llvm::hash_combine(std::get<0>(key), std::get<1>(key),
-                              std::get<2>(key), std::get<3>(key));
+                              std::get<2>(key));
   }
 
   /// Define a construction function for the key type.
   static KeyTy getKey(ArrayRef<int64_t> shape, Type elementType,
-                      ArrayAttr bankDims, DictionaryAttr portAttrs) {
-    return KeyTy(shape, elementType, bankDims, portAttrs);
+                      ArrayRef<DimKind> dimKinds) {
+    return KeyTy(shape, elementType, dimKinds);
   }
 
   /// Define a construction method for creating a new instance of this storage.
@@ -50,31 +49,28 @@ struct MemrefTypeStorage : public TypeStorage {
                                       const KeyTy &key) {
     ArrayRef<int64_t> shape = allocator.copyInto(std::get<0>(key));
     Type elementType = std::get<1>(key);
-    ArrayAttr bankDims = std::get<2>(key);
-    DictionaryAttr portAttrs = std::get<3>(key);
+    ArrayRef<DimKind> dimKinds = allocator.copyInto(std::get<2>(key));
     return new (allocator.allocate<MemrefTypeStorage>())
-        MemrefTypeStorage(shape, elementType, bankDims, portAttrs);
+        MemrefTypeStorage(shape, elementType, dimKinds);
   }
 
   ArrayRef<int64_t> shape;
   Type elementType;
-  ArrayAttr bankDims;
-  DictionaryAttr portAttrs;
+  ArrayRef<DimKind> dimKinds;
 };
 
 /// Storage class for FuncType.
 struct FuncTypeStorage : public TypeStorage {
-  FuncTypeStorage(FunctionType functionTy, ArrayAttr inputDelays,
+  FuncTypeStorage(FunctionType functionTy, ArrayAttr inputAttrs,
                   ArrayAttr outputDelays)
-      : functionTy(functionTy), inputDelays(inputDelays),
+      : functionTy(functionTy), inputAttrs(inputAttrs),
         outputDelays(outputDelays) {}
 
-  /// The hash key for this storage is a pair of the integer and type params.
   using KeyTy = std::tuple<FunctionType, ArrayAttr, ArrayAttr>;
 
   /// Define the comparison function for the key type.
   bool operator==(const KeyTy &key) const {
-    return key == KeyTy(functionTy, inputDelays, outputDelays);
+    return key == KeyTy(functionTy, inputAttrs, outputDelays);
   }
 
   /// Define a hash function for the key type.
@@ -83,23 +79,23 @@ struct FuncTypeStorage : public TypeStorage {
   }
 
   /// Define a construction function for the key type.
-  static KeyTy getKey(FunctionType functionTy, ArrayAttr inputDelays,
+  static KeyTy getKey(FunctionType functionTy, ArrayAttr inputAttrs,
                       ArrayAttr outputDelays) {
-    return KeyTy(functionTy, inputDelays, outputDelays);
+    return KeyTy(functionTy, inputAttrs, outputDelays);
   }
 
   /// Define a construction method for creating a new instance of this storage.
   static FuncTypeStorage *construct(mlir::TypeStorageAllocator &allocator,
                                     const KeyTy &key) {
     FunctionType functionTy = std::get<0>(key);
-    ArrayAttr inputDelays = std::get<1>(key);
+    ArrayAttr inputAttrs = std::get<1>(key);
     ArrayAttr outputDelays = std::get<2>(key);
     return new (allocator.allocate<FuncTypeStorage>())
-        FuncTypeStorage(functionTy, inputDelays, outputDelays);
+        FuncTypeStorage(functionTy, inputAttrs, outputDelays);
   }
 
   FunctionType functionTy;
-  ArrayAttr inputDelays;
+  ArrayAttr inputAttrs;
   ArrayAttr outputDelays;
 };
 
@@ -107,7 +103,6 @@ struct ArrayTypeStorage : public TypeStorage {
   ArrayTypeStorage(ArrayRef<int64_t> dims, Type elementType, Attribute attr)
       : dims(dims), elementType(elementType), attr(attr) {}
 
-  /// The hash key for this storage is a pair of the integer and type params.
   using KeyTy = std::tuple<ArrayRef<int64_t>, Type, Attribute>;
 
   /// Define the comparison function for the key type.
@@ -145,7 +140,6 @@ struct GroupTypeStorage : public TypeStorage {
   GroupTypeStorage(ArrayRef<Type> elementTypes, ArrayRef<Attribute> attrs)
       : elementTypes(elementTypes), attrs(attrs) {}
 
-  /// The hash key for this storage is a pair of the integer and type params.
   using KeyTy = std::tuple<ArrayRef<Type>, ArrayRef<Attribute>>;
 
   /// Define the comparison function for the key type.
@@ -178,43 +172,38 @@ struct GroupTypeStorage : public TypeStorage {
 
 /// Storage class for BusType.
 struct BusTypeStorage : public TypeStorage {
-  BusTypeStorage(ArrayRef<Type> elementTypes, ArrayRef<PortKind> directions,
-                 DictionaryAttr proto)
-      : elementTypes(elementTypes), directions(directions), proto(proto) {}
+  BusTypeStorage(ArrayRef<Type> elementTypes, ArrayRef<BusDirection> directions)
+      : elementTypes(elementTypes), directions(directions) {}
 
-  /// The hash key for this storage is a pair of the integer and type params.
-  using KeyTy = std::tuple<ArrayRef<Type>, ArrayRef<PortKind>, DictionaryAttr>;
+  using KeyTy = std::tuple<ArrayRef<Type>, ArrayRef<BusDirection>>;
 
   /// Define the comparison function for the key type.
   bool operator==(const KeyTy &key) const {
-    return key == KeyTy(elementTypes, directions, proto);
+    return key == KeyTy(elementTypes, directions);
   }
 
   /// Define a hash function for the key type.
   static llvm::hash_code hashKey(const KeyTy &key) {
-    return llvm::hash_combine(std::get<0>(key), std::get<1>(key),
-                              std::get<2>(key));
+    return llvm::hash_combine(std::get<0>(key), std::get<1>(key));
   }
 
   /// Define a construction function for the key type.
   static KeyTy getKey(ArrayRef<Type> elementTypes,
-                      ArrayRef<PortKind> directions, DictionaryAttr proto) {
-    return KeyTy(elementTypes, directions, proto);
+                      ArrayRef<BusDirection> directions) {
+    return KeyTy(elementTypes, directions);
   }
 
   /// Define a construction method for creating a new instance of this storage.
   static BusTypeStorage *construct(mlir::TypeStorageAllocator &allocator,
                                    const KeyTy &key) {
-    ArrayRef<Type> elementTypes = allocator.copyInto(std::get<0>(key));
-    ArrayRef<PortKind> directions = allocator.copyInto(std::get<1>(key));
-    DictionaryAttr proto = std::get<2>(key);
+    auto elementTypes = allocator.copyInto(std::get<0>(key));
+    auto directions = allocator.copyInto(std::get<1>(key));
     return new (allocator.allocate<BusTypeStorage>())
-        BusTypeStorage(elementTypes, directions, proto);
+        BusTypeStorage(elementTypes, directions);
   }
 
   ArrayRef<Type> elementTypes;
-  ArrayRef<PortKind> directions;
-  DictionaryAttr proto;
+  ArrayRef<BusDirection> directions;
 };
 } // namespace Details.
 
@@ -236,106 +225,47 @@ public:
   // static bool kindof(unsigned kind) { return kind == MemrefKind; }
   static StringRef getKeyword() { return "memref"; }
   static MemrefType get(MLIRContext *context, ArrayRef<int64_t> shape,
-                        Type elementType, ArrayAttr bankDims,
-                        DictionaryAttr portDims) {
-    assert(bankDims);
-    assert(portDims);
-    return Base::get(context, shape, elementType, bankDims, portDims);
+                        Type elementType, ArrayRef<DimKind> dimKinds) {
+    assert(dimKinds.size() == shape.size());
+    return Base::get(context, shape, elementType, dimKinds);
   }
 
   ArrayRef<int64_t> getShape() { return getImpl()->shape; }
   Type getElementType() { return getImpl()->elementType; }
-  ArrayAttr getBankDims() { return getImpl()->bankDims; }
-  DictionaryAttr getPortAttrs() { return getImpl()->portAttrs; }
-  PortKind getPort() {
-    DictionaryAttr portAttrs = getPortAttrs();
-    auto rdAttr = portAttrs.getNamed("rd");
-    auto wrAttr = portAttrs.getNamed("wr");
-    if (rdAttr && wrAttr)
-      return PortKind::rw;
-    if (rdAttr)
-      return PortKind::rd;
-    return PortKind::wr;
-  }
+  ArrayRef<DimKind> getDimKinds() { return getImpl()->dimKinds; }
 
-  int getDepth() {
-    int depth = 1;
-    auto addrDims = getAddrDims();
+  int getNumElementsPerBank() {
+    int count = 1;
+    auto dimKinds = getDimKinds();
     auto shape = getShape();
-    for (auto dim : addrDims) {
-      depth *= shape[shape.size() - 1 - dim];
+    for (size_t i = 0; i < shape.size(); i++) {
+      if (dimKinds[i] == ADDR)
+        count *= shape[i];
     }
-    return depth;
+    return count;
   }
 
   int getNumBanks() {
-    int numBanks = 1;
-    auto bankDims = getBankDims();
+    int count = 1;
+    auto dimKinds = getDimKinds();
     auto shape = getShape();
-    for (auto dim : bankDims) {
-      numBanks *=
-          shape[shape.size() - 1 - dim.dyn_cast<IntegerAttr>().getInt()];
+    for (size_t i = 0; i < shape.size(); i++) {
+      if (dimKinds[i] == BANK) {
+        count *= shape[i];
+      }
     }
-    return numBanks;
+    return count;
   }
-  SmallVector<int64_t, 4> getBankShape() {
+
+  SmallVector<int64_t, 4> filterShape(DimKind dimKind) {
     auto shape = getShape();
+    auto dimKinds = getDimKinds();
     SmallVector<int64_t, 4> bankShape;
     for (size_t i = 0; i < getShape().size(); i++) {
-      bool isBankDim = false;
-      for (auto dim : getBankDims())
-        if (i == (size_t)dim.dyn_cast<IntegerAttr>().getInt())
-          isBankDim = true;
-      if (isBankDim)
+      if (dimKinds[i] == dimKind)
         bankShape.push_back(shape[shape.size() - 1 - i]);
     }
     return bankShape;
-  }
-
-  SmallVector<int64_t, 4> getAddrShape() {
-    auto shape = getShape();
-    SmallVector<int64_t, 4> addrShape;
-    for (size_t i = 0; i < getShape().size(); i++) {
-      bool isAddrDim = false;
-      for (auto dim : getAddrDims())
-        if (i == (size_t)dim)
-          isAddrDim = true;
-      if (isAddrDim)
-        addrShape.push_back(shape[shape.size() - 1 - i]);
-    }
-    return addrShape;
-  }
-
-  SmallVector<int, 4> getAddrDims() {
-    SmallVector<int, 4> addrDims;
-    for (size_t i = 0; i < getShape().size(); i++) {
-      bool isBankDim = false;
-      for (auto dim : getBankDims())
-        if (i == (size_t)dim.dyn_cast<IntegerAttr>().getInt())
-          isBankDim = true;
-      if (!isBankDim)
-        addrDims.push_back(i);
-    }
-    return addrDims;
-  }
-  enum DimKind { ADDR = 0, BANK = 1 };
-  SmallVector<DimKind, 4> getDimensionKinds() {
-    SmallVector<DimKind, 4> dimensionKinds;
-    auto bankDims = getBankDims();
-    for (auto i = (int)getShape().size() - 1; i >= 0; i--) {
-      bool isBankDim = false;
-      for (auto bankDim : bankDims) {
-        if (i == bankDim.dyn_cast<IntegerAttr>().getInt()) {
-          isBankDim = true;
-          break;
-        }
-      }
-      if (isBankDim)
-        dimensionKinds.push_back(BANK);
-      else
-        dimensionKinds.push_back(ADDR);
-    }
-    return dimensionKinds;
   }
 };
 
@@ -347,12 +277,12 @@ public:
 
   static StringRef getKeyword() { return "func"; }
   static FuncType get(MLIRContext *context, FunctionType functionTy,
-                      ArrayAttr inputDelays, ArrayAttr outputDelays) {
-    return Base::get(context, functionTy, inputDelays, outputDelays);
+                      ArrayAttr inputAttrs, ArrayAttr outputDelays) {
+    return Base::get(context, functionTy, inputAttrs, outputDelays);
   }
 
   FunctionType getFunctionType() { return getImpl()->functionTy; }
-  ArrayAttr getInputDelays() { return getImpl()->inputDelays; }
+  ArrayAttr getInputAttrs() { return getImpl()->inputAttrs; }
   ArrayAttr getOutputDelays() { return getImpl()->outputDelays; }
 };
 
@@ -397,12 +327,13 @@ public:
 
   static StringRef getKeyword() { return "bus"; }
   static BusType get(MLIRContext *context, ArrayRef<Type> elementTypes,
-                     ArrayRef<PortKind> directions, DictionaryAttr proto) {
-    return Base::get(context, elementTypes, directions, proto);
+                     ArrayRef<BusDirection> directions) {
+    return Base::get(context, elementTypes, directions);
   }
   ArrayRef<Type> getElementTypes() { return getImpl()->elementTypes; }
-  ArrayRef<PortKind> getElementDirections() { return getImpl()->directions; }
-  DictionaryAttr getProto() { return getImpl()->proto; }
+  ArrayRef<BusDirection> getElementDirections() {
+    return getImpl()->directions;
+  }
 };
 
 } // namespace hir.

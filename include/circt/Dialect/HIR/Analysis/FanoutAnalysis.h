@@ -2,22 +2,21 @@
 namespace circt {
 namespace hir {
 
-class BusFanoutInfo {
+class MemrefFanoutInfo {
 public:
-  BusFanoutInfo(Operation *);
+  MemrefFanoutInfo(Operation *);
 
 private:
   void dispatchOp(Operation *);
   void visitOp(hir::FuncOp);
   void visitOp(hir::AllocaOp);
-  void visitOp(hir::TensorExtractOp);
-  void visitOp(hir::BusUnpackOp);
   void visitOp(hir::CallOp);
+  void visitOp(hir::LoadOp);
+  void visitOp(hir::StoreOp);
 
 public:
-  llvm::DenseMap<Value, SmallVector<SmallVector<Operation *, 1>, 1>>
-      mapBusTensor2Uses;
-  llvm::DenseMap<Value, SmallVector<Operation *, 4>> mapBus2Uses;
+  llvm::DenseMap<Value, SmallVector<SmallVector<SmallVector<Operation *>>>>
+      mapMemref2PerPortPerBankUses;
 };
 
 } // namespace hir

@@ -1,4 +1,5 @@
-//=========- -------BusFanoutInfo.cpp - Analysis pass for bus fanout-------===//
+//=========- -------MemrefFanoutInfo.cpp - Analysis pass for bus
+// fanout-------===//
 //
 // Calculates fanout info of each bus in a FuncOp.
 //
@@ -11,7 +12,7 @@
 using namespace circt;
 using namespace hir;
 
-BusFanoutInfo::BusFanoutInfo(Operation *op) {
+MemrefFanoutInfo::MemrefFanoutInfo(Operation *op) {
   auto funcOp = dyn_cast<hir::FuncOp>(op);
   assert(funcOp);
 
@@ -20,9 +21,9 @@ BusFanoutInfo::BusFanoutInfo(Operation *op) {
   WalkResult result = funcOp.walk([this](Operation *operation) -> WalkResult {
     if (auto op = dyn_cast<hir::AllocaOp>(operation))
       visitOp(op);
-    else if (auto op = dyn_cast<hir::TensorExtractOp>(operation))
+    else if (auto op = dyn_cast<hir::LoadOp>(operation))
       visitOp(op);
-    else if (auto op = dyn_cast<hir::BusUnpackOp>(operation))
+    else if (auto op = dyn_cast<hir::StoreOp>(operation))
       visitOp(op);
     else if (auto op = dyn_cast<hir::CallOp>(operation))
       visitOp(op);
@@ -31,57 +32,63 @@ BusFanoutInfo::BusFanoutInfo(Operation *op) {
   assert(!result.wasInterrupted());
 }
 
-void BusFanoutInfo::visitOp(hir::FuncOp op) {
+void MemrefFanoutInfo::visitOp(hir::FuncOp op) {
   auto &entryBlock = op.getBody().front();
   auto arguments = entryBlock.getArguments();
-  for (auto arg : arguments) {
-    if (auto tensorTy = arg.getType().dyn_cast<mlir::TensorType>()) {
-      if (auto busTy = arg.getType().dyn_cast<hir::BusType>()) {
-
-        mapBusTensor2Uses[arg].append(
-            helper::getSizeFromShape(tensorTy.getShape()),
-            SmallVector<Operation *, 1>({}));
-      }
-    } else if (auto busTy = arg.getType().dyn_cast<hir::BusType>()) {
-      mapBus2Uses[arg] = SmallVector<Operation *, 4>({});
-    }
+  ArrayAttr inputAttrs = op.funcTy().dyn_cast<hir::FuncType>().getInputAttrs();
+  for (size_t i = 0; i < arguments.size(); i++) {
+    auto arg = arguments[i];
+    // initialize the map with a vector of usage count filled with zeros.
+    auto memrefTy = arg.getType().dyn_cast<hir::MemrefType>();
+    if (!memrefTy)
+      continue;
+    auto numPorts = inputAttrs[i]
+                        .dyn_cast<DictionaryAttr>()
+                        .getNamed("ports")
+                        .getValue()
+                        .second.dyn_cast<ArrayAttr>()
+                        .size();
+    SmallVector<SmallVector<Operation *>> perBankUses;
+    perBankUses.append(memrefTy.getNumBanks(), SmallVector<Operation *>({}));
+    mapMemref2PerPortPerBankUses[arg].append(numPorts, perBankUses);
   }
 }
 
-void BusFanoutInfo::visitOp(hir::AllocaOp op) {
+void MemrefFanoutInfo::visitOp(hir::AllocaOp op) {
   std::string moduleAttr =
       op.moduleAttr().dyn_cast<StringAttr>().getValue().str();
-  if (moduleAttr != "bus")
-    return;
 
+  auto numPorts = op.ports().size();
   // initialize the map with a vector of usage count filled with zeros.
-  auto buses = op.getResults();
-  for (Value bus : buses) {
-    if (auto tensorTy = bus.getType().dyn_cast<mlir::TensorType>()) {
-      Type busTy = tensorTy.getElementType().dyn_cast<hir::BusType>();
-      assert(busTy);
-      mapBusTensor2Uses[bus].append(
-          helper::getSizeFromShape(tensorTy.getShape()),
-          SmallVector<Operation *, 1>({}));
-    } else if (auto busTy = bus.getType().dyn_cast<hir::BusType>()) {
-      mapBus2Uses[bus] = SmallVector<Operation *, 4>({});
-    } else {
-      assert(false && "We only support bus and tensor of bus.");
-    }
-  }
+  auto res = op.getResult();
+  auto memrefTy = res.getType().dyn_cast<hir::MemrefType>();
+  SmallVector<SmallVector<Operation *>> perBankUses;
+  perBankUses.append(memrefTy.getNumBanks(), SmallVector<Operation *>({}));
+  mapMemref2PerPortPerBankUses[res].append(numPorts, perBankUses);
 }
 
-void BusFanoutInfo::visitOp(hir::TensorExtractOp op) {
-  Value bus = op.bus();
-  auto tensorTy = bus.getType().dyn_cast<mlir::TensorType>();
-  assert(mapBusTensor2Uses.find(bus) != mapBusTensor2Uses.end());
-  int64_t linearIdx =
-      helper::calcLinearIndex(op.indices(), tensorTy.getShape());
-  mapBusTensor2Uses[bus][linearIdx].push_back(op);
+void MemrefFanoutInfo::visitOp(hir::LoadOp op) {
+  Value mem = op.mem();
+  auto memrefTy = mem.getType().dyn_cast<hir::MemrefType>();
+  assert(mapMemref2PerPortPerBankUses.find(mem) !=
+         mapMemref2PerPortPerBankUses.end());
+  int64_t linearIdx = helper::calcLinearIndex(op.filerIndices(BANK),
+                                              memrefTy.filterShape(BANK));
+  // before lowering explicit port must be specified.
+  assert(op.port().hasValue());
+  auto port = op.port().getValue();
+  mapMemref2PerPortPerBankUses[mem][port][linearIdx].push_back(op);
 }
 
-void BusFanoutInfo::visitOp(hir::BusUnpackOp op) {
-  Value bus = op.bus();
-  assert(mapBus2Uses.find(bus) != mapBus2Uses.end());
-  mapBus2Uses[bus].push_back(op);
+void MemrefFanoutInfo::visitOp(hir::StoreOp op) {
+  Value mem = op.mem();
+  auto memrefTy = mem.getType().dyn_cast<hir::MemrefType>();
+  assert(mapMemref2PerPortPerBankUses.find(mem) !=
+         mapMemref2PerPortPerBankUses.end());
+  int64_t linearIdx = helper::calcLinearIndex(op.filerIndices(BANK),
+                                              memrefTy.filterShape(BANK));
+  // before lowering explicit port must be specified.
+  assert(op.port().hasValue());
+  auto port = op.port().getValue();
+  mapMemref2PerPortPerBankUses[mem][port][linearIdx].push_back(op);
 }

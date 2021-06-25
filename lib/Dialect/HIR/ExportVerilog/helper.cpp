@@ -1,9 +1,10 @@
+#include "circt/Dialect/HIR/IR/helper.h"
 #include "helper.h"
 
 static bool isTerminatingChar(char c) {
   if (isalnum(c))
     return false;
-  else if (c == '_')
+  if (c == '_')
     return false;
   return true;
 }
@@ -39,14 +40,12 @@ void findAndReplaceAll(string &data, string toSearch, string replaceStr) {
 unsigned calcAddrWidth(hir::MemrefType memrefTy) {
   // FIXME: Currently we assume that all dims are power of two.
   auto shape = memrefTy.getShape();
-  auto packing = memrefTy.getAddrDims();
-  int maxDim = shape.size() - 1;
+  auto dimKinds = memrefTy.getDimKinds();
   unsigned addrWidth = 0;
-  for (auto dim : packing) {
-    // dim0 is last in shape.
-    int dimSize = shape[maxDim - dim];
-    float logSize = log2(dimSize);
-    addrWidth += ceil(logSize);
+  for (size_t i = 0; i < shape.size(); i++) {
+    if (dimKinds[i] == ADDR) {
+      addrWidth += helper::clog2(shape[i]);
+    }
   }
   return addrWidth;
 }

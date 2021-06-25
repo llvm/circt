@@ -16,6 +16,21 @@
 include "mlir/Pass/PassBase.td"
 
 //===----------------------------------------------------------------------===//
+// AffineToHIR
+//===----------------------------------------------------------------------===//
+
+def LowerAffineToHIR : Pass<"lower-affine-to-hir", "mlir::ModuleOp"> {
+  let summary = "Lower Affine + std + memref to HIR";
+  let description = [{
+    Lower a module of Affine + std + memref dialect to the HIR dialect.
+    Propagate the dependence info from AffineAnalysis to HIR dialect.
+  }];
+
+  let constructor = "circt::createLowerAffineToHIRPass()";
+  let dependentDialects = ["hir::HIRDialect"];
+}
+
+//===----------------------------------------------------------------------===//
 // FIRRTLToHW
 //===----------------------------------------------------------------------===//
 

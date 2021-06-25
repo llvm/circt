@@ -101,7 +101,7 @@ static ParseResult parseCallOp(OpAsmParser &parser, OperationState &result) {
                            static_cast<int32_t>(isOffsetPresent ? 1 : 0)}));
 
   result.attributes.push_back(
-      parser.getBuilder().getNamedAttr("inputDelays", funcTy.getInputDelays()));
+      parser.getBuilder().getNamedAttr("inputDelays", funcTy.getInputAttrs()));
 
   result.attributes.push_back(parser.getBuilder().getNamedAttr(
       "outputDelays", funcTy.getOutputDelays()));
@@ -494,7 +494,7 @@ static void printFuncSignature(OpAsmPrinter &printer, hir::FuncOp op) {
   Region &body = op.getOperation()->getRegion(0);
   auto argTypes = fnType.getInputs();
   auto resTypes = fnType.getResults();
-  ArrayAttr inputDelays = op.funcTy().dyn_cast<FuncType>().getInputDelays();
+  ArrayAttr inputAttrs = op.funcTy().dyn_cast<FuncType>().getInputAttrs();
   ArrayAttr outputDelays = op.funcTy().dyn_cast<FuncType>().getOutputDelays();
 
   printer << "(";
@@ -505,7 +505,12 @@ static void printFuncSignature(OpAsmPrinter &printer, hir::FuncOp op) {
     firstArg = false;
     Type type = argTypes[i];
     auto arg = body.front().getArgument(i);
-    int delay = inputDelays[i].dyn_cast<IntegerAttr>().getInt();
+    int delay = inputAttrs[i]
+                    .dyn_cast<DictionaryAttr>()
+                    .getNamed("delay")
+                    .getValue()
+                    .second.dyn_cast<IntegerAttr>()
+                    .getInt();
     assert(delay >= 0);
     printer << arg << " : " << type;
     if (delay > 0)

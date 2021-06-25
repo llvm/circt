@@ -14,58 +14,50 @@ using namespace hir;
 
 // Types.
 // Memref Type.
+ParseResult parseBankedDimensionList(DialectAsmParser &parser,
+                                     SmallVectorImpl<int64_t> &shape,
+                                     SmallVectorImpl<hir::DimKind> &dimKinds) {
+  while (true) {
+    int dimSize;
+    // try to parse an ADDR dimension.
+    mlir::OptionalParseResult result = parser.parseOptionalInteger(dimSize);
+    if (!result.hasValue())
+      return failure();
+    if (succeeded(result.getValue())) {
+      if (parser.parseXInDimensionList())
+        return failure();
+      shape.push_back(dimSize);
+      dimKinds.push_back(ADDR);
+      continue;
+    }
+
+    // try to parse a BANK dimension.
+    if (succeeded(parser.parseOptionalLParen())) {
+      if (parser.parseKeyword("bank") || parser.parseInteger(dimSize) ||
+          parser.parseRParen())
+        return failure();
+      if (parser.parseXInDimensionList())
+        return failure();
+      continue;
+    }
+
+    // else the dimension list is over.
+    break;
+  }
+  return success();
+}
+
 static Type parseMemrefType(DialectAsmParser &parser, MLIRContext *context) {
   SmallVector<int64_t, 4> shape;
   Type elementType;
   if (parser.parseLess())
     return Type();
-
-  if (parser.parseDimensionList(shape) || parser.parseType(elementType))
+  SmallVector<hir::DimKind, 4> dimKinds;
+  if (parseBankedDimensionList(parser, shape, dimKinds) ||
+      parser.parseType(elementType))
     return Type();
 
-  if (parser.parseComma())
-    return Type();
-
-  bool hasMultipleBanks = false;
-  mlir::Attribute attr1, attr2;
-  llvm::SMLoc loc1, loc2;
-  ArrayAttr bankDims;
-  DictionaryAttr portAttr;
-  loc1 = parser.getCurrentLocation();
-  if (parser.parseAttribute(attr1))
-    return Type();
-  if (parser.parseOptionalGreater()) {
-    if (parser.parseComma())
-      return Type();
-    hasMultipleBanks = true;
-    loc2 = parser.getCurrentLocation();
-    parser.parseAttribute(attr2);
-    if (parser.parseGreater())
-      return Type();
-  }
-
-  if (hasMultipleBanks) {
-    bankDims = attr1.dyn_cast<ArrayAttr>();
-    portAttr = attr2.dyn_cast<DictionaryAttr>();
-    if (!bankDims) {
-      parser.emitError(loc1, "expected bank dims!");
-      return Type();
-    }
-    if (!portAttr) {
-      parser.emitError(loc2, "expected port attributes!");
-      return Type();
-    }
-  } else {
-    portAttr = attr1.dyn_cast<DictionaryAttr>();
-    bankDims = ArrayAttr::get(context, SmallVector<Attribute>());
-    if (!portAttr) {
-      parser.emitError(loc1, "expected port attributes!");
-      return Type();
-    }
-  }
-  assert(bankDims);
-  assert(portAttr);
-  return MemrefType::get(context, shape, elementType, bankDims, portAttr);
+  return MemrefType::get(context, shape, elementType, dimKinds);
 }
 
 static void printMemrefType(MemrefType memrefTy, DialectAsmPrinter &printer) {
@@ -73,15 +65,14 @@ static void printMemrefType(MemrefType memrefTy, DialectAsmPrinter &printer) {
   printer << "<";
   auto shape = memrefTy.getShape();
   auto elementType = memrefTy.getElementType();
-  auto bankDims = memrefTy.getBankDims();
-  auto portAttrs = memrefTy.getPortAttrs();
-  for (auto dim : shape)
-    printer << dim << "x";
-
-  printer << elementType << ", ";
-  if (!bankDims.empty())
-    printer << bankDims << ", ";
-  printer << portAttrs << ">";
+  auto dimKinds = memrefTy.getDimKinds();
+  for (size_t i = 0; i < shape.size(); i++) {
+    if (dimKinds[i] == ADDR)
+      printer << shape[i] << "x";
+    else
+      printer << "(bank " + std::to_string(shape[i]) + ")x";
+  }
+  printer << elementType;
 }
 
 /// FuncType, GroupType, ArrayType
@@ -166,9 +157,9 @@ parseElementTypeWithOptionalAttr(DialectAsmParser &parser,
 
 static Type parseInnerFuncType(DialectAsmParser &parser, MLIRContext *context) {
   SmallVector<Type, 4> argTypes;
-  SmallVector<Attribute, 4> inputDelays;
+  SmallVector<Attribute, 4> inputAttrs;
   SmallVector<Attribute, 4> outputDelays;
-  ArrayAttr inputDelayAttr, outputDelayAttr;
+  auto builder = parser.getBuilder();
   if (parser.parseLParen())
     return Type();
   int count = 0;
@@ -179,17 +170,33 @@ static Type parseInnerFuncType(DialectAsmParser &parser, MLIRContext *context) {
       if (parser.parseType(type))
         return Type();
       argTypes.push_back(type);
-      if (helper::isPrimitiveType(type) &&
-          succeeded(parser.parseOptionalKeyword("delay"))) {
-        if (parser.parseAttribute(
-                delayAttr,
-                getIntegerType(parser.getBuilder().getContext(), 64)))
+      if (helper::isPrimitiveType(type)) {
+        if (succeeded(parser.parseOptionalKeyword("delay"))) {
+          if (parser.parseAttribute(delayAttr, getIntegerType(context, 64)))
+            return Type();
+        } else {
+          delayAttr = helper::getIntegerAttr(context, 64, 0);
+        }
+
+        inputAttrs.push_back(DictionaryAttr::get(
+            context, SmallVector<NamedAttribute, 1>(
+                         {builder.getNamedAttr("delay", delayAttr)})));
+      } else if (type.dyn_cast<hir::MemrefType>()) {
+        ArrayAttr portsAttr;
+        if (parser.parseAttribute(portsAttr))
           return Type();
-        inputDelays.push_back(delayAttr);
-      } else {
-        // Default delay is 0.
-        inputDelays.push_back(
-            getIntegerAttr(parser.getBuilder().getContext(), 64, 0));
+        inputAttrs.push_back(DictionaryAttr::get(
+            context, SmallVector<NamedAttribute, 1>(
+                         {builder.getNamedAttr("ports", portsAttr)})));
+      } else if (type.dyn_cast<hir::BusType>()) {
+        std::string busPortKind;
+        if (parser.parseLSquare() || parser.parseKeyword(busPortKind) ||
+            parser.parseRSquare())
+          return Type();
+
+        inputAttrs.push_back(DictionaryAttr::get(
+            context, SmallVector<NamedAttribute, 1>({builder.getNamedAttr(
+                         "ports", StringAttr::get(context, busPortKind))})));
       }
       count++;
       if (parser.parseOptionalComma())
@@ -198,8 +205,6 @@ static Type parseInnerFuncType(DialectAsmParser &parser, MLIRContext *context) {
     if (parser.parseRParen())
       return Type();
   }
-
-  inputDelayAttr = parser.getBuilder().getArrayAttr(inputDelays);
 
   // Process output types and delays.
   SmallVector<Type, 4> resultTypes;
@@ -234,11 +239,11 @@ static Type parseInnerFuncType(DialectAsmParser &parser, MLIRContext *context) {
     }
   }
 
-  outputDelayAttr = parser.getBuilder().getArrayAttr(outputDelays);
   FunctionType functionTy =
       parser.getBuilder().getFunctionType(argTypes, resultTypes);
   return hir::FuncType::get(parser.getBuilder().getContext(), functionTy,
-                            inputDelayAttr, outputDelayAttr);
+                            builder.getArrayAttr(inputAttrs),
+                            parser.getBuilder().getArrayAttr(outputDelays));
 }
 
 static Type parseInnerGroupType(DialectAsmParser &parser,
@@ -329,46 +334,31 @@ static Type parseArrayType(DialectAsmParser &parser, MLIRContext *context) {
 }
 
 static Type parseBusType(DialectAsmParser &parser, MLIRContext *context) {
-  if (parser.parseLess())
-    return Type();
 
   SmallVector<Type> elementTypes;
-  SmallVector<PortKind> directions;
-  DictionaryAttr proto;
+  SmallVector<BusDirection> directions;
 
+  // start parsing
+  if (parser.parseLess())
+    return Type();
+  // parse comma separated list of bus-directions and types.
   do {
     Type ty;
 
-    if (!parser.parseOptionalKeyword("rd")) {
-      if (parser.parseType(ty))
-        return Type();
-      directions.push_back(PortKind::rd);
-      elementTypes.push_back(ty);
-    } else if (!parser.parseOptionalKeyword("wr")) {
-      if (parser.parseType(ty))
-        return Type();
-      directions.push_back(PortKind::wr);
-      elementTypes.push_back(ty);
-    } else if (!parser.parseOptionalKeyword("proto")) {
-      if (parser.parseAttribute(proto))
-        return Type();
-      break;
-    } else {
-      if (parser.parseType(ty))
-        return Type();
-      directions.push_back(PortKind::rw);
-      elementTypes.push_back(ty);
-    }
+    if (succeeded(parser.parseOptionalKeyword("flip")))
+      directions.push_back(FLIP);
+    else
+      directions.push_back(SAME);
+    if (parser.parseType(ty))
+      return Type();
+    elementTypes.push_back(ty);
   } while (!parser.parseOptionalComma());
 
   // Finish parsing the group.
   if (parser.parseGreater())
     return Type();
 
-  if (!proto)
-    proto = DictionaryAttr::get(context, SmallVector<NamedAttribute, 4>());
-
-  return hir::BusType::get(context, elementTypes, directions, proto);
+  return hir::BusType::get(context, elementTypes, directions);
 }
 
 // parseType and printType.
@@ -401,7 +391,7 @@ Type HIRDialect::parseType(DialectAsmParser &parser) const {
 static void printFuncType(FuncType moduleTy, DialectAsmPrinter &printer) {
   printer << "func<(";
   FunctionType functionTy = moduleTy.getFunctionType();
-  ArrayAttr inputDelays = moduleTy.getInputDelays();
+  ArrayAttr inputAttrs = moduleTy.getInputAttrs();
   ArrayAttr outputDelays = moduleTy.getOutputDelays();
   auto inputTypes = functionTy.getInputs();
   auto outputTypes = functionTy.getResults();
@@ -409,9 +399,32 @@ static void printFuncType(FuncType moduleTy, DialectAsmPrinter &printer) {
     if (i > 0)
       printer << ", ";
     printer << inputTypes[i];
-    auto delay = inputDelays[i].dyn_cast<IntegerAttr>().getInt();
-    if (delay != 0)
-      printer << " delay " << delay;
+    if (helper::isPrimitiveType(inputTypes[i])) {
+      auto delay = inputAttrs[i]
+                       .dyn_cast<DictionaryAttr>()
+                       .getNamed("delay")
+                       .getValue()
+                       .second.dyn_cast<IntegerAttr>()
+                       .getInt();
+      if (delay != 0)
+        printer << " delay " << delay;
+    } else if (inputTypes[i].dyn_cast<hir::MemrefType>()) {
+      auto ports = inputAttrs[i]
+                       .dyn_cast<DictionaryAttr>()
+                       .getNamed("ports")
+                       .getValue()
+                       .second;
+      printer << " ports " << ports;
+    } else if (inputTypes[i].dyn_cast<hir::BusType>()) {
+      auto busPortKind = inputAttrs[i]
+                             .dyn_cast<DictionaryAttr>()
+                             .getNamed("ports")
+                             .getValue()
+                             .second.dyn_cast<StringAttr>()
+                             .getValue()
+                             .str();
+      printer << " ports [" << busPortKind << "]";
+    }
   }
   printer << ") -> (";
 
@@ -453,26 +466,17 @@ static void printArrayType(ArrayType arrayTy, DialectAsmPrinter &printer) {
 
 static void printBusType(BusType busTy, DialectAsmPrinter &printer) {
   ArrayRef<Type> elementTypes = busTy.getElementTypes();
-  ArrayRef<PortKind> directions = busTy.getElementDirections();
-  DictionaryAttr proto = busTy.getProto();
+  ArrayRef<BusDirection> directions = busTy.getElementDirections();
 
   printer << "bus<";
   for (int i = 0; i < (int)elementTypes.size(); i++) {
-    Type elementTy = elementTypes[i];
-    PortKind direction = directions[i];
-
     if (i > 0)
       printer << ", ";
 
-    if (direction == PortKind::rd)
-      printer << "rd ";
-    else if (direction == PortKind::wr)
-      printer << "wr ";
-
-    printer << elementTy;
+    if (directions[i] == BusDirection::FLIP)
+      printer << "flip ";
+    printer << elementTypes[i];
   }
-  if (!proto.empty())
-    printer << ", proto " << proto;
   printer << ">";
 }
 

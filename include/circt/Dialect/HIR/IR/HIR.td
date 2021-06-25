@@ -103,11 +103,11 @@ def LoadOp : HIR_Op<"load", [NoSideEffect,AttrSizedOperandSegments]> {
   }];
 
   let arguments = (ins MemrefType:$mem, 
-      Variadic<AnyType>:$indices, TimeType : $tstart,
+      Variadic<AnyType>:$indices, OptionalAttr<I64Attr>:$port, I64Attr:$delay, TimeType : $tstart,
       Optional<Index>: $offset);
   let results = (outs AnyType: $res);
   let assemblyFormat = [{
-    $mem `[`  $indices `]` `at` $tstart (`+` $offset^)? 
+    $mem `[`  $indices `]` (`port` $port^)? `delay` $delay `at` $tstart (`+` $offset^)? 
       attr-dict
       `:`custom<MemrefAndElementType>
       (type($mem),type($indices),type($res)) 
@@ -115,8 +115,7 @@ def LoadOp : HIR_Op<"load", [NoSideEffect,AttrSizedOperandSegments]> {
   let hasCanonicalizeMethod = true;
   let extraClassDeclaration = [{
     public:
-      SmallVector<Value> getBankIdx();
-      SmallVector<Value> getAddrIdx();
+      SmallVector<Value> filerIndices(hir::DimKind);
   }];
 }
 
@@ -133,11 +132,11 @@ def StoreOp : HIR_Op<"store", [AttrSizedOperandSegments]> {
   }];
 
   let arguments = (ins AnyType:$value, MemrefType:$mem,
-      Variadic<AnyType>:$indices, 
+      Variadic<AnyType>:$indices, OptionalAttr<I64Attr>:$port,
       TimeType :$tstart, Optional<Index>:$offset);
   let results = (outs );
   let assemblyFormat = [{
-    $value `to` $mem  `[` $indices `]` `at` $tstart (`+` $offset^ )? attr-dict `:` 
+    $value `to` $mem  `[` $indices `]` (`port` $port^)? `at` $tstart (`+` $offset^ )? attr-dict `:` 
       custom<MemrefAndElementType>
       (type($mem),type($indices), type($value))
   }];
@@ -145,8 +144,7 @@ def StoreOp : HIR_Op<"store", [AttrSizedOperandSegments]> {
   let hasCanonicalizeMethod = true;
   let extraClassDeclaration = [{
     public:
-      SmallVector<Value> getBankIdx();
-      SmallVector<Value> getAddrIdx();
+      SmallVector<Value> filerIndices(hir::DimKind);
   }];
 }
 
@@ -487,25 +485,42 @@ def ReturnOp : HIR_Op<"return", [HasParent<"FuncOp">,NoSideEffect,
     }
 
 def AllocaOp :HIR_Op<"alloca",[NoSideEffect]> {
-  let summary = "Instantiate new hardware.";
+  let summary = "Instantiate new memory.";
 
   let description = [{
 
     ```%w = hir.alloc("bram") : !hir.memref<...>```
   }];
 
-  let arguments = (ins AnyAttr:$moduleAttr);
-  let results = (outs Variadic<AnyType>:$res);
+  let arguments = (ins AnyAttr:$moduleAttr, ArrayAttr: $ports);
+  let results = (outs MemrefType:$res);
 
-  let assemblyFormat = [{`(`$moduleAttr`)`attr-dict 
-    `:` type($res)}];
+  let assemblyFormat = [{`(`$moduleAttr`)` attr-dict 
+    `:` type($res) `ports` $ports}];
 }
 
-def TupleOp:HIR_Op<"tuple",[NoSideEffect]>{
+def BusInstantiateOp :HIR_Op<"bus.instantiate",[NoSideEffect]> {
+  let summary = "Instantiate new bus.";
+
+  let description = [{ Instantiate a new !hir.bus or tensor<...x!hir.bus>
+    Tensor of bus can not contain flipped members.
+    Example: 
+    ```%w = hir.bus.instantiate : !hir.bus<...>```
+  }];
+
+  let arguments = (ins);
+  let results = (outs MemrefType:$res);
+
+  let assemblyFormat = [{attr-dict 
+    `:` type($res)
+  }];
+}
+
+def CreateTupleOp:HIR_Op<"create_tuple",[NoSideEffect]>{
   let summary = "creates a tuple from inputs";
   let description = [{
 Examples:
-    ```mlir %1 = hir.tuple (%x, %y) : (i1, i32) -> Tuple<i1,i32>```
+    ```mlir %1 = hir.create_tuple (%x, %y) : (i1, i32) -> Tuple<i1,i32>```
   }];
 
   let arguments = (ins Variadic<AnyType>: $args);
@@ -515,33 +530,4 @@ Examples:
       type($args) `)` `->` type($res) }];
 }
 
-def TensorExtractOp:HIR_Op<"tensor.extract",[NoSideEffect]>{
-  let summary = "Extract a bus from a tensor of bus";
-  let description = [{
-Examples:
-    ```mlir %b2 = hir.tensor.extract %b[%i] : Tensor<2x!hir.bus<...>> -> !hir.bus<...>```
-  }];
-
-  let arguments = (ins AnyType: $bus, Variadic<Index>: $indices);
-  let results = (outs BusType: $res);
-
-  let assemblyFormat = [{ $bus (`[` $indices^ `]`)? attr-dict `:` 
-    type($bus)  `->` type($res) }];
-}
-
-def BusUnpackOp:HIR_Op<"bus.unpack",[NoSideEffect]>{
-  let summary = "unpack all elements of a bus into individual buses.";
-  let description = [{
-Examples:
-    ```mlir 
-      %valid,%data = hir.bus.unpack %b 
-      : hir.bus<in i32, out f32> -> (!hir.bus<in i32>, !hir.bus<out f32>)
-      ```
-  }];
-
-  let arguments = (ins BusType: $bus);
-  let results = (outs Variadic<BusType>: $res);
-
-  let assemblyFormat = [{ $bus attr-dict `:`  type($bus) `->` `(`type($res)`)` }];
-}
 #endif // HIR_OPS

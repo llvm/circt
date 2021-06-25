@@ -20,6 +20,10 @@ class LLVMDialect;
 
 namespace circt {
 
+namespace hir {
+class HIRDialect;
+} // namespace hir
+
 namespace firrtl {
 class FIRRTLDialect;
 class FModuleOp;

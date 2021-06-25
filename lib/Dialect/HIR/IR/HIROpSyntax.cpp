@@ -151,10 +151,10 @@ ParseResult parseMemrefAndElementType(OpAsmParser &parser, Type &memrefTy,
   auto builder = parser.getBuilder();
   auto *context = builder.getContext();
   auto shape = memTy.getShape();
-  auto dimKinds = memTy.getDimensionKinds();
+  auto dimKinds = memTy.getDimKinds();
 
   for (int i = 0; i < (int)dimKinds.size(); i++) {
-    if (dimKinds[i] == MemrefType::BANK)
+    if (dimKinds[i] == hir::BANK)
       idxTypes.push_back(IndexType::get(context));
     else {
       idxTypes.push_back(IntegerType::get(context, helper::clog2(shape[i])));

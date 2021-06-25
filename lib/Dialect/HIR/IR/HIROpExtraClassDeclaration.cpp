@@ -10,84 +10,33 @@
 using namespace circt;
 using namespace hir;
 
-SmallVector<Value> LoadOp::getBankIdx() {
-  SmallVector<Value> bankIdx;
-  operand_range indices = this->indices();
-  MemrefType memTy = this->mem().getType().dyn_cast<hir::MemrefType>();
-  auto bankDims = memTy.getBankDims();
-  for (int i = (int)memTy.getShape().size() - 1; i >= 0; i--) {
-    bool isBankDim = false;
-    for (auto dim : bankDims) {
-      if (i == dim.dyn_cast<IntegerAttr>().getInt())
-        isBankDim = true;
-    }
-
-    if (isBankDim) {
-      auto idx = indices[indices.size() - 1 - i];
-      bankIdx.push_back(idx);
+namespace {
+SmallVector<Value> filterIndices(DimKind idxKind, OperandRange indices,
+                                 ArrayRef<DimKind> dimKinds) {
+  SmallVector<Value> addrIndices;
+  for (size_t i = 0; i < indices.size(); i++) {
+    if (dimKinds[i] == idxKind) {
+      auto idx = indices[i];
+      addrIndices.push_back(idx);
     }
   }
-  return bankIdx;
+  return addrIndices;
+}
+} // namespace
+SmallVector<Value> LoadOp::filerIndices(DimKind idxKind) {
+
+  OperandRange indices = this->indices();
+  auto dimKinds =
+      this->mem().getType().dyn_cast<hir::MemrefType>().getDimKinds();
+  return filterIndices(idxKind, indices, dimKinds);
 }
 
-SmallVector<Value> LoadOp::getAddrIdx() {
-  SmallVector<Value> addrIdx;
-  operand_range indices = this->indices();
-  MemrefType memTy = this->mem().getType().dyn_cast<hir::MemrefType>();
-  auto addrDims = memTy.getAddrDims();
-  for (int i = (int)memTy.getShape().size() - 1; i >= 0; i--) {
-    bool isAddrDim = false;
-    for (auto dim : addrDims) {
-      if (i == dim)
-        isAddrDim = true;
-    }
+SmallVector<Value> StoreOp::filerIndices(DimKind idxKind) {
 
-    if (isAddrDim) {
-      auto idx = indices[indices.size() - 1 - i];
-      addrIdx.push_back(idx);
-    }
-  }
-  return addrIdx;
-}
-
-SmallVector<Value> StoreOp::getBankIdx() {
-  SmallVector<Value> bankIdx;
-  operand_range indices = this->indices();
-  MemrefType memTy = this->mem().getType().dyn_cast<hir::MemrefType>();
-  auto bankDims = memTy.getBankDims();
-  for (int i = (int)memTy.getShape().size() - 1; i >= 0; i--) {
-    bool isBankDim = false;
-    for (auto dim : bankDims) {
-      if (i == dim.dyn_cast<IntegerAttr>().getInt())
-        isBankDim = true;
-    }
-
-    if (isBankDim) {
-      auto idx = indices[indices.size() - 1 - i];
-      bankIdx.push_back(idx);
-    }
-  }
-  return bankIdx;
-}
-
-SmallVector<Value> StoreOp::getAddrIdx() {
-  SmallVector<Value> addrIdx;
-  operand_range indices = this->indices();
-  MemrefType memTy = this->mem().getType().dyn_cast<hir::MemrefType>();
-  auto addrDims = memTy.getAddrDims();
-  for (int i = (int)memTy.getShape().size() - 1; i >= 0; i--) {
-    bool isAddrDim = false;
-    for (auto dim : addrDims) {
-      if (i == dim)
-        isAddrDim = true;
-    }
-
-    if (isAddrDim) {
-      auto idx = indices[indices.size() - 1 - i];
-      addrIdx.push_back(idx);
-    }
-  }
-  return addrIdx;
+  OperandRange indices = this->indices();
+  auto dimKinds =
+      this->mem().getType().dyn_cast<hir::MemrefType>().getDimKinds();
+  return filterIndices(idxKind, indices, dimKinds);
 }
 
 SmallVector<Value, 4> hir::FuncOp::getOperands() {
@@ -101,7 +50,6 @@ SmallVector<Value, 4> hir::FuncOp::getOperands() {
 }
 
 SmallVector<Value, 4> hir::CallOp::getOperands() {
-  ;
   SmallVector<Value, 4> operands;
   for (Value arg : this->operands().slice(0, this->getNumOperands() - 1))
     operands.push_back(arg);

@@ -67,18 +67,6 @@ bool isPrimitiveType(Type ty) {
     return true;
   return false;
 }
-
-unsigned getSizeFromShape(ArrayRef<int64_t> shape) {
-  if (shape.size() == 0)
-    return 0;
-
-  unsigned size = 1;
-  for (auto dimSize : shape) {
-    size *= dimSize;
-  }
-  return size;
-}
-
 IntegerType getIntegerType(MLIRContext *context, int bitwidth) {
   return IntegerType::get(context, bitwidth);
 }
@@ -102,7 +90,7 @@ int64_t getConstantIntValue(Value var) {
   return integerAttr.getInt();
 }
 
-int64_t calcLinearIndex(mlir::OperandRange indices,
+int64_t calcLinearIndex(mlir::ArrayRef<mlir::Value> indices,
                         mlir::ArrayRef<int64_t> dims) {
   int64_t linearIdx = 0;
   int64_t stride = 1;
