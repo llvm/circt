@@ -135,7 +135,10 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar
 ; // -----
 
 ; COM: Test result annotations of MemOp.
-circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar.r"},{"b":"b","target":"~Foo|Foo>bar.w"}]]
+circuit Foo: %[[{"a":null,"target":"~Foo|Foo>bar.r"},
+                {"b":null,"target":"~Foo|Foo>bar.r.data.baz"},
+                {"c":null,"target":"~Foo|Foo>bar.w.en"},
+                {"d":null,"target":"~Foo|Foo>bar.w.data.qux"}]]
   module Foo:
     mem bar:
       data-type => {baz: UInt<8>, qux: UInt<8>}
@@ -148,7 +151,9 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar.r"},{"b":"b","target":"~Foo|Foo>
 
     ; CHECK-LABEL: module {
     ; CHECK: firrtl.mem
-    ; CHECK-SAME: [{a = "a"}], [{b = "b"}]
+    ; CHECK-SAME: portAnnotations = [
+    ; CHECK-SAME: [{a}, #firrtl.subAnno<fieldID = [5, 5], {b}>],
+    ; CHECK-SAME: [#firrtl.subAnno<fieldID = [2, 2], {c}>, #firrtl.subAnno<fieldID = [6, 6], {d}>]
 
 ; // -----
 

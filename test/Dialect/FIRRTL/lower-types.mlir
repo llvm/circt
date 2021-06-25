@@ -1086,13 +1086,29 @@ firrtl.circuit "Foo"   {
 // -----
 
 // Test MemOp with port annotations.
+// circuit Foo: %[[{"a":null,"target":"~Foo|Foo>bar.r"},
+//                 {"b":null,"target":"~Foo|Foo>bar.r.data.baz"},
+//                 {"c":null,"target":"~Foo|Foo>bar.w.en"},
+//                 {"d":null,"target":"~Foo|Foo>bar.w.data.qux"}]]
 
 firrtl.circuit "Foo"   {
   firrtl.module @Foo() {
     // CHECK: firrtl.mem
-    // CHECK: [{a = "a"}], [{b = "b"}]
+    // CHECK-SAME: portAnnotations = [
+    // CHECK-SAME: [{a}, #firrtl.subAnno<fieldID = [4, 4], {b}>],
+    // CHECK-SAME: [#firrtl.subAnno<fieldID = [2, 2], {c}>]
+
     // CHECK: firrtl.mem
-    // CHECK: [{a = "a"}], [{b = "b"}]
-    %bar_r, %bar_w = firrtl.mem Undefined  {depth = 16 : i64, name = "bar", portAnnotations = [[{a = "a"}], [{b = "b"}]], portNames = ["r", "w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<baz: uint<8>, qux: uint<8>>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<baz: uint<8>, qux: uint<8>>, mask: bundle<baz: uint<1>, qux: uint<1>>>
+    // CHECK-SAME: portAnnotations = [
+    // CHECK-SAME: [{a}],
+    // CHECK-SAME: [#firrtl.subAnno<fieldID = [2, 2], {c}>, #firrtl.subAnno<fieldID = [4, 4], {d}>]
+    %bar_r, %bar_w = firrtl.mem Undefined  {depth = 16 : i64, name = "bar",
+        portAnnotations = [
+          [{a}, #firrtl.subAnno<fieldID = [5, 5], {b}>],
+          [#firrtl.subAnno<fieldID = [2, 2], {c}>, #firrtl.subAnno<fieldID = [6, 6], {d}>]
+        ],
+        portNames = ["r", "w"], readLatency = 0 : i32, writeLatency = 1 : i32} : 
+        !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<baz: uint<8>, qux: uint<8>>>,
+        !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<baz: uint<8>, qux: uint<8>>, mask: bundle<baz: uint<1>, qux: uint<1>>>
   }
 }
