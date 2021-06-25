@@ -25,7 +25,7 @@ def ProgramOp : CalyxContainer<"program", [
   let extraClassDeclaration = [{
     /// Returns the main component, representing the
     /// entry point of the Calyx program.
-    Operation *getMainComponent() { return lookupSymbol("main"); }
+    ComponentOp getMainComponent() { return lookupSymbol<ComponentOp>("main"); }
   }];
   let verifier = "return ::verify$cppClass(*this);";
 }
@@ -166,7 +166,7 @@ def CellOp : CalyxOp<"cell", [
   let extraClassDeclaration = [{
     /// Lookup the component for the symbol. This returns null on
     /// invalid IR.
-    Operation *getReferencedComponent();
+    ComponentOp getReferencedComponent();
   }];
 
   // TODO(Calyx): Add `parameters` attribute for

@@ -32,7 +32,7 @@ using namespace mlir;
 
 static LogicalResult verifyProgramOp(ProgramOp program) {
   if (!program.getMainComponent())
-    return program.emitOpError("Must contain one component named "
+    return program.emitOpError("must contain one component named "
                                "\"main\" as the entry point.");
   return success();
 }
@@ -42,31 +42,31 @@ static LogicalResult verifyProgramOp(ProgramOp program) {
 //===----------------------------------------------------------------------===//
 
 /// Returns the type of the given component as a function type.
-static FunctionType getComponentType(Operation *component) {
-  auto typeAttr =
-      component->getAttrOfType<TypeAttr>(ComponentOp::getTypeAttrName());
-  return typeAttr.getValue().cast<FunctionType>();
+static FunctionType getComponentType(ComponentOp component) {
+  return component.getTypeAttr().getValue().cast<FunctionType>();
 }
 
 /// Returns the component port names in the given direction.
-static ArrayAttr getComponentPortNames(Operation *component,
+static ArrayAttr getComponentPortNames(ComponentOp component,
                                        PortDirection direction) {
 
-  std::string attrName = "PortNames";
-  attrName.insert(0, direction == PortDirection::INPUT ? "in" : "out");
-  return component->getAttrOfType<ArrayAttr>(attrName);
+  if (direction == PortDirection::INPUT)
+    return component.inPortNames();
+  return component.outPortNames();
 }
 
 /// Returns the port information for the given component.
 SmallVector<ComponentPortInfo> calyx::getComponentPortInfo(Operation *op) {
   assert(isa<ComponentOp>(op) &&
          "Can only get port information from a component.");
+  auto component = dyn_cast<ComponentOp>(op);
 
-  auto functionType = getComponentType(op);
+  auto functionType = getComponentType(component);
   auto inPortTypes = functionType.getInputs();
   auto outPortTypes = functionType.getResults();
-  auto inPortNamesAttr = getComponentPortNames(op, PortDirection::INPUT);
-  auto outPortNamesAttr = getComponentPortNames(op, PortDirection::OUTPUT);
+  auto inPortNamesAttr = getComponentPortNames(component, PortDirection::INPUT);
+  auto outPortNamesAttr =
+      getComponentPortNames(component, PortDirection::OUTPUT);
 
   SmallVector<ComponentPortInfo> results;
   for (size_t i = 0, e = inPortTypes.size(); i != e; ++i) {
@@ -198,10 +198,6 @@ static ParseResult parseComponentOp(OpAsmParser &parser,
 }
 
 static LogicalResult verifyComponentOp(ComponentOp op) {
-  auto program = op->getParentOfType<ProgramOp>();
-  if (!program)
-    return op.emitOpError("should be embedded in 'calyx.program'.");
-
   // Verify there is exactly one of each section:
   // calyx.cells, calyx.wires, and calyx.control.
   uint32_t numCells = 0, numWires = 0, numControl = 0;
@@ -216,19 +212,14 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
   if (numCells == 1 && numWires == 1 && numControl == 1)
     return success();
 
-  return op.emitOpError()
-         << "Requires exactly one of each: "
-            "\"calyx.cells\", \"calyx.wires\", \"calyx.control\".";
+  return op.emitOpError() << "requires exactly one of each: "
+                             "'calyx.cells', 'calyx.wires', 'calyx.control'.";
 }
 
 //===----------------------------------------------------------------------===//
 // CellsOp
 //===----------------------------------------------------------------------===//
 static LogicalResult verifyCellsOp(CellsOp cells) {
-  auto component = cells->getParentOfType<ComponentOp>();
-  if (!component)
-    return cells.emitOpError("should be embedded in 'calyx.component'.");
-
   if (!llvm::all_of(*cells.getBody(), [](auto &op) { return isa<CellOp>(op); }))
     return cells.emitOpError("should only contain 'calyx.cell' ops.");
 
@@ -241,32 +232,28 @@ static LogicalResult verifyCellsOp(CellsOp cells) {
 
 /// Lookup the component for the symbol. This returns null on
 /// invalid IR.
-Operation *CellOp::getReferencedComponent() {
+ComponentOp CellOp::getReferencedComponent() {
   auto program = (*this)->getParentOfType<ProgramOp>();
   if (!program)
     return nullptr;
 
-  return program.lookupSymbol(componentName());
+  return program.lookupSymbol<ComponentOp>(componentName());
 }
 
 static LogicalResult verifyCellOp(CellOp cell) {
-  // Verify the cell is within the "calyx.cells" sub-section.
-  auto cells = cell->getParentOfType<CellsOp>();
-  if (!cells)
-    return cell.emitOpError("should be embedded in 'calyx.cells'.");
-
   if (cell.componentName() == "main")
     return cell.emitOpError("cannot reference the entry point.");
 
   // Verify the referenced component exists in this program.
-  auto referencedComponent = cell.getReferencedComponent();
+  ComponentOp referencedComponent = cell.getReferencedComponent();
   if (!referencedComponent)
     return cell.emitOpError()
            << "is referencing component: " << cell.componentName()
            << ", which does not exist.";
 
   // Verify the referenced component is not instantiating itself.
-  ComponentOp parentComponent = cells->getParentOfType<ComponentOp>();
+  auto cells = cell->getParentOfType<CellsOp>();
+  auto parentComponent = cells->getParentOfType<ComponentOp>();
   if (parentComponent == referencedComponent)
     return cell.emitOpError()
            << "is a recursive instantiation of its parent component: "
@@ -288,7 +275,7 @@ static LogicalResult verifyCellOp(CellOp cell) {
     if (resultType == expectedType)
       continue;
     return cell.emitOpError()
-           << "result type for " << componentPorts[i].name << "must be "
+           << "result type for " << componentPorts[i].name << " must be "
            << expectedType << ", but got " << resultType;
   }
   return success();
