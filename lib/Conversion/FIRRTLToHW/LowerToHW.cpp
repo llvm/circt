@@ -573,6 +573,9 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
       hwPort.argNum = numArgs++;
     }
     ports.push_back(hwPort);
+    if (!firrtlPort.annotations.empty())
+      moduleOp->emitWarning(
+          "unprocessed annotations still remaining on port after LowerToHW");
   }
   return success();
 }
@@ -590,6 +593,9 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   if (auto defName = oldModule.defname())
     verilogName = defName.getValue();
 
+  if (!AnnotationSet(oldModule).empty())
+    oldModule.emitWarning("unprocessed annotations still remaining on external "
+                          "module after LowerToHW");
   // Build the new hw.module op.
   OpBuilder builder(topLevelModule->getParent()->getContext());
   builder.setInsertionPointToEnd(topLevelModule);
@@ -608,6 +614,9 @@ hw::HWModuleOp FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
   if (failed(lowerPorts(firrtlPorts, ports, oldModule)))
     return {};
 
+  if (!AnnotationSet(oldModule).empty())
+    oldModule.emitWarning(
+        "unprocessed annotations still remaining on module after LowerToHW");
   // Build the new hw.module op.
   OpBuilder builder(topLevelModule->getParent()->getContext());
   builder.setInsertionPointToEnd(topLevelModule);
@@ -1082,9 +1091,12 @@ void FIRRTLLowering::run() {
   for (auto &op : body->getOperations()) {
     builder.setInsertionPoint(&op);
     builder.setLoc(op.getLoc());
-    if (succeeded(dispatchVisitor(&op))) {
+    auto done = succeeded(dispatchVisitor(&op));
+    if (!AnnotationSet(&op).empty())
+      op.emitWarning("unprocessed annotations still remaining after LowerToHW");
+    if (done)
       opsToRemove.push_back(&op);
-    } else {
+    else {
       switch (handleUnloweredOp(&op)) {
       case AlreadyLowered:
         break;         // Something like hw.output, which is already lowered.
