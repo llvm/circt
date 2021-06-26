@@ -104,14 +104,14 @@ circuit Foo:
 Using targets (or multiple targets), any specific module, instance, or
 combination of instances can be expressed. Some examples include:
 
-| Target                 | Description                                                |
-| --------               | -------------                                              |
-| `~Foo`                 | refers to the whole circuit                                |
-| `~Foo|Foo`             | refers to the top module                                   | 
-| `~Foo|Bar`             | refers to module `Bar` (or both instances of module `Bar`) |
-| `~Foo|Foo/a:Bar`       | refers just to one instance of module `Bar`                | 
-| `~Foo|Foo/b:Bar/c:Baz` | refers to one instance of module `Baz`                     |
-| `~Foo|Bar/d:Baz`       | refers to two instances of module `Baz`                    |
+| Target                                 | Description                                                |
+| --------                               | -------------                                              |
+| <code>~Foo</code>                      | refers to the whole circuit                                |
+| <code>~Foo&#124;Foo</code>             | refers to the top module                                   |
+| <code>~Foo&#124;Bar</code>             | refers to module `Bar` (or both instances of module `Bar`) |
+| <code>~Foo&#124;Foo/a:Bar</code>       | refers just to one instance of module `Bar`                |
+| <code>~Foo&#124;Foo/b:Bar/c:Baz</code> | refers to one instance of module `Baz`                     |
+| <code>~Foo&#124;Bar/d:Baz</code>       | refers to two instances of module `Baz`                    |
 
 If a target does not contain an instance path, it is a _local_ target.  A local
 target points to all instances of a module.  If a target contains an instance
