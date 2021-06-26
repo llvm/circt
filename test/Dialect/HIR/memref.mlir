@@ -11,16 +11,20 @@ hir.func @test at %t(
 
   %c0_i1 = constant 0:i1
   %c1_i4 = constant 0:i4
+  %c1_f32 = constant 1.0:f32
   %0 = constant 0:index
-  %1 = constant 0:index
-  %x = hir.memref.alloca("BRAM_2P") : !hir.memref<(bank 4)x(bank 4)xi8> ports [#reg_rw,#reg_wr]
+  %1 = constant 1:index
+  %x = hir.alloca("BRAM_2P") : !hir.memref<(bank 4)x(bank 4)xi8> ports [#reg_rw,#reg_wr]
   %y = hir.bus.instantiate : !hir.bus<i1, flip i1, i8> 
   %z = hir.bus.instantiate : tensor<4x!hir.bus<i1, flip i1, i8>>
 
   //It does not make sense to parameterize the bus element to be selected.
   //Thus the corresponding index must be an integer literal. 
-  hir.send %c0_i32 to %y[1] : i1 to !hir.bus<i1, flip i1, i8>
-  hir.send %c0_i32 to %z[%0,1] : i1 to !hir.bus<i1, flip i1, i8>
-  hir.load %x[%c1_i4,%1,%0,%0] port 0 delay 0: !hir.memref<16x16x(bank 4)x(bank 3)xf32>
-  hir.store %a[%c1_i4,%1,%0,%0] port 1 delay 1: !hir.memref<16x16x(bank 4)x(bank 3)xf32>
+  %f0 = hir.recv %c[1] at %t : !hir.bus<i1, flip i1, f32> -> i1
+  %bus = hir.tensor.extract %z[%0] : tensor<4x!hir.bus<i1, flip i1, i8>> -> !hir.bus<i1, flip i1, i8>
+  hir.send %c0_i1 to %bus[0] at %t + %1: i1 to !hir.bus<i1, flip i1, i8>
+
+  //hir.load %x[%0,%1] port 0 delay 0 at %t: !hir.memref<(bank 4)x(bank 4)xi8>
+  hir.store %c1_f32 to %a[%c1_i4,%c1_i4,%0,%0] port 1 at %t + %1: !hir.memref<16x16x(bank 4)x(bank 3)xf32>
+  hir.return
 }

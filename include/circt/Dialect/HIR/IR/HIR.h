@@ -61,16 +61,17 @@ struct MemrefTypeStorage : public TypeStorage {
 
 /// Storage class for FuncType.
 struct FuncTypeStorage : public TypeStorage {
-  FuncTypeStorage(FunctionType functionTy, ArrayAttr inputAttrs,
-                  ArrayAttr outputDelays)
+  FuncTypeStorage(FunctionType functionTy, ArrayRef<DictionaryAttr> inputAttrs,
+                  ArrayRef<DictionaryAttr> resultAttrs)
       : functionTy(functionTy), inputAttrs(inputAttrs),
-        outputDelays(outputDelays) {}
+        resultAttrs(resultAttrs) {}
 
-  using KeyTy = std::tuple<FunctionType, ArrayAttr, ArrayAttr>;
+  using KeyTy = std::tuple<FunctionType, ArrayRef<DictionaryAttr>,
+                           ArrayRef<DictionaryAttr>>;
 
   /// Define the comparison function for the key type.
   bool operator==(const KeyTy &key) const {
-    return key == KeyTy(functionTy, inputAttrs, outputDelays);
+    return key == KeyTy(functionTy, inputAttrs, resultAttrs);
   }
 
   /// Define a hash function for the key type.
@@ -79,24 +80,25 @@ struct FuncTypeStorage : public TypeStorage {
   }
 
   /// Define a construction function for the key type.
-  static KeyTy getKey(FunctionType functionTy, ArrayAttr inputAttrs,
-                      ArrayAttr outputDelays) {
-    return KeyTy(functionTy, inputAttrs, outputDelays);
+  static KeyTy getKey(FunctionType functionTy,
+                      ArrayRef<DictionaryAttr> inputAttrs,
+                      ArrayRef<DictionaryAttr> resultAttrs) {
+    return KeyTy(functionTy, inputAttrs, resultAttrs);
   }
 
   /// Define a construction method for creating a new instance of this storage.
   static FuncTypeStorage *construct(mlir::TypeStorageAllocator &allocator,
                                     const KeyTy &key) {
     FunctionType functionTy = std::get<0>(key);
-    ArrayAttr inputAttrs = std::get<1>(key);
-    ArrayAttr outputDelays = std::get<2>(key);
+    auto inputAttrs = allocator.copyInto(std::get<1>(key));
+    auto resultAttrs = allocator.copyInto(std::get<2>(key));
     return new (allocator.allocate<FuncTypeStorage>())
-        FuncTypeStorage(functionTy, inputAttrs, outputDelays);
+        FuncTypeStorage(functionTy, inputAttrs, resultAttrs);
   }
 
   FunctionType functionTy;
-  ArrayAttr inputAttrs;
-  ArrayAttr outputDelays;
+  ArrayRef<DictionaryAttr> inputAttrs;
+  ArrayRef<DictionaryAttr> resultAttrs;
 };
 
 struct ArrayTypeStorage : public TypeStorage {
@@ -277,13 +279,14 @@ public:
 
   static StringRef getKeyword() { return "func"; }
   static FuncType get(MLIRContext *context, FunctionType functionTy,
-                      ArrayAttr inputAttrs, ArrayAttr outputDelays) {
-    return Base::get(context, functionTy, inputAttrs, outputDelays);
+                      ArrayRef<DictionaryAttr> inputAttrs,
+                      ArrayRef<DictionaryAttr> resultAttrs) {
+    return Base::get(context, functionTy, inputAttrs, resultAttrs);
   }
 
   FunctionType getFunctionType() { return getImpl()->functionTy; }
-  ArrayAttr getInputAttrs() { return getImpl()->inputAttrs; }
-  ArrayAttr getOutputDelays() { return getImpl()->outputDelays; }
+  ArrayRef<DictionaryAttr> getInputAttrs() { return getImpl()->inputAttrs; }
+  ArrayRef<DictionaryAttr> getResultAttrs() { return getImpl()->resultAttrs; }
 };
 
 /// This class defines array type.

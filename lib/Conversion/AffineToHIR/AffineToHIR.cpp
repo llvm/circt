@@ -65,6 +65,13 @@ int64_t getConstantIndex(Value v) {
   return constantIndexOp.getValue();
 }
 
+ArrayAttr getDefaultMemrefPorts(ConversionPatternRewriter &rewriter) {
+  SmallVector<Attribute> ports;
+  ports.push_back(helper::getDictionaryAttr(
+      rewriter, "rd_latency",
+      helper::getIntegerAttr(rewriter.getContext(), 1)));
+  return ArrayAttr::get(rewriter.getContext(), ports);
+}
 //------------------------------------------------------------------------------
 
 // Op lowering functions.
@@ -77,8 +84,9 @@ LogicalResult AffineFuncLoweringImpl::lowerAffineFunction() {
   auto originalInputTypes = originalFunctionTy.getInputs();
   auto originalResultTypes = originalFunctionTy.getResults();
   auto *context = rewriter.getContext();
+  ;
   SmallVector<Type, 4> inputTypes;
-  SmallVector<int64_t, 4> inputDelays, resultDelays;
+  SmallVector<DictionaryAttr, 4> inputAttrs, resultAttrs;
   for (int i = 0; i < (int)originalInputTypes.size(); i++) {
     Type ty = originalInputTypes[i];
     if (auto memrefTy = ty.dyn_cast<mlir::MemRefType>()) {
@@ -118,14 +126,17 @@ LogicalResult AffineFuncLoweringImpl::lowerAffineFunction() {
     } else {
       inputTypes.push_back(ty);
     }
-    inputDelays.push_back(0);
+    inputAttrs.push_back(helper::getDictionaryAttr(
+        rewriter, "ports", getDefaultMemrefPorts(rewriter)));
   }
-  resultDelays.append(originalResultTypes.size(), 0);
+  resultAttrs.append(
+      originalResultTypes.size(),
+      helper::getDictionaryAttr(rewriter, "delay",
+                                helper::getIntegerAttr(context, 0)));
   mlir::FunctionType functionTy =
       FunctionType::get(context, inputTypes, originalResultTypes);
-  Type funcTy = hir::FuncType::get(context, functionTy,
-                                   rewriter.getI64ArrayAttr(inputDelays),
-                                   rewriter.getI64ArrayAttr(resultDelays));
+  Type funcTy =
+      hir::FuncType::get(context, functionTy, inputAttrs, resultAttrs);
   auto funcOp =
       rewriter.create<hir::FuncOp>(originalFunctionOp.getLoc(), functionTy,
                                    originalFunctionOp.sym_name(), funcTy);

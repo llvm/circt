@@ -47,39 +47,46 @@ unsigned getBitWidth(Type type) {
 
 unsigned clog2(int value) { return (int)(ceil(log2(((double)value)))); }
 
-IntegerAttr getIntegerAttr(MLIRContext *context, int width, int value) {
-  return IntegerAttr::get(IntegerType::get(context, width),
-                          APInt(width, value));
+IntegerAttr getIntegerAttr(MLIRContext *context, int value) {
+  return IntegerAttr::get(IntegerType::get(context, 64), APInt(64, value));
 }
 
-bool isPrimitiveType(Type ty) {
+DictionaryAttr getDictionaryAttr(mlir::Builder &builder, StringRef name,
+                                 Attribute attr) {
+  return DictionaryAttr::get(builder.getContext(),
+                             builder.getNamedAttr(name, attr));
+}
+
+DictionaryAttr getDictionaryAttr(mlir::RewriterBase &rewriter, StringRef name,
+                                 Attribute attr) {
+  return DictionaryAttr::get(rewriter.getContext(),
+                             rewriter.getNamedAttr(name, attr));
+}
+
+bool isBuiltinType(Type ty) {
   if (ty.isa<IntegerType>() || ty.isa<mlir::FloatType>())
     return true;
   if (ty.isa<TupleType>()) {
     bool tupleMembersArePrimitive = true;
     for (auto memberTy : ty.dyn_cast<TupleType>().getTypes())
-      tupleMembersArePrimitive &= isPrimitiveType(memberTy);
+      tupleMembersArePrimitive &= isBuiltinType(memberTy);
     if (tupleMembersArePrimitive)
       return true;
   }
   if (ty.isa<mlir::TensorType>() &&
-      isPrimitiveType(ty.dyn_cast<mlir::TensorType>().getElementType()))
+      isBuiltinType(ty.dyn_cast<mlir::TensorType>().getElementType()))
     return true;
   return false;
-}
-IntegerType getIntegerType(MLIRContext *context, int bitwidth) {
-  return IntegerType::get(context, bitwidth);
 }
 
 TimeType getTimeType(MLIRContext *context) { return TimeType::get(context); }
 
-ParseResult parseIntegerAttr(IntegerAttr &value, int bitwidth,
-                             StringRef attrName, OpAsmParser &parser,
-                             OperationState &result) {
+ParseResult parseIntegerAttr(IntegerAttr &value, StringRef attrName,
+                             OpAsmParser &parser, OperationState &result) {
 
   return parser.parseAttribute(
-      value, getIntegerType(parser.getBuilder().getContext(), bitwidth),
-      attrName, result.attributes);
+      value, IntegerType::get(parser.getBuilder().getContext(), 64), attrName,
+      result.attributes);
 }
 
 int64_t getConstantIntValue(Value var) {
@@ -101,5 +108,26 @@ int64_t calcLinearIndex(mlir::ArrayRef<mlir::Value> indices,
     stride *= dims[i];
   }
   return linearIdx;
+}
+
+int64_t extractDelayFromDict(mlir::DictionaryAttr dict) {
+  return dict.getNamed("hir.delay")
+      .getValue()
+      .second.dyn_cast<IntegerAttr>()
+      .getInt();
+}
+
+ArrayAttr extractMemrefPortsFromDict(mlir::DictionaryAttr dict) {
+  return dict.getNamed("hir.memref.ports")
+      .getValue()
+      .second.dyn_cast<ArrayAttr>();
+}
+
+StringRef extractBusPortFromDict(mlir::DictionaryAttr dict) {
+  auto ports =
+      dict.getNamed("hir.bus.ports").getValue().second.dyn_cast<ArrayAttr>();
+  // Bus port should be either send or recv.
+  assert(ports.size() == 1);
+  return ports[0].dyn_cast<StringAttr>().getValue();
 }
 } // namespace helper

@@ -44,7 +44,7 @@ void LoopUnrollPass::unrollLoopFull(hir::UnrollForOp unrollForOp) {
     Value loopIV = builder
                        .create<hir::ConstantOp>(
                            builder.getUnknownLoc(), IndexType::get(context),
-                           helper::getIntegerAttr(context, 64, 0))
+                           helper::getIntegerAttr(context, 0))
                        .getResult();
 
     BlockAndValueMapping operandMap;

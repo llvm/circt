@@ -12,8 +12,10 @@
 using namespace circt;
 using namespace hir;
 
-// Types.
-// Memref Type.
+//------------------------------------------------------------------------------
+// Helper functions.
+//------------------------------------------------------------------------------
+namespace {
 ParseResult parseBankedDimensionList(DialectAsmParser &parser,
                                      SmallVectorImpl<int64_t> &shape,
                                      SmallVectorImpl<hir::DimKind> &dimKinds) {
@@ -21,9 +23,9 @@ ParseResult parseBankedDimensionList(DialectAsmParser &parser,
     int dimSize;
     // try to parse an ADDR dimension.
     mlir::OptionalParseResult result = parser.parseOptionalInteger(dimSize);
-    if (!result.hasValue())
-      return failure();
-    if (succeeded(result.getValue())) {
+    if (result.hasValue()) {
+      if (failed(result.getValue()))
+        return failure();
       if (parser.parseXInDimensionList())
         return failure();
       shape.push_back(dimSize);
@@ -38,6 +40,8 @@ ParseResult parseBankedDimensionList(DialectAsmParser &parser,
         return failure();
       if (parser.parseXInDimensionList())
         return failure();
+      shape.push_back(dimSize);
+      dimKinds.push_back(BANK);
       continue;
     }
 
@@ -47,16 +51,61 @@ ParseResult parseBankedDimensionList(DialectAsmParser &parser,
   return success();
 }
 
+ParseResult parseDelayAttr(DialectAsmParser &parser,
+                           SmallVectorImpl<DictionaryAttr> &attrsList) {
+  IntegerAttr delayAttr;
+  auto *context = parser.getBuilder().getContext();
+  if (succeeded(parser.parseOptionalKeyword("delay"))) {
+    if (parser.parseAttribute(delayAttr, IntegerType::get(context, 64)))
+      return failure();
+  } else {
+    delayAttr = helper::getIntegerAttr(context, 0);
+  }
+  attrsList.push_back(
+      helper::getDictionaryAttr(parser.getBuilder(), "delay", delayAttr));
+
+  return success();
+}
+ParseResult parseMemrefPortsAttr(DialectAsmParser &parser,
+                                 SmallVectorImpl<DictionaryAttr> &attrsList) {
+  ArrayAttr memrefPortsAttr;
+  if (parser.parseKeyword("ports") || parser.parseAttribute(memrefPortsAttr))
+    return failure();
+  attrsList.push_back(
+      helper::getDictionaryAttr(parser.getBuilder(), "ports", memrefPortsAttr));
+
+  return success();
+}
+
+ParseResult parseBusPortsAttr(DialectAsmParser &parser,
+                              SmallVectorImpl<DictionaryAttr> &attrsList) {
+
+  std::string busPort;
+  auto *context = parser.getBuilder().getContext();
+  if (parser.parseKeyword("ports") || parser.parseLSquare() ||
+      parser.parseKeyword(busPort) || parser.parseRSquare())
+    return failure();
+  attrsList.push_back(helper::getDictionaryAttr(
+      parser.getBuilder(), "ports",
+      ArrayAttr::get(context,
+                     SmallVector<Attribute>({StringAttr::get(
+                         parser.getBuilder().getContext(), busPort)}))));
+  return success();
+}
+} // namespace
+
+//------------------------------------------------------------------------------
+// Type parsers.
+//------------------------------------------------------------------------------
+// Types.
+// Memref Type.
 static Type parseMemrefType(DialectAsmParser &parser, MLIRContext *context) {
   SmallVector<int64_t, 4> shape;
   Type elementType;
-  if (parser.parseLess())
-    return Type();
   SmallVector<hir::DimKind, 4> dimKinds;
-  if (parseBankedDimensionList(parser, shape, dimKinds) ||
-      parser.parseType(elementType))
+  if (parser.parseLess() || parseBankedDimensionList(parser, shape, dimKinds) ||
+      parser.parseType(elementType) || parser.parseGreater())
     return Type();
-
   return MemrefType::get(context, shape, elementType, dimKinds);
 }
 
@@ -72,7 +121,7 @@ static void printMemrefType(MemrefType memrefTy, DialectAsmPrinter &printer) {
     else
       printer << "(bank " + std::to_string(shape[i]) + ")x";
   }
-  printer << elementType;
+  printer << elementType << ">";
 }
 
 /// FuncType, GroupType, ArrayType
@@ -125,8 +174,8 @@ static Type parseOptionalElementType(DialectAsmParser &parser,
   auto result = parser.parseOptionalType(simpleTy);
 
   if (result.hasValue()) {
-    if (result.getValue())
-      return parser.emitError(locType, "could not parse type!"), Type();
+    if (failed(result.getValue()))
+      return Type();
     if (!isValidElementType(simpleTy))
       return parser.emitError(locType,
                               "only integer, float, !hir.time, !hir.memref, "
@@ -157,48 +206,27 @@ parseElementTypeWithOptionalAttr(DialectAsmParser &parser,
 
 static Type parseInnerFuncType(DialectAsmParser &parser, MLIRContext *context) {
   SmallVector<Type, 4> argTypes;
-  SmallVector<Attribute, 4> inputAttrs;
-  SmallVector<Attribute, 4> outputDelays;
-  auto builder = parser.getBuilder();
+  SmallVector<DictionaryAttr, 4> inputAttrs;
+  SmallVector<DictionaryAttr, 4> resultAttrs;
   if (parser.parseLParen())
     return Type();
-  int count = 0;
-  if (parser.parseOptionalRParen()) {
+  if (failed(parser.parseOptionalRParen())) {
     while (1) {
       Type type;
-      IntegerAttr delayAttr;
       if (parser.parseType(type))
         return Type();
       argTypes.push_back(type);
-      if (helper::isPrimitiveType(type)) {
-        if (succeeded(parser.parseOptionalKeyword("delay"))) {
-          if (parser.parseAttribute(delayAttr, getIntegerType(context, 64)))
-            return Type();
-        } else {
-          delayAttr = helper::getIntegerAttr(context, 64, 0);
-        }
 
-        inputAttrs.push_back(DictionaryAttr::get(
-            context, SmallVector<NamedAttribute, 1>(
-                         {builder.getNamedAttr("delay", delayAttr)})));
+      if (helper::isBuiltinType(type)) {
+        if (parseDelayAttr(parser, inputAttrs))
+          return Type();
       } else if (type.dyn_cast<hir::MemrefType>()) {
-        ArrayAttr portsAttr;
-        if (parser.parseAttribute(portsAttr))
+        if (parseMemrefPortsAttr(parser, inputAttrs))
           return Type();
-        inputAttrs.push_back(DictionaryAttr::get(
-            context, SmallVector<NamedAttribute, 1>(
-                         {builder.getNamedAttr("ports", portsAttr)})));
       } else if (type.dyn_cast<hir::BusType>()) {
-        std::string busPortKind;
-        if (parser.parseLSquare() || parser.parseKeyword(busPortKind) ||
-            parser.parseRSquare())
+        if (parseBusPortsAttr(parser, inputAttrs))
           return Type();
-
-        inputAttrs.push_back(DictionaryAttr::get(
-            context, SmallVector<NamedAttribute, 1>({builder.getNamedAttr(
-                         "ports", StringAttr::get(context, busPortKind))})));
       }
-      count++;
       if (parser.parseOptionalComma())
         break;
     }
@@ -213,23 +241,18 @@ static Type parseInnerFuncType(DialectAsmParser &parser, MLIRContext *context) {
       return Type();
     if (parser.parseOptionalRParen()) {
       while (1) {
-        Type type;
-        IntegerAttr delayAttr;
-        if (parser.parseType(type))
+        Type resultTy;
+        if (parser.parseType(resultTy))
           return Type();
-        resultTypes.push_back(type);
-        if (type.isa<IntegerType>() &&
-            succeeded(parser.parseOptionalKeyword("delay"))) {
-          if (parser.parseAttribute(
-                  delayAttr,
-                  getIntegerType(parser.getBuilder().getContext(), 64)))
-            return Type();
-          outputDelays.push_back(delayAttr);
-        } else {
-          // Default delay is 0.
-          outputDelays.push_back(
-              getIntegerAttr(parser.getBuilder().getContext(), 64, 0));
-        }
+        resultTypes.push_back(resultTy);
+        if (!helper::isBuiltinType(resultTy))
+          return parser.emitError(parser.getCurrentLocation(),
+                                  "Only mlir builtin types are supported in "
+                                  "function results."),
+                 Type();
+        if (parseDelayAttr(parser, resultAttrs))
+          return Type();
+
         if (parser.parseOptionalComma())
           break;
       }
@@ -242,8 +265,7 @@ static Type parseInnerFuncType(DialectAsmParser &parser, MLIRContext *context) {
   FunctionType functionTy =
       parser.getBuilder().getFunctionType(argTypes, resultTypes);
   return hir::FuncType::get(parser.getBuilder().getContext(), functionTy,
-                            builder.getArrayAttr(inputAttrs),
-                            parser.getBuilder().getArrayAttr(outputDelays));
+                            inputAttrs, resultAttrs);
 }
 
 static Type parseInnerGroupType(DialectAsmParser &parser,
@@ -391,48 +413,33 @@ Type HIRDialect::parseType(DialectAsmParser &parser) const {
 static void printFuncType(FuncType moduleTy, DialectAsmPrinter &printer) {
   printer << "func<(";
   FunctionType functionTy = moduleTy.getFunctionType();
-  ArrayAttr inputAttrs = moduleTy.getInputAttrs();
-  ArrayAttr outputDelays = moduleTy.getOutputDelays();
+  ArrayRef<DictionaryAttr> inputAttrs = moduleTy.getInputAttrs();
+  ArrayRef<DictionaryAttr> resultAttrs = moduleTy.getResultAttrs();
   auto inputTypes = functionTy.getInputs();
-  auto outputTypes = functionTy.getResults();
+  auto resultTypes = functionTy.getResults();
   for (size_t i = 0; i < inputTypes.size(); i++) {
     if (i > 0)
       printer << ", ";
     printer << inputTypes[i];
-    if (helper::isPrimitiveType(inputTypes[i])) {
-      auto delay = inputAttrs[i]
-                       .dyn_cast<DictionaryAttr>()
-                       .getNamed("delay")
-                       .getValue()
-                       .second.dyn_cast<IntegerAttr>()
-                       .getInt();
+    if (helper::isBuiltinType(inputTypes[i])) {
+      auto delay = helper::extractDelayFromDict(inputAttrs[i]);
       if (delay != 0)
         printer << " delay " << delay;
     } else if (inputTypes[i].dyn_cast<hir::MemrefType>()) {
-      auto ports = inputAttrs[i]
-                       .dyn_cast<DictionaryAttr>()
-                       .getNamed("ports")
-                       .getValue()
-                       .second;
+      auto ports = helper::extractMemrefPortsFromDict(inputAttrs[i]);
       printer << " ports " << ports;
     } else if (inputTypes[i].dyn_cast<hir::BusType>()) {
-      auto busPortKind = inputAttrs[i]
-                             .dyn_cast<DictionaryAttr>()
-                             .getNamed("ports")
-                             .getValue()
-                             .second.dyn_cast<StringAttr>()
-                             .getValue()
-                             .str();
-      printer << " ports [" << busPortKind << "]";
+      auto busPortStr = helper::extractBusPortFromDict(inputAttrs[i]);
+      printer << " ports [" << busPortStr << "]";
     }
   }
   printer << ") -> (";
 
-  for (size_t i = 0; i < outputTypes.size(); i++) {
+  for (size_t i = 0; i < resultTypes.size(); i++) {
     if (i > 0)
       printer << ", ";
-    printer << outputTypes[i];
-    auto delay = outputDelays[i].dyn_cast<IntegerAttr>().getInt();
+    printer << resultTypes[i];
+    auto delay = helper::extractDelayFromDict(resultAttrs[i]);
     if (delay != 0)
       printer << " delay " << delay;
   }

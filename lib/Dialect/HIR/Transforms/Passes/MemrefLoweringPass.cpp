@@ -41,7 +41,7 @@ struct ArgReplacementInfo {
   int argLoc;
   Value originalArg;
   SmallVector<Type, 4> tyReplacementArgs;
-  SmallVector<Attribute, 4> attrReplacementArgs;
+  SmallVector<DictionaryAttr, 4> attrReplacementArgs;
 };
 
 mlir::TensorType buildBusTensor(MLIRContext *context, ArrayRef<int64_t> shape,
@@ -101,8 +101,9 @@ Value createAddrAndDataTuple(OpBuilder &builder, Location loc,
       .getResult();
 }
 
-hir::FuncType updateFuncType(OpBuilder &builder, hir::FuncType oldFuncTy,
-                             ArrayRef<Value> arguments, ArrayAttr inputAttrs) {
+hir::FuncType getFuncType(OpBuilder &builder, hir::FuncType oldFuncTy,
+                          ArrayRef<Value> arguments,
+                          ArrayRef<DictionaryAttr> inputAttrs) {
 
   MLIRContext *context = builder.getContext();
   SmallVector<Type, 4> argumentTypes;
@@ -116,7 +117,7 @@ hir::FuncType updateFuncType(OpBuilder &builder, hir::FuncType oldFuncTy,
       builder.getFunctionType(argumentTypes, resultTypes);
 
   hir::FuncType newFuncTy = hir::FuncType::get(
-      context, newFunctionTy, inputAttrs, oldFuncTy.getOutputDelays());
+      context, newFunctionTy, inputAttrs, oldFuncTy.getResultAttrs());
 
   return newFuncTy;
 }
@@ -133,7 +134,7 @@ void MemrefLoweringPass::updateOp(hir::FuncOp op) {
   mlir::OpBuilder builder(op.getOperation()->getParentOp()->getContext());
   MLIRContext *context = builder.getContext();
   builder.setInsertionPoint(op);
-  Type memTyI1 = helper::getIntegerType(context, 1);
+  Type memTyI1 = IntegerType::get(context, 1);
 
   SmallVector<ArgReplacementInfo, 4> argReplacementArray;
 
@@ -145,22 +146,19 @@ void MemrefLoweringPass::updateOp(hir::FuncOp op) {
       continue;
 
     int dataWidth = helper::getBitWidth(memTy.getElementType());
-    ArrayAttr ports = inputAttrs[i]
-                          .dyn_cast<DictionaryAttr>()
-                          .getNamed("ports")
-                          .getValue()
-                          .second.dyn_cast<ArrayAttr>();
+    ArrayAttr ports =
+        inputAttrs[i].getNamed("ports").getValue().second.dyn_cast<ArrayAttr>();
     // We do not support multiple ports at function argument.
     assert(ports.size() == 1);
     auto port = ports[0];
     SmallVector<Type, 4> addrTypes;
     for (auto dimShape : memTy.filterShape(ADDR)) {
-      Type addrTy = helper::getIntegerType(context, helper::clog2(dimShape));
+      Type addrTy = IntegerType::get(context, helper::clog2(dimShape));
       addrTypes.push_back(addrTy);
     }
 
     Type memTyIAddr = builder.getTupleType(addrTypes);
-    Type memTyIData = helper::getIntegerType(context, dataWidth);
+    Type memTyIData = IntegerType::get(context, dataWidth);
     Type memTyIAddrAndData =
         TupleType::get(context, SmallVector<Type>({memTyIAddr, memTyIData}));
 
@@ -178,8 +176,11 @@ void MemrefLoweringPass::updateOp(hir::FuncOp op) {
            .argLoc = i,
            .originalArg = arg,
            .tyReplacementArgs = {rdAddrBusTy, rdDataBusTy},
-           .attrReplacementArgs = {StringAttr::get(context, "send"),
-                                   StringAttr::get(context, "recv")}});
+           .attrReplacementArgs = {
+               helper::getDictionaryAttr(builder, "ports",
+                                         StringAttr::get(context, "send")),
+               helper::getDictionaryAttr(builder, "ports",
+                                         StringAttr::get(context, "recv"))}});
 
     } else if (isWriteOnly(port)) {
       argReplacementArray.push_back(
@@ -187,15 +188,16 @@ void MemrefLoweringPass::updateOp(hir::FuncOp op) {
            .argLoc = i,
            .originalArg = arg,
            .tyReplacementArgs = {wrBusTy},
-           .attrReplacementArgs = {StringAttr::get(context, "send")}});
+           .attrReplacementArgs = {helper::getDictionaryAttr(
+               builder, "ports", StringAttr::get(context, "send"))}});
     } else {
       assert(false && "rw is not supported yet!");
     }
   }
   hir::FuncType oldFuncTy = op.funcTy().dyn_cast<hir::FuncType>();
-  SmallVector<Attribute, 4> updatedInputAttrs;
+  SmallVector<DictionaryAttr, 4> updatedInputAttrs;
 
-  for (Attribute attr : inputAttrs) {
+  for (auto attr : inputAttrs) {
     updatedInputAttrs.push_back(attr);
   }
 
@@ -204,7 +206,7 @@ void MemrefLoweringPass::updateOp(hir::FuncOp op) {
     int argLoc = argReplacementArray[i].argLoc;
     Value originalArg = argReplacementArray[i].originalArg;
     ArrayRef<Type> tyReplacementArgs = argReplacementArray[i].tyReplacementArgs;
-    ArrayRef<Attribute> attrReplacementArgs =
+    ArrayRef<DictionaryAttr> attrReplacementArgs =
         argReplacementArray[i].attrReplacementArgs;
 
     // Erase the original memref argument.
@@ -242,8 +244,8 @@ void MemrefLoweringPass::updateOp(hir::FuncOp op) {
     }
   }
 
-  auto newFuncTy = updateFuncType(builder, oldFuncTy, op.getOperands(),
-                                  ArrayAttr::get(context, updatedInputAttrs));
+  auto newFuncTy =
+      getFuncType(builder, oldFuncTy, op.getOperands(), updatedInputAttrs);
   op.setType(newFuncTy.getFunctionType());
   op->setAttr("funcTy", TypeAttr::get(newFuncTy));
 }
@@ -255,7 +257,7 @@ void MemrefLoweringPass::updateOp(hir::AllocaOp op) {
 
   auto res = op.res();
 
-  Type memTyI1 = helper::getIntegerType(context, 1);
+  Type memTyI1 = IntegerType::get(context, 1);
 
   ArrayAttr ports = op.ports();
   SmallVector<Value, 4> bramCallArgs;
@@ -266,12 +268,11 @@ void MemrefLoweringPass::updateOp(hir::AllocaOp op) {
     SmallVector<Type, 4> addrTypes;
 
     for (auto dimShape : memTy.filterShape(ADDR))
-      addrTypes.push_back(
-          helper::getIntegerType(context, helper::clog2(dimShape)));
+      addrTypes.push_back(IntegerType::get(context, helper::clog2(dimShape)));
 
     Type memTyIAddr = builder.getTupleType(addrTypes);
-    Type memTyIData = helper::getIntegerType(
-        context, helper::getBitWidth(memTy.getElementType()));
+    Type memTyIData =
+        IntegerType::get(context, helper::getBitWidth(memTy.getElementType()));
     Type memTyIAddrAndData =
         TupleType::get(context, SmallVector<Type>({memTyIAddr, memTyIData}));
 
@@ -315,14 +316,16 @@ void MemrefLoweringPass::updateOp(hir::AllocaOp op) {
   }
 
   SmallVector<Type, 4> bramCallArgTypes;
-  SmallVector<Attribute> inputAttrs;
+  SmallVector<DictionaryAttr> inputAttrs;
   for (size_t i = 0; i < bramCallArgs.size(); i++) {
     auto bramCallArg = bramCallArgs[i];
     bramCallArgTypes.push_back(bramCallArg.getType());
     if (bramCallBusPorts[i] == SEND)
-      inputAttrs.push_back(StringAttr::get(context, "send"));
+      inputAttrs.push_back(helper::getDictionaryAttr(
+          builder, "ports", StringAttr::get(context, "send")));
     else
-      inputAttrs.push_back(StringAttr::get(context, "recv"));
+      inputAttrs.push_back(helper::getDictionaryAttr(
+          builder, "ports", StringAttr::get(context, "recv")));
   }
 
   Value tstart = getOperation().getBody().front().getArguments().back();
@@ -330,8 +333,7 @@ void MemrefLoweringPass::updateOp(hir::AllocaOp op) {
   FuncType funcTy = hir::FuncType::get(
       context,
       FunctionType::get(context, bramCallArgTypes, SmallVector<Type>({})),
-      ArrayAttr::get(context, inputAttrs),
-      ArrayAttr::get(context, SmallVector<Attribute>({})));
+      inputAttrs, SmallVector<DictionaryAttr>({}));
 
   std::string moduleAttr =
       op.moduleAttr().dyn_cast<StringAttr>().getValue().str();
@@ -349,7 +351,7 @@ void MemrefLoweringPass::updateOp(hir::LoadOp op) {
   //  Value c1 =
   //      builder
   //          .create<hir::ConstantOp>(op.getLoc(), IndexType::get(context),
-  //                                   helper::getIntegerAttr(context, 64, 1))
+  //                                   helper::getIntegerAttr(context, 1))
   //          .getResult();
   //  MemrefType memTy = mem.getType().dyn_cast<MemrefType>();
   //  Attribute memrefRdDelayAttr = memTy.getPortAttrs().get("rd");
@@ -361,7 +363,7 @@ void MemrefLoweringPass::updateOp(hir::LoadOp op) {
   //          .create<hir::ConstantOp>(
   //              op.getLoc(), IndexType::get(context),
   //              helper::getIntegerAttr(
-  //                  context, 64,
+  //                  context,
   //                  memrefRdDelayAttr.dyn_cast<IntegerAttr>().getInt()))
   //          .getResult();
   //
@@ -434,7 +436,7 @@ void MemrefLoweringPass::updateOp(hir::StoreOp op) {
   //  Value c1 =
   //      builder
   //          .create<hir::ConstantOp>(op.getLoc(), IndexType::get(context),
-  //                                   helper::getIntegerAttr(context, 64, 1))
+  //                                   helper::getIntegerAttr(context,  1))
   //          .getResult();
   //
   //  SmallVector<Value, 4> bank = op.getBankIdx();
@@ -499,8 +501,8 @@ void MemrefLoweringPass::updateOp(hir::CallOp op) {
   //
   //      newOperands.push_back(addrBus);
   //      newOperands.push_back(dataBus);
-  //      newInputDelays.push_back(helper::getIntegerAttr(context, 64, 0));
-  //      newInputDelays.push_back(helper::getIntegerAttr(context, 64, 0));
+  //      newInputDelays.push_back(helper::getIntegerAttr(context, 0));
+  //      newInputDelays.push_back(helper::getIntegerAttr(context, 0));
   //    } else if (memTy.getPort() == wr) {
   //      Value writeBus = mapMemref2WrBusTensor[operand];
   //      newOperands.push_back(writeBus);

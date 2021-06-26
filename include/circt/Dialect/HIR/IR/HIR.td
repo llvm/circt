@@ -156,12 +156,12 @@ def SendOp : HIR_Op<"send", []> {
       ```mlir hir.send %1 to %v[%0] : !hir.bus<...>```
   }];
 
-  let arguments = (ins AnyType:$value, AnyType:$bus,
+  let arguments = (ins AnyType:$value, AnyType:$bus, I64Attr:$index,
       TimeType :$tstart, Optional<Index>:$offset);
   let results = (outs );
   let assemblyFormat = [{
-    $value `to` $bus `at` $tstart (`+` $offset^ )? attr-dict 
-      `:` type($value) `to` type($bus)  
+    $value `to` $bus `[` $index`]`
+    `at` $tstart (`+` $offset^ )? attr-dict  `:` type($value) `to` type($bus)  
   }];
   let hasCanonicalizeMethod = true;
 }
@@ -174,13 +174,13 @@ def RecvOp : HIR_Op<"recv", []> {
       ```mlir %v = hir.recv %x[%0] : !hir.bus<...> -> i32```
   }];
 
-  let arguments = (ins AnyType:$bus,
-      TimeType :$tstart, Optional<Index>:$offset);
+  let arguments = (ins AnyType:$bus,I64Attr:$index, 
+     TimeType :$tstart, Optional<Index>:$offset);
   let results = (outs AnyType:$res);
 
   let assemblyFormat = [{
-    $bus  `at` $tstart (`+` $offset^ )? attr-dict 
-      `:` type($bus) `->` type($res)  
+    $bus `[` $index `]`  
+    `at` $tstart (`+` $offset^ )? attr-dict  `:` type($bus) `->` type($res)  
   }];
   let hasCanonicalizeMethod = true;
 }
@@ -509,11 +509,25 @@ def BusInstantiateOp :HIR_Op<"bus.instantiate",[NoSideEffect]> {
   }];
 
   let arguments = (ins);
-  let results = (outs MemrefType:$res);
+  let results = (outs AnyType:$res);
 
   let assemblyFormat = [{attr-dict 
     `:` type($res)
   }];
+}
+
+def TensorExtract :HIR_Op<"tensor.extract",[NoSideEffect]>{
+  let summary = "Extract a bus from a tensor";
+  let description = [{
+Examples:
+    ```mlir %1 = hir.bus.extract %x[%0] : tensor<4x!hir.bus<...>>```
+  }];
+
+  let arguments = (ins AnyType: $tensor, Variadic<Index>: $indices);
+  let results = (outs BusType: $res);
+
+  let assemblyFormat = [{ $tensor `[`$indices`]` attr-dict `:`
+      type($tensor) `->` type($res) }];
 }
 
 def CreateTupleOp:HIR_Op<"create_tuple",[NoSideEffect]>{
@@ -526,8 +540,22 @@ Examples:
   let arguments = (ins Variadic<AnyType>: $args);
   let results = (outs AnyType: $res);
 
-  let assemblyFormat = [{ `(` $args`)` attr-dict `:` `(`
-      type($args) `)` `->` type($res) }];
+  let assemblyFormat = [{ `(` $args`)` attr-dict `:` 
+  `(` type($args) `)` `->` type($res) }];
+}
+
+def UnpackTupleOp:HIR_Op<"unpack_tuple",[NoSideEffect]>{
+  let summary = "creates a tuple from inputs";
+  let description = [{
+Examples:
+    ```mlir %1, %2 = hir.unpack %x : Tuple<i1,i32>```
+  }];
+
+  let arguments = (ins AnyType: $tuple);
+  let results = (outs Variadic<AnyType>: $res);
+
+  let assemblyFormat = [{ `(` $tuple`)` attr-dict `:` 
+      type($tuple) `->` `(` type($res) `)`}];
 }
 
 #endif // HIR_OPS

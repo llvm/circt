@@ -208,7 +208,7 @@ private:
 private:
   Schedule schedule;
   std::stack<TimeInstant> yieldPoints;
-  ArrayAttr outputDelays;
+  ArrayRef<DictionaryAttr> resultAttrs;
   Value tstart;
 };
 
@@ -220,12 +220,12 @@ bool ScheduleVerifier::inspectOp(hir::FuncOp op) {
   this->tstart = tstart;
   hir::FuncType funcTy = op.funcTy().dyn_cast<hir::FuncType>();
   auto inputAttrs = funcTy.getInputAttrs();
-  this->outputDelays = funcTy.getOutputDelays();
+  this->resultAttrs = funcTy.getResultAttrs();
   // Indentity map for root level time vars.
   schedule.insert(tstart, tstart, 0);
   for (unsigned i = 0; i < inputAttrs.size(); i++) {
     mapValueToDefiningLoc.insert(std::make_pair(args[i], op.getLoc()));
-    if (!helper::isPrimitiveType(args[i].getType()))
+    if (!helper::isBuiltinType(args[i].getType()))
       continue;
     int delay = inputAttrs[i]
                     .dyn_cast<DictionaryAttr>()
@@ -330,7 +330,7 @@ bool ScheduleVerifier::inspectOp(hir::ReturnOp op) {
   bool ok = true;
   for (int i = 0; i < (int)operands.size(); i++) {
     Value operand = operands[i];
-    int delay = this->outputDelays[i].dyn_cast<IntegerAttr>().getInt();
+    int delay = helper::extractDelayFromDict(this->resultAttrs[i]);
     ok &= schedule.check(op.getLoc(), getDefiningLoc(operand), operand,
                          this->tstart, delay,
                          "return operand " + std::to_string(i + 1));

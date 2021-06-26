@@ -35,7 +35,8 @@ MemrefFanoutInfo::MemrefFanoutInfo(Operation *op) {
 void MemrefFanoutInfo::visitOp(hir::FuncOp op) {
   auto &entryBlock = op.getBody().front();
   auto arguments = entryBlock.getArguments();
-  ArrayAttr inputAttrs = op.funcTy().dyn_cast<hir::FuncType>().getInputAttrs();
+  ArrayRef<DictionaryAttr> inputAttrs =
+      op.funcTy().dyn_cast<hir::FuncType>().getInputAttrs();
   for (size_t i = 0; i < arguments.size(); i++) {
     auto arg = arguments[i];
     // initialize the map with a vector of usage count filled with zeros.
@@ -43,7 +44,6 @@ void MemrefFanoutInfo::visitOp(hir::FuncOp op) {
     if (!memrefTy)
       continue;
     auto numPorts = inputAttrs[i]
-                        .dyn_cast<DictionaryAttr>()
                         .getNamed("ports")
                         .getValue()
                         .second.dyn_cast<ArrayAttr>()

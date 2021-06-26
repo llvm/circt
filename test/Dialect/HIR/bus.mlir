@@ -1,11 +1,9 @@
-#s_axis = {"merge"="s_axis_merge"}
-#valid = {"merge"="valid_merge"}
-#r_bram = {"rd"=3}
-#w_bram = {"wr"=1}
-#r_reg = {"rd"=0}
-#w_reg = {"wr"=1}
+#r_bram = {"rd_latency"=3}
+#w_bram = {"wr_latency"=1}
+#r_reg = {"rd_latency"=0}
+#w_reg = {"wr_latency"=1}
 hir.func @testBus at %t(%a:i32 delay 2,
-%b :!hir.memref<16x16x4x4xi32,[0,1], #r_bram>, 
+%b :!hir.memref<16x16x(bank 4)x(bank 4)xi32> ports [#r_bram], 
 %c : f32 delay 5){
 
   //%br_addr_send, %br_addr_recv= hir.alloca("bus") 
@@ -36,21 +34,18 @@ hir.func @testBus at %t(%a:i32 delay 2,
   %j2 = constant  3  :index
 
   hir.call @testBus(%a,%b,%c) at %t
-    :!hir.func<(i32 delay 2, !hir.memref<16x16x4x4xi32,[0,1], #r_bram>
+    :!hir.func<(i32 delay 2 
+    ,!hir.memref<16x16x(bank 4)x(bank 4)xi32> ports [#r_bram]
     , f32 delay 5) -> ()>
 
-  %mr, %mw= hir.alloca("bram") 
-  :!hir.memref<16x16x4x4xi32,[0,1], #r_bram>,
-  !hir.memref<16x16x4x4xi32,[0,1], #w_bram>
+  %m= hir.alloca("bram") 
+  :!hir.memref<16x16x(bank 4)x(bank 4)xi32> ports[#r_bram, #w_bram],
 
-  %x = hir.alloca("bus"):!hir.bus<wr i1, wr i32, proto #valid>
-  %y = hir.alloca("bus"):!hir.bus<rd i1, wr i1, wr f32, proto #s_axis>
-  %z = hir.alloca("bus"):tensor<1x!hir.bus<wr f32>>
+  %x = hir.bus.instantiate("bus"):!hir.bus<wr i1, wr i32>
+  %y = hir.bus.instantiate("bus"):!hir.bus<rd i1, wr i1, wr f32>
+  %z = hir.bus.instantiate("bus"):tensor<1x!hir.bus<wr f32>>
   //only tensor<bus> is allowed at the moment.
   //%u = hir.alloca("bus"):tuple<!hir.bus<wr i32, rd i1>, !hir.bus<i32>>
-
-  %b1,%b2 = hir.bus.unpack %x 
-  : !hir.bus<wr i1, wr i32, proto #valid> -> (!hir.bus<wr i1>, !hir.bus<wr i32>)
 
   %b3 = hir.tensor.extract %z[%0]: tensor<1x!hir.bus<wr f32>> -> !hir.bus<wr f32>
 
@@ -58,8 +53,8 @@ hir.func @testBus at %t(%a:i32 delay 2,
   //hir.send %i to %br_addr_send[%j][%1] at %t 
   //%v = hir.recv %br_data_recv[%j] at %t+1
 
-  %v =  hir.load %mr[%i1_i4,%j1_i4, %i2,%j2] at %t 
-  : !hir.memref<16x16x4x4xi32,[0,1],#r_bram>
+  %v =  hir.load %m[%i1_i4,%j1_i4, %i2,%j2] at %t 
+  :!hir.memref<16x16x(bank 4)x(bank 4)xi32> port 0
 
   //hir.send %1 to %bw_send[%j][%0]
   //%iv = hir.tuple (%i,%v)
