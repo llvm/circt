@@ -76,9 +76,13 @@ std::string FIRToken::getStringValue(StringRef spelling) {
     assert(i + 1 <= e && "invalid string should be caught by lexer");
     auto c1 = bytes[i++];
     switch (c1) {
-    case '"':
     case '\\':
+    case '"':
+    case '\'':
       result.push_back(c1);
+      continue;
+    case 'b':
+      result.push_back('\b');
       continue;
     case 'n':
       result.push_back('\n');
@@ -86,7 +90,13 @@ std::string FIRToken::getStringValue(StringRef spelling) {
     case 't':
       result.push_back('\t');
       continue;
-      // TODO: Handle the rest of the escapes.
+    case 'f':
+      result.push_back('\f');
+      continue;
+    case 'r':
+      result.push_back('\r');
+      continue;
+      // TODO: Handle the rest of the escapes (octal and unicode).
     default:
       break;
     }
@@ -96,6 +106,38 @@ std::string FIRToken::getStringValue(StringRef spelling) {
 
     assert(llvm::isHexDigit(c1) && llvm::isHexDigit(c2) && "invalid escape");
     result.push_back((llvm::hexDigitValue(c1) << 4) | llvm::hexDigitValue(c2));
+  }
+
+  return result;
+}
+
+/// Given a token containing a raw string, return its value, including removing
+/// the quote characters and unescaping the quotes of the string. The lexer has
+/// already verified that this token is valid.
+std::string FIRToken::getRawStringValue() const {
+  assert(getKind() == raw_string);
+  return getRawStringValue(getSpelling());
+}
+
+std::string FIRToken::getRawStringValue(StringRef spelling) {
+  // Start by dropping the quotes.
+  StringRef bytes = spelling.drop_front().drop_back();
+
+  std::string result;
+  result.reserve(bytes.size());
+  for (unsigned i = 0, e = bytes.size(); i != e;) {
+    auto c = bytes[i++];
+    if (c != '\\') {
+      result.push_back(c);
+      continue;
+    }
+
+    assert(i + 1 <= e && "invalid string should be caught by lexer");
+    auto c1 = bytes[i++];
+    if (c1 != '\'') {
+      result.push_back(c);
+    }
+    result.push_back(c1);
   }
 
   return result;
@@ -243,7 +285,9 @@ FIRToken FIRLexer::lexTokenImpl() {
       continue;
 
     case '"':
-      return lexString(tokStart);
+      return lexString(tokStart, /*isRaw=*/false);
+    case '\'':
+      return lexString(tokStart, /*isRaw=*/true);
 
     case '+':
     case '-':
@@ -390,16 +434,23 @@ void FIRLexer::skipComment() {
 }
 
 /// StringLit      ::= '"' UnquotedString? '"'
+/// RawString      ::= '\'' UnquotedString? '\''
 /// UnquotedString ::= ( '\\\'' | '\\"' | ~[\r\n] )+?
 ///
-FIRToken FIRLexer::lexString(const char *tokStart) {
+FIRToken FIRLexer::lexString(const char *tokStart, const bool isRaw) {
   while (1) {
     switch (*curPtr++) {
     case '"': // This is the end of the string literal.
+      if (isRaw)
+        break;
       return formToken(FIRToken::string, tokStart);
+    case '\'': // This is the end of the raw string.
+      if (!isRaw)
+        break;
+      return formToken(FIRToken::raw_string, tokStart);
     case '\\':
-      // Ignore escaped '"'
-      if (*curPtr == '"')
+      // Ignore escaped '\'' or '"'
+      if (*curPtr == '\'' || *curPtr == '"')
         ++curPtr;
       break;
     case 0:
@@ -409,6 +460,7 @@ FIRToken FIRLexer::lexString(const char *tokStart) {
         break;
       LLVM_FALLTHROUGH;
     case '\n': // Vertical whitespace isn't allowed in a string.
+    case '\r':
     case '\v':
     case '\f':
       return emitError(tokStart, "unterminated string");
