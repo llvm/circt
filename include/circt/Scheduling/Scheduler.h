@@ -17,10 +17,10 @@
 #ifndef CIRCT_SCHEDULING_SCHEDULER_H
 #define CIRCT_SCHEDULING_SCHEDULER_H
 
+#include "circt/Scheduling/DependenceIterator.h"
 #include "circt/Support/LLVM.h"
 
 #include "mlir/IR/Identifier.h"
-#include "mlir/Support/StorageUniquer.h"
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/Optional.h"
@@ -29,20 +29,27 @@
 namespace circt {
 namespace scheduling {
 
-class Dependence;
-
 /// This class models the most basic scheduling problem.
 ///
 /// A problem instance is comprised of:
 ///
 ///  - *Operations*: The vertices in the data-flow graph to be scheduled.
 ///  - *Dependences*: The edges in the data-flow graph to be scheduled, modeling
-///    a precedence relation between the involved operations. Individual operand
-///    and result indices can be distinguished.
+///    a precedence relation between the involved operations.
 ///  - *Operator types*: An abstraction of the characteristics of the target
 ///    representation, e.g. modules in the  HLS component library, available
 ///    functional units, etc. -- operations are executed on instances/units of
 ///    an operator type.
+///
+/// Operations and operator types must be explicitly registered. The registered
+/// operations induce a subgraph of the SSA graph. We implicitly include the
+/// dependences corresponding to its *def-use* relationships in the problem,
+/// e.g. if operation *y*'s second operand uses the first result produced by
+/// *x*, we'd have a dependence `x:0 --> y:1`. Clients can additionally register
+/// explicit, *auxiliary* dependence between operations, e.g. to encode memory
+/// dependencies or other ordering constraints. Auxiliary dependences do not
+/// distinguish specific operands/results. The differences between the flavors
+/// are transparent to concrete algorithms.
 ///
 /// All components of the problem (operations, dependences, operator types, as
 /// well as the problem itself) can be annotated with *properties*. In this
@@ -69,27 +76,46 @@ class Dependence;
 /// the dependences are satisfied.
 class Scheduler {
 public:
-  /// Operator types, in the context of this scheduling problem, are modeled
-  /// as a client-chosen name, which is used as a handle to access the
-  /// problem-specific property maps.
-  using OperatorType = mlir::Identifier;
-
   /// Initialize a scheduling problem corresponding to \p containingOp.
-  Scheduler(Operation *containingOp);
+  Scheduler(Operation *containingOp) : containingOp(containingOp) {}
   virtual ~Scheduler() = default;
+
+  friend detail::DependenceIterator;
+
+  //===--------------------------------------------------------------------===//
+  // Aliases for the problem components
+  //===--------------------------------------------------------------------===//
+public:
+  /// Client-side handle to uniquely identify an edge in the SSA graph.
+  using DefUseDependenceHandle = mlir::OpOperand *;
+  /// Client-side handle to encode an auxiliary dependence.
+  using AuxDependenceHandle = std::pair<Operation *, Operation *>;
+  /// Optional identifier, used to access dependence properties.
+  using DependenceId = detail::DependenceId;
+
+  /// Operator types are distinguished by name (chosen by the client).
+  using OperatorType = mlir::Identifier;
 
   //===--------------------------------------------------------------------===//
   // Aliases for containers storing the problem components and properties
   //===--------------------------------------------------------------------===//
 protected:
   using OperationSet = llvm::SetVector<Operation *>;
-  using DependenceSet = llvm::SetVector<Dependence *>;
+  using AuxDependenceMap =
+      llvm::DenseMap<Operation *, llvm::SmallSetVector<Operation *, 4>>;
   using OperatorTypeSet = llvm::SetVector<OperatorType>;
+
+  using DefUseDependenceIdMap =
+      llvm::DenseMap<DefUseDependenceHandle, DependenceId>;
+  using AuxDependenceIdMap = llvm::DenseMap<AuxDependenceHandle, DependenceId>;
+
+  using Dependence = detail::Dependence;
+  using DependenceRange = llvm::iterator_range<detail::DependenceIterator>;
 
   template <typename T>
   using OperationProperty = llvm::DenseMap<Operation *, Optional<T>>;
   template <typename T>
-  using DependenceProperty = llvm::DenseMap<Dependence *, Optional<T>>;
+  using DependenceProperty = llvm::DenseMap<DependenceId, Optional<T>>;
   template <typename T>
   using OperatorTypeProperty = llvm::DenseMap<OperatorType, Optional<T>>;
   template <typename T>
@@ -99,42 +125,49 @@ protected:
   // Containers for problem components and properties
   //===--------------------------------------------------------------------===//
 private:
-  // operation containing the ops for this scheduling problem. Used for its
+  // Operation containing the ops for this scheduling problem. Used for its
   // MLIRContext and to emit diagnostics.
   Operation *containingOp;
 
-  // storage for dependences
-  mlir::StorageUniquer uniquer;
-
-  // problem components
+  // Problem components
   OperationSet operations;
-  DependenceSet dependences;
+  AuxDependenceMap auxDependences;
   OperatorTypeSet operatorTypes;
 
-  // operation properties
+  // On-demand assignment of dependence IDs
+  DependenceId nextDependenceId = 0;
+  DefUseDependenceIdMap defUseDependenceIds;
+  AuxDependenceIdMap auxDependenceIds;
+
+  // Operation properties
   OperationProperty<OperatorType> linkedOperatorType;
   OperationProperty<unsigned> startTime;
 
-  // operator type properties
+  // Pperator type properties
   OperatorTypeProperty<unsigned> latency;
 
   //===--------------------------------------------------------------------===//
   // Client interface to construct problem
   //===--------------------------------------------------------------------===//
 public:
-  /// Add \p op to the scheduling problem.
-  void addOperation(Operation *op) { operations.insert(op); }
+  /// Include \p op in this scheduling problem.
+  void insertOperation(Operation *op) { operations.insert(op); }
 
-  /// Construct a dependence that distinguishes result and operands indices.
-  Dependence *getOrInsertDependence(Operation *src, unsigned srcIdx,
-                                    Operation *dst, unsigned dstIdx);
-
-  /// Construct a dependence that uses the default result and operand indices.
-  Dependence *getOrInsertDependence(Operation *src, Operation *dst) {
-    return getOrInsertDependence(src, 0, dst, 0);
+  /// Add an explicit auxiliary dependence to the scheduling problem.
+  void insertDependence(AuxDependenceHandle dep) {
+    auxDependences[std::get<1>(dep)].insert(std::get<0>(dep));
   }
 
-  /// Register an operator type identified by \p name.
+  /// Lookup or assign the ID needed to access dependence properties associated
+  /// with \p dep.
+  DependenceId getOrAssignDependenceId(DefUseDependenceHandle dep);
+  DependenceId getOrAssignDependenceId(AuxDependenceHandle dep);
+
+  /// Include \p opr in this scheduling problem.
+  void insertOperatorType(OperatorType opr) { operatorTypes.insert(opr); }
+
+  /// Retrieves the operator type identified by the client-specific \p name. The
+  /// operator type is automatically registered in the scheduling problem.
   OperatorType getOrInsertOperatorType(StringRef name);
 
   //===--------------------------------------------------------------------===//
@@ -144,8 +177,17 @@ protected:
   bool hasOperation(Operation *op) { return operations.contains(op); }
   const OperationSet &getOperations() { return operations; }
 
-  bool hasDependence(Dependence *dep) { return dependences.contains(dep); }
-  const DependenceSet &getDependences() { return dependences; }
+  /// Return a range object to transparently iterate over \p op's *incoming*
+  ///  1) implicit def-use dependences (backed by the SSA graph), and then
+  ///  2) explictly added auxiliary dependences.
+  ///
+  /// In other words, this yields dependences whose destination operation is
+  /// \p op, and whose source operations are \p op's predecessors in the problem
+  /// graph.
+  ///
+  /// To iterate over all of the scheduling problem's dependences, simply
+  /// process the ranges for all registered operations.
+  DependenceRange getDependences(Operation *op);
 
   bool hasOperatorType(OperatorType opr) { return operatorTypes.contains(opr); }
   const OperatorTypeSet &getOperatorTypes() { return operatorTypes; }
@@ -183,12 +225,12 @@ public:
   //===--------------------------------------------------------------------===//
 protected:
   virtual LogicalResult checkOperation(Operation *op);
-  virtual LogicalResult checkDependence(Dependence *dep);
+  virtual LogicalResult checkDependence(const Dependence &dep);
   virtual LogicalResult checkOperatorType(OperatorType opr);
   virtual LogicalResult checkProblem();
 
   virtual LogicalResult verifyOperation(Operation *op);
-  virtual LogicalResult verifyDependence(Dependence *dep);
+  virtual LogicalResult verifyDependence(const Dependence &dep);
   virtual LogicalResult verifyOperatorType(OperatorType opr);
   virtual LogicalResult verifyProblem();
 
@@ -204,33 +246,6 @@ public:
 public:
   // Attempt to schedule the constructed problem.
   virtual LogicalResult schedule() = 0;
-};
-
-/// This class models a *dependence* from the `srcIdx`'th result of `src` to the
-/// `destIdx`'th operand of `dst`. In other words, it represents an edge in a
-/// scheduling problem.
-class Dependence : public mlir::StorageUniquer::BaseStorage {
-public:
-  using KeyTy = std::tuple<Operation *, Operation *, unsigned, unsigned>;
-
-  bool operator==(const KeyTy &key) const {
-    return key == std::make_tuple(src, dst, srcIdx, dstIdx);
-  }
-
-  static Dependence *
-  construct(mlir::StorageUniquer::StorageAllocator &allocator,
-            const KeyTy &key);
-
-  Operation *getSource() { return src; }
-  unsigned getSourceIndex() { return srcIdx; }
-
-  Operation *getDestination() { return dst; }
-  unsigned getDestinationIndex() { return dstIdx; }
-
-private:
-  Dependence() = default;
-  Operation *src, *dst;
-  unsigned srcIdx, dstIdx;
 };
 
 } // namespace scheduling
