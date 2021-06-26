@@ -233,7 +233,8 @@ bool AnnotationSet::hasAnnotationImpl(StringRef className) const {
 }
 
 bool AnnotationSet::hasDontTouch() const {
-  return hasAnnotation("firrtl.transforms.DontTouchAnnotation");
+  return (hasAnnotation("firrtl.transforms.DontTouchAnnotation") ||
+          hasAnnotation("sifive.enterprise.grandcentral.DataTapsAnnotation"));
 }
 
 /// Add more annotations to this AttributeSet.
