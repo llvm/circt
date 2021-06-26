@@ -1995,10 +1995,31 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   // Use the symbol from the module we are referencing.
   FlatSymbolRefAttr symbolAttr = builder.getSymbolRefAttr(newModule);
 
+  // If this instance is destined to be lowered to a bind, generate a symbol for
+  // it and generate a bind op.
+  StringAttr symbol({});
+  if (oldInstance->getAttrOfType<BoolAttr>("lowerToBind").getValue()) {
+    symbol = builder.getStringAttr("__" + oldInstance.name() + "__");
+    mlir::OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPoint(oldInstance->getParentOp());
+    auto bindOp =
+        builder.create<sv::BindOp>(builder.getSymbolRefAttr(symbol.getValue()));
+    bindOp->setAttr("output_file",
+                    hw::OutputFileAttr::get(
+                        builder.getStringAttr(""),
+                        builder.getStringAttr("bindings.sv"),
+                        /*exclude_from_filelist=*/builder.getBoolAttr(true),
+                        /*exclude_replicated_ops=*/builder.getBoolAttr(true),
+                        bindOp.getContext()));
+  }
+
   // Create the new hw.instance operation.
-  auto newInstance = builder.create<hw::InstanceOp>(
-      resultTypes, oldInstance.nameAttr(), symbolAttr, operands, parameters,
-      StringAttr());
+  auto newInstance =
+      builder.create<hw::InstanceOp>(resultTypes, oldInstance.nameAttr(),
+                                     symbolAttr, operands, parameters, symbol);
+
+  if (symbol)
+    newInstance->setAttr("doNotPrint", builder.getBoolAttr(true));
 
   // Now that we have the new hw.instance, we need to remap all of the users
   // of the outputs/results to the values returned by the instance.
