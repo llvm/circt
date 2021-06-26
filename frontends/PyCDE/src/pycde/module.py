@@ -340,29 +340,47 @@ class _Generate:
     }
 
     # Build the replacement HWModuleOp in the outer module.
-    module_key = str((op.name, sorted(input_ports), sorted(output_ports),
-                      sorted(self.params.items())))
     if "module_name" in self.params:
       module_name = self.params["module_name"]
     else:
-      module_name = op.name
-    if module_key not in self.generated_modules:
+      module_name = self.create_module_name(op, input_ports, output_ports)
+
+    if module_name not in self.generated_modules:
       with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
         gen_mod = ModuleDefinition(self.modcls,
                                    module_name,
                                    input_ports=input_ports,
                                    output_ports=output_ports,
                                    body_builder=self.gen_func)
-        self.generated_modules[module_key] = gen_mod
+        self.generated_modules[module_name] = gen_mod
 
     # Build a replacement instance at the op to be replaced.
     with mlir.ir.InsertionPoint(op):
       mapping = {name.value: op.operands[i] for i, name in enumerate(op_names)}
-      inst = self.generated_modules[module_key].create(op.name,
-                                                       **mapping).operation
+      inst = self.generated_modules[module_name].create(op.name,
+                                                        **mapping).operation
       for (name, attr) in attrs.items():
         inst.attributes[name] = attr
       return inst
+
+  def create_module_name(self, op, input_ports, output_ports):
+    op_name = op.name.replace("pycde.", "")
+    input_port_types = "_".join(
+        sorted(self.sanitize(type) for (_, type) in input_ports))
+    output_port_types = "_".join(
+        sorted(self.sanitize(type) for (_, type) in output_ports))
+    param_values = "_".join(
+        sorted(self.sanitize(param) for param in self.params.values()))
+    return "_".join(
+        [op_name, input_port_types, output_port_types, param_values])
+
+  def sanitize(self, value):
+    sanitized_str = str(value)
+    for sub in ["!hw.", ">", "[", "]", ","]:
+      sanitized_str = sanitized_str.replace(sub, "")
+    for sub in ["<", "x", " "]:
+      sanitized_str = sanitized_str.replace(sub, "_")
+    return sanitized_str
 
 
 def generator(func):
