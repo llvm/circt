@@ -149,6 +149,17 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
       return success();
     }
   }
+
+  // extract(olo, extract(ilo, x)) = extract(olo + ilo, x)
+  if (auto innerExtract = dyn_cast_or_null<ExtractOp>(op.input().getDefiningOp())) {
+    rewriter.replaceOpWithNewOp<ExtractOp>(
+        op,
+        op.getType(),
+        innerExtract.input(),
+        innerExtract.lowBit() + op.lowBit());
+    return success();
+  }
+
   return failure();
 }
 
