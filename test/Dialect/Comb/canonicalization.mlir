@@ -40,3 +40,29 @@ hw.module @andCancel(%a: i4, %b : i4) -> (%o1: i4, %o2: i4) {
   hw.output %1, %2 : i4, i4
 }
 
+
+// CHECK-LABEL: hw.module @andDedup1(%arg0: i7, %arg1: i7) -> (i7) {
+hw.module @andDedup1(%arg0: i7, %arg1: i7) -> (i7) {
+// CHECK-NEXT:    %0 = comb.and %arg0, %arg1 : i7
+// CHECK-NEXT:    hw.output %0 : i7
+  %0 = comb.and %arg0    : i7
+  %1 = comb.and %0, %arg1: i7
+  hw.output %1 : i7
+}
+
+// CHECK-LABEL: hw.module @andDedup2(%arg0: i7, %arg1: i7) -> (i7) {
+hw.module @andDedup2(%arg0: i7, %arg1: i7) -> (i7) {
+// CHECK-NEXT:    %0 = comb.and %arg0, %arg1 : i7
+// CHECK-NEXT:    hw.output %0 : i7
+  %0 = comb.and %arg0, %arg0: i7
+  %1 = comb.and %0, %arg1: i7
+  hw.output %1 : i7
+}
+
+// CHECK-LABEL: hw.module @andDedupLong(%arg0: i7, %arg1: i7, %arg2: i7) -> (i7) {
+hw.module @andDedupLong(%arg0: i7, %arg1: i7, %arg2: i7) -> (i7) {
+// CHECK-NEXT:    %0 = comb.and %arg0, %arg1, %arg2 : i7
+// CHECK-NEXT:    hw.output %0 : i7
+  %0 = comb.and %arg0, %arg1, %arg2, %arg0: i7
+  hw.output %0 : i7
+}
