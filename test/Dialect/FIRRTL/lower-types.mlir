@@ -158,64 +158,60 @@ firrtl.circuit "TopLevel" {
     // COM: Split memory "a" should exist
     // CHECK: %[[MEMORY_A_R:.+]], %[[MEMORY_A_W:.+]] = firrtl.mem {{.+}} data: uint<8>, mask: uint<1>
     // COM: Split memory "b" should exist
-    // CHECK: %[[MEMORY_B_R:.+]], %[[MEMORY_B_W:.+]] = firrtl.mem {{.+}} data: uint<8>, mask: uint<1>
+    // CHECK-NEXT: %[[MEMORY_B_R:.+]], %[[MEMORY_B_W:.+]] = firrtl.mem {{.+}} data: uint<8>, mask: uint<1>
     // COM: ---------------------------------------------------------------------------------
-    // COM: Read port
-    // CHECK-DAG: %[[MEMORY_A_R_ADDR:.+]] = firrtl.subfield %[[MEMORY_A_R]]("addr")
-    // CHECK: firrtl.connect %[[MEMORY_A_R_ADDR]],
-    // CHECK-DAG: %[[MEMORY_A_R_EN:.+]] = firrtl.subfield %[[MEMORY_A_R]]("en")
-    // CHECK: firrtl.connect %[[MEMORY_A_R_EN]],
-    // CHECK-DAG: %[[MEMORY_A_R_CLK:.+]] = firrtl.subfield %[[MEMORY_A_R]]("clk")
-    // CHECK: firrtl.connect %[[MEMORY_A_R_CLK]],
-    // CHECK: %[[MEMORY_A_R_DATA:.+]] = firrtl.subfield %[[MEMORY_A_R]]("data")
-    // CHECK: firrtl.connect %[[WIRE_A_R_DATA:.+]], %[[MEMORY_A_R_DATA]] : 
+    // COM: Read ports
+    // CHECK-NEXT: %[[MEMORY_A_R_ADDR:.+]] = firrtl.subfield %[[MEMORY_A_R]]("addr")
+    // CHECK-NEXT: firrtl.connect %[[MEMORY_A_R_ADDR]], %[[MEMORY_R_ADDR:.+]] :
+    // CHECK-NEXT: %[[MEMORY_B_R_ADDR:.+]] = firrtl.subfield %[[MEMORY_B_R]]("addr")
+    // CHECK-NEXT: firrtl.connect %[[MEMORY_B_R_ADDR]], %[[MEMORY_R_ADDR]]
+    // CHECK-NEXT: %[[MEMORY_A_R_EN:.+]] = firrtl.subfield %[[MEMORY_A_R]]("en")
+    // CHECK-NEXT: firrtl.connect %[[MEMORY_A_R_EN]], %[[MEMORY_R_EN:.+]] :
+    // CHECK-NEXT: %[[MEMORY_B_R_EN:.+]] = firrtl.subfield %[[MEMORY_B_R]]("en")
+    // CHECK-NEXT: firrtl.connect %[[MEMORY_B_R_EN]], %[[MEMORY_R_EN]]
+    // CHECK-NEXT: %[[MEMORY_A_R_CLK:.+]] = firrtl.subfield %[[MEMORY_A_R]]("clk")
+    // CHECK-NEXT: firrtl.connect %[[MEMORY_A_R_CLK]], %[[MEMORY_R_CLK:.+]] :
+    // CHECK-NEXT: %[[MEMORY_B_R_CLK:.+]] = firrtl.subfield %[[MEMORY_B_R]]("clk")
+    // CHECK-NEXT: firrtl.connect %[[MEMORY_B_R_CLK]], %[[MEMORY_R_CLK]]
+    // CHECK-NEXT: %[[MEMORY_A_R_DATA:.+]] = firrtl.subfield %[[MEMORY_A_R]]("data")
+    // CHECK-NEXT: firrtl.connect %[[WIRE_A_R_DATA:.+]], %[[MEMORY_A_R_DATA]] : 
+    // CHECK-NEXT: %[[MEMORY_B_R_DATA:.+]] = firrtl.subfield %[[MEMORY_B_R]]("data")
+    // CHECK-NEXT: firrtl.connect %[[WIRE_B_R_DATA:.+]], %[[MEMORY_B_R_DATA]] : 
     // COM: ---------------------------------------------------------------------------------
-    // COM: Write Port
-    // CHECK-DAG: %[[MEMORY_A_W_ADDR:.+]] = firrtl.subfield %[[MEMORY_A_W]]("addr")
-    // CHECK: firrtl.connect %[[MEMORY_A_W_ADDR]], %[[MEMORY_W_ADDR:.+]] :
-    // CHECK-DAG: %[[MEMORY_A_W_EN:.+]] = firrtl.subfield %[[MEMORY_A_W]]("en")
-    // CHECK: firrtl.connect %[[MEMORY_A_W_EN]], %[[MEMORY_W_EN:.+]] :
-    // CHECK-DAG: %[[MEMORY_A_W_CLK:.+]] = firrtl.subfield %[[MEMORY_A_W]]("clk")
-    // CHECK: firrtl.connect %[[MEMORY_A_W_CLK]], %[[MEMORY_W_CLK:.+]] :
-    // CHECK: %[[MEMORY_A_W_DATA:.+]] = firrtl.subfield %[[MEMORY_A_W]]("data")
-    // CHECK: %[[MEMORY_A_W_MASK:.+]] = firrtl.subfield %[[MEMORY_A_W]]("mask")
-    // COM: ---------------------------------------------------------------------------------
-    // COM: ---------------------------------------------------------------------------------
-    // COM: Read port
-    // CHECK: %[[MEMORY_B_R_ADDR:.+]] = firrtl.subfield %[[MEMORY_B_R]]("addr")
-    // CHECK: firrtl.connect %[[MEMORY_B_R_ADDR]], %[[MEMORY_R_ADDR:.+]] :
-    // CHECK: %[[MEMORY_B_R_EN:.+]] = firrtl.subfield %[[MEMORY_B_R]]("en")
-    // CHECK: firrtl.connect %[[MEMORY_B_R_EN]], %[[MEMORY_R_EN:.+]] :
-    // CHECK: %[[MEMORY_B_R_CLK:.+]] = firrtl.subfield %[[MEMORY_B_R]]("clk")
-    // CHECK: firrtl.connect %[[MEMORY_B_R_CLK]], %[[MEMORY_R_CLK:.+]] :
-    // CHECK: %[[MEMORY_B_R_DATA:.+]] = firrtl.subfield %[[MEMORY_B_R]]("data")
-    // CHECK: firrtl.connect %[[WIRE_B_R_DATA:.+]], %[[MEMORY_B_R_DATA]] : 
-    // COM: ---------------------------------------------------------------------------------
-    // COM: Write port
-    // CHECK: %[[MEMORY_B_W_ADDR:.+]] = firrtl.subfield %[[MEMORY_B_W]]("addr")
-    // CHECK: firrtl.connect %[[MEMORY_B_W_ADDR]], %[[MEMORY_W_ADDR:.+]] :
-    // CHECK: %[[MEMORY_B_W_EN:.+]] = firrtl.subfield %[[MEMORY_B_W]]("en")
-    // CHECK: firrtl.connect %[[MEMORY_B_W_EN]], %[[MEMORY_W_EN]] :
-    // CHECK: %[[MEMORY_B_W_CLK:.+]] = firrtl.subfield %[[MEMORY_B_W]]("clk")
-    // CHECK: firrtl.connect %[[MEMORY_B_W_CLK]], %[[MEMORY_W_CLK]] :
-    // CHECK: %[[MEMORY_B_W_DATA:.+]] = firrtl.subfield %[[MEMORY_B_W]]("data")
-    // CHECK: firrtl.connect %[[MEMORY_B_W_DATA]]
-    // CHECK: %[[MEMORY_B_W_MASK:.+]] = firrtl.subfield %[[MEMORY_B_W]]("mask")
-    // CHECK-NEXT: firrtl.connect %[[MEMORY_B_W_MASK]], %{{.+}} :
-    // COM: ---------------------------------------------------------------------------------
+    // COM: Write Ports
+    // CHECK-NEXT: %[[MEMORY_A_W_ADDR:.+]] = firrtl.subfield %[[MEMORY_A_W]]("addr")
+    // CHECK-NEXT: firrtl.connect %[[MEMORY_A_W_ADDR]], %[[MEMORY_W_ADDR:.+]] :
+    // CHECK-NEXT: %[[MEMORY_B_W_ADDR:.+]] = firrtl.subfield %[[MEMORY_B_W]]("addr")
+    // CHECK-NEXT: firrtl.connect %[[MEMORY_B_W_ADDR]], %[[MEMORY_W_ADDR]] :
+    // CHECK-NEXT: %[[MEMORY_A_W_EN:.+]] = firrtl.subfield %[[MEMORY_A_W]]("en")
+    // CHECK-NEXT: firrtl.connect %[[MEMORY_A_W_EN]], %[[MEMORY_W_EN:.+]] :
+    // CHECK-NEXT: %[[MEMORY_B_W_EN:.+]] = firrtl.subfield %[[MEMORY_B_W]]("en")
+    // CHECK-NEXT: firrtl.connect %[[MEMORY_B_W_EN]], %[[MEMORY_W_EN]] :
+    // CHECK-NEXT: %[[MEMORY_A_W_CLK:.+]] = firrtl.subfield %[[MEMORY_A_W]]("clk")
+    // CHECK-NEXT: firrtl.connect %[[MEMORY_A_W_CLK]], %[[MEMORY_W_CLK:.+]] :
+    // CHECK-NEXT: %[[MEMORY_B_W_CLK:.+]] = firrtl.subfield %[[MEMORY_B_W]]("clk")
+    // CHECK-NEXT: firrtl.connect %[[MEMORY_B_W_CLK]], %[[MEMORY_W_CLK]] :
+    // CHECK-NEXT: %[[MEMORY_A_W_DATA:.+]] = firrtl.subfield %[[MEMORY_A_W]]("data")
+    // CHECK-NEXT: firrtl.connect %[[MEMORY_A_W_DATA]], %[[WIRE_A_W_DATA:.+]] :
+    // CHECK-NEXT: %[[MEMORY_B_W_DATA:.+]] = firrtl.subfield %[[MEMORY_B_W]]("data")
+    // CHECK-NEXT: firrtl.connect %[[MEMORY_B_W_DATA]], %[[WIRE_B_W_DATA:.+]] :
+    // CHECK-NEXT: %[[MEMORY_A_W_MASK:.+]] = firrtl.subfield %[[MEMORY_A_W]]("mask")
+    // CHECK-NEXT: firrtl.connect %[[MEMORY_A_W_MASK]], %[[WIRE_A_W_MASK:.+]] :
+    // CHECK-NEXT: %[[MEMORY_B_W_MASK:.+]] = firrtl.subfield %[[MEMORY_B_W]]("mask")
+    // CHECK-NEXT: firrtl.connect %[[MEMORY_B_W_MASK]], %[[WIRE_B_W_MASK:.+]] :
     // COM: Connections to module ports
     // CHECK-NEXT: firrtl.connect %[[MEMORY_R_CLK]], %clock
-    // CHECK: firrtl.connect %[[MEMORY_R_EN]], %rEn
-    // CHECK: firrtl.connect %[[MEMORY_R_ADDR]], %rAddr
-    // CHECK: firrtl.connect %rData_a, %[[WIRE_A_R_DATA]]
-    // CHECK: firrtl.connect %rData_b, %[[WIRE_B_R_DATA]]
-    // CHECK: firrtl.connect %[[MEMORY_W_CLK]], %clock
-    // CHECK: firrtl.connect %[[MEMORY_W_EN]], %wEn
-    // CHECK: firrtl.connect %[[MEMORY_W_ADDR]], %wAddr
-    // CHECK: firrtl.connect %{{.+}}, %wMask_a
-    // CHECK: firrtl.connect %{{.+}}, %wMask_b
-    // CHECK: firrtl.connect %{{.+}}, %wData_a
-    // CHECK: firrtl.connect %{{.+}}, %wData_b
+    // CHECK-NEXT: firrtl.connect %[[MEMORY_R_EN]], %rEn
+    // CHECK-NEXT: firrtl.connect %[[MEMORY_R_ADDR]], %rAddr
+    // CHECK-NEXT: firrtl.connect %rData_a, %[[WIRE_A_R_DATA]]
+    // CHECK-NEXT: firrtl.connect %rData_b, %[[WIRE_B_R_DATA]]
+    // CHECK-NEXT: firrtl.connect %[[MEMORY_W_CLK]], %clock
+    // CHECK-NEXT: firrtl.connect %[[MEMORY_W_EN]], %wEn
+    // CHECK-NEXT: firrtl.connect %[[MEMORY_W_ADDR]], %wAddr
+    // CHECK-NEXT: firrtl.connect %[[WIRE_A_W_MASK]], %wMask_a
+    // CHECK-NEXT: firrtl.connect %[[WIRE_B_W_MASK]], %wMask_b
+    // CHECK-NEXT: firrtl.connect %[[WIRE_A_W_DATA]], %wData_a
+    // CHECK-NEXT: firrtl.connect %[[WIRE_B_W_DATA]], %wData_b
 
   }
 
@@ -813,7 +809,7 @@ firrtl.circuit "TopLevel" {
 firrtl.circuit "Port" {
   firrtl.extmodule @Sub1(in %a: !firrtl.vector<uint<1>, 2> {firrtl.annotations = [{a}]})
   // CHECK: firrtl.extmodule
-  // CHECK-COUNT-2: firrtl.annotations = [{a}]
+  // CHECK-COUNT-2: firrtl.annotations = [{b}]
   // CHECK-NOT: firrtl.annotations = [{a}]
   firrtl.module @Port(in %a: !firrtl.vector<uint<1>, 2> {firrtl.annotations = [{b}]}) {
     %sub_a = firrtl.instance @Sub1  {name = "sub", portNames = ["a"]} : !firrtl.vector<uint<1>, 2>
@@ -826,26 +822,24 @@ firrtl.circuit "Port" {
 
 // Test that annotations on subfield/subindices of ports are only applied to
 // matching targets.  Any other arg attributes should be copied.
-module  {
-  firrtl.circuit "PortBundle"  {
-    // The annotation should be copied to just a.a.  The firrtl.hello arg
-    // attribute should be copied to each new port.
-    firrtl.module @PortBundle(in %a: !firrtl.bundle<a: uint<1>, b flip: uint<1>> {firrtl.annotations = [{a, target = [".a"]}], firrtl.hello}) {}
-    // CHECK: firrtl.module @PortBundle
-    // CHECK-COUNT-1: firrtl.annotations = [{a}]
-    // CHECK-COUNT-2: firrtl.hello
-    // CHECK-NOT: firrtl.annotations
-    // CHECK-NOT: firrtl.hello
+firrtl.circuit "PortBundle"  {
+  // The annotation should be copied to just a.a.  The firrtl.hello arg
+  // attribute should be copied to each new port.
+  firrtl.module @PortBundle(in %a: !firrtl.bundle<a: uint<1>, b flip: uint<1>> {firrtl.annotations = [{a, target = [".a"]}], firrtl.hello}) {}
+  // CHECK: firrtl.module @PortBundle
+  // CHECK-COUNT-1: firrtl.annotations = [{a}]
+  // CHECK-COUNT-2: firrtl.hello
+  // CHECK-NOT: firrtl.annotations
+  // CHECK-NOT: firrtl.hello
 
-    // The annotation should be copied to just a[0].  The firrtl.world arg
-    // attribute should be copied to each port.
-    firrtl.extmodule @PortVector(in %a: !firrtl.vector<uint<1>, 2> {firrtl.annotations = [{b, target = ["[0]"]}], firrtl.world})
-    // CHECK: firrtl.extmodule @PortVector
-    // CHECK-COUNT-1: firrtl.annotations = [{b}]
-    // CHECK-COUNT-2: firrtl.world
-    // CHECK-NOT: firrtl.annotations
-    // CHECK-NOT: firrtl.world
-  }
+  // The annotation should be copied to just a[0].  The firrtl.world arg
+  // attribute should be copied to each port.
+  firrtl.extmodule @PortVector(in %a: !firrtl.vector<uint<1>, 2> {firrtl.annotations = [{b, target = ["[0]"]}], firrtl.world})
+  // CHECK: firrtl.extmodule @PortVector
+  // CHECK-COUNT-1: firrtl.annotations = [{b}]
+  // CHECK-COUNT-2: firrtl.world
+  // CHECK-NOT: firrtl.annotations
+  // CHECK-NOT: firrtl.world
 }
 
 // -----
