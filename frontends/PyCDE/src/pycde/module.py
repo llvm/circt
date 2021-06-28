@@ -24,7 +24,7 @@ class ModuleDecl:
 
   __slots__ = ["name", "_type"]
 
-  def __init__(self, type, name: str = None):
+  def __init__(self, type: mlir.ir.Type, name: str = None):
     self.name: str = name
     self._type: mlir.ir.Type = type
 
@@ -113,7 +113,6 @@ class module:
     # Get the port names from the attributes we stored them in.
     op_names_attrs = mlir.ir.ArrayAttr(op.attributes["opNames"])
     op_names = [mlir.ir.StringAttr(x) for x in op_names_attrs]
-    input_ports = [(n.value, o.type) for (n, o) in zip(op_names, op.operands)]
 
     if self.extern_mod is None:
       # Find the top MLIR module.
@@ -121,10 +120,11 @@ class module:
       while mod.name != "module":
         mod = mod.parent
 
+      input_ports = [(n.value, o.type) for (n, o) in zip(op_names, op.operands)]
       result_names_attrs = mlir.ir.ArrayAttr(op.attributes["resultNames"])
       result_names = [mlir.ir.StringAttr(x) for x in result_names_attrs]
       output_ports = [
-          (n.value, n.type) for (n, o) in zip(result_names, op.results)
+          (n.value, o.type) for (n, o) in zip(result_names, op.results)
       ]
 
       with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
