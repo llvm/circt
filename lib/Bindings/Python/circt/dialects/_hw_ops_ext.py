@@ -200,8 +200,6 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
       if val is None:
         raise TypeError(
             f"body_builder return doesn't support type '{type(bb_ret[name])}'")
-      import sys
-      sys.stdout.flush()
       if val.type != type:
         raise TypeError(
             f"Output port '{name}' type ({val.type}) doesn't match declared"
