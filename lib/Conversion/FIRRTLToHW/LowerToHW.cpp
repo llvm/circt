@@ -235,6 +235,7 @@ namespace {
 struct FIRRTLModuleLowering : public LowerFIRRTLToHWBase<FIRRTLModuleLowering> {
 
   void runOnOperation() override;
+  void setEnableAnnotationWarning() { enableAnnotationWarning = true; }
 
 private:
   void lowerFileHeader(CircuitOp op, CircuitLoweringState &loweringState);
@@ -257,8 +258,12 @@ private:
 } // end anonymous namespace
 
 /// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::createLowerFIRRTLToHWPass() {
-  return std::make_unique<FIRRTLModuleLowering>();
+std::unique_ptr<mlir::Pass>
+circt::createLowerFIRRTLToHWPass(llvm::Optional<bool> enableAnnotationWarning) {
+  auto pass = std::make_unique<FIRRTLModuleLowering>();
+  if (enableAnnotationWarning.hasValue() && enableAnnotationWarning.getValue())
+    pass->setEnableAnnotationWarning();
+  return pass;
 }
 
 /// Run on the firrtl.circuit operation, lowering any firrtl.module operations
@@ -848,9 +853,11 @@ void FIRRTLModuleLowering::lowerModuleBody(
 namespace {
 struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
-  FIRRTLLowering(hw::HWModuleOp module, CircuitLoweringState &circuitState, bool warn)
+  FIRRTLLowering(hw::HWModuleOp module, CircuitLoweringState &circuitState,
+                 bool warn)
       : theModule(module), circuitState(circuitState),
-        builder(module.getLoc(), module.getContext()), enableAnnotationWarning(warn) {}
+        builder(module.getLoc(), module.getContext()),
+        enableAnnotationWarning(warn) {}
 
   void run();
 
@@ -1774,9 +1781,10 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     auto portName = op.getPortName(i).getValue();
     auto portKind = op.getPortKind(i);
 
-    auto &portKindNum = portKind == MemOp::PortKind::Read    ? readCount
-                        : portKind == MemOp::PortKind::Write ? writeCount
-                                                             : readwriteCount;
+    auto &portKindNum =
+        portKind == MemOp::PortKind::Read
+            ? readCount
+            : portKind == MemOp::PortKind::Write ? writeCount : readwriteCount;
 
     auto addInput = [&](SmallVectorImpl<Value> &operands, StringRef field,
                         size_t width) {
