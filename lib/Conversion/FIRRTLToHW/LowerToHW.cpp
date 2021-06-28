@@ -728,12 +728,12 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
 }
 
 static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
-                                                   StringRef field) {
+                                                   uint32_t field) {
   SmallVector<SubfieldOp> accesses;
   for (auto op : structValue.getUsers()) {
     assert(isa<SubfieldOp>(op));
     auto fieldAccess = cast<SubfieldOp>(op);
-    if (fieldAccess.fieldname() == field) {
+    if (fieldAccess.fieldIndex() == field) {
       accesses.push_back(fieldAccess);
     }
   }
@@ -1566,8 +1566,7 @@ LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
   Value value = getLoweredValue(op.input());
   assert(resultType && value && "subfield type lowering failed");
 
-  return setLoweringTo<hw::StructExtractOp>(op, resultType, value,
-                                            op.fieldname());
+  return setLoweringTo<hw::StructExtractOp>(op, resultType, value, op.input().getType().cast<BundleType>().getElementName(op.fieldIndex()));
 }
 
 //===----------------------------------------------------------------------===//

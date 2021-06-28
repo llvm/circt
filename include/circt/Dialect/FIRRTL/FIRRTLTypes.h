@@ -287,8 +287,14 @@ public:
   /// Look up an element's index by name.  This returns None on failure.
   llvm::Optional<unsigned> getElementIndex(StringRef name);
 
+  /// Look up an element's name by index. This returns None on failure.
+  llvm::Optional<StringRef> getElementName(uint32_t index);
+
   /// Look up an element by name.  This returns None on failure.
   llvm::Optional<BundleElement> getElement(StringRef name);
+
+  /// Look up an element by index.  This returns None on failure.
+  llvm::Optional<BundleElement> getElement(uint32_t  name);
 
   /// Look up an element type by name.
   FIRRTLType getElementType(StringRef name);
