@@ -235,7 +235,7 @@ hw.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2:
 // CHECK-NEXT:      .WIDTH(8'd32)
 // CHECK-NEXT:    ) paramd (
 // CHECK-NEXT:      .a   (w),
-// CHECK-NEXT:      .b   (i3),
+// CHECK-NEXT:    //.b   (i3),
 // CHECK-NEXT:      .out (paramd_out)
 // CHECK-NEXT:    );
 // CHECK-NEXT:    FooModule #(
