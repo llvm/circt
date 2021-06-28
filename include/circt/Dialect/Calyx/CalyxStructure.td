@@ -38,7 +38,8 @@ def ComponentOp : CalyxOp<"component", [
     IsolatedFromAbove,
     // TODO(Calyx): Need to eventually expose the output ports.
     NoTerminator,
-    SingleBlock
+    SingleBlock,
+    SymbolTable
   ]> {
   let summary = "Calyx Component";
   let description = [{
@@ -94,12 +95,12 @@ def CellsOp : CalyxContainer<"cells", [
   let description = [{
     The "calyx.cells" operation represents a container for
     the sub-components that are used within the parent
-    component.
+    component. This may only contain `calyx.cell` ops.
 
     ```mlir
       calyx.cells {
-       // TODO(Calyx): Add `cell` examples once
-       // CellOps are added.
+        %in0 = calyx.cell "a0" @A : i64
+        %in1, %out0 = calyx.cell "b0" @B : i132, i8
       }
     ```
   }];
@@ -118,8 +119,7 @@ def WiresOp : CalyxContainer<"wires", [
 
     ```mlir
       calyx.wires {
-        // TODO(Calyx): Add `group` examples once
-        // GroupOps are added.
+        calyx.group @A { ... }
       }
     ```
   }];
@@ -181,4 +181,43 @@ def CellOp : CalyxOp<"cell", [
     $instanceName $componentName attr-dict (`:` type($results)^)?
   }];
   let verifier = "return ::verify$cppClass(*this);";
+}
+
+def GroupOp : CalyxOp<"group", [
+    HasParent<"WiresOp">,
+    RegionKindInterface,
+    // TODO(Calyx): When assignments are added:
+    // SingleBlockImplicitTerminator<>
+    SingleBlock,
+    NoTerminator,
+    Symbol
+  ]> {
+  let summary = "Calyx Group";
+  let description = [{
+    Represents a Calyx group, which is a collection
+    of assignments that are only active when the group
+    is run from the control execution schedule. A group
+    signifies its termination with a special port named
+    a "done" port.
+
+    ```mlir
+      calyx.group @MyGroup {
+        // TODO(Calyx): Add assignments when
+        // they are in the Calyx dialect.
+      }
+    ```
+  }];
+
+  let arguments = (ins SymbolNameAttr: $sym_name);
+
+  let extraClassDeclaration = [{
+    // Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+
+    /// Returns the body of a Calyx group.
+    Block *getBody() { return &getOperation()->getRegion(0).front(); }
+  }];
+
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = "$sym_name $body attr-dict";
 }

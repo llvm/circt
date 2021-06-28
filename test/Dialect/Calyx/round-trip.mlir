@@ -41,7 +41,10 @@ calyx.program {
       %in1, %in2, %out1, %out2 = calyx.cell "c0" @ComponentWithInAndOutPorts : i64, i16, i32, i8
       calyx.cell "c1" @ComponentWithNoPorts
     }
-    calyx.wires {}
+    calyx.wires {
+      // CHECK: calyx.group @SomeGroup {
+      calyx.group @SomeGroup {}
+    }
     calyx.control {}
   }
 

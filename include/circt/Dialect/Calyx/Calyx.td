@@ -13,9 +13,9 @@
 #ifndef CALYX_TD
 #define CALYX_TD
 
-include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
-include "mlir/IR/OpAsmInterface.td"
+include "mlir/IR/OpBase.td"
+include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 
 def CalyxDialect : Dialect {
