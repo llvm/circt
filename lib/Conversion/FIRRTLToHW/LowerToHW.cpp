@@ -573,6 +573,9 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
       hwPort.argNum = numArgs++;
     }
     ports.push_back(hwPort);
+    if (enableAnnotationWarning && !firrtlPort.annotations.empty())
+      moduleOp->emitWarning(
+          "unprocessed annotations still remaining on port after LowerToHW");
   }
   return success();
 }
@@ -590,6 +593,9 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   if (auto defName = oldModule.defname())
     verilogName = defName.getValue();
 
+  if (enableAnnotationWarning && !AnnotationSet(oldModule).empty())
+    oldModule.emitWarning("unprocessed annotations still remaining on external "
+                          "module after LowerToHW");
   // Build the new hw.module op.
   OpBuilder builder(topLevelModule->getParent()->getContext());
   builder.setInsertionPointToEnd(topLevelModule);
@@ -608,6 +614,9 @@ hw::HWModuleOp FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
   if (failed(lowerPorts(firrtlPorts, ports, oldModule)))
     return {};
 
+  if (enableAnnotationWarning && !AnnotationSet(oldModule).empty())
+    oldModule.emitWarning(
+        "unprocessed annotations still remaining on module after LowerToHW");
   // Build the new hw.module op.
   OpBuilder builder(topLevelModule->getParent()->getContext());
   builder.setInsertionPointToEnd(topLevelModule);
@@ -839,9 +848,9 @@ void FIRRTLModuleLowering::lowerModuleBody(
 namespace {
 struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
-  FIRRTLLowering(hw::HWModuleOp module, CircuitLoweringState &circuitState)
+  FIRRTLLowering(hw::HWModuleOp module, CircuitLoweringState &circuitState, bool warn)
       : theModule(module), circuitState(circuitState),
-        builder(module.getLoc(), module.getContext()) {}
+        builder(module.getLoc(), module.getContext()), enableAnnotationWarning(warn) {}
 
   void run();
 
@@ -1059,12 +1068,14 @@ private:
   /// This is true if we've emitted `INIT_RANDOM_PROLOG_ into an initial
   /// block in this module already.
   bool randomizePrologEmitted;
+
+  bool enableAnnotationWarning;
 };
 } // end anonymous namespace
 
 void FIRRTLModuleLowering::lowerModuleOperations(
     hw::HWModuleOp module, CircuitLoweringState &loweringState) {
-  FIRRTLLowering(module, loweringState).run();
+  FIRRTLLowering(module, loweringState, enableAnnotationWarning).run();
 }
 
 // This is the main entrypoint for the lowering pass.
@@ -1083,6 +1094,8 @@ void FIRRTLLowering::run() {
     builder.setInsertionPoint(&op);
     builder.setLoc(op.getLoc());
     auto done = succeeded(dispatchVisitor(&op));
+    if (enableAnnotationWarning && !AnnotationSet(&op).empty())
+      op.emitWarning("unprocessed annotations still remaining after LowerToHW");
     if (done)
       opsToRemove.push_back(&op);
     else {
@@ -1574,7 +1587,7 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   // Name attr is required on sv.wire but optional on firrtl.wire.
   auto nameAttr = op.nameAttr() ? op.nameAttr() : builder.getStringAttr("");
 
-  if (!AnnotationSet::removeAnnotations(
+  if (enableAnnotationWarning && !AnnotationSet::removeAnnotations(
           op, "firrtl.transforms.DontTouchAnnotation"))
     return setLoweringTo<sv::WireOp>(op, resultType, nameAttr);
   auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
