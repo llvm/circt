@@ -1,10 +1,10 @@
 # FIRRTL Annotations
 
-The SFC provides a mechanism to encode arbitrary metadata and associate it with
-zero or more "things" in a FIRRTL circuit.  This mechanism is an _Annotation_
-and the association is described using one or more _Targets_.  Annotations
-should be viewed an extension to the FIRRTL IR specification, and can greatly
-affect the meaning and interpretation of the IR.
+The Scala FIRRTL Compiler (SFC) provides a mechanism to encode arbitrary
+metadata and associate it with zero or more "things" in a FIRRTL circuit.  This
+mechanism is an _Annotation_ and the association is described using one or more
+_Targets_.  Annotations should be viewed an extension to the FIRRTL IR
+specification, and can greatly affect the meaning and interpretation of the IR.
 
 Annotations are represented as a dictionary, with a "class" field which
 describes which annotation it is, and a "target" field which represents the IR
@@ -169,8 +169,8 @@ circuit Foo: %[[{"target":"~Foo|Foo","hello":"world"}]]
 ```
 
 During parsing, annotations are "scattered" into the MLIR representation as
-operation or argument attributes.  As an example of this, the above parses into
-the following MLIR representation:
+operation or port attributes.  As an example of this, the above parses into the
+following MLIR representation:
 
 ```mlir
 firrtl.circuit "Foo"  {
@@ -188,11 +188,12 @@ attach annotation metadata to only the _lowered_ portion of a targeted circuit
 component.
 
 Annotations are expected to be fully removed via custom transforms, conversion
-to other MLIR operations, or dropped.  E.g., the `ModuleInliner` pass removes
-`firrtl.passes.InlineAnnotation` by inlining annotated modules or instances.
-JSON Annotations map to the builtin MLIR attributes. An annotation is
-implemented using a DictionaryAttr, which holds the class, target, any
-annotation specific data.
+to other MLIR operations, or dropped. A warning will be emitted if there are
+any unused annotations still in the circuit. For example, the `ModuleInliner`
+pass removes `firrtl.passes.InlineAnnotation` by inlining annotated modules or
+instances. JSON Annotations map to the builtin MLIR attributes. An annotation
+is implemented using a DictionaryAttr, which holds the class, target, any
+annotation specific data. 
 
 ## Annotations
 
