@@ -673,8 +673,13 @@ bool circt::firrtl::scatterCustomAnnotations(
       auto target = canonicalizeTarget(blackBoxAttr.getValue());
       if (!target)
         return false;
+      NamedAttrList dontTouchAnn;
+      dontTouchAnn.append("class",
+          StringAttr::get(context, "firrtl.transforms.DontTouchAnnotation"));
       newAnnotations[target.getValue()].push_back(
           DictionaryAttr::getWithSorted(context, attrs));
+      newAnnotations[target.getValue()].push_back(
+          DictionaryAttr::getWithSorted(context, dontTouchAnn));
 
       // Process all the taps.
       auto keyAttr = tryGetAs<ArrayAttr>(dict, dict, "keys", loc, clazz);
@@ -717,9 +722,13 @@ bool circt::firrtl::scatterCustomAnnotations(
             return false;
           newAnnotations[sourceTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, source));
+          newAnnotations[sourceTarget.getValue()].push_back(
+              DictionaryAttr::getWithSorted(context, dontTouchAnn));
           port.append("portID", portID);
           newAnnotations[portTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, port));
+          newAnnotations[portTarget.getValue()].push_back(
+              DictionaryAttr::getWithSorted(context, dontTouchAnn));
           continue;
         }
 
@@ -740,8 +749,12 @@ bool circt::firrtl::scatterCustomAnnotations(
             return false;
           newAnnotations[moduleTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, module));
+          newAnnotations[moduleTarget.getValue()].push_back(
+              DictionaryAttr::getWithSorted(context, dontTouchAnn));
           newAnnotations[portTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, port));
+          newAnnotations[portTarget.getValue()].push_back(
+              DictionaryAttr::getWithSorted(context, dontTouchAnn));
           continue;
         }
 
@@ -749,6 +762,8 @@ bool circt::firrtl::scatterCustomAnnotations(
             "sifive.enterprise.grandcentral.DeletedDataTapKey") {
           newAnnotations[portTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, port));
+          newAnnotations[portTarget.getValue()].push_back(
+              DictionaryAttr::getWithSorted(context, dontTouchAnn));
           continue;
         }
 
@@ -768,6 +783,8 @@ bool circt::firrtl::scatterCustomAnnotations(
             return false;
           newAnnotations[portNameTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, literal));
+          newAnnotations[portNameTarget.getValue()].push_back(
+              DictionaryAttr::getWithSorted(context, dontTouchAnn));
           continue;
         }
 

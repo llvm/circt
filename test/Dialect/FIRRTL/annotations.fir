@@ -430,18 +430,18 @@ circuit GCTDataTap : %[
     ; CHECK-LABEL: firrtl.circuit "GCTDataTap"
     ; CHECK-SAME: annotations = [{unrelatedAnnotation}]
     ; CHECK: firrtl.extmodule @DataTap
-    ; CHECK-SAME: %_0: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = [[ID:[0-9]+]] : i64, portID = [[PORT_ID:[0-9]+]] : i64}]},
-    ; CHECK-SAME: %_1: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey", id = [[ID]] : i64}]},
-    ; CHECK-SAME: %_2: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.DeletedDataTapKey", id = [[ID]] : i64}]},
-    ; CHECK-SAME: %_3: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.LiteralDataTapKey", literal = "UInt<16>(\22h2a\22)"}]}
-    ; CHECK-SAME: annotations = [{class = "sifive.enterprise.grandcentral.DataTapsAnnotation"}]
+    ; CHECK-SAME: %_0: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = [[ID:[0-9]+]] : i64, portID = [[PORT_ID:[0-9]+]] : i64}, {class = "firrtl.transforms.DontTouchAnnotation"}]},
+    ; CHECK-SAME: %_1: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey", id = [[ID]] : i64}, {class = "firrtl.transforms.DontTouchAnnotation"}]},
+    ; CHECK-SAME: %_2: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.DeletedDataTapKey", id = [[ID]] : i64}, {class = "firrtl.transforms.DontTouchAnnotation"}]},
+    ; CHECK-SAME: %_3: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.LiteralDataTapKey", literal = "UInt<16>(\22h2a\22)"}, {class = "firrtl.transforms.DontTouchAnnotation"}]}
+    ; CHECK-SAME: annotations = [{class = "sifive.enterprise.grandcentral.DataTapsAnnotation"}, {class = "firrtl.transforms.DontTouchAnnotation"}]
 
     ; CHECK: firrtl.extmodule @BlackBox
-    ; CHECK-SAME: annotations = [{class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey", id = [[ID]] : i64, internalPath = "baz.qux"}]
+    ; CHECK-SAME: annotations = [{class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey", id = [[ID]] : i64, internalPath = "baz.qux"}, {class = "firrtl.transforms.DontTouchAnnotation"}]
 
     ; CHECK: firrtl.module @GCTDataTap
     ; CHECK: firrtl.reg
-    ; CHECk-SAME: annotations = [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = [[ID]] : i64, portID = [[PORT_ID]] : i64}]
+    ; CHECk-SAME: annotations = [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = [[ID]] : i64, portID = [[PORT_ID]] : i64}, {class = "firrtl.transforms.DontTouchAnnotation"}]
 
 ; // -----
 
