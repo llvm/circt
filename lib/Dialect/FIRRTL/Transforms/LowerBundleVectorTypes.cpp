@@ -448,10 +448,6 @@ TypeLoweringVisitor::addArg(FModuleOp module, unsigned insertPt,
   // Save the name attribute for the new argument.
   auto name = builder->getStringAttr(nameStr);
 
-  llvm::errs() << nameStr << " "
-  << oldArg.name.getValue().str() << " "
-  << nameSuffix.str() << "\n";
-
   // Populate the new arg attributes.
   AnnotationSet newAnnotations = filterAnnotations(oldArg.annotations, nameSuffix);
 
@@ -473,9 +469,6 @@ bool TypeLoweringVisitor::lowerArg(
   // Flatten any bundle types.
   SmallVector<FlatBundleFieldEntry>
           fieldTypes = peelType(arg.getType());
-
-  arg.getType().dump();
-  llvm::errs() << "\n* " << fieldTypes.size() << "\n";
 
   if (fieldTypes.empty())
     return false;
