@@ -1587,7 +1587,7 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   // Name attr is required on sv.wire but optional on firrtl.wire.
   auto nameAttr = op.nameAttr() ? op.nameAttr() : builder.getStringAttr("");
 
-  if (enableAnnotationWarning && !AnnotationSet::removeAnnotations(
+  if (!AnnotationSet::removeAnnotations(
           op, "firrtl.transforms.DontTouchAnnotation"))
     return setLoweringTo<sv::WireOp>(op, resultType, nameAttr);
   auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
