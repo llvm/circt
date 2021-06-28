@@ -22,6 +22,25 @@
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
+namespace circt {
+namespace calyx {
+
+/// The direction of a Calyx port.
+enum PortDirection { INPUT = 0, OUTPUT = 1 };
+
+/// This holds the name and type that describes the component's ports.
+struct ComponentPortInfo {
+  StringAttr name;
+  Type type;
+  PortDirection direction;
+};
+
+/// Returns port information about a given component.
+SmallVector<ComponentPortInfo> getComponentPortInfo(Operation *op);
+
+} // namespace calyx
+} // namespace circt
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/Calyx/Calyx.h.inc"
 

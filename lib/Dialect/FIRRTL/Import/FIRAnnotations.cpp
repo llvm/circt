@@ -183,7 +183,7 @@ static A tryGetAs(DictionaryAttr &dict, DictionaryAttr &root, StringRef key,
 /// represented as a Target-keyed arrays of attributes.  The input JSON value is
 /// checked, at runtime, to be an array of objects.  Returns true if successful,
 /// false if unsuccessful.
-bool circt::firrtl::fromJSON(json::Value &value,
+bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
                              llvm::StringMap<ArrayAttr> &annotationMap,
                              json::Path path, MLIRContext *context) {
 
@@ -314,6 +314,14 @@ bool circt::firrtl::fromJSON(json::Value &value,
     if (!optTarget)
       return false;
     StringRef targetStrRef = optTarget.getValue();
+
+    if (targetStrRef != "~") {
+      auto circuitFieldEnd = targetStrRef.find_first_of('|');
+      if (circuitTarget != targetStrRef.take_front(circuitFieldEnd)) {
+        p.report("annotation has invalid circuit name");
+        return false;
+      }
+    }
 
     // Build up the Attribute to represent the Annotation and store it in the
     // global Target -> Attribute mapping.
@@ -665,8 +673,13 @@ bool circt::firrtl::scatterCustomAnnotations(
       auto target = canonicalizeTarget(blackBoxAttr.getValue());
       if (!target)
         return false;
+      NamedAttrList dontTouchAnn;
+      dontTouchAnn.append("class",
+          StringAttr::get(context, "firrtl.transforms.DontTouchAnnotation"));
       newAnnotations[target.getValue()].push_back(
           DictionaryAttr::getWithSorted(context, attrs));
+      newAnnotations[target.getValue()].push_back(
+          DictionaryAttr::getWithSorted(context, dontTouchAnn));
 
       // Process all the taps.
       auto keyAttr = tryGetAs<ArrayAttr>(dict, dict, "keys", loc, clazz);
@@ -709,9 +722,13 @@ bool circt::firrtl::scatterCustomAnnotations(
             return false;
           newAnnotations[sourceTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, source));
+          newAnnotations[sourceTarget.getValue()].push_back(
+              DictionaryAttr::getWithSorted(context, dontTouchAnn));
           port.append("portID", portID);
           newAnnotations[portTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, port));
+          newAnnotations[portTarget.getValue()].push_back(
+              DictionaryAttr::getWithSorted(context, dontTouchAnn));
           continue;
         }
 
@@ -732,8 +749,12 @@ bool circt::firrtl::scatterCustomAnnotations(
             return false;
           newAnnotations[moduleTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, module));
+          newAnnotations[moduleTarget.getValue()].push_back(
+              DictionaryAttr::getWithSorted(context, dontTouchAnn));
           newAnnotations[portTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, port));
+          newAnnotations[portTarget.getValue()].push_back(
+              DictionaryAttr::getWithSorted(context, dontTouchAnn));
           continue;
         }
 
@@ -741,6 +762,8 @@ bool circt::firrtl::scatterCustomAnnotations(
             "sifive.enterprise.grandcentral.DeletedDataTapKey") {
           newAnnotations[portTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, port));
+          newAnnotations[portTarget.getValue()].push_back(
+              DictionaryAttr::getWithSorted(context, dontTouchAnn));
           continue;
         }
 
@@ -760,6 +783,8 @@ bool circt::firrtl::scatterCustomAnnotations(
             return false;
           newAnnotations[portNameTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, literal));
+          newAnnotations[portNameTarget.getValue()].push_back(
+              DictionaryAttr::getWithSorted(context, dontTouchAnn));
           continue;
         }
 

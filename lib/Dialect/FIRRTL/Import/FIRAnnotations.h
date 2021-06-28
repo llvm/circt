@@ -30,7 +30,7 @@ class ArrayAttr;
 namespace circt {
 namespace firrtl {
 
-bool fromJSON(llvm::json::Value &value,
+bool fromJSON(llvm::json::Value &value, StringRef circuitTarget,
               llvm::StringMap<ArrayAttr> &annotationMap, llvm::json::Path path,
               MLIRContext *context);
 
