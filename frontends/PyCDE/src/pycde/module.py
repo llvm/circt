@@ -4,7 +4,8 @@
 
 from __future__ import annotations
 
-from .support import Value
+from .support import Value, zeroconst
+from .types import types
 
 from circt import support
 from circt.dialects import hw
@@ -23,7 +24,7 @@ class ModuleDecl:
 
   __slots__ = ["name", "_type"]
 
-  def __init__(self, type: mlir.ir.Type, name: str = None):
+  def __init__(self, type, name: str = None):
     self.name: str = name
     self._type: mlir.ir.Type = type
 
@@ -62,7 +63,7 @@ class module:
     self.extern_name = extern_name
     if inspect.isclass(func_or_class):
       # If it's just a module class, we should wrap it immediately
-      self.mod = _module_base(func_or_class)
+      self.mod = _module_base(func_or_class, extern_name is not None)
       _register_generator(self.mod.__name__, "extern_instantiate",
                           self._instantiate,
                           mlir.ir.DictAttr.get(self.mod._parameters))
@@ -96,7 +97,8 @@ class module:
       cls = self.func(*args, **kwargs)
       if cls is None:
         raise ValueError("Parameterization function must return module class")
-      mod = _module_base(cls, param_values.arguments)
+      mod = _module_base(cls, self.extern_name is not None,
+                         param_values.arguments)
 
       if self.extern_name:
         _register_generator(cls.__name__, "extern_instantiate",
@@ -122,7 +124,7 @@ class module:
       result_names_attrs = mlir.ir.ArrayAttr(op.attributes["resultNames"])
       result_names = [mlir.ir.StringAttr(x) for x in result_names_attrs]
       output_ports = [
-          (n.value, o.type) for (n, o) in zip(result_names, op.results)
+          (n.value, n.type) for (n, o) in zip(result_names, op.results)
       ]
 
       with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
@@ -137,7 +139,9 @@ class module:
 
     with mlir.ir.InsertionPoint(op):
       mapping = {name.value: op.operands[i] for i, name in enumerate(op_names)}
-      inst = self.extern_mod.create(op.name, **mapping).operation
+      result_types = [x.type for x in op.results]
+      inst = self.extern_mod.create(
+        op.name, **mapping, results=result_types).operation
       for (name, attr) in attrs.items():
         inst.attributes[name] = attr
       return inst
@@ -154,7 +158,7 @@ def externmodule(cls_or_name):
 
 # The real workhorse of this package. Wraps a module class, making it implement
 # MLIR's OpView parent class.
-def _module_base(cls, params={}):
+def _module_base(cls, extern: bool, params={}):
   """The CIRCT design entry module class decorator."""
 
   class mod(cls, mlir.ir.OpView):
@@ -190,9 +194,12 @@ def _module_base(cls, params={}):
           value = support.get_value(inputs[name])
           assert value is not None
         else:
-          backedge = BackedgeBuilder.current().create(type, name, self)
-          self.backedges[idx] = backedge
-          value = backedge.result
+          if extern:
+            value = zeroconst(type)
+          else:
+            backedge = BackedgeBuilder.current().create(type, name, self)
+            self.backedges[idx] = backedge
+            value = backedge.result
         input_ports_values.append(value)
 
       # Set up the op attributes.

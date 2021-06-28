@@ -2295,10 +2295,11 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   auto opArgs = op.inputs();
   auto opResults = op.getResults();
   bool isFirst = true; // True until we print a port.
+  bool isExternMod = isa<HWModuleExternOp>(moduleOp);
   for (auto &elt : portInfo) {
     // Figure out which value we are emitting.
     Value portVal = elt.isOutput() ? opResults[elt.argNum] : opArgs[elt.argNum];
-    bool isZeroWidth = isZeroBitType(elt.type);
+    bool isZeroWidth = !isExternMod && isZeroBitType(elt.type);
 
     // Decide if we should print a comma.  We can't do this if we're the first
     // port or if all the subsequent ports are zero width.

@@ -1,20 +1,7 @@
 import circt.support as support
 import circt.dialects.hw as hw
 
-
-def connect(destination, source):
-  if not isinstance(destination, support.OpOperand):
-    raise TypeError(
-        f"cannot connect to destination of type {type(destination)}")
-  value = support.get_value(source)
-  if value is None:
-    raise TypeError(f"cannot connect from source of type {type(source)}")
-
-  index = destination.index
-  destination.operation.operands[index] = value
-  if isinstance(destination, support.OpOperand) and \
-     index in destination.builder.backedges:
-    destination.builder.backedges[index].erase()
+import mlir.ir
 
 
 class Value:
@@ -35,3 +22,13 @@ class Value:
 
     raise TypeError(
         "Subscripting only supported on hw.array and hw.struct types")
+
+
+def zeroconst(type: mlir.ir.Type):
+  type = support.type_to_pytype(type)
+  if isinstance(type, mlir.ir.IntegerType):
+    return hw.ConstantOp.create(type, 0)
+  if isinstance(type, hw.ArrayType):
+    zero_elemty = zeroconst(type.element_type)
+    arr = [zero_elemty for _ in range(type.size)]
+    return hw.ArrayCreateOp.create(arr).result
