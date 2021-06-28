@@ -120,6 +120,8 @@ def WiresOp : CalyxContainer<"wires", [
     ```mlir
       calyx.wires {
         calyx.group @A { ... }
+        // TODO(Calyx): Add example of assignment
+        // outside of a Calyx GroupOp.
       }
     ```
   }];
