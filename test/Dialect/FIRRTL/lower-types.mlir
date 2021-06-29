@@ -849,31 +849,25 @@ firrtl.circuit "PortBundle"  {
 //
 // See: https://github.com/llvm/circt/issues/1276
 
-module  {
-  // CHECK-LABEL: firrtl.circuit "TruncatingConnectWithFlip"
-  firrtl.circuit "TruncatingConnectWithFlip"  {
-    firrtl.extmodule @Bar(in %a: !firrtl.uint<2>)
-    firrtl.module @TruncatingConnectWithFlip() {
-      // CHECK: %[[a_b:.+]] = firrtl.wire
-      %a = firrtl.wire  : !firrtl.bundle<b: uint<1>>
-      %bar_a = firrtl.instance @Bar  {name = "bar"} : !firrtl.uint<2>
-      %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
-      firrtl.connect %bar_a, %invalid_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
-      // CHECK: %[[bar_a_tail:.+]] = firrtl.tail %bar_a, 1
-      %0 = firrtl.subfield %a("b") : (!firrtl.bundle<b: uint<1>>) -> !firrtl.uint<1>
-      // CHECK-NEXT: firrtl.connect %[[a_b]], %[[bar_a_tail]]
-      firrtl.partialconnect %0, %bar_a : !firrtl.uint<1>, !firrtl.uint<2>
-    }
+// CHECK-LABEL: firrtl.circuit "TruncatingConnectWithFlip"
+firrtl.circuit "TruncatingConnectWithFlip"  {
+  firrtl.extmodule @Bar(in %a: !firrtl.uint<2>)
+  firrtl.module @TruncatingConnectWithFlip() {
+    // CHECK: %[[a_b:.+]] = firrtl.wire
+    %a = firrtl.wire  : !firrtl.bundle<b: uint<1>>
+    // CHECK-NEXT: %bar_a = firrtl.instance @Bar
+    %bar_a = firrtl.instance @Bar  {name = "bar"} : !firrtl.uint<2>
+    // CHECK-NEXT: %invalid_ui2 = firrtl.invalidvalue
+    %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
+    // CHECK-NEXT: firrtl.connect %bar_a, %invalid_ui2
+    firrtl.connect %bar_a, %invalid_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
+    // CHECK: %[[bar_a_tail:.+]] = firrtl.tail %bar_a, 1
+    %0 = firrtl.subfield %a("b") : (!firrtl.bundle<b: uint<1>>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.connect %[[a_b]], %[[bar_a_tail]]
+    firrtl.partialconnect %0, %bar_a : !firrtl.uint<1>, !firrtl.uint<2>
   }
 }
-// CHECK: firrtl.module @readIndirect1d(in %a_0: !firrtl.uint<2>, in %a_1: !firrtl.uint<2>, in %a_2: !firrtl.uint<2>, in %a_3: !firrtl.uint<2>, in %z_0: !firrtl.uint<2>, in %z_1: !firrtl.uint<2>, in %z_2: !firrtl.uint<2>, in %z_3: !firrtl.uint<2>, in %sel: !firrtl.uint<2>, out %b: !firrtl.uint<2>)
-// CHECK:   %[[SELMUX9:.+]] = firrtl.mux(%{{.+}}, %z_2, %z_3) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK:   %[[SELMUX1:.+]] = firrtl.mux(%{{.+}}, %z_1, %[[SELMUX9]]) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK:   %[[MUXOUT8:.+]] = firrtl.mux(%{{.+}}, %z_0, %[[SELMUX1]]) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK:   %[[SELMUX11:.+]] = firrtl.mux(%{{.+}}, %a_2, %a_3) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK:   %[[SELMUX5:.+]] = firrtl.mux(%{{.+}}, %a_1, %[[SELMUX11]]) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK:   %[[SELMUX6:.+]] = firrtl.mux(%{{.+}}, %a_0, %[[SELMUX5]]) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK:   firrtl.connect %b, %[[SELMUX6]] : !firrtl.uint<2>, !firrtl.uint<2>
+
 
 // COM: circuit Foo:
 // COM:   module Foo:

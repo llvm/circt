@@ -187,8 +187,6 @@ public:
 
   void visitExpr(SubfieldOp op, ArrayRef<Value> mapping);
   void visitExpr(SubindexOp op, ArrayRef<Value> mapping);
-  //  void visitExpr(SubaccessOp op, ArrayRef<Value> mapping);
-  //  void visitExpr(AsPassivePrimOp op, ArrayRef<Value> mapping);
 
 private:
   // The builder is set and maintained in the main loop.
@@ -196,20 +194,8 @@ private:
 };
 } // namespace
 
-#if 0
-void AggregateUserVisitor::visitExpr(AsPassivePrimOp op, ArrayRef<Value> mapping) {
-  Value repl = mapping[0];
-//  if (repl.getType().isa<FlipType>())
-//    repl = builder->createOrFold<AsPassivePrimOp>(repl);
-  op.replaceAllUsesWith(repl);
-  op.erase();  
-}
-#endif
-
 void AggregateUserVisitor::visitExpr(SubindexOp op, ArrayRef<Value> mapping) {
   Value repl = mapping[op.index()];
-  //  if (repl.getType().isa<FlipType>())
-  //    repl = builder->createOrFold<AsPassivePrimOp>(repl);
   op.replaceAllUsesWith(repl);
   op.erase();
 }
@@ -219,55 +205,9 @@ void AggregateUserVisitor::visitExpr(SubfieldOp op, ArrayRef<Value> mapping) {
   Value input = op.input();
   auto bundleType = input.getType().cast<BundleType>();
   Value repl = mapping[*bundleType.getElementIndex(op.fieldname())];
-  //  if (repl.getType().isa<FlipType>())
-  //    repl = builder->createOrFold<AsPassivePrimOp>(repl);
   op.replaceAllUsesWith(repl);
   op.erase();
 }
-
-#if 0
-void AggregateUserVisitor::visitExpr(SubaccessOp op, ArrayRef<Value> mapping) {
-  // Get the input bundle type.
-  Value input = op.input();
-  auto inputType = input.getType();
-  if (auto flipType = inputType.dyn_cast<FlipType>())
-    inputType = flipType.getElementType();
-
-  auto selectWidth =
-      op.index().getType().cast<FIRRTLType>().getBitWidthOrSentinel();
-
-  // if we were given a mapping, this is a write and the mapping is the write
-  // Value
-  for (size_t index = 0, e = inputType.cast<FVectorType>().getNumElements();
-       index < e; ++index) {
-    auto cond = builder->create<EQPrimOp>(
-        op.index(), builder->createOrFold<ConstantOp>(
-                        UIntType::get(op.getContext(), selectWidth),
-                        APInt(selectWidth, index)));
-    //                        if (isa<ConnectOp>(mapping[0].getDefiningOp()))
-    builder->create<WhenOp>(cond, false, [&]() {
-      // Recreate the write Path
-      Value leaf = builder->create<SubindexOp>(input, index);
-      for (int i = mapping.size() - 2; i > 0; --i)
-        leaf = builder->create<SubfieldOp>(
-            leaf, cast<SubfieldOp>(mapping[i].getDefiningOp()).fieldname());
-      if (leaf.getType() == mapping[0].getType())
-                            if (foldFlow(leaf) == Flow::Source || foldFlow(mapping[0]) == Flow::Sink)
-        builder->create<ConnectOp>(mapping[0], leaf);
-else
-        builder->create<ConnectOp>(leaf, mapping[0]);
-      else
-        builder->create<PartialConnectOp>(leaf, mapping[0]);
-    });
-    // else
-    //  builder->create<WhenOp>(cond, false, [&]() {
-    //    builder->create<PartialConnectOp>(builder->create<SubindexOp>(input,
-    //    index),
-    //                               mapping[0]);
-    //  });
-  }
-}
-#endif
 
 //===----------------------------------------------------------------------===//
 // Module Type Lowering
@@ -284,12 +224,12 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
   // type lowering on all operations.
   void lowerModule(Operation *op);
 
-  bool lowerArg(
-      FModuleOp module, size_t argIndex,
+  SmallVector<Value> lowerArg(
+      Operation* module, size_t argIndex,
       SmallVectorImpl<std::pair<ModulePortInfo, SmallVector<NamedAttribute>>>
           &newArgs);
-  std::pair<BlockArgument, firrtl::ModulePortInfo>
-  addArg(FModuleOp module, unsigned insertPt, FIRRTLType type, bool isOutput,
+  std::pair<Value, firrtl::ModulePortInfo>
+  addArg(Operation* module, unsigned insertPt, FIRRTLType type, bool isOutput,
          StringRef nameSuffix, ModulePortInfo &oldArg);
 
   // Helpers to manage state.
@@ -434,18 +374,19 @@ void TypeLoweringVisitor::lowerModule(Operation *op) {
 // Creates and returns a new block argument of the specified type to the
 // module. This also maintains the name attribute for the new argument,
 // possibly with a new suffix appended.
-std::pair<BlockArgument, firrtl::ModulePortInfo>
-TypeLoweringVisitor::addArg(FModuleOp module, unsigned insertPt,
+std::pair<Value, firrtl::ModulePortInfo>
+TypeLoweringVisitor::addArg(Operation* module, unsigned insertPt,
                             FIRRTLType type, bool isOutput,
                             StringRef nameSuffix, ModulePortInfo &oldArg) {
-  Block *body = module.getBodyBlock();
-
-  // Append the new argument.
-  auto newValue = body->insertArgument(insertPt, type);
-
-  auto nameStr = oldArg.name.getValue().str() + nameSuffix.str();
+  Value newValue;
+  if (auto mod = dyn_cast<FModuleOp>(module)) {
+    Block *body = mod.getBodyBlock();
+    // Append the new argument.
+    newValue = body->insertArgument(insertPt, type);
+  }
 
   // Save the name attribute for the new argument.
+  auto nameStr = oldArg.name.getValue().str() + nameSuffix.str();
   auto name = builder->getStringAttr(nameStr);
 
   // Populate the new arg attributes.
@@ -460,20 +401,17 @@ TypeLoweringVisitor::addArg(FModuleOp module, unsigned insertPt,
 }
 
 // Lower arguments with bundle type by flattening them.
-bool TypeLoweringVisitor::lowerArg(
-    FModuleOp module, size_t argIndex,
+SmallVector<Value> TypeLoweringVisitor::lowerArg(
+    Operation* module, size_t argIndex,
     SmallVectorImpl<std::pair<ModulePortInfo, SmallVector<NamedAttribute>>>
         &newArgs) {
-  auto arg = module.getPortArgument(argIndex);
 
   // Flatten any bundle types.
   SmallVector<FlatBundleFieldEntry>
-          fieldTypes = peelType(arg.getType());
-
-  if (fieldTypes.empty())
-    return false;
+          fieldTypes = peelType(newArgs[argIndex].first.type);
 
   SmallVector<Value> lowering;
+
   for (auto field : llvm::enumerate(fieldTypes)) {
     auto newValue =
         addArg(module, 1 + argIndex + field.index(), field.value().type,
@@ -484,9 +422,7 @@ bool TypeLoweringVisitor::lowerArg(
     lowering.push_back(newValue.first);
   }
 
-  processUsers(arg, lowering);
-
-  return true;
+  return lowering;
 }
 
 static Value cloneAccess(ImplicitLocOpBuilder *builder, Operation *op,
@@ -701,88 +637,71 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
 }
 
 void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
+  ImplicitLocOpBuilder theBuilder(extModule.getLoc(), context);
+  builder = &theBuilder;
+  
+  // Top level builder
   OpBuilder builder(context);
 
-  // Create an array of the result types and results names.
-  SmallVector<Type, 8> inputTypes;
-  SmallVector<NamedAttribute, 8> attributes;
-  SmallVector<Attribute, 8> argAttrDicts;
-
-  SmallVector<Attribute> portNames;
-  SmallVector<Direction> portDirections;
-  unsigned oldArgNumber = 0;
-  SmallString<8> attrNameBuf;
-  bool skip = true;
-
-  for (auto &port : extModule.getPorts()) {
-    // Flatten the port type.
-    SmallVector<FlatBundleFieldEntry, 8> fieldTypes = peelType(port.type);
-
-    // Pre-populate argAttrs with the current arg attributes that are not
-    // annotations.  Populate oldAnnotations with the current annotations.
+  // Lower the module block arguments.
+  SmallVector<unsigned> argsToRemove;
+  // First get all the info for existing ports
+  SmallVector<std::pair<ModulePortInfo, SmallVector<NamedAttribute>>> newArgs;
+  for (auto port : llvm::enumerate(extModule.getPorts())) {
     SmallVector<NamedAttribute> argAttrs;
-    AnnotationSet oldAnnotations =
-        AnnotationSet::forPort(extModule, oldArgNumber, argAttrs);
-
-    if (fieldTypes.empty()) {
-      // FIXME:
-      inputTypes.push_back(port.type);
-      portNames.push_back(port.name);
-      // Flip the direction if the field is an output.
-      portDirections.push_back(port.direction);
-      // Populate the new arg attributes.
-      argAttrDicts.push_back(oldAnnotations.getArgumentAttrDict(argAttrs));
-      ++oldArgNumber;
-      continue;
-    }
-
-    skip = false;
-
-    // For each field, add record its name and type.
-    for (auto field : fieldTypes) {
-      inputTypes.push_back(field.type);
-      Attribute pName = builder.getStringAttr("");
-      std::string nameStr;
-      if (port.name) {
-        nameStr = port.name.getValue().str();
-        pName = builder.getStringAttr((port.getName() + field.suffix).str());
-      }
-      nameStr += field.suffix;
-      portNames.push_back(pName);
-      // Flip the direction if the field is an output.
-      portDirections.push_back((Direction)(
-          (unsigned)getModulePortDirection(extModule, oldArgNumber) ^
-          field.isOutput));
-
-    }
-    ++oldArgNumber;
+    AnnotationSet::forPort(extModule, port.index(), argAttrs);
+    newArgs.push_back(std::make_pair(port.value(), argAttrs));
   }
 
-  if (skip)
-    return;
-
-  // Add port names attribute.
-  attributes.push_back(
-      {Identifier::get(mlir::function_like_impl::getArgDictAttrName(), context),
-       builder.getArrayAttr(argAttrDicts)});
-  attributes.push_back(
-      {Identifier::get("portNames", context), builder.getArrayAttr(portNames)});
-  attributes.push_back({Identifier::get(direction::attrKey, context),
-                        direction::packAttribute(portDirections, context)});
-
-  // Copy over any lingering attributes which are not "portNames", directions,
-  // or argument attributes.
-  for (auto a : extModule->getAttrs()) {
-    if (a.first == "portNames" || a.first == direction::attrKey ||
-        a.first == mlir::function_like_impl::getArgDictAttrName())
-      continue;
-    attributes.push_back(a);
+  for (size_t argIndex = 0; argIndex < newArgs.size(); ++argIndex) {
+    auto lowerings = lowerArg(extModule, argIndex, newArgs);
+    if (!lowerings.empty())
+      argsToRemove.push_back(argIndex);
+    // lowerArg might have invalidated any reference to newArgs, be careful
   }
 
-  // Set the attributes.
-  extModule->setAttrs(builder.getDictionaryAttr(attributes));
+  //Remove block args that have been lowered
+  for (auto ii = argsToRemove.rbegin(), ee = argsToRemove.rend(); ii != ee;
+       ++ii)
+    newArgs.erase(newArgs.begin() + *ii);
 
-  // Set the type and then bulk set all the names.
+  SmallVector<NamedAttribute, 8> newModuleAttrs;
+
+  // Copy over any attributes that weren't original argument attributes.
+  for (auto attr : extModule->getAttrDictionary())
+    // Drop old "portNames", directions, and argument attributes.  These are
+    // handled differently below.
+    if (attr.first != "portNames" && attr.first != direction::attrKey &&
+        attr.first != mlir::function_like_impl::getArgDictAttrName())
+      newModuleAttrs.push_back(attr);
+
+  SmallVector<Attribute> newArgNames;
+  SmallVector<Direction> newArgDirections;
+  SmallVector<Attribute, 8> newArgAttrs;
+  SmallVector<Type, 8> inputTypes;
+
+  for (auto &port : newArgs) {
+    newArgNames.push_back(port.first.name);
+    newArgDirections.push_back(port.first.direction);
+    newArgAttrs.push_back(
+        port.first.annotations.getArgumentAttrDict(port.second));
+        inputTypes.push_back(port.first.type);
+  }
+  newModuleAttrs.push_back(NamedAttribute(Identifier::get("portNames", context),
+                                          builder.getArrayAttr(newArgNames)));
+  newModuleAttrs.push_back(
+      NamedAttribute(Identifier::get(direction::attrKey, context),
+                     direction::packAttribute(newArgDirections, context)));
+
+  // Attach new argument attributes.
+  newModuleAttrs.push_back(NamedAttribute(
+      builder.getIdentifier(mlir::function_like_impl::getArgDictAttrName()),
+      builder.getArrayAttr(newArgAttrs)));
+
+  // Update the module's attributes.
+  extModule->setAttrs(newModuleAttrs);
+
+  // Keep the module's type up-to-date.
   extModule.setType(builder.getFunctionType(inputTypes, {}));
 }
 
@@ -805,10 +724,15 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
     newArgs.push_back(std::make_pair(port.value(), argAttrs));
   }
 
-  for (size_t argIndex = 0; argIndex < newArgs.size(); ++argIndex)
-    if (lowerArg(module, argIndex, newArgs))
+  for (size_t argIndex = 0; argIndex < newArgs.size(); ++argIndex) {
+    auto lowerings = lowerArg(module, argIndex, newArgs);
+    if (!lowerings.empty()) {
+      auto arg = module.getPortArgument(argIndex);
+      processUsers(arg, lowerings);
       argsToRemove.push_back(argIndex);
+    }
   // lowerArg might have invalidated any reference to newArgs, be careful
+  }
 
   // Remove block args that have been lowered.
   body->eraseArguments(argsToRemove);
@@ -847,7 +771,6 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
 
   // Update the module's attributes.
   module->setAttrs(newModuleAttrs);
-  newModuleAttrs.clear();
 
   // Keep the module's type up-to-date.
   auto moduleType = builder->getFunctionType(body->getArgumentTypes(), {});
