@@ -30,6 +30,8 @@ class Test(pycde.System):
     Parameterized(2)(x=c1)
 
 
+# CHECK: hw.module @Module
+# CHECK-NOT: hw.module @Module
 # CHECK: hw.module @Module_i1_i1_1
 # CHECK-NOT: hw.module @Module_i1_i1_1
 # CHECK: hw.module @Module_i1_i1_2

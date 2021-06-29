@@ -343,7 +343,7 @@ class _Generate:
     if "module_name" in self.params:
       module_name = self.params["module_name"]
     else:
-      module_name = self.create_module_name(op, input_ports, output_ports)
+      module_name = self.create_module_name(mod, op, input_ports, output_ports)
 
     if module_name not in self.generated_modules:
       with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
@@ -363,8 +363,14 @@ class _Generate:
         inst.attributes[name] = attr
       return inst
 
-  def create_module_name(self, op, input_ports, output_ports):
+  def create_module_name(self, mod, op, input_ports, output_ports):
     op_name = op.name.replace("pycde.", "")
+    existing_module_names = set(
+        mlir.ir.StringAttr(o.name).value
+        for o in mod.regions[0].blocks[0].operations)
+    if op_name not in existing_module_names:
+      return op_name
+
     input_port_types = "_".join(
         sorted(self.sanitize(type) for (_, type) in input_ports))
     output_port_types = "_".join(
