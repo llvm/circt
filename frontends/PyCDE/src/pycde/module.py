@@ -311,13 +311,11 @@ class _Generate:
   """Represents a generator. Stores the generate function and wraps it with the
   necessary logic to build an HWModule."""
 
+
+
   def __init__(self, gen_func):
     self.gen_func = gen_func
     self.modcls = None
-
-    # Track generated modules so we don't create unnecessary duplicates of
-    # modules that are structurally equivalent.
-    self.generated_modules = {}
 
   def __call__(self, op):
     """Build an HWModuleOp and run the generator as the body builder."""
@@ -355,36 +353,41 @@ class _Generate:
       module_name = self.params["module_name"]
     else:
       module_name = self.create_module_name(mod, op)
+      self.params["module_name"] = module_name
+    module_name = self.sanitize(module_name)
 
-    if module_name not in self.generated_modules:
+    # Track generated modules so we don't create unnecessary duplicates of
+    # modules that are structurally equivalent. If the module name exists in the
+    # top level MLIR module, assume that we've already generated it.
+    existing_module_names = [
+       o for o in mod.regions[0].blocks[0].operations
+       if mlir.ir.StringAttr(o.name).value == module_name]
+
+    if not existing_module_names:
       with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
-        gen_mod = ModuleDefinition(self.modcls,
-                                   module_name,
-                                   input_ports=input_ports,
-                                   output_ports=output_ports,
-                                   body_builder=self.gen_func)
-        self.generated_modules[module_name] = gen_mod
+        mod = ModuleDefinition(self.modcls,
+                               module_name,
+                               input_ports=input_ports,
+                               output_ports=output_ports,
+                               body_builder=self.gen_func)
+    else:
+      assert(len(existing_module_names) == 1)
+      mod = existing_module_names[0]
 
     # Build a replacement instance at the op to be replaced.
     with mlir.ir.InsertionPoint(op):
       mapping = {name.value: op.operands[i] for i, name in enumerate(op_names)}
-      inst = self.generated_modules[module_name].create(op.name,
-                                                        **mapping).operation
+      inst = mod.create(op.name, **mapping).operation
       for (name, attr) in attrs.items():
         inst.attributes[name] = attr
       return inst
 
   def create_module_name(self, mod, op):
-    name = op.name.replace("pycde.", "")
-    existing_module_names = set(
-        mlir.ir.StringAttr(o.name).value
-        for o in mod.regions[0].blocks[0].operations)
-    if name not in existing_module_names:
-      return name
-
+    name = op.name
     if len(self.params) > 0:
       name += "_" + "_".join(
-          sorted(self.sanitize(param) for param in self.params.values()))
+          str(value) for (_, value) in
+          sorted(self.params.items()))
 
     return name
 
