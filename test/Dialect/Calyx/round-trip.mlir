@@ -36,7 +36,7 @@ calyx.program {
 
   calyx.component @main() -> () {
     %in1, %out1 = calyx.cell "c0" @A : i8, i8
-    %in2, %out2 =  calyx.cell "c1" @A : i8, i8
+    %in2, %out2 = calyx.cell "c1" @A : i8, i8
     %c1_i1 = constant 1 : i1
 
     calyx.wires {
