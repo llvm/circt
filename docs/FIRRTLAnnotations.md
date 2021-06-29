@@ -657,7 +657,7 @@ This key allows the creation of a FIRRTL literal.
 
 The DataTapsAnnotation is a collection of all the data taps in a circuit. This
 will cause a data tap module to be emitted.  The DataTapsAnnotation implies
-DontTouchAnnotation.
+DontTouchAnnotation on the `blackbox` target.
 
 Example:
 
