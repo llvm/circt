@@ -60,4 +60,7 @@ firrtl.circuit "moduleAnno" {
   // expected-warning @+1 {{unprocessed annotation:'d'}}
   firrtl.module @foo(in %io_cpu_flush: !firrtl.uint<1>) 
     attributes { annotations = [{class = "d"}] } {}
+  firrtl.module @foo2(in %io_cpu_flush: !firrtl.uint<1>) 
+    attributes { annotations = [{class = "b"}] } {}
+  firrtl.extmodule @extModPorts2(in %io_cpu_flush: !firrtl.uint<1> {firrtl.annotations = [{class="c"}]} )
 }
