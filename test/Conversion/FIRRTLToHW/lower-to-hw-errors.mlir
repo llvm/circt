@@ -1,4 +1,4 @@
-// RUN: circt-opt -lower-firrtl-to-hw=emit-annotation-warning -verify-diagnostics  -split-input-file  %s
+// RUN: circt-opt -lower-firrtl-to-hw=emit-annotation-warning --mlir-print-op-on-diagnostic=false -verify-diagnostics  -split-input-file  %s
 // The firrtl.circuit should be removed, the main module name moved to an
 // attribute on the module.
 
