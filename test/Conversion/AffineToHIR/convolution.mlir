@@ -1,6 +1,6 @@
 func @convolution(
 %img: memref<16x16xi32>, 
-%kernel : memref<5x5xi32> {hir.bank=[{dim=0},{dim=1}]}, 
+%kernel : memref<5x5xi32> {hir.bank=[0,1]}, 
 %res : memref<14x14xi32>){
 
   %0 = constant 0:i32
@@ -29,7 +29,7 @@ func @convolution(
 
 func @test(
 %img: memref<16x16xi32>, 
-%kernel : memref<5x5xi32> {hir.bank=[{dim=0},{dim=1}]}, 
+%kernel : memref<5x5xi32> {hir.bank=[0,1]}, 
 %res : memref<14x14xi32>){
 
   %0 = constant 0:index

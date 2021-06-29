@@ -70,6 +70,9 @@ ArrayAttr getDefaultMemrefPorts(ConversionPatternRewriter &rewriter) {
   ports.push_back(helper::getDictionaryAttr(
       rewriter, "rd_latency",
       helper::getIntegerAttr(rewriter.getContext(), 1)));
+  ports.push_back(helper::getDictionaryAttr(
+      rewriter, "wr_latency",
+      helper::getIntegerAttr(rewriter.getContext(), 1)));
   return ArrayAttr::get(rewriter.getContext(), ports);
 }
 //------------------------------------------------------------------------------
@@ -91,14 +94,14 @@ LogicalResult AffineFuncLoweringImpl::lowerAffineFunction() {
     Type ty = originalInputTypes[i];
     if (auto memrefTy = ty.dyn_cast<mlir::MemRefType>()) {
       ArrayAttr bankDims;
-      Attribute bankAttr = originalFunctionOp.getArgAttr(i, "bank");
+      Attribute bankAttr = originalFunctionOp.getArgAttr(i, "hir.bank");
       if (!bankAttr)
         bankDims = ArrayAttr::get(context, SmallVector<Attribute>());
       else {
         bankDims = bankAttr.dyn_cast<ArrayAttr>();
         if (!bankDims) {
           return originalFunctionOp.emitError(
-              "'bank' attribute must be an array of integers.");
+              "'bank' attribute must be an ArrayAttr.");
         }
         for (auto attr : bankDims) {
           if (!attr.dyn_cast<IntegerAttr>())
@@ -123,15 +126,20 @@ LogicalResult AffineFuncLoweringImpl::lowerAffineFunction() {
       }
       inputTypes.push_back(hir::MemrefType::get(
           context, memrefTy.getShape(), memrefTy.getElementType(), dimKinds));
-    } else {
+      inputAttrs.push_back(helper::getDictionaryAttr(
+          rewriter, "hir.memref.ports", getDefaultMemrefPorts(rewriter)));
+    } else if (helper::isBuiltinType(ty)) {
       inputTypes.push_back(ty);
-    }
-    inputAttrs.push_back(helper::getDictionaryAttr(
-        rewriter, "ports", getDefaultMemrefPorts(rewriter)));
+      inputAttrs.push_back(helper::getDictionaryAttr(
+          rewriter, "hir.delay", helper::getIntegerAttr(context, 0)));
+    } else
+      return originalFunctionOp.emitError(
+          "Only builtin types and memrefs are supported.");
   }
+
   resultAttrs.append(
       originalResultTypes.size(),
-      helper::getDictionaryAttr(rewriter, "delay",
+      helper::getDictionaryAttr(rewriter, "hir.delay",
                                 helper::getIntegerAttr(context, 0)));
   mlir::FunctionType functionTy =
       FunctionType::get(context, inputTypes, originalResultTypes);
