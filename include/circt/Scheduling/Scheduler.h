@@ -41,7 +41,7 @@ namespace scheduling {
 ///    functional units, etc. -- operations are executed on instances/units of
 ///    an operator type.
 ///
-/// Operations and operator types must be explicitly registered. The registered
+/// Operations and operator types are stored explicitly. The registered
 /// operations induce a subgraph of the SSA graph. We implicitly include the
 /// dependences corresponding to its *def-use* relationships in the problem,
 /// e.g. if operation *y*'s second operand uses the first result produced by
@@ -86,12 +86,9 @@ public:
   // Aliases for the problem components
   //===--------------------------------------------------------------------===//
 public:
-  /// Client-side handle to uniquely identify an edge in the SSA graph.
-  using DefUseDependenceHandle = mlir::OpOperand *;
-  /// Client-side handle to encode an auxiliary dependence.
-  using AuxDependenceHandle = std::pair<Operation *, Operation *>;
-  /// Optional identifier, used to access dependence properties.
-  using DependenceId = detail::DependenceId;
+  /// A thin wrapper to allow a uniform handling of def-use and auxiliary
+  /// dependences.
+  using Dependence = detail::Dependence;
 
   /// Operator types are distinguished by name (chosen by the client).
   using OperatorType = mlir::Identifier;
@@ -101,21 +98,16 @@ public:
   //===--------------------------------------------------------------------===//
 protected:
   using OperationSet = llvm::SetVector<Operation *>;
-  using AuxDependenceMap =
-      llvm::DenseMap<Operation *, llvm::SmallSetVector<Operation *, 4>>;
+  using DependenceRange = llvm::iterator_range<detail::DependenceIterator>;
   using OperatorTypeSet = llvm::SetVector<OperatorType>;
 
-  using DefUseDependenceIdMap =
-      llvm::DenseMap<DefUseDependenceHandle, DependenceId>;
-  using AuxDependenceIdMap = llvm::DenseMap<AuxDependenceHandle, DependenceId>;
-
-  using Dependence = detail::Dependence;
-  using DependenceRange = llvm::iterator_range<detail::DependenceIterator>;
+  using AuxDependenceMap =
+      llvm::DenseMap<Operation *, llvm::SmallSetVector<Operation *, 4>>;
 
   template <typename T>
   using OperationProperty = llvm::DenseMap<Operation *, Optional<T>>;
   template <typename T>
-  using DependenceProperty = llvm::DenseMap<DependenceId, Optional<T>>;
+  using DependenceProperty = llvm::DenseMap<Dependence, Optional<T>>;
   template <typename T>
   using OperatorTypeProperty = llvm::DenseMap<OperatorType, Optional<T>>;
   template <typename T>
@@ -134,11 +126,6 @@ private:
   AuxDependenceMap auxDependences;
   OperatorTypeSet operatorTypes;
 
-  // On-demand assignment of dependence IDs
-  DependenceId nextDependenceId = 0;
-  DefUseDependenceIdMap defUseDependenceIds;
-  AuxDependenceIdMap auxDependenceIds;
-
   // Operation properties
   OperationProperty<OperatorType> linkedOperatorType;
   OperationProperty<unsigned> startTime;
@@ -153,15 +140,10 @@ public:
   /// Include \p op in this scheduling problem.
   void insertOperation(Operation *op) { operations.insert(op); }
 
-  /// Add an explicit auxiliary dependence to the scheduling problem.
-  void insertDependence(AuxDependenceHandle dep) {
-    auxDependences[std::get<1>(dep)].insert(std::get<0>(dep));
-  }
-
-  /// Lookup or assign the ID needed to access dependence properties associated
-  /// with \p dep.
-  DependenceId getOrAssignDependenceId(DefUseDependenceHandle dep);
-  DependenceId getOrAssignDependenceId(AuxDependenceHandle dep);
+  /// Include \p dep in the scheduling problem. Return failure if \p dep does
+  /// not represent a valid def-use or auxiliary dependence between operations.
+  /// The endpoints become registered operations w.r.t. the problem.
+  LogicalResult insertDependence(Dependence dep);
 
   /// Include \p opr in this scheduling problem.
   void insertOperatorType(OperatorType opr) { operatorTypes.insert(opr); }
@@ -216,6 +198,9 @@ public:
 
   void setLatency(OperatorType opr, unsigned val) { latency[opr] = val; }
 
+  /// Return the start time for \p op, as computed by the scheduler.
+  /// These start times comprise the basic problem's solution, i.e. the
+  /// *schedule*.
   Optional<unsigned> getStartTime(Operation *op) {
     return startTime.lookup(op);
   }
@@ -225,12 +210,12 @@ public:
   //===--------------------------------------------------------------------===//
 protected:
   virtual LogicalResult checkOperation(Operation *op);
-  virtual LogicalResult checkDependence(const Dependence &dep);
+  virtual LogicalResult checkDependence(Dependence dep);
   virtual LogicalResult checkOperatorType(OperatorType opr);
   virtual LogicalResult checkProblem();
 
   virtual LogicalResult verifyOperation(Operation *op);
-  virtual LogicalResult verifyDependence(const Dependence &dep);
+  virtual LogicalResult verifyDependence(Dependence dep);
   virtual LogicalResult verifyOperatorType(OperatorType opr);
   virtual LogicalResult verifyProblem();
 

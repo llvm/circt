@@ -23,22 +23,25 @@ using namespace circt::scheduling::detail;
 // Scheduler
 //===----------------------------------------------------------------------===//
 
-Scheduler::DependenceId
-Scheduler::getOrAssignDependenceId(DefUseDependenceHandle dep) {
-  auto it = defUseDependenceIds.find(dep);
-  if (it != defUseDependenceIds.end())
-    return it->second;
+LogicalResult Scheduler::insertDependence(Dependence dep) {
+  Operation *src = dep.getSource();
+  Operation *dst = dep.getDestination();
 
-  return defUseDependenceIds[dep] = nextDependenceId++;
-}
+  // Fail early on invalid dependences (src == dst == null), and def-use
+  // dependences that cannot be added because the source value is not the result
+  // of an operation (e.g., a BlockArgument).
+  if (!src || !dst)
+    return failure();
 
-Scheduler::DependenceId
-Scheduler::getOrAssignDependenceId(AuxDependenceHandle dep) {
-  auto it = auxDependenceIds.find(dep);
-  if (it != auxDependenceIds.end())
-    return it->second;
+  // record auxiliary dependences explicitly
+  if (dep.isAuxiliary())
+    auxDependences[dst].insert(src);
 
-  return auxDependenceIds[dep] = nextDependenceId++;
+  // auto-register the endpoints
+  operations.insert(src);
+  operations.insert(dst);
+
+  return success();
 }
 
 Scheduler::OperatorType Scheduler::getOrInsertOperatorType(StringRef name) {
@@ -60,9 +63,7 @@ LogicalResult Scheduler::checkOperation(Operation *op) {
   return success();
 }
 
-LogicalResult Scheduler::checkDependence(const Dependence &dep) {
-  return success();
-}
+LogicalResult Scheduler::checkDependence(Dependence dep) { return success(); }
 
 LogicalResult Scheduler::checkOperatorType(OperatorType opr) {
   if (!getLatency(opr))
@@ -72,26 +73,7 @@ LogicalResult Scheduler::checkOperatorType(OperatorType opr) {
   return success();
 }
 
-LogicalResult Scheduler::checkProblem() {
-  // Check the auxiliary dependences for validity, as these have been provided
-  // by the client. The def-use-dependences (from the SSA subgraph) only include
-  // registered operations by construction.
-  for (auto kv : auxDependences) {
-    for (auto &dep : getDependences(kv.first)) {
-      Operation *i = dep.src;
-      Operation *j = dep.dst;
-
-      if (!(hasOperation(i) && hasOperation(j)))
-        return containingOp->emitError()
-               << "Scheduling problem contains dependence with unregistered "
-                  "endpoints."
-               << "\n  from: " << *i << (hasOperation(i) ? "" : " (unreg)")
-               << "\n  to:   " << *j << (hasOperation(j) ? "" : " (unreg)");
-    }
-  }
-
-  return success();
-}
+LogicalResult Scheduler::checkProblem() { return success(); }
 
 /// Check overall problem by delegating to the component-specific checkers.
 LogicalResult Scheduler::check() {
@@ -117,14 +99,13 @@ LogicalResult Scheduler::verifyOperation(Operation *op) {
   return success();
 }
 
-LogicalResult Scheduler::verifyDependence(const Dependence &dep) {
-  Operation *i = dep.src;
-  Operation *j = dep.dst;
+LogicalResult Scheduler::verifyDependence(Dependence dep) {
+  Operation *i = dep.getSource();
+  Operation *j = dep.getDestination();
 
-  unsigned stI, latI, stJ;
-  stI = *getStartTime(i);
-  latI = *getLatency(*getLinkedOperatorType(i));
-  stJ = *getStartTime(j);
+  unsigned stI = *getStartTime(i);
+  unsigned latI = *getLatency(*getLinkedOperatorType(i));
+  unsigned stJ = *getStartTime(j);
 
   // check if i's result is available before j starts
   if (!(stI + latI <= stJ))
@@ -161,20 +142,48 @@ LogicalResult Scheduler::verify() {
 }
 
 //===----------------------------------------------------------------------===//
-// Dependence and DependenceIterator
+// Dependence
 //===----------------------------------------------------------------------===//
 
+Operation *Dependence::getSource() const {
+  return isDefUse() ? defUse->get().getDefiningOp() : auxSrc;
+}
+
+Operation *Dependence::getDestination() const {
+  return isDefUse() ? defUse->getOwner() : auxDst;
+}
+
+Optional<unsigned> Dependence::getSourceIndex() const {
+  if (!isDefUse())
+    return None;
+
+  assert(defUse->get().isa<OpResult>() && "source is not an operation");
+  return defUse->get().dyn_cast<OpResult>().getResultNumber();
+}
+
+Optional<unsigned> Dependence::getDestinationIndex() const {
+  if (!isDefUse())
+    return None;
+  return defUse->getOperandNumber();
+}
+
+Dependence::TupleRepr Dependence::getAsTuple() const {
+  return TupleRepr(getSource(), getDestination(), getSourceIndex(),
+                   getDestinationIndex());
+}
+
 bool Dependence::operator==(const Dependence &other) const {
-  return src == other.src && dst == other.dst && srcIdx == other.srcIdx &&
-         dstIdx == other.dstIdx && id == other.id;
+  return getAsTuple() == other.getAsTuple();
 };
 
-constexpr Dependence DependenceIterator::invalid;
+//===----------------------------------------------------------------------===//
+// DependenceIterator
+//===----------------------------------------------------------------------===//
 
 DependenceIterator::DependenceIterator(Scheduler &scheduler, Operation *op,
                                        bool end)
     : scheduler(scheduler), op(op), operandIdx(0), auxPredIdx(0),
-      auxPreds(nullptr), dependence(invalid) {
+      auxPreds(nullptr), dep() {
   if (!end) {
     if (scheduler.auxDependences.count(op))
       auxPreds = &scheduler.auxDependences[op];
@@ -184,37 +193,23 @@ DependenceIterator::DependenceIterator(Scheduler &scheduler, Operation *op,
 }
 
 void DependenceIterator::findNextDependence() {
+  // Yield dependences corresponding to values used by `op`'s operands...
   while (operandIdx < op->getNumOperands()) {
-    OpOperand &operand = op->getOpOperand(operandIdx++);
-    Operation *src = operand.get().getDefiningOp();
+    dep = Dependence(&op->getOpOperand(operandIdx++));
+    Operation *src = dep.getSource();
 
-    // Skip definitions that are not an operation, or unregistered in the
-    // scheduling problem.
-    if (!src || !scheduler.hasOperation(src))
-      continue;
-
-    OpResult result = operand.get().dyn_cast<OpResult>();
-    Optional<DependenceId> depId = None;
-    auto mapIt = scheduler.defUseDependenceIds.find(&operand);
-    if (mapIt != scheduler.defUseDependenceIds.end())
-      depId = mapIt->second;
-
-    dependence = {src, op, result.getResultNumber(), operandIdx, depId};
-    return;
+    // ... but only if they are outgoing from operations that are registered in
+    // the scheduling problem.
+    if (src && scheduler.hasOperation(src))
+      return;
   }
 
+  // Then, yield auxiliary dependences, if present.
   if (auxPreds && auxPredIdx < auxPreds->size()) {
-    Operation *src = (*auxPreds)[auxPredIdx++];
-
-    Optional<DependenceId> depId = None;
-    auto mapIt = scheduler.auxDependenceIds.find(
-        Scheduler::AuxDependenceHandle(src, op));
-    if (mapIt != scheduler.auxDependenceIds.end())
-      depId = mapIt->second;
-
-    dependence = {src, op, None, None, depId};
+    dep = Dependence((*auxPreds)[auxPredIdx++], op);
     return;
   }
 
-  dependence = invalid;
+  // An invalid dependence signals the end of iteration.
+  dep = Dependence();
 }
