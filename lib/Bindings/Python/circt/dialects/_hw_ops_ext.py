@@ -92,24 +92,20 @@ class ModuleLike:
 
     input_types = []
     input_names = []
-    self.input_indices = {}
     input_ports = list(input_ports)
     for i in range(len(input_ports)):
       port_name, port_type = input_ports[i]
       input_types.append(port_type)
       input_names.append(StringAttr.get(str(port_name)))
-      self.input_indices[port_name] = i
     attributes["argNames"] = ArrayAttr.get(input_names)
 
     output_types = []
     output_names = []
     output_ports = list(output_ports)
-    self.output_indices = {}
     for i in range(len(output_ports)):
       port_name, port_type = output_ports[i]
       output_types.append(port_type)
       output_names.append(StringAttr.get(str(port_name)))
-      self.output_indices[port_name] = i
     attributes["resultNames"] = ArrayAttr.get(output_names)
 
     attributes["type"] = TypeAttr.get(
@@ -226,6 +222,15 @@ class HWModuleOp(ModuleLike):
   @property
   def entry_block(self):
     return self.regions[0].blocks[0]
+
+  @property
+  def input_indices(self):
+    indices: dict[int, str] = {}
+    op_names = ArrayAttr(self.attributes["argNames"])
+    for idx, name in enumerate(op_names):
+      str_name = StringAttr(name).value
+      indices[str_name] = idx
+    return indices
 
   # Support attribute access to block arguments by name
   def __getattr__(self, name):

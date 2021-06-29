@@ -42,14 +42,12 @@ class Test(pycde.System):
     UnParameterized(x=c1)
 
 
-# CHECK: hw.module @Module
-# CHECK-NOT: hw.module @Module
-# CHECK: hw.module @Module_1
-# CHECK-NOT: hw.module @Module_1
-# CHECK: hw.module @Module_2
-# CHECK-NOT: hw.module @Module_2
-# CHECK: hw.module @UnParameterized
-# CHECK-NOT: hw.module @UnParameterized
+# CHECK: hw.module @pycde.Module_1
+# CHECK-NOT: hw.module @pycde.Module_1
+# CHECK: hw.module @pycde.Module_2
+# CHECK-NOT: hw.module @pycde.Module_2
+# CHECK: hw.module @pycde.UnParameterized
+# CHECK-NOT: hw.module @pycde.UnParameterized
 t = Test()
 t.generate(["construct"])
 t.print()
