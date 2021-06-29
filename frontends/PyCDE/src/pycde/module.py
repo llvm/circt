@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from .support import Value
+from .types import types
 
 from circt import support
 from circt.dialects import hw
@@ -62,7 +63,7 @@ class module:
     self.extern_name = extern_name
     if inspect.isclass(func_or_class):
       # If it's just a module class, we should wrap it immediately
-      self.mod = _module_base(func_or_class)
+      self.mod = _module_base(func_or_class, extern_name is not None)
       _register_generator(self.mod.__name__, "extern_instantiate",
                           self._instantiate,
                           mlir.ir.DictAttr.get(self.mod._parameters))
@@ -96,7 +97,8 @@ class module:
       cls = self.func(*args, **kwargs)
       if cls is None:
         raise ValueError("Parameterization function must return module class")
-      mod = _module_base(cls, param_values.arguments)
+      mod = _module_base(cls, self.extern_name is not None,
+                         param_values.arguments)
 
       if self.extern_name:
         _register_generator(cls.__name__, "extern_instantiate",
@@ -111,7 +113,6 @@ class module:
     # Get the port names from the attributes we stored them in.
     op_names_attrs = mlir.ir.ArrayAttr(op.attributes["opNames"])
     op_names = [mlir.ir.StringAttr(x) for x in op_names_attrs]
-    input_ports = [(n.value, o.type) for (n, o) in zip(op_names, op.operands)]
 
     if self.extern_mod is None:
       # Find the top MLIR module.
@@ -119,6 +120,7 @@ class module:
       while mod.name != "module":
         mod = mod.parent
 
+      input_ports = [(n.value, o.type) for (n, o) in zip(op_names, op.operands)]
       result_names_attrs = mlir.ir.ArrayAttr(op.attributes["resultNames"])
       result_names = [mlir.ir.StringAttr(x) for x in result_names_attrs]
       output_ports = [
@@ -137,7 +139,9 @@ class module:
 
     with mlir.ir.InsertionPoint(op):
       mapping = {name.value: op.operands[i] for i, name in enumerate(op_names)}
-      inst = self.extern_mod.create(op.name, **mapping).operation
+      result_types = [x.type for x in op.results]
+      inst = self.extern_mod.create(
+        op.name, **mapping, results=result_types).operation
       for (name, attr) in attrs.items():
         inst.attributes[name] = attr
       return inst
@@ -154,7 +158,7 @@ def externmodule(cls_or_name):
 
 # The real workhorse of this package. Wraps a module class, making it implement
 # MLIR's OpView parent class.
-def _module_base(cls, params={}):
+def _module_base(cls, extern: bool, params={}):
   """The CIRCT design entry module class decorator."""
 
   class mod(cls, mlir.ir.OpView):
@@ -172,7 +176,14 @@ def _module_base(cls, params={}):
           name: kwargs[name] for (name, _) in mod._input_ports if name in kwargs
       }
       pass_up_kwargs = {n: v for (n, v) in kwargs.items() if n not in inputs}
-      # TODO: Inspect signature, raise error if __init__ doesn't accept **kwargs
+      if len(pass_up_kwargs) > 0:
+        init_sig = inspect.signature(cls.__init__)
+        if not any(
+          [x == inspect.Parameter.VAR_KEYWORD for x in init_sig.parameters]):
+          raise ValueError("Module constructor doesn't have a **kwargs"
+                           " parameter, so the following are likely inputs"
+                           " which don't have a port: " + ",".join(
+                             pass_up_kwargs.keys()))
       cls.__init__(self, *args, **pass_up_kwargs)
 
       # Build a list of operand values for the operation we're gonna create.

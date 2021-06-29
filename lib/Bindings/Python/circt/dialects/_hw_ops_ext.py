@@ -18,6 +18,7 @@ class InstanceBuilder(support.NamedValueOpView):
                name,
                input_port_mapping,
                *,
+               results=None,
                parameters={},
                sym_name=None,
                loc=None,
@@ -31,9 +32,11 @@ class InstanceBuilder(support.NamedValueOpView):
       sym_name = StringAttr.get(sym_name)
     pre_args = [instance_name, module_name]
     post_args = [parameters, sym_name]
+    if results is None:
+      results = module.type.results
 
     super().__init__(hw.InstanceOp,
-                     module.type.results,
+                     results,
                      input_port_mapping,
                      pre_args,
                      post_args,
@@ -142,6 +145,7 @@ class ModuleLike:
   def create(self,
              name: str,
              parameters: Dict[str, object] = {},
+             results=None,
              loc=None,
              ip=None,
              **kwargs):
@@ -149,6 +153,7 @@ class ModuleLike:
                            name,
                            kwargs,
                            parameters=parameters,
+                           results=results,
                            loc=loc,
                            ip=ip)
 
@@ -186,7 +191,7 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
   # A dict of `OutputPortName` -> ValueLike must be converted to a list in port
   # order.
   unconnected_ports = []
-  for (name, _) in output_ports:
+  for (name, type) in output_ports:
     if name not in bb_ret:
       unconnected_ports.append(name)
       outputs.append(None)
@@ -195,13 +200,18 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
       if val is None:
         raise TypeError(
             f"body_builder return doesn't support type '{type(bb_ret[name])}'")
+      if val.type != type:
+        raise TypeError(
+            f"Output port '{name}' type ({val.type}) doesn't match declared"
+            f" type ({type})")
       outputs.append(val)
       bb_ret.pop(name)
   if len(unconnected_ports) > 0:
     raise support.UnconnectedSignalError(cls_name, unconnected_ports)
   if len(bb_ret) > 0:
     raise support.ConnectionError(
-        f"Could not map the follow to ports in {cls_name}: {bb_ret.keys}")
+        f"Could not map the following to output ports in {cls_name}: " +
+        ",".join(bb_ret.keys()))
 
   hw.OutputOp(outputs)
 
