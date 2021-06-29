@@ -354,29 +354,50 @@ class _Generate:
     }
 
     # Build the replacement HWModuleOp in the outer module.
-    module_key = str((op.name, sorted(input_ports), sorted(output_ports),
-                      sorted(self.params.items())))
     if "module_name" in self.params:
       module_name = self.params["module_name"]
     else:
-      module_name = op.name
-    if module_key not in self.generated_modules:
+      module_name = self.create_module_name(mod, op)
+
+    if module_name not in self.generated_modules:
       with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
         gen_mod = ModuleDefinition(self.modcls,
                                    module_name,
                                    input_ports=input_ports,
                                    output_ports=output_ports,
                                    body_builder=self.gen_func)
-        self.generated_modules[module_key] = gen_mod
+        self.generated_modules[module_name] = gen_mod
 
     # Build a replacement instance at the op to be replaced.
     with mlir.ir.InsertionPoint(op):
       mapping = {name.value: op.operands[i] for i, name in enumerate(op_names)}
-      inst = self.generated_modules[module_key].create(op.name,
-                                                       **mapping).operation
+      inst = self.generated_modules[module_name].create(op.name,
+                                                        **mapping).operation
       for (name, attr) in attrs.items():
         inst.attributes[name] = attr
       return inst
+
+  def create_module_name(self, mod, op):
+    name = op.name.replace("pycde.", "")
+    existing_module_names = set(
+        mlir.ir.StringAttr(o.name).value
+        for o in mod.regions[0].blocks[0].operations)
+    if name not in existing_module_names:
+      return name
+
+    if len(self.params) > 0:
+      name += "_" + "_".join(
+          sorted(self.sanitize(param) for param in self.params.values()))
+
+    return name
+
+  def sanitize(self, value):
+    sanitized_str = str(value)
+    for sub in ["!hw.", ">", "[", "]", ","]:
+      sanitized_str = sanitized_str.replace(sub, "")
+    for sub in ["<", "x", " "]:
+      sanitized_str = sanitized_str.replace(sub, "_")
+    return sanitized_str
 
 
 def generator(func):
