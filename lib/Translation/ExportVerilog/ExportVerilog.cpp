@@ -20,6 +20,7 @@
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/LoweringOptions.h"
+#include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Support/FileUtilities.h"
@@ -1844,13 +1845,21 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
   for (ModulePortInfo port : parent.getPorts()) {
     if (!port.isOutput())
       continue;
+
+    auto operand = op.getOperand(operandIndex);
+    if (operand.hasOneUse() && dyn_cast_or_null<InstanceOp>(operand.getDefiningOp())) {
+      ++operandIndex;
+      ++numStatementsEmitted;
+      continue;
+    }
+
     ops.clear();
     ops.insert(op);
     indent();
     if (isZeroBitType(port.type))
       os << "// Zero width: ";
     os << "assign " << emitter.outputNames[port.argNum] << " = ";
-    emitExpression(op.getOperand(operandIndex), ops);
+    emitExpression(operand, ops);
     os << ';';
     emitLocationInfoAndNewLine(ops);
     ++operandIndex;
@@ -2222,6 +2231,7 @@ LogicalResult StmtEmitter::visitSV(CaseZOp op) {
   return success();
 }
 
+#include <iostream>
 LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   StringRef prefix = "";
   if (op->hasAttr("doNotPrint"))
@@ -2337,10 +2347,28 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 
     // Emit the value as an expression.
     ops.clear();
-    // output ports were lowered to wire
-    if (elt.isOutput())
+    // output ports that are not connected to single use output ports were lowered to wire
+    OutputOp output = dyn_cast_or_null<OutputOp>(portVal.getUses().begin()->getOwner());
+    if (elt.isOutput() && portVal.hasOneUse() && output) {
+      auto module = output->getParentOfType<HWModuleOp>();
+      SmallVector<ModulePortInfo> portInfo = getModulePortInfo(module);
+
+      for (size_t portNum = 0, operandNum = 0; portNum < portInfo.size(); ++portNum) {
+        if (!portInfo[portNum].isOutput())
+          continue;
+
+        if (output->getOperand(operandNum) == portVal) {
+          os << portInfo[portNum].getName();
+          break;
+        }
+
+        ++operandNum;
+      }
+
+    } else if (elt.isOutput()) {
       portVal = getWireForValue(portVal);
-    emitExpression(portVal, ops);
+      emitExpression(portVal, ops);
+    } else emitExpression(portVal, ops);
     os << ')';
   }
   if (!isFirst) {
@@ -2607,22 +2635,30 @@ static void lowerInstanceResults(InstanceOp op) {
     if (onlyUseIsConnect(result))
       continue;
 
-    nameTmp.resize(namePrefixSize);
-    if (port.name)
-      nameTmp += port.name.getValue().str();
-    else
-      nameTmp += std::to_string(nextResultNo - 1);
-
-    auto newWire = builder.create<WireOp>(result.getType(), nameTmp);
-    while (!result.use_empty()) {
-      auto newWireRead = builder.create<ReadInOutOp>(newWire);
+    bool isOneUseOutput = false;
+    if (result.hasOneUse()) {
       OpOperand &use = *result.getUses().begin();
-      use.set(newWireRead);
-      newWireRead->moveBefore(use.getOwner());
+      isOneUseOutput = dyn_cast_or_null<OutputOp>(use.getOwner()) != nullptr;
     }
 
-    auto connect = builder.create<ConnectOp>(newWire, result);
-    connect->moveAfter(op);
+    if (!isOneUseOutput) {
+      nameTmp.resize(namePrefixSize);
+      if (port.name)
+        nameTmp += port.name.getValue().str();
+      else
+        nameTmp += std::to_string(nextResultNo - 1);
+
+      auto newWire = builder.create<WireOp>(result.getType(), nameTmp);
+      while (!result.use_empty()) {
+        auto newWireRead = builder.create<ReadInOutOp>(newWire);
+        OpOperand &use = *result.getUses().begin();
+        use.set(newWireRead);
+        newWireRead->moveBefore(use.getOwner());
+      }
+
+      auto connect = builder.create<ConnectOp>(newWire, result);
+      connect->moveAfter(op);
+    }
   }
 }
 
