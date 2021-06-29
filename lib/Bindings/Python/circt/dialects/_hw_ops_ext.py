@@ -411,5 +411,6 @@ class StructExtractOp:
   def create(struct_value, field_name: str):
     struct_value = support.get_value(struct_value)
     struct_type = hw.StructType(struct_value.type)
-    return hw.StructExtractOp(struct_type, struct_value,
+    field_type = struct_type.get_field(field_name)
+    return hw.StructExtractOp(field_type, struct_value,
                               StringAttr.get(field_name))

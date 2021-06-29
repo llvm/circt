@@ -465,6 +465,8 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
   auto type = op.getDataType();
   auto depth = op.depth();
 
+  // Note that this "type" is the type of the data field. Therefore, the
+  // fieldTypes are the leaf elements of the data field.
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
   flattenType(type, fieldTypes);
 
@@ -472,6 +474,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
   // cleared and re-used.
   SmallVector<Type, 4> resultPortTypes;
   llvm::SmallSetVector<Attribute, 4> resultPortNames;
+  SmallVector<Attribute, 8> lowerPortAnnotations;
 
   // Insert a unique port into resultPortNames with base name nameStr.
   auto uniquePortName = [&](StringRef baseName) {
@@ -493,20 +496,81 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     // constructed by checking the kind of the memory.
     resultPortTypes.clear();
     resultPortNames.clear();
+    lowerPortAnnotations.clear();
+
     for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
       auto kind = op.getPortKind(i);
       auto name = op.getPortName(i);
+      auto annotations = op.getPortAnnotation(i);
+
+      SmallVector<Attribute> loweredAttrs;
+      // Bypass unnessesary logics if the annotation array is empty.
+      if (!annotations.empty()) {
+        auto bundleType = op.getPortType(i).cast<BundleType>();
+
+        // Collect the field IDs of addr, en, clk, and data fields.
+        unsigned dataFieldID = 0;
+        SmallVector<unsigned, 4> otherFieldIDs;
+        unsigned idx = 0;
+        for (auto elem : bundleType.getElements()) {
+          auto fieldID = bundleType.getFieldID(idx++);
+          if (elem.name.getValue() == "data")
+            dataFieldID = fieldID;
+          else
+            otherFieldIDs.push_back(fieldID);
+        }
+
+        // Get the field ID of the current leaf element.
+        auto dataElementFieldID = dataFieldID + field.fieldID;
+
+        // Traverse all annotations and filter the annotations that should be
+        // attached.
+        for (auto attr : annotations) {
+          if (auto subAnno = attr.dyn_cast<SubAnnotationAttr>()) {
+            // The annotations of addr, en, and clk fields should be attached to
+            // all memories generated in this lowering.
+            if (llvm::any_of(otherFieldIDs, [&](unsigned fieldID) {
+                  return fieldID >= subAnno.getMinFieldID() &&
+                         fieldID <= subAnno.getMaxFieldID();
+                })) {
+              loweredAttrs.push_back(subAnno);
+              continue;
+            }
+
+            // If the target of the annotation is the current leaf element, the
+            // SubAnnotationAttr should be updated. Suppose the old target is
+            // "data.leaf", the new target should be "data". Therefore, the
+            // dataFieldID should be used here to construct the new
+            // SubAnnotationAttr.
+            if (dataElementFieldID >= subAnno.getMinFieldID() &&
+                dataElementFieldID <= subAnno.getMaxFieldID()) {
+              auto newSubAnno =
+                  SubAnnotationAttr::get(subAnno.getContext(), dataFieldID,
+                                         dataFieldID, subAnno.getAnnotations());
+              loweredAttrs.push_back(newSubAnno);
+            }
+          } else {
+            // If the annotation is targeting the whole memory port bundle,
+            // directly attach it.
+            loweredAttrs.push_back(attr);
+          }
+        }
+      }
 
       // Any read or write ports are just added.
       if (kind != MemOp::PortKind::ReadWrite) {
+        lowerPortAnnotations.push_back(builder->getArrayAttr(loweredAttrs));
         resultPortTypes.push_back(op.getTypeForPort(depth, field.type, kind));
         uniquePortName(name.getValue());
         continue;
       }
 
       // Any readwrite ports are lowered to 1x read and 1x write.
+      lowerPortAnnotations.push_back(builder->getArrayAttr(loweredAttrs));
       resultPortTypes.push_back(
           op.getTypeForPort(depth, field.type, MemOp::PortKind::Read));
+
+      lowerPortAnnotations.push_back(builder->getArrayAttr(loweredAttrs));
       resultPortTypes.push_back(
           op.getTypeForPort(depth, field.type, MemOp::PortKind::Write));
 
@@ -516,16 +580,13 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     }
 
     // Construct the new memory for this flattened field.
-    //
-    // TODO: Annotations are just copied to the lowered memory.
-    // Change this to copy all global annotations and only those which
-    // target specific ports.
     auto newName = op.name().str() + field.suffix;
     auto newMem = builder->create<MemOp>(
         resultPortTypes, op.readLatencyAttr(), op.writeLatencyAttr(),
         op.depthAttr(), op.ruwAttr(),
         builder->getArrayAttr(resultPortNames.getArrayRef()),
-        builder->getStringAttr(newName), op.annotations());
+        builder->getStringAttr(newName), op.annotations(),
+        builder->getArrayAttr(lowerPortAnnotations));
 
     // Setup the lowering to the new memory. We need to track both the
     // new memory index ("i") and the old memory index ("j") to deal

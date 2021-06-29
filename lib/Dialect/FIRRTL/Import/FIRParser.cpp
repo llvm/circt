@@ -2725,7 +2725,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
   int64_t depth = -1, readLatency = -1, writeLatency = -1;
   RUWAttr ruw = RUWAttr::Undefined;
 
-  SmallVector<std::pair<StringAttr, BundleType>, 4> ports;
+  SmallVector<std::pair<StringAttr, Type>, 4> ports;
 
   // Parse all the memfield records, which are indented more than the mem.
   while (1) {
@@ -2803,8 +2803,8 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
   // Canonicalize the ports into alphabetical order.
   // TODO: Move this into MemOp construction/canonicalization.
   llvm::array_pod_sort(ports.begin(), ports.end(),
-                       [](const std::pair<StringAttr, BundleType> *lhs,
-                          const std::pair<StringAttr, BundleType> *rhs) -> int {
+                       [](const std::pair<StringAttr, Type> *lhs,
+                          const std::pair<StringAttr, Type> *rhs) -> int {
                          return lhs->first.getValue().compare(
                              rhs->first.getValue());
                        });
@@ -2816,16 +2816,22 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     resultTypes.push_back(p.second);
   }
 
-  // TODO: This will be fixed in the MemOp port annotation PR.
-  auto annotations =
-      getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(), type);
-  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
-
   locationProcessor.setLoc(startTok.getLoc());
 
-  auto result = builder.create<MemOp>(
-      resultTypes, readLatency, writeLatency, depth, ruw,
-      builder.getArrayAttr(resultNames), name, annotations);
+  auto annotations = getSplitAnnotations(getModuleTarget() + ">" + id,
+                                         startTok.getLoc(), ports);
+
+  // Keep the name if a dont touch exist on either the instance or its ports.
+  auto dontTouch = hasDontTouch(annotations.first) ||
+                   llvm::any_of(annotations.second, [&](Attribute a) {
+                     return hasDontTouch(a.cast<ArrayAttr>());
+                   });
+  auto name = dontTouch ? id : filterUselessName(id);
+
+  auto result =
+      builder.create<MemOp>(resultTypes, readLatency, writeLatency, depth, ruw,
+                            builder.getArrayAttr(resultNames), name,
+                            annotations.first, annotations.second);
 
   UnbundledValueEntry unbundledValueEntry;
   unbundledValueEntry.reserve(result.getNumResults());

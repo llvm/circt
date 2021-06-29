@@ -134,6 +134,29 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar
 
 ; // -----
 
+; COM: Test result annotations of MemOp.
+circuit Foo: %[[{"a":null,"target":"~Foo|Foo>bar.r"},
+                {"b":null,"target":"~Foo|Foo>bar.r.data.baz"},
+                {"c":null,"target":"~Foo|Foo>bar.w.en"},
+                {"d":null,"target":"~Foo|Foo>bar.w.data.qux"}]]
+  module Foo:
+    mem bar:
+      data-type => {baz: UInt<8>, qux: UInt<8>}
+      depth => 16
+      reader => r
+      writer => w
+      read-latency => 0
+      write-latency => 1
+      read-under-write => undefined
+
+    ; CHECK-LABEL: module {
+    ; CHECK: firrtl.mem
+    ; CHECK-SAME: portAnnotations = [
+    ; CHECK-SAME: [{a}, #firrtl.subAnno<fieldID = [5, 5], {b}>],
+    ; CHECK-SAME: [#firrtl.subAnno<fieldID = [2, 2], {c}>, #firrtl.subAnno<fieldID = [6, 6], {d}>]
+
+; // -----
+
 ; COM: A ReferenceTarget/ComponentName pointing at a node should work.
 ; COM: This shouldn't crash if the node is in a nested block.
 circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.baz"}]]
@@ -430,18 +453,18 @@ circuit GCTDataTap : %[
     ; CHECK-LABEL: firrtl.circuit "GCTDataTap"
     ; CHECK-SAME: annotations = [{unrelatedAnnotation}]
     ; CHECK: firrtl.extmodule @DataTap
-    ; CHECK-SAME: %_0: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = [[ID:[0-9]+]] : i64, portID = [[PORT_ID:[0-9]+]] : i64}]},
-    ; CHECK-SAME: %_1: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey", id = [[ID]] : i64}]},
-    ; CHECK-SAME: %_2: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.DeletedDataTapKey", id = [[ID]] : i64}]},
-    ; CHECK-SAME: %_3: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.LiteralDataTapKey", literal = "UInt<16>(\22h2a\22)"}]}
-    ; CHECK-SAME: annotations = [{class = "sifive.enterprise.grandcentral.DataTapsAnnotation"}]
+    ; CHECK-SAME: %_0: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = [[ID:[0-9]+]] : i64, portID = [[PORT_ID:[0-9]+]] : i64}, {class = "firrtl.transforms.DontTouchAnnotation"}]},
+    ; CHECK-SAME: %_1: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey", id = [[ID]] : i64}, {class = "firrtl.transforms.DontTouchAnnotation"}]},
+    ; CHECK-SAME: %_2: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.DeletedDataTapKey", id = [[ID]] : i64}, {class = "firrtl.transforms.DontTouchAnnotation"}]},
+    ; CHECK-SAME: %_3: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.LiteralDataTapKey", literal = "UInt<16>(\22h2a\22)"}, {class = "firrtl.transforms.DontTouchAnnotation"}]}
+    ; CHECK-SAME: annotations = [{class = "sifive.enterprise.grandcentral.DataTapsAnnotation"}, {class = "firrtl.transforms.DontTouchAnnotation"}]
 
     ; CHECK: firrtl.extmodule @BlackBox
-    ; CHECK-SAME: annotations = [{class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey", id = [[ID]] : i64, internalPath = "baz.qux"}]
+    ; CHECK-SAME: annotations = [{class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey", id = [[ID]] : i64, internalPath = "baz.qux"}, {class = "firrtl.transforms.DontTouchAnnotation"}]
 
     ; CHECK: firrtl.module @GCTDataTap
     ; CHECK: firrtl.reg
-    ; CHECk-SAME: annotations = [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = [[ID]] : i64, portID = [[PORT_ID]] : i64}]
+    ; CHECk-SAME: annotations = [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = [[ID]] : i64, portID = [[PORT_ID]] : i64}, {class = "firrtl.transforms.DontTouchAnnotation"}]
 
 ; // -----
 
