@@ -2295,10 +2295,18 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   auto opArgs = op.inputs();
   auto opResults = op.getResults();
   bool isFirst = true; // True until we print a port.
+  SmallVector<Value, 32> portValues;
   for (auto &elt : portInfo) {
     // Figure out which value we are emitting.
-    Value portVal = elt.isOutput() ? opResults[elt.argNum] : opArgs[elt.argNum];
-    bool isZeroWidth = isZeroBitType(elt.type);
+    portValues.push_back(elt.isOutput() ? opResults[elt.argNum]
+                                        : opArgs[elt.argNum]);
+  }
+
+  for (size_t portNum = 0, e = portValues.size(); portNum < e; ++portNum) {
+    // Figure out which value we are emitting.
+    auto &elt = portInfo[portNum];
+    Value portVal = portValues[portNum];
+    bool isZeroWidth = isZeroBitType(portVal.getType());
 
     // Decide if we should print a comma.  We can't do this if we're the first
     // port or if all the subsequent ports are zero width.
@@ -2308,7 +2316,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
         shouldPrintComma = false;
         for (size_t i = (&elt - portInfo.data()) + 1, e = portInfo.size();
              i != e; ++i)
-          if (!isZeroBitType(portInfo[i].type)) {
+          if (!isZeroBitType(portValues[i].getType())) {
             shouldPrintComma = true;
             break;
           }
