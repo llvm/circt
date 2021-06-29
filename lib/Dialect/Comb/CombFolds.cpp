@@ -988,8 +988,7 @@ OpFoldResult ICmpOp::fold(ArrayRef<Attribute> constants) {
   return {};
 }
 
-static std::pair<size_t, size_t>
-computeCommonPrefixAndSuffix(const OperandRange &a, const OperandRange &b)
+static std::pair<size_t, size_t> computeCommonPrefixAndSuffix(const OperandRange &a, const OperandRange &b)
 {
   size_t commonPrefixLength = 0;
   size_t commonSuffixLength = 0;
@@ -1011,7 +1010,7 @@ computeCommonPrefixAndSuffix(const OperandRange &a, const OperandRange &b)
   return { commonPrefixLength, commonSuffixLength };
 }
 
-static bool predicateIsSigned (const ICmpPredicate & predicate)
+static bool isPredicateSigned (const ICmpPredicate & predicate)
 {
   switch (predicate)  {
     case ICmpPredicate::ult:
@@ -1248,7 +1247,7 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
             }
           }
 
-          if (!predicateIsSigned(op.predicate()) || !commonPrefixContainsSignBit) {
+          if (!isPredicateSigned(op.predicate()) || !commonPrefixContainsSignBit) {
             return replaceWith(op.predicate(), directOrCat(lhsOnly), directOrCat(rhsOnly));
           } 
 
