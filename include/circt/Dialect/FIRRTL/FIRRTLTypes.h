@@ -294,7 +294,7 @@ public:
   llvm::Optional<BundleElement> getElement(StringRef name);
 
   /// Look up an element by index.  This returns None on failure.
-  llvm::Optional<BundleElement> getElement(uint32_t  name);
+  llvm::Optional<BundleElement> getElement(uint32_t  index);
 
   /// Look up an element type by name.
   FIRRTLType getElementType(StringRef name);
