@@ -134,7 +134,7 @@ private:
   FIRToken lexNumber(const char *tokStart);
   FIRToken lexFloatingPoint(const char *tokStart);
   void skipComment();
-  FIRToken lexString(const char *tokStart, const bool isRaw);
+  FIRToken lexString(const char *tokStart, bool isRaw);
 
   const llvm::SourceMgr &sourceMgr;
   mlir::MLIRContext *const context;

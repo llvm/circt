@@ -66,7 +66,7 @@ std::string FIRToken::getStringValue(StringRef spelling) {
 
   std::string result;
   result.reserve(bytes.size());
-  for (unsigned i = 0, e = bytes.size(); i != e;) {
+  for (size_t i = 0, e = bytes.size(); i != e;) {
     auto c = bytes[i++];
     if (c != '\\') {
       result.push_back(c);
@@ -125,7 +125,7 @@ std::string FIRToken::getRawStringValue(StringRef spelling) {
 
   std::string result;
   result.reserve(bytes.size());
-  for (unsigned i = 0, e = bytes.size(); i != e;) {
+  for (size_t i = 0, e = bytes.size(); i != e;) {
     auto c = bytes[i++];
     if (c != '\\') {
       result.push_back(c);
@@ -437,7 +437,7 @@ void FIRLexer::skipComment() {
 /// RawString      ::= '\'' UnquotedString? '\''
 /// UnquotedString ::= ( '\\\'' | '\\"' | ~[\r\n] )+?
 ///
-FIRToken FIRLexer::lexString(const char *tokStart, const bool isRaw) {
+FIRToken FIRLexer::lexString(const char *tokStart, bool isRaw) {
   while (1) {
     switch (*curPtr++) {
     case '"': // This is the end of the string literal.
