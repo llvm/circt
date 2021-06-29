@@ -571,7 +571,9 @@ Creates a SystemVerilog interface for each bundle type.
 | parent      | string   | Module target of the module the interface will be referencing            |
 | view        | object   | AugmentedBundleType representing the interface                           |
 
-Grand Central Interfaces are used to emit SystemVerilog interfaces with stable names.
+Grand Central Interfaces are used to emit SystemVerilog interfaces with stable
+names. `SerializedViewAnnotation` implies `DontTouchAnnotation` on any
+`AugmentedGroundType.ref` target.
 
 Example:
 ```json
@@ -612,9 +614,9 @@ Grand Central Taps are a tool for representing cross module references. They
 enable users to "tap" into signal anywhere in the module hierarchy and treat
 them as local, read-only signals.
 
-DataTaps annotations are used to fill in the body of a FIRRTL external module
-with cross-module references to other modules.  Each DataTapKey corresponds to
-one output port on the DataTapsAnnotation external module.
+`DataTaps` annotations are used to fill in the body of a FIRRTL external module
+with cross-module references to other modules.  Each `DataTapKey` corresponds
+to one output port on the `DataTapsAnnotation` external module.
 
 #### ReferenceDataTapKey
 
@@ -655,9 +657,9 @@ This key allows the creation of a FIRRTL literal.
 | blackbox    | string   | ExtModule name of the black box with ports referenced by the keys |
 | keys        | array    | List of DataTapKeys                                               |
 
-The DataTapsAnnotation is a collection of all the data taps in a circuit. This
-will cause a data tap module to be emitted.  The DataTapsAnnotation implies
-DontTouchAnnotation on the `blackbox` target.
+The `DataTapsAnnotation` is a collection of all the data taps in a circuit.
+This will cause a data tap module to be emitted.  The `DataTapsAnnotation`
+implies `DontTouchAnnotation` on any `ReferenceDataTapKey.source` target.
 
 Example:
 
@@ -699,7 +701,7 @@ FIRRTL memory vectors.
 | taps        | array of strings | An array of components corresponding to the elements of the tap vector |
 | source      | string           | Reference target to a FIRRTL memory element                            |
 
-MemoryTapAnnotation is used to create a data tap to a FIRRTL memory. The
+`MemoryTapAnnotation` is used to create a data tap to a FIRRTL memory. The
 contents of the MemTap module are the cross-module references to each row of
 the tapped memory. Attaching this annotation to memories with aggregate data
 types is not supported.
