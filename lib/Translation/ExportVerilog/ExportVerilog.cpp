@@ -2231,7 +2231,6 @@ LogicalResult StmtEmitter::visitSV(CaseZOp op) {
   return success();
 }
 
-#include <iostream>
 LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   StringRef prefix = "";
   if (op->hasAttr("doNotPrint"))
