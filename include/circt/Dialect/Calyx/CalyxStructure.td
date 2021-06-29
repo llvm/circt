@@ -36,10 +36,8 @@ def ComponentOp : CalyxOp<"component", [
     Symbol,
     FunctionLike,
     IsolatedFromAbove,
-    // TODO(Calyx): Need to eventually expose the output ports.
-    NoTerminator,
     SingleBlock,
-    SymbolTable
+    NoTerminator
   ]> {
   let summary = "Calyx Component";
   let description = [{
@@ -50,7 +48,8 @@ def ComponentOp : CalyxOp<"component", [
     (2) The cells, wires, and control schedule.
     ```mlir
       calyx.component @MyComponent(%in1: i32) -> (%out1: i8) {
-        calyx.cells { ... }
+        %in, %out = "c0" @SomeComponent : i32, i32
+
         calyx.wires { ... }
         calyx.control { ... }
       }
@@ -87,29 +86,9 @@ def ComponentOp : CalyxOp<"component", [
   let parser = "return ::parse$cppClass(parser, result);";
 }
 
-def CellsOp : CalyxContainer<"cells", [
-    HasParent<"ComponentOp">,
-    IsolatedFromAbove
-  ]> {
-  let summary = "Calyx Cells";
-  let description = [{
-    The "calyx.cells" operation represents a container for
-    the sub-components that are used within the parent
-    component. This may only contain `calyx.cell` ops.
-
-    ```mlir
-      calyx.cells {
-        %in0 = calyx.cell "a0" @A : i64
-        %in1, %out0 = calyx.cell "b0" @B : i132, i8
-      }
-    ```
-  }];
-
-  let verifier = "return ::verify$cppClass(*this);";
-}
-
 def WiresOp : CalyxContainer<"wires", [
-    HasParent<"ComponentOp">
+    HasParent<"ComponentOp">,
+    SymbolTable
   ]> {
   let summary = "Calyx Wires";
   let description = [{
@@ -152,7 +131,7 @@ def ControlOp : CalyxContainer<"control", [
 }
 
 def CellOp : CalyxOp<"cell", [
-    HasParent<"CellsOp">
+    // HasParent<"ComponentOp">
   ]> {
   let summary = "Calyx Cell";
   let description = [{
@@ -187,11 +166,9 @@ def CellOp : CalyxOp<"cell", [
 
 def GroupOp : CalyxOp<"group", [
     HasParent<"WiresOp">,
+    NoRegionArguments,
     RegionKindInterface,
-    // TODO(Calyx): When assignments are added:
-    // SingleBlockImplicitTerminator<>
     SingleBlock,
-    NoTerminator,
     Symbol
   ]> {
   let summary = "Calyx Group";
@@ -204,8 +181,8 @@ def GroupOp : CalyxOp<"group", [
 
     ```mlir
       calyx.group @MyGroup {
-        // TODO(Calyx): Add assignments when
-        // they are in the Calyx dialect.
+        calyx.assign %1, %2 : i32
+        calyx.done %3 : i1
       }
     ```
   }];
@@ -222,4 +199,34 @@ def GroupOp : CalyxOp<"group", [
 
   let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = "$sym_name $body attr-dict";
+}
+
+// TODO(Calyx): Add optional guard to AssignOp and DoneOp.
+def AssignOp : CalyxOp<"assign", [
+    SameTypeOperands
+  ]> {
+  let summary = "Calyx Assignment";
+  let description = [{
+    The "calyx.assign" operation represents a non-blocking
+    assignment. An assignment may optionally be
+    guarded. This operation should only be instantiated in the
+    "calyx.wires" section or a "calyx.group".
+  }];
+  let arguments = (ins AnyType:$dest, AnyType:$src);
+  let assemblyFormat = "$dest `=` $src attr-dict `:` type($src)";
+  let verifier = "return ::verify$cppClass(*this);";
+}
+
+def DoneOp : CalyxOp<"done", [
+    HasParent<"GroupOp">,
+    Terminator
+  ]> {
+    let summary = "Calyx Done Port";
+    let description = [{
+      The "calyx.done" operation represents a port on a
+      Calyx group that signifies when the group is finished.
+    }];
+
+    let arguments = (ins AnyType:$src);
+    let assemblyFormat = "$src attr-dict `:` type($src)";
 }
