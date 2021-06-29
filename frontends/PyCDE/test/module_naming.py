@@ -18,6 +18,16 @@ def Parameterized(param):
   return Module
 
 
+@pycde.module
+class UnParameterized:
+  x = pycde.Input(pycde.types.i1)
+  y = pycde.Output(pycde.types.i1)
+
+  @pycde.generator
+  def construct(mod):
+    return {"y": mod.x}
+
+
 class Test(pycde.System):
   inputs = []
   outputs = []
@@ -28,6 +38,8 @@ class Test(pycde.System):
     Parameterized(1)(x=c1)
     Parameterized(2)(x=c1)
     Parameterized(2)(x=c1)
+    UnParameterized(x=c1)
+    UnParameterized(x=c1)
 
 
 # CHECK: hw.module @Module
@@ -36,6 +48,8 @@ class Test(pycde.System):
 # CHECK-NOT: hw.module @Module_1
 # CHECK: hw.module @Module_2
 # CHECK-NOT: hw.module @Module_2
+# CHECK: hw.module @UnParameterized
+# CHECK-NOT: hw.module @UnParameterized
 t = Test()
-t.generate()
+t.generate(["construct"])
 t.print()

@@ -364,16 +364,18 @@ class _Generate:
       return inst
 
   def create_module_name(self, mod, op):
-    op_name = op.name.replace("pycde.", "")
+    name = op.name.replace("pycde.", "")
     existing_module_names = set(
         mlir.ir.StringAttr(o.name).value
         for o in mod.regions[0].blocks[0].operations)
-    if op_name not in existing_module_names:
-      return op_name
+    if name not in existing_module_names:
+      return name
 
-    param_values = "_".join(
-        sorted(self.sanitize(param) for param in self.params.values()))
-    return "_".join([op_name, param_values])
+    if len(self.params) > 0:
+      name += "_" + "_".join(
+          sorted(self.sanitize(param) for param in self.params.values()))
+
+    return name
 
   def sanitize(self, value):
     sanitized_str = str(value)
