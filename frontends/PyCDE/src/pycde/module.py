@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from .support import Value, zeroconst
+from .support import Value
 from .types import types
 
 from circt import support
@@ -194,12 +194,9 @@ def _module_base(cls, extern: bool, params={}):
           value = support.get_value(inputs[name])
           assert value is not None
         else:
-          if extern:
-            value = zeroconst(type)
-          else:
-            backedge = BackedgeBuilder.current().create(type, name, self)
-            self.backedges[idx] = backedge
-            value = backedge.result
+          backedge = BackedgeBuilder.current().create(type, name, self)
+          self.backedges[idx] = backedge
+          value = backedge.result
         input_ports_values.append(value)
 
       # Set up the op attributes.
