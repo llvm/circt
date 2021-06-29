@@ -284,6 +284,10 @@ public:
     return Base::get(context, functionTy, inputAttrs, resultAttrs);
   }
 
+  static LogicalResult verify(function_ref<InFlightDiagnostic()> emitError,
+                              FunctionType functionTy,
+                              ArrayRef<DictionaryAttr> inputAttrs,
+                              ArrayRef<DictionaryAttr> resultAttrs);
   FunctionType getFunctionType() { return getImpl()->functionTy; }
   ArrayRef<DictionaryAttr> getInputAttrs() { return getImpl()->inputAttrs; }
   ArrayRef<DictionaryAttr> getResultAttrs() { return getImpl()->resultAttrs; }

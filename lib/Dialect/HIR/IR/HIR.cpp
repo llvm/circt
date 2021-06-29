@@ -102,6 +102,56 @@ ParseResult parseBusPortsAttr(OpAsmParser &parser,
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
+// Type members.
+//------------------------------------------------------------------------------
+
+LogicalResult FuncType::verify(function_ref<InFlightDiagnostic()> emitError,
+                               FunctionType functionTy,
+                               ArrayRef<DictionaryAttr> inputAttrs,
+                               ArrayRef<DictionaryAttr> resultAttrs) {
+  auto inputTypes = functionTy.getInputs();
+  if (inputAttrs.size() != inputTypes.size())
+    return emitError() << "Number of input attributes is not same as number of "
+                          "input types.";
+  for (size_t i = 0; i < inputTypes.size(); i++) {
+    if (helper::isBuiltinType(inputTypes[i])) {
+      auto delayNameAndAttr = inputAttrs[i].getNamed("hir.delay");
+      if (!delayNameAndAttr.hasValue())
+        return emitError() << "Expected hir.delay in input attributes "
+                              "dictionary for input arg "
+                           << std::to_string(i) << ".";
+      if (!delayNameAndAttr->second.dyn_cast<IntegerAttr>())
+        return emitError() << "Expected hir.delay attribute to be an "
+                              "IntegerAttr for input arg"
+                           << std::to_string(i) << ".";
+    } else if (inputTypes[i].dyn_cast<hir::MemrefType>()) {
+      auto memrefPortsNameAndAttr = inputAttrs[i].getNamed("hir.memref.ports");
+      if (!memrefPortsNameAndAttr.hasValue())
+        return emitError() << "Expected hir.memref.ports in input attributes "
+                              "dictionary for input arg "
+                           << std::to_string(i) << ".";
+      if (!memrefPortsNameAndAttr->second.dyn_cast<ArrayAttr>())
+        return emitError() << "Expected hir.memref.ports attribute to be an "
+                              "ArrayAttr for input arg"
+                           << std::to_string(i) << ".";
+    } else if (inputTypes[i].dyn_cast<hir::BusType>()) {
+      auto memrefPortsNameAndAttr = inputAttrs[i].getNamed("hir.bus.ports");
+      if (!memrefPortsNameAndAttr.hasValue())
+        return emitError() << "Expected hir.bus.ports in input attributes "
+                              "dictionary for input arg "
+                           << std::to_string(i) << ".";
+      if (!memrefPortsNameAndAttr->second.dyn_cast<ArrayAttr>())
+        return emitError() << "Expected hir.bus.ports attribute to be an "
+                              "ArrayAttr for input arg"
+                           << std::to_string(i) << ".";
+    }
+  }
+  return success();
+}
+
+//------------------------------------------------------------------------------
+
+//------------------------------------------------------------------------------
 // Operation parsers.
 //------------------------------------------------------------------------------
 /// CallOp
