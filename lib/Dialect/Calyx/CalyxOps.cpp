@@ -275,7 +275,7 @@ static LogicalResult verifyAssignOp(AssignOp assign) {
   if (isa<GroupOp>(parent) || isa<WiresOp>(parent))
     return success();
   return assign.emitOpError(
-      "should only be contained in \"calyx.wires\" or \"calyx.group\"");
+      "should only be contained in 'calyx.wires' or 'calyx.group'");
 }
 
 //===----------------------------------------------------------------------===//
