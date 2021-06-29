@@ -131,7 +131,7 @@ def ControlOp : CalyxContainer<"control", [
 }
 
 def CellOp : CalyxOp<"cell", [
-    // HasParent<"ComponentOp">
+    HasParent<"ComponentOp">
   ]> {
   let summary = "Calyx Cell";
   let description = [{
