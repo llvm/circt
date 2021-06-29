@@ -1,5 +1,4 @@
-//===- LowerBundleVectorTypes.cpp - Expand WhenOps into muxed operations ---*-
-// C++ -*-===//
+//===- LowerBundleVectorTypes.cpp - Lower Aggregate Types -------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -23,24 +22,17 @@
 using namespace circt;
 using namespace firrtl;
 
-/// Is this an aggregate type?
-static FIRRTLType getAggregateType(Type type) {
-  if (type.isa<BundleType>() || type.isa<FVectorType>())
-    return type.cast<FIRRTLType>();
-  return nullptr;
-}
-
 // TODO: check all argument types
 namespace {
-// This represents a flattened bundle field element.
+/// This represents a flattened bundle field element.
 struct FlatBundleFieldEntry {
-  // This is the underlying ground type of the field.
+  /// This is the underlying ground type of the field.
   FIRRTLType type;
-  // the index in the parent type
+  /// The index in the parent type
   size_t index;
-  // This is a suffix to add to the field name to make it unique.
+  /// This is a suffix to add to the field name to make it unique.
   SmallString<16> suffix;
-  // This indicates whether the field was flipped to be an output.
+  /// This indicates whether the field was flipped to be an output.
   bool isOutput;
 
   FlatBundleFieldEntry(const FIRRTLType &type, size_t index, StringRef suffix,
@@ -49,7 +41,7 @@ struct FlatBundleFieldEntry {
 };
 } // end anonymous namespace
 
-// Peal one layer of an aggregate type into its components.
+/// Peel one layer of an aggregate type into its components.
 static SmallVector<FlatBundleFieldEntry> peelType(Type type) {
   SmallVector<FlatBundleFieldEntry> retval;
   TypeSwitch<Type>(type)
@@ -88,18 +80,14 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
                           (op.name() + suffix).str(), op.annotations());
 }
 
-// Look through and collect subfields leading to a subaccess
+/// Look through and collect subfields leading to a subaccess.
 static SmallVector<Operation *> getSAWritePath(Operation *op) {
   SmallVector<Operation *> retval;
   Value lhs = op->getOperand(0);
-  while (true) {
-    if (lhs.getDefiningOp() &&
-        isa<SubfieldOp, SubindexOp, SubaccessOp>(lhs.getDefiningOp())) {
-      retval.push_back(lhs.getDefiningOp());
-      lhs = lhs.getDefiningOp()->getOperand(0);
-    } else {
-      break;
-    }
+  auto defOp = lhs.getDefiningOp();
+  while (defOp && isa<SubfieldOp, SubindexOp, SubaccessOp>(defOp)) {
+    retval.push_back(defOp);
+    defOp = defOp->getOperand(0).getDefiningOp();
   }
   // Trim to the subaccess
   while (!retval.empty() && !isa<SubaccessOp>(retval.back()))
@@ -189,7 +177,7 @@ public:
   void visitExpr(SubindexOp op, ArrayRef<Value> mapping);
 
 private:
-  // The builder is set and maintained in the main loop.
+  /// The builder is set and maintained in the main loop.
   ImplicitLocOpBuilder *builder;
 };
 } // namespace
@@ -220,16 +208,16 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
   using FIRRTLVisitor<TypeLoweringVisitor>::visitExpr;
   using FIRRTLVisitor<TypeLoweringVisitor>::visitStmt;
 
-  // If the referenced operation is a FModuleOp or an FExtModuleOp, perform
-  // type lowering on all operations.
+  /// If the referenced operation is a FModuleOp or an FExtModuleOp, perform
+  /// type lowering on all operations.
   void lowerModule(Operation *op);
 
   SmallVector<Value> lowerArg(
-      Operation* module, size_t argIndex,
+      Operation *module, size_t argIndex,
       SmallVectorImpl<std::pair<ModulePortInfo, SmallVector<NamedAttribute>>>
           &newArgs);
   std::pair<Value, firrtl::ModulePortInfo>
-  addArg(Operation* module, unsigned insertPt, FIRRTLType type, bool isOutput,
+  addArg(Operation *module, unsigned insertPt, FIRRTLType type, bool isOutput,
          StringRef nameSuffix, ModulePortInfo &oldArg);
 
   // Helpers to manage state.
@@ -254,18 +242,19 @@ private:
   bool processSAPath(Operation *);
   void lowerBlock(Block *);
   void lowerSAWritePath(Operation *, ArrayRef<Operation *> writePath);
-  void lowerProducer(Operation *op,
-                     std::function<Operation *(FlatBundleFieldEntry, StringRef,
+  void
+  lowerProducer(Operation *op,
+                llvm::function_ref<Operation *(FlatBundleFieldEntry, StringRef,
                                                SmallVector<Attribute> &)>
-                         clone);
+                    clone);
   Value getSubWhatever(Value val, size_t index);
 
   MLIRContext *context;
 
-  // The builder is set and maintained in the main loop.
+  /// The builder is set and maintained in the main loop.
   ImplicitLocOpBuilder *builder;
 
-  // State to keep track of arguments and operations to clean up at the end.
+  /// State to keep track of arguments and operations to clean up at the end.
   SmallVector<Operation *, 16> opsToRemove;
 };
 } // namespace
@@ -280,7 +269,7 @@ Value TypeLoweringVisitor::getSubWhatever(Value val, size_t index) {
   return nullptr;
 }
 
-// Conditionally expand a subaccessop write path
+/// Conditionally expand a subaccessop write path
 bool TypeLoweringVisitor::processSAPath(Operation *op) {
   // Does this LHS have a subaccessop?
   SmallVector<Operation *> writePath = getSAWritePath(op);
@@ -320,9 +309,10 @@ void TypeLoweringVisitor::lowerBlock(Block *block) {
 }
 
 void TypeLoweringVisitor::lowerProducer(
-    Operation *op, std::function<Operation *(FlatBundleFieldEntry, StringRef,
-                                             SmallVector<Attribute> &)>
-                       clone) {
+    Operation *op,
+    llvm::function_ref<Operation *(FlatBundleFieldEntry, StringRef,
+                                   SmallVector<Attribute> &)>
+        clone) {
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes =
       peelType(op->getResult(0).getType());
 
@@ -375,7 +365,7 @@ void TypeLoweringVisitor::lowerModule(Operation *op) {
 // module. This also maintains the name attribute for the new argument,
 // possibly with a new suffix appended.
 std::pair<Value, firrtl::ModulePortInfo>
-TypeLoweringVisitor::addArg(Operation* module, unsigned insertPt,
+TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
                             FIRRTLType type, bool isOutput,
                             StringRef nameSuffix, ModulePortInfo &oldArg) {
   Value newValue;
@@ -390,7 +380,8 @@ TypeLoweringVisitor::addArg(Operation* module, unsigned insertPt,
   auto name = builder->getStringAttr(nameStr);
 
   // Populate the new arg attributes.
-  AnnotationSet newAnnotations = filterAnnotations(oldArg.annotations, nameSuffix);
+  AnnotationSet newAnnotations =
+      filterAnnotations(oldArg.annotations, nameSuffix);
 
   // Flip the direction if the field is an output.
   auto direction = (Direction)((unsigned)oldArg.direction ^ isOutput);
@@ -402,20 +393,20 @@ TypeLoweringVisitor::addArg(Operation* module, unsigned insertPt,
 
 // Lower arguments with bundle type by flattening them.
 SmallVector<Value> TypeLoweringVisitor::lowerArg(
-    Operation* module, size_t argIndex,
+    Operation *module, size_t argIndex,
     SmallVectorImpl<std::pair<ModulePortInfo, SmallVector<NamedAttribute>>>
         &newArgs) {
 
   // Flatten any bundle types.
-  SmallVector<FlatBundleFieldEntry>
-          fieldTypes = peelType(newArgs[argIndex].first.type);
+  SmallVector<FlatBundleFieldEntry> fieldTypes =
+      peelType(newArgs[argIndex].first.type);
 
   SmallVector<Value> lowering;
 
   for (auto field : llvm::enumerate(fieldTypes)) {
-    auto newValue =
-        addArg(module, 1 + argIndex + field.index(), field.value().type,
-               field.value().isOutput, field.value().suffix, newArgs[argIndex].first);
+    auto newValue = addArg(module, 1 + argIndex + field.index(),
+                           field.value().type, field.value().isOutput,
+                           field.value().suffix, newArgs[argIndex].first);
     newArgs.insert(newArgs.begin() + 1 + argIndex + field.index(),
                    std::make_pair(newValue.second, newArgs[argIndex].second));
     // Lower any other arguments by copying them to keep the relative order.
@@ -639,7 +630,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
 void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   ImplicitLocOpBuilder theBuilder(extModule.getLoc(), context);
   builder = &theBuilder;
-  
+
   // Top level builder
   OpBuilder builder(context);
 
@@ -660,7 +651,7 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
     // lowerArg might have invalidated any reference to newArgs, be careful
   }
 
-  //Remove block args that have been lowered
+  // Remove block args that have been lowered
   for (auto ii = argsToRemove.rbegin(), ee = argsToRemove.rend(); ii != ee;
        ++ii)
     newArgs.erase(newArgs.begin() + *ii);
@@ -685,7 +676,7 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
     newArgDirections.push_back(port.first.direction);
     newArgAttrs.push_back(
         port.first.annotations.getArgumentAttrDict(port.second));
-        inputTypes.push_back(port.first.type);
+    inputTypes.push_back(port.first.type);
   }
   newModuleAttrs.push_back(NamedAttribute(Identifier::get("portNames", context),
                                           builder.getArrayAttr(newArgNames)));
@@ -731,7 +722,7 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
       processUsers(arg, lowerings);
       argsToRemove.push_back(argIndex);
     }
-  // lowerArg might have invalidated any reference to newArgs, be careful
+    // lowerArg might have invalidated any reference to newArgs, be careful
   }
 
   // Remove block args that have been lowered.
@@ -744,11 +735,11 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
 
   // Copy over any attributes that weren't original argument attributes.
   for (auto attr : module->getAttrDictionary())
-      // Drop old "portNames", directions, and argument attributes.  These are
-      // handled differently below.
-      if (attr.first != "portNames" && attr.first != direction::attrKey &&
-          attr.first != mlir::function_like_impl::getArgDictAttrName())
-        newModuleAttrs.push_back(attr);
+    // Drop old "portNames", directions, and argument attributes.  These are
+    // handled differently below.
+    if (attr.first != "portNames" && attr.first != direction::attrKey &&
+        attr.first != mlir::function_like_impl::getArgDictAttrName())
+      newModuleAttrs.push_back(attr);
 
   SmallVector<Attribute> newArgNames;
   SmallVector<Direction> newArgDirections;
@@ -756,7 +747,8 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   for (auto &port : newArgs) {
     newArgNames.push_back(port.first.name);
     newArgDirections.push_back(port.first.direction);
-    newArgAttrs.push_back(port.first.annotations.getArgumentAttrDict(port.second));
+    newArgAttrs.push_back(
+        port.first.annotations.getArgumentAttrDict(port.second));
   }
   newModuleAttrs.push_back(NamedAttribute(Identifier::get("portNames", context),
                                           builder->getArrayAttr(newArgNames)));
@@ -887,7 +879,7 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
       lowered.push_back(newInstance.getResult(fieldIndex));
     if (lowered.size() != 1 || op.getType(aggIndex) != resultTypes[0])
       processUsers(op.getResult(aggIndex), lowered);
-      else 
+    else
       op.getResult(aggIndex).replaceAllUsesWith(lowered[0]);
   }
   opsToRemove.push_back(op);
@@ -916,8 +908,6 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   opsToRemove.push_back(op);
 }
 
-//
-//
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
