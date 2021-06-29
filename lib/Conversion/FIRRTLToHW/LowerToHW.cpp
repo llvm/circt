@@ -213,12 +213,17 @@ struct CircuitLoweringState {
       used_RANDOMIZE_MEM_INIT{false};
   std::atomic<bool> used_RANDOMIZE_GARBAGE_ASSIGN{false};
 
-  CircuitLoweringState(CircuitOp circuitOp) : circuitOp(circuitOp) {}
+  CircuitLoweringState(CircuitOp circuitOp, bool warn)
+      : circuitOp(circuitOp), enableAnnotationWarning(warn) {}
 
   Operation *getNewModule(Operation *oldModule) {
     auto it = oldToNewModuleMap.find(oldModule);
     return it != oldToNewModuleMap.end() ? it->second : nullptr;
   }
+
+  // Emit warnings on unprocessed annotations still remaining in the annotation
+  // set.
+  void warnOnRemainingAnnotations(Operation *op, const AnnotationSet &annoSet);
 
   CircuitOp circuitOp;
 
@@ -228,7 +233,25 @@ private:
   void operator=(const CircuitLoweringState &) = delete;
 
   DenseMap<Operation *, Operation *> oldToNewModuleMap;
+
+  // Record the set of remaining annotation classes. This is used to warn only
+  // once about any annotation class.
+  StringSet<> alreadyPrinted;
+  const bool enableAnnotationWarning;
 };
+
+void CircuitLoweringState::warnOnRemainingAnnotations(
+    Operation *op, const AnnotationSet &annoSet) {
+  if (!enableAnnotationWarning || annoSet.empty())
+    return;
+
+  for (auto a : annoSet) {
+    auto inserted = alreadyPrinted.insert(a.getClass());
+    if (inserted.second)
+      op->emitWarning("unprocessed annotation:'" + a.getClass() +
+                      "' still remaining after LowerToHW");
+  }
+}
 } // end anonymous namespace
 
 namespace {
@@ -241,10 +264,13 @@ private:
   void lowerFileHeader(CircuitOp op, CircuitLoweringState &loweringState);
   LogicalResult lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
                            SmallVectorImpl<hw::ModulePortInfo> &ports,
-                           Operation *moduleOp);
-  hw::HWModuleOp lowerModule(FModuleOp oldModule, Block *topLevelModule);
+                           Operation *moduleOp,
+                           CircuitLoweringState &loweringState);
+  hw::HWModuleOp lowerModule(FModuleOp oldModule, Block *topLevelModule,
+                             CircuitLoweringState &loweringState);
   hw::HWModuleExternOp lowerExtModule(FExtModuleOp oldModule,
-                                      Block *topLevelModule);
+                                      Block *topLevelModule,
+                                      CircuitLoweringState &loweringState);
 
   void lowerModuleBody(FModuleOp oldModule,
                        CircuitLoweringState &loweringState);
@@ -287,7 +313,7 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   // Keep track of the mapping from old to new modules.  The result may be null
   // if lowering failed.
-  CircuitLoweringState state(circuit);
+  CircuitLoweringState state(circuit, enableAnnotationWarning);
 
   SmallVector<FModuleOp, 32> modulesToProcess;
 
@@ -295,13 +321,14 @@ void FIRRTLModuleLowering::runOnOperation() {
   // FModule's we come across.
   for (auto &op : circuitBody->getOperations()) {
     if (auto module = dyn_cast<FModuleOp>(op)) {
-      state.oldToNewModuleMap[&op] = lowerModule(module, topLevelModule);
+      state.oldToNewModuleMap[&op] = lowerModule(module, topLevelModule, state);
       modulesToProcess.push_back(module);
       continue;
     }
 
     if (auto extModule = dyn_cast<FExtModuleOp>(op)) {
-      state.oldToNewModuleMap[&op] = lowerExtModule(extModule, topLevelModule);
+      state.oldToNewModuleMap[&op] =
+          lowerExtModule(extModule, topLevelModule, state);
       continue;
     }
 
@@ -543,7 +570,8 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
 LogicalResult
 FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
                                  SmallVectorImpl<hw::ModulePortInfo> &ports,
-                                 Operation *moduleOp) {
+                                 Operation *moduleOp,
+                                 CircuitLoweringState &loweringState) {
   ports.reserve(firrtlPorts.size());
   size_t numArgs = 0;
   size_t numResults = 0;
@@ -578,29 +606,26 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
       hwPort.argNum = numArgs++;
     }
     ports.push_back(hwPort);
-    if (enableAnnotationWarning && !firrtlPort.annotations.empty())
-      moduleOp->emitWarning(
-          "unprocessed annotations still remaining on port after LowerToHW");
+    loweringState.warnOnRemainingAnnotations(moduleOp, firrtlPort.annotations);
   }
   return success();
 }
 
 hw::HWModuleExternOp
 FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
-                                     Block *topLevelModule) {
+                                     Block *topLevelModule,
+                                     CircuitLoweringState &loweringState) {
   // Map the ports over, lowering their types as we go.
   SmallVector<ModulePortInfo> firrtlPorts = oldModule.getPorts();
   SmallVector<hw::ModulePortInfo, 8> ports;
-  if (failed(lowerPorts(firrtlPorts, ports, oldModule)))
+  if (failed(lowerPorts(firrtlPorts, ports, oldModule, loweringState)))
     return {};
 
   StringRef verilogName;
   if (auto defName = oldModule.defname())
     verilogName = defName.getValue();
 
-  if (enableAnnotationWarning && !AnnotationSet(oldModule).empty())
-    oldModule.emitWarning("unprocessed annotations still remaining on external "
-                          "module after LowerToHW");
+  loweringState.warnOnRemainingAnnotations(oldModule, AnnotationSet(oldModule));
   // Build the new hw.module op.
   OpBuilder builder(topLevelModule->getParent()->getContext());
   builder.setInsertionPointToEnd(topLevelModule);
@@ -611,17 +636,16 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
 
 /// Run on each firrtl.module, transforming it from an firrtl.module into an
 /// hw.module, then deleting the old one.
-hw::HWModuleOp FIRRTLModuleLowering::lowerModule(FModuleOp oldModule,
-                                                 Block *topLevelModule) {
+hw::HWModuleOp
+FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
+                                  CircuitLoweringState &loweringState) {
   // Map the ports over, lowering their types as we go.
   SmallVector<ModulePortInfo> firrtlPorts = oldModule.getPorts();
   SmallVector<hw::ModulePortInfo, 8> ports;
-  if (failed(lowerPorts(firrtlPorts, ports, oldModule)))
+  if (failed(lowerPorts(firrtlPorts, ports, oldModule, loweringState)))
     return {};
 
-  if (enableAnnotationWarning && !AnnotationSet(oldModule).empty())
-    oldModule.emitWarning(
-        "unprocessed annotations still remaining on module after LowerToHW");
+  loweringState.warnOnRemainingAnnotations(oldModule, AnnotationSet(oldModule));
   // Build the new hw.module op.
   OpBuilder builder(topLevelModule->getParent()->getContext());
   builder.setInsertionPointToEnd(topLevelModule);
@@ -853,11 +877,9 @@ void FIRRTLModuleLowering::lowerModuleBody(
 namespace {
 struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
-  FIRRTLLowering(hw::HWModuleOp module, CircuitLoweringState &circuitState,
-                 bool warn)
+  FIRRTLLowering(hw::HWModuleOp module, CircuitLoweringState &circuitState)
       : theModule(module), circuitState(circuitState),
-        builder(module.getLoc(), module.getContext()),
-        enableAnnotationWarning(warn) {}
+        builder(module.getLoc(), module.getContext()) {}
 
   void run();
 
@@ -1075,14 +1097,12 @@ private:
   /// This is true if we've emitted `INIT_RANDOM_PROLOG_ into an initial
   /// block in this module already.
   bool randomizePrologEmitted;
-
-  bool enableAnnotationWarning;
 };
 } // end anonymous namespace
 
 void FIRRTLModuleLowering::lowerModuleOperations(
     hw::HWModuleOp module, CircuitLoweringState &loweringState) {
-  FIRRTLLowering(module, loweringState, enableAnnotationWarning).run();
+  FIRRTLLowering(module, loweringState).run();
 }
 
 // This is the main entrypoint for the lowering pass.
@@ -1101,8 +1121,7 @@ void FIRRTLLowering::run() {
     builder.setInsertionPoint(&op);
     builder.setLoc(op.getLoc());
     auto done = succeeded(dispatchVisitor(&op));
-    if (enableAnnotationWarning && !AnnotationSet(&op).empty())
-      op.emitWarning("unprocessed annotations still remaining after LowerToHW");
+    circuitState.warnOnRemainingAnnotations(&op, AnnotationSet(&op));
     if (done)
       opsToRemove.push_back(&op);
     else {

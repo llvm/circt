@@ -9,33 +9,35 @@ firrtl.circuit "unprocessedAnnotations" {
   }
   firrtl.module @unprocessedAnnotations(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
                             in %cond: !firrtl.uint<1>, in %value: !firrtl.uint<2>) {
-    // expected-warning @+1 {{unprocessed annotations}}
-    %1 = firrtl.wire {annotations = [{class = "firrtl.transforms.RemainingAnnotation"}]} : !firrtl.uint<1>
-    // expected-warning @+1 {{unprocessed annotations}}
-    %2 = firrtl.node %1 {annotations = [{class = "firrtl.transforms.RemainingAnnotation"}]} : !firrtl.uint<1>
-    // expected-warning @+1 {{unprocessed annotations}}
-    %3 = firrtl.reg %clock {annotations = [{class = "firrtl.transforms.RemainingAnnotation"}]} : (!firrtl.clock) -> !firrtl.uint<1>
-    // expected-warning @+1 {{unprocessed annotations}}
-    %4 = firrtl.regreset %clock, %reset, %1 {annotations = [{class = "firrtl.transforms.RemainingAnnotation"}]} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    // expected-warning @+1 {{unprocessed annotations}}
-    %_M_read, %_M_rw, %_M_write = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read", "rw", "write"], readLatency = 0 : i32, writeLatency = 1 : i32, annotations = [{class = "firrtl.transforms.RemainingAnnotation"}]} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata flip: sint<42>, wdata: sint<42>, wmask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>
-    // expected-warning @+1 {{unprocessed annotations}}
-    %5 = firrtl.instance @bar {name = "fetch", portNames=["io_cpu_flush"], annotations = [{class = "firrtl.transforms.RemainingAnnotation"}] } : !firrtl.uint<1>
+    // expected-warning @+1 {{unprocessed annotation}}
+    %1 = firrtl.wire {annotations = [{class = "firrtl.transforms.RemainingAnnotation1"}]} : !firrtl.uint<1>
+    // expected-warning @+1 {{unprocessed annotation}}
+    %2 = firrtl.node %1 {annotations = [{class = "firrtl.transforms.RemainingAnnotation2"}]} : !firrtl.uint<1>
+    // expected-warning @+1 {{unprocessed annotation}}
+    %3 = firrtl.reg %clock {annotations = [{class = "firrtl.transforms.RemainingAnnotation3"}]} : (!firrtl.clock) -> !firrtl.uint<1>
+    // expected-warning @+1 {{unprocessed annotation}}
+    %4 = firrtl.regreset %clock, %reset, %1 {annotations = [{class = "firrtl.transforms.RemainingAnnotation4"}]} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // expected-warning @+1 {{unprocessed annotation}}
+    %_M_read, %_M_rw, %_M_write = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read", "rw",
+    "write"], readLatency = 0 : i32, writeLatency = 1 : i32, annotations = [{class =
+    "firrtl.transforms.RemainingAnnotation5"}]} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata flip: sint<42>, wdata: sint<42>, wmask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>
+    // expected-warning @+1 {{unprocessed annotation}}
+    %5 = firrtl.instance @bar {name = "fetch", portNames=["io_cpu_flush"], annotations = [{class = "firrtl.transforms.RemainingAnnotation6"}] } : !firrtl.uint<1>
   }
 }
 
 // -----
 
 firrtl.circuit "moduleAnno" {
-  // expected-warning @+1 {{unprocessed annotations}}
+  // expected-warning @+1 {{unprocessed annotation}}
   firrtl.module @moduleAnno(in %io_cpu_flush: !firrtl.uint<1> 
-    {firrtl.annotations = [{a}]}  ){  }
-  // expected-warning @+1 {{unprocessed annotations}}
-  firrtl.extmodule @extModPorts(in %io_cpu_flush: !firrtl.uint<1> {firrtl.annotations = [{a}]} )
-  // expected-warning @+1 {{unprocessed annotations}}
+    {firrtl.annotations = [{class="a"}]}  ){  }
+  // expected-warning @+1 {{unprocessed annotation}}
+  firrtl.extmodule @extModPorts(in %io_cpu_flush: !firrtl.uint<1> {firrtl.annotations = [{class="b"}]} )
+  // expected-warning @+1 {{unprocessed annotation}}
   firrtl.extmodule @extMod(in %io_cpu_flush: !firrtl.uint<1>) 
-    attributes { annotations = [{class = "a"}] }
-  // expected-warning @+1 {{unprocessed annotations}}
+    attributes { annotations = [{class = "c"}] }
+  // expected-warning @+1 {{unprocessed annotation}}
   firrtl.module @foo(in %io_cpu_flush: !firrtl.uint<1>) 
-    attributes { annotations = [{class = "a"}] } {}
+    attributes { annotations = [{class = "d"}] } {}
 }
