@@ -28,8 +28,8 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
   let dependentDialects = ["comb::CombDialect", "hw::HWDialect",
                            "sv::SVDialect"];
   let options = [
-    Option<"enableAnnotationWarning", "emit-annotation-warning", "bool", "false",
-    "Emit warnings on unprocessed annotations during lower-to-hw pass.">
+    Option<"enableAnnotationWarning", "warn-on-unprocessed-annotations", "bool", "false",
+    "Emit warnings on unprocessed annotations during lower-to-hw pass">
   ];
 }
 
