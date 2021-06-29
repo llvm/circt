@@ -32,10 +32,10 @@ class Test(pycde.System):
 
 # CHECK: hw.module @Module
 # CHECK-NOT: hw.module @Module
-# CHECK: hw.module @Module_i1_i1_1
-# CHECK-NOT: hw.module @Module_i1_i1_1
-# CHECK: hw.module @Module_i1_i1_2
-# CHECK-NOT: hw.module @Module_i1_i1_2
+# CHECK: hw.module @Module_1
+# CHECK-NOT: hw.module @Module_1
+# CHECK: hw.module @Module_2
+# CHECK-NOT: hw.module @Module_2
 t = Test()
 t.generate()
 t.print()
