@@ -885,7 +885,7 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
                 eField = endFields[aggIndex + 1];
          fieldIndex < eField; ++fieldIndex)
       lowered.push_back(newInstance.getResult(fieldIndex));
-    if (lowered.size() != 1 || op.getType(aggIndex) != resultTypes[0])
+    if (lowered.size() != 1 || op.getType(aggIndex) != resultTypes[endFields[aggIndex]])
       processUsers(op.getResult(aggIndex), lowered);
       else 
       op.getResult(aggIndex).replaceAllUsesWith(lowered[0]);
