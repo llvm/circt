@@ -1257,11 +1257,9 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
               IntegerType::get(rewriter.getContext(), 1),
               firstNonEmptyValue,
               firstNonEmptyValue.getType().getIntOrFloatBitWidth() - 1);
-
-          return replaceWith(op.predicate(),
-              rewriter.create<ConcatOp>(op.getLoc(), signBit, lhsOnly),
-              rewriter.create<ConcatOp>(op.getLoc(), signBit, rhsOnly)
-              );
+          auto newLhs = rewriter.create<ConcatOp>(op.getLoc(), signBit, lhsOnly);
+          auto newRhs = rewriter.create<ConcatOp>(op.getLoc(), signBit, rhsOnly);
+          return replaceWith(op.predicate(), newLhs, newRhs);
         }
       }
     }
