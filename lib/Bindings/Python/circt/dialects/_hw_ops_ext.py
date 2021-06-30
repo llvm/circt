@@ -187,19 +187,20 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
   # A dict of `OutputPortName` -> ValueLike must be converted to a list in port
   # order.
   unconnected_ports = []
-  for (name, type) in output_ports:
+  for (name, port_type) in output_ports:
     if name not in bb_ret:
       unconnected_ports.append(name)
       outputs.append(None)
     else:
       val = support.get_value(bb_ret[name])
       if val is None:
+        field_type = type(bb_ret[name])
         raise TypeError(
-            f"body_builder return doesn't support type '{type(bb_ret[name])}'")
-      if val.type != type:
+            f"body_builder return doesn't support type '{field_type}'")
+      if val.type != port_type:
         raise TypeError(
             f"Output port '{name}' type ({val.type}) doesn't match declared"
-            f" type ({type})")
+            f" type ({port_type})")
       outputs.append(val)
       bb_ret.pop(name)
   if len(unconnected_ports) > 0:

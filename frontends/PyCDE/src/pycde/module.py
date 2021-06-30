@@ -143,8 +143,6 @@ class module:
       inst = self.extern_mod.create(
         op.name, **mapping, results=result_types).operation
       for (name, attr) in attrs.items():
-        if name == "parameters":
-          continue
         inst.attributes[name] = attr
       return inst
 

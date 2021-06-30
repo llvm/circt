@@ -17,10 +17,12 @@ class Value:
       idx = int(sub)
       if idx >= self.type.size:
         raise ValueError("Subscript out-of-bounds")
-      return hw.ArrayGetOp.create(self.value, idx)
+      with get_user_loc():
+        return hw.ArrayGetOp.create(self.value, idx)
 
     if isinstance(self.type, hw.StructType):
-      return hw.StructExtractOp.create(self.value, sub)
+      with get_user_loc():
+        return hw.StructExtractOp.create(self.value, sub)
 
     raise TypeError(
         "Subscripting only supported on hw.array and hw.struct types")
