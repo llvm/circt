@@ -664,30 +664,58 @@ hw.module.extern @Owo(%owo_in : i32) -> ()
 
 // CHECK-LABEL: module Nya(
 hw.module @Nya() -> (%nya_output : i32) {
-    %0 = hw.instance "uwu" @Uwu() : () -> (i32)
-    // CHECK: wire [31:0] uwu_uwu_output;
-    // CHECK-EMPTY:
-    // CHECK: Uwu uwu (
-    // CHECK: .uwu_output (uwu_uwu_output)
-    // CHECK: );
+  %0 = hw.instance "uwu" @Uwu() : () -> (i32)
+  // CHECK: wire [31:0] uwu_uwu_output;
+  // CHECK-EMPTY:
+  // CHECK: Uwu uwu (
+  // CHECK: .uwu_output (uwu_uwu_output)
+  // CHECK: );
 
-    hw.instance "owo" @Owo(%0) : (i32) -> ()
-    // CHECK: Owo owo (
-    // CHECK: .owo_in (uwu_uwu_output)
-    // CHECK: );
+  hw.instance "owo" @Owo(%0) : (i32) -> ()
+  // CHECK: Owo owo (
+  // CHECK: .owo_in (uwu_uwu_output)
+  // CHECK: );
 
-    hw.output %0 : i32
-    // CHECK: assign nya_output = uwu_uwu_output;
-    // CHECK: endmodule
+  hw.output %0 : i32
+  // CHECK: assign nya_output = uwu_uwu_output;
+  // CHECK: endmodule
 }
 
 // CHECK-LABEL: module Nya2(
 hw.module @Nya2() -> (%nya2_output : i32) {
-    %0 = hw.instance "uwu" @Uwu() : () -> (i32)
-    // CHECK: Uwu uwu (
-    // CHECK: .uwu_output (nya2_output)
-    // CHECK: );
+  %0 = hw.instance "uwu" @Uwu() : () -> (i32)
+  // CHECK: Uwu uwu (
+  // CHECK: .uwu_output (nya2_output)
+  // CHECK: );
 
-    hw.output %0 : i32
-    // CHECK: endmodule
+  hw.output %0 : i32
+  // CHECK: endmodule
+}
+
+hw.module.extern @Ni() -> (%ni_output : i0)
+hw.module.extern @San(%san_input : i0) -> ()
+
+// CHECK-LABEL: module Ichi(
+hw.module @Ichi() -> (%Ichi_output : i0) {
+  %0 = hw.instance "ni" @Ni() : () -> (i0)
+  // CHECK: Ni ni (
+  // CHECK: //.ni_output (Ichi_output));
+
+  hw.output %0 : i0
+  // CHECK: endmodule
+}
+
+// CHECK-LABEL: module Chi(
+hw.module @Chi() -> (%Chi_output : i0) {
+  %0 = hw.instance "ni" @Ni() : () -> (i0)
+  // CHECK: Ni ni (
+  // CHECK: //.ni_output (ni_ni_output));
+
+  hw.instance "san" @San(%0) : (i0) -> ()
+  // CHECK: San san (
+  // CHECK: //.san_input (ni_ni_output));
+
+  // CHECK: // Zero width: assign Chi_output = ni_ni_output;
+  hw.output %0 : i0
+  // CHECK: endmodule
 }
