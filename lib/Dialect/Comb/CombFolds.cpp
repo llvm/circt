@@ -149,6 +149,17 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
       return success();
     }
   }
+
+  // extract(olo, extract(ilo, x)) = extract(olo + ilo, x)
+  if (auto innerExtract = dyn_cast_or_null<ExtractOp>(op.input().getDefiningOp())) {
+    rewriter.replaceOpWithNewOp<ExtractOp>(
+        op,
+        op.getType(),
+        innerExtract.input(),
+        innerExtract.lowBit() + op.lowBit());
+    return success();
+  }
+
   return failure();
 }
 
@@ -224,11 +235,23 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands, `fold` should handle this");
 
-  // TODO: remove all duplicate arguments
-  // and(..., x, x) -> and(..., x) -- idempotent
-  if (inputs[size - 1] == inputs[size - 2]) {
-    rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), inputs.drop_back());
-    return success();
+  // and(..., x, ..., x) -> and(..., x, ...) -- idempotent
+  // Trivial and(x), and(x, x) cases are handled by [AndOp::fold] above.
+  if (inputs.size() > 2) {
+    llvm::DenseSet<mlir::Value> dedupedArguments;
+    SmallVector<Value, 4> newOperands;
+
+    for (const auto input : inputs) {
+      auto insertionResult = dedupedArguments.insert(input);
+      if (insertionResult.second) {
+        newOperands.push_back(input);
+      }
+    }
+
+    if (newOperands.size() < inputs.size()) {
+      rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
+      return success();
+    }
   }
 
   // Patterns for and with a constant on RHS.

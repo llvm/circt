@@ -1082,9 +1082,10 @@ void FIRRTLLowering::run() {
   for (auto &op : body->getOperations()) {
     builder.setInsertionPoint(&op);
     builder.setLoc(op.getLoc());
-    if (succeeded(dispatchVisitor(&op))) {
+    auto done = succeeded(dispatchVisitor(&op));
+    if (done)
       opsToRemove.push_back(&op);
-    } else {
+    else {
       switch (handleUnloweredOp(&op)) {
       case AlreadyLowered:
         break;         // Something like hw.output, which is already lowered.

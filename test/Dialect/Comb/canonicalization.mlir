@@ -40,3 +40,40 @@ hw.module @andCancel(%a: i4, %b : i4) -> (%o1: i4, %o2: i4) {
   hw.output %1, %2 : i4, i4
 }
 
+
+// CHECK-LABEL: hw.module @andDedup1(%arg0: i7, %arg1: i7) -> (i7) {
+hw.module @andDedup1(%arg0: i7, %arg1: i7) -> (i7) {
+// CHECK-NEXT:    %0 = comb.and %arg0, %arg1 : i7
+// CHECK-NEXT:    hw.output %0 : i7
+  %0 = comb.and %arg0    : i7
+  %1 = comb.and %0, %arg1: i7
+  hw.output %1 : i7
+}
+
+// CHECK-LABEL: hw.module @andDedup2(%arg0: i7, %arg1: i7) -> (i7) {
+hw.module @andDedup2(%arg0: i7, %arg1: i7) -> (i7) {
+// CHECK-NEXT:    %0 = comb.and %arg0, %arg1 : i7
+// CHECK-NEXT:    hw.output %0 : i7
+  %0 = comb.and %arg0, %arg0: i7
+  %1 = comb.and %0, %arg1: i7
+  hw.output %1 : i7
+}
+
+// CHECK-LABEL: hw.module @andDedupLong(%arg0: i7, %arg1: i7, %arg2: i7) -> (i7) {
+hw.module @andDedupLong(%arg0: i7, %arg1: i7, %arg2: i7) -> (i7) {
+// CHECK-NEXT:    %0 = comb.and %arg0, %arg1, %arg2 : i7
+// CHECK-NEXT:    hw.output %0 : i7
+  %0 = comb.and %arg0, %arg1, %arg2, %arg0: i7
+  hw.output %0 : i7
+}
+
+// CHECK-LABEL: @extractNested
+hw.module @extractNested(%0: i5) -> (%o1 : i1) {
+// Multiple layers of nested extract is a weak evidence that the cannonicalization
+// operates recursively.
+// CHECK-NEXT: %0 = comb.extract %arg0 from 4 : (i5) -> i1
+  %1 = comb.extract %0 from 1 : (i5) -> i4
+  %2 = comb.extract %1 from 2 : (i4) -> i2
+  %3 = comb.extract %2 from 1 : (i2) -> i1
+  hw.output %3 : i1
+}

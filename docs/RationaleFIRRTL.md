@@ -46,10 +46,9 @@ support is planned, but not implemented.
 
 There are some exceptions to the above:
 
-1) We don't support the `'raw string'` syntax for strings.
-2) We don't support the `Fixed` types for fixed point numbers, and some
+1) We don't support the `Fixed` types for fixed point numbers, and some
    primitives associated with them.
-3) We don't support `Interval` types
+2) We don't support `Interval` types
 
 Some of these may be research efforts that didn't gain broad adoption, in which
 case we don't want to support them.  However, if there is a good reason and a

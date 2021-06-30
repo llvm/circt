@@ -409,3 +409,15 @@ StringRef Annotation::getClass() const {
     return classAttr.getValue();
   return {};
 }
+
+//===----------------------------------------------------------------------===//
+// AnnotationSetIterator
+//===----------------------------------------------------------------------===//
+
+Annotation AnnotationSetIterator::operator*() const {
+  auto attr = this->getBase().getArray()[this->getIndex()];
+  if (auto dictAttr = attr.dyn_cast<DictionaryAttr>())
+    return Annotation(dictAttr);
+  else
+    return Annotation(attr.cast<SubAnnotationAttr>().getAnnotations());
+}

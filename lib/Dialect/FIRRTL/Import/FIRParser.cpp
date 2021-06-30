@@ -2723,7 +2723,7 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
   int64_t depth = -1, readLatency = -1, writeLatency = -1;
   RUWAttr ruw = RUWAttr::Undefined;
 
-  SmallVector<std::pair<StringAttr, BundleType>, 4> ports;
+  SmallVector<std::pair<StringAttr, Type>, 4> ports;
 
   // Parse all the memfield records, which are indented more than the mem.
   while (1) {
@@ -2801,8 +2801,8 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
   // Canonicalize the ports into alphabetical order.
   // TODO: Move this into MemOp construction/canonicalization.
   llvm::array_pod_sort(ports.begin(), ports.end(),
-                       [](const std::pair<StringAttr, BundleType> *lhs,
-                          const std::pair<StringAttr, BundleType> *rhs) -> int {
+                       [](const std::pair<StringAttr, Type> *lhs,
+                          const std::pair<StringAttr, Type> *rhs) -> int {
                          return lhs->first.getValue().compare(
                              rhs->first.getValue());
                        });
@@ -2814,16 +2814,22 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     resultTypes.push_back(p.second);
   }
 
-  // TODO: This will be fixed in the MemOp port annotation PR.
-  auto annotations =
-      getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(), type);
-  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
-
   locationProcessor.setLoc(startTok.getLoc());
 
-  auto result = builder.create<MemOp>(
-      resultTypes, readLatency, writeLatency, depth, ruw,
-      builder.getArrayAttr(resultNames), name, annotations);
+  auto annotations = getSplitAnnotations(getModuleTarget() + ">" + id,
+                                         startTok.getLoc(), ports);
+
+  // Keep the name if a dont touch exist on either the instance or its ports.
+  auto dontTouch = hasDontTouch(annotations.first) ||
+                   llvm::any_of(annotations.second, [&](Attribute a) {
+                     return hasDontTouch(a.cast<ArrayAttr>());
+                   });
+  auto name = dontTouch ? id : filterUselessName(id);
+
+  auto result =
+      builder.create<MemOp>(resultTypes, readLatency, writeLatency, depth, ruw,
+                            builder.getArrayAttr(resultNames), name,
+                            annotations.first, annotations.second);
 
   UnbundledValueEntry unbundledValueEntry;
   unbundledValueEntry.reserve(result.getNumResults());
@@ -3029,7 +3035,8 @@ private:
   /// Add annotations from a string to the internal annotation map.  Report
   /// errors using a provided source manager location and with a provided error
   /// message
-  ParseResult importAnnotations(SMLoc loc, StringRef annotationsStr);
+  ParseResult importAnnotations(SMLoc loc, StringRef circuitTarget,
+                                StringRef annotationsStr);
 
   ParseResult parseModule(CircuitOp circuit, StringRef circuitTarget,
                           unsigned indent);
@@ -3060,6 +3067,7 @@ private:
 } // end anonymous namespace
 
 ParseResult FIRCircuitParser::importAnnotations(SMLoc loc,
+                                                StringRef circuitTarget,
                                                 StringRef annotationsStr) {
 
   auto annotations = json::parse(annotationsStr);
@@ -3073,7 +3081,8 @@ ParseResult FIRCircuitParser::importAnnotations(SMLoc loc,
 
   json::Path::Root root;
   llvm::StringMap<ArrayAttr> thisAnnotationMap;
-  if (!fromJSON(annotations.get(), thisAnnotationMap, root, getContext())) {
+  if (!fromJSON(annotations.get(), circuitTarget, thisAnnotationMap, root,
+                getContext())) {
     auto diag = emitError(loc, "Invalid/unsupported annotation format");
     std::string jsonErrorMessage =
         "See inline comments for problem area in JSON:\n";
@@ -3286,9 +3295,15 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
       break;
     }
     case FIRToken::string: {
-      // Drop the quotes and unescape.
+      // Drop the double quotes and unescape.
       value = builder.getStringAttr(getToken().getStringValue());
       consumeToken(FIRToken::string);
+      break;
+    }
+    case FIRToken::raw_string: {
+      // Drop the single quotes and unescape the ones inside.
+      value = builder.getStringAttr(getToken().getRawStringValue());
+      consumeToken(FIRToken::raw_string);
       break;
     }
 
@@ -3386,12 +3401,14 @@ FIRCircuitParser::parseCircuit(const llvm::MemoryBuffer *annotationsBuf) {
   // annotations.  While arbitrary, this makes the annotation file have "append"
   // semantics.
   if (!inlineAnnotations.empty())
-    if (importAnnotations(inlineAnnotationsLoc, inlineAnnotations))
+    if (importAnnotations(inlineAnnotationsLoc, circuitTarget,
+                          inlineAnnotations))
       return failure();
 
   // Deal with the annotation file if one was specified
   if (annotationsBuf) {
-    if (importAnnotations(info.getFIRLoc(), annotationsBuf->getBuffer()))
+    if (importAnnotations(info.getFIRLoc(), circuitTarget,
+                          annotationsBuf->getBuffer()))
       return failure();
   }
 

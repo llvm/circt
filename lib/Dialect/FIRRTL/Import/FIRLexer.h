@@ -74,6 +74,12 @@ public:
   std::string getStringValue() const;
   static std::string getStringValue(StringRef spelling);
 
+  /// Given a token containing a raw string, return its value, including removing
+  /// the quote characters and unescaping the quotes of the string. The lexer has
+  /// already verified that this token is valid.
+  std::string getRawStringValue() const;
+  static std::string getRawStringValue(StringRef spelling);
+
   // Location processing.
   llvm::SMLoc getLoc() const;
   llvm::SMLoc getEndLoc() const;
@@ -128,7 +134,7 @@ private:
   FIRToken lexNumber(const char *tokStart);
   FIRToken lexFloatingPoint(const char *tokStart);
   void skipComment();
-  FIRToken lexString(const char *tokStart);
+  FIRToken lexString(const char *tokStart, bool isRaw);
 
   const llvm::SourceMgr &sourceMgr;
   mlir::MLIRContext *const context;

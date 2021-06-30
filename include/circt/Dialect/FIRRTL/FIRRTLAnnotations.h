@@ -294,10 +294,7 @@ class AnnotationSetIterator
                                              AnnotationSet, Annotation> {
 public:
   // Index into this iterator.
-  Annotation operator*() const {
-    return Annotation(
-        this->getBase().getArray()[this->getIndex()].cast<DictionaryAttr>());
-  }
+  Annotation operator*() const;
 
 private:
   AnnotationSetIterator(AnnotationSet owner, ptrdiff_t curIndex)
