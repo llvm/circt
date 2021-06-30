@@ -41,10 +41,10 @@ struct FlatBundleFieldEntry {
 };
 } // end anonymous namespace
 
-/// Peel one layer of an aggregate type into its components.
-static SmallVector<FlatBundleFieldEntry> peelType(Type type) {
-  SmallVector<FlatBundleFieldEntry> retval;
-  TypeSwitch<Type>(type)
+/// Peel one layer of an aggregate type into its components.  Type may be
+/// complex, but empty, in which case fields is empty, but the return is true.
+static bool peelType(Type type, SmallVectorImpl<FlatBundleFieldEntry>& fields) {
+  return TypeSwitch<Type, bool>(type)
       .Case<BundleType>([&](auto bundle) {
         SmallString<16> tmpSuffix;
         // Otherwise, we have a bundle type.  Break it down.
@@ -53,18 +53,20 @@ static SmallVector<FlatBundleFieldEntry> peelType(Type type) {
           tmpSuffix.resize(0);
           tmpSuffix.push_back('_');
           tmpSuffix.append(elt.value().name.getValue());
-          retval.emplace_back(elt.value().type, elt.index(), tmpSuffix,
+          fields.emplace_back(elt.value().type, elt.index(), tmpSuffix,
                               elt.value().isFlip);
         }
+        return true;
       })
       .Case<FVectorType>([&](auto vector) {
         // Increment the field ID to point to the first element.
         for (size_t i = 0, e = vector.getNumElements(); i != e; ++i) {
-          retval.emplace_back(vector.getElementType(), i,
+          fields.emplace_back(vector.getElementType(), i,
                               "_" + std::to_string(i), false);
         }
-      });
-  return retval;
+        return true;
+      })
+      .Default([](auto op) { return false; });
 }
 
 static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
@@ -212,10 +214,11 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
   /// type lowering on all operations.
   void lowerModule(Operation *op);
 
-  SmallVector<Value> lowerArg(
+  bool lowerArg(
       Operation *module, size_t argIndex,
       SmallVectorImpl<std::pair<ModulePortInfo, SmallVector<NamedAttribute>>>
-          &newArgs);
+          &newArgs,
+      SmallVectorImpl<Value>& lowering);
   std::pair<Value, firrtl::ModulePortInfo>
   addArg(Operation *module, unsigned insertPt, FIRRTLType type, bool isOutput,
          StringRef nameSuffix, ModulePortInfo &oldArg);
@@ -313,34 +316,32 @@ void TypeLoweringVisitor::lowerProducer(
     llvm::function_ref<Operation *(FlatBundleFieldEntry, StringRef,
                                    SmallVector<Attribute> &)>
         clone) {
-  SmallVector<FlatBundleFieldEntry, 8> fieldTypes =
-      peelType(op->getResult(0).getType());
-
   // If the wire is not a bundle, there is nothing to do.
-  if (fieldTypes.empty())
-    return;
+      SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
+      if (!peelType(op->getResult(0).getType(), fieldTypes))
+        return;
 
-  SmallVector<Value> lowered;
+      SmallVector<Value> lowered;
 
-  // Loop over the leaf aggregates.
-  SmallString<16> loweredName;
-  if (auto nameAttr = op->getAttr("name"))
-    if (auto nameStrAttr = nameAttr.dyn_cast<StringAttr>())
-      loweredName = nameStrAttr.getValue();
-  auto baseNameLen = loweredName.size();
-  for (auto field : fieldTypes) {
-    if (!loweredName.empty()) {
-      loweredName.resize(baseNameLen);
-      loweredName += field.suffix;
-    }
-    // For all annotations on the parent op, filter them based on the target
-    // attribute.
-    auto oldAnno = op->getAttr("annotations");
-    SmallVector<Attribute> loweredAttrs;
-    if (auto anno = oldAnno.dyn_cast_or_null<ArrayAttr>())
-      loweredAttrs = filterAnnotations(anno, field.suffix);
-    auto newOp = clone(field, loweredName, loweredAttrs);
-    lowered.push_back(newOp->getResult(0));
+      // Loop over the leaf aggregates.
+      SmallString<16> loweredName;
+      if (auto nameAttr = op->getAttr("name"))
+        if (auto nameStrAttr = nameAttr.dyn_cast<StringAttr>())
+          loweredName = nameStrAttr.getValue();
+      auto baseNameLen = loweredName.size();
+      for (auto field : fieldTypes) {
+        if (!loweredName.empty()) {
+          loweredName.resize(baseNameLen);
+          loweredName += field.suffix;
+        }
+        // For all annotations on the parent op, filter them based on the target
+        // attribute.
+        auto oldAnno = op->getAttr("annotations");
+        SmallVector<Attribute> loweredAttrs;
+        if (auto anno = oldAnno.dyn_cast_or_null<ArrayAttr>())
+          loweredAttrs = filterAnnotations(anno, field.suffix);
+        auto newOp = clone(field, loweredName, loweredAttrs);
+        lowered.push_back(newOp->getResult(0));
   }
 
   processUsers(op->getResult(0), lowered);
@@ -392,16 +393,16 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
 }
 
 // Lower arguments with bundle type by flattening them.
-SmallVector<Value> TypeLoweringVisitor::lowerArg(
+bool TypeLoweringVisitor::lowerArg(
     Operation *module, size_t argIndex,
     SmallVectorImpl<std::pair<ModulePortInfo, SmallVector<NamedAttribute>>>
-        &newArgs) {
+        &newArgs,
+    SmallVectorImpl<Value>& lowering) {
 
   // Flatten any bundle types.
-  SmallVector<FlatBundleFieldEntry> fieldTypes =
-      peelType(newArgs[argIndex].first.type);
-
-  SmallVector<Value> lowering;
+  SmallVector<FlatBundleFieldEntry> fieldTypes;
+  if (!peelType(newArgs[argIndex].first.type, fieldTypes))
+    return false;
 
   for (auto field : llvm::enumerate(fieldTypes)) {
     auto newValue = addArg(module, 1 + argIndex + field.index(),
@@ -412,8 +413,7 @@ SmallVector<Value> TypeLoweringVisitor::lowerArg(
     // Lower any other arguments by copying them to keep the relative order.
     lowering.push_back(newValue.first);
   }
-
-  return lowering;
+  return true;
 }
 
 static Value cloneAccess(ImplicitLocOpBuilder *builder, Operation *op,
@@ -460,8 +460,8 @@ void TypeLoweringVisitor::visitStmt(ConnectOp op) {
     return;
 
   // Attempt to get the bundle types.
-  SmallVector<FlatBundleFieldEntry> fields = peelType(op.dest().getType());
-  if (fields.empty())
+  SmallVector<FlatBundleFieldEntry> fields;
+  if (!peelType(op.dest().getType(), fields))
     return;
 
   // Loop over the leaf aggregates.
@@ -479,11 +479,12 @@ void TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
   if (processSAPath(op))
     return;
 
-  SmallVector<FlatBundleFieldEntry> srcFields = peelType(op.src().getType());
-  SmallVector<FlatBundleFieldEntry> destFields = peelType(op.dest().getType());
+  SmallVector<FlatBundleFieldEntry> srcFields, destFields;
+  bool sValid = peelType(op.src().getType(), srcFields);
+  bool dValid = peelType(op.dest().getType(), destFields);
 
   // Ground Type
-  if (destFields.empty()) {
+  if (!dValid) {
     // check for truncation
     Value src = op.src();
     Value dest = op.dest();
@@ -573,8 +574,8 @@ void TypeLoweringVisitor::visitStmt(WhenOp op) {
 /// element in a memory's data type.
 void TypeLoweringVisitor::visitDecl(MemOp op) {
   // Attempt to get the bundle types.
-  SmallVector<FlatBundleFieldEntry> fields = peelType(op.getDataType());
-  if (fields.empty())
+  SmallVector<FlatBundleFieldEntry> fields;
+  if (!peelType(op.getDataType(), fields))
     return;
 
   SmallVector<MemOp> newMemories;
@@ -645,8 +646,8 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   }
 
   for (size_t argIndex = 0; argIndex < newArgs.size(); ++argIndex) {
-    auto lowerings = lowerArg(extModule, argIndex, newArgs);
-    if (!lowerings.empty())
+    SmallVector<Value> lowering;
+    if (lowerArg(extModule, argIndex, newArgs, lowering))
       argsToRemove.push_back(argIndex);
     // lowerArg might have invalidated any reference to newArgs, be careful
   }
@@ -716,8 +717,8 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   }
 
   for (size_t argIndex = 0; argIndex < newArgs.size(); ++argIndex) {
-    auto lowerings = lowerArg(module, argIndex, newArgs);
-    if (!lowerings.empty()) {
+    SmallVector<Value> lowerings; 
+    if (lowerArg(module, argIndex, newArgs, lowerings)) {
       auto arg = module.getPortArgument(argIndex);
       processUsers(arg, lowerings);
       argsToRemove.push_back(argIndex);
@@ -849,9 +850,8 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
     auto srcType = op.getType(i).cast<FIRRTLType>();
 
     // Flatten any nested bundle types the usual way.
-    SmallVector<FlatBundleFieldEntry, 8> fieldTypes = peelType(srcType);
-
-    if (fieldTypes.empty())
+    SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
+    if (!peelType(srcType, fieldTypes))
       resultTypes.push_back(srcType);
     else {
       skip = false;
