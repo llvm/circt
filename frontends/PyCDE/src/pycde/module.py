@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from .support import Value
+from .support import Value, var_to_attribute
 from .types import types
 
 from circt import support
@@ -46,7 +46,7 @@ class Parameter:
 
   def __init__(self, value=None, name: str = None):
     if value is not None:
-      self.attr = support.var_to_attribute(value)
+      self.attr = var_to_attribute(value)
     self.name = name
 
 
@@ -143,6 +143,8 @@ class module:
       inst = self.extern_mod.create(
         op.name, **mapping, results=result_types).operation
       for (name, attr) in attrs.items():
+        if name == "parameters":
+          continue
         inst.attributes[name] = attr
       return inst
 
@@ -254,7 +256,7 @@ def _module_base(cls, extern: bool, params={}):
 
   # Second, the specified parameters.
   for (name, value) in params.items():
-    value = support.var_to_attribute(value, True)
+    value = var_to_attribute(value)
     if value is not None:
       mod._parameters[name] = value
       setattr(mod, name, Parameter(value, name))
@@ -311,8 +313,6 @@ class _Generate:
   """Represents a generator. Stores the generate function and wraps it with the
   necessary logic to build an HWModule."""
 
-
-
   def __init__(self, gen_func):
     self.gen_func = gen_func
     self.modcls = None
@@ -352,7 +352,7 @@ class _Generate:
     if "module_name" in self.params:
       module_name = self.params["module_name"]
     else:
-      module_name = self.create_module_name(mod, op)
+      module_name = self.create_module_name(op)
       self.params["module_name"] = module_name
     module_name = self.sanitize(module_name)
 
@@ -379,10 +379,12 @@ class _Generate:
       mapping = {name.value: op.operands[i] for i, name in enumerate(op_names)}
       inst = mod.create(op.name, **mapping).operation
       for (name, attr) in attrs.items():
+        if name == "parameters":
+          continue
         inst.attributes[name] = attr
       return inst
 
-  def create_module_name(self, mod, op):
+  def create_module_name(self, op):
     name = op.name
     if len(self.params) > 0:
       name += "_" + "_".join(
