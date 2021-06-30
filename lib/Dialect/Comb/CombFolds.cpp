@@ -893,6 +893,26 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
       return success();
     }
   }
+
+  // mux(selector, x, mux(selector, y, z) = mux(selector, x, z)
+  if (auto falseCase = dyn_cast_or_null<MuxOp>(op.falseValue().getDefiningOp())) {
+    if (op.cond() == falseCase.cond()) {
+      const auto newT = op.trueValue();
+      const auto newF = falseCase.falseValue();
+      rewriter.replaceOpWithNewOp<MuxOp>(op, op.cond(), newT, newF);
+      return success();
+    }
+  }
+
+  // mux(selector, mux(selector, a, b), c) = mux(selector, a, c)
+  if (auto trueCase = dyn_cast_or_null<MuxOp>(op.trueValue().getDefiningOp())) {
+    if (op.cond() == trueCase.cond()) {
+      const auto newT = trueCase.trueValue();
+      const auto newF = op.falseValue();
+      rewriter.replaceOpWithNewOp<MuxOp>(op, op.cond(), newT, newF);
+    }
+  }
+
   return failure();
 }
 
