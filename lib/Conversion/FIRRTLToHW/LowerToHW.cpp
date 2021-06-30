@@ -237,17 +237,19 @@ private:
   // once about any annotation class.
   StringSet<> alreadyPrinted;
   const bool enableAnnotationWarning;
+  std::mutex annotationPrintingMtx;
 };
 
 void CircuitLoweringState::warnOnRemainingAnnotations(
     Operation *op, const AnnotationSet &annoSet) {
   if (!enableAnnotationWarning || annoSet.empty())
     return;
+  std::lock_guard<std::mutex> lock(annotationPrintingMtx);
 
   for (auto a : annoSet) {
     auto inserted = alreadyPrinted.insert(a.getClass());
     if (inserted.second)
-      op->emitWarning("unprocessed annotation:'" + a.getClass() +
+      mlir::emitWarning(op->getLoc(), "unprocessed annotation:'" + a.getClass() +
                       "' still remaining after LowerToHW");
   }
 }
