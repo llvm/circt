@@ -6,7 +6,24 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines the LowerBundleVectorTypes pass.
+// This file defines the LowerBundleVectorTypes pass.  This pass replaces
+// aggregate types with expanded values.
+//
+// This pass walks the operations in reverse order. This lets it visit users
+// before defs. Users can usually be expanded out to multiple operations (think
+// mux of a bundle to muxes of each field) with a temporary subWhatever op
+// inserted. When processing an aggregate producer, we blow out the op as
+// appropriate, then walk the users, often those are subWhatever ops which can
+// be bypassed and deleted. Function arguments are logically last on the
+// operation visit order and walked left to right, being peeled one layer at a
+// time with replacements inserted to the right of the original argument.
+//
+// Each processing of an op peels one layer of aggregate type off.  Because new
+// ops are inserted immediately above the current up, the walk will visit them
+// next, effectively recusing on the aggregate types, without recusing.  These
+// potentially temporary ops(if the aggregate is complex) effectively serve as
+// the worklist.  Often aggregates are shallow, so the new ops are the final
+// ones.
 //
 //===----------------------------------------------------------------------===//
 
@@ -19,7 +36,7 @@
 #include "llvm/Support/Parallel.h"
 #include <deque>
 
-using namespace circt;
+    using namespace circt;
 using namespace firrtl;
 
 // TODO: check all argument types
@@ -85,8 +102,7 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
 /// Look through and collect subfields leading to a subaccess.
 static SmallVector<Operation *> getSAWritePath(Operation *op) {
   SmallVector<Operation *> retval;
-  Value lhs = op->getOperand(0);
-  auto defOp = lhs.getDefiningOp();
+  auto defOp = op->getOperand(0).getDefiningOp();
   while (defOp && isa<SubfieldOp, SubindexOp, SubaccessOp>(defOp)) {
     retval.push_back(defOp);
     defOp = defOp->getOperand(0).getDefiningOp();
@@ -294,16 +310,16 @@ bool TypeLoweringVisitor::processSAPath(Operation *op) {
 
 void TypeLoweringVisitor::lowerBlock(Block *block) {
   // Lower the operations.
-  for (auto iop = block->rbegin(), iep = block->rend(); iop != iep; ++iop) {
+  for (auto& iop : llvm::reverse(*block)) {
     // We erase old ops eagerly so we don't have dangling uses we've already
     // lowered.
     for (auto *op : opsToRemove)
       op->erase();
     opsToRemove.clear();
 
-    builder->setInsertionPoint(&*iop);
-    builder->setLoc(iop->getLoc());
-    dispatchVisitor(&*iop);
+    builder->setInsertionPoint(&iop);
+    builder->setLoc(iop.getLoc());
+    dispatchVisitor(&iop);
   }
 
   for (auto *op : opsToRemove)
@@ -728,9 +744,8 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
 
   // Remove block args that have been lowered.
   body->eraseArguments(argsToRemove);
-  for (auto ii = argsToRemove.rbegin(), ee = argsToRemove.rend(); ii != ee;
-       ++ii)
-    newArgs.erase(newArgs.begin() + *ii);
+  for (auto deadArg : llvm::reverse(argsToRemove))
+    newArgs.erase(newArgs.begin() + deadArg);
 
   SmallVector<NamedAttribute, 8> newModuleAttrs;
 
