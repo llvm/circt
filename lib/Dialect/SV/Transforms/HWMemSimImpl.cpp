@@ -131,7 +131,7 @@ void HWMemSimImplPass::generateMemory(hw::HWModuleOp op, FirMemory mem) {
       auto slot = b.create<sv::ArrayIndexInOutOp>(reg, addr);
       auto rcond = b.createOrFold<comb::AndOp>(
           en, b.createOrFold<comb::ICmpOp>(
-                  ICmpPredicate::eq, wmode,
+                  comb::ICmpPredicate::eq, wmode,
                   b.createOrFold<hw::ConstantOp>(wmode.getType(), 0)));
       auto wcond = b.createOrFold<comb::AndOp>(
           en, b.createOrFold<comb::AndOp>(wmask, wmode));
