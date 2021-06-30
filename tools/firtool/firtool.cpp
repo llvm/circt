@@ -211,6 +211,8 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   if (lowerTypes) {
     pm.addNestedPass<firrtl::CircuitOp>(
         firrtl::createLowerBundleVectorTypesPass());
+//    pm.addNestedPass<firrtl::CircuitOp>(
+//        firrtl::createLowerFIRRTLTypesPass());
     auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
     // Only enable expand whens if lower types is also enabled.
     if (expandWhens)

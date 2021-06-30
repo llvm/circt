@@ -893,15 +893,14 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   auto selectWidth =
       op.index().getType().cast<FIRRTLType>().getBitWidthOrSentinel();
 
-  Value mux = builder->create<SubindexOp>(input, vType.getNumElements() - 1);
-
+  Value mux = builder->create<InvalidValueOp>(vType.getElementType());
   // Build up the mux
-  for (size_t index = vType.getNumElements() - 1; index > 0; --index) {
+  for (size_t index = 0, e = vType.getNumElements(); index < e; ++index) {
     auto cond = builder->create<EQPrimOp>(
         op.index(), builder->createOrFold<ConstantOp>(
                         UIntType::get(op.getContext(), selectWidth),
-                        APInt(selectWidth, index - 1)));
-    auto access = builder->create<SubindexOp>(input, index - 1);
+                        APInt(selectWidth, index)));
+    auto access = builder->create<SubindexOp>(input, index);
     mux = builder->create<MuxPrimOp>(cond, access, mux);
   }
   op.replaceAllUsesWith(mux);
