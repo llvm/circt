@@ -1,9 +1,9 @@
 add_circt_dialect_library(CIRCTHIR
   helper.cpp  
-  HIR.cpp  
+  HIROpSyntax.cpp  
   HIRDialect.cpp  
   HIRInterfaces.cpp
-  HIROpSyntax.cpp  
+  HIR.cpp  
   HIROpVerifier.cpp  
   HIROpCanonicalizer.cpp
   HIRTypeSyntax.cpp

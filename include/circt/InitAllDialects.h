@@ -26,6 +26,7 @@
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
+#include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/IR/Dialect.h"
 
 namespace circt {
@@ -43,6 +44,7 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
     llhd::LLHDDialect,
     msft::MSFTDialect,
     hw::HWDialect,
+    mlir::scf::SCFDialect,
     seq::SeqDialect,
     staticlogic::StaticLogicDialect,
     sv::SVDialect

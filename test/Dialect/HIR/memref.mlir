@@ -14,6 +14,7 @@ hir.func @test at %t(
   %c1_f32 = constant 1.0:f32
   %0 = constant 0:index
   %1 = constant 1:index
+  %16 = constant 16:index
   %x = hir.alloca("BRAM_2P") : !hir.memref<(bank 4)x(bank 4)xi8> ports [#reg_rw,#reg_wr]
   %y = hir.bus.instantiate : !hir.bus<i1, flip i1, i8> 
   %z = hir.bus.instantiate : tensor<4x!hir.bus<i1, flip i1, i8>>
@@ -26,5 +27,10 @@ hir.func @test at %t(
 
   //hir.load %x[%0,%1] port 0 delay 0 at %t: !hir.memref<(bank 4)x(bank 4)xi8>
   hir.store %c1_f32 to %a[%c1_i4,%c1_i4,%0,%0] port 1 at %t + %1: !hir.memref<16x16x(bank 4)x(bank 3)xf32>
+
+  hir.for %i : index = %0 to %16 step %1 iter_time(%ti = %t + %1 ){
+    hir.yield at %ti + %1
+  }
+
   hir.return
 }

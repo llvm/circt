@@ -104,46 +104,93 @@ ParseResult parseBusPortsAttr(OpAsmParser &parser,
 //------------------------------------------------------------------------------
 // Type members.
 //------------------------------------------------------------------------------
+static LogicalResult
+verifyDelayAttribute(mlir::function_ref<InFlightDiagnostic()> emitError,
+                     DictionaryAttr attrDict) {
+  auto delayNameAndAttr = attrDict.getNamed("hir.delay");
+  if (!delayNameAndAttr.hasValue())
+    return failure();
+  if (!delayNameAndAttr->second.dyn_cast<IntegerAttr>())
+    return failure();
+  return success();
+}
+
+static LogicalResult
+verifyMemrefPortsAttribute(mlir::function_ref<InFlightDiagnostic()> emitError,
+                           DictionaryAttr attrDict) {
+  auto memrefPortsNameAndAttr = attrDict.getNamed("hir.memref.ports");
+  if (!memrefPortsNameAndAttr.hasValue())
+    return failure();
+  if (!memrefPortsNameAndAttr->second.dyn_cast<ArrayAttr>())
+    return failure();
+  return success();
+}
+
+static LogicalResult
+verifyBusPortsAttribute(mlir::function_ref<InFlightDiagnostic()> emitError,
+                        DictionaryAttr attrDict) {
+  auto memrefPortsNameAndAttr = attrDict.getNamed("hir.bus.ports");
+  if (!memrefPortsNameAndAttr.hasValue())
+    return failure();
+  if (!memrefPortsNameAndAttr->second.dyn_cast<ArrayAttr>())
+    return failure();
+  return success();
+}
 
 LogicalResult FuncType::verify(function_ref<InFlightDiagnostic()> emitError,
-                               FunctionType functionTy,
+                               ArrayRef<Type> inputTypes,
                                ArrayRef<DictionaryAttr> inputAttrs,
+                               ArrayRef<Type> resultTypes,
                                ArrayRef<DictionaryAttr> resultAttrs) {
-  auto inputTypes = functionTy.getInputs();
   if (inputAttrs.size() != inputTypes.size())
     return emitError() << "Number of input attributes is not same as number of "
                           "input types.";
+
+  if (resultAttrs.size() != resultTypes.size())
+    return emitError()
+           << "Number of result attributes is not same as number of "
+              "result types.";
+
+  // Verify inputs.
   for (size_t i = 0; i < inputTypes.size(); i++) {
     if (helper::isBuiltinType(inputTypes[i])) {
-      auto delayNameAndAttr = inputAttrs[i].getNamed("hir.delay");
-      if (!delayNameAndAttr.hasValue())
-        return emitError() << "Expected hir.delay in input attributes "
-                              "dictionary for input arg "
-                           << std::to_string(i) << ".";
-      if (!delayNameAndAttr->second.dyn_cast<IntegerAttr>())
+      if (failed(verifyDelayAttribute(emitError, inputAttrs[i])))
         return emitError() << "Expected hir.delay attribute to be an "
                               "IntegerAttr for input arg"
                            << std::to_string(i) << ".";
     } else if (inputTypes[i].dyn_cast<hir::MemrefType>()) {
-      auto memrefPortsNameAndAttr = inputAttrs[i].getNamed("hir.memref.ports");
-      if (!memrefPortsNameAndAttr.hasValue())
-        return emitError() << "Expected hir.memref.ports in input attributes "
-                              "dictionary for input arg "
-                           << std::to_string(i) << ".";
-      if (!memrefPortsNameAndAttr->second.dyn_cast<ArrayAttr>())
+      if (failed(verifyMemrefPortsAttribute(emitError, inputAttrs[i])))
         return emitError() << "Expected hir.memref.ports attribute to be an "
                               "ArrayAttr for input arg"
                            << std::to_string(i) << ".";
     } else if (inputTypes[i].dyn_cast<hir::BusType>()) {
-      auto memrefPortsNameAndAttr = inputAttrs[i].getNamed("hir.bus.ports");
-      if (!memrefPortsNameAndAttr.hasValue())
-        return emitError() << "Expected hir.bus.ports in input attributes "
-                              "dictionary for input arg "
-                           << std::to_string(i) << ".";
-      if (!memrefPortsNameAndAttr->second.dyn_cast<ArrayAttr>())
+      if (failed(verifyBusPortsAttribute(emitError, inputAttrs[i])))
         return emitError() << "Expected hir.bus.ports attribute to be an "
                               "ArrayAttr for input arg"
                            << std::to_string(i) << ".";
+    } else if (inputTypes[i].dyn_cast<hir::TimeType>()) {
+      return success();
+    } else {
+      return emitError()
+             << "Expected MLIR-builtin-type or hir::MemrefType or "
+                "hir::BusType or hir::TimeType in inputTypes, got :\n\t"
+             << inputTypes[i];
+    }
+  }
+
+  // Verify results.
+  for (size_t i = 0; i < resultTypes.size(); i++) {
+    if (helper::isBuiltinType(resultTypes[i])) {
+      if (failed(verifyDelayAttribute(emitError, resultAttrs[i])))
+        return emitError() << "Expected hir.delay attribute to be an "
+                              "IntegerAttr for result arg"
+                           << std::to_string(i) << ".";
+    } else if (resultTypes[i].dyn_cast<hir::TimeType>()) {
+      return success();
+    } else {
+      return emitError() << "Expected MLIR-builtin-type or hir::TimeType in "
+                            "resultTypes, got :\n\t"
+                         << resultTypes[i];
     }
   }
   return success();
@@ -249,27 +296,55 @@ static void printCallOp(OpAsmPrinter &printer, CallOp op) {
 /// IfOp
 static void printIfOp(OpAsmPrinter &printer, IfOp op) {
 
-  printer << "hir.if (" << op.cond() << ") at " << op.tstart();
+  printer << "hir.if (" << op.cond() << ") at ";
+  if (op.tstart()) {
+    printer << op.tstart();
+    if (op.offset())
+      printer << " + " << op.offset();
+  } else
+    printer << "?";
+
   printer.printRegion(op.if_region(),
                       /*printEntryBlockArgs=*/false,
                       /*printBlockTerminators=*/false);
 }
+
 static ParseResult parseIfOp(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::OperandType cond;
   OpAsmParser::OperandType tstart;
+  OpAsmParser::OperandType offset;
   if (parser.parseLParen() || parser.parseOperand(cond) || parser.parseRParen())
     return failure();
-  if (parser.parseKeyword("at") || parser.parseOperand(tstart))
+  if (parser.parseKeyword("at"))
     return failure();
 
-  if (parser.resolveOperand(
-          cond, IntegerType::get(parser.getBuilder().getContext(), 1),
-          result.operands) ||
-      parser.resolveOperand(
-          tstart, helper::getTimeType(parser.getBuilder().getContext()),
-          result.operands))
+  bool tstartPresent = false;
+  bool offsetPresent = false;
+  if (failed(parser.parseOptionalQuestion())) {
+    if (parser.parseOperand(tstart))
+      return failure();
+    tstartPresent = true;
+    if (succeeded(parser.parseOptionalPlus()))
+      if (parser.parseOperand(offset))
+        offsetPresent = true;
+  }
+  auto *context = parser.getBuilder().getContext();
+  if (parser.resolveOperand(cond, IntegerType::get(context, 1),
+                            result.operands))
     return failure();
 
+  if (tstartPresent)
+    if (parser.resolveOperand(tstart, TimeType::get(context), result.operands))
+      return failure();
+  if (offsetPresent)
+    if (parser.resolveOperand(offset, IndexType::get(context), result.operands))
+      return failure();
+
+  result.addAttribute(
+      "operand_segment_sizes",
+      parser.getBuilder().getI32VectorAttr({1, // cond
+                                            (int32_t)(tstartPresent ? 1 : 0),
+                                            (int32_t)(offsetPresent ? 1 : 0)}));
   Region *ifBody = result.addRegion();
   if (parser.parseRegion(*ifBody, {}, {}))
     return failure();
@@ -281,19 +356,25 @@ static ParseResult parseIfOp(OpAsmParser &parser, OperationState &result) {
 /// ForOp.
 /// Example:
 /// hir.for %i = %l to %u step %s iter_time(%ti = %t){...}
+
 static void printForOp(OpAsmPrinter &printer, ForOp op) {
-  printer << "hir.for"
-          << " " << op.getInductionVar() << " : "
-          << op.getInductionVar().getType() << " = " << op.lb() << " : "
-          << op.lb().getType() << " to " << op.ub() << " : "
-          << op.ub().getType() << " step " << op.step() << " : "
-          << op.step().getType() << " iter_time( " << op.getIterTimeVar()
-          << " = " << op.tstart() << " + " << op.offset() << ")";
+  printer << "hir.for " << op.getInductionVar() << " : "
+          << op.getInductionVar().getType() << " = " << op.lb() << " to "
+          << op.ub() << " step " << op.step() << " iter_time( "
+          << op.getIterTimeVar() << " = ";
+  if (op.tstart()) {
+    printer << op.tstart();
+    if (op.offset())
+      printer << " + " << op.offset();
+  } else
+    printer << "?";
+  printer << ")";
 
   printer.printRegion(op.region(),
                       /*printEntryBlockArgs=*/false,
                       /*printBlockTerminators=*/false);
 }
+
 static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
   auto &builder = parser.getBuilder();
   auto *context = parser.getBuilder().getContext();
@@ -302,7 +383,7 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
   Type ubRawType;
   Type stepRawType;
   Type tstartRawType = timeTy;
-  Type offsetType = IndexType::get(parser.getBuilder().getContext());
+  Type offsetType = IndexType::get(context);
   Type regionRawOperandTypes[2];
   ArrayRef<Type> regionOperandTypes(regionRawOperandTypes);
   regionRawOperandTypes[1] = timeTy;
@@ -320,34 +401,65 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
       parser.parseColonType(regionRawOperandTypes[0]) || parser.parseEqual())
     return failure();
 
+  lbRawType = regionRawOperandTypes[0];
+  ubRawType = regionRawOperandTypes[0];
+  stepRawType = regionRawOperandTypes[0];
+
   // Parse loop bounds.
-  if (parser.parseOperand(lbRawOperand) || parser.parseColonType(lbRawType) ||
-      parser.parseKeyword("to") || parser.parseOperand(ubRawOperand) ||
-      parser.parseColonType(ubRawType) || parser.parseKeyword("step") ||
-      parser.parseOperand(stepRawOperand) || parser.parseColonType(stepRawType))
+  if (parser.parseOperand(lbRawOperand) || parser.parseKeyword("to") ||
+      parser.parseOperand(ubRawOperand) || parser.parseKeyword("step") ||
+      parser.parseOperand(stepRawOperand))
     return failure();
 
   // Parse iter time.
   if (parser.parseKeyword("iter_time") || parser.parseLParen() ||
-      parser.parseRegionArgument(regionRawOperands[1]) || parser.parseEqual() ||
-      parser.parseOperand(tstartRawOperand) || parser.parsePlus() ||
-      parser.parseOperand(offsetRawOperand) || parser.parseRParen())
+      parser.parseRegionArgument(regionRawOperands[1]) || parser.parseEqual())
     return failure();
 
+  bool tstartPresent = false;
+  bool offsetPresent = false;
+  if (failed(parser.parseOptionalQuestion())) {
+    if (parser.parseOperand(tstartRawOperand))
+      return failure();
+    tstartPresent = true;
+    if (succeeded(parser.parseOptionalPlus())) {
+      if (parser.parseOperand(offsetRawOperand))
+        return failure();
+      offsetPresent = true;
+    }
+  }
+  if (parser.parseRParen())
+    return failure();
+
+  // parse the loop bounds.
   if (parser.resolveOperand(lbRawOperand, lbRawType, result.operands) ||
       parser.resolveOperand(ubRawOperand, ubRawType, result.operands) ||
-      parser.resolveOperand(stepRawOperand, stepRawType, result.operands) ||
-      parser.resolveOperand(tstartRawOperand, tstartRawType, result.operands) ||
-      parser.resolveOperand(offsetRawOperand, offsetType, result.operands))
+      parser.resolveOperand(stepRawOperand, stepRawType, result.operands))
     return failure();
+
+  // parse optional tstart and offset.
+  if (tstartPresent)
+    if (parser.resolveOperand(tstartRawOperand, tstartRawType, result.operands))
+      return failure();
+  if (offsetPresent)
+    if (parser.resolveOperand(offsetRawOperand, offsetType, result.operands))
+      return failure();
+
+  result.addAttribute(
+      "operand_segment_sizes",
+      parser.getBuilder().getI32VectorAttr({1, // lb
+                                            1, // ub
+                                            1, // step
+                                            (int32_t)(tstartPresent ? 1 : 0),
+                                            (int32_t)(offsetPresent ? 1 : 0)}));
 
   // Parse the body region.
-
   Region *body = result.addRegion();
-
   if (parser.parseRegion(*body, regionOperands, regionOperandTypes))
     return failure();
-  result.addTypes(helper::getTimeType(parser.getBuilder().getContext()));
+
+  // First result is the time at which last iteration yields.
+  result.addTypes(TimeType::get(context));
   ForOp::ensureTerminator(*body, builder, result.location);
   return success();
 }
@@ -532,12 +644,8 @@ parseFuncSignature(OpAsmParser &parser, hir::FuncType &funcTy,
     }
   }
 
-  auto functionTy =
-      parser.getBuilder().getFunctionType(inputTypes, resultTypes);
-  funcTy = hir::FuncType::get(parser.getBuilder().getContext(), functionTy,
-                              inputAttrs, resultAttrs);
-  assert(inputAttrs.size() == inputTypes.size());
-  assert(resultAttrs.size() == resultTypes.size());
+  funcTy = hir::FuncType::get(parser.getBuilder().getContext(), inputTypes,
+                              inputAttrs, resultTypes, resultAttrs);
   return success();
 }
 

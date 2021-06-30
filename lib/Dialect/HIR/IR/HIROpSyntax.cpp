@@ -1,42 +1,50 @@
 #include "HIROpSyntax.h"
 #include "circt/Dialect/HIR/IR/helper.h"
 
-namespace helper {} // namespace helper.
-
 // parser and printer for Time and offset.
-ParseResult
-parseTimeAndOffset(mlir::OpAsmParser &parser, OpAsmParser::OperandType &tstart,
-                   llvm::Optional<OpAsmParser::OperandType> &varOffset,
-                   IntegerAttr &constOffset) {
-  OpAsmParser::OperandType tempOffset;
+ParseResult parseTimeAndOffset(
+    mlir::OpAsmParser &parser,
+    llvm::Optional<mlir::OpAsmParser::OperandType> &tstartOptional,
+    llvm::Optional<mlir::OpAsmParser::OperandType> &offsetOptional) {
+  OpAsmParser::OperandType tstart;
+  OpAsmParser::OperandType offset;
 
-  constOffset = helper::getIntegerAttr(parser.getBuilder().getContext(), 0);
+  if (parser.parseKeyword("at"))
+    return failure();
+
+  // early exit if no schedule provided.
+  if (parser.parseOptionalQuestion())
+    return success();
+
+  // parse tstart.
   if (parser.parseOperand(tstart))
     return failure();
+  tstartOptional = tstart;
 
   // early exit if no offsets.
   if (parser.parseOptionalPlus())
     return success();
 
-  // try to parse varOffset
-  mlir::OptionalParseResult result = parser.parseOptionalOperand(tempOffset);
-  if (result.hasValue() && succeeded(result.getValue()))
-    varOffset = tempOffset;
-  // otherwise constOffset
-  else if (parser.parseAttribute(constOffset))
+  // Parse offset
+  if (parser.parseOperand(offset))
     return failure();
+  offsetOptional = offset;
 
   return success();
 }
 
 void printTimeAndOffset(OpAsmPrinter &printer, Operation *op, Value tstart,
-                        Value varOffset, IntegerAttr constOffset) {
+                        Value offset) {
+  printer << "at ";
+  if (!tstart) {
+    printer << "?";
+    return;
+  }
   printer << tstart;
 
-  if (varOffset)
-    printer << "+" << varOffset;
-  if (constOffset.getInt() != 0)
-    printer << " + " << constOffset.getInt();
+  if (!offset)
+    return;
+  printer << " + " << offset;
 }
 
 // parser and printer for array address indices.

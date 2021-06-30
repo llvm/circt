@@ -1,5 +1,5 @@
-add_circt_conversion_library(CIRCTAffineToHIR
-  AffineToHIR.cpp
+add_circt_conversion_library(CIRCTStandardToHIR
+  StandardToHIR.cpp
 
   DEPENDS
   CIRCTConversionPassIncGen

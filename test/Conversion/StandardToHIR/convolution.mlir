@@ -7,7 +7,7 @@ func @convolution(
   affine.for %i = 0 to 10 step 1{
     affine.for %j = 0 to 10 step 1{
 
-      affine.store %0, %res[%i,%j] : memref<14x14xi32>//0
+      affine.store %0, %res[%i,%j] {sample_attr="blah"}: memref<14x14xi32>//0
 
       affine.for %k1 = 0 to 4 step 1 {
         affine.for %k2 = 0 to 4 step 1{

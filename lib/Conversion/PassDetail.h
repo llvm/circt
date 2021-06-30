@@ -13,6 +13,8 @@
 #include "mlir/Pass/Pass.h"
 
 namespace mlir {
+class StandardOpsDialect;
+
 namespace LLVM {
 class LLVMDialect;
 } // namespace LLVM

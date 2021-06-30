@@ -102,22 +102,17 @@ Value createAddrAndDataTuple(OpBuilder &builder, Location loc,
 }
 
 hir::FuncType getFuncType(OpBuilder &builder, hir::FuncType oldFuncTy,
-                          ArrayRef<Value> arguments,
+                          ArrayRef<Value> inputs,
                           ArrayRef<DictionaryAttr> inputAttrs) {
 
   MLIRContext *context = builder.getContext();
-  SmallVector<Type, 4> argumentTypes;
-  for (Value argument : arguments)
-    argumentTypes.push_back(argument.getType());
+  SmallVector<Type, 4> inputTypes;
+  for (Value input : inputs)
+    inputTypes.push_back(input.getType());
 
-  FunctionType oldFunctionTy = oldFuncTy.getFunctionType();
-  auto resultTypes = oldFunctionTy.getResults();
-
-  FunctionType newFunctionTy =
-      builder.getFunctionType(argumentTypes, resultTypes);
-
-  hir::FuncType newFuncTy = hir::FuncType::get(
-      context, newFunctionTy, inputAttrs, oldFuncTy.getResultAttrs());
+  hir::FuncType newFuncTy = hir::FuncType::get(context, inputTypes, inputAttrs,
+                                               oldFuncTy.getResultTypes(),
+                                               oldFuncTy.getResultAttrs());
 
   return newFuncTy;
 }
@@ -316,24 +311,23 @@ void MemrefLoweringPass::updateOp(hir::AllocaOp op) {
   }
 
   SmallVector<Type, 4> bramCallArgTypes;
-  SmallVector<DictionaryAttr> inputAttrs;
+  SmallVector<DictionaryAttr> inputAttrsbramCallArgAttrs;
   for (size_t i = 0; i < bramCallArgs.size(); i++) {
     auto bramCallArg = bramCallArgs[i];
     bramCallArgTypes.push_back(bramCallArg.getType());
     if (bramCallBusPorts[i] == SEND)
-      inputAttrs.push_back(helper::getDictionaryAttr(
+      inputAttrsbramCallArgAttrs.push_back(helper::getDictionaryAttr(
           builder, "ports", StringAttr::get(context, "send")));
     else
-      inputAttrs.push_back(helper::getDictionaryAttr(
+      inputAttrsbramCallArgAttrs.push_back(helper::getDictionaryAttr(
           builder, "ports", StringAttr::get(context, "recv")));
   }
 
   Value tstart = getOperation().getBody().front().getArguments().back();
 
   FuncType funcTy = hir::FuncType::get(
-      context,
-      FunctionType::get(context, bramCallArgTypes, SmallVector<Type>({})),
-      inputAttrs, SmallVector<DictionaryAttr>({}));
+      context, bramCallArgTypes, inputAttrsbramCallArgAttrs,
+      SmallVector<Type>({}), SmallVector<DictionaryAttr>({}));
 
   std::string moduleAttr =
       op.moduleAttr().dyn_cast<StringAttr>().getValue().str();

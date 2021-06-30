@@ -61,17 +61,19 @@ struct MemrefTypeStorage : public TypeStorage {
 
 /// Storage class for FuncType.
 struct FuncTypeStorage : public TypeStorage {
-  FuncTypeStorage(FunctionType functionTy, ArrayRef<DictionaryAttr> inputAttrs,
+  FuncTypeStorage(ArrayRef<Type> inputTypes,
+                  ArrayRef<DictionaryAttr> inputAttrs,
+                  ArrayRef<Type> resultTypes,
                   ArrayRef<DictionaryAttr> resultAttrs)
-      : functionTy(functionTy), inputAttrs(inputAttrs),
-        resultAttrs(resultAttrs) {}
+      : inputTypes(inputTypes), inputAttrs(inputAttrs),
+        resultTypes(resultTypes), resultAttrs(resultAttrs) {}
 
-  using KeyTy = std::tuple<FunctionType, ArrayRef<DictionaryAttr>,
-                           ArrayRef<DictionaryAttr>>;
+  using KeyTy = std::tuple<ArrayRef<Type>, ArrayRef<DictionaryAttr>,
+                           ArrayRef<Type>, ArrayRef<DictionaryAttr>>;
 
   /// Define the comparison function for the key type.
   bool operator==(const KeyTy &key) const {
-    return key == KeyTy(functionTy, inputAttrs, resultAttrs);
+    return key == KeyTy(inputTypes, inputAttrs, resultTypes, resultAttrs);
   }
 
   /// Define a hash function for the key type.
@@ -80,24 +82,27 @@ struct FuncTypeStorage : public TypeStorage {
   }
 
   /// Define a construction function for the key type.
-  static KeyTy getKey(FunctionType functionTy,
+  static KeyTy getKey(ArrayRef<Type> inputTypes,
                       ArrayRef<DictionaryAttr> inputAttrs,
+                      ArrayRef<Type> resultTypes,
                       ArrayRef<DictionaryAttr> resultAttrs) {
-    return KeyTy(functionTy, inputAttrs, resultAttrs);
+    return KeyTy(inputTypes, inputAttrs, resultTypes, resultAttrs);
   }
 
   /// Define a construction method for creating a new instance of this storage.
   static FuncTypeStorage *construct(mlir::TypeStorageAllocator &allocator,
                                     const KeyTy &key) {
-    FunctionType functionTy = std::get<0>(key);
+    auto inputTypes = allocator.copyInto(std::get<0>(key));
     auto inputAttrs = allocator.copyInto(std::get<1>(key));
-    auto resultAttrs = allocator.copyInto(std::get<2>(key));
+    auto resultTypes = allocator.copyInto(std::get<2>(key));
+    auto resultAttrs = allocator.copyInto(std::get<3>(key));
     return new (allocator.allocate<FuncTypeStorage>())
-        FuncTypeStorage(functionTy, inputAttrs, resultAttrs);
+        FuncTypeStorage(inputTypes, inputAttrs, resultTypes, resultAttrs);
   }
 
-  FunctionType functionTy;
+  ArrayRef<Type> inputTypes;
   ArrayRef<DictionaryAttr> inputAttrs;
+  ArrayRef<Type> resultTypes;
   ArrayRef<DictionaryAttr> resultAttrs;
 };
 
@@ -278,18 +283,34 @@ public:
   using Base::Base;
 
   static StringRef getKeyword() { return "func"; }
-  static FuncType get(MLIRContext *context, FunctionType functionTy,
+
+  // Depricated.
+  // static FuncType get(MLIRContext *context, FunctionType functionTy,
+  //                    ArrayRef<DictionaryAttr> inputAttrs,
+  //                    ArrayRef<DictionaryAttr> resultAttrs) {
+  //  return Base::get(context, functionTy, inputAttrs, resultAttrs);
+  //}
+
+  /// Build a new FuncType from the given attributes.
+  static FuncType get(MLIRContext *context, ArrayRef<Type> inputTypes,
                       ArrayRef<DictionaryAttr> inputAttrs,
+                      ArrayRef<Type> resultTypes,
                       ArrayRef<DictionaryAttr> resultAttrs) {
-    return Base::get(context, functionTy, inputAttrs, resultAttrs);
+    return Base::get(context, inputTypes, inputAttrs, resultTypes, resultAttrs);
   }
 
   static LogicalResult verify(function_ref<InFlightDiagnostic()> emitError,
-                              FunctionType functionTy,
+                              ArrayRef<Type> inputTypes,
                               ArrayRef<DictionaryAttr> inputAttrs,
+                              ArrayRef<Type> resultTypes,
                               ArrayRef<DictionaryAttr> resultAttrs);
-  FunctionType getFunctionType() { return getImpl()->functionTy; }
+  FunctionType getFunctionType() {
+    return FunctionType::get(getContext(), getImpl()->inputTypes,
+                             getImpl()->resultTypes);
+  }
+  ArrayRef<Type> getInputTypes() { return getImpl()->inputTypes; }
   ArrayRef<DictionaryAttr> getInputAttrs() { return getImpl()->inputAttrs; }
+  ArrayRef<Type> getResultTypes() { return getImpl()->resultTypes; }
   ArrayRef<DictionaryAttr> getResultAttrs() { return getImpl()->resultAttrs; }
 };
 

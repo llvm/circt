@@ -16,18 +16,17 @@
 include "mlir/Pass/PassBase.td"
 
 //===----------------------------------------------------------------------===//
-// AffineToHIR
+// StandardToHIR
 //===----------------------------------------------------------------------===//
 
-def LowerAffineToHIR : Pass<"lower-affine-to-hir", "mlir::ModuleOp"> {
-  let summary = "Lower Affine + std + memref to HIR";
+def ConvertStandardToHIR : Pass<"convert-to-hir", "mlir::ModuleOp"> {
+  let summary = "Convert standard + scf + memref to HIR";
   let description = [{
-    Lower a module of Affine + std + memref dialect to the HIR dialect.
-    Propagate the dependence info from AffineAnalysis to HIR dialect.
+    Lower a module of standard + scf + memref dialect to the HIR dialect.
   }];
 
-  let constructor = "circt::createLowerAffineToHIRPass()";
-  let dependentDialects = ["hir::HIRDialect"];
+  let constructor = "circt::createConvertStandardToHIRPass()";
+  let dependentDialects = ["hir::HIRDialect", "mlir::StandardOpsDialect"];
 }
 
 //===----------------------------------------------------------------------===//

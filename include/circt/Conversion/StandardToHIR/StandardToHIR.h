@@ -14,7 +14,8 @@ class Pass;
 
 namespace circt {
 
-std::unique_ptr<mlir::Pass> createLowerAffineToHIRPass();
+/// Creates the lower-to-hir pass.
+std::unique_ptr<mlir::Pass> createConvertStandardToHIRPass();
 
 } // namespace circt
 

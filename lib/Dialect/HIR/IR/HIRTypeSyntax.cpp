@@ -205,7 +205,7 @@ parseElementTypeWithOptionalAttr(DialectAsmParser &parser,
 }
 
 static Type parseInnerFuncType(DialectAsmParser &parser, MLIRContext *context) {
-  SmallVector<Type, 4> argTypes;
+  SmallVector<Type, 4> inputTypes;
   SmallVector<DictionaryAttr, 4> inputAttrs;
   SmallVector<DictionaryAttr, 4> resultAttrs;
   if (parser.parseLParen())
@@ -215,7 +215,7 @@ static Type parseInnerFuncType(DialectAsmParser &parser, MLIRContext *context) {
       Type type;
       if (parser.parseType(type))
         return Type();
-      argTypes.push_back(type);
+      inputTypes.push_back(type);
 
       if (helper::isBuiltinType(type)) {
         if (parseDelayAttr(parser, inputAttrs))
@@ -262,10 +262,8 @@ static Type parseInnerFuncType(DialectAsmParser &parser, MLIRContext *context) {
     }
   }
 
-  FunctionType functionTy =
-      parser.getBuilder().getFunctionType(argTypes, resultTypes);
-  return hir::FuncType::get(parser.getBuilder().getContext(), functionTy,
-                            inputAttrs, resultAttrs);
+  return hir::FuncType::get(parser.getBuilder().getContext(), inputTypes,
+                            inputAttrs, resultTypes, resultAttrs);
 }
 
 static Type parseInnerGroupType(DialectAsmParser &parser,
