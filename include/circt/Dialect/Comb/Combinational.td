@@ -112,6 +112,7 @@ def ICmpPredicateULT : I64EnumAttrCase<"ult", 6>;
 def ICmpPredicateULE : I64EnumAttrCase<"ule", 7>;
 def ICmpPredicateUGT : I64EnumAttrCase<"ugt", 8>;
 def ICmpPredicateUGE : I64EnumAttrCase<"uge", 9>;
+let cppNamespace = "circt::comb" in
 def ICmpPredicate : I64EnumAttr<
     "ICmpPredicate",
     "hw.icmp comparison predicate",
