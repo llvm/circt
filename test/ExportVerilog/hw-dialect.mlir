@@ -655,4 +655,39 @@ hw.module @ABC(%a: i1, %b: i2) -> (%c: i4) {
   hw.output %1 : i4
   // CHECK-NEXT: assign c = whatever_d;
   // CHECK-NEXT: endmodule
+  // CHECK-EMPTY
+}
+
+
+hw.module.extern @Uwu() -> (%uwu_output : i32)
+hw.module.extern @Owo(%owo_in : i32) -> ()
+
+// CHECK-LABEL: module Nya(
+hw.module @Nya() -> (%nya_output : i32) {
+    %0 = hw.instance "uwu" @Uwu() : () -> (i32)
+    // CHECK: wire [31:0] uwu_uwu_output;
+    // CHECK-EMPTY:
+    // CHECK: Uwu uwu (
+    // CHECK: .uwu_output (uwu_uwu_output)
+    // CHECK: );
+
+    hw.instance "owo" @Owo(%0) : (i32) -> ()
+    // CHECK: Owo owo (
+    // CHECK: .owo_in (uwu_uwu_output)
+    // CHECK: );
+
+    hw.output %0 : i32
+    // CHECK: assign nya_output = uwu_uwu_output;
+    // CHECK: endmodule
+}
+
+// CHECK-LABEL: module Nya2(
+hw.module @Nya2() -> (%nya2_output : i32) {
+    %0 = hw.instance "uwu" @Uwu() : () -> (i32)
+    // CHECK: Uwu uwu (
+    // CHECK: .uwu_output (nya2_output)
+    // CHECK: );
+
+    hw.output %0 : i32
+    // CHECK: endmodule
 }
