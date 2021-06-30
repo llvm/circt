@@ -175,3 +175,38 @@ hw.module @compareStrengthSignedCommonPrefix(%arg0 : i3, %arg1: i9, %arg2: i9) -
   %2 = comb.icmp sge %0, %1 : i12
   hw.output %2 : i1
 }
+
+// Validates that cmp(concat(..), concat(...)) that should be simplified to true
+// are indeed so.
+// CHECK-LABEL: hw.module @compareConcatEliminationTrueCases
+// CHECK-NEXT:    %true = hw.constant true
+// CHECK-NEXT:    hw.output %true : i1
+hw.module @compareConcatEliminationTrueCases(%arg0 : i4, %arg1: i9, %arg2: i7) -> (%o : i1) {
+  %0 = comb.concat %arg0, %arg1, %arg2 : (i4, i9, i7) -> i20
+  %1 = comb.concat %arg0, %arg1, %arg2 : (i4, i9, i7) -> i20
+  %2 = comb.icmp sle %0, %1 : i20
+  %3 = comb.icmp sge %0, %1 : i20
+  %4 = comb.icmp ule %0, %1 : i20
+  %5 = comb.icmp uge %0, %1 : i20
+  %6 = comb.icmp  eq %0, %1 : i20
+  %o = comb.and %2, %3, %4, %5, %6 : i1
+  hw.output %o : i1
+}
+
+// Validates cases of cmp(concat(..), concat(...)) that should be simplified to false
+// are indeed so.
+// CHECK-LABEL: hw.module @compareConcatEliminationFalseCases
+// CHECK-NEXT:    %false = hw.constant false
+// CHECK-NEXT:    hw.output %false : i1
+hw.module @compareConcatEliminationFalseCases(%arg0 : i4, %arg1: i9, %arg2: i7) -> (%o : i1) {
+  %0 = comb.concat %arg0, %arg1, %arg2 : (i4, i9, i7) -> i20
+  %1 = comb.concat %arg0, %arg1, %arg2 : (i4, i9, i7) -> i20
+  %2 = comb.icmp slt %0, %1 : i20
+  %3 = comb.icmp sgt %0, %1 : i20
+  %4 = comb.icmp ult %0, %1 : i20
+  %5 = comb.icmp ugt %0, %1 : i20
+  %6 = comb.icmp  ne %0, %1 : i20
+  %o = comb.or %2, %3, %4, %5, %6 : i1
+  hw.output %o : i1
+}
+
