@@ -3,6 +3,8 @@ import circt.dialects.hw as hw
 
 import mlir.ir as ir
 
+import os
+
 
 class Value:
 
@@ -51,3 +53,17 @@ def var_to_attribute(obj) -> ir.Attribute:
     return ir.DictAttr.get(attrs)
   raise TypeError(f"Cannot convert type '{type(obj)}' to MLIR attribute. "
                   "This is required for parameters.")
+
+
+__dir__ = os.path.dirname(__file__)
+_local_files = set([os.path.join(__dir__, x) for x in os.listdir(__dir__)])
+
+
+def get_user_loc() -> ir.Location:
+  import traceback
+  stack = reversed(traceback.extract_stack())
+  for frame in stack:
+    if frame.filename in _local_files:
+      continue
+    return ir.Location.file(frame.filename, frame.lineno, 0)
+  return ir.Location.unknown()
