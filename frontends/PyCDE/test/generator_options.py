@@ -40,6 +40,7 @@ top3 = Top()
 try:
   top3.generate()
 except RuntimeError:
+  print("generator exception")
   pass
 
 # CHECK: generator exception
@@ -47,6 +48,7 @@ top4 = Top()
 try:
   top4.generate(["generator_a", "generator_b"])
 except RuntimeError:
+  print("generator exception")
   pass
 
 # CHECK: generator exception
@@ -54,4 +56,5 @@ top5 = Top()
 try:
   top5.generate(["nonexistant"])
 except RuntimeError:
+  print("generator exception")
   pass

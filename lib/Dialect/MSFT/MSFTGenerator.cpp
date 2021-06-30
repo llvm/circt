@@ -75,6 +75,7 @@ LogicalResult OpGenerator::runOnOperation(mlir::Operation *op,
   Operation *replacement = gen(op);
   if (replacement == nullptr)
     return op->emitError("Failed generator on ") << op->getName();
+  replacement->setLoc(op->getLoc());
   rewriter.replaceOp(op, replacement->getResults());
   return success();
 }

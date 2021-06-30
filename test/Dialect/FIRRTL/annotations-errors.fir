@@ -1,10 +1,30 @@
 ; RUN: circt-translate -import-firrtl -verify-diagnostics --split-input-file %s
 
+; COM: Invalid circuit should report an error
+
+; expected-error @+2 {{Invalid/unsupported annotation format}}
+; expected-note @+1 {{/* error: annotation has invalid circuit name */}}
+circuit Foo: %[[{"one":null,"target":"~Fooo|Foo>bar"}]]
+  module Foo:
+    skip
+
+; // -----
+
+; COM: Invalid circuit should report an error
+
+; expected-error @+2 {{Invalid/unsupported annotation format}}
+; expected-note @+1 {{/* error: annotation has invalid circuit name */}}
+circuit Foo: %[[{"one":null,"target":"~Fooo"}]]
+  module Foo:
+    skip
+
+; // -----
+
 ; COM: A non-local Annotation is unsupported.
 
 ; expected-error @+2 {{Invalid/unsupported annotation format}}
-; expected-note @+1 {{"target": /* error: Unsupported target (not a local CircuitTarget, ModuleTarget, or ReferenceTarget without subfield or subindex) */ "~Foo|Foo/bar:Bar"}}
-circuit Foo: %[[{"a":"a","target":"~Foo|Foo/bar:Bar"}]]
+; expected-note @+1 {{"target": /* error: unsupported non-local target */ "~Foo|Foo/bar:Bar/baz:Baz"}}
+circuit Foo: %[[{"a":"a","target":"~Foo|Foo/bar:Bar/baz:Baz"}]]
   module Foo:
     skip
 
@@ -73,3 +93,44 @@ circuit Foo: %[[{"target":""}]]
 circuit Foo: %[[{"target":null}]]
   module Foo:
     skip
+
+; // -----
+
+; COM: Invalid port reference should report errors
+circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[1]"}]]
+  module Bar:
+    input a: UInt<1>
+  module Foo:
+    ; expected-error @+1 {{the first token is invalid}}
+    inst bar of Bar
+
+; // -----
+
+; COM: Invalid sub-target annotation should report an error
+
+circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[a].baz"}, {"two":null,"target":"~Foo|Foo>bar[2].baz"}]]
+  module Foo:
+; expected-error @+2 {{expect an integer for the 1-th token of .a.baz}}
+; expected-error @+1 {{the 1-th token of [2].baz is out of range in the vector}}
+    wire bar: {baz: UInt<1>, qux: UInt<1>}[2]
+
+; // -----
+
+; COM: Invalid sub-target annotation should report an error
+
+circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[1][0]"},{"two":null,"target":"~Foo|Foo>bar[1].qnx"}]]
+  module Foo:
+    input clock: Clock
+; expected-error @+2 {{expect a string for the 2-th token of [1][0]}}
+; expected-error @+1 {{the 2-th token of [1].qnx is not found in the bundle}}
+    reg bar: {baz: UInt<1>, qux: UInt<1>}[2], clock
+
+; // -----
+
+; COM: Invalid sub-target annotation should report an error
+
+circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[1].baz[0]"}]]
+  module Foo:
+    input clock: Clock
+; expected-error @+1 {{the 3-th token of [1].baz[0] expects an aggregate type}}
+    reg bar: {baz: UInt<1>, qux: UInt<1>}[2], clock

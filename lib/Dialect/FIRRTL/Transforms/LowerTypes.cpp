@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
@@ -108,53 +109,17 @@ static FIRRTLType getCanonicalAggregateType(Type originalType) {
 /// with "target" key, that do not match the field suffix.
 static void filterAnnotations(ArrayAttr annotations,
                               SmallVector<Attribute> &loweredAttrs,
-                              StringRef suffix) {
+                              unsigned targetFieldID) {
   if (!annotations || annotations.empty())
     return;
 
   for (auto opAttr : annotations) {
-    auto di = opAttr.dyn_cast<DictionaryAttr>();
-    if (!di) {
+    if (auto subAnno = opAttr.dyn_cast<SubAnnotationAttr>()) {
+      if (targetFieldID >= subAnno.getMinFieldID() &&
+          targetFieldID <= subAnno.getMaxFieldID())
+        loweredAttrs.push_back(subAnno.getAnnotations());
+    } else
       loweredAttrs.push_back(opAttr);
-      continue;
-    }
-    auto targetAttr = di.get("target");
-    if (!targetAttr) {
-      loweredAttrs.push_back(opAttr);
-      continue;
-    }
-
-    ArrayAttr subFieldTarget = targetAttr.cast<ArrayAttr>();
-    SmallString<16> targetStr;
-    for (auto fName : subFieldTarget) {
-      std::string fNameStr = fName.cast<StringAttr>().getValue().str();
-      // The fNameStr will begin with either '[' or '.', replace it with an
-      // '_' to construct the suffix.
-      fNameStr[0] = '_';
-      // If it ends with ']', then just remove it.
-      if (fNameStr.back() == ']')
-        fNameStr.erase(fNameStr.size() - 1);
-
-      targetStr += fNameStr;
-    }
-    // If no subfield attribute, then copy the annotation.
-    if (targetStr.empty()) {
-      loweredAttrs.push_back(opAttr);
-      continue;
-    }
-    // If the subfield suffix doesn't match, then ignore the annotation.
-    if (suffix.find(targetStr.str().str()) != 0)
-      continue;
-
-    NamedAttrList modAttr;
-    for (auto attr : di.getValue()) {
-      // Ignore the actual target annotation, but copy the rest of annotations.
-      if (attr.first.str() == "target")
-        continue;
-      modAttr.push_back(attr);
-    }
-    loweredAttrs.push_back(
-        DictionaryAttr::get(annotations.getContext(), modAttr));
   }
 }
 
@@ -162,11 +127,11 @@ static void filterAnnotations(ArrayAttr annotations,
 /// This removes annotations with "target" key that does not match the field
 /// suffix.
 static AnnotationSet filterAnnotations(AnnotationSet annotations,
-                                       StringRef suffix) {
+                                       unsigned targetFieldID) {
   if (annotations.empty())
     return annotations;
   SmallVector<Attribute> loweredAttrs;
-  filterAnnotations(annotations.getArrayAttr(), loweredAttrs, suffix);
+  filterAnnotations(annotations.getArrayAttr(), loweredAttrs, targetFieldID);
   return AnnotationSet(ArrayAttr::get(annotations.getContext(), loweredAttrs));
 }
 
@@ -210,7 +175,8 @@ private:
 
   // Helpers to manage state.
   Value addArg(FModuleOp module, Type type, unsigned oldArgNumber,
-               Direction direction, StringRef nameSuffix = "");
+               Direction direction, unsigned targetFieldID,
+               StringRef nameSuffix = "");
 
   void setBundleLowering(FieldRef fieldRef, Value newValue);
   Value getBundleLowering(FieldRef fieldRef);
@@ -338,7 +304,8 @@ void TypeLoweringVisitor::lowerArg(FModuleOp module, BlockArgument arg,
     // Flip the direction if the field is an output.
     auto direction = (Direction)(
         (unsigned)getModulePortDirection(module, argNumber) ^ field.isOutput);
-    auto newValue = addArg(module, type, argNumber, direction, field.suffix);
+    auto newValue =
+        addArg(module, type, argNumber, direction, field.fieldID, field.suffix);
 
     // If this field was flattened from a bundle.
     if (!field.suffix.empty()) {
@@ -394,7 +361,7 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
       // Populate newAnnotations with the old annotations filtered to those
       // associated with just this field.
       AnnotationSet newAnnotations =
-          filterAnnotations(oldAnnotations, field.suffix);
+          filterAnnotations(oldAnnotations, field.fieldID);
 
       // Populate the new arg attributes.
       argAttrDicts.push_back(newAnnotations.getArgumentAttrDict(argAttrs));
@@ -441,22 +408,29 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
   SmallVector<StringAttr, 8> resultNames;
   SmallVector<size_t, 8> numFieldsPerResult;
   SmallVector<unsigned, 8> resultFieldIDs;
+  SmallVector<Attribute, 8> lowerPortAnnotations;
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
     flattenType(op.getType(i).cast<FIRRTLType>(), fieldTypes);
 
+    auto annotations = op.getPortAnnotation(i);
     for (auto field : fieldTypes) {
       // Store the flat type for the new bundle type.
       resultNames.push_back(builder->getStringAttr(field.suffix));
       resultTypes.push_back(field.getPortType());
       resultFieldIDs.push_back(field.fieldID);
+
+      SmallVector<Attribute> loweredAttrs;
+      filterAnnotations(annotations, loweredAttrs, field.fieldID);
+      lowerPortAnnotations.push_back(builder->getArrayAttr(loweredAttrs));
     }
     numFieldsPerResult.push_back(fieldTypes.size());
   }
 
   auto newInstance = builder->create<InstanceOp>(
-      resultTypes, op.moduleNameAttr(), op.nameAttr(), op.annotations());
+      resultTypes, op.moduleNameAttr(), op.nameAttr(), op.annotations(),
+      builder->getArrayAttr(lowerPortAnnotations));
 
   // Record the mapping of each old result to each new result.
   size_t nextResult = 0;
@@ -491,6 +465,8 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
   auto type = op.getDataType();
   auto depth = op.depth();
 
+  // Note that this "type" is the type of the data field. Therefore, the
+  // fieldTypes are the leaf elements of the data field.
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
   flattenType(type, fieldTypes);
 
@@ -498,6 +474,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
   // cleared and re-used.
   SmallVector<Type, 4> resultPortTypes;
   llvm::SmallSetVector<Attribute, 4> resultPortNames;
+  SmallVector<Attribute, 8> lowerPortAnnotations;
 
   // Insert a unique port into resultPortNames with base name nameStr.
   auto uniquePortName = [&](StringRef baseName) {
@@ -519,20 +496,81 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     // constructed by checking the kind of the memory.
     resultPortTypes.clear();
     resultPortNames.clear();
+    lowerPortAnnotations.clear();
+
     for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
       auto kind = op.getPortKind(i);
       auto name = op.getPortName(i);
+      auto annotations = op.getPortAnnotation(i);
+
+      SmallVector<Attribute> loweredAttrs;
+      // Bypass unnessesary logics if the annotation array is empty.
+      if (!annotations.empty()) {
+        auto bundleType = op.getPortType(i).cast<BundleType>();
+
+        // Collect the field IDs of addr, en, clk, and data fields.
+        unsigned dataFieldID = 0;
+        SmallVector<unsigned, 4> otherFieldIDs;
+        unsigned idx = 0;
+        for (auto elem : bundleType.getElements()) {
+          auto fieldID = bundleType.getFieldID(idx++);
+          if (elem.name.getValue() == "data")
+            dataFieldID = fieldID;
+          else
+            otherFieldIDs.push_back(fieldID);
+        }
+
+        // Get the field ID of the current leaf element.
+        auto dataElementFieldID = dataFieldID + field.fieldID;
+
+        // Traverse all annotations and filter the annotations that should be
+        // attached.
+        for (auto attr : annotations) {
+          if (auto subAnno = attr.dyn_cast<SubAnnotationAttr>()) {
+            // The annotations of addr, en, and clk fields should be attached to
+            // all memories generated in this lowering.
+            if (llvm::any_of(otherFieldIDs, [&](unsigned fieldID) {
+                  return fieldID >= subAnno.getMinFieldID() &&
+                         fieldID <= subAnno.getMaxFieldID();
+                })) {
+              loweredAttrs.push_back(subAnno);
+              continue;
+            }
+
+            // If the target of the annotation is the current leaf element, the
+            // SubAnnotationAttr should be updated. Suppose the old target is
+            // "data.leaf", the new target should be "data". Therefore, the
+            // dataFieldID should be used here to construct the new
+            // SubAnnotationAttr.
+            if (dataElementFieldID >= subAnno.getMinFieldID() &&
+                dataElementFieldID <= subAnno.getMaxFieldID()) {
+              auto newSubAnno =
+                  SubAnnotationAttr::get(subAnno.getContext(), dataFieldID,
+                                         dataFieldID, subAnno.getAnnotations());
+              loweredAttrs.push_back(newSubAnno);
+            }
+          } else {
+            // If the annotation is targeting the whole memory port bundle,
+            // directly attach it.
+            loweredAttrs.push_back(attr);
+          }
+        }
+      }
 
       // Any read or write ports are just added.
       if (kind != MemOp::PortKind::ReadWrite) {
+        lowerPortAnnotations.push_back(builder->getArrayAttr(loweredAttrs));
         resultPortTypes.push_back(op.getTypeForPort(depth, field.type, kind));
         uniquePortName(name.getValue());
         continue;
       }
 
       // Any readwrite ports are lowered to 1x read and 1x write.
+      lowerPortAnnotations.push_back(builder->getArrayAttr(loweredAttrs));
       resultPortTypes.push_back(
           op.getTypeForPort(depth, field.type, MemOp::PortKind::Read));
+
+      lowerPortAnnotations.push_back(builder->getArrayAttr(loweredAttrs));
       resultPortTypes.push_back(
           op.getTypeForPort(depth, field.type, MemOp::PortKind::Write));
 
@@ -542,16 +580,13 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     }
 
     // Construct the new memory for this flattened field.
-    //
-    // TODO: Annotations are just copied to the lowered memory.
-    // Change this to copy all global annotations and only those which
-    // target specific ports.
     auto newName = op.name().str() + field.suffix;
     auto newMem = builder->create<MemOp>(
         resultPortTypes, op.readLatencyAttr(), op.writeLatencyAttr(),
         op.depthAttr(), op.ruwAttr(),
         builder->getArrayAttr(resultPortNames.getArrayRef()),
-        builder->getStringAttr(newName), op.annotations());
+        builder->getStringAttr(newName), op.annotations(),
+        builder->getArrayAttr(lowerPortAnnotations));
 
     // Setup the lowering to the new memory. We need to track both the
     // new memory index ("i") and the old memory index ("j") to deal
@@ -688,7 +723,7 @@ void TypeLoweringVisitor::visitDecl(NodeOp op) {
     // For all annotations on the parent op, filter them based on the target
     // attribute.
     SmallVector<Attribute> loweredAttrs;
-    filterAnnotations(op.annotations(), loweredAttrs, field.suffix);
+    filterAnnotations(op.annotations(), loweredAttrs, field.fieldID);
     auto initializer = getBundleLowering(FieldRef(op.input(), field.fieldID));
     auto node = builder->create<NodeOp>(field.type, initializer, loweredName,
                                         loweredAttrs);
@@ -723,7 +758,7 @@ void TypeLoweringVisitor::visitDecl(WireOp op) {
     SmallVector<Attribute> loweredAttrs;
     // For all annotations on the parent op, filter them based on the target
     // attribute.
-    filterAnnotations(op.annotations(), loweredAttrs, field.suffix);
+    filterAnnotations(op.annotations(), loweredAttrs, field.fieldID);
     auto wire = builder->create<WireOp>(field.type, loweredName, loweredAttrs);
     setBundleLowering(FieldRef(result, field.fieldID), wire);
   }
@@ -756,7 +791,7 @@ void TypeLoweringVisitor::visitDecl(RegOp op) {
     SmallVector<Attribute> loweredAttrs;
     // For all annotations on the parent op, filter them based on the target
     // attribute.
-    filterAnnotations(op.annotations(), loweredAttrs, field.suffix);
+    filterAnnotations(op.annotations(), loweredAttrs, field.fieldID);
     setBundleLowering(FieldRef(result, field.fieldID),
                       builder->create<RegOp>(field.getPortType(), op.clockVal(),
                                              loweredName, loweredAttrs));
@@ -1150,6 +1185,7 @@ void TypeLoweringVisitor::visitStmt(WhenOp op) {
 // possibly with a new suffix appended.
 Value TypeLoweringVisitor::addArg(FModuleOp module, Type type,
                                   unsigned oldArgNumber, Direction direction,
+                                  unsigned targetFieldID,
                                   StringRef nameSuffix) {
   Block *body = module.getBodyBlock();
 
@@ -1167,7 +1203,7 @@ Value TypeLoweringVisitor::addArg(FModuleOp module, Type type,
   SmallVector<NamedAttribute> attributes;
   auto annotations = AnnotationSet::forPort(module, oldArgNumber, attributes);
 
-  AnnotationSet newAnnotations = filterAnnotations(annotations, nameSuffix);
+  AnnotationSet newAnnotations = filterAnnotations(annotations, targetFieldID);
 
   // Populate the new arg attributes.
   newArgAttrs.push_back(newAnnotations.getArgumentAttrDict(attributes));

@@ -25,8 +25,6 @@ set(Calyx_Deps
   MLIRCalyxAttrsIncGen
   )
 
-
-
 add_circt_dialect_library(CIRCTCalyx
   ${srcs}
 

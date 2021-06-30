@@ -857,3 +857,12 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     output c: UInt<8>
     c <= mux(sel, a, b)
 
+  ; CHECK-LABEL: firrtl.extmodule @RawStringParam
+  ; CHECK: parameters = {FORMAT = "xyz_timeout=%d\\n",
+  ; CHECK:               MIXED_QUOTES = "\22'\\\22",
+  ; CHECK:               TYPE = "bit"}}
+  extmodule RawStringParam :
+    parameter TYPE = 'bit'
+    parameter FORMAT = 'xyz_timeout=%d\n'
+    parameter MIXED_QUOTES = '"\'\"'
+

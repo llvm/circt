@@ -18,6 +18,7 @@ class InstanceBuilder(support.NamedValueOpView):
                name,
                input_port_mapping,
                *,
+               results=None,
                parameters={},
                sym_name=None,
                loc=None,
@@ -31,9 +32,11 @@ class InstanceBuilder(support.NamedValueOpView):
       sym_name = StringAttr.get(sym_name)
     pre_args = [instance_name, module_name]
     post_args = [parameters, sym_name]
+    if results is None:
+      results = module.type.results
 
     super().__init__(hw.InstanceOp,
-                     module.type.results,
+                     results,
                      input_port_mapping,
                      pre_args,
                      post_args,
@@ -89,24 +92,20 @@ class ModuleLike:
 
     input_types = []
     input_names = []
-    self.input_indices = {}
     input_ports = list(input_ports)
     for i in range(len(input_ports)):
       port_name, port_type = input_ports[i]
       input_types.append(port_type)
       input_names.append(StringAttr.get(str(port_name)))
-      self.input_indices[port_name] = i
     attributes["argNames"] = ArrayAttr.get(input_names)
 
     output_types = []
     output_names = []
     output_ports = list(output_ports)
-    self.output_indices = {}
     for i in range(len(output_ports)):
       port_name, port_type = output_ports[i]
       output_types.append(port_type)
       output_names.append(StringAttr.get(str(port_name)))
-      self.output_indices[port_name] = i
     attributes["resultNames"] = ArrayAttr.get(output_names)
 
     attributes["type"] = TypeAttr.get(
@@ -142,6 +141,7 @@ class ModuleLike:
   def create(self,
              name: str,
              parameters: Dict[str, object] = {},
+             results=None,
              loc=None,
              ip=None,
              **kwargs):
@@ -149,6 +149,7 @@ class ModuleLike:
                            name,
                            kwargs,
                            parameters=parameters,
+                           results=results,
                            loc=loc,
                            ip=ip)
 
@@ -186,7 +187,7 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
   # A dict of `OutputPortName` -> ValueLike must be converted to a list in port
   # order.
   unconnected_ports = []
-  for (name, _) in output_ports:
+  for (name, type) in output_ports:
     if name not in bb_ret:
       unconnected_ports.append(name)
       outputs.append(None)
@@ -195,13 +196,18 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
       if val is None:
         raise TypeError(
             f"body_builder return doesn't support type '{type(bb_ret[name])}'")
+      if val.type != type:
+        raise TypeError(
+            f"Output port '{name}' type ({val.type}) doesn't match declared"
+            f" type ({type})")
       outputs.append(val)
       bb_ret.pop(name)
   if len(unconnected_ports) > 0:
     raise support.UnconnectedSignalError(cls_name, unconnected_ports)
   if len(bb_ret) > 0:
     raise support.ConnectionError(
-        f"Could not map the follow to ports in {cls_name}: {bb_ret.keys}")
+        f"Could not map the following to output ports in {cls_name}: " +
+        ",".join(bb_ret.keys()))
 
   hw.OutputOp(outputs)
 
@@ -216,6 +222,15 @@ class HWModuleOp(ModuleLike):
   @property
   def entry_block(self):
     return self.regions[0].blocks[0]
+
+  @property
+  def input_indices(self):
+    indices: dict[int, str] = {}
+    op_names = ArrayAttr(self.attributes["argNames"])
+    for idx, name in enumerate(op_names):
+      str_name = StringAttr(name).value
+      indices[str_name] = idx
+    return indices
 
   # Support attribute access to block arguments by name
   def __getattr__(self, name):
@@ -411,5 +426,6 @@ class StructExtractOp:
   def create(struct_value, field_name: str):
     struct_value = support.get_value(struct_value)
     struct_type = hw.StructType(struct_value.type)
-    return hw.StructExtractOp(struct_type, struct_value,
+    field_type = struct_type.get_field(field_name)
+    return hw.StructExtractOp(field_type, struct_value,
                               StringAttr.get(field_name))

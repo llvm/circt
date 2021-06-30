@@ -803,6 +803,9 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
               return ExprSolution{0, false};
             auto solution = solveExpr(expr->constraint, seenVars, indent + 1);
             seenVars.erase(expr);
+            // Constrain variables >= 0.
+            if (solution.first && *solution.first < 0)
+              solution.first = 0;
             return solution;
           })
           .Case<PowExpr>([&](auto *expr) {
@@ -930,6 +933,10 @@ LogicalResult ConstraintSolver::solve() {
     seenVars.insert(var);
     auto solution = solveExpr(var->constraint, seenVars);
     seenVars.clear();
+
+    // Constrain variables >= 0.
+    if (solution.first && *solution.first < 0)
+      solution.first = 0;
 
     // If successful, store the value as the variable's solution.
     // TODO: We might want to complain about unconstrained widths here.
@@ -1489,7 +1496,7 @@ void InferenceMapping::partiallyConstrainTypes(Value larger, Value smaller) {
             auto &aElt = aBundle.getElements()[aIndex];
             auto &bElt = bBundle.getElements()[*bIndex];
             if (aElt.isFlip)
-              constrain(aElt.type, b, bID + bBundle.getFieldID(*bIndex),
+              constrain(bElt.type, b, bID + bBundle.getFieldID(*bIndex),
                         aElt.type, a, aID + aBundle.getFieldID(aIndex));
             else
               constrain(aElt.type, a, aID + aBundle.getFieldID(aIndex),

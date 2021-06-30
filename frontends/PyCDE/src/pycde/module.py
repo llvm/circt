@@ -4,7 +4,8 @@
 
 from __future__ import annotations
 
-from .support import Value
+from .support import Value, get_user_loc, var_to_attribute
+from .types import types
 
 from circt import support
 from circt.dialects import hw
@@ -45,7 +46,7 @@ class Parameter:
 
   def __init__(self, value=None, name: str = None):
     if value is not None:
-      self.attr = support.var_to_attribute(value)
+      self.attr = var_to_attribute(value)
     self.name = name
 
 
@@ -62,7 +63,7 @@ class module:
     self.extern_name = extern_name
     if inspect.isclass(func_or_class):
       # If it's just a module class, we should wrap it immediately
-      self.mod = _module_base(func_or_class)
+      self.mod = _module_base(func_or_class, extern_name is not None)
       _register_generator(self.mod.__name__, "extern_instantiate",
                           self._instantiate,
                           mlir.ir.DictAttr.get(self.mod._parameters))
@@ -96,7 +97,8 @@ class module:
       cls = self.func(*args, **kwargs)
       if cls is None:
         raise ValueError("Parameterization function must return module class")
-      mod = _module_base(cls, param_values.arguments)
+      mod = _module_base(cls, self.extern_name is not None,
+                         param_values.arguments)
 
       if self.extern_name:
         _register_generator(cls.__name__, "extern_instantiate",
@@ -111,7 +113,6 @@ class module:
     # Get the port names from the attributes we stored them in.
     op_names_attrs = mlir.ir.ArrayAttr(op.attributes["opNames"])
     op_names = [mlir.ir.StringAttr(x) for x in op_names_attrs]
-    input_ports = [(n.value, o.type) for (n, o) in zip(op_names, op.operands)]
 
     if self.extern_mod is None:
       # Find the top MLIR module.
@@ -119,6 +120,7 @@ class module:
       while mod.name != "module":
         mod = mod.parent
 
+      input_ports = [(n.value, o.type) for (n, o) in zip(op_names, op.operands)]
       result_names_attrs = mlir.ir.ArrayAttr(op.attributes["resultNames"])
       result_names = [mlir.ir.StringAttr(x) for x in result_names_attrs]
       output_ports = [
@@ -137,8 +139,12 @@ class module:
 
     with mlir.ir.InsertionPoint(op):
       mapping = {name.value: op.operands[i] for i, name in enumerate(op_names)}
-      inst = self.extern_mod.create(op.name, **mapping).operation
+      result_types = [x.type for x in op.results]
+      inst = self.extern_mod.create(
+        op.name, **mapping, results=result_types).operation
       for (name, attr) in attrs.items():
+        if name == "parameters":
+          continue
         inst.attributes[name] = attr
       return inst
 
@@ -154,7 +160,7 @@ def externmodule(cls_or_name):
 
 # The real workhorse of this package. Wraps a module class, making it implement
 # MLIR's OpView parent class.
-def _module_base(cls, params={}):
+def _module_base(cls, extern: bool, params={}):
   """The CIRCT design entry module class decorator."""
 
   class mod(cls, mlir.ir.OpView):
@@ -168,11 +174,21 @@ def _module_base(cls, params={}):
       """Scan the class and eventually instance for Input/Output members and
       treat the inputs as operands and outputs as results."""
 
+      # Get the user callsite
+      loc = get_user_loc()
+
       inputs = {
           name: kwargs[name] for (name, _) in mod._input_ports if name in kwargs
       }
       pass_up_kwargs = {n: v for (n, v) in kwargs.items() if n not in inputs}
-      # TODO: Inspect signature, raise error if __init__ doesn't accept **kwargs
+      if len(pass_up_kwargs) > 0:
+        init_sig = inspect.signature(cls.__init__)
+        if not any(
+          [x == inspect.Parameter.VAR_KEYWORD for x in init_sig.parameters]):
+          raise ValueError("Module constructor doesn't have a **kwargs"
+                           " parameter, so the following are likely inputs"
+                           " which don't have a port: " + ",".join(
+                             pass_up_kwargs.keys()))
       cls.__init__(self, *args, **pass_up_kwargs)
 
       # Build a list of operand values for the operation we're gonna create.
@@ -210,7 +226,8 @@ def _module_base(cls, params={}):
           self,
           self.build_generic(attributes=attributes,
                              results=[type for (_, type) in mod._output_ports],
-                             operands=input_ports_values))
+                             operands=input_ports_values,
+                             loc=loc))
 
     @staticmethod
     def inputs() -> list[(str, mlir.ir.Type)]:
@@ -243,7 +260,7 @@ def _module_base(cls, params={}):
 
   # Second, the specified parameters.
   for (name, value) in params.items():
-    value = support.var_to_attribute(value, True)
+    value = var_to_attribute(value)
     if value is not None:
       mod._parameters[name] = value
       setattr(mod, name, Parameter(value, name))
@@ -303,10 +320,7 @@ class _Generate:
   def __init__(self, gen_func):
     self.gen_func = gen_func
     self.modcls = None
-
-    # Track generated modules so we don't create unnecessary duplicates of
-    # modules that are structurally equivalent.
-    self.generated_modules = {}
+    self.loc = get_user_loc()
 
   def __call__(self, op):
     """Build an HWModuleOp and run the generator as the body builder."""
@@ -340,29 +354,57 @@ class _Generate:
     }
 
     # Build the replacement HWModuleOp in the outer module.
-    module_key = str((op.name, sorted(input_ports), sorted(output_ports),
-                      sorted(self.params.items())))
     if "module_name" in self.params:
       module_name = self.params["module_name"]
     else:
-      module_name = op.name
-    if module_key not in self.generated_modules:
-      with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
-        gen_mod = ModuleDefinition(self.modcls,
-                                   module_name,
-                                   input_ports=input_ports,
-                                   output_ports=output_ports,
-                                   body_builder=self.gen_func)
-        self.generated_modules[module_key] = gen_mod
+      module_name = self.create_module_name(op)
+      self.params["module_name"] = module_name
+    module_name = self.sanitize(module_name)
+
+    # Track generated modules so we don't create unnecessary duplicates of
+    # modules that are structurally equivalent. If the module name exists in the
+    # top level MLIR module, assume that we've already generated it.
+    existing_module_names = [
+       o for o in mod.regions[0].blocks[0].operations
+       if mlir.ir.StringAttr(o.name).value == module_name]
+
+    if not existing_module_names:
+      with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]), self.loc:
+        mod = ModuleDefinition(self.modcls,
+                               module_name,
+                               input_ports=input_ports,
+                               output_ports=output_ports,
+                               body_builder=self.gen_func)
+    else:
+      assert(len(existing_module_names) == 1)
+      mod = existing_module_names[0]
 
     # Build a replacement instance at the op to be replaced.
     with mlir.ir.InsertionPoint(op):
       mapping = {name.value: op.operands[i] for i, name in enumerate(op_names)}
-      inst = self.generated_modules[module_key].create(op.name,
-                                                       **mapping).operation
+      inst = mod.create(op.name, **mapping).operation
       for (name, attr) in attrs.items():
+        if name == "parameters":
+          continue
         inst.attributes[name] = attr
       return inst
+
+  def create_module_name(self, op):
+    name = op.name
+    if len(self.params) > 0:
+      name += "_" + "_".join(
+          str(value) for (_, value) in
+          sorted(self.params.items()))
+
+    return name
+
+  def sanitize(self, value):
+    sanitized_str = str(value)
+    for sub in ["!hw.", ">", "[", "]", ","]:
+      sanitized_str = sanitized_str.replace(sub, "")
+    for sub in ["<", "x", " "]:
+      sanitized_str = sanitized_str.replace(sub, "_")
+    return sanitized_str
 
 
 def generator(func):

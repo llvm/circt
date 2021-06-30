@@ -19,5 +19,5 @@ mod = CompReg()
 mod.print_verilog()
 
 # CHECK: reg [7:0] [[NAME:.+]];
-# CHECK: always_ff @(posedge clk)
+# CHECK: always @(posedge clk)
 # CHECK: [[NAME]] <= {{.+}}

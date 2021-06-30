@@ -29,6 +29,11 @@ namespace firrtl {
 
 enum class Direction { Input = 0, Output };
 
+template <typename T>
+T &operator<<(T &os, const Direction &dir) {
+  return os << (dir == Direction::Input ? "input" : "output");
+}
+
 namespace direction {
 
 /// The key in a module's attribute dictionary used to find the direction.

@@ -38,7 +38,23 @@ def CalyxDialect : Dialect {
 
 /// Base class for the operation in this dialect.
 class CalyxOp<string mnemonic, list<OpTrait> traits = []> :
-    Op<CalyxDialect, mnemonic, traits>;
+  Op<CalyxDialect, mnemonic, traits>;
+
+/// Base class for Calyx containers.
+class CalyxContainer<string mnemonic, list<OpTrait> traits = []> :
+  Op<CalyxDialect, mnemonic, !listconcat(traits, [
+      NoRegionArguments,
+      NoTerminator,
+      SingleBlock
+  ])> {
+  let assemblyFormat = "$body attr-dict";
+  let regions = (region SizedRegion<1>: $body);
+
+  let extraClassDeclaration = [{
+    /// Returns the body of a Calyx container.
+    Block *getBody() { return &getOperation()->getRegion(0).front(); }
+  }];
+}
 
 include "circt/Dialect/Calyx/CalyxStructure.td"
 

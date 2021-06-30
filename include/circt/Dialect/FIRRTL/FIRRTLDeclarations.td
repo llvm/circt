@@ -18,7 +18,8 @@ def InstanceOp : FIRRTLOp<"instance"> {
   }];
 
   let arguments = (ins FlatSymbolRefAttr:$moduleName, StrAttr:$name,
-                       AnnotationArrayAttr:$annotations);
+                       AnnotationArrayAttr:$annotations,
+                       PortAnnotationsAttr:$portAnnotations);
   let results = (outs Variadic<FIRRTLType>:$results);
 
   let assemblyFormat =
@@ -30,10 +31,8 @@ def InstanceOp : FIRRTLOp<"instance"> {
     OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
                    "::mlir::StringRef":$moduleName,
                    CArg<"StringRef", "{}">:$name,
-                   CArg<"ArrayRef<Attribute>", "{}">:$annotations), [{
-      return build($_builder, $_state, resultTypes, moduleName, name,
-                   $_builder.getArrayAttr(annotations));
-    }]>,
+                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
+                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations)>,
 
     /// Constructor that creates a version of the specified instance, but that
     /// erases some number of results from it.
@@ -53,6 +52,10 @@ def InstanceOp : FIRRTLOp<"instance"> {
     StringRef getPortNameStr(size_t resultNo) {
       return getPortName(resultNo).getValue();
     }
+
+    /// Hooks for port annotations.
+    ArrayAttr getPortAnnotation(unsigned portIdx);
+    void setAllPortAnnotations(ArrayRef<Attribute> annotations);
   }];
 }
 
@@ -71,7 +74,7 @@ def SMemOp : FIRRTLOp<"smem", [/*MemAlloc*/]> {
   let results = (outs FIRRTLType:$result);
 
   let assemblyFormat =
-    "$ruw custom<MemOp>(attr-dict) `:` type($result)";
+    "$ruw custom<SMemOp>(attr-dict) `:` type($result)";
 }
 
 def MemoryPortOp : FIRRTLOp<"memoryport"> {
@@ -95,10 +98,21 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
          Confined<I32Attr, [IntMinValue<1>]>:$writeLatency,
          Confined<I64Attr, [IntMinValue<1>]>:$depth, RUWAttr:$ruw,
          StrArrayAttr:$portNames, StrAttr:$name,
-         AnnotationArrayAttr:$annotations);
+         AnnotationArrayAttr:$annotations,
+         PortAnnotationsAttr:$portAnnotations);
   let results = (outs Variadic<FIRRTLType>:$results);
 
   let assemblyFormat = "$ruw custom<MemOp>(attr-dict) `:` type($results)";
+
+  let builders = [
+    OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
+                   "uint32_t":$readLatency, "uint32_t":$writeLatency,
+                   "uint64_t":$depth, "RUWAttr":$ruw, 
+                   "ArrayRef<Attribute>":$portNames,
+                   CArg<"StringRef", "{}">:$name,
+                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
+                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations)>
+  ];
 
   let verifier = "return ::verifyMemOp(*this);";
 
@@ -141,6 +155,9 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
     }
     Value getPortNamed(StringAttr name);
 
+    /// Hooks for port annotations.
+    ArrayAttr getPortAnnotation(unsigned portIdx);
+    void setAllPortAnnotations(ArrayRef<Attribute> annotations);
   }];
 }
 

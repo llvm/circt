@@ -105,8 +105,33 @@ def MemDirAttr: I32EnumAttr<"MemDirAttr", "Memory Direction Enum",
 // FIRRTL Annotations Definition
 //===----------------------------------------------------------------------===//
 
-def AnnotationArrayAttr : TypedArrayAttrBase<DictionaryAttr,
-                                             "An array of FIRRTL Annotations">;
+def AnnotationArrayAttr: ArrayAttrBase<
+    And<[
+      // Guarantee this is an ArrayAttr first
+      CPred<"$_self.isa<::mlir::ArrayAttr>()">,
+      // Guarantee all elements are DictionaryAttr or SubAnnotationAttr
+      CPred<"::llvm::all_of($_self.cast<::mlir::ArrayAttr>(), "
+            "[&](::mlir::Attribute attr) { return attr.isa<"
+            "::mlir::DictionaryAttr,"
+            "::circt::firrtl::SubAnnotationAttr>();})">]>,
+    ""> {
+  let constBuilderCall = "$_builder.getArrayAttr($0)";
+}
+
+def SubAnnotationAttr
+  : AttrDef<FIRRTLDialect, "SubAnnotation", [], "::mlir::Attribute"> {
+  let summary = "An Annotation that targets part of what it's attached to";
+  let description = [{
+    An Annotation that is only applicable to part of what it is attached to.
+    This uses a range of field IDs to indicate to which fields it is applicable.
+  }];
+  let mnemonic = "subAnno";
+  let parameters = (ins "int64_t":$minFieldID, "int64_t":$maxFieldID,
+                        "DictionaryAttr":$annotations);
+}
+
+def PortAnnotationsAttr : TypedArrayAttrBase<AnnotationArrayAttr,
+                                             "FIRRTL port annotations">;
 
 def InvalidValueAttr
   : AttrDef<FIRRTLDialect, "InvalidValue", [], "::mlir::Attribute"> {

@@ -94,6 +94,11 @@ def attribute_to_var(attr):
     return [attribute_to_var(x) for x in arr]
   except ValueError:
     pass
+  try:
+    dict = ir.DictAttr(attr)
+    return {i.name: attribute_to_var(i.attr) for i in dict}
+  except ValueError:
+    pass
 
   raise TypeError(f"Cannot convert {repr(attr)} to python value")
 
