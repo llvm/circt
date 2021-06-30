@@ -1248,7 +1248,9 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
           }
 
           if (!isPredicateSigned(op.predicate()) || !commonPrefixContainsSignBit) {
-            return replaceWith(op.predicate(), directOrCat(lhsOnly), directOrCat(rhsOnly));
+            const auto newLhs = directOrCat(lhsOnly);
+            const auto newRhs = directOrCat(rhsOnly);
+            return replaceWith(op.predicate(), newLhs, newRhs);
           } 
 
           auto firstNonEmptyValue = findFirstNonEmptyValue(lhs.getOperands()).getValue();
