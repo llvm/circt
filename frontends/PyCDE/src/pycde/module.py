@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from .support import Value, var_to_attribute
+from .support import Value, get_user_loc, var_to_attribute
 from .types import types
 
 from circt import support
@@ -174,6 +174,9 @@ def _module_base(cls, extern: bool, params={}):
       """Scan the class and eventually instance for Input/Output members and
       treat the inputs as operands and outputs as results."""
 
+      # Get the user callsite
+      loc = get_user_loc()
+
       inputs = {
           name: kwargs[name] for (name, _) in mod._input_ports if name in kwargs
       }
@@ -223,7 +226,8 @@ def _module_base(cls, extern: bool, params={}):
           self,
           self.build_generic(attributes=attributes,
                              results=[type for (_, type) in mod._output_ports],
-                             operands=input_ports_values))
+                             operands=input_ports_values,
+                             loc=loc))
 
     @staticmethod
     def inputs() -> list[(str, mlir.ir.Type)]:
@@ -316,6 +320,7 @@ class _Generate:
   def __init__(self, gen_func):
     self.gen_func = gen_func
     self.modcls = None
+    self.loc = get_user_loc()
 
   def __call__(self, op):
     """Build an HWModuleOp and run the generator as the body builder."""
@@ -364,7 +369,7 @@ class _Generate:
        if mlir.ir.StringAttr(o.name).value == module_name]
 
     if not existing_module_names:
-      with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
+      with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]), self.loc:
         mod = ModuleDefinition(self.modcls,
                                module_name,
                                input_ports=input_ports,
