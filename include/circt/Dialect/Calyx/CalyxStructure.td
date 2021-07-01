@@ -99,8 +99,7 @@ def WiresOp : CalyxContainer<"wires", [
     ```mlir
       calyx.wires {
         calyx.group @A { ... }
-        // TODO(Calyx): Add example of assignment
-        // outside of a Calyx GroupOp.
+        calyx.assign %1, %2
       }
     ```
   }];
@@ -192,9 +191,6 @@ def GroupOp : CalyxOp<"group", [
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
-
-    /// Returns the body of a Calyx group.
-    Block *getBody() { return &getOperation()->getRegion(0).front(); }
   }];
 
   let regions = (region SizedRegion<1>:$body);
