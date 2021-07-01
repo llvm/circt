@@ -287,8 +287,23 @@ static void printUnpackedTypePostfix(Type type, raw_ostream &os) {
 
 /// Return the word (e.g. "reg") in Verilog to declare the specified thing.
 static StringRef getVerilogDeclWord(Operation *op) {
-  if (isa<RegOp>(op))
+  if (isa<RegOp>(op)) {
+    // Check if the type stored in this register is a struct or array of
+    // structs. In this case, according to spec section 6.8, the "reg" prefix
+    // should be left off.
+    auto elementType =
+        op->getResult(0).getType().cast<InOutType>().getElementType();
+    if (elementType.isa<StructType>())
+      return "";
+    if (auto innerType = elementType.dyn_cast<ArrayType>()) {
+      while (innerType.getElementType().isa<ArrayType>())
+        innerType = innerType.getElementType().cast<ArrayType>();
+      if (innerType.getElementType().isa<StructType>())
+        return "";
+    }
+
     return "reg";
+  }
   if (isa<WireOp>(op))
     return "wire";
   if (isa<ConstantOp>(op))
@@ -1621,7 +1636,10 @@ public:
   /// return false. If the operation *is* a constant, also emit the initializer
   /// and semicolon, e.g. `localparam K = 1'h0`, and return true.
   bool emitDeclarationForTemporary(Operation *op) {
-    indent() << getVerilogDeclWord(op) << " ";
+    StringRef declWord = getVerilogDeclWord(op);
+    indent() << declWord;
+    if (!declWord.empty())
+      os << ' ';
     if (printPackedType(stripUnpackedTypes(op->getResult(0).getType()), os, op))
       os << ' ';
     os << names.getName(op->getResult(0));
@@ -2507,7 +2525,8 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
     auto word = getVerilogDeclWord(decl);
     if (!isZeroBitType(type)) {
       indent() << word;
-      os.indent(maxDeclNameWidth - word.size() + 1);
+      auto extraIndent = word.empty() ? 0 : 1;
+      os.indent(maxDeclNameWidth - word.size() + extraIndent);
     } else {
       indent() << "// Zero width: " << word << ' ';
     }
