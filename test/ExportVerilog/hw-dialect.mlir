@@ -205,50 +205,44 @@ hw.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2:
 
   hw.output %y, %x, %p, %p2 : i1, i1, i1, i1
 }
-// CHECK-LABEL:  module AB(
-// CHECK-NEXT:    input                 w, x,
-// CHECK-NEXT:    input  [1:0]          i2,
-// CHECK-NEXT: // input  /*Zero Width*/ i3,
-// CHECK-NEXT:    output                y, z, p, p2);
-// CHECK-EMPTY:
+// CHECK-LABEL: module AB(
+// CHECK-NEXT:      input                 w, x,
+// CHECK-NEXT:      input  [1:0]          i2,
+// CHECK-NEXT:   // input  /*Zero Width*/ i3,
+// CHECK-NEXT:      output                y, z, p, p2);
+// CHECK-EMPTY: 
+// CHECK-NEXT:   wire b1_b;
+// CHECK-NEXT:   wire a1_f;
+// CHECK-EMPTY: 
+// CHECK-NEXT:   AAA a1 (
+// CHECK-NEXT:     .d (w),
+// CHECK-NEXT:     .e (b1_b),
+// CHECK-NEXT:     .f (a1_f)
+// CHECK-NEXT:   );
+// CHECK-NEXT:   B b1 (
+// CHECK-NEXT:     .a (a1_f),
+// CHECK-NEXT:     .b (b1_b),
+// CHECK-NEXT:     .c (y)
+// CHECK-NEXT:   );
+// CHECK-NEXT:   FooModule #(
+// CHECK-NEXT:     .DEFAULT(64'd14000240888948784983),
+// CHECK-NEXT:     .DEPTH(3.242000e+01),
+// CHECK-NEXT:     .FORMAT("xyz_timeout=%d\n"),
+// CHECK-NEXT:     .WIDTH(8'd32)
+// CHECK-NEXT:   ) paramd (
+// CHECK-NEXT:     .a   (w),
+// CHECK-NEXT:   //.b   (i3),
+// CHECK-NEXT:     .out (p)
+// CHECK-NEXT:   );
+// CHECK-NEXT:   FooModule #(
+// CHECK-NEXT:     .DEFAULT(64'd1)
+// CHECK-NEXT:   ) paramd2 (
+// CHECK-NEXT:     .a   (i2),
+// CHECK-NEXT:     .out (p2)
+// CHECK-NEXT:   );
+// CHECK-NEXT:   assign z = x;
+// CHECK-NEXT: endmodule
 
-// CHECK-NEXT:    wire paramd2_out;
-// CHECK-NEXT:    wire paramd_out;
-// CHECK-NEXT:    wire b1_b;
-// CHECK-NEXT:    wire b1_c;
-// CHECK-NEXT:    wire a1_f;
-// CHECK-EMPTY:
-// CHECK-NEXT:    A a1 (
-// CHECK-NEXT:      .d (w),
-// CHECK-NEXT:      .e (b1_b),
-// CHECK-NEXT:      .f (a1_f)
-// CHECK-NEXT:    )
-// CHECK-NEXT:    B b1 (
-// CHECK-NEXT:      .a (a1_f),
-// CHECK-NEXT:      .b (b1_b),
-// CHECK-NEXT:      .c (b1_c)
-// CHECK-NEXT:    )
-// CHECK-NEXT:    FooModule #(
-// CHECK-NEXT:      .DEFAULT(64'd14000240888948784983),
-// CHECK-NEXT:      .DEPTH(3.242000e+01),
-// CHECK-NEXT:      .FORMAT("xyz_timeout=%d\n"),
-// CHECK-NEXT:      .WIDTH(8'd32)
-// CHECK-NEXT:    ) paramd (
-// CHECK-NEXT:      .a   (w),
-// CHECK-NEXT:      .b   (i3),
-// CHECK-NEXT:      .out (paramd_out)
-// CHECK-NEXT:    );
-// CHECK-NEXT:    FooModule #(
-// CHECK-NEXT:      .DEFAULT(64'd1)
-// CHECK-NEXT:    ) paramd2 (
-// CHECK-NEXT:      .a   (i2),
-// CHECK-NEXT:      .out (paramd2_out)
-// CHECK-NEXT:    );
-// CHECK-NEXT:    assign y = b1_c;
-// CHECK-NEXT:    assign z = x;
-// CHECK-NEXT:    assign p = paramd_out;
-// CHECK-NEXT:    assign p2 = paramd2_out;
-// CHECK-NEXT:  endmodule
 
 
 hw.module @shl(%a: i1) -> (%b: i1) {
@@ -447,21 +441,19 @@ hw.module @TestZero(%a: i4, %zeroBit: i0, %arrZero: !hw.array<3xi0>)
 hw.module @TestZeroInstance(%aa: i4, %azeroBit: i0, %aarrZero: !hw.array<3xi0>)
   -> (%r0: i4, %rZero: i0, %arrZero_0: !hw.array<3xi0>) {
 
-  // CHECK: TestZero iii (	// {{.*}}hw-dialect.mlir:{{.*}}:19
-  // CHECK:   .a         (aa),
-  // CHECK: //.zeroBit   (azeroBit),
-  // CHECK: //.arrZero   (aarrZero),
-  // CHECK:   .r0        (iii_r0)
-  // CHECK: //.rZero     (iii_rZero)
-  // CHECK: //.arrZero_0 (iii_arrZero_0)
-  // CHECK: );
+// CHECK:  TestZero iii (
+// CHECK-NEXT:    .a         (aa),
+// CHECK-NEXT:  //.zeroBit   (azeroBit),
+// CHECK-NEXT:  //.arrZero   (aarrZero),
+// CHECK-NEXT:    .r0        (r0)
+// CHECK-NEXT:  //.rZero     (rZero)
+// CHECK-NEXT:  //.arrZero_0 (arrZero_0)
+// CHECK-NEXT:  );
+// CHECK-NEXT: endmodule
 
   %o1, %o2, %o3 = hw.instance "iii" @TestZero(%aa, %azeroBit, %aarrZero)
     : (i4, i0, !hw.array<3xi0>) -> (i4, i0, !hw.array<3xi0>)
 
-  // CHECK: assign r0 = iii_r0;
-  // CHECK: // Zero width: assign rZero = iii_rZero;
-  // CHECK: // Zero width: assign arrZero_0 = iii_arrZero_0;
   hw.output %o1, %o2, %o3 : i4, i0, !hw.array<3xi0>
 }
 
@@ -638,25 +630,24 @@ hw.module.extern @ExternDestMod(%a: i1, %b: i2) -> (%c: i3, %d: i4)
 hw.module @InternalDestMod(%a: i1, %b: i3) {}
 // CHECK-LABEL module ABC
 hw.module @ABC(%a: i1, %b: i2) -> (%c: i4) {
-  // CHECK: wire [2:0] whatever_c;
-  // CHECK: wire [3:0] whatever_d;
   %0,%1 = hw.instance "whatever" sym @a1 @ExternDestMod(%a, %b) {doNotPrint=1}: (i1, i2) -> (i3, i4)
-  // CHECK: // ExternDestMod whatever (
-  // CHECK-NEXT: //   .a (a),
-  // CHECK-NEXT: //   .b (b),
-  // CHECK-NEXT: //   .c (whatever_c),
-  // CHECK-NEXT: //   .d (whatever_d)
-  // CHECK-NEXT: // );
   hw.instance "yo" sym @b1 @InternalDestMod(%a, %0) {doNotPrint=1} : (i1, i3) -> ()
-  // CHECK-NEXT: // InternalDestMod yo (
-  // CHECK-NEXT: //   .a (a),
-  // CHECK-NEXT: //   .b (whatever_c)
-  // CHECK-NEXT: // );
   hw.output %1 : i4
-  // CHECK-NEXT: assign c = whatever_d;
-  // CHECK-NEXT: endmodule
-  // CHECK-EMPTY
 }
+
+// CHECK:   wire [2:0] whatever_c;
+// CHECK-EMPTY: 
+// CHECK-NEXT:   // ExternDestMod whatever (
+// CHECK-NEXT:   //   .a (a),
+// CHECK-NEXT:   //   .b (b),
+// CHECK-NEXT:   //   .c (whatever_c),
+// CHECK-NEXT:   //   .d (c)
+// CHECK-NEXT:   // );
+// CHECK-NEXT:   // InternalDestMod yo (
+// CHECK-NEXT:   //   .a (a),
+// CHECK-NEXT:   //   .b (whatever_c)
+// CHECK-NEXT:   // );
+// CHECK-NEXT: endmodule
 
 
 hw.module.extern @Uwu() -> (%uwu_output : i32)
