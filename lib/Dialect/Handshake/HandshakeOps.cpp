@@ -34,6 +34,8 @@ using namespace circt::handshake;
 
 #define INDEX_WIDTH 32
 
+#include "circt/Dialect/Handshake/HandshakeOpsDialect.cpp.inc"
+
 namespace circt {
 namespace handshake {
 #include "circt/Dialect/Handshake/HandshakeOps.inc"

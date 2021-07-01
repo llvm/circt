@@ -466,6 +466,110 @@ private:
 } // namespace
 
 //===----------------------------------------------------------------------===//
+// NameManager
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct ModuleNameManager {
+  ModuleNameManager() : encounteredError(false) {}
+
+  StringRef addName(Value value, StringRef name) {
+    return addName(ValueOrOp(value), name);
+  }
+  StringRef addName(Operation *op, StringRef name) {
+    return addName(ValueOrOp(op), name);
+  }
+  StringRef addName(Value value, StringAttr name) {
+    return addName(ValueOrOp(value), name);
+  }
+  StringRef addName(Operation *op, StringAttr name) {
+    return addName(ValueOrOp(op), name);
+  }
+
+  StringRef addLegalName(Value value, StringRef name, Operation *errOp) {
+    return addLegalName(ValueOrOp(value), name, errOp);
+  }
+  StringRef addLegalName(Operation *op, StringRef name, Operation *errOp) {
+    return addLegalName(ValueOrOp(op), name, errOp);
+  }
+
+  StringRef getName(Value value) { return getName(ValueOrOp(value)); }
+  StringRef getName(Operation *op) { return getName(ValueOrOp(op)); }
+
+  bool hasName(Value value) { return nameTable.count(ValueOrOp(value)); }
+
+  void addOutputNames(StringRef name, Operation *module) {
+    outputNames.push_back(addLegalName(nullptr, name, module));
+  }
+
+  StringRef getOutputName(size_t portNum) { return outputNames[portNum]; }
+
+  bool hadError() { return encounteredError; }
+
+private:
+  using ValueOrOp = PointerUnion<Value, Operation *>;
+
+  /// Retrieve a name from the name table.  The name must already have been
+  /// added.
+  StringRef getName(ValueOrOp valueOrOp) {
+    auto entry = nameTable.find(valueOrOp);
+    assert(entry != nameTable.end() &&
+           "value expected a name but doesn't have one");
+    return entry->getSecond();
+  }
+
+  /// Add the specified name to the name table, auto-uniquing the name if
+  /// required.  If the name is empty, then this creates a unique temp name.
+  ///
+  /// "valueOrOp" is typically the Value for an intermediate wire etc, but it
+  /// can also be an op for an instance, since we want the instances op uniqued
+  /// and tracked.  It can also be null for things like outputs which are not
+  /// tracked in the nameTable.
+  StringRef addName(ValueOrOp valueOrOp, StringRef name) {
+    auto updatedName = legalizeName(name, usedNames, nextGeneratedNameID);
+    if (valueOrOp)
+      nameTable[valueOrOp] = updatedName;
+    return updatedName;
+  }
+
+  StringRef addName(ValueOrOp valueOrOp, StringAttr nameAttr) {
+    return addName(valueOrOp, nameAttr ? nameAttr.getValue() : "");
+  }
+  /// Add the specified name to the name table, emitting an error message if the
+  /// name empty or is changed by uniqing.
+  StringRef addLegalName(ValueOrOp valueOrOp, StringRef name, Operation *op) {
+    auto updatedName = addName(valueOrOp, name);
+    if (name.empty())
+      emitOpError(op, "should have non-empty name");
+    else if (updatedName != name)
+      emitOpError(op, "name '") << name << "' changed during emission";
+    return updatedName;
+  }
+
+  InFlightDiagnostic emitOpError(Operation *op, const Twine &message) {
+    encounteredError = true;
+    return op->emitOpError(message);
+  }
+
+  // Track whether a name error ocurred
+  bool encounteredError;
+
+  /// nameTable keeps track of mappings from Value's and operations (for
+  /// instances) to their string table entry.
+  llvm::DenseMap<ValueOrOp, StringRef> nameTable;
+
+  /// outputNames tracks the uniquified names for output ports, which don't
+  /// have
+  /// a Value or Op representation.
+  SmallVector<StringRef> outputNames;
+
+  llvm::StringSet<> usedNames;
+
+  size_t nextGeneratedNameID = 0;
+};
+} // namespace
+
+//===----------------------------------------------------------------------===//
 // EmitterBase
 //===----------------------------------------------------------------------===//
 namespace {
@@ -592,50 +696,17 @@ class ModuleEmitter : public EmitterBase {
 public:
   explicit ModuleEmitter(VerilogEmitterState &state) : EmitterBase(state) {}
 
-  void emitHWModule(HWModuleOp module);
-  void prepareHWModule(Block &block);
+  void emitHWModule(HWModuleOp module, ModuleNameManager &names);
   void emitHWExternModule(HWModuleExternOp module);
   void emitHWGeneratedModule(HWModuleGeneratedOp module);
 
   // Statements.
-  void emitStatement(Operation *op);
-  void emitStatementBlock(Block &block);
-
+  void emitStatement(Operation *op, ModuleNameManager &names);
+  void emitStatementBlock(Block &block, ModuleNameManager &names);
   void emitBind(BindOp op);
 
-  using ValueOrOp = PointerUnion<Value, Operation *>;
-
-  StringRef addName(ValueOrOp valueOrOp, StringRef name);
-  StringRef addName(ValueOrOp valueOrOp, StringAttr nameAttr) {
-    return addName(valueOrOp, nameAttr ? nameAttr.getValue() : "");
-  }
-
-  StringRef addLegalName(ValueOrOp valueOrOp, StringRef name, Operation *op);
-
-  StringRef getName(Value value) { return getName(ValueOrOp(value)); }
-  StringRef getName(ValueOrOp valueOrOp) {
-    auto entry = nameTable.find(valueOrOp);
-    assert(entry != nameTable.end() &&
-           "value expected a name but doesn't have one");
-    return entry->getSecond();
-  }
-
-  bool hasName(Value value) { return nameTable.count(ValueOrOp(value)); }
-
-  void verifyModuleName(Operation *, StringAttr nameAttr);
-
 public:
-  /// nameTable keeps track of mappings from Value's and operations (for
-  /// instances) to their string table entry.
-  llvm::DenseMap<ValueOrOp, StringRef> nameTable;
-
-  /// outputNames tracks the uniquified names for output ports, which don't have
-  /// a Value or Op representation.
-  SmallVector<StringRef> outputNames;
-
-  llvm::StringSet<> usedNames;
-
-  size_t nextGeneratedNameID = 0;
+  void verifyModuleName(Operation *, StringAttr nameAttr);
 
   /// This set keeps track of all of the expression nodes that need to be
   /// emitted as standalone wire declarations.  This can happen because they are
@@ -644,32 +715,6 @@ public:
 };
 
 } // end anonymous namespace
-
-/// Add the specified name to the name table, auto-uniquing the name if
-/// required.  If the name is empty, then this creates a unique temp name.
-///
-/// "valueOrOp" is typically the Value for an intermediate wire etc, but it can
-/// also be an op for an instance, since we want the instances op uniqued and
-/// tracked.  It can also be null for things like outputs which are not tracked
-/// in the nameTable.
-StringRef ModuleEmitter::addName(ValueOrOp valueOrOp, StringRef name) {
-  auto updatedName = legalizeName(name, usedNames, nextGeneratedNameID);
-  if (valueOrOp)
-    nameTable[valueOrOp] = updatedName;
-  return updatedName;
-}
-
-/// Add the specified name to the name table, emitting an error message if the
-/// name empty or is changed by uniqing.
-StringRef ModuleEmitter::addLegalName(ValueOrOp valueOrOp, StringRef name,
-                                      Operation *op) {
-  auto updatedName = addName(valueOrOp, name);
-  if (name.empty())
-    emitOpError(op, "should have non-empty name");
-  else if (updatedName != name)
-    emitOpError(op, "name '") << name << "' changed during emission";
-  return updatedName;
-}
 
 /// Check if the given module name \p nameAttr is a valid SV name (does not
 /// contain any illegal characters). If invalid, calls \c emitOpError.
@@ -722,11 +767,12 @@ public:
   /// be emitted independently by the caller.
   ExprEmitter(ModuleEmitter &emitter, SmallVectorImpl<char> &outBuffer,
               SmallPtrSet<Operation *, 8> &emittedExprs,
-              SmallVectorImpl<Operation *> &tooLargeSubExpressions)
+              SmallVectorImpl<Operation *> &tooLargeSubExpressions,
+              ModuleNameManager &names)
       : EmitterBase(emitter.state, os), emitter(emitter),
         emittedExprs(emittedExprs),
         tooLargeSubExpressions(tooLargeSubExpressions), outBuffer(outBuffer),
-        os(outBuffer) {}
+        os(outBuffer), names(names) {}
 
   /// Emit the specified value as an expression.  If this is an inline-emitted
   /// expression, we emit that expression, otherwise we emit a reference to the
@@ -873,6 +919,8 @@ private:
   SmallVectorImpl<Operation *> &tooLargeSubExpressions;
   SmallVectorImpl<char> &outBuffer;
   llvm::raw_svector_ostream os;
+  // Track legalized names.
+  ModuleNameManager &names;
 };
 } // end anonymous namespace
 
@@ -931,7 +979,7 @@ void ExprEmitter::retroactivelyEmitExpressionIntoTemporary(Operation *op) {
          "Should only be called on expressions though to be inlined");
 
   emitter.outOfLineExpressions.insert(op);
-  emitter.addName(ModuleEmitter::ValueOrOp(op->getResult(0)), "_tmp");
+  names.addName(op->getResult(0), "_tmp");
 
   // Remember that this subexpr needs to be emitted independently.
   tooLargeSubExpressions.push_back(op);
@@ -955,11 +1003,11 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
     // All wires are declared as unsigned, so if the client needed it signed,
     // emit a conversion.
     if (signRequirement == RequireSigned) {
-      os << "$signed(" << emitter.getName(exp) << ')';
+      os << "$signed(" << names.getName(exp) << ')';
       return {Symbol, IsSigned};
     }
 
-    os << emitter.getName(exp);
+    os << names.getName(exp);
     return {Symbol, IsUnsigned};
   }
 
@@ -1154,12 +1202,12 @@ SubExprInfo ExprEmitter::visitComb(ExtractOp op) {
 }
 
 SubExprInfo ExprEmitter::visitSV(GetModportOp op) {
-  os << emitter.getName(op.iface()) + "." + op.field();
+  os << names.getName(op.iface()) + "." + op.field();
   return {Selection, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitSV(ReadInterfaceSignalOp op) {
-  os << emitter.getName(op.iface()) + "." + op.signalName();
+  os << names.getName(op.iface()) + "." + op.signalName();
   return {Selection, IsUnsigned};
 }
 
@@ -1413,7 +1461,8 @@ public:
     SmallString<8> typeString;
   };
 
-  NameCollector(ModuleEmitter &moduleEmitter) : moduleEmitter(moduleEmitter) {}
+  NameCollector(ModuleEmitter &moduleEmitter, ModuleNameManager &names)
+      : moduleEmitter(moduleEmitter), names(names) {}
 
   // Scan operations in the specified block, collecting information about
   // those that need to be emitted out of line.
@@ -1429,6 +1478,7 @@ private:
   size_t maxDeclNameWidth = 0, maxTypeWidth = 0;
   SmallVector<ValuesToEmitRecord, 16> valuesToEmit;
   ModuleEmitter &moduleEmitter;
+  ModuleNameManager &names;
 };
 } // namespace
 
@@ -1462,8 +1512,8 @@ void NameCollector::collectNames(Block &block) {
       // Otherwise, it must be an expression or a declaration like a
       // RegOp/WireOp.  Remember and unique the name for this result.  Instances
       // are handled separately.
-      if (!instance && !moduleEmitter.hasName(result))
-        moduleEmitter.addName(result, op.getAttrOfType<StringAttr>("name"));
+      if (!instance && !names.hasName(result))
+        names.addName(result, op.getAttrOfType<StringAttr>("name"));
 
       // Don't measure or emit wires that are emitted inline (i.e. the wire
       // definition is emitted on the line of the expression instead of a
@@ -1557,9 +1607,10 @@ class StmtEmitter : public EmitterBase,
 public:
   /// Create an ExprEmitter for the specified module emitter, and keeping track
   /// of any emitted expressions in the specified set.
-  StmtEmitter(ModuleEmitter &emitter, SmallVectorImpl<char> &outBuffer)
+  StmtEmitter(ModuleEmitter &emitter, SmallVectorImpl<char> &outBuffer,
+              ModuleNameManager &names)
       : EmitterBase(emitter.state, stringStream), emitter(emitter),
-        stringStream(outBuffer), outBuffer(outBuffer) {}
+        stringStream(outBuffer), outBuffer(outBuffer), names(names) {}
 
   void emitStatement(Operation *op);
   void emitStatementBlock(Block &body);
@@ -1573,7 +1624,7 @@ public:
     indent() << getVerilogDeclWord(op) << " ";
     if (printPackedType(stripUnpackedTypes(op->getResult(0).getType()), os, op))
       os << ' ';
-    os << emitter.getName(op->getResult(0));
+    os << names.getName(op->getResult(0));
 
     if (!isConstantExpression(op))
       return false;
@@ -1659,6 +1710,9 @@ private:
   // All statements are emitted into a temporary buffer, this is it.
   SmallVectorImpl<char> &outBuffer;
 
+  // Track the legalized names.
+  ModuleNameManager &names;
+
   // This is the index of the start of the current statement being emitted.
   size_t statementBeginningIndex = 0;
 
@@ -1678,7 +1732,7 @@ void StmtEmitter::emitExpression(Value exp,
                                  SmallPtrSet<Operation *, 8> &emittedExprs,
                                  VerilogPrecedence parenthesizeIfLooserThan) {
   SmallVector<Operation *> tooLargeSubExpressions;
-  ExprEmitter(emitter, outBuffer, emittedExprs, tooLargeSubExpressions)
+  ExprEmitter(emitter, outBuffer, emittedExprs, tooLargeSubExpressions, names)
       .emitExpression(exp, parenthesizeIfLooserThan);
 
   // It is possible that the emitted expression was too large to fit on a line
@@ -1736,7 +1790,7 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
       --numStatementsEmitted;
       return;
     }
-    indent() << emitter.getName(op->getResult(0)) << " = ";
+    indent() << names.getName(op->getResult(0)) << " = ";
   } else {
     if (emitDeclarationForTemporary(op))
       return;
@@ -1849,7 +1903,7 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
     indent();
     if (isZeroBitType(port.type))
       os << "// Zero width: ";
-    os << "assign " << emitter.outputNames[port.argNum] << " = ";
+    os << "assign " << names.getOutputName(port.argNum) << " = ";
     emitExpression(op.getOperand(operandIndex), ops);
     os << ';';
     emitLocationInfoAndNewLine(ops);
@@ -2277,7 +2331,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     }
   }
 
-  os << ' ' << emitter.getName(ModuleEmitter::ValueOrOp(op)) << " (";
+  os << ' ' << names.getName(op) << " (";
 
   SmallVector<ModulePortInfo> portInfo = getModulePortInfo(moduleOp);
 
@@ -2430,7 +2484,7 @@ void StmtEmitter::emitStatement(Operation *op) {
 void StmtEmitter::collectNamesEmitDecls(Block &block) {
   // In the first pass, we fill in the symbol table, calculate the max width
   // of the declaration words and the max type width.
-  NameCollector collector(emitter);
+  NameCollector collector(emitter, names);
   collector.collectNames(block);
 
   auto &valuesToEmit = collector.getValuesToEmit();
@@ -2464,7 +2518,7 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
       os.indent(maxTypeWidth - record.typeString.size());
 
     // Emit the name.
-    os << emitter.getName(record.value);
+    os << names.getName(record.value);
 
     // Interface instantiations have parentheses like a module with no ports.
     if (type.isa<InterfaceType>()) {
@@ -2505,15 +2559,15 @@ void StmtEmitter::emitStatementBlock(Block &body) {
   reduceIndent();
 }
 
-void ModuleEmitter::emitStatement(Operation *op) {
+void ModuleEmitter::emitStatement(Operation *op, ModuleNameManager &names) {
   SmallString<128> outputBuffer;
-  StmtEmitter(*this, outputBuffer).emitStatement(op);
+  StmtEmitter(*this, outputBuffer, names).emitStatement(op);
   os << outputBuffer;
 }
 
-void ModuleEmitter::emitStatementBlock(Block &body) {
+void ModuleEmitter::emitStatementBlock(Block &body, ModuleNameManager &names) {
   SmallString<128> outputBuffer;
-  StmtEmitter(*this, outputBuffer).emitStatementBlock(body);
+  StmtEmitter(*this, outputBuffer, names).emitStatementBlock(body);
   os << outputBuffer;
 }
 
@@ -2762,119 +2816,7 @@ static void lowerUsersToTemporaryWire(Operation &op) {
   }
 }
 
-/// For each module we emit, do a prepass over the structure, pre-lowering and
-/// otherwise rewriting operations we don't want to emit.
-void ModuleEmitter::prepareHWModule(Block &block) {
-  for (auto &op : llvm::make_early_inc_range(block)) {
-    // If the operations has regions, lower each of the regions.
-    for (auto &region : op.getRegions()) {
-      if (!region.empty())
-        prepareHWModule(region.front());
-    }
-
-    // Duplicate "always inline" expression for each of their users and move
-    // them to be next to their users.
-    if (isExpressionAlwaysInline(&op)) {
-      lowerAlwaysInlineOperation(&op);
-      continue;
-    }
-
-    // Lower 'merge' operations to wires and connects.
-    if (auto merge = dyn_cast<MergeOp>(op)) {
-      auto result = lowerMergeOp(merge);
-      op.getResult(0).replaceAllUsesWith(result);
-      op.erase();
-      continue;
-    }
-
-    // Lower commutative variadic operations with more than two operands into
-    // balanced operand trees so we can split long lines across multiple
-    // statements.
-    if (op.getNumOperands() > 2 && op.getNumResults() == 1 &&
-        op.hasTrait<mlir::OpTrait::IsCommutative>() &&
-        mlir::MemoryEffectOpInterface::hasNoEffect(&op) &&
-        op.getNumRegions() == 0 && op.getNumSuccessors() == 0 &&
-        op.getAttrs().empty()) {
-      // Lower this operation to a balanced binary tree of the same operation.
-      auto result = lowerVariadicCommutativeOp(op, op.getOperands());
-      op.getResult(0).replaceAllUsesWith(result);
-      op.erase();
-      continue;
-    }
-
-    // Name legalization should have happened in a different pass for these sv
-    // elements and we don't want to change their name through re-legalization
-    // (e.g. letting a temporary take the name of an unvisited wire). Adding
-    // them now ensures any temporary generated will not use one of the names
-    // previously declared.
-    if (auto instance = dyn_cast<InstanceOp>(op)) {
-      // Anchor return values to wires early
-      lowerInstanceResults(instance);
-      // Anchor ports of bound instances
-      if (instance->hasAttr("doNotPrint"))
-        lowerBoundInstance(instance);
-      addLegalName(ValueOrOp(&op), instance.instanceName(), &op);
-    } else if (auto wire = dyn_cast<WireOp>(op))
-      addLegalName(ValueOrOp(op.getResult(0)), wire.name(), &op);
-    else if (auto regOp = dyn_cast<RegOp>(op))
-      addLegalName(ValueOrOp(op.getResult(0)), regOp.name(), &op);
-  }
-
-  // Now that all the basic ops are settled, check for any use-before def issues
-  // in graph regions.  Lower these into explicit wires to keep the emitter
-  // simple.
-  if (!block.getParentOp()->hasTrait<ProceduralRegion>()) {
-    SmallPtrSet<Operation *, 32> seenOperations;
-
-    for (auto &op : llvm::make_early_inc_range(block)) {
-      // Check the users of any expressions to see if they are
-      // lexically below the operation itself.  If so, it is being used out
-      // of order.
-      bool haveAnyOutOfOrderUses = false;
-      for (auto *userOp : op.getUsers()) {
-        // If the user is in a suboperation like an always block, then zip up
-        // to the operation that uses it.
-        while (&block != &userOp->getParentRegion()->front())
-          userOp = userOp->getParentOp();
-
-        if (seenOperations.count(userOp)) {
-          haveAnyOutOfOrderUses = true;
-          break;
-        }
-      }
-
-      // Remember that we've seen this operation.
-      seenOperations.insert(&op);
-
-      // If all the uses of the operation are below this, then we're ok.
-      if (!haveAnyOutOfOrderUses)
-        continue;
-
-      // If this is a reg/wire declaration, then we move it to the top of the
-      // block.  We can't abstract the inout result.
-      if (op.getNumResults() == 1 &&
-          op.getResult(0).getType().isa<InOutType>() &&
-          op.getNumOperands() == 0) {
-        op.moveBefore(&block.front());
-        continue;
-      }
-
-      // If this is a constant, then we move it to the top of the block.
-      if (isConstantExpression(&op)) {
-        op.moveBefore(&block.front());
-        continue;
-      }
-
-      // Otherwise, we need to lower this to a wire to resolve this.
-      lowerUsersToTemporaryWire(op);
-    }
-  }
-}
-
-void ModuleEmitter::emitHWModule(HWModuleOp module) {
-  // Perform lowerings to make it easier to emit the module.
-  prepareHWModule(*module.getBodyBlock());
-
+void ModuleEmitter::emitHWModule(HWModuleOp module, ModuleNameManager &names) {
   // Add all the ports to the name table.
   SmallVector<ModulePortInfo> portInfo = module.getPorts();
   for (auto &port : portInfo) {
@@ -2886,9 +2828,9 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
       name = "<<NO-NAME-FOUND>>";
     }
     if (port.isOutput())
-      outputNames.push_back(addLegalName(ValueOrOp(), name, module));
+      names.addOutputNames(name, module);
     else
-      addLegalName(module.getArgument(port.argNum), name, module);
+      names.addLegalName(module.getArgument(port.argNum), name, module);
   }
 
   auto moduleNameAttr = module.getNameAttr();
@@ -2954,9 +2896,9 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
 
     auto getPortName = [&](size_t portIdx) -> StringRef {
       if (portInfo[portIdx].isOutput())
-        return outputNames[portInfo[portIdx].argNum];
+        return names.getOutputName(portInfo[portIdx].argNum);
       else
-        return getName(module.getArgument(portInfo[portIdx].argNum));
+        return names.getName(module.getArgument(portInfo[portIdx].argNum));
     };
 
     // Emit the name.
@@ -2999,7 +2941,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   reduceIndent();
 
   // Emit the body of the module.
-  emitStatementBlock(*module.getBodyBlock());
+  emitStatementBlock(*module.getBodyBlock(), names);
 
   os << "endmodule\n\n";
 }
@@ -3053,7 +2995,11 @@ struct RootEmitterBase {
   /// Whether any error has been encountered during emission.
   std::atomic<bool> encounteredError = {};
 
+  /// Legalized names for each module
+  llvm::DenseMap<Operation *, ModuleNameManager> legalizedNames;
+
   explicit RootEmitterBase(ModuleOp rootOp) : rootOp(rootOp) {}
+  void prepareAllModules();
   void gatherFiles(bool separateModules);
   void emitFile(const FileInfo &fileInfo, VerilogEmitterState &state);
   void emitOperation(VerilogEmitterState &state, Operation *op);
@@ -3061,10 +3007,130 @@ struct RootEmitterBase {
 
 } // namespace
 
+/// For each module we emit, do a prepass over the structure, pre-lowering and
+/// otherwise rewriting operations we don't want to emit.
+static void prepareHWModule(Block &block, ModuleNameManager &names) {
+  for (auto &op : llvm::make_early_inc_range(block)) {
+    // If the operations has regions, lower each of the regions.
+    for (auto &region : op.getRegions()) {
+      if (!region.empty())
+        prepareHWModule(region.front(), names);
+    }
+
+    // Duplicate "always inline" expression for each of their users and move
+    // them to be next to their users.
+    if (isExpressionAlwaysInline(&op)) {
+      lowerAlwaysInlineOperation(&op);
+      continue;
+    }
+
+    // Lower 'merge' operations to wires and connects.
+    if (auto merge = dyn_cast<MergeOp>(op)) {
+      auto result = lowerMergeOp(merge);
+      op.getResult(0).replaceAllUsesWith(result);
+      op.erase();
+      continue;
+    }
+
+    // Lower commutative variadic operations with more than two operands into
+    // balanced operand trees so we can split long lines across multiple
+    // statements.
+    if (op.getNumOperands() > 2 && op.getNumResults() == 1 &&
+        op.hasTrait<mlir::OpTrait::IsCommutative>() &&
+        mlir::MemoryEffectOpInterface::hasNoEffect(&op) &&
+        op.getNumRegions() == 0 && op.getNumSuccessors() == 0 &&
+        op.getAttrs().empty()) {
+      // Lower this operation to a balanced binary tree of the same operation.
+      auto result = lowerVariadicCommutativeOp(op, op.getOperands());
+      op.getResult(0).replaceAllUsesWith(result);
+      op.erase();
+      continue;
+    }
+
+    // Name legalization should have happened in a different pass for these sv
+    // elements and we don't want to change their name through re-legalization
+    // (e.g. letting a temporary take the name of an unvisited wire). Adding
+    // them now ensures any temporary generated will not use one of the names
+    // previously declared.
+    if (auto instance = dyn_cast<InstanceOp>(op)) {
+      // Anchor return values to wires early
+      lowerInstanceResults(instance);
+      // Anchor ports of bound instances
+      if (instance->hasAttr("doNotPrint"))
+        lowerBoundInstance(instance);
+      names.addLegalName(&op, instance.instanceName(), &op);
+    } else if (auto wire = dyn_cast<WireOp>(op))
+      names.addLegalName(op.getResult(0), wire.name(), &op);
+    else if (auto regOp = dyn_cast<RegOp>(op))
+      names.addLegalName(op.getResult(0), regOp.name(), &op);
+  }
+
+  // Now that all the basic ops are settled, check for any use-before def issues
+  // in graph regions.  Lower these into explicit wires to keep the emitter
+  // simple.
+  if (!block.getParentOp()->hasTrait<ProceduralRegion>()) {
+    SmallPtrSet<Operation *, 32> seenOperations;
+
+    for (auto &op : llvm::make_early_inc_range(block)) {
+      // Check the users of any expressions to see if they are
+      // lexically below the operation itself.  If so, it is being used out
+      // of order.
+      bool haveAnyOutOfOrderUses = false;
+      for (auto *userOp : op.getUsers()) {
+        // If the user is in a suboperation like an always block, then zip up
+        // to the operation that uses it.
+        while (&block != &userOp->getParentRegion()->front())
+          userOp = userOp->getParentOp();
+
+        if (seenOperations.count(userOp)) {
+          haveAnyOutOfOrderUses = true;
+          break;
+        }
+      }
+
+      // Remember that we've seen this operation.
+      seenOperations.insert(&op);
+
+      // If all the uses of the operation are below this, then we're ok.
+      if (!haveAnyOutOfOrderUses)
+        continue;
+
+      // If this is a reg/wire declaration, then we move it to the top of the
+      // block.  We can't abstract the inout result.
+      if (op.getNumResults() == 1 &&
+          op.getResult(0).getType().isa<InOutType>() &&
+          op.getNumOperands() == 0) {
+        op.moveBefore(&block.front());
+        continue;
+      }
+
+      // If this is a constant, then we move it to the top of the block.
+      if (isConstantExpression(&op)) {
+        op.moveBefore(&block.front());
+        continue;
+      }
+
+      // Otherwise, we need to lower this to a wire to resolve this.
+      lowerUsersToTemporaryWire(op);
+    }
+  }
+}
+
+void RootEmitterBase::prepareAllModules() {
+  bool hasError = false;
+  for (auto op : rootOp.getBody()->getOps<HWModuleOp>()) {
+    auto &names = legalizedNames[op];
+    prepareHWModule(*op.getBodyBlock(), names);
+    hasError |= names.hadError();
+  }
+  if (hasError)
+    encounteredError = true;
+}
+
 /// Organize the operations in the root MLIR module into output files to be
-/// generated. If `separateModules` is true, a handful of top-level declarations
-/// will be split into separate output files even in the absence of an explicit
-/// output file attribute.
+/// generated. If `separateModules` is true, a handful of top-level
+/// declarations will be split into separate output files even in the absence
+/// of an explicit output file attribute.
 void RootEmitterBase::gatherFiles(bool separateModules) {
   for (auto &op : *rootOp.getBody()) {
     auto info = OpFileInfo{&op, replicatedOps.size()};
@@ -3075,8 +3141,8 @@ void RootEmitterBase::gatherFiles(bool separateModules) {
     bool emitReplicatedOps = true;
     bool addToFilelist = true;
 
-    // Check if the operation has an explicit `output_file` attribute set. If it
-    // does, extract the information from the attribute.
+    // Check if the operation has an explicit `output_file` attribute set. If
+    // it does, extract the information from the attribute.
     if (attr) {
       LLVM_DEBUG(llvm::dbgs() << "Found output_file attribute " << attr
                               << " on " << op << "\n";);
@@ -3103,8 +3169,8 @@ void RootEmitterBase::gatherFiles(bool separateModules) {
       file.addToFilelist = addToFilelist;
     };
 
-    // Separate the operation into dedicated output file, or emit into the root
-    // file, or replicate in all output files.
+    // Separate the operation into dedicated output file, or emit into the
+    // root file, or replicate in all output files.
     TypeSwitch<Operation *>(&op)
         .Case<HWModuleOp>([&](auto &mod) {
           // Emit into a separate file named after the module.
@@ -3185,15 +3251,19 @@ void RootEmitterBase::emitFile(const FileInfo &file,
 
 void RootEmitterBase::emitOperation(VerilogEmitterState &state, Operation *op) {
   TypeSwitch<Operation *>(op)
-      .Case<HWModuleOp>([&](auto op) { ModuleEmitter(state).emitHWModule(op); })
+      .Case<HWModuleOp>([&](auto op) {
+        ModuleEmitter(state).emitHWModule(op, legalizedNames[op]);
+      })
       .Case<HWModuleExternOp>(
           [&](auto op) { ModuleEmitter(state).emitHWExternModule(op); })
       .Case<HWModuleGeneratedOp>(
           [&](auto op) { ModuleEmitter(state).emitHWGeneratedModule(op); })
       .Case<HWGeneratorSchemaOp>([&](auto op) { /* Empty */ })
       .Case<BindOp>([&](auto op) { ModuleEmitter(state).emitBind(op); })
-      .Case<InterfaceOp, VerbatimOp, IfDefProceduralOp>(
-          [&](auto op) { ModuleEmitter(state).emitStatement(op); })
+      .Case<InterfaceOp, VerbatimOp, IfDefProceduralOp>([&](auto op) {
+        ModuleNameManager emptyNames;
+        ModuleEmitter(state).emitStatement(op, emptyNames);
+      })
       .Case<TypeScopeOp>([&](auto typedecls) {
         TypeScopeEmitter(state).emitTypeScopeBlock(*typedecls.getBodyBlock());
       })
@@ -3303,7 +3373,8 @@ void SplitEmitter::createFile(const LoweringOptions &options,
     return;
   }
 
-  // Emit the file, copying the global options into the individual module state.
+  // Emit the file, copying the global options into the individual module
+  // state.
   VerilogEmitterState state(output->os());
   state.options = options;
   emitFile(file, state);
@@ -3316,12 +3387,14 @@ void SplitEmitter::createFile(const LoweringOptions &options,
 
 LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   UnifiedEmitter emitter(os, module);
+  emitter.prepareAllModules();
   emitter.emitMLIRModule();
   return failure(emitter.encounteredError);
 }
 
 LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
   SplitEmitter emitter(dirname, module);
+  emitter.prepareAllModules();
   emitter.emitMLIRModule();
 
   // Write the file list.

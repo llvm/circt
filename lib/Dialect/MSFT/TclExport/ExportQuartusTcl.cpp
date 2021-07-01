@@ -90,7 +90,7 @@ LogicalResult Entity::emit(Operation *op, StringRef attrKey, StringRef instName,
         "The placement information for this module has already been emitted. "
         "Modules are required to only be instantiated once.");
 
-  if (!attrKey.startswith_lower("loc:"))
+  if (!attrKey.startswith_insensitive("loc:"))
     return op->emitError("Error in '")
            << attrKey << "' PhysLocation attribute. Expected loc:<entityName>.";
 

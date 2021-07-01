@@ -52,7 +52,7 @@ TOK_LITERAL(integer)        // 42
 TOK_LITERAL(signed_integer) // -42 and +42
 TOK_LITERAL(floatingpoint)  // 42.0
 TOK_LITERAL(string)         // "foo"
-// TOK_LITERAL(raw_string)    // 'foo'
+TOK_LITERAL(raw_string)     // 'foo'
 
 TOK_LITERAL(fileinfo)
 TOK_LITERAL(inlineannotation) // %[{"foo":"bar"}]

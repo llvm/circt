@@ -29,6 +29,7 @@
 
 using namespace circt;
 using namespace firrtl;
+using circt::comb::ICmpPredicate;
 
 /// Given a FIRRTL type, return the corresponding type for the HW dialect.
 /// This returns a null type if it cannot be lowered.

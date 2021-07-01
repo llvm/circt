@@ -32,5 +32,6 @@ void CalyxDialect::initialize() {
 }
 
 // Provide implementations for the enums and attributes we use.
-#include "circt/Dialect/Calyx/CalyxEnums.cpp.inc"
 #include "circt/Dialect/Calyx/CalyxAttrs.cpp.inc"
+#include "circt/Dialect/Calyx/CalyxDialect.cpp.inc"
+#include "circt/Dialect/Calyx/CalyxEnums.cpp.inc"
