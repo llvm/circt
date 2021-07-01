@@ -287,8 +287,16 @@ static void printUnpackedTypePostfix(Type type, raw_ostream &os) {
 
 /// Return the word (e.g. "reg") in Verilog to declare the specified thing.
 static StringRef getVerilogDeclWord(Operation *op) {
-  if (isa<RegOp>(op))
+  if (isa<RegOp>(op)) {
+    auto elementType =
+        op->getResult(0).getType().cast<InOutType>().getElementType();
+    if (elementType.isa<StructType>())
+      return "";
+    if (auto innerType = elementType.dyn_cast<ArrayType>())
+      if (innerType.getElementType().isa<StructType>())
+        return "";
     return "reg";
+  }
   if (isa<WireOp>(op))
     return "wire";
   if (isa<ConstantOp>(op))
