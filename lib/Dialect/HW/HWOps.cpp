@@ -975,15 +975,19 @@ static void print(OpAsmPrinter &printer, hw::StructCreateOp op) {
 static ParseResult parseStructExplodeOp(OpAsmParser &parser,
                                         OperationState &result) {
   OpAsmParser::OperandType operand;
-  StructType declType;
+  Type declType;
 
   if (parser.parseOperand(operand) ||
       parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseColonType(declType))
     return failure();
+  auto structType = type_dyn_cast<StructType>(declType);
+  if (!structType)
+    return parser.emitError(parser.getNameLoc(),
+                            "invalid kind of type specified");
 
   llvm::SmallVector<Type, 4> structInnerTypes;
-  declType.getInnerTypes(structInnerTypes);
+  structType.getInnerTypes(structInnerTypes);
   result.addTypes(structInnerTypes);
 
   if (parser.resolveOperand(operand, declType, result.operands))
@@ -1008,7 +1012,7 @@ template <typename AggregateType>
 static ParseResult parseExtractOp(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::OperandType operand;
   StringAttr fieldName;
-  AggregateType declType;
+  Type declType;
 
   if (parser.parseOperand(operand) || parser.parseLSquare() ||
       parser.parseAttribute(fieldName, "field", result.attributes) ||
@@ -1016,8 +1020,12 @@ static ParseResult parseExtractOp(OpAsmParser &parser, OperationState &result) {
       parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseColonType(declType))
     return failure();
+  auto aggType = type_dyn_cast<AggregateType>(declType);
+  if (!aggType)
+    return parser.emitError(parser.getNameLoc(),
+                            "invalid kind of type specified");
 
-  Type resultType = declType.getFieldType(fieldName.getValue());
+  Type resultType = aggType.getFieldType(fieldName.getValue());
   if (!resultType) {
     parser.emitError(parser.getNameLoc(), "invalid field name specified");
     return failure();
@@ -1064,7 +1072,7 @@ static ParseResult parseStructInjectOp(OpAsmParser &parser,
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
   OpAsmParser::OperandType operand, val;
   StringAttr fieldName;
-  StructType declType;
+  Type declType;
 
   if (parser.parseOperand(operand) || parser.parseLSquare() ||
       parser.parseAttribute(fieldName, "field", result.attributes) ||
@@ -1073,8 +1081,11 @@ static ParseResult parseStructInjectOp(OpAsmParser &parser,
       parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseColonType(declType))
     return failure();
+  auto structType = type_dyn_cast<StructType>(declType);
+  if (!structType)
+    return parser.emitError(inputOperandsLoc, "invalid kind of type specified");
 
-  Type resultType = declType.getFieldType(fieldName.getValue());
+  Type resultType = structType.getFieldType(fieldName.getValue());
   if (!resultType) {
     parser.emitError(inputOperandsLoc, "invalid field name specified");
     return failure();
