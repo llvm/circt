@@ -103,6 +103,26 @@ int testHWTypes() {
   if (!hwTypeIsAInOut(io8type))
     return 4;
 
+  MlirStringRef scope = mlirStringRefCreateFromCString("myscope");
+  MlirStringRef name = mlirStringRefCreateFromCString("myname");
+  MlirType typeAliasType = hwTypeAliasTypeGet(scope, name, i8type);
+  if (mlirTypeIsNull(typeAliasType))
+    return 5;
+  if (!hwTypeIsATypeAliasType(typeAliasType))
+    return 6;
+  MlirType canonicalType = hwTypeAliasTypeGetCanonicalType(typeAliasType);
+  if (!mlirTypeEqual(canonicalType, i8type))
+    return 7;
+  MlirType innerType = hwTypeAliasTypeGetInnerType(typeAliasType);
+  if (!mlirTypeEqual(innerType, i8type))
+    return 8;
+  MlirStringRef theScope = hwTypeAliasTypeGetScope(typeAliasType);
+  if (theScope.length != scope.length)
+    return 9;
+  MlirStringRef theName = hwTypeAliasTypeGetName(typeAliasType);
+  if (theName.length != name.length)
+    return 10;
+
   mlirContextDestroy(ctx);
 
   return 0;

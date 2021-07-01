@@ -81,3 +81,39 @@ MlirType hwStructTypeGetField(MlirType structType, MlirStringRef fieldName) {
   StructType st = unwrap(structType).cast<StructType>();
   return wrap(st.getFieldType(unwrap(fieldName)));
 }
+
+bool hwTypeIsATypeAliasType(MlirType type) {
+  return unwrap(type).isa<TypeAliasType>();
+}
+
+MlirType hwTypeAliasTypeGet(MlirStringRef cScope, MlirStringRef cName,
+                            MlirType cInnerType) {
+  StringRef scope = unwrap(cScope);
+  StringRef name = unwrap(cName);
+  Type innerType = unwrap(cInnerType);
+  FlatSymbolRefAttr nameRef =
+      FlatSymbolRefAttr::get(innerType.getContext(), name);
+  SymbolRefAttr ref =
+      SymbolRefAttr::get(innerType.getContext(), scope, {nameRef});
+  return wrap(TypeAliasType::get(ref, innerType));
+}
+
+MlirType hwTypeAliasTypeGetCanonicalType(MlirType typeAlias) {
+  TypeAliasType type = unwrap(typeAlias).cast<TypeAliasType>();
+  return wrap(type.getCanonicalType());
+}
+
+MlirType hwTypeAliasTypeGetInnerType(MlirType typeAlias) {
+  TypeAliasType type = unwrap(typeAlias).cast<TypeAliasType>();
+  return wrap(type.getInnerType());
+}
+
+MlirStringRef hwTypeAliasTypeGetName(MlirType typeAlias) {
+  TypeAliasType type = unwrap(typeAlias).cast<TypeAliasType>();
+  return wrap(type.getRef().getLeafReference());
+}
+
+MlirStringRef hwTypeAliasTypeGetScope(MlirType typeAlias) {
+  TypeAliasType type = unwrap(typeAlias).cast<TypeAliasType>();
+  return wrap(type.getRef().getRootReference());
+}
