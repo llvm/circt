@@ -84,6 +84,14 @@ BaseTy type_cast(Type type) {
   return type.cast<TypeAliasType>().getInnerType().cast<BaseTy>();
 }
 
+template <typename BaseTy>
+BaseTy type_dyn_cast(Type type) {
+  if (!type_isa<BaseTy>(type))
+    return BaseTy();
+
+  return type_cast<BaseTy>(type);
+}
+
 } // namespace hw
 } // namespace circt
 

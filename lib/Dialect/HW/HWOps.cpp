@@ -830,14 +830,14 @@ static LogicalResult verifyOutputOp(OutputOp *op) {
 
 static ParseResult parseSliceTypes(OpAsmParser &p, Type &srcType,
                                    Type &idxType) {
-  Type arrType;
-  if (p.parseType(arrType))
+  Type type;
+  if (p.parseType(type))
     return p.emitError(p.getCurrentLocation(), "Expected type");
-  if (!type_isa<ArrayType>(arrType))
+  auto arrType = type_dyn_cast<ArrayType>(type);
+  if (!arrType)
     return p.emitError(p.getCurrentLocation(), "Expected !hw.array type");
-  srcType = arrType;
-  unsigned idxWidth =
-      llvm::Log2_64_Ceil(type_cast<ArrayType>(arrType).getSize());
+  srcType = type;
+  unsigned idxWidth = llvm::Log2_64_Ceil(arrType.getSize());
   idxType = IntegerType::get(p.getBuilder().getContext(), idxWidth);
   return success();
 }
@@ -895,9 +895,9 @@ static ParseResult parseArrayConcatTypes(OpAsmParser &p,
     Type ty;
     if (p.parseType(ty))
       return p.emitError(p.getCurrentLocation(), "Expected type");
-    if (!type_isa<ArrayType>(ty))
+    auto arrTy = type_dyn_cast<ArrayType>(ty);
+    if (!arrTy)
       return p.emitError(p.getCurrentLocation(), "Expected !hw.array type");
-    ArrayType arrTy = type_cast<ArrayType>(ty);
     if (elemType && elemType != arrTy.getElementType())
       return p.emitError(p.getCurrentLocation(), "Expected array element type ")
              << elemType;
