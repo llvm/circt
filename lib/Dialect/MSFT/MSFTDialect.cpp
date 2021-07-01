@@ -38,4 +38,5 @@ Operation *MSFTDialect::materializeConstant(OpBuilder &builder, Attribute value,
   return nullptr;
 }
 
+#include "circt/Dialect/MSFT/MSFTDialect.cpp.inc"
 #include "circt/Dialect/MSFT/MSFTEnums.cpp.inc"
