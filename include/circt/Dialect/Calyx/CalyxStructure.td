@@ -99,7 +99,7 @@ def WiresOp : CalyxContainer<"wires", [
     ```mlir
       calyx.wires {
         calyx.group @A { ... }
-        calyx.assign %1, %2
+        calyx.assign %1 = %2 : i16
       }
     ```
   }];
@@ -180,7 +180,7 @@ def GroupOp : CalyxOp<"group", [
 
     ```mlir
       calyx.group @MyGroup {
-        calyx.assign %1, %2 : i32
+        calyx.assign %1 = %2 : i32
         calyx.done %3 : i1
       }
     ```
@@ -207,6 +207,10 @@ def AssignOp : CalyxOp<"assign", [
     assignment. An assignment may optionally be
     guarded. This operation should only be instantiated in the
     "calyx.wires" section or a "calyx.group".
+
+    ```mlir
+      calyx.assign %1 = %2 : i16
+    ```
   }];
   let arguments = (ins AnyType:$dest, AnyType:$src);
   let assemblyFormat = "$dest `=` $src attr-dict `:` type($src)";
@@ -221,6 +225,10 @@ def DoneOp : CalyxOp<"done", [
     let description = [{
       The "calyx.done" operation represents a port on a
       Calyx group that signifies when the group is finished.
+
+      ```mlir
+        calyx.done %0 : i1
+      ```
     }];
 
     let arguments = (ins AnyType:$src);

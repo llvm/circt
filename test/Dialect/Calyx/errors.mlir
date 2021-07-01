@@ -54,3 +54,25 @@ calyx.program {
     calyx.control {}
   }
 }
+
+// -----
+
+calyx.program {
+  calyx.component @A() -> (%out: i16) {
+    calyx.wires {}
+    calyx.control {}
+  }
+  calyx.component @B(%in: i16) -> () {
+    calyx.wires {}
+    calyx.control {}
+  }
+  calyx.component @main() -> () {
+    %0 = calyx.cell "a0" @A : i16
+    %1 = calyx.cell "b0" @B : i16
+    // expected-error @+1 {{'calyx.assign' op should only be contained in 'calyx.wires' or 'calyx.group'}}
+    calyx.assign %1 = %0 : i16
+
+    calyx.wires {}
+    calyx.control {}
+  }
+}
