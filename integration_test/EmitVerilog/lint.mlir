@@ -6,6 +6,7 @@
 // RUN: verilator --lint-only --top-module TESTSIMPLE %t1.sv
 // RUN: verilator --lint-only --top-module casts %t1.sv
 // RUN: verilator --lint-only --top-module exprInlineTestIssue439 %t1.sv
+// RUN: verilator --lint-only --top-module StructDecls %t1.sv
 
 hw.module @B(%a: i1) -> (%b: i1, %c: i1) {
   %0 = comb.or %a, %a : i1
@@ -106,4 +107,9 @@ hw.module @casts(%in1: i64) -> (%r1: !hw.array<5xi8>) {
   %midBits = hw.array_slice %bits at %idx : (!hw.array<64xi1>) -> !hw.array<40xi1>
   %r1 = hw.bitcast %midBits : (!hw.array<40xi1>) -> !hw.array<5xi8>
   hw.output %r1 : !hw.array<5xi8>
+}
+
+hw.module @StructDecls() {
+  %reg1 = sv.reg : !hw.inout<struct<a: i1, b: i1>>
+  %reg2 = sv.reg : !hw.inout<array<8xstruct<a: i1, b: i1>>>
 }
