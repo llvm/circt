@@ -51,3 +51,15 @@ with Context() as ctx, Location.unknown():
     hw.HWModuleOp(name="test", body_builder=build)
 
   print(m)
+
+  # CHECK: !hw.typealias<@myscope::@myname, i1>
+  # CHECK: i1
+  # CHECK: i1
+  # CHECK: myscope
+  # CHECK: myname
+  typeAlias = hw.TypeAliasType.get("myscope", "myname", i1)
+  print(typeAlias)
+  print(typeAlias.canonical_type)
+  print(typeAlias.inner_type)
+  print(typeAlias.scope)
+  print(typeAlias.name)

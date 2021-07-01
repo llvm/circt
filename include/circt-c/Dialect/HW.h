@@ -67,6 +67,9 @@ MLIR_CAPI_EXPORTED bool hwTypeIsAInOut(MlirType type);
 /// If the type is an HW struct.
 MLIR_CAPI_EXPORTED bool hwTypeIsAStructType(MlirType);
 
+/// If the type is an HW type alias.
+MLIR_CAPI_EXPORTED bool hwTypeIsATypeAliasType(MlirType);
+
 /// Creates a fixed-size HW array type in the context associated with element
 MLIR_CAPI_EXPORTED MlirType hwArrayTypeGet(MlirType element, size_t size);
 
@@ -89,6 +92,18 @@ hwStructTypeGet(MlirContext ctx, intptr_t numElements,
 
 MLIR_CAPI_EXPORTED MlirType hwStructTypeGetField(MlirType structType,
                                                  MlirStringRef fieldName);
+
+MLIR_CAPI_EXPORTED MlirType hwTypeAliasTypeGet(MlirStringRef scope,
+                                               MlirStringRef name,
+                                               MlirType innerType);
+
+MLIR_CAPI_EXPORTED MlirType hwTypeAliasTypeGetCanonicalType(MlirType typeAlias);
+
+MLIR_CAPI_EXPORTED MlirType hwTypeAliasTypeGetInnerType(MlirType typeAlias);
+
+MLIR_CAPI_EXPORTED MlirStringRef hwTypeAliasTypeGetName(MlirType typeAlias);
+
+MLIR_CAPI_EXPORTED MlirStringRef hwTypeAliasTypeGetScope(MlirType typeAlias);
 
 #ifdef __cplusplus
 }
