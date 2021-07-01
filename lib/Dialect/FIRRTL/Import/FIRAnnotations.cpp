@@ -24,13 +24,12 @@ namespace json = llvm::json;
 using namespace circt;
 using namespace firrtl;
 
-/// Given a string \p target, return a target with any subfield or subindex
-/// references stripped.  Populate a \p annotations with any discovered
-/// references.  This function assumes that the \p target string is a well
-/// formed Annotation Target.
-static StringRef parseSubFieldSubIndexAnnotations(StringRef target,
-                                                  ArrayAttr &annotations,
-                                                  MLIRContext *context) {
+/// Mutably update a prototype Annotation (stored as a `NamedAttrList`) with
+/// sub-target information if the Annotation contains andy subfield or
+/// subindices.  Return the Target with any subfield and subindex tokens
+/// stripped.
+StringRef splitTarget(NamedAttrList &annotation, StringRef target,
+                      MLIRContext *context) {
   if (target.empty())
     return target;
 
@@ -90,8 +89,8 @@ static StringRef parseSubFieldSubIndexAnnotations(StringRef target,
   // Save the last token.
   if (!temp.empty())
     annotationVec.push_back(StringAttr::get(context, temp));
-  annotations = ArrayAttr::get(context, annotationVec);
 
+  annotation.append("target", ArrayAttr::get(context, annotationVec));
   return targetBase;
 }
 
@@ -327,13 +326,7 @@ bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
     // global Target -> Attribute mapping.
     NamedAttrList metadata;
     // Annotations on the element instance.
-    ArrayAttr elementAnnotations;
-    targetStrRef = parseSubFieldSubIndexAnnotations(
-        targetStrRef, elementAnnotations, context);
-    // Create an annotations with key "target", which will be parsed by
-    // lowerTypes, and propagated to the appropriate instance.
-    if (elementAnnotations && !elementAnnotations.empty())
-      metadata.append("target", elementAnnotations);
+    targetStrRef = splitTarget(metadata, targetStrRef, context);
 
     for (auto field : *object) {
       if (auto value = convertJSONToAttribute(field.second, p)) {
@@ -674,7 +667,8 @@ bool circt::firrtl::scatterCustomAnnotations(
       if (!target)
         return false;
       NamedAttrList dontTouchAnn;
-      dontTouchAnn.append("class",
+      dontTouchAnn.append(
+          "class",
           StringAttr::get(context, "firrtl.transforms.DontTouchAnnotation"));
       newAnnotations[target.getValue()].push_back(
           DictionaryAttr::getWithSorted(context, attrs));
@@ -830,15 +824,12 @@ bool circt::firrtl::scatterCustomAnnotations(
         NamedAttrList foo;
         foo.append("class", dict.get("class"));
         foo.append("id", id);
-        ArrayAttr subTargets;
         auto canonTarget = canonicalizeTarget(tap.getValue());
         if (!canonTarget)
           return false;
-        auto target = parseSubFieldSubIndexAnnotations(canonTarget.getValue(),
-                                                       subTargets, context);
-        if (subTargets && !subTargets.empty())
-          foo.append("target", subTargets);
-        newAnnotations[target].push_back(DictionaryAttr::get(context, foo));
+        auto targetStrRef = splitTarget(foo, canonTarget.getValue(), context);
+        newAnnotations[targetStrRef].push_back(
+            DictionaryAttr::get(context, foo));
       }
       continue;
     }
