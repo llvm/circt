@@ -6,11 +6,15 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "./PassDetails.h"
+#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
+#include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/TinyPtrVector.h"
+#include "llvm/Support/Parallel.h"
+
 using namespace circt;
 using namespace firrtl;
 
@@ -243,6 +247,9 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   void visitOperation(Operation *op);
 
 private:
+  /// This is the current instance graph for the Circuit.
+  InstanceGraph *instanceGraph = nullptr;
+
   /// This keeps track of the current state of each tracked value.
   DenseMap<Value, LatticeValue> latticeValues;
 
@@ -266,6 +273,8 @@ private:
 // TODO: handle annotations: [[OptimizableExtModuleAnnotation]]
 void IMConstPropPass::runOnOperation() {
   auto circuit = getOperation();
+
+  instanceGraph = &getAnalysis<InstanceGraph>();
 
   // If the top level module is an external module, mark the input ports
   // overdefined.
@@ -294,12 +303,17 @@ void IMConstPropPass::runOnOperation() {
   }
 
   // Rewrite any constants in the modules.
-  // TODO: parallelize.
-  for (auto &circuitBodyOp : *circuit.getBody())
-    if (auto module = dyn_cast<FModuleOp>(circuitBodyOp))
-      rewriteModuleBody(module);
+  if (circuit.getContext()->isMultithreadingEnabled()) {
+    SmallVector<FModuleOp> ops(circuit.getBody()->getOps<FModuleOp>());
+    llvm::parallelForEach(ops, [&](auto op) { rewriteModuleBody(op); });
+  } else {
+    for (auto &circuitBodyOp : *circuit.getBody())
+      if (auto module = dyn_cast<FModuleOp>(circuitBodyOp))
+        rewriteModuleBody(module);
+  }
 
   // Clean up our state for next time.
+  instanceGraph = nullptr;
   latticeValues.clear();
   executableBlocks.clear();
   resultPortToInstanceResultMapping.clear();
@@ -412,7 +426,8 @@ void IMConstPropPass::markInvalidValueOp(InvalidValueOp invalid) {
 /// enclosing block is marked live.  This sets up the def-use edges for ports.
 void IMConstPropPass::markInstanceOp(InstanceOp instance) {
   // Get the module being reference or a null pointer if this is an extmodule.
-  auto module = dyn_cast<FModuleOp>(instance.getReferencedModule());
+  auto module =
+      dyn_cast<FModuleOp>(instanceGraph->getReferencedModule(instance));
 
   // If this is an extmodule, just remember that any results and inouts are
   // overdefined.
@@ -420,9 +435,10 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
     for (size_t resultNo = 0, e = instance.getNumResults(); resultNo != e;
          ++resultNo) {
       auto portVal = instance.getResult(resultNo);
-      // If this is a flip value, then this is an input to the extmodule which
-      // we can ignore.
-      if (portVal.getType().isa<FlipType>())
+      // If this is an input to the extmodule,
+      // we can ignore it.
+      if (getModulePortDirection(instance.getReferencedModule(), resultNo) ==
+          Direction::Input)
         continue;
 
       // Otherwise this is a result from it or an inout, mark it as overdefined.
@@ -438,9 +454,10 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
   for (size_t resultNo = 0, e = instance.getNumResults(); resultNo != e;
        ++resultNo) {
     auto instancePortVal = instance.getResult(resultNo);
-    // If this is a flip value then this is an input to the instance, which will
+    // If this is an input to the instance, it will
     // get handled when any connects to it are processed.
-    if (instancePortVal.getType().isa<FlipType>())
+    if (getModulePortDirection(instance.getReferencedModule(), resultNo) ==
+        Direction::Input)
       continue;
     // We only support simple values so far.
     if (!instancePortVal.getType().cast<FIRRTLType>().isGround()) {
@@ -493,7 +510,8 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
   // Driving an instance argument port drives the corresponding argument of the
   // referenced module.
   if (auto instance = dest.getDefiningOp<InstanceOp>()) {
-    auto module = dyn_cast<FModuleOp>(instance.getReferencedModule());
+    auto module =
+        dyn_cast<FModuleOp>(instanceGraph->getReferencedModule(instance));
     if (!module)
       return;
 
@@ -612,12 +630,9 @@ void IMConstPropPass::visitOperation(Operation *op) {
 
 void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
   auto *body = module.getBodyBlock();
-  // If a module is unreachable, then nuke its body.
-  if (!executableBlocks.count(body)) {
-    while (!body->empty())
-      body->back().erase();
+  // If a module is unreachable, just ignore it.
+  if (!executableBlocks.count(body))
     return;
-  }
 
   auto builder = OpBuilder::atBlockBegin(body);
 
@@ -660,8 +675,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     // Connects to values that we found to be constant can be dropped.
     if (auto connect = dyn_cast<ConnectOp>(op)) {
       if (auto *destOp = connect.dest().getDefiningOp()) {
-        if (isDeletableWireOrReg(destOp) &&
-            !latticeValues[connect.dest()].isOverdefined())
+        if (isDeletableWireOrReg(destOp) && !isOverdefined(connect.dest()))
           connect.erase();
       }
       continue;

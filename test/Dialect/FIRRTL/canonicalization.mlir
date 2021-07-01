@@ -553,6 +553,23 @@ firrtl.module @reg_cst_prop1(in %clock: !firrtl.clock, out %out_b: !firrtl.uint<
   firrtl.connect %out_b, %tmp_b : !firrtl.uint<8>, !firrtl.uint<8>
 }
 
+// Check for DontTouch annotation
+// CHECK-LABEL: @reg_cst_prop1_DontTouch
+// CHECK-NEXT:      %c5_ui8 = firrtl.constant 5 : !firrtl.uint<8>
+// CHECK-NEXT:      %tmp_a = firrtl.reg %clock  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : (!firrtl.clock) -> !firrtl.uint<8>
+// CHECK-NEXT:      %tmp_b = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<8>
+// CHECK-NEXT:      firrtl.connect %tmp_a, %c5_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
+// CHECK-NEXT:      firrtl.connect %tmp_b, %tmp_a : !firrtl.uint<8>, !firrtl.uint<8>
+// CHECK-NEXT:      firrtl.connect %out_b, %tmp_b : !firrtl.uint<8>, !firrtl.uint<8>
+
+firrtl.module @reg_cst_prop1_DontTouch(in %clock: !firrtl.clock, out %out_b: !firrtl.uint<8>) {
+  %c5_ui8 = firrtl.constant 5 : !firrtl.uint<8>
+  %tmp_a = firrtl.reg %clock {name = "tmp_a", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}  : (!firrtl.clock) -> !firrtl.uint<8>
+  %tmp_b = firrtl.reg %clock {name = "tmp_b"} : (!firrtl.clock) -> !firrtl.uint<8>
+  firrtl.connect %tmp_a, %c5_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
+  firrtl.connect %tmp_b, %tmp_a : !firrtl.uint<8>, !firrtl.uint<8>
+  firrtl.connect %out_b, %tmp_b : !firrtl.uint<8>, !firrtl.uint<8>
+}
 // CHECK-LABEL: @reg_cst_prop2
 // CHECK-NEXT:   %c5_ui8 = firrtl.constant 5 : !firrtl.uint<8>
 // CHECK-NEXT:   firrtl.connect %out_b, %c5_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
@@ -612,6 +629,15 @@ firrtl.module @AttachOpts(in %a: !firrtl.analog<1>) {
   // CHECK-NEXT: }
   %b = firrtl.wire  : !firrtl.analog<1>
   firrtl.attach %b, %a : !firrtl.analog<1>, !firrtl.analog<1>
+}
+
+// CHECK-LABEL: @AttachDeadWireDontTouch
+firrtl.module @AttachDeadWireDontTouch(in %a: !firrtl.analog<1>, in %b: !firrtl.analog<1>) {
+  // CHECK-NEXT: %c = firrtl.wire
+  // CHECK-NEXT: firrtl.attach %a, %b, %c :
+  // CHECK-NEXT: }
+  %c = firrtl.wire  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}: !firrtl.analog<1>
+  firrtl.attach %a, %b, %c : !firrtl.analog<1>, !firrtl.analog<1>, !firrtl.analog<1>
 }
 
 // CHECK-LABEL: @wire_cst_prop1
@@ -1693,5 +1719,36 @@ firrtl.module @regsyncreset_no(in %clock: !firrtl.clock, in %reset: !firrtl.uint
   firrtl.connect %d, %1 : !firrtl.uint, !firrtl.uint
 }
 
+// https://github.com/llvm/circt/issues/1215
+// CHECK-LABEL: firrtl.module @dshifts_to_ishifts
+firrtl.module @dshifts_to_ishifts(in %a_in: !firrtl.sint<58>,
+                                  out %a_out: !firrtl.sint<58>,
+                                  in %b_in: !firrtl.uint<8>,
+                                  out %b_out: !firrtl.uint<23>,
+                                  in %c_in: !firrtl.sint<58>,
+                                  out %c_out: !firrtl.sint<58>) {
+  // CHECK: %0 = firrtl.bits %a_in 57 to 4 : (!firrtl.sint<58>) -> !firrtl.uint<54>
+  // CHECK: %1 = firrtl.asSInt %0 : (!firrtl.uint<54>) -> !firrtl.sint<54>
+  // CHECK: %2 = firrtl.pad %1, 58 : (!firrtl.sint<54>) -> !firrtl.sint<58>
+  // CHECK: firrtl.connect %a_out, %2 : !firrtl.sint<58>, !firrtl.sint<58>
+  %c4_ui10 = firrtl.constant 4 : !firrtl.uint<10>
+  %0 = firrtl.dshr %a_in, %c4_ui10 : (!firrtl.sint<58>, !firrtl.uint<10>) -> !firrtl.sint<58>
+  firrtl.connect %a_out, %0 : !firrtl.sint<58>, !firrtl.sint<58>
 
+  // CHECK: %3 = firrtl.shl %b_in, 4 : (!firrtl.uint<8>) -> !firrtl.uint<12>
+  // CHECK: %4 = firrtl.pad %3, 23 : (!firrtl.uint<12>) -> !firrtl.uint<23>
+  // CHECK: firrtl.connect %b_out, %4 : !firrtl.uint<23>, !firrtl.uint<23>
+  %c4_ui4 = firrtl.constant 4 : !firrtl.uint<4>
+  %1 = firrtl.dshl %b_in, %c4_ui4 : (!firrtl.uint<8>, !firrtl.uint<4>) -> !firrtl.uint<23>
+  firrtl.connect %b_out, %1 : !firrtl.uint<23>, !firrtl.uint<23>
+
+  // CHECK: %5 = firrtl.bits %c_in 57 to 57 : (!firrtl.sint<58>) -> !firrtl.uint<1>
+  // CHECK: %6 = firrtl.asSInt %5 : (!firrtl.uint<1>) -> !firrtl.sint<1>
+  // CHECK: %7 = firrtl.pad %6, 58 : (!firrtl.sint<1>) -> !firrtl.sint<58>
+  // CHECK: firrtl.connect %c_out, %7 : !firrtl.sint<58>, !firrtl.sint<58>
+  %c438_ui10 = firrtl.constant 438 : !firrtl.uint<10>
+  %2 = firrtl.dshr %c_in, %c438_ui10 : (!firrtl.sint<58>, !firrtl.uint<10>) -> !firrtl.sint<58>
+  firrtl.connect %c_out, %2 : !firrtl.sint<58>, !firrtl.sint<58>
+}
+ 
 }

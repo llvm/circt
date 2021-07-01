@@ -56,7 +56,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input s4: SInt<4>      ; CHECK: %s4: !firrtl.sint<4>,
     input u: UInt          ; CHECK: %u: !firrtl.uint,
     input bf: { flip int_1 : UInt<1>, int_out : UInt<2>}
-    ; CHECK: %bf: !firrtl.bundle<int_1: flip<uint<1>>, int_out: uint<2>>
+    ; CHECK: %bf: !firrtl.bundle<int_1 flip: uint<1>, int_out: uint<2>>
 
     input vec: UInt<1>[4] ; CHECK: %vec: !firrtl.vector<uint<1>, 4>) {
 
@@ -180,7 +180,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.asClock %reset_async : (!firrtl.asyncreset) -> !firrtl.clock
     node check_c5 = asClock(reset_async)
 
-    ; CHECK: firrtl.node %auto  : !firrtl.uint<1>
+    ; CHECK: firrtl.node %auto : !firrtl.uint<1>
     node check_output = auto
 
     ; CHECK: %c42_ui10 = firrtl.constant 42 : !firrtl.uint<10>
@@ -302,14 +302,14 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     reg _t_2622 : UInt<4>, clock with :
       reset => (UInt<1>("h0"), _t_2622)
 
-    ; CHECK: %xyz_in = firrtl.instance @circuit {name = "xyz"} : !firrtl.flip<uint<80>>
+    ; CHECK: %xyz_in = firrtl.instance @circuit {name = "xyz"} : !firrtl.uint<80>
     inst xyz of circuit
-    ; CHECK: firrtl.connect %xyz_in, %i8 : !firrtl.flip<uint<80>>, !firrtl.uint<8>
+    ; CHECK: firrtl.connect %xyz_in, %i8 : !firrtl.uint<80>, !firrtl.uint<8>
     xyz.in <= i8
 
     ; CHECK: %myext_in, %myext_out = firrtl.instance @MyExtModule
     ; CHECK: {name = "myext"} :
-    ; CHECK: !firrtl.flip<uint>, !firrtl.uint<8>
+    ; CHECK: !firrtl.uint, !firrtl.uint<8>
     inst myext of MyExtModule
     myext.in <= i8
     printf(clock, reset, "Something interesting! %x", myext.out)
@@ -318,7 +318,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     when reset :
       ; CHECK: %reset_myext_in, %reset_myext_out = firrtl.instance @MyExtModule
       ; CHECK: {name = "reset_myext"} :
-      ; CHECK: !firrtl.flip<uint>, !firrtl.uint<8>
+      ; CHECK: !firrtl.uint, !firrtl.uint<8>
       inst reset_myext of MyExtModule
       reset_myext.in <= i8
     ; CHECK: }
@@ -326,13 +326,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.subaccess %_t[%i8] : !firrtl.vector<uint<1>, 12>, !firrtl.uint<8>
     auto <= _t[i8]
 
-    ; CHECK: firrtl.subaccess %_t{{\[}}%auto] : !firrtl.vector<uint<1>, 12>, !firrtl.uint<1>
+    ; CHECK: firrtl.subaccess %_t[%auto] : !firrtl.vector<uint<1>, 12>, !firrtl.uint<1>
     auto <= _t[auto]
 
     ; CHECK: %myMem = firrtl.cmem {name = "myMem"} : !firrtl.vector<bundle<id: uint<4>, resp: uint<2>>, 8>
     cmem myMem : { id : UInt<4>, resp : UInt<2>} [8] @[Decoupled.scala 209:24]
 
-    ; CHECK: %memValue = firrtl.memoryport Infer %myMem, %i8, %clock  {annotations = [], name = "memValue"} : (!firrtl.vector<bundle<id: uint<4>, resp: uint<2>>, 8>, !firrtl.uint<8>, !firrtl.clock) -> !firrtl.bundle<id: uint<4>, resp: uint<2>>
+    ; CHECK: %memValue = firrtl.memoryport Infer %myMem, %i8, %clock  {name = "memValue"} : (!firrtl.vector<bundle<id: uint<4>, resp: uint<2>>, 8>, !firrtl.uint<8>, !firrtl.clock) -> !firrtl.bundle<id: uint<4>, resp: uint<2>>
     infer mport memValue = myMem[i8], clock
     auto11 <= memValue.id
 
@@ -341,7 +341,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %base_table_1 = firrtl.smem Old {name = "base_table_1"} : !firrtl.vector<vector<uint<1>, 9>, 256>
     smem base_table_1 : UInt<1>[9] [256] old
 
-    ; CHECK: %tableValue = firrtl.memoryport Read %base_table_0, %i8, %clock {annotations = [], name = "tableValue"} : (!firrtl.vector<vector<uint<1>, 9>, 256>, !firrtl.uint<8>, !firrtl.clock) -> !firrtl.vector<uint<1>, 9>
+    ; CHECK: %tableValue = firrtl.memoryport Read %base_table_0, %i8, %clock {name = "tableValue"} : (!firrtl.vector<vector<uint<1>, 9>, 256>, !firrtl.uint<8>, !firrtl.clock) -> !firrtl.vector<uint<1>, 9>
     read mport tableValue = base_table_0[i8], clock
 
     ; CHECK: firrtl.pad %i8, 10 : (!firrtl.uint<8>) -> !firrtl.uint<10>
@@ -367,9 +367,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; CHECK: %_M__T_10, %_M__T_11, %_M__T_18 = firrtl.mem Undefined {depth = 8 : i64, name = "_M", portNames = ["_T_10", "_T_11", "_T_18"]
     ; CHECK-SAME: readLatency = 0 : i32, writeLatency = 1 : i32} :
-    ; CHECK-SAME: !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>,
-    ; CHECK-SAME: !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>>,
-    ; CHECK-SAME: !firrtl.flip<bundle<addr: uint<3>, en: uint<1>, clk: clock, data: flip<bundle<id: uint<4>>>>
+    ; CHECK-SAME: !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>,
+    ; CHECK-SAME: !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: bundle<id: uint<4>>, mask: bundle<id: uint<1>>>,
+    ; CHECK-SAME: !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: bundle<id: uint<4>>
     mem _M : @[Decoupled.scala 209:24]
         data-type => { id : UInt<4> }
         depth => 8
@@ -415,13 +415,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     wire _t_6 : { flip b : { bits : { source : UInt<7> } } }
     node _t_8 = bits(_t_6.b.bits.source, 5, 0)
 
-    ; CHECK: %flip1 = firrtl.wire : !firrtl.bundle<x: flip<bundle<a: flip<uint>>>>
+    ; CHECK: %flip1 = firrtl.wire : !firrtl.bundle<x flip: bundle<a flip: uint>>
     wire flip1 : { flip x : { flip a : UInt } }
-    ; CHECK: %flip2 = firrtl.wire : !firrtl.bundle<x: flip<bundle<a: flip<uint>, b: analog>>>
+    ; CHECK: %flip2 = firrtl.wire : !firrtl.bundle<x flip: bundle<a flip: uint, b: analog>>
     wire flip2 : { flip x : { flip a : UInt, b: Analog } }
-    ; CHECK: %flip3 = firrtl.wire : !firrtl.bundle<x: flip<bundle<a: flip<uint>, b: analog>>>
+    ; CHECK: %flip3 = firrtl.wire : !firrtl.bundle<x flip: bundle<a flip: uint, b flip: analog>>
     wire flip3 : { flip x : { flip a : UInt, flip b: Analog } }
-    ; CHECK: %flip4 = firrtl.wire : !firrtl.bundle<x: flip<vector<bundle<a: flip<uint>>, 4>>>
+    ; CHECK: %flip4 = firrtl.wire : !firrtl.bundle<x flip: vector<bundle<a flip: uint>, 4>>
     wire flip4 : { flip x : { flip a : UInt }[4] }
 
 
@@ -478,19 +478,30 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input foo : UInt
     input clock : Clock
 
-    ; CHECK: [[HACKWIRE:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
     ; CHECK: [[HACKWIRE2:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
+    ; CHECK: [[HACKWIRE1:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
+    ; CHECK: [[HACKWIRE0:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
     ; CHECK: %memory = firrtl.smem Undefined {name = "memory"} : !firrtl.vector<vector<uint<1>, 9>, 256>
     smem memory : UInt<1>[9] [256]
 
     ; CHECK: firrtl.when %cond {
     when cond :
       node idx = foo
-      ; CHECK: %xyz = firrtl.memoryport Read %memory, %idx
-      ; CHECK: firrtl.connect [[HACKWIRE]], %xyz
-      read mport xyz = memory[idx], clock
+      ; CHECK: %xyz0 = firrtl.memoryport Read %memory, %idx
+      ; CHECK: firrtl.connect [[HACKWIRE0]], %xyz
+      read mport xyz0 = memory[idx], clock
     ; CHECK: }
     node sometest = eq(foo, UInt(42))
+
+    ; This tests that the location parsing from mport doesn't crash when the
+    ; skip op is eaten as a substatement.
+    ; CHECK: firrtl.when %cond {
+    when cond :
+      ; CHECK: %xyz1 = firrtl.memoryport Read %memory, %foo
+      ; CHECK: firrtl.connect [[HACKWIRE1]], %xyz
+      read mport xyz1 = memory[foo], clock  @[SRAM.scala 321:27]
+      skip
+    ; CHECK: }
 
     ; CHECK: firrtl.when %cond {
     when cond :
@@ -505,9 +516,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; CHECK: firrtl.when %sometest {
     when sometest :
-      ; CHECK: %awesome = firrtl.node [[HACKWIRE]]
+      ; CHECK: %awesome0 = firrtl.node [[HACKWIRE0]]
+      ; CHECK: %awesome1 = firrtl.node [[HACKWIRE1]]
       ; CHECK: %awesome2 = firrtl.node [[HACKWIRE2]]
-      node awesome = xyz
+      node awesome0 = xyz0
+      node awesome1 = xyz1
       node awesome2 = xyz2
 
 
@@ -545,7 +558,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input bf: { flip int_1 : UInt<1>, int_out : UInt<2>}
     ; CHECK: %0 = firrtl.subfield %bf("int_1")
     node _T = bf.int_1
-    when _T :  ; CHECK: firrtl.when %0 {
+    ; CHECK: firrtl.when %0 {
+    when _T :  
       skip
 
   ; CHECK-LABEL: firrtl.module @mem_depth_1
@@ -562,8 +576,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       writer => MPORT
       read-under-write => undefined
       ; CHECK: %bar_MPORT, %bar_io_deq_bits_MPORT = firrtl.mem Undefined {depth = 1 : i64, name = "bar", portNames = ["MPORT", "io_deq_bits_MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} :
-      ; CHECK: !firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<3>, mask: uint<1>>>,
-      ; CHECK: !firrtl.flip<bundle<addr: uint<1>, en: uint<1>, clk: clock, data: flip<uint<3>>>>
+      ; CHECK: !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<3>, mask: uint<1>>,
+      ; CHECK: !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<3>>
 
   ; CHECK-LABEL: firrtl.module @mem_no_ports() {
   ; CHECK-NEXT: }
@@ -662,14 +676,6 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
 
 
-  module mod_0_563 :
-    input in0: UInt<5>
-    input in1: { a : UInt<5> }
-    output out0: UInt<5>
-    output out1: { a : UInt<5> }
-    out0 <= in0
-    out1 <= in1
-
   ; CHECK-LABEL: firrtl.module @CheckInvalids
   module CheckInvalids :
     input in0 : UInt<1>
@@ -759,6 +765,16 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.connect [[U0_IN1_A]], [[INV]]
     U0 is invalid
 
+  ; This reference is declared after its first use.
+  ; https://github.com/llvm/circt/issues/163
+  module mod_0_563 :
+    input in0: UInt<5>
+    input in1: { a : UInt<5> }
+    output out0: UInt<5>
+    output out1: { a : UInt<5> }
+    out0 <= in0
+    out1 <= in1
+
   ; https://github.com/llvm/circt/issues/606
   ; CHECK-LABEL: firrtl.module @mutableSubIndex606
   module mutableSubIndex606 :
@@ -776,7 +792,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input rEn: UInt<1>
     output rData: UInt<8>
 
-    ; CHECK: %mem_r = firrtl.mem Undefined {depth = 16 : i64, name = "mem", portNames = ["r"], readLatency = 2 : i32, writeLatency = 1 : i32} : !firrtl.flip<bundle<addr: uint<4>, en: uint<1>, clk: clock, data: flip<uint<8>>>>
+    ; CHECK: %mem_r = firrtl.mem Undefined {depth = 16 : i64, name = "mem", portNames = ["r"], readLatency = 2 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
     mem mem:
       data-type => UInt<8>
       depth => 16
@@ -840,4 +856,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input sel: UInt
     output c: UInt<8>
     c <= mux(sel, a, b)
+
+  ; CHECK-LABEL: firrtl.extmodule @RawStringParam
+  ; CHECK: parameters = {FORMAT = "xyz_timeout=%d\\n",
+  ; CHECK:               MIXED_QUOTES = "\22'\\\22",
+  ; CHECK:               TYPE = "bit"}}
+  extmodule RawStringParam :
+    parameter TYPE = 'bit'
+    parameter FORMAT = 'xyz_timeout=%d\n'
+    parameter MIXED_QUOTES = '"\'\"'
 

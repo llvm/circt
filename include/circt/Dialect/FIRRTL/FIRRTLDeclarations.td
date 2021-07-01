@@ -18,8 +18,8 @@ def InstanceOp : FIRRTLOp<"instance"> {
   }];
 
   let arguments = (ins FlatSymbolRefAttr:$moduleName, StrAttr:$name,
-                       DefaultValuedAttr<AnnotationArrayAttr,
-                                         "{}">:$annotations);
+                       AnnotationArrayAttr:$annotations,
+                       PortAnnotationsAttr:$portAnnotations);
   let results = (outs Variadic<FIRRTLType>:$results);
 
   let assemblyFormat =
@@ -31,10 +31,8 @@ def InstanceOp : FIRRTLOp<"instance"> {
     OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
                    "::mlir::StringRef":$moduleName,
                    CArg<"StringRef", "{}">:$name,
-                   CArg<"ArrayRef<Attribute>", "{}">:$annotations), [{
-      return build($_builder, $_state, resultTypes, moduleName, name,
-                   $_builder.getArrayAttr(annotations));
-    }]>,
+                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
+                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations)>,
 
     /// Constructor that creates a version of the specified instance, but that
     /// erases some number of results from it.
@@ -54,13 +52,16 @@ def InstanceOp : FIRRTLOp<"instance"> {
     StringRef getPortNameStr(size_t resultNo) {
       return getPortName(resultNo).getValue();
     }
+
+    /// Hooks for port annotations.
+    ArrayAttr getPortAnnotation(unsigned portIdx);
+    void setAllPortAnnotations(ArrayRef<Attribute> annotations);
   }];
 }
 
 def CMemOp : FIRRTLOp<"cmem", [/*MemAlloc*/]> {
   let summary = "Define a new cmem";
-  let arguments = (ins StrAttr:$name,
-        DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
+  let arguments = (ins StrAttr:$name, AnnotationArrayAttr:$annotations);
   let results = (outs FIRRTLType:$result);
 
   let assemblyFormat = "custom<ElideAnnotations>(attr-dict) `:` type($result)";
@@ -69,11 +70,11 @@ def CMemOp : FIRRTLOp<"cmem", [/*MemAlloc*/]> {
 def SMemOp : FIRRTLOp<"smem", [/*MemAlloc*/]> {
   let summary = "Define a new smem";
   let arguments = (ins RUWAttr:$ruw, StrAttr:$name,
-        DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
+                       AnnotationArrayAttr:$annotations);
   let results = (outs FIRRTLType:$result);
 
   let assemblyFormat =
-    "$ruw custom<MemOp>(attr-dict) `:` type($result)";
+    "$ruw custom<SMemOp>(attr-dict) `:` type($result)";
 }
 
 def MemoryPortOp : FIRRTLOp<"memoryport"> {
@@ -81,26 +82,37 @@ def MemoryPortOp : FIRRTLOp<"memoryport"> {
 
   let arguments = (ins FIRRTLType:$memory, IntType:$index, ClockType:$clock,
                     MemDirAttr:$direction, StrAttr:$name,
-                    DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
+                    AnnotationArrayAttr:$annotations);
   let results = (outs FIRRTLType:$result);
 
   let assemblyFormat = [{
-    $direction $memory `,` $index `,` $clock attr-dict `:`
+    $direction $memory `,` $index `,` $clock custom<MemoryPortOp>(attr-dict) `:`
        functional-type(operands, $result)
   }];
 }
 
 def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
   let summary = "Define a new mem";
-  let arguments = (
-    ins Confined<I32Attr, [IntMinValue<0>]>:$readLatency,
-        Confined<I32Attr, [IntMinValue<1>]>:$writeLatency,
-        Confined<I64Attr, [IntMinValue<1>]>:$depth, RUWAttr:$ruw,
-        StrArrayAttr:$portNames, StrAttr:$name,
-        DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
+  let arguments =
+    (ins Confined<I32Attr, [IntMinValue<0>]>:$readLatency,
+         Confined<I32Attr, [IntMinValue<1>]>:$writeLatency,
+         Confined<I64Attr, [IntMinValue<1>]>:$depth, RUWAttr:$ruw,
+         StrArrayAttr:$portNames, StrAttr:$name,
+         AnnotationArrayAttr:$annotations,
+         PortAnnotationsAttr:$portAnnotations);
   let results = (outs Variadic<FIRRTLType>:$results);
 
   let assemblyFormat = "$ruw custom<MemOp>(attr-dict) `:` type($results)";
+
+  let builders = [
+    OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
+                   "uint32_t":$readLatency, "uint32_t":$writeLatency,
+                   "uint64_t":$depth, "RUWAttr":$ruw, 
+                   "ArrayRef<Attribute>":$portNames,
+                   CArg<"StringRef", "{}">:$name,
+                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
+                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations)>
+  ];
 
   let verifier = "return ::verifyMemOp(*this);";
 
@@ -143,10 +155,14 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
     }
     Value getPortNamed(StringAttr name);
 
+    /// Hooks for port annotations.
+    ArrayAttr getPortAnnotation(unsigned portIdx);
+    void setAllPortAnnotations(ArrayRef<Attribute> annotations);
   }];
 }
 
-def NodeOp : FIRRTLOp<"node", [SameOperandsAndResultType]> {
+def NodeOp : FIRRTLOp<"node",
+                      [SameOperandsAndResultType, InferTypeOpInterface]> {
   let summary = "No-op to name a value";
   let description = [{
     A node is simply a named intermediate value in a circuit. The node must
@@ -159,9 +175,8 @@ def NodeOp : FIRRTLOp<"node", [SameOperandsAndResultType]> {
     ```
     }];
 
-  let arguments = (
-    ins PassiveType:$input, StrAttr:$name,
-        DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
+  let arguments = (ins PassiveType:$input, StrAttr:$name, 
+                       AnnotationArrayAttr:$annotations);
   let results = (outs FIRRTLType:$result);
 
   let builders = [
@@ -177,6 +192,16 @@ def NodeOp : FIRRTLOp<"node", [SameOperandsAndResultType]> {
   let assemblyFormat = "$input custom<ImplicitSSAName>(attr-dict) `:` type($input)";
 
   let hasCanonicalizer = true;
+
+  let extraClassDeclaration = [{
+    /// Infer the return types of this operation.
+    static LogicalResult inferReturnTypes(MLIRContext *context,
+                                          Optional<Location> loc,
+                                          ValueRange operands,
+                                          DictionaryAttr attrs,
+                                          mlir::RegionRange regions,
+                                          SmallVectorImpl<Type> &results);
+  }];
 }
 
 def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
@@ -188,9 +213,8 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
     ```
     }];
 
-  let arguments = (
-    ins ClockType:$clockVal, StrAttr:$name,
-      DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
+  let arguments = 
+    (ins ClockType:$clockVal, StrAttr:$name, AnnotationArrayAttr:$annotations);
   let results = (outs PassiveType:$result);
 
   let builders = [
@@ -217,9 +241,8 @@ def RegResetOp : FIRRTLOp<"regreset", [/*MemAlloc*/]> {
     }];
 
   let arguments = (
-    ins ClockType:$clockVal, ResetType:$resetSignal,
-        PassiveType:$resetValue, StrAttr:$name,
-        DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
+    ins ClockType:$clockVal, ResetType:$resetSignal, PassiveType:$resetValue,
+        StrAttr:$name, AnnotationArrayAttr:$annotations);
   let results = (outs PassiveType:$result);
 
   let builders = [
@@ -248,10 +271,8 @@ def WireOp : FIRRTLOp<"wire", []> {
     ```
     }];
 
-  let arguments = (
-    ins StrAttr:$name,
-        DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
-  let results = (outs UnflippedType:$result);
+  let arguments = (ins StrAttr:$name, AnnotationArrayAttr:$annotations);
+  let results = (outs FIRRTLType:$result);
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,

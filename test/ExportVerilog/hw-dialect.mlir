@@ -1,4 +1,4 @@
-// RUN: circt-translate %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
+// RUN: circt-translate %s -export-verilog -verify-diagnostics --lowering-options=alwaysFF | FileCheck %s --strict-whitespace
 
 // CHECK-LABEL: // external module E
 hw.module.extern @E(%a: i1, %b: i1, %c: i1)
@@ -7,7 +7,9 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
                         %array2d: !hw.array<12 x array<10xi4>>,
                         %uarray: !hw.uarray<16xi8>,
                         %postUArray: i8,
-                        %structA: !hw.struct<foo: i2, bar:i4>) -> (
+                        %structA: !hw.struct<foo: i2, bar:i4>,
+                        %arrOfStructA: !hw.array<5 x struct<foo: i2>>
+                        ) -> (
   %r0: i4, %r2: i4, %r4: i4, %r6: i4,
   %r7: i4, %r8: i4, %r9: i4, %r10: i4,
   %r11: i4, %r12: i4, %r13: i4, %r14: i4,
@@ -91,6 +93,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:   input  [11:0][9:0][3:0]                                   array2d,
 // CHECK-NEXT:   input  [7:0]                                              uarray[0:15], postUArray,
 // CHECK-NEXT:   input  struct packed {logic [1:0] foo; logic [3:0] bar; } structA,
+// CHECK-NEXT:   input  struct packed {logic [1:0] foo; }[4:0]             arrOfStructA,
 // CHECK-NEXT:   output [3:0]                                              r0, r2, r4, r6, r7, r8, r9,
 // CHECK-NEXT:   output [3:0]                                              r10, r11, r12, r13, r14, r15,
 // CHECK-NEXT:   output                                                    r16, r17, r18, r19, r20, r21,
@@ -232,7 +235,7 @@ hw.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2:
 // CHECK-NEXT:      .WIDTH(8'd32)
 // CHECK-NEXT:    ) paramd (
 // CHECK-NEXT:      .a   (w),
-// CHECK-NEXT:    //.b   (i3),
+// CHECK-NEXT:      .b   (i3),
 // CHECK-NEXT:      .out (paramd_out)
 // CHECK-NEXT:    );
 // CHECK-NEXT:    FooModule #(
@@ -628,4 +631,28 @@ hw.module @out_of_order_multi_result() -> (%b: i1, %c: i2) {
   // CHECK: assign b = b1_out1 + b1_out1;
   // CHECK: assign c = b1_out2 + b1_out2;
   hw.output %b, %c : i1, i2
+}
+
+
+hw.module.extern @ExternDestMod(%a: i1, %b: i2) -> (%c: i3, %d: i4)
+hw.module @InternalDestMod(%a: i1, %b: i3) {}
+// CHECK-LABEL module ABC
+hw.module @ABC(%a: i1, %b: i2) -> (%c: i4) {
+  // CHECK: wire [2:0] whatever_c;
+  // CHECK: wire [3:0] whatever_d;
+  %0,%1 = hw.instance "whatever" sym @a1 @ExternDestMod(%a, %b) {doNotPrint=1}: (i1, i2) -> (i3, i4)
+  // CHECK: // ExternDestMod whatever (
+  // CHECK-NEXT: //   .a (a),
+  // CHECK-NEXT: //   .b (b),
+  // CHECK-NEXT: //   .c (whatever_c),
+  // CHECK-NEXT: //   .d (whatever_d)
+  // CHECK-NEXT: // );
+  hw.instance "yo" sym @b1 @InternalDestMod(%a, %0) {doNotPrint=1} : (i1, i3) -> ()
+  // CHECK-NEXT: // InternalDestMod yo (
+  // CHECK-NEXT: //   .a (a),
+  // CHECK-NEXT: //   .b (whatever_c)
+  // CHECK-NEXT: // );
+  hw.output %1 : i4
+  // CHECK-NEXT: assign c = whatever_d;
+  // CHECK-NEXT: endmodule
 }

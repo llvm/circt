@@ -85,14 +85,14 @@ static FIRRTLType getBundleType(Type type) {
   auto validId = StringAttr::get(context, "valid");
   auto readyId = StringAttr::get(context, "ready");
   auto signalType = UIntType::get(context, 1);
-  elements.push_back(BundleElement(validId, signalType));
-  elements.push_back(BundleElement(readyId, FlipType::get(signalType)));
+  elements.push_back(BundleElement(validId, false, signalType));
+  elements.push_back(BundleElement(readyId, true, signalType));
 
   // Add data subfield to the bundle if dataType is not a null.
   auto dataType = getFIRRTLType(type);
   if (dataType) {
     auto dataId = StringAttr::get(context, "data");
-    elements.push_back(BundleElement(dataId, dataType));
+    elements.push_back(BundleElement(dataId, false, dataType));
   }
 
   auto bundleType = BundleType::get(elements, context);
@@ -192,7 +192,7 @@ static std::string getSubModuleName(Operation *oldOp) {
 
   // Add buffer information.
   if (auto bufferOp = dyn_cast<handshake::BufferOp>(oldOp)) {
-    subModuleName += "_" + bufferOp.getNumSlots().toString(10, false) + "slots";
+    subModuleName += "_" + std::to_string(bufferOp.slots()) + "slots";
     if (bufferOp.isSequential())
       subModuleName += "_seq";
   }
@@ -400,9 +400,11 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
       funcOp.emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back({portName, bundlePortType, Direction::Input});
+    ports.push_back({portName, bundlePortType, Direction::Input, arg.getLoc()});
     ++argIndex;
   }
+
+  auto funcLoc = funcOp.getLoc();
 
   // Add all outputs of funcOp.
   for (auto portType : funcOp.getType().getResults()) {
@@ -413,24 +415,26 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
       funcOp.emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back({portName, bundlePortType, Direction::Output});
+    ports.push_back({portName, bundlePortType, Direction::Output, funcLoc});
     ++argIndex;
   }
 
   // Add clock and reset signals.
   if (numClocks == 1) {
     ports.push_back({rewriter.getStringAttr("clock"),
-                     rewriter.getType<ClockType>(), Direction::Input});
+                     rewriter.getType<ClockType>(), Direction::Input, funcLoc});
     ports.push_back({rewriter.getStringAttr("reset"),
-                     rewriter.getType<UIntType>(1), Direction::Input});
+                     rewriter.getType<UIntType>(1), Direction::Input, funcLoc});
   } else if (numClocks > 1) {
     for (unsigned i = 0; i < numClocks; ++i) {
       auto clockName = "clock" + std::to_string(i);
       auto resetName = "reset" + std::to_string(i);
       ports.push_back({rewriter.getStringAttr(clockName),
-                       rewriter.getType<ClockType>(), Direction::Input});
+                       rewriter.getType<ClockType>(), Direction::Input,
+                       funcLoc});
       ports.push_back({rewriter.getStringAttr(resetName),
-                       rewriter.getType<UIntType>(1), Direction::Input});
+                       rewriter.getType<UIntType>(1), Direction::Input,
+                       funcLoc});
     }
   }
 
@@ -487,6 +491,8 @@ static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
   rewriter.setInsertionPoint(topModuleOp);
   llvm::SmallVector<ModulePortInfo, 8> ports;
 
+  auto loc = oldOp->getLoc();
+
   // Add all inputs of oldOp.
   unsigned argIndex = 0;
   for (auto portType : oldOp->getOperands().getTypes()) {
@@ -497,7 +503,7 @@ static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
       oldOp->emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back({portName, bundlePortType, Direction::Input});
+    ports.push_back({portName, bundlePortType, Direction::Input, loc});
     ++argIndex;
   }
 
@@ -510,16 +516,16 @@ static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
       oldOp->emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back({portName, bundlePortType, Direction::Output});
+    ports.push_back({portName, bundlePortType, Direction::Output, loc});
     ++argIndex;
   }
 
   // Add clock and reset signals.
   if (hasClock) {
     ports.push_back({rewriter.getStringAttr("clock"),
-                     rewriter.getType<ClockType>(), Direction::Input});
+                     rewriter.getType<ClockType>(), Direction::Input, loc});
     ports.push_back({rewriter.getStringAttr("reset"),
-                     rewriter.getType<UIntType>(1), Direction::Input});
+                     rewriter.getType<UIntType>(1), Direction::Input, loc});
   }
 
   return rewriter.create<FModuleOp>(
@@ -1674,14 +1680,13 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
   llvm::SmallVector<Type> resultTypes;
   llvm::SmallVector<Attribute> resultNames;
   for (auto p : ports) {
-    resultTypes.push_back(
-        FlipType::get(MemOp::getTypeForPort(depth, dataType, p.second)));
-    resultNames.push_back(rewriter.getStringAttr(p.first));
+    resultTypes.push_back(MemOp::getTypeForPort(depth, dataType, p.second));
+    resultNames.push_back(rewriter.getStringAttr(p.first.str()));
   }
 
-  auto memOp = rewriter.create<MemOp>(
-      insertLoc, resultTypes, readLatency, writeLatency, depth, ruw,
-      rewriter.getArrayAttr(resultNames), name, rewriter.getArrayAttr({}));
+  auto memOp =
+      rewriter.create<MemOp>(insertLoc, resultTypes, readLatency, writeLatency,
+                             depth, ruw, resultNames, name);
 
   // Prepare to create each load and store port logic.
   auto bitType = UIntType::get(rewriter.getContext(), 1);
@@ -1985,14 +1990,8 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
 
   // Bundle all ports of the instance into a new flattened bundle type.
   SmallVector<ModulePortInfo, 8> portInfo = getModulePortInfo(subModuleOp);
-  for (auto &port : portInfo) {
-    // All instance input ports are flipped.
-    if (port.direction == Direction::Input) {
-      resultTypes.push_back(FlipType::get(port.type));
-      continue;
-    }
+  for (auto &port : portInfo)
     resultTypes.push_back(port.type);
-  }
 
   // Create a instance operation.
   auto instanceOp = rewriter.create<firrtl::InstanceOp>(

@@ -45,7 +45,7 @@ def CircuitOp : FIRRTLOp<"circuit",
     Operation *getMainModule();
   }];
 
-  let assemblyFormat = "$name attr-dict-with-keyword $body";
+  let assemblyFormat = "$name custom<CircuitOpAttrs>(attr-dict) $body";
   let verifier = "return ::verifyCircuitOp(*this);";
 }
 
@@ -67,7 +67,7 @@ def FModuleOp : FIRRTLOp<"module",
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports,
-               CArg<"ArrayAttr","ArrayAttr()">:$annotations)>
+               CArg<"ArrayAttr","{}">:$annotations)>
   ];
 
   let extraClassDeclaration = [{
@@ -145,7 +145,7 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
     OpBuilder<(ins "StringAttr":$name,
                       "ArrayRef<ModulePortInfo>":$ports,
                       CArg<"StringRef", "StringRef()">:$defnamAttr,
-                      CArg<"ArrayAttr", "ArrayAttr()">:$annotations)>
+                      CArg<"ArrayAttr", "{}">:$annotations)>
   ];
 
   let extraClassDeclaration = [{

@@ -16,6 +16,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OperationSupport.h"
+#include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/JSON.h"
 
 namespace json = llvm::json;
@@ -33,7 +34,30 @@ static StringRef parseSubFieldSubIndexAnnotations(StringRef target,
   if (target.empty())
     return target;
 
-  auto fieldBegin = target.find_first_of(".[");
+  // Find the string index where the target can be partitioned into the "base
+  // target" and the "target".  The "base target" is the module or instance and
+  // the "target" is everything else.  This has two variants that need to be
+  // considered:
+  //
+  //   1) A Local target, e.g., ~Foo|Foo>bar.baz
+  //   2) An instance target, e.g., ~Foo|Foo/bar:Bar>baz.qux
+  //
+  // In (1), this should be partitioned into ["~Foo|Foo>bar", ".baz"].  In (2),
+  // this should be partitioned into ["~Foo|Foo/bar:Bar", ">baz.qux"].
+  bool isInstance = false;
+  size_t fieldBegin = target.find_if_not([&isInstance](char c) {
+    switch (c) {
+    case '/':
+      return isInstance = true;
+    case '>':
+      return !isInstance;
+    case '[':
+    case '.':
+      return false;
+    default:
+      return true;
+    };
+  });
 
   // Exit if the target does not contain a subfield or subindex.
   if (fieldBegin == StringRef::npos)
@@ -43,17 +67,29 @@ static StringRef parseSubFieldSubIndexAnnotations(StringRef target,
   target = target.substr(fieldBegin);
   SmallVector<Attribute> annotationVec;
   SmallString<16> temp;
-  temp.push_back(target[0]);
-  for (size_t i = 1, s = target.size(); i < s; ++i) {
-    if (target[i] == '[' || target[i] == '.') {
-      // Create a StringAttr with the previous token.
-      annotationVec.push_back(StringAttr::get(context, temp));
+  for (auto c : target.drop_front()) {
+    if (c == ']') {
+      // Create a IntegerAttr with the previous sub-index token.
+      APInt subIndex;
+      if (!temp.str().getAsInteger(10, subIndex))
+        annotationVec.push_back(IntegerAttr::get(IntegerType::get(context, 64),
+                                                 subIndex.getSExtValue()));
+      else
+        // We don't have a good way to emit error here. This will be reported as
+        // an error in the FIRRTL parser.
+        annotationVec.push_back(StringAttr::get(context, temp));
       temp.clear();
-    }
-    temp.push_back(target[i]);
+    } else if (c == '[' || c == '.') {
+      // Create a StringAttr with the previous token.
+      if (!temp.empty())
+        annotationVec.push_back(StringAttr::get(context, temp));
+      temp.clear();
+    } else
+      temp.push_back(c);
   }
   // Save the last token.
-  annotationVec.push_back(StringAttr::get(context, temp));
+  if (!temp.empty())
+    annotationVec.push_back(StringAttr::get(context, temp));
   annotations = ArrayAttr::get(context, annotationVec);
 
   return targetBase;
@@ -62,7 +98,10 @@ static StringRef parseSubFieldSubIndexAnnotations(StringRef target,
 /// Return an input \p target string in canonical form.  This converts a Legacy
 /// Annotation (e.g., A.B.C) into a modern annotation (e.g., ~A|B>C).  Trailing
 /// subfield/subindex references are preserved.
-static std::string canonicalizeTarget(StringRef target) {
+static llvm::Optional<std::string> canonicalizeTarget(StringRef target) {
+
+  if (target.empty())
+    return {};
 
   // If this is a normal Target (not a Named), erase that field in the JSON
   // object and return that Target.
@@ -77,22 +116,25 @@ static std::string canonicalizeTarget(StringRef target) {
   //   3. ComponentName => ReferenceTarget, e.g., A.B.C -> ~A|B>C
   std::string newTarget = "~";
   llvm::raw_string_ostream s(newTarget);
-  bool isModule = true;
+  unsigned tokenIdx = 0;
   for (auto a : target) {
-    switch (a) {
-    case '.':
-      if (isModule) {
+    if (a == '.') {
+      switch (tokenIdx) {
+      case 0:
         s << "|";
-        isModule = false;
+        break;
+      case 1:
+        s << ">";
+        break;
+      default:
+        s << ".";
         break;
       }
-      s << ">";
-      break;
-    default:
+      ++tokenIdx;
+    } else
       s << a;
-    }
   }
-  return newTarget;
+  return llvm::Optional<std::string>(newTarget);
 }
 
 /// Implements the same behavior as DictionaryAttr::getAs<A> to return the value
@@ -141,7 +183,7 @@ static A tryGetAs(DictionaryAttr &dict, DictionaryAttr &root, StringRef key,
 /// represented as a Target-keyed arrays of attributes.  The input JSON value is
 /// checked, at runtime, to be an array of objects.  Returns true if successful,
 /// false if unsuccessful.
-bool circt::firrtl::fromJSON(json::Value &value,
+bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
                              llvm::StringMap<ArrayAttr> &annotationMap,
                              json::Path path, MLIRContext *context) {
 
@@ -160,15 +202,29 @@ bool circt::firrtl::fromJSON(json::Value &value,
       return llvm::Optional<std::string>("~");
 
     // Find the target.
-    auto target = canonicalizeTarget(maybeTarget->getAsString().getValue());
+    auto maybeTargetStr = maybeTarget->getAsString();
+    if (!maybeTargetStr) {
+      p.field("target").report("target must be a string type");
+      return {};
+    }
+    auto canonTargetStr = canonicalizeTarget(maybeTargetStr.getValue());
+    if (!canonTargetStr) {
+      p.field("target").report("invalid target string");
+      return {};
+    }
 
-    // If the target is something that we know we don't support, then error.
-    bool unsupported = std::any_of(target.begin(), target.end(),
-                                   [](char a) { return a == '/' || a == ':'; });
+    auto target = canonTargetStr.getValue();
+
+    // Allow targets through that are instance targets.  Error on anything which
+    // is actually non-local.  E.g., this is allowing:
+    //     ~Foo|Foo/bar:Bar
+    // But, this is disallowing:
+    //     ~Foo|Foo/bar:Bar/baz:Baz
+    bool unsupported = std::count_if(target.begin(), target.end(), [](char a) {
+                         return a == '/' || a == ':';
+                       }) > 2;
     if (unsupported) {
-      p.field("target").report(
-          "Unsupported target (not a local CircuitTarget, ModuleTarget, or "
-          "ReferenceTarget without subfield or subindex)");
+      p.field("target").report("unsupported non-local target");
       return {};
     }
 
@@ -259,6 +315,14 @@ bool circt::firrtl::fromJSON(json::Value &value,
       return false;
     StringRef targetStrRef = optTarget.getValue();
 
+    if (targetStrRef != "~") {
+      auto circuitFieldEnd = targetStrRef.find_first_of('|');
+      if (circuitTarget != targetStrRef.take_front(circuitFieldEnd)) {
+        p.report("annotation has invalid circuit name");
+        return false;
+      }
+    }
+
     // Build up the Attribute to represent the Annotation and store it in the
     // global Target -> Attribute mapping.
     NamedAttrList metadata;
@@ -348,7 +412,7 @@ static bool parseAugmentedType(
         tryGetAs<StringAttr>(refTarget, refTarget, "ref", loc, clazz, path);
     SmallVector<Attribute> componentAttrs;
     for (size_t i = 0, e = componentAttr.size(); i != e; ++i) {
-      auto cPath = path + ".component[" + Twine(i) + "]";
+      auto cPath = (path + ".component[" + Twine(i) + "]").str();
       auto component = componentAttr[i];
       auto dict = component.dyn_cast_or_null<DictionaryAttr>();
       if (!dict) {
@@ -369,8 +433,7 @@ static bool parseAugmentedType(
         assert(classAttr.getValue() == "firrtl.annotations.TargetToken$Field" &&
                "A StringAttr target token must be found with a subfield target "
                "token.");
-        componentAttrs.push_back(
-            StringAttr::get(context, (Twine(".") + field.getValue()).str()));
+        componentAttrs.push_back(field);
         continue;
       }
 
@@ -379,9 +442,7 @@ static bool parseAugmentedType(
         assert(classAttr.getValue() == "firrtl.annotations.TargetToken$Index" &&
                "An IntegerAttr target token must be found with a subindex "
                "target token.");
-        componentAttrs.push_back(StringAttr::get(
-            context,
-            (Twine("[") + index.getValue().toString(10, false) + "]").str()));
+        componentAttrs.push_back(index);
         continue;
       }
 
@@ -401,18 +462,25 @@ static bool parseAugmentedType(
          ArrayAttr::get(context, componentAttrs)});
   };
 
-  /// The package name for all Grand Central Annotations
-  static const char *package = "sifive.enterprise.grandcentral";
-
   auto classAttr =
       tryGetAs<StringAttr>(augmentedType, root, "class", loc, clazz, path);
   if (!classAttr)
     return false;
+  StringRef classBase = classAttr.getValue();
+  if (!classBase.consume_front("sifive.enterprise.grandcentral.Augmented")) {
+    mlir::emitError(loc,
+                    "the 'class' was expected to start with "
+                    "'sifive.enterprise.grandCentral.Augmented*', but was '" +
+                        classAttr.getValue() + "' (Did you misspell it?)")
+            .attachNote()
+        << "see annotation: " << augmentedType;
+    return false;
+  }
 
   // An AugmentedBundleType looks like:
   //   "defName": String
   //   "elements": Seq[AugmentedField]
-  if (classAttr.getValue() == (Twine(package) + ".AugmentedBundleType").str()) {
+  if (classBase == "BundleType") {
     defName =
         tryGetAs<StringAttr>(augmentedType, root, "defName", loc, clazz, path);
     if (!defName)
@@ -439,7 +507,7 @@ static bool parseAugmentedType(
             << "The received element was: " << elementsAttr[i] << "\n";
         return false;
       }
-      auto ePath = path + ".elements[" + Twine(i) + "]";
+      auto ePath = (path + ".elements[" + Twine(i) + "]").str();
       auto name = tryGetAs<StringAttr>(field, root, "name", loc, clazz, ePath);
       auto tpe =
           tryGetAs<DictionaryAttr>(field, root, "tpe", loc, clazz, ePath);
@@ -475,7 +543,7 @@ static bool parseAugmentedType(
   // The ReferenceTarget is not serialized to a string.  The GroundType will
   // either be an actual FIRRTL ground type or a GrandCentral uninferred type.
   // This can be ignored for us.
-  if (classAttr.getValue() == (Twine(package) + ".AugmentedGroundType").str()) {
+  if (classBase == "GroundType") {
     auto maybeTarget =
         refTargetToString(augmentedType.getAs<DictionaryAttr>("ref"));
     if (!maybeTarget) {
@@ -497,7 +565,7 @@ static bool parseAugmentedType(
 
   // An AugmentedVectorType looks like:
   //   "elements": Seq[AugmentedType]
-  if (classAttr.getValue() == (Twine(package) + ".AugmentedVectorType").str()) {
+  if (classBase == "VectorType") {
     auto elementsAttr =
         tryGetAs<ArrayAttr>(augmentedType, root, "elements", loc, clazz, path);
     if (!elementsAttr)
@@ -510,11 +578,25 @@ static bool parseAugmentedType(
     return true;
   }
 
-  mlir::emitError(
-      loc, "Unknown AugmentedType '" + classAttr.getValue() +
-               "'. Either this is unsupported or maybe you mispelled it?")
+  // Any of the following are known and expected, but are legacy AugmentedTypes
+  // do not have a target:
+  //   - AugmentedStringType
+  //   - AugmentedBooleanType
+  //   - AugmentedIntegerType
+  //   - AugmentedDoubleType
+  bool isIgnorable =
+      llvm::StringSwitch<bool>(classBase)
+          .Cases("StringType", "BooleanType", "IntegerType", "DoubleType", true)
+          .Default(false);
+  if (isIgnorable)
+    return true;
+
+  // Anything else is unexpected or a user error if they manually wrote
+  // annotations.  Print an error and error out.
+  mlir::emitError(loc, "found unknown AugmentedType '" + classAttr.getValue() +
+                           "' (Did you misspell it?)")
           .attachNote()
-      << "See the full Annotation her: " << augmentedType;
+      << "see annotation: " << augmentedType;
   return false;
 }
 
@@ -589,8 +671,15 @@ bool circt::firrtl::scatterCustomAnnotations(
       if (!blackBoxAttr)
         return false;
       auto target = canonicalizeTarget(blackBoxAttr.getValue());
-      newAnnotations[target].push_back(
+      if (!target)
+        return false;
+      NamedAttrList dontTouchAnn;
+      dontTouchAnn.append("class",
+          StringAttr::get(context, "firrtl.transforms.DontTouchAnnotation"));
+      newAnnotations[target.getValue()].push_back(
           DictionaryAttr::getWithSorted(context, attrs));
+      newAnnotations[target.getValue()].push_back(
+          DictionaryAttr::getWithSorted(context, dontTouchAnn));
 
       // Process all the taps.
       auto keyAttr = tryGetAs<ArrayAttr>(dict, dict, "keys", loc, clazz);
@@ -598,7 +687,7 @@ bool circt::firrtl::scatterCustomAnnotations(
         return false;
       for (size_t i = 0, e = keyAttr.size(); i != e; ++i) {
         auto b = keyAttr[i];
-        auto path = "keys[" + Twine(i) + "]";
+        auto path = ("keys[" + Twine(i) + "]").str();
         auto bDict = b.cast<DictionaryAttr>();
         auto classAttr =
             tryGetAs<StringAttr>(bDict, dict, "class", loc, clazz, path);
@@ -612,6 +701,8 @@ bool circt::firrtl::scatterCustomAnnotations(
         if (!portNameAttr)
           return false;
         auto portTarget = canonicalizeTarget(portNameAttr.getValue());
+        if (!portTarget)
+          return false;
         port.append("class", classAttr);
         port.append("id", id);
 
@@ -626,11 +717,18 @@ bool circt::firrtl::scatterCustomAnnotations(
               tryGetAs<StringAttr>(bDict, dict, "source", loc, clazz, path);
           if (!sourceAttr)
             return false;
-          newAnnotations[canonicalizeTarget(sourceAttr.getValue())].push_back(
+          auto sourceTarget = canonicalizeTarget(sourceAttr.getValue());
+          if (!sourceTarget)
+            return false;
+          newAnnotations[sourceTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, source));
+          newAnnotations[sourceTarget.getValue()].push_back(
+              DictionaryAttr::getWithSorted(context, dontTouchAnn));
           port.append("portID", portID);
-          newAnnotations[portTarget].push_back(
+          newAnnotations[portTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, port));
+          newAnnotations[portTarget.getValue()].push_back(
+              DictionaryAttr::getWithSorted(context, dontTouchAnn));
           continue;
         }
 
@@ -646,17 +744,26 @@ bool circt::firrtl::scatterCustomAnnotations(
           if (!internalPathAttr || !moduleAttr)
             return false;
           module.append("internalPath", internalPathAttr);
-          newAnnotations[canonicalizeTarget(moduleAttr.getValue())].push_back(
+          auto moduleTarget = canonicalizeTarget(moduleAttr.getValue());
+          if (!moduleTarget)
+            return false;
+          newAnnotations[moduleTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, module));
-          newAnnotations[portTarget].push_back(
+          newAnnotations[moduleTarget.getValue()].push_back(
+              DictionaryAttr::getWithSorted(context, dontTouchAnn));
+          newAnnotations[portTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, port));
+          newAnnotations[portTarget.getValue()].push_back(
+              DictionaryAttr::getWithSorted(context, dontTouchAnn));
           continue;
         }
 
         if (classAttr.getValue() ==
             "sifive.enterprise.grandcentral.DeletedDataTapKey") {
-          newAnnotations[portTarget].push_back(
+          newAnnotations[portTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, port));
+          newAnnotations[portTarget.getValue()].push_back(
+              DictionaryAttr::getWithSorted(context, dontTouchAnn));
           continue;
         }
 
@@ -671,8 +778,13 @@ bool circt::firrtl::scatterCustomAnnotations(
           if (!literalAttr || !portNameAttr)
             return false;
           literal.append("literal", literalAttr);
-          newAnnotations[canonicalizeTarget(portNameAttr.getValue())].push_back(
+          auto portNameTarget = canonicalizeTarget(portNameAttr.getValue());
+          if (!portNameTarget)
+            return false;
+          newAnnotations[portNameTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, literal));
+          newAnnotations[portNameTarget.getValue()].push_back(
+              DictionaryAttr::getWithSorted(context, dontTouchAnn));
           continue;
         }
 
@@ -695,9 +807,12 @@ bool circt::firrtl::scatterCustomAnnotations(
       if (!sourceAttr)
         return false;
       auto target = canonicalizeTarget(sourceAttr.getValue());
+      if (!target)
+        return false;
       attrs.append(dict.getNamed("class").getValue());
       attrs.append("id", id);
-      newAnnotations[target].push_back(DictionaryAttr::get(context, attrs));
+      newAnnotations[target.getValue()].push_back(
+          DictionaryAttr::get(context, attrs));
       auto tapsAttr = tryGetAs<ArrayAttr>(dict, dict, "taps", loc, clazz);
       if (!tapsAttr)
         return false;
@@ -717,8 +832,10 @@ bool circt::firrtl::scatterCustomAnnotations(
         foo.append("id", id);
         ArrayAttr subTargets;
         auto canonTarget = canonicalizeTarget(tap.getValue());
-        auto target =
-            parseSubFieldSubIndexAnnotations(canonTarget, subTargets, context);
+        if (!canonTarget)
+          return false;
+        auto target = parseSubFieldSubIndexAnnotations(canonTarget.getValue(),
+                                                       subTargets, context);
         if (subTargets && !subTargets.empty())
           foo.append("target", subTargets);
         newAnnotations[target].push_back(DictionaryAttr::get(context, foo));

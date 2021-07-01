@@ -27,11 +27,9 @@ def get_value(obj) -> ir.Value:
 
   if isinstance(obj, ir.Value):
     return obj
-  if isinstance(obj, ir.Operation):
+  if hasattr(obj, "result"):
     return obj.result
-  if isinstance(obj, ir.OpView):
-    return obj.result
-  if isinstance(obj, OpOperand):
+  if hasattr(obj, "value"):
     return obj.value
   return None
 
@@ -40,32 +38,95 @@ def connect(destination, source):
   """A convenient way to use BackedgeBuilder."""
   if not isinstance(destination, OpOperand):
     raise TypeError(
-        f"cannot connect to destination of type {type(destination)}")
+        f"cannot connect to destination of type {type(destination)}. "
+        "Must be OpOperand.")
   value = get_value(source)
   if value is None:
     raise TypeError(f"cannot connect from source of type {type(source)}")
 
   index = destination.index
   destination.operation.operands[index] = value
-  if isinstance(destination, BuilderValue) and \
-     index in destination.builder.backedges:
-    destination.builder.backedges[index].erase()
+  if destination.backedge_owner and \
+     index in destination.backedge_owner.backedges:
+    destination.backedge_owner.backedges[index].erase()
 
 
 def var_to_attribute(obj, none_on_fail: bool = False) -> ir.Attribute:
   """Create an MLIR attribute from a Python object for a few common cases."""
   if isinstance(obj, ir.Attribute):
     return obj
+  if isinstance(obj, bool):
+    return ir.BoolAttr.get(obj)
   if isinstance(obj, int):
     attrTy = ir.IntegerType.get_signless(64)
     return ir.IntegerAttr.get(attrTy, obj)
   if isinstance(obj, str):
     return ir.StringAttr.get(obj)
   if isinstance(obj, list):
-    return ir.ArrayAttr.get([var_to_attribute(x) for x in obj])
+    arr = [var_to_attribute(x, none_on_fail) for x in obj]
+    if all(arr):
+      return ir.ArrayAttr.get(arr)
+    return None
   if none_on_fail:
     return None
   raise TypeError(f"Cannot convert type '{type(obj)}' to MLIR attribute")
+
+
+# There is currently no support in MLIR for querying type types. The
+# conversation regarding how to achieve this is ongoing and I expect it to be a
+# long one. This is a way that works for now.
+def type_to_pytype(t):
+  from circt.dialects import hw
+  import mlir.ir as ir
+  try:
+    return ir.IntegerType(t)
+  except ValueError:
+    pass
+  try:
+    return hw.ArrayType(t)
+  except ValueError:
+    pass
+  try:
+    return hw.StructType(t)
+  except ValueError:
+    pass
+
+  raise TypeError(f"Cannot convert {repr(t)} to python type")
+
+
+# There is currently no support in MLIR for querying attribute types. The
+# conversation regarding how to achieve this is ongoing and I expect it to be a
+# long one. This is a way that works for now.
+def attribute_to_var(attr):
+  import mlir.ir as ir
+  try:
+    return ir.BoolAttr(attr).value
+  except ValueError:
+    pass
+  try:
+    return ir.IntegerAttr(attr).value
+  except ValueError:
+    pass
+  try:
+    return ir.StringAttr(attr).value
+  except ValueError:
+    pass
+  try:
+    return ir.TypeAttr(attr).value
+  except ValueError:
+    pass
+  try:
+    arr = ir.ArrayAttr(attr)
+    return [attribute_to_var(x) for x in arr]
+  except ValueError:
+    pass
+  try:
+    dict = ir.DictAttr(attr)
+    return {i.name: attribute_to_var(i.attr) for i in dict}
+  except ValueError:
+    pass
+
+  raise TypeError(f"Cannot convert {repr(attr)} to python value")
 
 
 class BackedgeBuilder(AbstractContextManager):
@@ -131,10 +192,6 @@ class BackedgeBuilder(AbstractContextManager):
       if edge.op_view is not None:
         op = edge.op_view.operation
         msg += "Instance:   " + str(op)
-        op.erase()
-      edge.erase()
-
-      # Clean up the IR and Python references.
       errors.append(msg)
 
     if errors:
@@ -143,23 +200,23 @@ class BackedgeBuilder(AbstractContextManager):
 
 
 class OpOperand:
-  __slots__ = ["index", "operation", "value"]
+  __slots__ = ["index", "operation", "value", "backedge_owner"]
 
-  def __init__(self, operation, index, value):
+  def __init__(self,
+               operation: ir.Operation,
+               index: int,
+               value,
+               backedge_owner=None):
+    if not isinstance(index, int):
+      raise TypeError("Index must be int")
     self.index = index
+
+    if not hasattr(operation, "operands"):
+      raise TypeError("Operation must be have 'operands' attribute")
     self.operation = operation
+
     self.value = value
-
-
-# Are there any situations in which this needs to be used to index into results?
-class BuilderValue(OpOperand):
-  """Class that holds a value, as well as builder and index of this value in
-     the operand or result list. This can represent an OpOperand and index into
-     OpOperandList or a OpResult and index into an OpResultList"""
-
-  def __init__(self, value, builder, index):
-    super().__init__(builder.operation, index, value)
-    self.builder = builder
+    self.backedge_owner = backedge_owner
 
 
 class NamedValueOpView:
@@ -212,13 +269,13 @@ class NamedValueOpView:
     if name in self.operand_indices:
       index = self.operand_indices[name]
       value = self.opview.operands[index]
-      return BuilderValue(value, self, index)
+      return OpOperand(self.opview.operation, index, value, self)
 
     # Check for the attribute in the result name set.
     if name in self.result_indices:
       index = self.result_indices[name]
       value = self.opview.results[index]
-      return BuilderValue(value, self, index)
+      return OpOperand(self.opview.operation, index, value, self)
 
     # If we fell through to here, the name isn't a result.
     raise AttributeError(f"unknown port name {name}")

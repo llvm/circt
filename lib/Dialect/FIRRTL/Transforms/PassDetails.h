@@ -17,10 +17,18 @@
 #define DIALECT_FIRRTL_TRANSFORMS_PASSDETAILS_H
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
-#include "circt/Dialect/SV/SVDialect.h"
 #include "mlir/Pass/Pass.h"
 
 namespace circt {
+
+namespace hw {
+class HWDialect;
+}
+
+namespace sv {
+class SVDialect;
+}
+
 namespace firrtl {
 
 #define GEN_PASS_CLASSES

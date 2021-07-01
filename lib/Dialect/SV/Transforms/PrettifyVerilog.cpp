@@ -14,9 +14,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "SVPassDetail.h"
+#include "PassDetail.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/Matchers.h"
 
 using namespace circt;
 
@@ -31,6 +34,7 @@ struct PrettifyVerilogPass
 
 private:
   void prettifyUnaryOperator(Operation *op);
+  void sinkOpToUses(Operation *op);
 
   bool anythingChanged;
 };
@@ -49,6 +53,39 @@ static bool isVerilogUnaryOperator(Operation *op) {
     return icmpOp.isEqualAllOnes() || icmpOp.isNotEqualZero();
 
   return false;
+}
+
+/// Sink an operation into the same block where it is used.  This will clone the
+/// operation so it can be sunk into multiple blocks. If there are no more uses
+/// in the current block, the op will be removed.
+void PrettifyVerilogPass::sinkOpToUses(Operation *op) {
+  assert(mlir::MemoryEffectOpInterface::hasNoEffect(op) &&
+         "Op with side effects cannot be sunk to its uses.");
+  auto block = op->getBlock();
+  // This maps a block to the block local instance of the op.
+  SmallDenseMap<Block *, Value, 8> blockLocalValues;
+  for (auto &use : llvm::make_early_inc_range(op->getUses())) {
+    // If the current use is in the same block as the operation, there is
+    // nothing to do.
+    auto localBlock = use.getOwner()->getBlock();
+    if (block == localBlock)
+      continue;
+    // Find the block local clone of the operation. If there is not one already,
+    // the op will be cloned in to the block.
+    auto &localValue = blockLocalValues[localBlock];
+    if (!localValue) {
+      // Clone the operation and insert it to the beginning of the block.
+      localValue = OpBuilder::atBlockBegin(localBlock).clone(*op)->getResult(0);
+    }
+    // Replace the current use, removing it from the use list.
+    use.set(localValue);
+    anythingChanged = true;
+  }
+  // If this op is no longer used, drop it.
+  if (op->use_empty()) {
+    op->erase();
+    anythingChanged = true;
+  }
 }
 
 /// This is called on unary operators.
@@ -97,6 +134,10 @@ void PrettifyVerilogPass::runOnOperation() {
   getOperation()->walk([&](Operation *op) {
     if (isVerilogUnaryOperator(op))
       return prettifyUnaryOperator(op);
+    // Sink or duplicate constant ops into the same block as their use.  This
+    // will allow the verilog emitter to inline constant expressions.
+    if (matchPattern(op, mlir::m_Constant()))
+      return sinkOpToUses(op);
   });
 
   // If we did not change anything in the graph mark all analysis as

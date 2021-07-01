@@ -108,6 +108,7 @@ func @mux_to_cond_assign_f(%clock: i1, %c: i1, %data: i2) {
 // CHECK-LABEL: func @mux_to_cond_assign_t
 // CHECK-NEXT:    %true = hw.constant true
 // CHECK-NEXT:    %r = sv.reg  : !hw.inout<i2>
+// CHECK-NEXT:    %r3 = sv.reg  sym @r3 : !hw.inout<i2>
 // CHECK-NEXT:    sv.alwaysff(posedge %arg0)  {
 // CHECK-NEXT:      %0 = comb.xor %arg1, %true : i1
 // CHECK-NEXT:      sv.if %0  {
@@ -118,6 +119,8 @@ func @mux_to_cond_assign_f(%clock: i1, %c: i1, %data: i2) {
 // CHECK-NEXT:  }
 func @mux_to_cond_assign_t(%clock: i1, %c: i1, %data: i2) {
   %r = sv.reg  : !hw.inout<i2>
+  %r2 = sv.reg  : !hw.inout<i2>
+  %r3 = sv.reg sym @r3 : !hw.inout<i2>
   %1 = sv.read_inout %r : !hw.inout<i2>
   %0 = comb.mux %c, %1, %data : i2
   sv.alwaysff(posedge %clock)  {

@@ -138,7 +138,7 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
     ```
     }];
 
-  let arguments = (ins FIRRTLType:$input, StrAttr:$fieldname);
+  let arguments = (ins BundleType:$input, StrAttr:$fieldname);
   let results = (outs FIRRTLType:$result);
 
   // TODO: Could drop the result type, inferring it from the source.
@@ -300,6 +300,7 @@ def DShlPrimOp  : BinaryPrimOp<"dshl", IntType, UIntType, IntType>  {
     A dynamic shift left operation. The width of `$result` is expanded to
     `width($lhs) + 1 << width($rhs) - 1`.
   }];
+  let hasCanonicalizeMethod = true;
 }
 def DShlwPrimOp : BinaryPrimOp<"dshlw", IntType, UIntType, IntType> {
   let description = [{
@@ -307,7 +308,9 @@ def DShlwPrimOp : BinaryPrimOp<"dshlw", IntType, UIntType, IntType> {
     The width of `$result` is equal to `$lhs`.
   }];
 }
-def DShrPrimOp  : BinaryPrimOp<"dshr", IntType, UIntType, IntType>;
+def DShrPrimOp  : BinaryPrimOp<"dshr", IntType, UIntType, IntType> {
+  let hasCanonicalizeMethod = true;
+}
 
 //===----------------------------------------------------------------------===//
 // Unary Operations

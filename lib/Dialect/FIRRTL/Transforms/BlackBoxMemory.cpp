@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "./PassDetails.h"
+#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -18,7 +18,6 @@
 #include "mlir/IR/OperationSupport.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/Hashing.h"
-#include "llvm/ADT/Twine.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -85,12 +84,8 @@ static InstanceOp createInstance(OpBuilder builder, Location loc,
   // Make a bundle of the inputs and outputs of the specified module.
   SmallVector<Type, 4> resultTypes;
   resultTypes.reserve(modulePorts.size());
-  for (auto port : modulePorts) {
-    if (port.direction == Direction::Input)
-      resultTypes.push_back(FlipType::get(port.type));
-    else
-      resultTypes.push_back(port.type);
-  }
+  for (auto port : modulePorts)
+    resultTypes.push_back(port.type);
 
   return builder.create<InstanceOp>(loc, resultTypes, moduleName,
                                     instanceName.getValue());
@@ -100,7 +95,7 @@ static InstanceOp createInstance(OpBuilder builder, Location loc,
 /// external module must be compatible with the modules which are generated for
 /// `vlsi_mem_gen`, which can be found in the rocketchip project.
 static void
-getBlackboxPortsForMemOp(MemOp op, ArrayRef<MemOp::NamedPort> memPorts,
+getBlackBoxPortsForMemOp(MemOp op, ArrayRef<MemOp::NamedPort> memPorts,
                          SmallVectorImpl<ModulePortInfo> &extPorts) {
   OpBuilder builder(op);
   unsigned readPorts = 0;
@@ -111,33 +106,32 @@ getBlackboxPortsForMemOp(MemOp op, ArrayRef<MemOp::NamedPort> memPorts,
     std::string prefix;
     switch (memPorts[i].second) {
     case MemOp::PortKind::Read:
-      prefix = (Twine("R") + Twine(readPorts++) + "_").str();
+      prefix = ("R" + Twine(readPorts++) + "_").str();
       break;
     case MemOp::PortKind::Write:
-      prefix = (Twine("W") + Twine(writePorts++) + "_").str();
+      prefix = ("W" + Twine(writePorts++) + "_").str();
       break;
     case MemOp::PortKind::ReadWrite:
-      prefix = (Twine("RW") + Twine(readWritePorts++) + "_").str();
+      prefix = ("RW" + Twine(readWritePorts++) + "_").str();
       break;
     }
     // Flatten the bundle representing a memory port, name-mangling and adding
     // every field in the bundle to the exter module's port list.  All memory
     // ports have an outer flip, so we just strip this.
-    auto type = op.getResult(i).getType().cast<FlipType>().getElementType();
+    auto type = op.getResult(i).getType();
     for (auto bundleElement : type.cast<BundleType>().getElements()) {
       auto name = (prefix + bundleElement.name.getValue()).str();
       auto type = bundleElement.type;
       auto direction = Direction::Input;
-      if (type.isa<FlipType>()) {
-        type = FlipType::get(type);
+      if (bundleElement.isFlip)
         direction = Direction::Output;
-      }
-      extPorts.push_back({builder.getStringAttr(name), type, direction});
+      extPorts.push_back(
+          {builder.getStringAttr(name), type, direction, op.getLoc()});
     }
   }
 }
 
-/// Create an external module blackbox representing the memory operation.
+/// Create an external module black box representing the memory operation.
 /// Returns the port list of the external module.
 static FExtModuleOp
 createBlackboxModuleForMem(MemOp op, ArrayRef<ModulePortInfo> extPorts) {
@@ -150,7 +144,7 @@ createBlackboxModuleForMem(MemOp op, ArrayRef<ModulePortInfo> extPorts) {
     memName = "mem";
   std::string extName = memName + "_ext";
 
-  // Create the blackbox external module.
+  // Create the black box external module.
   auto extModuleOp = builder.create<FExtModuleOp>(
       op.getLoc(), builder.getStringAttr(extName), extPorts);
 
@@ -200,8 +194,8 @@ createWrapperModule(MemOp op, ArrayRef<MemOp::NamedPort> memPorts,
   modPorts.reserve(op.getResults().size());
   for (size_t i = 0, e = memPorts.size(); i != e; ++i) {
     auto name = op.getPortName(i);
-    auto type = op.getPortType(i).cast<FlipType>().getElementType();
-    modPorts.push_back({name, type, Direction::Input});
+    auto type = op.getPortType(i);
+    modPorts.push_back({name, type, Direction::Input, op.getLoc()});
   }
   auto moduleOp = builder.create<FModuleOp>(
       op.getLoc(), builder.getStringAttr(memName), modPorts);
@@ -232,7 +226,7 @@ createWrapperModule(MemOp op, ArrayRef<MemOp::NamedPort> memPorts,
           builder.create<SubfieldOp>(op.getLoc(), memPort, field.name);
       // Create the connection between module arguments and the external module,
       // making sure that sinks are on the LHS
-      if (!field.type.isa<FlipType>())
+      if (!field.isFlip)
         builder.create<ConnectOp>(op.getLoc(), *extResultIt, fieldValue);
       else
         builder.create<ConnectOp>(op.getLoc(), fieldValue, *extResultIt);
@@ -256,20 +250,17 @@ static void createWiresForMemoryPorts(OpBuilder builder, Location loc, MemOp op,
 
   for (auto memPort : op.getResults()) {
     // Create  a wire bundle for each memory port
-    auto wireOp = builder.create<WireOp>(
-        loc, memPort.getType().cast<FlipType>().getElementType());
+    auto wireOp = builder.create<WireOp>(loc, memPort.getType());
     results.push_back(wireOp.getResult());
 
     // Connect each wire to the corresponding ports in the external module
     auto wireBundle = memPort.getType().cast<FIRRTLType>();
-    if (wireBundle.isa<FlipType>())
-      wireBundle = wireBundle.cast<FlipType>().getElementType();
     for (auto field : wireBundle.cast<BundleType>().getElements()) {
       auto fieldValue =
           builder.create<SubfieldOp>(op.getLoc(), wireOp, field.name);
       // Create the connection between module arguments and the external module,
       // making sure that sinks are on the LHS
-      if (field.type.isa<FlipType>())
+      if (field.isFlip)
         builder.create<ConnectOp>(op.getLoc(), fieldValue, *extResultIt);
       else
         builder.create<ConnectOp>(op.getLoc(), *extResultIt, fieldValue);
@@ -303,10 +294,10 @@ replaceMemWithWrapperModule(DenseMap<MemOp, FModuleOp, MemOpInfo> &knownMems,
     // memory port created by the MemOp.
     auto memPorts = memOp.getPorts();
 
-    // Get the pohwist for a module which represents the blackbox memory.
+    // Get the pohwist for a module which represents the black box memory.
     // Typically has 1R + 1W memory port, which has 4+5=9 fields.
     SmallVector<ModulePortInfo, 9> extPortList;
-    getBlackboxPortsForMemOp(memOp, memPorts, extPortList);
+    getBlackBoxPortsForMemOp(memOp, memPorts, extPortList);
     auto extModuleOp = createBlackboxModuleForMem(memOp, extPortList);
     moduleOp = createWrapperModule(memOp, memPorts, extModuleOp, extPortList,
                                    modPorts);
@@ -327,7 +318,10 @@ replaceMemWithWrapperModule(DenseMap<MemOp, FModuleOp, MemOpInfo> &knownMems,
     memOp->erase();
 }
 
-static void
+/// Replaces all memories which match the predicate function with external
+/// modules and simple wrapper module which instantiates it.  Returns true if
+/// any memories were replaced.
+static bool
 replaceMemsWithWrapperModules(CircuitOp circuit,
                               function_ref<bool(MemOp)> shouldReplace) {
   /// A set of replaced memory operations.  When two memory operations
@@ -344,6 +338,9 @@ replaceMemsWithWrapperModules(CircuitOp circuit,
   // to check if other memory operations were equivalent.
   for (auto it : knownMems)
     it.first.erase();
+
+  // Return true if something changed.
+  return !knownMems.empty();
 }
 
 static void
@@ -365,9 +362,9 @@ replaceMemWithExtModule(DenseMap<MemOp, FExtModuleOp, MemOpInfo> &knownMems,
     // memory port created by the MemOp.
     auto memPorts = memOp.getPorts();
 
-    // Get the pohwist for a module which represents the blackbox memory.
+    // Get the pohwist for a module which represents the black box memory.
     // Typically has 1R + 1W memory port, which has 4+5=9 fields.
-    getBlackboxPortsForMemOp(memOp, memPorts, extPortList);
+    getBlackBoxPortsForMemOp(memOp, memPorts, extPortList);
     extModuleOp = createBlackboxModuleForMem(memOp, extPortList);
     knownMems[memOp] = extModuleOp;
   }
@@ -394,7 +391,9 @@ replaceMemWithExtModule(DenseMap<MemOp, FExtModuleOp, MemOpInfo> &knownMems,
     memOp->erase();
 }
 
-static void replaceMemsWithExtModules(CircuitOp circuit,
+/// Replaces all memories which match the predicate function with external
+/// modules.  Returns true if any modules were replaced.
+static bool replaceMemsWithExtModules(CircuitOp circuit,
                                       function_ref<bool(MemOp)> shouldReplace) {
   /// A set of replaced memory operations.  When two memory operations
   /// share the same types, they can share the same modules.
@@ -410,24 +409,33 @@ static void replaceMemsWithExtModules(CircuitOp circuit,
   // to check if other memory operations were equivalent.
   for (auto op : knownMems)
     op.first.erase();
+
+  // Return true if something changed.
+  return !knownMems.empty();
 }
 
 namespace {
-struct BlackboxMemoryPass : public BlackboxMemoryBase<BlackboxMemoryPass> {
+struct BlackBoxMemoryPass : public BlackBoxMemoryBase<BlackBoxMemoryPass> {
   void runOnOperation() override {
     // A memory must have read and write latencies of 1 in order to be
     // blackboxed. In the future this will probably be configurable.
     auto shouldReplace = [](MemOp memOp) -> bool {
       return memOp.readLatency() == 1 && memOp.writeLatency() == 1;
     };
+    auto anythingChanged = false;
     if (emitWrapper)
-      replaceMemsWithWrapperModules(getOperation(), shouldReplace);
+      anythingChanged =
+          replaceMemsWithWrapperModules(getOperation(), shouldReplace);
     else
-      replaceMemsWithExtModules(getOperation(), shouldReplace);
+      anythingChanged =
+          replaceMemsWithExtModules(getOperation(), shouldReplace);
+
+    if (!anythingChanged)
+      markAllAnalysesPreserved();
   }
 };
 } // end anonymous namespace
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createBlackBoxMemoryPass() {
-  return std::make_unique<BlackboxMemoryPass>();
+  return std::make_unique<BlackBoxMemoryPass>();
 }

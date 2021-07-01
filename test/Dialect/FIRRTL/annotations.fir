@@ -69,8 +69,13 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Bar"}]]
 
 ; // -----
 
-; COM: A ReferenceTarget/ComponentName pointing at an Instance should work.
-circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar"}]]
+; COM: A ReferenceTarget, ComponentName, or InstanceTarget pointing at an
+; COM: Instance should work.
+circuit Foo: %[[
+{"a":"a","target":"~Foo|Foo>bar"},
+{"b":"b","target":"Foo.Foo.bar"},
+{"c":"c","target":"~Foo|Foo/bar:Bar"}
+]]
   module Bar:
     skip
   module Foo:
@@ -78,7 +83,25 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar
 
     ; CHECK-LABEL: module {
     ; CHECK: firrtl.instance @Bar
-    ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}]
+    ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}, {c = "c"}]
+
+; // -----
+
+; COM: Test result annotations of InstanceOp.
+circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},
+                {"two":null,"target":"~Foo|Foo>bar.b.baz"},
+                {"three":null,"target":"~Foo|Foo/bar:Bar>b.qux"},
+                {"four":null,"target":"Foo.Foo.bar.c"}]]
+  module Bar:
+    input a: UInt<1>
+    output b: {baz: UInt<1>, qux: UInt<1>}
+    output c: UInt<1>
+  module Foo:
+    inst bar of Bar
+
+    ; CHECK-LABEL: module {
+    ; CHECK: %bar_a, %bar_b, %bar_c = firrtl.instance @Bar
+    ; CHECK-SAME: [{one}], [#firrtl.subAnno<fieldID = [1, 1], {two}>, #firrtl.subAnno<fieldID = [2, 2], {three}>], [{four}]
 
 ; // -----
 
@@ -108,6 +131,29 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar
     ; CHECK-LABEL: module {
     ; CHECK: firrtl.mem
     ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}]
+
+; // -----
+
+; COM: Test result annotations of MemOp.
+circuit Foo: %[[{"a":null,"target":"~Foo|Foo>bar.r"},
+                {"b":null,"target":"~Foo|Foo>bar.r.data.baz"},
+                {"c":null,"target":"~Foo|Foo>bar.w.en"},
+                {"d":null,"target":"~Foo|Foo>bar.w.data.qux"}]]
+  module Foo:
+    mem bar:
+      data-type => {baz: UInt<8>, qux: UInt<8>}
+      depth => 16
+      reader => r
+      writer => w
+      read-latency => 0
+      write-latency => 1
+      read-under-write => undefined
+
+    ; CHECK-LABEL: module {
+    ; CHECK: firrtl.mem
+    ; CHECK-SAME: portAnnotations = [
+    ; CHECK-SAME: [{a}, #firrtl.subAnno<fieldID = [5, 5], {b}>],
+    ; CHECK-SAME: [#firrtl.subAnno<fieldID = [2, 2], {c}>, #firrtl.subAnno<fieldID = [6, 6], {d}>]
 
 ; // -----
 
@@ -220,37 +266,37 @@ circuit Foo: %[[{"a":"{\"b\":null}"}]]
 ; // -----
 
 ; COM: Subfield/Subindex annotations should be parsed correctly on wires
-circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.qux"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
+circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0]"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
   module Foo:
     wire bar: {baz: UInt<1>, qux: UInt<1>}[2]
 
     ; CHECK-LABEL: module {
-    ; CHECK: %bar = firrtl.wire  {annotations = [{one, target = [".qux"]}, {target = ["[1]", ".baz"], two}]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+    ; CHECK: %bar = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [1, 3], {one}>, #firrtl.subAnno<fieldID = [5, 5], {two}>]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
 
 
 ; // -----
 
 ; COM: Subfield/Subindex annotations should be parsed correctly on registers
-circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.qux"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
+circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0]"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
   module Foo:
     input clock: Clock
     reg bar: {baz: UInt<1>, qux: UInt<1>}[2], clock
 
     ; CHECK-LABEL: module {
-    ; CHECK: %bar = firrtl.reg %clock  {annotations = [{one, target = [".qux"]}, {target = ["[1]", ".baz"], two}]} : (!firrtl.clock) -> !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+    ; CHECK: %bar = firrtl.reg %clock  {annotations = [#firrtl.subAnno<fieldID = [1, 3], {one}>, #firrtl.subAnno<fieldID = [5, 5], {two}>]} : (!firrtl.clock) -> !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
 
 ; // -----
 
 ; COM: Annotations should apply even when the target's name is dropped.
-circuit Foo: %[[{"target": "Foo|Foo>_T_0", "a": "a"},
-                {"target": "Foo|Foo>_T_1", "a": "a"},
-                {"target": "Foo|Foo>_T_2", "a": "a"},
-                {"target": "Foo|Foo>_T_3", "a": "a"},
-                {"target": "Foo|Foo>_T_4", "a": "a"},
-                {"target": "Foo|Foo>_T_5", "a": "a"},
-                {"target": "Foo|Foo>_T_6", "a": "a"},
-                {"target": "Foo|Foo>_T_7", "a": "a"},
-                {"target": "Foo|Foo>_T_8", "a": "a"}]]
+circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "a": "a"},
+                {"target": "~Foo|Foo>_T_1", "a": "a"},
+                {"target": "~Foo|Foo>_T_2", "a": "a"},
+                {"target": "~Foo|Foo>_T_3", "a": "a"},
+                {"target": "~Foo|Foo>_T_4", "a": "a"},
+                {"target": "~Foo|Foo>_T_5", "a": "a"},
+                {"target": "~Foo|Foo>_T_6", "a": "a"},
+                {"target": "~Foo|Foo>_T_7", "a": "a"},
+                {"target": "~Foo|Foo>_T_8", "a": "a"}]]
   module Bar:
     skip
   module Foo:
@@ -286,15 +332,15 @@ circuit Foo: %[[{"target": "Foo|Foo>_T_0", "a": "a"},
 ; // -----
 
 ; COM: DontTouch annotation preserves temporary names
-circuit Foo: %[[{"target": "Foo|Foo>_T_0", "class": "firrtl.transforms.DontTouchAnnotation"},
-                {"target": "Foo|Foo>_T_1", "class": "firrtl.transforms.DontTouchAnnotation"},
-                {"target": "Foo|Foo>_T_2", "class": "firrtl.transforms.DontTouchAnnotation"},
-                {"target": "Foo|Foo>_T_3", "class": "firrtl.transforms.DontTouchAnnotation"},
-                {"target": "Foo|Foo>_T_4", "class": "firrtl.transforms.DontTouchAnnotation"},
-                {"target": "Foo|Foo>_T_5", "class": "firrtl.transforms.DontTouchAnnotation"},
-                {"target": "Foo|Foo>_T_6", "class": "firrtl.transforms.DontTouchAnnotation"},
-                {"target": "Foo|Foo>_T_7", "class": "firrtl.transforms.DontTouchAnnotation"},
-                {"target": "Foo|Foo>_T_8", "class": "firrtl.transforms.DontTouchAnnotation"}]]
+circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "class": "firrtl.transforms.DontTouchAnnotation"},
+                {"target": "~Foo|Foo>_T_1", "class": "firrtl.transforms.DontTouchAnnotation"},
+                {"target": "~Foo|Foo>_T_2", "class": "firrtl.transforms.DontTouchAnnotation"},
+                {"target": "~Foo|Foo>_T_3", "class": "firrtl.transforms.DontTouchAnnotation"},
+                {"target": "~Foo|Foo>_T_4", "class": "firrtl.transforms.DontTouchAnnotation"},
+                {"target": "~Foo|Foo>_T_5", "class": "firrtl.transforms.DontTouchAnnotation"},
+                {"target": "~Foo|Foo>_T_6", "class": "firrtl.transforms.DontTouchAnnotation"},
+                {"target": "~Foo|Foo>_T_7", "class": "firrtl.transforms.DontTouchAnnotation"},
+                {"target": "~Foo|Foo>_T_8", "class": "firrtl.transforms.DontTouchAnnotation"}]]
   module Bar:
     skip
   module Foo:
@@ -364,7 +410,7 @@ circuit GCTDataTap : %[
       },
       {
         "class":"sifive.enterprise.grandcentral.DataTapModuleSignalKey",
-        "module":"~GCTDataTap|Blackbox",
+        "module":"~GCTDataTap|BlackBox",
         "internalPath":"baz.qux",
         "portName":"~GCTDataTap|DataTap>_1"
       },
@@ -391,8 +437,8 @@ circuit GCTDataTap : %[
 
     defname = DataTap
 
-  extmodule Blackbox:
-    defname = Blackbox
+  extmodule BlackBox:
+    defname = BlackBox
 
   module GCTDataTap :
     input clock : Clock
@@ -402,23 +448,23 @@ circuit GCTDataTap : %[
 
     reg r : UInt<1>, clock
     inst DataTap of DataTap
-    inst Blackbox of Blackbox
+    inst BlackBox of BlackBox
 
     ; CHECK-LABEL: firrtl.circuit "GCTDataTap"
     ; CHECK-SAME: annotations = [{unrelatedAnnotation}]
     ; CHECK: firrtl.extmodule @DataTap
-    ; CHECK-SAME: %_0: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = [[ID:[0-9]+]] : i64, portID = [[PORT_ID:[0-9]+]] : i64}]},
-    ; CHECK-SAME: %_1: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey", id = [[ID]] : i64}]},
-    ; CHECK-SAME: %_2: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.DeletedDataTapKey", id = [[ID]] : i64}]},
-    ; CHECK-SAME: %_3: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.LiteralDataTapKey", literal = "UInt<16>(\22h2a\22)"}]}
-    ; CHECK-SAME: annotations = [{class = "sifive.enterprise.grandcentral.DataTapsAnnotation"}]
+    ; CHECK-SAME: %_0: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = [[ID:[0-9]+]] : i64, portID = [[PORT_ID:[0-9]+]] : i64}, {class = "firrtl.transforms.DontTouchAnnotation"}]},
+    ; CHECK-SAME: %_1: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey", id = [[ID]] : i64}, {class = "firrtl.transforms.DontTouchAnnotation"}]},
+    ; CHECK-SAME: %_2: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.DeletedDataTapKey", id = [[ID]] : i64}, {class = "firrtl.transforms.DontTouchAnnotation"}]},
+    ; CHECK-SAME: %_3: {{.+}} {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.LiteralDataTapKey", literal = "UInt<16>(\22h2a\22)"}, {class = "firrtl.transforms.DontTouchAnnotation"}]}
+    ; CHECK-SAME: annotations = [{class = "sifive.enterprise.grandcentral.DataTapsAnnotation"}, {class = "firrtl.transforms.DontTouchAnnotation"}]
 
-    ; CHECK: firrtl.extmodule @Blackbox
-    ; CHECK-SAME: annotations = [{class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey", id = [[ID]] : i64, internalPath = "baz.qux"}]
+    ; CHECK: firrtl.extmodule @BlackBox
+    ; CHECK-SAME: annotations = [{class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey", id = [[ID]] : i64, internalPath = "baz.qux"}, {class = "firrtl.transforms.DontTouchAnnotation"}]
 
     ; CHECK: firrtl.module @GCTDataTap
     ; CHECK: firrtl.reg
-    ; CHECk-SAME: annotations = [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = [[ID]] : i64, portID = [[PORT_ID]] : i64}]
+    ; CHECk-SAME: annotations = [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = [[ID]] : i64, portID = [[PORT_ID]] : i64}, {class = "firrtl.transforms.DontTouchAnnotation"}]
 
 ; // -----
 
@@ -456,7 +502,7 @@ circuit GCTMemTap : %[
     ; CHECK-LABEL: firrtl.circuit "GCTMemTap"
     ; CHECK-SAME: annotations = [{unrelatedAnnotation}]
     ; CHECK: firrtl.extmodule @MemTap
-    ; CHECK-SAME: %mem: [[A:.+]] {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = [[ID:.+]] : i64, target = ["[0]"]}, {class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = [[ID]] : i64, target = ["[1]"]}]
+    ; CHECK-SAME: %mem: [[A:.+]] {firrtl.annotations = [#firrtl.subAnno<fieldID = [1, 1], {class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = 0 : i64}>, #firrtl.subAnno<fieldID = [2, 2], {class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = 0 : i64}>]
     ; CHECK: firrtl.module @GCTMemTap
     ; CHECK: %mem = firrtl.cmem
     ; CHECK-SAME: annotations = [{class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = [[ID]] : i64}]
@@ -507,11 +553,74 @@ circuit GCTInterface : %[
     ; members of the interface inside the parent.  Both port "a" and register
     ; "r" should be annotated.
     ; CHECK: firrtl.module @GCTInterface
-    ; CHECK-SAME: %a: [[TYPE:.+]] {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "ViewName", name = "port", target = []}]}
+    ; CHECK-SAME: %a: [[TYPE:.+]] {firrtl.annotations = [#firrtl.subAnno<fieldID = [0, 0], {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "ViewName", name = "port"}>]}
     ; CHECK-SAME: annotations = [{class = "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation", id = [[ID]] : i64, type = "parent"}]
     ; CHECK: firrtl.reg
     ; CHECK-SAME: annotations
-    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "register", name = "_2", target = ["._2", "[0]"]}
-    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "register", name = "_2", target = ["._2", "[1]"]}
-    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "_0", name = "_1", target = ["._0", "._1"]}
-    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "_0", name = "_0", target = ["._0", "._0"]}]}
+    ; CHECK-SAME: #firrtl.subAnno<fieldID = [5, 5], {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "register", name = "_2"}>
+    ; CHECK-SAME: #firrtl.subAnno<fieldID = [6, 6], {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "register", name = "_2"}>
+    ; CHECK-SAME: #firrtl.subAnno<fieldID = [3, 3], {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "_0", name = "_1"}>
+    ; CHECK-SAME: #firrtl.subAnno<fieldID = [2, 2], {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "_0", name = "_0"}>
+
+; // -----
+
+; Test weird Grand Central AugmentedTypes which do not have a mapping in the
+; Verilog.  This test is primarily making sure that these don't error.
+
+circuit Foo : %[[
+{
+  "class": "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation",
+  "name": "Bar",
+  "companion": "~Foo|Bar_companion",
+  "parent": "~Foo|Foo",
+  "view": {
+    "class": "sifive.enterprise.grandcentral.AugmentedBundleType",
+    "defName": "View",
+    "elements": [
+      {
+        "name": "string",
+        "description": "a string",
+        "tpe": {
+          "class": "sifive.enterprise.grandcentral.AugmentedStringType",
+          "value": "hello"
+        }
+      },
+      {
+        "name": "boolean",
+        "description": "a boolean",
+        "tpe": {
+          "class": "sifive.enterprise.grandcentral.AugmentedBooleanType",
+          "value": false
+        }
+      },
+      {
+        "name": "integer",
+        "description": "an integer",
+        "tpe": {
+          "class": "sifive.enterprise.grandcentral.AugmentedIntegerType",
+          "value": 42
+        }
+      },
+      {
+        "name": "double",
+        "description": "a double",
+        "tpe": {
+          "class": "sifive.enterprise.grandcentral.AugmentedDoubleType",
+          "value": 3.14
+        }
+      }
+    ]
+  }
+}
+]]
+  extmodule Bar_companion :
+
+  module Foo :
+    inst Bar_companion of Bar_companion
+
+    ; CHECK-LABEL: firrtl.circuit "Foo"
+    ; CHECK-SAME: annotations = [{class = "[[_:.+]]AugmentedBundleType", [[_:.+]] elements = [{
+    ; CHECK-SAME: "sifive.enterprise.grandcentral.AugmentedStringType"
+    ; CHECK-SAME: "sifive.enterprise.grandcentral.AugmentedBooleanType"
+    ; CHECK-SAME: "sifive.enterprise.grandcentral.AugmentedIntegerType"
+    ; CHECK-SAME: "sifive.enterprise.grandcentral.AugmentedDoubleType"

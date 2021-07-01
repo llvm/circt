@@ -20,6 +20,14 @@ This document describes the available CIRCT passes and their contracts.
 
 [include "LLHDPasses.md"]
 
+## MSFT Dialect Passes
+
+[include "MSFTPasses.md"]
+
+## Seq Dialect Passes
+
+[include "SeqPasses.md"]
+
 ## SV Dialect Passes
 
 [include "SVPasses.md"]

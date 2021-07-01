@@ -13,10 +13,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "SVPassDetail.h"
-#include "circt/Dialect/SV/SVOps.h"
+#include "PassDetail.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
-#include "circt/Dialect/SV/SVVisitors.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/Builders.h"
 
@@ -204,19 +203,40 @@ static void addBlockMapping(BlockAndValueMapping &cutMap, Operation *oldOp,
   }
 }
 
+static bool hasOoOArgs(hw::HWModuleOp newMod, Operation *op) {
+  for (auto arg : op->getOperands()) {
+    auto argOp = arg.getDefiningOp(); // may be null
+    if (!argOp)
+      continue;
+    if (argOp->getParentOfType<hw::HWModuleOp>() != newMod)
+      return true;
+  }
+  return false;
+}
+
 // Do the cloning, which is just a pre-order traversal over the module looking
 // for marked ops.
 static void migrateOps(hw::HWModuleOp oldMod, hw::HWModuleOp newMod,
                        SmallPtrSetImpl<Operation *> &depOps,
                        BlockAndValueMapping &cutMap) {
+  SmallVector<Operation *, 16> lateBoundOps;
   OpBuilder b = OpBuilder::atBlockBegin(newMod.getBodyBlock());
   oldMod.walk<WalkOrder::PreOrder>([&](Operation *op) {
     if (depOps.count(op)) {
       setInsertPointToEndOrTerminator(b, cutMap.lookup(op->getBlock()));
       auto newOp = b.cloneWithoutRegions(*op, cutMap);
       addBlockMapping(cutMap, op, newOp);
+      if (hasOoOArgs(newMod, newOp))
+        lateBoundOps.push_back(newOp);
     }
   });
+  // update any operand which was emitted before it's defining op was.
+  for (auto op : lateBoundOps)
+    for (unsigned argidx = 0, e = op->getNumOperands(); argidx < e; ++argidx) {
+      Value arg = op->getOperand(argidx);
+      if (cutMap.contains(arg))
+        op->setOperand(argidx, cutMap.lookup(arg));
+    }
 }
 
 //===----------------------------------------------------------------------===//

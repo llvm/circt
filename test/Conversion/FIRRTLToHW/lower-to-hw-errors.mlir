@@ -1,4 +1,4 @@
-// RUN: circt-opt -lower-firrtl-to-hw %s -verify-diagnostics
+// RUN: circt-opt -lower-firrtl-to-hw -verify-diagnostics -split-input-file %s 
 // The firrtl.circuit should be removed, the main module name moved to an
 // attribute on the module.
 // CHECK-NOT: firrtl.circuit
@@ -20,3 +20,4 @@ firrtl.circuit "InvalidBundle" {
     return
   }
 }
+

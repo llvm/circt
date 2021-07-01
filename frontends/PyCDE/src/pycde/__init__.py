@@ -4,6 +4,8 @@
 
 from .module import *
 from .system import *
+from .types import *
+from circt.support import connect
 
 import mlir.ir
 import circt

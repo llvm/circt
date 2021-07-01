@@ -11,8 +11,8 @@
 // LIST-TOP: test_mod.sv
 
 // LIST-BLACK-BOX:      magic/blackbox-inline.v
-// LIST-BLACK-BOX-NEXT: magic/blackbox-resource.v
 // LIST-BLACK-BOX-NEXT: magic/blackbox-path.v
+// LIST-BLACK-BOX-NEXT: magic/blackbox-resource.v
 
 firrtl.circuit "test_mod" attributes {annotations = [
   // Black box processing should honor only the last annotation.
@@ -37,13 +37,19 @@ firrtl.circuit "test_mod" attributes {annotations = [
   // VERILOG-HDR-LABEL: `define SOME_MACRO
   // VERILOG-HDR-NOT:   `define SOME_MACRO
   firrtl.extmodule @ExtInline() attributes {annotations = [
-    // Both files shall be emitted, but the Verilog header `*.svh` shall be
-    // excluded from the file list.
+    // Inline file shall be emitted.
     {
       class = "firrtl.transforms.BlackBoxInlineAnno",
       name = "blackbox-inline.v",
       text = "module ExtInline(); endmodule\n"
     },
+    // Duplicate inline annotations will not be emitted.
+    {
+      class = "firrtl.transforms.BlackBoxInlineAnno",
+      name = "blackbox-inline.v",
+      text = "module ExtInline(); endmodule\n"
+    },
+    // Verilog header `*.svh` shall be excluded from the file list.
     {
       class = "firrtl.transforms.BlackBoxInlineAnno",
       name = "blackbox-inline.svh",
@@ -54,6 +60,13 @@ firrtl.circuit "test_mod" attributes {annotations = [
   // VERILOG-BAR-LABEL: module ExtResource(); endmodule
   // VERILOG-BAR-NOT:   module ExtResource(); endmodule
   firrtl.extmodule @ExtResource() attributes {annotations = [{
+    class = "firrtl.transforms.BlackBoxResourceAnno",
+    resourceId = "firtool/blackbox-resource.v"
+  }]}
+
+  // Duplicate resources will not be copied.
+  // VERILOG-BAR-NOT:   module ExtResource(); endmodule
+  firrtl.extmodule @DuplicateExtResource() attributes {annotations = [{
     class = "firrtl.transforms.BlackBoxResourceAnno",
     resourceId = "firtool/blackbox-resource.v"
   }]}

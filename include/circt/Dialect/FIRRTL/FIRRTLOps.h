@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_FIRRTL_OPS_H
 #define CIRCT_DIALECT_FIRRTL_OPS_H
 
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "mlir/IR/Builders.h"
@@ -27,6 +28,11 @@ namespace circt {
 namespace firrtl {
 
 enum class Direction { Input = 0, Output };
+
+template <typename T>
+T &operator<<(T &os, const Direction &dir) {
+  return os << (dir == Direction::Input ? "input" : "output");
+}
 
 namespace direction {
 
@@ -55,7 +61,8 @@ struct ModulePortInfo {
   StringAttr name;
   FIRRTLType type;
   Direction direction;
-  ArrayAttr annotations = ArrayAttr();
+  Location loc;
+  AnnotationSet annotations = AnnotationSet(type.getContext());
 
   StringRef getName() const { return name ? name.getValue() : ""; }
 
@@ -63,14 +70,16 @@ struct ModulePortInfo {
   /// direction of the port, use the \p direction parameter.
   bool isOutput() {
     auto flags = type.getRecursiveTypeProperties();
-    return flags.first && !flags.second && direction == Direction::Output;
+    return flags.isPassive && !flags.containsAnalog &&
+           direction == Direction::Output;
   }
 
   /// Return true if this is a simple input-only port.  If you want the
   /// direction of the port, use the \p direction parameter.
   bool isInput() {
     auto flags = type.getRecursiveTypeProperties();
-    return flags.first && !flags.second && direction == Direction::Input;
+    return flags.isPassive && !flags.containsAnalog &&
+           direction == Direction::Input;
   }
 
   /// Return true if this is an inout port.  This will be true if the port
@@ -99,12 +108,6 @@ IntegerAttr getModulePortDirections(Operation *module);
 /// Given an FModule or ExtModule, return the direction of the specified port
 /// number.
 Direction getModulePortDirection(Operation *op, size_t portIndex);
-
-/// Return an array of the Annotations on each port of an FModule or ExtModule.
-SmallVector<ArrayAttr> getModulePortAnnotations(Operation *module);
-
-/// Return the annotations for a specific port of an FModule or ExtModule..
-ArrayAttr getModulePortAnnotation(Operation *op, size_t portIndex);
 
 /// Returns true if the value results from an expression with duplex flow.
 /// Duplex values have special treatment in bundle connect operations, and their

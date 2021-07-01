@@ -51,3 +51,5 @@ Operation *CombDialect::materializeConstant(OpBuilder &builder, Attribute value,
 
 // Provide implementations for the enums we use.
 #include "circt/Dialect/Comb/CombEnums.cpp.inc"
+
+#include "circt/Dialect/Comb/CombDialect.cpp.inc"

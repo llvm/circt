@@ -71,6 +71,8 @@ Operation *LLHDDialect::materializeConstant(OpBuilder &builder, Attribute value,
   return builder.create<llhd::ConstOp>(loc, type, value);
 }
 
+#include "circt/Dialect/LLHD/IR/LLHDDialect.cpp.inc"
+
 //===----------------------------------------------------------------------===//
 // Type parsing
 //===----------------------------------------------------------------------===//

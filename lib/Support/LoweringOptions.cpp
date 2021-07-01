@@ -39,8 +39,8 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
     text = split.second;
     if (option == "") {
       // Empty options are fine.
-    } else if (option == "noAlwaysFF") {
-      useAlwaysFF = false;
+    } else if (option == "alwaysFF") {
+      useAlwaysFF = true;
     } else if (option.startswith("emittedLineLength=")) {
       option = option.drop_front(strlen("emittedLineLength="));
       if (option.getAsInteger(10, emittedLineLength)) {
@@ -57,8 +57,8 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
 std::string LoweringOptions::toString() const {
   std::string options = "";
   // All options should add a trailing comma to simplify the code.
-  if (!useAlwaysFF)
-    options += "noAlwaysFF,";
+  if (useAlwaysFF)
+    options += "alwaysFF,";
   if (emittedLineLength != 90)
     options += "emittedLineLength=" + std::to_string(emittedLineLength) + ',';
 

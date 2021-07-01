@@ -11,6 +11,8 @@ add_circt_dialect_library(CIRCTSVTransforms
   CIRCTSVTransformsIncGen
 
   LINK_LIBS PUBLIC
+  CIRCTComb
+  CIRCTHW
   CIRCTSV
   MLIRIR
   MLIRPass

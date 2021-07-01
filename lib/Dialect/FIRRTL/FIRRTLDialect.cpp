@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/FieldRef.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -38,18 +39,17 @@ FieldRef circt::firrtl::getFieldRefFromValue(Value value) {
     if (!op)
       break;
 
-    // TODO: implement subindex op.
     if (auto subfieldOp = dyn_cast<SubfieldOp>(op)) {
       value = subfieldOp.input();
-      // Strip any flip wrapping the bundle type.
-      auto type = value.getType();
-      if (auto flipType = type.dyn_cast<FlipType>())
-        type = flipType.getElementType();
-      auto bundleType = type.cast<BundleType>();
+      auto bundleType = value.getType().cast<BundleType>();
       auto index =
           bundleType.getElementIndex(subfieldOp.fieldname()).getValue();
       // Rebase the current index on the parent field's index.
       id += bundleType.getFieldID(index);
+    } else if (auto subindexOp = dyn_cast<SubindexOp>(op)) {
+      auto vecType = subindexOp.input().getType().cast<FVectorType>();
+      // Rebase the current index on the parent field's index.
+      id += vecType.getFieldID(subindexOp.index());
     } else {
       break;
     }
@@ -87,19 +87,30 @@ std::string circt::firrtl::getFieldName(const FieldRef &fieldRef) {
   auto type = value.getType();
   auto localID = fieldRef.getFieldID();
   while (localID) {
-    // Strip off the flip type if there is one.
-    if (auto flipType = type.dyn_cast<FlipType>())
-      type = flipType.getElementType();
-    // TODO: support vector types.
-    auto bundleType = type.cast<BundleType>();
-    auto index = bundleType.getIndexForFieldID(localID);
-    // Add the current field string, and recurse into a subfield.
-    auto &element = bundleType.getElements()[index];
-    name += ".";
-    name += element.name.getValue();
-    type = element.type;
-    // Get a field localID for the nested bundle.
-    localID = localID - bundleType.getFieldID(index);
+    if (auto bundleType = type.dyn_cast<BundleType>()) {
+      auto index = bundleType.getIndexForFieldID(localID);
+      // Add the current field string, and recurse into a subfield.
+      auto &element = bundleType.getElements()[index];
+      name += ".";
+      name += element.name.getValue();
+      // Recurse in to the element type.
+      type = element.type;
+      localID = localID - bundleType.getFieldID(index);
+    } else if (auto vecType = type.dyn_cast<FVectorType>()) {
+      auto index = vecType.getIndexForFieldID(localID);
+      name += "[";
+      name += std::to_string(index);
+      name += "]";
+      // Recurse in to the element type.
+      type = vecType.getElementType();
+      localID = localID - vecType.getFieldID(index);
+    } else {
+      // If we reach here, the field ref is pointing inside some aggregate type
+      // that isn't a bundle or a vector. If the type is a ground type, then the
+      // localID should be 0 at this point, and we should have broken from the
+      // loop.
+      llvm_unreachable("unsupported type");
+    }
   }
 
   return name.str().str();
@@ -117,22 +128,6 @@ ArrayAttr firrtl::getModulePortNames(Operation *module) {
 // If the specified module contains the portDirections attribute, return it.
 mlir::IntegerAttr firrtl::getModulePortDirections(Operation *module) {
   return module->getAttrOfType<mlir::IntegerAttr>(direction::attrKey);
-}
-
-SmallVector<ArrayAttr> firrtl::getModulePortAnnotations(Operation *module) {
-  SmallVector<ArrayAttr> portAnnotations;
-  for (size_t i = 0, e = getModuleType(module).getInputs().size(); i != e;
-       ++i) {
-    ArrayAttr annotations = {};
-    for (auto a : mlir::function_like_impl::getArgAttrs(module, i)) {
-      if (a.first != "firrtl.annotations")
-        continue;
-      annotations = a.second.cast<ArrayAttr>();
-      break;
-    }
-    portAnnotations.push_back(annotations);
-  }
-  return portAnnotations;
 }
 
 namespace {
@@ -301,3 +296,5 @@ Operation *FIRRTLDialect::materializeConstant(OpBuilder &builder,
 
 // Provide implementations for the enums we use.
 #include "circt/Dialect/FIRRTL/FIRRTLEnums.cpp.inc"
+
+#include "circt/Dialect/FIRRTL/FIRRTLDialect.cpp.inc"

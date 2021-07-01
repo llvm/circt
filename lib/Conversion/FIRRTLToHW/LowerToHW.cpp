@@ -13,6 +13,7 @@
 #include "../PassDetail.h"
 #include "circt/Conversion/FIRRTLToHW/FIRRTLToHW.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -28,6 +29,7 @@
 
 using namespace circt;
 using namespace firrtl;
+using circt::comb::ICmpPredicate;
 
 /// Given a FIRRTL type, return the corresponding type for the HW dialect.
 /// This returns a null type if it cannot be lowered.
@@ -366,12 +368,12 @@ void FIRRTLModuleLowering::lowerMemoryDecls(const SmallVector<FirMemory> &mems,
     size_t inputPin = 0;
     size_t outputPin = 0;
 
-    auto makePortCommon = [&](StringRef prefix, Twine i, Type bAddrType) {
-      ports.push_back({b.getStringAttr((prefix + "_clock_" + i).str()),
+    auto makePortCommon = [&](StringRef prefix, size_t idx, Type bAddrType) {
+      ports.push_back({b.getStringAttr(prefix + "_clock_" + Twine(idx)),
                        hw::INPUT, b1Type, inputPin++});
-      ports.push_back({b.getStringAttr((prefix + "_en_" + i).str()), hw::INPUT,
+      ports.push_back({b.getStringAttr(prefix + "_en_" + Twine(idx)), hw::INPUT,
                        b1Type, inputPin++});
-      ports.push_back({b.getStringAttr((prefix + "_addr_" + i).str()),
+      ports.push_back({b.getStringAttr(prefix + "_addr_" + Twine(idx)),
                        hw::INPUT, bAddrType, inputPin++});
     };
 
@@ -382,28 +384,28 @@ void FIRRTLModuleLowering::lowerMemoryDecls(const SmallVector<FirMemory> &mems,
         &getContext(), std::max(1U, llvm::Log2_64_Ceil(mem.depth)));
 
     for (size_t i = 0; i < mem.numReadPorts; ++i) {
-      makePortCommon("ro", Twine(i), bAddrType);
+      makePortCommon("ro", i, bAddrType);
       ports.push_back({b.getStringAttr(("ro_data_" + Twine(i)).str()),
                        hw::OUTPUT, bDataType, outputPin++});
     }
     for (size_t i = 0; i < mem.numReadWritePorts; ++i) {
-      makePortCommon("rw", Twine(i), bAddrType);
-      ports.push_back({b.getStringAttr(("rw_wmode_" + Twine(i)).str()),
-                       hw::INPUT, b1Type, inputPin++});
-      ports.push_back({b.getStringAttr(("rw_wmask_" + Twine(i)).str()),
-                       hw::INPUT, b1Type, inputPin++});
-      ports.push_back({b.getStringAttr(("rw_wdata_" + Twine(i)).str()),
-                       hw::INPUT, bDataType, inputPin++});
-      ports.push_back({b.getStringAttr(("rw_rdata_" + Twine(i)).str()),
-                       hw::OUTPUT, bDataType, outputPin++});
+      makePortCommon("rw", i, bAddrType);
+      ports.push_back({b.getStringAttr("rw_wmode_" + Twine(i)), hw::INPUT,
+                       b1Type, inputPin++});
+      ports.push_back({b.getStringAttr("rw_wmask_" + Twine(i)), hw::INPUT,
+                       b1Type, inputPin++});
+      ports.push_back({b.getStringAttr("rw_wdata_" + Twine(i)), hw::INPUT,
+                       bDataType, inputPin++});
+      ports.push_back({b.getStringAttr("rw_rdata_" + Twine(i)), hw::OUTPUT,
+                       bDataType, outputPin++});
     }
 
     for (size_t i = 0; i < mem.numWritePorts; ++i) {
-      makePortCommon("wo", Twine(i), bAddrType);
-      ports.push_back({b.getStringAttr(("wo_mask_" + Twine(i)).str()),
-                       hw::INPUT, b1Type, inputPin++});
-      ports.push_back({b.getStringAttr(("wo_data_" + Twine(i)).str()),
-                       hw::INPUT, bDataType, inputPin++});
+      makePortCommon("wo", i, bAddrType);
+      ports.push_back({b.getStringAttr("wo_mask_" + Twine(i)), hw::INPUT,
+                       b1Type, inputPin++});
+      ports.push_back({b.getStringAttr("wo_data_" + Twine(i)), hw::INPUT,
+                       bDataType, inputPin++});
     }
     std::array<NamedAttribute, 8> genAttrs = {
         b.getNamedAttr("depth", b.getI64IntegerAttr(mem.depth)),
@@ -1081,9 +1083,10 @@ void FIRRTLLowering::run() {
   for (auto &op : body->getOperations()) {
     builder.setInsertionPoint(&op);
     builder.setLoc(op.getLoc());
-    if (succeeded(dispatchVisitor(&op))) {
+    auto done = succeeded(dispatchVisitor(&op));
+    if (done)
       opsToRemove.push_back(&op);
-    } else {
+    else {
       switch (handleUnloweredOp(&op)) {
       case AlreadyLowered:
         break;         // Something like hw.output, which is already lowered.
@@ -1572,16 +1575,22 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   // Name attr is required on sv.wire but optional on firrtl.wire.
   auto nameAttr = op.nameAttr() ? op.nameAttr() : builder.getStringAttr("");
 
+  if (!AnnotationSet::removeAnnotations(
+          op, "firrtl.transforms.DontTouchAnnotation"))
+    return setLoweringTo<sv::WireOp>(op, resultType, nameAttr);
+  auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
   auto symName = op.nameAttr();
-  if (symName) {
   // Prepend the name of the module to make the symbol name unique in the symbol
   // table, it is already unique in the module. Checking if the name is unique
   // in the SymbolTable is non-trivial.
-    auto moduleName =
-        cast<hw::HWModuleOp>(op->getParentOp()).getNameAttr().getValue().str();
-    symName = builder.getStringAttr("__" + moduleName + "__" +
-                                    symName.getValue().str());
-  }
+  if (symName && !symName.getValue().empty())
+    symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
+                                    symName.getValue());
+  else
+    // If marked with DontTouch but does not have a name, then add a symbol
+    // name. Note: Same symbol name for all such wires in the module.
+    symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__"));
+
   // This is not a temporary wire created by the compiler, so attach a symbol
   // name.
   return setLoweringTo<sv::WireOp>(op, resultType, nameAttr, symName);
@@ -1593,22 +1602,20 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
     return handleZeroBit(op.input(),
                          [&]() { return setLowering(op, Value()); });
 
-  // Node operations are logical noops, but can carry a name.  If a name is
-  // present then we lower this into a wire and a connect, otherwise we just
-  // drop it.
-  if (auto name = op->getAttrOfType<StringAttr>("name")) {
-    if (!name.getValue().empty()) {
-      // This is a locally visible, private wire created by the compiler, so
-      // do not attach a symbol name.
-      auto wire = builder.create<sv::WireOp>(operand.getType(), name);
-      builder.create<sv::ConnectOp>(wire, operand);
-    }
+  // Node operations are logical noops, but may carry annotations.  Don't touch
+  // indicates we should keep it as a wire.
+  if (AnnotationSet::removeAnnotations(
+          op, "firrtl.transforms.DontTouchAnnotation")) {
+    // name may be empty
+    auto name = op->getAttrOfType<StringAttr>("name");
+    auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
+    auto symName = builder.getStringAttr(Twine("__") + moduleName +
+                                         Twine("__") + name.getValue());
+
+    auto wire = builder.create<sv::WireOp>(operand.getType(), name, symName);
+    builder.create<sv::ConnectOp>(wire, operand);
   }
 
-  // TODO(clattner): This is dropping the location information from unnamed
-  // node ops.  I suspect that this falls below the fold in terms of things we
-  // care about given how Chisel works, but we should reevaluate with more
-  // information.
   return setLowering(op, operand);
 }
 
@@ -1671,7 +1678,12 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
   if (resultType.isInteger(0))
     return setLowering(op, Value());
 
-  auto regResult = builder.create<sv::RegOp>(resultType, op.nameAttr());
+  // Add symbol if DontTouch annotation present.
+  auto regResult =
+      AnnotationSet::removeAnnotations(op,
+                                       "firrtl.transforms.DontTouchAnnotation")
+          ? builder.create<sv::RegOp>(resultType, op.nameAttr(), op.nameAttr())
+          : builder.create<sv::RegOp>(resultType, op.nameAttr());
   (void)setLowering(op, regResult);
 
   initializeRegister(regResult, Value());
@@ -1750,10 +1762,9 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     auto portName = op.getPortName(i).getValue();
     auto portKind = op.getPortKind(i);
 
-    auto &portKindNum =
-        portKind == MemOp::PortKind::Read
-            ? readCount
-            : portKind == MemOp::PortKind::Write ? writeCount : readwriteCount;
+    auto &portKindNum = portKind == MemOp::PortKind::Read    ? readCount
+                        : portKind == MemOp::PortKind::Write ? writeCount
+                                                             : readwriteCount;
 
     auto addInput = [&](SmallVectorImpl<Value> &operands, StringRef field,
                         size_t width) {
@@ -1882,7 +1893,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
 
     // If we can find the connects to this port, then we can directly
     // materialize it.
-    auto portResult = oldInstance.getResult(portIndicesByName[port.name]);
+    auto portResult = oldInstance.getResult(portIndex);
     assert(portResult && "invalid IR, couldn't find port");
 
     // Create a wire for each input/inout operand, so there is
@@ -1919,7 +1930,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
 
     Value resultVal = newInstance.getResult(resultNo);
 
-    auto oldPortResult = oldInstance.getResult(portIndicesByName[port.name]);
+    auto oldPortResult = oldInstance.getResult(portIndex);
     (void)setLowering(oldPortResult, resultVal);
     ++resultNo;
   }

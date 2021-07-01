@@ -18,3 +18,47 @@ hw.module @unary_ops(%arg0: i8, %arg1: i8, %arg2: i8) -> (%a: i8, %b: i8) {
 
 // VERILOG: assign a = ~arg0 + arg1;
 // VERILOG: assign b = ~arg0 + arg2;
+
+
+/// The pass should sink constants in to the block where they are used.
+// CHECK-LABEL: @sink_constants
+hw.module @sink_constants(%clock :i1) -> (%out : i1){
+  // CHECK: %false = hw.constant false
+  %false = hw.constant false
+
+  /// Constants not used should be removed.
+  // CHECK-NOT: %true = hw.constant true
+  %true = hw.constant true
+
+  /// Simple constant sinking.
+  sv.ifdef.procedural "FOO" {
+    // CHECK: [[TRUE:%.*]] = hw.constant true
+    // CHECK: [[FALSE:%.*]] = hw.constant false
+    // CHECK: sv.fwrite "%x"([[TRUE]]) : i1
+    sv.fwrite "%x"(%true) : i1
+    // CHECK: sv.fwrite "%x"([[FALSE]]) : i1
+    sv.fwrite "%x"(%false) : i1
+  }
+  
+  /// Multiple uses in the same block should use the same constant.
+  sv.ifdef.procedural "FOO" {
+    // CHECK: [[TRUE:%.*]] = hw.constant true
+    // CHECK: sv.fwrite "%x"([[TRUE]]) : i1
+    // CHECK: sv.fwrite "%x"([[TRUE]]) : i1
+    sv.fwrite "%x"(%true) : i1
+    sv.fwrite "%x"(%true) : i1
+  }
+
+  // CHECK: hw.output %false : i1
+  hw.output %false : i1
+}
+
+// VERILOG: `ifdef FOO
+// VERILOG:   $fwrite(32'h80000002, "%x", 1'h1);
+// VERILOG:   $fwrite(32'h80000002, "%x", 1'h0);
+// VERILOG: `endif
+// VERILOG: `ifdef FOO
+// VERILOG:   $fwrite(32'h80000002, "%x", 1'h1);
+// VERILOG:   $fwrite(32'h80000002, "%x", 1'h1);
+// VERILOG: `endif
+

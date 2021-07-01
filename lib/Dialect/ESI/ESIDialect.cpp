@@ -333,3 +333,4 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
 }
 
 #include "circt/Dialect/ESI/ESIAttrs.cpp.inc"
+#include "circt/Dialect/ESI/ESIDialect.cpp.inc"

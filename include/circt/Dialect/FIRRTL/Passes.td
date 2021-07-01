@@ -50,21 +50,21 @@ def Inliner : Pass<"firrtl-inliner", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createInlinerPass()";
 }
 
-def BlackboxMemory : Pass<"firrtl-blackbox-memory", "firrtl::CircuitOp"> {
-  let summary = "Replace all FIRRTL memories with an external module blackbox.";
+def BlackBoxMemory : Pass<"firrtl-blackbox-memory", "firrtl::CircuitOp"> {
+  let summary = "Replace all FIRRTL memories with an external module black box.";
   let description = [{
     This pass replaces all sequential memory operations with an external module
-    blackbox.  For each memory operation, it creates a FModuleOp which
+    black box.  For each memory operation, it creates a FModuleOp which
     replicates the return types of the memory operation, and replaces the
     MemoryOp with an instance of the module.  Inside the new module, an
-    instance of an FExtModule blackbox is created.  The blackbox module must
+    instance of an FExtModule black box is created.  The black box module must
     use the same parameter naming conventions used by the ReplaceSeqMemories
     pass in the Scala FIRRTL compiler.
   }];
   let constructor = "circt::firrtl::createBlackBoxMemoryPass()";
   let options = [
     Option<"emitWrapper", "emit-wrapper", "bool", "true",
-           "Create a wrapper module around the blackbox external module.">
+           "Create a wrapper module around the black box external module.">
   ];
 }
 
@@ -171,6 +171,28 @@ def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
       "Search path for black box sources specified via the "
       "`BlackBoxResourceAnno` annotation.">
   ];
+  let dependentDialects = ["sv::SVDialect"];
+}
+
+def PrintInstanceGraph
+    : Pass<"firrtl-print-instance-graph", "firrtl::CircuitOp"> {
+  let summary = "Print a DOT graph of the module hierarchy.";
+  let constructor =  "circt::firrtl::createPrintInstanceGraphPass()";
+}
+
+def GrandCentral : Pass<"firrtl-grand-central", "CircuitOp"> {
+  let summary = "Remove Grand Central Annotations";
+  let description = [{
+    Processes annotations associated with SiFive's Grand Central utility.
+  }];
+
+  let constructor = "circt::firrtl::createGrandCentralPass()";
+  let dependentDialects = ["circt::sv::SVDialect", "circt::hw::HWDialect"];
+}
+
+def GrandCentralTaps : Pass<"firrtl-grand-central-taps", "firrtl::CircuitOp"> {
+  let summary = "Generate code for grand central data and memory taps";
+  let constructor = "circt::firrtl::createGrandCentralTapsPass()";
   let dependentDialects = ["sv::SVDialect"];
 }
 

@@ -13,13 +13,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "./PassDetails.h"
+#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/Support/FileUtilities.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
@@ -51,40 +52,44 @@ static void appendPossiblyAbsolutePath(SmallVectorImpl<char> &base,
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct EmittedFile {
-  VerbatimOp op;
-  StringAttr fileName;
-};
-
 struct BlackBoxReaderPass : public BlackBoxReaderBase<BlackBoxReaderPass> {
   void runOnOperation() override;
   bool runOnAnnotation(Operation *op, Annotation anno, OpBuilder &builder);
-  void loadFile(Operation *op, StringRef inputPath, OpBuilder &builder);
+  bool loadFile(Operation *op, StringRef inputPath, OpBuilder &builder);
+  void setOutputFile(VerbatimOp op, StringAttr fileNameAttr);
 
   using BlackBoxReaderBase::inputPrefix;
   using BlackBoxReaderBase::resourcePrefix;
 
 private:
-  /// The generated `sv.verbatim` nodes.
-  SmallVector<EmittedFile, 8> emittedFiles;
+  /// A set of the files generated so far. This is used to prevent two
+  /// annotations from generating the same file.
+  SmallPtrSet<Attribute, 8> emittedFiles;
+
+  /// A list of all files which will be included in the file list.  This is
+  /// subset of all emitted files.
+  SmallVector<StringRef> fileListFiles;
 
   /// The target directory to output black boxes into. Can be changed
   /// through `firrtl.transforms.BlackBoxTargetDirAnno` annotations.
-  SmallString<128> targetDir;
+  StringRef targetDir;
 
   /// The file list file name (sic) for black boxes. If set, generates a file
   /// that lists all non-header source files for black boxes. Can be changed
   /// through `firrtl.transforms.BlackBoxResourceFileNameAnno` annotations.
-  SmallString<128> resourceFileName;
+  StringRef resourceFileName;
 };
 } // end anonymous namespace
 
 /// Emit the annotated source code for black boxes in a circuit.
 void BlackBoxReaderPass::runOnOperation() {
   CircuitOp circuitOp = getOperation();
+  auto context = &getContext();
+
+  // If this pass has changed anything.
+  bool anythingChanged = false;
 
   // Internalize some string attributes for easy reference later.
-  auto cx = &getContext();
   StringRef targetDirAnnoClass = "firrtl.transforms.BlackBoxTargetDirAnno";
   StringRef resourceFileNameAnnoClass =
       "firrtl.transforms.BlackBoxResourceFileNameAnno";
@@ -94,9 +99,10 @@ void BlackBoxReaderPass::runOnOperation() {
   targetDir = ".";
   resourceFileName = "firrtl_black_box_resource_files.f";
 
-  AnnotationSet circuitAnnos(circuitOp);
+  // Process black box annotations on the circuit.  Some of these annotations
+  // will affect how the rest of the annotations are resolved.
   SmallVector<Attribute, 4> filteredAnnos;
-  for (auto annot : circuitAnnos) {
+  for (auto annot : AnnotationSet(circuitOp)) {
     // Handle target dir annotation.
     if (annot.isClass(targetDirAnnoClass)) {
       if (auto target = annot.getMember<StringAttr>("targetDir")) {
@@ -124,21 +130,19 @@ void BlackBoxReaderPass::runOnOperation() {
 
     filteredAnnos.push_back(annot.getDict());
   }
-
-  // Update the circuit annotations to exclude the ones we have consumed.
-  if (filteredAnnos.empty())
-    circuitOp->removeAttr("annotations");
-  else
-    circuitOp->setAttr("annotations", ArrayAttr::get(cx, filteredAnnos));
+  // Apply the filtered annotations to the circuit.  If we updated the circuit
+  // and record that they changed.
+  anythingChanged |=
+      AnnotationSet(filteredAnnos, context).applyToOperation(circuitOp);
 
   LLVM_DEBUG(llvm::dbgs() << "Black box target directory: " << targetDir << "\n"
                           << "Black box resource file name: "
                           << resourceFileName << "\n");
 
-  // Gather the relevant annotations on all modules in the circuit.
-  OpBuilder builder(&getContext());
-  builder.setInsertionPointToEnd(getOperation()->getBlock());
+  // Newly generated IR will be placed at the end of the circuit.
+  auto builder = OpBuilder::atBlockEnd(circuitOp->getBlock());
 
+  // Gather the relevant annotations on all modules in the circuit.
   for (auto &op : *circuitOp.getBody()) {
     if (!isa<FModuleOp>(op) && !isa<FExtModuleOp>(op))
       continue;
@@ -150,47 +154,50 @@ void BlackBoxReaderPass::runOnOperation() {
     }
 
     // Update the operation annotations to exclude the ones we have consumed.
-    if (filteredAnnos.empty())
-      op.removeAttr("annotations");
-    else
-      op.setAttr("annotations", ArrayAttr::get(cx, filteredAnnos));
+    anythingChanged |= AnnotationSet(filteredAnnos, context).applyToOperation(&op);
   }
 
   // If we have emitted any files, generate a file list operation that
   // documents the additional annotation-controlled file listing to be
   // created.
-  if (!emittedFiles.empty()) {
-    auto trueAttr = BoolAttr::get(cx, true);
+  if (!fileListFiles.empty()) {
+    // Output the file list in sorted order.
+    llvm::sort(fileListFiles.begin(), fileListFiles.end());
+
+    // Create the file list contents by prepending the file name with the target
+    // directory, and putting each file on its own line.
     std::string output;
     llvm::raw_string_ostream os(output);
-    for (auto &file : emittedFiles) {
-      const auto &fileName = file.fileName.getValue();
-      // Exclude Verilog header files since we expect them to be included
-      // explicitly by compiler directives in other source files.
-      auto ext = llvm::sys::path::extension(fileName);
-      bool exclude = (ext == ".h" || ext == ".vh" || ext == ".svh");
-      file.op->setAttr(
-          "output_file",
-          OutputFileAttr::get(StringAttr::get(cx, targetDir), file.fileName,
-                              BoolAttr::get(cx, exclude),
-                              /*exclude_replicated_ops=*/trueAttr, cx));
+    llvm::interleave(
+        fileListFiles, os,
+        [&](StringRef fileName) {
+          SmallString<32> filePath(targetDir);
+          llvm::sys::path::append(filePath, fileName);
+          os << filePath;
+        },
+        "\n");
 
-      SmallString<32> filePath(targetDir);
-      llvm::sys::path::append(filePath, fileName);
-      if (!exclude)
-        os << filePath << "\n";
-    }
+    // Put the file list in to a verbatim op.
     auto op =
         builder.create<VerbatimOp>(circuitOp->getLoc(), std::move(output));
+
+    // Attach the output file information to the verbatim op.
+    auto trueAttr = BoolAttr::get(context, true);
     op->setAttr("output_file",
-                OutputFileAttr::get(StringAttr::get(cx, ""),
-                                    StringAttr::get(cx, resourceFileName),
+                OutputFileAttr::get(StringAttr::get(context, ""),
+                                    StringAttr::get(context, resourceFileName),
                                     /*exclude_from_filelist=*/trueAttr,
-                                    /*exclude_replicated_ops=*/trueAttr, cx));
+                                    /*exclude_replicated_ops=*/trueAttr,
+                                    context));
   }
+
+  // If nothing has changed we can preseve the analysis.
+  if (!anythingChanged)
+    markAllAnalysesPreserved();
 
   // Clean up.
   emittedFiles.clear();
+  fileListFiles.clear();
 }
 
 /// Run on an operation-annotation pair. The annotation need not be a black box
@@ -216,9 +223,13 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
     LLVM_DEBUG(llvm::dbgs()
                << "Add black box source `" << name.getValue() << "` inline\n");
 
+    // Skip this inline annotation if the target is already generated.
+    if (emittedFiles.count(name))
+      return true;
+
     // Create an IR node to hold the contents.
-    emittedFiles.push_back({builder.create<VerbatimOp>(op->getLoc(), text),
-                            builder.getStringAttr(name.getValue())});
+    auto verbatim = builder.create<VerbatimOp>(op->getLoc(), text);
+    setOutputFile(verbatim, name);
     return true;
   }
 
@@ -232,8 +243,11 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
     }
     SmallString<128> inputPath(inputPrefix);
     appendPossiblyAbsolutePath(inputPath, path.getValue());
-    loadFile(op, inputPath, builder);
-    return true;
+    if (loadFile(op, inputPath, builder))
+      return true;
+    op->emitError("Cannot find file ") << inputPath;
+    signalPassFailure();
+    return false;
   }
 
   // Handle resource annotation.
@@ -245,12 +259,23 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
       signalPassFailure();
       return true;
     }
-    SmallString<128> inputPath(resourcePrefix);
+
     // Note that we always treat `resourceId` as a relative path, as the
     // previous Scala implementation tended to emit `/foo.v` as resourceId.
-    llvm::sys::path::append(inputPath, resourceId.getValue());
-    loadFile(op, inputPath, builder);
-    return true;
+    auto relativeResourceId =
+        llvm::sys::path::relative_path(resourceId.getValue());
+
+    SmallVector<StringRef> roots;
+    StringRef(resourcePrefix).split(roots, ':');
+    for (auto root : roots) {
+      SmallString<128> inputPath(root);
+      llvm::sys::path::append(inputPath, relativeResourceId);
+      if (loadFile(op, inputPath, builder))
+        return true; // found file
+    }
+    op->emitError("Cannot find file ") << resourceId.getValue();
+    signalPassFailure();
+    return false;
   }
 
   // Annotation was not concerned with black boxes.
@@ -259,25 +284,57 @@ bool BlackBoxReaderPass::runOnAnnotation(Operation *op, Annotation anno,
 
 /// Copies a black box source file to the appropriate location in the target
 /// directory.
-void BlackBoxReaderPass::loadFile(Operation *op, StringRef inputPath,
+bool BlackBoxReaderPass::loadFile(Operation *op, StringRef inputPath,
                                   OpBuilder &builder) {
   auto fileName = llvm::sys::path::filename(inputPath);
   LLVM_DEBUG(llvm::dbgs() << "Add black box source  `" << fileName << "` from `"
                           << inputPath << "`\n");
 
+  // Skip this annotation if the target is already loaded.
+  auto fileNameAttr = builder.getStringAttr(fileName);
+  if (emittedFiles.count(fileNameAttr))
+    return true;
+
   // Open and read the input file.
   std::string errorMessage;
   auto input = mlir::openInputFile(inputPath, &errorMessage);
-  if (!input) {
-    op->emitError(errorMessage);
-    signalPassFailure();
-    return;
-  }
+  if (!input)
+    return false;
 
   // Create an IR node to hold the contents.
-  emittedFiles.push_back(
-      {builder.create<VerbatimOp>(op->getLoc(), input->getBuffer()),
-       builder.getStringAttr(fileName)});
+  auto verbatimOp =
+      builder.create<VerbatimOp>(op->getLoc(), input->getBuffer());
+  setOutputFile(verbatimOp, fileNameAttr);
+  return true;
+}
+
+/// This function is called for every file generated.  It does the following
+/// things:
+///  1. Attaches the output file attribute to the VerbatimOp.
+///  2. Record that the file has been generated to avoid duplicates.
+///  3. Add each file name to the generated "file list" file.
+void BlackBoxReaderPass::setOutputFile(VerbatimOp op, StringAttr fileNameAttr) {
+  auto *context = &getContext();
+  auto fileName = fileNameAttr.getValue();
+  // Exclude Verilog header files since we expect them to be included
+  // explicitly by compiler directives in other source files.
+  auto ext = llvm::sys::path::extension(fileName);
+  bool exclude = (ext == ".h" || ext == ".vh" || ext == ".svh");
+  auto trueAttr = BoolAttr::get(context, true);
+  op->setAttr("output_file",
+              OutputFileAttr::get(
+                  StringAttr::get(context, targetDir), fileNameAttr,
+                  /*exclude_from_filelist=*/BoolAttr::get(context, exclude),
+                  /*exclude_replicated_ops=*/trueAttr, context));
+
+  // Record that this file has been generated.
+  assert(!emittedFiles.count(fileNameAttr) &&
+         "Can't generate the same file twice.");
+  emittedFiles.insert(fileNameAttr);
+
+  // Append this file to the file list if its not excluded.
+  if (!exclude)
+    fileListFiles.push_back(fileName);
 }
 
 //===----------------------------------------------------------------------===//

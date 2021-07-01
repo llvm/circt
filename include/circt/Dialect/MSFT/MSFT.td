@@ -34,7 +34,7 @@ def MSFTDialect : Dialect {
     void registerAttributes();
 
     void registerGenerator(StringRef opName, StringRef generatorName,
-                           GeneratorCallback cb);
+                           GeneratorCallback cb, Attribute parameters);
 
     /// Generator details don't need to be exposed.
     llvm::ManagedStatic<detail::Generators> generators;
@@ -85,6 +85,11 @@ def RunGenerators: Pass<"run-generators", "mlir::ModuleOp"> {
     implementation of the same logical feature.
   }];
   let constructor = "circt::msft::createRunGeneratorsPass()";
+  let options = [
+    ListOption<"generators", "generators", "std::string",
+               "List of possible generators to run.",
+               "llvm::cl::OneOrMore, llvm::cl::MiscFlags::CommaSeparated">
+  ];
 }
 
 #endif // MSFT_TD

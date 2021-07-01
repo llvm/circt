@@ -149,6 +149,17 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
       return success();
     }
   }
+
+  // extract(olo, extract(ilo, x)) = extract(olo + ilo, x)
+  if (auto innerExtract = dyn_cast_or_null<ExtractOp>(op.input().getDefiningOp())) {
+    rewriter.replaceOpWithNewOp<ExtractOp>(
+        op,
+        op.getType(),
+        innerExtract.input(),
+        innerExtract.lowBit() + op.lowBit());
+    return success();
+  }
+
   return failure();
 }
 
@@ -203,6 +214,17 @@ OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
   if (llvm::all_of(inputs(), [&](auto in) { return in == this->inputs()[0]; }))
     return inputs()[0];
 
+  // and(..., x, ..., ~x, ...) -> 0
+  for (Value arg : inputs())
+    if (auto xorOp = dyn_cast_or_null<XorOp>(arg.getDefiningOp()))
+      if (xorOp.isBinaryNot()) {
+        // isBinaryOp checks for the constant on operand 0.
+        auto srcVal = xorOp.getOperand(0);
+        for (Value arg2 : inputs())
+          if (arg2 == srcVal)
+            return getIntAttr(APInt(getType().getWidth(), 0), getContext());
+      }
+
   // Constant fold
   return constFoldVariadicOp<IntegerAttr>(
       constants, [](APInt &a, const APInt &b) { a &= b; });
@@ -213,11 +235,23 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands, `fold` should handle this");
 
-  // TODO: remove all duplicate arguments
-  // and(..., x, x) -> and(..., x) -- idempotent
-  if (inputs[size - 1] == inputs[size - 2]) {
-    rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), inputs.drop_back());
-    return success();
+  // and(..., x, ..., x) -> and(..., x, ...) -- idempotent
+  // Trivial and(x), and(x, x) cases are handled by [AndOp::fold] above.
+  if (inputs.size() > 2) {
+    llvm::DenseSet<mlir::Value> dedupedArguments;
+    SmallVector<Value, 4> newOperands;
+
+    for (const auto input : inputs) {
+      auto insertionResult = dedupedArguments.insert(input);
+      if (insertionResult.second) {
+        newOperands.push_back(input);
+      }
+    }
+
+    if (newOperands.size() < inputs.size()) {
+      rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
+      return success();
+    }
   }
 
   // Patterns for and with a constant on RHS.
@@ -361,6 +395,13 @@ OpFoldResult XorOp::fold(ArrayRef<Attribute> constants) {
   if (constants.size() == 2 && constants[1] &&
       constants[1].cast<IntegerAttr>().getValue().isNullValue())
     return inputs()[0];
+
+  // xor(xor(x,1),1) -> x
+  if (isBinaryNot()) {
+    XorOp arg = dyn_cast_or_null<XorOp>(inputs()[0].getDefiningOp());
+    if (arg && arg.isBinaryNot())
+      return arg.inputs()[0];
+  }
 
   // Constant fold
   return constFoldVariadicOp<IntegerAttr>(
@@ -588,6 +629,56 @@ LogicalResult MulOp::canonicalize(MulOp op, PatternRewriter &rewriter) {
   return failure();
 }
 
+template <class Op, bool isSigned>
+static OpFoldResult foldDiv(Op op, ArrayRef<Attribute> constants) {
+  if (auto rhs_value = constants[1].dyn_cast_or_null<IntegerAttr>()) {
+    // divu(x, 1) -> x, divs(x, 1) -> x
+    if (rhs_value.getValue() == 1)
+      return op.lhs();
+
+    // If the divisor is zero, do not fold for now.
+    if (rhs_value.getValue().isNullValue())
+      return {};
+  }
+
+  return constFoldBinaryOp<IntegerAttr>(constants, [](APInt a, APInt b) {
+    return isSigned ? a.sdiv(b) : a.udiv(b);
+  });
+}
+
+OpFoldResult DivUOp::fold(ArrayRef<Attribute> constants) {
+  return foldDiv<DivUOp, /*isSigned=*/false>(*this, constants);
+}
+
+OpFoldResult DivSOp::fold(ArrayRef<Attribute> constants) {
+  return foldDiv<DivSOp, /*isSigned=*/true>(*this, constants);
+}
+
+template <class Op, bool isSigned>
+static OpFoldResult foldMod(Op op, ArrayRef<Attribute> constants) {
+  if (auto rhs_value = constants[1].dyn_cast_or_null<IntegerAttr>()) {
+    // modu(x, 1) -> 0, mods(x, 1) -> 0
+    if (rhs_value.getValue() == 1)
+      return getIntAttr(APInt(op.getType().getIntOrFloatBitWidth(), 0),
+                        op.getContext());
+
+    // If the divisor is zero, do not fold for now.
+    if (rhs_value.getValue().isNullValue())
+      return {};
+  }
+
+  return constFoldBinaryOp<IntegerAttr>(constants, [](APInt a, APInt b) {
+    return isSigned ? a.srem(b) : a.urem(b);
+  });
+}
+
+OpFoldResult ModUOp::fold(ArrayRef<Attribute> constants) {
+  return foldMod<ModUOp, /*isSigned=*/false>(*this, constants);
+}
+
+OpFoldResult ModSOp::fold(ArrayRef<Attribute> constants) {
+  return foldMod<ModSOp, /*isSigned=*/true>(*this, constants);
+}
 //===----------------------------------------------------------------------===//
 // ConcatOp
 //===----------------------------------------------------------------------===//
@@ -794,6 +885,14 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
     }
   }
 
+  // mux(!a, b, c) -> mux(a, c, b)
+  if (auto xorOp = dyn_cast_or_null<XorOp>(op.cond().getDefiningOp())) {
+    if (xorOp.isBinaryNot()) {
+      Value newOperands[]{xorOp.inputs()[0], op.falseValue(), op.trueValue()};
+      rewriter.replaceOpWithNewOp<MuxOp>(op, op.getType(), newOperands);
+      return success();
+    }
+  }
   return failure();
 }
 

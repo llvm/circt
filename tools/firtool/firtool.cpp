@@ -73,6 +73,7 @@ static cl::opt<bool> inliner("inline",
 
 static cl::opt<bool> lowerToHW("lower-to-hw",
                                cl::desc("run the lower-to-hw pass"));
+
 static cl::opt<bool> imconstprop(
     "imconstprop",
     cl::desc(
@@ -80,18 +81,17 @@ static cl::opt<bool> imconstprop(
     cl::init(true));
 
 static cl::opt<bool>
-    disableLowerTypes("disable-lower-types",
-                      cl::desc("run the lower-types pass within lower-to-hw"),
-                      cl::init(false));
+    lowerTypes("lower-types",
+               cl::desc("run the lower-types pass within lower-to-hw"),
+               cl::init(true));
+
+static cl::opt<bool> expandWhens("expand-whens",
+                                 cl::desc("disable the expand-whens pass"),
+                                 cl::init(true));
 
 static cl::opt<bool>
-    disableExpandWhens("disable-expand-whens",
-                       cl::desc("disable the expand-whens pass"),
-                       cl::init(false));
-
-static cl::opt<bool>
-    blackboxMemory("blackbox-memory",
-                   cl::desc("Create a blackbox for all memory operations"),
+    blackBoxMemory("blackbox-memory",
+                   cl::desc("Create a black box for all memory operations"),
                    cl::init(false));
 
 static cl::opt<bool>
@@ -102,7 +102,16 @@ static cl::opt<bool>
 static cl::opt<bool>
     inferWidths("infer-widths",
                 cl::desc("run the width inference pass on firrtl"),
-                cl::init(false));
+                cl::init(true));
+
+static cl::opt<bool> extractTestCode("extract-test-code",
+                                     cl::desc("run the extract test code pass"),
+                                     cl::init(false));
+static cl::opt<bool>
+    grandCentral("firrtl-grand-central",
+                 cl::desc("create interfaces and data/memory taps from SiFive "
+                          "Grand Central annotations"),
+                 cl::init(false));
 
 enum OutputFormatKind {
   OutputMLIR,
@@ -134,13 +143,13 @@ static cl::opt<std::string>
 
 static cl::opt<std::string> blackBoxRootPath(
     "blackbox-path",
-    cl::desc("Optional path to use as the root of blackbox annotations"),
+    cl::desc("Optional path to use as the root of black box annotations"),
     cl::value_desc("path"), cl::init(""));
 
 static cl::opt<std::string> blackBoxRootResourcePath(
     "blackbox-resource-path",
     cl::desc(
-        "Optional path to use as the root of blackbox resource annotations"),
+        "Optional path to use as the root of black box resource annotations"),
     cl::value_desc("path"), cl::init(""));
 
 /// Process a single buffer of the input.
@@ -168,16 +177,6 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     }
   }
 
-  // Nothing in the parser is threaded.  Disable synchronization overhead.
-  auto isMultithreaded = context.isMultithreadingEnabled();
-  context.disableMultithreading();
-
-  // Apply any pass manager command line options.
-  PassManager pm(&context);
-  pm.enableVerifier(verifyPasses);
-  pm.enableTiming(ts);
-  applyPassManagerCLOptions(pm);
-
   OwningModuleRef module;
   if (inputFormat == InputFIRFile) {
     auto parserTimer = ts.nest("FIR Parser");
@@ -192,8 +191,16 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   if (!module)
     return failure();
 
-  // Allow optimizations to run multithreaded.
-  context.enableMultithreading(isMultithreaded);
+  // Apply any pass manager command line options.
+  PassManager pm(&context);
+  pm.enableVerifier(verifyPasses);
+  pm.enableTiming(ts);
+  applyPassManagerCLOptions(pm);
+
+  if (!disableOptimization) {
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        createCSEPass());
+  }
 
   // Width inference creates canonicalization opportunities.
   if (inferWidths)
@@ -201,18 +208,17 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
   // The input mlir file could be firrtl dialect so we might need to clean
   // things up.
-  if (!disableLowerTypes) {
+  if (lowerTypes) {
     pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass());
     auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
     // Only enable expand whens if lower types is also enabled.
-    if (!disableExpandWhens)
+    if (expandWhens)
       modulePM.addPass(firrtl::createExpandWhensPass());
   }
 
   // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
   if (!disableOptimization) {
     auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
-    modulePM.addPass(createCSEPass());
     modulePM.addPass(createSimpleCanonicalizerPass());
   }
 
@@ -222,7 +228,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   if (imconstprop)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
 
-  if (blackboxMemory)
+  if (blackBoxMemory)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxMemoryPass());
 
   // Read black box source files into the IR.
@@ -234,6 +240,12 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
                         ? blackBoxRoot
                         : blackBoxRootResourcePath));
 
+  if (grandCentral) {
+    auto &circuitPM = pm.nest<firrtl::CircuitOp>();
+    circuitPM.addPass(firrtl::createGrandCentralPass());
+    circuitPM.addPass(firrtl::createGrandCentralTapsPass());
+  }
+
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (lowerToHW || outputFormat == OutputVerilog ||
       outputFormat == OutputSplitVerilog) {
@@ -241,6 +253,9 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
         firrtl::createCheckWidthsPass());
     pm.addPass(createLowerFIRRTLToHWPass());
     pm.addPass(sv::createHWMemSimImplPass());
+
+    if (extractTestCode)
+      pm.addPass(sv::createSVExtractTestCodePass());
 
     // If enabled, run the optimizer.
     if (!disableOptimization) {

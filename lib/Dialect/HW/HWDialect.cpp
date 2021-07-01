@@ -25,6 +25,9 @@ using namespace hw;
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
+// Pull in the dialect definition.
+#include "circt/Dialect/HW/HWDialect.cpp.inc"
+
 namespace {
 
 // We implement the OpAsmDialectInterface so that HW dialect operations

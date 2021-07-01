@@ -62,11 +62,11 @@ class UTVariadicOp<string mnemonic, list<OpTrait> traits = []> :
 // Arithmetic and Logical Operations.
 def AddOp : UTVariadicOp<"add", [Commutative]>;
 def MulOp : UTVariadicOp<"mul", [Commutative]>;
-def DivUOp : UTBinOp<"divu">;
-def DivSOp : UTBinOp<"divs">;
-def ModUOp : UTBinOp<"modu">;
-def ModSOp : UTBinOp<"mods">;
 let hasFolder = true in {
+  def DivUOp : UTBinOp<"divu">;
+  def DivSOp : UTBinOp<"divs">;
+  def ModUOp : UTBinOp<"modu">;
+  def ModSOp : UTBinOp<"mods">;
   def ShlOp : UTBinOp<"shl">;
   def ShrUOp : UTBinOp<"shru">;
   def ShrSOp : UTBinOp<"shrs">;
@@ -112,6 +112,7 @@ def ICmpPredicateULT : I64EnumAttrCase<"ult", 6>;
 def ICmpPredicateULE : I64EnumAttrCase<"ule", 7>;
 def ICmpPredicateUGT : I64EnumAttrCase<"ugt", 8>;
 def ICmpPredicateUGE : I64EnumAttrCase<"uge", 9>;
+let cppNamespace = "circt::comb" in
 def ICmpPredicate : I64EnumAttr<
     "ICmpPredicate",
     "hw.icmp comparison predicate",

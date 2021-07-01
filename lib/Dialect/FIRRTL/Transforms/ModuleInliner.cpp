@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "./PassDetails.h"
+#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
@@ -63,10 +63,8 @@ static SmallVector<Value> mapPortsToWires(StringRef prefix, OpBuilder &b,
   auto portInfo = target.getPorts();
   for (unsigned i = 0, e = target.getNumArguments(); i < e; ++i) {
     auto arg = target.getArgument(i);
-    // Get the type of the wire.  If this is an output port, remove the flip.
+    // Get the type of the wire.
     auto type = arg.getType().cast<FIRRTLType>();
-    if (auto flipType = type.dyn_cast<FlipType>())
-      type = flipType.getElementType();
     auto wire = b.create<WireOp>(target.getLoc(), type,
                                  (prefix + portInfo[i].getName()).str());
     wires.push_back(wire);

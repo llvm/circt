@@ -15,6 +15,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/APSInt.h"
 
 // Declarative canonicalization patterns
 namespace circt {
@@ -843,6 +844,44 @@ OpFoldResult CatPrimOp::fold(ArrayRef<Attribute> operands) {
   return {};
 }
 
+LogicalResult DShlPrimOp::canonicalize(DShlPrimOp op,
+                                       PatternRewriter &rewriter) {
+  if (!hasKnownWidthIntTypesAndNonZeroResult(op))
+    return failure();
+
+  // dshl(x, cst) -> shl(x, cst).  The result size is generally much wider than
+  // what is needed for the constant.
+  if (auto rhsCst = dyn_cast_or_null<ConstantOp>(op.rhs().getDefiningOp())) {
+    // Shift amounts are always unsigned, but shift only takes a 32-bit amount.
+    uint64_t shiftAmt = rhsCst.value().getLimitedValue(1ULL << 31);
+    auto result =
+        rewriter.createOrFold<ShlPrimOp>(op.getLoc(), op.lhs(), shiftAmt);
+    rewriter.replaceOpWithNewOp<PadPrimOp>(
+        op, result, op.getType().cast<IntType>().getWidthOrSentinel());
+    return success();
+  }
+  return failure();
+}
+
+LogicalResult DShrPrimOp::canonicalize(DShrPrimOp op,
+                                       PatternRewriter &rewriter) {
+  if (!hasKnownWidthIntTypesAndNonZeroResult(op))
+    return failure();
+
+  // dshr(x, cst) -> shr(x, cst).  The result size is generally much wider than
+  // what is needed for the constant.
+  if (auto rhsCst = dyn_cast_or_null<ConstantOp>(op.rhs().getDefiningOp())) {
+    // Shift amounts are always unsigned, but shift only takes a 32-bit amount.
+    uint64_t shiftAmt = rhsCst.value().getLimitedValue(1ULL << 31);
+    auto result =
+        rewriter.createOrFold<ShrPrimOp>(op.getLoc(), op.lhs(), shiftAmt);
+    rewriter.replaceOpWithNewOp<PadPrimOp>(
+        op, result, op.getType().cast<IntType>().getWidthOrSentinel());
+    return success();
+  }
+  return failure();
+}
+
 LogicalResult CatPrimOp::canonicalize(CatPrimOp op, PatternRewriter &rewriter) {
   // cat(bits(x, ...), bits(x, ...)) -> bits(x ...) when the two ...'s are
   // consequtive in the input.
@@ -953,8 +992,8 @@ OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
 
 static LogicalResult canonicalizeMux(MuxPrimOp op, PatternRewriter &rewriter) {
   // If the mux has a known output width, pad the operands up to this width.
-  // Most folds on mux require that folded operands are of the same width as the
-  // mux itself.
+  // Most folds on mux require that folded operands are of the same width as
+  // the mux itself.
   auto width = op.getType().getBitWidthOrSentinel();
   if (width < 0)
     return failure();
@@ -1138,7 +1177,8 @@ LogicalResult SubaccessOp::canonicalize(SubaccessOp op,
                                         PatternRewriter &rewriter) {
   if (auto index = op.index().getDefiningOp()) {
     if (auto constIndex = dyn_cast<ConstantOp>(index)) {
-      // The SubindexOp require the index value to be unsigned 32-bits integer.
+      // The SubindexOp require the index value to be unsigned 32-bits
+      // integer.
       auto value = constIndex.value().getExtValue();
       auto valueAttr = rewriter.getI32IntegerAttr(value);
       rewriter.replaceOpWithNewOp<SubindexOp>(op, op.result().getType(),
@@ -1174,7 +1214,6 @@ static bool isOnlyConnectToValue(ConnectOp connect, Value value) {
 // Forward simple values through wire's and reg's.
 static LogicalResult foldSingleSetConnect(ConnectOp op,
                                           PatternRewriter &rewriter) {
-  //
   // While we can do this for nearly all wires, we currently limit it to simple
   // things.
   Operation *connectedDecl = op.dest().getDefiningOp();
@@ -1183,6 +1222,8 @@ static LogicalResult foldSingleSetConnect(ConnectOp op,
 
   // Only support wire and reg for now.
   if (!isa<WireOp>(connectedDecl) && !isa<RegOp>(connectedDecl))
+    return failure();
+  if (AnnotationSet(connectedDecl).hasDontTouch())
     return failure();
 
   // Only forward if the types exactly match and there is one connect.
@@ -1324,7 +1365,7 @@ LogicalResult AttachOp::canonicalize(AttachOp op, PatternRewriter &rewriter) {
     // TODO: May need to be sensitive to "don't touch" or other
     // annotations.
     if (auto wire = dyn_cast_or_null<WireOp>(operand.getDefiningOp())) {
-      if (wire->hasOneUse()) {
+      if (!AnnotationSet(wire).hasDontTouch() && wire->hasOneUse()) {
         SmallVector<Value> newOperands;
         for (auto newOperand : op.getOperands())
           if (newOperand != operand) // Don't the add wire.
@@ -1440,7 +1481,7 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
   if (!constOp)
     return failure();
 
-  // reset should be a module port (heuristic to limit to intended reset lines)
+  // reset should be a module port (heuristic to limit to intended reset lines).
   if (!mux.sel().isa<BlockArgument>())
     return failure();
 
@@ -1468,7 +1509,8 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
 }
 
 LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
-  if (succeeded(foldHiddenReset(op, rewriter)))
+  if (!(AnnotationSet(op).hasDontTouch()) &&
+      succeeded(foldHiddenReset(op, rewriter)))
     return success();
 
   return failure();

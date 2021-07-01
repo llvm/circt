@@ -88,6 +88,41 @@ hw.module @mul_cstfold(%arg0: i7) -> (i7) {
   hw.output %0 : i7
 }
 
+// CHECK-LABEL: hw.module @div_cstfold(%arg0: i7) -> (i7, i7, i7, i7) {
+// CHECK-NEXT:    %c2_i7 = hw.constant 2 : i7
+// CHECK-NEXT:    %c-3_i7 = hw.constant -3 : i7
+// CHECK-NEXT:    hw.output %c2_i7, %arg0, %c-3_i7, %arg0 : i7, i7, i7, i7
+hw.module @div_cstfold(%arg0: i7) -> (i7, i7, i7, i7) {
+  %c1_i7 = hw.constant 1 : i7
+  %c-3_i7 = hw.constant -3 : i7
+  %c5_i7 = hw.constant 5 : i7
+  %c10_i7 = hw.constant 10 : i7
+  %a = comb.divu %c10_i7, %c5_i7 : i7
+  %b = comb.divu %arg0, %c1_i7 : i7
+
+  %c = comb.divs %c10_i7, %c-3_i7 : i7
+  %d = comb.divs %arg0, %c1_i7 : i7
+
+  hw.output %a, %b, %c, %d : i7, i7, i7, i7
+}
+
+// CHECK-LABEL: hw.module @mod_cstfold(%arg0: i7) -> (i7, i7, i7, i7) {
+// CHECK-NEXT:    %c0_i7 = hw.constant 0 : i7
+// CHECK-NEXT:    %c1_i7 = hw.constant 1 : i7
+// CHECK-NEXT:    hw.output %c0_i7, %c0_i7, %c1_i7, %c0_i7 : i7, i7, i7, i7
+hw.module @mod_cstfold(%arg0: i7) -> (i7, i7, i7, i7) {
+  %c1_i7 = hw.constant 1 : i7
+  %c-3_i7 = hw.constant -3 : i7
+  %c5_i7 = hw.constant 5 : i7
+  %c10_i7 = hw.constant 10 : i7
+  %a = comb.modu %c10_i7, %c5_i7 : i7
+  %b = comb.modu %arg0, %c1_i7 : i7
+
+  %c = comb.mods %c10_i7, %c-3_i7 : i7
+  %d = comb.mods %arg0, %c1_i7 : i7
+
+  hw.output %a, %b, %c, %d : i7, i7, i7, i7
+}
 // CHECK-LABEL: hw.module @variadic_noop(%arg0: i11) -> (i11) {
 // CHECK-NEXT:    hw.output %arg0
 

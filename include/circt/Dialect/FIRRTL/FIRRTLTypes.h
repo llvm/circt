@@ -21,7 +21,6 @@ namespace circt {
 namespace firrtl {
 namespace detail {
 struct WidthTypeStorage;
-struct FlipTypeStorage;
 struct BundleTypeStorage;
 struct VectorTypeStorage;
 } // namespace detail.
@@ -32,9 +31,25 @@ class AsyncResetType;
 class SIntType;
 class UIntType;
 class AnalogType;
-class FlipType;
 class BundleType;
 class FVectorType;
+
+/// A collection of bits indicating the recursive properties of a type.
+struct RecursiveTypeProperties {
+  /// Whether the type only contains passive elements.
+  bool isPassive : 1;
+  /// Whether the type contains an analog type.
+  bool containsAnalog : 1;
+  /// Whether the type has any uninferred bit widths.
+  bool hasUninferredWidth : 1;
+
+  /// The number of bits required to represent a type's recursive properties.
+  static constexpr unsigned numBits = 3;
+  /// Unpack `RecursiveTypeProperties` from a bunch of bits.
+  static RecursiveTypeProperties fromFlags(unsigned bits);
+  /// Pack `RecursiveTypeProperties` as a bunch of bits.
+  unsigned toFlags() const;
+};
 
 // This is a common base class for all FIRRTL types.
 class FIRRTLType : public Type {
@@ -43,16 +58,22 @@ public:
 
   /// Return true if this is a "passive" type - one that contains no "flip"
   /// types recursively within itself.
-  bool isPassive() { return getRecursiveTypeProperties().first; }
+  bool isPassive() { return getRecursiveTypeProperties().isPassive; }
 
   /// Return true if this is a 'ground' type, aka a non-aggregate type.
   bool isGround();
 
   /// Return true if this is or contains an Analog type.
-  bool containsAnalog() { return getRecursiveTypeProperties().second; }
+  bool containsAnalog() { return getRecursiveTypeProperties().containsAnalog; }
 
-  /// Return a pair with the 'isPassive' and 'containsAnalog' bits.
-  std::pair<bool, bool> getRecursiveTypeProperties();
+  /// Return true if this type contains an uninferred bit width.
+  bool hasUninferredWidth() {
+    return getRecursiveTypeProperties().hasUninferredWidth;
+  }
+
+  /// Return the recursive properties of the type, containing the `isPassive`,
+  /// `containsAnalog`, and `hasUninferredWidth` bits.
+  RecursiveTypeProperties getRecursiveTypeProperties();
 
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLType getPassiveType();
@@ -80,9 +101,12 @@ public:
   /// Return true if this is a valid "reset" type.
   bool isResetType();
 
-  /// Return the type with an outer flip stripped and a bool indicating if an
-  /// outer flip was stripped.
-  std::pair<FIRRTLType, bool> stripFlip();
+  /// Get the maximum field ID of this type.  For integers and other ground
+  /// types, there are no subfields and the maximum field ID is 0.  For bundle
+  /// types and vector types, each field is assigned a field ID in a depth-first
+  /// walk order. This function is used to calculate field IDs when this type is
+  /// nested under another type.
+  unsigned getMaxFieldID();
 
 protected:
   using Type::Type;
@@ -229,20 +253,6 @@ public:
 };
 
 //===----------------------------------------------------------------------===//
-// Flip Type
-//===----------------------------------------------------------------------===//
-
-class FlipType : public FIRRTLType::TypeBase<FlipType, FIRRTLType,
-                                             detail::FlipTypeStorage> {
-public:
-  using Base::Base;
-
-  FIRRTLType getElementType();
-
-  static FIRRTLType get(FIRRTLType element);
-};
-
-//===----------------------------------------------------------------------===//
 // Bundle Type
 //===----------------------------------------------------------------------===//
 
@@ -256,12 +266,14 @@ public:
   // Each element of a bundle, which is a name and type.
   struct BundleElement {
     StringAttr name;
+    bool isFlip;
     FIRRTLType type;
 
-    BundleElement(StringAttr name, FIRRTLType type) : name(name), type(type) {}
+    BundleElement(StringAttr name, bool isFlip, FIRRTLType type)
+        : name(name), isFlip(isFlip), type(type) {}
 
     bool operator==(const BundleElement &rhs) const {
-      return name == rhs.name && type == rhs.type;
+      return name == rhs.name && isFlip == rhs.isFlip && type == rhs.type;
     }
     bool operator!=(const BundleElement &rhs) const { return !operator==(rhs); }
   };
@@ -281,8 +293,8 @@ public:
   /// Look up an element type by name.
   FIRRTLType getElementType(StringRef name);
 
-  /// Return a pair with the 'isPassive' and 'containsAnalog' bits.
-  std::pair<bool, bool> getRecursiveTypeProperties();
+  /// Return the recursive properties of the type.
+  RecursiveTypeProperties getRecursiveTypeProperties();
 
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLType getPassiveType();
@@ -319,11 +331,25 @@ public:
   FIRRTLType getElementType();
   unsigned getNumElements();
 
-  /// Return a pair with the 'isPassive' and 'containsAnalog' bits.
-  std::pair<bool, bool> getRecursiveTypeProperties();
+  /// Return the recursive properties of the type.
+  RecursiveTypeProperties getRecursiveTypeProperties();
 
   /// Return this type with any flip types recursively removed from itself.
   FIRRTLType getPassiveType();
+
+  /// Get an integer ID for the field. Field IDs start at 1, and are assigned
+  /// to each field in a vector in a recursive depth-first walk of all elements.
+  /// A field ID of 0 is used to reference the vector itself.
+  unsigned getFieldID(unsigned index);
+
+  /// Find the element index corresponding to the desired fieldID.  If the
+  /// fieldID corresponds to a field in nested under an element, it will return
+  /// the index of the parent element.
+  unsigned getIndexForFieldID(unsigned fieldID);
+
+  /// Get the maximum field ID in this vector.  This is helpful for constructing
+  /// field IDs when this VectorType is nested in another aggregate type.
+  unsigned getMaxFieldID();
 };
 
 } // namespace firrtl

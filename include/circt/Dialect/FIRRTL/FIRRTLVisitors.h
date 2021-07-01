@@ -288,7 +288,9 @@ public:
 
   /// visitUnhandledOp is an override point for FIRRTL dialect ops that the
   /// concrete visitor didn't bother to implement.
-  ResultType visitUnhandledOp(Operation *op) { return ResultType(); }
+  ResultType visitUnhandledOp(Operation *op, ExtraArgs... args) {
+    return ResultType(); 
+  }
 };
 } // namespace firrtl
 } // namespace circt

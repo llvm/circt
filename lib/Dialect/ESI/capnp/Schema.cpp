@@ -31,6 +31,7 @@
 
 using namespace circt::esi::capnp::detail;
 using namespace circt;
+using circt::comb::ICmpPredicate;
 
 namespace {
 struct GasketComponent;
@@ -194,10 +195,10 @@ static bool isPointerType(::capnp::schema::Type::Reader type) {
 TypeSchemaImpl::TypeSchemaImpl(Type t) : type(t) {
   TypeSwitch<Type>(type)
       .Case([this](IntegerType t) {
-        fieldTypes.push_back(FieldInfo{.name = "i", .type = t});
+        fieldTypes.push_back(FieldInfo{"i", t});
       })
       .Case([this](hw::ArrayType t) {
-        fieldTypes.push_back(FieldInfo{.name = "l", .type = t});
+        fieldTypes.push_back(FieldInfo{"l", t});
       })
       .Case([this](hw::StructType t) {
         fieldTypes.append(t.getElements().begin(), t.getElements().end());
