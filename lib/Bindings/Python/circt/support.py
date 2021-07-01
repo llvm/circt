@@ -112,6 +112,10 @@ def attribute_to_var(attr):
   except ValueError:
     pass
   try:
+    return ir.TypeAttr(attr).value
+  except ValueError:
+    pass
+  try:
     arr = ir.ArrayAttr(attr)
     return [attribute_to_var(x) for x in arr]
   except ValueError:
