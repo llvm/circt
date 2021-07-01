@@ -38,6 +38,8 @@ def var_to_attribute(obj) -> ir.Attribute:
     return ir.BoolAttr.get(False)
   if isinstance(obj, ir.Attribute):
     return obj
+  if isinstance(obj, ir.Type):
+    return ir.TypeAttr.get(obj)
   if isinstance(obj, bool):
     return ir.BoolAttr.get(obj)
   if isinstance(obj, int):
