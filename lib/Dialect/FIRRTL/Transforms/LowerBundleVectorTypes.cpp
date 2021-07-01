@@ -49,21 +49,21 @@ struct FlatBundleFieldEntry {
   /// The index in the parent type
   size_t index;
   /// The FieldID range of self and children in the parent type
-  size_t fieldID, fieldIDWidth;
+  size_t minFieldID, maxFieldID;
   /// This is a suffix to add to the field name to make it unique.
   SmallString<16> suffix;
   /// This indicates whether the field was flipped to be an output.
   bool isOutput;
 
-  FlatBundleFieldEntry(const FIRRTLType &type, size_t index, size_t fieldID,
-                       size_t fieldIDWidth, StringRef suffix, bool isOutput)
-      : type(type), index(index), fieldID(fieldID), fieldIDWidth(fieldIDWidth),
-        suffix(suffix), isOutput(isOutput) {}
+  FlatBundleFieldEntry(const FIRRTLType &type, size_t index, size_t minFieldID,
+                       size_t maxFieldID, StringRef suffix, bool isOutput)
+      : type(type), index(index), minFieldID(minFieldID),
+        maxFieldID(maxFieldID), suffix(suffix), isOutput(isOutput) {}
 
   void dump() const {
     llvm::errs() << "FBFE{" << type << " index<" << index << "> fieldID<"
-                 << fieldID << "> width<" << fieldIDWidth << "> suffix<"
-                 << suffix << "> isOutput<" << isOutput << ">}\n";
+                 << minFieldID << "," << maxFieldID << "> suffix<" << suffix
+                 << "> isOutput<" << isOutput << ">}\n";
   }
 };
 } // end anonymous namespace
@@ -82,7 +82,9 @@ static bool peelType(Type type, SmallVectorImpl<FlatBundleFieldEntry> &fields) {
           tmpSuffix.push_back('_');
           tmpSuffix.append(elt.name.getValue());
           fields.emplace_back(elt.type, i, bundle.getFieldID(i),
-                              elt.type.getMaxFieldID()+1, tmpSuffix, elt.isFlip);
+                              bundle.getFieldID(i) + elt.type.getMaxFieldID()
+                                  ,
+                              tmpSuffix, elt.isFlip);
         }
         return true;
       })
@@ -91,25 +93,12 @@ static bool peelType(Type type, SmallVectorImpl<FlatBundleFieldEntry> &fields) {
         auto width = vector.getElementType().getMaxFieldID() + 1;
         for (size_t i = 0, e = vector.getNumElements(); i != e; ++i) {
           fields.emplace_back(vector.getElementType(), i, vector.getFieldID(i),
-                              width, "_" + std::to_string(i), false);
+                              vector.getFieldID(i) + width,
+                              "_" + std::to_string(i), false);
         }
         return true;
       })
       .Default([](auto op) { return false; });
-}
-
-static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
-                                 FIRRTLType type, StringRef suffix) {
-  SmallVector<Type, 8> ports;
-  SmallVector<Attribute, 8> portNames;
-  for (auto port : op.getPorts()) {
-    ports.push_back(MemOp::getTypeForPort(op.depth(), type, port.second));
-    portNames.push_back(port.first);
-  }
-  return b->create<MemOp>(ports, op.readLatency(), op.writeLatency(),
-                          op.depth(), op.ruw(), b->getArrayAttr(portNames),
-                          (op.name() + suffix).str(), op.annotations(),
-                          op.portAnnotations());
 }
 
 /// Look through and collect subfields leading to a subaccess.
@@ -128,21 +117,24 @@ static SmallVector<Operation *> getSAWritePath(Operation *op) {
 
 /// Copy annotations from \p annotations to \p loweredAttrs, except annotations
 /// with "target" key, that do not match the field suffix.
-static SmallVector<Attribute> filterAnnotations(MLIRContext *ctxt,
+static ArrayAttr filterAnnotations(MLIRContext *ctxt,
                                                 ArrayAttr annotations,
-                                                unsigned targetFieldID,
-                                                unsigned fieldWidth) {
+                                                unsigned targetMinFieldID,
+                                                unsigned targetMaxFieldID) {
   SmallVector<Attribute> retval;
   if (!annotations || annotations.empty())
-    return retval;
+    return ArrayAttr::get(ctxt, retval);
 
   for (auto opAttr : annotations) {
     if (auto subAnno = opAttr.dyn_cast<SubAnnotationAttr>()) {
-      if (targetFieldID <= subAnno.getMinFieldID() &&
-          targetFieldID + fieldWidth > subAnno.getMaxFieldID()) {
-        auto newMin = subAnno.getMinFieldID() - targetFieldID;
-        auto newMax = subAnno.getMaxFieldID() - targetFieldID;
-        if (newMin == 0 && newMax == 0)
+      // Check for overlap of the two ranges
+      if ((targetMinFieldID >= subAnno.getMinFieldID() &&
+          targetMinFieldID <= subAnno.getMaxFieldID()) ||
+          (targetMaxFieldID >= subAnno.getMinFieldID() &&
+          targetMinFieldID <= subAnno.getMinFieldID())) {
+        auto newMin = subAnno.getMinFieldID() - targetMinFieldID;
+        auto newMax = subAnno.getMaxFieldID() - targetMinFieldID;
+        if (newMin <= 0 && newMax >= 0)
           retval.push_back(subAnno.getAnnotations());
         else
           retval.push_back(SubAnnotationAttr::get(ctxt, newMin, newMax,
@@ -151,7 +143,7 @@ static SmallVector<Attribute> filterAnnotations(MLIRContext *ctxt,
     } else
       retval.push_back(opAttr);
   }
-  return retval;
+  return ArrayAttr::get(ctxt, retval);
 }
 
 /// Copy annotations from \p annotations into a new AnnotationSet and return it.
@@ -159,13 +151,35 @@ static SmallVector<Attribute> filterAnnotations(MLIRContext *ctxt,
 /// suffix.
 static AnnotationSet filterAnnotations(MLIRContext *ctxt,
                                        AnnotationSet annotations,
-                                       unsigned targetFieldID,
-                                       unsigned fieldWidth) {
+                                       unsigned targetMinFieldID,
+                                       unsigned targetMaxFieldID) {
   if (annotations.empty())
     return annotations;
-  SmallVector<Attribute> loweredAttrs = filterAnnotations(
-      ctxt, annotations.getArrayAttr(), targetFieldID, fieldWidth);
-  return AnnotationSet(ArrayAttr::get(annotations.getContext(), loweredAttrs));
+  return AnnotationSet( filterAnnotations(
+      ctxt, annotations.getArrayAttr(), targetMinFieldID, targetMaxFieldID));
+}
+
+static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
+                                 FlatBundleFieldEntry field) {
+  SmallVector<Type, 8> ports;
+  SmallVector<Attribute, 8> portNames;
+  auto oldPortAnno = op.portAnnotations();
+  SmallVector<Attribute> newPortAnno;
+  
+  auto oldPorts = op.getPorts();
+  for (size_t portIdx = 0, e = oldPorts.size(); portIdx < e; ++portIdx) {
+    auto port = oldPorts[portIdx];
+    ports.push_back(MemOp::getTypeForPort(op.depth(), field.type, port.second));
+    portNames.push_back(port.first);
+    newPortAnno.push_back(filterAnnotations(op->getContext(),
+                        oldPortAnno[portIdx].dyn_cast_or_null<ArrayAttr>(),
+                        field.minFieldID, field.maxFieldID));
+                        //FIXME: this is in terms of the port structs, not the data structs
+  }
+  return b->create<MemOp>(ports, op.readLatency(), op.writeLatency(),
+                          op.depth(), op.ruw(), portNames,
+                          (op.name() + field.suffix).str(), op.annotations(),
+                          newPortAnno);
 }
 
 namespace {
@@ -246,7 +260,7 @@ private:
   void
   lowerProducer(Operation *op,
                 llvm::function_ref<Operation *(FlatBundleFieldEntry, StringRef,
-                                               SmallVector<Attribute> &)>
+                                               ArrayAttr)>
                     clone);
   Value getSubWhatever(Value val, size_t index);
 
@@ -312,7 +326,7 @@ void TypeLoweringVisitor::lowerBlock(Block *block) {
 void TypeLoweringVisitor::lowerProducer(
     Operation *op,
     llvm::function_ref<Operation *(FlatBundleFieldEntry, StringRef,
-                                   SmallVector<Attribute> &)>
+                                   ArrayAttr)>
         clone) {
   // If the wire is not a bundle, there is nothing to do.
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
@@ -328,6 +342,9 @@ void TypeLoweringVisitor::lowerProducer(
   auto baseNameLen = loweredName.size();
   auto oldAnno = op->getAttr("annotations").dyn_cast_or_null<ArrayAttr>();
 
+//  op->dump();
+//  oldAnno.dump();
+
   for (auto field : fieldTypes) {
     if (!loweredName.empty()) {
       loweredName.resize(baseNameLen);
@@ -335,10 +352,12 @@ void TypeLoweringVisitor::lowerProducer(
     }
     // For all annotations on the parent op, filter them based on the target
     // attribute.
-    SmallVector<Attribute> loweredAttrs =
-        filterAnnotations(context, oldAnno, field.fieldID, field.fieldIDWidth);
+    ArrayAttr loweredAttrs =
+        filterAnnotations(context, oldAnno, field.minFieldID, field.maxFieldID);
     auto newOp = clone(field, loweredName, loweredAttrs);
     lowered.push_back(newOp->getResult(0));
+//    llvm::errs() << field.index << " " << field.minFieldID << " " << field.maxFieldID << "\n";
+//    newOp->dump();
   }
 
   processUsers(op->getResult(0), lowered);
@@ -379,7 +398,7 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
 
   // Populate the new arg attributes.
   AnnotationSet newAnnotations = filterAnnotations(
-      context, oldArg.annotations, field.fieldID, field.fieldIDWidth);
+      context, oldArg.annotations, field.minFieldID, field.maxFieldID);
 
   // Flip the direction if the field is an output.
   auto direction = (Direction)((unsigned)oldArg.direction ^ field.isOutput);
@@ -591,7 +610,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
   // Memory for each field
   for (auto field : fields)
     newMemories.push_back(
-        cloneMemWithNewType(builder, op, field.type, field.suffix));
+        cloneMemWithNewType(builder, op, field));
 
   // Hook up the new memories to the wires the old memory was replaced with.
   for (size_t index = 0, rend = op.getNumResults(); index < rend; ++index) {
@@ -768,7 +787,7 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
 /// Lower a wire op with a bundle to multiple non-bundled wires.
 void TypeLoweringVisitor::visitDecl(WireOp op) {
   auto clone = [&](FlatBundleFieldEntry field, StringRef name,
-                   SmallVector<Attribute> &attrs) -> Operation * {
+                   ArrayAttr attrs) -> Operation * {
     return builder->create<WireOp>(field.type, name, attrs);
   };
   lowerProducer(op, clone);
@@ -777,7 +796,7 @@ void TypeLoweringVisitor::visitDecl(WireOp op) {
 /// Lower a reg op with a bundle to multiple non-bundled regs.
 void TypeLoweringVisitor::visitDecl(RegOp op) {
   auto clone = [&](FlatBundleFieldEntry field, StringRef name,
-                   SmallVector<Attribute> &attrs) -> Operation * {
+                   ArrayAttr attrs) -> Operation * {
     return builder->create<RegOp>(field.type, op.clockVal(), name, attrs);
   };
   lowerProducer(op, clone);
@@ -786,7 +805,7 @@ void TypeLoweringVisitor::visitDecl(RegOp op) {
 /// Lower a reg op with a bundle to multiple non-bundled regs.
 void TypeLoweringVisitor::visitDecl(RegResetOp op) {
   auto clone = [&](FlatBundleFieldEntry field, StringRef name,
-                   SmallVector<Attribute> &attrs) -> Operation * {
+                   ArrayAttr attrs) -> Operation * {
     auto resetVal = getSubWhatever(op.resetValue(), field.index);
     return builder->create<RegResetOp>(field.type, op.clockVal(),
                                        op.resetSignal(), resetVal, name, attrs);
@@ -797,7 +816,7 @@ void TypeLoweringVisitor::visitDecl(RegResetOp op) {
 /// Lower a wire op with a bundle to multiple non-bundled wires.
 void TypeLoweringVisitor::visitDecl(NodeOp op) {
   auto clone = [&](FlatBundleFieldEntry field, StringRef name,
-                   SmallVector<Attribute> &attrs) -> Operation * {
+                   ArrayAttr attrs) -> Operation * {
     auto input = getSubWhatever(op.input(), field.index);
     return builder->create<NodeOp>(field.type, input, name, attrs);
   };
@@ -807,7 +826,7 @@ void TypeLoweringVisitor::visitDecl(NodeOp op) {
 /// Lower an InvalidValue op with a bundle to multiple non-bundled InvalidOps.
 void TypeLoweringVisitor::visitExpr(InvalidValueOp op) {
   auto clone = [&](FlatBundleFieldEntry field, StringRef name,
-                   SmallVector<Attribute> &attrs) -> Operation * {
+                   ArrayAttr attrs) -> Operation * {
     return builder->create<InvalidValueOp>(field.type);
   };
   lowerProducer(op, clone);
@@ -816,7 +835,7 @@ void TypeLoweringVisitor::visitExpr(InvalidValueOp op) {
 // Expand muxes of aggregates
 void TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
   auto clone = [&](FlatBundleFieldEntry field, StringRef name,
-                   SmallVector<Attribute> &attrs) -> Operation * {
+                   ArrayAttr attrs) -> Operation * {
     auto high = getSubWhatever(op.high(), field.index);
     auto low = getSubWhatever(op.low(), field.index);
     return builder->create<MuxPrimOp>(op.sel(), high, low);
@@ -827,7 +846,7 @@ void TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
 // Expand AsPassivePrimOp of aggregates
 void TypeLoweringVisitor::visitExpr(AsPassivePrimOp op) {
   auto clone = [&](FlatBundleFieldEntry field, StringRef name,
-                   SmallVector<Attribute> &attrs) -> Operation * {
+                   ArrayAttr attrs) -> Operation * {
     auto input = getSubWhatever(op.input(), field.index);
     return builder->create<AsPassivePrimOp>(field.type, input);
   };
@@ -856,7 +875,7 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
       // Store the flat type for the new bundle type.
       for (auto field : fieldTypes) {
         resultTypes.push_back(field.type);
-        newPortAnno.push_back(oldPortAnno[i]);
+        newPortAnno.push_back(filterAnnotations(context,oldPortAnno[i].dyn_cast_or_null<ArrayAttr>(),field.minFieldID, field.maxFieldID));
       }
     }
     endFields.push_back(resultTypes.size());
