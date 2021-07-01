@@ -975,15 +975,18 @@ static void print(OpAsmPrinter &printer, hw::StructCreateOp op) {
 static ParseResult parseStructExplodeOp(OpAsmParser &parser,
                                         OperationState &result) {
   OpAsmParser::OperandType operand;
-  TypeAliasOr<StructType> declType;
+  Type declType;
 
   if (parser.parseOperand(operand) ||
       parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseColonType(declType))
     return failure();
+  if (!type_isa<StructType>(declType))
+    return parser.emitError(parser.getNameLoc(),
+                            "invalid kind of type specified");
 
   llvm::SmallVector<Type, 4> structInnerTypes;
-  declType.getCanonicalType().getInnerTypes(structInnerTypes);
+  type_cast<StructType>(declType).getInnerTypes(structInnerTypes);
   result.addTypes(structInnerTypes);
 
   if (parser.resolveOperand(operand, declType, result.operands))
@@ -1008,7 +1011,7 @@ template <typename AggregateType>
 static ParseResult parseExtractOp(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::OperandType operand;
   StringAttr fieldName;
-  AggregateType declType;
+  Type declType;
 
   if (parser.parseOperand(operand) || parser.parseLSquare() ||
       parser.parseAttribute(fieldName, "field", result.attributes) ||
@@ -1016,9 +1019,12 @@ static ParseResult parseExtractOp(OpAsmParser &parser, OperationState &result) {
       parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseColonType(declType))
     return failure();
+  if (!type_isa<AggregateType>(declType))
+    return parser.emitError(parser.getNameLoc(),
+                            "invalid kind of type specified");
 
   Type resultType =
-      declType.getCanonicalType().getFieldType(fieldName.getValue());
+      type_cast<AggregateType>(declType).getFieldType(fieldName.getValue());
   if (!resultType) {
     parser.emitError(parser.getNameLoc(), "invalid field name specified");
     return failure();
@@ -1043,7 +1049,7 @@ static void printExtractOp(OpAsmPrinter &printer, AggType op) {
 
 static ParseResult parseStructExtractOp(OpAsmParser &parser,
                                         OperationState &result) {
-  return parseExtractOp<TypeAliasOr<StructType>>(parser, result);
+  return parseExtractOp<StructType>(parser, result);
 }
 
 static void print(OpAsmPrinter &printer, hw::StructExtractOp op) {
@@ -1065,7 +1071,7 @@ static ParseResult parseStructInjectOp(OpAsmParser &parser,
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
   OpAsmParser::OperandType operand, val;
   StringAttr fieldName;
-  TypeAliasOr<StructType> declType;
+  Type declType;
 
   if (parser.parseOperand(operand) || parser.parseLSquare() ||
       parser.parseAttribute(fieldName, "field", result.attributes) ||
@@ -1074,9 +1080,11 @@ static ParseResult parseStructInjectOp(OpAsmParser &parser,
       parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseColonType(declType))
     return failure();
+  if (!type_isa<StructType>(declType))
+    return parser.emitError(inputOperandsLoc, "invalid kind of type specified");
 
   Type resultType =
-      declType.getCanonicalType().getFieldType(fieldName.getValue());
+      type_cast<StructType>(declType).getFieldType(fieldName.getValue());
   if (!resultType) {
     parser.emitError(inputOperandsLoc, "invalid field name specified");
     return failure();
@@ -1141,7 +1149,7 @@ static void print(OpAsmPrinter &printer, hw::UnionCreateOp op) {
 
 static ParseResult parseUnionExtractOp(OpAsmParser &parser,
                                        OperationState &result) {
-  return parseExtractOp<TypeAliasOr<UnionType>>(parser, result);
+  return parseExtractOp<UnionType>(parser, result);
 }
 
 static void print(OpAsmPrinter &printer, hw::UnionExtractOp op) {
