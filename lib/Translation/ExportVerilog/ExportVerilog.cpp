@@ -295,9 +295,12 @@ static StringRef getVerilogDeclWord(Operation *op) {
         op->getResult(0).getType().cast<InOutType>().getElementType();
     if (elementType.isa<StructType>())
       return "";
-    if (auto innerType = elementType.dyn_cast<ArrayType>())
+    if (auto innerType = elementType.dyn_cast<ArrayType>()) {
+      while (innerType.getElementType().isa<ArrayType>())
+        innerType = innerType.getElementType().cast<ArrayType>();
       if (innerType.getElementType().isa<StructType>())
         return "";
+    }
 
     return "reg";
   }

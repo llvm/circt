@@ -738,10 +738,14 @@ hw.module @ConstantEmissionAtTopOfBlock() {
 // CHECK-LABEL: module RegisterOfStructOrArrayOfStruct
 hw.module @RegisterOfStructOrArrayOfStruct() {
   // CHECK-NOT: reg
-  // CHECK: struct packed {logic a; logic b; }      reg1
+  // CHECK: struct packed {logic a; logic b; }           reg1
   %reg1 = sv.reg : !hw.inout<struct<a: i1, b: i1>>
 
   // CHECK-NOT: reg
-  // CHECK: struct packed {logic a; logic b; }[7:0] reg2
+  // CHECK: struct packed {logic a; logic b; }[7:0]      reg2
   %reg2 = sv.reg : !hw.inout<array<8xstruct<a: i1, b: i1>>>
+
+  // CHECK-NOT: reg
+  // CHECK: struct packed {logic a; logic b; }[3:0][7:0] reg3
+  %reg3 = sv.reg : !hw.inout<array<4xarray<8xstruct<a: i1, b: i1>>>>
 }
