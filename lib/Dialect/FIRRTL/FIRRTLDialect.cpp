@@ -296,3 +296,5 @@ Operation *FIRRTLDialect::materializeConstant(OpBuilder &builder,
 
 // Provide implementations for the enums we use.
 #include "circt/Dialect/FIRRTL/FIRRTLEnums.cpp.inc"
+
+#include "circt/Dialect/FIRRTL/FIRRTLDialect.cpp.inc"
