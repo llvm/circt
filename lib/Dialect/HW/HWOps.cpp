@@ -981,12 +981,13 @@ static ParseResult parseStructExplodeOp(OpAsmParser &parser,
       parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseColonType(declType))
     return failure();
-  if (!type_isa<StructType>(declType))
+  auto structType = type_dyn_cast<StructType>(declType);
+  if (!structType)
     return parser.emitError(parser.getNameLoc(),
                             "invalid kind of type specified");
 
   llvm::SmallVector<Type, 4> structInnerTypes;
-  type_cast<StructType>(declType).getInnerTypes(structInnerTypes);
+  structType.getInnerTypes(structInnerTypes);
   result.addTypes(structInnerTypes);
 
   if (parser.resolveOperand(operand, declType, result.operands))
@@ -1019,12 +1020,12 @@ static ParseResult parseExtractOp(OpAsmParser &parser, OperationState &result) {
       parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseColonType(declType))
     return failure();
-  if (!type_isa<AggregateType>(declType))
+  auto aggType = type_dyn_cast<AggregateType>(declType);
+  if (!aggType)
     return parser.emitError(parser.getNameLoc(),
                             "invalid kind of type specified");
 
-  Type resultType =
-      type_cast<AggregateType>(declType).getFieldType(fieldName.getValue());
+  Type resultType = aggType.getFieldType(fieldName.getValue());
   if (!resultType) {
     parser.emitError(parser.getNameLoc(), "invalid field name specified");
     return failure();
@@ -1080,11 +1081,11 @@ static ParseResult parseStructInjectOp(OpAsmParser &parser,
       parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseColonType(declType))
     return failure();
-  if (!type_isa<StructType>(declType))
+  auto structType = type_dyn_cast<StructType>(declType);
+  if (!structType)
     return parser.emitError(inputOperandsLoc, "invalid kind of type specified");
 
-  Type resultType =
-      type_cast<StructType>(declType).getFieldType(fieldName.getValue());
+  Type resultType = structType.getFieldType(fieldName.getValue());
   if (!resultType) {
     parser.emitError(inputOperandsLoc, "invalid field name specified");
     return failure();
