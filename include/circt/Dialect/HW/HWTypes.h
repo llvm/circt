@@ -59,6 +59,39 @@ int64_t getBitWidth(mlir::Type type);
 /// false on known InOut types, rather than any unknown types.
 bool hasHWInOutType(mlir::Type type);
 
+template <typename BaseTy>
+bool type_isa(Type type) {
+  // First check if the type is the requested type.
+  if (type.isa<BaseTy>())
+    return true;
+
+  // Then check if it is a type alias wrapping the requested type.
+  if (auto alias = type.dyn_cast<TypeAliasType>())
+    return alias.getInnerType().isa<BaseTy>();
+
+  return false;
+}
+
+template <typename BaseTy>
+BaseTy type_cast(Type type) {
+  assert(type_isa<BaseTy>(type) && "type must convert to requested type");
+
+  // If the type is the requested type, return it.
+  if (type.isa<BaseTy>())
+    return type.cast<BaseTy>();
+
+  // Otherwise, it must be a type alias wrapping the requested type.
+  return type.cast<TypeAliasType>().getInnerType().cast<BaseTy>();
+}
+
+template <typename BaseTy>
+BaseTy type_dyn_cast(Type type) {
+  if (!type_isa<BaseTy>(type))
+    return BaseTy();
+
+  return type_cast<BaseTy>(type);
+}
+
 } // namespace hw
 } // namespace circt
 

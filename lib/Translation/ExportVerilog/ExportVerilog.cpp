@@ -1263,7 +1263,7 @@ SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
 SubExprInfo ExprEmitter::visitTypeOp(ArraySliceOp op) {
   auto arrayPrec = emitSubExpr(op.input(), Selection, OOLUnary);
 
-  unsigned dstWidth = op.getType().getSize();
+  unsigned dstWidth = type_cast<ArrayType>(op.getType()).getSize();
   os << '[';
   emitSubExpr(op.lowIndex(), LowestPrecedence, OOLBinary);
   os << "+:" << dstWidth << ']';

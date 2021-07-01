@@ -37,8 +37,8 @@ def HWNonInOutType : DialectType<HWDialect, CPred<"!hasHWInOutType($_self)">,
 // Type declarations
 //===----------------------------------------------------------------------===//
 
-// A simple fixed size array.
-def ArrayType : HWType<"Array"> {
+// A simple fixed size array. Declares the hw::ArrayType in C++.
+def ArrayTypeImpl : HWType<"Array"> {
   let summary = "fixed-sized array";
   let description = [{
     Fixed sized HW arrays are roughly similar to C arrays. On the wire (vs.
@@ -57,6 +57,10 @@ def ArrayType : HWType<"Array"> {
     }
   }];
 }
+
+// A handle to refer to hw::ArrayType in ODS.
+def ArrayType : DialectType<HWDialect,
+    CPred<"type_isa<ArrayType>($_self)">, "an ArrayType">;
 
 // An 'unpacked' array of fixed size.
 def UnpackedArrayType : HWType<"UnpackedArray"> {
