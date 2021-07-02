@@ -197,7 +197,19 @@ def GroupOp : CalyxOp<"group", [
   let assemblyFormat = "$sym_name $body attr-dict";
 }
 
-// TODO(Calyx): Add optional guard to AssignOp and DoneOp.
+def GuardOp : CalyxOp<"guard", [
+  ]> {
+  let summary = "Calyx Guard";
+  let description = [{
+    todo
+
+    ```mlir
+      calyx.guard comb.and %0, %1 : i1
+    ```
+  }];
+  let arguments = (ins Variadic<AnyType>:$inputs);
+}
+
 def AssignOp : CalyxOp<"assign", [
     SameTypeOperands
   ]> {
