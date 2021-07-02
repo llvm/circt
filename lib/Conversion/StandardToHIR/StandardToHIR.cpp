@@ -1,6 +1,6 @@
-//===----- AffineToHIR.cpp - Affine to HIR Lowering Pass ------------------===//
+//===----- StandardToHIR.cpp - Standard to HIR Lowering Pass-------*-C++-*-===//
 //
-// This pass converts affine+std+memref dialect to HIR.
+// This pass converts standard+scf+memref to HIR dialect.
 //===----------------------------------------------------------------------===//
 
 #include "../PassDetail.h"
@@ -8,7 +8,6 @@
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Dialect/HIR/IR/HIRDialect.h"
 #include "circt/Dialect/HIR/IR/helper.h"
-#include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
@@ -32,7 +31,8 @@ public:
   }
 
 private:
-  LogicalResult lowerRegion(Region &region, ArrayRef<Type> blockArgumentTypes) {
+  LogicalResult lowerRegion(Region &region, ArrayRef<Type> blockArgumentTypes,
+                            bool tstartRequired = false) {
     if (region.getBlocks().size() > 1)
       region.getParentOp()->emitError(
           "Standard to HIR lowering only supports one block per region.");
@@ -40,19 +40,20 @@ private:
     // Replace the old arguments in the body with new ones.
     auto &body = region.front();
 
-    if (body.getNumArguments() != blockArgumentTypes.size()) {
-      return region.getParentOp()->emitError()
-             << "original numArguments(" << body.getNumArguments()
-             << ") != blockArgumentTypes.size()(" << blockArgumentTypes.size()
-             << ")";
+    // hir::FuncOp can insert extra blockArguments for the mlir::funcOp results.
+    assert(body.getNumArguments() <= blockArgumentTypes.size());
+    for (size_t i = 0; i < blockArgumentTypes.size(); i++) {
+      if (i < body.getNumArguments()) {
+        Value replacedArg = body.insertArgument(i, blockArgumentTypes[i]);
+        body.getArgument(i + 1).replaceAllUsesWith(replacedArg);
+        body.eraseArgument(i + 1);
+      } else {
+        body.addArgument(blockArgumentTypes[i]);
+      }
     }
-    for (size_t i = 0; i < body.getNumArguments(); i++) {
-      Value replacedArg = body.insertArgument(i, blockArgumentTypes[i]);
-      body.getArgument(i + 1).replaceAllUsesWith(replacedArg);
-      body.eraseArgument(i + 1);
-    }
-    // body always has one extra argument for tstart.
-    body.addArgument(hir::TimeType::get(region.getContext()));
+
+    if (tstartRequired)
+      body.addArgument(hir::TimeType::get(region.getContext()));
 
     // lower the ops in the region.
     for (Operation &operation : body) {
@@ -65,6 +66,12 @@ private:
       } else if (auto op = dyn_cast<mlir::memref::LoadOp>(operation)) {
         if (failed(lowerOp(op)))
           return failure();
+      } else if (auto op = dyn_cast<mlir::memref::StoreOp>(operation)) {
+        if (failed(lowerOp(op)))
+          return failure();
+      } else if (auto op = dyn_cast<mlir::ReturnOp>(operation)) {
+        if (failed(lowerOp(op)))
+          return failure();
       }
     }
     return success();
@@ -74,7 +81,11 @@ private:
   LogicalResult lowerOp(mlir::FuncOp);
   LogicalResult lowerOp(mlir::scf::ForOp);
   LogicalResult lowerOp(mlir::memref::LoadOp);
+  LogicalResult lowerOp(mlir::memref::StoreOp);
+  LogicalResult lowerOp(mlir::ReturnOp);
   SmallVector<Operation *> opsToErase;
+  SmallVector<unsigned int> mapResultPosToArgumentPos;
+  hir::FuncOp enclosingFuncOp;
 };
 } // namespace
 
@@ -153,7 +164,6 @@ getDimKindsFromArrayOfBankDims(ArrayRef<int64_t> shape, ArrayAttr bankDims) {
 LogicalResult ConvertStandardToHIRPass::lowerOp(mlir::FuncOp op) {
   FunctionType originalFunctionTy = op.type().dyn_cast<FunctionType>();
   auto originalInputTypes = originalFunctionTy.getInputs();
-  auto originalResultTypes = originalFunctionTy.getResults();
   OpBuilder builder(op);
   auto *context = builder.getContext();
   ;
@@ -187,43 +197,43 @@ LogicalResult ConvertStandardToHIRPass::lowerOp(mlir::FuncOp op) {
   }
 
   // Insert result types into inputs as a reg with write only port.
-  for (int i = 0; i < (int)originalResultTypes.size(); i++) {
-    Type ty = originalResultTypes[i];
+  for (Type ty : originalFunctionTy.getResults()) {
     if (helper::isBuiltinType(ty)) {
-      auto resultReg =
+      auto resultRegTy =
           hir::MemrefType::get(context, SmallVector<int64_t>({1}), ty,
                                SmallVector<hir::DimKind>({hir::DimKind::BANK}));
 
-      inputTypes.push_back(resultReg);
+      // Note the arg location at which the reg corresponding to this result is
+      // placed.
+      mapResultPosToArgumentPos.push_back(inputTypes.size());
+      inputTypes.push_back(resultRegTy);
       inputAttrs.push_back(helper::getDictionaryAttr(
           builder, "hir.memref.ports", getRegWritePort(builder)));
-      op.getBody().front().insertArgument(i, inputTypes.back());
     } else
       return op.emitError("Only builtin types are supported in return types.");
   }
-  // Insert tstart as the last argument to the loop region.
 
   auto funcTy =
-      hir::FuncType::get(context, inputTypes, inputAttrs, originalResultTypes,
+      hir::FuncType::get(context, inputTypes, inputAttrs, SmallVector<Type>({}),
                          SmallVector<DictionaryAttr, 4>({}));
   auto funcOp = builder.create<hir::FuncOp>(
       op.getLoc(), funcTy.getFunctionType(), op.sym_name(), funcTy);
   BlockAndValueMapping mapper;
 
   op.getBody().cloneInto(&funcOp.getBody(), mapper);
-  assert(inputTypes.size() == funcOp.getBody().front().getNumArguments());
 
   // Replace the old arguments in the body with new ones.
-  for (size_t i = 0; i < inputTypes.size(); i++) {
-    auto &body = funcOp.getBody().front();
+  // for (size_t i = 0; i < inputTypes.size(); i++) {
+  //  auto &body = funcOp.getBody().front();
 
-    Value replacedArg = body.insertArgument(i, inputTypes[i]);
-    body.getArgument(i + 1).replaceAllUsesWith(replacedArg);
-    body.eraseArgument(i + 1);
-  }
+  //  Value replacedArg = body.insertArgument(i, inputTypes[i]);
+  //  body.getArgument(i + 1).replaceAllUsesWith(replacedArg);
+  //  body.eraseArgument(i + 1);
+  //}
 
   opsToErase.push_back(op);
-  return lowerRegion(funcOp.getBody(), inputTypes);
+  enclosingFuncOp = funcOp;
+  return lowerRegion(funcOp.getBody(), inputTypes, /*tstartRequired*/ true);
 }
 
 LogicalResult ConvertStandardToHIRPass::lowerOp(mlir::scf::ForOp op) {
@@ -252,9 +262,9 @@ LogicalResult ConvertStandardToHIRPass::lowerOp(mlir::scf::ForOp op) {
   opsToErase.push_back(op);
 
   return lowerRegion(forOp.getLoopBody(),
-                     SmallVector<Type>({IndexType::get(builder.getContext())}));
+                     SmallVector<Type>({IndexType::get(builder.getContext())}),
+                     /*tstartRequired*/ true);
 }
-
 LogicalResult ConvertStandardToHIRPass::lowerOp(mlir::memref::LoadOp op) {
   OpBuilder builder(op);
   auto memref = op.memref();
@@ -292,15 +302,72 @@ LogicalResult ConvertStandardToHIRPass::lowerOp(mlir::memref::LoadOp op) {
 
   auto loadOp = builder.create<hir::LoadOp>(
       op.getLoc(), res.getType(), memref, castedIndices,
-      builder.getI64IntegerAttr(1), builder.getI64IntegerAttr(1), Value(),
+      builder.getI64IntegerAttr(0), builder.getI64IntegerAttr(1), Value(),
       Value());
   op->replaceAllUsesWith(loadOp);
   opsToErase.push_back(op);
   return success();
 }
 
-LogicalResult builderReturnOp(mlir::ReturnOp op, PatternRewriter &builder) {
-  builder.eraseOp(op);
+LogicalResult ConvertStandardToHIRPass::lowerOp(mlir::memref::StoreOp op) {
+  OpBuilder builder(op);
+  auto memref = op.memref();
+  if (op->getNumResults() > 1)
+    return op.emitError("Only one result is supported.");
+  auto *context = builder.getContext();
+
+  // The memref's type is already fixed while lowering the enclosing FunctionOp
+  // to hir::FuncOp.
+  auto hirMemrefTy = memref.getType().dyn_cast<hir::MemrefType>();
+  assert(hirMemrefTy);
+  auto dimKinds = hirMemrefTy.getDimKinds();
+  auto shape = hirMemrefTy.getShape();
+  SmallVector<Value, 6> castedIndices;
+  if (op.indices().size() != shape.size()) {
+    return op.emitError() << "op.indices().size() = " << op.indices().size()
+                          << ", shape.size()= " << shape.size() << "\n";
+  }
+  for (int i = 0; i < (int)op.indices().size(); i++) {
+    Value originalIdx = op.indices()[i];
+    if (dimKinds[i] == hir::ADDR) {
+      auto correctWidthIntTy =
+          IntegerType::get(context, helper::clog2(shape[i]));
+      castedIndices.push_back(
+          builder
+              .create<mlir::IndexCastOp>(builder.getUnknownLoc(),
+                                         correctWidthIntTy, originalIdx)
+              .getResult());
+    } else {
+      castedIndices.push_back(originalIdx);
+    }
+  }
+
+  auto storeOp = builder.create<hir::StoreOp>(
+      op.getLoc(), op.value(), memref, castedIndices,
+      builder.getI64IntegerAttr(1), Value(), Value());
+  op->replaceAllUsesWith(storeOp);
+  opsToErase.push_back(op);
+  return success();
+}
+
+LogicalResult ConvertStandardToHIRPass::lowerOp(mlir::ReturnOp op) {
+  OpBuilder builder(op);
+  Value c0 = builder
+                 .create<mlir::ConstantOp>(op.getLoc(),
+                                           IndexType::get(builder.getContext()),
+                                           builder.getI64IntegerAttr(0))
+                 .getResult();
+  for (size_t i = 0; i < op.getNumOperands(); i++) {
+    Value memref = enclosingFuncOp.getBody().front().getArgument(
+        mapResultPosToArgumentPos[i]);
+    Value operand = op.getOperand(i);
+    builder.create<hir::StoreOp>(op.getLoc(), operand, memref, c0,
+                                 builder.getI64IntegerAttr(1), Value(),
+                                 Value());
+  }
+
+  builder.create<hir::ReturnOp>(op.getLoc(), SmallVector<Value>());
+  opsToErase.push_back(op);
   return success();
 }
 

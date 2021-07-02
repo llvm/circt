@@ -1,5 +1,6 @@
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Dialect/HIR/IR/helper.h"
+#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include <string>
@@ -90,7 +91,7 @@ ParseResult parseIntegerAttr(IntegerAttr &value, StringRef attrName,
 }
 
 int64_t getConstantIntValue(Value var) {
-  auto constantOp = dyn_cast<ConstantOp>(var.getDefiningOp());
+  auto constantOp = dyn_cast<mlir::ConstantOp>(var.getDefiningOp());
   assert(constantOp);
   auto integerAttr = constantOp.value().dyn_cast<IntegerAttr>();
   assert(integerAttr);

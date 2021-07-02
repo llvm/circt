@@ -1,10 +1,10 @@
-//===--- AffineToHIR.h - Affine to HW conversion pass ------------*- C++-*-===//
+//===--- StandardToHIR.h - Standard to HW conversion pass ---------*-C++-*-===//
 //
-// This file declares pass to convert Affine + std + memref dialect to HIR.
+// This file declares pass to convert Standard + scf + memref to HIR dialect.
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_CONVERSION_AffineToHIR_H
-#define CIRCT_CONVERSION_AffineToHIR_H
+#ifndef CIRCT_CONVERSION_StandardToHIR_H
+#define CIRCT_CONVERSION_StandardToHIR_H
 
 #include <memory>
 
@@ -19,4 +19,4 @@ std::unique_ptr<mlir::Pass> createConvertStandardToHIRPass();
 
 } // namespace circt
 
-#endif // CIRCT_CONVERSION_AffineToHIR_H
+#endif // CIRCT_CONVERSION_StandardToHIR_H

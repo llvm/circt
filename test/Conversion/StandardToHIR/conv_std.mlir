@@ -32,14 +32,17 @@ module  {
     }
     return
   }
-  func @test(%arg0: memref<16x16xi32>) {
+  func @test(%arg0: memref<16x16xi32>) -> (i32){
+  //func @test(%arg0: memref<16x16xi32>){
     %c0 = constant 0 : index
     %c4 = constant 4 : index
     %c1 = constant 1 : index
     scf.for %arg3 = %c0 to %c4 step %c1 {
       %0 = memref.load %arg0[%c0, %c0] : memref<16x16xi32>
     }
-    return
+    %1 = memref.load %arg0[%c0, %c1] : memref<16x16xi32>
+    return %1:i32
+    
   }
 }
 

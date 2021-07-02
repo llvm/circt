@@ -13,7 +13,7 @@ ParseResult parseTimeAndOffset(
     return failure();
 
   // early exit if no schedule provided.
-  if (parser.parseOptionalQuestion())
+  if (succeeded(parser.parseOptionalQuestion()))
     return success();
 
   // parse tstart.

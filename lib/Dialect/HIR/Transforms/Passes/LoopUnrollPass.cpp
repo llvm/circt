@@ -7,6 +7,7 @@
 #include "../PassDetails.h"
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Dialect/HIR/IR/helper.h"
+#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 
 using namespace circt;
@@ -42,7 +43,7 @@ void LoopUnrollPass::unrollLoopFull(hir::UnrollForOp unrollForOp) {
   // insert the unrolled body.
   for (int i = lb; i < ub; i += step) {
     Value loopIV = builder
-                       .create<hir::ConstantOp>(
+                       .create<mlir::ConstantOp>(
                            builder.getUnknownLoc(), IndexType::get(context),
                            helper::getIntegerAttr(context, 0))
                        .getResult();

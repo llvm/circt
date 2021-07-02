@@ -358,23 +358,6 @@ def YieldOp : HIR_Op<"yield", [AttrSizedOperandSegments] > {
     custom<TimeAndOffset>($tstart, $offset)}];
   let hasCanonicalizeMethod = true;
 }
-
-def ConstantOp : HIR_Op<"constant",[NoSideEffect]> {
-  let summary = "Get an ssa var with a constant value";
-  let description = [{
-    This Op calls a function/module. 
-      Example:
-
-      ```mlir %0 = hir.const 0 : !hir.const```
-      ```mlir %f = hir.const 3.18 : !hir.group<f32>```
-  }];
-
-  let arguments = (ins AnyAttr:$value);
-  let results = (outs AnyType : $res);
-
-  let assemblyFormat = [{  `(` $value `)` attr-dict `:` type($res)}];
-}
-
 def ReturnOp : HIR_Op<"return", [HasParent<"FuncOp">,NoSideEffect,
     Terminator]> {
       let summary = "Return from function";

@@ -8,8 +8,8 @@ add_circt_conversion_library(CIRCTStandardToHIR
   Core
 
   LINK_LIBS PUBLIC
-  MLIRAffine
-  MLIRMemRef
   MLIRStandard
+  MLIRSCF
+  MLIRMemRef
   MLIRTransforms
 )
