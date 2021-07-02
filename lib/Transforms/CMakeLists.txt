@@ -4,6 +4,7 @@ add_circt_library(CIRCTTransforms
 
   DEPENDS
   CIRCTTransformsIncGen
+  CIRCTComb
 
   LINK_LIBS PUBLIC
   MLIRIR
