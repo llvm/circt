@@ -27,6 +27,7 @@ class OperationPass;
 namespace circt {
 
 std::unique_ptr<mlir::Pass> createSimpleCanonicalizerPass();
+std::unique_ptr<mlir::Pass> createCombStrengthReductionPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

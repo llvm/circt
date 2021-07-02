@@ -1,5 +1,6 @@
 add_circt_library(CIRCTTransforms
   SimpleCanonicalizer.cpp
+  CombStrengthReduction.cpp
 
   DEPENDS
   CIRCTTransformsIncGen

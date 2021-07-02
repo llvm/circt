@@ -25,4 +25,13 @@ def SimpleCanonicalizer : Pass<"simple-canonicalizer"> {
   let constructor = "circt::createSimpleCanonicalizerPass()";
 }
 
+def CombStrengthReduction : Pass<"comb-strength-reduction"> {
+  let summary = "An optimization pass that reduces the strength of combination operation.";
+  let description = [{
+      A compiler pass that reduces the strength of combinational operations.
+  }];
+
+  let constructor = "circt::createCombStrengthReductionPass()";
+}
+
 #endif // CIRCT_DIALECT_SV_SVPASSES
