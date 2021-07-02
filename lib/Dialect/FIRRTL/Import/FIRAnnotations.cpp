@@ -24,14 +24,12 @@ namespace json = llvm::json;
 using namespace circt;
 using namespace firrtl;
 
-/// Mutably update a prototype Annotation (stored as a `NamedAttrList`) with
-/// sub-target information if the Annotation contains andy subfield or
-/// subindices.  Return the Target with any subfield and subindex tokens
-/// stripped.
-StringRef splitTarget(NamedAttrList &annotation, StringRef target,
-                      MLIRContext *context) {
+/// Split a target into a base target (including a reference if one exists) and
+/// an optional array of subfield/subindex tokens.
+static std::pair<StringRef, llvm::Optional<ArrayAttr>>
+splitTarget(StringRef target, MLIRContext *context) {
   if (target.empty())
-    return target;
+    return {target, None};
 
   // Find the string index where the target can be partitioned into the "base
   // target" and the "target".  The "base target" is the module or instance and
@@ -60,7 +58,7 @@ StringRef splitTarget(NamedAttrList &annotation, StringRef target,
 
   // Exit if the target does not contain a subfield or subindex.
   if (fieldBegin == StringRef::npos)
-    return target;
+    return {target, None};
 
   auto targetBase = target.take_front(fieldBegin);
   target = target.substr(fieldBegin);
@@ -90,8 +88,29 @@ StringRef splitTarget(NamedAttrList &annotation, StringRef target,
   if (!temp.empty())
     annotationVec.push_back(StringAttr::get(context, temp));
 
-  annotation.append("target", ArrayAttr::get(context, annotationVec));
-  return targetBase;
+  return {targetBase, ArrayAttr::get(context, annotationVec)};
+}
+
+/// Append the argument `target` to the `annotation` using the key "target".
+static inline void appendTarget(NamedAttrList &annotation, ArrayAttr target) {
+  annotation.append("target", target);
+}
+
+/// Mutably update a prototype Annotation (stored as a `NamedAttrList`) with
+/// subfield/subindex information from a Target string.  Subfield/subindex
+/// information will be placed in the key "target" at the back of the
+/// Annotation.  If no subfield/subindex information, the Annotation is
+/// unmodified.  Return the split input target as a base target (include a
+/// reference if one exists) and an optional array containing subfield/subindex
+/// tokens.
+static std::pair<StringRef, llvm::Optional<ArrayAttr>>
+splitAndAppendTarget(NamedAttrList &annotation, StringRef target,
+                     MLIRContext *context) {
+  auto targetPair = splitTarget(target, context);
+  if (targetPair.second.hasValue())
+    appendTarget(annotation, targetPair.second.getValue());
+
+  return targetPair;
 }
 
 /// Return an input \p target string in canonical form.  This converts a Legacy
@@ -326,7 +345,7 @@ bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
     // global Target -> Attribute mapping.
     NamedAttrList metadata;
     // Annotations on the element instance.
-    targetStrRef = splitTarget(metadata, targetStrRef, context);
+    targetStrRef = splitAndAppendTarget(metadata, targetStrRef, context).first;
 
     for (auto field : *object) {
       if (auto value = convertJSONToAttribute(field.second, p)) {
@@ -827,7 +846,8 @@ bool circt::firrtl::scatterCustomAnnotations(
         auto canonTarget = canonicalizeTarget(tap.getValue());
         if (!canonTarget)
           return false;
-        auto targetStrRef = splitTarget(foo, canonTarget.getValue(), context);
+        auto targetStrRef =
+            splitAndAppendTarget(foo, canonTarget.getValue(), context).first;
         newAnnotations[targetStrRef].push_back(
             DictionaryAttr::get(context, foo));
       }
