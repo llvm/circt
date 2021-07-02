@@ -32,6 +32,7 @@ extern "C" {
 struct HWStructFieldInfo {
   MlirStringRef name;
   MlirAttribute attribute;
+  MlirType type;
 };
 typedef struct MlirNamedAttribute MlirNamedAttribute;
 
@@ -92,6 +93,10 @@ hwStructTypeGet(MlirContext ctx, intptr_t numElements,
 
 MLIR_CAPI_EXPORTED MlirType hwStructTypeGetField(MlirType structType,
                                                  MlirStringRef fieldName);
+
+MLIR_CAPI_EXPORTED HWStructFieldInfo
+hwStructTypeGetFieldNum(MlirType structType, unsigned idx);
+MLIR_CAPI_EXPORTED intptr_t hwStructTypeGetNumFields(MlirType structType);
 
 MLIR_CAPI_EXPORTED MlirType hwTypeAliasTypeGet(MlirStringRef scope,
                                                MlirStringRef name,

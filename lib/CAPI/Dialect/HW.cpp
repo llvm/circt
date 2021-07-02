@@ -82,6 +82,20 @@ MlirType hwStructTypeGetField(MlirType structType, MlirStringRef fieldName) {
   return wrap(st.getFieldType(unwrap(fieldName)));
 }
 
+intptr_t hwStructTypeGetNumFields(MlirType structType) {
+  StructType st = unwrap(structType).cast<StructType>();
+  return st.getElements().size();
+}
+
+HWStructFieldInfo hwStructTypeGetFieldNum(MlirType structType, unsigned idx) {
+  StructType st = unwrap(structType).cast<StructType>();
+  auto cppField = st.getElements()[idx];
+  HWStructFieldInfo ret;
+  ret.name = wrap(cppField.name);
+  ret.type = wrap(cppField.type);
+  return ret;
+}
+
 bool hwTypeIsATypeAliasType(MlirType type) {
   return unwrap(type).isa<TypeAliasType>();
 }
