@@ -730,13 +730,19 @@ bool circt::firrtl::scatterCustomAnnotations(
               tryGetAs<StringAttr>(bDict, dict, "source", loc, clazz, path);
           if (!sourceAttr)
             return false;
-          auto sourceTarget = canonicalizeTarget(sourceAttr.getValue());
-          if (!sourceTarget)
+          auto maybeSourceTarget = canonicalizeTarget(sourceAttr.getValue());
+          if (!maybeSourceTarget)
             return false;
-          newAnnotations[sourceTarget.getValue()].push_back(
+          auto targetPair = splitAndAppendTarget(
+              source, maybeSourceTarget.getValue(), context);
+          if (targetPair.second.hasValue())
+            appendTarget(dontTouchAnn, targetPair.second.getValue());
+          newAnnotations[targetPair.first].push_back(
               DictionaryAttr::getWithSorted(context, source));
-          newAnnotations[sourceTarget.getValue()].push_back(
+          newAnnotations[targetPair.first].push_back(
               DictionaryAttr::getWithSorted(context, dontTouchAnn));
+          if (targetPair.second.hasValue())
+            dontTouchAnn.pop_back();
           port.append("portID", portID);
           newAnnotations[portTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, port));
