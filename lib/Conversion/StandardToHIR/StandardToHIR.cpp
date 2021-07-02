@@ -1,6 +1,6 @@
 //===----- StandardToHIR.cpp - Standard to HIR Lowering Pass-------*-C++-*-===//
 //
-// This pass converts standard+scf+memref to HIR dialect.
+// This pass converts standard + scf + memref to HIR dialect.
 //===----------------------------------------------------------------------===//
 
 #include "../PassDetail.h"
@@ -22,7 +22,7 @@ class ConvertStandardToHIRPass
 public:
   void runOnOperation() override {
     ModuleOp moduleOp = getOperation();
-    if (failed(lowerRegion(moduleOp.body(), SmallVector<Type>()))) {
+    if (failed(convertRegion(moduleOp.body(), SmallVector<Type>()))) {
       signalPassFailure();
       return;
     }
@@ -31,11 +31,11 @@ public:
   }
 
 private:
-  LogicalResult lowerRegion(Region &region, ArrayRef<Type> blockArgumentTypes,
-                            bool tstartRequired = false) {
+  LogicalResult convertRegion(Region &region, ArrayRef<Type> blockArgumentTypes,
+                              bool tstartRequired = false) {
     if (region.getBlocks().size() > 1)
       region.getParentOp()->emitError(
-          "Standard to HIR lowering only supports one block per region.");
+          "HIR only supports one block per region.");
 
     // Replace the old arguments in the body with new ones.
     auto &body = region.front();
@@ -58,19 +58,19 @@ private:
     // lower the ops in the region.
     for (Operation &operation : body) {
       if (auto op = dyn_cast<mlir::FuncOp>(operation)) {
-        if (failed(lowerOp(op)))
+        if (failed(convertOp(op)))
           return failure();
       } else if (auto op = dyn_cast<mlir::scf::ForOp>(operation)) {
-        if (failed(lowerOp(op)))
+        if (failed(convertOp(op)))
           return failure();
       } else if (auto op = dyn_cast<mlir::memref::LoadOp>(operation)) {
-        if (failed(lowerOp(op)))
+        if (failed(convertOp(op)))
           return failure();
       } else if (auto op = dyn_cast<mlir::memref::StoreOp>(operation)) {
-        if (failed(lowerOp(op)))
+        if (failed(convertOp(op)))
           return failure();
       } else if (auto op = dyn_cast<mlir::ReturnOp>(operation)) {
-        if (failed(lowerOp(op)))
+        if (failed(convertOp(op)))
           return failure();
       }
     }
@@ -78,20 +78,22 @@ private:
   }
 
 private:
-  LogicalResult lowerOp(mlir::FuncOp);
-  LogicalResult lowerOp(mlir::scf::ForOp);
-  LogicalResult lowerOp(mlir::memref::LoadOp);
-  LogicalResult lowerOp(mlir::memref::StoreOp);
-  LogicalResult lowerOp(mlir::ReturnOp);
+  LogicalResult convertOp(mlir::FuncOp);
+  LogicalResult convertOp(mlir::scf::ForOp);
+  LogicalResult convertOp(mlir::memref::LoadOp);
+  LogicalResult convertOp(mlir::memref::StoreOp);
+  LogicalResult convertOp(mlir::ReturnOp);
+
+private: // State.
   SmallVector<Operation *> opsToErase;
   SmallVector<unsigned int> mapResultPosToArgumentPos;
   hir::FuncOp enclosingFuncOp;
 };
 } // namespace
 
+//------------------------------------------------------------------------------
 // Helper functions
 //------------------------------------------------------------------------------
-
 bool isConstantIndex(Value v) {
   auto constantIndexOp = dyn_cast<mlir::ConstantIndexOp>(v.getDefiningOp());
   if (!constantIndexOp)
@@ -155,13 +157,12 @@ getDimKindsFromArrayOfBankDims(ArrayRef<int64_t> shape, ArrayAttr bankDims) {
   }
   return dimKinds;
 }
-
 //------------------------------------------------------------------------------
 
-// Op lowering functions.
 //------------------------------------------------------------------------------
-
-LogicalResult ConvertStandardToHIRPass::lowerOp(mlir::FuncOp op) {
+// Op conversions.
+//------------------------------------------------------------------------------
+LogicalResult ConvertStandardToHIRPass::convertOp(mlir::FuncOp op) {
   FunctionType originalFunctionTy = op.type().dyn_cast<FunctionType>();
   auto originalInputTypes = originalFunctionTy.getInputs();
   OpBuilder builder(op);
@@ -233,10 +234,10 @@ LogicalResult ConvertStandardToHIRPass::lowerOp(mlir::FuncOp op) {
 
   opsToErase.push_back(op);
   enclosingFuncOp = funcOp;
-  return lowerRegion(funcOp.getBody(), inputTypes, /*tstartRequired*/ true);
+  return convertRegion(funcOp.getBody(), inputTypes, /*tstartRequired*/ true);
 }
 
-LogicalResult ConvertStandardToHIRPass::lowerOp(mlir::scf::ForOp op) {
+LogicalResult ConvertStandardToHIRPass::convertOp(mlir::scf::ForOp op) {
   OpBuilder builder(op.getContext());
   builder.setInsertionPoint(op);
   Value lb = op.lowerBound();
@@ -261,11 +262,13 @@ LogicalResult ConvertStandardToHIRPass::lowerOp(mlir::scf::ForOp op) {
 
   opsToErase.push_back(op);
 
-  return lowerRegion(forOp.getLoopBody(),
-                     SmallVector<Type>({IndexType::get(builder.getContext())}),
-                     /*tstartRequired*/ true);
+  return convertRegion(
+      forOp.getLoopBody(),
+      SmallVector<Type>({IndexType::get(builder.getContext())}),
+      /*tstartRequired*/ true);
 }
-LogicalResult ConvertStandardToHIRPass::lowerOp(mlir::memref::LoadOp op) {
+
+LogicalResult ConvertStandardToHIRPass::convertOp(mlir::memref::LoadOp op) {
   OpBuilder builder(op);
   auto memref = op.memref();
   if (op->getNumResults() > 1)
@@ -274,8 +277,8 @@ LogicalResult ConvertStandardToHIRPass::lowerOp(mlir::memref::LoadOp op) {
 
   auto *context = builder.getContext();
 
-  // The memref's type is already fixed while lowering the enclosing FunctionOp
-  // to hir::FuncOp.
+  // The memref's type is already fixed while converting the enclosing
+  // FunctionOp to hir::FuncOp.
   auto hirMemrefTy = memref.getType().dyn_cast<hir::MemrefType>();
   assert(hirMemrefTy);
   auto dimKinds = hirMemrefTy.getDimKinds();
@@ -309,15 +312,15 @@ LogicalResult ConvertStandardToHIRPass::lowerOp(mlir::memref::LoadOp op) {
   return success();
 }
 
-LogicalResult ConvertStandardToHIRPass::lowerOp(mlir::memref::StoreOp op) {
+LogicalResult ConvertStandardToHIRPass::convertOp(mlir::memref::StoreOp op) {
   OpBuilder builder(op);
   auto memref = op.memref();
   if (op->getNumResults() > 1)
     return op.emitError("Only one result is supported.");
   auto *context = builder.getContext();
 
-  // The memref's type is already fixed while lowering the enclosing FunctionOp
-  // to hir::FuncOp.
+  // The memref's type is already fixed while converting the enclosing
+  // FunctionOp to hir::FuncOp.
   auto hirMemrefTy = memref.getType().dyn_cast<hir::MemrefType>();
   assert(hirMemrefTy);
   auto dimKinds = hirMemrefTy.getDimKinds();
@@ -350,7 +353,7 @@ LogicalResult ConvertStandardToHIRPass::lowerOp(mlir::memref::StoreOp op) {
   return success();
 }
 
-LogicalResult ConvertStandardToHIRPass::lowerOp(mlir::ReturnOp op) {
+LogicalResult ConvertStandardToHIRPass::convertOp(mlir::ReturnOp op) {
   OpBuilder builder(op);
   Value c0 = builder
                  .create<mlir::ConstantOp>(op.getLoc(),
@@ -371,7 +374,7 @@ LogicalResult ConvertStandardToHIRPass::lowerOp(mlir::ReturnOp op) {
   return success();
 }
 
-/// lower-to-hir pass Constructor
+/// convert-to-hir pass Constructor
 std::unique_ptr<mlir::Pass> circt::createConvertStandardToHIRPass() {
   return std::make_unique<ConvertStandardToHIRPass>();
 }
