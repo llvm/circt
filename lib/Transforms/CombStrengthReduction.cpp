@@ -29,14 +29,12 @@ using namespace comb;
 #define GEN_PASS_CLASSES
 #include "circt/Transforms/Passes.h.inc"
 
-namespace {
-
 static std::pair<size_t, size_t> computeCommonPrefixAndSuffix(const OperandRange &a, const OperandRange &b)
 {
   size_t commonPrefixLength = 0;
   size_t commonSuffixLength = 0;
-  const size_t sizeA = a.size();
-  const size_t sizeB = b.size();
+  size_t sizeA = a.size();
+  size_t sizeB = b.size();
 
   for (; commonPrefixLength < std::min(sizeA, sizeB); commonPrefixLength++) {
     if (a[commonPrefixLength] != b[commonPrefixLength]) {
@@ -201,6 +199,8 @@ LogicalResult matchAndRewriteCompareConcat(ICmpOp &op, ConcatOp &lhs, ConcatOp &
   return failure();
 }
 
+namespace {
+
 class RewriteCompareConcat : public mlir::RewritePattern {
 public:
   RewriteCompareConcat(MLIRContext *context) : RewritePattern(
@@ -237,6 +237,7 @@ class CombStrengthReduction
 
   mlir::FrozenRewritePatternSet patterns;
 };
+
 } // end anonymous namespace
 
 void CombStrengthReduction::runOnOperation() {
