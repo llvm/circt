@@ -42,7 +42,7 @@ SmallVector<Value> StoreOp::filerIndices(DimKind idxKind) {
 SmallVector<Value, 4> hir::FuncOp::getOperands() {
   SmallVector<Value, 4> operands;
 
-  auto &entryBlock = this->getBody().front();
+  auto &entryBlock = this->getFuncBody().front();
   for (Value arg :
        entryBlock.getArguments().slice(0, entryBlock.getNumArguments() - 1))
     operands.push_back(arg);

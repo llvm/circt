@@ -177,3 +177,18 @@ void printMemrefAndElementType(OpAsmPrinter &printer, Operation *,
                                Type memrefTy, TypeRange, Type) {
   printer << memrefTy;
 }
+
+ParseResult parseBinOpOperandsAndResultType(mlir::OpAsmParser &parser,
+                                            Type &resultTy, Type &op1Ty,
+                                            Type &op2Ty) {
+  if (parser.parseType(resultTy))
+    return failure();
+  op1Ty = resultTy;
+  op2Ty = resultTy;
+  return success();
+}
+
+void printBinOpOperandsAndResultType(mlir::OpAsmPrinter &printer, Operation *,
+                                     Type resultTy, Type, Type) {
+  printer << resultTy;
+}

@@ -124,7 +124,7 @@ hir::FuncType getFuncType(OpBuilder &builder, hir::FuncType oldFuncTy,
 // Functions to replace defs and uses of hir.memref.
 //------------------------------------------------------------------------------
 void MemrefLoweringPass::updateOp(hir::FuncOp op) {
-  Block &entryBlock = op.getBody().front();
+  Block &entryBlock = op.getFuncBody().front();
   auto args = entryBlock.getArguments();
   mlir::OpBuilder builder(op.getOperation()->getParentOp()->getContext());
   MLIRContext *context = builder.getContext();
@@ -246,6 +246,7 @@ void MemrefLoweringPass::updateOp(hir::FuncOp op) {
 }
 
 void MemrefLoweringPass::updateOp(hir::AllocaOp op) {
+  hir::FuncOp funcOp = getOperation();
   mlir::OpBuilder builder(op.getOperation()->getParentOp()->getContext());
   MLIRContext *context = builder.getContext();
   builder.setInsertionPoint(op);
@@ -323,7 +324,7 @@ void MemrefLoweringPass::updateOp(hir::AllocaOp op) {
           builder, "ports", StringAttr::get(context, "recv")));
   }
 
-  Value tstart = getOperation().getBody().front().getArguments().back();
+  Value tstart = funcOp.getFuncBody().front().getArguments().back();
 
   FuncType funcTy = hir::FuncType::get(
       context, bramCallArgTypes, inputAttrsbramCallArgAttrs,

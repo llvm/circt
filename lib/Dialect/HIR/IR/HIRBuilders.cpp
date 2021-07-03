@@ -14,7 +14,7 @@ void ForOp::beginRegion(OpBuilder &builder) {
   builder.setInsertionPointToStart(&getLoopBody().front());
 }
 void ForOp::endRegion(OpBuilder &builder) {
-  builder.create<hir::TerminatorOp>(builder.getUnknownLoc());
+  builder.create<hir::YieldOp>(builder.getUnknownLoc());
   builder.setInsertionPointAfter(*this);
 }
 
@@ -30,6 +30,6 @@ void UnrollForOp::beginRegion(OpBuilder &builder) {
   builder.setInsertionPointToStart(&getLoopBody().front());
 }
 void UnrollForOp::endRegion(OpBuilder &builder) {
-  builder.create<hir::TerminatorOp>(builder.getUnknownLoc());
+  builder.create<hir::YieldOp>(builder.getUnknownLoc());
   builder.setInsertionPointAfter(*this);
 }

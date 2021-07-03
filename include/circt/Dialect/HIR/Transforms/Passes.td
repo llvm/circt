@@ -1,18 +1,20 @@
 #ifndef CIRCT_DIALECT_HIR_TRANSFORMS_PASSES
 #define CIRCT_DIALECT_HIR_TRANSFORMS_PASSES
 include "mlir/Pass/PassBase.td"
-def OpLowering : Pass<"hir-op-lowering", "hir::FuncOp"> {
-  let summary = "Lower ops for codegen.";
-  let description = [{This pass lowers ops into simpler forms for codegen.  }];
 
-  let constructor = "circt::hir::createMemrefLoweringPass()";
+def SeqScheduler : Pass<"hir-seq-scheduler", "hir::FuncOp"> {
+  let summary = "A Simple sequential scheduler for HIR.";
+  let description = [{This pass populates the schedule in an unscheduled HIR 
+  program assuming that the original program was sequential. The scheduler 
+  assumes a simple processor like model - only one operation can happen at 
+  a time and all memrefs alias.}];
+
+  let constructor = "circt::hir::createSeqSchedulerPass()";
 }
 
-
 def MemrefLowering : Pass<"hir-memref-lowering", "hir::FuncOp"> {
-  let summary = "Lower memrefs into buses.";
-  let description = [{This pass lowers memrefs into bus types and function
-  calls.  }];
+  let summary = "Lower hir.memref to hir.bus.";
+  let description = [{This pass lowers hir.memref to hir.bus for codegen.}];
 
   let constructor = "circt::hir::createMemrefLoweringPass()";
 }

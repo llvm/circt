@@ -157,7 +157,6 @@ private:
   bool inspectOp(UnrollForOp op);
   bool inspectOp(hir::LoadOp op);
   bool inspectOp(hir::StoreOp op);
-  bool inspectOp(hir::ReturnOp op);
   bool inspectOp(hir::YieldOp op);
   bool inspectOp(hir::SendOp op);
   bool inspectOp(hir::RecvOp op);
@@ -213,7 +212,7 @@ private:
 };
 
 bool ScheduleVerifier::inspectOp(hir::FuncOp op) {
-  Block &entryBlock = op.getBody().front();
+  Block &entryBlock = op.getFuncBody().front();
   // args also contains tstart;
   auto args = entryBlock.getArguments();
   Value tstart = args.back();
@@ -303,7 +302,7 @@ bool ScheduleVerifier::inspectOp(hir::LoadOp op) {
                          "indicesess " + std::to_string(c));
     c++;
   }
-  auto delay = op.delay();
+  auto delay = op.delay().getValueOr(0);
 
   schedule.insert(result, tstart, offset + delay);
   return ok;
@@ -324,19 +323,6 @@ bool ScheduleVerifier::inspectOp(hir::StoreOp op) {
     ok &= schedule.check(op.getLoc(), locAddrI, idx, tstart, offset,
                          "indicesess " + std::to_string(c));
     c++;
-  }
-  return ok;
-}
-
-bool ScheduleVerifier::inspectOp(hir::ReturnOp op) {
-  auto operands = op.operands();
-  bool ok = true;
-  for (int i = 0; i < (int)operands.size(); i++) {
-    Value operand = operands[i];
-    int delay = helper::extractDelayFromDict(this->resultAttrs[i]);
-    ok &= schedule.check(op.getLoc(), getDefiningLoc(operand), operand,
-                         this->tstart, delay,
-                         "return operand " + std::to_string(i + 1));
   }
   return ok;
 }
@@ -407,8 +393,6 @@ bool ScheduleVerifier::inspectOp(Operation *inst) {
     return inspectOp(op);
   if (auto op = dyn_cast<hir::UnrollForOp>(inst))
     return inspectOp(op);
-  if (auto op = dyn_cast<hir::ReturnOp>(inst))
-    return inspectOp(op);
   if (auto op = dyn_cast<hir::LoadOp>(inst))
     return inspectOp(op);
   if (auto op = dyn_cast<hir::StoreOp>(inst))
@@ -419,8 +403,6 @@ bool ScheduleVerifier::inspectOp(Operation *inst) {
     return inspectOp(op);
   if (auto op = dyn_cast<hir::YieldOp>(inst))
     return inspectOp(op);
-  if (auto op = dyn_cast<hir::TerminatorOp>(inst))
-    return true;
   emitError(inst->getLoc(), "Unsupported Operation for verification!");
   return false;
 }

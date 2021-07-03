@@ -63,10 +63,31 @@ private:
       } else if (auto op = dyn_cast<mlir::scf::ForOp>(operation)) {
         if (failed(convertOp(op)))
           return failure();
+      } else if (auto op = dyn_cast<mlir::scf::YieldOp>(operation)) {
+        if (failed(convertOp(op)))
+          return failure();
       } else if (auto op = dyn_cast<mlir::memref::LoadOp>(operation)) {
         if (failed(convertOp(op)))
           return failure();
       } else if (auto op = dyn_cast<mlir::memref::StoreOp>(operation)) {
+        if (failed(convertOp(op)))
+          return failure();
+      } else if (auto op = dyn_cast<mlir::AddIOp>(operation)) {
+        if (failed(convertOp(op)))
+          return failure();
+      } else if (auto op = dyn_cast<mlir::SubIOp>(operation)) {
+        if (failed(convertOp(op)))
+          return failure();
+      } else if (auto op = dyn_cast<mlir::MulIOp>(operation)) {
+        if (failed(convertOp(op)))
+          return failure();
+      } else if (auto op = dyn_cast<mlir::AddFOp>(operation)) {
+        if (failed(convertOp(op)))
+          return failure();
+      } else if (auto op = dyn_cast<mlir::SubFOp>(operation)) {
+        if (failed(convertOp(op)))
+          return failure();
+      } else if (auto op = dyn_cast<mlir::MulFOp>(operation)) {
         if (failed(convertOp(op)))
           return failure();
       } else if (auto op = dyn_cast<mlir::ReturnOp>(operation)) {
@@ -80,8 +101,15 @@ private:
 private:
   LogicalResult convertOp(mlir::FuncOp);
   LogicalResult convertOp(mlir::scf::ForOp);
+  LogicalResult convertOp(mlir::scf::YieldOp);
   LogicalResult convertOp(mlir::memref::LoadOp);
   LogicalResult convertOp(mlir::memref::StoreOp);
+  LogicalResult convertOp(mlir::AddIOp);
+  LogicalResult convertOp(mlir::SubIOp);
+  LogicalResult convertOp(mlir::MulIOp);
+  LogicalResult convertOp(mlir::AddFOp);
+  LogicalResult convertOp(mlir::SubFOp);
+  LogicalResult convertOp(mlir::MulFOp);
   LogicalResult convertOp(mlir::ReturnOp);
 
 private: // State.
@@ -221,7 +249,7 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::FuncOp op) {
       op.getLoc(), funcTy.getFunctionType(), op.sym_name(), funcTy);
   BlockAndValueMapping mapper;
 
-  op.getBody().cloneInto(&funcOp.getBody(), mapper);
+  op.getBody().cloneInto(&funcOp.getFuncBody(), mapper);
 
   // Replace the old arguments in the body with new ones.
   // for (size_t i = 0; i < inputTypes.size(); i++) {
@@ -234,7 +262,8 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::FuncOp op) {
 
   opsToErase.push_back(op);
   enclosingFuncOp = funcOp;
-  return convertRegion(funcOp.getBody(), inputTypes, /*tstartRequired*/ true);
+  return convertRegion(funcOp.getFuncBody(), inputTypes,
+                       /*tstartRequired*/ true);
 }
 
 LogicalResult ConvertStandardToHIRPass::convertOp(mlir::scf::ForOp op) {
@@ -246,6 +275,7 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::scf::ForOp op) {
   assert(lb);
   assert(ub);
   assert(step);
+
   auto forOp =
       builder.create<hir::ForOp>(op.getLoc(), lb, ub, step, Value(), Value(),
                                  IndexType::get(builder.getContext()));
@@ -266,6 +296,17 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::scf::ForOp op) {
       forOp.getLoopBody(),
       SmallVector<Type>({IndexType::get(builder.getContext())}),
       /*tstartRequired*/ true);
+}
+
+LogicalResult ConvertStandardToHIRPass::convertOp(mlir::scf::YieldOp op) {
+  OpBuilder builder(op);
+  if (op.getNumOperands() > 0)
+    return op->getParentOp()->emitError(
+        "lower-to-hir does not support iter_args.");
+
+  builder.create<hir::YieldOp>(op.getLoc());
+  opsToErase.push_back(op);
+  return success();
 }
 
 LogicalResult ConvertStandardToHIRPass::convertOp(mlir::memref::LoadOp op) {
@@ -303,10 +344,9 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::memref::LoadOp op) {
     }
   }
 
-  auto loadOp = builder.create<hir::LoadOp>(
-      op.getLoc(), res.getType(), memref, castedIndices,
-      builder.getI64IntegerAttr(0), builder.getI64IntegerAttr(1), Value(),
-      Value());
+  auto loadOp = builder.create<hir::LoadOp>(op.getLoc(), res.getType(), memref,
+                                            castedIndices, IntegerAttr(),
+                                            IntegerAttr(), Value(), Value());
   op->replaceAllUsesWith(loadOp);
   opsToErase.push_back(op);
   return success();
@@ -345,11 +385,53 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::memref::StoreOp op) {
     }
   }
 
-  auto storeOp = builder.create<hir::StoreOp>(
-      op.getLoc(), op.value(), memref, castedIndices,
-      builder.getI64IntegerAttr(1), Value(), Value());
+  auto storeOp = builder.create<hir::StoreOp>(op.getLoc(), op.value(), memref,
+                                              castedIndices, IntegerAttr(),
+                                              Value(), Value());
   op->replaceAllUsesWith(storeOp);
   opsToErase.push_back(op);
+  return success();
+}
+
+LogicalResult ConvertStandardToHIRPass::convertOp(mlir::AddIOp op) {
+  OpBuilder builder(op);
+  builder.create<hir::AddIOp>(op.getLoc(), op.getResult().getType(), op.lhs(),
+                              op.rhs(), IntegerAttr(), Value(), Value());
+  return success();
+}
+
+LogicalResult ConvertStandardToHIRPass::convertOp(mlir::SubIOp op) {
+  OpBuilder builder(op);
+  builder.create<hir::SubIOp>(op.getLoc(), op.getResult().getType(), op.lhs(),
+                              op.rhs(), IntegerAttr(), Value(), Value());
+  return success();
+}
+
+LogicalResult ConvertStandardToHIRPass::convertOp(mlir::MulIOp op) {
+  OpBuilder builder(op);
+  builder.create<hir::MulIOp>(op.getLoc(), op.getResult().getType(), op.lhs(),
+                              op.rhs(), IntegerAttr(), Value(), Value());
+  return success();
+}
+
+LogicalResult ConvertStandardToHIRPass::convertOp(mlir::AddFOp op) {
+  OpBuilder builder(op);
+  builder.create<hir::AddFOp>(op.getLoc(), op.getResult().getType(), op.lhs(),
+                              op.rhs(), IntegerAttr(), Value(), Value());
+  return success();
+}
+
+LogicalResult ConvertStandardToHIRPass::convertOp(mlir::SubFOp op) {
+  OpBuilder builder(op);
+  builder.create<hir::SubFOp>(op.getLoc(), op.getResult().getType(), op.lhs(),
+                              op.rhs(), IntegerAttr(), Value(), Value());
+  return success();
+}
+
+LogicalResult ConvertStandardToHIRPass::convertOp(mlir::MulFOp op) {
+  OpBuilder builder(op);
+  builder.create<hir::MulFOp>(op.getLoc(), op.getResult().getType(), op.lhs(),
+                              op.rhs(), IntegerAttr(), Value(), Value());
   return success();
 }
 
@@ -358,18 +440,17 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::ReturnOp op) {
   Value c0 = builder
                  .create<mlir::ConstantOp>(op.getLoc(),
                                            IndexType::get(builder.getContext()),
-                                           builder.getI64IntegerAttr(0))
+                                           builder.getIndexAttr(0))
                  .getResult();
   for (size_t i = 0; i < op.getNumOperands(); i++) {
-    Value memref = enclosingFuncOp.getBody().front().getArgument(
+    Value memref = enclosingFuncOp.getFuncBody().front().getArgument(
         mapResultPosToArgumentPos[i]);
     Value operand = op.getOperand(i);
     builder.create<hir::StoreOp>(op.getLoc(), operand, memref, c0,
-                                 builder.getI64IntegerAttr(1), Value(),
-                                 Value());
+                                 IntegerAttr(), Value(), Value());
   }
 
-  builder.create<hir::ReturnOp>(op.getLoc(), SmallVector<Value>());
+  builder.create<hir::YieldOp>(op.getLoc());
   opsToErase.push_back(op);
   return success();
 }

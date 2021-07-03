@@ -32,6 +32,7 @@ module  {
     }
     return
   }
+
   func @test(%arg0: memref<16x16xi32>) -> (i32){
   //func @test(%arg0: memref<16x16xi32>){
     %c0 = constant 0 : index

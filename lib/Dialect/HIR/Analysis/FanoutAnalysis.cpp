@@ -33,7 +33,7 @@ MemrefFanoutInfo::MemrefFanoutInfo(Operation *op) {
 }
 
 void MemrefFanoutInfo::visitOp(hir::FuncOp op) {
-  auto &entryBlock = op.getBody().front();
+  auto &entryBlock = op.getFuncBody();
   auto arguments = entryBlock.getArguments();
   ArrayRef<DictionaryAttr> inputAttrs =
       op.funcTy().dyn_cast<hir::FuncType>().getInputAttrs();

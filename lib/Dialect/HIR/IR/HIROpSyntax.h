@@ -29,6 +29,7 @@ void printTimeAndOffset(OpAsmPrinter &, Operation *op, Value, Value);
 ParseResult parseOptionalArrayAccessTypes(mlir::OpAsmParser &parser,
                                           ArrayAttr &constAddrs,
                                           SmallVectorImpl<Type> &varAddrTypes);
+
 void printOptionalArrayAccessTypes(OpAsmPrinter &printer, Operation *op,
                                    ArrayAttr constAddrs,
                                    TypeRange varAddrTypes);
@@ -38,6 +39,7 @@ ParseResult
 parseOptionalArrayAccess(OpAsmParser &parser,
                          SmallVectorImpl<OpAsmParser::OperandType> &varAddrs,
                          ArrayAttr &constAddrs);
+
 void printOptionalArrayAccess(OpAsmPrinter &printer, Operation *op,
                               OperandRange varAddrs, ArrayAttr constAddrs);
 
@@ -46,3 +48,10 @@ ParseResult parseMemrefAndElementType(OpAsmParser &, Type &,
 
 void printMemrefAndElementType(OpAsmPrinter &, Operation *, Type, TypeRange,
                                Type);
+
+ParseResult parseBinOpOperandsAndResultType(mlir::OpAsmParser &parser,
+                                            Type &resultTy, Type &op1Ty,
+                                            Type &op2Ty);
+
+void printBinOpOperandsAndResultType(mlir::OpAsmPrinter &, Operation *, Type,
+                                     Type, Type);

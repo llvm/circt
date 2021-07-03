@@ -39,10 +39,64 @@ def BusType: Type<CPred<"$_self.isa<BusType>()">, "HIR bus type ">,
 class HIR_Op<string mnemonic, list<OpTrait> traits = []>
 : Op<HIR_Dialect, mnemonic, traits>;
 
-def ImplicitTerminator
-: SingleBlockImplicitTerminator<"TerminatorOp">;
+//def ImplicitTerminator
+//: SingleBlockImplicitTerminator<"TerminatorOp">;
 
-def FuncOp : HIR_Op<"func", [Symbol, FunctionLike, IsolatedFromAbove, DeclareOpInterfaceMethods<CallableOpInterface>]> {
+def ImplicitYieldTerminator
+: SingleBlockImplicitTerminator<"YieldOp">;
+
+def YieldOp : HIR_Op<"yield", [Terminator, AttrSizedOperandSegments] > {
+  let summary = "Yield from loops";
+  let description = [{
+    This Op yields from a loop.
+      Example:
+
+      ```mlir hir.yield (%x, %A) at %t offset %3 : (!hir.val,!hir.val)```
+  }];
+
+  let arguments = (ins Variadic<AnyType> : $operands, Optional<TimeType>: $tstart,
+      Optional<Index>:$offset);
+  let results = (outs );
+
+  let builders = [OpBuilder<(ins),[{
+      build($_builder,$_state,SmallVector<Value>(),Value(),Value());
+  }]>];
+  let assemblyFormat = [{ attr-dict (`(` $operands^ `)` `:` type($operands))? 
+    custom<TimeAndOffset>($tstart, $offset)}];
+  let hasCanonicalizeMethod = true;
+}
+
+//def ReturnOp : HIR_Op<"return", [HasParent<"FuncOp">, Terminator]> {
+//  let summary = "Return from function";
+//
+//  let description = [{
+//    This instruction must be the last instruction in a block.
+//      ```mlir hir.return (%x, %y): (i32, !hir.const<i1>)```
+//  }];
+//
+//  let arguments = (ins Variadic<AnyType>:$operands);
+//
+//  let assemblyFormat = "(`(`$operands^`)` `:` `(`type($operands)`)`)? attr-dict";
+//}
+
+//def TerminatorOp :
+//HIR_Op<"terminator", [Terminator]> {
+//  let summary = "HIR terminator operation";
+//  let description = [{
+//    This is the terminator op for loop and if statement regions
+//      Syntax:
+//      ```operation ::= `"hir.terminator"() : () -> ()````
+//  }];
+//
+//  // No custom parsing/printing form.
+//  let parser = ?;
+//  let printer = ?;
+//
+//  // Fully specified by traits.
+//  let verifier = ?;
+//}
+
+def FuncOp : HIR_Op<"func", [Symbol, ImplicitYieldTerminator, FunctionLike, IsolatedFromAbove, DeclareOpInterfaceMethods<CallableOpInterface>]> {
   let summary = "Function definition";
   let description = [{
     This Op creates a new function 
@@ -85,13 +139,14 @@ def FuncOp : HIR_Op<"func", [Symbol, FunctionLike, IsolatedFromAbove, DeclareOpI
       LogicalResult verifyBody();
 
     public:
+      Region& getFuncBody(){ return body();}
       ///Get the function arguments (excluding tstart).
       SmallVector<Value,4> getOperands();
   }];
   let verifier =[{return verifyFuncOp(*this);}];
 }
 
-def IfOp : HIR_Op<"if", [ImplicitTerminator, RecursiveSideEffects, AttrSizedOperandSegments]> {
+def IfOp : HIR_Op<"if", [ImplicitYieldTerminator, RecursiveSideEffects, AttrSizedOperandSegments]> {
   let summary = "if operation";
   let description = [{
     This op implements an if statement.
@@ -110,7 +165,7 @@ def IfOp : HIR_Op<"if", [ImplicitTerminator, RecursiveSideEffects, AttrSizedOper
   let printer = [{return print$cppClass(p,*this);}];
 }
 
-def ForOp : HIR_Op<"for", [ImplicitTerminator, RecursiveSideEffects,AttrSizedOperandSegments, DeclareOpInterfaceMethods<LoopLikeOpInterface>]> {
+def ForOp : HIR_Op<"for", [ImplicitYieldTerminator, RecursiveSideEffects,AttrSizedOperandSegments, DeclareOpInterfaceMethods<LoopLikeOpInterface>]> {
   let summary = "for operation";
   let description = [{
     This op implements a sequential for loop.
@@ -148,7 +203,7 @@ def ForOp : HIR_Op<"for", [ImplicitTerminator, RecursiveSideEffects,AttrSizedOpe
   let hasCanonicalizeMethod = true; 
 }
 
-def UnrollForOp : HIR_Op<"unroll_for", [ImplicitTerminator, RecursiveSideEffects, DeclareOpInterfaceMethods<LoopLikeOpInterface>]> {
+def UnrollForOp : HIR_Op<"unroll_for", [ImplicitYieldTerminator, RecursiveSideEffects, DeclareOpInterfaceMethods<LoopLikeOpInterface>]> {
   let summary = "for operation";
   let description = [{
     This op implements a sequential for loop.
@@ -221,15 +276,16 @@ def LoadOp : HIR_Op<"load", [NoSideEffect, AttrSizedOperandSegments]> {
   }];
 
   let arguments = (ins MemrefType:$mem, 
-      Variadic<AnyType>:$indices, OptionalAttr<I64Attr>:$port, I64Attr:$delay, Optional<TimeType> : $tstart,
+      Variadic<AnyType>:$indices, OptionalAttr<I64Attr>:$port, OptionalAttr<I64Attr>:$delay, Optional<TimeType> : $tstart,
       Optional<Index>: $offset);
   let results = (outs AnyType: $res);
   let assemblyFormat = [{
-    $mem `[`  $indices `]` (`port` $port^)? `delay` $delay custom<TimeAndOffset>($tstart ,$offset) 
+    $mem `[`  $indices `]` (`[` `port` $port^ `]`)? custom<TimeAndOffset>($tstart ,$offset) 
       attr-dict
       `:`custom<MemrefAndElementType>
-      (type($mem),type($indices),type($res)) 
+      (type($mem),type($indices),type($res)) (`delay` $delay^ )?
   }];
+
   let hasCanonicalizeMethod = true;
   let extraClassDeclaration = [{
     public:
@@ -348,6 +404,102 @@ def DelayOp: HIR_Op<"delay",[NoSideEffect,AttrSizedOperandSegments]>{
     ($tstart, $offset) attr-dict `:` type($input) `->` type($res)}];
 }
 
+def AddIOp: HIR_Op<"addi",[NoSideEffect,AttrSizedOperandSegments]>{
+  let summary = "Integer add operation";
+  let description = [{
+    This op adds two inputs of same type (integer or index).
+      Example:
+      ```mlir %yy = hir.addi %a, %b at %t: i32 delay 1```
+  }];
+
+  let arguments = (ins AnyType : $op1, AnyType: $op2,  OptionalAttr<I64Attr>:$delay, 
+      Optional<TimeType>:$tstart, Optional<Index>: $offset);
+  let results = (outs AnyType : $res);
+  let assemblyFormat = [{$op1 `,` $op2 custom<TimeAndOffset> 
+    ($tstart, $offset) attr-dict `:` custom<BinOpOperandsAndResultType>(type($res), type($op1),type($op2)) (`delay` $delay^)?
+    }];
+}
+
+def SubIOp: HIR_Op<"subi",[NoSideEffect,AttrSizedOperandSegments]>{
+  let summary = "Integer subtract operation";
+  let description = [{
+    This op subtracts second operand from first operand. Operands must be of same type (integer or index).
+      Example:
+      ```mlir %yy = hir.subi %a, %b at %t: i32 delay 1```
+  }];
+
+  let arguments = (ins AnyType : $op1, AnyType: $op2,  OptionalAttr<I64Attr>:$delay, 
+      Optional<TimeType>:$tstart, Optional<Index>: $offset);
+  let results = (outs AnyType : $res);
+  let assemblyFormat = [{$op1 `,` $op2 custom<TimeAndOffset> 
+    ($tstart, $offset) attr-dict `:` custom<BinOpOperandsAndResultType>(type($res), type($op1),type($op2)) (`delay` $delay^)?
+    }];
+}
+
+def MulIOp: HIR_Op<"muli",[NoSideEffect,AttrSizedOperandSegments]>{
+  let summary = "Integer Multiply operation";
+  let description = [{
+    This op multipliers to integer operands. Operands must be of same type (integer or index).
+      Example:
+      ```mlir %yy = hir.muli %a, %b at %t: i32 delay 1```
+  }];
+
+  let arguments = (ins AnyType : $op1, AnyType: $op2,  OptionalAttr<I64Attr>:$delay, 
+      Optional<TimeType>:$tstart, Optional<Index>: $offset);
+  let results = (outs AnyType : $res);
+  let assemblyFormat = [{$op1 `,` $op2 custom<TimeAndOffset> 
+    ($tstart, $offset) attr-dict `:` custom<BinOpOperandsAndResultType>(type($res), type($op1),type($op2)) (`delay` $delay^)?
+    }];
+}
+
+def AddFOp: HIR_Op<"addf",[NoSideEffect,AttrSizedOperandSegments]>{
+  let summary = "floating point add operation";
+  let description = [{
+    This op adds two floatin point inputs of same type.
+      Example:
+      ```mlir %yy = hir.addf %a, %b at %t: f32 delay 4```
+  }];
+
+  let arguments = (ins AnyType : $op1, AnyType: $op2,  OptionalAttr<I64Attr>:$delay, 
+      Optional<TimeType>:$tstart, Optional<Index>: $offset);
+  let results = (outs AnyType : $res);
+  let assemblyFormat = [{$op1 `,` $op2 custom<TimeAndOffset> 
+    ($tstart, $offset) attr-dict `:` custom<BinOpOperandsAndResultType>(type($res), type($op1),type($op2)) (`delay` $delay^)?
+    }];
+}
+
+def SubFOp: HIR_Op<"subf",[NoSideEffect,AttrSizedOperandSegments]>{
+  let summary = "Floating point subtract operation";
+  let description = [{
+    This op subtracts second floating point operand from first. Operands must be of same type.
+      Example:
+      ```mlir %yy = hir.subf %a, %b at %t: f32 delay 4```
+  }];
+
+  let arguments = (ins AnyType : $op1, AnyType: $op2,  OptionalAttr<I64Attr>:$delay, 
+      Optional<TimeType>:$tstart, Optional<Index>: $offset);
+  let results = (outs AnyType : $res);
+  let assemblyFormat = [{$op1 `,` $op2 custom<TimeAndOffset> 
+    ($tstart, $offset) attr-dict `:` custom<BinOpOperandsAndResultType>(type($res), type($op1),type($op2)) (`delay` $delay^)?
+    }];
+}
+
+def MulFOp: HIR_Op<"mulf",[NoSideEffect,AttrSizedOperandSegments]>{
+  let summary = "Floating point Multiply operation.";
+  let description = [{
+    This op multipliers two floating point operands. Operands must be of same type.
+      Example:
+      ```mlir %yy = hir.mulf %a, %b at %t: f32 delay 1```
+  }];
+
+  let arguments = (ins AnyType : $op1, AnyType: $op2,  OptionalAttr<I64Attr>:$delay, 
+      Optional<TimeType>:$tstart, Optional<Index>: $offset);
+  let results = (outs AnyType : $res);
+  let assemblyFormat = [{$op1 `,` $op2 custom<TimeAndOffset> 
+    ($tstart, $offset) attr-dict `:` custom<BinOpOperandsAndResultType>(type($res), type($op1),type($op2)) (`delay` $delay^)?
+    }];
+}
+
 def TensorExtract :HIR_Op<"tensor.extract",[NoSideEffect]>{
   let summary = "Extract a bus from a tensor";
   let description = [{
@@ -391,54 +543,6 @@ def UnpackTupleOp:HIR_Op<"unpack_tuple",[NoSideEffect]>{
 
   let assemblyFormat = [{ `(` $tuple`)` attr-dict `:` 
     type($tuple) `->` `(` type($res) `)`}];
-}
-
-def YieldOp : HIR_Op<"yield", [AttrSizedOperandSegments] > {
-  let summary = "Yield from loops";
-  let description = [{
-    This Op yields from a loop.
-      Example:
-
-      ```mlir hir.yield (%x, %A) at %t offset %3 : (!hir.val,!hir.val)```
-  }];
-
-  let arguments = (ins Variadic<AnyType> : $operands, Optional<TimeType>: $tstart,
-      Optional<Index>:$offset);
-  let results = (outs );
-
-  let assemblyFormat = [{ attr-dict (`(` $operands^ `)` `:` type($operands))? 
-    custom<TimeAndOffset>($tstart, $offset)}];
-  let hasCanonicalizeMethod = true;
-}
-
-def ReturnOp : HIR_Op<"return", [HasParent<"FuncOp">, Terminator]> {
-  let summary = "Return from function";
-
-  let description = [{
-    This instruction must be the last instruction in a block.
-      ```mlir hir.return (%x, %y): (i32, !hir.const<i1>)```
-  }];
-
-  let arguments = (ins Variadic<AnyType>:$operands);
-
-  let assemblyFormat = "(`(`$operands^`)` `:` `(`type($operands)`)`)? attr-dict";
-}
-
-def TerminatorOp :
-HIR_Op<"terminator", [Terminator]> {
-  let summary = "HIR terminator operation";
-  let description = [{
-    This is the terminator op for loop and if statement regions
-      Syntax:
-      ```operation ::= `"hir.terminator"() : () -> ()````
-  }];
-
-  // No custom parsing/printing form.
-  let parser = ?;
-  let printer = ?;
-
-  // Fully specified by traits.
-  let verifier = ?;
 }
 
 #endif // HIR_OPS
