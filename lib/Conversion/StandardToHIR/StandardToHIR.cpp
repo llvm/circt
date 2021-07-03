@@ -73,22 +73,22 @@ private:
         if (failed(convertOp(op)))
           return failure();
       } else if (auto op = dyn_cast<mlir::AddIOp>(operation)) {
-        if (failed(convertOp(op)))
+        if (failed(convertBinOp<mlir::AddIOp, hir::AddIOp>(op)))
           return failure();
       } else if (auto op = dyn_cast<mlir::SubIOp>(operation)) {
-        if (failed(convertOp(op)))
+        if (failed(convertBinOp<mlir::SubIOp, hir::SubIOp>(op)))
           return failure();
       } else if (auto op = dyn_cast<mlir::MulIOp>(operation)) {
-        if (failed(convertOp(op)))
+        if (failed(convertBinOp<mlir::MulIOp, hir::MulIOp>(op)))
           return failure();
       } else if (auto op = dyn_cast<mlir::AddFOp>(operation)) {
-        if (failed(convertOp(op)))
+        if (failed(convertBinOp<mlir::AddFOp, hir::AddFOp>(op)))
           return failure();
       } else if (auto op = dyn_cast<mlir::SubFOp>(operation)) {
-        if (failed(convertOp(op)))
+        if (failed(convertBinOp<mlir::SubFOp, hir::SubFOp>(op)))
           return failure();
       } else if (auto op = dyn_cast<mlir::MulFOp>(operation)) {
-        if (failed(convertOp(op)))
+        if (failed(convertBinOp<mlir::MulFOp, hir::MulFOp>(op)))
           return failure();
       } else if (auto op = dyn_cast<mlir::ReturnOp>(operation)) {
         if (failed(convertOp(op)))
@@ -104,13 +104,24 @@ private:
   LogicalResult convertOp(mlir::scf::YieldOp);
   LogicalResult convertOp(mlir::memref::LoadOp);
   LogicalResult convertOp(mlir::memref::StoreOp);
-  LogicalResult convertOp(mlir::AddIOp);
-  LogicalResult convertOp(mlir::SubIOp);
-  LogicalResult convertOp(mlir::MulIOp);
-  LogicalResult convertOp(mlir::AddFOp);
-  LogicalResult convertOp(mlir::SubFOp);
-  LogicalResult convertOp(mlir::MulFOp);
+  // LogicalResult convertOp(mlir::AddIOp);
+  // LogicalResult convertOp(mlir::SubIOp);
+  // LogicalResult convertOp(mlir::MulIOp);
+  // LogicalResult convertOp(mlir::AddFOp);
+  // LogicalResult convertOp(mlir::SubFOp);
+  // LogicalResult convertOp(mlir::MulFOp);
   LogicalResult convertOp(mlir::ReturnOp);
+
+  template <typename FromT, typename ToT>
+  LogicalResult convertBinOp(FromT op) {
+    OpBuilder builder(op);
+    Value res =
+        builder.create<ToT>(op.getLoc(), op.getResult().getType(), op.lhs(),
+                            op.rhs(), IntegerAttr(), Value(), Value());
+    op.getResult().replaceAllUsesWith(res);
+    opsToErase.push_back(op);
+    return success();
+  }
 
 private: // State.
   SmallVector<Operation *> opsToErase;
@@ -393,47 +404,58 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::memref::StoreOp op) {
   return success();
 }
 
-LogicalResult ConvertStandardToHIRPass::convertOp(mlir::AddIOp op) {
-  OpBuilder builder(op);
-  builder.create<hir::AddIOp>(op.getLoc(), op.getResult().getType(), op.lhs(),
-                              op.rhs(), IntegerAttr(), Value(), Value());
-  return success();
-}
-
-LogicalResult ConvertStandardToHIRPass::convertOp(mlir::SubIOp op) {
-  OpBuilder builder(op);
-  builder.create<hir::SubIOp>(op.getLoc(), op.getResult().getType(), op.lhs(),
-                              op.rhs(), IntegerAttr(), Value(), Value());
-  return success();
-}
-
-LogicalResult ConvertStandardToHIRPass::convertOp(mlir::MulIOp op) {
-  OpBuilder builder(op);
-  builder.create<hir::MulIOp>(op.getLoc(), op.getResult().getType(), op.lhs(),
-                              op.rhs(), IntegerAttr(), Value(), Value());
-  return success();
-}
-
-LogicalResult ConvertStandardToHIRPass::convertOp(mlir::AddFOp op) {
-  OpBuilder builder(op);
-  builder.create<hir::AddFOp>(op.getLoc(), op.getResult().getType(), op.lhs(),
-                              op.rhs(), IntegerAttr(), Value(), Value());
-  return success();
-}
-
-LogicalResult ConvertStandardToHIRPass::convertOp(mlir::SubFOp op) {
-  OpBuilder builder(op);
-  builder.create<hir::SubFOp>(op.getLoc(), op.getResult().getType(), op.lhs(),
-                              op.rhs(), IntegerAttr(), Value(), Value());
-  return success();
-}
-
-LogicalResult ConvertStandardToHIRPass::convertOp(mlir::MulFOp op) {
-  OpBuilder builder(op);
-  builder.create<hir::MulFOp>(op.getLoc(), op.getResult().getType(), op.lhs(),
-                              op.rhs(), IntegerAttr(), Value(), Value());
-  return success();
-}
+// LogicalResult ConvertStandardToHIRPass::convertOp(mlir::AddIOp op) {
+//  OpBuilder builder(op);
+//  Value res =
+//      builder
+//          .create<hir::AddIOp>(op.getLoc(), op.getResult().getType(),
+//          op.lhs(),
+//                               op.rhs(), IntegerAttr(), Value(), Value())
+//          .getResult();
+//  op.getResult().replaceAllUsesWith(res);
+//  opsToErase.push_back(op);
+//  return success();
+//}
+//
+// LogicalResult ConvertStandardToHIRPass::convertOp(mlir::SubIOp op) {
+//  OpBuilder builder(op);
+//  builder.create<hir::SubIOp>(op.getLoc(), op.getResult().getType(), op.lhs(),
+//                              op.rhs(), IntegerAttr(), Value(), Value());
+//  opsToErase.push_back(op);
+//  return success();
+//}
+//
+// LogicalResult ConvertStandardToHIRPass::convertOp(mlir::MulIOp op) {
+//  OpBuilder builder(op);
+//  builder.create<hir::MulIOp>(op.getLoc(), op.getResult().getType(), op.lhs(),
+//                              op.rhs(), IntegerAttr(), Value(), Value());
+//  opsToErase.push_back(op);
+//  return success();
+//}
+//
+// LogicalResult ConvertStandardToHIRPass::convertOp(mlir::AddFOp op) {
+//  OpBuilder builder(op);
+//  builder.create<hir::AddFOp>(op.getLoc(), op.getResult().getType(), op.lhs(),
+//                              op.rhs(), IntegerAttr(), Value(), Value());
+//  opsToErase.push_back(op);
+//  return success();
+//}
+//
+// LogicalResult ConvertStandardToHIRPass::convertOp(mlir::SubFOp op) {
+//  OpBuilder builder(op);
+//  builder.create<hir::SubFOp>(op.getLoc(), op.getResult().getType(), op.lhs(),
+//                              op.rhs(), IntegerAttr(), Value(), Value());
+//  opsToErase.push_back(op);
+//  return success();
+//}
+//
+// LogicalResult ConvertStandardToHIRPass::convertOp(mlir::MulFOp op) {
+//  OpBuilder builder(op);
+//  builder.create<hir::MulFOp>(op.getLoc(), op.getResult().getType(), op.lhs(),
+//                              op.rhs(), IntegerAttr(), Value(), Value());
+//  opsToErase.push_back(op);
+//  return success();
+//}
 
 LogicalResult ConvertStandardToHIRPass::convertOp(mlir::ReturnOp op) {
   OpBuilder builder(op);
@@ -450,7 +472,7 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::ReturnOp op) {
                                  IntegerAttr(), Value(), Value());
   }
 
-  builder.create<hir::YieldOp>(op.getLoc());
+  builder.create<hir::ReturnOp>(op.getLoc());
   opsToErase.push_back(op);
   return success();
 }

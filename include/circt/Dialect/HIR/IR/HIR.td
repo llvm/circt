@@ -40,7 +40,7 @@ class HIR_Op<string mnemonic, list<OpTrait> traits = []>
 : Op<HIR_Dialect, mnemonic, traits>;
 
 
-def YieldOp : HIR_Op<"yield", [Terminator,AttrSizedOperandSegments] > {
+def YieldOp : HIR_Op<"yield", [ParentOneOf<["ForOp","UnrollForOp","IfOp"]>,Terminator,AttrSizedOperandSegments] > {
   let summary = "Yield from loops";
   let description = [{
     This Op yields from a loop.
@@ -397,13 +397,13 @@ def AddIOp: HIR_Op<"addi",[NoSideEffect,AttrSizedOperandSegments]>{
   let description = [{
     This op adds two inputs of same type (integer or index).
       Example:
-      ```mlir %yy = hir.addi %a, %b at %t: i32 delay 1```
+      ```mlir %yy = hir.addi (%a, %b) at %t: i32 delay 1```
   }];
 
   let arguments = (ins AnyType : $op1, AnyType: $op2,  OptionalAttr<I64Attr>:$delay, 
       Optional<TimeType>:$tstart, Optional<Index>: $offset);
   let results = (outs AnyType : $res);
-  let assemblyFormat = [{$op1 `,` $op2 custom<TimeAndOffset> 
+  let assemblyFormat = [{`(`$op1 `,` $op2 `)` custom<TimeAndOffset> 
     ($tstart, $offset) attr-dict `:` custom<BinOpOperandsAndResultType>(type($res), type($op1),type($op2)) (`delay` $delay^)?
     }];
 }
@@ -413,13 +413,13 @@ def SubIOp: HIR_Op<"subi",[NoSideEffect,AttrSizedOperandSegments]>{
   let description = [{
     This op subtracts second operand from first operand. Operands must be of same type (integer or index).
       Example:
-      ```mlir %yy = hir.subi %a, %b at %t: i32 delay 1```
+      ```mlir %yy = hir.subi (%a, %b) at %t: i32 delay 1```
   }];
 
   let arguments = (ins AnyType : $op1, AnyType: $op2,  OptionalAttr<I64Attr>:$delay, 
       Optional<TimeType>:$tstart, Optional<Index>: $offset);
   let results = (outs AnyType : $res);
-  let assemblyFormat = [{$op1 `,` $op2 custom<TimeAndOffset> 
+  let assemblyFormat = [{`(`$op1 `,` $op2 `)` custom<TimeAndOffset> 
     ($tstart, $offset) attr-dict `:` custom<BinOpOperandsAndResultType>(type($res), type($op1),type($op2)) (`delay` $delay^)?
     }];
 }
@@ -429,13 +429,13 @@ def MulIOp: HIR_Op<"muli",[NoSideEffect,AttrSizedOperandSegments]>{
   let description = [{
     This op multipliers to integer operands. Operands must be of same type (integer or index).
       Example:
-      ```mlir %yy = hir.muli %a, %b at %t: i32 delay 1```
+      ```mlir %yy = hir.muli (%a, %b ) at %t: i32 delay 1```
   }];
 
   let arguments = (ins AnyType : $op1, AnyType: $op2,  OptionalAttr<I64Attr>:$delay, 
       Optional<TimeType>:$tstart, Optional<Index>: $offset);
   let results = (outs AnyType : $res);
-  let assemblyFormat = [{$op1 `,` $op2 custom<TimeAndOffset> 
+  let assemblyFormat = [{`(`$op1 `,` $op2`)` custom<TimeAndOffset> 
     ($tstart, $offset) attr-dict `:` custom<BinOpOperandsAndResultType>(type($res), type($op1),type($op2)) (`delay` $delay^)?
     }];
 }
@@ -445,13 +445,13 @@ def AddFOp: HIR_Op<"addf",[NoSideEffect,AttrSizedOperandSegments]>{
   let description = [{
     This op adds two floatin point inputs of same type.
       Example:
-      ```mlir %yy = hir.addf %a, %b at %t: f32 delay 4```
+      ```mlir %yy = hir.addf (%a, %b) at %t: f32 delay 4```
   }];
 
   let arguments = (ins AnyType : $op1, AnyType: $op2,  OptionalAttr<I64Attr>:$delay, 
       Optional<TimeType>:$tstart, Optional<Index>: $offset);
   let results = (outs AnyType : $res);
-  let assemblyFormat = [{$op1 `,` $op2 custom<TimeAndOffset> 
+  let assemblyFormat = [{`(`$op1 `,` $op2`)` custom<TimeAndOffset> 
     ($tstart, $offset) attr-dict `:` custom<BinOpOperandsAndResultType>(type($res), type($op1),type($op2)) (`delay` $delay^)?
     }];
 }
@@ -461,13 +461,13 @@ def SubFOp: HIR_Op<"subf",[NoSideEffect,AttrSizedOperandSegments]>{
   let description = [{
     This op subtracts second floating point operand from first. Operands must be of same type.
       Example:
-      ```mlir %yy = hir.subf %a, %b at %t: f32 delay 4```
+      ```mlir %yy = hir.subf (%a, %b) at %t: f32 delay 4```
   }];
 
   let arguments = (ins AnyType : $op1, AnyType: $op2,  OptionalAttr<I64Attr>:$delay, 
       Optional<TimeType>:$tstart, Optional<Index>: $offset);
   let results = (outs AnyType : $res);
-  let assemblyFormat = [{$op1 `,` $op2 custom<TimeAndOffset> 
+  let assemblyFormat = [{`(`$op1 `,` $op2 `)` custom<TimeAndOffset> 
     ($tstart, $offset) attr-dict `:` custom<BinOpOperandsAndResultType>(type($res), type($op1),type($op2)) (`delay` $delay^)?
     }];
 }
@@ -477,13 +477,13 @@ def MulFOp: HIR_Op<"mulf",[NoSideEffect,AttrSizedOperandSegments]>{
   let description = [{
     This op multipliers two floating point operands. Operands must be of same type.
       Example:
-      ```mlir %yy = hir.mulf %a, %b at %t: f32 delay 1```
+      ```mlir %yy = hir.mulf (%a, %b) at %t: f32 delay 1```
   }];
 
   let arguments = (ins AnyType : $op1, AnyType: $op2,  OptionalAttr<I64Attr>:$delay, 
       Optional<TimeType>:$tstart, Optional<Index>: $offset);
   let results = (outs AnyType : $res);
-  let assemblyFormat = [{$op1 `,` $op2 custom<TimeAndOffset> 
+  let assemblyFormat = [{`(`$op1 `,` $op2`)` custom<TimeAndOffset> 
     ($tstart, $offset) attr-dict `:` custom<BinOpOperandsAndResultType>(type($res), type($op1),type($op2)) (`delay` $delay^)?
     }];
 }
