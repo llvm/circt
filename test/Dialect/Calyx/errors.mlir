@@ -80,12 +80,12 @@ calyx.program {
 // -----
 
 calyx.program {
-  calyx.component @A(%in: i8) -> (%out: i8) {
+  calyx.component @A(%in: i8) -> () {
     calyx.wires {}
     calyx.control {}
   }
   calyx.component @main() -> () {
-    %in, %out = calyx.cell "c0" @A : i8, i8
+    %in = calyx.cell "c0" @A : i8
     %c1_i1 = constant 1 : i1
 
     calyx.wires {
