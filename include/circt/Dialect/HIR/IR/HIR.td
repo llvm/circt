@@ -39,13 +39,8 @@ def BusType: Type<CPred<"$_self.isa<BusType>()">, "HIR bus type ">,
 class HIR_Op<string mnemonic, list<OpTrait> traits = []>
 : Op<HIR_Dialect, mnemonic, traits>;
 
-//def ImplicitTerminator
-//: SingleBlockImplicitTerminator<"TerminatorOp">;
 
-def ImplicitYieldTerminator
-: SingleBlockImplicitTerminator<"YieldOp">;
-
-def YieldOp : HIR_Op<"yield", [Terminator, AttrSizedOperandSegments] > {
+def YieldOp : HIR_Op<"yield", [Terminator,AttrSizedOperandSegments] > {
   let summary = "Yield from loops";
   let description = [{
     This Op yields from a loop.
@@ -61,42 +56,35 @@ def YieldOp : HIR_Op<"yield", [Terminator, AttrSizedOperandSegments] > {
   let builders = [OpBuilder<(ins),[{
       build($_builder,$_state,SmallVector<Value>(),Value(),Value());
   }]>];
+  //TODO: Currently yieldOp prints even if there is no timevar or operands.
+  // If the custom printer returns without printing anything, then mlir does not print the op.
+  // We can use custom printer/parser to ensure that the yieldOp is not printed.
   let assemblyFormat = [{ attr-dict (`(` $operands^ `)` `:` type($operands))? 
     custom<TimeAndOffset>($tstart, $offset)}];
+
+  //let parser = [{return parse$cppClass(parser,result);}];
+  //let printer = [{return print$cppClass(p,*this);}];
   let hasCanonicalizeMethod = true;
 }
 
-//def ReturnOp : HIR_Op<"return", [HasParent<"FuncOp">, Terminator]> {
-//  let summary = "Return from function";
-//
-//  let description = [{
-//    This instruction must be the last instruction in a block.
-//      ```mlir hir.return (%x, %y): (i32, !hir.const<i1>)```
-//  }];
-//
-//  let arguments = (ins Variadic<AnyType>:$operands);
-//
-//  let assemblyFormat = "(`(`$operands^`)` `:` `(`type($operands)`)`)? attr-dict";
-//}
+def ReturnOp : HIR_Op<"return", [HasParent<"FuncOp">, Terminator]> {
+  let summary = "Return from function";
 
-//def TerminatorOp :
-//HIR_Op<"terminator", [Terminator]> {
-//  let summary = "HIR terminator operation";
-//  let description = [{
-//    This is the terminator op for loop and if statement regions
-//      Syntax:
-//      ```operation ::= `"hir.terminator"() : () -> ()````
-//  }];
-//
-//  // No custom parsing/printing form.
-//  let parser = ?;
-//  let printer = ?;
-//
-//  // Fully specified by traits.
-//  let verifier = ?;
-//}
+  let description = [{
+    This instruction must be the last instruction in the function.
+    If hir.yield is specified for the function then return must be specified.
+      ```mlir hir.return (%x, %y): (i32, !hir.const<i1>)```
+  }];
 
-def FuncOp : HIR_Op<"func", [Symbol, ImplicitYieldTerminator, FunctionLike, IsolatedFromAbove, DeclareOpInterfaceMethods<CallableOpInterface>]> {
+  let arguments = (ins Variadic<AnyType>:$operands);
+  let builders = [OpBuilder<(ins),[{
+      build($_builder,$_state,SmallVector<Value>());
+  }]>];
+
+  let assemblyFormat = "(`(`$operands^`)` `:` `(`type($operands)`)`)? attr-dict";
+}
+
+def FuncOp : HIR_Op<"func", [Symbol, SingleBlockImplicitTerminator<"ReturnOp">, FunctionLike, IsolatedFromAbove, DeclareOpInterfaceMethods<CallableOpInterface>]> {
   let summary = "Function definition";
   let description = [{
     This Op creates a new function 
@@ -146,7 +134,7 @@ def FuncOp : HIR_Op<"func", [Symbol, ImplicitYieldTerminator, FunctionLike, Isol
   let verifier =[{return verifyFuncOp(*this);}];
 }
 
-def IfOp : HIR_Op<"if", [ImplicitYieldTerminator, RecursiveSideEffects, AttrSizedOperandSegments]> {
+def IfOp : HIR_Op<"if", [SingleBlockImplicitTerminator<"YieldOp">, RecursiveSideEffects, AttrSizedOperandSegments]> {
   let summary = "if operation";
   let description = [{
     This op implements an if statement.
@@ -165,7 +153,7 @@ def IfOp : HIR_Op<"if", [ImplicitYieldTerminator, RecursiveSideEffects, AttrSize
   let printer = [{return print$cppClass(p,*this);}];
 }
 
-def ForOp : HIR_Op<"for", [ImplicitYieldTerminator, RecursiveSideEffects,AttrSizedOperandSegments, DeclareOpInterfaceMethods<LoopLikeOpInterface>]> {
+def ForOp : HIR_Op<"for", [SingleBlockImplicitTerminator<"YieldOp">, RecursiveSideEffects,AttrSizedOperandSegments, DeclareOpInterfaceMethods<LoopLikeOpInterface>]> {
   let summary = "for operation";
   let description = [{
     This op implements a sequential for loop.
@@ -203,7 +191,7 @@ def ForOp : HIR_Op<"for", [ImplicitYieldTerminator, RecursiveSideEffects,AttrSiz
   let hasCanonicalizeMethod = true; 
 }
 
-def UnrollForOp : HIR_Op<"unroll_for", [ImplicitYieldTerminator, RecursiveSideEffects, DeclareOpInterfaceMethods<LoopLikeOpInterface>]> {
+def UnrollForOp : HIR_Op<"unroll_for", [SingleBlockImplicitTerminator<"YieldOp">, RecursiveSideEffects, DeclareOpInterfaceMethods<LoopLikeOpInterface>]> {
   let summary = "for operation";
   let description = [{
     This op implements a sequential for loop.

@@ -201,13 +201,29 @@ LogicalResult FuncType::verify(function_ref<InFlightDiagnostic()> emitError,
 //------------------------------------------------------------------------------
 // Operation parsers.
 //------------------------------------------------------------------------------
+
+// YieldOp
+// Syntax:
+// (`(` $operands^ `)`)?
+//    custom<TimeAndOffset>($tstart, $offset) attr-dict `:` (type($operands))?;
+//
+// static ParseResult parseYieldOp(OpAsmParser &parser, OperationState &result)
+// {
+//  SmallVector<OpAsmParser::OperandType, 4> operands;
+//  if (parser.parseLParen() && parser.parseOperandList(operands) &&
+//      parser.parseRParen())
+//    return failure();
+//  return success();
+//}
+
+// static void printYieldOp(OpAsmPrinter &printer, YieldOp op) {}
+
 /// CallOp
 /// Syntax:
 /// $callee `(` $operands `)` `at` $tstart (`offset` $offset^ )?
 ///   `:` ($operand (delay $delay^)?) `->` ($results)
 
 static ParseResult parseCallOp(OpAsmParser &parser, OperationState &result) {
-
   OpAsmParser::OperandType calleeVar;
   Type calleeTy;
   SmallVector<OpAsmParser::OperandType, 4> operands;
@@ -348,8 +364,7 @@ static ParseResult parseIfOp(OpAsmParser &parser, OperationState &result) {
   Region *ifBody = result.addRegion();
   if (parser.parseRegion(*ifBody, {}, {}))
     return failure();
-  auto &builder = parser.getBuilder();
-  IfOp::ensureTerminator(*ifBody, builder, result.location);
+  // IfOp::ensureTerminator(*ifBody, builder, result.location);
   return success();
 }
 
@@ -495,7 +510,7 @@ static void printUnrollForOp(OpAsmPrinter &printer, UnrollForOp op) {
 
 static ParseResult parseUnrollForOp(OpAsmParser &parser,
                                     OperationState &result) {
-  auto &builder = parser.getBuilder();
+  // auto &builder = parser.getBuilder();
   auto *context = parser.getBuilder().getContext();
   Type timeTypeVar = helper::getTimeType(context);
   Type tstartRawType = timeTypeVar;
@@ -555,7 +570,7 @@ static ParseResult parseUnrollForOp(OpAsmParser &parser,
 
   if (parser.parseRegion(*body, regionOperands, regionOperandTypes))
     return failure();
-  ForOp::ensureTerminator(*body, builder, result.location);
+  // UnrollForOp::ensureTerminator(*body, builder, result.location);
   result.addTypes(helper::getTimeType(context));
   return success();
 }
@@ -687,6 +702,7 @@ static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
   entryArgTypes.push_back(
       helper::getTimeType(parser.getBuilder().getContext()));
   auto r = parser.parseOptionalRegion(*body, entryArgs, entryArgTypes);
+  FuncOp::ensureTerminator(*body, builder, result.location);
   if (r.hasValue())
     return r.getValue();
   return success();
