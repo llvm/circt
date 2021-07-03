@@ -1000,24 +1000,24 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
     return success();
   }
 
-  auto getConstant = [&](APInt constant) -> Value {
-    return rewriter.create<hw::ConstantOp>(op.getLoc(), std::move(constant));
-  };
-
-  auto replaceWith = [&](ICmpPredicate predicate, Value lhs,
-      Value rhs) -> LogicalResult {
-    rewriter.replaceOpWithNewOp<ICmpOp>(op, predicate, lhs, rhs);
-    return success();
-  };
-
-  auto replaceWithConstantI1 = [&](bool constant) -> LogicalResult {
-    rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, APInt(1, constant));
-    return success();
-  };
-
   // Canonicalize with RHS constant
   if (matchPattern(op.rhs(), m_RConstant(rhs))) {
     hw::ConstantOp constant;
+
+    auto getConstant = [&](APInt constant) -> Value {
+      return rewriter.create<hw::ConstantOp>(op.getLoc(), std::move(constant));
+    };
+
+    auto replaceWith = [&](ICmpPredicate predicate, Value lhs,
+                           Value rhs) -> LogicalResult {
+      rewriter.replaceOpWithNewOp<ICmpOp>(op, predicate, lhs, rhs);
+      return success();
+    };
+
+    auto replaceWithConstantI1 = [&](bool constant) -> LogicalResult {
+      rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, APInt(1, constant));
+      return success();
+    };
 
     switch (op.predicate()) {
     case ICmpPredicate::slt:
