@@ -197,36 +197,30 @@ def GroupOp : CalyxOp<"group", [
   let assemblyFormat = "$sym_name $body attr-dict";
 }
 
-def GuardOp : CalyxOp<"guard", [
-  ]> {
-  let summary = "Calyx Guard";
-  let description = [{
-    todo
-
-    ```mlir
-      calyx.guard comb.and %0, %1 : i1
-    ```
-  }];
-  let arguments = (ins Variadic<AnyType>:$inputs);
-}
-
-def AssignOp : CalyxOp<"assign", [
-    SameTypeOperands
-  ]> {
+def AssignOp : CalyxOp<"assign", []> {
   let summary = "Calyx Assignment";
   let description = [{
     The "calyx.assign" operation represents a non-blocking
-    assignment. An assignment may optionally be
-    guarded. This operation should only be instantiated in the
+    assignment. An assignment may optionally be guarded,
+    which controls when the assignment should be active.
+    This operation should only be instantiated in the
     "calyx.wires" section or a "calyx.group".
 
     ```mlir
-      calyx.assign %1 = %2 : i16
+      calyx.assign %1 = %2 : i16, i16
+      calyx.assign %1 = %2, %guard ? : i16, i16
     ```
   }];
-  let arguments = (ins AnyType:$dest, AnyType:$src);
-  let assemblyFormat = "$dest `=` $src attr-dict `:` type($src)";
+  let arguments = (ins
+    AnyType:$dest,
+    AnyType:$src,
+    Optional<I1>:$guard
+  );
   let verifier = "return ::verify$cppClass(*this);";
+  let assemblyFormat = [{
+    $dest `=` $src (`,` $guard^ `?`)?
+    attr-dict `:` type($dest) `,` type($src)
+  }];
 }
 
 def DoneOp : CalyxOp<"done", [
@@ -237,12 +231,18 @@ def DoneOp : CalyxOp<"done", [
     let description = [{
       The "calyx.done" operation represents a port on a
       Calyx group that signifies when the group is finished.
+      A done operation may optionally be guarded, which controls
+      when the group's done operation should be active.
 
       ```mlir
         calyx.done %0 : i1
+        calyx.done %0, %guard ? : i1
       ```
     }];
 
-    let arguments = (ins AnyType:$src);
-    let assemblyFormat = "$src attr-dict `:` type($src)";
+    let arguments = (ins
+      AnyType:$src,
+      Optional<I1>:$guard
+    );
+    let assemblyFormat = "$src (`,` $guard^ `?`)? attr-dict `:` type($src)";
 }
