@@ -963,6 +963,11 @@ OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
   if (getType().getBitWidthOrSentinel() < 0)
     return {};
 
+  // // mux(0-bit, x, y) -> y
+  if (sel().getType().cast<FIRRTLType>().getBitWidthOrSentinel() == 0 &&
+      low().getType() == getType())
+    return low();
+
   // mux(0/1, x, y) -> x or y
   if (auto cond = operands[0].dyn_cast_or_null<IntegerAttr>()) {
     if (cond.getValue().isNullValue() && low().getType() == getType())

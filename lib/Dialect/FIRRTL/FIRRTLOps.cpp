@@ -1983,15 +1983,6 @@ FIRRTLType MuxPrimOp::inferReturnType(ValueRange operands,
   auto high = operands[1].getType().cast<FIRRTLType>();
   auto low = operands[2].getType().cast<FIRRTLType>();
 
-  // Sel needs to be a one bit uint or an unknown width uint.
-  auto selui = sel.dyn_cast<UIntType>();
-  int32_t selWidth = selui.getBitWidthOrSentinel();
-  if (!selui || selWidth == 0 || selWidth > 1) {
-    if (loc)
-      mlir::emitError(*loc, "selector must be UInt or UInt<1>");
-    return {};
-  }
-
   // TODO: Should use a more general type equivalence operator.
   if (high == low)
     return low;
