@@ -56,6 +56,20 @@ hw.module @compareStrengthSignedCommonPrefix(%arg0 : i3, %arg1: i9, %arg2: i9) -
   hw.output %2 : i1
 }
 
+// Validates that narrowing signed comparisons that strips of the common suffix
+// must add the sign-bit. The sign bit if the leading common element has a length of 1.
+// CHECK-LABEL: hw.module @compareStrengthSignedCommonPrefixNoExtract
+// CHECK-NEXT:    [[ARG1:%[0-9]+]] = comb.concat %arg0, %arg2 : (i1, i9) -> i10
+// CHECK-NEXT:    [[ARG2:%[0-9]+]] = comb.concat %arg0, %arg3 : (i1, i9) -> i10
+// CHECK-NEXT:    [[RES:%[0-9]+]] = comb.icmp sge [[ARG1]], [[ARG2]] : i10
+// CHECK-NEXT:    hw.output [[RES]] : i1
+hw.module @compareStrengthSignedCommonPrefixNoExtract(%arg0 : i1, %arg1 : i3, %arg2: i9, %arg3: i9) -> (%o : i1) {
+  %0 = comb.concat %arg0, %arg1, %arg2 : (i1, i3, i9) -> i13
+  %1 = comb.concat %arg0, %arg1, %arg3 : (i1, i3, i9) -> i13
+  %2 = comb.icmp sge %0, %1 : i13
+  hw.output %2 : i1
+}
+
 // Validates that cmp(concat(..), concat(...)) that should be simplified to true
 // are indeed so.
 // CHECK-LABEL: hw.module @compareConcatEliminationTrueCases
