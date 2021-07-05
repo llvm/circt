@@ -276,13 +276,6 @@ static LogicalResult verifyAssignOp(AssignOp assign) {
     return assign.emitOpError(
         "should only be contained in 'calyx.wires' or 'calyx.group'");
 
-  auto srcType = assign.src().getType();
-  auto destType = assign.dest().getType();
-  if (srcType != destType)
-    return assign.emitOpError()
-           << "expected srcType: " << srcType
-           << " to be equivalent to destType: " << destType;
-
   return success();
 }
 
