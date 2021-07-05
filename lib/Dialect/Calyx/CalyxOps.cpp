@@ -47,7 +47,7 @@ static WiresOp getWiresOp(ComponentOp componentOp) {
   auto opIt = llvm::find_if(*body, [](auto &&op) { return isa<WiresOp>(op); });
 
   assert(opIt != body->end() && "A component should have a WiresOp.");
-  return dyn_cast<WiresOp>(*opIt);
+  return cast<WiresOp>(*opIt);
 }
 
 /// Returns the type of the given component as a function type.
@@ -282,7 +282,7 @@ static LogicalResult verifyCellOp(CellOp cell) {
 //===----------------------------------------------------------------------===//
 static LogicalResult verifyAssignOp(AssignOp assign) {
   auto parent = assign->getParentOp();
-  if (!(isa<GroupOp, WiresOp>(parent)))
+  if (!isa<GroupOp, WiresOp>(parent))
     return assign.emitOpError(
         "should only be contained in 'calyx.wires' or 'calyx.group'");
 
