@@ -63,12 +63,17 @@ calyx.program {
       }
     }
     calyx.control {
-      // CHECK: calyx.seq {
+      // CHECK:      calyx.seq {
       // CHECK-NEXT: calyx.enable @Group1
       // CHECK-NEXT: calyx.enable @Group2
+      // CHECK-NEXT: calyx.seq {
+      // CHECK-NEXT: calyx.enable @Group1
       calyx.seq {
         calyx.enable @Group1
         calyx.enable @Group2
+        calyx.seq {
+          calyx.enable @Group1
+        }
       }
     }
   }

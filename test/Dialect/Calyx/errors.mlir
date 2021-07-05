@@ -100,8 +100,8 @@ calyx.program {
   }
   calyx.component @main() -> () {
     calyx.wires {}
+    // expected-error @+1 {{'calyx.control' op has operation: calyx.cell, which is not allowed in this control-like operation}}
     calyx.control {
-      // expected-error @+1 {{'calyx.cell' op has operation: calyx.cell, which is not allowed in this control-like operation}}
       calyx.cell "b0" @B
     }
   }

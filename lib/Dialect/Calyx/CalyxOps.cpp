@@ -43,10 +43,11 @@ static LogicalResult verifyProgramOp(ProgramOp program) {
 /// Gets the WiresOp of a component.
 static WiresOp getWiresOp(ComponentOp componentOp) {
   WiresOp wiresOp;
-  auto opIt = llvm::find_if(*componentOp.getBody(),
-                            [](auto &&op) { return isa<WiresOp>(op); });
-  // A component is guaranteed to have a WiresOp.
-  return dyn_cast<WiresOp>(opIt);
+  auto body = componentOp.getBody();
+  auto opIt = llvm::find_if(*body, [](auto &&op) { return isa<WiresOp>(op); });
+
+  assert(opIt != body->end() && "A component should have a WiresOp.");
+  return dyn_cast<WiresOp>(*opIt);
 }
 
 /// Returns the type of the given component as a function type.
@@ -295,11 +296,19 @@ static LogicalResult verifyAssignOp(AssignOp assign) {
 /// A helper function to verify that each operation in
 /// the body of a control-like operation is valid.
 static LogicalResult verifyControlLikeOpBody(Operation *op) {
-  for (auto &&op : op->getRegion(0).front()) {
-    if (isa<SeqOp, EnableOp>(op))
+  bool isNotControlOp = !isa<ControlOp>(op);
+  for (auto &&bodyOp : op->getRegion(0).front()) {
+    if (isa<SeqOp>(bodyOp))
       continue;
-    return op.emitOpError()
-           << "has operation: " << op.getName()
+
+    if (isNotControlOp && isa<EnableOp>(bodyOp))
+      // An EnableOp may be nested in any control-like
+      // operation except "calyx.control". This is verified
+      // in the ODS of EnableOp, but kept here for correctness.
+      continue;
+
+    return op->emitOpError()
+           << "has operation: " << bodyOp.getName()
            << ", which is not allowed in this control-like operation";
   }
   return success();
