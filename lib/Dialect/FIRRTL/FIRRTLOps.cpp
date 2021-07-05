@@ -1979,7 +1979,6 @@ LogicalResult MuxPrimOp::validateArguments(ValueRange operands,
 FIRRTLType MuxPrimOp::inferReturnType(ValueRange operands,
                                       ArrayRef<NamedAttribute> attrs,
                                       Optional<Location> loc) {
-  auto sel = operands[0].getType();
   auto high = operands[1].getType().cast<FIRRTLType>();
   auto low = operands[2].getType().cast<FIRRTLType>();
 
