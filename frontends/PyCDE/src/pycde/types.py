@@ -13,6 +13,8 @@ class _Types:
 
   def __init__(self):
     self.registered_aliases = {}
+    self.declared_aliases = {}
+    self.type_scopes = {}
 
   def __getattr__(self, name: str) -> mlir.ir.Type:
     return mlir.ir.Type.parse(name)
@@ -42,16 +44,34 @@ class _Types:
       if name in self.registered_aliases:
         if alias != self.registered_aliases[name]:
           raise RuntimeError(
-              f"Re-defining type alias for {name}! "\
-              f"Given: {inner_type}, "\
-              f"existing: {self.registered_aliases[name].inner_type}"
-          )
+              f"Re-defining type alias for {name}! "
+              f"Given: {inner_type}, "
+              f"existing: {self.registered_aliases[name].inner_type}")
         return self.registered_aliases[name]
 
       self.registered_aliases[name] = alias
       return alias
 
     return inner_type
+
+  def declare_types(self, mod):
+    if not self.registered_aliases:
+      return
+
+    if not self.type_scopes.get(mod):
+      with mlir.ir.InsertionPoint.at_block_begin(mod.body):
+        self.type_scopes[mod] = hw.TypeScopeOp.create(self.TYPE_SCOPE)
+        self.declared_aliases[mod] = set([])
+
+    # TODO: at this point, we should ensure that any aliases referring to other
+    # aliases are declared in an order that respects def-before-use, or error on
+    # mutually recursive aliases. For now, emit them in arbitrary order.
+    with mlir.ir.InsertionPoint(self.type_scopes[mod].body):
+      for (name, type) in self.registered_aliases.items():
+        if name in self.declared_aliases[mod]:
+          continue
+        hw.TypedeclOp.create(name, type.inner_type)
+        self.declared_aliases[mod].add(name)
 
 
 types = _Types()

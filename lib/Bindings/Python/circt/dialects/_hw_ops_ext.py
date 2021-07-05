@@ -430,3 +430,24 @@ class StructExtractOp:
     field_type = struct_type.get_field(field_name)
     return hw.StructExtractOp(field_type, struct_value,
                               StringAttr.get(field_name))
+
+
+class TypedeclOp:
+
+  @staticmethod
+  def create(sym_name: str, type: Type, verilog_name: str = None):
+    return hw.TypedeclOp(StringAttr.get(sym_name), TypeAttr.get(type),
+                         verilog_name)
+
+
+class TypeScopeOp:
+
+  @staticmethod
+  def create(sym_name: str):
+    op = hw.TypeScopeOp(StringAttr.get(sym_name))
+    op.regions[0].blocks.append()
+    return op
+
+  @property
+  def body(self):
+    return self.regions[0].blocks[0]

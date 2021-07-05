@@ -2,6 +2,8 @@
 
 from pycde import dim, types
 
+from mlir.ir import Module
+
 # CHECK: i6
 array1 = dim(types.i6)
 array1.dump()
@@ -41,3 +43,19 @@ print()
 dim_alias = dim(1, 8, name="myname5")
 dim_alias.dump()
 print()
+
+# CHECK: hw.type_scope @pycde
+# CHECK: hw.typedecl @myname1 : i8
+# CHECK: hw.typedecl @myname2 : i8
+# CHECK: hw.typedecl @myname3 : !hw.array<8xi1>
+# CHECK: hw.typedecl @myname4 : !hw.struct<a: i1, b: i1>
+# CHECK: hw.typedecl @myname5 : !hw.array<8xi1>
+# CHECK-NOT: hw.typedecl @myname1
+# CHECK-NOT: hw.typedecl @myname2
+# CHECK-NOT: hw.typedecl @myname3
+# CHECK-NOT: hw.typedecl @myname4
+# CHECK-NOT: hw.typedecl @myname5
+m = Module.create()
+types.declare_types(m)
+types.declare_types(m)
+print(m)
