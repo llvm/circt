@@ -296,8 +296,12 @@ static LogicalResult verifyAssignOp(AssignOp assign) {
 /// A helper function to verify that each operation in
 /// the body of a control-like operation is valid.
 static LogicalResult verifyControlLikeOpBody(Operation *op) {
+  assert(op->getNumRegions() != 0 && "The operation should have a region.");
+  auto &region = op->getRegion(0);
+  assert(region.hasOneBlock() && "The region should have one block.");
+
   bool isNotControlOp = !isa<ControlOp>(op);
-  for (auto &&bodyOp : op->getRegion(0).front()) {
+  for (auto &&bodyOp : region.front()) {
     if (isa<SeqOp>(bodyOp))
       continue;
 
