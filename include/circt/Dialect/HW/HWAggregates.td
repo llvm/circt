@@ -30,7 +30,7 @@ def ArrayCreateOp : HWOp<"array_create", [NoSideEffect, SameTypeOperands]> {
   }];
 
   let arguments = (ins Variadic<HWNonInOutType>:$inputs);
-  let results = (outs ArrayType:$result);
+  let results = (outs ArrayTypeImpl:$result);
 
   let verifier = [{
     unsigned returnSize = getType().cast<ArrayType>().getSize();
@@ -155,7 +155,7 @@ def ArrayGetOp : HWOp<"array_get",
 def StructCreateOp : HWOp<"struct_create", [NoSideEffect]> {
   let summary = "Create a struct from constituent parts.";
   let arguments = (ins Variadic<HWNonInOutType>:$input);
-  let results = (outs StructType:$result);
+  let results = (outs StructTypeImpl:$result);
 
   let parser = "return ::parse$cppClass(parser, result);";
   let printer = "return ::print(p, *this);";
@@ -214,7 +214,7 @@ def UnionCreateOp : HWOp<"union_create", [NoSideEffect]> {
   }];
 
   let arguments = (ins StrAttr:$field, HWNonInOutType:$input);
-  let results = (outs UnionType:$result);
+  let results = (outs UnionTypeImpl:$result);
 
   let parser = "return ::parse$cppClass(parser, result);";
   let printer = "return ::print(p, *this);";
