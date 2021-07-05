@@ -40,6 +40,15 @@ static LogicalResult verifyProgramOp(ProgramOp program) {
 // ComponentOp
 //===----------------------------------------------------------------------===//
 
+/// Gets the WiresOp of a component.
+static WiresOp getWiresOp(ComponentOp componentOp) {
+  WiresOp wiresOp;
+  auto opIt = llvm::find_if(*componentOp.getBody(),
+                            [](auto &&op) { return isa<WiresOp>(op); });
+  // A component is guaranteed to have a WiresOp.
+  return dyn_cast<WiresOp>(opIt);
+}
+
 /// Returns the type of the given component as a function type.
 static FunctionType getComponentType(ComponentOp component) {
   return component.getTypeAttr().getValue().cast<FunctionType>();
@@ -272,9 +281,52 @@ static LogicalResult verifyCellOp(CellOp cell) {
 //===----------------------------------------------------------------------===//
 static LogicalResult verifyAssignOp(AssignOp assign) {
   auto parent = assign->getParentOp();
-  if (!(isa<GroupOp>(parent) || isa<WiresOp>(parent)))
+  if (!(isa<GroupOp, WiresOp>(parent)))
     return assign.emitOpError(
         "should only be contained in 'calyx.wires' or 'calyx.group'");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ControlOp
+//===----------------------------------------------------------------------===//
+
+/// A helper function to verify that each operation in
+/// the body of a control-like operation is valid.
+static LogicalResult verifyControlLikeOpBody(Operation *op) {
+  for (auto &&op : op->getRegion(0).front()) {
+    if (isa<SeqOp, EnableOp>(op))
+      continue;
+    return op.emitOpError()
+           << "has operation: " << op.getName()
+           << ", which is not allowed in this control-like operation";
+  }
+  return success();
+}
+
+static LogicalResult verifyControlOp(ControlOp controlOp) {
+  return verifyControlLikeOpBody(controlOp);
+}
+
+//===----------------------------------------------------------------------===//
+// SeqOp
+//===----------------------------------------------------------------------===//
+static LogicalResult verifySeqOp(SeqOp seqOp) {
+  return verifyControlLikeOpBody(seqOp);
+}
+
+//===----------------------------------------------------------------------===//
+// EnableOp
+//===----------------------------------------------------------------------===//
+static LogicalResult verifyEnableOp(EnableOp enableOp) {
+  auto component = enableOp->getParentOfType<ComponentOp>();
+  auto wiresOp = getWiresOp(component);
+  auto groupName = enableOp.groupName();
+
+  if (!wiresOp.lookupSymbol<GroupOp>(groupName))
+    return enableOp.emitOpError()
+           << "with group: " << groupName << ", which does not exist.";
 
   return success();
 }

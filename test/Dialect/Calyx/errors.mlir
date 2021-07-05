@@ -76,3 +76,33 @@ calyx.program {
     calyx.control {}
   }
 }
+
+// -----
+
+calyx.program {
+  calyx.component @main() -> () {
+    calyx.wires {}
+    calyx.control {
+      calyx.seq {
+        // expected-error @+1 {{'calyx.enable' op with group: WrongName, which does not exist.}}
+        calyx.enable @WrongName
+      }
+    }
+  }
+}
+
+// -----
+
+calyx.program {
+  calyx.component @B() -> () {
+    calyx.wires {}
+    calyx.control {}
+  }
+  calyx.component @main() -> () {
+    calyx.wires {}
+    calyx.control {
+      // expected-error @+1 {{'calyx.cell' op has operation: calyx.cell, which is not allowed in this control-like operation}}
+      calyx.cell "b0" @B
+    }
+  }
+}

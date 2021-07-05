@@ -30,7 +30,6 @@ def ProgramOp : CalyxContainer<"program", [
   let verifier = "return ::verify$cppClass(*this);";
 }
 
-
 def ComponentOp : CalyxOp<"component", [
     HasParent<"ProgramOp">,
     Symbol,
@@ -100,30 +99,6 @@ def WiresOp : CalyxContainer<"wires", [
       calyx.wires {
         calyx.group @A { ... }
         calyx.assign %1 = %2 : i16
-      }
-    ```
-  }];
-}
-
-// TODO1(Calyx): The terminator for the control flow
-// schedule should define that of the component.
-// TODO2(Calyx): While it currently carries the
-// SingleBlock trait, this may change depending
-// on how we decide to represent Groups in the
-// dialect.
-def ControlOp : CalyxContainer<"control", [
-    HasParent<"ComponentOp">
-  ]> {
-  let summary = "Calyx Control";
-  let description = [{
-    The "calyx.control" operation represents the
-    execution schedule defined for the given
-    component, i.e. when each group executes.
-
-    ```mlir
-      calyx.control {
-        // TODO(Calyx): Add `control` examples
-        // once control flow ops are added.
       }
     ```
   }];
