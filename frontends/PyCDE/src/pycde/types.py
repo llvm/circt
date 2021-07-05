@@ -2,6 +2,8 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+from collections import OrderedDict
+
 import mlir.ir
 from circt.dialects import hw
 
@@ -12,7 +14,7 @@ class _Types:
   TYPE_SCOPE = "pycde"
 
   def __init__(self):
-    self.registered_aliases = {}
+    self.registered_aliases = OrderedDict()
     self.declared_aliases = {}
     self.type_scopes = {}
 
@@ -63,9 +65,6 @@ class _Types:
         self.type_scopes[mod] = hw.TypeScopeOp.create(self.TYPE_SCOPE)
         self.declared_aliases[mod] = set([])
 
-    # TODO: at this point, we should ensure that any aliases referring to other
-    # aliases are declared in an order that respects def-before-use, or error on
-    # mutually recursive aliases. For now, emit them in arbitrary order.
     with mlir.ir.InsertionPoint(self.type_scopes[mod].body):
       for (name, type) in self.registered_aliases.items():
         if name in self.declared_aliases[mod]:
