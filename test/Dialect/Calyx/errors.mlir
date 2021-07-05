@@ -70,28 +70,9 @@ calyx.program {
     %0 = calyx.cell "a0" @A : i16
     %1 = calyx.cell "b0" @B : i16
     // expected-error @+1 {{'calyx.assign' op should only be contained in 'calyx.wires' or 'calyx.group'}}
-    calyx.assign %1 = %0 : i16, i16
+    calyx.assign %1 = %0 : i16
 
     calyx.wires {}
-    calyx.control {}
-  }
-}
-
-// -----
-
-calyx.program {
-  calyx.component @A(%in: i8) -> () {
-    calyx.wires {}
-    calyx.control {}
-  }
-  calyx.component @main() -> () {
-    %in = calyx.cell "c0" @A : i8
-    %c1_i1 = constant 1 : i1
-
-    calyx.wires {
-      // expected-error @+1 {{'calyx.assign' op expected srcType: 'i1' to be equivalent to destType: 'i8'}}
-      calyx.assign %in = %c1_i1 : i8, i1
-    }
     calyx.control {}
   }
 }

@@ -197,7 +197,13 @@ def GroupOp : CalyxOp<"group", [
   let assemblyFormat = "$sym_name $body attr-dict";
 }
 
-def AssignOp : CalyxOp<"assign", []> {
+class SameTypeConstraint<string lhs, string rhs>
+ : TypesMatchWith<"lhs and rhs types should be equivalent",
+                   lhs, rhs, [{ $_self }]>;
+
+def AssignOp : CalyxOp<"assign", [
+    SameTypeConstraint<"dest", "src">
+  ]> {
   let summary = "Calyx Assignment";
   let description = [{
     The "calyx.assign" operation represents a non-blocking
@@ -207,8 +213,8 @@ def AssignOp : CalyxOp<"assign", []> {
     "calyx.wires" section or a "calyx.group".
 
     ```mlir
-      calyx.assign %1 = %2 : i16, i16
-      calyx.assign %1 = %2, %guard ? : i16, i16
+      calyx.assign %1 = %2 : i16
+      calyx.assign %1 = %2, %guard ? : i16
     ```
   }];
   let arguments = (ins
@@ -218,12 +224,10 @@ def AssignOp : CalyxOp<"assign", []> {
   );
   let verifier = "return ::verify$cppClass(*this);";
 
-  // TODO1(Calyx): Calyx IR typically represents a
+  // TODO(Calyx): Calyx IR typically represents a
   // guarded assignments as `%dest = %guard ? %src`
-  // TODO2(Calyx): Only need type of `src` or `dest`.
   let assemblyFormat = [{
-    $dest `=` $src (`,` $guard^ `?`)?
-    attr-dict `:` type($dest) `,` type($src)
+    $dest `=` $src (`,` $guard^ `?`)? attr-dict `:` type($dest)
   }];
 }
 

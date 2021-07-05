@@ -48,14 +48,14 @@ calyx.program {
     calyx.wires {
       // CHECK: calyx.group @Group1 {
       calyx.group @Group1 {
-        // CHECK: calyx.assign %1#0 = %0#1 : i8, i8
+        // CHECK: calyx.assign %1#0 = %0#1 : i8
         // CHECK-NEXT: calyx.done %true : i1
-        calyx.assign %in2 = %out1 : i8, i8
+        calyx.assign %in2 = %out1 : i8
         calyx.done %c1_i1 : i1
       }
       calyx.group @Group2 {
-        // CHECK:  calyx.assign %1#0 = %0#1, %2 ? : i8, i8
-        calyx.assign %in2 = %out1, %out3 ?  : i8, i8
+        // CHECK:  calyx.assign %1#0 = %0#1, %2 ? : i8
+        calyx.assign %in2 = %out1, %out3 ?  : i8
 
         // CHECK: calyx.done %true, %3 ? : i1
         %guard = comb.and %c1_i1, %out3 : i1
