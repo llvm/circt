@@ -2,9 +2,10 @@
 
 from pycde import dim, types
 
+# CHECK: !hw.struct<foo: i1, bar: i13>
 st1 = types.struct({"foo": types.i1, "bar": types.i13})
-print(st1.get_fields())
-# CHECK: [('foo', Type(i1)), ('bar', Type(i13))]
+st1.dump()
+print()
 
 # CHECK: i6
 array1 = dim(types.i6)

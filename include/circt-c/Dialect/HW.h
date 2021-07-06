@@ -28,6 +28,7 @@ struct HWStructFieldInfo {
   MlirStringRef name;
   MlirType type;
 };
+typedef struct HWStructFieldInfo HWStructFieldInfo;
 
 //===----------------------------------------------------------------------===//
 // Dialect API.
@@ -80,9 +81,9 @@ MLIR_CAPI_EXPORTED MlirType hwInOutTypeGet(MlirType element);
 MLIR_CAPI_EXPORTED MlirType hwInOutTypeGetElementType(MlirType);
 
 /// Creates an HW struct type in the context associated with the elements.
-MLIR_CAPI_EXPORTED MlirType
-hwStructTypeGet(MlirContext ctx, intptr_t numElements,
-                struct HWStructFieldInfo const *elements);
+MLIR_CAPI_EXPORTED MlirType hwStructTypeGet(MlirContext ctx,
+                                            intptr_t numElements,
+                                            HWStructFieldInfo const *elements);
 
 MLIR_CAPI_EXPORTED MlirType hwStructTypeGetField(MlirType structType,
                                                  MlirStringRef fieldName);
