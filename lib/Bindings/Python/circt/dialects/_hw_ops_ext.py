@@ -378,7 +378,7 @@ class ArrayGetOp:
   @staticmethod
   def create(array_value, idx):
     array_value = support.get_value(array_value)
-    array_type = hw.ArrayType(array_value.type)
+    array_type = support.get_self_or_inner(array_value.type)
     if isinstance(idx, int):
       idx_width = (array_type.size - 1).bit_length()
       idx_val = ConstantOp.create(IntegerType.get_signless(idx_width),
@@ -426,7 +426,7 @@ class StructExtractOp:
   @staticmethod
   def create(struct_value, field_name: str):
     struct_value = support.get_value(struct_value)
-    struct_type = hw.StructType(struct_value.type)
+    struct_type = support.get_self_or_inner(struct_value.type)
     field_type = struct_type.get_field(field_name)
     return hw.StructExtractOp(field_type, struct_value,
                               StringAttr.get(field_name))
