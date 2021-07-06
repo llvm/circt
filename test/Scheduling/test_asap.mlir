@@ -38,3 +38,34 @@ func @test_asap2(%v : complex<f32>) -> f32 attributes { operatortypes = [
   // expected-remark@+1 {{start time = 19}}
   return %5 : f32
 }
+
+func @test_asap3() attributes { auxdeps = [
+    [0,1], [0,2], [2,3], [3,4], [3,6], [4,5], [5,6]
+  ] } {
+  // expected-remark@+1 {{start time = 0}}
+  %0 = constant 0 : i32
+  // expected-remark@+1 {{start time = 1}}
+  %1 = constant 1 : i32
+  // expected-remark@+1 {{start time = 1}}
+  %2 = constant 2 : i32
+  // expected-remark@+1 {{start time = 2}}
+  %3 = constant 3 : i32
+  // expected-remark@+1 {{start time = 3}}
+  %4 = constant 4 : i32
+  // expected-remark@+1 {{start time = 4}}
+  %5 = constant 5 : i32
+  // expected-remark@+1 {{start time = 5}}
+  return
+}
+
+// expected-error@+2 {{dependence cycle detected}}
+// expected-error@+1 {{scheduling failed}}
+func @test_asap4() attributes { auxdeps = [
+    [0,1], [1,2], [2,3], [3,1]
+  ] } {
+  %0 = constant 0 : i32
+  %1 = constant 1 : i32
+  %2 = constant 2 : i32
+  %3 = constant 3 : i32
+  return
+}
