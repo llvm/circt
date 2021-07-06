@@ -24,16 +24,10 @@
 extern "C" {
 #endif
 
-/// Named MLIR attribute.
-///
-/// A named attribute is essentially a (name, attribute) pair where the name is
-/// a string.
-
 struct HWStructFieldInfo {
   MlirStringRef name;
-  MlirAttribute attribute;
+  MlirType type;
 };
-typedef struct MlirNamedAttribute MlirNamedAttribute;
 
 //===----------------------------------------------------------------------===//
 // Dialect API.
