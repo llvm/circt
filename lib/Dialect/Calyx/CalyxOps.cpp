@@ -44,9 +44,13 @@ static LogicalResult verifyProgramOp(ProgramOp program) {
 static WiresOp getWiresOp(ComponentOp componentOp) {
   WiresOp wiresOp;
   auto body = componentOp.getBody();
-  auto opIt = llvm::find_if(*body, [](auto &&op) { return isa<WiresOp>(op); });
 
-  assert(opIt != body->end() && "A component should have a WiresOp.");
+  // Generally, this should be placed at the end of a ComponentOp
+  // before the ControlOp.
+  auto opIt = llvm::find_if(llvm::reverse(*body),
+                            [](auto &&op) { return isa<WiresOp>(op); });
+
+  assert(opIt != body->rend() && "A component should have a WiresOp.");
   return cast<WiresOp>(*opIt);
 }
 
