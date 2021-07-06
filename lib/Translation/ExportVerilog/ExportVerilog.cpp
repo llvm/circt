@@ -1900,7 +1900,8 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
       continue;
 
     auto operand = op.getOperand(operandIndex);
-    if (operand.hasOneUse() && dyn_cast_or_null<InstanceOp>(operand.getDefiningOp())) {
+    if (operand.hasOneUse() &&
+        dyn_cast_or_null<InstanceOp>(operand.getDefiningOp())) {
       ++operandIndex;
       continue;
     }
@@ -2407,14 +2408,17 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     // Emit the value as an expression.
     ops.clear();
 
-    // output ports that are not connected to single use output ports were lowered to wire
+    // Output ports that are not connected to single use output ports were
+    // lowered to wire.
     OutputOp output;
-    if (!elt.isOutput())
+    if (!elt.isOutput()) {
       emitExpression(portVal, ops);
-    else if (portVal.hasOneUse() && (output = dyn_cast_or_null<OutputOp>(portVal.getUses().begin()->getOwner()))) {
+    } else if (portVal.hasOneUse() &&
+             (output = dyn_cast_or_null<OutputOp>(
+                  portVal.getUses().begin()->getOwner()))) {
       auto module = output->getParentOfType<HWModuleOp>();
-      SmallVector<ModulePortInfo> portInfo = getModulePortInfo(module);
-      auto name = getModuleResultNameAttr(module, portVal.getUses().begin()->getOperandNumber());
+      auto name = getModuleResultNameAttr(
+          module, portVal.getUses().begin()->getOperandNumber());
       os << name.getValue().str();
     } else {
       portVal = getWireForValue(portVal);
