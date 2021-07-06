@@ -24,15 +24,12 @@ namespace json = llvm::json;
 using namespace circt;
 using namespace firrtl;
 
-/// Given a string \p target, return a target with any subfield or subindex
-/// references stripped.  Populate a \p annotations with any discovered
-/// references.  This function assumes that the \p target string is a well
-/// formed Annotation Target.
-static StringRef parseSubFieldSubIndexAnnotations(StringRef target,
-                                                  ArrayAttr &annotations,
-                                                  MLIRContext *context) {
+/// Split a target into a base target (including a reference if one exists) and
+/// an optional array of subfield/subindex tokens.
+static std::pair<StringRef, llvm::Optional<ArrayAttr>>
+splitTarget(StringRef target, MLIRContext *context) {
   if (target.empty())
-    return target;
+    return {target, None};
 
   // Find the string index where the target can be partitioned into the "base
   // target" and the "target".  The "base target" is the module or instance and
@@ -61,7 +58,7 @@ static StringRef parseSubFieldSubIndexAnnotations(StringRef target,
 
   // Exit if the target does not contain a subfield or subindex.
   if (fieldBegin == StringRef::npos)
-    return target;
+    return {target, None};
 
   auto targetBase = target.take_front(fieldBegin);
   target = target.substr(fieldBegin);
@@ -90,9 +87,30 @@ static StringRef parseSubFieldSubIndexAnnotations(StringRef target,
   // Save the last token.
   if (!temp.empty())
     annotationVec.push_back(StringAttr::get(context, temp));
-  annotations = ArrayAttr::get(context, annotationVec);
 
-  return targetBase;
+  return {targetBase, ArrayAttr::get(context, annotationVec)};
+}
+
+/// Append the argument `target` to the `annotation` using the key "target".
+static inline void appendTarget(NamedAttrList &annotation, ArrayAttr target) {
+  annotation.append("target", target);
+}
+
+/// Mutably update a prototype Annotation (stored as a `NamedAttrList`) with
+/// subfield/subindex information from a Target string.  Subfield/subindex
+/// information will be placed in the key "target" at the back of the
+/// Annotation.  If no subfield/subindex information, the Annotation is
+/// unmodified.  Return the split input target as a base target (include a
+/// reference if one exists) and an optional array containing subfield/subindex
+/// tokens.
+static std::pair<StringRef, llvm::Optional<ArrayAttr>>
+splitAndAppendTarget(NamedAttrList &annotation, StringRef target,
+                     MLIRContext *context) {
+  auto targetPair = splitTarget(target, context);
+  if (targetPair.second.hasValue())
+    appendTarget(annotation, targetPair.second.getValue());
+
+  return targetPair;
 }
 
 /// Return an input \p target string in canonical form.  This converts a Legacy
@@ -327,13 +345,7 @@ bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
     // global Target -> Attribute mapping.
     NamedAttrList metadata;
     // Annotations on the element instance.
-    ArrayAttr elementAnnotations;
-    targetStrRef = parseSubFieldSubIndexAnnotations(
-        targetStrRef, elementAnnotations, context);
-    // Create an annotations with key "target", which will be parsed by
-    // lowerTypes, and propagated to the appropriate instance.
-    if (elementAnnotations && !elementAnnotations.empty())
-      metadata.append("target", elementAnnotations);
+    targetStrRef = splitAndAppendTarget(metadata, targetStrRef, context).first;
 
     for (auto field : *object) {
       if (auto value = convertJSONToAttribute(field.second, p)) {
@@ -674,7 +686,8 @@ bool circt::firrtl::scatterCustomAnnotations(
       if (!target)
         return false;
       NamedAttrList dontTouchAnn;
-      dontTouchAnn.append("class",
+      dontTouchAnn.append(
+          "class",
           StringAttr::get(context, "firrtl.transforms.DontTouchAnnotation"));
       newAnnotations[target.getValue()].push_back(
           DictionaryAttr::getWithSorted(context, attrs));
@@ -717,13 +730,19 @@ bool circt::firrtl::scatterCustomAnnotations(
               tryGetAs<StringAttr>(bDict, dict, "source", loc, clazz, path);
           if (!sourceAttr)
             return false;
-          auto sourceTarget = canonicalizeTarget(sourceAttr.getValue());
-          if (!sourceTarget)
+          auto maybeSourceTarget = canonicalizeTarget(sourceAttr.getValue());
+          if (!maybeSourceTarget)
             return false;
-          newAnnotations[sourceTarget.getValue()].push_back(
+          auto targetPair = splitAndAppendTarget(
+              source, maybeSourceTarget.getValue(), context);
+          if (targetPair.second.hasValue())
+            appendTarget(dontTouchAnn, targetPair.second.getValue());
+          newAnnotations[targetPair.first].push_back(
               DictionaryAttr::getWithSorted(context, source));
-          newAnnotations[sourceTarget.getValue()].push_back(
+          newAnnotations[targetPair.first].push_back(
               DictionaryAttr::getWithSorted(context, dontTouchAnn));
+          if (targetPair.second.hasValue())
+            dontTouchAnn.pop_back();
           port.append("portID", portID);
           newAnnotations[portTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, port));
@@ -830,15 +849,13 @@ bool circt::firrtl::scatterCustomAnnotations(
         NamedAttrList foo;
         foo.append("class", dict.get("class"));
         foo.append("id", id);
-        ArrayAttr subTargets;
         auto canonTarget = canonicalizeTarget(tap.getValue());
         if (!canonTarget)
           return false;
-        auto target = parseSubFieldSubIndexAnnotations(canonTarget.getValue(),
-                                                       subTargets, context);
-        if (subTargets && !subTargets.empty())
-          foo.append("target", subTargets);
-        newAnnotations[target].push_back(DictionaryAttr::get(context, foo));
+        auto targetStrRef =
+            splitAndAppendTarget(foo, canonTarget.getValue(), context).first;
+        newAnnotations[targetStrRef].push_back(
+            DictionaryAttr::get(context, foo));
       }
       continue;
     }

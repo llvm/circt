@@ -72,6 +72,28 @@ def var_to_attribute(obj, none_on_fail: bool = False) -> ir.Attribute:
   raise TypeError(f"Cannot convert type '{type(obj)}' to MLIR attribute")
 
 
+# There is currently no support in MLIR for querying type types. The
+# conversation regarding how to achieve this is ongoing and I expect it to be a
+# long one. This is a way that works for now.
+def type_to_pytype(t):
+  from circt.dialects import hw
+  import mlir.ir as ir
+  try:
+    return ir.IntegerType(t)
+  except ValueError:
+    pass
+  try:
+    return hw.ArrayType(t)
+  except ValueError:
+    pass
+  try:
+    return hw.StructType(t)
+  except ValueError:
+    pass
+
+  raise TypeError(f"Cannot convert {repr(t)} to python type")
+
+
 # There is currently no support in MLIR for querying attribute types. The
 # conversation regarding how to achieve this is ongoing and I expect it to be a
 # long one. This is a way that works for now.
@@ -90,8 +112,17 @@ def attribute_to_var(attr):
   except ValueError:
     pass
   try:
+    return ir.TypeAttr(attr).value
+  except ValueError:
+    pass
+  try:
     arr = ir.ArrayAttr(attr)
     return [attribute_to_var(x) for x in arr]
+  except ValueError:
+    pass
+  try:
+    dict = ir.DictAttr(attr)
+    return {i.name: attribute_to_var(i.attr) for i in dict}
   except ValueError:
     pass
 

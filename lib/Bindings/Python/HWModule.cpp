@@ -16,6 +16,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include "PybindUtils.h"
+#include <mlir-c/Support.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/pytypes.h>
 #include <pybind11/stl.h>
@@ -64,5 +65,31 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
       .def("get_field", [](MlirType self, std::string fieldName) {
         return hwStructTypeGetField(
             self, mlirStringRefCreateFromCString(fieldName.c_str()));
+      });
+
+  mlir_type_subclass(m, "TypeAliasType", hwTypeIsATypeAliasType)
+      .def_classmethod("get",
+                       [](py::object cls, std::string scope, std::string name,
+                          MlirType innerType) {
+                         return cls(hwTypeAliasTypeGet(
+                             mlirStringRefCreateFromCString(scope.c_str()),
+                             mlirStringRefCreateFromCString(name.c_str()),
+                             innerType));
+                       })
+      .def_property_readonly(
+          "canonical_type",
+          [](MlirType self) { return hwTypeAliasTypeGetCanonicalType(self); })
+      .def_property_readonly(
+          "inner_type",
+          [](MlirType self) { return hwTypeAliasTypeGetInnerType(self); })
+      .def_property_readonly("name",
+                             [](MlirType self) {
+                               MlirStringRef cStr =
+                                   hwTypeAliasTypeGetName(self);
+                               return std::string(cStr.data, cStr.length);
+                             })
+      .def_property_readonly("scope", [](MlirType self) {
+        MlirStringRef cStr = hwTypeAliasTypeGetScope(self);
+        return std::string(cStr.data, cStr.length);
       });
 }

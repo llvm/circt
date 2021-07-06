@@ -790,21 +790,12 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 /// Verify that the num of operands and types fit the declared results.
 static LogicalResult verifyOutputOp(OutputOp *op) {
-  OperandRange outputValues = op->getOperands();
-  auto opParent = (*op)->getParentOp();
-
-  // Check that we are in the correct region. OutputOp should be directly
-  // contained by an HWModuleOp region. We'll loosen this restriction if
-  // there's a compelling use case.
-  if (!isa<HWModuleOp>(opParent)) {
-    op->emitOpError("operation expected to be in a HWModuleOp.");
-    return failure();
-  }
-
   // Check that the we (hw.output) have the same number of operands as our
   // region has results.
+  auto opParent = (*op)->getParentOp();
   FunctionType modType = getModuleType(opParent);
   ArrayRef<Type> modResults = modType.getResults();
+  OperandRange outputValues = op->getOperands();
   if (modResults.size() != outputValues.size()) {
     op->emitOpError("must have same number of operands as region results.");
     return failure();
@@ -830,10 +821,13 @@ static LogicalResult verifyOutputOp(OutputOp *op) {
 
 static ParseResult parseSliceTypes(OpAsmParser &p, Type &srcType,
                                    Type &idxType) {
-  ArrayType arrType;
-  if (p.parseType(arrType))
-    return failure();
-  srcType = arrType;
+  Type type;
+  if (p.parseType(type))
+    return p.emitError(p.getCurrentLocation(), "Expected type");
+  auto arrType = type_dyn_cast<ArrayType>(type);
+  if (!arrType)
+    return p.emitError(p.getCurrentLocation(), "Expected !hw.array type");
+  srcType = type;
   unsigned idxWidth = llvm::Log2_64_Ceil(arrType.getSize());
   idxType = IntegerType::get(p.getBuilder().getContext(), idxWidth);
   return success();
@@ -889,16 +883,19 @@ static ParseResult parseArrayConcatTypes(OpAsmParser &p,
   Type elemType;
   uint64_t resultSize = 0;
   do {
-    ArrayType ty;
+    Type ty;
     if (p.parseType(ty))
+      return p.emitError(p.getCurrentLocation(), "Expected type");
+    auto arrTy = type_dyn_cast<ArrayType>(ty);
+    if (!arrTy)
       return p.emitError(p.getCurrentLocation(), "Expected !hw.array type");
-    if (elemType && elemType != ty.getElementType())
+    if (elemType && elemType != arrTy.getElementType())
       return p.emitError(p.getCurrentLocation(), "Expected array element type ")
              << elemType;
 
-    elemType = ty.getElementType();
+    elemType = arrTy.getElementType();
     inputTypes.push_back(ty);
-    resultSize += ty.getSize();
+    resultSize += arrTy.getSize();
   } while (!p.parseOptionalComma());
 
   resultType = ArrayType::get(elemType, resultSize);
@@ -969,15 +966,19 @@ static void print(OpAsmPrinter &printer, hw::StructCreateOp op) {
 static ParseResult parseStructExplodeOp(OpAsmParser &parser,
                                         OperationState &result) {
   OpAsmParser::OperandType operand;
-  StructType declType;
+  Type declType;
 
   if (parser.parseOperand(operand) ||
       parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseColonType(declType))
     return failure();
+  auto structType = type_dyn_cast<StructType>(declType);
+  if (!structType)
+    return parser.emitError(parser.getNameLoc(),
+                            "invalid kind of type specified");
 
   llvm::SmallVector<Type, 4> structInnerTypes;
-  declType.getInnerTypes(structInnerTypes);
+  structType.getInnerTypes(structInnerTypes);
   result.addTypes(structInnerTypes);
 
   if (parser.resolveOperand(operand, declType, result.operands))
@@ -1002,7 +1003,7 @@ template <typename AggregateType>
 static ParseResult parseExtractOp(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::OperandType operand;
   StringAttr fieldName;
-  AggregateType declType;
+  Type declType;
 
   if (parser.parseOperand(operand) || parser.parseLSquare() ||
       parser.parseAttribute(fieldName, "field", result.attributes) ||
@@ -1010,8 +1011,12 @@ static ParseResult parseExtractOp(OpAsmParser &parser, OperationState &result) {
       parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseColonType(declType))
     return failure();
+  auto aggType = type_dyn_cast<AggregateType>(declType);
+  if (!aggType)
+    return parser.emitError(parser.getNameLoc(),
+                            "invalid kind of type specified");
 
-  Type resultType = declType.getFieldType(fieldName.getValue());
+  Type resultType = aggType.getFieldType(fieldName.getValue());
   if (!resultType) {
     parser.emitError(parser.getNameLoc(), "invalid field name specified");
     return failure();
@@ -1058,7 +1063,7 @@ static ParseResult parseStructInjectOp(OpAsmParser &parser,
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
   OpAsmParser::OperandType operand, val;
   StringAttr fieldName;
-  StructType declType;
+  Type declType;
 
   if (parser.parseOperand(operand) || parser.parseLSquare() ||
       parser.parseAttribute(fieldName, "field", result.attributes) ||
@@ -1067,8 +1072,11 @@ static ParseResult parseStructInjectOp(OpAsmParser &parser,
       parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseColonType(declType))
     return failure();
+  auto structType = type_dyn_cast<StructType>(declType);
+  if (!structType)
+    return parser.emitError(inputOperandsLoc, "invalid kind of type specified");
 
-  Type resultType = declType.getFieldType(fieldName.getValue());
+  Type resultType = structType.getFieldType(fieldName.getValue());
   if (!resultType) {
     parser.emitError(inputOperandsLoc, "invalid field name specified");
     return failure();
@@ -1146,7 +1154,7 @@ static void print(OpAsmPrinter &printer, hw::UnionExtractOp op) {
 
 void ArrayGetOp::build(OpBuilder &builder, OperationState &result, Value input,
                        Value index) {
-  auto resultType = input.getType().cast<ArrayType>().getElementType();
+  auto resultType = type_cast<ArrayType>(input.getType()).getElementType();
   build(builder, result, resultType, input, index);
 }
 

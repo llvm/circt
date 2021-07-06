@@ -16,6 +16,8 @@
 using namespace circt;
 using namespace circt::staticlogic;
 
+#include "circt/Dialect/StaticLogic/StaticLogicDialect.cpp.inc"
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/StaticLogic/StaticLogic.cpp.inc"
 

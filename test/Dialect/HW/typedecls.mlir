@@ -28,3 +28,28 @@ hw.module @testTypeAliasComb(
   %0 = comb.add %arg0, %arg1 : !hw.typealias<@__hw_typedecls::@foo, i1>
   hw.output %0 : !hw.typealias<@__hw_typedecls::@foo, i1>
 }
+
+// CHECK-LABEL: hw.module @testTypeAliasArray
+!Foo = type !hw.typealias<@__hw_typedecls::@foo, i1>
+!FooArray = type !hw.typealias<@__hw_typedecls::@fooArray, !hw.array<2x!Foo>>
+hw.module @testTypeAliasArray(%arg0: !Foo, %arg1: !Foo, %arg2: !FooArray) {
+  %c1 = hw.constant 1 : i1
+  %0 = hw.array_create %arg0, %arg1 : !Foo
+  %1 = hw.array_concat %arg2, %arg2 : !FooArray, !FooArray
+  %2 = hw.array_slice %arg2 at %c1 : (!FooArray) -> !hw.array<1x!Foo>
+  %3 = hw.array_get %arg2[%c1] : !FooArray
+}
+
+// CHECK-LABEL: hw.module @testTypeAliasStruct
+!FooStruct = type !hw.typealias<@__hw_typedecls::@fooStruct, !hw.struct<a: i1>>
+hw.module @testTypeAliasStruct(%arg0: !FooStruct, %arg1: i1) {
+  %0 = hw.struct_extract %arg0["a"] : !FooStruct
+  %1 = hw.struct_inject %arg0["a"], %arg1 : !FooStruct
+  %2:1 = hw.struct_explode %arg0 : !FooStruct
+}
+
+// CHECK-LABEL: hw.module @testTypeAliasUnion
+!FooUnion = type !hw.typealias<@__hw_typedecls::@fooUnion, !hw.union<a: i1>>
+hw.module @testTypeAliasUnion(%arg0: !FooUnion, %arg1: i1) {
+  %0 = hw.union_extract %arg0["a"] : !FooUnion
+}

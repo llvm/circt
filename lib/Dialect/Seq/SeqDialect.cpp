@@ -48,3 +48,5 @@ Operation *SeqDialect::materializeConstant(OpBuilder &builder, Attribute value,
 
   return nullptr;
 }
+
+#include "circt/Dialect/Seq/SeqDialect.cpp.inc"

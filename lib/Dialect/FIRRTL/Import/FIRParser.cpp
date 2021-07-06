@@ -3295,9 +3295,15 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
       break;
     }
     case FIRToken::string: {
-      // Drop the quotes and unescape.
+      // Drop the double quotes and unescape.
       value = builder.getStringAttr(getToken().getStringValue());
       consumeToken(FIRToken::string);
+      break;
+    }
+    case FIRToken::raw_string: {
+      // Drop the single quotes and unescape the ones inside.
+      value = builder.getStringAttr(getToken().getRawStringValue());
+      consumeToken(FIRToken::raw_string);
       break;
     }
 

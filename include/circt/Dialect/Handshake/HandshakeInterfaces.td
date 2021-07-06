@@ -35,7 +35,7 @@ def MergeLikeOpInterface : OpInterface<"MergeLikeOpInterface"> {
   ];
 
   let verify = [{
-    auto concreteOp = cast<ConcreteOpType>($_op);
+    auto concreteOp = cast<ConcreteOp>($_op);
 
     auto operands = concreteOp.dataOperands();
 

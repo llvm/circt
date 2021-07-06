@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Calyx/CalyxOps.h"
-#include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -199,31 +198,19 @@ static ParseResult parseComponentOp(OpAsmParser &parser,
 
 static LogicalResult verifyComponentOp(ComponentOp op) {
   // Verify there is exactly one of each section:
-  // calyx.cells, calyx.wires, and calyx.control.
-  uint32_t numCells = 0, numWires = 0, numControl = 0;
+  // calyx.wires, and calyx.control.
+  uint32_t numWires = 0, numControl = 0;
   for (auto &bodyOp : *op.getBody()) {
-    if (isa<CellsOp>(bodyOp))
-      ++numCells;
-    else if (isa<WiresOp>(bodyOp))
+    if (isa<WiresOp>(bodyOp))
       ++numWires;
     else if (isa<ControlOp>(bodyOp))
       ++numControl;
   }
-  if (numCells == 1 && numWires == 1 && numControl == 1)
+  if (numWires == 1 && numControl == 1)
     return success();
 
   return op.emitOpError() << "requires exactly one of each: "
-                             "'calyx.cells', 'calyx.wires', 'calyx.control'.";
-}
-
-//===----------------------------------------------------------------------===//
-// CellsOp
-//===----------------------------------------------------------------------===//
-static LogicalResult verifyCellsOp(CellsOp cells) {
-  if (!llvm::all_of(*cells.getBody(), [](auto &op) { return isa<CellOp>(op); }))
-    return cells.emitOpError("should only contain 'calyx.cell' ops.");
-
-  return success();
+                             "'calyx.wires', 'calyx.control'.";
 }
 
 //===----------------------------------------------------------------------===//
@@ -252,8 +239,7 @@ static LogicalResult verifyCellOp(CellOp cell) {
            << ", which does not exist.";
 
   // Verify the referenced component is not instantiating itself.
-  auto cells = cell->getParentOfType<CellsOp>();
-  auto parentComponent = cells->getParentOfType<ComponentOp>();
+  auto parentComponent = cell->getParentOfType<ComponentOp>();
   if (parentComponent == referencedComponent)
     return cell.emitOpError()
            << "is a recursive instantiation of its parent component: "
@@ -278,6 +264,18 @@ static LogicalResult verifyCellOp(CellOp cell) {
            << "result type for " << componentPorts[i].name << " must be "
            << expectedType << ", but got " << resultType;
   }
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// AssignOp
+//===----------------------------------------------------------------------===//
+static LogicalResult verifyAssignOp(AssignOp assign) {
+  auto parent = assign->getParentOp();
+  if (!(isa<GroupOp>(parent) || isa<WiresOp>(parent)))
+    return assign.emitOpError(
+        "should only be contained in 'calyx.wires' or 'calyx.group'");
+
   return success();
 }
 
