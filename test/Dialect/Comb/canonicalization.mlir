@@ -77,3 +77,45 @@ hw.module @extractNested(%0: i5) -> (%o1 : i1) {
   %3 = comb.extract %2 from 1 : (i2) -> i1
   hw.output %3 : i1
 }
+
+// CHECK-LABEL: @flattenMuxTrue
+hw.module @flattenMuxTrue(%arg0: i1, %arg1: i8, %arg2: i8, %arg3: i8, %arg4 : i8) -> (%o1 : i8) {
+// CHECK-NEXT:    [[RET:%[0-9]+]] = comb.mux %arg0, %arg1, %arg4
+// CHECK-NEXT:    hw.output [[RET]]
+  %0 = comb.mux %arg0, %arg1, %arg2 : i8
+  %1 = comb.mux %arg0, %0   , %arg3 : i8
+  %2 = comb.mux %arg0, %1   , %arg4 : i8
+  hw.output %2 : i8
+}
+
+// CHECK-LABEL: @flattenMuxFalse
+hw.module @flattenMuxFalse(%arg0: i1, %arg1: i8, %arg2: i8, %arg3: i8, %arg4 : i8) -> (%o1 : i8) {
+// CHECK-NEXT:    [[RET:%[0-9]+]] = comb.mux %arg0, %arg4, %arg2
+// CHECK-NEXT:    hw.output [[RET]]
+  %0 = comb.mux %arg0, %arg1, %arg2 : i8
+  %1 = comb.mux %arg0, %arg3, %0    : i8
+  %2 = comb.mux %arg0, %arg4, %1    : i8
+  hw.output %2 : i8
+}
+
+// CHECK-LABEL: @flattenMuxMixed
+hw.module @flattenMuxMixed(%arg0: i1, %arg1: i8, %arg2: i8, %arg3: i8, %arg4 : i8) -> (%o1 : i8) {
+// CHECK-NEXT:    [[RET:%[0-9]+]] = comb.mux %arg0, %arg1, %arg4
+// CHECK-NEXT:    hw.output [[RET]]
+  %0 = comb.mux %arg0, %arg1, %arg2 : i8
+  %1 = comb.mux %arg0, %arg3, %arg4 : i8
+  %2 = comb.mux %arg0, %0   , %1    : i8
+  hw.output %2 : i8
+}
+
+// CHECK-LABEL: @flattenNotOnDifferentCond
+hw.module @flattenNotOnDifferentCond(%arg0: i1, %arg1: i1, %arg2: i1, %arg3: i8, %arg4 : i8) -> (%o1 : i8) {
+// CHECK-NEXT:    %0 = comb.mux %arg0, %arg3, %arg4 : i8
+// CHECK-NEXT:    %1 = comb.mux %arg1, %0, %arg4 : i8
+// CHECK-NEXT:    %2 = comb.mux %arg2, %1, %arg4 : i8
+// CHECK-NEXT:    hw.output %2 : i8
+  %0 = comb.mux %arg0, %arg3, %arg4 : i8
+  %1 = comb.mux %arg1, %0,    %arg4 : i8
+  %2 = comb.mux %arg2, %1,    %arg4 : i8
+  hw.output %2 : i8
+}

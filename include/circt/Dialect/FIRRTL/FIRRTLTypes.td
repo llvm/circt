@@ -46,6 +46,14 @@ def UInt1Type : DialectType<FIRRTLDialect,
    "UInt<1> or UInt", "::circt::firrtl::UIntType">,
    BuildableType<"UIntType::get($_builder.getContext(), 1)">;
 
+def UInt01Type : DialectType<FIRRTLDialect,
+  CPred<"$_self.isa<UIntType>() && "
+        "($_self.cast<UIntType>().getWidth() == 0 ||"
+        "$_self.cast<UIntType>().getWidth() == 1 ||"
+        " $_self.cast<UIntType>().getWidth() == None)">,
+   "UInt<0> UInt<1> or UInt", "::circt::firrtl::UIntType">,
+   BuildableType<"UIntType::get($_builder.getContext(), 1)">;
+
 def AsyncResetType : DialectType<FIRRTLDialect,
   CPred<"$_self.isa<AsyncResetType>()">,
   "AsyncReset", "::circt::firrtl::AsyncResetType">;
