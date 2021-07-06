@@ -2048,6 +2048,7 @@ LogicalResult StmtEmitter::emitIfDef(Operation *op, StringRef cond) {
   // We don't know how many statements we emitted, so assume conservatively
   // that a lot got put out. This will make sure we get a begin/end block around
   // this.
+  numStatementsEmitted += 2;
   return success();
 }
 
@@ -2282,7 +2283,6 @@ LogicalResult StmtEmitter::visitSV(CaseZOp op) {
   return success();
 }
 
-#include <iostream>
 LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   StringRef prefix = "";
   if (op->hasAttr("doNotPrint"))
@@ -2414,8 +2414,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     else if (portVal.hasOneUse() && (output = dyn_cast_or_null<OutputOp>(portVal.getUses().begin()->getOwner()))) {
       auto module = output->getParentOfType<HWModuleOp>();
       SmallVector<ModulePortInfo> portInfo = getModulePortInfo(module);
-      auto name = getModuleResultNameAttr(module, portVal.cast<OpResult>().getResultNumber());
-      std::cerr << name.getAsOpaquePointer() << std::endl;
+      auto name = getModuleResultNameAttr(module, portVal.getUses().begin()->getOperandNumber());
       os << name.getValue().str();
     } else {
       portVal = getWireForValue(portVal);
