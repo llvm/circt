@@ -1665,13 +1665,14 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
   StringRef fieldName;
   if (parseFieldId(fieldName, "expected field name"))
     return failure();
-  auto index = result.cast<BundleType>().getElementIndex(fieldName);
-  if (!index)
+  auto indexV = result.getType().cast<FIRRTLType>().cast<BundleType>().getElementIndex(fieldName);
+  if (!indexV)
     return emitError("invalid field " + fieldName), failure();
+  auto index = indexV.getValue();
   // Make sure the field name matches up with the input value's type and
   // compute the result type for the expression.
   NamedAttribute attrs = {getConstants().fieldnameIdentifier,
-                          builder.getUI32IntegerAttr(index.getValue())};
+                          builder.getUI32IntegerAttr(index)};
   auto resultType = SubfieldOp::inferReturnType({result}, attrs, {});
   if (!resultType) {
     // Emit the error at the right location.  translateLocation is expensive.
