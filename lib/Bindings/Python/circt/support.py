@@ -286,13 +286,13 @@ class NamedValueOpView:
 
   def __getattr__(self, name):
     # Check for the attribute in the arg name set.
-    if name in self.operand_indices:
+    if "operand_indices" in dir(self) and name in self.operand_indices:
       index = self.operand_indices[name]
       value = self.opview.operands[index]
       return OpOperand(self.opview.operation, index, value, self)
 
     # Check for the attribute in the result name set.
-    if name in self.result_indices:
+    if "result_indices" in dir(self) and name in self.result_indices:
       index = self.result_indices[name]
       value = self.opview.results[index]
       return OpOperand(self.opview.operation, index, value, self)
