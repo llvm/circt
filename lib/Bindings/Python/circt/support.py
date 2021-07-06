@@ -90,6 +90,10 @@ def type_to_pytype(t):
     return hw.StructType(t)
   except ValueError:
     pass
+  try:
+    return hw.TypeAliasType(t)
+  except ValueError:
+    pass
 
   raise TypeError(f"Cannot convert {repr(t)} to python type")
 
@@ -129,14 +133,28 @@ def attribute_to_var(attr):
   raise TypeError(f"Cannot convert {repr(attr)} to python value")
 
 
+def get_self_or_inner(mlir_type):
+  from circt.dialects import hw
+  if type(mlir_type) is ir.Type:
+    mlir_type = type_to_pytype(mlir_type)
+  if isinstance(mlir_type, hw.TypeAliasType):
+    return type_to_pytype(mlir_type.inner_type)
+  return mlir_type
+
+
 class BackedgeBuilder(AbstractContextManager):
 
   class Edge:
 
-    def __init__(self, creator, type: ir.Type, port_name: str, op_view,
-                 instance_of: ir.Operation):
+    def __init__(self,
+                 creator,
+                 type: ir.Type,
+                 port_name: str,
+                 op_view,
+                 instance_of: ir.Operation,
+                 loc: ir.Location = None):
       self.creator: BackedgeBuilder = creator
-      self.dummy_op = ir.Operation.create("TemporaryBackedge", [type])
+      self.dummy_op = ir.Operation.create("TemporaryBackedge", [type], loc=loc)
       self.instance_of = instance_of
       self.op_view = op_view
       self.port_name = port_name
@@ -171,8 +189,10 @@ class BackedgeBuilder(AbstractContextManager):
               type: ir.Type,
               port_name: str,
               op_view,
-              instance_of: ir.Operation = None):
-    edge = BackedgeBuilder.Edge(self, type, port_name, op_view, instance_of)
+              instance_of: ir.Operation = None,
+              loc: ir.Location = None):
+    edge = BackedgeBuilder.Edge(self, type, port_name, op_view, instance_of,
+                                loc)
     self.edges.add(edge)
     return edge
 

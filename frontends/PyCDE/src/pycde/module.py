@@ -197,7 +197,7 @@ def _module_base(cls, extern: bool, params={}):
           value = support.get_value(inputs[name])
           assert value is not None
         else:
-          backedge = BackedgeBuilder.current().create(type, name, self)
+          backedge = BackedgeBuilder.current().create(type, name, self, loc=loc)
           self.backedges[idx] = backedge
           value = backedge.result
         input_ports_values.append(value)

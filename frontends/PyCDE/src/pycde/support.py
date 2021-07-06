@@ -16,17 +16,18 @@ class Value:
       self.type = type
 
   def __getitem__(self, sub):
-    if isinstance(self.type, hw.ArrayType):
+    ty = support.get_self_or_inner(self.type)
+    if isinstance(ty, hw.ArrayType):
       idx = int(sub)
       if idx >= self.type.size:
         raise ValueError("Subscript out-of-bounds")
       with get_user_loc():
         return Value(hw.ArrayGetOp.create(self.value, idx))
 
-    if isinstance(self.type, hw.StructType):
-      fields = self.type.get_fields()
+    if isinstance(ty, hw.StructType):
+      fields = ty.get_fields()
       if sub not in [name for name, _ in fields]:
-        raise ValueError(f"Struct field '{sub}' not found in {self.type}")
+        raise ValueError(f"Struct field '{sub}' not found in {ty}")
       with get_user_loc():
         return Value(hw.StructExtractOp.create(self.value, sub))
 
@@ -34,8 +35,9 @@ class Value:
         "Subscripting only supported on hw.array and hw.struct types")
 
   def __getattr__(self, attr):
-    if isinstance(self.type, hw.StructType):
-      fields = self.type.get_fields()
+    ty = support.get_self_or_inner(self.type)
+    if isinstance(ty, hw.StructType):
+      fields = ty.get_fields()
       if attr in [name for name, _ in fields]:
         with get_user_loc():
           return Value(hw.StructExtractOp.create(self.value, attr))
