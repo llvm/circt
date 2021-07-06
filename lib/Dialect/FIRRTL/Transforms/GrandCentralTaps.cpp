@@ -481,9 +481,9 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
     if (auto op = tappedOps.lookup(portAnno.anno.getDict())) {
       // We require the target to be a wire or node, such that it gets a name
       // during Verilog emission.
-      if (!isa<WireOp, NodeOp>(op)) {
+      if (!isa<WireOp, NodeOp, RegOp, RegResetOp>(op)) {
         auto diag = blackBox.extModule.emitError("ReferenceDataTapKey on port ")
-                    << portName << " must be a wire or node";
+                    << portName << " must be a wire, node, or reg";
         diag.attachNote(op->getLoc()) << "referenced operation is here:";
         signalPassFailure();
         return;
@@ -496,7 +496,7 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
       auto name = op->getAttrOfType<StringAttr>("name");
       if (!name) {
         auto diag =
-            op->emitError("wire or node targeted by data tap must have a name");
+            op->emitError("declaration targeted by data tap must have a name");
         diag.attachNote(blackBox.extModule->getLoc())
             << "used by ReferenceDataTapKey on port " << portName << " here:";
         signalPassFailure();

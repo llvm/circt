@@ -45,6 +45,28 @@ firrtl.circuit "TestHarness" attributes {
       class = "firrtl.transforms.DontTouchAnnotation"
     }]} : !firrtl.uint<1>
 
+    // CHECK-LABEL: %reg = firrtl.reg
+    // CHECK-NOT: class = "sifive.enterprise.grandcentral.ReferenceDataTapKey"
+    // CHECK-SAME: class = "firrtl.transforms.DontTouchAnnotation"
+    %reg = firrtl.reg %clock {annotations = [{
+      class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
+      id = 0 : i64,
+      portID = 6 : i64
+    }, {
+      class = "firrtl.transforms.DontTouchAnnotation"
+    }]} : (!firrtl.clock) -> !firrtl.uint<1>
+
+    // CHECK-LABEL: %regreset = firrtl.regreset
+    // CHECK-NOT: class = "sifive.enterprise.grandcentral.ReferenceDataTapKey"
+    // CHECK-SAME: class = "firrtl.transforms.DontTouchAnnotation"
+    %regreset = firrtl.regreset %clock, %reset, %in {annotations = [{
+      class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
+      id = 0 : i64,
+      portID = 7 : i64
+    }, {
+      class = "firrtl.transforms.DontTouchAnnotation"
+    }]} : (!firrtl.clock, !firrtl.reset, !firrtl.uint<1>) -> !firrtl.uint<1>
+
     // CHECK-LABEL: firrtl.mem Undefined
     // CHECK-NOT: class = "sifive.enterprise.grandcentral.MemTapAnnotation"
     // CHECK-SAME: class = "firrtl.transforms.DontTouchAnnotation"
@@ -87,11 +109,17 @@ firrtl.circuit "TestHarness" attributes {
   }
 
   // CHECK: firrtl.module [[DT:@DataTap.*]](
+  // CHECK-SAME: out %_6: !firrtl.uint<1>
+  // CHECK-SAME: out %_5: !firrtl.uint<1>
   // CHECK-SAME: out %_4: !firrtl.uint<1>
   // CHECK-SAME: out %_3: !firrtl.uint<1>
   // CHECK-SAME: out %_2: !firrtl.uint<1>
   // CHECK-SAME: out %_1: !firrtl.clock
   // CHECK-SAME: out %_0: !firrtl.uint<1>
+  // CHECK-NEXT: [[V6:%.+]] = firrtl.verbatim.expr "foo.bar.regreset"
+  // CHECK-NEXT: firrtl.connect %_6, [[V6]]
+  // CHECK-NEXT: [[V5:%.+]] = firrtl.verbatim.expr "foo.bar.reg"
+  // CHECK-NEXT: firrtl.connect %_5, [[V5]]
   // CHECK-NEXT: [[V4:%.+]] = firrtl.verbatim.expr "foo.bar.node"
   // CHECK-NEXT: firrtl.connect %_4, [[V4]]
   // CHECK-NEXT: [[V3:%.+]] = firrtl.verbatim.expr "bigScary.schwarzschild.no.more"
@@ -103,6 +131,14 @@ firrtl.circuit "TestHarness" attributes {
   // CHECK-NEXT: [[V0:%.+]] = firrtl.verbatim.expr "foo.bar.wire"
   // CHECK-NEXT: firrtl.connect %_0, [[V0]]
   firrtl.extmodule @DataTap(
+    out %_6: !firrtl.uint<1> {firrtl.annotations = [{
+      class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
+      id = 0 : i64,
+      portID = 7 : i64 }]},
+    out %_5: !firrtl.uint<1> {firrtl.annotations = [{
+      class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
+      id = 0 : i64,
+      portID = 6 : i64 }]},
     out %_4: !firrtl.uint<1> {firrtl.annotations = [{
       class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
       id = 0 : i64,
@@ -174,7 +210,7 @@ firrtl.circuit "TestHarness" attributes {
     firrtl.connect %out, %foo_out : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.instance @BlackHole {name = "bigScary"}
     // CHECK: firrtl.instance [[DT]] {name = "dataTap"}
-    %DataTap_4, %DataTap_3, %DataTap_2, %DataTap_1, %DataTap_0 = firrtl.instance @DataTap {name = "dataTap"} : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.clock, !firrtl.uint<1>
+    %DataTap_6, %DataTap_5, %DataTap_4, %DataTap_3, %DataTap_2, %DataTap_1, %DataTap_0 = firrtl.instance @DataTap {name = "dataTap"} : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.clock, !firrtl.uint<1>
     // CHECK: firrtl.instance [[MT]] {name = "memTap"}
     %MemTap_mem_0, %MemTap_mem_1 = firrtl.instance @MemTap {name = "memTap"} : !firrtl.uint<1>, !firrtl.uint<1>
   }
