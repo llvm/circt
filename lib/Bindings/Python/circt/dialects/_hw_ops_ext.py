@@ -410,14 +410,30 @@ class ArrayCreateOp:
 class StructCreateOp:
 
   @staticmethod
-  def create(elements: list[(str, Type)]):
+  def create(elements, result_type: Type = None):
     elem_name_values = [
         (name, support.get_value(value)) for (name, value) in elements
     ]
-    struct_type = hw.StructType.get([
-        (name, value.type) for (name, value) in elem_name_values
-    ])
-    return hw.StructCreateOp(struct_type,
+    struct_fields = [(name, value.type) for (name, value) in elem_name_values]
+    if result_type is None:
+      result_type = hw.StructType.get(struct_fields)
+    else:
+      result_type_inner = support.get_self_or_inner(result_type)
+      if not isinstance(result_type_inner, hw.StructType):
+        raise TypeError("result_type must be cast-able to struct type")
+      result_fields = result_type_inner.get_fields()
+      if len(struct_fields) != len(result_fields):
+        raise TypeError("Number of fields in result_type must match elements")
+      for (ex_name, ex_type), (res_name,
+                               res_type) in zip(struct_fields, result_fields):
+        if ex_name != res_name:
+          raise TypeError(
+              f"Field names must match ('{ex_name}' vs '{res_name}'")
+        if support.type_to_pytype(ex_type) != support.type_to_pytype(res_type):
+          raise TypeError(
+              f"Field types must match ('{ex_type}' vs '{res_type}'")
+
+    return hw.StructCreateOp(result_type,
                              [value for (_, value) in elem_name_values])
 
 
