@@ -18,6 +18,7 @@
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -40,18 +41,31 @@ static LogicalResult verifyProgramOp(ProgramOp program) {
 // ComponentOp
 //===----------------------------------------------------------------------===//
 
+namespace {
+
+/// This is a helper function that should only be used to get the WiresOp
+/// or ControlOp of a ComponentOp, which are guaranteed to exist and generally
+/// at the end of a component's body.
+template <typename Op>
+static Op getOpFromComponentWithType(ComponentOp componentOp) {
+  auto body = componentOp.getBody();
+  auto opIt = llvm::find_if(llvm::reverse(*body),
+                            [](auto &&op) { return isa<Op>(op); });
+  assert(opIt != body->rend() &&
+         "A component should have a WiresOp and ControlOp.");
+  return cast<Op>(*opIt);
+}
+
+} // namespace
+
 /// Gets the WiresOp of a component.
 static WiresOp getWiresOp(ComponentOp componentOp) {
-  WiresOp wiresOp;
-  auto body = componentOp.getBody();
+  return getOpFromComponentWithType<WiresOp>(componentOp);
+}
 
-  // Generally, this should be placed at the end of a ComponentOp
-  // before the ControlOp.
-  auto opIt = llvm::find_if(llvm::reverse(*body),
-                            [](auto &&op) { return isa<WiresOp>(op); });
-
-  assert(opIt != body->rend() && "A component should have a WiresOp.");
-  return cast<WiresOp>(*opIt);
+/// Gets the ControlOp of a component.
+static ControlOp getControlOp(ComponentOp componentOp) {
+  return getOpFromComponentWithType<ControlOp>(componentOp);
 }
 
 /// Returns the type of the given component as a function type.
@@ -225,6 +239,32 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
 
   return op.emitOpError() << "requires exactly one of each: "
                              "'calyx.wires', 'calyx.control'.";
+}
+
+//===----------------------------------------------------------------------===//
+// WiresOp
+//===----------------------------------------------------------------------===//
+static LogicalResult verifyWiresOp(WiresOp wires) {
+  auto component = wires->getParentOfType<ComponentOp>();
+  auto control = getControlOp(component);
+
+  llvm::SmallSet<StringRef, 32> groupsExecuted;
+  control.getBody()->walk([&groupsExecuted](Operation *op) {
+    if (auto enable = dyn_cast<EnableOp>(op))
+      groupsExecuted.insert(enable.groupName());
+  });
+
+  for (auto &&op : *wires.getBody()) {
+    if (!isa<GroupOp>(op))
+      continue;
+    auto group = cast<GroupOp>(op);
+    StringRef groupName = group.sym_name();
+    if (groupsExecuted.contains(groupName))
+      continue;
+    return op.emitOpError() << "with name: " << groupName
+                            << " is unused in the control execution schedule";
+  }
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

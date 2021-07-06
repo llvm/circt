@@ -27,7 +27,6 @@ def ControlOp : CalyxContainer<"control", [
       }
     ```
   }];
-  let verifier = "return ::verify$cppClass(*this);";
 }
 
 def SeqOp : CalyxContainer<"seq", [
@@ -46,7 +45,6 @@ def SeqOp : CalyxContainer<"seq", [
       }
     ```
   }];
-  let verifier = "return ::verify$cppClass(*this);";
 }
 
 def EnableOp : CalyxOp<"enable", [
