@@ -20,7 +20,6 @@
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/LoweringOptions.h"
-#include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Support/FileUtilities.h"
@@ -1903,7 +1902,6 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
     auto operand = op.getOperand(operandIndex);
     if (operand.hasOneUse() && dyn_cast_or_null<InstanceOp>(operand.getDefiningOp())) {
       ++operandIndex;
-      ++numStatementsEmitted;
       continue;
     }
 
@@ -2050,7 +2048,6 @@ LogicalResult StmtEmitter::emitIfDef(Operation *op, StringRef cond) {
   // We don't know how many statements we emitted, so assume conservatively
   // that a lot got put out. This will make sure we get a begin/end block around
   // this.
-  numStatementsEmitted += 2;
   return success();
 }
 
@@ -2285,6 +2282,7 @@ LogicalResult StmtEmitter::visitSV(CaseZOp op) {
   return success();
 }
 
+#include <iostream>
 LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   StringRef prefix = "";
   if (op->hasAttr("doNotPrint"))
@@ -2408,28 +2406,21 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 
     // Emit the value as an expression.
     ops.clear();
+
     // output ports that are not connected to single use output ports were lowered to wire
-    OutputOp output = dyn_cast_or_null<OutputOp>(portVal.getUses().begin()->getOwner());
-    if (elt.isOutput() && portVal.hasOneUse() && output) {
+    OutputOp output;
+    if (!elt.isOutput())
+      emitExpression(portVal, ops);
+    else if (portVal.hasOneUse() && (output = dyn_cast_or_null<OutputOp>(portVal.getUses().begin()->getOwner()))) {
       auto module = output->getParentOfType<HWModuleOp>();
       SmallVector<ModulePortInfo> portInfo = getModulePortInfo(module);
-
-      for (size_t portNum = 0, operandNum = 0; portNum < portInfo.size(); ++portNum) {
-        if (!portInfo[portNum].isOutput())
-          continue;
-
-        if (output->getOperand(operandNum) == portVal) {
-          os << portInfo[portNum].getName();
-          break;
-        }
-
-        ++operandNum;
-      }
-
-    } else if (elt.isOutput()) {
+      auto name = getModuleResultNameAttr(module, portVal.cast<OpResult>().getResultNumber());
+      std::cerr << name.getAsOpaquePointer() << std::endl;
+      os << name.getValue().str();
+    } else {
       portVal = getWireForValue(portVal);
       emitExpression(portVal, ops);
-    } else emitExpression(portVal, ops);
+    }
     os << ')';
   }
   if (!isFirst) {
