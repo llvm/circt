@@ -1,5 +1,6 @@
 add_subdirectory(CAPI)
 add_subdirectory(Dialect)
+add_subdirectory(Scheduling)
 
 configure_lit_site_cfg(
   ${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.py.in

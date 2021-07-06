@@ -156,6 +156,8 @@ public:
   // Subclass access to problem components
   //===--------------------------------------------------------------------===//
 protected:
+  Operation *getContainingOp() { return containingOp; }
+
   bool hasOperation(Operation *op) { return operations.contains(op); }
   const OperationSet &getOperations() { return operations; }
 
