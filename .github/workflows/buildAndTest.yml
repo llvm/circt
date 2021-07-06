@@ -29,12 +29,10 @@ jobs:
       - name: Get LLVM Hash
         id: get-llvm-hash
         run: echo "::set-output name=hash::$(git rev-parse @:./llvm)"
-        shell: bash
 
       - name: Get workflow spec hash
         id: get-workflow-hash
         run: echo "::set-output name=hash::$(md5sum $GITHUB_WORKSPACE/.github/workflows/buildAndTest.yml)"
-        shell: bash
 
       # Try to fetch LLVM from the cache.
       - name: Cache LLVM
@@ -111,12 +109,10 @@ jobs:
       - name: Get LLVM Hash
         id: get-llvm-hash
         run: echo "::set-output name=hash::$(git rev-parse @:./llvm)"
-        shell: bash
 
       - name: Get workflow spec hash
         id: get-workflow-hash
         run: echo "::set-output name=hash::$(md5sum $GITHUB_WORKSPACE/.github/workflows/buildAndTest.yml)"
-        shell: bash
 
       # Try to fetch LLVM from the cache.
       - name: Cache LLVM
@@ -195,7 +191,7 @@ jobs:
           PR_BASE: ${{ github.base_ref }}
         run: |
           # Run clang-format
-          if [[ -z "$PR_BASE" ]]; then
+          if [ -z "$PR_BASE" ]; then
             DIFF_COMMIT_NAME="HEAD^"
           else
             DIFF_COMMIT_NAME="$PR_BASE"
@@ -209,11 +205,11 @@ jobs:
       - name: git fetch base commit
         continue-on-error: true
         run: |
-          if [[ ! "$DIFF_COMMIT_NAME" == *"HEAD"* ]]; then
+          if echo "$DIFF_COMMIT_NAME" | grep -q HEAD; then
+            DIFF_COMMIT_SHA=$( git rev-parse $DIFF_COMMIT_NAME )
+          else
             git fetch --recurse-submodules=no origin $DIFF_COMMIT_NAME
             DIFF_COMMIT_SHA=$( git rev-parse origin/$DIFF_COMMIT_NAME )
-          else
-            DIFF_COMMIT_SHA=$( git rev-parse $DIFF_COMMIT_NAME )
           fi
           echo "DIFF_COMMIT=$DIFF_COMMIT_SHA" >> $GITHUB_ENV
 
@@ -256,10 +252,9 @@ jobs:
       # Run yapf to check Python formatting.
       - name: python-format
         if: ${{ always() }}
-        shell: bash -e {0}
         run: |
           files=$(git diff --name-only $DIFF_COMMIT | grep .py || echo -n)
-          if [[ ! -z $files ]]; then
+          if [ ! -z $files ]; then
             yapf --diff $files
           fi
 
