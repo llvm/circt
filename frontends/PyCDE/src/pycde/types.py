@@ -15,8 +15,6 @@ class _Types:
 
   def __init__(self):
     self.registered_aliases = OrderedDict()
-    self.declared_aliases = {}
-    self.type_scopes = {}
 
   def __getattr__(self, name: str) -> mlir.ir.Type:
     return mlir.ir.Type.parse(name)
@@ -60,17 +58,25 @@ class _Types:
     if not self.registered_aliases:
       return
 
-    if not self.type_scopes.get(mod):
+    type_scopes = [
+        op for op in mod.body.operations if isinstance(op, hw.TypeScopeOp)
+    ]
+    if len(type_scopes) == 0:
       with mlir.ir.InsertionPoint.at_block_begin(mod.body):
-        self.type_scopes[mod] = hw.TypeScopeOp.create(self.TYPE_SCOPE)
+        type_scopes.append(hw.TypeScopeOp.create(self.TYPE_SCOPE))
         self.declared_aliases[mod] = set([])
 
-    with mlir.ir.InsertionPoint(self.type_scopes[mod].body):
+    assert len(type_scopes) == 1
+    type_scope = type_scopes[0]
+    with mlir.ir.InsertionPoint(type_scope.body):
       for (name, type) in self.registered_aliases.items():
-        if name in self.declared_aliases[mod]:
+        declared_aliases = [
+            op for op in type_scope.body.operations
+            if isinstance(op, hw.TypedeclOp) and op.sym_name.value == name
+        ]
+        if len(declared_aliases) != 0:
           continue
         hw.TypedeclOp.create(name, type.inner_type)
-        self.declared_aliases[mod].add(name)
 
 
 types = _Types()
