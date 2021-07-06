@@ -16,6 +16,7 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallSet.h"
@@ -43,9 +44,10 @@ static LogicalResult verifyProgramOp(ProgramOp program) {
 
 namespace {
 
-/// This is a helper function that should only be used to get the WiresOp
-/// or ControlOp of a ComponentOp, which are guaranteed to exist and generally
-/// at the end of a component's body.
+/// This is a helper function that should only be used to get the WiresOp or
+/// ControlOp of a ComponentOp, which are guaranteed to exist and generally at
+/// the end of a component's body. In the worst case, this will run in linear
+/// time.
 template <typename Op>
 static Op getOpFromComponentWithType(ComponentOp componentOp) {
   auto body = componentOp.getBody();
@@ -248,21 +250,15 @@ static LogicalResult verifyWiresOp(WiresOp wires) {
   auto component = wires->getParentOfType<ComponentOp>();
   auto control = getControlOp(component);
 
-  llvm::SmallSet<StringRef, 32> groupsExecuted;
-  control.getBody()->walk([&groupsExecuted](Operation *op) {
-    if (auto enable = dyn_cast<EnableOp>(op))
-      groupsExecuted.insert(enable.groupName());
-  });
-
+  // Verify each group is referenced in the control section.
   for (auto &&op : *wires.getBody()) {
     if (!isa<GroupOp>(op))
       continue;
     auto group = cast<GroupOp>(op);
     StringRef groupName = group.sym_name();
-    if (groupsExecuted.contains(groupName))
-      continue;
-    return op.emitOpError() << "with name: " << groupName
-                            << " is unused in the control execution schedule";
+    if (SymbolTable::symbolKnownUseEmpty(groupName, control))
+      return op.emitOpError() << "with name: " << groupName
+                              << " is unused in the control execution schedule";
   }
   return success();
 }
