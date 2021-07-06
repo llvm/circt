@@ -1916,13 +1916,21 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
   for (ModulePortInfo port : parent.getPorts()) {
     if (!port.isOutput())
       continue;
+
+    auto operand = op.getOperand(operandIndex);
+    if (operand.hasOneUse() &&
+        dyn_cast_or_null<InstanceOp>(operand.getDefiningOp())) {
+      ++operandIndex;
+      continue;
+    }
+
     ops.clear();
     ops.insert(op);
     indent();
     if (isZeroBitType(port.type))
       os << "// Zero width: ";
     os << "assign " << names.getOutputName(port.argNum) << " = ";
-    emitExpression(op.getOperand(operandIndex), ops);
+    emitExpression(operand, ops);
     os << ';';
     emitLocationInfoAndNewLine(ops);
     ++operandIndex;
@@ -2417,10 +2425,23 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 
     // Emit the value as an expression.
     ops.clear();
-    // output ports were lowered to wire
-    if (elt.isOutput())
+
+    // Output ports that are not connected to single use output ports were
+    // lowered to wire.
+    OutputOp output;
+    if (!elt.isOutput()) {
+      emitExpression(portVal, ops);
+    } else if (portVal.hasOneUse() &&
+             (output = dyn_cast_or_null<OutputOp>(
+                  portVal.getUses().begin()->getOwner()))) {
+      auto module = output->getParentOfType<HWModuleOp>();
+      auto name = getModuleResultNameAttr(
+          module, portVal.getUses().begin()->getOperandNumber());
+      os << name.getValue().str();
+    } else {
       portVal = getWireForValue(portVal);
-    emitExpression(portVal, ops);
+      emitExpression(portVal, ops);
+    }
     os << ')';
   }
   if (!isFirst) {
@@ -2688,22 +2709,30 @@ static void lowerInstanceResults(InstanceOp op) {
     if (onlyUseIsConnect(result))
       continue;
 
-    nameTmp.resize(namePrefixSize);
-    if (port.name)
-      nameTmp += port.name.getValue().str();
-    else
-      nameTmp += std::to_string(nextResultNo - 1);
-
-    auto newWire = builder.create<WireOp>(result.getType(), nameTmp);
-    while (!result.use_empty()) {
-      auto newWireRead = builder.create<ReadInOutOp>(newWire);
+    bool isOneUseOutput = false;
+    if (result.hasOneUse()) {
       OpOperand &use = *result.getUses().begin();
-      use.set(newWireRead);
-      newWireRead->moveBefore(use.getOwner());
+      isOneUseOutput = dyn_cast_or_null<OutputOp>(use.getOwner()) != nullptr;
     }
 
-    auto connect = builder.create<ConnectOp>(newWire, result);
-    connect->moveAfter(op);
+    if (!isOneUseOutput) {
+      nameTmp.resize(namePrefixSize);
+      if (port.name)
+        nameTmp += port.name.getValue().str();
+      else
+        nameTmp += std::to_string(nextResultNo - 1);
+
+      auto newWire = builder.create<WireOp>(result.getType(), nameTmp);
+      while (!result.use_empty()) {
+        auto newWireRead = builder.create<ReadInOutOp>(newWire);
+        OpOperand &use = *result.getUses().begin();
+        use.set(newWireRead);
+        newWireRead->moveBefore(use.getOwner());
+      }
+
+      auto connect = builder.create<ConnectOp>(newWire, result);
+      connect->moveAfter(op);
+    }
   }
 }
 
