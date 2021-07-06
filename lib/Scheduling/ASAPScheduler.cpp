@@ -12,7 +12,7 @@
 
 #include "circt/Scheduling/ASAPScheduler.h"
 
-#include <deque>
+#include "mlir/IR/Operation.h"
 
 using namespace circt;
 using namespace circt::scheduling;
@@ -21,42 +21,62 @@ LogicalResult ASAPScheduler::schedule() {
   if (failed(check()))
     return failure();
 
-  // initialize a worklist with the block's operations
-  std::deque<Operation *> worklist;
-  worklist.insert(worklist.begin(), getOperations().begin(),
-                  getOperations().end());
+  // Keep track of ops that don't have a start time yet
+  llvm::SmallVector<Operation *> unscheduledOps;
+  unscheduledOps.insert(unscheduledOps.begin(), getOperations().begin(),
+                        getOperations().end());
 
-  // iterate until all operations are scheduled
-  while (!worklist.empty()) {
-    Operation *op = worklist.front();
-    worklist.pop_front();
-    if (getDependences(op).empty()) {
-      // operations with no predecessors are scheduled at time step 0
-      setStartTime(op, 0);
-      continue;
-    }
+  // We may need multiple attempts to schedule all operations in case the
+  // problem's operation list is not in a topological order w.r.t. the
+  // dependence graph.
+  while (!unscheduledOps.empty()) {
+    // Remember how many unscheduled operations we have at the beginning of this
+    // attempt. This is a fail-safe for cyclic dependence graphs: If we do not
+    // schedule at least one operation per attempt, we have encountered a cycle.
+    unsigned numUnscheduledBefore = unscheduledOps.size();
 
-    // op has at least one predecessor. Compute start time as:
-    //   max_{p : preds} startTime[p] + latency[linkedOpr[p]]
-    unsigned startTime = 0;
-    bool startTimeIsValid = true;
-    for (auto &dep : getDependences(op)) {
-      Operation *pred = dep.getSource();
-      if (auto predStart = getStartTime(pred)) {
-        // pred is already scheduled
-        unsigned predLatency = *getLatency(*getLinkedOperatorType(pred));
-        startTime = std::max(startTime, *predStart + predLatency);
-      } else {
-        // pred is not yet scheduled, give up and try again later
-        startTimeIsValid = false;
-        break;
+    // Set up the worklist for this attempt, and initialize it in reverse order
+    // so that we can pop off its back later.
+    llvm::SmallVector<Operation *> worklist;
+    worklist.insert(worklist.begin(), unscheduledOps.rbegin(),
+                    unscheduledOps.rend());
+    unscheduledOps.clear();
+
+    while (!worklist.empty()) {
+      Operation *op = worklist.pop_back_val();
+
+      // Operations with no predecessors are scheduled at time step 0
+      if (getDependences(op).empty()) {
+        setStartTime(op, 0);
+        continue;
       }
+
+      // op has at least one predecessor. Compute start time as:
+      //   max_{p : preds} startTime[p] + latency[linkedOpr[p]]
+      unsigned startTime = 0;
+      bool startTimeIsValid = true;
+      for (auto &dep : getDependences(op)) {
+        Operation *pred = dep.getSource();
+        if (auto predStart = getStartTime(pred)) {
+          // pred is already scheduled
+          unsigned predLatency = *getLatency(*getLinkedOperatorType(pred));
+          startTime = std::max(startTime, *predStart + predLatency);
+        } else {
+          // pred is not yet scheduled, give up and try again later
+          startTimeIsValid = false;
+          break;
+        }
+      }
+
+      if (startTimeIsValid)
+        setStartTime(op, startTime);
+      else
+        unscheduledOps.push_back(op);
     }
 
-    if (startTimeIsValid)
-      setStartTime(op, startTime);
-    else
-      worklist.push_back(op);
+    // Fail if no progress was made during this attempt
+    if (numUnscheduledBefore == unscheduledOps.size())
+      return getContainingOp()->emitError() << "dependence cycle detected";
   }
 
   return success();
