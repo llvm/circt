@@ -479,12 +479,11 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
 
     // Handle operations.
     if (auto op = tappedOps.lookup(portAnno.anno.getDict())) {
-      // We currently require the target to be a wire.
-      // TODO: This should probably also allow other things?
-      auto wire = dyn_cast<WireOp>(op);
-      if (!wire) {
+      // We require the target to be a wire or node, such that it gets a name
+      // during Verilog emission.
+      if (!isa<WireOp, NodeOp>(op)) {
         auto diag = blackBox.extModule.emitError("ReferenceDataTapKey on port ")
-                    << portName << " must be a wire";
+                    << portName << " must be a wire or node";
         diag.attachNote(op->getLoc()) << "referenced operation is here:";
         signalPassFailure();
         return;
@@ -494,10 +493,10 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
       // TODO: If we were to use proper cross-module reference ops in the IR
       // then this could be anonymous, with ExportVerilog resolving the name
       // at the last moment.
-      auto name = wire.nameAttr();
+      auto name = op->getAttrOfType<StringAttr>("name");
       if (!name) {
         auto diag =
-            wire.emitError("wire targeted by data tap must have a name");
+            op->emitError("wire or node targeted by data tap must have a name");
         diag.attachNote(blackBox.extModule->getLoc())
             << "used by ReferenceDataTapKey on port " << portName << " here:";
         signalPassFailure();
@@ -505,7 +504,7 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
       }
 
       wiring.prefices =
-          instancePaths.getAbsolutePaths(wire->getParentOfType<FModuleOp>());
+          instancePaths.getAbsolutePaths(op->getParentOfType<FModuleOp>());
       wiring.suffix = name.getValue();
       portWiring.push_back(std::move(wiring));
       return;
