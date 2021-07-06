@@ -238,6 +238,10 @@ class OpOperand:
     self.value = value
     self.backedge_owner = backedge_owner
 
+  @property
+  def type(self):
+    return self.value.type
+
 
 class NamedValueOpView:
   """Helper class to incrementally construct an instance of an operation that
