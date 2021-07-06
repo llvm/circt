@@ -1,6 +1,15 @@
 # RUN: %PYTHON% %s 2>&1 | FileCheck %s
 
 from pycde import dim, types
+import sys
+
+# CHECK: [('foo', Type(i1)), ('bar', Type(i13))]
+# CHECK: i1
+st1 = types.struct({"foo": types.i1, "bar": types.i13})
+fields = st1.get_fields()
+sys.stderr.write(str(fields) + "\n")
+st1.get_field("foo").dump()
+print()
 
 # CHECK: i6
 array1 = dim(types.i6)
