@@ -42,7 +42,7 @@ class InstanceBuilder(support.NamedValueOpView):
       }
       for input_name, input_value in input_port_mapping.items():
         if input_name not in input_name_type_lookup:
-          continue  # This error gets caught and raise later.
+          continue  # This error gets caught and raised later.
         mod_input_type = input_name_type_lookup[input_name]
         if support.type_to_pytype(input_value.type) != mod_input_type:
           raise TypeError(f"Input '{input_name}' has type '{input_value.type}' "
