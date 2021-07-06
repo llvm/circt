@@ -196,6 +196,9 @@ def _module_base(cls, extern: bool, params={}):
         if name in inputs:
           value = support.get_value(inputs[name])
           assert value is not None
+          if not extern and support.type_to_pytype(value.type) != type:
+            raise TypeError(f"Input '{name}' has type '{value.type}' "
+                            f"but expected '{type}'")
         else:
           backedge = BackedgeBuilder.current().create(type, name, self, loc=loc)
           self.backedges[idx] = backedge
@@ -328,17 +331,6 @@ class _Generate:
     while mod.name != "module":
       mod = mod.parent
 
-    # Get the port names from the attributes we stored them in.
-    op_names_attrs = mlir.ir.ArrayAttr(op.attributes["opNames"])
-    op_names = [mlir.ir.StringAttr(x) for x in op_names_attrs]
-    input_ports = [(n.value, o.type) for (n, o) in zip(op_names, op.operands)]
-
-    result_names_attrs = mlir.ir.ArrayAttr(op.attributes["resultNames"])
-    result_names = [mlir.ir.StringAttr(x) for x in result_names_attrs]
-    output_ports = [
-        (n.value, o.type) for (n, o) in zip(result_names, op.results)
-    ]
-
     # Assemble the parameters.
     self.params = {
         nattr.name: support.attribute_to_var(nattr.attr)
@@ -370,16 +362,17 @@ class _Generate:
       with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]), self.loc:
         mod = ModuleDefinition(self.modcls,
                                module_name,
-                               input_ports=input_ports,
-                               output_ports=output_ports,
+                               input_ports=self.modcls._input_ports,
+                               output_ports=self.modcls._output_ports,
                                body_builder=self.gen_func)
     else:
       assert(len(existing_module_names) == 1)
       mod = existing_module_names[0]
 
     # Build a replacement instance at the op to be replaced.
+    op_names = [name for name, _ in self.modcls._input_ports]
     with mlir.ir.InsertionPoint(op):
-      mapping = {name.value: op.operands[i] for i, name in enumerate(op_names)}
+      mapping = {name: op.operands[i] for i, name in enumerate(op_names)}
       inst = mod.create(op.name, **mapping).operation
       for (name, attr) in attrs.items():
         if name == "parameters":

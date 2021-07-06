@@ -35,6 +35,19 @@ class InstanceBuilder(support.NamedValueOpView):
     if results is None:
       results = module.type.results
 
+    if not isinstance(module, hw.HWModuleExternOp):
+      input_name_type_lookup = {
+          name: support.type_to_pytype(ty)
+          for name, ty in zip(self.operand_names(), module.type.inputs)
+      }
+      for input_name, input_value in input_port_mapping.items():
+        if input_name not in input_name_type_lookup:
+          continue  # This error gets caught and raised later.
+        mod_input_type = input_name_type_lookup[input_name]
+        if support.type_to_pytype(input_value.type) != mod_input_type:
+          raise TypeError(f"Input '{input_name}' has type '{input_value.type}' "
+                          f"but expected '{mod_input_type}'")
+
     super().__init__(hw.InstanceOp,
                      results,
                      input_port_mapping,

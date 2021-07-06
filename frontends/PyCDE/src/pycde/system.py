@@ -42,8 +42,8 @@ class System:
   def body(self):
     return self.mod.body
 
-  def print(self):
-    self.mod.operation.print()
+  def print(self, **kwargs):
+    self.mod.operation.print(**kwargs)
 
   def graph(self, short_names=True):
     import mlir.all_passes_registration
