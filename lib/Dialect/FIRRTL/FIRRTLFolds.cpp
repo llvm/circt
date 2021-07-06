@@ -711,7 +711,7 @@ LogicalResult NEQPrimOp::canonicalize(NEQPrimOp op, PatternRewriter &rewriter) {
 OpFoldResult AsSIntPrimOp::fold(ArrayRef<Attribute> operands) {
   // No effect.
   if (input().getType() == getType())
-      return input();
+    return input();
 
   // Be careful to only fold the cast into the constant if the size is known.
   // Otherwise width inference may produce differently-sized constants if the
@@ -725,7 +725,7 @@ OpFoldResult AsSIntPrimOp::fold(ArrayRef<Attribute> operands) {
 OpFoldResult AsUIntPrimOp::fold(ArrayRef<Attribute> operands) {
   // No effect.
   if (input().getType() == getType())
-      return input();
+    return input();
 
   // Be careful to only fold the cast into the constant if the size is known.
   // Otherwise width inference may produce differently-sized constants if the
@@ -741,7 +741,7 @@ OpFoldResult AsAsyncResetPrimOp::fold(ArrayRef<Attribute> operands) {
 
   // No effect.
   if (input().getType() == getType())
-      return input();
+    return input();
 
   return {};
 }
@@ -751,7 +751,7 @@ OpFoldResult AsClockPrimOp::fold(ArrayRef<Attribute> operands) {
 
   // No effect.
   if (input().getType() == getType())
-      return input();
+    return input();
 
   return {};
 }
