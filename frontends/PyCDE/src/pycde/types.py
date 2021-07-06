@@ -64,7 +64,6 @@ class _Types:
     if len(type_scopes) == 0:
       with mlir.ir.InsertionPoint.at_block_begin(mod.body):
         type_scopes.append(hw.TypeScopeOp.create(self.TYPE_SCOPE))
-        self.declared_aliases[mod] = set([])
 
     assert len(type_scopes) == 1
     type_scope = type_scopes[0]

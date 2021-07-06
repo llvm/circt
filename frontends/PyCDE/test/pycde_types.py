@@ -8,6 +8,7 @@ import sys
 st1 = types.struct({"foo": types.i1, "bar": types.i13})
 fields = st1.get_fields()
 sys.stderr.write(str(fields) + "\n")
+sys.stderr.flush()
 st1.get_field("foo").dump()
 print()
 
