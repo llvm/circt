@@ -74,6 +74,11 @@ static cl::opt<bool> inliner("inline",
 static cl::opt<bool> lowerToHW("lower-to-hw",
                                cl::desc("run the lower-to-hw pass"));
 
+static cl::opt<bool> enableAnnotationWarning(
+    "warn-on-unprocessed-annotations",
+    cl::desc("Warn about annotations that were not removed by lower-to-hw"),
+    cl::init(false));
+
 static cl::opt<bool> imconstprop(
     "imconstprop",
     cl::desc(
@@ -251,7 +256,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
       outputFormat == OutputSplitVerilog) {
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         firrtl::createCheckWidthsPass());
-    pm.addPass(createLowerFIRRTLToHWPass());
+    pm.addPass(createLowerFIRRTLToHWPass(enableAnnotationWarning.getValue()));
     pm.addPass(sv::createHWMemSimImplPass());
 
     if (extractTestCode)
