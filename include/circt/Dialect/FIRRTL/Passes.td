@@ -26,7 +26,13 @@ def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
 def LowerBundleVector : Pass<"firrtl-lower-bundle-vectors", "firrtl::CircuitOp"> {
   let summary = "Lower FIRRTL bundle and vector types to ground types";
   let description = [{
-    Lower firrtl.module port types to ground types.
+    Lower aggregate FIRRTL types to ground types.  Memories, ports, wires, etc
+    are split appart by elements of aggregate types.  The only aggregate types
+    which exist after this pass are memory ports, though memory data types are
+    split.
+
+    Connect and partial connect expansion and canonicalization happen in this
+    pass.
   }];
   let constructor = "circt::firrtl::createLowerBundleVectorTypesPass()";
 }
