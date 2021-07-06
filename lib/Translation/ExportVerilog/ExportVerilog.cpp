@@ -108,6 +108,9 @@ static int getBitWidthOrSentinel(Type type) {
       .Case<InOutType>([](InOutType inoutType) {
         return getBitWidthOrSentinel(inoutType.getElementType());
       })
+      .Case<TypeAliasType>([](TypeAliasType alias) {
+        return getBitWidthOrSentinel(alias.getInnerType());
+      })
       .Default([](Type) { return -1; });
 }
 
@@ -120,11 +123,11 @@ static void getTypeDims(SmallVectorImpl<int64_t> &dims, Type type,
     return getTypeDims(dims, uarray.getElementType(), loc);
   if (type.isa<InterfaceType>())
     return;
-  if (type.isa<StructType>())
+  if (hw::type_isa<StructType>(type))
     return;
 
   int width;
-  if (auto arrayType = type.dyn_cast<hw::ArrayType>()) {
+  if (auto arrayType = hw::type_dyn_cast<hw::ArrayType>(type)) {
     width = arrayType.getSize();
   } else {
     width = getBitWidthOrSentinel(type);
