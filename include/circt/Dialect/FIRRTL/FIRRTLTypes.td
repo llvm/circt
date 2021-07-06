@@ -79,6 +79,9 @@ def ResetType : DialectType<FIRRTLDialect,
   CPred<"$_self.isa<FIRRTLType>() && $_self.cast<FIRRTLType>().isResetType()">,
   "Reset", "::circt::firrtl::FIRRTLType">;
 
+def NonZeroGroundType : AnyTypeOf<[NonZeroIntType, ClockType, ResetType,
+    AsyncResetType], "A non-aggregate type with a positive width.">;
+
 def UIntSIntClockType : AnyTypeOf<[SIntType, UIntType, ClockType],
                                   "sint, uint, or clock",
                                   "::circt::firrtl::FIRRTLType">;

@@ -53,6 +53,61 @@ firrtl.circuit "" {
 // -----
 
 firrtl.circuit "Foo" {
+firrtl.module @Foo() {
+  // expected-error @+1 {{invalid return type}}
+  firrtl.constant 100 : !firrtl.bundle<>
+}
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+firrtl.module @Foo() {
+  // expected-error @+1 {{constant too large for result type}}
+  firrtl.constant 100 : !firrtl.uint<4>
+}
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+firrtl.module @Foo() {
+  // expected-error @+1 {{constant too large for result type}}
+  firrtl.constant -100 : !firrtl.sint<4>
+}
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+firrtl.module @Foo() {
+  // expected-error @+1 {{constant too large for result type}}
+  firrtl.constant 2 : !firrtl.clock
+}
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+firrtl.module @Foo() {
+  // expected-error @+1 {{constant too large for result type}}
+  firrtl.constant 2 : !firrtl.reset
+}
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+firrtl.module @Foo() {
+  // expected-error @+1 {{constant too large for result type}}
+  firrtl.constant 2 : !firrtl.asyncreset
+}
+}
+
+
+// -----
+
+firrtl.circuit "Foo" {
   firrtl.module @Foo(in %clk: !firrtl.uint<1>, in %reset: !firrtl.uint<1>) {
     // expected-error @+1 {{'firrtl.reg' op operand #0 must be clock, but got '!firrtl.uint<1>'}}
     %a = firrtl.reg %clk {name = "a"} : (!firrtl.uint<1>) -> !firrtl.uint<1>

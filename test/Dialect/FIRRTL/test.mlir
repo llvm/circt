@@ -78,6 +78,19 @@ firrtl.module @ClockCast(in %clock: !firrtl.clock) {
   %1 = firrtl.stdIntCast %0 : (i1) -> !firrtl.clock
 }
 
+// Constant op supports different return types.
+firrtl.module @Constants() {
+  // CHECK: %c4_ui8 = firrtl.constant 4 : !firrtl.uint<8>
+  firrtl.constant 4 : !firrtl.uint<8>
+  // CHECK: %c-4_si16 = firrtl.constant -4 : !firrtl.sint<16>
+  firrtl.constant -4 : !firrtl.sint<16>
+  // CHECK: %c1_clock = firrtl.constant 1 : !firrtl.clock
+  firrtl.constant 1 : !firrtl.clock
+  // CHECK: %c1_reset = firrtl.constant 1 : !firrtl.reset
+  firrtl.constant 1 : !firrtl.reset
+  // CHECK: %c1_asyncreset = firrtl.constant 1 : !firrtl.asyncreset
+  firrtl.constant 1 : !firrtl.asyncreset
+}
 
 // CHECK-LABEL: @TestDshRL
 firrtl.module @TestDshRL(in %in1 : !firrtl.uint<2>, in %in2: !firrtl.uint<3>) {

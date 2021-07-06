@@ -1442,57 +1442,93 @@ static ParseResult parseConstantOp(OpAsmParser &parser,
   if (!valueResult.hasValue())
     return parser.emitError(loc, "expected integer value");
 
-  // Parse the result firrtl integer type.
-  IntType resultType;
+  // Parse the result firrtl type.
+  Type resultType;
   if (failed(*valueResult) || parser.parseColonType(resultType) ||
       parser.parseOptionalAttrDict(result.attributes))
     return failure();
   result.addTypes(resultType);
 
-  // Now that we know the width and sign of the result type, we can munge the
-  // APInt as appropriate.
-  if (resultType.hasWidth()) {
-    auto width = (unsigned)resultType.getWidthOrSentinel();
-    if (width == 0)
-      return parser.emitError(loc, "zero bit constants aren't allowed");
+  // By default the width is unknown.
+  auto typeWidth = -1;
+  auto isSigned = false;
 
-    if (width > value.getBitWidth()) {
-      // sext is always safe here, even for unsigned values, because the
-      // parseOptionalInteger method will return something with a zero in the
-      // top bits if it is a positive number.
-      value = value.sext(width);
-    } else if (width < value.getBitWidth()) {
-      // The parser can return an unnecessarily wide result with leading zeros.
-      // This isn't a problem, but truncating off bits is bad.
-      if (value.getNumSignBits() < value.getBitWidth() - width)
-        return parser.emitError(loc, "constant too large for result type ")
-               << resultType;
-      value = value.trunc(width);
-    }
+  // Collect the width and signedness from the result type.
+  if (auto intType = resultType.dyn_cast<IntType>()) {
+    // If are returning an IntType, the width is explicit.
+    typeWidth = intType.getWidthOrSentinel();
+    isSigned = intType.isSigned();
+  } else if (resultType.isa<ResetType, AsyncResetType, ClockType>()) {
+    // These types always have a width of 1 and are unsigned.
+    typeWidth = 1;
+    isSigned = false;
+  } else {
+    return parser.emitError(loc, "invalid return type");
   }
 
-  auto intType = parser.getBuilder().getIntegerType(value.getBitWidth(),
-                                                    resultType.isSigned());
+  // Now that we know the width and sign of the result type, we can munge the
+  // APInt as appropriate.
+  if (typeWidth < 0) {
+    // If the width is unknown (-1), we don't resize anything.
+  } else if (typeWidth == 0) {
+    return parser.emitError(loc, "zero bit constants aren't allowed");
+  } else if ((unsigned)typeWidth > value.getBitWidth()) {
+    // sext is always safe here, even for unsigned values, because the
+    // parseOptionalInteger method will return something with a zero in the top
+    // bits if it is a positive number.
+    value = value.sext(typeWidth);
+  } else if ((unsigned)typeWidth < value.getBitWidth()) {
+    // The parser can return an unnecessarily wide result with leading zeros.
+    // This isn't a problem, but truncating off bits is bad.
+    if (value.getNumSignBits() < value.getBitWidth() - typeWidth)
+      return parser.emitError(loc, "constant too large for result type ")
+             << resultType;
+    value = value.trunc(typeWidth);
+  }
+
+  auto intType =
+      parser.getBuilder().getIntegerType(value.getBitWidth(), isSigned);
   auto valueAttr = parser.getBuilder().getIntegerAttr(intType, value);
   result.addAttribute("value", valueAttr);
   return success();
 }
 
 static LogicalResult verifyConstantOp(ConstantOp constant) {
-  // If the result type has a bitwidth, then the attribute must match its width.
-  auto intType = constant.getType().cast<IntType>();
-  auto width = intType.getWidthOrSentinel();
-  if (width != -1 && (int)constant.value().getBitWidth() != width)
-    return constant.emitError(
-        "firrtl.constant attribute bitwidth doesn't match return type");
 
-  // The sign of the attribute's integer type must match our integer type sign.
-  auto attrType = constant.valueAttr().getType().cast<IntegerType>();
-  if (attrType.isSignless() ||
-      attrType.isSigned() != constant.getType().isSigned())
-    return constant.emitError("firrtl.constant attribute has wrong sign");
+  // IntType.
+  if (auto intType = constant.getType().dyn_cast<IntType>()) {
+    // If the result type has a bitwidth, then the attribute must match its
+    // width.
+    auto width = intType.getWidthOrSentinel();
+    if (width != -1 && (int)constant.value().getBitWidth() != width)
+      return constant.emitError(
+          "firrtl.constant attribute bitwidth doesn't match return type");
 
-  return success();
+    // The sign of the attribute's integer type must match our integer type
+    // sign.
+    auto attrType = constant.valueAttr().getType().cast<IntegerType>();
+    if (attrType.isSignless() || attrType.isSigned() != intType.isSigned())
+      return constant.emitError("firrtl.constant attribute has wrong sign");
+
+    return success();
+  }
+
+  // ClockType, ResetType, AsyncResetType.
+  if (constant.getType().isa<ClockType, ResetType, AsyncResetType>()) {
+    // Attribute must have a bitwidth of one.
+    if (constant.value().getBitWidth() != 1)
+      return constant.emitError(
+          "firrt.constant attribute bitwidth doesn't match return type");
+
+    // Attribute must be unsigned.
+    auto attrType = constant.valueAttr().getType().cast<IntegerType>();
+    if (attrType.isSigned())
+      return constant.emitError("firrtl.constant attribute has wrong sign");
+    return success();
+  }
+
+  constant.emitError("firrtl.constant has invalid return type");
+  return failure();
 }
 
 /// Build a ConstantOp from an APInt and a FIRRTL type, handling the attribute

@@ -24,6 +24,20 @@ firrtl.module @Casts(in %ui1 : !firrtl.uint<1>, in %si1 : !firrtl.sint<1>,
   // CHECK: firrtl.connect %out_asyncreset, %asyncreset : !firrtl.asyncreset, !firrtl.asyncreset
   %3 = firrtl.asAsyncReset %asyncreset : (!firrtl.asyncreset) -> !firrtl.asyncreset
   firrtl.connect %out_asyncreset, %3 : !firrtl.asyncreset, !firrtl.asyncreset
+
+  /// Constant fold.
+  // CHECK: firrtl.connect %out_ui1, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+  %5 = firrtl.asUInt %c1_si1 : (!firrtl.sint<1>) -> !firrtl.uint<1>
+  firrtl.connect %out_ui1, %5 : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: firrtl.connect %out_si1, %c-1_si1 : !firrtl.sint<1>, !firrtl.sint<1>
+  %6 = firrtl.asSInt %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.sint<1>
+  firrtl.connect %out_si1, %6 : !firrtl.sint<1>, !firrtl.sint<1>
+  // CHECK: firrtl.connect %out_clock, %c1_clock : !firrtl.clock, !firrtl.clock
+  %7 = firrtl.asClock %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.clock
+  firrtl.connect %out_clock, %7 : !firrtl.clock, !firrtl.clock
+  // CHECK: firrtl.connect %out_asyncreset, %c1_asyncreset : !firrtl.asyncreset, !firrtl.asyncreset
+  %8 = firrtl.asAsyncReset %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
+  firrtl.connect %out_asyncreset, %8 : !firrtl.asyncreset, !firrtl.asyncreset
 }
 
 // CHECK-LABEL: firrtl.module @Div
@@ -1564,13 +1578,14 @@ firrtl.module @EmptyNode(in %d1: !firrtl.uint<5>, out %foo: !firrtl.uint<5>, out
 firrtl.module @RegresetToReg(in %clock: !firrtl.clock, out %foo1: !firrtl.uint<1>, out %foo2: !firrtl.uint<1>) {
   %c0_ui95 = firrtl.constant 7 : !firrtl.uint<95>
 
-  %c1_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-  %zero_asyncreset = firrtl.asAsyncReset %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
+  // Constant reset is folded to a regular RegOp.
   // CHECK: %bar1 = firrtl.reg %clock : (!firrtl.clock) -> !firrtl.uint<1>
-  %bar1 = firrtl.regreset %clock, %zero_asyncreset, %c0_ui95  : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<95>) -> !firrtl.uint<1>
+  %c0_asyncreset = firrtl.constant 0 : !firrtl.asyncreset
+  %bar1 = firrtl.regreset %clock, %c0_asyncreset, %c0_ui95  : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<95>) -> !firrtl.uint<1>
 
-  %invalid_asyncreset = firrtl.invalidvalue : !firrtl.asyncreset
+  // Invalid reset is canonicalized to a regular RegOp.
   // CHECK: %bar2 = firrtl.reg %clock : (!firrtl.clock) -> !firrtl.uint<1>
+  %invalid_asyncreset = firrtl.invalidvalue : !firrtl.asyncreset
   %bar2 = firrtl.regreset %clock, %invalid_asyncreset, %c0_ui95  : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<95>) -> !firrtl.uint<1>
   
   firrtl.connect %foo1, %bar1 : !firrtl.uint<1>, !firrtl.uint<1>

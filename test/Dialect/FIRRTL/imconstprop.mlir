@@ -134,6 +134,36 @@ firrtl.circuit "Test" {
 }
 
 // -----
+firrtl.circuit "RegParent" {
+  /// Properly handle reset types as constants.
+  firrtl.module @RegParent(in %clock: !firrtl.clock, out %out: !firrtl.uint<1>) {
+    %x_in, %x_clock, %x_out = firrtl.instance @RegChild  {name = "x"} : !firrtl.reset, !firrtl.clock, !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    firrtl.connect %x_in, %c0_ui1 : !firrtl.reset, !firrtl.uint<1>
+    firrtl.connect %x_clock, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %out, %x_out : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  // CHECK-LABEL: @RegChild
+  firrtl.module @RegChild(in %in: !firrtl.reset, in %clock: !firrtl.clock, out %out: !firrtl.uint<1>) {
+    // CHECK-NOT: %arst = firrtl.wire
+    %arst = firrtl.wire  : !firrtl.reset
+    firrtl.connect %arst, %in : !firrtl.reset, !firrtl.reset
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // Register should have a constant reset value.
+    // CHECK: %c0_reset = firrtl.constant 0 : !firrtl.reset
+    // CHECK: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK: %myreg = firrtl.regreset %clock, %c0_reset, %c0_ui1  : (!firrtl.clock, !firrtl.reset, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %myreg = firrtl.regreset %clock, %arst, %c0_ui1  : (!firrtl.clock, !firrtl.reset, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // Don't optimize away the register..
+    %0 = firrtl.asUInt %clock : (!firrtl.clock) -> !firrtl.uint<1>
+    %1 = firrtl.not %myreg : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    %2 = firrtl.mux(%0, %1, %myreg) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %myreg, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %out, %myreg : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+
+// -----
 
 // CHECK-LABEL: firrtl.module @Issue1188
 // https://github.com/llvm/circt/issues/1188

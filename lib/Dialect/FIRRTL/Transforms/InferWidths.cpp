@@ -1124,7 +1124,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // If the constant has a known width, use that. Otherwise pick the
         // smallest number of bits necessary to represent the constant.
         Expr *e;
-        if (auto width = op.getType().getWidth())
+        if (auto width = op.getType().template cast<IntType>().getWidth())
           e = solver.known(*width);
         else {
           auto v = op.value();

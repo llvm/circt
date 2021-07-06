@@ -15,7 +15,7 @@ def APSIntAttr : Attr<CPred<"$_self.isa<::mlir::IntegerAttr>()">,
   let storageType = [{ ::mlir::IntegerAttr }];
   let returnType = [{ ::llvm::APSInt }];
   let constBuilderCall = "IntegerAttr::get($_builder.getContext(), $0)";
-  let convertFromStorage = "APSInt($_self.getValue(), !getType().isSigned())";
+  let convertFromStorage = "APSInt($_self.getValue(), !isSigned())";
 }
 
 def SameOperandsIntTypeKind : NativeOpTrait<"SameOperandsIntTypeKind"> {
@@ -94,7 +94,7 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
     }];
 
   let arguments = (ins APSIntAttr:$value);
-  let results = (outs NonZeroIntType:$result);
+  let results = (outs NonZeroGroundType:$result);
 
   // Need a custom parser/printer to avoid redundant type for the attribute and
   // the op itself.
@@ -107,6 +107,13 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
   ];
   let hasFolder = 1;
   let verifier = "return ::verifyConstantOp(*this);";
+  let extraClassDeclaration = [{
+    bool isSigned() {
+      if (auto intType = getType().dyn_cast<IntType>())
+        return intType.isSigned();
+      return false;
+    }
+  }];
 }
 
 def InvalidValueOp : FIRRTLOp<"invalidvalue", [NoSideEffect, ConstantLike]> {

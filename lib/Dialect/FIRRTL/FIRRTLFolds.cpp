@@ -737,21 +737,25 @@ OpFoldResult AsUIntPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult AsAsyncResetPrimOp::fold(ArrayRef<Attribute> operands) {
-  // TODO: Implement constants of asyncreset type.
-
   // No effect.
   if (input().getType() == getType())
       return input();
+
+  // Constant fold.  The operand must already be 1 bit.
+  if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
+      return attr;
 
   return {};
 }
 
 OpFoldResult AsClockPrimOp::fold(ArrayRef<Attribute> operands) {
-  // TODO: Implement constants of clock type.
-
   // No effect.
   if (input().getType() == getType())
       return input();
+
+  // Constant fold.  The operand must already be 1 bit.
+  if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
+      return attr;
 
   return {};
 }

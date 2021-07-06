@@ -179,21 +179,27 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
     // For constants in particular, propagate the value into the result name to
     // make it easier to read the IR.
     if (auto constant = dyn_cast<ConstantOp>(op)) {
-      auto intTy = constant.getType().dyn_cast<IntType>();
-
-      // Otherwise, build a complex name with the value and type.
+      auto type = constant.getType();
       SmallString<32> specialNameBuffer;
       llvm::raw_svector_ostream specialName(specialNameBuffer);
       specialName << 'c';
-      if (intTy) {
-        constant.value().print(specialName, /*isSigned:*/ intTy.isSigned());
-
+      // Print the constant value. Non-integer types always print as unsigned.
+      auto isSigned = false;
+      if (auto intTy = type.dyn_cast<IntType>())
+        isSigned = intTy.isSigned();
+      constant.value().print(specialName, isSigned);
+      // Print the suffix.
+      if (auto intTy = type.dyn_cast<IntType>()) {
         specialName << (intTy.isSigned() ? "_si" : "_ui");
         auto width = intTy.getWidthOrSentinel();
         if (width != -1)
           specialName << width;
-      } else {
-        constant.value().print(specialName, /*isSigned:*/ false);
+      } else if (type.isa<ClockType>()) {
+        specialName << "_clock";
+      } else if (type.isa<ResetType>()) {
+        specialName << "_reset";
+      } else if (type.isa<AsyncResetType>()) {
+        specialName << "_asyncreset";
       }
       setNameFn(constant.getResult(), specialName.str());
     }
@@ -278,12 +284,19 @@ void FIRRTLDialect::printType(Type type, DialectAsmPrinter &os) const {
 Operation *FIRRTLDialect::materializeConstant(OpBuilder &builder,
                                               Attribute value, Type type,
                                               Location loc) {
-  // Integer constants.
   if (auto attrValue = value.dyn_cast<IntegerAttr>()) {
-    auto intType = type.cast<IntType>();
-    assert((!intType.hasWidth() || (unsigned)intType.getWidthOrSentinel() ==
-                                       attrValue.getValue().getBitWidth()) &&
-           "type/value width mismatch materializing constant");
+    if (auto intType = type.dyn_cast<IntType>()) {
+      // Integer constants.
+      assert((!intType.hasWidth() || (unsigned)intType.getWidthOrSentinel() ==
+                                         attrValue.getValue().getBitWidth()) &&
+             "type/value width mismatch materializing constant");
+    } else if (type.isa<ClockType, ResetType, AsyncResetType>()) {
+      // Clock, Reset, and AsyncReset constants.
+      assert(attrValue.getValue().getBitWidth() == 1);
+    } else {
+      llvm_unreachable("materializing constant of unknown type");
+    }
+
     return builder.create<ConstantOp>(loc, type, attrValue);
   }
 
