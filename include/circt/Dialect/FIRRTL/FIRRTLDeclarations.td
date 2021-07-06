@@ -129,7 +129,7 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
 
     /// Return the name and kind of ports supported by this memory.
     SmallVector<NamedPort> getPorts();
-
+    
     /// Return the kind of the specified port.
     PortKind getPortKind(StringRef portName);
 
