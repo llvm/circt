@@ -394,8 +394,8 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
   }
 
   // Save the name attribute for the new argument.
-  auto nameStr = oldArg.name.getValue().str() + field.suffix.str();
-  auto name = builder->getStringAttr(nameStr);
+  auto name =
+      builder->getStringAttr(oldArg.name.getValue().str() + field.suffix.str());
 
   // Populate the new arg attributes.
   auto newAnnotations = filterAnnotations(
