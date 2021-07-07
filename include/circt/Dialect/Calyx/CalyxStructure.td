@@ -163,7 +163,7 @@ def GroupOp : CalyxOp<"group", [
     ```mlir
       calyx.group @MyGroup {
         calyx.assign %1 = %2 : i32
-        calyx.done %3 : i1
+        calyx.group_done %3 : i1
       }
     ```
   }];
@@ -216,35 +216,34 @@ def AssignOp : CalyxOp<"assign", [
 def GroupDoneOp : CalyxGroupPort<"group_done", [
     Terminator
   ]> {
-    let summary = "Calyx Group Done Port";
-    let description = [{
-      The "calyx.group_done" operation represents a port on a
-      Calyx group that signifies when the group is finished.
-      A done operation may optionally be guarded, which controls
-      when the group's done operation should be active.
+  let summary = "Calyx Group Done Port";
+  let description = [{
+    The "calyx.group_done" operation represents a port on a
+    Calyx group that signifies when the group is finished.
+    A done operation may optionally be guarded, which controls
+    when the group's done operation should be active.
 
-      ```mlir
-        %0 = calyx.group_done %v1 : i1
-        %1 = calyx.group_done %v2, %guard ? : i1
-      ```
-    }];
+    ```mlir
+      %0 = calyx.group_done %v1 : i1
+      %1 = calyx.group_done %v2, %guard ? : i1
+    ```
+  }];
 }
 
-def GroupGoOp : CalyxGroupPort<"group_go", [
-  ]> {
-    let summary = "Calyx Group Go Port";
-    let description = [{
-      The "calyx.group_go" operation represents a port on a
-      Calyx group that signifies when the group begins.
-      A go operation may optionally be guarded, which
-      controls when the group's go operation should be
-      active. The go operation should only be inserted
-      during the Go Insertion pass. It does not
-      receive a source until the Compile Control pass.
+def GroupGoOp : CalyxGroupPort<"group_go", []> {
+  let summary = "Calyx Group Go Port";
+  let description = [{
+    The "calyx.group_go" operation represents a port on a
+    Calyx group that signifies when the group begins.
+    A go operation may optionally be guarded, which
+    controls when the group's go operation should be
+    active. The go operation should only be inserted
+    during the Go Insertion pass. It does not
+    receive a source until the Compile Control pass.
 
-      ```mlir
-        %1 = calyx.group_go %0 : i1
-        %2 = calyx.group_go %3, %guard ? : i1
-      ```
-    }];
+    ```mlir
+      %1 = calyx.group_go %0 : i1
+      %2 = calyx.group_go %3, %guard ? : i1
+    ```
+  }];
 }
