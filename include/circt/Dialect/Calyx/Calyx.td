@@ -48,7 +48,6 @@ class CalyxContainer<string mnemonic, list<OpTrait> traits = []> :
   ])> {
   let assemblyFormat = "$body attr-dict";
   let regions = (region SizedRegion<1>: $body);
-  let verifier = "return ::verify$cppClass(*this);";
 
   let extraClassDeclaration = [{
     /// Returns the body of a Calyx container.

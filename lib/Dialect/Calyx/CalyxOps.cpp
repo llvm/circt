@@ -27,6 +27,27 @@ using namespace circt;
 using namespace circt::calyx;
 using namespace mlir;
 
+LogicalResult calyx::verifyControlLikeOpBody(Operation *op) {
+  auto &region = op->getRegion(0);
+
+  bool isNotControlOp = !isa<ControlOp>(op);
+  for (auto &&bodyOp : region.front()) {
+    if (isa<SeqOp>(bodyOp))
+      continue;
+
+    if (isNotControlOp && isa<EnableOp>(bodyOp))
+      // An EnableOp may be nested in any control-like
+      // operation except "calyx.control". This is verified
+      // in the ODS of EnableOp, and kept here for correctness.
+      continue;
+
+    return op->emitOpError()
+           << "has operation: " << bodyOp.getName()
+           << ", which is not allowed in this control-like operation";
+  }
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // ProgramOp
 //===----------------------------------------------------------------------===//
@@ -41,6 +62,27 @@ static LogicalResult verifyProgramOp(ProgramOp program) {
 //===----------------------------------------------------------------------===//
 // ComponentOp
 //===----------------------------------------------------------------------===//
+
+/// This is a helper function that should only be used to get the WiresOp or
+/// ControlOp of a ComponentOp, which are guaranteed to exist and generally at
+/// the end of a component's body. In the worst case, this will run in linear
+/// time with respect to the number of instances within the cell.
+template <typename Op>
+Op getControlOrWiresFrom(ComponentOp op) {
+  auto body = op.getBody();
+  // We verify there is a single WiresOp and ControlOp,
+  // so this is safe.
+  auto opIt = body->getOps<Op>().begin();
+  return *opIt;
+}
+
+WiresOp calyx::ComponentOp::getWiresOp() {
+  return getControlOrWiresFrom<WiresOp>(*this);
+}
+
+ControlOp calyx::ComponentOp::getControlOp() {
+  return getControlOrWiresFrom<ControlOp>(*this);
+}
 
 /// Returns the type of the given component as a function type.
 static FunctionType getComponentType(ComponentOp component) {
@@ -220,7 +262,7 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
 //===----------------------------------------------------------------------===//
 static LogicalResult verifyWiresOp(WiresOp wires) {
   auto component = wires->getParentOfType<ComponentOp>();
-  auto control = cast<ControlOp>(component.getControlOp());
+  auto control = component.getControlOp();
 
   // Verify each group is referenced in the control section.
   for (auto &&op : *wires.getBody()) {
@@ -290,49 +332,11 @@ static LogicalResult verifyCellOp(CellOp cell) {
 }
 
 //===----------------------------------------------------------------------===//
-// ControlOp
-//===----------------------------------------------------------------------===//
-
-/// A helper function to verify that each operation in
-/// the body of a control-like operation is valid.
-static LogicalResult verifyControlLikeOpBody(Operation *op) {
-  auto &region = op->getRegion(0);
-
-  bool isNotControlOp = !isa<ControlOp>(op);
-  for (auto &&bodyOp : region.front()) {
-    if (isa<SeqOp>(bodyOp))
-      continue;
-
-    if (isNotControlOp && isa<EnableOp>(bodyOp))
-      // An EnableOp may be nested in any control-like
-      // operation except "calyx.control". This is verified
-      // in the ODS of EnableOp, but kept here for correctness.
-      continue;
-
-    return op->emitOpError()
-           << "has operation: " << bodyOp.getName()
-           << ", which is not allowed in this control-like operation";
-  }
-  return success();
-}
-
-static LogicalResult verifyControlOp(ControlOp controlOp) {
-  return verifyControlLikeOpBody(controlOp);
-}
-
-//===----------------------------------------------------------------------===//
-// SeqOp
-//===----------------------------------------------------------------------===//
-static LogicalResult verifySeqOp(SeqOp seqOp) {
-  return verifyControlLikeOpBody(seqOp);
-}
-
-//===----------------------------------------------------------------------===//
 // EnableOp
 //===----------------------------------------------------------------------===//
 static LogicalResult verifyEnableOp(EnableOp enableOp) {
   auto component = enableOp->getParentOfType<ComponentOp>();
-  auto wiresOp = cast<WiresOp>(component.getWiresOp());
+  auto wiresOp = component.getWiresOp();
   auto groupName = enableOp.groupName();
 
   if (!wiresOp.lookupSymbol<GroupOp>(groupName))
