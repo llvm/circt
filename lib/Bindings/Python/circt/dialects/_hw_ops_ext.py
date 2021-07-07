@@ -178,7 +178,8 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
       # If it does, the return from body_builder must be None.
       if bb_ret is not None and bb_ret != last_op:
         raise support.ConnectionError(
-            "Cannot return value from body_builder and create hw.OutputOp")
+            f"In {cls_name}, cannot return value from body_builder and "
+            "create hw.OutputOp")
       return
 
   # If builder didn't create an output op and didn't return anything, this op
@@ -187,7 +188,8 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
     if len(output_ports) == 0:
       hw.OutputOp([])
       return
-    raise support.ConnectionError("Must return module output values")
+    raise support.ConnectionError(
+        f"In {cls_name}, must return module output values")
 
   # Now create the output op depending on the object type returned
   outputs: list[Value] = list()
@@ -195,7 +197,8 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
   # Only acceptable return is a dict of port, value mappings.
   if not isinstance(bb_ret, dict):
     raise support.ConnectionError(
-        "Can only return a dict of port, value mappings from body_builder.")
+        "In {cls_name}, can only return a dict of port, value mappings "
+        "from body_builder.")
 
   # A dict of `OutputPortName` -> ValueLike must be converted to a list in port
   # order.
@@ -209,11 +212,16 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
       if val is None:
         field_type = type(bb_ret[name])
         raise TypeError(
-            f"body_builder return doesn't support type '{field_type}'")
+            f"In {cls_name}, body_builder return doesn't support type "
+            f"'{field_type}'")
       if val.type != port_type:
-        raise TypeError(
-            f"Output port '{name}' type ({val.type}) doesn't match declared"
-            f" type ({port_type})")
+        if isinstance(port_type, hw.TypeAliasType) and \
+           port_type.inner_type == val.type:
+          val = hw.BitcastOp(port_type, val).result
+        else:
+          raise TypeError(
+              f"In {cls_name}, output port '{name}' type ({val.type}) doesn't "
+              f"match declared type ({port_type})")
       outputs.append(val)
       bb_ret.pop(name)
   if len(unconnected_ports) > 0:

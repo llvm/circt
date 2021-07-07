@@ -380,11 +380,25 @@ class _Generate:
         inst.attributes[name] = attr
       return inst
 
+  @staticmethod
+  def create_type_string(ty):
+    ty = support.type_to_pytype(ty)
+    if isinstance(ty, hw.TypeAliasType):
+      return ty.name
+    if isinstance(ty, hw.ArrayType):
+      return f"{ty.size}x" + _Generate.create_type_string(ty.element_type)
+    return str(ty)
+
   def create_module_name(self, op):
+    def val_str(val):
+      if isinstance(val, mlir.ir.Type):
+        return self.create_type_string(val)
+      return str(val)
+
     name = op.name
     if len(self.params) > 0:
       name += "_" + "_".join(
-          str(value) for (_, value) in
+          val_str(value) for (_, value) in
           sorted(self.params.items()))
 
     return name
