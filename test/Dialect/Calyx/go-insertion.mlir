@@ -22,6 +22,8 @@ calyx.program {
         calyx.done %flag : i1
       }
     }
-    calyx.control {}
+    calyx.control {
+      calyx.seq { calyx.enable @Group1 }
+    }
   }
 }
