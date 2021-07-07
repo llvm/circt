@@ -26,24 +26,24 @@ def GoInsertion : Pass<"calyx-go-insertion", "calyx::ComponentOp"> {
     Before:
     ```mlir
     calyx.group @Group1 {
-      calyx.assign %1 = %2, %3 ? : i8
-      calyx.done %4 : i1
+      calyx.assign %in = %out1, %guard ? : i8
+      %done = calyx.done %out2 : i1
     }
     ```
 
     After:
     ```mlir
-    %0 = hw.constant 0 : i1
+    // The `go` assignment takes on a placeholder
+    // value until the Compile Control pass.
+    %c1_0 = hw.constant 0 : i1
     ...
     calyx.group @Group1 {
-      // The `go` assignment takes on a placeholder
-      // value until the CompileControl pass.
-      %5 = calyx.go %0 : i1
+      %go = calyx.go %c1_0 : i1
 
-      %6 = comb.and %5, %3 : i1
-      calyx.assign %1 = %2, %6 ? : i8
+      %and = comb.and %guard, %go : i1
+      calyx.assign %in = %out1, %and ? : i8
 
-      calyx.done %4 : i1
+      %done = calyx.done %out2 : i1
     }
     ```
   }];

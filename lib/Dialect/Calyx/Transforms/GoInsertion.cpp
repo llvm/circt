@@ -25,11 +25,11 @@ using namespace calyx;
 namespace {
 
 /// Adds the group's "go" signal to the guards of assignments within `group`,
-/// with the exception of the "done" terminator. If the assignment
-/// already has a guard, then the bitwise 'and' is taken of the current guard
-/// and the "go" signal. For example:
+/// with the exception of the "done" terminator. If the assignment already
+/// has a guard, then the bitwise 'and' is taken of the current guard and the
+/// "go" signal. For example:
 ///    ```mlir
-///      %go = calyx.go %false : i1
+///      %go = calyx.go %c1_0 : i1
 ///
 ///      // Case 1: No Guard
 ///      %in = %out : i8
@@ -39,8 +39,8 @@ namespace {
 ///      // Case 2: Guard
 ///      %in = %out, %guard ? : i8
 ///      =>
-///      %0 = comb.and %guard, %go : i1
-///      %in = %out, %0 ? : i8
+///      %and = comb.and %guard, %go : i1
+///      %in = %out, %and ? : i8
 ///    ```
 static void updateGroupAssignmentGuards(OpBuilder &builder, GroupOp &group,
                                         GroupGoOp &goOp) {
