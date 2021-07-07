@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_CALYX_CALYXDIALECT_H
 
 #include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
