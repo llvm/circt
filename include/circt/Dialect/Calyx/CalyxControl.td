@@ -10,11 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-// A trait to validate the bodies of control-like regions.
 def ControlLike : NativeOpTrait<"ControlLike"> {
   let cppNamespace = "::circt::calyx";
 }
-
 
 def ControlOp : CalyxContainer<"control", [
     HasParent<"ComponentOp">,
