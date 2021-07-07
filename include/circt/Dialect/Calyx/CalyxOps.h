@@ -15,7 +15,6 @@
 
 #include "circt/Dialect/Calyx/CalyxDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
-#include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/FunctionSupport.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/RegionKindInterface.h"

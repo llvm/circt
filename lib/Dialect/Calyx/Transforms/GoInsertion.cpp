@@ -13,10 +13,8 @@
 #include "PassDetails.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/Calyx/CalyxPasses.h"
-#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinTypes.h"
 
 using namespace circt;
@@ -26,8 +24,22 @@ namespace {
 
 /// Adds the group's "go" signal to the guards of assignments within `group`,
 /// with the exception of the "done" terminator. If the assignment
-/// already has a guard, then the bitwise and is taken of the current guard
-/// and the "go" signal.
+/// already has a guard, then the bitwise 'and' is taken of the current guard
+/// and the "go" signal. For example:
+///    ```mlir
+///      %go = calyx.go %false : i1
+///
+///      /*Case 1*/
+///      %in = %out : i8
+///      =>
+///      %in = %out, %go ? : i8
+///
+///      /*Case 2*/
+///      %in = %out, %guard ? : i8
+///      =>
+///      %0 = comb.and %guard, %go : i1
+///      %in = %out, %0 ? : i8
+///    ```
 static void updateGroupAssignmentGuards(OpBuilder &builder, GroupOp &group,
                                         GoOp &goOp) {
   group.walk([&](Operation *op) {
