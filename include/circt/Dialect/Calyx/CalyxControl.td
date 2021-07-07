@@ -14,6 +14,8 @@ def ControlLike : NativeOpTrait<"ControlLike"> {
   let cppNamespace = "::circt::calyx";
 }
 
+// TODO(Calyx): Verify the semantics concerning
+// EnableOps placed directly inside "calyx.control".
 def ControlOp : CalyxContainer<"control", [
     HasParent<"ComponentOp">,
     ControlLike
