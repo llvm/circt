@@ -197,7 +197,8 @@ class SameTypeConstraint<string lhs, string rhs>
                    lhs, rhs, [{ $_self }]>;
 
 def AssignOp : CalyxOp<"assign", [
-    SameTypeConstraint<"dest", "src">
+    SameTypeConstraint<"dest", "src">,
+    ParentOneOf<["GroupOp", "WiresOp"]>
   ]> {
   let summary = "Calyx Assignment";
   let description = [{
@@ -217,7 +218,6 @@ def AssignOp : CalyxOp<"assign", [
     AnyType:$src,
     Optional<I1>:$guard
   );
-  let verifier = "return ::verify$cppClass(*this);";
 
   // TODO(Calyx): Calyx IR typically represents a
   // guarded assignments as `%dest = %guard ? %src`

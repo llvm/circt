@@ -69,7 +69,7 @@ calyx.program {
   calyx.component @main() -> () {
     %0 = calyx.cell "a0" @A : i16
     %1 = calyx.cell "b0" @B : i16
-    // expected-error @+1 {{'calyx.assign' op should only be contained in 'calyx.wires' or 'calyx.group'}}
+    // expected-error @+1 {{'calyx.assign' op expects parent op to be one of 'calyx.group, calyx.wires'}}
     calyx.assign %1 = %0 : i16
 
     calyx.wires {}
