@@ -22,16 +22,26 @@ hw.type_scope @_other_scope {
 
 // CHECK-LABEL: module testTypeAlias
 hw.module @testTypeAlias(
-  // CHECK: input  foo arg0, arg1
+  // CHECK: input  foo      arg0, arg1
   %arg0: !hw.typealias<@__hw_typedecls::@foo,i1>,
   %arg1: !hw.typealias<@__hw_typedecls::@foo,i1>,
-  // CHECK: input  arr arrArg,
+  // CHECK: input  foo[2:0] arg2
+  %arg2: !hw.array<3xtypealias<@__hw_typedecls::@foo,i1>>,
+  // CHECK: input  arr      arrArg,
   %arrArg: !hw.typealias<@__hw_typedecls::@arr,!hw.array<16xi8>>,
-  // CHECK: input  bar structArg,
+  // CHECK: input  bar      structArg,
   %structArg: !hw.typealias<@__hw_typedecls::@bar,!hw.struct<a: i1, b: i1>>) ->
-  // CHECK: output foo out
+  // CHECK: output foo      out
   (%out: !hw.typealias<@__hw_typedecls::@foo, i1>) {
   // CHECK: out = arg0 + arg1
   %0 = comb.add %arg0, %arg1 : !hw.typealias<@__hw_typedecls::@foo, i1>
   hw.output %0 : !hw.typealias<@__hw_typedecls::@foo, i1>
+}
+
+// CHECK-LABEL: module testRegOp
+hw.module @testRegOp() -> () {
+  // CHECK: foo {{.+}};
+  %r1 = sv.reg : !hw.inout<!hw.typealias<@__hw_typedecls::@foo,i1>>
+  // CHECK: foo[2:0] {{.+}};
+  %r2 = sv.reg : !hw.inout<!hw.array<3xtypealias<@__hw_typedecls::@foo,i1>>>
 }

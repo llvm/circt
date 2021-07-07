@@ -260,6 +260,7 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Operation *op,
           return false;
 
         os << typedecl.getValue().getPreferredName();
+        emitDims(dims, os);
         return true;
       })
       .Default([&](Type type) {
@@ -301,9 +302,12 @@ static StringRef getVerilogDeclWord(Operation *op) {
     if (auto innerType = elementType.dyn_cast<ArrayType>()) {
       while (innerType.getElementType().isa<ArrayType>())
         innerType = innerType.getElementType().cast<ArrayType>();
-      if (innerType.getElementType().isa<StructType>())
+      if (innerType.getElementType().isa<StructType>() ||
+          innerType.getElementType().isa<TypeAliasType>())
         return "";
     }
+    if (elementType.isa<TypeAliasType>())
+      return "";
 
     return "reg";
   }
