@@ -20,6 +20,15 @@
 #include "mlir/Pass/Pass.h"
 
 namespace circt {
+
+namespace hw {
+class HWDialect;
+}
+
+namespace comb {
+class CombDialect;
+}
+
 namespace calyx {
 
 #define GEN_PASS_CLASSES
