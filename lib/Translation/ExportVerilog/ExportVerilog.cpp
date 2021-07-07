@@ -747,6 +747,7 @@ public:
   void emitStatement(Operation *op, ModuleNameManager &names);
   void emitStatementBlock(Block &block, ModuleNameManager &names);
   void emitBind(BindOp op);
+  void emitBindInterface(BindInterfaceOp op);
 
 public:
   void verifyModuleName(Operation *, StringAttr nameAttr);
@@ -2817,6 +2818,16 @@ void ModuleEmitter::emitBind(BindOp op) {
   os << ");\n";
 }
 
+void ModuleEmitter::emitBindInterface(BindInterfaceOp bind) {
+  auto instance = bind.getReferencedInstance();
+  auto instantiator = instance->getParentOfType<hw::HWModuleOp>().getName();
+  auto *interface = bind->getParentOfType<ModuleOp>().lookupSymbol(
+      instance.getInterfaceType().getInterface());
+  os << "bind " << instantiator << " "
+     << cast<InterfaceOp>(*interface).sym_name() << " " << instance.name()
+     << " (.*);\n\n";
+}
+
 // Check if the value is from read of a wire or reg or is a port.
 static bool isSimpleReadOrPort(Value v) {
   if (v.isa<BlockArgument>())
@@ -3297,6 +3308,8 @@ static void prepareHWModule(Block &block, ModuleNameManager &names) {
       names.addLegalName(op.getResult(0), wire.name(), &op);
     else if (auto regOp = dyn_cast<RegOp>(op))
       names.addLegalName(op.getResult(0), regOp.name(), &op);
+    else if (auto interfaceInstanceOp = dyn_cast<InterfaceInstanceOp>(op))
+      names.addLegalName(op.getResult(0), interfaceInstanceOp.name(), &op);
   }
 
   // Now that all the basic ops are settled, check for any use-before def issues
@@ -3435,7 +3448,7 @@ void RootEmitterBase::gatherFiles(bool separateModules) {
         .Case<HWGeneratorSchemaOp>([&](auto &) {
           // Empty.
         })
-        .Case<BindOp>([&](auto &op) {
+        .Case<BindOp, BindInterfaceOp>([&](auto &op) {
           if (attr) {
             if (!hasFileName) {
               op.emitError("file name unspecified");
@@ -3493,6 +3506,8 @@ void RootEmitterBase::emitOperation(VerilogEmitterState &state, Operation *op) {
           [&](auto op) { ModuleEmitter(state).emitHWGeneratedModule(op); })
       .Case<HWGeneratorSchemaOp>([&](auto op) { /* Empty */ })
       .Case<BindOp>([&](auto op) { ModuleEmitter(state).emitBind(op); })
+      .Case<BindInterfaceOp>(
+          [&](auto op) { ModuleEmitter(state).emitBindInterface(op); })
       .Case<InterfaceOp, VerbatimOp, IfDefOp>([&](auto op) {
         ModuleNameManager emptyNames;
         ModuleEmitter(state).emitStatement(op, emptyNames);
