@@ -42,34 +42,6 @@ static LogicalResult verifyProgramOp(ProgramOp program) {
 // ComponentOp
 //===----------------------------------------------------------------------===//
 
-namespace {
-
-/// This is a helper function that should only be used to get the WiresOp or
-/// ControlOp of a ComponentOp, which are guaranteed to exist and generally at
-/// the end of a component's body. In the worst case, this will run in linear
-/// time with respect to the number of instances within the cell.
-template <typename Op>
-static Op getOpFromComponentWithType(ComponentOp componentOp) {
-  auto body = componentOp.getBody();
-  auto opIt = llvm::find_if(llvm::reverse(*body),
-                            [](auto &&op) { return isa<Op>(op); });
-  assert(opIt != body->rend() &&
-         "A component should have a WiresOp and ControlOp.");
-  return cast<Op>(*opIt);
-}
-
-} // namespace
-
-/// Gets the WiresOp of a component.
-static WiresOp getWiresOp(ComponentOp componentOp) {
-  return getOpFromComponentWithType<WiresOp>(componentOp);
-}
-
-/// Gets the ControlOp of a component.
-static ControlOp getControlOp(ComponentOp componentOp) {
-  return getOpFromComponentWithType<ControlOp>(componentOp);
-}
-
 /// Returns the type of the given component as a function type.
 static FunctionType getComponentType(ComponentOp component) {
   return component.getTypeAttr().getValue().cast<FunctionType>();
@@ -248,7 +220,7 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
 //===----------------------------------------------------------------------===//
 static LogicalResult verifyWiresOp(WiresOp wires) {
   auto component = wires->getParentOfType<ComponentOp>();
-  auto control = getControlOp(component);
+  auto control = cast<ControlOp>(component.getControlOp());
 
   // Verify each group is referenced in the control section.
   for (auto &&op : *wires.getBody()) {
@@ -374,7 +346,7 @@ static LogicalResult verifySeqOp(SeqOp seqOp) {
 //===----------------------------------------------------------------------===//
 static LogicalResult verifyEnableOp(EnableOp enableOp) {
   auto component = enableOp->getParentOfType<ComponentOp>();
-  auto wiresOp = getWiresOp(component);
+  auto wiresOp = cast<WiresOp>(component.getWiresOp());
   auto groupName = enableOp.groupName();
 
   if (!wiresOp.lookupSymbol<GroupOp>(groupName))
