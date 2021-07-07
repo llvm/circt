@@ -30,7 +30,6 @@ def ProgramOp : CalyxContainer<"program", [
   let verifier = "return ::verify$cppClass(*this);";
 }
 
-
 def ComponentOp : CalyxOp<"component", [
     HasParent<"ProgramOp">,
     Symbol,
@@ -79,6 +78,12 @@ def ComponentOp : CalyxOp<"component", [
     public:
       /// Returns the body of a Calyx component.
       Block *getBody() { return &getOperation()->getRegion(0).front(); }
+
+      /// Returns the WiresOp of a Calyx Component.
+      WiresOp getWiresOp();
+
+      /// Returns the ControlOp of a Calyx Component.
+      ControlOp getControlOp();
   }];
 
   let verifier = "return ::verify$cppClass(*this);";
@@ -103,30 +108,7 @@ def WiresOp : CalyxContainer<"wires", [
       }
     ```
   }];
-}
-
-// TODO1(Calyx): The terminator for the control flow
-// schedule should define that of the component.
-// TODO2(Calyx): While it currently carries the
-// SingleBlock trait, this may change depending
-// on how we decide to represent Groups in the
-// dialect.
-def ControlOp : CalyxContainer<"control", [
-    HasParent<"ComponentOp">
-  ]> {
-  let summary = "Calyx Control";
-  let description = [{
-    The "calyx.control" operation represents the
-    execution schedule defined for the given
-    component, i.e. when each group executes.
-
-    ```mlir
-      calyx.control {
-        // TODO(Calyx): Add `control` examples
-        // once control flow ops are added.
-      }
-    ```
-  }];
+  let verifier = "return ::verify$cppClass(*this);";
 }
 
 def CellOp : CalyxOp<"cell", [
@@ -202,7 +184,8 @@ class SameTypeConstraint<string lhs, string rhs>
                    lhs, rhs, [{ $_self }]>;
 
 def AssignOp : CalyxOp<"assign", [
-    SameTypeConstraint<"dest", "src">
+    SameTypeConstraint<"dest", "src">,
+    ParentOneOf<["GroupOp", "WiresOp"]>
   ]> {
   let summary = "Calyx Assignment";
   let description = [{
@@ -222,7 +205,6 @@ def AssignOp : CalyxOp<"assign", [
     AnyType:$src,
     Optional<I1>:$guard
   );
-  let verifier = "return ::verify$cppClass(*this);";
 
   // TODO(Calyx): Calyx IR typically represents a
   // guarded assignments as `%dest = %guard ? %src`

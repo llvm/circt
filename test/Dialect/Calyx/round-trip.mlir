@@ -62,6 +62,19 @@ calyx.program {
         calyx.done %c1_i1, %guard ? : i1
       }
     }
-    calyx.control {}
+    calyx.control {
+      // CHECK:      calyx.seq {
+      // CHECK-NEXT: calyx.enable @Group1
+      // CHECK-NEXT: calyx.enable @Group2
+      // CHECK-NEXT: calyx.seq {
+      // CHECK-NEXT: calyx.enable @Group1
+      calyx.seq {
+        calyx.enable @Group1
+        calyx.enable @Group2
+        calyx.seq {
+          calyx.enable @Group1
+        }
+      }
+    }
   }
 }
