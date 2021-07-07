@@ -272,7 +272,7 @@ def GoOp : CalyxOp<"go", [
       controls when the group's go operation should be
       active. The go operation should only be inserted
       during the Go Insertion pass. It does not
-      receive a value until the Compile Control pass.
+      receive a source until the Compile Control pass.
 
       ```mlir
         %1 = calyx.go %0 : i1
@@ -285,6 +285,13 @@ def GoOp : CalyxOp<"go", [
       I1:$src,
       Optional<I1>:$guard
     );
-    let builders = [ OpBuilder<(ins "Value":$src)> ];
+    let builders = [
+      OpBuilder<(ins "Value":$src, CArg<"Value", "{}">:$guard), [{
+        $_state.addTypes($_builder.getI1Type());
+        $_state.addOperands(src);
+        if (guard)
+          $_state.addOperands(guard);
+      }]>
+    ];
     let assemblyFormat = "$src (`,` $guard^ `?`)? attr-dict `:` type($src)";
 }

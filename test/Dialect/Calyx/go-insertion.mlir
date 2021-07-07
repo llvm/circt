@@ -9,7 +9,7 @@ calyx.program {
     %in1, %out1, %flag = calyx.cell "c0" @A : i8, i8, i1
 
     calyx.wires {
-      // CHECK-LABEL: calyx.group @Group1 {
+      // CHECK-LABEL: calyx.group @Group1
       // CHECK-NEXT:  %1 = calyx.go %false : i1
       // CHECK-NEXT:  %2 = comb.and %0#2, %1 : i1
       // CHECK-NEXT:  calyx.assign %0#0 = %0#1, %1 ? : i8

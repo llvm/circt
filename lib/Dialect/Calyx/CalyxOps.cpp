@@ -311,14 +311,6 @@ static LogicalResult verifyAssignOp(AssignOp assign) {
 }
 
 //===----------------------------------------------------------------------===//
-// GoOp
-//===----------------------------------------------------------------------===//
-void GoOp::build(OpBuilder &builder, OperationState &result, Value src) {
-  result.addTypes(builder.getI1Type());
-  result.addOperands(src);
-}
-
-//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
