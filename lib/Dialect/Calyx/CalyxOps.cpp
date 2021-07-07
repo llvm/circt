@@ -41,18 +41,22 @@ static LogicalResult verifyProgramOp(ProgramOp program) {
 // ComponentOp
 //===----------------------------------------------------------------------===//
 
+namespace {
+
 /// This is a helper function that should only be used to get the WiresOp or
 /// ControlOp of a ComponentOp, which are guaranteed to exist and generally at
 /// the end of a component's body. In the worst case, this will run in linear
 /// time with respect to the number of instances within the cell.
 template <typename Op>
-Op getControlOrWiresFrom(ComponentOp op) {
+static Op getControlOrWiresFrom(ComponentOp op) {
   auto body = op.getBody();
   // We verify there is a single WiresOp and ControlOp,
   // so this is safe.
   auto opIt = body->getOps<Op>().begin();
   return *opIt;
 }
+
+} // namespace
 
 WiresOp calyx::ComponentOp::getWiresOp() {
   return getControlOrWiresFrom<WiresOp>(*this);
