@@ -213,36 +213,28 @@ def AssignOp : CalyxOp<"assign", [
   }];
 }
 
-def DoneOp : CalyxOp<"done", [
-    HasParent<"GroupOp">,
+def GroupDoneOp : CalyxGroupPort<"group_done", [
     Terminator
   ]> {
-    let summary = "Calyx Done Port";
+    let summary = "Calyx Group Done Port";
     let description = [{
-      The "calyx.done" operation represents a port on a
+      The "calyx.group_done" operation represents a port on a
       Calyx group that signifies when the group is finished.
       A done operation may optionally be guarded, which controls
       when the group's done operation should be active.
 
       ```mlir
-        calyx.done %0 : i1
-        calyx.done %0, %guard ? : i1
+        %0 = calyx.group_done %v1 : i1
+        %1 = calyx.group_done %v2, %guard ? : i1
       ```
     }];
-
-    let arguments = (ins
-      I1:$src,
-      Optional<I1>:$guard
-    );
-    let assemblyFormat = "$src (`,` $guard^ `?`)? attr-dict `:` type($src)";
 }
 
-def GoOp : CalyxOp<"go", [
-    HasParent<"GroupOp">
+def GroupGoOp : CalyxGroupPort<"group_go", [
   ]> {
-    let summary = "Calyx Go Port";
+    let summary = "Calyx Group Go Port";
     let description = [{
-      The "calyx.go" operation represents a port on a
+      The "calyx.group_go" operation represents a port on a
       Calyx group that signifies when the group begins.
       A go operation may optionally be guarded, which
       controls when the group's go operation should be
@@ -251,23 +243,8 @@ def GoOp : CalyxOp<"go", [
       receive a source until the Compile Control pass.
 
       ```mlir
-        %1 = calyx.go %0 : i1
-        %2 = calyx.go %3, %guard ? : i1
+        %1 = calyx.group_go %0 : i1
+        %2 = calyx.group_go %3, %guard ? : i1
       ```
     }];
-    let results = (outs I1);
-
-    let arguments = (ins
-      I1:$src,
-      Optional<I1>:$guard
-    );
-    let builders = [
-      OpBuilder<(ins "Value":$src, CArg<"Value", "{}">:$guard), [{
-        $_state.addTypes($_builder.getI1Type());
-        $_state.addOperands(src);
-        if (guard)
-          $_state.addOperands(guard);
-      }]>
-    ];
-    let assemblyFormat = "$src (`,` $guard^ `?`)? attr-dict `:` type($src)";
 }

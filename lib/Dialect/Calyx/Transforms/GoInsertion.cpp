@@ -43,7 +43,7 @@ namespace {
 ///      %in = %out, %0 ? : i8
 ///    ```
 static void updateGroupAssignmentGuards(OpBuilder &builder, GroupOp &group,
-                                        GoOp &goOp) {
+                                        GroupGoOp &goOp) {
   group.walk([&](Operation *op) {
     if (!isa<AssignOp>(op))
       return;
@@ -73,7 +73,7 @@ struct GoInsertionPass : public GoInsertionBase<GoInsertionPass> {
       OpBuilder builder(group->getRegion(0));
       // Since the source of a GroupOp's go signal isn't set until the
       // a following pass, a dummy constant is used as a placeholder.
-      auto goOp = builder.create<GoOp>(group->getLoc(), zeroConstant);
+      auto goOp = builder.create<GroupGoOp>(group->getLoc(), zeroConstant);
 
       updateGroupAssignmentGuards(builder, group, goOp);
     });
