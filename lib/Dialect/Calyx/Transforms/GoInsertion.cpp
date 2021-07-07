@@ -29,7 +29,7 @@ namespace {
 /// has a guard, then the bitwise 'and' is taken of the current guard and the
 /// "go" signal. For example:
 ///    ```mlir
-///      %go = calyx.go %c1_0 : i1
+///      %go = calyx.group_go %c1_0 : i1
 ///
 ///      // Case 1: No Guard
 ///      %in = %out : i8
