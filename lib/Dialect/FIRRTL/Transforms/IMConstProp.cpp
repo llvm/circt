@@ -189,6 +189,9 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   /// revisitation.
   void mergeLatticeValue(Value value, LatticeValue &valueEntry,
                          LatticeValue source) {
+    if (!source.isOverdefined() &&
+        AnnotationSet::getAnnotationSet(value).hasDontTouch())
+      source = LatticeValue::getOverdefined();
     if (valueEntry.mergeIn(source))
       changedLatticeValueWorklist.push_back(value);
   }
@@ -217,6 +220,9 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     if (source.isUnknown())
       return;
 
+    if (!source.isOverdefined() &&
+        AnnotationSet::getAnnotationSet(value).hasDontTouch())
+      source = LatticeValue::getOverdefined();
     // If we've changed this value then revisit all the users.
     auto &valueEntry = latticeValues[value];
     if (valueEntry != source) {

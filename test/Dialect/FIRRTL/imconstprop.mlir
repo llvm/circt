@@ -6,14 +6,13 @@ firrtl.circuit "Test" {
   // CHECK: (in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>)
   firrtl.module @PassThrough(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>) {
     // CHECK-NEXT: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK-NEXT: %c0_ui1_0 = firrtl.constant 0 : !firrtl.uint<1>
 
     %dontTouchWire = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
     // CHECK-NEXT: %dontTouchWire = firrtl.wire
     firrtl.connect %dontTouchWire, %source : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK-NEXT: firrtl.connect %dontTouchWire, %c0_ui1
 
-    // CHECK-NEXT: firrtl.connect %dest, %c0_ui1_0
+    // CHECK-NEXT: firrtl.connect %dest, %dontTouchWire
     firrtl.connect %dest, %dontTouchWire : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK-NEXT: }
   }
@@ -53,7 +52,7 @@ firrtl.circuit "Test" {
 
     // CHECK: firrtl.connect %inst_source, %c0_ui1
     firrtl.connect %source, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK: firrtl.connect %result3, %c0_ui1_1
+    // CHECK: firrtl.connect %result3, %inst_dest
     firrtl.connect %result3, %dest : !firrtl.uint<1>, !firrtl.uint<1>
 
     // Check connect extensions.
@@ -156,5 +155,27 @@ firrtl.circuit "Issue1188"  {
     // CHECK: firrtl.mux(%reset, %c1_ui6, %4)
     %9 = firrtl.mux(%reset, %c1_ui6, %4) : (!firrtl.uint<1>, !firrtl.uint<6>, !firrtl.uint<6>) -> !firrtl.uint<6>
     firrtl.connect %D0123456, %9 : !firrtl.uint<6>, !firrtl.uint<6>
+  }
+}
+
+// -----
+// DontTouch annotation should block constant propagation.
+firrtl.circuit "testDontTouch"  {
+  // CHECK-LABEL: firrtl.module @blockProp 
+  firrtl.module @blockProp(in %clock: !firrtl.clock, in %a: !firrtl.uint<1> {firrtl.annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}, out %b: !firrtl.uint<1>) {
+    //CHECK: %c = firrtl.reg 
+    %c = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+    firrtl.connect %c, %a : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %b, %c 
+    firrtl.connect %b, %c : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  // CHECK-LABEL: firrtl.module @testDontTouch
+  firrtl.module @testDontTouch(in %clock: !firrtl.clock, out %a: !firrtl.uint<1>) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %bar_clock, %bar_a, %bar_b = firrtl.instance @blockProp  {name = "bar"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %bar_clock, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %bar_a, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %a, %bar_b
+    firrtl.connect %a, %bar_b : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
