@@ -78,6 +78,9 @@ void ModportType::print(DialectAsmPrinter &p) const {
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/SV/SVTypes.cpp.inc"
 
+#define GET_ATTRDEF_CLASSES
+#include "circt/Dialect/SV/SVAttributes.cpp.inc"
+
 /// Parses a type registered to this dialect
 Type SVDialect::parseType(DialectAsmParser &parser) const {
   llvm::StringRef mnemonic;
@@ -104,4 +107,42 @@ void SVDialect::registerTypes() {
 #define GET_TYPEDEF_LIST
 #include "circt/Dialect/SV/SVTypes.cpp.inc"
       >();
+
+  addAttributes<
+#define GET_ATTRDEF_LIST
+#include "circt/Dialect/SV/SVAttributes.cpp.inc"
+      >();
+}
+
+Attribute SVDialect::parseAttribute(DialectAsmParser &p, Type type) const {
+  StringRef attrName;
+  Attribute attr;
+  if (p.parseKeyword(&attrName))
+    return Attribute();
+  auto parseResult =
+      generatedAttributeParser(getContext(), p, attrName, type, attr);
+  if (parseResult.hasValue())
+    return attr;
+  p.emitError(p.getNameLoc(), "Unexpected sv attribute '" + attrName + "'");
+  return {};
+}
+
+void SVDialect::printAttribute(Attribute attr, DialectAsmPrinter &p) const {
+  if (succeeded(generatedAttributePrinter(attr, p)))
+    return;
+  llvm_unreachable("Unexpected attribute");
+}
+
+Attribute VerbatimAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
+                              Type type) {
+  StringRef verbatimString;
+  if (p.parseLess() || p.parseOptionalString(&verbatimString) ||
+      p.parseGreater())
+    return Attribute();
+
+  return VerbatimAttr::get(ctxt, verbatimString);
+}
+
+void VerbatimAttr::print(DialectAsmPrinter &p) const {
+  p << "verbatim<\"" << getValue() << "\">";
 }

@@ -2326,7 +2326,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   indent() << prefix << verilogName.getValue();
 
   // Helper that prints a parameter constant value in a Verilog compatible way.
-  auto printParmValue = [&](Attribute value) {
+  auto printParmValue = [&](Identifier paramName, Attribute value) {
     if (auto intAttr = value.dyn_cast<IntegerAttr>()) {
       IntegerType intTy = intAttr.getType().cast<IntegerType>();
       SmallString<20> numToPrint;
@@ -2339,9 +2339,12 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     } else if (auto fpAttr = value.dyn_cast<FloatAttr>()) {
       // TODO: relying on float printing to be precise is not a good idea.
       os << fpAttr.getValueAsDouble();
+    } else if (auto verbatim = value.dyn_cast<VerbatimAttr>()) {
+      os << verbatim.getValue();
     } else {
       os << "<<UNKNOWN MLIRATTR: " << value << ">>";
-      emitOpError(op, "unknown extmodule parameter value");
+      emitOpError(op, "unknown extmodule parameter value '")
+          << paramName << "' = " << value;
     }
   };
 
@@ -2355,7 +2358,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
           [&](NamedAttribute elt) {
             os.indent(state.currentIndent + 2)
                 << prefix << '.' << elt.first << '(';
-            printParmValue(elt.second);
+            printParmValue(elt.first, elt.second);
             os << ')';
           },
           ",\n");

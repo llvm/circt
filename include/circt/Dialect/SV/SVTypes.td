@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 class SVType<string name> : TypeDef<SVDialect, name> { }
+class SVAttr<string name> : AttrDef<SVDialect, name> { }
 
 //===----------------------------------------------------------------------===//
 // Generic stuff shared with HW Dialect.
@@ -66,3 +67,13 @@ class InOutTypeConstraint<string value, string inoutValue>
 class InOutElementConstraint<string value, string inoutValue>
   : TypesMatchWith<"type should be element of inout type",
                    inoutValue, value, "sv::getInOutElementType($_self)">;
+
+//===----------------------------------------------------------------------===//
+// Attributes
+//===----------------------------------------------------------------------===//
+
+def VerbatimAttr : SVAttr<"Verbatim"> {
+  let summary = "Represents text to emit directly to SystemVerilog";
+  let parameters = (ins StringRefParameter<"">:$value);
+  let mnemonic = "verbatim";
+}
