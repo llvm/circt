@@ -16,4 +16,36 @@
 
 include "mlir/Pass/PassBase.td"
 
+def GoInsertion : Pass<"calyx-go-insertion", "calyx::ComponentOp"> {
+  let summary = "Inserts `go` signals into the guards of a group's non-hole assignments";
+  let description = [{
+    This passes inserts a group's `go` signal into the guards of all
+    assignments housed within the group with exception of the "calyx.done"
+    terminator. For example,
+
+    Before:
+    ```mlir
+    calyx.group @Group1 {
+      calyx.assign %1 = %2, %3 ? : i8
+      calyx.done %4 : i1
+    }
+    ```
+
+    After:
+    ```mlir
+    calyx.group @Group1 {
+      // The `go` assignment of a group does not take
+      // on a value until the CompileControl pass.
+      %5 = calyx.go : i1
+
+      %6 = comb.and %5, %3 : i1
+      calyx.assign %1 = %2, %6 ? : i8
+
+      calyx.done %4 : i1
+    }
+    ```
+  }];
+  let constructor = "circt::calyx::createGoInsertionPass()";
+}
+
 #endif // CIRCT_DIALECT_CALYX_CALYXPASSES_TD

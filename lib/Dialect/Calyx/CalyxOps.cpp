@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Calyx/CalyxOps.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -193,6 +194,11 @@ static ParseResult parseComponentOp(OpAsmParser &parser,
   if (body->empty())
     body->push_back(new Block());
 
+  // Combinational dialect used for assignment guards.
+  result.getContext()->loadDialect<comb::CombDialect>();
+  // HW dialect used for constant operations.
+  result.getContext()->loadDialect<hw::HWDialect>();
+
   return success();
 }
 
@@ -277,6 +283,14 @@ static LogicalResult verifyAssignOp(AssignOp assign) {
         "should only be contained in 'calyx.wires' or 'calyx.group'");
 
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// GoOp
+//===----------------------------------------------------------------------===//
+void GoOp::build(OpBuilder &builder, OperationState &result, Value src) {
+  result.addTypes(builder.getI1Type());
+  result.addOperands(src);
 }
 
 //===----------------------------------------------------------------------===//

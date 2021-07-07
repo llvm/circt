@@ -1,10 +1,11 @@
 add_circt_dialect_library(CIRCTCalyxTransforms
-  CalyxPasses.cpp
+  GoInsertion.cpp
 
   DEPENDS
   CIRCTCalyxTransformsIncGen
 
   LINK_LIBS PUBLIC
+  CIRCTHW
   CIRCTSupport
   MLIRIR
   MLIRPass

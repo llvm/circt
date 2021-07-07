@@ -76,9 +76,29 @@ def ComponentOp : CalyxOp<"component", [
       /// Hooks for the input/output type enumeration in FunctionLike.
       unsigned getNumFuncArguments() { return getType().getNumInputs(); }
       unsigned getNumFuncResults() { return getType().getNumResults(); }
+
+      /// This is a helper function that should only be used to get the WiresOp or
+      /// ControlOp of a ComponentOp, which are guaranteed to exist and generally at
+      /// the end of a component's body. In the worst case, this will run in linear
+      /// time with respect to the number of instances within the cell.
+      template <typename Op>
+      Operation* getOpWithType() {
+        auto body = &getOperation()->getRegion(0).front();;
+        auto opIt = llvm::find_if(llvm::reverse(*body),
+                                  [](auto &&op) { return isa<Op>(op); });
+        assert(opIt != body->rend() &&
+         "A component should have a WiresOp and ControlOp.");
+        return cast<Op>(*opIt);
+      }
     public:
       /// Returns the body of a Calyx component.
       Block *getBody() { return &getOperation()->getRegion(0).front(); }
+
+      /// Returns the WiresOp of a Calyx Component.
+      Operation* getWiresOp() { return getOpWithType<WiresOp>(); }
+
+      /// Returns the ControlOp of a Calyx Component.
+      Operation* getControlOp() { return getOpWithType<ControlOp>(); }
   }];
 
   let verifier = "return ::verify$cppClass(*this);";
@@ -249,8 +269,36 @@ def DoneOp : CalyxOp<"done", [
     }];
 
     let arguments = (ins
-      AnyType:$src,
+      I1:$src,
       Optional<I1>:$guard
     );
+    let assemblyFormat = "$src (`,` $guard^ `?`)? attr-dict `:` type($src)";
+}
+
+def GoOp : CalyxOp<"go", [
+    HasParent<"GroupOp">
+  ]> {
+    let summary = "Calyx Go Port";
+    let description = [{
+      The "calyx.go" operation represents a port on a
+      Calyx group that signifies when the group begins.
+      A go operation may optionally be guarded, which
+      controls when the group's go operation should be
+      active. The go operation should only be inserted
+      during the Go Insertion pass. It does not
+      receive a value until the Compile Control pass.
+
+      ```mlir
+        %1 = calyx.go %0 : i1
+        %2 = calyx.go %3, %guard ? : i1
+      ```
+    }];
+    let results = (outs I1);
+
+    let arguments = (ins
+      I1:$src,
+      Optional<I1>:$guard
+    );
+    let builders = [ OpBuilder<(ins "Value":$src)> ];
     let assemblyFormat = "$src (`,` $guard^ `?`)? attr-dict `:` type($src)";
 }

@@ -14,9 +14,16 @@
 #define CIRCT_DIALECT_CALYX_CALYXPASSES_H
 
 #include "circt/Support/LLVM.h"
+#include <memory>
+
+namespace mlir {
+class Pass;
+} // namespace mlir
 
 namespace circt {
 namespace calyx {
+
+std::unique_ptr<mlir::Pass> createGoInsertionPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
