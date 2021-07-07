@@ -17,14 +17,35 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace circt::calyx;
 using namespace mlir;
+
+LogicalResult calyx::verifyControlLikeOpBody(Operation *op) {
+  auto &region = op->getRegion(0);
+
+  // A list of Operations that are allowed in the body of a ControlLike op.
+  auto isAllowed = [](Operation *operation) {
+    return isa<SeqOp, EnableOp>(operation);
+  };
+
+  for (auto &&bodyOp : region.front()) {
+    if (isAllowed(&bodyOp))
+      continue;
+
+    return op->emitOpError()
+           << "has operation: " << bodyOp.getName()
+           << ", which is not allowed in this control-like operation";
+  }
+  return success();
+}
 
 //===----------------------------------------------------------------------===//
 // ProgramOp
@@ -245,6 +266,26 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
 }
 
 //===----------------------------------------------------------------------===//
+// WiresOp
+//===----------------------------------------------------------------------===//
+static LogicalResult verifyWiresOp(WiresOp wires) {
+  auto component = wires->getParentOfType<ComponentOp>();
+  auto control = component.getControlOp();
+
+  // Verify each group is referenced in the control section.
+  for (auto &&op : *wires.getBody()) {
+    if (!isa<GroupOp>(op))
+      continue;
+    auto group = cast<GroupOp>(op);
+    StringRef groupName = group.sym_name();
+    if (SymbolTable::symbolKnownUseEmpty(groupName, control))
+      return op.emitOpError() << "with name: " << groupName
+                              << " is unused in the control execution schedule";
+  }
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // CellOp
 //===----------------------------------------------------------------------===//
 
@@ -299,13 +340,16 @@ static LogicalResult verifyCellOp(CellOp cell) {
 }
 
 //===----------------------------------------------------------------------===//
-// AssignOp
+// EnableOp
 //===----------------------------------------------------------------------===//
-static LogicalResult verifyAssignOp(AssignOp assign) {
-  auto parent = assign->getParentOp();
-  if (!(isa<GroupOp>(parent) || isa<WiresOp>(parent)))
-    return assign.emitOpError(
-        "should only be contained in 'calyx.wires' or 'calyx.group'");
+static LogicalResult verifyEnableOp(EnableOp enableOp) {
+  auto component = enableOp->getParentOfType<ComponentOp>();
+  auto wiresOp = component.getWiresOp();
+  auto groupName = enableOp.groupName();
+
+  if (!wiresOp.lookupSymbol<GroupOp>(groupName))
+    return enableOp.emitOpError()
+           << "with group: " << groupName << ", which does not exist.";
 
   return success();
 }

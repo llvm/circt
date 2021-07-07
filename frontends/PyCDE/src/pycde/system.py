@@ -2,6 +2,8 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+from .types import types
+
 import mlir
 import mlir.ir
 import mlir.passmanager
@@ -40,8 +42,8 @@ class System:
   def body(self):
     return self.mod.body
 
-  def print(self):
-    self.mod.operation.print()
+  def print(self, **kwargs):
+    self.mod.operation.print(**kwargs)
 
   def graph(self, short_names=True):
     import mlir.all_passes_registration
@@ -59,6 +61,7 @@ class System:
       return
     pm = mlir.passmanager.PassManager.parse(",".join(self.passes))
     pm.run(self.mod)
+    types.declare_types(self.mod)
     self.passed = True
 
   def print_verilog(self, out_stream: typing.TextIO = sys.stdout):

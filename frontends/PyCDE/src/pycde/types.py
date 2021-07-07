@@ -2,6 +2,8 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+from collections import OrderedDict
+
 import mlir.ir
 from circt.dialects import hw
 
@@ -12,7 +14,7 @@ class _Types:
   TYPE_SCOPE = "pycde"
 
   def __init__(self):
-    self.registered_aliases = {}
+    self.registered_aliases = OrderedDict()
 
   def __getattr__(self, name: str) -> mlir.ir.Type:
     return mlir.ir.Type.parse(name)
@@ -42,16 +44,38 @@ class _Types:
       if name in self.registered_aliases:
         if alias != self.registered_aliases[name]:
           raise RuntimeError(
-              f"Re-defining type alias for {name}! "\
-              f"Given: {inner_type}, "\
-              f"existing: {self.registered_aliases[name].inner_type}"
-          )
+              f"Re-defining type alias for {name}! "
+              f"Given: {inner_type}, "
+              f"existing: {self.registered_aliases[name].inner_type}")
         return self.registered_aliases[name]
 
       self.registered_aliases[name] = alias
       return alias
 
     return inner_type
+
+  def declare_types(self, mod):
+    if not self.registered_aliases:
+      return
+
+    type_scopes = [
+        op for op in mod.body.operations if isinstance(op, hw.TypeScopeOp)
+    ]
+    if len(type_scopes) == 0:
+      with mlir.ir.InsertionPoint.at_block_begin(mod.body):
+        type_scopes.append(hw.TypeScopeOp.create(self.TYPE_SCOPE))
+
+    assert len(type_scopes) == 1
+    type_scope = type_scopes[0]
+    with mlir.ir.InsertionPoint(type_scope.body):
+      for (name, type) in self.registered_aliases.items():
+        declared_aliases = [
+            op for op in type_scope.body.operations
+            if isinstance(op, hw.TypedeclOp) and op.sym_name.value == name
+        ]
+        if len(declared_aliases) != 0:
+          continue
+        hw.TypedeclOp.create(name, type.inner_type)
 
 
 types = _Types()
