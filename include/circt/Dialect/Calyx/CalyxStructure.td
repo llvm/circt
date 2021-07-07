@@ -82,7 +82,7 @@ def ComponentOp : CalyxOp<"component", [
       /// time with respect to the number of instances within the cell.
       template <typename Op>
       Operation* getOpWithType() {
-        auto body = &getOperation()->getRegion(0).front();;
+        auto body = &getOperation()->getRegion(0).front();
         auto opIt = llvm::find_if(llvm::reverse(*body),
                                   [](auto &&op) { return isa<Op>(op); });
         assert(opIt != body->rend() &&
