@@ -29,12 +29,12 @@ namespace {
 ///    ```mlir
 ///      %go = calyx.go %false : i1
 ///
-///      /*Case 1*/
+///      // Case 1: No Guard
 ///      %in = %out : i8
 ///      =>
 ///      %in = %out, %go ? : i8
 ///
-///      /*Case 2*/
+///      // Case 2: Guard
 ///      %in = %out, %guard ? : i8
 ///      =>
 ///      %0 = comb.and %guard, %go : i1
@@ -63,7 +63,7 @@ struct GoInsertionPass : public GoInsertionBase<GoInsertionPass> {
     auto zeroConstant = builder.create<hw::ConstantOp>(
         component->getLoc(), APInt(/*numBits=*/1, /*val=*/0));
 
-    auto wiresOp = cast<WiresOp>(component.getWiresOp());
+    auto wiresOp = component.getWiresOp();
     wiresOp.walk([&](Operation *op) {
       if (!isa<GroupOp>(op))
         return;

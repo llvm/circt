@@ -41,6 +41,27 @@ static LogicalResult verifyProgramOp(ProgramOp program) {
 // ComponentOp
 //===----------------------------------------------------------------------===//
 
+/// This is a helper function that should only be used to get the WiresOp or
+/// ControlOp of a ComponentOp, which are guaranteed to exist and generally at
+/// the end of a component's body. In the worst case, this will run in linear
+/// time with respect to the number of instances within the cell.
+template <typename Op>
+Op getControlOrWiresFrom(ComponentOp op) {
+  auto body = op.getBody();
+  // We verify there is a single WiresOp and ControlOp,
+  // so this is safe.
+  auto opIt = body->getOps<Op>().begin();
+  return *opIt;
+}
+
+WiresOp calyx::ComponentOp::getWiresOp() {
+  return getControlOrWiresFrom<WiresOp>(*this);
+}
+
+ControlOp calyx::ComponentOp::getControlOp() {
+  return getControlOrWiresFrom<ControlOp>(*this);
+}
+
 /// Returns the type of the given component as a function type.
 static FunctionType getComponentType(ComponentOp component) {
   return component.getTypeAttr().getValue().cast<FunctionType>();
