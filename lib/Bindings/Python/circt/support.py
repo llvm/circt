@@ -103,6 +103,10 @@ def type_to_pytype(t):
 # long one. This is a way that works for now.
 def attribute_to_var(attr):
   import mlir.ir as ir
+
+  if not isinstance(attr, ir.Attribute):
+    raise TypeError("attribute_to_var only accepts MLIR Attributes")
+
   try:
     return ir.BoolAttr(attr).value
   except ValueError:
@@ -237,6 +241,10 @@ class OpOperand:
 
     self.value = value
     self.backedge_owner = backedge_owner
+
+  @property
+  def type(self):
+    return self.value.type
 
 
 class NamedValueOpView:
