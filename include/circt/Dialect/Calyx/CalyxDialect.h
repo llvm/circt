@@ -23,7 +23,7 @@
 
 // Pull in all enum type definitions, attributes,
 // and utility function declarations.
-#include "circt/Dialect/Calyx/CalyxAttrs.h.inc"
 #include "circt/Dialect/Calyx/CalyxEnums.h.inc"
+#include "circt/Dialect/Calyx/CalyxAttrs.h.inc"
 
 #endif // CIRCT_DIALECT_CALYX_CALYXDIALECT_H

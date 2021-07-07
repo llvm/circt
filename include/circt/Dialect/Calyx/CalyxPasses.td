@@ -33,10 +33,12 @@ def GoInsertion : Pass<"calyx-go-insertion", "calyx::ComponentOp"> {
 
     After:
     ```mlir
+    %0 = hw.constant 0 : i1
+    ...
     calyx.group @Group1 {
-      // The `go` assignment of a group does not take
-      // on a value until the CompileControl pass.
-      %5 = calyx.go : i1
+      // The `go` assignment takes on a placeholder
+      // value until the CompileControl pass.
+      %5 = calyx.go %0 : i1
 
       %6 = comb.and %5, %3 : i1
       calyx.assign %1 = %2, %6 ? : i8

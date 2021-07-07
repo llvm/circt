@@ -24,15 +24,12 @@ using namespace calyx;
 
 namespace {
 
-/// TODO: FINISH:
-/// Updates the guards of assignments/\/\/
-static void updateGroupAssignmentGuards(GroupOp &group,
-                                        hw::ConstantOp &constant) {
-  OpBuilder builder(group->getRegion(0));
-  // Since the source of a GroupOp's go signal isn't set until the
-  // a following pass, a dummy constant is used as a placeholder.
-  auto goOp = builder.create<GoOp>(group->getLoc(), constant);
-
+/// Adds the group's "go" signal to the guards of assignments within `group`,
+/// with the exception of the "done" terminator. If the assignment
+/// already has a guard, then the bitwise and is taken of the current guard
+/// and the "go" signal.
+static void updateGroupAssignmentGuards(OpBuilder &builder, GroupOp &group,
+                                        GoOp &goOp) {
   group.walk([&](Operation *op) {
     if (!isa<AssignOp>(op))
       return;
@@ -59,12 +56,17 @@ struct GoInsertionPass : public GoInsertionBase<GoInsertionPass> {
       if (!isa<GroupOp>(op))
         return;
       auto group = cast<GroupOp>(op);
-      updateGroupAssignmentGuards(group, zeroConstant);
+      OpBuilder builder(group->getRegion(0));
+      // Since the source of a GroupOp's go signal isn't set until the
+      // a following pass, a dummy constant is used as a placeholder.
+      auto goOp = builder.create<GoOp>(group->getLoc(), zeroConstant);
+
+      updateGroupAssignmentGuards(builder, group, goOp);
     });
   }
 };
 
-} // end anonymous namespace
+} // namespace
 
 std::unique_ptr<mlir::Pass> circt::calyx::createGoInsertionPass() {
   return std::make_unique<GoInsertionPass>();

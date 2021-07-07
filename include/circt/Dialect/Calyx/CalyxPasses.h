@@ -16,10 +16,6 @@
 #include "circt/Support/LLVM.h"
 #include <memory>
 
-namespace mlir {
-class Pass;
-} // namespace mlir
-
 namespace circt {
 namespace calyx {
 
