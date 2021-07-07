@@ -82,7 +82,7 @@ AnnotationSet::forPort(Operation *module, size_t portNo,
 }
 
 /// Get an annotation set for the specified value.
-AnnotationSet AnnotationSet::getAnnotationSet(Value v) {
+AnnotationSet AnnotationSet::get(Value v) {
   if (auto op = v.getDefiningOp())
     return AnnotationSet(op);
   // If its not an Operation, then must be a block argument.

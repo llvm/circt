@@ -162,20 +162,44 @@ firrtl.circuit "Issue1188"  {
 // DontTouch annotation should block constant propagation.
 firrtl.circuit "testDontTouch"  {
   // CHECK-LABEL: firrtl.module @blockProp 
-  firrtl.module @blockProp(in %clock: !firrtl.clock, in %a: !firrtl.uint<1> {firrtl.annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}, out %b: !firrtl.uint<1>) {
+  firrtl.module @blockProp1(in %clock: !firrtl.clock, in %a: !firrtl.uint<1> {firrtl.annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}, out %b: !firrtl.uint<1>) {
     //CHECK: %c = firrtl.reg 
     %c = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
     firrtl.connect %c, %a : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK: firrtl.connect %b, %c 
+    firrtl.connect %b, %c : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  // CHECK-LABEL: firrtl.module @allowProp 
+  firrtl.module @allowProp(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
+    // CHECK: [[CONST:%.+]] = firrtl.constant 1 : !firrtl.uint<1>
+    %c = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+    firrtl.connect %c, %a : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %b, [[CONST]] 
+    firrtl.connect %b, %c : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  // CHECK-LABEL: firrtl.module @blockProp3
+  firrtl.module @blockProp3(in %clock: !firrtl.clock, in %a: !firrtl.uint<1> , out %b: !firrtl.uint<1>) {
+    //CHECK: %c = firrtl.reg
+    %c = firrtl.reg %clock {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : (!firrtl.clock) -> !firrtl.uint<1>
+    firrtl.connect %c, %a : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %b, %c : !firrtl.uint<1>, !firrtl.uint<1>
   }
   // CHECK-LABEL: firrtl.module @testDontTouch
-  firrtl.module @testDontTouch(in %clock: !firrtl.clock, out %a: !firrtl.uint<1>) {
+  firrtl.module @testDontTouch(in %clock: !firrtl.clock, out %a: !firrtl.uint<1>, out %a1: !firrtl.uint<1>, out %a2: !firrtl.uint<1>) {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-    %bar_clock, %bar_a, %bar_b = firrtl.instance @blockProp  {name = "bar"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.connect %bar_clock, %clock : !firrtl.clock, !firrtl.clock
-    firrtl.connect %bar_a, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK: firrtl.connect %a, %bar_b
-    firrtl.connect %a, %bar_b : !firrtl.uint<1>, !firrtl.uint<1>
+    %blockProp1_clock, %blockProp1_a, %blockProp1_b = firrtl.instance @blockProp1  {name = "blockProp1"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
+    %allowProp_clock, %allowProp_a, %allowProp_b = firrtl.instance @allowProp  {name = "allowProp"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
+    %blockProp3_clock, %blockProp3_a, %blockProp3_b = firrtl.instance @blockProp3  {name = "blockProp3"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %blockProp1_clock, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %allowProp_clock, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %blockProp3_clock, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %blockProp1_a, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %allowProp_a, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %blockProp3_a, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %a, %blockProp1_b
+    firrtl.connect %a, %blockProp1_b : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %a1, %c
+    firrtl.connect %a1, %allowProp_b : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %a2, %blockProp3_b
+    firrtl.connect %a2, %blockProp3_b : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }

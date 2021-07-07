@@ -69,7 +69,7 @@ public:
           SmallVectorImpl<NamedAttribute> &otherAttributes);
 
   /// Get an annotation set for the specified value.
-  static AnnotationSet getAnnotationSet(Value v);
+  static AnnotationSet get(Value v);
 
   /// Return all the raw annotations that exist.
   ArrayRef<Attribute> getArray() const { return annotations.getValue(); }
