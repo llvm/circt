@@ -30,15 +30,13 @@ using namespace mlir;
 LogicalResult calyx::verifyControlLikeOpBody(Operation *op) {
   auto &region = op->getRegion(0);
 
-  bool isNotControlOp = !isa<ControlOp>(op);
-  for (auto &&bodyOp : region.front()) {
-    if (isa<SeqOp>(bodyOp))
-      continue;
+  // A list of Operations that are allowed in the body of a ControlLike op.
+  auto isAllowed = [](Operation *operation) {
+    return isa<SeqOp, EnableOp>(operation);
+  };
 
-    if (isNotControlOp && isa<EnableOp>(bodyOp))
-      // An EnableOp may be nested in any control-like
-      // operation except "calyx.control". This is verified
-      // in the ODS of EnableOp, and kept here for correctness.
+  for (auto &&bodyOp : region.front()) {
+    if (isAllowed(&bodyOp))
       continue;
 
     return op->emitOpError()

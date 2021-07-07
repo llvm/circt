@@ -54,7 +54,7 @@ def SeqOp : CalyxContainer<"seq", [
 }
 
 def EnableOp : CalyxOp<"enable", [
-    ParentOneOf<["SeqOp"]>
+    ParentOneOf<["ControlOp", "SeqOp"]>
   ]> {
   let summary = "Calyx Enable";
   let description = [{
