@@ -24,9 +24,8 @@
 namespace circt {
 namespace calyx {
 
-/// A helper function to verify each control-like
-/// operation has a valid parent and, if applicable,
-/// body.
+/// A helper function to verify each control-like operation
+/// has a valid parent and, if applicable, body.
 LogicalResult verifyControlLikeOp(Operation *op);
 
 /// Signals that the following operation is "control-like."
