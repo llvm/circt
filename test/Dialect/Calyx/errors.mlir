@@ -101,7 +101,7 @@ calyx.program {
   calyx.component @main() -> () {
     %c1_1 = constant 1 : i1
     calyx.wires {
-      calyx.group @A { calyx.done %c1_1 : i1 }
+      calyx.group @A { calyx.group_done %c1_1 : i1 }
     }
     // expected-error @+1 {{'calyx.control' op EnableOp is not a composition operator. It should be nested in a control flow operation, such as "calyx.seq"}}
     calyx.control {
