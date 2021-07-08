@@ -678,7 +678,8 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
           }
 
           builder->create<ConnectOp>(
-              builder->create<SubfieldOp>(newMem.getResult(i), bElem.index()), wire);
+              builder->create<SubfieldOp>(newMem.getResult(i), bElem.index()),
+              wire);
           continue;
         }
 
@@ -850,8 +851,7 @@ void TypeLoweringVisitor::visitExpr(SubfieldOp op) {
   auto bundleType = op.input().getType().cast<BundleType>();
 
   // Get the base element ID of input bundle.
-  auto parentID =
-      bundleType.getFieldID(op.fieldIndex());
+  auto parentID = bundleType.getFieldID(op.fieldIndex());
 
   for (auto field : fieldTypes) {
     // Get the lowered value of the current field from the input value.

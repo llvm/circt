@@ -221,7 +221,8 @@ createWrapperModule(MemOp op, ArrayRef<MemOp::NamedPort> memPorts,
   auto extResultIt = instanceOp.result_begin();
   for (auto memPort : moduleOp.getArguments()) {
     auto memPortType = memPort.getType().cast<FIRRTLType>();
-    for (auto field : llvm::enumerate(memPortType.cast<BundleType>().getElements())) {
+    for (auto field :
+         llvm::enumerate(memPortType.cast<BundleType>().getElements())) {
       auto fieldValue =
           builder.create<SubfieldOp>(op.getLoc(), memPort, field.index());
       // Create the connection between module arguments and the external module,
@@ -255,7 +256,8 @@ static void createWiresForMemoryPorts(OpBuilder builder, Location loc, MemOp op,
 
     // Connect each wire to the corresponding ports in the external module
     auto wireBundle = memPort.getType().cast<FIRRTLType>();
-    for (auto field : llvm::enumerate(wireBundle.cast<BundleType>().getElements())) {
+    for (auto field :
+         llvm::enumerate(wireBundle.cast<BundleType>().getElements())) {
       auto fieldValue =
           builder.create<SubfieldOp>(op.getLoc(), wireOp, field.index());
       // Create the connection between module arguments and the external module,
