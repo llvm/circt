@@ -14,11 +14,8 @@ def ControlLike : NativeOpTrait<"ControlLike"> {
   let cppNamespace = "::circt::calyx";
 }
 
-// TODO(Calyx): Verify the semantics concerning
-// EnableOps placed directly inside "calyx.control".
 def ControlOp : CalyxContainer<"control", [
-    HasParent<"ComponentOp">,
-    ControlLike
+    HasParent<"ComponentOp">
   ]> {
   let summary = "Calyx Control";
   let description = [{
@@ -34,10 +31,10 @@ def ControlOp : CalyxContainer<"control", [
       }
     ```
   }];
+  let verifier = "return ::verify$cppClass(*this);";
 }
 
 def SeqOp : CalyxContainer<"seq", [
-    ParentOneOf<["ControlOp", "SeqOp"]>,
     ControlLike
   ]> {
   let summary = "Calyx Sequential";
@@ -56,7 +53,7 @@ def SeqOp : CalyxContainer<"seq", [
 }
 
 def EnableOp : CalyxOp<"enable", [
-    ParentOneOf<["ControlOp", "SeqOp"]>
+    ControlLike
   ]> {
   let summary = "Calyx Enable";
   let description = [{

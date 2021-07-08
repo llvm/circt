@@ -27,16 +27,27 @@ using namespace circt;
 using namespace circt::calyx;
 using namespace mlir;
 
-LogicalResult calyx::verifyControlLikeOpBody(Operation *op) {
-  auto &region = op->getRegion(0);
-
-  // A list of Operations that are allowed in the body of a ControlLike op.
-  auto isAllowed = [](Operation *operation) {
-    return isa<SeqOp, EnableOp>(operation);
+LogicalResult calyx::verifyControlLikeOp(Operation *op) {
+  auto parent = op->getParentOp();
+  // Operations that may parent other ControlLike operations.
+  auto isValidParent = [](Operation *operation) {
+    return isa<ControlOp, SeqOp>(operation);
   };
+  if (!isValidParent(parent))
+    return op->emitOpError()
+           << "has parent: " << parent
+           << ", which is not allowed for a control-like operation.";
 
+  if (op->getNumRegions() == 0)
+    return success();
+
+  auto &region = op->getRegion(0);
+  // Operations that are allowed in the body of a ControlLike op.
+  auto isValidBodyOp = [](Operation *operation) {
+    return isa<EnableOp, SeqOp>(operation);
+  };
   for (auto &&bodyOp : region.front()) {
-    if (isAllowed(&bodyOp))
+    if (isValidBodyOp(&bodyOp))
       continue;
 
     return op->emitOpError()
@@ -257,6 +268,25 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
 
   return op.emitOpError() << "requires exactly one of each: "
                              "'calyx.wires', 'calyx.control'.";
+}
+
+//===----------------------------------------------------------------------===//
+// ControlOp
+//===----------------------------------------------------------------------===//
+static LogicalResult verifyControlOp(ControlOp control) {
+  auto body = control.getBody();
+
+  // A control operation may have a single EnableOp within it. However,
+  // that must be the only operation. E.g.
+  // Allowed:      calyx.control { calyx.enable @A }
+  // Not Allowed:  calyx.control { calyx.enable @A calyx.seq { ... } }
+  if (llvm::any_of(*body, [](auto &&op) { return isa<EnableOp>(op); }) &&
+      body->getOperations().size() > 1)
+    return control->emitOpError(
+        "EnableOp is not a composition operator. It should be nested "
+        "in a control flow operation, such as \"calyx.seq\"");
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
