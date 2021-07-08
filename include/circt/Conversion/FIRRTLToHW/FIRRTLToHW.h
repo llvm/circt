@@ -14,6 +14,7 @@
 #ifndef CIRCT_CONVERSION_FIRRTLTOHW_FIRRTLTOHW_H
 #define CIRCT_CONVERSION_FIRRTLTOHW_FIRRTLTOHW_H
 
+#include "circt/Support/LLVM.h"
 #include <memory>
 
 namespace mlir {
@@ -22,7 +23,8 @@ class Pass;
 
 namespace circt {
 
-std::unique_ptr<mlir::Pass> createLowerFIRRTLToHWPass();
+std::unique_ptr<mlir::Pass>
+createLowerFIRRTLToHWPass(llvm::Optional<bool> enableAnnotationWarning = false);
 
 } // namespace circt
 

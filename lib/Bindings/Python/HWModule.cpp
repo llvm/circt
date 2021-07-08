@@ -16,6 +16,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include "PybindUtils.h"
+#include <mlir-c/Support.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/pytypes.h>
 #include <pybind11/stl.h>
@@ -55,14 +56,50 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
               ctx = mlirTypeGetContext(type);
               names.emplace_back(tuple[0].cast<std::string>());
               mlirFieldInfos.push_back(HWStructFieldInfo{
-                  mlirStringRefCreate(names[i].data(), names[i].size()),
-                  mlirTypeAttrGet(type)});
+                  mlirStringRefCreate(names[i].data(), names[i].size()), type});
             }
             return cls(hwStructTypeGet(ctx, mlirFieldInfos.size(),
                                        mlirFieldInfos.data()));
           })
-      .def("get_field", [](MlirType self, std::string fieldName) {
-        return hwStructTypeGetField(
-            self, mlirStringRefCreateFromCString(fieldName.c_str()));
+      .def("get_field",
+           [](MlirType self, std::string fieldName) {
+             return hwStructTypeGetField(
+                 self, mlirStringRefCreateFromCString(fieldName.c_str()));
+           })
+      .def("get_fields", [](MlirType self) {
+        intptr_t num_fields = hwStructTypeGetNumFields(self);
+        py::list fields;
+        for (intptr_t i = 0; i < num_fields; ++i) {
+          auto field = hwStructTypeGetFieldNum(self, i);
+          std::string name(field.name.data, field.name.length);
+          fields.append(py::make_tuple(name, field.type));
+        }
+        return fields;
+      });
+
+  mlir_type_subclass(m, "TypeAliasType", hwTypeIsATypeAliasType)
+      .def_classmethod("get",
+                       [](py::object cls, std::string scope, std::string name,
+                          MlirType innerType) {
+                         return cls(hwTypeAliasTypeGet(
+                             mlirStringRefCreateFromCString(scope.c_str()),
+                             mlirStringRefCreateFromCString(name.c_str()),
+                             innerType));
+                       })
+      .def_property_readonly(
+          "canonical_type",
+          [](MlirType self) { return hwTypeAliasTypeGetCanonicalType(self); })
+      .def_property_readonly(
+          "inner_type",
+          [](MlirType self) { return hwTypeAliasTypeGetInnerType(self); })
+      .def_property_readonly("name",
+                             [](MlirType self) {
+                               MlirStringRef cStr =
+                                   hwTypeAliasTypeGetName(self);
+                               return std::string(cStr.data, cStr.length);
+                             })
+      .def_property_readonly("scope", [](MlirType self) {
+        MlirStringRef cStr = hwTypeAliasTypeGetScope(self);
+        return std::string(cStr.data, cStr.length);
       });
 }

@@ -414,7 +414,7 @@ def HeadPrimOp : PrimOp<"head"> {
 }
 
 def MuxPrimOp : PrimOp<"mux"> {
-  let arguments = (ins UInt1Type:$sel, PassiveType:$high, PassiveType:$low);
+  let arguments = (ins UInt01Type:$sel, PassiveType:$high, PassiveType:$low);
   let results = (outs PassiveType:$result);
 
   let assemblyFormat =

@@ -108,6 +108,9 @@ static int getBitWidthOrSentinel(Type type) {
       .Case<InOutType>([](InOutType inoutType) {
         return getBitWidthOrSentinel(inoutType.getElementType());
       })
+      .Case<TypeAliasType>([](TypeAliasType alias) {
+        return getBitWidthOrSentinel(alias.getInnerType());
+      })
       .Default([](Type) { return -1; });
 }
 
@@ -120,11 +123,11 @@ static void getTypeDims(SmallVectorImpl<int64_t> &dims, Type type,
     return getTypeDims(dims, uarray.getElementType(), loc);
   if (type.isa<InterfaceType>())
     return;
-  if (type.isa<StructType>())
+  if (hw::type_isa<StructType>(type))
     return;
 
   int width;
-  if (auto arrayType = type.dyn_cast<hw::ArrayType>()) {
+  if (auto arrayType = hw::type_dyn_cast<hw::ArrayType>(type)) {
     width = arrayType.getSize();
   } else {
     width = getBitWidthOrSentinel(type);
@@ -257,6 +260,7 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Operation *op,
           return false;
 
         os << typedecl.getValue().getPreferredName();
+        emitDims(dims, os);
         return true;
       })
       .Default([&](Type type) {
@@ -287,8 +291,26 @@ static void printUnpackedTypePostfix(Type type, raw_ostream &os) {
 
 /// Return the word (e.g. "reg") in Verilog to declare the specified thing.
 static StringRef getVerilogDeclWord(Operation *op) {
-  if (isa<RegOp>(op))
+  if (isa<RegOp>(op)) {
+    // Check if the type stored in this register is a struct or array of
+    // structs. In this case, according to spec section 6.8, the "reg" prefix
+    // should be left off.
+    auto elementType =
+        op->getResult(0).getType().cast<InOutType>().getElementType();
+    if (elementType.isa<StructType>())
+      return "";
+    if (auto innerType = elementType.dyn_cast<ArrayType>()) {
+      while (innerType.getElementType().isa<ArrayType>())
+        innerType = innerType.getElementType().cast<ArrayType>();
+      if (innerType.getElementType().isa<StructType>() ||
+          innerType.getElementType().isa<TypeAliasType>())
+        return "";
+    }
+    if (elementType.isa<TypeAliasType>())
+      return "";
+
     return "reg";
+  }
   if (isa<WireOp>(op))
     return "wire";
   if (isa<ConstantOp>(op))
@@ -1263,7 +1285,7 @@ SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
 SubExprInfo ExprEmitter::visitTypeOp(ArraySliceOp op) {
   auto arrayPrec = emitSubExpr(op.input(), Selection, OOLUnary);
 
-  unsigned dstWidth = op.getType().getSize();
+  unsigned dstWidth = type_cast<ArrayType>(op.getType()).getSize();
   os << '[';
   emitSubExpr(op.lowIndex(), LowestPrecedence, OOLBinary);
   os << "+:" << dstWidth << ']';
@@ -1621,7 +1643,10 @@ public:
   /// return false. If the operation *is* a constant, also emit the initializer
   /// and semicolon, e.g. `localparam K = 1'h0`, and return true.
   bool emitDeclarationForTemporary(Operation *op) {
-    indent() << getVerilogDeclWord(op) << " ";
+    StringRef declWord = getVerilogDeclWord(op);
+    indent() << declWord;
+    if (!declWord.empty())
+      os << ' ';
     if (printPackedType(stripUnpackedTypes(op->getResult(0).getType()), os, op))
       os << ' ';
     os << names.getName(op->getResult(0));
@@ -1898,13 +1923,21 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
   for (ModulePortInfo port : parent.getPorts()) {
     if (!port.isOutput())
       continue;
+
+    auto operand = op.getOperand(operandIndex);
+    if (operand.hasOneUse() &&
+        dyn_cast_or_null<InstanceOp>(operand.getDefiningOp())) {
+      ++operandIndex;
+      continue;
+    }
+
     ops.clear();
     ops.insert(op);
     indent();
     if (isZeroBitType(port.type))
       os << "// Zero width: ";
     os << "assign " << names.getOutputName(port.argNum) << " = ";
-    emitExpression(op.getOperand(operandIndex), ops);
+    emitExpression(operand, ops);
     os << ';';
     emitLocationInfoAndNewLine(ops);
     ++operandIndex;
@@ -2399,10 +2432,23 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 
     // Emit the value as an expression.
     ops.clear();
-    // output ports were lowered to wire
-    if (elt.isOutput())
+
+    // Output ports that are not connected to single use output ports were
+    // lowered to wire.
+    OutputOp output;
+    if (!elt.isOutput()) {
+      emitExpression(portVal, ops);
+    } else if (portVal.hasOneUse() &&
+             (output = dyn_cast_or_null<OutputOp>(
+                  portVal.getUses().begin()->getOwner()))) {
+      auto module = output->getParentOfType<HWModuleOp>();
+      auto name = getModuleResultNameAttr(
+          module, portVal.getUses().begin()->getOperandNumber());
+      os << name.getValue().str();
+    } else {
       portVal = getWireForValue(portVal);
-    emitExpression(portVal, ops);
+      emitExpression(portVal, ops);
+    }
     os << ')';
   }
   if (!isFirst) {
@@ -2507,7 +2553,8 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
     auto word = getVerilogDeclWord(decl);
     if (!isZeroBitType(type)) {
       indent() << word;
-      os.indent(maxDeclNameWidth - word.size() + 1);
+      auto extraIndent = word.empty() ? 0 : 1;
+      os.indent(maxDeclNameWidth - word.size() + extraIndent);
     } else {
       indent() << "// Zero width: " << word << ' ';
     }
@@ -2669,22 +2716,30 @@ static void lowerInstanceResults(InstanceOp op) {
     if (onlyUseIsConnect(result))
       continue;
 
-    nameTmp.resize(namePrefixSize);
-    if (port.name)
-      nameTmp += port.name.getValue().str();
-    else
-      nameTmp += std::to_string(nextResultNo - 1);
-
-    auto newWire = builder.create<WireOp>(result.getType(), nameTmp);
-    while (!result.use_empty()) {
-      auto newWireRead = builder.create<ReadInOutOp>(newWire);
+    bool isOneUseOutput = false;
+    if (result.hasOneUse()) {
       OpOperand &use = *result.getUses().begin();
-      use.set(newWireRead);
-      newWireRead->moveBefore(use.getOwner());
+      isOneUseOutput = dyn_cast_or_null<OutputOp>(use.getOwner()) != nullptr;
     }
 
-    auto connect = builder.create<ConnectOp>(newWire, result);
-    connect->moveAfter(op);
+    if (!isOneUseOutput) {
+      nameTmp.resize(namePrefixSize);
+      if (port.name)
+        nameTmp += port.name.getValue().str();
+      else
+        nameTmp += std::to_string(nextResultNo - 1);
+
+      auto newWire = builder.create<WireOp>(result.getType(), nameTmp);
+      while (!result.use_empty()) {
+        auto newWireRead = builder.create<ReadInOutOp>(newWire);
+        OpOperand &use = *result.getUses().begin();
+        use.set(newWireRead);
+        newWireRead->moveBefore(use.getOwner());
+      }
+
+      auto connect = builder.create<ConnectOp>(newWire, result);
+      connect->moveAfter(op);
+    }
   }
 }
 

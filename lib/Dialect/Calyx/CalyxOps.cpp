@@ -272,10 +272,11 @@ static LogicalResult verifyCellOp(CellOp cell) {
 //===----------------------------------------------------------------------===//
 static LogicalResult verifyAssignOp(AssignOp assign) {
   auto parent = assign->getParentOp();
-  if (isa<GroupOp>(parent) || isa<WiresOp>(parent))
-    return success();
-  return assign.emitOpError(
-      "should only be contained in 'calyx.wires' or 'calyx.group'");
+  if (!(isa<GroupOp>(parent) || isa<WiresOp>(parent)))
+    return assign.emitOpError(
+        "should only be contained in 'calyx.wires' or 'calyx.group'");
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

@@ -30,7 +30,7 @@ def ArrayCreateOp : HWOp<"array_create", [NoSideEffect, SameTypeOperands]> {
   }];
 
   let arguments = (ins Variadic<HWNonInOutType>:$inputs);
-  let results = (outs ArrayType:$result);
+  let results = (outs ArrayTypeImpl:$result);
 
   let verifier = [{
     unsigned returnSize = getType().cast<ArrayType>().getSize();
@@ -104,7 +104,7 @@ def ArraySliceOp : HWOp<"array_slice", [NoSideEffect]> {
   let arguments = (ins ArrayType:$input, HWIntegerType:$lowIndex);
   let results = (outs ArrayType:$dst);
   let verifier = [{
-    unsigned inputSize = input().getType().cast<ArrayType>().getSize();
+    unsigned inputSize = type_cast<ArrayType>(input().getType()).getSize();
     if (llvm::Log2_64_Ceil(inputSize) !=
           lowIndex().getType().getIntOrFloatBitWidth())
       return emitOpError(
@@ -123,13 +123,13 @@ class IndexBitWidthConstraint<string index, string input>
                    input, index,
                    [{
     IntegerType::get($_self.getContext(),
-                     llvm::Log2_64_Ceil($_self.cast<ArrayType>().getSize()))
+                     llvm::Log2_64_Ceil(type_cast<ArrayType>($_self).getSize()))
                    }]>;
 
 class ArrayElementTypeConstraint<string result, string input>
   : TypesMatchWith<"Result must be arrays element type",
                    input, result,
-                   "$_self.cast<ArrayType>().getElementType()">;
+                   "type_cast<ArrayType>($_self).getElementType()">;
 
 // hw.array_get does not work with unpacked arrays.
 def ArrayGetOp : HWOp<"array_get",
@@ -155,7 +155,7 @@ def ArrayGetOp : HWOp<"array_get",
 def StructCreateOp : HWOp<"struct_create", [NoSideEffect]> {
   let summary = "Create a struct from constituent parts.";
   let arguments = (ins Variadic<HWNonInOutType>:$input);
-  let results = (outs StructType:$result);
+  let results = (outs StructTypeImpl:$result);
 
   let parser = "return ::parse$cppClass(parser, result);";
   let printer = "return ::print(p, *this);";
@@ -214,7 +214,7 @@ def UnionCreateOp : HWOp<"union_create", [NoSideEffect]> {
   }];
 
   let arguments = (ins StrAttr:$field, HWNonInOutType:$input);
-  let results = (outs UnionType:$result);
+  let results = (outs UnionTypeImpl:$result);
 
   let parser = "return ::parse$cppClass(parser, result);";
   let printer = "return ::print(p, *this);";

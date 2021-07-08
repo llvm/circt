@@ -24,16 +24,11 @@
 extern "C" {
 #endif
 
-/// Named MLIR attribute.
-///
-/// A named attribute is essentially a (name, attribute) pair where the name is
-/// a string.
-
 struct HWStructFieldInfo {
   MlirStringRef name;
-  MlirAttribute attribute;
+  MlirType type;
 };
-typedef struct MlirNamedAttribute MlirNamedAttribute;
+typedef struct HWStructFieldInfo HWStructFieldInfo;
 
 //===----------------------------------------------------------------------===//
 // Dialect API.
@@ -67,6 +62,9 @@ MLIR_CAPI_EXPORTED bool hwTypeIsAInOut(MlirType type);
 /// If the type is an HW struct.
 MLIR_CAPI_EXPORTED bool hwTypeIsAStructType(MlirType);
 
+/// If the type is an HW type alias.
+MLIR_CAPI_EXPORTED bool hwTypeIsATypeAliasType(MlirType);
+
 /// Creates a fixed-size HW array type in the context associated with element
 MLIR_CAPI_EXPORTED MlirType hwArrayTypeGet(MlirType element, size_t size);
 
@@ -83,12 +81,28 @@ MLIR_CAPI_EXPORTED MlirType hwInOutTypeGet(MlirType element);
 MLIR_CAPI_EXPORTED MlirType hwInOutTypeGetElementType(MlirType);
 
 /// Creates an HW struct type in the context associated with the elements.
-MLIR_CAPI_EXPORTED MlirType
-hwStructTypeGet(MlirContext ctx, intptr_t numElements,
-                struct HWStructFieldInfo const *elements);
+MLIR_CAPI_EXPORTED MlirType hwStructTypeGet(MlirContext ctx,
+                                            intptr_t numElements,
+                                            HWStructFieldInfo const *elements);
 
 MLIR_CAPI_EXPORTED MlirType hwStructTypeGetField(MlirType structType,
                                                  MlirStringRef fieldName);
+
+MLIR_CAPI_EXPORTED HWStructFieldInfo
+hwStructTypeGetFieldNum(MlirType structType, unsigned idx);
+MLIR_CAPI_EXPORTED intptr_t hwStructTypeGetNumFields(MlirType structType);
+
+MLIR_CAPI_EXPORTED MlirType hwTypeAliasTypeGet(MlirStringRef scope,
+                                               MlirStringRef name,
+                                               MlirType innerType);
+
+MLIR_CAPI_EXPORTED MlirType hwTypeAliasTypeGetCanonicalType(MlirType typeAlias);
+
+MLIR_CAPI_EXPORTED MlirType hwTypeAliasTypeGetInnerType(MlirType typeAlias);
+
+MLIR_CAPI_EXPORTED MlirStringRef hwTypeAliasTypeGetName(MlirType typeAlias);
+
+MLIR_CAPI_EXPORTED MlirStringRef hwTypeAliasTypeGetScope(MlirType typeAlias);
 
 #ifdef __cplusplus
 }

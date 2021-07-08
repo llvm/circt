@@ -66,9 +66,8 @@ namespace scheduling {
 /// as concrete algorithms, can declare additional properties as needed. The
 /// top-level entrypoint for algorithms is the pure virtual `schedule()` method.
 //
-/// The `check...` methods perform validity checks before scheduling, e.g. all
-/// operation handles referenced in dependences are registered, all ops have an
-/// associated operator type, etc.
+/// The `check...` methods perform validity checks before scheduling, e.g. that
+/// all operations have an associated operator type, etc.
 ///
 /// The `verify...` methods check the correctness of the solution determined by
 /// a concrete scheduling algorithm, e.g. that there are start times available
@@ -156,6 +155,8 @@ public:
   // Subclass access to problem components
   //===--------------------------------------------------------------------===//
 protected:
+  Operation *getContainingOp() { return containingOp; }
+
   bool hasOperation(Operation *op) { return operations.contains(op); }
   const OperationSet &getOperations() { return operations; }
 

@@ -709,6 +709,10 @@ LogicalResult NEQPrimOp::canonicalize(NEQPrimOp op, PatternRewriter &rewriter) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult AsSIntPrimOp::fold(ArrayRef<Attribute> operands) {
+  // No effect.
+  if (input().getType() == getType())
+    return input();
+
   // Be careful to only fold the cast into the constant if the size is known.
   // Otherwise width inference may produce differently-sized constants if the
   // sign changes.
@@ -719,6 +723,10 @@ OpFoldResult AsSIntPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult AsUIntPrimOp::fold(ArrayRef<Attribute> operands) {
+  // No effect.
+  if (input().getType() == getType())
+    return input();
+
   // Be careful to only fold the cast into the constant if the size is known.
   // Otherwise width inference may produce differently-sized constants if the
   // sign changes.
@@ -730,11 +738,21 @@ OpFoldResult AsUIntPrimOp::fold(ArrayRef<Attribute> operands) {
 
 OpFoldResult AsAsyncResetPrimOp::fold(ArrayRef<Attribute> operands) {
   // TODO: Implement constants of asyncreset type.
+
+  // No effect.
+  if (input().getType() == getType())
+    return input();
+
   return {};
 }
 
 OpFoldResult AsClockPrimOp::fold(ArrayRef<Attribute> operands) {
   // TODO: Implement constants of clock type.
+
+  // No effect.
+  if (input().getType() == getType())
+    return input();
+
   return {};
 }
 
@@ -962,6 +980,11 @@ OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
   // not possible in a fold.
   if (getType().getBitWidthOrSentinel() < 0)
     return {};
+
+  // // mux(0-bit, x, y) -> y
+  if (sel().getType().cast<FIRRTLType>().getBitWidthOrSentinel() == 0 &&
+      low().getType() == getType())
+    return low();
 
   // mux(0/1, x, y) -> x or y
   if (auto cond = operands[0].dyn_cast_or_null<IntegerAttr>()) {

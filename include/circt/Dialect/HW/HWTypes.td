@@ -37,8 +37,8 @@ def HWNonInOutType : DialectType<HWDialect, CPred<"!hasHWInOutType($_self)">,
 // Type declarations
 //===----------------------------------------------------------------------===//
 
-// A simple fixed size array.
-def ArrayType : HWType<"Array"> {
+// A simple fixed size array. Declares the hw::ArrayType in C++.
+def ArrayTypeImpl : HWType<"Array"> {
   let summary = "fixed-sized array";
   let description = [{
     Fixed sized HW arrays are roughly similar to C arrays. On the wire (vs.
@@ -57,6 +57,10 @@ def ArrayType : HWType<"Array"> {
     }
   }];
 }
+
+// A handle to refer to hw::ArrayType in ODS.
+def ArrayType : DialectType<HWDialect,
+    CPred<"type_isa<ArrayType>($_self)">, "an ArrayType">;
 
 // An 'unpacked' array of fixed size.
 def UnpackedArrayType : HWType<"UnpackedArray"> {
@@ -96,7 +100,8 @@ def InOutType : HWType<"InOut"> {
   }];
 }
 
-def StructType : HWType<"Struct"> {
+// A packed struct. Declares the hw::StructType in C++.
+def StructTypeImpl : HWType<"Struct"> {
   let summary = "HW struct type";
   let description = [{
     Represents a structure of name, value pairs.
@@ -120,7 +125,12 @@ def StructType : HWType<"Struct"> {
   }];
 }
 
-def UnionType : HWType<"Union"> {
+// A handle to refer to hw::StructType in ODS.
+def StructType : DialectType<HWDialect,
+    CPred<"type_isa<StructType>($_self)">, "a StructType">;
+
+// An untagged union. Declares the hw::UnionType in C++.
+def UnionTypeImpl : HWType<"Union"> {
   let summary = "An untagged union of types";
   let parameters = (
     ins
@@ -137,6 +147,10 @@ def UnionType : HWType<"Union"> {
     mlir::Type getFieldType(mlir::StringRef fieldName);
   }];
 }
+
+// A handle to refer to hw::UnionType in ODS.
+def UnionType : DialectType<HWDialect,
+    CPred<"type_isa<UnionType>($_self)">, "a UnionType">;
 
 def TypeAliasType : HWType<"TypeAlias"> {
   let summary = "An symbolic reference to a type declaration";
