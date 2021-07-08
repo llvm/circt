@@ -1535,9 +1535,7 @@ FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
       getAttr<IntegerAttr>(attrs, "fieldIndex").getValue().getZExtValue();
 
   // SubfieldOp verifier checks that the field index is valid with number of
-  // subelements. FIRRTL puts flips on element fields, not on the underlying
-  // types.  The result type of a subfield should strip a flip
-  // if one exists.
+  // subelements.
   return inType.cast<BundleType>().getElement(fieldIndex).getValue().type;
 }
 

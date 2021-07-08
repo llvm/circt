@@ -1513,9 +1513,8 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
   // to only the leaf sources.
   TypeSwitch<FIRRTLType>(tpe)
       .Case<BundleType>([&](auto tpe) {
-        for (size_t index = 0, size = tpe.getNumElements(); index < size;
-             ++index) {
-          auto subfield = builder.create<SubfieldOp>(val, index);
+        for (size_t i = 0, e = tpe.getNumElements(); i < e; ++i) {
+          auto subfield = builder.create<SubfieldOp>(val, i);
           emitInvalidate(subfield,
                          subfield.isFieldFlipped() ? swapFlow(flow) : flow);
         }
@@ -1666,9 +1665,7 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
   StringRef fieldName;
   if (parseFieldId(fieldName, "expected field name"))
     return failure();
-  auto indexV =
-      result.getType().cast<FIRRTLType>().cast<BundleType>().getElementIndex(
-          fieldName);
+  auto indexV = result.getType().cast<BundleType>().getElementIndex(fieldName);
   if (!indexV)
     return emitError("unknown field '" + fieldName + "' in bundle type ")
                << result.getType(),

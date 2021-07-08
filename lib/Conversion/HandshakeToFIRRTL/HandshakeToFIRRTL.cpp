@@ -543,9 +543,8 @@ static ValueVectorList extractSubfields(FModuleOp subModuleOp,
     auto type = arg.getType().cast<FIRRTLType>();
     if (auto bundleType = type.dyn_cast<BundleType>()) {
       // Extract all subfields of all bundle ports.
-      for (size_t index = 0, size = bundleType.getNumElements(); index < size;
-           ++index) {
-        subfields.push_back(rewriter.create<SubfieldOp>(insertLoc, arg, index));
+      for (size_t i = 0, e = bundleType.getNumElements(); i < e; ++i) {
+        subfields.push_back(rewriter.create<SubfieldOp>(insertLoc, arg, i));
       }
     } else if (type.isa<ClockType>()) {
       // Extract clock signals.
@@ -1714,7 +1713,7 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     // Create a subfield op to access this port in the memory.
     auto fieldName = loadIdentifier(i);
     auto memBundle = memOp.getPortNamed(fieldName);
-    auto memType = memBundle.getType().cast<FIRRTLType>().cast<BundleType>();
+    auto memType = memBundle.getType().cast<BundleType>();
 
     // Get the clock out of the bundle and connect it.
     auto memClock = rewriter.create<SubfieldOp>(
