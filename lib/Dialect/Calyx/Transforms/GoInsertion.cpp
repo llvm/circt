@@ -21,8 +21,6 @@ using namespace circt;
 using namespace calyx;
 using namespace mlir;
 
-namespace {
-
 /// Adds the group's "go" signal to the guards of assignments within `group`,
 /// with the exception of the "done" terminator. If the assignment already
 /// has a guard, then the bitwise 'and' is taken of the current guard and the
@@ -43,10 +41,7 @@ namespace {
 ///    ```
 static void updateGroupAssignmentGuards(OpBuilder &builder, GroupOp &group,
                                         GroupGoOp &goOp) {
-  group.walk([&](Operation *op) {
-    if (!isa<AssignOp>(op))
-      return;
-    auto assign = cast<AssignOp>(op);
+  group.walk([&](AssignOp assign) {
     if (assign.guard())
       // Take the bitwise & of the current guard and the group's go signal.
       assign->setOperand(
@@ -56,30 +51,31 @@ static void updateGroupAssignmentGuards(OpBuilder &builder, GroupOp &group,
   });
 }
 
+namespace {
+
 struct GoInsertionPass : public GoInsertionBase<GoInsertionPass> {
-  void runOnOperation() override {
-    ComponentOp component = getOperation();
-    OpBuilder builder(component->getRegion(0));
-
-    auto undefinedOp =
-        builder.create<LLVM::UndefOp>(component->getLoc(), builder.getI1Type());
-
-    auto wiresOp = component.getWiresOp();
-    wiresOp.walk([&](Operation *op) {
-      if (!isa<GroupOp>(op))
-        return;
-      auto group = cast<GroupOp>(op);
-      OpBuilder builder(group->getRegion(0));
-      // Since the source of a GroupOp's go signal isn't set until the
-      // the Compile Control pass, use an undefined value.
-      auto goOp = builder.create<GroupGoOp>(group->getLoc(), undefinedOp);
-
-      updateGroupAssignmentGuards(builder, group, goOp);
-    });
-  }
+  void runOnOperation() override;
 };
 
-} // namespace
+} // end anonymous namespace
+
+void GoInsertionPass::runOnOperation() {
+  ComponentOp component = getOperation();
+  OpBuilder builder(component->getRegion(0));
+
+  auto undefinedOp =
+      builder.create<UndefinedOp>(component->getLoc(), builder.getI1Type());
+
+  auto wiresOp = component.getWiresOp();
+  wiresOp.walk([&](GroupOp group) {
+    OpBuilder builder(group->getRegion(0));
+    // Since the source of a GroupOp's go signal isn't set until the
+    // the Compile Control pass, use an undefined value.
+    auto goOp = builder.create<GroupGoOp>(group->getLoc(), undefinedOp);
+
+    updateGroupAssignmentGuards(builder, group, goOp);
+  });
+}
 
 std::unique_ptr<mlir::Pass> circt::calyx::createGoInsertionPass() {
   return std::make_unique<GoInsertionPass>();

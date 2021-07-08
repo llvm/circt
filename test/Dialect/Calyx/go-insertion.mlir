@@ -6,7 +6,7 @@ calyx.program {
     calyx.control {}
   }
   calyx.component @main() -> () {
-    // CHECK: %0 = llvm.mlir.undef : i1
+    // CHECK: %0 = calyx.undef : i1
     %in, %out, %flag = calyx.cell "c0" @A : i8, i8, i1
 
     calyx.wires {

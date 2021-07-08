@@ -10,6 +10,25 @@
 //
 //===----------------------------------------------------------------------===//
 
+def UndefinedOp : CalyxOp<"undef", [
+    NoSideEffect
+  ]> {
+  let summary = "Calyx Undefined Value";
+  let description = [{
+    The "undef" operation represents an undefined value
+    that may be used when a specific source or destination
+    does not have an assignment yet. This is used to avoid
+    pulling in the entire LLVMIR dialect for a single
+    operation.
+
+    ```mlir
+      %0 = calyx.undef : i1
+    ```
+  }];
+  let results = (outs AnyType:$res);
+  let assemblyFormat = "attr-dict `:` type($res)";
+}
+
 def ProgramOp : CalyxContainer<"program", [
     IsolatedFromAbove,
     SymbolTable

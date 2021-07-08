@@ -239,14 +239,6 @@ static ParseResult parseComponentOp(OpAsmParser &parser,
 
   if (body->empty())
     body->push_back(new Block());
-
-  // Combinational dialect used for assignment guards.
-  result.getContext()->loadDialect<comb::CombDialect>();
-  // HW dialect used for constant operations.
-  result.getContext()->loadDialect<hw::HWDialect>();
-  // LLVM dialect used for `undef`.
-  result.getContext()->loadDialect<LLVM::LLVMDialect>();
-
   return success();
 }
 

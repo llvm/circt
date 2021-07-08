@@ -15,7 +15,6 @@ set(Calyx_LinkLibs
   CIRCTSV
   CIRCTHW
   MLIRIR
-  MLIRLLVMIR
   MLIRTransforms
   MLIRTranslation
   )
