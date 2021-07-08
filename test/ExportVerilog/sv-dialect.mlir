@@ -615,13 +615,11 @@ hw.module @inlineProceduralWiresWithLongNames(%clock: i1, %in: i1) {
   %s = sv.reg  : !hw.inout<uarray<1xi1>>
   %2 = sv.array_index_inout %r[%0] : !hw.inout<uarray<1xi1>>, i1
   %3 = sv.array_index_inout %s[%1] : !hw.inout<uarray<1xi1>>, i1
-  // CHECK: wire _T = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
-  // CHECK: wire _T_0 = bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb;
   // CHECK: always_ff
   sv.alwaysff(posedge %clock)  {
-    // CHECK-NEXT: r[_T] <= in;
+    // CHECK-NEXT: r[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa] <= in;
     sv.passign %2, %in : i1
-    // CHECK-NEXT: s[_T_0] <= in;
+    // CHECK-NEXT: s[bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb] <= in;
     sv.passign %3, %in : i1
   }
 }

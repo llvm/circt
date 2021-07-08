@@ -134,11 +134,10 @@ hw.module @Precedence(%a: i4, %b: i4, %c: i4) -> (%out1: i1, %out: i10) {
   // CHECK: assign _out_output = {5'h0, _T_3} * {5'h0, _T_0};
   // CHECK: assign _out1_output = ^_T_0;
   // CHECK: assign _out1_output = b < c | b > c;
-  // CHECK: wire _T_7 = _out1_output; 
-  // CHECK: assign _out_output = {6'h0, (b ^ c) & {3'h0, _T_7}};
-  // CHECK: wire [9:0] _T_8 = _out_output;
-  // CHECK: assign _out_output = {2'h0, _T_8[9:2]};
-  // CHECK: assign _out1_output = _T_8 < {6'h0, a};
+  // CHECK: assign _out_output = {6'h0, (b ^ c) & {3'h0, _out1_output}};
+  // CHECK: wire [9:0] [[WIRE7:_T.*]] = _out_output;
+  // CHECK: assign _out_output = {2'h0, [[WIRE7]][9:2]};
+  // CHECK: assign _out1_output = _out_output < {6'h0, a};
   %0 = comb.concat %false, %b : (i1, i4) -> i5
   %1 = comb.concat %false, %c : (i1, i4) -> i5
   %2 = comb.add %0, %1 : i5
@@ -377,4 +376,3 @@ hw.module @UnaryParensIssue755(%a: i8) -> (%b: i1) {
   %1 = comb.icmp ne %0, %c0_i8 : i8
   hw.output %1 : i1
 }
-
