@@ -17,10 +17,10 @@
 include "mlir/Pass/PassBase.td"
 
 def GoInsertion : Pass<"calyx-go-insertion", "calyx::ComponentOp"> {
-  let summary = "Inserts `go` signals into the guards of a group's non-hole assignments";
+  let summary = "Insert go signals into the guards of a group's non-hole assignments";
   let description = [{
-    This pass inserts a group's `go` signal, "calyx.group_go", into the guards of all
-    all assignments housed in the group, with the exception of the "calyx.group_done"
+    This pass inserts the operation "calyx.group_go" into the guards of all
+    assignments housed in the group, with the exception of the "calyx.group_done"
     terminator. For example,
 
     Before:
