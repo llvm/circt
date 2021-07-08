@@ -115,7 +115,7 @@ calyx.program {
     calyx.wires {
       // expected-error @+1 {{'calyx.group' op with name: Group1 is unused in the control execution schedule}}
       calyx.group @Group1 {
-        calyx.done %c1_1 : i1
+        %done = calyx.group_done %c1_1 : i1
       }
     }
     calyx.control {}
