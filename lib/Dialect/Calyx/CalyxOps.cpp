@@ -239,6 +239,7 @@ static ParseResult parseComponentOp(OpAsmParser &parser,
 
   if (body->empty())
     body->push_back(new Block());
+
   return success();
 }
 
