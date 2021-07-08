@@ -10,21 +10,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Scheduling/ASAPScheduler.h"
+#include "circt/Scheduling/Algorithms.h"
 
 #include "mlir/IR/Operation.h"
 
 using namespace circt;
 using namespace circt::scheduling;
 
-LogicalResult ASAPScheduler::schedule() {
-  if (failed(check()))
-    return failure();
-
+LogicalResult scheduling::scheduleASAP(Problem &prob) {
+  auto allOps = prob.getOperations();
   // Keep track of ops that don't have a start time yet
   llvm::SmallVector<Operation *> unscheduledOps;
-  unscheduledOps.insert(unscheduledOps.begin(), getOperations().begin(),
-                        getOperations().end());
+  unscheduledOps.insert(unscheduledOps.begin(), allOps.begin(), allOps.end());
 
   // We may need multiple attempts to schedule all operations in case the
   // problem's operation list is not in a topological order w.r.t. the
@@ -46,8 +43,8 @@ LogicalResult ASAPScheduler::schedule() {
       Operation *op = worklist.pop_back_val();
 
       // Operations with no predecessors are scheduled at time step 0
-      if (getDependences(op).empty()) {
-        setStartTime(op, 0);
+      if (prob.getDependences(op).empty()) {
+        prob.setStartTime(op, 0);
         continue;
       }
 
@@ -55,11 +52,12 @@ LogicalResult ASAPScheduler::schedule() {
       //   max_{p : preds} startTime[p] + latency[linkedOpr[p]]
       unsigned startTime = 0;
       bool startTimeIsValid = true;
-      for (auto &dep : getDependences(op)) {
+      for (auto &dep : prob.getDependences(op)) {
         Operation *pred = dep.getSource();
-        if (auto predStart = getStartTime(pred)) {
+        if (auto predStart = prob.getStartTime(pred)) {
           // pred is already scheduled
-          unsigned predLatency = *getLatency(*getLinkedOperatorType(pred));
+          auto predOpr = *prob.getLinkedOperatorType(pred);
+          unsigned predLatency = *prob.getLatency(predOpr);
           startTime = std::max(startTime, *predStart + predLatency);
         } else {
           // pred is not yet scheduled, give up and try again later
@@ -69,14 +67,14 @@ LogicalResult ASAPScheduler::schedule() {
       }
 
       if (startTimeIsValid)
-        setStartTime(op, startTime);
+        prob.setStartTime(op, startTime);
       else
         unscheduledOps.push_back(op);
     }
 
     // Fail if no progress was made during this attempt
     if (numUnscheduledBefore == unscheduledOps.size())
-      return getContainingOp()->emitError() << "dependence cycle detected";
+      return prob.getContainingOp()->emitError() << "dependence cycle detected";
   }
 
   return success();
