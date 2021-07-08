@@ -1164,4 +1164,16 @@ firrtl.circuit "TopLevel" {
         !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<baz: uint<8>, qux: uint<8>>, mask: bundle<baz: uint<1>, qux: uint<1>>>
   }
 
+// Test that partial connects can extend
+// CHECK-LABEL: firrtl.module @TLBBB
+firrtl.module @TLBBB() {
+  %invalid_ui9 = firrtl.invalidvalue : !firrtl.uint<9>
+  %in_bits = firrtl.wire  : !firrtl.uint<9>
+  firrtl.connect %in_bits, %invalid_ui9 : !firrtl.uint<9>, !firrtl.uint<9>
+  %out0_bits = firrtl.wire  : !firrtl.uint<128>
+// CHECK: firrtl.connect %out0_bits
+  firrtl.partialconnect %out0_bits, %in_bits : !firrtl.uint<128>, !firrtl.uint<9>
+}
+
+
 } // CIRCUIT
