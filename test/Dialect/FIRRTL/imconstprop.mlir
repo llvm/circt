@@ -202,4 +202,58 @@ firrtl.circuit "testDontTouch"  {
     // CHECK: firrtl.connect %a2, %blockProp3_b
     firrtl.connect %a2, %blockProp3_b : !firrtl.uint<1>, !firrtl.uint<1>
   }
+  // CHECK-LABEL: firrtl.module @CheckNode
+  firrtl.module @CheckNode(in %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>) {
+    %z = firrtl.node %x  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
+    // CHECK: firrtl.connect %y, %z
+    firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+
+}
+
+firrtl.circuit "OutPortTop" {
+    firrtl.module @OutPortChild1(out %out: !firrtl.uint<1> {firrtl.annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}) {
+      %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+      firrtl.connect %out, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    }
+    firrtl.module @OutPortChild2(out %out: !firrtl.uint<1>) {
+      %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+      firrtl.connect %out, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    }
+  // CHECK-LABEL: firrtl.module @OutPortTop
+    firrtl.module @OutPortTop(in %x: !firrtl.uint<1>, out %z: !firrtl.uint<1>) {
+      %c_out = firrtl.instance @OutPortChild1  {name = "c"} : !firrtl.uint<1>
+      %c_out_0 = firrtl.instance @OutPortChild2  {name = "c"} : !firrtl.uint<1>
+      // CHECK: %0 = firrtl.and %x, %c_out
+      %0 = firrtl.and %x, %c_out : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+      // CHECK: %1 = firrtl.and %0, %c0_ui1
+      %1 = firrtl.and %0, %c_out_0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+      firrtl.connect %z, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+    }
+}
+
+firrtl.circuit "InputPortTop"   {
+  // CHECK-LABEL: firrtl.module @InputPortChild2
+  firrtl.module @InputPortChild2(in %in0: !firrtl.uint<1>, in %in1: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+    // CHECK: %c1_ui1 = firrtl.constant 1
+    %0 = firrtl.and %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  // CHECK-LABEL: firrtl.module @InputPortChild
+  firrtl.module @InputPortChild(in %in0: !firrtl.uint<1>, in %in1: !firrtl.uint<1> {firrtl.annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}, out %out: !firrtl.uint<1>) {
+    // CHECK: %0 = firrtl.and %in0, %in1
+    %0 = firrtl.and %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  firrtl.module @InputPortTop(in %x: !firrtl.uint<1>, out %z: !firrtl.uint<1>, out %z2: !firrtl.uint<1>) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %c_in0, %c_in1, %c_out = firrtl.instance @InputPortChild  {name = "c"} : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    %c2_in0, %c2_in1, %c2_out = firrtl.instance @InputPortChild2  {name = "c2"} : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %z, %c_out : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %c_in0, %x : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %c_in1, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %z2, %c2_out : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %c2_in0, %x : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %c2_in1, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
 }
