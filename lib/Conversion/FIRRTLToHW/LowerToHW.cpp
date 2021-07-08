@@ -764,8 +764,13 @@ static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
   for (auto op : structValue.getUsers()) {
     assert(isa<SubfieldOp>(op));
     auto fieldAccess = cast<SubfieldOp>(op);
-    auto elemIndex = fieldAccess.input().getType().cast<FIRRTLType>().cast<BundleType>().getElementIndex(field);
-    if (elemIndex.hasValue() && fieldAccess.fieldIndex() == elemIndex.getValue()) {
+    auto elemIndex = fieldAccess.input()
+                         .getType()
+                         .cast<FIRRTLType>()
+                         .cast<BundleType>()
+                         .getElementIndex(field);
+    if (elemIndex.hasValue() &&
+        fieldAccess.fieldIndex() == elemIndex.getValue()) {
       accesses.push_back(fieldAccess);
     }
   }
@@ -1597,7 +1602,12 @@ LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
   Value value = getLoweredValue(op.input());
   assert(resultType && value && "subfield type lowering failed");
 
-  return setLoweringTo<hw::StructExtractOp>(op, resultType, value, op.input().getType().cast<BundleType>().getElementName(op.fieldIndex()).getValue());
+  return setLoweringTo<hw::StructExtractOp>(op, resultType, value,
+                                            op.input()
+                                                .getType()
+                                                .cast<BundleType>()
+                                                .getElementName(op.fieldIndex())
+                                                .getValue());
 }
 
 //===----------------------------------------------------------------------===//

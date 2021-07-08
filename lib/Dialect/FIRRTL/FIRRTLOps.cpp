@@ -1520,9 +1520,10 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
 }
 
 static LogicalResult verifySubfieldOp(SubfieldOp op) {
-  if (op.fieldIndex() > op.input().getType().cast<BundleType>().getNumElements())
-    return op.emitError(
-        "Subfield op field index is greater than number of fields in the BundleType");
+  if (op.fieldIndex() >
+      op.input().getType().cast<BundleType>().getNumElements())
+    return op.emitOpError("Subfield field index is greater than number of "
+                          "fields in the bundle type");
   return success();
 }
 
@@ -1530,14 +1531,14 @@ FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
                                        ArrayRef<NamedAttribute> attrs,
                                        Optional<Location> loc) {
   auto inType = operands[0].getType();
-  auto fieldIndex  = getAttr<IntegerAttr>(attrs, "fieldIndex").getValue().getZExtValue();
+  auto fieldIndex =
+      getAttr<IntegerAttr>(attrs, "fieldIndex").getValue().getZExtValue();
 
-  // SubfieldOp verifier checks that the field index is valid with number of subelements.
-  auto elt = inType.cast<BundleType>().getElement(fieldIndex);
-  // FIRRTL puts flips on element fields, not on the underlying
+  // SubfieldOp verifier checks that the field index is valid with number of
+  // subelements. FIRRTL puts flips on element fields, not on the underlying
   // types.  The result type of a subfield should strip a flip
   // if one exists.
-  return elt->type;
+  return inType.cast<BundleType>().getElement(fieldIndex).getValue().type;
 }
 
 bool SubfieldOp::isFieldFlipped() {

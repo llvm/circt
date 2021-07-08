@@ -685,29 +685,23 @@ llvm::Optional<unsigned> BundleType::getElementIndex(StringRef name) {
   return None;
 }
 
-
-llvm::Optional<StringRef> BundleType::getElementName(uint32_t index) {
-  for (auto it : llvm::enumerate(getElements())) 
+llvm::Optional<StringRef> BundleType::getElementName(size_t index) {
+  for (auto it : llvm::enumerate(getElements()))
     if (it.index() == index)
       return it.value().name.getValue();
   return None;
 }
-/// Look up an element by name.  This returns a BundleElement with.
+/// Look up an element by name.  This returns a BundleElement.
 auto BundleType::getElement(StringRef name) -> Optional<BundleElement> {
   if (auto maybeIndex = getElementIndex(name))
     return getElements()[*maybeIndex];
   return None;
 }
-/// Look up an element by name.  This returns a BundleElement with.
-auto BundleType::getElement(uint32_t index) -> Optional<BundleElement> {
+/// Look up an element by index.
+auto BundleType::getElement(size_t index) -> Optional<BundleElement> {
   if (index < getNumElements())
     return getElements()[index];
   return None;
-}
-
-/// Look up an element by index.
-BundleType::BundleElement BundleType::getElement(size_t index) {
-  return getElements()[index];
 }
 
 FIRRTLType BundleType::getElementType(StringRef name) {
