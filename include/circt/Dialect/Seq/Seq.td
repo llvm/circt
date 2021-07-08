@@ -47,7 +47,32 @@ def CompRegOp : SeqOp<"compreg",
     Optional<I1>:$reset, Optional<AnyType>:$resetValue);
   let results = (outs AnyType:$data);
 
-  let printer = "return ::print(p, *this);";
+  let printer = "return ::print$cppClass(p, *this);";
+  let parser = "return ::parse$cppClass(parser, result);";
+}
+
+def EdgeRising  : I64EnumAttrCase<"rising", 0>;
+def EdgeFalling  : I64EnumAttrCase<"falling", 1>;
+def Edge : I64EnumAttr<"Edge", "seq.reg clock/reset edge behaviour", [ EdgeRising, EdgeFalling ]>;
+
+def RegOp : SeqOp<"reg",
+    [NoSideEffect, AllTypesMatch<["input", "data"/*, "resetValue"*/]>,
+     SameVariadicOperandSize]> {
+
+  let summary = "A complete implementation of registers.";
+  let description = "See the Seq dialect rationale for a longer description";
+
+  let arguments = (ins AnyType:$input, I1:$clk,
+    Optional<I1>:$syncClear, Optional<AnyType>:$syncClearTo,
+    Optional<I1>:$asyncReset, Optional<AnyType>:$asyncResetTo,
+    Optional<I1>:$enable,
+
+    OptionalAttr<Edge>:$clockEdge // defaults to EdgeRising
+    );
+
+  let results = (outs AnyType:$data);
+
+  let printer = "return ::print$cppClass(parser, result);";
   let parser = "return ::parse$cppClass(parser, result);";
 }
 

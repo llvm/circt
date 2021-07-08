@@ -16,6 +16,8 @@
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
+#include "circt/Dialect/Seq/SeqEnums.h.inc"
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/Seq/Seq.h.inc"
 
