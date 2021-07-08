@@ -16,6 +16,7 @@
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
 

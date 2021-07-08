@@ -244,6 +244,8 @@ static ParseResult parseComponentOp(OpAsmParser &parser,
   result.getContext()->loadDialect<comb::CombDialect>();
   // HW dialect used for constant operations.
   result.getContext()->loadDialect<hw::HWDialect>();
+  // LLVMIR dialect used for `undef`.
+  result.getContext()->loadDialect<LLVM::LLVMDialect>();
 
   return success();
 }

@@ -13,6 +13,8 @@
 #ifndef CIRCT_DIALECT_CALYX_CALYXPASSES_H
 #define CIRCT_DIALECT_CALYX_CALYXPASSES_H
 
+#include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
 #include <memory>
 

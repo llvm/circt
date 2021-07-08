@@ -13,14 +13,13 @@
 #include "PassDetails.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/Calyx/CalyxPasses.h"
-#include "circt/Dialect/Comb/CombOps.h"
-#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OperationSupport.h"
 
 using namespace circt;
 using namespace calyx;
+using namespace mlir;
 
 namespace {
 
@@ -29,7 +28,7 @@ namespace {
 /// has a guard, then the bitwise 'and' is taken of the current guard and the
 /// "go" signal. For example:
 ///    ```mlir
-///      %go = calyx.group_go %c1_0 : i1
+///      %go = calyx.group_go %undef : i1
 ///
 ///      // Case 1: No Guard
 ///      %in = %out : i8
@@ -62,8 +61,8 @@ struct GoInsertionPass : public GoInsertionBase<GoInsertionPass> {
     ComponentOp component = getOperation();
     OpBuilder builder(component->getRegion(0));
 
-    auto zeroConstant = builder.create<hw::ConstantOp>(
-        component->getLoc(), APInt(/*numBits=*/1, /*val=*/0));
+    auto undefinedOp =
+        builder.create<LLVM::UndefOp>(component->getLoc(), builder.getI1Type());
 
     auto wiresOp = component.getWiresOp();
     wiresOp.walk([&](Operation *op) {
@@ -72,8 +71,8 @@ struct GoInsertionPass : public GoInsertionBase<GoInsertionPass> {
       auto group = cast<GroupOp>(op);
       OpBuilder builder(group->getRegion(0));
       // Since the source of a GroupOp's go signal isn't set until the
-      // a following pass, a dummy constant is used as a placeholder.
-      auto goOp = builder.create<GroupGoOp>(group->getLoc(), zeroConstant);
+      // the Compile Control pass, use an undefined value.
+      auto goOp = builder.create<GroupGoOp>(group->getLoc(), undefinedOp);
 
       updateGroupAssignmentGuards(builder, group, goOp);
     });
