@@ -35,7 +35,7 @@ def GoInsertion : Pass<"calyx-go-insertion", "calyx::ComponentOp"> {
     ```mlir
     // The `go` assignment takes on an undefined
     // value until the Compile Control pass.
-    %undef = llvm.mlir.undef : i1
+    %undef = calyx.undef : i1
     ...
     calyx.group @Group1 {
       %go = calyx.group_go %undef : i1
