@@ -24,6 +24,19 @@
 namespace circt {
 namespace calyx {
 
+/// A helper function to verify that each operation in
+/// the body of a control-like operation is valid.
+LogicalResult verifyControlLikeOpBody(Operation *op);
+
+/// Signals that the following operation is "control-like."
+template <typename ConcreteType>
+class ControlLike : public mlir::OpTrait::TraitBase<ConcreteType, ControlLike> {
+public:
+  static LogicalResult verifyTrait(Operation *op) {
+    return verifyControlLikeOpBody(op);
+  }
+};
+
 /// The direction of a Calyx port.
 enum PortDirection { INPUT = 0, OUTPUT = 1 };
 

@@ -463,8 +463,9 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT:    sv.initial {
     // CHECK-NEXT:    sv.verbatim "`INIT_RANDOM_PROLOG_"
     // CHECK-NEXT:    sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-    // CHECK-NEXT:       %RANDOM = sv.verbatim.expr "`RANDOM" : () -> i2
-    // CHECK-NEXT:       sv.bpassign %count, %RANDOM : i2
+    // CHECK-NEXT:       %RANDOM = sv.verbatim.expr "`RANDOM" : () -> i32
+    // CHECK-NEXT:       %3 = comb.extract %RANDOM from 0 : (i32) -> i2
+    // CHECK-NEXT:       sv.bpassign %count, %3 : i2
     // CHECK-NEXT:     }
     // CHECK-NEXT:    }
     // CHECK-NEXT:  }
@@ -748,5 +749,33 @@ firrtl.circuit "Simple" {
   firrtl.module @issue1115(in %a: !firrtl.sint<20>, out %tmp59: !firrtl.sint<2>) {
     %0 = firrtl.shr %a, 21 : (!firrtl.sint<20>) -> !firrtl.sint<1>
     firrtl.connect %tmp59, %0 : !firrtl.sint<2>, !firrtl.sint<1>
+  }
+
+   // CHECK-LABEL: hw.module @UninitReg42(%clock: i1, %reset: i1, %cond: i1, %value: i42) {
+
+  firrtl.module @UninitReg42(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
+                            in %cond: !firrtl.uint<1>, in %value: !firrtl.uint<42>) {
+    %c0_ui42 = firrtl.constant 0 : !firrtl.uint<42>
+    // CHECK: %count = sv.reg sym @count : !hw.inout<i42>
+    %count = firrtl.reg %clock {name = "count", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : (!firrtl.clock) -> !firrtl.uint<42>
+
+    // CHECK: sv.ifdef "SYNTHESIS"  {
+    // CHECK-NEXT:   } else {
+    // CHECK-NEXT:    sv.initial {
+    // CHECK-NEXT:    sv.verbatim "`INIT_RANDOM_PROLOG_"
+    // CHECK-NEXT:    sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
+    // CHECK-NEXT:       %RANDOM = sv.verbatim.expr "`RANDOM" : () -> i32
+    // CHECK-NEXT:       %RANDOM_0 = sv.verbatim.expr "`RANDOM" : () -> i32
+    // CHECK-NEXT:       %3 = comb.extract %RANDOM_0 from 0 : (i32) -> i10
+    // CHECK-NEXT:       %4 = comb.concat %RANDOM, %3 : (i32, i10) -> i42
+    // CHECK-NEXT:       sv.bpassign %count, %4 : i42
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:    }
+    // CHECK-NEXT:  }
+
+    %4 = firrtl.mux(%cond, %value, %count) : (!firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>) -> !firrtl.uint<42>
+    %5 = firrtl.mux(%reset, %c0_ui42, %4) : (!firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>) -> !firrtl.uint<42>
+
+    firrtl.connect %count, %5 : !firrtl.uint<42>, !firrtl.uint<42>
   }
 }

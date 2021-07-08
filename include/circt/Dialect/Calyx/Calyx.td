@@ -56,5 +56,6 @@ class CalyxContainer<string mnemonic, list<OpTrait> traits = []> :
 }
 
 include "circt/Dialect/Calyx/CalyxStructure.td"
+include "circt/Dialect/Calyx/CalyxControl.td"
 
 #endif // CALYX_TD
