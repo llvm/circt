@@ -109,6 +109,29 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
   let verifier = "return ::verifyConstantOp(*this);";
 }
 
+def SpecialConstantOp : FIRRTLOp<"specialconstant", [NoSideEffect,
+                                                     ConstantLike]> {
+  let summary = "Produce a constant Reset or Clock value";
+  let description = [{
+    The constant operation produces a constant value of Reset, AsyncReset, or
+    Clock type. The value can only be 0 or 1.
+    ```
+      %result = firrtl.specialconstant 1 : !firrtl.clock
+    ```
+    }];
+
+  let arguments = (ins BoolAttr:$value);
+  let results = (outs
+    AnyTypeOf<[ClockType, ResetType, AsyncResetType]>:$result);
+
+  // Need a custom parser/printer to avoid redundant type for the attribute and
+  // the op itself.
+  let parser = "return parse$cppClass(parser, result);";
+  let printer = "print$cppClass(p, *this);";
+  let hasFolder = 1;
+  let verifier = "return ::verifySpecialConstantOp(*this);";
+}
+
 def InvalidValueOp : FIRRTLOp<"invalidvalue", [NoSideEffect, ConstantLike]> {
   let summary = "InvalidValue primitive";
   let description = [{

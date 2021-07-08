@@ -958,6 +958,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   enum UnloweredOpResult { AlreadyLowered, NowLowered, LoweringFailure };
   UnloweredOpResult handleUnloweredOp(Operation *op);
   LogicalResult visitExpr(ConstantOp op);
+  LogicalResult visitExpr(SpecialConstantOp op);
   LogicalResult visitExpr(SubfieldOp op);
   LogicalResult visitUnhandledOp(Operation *op) { return failure(); }
   LogicalResult visitInvalidOp(Operation *op) { return failure(); }
@@ -1594,6 +1595,10 @@ FIRRTLLowering::handleUnloweredOp(Operation *op) {
 
 LogicalResult FIRRTLLowering::visitExpr(ConstantOp op) {
   return setLowering(op, getOrCreateIntConstant(op.value()));
+}
+
+LogicalResult FIRRTLLowering::visitExpr(SpecialConstantOp op) {
+  return setLowering(op, getOrCreateIntConstant(APInt(/*bitWidth*/ 1, op.value())));
 }
 
 LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {

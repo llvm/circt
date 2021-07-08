@@ -162,7 +162,7 @@ protected:
 template <class DerivedT, Expr::Kind DerivedKind>
 struct UnaryExprBase : public UnaryExpr {
   template <typename... Args>
-  UnaryExprBase(Args &&... args)
+  UnaryExprBase(Args &&...args)
       : UnaryExpr(DerivedKind, std::forward<Args>(args)...) {}
   static bool classof(const Expr *e) { return e->kind == DerivedKind; }
 };
@@ -201,7 +201,7 @@ protected:
 template <class DerivedT, Expr::Kind DerivedKind>
 struct BinaryExprBase : public BinaryExpr {
   template <typename... Args>
-  BinaryExprBase(Args &&... args)
+  BinaryExprBase(Args &&...args)
       : BinaryExpr(DerivedKind, std::forward<Args>(args)...) {}
   static bool classof(const Expr *e) { return e->kind == DerivedKind; }
 };
@@ -296,7 +296,7 @@ public:
   /// existing one. `R` is the type of the object to be allocated. `R` must be
   /// derived from or be the type `T`.
   template <typename R = T, typename... Args>
-  std::pair<R *, bool> alloc(Args &&... args) {
+  std::pair<R *, bool> alloc(Args &&...args) {
     auto stack_value = R(std::forward<Args>(args)...);
     auto stack_slot = Slot(&stack_value);
     auto it = interned.find(stack_slot);
@@ -320,7 +320,7 @@ public:
   /// Allocate a new object. `R` is the type of the object to be allocated. `R`
   /// must be derived from or be the type `T`.
   template <typename R = T, typename... Args>
-  R *alloc(Args &&... args) {
+  R *alloc(Args &&...args) {
     return new (allocator) R(std::forward<Args>(args)...);
   }
 };
@@ -381,7 +381,7 @@ private:
 
   /// Add an allocated expression to the list above.
   template <typename R, typename T, typename... Args>
-  R *alloc(InternedAllocator<T> &allocator, Args &&... args) {
+  R *alloc(InternedAllocator<T> &allocator, Args &&...args) {
     auto it = allocator.template alloc<R>(std::forward<Args>(args)...);
     if (it.second)
       exprs.push_back(it.first);
@@ -1135,6 +1135,9 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
           e = solver.known(std::max(w, 1u));
         }
         setExpr(op.getResult(), e);
+      })
+      .Case<SpecialConstantOp>([&](auto op) {
+        // Nothing required.
       })
       .Case<WireOp, InvalidValueOp, RegOp>(
           [&](auto op) { declareVars(op.getResult(), op.getLoc()); })

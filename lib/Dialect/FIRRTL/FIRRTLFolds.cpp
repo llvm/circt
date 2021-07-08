@@ -206,6 +206,11 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
   return valueAttr();
 }
 
+OpFoldResult SpecialConstantOp::fold(ArrayRef<Attribute> operands) {
+  assert(operands.empty() && "constant has no operands");
+  return valueAttr();
+}
+
 OpFoldResult InvalidValueOp::fold(ArrayRef<Attribute> operands) {
   return InvalidValueAttr::get(getType());
 }
@@ -713,12 +718,20 @@ OpFoldResult AsSIntPrimOp::fold(ArrayRef<Attribute> operands) {
   if (input().getType() == getType())
     return input();
 
+  if (!operands[0])
+    return {};
+
   // Be careful to only fold the cast into the constant if the size is known.
   // Otherwise width inference may produce differently-sized constants if the
   // sign changes.
-  if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
+  if (auto attr = operands[0].dyn_cast<IntegerAttr>())
     if (getType().hasWidth())
       return getIntAttr(getType(), attr.getValue());
+
+  // Constant clocks and resets are bool attributes.
+  if (auto attr = operands[0].dyn_cast<BoolAttr>())
+    return getIntAttr(getType(), APInt(/*bitWidth*/ 1, attr.getValue()));
+
   return {};
 }
 
@@ -727,31 +740,43 @@ OpFoldResult AsUIntPrimOp::fold(ArrayRef<Attribute> operands) {
   if (input().getType() == getType())
     return input();
 
+  if (!operands[0])
+    return {};
+
   // Be careful to only fold the cast into the constant if the size is known.
   // Otherwise width inference may produce differently-sized constants if the
   // sign changes.
-  if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
+  if (auto attr = operands[0].dyn_cast<IntegerAttr>())
     if (getType().hasWidth())
       return getIntAttr(getType(), attr.getValue());
+
+  // Constant clocks and resets are bool attributes.
+  if (auto attr = operands[0].dyn_cast<BoolAttr>())
+    return getIntAttr(getType(), APInt(/*bitWidth*/ 1, attr.getValue()));
+
   return {};
 }
 
 OpFoldResult AsAsyncResetPrimOp::fold(ArrayRef<Attribute> operands) {
-  // TODO: Implement constants of asyncreset type.
-
   // No effect.
   if (input().getType() == getType())
     return input();
+
+  // Constant fold.
+  if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
+    return BoolAttr::get(getContext(), attr.getValue().getBoolValue());
 
   return {};
 }
 
 OpFoldResult AsClockPrimOp::fold(ArrayRef<Attribute> operands) {
-  // TODO: Implement constants of clock type.
-
   // No effect.
   if (input().getType() == getType())
     return input();
+
+  // Constant fold.
+  if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
+    return BoolAttr::get(getContext(), attr.getValue().getBoolValue());
 
   return {};
 }
