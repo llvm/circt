@@ -1598,7 +1598,8 @@ LogicalResult FIRRTLLowering::visitExpr(ConstantOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(SpecialConstantOp op) {
-  return setLowering(op, getOrCreateIntConstant(APInt(/*bitWidth*/ 1, op.value())));
+  return setLowering(op,
+                     getOrCreateIntConstant(APInt(/*bitWidth*/ 1, op.value())));
 }
 
 LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {

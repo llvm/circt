@@ -295,7 +295,7 @@ Operation *FIRRTLDialect::materializeConstant(OpBuilder &builder,
                                               Location loc) {
   // Boolean constants. Boolean attributes are always a special constant type
   // like ClockType and ResetType.  Since BoolAttrs are also IntegerAttrs, its
-  // important that this goes first. 
+  // important that this goes first.
   if (auto attrValue = value.dyn_cast<BoolAttr>())
     return builder.create<SpecialConstantOp>(loc, type, attrValue);
 
