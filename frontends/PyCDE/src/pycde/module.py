@@ -97,8 +97,13 @@ class module:
       cls = self.func(*args, **kwargs)
       if cls is None:
         raise ValueError("Parameterization function must return module class")
+
+      # Function arguments which start with '_' don't become parameters.
+      params = {n: v for n, v
+                in param_values.arguments.items()
+                if not n.startswith("_")}
       mod = _module_base(cls, self.extern_name is not None,
-                         param_values.arguments)
+                         params)
 
       if self.extern_name:
         _register_generator(cls.__name__, "extern_instantiate",
@@ -229,6 +234,10 @@ def _module_base(cls, extern: bool, params={}):
                              results=[type for (_, type) in mod._output_ports],
                              operands=input_ports_values,
                              loc=loc))
+
+    def output_values(self):
+      return {op_name: self.operation.results[idx]
+              for (idx, (op_name, _)) in enumerate(mod._output_ports)}
 
     @staticmethod
     def inputs() -> list[(str, mlir.ir.Type)]:
