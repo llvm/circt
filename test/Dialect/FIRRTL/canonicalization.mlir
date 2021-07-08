@@ -1,6 +1,30 @@
 // RUN: circt-opt -simple-canonicalizer %s | FileCheck %s
 
-firrtl.circuit "And" {
+firrtl.circuit "Casts" {
+
+// CHECK-LABEL: firrtl.module @Casts
+firrtl.module @Casts(in %ui1 : !firrtl.uint<1>, in %si1 : !firrtl.sint<1>,
+    in %clock : !firrtl.clock, in %asyncreset : !firrtl.asyncreset,
+    out %out_ui1 : !firrtl.uint<1>, out %out_si1 : !firrtl.sint<1>,
+    out %out_clock : !firrtl.clock, out %out_asyncreset : !firrtl.asyncreset) {
+
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  %c1_si1 = firrtl.constant 1 : !firrtl.sint<1>
+
+  /// No effect
+  // CHECK: firrtl.connect %out_ui1, %ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+  %0 = firrtl.asUInt %ui1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %out_ui1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: firrtl.connect %out_si1, %si1 : !firrtl.sint<1>, !firrtl.sint<1>
+  %1 = firrtl.asSInt %si1 : (!firrtl.sint<1>) -> !firrtl.sint<1>
+  firrtl.connect %out_si1, %1 : !firrtl.sint<1>, !firrtl.sint<1>
+  // CHECK: firrtl.connect %out_clock, %clock : !firrtl.clock, !firrtl.clock
+  %2 = firrtl.asClock %clock : (!firrtl.clock) -> !firrtl.clock
+  firrtl.connect %out_clock, %2 : !firrtl.clock, !firrtl.clock
+  // CHECK: firrtl.connect %out_asyncreset, %asyncreset : !firrtl.asyncreset, !firrtl.asyncreset
+  %3 = firrtl.asAsyncReset %asyncreset : (!firrtl.asyncreset) -> !firrtl.asyncreset
+  firrtl.connect %out_asyncreset, %3 : !firrtl.asyncreset, !firrtl.asyncreset
+}
 
 // CHECK-LABEL: firrtl.module @Div
 firrtl.module @Div(in %a: !firrtl.uint<4>,

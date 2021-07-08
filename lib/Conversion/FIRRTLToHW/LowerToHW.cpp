@@ -250,8 +250,9 @@ void CircuitLoweringState::warnOnRemainingAnnotations(
   for (auto a : annoSet) {
     auto inserted = alreadyPrinted.insert(a.getClass());
     if (inserted.second)
-      mlir::emitWarning(op->getLoc(), "unprocessed annotation:'" + a.getClass() +
-                      "' still remaining after LowerToHW");
+      mlir::emitWarning(op->getLoc(), "unprocessed annotation:'" +
+                                          a.getClass() +
+                                          "' still remaining after LowerToHW");
   }
 }
 } // end anonymous namespace
@@ -493,6 +494,13 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
     }
   };
 
+  // If none of the macros are needed, then don't emit any header at all, not
+  // even the header comment.
+  if (!state.used_RANDOMIZE_GARBAGE_ASSIGN && !state.used_RANDOMIZE_REG_INIT &&
+      !state.used_RANDOMIZE_MEM_INIT && !state.used_PRINTF_COND &&
+      !state.used_STOP_COND)
+    return;
+
   emitString("// Standard header to adapt well known macros to our needs.");
 
   bool needRandom = false;
@@ -509,8 +517,11 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
     needRandom = true;
   }
 
-  if (needRandom)
-    emitGuardedDefine("RANDOM", nullptr, "RANDOM $random");
+  if (needRandom) {
+    emitString("\n// RANDOM may be set to an expression that produces a 32-bit "
+               "random unsigned value.");
+    emitGuardedDefine("RANDOM", nullptr, "RANDOM {$random}");
+  }
 
   if (state.used_PRINTF_COND) {
     emitString(
@@ -1670,9 +1681,34 @@ void FIRRTLLowering::emitRandomizePrologIfNeeded() {
 }
 
 void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
-  // Construct and return a new reference to `RANDOM.
-  auto randomVal = [&](Type type) {
-    return builder.create<sv::VerbatimExprOp>(type, "`RANDOM");
+  // Construct and return a new reference to `RANDOM.  It is always a 32-bit
+  // unsigned expression.  We don't want these CSE'd.
+  auto getRandom32Val = [&]() -> Value {
+    return builder.create<sv::VerbatimExprOp>(builder.getIntegerType(32),
+                                              "`RANDOM");
+  };
+
+  // Return an expression containing random bits of the specified width.
+  // An explicit std::function is required here due to recursion.
+  std::function<Value(IntegerType)> getRandomValue =
+      [&](IntegerType type) -> Value {
+    assert(type.getWidth() != 0 && "zero bit width's not supported");
+    auto rand32 = getRandom32Val();
+    if (type.getWidth() <= 32)
+      return builder.createOrFold<comb::ExtractOp>(type, rand32, 0);
+
+    // Get the top part.
+    auto rest = getRandomValue(builder.getIntegerType(type.getWidth() - 32));
+    return builder.createOrFold<comb::ConcatOp>(rand32, rest);
+  };
+
+  // Get a random value with the specified width, combining or truncating
+  // 32-bit units as necessary.
+  auto emitRandomInit = [&](Value dest, Type type) {
+    auto intType = type.cast<IntegerType>();
+    if (intType.getWidth() == 0)
+      return;
+    builder.create<sv::BPAssignOp>(dest, getRandomValue(intType));
   };
 
   // Randomly initialize everything in the register. If the register
@@ -1686,12 +1722,10 @@ void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
           for (size_t i = 0, e = a.getSize(); i != e; ++i) {
             auto iIdx = getOrCreateIntConstant(log2(e + 1), i);
             auto arrayIndex = builder.create<sv::ArrayIndexInOutOp>(reg, iIdx);
-            builder.create<sv::BPAssignOp>(arrayIndex,
-                                           randomVal(a.getElementType()));
+            emitRandomInit(arrayIndex, a.getElementType());
           }
         })
-        .Default(
-            [&](auto a) { builder.create<sv::BPAssignOp>(reg, randomVal(a)); });
+        .Default([&](auto type) { emitRandomInit(reg, type); });
   };
 
   // Emit the initializer expression for simulation that fills it with random
@@ -1802,9 +1836,10 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     auto portName = op.getPortName(i).getValue();
     auto portKind = op.getPortKind(i);
 
-    auto &portKindNum = portKind == MemOp::PortKind::Read    ? readCount
-                        : portKind == MemOp::PortKind::Write ? writeCount
-                                                             : readwriteCount;
+    auto &portKindNum =
+        portKind == MemOp::PortKind::Read
+            ? readCount
+            : portKind == MemOp::PortKind::Write ? writeCount : readwriteCount;
 
     auto addInput = [&](SmallVectorImpl<Value> &operands, StringRef field,
                         size_t width) {
@@ -2364,9 +2399,7 @@ LogicalResult FIRRTLLowering::visitExpr(MuxPrimOp op) {
 
   // Lower mux(0-bit, x, y) -> y
   if (!cond) {
-    return handleZeroBit(op.sel(), [&]() {
-      return setLowering(op, ifFalse);
-    });
+    return handleZeroBit(op.sel(), [&]() { return setLowering(op, ifFalse); });
   }
 
   return setLoweringTo<comb::MuxOp>(op, ifTrue.getType(), cond, ifTrue,

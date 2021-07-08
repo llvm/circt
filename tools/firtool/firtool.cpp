@@ -89,6 +89,10 @@ static cl::opt<bool>
     lowerTypes("lower-types",
                cl::desc("run the lower-types pass within lower-to-hw"),
                cl::init(true));
+static cl::opt<bool>
+    lowerTypesV2("lower-types-v2",
+                 cl::desc("run the lower-types pass within lower-to-hw"),
+                 cl::init(false));
 
 static cl::opt<bool> expandWhens("expand-whens",
                                  cl::desc("disable the expand-whens pass"),
@@ -213,8 +217,12 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
   // The input mlir file could be firrtl dialect so we might need to clean
   // things up.
-  if (lowerTypes) {
+  if (lowerTypes && !lowerTypesV2)
     pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass());
+  if (lowerTypesV2)
+    pm.addNestedPass<firrtl::CircuitOp>(
+        firrtl::createLowerBundleVectorTypesPass());
+  if (lowerTypes || lowerTypesV2) {
     auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
     // Only enable expand whens if lower types is also enabled.
     if (expandWhens)

@@ -90,6 +90,10 @@ def type_to_pytype(t):
     return hw.StructType(t)
   except ValueError:
     pass
+  try:
+    return hw.TypeAliasType(t)
+  except ValueError:
+    pass
 
   raise TypeError(f"Cannot convert {repr(t)} to python type")
 
@@ -99,6 +103,10 @@ def type_to_pytype(t):
 # long one. This is a way that works for now.
 def attribute_to_var(attr):
   import mlir.ir as ir
+
+  if not isinstance(attr, ir.Attribute):
+    raise TypeError("attribute_to_var only accepts MLIR Attributes")
+
   try:
     return ir.BoolAttr(attr).value
   except ValueError:
@@ -129,14 +137,28 @@ def attribute_to_var(attr):
   raise TypeError(f"Cannot convert {repr(attr)} to python value")
 
 
+def get_self_or_inner(mlir_type):
+  from circt.dialects import hw
+  if type(mlir_type) is ir.Type:
+    mlir_type = type_to_pytype(mlir_type)
+  if isinstance(mlir_type, hw.TypeAliasType):
+    return type_to_pytype(mlir_type.inner_type)
+  return mlir_type
+
+
 class BackedgeBuilder(AbstractContextManager):
 
   class Edge:
 
-    def __init__(self, creator, type: ir.Type, port_name: str, op_view,
-                 instance_of: ir.Operation):
+    def __init__(self,
+                 creator,
+                 type: ir.Type,
+                 port_name: str,
+                 op_view,
+                 instance_of: ir.Operation,
+                 loc: ir.Location = None):
       self.creator: BackedgeBuilder = creator
-      self.dummy_op = ir.Operation.create("TemporaryBackedge", [type])
+      self.dummy_op = ir.Operation.create("TemporaryBackedge", [type], loc=loc)
       self.instance_of = instance_of
       self.op_view = op_view
       self.port_name = port_name
@@ -171,8 +193,10 @@ class BackedgeBuilder(AbstractContextManager):
               type: ir.Type,
               port_name: str,
               op_view,
-              instance_of: ir.Operation = None):
-    edge = BackedgeBuilder.Edge(self, type, port_name, op_view, instance_of)
+              instance_of: ir.Operation = None,
+              loc: ir.Location = None):
+    edge = BackedgeBuilder.Edge(self, type, port_name, op_view, instance_of,
+                                loc)
     self.edges.add(edge)
     return edge
 
@@ -217,6 +241,10 @@ class OpOperand:
 
     self.value = value
     self.backedge_owner = backedge_owner
+
+  @property
+  def type(self):
+    return self.value.type
 
 
 class NamedValueOpView:
@@ -266,13 +294,13 @@ class NamedValueOpView:
 
   def __getattr__(self, name):
     # Check for the attribute in the arg name set.
-    if name in self.operand_indices:
+    if "operand_indices" in dir(self) and name in self.operand_indices:
       index = self.operand_indices[name]
       value = self.opview.operands[index]
       return OpOperand(self.opview.operation, index, value, self)
 
     # Check for the attribute in the result name set.
-    if name in self.result_indices:
+    if "result_indices" in dir(self) and name in self.result_indices:
       index = self.result_indices[name]
       value = self.opview.results[index]
       return OpOperand(self.opview.operation, index, value, self)
