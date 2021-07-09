@@ -2291,7 +2291,7 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
                                       insertNameIntoGlobalScope);
 }
 
-/// printf ::= 'printf(' exp exp StringLit exp* ')' info?
+/// printf ::= 'printf(' exp exp StringLit exp* ')' name? info?
 ParseResult FIRStmtParser::parsePrintf() {
   auto startTok = consumeToken(FIRToken::lp_printf);
 
