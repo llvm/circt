@@ -1034,11 +1034,10 @@ static LogicalResult verifyBindOp(BindOp op) {
 //===----------------------------------------------------------------------===//
 
 static ParseResult parseOmitEmptyStringAttr(OpAsmParser &p, StringAttr &str) {
-  // TODO: There is no parseOptionalAttribute(StringAttr &foo, Type bar) API
-  // available for OpAsmParse.  Use of parseAttribute(StringAttr &foo, Type bar)
-  // does exist, but produces an opError during parsing.  This can be cleaned up
-  // to avoid using a dummy NamedAttrList (which will be thrown away) if such an
-  // API is added to MLIR.
+  // TODO: No OpAsmParser::parseOptionalAttribute(StringAttr &a, Type b) API
+  // exists.  OpAsmParser::parseAttribute(StringAttr &a, Type b) does exist, but
+  // produces an opError during parsing.  This should eventually be cleaned up
+  // to avoid the need to use a dummy attribute list.
   NamedAttrList dummy;
   p.parseOptionalAttribute(str, p.getBuilder().getType<mlir::NoneType>(),
                            "label", dummy);
