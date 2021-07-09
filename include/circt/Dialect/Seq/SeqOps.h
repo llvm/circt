@@ -14,9 +14,8 @@
 #define CIRCT_DIALECT_SEQ_SEQOPS_H
 
 #include "circt/Dialect/Seq/SeqDialect.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
-
-#include "circt/Dialect/Seq/SeqEnums.h.inc"
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/Seq/Seq.h.inc"

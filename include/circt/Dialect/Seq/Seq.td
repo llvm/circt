@@ -51,26 +51,35 @@ def CompRegOp : SeqOp<"compreg",
   let parser = "return ::parse$cppClass(parser, result);";
 }
 
-def EdgeRising  : I64EnumAttrCase<"posedge", 0>;
-def EdgeFalling  : I64EnumAttrCase<"negedge", 1>;
-def Edge : I64EnumAttr<"Edge", "seq.reg clock/reset edge behaviour", [ EdgeRising, EdgeFalling ]>;
+def EventControlAttr : Attr<CPred<"$_self.isa<::circt::sv::EventControlAttr>()">> {
+  let returnType = "::circt::sv::EventControl";
+  let convertFromStorage = "$_self.dyn_cast<::circt::sv::EventControlAttr>().getValue()";
+}
+
+def ResetTypeAttr : Attr<CPred<"$_self.isa<ResetTypeAttr>()">> {
+  // FIXME: This should be moved into the ::circt::sv namespace when it's moved
+  // in circt::sv::
+  let returnType = "::ResetType";
+  let convertFromStorage = "$_self.dyn_cast<ResetTypeAttr>().getValue()";
+}
 
 def RegOp : SeqOp<"reg",
-    [AllTypesMatch<["input", "data", "syncClearTo", "asyncResetTo"]>]> {
+    [AllTypesMatch<["input", "data", "resetValue"]>]> {
 
   let summary = "A complete implementation of registers.";
   let description = "See the Seq dialect rationale for a longer description";
 
   let arguments = (ins AnyType:$input, I1:$clk,
-    I1:$syncClear, AnyType:$syncClearTo,
-    I1:$asyncReset,AnyType:$asyncResetTo,
+    I1:$reset, AnyType:$resetValue,
     I1:$enable,
-    Edge:$clockEdge
+    EventControlAttr:$clockEdge,
+    EventControlAttr:$resetEdge,
+    ResetTypeAttr:$resetType
     );
 
   let results = (outs AnyType:$data);
 
-  let assemblyFormat = "$input `,` $clockEdge $clk `,` `enable` $enable `,` $syncClear `,` $syncClearTo `,` $asyncReset `,` $asyncResetTo attr-dict `:` type($input)";
+  let assemblyFormat = "$input `,` $clockEdge $clk `,` `enable` $enable `,` $reset `,` $resetValue attr-dict `:` type($input)";
 }
 
 def LowerSeqToSV: Pass<"lower-seq-to-sv", "mlir::ModuleOp"> {

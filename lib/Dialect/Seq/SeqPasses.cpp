@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/IR/Builders.h"
@@ -70,7 +71,84 @@ public:
   }
 };
 
+class RegLower : public OpConversionPattern<RegOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(RegOp reg, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final;
+};
+
 } // namespace
+
+static bool isI1Constant(::mlir::Value value, size_t n)
+{
+  assert (value.getType().isSignlessInteger(1));
+  if (auto constantOp = value.getDefiningOp<::circt::hw::ConstantOp>()) {
+    return constantOp.value() == n;
+  }
+
+  return false;
+}
+
+static bool isI1Gnd(::mlir::Value value) { return isI1Constant(value, 0); }
+static bool isI1Vdd(::mlir::Value value) { return isI1Constant(value, 1); }
+
+LogicalResult
+RegLower::matchAndRewrite(RegOp reg,
+                          ArrayRef<Value> operands,
+                          ConversionPatternRewriter &rewriter) const
+{
+  Location loc = reg.getLoc();
+
+  auto svReg = rewriter.create<sv::RegOp>(loc, reg.getResult().getType());
+
+  DictionaryAttr regAttrs = reg->getAttrDictionary();
+  if (!regAttrs.empty())
+    svReg->setAttrs(regAttrs);
+  if (!svReg->hasAttrOfType<StringAttr>("name"))
+    // sv.reg requires a name attribute.
+    svReg->setAttr("name", rewriter.getStringAttr(""));
+
+  auto onAssignInput = [&]() {
+    rewriter.create<sv::PAssignOp>(loc, svReg, reg.input());
+  };
+
+  auto onReset = [&]() {
+    rewriter.create<sv::PAssignOp>(loc, svReg, reg.resetValue());
+  };
+
+  auto onRegularOperation = [&]() {
+    if (isI1Vdd(reg.enable())) {
+      return onAssignInput();
+    }
+
+    rewriter.create<sv::IfOp>(loc,
+        reg.enable(),
+        onAssignInput,
+        nullptr
+        );
+  };
+
+  if (!reg.reset() || isI1Gnd(reg.reset())) {
+    rewriter.create<sv::AlwaysFFOp>(
+        loc, reg.clockEdge(), reg.clk(),
+        onRegularOperation);
+  } else {
+    rewriter.create<sv::AlwaysFFOp>(
+        loc, reg.clockEdge(), reg.clk(),
+        reg.resetType(), reg.resetEdge(),
+        reg.reset(), onRegularOperation,
+        onReset);
+  }
+
+  auto svRegValue = rewriter.create<sv::ReadInOutOp>(loc, svReg);
+  rewriter.replaceOp(reg, { svRegValue });
+
+  return success();
+}
+
 void SeqToSVPass::runOnOperation() {
   ModuleOp top = getOperation();
   MLIRContext &ctxt = getContext();
@@ -80,6 +158,7 @@ void SeqToSVPass::runOnOperation() {
   target.addLegalDialect<sv::SVDialect>();
   RewritePatternSet patterns(&ctxt);
   patterns.add<CompRegLower>(&ctxt);
+  patterns.add<RegLower>(&ctxt);
 
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
     signalPassFailure();
