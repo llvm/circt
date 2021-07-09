@@ -293,7 +293,7 @@ public:
   llvm::Optional<unsigned> getElementIndex(StringRef name);
 
   /// Look up an element's name by index. This returns None on failure.
-  llvm::Optional<StringRef> getElementName(size_t index);
+  StringRef getElementName(size_t index);
 
   /// Look up an element by name.  This returns None on failure.
   llvm::Optional<BundleElement> getElement(StringRef name);

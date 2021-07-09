@@ -685,18 +685,19 @@ llvm::Optional<unsigned> BundleType::getElementIndex(StringRef name) {
   return None;
 }
 
-llvm::Optional<StringRef> BundleType::getElementName(size_t index) {
-  for (auto it : llvm::enumerate(getElements()))
-    if (it.index() == index)
-      return it.value().name.getValue();
-  return None;
+StringRef BundleType::getElementName(size_t index) {
+  assert((index < getElements().size()) &&
+         "index must be less than number of fields in bundle");
+  return getElements()[index].name.getValue();
 }
+
 /// Look up an element by name.  This returns a BundleElement.
 auto BundleType::getElement(StringRef name) -> Optional<BundleElement> {
   if (auto maybeIndex = getElementIndex(name))
     return getElements()[*maybeIndex];
   return None;
 }
+
 /// Look up an element by index.
 auto BundleType::getElement(size_t index) -> Optional<BundleElement> {
   if (index < getNumElements())
