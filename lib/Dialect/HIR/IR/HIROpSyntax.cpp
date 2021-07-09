@@ -5,9 +5,8 @@
 ParseResult parseTimeAndOffset(
     mlir::OpAsmParser &parser,
     llvm::Optional<mlir::OpAsmParser::OperandType> &tstartOptional,
-    llvm::Optional<mlir::OpAsmParser::OperandType> &offsetOptional) {
+    IntegerAttr &offsetOptional) {
   OpAsmParser::OperandType tstart;
-  OpAsmParser::OperandType offset;
 
   // early exit if no schedule provided.
   if (succeeded(parser.parseOptionalQuestion()))
@@ -18,29 +17,55 @@ ParseResult parseTimeAndOffset(
     return failure();
   tstartOptional = tstart;
 
-  // early exit if no offsets.
-  if (parser.parseOptionalPlus())
+  // set offset = 0 and early exit if no offsets.
+  if (parser.parseOptionalPlus()) {
+    offsetOptional = parser.getBuilder().getI64IntegerAttr(0);
     return success();
+  }
 
   // Parse offset
-  if (parser.parseOperand(offset))
+  int64_t offset;
+  if (parser.parseInteger(offset))
     return failure();
-  offsetOptional = offset;
+  offsetOptional = parser.getBuilder().getI64IntegerAttr(offset);
+
+  return success();
+}
+
+ParseResult parseTimeAndOffset(mlir::OpAsmParser &parser,
+                               mlir::OpAsmParser::OperandType &tstart,
+                               IntegerAttr &delay) {
+
+  // parse tstart.
+  if (parser.parseOperand(tstart))
+    return failure();
+
+  // early exit if no offsets.
+  if (parser.parseOptionalPlus()) {
+    delay = parser.getBuilder().getI64IntegerAttr(0);
+    return success();
+  }
+
+  // Parse offset
+  int64_t offset;
+  if (parser.parseInteger(offset))
+    return failure();
+  delay = parser.getBuilder().getI64IntegerAttr(offset);
 
   return success();
 }
 
 void printTimeAndOffset(OpAsmPrinter &printer, Operation *op, Value tstart,
-                        Value offset) {
+                        IntegerAttr offset) {
   if (!tstart) {
     printer << "?";
     return;
   }
   printer << tstart;
 
-  if (!offset)
+  if (!offset || (offset.getInt() == 0))
     return;
-  printer << " + " << offset;
+  printer << " + " << offset.getInt();
 }
 
 // parser and printer for array address indices.

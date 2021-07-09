@@ -60,8 +60,7 @@ private:
         continue;
       } else if (auto op = dyn_cast<mlir::IndexCastOp>(operation)) {
         return operation.emitError(
-            "Unsupported op for RegisterAllocationPass. All IndexCast should "
-            "have been replaced by ConstantOp by now.");
+            "All IndexCast should have been replaced by ConstantOp by now.");
       } else if (auto op = dyn_cast<mlir::TruncateIOp>(operation)) {
         if (failed(updateOp(op)))
           return failure();
@@ -77,16 +76,17 @@ private:
       } else if (auto op = dyn_cast<hir::CallOp>(operation)) {
         if (failed(updateOp(op)))
           return failure();
-      } else
+      } else if (auto op = dyn_cast<hir::TimeOp>(operation)) {
+        continue;
+      } else {
         return operation.emitError(
             "Unsupported op for RegisterAllocationPass.");
+      }
     }
     return success();
   }
 
 private:
-  LogicalResult getPipelineBalancedValue(ImplicitLocOpBuilder &, Value &, Value,
-                                         Value, Value);
   LogicalResult getPipelineBalancedValue(ImplicitLocOpBuilder &, Value &, Value,
                                          Value, int64_t);
 
@@ -118,7 +118,7 @@ private:
 //
 LogicalResult RegisterAllocationPass::getPipelineBalancedValue(
     ImplicitLocOpBuilder &builder, Value &newValue, Value oldValue,
-    Value tstart, Value offset) {
+    Value tstart, int64_t offset) {
 
   // If the value is constant then no need to add pipeline stages.
   if (oldValue.getDefiningOp() &&
@@ -130,72 +130,40 @@ LogicalResult RegisterAllocationPass::getPipelineBalancedValue(
   if (mapValueToTimeVar.find(oldValue) == mapValueToTimeVar.end())
     return builder.emitError("Could not find Value in mapValueToTimeVar : ")
            << oldValue.getType();
-  Value srcTimeVar = mapValueToTimeVar[oldValue];
   if (mapValueToOffset.find(oldValue) == mapValueToOffset.end())
     return builder.emitError("Could not find Value in mapValueToOffset.");
-  int64_t destOffset;
-  if (offset)
-    destOffset = dyn_cast<mlir::ConstantOp>(offset.getDefiningOp())
-                     .value()
-                     .dyn_cast<IntegerAttr>()
-                     .getInt();
-  else
-    destOffset = 0;
 
+  Value srcTimeVar = mapValueToTimeVar[oldValue];
   int64_t srcOffset = mapValueToOffset[oldValue];
-  Value cSrcOffset = builder.create<mlir::ConstantOp>(
-      builder.getIndexType(), builder.getIndexAttr(destOffset - srcOffset));
-
+  if (auto timeOp =
+          llvm::dyn_cast_or_null<hir::TimeOp>(srcTimeVar.getDefiningOp())) {
+    srcTimeVar = timeOp.timevar();
+    srcOffset += timeOp.delay();
+  }
+  if (auto timeOp =
+          llvm::dyn_cast_or_null<hir::TimeOp>(tstart.getDefiningOp())) {
+    tstart = timeOp.timevar();
+    offset += timeOp.delay();
+  }
   if (srcTimeVar == tstart) {
-    if (destOffset < srcOffset)
-      return builder.emitError("Dest offset < source offset.");
-    Value cDelay = builder.create<mlir::ConstantOp>(
-        builder.getIndexType(), builder.getIndexAttr(destOffset - srcOffset));
-    newValue = builder
-                   .create<hir::DelayOp>(oldValue.getType(), oldValue, cDelay,
-                                         tstart, cSrcOffset)
-                   .getResult();
+    if (offset < srcOffset)
+      return builder.emitError("Op offset < operand offset.");
+    newValue =
+        builder
+            .create<hir::DelayOp>(oldValue.getType(), oldValue,
+                                  builder.getI64IntegerAttr(offset - srcOffset),
+                                  tstart, builder.getI64IntegerAttr(srcOffset))
+            .getResult();
     return success();
   }
-  newValue = builder
-                 .create<hir::LatchOp>(oldValue.getType(), oldValue, srcTimeVar,
-                                       cSrcOffset, tstart, offset)
-                 .getResult();
+  newValue =
+      builder
+          .create<hir::LatchOp>(oldValue.getType(), oldValue, srcTimeVar,
+                                builder.getI64IntegerAttr(srcOffset), tstart,
+                                builder.getI64IntegerAttr(offset))
+          .getResult();
   return success();
 }
-
-LogicalResult RegisterAllocationPass::getPipelineBalancedValue(
-    ImplicitLocOpBuilder &builder, Value &newValue, Value oldValue,
-    Value tstart, int64_t destOffset) {
-
-  // If the value is constant then no need to add pipeline stages.
-  if (oldValue.getDefiningOp() &&
-      dyn_cast<mlir::ConstantOp>(oldValue.getDefiningOp())) {
-    newValue = oldValue;
-    return success();
-  }
-  if (mapValueToTimeVar.find(oldValue) == mapValueToTimeVar.end())
-    return builder.emitError("Could not find Value in mapValueToTimeVar.");
-  Value srcTimeVar = mapValueToTimeVar[oldValue];
-  if (mapValueToOffset.find(oldValue) == mapValueToOffset.end())
-    return builder.emitError("Could not find Value in mapValueToOffset.");
-  int64_t srcOffset = mapValueToOffset[oldValue];
-  if (destOffset < srcOffset)
-    return builder.emitError("Dest offset < source offset.");
-
-  Value cSrcOffset = builder.create<mlir::ConstantOp>(
-      builder.getIndexType(), builder.getIndexAttr(destOffset - srcOffset));
-  if (srcTimeVar != tstart)
-    return builder.emitError("Expected src and dest time vars to be same.");
-  Value cDelay = builder.create<mlir::ConstantOp>(
-      builder.getIndexType(), builder.getIndexAttr(destOffset - srcOffset));
-  newValue = builder
-                 .create<hir::DelayOp>(oldValue.getType(), oldValue, cDelay,
-                                       tstart, cSrcOffset)
-                 .getResult();
-  return success();
-}
-
 //-----------------------------------------------------------------------------
 
 //-----------------------------------------------------------------------------
@@ -214,15 +182,15 @@ LogicalResult RegisterAllocationPass::updateOp(hir::ForOp op) {
   Value ubNew;
   Value stepNew;
   if (failed(getPipelineBalancedValue(builder, lbNew, op.lb(), op.tstart(),
-                                      op.offset())))
+                                      op.offset().getValue())))
     return failure();
   op.lbMutable().assign(lbNew);
   if (failed(getPipelineBalancedValue(builder, ubNew, op.ub(), op.tstart(),
-                                      op.offset())))
+                                      op.offset().getValue())))
     return failure();
   op.ubMutable().assign(ubNew);
   if (failed(getPipelineBalancedValue(builder, stepNew, op.step(), op.tstart(),
-                                      op.offset())))
+                                      op.offset().getValue())))
     return failure();
   op.stepMutable().assign(stepNew);
   mapValueToTimeVar[op.getInductionVar()] = op.getIterTimeVar();
@@ -237,16 +205,11 @@ LogicalResult RegisterAllocationPass::updateOp(hir::LoadOp op) {
   auto indices = op.indices();
   SmallVector<Value> indicesNew;
   mapValueToTimeVar[op.getResult()] = op.tstart();
-  mapValueToOffset[op.getResult()] =
-      op.offset() ? dyn_cast<mlir::ConstantOp>(op.offset().getDefiningOp())
-                        .value()
-                        .dyn_cast<IntegerAttr>()
-                        .getInt()
-                  : 0;
+  mapValueToOffset[op.getResult()] = op.offset().getValue();
   for (size_t i = 0; i < indices.size(); i++) {
     Value idxNew;
     if (failed(getPipelineBalancedValue(builder, idxNew, indices[i],
-                                        op.tstart(), op.offset())))
+                                        op.tstart(), op.offset().getValue())))
       return failure();
     indicesNew.push_back(idxNew);
   }
@@ -261,7 +224,7 @@ LogicalResult RegisterAllocationPass::updateOp(hir::StoreOp op) {
   for (size_t i = 0; i < indices.size(); i++) {
     Value idxNew;
     if (failed(getPipelineBalancedValue(builder, idxNew, indices[i],
-                                        op.tstart(), op.offset())))
+                                        op.tstart(), op.offset().getValue())))
       return failure();
     indicesNew.push_back(idxNew);
   }
@@ -269,7 +232,7 @@ LogicalResult RegisterAllocationPass::updateOp(hir::StoreOp op) {
   op.indicesMutable().assign(indicesNew);
   Value valueNew;
   if (failed(getPipelineBalancedValue(builder, valueNew, op.value(),
-                                      op.tstart(), op.offset())))
+                                      op.tstart(), op.offset().getValue())))
     return failure();
   op.valueMutable().assign(valueNew);
   return success();
@@ -288,19 +251,13 @@ template <typename T>
 LogicalResult RegisterAllocationPass::updateBinOp(T op) {
   ImplicitLocOpBuilder builder(op.getLoc(), OpBuilder(op));
   mapValueToTimeVar[op.getResult()] = op.tstart();
-  if (op.offset()) {
-    Attribute valueAttr =
-        dyn_cast<mlir::ConstantOp>(op.offset().getDefiningOp()).value();
-    mapValueToOffset[op.getResult()] =
-        valueAttr.dyn_cast<IntegerAttr>().getInt();
-  } else
-    mapValueToOffset[op.getResult()] = 0;
+  mapValueToOffset[op.getResult()] = op.offset().getValue();
   Value op1New, op2New;
   if (failed(getPipelineBalancedValue(builder, op1New, op.op1(), op.tstart(),
-                                      op.offset())))
+                                      op.offset().getValue())))
     return failure();
   if (failed(getPipelineBalancedValue(builder, op2New, op.op1(), op.tstart(),
-                                      op.offset())))
+                                      op.offset().getValue())))
     return failure();
   op.op1Mutable().assign(op1New);
   op.op2Mutable().assign(op2New);
@@ -314,7 +271,7 @@ LogicalResult RegisterAllocationPass::updateOp(hir::YieldOp op) {
   for (size_t i = 0; i < operands.size(); i++) {
     Value operandNew;
     if (failed(getPipelineBalancedValue(builder, operandNew, operands[i],
-                                        op.tstart(), op.offset())))
+                                        op.tstart(), op.offset().getValue())))
       return failure();
     operandsNew.push_back(operandNew);
   }
@@ -352,7 +309,7 @@ LogicalResult RegisterAllocationPass::updateOp(hir::CallOp op) {
   for (size_t i = 0; i < operands.size(); i++) {
     Value operandNew;
     if (failed(getPipelineBalancedValue(builder, operandNew, operands[i],
-                                        op.tstart(), op.offset())))
+                                        op.tstart(), op.offset().getValue())))
       ;
     return failure();
     operandsNew.push_back(operandNew);
@@ -362,14 +319,14 @@ LogicalResult RegisterAllocationPass::updateOp(hir::CallOp op) {
 }
 
 LogicalResult RegisterAllocationPass::updateOp(mlir::TruncateIOp op) {
-  mapValueToTimeVar[op.value()] = mapValueToTimeVar[op.getResult()];
-  mapValueToOffset[op.value()] = mapValueToOffset[op.getResult()];
+  mapValueToTimeVar[op.getResult()] = mapValueToTimeVar[op.value()];
+  mapValueToOffset[op.getResult()] = mapValueToOffset[op.value()];
   return success();
 }
 
 LogicalResult RegisterAllocationPass::updateOp(mlir::SignExtendIOp op) {
-  mapValueToTimeVar[op.value()] = mapValueToTimeVar[op.getResult()];
-  mapValueToOffset[op.value()] = mapValueToOffset[op.getResult()];
+  mapValueToTimeVar[op.getResult()] = mapValueToTimeVar[op.value()];
+  mapValueToOffset[op.getResult()] = mapValueToOffset[op.value()];
   return success();
 }
 

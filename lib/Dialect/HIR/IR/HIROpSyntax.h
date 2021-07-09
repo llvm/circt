@@ -20,9 +20,12 @@ using namespace llvm;
 // parser and printer for Time and offset.
 ParseResult parseTimeAndOffset(mlir::OpAsmParser &,
                                llvm::Optional<OpAsmParser::OperandType> &,
-                               llvm::Optional<OpAsmParser::OperandType> &);
+                               IntegerAttr &);
 
-void printTimeAndOffset(OpAsmPrinter &, Operation *op, Value, Value);
+ParseResult parseTimeAndOffset(mlir::OpAsmParser &, OpAsmParser::OperandType &,
+                               IntegerAttr &);
+
+void printTimeAndOffset(OpAsmPrinter &, Operation *op, Value, IntegerAttr);
 
 // parser and printer for array address types.
 

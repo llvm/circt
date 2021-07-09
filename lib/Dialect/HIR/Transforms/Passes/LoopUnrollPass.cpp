@@ -44,7 +44,7 @@ LogicalResult unrollLoopFull(hir::ForOp forOp) {
   Block::iterator srcBlockEnd = std::prev(loopBodyBlock.end(), 1);
 
   SmallVector<Value, 4> iterArgs = {forOp.getIterTimeVar()};
-  assert(!forOp.offset());
+  assert(forOp.offset().getValue() == 0);
   SmallVector<Value, 4> iterValues = {forOp.tstart()};
   auto *context = builder.getContext();
 
@@ -63,7 +63,7 @@ LogicalResult unrollLoopFull(hir::ForOp forOp) {
     // Copy the loop body.
     for (auto it = loopBodyBlock.begin(); it != srcBlockEnd; it++) {
       if (auto yieldOp = dyn_cast<hir::YieldOp>(it)) {
-        assert(!yieldOp.offset());
+        assert(yieldOp.offset().getValue() == 0);
         iterValues = {lookupOrOriginal(operandMap, yieldOp.tstart())};
         operandMap.map(iterArgs, iterValues);
         continue;

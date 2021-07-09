@@ -334,7 +334,8 @@ void MemrefLoweringPass::updateOp(hir::AllocaOp op) {
       op.moduleAttr().dyn_cast<StringAttr>().getValue().str();
   builder.create<hir::CallOp>(op.getLoc(), SmallVector<Type>({}),
                               FlatSymbolRefAttr::get(context, moduleAttr),
-                              funcTy, Value(), bramCallArgs, tstart, Value());
+                              funcTy, Value(), bramCallArgs, tstart,
+                              IntegerAttr());
 }
 
 void MemrefLoweringPass::updateOp(hir::LoadOp op) {

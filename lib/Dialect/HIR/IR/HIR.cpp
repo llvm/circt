@@ -356,11 +356,6 @@ static ParseResult parseIfOp(OpAsmParser &parser, OperationState &result) {
     if (parser.resolveOperand(offset, IndexType::get(context), result.operands))
       return failure();
 
-  result.addAttribute(
-      "operand_segment_sizes",
-      parser.getBuilder().getI32VectorAttr({1, // cond
-                                            (int32_t)(tstartPresent ? 1 : 0),
-                                            (int32_t)(offsetPresent ? 1 : 0)}));
   Region *ifBody = result.addRegion();
   if (parser.parseRegion(*ifBody, {}, {}))
     return failure();
@@ -379,7 +374,7 @@ static void printForOp(OpAsmPrinter &printer, ForOp op) {
           << op.getIterTimeVar() << " = ";
   if (op.tstart()) {
     printer << op.tstart();
-    if (op.offset())
+    if (op.offset() && op.offset().getValue() != 0)
       printer << " + " << op.offset();
   } else
     printer << "?";
@@ -388,8 +383,8 @@ static void printForOp(OpAsmPrinter &printer, ForOp op) {
   printer.printRegion(op.region(),
                       /*printEntryBlockArgs=*/false,
                       /*printBlockTerminators=*/true);
-  printer.printOptionalAttrDict(
-      op->getAttrs(), SmallVector<StringRef>({"operand_segment_sizes"}));
+  printer.printOptionalAttrDict(op->getAttrs(),
+                                SmallVector<StringRef>({"offset"}));
 }
 
 static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
@@ -400,14 +395,13 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
   Type ubRawType;
   Type stepRawType;
   Type tstartRawType = timeTy;
-  Type offsetType = IndexType::get(context);
   Type regionRawOperandTypes[2];
   ArrayRef<Type> regionOperandTypes(regionRawOperandTypes);
   regionRawOperandTypes[1] = timeTy;
 
   OpAsmParser::OperandType lbRawOperand;
   OpAsmParser::OperandType ubRawOperand;
-  OpAsmParser::OperandType offsetRawOperand;
+  IntegerAttr offsetAttr;
   OpAsmParser::OperandType stepRawOperand;
   OpAsmParser::OperandType tstartRawOperand;
   OpAsmParser::OperandType regionRawOperands[2];
@@ -434,41 +428,30 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
     return failure();
 
   bool tstartPresent = false;
-  bool offsetPresent = false;
   if (failed(parser.parseOptionalQuestion())) {
     if (parser.parseOperand(tstartRawOperand))
       return failure();
     tstartPresent = true;
     if (succeeded(parser.parseOptionalPlus())) {
-      if (parser.parseOperand(offsetRawOperand))
+      if (parser.parseAttribute(offsetAttr, "offset", result.attributes))
         return failure();
-      offsetPresent = true;
+    } else {
+      result.addAttribute("offset", helper::getIntegerAttr(context, 0));
     }
   }
   if (parser.parseRParen())
     return failure();
 
-  // parse the loop bounds.
+  // resolve the loop bounds.
   if (parser.resolveOperand(lbRawOperand, lbRawType, result.operands) ||
       parser.resolveOperand(ubRawOperand, ubRawType, result.operands) ||
       parser.resolveOperand(stepRawOperand, stepRawType, result.operands))
     return failure();
 
-  // parse optional tstart and offset.
+  // resolve optional tstart and offset.
   if (tstartPresent)
     if (parser.resolveOperand(tstartRawOperand, tstartRawType, result.operands))
       return failure();
-  if (offsetPresent)
-    if (parser.resolveOperand(offsetRawOperand, offsetType, result.operands))
-      return failure();
-
-  result.addAttribute(
-      "operand_segment_sizes",
-      parser.getBuilder().getI32VectorAttr({1, // lb
-                                            1, // ub
-                                            1, // step
-                                            (int32_t)(tstartPresent ? 1 : 0),
-                                            (int32_t)(offsetPresent ? 1 : 0)}));
 
   // Parse the body region.
   Region *body = result.addRegion();

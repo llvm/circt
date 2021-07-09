@@ -81,12 +81,7 @@ private:
       return op.emitError(
           "Could not find currentTimeVar while scheduling this op.");
     op.tstartMutable().assign(this->currentTimeVar);
-    if (this->nextFreeOffset > 0) {
-      Value offsetIndexVar = builder.create<mlir::ConstantOp>(
-          op.getLoc(), builder.getIndexType(),
-          builder.getIndexAttr(this->nextFreeOffset));
-      op.offsetMutable().assign(offsetIndexVar);
-    }
+    op.offsetAttr(builder.getI64IntegerAttr(this->nextFreeOffset));
     return success();
   }
 

@@ -248,7 +248,7 @@ bool ScheduleVerifier::inspectOp(mlir::ConstantOp op) {
 bool ScheduleVerifier::inspectOp(ForOp op) {
   Value idx = op.getInductionVar();
   Value tloop = op.getIterTimeVar();
-  unsigned delayValue = getIntegerConstOrError(op.offset());
+  unsigned delayValue = op.offset().getValue();
   assert(delayValue > 0);
   schedule.insert(tloop, tloop, 0);
   schedule.insert(idx, tloop, 0);
@@ -292,7 +292,7 @@ bool ScheduleVerifier::inspectOp(hir::LoadOp op) {
   auto indices = op.indices();
   Value result = op.res();
   Value tstart = op.tstart();
-  int offset = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
+  int offset = op.offset() ? op.offset().getValue() : 0;
   assert(offset >= 0);
 
   bool ok = true;
@@ -312,7 +312,7 @@ bool ScheduleVerifier::inspectOp(hir::StoreOp op) {
   auto indices = op.indices();
   Value value = op.value();
   Value tstart = op.tstart();
-  int offset = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
+  int offset = op.offset() ? op.offset().getValue() : 0;
   assert(offset >= 0);
   bool ok = true;
   ok &= schedule.check(op.getLoc(), getDefiningLoc(value), value, tstart,
@@ -329,20 +329,20 @@ bool ScheduleVerifier::inspectOp(hir::StoreOp op) {
 
 bool ScheduleVerifier::inspectOp(hir::YieldOp op) {
   Value tstart = op.tstart();
-  unsigned offset = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
+  unsigned offset = op.offset() ? op.offset().getValue() : 0;
   yieldPoints.top().t = tstart;
   yieldPoints.top().delay = offset;
   return true;
 }
 
 bool ScheduleVerifier::inspectOp(hir::SendOp op) {
-  unsigned offset = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
+  unsigned offset = op.offset() ? op.offset().getValue() : 0;
   return schedule.check(op.getLoc(), getDefiningLoc(op.value()), op.value(),
                         op.tstart(), offset, "input var");
 }
 
 bool ScheduleVerifier::inspectOp(hir::RecvOp op) {
-  unsigned offset = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
+  unsigned offset = op.offset() ? op.offset().getValue() : 0;
   schedule.insert(op.res(), op.tstart(), offset);
   return true;
 }
@@ -350,8 +350,8 @@ bool ScheduleVerifier::inspectOp(hir::RecvOp op) {
 bool ScheduleVerifier::inspectOp(hir::AllocaOp op) { return true; }
 
 bool ScheduleVerifier::inspectOp(hir::DelayOp op) {
-  unsigned offset = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
-  unsigned latency = getIntegerConstOrError(op.delay());
+  unsigned offset = op.offset() ? op.offset().getValue() : 0;
+  unsigned latency = op.delay();
   bool ok = schedule.check(op.getLoc(), getDefiningLoc(op.input()), op.input(),
                            op.tstart(), offset, "input var");
   schedule.insert(op.res(), op.tstart(), offset + latency);
@@ -361,7 +361,7 @@ bool ScheduleVerifier::inspectOp(hir::DelayOp op) {
 bool ScheduleVerifier::inspectOp(hir::CallOp op) {
   mlir::ResultRange results = op.res();
   auto operands = op.operands();
-  unsigned tstartDelay = op.offset() ? getIntegerConstOrError(op.offset()) : 0;
+  unsigned tstartDelay = op.offset() ? op.offset().getValue() : 0;
   ArrayAttr inputDelays = op->getAttrOfType<ArrayAttr>("inputDelays");
   ArrayAttr outputDelays = op->getAttrOfType<ArrayAttr>("outputDelays");
   assert(inputDelays.size() == operands.size());

@@ -226,7 +226,7 @@ LogicalResult IndexLoweringPass::updateBinOp(T op) {
                     .getResult();
     Value newRes = builder.create<hir::AddIOp>(
         builder.getIntegerType(MACHINE_WORD_SIZE), op.op1(), rhs,
-        op.delayAttr(), op.tstart(), op.offset());
+        op.delayAttr(), op.tstart(), op.offsetAttr());
     op.res().replaceAllUsesWith(newRes);
     opsToErase.push_back(op);
   } else if (op.op1().getType().template isa<IndexType>() &&
@@ -238,7 +238,7 @@ LogicalResult IndexLoweringPass::updateBinOp(T op) {
                     .getResult();
     Value newRes = builder.create<hir::AddIOp>(
         builder.getIntegerType(MACHINE_WORD_SIZE), lhs, op.op2(),
-        op.delayAttr(), op.tstart(), op.offset());
+        op.delayAttr(), op.tstart(), op.offsetAttr());
     op.res().replaceAllUsesWith(newRes);
     opsToErase.push_back(op);
   }

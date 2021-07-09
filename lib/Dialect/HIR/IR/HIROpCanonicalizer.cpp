@@ -19,14 +19,14 @@ static LogicalResult splitOffsetIntoSeparateOp(OPTYPE op,
   auto *context = rewriter.getContext();
   if (!op.offset())
     return success();
+  if (op.offset().getValue() == 0)
+    return success();
 
-  Value tstart = rewriter.create<hir::DelayOp>(
-      op.getLoc(), helper::getTimeType(context), op.tstart(), op.offset(),
-      op.tstart(), Value());
+  Value tstart = rewriter.create<hir::TimeOp>(
+      op.getLoc(), helper::getTimeType(context), op.tstart(), op.offsetAttr());
 
   op.tstartMutable().assign(tstart);
-  op.offsetMutable().clear();
-
+  op.offsetAttr(rewriter.getI64IntegerAttr(0));
   return success();
 }
 
@@ -49,10 +49,32 @@ LogicalResult RecvOp::canonicalize(RecvOp op,
                                    ::mlir::PatternRewriter &rewriter) {
   return splitOffsetIntoSeparateOp(op, rewriter);
 }
-
+LogicalResult AddIOp::canonicalize(AddIOp op,
+                                   ::mlir::PatternRewriter &rewriter) {
+  return splitOffsetIntoSeparateOp(op, rewriter);
+}
+LogicalResult SubIOp::canonicalize(SubIOp op,
+                                   ::mlir::PatternRewriter &rewriter) {
+  return splitOffsetIntoSeparateOp(op, rewriter);
+}
+LogicalResult MulIOp::canonicalize(MulIOp op,
+                                   ::mlir::PatternRewriter &rewriter) {
+  return splitOffsetIntoSeparateOp(op, rewriter);
+}
+LogicalResult AddFOp::canonicalize(AddFOp op,
+                                   ::mlir::PatternRewriter &rewriter) {
+  return splitOffsetIntoSeparateOp(op, rewriter);
+}
+LogicalResult SubFOp::canonicalize(SubFOp op,
+                                   ::mlir::PatternRewriter &rewriter) {
+  return splitOffsetIntoSeparateOp(op, rewriter);
+}
+LogicalResult MulFOp::canonicalize(MulFOp op,
+                                   ::mlir::PatternRewriter &rewriter) {
+  return splitOffsetIntoSeparateOp(op, rewriter);
+}
 LogicalResult ForOp::canonicalize(ForOp op, PatternRewriter &rewriter) {
-  splitOffsetIntoSeparateOp(op, rewriter);
-  return failure();
+  return splitOffsetIntoSeparateOp(op, rewriter);
 }
 
 LogicalResult UnrollForOp::canonicalize(UnrollForOp op,

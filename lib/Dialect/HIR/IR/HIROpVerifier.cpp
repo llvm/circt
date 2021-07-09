@@ -4,6 +4,14 @@
 namespace circt {
 namespace hir {
 
+LogicalResult verifyTimeAndOffset(Value time, llvm::Optional<uint64_t> offset) {
+  if (time && !offset.hasValue())
+    return failure();
+  if (offset.hasValue() && offset.getValue() < 0)
+    return failure();
+  return success();
+}
+
 LogicalResult verifyFuncOp(hir::FuncOp op) {
   auto funcTy = op.funcTy().dyn_cast<hir::FuncType>();
   if (!funcTy)
@@ -24,7 +32,17 @@ LogicalResult verifyDelayOp(hir::DelayOp op) {
   return success();
 }
 
+LogicalResult verifyLatchOp(hir::LatchOp op) {
+  if (failed(verifyTimeAndOffset(op.tstart(), op.offset())))
+    return op.emitError("Invalid offset.");
+  if (failed(verifyTimeAndOffset(op.tResult(), op.offsetResult())))
+    return op.emitError("Invalid offset after 'until'.");
+  return success();
+}
+
 LogicalResult verifyForOp(hir::ForOp op) {
+  if (failed(verifyTimeAndOffset(op.tstart(), op.offset())))
+    return op.emitError("Invalid offset.");
   auto ivTy = op.getInductionVar().getType();
   if (op->getAttr("unroll"))
     if (!ivTy.isa<IndexType>())
@@ -44,6 +62,17 @@ LogicalResult verifyForOp(hir::ForOp op) {
   if (!op.getIterTimeVar().getType().isa<hir::TimeType>())
     return op.emitError("Expected time var to be of !hir.time type.");
 
+  return success();
+}
+
+LogicalResult verifyLoadOp(hir::LoadOp op) {
+  if (failed(verifyTimeAndOffset(op.tstart(), op.offset())))
+    return op.emitError("Invalid offset.");
+  return success();
+}
+LogicalResult verifyStoreOp(hir::StoreOp op) {
+  if (failed(verifyTimeAndOffset(op.tstart(), op.offset())))
+    return op.emitError("Invalid offset.");
   return success();
 }
 } // namespace hir

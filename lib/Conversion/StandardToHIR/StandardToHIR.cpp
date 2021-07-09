@@ -206,7 +206,7 @@ private:
       delayAttr = IntegerAttr();
     Value res =
         builder.create<ToT>(op.getLoc(), op.getResult().getType(), op.lhs(),
-                            op.rhs(), delayAttr, Value(), Value());
+                            op.rhs(), delayAttr, Value(), IntegerAttr());
     op.getResult().replaceAllUsesWith(res);
     opsToErase.push_back(op);
     return success();
@@ -310,9 +310,9 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::scf::ForOp op) {
   assert(ub);
   assert(step);
 
-  auto forOp =
-      builder.create<hir::ForOp>(op.getLoc(), lb, ub, step, Value(), Value(),
-                                 IndexType::get(builder.getContext()));
+  auto forOp = builder.create<hir::ForOp>(op.getLoc(), lb, ub, step, Value(),
+                                          IntegerAttr(),
+                                          IndexType::get(builder.getContext()));
   // forOp.getLoopBody().push_back(new Block);
   // forOp.getLoopBody().front().addArgument(IndexType::get(builder.getContext()));
   BlockAndValueMapping mapper;
@@ -383,7 +383,8 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::memref::LoadOp op) {
 
   auto loadOp = builder.create<hir::LoadOp>(
       op.getLoc(), res.getType(), memref, castedIndices, /*port*/ IntegerAttr(),
-      builder.getI64IntegerAttr(mapMemrefToRdDelay[memref]), Value(), Value());
+      builder.getI64IntegerAttr(mapMemrefToRdDelay[memref]), Value(),
+      IntegerAttr());
 
   op->replaceAllUsesWith(loadOp);
   opsToErase.push_back(op);
@@ -425,7 +426,8 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::memref::StoreOp op) {
 
   auto storeOp = builder.create<hir::StoreOp>(
       op.getLoc(), op.value(), memref, castedIndices, /*port*/ IntegerAttr(),
-      builder.getI64IntegerAttr(mapMemrefToWrDelay[memref]), Value(), Value());
+      builder.getI64IntegerAttr(mapMemrefToWrDelay[memref]), Value(),
+      IntegerAttr());
   op->replaceAllUsesWith(storeOp);
   opsToErase.push_back(op);
   return success();
@@ -499,7 +501,7 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::ReturnOp op) {
         op.getLoc(), operand, memref, c0,
         /*port*/ IntegerAttr(),
         builder.getI64IntegerAttr(mapMemrefToWrDelay[memref]), Value(),
-        Value());
+        IntegerAttr());
   }
 
   builder.create<hir::ReturnOp>(op.getLoc());
