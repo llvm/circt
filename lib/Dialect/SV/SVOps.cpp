@@ -1030,6 +1030,30 @@ static LogicalResult verifyBindOp(BindOp op) {
 }
 
 //===----------------------------------------------------------------------===//
+// BindOp
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseElideLabel(OpAsmParser &p, NamedAttrList &resultAttrs) {
+
+  auto result = p.parseOptionalAttrDict(resultAttrs);
+  if (!resultAttrs.get("label"))
+    resultAttrs.append("label", p.getBuilder().getStringAttr(""));
+
+  return result;
+}
+
+static void printElideLabel(OpAsmPrinter &p, Operation *op,
+                            DictionaryAttr attr) {
+
+  SmallVector<StringRef, 1> elides;
+  // Elide "label" if it is an empty string.
+  if (op->getAttrOfType<StringAttr>("label").getValue().empty())
+    elides.push_back("label");
+
+  p.printOptionalAttrDict(op->getAttrs(), elides);
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

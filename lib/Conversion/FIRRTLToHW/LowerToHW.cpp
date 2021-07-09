@@ -2639,7 +2639,12 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op) {
   addToAlwaysBlock(clock, [&]() {
     addIfProceduralBlock(enable, [&]() {
       // Create BOpTy inside the always/if.
-      builder.create<BOpTy>(predicate);
+      StringAttr label;
+      if (op.nameAttr())
+        label = op.nameAttr();
+      else
+        label = builder.getStringAttr("");
+      builder.create<BOpTy>(predicate, label);
     });
   });
 
