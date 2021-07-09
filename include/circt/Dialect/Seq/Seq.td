@@ -51,29 +51,26 @@ def CompRegOp : SeqOp<"compreg",
   let parser = "return ::parse$cppClass(parser, result);";
 }
 
-def EdgeRising  : I64EnumAttrCase<"rising", 0>;
-def EdgeFalling  : I64EnumAttrCase<"falling", 1>;
+def EdgeRising  : I64EnumAttrCase<"posedge", 0>;
+def EdgeFalling  : I64EnumAttrCase<"negedge", 1>;
 def Edge : I64EnumAttr<"Edge", "seq.reg clock/reset edge behaviour", [ EdgeRising, EdgeFalling ]>;
 
 def RegOp : SeqOp<"reg",
-    [NoSideEffect, AllTypesMatch<["input", "data"/*, "resetValue"*/]>,
-     SameVariadicOperandSize]> {
+    [AllTypesMatch<["input", "data", "syncClearTo", "asyncResetTo"]>]> {
 
   let summary = "A complete implementation of registers.";
   let description = "See the Seq dialect rationale for a longer description";
 
   let arguments = (ins AnyType:$input, I1:$clk,
-    Optional<I1>:$syncClear, Optional<AnyType>:$syncClearTo,
-    Optional<I1>:$asyncReset, Optional<AnyType>:$asyncResetTo,
-    Optional<I1>:$enable,
-
-    OptionalAttr<Edge>:$clockEdge // defaults to EdgeRising
+    I1:$syncClear, AnyType:$syncClearTo,
+    I1:$asyncReset,AnyType:$asyncResetTo,
+    I1:$enable,
+    Edge:$clockEdge
     );
 
   let results = (outs AnyType:$data);
 
-  let printer = "return ::print$cppClass(parser, result);";
-  let parser = "return ::parse$cppClass(parser, result);";
+  let assemblyFormat = "$input `,` $clockEdge $clk `,` `enable` $enable `,` $syncClear `,` $syncClearTo `,` $asyncReset `,` $asyncResetTo attr-dict `:` type($input)";
 }
 
 def LowerSeqToSV: Pass<"lower-seq-to-sv", "mlir::ModuleOp"> {
