@@ -1030,7 +1030,7 @@ static LogicalResult verifyBindOp(BindOp op) {
 }
 
 //===----------------------------------------------------------------------===//
-// BindOp
+// Helpers to elide "label" attributes.
 //===----------------------------------------------------------------------===//
 
 static ParseResult parseElideLabel(OpAsmParser &p, NamedAttrList &resultAttrs) {

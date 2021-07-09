@@ -2025,7 +2025,7 @@ LogicalResult StmtEmitter::visitSV(AssertOp op) {
   indent();
   auto label = op.label();
   if (!label.empty())
-    os << op.label() << ": ";
+    os << label << ": ";
   os << "assert(";
   emitExpression(op.predicate(), ops);
   os << ");";
@@ -2053,7 +2053,7 @@ LogicalResult StmtEmitter::visitSV(CoverOp op) {
   indent();
   auto label = op.label();
   if (!label.empty())
-    os << op.label() << ": ";
+    os << label << ": ";
   os << "cover(";
   emitExpression(op.property(), ops);
   os << ");";
