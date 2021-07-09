@@ -13,6 +13,7 @@
 #ifndef CALYX_TD
 #define CALYX_TD
 
+include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
@@ -41,7 +42,7 @@ class CalyxOp<string mnemonic, list<OpTrait> traits = []> :
 
 /// Base class for Calyx containers.
 class CalyxContainer<string mnemonic, list<OpTrait> traits = []> :
-  Op<CalyxDialect, mnemonic, !listconcat(traits, [
+  CalyxOp<mnemonic, !listconcat(traits, [
       NoRegionArguments,
       NoTerminator,
       SingleBlock
@@ -53,6 +54,27 @@ class CalyxContainer<string mnemonic, list<OpTrait> traits = []> :
     /// Returns the body of a Calyx container.
     Block *getBody() { return &getOperation()->getRegion(0).front(); }
   }];
+}
+
+/// Base class for ports associated with a Calyx GroupOp.
+class CalyxGroupPort<string mnemonic, list<OpTrait> traits = []> :
+  CalyxOp<mnemonic, !listconcat(traits, [
+    HasParent<"GroupOp">
+  ])> {
+  let arguments = (ins
+    I1:$src,
+    Optional<I1>:$guard
+  );
+  let results = (outs I1);
+  let builders = [
+    OpBuilder<(ins "Value":$src, CArg<"Value", "{}">:$guard), [{
+      $_state.addTypes($_builder.getI1Type());
+      $_state.addOperands(src);
+      if (guard)
+        $_state.addOperands(guard);
+    }]>
+  ];
+  let assemblyFormat = "$src (`,` $guard^ `?`)? attr-dict `:` type($src)";
 }
 
 include "circt/Dialect/Calyx/CalyxStructure.td"

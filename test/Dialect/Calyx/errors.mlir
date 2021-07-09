@@ -99,10 +99,14 @@ calyx.program {
     calyx.control {}
   }
   calyx.component @main() -> () {
-    calyx.wires {}
-    // expected-error @+1 {{'calyx.control' op has operation: calyx.cell, which is not allowed in this control-like operation}}
+    %c1_1 = constant 1 : i1
+    calyx.wires {
+      calyx.group @A { calyx.group_done %c1_1 : i1 }
+    }
+    // expected-error @+1 {{'calyx.control' op EnableOp is not a composition operator. It should be nested in a control flow operation, such as "calyx.seq"}}
     calyx.control {
-      calyx.cell "b0" @B
+      calyx.enable @A
+      calyx.enable @A
     }
   }
 }
@@ -115,7 +119,7 @@ calyx.program {
     calyx.wires {
       // expected-error @+1 {{'calyx.group' op with name: Group1 is unused in the control execution schedule}}
       calyx.group @Group1 {
-        calyx.done %c1_1 : i1
+        %done = calyx.group_done %c1_1 : i1
       }
     }
     calyx.control {}

@@ -219,7 +219,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   // things up.
   if (lowerTypes && !lowerTypesV2)
     pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass());
-  if (!lowerTypes && lowerTypesV2)
+  if (lowerTypesV2)
     pm.addNestedPass<firrtl::CircuitOp>(
         firrtl::createLowerBundleVectorTypesPass());
   if (lowerTypes || lowerTypesV2) {

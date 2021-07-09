@@ -1,4 +1,4 @@
-//===- Scheduler.cpp - Common interface for scheduling algorithms -===========//
+//===- Problems.h - Modeling of scheduling problems -----------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,11 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implements base classes and utilities for scheduling algorithms.
+// This file implements base classes for scheduling problems.
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Scheduling/Scheduler.h"
+#include "circt/Scheduling/Problems.h"
 #include "circt/Scheduling/DependenceIterator.h"
 
 #include "mlir/IR/Operation.h"
@@ -20,10 +20,10 @@ using namespace circt::scheduling;
 using namespace circt::scheduling::detail;
 
 //===----------------------------------------------------------------------===//
-// Scheduler
+// Problem
 //===----------------------------------------------------------------------===//
 
-LogicalResult Scheduler::insertDependence(Dependence dep) {
+LogicalResult Problem::insertDependence(Dependence dep) {
   Operation *src = dep.getSource();
   Operation *dst = dep.getDestination();
 
@@ -44,18 +44,18 @@ LogicalResult Scheduler::insertDependence(Dependence dep) {
   return success();
 }
 
-Scheduler::OperatorType Scheduler::getOrInsertOperatorType(StringRef name) {
+Problem::OperatorType Problem::getOrInsertOperatorType(StringRef name) {
   auto opr = OperatorType::get(name, containingOp->getContext());
   operatorTypes.insert(opr);
   return opr;
 }
 
-Scheduler::DependenceRange Scheduler::getDependences(Operation *op) {
+Problem::DependenceRange Problem::getDependences(Operation *op) {
   return DependenceRange(DependenceIterator(*this, op),
                          DependenceIterator(*this, op, /*end=*/true));
 }
 
-LogicalResult Scheduler::checkOperation(Operation *op) {
+LogicalResult Problem::checkOperation(Operation *op) {
   if (!getLinkedOperatorType(op))
     return op->emitError("Operation is not linked to an operator type");
   if (!hasOperatorType(*getLinkedOperatorType(op)))
@@ -63,9 +63,9 @@ LogicalResult Scheduler::checkOperation(Operation *op) {
   return success();
 }
 
-LogicalResult Scheduler::checkDependence(Dependence dep) { return success(); }
+LogicalResult Problem::checkDependence(Dependence dep) { return success(); }
 
-LogicalResult Scheduler::checkOperatorType(OperatorType opr) {
+LogicalResult Problem::checkOperatorType(OperatorType opr) {
   if (!getLatency(opr))
     return containingOp->emitError()
            << "Operator type '" << opr << "' has no latency";
@@ -73,10 +73,10 @@ LogicalResult Scheduler::checkOperatorType(OperatorType opr) {
   return success();
 }
 
-LogicalResult Scheduler::checkProblem() { return success(); }
+LogicalResult Problem::checkProblem() { return success(); }
 
 /// Check overall problem by delegating to the component-specific checkers.
-LogicalResult Scheduler::check() {
+LogicalResult Problem::check() {
   for (auto *op : getOperations())
     if (failed(checkOperation(op)))
       return failure();
@@ -93,13 +93,13 @@ LogicalResult Scheduler::check() {
   return checkProblem();
 }
 
-LogicalResult Scheduler::verifyOperation(Operation *op) {
+LogicalResult Problem::verifyOperation(Operation *op) {
   if (!getStartTime(op))
     return op->emitError("Operation has no start time");
   return success();
 }
 
-LogicalResult Scheduler::verifyDependence(Dependence dep) {
+LogicalResult Problem::verifyDependence(Dependence dep) {
   Operation *i = dep.getSource();
   Operation *j = dep.getDestination();
 
@@ -117,14 +117,14 @@ LogicalResult Scheduler::verifyDependence(Dependence dep) {
   return success();
 }
 
-LogicalResult Scheduler::verifyOperatorType(OperatorType opr) {
+LogicalResult Problem::verifyOperatorType(OperatorType opr) {
   return success();
 }
 
-LogicalResult Scheduler::verifyProblem() { return success(); }
+LogicalResult Problem::verifyProblem() { return success(); }
 
 /// Verify overall solution by delegating to the component-specific verifiers.
-LogicalResult Scheduler::verify() {
+LogicalResult Problem::verify() {
   for (auto *op : getOperations())
     if (failed(verifyOperation(op)))
       return failure();
@@ -180,13 +180,13 @@ bool Dependence::operator==(const Dependence &other) const {
 // DependenceIterator
 //===----------------------------------------------------------------------===//
 
-DependenceIterator::DependenceIterator(Scheduler &scheduler, Operation *op,
+DependenceIterator::DependenceIterator(Problem &problem, Operation *op,
                                        bool end)
-    : scheduler(scheduler), op(op), operandIdx(0), auxPredIdx(0),
-      auxPreds(nullptr), dep() {
+    : problem(problem), op(op), operandIdx(0), auxPredIdx(0), auxPreds(nullptr),
+      dep() {
   if (!end) {
-    if (scheduler.auxDependences.count(op))
-      auxPreds = &scheduler.auxDependences[op];
+    if (problem.auxDependences.count(op))
+      auxPreds = &problem.auxDependences[op];
 
     findNextDependence();
   }
@@ -200,7 +200,7 @@ void DependenceIterator::findNextDependence() {
 
     // ... but only if they are outgoing from operations that are registered in
     // the scheduling problem.
-    if (src && scheduler.hasOperation(src))
+    if (src && problem.hasOperation(src))
       return;
   }
 

@@ -24,7 +24,7 @@
 namespace circt {
 namespace scheduling {
 
-class Scheduler;
+class Problem;
 
 namespace detail {
 
@@ -90,7 +90,7 @@ public:
   /// values of other operations registered in the scheduling problem, which are
   /// used by one of \p op's operands), and over auxiliary dependences (i.e.
   /// from other operation to \p op).
-  DependenceIterator(Scheduler &scheduler, Operation *op, bool end = false);
+  DependenceIterator(Problem &problem, Operation *op, bool end = false);
 
   bool operator==(const DependenceIterator &other) const {
     return dep == other.dep;
@@ -106,7 +106,7 @@ public:
 private:
   void findNextDependence();
 
-  Scheduler &scheduler;
+  Problem &problem;
   Operation *op;
 
   unsigned operandIdx;

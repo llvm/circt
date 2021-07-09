@@ -286,11 +286,14 @@ bool TypeLoweringVisitor::processSAPath(Operation *op) {
     lowerSAWritePath(op, writePath);
     // Unhook the writePath from the connect.  This isn't the right type, but we
     // are deleting the op anyway.
-    op->setOperand(0, writePath.back()->getResult(0));
+    op->eraseOperands(0, 2);
     // See how far up the tree we can delete things.
-    for (size_t i = 1; i < writePath.size() - 1; ++i) {
-      if (writePath[i]->use_empty())
+    for (size_t i = 0; i < writePath.size(); ++i) {
+      if (writePath[i]->use_empty()) {
         writePath[i]->erase();
+      } else {
+        break;
+      }
     }
     opsToRemove.push_back(op);
     return true;
@@ -462,9 +465,9 @@ void TypeLoweringVisitor::lowerSAWritePath(Operation *op,
         leaf = cloneAccess(builder, writePath[i], leaf);
 
       if (isa<ConnectOp>(op))
-        builder->create<ConnectOp>(leaf, writePath[0]->getResult(0));
+        builder->create<ConnectOp>(leaf, op->getOperand(1));
       else
-        builder->create<PartialConnectOp>(leaf, writePath[0]->getResult(0));
+        builder->create<PartialConnectOp>(leaf, op->getOperand(1));
     });
   }
 }
@@ -512,15 +515,20 @@ void TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
       builder->create<ConnectOp>(dest, src);
       opsToRemove.push_back(op);
     } else if (destType.isa<IntType>() && srcType.isa<IntType>() &&
-               destWidth >= 0 && destWidth < srcWidth) {
-      // firrtl.tail always returns uint even for sint operands.
-      IntType tmpType = destType.cast<IntType>();
-      if (tmpType.isSigned())
-        tmpType = UIntType::get(destType.getContext(), destWidth);
-      src = builder->create<TailPrimOp>(tmpType, src, srcWidth - destWidth);
-      // Insert the cast back to signed if needed.
-      if (tmpType != destType)
-        src = builder->create<AsSIntPrimOp>(destType, src);
+               destWidth >= 0) {
+      if (destWidth < srcWidth) {
+        // firrtl.tail always returns uint even for sint operands.
+        IntType tmpType = destType.cast<IntType>();
+        if (tmpType.isSigned())
+          tmpType = UIntType::get(destType.getContext(), destWidth);
+        src = builder->create<TailPrimOp>(tmpType, src, srcWidth - destWidth);
+        // Insert the cast back to signed if needed.
+        if (tmpType != destType)
+          src = builder->create<AsSIntPrimOp>(destType, src);
+      } else {
+        // Need to extend arg
+        src = builder->create<PadPrimOp>(src, destWidth);
+      }
       builder->create<ConnectOp>(dest, src);
       opsToRemove.push_back(op);
     }
