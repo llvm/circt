@@ -2441,6 +2441,58 @@ SmallVector<Direction> direction::unpackAttribute(Operation *module) {
 }
 
 //===----------------------------------------------------------------------===//
+// Miscellaneous custom elision logic.
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseElideEmptyName(OpAsmParser &p,
+                                       NamedAttrList &resultAttrs) {
+  auto result = p.parseOptionalAttrDict(resultAttrs);
+  if (!resultAttrs.get("name"))
+    resultAttrs.append("name", p.getBuilder().getStringAttr(""));
+
+  return result;
+}
+
+static void printElideEmptyName(OpAsmPrinter &p, Operation *op,
+                                DictionaryAttr attr,
+                                ArrayRef<StringRef> extraElides = {}) {
+
+  SmallVector<StringRef> elides(extraElides.begin(), extraElides.end());
+  if (op->getAttrOfType<StringAttr>("name").getValue().empty())
+    elides.push_back("name");
+
+  p.printOptionalAttrDict(op->getAttrs(), elides);
+}
+
+static ParseResult parsePrintfAttrs(OpAsmParser &p,
+                                    NamedAttrList &resultAttrs) {
+  return parseElideEmptyName(p, resultAttrs);
+}
+
+static void printPrintfAttrs(OpAsmPrinter &p, Operation *op,
+                             DictionaryAttr attr) {
+  printElideEmptyName(p, op, attr, {"formatString"});
+}
+
+static ParseResult parseStopAttrs(OpAsmParser &p, NamedAttrList &resultAttrs) {
+  return parseElideEmptyName(p, resultAttrs);
+}
+
+static void printStopAttrs(OpAsmPrinter &p, Operation *op,
+                           DictionaryAttr attr) {
+  printElideEmptyName(p, op, attr, {"exitCode"});
+}
+
+static ParseResult parseVerifAttrs(OpAsmParser &p, NamedAttrList &resultAttrs) {
+  return parseElideEmptyName(p, resultAttrs);
+}
+
+static void printVerifAttrs(OpAsmPrinter &p, Operation *op,
+                            DictionaryAttr attr) {
+  printElideEmptyName(p, op, attr, {"message"});
+}
+
+//===----------------------------------------------------------------------===//
 // TblGen Generated Logic.
 //===----------------------------------------------------------------------===//
 

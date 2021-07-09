@@ -2022,7 +2022,11 @@ LogicalResult StmtEmitter::visitSV(FinishOp op) {
 LogicalResult StmtEmitter::visitSV(AssertOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  indent() << "assert(";
+  indent();
+  auto label = op.label();
+  if (!label.empty())
+    os << label << ": ";
+  os << "assert(";
   emitExpression(op.predicate(), ops);
   os << ");";
   emitLocationInfoAndNewLine(ops);
@@ -2032,7 +2036,11 @@ LogicalResult StmtEmitter::visitSV(AssertOp op) {
 LogicalResult StmtEmitter::visitSV(AssumeOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  indent() << "assume(";
+  indent();
+  auto label = op.label();
+  if (!label.empty())
+    os << label << ": ";
+  os << "assume(";
   emitExpression(op.property(), ops);
   os << ");";
   emitLocationInfoAndNewLine(ops);
@@ -2042,7 +2050,11 @@ LogicalResult StmtEmitter::visitSV(AssumeOp op) {
 LogicalResult StmtEmitter::visitSV(CoverOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  indent() << "cover(";
+  indent();
+  auto label = op.label();
+  if (!label.empty())
+    os << label << ": ";
+  os << "cover(";
   emitExpression(op.property(), ops);
   os << ");";
   emitLocationInfoAndNewLine(ops);

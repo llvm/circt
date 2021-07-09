@@ -252,11 +252,17 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     else :
       _t <= _t_2
 
-    ; CHECK: firrtl.printf %clock, %reset, "Something interesting!\0A %x %x"(%_t, %_t_2) : !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 12>
+    ; CHECK: firrtl.printf %clock, %reset, "Something interesting!\0A %x %x" (%_t, %_t_2) : !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 12>
     printf(clock, reset, "Something interesting!\n %x %x", _t, _t_2)
+
+    ; CHECK: firrtl.printf %clock, %reset, "Something interesting!\0A %x %x" {name = "printf_0"}(%_t, %_t_2) : !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 12>
+    printf(clock, reset, "Something interesting!\n %x %x", _t, _t_2) : printf_0
 
     ; CHECK: firrtl.stop %clock, %reset, 42
     stop(clock, reset, 42)
+
+    ; CHECK: firrtl.stop %clock, %reset, 42 {name = "stop_0"}
+    stop(clock, reset, 42) : stop_0
 
     ; CHECK: firrtl.bits %i8 4 to 2 : (!firrtl.uint<8>) -> !firrtl.uint<3>
     node n4 = bits(i8, 4, 2)
@@ -396,16 +402,22 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     en <= not(reset)
     ; CHECK: firrtl.assert %clock, %pred, %en, "X equals Y when Z is valid"
     assert(clock, pred, en, "X equals Y when Z is valid")
+    ; CHECK: firrtl.assert %clock, %pred, %en, "X equals Y when Z is valid" {name = "assert_0"}
+    assert(clock, pred, en, "X equals Y when Z is valid") : assert_0
     ; CHECK: [[C:%.+]] = firrtl.constant 1 : !firrtl.uint<1>
     ; CHECK-NEXT: firrtl.assert %clock, %pred, [[C]], "assert:X equals Y when Z is valid"
     printf(clock, pred, "assert:X equals Y when Z is valid")
     ; CHECK: firrtl.assume %clock, %pred, %en, "X equals Y when Z is valid"
     assume(clock, pred, en, "X equals Y when Z is valid")
+    ; CHECK: firrtl.assume %clock, %pred, %en, "X equals Y when Z is valid" {name = "assume_0"}
+    assume(clock, pred, en, "X equals Y when Z is valid") : assume_0
     ; CHECK: [[C2:%.+]] = firrtl.constant 1 : !firrtl.uint<1>
     ; CHECK-NEXT: firrtl.assume %clock, %pred, [[C2]], "assume:X equals Y when Z is valid"
     printf(clock, pred, "assume:X equals Y when Z is valid")
     ; CHECK: firrtl.cover %clock, %pred, %en, "X equals Y when Z is valid"
     cover(clock, pred, en, "X equals Y when Z is valid")
+    ; CHECK: firrtl.cover %clock, %pred, %en, "X equals Y when Z is valid" {name = "cover_0"}
+    cover(clock, pred, en, "X equals Y when Z is valid") : cover_0
     ; CHECK: [[C3:%.+]] = firrtl.constant 1 : !firrtl.uint<1>
     ; CHECK-NEXT: firrtl.cover %clock, %pred, [[C3]], "cover:X equals Y when Z is valid"
     printf(clock, pred, "cover:X equals Y when Z is valid")

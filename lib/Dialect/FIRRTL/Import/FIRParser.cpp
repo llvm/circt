@@ -181,6 +181,10 @@ struct FIRParser {
   /// if not, ignore it.
   ParseResult parseOptionalInfoLocator(LocationAttr &result);
 
+  /// Parse an optional name that may appear in Stop, Printf, or Verification
+  /// statements.
+  ParseResult parseOptionalName(StringAttr &name);
+
   //===--------------------------------------------------------------------===//
   // Annotation Parsing
   //===--------------------------------------------------------------------===//
@@ -544,6 +548,27 @@ ParseResult FIRParser::parseOptionalInfoLocator(LocationAttr &result) {
     std::reverse(extraLocs.begin(), extraLocs.end());
     result = FusedLoc::get(getContext(), extraLocs);
   }
+  return success();
+}
+
+/// Parse an optional trailing name that may show up on assert, assume, cover,
+/// stop, or printf.
+///
+/// optional_name ::= ( ':' id )?
+ParseResult FIRParser::parseOptionalName(StringAttr &name) {
+
+  if (getToken().isNot(FIRToken::colon)) {
+    name = StringAttr::get(getContext(), "");
+    return success();
+  }
+
+  consumeToken(FIRToken::colon);
+  StringRef nameRef;
+  if (parseId(nameRef, "expected result name"))
+    return failure();
+
+  name = StringAttr::get(getContext(), nameRef);
+
   return success();
 }
 
@@ -2266,7 +2291,7 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
                                       insertNameIntoGlobalScope);
 }
 
-/// printf ::= 'printf(' exp exp StringLit exp* ')' info?
+/// printf ::= 'printf(' exp exp StringLit exp* ')' name? info?
 ParseResult FIRStmtParser::parsePrintf() {
   auto startTok = consumeToken(FIRToken::lp_printf);
 
@@ -2285,6 +2310,10 @@ ParseResult FIRStmtParser::parsePrintf() {
       return failure();
   }
 
+  StringAttr name;
+  if (parseOptionalName(name))
+    return failure();
+
   if (parseOptionalInfo())
     return failure();
 
@@ -2296,29 +2325,30 @@ ParseResult FIRStmtParser::parsePrintf() {
     APInt constOne(1, 1, false);
     auto constTrue =
         builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
-    builder.create<CoverOp>(clock, condition, constTrue,
-                            builder.getStringAttr(formatStrUnescaped));
+    builder.create<CoverOp>(clock, condition, constTrue, formatStrUnescaped,
+                            "");
     return success();
   }
   if (formatStringRef.startswith("assert:")) {
     APInt constOne(1, 1, false);
     auto constTrue =
         builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
-    builder.create<AssertOp>(clock, condition, constTrue,
-                             builder.getStringAttr(formatStrUnescaped));
+    builder.create<AssertOp>(clock, condition, constTrue, formatStrUnescaped,
+                             "");
     return success();
   }
   if (formatStringRef.startswith("assume:")) {
     APInt constOne(1, 1, false);
     auto constTrue =
         builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
-    builder.create<AssumeOp>(clock, condition, constTrue,
-                             builder.getStringAttr(formatStrUnescaped));
+    builder.create<AssumeOp>(clock, condition, constTrue, formatStrUnescaped,
+                             "");
     return success();
   }
 
   builder.create<PrintFOp>(clock, condition,
-                           builder.getStringAttr(formatStrUnescaped), operands);
+                           builder.getStringAttr(formatStrUnescaped), operands,
+                           name);
   return success();
 }
 
@@ -2345,15 +2375,17 @@ ParseResult FIRStmtParser::parseStop() {
 
   Value clock, condition;
   int64_t exitCode;
+  StringAttr name;
   if (parseExp(clock, "expected clock expression in 'stop'") ||
       parseExp(condition, "expected condition in 'stop'") ||
       parseIntLit(exitCode, "expected exit code in 'stop'") ||
       parseToken(FIRToken::r_paren, "expected ')' in 'stop'") ||
-      parseOptionalInfo())
+      parseOptionalName(name) || parseOptionalInfo())
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
-  builder.create<StopOp>(clock, condition, builder.getI32IntegerAttr(exitCode));
+  builder.create<StopOp>(clock, condition, builder.getI32IntegerAttr(exitCode),
+                         name);
   return success();
 }
 
@@ -2363,19 +2395,20 @@ ParseResult FIRStmtParser::parseAssert() {
 
   Value clock, predicate, enable;
   StringRef message;
+  StringAttr name;
   if (parseExp(clock, "expected clock expression in 'assert'") ||
       parseExp(predicate, "expected predicate in 'assert'") ||
       parseExp(enable, "expected enable in 'assert'") ||
       parseGetSpelling(message) ||
       parseToken(FIRToken::string, "expected message in 'assert'") ||
       parseToken(FIRToken::r_paren, "expected ')' in 'assert'") ||
-      parseOptionalInfo())
+      parseOptionalName(name) || parseOptionalInfo())
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
   auto messageUnescaped = FIRToken::getStringValue(message);
   builder.create<AssertOp>(clock, predicate, enable,
-                           builder.getStringAttr(messageUnescaped));
+                           builder.getStringAttr(messageUnescaped), name);
   return success();
 }
 
@@ -2385,19 +2418,20 @@ ParseResult FIRStmtParser::parseAssume() {
 
   Value clock, predicate, enable;
   StringRef message;
+  StringAttr name;
   if (parseExp(clock, "expected clock expression in 'assume'") ||
       parseExp(predicate, "expected predicate in 'assume'") ||
       parseExp(enable, "expected enable in 'assume'") ||
       parseGetSpelling(message) ||
       parseToken(FIRToken::string, "expected message in 'assume'") ||
       parseToken(FIRToken::r_paren, "expected ')' in 'assume'") ||
-      parseOptionalInfo())
+      parseOptionalName(name) || parseOptionalInfo())
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
   auto messageUnescaped = FIRToken::getStringValue(message);
   builder.create<AssumeOp>(clock, predicate, enable,
-                           builder.getStringAttr(messageUnescaped));
+                           builder.getStringAttr(messageUnescaped), name);
   return success();
 }
 
@@ -2407,19 +2441,20 @@ ParseResult FIRStmtParser::parseCover() {
 
   Value clock, predicate, enable;
   StringRef message;
+  StringAttr name;
   if (parseExp(clock, "expected clock expression in 'cover'") ||
       parseExp(predicate, "expected predicate in 'cover'") ||
       parseExp(enable, "expected enable in 'cover'") ||
       parseGetSpelling(message) ||
       parseToken(FIRToken::string, "expected message in 'cover'") ||
       parseToken(FIRToken::r_paren, "expected ')' in 'cover'") ||
-      parseOptionalInfo())
+      parseOptionalName(name) || parseOptionalInfo())
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
   auto messageUnescaped = FIRToken::getStringValue(message);
   builder.create<CoverOp>(clock, predicate, enable,
-                          builder.getStringAttr(messageUnescaped));
+                          builder.getStringAttr(messageUnescaped), name);
   return success();
 }
 

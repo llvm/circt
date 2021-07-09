@@ -63,12 +63,12 @@ def PrintFOp : FIRRTLOp<"printf"> {
   let summary = "Formatted Print Statement";
 
   let arguments = (ins ClockType:$clock, UInt1Type:$cond, StrAttr:$formatString,
-                       Variadic<FIRRTLType>:$operands);
+                       Variadic<FIRRTLType>:$operands, StrAttr:$name);
   let results = (outs);
 
   let assemblyFormat = [{
-    $clock `,` $cond `,` $formatString attr-dict (`(` $operands^ `)`
-    `:` type($operands))?
+    $clock `,` $cond `,` $formatString custom<PrintfAttrs>(attr-dict)
+    (`(` $operands^ `)` `:` type($operands))?
   }];
 }
 
@@ -92,43 +92,44 @@ def SkipOp : FIRRTLOp<"skip", [NoSideEffect]> {
 def StopOp : FIRRTLOp<"stop"> {
   let summary = "Stop Statement";
 
-  let arguments = (ins ClockType:$clock, UInt1Type:$cond, I32Attr:$exitCode);
+  let arguments = (ins ClockType:$clock, UInt1Type:$cond, I32Attr:$exitCode,
+                       StrAttr:$name);
   let results = (outs);
 
-  let assemblyFormat = "$clock `,` $cond `,` $exitCode attr-dict";
+  let assemblyFormat = "$clock `,` $cond `,` $exitCode custom<StopAttrs>(attr-dict)";
 }
 
 def AssertOp : FIRRTLOp<"assert"> {
   let summary = "Assert Verification Statement";
 
   let arguments = (ins ClockType:$clock, UInt1Type:$predicate, UInt1Type:$enable,
-    StrAttr:$message);
+    StrAttr:$message, StrAttr:$name);
   let results = (outs);
 
   let assemblyFormat =
-    "$clock `,` $predicate `,` $enable `,` $message attr-dict";
+    "$clock `,` $predicate `,` $enable `,` $message custom<VerifAttrs>(attr-dict)";
 }
 
 def AssumeOp : FIRRTLOp<"assume"> {
   let summary = "Assume Verification Statement";
 
   let arguments = (ins ClockType:$clock, UInt1Type:$predicate, UInt1Type:$enable,
-    StrAttr:$message);
+    StrAttr:$message, StrAttr:$name);
   let results = (outs);
 
   let assemblyFormat =
-    "$clock `,` $predicate `,` $enable `,` $message attr-dict";
+    "$clock `,` $predicate `,` $enable `,` $message custom<VerifAttrs>(attr-dict)";
 }
 
 def CoverOp : FIRRTLOp<"cover"> {
   let summary = "Cover Verification Statement";
 
   let arguments = (ins ClockType:$clock, UInt1Type:$predicate, UInt1Type:$enable,
-    StrAttr:$message);
+    StrAttr:$message, StrAttr:$name);
   let results = (outs);
 
   let assemblyFormat =
-    "$clock `,` $predicate `,` $enable `,` $message attr-dict";
+    "$clock `,` $predicate `,` $enable `,` $message custom<VerifAttrs>(attr-dict)";
 }
 
 def WhenOp : FIRRTLOp<"when", [SingleBlock, NoTerminator, NoRegionArguments,

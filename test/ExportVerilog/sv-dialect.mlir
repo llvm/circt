@@ -133,10 +133,18 @@ hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
 
       // CHECK-NEXT:     assert(cond);
       sv.assert %cond : i1
+      // CHECK-NEXT:     assert_0: assert(cond);
+      sv.assert "assert_0" %cond : i1
+
       // CHECK-NEXT:     assume(cond);
       sv.assume %cond : i1
+      // CHECK-NEXT:     assume_0: assume(cond);
+      sv.assume "assume_0" %cond : i1
+
       // CHECK-NEXT:     cover(cond);
       sv.cover %cond : i1
+      // CHECK-NEXT:     cover_0: cover(cond);
+      sv.cover "cover_0" %cond : i1
 
       // CHECK-NEXT:   $fatal
       sv.fatal

@@ -339,8 +339,11 @@ firrtl.circuit "Simple" {
 //     input cCond: UInt<1>
 //     input cEn: UInt<1>
 //     assert(clock, bCond, bEn, "assert0")
+//     assert(clock, bCond, bEn, "assert0") : assert_0
 //     assume(clock, aCond, aEn, "assume0")
-//     cover(clock,  cCond, cEn, "cover0")
+//     assume(clock, aCond, aEn, "assume0") : assume_0
+//     cover(clock,  cCond, cEn, "cover0)"
+//     cover(clock,  cCond, cEn, "cover0)" : cover_0
 
   // CHECK-LABEL: hw.module @Verification
   firrtl.module @Verification(in %clock: !firrtl.clock, in %aCond: !firrtl.uint<1>,
@@ -350,17 +353,23 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: sv.always posedge %clock {
     // CHECK-NEXT:   sv.if %aEn {
     // CHECK-NEXT:     sv.assert %aCond : i1
+    // CHECK-NEXT:     sv.assert "assert_0" %aCond : i1
     // CHECK-NEXT:   }
     // CHECK-NEXT:   sv.if %bEn {
     // CHECK-NEXT:     sv.assume %bCond  : i1
+    // CHECK-NEXT:     sv.assume "assume_0" %bCond  : i1
     // CHECK-NEXT:   }
     // CHECK-NEXT:   sv.if %cEn {
     // CHECK-NEXT:     sv.cover %cCond : i1
+    // CHECK-NEXT:     sv.cover "cover_0" %cCond : i1
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
     firrtl.assert %clock, %aCond, %aEn, "assert0"
+    firrtl.assert %clock, %aCond, %aEn, "assert0" {name = "assert_0"}
     firrtl.assume %clock, %bCond, %bEn, "assume0"
+    firrtl.assume %clock, %bCond, %bEn, "assume0" {name = "assume_0"}
     firrtl.cover %clock, %cCond, %cEn, "cover0"
+    firrtl.cover %clock, %cCond, %cEn, "cover0" {name = "cover_0"}
     // CHECK-NEXT: hw.output
   }
 
