@@ -448,6 +448,10 @@ class ModuleDefinition(hw.HWModuleOp):
   def __getattr__(self, name):
     if name in self.input_indices:
       index = self.input_indices[name]
-      return Value(self.entry_block.arguments[index],
-                   self.modcls._input_ports_lookup[name])
+      val = self.entry_block.arguments[index]
+      if self.modcls:
+        ty = self.modcls._input_ports_lookup[name]
+      else:
+        ty = support.type_to_pytype(val.type)
+      return Value(val, ty)
     raise AttributeError(f"unknown input port name {name}")
