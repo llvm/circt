@@ -916,22 +916,15 @@ firrtl.circuit "TopLevel" {
 // CHECK-LABEL:    firrtl.module @write1D(in %b: !firrtl.uint<1>, in %sel: !firrtl.uint<2>, in %default_0: !firrtl.uint<1>, in %default_1: !firrtl.uint<1>, out %a_0: !firrtl.uint<1>, out %a_1: !firrtl.uint<1>) {
 // CHECK-NEXT:      firrtl.connect %a_0, %default_0 : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:      firrtl.connect %a_1, %default_1 : !firrtl.uint<1>, !firrtl.uint<1>
-// CHECK-NEXT:      %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
 // CHECK-NEXT:      %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
 // CHECK-NEXT:      %0 = firrtl.eq %sel, %c0_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
-// CHECK-NEXT:      %1 = firrtl.mux(%0, %a_0, %invalid_ui1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:      %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
-// CHECK-NEXT:      %2 = firrtl.eq %sel, %c1_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
-// CHECK-NEXT:      %3 = firrtl.mux(%2, %a_1, %1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:      %c0_ui2_0 = firrtl.constant 0 : !firrtl.uint<2>
-// CHECK-NEXT:      %4 = firrtl.eq %sel, %c0_ui2_0 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
-// CHECK-NEXT:      firrtl.when %4  {
-// CHECK-NEXT:        firrtl.connect %a_0, %3 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK-NEXT:      firrtl.when %0  {
+// CHECK-NEXT:        firrtl.connect %a_0, %b : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:      }
-// CHECK-NEXT:      %c1_ui2_1 = firrtl.constant 1 : !firrtl.uint<2>
-// CHECK-NEXT:      %5 = firrtl.eq %sel, %c1_ui2_1 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
-// CHECK-NEXT:      firrtl.when %5  {
-// CHECK-NEXT:        firrtl.connect %a_1, %3 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK-NEXT:      %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
+// CHECK-NEXT:      %1 = firrtl.eq %sel, %c1_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK-NEXT:      firrtl.when %1  {
+// CHECK-NEXT:        firrtl.connect %a_1, %b : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
 
@@ -950,63 +943,32 @@ firrtl.circuit "TopLevel" {
     firrtl.connect %1, %b : !firrtl.uint<2>, !firrtl.uint<2>
   }
 // CHECK-LABEL:    firrtl.module @multidimWrite(in %sel: !firrtl.uint<1>, in %b: !firrtl.uint<2>, out %a_0_0: !firrtl.uint<2>, out %a_0_1: !firrtl.uint<2>, out %a_1_0: !firrtl.uint<2>, out %a_1_1: !firrtl.uint<2>) {
-// CHECK-NEXT:      %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
-// CHECK-NEXT:      %invalid_ui2_0 = firrtl.invalidvalue : !firrtl.uint<2>
 // CHECK-NEXT:      %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
 // CHECK-NEXT:      %0 = firrtl.eq %sel, %c0_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:      %1 = firrtl.mux(%0, %a_0_0, %invalid_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK-NEXT:      %2 = firrtl.mux(%0, %a_0_1, %invalid_ui2_0) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK-NEXT:      %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK-NEXT:      %3 = firrtl.eq %sel, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:      %4 = firrtl.mux(%3, %a_1_0, %1) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK-NEXT:      %5 = firrtl.mux(%3, %a_1_1, %2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK-NEXT:      %invalid_ui2_1 = firrtl.invalidvalue : !firrtl.uint<2>
-// CHECK-NEXT:      %c0_ui1_2 = firrtl.constant 0 : !firrtl.uint<1>
-// CHECK-NEXT:      %6 = firrtl.eq %sel, %c0_ui1_2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:      %7 = firrtl.mux(%6, %4, %invalid_ui2_1) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK-NEXT:      %c1_ui1_3 = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK-NEXT:      %8 = firrtl.eq %sel, %c1_ui1_3 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:      %9 = firrtl.mux(%8, %5, %7) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK-NEXT:      %c0_ui1_4 = firrtl.constant 0 : !firrtl.uint<1>
-// CHECK-NEXT:      %10 = firrtl.eq %sel, %c0_ui1_4 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:      firrtl.when %10  {
-// CHECK-NEXT:        %invalid_ui2_6 = firrtl.invalidvalue : !firrtl.uint<2>
-// CHECK-NEXT:        %c0_ui1_7 = firrtl.constant 0 : !firrtl.uint<1>
-// CHECK-NEXT:        %12 = firrtl.eq %sel, %c0_ui1_7 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:        %13 = firrtl.mux(%12, %a_0_0, %invalid_ui2_6) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK-NEXT:        %c1_ui1_8 = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK-NEXT:        %14 = firrtl.eq %sel, %c1_ui1_8 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:        %15 = firrtl.mux(%14, %a_0_1, %13) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK-NEXT:        %c0_ui1_9 = firrtl.constant 0 : !firrtl.uint<1>
-// CHECK-NEXT:        %16 = firrtl.eq %sel, %c0_ui1_9 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:        firrtl.when %16  {
-// CHECK-NEXT:          firrtl.connect %a_0_0, %15 : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK-NEXT:      firrtl.when %0  {
+// CHECK-NEXT:        %c0_ui1_0 = firrtl.constant 0 : !firrtl.uint<1>
+// CHECK-NEXT:        %2 = firrtl.eq %sel, %c0_ui1_0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:        firrtl.when %2  {
+// CHECK-NEXT:          firrtl.connect %a_0_0, %b : !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK-NEXT:        }
-// CHECK-NEXT:        %c1_ui1_10 = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK-NEXT:        %17 = firrtl.eq %sel, %c1_ui1_10 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:        firrtl.when %17  {
-// CHECK-NEXT:          firrtl.connect %a_0_1, %15 : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK-NEXT:        %c1_ui1_1 = firrtl.constant 1 : !firrtl.uint<1>
+// CHECK-NEXT:        %3 = firrtl.eq %sel, %c1_ui1_1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:        firrtl.when %3  {
+// CHECK-NEXT:          firrtl.connect %a_0_1, %b : !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK-NEXT:        }
 // CHECK-NEXT:      }
-// CHECK-NEXT:      %c1_ui1_5 = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK-NEXT:      %11 = firrtl.eq %sel, %c1_ui1_5 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:      firrtl.when %11  {
-// CHECK-NEXT:        %invalid_ui2_6 = firrtl.invalidvalue : !firrtl.uint<2>
-// CHECK-NEXT:        %c0_ui1_7 = firrtl.constant 0 : !firrtl.uint<1>
-// CHECK-NEXT:        %12 = firrtl.eq %sel, %c0_ui1_7 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:        %13 = firrtl.mux(%12, %a_1_0, %invalid_ui2_6) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK-NEXT:        %c1_ui1_8 = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK-NEXT:        %14 = firrtl.eq %sel, %c1_ui1_8 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:        %15 = firrtl.mux(%14, %a_1_1, %13) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK-NEXT:        %c0_ui1_9 = firrtl.constant 0 : !firrtl.uint<1>
-// CHECK-NEXT:        %16 = firrtl.eq %sel, %c0_ui1_9 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:        firrtl.when %16  {
-// CHECK-NEXT:          firrtl.connect %a_1_0, %15 : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK-NEXT:      %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+// CHECK-NEXT:      %1 = firrtl.eq %sel, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:      firrtl.when %1  {
+// CHECK-NEXT:        %c0_ui1_0 = firrtl.constant 0 : !firrtl.uint<1>
+// CHECK-NEXT:        %2 = firrtl.eq %sel, %c0_ui1_0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:        firrtl.when %2  {
+// CHECK-NEXT:          firrtl.connect %a_1_0, %b : !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK-NEXT:        }
-// CHECK-NEXT:        %c1_ui1_10 = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK-NEXT:        %17 = firrtl.eq %sel, %c1_ui1_10 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:        firrtl.when %17  {
-// CHECK-NEXT:          firrtl.connect %a_1_1, %15 : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK-NEXT:        %c1_ui1_1 = firrtl.constant 1 : !firrtl.uint<1>
+// CHECK-NEXT:        %3 = firrtl.eq %sel, %c1_ui1_1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK-NEXT:        firrtl.when %3  {
+// CHECK-NEXT:          firrtl.connect %a_1_1, %b : !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK-NEXT:        }
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
@@ -1033,25 +995,15 @@ firrtl.circuit "TopLevel" {
 // CHECK-NEXT:      firrtl.connect %b_0_valid, %def_0_valid : !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK-NEXT:      firrtl.connect %b_1_wo, %def_1_wo : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:      firrtl.connect %b_1_valid, %def_1_valid : !firrtl.uint<2>, !firrtl.uint<2>
-// CHECK-NEXT:      %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
-// CHECK-NEXT:      %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
 // CHECK-NEXT:      %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
 // CHECK-NEXT:      %0 = firrtl.eq %sel, %c0_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
-// CHECK-NEXT:      %1 = firrtl.mux(%0, %b_0_wo, %invalid_ui1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:      %2 = firrtl.mux(%0, %b_0_valid, %invalid_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK-NEXT:      %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
-// CHECK-NEXT:      %3 = firrtl.eq %sel, %c1_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
-// CHECK-NEXT:      %4 = firrtl.mux(%3, %b_1_wo, %1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:      %5 = firrtl.mux(%3, %b_1_valid, %2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK-NEXT:      %c0_ui2_0 = firrtl.constant 0 : !firrtl.uint<2>
-// CHECK-NEXT:      %6 = firrtl.eq %sel, %c0_ui2_0 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
-// CHECK-NEXT:      firrtl.when %6  {
-// CHECK-NEXT:        firrtl.connect %b_0_wo, %4 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK-NEXT:      firrtl.when %0  {
+// CHECK-NEXT:        firrtl.connect %b_0_wo, %a_wo : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:      }
-// CHECK-NEXT:      %c1_ui2_1 = firrtl.constant 1 : !firrtl.uint<2>
-// CHECK-NEXT:      %7 = firrtl.eq %sel, %c1_ui2_1 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
-// CHECK-NEXT:      firrtl.when %7  {
-// CHECK-NEXT:        firrtl.connect %b_1_wo, %4 : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK-NEXT:      %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
+// CHECK-NEXT:      %1 = firrtl.eq %sel, %c1_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<1>
+// CHECK-NEXT:      firrtl.when %1  {
+// CHECK-NEXT:        firrtl.connect %b_1_wo, %a_wo : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
 
