@@ -48,7 +48,8 @@ firrtl.circuit "unprocessedAnnotations" {
 
 // -----
 
-firrtl.circuit "moduleAnno" {
+// expected-warning @+1 {{unprocessed annotation:'circuitOpAnnotation'}}
+firrtl.circuit "moduleAnno" attributes {annotations = [{class = "circuitOpAnnotation"}]} {
   // expected-warning @+1 {{unprocessed annotation:'a'}}
   firrtl.module @moduleAnno(in %io_cpu_flush: !firrtl.uint<1> 
     {firrtl.annotations = [{class="a"}]}  ){  }
