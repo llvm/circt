@@ -2325,27 +2325,24 @@ ParseResult FIRStmtParser::parsePrintf() {
     APInt constOne(1, 1, false);
     auto constTrue =
         builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
-    builder.create<CoverOp>(clock, condition, constTrue,
-                            builder.getStringAttr(formatStrUnescaped),
-                            builder.getStringAttr(""));
+    builder.create<CoverOp>(clock, condition, constTrue, formatStrUnescaped,
+                            "");
     return success();
   }
   if (formatStringRef.startswith("assert:")) {
     APInt constOne(1, 1, false);
     auto constTrue =
         builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
-    builder.create<AssertOp>(clock, condition, constTrue,
-                             builder.getStringAttr(formatStrUnescaped),
-                             builder.getStringAttr(""));
+    builder.create<AssertOp>(clock, condition, constTrue, formatStrUnescaped,
+                             "");
     return success();
   }
   if (formatStringRef.startswith("assume:")) {
     APInt constOne(1, 1, false);
     auto constTrue =
         builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
-    builder.create<AssumeOp>(clock, condition, constTrue,
-                             builder.getStringAttr(formatStrUnescaped),
-                             builder.getStringAttr(""));
+    builder.create<AssumeOp>(clock, condition, constTrue, formatStrUnescaped,
+                             "");
     return success();
   }
 
