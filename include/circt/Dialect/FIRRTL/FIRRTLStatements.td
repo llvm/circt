@@ -155,7 +155,7 @@ def WhenOp : FIRRTLOp<"when", [SingleBlock, NoTerminator, NoRegionArguments,
     "$condition $thenRegion (`else` $elseRegion^)? attr-dict-with-keyword";
 
   let extraClassDeclaration = [{
-    
+
     Block &getThenBlock() {
       assert(!thenRegion().empty() && "Unexpected empty 'then' region.");
       return thenRegion().front();

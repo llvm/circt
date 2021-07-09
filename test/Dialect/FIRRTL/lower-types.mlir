@@ -174,9 +174,9 @@ firrtl.circuit "TopLevel" {
     // CHECK-NEXT: %[[MEMORY_B_R_CLK:.+]] = firrtl.subfield %[[MEMORY_B_R]](2)
     // CHECK-NEXT: firrtl.connect %[[MEMORY_B_R_CLK]], %[[MEMORY_R_CLK]]
     // CHECK-NEXT: %[[MEMORY_A_R_DATA:.+]] = firrtl.subfield %[[MEMORY_A_R]](3)
-    // CHECK-NEXT: firrtl.connect %[[WIRE_A_R_DATA:.+]], %[[MEMORY_A_R_DATA]] : 
+    // CHECK-NEXT: firrtl.connect %[[WIRE_A_R_DATA:.+]], %[[MEMORY_A_R_DATA]] :
     // CHECK-NEXT: %[[MEMORY_B_R_DATA:.+]] = firrtl.subfield %[[MEMORY_B_R]](3)
-    // CHECK-NEXT: firrtl.connect %[[WIRE_B_R_DATA:.+]], %[[MEMORY_B_R_DATA]] : 
+    // CHECK-NEXT: firrtl.connect %[[WIRE_B_R_DATA:.+]], %[[MEMORY_B_R_DATA]] :
     // COM: ---------------------------------------------------------------------------------
     // COM: Write Ports
     // CHECK-NEXT: %[[MEMORY_A_W_ADDR:.+]] = firrtl.subfield %[[MEMORY_A_W]](0)
@@ -280,10 +280,10 @@ firrtl.circuit "TopLevel" {
       %1 = firrtl.invalidvalue : !firrtl.bundle<inp_d: uint<14>>
       firrtl.connect %U0_inp_a, %1 : !firrtl.bundle<inp_d: uint<14>>, !firrtl.bundle<inp_d: uint<14>>
     }
- 
 
 
-//CHECK-LABEL:     firrtl.module @mod_2(in %clock: !firrtl.clock, in %inp_a_inp_d: !firrtl.uint<14>) 
+
+//CHECK-LABEL:     firrtl.module @mod_2(in %clock: !firrtl.clock, in %inp_a_inp_d: !firrtl.uint<14>)
 //CHECK:    firrtl.module @top_mod(in %clock: !firrtl.clock)
 //CHECK-NEXT:      %U0_clock, %U0_inp_a_inp_d = firrtl.instance @mod_2 {name = "U0"} : !firrtl.clock, !firrtl.uint<14>
 //CHECK-NEXT:      %invalid_clock = firrtl.invalidvalue : !firrtl.clock
@@ -869,7 +869,7 @@ firrtl.circuit "TopLevel" {
 // COM:     input a: UInt<2>[2][2]
 // COM:     input sel: UInt<2>
 // COM:     output b: UInt<2>
-// COM: 
+// COM:
 // COM:     b <= a[sel][sel]
 
   firrtl.module @multidimRead(in %a: !firrtl.vector<vector<uint<2>, 2>, 2>, in %sel: !firrtl.uint<2>, out %b: !firrtl.uint<2>) {
@@ -904,7 +904,7 @@ firrtl.circuit "TopLevel" {
 // COM:    input sel: UInt<2>
 // COM:    input default: UInt<1>[4]
 // COM:    output a: UInt<1>[4]
-// COM: 
+// COM:
 // COM:     a <= default
 // COM:     a[sel] <= b
 
@@ -934,7 +934,7 @@ firrtl.circuit "TopLevel" {
 // COM:     input sel: UInt<1>
 // COM:     input b: UInt<2>
 // COM:     output a: UInt<2>[2][2]
-// COM: 
+// COM:
 // COM:     a[sel][sel] <= b
 
   firrtl.module @multidimWrite(in %sel: !firrtl.uint<1>, in %b: !firrtl.uint<2>, out %a: !firrtl.vector<vector<uint<2>, 2>, 2>) {
@@ -979,8 +979,8 @@ firrtl.circuit "TopLevel" {
 // COM:     input def: {wo: UInt<1>, valid: UInt<2>}[4]
 // COM:     input sel: UInt<2>
 // COM:     output b: {wo: UInt<1>, valid: UInt<2>}[4]
-// COM: 
-// COM:     b <= def 
+// COM:
+// COM:     b <= def
 // COM:     b[sel].wo <= a.wo
   firrtl.module @writeVectorOfBundle1D(in %a: !firrtl.bundle<wo: uint<1>, valid: uint<2>>, in %def: !firrtl.vector<bundle<wo: uint<1>, valid: uint<2>>, 2>, in %sel: !firrtl.uint<2>, out %b: !firrtl.vector<bundle<wo: uint<1>, valid: uint<2>>, 2>) {
     firrtl.connect %b, %def : !firrtl.vector<bundle<wo: uint<1>, valid: uint<2>>, 2>, !firrtl.vector<bundle<wo: uint<1>, valid: uint<2>>, 2>
@@ -1014,7 +1014,7 @@ firrtl.circuit "TopLevel" {
 // COM:     input sel2: UInt<1>
 // COM:     output b: UInt<2>
 // COM:     output c: UInt<2>
-// COM: 
+// COM:
 // COM:     b <= a[sel1][sel1]
 // COM:     c <= a[sel1][sel2]
   firrtl.module @multiSubaccess(in %a: !firrtl.vector<vector<uint<2>, 2>, 2>, in %sel1: !firrtl.uint<1>, in %sel2: !firrtl.uint<1>, out %b: !firrtl.uint<2>, out %c: !firrtl.uint<2>) {
@@ -1111,7 +1111,7 @@ firrtl.circuit "TopLevel" {
           [{a}, #firrtl.subAnno<fieldID = [5, 5], {b}>],
           [#firrtl.subAnno<fieldID = [2, 2], {c}>, #firrtl.subAnno<fieldID = [6, 6], {d}>]
         ],
-        portNames = ["r", "w"], readLatency = 0 : i32, writeLatency = 1 : i32} : 
+        portNames = ["r", "w"], readLatency = 0 : i32, writeLatency = 1 : i32} :
         !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<baz: uint<8>, qux: uint<8>>>,
         !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<baz: uint<8>, qux: uint<8>>, mask: bundle<baz: uint<1>, qux: uint<1>>>
   }

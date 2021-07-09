@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-// 
+//
 // Package: Cosim_DpiPkg
 //
 // DPI-exposed funcs for cosimserver cosimulation unit-test.
@@ -45,7 +45,7 @@ import "DPI-C" sv2cCosimserverEpRegister =
 
 // Attempt to send data to a client.
 // - return 0 on success, negative on failure (unregistered EP).
-import "DPI-C" sv2cCosimserverEpTryPut = 
+import "DPI-C" sv2cCosimserverEpTryPut =
   function int cosim_ep_tryput(
     // The ID of the endpoint to which the data should be sent.
     input int unsigned endpoint_id,
@@ -61,7 +61,7 @@ import "DPI-C" sv2cCosimserverEpTryPut =
 //   - Assumes buffer is large enough to contain entire message. Fails if not
 //   large enough. (In the future, will add support for getting the message into
 //   a fixed-size buffer over multiple calls.)
-import "DPI-C" sv2cCosimserverEpTryGet = 
+import "DPI-C" sv2cCosimserverEpTryGet =
   function int cosim_ep_tryget(
     // The ID of the endpoint from which data should be recieved.
     input  int unsigned endpoint_id,

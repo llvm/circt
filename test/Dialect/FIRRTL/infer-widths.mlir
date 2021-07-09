@@ -565,7 +565,7 @@ firrtl.circuit "Foo" {
 
   // CHECK-LABEL: @InferEmptyBundle
   firrtl.module @InferEmptyBundle(in %in : !firrtl.uint<3>) {
-    // CHECK: %w = firrtl.wire : !firrtl.bundle<a: bundle<>, b: uint<3>> 
+    // CHECK: %w = firrtl.wire : !firrtl.bundle<a: bundle<>, b: uint<3>>
     %w = firrtl.wire : !firrtl.bundle<a: bundle<>, b: uint>
     %w_a = firrtl.subfield %w(0) : (!firrtl.bundle<a: bundle<>, b: uint>) -> !firrtl.bundle<>
     %w_b = firrtl.subfield %w(1) : (!firrtl.bundle<a: bundle<>, b: uint>) -> !firrtl.uint
@@ -631,10 +631,10 @@ firrtl.circuit "Foo" {
     %c2_ui3 = firrtl.constant 2 : !firrtl.uint<3>
     firrtl.connect %w_a, %c2_ui3 : !firrtl.uint, !firrtl.uint<3>
   }
-  
+
   // CHECK-LABEL: InferComplexBundles
   firrtl.module @InferComplexBundles() {
-    // CHECK: %w = firrtl.wire : !firrtl.bundle<a: bundle<v: vector<uint<3>, 10>>, b: bundle<v: vector<uint<3>, 10>>> 
+    // CHECK: %w = firrtl.wire : !firrtl.bundle<a: bundle<v: vector<uint<3>, 10>>, b: bundle<v: vector<uint<3>, 10>>>
     %w = firrtl.wire : !firrtl.bundle<a: bundle<v: vector<uint, 10>>, b: bundle <v: vector<uint, 10>>>
     %w_a = firrtl.subfield %w(0) : (!firrtl.bundle<a: bundle<v: vector<uint, 10>>, b: bundle <v: vector<uint, 10>>>) -> !firrtl.bundle<v : vector<uint, 10>>
     %w_a_v = firrtl.subfield %w_a(0) : (!firrtl.bundle<v : vector<uint, 10>>) -> !firrtl.vector<uint, 10>

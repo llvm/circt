@@ -825,7 +825,7 @@ hw.module @mux_canonicalize4(%a: i1, %b: i1, %c: i4) -> (i1, i1, i4, i4) {
 // CHECK-NEXT:   %0 = comb.xor %arg, %true : i1
 // CHECK-NEXT:   %1 = comb.xor %arg, %true : i1
 // CHECK-NEXT:   hw.output %0, %arg, %arg, %1 : i1, i1, i1, i1
-// CHECK-NEXT:   }  
+// CHECK-NEXT:   }
 hw.module @icmp_fold_1bit_eq1(%arg: i1) -> (i1, i1, i1, i1) {
   %zero = hw.constant 0 : i1
   %one = hw.constant 1 : i1
@@ -877,7 +877,7 @@ hw.module @issue955() -> (i100, i100) {
   %1 = comb.and %0, %0 : i100
 
   // CHECK-DAG: = hw.constant 18446744073709551616 : i100
-  
+
   // (1 << 64) + 1
   %2 = hw.constant 18446744073709551617 : i100
   %3 = comb.and %2, %2 : i100
@@ -983,7 +983,7 @@ hw.module @wire5() -> () {
 // CHECK-NEXT:    %2 = comb.add %0, %1 : i3
 // CHECK-NEXT:    %3 = comb.icmp eq %2, %arg2 : i3
 // CHECK-NEXT:    hw.output %myext.out : i8
-  
+
 hw.module @instance_ooo(%arg0: i2, %arg1: i2, %arg2: i3) -> (%out0: i8) {
   %false = hw.constant false
     %.in.wire = sv.wire  : !hw.inout<i1>
@@ -1026,7 +1026,7 @@ hw.module @TestInstance(%u2: i2, %s8: i8, %clock: i1, %reset: i1) {
 }
 
 // CHECK-LABEL:  hw.module @instance_cyclic(%arg0: i2, %arg1: i2) {
-// CHECK-NEXT:    %myext.out = hw.instance "myext" @MyParameterizedExtModule(%0) 
+// CHECK-NEXT:    %myext.out = hw.instance "myext" @MyParameterizedExtModule(%0)
 // CHECK-NEXT:    %0 = comb.extract %myext.out from 2 : (i8) -> i1
 // CHECK-NEXT:    hw.output
 // CHECK-NEXT:  }
@@ -1039,7 +1039,7 @@ hw.module @instance_cyclic(%arg0: i2, %arg1: i2) {
   hw.output
 }
 
-  hw.module.extern @ZeroWidthPorts(%inA: i4) -> (%outa: i4) 
+  hw.module.extern @ZeroWidthPorts(%inA: i4) -> (%outa: i4)
 // CHECK-LABEL:  hw.module @ZeroWidthInstance(%iA: i4) -> (%oA: i4) {
 // CHECK-NEXT:    %myinst.outa = hw.instance "myinst" @ZeroWidthPorts(%iA) : (i4) -> i4
 // CHECK-NEXT:    hw.output %myinst.outa : i4

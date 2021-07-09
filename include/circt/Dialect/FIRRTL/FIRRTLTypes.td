@@ -156,4 +156,3 @@ def InvalidValueAttr
                                    "return $_get(type.getContext(), type);">
   ];
 }
-

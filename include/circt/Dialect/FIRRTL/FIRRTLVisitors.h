@@ -289,7 +289,7 @@ public:
   /// visitUnhandledOp is an override point for FIRRTL dialect ops that the
   /// concrete visitor didn't bother to implement.
   ResultType visitUnhandledOp(Operation *op, ExtraArgs... args) {
-    return ResultType(); 
+    return ResultType();
   }
 };
 } // namespace firrtl

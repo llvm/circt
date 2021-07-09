@@ -161,19 +161,19 @@ firrtl.circuit "Issue1188"  {
 // -----
 // DontTouch annotation should block constant propagation.
 firrtl.circuit "testDontTouch"  {
-  // CHECK-LABEL: firrtl.module @blockProp 
+  // CHECK-LABEL: firrtl.module @blockProp
   firrtl.module @blockProp1(in %clock: !firrtl.clock, in %a: !firrtl.uint<1> {firrtl.annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}, out %b: !firrtl.uint<1>) {
-    //CHECK: %c = firrtl.reg 
+    //CHECK: %c = firrtl.reg
     %c = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
     firrtl.connect %c, %a : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %b, %c : !firrtl.uint<1>, !firrtl.uint<1>
   }
-  // CHECK-LABEL: firrtl.module @allowProp 
+  // CHECK-LABEL: firrtl.module @allowProp
   firrtl.module @allowProp(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
     // CHECK: [[CONST:%.+]] = firrtl.constant 1 : !firrtl.uint<1>
     %c = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
     firrtl.connect %c, %a : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK: firrtl.connect %b, [[CONST]] 
+    // CHECK: firrtl.connect %b, [[CONST]]
     firrtl.connect %b, %c : !firrtl.uint<1>, !firrtl.uint<1>
   }
   // CHECK-LABEL: firrtl.module @blockProp3

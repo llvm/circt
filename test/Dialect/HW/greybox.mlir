@@ -5,7 +5,7 @@
 //CHECK-NEXT:    hw.output %foo.r : i3
 //CHECK-NEXT:  }
 //CHECK-LABEL: hw.module @remote(%arg0: !hw.inout<i1>, %arg1: i1) -> (%r: i3) {
-//CHECK-NEXT: %x_i3 = sv.constantX : i3 
+//CHECK-NEXT: %x_i3 = sv.constantX : i3
 //CHECK-NEXT:   hw.output %x_i3 : i3
 //CHECK-NEXT: }
 

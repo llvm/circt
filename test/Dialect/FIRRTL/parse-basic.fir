@@ -559,7 +559,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %0 = firrtl.subfield %bf(0)
     node _T = bf.int_1
     ; CHECK: firrtl.when %0 {
-    when _T :  
+    when _T :
       skip
 
   ; CHECK-LABEL: firrtl.module @mem_depth_1
@@ -816,10 +816,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %out1 = firrtl.node %in1
     node out1 = validif(en, in1)
 
-    ; CHECK: %out2 = firrtl.node %in2 
+    ; CHECK: %out2 = firrtl.node %in2
     node out2 = validif(en, in2)
 
-    ; This is required for SFC compatibility. 
+    ; This is required for SFC compatibility.
     ; https://github.com/llvm/circt/issues/1186
     ; CHECK: %out3 = firrtl.node %in1
     node out3 = validif(UInt<1>(0), in1)
@@ -869,4 +869,3 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     parameter TYPE = 'bit'
     parameter FORMAT = 'xyz_timeout=%d\n'
     parameter MIXED_QUOTES = '"\'\"'
-

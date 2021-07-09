@@ -68,4 +68,3 @@ def EnableOp : CalyxOp<"enable", [
   let assemblyFormat = "$groupName attr-dict";
   let verifier = "return ::verify$cppClass(*this);";
 }
-

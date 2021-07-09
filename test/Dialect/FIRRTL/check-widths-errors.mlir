@@ -84,4 +84,3 @@ firrtl.circuit "Foo"  {
     firrtl.partialconnect %w1, %w0 : !firrtl.vector<uint, 0>, !firrtl.vector<uint<3>, 10>
   }
 }
-

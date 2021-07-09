@@ -61,7 +61,7 @@ func @empty_body () -> () {
 
 // -----
 
-// Simple load store pair in the loop body. 
+// Simple load store pair in the loop body.
 
 func @load_store () -> () {
   %A = memref.alloc() : memref<10xf32>

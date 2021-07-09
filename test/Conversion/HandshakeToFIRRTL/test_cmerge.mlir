@@ -3,8 +3,8 @@
 // Test a control merge that is control only.
 
 // CHECK-LABEL: firrtl.module @handshake_control_merge_2ins_2outs_ctrl(
-// CHECK-SAME:  in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, 
-// CHECK-SAME:  in %arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, 
+// CHECK-SAME:  in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>,
+// CHECK-SAME:  in %arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>,
 // CHECK-SAME:  out %arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>,
 // CHECK-SAME:  out %arg3: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>,
 // CHECK-SAME:  in %[[CLOCK:.+]]: !firrtl.clock, in %[[RESET:.+]]: !firrtl.uint<1>) {

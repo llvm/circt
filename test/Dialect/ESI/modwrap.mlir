@@ -7,7 +7,7 @@ hw.module.extern @OutputChannel(%clk: i1, %bar_ready: i1) -> (%bar: i42, %bar_va
 // CHECK:          %pearl.bar, %pearl.bar_valid = hw.instance "pearl" @OutputChannel(%clk, %ready) : (i1, i1) -> (i42, i1)
 // CHECK:          hw.output %chanOutput : !esi.channel<i42>
 
-hw.module.extern @InputChannel(%clk: i1, %foo_data: i23, %foo_valid: i1) -> (%foo_ready: i1, %rawOut: i99) 
+hw.module.extern @InputChannel(%clk: i1, %foo_data: i23, %foo_valid: i1) -> (%foo_ready: i1, %rawOut: i99)
 
 // CHECK-LABEL:  hw.module @InputChannel_esi(%clk: i1, %foo_data: !esi.channel<i23>) -> (%rawOut: i99) {
 // CHECK:          %rawOutput, %valid = esi.unwrap.vr %foo_data, %pearl.foo_ready : i23

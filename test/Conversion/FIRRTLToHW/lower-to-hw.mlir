@@ -23,8 +23,8 @@ firrtl.circuit "Simple" {
     // CHECK: %out5 = sv.wire : !hw.inout<i4>
     %out4 = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
     %out5 = firrtl.wire : !firrtl.uint<4>
-    // CHECK: sv.wire sym @__Simple{{.*}} 
-    // CHECK: sv.wire sym @__Simple{{.*}} 
+    // CHECK: sv.wire sym @__Simple{{.*}}
+    // CHECK: sv.wire sym @__Simple{{.*}}
     %500 = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
     %501 = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<5>
 

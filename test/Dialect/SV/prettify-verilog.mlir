@@ -39,7 +39,7 @@ hw.module @sink_constants(%clock :i1) -> (%out : i1){
     // CHECK: sv.fwrite "%x"([[FALSE]]) : i1
     sv.fwrite "%x"(%false) : i1
   }
-  
+
   /// Multiple uses in the same block should use the same constant.
   sv.ifdef.procedural "FOO" {
     // CHECK: [[TRUE:%.*]] = hw.constant true
@@ -61,4 +61,3 @@ hw.module @sink_constants(%clock :i1) -> (%out : i1){
 // VERILOG:   $fwrite(32'h80000002, "%x", 1'h1);
 // VERILOG:   $fwrite(32'h80000002, "%x", 1'h1);
 // VERILOG: `endif
-

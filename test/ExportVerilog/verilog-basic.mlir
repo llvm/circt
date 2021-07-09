@@ -63,7 +63,7 @@ hw.module @Expressions(%in4: i4, %clock: i1) ->
   %6 = comb.extract %in4 from 2 : (i4) -> i2
   %8 = comb.concat %7, %false : (i1, i1) -> i2
   %9 = comb.or %6, %8 : i2
-  
+
   // CHECK: assign _T_1 = _T_3;
   // CHECK: assign _T_1 = clock ? (clock ? 4'h1 : 4'h2) : 4'h3;
   // CHECK: assign _T_1 = clock ? 4'h1 : clock ? 4'h2 : 4'h3;
@@ -118,23 +118,23 @@ hw.module @Precedence(%a: i4, %b: i4, %c: i4) -> (%out1: i1, %out: i10) {
 
   // CHECK: wire [4:0] _T = {1'h0, b};
   // CHECK: wire [4:0] _T_0 = _T + {1'h0, c};
-  // CHECK: wire [5:0] _T_1 = {2'h0, a}; 
+  // CHECK: wire [5:0] _T_1 = {2'h0, a};
   // CHECK: wire [5:0] _T_2 = {1'h0, _T_0};
   // CHECK: assign _out_output = {4'h0, _T_1 + _T_2};
-  // CHECK: wire [4:0] _T_3 = {1'h0, a} + _T;   
+  // CHECK: wire [4:0] _T_3 = {1'h0, a} + _T;
   // CHECK: assign _out_output = {4'h0, {1'h0, _T_3} - {2'h0, c}};
   // CHECK: assign _out_output = {4'h0, _T_1 - _T_2};
   // CHECK: wire [7:0] _T_4 = {4'h0, b};
   // CHECK: wire [8:0] _T_5 = {5'h0, a};
   // CHECK: assign _out_output = {1'h0, _T_5 + {1'h0, _T_4 * {4'h0, c}}};
-  // CHECK: wire [8:0] _T_6 = {5'h0, c}; 
+  // CHECK: wire [8:0] _T_6 = {5'h0, c};
   // CHECK: assign _out_output = {1'h0, {1'h0, {4'h0, a} * _T_4} + _T_6};
   // CHECK: assign _out_output = {1'h0, {4'h0, _T_3} * _T_6};
   // CHECK: assign _out_output = {1'h0, _T_5 * {4'h0, _T_0}};
   // CHECK: assign _out_output = {5'h0, _T_3} * {5'h0, _T_0};
   // CHECK: assign _out1_output = ^_T_0;
   // CHECK: assign _out1_output = b < c | b > c;
-  // CHECK: wire _T_7 = _out1_output; 
+  // CHECK: wire _T_7 = _out1_output;
   // CHECK: assign _out_output = {6'h0, (b ^ c) & {3'h0, _T_7}};
   // CHECK: wire [9:0] _T_8 = _out_output;
   // CHECK: assign _out_output = {2'h0, _T_8[9:2]};
@@ -281,7 +281,7 @@ hw.module.extern @MyParameterizedExtModule(%in: i8) -> (%out: i1)
 hw.module @UseInstances(%a_in: i8) -> (%a_out: i1) {
   // CHECK: wire _T;
   // CHECK: wire xyz2_out;
-  // CHECK: wire xyz_out; 
+  // CHECK: wire xyz_out;
   // CHECK: FooExtModule xyz (
   // CHECK:   .in  (a_in),
   // CHECK:   .out (xyz_out)
@@ -297,7 +297,7 @@ hw.module @UseInstances(%a_in: i8) -> (%a_out: i1) {
   // CHECK: );
   // CHECK: assign _T = xyz_out;
   // CHECK: assign _T = xyz2_out;
-  // CHECK: assign a_out = _T; 
+  // CHECK: assign a_out = _T;
   %xyz.out = hw.instance "xyz" @MyExtModule(%a_in) : (i8) -> i1
   %xyz2.out = hw.instance "xyz2" @MyParameterizedExtModule(%a_in) {parameters = {DEFAULT = 0 : i64, DEPTH = 3.500000e+00 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i8) -> i1
   %0 = comb.merge %xyz.out, %xyz2.out : i1
@@ -351,7 +351,7 @@ hw.module @Print(%clock: i1, %reset: i1, %a: i4, %b: i4) {
 hw.module @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
   %c-1_i2 = hw.constant -1 : i2
   %count = sv.reg  : !hw.inout<i2>
- 
+
   // CHECK: wire [1:0] _T = ~{2{reset}} & (cond ? value : count);
   // CHECK-NEXT: always_ff @(posedge clock)
   // CHECK-NEXT:   count <= _T;
@@ -377,4 +377,3 @@ hw.module @UnaryParensIssue755(%a: i8) -> (%b: i1) {
   %1 = comb.icmp ne %0, %c0_i8 : i8
   hw.output %1 : i1
 }
-

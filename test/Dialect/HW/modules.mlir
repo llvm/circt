@@ -40,7 +40,7 @@ module {
 
   hw.module @AnyType1(%a: vector< 3 x i8 >) { }
   // CHECK-LABEL: hw.module @AnyType1(%a: vector<3xi8>)
-  
+
   // CHECK-LABEL: hw.module @AnyTypeInstance()
   hw.module @AnyTypeInstance() {
     %vec = constant dense <0> : vector<3xi8>

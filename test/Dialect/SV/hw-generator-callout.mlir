@@ -11,4 +11,3 @@ module attributes {firrtl.mainModule = "top_mod"}  {
   hw.module.generated @sampleModuleName1, @SchemaVar1(%rd_clock_0: i1, %rd_en_0: i1, %rd_addr_0: i4, %rd_clock_1: i1, %rd_en_1: i1, %rd_addr_1: i4) -> (%rd_data_0: i16, %rd_data_1: i16) attributes {port1 = 10 : i64, port2 = 2 : i32}
   // CHECK: hw.module.generated @sampleModuleName1, @SchemaVar1(%rd_clock_0: i1, %rd_en_0: i1, %rd_addr_0: i4, %rd_clock_1: i1, %rd_en_1: i1, %rd_addr_1: i4) -> (%rd_data_0: i16, %rd_data_1: i16) attributes {port1 = 10 : i64, port2 = 2 : i32}
 }
-
