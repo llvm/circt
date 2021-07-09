@@ -96,7 +96,7 @@ struct SharedParserConstants {
         loIdentifier(Identifier::get("lo", context)),
         hiIdentifier(Identifier::get("hi", context)),
         amountIdentifier(Identifier::get("amount", context)),
-        fieldnameIdentifier(Identifier::get("fieldIndex", context)),
+        fieldIndexIdentifier(Identifier::get("fieldIndex", context)),
         indexIdentifier(Identifier::get("index", context)) {}
 
   /// The context we're parsing into.
@@ -118,7 +118,7 @@ struct SharedParserConstants {
 
   /// Cached identifiers used in primitives.
   const Identifier loIdentifier, hiIdentifier, amountIdentifier;
-  const Identifier fieldnameIdentifier, indexIdentifier;
+  const Identifier fieldIndexIdentifier, indexIdentifier;
 
 private:
   SharedParserConstants(const SharedParserConstants &) = delete;
@@ -1673,7 +1673,7 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
   auto index = indexV.getValue();
   // Make sure the field name matches up with the input value's type and
   // compute the result type for the expression.
-  NamedAttribute attrs = {getConstants().fieldnameIdentifier,
+  NamedAttribute attrs = {getConstants().fieldIndexIdentifier,
                           builder.getUI32IntegerAttr(index)};
   auto resultType = SubfieldOp::inferReturnType({result}, attrs, {});
   if (!resultType) {
