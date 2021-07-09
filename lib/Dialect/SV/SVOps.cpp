@@ -1030,28 +1030,29 @@ static LogicalResult verifyBindOp(BindOp op) {
 }
 
 //===----------------------------------------------------------------------===//
-// Helpers to elide "label" attributes.
+// Custom printer/parsers to be used with custom<> ODS assembly formats.
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseElideEmptyLabel(OpAsmParser &p,
-                                        NamedAttrList &resultAttrs) {
-
-  auto result = p.parseOptionalAttrDict(resultAttrs);
-  if (!resultAttrs.get("label"))
-    resultAttrs.append("label", p.getBuilder().getStringAttr(""));
-
-  return result;
+static ParseResult parseOmitEmptyStringAttr(OpAsmParser &p, StringAttr &str) {
+  // TODO: There is no parseOptionalAttribute(StringAttr &foo, Type bar) API
+  // available for OpAsmParse.  Use of parseAttribute(StringAttr &foo, Type bar)
+  // does exist, but produces an opError during parsing.  This can be cleaned up
+  // to avoid using a dummy NamedAttrList (which will be thrown away) if such an
+  // API is added to MLIR.
+  NamedAttrList dummy;
+  p.parseOptionalAttribute(str, p.getBuilder().getType<mlir::NoneType>(),
+                           "label", dummy);
+  if (!str) {
+    str = p.getBuilder().getStringAttr("");
+    return success();
+  }
+  return success();
 }
 
-static void printElideEmptyLabel(OpAsmPrinter &p, Operation *op,
-                                 DictionaryAttr attr) {
-
-  SmallVector<StringRef, 1> elides;
-  // Elide "label" if it is an empty string.
-  if (op->getAttrOfType<StringAttr>("label").getValue().empty())
-    elides.push_back("label");
-
-  p.printOptionalAttrDict(op->getAttrs(), elides);
+static void printOmitEmptyStringAttr(OpAsmPrinter &p, Operation *op,
+                                     StringAttr str) {
+  if (str && !str.getValue().empty())
+    p.printAttributeWithoutType(str);
 }
 
 //===----------------------------------------------------------------------===//

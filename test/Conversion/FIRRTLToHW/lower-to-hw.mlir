@@ -353,15 +353,15 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: sv.always posedge %clock {
     // CHECK-NEXT:   sv.if %aEn {
     // CHECK-NEXT:     sv.assert %aCond : i1
-    // CHECK-NEXT:     sv.assert {label = "assert_0"} %aCond : i1
+    // CHECK-NEXT:     sv.assert "assert_0" %aCond : i1
     // CHECK-NEXT:   }
     // CHECK-NEXT:   sv.if %bEn {
     // CHECK-NEXT:     sv.assume %bCond  : i1
-    // CHECK-NEXT:     sv.assume {label = "assume_0"} %bCond  : i1
+    // CHECK-NEXT:     sv.assume "assume_0" %bCond  : i1
     // CHECK-NEXT:   }
     // CHECK-NEXT:   sv.if %cEn {
     // CHECK-NEXT:     sv.cover %cCond : i1
-    // CHECK-NEXT:     sv.cover {label = "cover_0"} %cCond : i1
+    // CHECK-NEXT:     sv.cover "cover_0" %cCond : i1
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
     firrtl.assert %clock, %aCond, %aEn, "assert0"
