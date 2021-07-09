@@ -153,7 +153,7 @@ LogicalResult FuncType::verify(function_ref<InFlightDiagnostic()> emitError,
 
   // Verify inputs.
   for (size_t i = 0; i < inputTypes.size(); i++) {
-    if (helper::isBuiltinType(inputTypes[i])) {
+    if (helper::isBuiltinSizedType(inputTypes[i])) {
       if (failed(verifyDelayAttribute(emitError, inputAttrs[i])))
         return emitError() << "Expected hir.delay attribute to be an "
                               "IntegerAttr for input arg"
@@ -180,7 +180,7 @@ LogicalResult FuncType::verify(function_ref<InFlightDiagnostic()> emitError,
 
   // Verify results.
   for (size_t i = 0; i < resultTypes.size(); i++) {
-    if (helper::isBuiltinType(resultTypes[i])) {
+    if (helper::isBuiltinSizedType(resultTypes[i])) {
       if (failed(verifyDelayAttribute(emitError, resultAttrs[i])))
         return emitError() << "Expected hir.delay attribute to be an "
                               "IntegerAttr for result arg"
@@ -322,7 +322,7 @@ static void printIfOp(OpAsmPrinter &printer, IfOp op) {
 
   printer.printRegion(op.if_region(),
                       /*printEntryBlockArgs=*/false,
-                      /*printBlockTerminators=*/false);
+                      /*printBlockTerminators=*/true);
 }
 
 static ParseResult parseIfOp(OpAsmParser &parser, OperationState &result) {
@@ -387,7 +387,9 @@ static void printForOp(OpAsmPrinter &printer, ForOp op) {
 
   printer.printRegion(op.region(),
                       /*printEntryBlockArgs=*/false,
-                      /*printBlockTerminators=*/false);
+                      /*printBlockTerminators=*/true);
+  printer.printOptionalAttrDict(
+      op->getAttrs(), SmallVector<StringRef>({"operand_segment_sizes"}));
 }
 
 static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
@@ -472,7 +474,8 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
   Region *body = result.addRegion();
   if (parser.parseRegion(*body, regionOperands, regionOperandTypes))
     return failure();
-
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
   // First result is the time at which last iteration yields.
   result.addTypes(TimeType::get(context));
   ForOp::ensureTerminator(*body, builder, result.location);
@@ -505,7 +508,7 @@ static void printUnrollForOp(OpAsmPrinter &printer, UnrollForOp op) {
 
   printer.printRegion(op.region(),
                       /*printEntryBlockArgs=*/false,
-                      /*printBlockTerminators=*/false);
+                      /*printBlockTerminators=*/true);
 }
 
 static ParseResult parseUnrollForOp(OpAsmParser &parser,
@@ -609,7 +612,7 @@ parseFuncSignature(OpAsmParser &parser, hir::FuncType &funcTy,
         return failure();
 
       // Parse argAttr
-      if (helper::isBuiltinType(inputTypes.back())) {
+      if (helper::isBuiltinSizedType(inputTypes.back())) {
         if (parseDelayAttr(parser, inputAttrs))
           return failure();
       } else if (inputTypes.back().dyn_cast<hir::TimeType>()) {
@@ -724,7 +727,7 @@ static void printFuncSignature(OpAsmPrinter &printer, hir::FuncOp op) {
       printer << ", ";
     printer << body.front().getArgument(i) << " : " << inputTypes[i];
 
-    if (helper::isBuiltinType(inputTypes[i])) {
+    if (helper::isBuiltinSizedType(inputTypes[i])) {
       auto delay = helper::extractDelayFromDict(inputAttrs[i]);
       if (delay != 0)
         printer << " delay " << delay;

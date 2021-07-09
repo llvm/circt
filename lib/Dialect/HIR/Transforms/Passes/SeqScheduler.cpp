@@ -7,14 +7,90 @@
 #include "../PassDetails.h"
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Dialect/HIR/IR/helper.h"
+#include "mlir/Dialect/StandardOps/IR/Ops.h"
 
 using namespace circt;
 using namespace hir;
 namespace {
 class SeqSchedulerPass : public hir::SeqSchedulerBase<SeqSchedulerPass> {
 public:
-  void runOnOperation() override;
-  LogicalResult updateRegion(Region &);
+  void runOnOperation() override {
+    hir::FuncOp funcOp = getOperation();
+
+    this->currentTimeVar = funcOp.getTimeVar();
+    this->nextFreeOffset = 0;
+    if (failed(updateRegion(funcOp.getFuncBody())))
+      signalPassFailure();
+    return;
+  }
+
+private:
+  LogicalResult updateRegion(Region &region) {
+    for (auto &operation : region.front()) {
+      if (auto op = dyn_cast<hir::ForOp>(operation)) {
+        if (failed(updateOp(op)))
+          return failure();
+      } else if (auto op = dyn_cast<hir::LoadOp>(operation)) {
+        if (failed(updateOp(op)))
+          return failure();
+      } else if (auto op = dyn_cast<hir::StoreOp>(operation)) {
+        if (failed(updateOp(op)))
+          return failure();
+      } else if (auto op = dyn_cast<hir::AddIOp>(operation)) {
+        if (failed(updateOp(op)))
+          return failure();
+      } else if (auto op = dyn_cast<hir::SubIOp>(operation)) {
+        if (failed(updateOp(op)))
+          return failure();
+      } else if (auto op = dyn_cast<hir::MulIOp>(operation)) {
+        if (failed(updateOp(op)))
+          return failure();
+      } else if (auto op = dyn_cast<hir::AddFOp>(operation)) {
+        if (failed(updateOp(op)))
+          return failure();
+      } else if (auto op = dyn_cast<hir::SubFOp>(operation)) {
+        if (failed(updateOp(op)))
+          return failure();
+      } else if (auto op = dyn_cast<hir::MulFOp>(operation)) {
+        if (failed(updateOp(op)))
+          return failure();
+      } else if (auto op = dyn_cast<mlir::ConstantOp>(operation)) {
+        continue;
+      } else if (auto op = dyn_cast<mlir::IndexCastOp>(operation)) {
+        continue;
+      } else if (auto op = dyn_cast<mlir::TruncateIOp>(operation)) {
+        continue;
+      } else if (auto op = dyn_cast<mlir::SignExtendIOp>(operation)) {
+        continue;
+      } else if (auto op = dyn_cast<hir::ReturnOp>(operation)) {
+        continue;
+      } else if (auto op = dyn_cast<hir::YieldOp>(operation)) {
+        if (failed(updateOp(op)))
+          return failure();
+      } else
+        operation.emitError("Unsupported op for SeqSchedulerPass.");
+    }
+    return success();
+  }
+
+private:
+  template <typename T>
+  LogicalResult populateSchedule(T op) {
+    OpBuilder builder(op);
+    if (!this->currentTimeVar)
+      return op.emitError(
+          "Could not find currentTimeVar while scheduling this op.");
+    op.tstartMutable().assign(this->currentTimeVar);
+    if (this->nextFreeOffset > 0) {
+      Value offsetIndexVar = builder.create<mlir::ConstantOp>(
+          op.getLoc(), builder.getIndexType(),
+          builder.getIndexAttr(this->nextFreeOffset));
+      op.offsetMutable().assign(offsetIndexVar);
+    }
+    return success();
+  }
+
+private:
   LogicalResult updateOp(hir::ForOp);
   LogicalResult updateOp(hir::LoadOp);
   LogicalResult updateOp(hir::StoreOp);
@@ -24,6 +100,7 @@ public:
   LogicalResult updateOp(hir::AddFOp);
   LogicalResult updateOp(hir::SubFOp);
   LogicalResult updateOp(hir::MulFOp);
+  LogicalResult updateOp(hir::YieldOp);
   LogicalResult updateOp(hir::CallOp);
 
 private:
@@ -34,59 +111,98 @@ private:
 
 } // end anonymous namespace
 
-LogicalResult SeqSchedulerPass::updateOp(ForOp op) { return success(); }
+//-----------------------------------------------------------------------------
+// Helper functions.
+//-----------------------------------------------------------------------------
 
-LogicalResult SeqSchedulerPass::updateOp(LoadOp op) { return success(); }
+//-----------------------------------------------------------------------------
 
-LogicalResult SeqSchedulerPass::updateOp(hir::StoreOp) { return success(); }
-LogicalResult SeqSchedulerPass::updateOp(hir::AddIOp) { return success(); }
-LogicalResult SeqSchedulerPass::updateOp(hir::SubIOp) { return success(); }
-LogicalResult SeqSchedulerPass::updateOp(hir::MulIOp) { return success(); }
-LogicalResult SeqSchedulerPass::updateOp(hir::AddFOp) { return success(); }
-LogicalResult SeqSchedulerPass::updateOp(hir::SubFOp) { return success(); }
-LogicalResult SeqSchedulerPass::updateOp(hir::MulFOp) { return success(); }
+//-----------------------------------------------------------------------------
+// Functions to update ops with new schedule.
+//-----------------------------------------------------------------------------
+LogicalResult SeqSchedulerPass::updateOp(ForOp op) {
+  // Schedule the ForOp in the next available slot.
+  if (failed(populateSchedule(op)))
+    return failure();
 
-LogicalResult SeqSchedulerPass::updateRegion(Region &region) {
-  for (auto &operation : region.front()) {
-    if (auto op = dyn_cast<hir::ForOp>(operation)) {
-      if (failed(updateOp(op)))
-        return failure();
-    } else if (auto op = dyn_cast<hir::LoadOp>(operation)) {
-      if (failed(updateOp(op)))
-        return failure();
-    } else if (auto op = dyn_cast<hir::StoreOp>(operation)) {
-      if (failed(updateOp(op)))
-        return failure();
-    } else if (auto op = dyn_cast<hir::AddIOp>(operation)) {
-      if (failed(updateOp(op)))
-        return failure();
-    } else if (auto op = dyn_cast<hir::SubIOp>(operation)) {
-      if (failed(updateOp(op)))
-        return failure();
-    } else if (auto op = dyn_cast<hir::MulIOp>(operation)) {
-      if (failed(updateOp(op)))
-        return failure();
-    } else if (auto op = dyn_cast<hir::AddFOp>(operation)) {
-      if (failed(updateOp(op)))
-        return failure();
-    } else if (auto op = dyn_cast<hir::SubFOp>(operation)) {
-      if (failed(updateOp(op)))
-        return failure();
-    } else if (auto op = dyn_cast<hir::MulFOp>(operation)) {
-      if (failed(updateOp(op)))
-        return failure();
-    } else
-      operation.emitError("Unsupported op for SeqSchedulerPass.");
-  }
-  return failure();
+  // Update the time var and offset for use inside the loop body.
+  this->currentTimeVar = op.getIterTimeVar();
+  this->nextFreeOffset = 0;
+
+  // Schedule  the loop body;
+  if (failed(updateRegion(op.getLoopBody())))
+    return failure();
+
+  // Update the time var and offset for instructions after the ForOp.
+  this->currentTimeVar = op.getResult(0);
+  this->nextFreeOffset = 0;
+
+  return success();
 }
 
-void SeqSchedulerPass::runOnOperation() {
-  hir::FuncOp funcOp = getOperation();
+LogicalResult SeqSchedulerPass::updateOp(LoadOp op) {
+  if (failed(populateSchedule(op)))
+    return failure();
+  // Even if load happens in same cycle (like in case of LUTRAM), next load
+  // operation can not be scheduled safely on the same cycle if it is on the
+  // same memref and with different address.
+  this->nextFreeOffset += op.delay().getValueOr(1);
+  return success();
+}
 
-  if (failed(updateRegion(funcOp.getFuncBody())))
-    signalPassFailure();
-  return;
+LogicalResult SeqSchedulerPass::updateOp(hir::StoreOp op) {
+  if (failed(populateSchedule(op)))
+    return failure();
+  this->nextFreeOffset += op.delay().getValueOr(0);
+  return success();
+}
+
+LogicalResult SeqSchedulerPass::updateOp(hir::AddIOp op) {
+  if (failed(populateSchedule(op)))
+    return failure();
+  this->nextFreeOffset += op.delay().getValueOr(0);
+  return success();
+}
+
+LogicalResult SeqSchedulerPass::updateOp(hir::SubIOp op) {
+  if (failed(populateSchedule(op)))
+    return failure();
+  this->nextFreeOffset += op.delay().getValueOr(0);
+  return success();
+}
+
+LogicalResult SeqSchedulerPass::updateOp(hir::MulIOp op) {
+  if (failed(populateSchedule(op)))
+    return failure();
+  this->nextFreeOffset += op.delay().getValueOr(0);
+  return success();
+}
+
+LogicalResult SeqSchedulerPass::updateOp(hir::AddFOp op) {
+  if (failed(populateSchedule(op)))
+    return failure();
+  this->nextFreeOffset += op.delay().getValueOr(0);
+  return success();
+}
+
+LogicalResult SeqSchedulerPass::updateOp(hir::SubFOp op) {
+  if (failed(populateSchedule(op)))
+    return failure();
+  this->nextFreeOffset += op.delay().getValueOr(0);
+  return success();
+}
+
+LogicalResult SeqSchedulerPass::updateOp(hir::MulFOp op) {
+  if (failed(populateSchedule(op)))
+    return failure();
+  this->nextFreeOffset += op.delay().getValueOr(0);
+  return success();
+}
+
+LogicalResult SeqSchedulerPass::updateOp(hir::YieldOp op) {
+  if (failed(populateSchedule(op)))
+    return failure();
+  return success();
 }
 
 namespace circt {

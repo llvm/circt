@@ -16,7 +16,6 @@ namespace {
 class LoopUnrollPass : public hir::LoopUnrollBase<LoopUnrollPass> {
 public:
   void runOnOperation() override;
-  void unrollLoopFull(hir::UnrollForOp);
 };
 } // end anonymous namespace
 
@@ -26,31 +25,40 @@ Value lookupOrOriginal(BlockAndValueMapping &mapper, Value originalValue) {
   return originalValue;
 }
 
-void LoopUnrollPass::unrollLoopFull(hir::UnrollForOp unrollForOp) {
-  Block &loopBodyBlock = unrollForOp.getLoopBody().front();
-  int lb = unrollForOp.lb();
-  int ub = unrollForOp.ub();
-  int step = unrollForOp.step();
+LogicalResult unrollLoopFull(hir::ForOp forOp) {
+  Block &loopBodyBlock = forOp.getLoopBody().front();
   auto builder = OpBuilder::atBlockTerminator(&loopBodyBlock);
-  builder.setInsertionPointAfter(unrollForOp);
+  builder.setInsertionPointAfter(forOp);
+
+  if (failed(helper::isConstantIntValue(forOp.lb())))
+    return forOp.emitError("Expected lower bound to be constant.");
+  if (failed(helper::isConstantIntValue(forOp.ub())))
+    return forOp.emitError("Expected upper bound to be constant.");
+  if (failed(helper::isConstantIntValue(forOp.step())))
+    return forOp.emitError("Expected step to be constant.");
+
+  int64_t lb = helper::getConstantIntValue(forOp.lb());
+  int64_t ub = helper::getConstantIntValue(forOp.ub());
+  int64_t step = helper::getConstantIntValue(forOp.step());
+
   Block::iterator srcBlockEnd = std::prev(loopBodyBlock.end(), 1);
 
-  SmallVector<Value, 4> iterArgs = {unrollForOp.getIterTimeVar()};
-  assert(!unrollForOp.offset());
-  SmallVector<Value, 4> iterValues = {unrollForOp.tstart()};
+  SmallVector<Value, 4> iterArgs = {forOp.getIterTimeVar()};
+  assert(!forOp.offset());
+  SmallVector<Value, 4> iterValues = {forOp.tstart()};
   auto *context = builder.getContext();
 
   // insert the unrolled body.
   for (int i = lb; i < ub; i += step) {
     Value loopIV = builder
-                       .create<mlir::ConstantOp>(
-                           builder.getUnknownLoc(), IndexType::get(context),
-                           helper::getIntegerAttr(context, 0))
+                       .create<mlir::ConstantOp>(builder.getUnknownLoc(),
+                                                 IndexType::get(context),
+                                                 builder.getIndexAttr(0))
                        .getResult();
 
     BlockAndValueMapping operandMap;
     operandMap.map(iterArgs, iterValues);
-    operandMap.map(unrollForOp.getInductionVar(), loopIV);
+    operandMap.map(forOp.getInductionVar(), loopIV);
 
     // Copy the loop body.
     for (auto it = loopBodyBlock.begin(); it != srcBlockEnd; it++) {
@@ -64,22 +72,33 @@ void LoopUnrollPass::unrollLoopFull(hir::UnrollForOp unrollForOp) {
     }
   }
 
-  // replace the UnrollForOp results.
-  auto results = unrollForOp->getResults();
+  // replace the ForOp results.
+  auto results = forOp->getResults();
   for (unsigned i = 0; i < results.size(); i++) {
-    Value unrollForOpResult = results[i];
+    Value forOpResult = results[i];
     Value newResult = iterValues[i];
-    unrollForOpResult.replaceAllUsesWith(newResult);
+    forOpResult.replaceAllUsesWith(newResult);
   }
 
-  unrollForOp.erase();
+  forOp.erase();
+  return success();
 }
 
 void LoopUnrollPass::runOnOperation() {
   hir::FuncOp funcOp = getOperation();
-  WalkResult result = funcOp.walk([this](Operation *operation) -> WalkResult {
-    if (auto unrollForOp = dyn_cast<hir::UnrollForOp>(operation))
-      unrollLoopFull(unrollForOp);
+  WalkResult result = funcOp.walk([](Operation *operation) -> WalkResult {
+    if (auto forOp = dyn_cast<hir::ForOp>(operation)) {
+      if (Attribute unrollAttr = forOp->getAttr("unroll")) {
+        if (!unrollAttr.dyn_cast<mlir::UnitAttr>()) {
+          forOp.emitError(
+              "We only support full unrolling, i.e. unroll attr should be "
+              "mlir::UnitAttr.");
+          return WalkResult::interrupt();
+        }
+        if (failed(unrollLoopFull(forOp)))
+          return WalkResult::interrupt();
+      }
+    }
     return WalkResult::advance();
   });
 

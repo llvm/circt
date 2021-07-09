@@ -224,7 +224,7 @@ bool ScheduleVerifier::inspectOp(hir::FuncOp op) {
   schedule.insert(tstart, tstart, 0);
   for (unsigned i = 0; i < inputAttrs.size(); i++) {
     mapValueToDefiningLoc.insert(std::make_pair(args[i], op.getLoc()));
-    if (!helper::isBuiltinType(args[i].getType()))
+    if (!helper::isBuiltinSizedType(args[i].getType()))
       continue;
     int delay = inputAttrs[i]
                     .dyn_cast<DictionaryAttr>()

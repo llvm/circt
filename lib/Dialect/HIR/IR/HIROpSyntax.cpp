@@ -9,9 +9,6 @@ ParseResult parseTimeAndOffset(
   OpAsmParser::OperandType tstart;
   OpAsmParser::OperandType offset;
 
-  if (parser.parseKeyword("at"))
-    return failure();
-
   // early exit if no schedule provided.
   if (succeeded(parser.parseOptionalQuestion()))
     return success();
@@ -35,7 +32,6 @@ ParseResult parseTimeAndOffset(
 
 void printTimeAndOffset(OpAsmPrinter &printer, Operation *op, Value tstart,
                         Value offset) {
-  printer << "at ";
   if (!tstart) {
     printer << "?";
     return;
@@ -192,3 +188,9 @@ void printBinOpOperandsAndResultType(mlir::OpAsmPrinter &printer, Operation *,
                                      Type resultTy, Type, Type) {
   printer << resultTy;
 }
+
+ParseResult parseCopyType(mlir::OpAsmParser &parser, Type &destTy, Type srcTy) {
+  destTy = srcTy;
+  return success();
+}
+void printCopyType(mlir::OpAsmPrinter &, Operation *, Type, Type) {}

@@ -18,7 +18,7 @@ static LogicalResult splitOffsetIntoSeparateOp(OPTYPE op,
                                                PatternRewriter &rewriter) {
   auto *context = rewriter.getContext();
   if (!op.offset())
-    return failure();
+    return success();
 
   Value tstart = rewriter.create<hir::DelayOp>(
       op.getLoc(), helper::getTimeType(context), op.tstart(), op.offset(),
@@ -51,7 +51,7 @@ LogicalResult RecvOp::canonicalize(RecvOp op,
 }
 
 LogicalResult ForOp::canonicalize(ForOp op, PatternRewriter &rewriter) {
-  // Currently ForOp requires an offset to generate an efficient circuit.
+  splitOffsetIntoSeparateOp(op, rewriter);
   return failure();
 }
 

@@ -15,9 +15,9 @@ def HIR_Dialect : Dialect {
   let summary = "An MLIR dialect for Hardware description";
   let description = [{
     This dialect is designed for hardware description. A circuit described in HIR 
-    dialect contains the schedule of execution and functional unit binding 
-    information. HIR supports high level constructs such as loops and 
-    conditionals.
+      dialect contains the schedule of execution and functional unit binding 
+      information. HIR supports high level constructs such as loops and 
+      conditionals.
   }];
   let cppNamespace = "hir";
 }
@@ -54,13 +54,13 @@ def YieldOp : HIR_Op<"yield", [ParentOneOf<["ForOp","UnrollForOp","IfOp"]>,Termi
   let results = (outs );
 
   let builders = [OpBuilder<(ins),[{
-      build($_builder,$_state,SmallVector<Value>(),Value(),Value());
+    build($_builder,$_state,SmallVector<Value>(),Value(),Value());
   }]>];
   //TODO: Currently yieldOp prints even if there is no timevar or operands.
   // If the custom printer returns without printing anything, then mlir does not print the op.
   // We can use custom printer/parser to ensure that the yieldOp is not printed.
   let assemblyFormat = [{ attr-dict (`(` $operands^ `)` `:` type($operands))? 
-    custom<TimeAndOffset>($tstart, $offset)}];
+    `at` custom<TimeAndOffset>($tstart, $offset)}];
 
   //let parser = [{return parse$cppClass(parser,result);}];
   //let printer = [{return print$cppClass(p,*this);}];
@@ -72,13 +72,13 @@ def ReturnOp : HIR_Op<"return", [HasParent<"FuncOp">, Terminator]> {
 
   let description = [{
     This instruction must be the last instruction in the function.
-    If hir.yield is specified for the function then return must be specified.
+      If hir.yield is specified for the function then return must be specified.
       ```mlir hir.return (%x, %y): (i32, !hir.const<i1>)```
   }];
 
   let arguments = (ins Variadic<AnyType>:$operands);
   let builders = [OpBuilder<(ins),[{
-      build($_builder,$_state,SmallVector<Value>());
+    build($_builder,$_state,SmallVector<Value>());
   }]>];
 
   let assemblyFormat = "(`(`$operands^`)` `:` `(`type($operands)`)`)? attr-dict";
@@ -130,8 +130,11 @@ def FuncOp : HIR_Op<"func", [Symbol, SingleBlockImplicitTerminator<"ReturnOp">, 
       Region& getFuncBody(){ return body();}
       ///Get the function arguments (excluding tstart).
       SmallVector<Value,4> getOperands();
+      Value getTimeVar(){
+        return getFuncBody().getArguments().back();
+      }
   }];
-  let verifier =[{return verifyFuncOp(*this);}];
+  let verifier =[{return verify$cppClass(*this);}];
 }
 
 def IfOp : HIR_Op<"if", [SingleBlockImplicitTerminator<"YieldOp">, RecursiveSideEffects, AttrSizedOperandSegments]> {
@@ -189,6 +192,7 @@ def ForOp : HIR_Op<"for", [SingleBlockImplicitTerminator<"YieldOp">, RecursiveSi
     void endRegion(mlir::OpBuilder &builder);
   }];
   let hasCanonicalizeMethod = true; 
+  let verifier =[{return verify$cppClass(*this);}];
 }
 
 def UnrollForOp : HIR_Op<"unroll_for", [SingleBlockImplicitTerminator<"YieldOp">, RecursiveSideEffects, DeclareOpInterfaceMethods<LoopLikeOpInterface>]> {
@@ -268,7 +272,7 @@ def LoadOp : HIR_Op<"load", [NoSideEffect, AttrSizedOperandSegments]> {
       Optional<Index>: $offset);
   let results = (outs AnyType: $res);
   let assemblyFormat = [{
-    $mem `[`  $indices `]` (`[` `port` $port^ `]`)? custom<TimeAndOffset>($tstart ,$offset) 
+    $mem `[`  $indices `]` (`[` `port` $port^ `]`)? `at` custom<TimeAndOffset>($tstart ,$offset) 
       attr-dict
       `:`custom<MemrefAndElementType>
       (type($mem),type($indices),type($res)) (`delay` $delay^ )?
@@ -295,12 +299,12 @@ def StoreOp : HIR_Op<"store", [AttrSizedOperandSegments]> {
 
   let arguments = (ins AnyType:$value, MemrefType:$mem,
       Variadic<AnyType>:$indices, OptionalAttr<I64Attr>:$port,
-      Optional<TimeType> :$tstart, Optional<Index>:$offset);
+      OptionalAttr<I64Attr>:$delay, Optional<TimeType> :$tstart, Optional<Index>:$offset);
   let results = (outs );
   let assemblyFormat = [{
-    $value `to` $mem  `[` $indices `]` (`port` $port^)? custom<TimeAndOffset>($tstart, $offset) attr-dict `:` 
+    $value `to` $mem  `[` $indices `]` (`port` $port^)? `at` custom<TimeAndOffset>($tstart, $offset) attr-dict `:` 
       custom<MemrefAndElementType>
-      (type($mem),type($indices), type($value))
+      (type($mem),type($indices), type($value)) (`delay` $delay^ )?
   }];
 
   let hasCanonicalizeMethod = true;
@@ -323,7 +327,7 @@ def SendOp : HIR_Op<"send", [AttrSizedOperandSegments]> {
   let results = (outs );
   let assemblyFormat = [{
     $value `to` $bus `[` $index`]`
-      custom<TimeAndOffset> ($tstart, $offset) attr-dict  `:` type($value) `to` type($bus)  
+      `at` custom<TimeAndOffset> ($tstart, $offset) attr-dict  `:` type($value) `to` type($bus)  
   }];
   let hasCanonicalizeMethod = true;
 }
@@ -342,7 +346,7 @@ def RecvOp : HIR_Op<"recv", [NoSideEffect, AttrSizedOperandSegments]> {
 
   let assemblyFormat = [{
     $bus `[` $index `]`  
-      custom<TimeAndOffset>($tstart, $offset) attr-dict  `:` type($bus) `->` type($res)  
+      `at` custom<TimeAndOffset>($tstart, $offset) attr-dict  `:` type($bus) `->` type($res)  
   }];
   let hasCanonicalizeMethod = true;
 }
@@ -388,8 +392,44 @@ def DelayOp: HIR_Op<"delay",[NoSideEffect,AttrSizedOperandSegments]>{
   let arguments = (ins AnyType : $input, Index:$delay, 
       Optional<TimeType>:$tstart, Optional<Index>: $offset);
   let results = (outs AnyType : $res);
-  let assemblyFormat = [{$input `by` $delay custom<TimeAndOffset> 
+  let assemblyFormat = [{$input `by` $delay `at` custom<TimeAndOffset> 
     ($tstart, $offset) attr-dict `:` type($input) `->` type($res)}];
+  let verifier =[{return verify$cppClass(*this);}];
+}
+
+def TimeOp: HIR_Op<"time",[NoSideEffect]>{
+  let summary = "Define a new time var";
+  let description = [{
+    This op defines a new time var that represents a fixed delay from another time var.
+      Example:
+      ```mlir %t = hir.time %t+3 :!hir.time``
+  }];
+
+  let arguments = (ins TimeType : $timevar, OptionalAttr<I64Attr>:$offset);
+  let results = (outs TimeType : $res);
+  let assemblyFormat = [{$timevar (`+` $offset^)? attr-dict `:` type($res)}];
+}
+
+def LatchOp: HIR_Op<"latch",[NoSideEffect,AttrSizedOperandSegments]>{
+  let summary = "Latch a value for certain time.";
+  let description = [{
+    This op latches an input value from one time instant to the other.
+      This instruction can be used to move values between time domains.
+      It is undefined behaviour if the first time instant happens after the 
+      second time instant.
+
+      Example:
+      ```mlir %yy = hir.latch %xx at %tx+%1 until %ty+%2: i32```
+  }];
+
+  let arguments = (ins AnyType : $input,
+      Optional<TimeType>:$tstart, Optional<Index>: $offset,
+      Optional<TimeType>:$tResult, Optional<Index>: $offsetResult);
+  let results = (outs AnyType : $res);
+  let assemblyFormat = [{$input `at` custom<TimeAndOffset> ($tstart, $offset) 
+    `until` custom<TimeAndOffset>($tResult, $offsetResult) 
+      attr-dict `:` type($res) custom<CopyType>(type($input),ref(type($res)))
+  }];
 }
 
 def AddIOp: HIR_Op<"addi",[NoSideEffect,AttrSizedOperandSegments]>{
@@ -403,9 +443,9 @@ def AddIOp: HIR_Op<"addi",[NoSideEffect,AttrSizedOperandSegments]>{
   let arguments = (ins AnyType : $op1, AnyType: $op2,  OptionalAttr<I64Attr>:$delay, 
       Optional<TimeType>:$tstart, Optional<Index>: $offset);
   let results = (outs AnyType : $res);
-  let assemblyFormat = [{`(`$op1 `,` $op2 `)` custom<TimeAndOffset> 
+  let assemblyFormat = [{`(`$op1 `,` $op2 `)` `at` custom<TimeAndOffset> 
     ($tstart, $offset) attr-dict `:` custom<BinOpOperandsAndResultType>(type($res), type($op1),type($op2)) (`delay` $delay^)?
-    }];
+  }];
 }
 
 def SubIOp: HIR_Op<"subi",[NoSideEffect,AttrSizedOperandSegments]>{
@@ -419,9 +459,9 @@ def SubIOp: HIR_Op<"subi",[NoSideEffect,AttrSizedOperandSegments]>{
   let arguments = (ins AnyType : $op1, AnyType: $op2,  OptionalAttr<I64Attr>:$delay, 
       Optional<TimeType>:$tstart, Optional<Index>: $offset);
   let results = (outs AnyType : $res);
-  let assemblyFormat = [{`(`$op1 `,` $op2 `)` custom<TimeAndOffset> 
+  let assemblyFormat = [{`(`$op1 `,` $op2 `)` `at` custom<TimeAndOffset> 
     ($tstart, $offset) attr-dict `:` custom<BinOpOperandsAndResultType>(type($res), type($op1),type($op2)) (`delay` $delay^)?
-    }];
+  }];
 }
 
 def MulIOp: HIR_Op<"muli",[NoSideEffect,AttrSizedOperandSegments]>{
@@ -435,9 +475,9 @@ def MulIOp: HIR_Op<"muli",[NoSideEffect,AttrSizedOperandSegments]>{
   let arguments = (ins AnyType : $op1, AnyType: $op2,  OptionalAttr<I64Attr>:$delay, 
       Optional<TimeType>:$tstart, Optional<Index>: $offset);
   let results = (outs AnyType : $res);
-  let assemblyFormat = [{`(`$op1 `,` $op2`)` custom<TimeAndOffset> 
+  let assemblyFormat = [{`(`$op1 `,` $op2`)` `at` custom<TimeAndOffset> 
     ($tstart, $offset) attr-dict `:` custom<BinOpOperandsAndResultType>(type($res), type($op1),type($op2)) (`delay` $delay^)?
-    }];
+  }];
 }
 
 def AddFOp: HIR_Op<"addf",[NoSideEffect,AttrSizedOperandSegments]>{
@@ -451,9 +491,9 @@ def AddFOp: HIR_Op<"addf",[NoSideEffect,AttrSizedOperandSegments]>{
   let arguments = (ins AnyType : $op1, AnyType: $op2,  OptionalAttr<I64Attr>:$delay, 
       Optional<TimeType>:$tstart, Optional<Index>: $offset);
   let results = (outs AnyType : $res);
-  let assemblyFormat = [{`(`$op1 `,` $op2`)` custom<TimeAndOffset> 
+  let assemblyFormat = [{`(`$op1 `,` $op2`)` `at` custom<TimeAndOffset> 
     ($tstart, $offset) attr-dict `:` custom<BinOpOperandsAndResultType>(type($res), type($op1),type($op2)) (`delay` $delay^)?
-    }];
+  }];
 }
 
 def SubFOp: HIR_Op<"subf",[NoSideEffect,AttrSizedOperandSegments]>{
@@ -467,9 +507,9 @@ def SubFOp: HIR_Op<"subf",[NoSideEffect,AttrSizedOperandSegments]>{
   let arguments = (ins AnyType : $op1, AnyType: $op2,  OptionalAttr<I64Attr>:$delay, 
       Optional<TimeType>:$tstart, Optional<Index>: $offset);
   let results = (outs AnyType : $res);
-  let assemblyFormat = [{`(`$op1 `,` $op2 `)` custom<TimeAndOffset> 
+  let assemblyFormat = [{`(`$op1 `,` $op2 `)` `at` custom<TimeAndOffset> 
     ($tstart, $offset) attr-dict `:` custom<BinOpOperandsAndResultType>(type($res), type($op1),type($op2)) (`delay` $delay^)?
-    }];
+  }];
 }
 
 def MulFOp: HIR_Op<"mulf",[NoSideEffect,AttrSizedOperandSegments]>{
@@ -483,9 +523,9 @@ def MulFOp: HIR_Op<"mulf",[NoSideEffect,AttrSizedOperandSegments]>{
   let arguments = (ins AnyType : $op1, AnyType: $op2,  OptionalAttr<I64Attr>:$delay, 
       Optional<TimeType>:$tstart, Optional<Index>: $offset);
   let results = (outs AnyType : $res);
-  let assemblyFormat = [{`(`$op1 `,` $op2`)` custom<TimeAndOffset> 
+  let assemblyFormat = [{`(`$op1 `,` $op2`)` `at` custom<TimeAndOffset> 
     ($tstart, $offset) attr-dict `:` custom<BinOpOperandsAndResultType>(type($res), type($op1),type($op2)) (`delay` $delay^)?
-    }];
+  }];
 }
 
 def TensorExtract :HIR_Op<"tensor.extract",[NoSideEffect]>{

@@ -217,7 +217,7 @@ static Type parseInnerFuncType(DialectAsmParser &parser, MLIRContext *context) {
         return Type();
       inputTypes.push_back(type);
 
-      if (helper::isBuiltinType(type)) {
+      if (helper::isBuiltinSizedType(type)) {
         if (parseDelayAttr(parser, inputAttrs))
           return Type();
       } else if (type.dyn_cast<hir::MemrefType>()) {
@@ -245,7 +245,7 @@ static Type parseInnerFuncType(DialectAsmParser &parser, MLIRContext *context) {
         if (parser.parseType(resultTy))
           return Type();
         resultTypes.push_back(resultTy);
-        if (!helper::isBuiltinType(resultTy))
+        if (!helper::isBuiltinSizedType(resultTy))
           return parser.emitError(parser.getCurrentLocation(),
                                   "Only mlir builtin types are supported in "
                                   "function results."),
@@ -419,7 +419,7 @@ static void printFuncType(FuncType moduleTy, DialectAsmPrinter &printer) {
     if (i > 0)
       printer << ", ";
     printer << inputTypes[i];
-    if (helper::isBuiltinType(inputTypes[i])) {
+    if (helper::isBuiltinSizedType(inputTypes[i])) {
       auto delay = helper::extractDelayFromDict(inputAttrs[i]);
       if (delay != 0)
         printer << " delay " << delay;

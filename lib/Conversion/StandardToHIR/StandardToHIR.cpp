@@ -16,136 +16,10 @@
 #include <iostream>
 using namespace circt;
 
-namespace {
-class ConvertStandardToHIRPass
-    : public ConvertStandardToHIRBase<ConvertStandardToHIRPass> {
-public:
-  void runOnOperation() override {
-    ModuleOp moduleOp = getOperation();
-    if (failed(convertRegion(moduleOp.body(), SmallVector<Type>()))) {
-      signalPassFailure();
-      return;
-    }
-    for (auto *op : opsToErase)
-      op->erase();
-  }
-
-private:
-  LogicalResult convertRegion(Region &region, ArrayRef<Type> blockArgumentTypes,
-                              bool tstartRequired = false) {
-    if (region.getBlocks().size() > 1)
-      region.getParentOp()->emitError(
-          "HIR only supports one block per region.");
-
-    // Replace the old arguments in the body with new ones.
-    auto &body = region.front();
-
-    // hir::FuncOp can insert extra blockArguments for the mlir::funcOp results.
-    assert(body.getNumArguments() <= blockArgumentTypes.size());
-    for (size_t i = 0; i < blockArgumentTypes.size(); i++) {
-      if (i < body.getNumArguments()) {
-        Value replacedArg = body.insertArgument(i, blockArgumentTypes[i]);
-        body.getArgument(i + 1).replaceAllUsesWith(replacedArg);
-        body.eraseArgument(i + 1);
-      } else {
-        body.addArgument(blockArgumentTypes[i]);
-      }
-    }
-
-    if (tstartRequired)
-      body.addArgument(hir::TimeType::get(region.getContext()));
-
-    // lower the ops in the region.
-    for (Operation &operation : body) {
-      if (auto op = dyn_cast<mlir::FuncOp>(operation)) {
-        if (failed(convertOp(op)))
-          return failure();
-      } else if (auto op = dyn_cast<mlir::scf::ForOp>(operation)) {
-        if (failed(convertOp(op)))
-          return failure();
-      } else if (auto op = dyn_cast<mlir::scf::YieldOp>(operation)) {
-        if (failed(convertOp(op)))
-          return failure();
-      } else if (auto op = dyn_cast<mlir::memref::LoadOp>(operation)) {
-        if (failed(convertOp(op)))
-          return failure();
-      } else if (auto op = dyn_cast<mlir::memref::StoreOp>(operation)) {
-        if (failed(convertOp(op)))
-          return failure();
-      } else if (auto op = dyn_cast<mlir::AddIOp>(operation)) {
-        if (failed(convertBinOp<mlir::AddIOp, hir::AddIOp>(op)))
-          return failure();
-      } else if (auto op = dyn_cast<mlir::SubIOp>(operation)) {
-        if (failed(convertBinOp<mlir::SubIOp, hir::SubIOp>(op)))
-          return failure();
-      } else if (auto op = dyn_cast<mlir::MulIOp>(operation)) {
-        if (failed(convertBinOp<mlir::MulIOp, hir::MulIOp>(op)))
-          return failure();
-      } else if (auto op = dyn_cast<mlir::AddFOp>(operation)) {
-        if (failed(convertBinOp<mlir::AddFOp, hir::AddFOp>(op)))
-          return failure();
-      } else if (auto op = dyn_cast<mlir::SubFOp>(operation)) {
-        if (failed(convertBinOp<mlir::SubFOp, hir::SubFOp>(op)))
-          return failure();
-      } else if (auto op = dyn_cast<mlir::MulFOp>(operation)) {
-        if (failed(convertBinOp<mlir::MulFOp, hir::MulFOp>(op)))
-          return failure();
-      } else if (auto op = dyn_cast<mlir::ReturnOp>(operation)) {
-        if (failed(convertOp(op)))
-          return failure();
-      }
-    }
-    return success();
-  }
-
-private:
-  LogicalResult convertOp(mlir::FuncOp);
-  LogicalResult convertOp(mlir::scf::ForOp);
-  LogicalResult convertOp(mlir::scf::YieldOp);
-  LogicalResult convertOp(mlir::memref::LoadOp);
-  LogicalResult convertOp(mlir::memref::StoreOp);
-  // LogicalResult convertOp(mlir::AddIOp);
-  // LogicalResult convertOp(mlir::SubIOp);
-  // LogicalResult convertOp(mlir::MulIOp);
-  // LogicalResult convertOp(mlir::AddFOp);
-  // LogicalResult convertOp(mlir::SubFOp);
-  // LogicalResult convertOp(mlir::MulFOp);
-  LogicalResult convertOp(mlir::ReturnOp);
-
-  template <typename FromT, typename ToT>
-  LogicalResult convertBinOp(FromT op) {
-    OpBuilder builder(op);
-    Value res =
-        builder.create<ToT>(op.getLoc(), op.getResult().getType(), op.lhs(),
-                            op.rhs(), IntegerAttr(), Value(), Value());
-    op.getResult().replaceAllUsesWith(res);
-    opsToErase.push_back(op);
-    return success();
-  }
-
-private: // State.
-  SmallVector<Operation *> opsToErase;
-  SmallVector<unsigned int> mapResultPosToArgumentPos;
-  hir::FuncOp enclosingFuncOp;
-};
-} // namespace
-
 //------------------------------------------------------------------------------
 // Helper functions
 //------------------------------------------------------------------------------
-bool isConstantIndex(Value v) {
-  auto constantIndexOp = dyn_cast<mlir::ConstantIndexOp>(v.getDefiningOp());
-  if (!constantIndexOp)
-    return false;
-  return true;
-}
-
-int64_t getConstantIndex(Value v) {
-  auto constantIndexOp = dyn_cast<mlir::ConstantIndexOp>(v.getDefiningOp());
-  assert(constantIndexOp);
-  return constantIndexOp.getValue();
-}
-
+namespace {
 ArrayAttr getRegWritePort(OpBuilder &builder) {
   SmallVector<Attribute> ports;
   ports.push_back(helper::getDictionaryAttr(
@@ -196,7 +70,156 @@ getDimKindsFromArrayOfBankDims(ArrayRef<int64_t> shape, ArrayAttr bankDims) {
   }
   return dimKinds;
 }
+
+unsigned int getLatencyFromMemrefAttrDict(StringRef latencyOf,
+                                          DictionaryAttr dict) {
+  unsigned int wrDelay = 0;
+  ArrayAttr ports =
+      dict.getNamed("hir.memref.ports").getValue().second.dyn_cast<ArrayAttr>();
+  for (auto port : ports) {
+    auto latencyAttr = port.dyn_cast<DictionaryAttr>().getNamed(latencyOf);
+    if (latencyAttr.hasValue()) {
+      wrDelay = latencyAttr.getValue().second.dyn_cast<IntegerAttr>().getInt();
+    }
+  }
+  return wrDelay;
+}
+} // namespace
 //------------------------------------------------------------------------------
+
+namespace {
+class ConvertStandardToHIRPass
+    : public ConvertStandardToHIRBase<ConvertStandardToHIRPass> {
+public:
+  void runOnOperation() override {
+    ModuleOp moduleOp = getOperation();
+    if (failed(convertRegion(moduleOp.body(), SmallVector<Type>(),
+                             SmallVector<DictionaryAttr>()))) {
+      signalPassFailure();
+      return;
+    }
+    for (auto *op : opsToErase)
+      op->erase();
+  }
+
+private:
+  LogicalResult convertRegion(Region &region, ArrayRef<Type> blockArgumentTypes,
+                              ArrayRef<DictionaryAttr> blockArgumentAttrs,
+                              bool tstartRequired = false) {
+    if (region.getBlocks().size() > 1)
+      region.getParentOp()->emitError(
+          "HIR only supports one block per region.");
+
+    // Replace the old arguments in the body with new ones.
+    auto &body = region.front();
+
+    // hir::FuncOp can insert extra blockArguments for the mlir::funcOp results.
+    assert(body.getNumArguments() <= blockArgumentTypes.size());
+    for (size_t i = 0; i < blockArgumentTypes.size(); i++) {
+      Value newArg;
+      if (i < body.getNumArguments()) {
+        newArg = body.insertArgument(i, blockArgumentTypes[i]);
+        body.getArgument(i + 1).replaceAllUsesWith(newArg);
+        body.eraseArgument(i + 1);
+      } else {
+        newArg = body.addArgument(blockArgumentTypes[i]);
+      }
+      if (auto memrefTy = blockArgumentTypes[i].dyn_cast<hir::MemrefType>()) {
+        // delay;
+        ;
+        mapMemrefToWrDelay[newArg] =
+            getLatencyFromMemrefAttrDict("wr_latency", blockArgumentAttrs[i]);
+        mapMemrefToRdDelay[newArg] =
+            getLatencyFromMemrefAttrDict("rd_latency", blockArgumentAttrs[i]);
+      }
+    }
+
+    if (tstartRequired)
+      body.addArgument(hir::TimeType::get(region.getContext()));
+
+    // lower the ops in the region.
+    for (Operation &operation : body) {
+      if (auto op = dyn_cast<mlir::FuncOp>(operation)) {
+        if (failed(convertOp(op)))
+          return failure();
+      } else if (auto op = dyn_cast<mlir::scf::ForOp>(operation)) {
+        if (failed(convertOp(op)))
+          return failure();
+      } else if (auto op = dyn_cast<mlir::scf::YieldOp>(operation)) {
+        if (failed(convertOp(op)))
+          return failure();
+      } else if (auto op = dyn_cast<mlir::memref::LoadOp>(operation)) {
+        if (failed(convertOp(op)))
+          return failure();
+      } else if (auto op = dyn_cast<mlir::memref::StoreOp>(operation)) {
+        if (failed(convertOp(op)))
+          return failure();
+      } else if (auto op = dyn_cast<mlir::AddIOp>(operation)) {
+        if (failed(convertBinOp<mlir::AddIOp, hir::AddIOp>(op)))
+          return failure();
+      } else if (auto op = dyn_cast<mlir::SubIOp>(operation)) {
+        if (failed(convertBinOp<mlir::SubIOp, hir::SubIOp>(op)))
+          return failure();
+      } else if (auto op = dyn_cast<mlir::MulIOp>(operation)) {
+        if (failed(convertBinOp<mlir::MulIOp, hir::MulIOp>(op)))
+          return failure();
+      } else if (auto op = dyn_cast<mlir::AddFOp>(operation)) {
+        if (failed(convertBinOp<mlir::AddFOp, hir::AddFOp>(op)))
+          return failure();
+      } else if (auto op = dyn_cast<mlir::SubFOp>(operation)) {
+        if (failed(convertBinOp<mlir::SubFOp, hir::SubFOp>(op)))
+          return failure();
+      } else if (auto op = dyn_cast<mlir::MulFOp>(operation)) {
+        if (failed(convertBinOp<mlir::MulFOp, hir::MulFOp>(op)))
+          return failure();
+      } else if (auto op = dyn_cast<mlir::ReturnOp>(operation)) {
+        if (failed(convertOp(op)))
+          return failure();
+      }
+    }
+    return success();
+  }
+
+private: // Helper methods.
+private:
+  LogicalResult convertOp(mlir::FuncOp);
+  LogicalResult convertOp(mlir::scf::ForOp);
+  LogicalResult convertOp(mlir::scf::YieldOp);
+  LogicalResult convertOp(mlir::memref::LoadOp);
+  LogicalResult convertOp(mlir::memref::StoreOp);
+  // LogicalResult convertOp(mlir::AddIOp);
+  // LogicalResult convertOp(mlir::SubIOp);
+  // LogicalResult convertOp(mlir::MulIOp);
+  // LogicalResult convertOp(mlir::AddFOp);
+  // LogicalResult convertOp(mlir::SubFOp);
+  // LogicalResult convertOp(mlir::MulFOp);
+  LogicalResult convertOp(mlir::ReturnOp);
+
+  template <typename FromT, typename ToT>
+  LogicalResult convertBinOp(FromT op) {
+    OpBuilder builder(op);
+    Attribute opDelayAttr = op->getAttr("hir.op.delay");
+    IntegerAttr delayAttr;
+    if (opDelayAttr)
+      delayAttr = opDelayAttr.dyn_cast<IntegerAttr>();
+    else
+      delayAttr = IntegerAttr();
+    Value res =
+        builder.create<ToT>(op.getLoc(), op.getResult().getType(), op.lhs(),
+                            op.rhs(), delayAttr, Value(), Value());
+    op.getResult().replaceAllUsesWith(res);
+    opsToErase.push_back(op);
+    return success();
+  }
+
+private: // State.
+  SmallVector<Operation *> opsToErase;
+  SmallVector<unsigned int> mapResultPosToArgumentPos;
+  hir::FuncOp enclosingFuncOp;
+  llvm::DenseMap<Value, unsigned int> mapMemrefToWrDelay;
+  llvm::DenseMap<Value, unsigned int> mapMemrefToRdDelay;
+};
+} // namespace
 
 //------------------------------------------------------------------------------
 // Op conversions.
@@ -227,18 +250,18 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::FuncOp op) {
           context, memrefTy.getShape(), memrefTy.getElementType(), dimKinds));
       inputAttrs.push_back(helper::getDictionaryAttr(
           builder, "hir.memref.ports", getDefaultMemrefPorts(builder)));
-    } else if (helper::isBuiltinType(ty)) {
+    } else if (helper::isBuiltinSizedType(ty)) {
       inputTypes.push_back(ty);
       inputAttrs.push_back(helper::getDictionaryAttr(
           builder, "hir.delay", helper::getIntegerAttr(context, 0)));
     } else
-      return op.emitError(
-          "Only builtin types and memrefs are supported in input types.");
+      return op.emitError("Only mlir builtin types (except mlir::IndexType) "
+                          "and memrefs are supported in input types.");
   }
 
   // Insert result types into inputs as a reg with write only port.
   for (Type ty : originalFunctionTy.getResults()) {
-    if (helper::isBuiltinType(ty)) {
+    if (helper::isBuiltinSizedType(ty)) {
       auto resultRegTy =
           hir::MemrefType::get(context, SmallVector<int64_t>({1}), ty,
                                SmallVector<hir::DimKind>({hir::DimKind::BANK}));
@@ -273,7 +296,7 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::FuncOp op) {
 
   opsToErase.push_back(op);
   enclosingFuncOp = funcOp;
-  return convertRegion(funcOp.getFuncBody(), inputTypes,
+  return convertRegion(funcOp.getFuncBody(), inputTypes, inputAttrs,
                        /*tstartRequired*/ true);
 }
 
@@ -294,7 +317,8 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::scf::ForOp op) {
   // forOp.getLoopBody().front().addArgument(IndexType::get(builder.getContext()));
   BlockAndValueMapping mapper;
   op.getLoopBody().cloneInto(&forOp.getLoopBody(), mapper);
-
+  if (Attribute unrollAttr = op->getAttr("hir.unroll"))
+    forOp->setAttr("unroll", unrollAttr);
   // tfinish is returned in addition to any other outputs.
   assert(forOp.getNumResults() == 1 + op.getNumResults());
   for (size_t i = 0; i < op.getNumResults(); i++) {
@@ -306,6 +330,8 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::scf::ForOp op) {
   return convertRegion(
       forOp.getLoopBody(),
       SmallVector<Type>({IndexType::get(builder.getContext())}),
+      {helper::getDictionaryAttr(builder, "hir.delay",
+                                 builder.getI64IntegerAttr(0))},
       /*tstartRequired*/ true);
 }
 
@@ -355,9 +381,10 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::memref::LoadOp op) {
     }
   }
 
-  auto loadOp = builder.create<hir::LoadOp>(op.getLoc(), res.getType(), memref,
-                                            castedIndices, IntegerAttr(),
-                                            IntegerAttr(), Value(), Value());
+  auto loadOp = builder.create<hir::LoadOp>(
+      op.getLoc(), res.getType(), memref, castedIndices, /*port*/ IntegerAttr(),
+      builder.getI64IntegerAttr(mapMemrefToRdDelay[memref]), Value(), Value());
+
   op->replaceAllUsesWith(loadOp);
   opsToErase.push_back(op);
   return success();
@@ -396,9 +423,9 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::memref::StoreOp op) {
     }
   }
 
-  auto storeOp = builder.create<hir::StoreOp>(op.getLoc(), op.value(), memref,
-                                              castedIndices, IntegerAttr(),
-                                              Value(), Value());
+  auto storeOp = builder.create<hir::StoreOp>(
+      op.getLoc(), op.value(), memref, castedIndices, /*port*/ IntegerAttr(),
+      builder.getI64IntegerAttr(mapMemrefToWrDelay[memref]), Value(), Value());
   op->replaceAllUsesWith(storeOp);
   opsToErase.push_back(op);
   return success();
@@ -468,8 +495,11 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::ReturnOp op) {
     Value memref = enclosingFuncOp.getFuncBody().front().getArgument(
         mapResultPosToArgumentPos[i]);
     Value operand = op.getOperand(i);
-    builder.create<hir::StoreOp>(op.getLoc(), operand, memref, c0,
-                                 IntegerAttr(), Value(), Value());
+    builder.create<hir::StoreOp>(
+        op.getLoc(), operand, memref, c0,
+        /*port*/ IntegerAttr(),
+        builder.getI64IntegerAttr(mapMemrefToWrDelay[memref]), Value(),
+        Value());
   }
 
   builder.create<hir::ReturnOp>(op.getLoc());

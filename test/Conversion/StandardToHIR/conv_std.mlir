@@ -22,12 +22,12 @@ module  {
             %1 = addi %arg4, %arg6 : index
             %2 = memref.load %arg0[%0, %1] : memref<16x16xi32>
             %3 = memref.load %arg1[%arg5, %arg6] : memref<5x5xi32>
-            %4 = muli %2, %3 : i32
+            %4 = muli %2, %3 {hir.op.delay=3}: i32
             %5 = memref.load %arg2[%arg3, %arg4] : memref<14x14xi32>
             %6 = addi %4, %5 : i32
             memref.store %6, %arg2[%arg3, %arg4] : memref<14x14xi32>
-          }{unroll=true}
-        }
+          }{hir.unroll}
+        }{hir.unroll}
       }
     }
     return
@@ -38,7 +38,8 @@ module  {
     %c0 = constant 0 : index
     %c4 = constant 4 : index
     %c1 = constant 1 : index
-    scf.for %arg3 = %c0 to %c4 step %c1 {
+    %cx = constant -1: index
+    scf.for %arg3 = %cx to %c4 step %c1 {
       %0 = memref.load %arg0[%c0, %c0] : memref<16x16xi32>
     }
     %1 = memref.load %arg0[%c0, %c1] : memref<16x16xi32>

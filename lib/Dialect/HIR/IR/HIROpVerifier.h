@@ -6,6 +6,9 @@
 namespace circt {
 namespace hir {
 LogicalResult verifyFuncOp(hir::FuncOp op);
+LogicalResult verifyDelayOp(hir::DelayOp op);
+LogicalResult verifyTimeOp(hir::TimeOp op);
+LogicalResult verifyForOp(hir::ForOp op);
 } // namespace hir
 } // namespace circt
 

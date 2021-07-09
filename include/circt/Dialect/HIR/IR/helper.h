@@ -8,8 +8,9 @@ unsigned getBitWidth(mlir::Type);
 unsigned clog2(int);
 
 /// A primitive type is integer, float or a tuple/tensor of a primitive type.
-bool isBuiltinType(mlir::Type);
+bool isBuiltinSizedType(mlir::Type);
 int64_t getConstantIntValue(mlir::Value var);
+mlir::LogicalResult isConstantIntValue(mlir::Value var);
 mlir::IntegerAttr getIntegerAttr(mlir::MLIRContext *context, int value);
 
 circt::hir::TimeType getTimeType(mlir::MLIRContext *context);

@@ -55,3 +55,6 @@ ParseResult parseBinOpOperandsAndResultType(mlir::OpAsmParser &parser,
 
 void printBinOpOperandsAndResultType(mlir::OpAsmPrinter &, Operation *, Type,
                                      Type, Type);
+
+ParseResult parseCopyType(mlir::OpAsmParser &parser, Type &destTy, Type srcTy);
+void printCopyType(mlir::OpAsmPrinter &, Operation *, Type, Type);

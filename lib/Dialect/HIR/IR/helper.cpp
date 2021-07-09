@@ -64,18 +64,19 @@ DictionaryAttr getDictionaryAttr(mlir::RewriterBase &rewriter, StringRef name,
                              rewriter.getNamedAttr(name, attr));
 }
 
-bool isBuiltinType(Type ty) {
-  if (ty.isa<IntegerType>() || ty.isa<mlir::FloatType>())
+bool isBuiltinSizedType(Type ty) {
+  if ((ty.isa<IntegerType>() && ty.dyn_cast<IntegerType>().isSignless()) ||
+      ty.isa<mlir::FloatType>())
     return true;
   if (ty.isa<TupleType>()) {
     bool tupleMembersArePrimitive = true;
     for (auto memberTy : ty.dyn_cast<TupleType>().getTypes())
-      tupleMembersArePrimitive &= isBuiltinType(memberTy);
+      tupleMembersArePrimitive &= isBuiltinSizedType(memberTy);
     if (tupleMembersArePrimitive)
       return true;
   }
   if (ty.isa<mlir::TensorType>() &&
-      isBuiltinType(ty.dyn_cast<mlir::TensorType>().getElementType()))
+      isBuiltinSizedType(ty.dyn_cast<mlir::TensorType>().getElementType()))
     return true;
   return false;
 }
@@ -96,6 +97,13 @@ int64_t getConstantIntValue(Value var) {
   auto integerAttr = constantOp.value().dyn_cast<IntegerAttr>();
   assert(integerAttr);
   return integerAttr.getInt();
+}
+
+mlir::LogicalResult isConstantIntValue(mlir::Value var) {
+
+  if (dyn_cast<mlir::ConstantOp>(var.getDefiningOp()))
+    return success();
+  return failure();
 }
 
 int64_t calcLinearIndex(mlir::ArrayRef<mlir::Value> indices,
