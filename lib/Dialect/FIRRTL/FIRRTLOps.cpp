@@ -2444,7 +2444,8 @@ SmallVector<Direction> direction::unpackAttribute(Operation *module) {
 // Miscellaneous custom elision logic.
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseElideName(OpAsmParser &p, NamedAttrList &resultAttrs) {
+static ParseResult parseElideEmptyName(OpAsmParser &p,
+                                       NamedAttrList &resultAttrs) {
   auto result = p.parseOptionalAttrDict(resultAttrs);
   if (!resultAttrs.get("name"))
     resultAttrs.append("name", p.getBuilder().getStringAttr(""));
@@ -2452,8 +2453,9 @@ static ParseResult parseElideName(OpAsmParser &p, NamedAttrList &resultAttrs) {
   return result;
 }
 
-static void printElideName(OpAsmPrinter &p, Operation *op, DictionaryAttr attr,
-                           ArrayRef<StringRef> extraElides = {}) {
+static void printElideEmptyName(OpAsmPrinter &p, Operation *op,
+                                DictionaryAttr attr,
+                                ArrayRef<StringRef> extraElides = {}) {
 
   SmallVector<StringRef> elides(extraElides.begin(), extraElides.end());
   if (op->getAttrOfType<StringAttr>("name").getValue().empty())
@@ -2464,30 +2466,30 @@ static void printElideName(OpAsmPrinter &p, Operation *op, DictionaryAttr attr,
 
 static ParseResult parsePrintfAttrs(OpAsmParser &p,
                                     NamedAttrList &resultAttrs) {
-  return parseElideName(p, resultAttrs);
+  return parseElideEmptyName(p, resultAttrs);
 }
 
 static void printPrintfAttrs(OpAsmPrinter &p, Operation *op,
                              DictionaryAttr attr) {
-  printElideName(p, op, attr, {"formatString"});
+  printElideEmptyName(p, op, attr, {"formatString"});
 }
 
 static ParseResult parseStopAttrs(OpAsmParser &p, NamedAttrList &resultAttrs) {
-  return parseElideName(p, resultAttrs);
+  return parseElideEmptyName(p, resultAttrs);
 }
 
 static void printStopAttrs(OpAsmPrinter &p, Operation *op,
                            DictionaryAttr attr) {
-  printElideName(p, op, attr, {"exitCode"});
+  printElideEmptyName(p, op, attr, {"exitCode"});
 }
 
 static ParseResult parseVerifAttrs(OpAsmParser &p, NamedAttrList &resultAttrs) {
-  return parseElideName(p, resultAttrs);
+  return parseElideEmptyName(p, resultAttrs);
 }
 
 static void printVerifAttrs(OpAsmPrinter &p, Operation *op,
                             DictionaryAttr attr) {
-  printElideName(p, op, attr, {"message"});
+  printElideEmptyName(p, op, attr, {"message"});
 }
 
 //===----------------------------------------------------------------------===//

@@ -499,7 +499,8 @@ def AssertOp : SVOp<"assert", [ProceduralOp]> {
 
   let arguments = (ins AnyType:$predicate, StrAttr:$label);
   let results = (outs);
-  let assemblyFormat = "custom<ElideLabel>(attr-dict) $predicate `:` type($predicate)";
+  let assemblyFormat =
+    "custom<ElideEmptyLabel>(attr-dict) $predicate `:` type($predicate)";
 }
 
 def AssumeOp : SVOp<"assume", [ProceduralOp]> {
@@ -510,7 +511,8 @@ def AssumeOp : SVOp<"assume", [ProceduralOp]> {
 
   let arguments = (ins AnyType:$property, StrAttr:$label);
   let results = (outs);
-  let assemblyFormat = "custom<ElideLabel>(attr-dict) $property `:` type($property)";
+  let assemblyFormat =
+    "custom<ElideEmptyLabel>(attr-dict) $property `:` type($property)";
 }
 
 def CoverOp : SVOp<"cover", [ProceduralOp]> {
@@ -521,7 +523,8 @@ def CoverOp : SVOp<"cover", [ProceduralOp]> {
 
   let arguments = (ins AnyType:$property, StrAttr:$label);
   let results = (outs);
-  let assemblyFormat = "custom<ElideLabel>(attr-dict) $property `:` type($property)";
+  let assemblyFormat =
+    "custom<ElideEmptyLabel>(attr-dict) $property `:` type($property)";
 }
 
 def BindOp : SVOp<"bind", []> {

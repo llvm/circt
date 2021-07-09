@@ -1033,7 +1033,8 @@ static LogicalResult verifyBindOp(BindOp op) {
 // Helpers to elide "label" attributes.
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseElideLabel(OpAsmParser &p, NamedAttrList &resultAttrs) {
+static ParseResult parseElideEmptyLabel(OpAsmParser &p,
+                                        NamedAttrList &resultAttrs) {
 
   auto result = p.parseOptionalAttrDict(resultAttrs);
   if (!resultAttrs.get("label"))
@@ -1042,8 +1043,8 @@ static ParseResult parseElideLabel(OpAsmParser &p, NamedAttrList &resultAttrs) {
   return result;
 }
 
-static void printElideLabel(OpAsmPrinter &p, Operation *op,
-                            DictionaryAttr attr) {
+static void printElideEmptyLabel(OpAsmPrinter &p, Operation *op,
+                                 DictionaryAttr attr) {
 
   SmallVector<StringRef, 1> elides;
   // Elide "label" if it is an empty string.
