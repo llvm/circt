@@ -320,6 +320,7 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   SmallVector<FModuleOp, 32> modulesToProcess;
 
+  state.warnOnRemainingAnnotations(circuit, AnnotationSet(circuit));
   // Iterate through each operation in the circuit body, transforming any
   // FModule's we come across.
   for (auto &op : circuitBody->getOperations()) {
