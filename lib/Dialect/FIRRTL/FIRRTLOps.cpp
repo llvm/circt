@@ -1520,23 +1520,30 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
 }
 
 static LogicalResult verifySubfieldOp(SubfieldOp op) {
-  if (op.fieldIndex() >
+  if (op.fieldIndex() >=
       op.input().getType().cast<BundleType>().getNumElements())
-    return op.emitOpError("Subfield field index is greater than number of "
-                          "fields in the bundle type");
+    return op.emitOpError("subfield element index is greater than the number "
+                          "of fields in the bundle type");
   return success();
 }
 
 FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
                                        ArrayRef<NamedAttribute> attrs,
                                        Optional<Location> loc) {
-  auto inType = operands[0].getType();
+  auto inType = operands[0].getType().cast<BundleType>();
   auto fieldIndex =
       getAttr<IntegerAttr>(attrs, "fieldIndex").getValue().getZExtValue();
 
+  if (fieldIndex >= inType.getNumElements()) {
+    if (loc)
+      mlir::emitError(*loc, "subfield element index is greater than the number "
+                            "of fields in the bundle type");
+    return {};
+  }
+
   // SubfieldOp verifier checks that the field index is valid with number of
   // subelements.
-  return inType.cast<BundleType>().getElement(fieldIndex).type;
+  return inType.getElement(fieldIndex).type;
 }
 
 bool SubfieldOp::isFieldFlipped() {
