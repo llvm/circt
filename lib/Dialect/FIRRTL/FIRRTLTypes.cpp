@@ -686,7 +686,7 @@ llvm::Optional<unsigned> BundleType::getElementIndex(StringRef name) {
 }
 
 StringRef BundleType::getElementName(size_t index) {
-  assert((index < getElements().size()) &&
+  assert(index < getNumElements() &&
          "index must be less than number of fields in bundle");
   return getElements()[index].name.getValue();
 }
@@ -699,10 +699,10 @@ auto BundleType::getElement(StringRef name) -> Optional<BundleElement> {
 }
 
 /// Look up an element by index.
-auto BundleType::getElement(size_t index) -> Optional<BundleElement> {
-  if (index < getNumElements())
-    return getElements()[index];
-  return None;
+BundleType::BundleElement BundleType::getElement(size_t index) {
+  assert(index < getNumElements() &&
+         "index must be less than number of fields in bundle");
+  return getElements()[index];
 }
 
 FIRRTLType BundleType::getElementType(StringRef name) {

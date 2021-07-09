@@ -77,7 +77,7 @@ static bool peelType(Type type, SmallVectorImpl<FlatBundleFieldEntry> &fields) {
         SmallString<16> tmpSuffix;
         // Otherwise, we have a bundle type.  Break it down.
         for (size_t i = 0, e = bundle.getNumElements(); i < e; ++i) {
-          auto elt = bundle.getElement(i).getValue();
+          auto elt = bundle.getElement(i);
           // Construct the suffix to pass down.
           tmpSuffix.resize(0);
           tmpSuffix.push_back('_');
@@ -551,10 +551,10 @@ void TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
     BundleType destBundle = op.dest().getType().cast<BundleType>();
     for (int srcIndex = 0, srcEnd = srcBundle.getNumElements();
          srcIndex < srcEnd; ++srcIndex) {
-      auto srcName = srcBundle.getElement(srcIndex).getValue().name;
+      auto srcName = srcBundle.getElement(srcIndex).name;
       for (int destIndex = 0, destEnd = destBundle.getNumElements();
            destIndex < destEnd; ++destIndex) {
-        auto destName = destBundle.getElement(destIndex).getValue().name;
+        auto destName = destBundle.getElement(destIndex).name;
         if (srcName == destName) {
           Value src = builder->create<SubfieldOp>(op.src(), srcIndex);
           Value dest = builder->create<SubfieldOp>(op.dest(), destIndex);
@@ -625,7 +625,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     auto rType = result.getType().cast<BundleType>();
     for (size_t fieldIndex = 0, fend = rType.getNumElements();
          fieldIndex != fend; ++fieldIndex) {
-      auto name = rType.getElement(fieldIndex).getValue().name.getValue();
+      auto name = rType.getElement(fieldIndex).name.getValue();
       auto oldField = builder->create<SubfieldOp>(result, fieldIndex);
       // data and mask depend on the memory type which was split.  They can also
       // go both directions, depending on the port direction.
@@ -634,7 +634,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
           auto realOldField = getSubWhatever(oldField, field.index);
           auto newField = getSubWhatever(
               newMemories[field.index].getResult(index), fieldIndex);
-          if (rType.getElement(fieldIndex).getValue().isFlip)
+          if (rType.getElement(fieldIndex).isFlip)
             std::swap(realOldField, newField);
           builder->create<ConnectOp>(newField, realOldField);
         }

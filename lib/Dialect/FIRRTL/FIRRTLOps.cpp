@@ -1536,14 +1536,13 @@ FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
 
   // SubfieldOp verifier checks that the field index is valid with number of
   // subelements.
-  return inType.cast<BundleType>().getElement(fieldIndex).getValue().type;
+  return inType.cast<BundleType>().getElement(fieldIndex).type;
 }
 
 bool SubfieldOp::isFieldFlipped() {
   auto fieldIndex = this->fieldIndex();
   auto bundle = input().getType().cast<BundleType>();
-  auto field = bundle.getElement(fieldIndex);
-  return field.getValue().isFlip;
+  return bundle.getElement(fieldIndex).isFlip;
 }
 
 FIRRTLType SubindexOp::inferReturnType(ValueRange operands,
