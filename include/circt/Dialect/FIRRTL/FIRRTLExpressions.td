@@ -134,21 +134,23 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
     The subfield expression refers to a subelement of an expression with a
     bundle type.
     ```
-      %result = firrtl.subfield %input "fieldname" : t1, t2
+      %result = firrtl.subfield %input "fieldIndex" : t1, t2
     ```
     }];
 
-  let arguments = (ins BundleType:$input, StrAttr:$fieldname);
+  let arguments = (ins BundleType:$input, I32Attr:$fieldIndex);
   let results = (outs FIRRTLType:$result);
 
   // TODO: Could drop the result type, inferring it from the source.
   let assemblyFormat =
-    "$input `(` $fieldname `)` attr-dict `:` functional-type($input, $result)";
+    "$input `(` $fieldIndex `)` attr-dict `:` functional-type($input, $result)";
 
   let firrtlExtraClassDeclaration = [{
     /// Return true if the specified field is flipped.
     bool isFieldFlipped();
   }];
+
+  let verifier = "return ::verifySubfieldOp(*this);";
 }
 
 class IndexConstraint<string value, string resultValue>

@@ -96,7 +96,7 @@ struct SharedParserConstants {
         loIdentifier(Identifier::get("lo", context)),
         hiIdentifier(Identifier::get("hi", context)),
         amountIdentifier(Identifier::get("amount", context)),
-        fieldnameIdentifier(Identifier::get("fieldname", context)),
+        fieldIndexIdentifier(Identifier::get("fieldIndex", context)),
         indexIdentifier(Identifier::get("index", context)) {}
 
   /// The context we're parsing into.
@@ -118,7 +118,7 @@ struct SharedParserConstants {
 
   /// Cached identifiers used in primitives.
   const Identifier loIdentifier, hiIdentifier, amountIdentifier;
-  const Identifier fieldnameIdentifier, indexIdentifier;
+  const Identifier fieldIndexIdentifier, indexIdentifier;
 
 private:
   SharedParserConstants(const SharedParserConstants &) = delete;
@@ -1513,8 +1513,8 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
   // to only the leaf sources.
   TypeSwitch<FIRRTLType>(tpe)
       .Case<BundleType>([&](auto tpe) {
-        for (auto element : tpe.getElements()) {
-          auto subfield = builder.create<SubfieldOp>(val, element.name);
+        for (size_t i = 0, e = tpe.getNumElements(); i < e; ++i) {
+          auto subfield = builder.create<SubfieldOp>(val, i);
           emitInvalidate(subfield,
                          subfield.isFieldFlipped() ? swapFlow(flow) : flow);
         }
@@ -1665,11 +1665,16 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
   StringRef fieldName;
   if (parseFieldId(fieldName, "expected field name"))
     return failure();
-
+  auto indexV = result.getType().cast<BundleType>().getElementIndex(fieldName);
+  if (!indexV)
+    return emitError("unknown field '" + fieldName + "' in bundle type ")
+               << result.getType(),
+           failure();
+  auto index = indexV.getValue();
   // Make sure the field name matches up with the input value's type and
   // compute the result type for the expression.
-  NamedAttribute attrs = {getConstants().fieldnameIdentifier,
-                          builder.getStringAttr(fieldName)};
+  NamedAttribute attrs = {getConstants().fieldIndexIdentifier,
+                          builder.getUI32IntegerAttr(index)};
   auto resultType = SubfieldOp::inferReturnType({result}, attrs, {});
   if (!resultType) {
     // Emit the error at the right location.  translateLocation is expensive.
@@ -1679,7 +1684,7 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
 
   // Create the result operation.
   locationProcessor.setLoc(loc);
-  auto op = builder.create<SubfieldOp>(resultType, result, attrs);
+  auto op = builder.create<SubfieldOp>(resultType, result, index);
   result = op.getResult();
   return success();
 }
