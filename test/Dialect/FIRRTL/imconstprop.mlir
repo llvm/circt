@@ -235,7 +235,7 @@ firrtl.circuit "OutPortTop" {
 firrtl.circuit "InputPortTop"   {
   // CHECK-LABEL: firrtl.module @InputPortChild2
   firrtl.module @InputPortChild2(in %in0: !firrtl.uint<1>, in %in1: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
-    // CHECK: %c1_ui1 = firrtl.constant 1
+    // CHECK: = firrtl.constant 1
     %0 = firrtl.and %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   }
