@@ -293,11 +293,17 @@ void FIRRTLDialect::printType(Type type, DialectAsmPrinter &os) const {
 Operation *FIRRTLDialect::materializeConstant(OpBuilder &builder,
                                               Attribute value, Type type,
                                               Location loc) {
+
   // Boolean constants. Boolean attributes are always a special constant type
   // like ClockType and ResetType.  Since BoolAttrs are also IntegerAttrs, its
   // important that this goes first.
-  if (auto attrValue = value.dyn_cast<BoolAttr>())
+  if (auto attrValue = value.dyn_cast<BoolAttr>()) {
+    auto isSpecialConstantType =
+        type.isa<ClockType, AsyncResetType, ResetType>();
+    assert(isSpecialConstantType &&
+           "BoolAttrs can only be materialized for special constant types.");
     return builder.create<SpecialConstantOp>(loc, type, attrValue);
+  }
 
   // Integer constants.
   if (auto attrValue = value.dyn_cast<IntegerAttr>()) {

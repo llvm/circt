@@ -721,16 +721,16 @@ OpFoldResult AsSIntPrimOp::fold(ArrayRef<Attribute> operands) {
   if (!operands[0])
     return {};
 
+  // Constant clocks and resets are bool attributes.
+  if (auto attr = operands[0].dyn_cast<BoolAttr>())
+    return getIntAttr(getType(), APInt(/*bitWidth*/ 1, attr.getValue()));
+
   // Be careful to only fold the cast into the constant if the size is known.
   // Otherwise width inference may produce differently-sized constants if the
   // sign changes.
   if (auto attr = operands[0].dyn_cast<IntegerAttr>())
     if (getType().hasWidth())
       return getIntAttr(getType(), attr.getValue());
-
-  // Constant clocks and resets are bool attributes.
-  if (auto attr = operands[0].dyn_cast<BoolAttr>())
-    return getIntAttr(getType(), APInt(/*bitWidth*/ 1, attr.getValue()));
 
   return {};
 }
@@ -743,16 +743,16 @@ OpFoldResult AsUIntPrimOp::fold(ArrayRef<Attribute> operands) {
   if (!operands[0])
     return {};
 
+  // Constant clocks and resets are bool attributes.
+  if (auto attr = operands[0].dyn_cast<BoolAttr>())
+    return getIntAttr(getType(), APInt(/*bitWidth*/ 1, attr.getValue()));
+
   // Be careful to only fold the cast into the constant if the size is known.
   // Otherwise width inference may produce differently-sized constants if the
   // sign changes.
   if (auto attr = operands[0].dyn_cast<IntegerAttr>())
     if (getType().hasWidth())
       return getIntAttr(getType(), attr.getValue());
-
-  // Constant clocks and resets are bool attributes.
-  if (auto attr = operands[0].dyn_cast<BoolAttr>())
-    return getIntAttr(getType(), APInt(/*bitWidth*/ 1, attr.getValue()));
 
   return {};
 }

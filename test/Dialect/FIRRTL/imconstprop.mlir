@@ -48,7 +48,6 @@ firrtl.circuit "Test" {
     // CHECK: firrtl.connect %result2, %c0_clock
     firrtl.connect %result2, %clockWire : !firrtl.clock, !firrtl.clock
 
-
     // Not a constant.
     %nonconstWire = firrtl.wire : !firrtl.uint<1>
     firrtl.connect %nonconstWire, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -57,22 +56,14 @@ firrtl.circuit "Test" {
     // CHECK: firrtl.connect %result3, %nonconstWire
     firrtl.connect %result3, %nonconstWire : !firrtl.uint<1>, !firrtl.uint<1>
 
-
     // Constant propagation through instance.
     %source, %dest = firrtl.instance @PassThrough {name = "", portNames = ["source", "dest"]} : !firrtl.uint<1>, !firrtl.uint<1>
 
     // CHECK: firrtl.connect %inst_source, %c0_ui1
     firrtl.connect %source, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-<<<<<<< HEAD
-    // CHECK: firrtl.connect %result3, %inst_dest
-    firrtl.connect %result3, %dest : !firrtl.uint<1>, !firrtl.uint<1>
-||||||| parent of f3ea2e7d ([FIRRTL] Allow firrtl.constant of type Clock, Reset, AsyncReset)
-    // CHECK: firrtl.connect %result3, %c0_ui1_1
-    firrtl.connect %result3, %dest : !firrtl.uint<1>, !firrtl.uint<1>
-=======
-    // CHECK: firrtl.connect %result4, %c0_ui1_1
+
+    // CHECK: firrtl.connect %result4, %inst_dest
     firrtl.connect %result4, %dest : !firrtl.uint<1>, !firrtl.uint<1>
->>>>>>> f3ea2e7d ([FIRRTL] Allow firrtl.constant of type Clock, Reset, AsyncReset)
 
     // Check connect extensions.
     %extWire = firrtl.wire : !firrtl.uint<2>
@@ -175,7 +166,6 @@ firrtl.circuit "Issue1188"  {
     %9 = firrtl.mux(%reset, %c1_ui6, %4) : (!firrtl.uint<1>, !firrtl.uint<6>, !firrtl.uint<6>) -> !firrtl.uint<6>
     firrtl.connect %D0123456, %9 : !firrtl.uint<6>, !firrtl.uint<6>
   }
-<<<<<<< HEAD
 }
 
 // -----
@@ -277,8 +267,3 @@ firrtl.circuit "InputPortTop"   {
     firrtl.connect %c2_in1, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
-||||||| parent of f3ea2e7d ([FIRRTL] Allow firrtl.constant of type Clock, Reset, AsyncReset)
-}
-=======
-}
->>>>>>> f3ea2e7d ([FIRRTL] Allow firrtl.constant of type Clock, Reset, AsyncReset)

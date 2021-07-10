@@ -1555,12 +1555,6 @@ static ParseResult parseSpecialConstantOp(OpAsmParser &parser,
   return success();
 }
 
-static LogicalResult verifySpecialConstantOp(SpecialConstantOp constant) {
-  // The attribute is bool and always correct.  The return type is checked by
-  // the type constraints. Nothing to check here.
-  return success();
-}
-
 static LogicalResult verifySubfieldOp(SubfieldOp op) {
   if (op.fieldIndex() >=
       op.input().getType().cast<BundleType>().getNumElements())

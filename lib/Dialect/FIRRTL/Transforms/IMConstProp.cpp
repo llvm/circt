@@ -714,7 +714,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     }
 
     // Don't "refold" constants.  TODO: Unique in the module entry block.
-    if (isa<ConstantOp>(op) || isa<InvalidValueOp>(op))
+    if (isa<ConstantOp, SpecialConstantOp, InvalidValueOp>(op))
       continue;
 
     // If the op had any constants folded, replace them.

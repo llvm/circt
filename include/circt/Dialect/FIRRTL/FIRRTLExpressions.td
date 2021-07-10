@@ -129,7 +129,6 @@ def SpecialConstantOp : FIRRTLOp<"specialconstant", [NoSideEffect,
   let parser = "return parse$cppClass(parser, result);";
   let printer = "print$cppClass(p, *this);";
   let hasFolder = 1;
-  let verifier = "return ::verifySpecialConstantOp(*this);";
 }
 
 def InvalidValueOp : FIRRTLOp<"invalidvalue", [NoSideEffect, ConstantLike]> {
