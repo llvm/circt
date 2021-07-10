@@ -71,6 +71,7 @@ static CellOp buildRegisterLikeComponent(OpBuilder &builder,
       FlatSymbolRefAttr::get(context, SymbolTable::getSymbolName(newRegister)));
 }
 
+// TODO(Calyx): Document.
 static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
   auto wires = component.getWiresOp();
   Block *wiresBody = wires.getBody();
