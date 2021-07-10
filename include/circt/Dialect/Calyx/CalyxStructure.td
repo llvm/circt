@@ -116,7 +116,6 @@ def ComponentOp : CalyxOp<"component", [
 
 def WiresOp : CalyxContainer<"wires", [
     HasParent<"ComponentOp">,
-    RegionKindInterface,
     SymbolTable
   ]> {
   let summary = "Calyx Wires";
@@ -132,12 +131,6 @@ def WiresOp : CalyxContainer<"wires", [
       }
     ```
   }];
-
-  let extraClassDeclaration = [{
-    // Implement RegionKindInterface.
-    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
-  }];
-
   let verifier = "return ::verify$cppClass(*this);";
 }
 

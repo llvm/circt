@@ -50,14 +50,14 @@ static CellOp buildRegisterLikeComponent(OpBuilder &builder,
 
   SmallVector<calyx::ComponentPortInfo, 3> ports{
       {.name = StringAttr::get(context, "in"),
-       .direction = PortDirection::INPUT,
-       .type = regWidthType},
+       .type = regWidthType,
+       .direction = PortDirection::INPUT},
       {.name = StringAttr::get(context, "write_en"),
-       .direction = PortDirection::INPUT,
-       .type = builder.getI1Type()},
+       .type = builder.getI1Type(),
+       .direction = PortDirection::INPUT},
       {.name = StringAttr::get(context, "out"),
-       .direction = PortDirection::OUTPUT,
-       .type = regWidthType}};
+       .type = regWidthType,
+       .direction = PortDirection::OUTPUT}};
 
   builder.setInsertionPointToStart(program.getBody());
   auto newRegister = builder.create<ComponentOp>(
