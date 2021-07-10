@@ -22,7 +22,7 @@ LogicalResult checkRegionTimeVarDominance(Region &region) {
   mlir::visitUsedValuesDefinedAbove(region, [&errorMsgs](OpOperand *operand) {
     if (operand->get().getType().isa<hir::TimeType>())
       errorMsgs.push_back(operand->getOwner()->emitError(
-          "Invalid time-var found. Time-vars can not be captured by a "
+          "Invalid time-var use. Time-vars can not be captured by a "
           "region."));
   });
   if (!errorMsgs.empty())
