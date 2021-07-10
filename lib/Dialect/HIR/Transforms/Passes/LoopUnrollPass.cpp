@@ -65,7 +65,6 @@ LogicalResult unrollLoopFull(hir::ForOp forOp) {
       if (auto yieldOp = dyn_cast<hir::YieldOp>(it)) {
         assert(yieldOp.offset().getValue() == 0);
         iterValues = {lookupOrOriginal(operandMap, yieldOp.tstart())};
-        operandMap.map(iterArgs, iterValues);
         continue;
       }
       builder.clone(*it, operandMap);
