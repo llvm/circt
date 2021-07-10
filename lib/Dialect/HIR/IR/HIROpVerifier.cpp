@@ -1,9 +1,14 @@
 #include "HIROpVerifier.h"
 #include "circt/Dialect/HIR/IR/helper.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
-namespace circt {
-namespace hir {
-
+#include "mlir/Transforms/RegionUtils.h"
+#include "llvm/ADT/SetVector.h"
+using namespace circt;
+using namespace hir;
+//-----------------------------------------------------------------------------
+// Helper functions.
+//-----------------------------------------------------------------------------
+namespace {
 LogicalResult verifyTimeAndOffset(Value time, llvm::Optional<uint64_t> offset) {
   if (time && !offset.hasValue())
     return failure();
@@ -12,6 +17,26 @@ LogicalResult verifyTimeAndOffset(Value time, llvm::Optional<uint64_t> offset) {
   return success();
 }
 
+LogicalResult checkRegionTimeVarDominance(Region &region) {
+  SmallVector<InFlightDiagnostic> errorMsgs;
+  mlir::visitUsedValuesDefinedAbove(region, [&errorMsgs](OpOperand *operand) {
+    if (operand->get().getType().isa<hir::TimeType>())
+      errorMsgs.push_back(operand->getOwner()->emitError(
+          "Invalid time-var found. Time-vars can not be captured by a "
+          "region."));
+  });
+  if (!errorMsgs.empty())
+    return failure();
+  return success();
+}
+} // namespace
+//-----------------------------------------------------------------------------
+
+namespace circt {
+namespace hir {
+//-----------------------------------------------------------------------------
+// HIR Op verifiers.
+//-----------------------------------------------------------------------------
 LogicalResult verifyFuncOp(hir::FuncOp op) {
   auto funcTy = op.funcTy().dyn_cast<hir::FuncType>();
   if (!funcTy)
@@ -62,6 +87,8 @@ LogicalResult verifyForOp(hir::ForOp op) {
   if (!op.getIterTimeVar().getType().isa<hir::TimeType>())
     return op.emitError("Expected time var to be of !hir.time type.");
 
+  if (failed(checkRegionTimeVarDominance(op.getLoopBody())))
+    return failure();
   return success();
 }
 
@@ -75,5 +102,6 @@ LogicalResult verifyStoreOp(hir::StoreOp op) {
     return op.emitError("Invalid offset.");
   return success();
 }
+//-----------------------------------------------------------------------------
 } // namespace hir
 } // namespace circt
