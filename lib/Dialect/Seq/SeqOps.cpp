@@ -11,8 +11,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "mlir/Support/LogicalResult.h"
 #include <initializer_list>
 
 using namespace mlir;
@@ -67,6 +70,34 @@ static void printCompRegOp(::mlir::OpAsmPrinter &p, CompRegOp reg) {
   }
   p.printOptionalAttrDict(reg->getAttrs(), /*elidedAttrs=*/{});
   p << " : " << reg.input().getType();
+}
+
+static LogicalResult
+verifyReg(RegOp reg)
+{
+  switch (reg.resetType()) {
+    case ::ResetType::SyncReset:
+    case ::ResetType::AsyncReset: {
+      if (!(reg.reset() && reg.resetValue() && reg.resetEdge())) {
+        return reg.emitOpError("reset and resetValue operands, and resetEdge attributes must be set when resetType is SyncReset or AsyncReset");
+      }
+      auto inputType = reg.input().getType();
+      auto resetValueType = reg.resetValue().getType();
+      if (inputType != resetValueType) {
+        return reg.emitOpError("resetValue's type, when specified, must match those of input")
+          << "resetValueType = " << resetValueType
+          << ", inputType = " << inputType;
+      }
+      break;
+    }
+
+    case ::ResetType::NoReset:
+      if (reg.reset() || reg.resetValue() || reg.resetEdge()) {
+        return reg.emitOpError("reset and resetValue operands, and resetEdge attributes must not be set when resetType is NoReset");
+      }
+      break;
+  }
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

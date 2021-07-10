@@ -73,22 +73,24 @@ def ResetTypeAttr : I32EnumAttr<"ResetType", "reset type",
                                    [NoReset, SyncReset, AsyncReset]>;
 
 def RegOp : SeqOp<"reg",
-    [AllTypesMatch<["input", "data", "resetValue"]>]> {
+    [AllTypesMatch<["input", "data"]>, SameVariadicOperandSize]> {
 
   let summary = "A complete implementation of registers.";
   let description = "See the Seq dialect rationale for a longer description";
 
   let arguments = (ins AnyType:$input, I1:$clk,
-    I1:$reset, AnyType:$resetValue,
     I1:$enable,
+    Optional<I1>:$reset, Optional<AnyType>:$resetValue,
     EventControlAttr:$clockEdge,
-    EventControlAttr:$resetEdge,
+    OptionalAttr<EventControlAttr>:$resetEdge,
     ResetTypeAttr:$resetType
     );
 
   let results = (outs AnyType:$data);
 
-  let assemblyFormat = "$input `,` $clockEdge $clk `,` `enable` $enable `,` $resetType $resetEdge $reset `,` $resetValue attr-dict `:` type($input)";
+  let assemblyFormat = "$input `,` $clockEdge $clk `,` `enable` $enable `,` $resetType ($resetEdge^ $reset `,` $resetValue `:` type($resetValue))? attr-dict `:`  type($input)";
+
+  let verifier = "return ::verifyReg(*this);";
 }
 
 def LowerSeqToSV: Pass<"lower-seq-to-sv", "mlir::ModuleOp"> {

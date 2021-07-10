@@ -105,8 +105,11 @@ RegLower::matchAndRewrite(RegOp reg,
   auto svReg = rewriter.create<sv::RegOp>(loc, reg.getResult().getType());
 
   DictionaryAttr regAttrs = reg->getAttrDictionary();
-  if (!regAttrs.empty())
-    svReg->setAttrs(regAttrs);
+  for (auto & attr : regAttrs) {
+    if (attr.first != "clockEdge" && attr.first != "resetEdge" && attr.first != "resetType") {
+      svReg->setAttr(attr.first, attr.second);
+    }
+  }
   if (!svReg->hasAttrOfType<StringAttr>("name"))
     // sv.reg requires a name attribute.
     svReg->setAttr("name", rewriter.getStringAttr(""));
@@ -136,9 +139,10 @@ RegLower::matchAndRewrite(RegOp reg,
         loc, reg.clockEdge(), reg.clk(),
         onRegularOperation);
   } else {
+    // reg.resetEdge() will always be defined, when reg.reset() is set.
     rewriter.create<sv::AlwaysFFOp>(
         loc, reg.clockEdge(), reg.clk(),
-        reg.resetType(), reg.resetEdge(),
+        reg.resetType(), reg.resetEdge().getValue(),
         reg.reset(), onRegularOperation,
         onReset);
   }
