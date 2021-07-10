@@ -83,6 +83,10 @@ def ComponentOp : CalyxOp<"component", [
 
   let regions = (region SizedRegion<1>: $body);
 
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<ComponentPortInfo>":$ports)>
+  ];
+
   let extraClassDeclaration = [{
     // Necessary to avoid name clashing with `front`.
     using FunctionLike::front;
@@ -112,6 +116,7 @@ def ComponentOp : CalyxOp<"component", [
 
 def WiresOp : CalyxContainer<"wires", [
     HasParent<"ComponentOp">,
+    RegionKindInterface,
     SymbolTable
   ]> {
   let summary = "Calyx Wires";
@@ -127,6 +132,12 @@ def WiresOp : CalyxContainer<"wires", [
       }
     ```
   }];
+
+  let extraClassDeclaration = [{
+    // Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+  }];
+
   let verifier = "return ::verify$cppClass(*this);";
 }
 
@@ -192,6 +203,12 @@ def GroupOp : CalyxOp<"group", [
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+
+    /// Returns the GroupGoOp for this group.
+    GroupGoOp getGoOp();
+
+    /// Returns the GroupDoneOp for this group.
+    GroupDoneOp getDoneOp();
   }];
 
   let regions = (region SizedRegion<1>:$body);
@@ -243,10 +260,11 @@ def GroupDoneOp : CalyxGroupPort<"group_done", [
     when the group's done operation should be active.
 
     ```mlir
-      %0 = calyx.group_done %v1 : i1
-      %1 = calyx.group_done %v2, %guard ? : i1
+      calyx.group_done %v1 : i1
+      calyx.group_done %v2, %guard ? : i1
     ```
   }];
+  let results = (outs);
 }
 
 def GroupGoOp : CalyxGroupPort<"group_go", []> {
@@ -265,4 +283,13 @@ def GroupGoOp : CalyxGroupPort<"group_go", []> {
       %2 = calyx.group_go %3, %guard ? : i1
     ```
   }];
+  let builders = [
+    OpBuilder<(ins "Value":$src, CArg<"Value", "{}">:$guard), [{
+      $_state.addTypes($_builder.getI1Type());
+      $_state.addOperands(src);
+      if (guard)
+        $_state.addOperands(guard);
+    }]>
+  ];
+  let results = (outs I1);
 }
