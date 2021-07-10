@@ -19,6 +19,9 @@ include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Pass/PassBase.td"
 
+// Include this file to pick up the enumerations exposed by the SystemVerilog dialect.
+include "circt/Dialect/SV/SVEnums.td"
+
 def SeqDialect : Dialect {
   let name = "seq";
 
@@ -50,27 +53,6 @@ def CompRegOp : SeqOp<"compreg",
   let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
 }
-
-// FIXME: Include these enums from SV/ Dialect directory ..
-
-/// AtPosEdge triggers on a rise from 0 to 1/X/Z, or X/Z to 1.
-def AtPosEdge: I32EnumAttrCase<"AtPosEdge", 0, "posedge">;
-/// AtNegEdge triggers on a drop from 1 to 0/X/Z, or X/Z to 0.
-def AtNegEdge: I32EnumAttrCase<"AtNegEdge", 1, "negedge">;
-/// AtEdge(v) is syntactic sugar for "AtPosEdge(v) or AtNegEdge(v)".
-def AtEdge   : I32EnumAttrCase<"AtEdge", 2, "edge">;
-
-def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
-                                   [AtPosEdge, AtNegEdge, AtEdge]> {
-  let cppNamespace = "circt::sv";
-}
-
-def NoReset: I32EnumAttrCase<"NoReset", 0, "noreset">;
-def SyncReset: I32EnumAttrCase<"SyncReset", 1, "syncreset">;
-def AsyncReset: I32EnumAttrCase<"AsyncReset", 2, "asyncreset">;
-
-def ResetTypeAttr : I32EnumAttr<"ResetType", "reset type",
-                                   [NoReset, SyncReset, AsyncReset]>;
 
 def RegOp : SeqOp<"reg",
     [AllTypesMatch<["input", "data"]>, SameVariadicOperandSize]> {
