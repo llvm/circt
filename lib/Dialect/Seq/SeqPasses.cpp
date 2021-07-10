@@ -31,7 +31,6 @@ struct SeqToSVPass : public LowerSeqToSVBase<SeqToSVPass> {
 };
 } // anonymous namespace
 
-
 namespace {
 /// Lower CompRegOp to `sv.reg` and `sv.alwaysff`. Use a posedge clock and
 /// synchronous reset.
@@ -58,7 +57,6 @@ public:
 
 } // anonymous namespace
 
-
 struct RegOperandsAndAttrs {
   Location loc;
   DictionaryAttr regAttrs;
@@ -73,10 +71,8 @@ struct RegOperandsAndAttrs {
   ::llvm::Optional<sv::EventControl> resetEdge;
 };
 
-
-static bool isI1Constant(::mlir::Value value, size_t n)
-{
-  assert (value.getType().isSignlessInteger(1));
+static bool isI1Constant(::mlir::Value value, size_t n) {
+  assert(value.getType().isSignlessInteger(1));
   if (auto constantOp = value.getDefiningOp<::circt::hw::ConstantOp>()) {
     return constantOp.value() == n;
   }
@@ -87,18 +83,18 @@ static bool isI1Constant(::mlir::Value value, size_t n)
 static bool isI1Gnd(::mlir::Value value) { return isI1Constant(value, 0); }
 static bool isI1Vdd(::mlir::Value value) { return isI1Constant(value, 1); }
 
-
 static sv::ReadInOutOp
-lowerRegCommon(const RegOperandsAndAttrs & regOperandsAndAttrs, ConversionPatternRewriter &rewriter)
-{
+lowerRegCommon(const RegOperandsAndAttrs &regOperandsAndAttrs,
+               ConversionPatternRewriter &rewriter) {
   Location loc = regOperandsAndAttrs.loc;
 
   auto svReg = rewriter.create<sv::RegOp>(loc, regOperandsAndAttrs.resultType);
   auto svRegValue = rewriter.create<sv::ReadInOutOp>(loc, svReg);
 
   DictionaryAttr regAttrs = regOperandsAndAttrs.regAttrs;
-  for (auto & attr : regAttrs) {
-    if (attr.first != "clockEdge" && attr.first != "resetEdge" && attr.first != "resetType") {
+  for (auto &attr : regAttrs) {
+    if (attr.first != "clockEdge" && attr.first != "resetEdge" &&
+        attr.first != "resetType") {
       svReg->setAttr(attr.first, attr.second);
     }
   }
@@ -119,78 +115,69 @@ lowerRegCommon(const RegOperandsAndAttrs & regOperandsAndAttrs, ConversionPatter
       return onAssignInput();
     }
 
-    rewriter.create<sv::IfOp>(loc,
-        regOperandsAndAttrs.enable,
-        onAssignInput,
-        nullptr
-        );
+    rewriter.create<sv::IfOp>(loc, regOperandsAndAttrs.enable, onAssignInput,
+                              nullptr);
   };
 
   if (!regOperandsAndAttrs.reset || isI1Gnd(regOperandsAndAttrs.reset)) {
-    rewriter.create<sv::AlwaysFFOp>(
-        loc, regOperandsAndAttrs.clockEdge, regOperandsAndAttrs.clk,
-        onRegularOperation);
+    rewriter.create<sv::AlwaysFFOp>(loc, regOperandsAndAttrs.clockEdge,
+                                    regOperandsAndAttrs.clk,
+                                    onRegularOperation);
   } else {
     // reg.resetEdge() will always be defined, when reg.reset() is set.
-    assert (regOperandsAndAttrs.resetEdge.hasValue() && "resetEdge must be set when reset is set!");
+    assert(regOperandsAndAttrs.resetEdge.hasValue() &&
+           "resetEdge must be set when reset is set!");
     rewriter.create<sv::AlwaysFFOp>(
         loc, regOperandsAndAttrs.clockEdge, regOperandsAndAttrs.clk,
         regOperandsAndAttrs.resetType, regOperandsAndAttrs.resetEdge.getValue(),
-        regOperandsAndAttrs.reset, onRegularOperation,
-        onReset);
+        regOperandsAndAttrs.reset, onRegularOperation, onReset);
   }
 
   return svRegValue;
 }
 
-
 LogicalResult
-CompRegLower::matchAndRewrite(CompRegOp reg,
-                              ArrayRef<Value> operands,
-                              ConversionPatternRewriter &rewriter) const
-{
-  RegOperandsAndAttrs regOperandsAndAttrs {
-    .loc        = reg.getLoc(),
-    .regAttrs   = reg->getAttrDictionary(),
-    .resultType = reg.getResult().getType(),
-    .clockEdge  = sv::EventControl::AtPosEdge,
-    .input      = reg.input(),
-    .clk        = reg.clk(),
-    .enable     = ::mlir::Value(),
-    .reset      = reg.reset(),
-    .resetValue = reg.resetValue(),
-    .resetType  = (reg.reset() ? ::ResetType::SyncReset : ::ResetType::NoReset),
-    .resetEdge  = sv::EventControl::AtPosEdge
-  };
+CompRegLower::matchAndRewrite(CompRegOp reg, ArrayRef<Value> operands,
+                              ConversionPatternRewriter &rewriter) const {
+  RegOperandsAndAttrs regOperandsAndAttrs{
+      .loc = reg.getLoc(),
+      .regAttrs = reg->getAttrDictionary(),
+      .resultType = reg.getResult().getType(),
+      .clockEdge = sv::EventControl::AtPosEdge,
+      .input = reg.input(),
+      .clk = reg.clk(),
+      .enable = ::mlir::Value(),
+      .reset = reg.reset(),
+      .resetValue = reg.resetValue(),
+      .resetType =
+          (reg.reset() ? ::ResetType::SyncReset : ::ResetType::NoReset),
+      .resetEdge = sv::EventControl::AtPosEdge};
 
   auto svRegValue = lowerRegCommon(regOperandsAndAttrs, rewriter);
-  rewriter.replaceOp(reg, { svRegValue });
+  rewriter.replaceOp(reg, {svRegValue});
 
   return success();
 }
 
 LogicalResult
-RegLower::matchAndRewrite(RegOp reg,
-                          ArrayRef<Value> operands,
-                          ConversionPatternRewriter &rewriter) const
-{
+RegLower::matchAndRewrite(RegOp reg, ArrayRef<Value> operands,
+                          ConversionPatternRewriter &rewriter) const {
 
-  RegOperandsAndAttrs regOperandsAndAttrs {
-    .loc        = reg.getLoc(),
-    .regAttrs   = reg->getAttrDictionary(),
-    .resultType = reg.getResult().getType(),
-    .clockEdge  = reg.clockEdge(),
-    .input      = reg.input(),
-    .clk        = reg.clk(),
-    .enable     = reg.enable(),
-    .reset      = reg.reset(),
-    .resetValue = reg.resetValue(),
-    .resetType  = reg.resetType(),
-    .resetEdge  = reg.resetEdge()
-  };
+  RegOperandsAndAttrs regOperandsAndAttrs{.loc = reg.getLoc(),
+                                          .regAttrs = reg->getAttrDictionary(),
+                                          .resultType =
+                                              reg.getResult().getType(),
+                                          .clockEdge = reg.clockEdge(),
+                                          .input = reg.input(),
+                                          .clk = reg.clk(),
+                                          .enable = reg.enable(),
+                                          .reset = reg.reset(),
+                                          .resetValue = reg.resetValue(),
+                                          .resetType = reg.resetType(),
+                                          .resetEdge = reg.resetEdge()};
 
   auto svRegValue = lowerRegCommon(regOperandsAndAttrs, rewriter);
-  rewriter.replaceOp(reg, { svRegValue });
+  rewriter.replaceOp(reg, {svRegValue});
 
   return success();
 }
