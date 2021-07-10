@@ -39,9 +39,9 @@ hw.module @top(%clk: i1, %rst: i1, %i: i32, %s: !hw.struct<foo: i32>) {
   // SV: }
 }
 
-hw.module @testRegWithSyncClear(%clk: i1, %d: !hw.struct<foo:i32>, %clear: i1, %clearTo: !hw.struct<foo:i32>) -> (%o : !hw.struct<foo:i32>) {
+hw.module @testRegWithSyncClear(%clk: i1, %d: !hw.struct<foo:i32>, %reset: i1, %resetValue: !hw.struct<foo:i32>) -> (%o : !hw.struct<foo:i32>) {
   %gnd = hw.constant 0 : i1
   %vdd = hw.constant 1 : i1
-  %r0  = seq.reg %d, posedge %clk, enable %vdd, %clear, %clearTo, %gnd, %clearTo : !hw.struct<foo:i32>
+  %r0  = seq.reg %d, posedge %clk, enable %vdd, syncreset posedge %reset, %resetValue  : !hw.struct<foo:i32>
   hw.output %r0 : !hw.struct<foo:i32>
 }

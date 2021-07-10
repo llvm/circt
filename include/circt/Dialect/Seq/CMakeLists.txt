@@ -14,8 +14,6 @@ add_circt_doc(Seq -gen-dialect-doc Seq Dialects/)
 
 set(LLVM_TARGET_DEFINITIONS Seq.td)
 mlir_tablegen(SeqPasses.h.inc -gen-pass-decls)
-mlir_tablegen(SeqEnums.h.inc -gen-enum-decls)
-mlir_tablegen(SeqEnums.cpp.inc -gen-enum-defs)
 
 add_circt_doc(Seq -gen-pass-doc SeqPasses ./)
 

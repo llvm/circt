@@ -51,17 +51,26 @@ def CompRegOp : SeqOp<"compreg",
   let parser = "return ::parse$cppClass(parser, result);";
 }
 
-def EventControlAttr : Attr<CPred<"$_self.isa<::circt::sv::EventControlAttr>()">> {
-  let returnType = "::circt::sv::EventControl";
-  let convertFromStorage = "$_self.dyn_cast<::circt::sv::EventControlAttr>().getValue()";
+// FIXME: Include these enums from SV/ Dialect directory ..
+
+/// AtPosEdge triggers on a rise from 0 to 1/X/Z, or X/Z to 1.
+def AtPosEdge: I32EnumAttrCase<"AtPosEdge", 0, "posedge">;
+/// AtNegEdge triggers on a drop from 1 to 0/X/Z, or X/Z to 0.
+def AtNegEdge: I32EnumAttrCase<"AtNegEdge", 1, "negedge">;
+/// AtEdge(v) is syntactic sugar for "AtPosEdge(v) or AtNegEdge(v)".
+def AtEdge   : I32EnumAttrCase<"AtEdge", 2, "edge">;
+
+def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
+                                   [AtPosEdge, AtNegEdge, AtEdge]> {
+  let cppNamespace = "circt::sv";
 }
 
-def ResetTypeAttr : Attr<CPred<"$_self.isa<ResetTypeAttr>()">> {
-  // FIXME: This should be moved into the ::circt::sv namespace when it's moved
-  // in circt::sv::
-  let returnType = "::ResetType";
-  let convertFromStorage = "$_self.dyn_cast<ResetTypeAttr>().getValue()";
-}
+def NoReset: I32EnumAttrCase<"NoReset", 0, "noreset">;
+def SyncReset: I32EnumAttrCase<"SyncReset", 1, "syncreset">;
+def AsyncReset: I32EnumAttrCase<"AsyncReset", 2, "asyncreset">;
+
+def ResetTypeAttr : I32EnumAttr<"ResetType", "reset type",
+                                   [NoReset, SyncReset, AsyncReset]>;
 
 def RegOp : SeqOp<"reg",
     [AllTypesMatch<["input", "data", "resetValue"]>]> {
@@ -79,7 +88,7 @@ def RegOp : SeqOp<"reg",
 
   let results = (outs AnyType:$data);
 
-  let assemblyFormat = "$input `,` $clockEdge $clk `,` `enable` $enable `,` $reset `,` $resetValue attr-dict `:` type($input)";
+  let assemblyFormat = "$input `,` $clockEdge $clk `,` `enable` $enable `,` $resetType $resetEdge $reset `,` $resetValue attr-dict `:` type($input)";
 }
 
 def LowerSeqToSV: Pass<"lower-seq-to-sv", "mlir::ModuleOp"> {
