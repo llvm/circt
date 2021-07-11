@@ -1055,7 +1055,6 @@ static bool isPredicateSigned(ICmpPredicate predicate) {
   llvm_unreachable("unknown comparison predicate");
 }
 
-
 // Reduce the strength icmp(concat(...), concat(...)) by doing a element-wise
 // comparison on common prefix and suffixes. Returns success() if a rewriting
 // happens.
@@ -1171,8 +1170,6 @@ static LogicalResult matchAndRewriteCompareConcat(ICmpOp &op, ConcatOp &lhs,
 
   return failure();
 }
-
-
 
 // Canonicalizes a ICmp with a single constant
 LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
