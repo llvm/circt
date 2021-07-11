@@ -131,7 +131,7 @@ bool XorOp::isBinaryNot() {
 // ConcatOp
 //===----------------------------------------------------------------------===//
 
-static unsigned valueRangeTotalWidth(ValueRange inputs)
+static unsigned getTotalWidth(ValueRange inputs)
 {
   unsigned resultWidth = 0;
   for (auto input : inputs) {
@@ -142,7 +142,7 @@ static unsigned valueRangeTotalWidth(ValueRange inputs)
 
 void ConcatOp::build(OpBuilder &builder, OperationState &result,
                      ValueRange inputs) {
-  build(builder, result, builder.getIntegerType(valueRangeTotalWidth(inputs)), inputs);
+  build(builder, result, builder.getIntegerType(getTotalWidth(inputs)), inputs);
 }
 
 void ConcatOp::build(OpBuilder&builder, OperationState &result, Value hd, ValueRange tl)
@@ -150,7 +150,7 @@ void ConcatOp::build(OpBuilder&builder, OperationState &result, Value hd, ValueR
   result.addOperands(ValueRange { hd });
   result.addOperands(tl);
   const unsigned hdWidth = hd.getType().cast<IntegerType>().getWidth();
-  result.addTypes(builder.getIntegerType(valueRangeTotalWidth(tl) + hdWidth));
+  result.addTypes(builder.getIntegerType(getTotalWidth(tl) + hdWidth));
 }
 
 //===----------------------------------------------------------------------===//
