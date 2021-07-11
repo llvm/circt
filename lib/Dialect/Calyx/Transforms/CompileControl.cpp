@@ -42,7 +42,6 @@ static RegisterOp createRegister(OpBuilder &builder, ComponentOp &component,
                                  size_t width, StringRef name) {
   auto *context = builder.getContext();
   builder.setInsertionPointToStart(component.getBody());
-
   return builder.create<RegisterOp>(component->getLoc(),
                                     StringAttr::get(context, name), width);
 }
@@ -74,6 +73,7 @@ static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
   builder.setInsertionPointToStart(wiresBody);
   auto oneConstant = createConstant(builder, wires->getLoc(), 1, 1);
 
+  // Create the new compilation group to replace this SeqOp.
   builder.setInsertionPointToEnd(wiresBody);
   auto seqGroup =
       builder.create<GroupOp>(wires->getLoc(), builder.getStringAttr("seq"));
@@ -125,7 +125,6 @@ static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
     // Directly update the GroupGoOp of the current group being walked.
     auto goOp = groupOp.getGoOp();
     assert(goOp && "The Go Insertion pass should be run before this.");
-
     goOp->setOperand(0, oneConstant);
     goOp->insertOperands(1, {groupGoGuard});
 
@@ -137,7 +136,7 @@ static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
                              groupDoneGuard);
     builder.create<AssignOp>(wires->getLoc(), fsmWriteEn, oneConstant,
                              groupDoneGuard);
-
+    // Increment the fsm index for the next group.
     ++fsmIndex;
   });
 
