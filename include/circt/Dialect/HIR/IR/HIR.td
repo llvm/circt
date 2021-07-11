@@ -156,7 +156,7 @@ def IfOp : HIR_Op<"if", [SingleBlockImplicitTerminator<"YieldOp">, RecursiveSide
   let printer = [{return print$cppClass(p,*this);}];
 }
 
-def ForOp : HIR_Op<"for", [SingleBlockImplicitTerminator<"YieldOp">, RecursiveSideEffects, DeclareOpInterfaceMethods<LoopLikeOpInterface>]> {
+def ForOp : HIR_Op<"for", [SingleBlockImplicitTerminator<"YieldOp">, RecursiveSideEffects, DeclareOpInterfaceMethods<LoopLikeOpInterface>,AttrSizedOperandSegments]> {
   let summary = "for operation";
   let description = [{
     This op implements a sequential for loop.
@@ -172,21 +172,35 @@ def ForOp : HIR_Op<"for", [SingleBlockImplicitTerminator<"YieldOp">, RecursiveSi
     ```
   }];
 
-  let arguments = (ins AnyType: $lb, AnyType: $ub, AnyType: $step, 
+  let arguments = (ins AnyType: $lb, AnyType: $ub, AnyType: $step, Variadic<AnyType>: $captures,
       Optional<TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
   let regions = (region SizedRegion<1>:$region);
   let results = (outs Variadic<AnyType>:$res);
 
   let parser = [{return parse$cppClass(parser,result);}];
   let printer = [{return print$cppClass(p,*this);}];
-  let builders = [OpBuilder<(ins "Value":$lb, "Value":$ub, "Value":$step,
+  let builders = [OpBuilder<(ins "Value":$lb, "Value":$ub, "Value":$step, "ValueRange":$captures,
       "Value":$tstart, "IntegerAttr":$offset,"Type":$inductionVarTy),[{
-    build($_builder,$_state,hir::TimeType::get($_builder.getContext()),lb,ub,step,tstart,offset);
+    build($_builder,$_state,hir::TimeType::get($_builder.getContext()),lb,ub,step,captures,tstart,offset);
 
   }]>];
   let extraClassDeclaration = [{
     Value getInductionVar() { return getBody()->getArgument(0); }
-    Value getIterTimeVar() { return getBody()->getArgument(1); }
+    Value setInductionVar(Type ty) { 
+      Value newInductionVar = getBody()->insertArgument(
+        (unsigned)0, ty);
+      getBody()->getArgument(1).replaceAllUsesWith(newInductionVar);
+      getBody()->eraseArgument(1);
+      return newInductionVar;
+    }
+    ArrayRef<BlockArgument> getLatchedInputs(){return getBody()->getArguments().slice(1,captures().size());}
+    Value setLatchedInput(unsigned i, Type ty) { 
+      Value newArg = getBody()->insertArgument(1+i,ty);
+      getBody()->getArgument(2+i).replaceAllUsesWith(newArg);
+      getBody()->eraseArgument(2+i);
+      return newArg;
+    }
+    Value getIterTimeVar() { return getBody()->getArgument(captures().size()+1); }
     Block* addEntryBlock(MLIRContext *context, Type inductionVarTy);
     void beginRegion(mlir::OpBuilder &builder);        
     void endRegion(mlir::OpBuilder &builder);
@@ -410,28 +424,27 @@ def TimeOp: HIR_Op<"time",[NoSideEffect]>{
   let arguments = (ins TimeType : $timevar, I64Attr:$delay);
   let results = (outs TimeType : $res);
   let assemblyFormat = [{custom<TimeAndOffset>($timevar, $delay) attr-dict `:` type($res)}];
+  let hasFolder = true;
 }
 
-def LatchOp: HIR_Op<"latch",[NoSideEffect,AttrSizedOperandSegments]>{
+def LatchOp: HIR_Op<"latch",[NoSideEffect]>{
   let summary = "Latch a value for certain time.";
   let description = [{
-    This op latches an input value from one time instant to the other.
+      This op latches the input value until the next input value is latched at a later instant. 
+      It is undefined behaviour if the latched value is accessed after it is overwritten by a new value.
       This instruction can be used to move values between time domains.
-      It is undefined behaviour if the first time instant happens after the 
-      second time instant.
 
       Example:
-      ```mlir %yy = hir.latch %xx at %tx+%1 until %ty+%2: i32```
+      ```mlir %yy = hir.latch %xx at %tx+%1 : i32```
   }];
 
   let arguments = (ins AnyType : $input,
-      Optional<TimeType>:$tstart, OptionalAttr<I64Attr>: $offset,
-      Optional<TimeType>:$tResult, OptionalAttr<I64Attr>: $offsetResult);
+      Optional<TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
   let results = (outs AnyType : $res);
-  let assemblyFormat = [{$input `at` custom<TimeAndOffset> ($tstart, $offset) 
-    `until` custom<TimeAndOffset>($tResult, $offsetResult) 
+  let assemblyFormat = [{$input `at` custom<TimeAndOffset> ($tstart, $offset)  
       attr-dict `:` type($res) custom<CopyType>(type($input),ref(type($res)))
   }];
+  let hasFolder = true;
 }
 
 def AddIOp: HIR_Op<"addi",[NoSideEffect]>{

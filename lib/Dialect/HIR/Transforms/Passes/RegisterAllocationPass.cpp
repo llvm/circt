@@ -9,6 +9,7 @@
 #include "circt/Dialect/HIR/IR/helper.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "llvm/ADT/SetVector.h"
 
 using namespace circt;
 using namespace hir;
@@ -20,7 +21,17 @@ public:
     hir::FuncOp funcOp = getOperation();
     if (failed(updateRegion(funcOp.getFuncBody())))
       signalPassFailure();
+    printPassStatistics(funcOp);
     return;
+  }
+
+private:
+  void printPassStatistics(hir::FuncOp op) {
+    op.emitRemark() << "Number of LatchOp added = " << numLatcheOpsAdded
+                    << ", Number of DelayOp added = " << numDelayOpsAdded
+                    << ", Peak delay inserted = " << peakDelay
+                    << ", Total delay registers inserted = "
+                    << totalDelayRegistersInserted;
   }
 
 private:
@@ -57,10 +68,11 @@ private:
         if (failed(updateBinOp(op)))
           return failure();
       } else if (auto op = dyn_cast<mlir::ConstantOp>(operation)) {
-        continue;
+        if (failed(updateOp(op)))
+          return failure();
       } else if (auto op = dyn_cast<mlir::IndexCastOp>(operation)) {
-        return operation.emitError(
-            "All IndexCast should have been replaced by ConstantOp by now.");
+        if (failed(updateOp(op)))
+          return failure();
       } else if (auto op = dyn_cast<mlir::TruncateIOp>(operation)) {
         if (failed(updateOp(op)))
           return failure();
@@ -78,6 +90,9 @@ private:
           return failure();
       } else if (auto op = dyn_cast<hir::TimeOp>(operation)) {
         continue;
+      } else if (auto op = dyn_cast<hir::LatchOp>(operation)) {
+        if (failed(updateOp(op)))
+          return failure();
       } else {
         return operation.emitError(
             "Unsupported op for RegisterAllocationPass.");
@@ -100,6 +115,9 @@ private:
   LogicalResult updateOp(hir::CallOp);
   LogicalResult updateOp(mlir::TruncateIOp);
   LogicalResult updateOp(mlir::SignExtendIOp);
+  LogicalResult updateOp(mlir::ConstantOp);
+  LogicalResult updateOp(mlir::IndexCastOp);
+  LogicalResult updateOp(hir::LatchOp);
 
 private:
   template <typename T>
@@ -108,21 +126,29 @@ private:
 private:
   llvm::DenseMap<Value, Value> mapValueToTimeVar;
   llvm::DenseMap<Value, int64_t> mapValueToOffset;
+  // Set of those values which do not have a time instance associated with them
+  // and are forever valid in their scope. For example, constants and ForOp
+  // latched values.
+  llvm::SetVector<Value> setOfForeverValidValues;
+  size_t numLatcheOpsAdded = 0;
+  size_t numDelayOpsAdded = 0;
+  size_t peakDelay = 0;
+  size_t totalDelayRegistersInserted = 0;
 };
 
 } // end anonymous namespace
 
 //-----------------------------------------------------------------------------
-// Helper functions.
+// Helper method.
 //-----------------------------------------------------------------------------
-//
 LogicalResult RegisterAllocationPass::getPipelineBalancedValue(
     ImplicitLocOpBuilder &builder, Value &newValue, Value oldValue,
     Value tstart, int64_t offset) {
 
-  // If the value is constant then no need to add pipeline stages.
-  if (oldValue.getDefiningOp() &&
-      dyn_cast<mlir::ConstantOp>(oldValue.getDefiningOp())) {
+  // If the value is IndexType (constant) or forever valid then no need to
+  // pipeline it.
+  if (oldValue.getType().isa<IndexType>() ||
+      setOfForeverValidValues.contains(oldValue)) {
     newValue = oldValue;
     return success();
   }
@@ -135,6 +161,7 @@ LogicalResult RegisterAllocationPass::getPipelineBalancedValue(
 
   Value srcTimeVar = mapValueToTimeVar[oldValue];
   int64_t srcOffset = mapValueToOffset[oldValue];
+  assert(srcTimeVar);
   if (auto timeOp =
           llvm::dyn_cast_or_null<hir::TimeOp>(srcTimeVar.getDefiningOp())) {
     srcTimeVar = timeOp.timevar();
@@ -154,14 +181,18 @@ LogicalResult RegisterAllocationPass::getPipelineBalancedValue(
                                   builder.getI64IntegerAttr(offset - srcOffset),
                                   tstart, builder.getI64IntegerAttr(srcOffset))
             .getResult();
+    this->numDelayOpsAdded++;
+    this->peakDelay = (long)this->peakDelay > (offset - srcOffset)
+                          ? (long)this->peakDelay
+                          : (offset - srcOffset);
+    this->totalDelayRegistersInserted += (offset - srcOffset);
     return success();
   }
-  newValue =
-      builder
-          .create<hir::LatchOp>(oldValue.getType(), oldValue, srcTimeVar,
-                                builder.getI64IntegerAttr(srcOffset), tstart,
-                                builder.getI64IntegerAttr(offset))
-          .getResult();
+  newValue = builder
+                 .create<hir::LatchOp>(oldValue.getType(), oldValue, srcTimeVar,
+                                       builder.getI64IntegerAttr(srcOffset))
+                 .getResult();
+  this->numLatcheOpsAdded++;
   return success();
 }
 //-----------------------------------------------------------------------------
@@ -178,21 +209,39 @@ LogicalResult RegisterAllocationPass::updateOp(hir::ForOp op) {
       mapValueToTimeVar[res] = tfinish;
     }
   }
-  Value lbNew;
-  Value ubNew;
-  Value stepNew;
-  if (failed(getPipelineBalancedValue(builder, lbNew, op.lb(), op.tstart(),
-                                      op.offset().getValue())))
-    return failure();
-  op.lbMutable().assign(lbNew);
-  if (failed(getPipelineBalancedValue(builder, ubNew, op.ub(), op.tstart(),
-                                      op.offset().getValue())))
-    return failure();
-  op.ubMutable().assign(ubNew);
-  if (failed(getPipelineBalancedValue(builder, stepNew, op.step(), op.tstart(),
-                                      op.offset().getValue())))
-    return failure();
-  op.stepMutable().assign(stepNew);
+  // Value lbNew;
+  // Value ubNew;
+  // Value stepNew;
+  // if (failed(getPipelineBalancedValue(builder, lbNew, op.lb(), op.tstart(),
+  //                                    op.offset().getValue())))
+  //  return failure();
+  // op.lbMutable().assign(lbNew);
+  // if (failed(getPipelineBalancedValue(builder, ubNew, op.ub(), op.tstart(),
+  //                                    op.offset().getValue())))
+  //  return failure();
+  // op.ubMutable().assign(ubNew);
+  // if (failed(getPipelineBalancedValue(builder, stepNew, op.step(),
+  // op.tstart(),
+  //                                    op.offset().getValue())))
+  //  return failure();
+  // op.stepMutable().assign(stepNew);
+
+  // Process all operands.
+  for (auto operand : op.getOperands()) {
+    Value operandNew;
+    if (operand.getType().isa<TimeType>())
+      continue;
+    if (failed(getPipelineBalancedValue(builder, operandNew, operand,
+                                        op.tstart(), op.offset().getValue())))
+      return failure();
+  }
+
+  // Latched values are valid for the whole duration of the loop.
+  for (auto latchedInput : op.getLatchedInputs()) {
+    setOfForeverValidValues.insert(latchedInput);
+  }
+
+  // Update the ForOp body.
   mapValueToTimeVar[op.getInductionVar()] = op.getIterTimeVar();
   mapValueToOffset[op.getInductionVar()] = 0;
   if (failed(updateRegion(op.getLoopBody())))
@@ -319,17 +368,44 @@ LogicalResult RegisterAllocationPass::updateOp(hir::CallOp op) {
 }
 
 LogicalResult RegisterAllocationPass::updateOp(mlir::TruncateIOp op) {
+  if (setOfForeverValidValues.contains(op.value())) {
+    setOfForeverValidValues.insert(op.getResult());
+    return success();
+  }
+  if (mapValueToTimeVar.find(op.value()) == mapValueToTimeVar.end())
+    return op.emitError("Could not find input in mapValueToTimeVar : ");
   mapValueToTimeVar[op.getResult()] = mapValueToTimeVar[op.value()];
   mapValueToOffset[op.getResult()] = mapValueToOffset[op.value()];
   return success();
 }
 
 LogicalResult RegisterAllocationPass::updateOp(mlir::SignExtendIOp op) {
+  if (setOfForeverValidValues.contains(op.value())) {
+    setOfForeverValidValues.insert(op.getResult());
+    return success();
+  }
+  if (mapValueToTimeVar.find(op.value()) == mapValueToTimeVar.end())
+    return op.emitError("Could not find input in mapValueToTimeVar : ");
   mapValueToTimeVar[op.getResult()] = mapValueToTimeVar[op.value()];
   mapValueToOffset[op.getResult()] = mapValueToOffset[op.value()];
   return success();
 }
 
+LogicalResult RegisterAllocationPass::updateOp(mlir::ConstantOp op) {
+  setOfForeverValidValues.insert(op.getResult());
+  return success();
+}
+
+LogicalResult RegisterAllocationPass::updateOp(mlir::IndexCastOp op) {
+  // IndexType values are always constants.
+  setOfForeverValidValues.insert(op.getResult());
+  return success();
+}
+
+LogicalResult RegisterAllocationPass::updateOp(hir::LatchOp op) {
+  setOfForeverValidValues.insert(op.getResult());
+  return success();
+}
 namespace circt {
 namespace hir {
 std::unique_ptr<OperationPass<hir::FuncOp>> createRegisterAllocationPass() {

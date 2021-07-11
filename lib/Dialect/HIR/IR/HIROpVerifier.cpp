@@ -17,13 +17,25 @@ LogicalResult verifyTimeAndOffset(Value time, llvm::Optional<uint64_t> offset) {
   return success();
 }
 
-LogicalResult checkRegionTimeVarDominance(Region &region) {
+LogicalResult checkRegionCaptures(Region &region) {
   SmallVector<InFlightDiagnostic> errorMsgs;
   mlir::visitUsedValuesDefinedAbove(region, [&errorMsgs](OpOperand *operand) {
-    if (operand->get().getType().isa<hir::TimeType>())
-      errorMsgs.push_back(operand->getOwner()->emitError(
-          "Invalid time-var use. Time-vars can not be captured by a "
-          "region."));
+    Type ty = operand->get().getType();
+    if (ty.isa<hir::MemrefType>() || ty.isa<hir::BusType>())
+      return;
+    if (ty.isa<hir::TimeType>())
+      errorMsgs.push_back(
+          operand->getOwner()->emitError()
+          << "hir::TimeType can not be captured by a region. Only the region's "
+             "own time-var (and any other time-var derived from it) is "
+             "available inside the region.");
+    else if (!dyn_cast_or_null<mlir::ConstantOp>(
+                 operand->get().getDefiningOp()))
+      errorMsgs.push_back(operand->getOwner()->emitError()
+                          << "Values of type " << ty
+                          << " can not be directly captured by a region. "
+                             "Use 'latch' operands to capture it.");
+    return;
   });
   if (!errorMsgs.empty())
     return failure();
@@ -60,8 +72,6 @@ LogicalResult verifyDelayOp(hir::DelayOp op) {
 LogicalResult verifyLatchOp(hir::LatchOp op) {
   if (failed(verifyTimeAndOffset(op.tstart(), op.offset())))
     return op.emitError("Invalid offset.");
-  if (failed(verifyTimeAndOffset(op.tResult(), op.offsetResult())))
-    return op.emitError("Invalid offset after 'until'.");
   return success();
 }
 
@@ -87,7 +97,11 @@ LogicalResult verifyForOp(hir::ForOp op) {
   if (!op.getIterTimeVar().getType().isa<hir::TimeType>())
     return op.emitError("Expected time var to be of !hir.time type.");
 
-  if (failed(checkRegionTimeVarDominance(op.getLoopBody())))
+  for (Value capture : op.captures())
+    if (capture.getType().isa<hir::TimeType>())
+      return op.emitError(
+          "hir::TimeType can not be captured in a 'latch' operand.");
+  if (failed(checkRegionCaptures(op.getLoopBody())))
     return failure();
   return success();
 }

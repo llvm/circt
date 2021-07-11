@@ -131,6 +131,16 @@ Value replaceIndexCastWithIntegerCast(mlir::ImplicitLocOpBuilder &builder,
         builder.create<mlir::SignExtendIOp>(op.getResult().getType(), op.in());
   return out;
 }
+
+void updateLatchedInputTypes(hir::ForOp op) {
+  auto captures = op.captures();
+  auto latchedInputs = op.getLatchedInputs();
+  for (size_t i = 0; i < captures.size(); i++) {
+    if (latchedInputs[i].getType() != captures[i].getType()) {
+      op.setLatchedInput(i, captures[i].getType());
+    }
+  }
+}
 //-----------------------------------------------------------------------------
 
 //-----------------------------------------------------------------------------
@@ -163,6 +173,9 @@ LogicalResult IndexLoweringPass::updateOp(mlir::IndexCastOp op) {
 }
 
 LogicalResult IndexLoweringPass::updateOp(hir::ForOp op) {
+
+  updateLatchedInputTypes(op);
+
   // There is nothing to do for unroll loops.
   if (op->getAttr("unroll")) {
     if (failed(updateRegion(op.getLoopBody())))
@@ -170,7 +183,7 @@ LogicalResult IndexLoweringPass::updateOp(hir::ForOp op) {
     return success();
   }
 
-  // There is nothing to do if the loop vars are already integer.
+  // There is nothing more to do if the loop vars are already integer.
   if (op.getInductionVar().getType().isa<IntegerType>()) {
     if (failed(updateRegion(op.getLoopBody())))
       return failure();
@@ -178,6 +191,7 @@ LogicalResult IndexLoweringPass::updateOp(hir::ForOp op) {
   }
 
   ImplicitLocOpBuilder builder(op.getLoc(), op);
+  op.setInductionVar(builder.getIntegerType(MACHINE_WORD_SIZE));
 
   // Cast the bounds to IntegerType if they still IndexType (which means they
   // are constants).
@@ -204,11 +218,6 @@ LogicalResult IndexLoweringPass::updateOp(hir::ForOp op) {
     op.stepMutable().assign(newStep);
   }
 
-  auto &body = op.getLoopBody().front();
-  Value newInductionVar = body.insertArgument(
-      (unsigned)0, builder.getIntegerType(MACHINE_WORD_SIZE));
-  body.getArgument(1).replaceAllUsesWith(newInductionVar);
-  body.eraseArgument(1);
   if (failed(updateRegion(op.getLoopBody())))
     return failure();
   return success();

@@ -13,6 +13,7 @@
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "mlir/Transforms/RegionUtils.h"
 #include <iostream>
 using namespace circt;
 
@@ -310,11 +311,9 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::scf::ForOp op) {
   assert(ub);
   assert(step);
 
-  auto forOp = builder.create<hir::ForOp>(op.getLoc(), lb, ub, step, Value(),
-                                          IntegerAttr(),
-                                          IndexType::get(builder.getContext()));
-  // forOp.getLoopBody().push_back(new Block);
-  // forOp.getLoopBody().front().addArgument(IndexType::get(builder.getContext()));
+  auto forOp = builder.create<hir::ForOp>(
+      op.getLoc(), lb, ub, step, SmallVector<Value>(), Value(), IntegerAttr(),
+      IndexType::get(builder.getContext()));
   BlockAndValueMapping mapper;
   op.getLoopBody().cloneInto(&forOp.getLoopBody(), mapper);
   if (Attribute unrollAttr = op->getAttr("hir.unroll"))
@@ -324,15 +323,37 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::scf::ForOp op) {
   for (size_t i = 0; i < op.getNumResults(); i++) {
     op.getResult(i).replaceAllUsesWith(forOp.getResult(i + 1));
   }
+  llvm::DenseMap<Value, Value> mapCapturesToLatchedInputs;
+
+  // Replace all builtin-sized-types that are captured from parent region with a
+  // latched input.
+  auto regionOperandTypes =
+      SmallVector<Type>({IndexType::get(builder.getContext())});
+  mlir::visitUsedValuesDefinedAbove(
+      forOp.getLoopBody(), [&forOp, &mapCapturesToLatchedInputs,
+                            &regionOperandTypes](OpOperand *operand) {
+        Value capture = operand->get();
+        if (helper::isBuiltinSizedType(capture.getType()) ||
+            capture.getType().isIndex()) {
+          Value latchedInput;
+          if (mapCapturesToLatchedInputs.find(capture) ==
+              mapCapturesToLatchedInputs.end()) {
+            latchedInput = forOp.getBody()->addArgument(capture.getType());
+            forOp.capturesMutable().append(capture);
+            regionOperandTypes.push_back(capture.getType());
+            mapCapturesToLatchedInputs[capture] = latchedInput;
+          } else {
+            latchedInput = mapCapturesToLatchedInputs[capture];
+          }
+          operand->set(latchedInput);
+        }
+      });
 
   opsToErase.push_back(op);
-
-  return convertRegion(
-      forOp.getLoopBody(),
-      SmallVector<Type>({IndexType::get(builder.getContext())}),
-      {helper::getDictionaryAttr(builder, "hir.delay",
-                                 builder.getI64IntegerAttr(0))},
-      /*tstartRequired*/ true);
+  return convertRegion(forOp.getLoopBody(), regionOperandTypes,
+                       {helper::getDictionaryAttr(
+                           builder, "hir.delay", builder.getI64IntegerAttr(0))},
+                       /*tstartRequired*/ true);
 }
 
 LogicalResult ConvertStandardToHIRPass::convertOp(mlir::scf::YieldOp op) {

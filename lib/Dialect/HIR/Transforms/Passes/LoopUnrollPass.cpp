@@ -43,12 +43,16 @@ LogicalResult unrollLoopFull(hir::ForOp forOp) {
 
   Block::iterator srcBlockEnd = std::prev(loopBodyBlock.end(), 1);
 
-  SmallVector<Value, 4> iterArgs = {forOp.getIterTimeVar()};
+  Value iterTimeVar = forOp.getIterTimeVar();
   assert(forOp.offset().getValue() == 0);
-  SmallVector<Value, 4> iterValues = {forOp.tstart()};
+  Value iterTStart = forOp.tstart();
   auto *context = builder.getContext();
 
   // insert the unrolled body.
+  // captures must be a new SmallVector since we update it later.
+  SmallVector<Value> captures = forOp.captures();
+
+  auto latcheInputs = forOp.getLatchedInputs();
   for (int i = lb; i < ub; i += step) {
     Value loopIV = builder
                        .create<mlir::ConstantOp>(builder.getUnknownLoc(),
@@ -57,14 +61,22 @@ LogicalResult unrollLoopFull(hir::ForOp forOp) {
                        .getResult();
 
     BlockAndValueMapping operandMap;
-    operandMap.map(iterArgs, iterValues);
+    // Latch the captures and update them as the new captures for the next
+    // iteration.
+    for (size_t i = 0; i < captures.size(); i++) {
+      captures[i] = builder.create<hir::LatchOp>(
+          builder.getUnknownLoc(), captures[i].getType(), captures[i],
+          iterTStart, builder.getI64IntegerAttr(0));
+    }
+    operandMap.map(latcheInputs, captures);
+    operandMap.map(iterTimeVar, iterTStart);
     operandMap.map(forOp.getInductionVar(), loopIV);
 
     // Copy the loop body.
     for (auto it = loopBodyBlock.begin(); it != srcBlockEnd; it++) {
       if (auto yieldOp = dyn_cast<hir::YieldOp>(it)) {
         assert(yieldOp.offset().getValue() == 0);
-        iterValues = {lookupOrOriginal(operandMap, yieldOp.tstart())};
+        iterTStart = {lookupOrOriginal(operandMap, yieldOp.tstart())};
         continue;
       }
       builder.clone(*it, operandMap);
@@ -73,11 +85,8 @@ LogicalResult unrollLoopFull(hir::ForOp forOp) {
 
   // replace the ForOp results.
   auto results = forOp->getResults();
-  for (unsigned i = 0; i < results.size(); i++) {
-    Value forOpResult = results[i];
-    Value newResult = iterValues[i];
-    forOpResult.replaceAllUsesWith(newResult);
-  }
+  assert(results.size() <= 1);
+  results[0].replaceAllUsesWith(iterTStart);
 
   forOp.erase();
   return success();
