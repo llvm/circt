@@ -40,7 +40,7 @@ def PrettifyVerilog : Pass<"prettify-verilog", "hw::HWModuleOp"> {
   let constructor = "circt::sv::createPrettifyVerilogPass()";
 }
 
-def HWStubExternalModules : Pass<"hw-stub-external-modules", 
+def HWStubExternalModules : Pass<"hw-stub-external-modules",
                                   "mlir::ModuleOp"> {
   let summary = "transform external hw modules to empty hw modules";
   let description = [{

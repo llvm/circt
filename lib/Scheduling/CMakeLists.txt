@@ -1,5 +1,6 @@
 add_circt_library(CIRCTScheduling
-  Scheduler.cpp
+  ASAPScheduler.cpp
+  Problems.cpp
 
   LINK_LIBS PUBLIC
   MLIRIR

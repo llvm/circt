@@ -7,7 +7,7 @@
 // CHECK-NEXT:      sv.fwrite "Reachable3"
 // CHECK-NEXT:      sv.fwrite "Reachable4"
 // CHECK-NEXT:    }
-// CHECK-NEXT:    return 
+// CHECK-NEXT:    return
 // CHECK-NEXT:  }
 
 func @if_dead_condition(%arg0: i1) {
@@ -29,19 +29,19 @@ func @if_dead_condition(%arg0: i1) {
       sv.fwrite "Reachable2"
     } else {
       sv.fwrite "Unreachable2"
-    } 
+    }
 
     sv.if %false {
       sv.fwrite "Unreachable3"
     } else {
       sv.fwrite "Reachable3"
-    } 
+    }
 
     sv.if %false {
       sv.fwrite "Unreachable4"
     } else {
       sv.fwrite "Reachable4"
-    } 
+    }
   }
 
   return

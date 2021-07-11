@@ -78,8 +78,9 @@ static bool isDuplicatableNullaryExpression(Operation *op) {
     return true;
 
   // If this is a small verbatim expression, keep it inline.
-  if (auto verb = dyn_cast<VerbatimExprOp>(op)) {
-    if (verb->getNumOperands() == 0 && verb.string().size() <= 16)
+  if (isa<VerbatimExprOp, VerbatimExprSEOp>(op)) {
+    if (op->getNumOperands() == 0 &&
+        op->getAttrOfType<StringAttr>("string").getValue().size() <= 16)
       return true;
   }
 
@@ -108,6 +109,9 @@ static int getBitWidthOrSentinel(Type type) {
       .Case<InOutType>([](InOutType inoutType) {
         return getBitWidthOrSentinel(inoutType.getElementType());
       })
+      .Case<TypeAliasType>([](TypeAliasType alias) {
+        return getBitWidthOrSentinel(alias.getInnerType());
+      })
       .Default([](Type) { return -1; });
 }
 
@@ -120,11 +124,11 @@ static void getTypeDims(SmallVectorImpl<int64_t> &dims, Type type,
     return getTypeDims(dims, uarray.getElementType(), loc);
   if (type.isa<InterfaceType>())
     return;
-  if (type.isa<StructType>())
+  if (hw::type_isa<StructType>(type))
     return;
 
   int width;
-  if (auto arrayType = type.dyn_cast<hw::ArrayType>()) {
+  if (auto arrayType = hw::type_dyn_cast<hw::ArrayType>(type)) {
     width = arrayType.getSize();
   } else {
     width = getBitWidthOrSentinel(type);
@@ -257,6 +261,7 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Operation *op,
           return false;
 
         os << typedecl.getValue().getPreferredName();
+        emitDims(dims, os);
         return true;
       })
       .Default([&](Type type) {
@@ -298,9 +303,12 @@ static StringRef getVerilogDeclWord(Operation *op) {
     if (auto innerType = elementType.dyn_cast<ArrayType>()) {
       while (innerType.getElementType().isa<ArrayType>())
         innerType = innerType.getElementType().cast<ArrayType>();
-      if (innerType.getElementType().isa<StructType>())
+      if (innerType.getElementType().isa<StructType>() ||
+          innerType.getElementType().isa<TypeAliasType>())
         return "";
     }
+    if (elementType.isa<TypeAliasType>())
+      return "";
 
     return "reg";
   }
@@ -847,7 +855,9 @@ private:
 
   SubExprInfo visitSV(GetModportOp op);
   SubExprInfo visitSV(ReadInterfaceSignalOp op);
-  SubExprInfo visitSV(VerbatimExprOp op);
+  SubExprInfo visitVerbatimExprOp(Operation *op);
+  SubExprInfo visitSV(VerbatimExprOp op) { return visitVerbatimExprOp(op); }
+  SubExprInfo visitSV(VerbatimExprSEOp op) { return visitVerbatimExprOp(op); }
   SubExprInfo visitSV(ConstantXOp op);
   SubExprInfo visitSV(ConstantZOp op);
 
@@ -1226,10 +1236,11 @@ SubExprInfo ExprEmitter::visitSV(ReadInterfaceSignalOp op) {
   return {Selection, IsUnsigned};
 }
 
-SubExprInfo ExprEmitter::visitSV(VerbatimExprOp op) {
-  emitTextWithSubstitutions(op.string(), op, [&](Value operand) {
-    emitSubExpr(operand, LowestPrecedence, OOLBinary);
-  });
+SubExprInfo ExprEmitter::visitVerbatimExprOp(Operation *op) {
+  emitTextWithSubstitutions(op->getAttrOfType<StringAttr>("string").getValue(),
+                            op, [&](Value operand) {
+                              emitSubExpr(operand, LowestPrecedence, OOLBinary);
+                            });
 
   return {Unary, IsUnsigned};
 }
@@ -1339,7 +1350,7 @@ SubExprInfo ExprEmitter::visitComb(MuxOp op) {
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(StructCreateOp op) {
-  StructType stype = type_cast<StructType>(op.getType());
+  StructType stype = op.getType();
   os << "'{";
   size_t i = 0;
   llvm::interleaveComma(stype.getElements(), os,
@@ -1916,13 +1927,21 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
   for (ModulePortInfo port : parent.getPorts()) {
     if (!port.isOutput())
       continue;
+
+    auto operand = op.getOperand(operandIndex);
+    if (operand.hasOneUse() &&
+        dyn_cast_or_null<InstanceOp>(operand.getDefiningOp())) {
+      ++operandIndex;
+      continue;
+    }
+
     ops.clear();
     ops.insert(op);
     indent();
     if (isZeroBitType(port.type))
       os << "// Zero width: ";
     os << "assign " << names.getOutputName(port.argNum) << " = ";
-    emitExpression(op.getOperand(operandIndex), ops);
+    emitExpression(operand, ops);
     os << ';';
     emitLocationInfoAndNewLine(ops);
     ++operandIndex;
@@ -2007,7 +2026,11 @@ LogicalResult StmtEmitter::visitSV(FinishOp op) {
 LogicalResult StmtEmitter::visitSV(AssertOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  indent() << "assert(";
+  indent();
+  auto label = op.label();
+  if (!label.empty())
+    os << label << ": ";
+  os << "assert(";
   emitExpression(op.predicate(), ops);
   os << ");";
   emitLocationInfoAndNewLine(ops);
@@ -2017,7 +2040,11 @@ LogicalResult StmtEmitter::visitSV(AssertOp op) {
 LogicalResult StmtEmitter::visitSV(AssumeOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  indent() << "assume(";
+  indent();
+  auto label = op.label();
+  if (!label.empty())
+    os << label << ": ";
+  os << "assume(";
   emitExpression(op.property(), ops);
   os << ");";
   emitLocationInfoAndNewLine(ops);
@@ -2027,7 +2054,11 @@ LogicalResult StmtEmitter::visitSV(AssumeOp op) {
 LogicalResult StmtEmitter::visitSV(CoverOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  indent() << "cover(";
+  indent();
+  auto label = op.label();
+  if (!label.empty())
+    os << label << ": ";
+  os << "cover(";
   emitExpression(op.property(), ops);
   os << ");";
   emitLocationInfoAndNewLine(ops);
@@ -2314,9 +2345,10 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   auto printParmValue = [&](Attribute value) {
     if (auto intAttr = value.dyn_cast<IntegerAttr>()) {
       IntegerType intTy = intAttr.getType().cast<IntegerType>();
-      SmallString<20> numToPrint;
-      intAttr.getValue().toString(numToPrint, 10, intTy.isSigned());
-      os << intTy.getWidth() << "'d" << numToPrint;
+      // Integer attributes are printed without a designated width.  The width
+      // is inferred from the extmodule they are used with, we don't want to
+      // take some arbitrary width from the APInt storage.
+      intAttr.getValue().print(os, intTy.isSigned());
     } else if (auto strAttr = value.dyn_cast<StringAttr>()) {
       os << '"';
       os.write_escaped(strAttr.getValue());
@@ -2417,10 +2449,23 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 
     // Emit the value as an expression.
     ops.clear();
-    // output ports were lowered to wire
-    if (elt.isOutput())
+
+    // Output ports that are not connected to single use output ports were
+    // lowered to wire.
+    OutputOp output;
+    if (!elt.isOutput()) {
+      emitExpression(portVal, ops);
+    } else if (portVal.hasOneUse() &&
+               (output = dyn_cast_or_null<OutputOp>(
+                    portVal.getUses().begin()->getOwner()))) {
+      auto module = output->getParentOfType<HWModuleOp>();
+      auto name = getModuleResultNameAttr(
+          module, portVal.getUses().begin()->getOperandNumber());
+      os << name.getValue().str();
+    } else {
       portVal = getWireForValue(portVal);
-    emitExpression(portVal, ops);
+      emitExpression(portVal, ops);
+    }
     os << ')';
   }
   if (!isFirst) {
@@ -2688,22 +2733,30 @@ static void lowerInstanceResults(InstanceOp op) {
     if (onlyUseIsConnect(result))
       continue;
 
-    nameTmp.resize(namePrefixSize);
-    if (port.name)
-      nameTmp += port.name.getValue().str();
-    else
-      nameTmp += std::to_string(nextResultNo - 1);
-
-    auto newWire = builder.create<WireOp>(result.getType(), nameTmp);
-    while (!result.use_empty()) {
-      auto newWireRead = builder.create<ReadInOutOp>(newWire);
+    bool isOneUseOutput = false;
+    if (result.hasOneUse()) {
       OpOperand &use = *result.getUses().begin();
-      use.set(newWireRead);
-      newWireRead->moveBefore(use.getOwner());
+      isOneUseOutput = dyn_cast_or_null<OutputOp>(use.getOwner()) != nullptr;
     }
 
-    auto connect = builder.create<ConnectOp>(newWire, result);
-    connect->moveAfter(op);
+    if (!isOneUseOutput) {
+      nameTmp.resize(namePrefixSize);
+      if (port.name)
+        nameTmp += port.name.getValue().str();
+      else
+        nameTmp += std::to_string(nextResultNo - 1);
+
+      auto newWire = builder.create<WireOp>(result.getType(), nameTmp);
+      while (!result.use_empty()) {
+        auto newWireRead = builder.create<ReadInOutOp>(newWire);
+        OpOperand &use = *result.getUses().begin();
+        use.set(newWireRead);
+        newWireRead->moveBefore(use.getOwner());
+      }
+
+      auto connect = builder.create<ConnectOp>(newWire, result);
+      connect->moveAfter(op);
+    }
   }
 }
 

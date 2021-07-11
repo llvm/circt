@@ -363,6 +363,19 @@ unsigned FIRRTLType::getMaxFieldID() {
       });
 }
 
+std::pair<unsigned, bool> FIRRTLType::rootChildFieldID(unsigned fieldID,
+                                                    unsigned index) {
+  return TypeSwitch<FIRRTLType, std::pair<unsigned, bool>>(*this)
+      .Case<AnalogType, ClockType, ResetType, AsyncResetType, SIntType,
+            UIntType>([&](Type) { return std::make_pair(0, fieldID == 0); })
+      .Case<BundleType, FVectorType>(
+          [&](auto type) { return type.rootChildFieldID(fieldID, index); })
+      .Default([](Type) {
+        llvm_unreachable("unknown FIRRTL type");
+        return std::make_pair(0,false);
+      });
+}
+
 /// Helper to implement the equivalence logic for a pair of bundle elements.
 /// Note that the FIRRTL spec requires bundle elements to have the same
 /// orientation, but this only compares their passive types. The FIRRTL dialect
@@ -672,11 +685,24 @@ llvm::Optional<unsigned> BundleType::getElementIndex(StringRef name) {
   return None;
 }
 
-/// Look up an element by name.  This returns a BundleElement with.
+StringRef BundleType::getElementName(size_t index) {
+  assert(index < getNumElements() &&
+         "index must be less than number of fields in bundle");
+  return getElements()[index].name.getValue();
+}
+
+/// Look up an element by name.  This returns a BundleElement.
 auto BundleType::getElement(StringRef name) -> Optional<BundleElement> {
   if (auto maybeIndex = getElementIndex(name))
     return getElements()[*maybeIndex];
   return None;
+}
+
+/// Look up an element by index.
+BundleType::BundleElement BundleType::getElement(size_t index) {
+  assert(index < getNumElements() &&
+         "index must be less than number of fields in bundle");
+  return getElements()[index];
 }
 
 FIRRTLType BundleType::getElementType(StringRef name) {
@@ -697,6 +723,12 @@ unsigned BundleType::getIndexForFieldID(unsigned fieldID) {
 }
 
 unsigned BundleType::getMaxFieldID() { return getImpl()->maxFieldID; }
+
+std::pair<unsigned,bool> BundleType::rootChildFieldID(unsigned fieldID, unsigned index) {
+  auto childRoot = getFieldID(index);
+  auto rangeEnd = index + 1 >= getNumElements() ? getMaxFieldID() : (getFieldID(index+1) - 1);
+  return std::make_pair(fieldID - childRoot, fieldID >= childRoot && fieldID <= rangeEnd);
+}
 
 //===----------------------------------------------------------------------===//
 // Vector Type
@@ -780,6 +812,15 @@ unsigned FVectorType::getIndexForFieldID(unsigned fieldID) {
 
 unsigned FVectorType::getMaxFieldID() {
   return getNumElements() * (getElementType().getMaxFieldID() + 1);
+}
+
+std::pair<unsigned, bool> FVectorType::rootChildFieldID(unsigned fieldID,
+                                                    unsigned index) {
+  auto childRoot = getFieldID(index);
+  auto rangeEnd = index >= getNumElements() ? getMaxFieldID()
+                                                : (getFieldID(index + 1) - 1);
+  return std::make_pair(fieldID - childRoot,
+                        fieldID >= childRoot && fieldID <= rangeEnd);
 }
 
 //===----------------------------------------------------------------------===//

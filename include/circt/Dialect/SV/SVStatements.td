@@ -107,7 +107,7 @@ def IfDefProceduralOp
 def IfOp : SVOp<"if", [SingleBlock, NoTerminator, NoRegionArguments,
                        ProceduralRegion, ProceduralOp]> {
   let summary = "'if (cond)' block";
-  
+
   let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
   let arguments = (ins I1:$cond);
   let results = (outs);
@@ -160,12 +160,12 @@ def AlwaysOp : SVOp<"always", [SingleBlock, NoTerminator, NoRegionArguments,
                                NonProceduralOp]> {
   let summary = "'always @' block";
   let description = "See SV Spec 9.2, and 9.4.2.2.";
-  
+
   let regions = (region SizedRegion<1>:$body);
   let arguments = (ins TypedArrayAttrBase<EventControlAttr, "events">:$events,
                        Variadic<I1>:$clocks);
   let results = (outs);
-  
+
   let assemblyFormat = "custom<EventList>($events, $clocks) $body attr-dict";
 
   let skipDefaultBuilders = 1;
@@ -195,11 +195,11 @@ def AlwaysCombOp : SVOp<"alwayscomb", [SingleBlock, NoTerminator,
                                        ProceduralRegion, NonProceduralOp]> {
   let summary = "'alwayscomb block";
   let description = "See SV Spec 9.2, and 9.2.2.2.";
-  
+
   let regions = (region SizedRegion<1>:$body);
   let arguments = (ins);
   let results = (outs);
-  
+
   let assemblyFormat = "$body attr-dict";
 
   let skipDefaultBuilders = 1;
@@ -224,25 +224,25 @@ def AlwaysFFOp : SVOp<"alwaysff", [SingleBlock, NoTerminator, NoRegionArguments,
                                    RecursiveSideEffects, ProceduralRegion,
                                    NonProceduralOp]> {
   let summary = "'alwaysff @' block with optional reset";
-  let description = [{ 
-    alwaysff blocks represent always_ff verilog nodes, which enforce inference 
-    of registers.  This block takes a clock signal and edge sensitivity and 
+  let description = [{
+    alwaysff blocks represent always_ff verilog nodes, which enforce inference
+    of registers.  This block takes a clock signal and edge sensitivity and
     reset type.  If the reset type is anything but 'noreset', the block takes a
     reset signal, reset sensitivity, and reset block.  Appropriate if conditions
-    are generated in the output code based on the reset type.  A negative-edge, 
-    asynchronous reset will check the inverse of the reset condition 
+    are generated in the output code based on the reset type.  A negative-edge,
+    asynchronous reset will check the inverse of the reset condition
     (if (!reset) begin resetblock end) to match the sensitivity.
   }];
-  
+
   let regions = (region SizedRegion<1>:$bodyBlk, AnyRegion:$resetBlk);
-  let arguments = (ins EventControlAttr:$clockEdge, I1:$clock, 
-                       DefaultValuedAttr<ResetTypeAttr, 
+  let arguments = (ins EventControlAttr:$clockEdge, I1:$clock,
+                       DefaultValuedAttr<ResetTypeAttr,
                                          "ResetType::NoReset">:$resetStyle,
-                       OptionalAttr<EventControlAttr>:$resetEdge, 
+                       OptionalAttr<EventControlAttr>:$resetEdge,
                        Optional<I1>:$reset);
   let results = (outs);
-  
-  let assemblyFormat = [{ 
+
+  let assemblyFormat = [{
     `(` $clockEdge $clock `)` $bodyBlk
     ( `(` $resetStyle `:` $resetEdge^ $reset `)` $resetBlk )? attr-dict
   }];
@@ -251,7 +251,7 @@ def AlwaysFFOp : SVOp<"alwaysff", [SingleBlock, NoTerminator, NoRegionArguments,
   let builders = [
     OpBuilder<(ins "EventControl":$clockEdge, "Value":$clock,
                       CArg<"std::function<void()>", "{}">:$bodyCtor)>,
-    OpBuilder<(ins "EventControl":$clockEdge, "Value":$clock, 
+    OpBuilder<(ins "EventControl":$clockEdge, "Value":$clock,
                       "ResetType":$resetStyle,
                       "EventControl":$resetEdge, "Value":$reset,
                       CArg<"std::function<void()>", "{}">:$bodyCtor,
@@ -369,7 +369,7 @@ def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">,
                                  ProceduralOp]> {
   let summary = "Nonblocking procedural assignment";
   let description = [{
-    A SystemVerilog nonblocking procedural assignment statement 'x <= y;'. 
+    A SystemVerilog nonblocking procedural assignment statement 'x <= y;'.
     These occur in initial, always, task, and function blocks.  The statement
     can be scheduled without blocking procedural flow.  See SV Spec 10.4.2.
   }];
@@ -384,12 +384,12 @@ def ForceOp : SVOp<"force", [InOutTypeConstraint<"src", "dest">,
   let summary = "Force procedural statement";
   let description = [{
     A SystemVerilog force procedural statement 'force x = y;'.  These
-    occur in initial, always, task, and function blocks.  
+    occur in initial, always, task, and function blocks.
     A force statement shall override a procedural assignment until
-    a release statement is executed on the variable. 
+    a release statement is executed on the variable.
     The left-hand side of the assignment can be avariable, a net,
-    a constant bit-select of a vector net, a part-select of a vector 
-    net or a concatenation. It cannot be a memory word or a bit-select 
+    a constant bit-select of a vector net, a part-select of a vector
+    net or a concatenation. It cannot be a memory word or a bit-select
     or part-select of a vector variable. See SV Spec 10.6.2.
   }];
   let arguments = (ins InOutType:$dest, InOutElementType:$src);
@@ -401,12 +401,12 @@ def ReleaseOp : SVOp<"release", [ProceduralOp]> {
   let summary = "Release procedural statement";
   let description = [{
     Release is used in conjunction with force. When released,
-    then if the variable does not currently have an active assign 
-    procedural continuous assignment, the variable shall not immediately 
-    change value. The variable shall maintain its current value until 
-    the next procedural assignment or procedural continuous assignment 
+    then if the variable does not currently have an active assign
+    procedural continuous assignment, the variable shall not immediately
+    change value. The variable shall maintain its current value until
+    the next procedural assignment or procedural continuous assignment
     to the variable. Releasing a variable that currently has an
-    active assign procedural continuous assignment shall immediately 
+    active assign procedural continuous assignment shall immediately
     reestablish that assignment. See SV Spec 10.6.2.
   }];
   let arguments = (ins InOutType:$dest);
@@ -434,7 +434,7 @@ def AliasOp : SVOp<"alias"> {
 // hard coded to 32'h80000002.
 def FWriteOp : SVOp<"fwrite", [ProceduralOp]> {
   let summary = "'$fwrite' statement";
-   
+
   let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands);
   let results = (outs);
 
@@ -497,9 +497,10 @@ def AssertOp : SVOp<"assert", [ProceduralOp]> {
     Assert that a specific condition is always true.
   }];
 
-  let arguments = (ins AnyType:$predicate);
+  let arguments = (ins AnyType:$predicate, StrAttr:$label);
   let results = (outs);
-  let assemblyFormat = "attr-dict $predicate `:` type($predicate)";
+  let assemblyFormat =
+    "custom<OmitEmptyStringAttr>($label) attr-dict $predicate `:` type($predicate)";
 }
 
 def AssumeOp : SVOp<"assume", [ProceduralOp]> {
@@ -508,9 +509,10 @@ def AssumeOp : SVOp<"assume", [ProceduralOp]> {
     Assume that a specific property is always true.
   }];
 
-  let arguments = (ins AnyType:$property);
+  let arguments = (ins AnyType:$property, StrAttr:$label);
   let results = (outs);
-  let assemblyFormat = "attr-dict $property `:` type($property)";
+  let assemblyFormat =
+    "custom<OmitEmptyStringAttr>($label) attr-dict $property `:` type($property)";
 }
 
 def CoverOp : SVOp<"cover", [ProceduralOp]> {
@@ -519,9 +521,10 @@ def CoverOp : SVOp<"cover", [ProceduralOp]> {
     Assert that a specific property happens during the course of execution.
   }];
 
-  let arguments = (ins AnyType:$property);
+  let arguments = (ins AnyType:$property, StrAttr:$label);
   let results = (outs);
-  let assemblyFormat = "attr-dict $property `:` type($property)";
+  let assemblyFormat =
+    "custom<OmitEmptyStringAttr>($label) attr-dict $property `:` type($property)";
 }
 
 def BindOp : SVOp<"bind", []> {
@@ -545,4 +548,3 @@ def BindOp : SVOp<"bind", []> {
     hw::InstanceOp getReferencedInstance();
   }];
 }
-

@@ -107,5 +107,3 @@ hw.module @InstanceWithCollisions(%a: i1) {
 hw.module.extern @inout_0 () -> ()
 hw.module.extern @inout_1 () -> ()
 hw.module.extern @inout_2 () -> ()
-
-

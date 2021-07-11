@@ -35,6 +35,19 @@ class InstanceBuilder(support.NamedValueOpView):
     if results is None:
       results = module.type.results
 
+    if not isinstance(module, hw.HWModuleExternOp):
+      input_name_type_lookup = {
+          name: support.type_to_pytype(ty)
+          for name, ty in zip(self.operand_names(), module.type.inputs)
+      }
+      for input_name, input_value in input_port_mapping.items():
+        if input_name not in input_name_type_lookup:
+          continue  # This error gets caught and raised later.
+        mod_input_type = input_name_type_lookup[input_name]
+        if support.type_to_pytype(input_value.type) != mod_input_type:
+          raise TypeError(f"Input '{input_name}' has type '{input_value.type}' "
+                          f"but expected '{mod_input_type}'")
+
     super().__init__(hw.InstanceOp,
                      results,
                      input_port_mapping,
@@ -165,7 +178,8 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
       # If it does, the return from body_builder must be None.
       if bb_ret is not None and bb_ret != last_op:
         raise support.ConnectionError(
-            "Cannot return value from body_builder and create hw.OutputOp")
+            f"In {cls_name}, cannot return value from body_builder and "
+            "create hw.OutputOp")
       return
 
   # If builder didn't create an output op and didn't return anything, this op
@@ -174,7 +188,8 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
     if len(output_ports) == 0:
       hw.OutputOp([])
       return
-    raise support.ConnectionError("Must return module output values")
+    raise support.ConnectionError(
+        f"In {cls_name}, must return module output values")
 
   # Now create the output op depending on the object type returned
   outputs: list[Value] = list()
@@ -182,7 +197,8 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
   # Only acceptable return is a dict of port, value mappings.
   if not isinstance(bb_ret, dict):
     raise support.ConnectionError(
-        "Can only return a dict of port, value mappings from body_builder.")
+        f"In {cls_name}, can only return a dict of port, value mappings "
+        "from body_builder.")
 
   # A dict of `OutputPortName` -> ValueLike must be converted to a list in port
   # order.
@@ -196,11 +212,16 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
       if val is None:
         field_type = type(bb_ret[name])
         raise TypeError(
-            f"body_builder return doesn't support type '{field_type}'")
+            f"In {cls_name}, body_builder return doesn't support type "
+            f"'{field_type}'")
       if val.type != port_type:
-        raise TypeError(
-            f"Output port '{name}' type ({val.type}) doesn't match declared"
-            f" type ({port_type})")
+        if isinstance(port_type, hw.TypeAliasType) and \
+           port_type.inner_type == val.type:
+          val = hw.BitcastOp(port_type, val).result
+        else:
+          raise TypeError(
+              f"In {cls_name}, output port '{name}' type ({val.type}) doesn't "
+              f"match declared type ({port_type})")
       outputs.append(val)
       bb_ret.pop(name)
   if len(unconnected_ports) > 0:
@@ -378,7 +399,7 @@ class ArrayGetOp:
   @staticmethod
   def create(array_value, idx):
     array_value = support.get_value(array_value)
-    array_type = hw.ArrayType(array_value.type)
+    array_type = support.get_self_or_inner(array_value.type)
     if isinstance(idx, int):
       idx_width = (array_type.size - 1).bit_length()
       idx_val = ConstantOp.create(IntegerType.get_signless(idx_width),
@@ -410,15 +431,31 @@ class ArrayCreateOp:
 class StructCreateOp:
 
   @staticmethod
-  def create(elements: list[(str, Type)]):
+  def create(elements, result_type: Type = None):
     elem_name_values = [
         (name, support.get_value(value)) for (name, value) in elements
     ]
-    struct_type = hw.StructType.get([
-        (name, value.type) for (name, value) in elem_name_values
-    ])
-    return hw.StructCreateOp(struct_type,
-                             [value for (_, value) in elem_name_values])
+    struct_fields = [(name, value.type) for (name, value) in elem_name_values]
+    struct_type = hw.StructType.get(struct_fields)
+
+    struct_val = hw.StructCreateOp(struct_type,
+                                   [value for (_, value) in elem_name_values])
+    if result_type is None:
+      return struct_val
+
+    result_type_inner = support.get_self_or_inner(result_type)
+    if not isinstance(result_type_inner, hw.StructType):
+      raise TypeError("result_type must be cast-able to struct type")
+    result_fields = result_type_inner.get_fields()
+    if len(struct_fields) != len(result_fields):
+      raise TypeError("Number of fields in result_type must match elements")
+    for (ex_name, ex_type), (res_name, res_type) in zip(struct_fields,
+                                                        result_fields):
+      if ex_name != res_name:
+        raise TypeError(f"Field names must match ('{ex_name}' vs '{res_name}'")
+      if support.type_to_pytype(ex_type) != support.type_to_pytype(res_type):
+        raise TypeError(f"Field types must match ('{ex_type}' vs '{res_type}'")
+    return hw.BitcastOp(result_type, struct_val.result)
 
 
 class StructExtractOp:
@@ -426,7 +463,28 @@ class StructExtractOp:
   @staticmethod
   def create(struct_value, field_name: str):
     struct_value = support.get_value(struct_value)
-    struct_type = hw.StructType(struct_value.type)
+    struct_type = support.get_self_or_inner(struct_value.type)
     field_type = struct_type.get_field(field_name)
     return hw.StructExtractOp(field_type, struct_value,
                               StringAttr.get(field_name))
+
+
+class TypedeclOp:
+
+  @staticmethod
+  def create(sym_name: str, type: Type, verilog_name: str = None):
+    return hw.TypedeclOp(StringAttr.get(sym_name), TypeAttr.get(type),
+                         verilog_name)
+
+
+class TypeScopeOp:
+
+  @staticmethod
+  def create(sym_name: str):
+    op = hw.TypeScopeOp(StringAttr.get(sym_name))
+    op.regions[0].blocks.append()
+    return op
+
+  @property
+  def body(self):
+    return self.regions[0].blocks[0]

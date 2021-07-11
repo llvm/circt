@@ -450,3 +450,13 @@ firrtl.circuit "MemoryPortsWithDifferentTypes" {
     %memory_r0, %memory_r1 = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r0", "r1"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<8>>
   }
 }
+
+// -----
+
+firrtl.circuit "SubfieldOpFieldError" {
+  firrtl.module @SubfieldOpFieldError() {
+    %w = firrtl.wire  : !firrtl.bundle<a: uint<2>, b: uint<2>>
+    // expected-error @+1 {{subfield element index is greater than the number of fields}}
+    %w_a = firrtl.subfield %w(2) : (!firrtl.bundle<a : uint<2>, b : uint<2>>) -> !firrtl.uint<2>
+  }
+}

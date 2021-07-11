@@ -15,6 +15,7 @@
 #define CIRCT_INITALLPASSES_H_
 
 #include "circt/Conversion/Passes.h"
+#include "circt/Dialect/Calyx/CalyxPasses.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
@@ -29,6 +30,7 @@ inline void registerAllPasses() {
   registerConversionPasses();
 
   // Standard Passes
+  calyx::registerPasses();
   esi::registerESIPasses();
   firrtl::registerPasses();
   llhd::initLLHDTransformationPasses();

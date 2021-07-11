@@ -132,12 +132,12 @@ def ICmpOp : CombOp<"icmp", [NoSideEffect, SameTypeOperands]> {
     ```
   }];
 
-  let arguments = (ins ICmpPredicate:$predicate, 
+  let arguments = (ins ICmpPredicate:$predicate,
                    CombIntegerType:$lhs, CombIntegerType:$rhs);
   let results = (outs I1:$result);
 
   let assemblyFormat = "$predicate $lhs `,` $rhs  attr-dict `:` type($lhs)";
-  
+
   let hasFolder = true;
   let hasCanonicalizeMethod = true;
 
@@ -248,7 +248,7 @@ def MuxOp : CombOp<"mux",
 
   let assemblyFormat =
     "$cond `,` $trueValue `,` $falseValue attr-dict `:` type($result)";
-  
+
   let hasFolder = true;
   let hasCanonicalizeMethod = true;
 

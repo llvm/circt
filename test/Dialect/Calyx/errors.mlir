@@ -69,10 +69,59 @@ calyx.program {
   calyx.component @main() -> () {
     %0 = calyx.cell "a0" @A : i16
     %1 = calyx.cell "b0" @B : i16
-    // expected-error @+1 {{'calyx.assign' op should only be contained in 'calyx.wires' or 'calyx.group'}}
+    // expected-error @+1 {{'calyx.assign' op expects parent op to be one of 'calyx.group, calyx.wires'}}
     calyx.assign %1 = %0 : i16
 
     calyx.wires {}
+    calyx.control {}
+  }
+}
+
+// -----
+
+calyx.program {
+  calyx.component @main() -> () {
+    calyx.wires {}
+    calyx.control {
+      calyx.seq {
+        // expected-error @+1 {{'calyx.enable' op with group: WrongName, which does not exist.}}
+        calyx.enable @WrongName
+      }
+    }
+  }
+}
+
+// -----
+
+calyx.program {
+  calyx.component @B() -> () {
+    calyx.wires {}
+    calyx.control {}
+  }
+  calyx.component @main() -> () {
+    %c1_1 = constant 1 : i1
+    calyx.wires {
+      calyx.group @A { calyx.group_done %c1_1 : i1 }
+    }
+    // expected-error @+1 {{'calyx.control' op EnableOp is not a composition operator. It should be nested in a control flow operation, such as "calyx.seq"}}
+    calyx.control {
+      calyx.enable @A
+      calyx.enable @A
+    }
+  }
+}
+
+// -----
+
+calyx.program {
+  calyx.component @main() -> () {
+    %c1_1 = constant 1 : i1
+    calyx.wires {
+      // expected-error @+1 {{'calyx.group' op with name: Group1 is unused in the control execution schedule}}
+      calyx.group @Group1 {
+        %done = calyx.group_done %c1_1 : i1
+      }
+    }
     calyx.control {}
   }
 }

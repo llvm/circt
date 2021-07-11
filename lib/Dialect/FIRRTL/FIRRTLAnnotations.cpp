@@ -81,6 +81,16 @@ AnnotationSet::forPort(Operation *module, size_t portNo,
   return AnnotationSet(annotations, module->getContext());
 }
 
+/// Get an annotation set for the specified value.
+AnnotationSet AnnotationSet::get(Value v) {
+  if (auto op = v.getDefiningOp())
+    return AnnotationSet(op);
+  // If its not an Operation, then must be a block argument.
+  auto arg = v.dyn_cast<BlockArgument>();
+  auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
+  return forPort(module, arg.getArgNumber());
+}
+
 /// Return this annotation set as an argument attribute dictionary for a port.
 DictionaryAttr AnnotationSet::getArgumentAttrDict(
     ArrayRef<NamedAttribute> otherPortAttrs) const {

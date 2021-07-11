@@ -1,6 +1,30 @@
 // RUN: circt-opt -simple-canonicalizer %s | FileCheck %s
 
-firrtl.circuit "And" {
+firrtl.circuit "Casts" {
+
+// CHECK-LABEL: firrtl.module @Casts
+firrtl.module @Casts(in %ui1 : !firrtl.uint<1>, in %si1 : !firrtl.sint<1>,
+    in %clock : !firrtl.clock, in %asyncreset : !firrtl.asyncreset,
+    out %out_ui1 : !firrtl.uint<1>, out %out_si1 : !firrtl.sint<1>,
+    out %out_clock : !firrtl.clock, out %out_asyncreset : !firrtl.asyncreset) {
+
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  %c1_si1 = firrtl.constant 1 : !firrtl.sint<1>
+
+  /// No effect
+  // CHECK: firrtl.connect %out_ui1, %ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+  %0 = firrtl.asUInt %ui1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %out_ui1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: firrtl.connect %out_si1, %si1 : !firrtl.sint<1>, !firrtl.sint<1>
+  %1 = firrtl.asSInt %si1 : (!firrtl.sint<1>) -> !firrtl.sint<1>
+  firrtl.connect %out_si1, %1 : !firrtl.sint<1>, !firrtl.sint<1>
+  // CHECK: firrtl.connect %out_clock, %clock : !firrtl.clock, !firrtl.clock
+  %2 = firrtl.asClock %clock : (!firrtl.clock) -> !firrtl.clock
+  firrtl.connect %out_clock, %2 : !firrtl.clock, !firrtl.clock
+  // CHECK: firrtl.connect %out_asyncreset, %asyncreset : !firrtl.asyncreset, !firrtl.asyncreset
+  %3 = firrtl.asAsyncReset %asyncreset : (!firrtl.asyncreset) -> !firrtl.asyncreset
+  firrtl.connect %out_asyncreset, %3 : !firrtl.asyncreset, !firrtl.asyncreset
+}
 
 // CHECK-LABEL: firrtl.module @Div
 firrtl.module @Div(in %a: !firrtl.uint<4>,
@@ -298,8 +322,10 @@ firrtl.module @Head(in %in4u: !firrtl.uint<4>,
 // CHECK-LABEL: firrtl.module @Mux
 firrtl.module @Mux(in %in: !firrtl.uint<4>,
                    in %cond: !firrtl.uint<1>,
+                   in %condZeroWidth: !firrtl.uint<0>,
                    out %out: !firrtl.uint<4>,
-                   out %out1: !firrtl.uint<1>) {
+                   out %out1: !firrtl.uint<1>,
+                   out %out2: !firrtl.uint<4>) {
   // CHECK: firrtl.connect %out, %in
   %0 = firrtl.mux (%cond, %in, %in) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %0 : !firrtl.uint<4>, !firrtl.uint<4>
@@ -314,6 +340,10 @@ firrtl.module @Mux(in %in: !firrtl.uint<4>,
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   %3 = firrtl.mux (%cond, %c1_ui1, %c1_ui0) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.connect %out1, %3 : !firrtl.uint<1>, !firrtl.uint<1>
+
+  // CHECK: firrtl.connect %out2, %c7_ui4
+  %4 = firrtl.mux (%condZeroWidth, %in, %c7_ui4) : (!firrtl.uint<0>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.connect %out2, %4 : !firrtl.uint<4>, !firrtl.uint<4>
 }
 
 // CHECK-LABEL: firrtl.module @Pad
@@ -1542,7 +1572,7 @@ firrtl.module @RegresetToReg(in %clock: !firrtl.clock, out %foo1: !firrtl.uint<1
   %invalid_asyncreset = firrtl.invalidvalue : !firrtl.asyncreset
   // CHECK: %bar2 = firrtl.reg %clock : (!firrtl.clock) -> !firrtl.uint<1>
   %bar2 = firrtl.regreset %clock, %invalid_asyncreset, %c0_ui95  : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<95>) -> !firrtl.uint<1>
-  
+
   firrtl.connect %foo1, %bar1 : !firrtl.uint<1>, !firrtl.uint<1>
   firrtl.connect %foo2, %bar2 : !firrtl.uint<1>, !firrtl.uint<1>
 }
@@ -1709,7 +1739,7 @@ firrtl.module @regsyncreset_no(in %clock: !firrtl.clock, in %reset: !firrtl.uint
   // CHECK: %[[const:.*]] = firrtl.constant 1
   // CHECK: firrtl.reg %clock
   // CHECK-NEXT:  firrtl.connect %bar, %d : !firrtl.uint, !firrtl.uint
-  // CHECK-NEXT:  %0 = firrtl.mux(%reset, %[[const]], %foo) : (!firrtl.uint<1>, !firrtl.uint, !firrtl.uint) -> !firrtl.uint 
+  // CHECK-NEXT:  %0 = firrtl.mux(%reset, %[[const]], %foo) : (!firrtl.uint<1>, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
   // CHECK-NEXT:  firrtl.connect %d, %0 : !firrtl.uint, !firrtl.uint
   // CHECK-NEXT: }
   %d = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint
@@ -1750,5 +1780,5 @@ firrtl.module @dshifts_to_ishifts(in %a_in: !firrtl.sint<58>,
   %2 = firrtl.dshr %c_in, %c438_ui10 : (!firrtl.sint<58>, !firrtl.uint<10>) -> !firrtl.sint<58>
   firrtl.connect %c_out, %2 : !firrtl.sint<58>, !firrtl.sint<58>
 }
- 
+
 }

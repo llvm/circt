@@ -790,21 +790,12 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 /// Verify that the num of operands and types fit the declared results.
 static LogicalResult verifyOutputOp(OutputOp *op) {
-  OperandRange outputValues = op->getOperands();
-  auto opParent = (*op)->getParentOp();
-
-  // Check that we are in the correct region. OutputOp should be directly
-  // contained by an HWModuleOp region. We'll loosen this restriction if
-  // there's a compelling use case.
-  if (!isa<HWModuleOp>(opParent)) {
-    op->emitOpError("operation expected to be in a HWModuleOp.");
-    return failure();
-  }
-
   // Check that the we (hw.output) have the same number of operands as our
   // region has results.
+  auto opParent = (*op)->getParentOp();
   FunctionType modType = getModuleType(opParent);
   ArrayRef<Type> modResults = modType.getResults();
+  OperandRange outputValues = op->getOperands();
   if (modResults.size() != outputValues.size()) {
     op->emitOpError("must have same number of operands as region results.");
     return failure();
