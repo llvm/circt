@@ -16,10 +16,10 @@ def RegisterOp : CalyxOp<"register", [
   ]> {
   let summary = "Defines a register";
   let description = [{
-    The "calyx.reg" op defines a register. The clock signal of
+    The "calyx.register" op defines a register. The clock signal of
     the register is not exposed in the Calyx IR.
     ```
-      %in, %out, %write_en, %done = calyx.reg : i32
+      %in, %out, %write_en, %done = calyx.register "name" : i32, i32, i1, i1
     ```
   }];
   let arguments = (ins StrAttr:$name);
