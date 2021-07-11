@@ -11,11 +11,11 @@ calyx.program {
 
     calyx.wires {
       // CHECK-LABEL: calyx.group @Group1
-      // CHECK-NEXT:  %2 = calyx.group_go %0 : i1
-      // CHECK-NEXT:  %3 = comb.and %1#2, %2 : i1
-      // CHECK-NEXT:  calyx.assign %1#0 = %1#1, %2 ? : i8
-      // CHECK-NEXT:  calyx.assign %1#0 = %1#1, %3 ? : i8
-      // CHECK-NEXT:  %4 = calyx.group_done %1#2 : i1
+      // CHECK-NEXT:  %Group1.go = calyx.group_go %0 : i1
+      // CHECK-NEXT:  %1 = comb.and %c0.flag, %Group1.go : i1
+      // CHECK-NEXT:  calyx.assign %c0.in = %c0.out, %Group1.go ? : i8
+      // CHECK-NEXT:  calyx.assign %c0.in = %c0.out, %1 ? : i8
+      // CHECK-NEXT:  %2 = calyx.group_done %c0.flag : i1
       // CHECK-NEXT:  }
       calyx.group @Group1 {
         calyx.assign %in = %out : i8

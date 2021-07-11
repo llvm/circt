@@ -47,7 +47,7 @@ calyx.program {
     calyx.control {}
   }
   calyx.component @main() -> () {
-    // expected-error @+1 {{'calyx.cell' op result type for "%in" must be 'i16', but got 'i1'}}
+    // expected-error @+1 {{'calyx.cell' op result type for "in" must be 'i16', but got 'i1'}}
     %0 = calyx.cell "b0" @B : i1
 
     calyx.wires {}
