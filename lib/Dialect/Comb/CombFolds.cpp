@@ -895,7 +895,8 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
   }
 
   // mux(selector, x, mux(selector, y, z) = mux(selector, x, z)
-  if (auto falseCase = dyn_cast_or_null<MuxOp>(op.falseValue().getDefiningOp())) {
+  if (auto falseCase =
+          dyn_cast_or_null<MuxOp>(op.falseValue().getDefiningOp())) {
     if (op.cond() == falseCase.cond()) {
       Value newT = op.trueValue();
       Value newF = falseCase.falseValue();
