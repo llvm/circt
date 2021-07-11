@@ -25,4 +25,13 @@ def RegisterOp : CalyxOp<"register", [
   let arguments = (ins StrAttr:$name);
   let results = (outs AnyType:$in, AnyType:$out, I1:$write_en, I1:$done);
   let assemblyFormat = "$name attr-dict `:` type(results)";
+
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name, "size_t":$width), [{
+      $_state.addAttribute("name", name);
+      auto i1Type = $_builder.getI1Type();
+      auto widthType = $_builder.getIntegerType(width);
+      $_state.addTypes({widthType, widthType, i1Type, i1Type});
+    }]>
+  ];
 }
