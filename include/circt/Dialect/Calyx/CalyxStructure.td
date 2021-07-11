@@ -198,10 +198,6 @@ def GroupOp : CalyxOp<"group", [
   let assemblyFormat = "$sym_name $body attr-dict";
 }
 
-class SameTypeConstraint<string lhs, string rhs>
- : TypesMatchWith<"lhs and rhs types should be equivalent",
-                   lhs, rhs, [{ $_self }]>;
-
 def AssignOp : CalyxOp<"assign", [
     SameTypeConstraint<"dest", "src">,
     ParentOneOf<["GroupOp", "WiresOp"]>
