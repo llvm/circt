@@ -46,14 +46,20 @@ static RegisterOp createRegister(OpBuilder &builder, ComponentOp &component,
                                     StringAttr::get(context, name), width);
 }
 
-// TODO(Calyx): Document.
+/// Generates a latency-insensitive FSM to realize a sequential operation. This
+/// is done by initializing GroupGoOp values for the enabled groups in the
+/// SeqOp, and then creating a new Seq GroupOp with the given FSM. Each step in
+/// the FSM is guarded by the done operation of the group currently being
+/// executed. After the group is complete, the FSM is incremented. This SeqOp is
+/// then replaced in the control with an Enable statement referring to the new
+/// Seq GroupOp.
 static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
   auto wires = component.getWiresOp();
   Block *wiresBody = wires.getBody();
 
   auto &seqOps = seq.getBody()->getOperations();
   assert(llvm::all_of(seqOps, [](auto &&op) { return isa<EnableOp>(op); }) &&
-         "The Seq should only contain EnableOps in this pass.");
+         "The SeqOp should only contain EnableOps in this pass.");
   // This should be the number of enable statements + 1 since this is the
   // maximum value the FSM register will reach.
   size_t fsmBitWidth = getNecessaryBitWidth(seqOps.size() + 1);
@@ -90,7 +96,7 @@ static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
 
     // Currently, we assume that there is no guard, i.e. the source is
     // used in the predicate whenever `GroupDoneOp` is needed.
-    assert(!groupOp.getDoneOp().guard() && "This case is not implemented.");
+    assert(!groupOp.getDoneOp().guard() && "This case is not implemented yet.");
     // TODO(Calyx): Need to canonicalize the GroupDoneOp's guard and source.
     // For example, from: group_done %src : i1
     // ->
@@ -152,7 +158,7 @@ static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
       builder.create<EnableOp>(seq->getLoc(), seqGroup.sym_name());
   seq->erase();
 
-  // Keep a list of compiled groups associated with the new enable.
+  // Keep a list of compiled groups associated with the new EnableOp.
   newEnableOp->setAttr("groups",
                        ArrayAttr::get(builder.getContext(), groupNames));
 }
