@@ -40,8 +40,8 @@ calyx.program {
   }
 
   calyx.component @main() -> () {
-    // CHECK: %in, %out, %write_en, %done = calyx.reg "s" : i8, i8, i1, i1
-    %in, %out, %write_en, %done = calyx.reg "s" : i8, i8, i1, i1
+    // CHECK: %in, %out, %write_en, %done = calyx.register "r0" : i8, i8, i1, i1
+    %in, %out, %write_en, %done = calyx.register "r0" : i8, i8, i1, i1
 
     %in1, %out1 = calyx.cell "c0" @A : i8, i8
     %in2, %out2 = calyx.cell "c1" @A : i8, i8

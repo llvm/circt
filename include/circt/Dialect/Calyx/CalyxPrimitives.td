@@ -10,9 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-def RegisterOp : CalyxOp<"reg", [
-  SameTypeConstraint<"in", "out">,
-  HasParent<"ComponentOp">
+def RegisterOp : CalyxOp<"register", [
+  HasParent<"ComponentOp">,
+  SameTypeConstraint<"in", "out">
   ]> {
   let summary = "Defines a register";
   let description = [{
