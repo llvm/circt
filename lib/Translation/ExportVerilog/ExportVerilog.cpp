@@ -2345,9 +2345,10 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   auto printParmValue = [&](Attribute value) {
     if (auto intAttr = value.dyn_cast<IntegerAttr>()) {
       IntegerType intTy = intAttr.getType().cast<IntegerType>();
-      SmallString<20> numToPrint;
-      intAttr.getValue().toString(numToPrint, 10, intTy.isSigned());
-      os << intTy.getWidth() << "'d" << numToPrint;
+      // Integer attributes are printed without a designated width.  The width
+      // is inferred from the extmodule they are used with, we don't want to
+      // take some arbitrary width from the APInt storage.
+      intAttr.getValue().print(os, intTy.isSigned());
     } else if (auto strAttr = value.dyn_cast<StringAttr>()) {
       os << '"';
       os.write_escaped(strAttr.getValue());

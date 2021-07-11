@@ -225,17 +225,17 @@ hw.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2:
 // CHECK-NEXT:     .c (y)
 // CHECK-NEXT:   );
 // CHECK-NEXT:   FooModule #(
-// CHECK-NEXT:     .DEFAULT(64'd14000240888948784983),
+// CHECK-NEXT:     .DEFAULT(14000240888948784983),
 // CHECK-NEXT:     .DEPTH(3.242000e+01),
 // CHECK-NEXT:     .FORMAT("xyz_timeout=%d\n"),
-// CHECK-NEXT:     .WIDTH(8'd32)
+// CHECK-NEXT:     .WIDTH(32)
 // CHECK-NEXT:   ) paramd (
 // CHECK-NEXT:     .a   (w),
 // CHECK-NEXT:   //.b   (i3),
 // CHECK-NEXT:     .out (p)
 // CHECK-NEXT:   );
 // CHECK-NEXT:   FooModule #(
-// CHECK-NEXT:     .DEFAULT(64'd1)
+// CHECK-NEXT:     .DEFAULT(1)
 // CHECK-NEXT:   ) paramd2 (
 // CHECK-NEXT:     .a   (i2),
 // CHECK-NEXT:     .out (p2)

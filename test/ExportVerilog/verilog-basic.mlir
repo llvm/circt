@@ -287,10 +287,10 @@ hw.module @UseInstances(%a_in: i8) -> (%a_out: i1) {
   // CHECK:   .out (xyz_out)
   // CHECK: );
   // CHECK: MyParameterizedExtModule #(
-  // CHECK:   .DEFAULT(64'd0),
+  // CHECK:   .DEFAULT(0),
   // CHECK:   .DEPTH(3.500000e+00),
   // CHECK:   .FORMAT("xyz_timeout=%d\n"),
-  // CHECK:   .WIDTH(8'd32)
+  // CHECK:   .WIDTH(32)
   // CHECK: ) xyz2 (
   // CHECK:   .in  (a_in),
   // CHECK:   .out (xyz2_out)
