@@ -78,8 +78,9 @@ static bool isDuplicatableNullaryExpression(Operation *op) {
     return true;
 
   // If this is a small verbatim expression, keep it inline.
-  if (auto verb = dyn_cast<VerbatimExprOp>(op)) {
-    if (verb->getNumOperands() == 0 && verb.string().size() <= 16)
+  if (isa<VerbatimExprOp, VerbatimExprSEOp>(op)) {
+    if (op->getNumOperands() == 0 &&
+        op->getAttrOfType<StringAttr>("string").getValue().size() <= 16)
       return true;
   }
 
@@ -854,7 +855,9 @@ private:
 
   SubExprInfo visitSV(GetModportOp op);
   SubExprInfo visitSV(ReadInterfaceSignalOp op);
-  SubExprInfo visitSV(VerbatimExprOp op);
+  SubExprInfo visitVerbatimExprOp(Operation *op);
+  SubExprInfo visitSV(VerbatimExprOp op) { return visitVerbatimExprOp(op); }
+  SubExprInfo visitSV(VerbatimExprSEOp op) { return visitVerbatimExprOp(op); }
   SubExprInfo visitSV(ConstantXOp op);
   SubExprInfo visitSV(ConstantZOp op);
 
@@ -1233,10 +1236,11 @@ SubExprInfo ExprEmitter::visitSV(ReadInterfaceSignalOp op) {
   return {Selection, IsUnsigned};
 }
 
-SubExprInfo ExprEmitter::visitSV(VerbatimExprOp op) {
-  emitTextWithSubstitutions(op.string(), op, [&](Value operand) {
-    emitSubExpr(operand, LowestPrecedence, OOLBinary);
-  });
+SubExprInfo ExprEmitter::visitVerbatimExprOp(Operation *op) {
+  emitTextWithSubstitutions(op->getAttrOfType<StringAttr>("string").getValue(),
+                            op, [&](Value operand) {
+                              emitSubExpr(operand, LowestPrecedence, OOLBinary);
+                            });
 
   return {Unary, IsUnsigned};
 }
@@ -2451,8 +2455,8 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     if (!elt.isOutput()) {
       emitExpression(portVal, ops);
     } else if (portVal.hasOneUse() &&
-             (output = dyn_cast_or_null<OutputOp>(
-                  portVal.getUses().begin()->getOwner()))) {
+               (output = dyn_cast_or_null<OutputOp>(
+                    portVal.getUses().begin()->getOwner()))) {
       auto module = output->getParentOfType<HWModuleOp>();
       auto name = getModuleResultNameAttr(
           module, portVal.getUses().begin()->getOperandNumber());
