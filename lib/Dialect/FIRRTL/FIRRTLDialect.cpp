@@ -298,10 +298,10 @@ Operation *FIRRTLDialect::materializeConstant(OpBuilder &builder,
   // like ClockType and ResetType.  Since BoolAttrs are also IntegerAttrs, its
   // important that this goes first.
   if (auto attrValue = value.dyn_cast<BoolAttr>()) {
-    auto isSpecialConstantType =
-        type.isa<ClockType, AsyncResetType, ResetType>();
-    assert(isSpecialConstantType &&
-           "BoolAttrs can only be materialized for special constant types.");
+    assert(
+        type.isa<ClockType>() || type.isa<AsyncResetType>() ||
+        type.isa<ResetType>() &&
+            "BoolAttrs can only be materialized for special constant types.");
     return builder.create<SpecialConstantOp>(loc, type, attrValue);
   }
 
