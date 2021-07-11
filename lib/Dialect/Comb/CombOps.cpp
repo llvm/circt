@@ -149,7 +149,7 @@ void ConcatOp::build(OpBuilder&builder, OperationState &result, Value hd, ValueR
 {
   result.addOperands(ValueRange { hd });
   result.addOperands(tl);
-  const unsigned hdWidth = hd.getType().cast<IntegerType>().getWidth();
+  unsigned hdWidth = hd.getType().cast<IntegerType>().getWidth();
   result.addTypes(builder.getIntegerType(getTotalWidth(tl) + hdWidth));
 }
 

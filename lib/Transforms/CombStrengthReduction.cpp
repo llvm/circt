@@ -78,7 +78,7 @@ static mlir::Optional<Value> findFirstNonEmptyValue(const OperandRange &range)
     }
   }
 
-  return mlir::None;
+  return None;
 }
 
 static size_t calculateRangeTotalWidth(const OperandRange &range) {
@@ -92,7 +92,10 @@ static size_t calculateRangeTotalWidth(const OperandRange &range) {
   return totalWidth;
 }
 
-LogicalResult matchAndRewriteCompareConcat(ICmpOp &op, ConcatOp &lhs, ConcatOp &rhs, PatternRewriter &rewriter) {
+// Reduce the strength icmp(concat(...), concat(...)) by doing a element-wise comparison on common
+// prefix and suffixes. Returns success() if a rewriting happens.
+static LogicalResult
+matchAndRewriteCompareConcat(ICmpOp &op, ConcatOp &lhs, ConcatOp &rhs, PatternRewriter &rewriter) {
   auto lhsOperands = lhs.getOperands();
   auto rhsOperands = rhs.getOperands();
   size_t numElements = std::min<size_t>(lhsOperands.size(), rhsOperands.size());
@@ -107,7 +110,7 @@ LogicalResult matchAndRewriteCompareConcat(ICmpOp &op, ConcatOp &lhs, ConcatOp &
     return success();
   };
 
-  auto directOrCat = [&](OperandRange range) -> mlir::Value {
+  auto directOrCat = [&](const OperandRange &range) -> Value {
     assert (range.size() > 0);
     if (range.size() == 1) {
       return range.front();
@@ -116,8 +119,7 @@ LogicalResult matchAndRewriteCompareConcat(ICmpOp &op, ConcatOp &lhs, ConcatOp &
     return rewriter.create<ConcatOp>(op.getLoc(), range);
   };
 
-  auto replaceWith = [&](ICmpPredicate predicate, Value lhs,
-      Value rhs) -> LogicalResult {
+  auto replaceWith = [&](ICmpPredicate predicate, Value lhs, Value rhs) -> LogicalResult {
     rewriter.replaceOpWithNewOp<ICmpOp>(op, predicate, lhs, rhs);
     return success();
   };
@@ -207,10 +209,6 @@ public:
       MatchAnyOpTypeTag(), /* benefit */ 1, context) {}
 
   LogicalResult matchAndRewrite(Operation *op, PatternRewriter &rewriter) const override {
-    // TODO: This elimination can be done more aggressively on non-concat operations, for example:
-    // cmp(a[31:0], concat(a[31:16], b[15:0])) could be put through this optimization.
-
-    // icmp (cat(x, a, y), cat(x, b, y)) -> icmp(a, b) with special handling for sign extensions.
     if (auto cmpOp = dyn_cast_or_null<ICmpOp>(op)) {
       if (auto lhs = dyn_cast_or_null<ConcatOp>(cmpOp.lhs().getDefiningOp())) {
         if (auto rhs = dyn_cast_or_null<ConcatOp>(cmpOp.rhs().getDefiningOp())) {
