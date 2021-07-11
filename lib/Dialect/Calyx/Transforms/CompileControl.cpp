@@ -36,39 +36,14 @@ static size_t getNecessaryBitWidth(size_t numStates) {
   return log2 > 1 ? log2 : 1;
 }
 
-/// Creates a component interface for a Register, and returns a Cell instance
-/// referring to it.
-/// TODO(Calyx): Need to introduce a standard register.
-static CellOp buildRegisterLikeComponent(OpBuilder &builder,
-                                         ComponentOp &component, size_t width,
-                                         StringRef name) {
+/// Creates a RegisterOp.
+static RegisterOp createRegister(OpBuilder &builder, ComponentOp &component,
+                                 size_t width, StringRef name) {
   auto *context = builder.getContext();
-  // Create Component to represent the internal state of a register.
-  auto program = component->getParentOfType<ProgramOp>();
-
-  auto regWidthType = builder.getIntegerType(width);
-
-  SmallVector<calyx::ComponentPortInfo, 3> ports{
-      {.name = StringAttr::get(context, "in"),
-       .type = regWidthType,
-       .direction = PortDirection::INPUT},
-      {.name = StringAttr::get(context, "write_en"),
-       .type = builder.getI1Type(),
-       .direction = PortDirection::INPUT},
-      {.name = StringAttr::get(context, "out"),
-       .type = regWidthType,
-       .direction = PortDirection::OUTPUT}};
-
-  builder.setInsertionPointToStart(program.getBody());
-  auto newRegister = builder.create<ComponentOp>(
-      program->getLoc(), StringAttr::get(context, name), ports);
-
-  // Create the cell operation.
-  TypeRange types = {regWidthType, builder.getI1Type(), regWidthType};
   builder.setInsertionPointToStart(component.getBody());
-  return builder.create<CellOp>(
-      component->getLoc(), types, StringAttr::get(context, "fsm"),
-      FlatSymbolRefAttr::get(context, SymbolTable::getSymbolName(newRegister)));
+
+  return builder.create<RegisterOp>(component->getLoc(),
+                                    StringAttr::get(context, name), width);
 }
 
 // TODO(Calyx): Document.
@@ -76,17 +51,18 @@ static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
   auto wires = component.getWiresOp();
   Block *wiresBody = wires.getBody();
 
-  size_t numEnables = seq.getBody()->getOperations().size();
+  auto &seqOps = seq.getBody()->getOperations();
+  assert(llvm::all_of(seqOps, [](auto &&op) { return isa<EnableOp>(op); }) &&
+         "The Seq should only contain EnableOps in this pass.");
   // This should be the number of enable statements + 1 since this is the
   // maximum value the FSM register will reach.
-  size_t fsmBitWidth = getNecessaryBitWidth(numEnables + 1);
+  size_t fsmBitWidth = getNecessaryBitWidth(seqOps.size() + 1);
 
   OpBuilder builder(component->getRegion(0));
-  auto fsmCell =
-      buildRegisterLikeComponent(builder, component, fsmBitWidth, "register");
-  auto fsmIn = fsmCell.getResult(0);
-  auto fsmWriteEn = fsmCell.getResult(1);
-  auto fsmOut = fsmCell.getResult(2);
+  auto fsmRegister = createRegister(builder, component, fsmBitWidth, "fsm");
+  auto fsmIn = fsmRegister.getResult(0);
+  auto fsmOut = fsmRegister.getResult(1);
+  auto fsmWriteEn = fsmRegister.getResult(2);
 
   builder.setInsertionPointToStart(wiresBody);
   auto oneConstant = createConstant(builder, wires->getLoc(), 1, 1);
@@ -114,9 +90,10 @@ static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
 
     // Currently, we assume that there is no guard, i.e. the source is
     // used in the predicate whenever `GroupDoneOp` is needed.
-    // TODO(Calyx): Need to canonicalize the GroupDoneOp's guard and source
-    // from: group_done %src : i1
-    // =>
+    assert(!groupOp.getDoneOp().guard() && "This case is not implemented.");
+    // TODO(Calyx): Need to canonicalize the GroupDoneOp's guard and source.
+    // For example, from: group_done %src : i1
+    // ->
     // %c1 = hw.constant 1 : i1
     // group_done %c1, %src ? : i1
     auto doneOpSource = groupOp.getDoneOp().src();
