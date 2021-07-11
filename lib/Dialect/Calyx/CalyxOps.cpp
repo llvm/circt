@@ -387,7 +387,7 @@ static LogicalResult verifyCellOp(CellOp cell) {
 // GroupGoOp
 //===----------------------------------------------------------------------===//
 
-/// Provide meaningful names to the result values of a RegisterOp.
+/// Provide meaningful names to the result values of a GroupGoOp.
 void GroupGoOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   auto parent = (*this)->getParentOfType<GroupOp>();
   auto name = parent.sym_name();

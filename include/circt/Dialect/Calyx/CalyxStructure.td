@@ -141,7 +141,7 @@ def CellOp : CalyxOp<"cell", [
     optionally have parameters attributed to them.
 
     ```mlir
-      %in1, %out1 = calyx.cell "name" @MyComponent : i64, i16
+      %name.in, %name.out = calyx.cell "name" @MyComponent : i64, i16
     ```
   }];
 
