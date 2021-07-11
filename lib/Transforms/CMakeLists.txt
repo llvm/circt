@@ -5,7 +5,6 @@ add_circt_library(CIRCTTransforms
   CIRCTTransformsIncGen
 
   LINK_LIBS PUBLIC
-  CIRCTComb
   MLIRIR
   MLIRPass
   MLIRRewrite
