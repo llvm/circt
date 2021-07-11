@@ -36,7 +36,8 @@ static size_t getNecessaryBitWidth(size_t numStates) {
   return log2 > 1 ? log2 : 1;
 }
 
-/// Creates a RegisterOp.
+/// Creates a RegisterOp, with input and output port bit widths defined by
+/// `width`.
 static RegisterOp createRegister(OpBuilder &builder, ComponentOp &component,
                                  size_t width, StringRef name) {
   auto *context = builder.getContext();
