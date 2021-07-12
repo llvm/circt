@@ -86,6 +86,7 @@ static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
 
   size_t fsmIndex = 0;
   SmallVector<Attribute, 8> groupNames;
+  Value fsmNextState;
   seq.walk([&](EnableOp enable) {
     StringRef groupName = enable.groupName();
     groupNames.push_back(SymbolRefAttr::get(builder.getContext(), groupName));
@@ -95,15 +96,13 @@ static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
     auto fsmCurrentState =
         createConstant(builder, wires->getLoc(), fsmBitWidth, fsmIndex);
 
-    // Currently, we assume that there is no guard, i.e. the source is
-    // used in the predicate whenever `GroupDoneOp` is needed.
-    assert(!groupOp.getDoneOp().guard() && "This case is not implemented yet.");
-    // TODO(Calyx): Need to canonicalize the GroupDoneOp's guard and source.
-    // For example, from: group_done %src : i1
-    // ->
-    // %c1 = hw.constant 1 : i1
-    // group_done %c1, %src ? : i1
-    auto doneOpSource = groupOp.getDoneOp().src();
+    // TODO(Calyx): Eventually, we should canonicalize the GroupDoneOp's guard
+    // and source.
+    auto guard = groupOp.getDoneOp().guard();
+    auto source = groupOp.getDoneOp().src();
+    auto doneOpValue =
+        !guard ? source
+               : builder.create<comb::AndOp>(wires->getLoc(), guard, source);
 
     // Build the Guard for the `go` signal of the current group being walked.
     // The group should begin when:
@@ -112,7 +111,7 @@ static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
     auto eqCmp = builder.create<comb::ICmpOp>(
         wires->getLoc(), comb::ICmpPredicate::eq, fsmOut, fsmCurrentState);
     auto notDone =
-        builder.create<comb::XorOp>(wires->getLoc(), doneOpSource, oneConstant);
+        builder.create<comb::XorOp>(wires->getLoc(), doneOpValue, oneConstant);
     auto groupGoGuard =
         builder.create<comb::AndOp>(wires->getLoc(), eqCmp, notDone);
 
@@ -120,7 +119,7 @@ static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
     // driven when the group has completed.
     builder.setInsertionPoint(seqGroup);
     auto groupDoneGuard =
-        builder.create<comb::AndOp>(wires->getLoc(), eqCmp, doneOpSource);
+        builder.create<comb::AndOp>(wires->getLoc(), eqCmp, doneOpValue);
 
     // Directly update the GroupGoOp of the current group being walked.
     auto goOp = groupOp.getGoOp();
@@ -129,7 +128,7 @@ static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
     goOp->insertOperands(1, {groupGoGuard});
 
     // Add guarded assignments to the fsm register `in` and `write_en` ports.
-    auto fsmNextState =
+    fsmNextState =
         createConstant(builder, wires->getLoc(), fsmBitWidth, fsmIndex + 1);
     builder.setInsertionPointToEnd(seqGroupBody);
     builder.create<AssignOp>(wires->getLoc(), fsmIn, fsmNextState,
@@ -143,14 +142,20 @@ static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
   // Build the final guard for the new Seq group's GroupDoneOp. This is defined
   // by the fsm's final state.
   builder.setInsertionPoint(seqGroup);
-  auto fsmFinalState =
-      createConstant(builder, wires->getLoc(), fsmBitWidth, fsmIndex);
-  auto eqCmp = builder.create<comb::ICmpOp>(
-      wires->getLoc(), comb::ICmpPredicate::eq, fsmOut, fsmFinalState);
+  auto isFinalState = builder.create<comb::ICmpOp>(
+      wires->getLoc(), comb::ICmpPredicate::eq, fsmOut, fsmNextState);
 
   // Insert the respective GroupDoneOp.
   builder.setInsertionPointToEnd(seqGroupBody);
-  builder.create<GroupDoneOp>(seqGroup->getLoc(), oneConstant, eqCmp);
+  builder.create<GroupDoneOp>(seqGroup->getLoc(), oneConstant, isFinalState);
+
+  // Add continuous wires to reset the `in` and `write_en` ports of the fsm
+  // when the SeqGroup is finished executing.
+  builder.setInsertionPointToEnd(wiresBody);
+  auto zeroConstant = createConstant(builder, wires->getLoc(), fsmBitWidth, 0);
+  builder.create<AssignOp>(wires->getLoc(), fsmIn, zeroConstant, isFinalState);
+  builder.create<AssignOp>(wires->getLoc(), fsmWriteEn, oneConstant,
+                           isFinalState);
 
   // Replace the SeqOp with an EnableOp.
   builder.setInsertionPoint(seq);
