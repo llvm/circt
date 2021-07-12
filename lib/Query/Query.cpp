@@ -133,7 +133,7 @@ std::vector<mlir::Operation *> filterAsVector(Filter &filter, Operation *module)
                   break;
                 case FilterType::RECURSIVE_GLOB:
                   match = true;
-                  opStack.push_back(std::make_pair(instance, i));
+                  opStack.push_back(std::make_pair(instance.getReferencedModule(), i));
                   break;
                 case FilterType::LITERAL:
                   match = node.literal == instance.getNameAttr().getValue().str();
@@ -144,7 +144,7 @@ std::vector<mlir::Operation *> filterAsVector(Filter &filter, Operation *module)
               }
 
               if (match) {
-                  opStack.push_back(std::make_pair(instance, i + 1));
+                  opStack.push_back(std::make_pair(instance.getReferencedModule(), i + 1));
               }
             }
           }
