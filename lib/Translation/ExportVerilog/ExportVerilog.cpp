@@ -51,7 +51,7 @@ using namespace sv;
 /// expression.
 static bool isExpressionAlwaysInline(Operation *op) {
   // We need to emit array indexes inline per verilog "lvalue" semantics.
-  if (isa<ArrayIndexInOutOp>(op) || isa<ReadInOutOp>(op))
+  if (isa<ArrayIndexInOutOp>(op))
     return true;
 
   // An SV interface modport is a symbolic name that is always inlined.
