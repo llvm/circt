@@ -204,7 +204,7 @@ private:
     if (opDelayAttr)
       delayAttr = opDelayAttr.dyn_cast<IntegerAttr>();
     else
-      delayAttr = IntegerAttr();
+      delayAttr = builder.getI64IntegerAttr(0);
     Value res =
         builder.create<ToT>(op.getLoc(), op.getResult().getType(), op.lhs(),
                             op.rhs(), delayAttr, Value(), IntegerAttr());
@@ -254,7 +254,7 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::FuncOp op) {
     } else if (helper::isBuiltinSizedType(ty)) {
       inputTypes.push_back(ty);
       inputAttrs.push_back(helper::getDictionaryAttr(
-          builder, "hir.delay", helper::getIntegerAttr(context, 0)));
+          builder, "hir.delay", builder.getI64IntegerAttr(0)));
     } else
       return op.emitError("Only mlir builtin types (except mlir::IndexType) "
                           "and memrefs are supported in input types.");
@@ -318,11 +318,8 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::scf::ForOp op) {
   op.getLoopBody().cloneInto(&forOp.getLoopBody(), mapper);
   if (Attribute unrollAttr = op->getAttr("hir.unroll"))
     forOp->setAttr("unroll", unrollAttr);
-  // tfinish is returned in addition to any other outputs.
-  assert(forOp.getNumResults() == 1 + op.getNumResults());
-  for (size_t i = 0; i < op.getNumResults(); i++) {
-    op.getResult(i).replaceAllUsesWith(forOp.getResult(i + 1));
-  }
+  // We do not support iter_args.
+  assert(op.getNumResults() == 0);
   llvm::DenseMap<Value, Value> mapCapturesToLatchedInputs;
 
   // Replace all builtin-sized-types that are captured from parent region with a

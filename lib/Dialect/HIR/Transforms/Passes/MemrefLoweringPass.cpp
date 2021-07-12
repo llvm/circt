@@ -531,12 +531,12 @@ void MemrefLoweringPass::runOnOperation() {
   hir::FuncOp funcOp = getOperation();
 
   updateOp(funcOp);
-  WalkResult result = funcOp.walk([this](Operation *operation) -> WalkResult {
+  WalkResult walk = funcOp.walk([this](Operation *operation) -> WalkResult {
     dispatchOp(operation);
     return WalkResult::advance();
   });
 
-  if (result.wasInterrupted()) {
+  if (walk.wasInterrupted()) {
     signalPassFailure();
     return;
   }

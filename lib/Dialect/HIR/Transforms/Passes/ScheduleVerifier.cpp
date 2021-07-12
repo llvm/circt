@@ -209,6 +209,11 @@ private:
   std::stack<TimeInstant> yieldPoints;
   ArrayRef<DictionaryAttr> resultAttrs;
   Value tstart;
+
+private:
+  llvm::DenseMap<Value, Value> mapValueToTimeVar;
+  llvm::DenseMap<Value, int64_t> mapValueToOffset;
+  llvm::SetVector<Value> setOfForeverValidValues;
 };
 
 bool ScheduleVerifier::inspectOp(hir::FuncOp op) {

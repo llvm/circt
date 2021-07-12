@@ -175,7 +175,7 @@ def ForOp : HIR_Op<"for", [SingleBlockImplicitTerminator<"YieldOp">, RecursiveSi
   let arguments = (ins AnyType: $lb, AnyType: $ub, AnyType: $step, Variadic<AnyType>: $captures,
       Optional<TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
   let regions = (region SizedRegion<1>:$region);
-  let results = (outs Variadic<AnyType>:$res);
+  let results = (outs TimeType:$res);
 
   let parser = [{return parse$cppClass(parser,result);}];
   let printer = [{return print$cppClass(p,*this);}];

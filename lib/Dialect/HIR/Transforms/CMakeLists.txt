@@ -11,9 +11,9 @@ add_circt_dialect_library(CIRCTHIRTransforms
 
   DEPENDS
   CIRCTHIRTransformsIncGen
-  CIRCTHIRAnalysis
 
   LINK_LIBS PUBLIC
   MLIRTransformUtils
   CIRCTHIR
+  CIRCTHIRAnalysis
   )
