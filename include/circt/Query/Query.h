@@ -25,6 +25,7 @@ class Filter;
 
 class FilterNode {
 public:
+  FilterNode(const FilterNode &other);
   ~FilterNode();
 
 private:

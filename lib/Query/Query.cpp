@@ -5,6 +5,24 @@
 namespace circt {
 namespace query {
 
+FilterNode::FilterNode(const FilterNode &other) {
+  tag = other.tag;
+  switch (tag) {
+    case FilterType::GLOB:
+    case FilterType::RECURSIVE_GLOB:
+    case FilterType::UNSET:
+      break;
+
+    case FilterType::REGEX:
+      regex = other.regex;
+      break;
+
+    case FilterType::LITERAL:
+      literal = other.literal;
+      break;
+  }
+}
+
 // TODO: Parsing errors.
 Filter::Filter(std::string &filter) {
   FilterNode n;
@@ -58,6 +76,7 @@ Filter::Filter(std::string &filter) {
         case FilterType::LITERAL:
           n.literal = filter.substr(start, i - start);
           break;
+
         case FilterType::REGEX: {
           auto s = filter.substr(start, i - start);
           n.regex = std::regex(s);
@@ -99,8 +118,8 @@ std::vector<mlir::Operation *> filterAsVector(Filter &filter, Operation *module)
     if (i >= filter.nodes.size()) {
       filtered.push_back(op);
     } else {
-      TypeSwitch<Operation *>(&*op)
-        .Case<hw::HWModuleOp *>([&](hw::HWModuleOp &op) {
+      TypeSwitch<Operation *>(op)
+        .Case<hw::HWModuleOp>([&](hw::HWModuleOp &op) {
           for (auto &child : op.getBody().getOps()) {
             hw::InstanceOp instance;
             if ((instance = dyn_cast_or_null<hw::InstanceOp>(&child))) {
