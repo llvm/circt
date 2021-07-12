@@ -990,28 +990,19 @@ OpFoldResult ICmpOp::fold(ArrayRef<Attribute> constants) {
 
 // Given a range of operands, computes the number of matching prefix and
 // suffix elements. This does not perform cross-element matching.
-static std::pair<size_t, size_t>
-computeCommonPrefixAndSuffix(const OperandRange &a, const OperandRange &b) {
+template<typename Range>
+static size_t computeCommonPrefixLength(const Range &a, const Range &b) {
   size_t commonPrefixLength = 0;
-  size_t commonSuffixLength = 0;
-  size_t sizeA = a.size();
-  size_t sizeB = b.size();
+  auto ia = a.begin();
+  auto ib = b.begin();
 
-  for (; commonPrefixLength < std::min(sizeA, sizeB); commonPrefixLength++) {
-    if (a[commonPrefixLength] != b[commonPrefixLength]) {
+  for (; ia != a.end() && ib != b.end(); ia++, ib++, commonPrefixLength++) {
+    if (*ia != *ib) {
       break;
     }
   }
 
-  for (; commonSuffixLength < std::min(sizeA, sizeB) - commonPrefixLength;
-       commonSuffixLength++) {
-    if (a[sizeA - commonSuffixLength - 1] !=
-        b[sizeB - commonSuffixLength - 1]) {
-      break;
-    }
-  }
-
-  return {commonPrefixLength, commonSuffixLength};
+  return commonPrefixLength;
 }
 
 static size_t getTotalWidth(const OperandRange &range) {
@@ -1046,10 +1037,10 @@ static LogicalResult matchAndRewriteCompareConcat(ICmpOp op, ConcatOp lhs,
   auto rhsOperands = rhs.getOperands();
   size_t numElements = std::min<size_t>(lhsOperands.size(), rhsOperands.size());
 
-  std::pair<size_t, size_t> commonPrefixSuffixLength =
-      computeCommonPrefixAndSuffix(lhsOperands, rhsOperands);
-  size_t commonPrefixLength = commonPrefixSuffixLength.first;
-  size_t commonSuffixLength = commonPrefixSuffixLength.second;
+  size_t commonPrefixLength = computeCommonPrefixLength(lhsOperands, rhsOperands);
+  size_t commonSuffixLength = computeCommonPrefixLength(
+      llvm::reverse(lhsOperands.drop_front(commonPrefixLength)),
+      llvm::reverse(rhsOperands.drop_front(commonPrefixLength)));
 
   auto replaceWithConstantI1 = [&](bool constant) -> LogicalResult {
     rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, APInt(1, constant));
