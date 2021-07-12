@@ -6,8 +6,8 @@ calyx.program {
     calyx.control {}
   }
 
-  // CHECK-LABEL: calyx.component @main(%go : i1, %reset : i1, %clk : i1) -> (%done: i1) {
-  // CHECK-NEXT: %fsm.in, %fsm.write_en, %fsm.clk, %fsm.reset, %fsm.out, %fsm.done = calyx.register "r" : i2
+  // CHECK-LABEL: calyx.component @main(%go: i1, %reset: i1, %clk: i1) -> (%done: i1) {
+  // CHECK-NEXT:  %fsm.in, %fsm.write_en, %fsm.clk, %fsm.reset, %fsm.out, %fsm.done = calyx.register "fsm" : i2
   calyx.component @main(%go : i1, %reset : i1, %clk : i1) -> (%done: i1) {
     %z.go, %z.reset, %z.clk, %z.done = calyx.cell "z" @Z : i1, i1, i1, i1
 
@@ -17,11 +17,11 @@ calyx.program {
 
       // CHECK-NEXT:  %true = hw.constant true
       // CHECK-NEXT:  %c0_i2 = hw.constant 0 : i2
-      // CHECK-NEXT:  %1 = comb.icmp eq %fsm.out, %c0_i2 : i2
-      // CHECK-NEXT:  %2 = comb.xor %0, %true : i1
-      // CHECK-NEXT:  %3 = comb.and %1, %2 : i1
+      // CHECK-NEXT:  %0 = comb.icmp eq %fsm.out, %c0_i2 : i2
+      // CHECK-NEXT:  %1 = comb.xor %z.done, %true : i1
+      // CHECK-NEXT:  %2 = comb.and %0, %1 : i1
       // CHECK-NEXT:  calyx.group @A {
-      // CHECK-NEXT:    %10 = calyx.group_go %true, %3 ? : i1
+      // CHECK-NEXT:    %A.go = calyx.group_go %true, %2 ? : i1
       // CHECK-NEXT:    calyx.group_done %z.done : i1
       // CHECK-NEXT:  }
       calyx.group @A {
@@ -30,30 +30,30 @@ calyx.program {
       }
 
       // CHECK-NEXT: %c1_i2 = hw.constant 1 : i2
-      // CHECK-NEXT:  %4 = comb.icmp eq %fsm.out, %c1_i2 : i2
-      // CHECK-NEXT:  %5 = comb.xor %0, %true : i1
-      // CHECK-NEXT:  %6 = comb.and %4, %5 : i1
+      // CHECK-NEXT:  %3 = comb.icmp eq %fsm.out, %c1_i2 : i2
+      // CHECK-NEXT:  %4 = comb.xor %z.done, %true : i1
+      // CHECK-NEXT:  %5 = comb.and %3, %4 : i1
       // CHECK-NEXT:  calyx.group @B {
-      // CHECK-NEXT:    %10 = calyx.group_go %true, %6 ? : i1
-      // CHECK-NEXT:    calyx.group_done %0 : i1
+      // CHECK-NEXT:    %B.go = calyx.group_go %true, %5 ? : i1
+      // CHECK-NEXT:    calyx.group_done %z.done : i1
       // CHECK-NEXT:  }
       calyx.group @B {
-        %B_go = calyx.group_go %undef : i1
+        %B.go = calyx.group_go %undef : i1
         calyx.group_done %z.done : i1
       }
 
-      // CHECK-NEXT:  %7 = comb.and %1, %0 : i1
+      // CHECK-NEXT:  %6 = comb.and %0, %z.done : i1
       // CHECK-NEXT:  %c1_i2_0 = hw.constant 1 : i2
-      // CHECK-NEXT:  %8 = comb.and %4, %0 : i1
+      // CHECK-NEXT:  %7 = comb.and %3, %z.done : i1
       // CHECK-NEXT:  %c-2_i2 = hw.constant -2 : i2
       // CHECK-NEXT:  %c-2_i2_1 = hw.constant -2 : i2
-      // CHECK-NEXT:  %9 = comb.icmp eq %fsm.out, %c-2_i2_1 : i2
+      // CHECK-NEXT:  %8 = comb.icmp eq %fsm.out, %c-2_i2_1 : i2
       // CHECK-NEXT:  calyx.group @seq {
-      // CHECK-NEXT:    calyx.assign %fsm.in = %c1_i2_0, %7 ? : i2
+      // CHECK-NEXT:    calyx.assign %fsm.in = %c1_i2_0, %6 ? : i2
+      // CHECK-NEXT:    calyx.assign %fsm.write_en = %true, %6 ? : i1
+      // CHECK-NEXT:    calyx.assign %fsm.in = %c-2_i2, %7 ? : i2
       // CHECK-NEXT:    calyx.assign %fsm.write_en = %true, %7 ? : i1
-      // CHECK-NEXT:    calyx.assign %fsm.in = %c-2_i2, %8 ? : i2
-      // CHECK-NEXT:    calyx.assign %fsm.write_en = %true, %8 ? : i1
-      // CHECK-NEXT:    calyx.group_done %true, %9 ? : i1
+      // CHECK-NEXT:    calyx.group_done %true, %8 ? : i1
       // CHECK-NEXT:  }
     }
 

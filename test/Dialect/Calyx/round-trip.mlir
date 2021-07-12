@@ -37,7 +37,7 @@ calyx.program {
         // CHECK: calyx.assign %c1.in = %c0.out, %c2.out ? : i8
         calyx.assign %c1.in = %c0.out, %c2.out ? : i8
 
-        // CHECK: %1 = calyx.group_done %c1.done, %0 ? : i1
+        // CHECK: calyx.group_done %c1.done, %0 ? : i1
         %guard = comb.and %c1_i1, %c2.out : i1
         calyx.group_done %c1.done, %guard ? : i1
       }
