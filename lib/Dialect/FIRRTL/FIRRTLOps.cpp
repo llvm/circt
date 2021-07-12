@@ -1519,41 +1519,36 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
   return build(builder, result, type, attr);
 }
 
+static LogicalResult verifySubfieldOp(SubfieldOp op) {
+  if (op.fieldIndex() >=
+      op.input().getType().cast<BundleType>().getNumElements())
+    return op.emitOpError("subfield element index is greater than the number "
+                          "of fields in the bundle type");
+  return success();
+}
+
 FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
                                        ArrayRef<NamedAttribute> attrs,
                                        Optional<Location> loc) {
-  auto inType = operands[0].getType();
-  auto fieldname = getAttr<StringAttr>(attrs, "fieldname");
+  auto inType = operands[0].getType().cast<BundleType>();
+  auto fieldIndex =
+      getAttr<IntegerAttr>(attrs, "fieldIndex").getValue().getZExtValue();
 
-  if (auto bundleType = inType.dyn_cast<BundleType>()) {
-    auto elt = bundleType.getElement(fieldname.getValue());
-    if (!elt) {
-      if (loc)
-        mlir::emitError(*loc, "unknown field '")
-            << fieldname.getValue() << "' in bundle type " << inType;
-      return {};
-    }
-    // FIRRTL puts flips on element fields, not on the underlying
-    // types.  The result type of a subfield should strip a flip
-    // if one exists.
-    return elt->type;
+  if (fieldIndex >= inType.getNumElements()) {
+    if (loc)
+      mlir::emitError(*loc, "subfield element index is greater than the number "
+                            "of fields in the bundle type");
+    return {};
   }
 
-  if (loc)
-    mlir::emitError(*loc, "subfield requires bundle operand");
-  return {};
+  // SubfieldOp verifier checks that the field index is valid with number of
+  // subelements.
+  return inType.getElement(fieldIndex).type;
 }
 
 bool SubfieldOp::isFieldFlipped() {
-  auto fieldname = this->fieldname();
   auto bundle = input().getType().cast<BundleType>();
-  auto field = bundle.getElement(fieldname);
-  if (!field) {
-    emitOpError() << "unknown field '" << fieldname << "' in bundle type "
-                  << bundle;
-    return false;
-  };
-  return field.getValue().isFlip;
+  return bundle.getElement(fieldIndex()).isFlip;
 }
 
 FIRRTLType SubindexOp::inferReturnType(ValueRange operands,
@@ -2442,6 +2437,58 @@ SmallVector<Direction> direction::unpackAttribute(Operation *module) {
   for (size_t i = 0, e = value.getBitWidth(); i != e; ++i)
     result.push_back(direction::get(value[i]));
   return result;
+}
+
+//===----------------------------------------------------------------------===//
+// Miscellaneous custom elision logic.
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseElideEmptyName(OpAsmParser &p,
+                                       NamedAttrList &resultAttrs) {
+  auto result = p.parseOptionalAttrDict(resultAttrs);
+  if (!resultAttrs.get("name"))
+    resultAttrs.append("name", p.getBuilder().getStringAttr(""));
+
+  return result;
+}
+
+static void printElideEmptyName(OpAsmPrinter &p, Operation *op,
+                                DictionaryAttr attr,
+                                ArrayRef<StringRef> extraElides = {}) {
+
+  SmallVector<StringRef> elides(extraElides.begin(), extraElides.end());
+  if (op->getAttrOfType<StringAttr>("name").getValue().empty())
+    elides.push_back("name");
+
+  p.printOptionalAttrDict(op->getAttrs(), elides);
+}
+
+static ParseResult parsePrintfAttrs(OpAsmParser &p,
+                                    NamedAttrList &resultAttrs) {
+  return parseElideEmptyName(p, resultAttrs);
+}
+
+static void printPrintfAttrs(OpAsmPrinter &p, Operation *op,
+                             DictionaryAttr attr) {
+  printElideEmptyName(p, op, attr, {"formatString"});
+}
+
+static ParseResult parseStopAttrs(OpAsmParser &p, NamedAttrList &resultAttrs) {
+  return parseElideEmptyName(p, resultAttrs);
+}
+
+static void printStopAttrs(OpAsmPrinter &p, Operation *op,
+                           DictionaryAttr attr) {
+  printElideEmptyName(p, op, attr, {"exitCode"});
+}
+
+static ParseResult parseVerifAttrs(OpAsmParser &p, NamedAttrList &resultAttrs) {
+  return parseElideEmptyName(p, resultAttrs);
+}
+
+static void printVerifAttrs(OpAsmPrinter &p, Operation *op,
+                            DictionaryAttr attr) {
+  printElideEmptyName(p, op, attr, {"message"});
 }
 
 //===----------------------------------------------------------------------===//

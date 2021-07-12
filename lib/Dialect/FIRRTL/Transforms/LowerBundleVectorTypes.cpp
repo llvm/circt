@@ -270,7 +270,7 @@ private:
 
 Value TypeLoweringVisitor::getSubWhatever(Value val, size_t index) {
   if (BundleType bundle = val.getType().dyn_cast<BundleType>()) {
-    return builder->create<SubfieldOp>(val, bundle.getElement(index).name);
+    return builder->create<SubfieldOp>(val, index);
   } else if (FVectorType fvector = val.getType().dyn_cast<FVectorType>()) {
     return builder->create<SubindexOp>(val, index);
   }
@@ -286,11 +286,14 @@ bool TypeLoweringVisitor::processSAPath(Operation *op) {
     lowerSAWritePath(op, writePath);
     // Unhook the writePath from the connect.  This isn't the right type, but we
     // are deleting the op anyway.
-    op->setOperand(0, writePath.back()->getResult(0));
+    op->eraseOperands(0, 2);
     // See how far up the tree we can delete things.
-    for (size_t i = 1; i < writePath.size() - 1; ++i) {
-      if (writePath[i]->use_empty())
+    for (size_t i = 0; i < writePath.size(); ++i) {
+      if (writePath[i]->use_empty()) {
         writePath[i]->erase();
+      } else {
+        break;
+      }
     }
     opsToRemove.push_back(op);
     return true;
@@ -361,9 +364,7 @@ void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
       sio.erase();
     } else if (SubfieldOp sfo = dyn_cast<SubfieldOp>(user)) {
       // Get the input bundle type.
-      Value input = sfo.input();
-      auto bundleType = input.getType().cast<BundleType>();
-      Value repl = mapping[*bundleType.getElementIndex(sfo.fieldname())];
+      Value repl = mapping[sfo.fieldIndex()];
       sfo.replaceAllUsesWith(repl);
       sfo.erase();
     } else {
@@ -436,7 +437,7 @@ bool TypeLoweringVisitor::lowerArg(
 static Value cloneAccess(ImplicitLocOpBuilder *builder, Operation *op,
                          Value rhs) {
   if (auto rop = dyn_cast<SubfieldOp>(op))
-    return builder->create<SubfieldOp>(rhs, rop.fieldname());
+    return builder->create<SubfieldOp>(rhs, rop.fieldIndex());
   if (auto rop = dyn_cast<SubindexOp>(op))
     return builder->create<SubindexOp>(rhs, rop.index());
   if (auto rop = dyn_cast<SubaccessOp>(op))
@@ -464,9 +465,9 @@ void TypeLoweringVisitor::lowerSAWritePath(Operation *op,
         leaf = cloneAccess(builder, writePath[i], leaf);
 
       if (isa<ConnectOp>(op))
-        builder->create<ConnectOp>(leaf, writePath[0]->getResult(0));
+        builder->create<ConnectOp>(leaf, op->getOperand(1));
       else
-        builder->create<PartialConnectOp>(leaf, writePath[0]->getResult(0));
+        builder->create<PartialConnectOp>(leaf, op->getOperand(1));
     });
   }
 }
@@ -555,8 +556,8 @@ void TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
            destIndex < destEnd; ++destIndex) {
         auto destName = destBundle.getElement(destIndex).name;
         if (srcName == destName) {
-          Value src = builder->create<SubfieldOp>(op.src(), srcName);
-          Value dest = builder->create<SubfieldOp>(op.dest(), destName);
+          Value src = builder->create<SubfieldOp>(op.src(), srcIndex);
+          Value dest = builder->create<SubfieldOp>(op.dest(), destIndex);
           if (destFields[destIndex].isOutput)
             std::swap(src, dest);
           if (src.getType().isa<AnalogType>())
@@ -625,10 +626,11 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     for (size_t fieldIndex = 0, fend = rType.getNumElements();
          fieldIndex != fend; ++fieldIndex) {
       auto name = rType.getElement(fieldIndex).name.getValue();
-      auto oldField = builder->create<SubfieldOp>(result, name);
+      auto oldField = builder->create<SubfieldOp>(result, fieldIndex);
       // data and mask depend on the memory type which was split.  They can also
       // go both directions, depending on the port direction.
-      if (name == "data" || name == "mask") {
+      if (name == "data" || name == "mask" || name == "wdata" ||
+          name == "wmask" || name == "rdata") {
         for (auto field : fields) {
           auto realOldField = getSubWhatever(oldField, field.index);
           auto newField = getSubWhatever(
@@ -640,7 +642,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
       } else {
         for (auto mem : newMemories) {
           auto newField =
-              builder->create<SubfieldOp>(mem.getResult(index), name);
+              builder->create<SubfieldOp>(mem.getResult(index), fieldIndex);
           builder->create<ConnectOp>(newField, oldField);
         }
       }

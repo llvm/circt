@@ -29,4 +29,3 @@ firrtl.module @Bear() {
 firrtl.module @Cat() { }
 
 }
-

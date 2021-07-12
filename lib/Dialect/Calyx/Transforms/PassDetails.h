@@ -16,6 +16,7 @@
 #ifndef DIALECT_CALYX_TRANSFORMS_PASSDETAILS_H
 #define DIALECT_CALYX_TRANSFORMS_PASSDETAILS_H
 
+#include "circt/Dialect/Calyx/CalyxOps.h"
 #include "mlir/Pass/Pass.h"
 
 namespace circt {

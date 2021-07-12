@@ -107,7 +107,7 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
   let builders = [
     OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
                    "uint32_t":$readLatency, "uint32_t":$writeLatency,
-                   "uint64_t":$depth, "RUWAttr":$ruw, 
+                   "uint64_t":$depth, "RUWAttr":$ruw,
                    "ArrayRef<Attribute>":$portNames,
                    CArg<"StringRef", "{}">:$name,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
@@ -129,7 +129,7 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
 
     /// Return the name and kind of ports supported by this memory.
     SmallVector<NamedPort> getPorts();
-    
+
     /// Return the kind of the specified port.
     PortKind getPortKind(StringRef portName);
 
@@ -175,7 +175,7 @@ def NodeOp : FIRRTLOp<"node",
     ```
     }];
 
-  let arguments = (ins PassiveType:$input, StrAttr:$name, 
+  let arguments = (ins PassiveType:$input, StrAttr:$name,
                        AnnotationArrayAttr:$annotations);
   let results = (outs FIRRTLType:$result);
 
@@ -213,7 +213,7 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
     ```
     }];
 
-  let arguments = 
+  let arguments =
     (ins ClockType:$clockVal, StrAttr:$name, AnnotationArrayAttr:$annotations);
   let results = (outs PassiveType:$result);
 

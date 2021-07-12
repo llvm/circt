@@ -48,7 +48,7 @@ def WireOp : SVOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>,
     }]>
   ];
 
-  let assemblyFormat = [{ (`sym` $sym_name^)? custom<ImplicitSSAName>(attr-dict) 
+  let assemblyFormat = [{ (`sym` $sym_name^)? custom<ImplicitSSAName>(attr-dict)
                           `:` type($result) }];
   let hasCanonicalizeMethod = true;
 
@@ -56,7 +56,7 @@ def WireOp : SVOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>,
     Type getElementType() {
       return result().getType().cast<InOutType>().getElementType();
     }
-    
+
     //===------------------------------------------------------------------===//
     // SymbolOpInterface Methods
     //===------------------------------------------------------------------===//
@@ -86,7 +86,7 @@ def RegOp : SVOp<"reg", [DeclareOpInterfaceMethods<OpAsmOpInterface>,
   ];
 
   // We handle the name in a custom way, so we use a customer parser/printer.
-  let assemblyFormat = [{ (`sym` $sym_name^)? custom<ImplicitSSAName>(attr-dict) 
+  let assemblyFormat = [{ (`sym` $sym_name^)? custom<ImplicitSSAName>(attr-dict)
                           `:` type($result) }];
   let hasCanonicalizeMethod = true;
 

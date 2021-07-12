@@ -320,6 +320,7 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   SmallVector<FModuleOp, 32> modulesToProcess;
 
+  state.warnOnRemainingAnnotations(circuit, AnnotationSet(circuit));
   // Iterate through each operation in the circuit body, transforming any
   // FModule's we come across.
   for (auto &op : circuitBody->getOperations()) {
@@ -775,7 +776,10 @@ static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
   for (auto op : structValue.getUsers()) {
     assert(isa<SubfieldOp>(op));
     auto fieldAccess = cast<SubfieldOp>(op);
-    if (fieldAccess.fieldname() == field) {
+    auto elemIndex =
+        fieldAccess.input().getType().cast<BundleType>().getElementIndex(field);
+    if (elemIndex.hasValue() &&
+        fieldAccess.fieldIndex() == elemIndex.getValue()) {
       accesses.push_back(fieldAccess);
     }
   }
@@ -1607,8 +1611,9 @@ LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
   Value value = getLoweredValue(op.input());
   assert(resultType && value && "subfield type lowering failed");
 
-  return setLoweringTo<hw::StructExtractOp>(op, resultType, value,
-                                            op.fieldname());
+  return setLoweringTo<hw::StructExtractOp>(
+      op, resultType, value,
+      op.input().getType().cast<BundleType>().getElementName(op.fieldIndex()));
 }
 
 //===----------------------------------------------------------------------===//
@@ -1682,10 +1687,11 @@ void FIRRTLLowering::emitRandomizePrologIfNeeded() {
 
 void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
   // Construct and return a new reference to `RANDOM.  It is always a 32-bit
-  // unsigned expression.  We don't want these CSE'd.
+  // unsigned expression.  Calls to $random have side effects, so we use
+  // VerbatimExprSEOp.
   auto getRandom32Val = [&]() -> Value {
-    return builder.create<sv::VerbatimExprOp>(builder.getIntegerType(32),
-                                              "`RANDOM");
+    return builder.create<sv::VerbatimExprSEOp>(builder.getIntegerType(32),
+                                                "`RANDOM");
   };
 
   // Return an expression containing random bits of the specified width.
@@ -1836,10 +1842,9 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     auto portName = op.getPortName(i).getValue();
     auto portKind = op.getPortKind(i);
 
-    auto &portKindNum =
-        portKind == MemOp::PortKind::Read
-            ? readCount
-            : portKind == MemOp::PortKind::Write ? writeCount : readwriteCount;
+    auto &portKindNum = portKind == MemOp::PortKind::Read    ? readCount
+                        : portKind == MemOp::PortKind::Write ? writeCount
+                                                             : readwriteCount;
 
     auto addInput = [&](SmallVectorImpl<Value> &operands, StringRef field,
                         size_t width) {
@@ -2635,7 +2640,12 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op) {
   addToAlwaysBlock(clock, [&]() {
     addIfProceduralBlock(enable, [&]() {
       // Create BOpTy inside the always/if.
-      builder.create<BOpTy>(predicate);
+      StringAttr label;
+      if (op.nameAttr())
+        label = op.nameAttr();
+      else
+        label = builder.getStringAttr("");
+      builder.create<BOpTy>(predicate, label);
     });
   });
 

@@ -61,7 +61,7 @@ hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
   sv.alwaysff(posedge %clock) {
     sv.fwrite "Yo\n"
   }
-  
+
   // CHECK-NEXT: always_ff @(posedge clock) begin
   // CHECK-NEXT:   if (cond)
   // CHECK-NEXT:     $fwrite(32'h80000002, "Sync Reset Block\n")
@@ -84,7 +84,7 @@ hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
     sv.fwrite "Async Main Block\n"
   } ( asyncreset : negedge %cond) {
     sv.fwrite "Async Reset Block\n"
-  } 
+  }
 
   // CHECK-NEXT:  initial begin
   sv.initial {
@@ -106,7 +106,7 @@ hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
       sv.fwrite "Inlined! %x\n"(%add) : i8
     }
 
-    // begin/end required here to avoid else-confusion.  
+    // begin/end required here to avoid else-confusion.
 
     // CHECK-NEXT:   if (cond) begin
     sv.if %cond {
@@ -133,10 +133,18 @@ hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
 
       // CHECK-NEXT:     assert(cond);
       sv.assert %cond : i1
+      // CHECK-NEXT:     assert_0: assert(cond);
+      sv.assert "assert_0" %cond : i1
+
       // CHECK-NEXT:     assume(cond);
       sv.assume %cond : i1
+      // CHECK-NEXT:     assume_0: assume(cond);
+      sv.assume "assume_0" %cond : i1
+
       // CHECK-NEXT:     cover(cond);
       sv.cover %cond : i1
+      // CHECK-NEXT:     cover_0: cover(cond);
+      sv.cover "cover_0" %cond : i1
 
       // CHECK-NEXT:   $fatal
       sv.fatal
@@ -298,7 +306,7 @@ hw.module @reg_0(%in4: i4, %in8: i8) -> (%a: i8, %b: i8) {
 // https://github.com/llvm/circt/issues/508
 hw.module @issue508(%in1: i1, %in2: i1) {
   // CHECK: wire _T = in1 | in2;
-  %clock = comb.or %in1, %in2 : i1 
+  %clock = comb.or %in1, %in2 : i1
 
   // CHECK-NEXT: always @(posedge _T) begin
   // CHECK-NEXT: end
@@ -560,7 +568,7 @@ attributes { argNames = ["clock", "asdfasdfasdfasdfafa", "gasfdasafwjhijjafija"]
        sv.fwrite "this cond is split"
      }
   }
-  hw.output 
+  hw.output
 }
 
 // CHECK-LABEL: module issue728ifdef(

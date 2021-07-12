@@ -63,7 +63,7 @@ def GeneralOpInterface : OpInterface<"GeneralOpInterface"> {
     InterfaceMethod<
         "Simulate the Execution of the general op with given inputs", "void",
         "execute",
-        (ins "std::vector<llvm::Any> &" : $ins, 
+        (ins "std::vector<llvm::Any> &" : $ins,
            "std::vector<llvm::Any> &" : $outs)>,
   ];
 }
@@ -87,10 +87,10 @@ def ExecutableOpInterface : OpInterface<"ExecutableOpInterface"> {
         "accessed by it."
         "scheduleList = a list of values to be scheduled.",
         "bool", "tryExecute",
-        (ins "llvm::DenseMap<mlir::Value, llvm::Any> &" : $valueMap, 
-           "llvm::DenseMap<unsigned, unsigned> &" : $memoryMap, 
-           "llvm::DenseMap<mlir::Value, double> &" : $timeMap, 
-           "std::vector<std::vector<llvm::Any>> &" : $store, 
+        (ins "llvm::DenseMap<mlir::Value, llvm::Any> &" : $valueMap,
+           "llvm::DenseMap<unsigned, unsigned> &" : $memoryMap,
+           "llvm::DenseMap<mlir::Value, double> &" : $timeMap,
+           "std::vector<std::vector<llvm::Any>> &" : $store,
            "std::vector<mlir::Value> &" : $scheduleList)>,
   ];
 }

@@ -177,7 +177,7 @@ def StructExtractOp : HWOp<"struct_extract", [NoSideEffect]> {
 }
 
 // Extract a range of bits from the specified input.
-def StructInjectOp : HWOp<"struct_inject", [NoSideEffect, 
+def StructInjectOp : HWOp<"struct_inject", [NoSideEffect,
                            AllTypesMatch<["input", "result"]>]> {
   let summary = "Inject a value into a named field of a struct.";
 
