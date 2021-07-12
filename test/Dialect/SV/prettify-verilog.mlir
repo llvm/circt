@@ -61,3 +61,20 @@ hw.module @sink_constants(%clock :i1) -> (%out : i1){
 // VERILOG:   $fwrite(32'h80000002, "%x", 1'h1);
 // VERILOG:   $fwrite(32'h80000002, "%x", 1'h1);
 // VERILOG: `endif
+
+// Prettify should always since ReadInOut to its usage.
+// CHECK-LABEL: @sinkReadInOut
+hw.module @sinkReadInOut(%clk: i1) {
+  %myreg = sv.reg  : !hw.inout<i48>
+  %1 = sv.read_inout %myreg : !hw.inout<i48>
+  sv.alwaysff(posedge %clk)  {
+    sv.passign %myreg, %1 : i48
+  }
+}
+// CHECK:  sv.reg  : !hw.inout<i48>
+// CHECK:  sv.alwaysff(posedge %clk)  {
+// CHECK:    sv.read_inout
+
+// VERILOG:  reg [47:0] myreg;
+// VERILOG:  always @(posedge clk)
+// VERILOG:    myreg <= myreg;

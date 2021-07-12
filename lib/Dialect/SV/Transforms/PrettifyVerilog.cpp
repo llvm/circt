@@ -43,7 +43,7 @@ private:
 /// Return true if this is something that will get printed as a unary operator
 /// by the Verilog printer.
 static bool isVerilogUnaryOperator(Operation *op) {
-  if (isa<comb::ParityOp>(op))
+  if (isa<comb::ParityOp>(op) || isa<sv::ReadInOutOp>(op))
     return true;
 
   if (auto xorOp = dyn_cast<comb::XorOp>(op))
@@ -104,7 +104,7 @@ void PrettifyVerilogPass::prettifyUnaryOperator(Operation *op) {
   //
   // This is particularly helpful when the operand of the unary op has multiple
   // uses as well.
-  if (op->use_empty() || op->hasOneUse())
+  if (op->use_empty())
     return;
 
   while (!op->hasOneUse()) {
