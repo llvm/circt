@@ -269,6 +269,8 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
                                "'calyx.wires', 'calyx.control'.";
 
   // Verify the component has the following ports.
+  // TODO(Calyx): Eventually, we want to use either types for these,
+  //  e.g. `calyx.clk_type` or attributes for passes.
   bool go = false, clk = false, reset = false, done = false;
   SmallVector<ComponentPortInfo> componentPorts = getComponentPortInfo(op);
   for (auto port : componentPorts) {
