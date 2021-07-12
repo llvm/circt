@@ -5,14 +5,83 @@
 namespace circt {
 namespace query {
 
-Filter parseFilter(std::string &filter) {
-  Filter f;
-  /*
-  for (auto c : filter) {
-    // TODO
+// TODO: Parsing errors.
+Filter::Filter(std::string &filter) {
+  FilterNode n;
+  bool stop = false;
+  size_t start = 0;
+
+  for (size_t i = 0; i < filter.size(); i++) {
+    char c = filter[i];
+    switch (n.tag) {
+      case FilterType::UNSET:
+        if (c == '*') {
+          n.tag = FilterType::GLOB;
+        } else if (c == '/') {
+          n.tag = FilterType::REGEX;
+        } else if (c != ':') {
+          n.tag = FilterType::LITERAL;
+        } else {
+          stop = true;
+        }
+        break;
+
+      case FilterType::GLOB:
+        if (c == '*') {
+          n.tag = FilterType::RECURSIVE_GLOB;
+        } else {
+          stop = true;
+        }
+        break;
+
+      case FilterType::RECURSIVE_GLOB:
+        stop = true;
+        break;
+
+      case FilterType::REGEX:
+        if (c == '\\') {
+          ++i;
+        } else if (i - 1 != start && filter[i - 1] == '/'){
+          stop = true;
+        }
+        break;
+
+      case FilterType::LITERAL:
+        if (c == ':') {
+          stop = true;
+        }
+        break;
+    }
+
+    if (stop) {
+      switch (n.tag) {
+        case FilterType::LITERAL:
+          n.literal = filter.substr(start, i - start);
+          break;
+        case FilterType::REGEX: {
+          auto s = filter.substr(start, i - start);
+          n.regex = std::regex(s);
+          break;
+        }
+
+        case FilterType::GLOB:
+        case FilterType::RECURSIVE_GLOB:
+        case FilterType::UNSET:
+          break;
+      }
+
+      if (c == ':' && filter[i + 1] == ':') {
+        i++;
+      } else {
+        break;
+      }
+
+      start = i + 1;
+      stop = false;
+      nodes.push_back(n);
+      n.tag = FilterType::UNSET;
+    }
   }
-  */
-  return f;
 }
 
 std::vector<mlir::Operation *> filterAsVector(Filter &filter, Operation *module) {

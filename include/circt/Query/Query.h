@@ -25,15 +25,10 @@ class Filter;
 
 class FilterNode {
 public:
-  // TODO: remove this
-  FilterNode(std::regex regex) : tag (FilterType::REGEX), regex (regex) { }
-  FilterNode(std::string literal) : tag (FilterType::LITERAL), literal (literal) { }
-  FilterNode() : tag (FilterType::GLOB) { }
-
   ~FilterNode();
 
 private:
-  // FilterNode() : tag (FilterType::UNSET) { }
+  FilterNode() : tag (FilterType::UNSET) { }
 
   FilterType tag;
   union {
@@ -42,14 +37,12 @@ private:
   };
 
   friend class Filter;
-  friend Filter parseFilter(std::string &filter);
   friend std::vector<mlir::Operation *> filterAsVector(Filter &filter, Operation *module);
 };
 
 class Filter {
 public:
-  // TODO: remove this
-  Filter(std::vector<FilterNode> nodes) : nodes (nodes) { }
+  Filter(std::string &filter);
 
 private:
   Filter() : nodes (std::vector<FilterNode>()) { }
@@ -59,9 +52,8 @@ private:
   friend std::vector<mlir::Operation *> filterAsVector(Filter &filter, Operation *module);
 };
 
+// TODO: filterAsIterator()
 std::vector<mlir::Operation *> filterAsVector(Filter &filter);
-
-Filter parseFilter(std::string &filter);
 
 } /* namespace query */
 } /* namespace circt */
