@@ -1017,14 +1017,9 @@ static size_t getTotalWidth(const OperandRange &range) {
   return totalWidth;
 }
 
-static Optional<Value> findFirstNonEmptyValue(const OperandRange &range) {
-  for (auto op : range) {
-    if (op.getType().getIntOrFloatBitWidth() > 0) {
-      return mlir::Optional<Value>(op);
-    }
-  }
-
-  return None;
+static bool isAnyZeroWidthOperands(OperandRange operands)
+{
+  return llvm::any_of(operands, [&](auto x){ return x.getType().getIntOrFloatBitWidth() == 0; });
 }
 
 // Reduce the strength icmp(concat(...), concat(...)) by doing a element-wise
@@ -1033,8 +1028,18 @@ static Optional<Value> findFirstNonEmptyValue(const OperandRange &range) {
 static LogicalResult matchAndRewriteCompareConcat(ICmpOp op, ConcatOp lhs,
                                                   ConcatOp rhs,
                                                   PatternRewriter &rewriter) {
+
   auto lhsOperands = lhs.getOperands();
   auto rhsOperands = rhs.getOperands();
+
+  if (lhs.getType().getWidth() == 0 || rhs.getType().getWidth() == 0) {
+    return failure();
+  }
+
+  if (isAnyZeroWidthOperands(lhsOperands) || isAnyZeroWidthOperands(rhsOperands)) {
+    return failure();
+  }
+
   size_t numElements = std::min<size_t>(lhsOperands.size(), rhsOperands.size());
 
   size_t commonPrefixLength = computeCommonPrefixLength(lhsOperands, rhsOperands);
@@ -1083,10 +1088,8 @@ static LogicalResult matchAndRewriteCompareConcat(ICmpOp op, ConcatOp lhs,
   };
 
   auto replaceWithReplicatingSignBit = [&]() {
-    auto firstNonEmptyValue =
-      findFirstNonEmptyValue(lhs.getOperands()).getValue();
-    auto firstNonEmptyElemWidth =
-      firstNonEmptyValue.getType().getIntOrFloatBitWidth();
+    auto firstNonEmptyValue = lhsOperands[0];
+    auto firstNonEmptyElemWidth = firstNonEmptyValue.getType().getIntOrFloatBitWidth();
     Value signBit;
 
     // Skip creating an ExtractOp where possible.
