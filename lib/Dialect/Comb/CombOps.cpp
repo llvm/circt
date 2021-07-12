@@ -64,7 +64,6 @@ ICmpPredicate ICmpOp::getFlippedPredicate(ICmpPredicate predicate) {
   llvm_unreachable("unknown comparison predicate");
 }
 
-
 bool ICmpOp::isPredicateSigned(ICmpPredicate predicate) {
   switch (predicate) {
   case ICmpPredicate::ult:
@@ -82,7 +81,6 @@ bool ICmpOp::isPredicateSigned(ICmpPredicate predicate) {
   }
   llvm_unreachable("unknown comparison predicate");
 }
-
 
 /// Return true if this is an equality test with -1, which is a "reduction
 /// and" operation in Verilog.

@@ -990,7 +990,7 @@ OpFoldResult ICmpOp::fold(ArrayRef<Attribute> constants) {
 
 // Given a range of operands, computes the number of matching prefix and
 // suffix elements. This does not perform cross-element matching.
-template<typename Range>
+template <typename Range>
 static size_t computeCommonPrefixLength(const Range &a, const Range &b) {
   size_t commonPrefixLength = 0;
   auto ia = a.begin();
@@ -1017,9 +1017,10 @@ static size_t getTotalWidth(const OperandRange &range) {
   return totalWidth;
 }
 
-static bool isAnyZeroWidthOperands(OperandRange operands)
-{
-  return llvm::any_of(operands, [&](auto x){ return x.getType().getIntOrFloatBitWidth() == 0; });
+static bool isAnyZeroWidthOperands(OperandRange operands) {
+  return llvm::any_of(operands, [&](auto x) {
+    return x.getType().getIntOrFloatBitWidth() == 0;
+  });
 }
 
 // Reduce the strength icmp(concat(...), concat(...)) by doing a element-wise
@@ -1036,13 +1037,15 @@ static LogicalResult matchAndRewriteCompareConcat(ICmpOp op, ConcatOp lhs,
     return failure();
   }
 
-  if (isAnyZeroWidthOperands(lhsOperands) || isAnyZeroWidthOperands(rhsOperands)) {
+  if (isAnyZeroWidthOperands(lhsOperands) ||
+      isAnyZeroWidthOperands(rhsOperands)) {
     return failure();
   }
 
   size_t numElements = std::min<size_t>(lhsOperands.size(), rhsOperands.size());
 
-  size_t commonPrefixLength = computeCommonPrefixLength(lhsOperands, rhsOperands);
+  size_t commonPrefixLength =
+      computeCommonPrefixLength(lhsOperands, rhsOperands);
   size_t commonSuffixLength = computeCommonPrefixLength(
       llvm::reverse(lhsOperands.drop_front(commonPrefixLength)),
       llvm::reverse(rhsOperands.drop_front(commonPrefixLength)));
@@ -1069,17 +1072,18 @@ static LogicalResult matchAndRewriteCompareConcat(ICmpOp op, ConcatOp lhs,
 
   if (commonPrefixLength == numElements) {
     // cat(a, b, c) == cat(a, b, c) -> 1
-    return replaceWithConstantI1(applyCmpPredicateToEqualOperands(op.predicate()));
+    return replaceWithConstantI1(
+        applyCmpPredicateToEqualOperands(op.predicate()));
   }
 
   size_t commonPrefixTotalWidth =
-    getTotalWidth(lhsOperands.take_front(commonPrefixLength));
+      getTotalWidth(lhsOperands.take_front(commonPrefixLength));
   size_t commonSuffixTotalWidth =
-    getTotalWidth(lhsOperands.take_back(commonSuffixLength));
-  auto lhsOnly = lhsOperands.drop_front(commonPrefixLength)
-    .drop_back(commonSuffixLength);
-  auto rhsOnly = rhsOperands.drop_front(commonPrefixLength)
-    .drop_back(commonSuffixLength);
+      getTotalWidth(lhsOperands.take_back(commonSuffixLength));
+  auto lhsOnly =
+      lhsOperands.drop_front(commonPrefixLength).drop_back(commonSuffixLength);
+  auto rhsOnly =
+      rhsOperands.drop_front(commonPrefixLength).drop_back(commonSuffixLength);
 
   auto replaceWithoutReplicatingSignBit = [&]() {
     auto newLhs = directOrCat(lhsOnly);
@@ -1089,7 +1093,8 @@ static LogicalResult matchAndRewriteCompareConcat(ICmpOp op, ConcatOp lhs,
 
   auto replaceWithReplicatingSignBit = [&]() {
     auto firstNonEmptyValue = lhsOperands[0];
-    auto firstNonEmptyElemWidth = firstNonEmptyValue.getType().getIntOrFloatBitWidth();
+    auto firstNonEmptyElemWidth =
+        firstNonEmptyValue.getType().getIntOrFloatBitWidth();
     Value signBit;
 
     // Skip creating an ExtractOp where possible.
