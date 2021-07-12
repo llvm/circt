@@ -64,6 +64,26 @@ ICmpPredicate ICmpOp::getFlippedPredicate(ICmpPredicate predicate) {
   llvm_unreachable("unknown comparison predicate");
 }
 
+
+bool ICmpOp::isPredicateSigned(ICmpPredicate predicate) {
+  switch (predicate) {
+  case ICmpPredicate::ult:
+  case ICmpPredicate::ugt:
+  case ICmpPredicate::ule:
+  case ICmpPredicate::uge:
+  case ICmpPredicate::ne:
+  case ICmpPredicate::eq:
+    return false;
+  case ICmpPredicate::slt:
+  case ICmpPredicate::sgt:
+  case ICmpPredicate::sle:
+  case ICmpPredicate::sge:
+    return true;
+  }
+  llvm_unreachable("unknown comparison predicate");
+}
+
+
 /// Return true if this is an equality test with -1, which is a "reduction
 /// and" operation in Verilog.
 bool ICmpOp::isEqualAllOnes() {

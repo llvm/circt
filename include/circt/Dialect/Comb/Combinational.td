@@ -151,6 +151,9 @@ def ICmpOp : CombOp<"icmp", [NoSideEffect, SameTypeOperands]> {
     /// lhs and rhs operands should be flipped to match the new predicate.
     static ICmpPredicate getFlippedPredicate(ICmpPredicate predicate);
 
+    /// Returns true if the predicate is signed.
+    static bool isPredicateSigned(ICmpPredicate predicate);
+
     /// Return true if this is an equality test with -1, which is a "reduction
     /// and" operation in Verilog.
     bool isEqualAllOnes();

@@ -1036,29 +1036,11 @@ static Optional<Value> findFirstNonEmptyValue(const OperandRange &range) {
   return None;
 }
 
-static bool isPredicateSigned(ICmpPredicate predicate) {
-  switch (predicate) {
-  case ICmpPredicate::ult:
-  case ICmpPredicate::ugt:
-  case ICmpPredicate::ule:
-  case ICmpPredicate::uge:
-  case ICmpPredicate::ne:
-  case ICmpPredicate::eq:
-    return false;
-  case ICmpPredicate::slt:
-  case ICmpPredicate::sgt:
-  case ICmpPredicate::sle:
-  case ICmpPredicate::sge:
-    return true;
-  }
-  llvm_unreachable("unknown comparison predicate");
-}
-
 // Reduce the strength icmp(concat(...), concat(...)) by doing a element-wise
 // comparison on common prefix and suffixes. Returns success() if a rewriting
 // happens.
-static LogicalResult matchAndRewriteCompareConcat(ICmpOp &op, ConcatOp &lhs,
-                                                  ConcatOp &rhs,
+static LogicalResult matchAndRewriteCompareConcat(ICmpOp op, ConcatOp lhs,
+                                                  ConcatOp rhs,
                                                   PatternRewriter &rewriter) {
   auto lhsOperands = lhs.getOperands();
   auto rhsOperands = rhs.getOperands();
@@ -1091,79 +1073,65 @@ static LogicalResult matchAndRewriteCompareConcat(ICmpOp &op, ConcatOp &lhs,
 
   if (commonPrefixLength == numElements) {
     // cat(a, b, c) == cat(a, b, c) -> 1
-    switch (op.predicate()) {
-    case ICmpPredicate::ult:
-    case ICmpPredicate::ugt:
-    case ICmpPredicate::ne:
-    case ICmpPredicate::slt:
-    case ICmpPredicate::sgt:
-      return replaceWithConstantI1(0);
+    return replaceWithConstantI1(applyCmpPredicateToEqualOperands(op.predicate()));
+  }
 
-    case ICmpPredicate::sle:
-    case ICmpPredicate::sge:
-    case ICmpPredicate::ule:
-    case ICmpPredicate::uge:
-    case ICmpPredicate::eq:
-      return replaceWithConstantI1(1);
-    }
-  } else {
-    size_t commonPrefixTotalWidth =
-        getTotalWidth(lhsOperands.take_front(commonPrefixLength));
-    size_t commonSuffixTotalWidth =
-        getTotalWidth(lhsOperands.take_back(commonSuffixLength));
-    auto lhsOnly = lhsOperands.drop_front(commonPrefixLength)
-                       .drop_back(commonSuffixLength);
-    auto rhsOnly = rhsOperands.drop_front(commonPrefixLength)
-                       .drop_back(commonSuffixLength);
+  size_t commonPrefixTotalWidth =
+    getTotalWidth(lhsOperands.take_front(commonPrefixLength));
+  size_t commonSuffixTotalWidth =
+    getTotalWidth(lhsOperands.take_back(commonSuffixLength));
+  auto lhsOnly = lhsOperands.drop_front(commonPrefixLength)
+    .drop_back(commonSuffixLength);
+  auto rhsOnly = rhsOperands.drop_front(commonPrefixLength)
+    .drop_back(commonSuffixLength);
 
-    auto replaceWithoutReplicatingSignBit = [&]() {
-      auto newLhs = directOrCat(lhsOnly);
-      auto newRhs = directOrCat(rhsOnly);
-      return replaceWith(op.predicate(), newLhs, newRhs);
-    };
+  auto replaceWithoutReplicatingSignBit = [&]() {
+    auto newLhs = directOrCat(lhsOnly);
+    auto newRhs = directOrCat(rhsOnly);
+    return replaceWith(op.predicate(), newLhs, newRhs);
+  };
 
-    auto replaceWithReplicatingSignBit = [&]() {
-      auto firstNonEmptyValue =
-          findFirstNonEmptyValue(lhs.getOperands()).getValue();
-      auto firstNonEmptyElemWidth =
-          firstNonEmptyValue.getType().getIntOrFloatBitWidth();
-      Value signBit;
+  auto replaceWithReplicatingSignBit = [&]() {
+    auto firstNonEmptyValue =
+      findFirstNonEmptyValue(lhs.getOperands()).getValue();
+    auto firstNonEmptyElemWidth =
+      firstNonEmptyValue.getType().getIntOrFloatBitWidth();
+    Value signBit;
 
-      // Skip creating an ExtractOp where possible.
-      if (firstNonEmptyElemWidth == 1) {
-        signBit = firstNonEmptyValue;
-      } else {
-        signBit = rewriter.create<ExtractOp>(
-            op.getLoc(), IntegerType::get(rewriter.getContext(), 1),
-            firstNonEmptyValue, firstNonEmptyElemWidth - 1);
-      }
-
-      auto newLhs = rewriter.create<ConcatOp>(op.getLoc(), signBit, lhsOnly);
-      auto newRhs = rewriter.create<ConcatOp>(op.getLoc(), signBit, rhsOnly);
-      return replaceWith(op.predicate(), newLhs, newRhs);
-    };
-
-    if (isPredicateSigned(op.predicate())) {
-
-      // scmp(cat(..x, b), cat(..y, b)) == scmp(cat(..x), cat(..y))
-      if (commonPrefixTotalWidth == 0 && commonSuffixTotalWidth > 0) {
-        return replaceWithoutReplicatingSignBit();
-      }
-
-      // scmp(cat(a, ..x, b), cat(a, ..y, b)) == scmp(cat(sgn(a), ..x),
-      // cat(sgn(b), ..y)) Note that we cannot perform this optimization if
-      // [width(b) = 0 && width(a) <= 1]. since that common prefix is the sign
-      // bit. Doing the rewrite can result in an infinite loop.
-      if (commonPrefixTotalWidth > 1 || commonSuffixTotalWidth > 0) {
-        return replaceWithReplicatingSignBit();
-      }
-
+    // Skip creating an ExtractOp where possible.
+    if (firstNonEmptyElemWidth == 1) {
+      signBit = firstNonEmptyValue;
     } else {
+      signBit = rewriter.create<ExtractOp>(
+          op.getLoc(), IntegerType::get(rewriter.getContext(), 1),
+          firstNonEmptyValue, firstNonEmptyElemWidth - 1);
+    }
 
-      // ucmp(cat(a, ..x, b), cat(a, ..y, b)) = ucmp(cat(..x), cat(..y))
-      if (commonPrefixTotalWidth > 0 || commonSuffixTotalWidth > 0) {
-        return replaceWithoutReplicatingSignBit();
-      }
+    auto newLhs = rewriter.create<ConcatOp>(op.getLoc(), signBit, lhsOnly);
+    auto newRhs = rewriter.create<ConcatOp>(op.getLoc(), signBit, rhsOnly);
+    return replaceWith(op.predicate(), newLhs, newRhs);
+  };
+
+  if (ICmpOp::isPredicateSigned(op.predicate())) {
+
+    // scmp(cat(..x, b), cat(..y, b)) == scmp(cat(..x), cat(..y))
+    if (commonPrefixTotalWidth == 0 && commonSuffixTotalWidth > 0) {
+      return replaceWithoutReplicatingSignBit();
+    }
+
+    // scmp(cat(a, ..x, b), cat(a, ..y, b)) == scmp(cat(sgn(a), ..x),
+    // cat(sgn(b), ..y)) Note that we cannot perform this optimization if
+    // [width(b) = 0 && width(a) <= 1]. since that common prefix is the sign
+    // bit. Doing the rewrite can result in an infinite loop.
+    if (commonPrefixTotalWidth > 1 || commonSuffixTotalWidth > 0) {
+      return replaceWithReplicatingSignBit();
+    }
+
+  } else {
+
+    // ucmp(cat(a, ..x, b), cat(a, ..y, b)) = ucmp(cat(..x), cat(..y))
+    if (commonPrefixTotalWidth > 0 || commonSuffixTotalWidth > 0) {
+      return replaceWithoutReplicatingSignBit();
     }
   }
 
