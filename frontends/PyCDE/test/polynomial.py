@@ -81,7 +81,8 @@ class Polynomial(pycde.System):
   def build(self, top):
     i32 = types.i32
     x = hw.ConstantOp.create(i32, 23)
-    poly = PolynomialCompute(Coefficients([62, 42, 6]))("example", x=x)
+    poly = PolynomialCompute(Coefficients([62, 42, 6]))("example")
+    poly.x.connect(x)
     PolynomialCompute(coefficients=Coefficients([62, 42, 6]))("example2",
                                                               x=poly.y)
     PolynomialCompute(Coefficients([1, 2, 3, 4, 5]))("example2", x=poly.y)
@@ -97,6 +98,7 @@ poly.graph()
 # CHECK: label="top";
 # CHECK: [shape=record,label="{hw.constant\ni32\n\nvalue: 23 : i32}"];
 
+print("Printing...")
 poly.print()
 # CHECK-LABEL:  hw.module @top() -> (%y: i32)
 # CHECK:    [[REG0:%.+]] = "pycde.PolynomialCompute"(%c23_i32) {instanceName = "example", opNames = ["x"], parameters = {coefficients = {coeff = [62, 42, 6]}, module_name = "PolyComputeForCoeff_62_42_6", unused_parameter = true}, resultNames = ["y"]} : (i32) -> i32
@@ -105,7 +107,9 @@ poly.print()
 # CHECK:    [[REG3:%.+]] = "pycde.CoolPolynomialCompute"(%c23_i32) {coefficients = [4, 42], opNames = ["x"], parameters = {}, resultNames = ["y"]} : (i32) -> i32
 # CHECK:    hw.output [[REG0]] : i32
 
+print("Generating...")
 poly.generate()
+print("Printing...")
 poly.print()
 # CHECK-LABEL: hw.module @top
 # CHECK: %example.y = hw.instance "example" @PolyComputeForCoeff_62_42_6(%c23_i32) {parameters = {}} : (i32) -> i32
