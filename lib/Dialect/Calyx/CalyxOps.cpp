@@ -406,9 +406,11 @@ void RegisterOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   std::string prefix = registerName.str() + ".";
 
   setNameFn(getResult(0), prefix + "in");
-  setNameFn(getResult(1), prefix + "out");
-  setNameFn(getResult(2), prefix + "write_en");
-  setNameFn(getResult(3), prefix + "done");
+  setNameFn(getResult(1), prefix + "write_en");
+  setNameFn(getResult(2), prefix + "clk");
+  setNameFn(getResult(3), prefix + "reset");
+  setNameFn(getResult(4), prefix + "out");
+  setNameFn(getResult(5), prefix + "done");
 }
 
 //===----------------------------------------------------------------------===//

@@ -40,11 +40,11 @@ calyx.program {
   }
 
   calyx.component @main() -> () {
-    // CHECK:      %r.in, %r.out, %r.write_en, %r.done = calyx.register "r" : i8, i8, i1, i1
+    // CHECK:      %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i8
     // CHECK-NEXT: %c0.in, %c0.out = calyx.cell "c0" @A : i8, i8
     // CHECK-NEXT: %c1.in, %c1.out = calyx.cell "c1" @A : i8, i8
     // CHECK-NEXT: %c2.out = calyx.cell "c2" @B : i1
-    %in, %out, %write_en, %done = calyx.register "r" : i8, i8, i1, i1
+    %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i8
     %in1, %out1 = calyx.cell "c0" @A : i8, i8
     %in2, %out2 = calyx.cell "c1" @A : i8, i8
     %out3 = calyx.cell "c2" @B : i1
