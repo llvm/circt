@@ -271,21 +271,19 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
   // Verify the component has the following ports.
   bool go = false, clk = false, reset = false, done = false;
   SmallVector<ComponentPortInfo> componentPorts = getComponentPortInfo(op);
-  auto orEqual = [](bool &pred, StringRef lhs, StringRef rhs) {
-    pred |= (lhs == rhs);
-  };
   for (auto port : componentPorts) {
     if (!port.type.isInteger(1))
       // Each of the ports has bit width 1.
       continue;
+
     // TODO(Calyx): Remove drop_front() when llvm/circt:#1406 is merged.
     StringRef portName = port.name.getValue().drop_front();
     if (port.direction == PortDirection::OUTPUT) {
-      orEqual(done, portName, "done");
+      done |= (portName == "done");
     } else {
-      orEqual(go, portName, "go");
-      orEqual(clk, portName, "clk");
-      orEqual(reset, portName, "reset");
+      go |= (portName == "go");
+      clk |= (portName == "clk");
+      reset |= (portName == "reset");
     }
     if (go && clk && reset && done)
       return success();
