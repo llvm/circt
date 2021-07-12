@@ -64,10 +64,14 @@ def ComponentOp : CalyxOp<"component", [
     (1) In- and output port definitions
         that define the interface.
     (2) The cells, wires, and control schedule.
-    ```mlir
-      calyx.component @MyComponent(%in1: i32) -> (%out1: i8) {
-        %in, %out = "c0" @SomeComponent : i32, i32
 
+    A Calyx component requires the following ports with bit width 1:
+    - Input ports: `go`, `clk`, and `reset`.
+    - Output ports: `done`.
+
+    ```mlir
+      calyx.component @MyComponent(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%out: i16, %done: i1) {
+        ...
         calyx.wires { ... }
         calyx.control { ... }
       }
@@ -135,6 +139,7 @@ def WiresOp : CalyxContainer<"wires", [
 }
 
 def CellOp : CalyxOp<"cell", [
+    DeclareOpInterfaceMethods<OpAsmOpInterface>,
     HasParent<"ComponentOp">
   ]> {
   let summary = "Calyx Cell";
@@ -144,7 +149,7 @@ def CellOp : CalyxOp<"cell", [
     optionally have parameters attributed to them.
 
     ```mlir
-      %in1, %out1 = calyx.cell "name" @MyComponent : i64, i16
+      %name.in, %name.out = calyx.cell "name" @MyComponent : i64, i16
     ```
   }];
 
@@ -256,7 +261,9 @@ def GroupDoneOp : CalyxGroupPort<"group_done", [
   let results = (outs);
 }
 
-def GroupGoOp : CalyxGroupPort<"group_go", []> {
+def GroupGoOp : CalyxGroupPort<"group_go", [
+  DeclareOpInterfaceMethods<OpAsmOpInterface>,
+]> {
   let summary = "Calyx Group Go Port";
   let description = [{
     The "calyx.group_go" operation represents a port on a
@@ -268,8 +275,8 @@ def GroupGoOp : CalyxGroupPort<"group_go", []> {
     receive a source until the Compile Control pass.
 
     ```mlir
-      %1 = calyx.group_go %0 : i1
-      %2 = calyx.group_go %3, %guard ? : i1
+      %group_name1.go = calyx.group_go %0 : i1
+      %group_name2.go = calyx.group_go %3, %guard ? : i1
     ```
   }];
   let builders = [

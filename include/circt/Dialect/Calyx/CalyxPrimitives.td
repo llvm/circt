@@ -11,27 +11,27 @@
 //===----------------------------------------------------------------------===//
 
 def RegisterOp : CalyxOp<"register", [
+    DeclareOpInterfaceMethods<OpAsmOpInterface>,
     HasParent<"ComponentOp">,
     SameTypeConstraint<"in", "out">
   ]> {
   let summary = "Defines a register";
   let description = [{
-    The "calyx.register" op defines a register. The clock signal of
-    the register is not exposed in the Calyx IR.
+    The "calyx.register" op defines a register.
     ```
-      %in, %out, %write_en, %done = calyx.register "name" : i32, i32, i1, i1
+      %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i32
     ```
   }];
   let arguments = (ins StrAttr:$name);
-  let results = (outs AnyType:$in, AnyType:$out, I1:$write_en, I1:$done);
-  let assemblyFormat = "$name attr-dict `:` type(results)";
+  let results = (outs AnyType:$in, AnyType:$out, I1:$write_en, I1:$done, I1:$clk, I1:$reset);
+  let assemblyFormat = "$name attr-dict `:` type($in)";
 
   let builders = [
     OpBuilder<(ins "StringAttr":$name, "size_t":$width), [{
       $_state.addAttribute("name", name);
       auto i1Type = $_builder.getI1Type();
       auto widthType = $_builder.getIntegerType(width);
-      $_state.addTypes({widthType, widthType, i1Type, i1Type});
+      $_state.addTypes({widthType, i1Type, i1Type, i1Type, widthType, i1Type});
     }]>
   ];
 }

@@ -145,7 +145,7 @@ static void printPortDefList(OpAsmPrinter &p, ArrayRef<Type> portDefTypes,
       llvm::zip(portDefNames, portDefTypes), p, [&](auto nameAndType) {
         if (auto name =
                 std::get<0>(nameAndType).template dyn_cast<StringAttr>()) {
-          p << name.getValue() << ": ";
+          p << '%' << name.getValue() << ": ";
         }
         p << std::get<1>(nameAndType);
       });
@@ -197,7 +197,10 @@ parsePortDefList(OpAsmParser &parser, MLIRContext *context,
   // just inferred from the arguments of the component.
   SmallVector<Attribute> portNames(ports.size());
   llvm::transform(ports, portNames.begin(), [&](auto port) -> StringAttr {
-    return StringAttr::get(context, port.name);
+    StringRef name = port.name;
+    if (name.startswith("%"))
+      name = name.drop_front();
+    return StringAttr::get(context, name);
   });
   result.addAttribute(attrName, ArrayAttr::get(context, portNames));
 
@@ -264,11 +267,32 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
     else if (isa<ControlOp>(bodyOp))
       ++numControl;
   }
-  if (numWires == 1 && numControl == 1)
-    return success();
+  if (!(numWires == 1 && numControl == 1))
+    return op.emitOpError() << "requires exactly one of each: "
+                               "'calyx.wires', 'calyx.control'.";
 
-  return op.emitOpError() << "requires exactly one of each: "
-                             "'calyx.wires', 'calyx.control'.";
+  // Verify the component has the following ports.
+  bool go = false, clk = false, reset = false, done = false;
+  SmallVector<ComponentPortInfo> componentPorts = getComponentPortInfo(op);
+  for (auto port : componentPorts) {
+    if (!port.type.isInteger(1))
+      // Each of the ports has bit width 1.
+      continue;
+
+    StringRef portName = port.name.getValue();
+
+    if (port.direction == PortDirection::OUTPUT) {
+      done |= (portName == "done");
+    } else {
+      go |= (portName == "go");
+      clk |= (portName == "clk");
+      reset |= (portName == "reset");
+    }
+    if (go && clk && reset && done)
+      return success();
+  }
+  return op->emitOpError() << "does not have required 1-bit input ports `go`, "
+                              "`clk`, `reset`, and output port `done`";
 }
 
 void ComponentOp::build(OpBuilder &builder, OperationState &result,
@@ -386,6 +410,22 @@ ComponentOp CellOp::getReferencedComponent() {
   return program.lookupSymbol<ComponentOp>(componentName());
 }
 
+/// Provide meaningful names to the result values of a CellOp.
+void CellOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  auto component = getReferencedComponent();
+
+  std::string prefix = instanceName().str() + ".";
+  size_t resultIndex = 0;
+  auto renameResults = [&](ArrayAttr portNames) {
+    for (size_t i = 0, e = portNames.size(); i != e; ++i, ++resultIndex) {
+      StringRef portName = portNames[i].cast<StringAttr>().getValue();
+      setNameFn(getResult(resultIndex), prefix + portName.str());
+    }
+  };
+  renameResults(component.inPortNames());
+  renameResults(component.outPortNames());
+}
+
 static LogicalResult verifyCellOp(CellOp cell) {
   if (cell.componentName() == "main")
     return cell.emitOpError("cannot reference the entry point.");
@@ -424,6 +464,36 @@ static LogicalResult verifyCellOp(CellOp cell) {
            << expectedType << ", but got " << resultType;
   }
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// GroupGoOp
+//===----------------------------------------------------------------------===//
+
+/// Provide meaningful names to the result value of a GroupGoOp.
+void GroupGoOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  auto parent = (*this)->getParentOfType<GroupOp>();
+  auto name = parent.sym_name();
+  std::string resultName = name.str() + ".go";
+  setNameFn(getResult(), resultName);
+}
+
+//===----------------------------------------------------------------------===//
+// RegisterOp
+//===----------------------------------------------------------------------===//
+
+/// Provide meaningful names to the result values of a RegisterOp.
+void RegisterOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // Provide default names for instance results.
+  StringRef registerName = this->name();
+  std::string prefix = registerName.str() + ".";
+
+  setNameFn(getResult(0), prefix + "in");
+  setNameFn(getResult(1), prefix + "write_en");
+  setNameFn(getResult(2), prefix + "clk");
+  setNameFn(getResult(3), prefix + "reset");
+  setNameFn(getResult(4), prefix + "out");
+  setNameFn(getResult(5), prefix + "done");
 }
 
 //===----------------------------------------------------------------------===//
