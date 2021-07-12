@@ -2349,8 +2349,8 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
   return result;
 }
 
-/// Always elide "moduleName" and elide "annotations" if it exists or
-/// if it is empty.
+/// Always elide "moduleName", elide "lowerToBind" if false, and elide
+/// "annotations" if it exists or if it is empty.
 static void printInstanceOp(OpAsmPrinter &p, Operation *op,
                             DictionaryAttr attr) {
   SmallVector<StringRef, 2> elides = {"moduleName"};
