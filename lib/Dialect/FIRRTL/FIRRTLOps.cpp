@@ -1547,9 +1547,8 @@ FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
 }
 
 bool SubfieldOp::isFieldFlipped() {
-  auto fieldIndex = this->fieldIndex();
   auto bundle = input().getType().cast<BundleType>();
-  return bundle.getElement(fieldIndex).isFlip;
+  return bundle.getElement(fieldIndex()).isFlip;
 }
 
 FIRRTLType SubindexOp::inferReturnType(ValueRange operands,
