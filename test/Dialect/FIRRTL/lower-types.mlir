@@ -1127,5 +1127,11 @@ firrtl.module @TLBBB() {
   firrtl.partialconnect %out0_bits, %in_bits : !firrtl.uint<128>, !firrtl.uint<9>
 }
 
+// This simply has to not crash
+// CHECK-LABEL: firrtl.module @vecmem
+firrtl.module @vecmem(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
+  %vmem_MPORT, %vmem_rdwrPort = firrtl.mem Undefined  {depth = 32 : i64, name = "vmem", portNames = ["MPORT", "rdwrPort"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data flip: vector<uint<17>, 8>>, !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, wmode: uint<1>, rdata flip: vector<uint<17>, 8>, wdata: vector<uint<17>, 8>, wmask: vector<uint<1>, 8>>
+}
+
 
 } // CIRCUIT
