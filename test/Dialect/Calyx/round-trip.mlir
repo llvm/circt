@@ -2,44 +2,19 @@
 
 // CHECK: calyx.program {
 calyx.program {
-
-  // CHECK-LABEL:  calyx.component @ComponentWithInAndOutPorts(%in1: i32, %in2: i16) -> (%out1: i32, %out2: i8) {
-  calyx.component @ComponentWithInAndOutPorts(%in1: i32, %in2: i16) -> (%out1: i32, %out2: i8) {
-    // CHECK:        calyx.wires {
-    // CHECK:        calyx.control {
+  // CHECK-LABEL: calyx.component @A(%in: i8, %go: i1, %clk: i1, %reset: i1) -> (%out: i8, %done: i1) {
+  calyx.component @A(%in: i8, %go: i1, %clk: i1, %reset: i1) -> (%out: i8, %done: i1) {
     calyx.wires {}
     calyx.control {}
   }
 
-  // CHECK-LABEL: calyx.component @ComponentWithInPort(%x: i64) -> () {
-  calyx.component @ComponentWithInPort(%x: i64) -> () {
+  // CHECK-LABEL: calyx.component @B (%go: i1, %clk: i1, %reset: i1) -> (%out: i1, %done: i1) {
+  calyx.component @B (%go: i1, %clk: i1, %reset: i1) -> (%out: i1, %done: i1) {
     calyx.wires {}
     calyx.control {}
   }
 
-  // CHECK-LABEL: calyx.component @ComponentWithOutPort() -> (%y: i64) {
-  calyx.component @ComponentWithOutPort() -> (%y: i64) {
-    calyx.wires {}
-    calyx.control {}
-  }
-
-  // CHECK-LABEL: calyx.component @ComponentWithNoPorts() -> () {
-  calyx.component @ComponentWithNoPorts() -> () {
-    calyx.wires {}
-    calyx.control {}
-  }
-
-  calyx.component @A(%in: i8) -> (%out: i8) {
-    calyx.wires {}
-    calyx.control {}
-  }
-
-  calyx.component @B () -> (%out: i1) {
-    calyx.wires {}
-    calyx.control {}
-  }
-
-  calyx.component @main() -> () {
+  calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     %in1, %out1 = calyx.cell "c0" @A : i8, i8
     %in2, %out2 = calyx.cell "c1" @A : i8, i8
     %out3 = calyx.cell "c2" @B : i1
