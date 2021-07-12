@@ -67,8 +67,8 @@ static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
   OpBuilder builder(component->getRegion(0));
   auto fsmRegister = createRegister(builder, component, fsmBitWidth, "fsm");
   auto fsmIn = fsmRegister.getResult(0);
-  auto fsmOut = fsmRegister.getResult(1);
-  auto fsmWriteEn = fsmRegister.getResult(2);
+  auto fsmWriteEn = fsmRegister.getResult(1);
+  auto fsmOut = fsmRegister.getResult(4);
 
   builder.setInsertionPointToStart(wiresBody);
   auto oneConstant = createConstant(builder, wires->getLoc(), 1, 1);

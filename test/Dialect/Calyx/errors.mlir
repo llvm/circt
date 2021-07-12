@@ -32,7 +32,7 @@ calyx.program {
     calyx.control {}
   }
   calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
-    // expected-error @+1 {{'calyx.cell' op has a wrong number of results; expected: 1 but got 0}}
+    // expected-error @+1 {{'calyx.cell' op has a wrong number of results; expected: 5 but got 0}}
     calyx.cell "a0" @A
     calyx.wires {}
     calyx.control {}
@@ -48,7 +48,7 @@ calyx.program {
   }
   calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     // expected-error @+1 {{'calyx.cell' op result type for "in" must be 'i16', but got 'i1'}}
-    %0 = calyx.cell "b0" @B : i1
+    %b0.in, %b0.go, %b0.clk, %b0.reset, %b0.done = calyx.cell "b0" @B : i1, i1, i1, i1, i1
 
     calyx.wires {}
     calyx.control {}
@@ -114,7 +114,7 @@ calyx.program {
 // -----
 
 calyx.program {
-  calyx.component @main() -> () {
+  calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     %c1_1 = constant 1 : i1
     calyx.wires {
       // expected-error @+1 {{'calyx.group' op with name: Group1 is unused in the control execution schedule}}

@@ -23,7 +23,7 @@ def RegisterOp : CalyxOp<"register", [
     ```
   }];
   let arguments = (ins StrAttr:$name);
-  let results = (outs AnyType:$in, AnyType:$out, I1:$write_en, I1:$done, I1:$clk, I1:$reset);
+  let results = (outs AnyType:$in, I1:$write_en, I1:$clk, I1:$reset, AnyType:$out, I1:$done);
   let assemblyFormat = "$name attr-dict `:` type($in)";
 
   let builders = [
