@@ -283,7 +283,6 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
     if (port.direction == PortDirection::OUTPUT) {
       orEqual(done, portName, "done");
     } else {
-      llvm::errs() << portName;
       orEqual(go, portName, "go");
       orEqual(clk, portName, "clk");
       orEqual(reset, portName, "reset");
