@@ -1687,10 +1687,11 @@ void FIRRTLLowering::emitRandomizePrologIfNeeded() {
 
 void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
   // Construct and return a new reference to `RANDOM.  It is always a 32-bit
-  // unsigned expression.  We don't want these CSE'd.
+  // unsigned expression.  Calls to $random have side effects, so we use
+  // VerbatimExprSEOp.
   auto getRandom32Val = [&]() -> Value {
-    return builder.create<sv::VerbatimExprOp>(builder.getIntegerType(32),
-                                              "`RANDOM");
+    return builder.create<sv::VerbatimExprSEOp>(builder.getIntegerType(32),
+                                                "`RANDOM");
   };
 
   // Return an expression containing random bits of the specified width.
@@ -1841,10 +1842,9 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     auto portName = op.getPortName(i).getValue();
     auto portKind = op.getPortKind(i);
 
-    auto &portKindNum =
-        portKind == MemOp::PortKind::Read
-            ? readCount
-            : portKind == MemOp::PortKind::Write ? writeCount : readwriteCount;
+    auto &portKindNum = portKind == MemOp::PortKind::Read    ? readCount
+                        : portKind == MemOp::PortKind::Write ? writeCount
+                                                             : readwriteCount;
 
     auto addInput = [&](SmallVectorImpl<Value> &operands, StringRef field,
                         size_t width) {

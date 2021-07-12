@@ -472,7 +472,7 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT:    sv.initial {
     // CHECK-NEXT:    sv.verbatim "`INIT_RANDOM_PROLOG_"
     // CHECK-NEXT:    sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-    // CHECK-NEXT:       %RANDOM = sv.verbatim.expr "`RANDOM" : () -> i32
+    // CHECK-NEXT:       %RANDOM = sv.verbatim.expr.se "`RANDOM" : () -> i32
     // CHECK-NEXT:       %3 = comb.extract %RANDOM from 0 : (i32) -> i2
     // CHECK-NEXT:       sv.bpassign %count, %3 : i2
     // CHECK-NEXT:     }
@@ -528,9 +528,9 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT:     sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
     // CHECK-NEXT:       sv.if %reset  {
     // CHECK-NEXT:       } else {
-    // CHECK-NEXT:         %RANDOM = sv.verbatim.expr "`RANDOM" : () -> i32
+    // CHECK-NEXT:         %RANDOM = sv.verbatim.expr.se "`RANDOM" : () -> i32
     // CHECK-NEXT:         sv.bpassign %reg, %RANDOM : i32
-    // CHECK-NEXT:         %RANDOM_0 = sv.verbatim.expr "`RANDOM" : () -> i32
+    // CHECK-NEXT:         %RANDOM_0 = sv.verbatim.expr.se "`RANDOM" : () -> i32
     // CHECK-NEXT:         sv.bpassign %reg2, %RANDOM_0 : i32
     // CHECK-NEXT:       }
     // CHECK-NEXT:     }
@@ -773,8 +773,8 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT:    sv.initial {
     // CHECK-NEXT:    sv.verbatim "`INIT_RANDOM_PROLOG_"
     // CHECK-NEXT:    sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
-    // CHECK-NEXT:       %RANDOM = sv.verbatim.expr "`RANDOM" : () -> i32
-    // CHECK-NEXT:       %RANDOM_0 = sv.verbatim.expr "`RANDOM" : () -> i32
+    // CHECK-NEXT:       %RANDOM = sv.verbatim.expr.se "`RANDOM" : () -> i32
+    // CHECK-NEXT:       %RANDOM_0 = sv.verbatim.expr.se "`RANDOM" : () -> i32
     // CHECK-NEXT:       %3 = comb.extract %RANDOM_0 from 0 : (i32) -> i10
     // CHECK-NEXT:       %4 = comb.concat %RANDOM, %3 : (i32, i10) -> i42
     // CHECK-NEXT:       sv.bpassign %count, %4 : i42

@@ -25,9 +25,8 @@ using namespace sv;
 
 /// Return true if the specified operation is an expression.
 bool sv::isExpression(Operation *op) {
-  return isa<sv::VerbatimExprOp>(op) || isa<sv::GetModportOp>(op) ||
-         isa<sv::ReadInterfaceSignalOp>(op) || isa<sv::ConstantXOp>(op) ||
-         isa<sv::ConstantZOp>(op);
+  return isa<VerbatimExprOp, VerbatimExprSEOp, GetModportOp,
+             ReadInterfaceSignalOp, ConstantXOp, ConstantZOp>(op);
 }
 
 LogicalResult sv::verifyInProceduralRegion(Operation *op) {
@@ -129,19 +128,31 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
 // VerbatimExprOp
 //===----------------------------------------------------------------------===//
 
-void VerbatimExprOp::getAsmResultNames(
-    function_ref<void(Value, StringRef)> setNameFn) {
+/// Get the asm name for sv.verbatim.expr and sv.verbatim.expr.se.
+static void
+getVerbatimExprAsmResultNames(Operation *op,
+                              function_ref<void(Value, StringRef)> setNameFn) {
   // If the string is macro like, then use a pretty name.  We only take the
   // string up to a weird character (like a paren) and currently ignore
   // parenthesized expressions.
   auto isOkCharacter = [](char c) { return llvm::isAlnum(c) || c == '_'; };
-  auto name = string();
+  auto name = op->getAttrOfType<StringAttr>("string").getValue();
   // Ignore a leading ` in macro name.
   if (name.startswith("`"))
     name = name.drop_front();
   name = name.take_while(isOkCharacter);
   if (!name.empty())
-    setNameFn(getResult(), name);
+    setNameFn(op->getResult(0), name);
+}
+
+void VerbatimExprOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  getVerbatimExprAsmResultNames(getOperation(), std::move(setNameFn));
+}
+
+void VerbatimExprSEOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  getVerbatimExprAsmResultNames(getOperation(), std::move(setNameFn));
 }
 
 //===----------------------------------------------------------------------===//
