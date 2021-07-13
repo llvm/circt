@@ -2655,7 +2655,8 @@ void ModuleEmitter::emitBind(BindOp bind) {
   auto instance = bind.getReferencedInstance();
   auto instantiator = instance->getParentOfType<hw::HWModuleOp>().getName();
   auto instanceName = instance.instanceName();
-  os << "bind " << instantiator << " " << instanceName << " " << instanceName << " (.*);\n\n";
+  os << "bind " << instantiator << " " << instanceName << " " << instanceName
+     << " (.*);\n\n";
 }
 
 // Check if the value is from read of a wire or reg or is a port.
