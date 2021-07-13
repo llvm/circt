@@ -1,6 +1,7 @@
 #include <regex>
 #include <string>
 #include <vector>
+#include <iostream>
 
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
@@ -26,19 +27,17 @@ class Filter;
 class FilterNode {
 public:
   FilterNode(const FilterNode &other);
-  ~FilterNode();
+  FilterNode &operator =(const FilterNode &other);
 
 private:
-  FilterNode() : tag (FilterType::UNSET) { }
+  FilterNode() : tag (FilterType::UNSET), regex (std::regex()), literal (std::string()) { }
 
   FilterType tag;
-  union {
-    std::regex regex;
-    std::string literal;
-  };
+  std::regex regex;
+  std::string literal;
 
   friend class Filter;
-  friend std::vector<mlir::Operation *> filterAsVector(Filter &filter, Operation *module);
+  friend std::vector<mlir::Operation *> filterAsVector(Filter &filter, ModuleOp &module);
 };
 
 class Filter {
@@ -50,11 +49,11 @@ private:
   std::vector<FilterNode> nodes;
 
   friend Filter parseFilter(std::string &filter);
-  friend std::vector<mlir::Operation *> filterAsVector(Filter &filter, Operation *module);
+  friend std::vector<mlir::Operation *> filterAsVector(Filter &filter, ModuleOp &module);
 };
 
 // TODO: filterAsIterator()
-std::vector<mlir::Operation *> filterAsVector(Filter &filter);
+std::vector<mlir::Operation *> filterAsVector(Filter &filter, ModuleOp &module);
 
 } /* namespace query */
 } /* namespace circt */
