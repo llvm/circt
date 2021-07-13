@@ -547,6 +547,16 @@ def AssertConcurrentOp : ConcurrentAssertionOp<"assert.concurrent"> {
   }];
 }
 
+def AssumeConcurrentOp : ConcurrentAssertionOp<"assume.concurrent"> {
+  let summary = "concurrent assume statement, i.e., assume property";
+  let description = [{
+    Specify that a property is assumed to be true whenever the property is
+    evaluated.  This can be used to both document the behavior of the design and
+    to test that the design behaves as expected.  See section 16.5 of the
+    SystemVerilog 2017 specification.
+  }];
+}
+
 def BindOp : SVOp<"bind", []> {
   let summary = "indirect instantiation statement";
   let description = [{
