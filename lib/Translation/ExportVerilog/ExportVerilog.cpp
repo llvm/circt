@@ -2031,7 +2031,7 @@ LogicalResult StmtEmitter::visitSV(AssertOp op) {
   if (!label.empty())
     os << label << ": ";
   os << "assert(";
-  emitExpression(op.predicate(), ops);
+  emitExpression(op.expression(), ops);
   os << ");";
   emitLocationInfoAndNewLine(ops);
   return success();
@@ -2045,7 +2045,7 @@ LogicalResult StmtEmitter::visitSV(AssumeOp op) {
   if (!label.empty())
     os << label << ": ";
   os << "assume(";
-  emitExpression(op.property(), ops);
+  emitExpression(op.expression(), ops);
   os << ");";
   emitLocationInfoAndNewLine(ops);
   return success();
@@ -2059,7 +2059,7 @@ LogicalResult StmtEmitter::visitSV(CoverOp op) {
   if (!label.empty())
     os << label << ": ";
   os << "cover(";
-  emitExpression(op.property(), ops);
+  emitExpression(op.expression(), ops);
   os << ");";
   emitLocationInfoAndNewLine(ops);
   return success();
