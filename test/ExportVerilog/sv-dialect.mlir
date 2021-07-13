@@ -759,17 +759,17 @@ hw.module @RegisterOfStructOrArrayOfStruct() {
 }
 
 // CHECK-LABEL: module extInst
-hw.module.extern @extInst(%_h: i1, %_i: i1, %_j: i1, %_k: i1) -> ()
+hw.module.extern @extInst(%_h: i1, %_i: i1, %_j: i1, %_k: i1, %_z :i0) -> ()
 
 // CHECK-LABEL: module remoteInstDut
-hw.module @remoteInstDut(%i: i1, %j: i1) -> () {
+hw.module @remoteInstDut(%i: i1, %j: i1, %z: i0) -> () {
   %mywire = sv.wire : !hw.inout<i1>
   %mywire_rd = sv.read_inout %mywire : !hw.inout<i1>
   %myreg = sv.reg : !hw.inout<i1>
   %myreg_rd = sv.read_inout %myreg : !hw.inout<i1>
   %0 = hw.constant 1 : i1
-  hw.instance "a1" sym @bindInst @extInst(%mywire_rd, %myreg_rd, %j, %0) {doNotPrint=1}: (i1, i1, i1, i1) -> ()
-  hw.instance "a2" sym @bindInst2 @extInst(%mywire_rd, %myreg_rd, %j, %0) {doNotPrint=1}: (i1, i1, i1, i1) -> ()
+  hw.instance "a1" sym @bindInst @extInst(%mywire_rd, %myreg_rd, %j, %0, %z) {doNotPrint=1}: (i1, i1, i1, i1, i0) -> ()
+  hw.instance "a2" sym @bindInst2 @extInst(%mywire_rd, %myreg_rd, %j, %0, %z) {doNotPrint=1}: (i1, i1, i1, i1, i0) -> ()
 // CHECK: wire a2__k
 // CHECK-NEXT: wire a1__k
 // CHECK-NEXT: wire mywire
@@ -792,6 +792,7 @@ hw.module @bindInMod() -> () {
 // CHECK-NEXT:   ._i (myreg),
 // CHECK-NEXT:   ._j (j),
 // CHECK-NEXT:   ._k (a1__k)
+// CHECK-NEXT: //._z (z)
 // CHECK-NEXT: );
 // CHECK: endmodule
 
@@ -802,4 +803,5 @@ sv.bind @bindInst2
 // CHECK-NEXT:   ._i (myreg),
 // CHECK-NEXT:   ._j (j),
 // CHECK-NEXT:   ._k (a2__k)
+// CHECK-NEXT: //._z (z)
 // CHECK-NEXT: );
