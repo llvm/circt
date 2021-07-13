@@ -2077,15 +2077,18 @@ LogicalResult StmtEmitter::emitConcurrentAssertion(Operation *op, Twine name,
 }
 
 LogicalResult StmtEmitter::visitSV(AssertConcurrentOp op) {
-  return emitConcurrentAssertion(op, "assert", op.label(), op.event(), op.clock(), op.property());
+  return emitConcurrentAssertion(op, "assert", op.label(), op.event(),
+                                 op.clock(), op.property());
 }
 
 LogicalResult StmtEmitter::visitSV(AssumeConcurrentOp op) {
-  return emitConcurrentAssertion(op, "assume", op.label(), op.event(), op.clock(), op.property());
+  return emitConcurrentAssertion(op, "assume", op.label(), op.event(),
+                                 op.clock(), op.property());
 }
 
 LogicalResult StmtEmitter::visitSV(CoverConcurrentOp op) {
-  return emitConcurrentAssertion(op, "cover", op.label(), op.event(), op.clock(), op.property());
+  return emitConcurrentAssertion(op, "cover", op.label(), op.event(),
+                                 op.clock(), op.property());
 }
 
 LogicalResult StmtEmitter::emitIfDef(Operation *op, StringRef cond) {
