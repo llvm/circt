@@ -1029,31 +1029,17 @@ static size_t getTotalWidth(const OperandRange &range) {
   return totalWidth;
 }
 
-static bool isAnyZeroWidthOperands(OperandRange operands) {
-  return llvm::any_of(operands, [&](auto x) {
-    return x.getType().getIntOrFloatBitWidth() == 0;
-  });
-}
-
 // Reduce the strength icmp(concat(...), concat(...)) by doing a element-wise
 // comparison on common prefix and suffixes. Returns success() if a rewriting
 // happens.
 static LogicalResult matchAndRewriteCompareConcat(ICmpOp op, ConcatOp lhs,
                                                   ConcatOp rhs,
                                                   PatternRewriter &rewriter) {
-
+  // It is safe to assume that [{lhsOperands, rhsOperands}.size() > 0] and
+  // all elements have non-zero length. Both these invariants are verified
+  // by the ConcatOp verifier.
   auto lhsOperands = lhs.getOperands();
   auto rhsOperands = rhs.getOperands();
-
-  if (lhs.getType().getWidth() == 0 || rhs.getType().getWidth() == 0) {
-    return failure();
-  }
-
-  if (isAnyZeroWidthOperands(lhsOperands) ||
-      isAnyZeroWidthOperands(rhsOperands)) {
-    return failure();
-  }
-
   size_t numElements = std::min<size_t>(lhsOperands.size(), rhsOperands.size());
 
   size_t commonPrefixLength =
@@ -1282,6 +1268,8 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
     }
   }
 
+  // icmp(cat(prefix, a, b, suffix), cat(prefix, c, d, suffix)) => icmp(cat(a, b), cat(c, d)).
+  // contains special handling for sign bit in signed compressions.
   if (auto lhs = dyn_cast_or_null<ConcatOp>(op.lhs().getDefiningOp())) {
     if (auto rhs = dyn_cast_or_null<ConcatOp>(op.rhs().getDefiningOp())) {
       auto rewriteResult = matchAndRewriteCompareConcat(op, lhs, rhs, rewriter);
