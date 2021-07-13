@@ -757,3 +757,37 @@ hw.module @RegisterOfStructOrArrayOfStruct() {
   // CHECK: struct packed {logic a; logic b; }[3:0][7:0] reg3
   %reg3 = sv.reg : !hw.inout<array<4xarray<8xstruct<a: i1, b: i1>>>>
 }
+
+// CHECK-LABEL: module extInst
+hw.module.extern @extInst(%_h: i1, %_i: i1, %_j: i1, %_k: i1) -> ()
+
+// CHECK-LABEL: module remoteInstDut
+hw.module @remoteInstDut(%i: i1, %j: i1) -> () {
+  %mywire = sv.wire : !hw.inout<i1>
+  %mywire_rd = sv.read_inout %mywire : !hw.inout<i1>
+  %myreg = sv.reg : !hw.inout<i1>
+  %myreg_rd = sv.read_inout %myreg : !hw.inout<i1>
+  %0 = hw.constant 1 : i1
+  hw.instance "a1" sym @bindInst @extInst(%mywire_rd, %myreg_rd, %j, %0) {emitAsBind=1, doNotPrint=1}: (i1, i1, i1, i1) -> ()
+// CHECK: wire a1__k
+// CHECK-NEXT: wire mywire
+// CHECK-NEXT: myreg
+// CHECK-EMPTY:
+// CHECK-NEXT: assign a1__k = 1'h1
+// CHECK-NEXT: // This instance is elsewhere emitted as a bind statement
+// CHECK-NEXT: // extInst a1
+}
+
+hw.module @bindInMod() -> () {
+  sv.bind @bindInst
+}
+
+//CHECK-LABEL: bindInMod
+//CHECK-NEXT:  bind remoteInstDut extInst a1 (
+//CHECK-NEXT:    ._h (mywire),
+//CHECK-NEXT:    ._i (myreg),
+//CHECK-NEXT:    ._j (j),
+//CHECK-NEXT:    ._k (a1__k)
+//CHECK-NEXT:  );
+
+sv.bind @bindInst
