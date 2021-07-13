@@ -344,8 +344,6 @@ static StringRef getNameRemotely(Value &value,
   return {};
 }
 
-
-
 namespace {
 /// This enum keeps track of the precedence level of various binary operators,
 /// where a lower number binds tighter.
@@ -2774,7 +2772,7 @@ void ModuleEmitter::emitBind(BindOp op) {
     indent();
   }
   os << ");\n";
- }
+}
 
 // Check if the value is from read of a wire or reg or is a port.
 static bool isSimpleReadOrPort(Value v) {
