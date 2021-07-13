@@ -2344,11 +2344,23 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   // Helper that prints a parameter constant value in a Verilog compatible way.
   auto printParmValue = [&](Attribute value) {
     if (auto intAttr = value.dyn_cast<IntegerAttr>()) {
-      IntegerType intTy = intAttr.getType().cast<IntegerType>();
-      // Integer attributes are printed without a designated width.  The width
-      // is inferred from the extmodule they are used with, we don't want to
-      // take some arbitrary width from the APInt storage.
-      intAttr.getValue().print(os, intTy.isSigned());
+      // Sign comes out before any width specifier.
+      APInt value = intAttr.getValue();
+      unsigned signBitWidth = 0;
+      if (value.isNegative()) {
+        os << '-';
+        value = -value;
+        signBitWidth = 1;
+      }
+
+      // The signedness and width of the integer attribute type is arbitrary,
+      // we just look at the active bits of the parameter.  We omit the width
+      // specifier if the value is <= 32-bits in size, which makes this more
+      // compatible with unknown width extmodules.
+      if (value.getActiveBits() >= 32)
+        os << (value.getActiveBits() + signBitWidth) << "'d";
+
+      os << value;
     } else if (auto strAttr = value.dyn_cast<StringAttr>()) {
       os << '"';
       os.write_escaped(strAttr.getValue());
