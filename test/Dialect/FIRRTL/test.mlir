@@ -125,4 +125,11 @@ firrtl.module @VerbatimExpr() {
   %2 = firrtl.add %0, %1 : (!firrtl.uint<42>, !firrtl.uint<32>) -> !firrtl.uint<43>
 }
 
+// CHECK-LABL: @LowerToBind
+// CHECK: firrtl.instance @InstanceLowerToBind {lowerToBind = true, name = "foo"}
+firrtl.module @InstanceLowerToBind() {}
+firrtl.module @LowerToBind() {
+  firrtl.instance @InstanceLowerToBind {lowerToBind = true, name = "foo"}
+}
+
 }

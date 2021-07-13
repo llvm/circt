@@ -2651,7 +2651,13 @@ void ModuleEmitter::emitHWGeneratedModule(HWModuleGeneratedOp module) {
   os << "// external generated module " << verilogName.getValue() << "\n\n";
 }
 
-void ModuleEmitter::emitBind(BindOp bind) { os << "// bind\n\n"; }
+void ModuleEmitter::emitBind(BindOp bind) {
+  auto instance = bind.getReferencedInstance();
+  auto instantiator = instance->getParentOfType<hw::HWModuleOp>().getName();
+  auto instanceName = instance.instanceName();
+  os << "bind " << instantiator << " " << instanceName << " " << instanceName
+     << " (.*);\n\n";
+}
 
 // Check if the value is from read of a wire or reg or is a port.
 static bool isSimpleReadOrPort(Value v) {

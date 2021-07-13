@@ -897,7 +897,7 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
   // FIXME: annotation update
   auto newInstance = builder->create<InstanceOp>(
       resultTypes, op.moduleNameAttr(), op.nameAttr(), op.annotations(),
-      builder->getArrayAttr(newPortAnno));
+      builder->getArrayAttr(newPortAnno), op.lowerToBindAttr());
 
   SmallVector<Value> lowered;
   for (size_t aggIndex = 0, eAgg = op.getNumResults(); aggIndex != eAgg;
