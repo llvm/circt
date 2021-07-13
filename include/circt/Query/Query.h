@@ -1,7 +1,6 @@
 #include <regex>
 #include <string>
 #include <vector>
-#include <iostream>
 
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
@@ -26,12 +25,16 @@ class Filter;
 
 class FilterNode {
 public:
+  FilterNode() : tag (FilterType::UNSET), regex (std::regex()), literal (std::string()) { }
   FilterNode(const FilterNode &other);
   FilterNode &operator =(const FilterNode &other);
 
-private:
-  FilterNode() : tag (FilterType::UNSET), regex (std::regex()), literal (std::string()) { }
+  static FilterNode newGlob();
+  static FilterNode newRecursiveGlob();
+  static FilterNode newLiteral(std::string &literal);
+  static FilterNode newRegex(std::string &regex);
 
+private:
   FilterType tag;
   std::regex regex;
   std::string literal;
@@ -43,6 +46,8 @@ private:
 class Filter {
 public:
   Filter(std::string &filter);
+
+  static Filter newFilter(size_t count, FilterNode nodes[]);
 
 private:
   Filter() : nodes (std::vector<FilterNode>()) { }

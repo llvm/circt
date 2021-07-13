@@ -40,6 +40,7 @@
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
 
+// Yes this was copy pasted from firtool, don't judge me >w<
 using namespace llvm;
 using namespace mlir;
 using namespace circt;

@@ -1,5 +1,3 @@
-#include <string>
-
 #include "circt/Query/Query.h"
 
 namespace circt {
@@ -41,6 +39,40 @@ FilterNode &FilterNode::operator =(const FilterNode &other) {
   }
 
   return *this;
+}
+
+FilterNode FilterNode::newGlob() {
+  FilterNode f;
+  f.tag = FilterType::GLOB;
+  return f;
+}
+
+FilterNode FilterNode::newRecursiveGlob() {
+  FilterNode f;
+  f.tag = FilterType::RECURSIVE_GLOB;
+  return f;
+}
+
+FilterNode FilterNode::newLiteral(std::string &literal) {
+  FilterNode f;
+  f.tag = FilterType::LITERAL;
+  f.literal = literal;
+  return f;
+}
+
+FilterNode FilterNode::newRegex(std::string &regex) {
+  FilterNode f;
+  f.tag = FilterType::REGEX;
+  f.regex = regex;
+  return f;
+}
+
+Filter Filter::newFilter(size_t count, FilterNode nodes[]) {
+  Filter f;
+  for (size_t i = 0; i < count; i++) {
+    f.nodes.push_back(nodes[i]);
+  }
+  return f;
 }
 
 // TODO: Parsing errors.
