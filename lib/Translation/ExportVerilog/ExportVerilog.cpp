@@ -1718,6 +1718,8 @@ private:
   LogicalResult visitSV(FatalOp op);
   LogicalResult visitSV(FinishOp op);
   LogicalResult visitSV(VerbatimOp op);
+  LogicalResult emitImmediateAssertion(Operation *op, Twine name,
+                                       StringRef label, Value expression);
   LogicalResult visitSV(AssertOp op);
   LogicalResult visitSV(AssumeOp op);
   LogicalResult visitSV(CoverOp op);
@@ -2023,46 +2025,31 @@ LogicalResult StmtEmitter::visitSV(FinishOp op) {
   return success();
 }
 
-LogicalResult StmtEmitter::visitSV(AssertOp op) {
+LogicalResult StmtEmitter::emitImmediateAssertion(Operation *op, Twine name,
+                                                  StringRef label,
+                                                  Value expression) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   indent();
-  auto label = op.label();
   if (!label.empty())
     os << label << ": ";
-  os << "assert(";
-  emitExpression(op.expression(), ops);
+  os << name << "(";
+  emitExpression(expression, ops);
   os << ");";
   emitLocationInfoAndNewLine(ops);
   return success();
+}
+
+LogicalResult StmtEmitter::visitSV(AssertOp op) {
+  return emitImmediateAssertion(op, "assert", op.label(), op.expression());
 }
 
 LogicalResult StmtEmitter::visitSV(AssumeOp op) {
-  SmallPtrSet<Operation *, 8> ops;
-  ops.insert(op);
-  indent();
-  auto label = op.label();
-  if (!label.empty())
-    os << label << ": ";
-  os << "assume(";
-  emitExpression(op.expression(), ops);
-  os << ");";
-  emitLocationInfoAndNewLine(ops);
-  return success();
+  return emitImmediateAssertion(op, "assume", op.label(), op.expression());
 }
 
 LogicalResult StmtEmitter::visitSV(CoverOp op) {
-  SmallPtrSet<Operation *, 8> ops;
-  ops.insert(op);
-  indent();
-  auto label = op.label();
-  if (!label.empty())
-    os << label << ": ";
-  os << "cover(";
-  emitExpression(op.expression(), ops);
-  os << ");";
-  emitLocationInfoAndNewLine(ops);
-  return success();
+  return emitImmediateAssertion(op, "cover", op.label(), op.expression());
 }
 
 LogicalResult StmtEmitter::emitIfDef(Operation *op, StringRef cond) {
