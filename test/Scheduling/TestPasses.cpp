@@ -12,7 +12,6 @@
 
 #include "circt/Scheduling/Algorithms.h"
 
-#include "mlir/IR/Builders.h"
 #include "mlir/Pass/Pass.h"
 
 using namespace mlir;
@@ -20,22 +19,10 @@ using namespace circt;
 using namespace circt::scheduling;
 
 //===----------------------------------------------------------------------===//
-// ASAPScheduler
+// Construction helper methods
 //===----------------------------------------------------------------------===//
 
-namespace {
-struct TestASAPSchedulerPass
-    : public PassWrapper<TestASAPSchedulerPass, FunctionPass> {
-  void runOnFunction() override;
-};
-} // anonymous namespace
-
-void TestASAPSchedulerPass::runOnFunction() {
-  auto func = getFunction();
-  OpBuilder builder(func.getContext());
-
-  Problem prob(func);
-
+static LogicalResult constructProblem(Problem &prob, FuncOp func) {
   // set up catch-all operator type with unit latency
   auto unitOpr = prob.getOrInsertOperatorType("unit");
   prob.setLatency(unitOpr, 1);
@@ -84,10 +71,32 @@ void TestASAPSchedulerPass::runOnFunction() {
       // finally, we have two integer indices in range of the operations list
       if (failed(prob.insertDependence(
               std::make_pair(ops[fromIdx], ops[toIdx])))) {
-        func->emitError("inserting aux dependence failed");
-        return signalPassFailure();
+        return func->emitError("inserting aux dependence failed");
       }
     }
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ASAPScheduler
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct TestASAPSchedulerPass
+    : public PassWrapper<TestASAPSchedulerPass, FunctionPass> {
+  void runOnFunction() override;
+};
+} // anonymous namespace
+
+void TestASAPSchedulerPass::runOnFunction() {
+  auto func = getFunction();
+
+  Problem prob(func);
+  if (failed(constructProblem(prob, func))) {
+    func->emitError("problem construction failed");
+    return signalPassFailure();
   }
 
   if (failed(prob.check())) {
