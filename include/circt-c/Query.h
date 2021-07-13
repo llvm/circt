@@ -22,7 +22,6 @@ CIRCTQueryFilterNode CIRCTQueryNewRecursiveGlobFilter();
 CIRCTQueryFilterNode CIRCTQueryNewLiteralFilter(char *literal);
 CIRCTQueryFilterNode CIRCTQueryNewRegexFilter(char *regex);
 
-
 CIRCTQueryFilter CIRCTQueryNewFilterArray(size_t count, CIRCTQueryFilterNode *nodes);
 CIRCTQueryFilter CIRCTQueryNewFilter(size_t count, ...);
 
