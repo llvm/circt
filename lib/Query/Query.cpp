@@ -206,6 +206,7 @@ std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, Modul
     }
   }
 
+  bool didRecursiveGlobSelfPut = false;
   while (!opStack.empty()) {
     std::pair<std::vector<Operation *>, size_t> pair = opStack[opStack.size() - 1];
     std::vector<Operation *> vec = pair.first;
@@ -253,6 +254,15 @@ std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, Modul
             }
           }
         });
+
+      if (filter.nodes[i].tag == FilterType::RECURSIVE_GLOB) {
+        if (!didRecursiveGlobSelfPut) {
+          opStack.push_back(std::make_pair(vec, i + 1));
+          didRecursiveGlobSelfPut = true;
+        }
+      } else {
+        didRecursiveGlobSelfPut = false;
+      }
     }
   }
 
