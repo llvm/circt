@@ -1268,8 +1268,9 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
     }
   }
 
-  // icmp(cat(prefix, a, b, suffix), cat(prefix, c, d, suffix)) => icmp(cat(a, b), cat(c, d)).
-  // contains special handling for sign bit in signed compressions.
+  // icmp(cat(prefix, a, b, suffix), cat(prefix, c, d, suffix)) => icmp(cat(a,
+  // b), cat(c, d)). contains special handling for sign bit in signed
+  // compressions.
   if (auto lhs = dyn_cast_or_null<ConcatOp>(op.lhs().getDefiningOp())) {
     if (auto rhs = dyn_cast_or_null<ConcatOp>(op.rhs().getDefiningOp())) {
       auto rewriteResult = matchAndRewriteCompareConcat(op, lhs, rhs, rewriter);
