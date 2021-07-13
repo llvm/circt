@@ -19,6 +19,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Matchers.h"
 
 using namespace circt;
@@ -125,6 +126,20 @@ void PrettifyVerilogPass::prettifyUnaryOperator(Operation *op) {
   anythingChanged = true;
 }
 
+/// Transform "a + -cst" ==> "a - cst" for prettier output.
+static void rewriteAddWithNegativeConstant(comb::AddOp add,
+                                           hw::ConstantOp rhsCst) {
+  ImplicitLocOpBuilder builder(add.getLoc(), add);
+
+  // Get the positive constant.
+  auto negCst = builder.create<hw::ConstantOp>(-rhsCst.getValue());
+  auto sub = builder.create<comb::SubOp>(add.getOperand(0), negCst);
+  add.getResult().replaceAllUsesWith(sub);
+  add.erase();
+  if (rhsCst.use_empty())
+    rhsCst.erase();
+}
+
 void PrettifyVerilogPass::runOnOperation() {
   // Keeps track if anything changed during this pass, used to determine if
   // the analyses were preserved.
@@ -138,6 +153,12 @@ void PrettifyVerilogPass::runOnOperation() {
     // will allow the verilog emitter to inline constant expressions.
     if (matchPattern(op, mlir::m_Constant()))
       return sinkOpToUses(op);
+
+    // Turn a + -cst  ==> a - cst
+    if (auto addOp = dyn_cast<comb::AddOp>(op))
+      if (auto cst = addOp.getOperand(1).getDefiningOp<hw::ConstantOp>())
+        if (addOp.getNumOperands() == 2 && cst.getValue().isNegative())
+          return rewriteAddWithNegativeConstant(addOp, cst);
   });
 
   // If we did not change anything in the graph mark all analysis as
