@@ -385,10 +385,11 @@ hw.module @BindEmissionInstance() {
 }
 // CHECK-LABEL: module BindEmission()
 hw.module @BindEmission() -> () {
+  // CHECK-NEXT: // This instance is elsewhere emitted as a bind statement
   // CHECK-NEXT: // BindEmissionInstance BindEmissionInstance ();
   hw.instance "BindEmissionInstance" sym @__BindEmissionInstance__ @BindEmissionInstance() {doNotPrint = true} : () -> ()
   hw.output
 }
 
 // CHECK-LABEL: FILE "BindTest/BindEmissionInstance.sv"
-// CHECK: bind BindEmission BindEmissionInstance BindEmissionInstance (.*);
+// CHECK: bind BindEmission BindEmissionInstance BindEmissionInstance ();
