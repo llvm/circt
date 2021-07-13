@@ -80,13 +80,13 @@ class Polynomial(pycde.System):
 
   def build(self, top):
     i32 = types.i32
-    x = hw.ConstantOp.create(i32, 23)
-    poly = PolynomialCompute(Coefficients([62, 42, 6]))("example")
-    poly.x.connect(x)
+    poly = PolynomialCompute(Coefficients([62, 42, 6]))("example")  #, x=23)
+    poly.x.connect(23)
     PolynomialCompute(coefficients=Coefficients([62, 42, 6]))("example2",
                                                               x=poly.y)
     PolynomialCompute(Coefficients([1, 2, 3, 4, 5]))("example2", x=poly.y)
 
+    x = hw.ConstantOp.create(i32, 23)
     CoolPolynomialCompute([4, 42], x=x)
     return {"y": poly.y}
 

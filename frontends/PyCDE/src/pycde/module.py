@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from pycde.support import obj_to_value
+
 from .support import Value, get_user_loc, var_to_attribute, OpOperandConnect
 from .types import types
 
@@ -200,7 +202,8 @@ def _module_base(cls, extern: bool, params={}):
       self.backedges: dict[int:BackedgeBuilder.Edge] = {}
       for (idx, (name, type)) in enumerate(mod._input_ports):
         if name in inputs:
-          value = support.get_value(inputs[name])
+          value = support.get_value(
+            obj_to_value(inputs[name], type))
           assert value is not None
           if not extern and support.type_to_pytype(value.type) != type:
             raise TypeError(f"Input '{name}' has type '{value.type}' "
