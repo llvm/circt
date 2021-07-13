@@ -70,6 +70,8 @@ let hasFolder = true in {
   def ShlOp : UTBinOp<"shl">;
   def ShrUOp : UTBinOp<"shru">;
   def ShrSOp : UTBinOp<"shrs">;
+
+  let hasCanonicalizeMethod = true in
   def SubOp : UTBinOp<"sub">;
 }
 

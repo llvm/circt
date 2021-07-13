@@ -841,10 +841,11 @@ Operation *InstanceOp::getReferencedModule() {
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        TypeRange resultTypes, StringRef moduleName,
                        StringRef name, ArrayRef<Attribute> annotations,
-                       ArrayRef<Attribute> portAnnotations) {
+                       ArrayRef<Attribute> portAnnotations, bool lowerToBind) {
   result.addAttribute("moduleName", builder.getSymbolRefAttr(moduleName));
   result.addAttribute("name", builder.getStringAttr(name));
   result.addAttribute("annotations", builder.getArrayAttr(annotations));
+  result.addAttribute("lowerToBind", builder.getBoolAttr(lowerToBind));
   result.addTypes(resultTypes);
 
   if (portAnnotations.empty()) {
@@ -1547,9 +1548,8 @@ FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
 }
 
 bool SubfieldOp::isFieldFlipped() {
-  auto fieldIndex = this->fieldIndex();
   auto bundle = input().getType().cast<BundleType>();
-  return bundle.getElement(fieldIndex).isFlip;
+  return bundle.getElement(fieldIndex()).isFlip;
 }
 
 FIRRTLType SubindexOp::inferReturnType(ValueRange operands,
@@ -2340,14 +2340,25 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
 
 static ParseResult parseInstanceOp(OpAsmParser &parser,
                                    NamedAttrList &resultAttrs) {
-  return parseElidePortAnnotations(parser, resultAttrs);
+  auto result = parseElidePortAnnotations(parser, resultAttrs);
+
+  if (!resultAttrs.get("lowerToBind")) {
+    resultAttrs.append("lowerToBind", parser.getBuilder().getBoolAttr(false));
+  }
+
+  return result;
 }
 
-/// Always elide "moduleName" and elide "annotations" if it exists or
-/// if it is empty.
+/// Always elide "moduleName", elide "lowerToBind" if false, and elide
+/// "annotations" if it exists or if it is empty.
 static void printInstanceOp(OpAsmPrinter &p, Operation *op,
                             DictionaryAttr attr) {
-  printElidePortAnnotations(p, op, attr, {"moduleName"});
+  SmallVector<StringRef, 2> elides = {"moduleName"};
+  if (auto lowerToBind = op->getAttrOfType<BoolAttr>("lowerToBind"))
+    if (!lowerToBind.getValue())
+      elides.push_back("lowerToBind");
+
+  printElidePortAnnotations(p, op, attr, elides);
 }
 
 //===----------------------------------------------------------------------===//

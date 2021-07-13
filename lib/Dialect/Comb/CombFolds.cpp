@@ -151,12 +151,11 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
   }
 
   // extract(olo, extract(ilo, x)) = extract(olo + ilo, x)
-  if (auto innerExtract = dyn_cast_or_null<ExtractOp>(op.input().getDefiningOp())) {
-    rewriter.replaceOpWithNewOp<ExtractOp>(
-        op,
-        op.getType(),
-        innerExtract.input(),
-        innerExtract.lowBit() + op.lowBit());
+  if (auto innerExtract =
+          dyn_cast_or_null<ExtractOp>(op.input().getDefiningOp())) {
+    rewriter.replaceOpWithNewOp<ExtractOp>(op, op.getType(),
+                                           innerExtract.input(),
+                                           innerExtract.lowBit() + op.lowBit());
     return success();
   }
 
@@ -471,6 +470,18 @@ OpFoldResult SubOp::fold(ArrayRef<Attribute> constants) {
   // Constant fold
   return constFoldBinaryOp<IntegerAttr>(constants,
                                         [](APInt a, APInt b) { return a - b; });
+}
+
+LogicalResult SubOp::canonicalize(SubOp op, PatternRewriter &rewriter) {
+  // sub(x, cst) -> add(x, -cst)
+  APInt value;
+  if (matchPattern(op.rhs(), m_RConstant(value))) {
+    auto negCst = rewriter.create<hw::ConstantOp>(op.getLoc(), -value);
+    rewriter.replaceOpWithNewOp<AddOp>(op, op.lhs(), negCst);
+    return success();
+  }
+
+  return failure();
 }
 
 OpFoldResult AddOp::fold(ArrayRef<Attribute> constants) {
@@ -895,7 +906,8 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
   }
 
   // mux(selector, x, mux(selector, y, z) = mux(selector, x, z)
-  if (auto falseCase = dyn_cast_or_null<MuxOp>(op.falseValue().getDefiningOp())) {
+  if (auto falseCase =
+          dyn_cast_or_null<MuxOp>(op.falseValue().getDefiningOp())) {
     if (op.cond() == falseCase.cond()) {
       Value newT = op.trueValue();
       Value newF = falseCase.falseValue();

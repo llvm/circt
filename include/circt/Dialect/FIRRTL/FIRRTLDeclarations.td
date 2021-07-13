@@ -19,7 +19,8 @@ def InstanceOp : FIRRTLOp<"instance"> {
 
   let arguments = (ins FlatSymbolRefAttr:$moduleName, StrAttr:$name,
                        AnnotationArrayAttr:$annotations,
-                       PortAnnotationsAttr:$portAnnotations);
+                       PortAnnotationsAttr:$portAnnotations,
+                       BoolAttr:$lowerToBind);
   let results = (outs Variadic<FIRRTLType>:$results);
 
   let assemblyFormat =
@@ -32,7 +33,8 @@ def InstanceOp : FIRRTLOp<"instance"> {
                    "::mlir::StringRef":$moduleName,
                    CArg<"StringRef", "{}">:$name,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
-                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations)>,
+                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
+                   CArg<"bool","false">:$lowerToBind)>,
 
     /// Constructor that creates a version of the specified instance, but that
     /// erases some number of results from it.

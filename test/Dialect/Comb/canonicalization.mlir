@@ -120,6 +120,15 @@ hw.module @flattenNotOnDifferentCond(%arg0: i1, %arg1: i1, %arg2: i1, %arg3: i8,
   hw.output %2 : i8
 }
 
+// CHECK-LABEL: @subCst
+hw.module @subCst(%a: i4) -> (%o1: i4) {
+// CHECK-NEXT: %c-4_i4 = hw.constant -4 : i4
+// CHECK-NEXT: %0 = comb.add %a, %c-4_i4 : i4
+  %c1 = hw.constant 4 : i4
+  %b = comb.sub %a, %c1 : i4
+  hw.output %b : i4
+}
+
 // Validates that when there is a matching suffix, and prefix, both of them are removed
 // appropriately, and strips of an unnecessary Cat where possible.
 // CHECK-LABEL: hw.module @compareStrengthReductionRemoveSuffixAndPrefix

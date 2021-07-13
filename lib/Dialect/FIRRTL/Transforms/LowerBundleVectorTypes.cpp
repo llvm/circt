@@ -629,7 +629,8 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
       auto oldField = builder->create<SubfieldOp>(result, fieldIndex);
       // data and mask depend on the memory type which was split.  They can also
       // go both directions, depending on the port direction.
-      if (name == "data" || name == "mask") {
+      if (name == "data" || name == "mask" || name == "wdata" ||
+          name == "wmask" || name == "rdata") {
         for (auto field : fields) {
           auto realOldField = getSubWhatever(oldField, field.index);
           auto newField = getSubWhatever(
@@ -896,7 +897,7 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
   // FIXME: annotation update
   auto newInstance = builder->create<InstanceOp>(
       resultTypes, op.moduleNameAttr(), op.nameAttr(), op.annotations(),
-      builder->getArrayAttr(newPortAnno));
+      builder->getArrayAttr(newPortAnno), op.lowerToBindAttr());
 
   SmallVector<Value> lowered;
   for (size_t aggIndex = 0, eAgg = op.getNumResults(); aggIndex != eAgg;
