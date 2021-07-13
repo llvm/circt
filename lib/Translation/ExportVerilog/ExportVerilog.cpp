@@ -1737,6 +1737,8 @@ private:
   LogicalResult visitSV(FatalOp op);
   LogicalResult visitSV(FinishOp op);
   LogicalResult visitSV(VerbatimOp op);
+  LogicalResult emitImmediateAssertion(Operation *op, Twine name,
+                                       StringRef label, Value expression);
   LogicalResult visitSV(AssertOp op);
   LogicalResult visitSV(AssumeOp op);
   LogicalResult visitSV(CoverOp op);
@@ -2043,46 +2045,31 @@ LogicalResult StmtEmitter::visitSV(FinishOp op) {
   return success();
 }
 
-LogicalResult StmtEmitter::visitSV(AssertOp op) {
+LogicalResult StmtEmitter::emitImmediateAssertion(Operation *op, Twine name,
+                                                  StringRef label,
+                                                  Value expression) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   indent();
-  auto label = op.label();
   if (!label.empty())
     os << label << ": ";
-  os << "assert(";
-  emitExpression(op.predicate(), ops);
+  os << name << "(";
+  emitExpression(expression, ops);
   os << ");";
   emitLocationInfoAndNewLine(ops);
   return success();
+}
+
+LogicalResult StmtEmitter::visitSV(AssertOp op) {
+  return emitImmediateAssertion(op, "assert", op.label(), op.expression());
 }
 
 LogicalResult StmtEmitter::visitSV(AssumeOp op) {
-  SmallPtrSet<Operation *, 8> ops;
-  ops.insert(op);
-  indent();
-  auto label = op.label();
-  if (!label.empty())
-    os << label << ": ";
-  os << "assume(";
-  emitExpression(op.property(), ops);
-  os << ");";
-  emitLocationInfoAndNewLine(ops);
-  return success();
+  return emitImmediateAssertion(op, "assume", op.label(), op.expression());
 }
 
 LogicalResult StmtEmitter::visitSV(CoverOp op) {
-  SmallPtrSet<Operation *, 8> ops;
-  ops.insert(op);
-  indent();
-  auto label = op.label();
-  if (!label.empty())
-    os << label << ": ";
-  os << "cover(";
-  emitExpression(op.property(), ops);
-  os << ");";
-  emitLocationInfoAndNewLine(ops);
-  return success();
+  return emitImmediateAssertion(op, "cover", op.label(), op.expression());
 }
 
 LogicalResult StmtEmitter::emitIfDef(Operation *op, StringRef cond) {
@@ -2366,11 +2353,23 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   // Helper that prints a parameter constant value in a Verilog compatible way.
   auto printParmValue = [&](Attribute value) {
     if (auto intAttr = value.dyn_cast<IntegerAttr>()) {
-      IntegerType intTy = intAttr.getType().cast<IntegerType>();
-      // Integer attributes are printed without a designated width.  The width
-      // is inferred from the extmodule they are used with, we don't want to
-      // take some arbitrary width from the APInt storage.
-      intAttr.getValue().print(os, intTy.isSigned());
+      // Sign comes out before any width specifier.
+      APInt value = intAttr.getValue();
+      unsigned signBitWidth = 0;
+      if (value.isNegative()) {
+        os << '-';
+        value = -value;
+        signBitWidth = 1;
+      }
+
+      // The signedness and width of the integer attribute type is arbitrary,
+      // we just look at the active bits of the parameter.  We omit the width
+      // specifier if the value is <= 32-bits in size, which makes this more
+      // compatible with unknown width extmodules.
+      if (value.getActiveBits() >= 32)
+        os << (value.getActiveBits() + signBitWidth) << "'d";
+
+      os << value;
     } else if (auto strAttr = value.dyn_cast<StringAttr>()) {
       os << '"';
       os.write_escaped(strAttr.getValue());

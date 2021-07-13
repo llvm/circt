@@ -491,40 +491,40 @@ def VerbatimOp : SVOp<"verbatim"> {
 // Verification Statements
 //===----------------------------------------------------------------------===//
 
-def AssertOp : SVOp<"assert", [ProceduralOp]> {
+class ImmediateAssertionOp<string mnemonic, list<OpTrait> traits = []> :
+    SVOp<mnemonic, traits> {
+  let arguments = (ins I1:$expression, StrAttr:$label);
+  let results = (outs);
+  let assemblyFormat =
+    "custom<OmitEmptyStringAttr>($label) attr-dict $expression `:` type($expression)";
+}
+
+def AssertOp : ImmediateAssertionOp<"assert", [ProceduralOp]> {
   let summary = "immediate assertion statement";
   let description = [{
-    Assert that a specific condition is always true.
+    Specify that a Boolean expression is always true.  This can be used to both
+    document the behavior of the design and to test that the design behaves as
+    expected.  See Section 16.3 of the SystemVerilog 2017 specification.
   }];
-
-  let arguments = (ins AnyType:$predicate, StrAttr:$label);
-  let results = (outs);
-  let assemblyFormat =
-    "custom<OmitEmptyStringAttr>($label) attr-dict $predicate `:` type($predicate)";
 }
 
-def AssumeOp : SVOp<"assume", [ProceduralOp]> {
-  let summary = "assume property statement";
+def AssumeOp : ImmediateAssertionOp<"assume", [ProceduralOp]> {
+  let summary = "immediate assume statement";
   let description = [{
-    Assume that a specific property is always true.
+    Specify that a Boolean expression is assumed to always be true.  This can
+    either be used as an assertion-like check that the expression is, in fact,
+    always true or to bound legal input values during testing.  See Section 16.3
+    of the SystemVerilog 2017 specification.
   }];
-
-  let arguments = (ins AnyType:$property, StrAttr:$label);
-  let results = (outs);
-  let assemblyFormat =
-    "custom<OmitEmptyStringAttr>($label) attr-dict $property `:` type($property)";
 }
 
-def CoverOp : SVOp<"cover", [ProceduralOp]> {
-  let summary = "functional coverage statement";
+def CoverOp : ImmediateAssertionOp<"cover", [ProceduralOp]> {
+  let summary = "immediate cover statement";
   let description = [{
-    Assert that a specific property happens during the course of execution.
+    Specify that a Boolean expression should be monitored for coverage, i.e., a
+    simulator will watch if it occurs and how many times it occurs.  See section
+    16.3 of the SystemVerilog 2017 specification.
   }];
-
-  let arguments = (ins AnyType:$property, StrAttr:$label);
-  let results = (outs);
-  let assemblyFormat =
-    "custom<OmitEmptyStringAttr>($label) attr-dict $property `:` type($property)";
 }
 
 def BindOp : SVOp<"bind", []> {
