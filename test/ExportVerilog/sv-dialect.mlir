@@ -168,6 +168,10 @@ hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
   }
   // CHECK-NEXT:  end // initial
 
+  // CHECK-NEXT: assert property (@(posedge clock) cond);
+  sv.assert.concurrent posedge %clock %cond : i1
+  // CHECK-NEXT: assert_1: assert property (@(posedge clock) cond);
+  sv.assert.concurrent "assert_1" posedge %clock %cond : i1
 
   // CHECK-NEXT: initial
   // CHECK-NOT: begin

@@ -527,6 +527,26 @@ def CoverOp : ImmediateAssertionOp<"cover", [ProceduralOp]> {
   }];
 }
 
+class ConcurrentAssertionOp<string mnemonic, list<OpTrait> traits = []> :
+    SVOp<mnemonic, traits> {
+  let arguments =
+    (ins EventControlAttr:$event, I1:$clock, I1:$property, StrAttr:$label);
+  let results = (outs);
+  let assemblyFormat =
+    "custom<OmitEmptyStringAttr>($label) $event $clock $property attr-dict `:`"
+    " type($property)";
+}
+
+def AssertConcurrentOp : ConcurrentAssertionOp<"assert.concurrent"> {
+  let summary = "concurrent assertion statement, i.e., assert property";
+  let description = [{
+    Specify that a property of the hardware design is true whenever the property
+    is evaluated.  This can be used to both document the behavior of the design
+    and to test that the design behaves as expected.  See section 16.5 of the
+    SystemVerilog 2017 specification.
+  }];
+}
+
 def BindOp : SVOp<"bind", []> {
   let summary = "indirect instantiation statement";
   let description = [{
