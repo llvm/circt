@@ -19,10 +19,13 @@ mlir::ParseResult parseIntegerAttr(mlir::IntegerAttr &value,
                                    mlir::StringRef attrName,
                                    mlir::OpAsmParser &parser,
                                    mlir::OperationState &result);
-mlir::DictionaryAttr getDictionaryAttr(mlir::Builder &builder,
+mlir::DictionaryAttr getDictionaryAttr(mlir::MLIRContext *context,
                                        mlir::StringRef name,
                                        mlir::Attribute attr);
 
+mlir::DictionaryAttr getDictionaryAttr(mlir::Builder &builder,
+                                       mlir::StringRef name,
+                                       mlir::Attribute attr);
 mlir::DictionaryAttr getDictionaryAttr(mlir::RewriterBase &builder,
                                        mlir::StringRef name,
                                        mlir::Attribute attr);

@@ -58,6 +58,12 @@ DictionaryAttr getDictionaryAttr(mlir::Builder &builder, StringRef name,
                              builder.getNamedAttr(name, attr));
 }
 
+DictionaryAttr getDictionaryAttr(mlir::MLIRContext *context, StringRef name,
+                                 Attribute attr) {
+  Builder builder(context);
+  return DictionaryAttr::get(context, builder.getNamedAttr(name, attr));
+}
+
 DictionaryAttr getDictionaryAttr(mlir::RewriterBase &rewriter, StringRef name,
                                  Attribute attr) {
   return DictionaryAttr::get(rewriter.getContext(),
