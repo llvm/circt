@@ -1741,6 +1741,12 @@ private:
   LogicalResult visitSV(AssumeOp op);
   LogicalResult visitSV(CoverOp op);
   LogicalResult visitSV(BindOp op);
+  LogicalResult emitConcurrentAssertion(Operation *op, Twine name,
+                                        StringRef label, EventControl event,
+                                        Value clock, Value property);
+  LogicalResult visitSV(AssertConcurrentOp op);
+  LogicalResult visitSV(AssumeConcurrentOp op);
+  LogicalResult visitSV(CoverConcurrentOp op);
   LogicalResult visitSV(InterfaceOp op);
   LogicalResult visitSV(InterfaceSignalOp op);
   LogicalResult visitSV(InterfaceModportOp op);
@@ -2068,6 +2074,39 @@ LogicalResult StmtEmitter::visitSV(AssumeOp op) {
 
 LogicalResult StmtEmitter::visitSV(CoverOp op) {
   return emitImmediateAssertion(op, "cover", op.label(), op.expression());
+}
+
+LogicalResult StmtEmitter::emitConcurrentAssertion(Operation *op, Twine name,
+                                                   StringRef label,
+                                                   EventControl event,
+                                                   Value clock,
+                                                   Value property) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+  if (!label.empty())
+    os << label << ": ";
+  os << name << " property (@(" << stringifyEventControl(event) << " ";
+  emitExpression(clock, ops);
+  os << ") ";
+  emitExpression(property, ops);
+  os << ");";
+  emitLocationInfoAndNewLine(ops);
+  return success();
+}
+
+LogicalResult StmtEmitter::visitSV(AssertConcurrentOp op) {
+  return emitConcurrentAssertion(op, "assert", op.label(), op.event(),
+                                 op.clock(), op.property());
+}
+
+LogicalResult StmtEmitter::visitSV(AssumeConcurrentOp op) {
+  return emitConcurrentAssertion(op, "assume", op.label(), op.event(),
+                                 op.clock(), op.property());
+}
+
+LogicalResult StmtEmitter::visitSV(CoverConcurrentOp op) {
+  return emitConcurrentAssertion(op, "cover", op.label(), op.event(),
+                                 op.clock(), op.property());
 }
 
 LogicalResult StmtEmitter::emitIfDef(Operation *op, StringRef cond) {
@@ -2979,9 +3018,7 @@ static Value lowerVariadicCommutativeOp(Operation &op, OperandRange operands) {
   }
 
   OperationState state(op.getLoc(), op.getName());
-  // state.addOperands(ValueRange{lhs, rhs});
-  state.addOperands(lhs);
-  state.addOperands(rhs);
+  state.addOperands(ValueRange{lhs, rhs});
   state.addTypes(op.getResult(0).getType());
   auto *newOp = Operation::create(state);
   op.getBlock()->getOperations().insert(Block::iterator(&op), newOp);
