@@ -227,6 +227,13 @@ struct CircuitLoweringState {
 
   CircuitOp circuitOp;
 
+  // Safely add a BindOp to global mutable state.  This will acquire a lock to
+  // do this safely.
+  void addBind(sv::BindOp op) {
+    std::lock_guard<std::mutex> lock(bindsMutex);
+    binds.push_back(op);
+  }
+
 private:
   friend struct FIRRTLModuleLowering;
   CircuitLoweringState(const CircuitLoweringState &) = delete;
@@ -239,6 +246,13 @@ private:
   StringSet<> alreadyPrinted;
   const bool enableAnnotationWarning;
   std::mutex annotationPrintingMtx;
+
+  // Records any sv::BindOps that are found during the course of execution.
+  // This is unsafe to access directly and should only be used through addBind.
+  SmallVector<sv::BindOp> binds;
+
+  // Control access to binds.
+  std::mutex bindsMutex;
 };
 
 void CircuitLoweringState::warnOnRemainingAnnotations(
@@ -365,6 +379,11 @@ void FIRRTLModuleLowering::runOnOperation() {
   } else {
     for (auto module : modulesToProcess)
       lowerModuleBody(module, state);
+  }
+
+  // Move binds from inside modules to outside modules.
+  for (auto bind : state.binds) {
+    bind->moveBefore(bind->getParentOfType<hw::HWModuleOp>());
   }
 
   // Finally delete all the old modules.
@@ -1996,12 +2015,12 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   FlatSymbolRefAttr symbolAttr = builder.getSymbolRefAttr(newModule);
 
   // If this instance is destined to be lowered to a bind, generate a symbol for
-  // it and generate a bind op.
+  // it and generate a bind op.  Enter the bind into global CircuitLoweringState
+  // so that this can be moved outside of module once we're guaranteed to not be
+  // a parallel context.
   StringAttr symbol({});
   if (oldInstance->getAttrOfType<BoolAttr>("lowerToBind").getValue()) {
     symbol = builder.getStringAttr("__" + oldInstance.name() + "__");
-    mlir::OpBuilder::InsertionGuard guard(builder);
-    builder.setInsertionPoint(oldInstance->getParentOp());
     auto bindOp =
         builder.create<sv::BindOp>(builder.getSymbolRefAttr(symbol.getValue()));
     bindOp->setAttr("output_file",
@@ -2011,6 +2030,9 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
                         /*exclude_from_filelist=*/builder.getBoolAttr(true),
                         /*exclude_replicated_ops=*/builder.getBoolAttr(true),
                         bindOp.getContext()));
+    // Add the bind to the circuit state.  This will be moved outside of the
+    // encapsulating module after all modules have been processed in parallel.
+    circuitState.addBind(bindOp);
   }
 
   // Create the new hw.instance operation.
