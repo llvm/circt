@@ -497,7 +497,7 @@ def AssertOp : SVOp<"assert", [ProceduralOp]> {
     Assert that a specific condition is always true.
   }];
 
-  let arguments = (ins AnyType:$predicate, StrAttr:$label);
+  let arguments = (ins I1:$predicate, StrAttr:$label);
   let results = (outs);
   let assemblyFormat =
     "custom<OmitEmptyStringAttr>($label) attr-dict $predicate `:` type($predicate)";
@@ -509,7 +509,7 @@ def AssumeOp : SVOp<"assume", [ProceduralOp]> {
     Assume that a specific property is always true.
   }];
 
-  let arguments = (ins AnyType:$property, StrAttr:$label);
+  let arguments = (ins I1:$property, StrAttr:$label);
   let results = (outs);
   let assemblyFormat =
     "custom<OmitEmptyStringAttr>($label) attr-dict $property `:` type($property)";
@@ -521,7 +521,7 @@ def CoverOp : SVOp<"cover", [ProceduralOp]> {
     Assert that a specific property happens during the course of execution.
   }];
 
-  let arguments = (ins AnyType:$property, StrAttr:$label);
+  let arguments = (ins I1:$property, StrAttr:$label);
   let results = (outs);
   let assemblyFormat =
     "custom<OmitEmptyStringAttr>($label) attr-dict $property `:` type($property)";
