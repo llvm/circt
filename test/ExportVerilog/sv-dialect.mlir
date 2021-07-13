@@ -178,6 +178,11 @@ hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
   // CHECK-NEXT: assume_1: assume property (@(posedge clock) cond);
   sv.assume.concurrent "assume_1" posedge %clock %cond : i1
 
+  // CHECK-NEXT: cover property (@(posedge clock) cond);
+  sv.cover.concurrent posedge %clock %cond : i1
+  // CHECK-NEXT: cover_1: cover property (@(posedge clock) cond);
+  sv.cover.concurrent "cover_1" posedge %clock %cond : i1
+
   // CHECK-NEXT: initial
   // CHECK-NOT: begin
   sv.initial {

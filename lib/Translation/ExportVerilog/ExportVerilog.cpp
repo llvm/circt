@@ -1725,6 +1725,7 @@ private:
   LogicalResult visitSV(CoverOp op);
   LogicalResult visitSV(AssertConcurrentOp op);
   LogicalResult visitSV(AssumeConcurrentOp op);
+  LogicalResult visitSV(CoverConcurrentOp op);
   LogicalResult visitSV(InterfaceOp op);
   LogicalResult visitSV(InterfaceSignalOp op);
   LogicalResult visitSV(InterfaceModportOp op);
@@ -2076,6 +2077,21 @@ LogicalResult StmtEmitter::visitSV(AssumeConcurrentOp op) {
   if (!label.empty())
     os << op.label() << ": ";
   os << "assume property (@(" << stringifyEventControl(op.event()) << " ";
+  emitExpression(op.clock(), ops);
+  os << ") ";
+  emitExpression(op.property(), ops);
+  os << ");";
+  emitLocationInfoAndNewLine(ops);
+  return success();
+}
+
+LogicalResult StmtEmitter::visitSV(CoverConcurrentOp op) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+  auto label = op.label();
+  if (!label.empty())
+    os << op.label() << ": ";
+  os << "cover property (@(" << stringifyEventControl(op.event()) << " ";
   emitExpression(op.clock(), ops);
   os << ") ";
   emitExpression(op.property(), ops);

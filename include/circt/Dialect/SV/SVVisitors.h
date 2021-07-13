@@ -44,6 +44,7 @@ public:
             ReadInterfaceSignalOp,
             // Verification statements.
             AssertOp, AssumeOp, CoverOp, AssertConcurrentOp, AssumeConcurrentOp,
+            CoverConcurrentOp,
             // Bind Statements
             BindOp>([&](auto expr) -> ResultType {
           return thisCast->visitSV(expr, args...);
@@ -119,6 +120,7 @@ public:
   HANDLE(CoverOp, Unhandled);
   HANDLE(AssertConcurrentOp, Unhandled);
   HANDLE(AssumeConcurrentOp, Unhandled);
+  HANDLE(CoverConcurrentOp, Unhandled);
 
   // Bind statements.
   HANDLE(BindOp, Unhandled);

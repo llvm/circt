@@ -557,6 +557,15 @@ def AssumeConcurrentOp : ConcurrentAssertionOp<"assume.concurrent"> {
   }];
 }
 
+def CoverConcurrentOp : ConcurrentAssertionOp<"cover.concurrent"> {
+  let summary = "concurrent cover statement, i.e., cover property";
+  let description = [{
+    Specify that a specific property should be monitored for coverage, i.e., a
+    simulation will watch if it occurrs and how many times it occurs.  See
+    section 16.5 of the SystemVerilog 2017 specification.
+  }];
+}
+
 def BindOp : SVOp<"bind", []> {
   let summary = "indirect instantiation statement";
   let description = [{
