@@ -1723,6 +1723,9 @@ private:
   LogicalResult visitSV(AssertOp op);
   LogicalResult visitSV(AssumeOp op);
   LogicalResult visitSV(CoverOp op);
+  LogicalResult emitConcurrentAssertion(Operation *op, Twine name,
+                                        StringRef label, EventControl event,
+                                        Value clock, Value property);
   LogicalResult visitSV(AssertConcurrentOp op);
   LogicalResult visitSV(AssumeConcurrentOp op);
   LogicalResult visitSV(CoverConcurrentOp op);
@@ -2055,49 +2058,34 @@ LogicalResult StmtEmitter::visitSV(CoverOp op) {
   return emitImmediateAssertion(op, "cover", op.label(), op.expression());
 }
 
-LogicalResult StmtEmitter::visitSV(AssertConcurrentOp op) {
+LogicalResult StmtEmitter::emitConcurrentAssertion(Operation *op, Twine name,
+                                                   StringRef label,
+                                                   EventControl event,
+                                                   Value clock,
+                                                   Value property) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  auto label = op.label();
   if (!label.empty())
-    os << op.label() << ": ";
-  os << "assert property (@(" << stringifyEventControl(op.event()) << " ";
-  emitExpression(op.clock(), ops);
+    os << label << ": ";
+  os << name << " property (@(" << stringifyEventControl(event) << " ";
+  emitExpression(clock, ops);
   os << ") ";
-  emitExpression(op.property(), ops);
+  emitExpression(property, ops);
   os << ");";
   emitLocationInfoAndNewLine(ops);
   return success();
+}
+
+LogicalResult StmtEmitter::visitSV(AssertConcurrentOp op) {
+  return emitConcurrentAssertion(op, "assert", op.label(), op.event(), op.clock(), op.property());
 }
 
 LogicalResult StmtEmitter::visitSV(AssumeConcurrentOp op) {
-  SmallPtrSet<Operation *, 8> ops;
-  ops.insert(op);
-  auto label = op.label();
-  if (!label.empty())
-    os << op.label() << ": ";
-  os << "assume property (@(" << stringifyEventControl(op.event()) << " ";
-  emitExpression(op.clock(), ops);
-  os << ") ";
-  emitExpression(op.property(), ops);
-  os << ");";
-  emitLocationInfoAndNewLine(ops);
-  return success();
+  return emitConcurrentAssertion(op, "assume", op.label(), op.event(), op.clock(), op.property());
 }
 
 LogicalResult StmtEmitter::visitSV(CoverConcurrentOp op) {
-  SmallPtrSet<Operation *, 8> ops;
-  ops.insert(op);
-  auto label = op.label();
-  if (!label.empty())
-    os << op.label() << ": ";
-  os << "cover property (@(" << stringifyEventControl(op.event()) << " ";
-  emitExpression(op.clock(), ops);
-  os << ") ";
-  emitExpression(op.property(), ops);
-  os << ");";
-  emitLocationInfoAndNewLine(ops);
-  return success();
+  return emitConcurrentAssertion(op, "cover", op.label(), op.event(), op.clock(), op.property());
 }
 
 LogicalResult StmtEmitter::emitIfDef(Operation *op, StringRef cond) {
