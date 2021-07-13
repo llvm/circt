@@ -77,6 +77,10 @@ Filter Filter::newFilter(size_t count, FilterNode nodes[]) {
 
 // TODO: Parsing errors.
 Filter::Filter(std::string &filter) {
+  if (filter.empty()) {
+    return;
+  }
+
   FilterNode n;
   bool stop = false;
   size_t start = 0;
@@ -158,13 +162,15 @@ Filter::Filter(std::string &filter) {
   }
 }
 
-std::vector<mlir::Operation *> filterAsVector(Filter &filter, ModuleOp &module) {
-  std::vector<mlir::Operation *> filtered;
-  std::vector<std::pair<mlir::Operation *, size_t>> opStack;
+std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, ModuleOp &module) {
+  std::vector<std::vector<mlir::Operation *>> filtered;
+  std::vector<std::pair<std::vector<mlir::Operation *>, size_t>> opStack;
 
   if (filter.nodes.empty()) {
     for (auto op : module.getBody()->getOps<hw::HWModuleOp>()) {
-      filtered.push_back(op);
+      std::vector<Operation *> vec;
+      vec.push_back(op);
+      filtered.push_back(vec);
     }
     return filtered;
   }
@@ -178,10 +184,13 @@ std::vector<mlir::Operation *> filterAsVector(Filter &filter, ModuleOp &module) 
       case FilterType::GLOB:
         match = true;
         break;
-      case FilterType::RECURSIVE_GLOB:
+      case FilterType::RECURSIVE_GLOB: {
+        std::vector<Operation *> vec;
+        vec.push_back(op);
         match = true;
-        opStack.push_back(std::make_pair(op, 0));
+        opStack.push_back(std::make_pair(vec, 0));
         break;
+      }
       case FilterType::LITERAL:
         match = node.literal == op.getNameAttr().getValue().str();
         break;
@@ -191,24 +200,28 @@ std::vector<mlir::Operation *> filterAsVector(Filter &filter, ModuleOp &module) 
     }
 
     if (match) {
-      opStack.push_back(std::make_pair(op, 1));
+      std::vector<Operation *> vec;
+      vec.push_back(op);
+      opStack.push_back(std::make_pair(vec, 1));
     }
   }
 
   while (!opStack.empty()) {
-    std::pair<Operation *, size_t> pair = opStack[opStack.size() - 1];
-    Operation *op = pair.first;
+    std::pair<std::vector<Operation *>, size_t> pair = opStack[opStack.size() - 1];
+    std::vector<Operation *> vec = pair.first;
+    Operation *op = vec[vec.size() - 1];
     size_t i = pair.second;
     opStack.pop_back();
 
     if (i >= filter.nodes.size()) {
-      filtered.push_back(op);
+      filtered.push_back(vec);
     } else {
       TypeSwitch<Operation *>(op)
         .Case<hw::HWModuleOp>([&](auto &op) {
           for (auto &child : op.getBody().getOps()) {
             hw::InstanceOp instance;
             if ((instance = dyn_cast_or_null<hw::InstanceOp>(&child))) {
+              auto copy = std::vector<Operation *>(vec);
               auto &node = filter.nodes[i];
               bool match = false;
               auto module = dyn_cast<hw::HWModuleOp>(instance.getReferencedModule());
@@ -218,10 +231,13 @@ std::vector<mlir::Operation *> filterAsVector(Filter &filter, ModuleOp &module) 
                 case FilterType::GLOB:
                   match = true;
                   break;
-                case FilterType::RECURSIVE_GLOB:
+                case FilterType::RECURSIVE_GLOB: {
+                  auto copy2 = std::vector<Operation *>(vec);
+                  copy2.push_back(module);
                   match = true;
-                  opStack.push_back(std::make_pair(module, i));
+                  opStack.push_back(std::make_pair(copy2, i));
                   break;
+                }
                 case FilterType::LITERAL:
                   match = node.literal == module.getNameAttr().getValue().str();
                   break;
@@ -231,7 +247,8 @@ std::vector<mlir::Operation *> filterAsVector(Filter &filter, ModuleOp &module) 
               }
 
               if (match) {
-                opStack.push_back(std::make_pair(module, i + 1));
+                copy.push_back(module);
+                opStack.push_back(std::make_pair(copy, i + 1));
               }
             }
           }

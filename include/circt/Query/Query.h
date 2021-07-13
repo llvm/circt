@@ -40,7 +40,7 @@ private:
   std::string literal;
 
   friend class Filter;
-  friend std::vector<mlir::Operation *> filterAsVector(Filter &filter, ModuleOp &module);
+  friend std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, ModuleOp &module);
 };
 
 class Filter {
@@ -54,11 +54,11 @@ private:
   std::vector<FilterNode> nodes;
 
   friend Filter parseFilter(std::string &filter);
-  friend std::vector<mlir::Operation *> filterAsVector(Filter &filter, ModuleOp &module);
+  friend std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, ModuleOp &module);
 };
 
 // TODO: filterAsIterator()
-std::vector<mlir::Operation *> filterAsVector(Filter &filter, ModuleOp &module);
+std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, ModuleOp &module);
 
 } /* namespace query */
 } /* namespace circt */

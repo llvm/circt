@@ -276,14 +276,18 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   auto mod = module.release();
   auto vec = query::filterAsVector(filter, mod);
 
-  for (auto *op : vec) {
-    llvm::TypeSwitch<mlir::Operation *>(op)
-      .Case<hw::HWModuleOp>([&](auto &op) {
-        std::cout << op.getNameAttr().getValue().str() << std::endl;
-      })
-      .Default([&](auto &op) {
-        std::cout << "Unknown operator type\n";
-      });
+  for (auto v : vec) {
+    for (auto *op : v) {
+      std::cout << "::";
+      llvm::TypeSwitch<mlir::Operation *>(op)
+        .Case<hw::HWModuleOp>([&](auto &op) {
+          std::cout << op.getNameAttr().getValue().str();
+        })
+        .Default([&](auto &op) {
+          std::cout << "???";
+        });
+    }
+    std::cout << std::endl;
   }
 
   return success();
