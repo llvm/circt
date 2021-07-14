@@ -501,8 +501,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
     std::string define = "`define ";
     if (!defineFalse) {
       assert(defineTrue && "didn't define anything");
-      b.create<sv::IfDefOp>(
-          guard, [&]() { emitString(define + defineTrue); });
+      b.create<sv::IfDefOp>(guard, [&]() { emitString(define + defineTrue); });
     } else {
       b.create<sv::IfDefOp>(
           guard,

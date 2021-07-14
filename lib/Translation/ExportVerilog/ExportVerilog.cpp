@@ -3418,19 +3418,18 @@ void RootEmitterBase::gatherFiles(bool separateModules) {
           else
             rootFile.ops.push_back(info);
         })
-        .Case<VerbatimOp, IfDefOp, TypeScopeOp, HWModuleExternOp>(
-            [&](auto &) {
-              // Emit into a separate file using the specified file name or
-              // replicate the operation in each outputfile.
-              if (attr) {
-                if (!hasFileName) {
-                  op.emitError("file name unspecified");
-                  encounteredError = true;
-                } else
-                  separateFile(&op);
-              } else
-                replicatedOps.push_back(&op);
-            })
+        .Case<VerbatimOp, IfDefOp, TypeScopeOp, HWModuleExternOp>([&](auto &) {
+          // Emit into a separate file using the specified file name or
+          // replicate the operation in each outputfile.
+          if (attr) {
+            if (!hasFileName) {
+              op.emitError("file name unspecified");
+              encounteredError = true;
+            } else
+              separateFile(&op);
+          } else
+            replicatedOps.push_back(&op);
+        })
         .Case<HWGeneratorSchemaOp>([&](auto &) {
           // Empty.
         })
