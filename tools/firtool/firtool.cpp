@@ -255,8 +255,6 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (lowerToHW || outputFormat == OutputVerilog ||
       outputFormat == OutputSplitVerilog) {
-    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-        firrtl::createCheckWidthsPass());
     pm.addPass(createLowerFIRRTLToHWPass(enableAnnotationWarning.getValue()));
     pm.addPass(sv::createHWMemSimImplPass());
 
