@@ -347,7 +347,8 @@ int32_t FIRRTLType::getBitWidthOrSentinel() {
 bool FIRRTLType::isResetType() {
   return TypeSwitch<FIRRTLType, bool>(*this)
       .Case<ResetType, AsyncResetType>([](Type) { return true; })
-      .Case<UIntType>([](UIntType a) { return !a.hasWidth() || a.getWidth() == 1; })
+      .Case<UIntType>(
+          [](UIntType a) { return !a.hasWidth() || a.getWidth() == 1; })
       .Default([](Type) { return false; });
 }
 
@@ -364,7 +365,7 @@ unsigned FIRRTLType::getMaxFieldID() {
 }
 
 std::pair<unsigned, bool> FIRRTLType::rootChildFieldID(unsigned fieldID,
-                                                    unsigned index) {
+                                                       unsigned index) {
   return TypeSwitch<FIRRTLType, std::pair<unsigned, bool>>(*this)
       .Case<AnalogType, ClockType, ResetType, AsyncResetType, SIntType,
             UIntType>([&](Type) { return std::make_pair(0, fieldID == 0); })
@@ -372,7 +373,7 @@ std::pair<unsigned, bool> FIRRTLType::rootChildFieldID(unsigned fieldID,
           [&](auto type) { return type.rootChildFieldID(fieldID, index); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
-        return std::make_pair(0,false);
+        return std::make_pair(0, false);
       });
 }
 
@@ -724,10 +725,13 @@ unsigned BundleType::getIndexForFieldID(unsigned fieldID) {
 
 unsigned BundleType::getMaxFieldID() { return getImpl()->maxFieldID; }
 
-std::pair<unsigned,bool> BundleType::rootChildFieldID(unsigned fieldID, unsigned index) {
+std::pair<unsigned, bool> BundleType::rootChildFieldID(unsigned fieldID,
+                                                       unsigned index) {
   auto childRoot = getFieldID(index);
-  auto rangeEnd = index + 1 >= getNumElements() ? getMaxFieldID() : (getFieldID(index+1) - 1);
-  return std::make_pair(fieldID - childRoot, fieldID >= childRoot && fieldID <= rangeEnd);
+  auto rangeEnd = index + 1 >= getNumElements() ? getMaxFieldID()
+                                                : (getFieldID(index + 1) - 1);
+  return std::make_pair(fieldID - childRoot,
+                        fieldID >= childRoot && fieldID <= rangeEnd);
 }
 
 //===----------------------------------------------------------------------===//
@@ -815,10 +819,10 @@ unsigned FVectorType::getMaxFieldID() {
 }
 
 std::pair<unsigned, bool> FVectorType::rootChildFieldID(unsigned fieldID,
-                                                    unsigned index) {
+                                                        unsigned index) {
   auto childRoot = getFieldID(index);
-  auto rangeEnd = index >= getNumElements() ? getMaxFieldID()
-                                                : (getFieldID(index + 1) - 1);
+  auto rangeEnd =
+      index >= getNumElements() ? getMaxFieldID() : (getFieldID(index + 1) - 1);
   return std::make_pair(fieldID - childRoot,
                         fieldID >= childRoot && fieldID <= rangeEnd);
 }
