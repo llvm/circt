@@ -232,3 +232,72 @@ hw.module @compareConcatEliminationFalseCases(%arg0 : i4, %arg1: i9, %arg2: i7) 
   %o = comb.or %2, %3, %4, %5, %6 : i1
   hw.output %o : i1
 }
+
+// Validates that extract(cat(a, b, c)) -> cat(b, c) when it aligns with the exact elements, or simply
+// a when it is a single full element.
+// CHECK-LABEL: hw.module @extractCatAlignWithExactElements
+hw.module @extractCatAlignWithExactElements(%arg0: i8, %arg1: i9, %arg2: i10) -> (%o1 : i17, %o2: i19, %o3: i9, %o4: i10) {
+  %0 = comb.concat %arg0, %arg1, %arg2 : (i8, i9, i10) -> i27
+
+  // CHECK-NEXT:    [[R0:%.+]] = comb.concat %arg0, %arg1
+  %1 = comb.extract %0 from 10 : (i27) -> i17
+
+  // CHECK-NEXT:    [[R1:%.+]] = comb.concat %arg1, %arg2
+  %2 = comb.extract %0 from 0 : (i27) -> i19
+  %3 = comb.extract %0 from 10 : (i27) -> i9
+  %4 = comb.extract %0 from 0 : (i27) -> i10
+
+  // CHECK-NEXT:    hw.output [[R0]], [[R1]], %arg1, %arg2
+  hw.output %1, %2, %3, %4 : i17, i19, i9, i10
+}
+
+// Validates that extract(cat(a, b, c)) -> cat(extract(b)) when it matches only on a single
+// partial element
+// CHECK-LABEL: hw.module @extractCatOnSinglePartialElement
+hw.module @extractCatOnSinglePartialElement(%arg0: i8, %arg1: i9, %arg2: i10) -> (%o1 : i1, %o2: i1, %o3: i1, %o4: i1) {
+  %0 = comb.concat %arg0, %arg1, %arg2 : (i8, i9, i10) -> i27
+
+  // From the first bit position
+  // CHECK-NEXT:    [[R0:%.+]] = comb.extract %arg2 from 0 : (i10) -> i1
+  %1 = comb.extract %0 from 0 : (i27) -> i1
+
+  // From the last bit position
+  // CHECK-NEXT:    [[R1:%.+]] = comb.extract %arg2 from 9 : (i10) -> i1
+  %2 = comb.extract %0 from 9 : (i27) -> i1
+
+  // From some middling position
+  // CHECK-NEXT:    [[R2:%.+]] = comb.extract %arg2 from 5 : (i10) -> i1
+  %3 = comb.extract %0 from 5 : (i27) -> i1
+
+  // From the first bit position on non-first element.
+  // CHECK-NEXT:    [[R3:%.]] = comb.extract %arg1 from 0 : (i9) -> i1
+  %4 = comb.extract %0 from 10 : (i27) -> i1
+
+  // CHECK-NEXT:    hw.output [[R0]], [[R1]], [[R2]], [[R3]]
+  hw.output %1, %2, %3, %4 : i1, i1, i1, i1
+}
+
+// Validates theat extract(cat(a, b, c)) -> cat(extract(..), .., extract(..)). A few
+// things to validate here:
+// - extract is only inserted at elements that require it
+// - no zero-elements introduced
+// - the order of the elements are correct.
+// CHECK-LABEL: hw.module @extractCatOnMultiplePartialElements
+hw.module @extractCatOnMultiplePartialElements(%arg0: i8, %arg1: i9, %arg2: i10) -> (%o1 : i11, %o2 : i5) {
+  %0 = comb.concat %arg0, %arg1, %arg2 : (i8, i9, i10) -> i27
+
+  // Part of arg0, all of arg1, part of arg2
+  // CHECK-NEXT: [[FROMARG2:%.+]] = comb.extract %arg2 from 9 : (i10) -> i1
+  // CHECK-NEXT: [[FROMARG0:%.+]] = comb.extract %arg0 from 0 : (i8) -> i1
+  // CHECK-NEXT: [[RESULT1:%.+]] = comb.concat [[FROMARG0]], %arg1, [[FROMARG2]] : (i1, i9, i1) -> i11
+  %1 = comb.extract %0 from 9 : (i27) -> i11
+
+  // Part of arg1 and part of arg2
+  // CHECK-NEXT: [[FROMARG2:%.+]] = comb.extract %arg2 from 9 : (i10) -> i1
+  // CHECK-NEXT: [[FROMARG1:%.+]] = comb.extract %arg1 from 0 : (i9) -> i4
+  // CHECK-NEXT: [[RESULT2:%.+]] = comb.concat [[FROMARG1]], [[FROMARG2]] : (i4, i1) -> i5
+  %2 = comb.extract %0 from 9 : (i27) -> i5
+
+  // CHECK-NEXT: hw.output [[RESULT1:%.+]], [[RESULT2:%.+]]
+  hw.output %1, %2 : i11, i5
+}

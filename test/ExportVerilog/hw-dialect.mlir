@@ -730,3 +730,14 @@ hw.module @Chi() -> (%Chi_output : i0) {
    hw.output
  }
  hw.module.extern @Bar1360() attributes {verilogName = "RealBar"}
+
+
+// CHECK-LABEL: module TruncateAdditionOp
+hw.module @TruncateAdditionOp(%x: i8, %y: i8) -> (%z: i8) {
+  %false = hw.constant false
+  %0 = comb.concat %false, %x : (i1, i8) -> i9
+  %1 = comb.concat %false, %y : (i1, i8) -> i9
+  %2 = comb.add %0, %1 : i9
+  %3 = comb.extract %2 from 0 : (i9) -> i8
+  hw.output %3 : i8
+}

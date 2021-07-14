@@ -136,6 +136,78 @@ OpFoldResult ExtractOp::fold(ArrayRef<Attribute> constants) {
   return {};
 }
 
+static LogicalResult extractCatToCatExtract(ExtractOp op, ConcatOp innerCat,
+                                            PatternRewriter &rewriter) {
+  size_t position = 0;
+  auto reversedOperands = llvm::reverse(innerCat.inputs());
+  auto it = reversedOperands.begin();
+  size_t lowBit = op.lowBit();
+
+  for (; it != reversedOperands.end(); it++) {
+    auto operand = *it;
+
+    assert(position <= lowBit);
+
+    if (position == lowBit) {
+      // Use this element from bit 0
+      // ...... ........ ...
+      //        ^---lowBit
+      //        ^---position
+      //
+      break;
+    }
+
+    size_t operandWidth = operand.getType().getIntOrFloatBitWidth();
+    if (position + operandWidth > lowBit) {
+      // A bit other than the first bit will be used in this element.
+      // ...... ........ ...
+      //           ^---lowBit
+      //        ^---position
+      //
+      // The edge case of this operation to take care of
+      // ...... ........ ...
+      //               ^---lowBit
+      //        ^---position
+      //                 ^---(position + operandWidth)
+      break;
+    }
+
+    // This element can be discarded. Move to the next element.
+    // ...... ........  ...
+    // |      ^---lowBit
+    // ^---position
+    position += operandWidth;
+  }
+
+  SmallVector<Value> reverseConcatArgs;
+  size_t widthRemaining = op.getType().getWidth();
+  size_t extractLo = op.lowBit() - position;
+
+  for (; widthRemaining != 0 && it != reversedOperands.end(); it++) {
+    size_t operandWidth = (*it).getType().getIntOrFloatBitWidth();
+    size_t widthToConsume = std::min(widthRemaining, operandWidth - extractLo);
+
+    if (widthToConsume == operandWidth && extractLo == 0) {
+      reverseConcatArgs.push_back(*it);
+    } else {
+      auto resultType = IntegerType::get(rewriter.getContext(), widthToConsume);
+      reverseConcatArgs.push_back(
+          rewriter.create<ExtractOp>(op.getLoc(), resultType, *it, extractLo));
+    }
+
+    widthRemaining -= widthToConsume;
+    extractLo = 0;
+  }
+
+  if (reverseConcatArgs.size() == 1) {
+    rewriter.replaceOp(op, reverseConcatArgs[0]);
+  } else {
+    rewriter.replaceOpWithNewOp<ConcatOp>(
+        op, SmallVector<Value>(llvm::reverse(reverseConcatArgs)));
+  }
+  return success();
+}
+
 LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
   // Narrow Mux
   // extract(mux(c,a,b)) -> mux(c,extract(a),extract(b))
@@ -157,6 +229,11 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
                                            innerExtract.input(),
                                            innerExtract.lowBit() + op.lowBit());
     return success();
+  }
+
+  // extract(lo, cat(a,b,c,d, e)) = cat(extract(lo1, b), c, extract(lo2, d))
+  if (auto innerCat = dyn_cast_or_null<ConcatOp>(op.input().getDefiningOp())) {
+    return extractCatToCatExtract(op, innerCat, rewriter);
   }
 
   return failure();
@@ -568,8 +645,9 @@ LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
   }
 
   // add(x, add(...)) -> add(x, ...) -- flatten
-  if (tryFlatteningOperands(op, rewriter))
+  if (tryFlatteningOperands(op, rewriter)) {
     return success();
+  }
 
   return failure();
 }
