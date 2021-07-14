@@ -277,8 +277,9 @@ hw.module @extractCatOnSinglePartialElement(%arg0: i8, %arg1: i9, %arg2: i10) ->
   hw.output %1, %2, %3, %4 : i1, i1, i1, i1
 }
 
-// Validates theat extract(cat(a, b, c)) -> cat(extract(..), .., extract(..)). A few
-// things to validate here:
+// Validates that extract(cat(a, b, c)) -> cat(extract(..), .., extract(..))
+// containing a mix of full elements and extract elements.
+// A few things to look out here:
 // - extract is only inserted at elements that require it
 // - no zero-elements introduced
 // - the order of the elements are correct.
