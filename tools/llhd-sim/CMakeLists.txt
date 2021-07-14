@@ -10,7 +10,7 @@ set(LIBS
         )
 
 # llhd-sim fails to link on Windows with MSVC.
-IF(NOT WIN32)
+IF(CIRCT_LLHD_SIM_ENABLED)
   add_llvm_executable(llhd-sim
     llhd-sim.cpp)
   
