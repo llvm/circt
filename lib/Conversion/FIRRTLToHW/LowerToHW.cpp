@@ -767,8 +767,9 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
     // We know it must be the destination operand due to the types, but the
     // source may not match the destination width.
     auto destTy = flipValue.getType().cast<FIRRTLType>().getPassiveType();
-    if (destTy != connectSrc.getType()) {
-      // The only type mismatch we can have is due to integer width
+    if (destTy.getBitWidthOrSentinel() !=
+        connectSrc.getType().cast<FIRRTLType>().getBitWidthOrSentinel()) {
+      // The only type mismatchs we care about is due to integer width
       // differences.
       auto destWidth = destTy.getBitWidthOrSentinel();
       assert(destWidth != -1 && "must know integer widths");
@@ -1867,9 +1868,10 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     auto portName = op.getPortName(i).getValue();
     auto portKind = op.getPortKind(i);
 
-    auto &portKindNum = portKind == MemOp::PortKind::Read    ? readCount
-                        : portKind == MemOp::PortKind::Write ? writeCount
-                                                             : readwriteCount;
+    auto &portKindNum =
+        portKind == MemOp::PortKind::Read
+            ? readCount
+            : portKind == MemOp::PortKind::Write ? writeCount : readwriteCount;
 
     auto addInput = [&](SmallVectorImpl<Value> &operands, StringRef field,
                         size_t width) {

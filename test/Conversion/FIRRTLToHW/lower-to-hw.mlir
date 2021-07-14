@@ -800,4 +800,12 @@ firrtl.circuit "Simple" {
 
     firrtl.connect %count, %5 : !firrtl.uint<42>, !firrtl.uint<42>
   }
+
+  // CHECK-LABEL: issue1303
+  firrtl.module @issue1303(out %out: !firrtl.reset) {
+    %c1_ui = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.connect %out, %c1_ui : !firrtl.reset, !firrtl.uint<1>
+    // CHECK-NEXT: %true = hw.constant true
+    // CHECK-NEXT: hw.output %true
+  }
 }
