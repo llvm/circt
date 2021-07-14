@@ -27,6 +27,7 @@ def IfDefOp : SVOp<"ifdef", [SingleBlock, NoTerminator, NoRegionArguments,
 
   let description = [{
     This operation is an #ifdef block, which has a "then" and "else" region.
+    This operation is for non-procedural regions and its body is non-procedural.
   }];
 
   let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
@@ -66,11 +67,12 @@ def IfDefOp : SVOp<"ifdef", [SingleBlock, NoTerminator, NoRegionArguments,
 
 def IfDefProceduralOp
   : SVOp<"ifdef.procedural", [SingleBlock, NoTerminator, NoRegionArguments,
-                              ProceduralRegion]> {
+                              ProceduralRegion, ProceduralOp]> {
   let summary = "'ifdef MACRO' block for procedural regions";
 
   let description = [{
     This operation is an #ifdef block, which has a "then" and "else" region.
+    This operation is for procedural regions and its body is procedural.
   }];
 
   let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
@@ -349,7 +351,7 @@ def CaseZOp : SVOp<"casez", [SingleBlock, NoTerminator, NoRegionArguments,
 }
 
 //===----------------------------------------------------------------------===//
-// Other Statements
+// Assignment Related Statements
 //===----------------------------------------------------------------------===//
 
 def BPAssignOp : SVOp<"bpassign", [InOutTypeConstraint<"src", "dest">,
@@ -378,6 +380,12 @@ def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">,
   let results = (outs);
   let assemblyFormat = "$dest `,` $src  attr-dict `:` type($src)";
 }
+
+
+
+//===----------------------------------------------------------------------===//
+// Other Statements
+//===----------------------------------------------------------------------===//
 
 def ForceOp : SVOp<"force", [InOutTypeConstraint<"src", "dest">,
                                    ProceduralOp]> {
