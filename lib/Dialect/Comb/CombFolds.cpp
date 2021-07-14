@@ -1000,6 +1000,141 @@ OpFoldResult ICmpOp::fold(ArrayRef<Attribute> constants) {
   return {};
 }
 
+// Given a range of operands, computes the number of matching prefix and
+// suffix elements. This does not perform cross-element matching.
+template <typename Range>
+static size_t computeCommonPrefixLength(const Range &a, const Range &b) {
+  size_t commonPrefixLength = 0;
+  auto ia = a.begin();
+  auto ib = b.begin();
+
+  for (; ia != a.end() && ib != b.end(); ia++, ib++, commonPrefixLength++) {
+    if (*ia != *ib) {
+      break;
+    }
+  }
+
+  return commonPrefixLength;
+}
+
+static size_t getTotalWidth(const OperandRange &range) {
+  size_t totalWidth = 0;
+  for (auto operand : range) {
+    // getIntOrFloatBitWidth should never raise, since all arguments to ConcatOp
+    // are integers.
+    ssize_t width = operand.getType().getIntOrFloatBitWidth();
+    assert(width >= 0);
+    totalWidth += width;
+  }
+  return totalWidth;
+}
+
+// Reduce the strength icmp(concat(...), concat(...)) by doing a element-wise
+// comparison on common prefix and suffixes. Returns success() if a rewriting
+// happens.
+static LogicalResult matchAndRewriteCompareConcat(ICmpOp op, ConcatOp lhs,
+                                                  ConcatOp rhs,
+                                                  PatternRewriter &rewriter) {
+  // It is safe to assume that [{lhsOperands, rhsOperands}.size() > 0] and
+  // all elements have non-zero length. Both these invariants are verified
+  // by the ConcatOp verifier.
+  auto lhsOperands = lhs.getOperands();
+  auto rhsOperands = rhs.getOperands();
+  size_t numElements = std::min<size_t>(lhsOperands.size(), rhsOperands.size());
+
+  size_t commonPrefixLength =
+      computeCommonPrefixLength(lhsOperands, rhsOperands);
+  size_t commonSuffixLength = computeCommonPrefixLength(
+      llvm::reverse(lhsOperands.drop_front(commonPrefixLength)),
+      llvm::reverse(rhsOperands.drop_front(commonPrefixLength)));
+
+  auto replaceWithConstantI1 = [&](bool constant) -> LogicalResult {
+    rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, APInt(1, constant));
+    return success();
+  };
+
+  auto directOrCat = [&](const OperandRange &range) -> Value {
+    assert(range.size() > 0);
+    if (range.size() == 1) {
+      return range.front();
+    }
+
+    return rewriter.create<ConcatOp>(op.getLoc(), range);
+  };
+
+  auto replaceWith = [&](ICmpPredicate predicate, Value lhs,
+                         Value rhs) -> LogicalResult {
+    rewriter.replaceOpWithNewOp<ICmpOp>(op, predicate, lhs, rhs);
+    return success();
+  };
+
+  if (commonPrefixLength == numElements) {
+    // cat(a, b, c) == cat(a, b, c) -> 1
+    return replaceWithConstantI1(
+        applyCmpPredicateToEqualOperands(op.predicate()));
+  }
+
+  size_t commonPrefixTotalWidth =
+      getTotalWidth(lhsOperands.take_front(commonPrefixLength));
+  size_t commonSuffixTotalWidth =
+      getTotalWidth(lhsOperands.take_back(commonSuffixLength));
+  auto lhsOnly =
+      lhsOperands.drop_front(commonPrefixLength).drop_back(commonSuffixLength);
+  auto rhsOnly =
+      rhsOperands.drop_front(commonPrefixLength).drop_back(commonSuffixLength);
+
+  auto replaceWithoutReplicatingSignBit = [&]() {
+    auto newLhs = directOrCat(lhsOnly);
+    auto newRhs = directOrCat(rhsOnly);
+    return replaceWith(op.predicate(), newLhs, newRhs);
+  };
+
+  auto replaceWithReplicatingSignBit = [&]() {
+    auto firstNonEmptyValue = lhsOperands[0];
+    auto firstNonEmptyElemWidth =
+        firstNonEmptyValue.getType().getIntOrFloatBitWidth();
+    Value signBit;
+
+    // Skip creating an ExtractOp where possible.
+    if (firstNonEmptyElemWidth == 1) {
+      signBit = firstNonEmptyValue;
+    } else {
+      signBit = rewriter.create<ExtractOp>(
+          op.getLoc(), IntegerType::get(rewriter.getContext(), 1),
+          firstNonEmptyValue, firstNonEmptyElemWidth - 1);
+    }
+
+    auto newLhs = rewriter.create<ConcatOp>(op.getLoc(), signBit, lhsOnly);
+    auto newRhs = rewriter.create<ConcatOp>(op.getLoc(), signBit, rhsOnly);
+    return replaceWith(op.predicate(), newLhs, newRhs);
+  };
+
+  if (ICmpOp::isPredicateSigned(op.predicate())) {
+
+    // scmp(cat(..x, b), cat(..y, b)) == scmp(cat(..x), cat(..y))
+    if (commonPrefixTotalWidth == 0 && commonSuffixTotalWidth > 0) {
+      return replaceWithoutReplicatingSignBit();
+    }
+
+    // scmp(cat(a, ..x, b), cat(a, ..y, b)) == scmp(cat(sgn(a), ..x),
+    // cat(sgn(b), ..y)) Note that we cannot perform this optimization if
+    // [width(b) = 0 && width(a) <= 1]. since that common prefix is the sign
+    // bit. Doing the rewrite can result in an infinite loop.
+    if (commonPrefixTotalWidth > 1 || commonSuffixTotalWidth > 0) {
+      return replaceWithReplicatingSignBit();
+    }
+
+  } else {
+
+    // ucmp(cat(a, ..x, b), cat(a, ..y, b)) = ucmp(cat(..x), cat(..y))
+    if (commonPrefixTotalWidth > 0 || commonSuffixTotalWidth > 0) {
+      return replaceWithoutReplicatingSignBit();
+    }
+  }
+
+  return failure();
+}
+
 // Canonicalizes a ICmp with a single constant
 LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
   APInt lhs, rhs;
@@ -1130,6 +1265,18 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
         return success();
       }
       break;
+    }
+  }
+
+  // icmp(cat(prefix, a, b, suffix), cat(prefix, c, d, suffix)) => icmp(cat(a,
+  // b), cat(c, d)). contains special handling for sign bit in signed
+  // compressions.
+  if (auto lhs = dyn_cast_or_null<ConcatOp>(op.lhs().getDefiningOp())) {
+    if (auto rhs = dyn_cast_or_null<ConcatOp>(op.rhs().getDefiningOp())) {
+      auto rewriteResult = matchAndRewriteCompareConcat(op, lhs, rhs, rewriter);
+      if (rewriteResult.succeeded()) {
+        return success();
+      }
     }
   }
 
