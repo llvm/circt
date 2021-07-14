@@ -329,15 +329,17 @@ static StringRef getVerilogDeclWord(Operation *op) {
 /// Return the name of a value without using the name map.  This is needed when
 /// looking into an instance from a different module as happens with bind.  It
 /// may return "" when unable to determine a name.  This works in situations
-/// where names are pre-legalized durring prepare.
+/// where names are pre-legalized during prepare.
 static StringRef getNameRemotely(Value &value,
                                  ArrayRef<ModulePortInfo> modulePorts) {
   if (auto barg = value.dyn_cast<BlockArgument>()) {
     return modulePorts[barg.getArgNumber()].getName();
-  } else if (auto readinout = dyn_cast<ReadInOutOp>(value.getDefiningOp())) {
+  }
+  if (auto readinout = dyn_cast<ReadInOutOp>(value.getDefiningOp())) {
     if (auto wire = dyn_cast<WireOp>(readinout.input().getDefiningOp())) {
       return wire.name();
-    } else if (auto reg = dyn_cast<RegOp>(readinout.input().getDefiningOp())) {
+    }
+    if (auto reg = dyn_cast<RegOp>(readinout.input().getDefiningOp())) {
       return reg.name();
     }
   }
@@ -2373,7 +2375,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   StringRef prefix = "";
   if (op->hasAttr("doNotPrint")) {
     prefix = "// ";
-    indent() << "// This instance is elsewhere emitted as a bind statement\n";
+    indent() << "// This instance is elsewhere emitted as a bind statement.\n";
   }
 
   SmallPtrSet<Operation *, 8> ops;
