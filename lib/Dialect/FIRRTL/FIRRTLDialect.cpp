@@ -306,6 +306,14 @@ Operation *FIRRTLDialect::materializeConstant(OpBuilder &builder,
 
   // Integer constants.
   if (auto attrValue = value.dyn_cast<IntegerAttr>()) {
+    // Integer attributes (ui1) might still be special constant types.
+    if (attrValue.getValue().getBitWidth() == 1 &&
+        (type.isa<ClockType>() || type.isa<AsyncResetType>() ||
+         type.isa<ResetType>()))
+      return builder.create<SpecialConstantOp>(
+          loc, type,
+          builder.getBoolAttr(attrValue.getValue().isAllOnesValue()));
+
     auto intType = type.cast<IntType>();
     assert((!intType.hasWidth() || (unsigned)intType.getWidthOrSentinel() ==
                                        attrValue.getValue().getBitWidth()) &&
