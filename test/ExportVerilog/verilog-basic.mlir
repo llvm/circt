@@ -285,7 +285,7 @@ hw.module @ExternMods(%a_in: i8) {
   // CHECK:   .in  (a_in),
   // CHECK:   .out (xyz2_out)
   // CHECK: );
-  hw.instance "xyz2" @MyParameterizedExtModule(%a_in) {parameters = {CFG = #sv.verbatim<"FOO">}} : (i8) -> i1
+  hw.instance "xyz2" @MyParameterizedExtModule(%a_in) {parameters = {CFG = #sv.verbatim.parameter<"FOO">}} : (i8) -> i1
 }
 
 // CHECK-LABEL: module UseInstances

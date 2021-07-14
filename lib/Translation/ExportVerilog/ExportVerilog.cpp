@@ -16,6 +16,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/HWVisitors.h"
+#include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Support/LLVM.h"
@@ -2394,8 +2395,8 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     } else if (auto fpAttr = value.dyn_cast<FloatAttr>()) {
       // TODO: relying on float printing to be precise is not a good idea.
       os << fpAttr.getValueAsDouble();
-    } else if (auto verbatim = value.dyn_cast<VerbatimAttr>()) {
-      os << verbatim.getValue();
+    } else if (auto verbatimParam = value.dyn_cast<VerbatimParameterAttr>()) {
+      os << verbatimParam.getValue();
     } else {
       os << "<<UNKNOWN MLIRATTR: " << value << ">>";
       emitOpError(op, "unknown extmodule parameter value '")

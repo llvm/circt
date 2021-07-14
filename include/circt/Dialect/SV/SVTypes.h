@@ -20,9 +20,6 @@
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/SV/SVTypes.h.inc"
 
-#define GET_ATTRDEF_CLASSES
-#include "circt/Dialect/SV/SVAttributes.h.inc"
-
 namespace circt {
 namespace sv {
 using InOutType = circt::hw::InOutType;
