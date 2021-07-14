@@ -77,10 +77,16 @@ static void getDeclName(Value value, SmallString<64> &string) {
 }
 
 std::string circt::firrtl::getFieldName(const FieldRef &fieldRef) {
+  bool rootKnown;
+  return getFieldName(fieldRef, rootKnown);
+}
 
+std::string circt::firrtl::getFieldName(const FieldRef &fieldRef,
+                                        bool &rootKnown) {
   SmallString<64> name;
   auto value = fieldRef.getValue();
   getDeclName(value, name);
+  rootKnown = !name.empty();
 
   auto type = value.getType();
   auto localID = fieldRef.getFieldID();
@@ -89,7 +95,8 @@ std::string circt::firrtl::getFieldName(const FieldRef &fieldRef) {
       auto index = bundleType.getIndexForFieldID(localID);
       // Add the current field string, and recurse into a subfield.
       auto &element = bundleType.getElements()[index];
-      name += ".";
+      if (!name.empty())
+        name += ".";
       name += element.name.getValue();
       // Recurse in to the element type.
       type = element.type;

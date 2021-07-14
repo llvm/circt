@@ -10,6 +10,7 @@ firrtl.circuit "Foo" {
     %2 = firrtl.shl %1, 1 : (!firrtl.uint) -> !firrtl.uint
     // expected-note @+1 {{constrained width W >= 2W+4 here}}
     %3 = firrtl.mul %0, %2 : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
+    // expected-note @+1 {{constrained width W >= 2W+4 here}}
     firrtl.connect %0, %3 : !firrtl.uint, !firrtl.uint
   }
 }
@@ -36,5 +37,73 @@ firrtl.circuit "Issue1255" {
     // expected-error @+1 {{amount must be less than or equal operand width}}
     %0 = firrtl.tail %c14972_ui, 15 : (!firrtl.uint) -> !firrtl.uint
     firrtl.connect %tmp74, %0 : !firrtl.uint, !firrtl.uint
+  }
+}
+
+// -----
+firrtl.circuit "Foo" {
+  // expected-error @+1 {{uninferred width: port "a" is unconstrained}}
+  firrtl.module @Foo (in %a: !firrtl.uint) {
+  }
+}
+
+// -----
+firrtl.circuit "Foo" {
+  firrtl.module @Foo () {
+    // expected-error @+1 {{uninferred width: wire is unconstrained}}
+    %0 = firrtl.wire : !firrtl.uint
+  }
+}
+
+// -----
+firrtl.circuit "Foo" {
+  firrtl.module @Foo () {
+    // expected-error @+1 {{uninferred width: wire field "[0]" is unconstrained}}
+    %0 = firrtl.wire : !firrtl.vector<uint, 16>
+  }
+}
+
+// -----
+firrtl.circuit "Foo" {
+  firrtl.module @Foo () {
+    // expected-error @+1 {{uninferred width: wire field "a" is unconstrained}}
+    %0 = firrtl.wire : !firrtl.bundle<a: uint>
+  }
+}
+
+// -----
+firrtl.circuit "Foo" {
+  firrtl.module @Foo () {
+    // expected-error @+1 {{uninferred width: wire field "a.b.c" is unconstrained}}
+    %0 = firrtl.wire : !firrtl.bundle<a: bundle<b: bundle<c flip: uint, d: uint<1>>>>
+  }
+}
+
+// -----
+// Only first error on module ports reported.
+firrtl.circuit "Foo" {
+  // expected-error @+2 {{uninferred width: port "a" is unconstrained}}
+  // expected-error @+1 {{uninferred width: port "b" is unconstrained}}
+  firrtl.module @Foo (in %a: !firrtl.uint, in %b: !firrtl.sint) {
+  }
+}
+
+// -----
+firrtl.circuit "Foo" {
+  // expected-error @+2 {{uninferred width: port "a" is unconstrained}}
+  // expected-error @+1 {{uninferred width: port "b" width cannot be determined}}
+  firrtl.module @Foo(in %a: !firrtl.uint, out %b: !firrtl.uint) {
+    // expected-note @+1 {{width is constrained by an uninferred width here:}}
+    firrtl.connect %b, %a : !firrtl.uint, !firrtl.uint
+  }
+}
+
+// -----
+firrtl.circuit "Foo"  {
+  firrtl.module @Foo() {
+    %w0 = firrtl.wire  : !firrtl.vector<uint<3>, 10>
+    // expected-error @+1 {{uninferred width: wire "w1[0]" is unconstrained}}
+    %w1 = firrtl.wire  : !firrtl.vector<uint, 0>
+    firrtl.partialconnect %w1, %w0 : !firrtl.vector<uint, 0>, !firrtl.vector<uint<3>, 10>
   }
 }
