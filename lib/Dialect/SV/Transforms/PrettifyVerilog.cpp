@@ -44,7 +44,7 @@ private:
 /// Return true if this is something that will get printed as a unary operator
 /// by the Verilog printer.
 static bool isVerilogUnaryOperator(Operation *op) {
-  if (isa<comb::ParityOp>(op) || isa<sv::ReadInOutOp>(op))
+  if (isa<comb::ParityOp>(op))
     return true;
 
   if (auto xorOp = dyn_cast<comb::XorOp>(op))
@@ -105,7 +105,7 @@ void PrettifyVerilogPass::prettifyUnaryOperator(Operation *op) {
   //
   // This is particularly helpful when the operand of the unary op has multiple
   // uses as well.
-  if (op->use_empty())
+  if (op->use_empty() || op->hasOneUse())
     return;
 
   while (!op->hasOneUse()) {
@@ -152,6 +152,10 @@ void PrettifyVerilogPass::runOnOperation() {
     // Sink or duplicate constant ops into the same block as their use.  This
     // will allow the verilog emitter to inline constant expressions.
     if (matchPattern(op, mlir::m_Constant()))
+      return sinkOpToUses(op);
+
+    // Sink "free" operations which make Verilog prettier.
+    if (isa<sv::ReadInOutOp>(op))
       return sinkOpToUses(op);
 
     // Turn a + -cst  ==> a - cst
