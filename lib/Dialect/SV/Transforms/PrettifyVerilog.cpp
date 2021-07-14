@@ -154,6 +154,10 @@ void PrettifyVerilogPass::runOnOperation() {
     if (matchPattern(op, mlir::m_Constant()))
       return sinkOpToUses(op);
 
+    // Sink "free" operations which make Verilog prettier.
+    if (isa<sv::ReadInOutOp>(op))
+      return sinkOpToUses(op);
+
     // Turn a + -cst  ==> a - cst
     if (auto addOp = dyn_cast<comb::AddOp>(op))
       if (auto cst = addOp.getOperand(1).getDefiningOp<hw::ConstantOp>())
