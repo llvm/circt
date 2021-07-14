@@ -1,4 +1,4 @@
-//===- LowerBundleVectorTypes.cpp - Lower Aggregate Types -------*- C++ -*-===//
+//===- LowerTypes.cpp - Lower Aggregate Types -------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines the LowerBundleVectorTypes pass.  This pass replaces
-// aggregate types with expanded values.
+// This file defines the LowerTypes pass.  This pass replaces aggregate types
+// with expanded values.
 //
 // This pass walks the operations in reverse order. This lets it visit users
 // before defs. Users can usually be expanded out to multiple operations (think
