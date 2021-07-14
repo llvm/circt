@@ -279,7 +279,7 @@ The`concat(extract(..))` form is preferred over the `extract(concat(..))` form,
 because
 
 - `extract` gets "closer" to underlying `add/sub/xor/op` operations, giving way
-  narrowing optimizations like bit-narrowing.
+  optimizations like narrowing.
 - the form gives a more accurate view of the values that are being depended on.
 - redundant extract operations can be removed from the concat args lists, eg:
   `cat(extract(a), b, c, extract(d))`

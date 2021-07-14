@@ -138,18 +138,32 @@ OpFoldResult ExtractOp::fold(ArrayRef<Attribute> constants) {
 
 static LogicalResult extractCatToCatExtract(ExtractOp op, ConcatOp innerCat,
                                             PatternRewriter &rewriter) {
-  size_t position = 0;
-  auto reversedOperands = llvm::reverse(innerCat.inputs());
-  auto it = reversedOperands.begin();
+  auto reversedConcatArgs = llvm::reverse(innerCat.inputs());
+  size_t initialPosition = 0;
+  auto it = reversedConcatArgs.begin();
   size_t lowBit = op.lowBit();
 
-  for (; it != reversedOperands.end(); it++) {
+  // This loop finds the first concatArg that is covered by the ExtractOp.
+  for (; it != reversedConcatArgs.end(); it++) {
+    assert(
+        initialPosition <= lowBit &&
+        "incorrectly moved past an element that lowBit has coverage over");
     auto operand = *it;
 
-    assert(position <= lowBit);
-
-    if (position == lowBit) {
-      // Use this element from bit 0
+    size_t operandWidth = operand.getType().getIntOrFloatBitWidth();
+    if (lowBit < initialPosition + operandWidth) {
+      // A bit other than the first bit will be used in this element.
+      // ...... ........ ...
+      //           ^---lowBit
+      //        ^---initialPosition
+      //
+      // Edge-case close to the end of the range.
+      // ...... ........ ...
+      //                 ^---(position + operandWidth)
+      //               ^---lowBit
+      //        ^---initialPosition
+      //
+      // Edge-case close to the beginning of the rang
       // ...... ........ ...
       //        ^---lowBit
       //        ^---position
@@ -157,38 +171,29 @@ static LogicalResult extractCatToCatExtract(ExtractOp op, ConcatOp innerCat,
       break;
     }
 
-    size_t operandWidth = operand.getType().getIntOrFloatBitWidth();
-    if (position + operandWidth > lowBit) {
-      // A bit other than the first bit will be used in this element.
-      // ...... ........ ...
-      //           ^---lowBit
-      //        ^---position
-      //
-      // The edge case of this operation to take care of
-      // ...... ........ ...
-      //               ^---lowBit
-      //        ^---position
-      //                 ^---(position + operandWidth)
-      break;
-    }
-
-    // This element can be discarded. Move to the next element.
+    // extraction discards this element.
     // ...... ........  ...
     // |      ^---lowBit
-    // ^---position
-    position += operandWidth;
+    // ^---initialPosition
+    initialPosition += operandWidth;
   }
+  assert(
+      it != reversedConcatArgs.end()
+      && "incorrectly failed to find an element which contains coverage of lowBit");
 
   SmallVector<Value> reverseConcatArgs;
   size_t widthRemaining = op.getType().getWidth();
-  size_t extractLo = op.lowBit() - position;
+  size_t extractLo = lowBit - initialPosition;
 
-  for (; widthRemaining != 0 && it != reversedOperands.end(); it++) {
-    size_t operandWidth = (*it).getType().getIntOrFloatBitWidth();
+  // Transform individual arguments of innerCat(..., a, b, c,) into
+  // [ extract(a), b, extract(c) ], skipping an extract operation where possible.
+  for (; widthRemaining != 0 && it != reversedConcatArgs.end(); it++) {
+    auto concatArg = *it;
+    size_t operandWidth = concatArg.getType().getIntOrFloatBitWidth();
     size_t widthToConsume = std::min(widthRemaining, operandWidth - extractLo);
 
     if (widthToConsume == operandWidth && extractLo == 0) {
-      reverseConcatArgs.push_back(*it);
+      reverseConcatArgs.push_back(concatArg);
     } else {
       auto resultType = IntegerType::get(rewriter.getContext(), widthToConsume);
       reverseConcatArgs.push_back(
@@ -196,6 +201,8 @@ static LogicalResult extractCatToCatExtract(ExtractOp op, ConcatOp innerCat,
     }
 
     widthRemaining -= widthToConsume;
+
+    // Beyond the first element, all elements are extracted from position 0.
     extractLo = 0;
   }
 
@@ -231,7 +238,7 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
     return success();
   }
 
-  // extract(lo, cat(a,b,c,d, e)) = cat(extract(lo1, b), c, extract(lo2, d))
+  // extract(lo, cat(a, b, c, d, e)) = cat(extract(lo1, b), c, extract(lo2, d))
   if (auto innerCat = dyn_cast_or_null<ConcatOp>(op.input().getDefiningOp())) {
     return extractCatToCatExtract(op, innerCat, rewriter);
   }
@@ -645,9 +652,8 @@ LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
   }
 
   // add(x, add(...)) -> add(x, ...) -- flatten
-  if (tryFlatteningOperands(op, rewriter)) {
+  if (tryFlatteningOperands(op, rewriter))
     return success();
-  }
 
   return failure();
 }
