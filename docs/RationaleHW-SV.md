@@ -60,7 +60,7 @@ TODO: Spotlight on module.  Allows arbitrary types for ports.
 TODO: Why is add variadic?  Why consistent operand types instead of allowing
 implicit extensions?
 
-** No "Replication", "ZExt", or "Complement" Operators **
+**No "Replication", "ZExt", or "Complement" Operators**
 
 We choose to omit several operators that you might expect, in order to make the
 IR more regular, easy to transform, and have fewer canonical forms.
@@ -81,7 +81,7 @@ IR more regular, easy to transform, and have fewer canonical forms.
 The absence of these operations doesn't affect the expressive ability of the IR,
 and ExportVerilog will notice these and generate the compact Verilog syntax.
 
-** Zero Bit Integers **
+**Zero Bit Integers**
 
 Combinatorial operations like add and multiply work on values of signless
 standard integer types, e.g. `i42`, but they do not allow zero bit inputs.  This
