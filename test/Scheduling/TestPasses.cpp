@@ -12,6 +12,7 @@
 
 #include "circt/Scheduling/Algorithms.h"
 
+#include "mlir/IR/Builders.h"
 #include "mlir/Pass/Pass.h"
 
 using namespace mlir;
@@ -105,7 +106,7 @@ void TestProblemPass::runOnFunction() {
 
   // get schedule from the test case
   for (auto *op : prob.getOperations())
-    if (auto startTimeAttr = op->getAttrOfType<IntegerAttr>("startTime"))
+    if (auto startTimeAttr = op->getAttrOfType<IntegerAttr>("problemStartTime"))
       prob.setStartTime(op, startTimeAttr.getInt());
 
   if (failed(prob.verify())) {
@@ -149,9 +150,10 @@ void TestASAPSchedulerPass::runOnFunction() {
     return signalPassFailure();
   }
 
+  OpBuilder builder(func.getContext());
   for (auto *op : prob.getOperations()) {
     unsigned startTime = *prob.getStartTime(op);
-    op->emitRemark("start time = " + std::to_string(startTime));
+    op->setAttr("asapStartTime", builder.getI32IntegerAttr(startTime));
   }
 }
 
