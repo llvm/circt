@@ -145,9 +145,8 @@ static LogicalResult extractCatToCatExtract(ExtractOp op, ConcatOp innerCat,
 
   // This loop finds the first concatArg that is covered by the ExtractOp.
   for (; it != reversedConcatArgs.end(); it++) {
-    assert(
-        initialPosition <= lowBit &&
-        "incorrectly moved past an element that lowBit has coverage over");
+    assert(initialPosition <= lowBit &&
+           "incorrectly moved past an element that lowBit has coverage over");
     auto operand = *it;
 
     size_t operandWidth = operand.getType().getIntOrFloatBitWidth();
@@ -177,16 +176,17 @@ static LogicalResult extractCatToCatExtract(ExtractOp op, ConcatOp innerCat,
     // ^---initialPosition
     initialPosition += operandWidth;
   }
-  assert(
-      it != reversedConcatArgs.end()
-      && "incorrectly failed to find an element which contains coverage of lowBit");
+  assert(it != reversedConcatArgs.end() &&
+         "incorrectly failed to find an element which contains coverage of "
+         "lowBit");
 
   SmallVector<Value> reverseConcatArgs;
   size_t widthRemaining = op.getType().getWidth();
   size_t extractLo = lowBit - initialPosition;
 
   // Transform individual arguments of innerCat(..., a, b, c,) into
-  // [ extract(a), b, extract(c) ], skipping an extract operation where possible.
+  // [ extract(a), b, extract(c) ], skipping an extract operation where
+  // possible.
   for (; widthRemaining != 0 && it != reversedConcatArgs.end(); it++) {
     auto concatArg = *it;
     size_t operandWidth = concatArg.getType().getIntOrFloatBitWidth();
