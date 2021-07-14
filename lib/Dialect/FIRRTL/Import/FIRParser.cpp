@@ -2662,8 +2662,9 @@ ParseResult FIRStmtParser::parseInstance() {
                    });
   auto name = dontTouch ? id : filterUselessName(id);
 
-  auto result = builder.create<InstanceOp>(
-      resultTypes, moduleName, name, annotations.first, annotations.second);
+  auto result = builder.create<InstanceOp>(resultTypes, moduleName, name,
+                                           annotations.first.getValue(),
+                                           annotations.second.getValue());
 
   // Since we are implicitly unbundling the instance results, we need to keep
   // track of the mapping from bundle fields to results in the unbundledValues

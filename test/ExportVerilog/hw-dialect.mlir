@@ -225,7 +225,7 @@ hw.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2:
 // CHECK-NEXT:     .c (y)
 // CHECK-NEXT:   );
 // CHECK-NEXT:   FooModule #(
-// CHECK-NEXT:     .DEFAULT(14000240888948784983),
+// CHECK-NEXT:     .DEFAULT(-63'd4446503184760766633),
 // CHECK-NEXT:     .DEPTH(3.242000e+01),
 // CHECK-NEXT:     .FORMAT("xyz_timeout=%d\n"),
 // CHECK-NEXT:     .WIDTH(32)
@@ -710,3 +710,21 @@ hw.module @Chi() -> (%Chi_output : i0) {
   hw.output %0 : i0
   // CHECK: endmodule
 }
+
+// CHECK-LABEL: module Foo1360(
+// Issue #1360: https://github.com/llvm/circt/issues/1360
+
+ hw.module @Foo1360() {
+   // CHECK:      RealBar #(
+   // CHECK-NEXT:   .WIDTH0(0),
+   // CHECK-NEXT:   .WIDTH1(4),
+   // CHECK-NEXT:   .WIDTH2(33'd6812312123),
+   // CHECK-NEXT:   .WIDTH3(-1),
+   // CHECK-NEXT:   .WIDTH4(-58'd88888888888888888),
+   // CHECK-NEXT:   .Wtricky(32'd4294967295)
+   // CHECK-NEXT: ) bar ();
+   
+   hw.instance "bar" @Bar1360() {parameters = {WIDTH0 = 0 : i64, WIDTH1 = 4 : i4, WIDTH2 = 6812312123 : i40, WIDTH3 = -1 : i4, WIDTH4 = -88888888888888888 : i68, Wtricky = 4294967295 : i40}} : () -> ()
+   hw.output
+ }
+ hw.module.extern @Bar1360() attributes {verilogName = "RealBar"}
