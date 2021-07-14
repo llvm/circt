@@ -19,10 +19,10 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   %r25: i1, %r26: i1, %r27: i1, %r28: i1,
   %r29: i12, %r30: i2, %r31: i9, %r33: i4, %r34: i4,
   %r35: !hw.array<3xi4>, %r36: i12, %r37: i4,
-  %r38: !hw.array<6xi4>, 
+  %r38: !hw.array<6xi4>,
   %r40: !hw.struct<foo: i2, bar:i4>, %r41: !hw.struct<foo: i2, bar: i4>
   ) {
-  
+
   %0 = comb.add %a, %b : i4
   %2 = comb.sub %a, %b : i4
   %4 = comb.mul %a, %b : i4
@@ -83,7 +83,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
               %28, %29, %30, %31, %33, %34, %35, %36, %37, %38, %40, %42 :
     i4,i4, i4,i4,i4,i4,i4, i4,i4,i4,i4,i4,
     i4,i1,i1,i1,i1, i1,i1,i1,i1,i1, i1,i1,i1,i1,
-   i12, i2, i9, i4, i4, !hw.array<3xi4>, i12, i4, !hw.array<6xi4>, 
+   i12, i2, i9, i4, i4, !hw.array<3xi4>, i12, i4, !hw.array<6xi4>,
    !hw.struct<foo: i2, bar: i4>, !hw.struct<foo: i2, bar: i4>
 }
 // CHECK-LABEL: module TESTSIMPLE(
@@ -139,7 +139,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:   assign r27 = |a;
 // CHECK-NEXT:   assign r28 = ^a;
 // CHECK-NEXT:   assign r29 = {a, a, b};
-// CHECK-NEXT:   assign r30 = a[2:1]; 
+// CHECK-NEXT:   assign r30 = a[2:1];
 // CHECK-NEXT:   assign r31 = {{[{}][{}]}}5{a[3]}}, a};
 // CHECK-NEXT:   assign r33 = cond ? a : b;
 // CHECK-NEXT:   assign r34 = ~a;
@@ -210,10 +210,10 @@ hw.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2:
 // CHECK-NEXT:      input  [1:0]          i2,
 // CHECK-NEXT:   // input  /*Zero Width*/ i3,
 // CHECK-NEXT:      output                y, z, p, p2);
-// CHECK-EMPTY: 
+// CHECK-EMPTY:
 // CHECK-NEXT:   wire b1_b;
 // CHECK-NEXT:   wire a1_f;
-// CHECK-EMPTY: 
+// CHECK-EMPTY:
 // CHECK-NEXT:   AAA a1 (
 // CHECK-NEXT:     .d (w),
 // CHECK-NEXT:     .e (b1_b),
@@ -225,17 +225,17 @@ hw.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2:
 // CHECK-NEXT:     .c (y)
 // CHECK-NEXT:   );
 // CHECK-NEXT:   FooModule #(
-// CHECK-NEXT:     .DEFAULT(64'd14000240888948784983),
+// CHECK-NEXT:     .DEFAULT(-63'd4446503184760766633),
 // CHECK-NEXT:     .DEPTH(3.242000e+01),
 // CHECK-NEXT:     .FORMAT("xyz_timeout=%d\n"),
-// CHECK-NEXT:     .WIDTH(8'd32)
+// CHECK-NEXT:     .WIDTH(32)
 // CHECK-NEXT:   ) paramd (
 // CHECK-NEXT:     .a   (w),
 // CHECK-NEXT:   //.b   (i3),
 // CHECK-NEXT:     .out (p)
 // CHECK-NEXT:   );
 // CHECK-NEXT:   FooModule #(
-// CHECK-NEXT:     .DEFAULT(64'd1)
+// CHECK-NEXT:     .DEFAULT(1)
 // CHECK-NEXT:   ) paramd2 (
 // CHECK-NEXT:     .a   (i2),
 // CHECK-NEXT:     .out (p2)
@@ -477,11 +477,11 @@ hw.module @cyclic(%a: i1) -> (%b: i1) {
 hw.module @longExpressions(%a: i8, %a2: i8) -> (%b: i8) {
   // CHECK: wire [7:0] _tmp = a + a + a + a + a
   %1 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a : i8
-  // CHECK-NEXT: wire [7:0] _tmp_0 = a + a + a 
+  // CHECK-NEXT: wire [7:0] _tmp_0 = a + a + a
   %2 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a : i8
-  // CHECK-NEXT: wire [7:0] _tmp_1 = a + a + a + a + a + a + a + a 
+  // CHECK-NEXT: wire [7:0] _tmp_1 = a + a + a + a + a + a + a + a
   %3 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a : i8
-  // CHECK-NEXT: wire [7:0] _tmp_2 = a + a + a + a + a + a + a + a 
+  // CHECK-NEXT: wire [7:0] _tmp_2 = a + a + a + a + a + a + a + a
   %4 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a : i8
   // CHECK-NEXT: assign b = _tmp * _tmp_0 | _tmp_1 * _tmp_2;
   %5 = comb.mul %1, %2 : i8
@@ -545,7 +545,7 @@ hw.module @longvariadic(%a: i8) -> (%b: i8) {
     %4 = comb.icmp eq %1, %2 : i1
     hw.output %4 : i1
   }
-  
+
 // https://github.com/llvm/circt/issues/750
 // Always get array indexes on the lhs
 // CHECK-LABEL: module ArrayLHS
@@ -636,7 +636,7 @@ hw.module @ABC(%a: i1, %b: i2) -> (%c: i4) {
 }
 
 // CHECK:   wire [2:0] whatever_c;
-// CHECK-EMPTY: 
+// CHECK-EMPTY:
 // CHECK-NEXT:   // ExternDestMod whatever (
 // CHECK-NEXT:   //   .a (a),
 // CHECK-NEXT:   //   .b (b),
@@ -710,3 +710,21 @@ hw.module @Chi() -> (%Chi_output : i0) {
   hw.output %0 : i0
   // CHECK: endmodule
 }
+
+// CHECK-LABEL: module Foo1360(
+// Issue #1360: https://github.com/llvm/circt/issues/1360
+
+ hw.module @Foo1360() {
+   // CHECK:      RealBar #(
+   // CHECK-NEXT:   .WIDTH0(0),
+   // CHECK-NEXT:   .WIDTH1(4),
+   // CHECK-NEXT:   .WIDTH2(33'd6812312123),
+   // CHECK-NEXT:   .WIDTH3(-1),
+   // CHECK-NEXT:   .WIDTH4(-58'd88888888888888888),
+   // CHECK-NEXT:   .Wtricky(32'd4294967295)
+   // CHECK-NEXT: ) bar ();
+   
+   hw.instance "bar" @Bar1360() {parameters = {WIDTH0 = 0 : i64, WIDTH1 = 4 : i4, WIDTH2 = 6812312123 : i40, WIDTH3 = -1 : i4, WIDTH4 = -88888888888888888 : i68, Wtricky = 4294967295 : i40}} : () -> ()
+   hw.output
+ }
+ hw.module.extern @Bar1360() attributes {verilogName = "RealBar"}

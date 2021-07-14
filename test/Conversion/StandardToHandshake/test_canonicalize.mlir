@@ -8,7 +8,7 @@ module {
 
     // CHECK: %[[VAL_1:.*]] = "handshake.constant"(%[[VAL_0:.*]]) {value = 1 : index} : (none) -> index
     %0 = "handshake.constant"(%arg0) {value = 1 : index} : (none) -> index
-    
+
     // CHECK-NOT: %[[TMP_0:.*]] = "handshake.branch"(%[[VAL_0:.*]]) {control = true} : (none) -> none
     // CHECK-NOT: %[[TMP_1:.*]] = "handshake.branch"(%[[VAL_1:.*]]) {control = false} : (index) -> index
     %1 = "handshake.branch"(%arg0) {control = true} : (none) -> none

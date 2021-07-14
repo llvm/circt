@@ -78,8 +78,9 @@ static bool isDuplicatableNullaryExpression(Operation *op) {
     return true;
 
   // If this is a small verbatim expression, keep it inline.
-  if (auto verb = dyn_cast<VerbatimExprOp>(op)) {
-    if (verb->getNumOperands() == 0 && verb.string().size() <= 16)
+  if (isa<VerbatimExprOp, VerbatimExprSEOp>(op)) {
+    if (op->getNumOperands() == 0 &&
+        op->getAttrOfType<StringAttr>("string").getValue().size() <= 16)
       return true;
   }
 
@@ -854,7 +855,9 @@ private:
 
   SubExprInfo visitSV(GetModportOp op);
   SubExprInfo visitSV(ReadInterfaceSignalOp op);
-  SubExprInfo visitSV(VerbatimExprOp op);
+  SubExprInfo visitVerbatimExprOp(Operation *op);
+  SubExprInfo visitSV(VerbatimExprOp op) { return visitVerbatimExprOp(op); }
+  SubExprInfo visitSV(VerbatimExprSEOp op) { return visitVerbatimExprOp(op); }
   SubExprInfo visitSV(ConstantXOp op);
   SubExprInfo visitSV(ConstantZOp op);
 
@@ -1233,10 +1236,11 @@ SubExprInfo ExprEmitter::visitSV(ReadInterfaceSignalOp op) {
   return {Selection, IsUnsigned};
 }
 
-SubExprInfo ExprEmitter::visitSV(VerbatimExprOp op) {
-  emitTextWithSubstitutions(op.string(), op, [&](Value operand) {
-    emitSubExpr(operand, LowestPrecedence, OOLBinary);
-  });
+SubExprInfo ExprEmitter::visitVerbatimExprOp(Operation *op) {
+  emitTextWithSubstitutions(op->getAttrOfType<StringAttr>("string").getValue(),
+                            op, [&](Value operand) {
+                              emitSubExpr(operand, LowestPrecedence, OOLBinary);
+                            });
 
   return {Unary, IsUnsigned};
 }
@@ -1714,9 +1718,17 @@ private:
   LogicalResult visitSV(FatalOp op);
   LogicalResult visitSV(FinishOp op);
   LogicalResult visitSV(VerbatimOp op);
+  LogicalResult emitImmediateAssertion(Operation *op, Twine name,
+                                       StringRef label, Value expression);
   LogicalResult visitSV(AssertOp op);
   LogicalResult visitSV(AssumeOp op);
   LogicalResult visitSV(CoverOp op);
+  LogicalResult emitConcurrentAssertion(Operation *op, Twine name,
+                                        StringRef label, EventControl event,
+                                        Value clock, Value property);
+  LogicalResult visitSV(AssertConcurrentOp op);
+  LogicalResult visitSV(AssumeConcurrentOp op);
+  LogicalResult visitSV(CoverConcurrentOp op);
   LogicalResult visitSV(InterfaceOp op);
   LogicalResult visitSV(InterfaceSignalOp op);
   LogicalResult visitSV(InterfaceModportOp op);
@@ -2019,34 +2031,64 @@ LogicalResult StmtEmitter::visitSV(FinishOp op) {
   return success();
 }
 
-LogicalResult StmtEmitter::visitSV(AssertOp op) {
+LogicalResult StmtEmitter::emitImmediateAssertion(Operation *op, Twine name,
+                                                  StringRef label,
+                                                  Value expression) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  indent() << "assert(";
-  emitExpression(op.predicate(), ops);
+  indent();
+  if (!label.empty())
+    os << label << ": ";
+  os << name << "(";
+  emitExpression(expression, ops);
   os << ");";
   emitLocationInfoAndNewLine(ops);
   return success();
+}
+
+LogicalResult StmtEmitter::visitSV(AssertOp op) {
+  return emitImmediateAssertion(op, "assert", op.label(), op.expression());
 }
 
 LogicalResult StmtEmitter::visitSV(AssumeOp op) {
+  return emitImmediateAssertion(op, "assume", op.label(), op.expression());
+}
+
+LogicalResult StmtEmitter::visitSV(CoverOp op) {
+  return emitImmediateAssertion(op, "cover", op.label(), op.expression());
+}
+
+LogicalResult StmtEmitter::emitConcurrentAssertion(Operation *op, Twine name,
+                                                   StringRef label,
+                                                   EventControl event,
+                                                   Value clock,
+                                                   Value property) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  indent() << "assume(";
-  emitExpression(op.property(), ops);
+  if (!label.empty())
+    os << label << ": ";
+  os << name << " property (@(" << stringifyEventControl(event) << " ";
+  emitExpression(clock, ops);
+  os << ") ";
+  emitExpression(property, ops);
   os << ");";
   emitLocationInfoAndNewLine(ops);
   return success();
 }
 
-LogicalResult StmtEmitter::visitSV(CoverOp op) {
-  SmallPtrSet<Operation *, 8> ops;
-  ops.insert(op);
-  indent() << "cover(";
-  emitExpression(op.property(), ops);
-  os << ");";
-  emitLocationInfoAndNewLine(ops);
-  return success();
+LogicalResult StmtEmitter::visitSV(AssertConcurrentOp op) {
+  return emitConcurrentAssertion(op, "assert", op.label(), op.event(),
+                                 op.clock(), op.property());
+}
+
+LogicalResult StmtEmitter::visitSV(AssumeConcurrentOp op) {
+  return emitConcurrentAssertion(op, "assume", op.label(), op.event(),
+                                 op.clock(), op.property());
+}
+
+LogicalResult StmtEmitter::visitSV(CoverConcurrentOp op) {
+  return emitConcurrentAssertion(op, "cover", op.label(), op.event(),
+                                 op.clock(), op.property());
 }
 
 LogicalResult StmtEmitter::emitIfDef(Operation *op, StringRef cond) {
@@ -2328,10 +2370,23 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   // Helper that prints a parameter constant value in a Verilog compatible way.
   auto printParmValue = [&](Identifier paramName, Attribute value) {
     if (auto intAttr = value.dyn_cast<IntegerAttr>()) {
-      IntegerType intTy = intAttr.getType().cast<IntegerType>();
-      SmallString<20> numToPrint;
-      intAttr.getValue().toString(numToPrint, 10, intTy.isSigned());
-      os << intTy.getWidth() << "'d" << numToPrint;
+      // Sign comes out before any width specifier.
+      APInt value = intAttr.getValue();
+      unsigned signBitWidth = 0;
+      if (value.isNegative()) {
+        os << '-';
+        value = -value;
+        signBitWidth = 1;
+      }
+
+      // The signedness and width of the integer attribute type is arbitrary,
+      // we just look at the active bits of the parameter.  We omit the width
+      // specifier if the value is <= 32-bits in size, which makes this more
+      // compatible with unknown width extmodules.
+      if (value.getActiveBits() >= 32)
+        os << (value.getActiveBits() + signBitWidth) << "'d";
+
+      os << value;
     } else if (auto strAttr = value.dyn_cast<StringAttr>()) {
       os << '"';
       os.write_escaped(strAttr.getValue());
@@ -2442,8 +2497,8 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     if (!elt.isOutput()) {
       emitExpression(portVal, ops);
     } else if (portVal.hasOneUse() &&
-             (output = dyn_cast_or_null<OutputOp>(
-                  portVal.getUses().begin()->getOwner()))) {
+               (output = dyn_cast_or_null<OutputOp>(
+                    portVal.getUses().begin()->getOwner()))) {
       auto module = output->getParentOfType<HWModuleOp>();
       auto name = getModuleResultNameAttr(
           module, portVal.getUses().begin()->getOperandNumber());
@@ -2637,7 +2692,13 @@ void ModuleEmitter::emitHWGeneratedModule(HWModuleGeneratedOp module) {
   os << "// external generated module " << verilogName.getValue() << "\n\n";
 }
 
-void ModuleEmitter::emitBind(BindOp bind) { os << "// bind\n\n"; }
+void ModuleEmitter::emitBind(BindOp bind) {
+  auto instance = bind.getReferencedInstance();
+  auto instantiator = instance->getParentOfType<hw::HWModuleOp>().getName();
+  auto instanceName = instance.instanceName();
+  os << "bind " << instantiator << " " << instanceName << " " << instanceName
+     << " (.*);\n\n";
+}
 
 // Check if the value is from read of a wire or reg or is a port.
 static bool isSimpleReadOrPort(Value v) {
@@ -2844,9 +2905,7 @@ static Value lowerVariadicCommutativeOp(Operation &op, OperandRange operands) {
   }
 
   OperationState state(op.getLoc(), op.getName());
-  // state.addOperands(ValueRange{lhs, rhs});
-  state.addOperands(lhs);
-  state.addOperands(rhs);
+  state.addOperands(ValueRange{lhs, rhs});
   state.addTypes(op.getResult(0).getType());
   auto *newOp = Operation::create(state);
   op.getBlock()->getOperations().insert(Block::iterator(&op), newOp);

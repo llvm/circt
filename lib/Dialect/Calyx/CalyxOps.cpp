@@ -11,19 +11,52 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Calyx/CalyxOps.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace circt::calyx;
 using namespace mlir;
+
+LogicalResult calyx::verifyControlLikeOp(Operation *op) {
+  auto parent = op->getParentOp();
+  // Operations that may parent other ControlLike operations.
+  auto isValidParent = [](Operation *operation) {
+    return isa<ControlOp, SeqOp>(operation);
+  };
+  if (!isValidParent(parent))
+    return op->emitOpError()
+           << "has parent: " << parent
+           << ", which is not allowed for a control-like operation.";
+
+  if (op->getNumRegions() == 0)
+    return success();
+
+  auto &region = op->getRegion(0);
+  // Operations that are allowed in the body of a ControlLike op.
+  auto isValidBodyOp = [](Operation *operation) {
+    return isa<EnableOp, SeqOp>(operation);
+  };
+  for (auto &&bodyOp : region.front()) {
+    if (isValidBodyOp(&bodyOp))
+      continue;
+
+    return op->emitOpError()
+           << "has operation: " << bodyOp.getName()
+           << ", which is not allowed in this control-like operation";
+  }
+  return success();
+}
 
 //===----------------------------------------------------------------------===//
 // ProgramOp
@@ -39,6 +72,31 @@ static LogicalResult verifyProgramOp(ProgramOp program) {
 //===----------------------------------------------------------------------===//
 // ComponentOp
 //===----------------------------------------------------------------------===//
+
+namespace {
+
+/// This is a helper function that should only be used to get the WiresOp or
+/// ControlOp of a ComponentOp, which are guaranteed to exist and generally at
+/// the end of a component's body. In the worst case, this will run in linear
+/// time with respect to the number of instances within the cell.
+template <typename Op>
+static Op getControlOrWiresFrom(ComponentOp op) {
+  auto body = op.getBody();
+  // We verify there is a single WiresOp and ControlOp,
+  // so this is safe.
+  auto opIt = body->getOps<Op>().begin();
+  return *opIt;
+}
+
+} // namespace
+
+WiresOp calyx::ComponentOp::getWiresOp() {
+  return getControlOrWiresFrom<WiresOp>(*this);
+}
+
+ControlOp calyx::ComponentOp::getControlOp() {
+  return getControlOrWiresFrom<ControlOp>(*this);
+}
 
 /// Returns the type of the given component as a function type.
 static FunctionType getComponentType(ComponentOp component) {
@@ -214,6 +272,45 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
 }
 
 //===----------------------------------------------------------------------===//
+// ControlOp
+//===----------------------------------------------------------------------===//
+static LogicalResult verifyControlOp(ControlOp control) {
+  auto body = control.getBody();
+
+  // A control operation may have a single EnableOp within it. However,
+  // that must be the only operation. E.g.
+  // Allowed:      calyx.control { calyx.enable @A }
+  // Not Allowed:  calyx.control { calyx.enable @A calyx.seq { ... } }
+  if (llvm::any_of(*body, [](auto &&op) { return isa<EnableOp>(op); }) &&
+      body->getOperations().size() > 1)
+    return control->emitOpError(
+        "EnableOp is not a composition operator. It should be nested "
+        "in a control flow operation, such as \"calyx.seq\"");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// WiresOp
+//===----------------------------------------------------------------------===//
+static LogicalResult verifyWiresOp(WiresOp wires) {
+  auto component = wires->getParentOfType<ComponentOp>();
+  auto control = component.getControlOp();
+
+  // Verify each group is referenced in the control section.
+  for (auto &&op : *wires.getBody()) {
+    if (!isa<GroupOp>(op))
+      continue;
+    auto group = cast<GroupOp>(op);
+    StringRef groupName = group.sym_name();
+    if (SymbolTable::symbolKnownUseEmpty(groupName, control))
+      return op.emitOpError() << "with name: " << groupName
+                              << " is unused in the control execution schedule";
+  }
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // CellOp
 //===----------------------------------------------------------------------===//
 
@@ -268,13 +365,16 @@ static LogicalResult verifyCellOp(CellOp cell) {
 }
 
 //===----------------------------------------------------------------------===//
-// AssignOp
+// EnableOp
 //===----------------------------------------------------------------------===//
-static LogicalResult verifyAssignOp(AssignOp assign) {
-  auto parent = assign->getParentOp();
-  if (!(isa<GroupOp>(parent) || isa<WiresOp>(parent)))
-    return assign.emitOpError(
-        "should only be contained in 'calyx.wires' or 'calyx.group'");
+static LogicalResult verifyEnableOp(EnableOp enableOp) {
+  auto component = enableOp->getParentOfType<ComponentOp>();
+  auto wiresOp = component.getWiresOp();
+  auto groupName = enableOp.groupName();
+
+  if (!wiresOp.lookupSymbol<GroupOp>(groupName))
+    return enableOp.emitOpError()
+           << "with group: " << groupName << ", which does not exist.";
 
   return success();
 }

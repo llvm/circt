@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Scheduling/ASAPScheduler.h"
+#include "circt/Scheduling/Algorithms.h"
 
 #include "mlir/IR/Builders.h"
 #include "mlir/Pass/Pass.h"
@@ -34,12 +34,11 @@ void TestASAPSchedulerPass::runOnFunction() {
   auto func = getFunction();
   OpBuilder builder(func.getContext());
 
-  // instantiate algorithm implementation
-  ASAPScheduler scheduler(func);
+  Problem prob(func);
 
   // set up catch-all operator type with unit latency
-  auto unitOpr = scheduler.getOrInsertOperatorType("unit");
-  scheduler.setLatency(unitOpr, 1);
+  auto unitOpr = prob.getOrInsertOperatorType("unit");
+  prob.setLatency(unitOpr, 1);
 
   // parse additional operator type information attached to the test case
   if (auto attr = func->getAttrOfType<ArrayAttr>("operatortypes")) {
@@ -49,30 +48,27 @@ void TestASAPSchedulerPass::runOnFunction() {
       if (!(name && latency))
         continue;
 
-      auto opr = scheduler.getOrInsertOperatorType(name.getValue());
-      scheduler.setLatency(opr, latency.getInt());
+      auto opr = prob.getOrInsertOperatorType(name.getValue());
+      prob.setLatency(opr, latency.getInt());
     }
   }
 
   // construct problem (consider only the first block)
-  llvm::SmallVector<Operation *> operationsToSchedule;
-  for (Operation &op : func.getBlocks().front().getOperations())
-    operationsToSchedule.push_back(&op);
+  for (auto &op : func.getBlocks().front().getOperations()) {
+    prob.insertOperation(&op);
 
-  for (auto *op : operationsToSchedule) {
-    scheduler.insertOperation(op);
-
-    if (auto oprRefAttr = op->getAttrOfType<StringAttr>("opr")) {
-      auto opr = scheduler.getOrInsertOperatorType(oprRefAttr.getValue());
-      scheduler.setLinkedOperatorType(op, opr);
+    if (auto oprRefAttr = op.getAttrOfType<StringAttr>("opr")) {
+      auto opr = prob.getOrInsertOperatorType(oprRefAttr.getValue());
+      prob.setLinkedOperatorType(&op, opr);
     } else {
-      scheduler.setLinkedOperatorType(op, unitOpr);
+      prob.setLinkedOperatorType(&op, unitOpr);
     }
   }
 
   // parse auxiliary dependences in the testcase, encoded as an array of
   // 2-element arrays of integer attributes (see `test_asap.mlir`)
   if (auto attr = func->getAttrOfType<ArrayAttr>("auxdeps")) {
+    auto &ops = prob.getOperations();
     for (auto auxDepAttr : attr.getAsRange<ArrayAttr>()) {
       if (auxDepAttr.size() != 2)
         continue;
@@ -82,31 +78,35 @@ void TestASAPSchedulerPass::runOnFunction() {
         continue;
       unsigned fromIdx = fromIdxAttr.getInt();
       unsigned toIdx = toIdxAttr.getInt();
-      if (fromIdx >= operationsToSchedule.size() ||
-          toIdx >= operationsToSchedule.size())
+      if (fromIdx >= ops.size() || toIdx >= ops.size())
         continue;
 
       // finally, we have two integer indices in range of the operations list
-      if (failed(scheduler.insertDependence(std::make_pair(
-              operationsToSchedule[fromIdx], operationsToSchedule[toIdx])))) {
+      if (failed(prob.insertDependence(
+              std::make_pair(ops[fromIdx], ops[toIdx])))) {
         func->emitError("inserting aux dependence failed");
         return signalPassFailure();
       }
     }
   }
 
-  if (failed(scheduler.schedule())) {
+  if (failed(prob.check())) {
+    func->emitError("problem check failed");
+    return signalPassFailure();
+  }
+
+  if (failed(scheduleASAP(prob))) {
     func->emitError("scheduling failed");
     return signalPassFailure();
   }
 
-  if (failed(scheduler.verify())) {
+  if (failed(prob.verify())) {
     func->emitError("schedule verification failed");
     return signalPassFailure();
   }
 
-  for (auto *op : operationsToSchedule) {
-    unsigned startTime = *scheduler.getStartTime(op);
+  for (auto *op : prob.getOperations()) {
+    unsigned startTime = *prob.getStartTime(op);
     op->emitRemark("start time = " + std::to_string(startTime));
   }
 }

@@ -1,20 +1,20 @@
 // RUN: circt-opt -lower-handshake-to-firrtl -split-input-file %s | FileCheck %s
 
 // CHECK-LABEL: firrtl.module @handshake_store_3ins_2outs_ui8
-// CHECK: %[[IN_DATA_VALID:.+]] = firrtl.subfield %arg0("valid")
-// CHECK: %[[IN_DATA_READY:.+]] = firrtl.subfield %arg0("ready")
-// CHECK: %[[IN_DATA_DATA:.+]] = firrtl.subfield %arg0("data")
-// CHECK: %[[IN_ADDR_VALID:.+]] = firrtl.subfield %arg1("valid")
-// CHECK: %[[IN_ADDR_READY:.+]] = firrtl.subfield %arg1("ready")
-// CHECK: %[[IN_ADDR_DATA:.+]] = firrtl.subfield %arg1("data")
-// CHECK: %[[IN_CONTROL_VALID:.+]] = firrtl.subfield %arg2("valid")
-// CHECK: %[[IN_CONTROL_READY:.+]] = firrtl.subfield %arg2("ready")
-// CHECK: %[[OUT_DATA_VALID:.+]] = firrtl.subfield %arg3("valid")
-// CHECK: %[[OUT_DATA_READY:.+]] = firrtl.subfield %arg3("ready")
-// CHECK: %[[OUT_DATA_DATA:.+]] = firrtl.subfield %arg3("data")
-// CHECK: %[[OUT_ADDR_VALID:.+]] = firrtl.subfield %arg4("valid")
-// CHECK: %[[OUT_ADDR_READY:.+]] = firrtl.subfield %arg4("ready")
-// CHECK: %[[OUT_ADDR_DATA:.+]] = firrtl.subfield %arg4("data")
+// CHECK: %[[IN_DATA_VALID:.+]] = firrtl.subfield %arg0(0)
+// CHECK: %[[IN_DATA_READY:.+]] = firrtl.subfield %arg0(1)
+// CHECK: %[[IN_DATA_DATA:.+]] = firrtl.subfield %arg0(2)
+// CHECK: %[[IN_ADDR_VALID:.+]] = firrtl.subfield %arg1(0)
+// CHECK: %[[IN_ADDR_READY:.+]] = firrtl.subfield %arg1(1)
+// CHECK: %[[IN_ADDR_DATA:.+]] = firrtl.subfield %arg1(2)
+// CHECK: %[[IN_CONTROL_VALID:.+]] = firrtl.subfield %arg2(0)
+// CHECK: %[[IN_CONTROL_READY:.+]] = firrtl.subfield %arg2(1)
+// CHECK: %[[OUT_DATA_VALID:.+]] = firrtl.subfield %arg3(0)
+// CHECK: %[[OUT_DATA_READY:.+]] = firrtl.subfield %arg3(1)
+// CHECK: %[[OUT_DATA_DATA:.+]] = firrtl.subfield %arg3(2)
+// CHECK: %[[OUT_ADDR_VALID:.+]] = firrtl.subfield %arg4(0)
+// CHECK: %[[OUT_ADDR_READY:.+]] = firrtl.subfield %arg4(1)
+// CHECK: %[[OUT_ADDR_DATA:.+]] = firrtl.subfield %arg4(2)
 
 // CHECK: %[[ALL_VALID_WIRE:inputsValid]] = firrtl.wire : !firrtl.uint<1>
 

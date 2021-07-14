@@ -50,7 +50,7 @@ def CircuitOp : FIRRTLOp<"circuit",
 }
 
 def FModuleOp : FIRRTLOp<"module",
-      [IsolatedFromAbove, FunctionLike, Symbol, SingleBlock, NoTerminator, 
+      [IsolatedFromAbove, FunctionLike, Symbol, SingleBlock, NoTerminator,
        HasParent<"CircuitOp">]> {
   let summary = "FIRRTL Module";
   let description = [{

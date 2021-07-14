@@ -3,6 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from .types import types
+from .module import ModuleDefinition
 
 import mlir
 import mlir.ir
@@ -22,15 +23,19 @@ class System:
   passed = False
 
   def __init__(self):
+    if not hasattr(self, "name"):
+      self.name = "top"
+
     self.mod = mlir.ir.Module.create()
     self.get_types()
 
     with mlir.ir.InsertionPoint(self.mod.body):
       self.declare_externs()
-      hw.HWModuleOp(name='top',
-                    input_ports=self.inputs,
-                    output_ports=self.outputs,
-                    body_builder=self.build)
+      ModuleDefinition(modcls=None,
+                       name=self.name,
+                       input_ports=self.inputs,
+                       output_ports=self.outputs,
+                       body_builder=self.build)
 
   def declare_externs(self):
     pass
@@ -42,8 +47,8 @@ class System:
   def body(self):
     return self.mod.body
 
-  def print(self, **kwargs):
-    self.mod.operation.print(**kwargs)
+  def print(self, *argv, **kwargs):
+    self.mod.operation.print(*argv, **kwargs)
 
   def graph(self, short_names=True):
     import mlir.all_passes_registration

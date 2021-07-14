@@ -430,7 +430,7 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
 
   auto newInstance = builder->create<InstanceOp>(
       resultTypes, op.moduleNameAttr(), op.nameAttr(), op.annotations(),
-      builder->getArrayAttr(lowerPortAnnotations));
+      builder->getArrayAttr(lowerPortAnnotations), op.lowerToBindAttr());
 
   // Record the mapping of each old result to each new result.
   size_t nextResult = 0;
@@ -615,7 +615,8 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
       // have been split, this only needs to deal with the fields of
       // read or write ports. If the port is replacing a readwrite
       // port, then this is linked against the old field.
-      for (auto elt : underlying.getElements()) {
+      for (auto bElem : llvm::enumerate(underlying.getElements())) {
+        auto elt = bElem.value();
 
         auto oldName = elt.name.getValue();
         if (oldKind == MemOp::PortKind::ReadWrite) {
@@ -677,7 +678,8 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
           }
 
           builder->create<ConnectOp>(
-              builder->create<SubfieldOp>(newMem.getResult(i), elt.name), wire);
+              builder->create<SubfieldOp>(newMem.getResult(i), bElem.index()),
+              wire);
           continue;
         }
 
@@ -686,7 +688,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
         // creation is needed.
         setBundleLowering(
             FieldRef(op.getResult(j), elementID + field.fieldID),
-            builder->create<SubfieldOp>(newMem.getResult(i), elt.name));
+            builder->create<SubfieldOp>(newMem.getResult(i), bElem.index()));
       }
 
       // Don't increment the index of the old memory if this is the
@@ -849,8 +851,7 @@ void TypeLoweringVisitor::visitExpr(SubfieldOp op) {
   auto bundleType = op.input().getType().cast<BundleType>();
 
   // Get the base element ID of input bundle.
-  auto parentID =
-      bundleType.getFieldID(*bundleType.getElementIndex(op.fieldname()));
+  auto parentID = bundleType.getFieldID(op.fieldIndex());
 
   for (auto field : fieldTypes) {
     // Get the lowered value of the current field from the input value.

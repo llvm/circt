@@ -13,10 +13,15 @@
 #ifndef CIRCT_DIALECT_CALYX_CALYXPASSES_H
 #define CIRCT_DIALECT_CALYX_CALYXPASSES_H
 
+#include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
+#include <memory>
 
 namespace circt {
 namespace calyx {
+
+std::unique_ptr<mlir::Pass> createGoInsertionPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

@@ -189,6 +189,8 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   /// revisitation.
   void mergeLatticeValue(Value value, LatticeValue &valueEntry,
                          LatticeValue source) {
+    if (!source.isOverdefined() && AnnotationSet::get(value).hasDontTouch())
+      source = LatticeValue::getOverdefined();
     if (valueEntry.mergeIn(source))
       changedLatticeValueWorklist.push_back(value);
   }
@@ -217,6 +219,8 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     if (source.isUnknown())
       return;
 
+    if (!source.isOverdefined() && AnnotationSet::get(value).hasDontTouch())
+      source = LatticeValue::getOverdefined();
     // If we've changed this value then revisit all the users.
     auto &valueEntry = latticeValues[value];
     if (valueEntry != source) {
@@ -495,8 +499,9 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
   // Driving result ports propagates the value to each instance using the
   // module.
   if (auto blockArg = connect.dest().dyn_cast<BlockArgument>()) {
-    for (auto userOfResultPort : resultPortToInstanceResultMapping[blockArg])
-      mergeLatticeValue(userOfResultPort, srcValue);
+    if (!AnnotationSet::get(blockArg).hasDontTouch())
+      for (auto userOfResultPort : resultPortToInstanceResultMapping[blockArg])
+        mergeLatticeValue(userOfResultPort, srcValue);
     return;
   }
 

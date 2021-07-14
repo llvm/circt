@@ -39,7 +39,7 @@ hw.module @sink_constants(%clock :i1) -> (%out : i1){
     // CHECK: sv.fwrite "%x"([[FALSE]]) : i1
     sv.fwrite "%x"(%false) : i1
   }
-  
+
   /// Multiple uses in the same block should use the same constant.
   sv.ifdef.procedural "FOO" {
     // CHECK: [[TRUE:%.*]] = hw.constant true
@@ -62,3 +62,19 @@ hw.module @sink_constants(%clock :i1) -> (%out : i1){
 // VERILOG:   $fwrite(32'h80000002, "%x", 1'h1);
 // VERILOG: `endif
 
+
+
+// CHECK-LABEL:   hw.module @AddNegLiteral
+// Issue #1324: https://github.com/llvm/circt/issues/1324
+hw.module @AddNegLiteral(%a: i8) -> (%x: i8) {
+
+  // CHECK-NEXT: %c4_i8 = hw.constant 4 : i8
+  %c = hw.constant -4 : i8
+  // CHECK-NEXT: %0 = comb.sub %a, %c4_i8 : i8
+  %1 = comb.add %a, %c : i8
+
+  // CHECK-NEXT: hw.output %0
+  hw.output %1 : i8
+}
+// VERILOG-LABEL: module AddNegLiteral(
+// VERILOG: assign x = a - 8'h4;

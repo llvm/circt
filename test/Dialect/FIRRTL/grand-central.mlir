@@ -137,3 +137,24 @@ firrtl.circuit "UnsupportedTypes" attributes {annotations = [{a}, {class = "sifi
 // CHECK-NEXT: sv.verbatim "// boolean = <unsupported boolean type>;"
 // CHECK-NEXT: sv.verbatim "// integer = <unsupported integer type>;"
 // CHECK-NEXT: sv.verbatim "// double = <unsupported double type>;"
+
+// -----
+
+firrtl.circuit "BindTest" attributes {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "Foo", elements = []}]} {
+  firrtl.module @Companion() attributes {annotations = [{class = "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation", id = 42 : i64, type = "companion"}]} {}
+  firrtl.module @BindTest() {
+    firrtl.instance @Companion { name = "companion1" }
+    firrtl.instance @Companion { name = "companion2" }
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "BindTest"
+
+// Annotations are remove from the companion module declaration.
+// CHECK: firrtl.module @Companion()
+// CHECK-NOT: annotations
+// CHECK-SAME: {
+
+// Each companion instance has "lowerToBind" set.
+// CHECK: firrtl.module @BindTest
+// CHECK-COUNT-2: firrtl.instance @Companion {lowerToBind = true

@@ -197,7 +197,7 @@ def _create_output_op(cls_name, output_ports, entry_block, bb_ret):
   # Only acceptable return is a dict of port, value mappings.
   if not isinstance(bb_ret, dict):
     raise support.ConnectionError(
-        "In {cls_name}, can only return a dict of port, value mappings "
+        f"In {cls_name}, can only return a dict of port, value mappings "
         "from body_builder.")
 
   # A dict of `OutputPortName` -> ValueLike must be converted to a list in port

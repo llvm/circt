@@ -359,7 +359,7 @@ llhd.proc @convert_persistent_block_argument () -> () {
 // CHECK:         }
 llhd.proc @convert_ptr_redirect () -> () {
   %1 = llhd.const 0 : i32
-  %var = llhd.var %1 : i32 
+  %var = llhd.var %1 : i32
   llhd.store %var, %1 : !llhd.ptr<i32>
   br ^bb0
 ^bb0:

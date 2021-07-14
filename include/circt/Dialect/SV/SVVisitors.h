@@ -28,22 +28,23 @@ public:
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<
             // Expressions
-            ReadInOutOp, ArrayIndexInOutOp, VerbatimExprOp, ConstantXOp,
-            ConstantZOp,
+            ReadInOutOp, ArrayIndexInOutOp, VerbatimExprOp, VerbatimExprSEOp,
+            ConstantXOp, ConstantZOp,
             // Declarations.
             RegOp, WireOp,
             // Control flow.
             IfDefOp, IfDefProceduralOp, IfOp, AlwaysOp, AlwaysCombOp,
             AlwaysFFOp, InitialOp, CaseZOp,
             // Other Statements.
-            ConnectOp, BPAssignOp, PAssignOp, ForceOp, ReleaseOp,
-            AliasOp, FWriteOp, FatalOp, FinishOp, VerbatimOp,
+            ConnectOp, BPAssignOp, PAssignOp, ForceOp, ReleaseOp, AliasOp,
+            FWriteOp, FatalOp, FinishOp, VerbatimOp,
             // Type declarations.
             InterfaceOp, InterfaceSignalOp, InterfaceModportOp,
             InterfaceInstanceOp, GetModportOp, AssignInterfaceSignalOp,
             ReadInterfaceSignalOp,
             // Verification statements.
-            AssertOp, AssumeOp, CoverOp,
+            AssertOp, AssumeOp, CoverOp, AssertConcurrentOp, AssumeConcurrentOp,
+            CoverConcurrentOp,
             // Bind Statements
             BindOp>([&](auto expr) -> ResultType {
           return thisCast->visitSV(expr, args...);
@@ -78,6 +79,7 @@ public:
   HANDLE(ReadInOutOp, Unhandled);
   HANDLE(ArrayIndexInOutOp, Unhandled);
   HANDLE(VerbatimExprOp, Unhandled);
+  HANDLE(VerbatimExprSEOp, Unhandled);
   HANDLE(ConstantXOp, Unhandled);
   HANDLE(ConstantZOp, Unhandled);
 
@@ -116,6 +118,9 @@ public:
   HANDLE(AssertOp, Unhandled);
   HANDLE(AssumeOp, Unhandled);
   HANDLE(CoverOp, Unhandled);
+  HANDLE(AssertConcurrentOp, Unhandled);
+  HANDLE(AssumeConcurrentOp, Unhandled);
+  HANDLE(CoverConcurrentOp, Unhandled);
 
   // Bind statements.
   HANDLE(BindOp, Unhandled);

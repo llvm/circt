@@ -68,8 +68,9 @@ def var_to_attribute(obj) -> ir.Attribute:
     attrs = {name: var_to_attribute(value) for name, value in obj.items()}
     return ir.DictAttr.get(attrs)
   if hasattr(obj, "__dict__"):
-    attrs = {name: var_to_attribute(value)
-             for name, value in obj.__dict__.items()}
+    attrs = {
+        name: var_to_attribute(value) for name, value in obj.__dict__.items()
+    }
     return ir.DictAttr.get(attrs)
   raise TypeError(f"Cannot convert type '{type(obj)}' to MLIR attribute. "
                   "This is required for parameters.")

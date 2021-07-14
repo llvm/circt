@@ -96,7 +96,7 @@ struct SharedParserConstants {
         loIdentifier(Identifier::get("lo", context)),
         hiIdentifier(Identifier::get("hi", context)),
         amountIdentifier(Identifier::get("amount", context)),
-        fieldnameIdentifier(Identifier::get("fieldname", context)),
+        fieldIndexIdentifier(Identifier::get("fieldIndex", context)),
         indexIdentifier(Identifier::get("index", context)) {}
 
   /// The context we're parsing into.
@@ -118,7 +118,7 @@ struct SharedParserConstants {
 
   /// Cached identifiers used in primitives.
   const Identifier loIdentifier, hiIdentifier, amountIdentifier;
-  const Identifier fieldnameIdentifier, indexIdentifier;
+  const Identifier fieldIndexIdentifier, indexIdentifier;
 
 private:
   SharedParserConstants(const SharedParserConstants &) = delete;
@@ -180,6 +180,10 @@ struct FIRParser {
   /// Parse an @info marker if present.  If so, fill in the specified Location,
   /// if not, ignore it.
   ParseResult parseOptionalInfoLocator(LocationAttr &result);
+
+  /// Parse an optional name that may appear in Stop, Printf, or Verification
+  /// statements.
+  ParseResult parseOptionalName(StringAttr &name);
 
   //===--------------------------------------------------------------------===//
   // Annotation Parsing
@@ -544,6 +548,27 @@ ParseResult FIRParser::parseOptionalInfoLocator(LocationAttr &result) {
     std::reverse(extraLocs.begin(), extraLocs.end());
     result = FusedLoc::get(getContext(), extraLocs);
   }
+  return success();
+}
+
+/// Parse an optional trailing name that may show up on assert, assume, cover,
+/// stop, or printf.
+///
+/// optional_name ::= ( ':' id )?
+ParseResult FIRParser::parseOptionalName(StringAttr &name) {
+
+  if (getToken().isNot(FIRToken::colon)) {
+    name = StringAttr::get(getContext(), "");
+    return success();
+  }
+
+  consumeToken(FIRToken::colon);
+  StringRef nameRef;
+  if (parseId(nameRef, "expected result name"))
+    return failure();
+
+  name = StringAttr::get(getContext(), nameRef);
+
   return success();
 }
 
@@ -1513,8 +1538,8 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
   // to only the leaf sources.
   TypeSwitch<FIRRTLType>(tpe)
       .Case<BundleType>([&](auto tpe) {
-        for (auto element : tpe.getElements()) {
-          auto subfield = builder.create<SubfieldOp>(val, element.name);
+        for (size_t i = 0, e = tpe.getNumElements(); i < e; ++i) {
+          auto subfield = builder.create<SubfieldOp>(val, i);
           emitInvalidate(subfield,
                          subfield.isFieldFlipped() ? swapFlow(flow) : flow);
         }
@@ -1665,11 +1690,16 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
   StringRef fieldName;
   if (parseFieldId(fieldName, "expected field name"))
     return failure();
-
+  auto indexV = result.getType().cast<BundleType>().getElementIndex(fieldName);
+  if (!indexV)
+    return emitError("unknown field '" + fieldName + "' in bundle type ")
+               << result.getType(),
+           failure();
+  auto index = indexV.getValue();
   // Make sure the field name matches up with the input value's type and
   // compute the result type for the expression.
-  NamedAttribute attrs = {getConstants().fieldnameIdentifier,
-                          builder.getStringAttr(fieldName)};
+  NamedAttribute attrs = {getConstants().fieldIndexIdentifier,
+                          builder.getUI32IntegerAttr(index)};
   auto resultType = SubfieldOp::inferReturnType({result}, attrs, {});
   if (!resultType) {
     // Emit the error at the right location.  translateLocation is expensive.
@@ -1679,7 +1709,7 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
 
   // Create the result operation.
   locationProcessor.setLoc(loc);
-  auto op = builder.create<SubfieldOp>(resultType, result, attrs);
+  auto op = builder.create<SubfieldOp>(resultType, result, index);
   result = op.getResult();
   return success();
 }
@@ -2261,7 +2291,7 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
                                       insertNameIntoGlobalScope);
 }
 
-/// printf ::= 'printf(' exp exp StringLit exp* ')' info?
+/// printf ::= 'printf(' exp exp StringLit exp* ')' name? info?
 ParseResult FIRStmtParser::parsePrintf() {
   auto startTok = consumeToken(FIRToken::lp_printf);
 
@@ -2280,6 +2310,10 @@ ParseResult FIRStmtParser::parsePrintf() {
       return failure();
   }
 
+  StringAttr name;
+  if (parseOptionalName(name))
+    return failure();
+
   if (parseOptionalInfo())
     return failure();
 
@@ -2291,29 +2325,30 @@ ParseResult FIRStmtParser::parsePrintf() {
     APInt constOne(1, 1, false);
     auto constTrue =
         builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
-    builder.create<CoverOp>(clock, condition, constTrue,
-                            builder.getStringAttr(formatStrUnescaped));
+    builder.create<CoverOp>(clock, condition, constTrue, formatStrUnescaped,
+                            "");
     return success();
   }
   if (formatStringRef.startswith("assert:")) {
     APInt constOne(1, 1, false);
     auto constTrue =
         builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
-    builder.create<AssertOp>(clock, condition, constTrue,
-                             builder.getStringAttr(formatStrUnescaped));
+    builder.create<AssertOp>(clock, condition, constTrue, formatStrUnescaped,
+                             "");
     return success();
   }
   if (formatStringRef.startswith("assume:")) {
     APInt constOne(1, 1, false);
     auto constTrue =
         builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
-    builder.create<AssumeOp>(clock, condition, constTrue,
-                             builder.getStringAttr(formatStrUnescaped));
+    builder.create<AssumeOp>(clock, condition, constTrue, formatStrUnescaped,
+                             "");
     return success();
   }
 
   builder.create<PrintFOp>(clock, condition,
-                           builder.getStringAttr(formatStrUnescaped), operands);
+                           builder.getStringAttr(formatStrUnescaped), operands,
+                           name);
   return success();
 }
 
@@ -2340,15 +2375,17 @@ ParseResult FIRStmtParser::parseStop() {
 
   Value clock, condition;
   int64_t exitCode;
+  StringAttr name;
   if (parseExp(clock, "expected clock expression in 'stop'") ||
       parseExp(condition, "expected condition in 'stop'") ||
       parseIntLit(exitCode, "expected exit code in 'stop'") ||
       parseToken(FIRToken::r_paren, "expected ')' in 'stop'") ||
-      parseOptionalInfo())
+      parseOptionalName(name) || parseOptionalInfo())
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
-  builder.create<StopOp>(clock, condition, builder.getI32IntegerAttr(exitCode));
+  builder.create<StopOp>(clock, condition, builder.getI32IntegerAttr(exitCode),
+                         name);
   return success();
 }
 
@@ -2358,19 +2395,20 @@ ParseResult FIRStmtParser::parseAssert() {
 
   Value clock, predicate, enable;
   StringRef message;
+  StringAttr name;
   if (parseExp(clock, "expected clock expression in 'assert'") ||
       parseExp(predicate, "expected predicate in 'assert'") ||
       parseExp(enable, "expected enable in 'assert'") ||
       parseGetSpelling(message) ||
       parseToken(FIRToken::string, "expected message in 'assert'") ||
       parseToken(FIRToken::r_paren, "expected ')' in 'assert'") ||
-      parseOptionalInfo())
+      parseOptionalName(name) || parseOptionalInfo())
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
   auto messageUnescaped = FIRToken::getStringValue(message);
   builder.create<AssertOp>(clock, predicate, enable,
-                           builder.getStringAttr(messageUnescaped));
+                           builder.getStringAttr(messageUnescaped), name);
   return success();
 }
 
@@ -2380,19 +2418,20 @@ ParseResult FIRStmtParser::parseAssume() {
 
   Value clock, predicate, enable;
   StringRef message;
+  StringAttr name;
   if (parseExp(clock, "expected clock expression in 'assume'") ||
       parseExp(predicate, "expected predicate in 'assume'") ||
       parseExp(enable, "expected enable in 'assume'") ||
       parseGetSpelling(message) ||
       parseToken(FIRToken::string, "expected message in 'assume'") ||
       parseToken(FIRToken::r_paren, "expected ')' in 'assume'") ||
-      parseOptionalInfo())
+      parseOptionalName(name) || parseOptionalInfo())
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
   auto messageUnescaped = FIRToken::getStringValue(message);
   builder.create<AssumeOp>(clock, predicate, enable,
-                           builder.getStringAttr(messageUnescaped));
+                           builder.getStringAttr(messageUnescaped), name);
   return success();
 }
 
@@ -2402,19 +2441,20 @@ ParseResult FIRStmtParser::parseCover() {
 
   Value clock, predicate, enable;
   StringRef message;
+  StringAttr name;
   if (parseExp(clock, "expected clock expression in 'cover'") ||
       parseExp(predicate, "expected predicate in 'cover'") ||
       parseExp(enable, "expected enable in 'cover'") ||
       parseGetSpelling(message) ||
       parseToken(FIRToken::string, "expected message in 'cover'") ||
       parseToken(FIRToken::r_paren, "expected ')' in 'cover'") ||
-      parseOptionalInfo())
+      parseOptionalName(name) || parseOptionalInfo())
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
   auto messageUnescaped = FIRToken::getStringValue(message);
   builder.create<CoverOp>(clock, predicate, enable,
-                          builder.getStringAttr(messageUnescaped));
+                          builder.getStringAttr(messageUnescaped), name);
   return success();
 }
 
@@ -2622,8 +2662,9 @@ ParseResult FIRStmtParser::parseInstance() {
                    });
   auto name = dontTouch ? id : filterUselessName(id);
 
-  auto result = builder.create<InstanceOp>(
-      resultTypes, moduleName, name, annotations.first, annotations.second);
+  auto result = builder.create<InstanceOp>(resultTypes, moduleName, name,
+                                           annotations.first.getValue(),
+                                           annotations.second.getValue());
 
   // Since we are implicitly unbundling the instance results, we need to keep
   // track of the mapping from bundle fields to results in the unbundledValues

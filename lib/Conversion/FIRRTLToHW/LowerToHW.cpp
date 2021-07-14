@@ -227,6 +227,13 @@ struct CircuitLoweringState {
 
   CircuitOp circuitOp;
 
+  // Safely add a BindOp to global mutable state.  This will acquire a lock to
+  // do this safely.
+  void addBind(sv::BindOp op) {
+    std::lock_guard<std::mutex> lock(bindsMutex);
+    binds.push_back(op);
+  }
+
 private:
   friend struct FIRRTLModuleLowering;
   CircuitLoweringState(const CircuitLoweringState &) = delete;
@@ -239,6 +246,13 @@ private:
   StringSet<> alreadyPrinted;
   const bool enableAnnotationWarning;
   std::mutex annotationPrintingMtx;
+
+  // Records any sv::BindOps that are found during the course of execution.
+  // This is unsafe to access directly and should only be used through addBind.
+  SmallVector<sv::BindOp> binds;
+
+  // Control access to binds.
+  std::mutex bindsMutex;
 };
 
 void CircuitLoweringState::warnOnRemainingAnnotations(
@@ -250,8 +264,9 @@ void CircuitLoweringState::warnOnRemainingAnnotations(
   for (auto a : annoSet) {
     auto inserted = alreadyPrinted.insert(a.getClass());
     if (inserted.second)
-      mlir::emitWarning(op->getLoc(), "unprocessed annotation:'" + a.getClass() +
-                      "' still remaining after LowerToHW");
+      mlir::emitWarning(op->getLoc(), "unprocessed annotation:'" +
+                                          a.getClass() +
+                                          "' still remaining after LowerToHW");
   }
 }
 } // end anonymous namespace
@@ -319,6 +334,7 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   SmallVector<FModuleOp, 32> modulesToProcess;
 
+  state.warnOnRemainingAnnotations(circuit, AnnotationSet(circuit));
   // Iterate through each operation in the circuit body, transforming any
   // FModule's we come across.
   for (auto &op : circuitBody->getOperations()) {
@@ -363,6 +379,11 @@ void FIRRTLModuleLowering::runOnOperation() {
   } else {
     for (auto module : modulesToProcess)
       lowerModuleBody(module, state);
+  }
+
+  // Move binds from inside modules to outside modules.
+  for (auto bind : state.binds) {
+    bind->moveBefore(bind->getParentOfType<hw::HWModuleOp>());
   }
 
   // Finally delete all the old modules.
@@ -493,6 +514,13 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
     }
   };
 
+  // If none of the macros are needed, then don't emit any header at all, not
+  // even the header comment.
+  if (!state.used_RANDOMIZE_GARBAGE_ASSIGN && !state.used_RANDOMIZE_REG_INIT &&
+      !state.used_RANDOMIZE_MEM_INIT && !state.used_PRINTF_COND &&
+      !state.used_STOP_COND)
+    return;
+
   emitString("// Standard header to adapt well known macros to our needs.");
 
   bool needRandom = false;
@@ -509,8 +537,11 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
     needRandom = true;
   }
 
-  if (needRandom)
-    emitGuardedDefine("RANDOM", nullptr, "RANDOM $random");
+  if (needRandom) {
+    emitString("\n// RANDOM may be set to an expression that produces a 32-bit "
+               "random unsigned value.");
+    emitGuardedDefine("RANDOM", nullptr, "RANDOM {$random}");
+  }
 
   if (state.used_PRINTF_COND) {
     emitString(
@@ -764,7 +795,10 @@ static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
   for (auto op : structValue.getUsers()) {
     assert(isa<SubfieldOp>(op));
     auto fieldAccess = cast<SubfieldOp>(op);
-    if (fieldAccess.fieldname() == field) {
+    auto elemIndex =
+        fieldAccess.input().getType().cast<BundleType>().getElementIndex(field);
+    if (elemIndex.hasValue() &&
+        fieldAccess.fieldIndex() == elemIndex.getValue()) {
       accesses.push_back(fieldAccess);
     }
   }
@@ -1596,8 +1630,9 @@ LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
   Value value = getLoweredValue(op.input());
   assert(resultType && value && "subfield type lowering failed");
 
-  return setLoweringTo<hw::StructExtractOp>(op, resultType, value,
-                                            op.fieldname());
+  return setLoweringTo<hw::StructExtractOp>(
+      op, resultType, value,
+      op.input().getType().cast<BundleType>().getElementName(op.fieldIndex()));
 }
 
 //===----------------------------------------------------------------------===//
@@ -1670,9 +1705,35 @@ void FIRRTLLowering::emitRandomizePrologIfNeeded() {
 }
 
 void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
-  // Construct and return a new reference to `RANDOM.
-  auto randomVal = [&](Type type) {
-    return builder.create<sv::VerbatimExprOp>(type, "`RANDOM");
+  // Construct and return a new reference to `RANDOM.  It is always a 32-bit
+  // unsigned expression.  Calls to $random have side effects, so we use
+  // VerbatimExprSEOp.
+  auto getRandom32Val = [&]() -> Value {
+    return builder.create<sv::VerbatimExprSEOp>(builder.getIntegerType(32),
+                                                "`RANDOM");
+  };
+
+  // Return an expression containing random bits of the specified width.
+  // An explicit std::function is required here due to recursion.
+  std::function<Value(IntegerType)> getRandomValue =
+      [&](IntegerType type) -> Value {
+    assert(type.getWidth() != 0 && "zero bit width's not supported");
+    auto rand32 = getRandom32Val();
+    if (type.getWidth() <= 32)
+      return builder.createOrFold<comb::ExtractOp>(type, rand32, 0);
+
+    // Get the top part.
+    auto rest = getRandomValue(builder.getIntegerType(type.getWidth() - 32));
+    return builder.createOrFold<comb::ConcatOp>(rand32, rest);
+  };
+
+  // Get a random value with the specified width, combining or truncating
+  // 32-bit units as necessary.
+  auto emitRandomInit = [&](Value dest, Type type) {
+    auto intType = type.cast<IntegerType>();
+    if (intType.getWidth() == 0)
+      return;
+    builder.create<sv::BPAssignOp>(dest, getRandomValue(intType));
   };
 
   // Randomly initialize everything in the register. If the register
@@ -1686,12 +1747,10 @@ void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
           for (size_t i = 0, e = a.getSize(); i != e; ++i) {
             auto iIdx = getOrCreateIntConstant(log2(e + 1), i);
             auto arrayIndex = builder.create<sv::ArrayIndexInOutOp>(reg, iIdx);
-            builder.create<sv::BPAssignOp>(arrayIndex,
-                                           randomVal(a.getElementType()));
+            emitRandomInit(arrayIndex, a.getElementType());
           }
         })
-        .Default(
-            [&](auto a) { builder.create<sv::BPAssignOp>(reg, randomVal(a)); });
+        .Default([&](auto type) { emitRandomInit(reg, type); });
   };
 
   // Emit the initializer expression for simulation that fills it with random
@@ -1955,10 +2014,34 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   // Use the symbol from the module we are referencing.
   FlatSymbolRefAttr symbolAttr = builder.getSymbolRefAttr(newModule);
 
+  // If this instance is destined to be lowered to a bind, generate a symbol for
+  // it and generate a bind op.  Enter the bind into global CircuitLoweringState
+  // so that this can be moved outside of module once we're guaranteed to not be
+  // a parallel context.
+  StringAttr symbol({});
+  if (oldInstance->getAttrOfType<BoolAttr>("lowerToBind").getValue()) {
+    symbol = builder.getStringAttr("__" + oldInstance.name() + "__");
+    auto bindOp =
+        builder.create<sv::BindOp>(builder.getSymbolRefAttr(symbol.getValue()));
+    bindOp->setAttr("output_file",
+                    hw::OutputFileAttr::get(
+                        builder.getStringAttr(""),
+                        builder.getStringAttr("bindings.sv"),
+                        /*exclude_from_filelist=*/builder.getBoolAttr(true),
+                        /*exclude_replicated_ops=*/builder.getBoolAttr(true),
+                        bindOp.getContext()));
+    // Add the bind to the circuit state.  This will be moved outside of the
+    // encapsulating module after all modules have been processed in parallel.
+    circuitState.addBind(bindOp);
+  }
+
   // Create the new hw.instance operation.
-  auto newInstance = builder.create<hw::InstanceOp>(
-      resultTypes, oldInstance.nameAttr(), symbolAttr, operands, parameters,
-      StringAttr());
+  auto newInstance =
+      builder.create<hw::InstanceOp>(resultTypes, oldInstance.nameAttr(),
+                                     symbolAttr, operands, parameters, symbol);
+
+  if (symbol)
+    newInstance->setAttr("doNotPrint", builder.getBoolAttr(true));
 
   // Now that we have the new hw.instance, we need to remap all of the users
   // of the outputs/results to the values returned by the instance.
@@ -2364,9 +2447,7 @@ LogicalResult FIRRTLLowering::visitExpr(MuxPrimOp op) {
 
   // Lower mux(0-bit, x, y) -> y
   if (!cond) {
-    return handleZeroBit(op.sel(), [&]() {
-      return setLowering(op, ifFalse);
-    });
+    return handleZeroBit(op.sel(), [&]() { return setLowering(op, ifFalse); });
   }
 
   return setLoweringTo<comb::MuxOp>(op, ifTrue.getType(), cond, ifTrue,
@@ -2602,7 +2683,12 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op) {
   addToAlwaysBlock(clock, [&]() {
     addIfProceduralBlock(enable, [&]() {
       // Create BOpTy inside the always/if.
-      builder.create<BOpTy>(predicate);
+      StringAttr label;
+      if (op.nameAttr())
+        label = op.nameAttr();
+      else
+        label = builder.getStringAttr("");
+      builder.create<BOpTy>(predicate, label);
     });
   });
 

@@ -59,6 +59,6 @@ llhd.proc @proc () -> (%a : !llhd.sig<i32>, %b : !llhd.sig<i32>) {
   %a4 = addi %c0, %p4 : i32
   llhd.wait (%a, %b : !llhd.sig<i32>, !llhd.sig<i32>), ^end(%a4 : i32)
 ^end (%arg : i32):
-  llhd.drv %b, %arg after %t2 : !llhd.sig<i32> 
+  llhd.drv %b, %arg after %t2 : !llhd.sig<i32>
   llhd.halt
 }

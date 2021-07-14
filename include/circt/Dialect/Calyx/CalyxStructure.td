@@ -10,6 +10,25 @@
 //
 //===----------------------------------------------------------------------===//
 
+def UndefinedOp : CalyxOp<"undef", [
+    NoSideEffect
+  ]> {
+  let summary = "Calyx Undefined Value";
+  let description = [{
+    The "undef" operation represents an undefined value
+    that may be used when a specific source or destination
+    does not have an assignment yet. This is used to avoid
+    pulling in the entire LLVMIR dialect for a single
+    operation.
+
+    ```mlir
+      %0 = calyx.undef : i1
+    ```
+  }];
+  let results = (outs AnyType:$res);
+  let assemblyFormat = "attr-dict `:` type($res)";
+}
+
 def ProgramOp : CalyxContainer<"program", [
     IsolatedFromAbove,
     SymbolTable
@@ -29,7 +48,6 @@ def ProgramOp : CalyxContainer<"program", [
   }];
   let verifier = "return ::verify$cppClass(*this);";
 }
-
 
 def ComponentOp : CalyxOp<"component", [
     HasParent<"ProgramOp">,
@@ -79,6 +97,12 @@ def ComponentOp : CalyxOp<"component", [
     public:
       /// Returns the body of a Calyx component.
       Block *getBody() { return &getOperation()->getRegion(0).front(); }
+
+      /// Returns the WiresOp of a Calyx Component.
+      WiresOp getWiresOp();
+
+      /// Returns the ControlOp of a Calyx Component.
+      ControlOp getControlOp();
   }];
 
   let verifier = "return ::verify$cppClass(*this);";
@@ -103,30 +127,7 @@ def WiresOp : CalyxContainer<"wires", [
       }
     ```
   }];
-}
-
-// TODO1(Calyx): The terminator for the control flow
-// schedule should define that of the component.
-// TODO2(Calyx): While it currently carries the
-// SingleBlock trait, this may change depending
-// on how we decide to represent Groups in the
-// dialect.
-def ControlOp : CalyxContainer<"control", [
-    HasParent<"ComponentOp">
-  ]> {
-  let summary = "Calyx Control";
-  let description = [{
-    The "calyx.control" operation represents the
-    execution schedule defined for the given
-    component, i.e. when each group executes.
-
-    ```mlir
-      calyx.control {
-        // TODO(Calyx): Add `control` examples
-        // once control flow ops are added.
-      }
-    ```
-  }];
+  let verifier = "return ::verify$cppClass(*this);";
 }
 
 def CellOp : CalyxOp<"cell", [
@@ -181,7 +182,7 @@ def GroupOp : CalyxOp<"group", [
     ```mlir
       calyx.group @MyGroup {
         calyx.assign %1 = %2 : i32
-        calyx.done %3 : i1
+        calyx.group_done %3 : i1
       }
     ```
   }];
@@ -202,7 +203,8 @@ class SameTypeConstraint<string lhs, string rhs>
                    lhs, rhs, [{ $_self }]>;
 
 def AssignOp : CalyxOp<"assign", [
-    SameTypeConstraint<"dest", "src">
+    SameTypeConstraint<"dest", "src">,
+    ParentOneOf<["GroupOp", "WiresOp"]>
   ]> {
   let summary = "Calyx Assignment";
   let description = [{
@@ -222,7 +224,6 @@ def AssignOp : CalyxOp<"assign", [
     AnyType:$src,
     Optional<I1>:$guard
   );
-  let verifier = "return ::verify$cppClass(*this);";
 
   // TODO(Calyx): Calyx IR typically represents a
   // guarded assignments as `%dest = %guard ? %src`
@@ -231,26 +232,37 @@ def AssignOp : CalyxOp<"assign", [
   }];
 }
 
-def DoneOp : CalyxOp<"done", [
-    HasParent<"GroupOp">,
+def GroupDoneOp : CalyxGroupPort<"group_done", [
     Terminator
   ]> {
-    let summary = "Calyx Done Port";
-    let description = [{
-      The "calyx.done" operation represents a port on a
-      Calyx group that signifies when the group is finished.
-      A done operation may optionally be guarded, which controls
-      when the group's done operation should be active.
+  let summary = "Calyx Group Done Port";
+  let description = [{
+    The "calyx.group_done" operation represents a port on a
+    Calyx group that signifies when the group is finished.
+    A done operation may optionally be guarded, which controls
+    when the group's done operation should be active.
 
-      ```mlir
-        calyx.done %0 : i1
-        calyx.done %0, %guard ? : i1
-      ```
-    }];
+    ```mlir
+      %0 = calyx.group_done %v1 : i1
+      %1 = calyx.group_done %v2, %guard ? : i1
+    ```
+  }];
+}
 
-    let arguments = (ins
-      AnyType:$src,
-      Optional<I1>:$guard
-    );
-    let assemblyFormat = "$src (`,` $guard^ `?`)? attr-dict `:` type($src)";
+def GroupGoOp : CalyxGroupPort<"group_go", []> {
+  let summary = "Calyx Group Go Port";
+  let description = [{
+    The "calyx.group_go" operation represents a port on a
+    Calyx group that signifies when the group begins.
+    A go operation may optionally be guarded, which
+    controls when the group's go operation should be
+    active. The go operation should only be inserted
+    during the Go Insertion pass. It does not
+    receive a source until the Compile Control pass.
+
+    ```mlir
+      %1 = calyx.group_go %0 : i1
+      %2 = calyx.group_go %3, %guard ? : i1
+    ```
+  }];
 }

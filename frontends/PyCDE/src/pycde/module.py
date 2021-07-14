@@ -97,8 +97,14 @@ class module:
       cls = self.func(*args, **kwargs)
       if cls is None:
         raise ValueError("Parameterization function must return module class")
-      mod = _module_base(cls, self.extern_name is not None,
-                         param_values.arguments)
+
+      # Function arguments which start with '_' don't become parameters.
+      params = {
+          n: v
+          for n, v in param_values.arguments.items()
+          if not n.startswith("_")
+      }
+      mod = _module_base(cls, self.extern_name is not None, params)
 
       if self.extern_name:
         _register_generator(cls.__name__, "extern_instantiate",
@@ -140,8 +146,8 @@ class module:
     with mlir.ir.InsertionPoint(op):
       mapping = {name.value: op.operands[i] for i, name in enumerate(op_names)}
       result_types = [x.type for x in op.results]
-      inst = self.extern_mod.create(
-        op.name, **mapping, results=result_types).operation
+      inst = self.extern_mod.create(op.name, **mapping,
+                                    results=result_types).operation
       for (name, attr) in attrs.items():
         inst.attributes[name] = attr
       return inst
@@ -182,11 +188,11 @@ def _module_base(cls, extern: bool, params={}):
       if len(pass_up_kwargs) > 0:
         init_sig = inspect.signature(cls.__init__)
         if not any(
-          [x == inspect.Parameter.VAR_KEYWORD for x in init_sig.parameters]):
+            [x == inspect.Parameter.VAR_KEYWORD for x in init_sig.parameters]):
           raise ValueError("Module constructor doesn't have a **kwargs"
                            " parameter, so the following are likely inputs"
-                           " which don't have a port: " + ",".join(
-                             pass_up_kwargs.keys()))
+                           " which don't have a port: " +
+                           ",".join(pass_up_kwargs.keys()))
       cls.__init__(self, *args, **pass_up_kwargs)
 
       # Build a list of operand values for the operation we're gonna create.
@@ -229,6 +235,12 @@ def _module_base(cls, extern: bool, params={}):
                              results=[type for (_, type) in mod._output_ports],
                              operands=input_ports_values,
                              loc=loc))
+
+    def output_values(self):
+      return {
+          op_name: self.operation.results[idx]
+          for (idx, (op_name, _)) in enumerate(mod._output_ports)
+      }
 
     @staticmethod
     def inputs() -> list[(str, mlir.ir.Type)]:
@@ -355,8 +367,9 @@ class _Generate:
     # modules that are structurally equivalent. If the module name exists in the
     # top level MLIR module, assume that we've already generated it.
     existing_module_names = [
-       o for o in mod.regions[0].blocks[0].operations
-       if mlir.ir.StringAttr(o.name).value == module_name]
+        o for o in mod.regions[0].blocks[0].operations
+        if mlir.ir.StringAttr(o.name).value == module_name
+    ]
 
     if not existing_module_names:
       with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]), self.loc:
@@ -366,7 +379,7 @@ class _Generate:
                                output_ports=self.modcls._output_ports,
                                body_builder=self.gen_func)
     else:
-      assert(len(existing_module_names) == 1)
+      assert (len(existing_module_names) == 1)
       mod = existing_module_names[0]
 
     # Build a replacement instance at the op to be replaced.
@@ -390,6 +403,7 @@ class _Generate:
     return str(ty)
 
   def create_module_name(self, op):
+
     def val_str(val):
       if isinstance(val, mlir.ir.Type):
         return self.create_type_string(val)
@@ -398,8 +412,7 @@ class _Generate:
     name = op.name
     if len(self.params) > 0:
       name += "_" + "_".join(
-          val_str(value) for (_, value) in
-          sorted(self.params.items()))
+          val_str(value) for (_, value) in sorted(self.params.items()))
 
     return name
 
@@ -435,6 +448,10 @@ class ModuleDefinition(hw.HWModuleOp):
   def __getattr__(self, name):
     if name in self.input_indices:
       index = self.input_indices[name]
-      return Value(self.entry_block.arguments[index],
-                   self.modcls._input_ports_lookup[name])
+      val = self.entry_block.arguments[index]
+      if self.modcls:
+        ty = self.modcls._input_ports_lookup[name]
+      else:
+        ty = support.type_to_pytype(val.type)
+      return Value(val, ty)
     raise AttributeError(f"unknown input port name {name}")
