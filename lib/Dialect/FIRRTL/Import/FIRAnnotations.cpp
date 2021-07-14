@@ -737,6 +737,7 @@ bool circt::firrtl::scatterCustomAnnotations(
               source, maybeSourceTarget.getValue(), context);
           if (targetPair.second.hasValue())
             appendTarget(dontTouchAnn, targetPair.second.getValue());
+          source.append("type", StringAttr::get(context, "source"));
           newAnnotations[targetPair.first].push_back(
               DictionaryAttr::getWithSorted(context, source));
           newAnnotations[targetPair.first].push_back(
@@ -744,6 +745,7 @@ bool circt::firrtl::scatterCustomAnnotations(
           if (targetPair.second.hasValue())
             dontTouchAnn.pop_back();
           port.append("portID", portID);
+          port.append("type", StringAttr::get(context, "portName"));
           newAnnotations[portTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, port));
           newAnnotations[portTarget.getValue()].push_back(
