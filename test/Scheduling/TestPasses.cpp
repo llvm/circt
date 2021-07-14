@@ -167,7 +167,7 @@ void registerSchedulingTestPasses() {
   PassRegistration<TestProblemPass> problemTester(
       "test-scheduling-problem", "Import a schedule encoded as attributes");
   PassRegistration<TestASAPSchedulerPass> asapTester(
-      "test-asap-scheduler", "Emit ASAP scheduler's solution as remarks");
+      "test-asap-scheduler", "Emit ASAP scheduler's solution as attributes");
 }
 } // namespace test
 } // namespace circt
