@@ -8,7 +8,6 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   IMConstProp.cpp
   InferWidths.cpp
   LowerTypes.cpp
-  LowerBundleVectorTypes.cpp
   ModuleInliner.cpp
   PrintInstanceGraph.cpp
 

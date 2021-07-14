@@ -18,14 +18,6 @@ include "mlir/Pass/PassBase.td"
 def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
   let summary = "Lower FIRRTL types to ground types";
   let description = [{
-    Lower firrtl.module port types to ground types.
-  }];
-  let constructor = "circt::firrtl::createLowerFIRRTLTypesPass()";
-}
-
-def LowerBundleVector : Pass<"firrtl-lower-bundle-vectors", "firrtl::CircuitOp"> {
-  let summary = "Lower FIRRTL bundle and vector types to ground types";
-  let description = [{
     Lower aggregate FIRRTL types to ground types.  Memories, ports, wires, etc
     are split appart by elements of aggregate types.  The only aggregate types
     which exist after this pass are memory ports, though memory data types are
@@ -34,7 +26,7 @@ def LowerBundleVector : Pass<"firrtl-lower-bundle-vectors", "firrtl::CircuitOp">
     Connect and partial connect expansion and canonicalization happen in this
     pass.
   }];
-  let constructor = "circt::firrtl::createLowerBundleVectorTypesPass()";
+  let constructor = "circt::firrtl::createLowerFIRRTLTypesPass()";
 }
 
 def IMConstProp : Pass<"firrtl-imconstprop", "firrtl::CircuitOp"> {

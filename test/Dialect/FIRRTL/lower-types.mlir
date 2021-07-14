@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-lower-bundle-vectors)' %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-lower-types)' %s | FileCheck %s
 
 firrtl.circuit "TopLevel" {
 
