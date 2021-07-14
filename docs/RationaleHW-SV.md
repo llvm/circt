@@ -273,6 +273,19 @@ do not synthesize into hardware.  All things being equal it is good to reduce
 the number of instances of these (to reduce IR size and increase canonical form)
 but it is ok to introduce more of these to improve on other metrics above.
 
+**Ordering Concat and Extract**
+
+The`concat(extract(..))` form is preferred over the `extract(concat(..))` form,
+because
+
+- `extract` gets "closer" to underlying `add/sub/xor/op` operations, giving way
+  narrowing optimizations like bit-narrowing.
+- the form gives a more accurate view of the values that are being depended on.
+- redundant extract operations can be removed from the concat args lists, eg:
+  `cat(extract(a), b, c, extract(d))`
+
+Both forms perform similarly on hardware, since they are simply bit-copies.
+
 ## The SV Dialect
 
 The SV dialect is one of the dialects that can be mixed into the HW dialect,
