@@ -1,4 +1,4 @@
-// RUN: circt-opt -test-asap-scheduler -verify-diagnostics -allow-unregistered-dialect -split-input-file %s
+// RUN: circt-opt -test-asap-scheduler -verify-diagnostics -allow-unregistered-dialect %s
 
 // Test basic functionality with a simple graph and unit latencies
 func @test_asap1(%a1 : i32, %a2 : i32, %a3 : i32, %a4 : i32) -> i32 {
@@ -17,8 +17,6 @@ func @test_asap1(%a1 : i32, %a2 : i32, %a3 : i32, %a4 : i32) -> i32 {
   // expected-remark@+1 {{start time = 5}}
   return %5 : i32
 }
-
-// -----
 
 // Test non-unit latencies
 func @test_asap2(%v : complex<f32>) -> f32 attributes { operatortypes = [
@@ -43,8 +41,6 @@ func @test_asap2(%v : complex<f32>) -> f32 attributes { operatortypes = [
   return %5 : f32
 }
 
-// -----
-
 // Test auxiliary dependences
 func @test_asap3() attributes { auxdeps = [
     [0,1], [0,2], [2,3], [3,4], [3,6], [4,5], [5,6]
@@ -56,19 +52,4 @@ func @test_asap3() attributes { auxdeps = [
   %4 = constant 4 : i32 // expected-remark {{start time = 3}}
   %5 = constant 5 : i32 // expected-remark {{start time = 4}}
   return // expected-remark {{start time = 5}}
-}
-
-// -----
-
-// Test fail-safe for cyclic graphs
-// expected-error@+2 {{dependence cycle detected}}
-// expected-error@+1 {{scheduling failed}}
-func @test_asap4() attributes { auxdeps = [
-    [0,1], [1,2], [2,3], [3,1]
-  ] } {
-  %0 = constant 0 : i32
-  %1 = constant 1 : i32
-  %2 = constant 2 : i32
-  %3 = constant 3 : i32
-  return
 }
