@@ -37,6 +37,7 @@ config.circt_tools_dir = "@CIRCT_TOOLS_DIR@"
 config.circt_shlib_dir = "@LLVM_LIBRARY_OUTPUT_INTDIR@"
 config.verilator_path = "@VERILATOR_PATH@"
 config.esi_capnp = "@ESI_CAPNP@"
+config.llhd_sim_enabled = @CIRCT_LLHD_SIM_ENABLED@
 
 # Support substitution of the tools_dir with user parameters. This is
 # used when we can't determine the tool dir at configuration time.
