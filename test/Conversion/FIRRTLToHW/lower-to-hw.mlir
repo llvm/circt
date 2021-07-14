@@ -31,6 +31,12 @@ firrtl.circuit "Simple" {
     // CHECK: sv.wire sym @__Simple__dntnode
     %dntnode = firrtl.node %in1 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
 
+    // CHECK: %clockWire = sv.wire  : !hw.inout<i1>
+    // CHECK: sv.connect %clockWire, %false : i1
+    %c0_clock = firrtl.specialconstant 0 : !firrtl.clock
+    %clockWire = firrtl.wire : !firrtl.clock
+    firrtl.connect %clockWire, %c0_clock : !firrtl.clock, !firrtl.clock
+
     // CHECK: sv.connect %out5, %c0_i4 : i4
     %tmp1 = firrtl.invalidvalue : !firrtl.uint<4>
     firrtl.connect %out5, %tmp1 : !firrtl.uint<4>, !firrtl.uint<4>

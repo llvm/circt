@@ -1520,6 +1520,42 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
   return build(builder, result, type, attr);
 }
 
+static void printSpecialConstantOp(OpAsmPrinter &p, SpecialConstantOp &op) {
+  p << "firrtl.specialconstant ";
+  // SpecialConstant uses a BoolAttr, and we want to print `true` as `1`.
+  p << static_cast<unsigned>(op.value());
+  p << " : ";
+  p.printType(op.getType());
+  p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"value"});
+}
+
+static ParseResult parseSpecialConstantOp(OpAsmParser &parser,
+                                          OperationState &result) {
+  // Parse the constant value.  SpecialConstant uses bool attributes, but it
+  // prints as an integer.
+  APInt value;
+  auto loc = parser.getCurrentLocation();
+  auto valueResult = parser.parseOptionalInteger(value);
+  if (!valueResult.hasValue())
+    return parser.emitError(loc, "expected integer value");
+
+  // Clocks and resets can only be 0 or 1.
+  if (value != 0 && value != 1)
+    return parser.emitError(loc, "special constants can only be 0 or 1.");
+
+  // Parse the result firrtl type.
+  Type resultType;
+  if (failed(*valueResult) || parser.parseColonType(resultType) ||
+      parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+  result.addTypes(resultType);
+
+  // Create the attribute.
+  auto valueAttr = parser.getBuilder().getBoolAttr(value == 1);
+  result.addAttribute("value", valueAttr);
+  return success();
+}
+
 static LogicalResult verifySubfieldOp(SubfieldOp op) {
   if (op.fieldIndex() >=
       op.input().getType().cast<BundleType>().getNumElements())

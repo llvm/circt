@@ -21,6 +21,12 @@ firrtl.circuit "Foo" {
     firrtl.connect %out1, %1 : !firrtl.sint, !firrtl.sint<42>
   }
 
+  // CHECK-LABEL: @InferSpecialConstant
+  firrtl.module @InferSpecialConstant() {
+    // CHECK: %c0_clock = firrtl.specialconstant 0 : !firrtl.clock
+    %c0_clock = firrtl.specialconstant 0 : !firrtl.clock
+  }
+
   // CHECK-LABEL: @InferOutput
   // CHECK-SAME: out %out: !firrtl.uint<2>
   firrtl.module @InferOutput(in %in: !firrtl.uint<2>, out %out: !firrtl.uint) {

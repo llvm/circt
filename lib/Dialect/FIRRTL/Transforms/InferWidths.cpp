@@ -1136,6 +1136,9 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         }
         setExpr(op.getResult(), e);
       })
+      .Case<SpecialConstantOp>([&](auto op) {
+        // Nothing required.
+      })
       .Case<WireOp, InvalidValueOp, RegOp>(
           [&](auto op) { declareVars(op.getResult(), op.getLoc()); })
       .Case<RegResetOp>([&](auto op) {

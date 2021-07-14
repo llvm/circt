@@ -196,6 +196,22 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
       setNameFn(constant.getResult(), specialName.str());
     }
 
+    if (auto specialConstant = dyn_cast<SpecialConstantOp>(op)) {
+      SmallString<32> specialNameBuffer;
+      llvm::raw_svector_ostream specialName(specialNameBuffer);
+      specialName << 'c';
+      specialName << static_cast<unsigned>(specialConstant.value());
+      auto type = specialConstant.getType();
+      if (type.isa<ClockType>()) {
+        specialName << "_clock";
+      } else if (type.isa<ResetType>()) {
+        specialName << "_reset";
+      } else if (type.isa<AsyncResetType>()) {
+        specialName << "_asyncreset";
+      }
+      setNameFn(specialConstant.getResult(), specialName.str());
+    }
+
     // Set invalid values to have a distinct name.
     if (auto invalid = dyn_cast<InvalidValueOp>(op)) {
       std::string name;
@@ -276,6 +292,18 @@ void FIRRTLDialect::printType(Type type, DialectAsmPrinter &os) const {
 Operation *FIRRTLDialect::materializeConstant(OpBuilder &builder,
                                               Attribute value, Type type,
                                               Location loc) {
+
+  // Boolean constants. Boolean attributes are always a special constant type
+  // like ClockType and ResetType.  Since BoolAttrs are also IntegerAttrs, its
+  // important that this goes first.
+  if (auto attrValue = value.dyn_cast<BoolAttr>()) {
+    assert(
+        type.isa<ClockType>() || type.isa<AsyncResetType>() ||
+        type.isa<ResetType>() &&
+            "BoolAttrs can only be materialized for special constant types.");
+    return builder.create<SpecialConstantOp>(loc, type, attrValue);
+  }
+
   // Integer constants.
   if (auto attrValue = value.dyn_cast<IntegerAttr>()) {
     auto intType = type.cast<IntType>();
