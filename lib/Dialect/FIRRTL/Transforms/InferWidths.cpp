@@ -777,14 +777,14 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
             return ExprSolution{*expr->solution, false};
           })
           .Case<VarExpr>([&](auto *expr) {
-            // Count recursions in variables as 0. This is sane since the cycle
-            // is breakable and therefore the recursion does not modify the
-            // resulting value of the variable.
+            // Unconstrained variables produce no solution.
+            if (!expr->constraint)
+              return ExprSolution{llvm::None, true};
+            // Return no solution for recursions in the variables. This is sane
+            // and will cause the expression to be ignored when computing the
+            // parent, e.g. `a >= max(a, 1)` will become just `a >= 1`.
             if (!seenVars.insert(expr).second)
               return ExprSolution{llvm::None, true};
-            // Set unconstrained variables to 0.
-            if (!expr->constraint)
-              return ExprSolution{0, false};
             auto solution = solveExpr(expr->constraint, seenVars, indent + 1);
             seenVars.erase(expr);
             // Constrain variables >= 0.

@@ -84,3 +84,13 @@ firrtl.circuit "Foo"  {
     firrtl.partialconnect %w1, %w0 : !firrtl.vector<uint, 0>, !firrtl.vector<uint<3>, 10>
   }
 }
+
+// -----
+
+firrtl.circuit "Foo" {
+  // expected-error @+2 {{uninferred width: type '!firrtl.uint'}}
+  // expected-note @+1 {{in port `a` of module `Foo`}}
+  firrtl.module @Foo(in %a: !firrtl.uint, out %b: !firrtl.uint) {
+    firrtl.connect %b, %a : !firrtl.uint, !firrtl.uint
+  }
+}
