@@ -136,8 +136,9 @@ OpFoldResult ExtractOp::fold(ArrayRef<Attribute> constants) {
   return {};
 }
 
-static LogicalResult extractCatToCatExtract(ExtractOp op, ConcatOp innerCat,
-                                            PatternRewriter &rewriter) {
+static LogicalResult extractConcatToConcatExtract(ExtractOp op,
+                                                  ConcatOp innerCat,
+                                                  PatternRewriter &rewriter) {
   auto reversedConcatArgs = llvm::reverse(innerCat.inputs());
   size_t initialPosition = 0;
   auto it = reversedConcatArgs.begin();
@@ -240,7 +241,7 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
 
   // extract(lo, cat(a, b, c, d, e)) = cat(extract(lo1, b), c, extract(lo2, d))
   if (auto innerCat = dyn_cast_or_null<ConcatOp>(op.input().getDefiningOp())) {
-    return extractCatToCatExtract(op, innerCat, rewriter);
+    return extractConcatToConcatExtract(op, innerCat, rewriter);
   }
 
   return failure();
