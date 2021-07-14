@@ -140,33 +140,33 @@ static LogicalResult extractConcatToConcatExtract(ExtractOp op,
                                                   ConcatOp innerCat,
                                                   PatternRewriter &rewriter) {
   auto reversedConcatArgs = llvm::reverse(innerCat.inputs());
-  size_t initialPosition = 0;
+  size_t beginOfFirstRelevantElement = 0;
   auto it = reversedConcatArgs.begin();
   size_t lowBit = op.lowBit();
 
-  // This loop finds the first concatArg that is covered by the ExtractOp.
+  // This loop finds the first concatArg that is covered by the ExtractOp
   for (; it != reversedConcatArgs.end(); it++) {
-    assert(initialPosition <= lowBit &&
+    assert(beginOfFirstRelevantElement <= lowBit &&
            "incorrectly moved past an element that lowBit has coverage over");
     auto operand = *it;
 
     size_t operandWidth = operand.getType().getIntOrFloatBitWidth();
-    if (lowBit < initialPosition + operandWidth) {
+    if (lowBit < beginOfFirstRelevantElement + operandWidth) {
       // A bit other than the first bit will be used in this element.
       // ...... ........ ...
       //           ^---lowBit
-      //        ^---initialPosition
+      //        ^---beginOfFirstRelevantElement
       //
       // Edge-case close to the end of the range.
       // ...... ........ ...
       //                 ^---(position + operandWidth)
       //               ^---lowBit
-      //        ^---initialPosition
+      //        ^---beginOfFirstRelevantElement
       //
       // Edge-case close to the beginning of the rang
       // ...... ........ ...
       //        ^---lowBit
-      //        ^---position
+      //        ^---beginOfFirstRelevantElement
       //
       break;
     }
@@ -174,8 +174,8 @@ static LogicalResult extractConcatToConcatExtract(ExtractOp op,
     // extraction discards this element.
     // ...... ........  ...
     // |      ^---lowBit
-    // ^---initialPosition
-    initialPosition += operandWidth;
+    // ^---beginOfFirstRelevantElement
+    beginOfFirstRelevantElement += operandWidth;
   }
   assert(it != reversedConcatArgs.end() &&
          "incorrectly failed to find an element which contains coverage of "
@@ -183,7 +183,7 @@ static LogicalResult extractConcatToConcatExtract(ExtractOp op,
 
   SmallVector<Value> reverseConcatArgs;
   size_t widthRemaining = op.getType().getWidth();
-  size_t extractLo = lowBit - initialPosition;
+  size_t extractLo = lowBit - beginOfFirstRelevantElement;
 
   // Transform individual arguments of innerCat(..., a, b, c,) into
   // [ extract(a), b, extract(c) ], skipping an extract operation where
