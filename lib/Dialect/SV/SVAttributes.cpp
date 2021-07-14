@@ -55,5 +55,7 @@ Attribute VerbatimParameterAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
 }
 
 void VerbatimParameterAttr::print(DialectAsmPrinter &p) const {
-  p << "verbatim<\"" << getValue() << "\">";
+  p << "verbatim.parameter<\"";
+  p.getStream().write_escaped(getValue());
+  p << "\">";
 }

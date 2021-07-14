@@ -186,10 +186,12 @@ hw.module @InternalDestMod(%a: i1, %b: i2) {}
 //CHECK-NEXT: hw.module @AB(%a: i1, %b: i2) {
 //CHECK-NEXT:   hw.instance "whatever" sym @a1 @ExternDestMod(%a, %b) {doNotPrint = 1 : i64} : (i1, i2) -> ()
 //CHECK-NEXT:   hw.instance "yo" sym @b1 @InternalDestMod(%a, %b) {doNotPrint = 1 : i64} : (i1, i2) -> ()
+//CHECK-NEXT:   hw.instance "whazzzup" @ExternDestMod(%a, %b) {parameters = {CFG = #sv.verbatim.parameter<"\"FOO\"">}} : (i1, i2) -> ()
 //CHECK-NEXT:   hw.output
 //CHECK-NEXT: }
 hw.module @AB(%a: i1, %b: i2) -> () {
   hw.instance "whatever" sym @a1 @ExternDestMod(%a, %b) {doNotPrint=1}: (i1, i2) -> ()
   hw.instance "yo" sym @b1 @InternalDestMod(%a, %b) {doNotPrint=1} : (i1, i2) -> ()
+  hw.instance "whazzzup" @ExternDestMod(%a, %b) {parameters = {CFG = #sv.verbatim.parameter<"\"FOO\"">}} : (i1, i2) -> ()
   hw.output
 }
