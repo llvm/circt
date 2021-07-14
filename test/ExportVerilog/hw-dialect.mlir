@@ -327,21 +327,21 @@ hw.module @wires(%in4: i4, %in8: i8) -> (%a: i4, %b: i8, %c: i8) {
   // Wires.
 
   // CHECK-NEXT: assign myWire = in4;
-  sv.connect %myWire, %in4 : i4
+  sv.assign %myWire, %in4 : i4
   %wireout = sv.read_inout %myWire : !hw.inout<i4>
 
   // Packed arrays.
 
   %subscript = sv.array_index_inout %myArray1[%in4] : !hw.inout<array<42 x i8>>, i4
   // CHECK-NEXT: assign myArray1[in4] = in8;
-  sv.connect %subscript, %in8 : i8
+  sv.assign %subscript, %in8 : i8
 
   %memout1 = sv.read_inout %subscript : !hw.inout<i8>
 
     // Unpacked arrays, and unpacked arrays of packed arrays.
   %subscriptu = sv.array_index_inout %myUArray1[%in4] : !hw.inout<uarray<42 x i8>>, i4
   // CHECK-NEXT: assign myUArray1[in4] = in8;
-  sv.connect %subscriptu, %in8 : i8
+  sv.assign %subscriptu, %in8 : i8
 
   %memout2 = sv.read_inout %subscriptu : !hw.inout<i8>
 
@@ -376,7 +376,7 @@ hw.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
   %a1 = comb.divs %in1, %in2: i4
   %a2 = comb.divs %in3, %in4: i4
   %a3 = comb.divu %a1, %a2: i4
-  sv.connect %awire, %a3: i4
+  sv.assign %awire, %a3: i4
 
   // CHECK: wire [3:0] _tmp = $signed(in1) / $signed(in2) + $signed(in1) / $signed(in2);
   // CHECK: wire [3:0] _tmp_0 = $signed(in1) / $signed(in2) * $signed(in1) / $signed(in2);
@@ -388,14 +388,14 @@ hw.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
   %b2 = comb.add %b1a, %b1b: i4
   %b3 = comb.mul %b1c, %b1d: i4
   %b4 = comb.divu %b2, %b3: i4
-  sv.connect %awire, %b4: i4
+  sv.assign %awire, %b4: i4
 
   // https://github.com/llvm/circt/issues/369
   // CHECK: assign awire = 4'sh5 / -4'sh3;
   %c5_i4 = hw.constant 5 : i4
   %c-3_i4 = hw.constant -3 : i4
   %divs = comb.divs %c5_i4, %c-3_i4 : i4
-  sv.connect %awire, %divs: i4
+  sv.assign %awire, %divs: i4
 
   hw.output
 }
