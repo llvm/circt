@@ -1,4 +1,5 @@
-add_library(circt-tcl SHARED circt_tcl.c)
+add_library(circt-tcl SHARED circt_tcl.cpp Query.cpp)
+target_link_libraries(circt-tcl PUBLIC CIRCTCAPIQuery)
 target_compile_definitions(circt-tcl PUBLIC -DUSE_TCL_STUBS)
 target_link_libraries(circt-tcl PUBLIC ${TCL_STUB_LIBRARY})
 target_include_directories(circt-tcl PUBLIC ${TCL_INCLUDE_PATH})

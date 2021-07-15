@@ -270,7 +270,6 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
   auto outputTimer = ts.nest("Output");
 
-  
   // Create the filter and filter from the module
   query::Filter filter = query::Filter(filterInput);
   auto mod = module.release();

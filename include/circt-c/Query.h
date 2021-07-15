@@ -4,8 +4,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_C_QUERY_H
-#define CIRCT_C_QUERY_H
+#ifndef Circt_C_QUERY_H
+#define Circt_C_QUERY_H
 
 #include "mlir-c/IR.h"
 #include "circt/Query/Query.h"
@@ -14,19 +14,19 @@
 extern "C" {
 #endif
 
-typedef circt::query::FilterNode  *CIRCTQueryFilterNode;
-typedef circt::query::Filter      *CIRCTQueryFilter;
+typedef circt::query::FilterNode  *CirctQueryFilterNode;
+typedef circt::query::Filter      *CirctQueryFilter;
 
-CIRCTQueryFilterNode CIRCTQueryNewGlobFilter();
-CIRCTQueryFilterNode CIRCTQueryNewRecursiveGlobFilter();
-CIRCTQueryFilterNode CIRCTQueryNewLiteralFilter(char *literal);
-CIRCTQueryFilterNode CIRCTQueryNewRegexFilter(char *regex);
+CirctQueryFilterNode CirctQueryNewGlobFilter();
+CirctQueryFilterNode CirctQueryNewRecursiveGlobFilter();
+CirctQueryFilterNode CirctQueryNewLiteralFilter(char *literal);
+CirctQueryFilterNode CirctQueryNewRegexFilter(char *regex);
 
-CIRCTQueryFilter CIRCTQueryNewFilterArray(size_t count, CIRCTQueryFilterNode *nodes);
-CIRCTQueryFilter CIRCTQueryNewFilter(size_t count, ...);
+CirctQueryFilter CirctQueryNewFilterArray(size_t count, CirctQueryFilterNode *nodes);
+CirctQueryFilter CirctQueryNewFilter(size_t count, ...);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* CIRCT_C_QUERY_H */
+#endif /* Circt_C_QUERY_H */
