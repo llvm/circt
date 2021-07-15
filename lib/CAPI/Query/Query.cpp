@@ -52,10 +52,9 @@ CirctQueryFilter CirctQueryNewFilterArray(size_t count, CirctQueryFilterNode *no
 
   for (size_t i = 0; i < count; i++) {
     rawNodes[i] = *nodes[i];
-    free(nodes[i]);
   }
 
-  CirctQueryFilter filter = (CirctQueryFilter) malloc(sizeof(Filter));
+  CirctQueryFilter filter = new Filter;
   *filter = Filter::newFilter(count, rawNodes);
   return filter;
 }
@@ -68,7 +67,6 @@ CirctQueryFilter CirctQueryNewFilter(size_t count, ...) {
   for (size_t i = 0; i < count; i++) {
     auto *node = va_arg(va, CirctQueryFilterNode);
     nodes[i] = *node;
-    free(node);
   }
 
   CirctQueryFilter filter = (CirctQueryFilter) malloc(sizeof(Filter));

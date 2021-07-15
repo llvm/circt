@@ -7,3 +7,8 @@ void filterNodeUpdateStringProc(Tcl_Obj *obj);
 void filterNodeDupIntRepProc(Tcl_Obj *src, Tcl_Obj *dup);
 void filterNodeFreeIntRepProc(Tcl_Obj *obj);
 
+int filterTypeSetFromAnyProc(Tcl_Interp *interp, Tcl_Obj *obj);
+void filterUpdateStringProc(Tcl_Obj *obj);
+void filterDupIntRepProc(Tcl_Obj *src, Tcl_Obj *dup);
+void filterFreeIntRepProc(Tcl_Obj *obj);
+

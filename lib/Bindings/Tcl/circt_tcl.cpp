@@ -10,7 +10,9 @@ static int Hello_Cmd(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Obj *co
 }
 
 static int createTclFilter(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]) {
-  Tcl_Obj *nodes[objc - 1];
+  auto **nodeObjs = new Tcl_Obj*[objc - 1];
+  CirctQueryFilterNode nodes[objc - 1];
+  auto *filterNodeType = Tcl_GetObjType("FilterNode");
 
   if (objc == 1) {
     return TCL_ERROR;
@@ -22,13 +24,26 @@ static int createTclFilter(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_O
       obj = Tcl_DuplicateObj(obj);
     }
 
-    if (Tcl_ConvertToType(interp, obj, Tcl_GetObjType("FilterNode")) != TCL_OK) {
+    if (Tcl_ConvertToType(interp, obj, filterNodeType) != TCL_OK) {
       return TCL_ERROR;
     }
 
-    nodes[i - 1] = obj;
+    nodeObjs[i - 1] = obj;
+    nodes[i - 1] = (CirctQueryFilterNode) obj->internalRep.otherValuePtr;
   }
-  Tcl_SetObjResult(interp, nodes[0]);
+
+  for (int i = 0; i < objc - 1; i++) {
+    Tcl_IncrRefCount(nodeObjs[i]);
+  }
+
+  auto *filter = CirctQueryNewFilterArray(objc - 1, nodes);
+  auto *result = Tcl_NewObj();
+  result->bytes = nullptr;
+  result->length = 0;
+  result->typePtr = Tcl_GetObjType("Filter");
+  result->internalRep.twoPtrValue.ptr1 = filter;
+  result->internalRep.twoPtrValue.ptr2 = nodeObjs;
+  Tcl_SetObjResult(interp, result);
   return TCL_OK;
 }
 
@@ -46,6 +61,14 @@ int DLLEXPORT Circt_Init(Tcl_Interp *interp) {
   filterNodeType->dupIntRepProc = filterNodeDupIntRepProc;
   filterNodeType->freeIntRepProc = filterNodeFreeIntRepProc;
   Tcl_RegisterObjType(filterNodeType);
+
+  Tcl_ObjType *filterType = (Tcl_ObjType *) malloc(sizeof(Tcl_ObjType));
+  filterType->name = "Filter";
+  filterType->setFromAnyProc = filterTypeSetFromAnyProc;
+  filterType->updateStringProc = filterUpdateStringProc;
+  filterType->dupIntRepProc = filterDupIntRepProc;
+  filterType->freeIntRepProc = filterFreeIntRepProc;
+  Tcl_RegisterObjType(filterType);
 
  if (Tcl_PkgProvide(interp, "Hello", "1.0") == TCL_ERROR) {
     return TCL_ERROR;

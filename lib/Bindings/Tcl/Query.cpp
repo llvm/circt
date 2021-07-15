@@ -1,9 +1,5 @@
-#include <stdlib.h>
-#include <string.h>
-
 #include "Query.h"
 
-#include <iostream>
 int filterNodeTypeSetFromAnyProc(Tcl_Interp *interp, Tcl_Obj *obj) {
   std::string bytes(obj->bytes);
 
@@ -53,8 +49,7 @@ int filterNodeTypeSetFromAnyProc(Tcl_Interp *interp, Tcl_Obj *obj) {
   return TCL_ERROR;
 }
 
-void filterNodeUpdateStringProc(Tcl_Obj *obj) {
-}
+void filterNodeUpdateStringProc(Tcl_Obj *obj) { }
 
 void filterNodeDupIntRepProc(Tcl_Obj *src, Tcl_Obj *dup) {
   circt::query::FilterNode node = *((CirctQueryFilterNode) src->internalRep.otherValuePtr);
@@ -63,5 +58,44 @@ void filterNodeDupIntRepProc(Tcl_Obj *src, Tcl_Obj *dup) {
 }
 
 void filterNodeFreeIntRepProc(Tcl_Obj *obj) {
-  std::free(obj->internalRep.otherValuePtr);
+  if (obj->internalRep.otherValuePtr) {
+    delete (CirctQueryFilterNode) obj->internalRep.otherValuePtr;
+  }
 }
+
+int filterTypeSetFromAnyProc(Tcl_Interp *interp, Tcl_Obj *obj) {
+  return TCL_ERROR;
+}
+
+void filterUpdateStringProc(Tcl_Obj *obj) {
+  std::string str;
+  size_t count = ((CirctQueryFilter) obj->internalRep.twoPtrValue.ptr1)->size();
+
+  for (size_t i = 0; i < count; i++) {
+    if (i != 0) {
+      str.append("::");
+    }
+    str.append(((Tcl_Obj**) obj->internalRep.twoPtrValue.ptr2)[i]->bytes);
+  }
+
+  auto *bytes = Tcl_Alloc(str.size() + 1);
+  bytes[str.size()] = '\0';
+  memcpy(bytes, str.data(), str.size());
+  obj->bytes = bytes;
+  obj->length = str.size();
+}
+
+void filterDupIntRepProc(Tcl_Obj *src, Tcl_Obj *dup) {
+}
+
+void filterFreeIntRepProc(Tcl_Obj *obj) {
+  size_t count = ((CirctQueryFilter) obj->internalRep.twoPtrValue.ptr1)->size();
+
+  for (size_t i = 0; i < count; i++) {
+    Tcl_DecrRefCount(((Tcl_Obj**) obj->internalRep.twoPtrValue.ptr2)[i]);
+  }
+
+  delete (CirctQueryFilter) obj->internalRep.twoPtrValue.ptr1;
+  delete[] (Tcl_Obj*) obj->internalRep.twoPtrValue.ptr2;
+}
+

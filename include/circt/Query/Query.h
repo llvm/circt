@@ -45,12 +45,14 @@ private:
 
 class Filter {
 public:
+  Filter() : nodes (std::vector<FilterNode>()) { }
   Filter(std::string &filter);
+
+  size_t size() { return nodes.size(); }
 
   static Filter newFilter(size_t count, FilterNode nodes[]);
 
 private:
-  Filter() : nodes (std::vector<FilterNode>()) { }
   std::vector<FilterNode> nodes;
 
   friend Filter parseFilter(std::string &filter);
