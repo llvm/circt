@@ -16,6 +16,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/HWVisitors.h"
+#include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Support/LLVM.h"
@@ -2390,7 +2391,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   indent() << prefix << verilogName.getValue();
 
   // Helper that prints a parameter constant value in a Verilog compatible way.
-  auto printParmValue = [&](Attribute value) {
+  auto printParmValue = [&](Identifier paramName, Attribute value) {
     if (auto intAttr = value.dyn_cast<IntegerAttr>()) {
       // Sign comes out before any width specifier.
       APInt value = intAttr.getValue();
@@ -2416,9 +2417,12 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     } else if (auto fpAttr = value.dyn_cast<FloatAttr>()) {
       // TODO: relying on float printing to be precise is not a good idea.
       os << fpAttr.getValueAsDouble();
+    } else if (auto verbatimParam = value.dyn_cast<VerbatimParameterAttr>()) {
+      os << verbatimParam.getValue().getValue();
     } else {
       os << "<<UNKNOWN MLIRATTR: " << value << ">>";
-      emitOpError(op, "unknown extmodule parameter value");
+      emitOpError(op, "unknown extmodule parameter value '")
+          << paramName << "' = " << value;
     }
   };
 
@@ -2432,7 +2436,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
           [&](NamedAttribute elt) {
             os.indent(state.currentIndent + 2)
                 << prefix << '.' << elt.first << '(';
-            printParmValue(elt.second);
+            printParmValue(elt.first, elt.second);
             os << ')';
           },
           ",\n");

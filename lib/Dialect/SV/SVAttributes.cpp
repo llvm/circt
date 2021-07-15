@@ -10,6 +10,7 @@
 #include "circt/Dialect/SV/SVDialect.h"
 
 #include "mlir/IR/DialectImplementation.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace circt::sv;
@@ -24,10 +25,6 @@ void SVDialect::registerAttributes() {
       >();
 }
 
-// These are not used / generated unless there are attributes. Since they are
-// boilerplate, adding them commented out to be uncommented with the first
-// attribute.
-/*
 Attribute SVDialect::parseAttribute(DialectAsmParser &p, Type type) const {
   StringRef attrName;
   Attribute attr;
@@ -47,4 +44,15 @@ void SVDialect::printAttribute(Attribute attr, DialectAsmPrinter &p) const {
   llvm_unreachable("Unexpected attribute");
 }
 
-*/
+Attribute VerbatimParameterAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
+                                       Type type) {
+  StringAttr verbatimString;
+  if (p.parseLess() || p.parseAttribute(verbatimString) || p.parseGreater())
+    return Attribute();
+
+  return VerbatimParameterAttr::get(ctxt, verbatimString);
+}
+
+void VerbatimParameterAttr::print(DialectAsmPrinter &p) const {
+  p << "verbatim.parameter<" << getValue() << ">";
+}
