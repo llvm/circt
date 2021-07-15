@@ -69,8 +69,12 @@ CirctQueryFilter CirctQueryNewFilter(size_t count, ...) {
     nodes[i] = *node;
   }
 
-  CirctQueryFilter filter = (CirctQueryFilter) malloc(sizeof(Filter));
+  CirctQueryFilter filter = new Filter;
   *filter = Filter::newFilter(count, nodes);
   va_end(va);
   return filter;
+}
+
+void CirctQueryDeleteFilter(CirctQueryFilter filter) {
+  delete filter;
 }

@@ -25,6 +25,7 @@ void CirctQueryDeleteFilterNode(CirctQueryFilterNode node);
 
 CirctQueryFilter CirctQueryNewFilterArray(size_t count, CirctQueryFilterNode *nodes);
 CirctQueryFilter CirctQueryNewFilter(size_t count, ...);
+void CirctQueryDeleteFilter(CirctQueryFilter filter);
 
 #ifdef __cplusplus
 }
