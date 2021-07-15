@@ -136,6 +136,9 @@ OpFoldResult ExtractOp::fold(ArrayRef<Attribute> constants) {
   return {};
 }
 
+// Transforms extract(lo, cat(a, b, c, d, e)) into
+// cat(extract(lo1, b), c, extract(lo2, d)).
+// innerCat must be the argument of the provided ExtractOp.
 static LogicalResult extractConcatToConcatExtract(ExtractOp op,
                                                   ConcatOp innerCat,
                                                   PatternRewriter &rewriter) {
