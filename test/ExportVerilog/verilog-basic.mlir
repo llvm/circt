@@ -403,5 +403,19 @@ hw.module @BindEmission() -> () {
   hw.output
 }
 
+sv.bind.interface @__Interface__ {output_file = {directory = "BindTest", exclude_from_filelist = true, exclude_replicated_ops = true, name = "BindInterface.sv"}}
+sv.interface @Interface {
+  sv.interface.signal @a : i1
+  sv.interface.signal @b : i1
+}
+
+hw.module @BindInterface() -> () {
+  %bar = sv.interface.instance sym @__Interface__ {doNotPrint = true} : !sv.interface<@Interface>
+  hw.output
+}
+
 // CHECK-LABEL: FILE "BindTest/BindEmissionInstance.sv"
 // CHECK: bind BindEmission BindEmissionInstance BindEmissionInstance ();
+
+// CHECK-LABEL: FILE "BindTest/BindInterface.sv"
+// CHECK: bind BindInterface Interface bar (.*);
