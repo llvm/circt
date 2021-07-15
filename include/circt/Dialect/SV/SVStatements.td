@@ -354,6 +354,18 @@ def CaseZOp : SVOp<"casez", [SingleBlock, NoTerminator, NoRegionArguments,
 // Assignment Related Statements
 //===----------------------------------------------------------------------===//
 
+def AssignOp : SVOp<"assign", [InOutTypeConstraint<"src", "dest">,
+                                 NonProceduralOp]> {
+  let summary = "Continuous assignment";
+  let description = [{
+    A SystemVerilog assignment statement 'x = y;'.
+    These occur in module scope.  See SV Spec 10.3.2.
+  }];
+  let arguments = (ins InOutType:$dest, InOutElementType:$src);
+  let results = (outs);
+  let assemblyFormat = "$dest `,` $src  attr-dict `:` type($src)";
+}
+
 def BPAssignOp : SVOp<"bpassign", [InOutTypeConstraint<"src", "dest">,
                                    ProceduralOp]> {
   let summary = "Blocking procedural assignment";

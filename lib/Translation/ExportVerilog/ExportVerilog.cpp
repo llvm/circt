@@ -1714,7 +1714,7 @@ private:
   LogicalResult visitSV(WireOp op) { return emitNoop(); }
   LogicalResult visitSV(RegOp op) { return emitNoop(); }
   LogicalResult visitSV(InterfaceInstanceOp op) { return emitNoop(); }
-  LogicalResult visitSV(ConnectOp op);
+  LogicalResult visitSV(AssignOp op);
   LogicalResult visitSV(BPAssignOp op);
   LogicalResult visitSV(PAssignOp op);
   LogicalResult visitSV(ForceOp op);
@@ -1864,8 +1864,8 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
   emitLocationInfoAndNewLine(emittedExprs);
 }
 
-LogicalResult StmtEmitter::visitSV(ConnectOp op) {
-  // prepare connects wires to instance outputs, but these are logically handled
+LogicalResult StmtEmitter::visitSV(AssignOp op) {
+  // prepare assigns wires to instance outputs, but these are logically handled
   // in the port binding list when outputing an instance.
   if (dyn_cast_or_null<InstanceOp>(op.src().getDefiningOp()))
     return success();
@@ -2864,17 +2864,17 @@ static void lowerBoundInstance(InstanceOp op) {
 
     auto newWire = builder.create<WireOp>(src.getType(), nameTmp);
     auto newWireRead = builder.create<ReadInOutOp>(newWire);
-    auto connect = builder.create<ConnectOp>(newWire, src);
+    auto connect = builder.create<AssignOp>(newWire, src);
     newWireRead->moveBefore(op);
     connect->moveBefore(op);
     op.setOperand(nextOpNo - 1, newWireRead);
   }
 }
 
-static bool onlyUseIsConnect(Value v) {
+static bool onlyUseIsAssign(Value v) {
   if (!v.hasOneUse())
     return false;
-  if (!dyn_cast_or_null<ConnectOp>(v.getDefiningOp()))
+  if (!dyn_cast_or_null<AssignOp>(v.getDefiningOp()))
     return false;
   return true;
 }
@@ -2896,7 +2896,7 @@ static void lowerInstanceResults(InstanceOp op) {
     auto result = op.getResult(nextResultNo);
     ++nextResultNo;
 
-    if (onlyUseIsConnect(result))
+    if (onlyUseIsAssign(result))
       continue;
 
     bool isOneUseOutput = false;
@@ -2920,7 +2920,7 @@ static void lowerInstanceResults(InstanceOp op) {
         newWireRead->moveBefore(use.getOwner());
       }
 
-      auto connect = builder.create<ConnectOp>(newWire, result);
+      auto connect = builder.create<AssignOp>(newWire, result);
       connect->moveAfter(op);
     }
   }
@@ -2980,7 +2980,7 @@ static void lowerAlwaysInlineOperation(Operation *op) {
 }
 
 /// We lower the Merge operation to a wire at the top level along with
-/// connects to it and a ReadInOut.
+/// assigns to it and a ReadInOut.
 static Value lowerMergeOp(MergeOp merge) {
   auto module = merge->getParentOfType<HWModuleOp>();
   assert(module && "merges should only be in a module");
@@ -2989,14 +2989,14 @@ static Value lowerMergeOp(MergeOp merge) {
   ImplicitLocOpBuilder b(merge.getLoc(), &module.getBodyBlock()->front());
   auto wire = b.create<WireOp>(merge.getType());
 
-  // Each of the operands is a connect or passign into the wire.
+  // Each of the operands is an assign or passign into the wire.
   b.setInsertionPoint(merge);
   if (merge->getParentOp()->hasTrait<sv::ProceduralRegion>()) {
     for (auto op : merge.getOperands())
       b.create<PAssignOp>(wire, op);
   } else {
     for (auto op : merge.getOperands())
-      b.create<ConnectOp>(wire, op);
+      b.create<AssignOp>(wire, op);
   }
 
   return b.create<ReadInOutOp>(wire);
@@ -3047,7 +3047,7 @@ static void lowerUsersToTemporaryWire(Operation &op) {
       newWireRead->moveBefore(use.getOwner());
     }
 
-    auto connect = builder.create<ConnectOp>(newWire, result);
+    auto connect = builder.create<AssignOp>(newWire, result);
     connect->moveAfter(&op);
   }
 }
