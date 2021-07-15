@@ -61,14 +61,14 @@ module {
     hw.instance "rcvr2" @Rcvr(%ifaceInPort) : (!sv.modport<@data_vr::@data_in>) -> ()
 
     %c1 = hw.constant 1 : i1
-    // CHECK: assign _T.valid = 1'h1;
+    // CHECK: assign iface.valid = 1'h1;
     sv.interface.signal.assign %iface(@data_vr::@valid) = %c1 : i1
 
     sv.always posedge %clk {
       %validValue = sv.interface.signal.read %iface(@data_vr::@valid) : i1
-      // CHECK: $fwrite(32'h80000002, "valid: %d\n", _T.valid);
+      // CHECK: $fwrite(32'h80000002, "valid: %d\n", iface.valid);
       sv.fwrite "valid: %d\n" (%validValue) : i1
-      // CHECK: assert(_T.valid);
+      // CHECK: assert(iface.valid);
       sv.assert %validValue : i1
 
       sv.if %clk {
@@ -115,7 +115,7 @@ module {
   // CHECK-NOT: wire [383:0] _tmp =
   // CHECK: endmodule
   hw.module @structs(%clk: i1, %rstn: i1) {
-    %0 = sv.interface.instance : !sv.interface<@IValidReady_Struct>
+    %0 = sv.interface.instance {name = "iface"} : !sv.interface<@IValidReady_Struct>
     sv.interface.signal.assign %0(@IValidReady_Struct::@data) = %s : !hw.struct<foo: !hw.array<384xi1>>
     %c0 = hw.constant 0 : i8
     %c64 = hw.constant 100000 : i64
