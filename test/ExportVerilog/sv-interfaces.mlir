@@ -41,12 +41,11 @@ module {
 
   // CHECK-LABEL: module Top
   hw.module @Top (%clk: i1) {
-    // CHECK: data_vr   [[IFACE:.+]]();
+    // CHECK: data_vr [[IFACE:.+]]();
     %iface = sv.interface.instance : !sv.interface<@data_vr>
     // CHECK: struct_vr [[IFACEST:.+]]();
     %structIface = sv.interface.instance : !sv.interface<@struct_vr>
 
-    // CHECK-EMPTY:
     %ifaceInPort = sv.modport.get %iface @data_in :
       !sv.interface<@data_vr> -> !sv.modport<@data_vr::@data_in>
 
@@ -91,7 +90,6 @@ module {
     // CHECK: data_vr [[IFACE:.+]]();{{.*}}//{{.+}}
     %iface = sv.interface.instance : !sv.interface<@data_vr>
 
-    // CHECK-EMPTY:
     %ifaceInPort = sv.modport.get %iface @data_in :
       !sv.interface<@data_vr> -> !sv.modport<@data_vr::@data_in>
 

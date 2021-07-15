@@ -1539,8 +1539,8 @@ void NameCollector::collectNames(Block &block) {
   for (auto &op : block) {
     bool isExpr = isVerilogExpression(&op);
 
-    // Instances are handled in prepareHWModule
-    if (isa<InstanceOp>(op))
+    // Instances and interface instances are handled in prepareHWModule
+    if (isa<InstanceOp, InterfaceInstanceOp>(op))
       continue;
 
     for (auto result : op.getResults()) {
@@ -1712,13 +1712,13 @@ private:
 
   LogicalResult visitSV(WireOp op) { return emitNoop(); }
   LogicalResult visitSV(RegOp op) { return emitNoop(); }
-  LogicalResult visitSV(InterfaceInstanceOp op) { return emitNoop(); }
   LogicalResult visitSV(AssignOp op);
   LogicalResult visitSV(BPAssignOp op);
   LogicalResult visitSV(PAssignOp op);
   LogicalResult visitSV(ForceOp op);
   LogicalResult visitSV(ReleaseOp op);
   LogicalResult visitSV(AliasOp op);
+  LogicalResult visitSV(InterfaceInstanceOp op);
   LogicalResult visitStmt(OutputOp op);
   LogicalResult visitStmt(InstanceOp op);
 
@@ -1940,6 +1940,29 @@ LogicalResult StmtEmitter::visitSV(AliasOp op) {
       op.getOperands(), os, [&](Value v) { emitExpression(v, ops); }, " = ");
   os << ';';
   emitLocationInfoAndNewLine(ops);
+  return success();
+}
+
+LogicalResult StmtEmitter::visitSV(InterfaceInstanceOp op) {
+  StringRef prefix = "";
+  if (op->hasAttr("doNotPrint")) {
+    prefix = "// ";
+    indent() << "// This interface is elsewhere emitted as a bind statement.\n";
+  }
+
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  auto *interfaceOp = op.getReferencedInterface();
+  assert(interfaceOp && "InterfaceInstanceOp has invalid symbol that does not "
+                        "point to an interface");
+
+  auto verilogName = getVerilogModuleNameAttr(interfaceOp);
+  emitter.verifyModuleName(op, verilogName);
+  indent() << prefix << verilogName.getValue() << " " << op.name() << "();";
+
+  emitLocationInfoAndNewLine(ops);
+
   return success();
 }
 
