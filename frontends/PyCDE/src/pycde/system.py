@@ -10,7 +10,6 @@ import mlir.ir
 import mlir.passmanager
 
 import circt
-from circt.dialects import hw
 
 import sys
 import typing
@@ -19,7 +18,12 @@ import typing
 class System:
 
   mod = None
-  passes = ["lower-seq-to-sv", "hw-legalize-names", "hw.module(hw-cleanup)"]
+  passes = [
+    "lower-seq-to-sv",
+    "hw-legalize-names",
+    "hw.module(prettify-verilog)",
+    "hw.module(hw-cleanup)"
+  ]
   passed = False
 
   def __init__(self):
