@@ -1,3 +1,9 @@
+set(LLVM_OPTIONAL_SOURCES
+  ASAPScheduler.cpp
+  Problems.cpp
+  TestPasses.cpp
+  )
+
 add_circt_library(CIRCTScheduling
   ASAPScheduler.cpp
   Problems.cpp
@@ -6,4 +12,12 @@ add_circt_library(CIRCTScheduling
   MLIRIR
   MLIRStandard
   MLIRSupport
+  )
+
+add_circt_library(CIRCTSchedulingTestPasses
+  TestPasses.cpp
+
+  LINK_LIBS PUBLIC
+  CIRCTScheduling
+  MLIRPass
   )
