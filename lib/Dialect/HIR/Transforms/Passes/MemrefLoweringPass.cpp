@@ -5,13 +5,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "../PassDetails.h"
+#include "circt/Dialect/HIR/Analysis/FanoutAnalysis.h"
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Dialect/HIR/IR/helper.h"
-
 using namespace circt;
 using namespace hir;
 namespace {
-struct Info {
+enum MemrefPortKind { RD = 0, WR = 1, RW = 2 };
+struct PortToBusMapping {
+  MemrefPortKind portKind;
   Value addrBus;
   Value rdEnableBus;
   Value rdDataBus;
@@ -38,7 +40,8 @@ private:
   LogicalResult visitOp(hir::CallOp);
 
 private:
-  DenseMap<Value, SmallVector<Info>> infoPerMemrefPerPort;
+  DenseMap<Value, SmallVector<PortToBusMapping>> mapMemrefPortToBuses;
+  llvm::DenseMap<Value, SmallVector<SmallVector<ListOfUses>>> *uses;
 };
 } // end anonymous namespace
 
@@ -78,7 +81,7 @@ bool isWrite(Attribute port) {
 void insertBusTypesPerPort(size_t i, Block &bb,
                            SmallVectorImpl<Type> &inputTypes,
                            hir::MemrefType memrefTy, DictionaryAttr port,
-                           Info &info) {
+                           PortToBusMapping &info) {
   auto *context = memrefTy.getContext();
   Type validTy = buildBusTensor(context, memrefTy.filterShape(BANK),
                                 {IntegerType::get(context, 1)});
@@ -106,6 +109,15 @@ void insertBusTypesPerPort(size_t i, Block &bb,
     inputTypes.push_back(validTy);
     inputTypes.push_back(dataTy);
   }
+
+  if (isRead(port) && isWrite(port))
+    info.portKind = RW;
+  else if (isRead(port))
+    info.portKind = RD;
+  else if (isWrite(port))
+    info.portKind = WR;
+  else
+    assert(false);
 }
 
 void addBusAttrsPerPort(size_t i, SmallVectorImpl<DictionaryAttr> &attrs,
@@ -135,7 +147,8 @@ void addBusAttrsPerPort(size_t i, SmallVectorImpl<DictionaryAttr> &attrs,
 }
 
 void insertBusArguments(
-    hir::FuncOp op, DenseMap<Value, SmallVector<Info>> &infoPerMemrefPerPort) {
+    hir::FuncOp op,
+    DenseMap<Value, SmallVector<PortToBusMapping>> &mapMemrefPortToBuses) {
   SmallVector<Type> inputTypes;
   SmallVector<DictionaryAttr> inputAttrs;
   auto funcTy = op.funcTy().dyn_cast<hir::FuncType>();
@@ -147,10 +160,9 @@ void insertBusArguments(
       for (auto port : ports) {
         auto portDict = port.dyn_cast<DictionaryAttr>();
         assert(portDict);
-        Info info;
+        PortToBusMapping info;
         insertBusTypesPerPort(i, bb, inputTypes, memrefTy, portDict, info);
         addBusAttrsPerPort(i, inputAttrs, memrefTy, portDict);
-        infoPerMemrefPerPort[arg].push_back(info);
       }
     }
     inputTypes.push_back(funcTy.getInputTypes()[i]);
@@ -181,18 +193,99 @@ void removeMemrefArguments(hir::FuncOp op) {
                          funcTy.getResultTypes(), funcTy.getResultAttrs());
   op.funcTyAttr(TypeAttr::get(newFuncTy));
 }
+
+void initBusesForNoMemrefUse(uint64_t bank, PortToBusMapping portToBusMapping) {
+  // TODO
+}
+PortToBusMapping defineRdBuses(uint64_t bank, uint64_t numUses,
+                               PortToBusMapping portToBusMapping) {
+  PortToBusMapping buses;
+  // TODO
+  return buses;
+}
+
+void connectRdBuses(uint64_t bank, PortToBusMapping rdBusesPerBank,
+                    PortToBusMapping buses) {
+  // TODO
+}
+
+llvm::Optional<PortToBusMapping>
+defineBusesForMemrefUse(uint64_t bank, ListOfUses uses,
+                        PortToBusMapping portToBusMapping) {
+  auto portKind = portToBusMapping.portKind;
+  if (uses.size() == 0) {
+    initBusesForNoMemrefUse(bank, portToBusMapping);
+    return llvm::None;
+  }
+  if (portKind == RD) {
+    auto rdBuses = defineRdBuses(bank, uses.size(), portToBusMapping);
+    connectRdBuses(bank, rdBuses, portToBusMapping);
+    return rdBuses;
+  }
+  if (portKind == WR) {
+    auto wrBuses = defineWrBuses(bank, uses.size(), portToBusMapping);
+    connectWrBuses(bank, wrBuses, portToBusMapping);
+    return wrBuses;
+  }
+  auto rwBuses = defineRWBuses(bank, uses.size(), portToBusMapping);
+  connectRWBuses(bank, rwBuses, portToBusMapping);
+  return rwBuses;
+}
+
+LogicalResult replacePortUses(PortToBusMapping portToBusMapping,
+                              SmallVector<ListOfUses> portUses) {
+  uint64_t numBanks = portUses.size();
+  for (uint64_t bank = 0; bank < numBanks; bank++) {
+    auto buses =
+        defineBusesForMemrefUse(bank, portUses[bank], portToBusMapping);
+    for (uint64_t use = 0; use < portUses[bank].size(); use++) {
+      if (failed(convertLoadOp(portUses[bank][use], buses, use)))
+        return failure();
+    }
+  }
+  return success();
+}
+
+LogicalResult replaceMemrefUses(
+    hir::FuncOp op,
+    DenseMap<Value, SmallVector<PortToBusMapping>> mapMemrefPortToBuses,
+    DenseMap<Value, SmallVector<SmallVector<ListOfUses>>> &uses) {
+  OpBuilder builder(op);
+  builder.setInsertionPointToStart(&op.getFuncBody().front());
+  // Create a list of memref input args.
+  SmallVector<Value> memrefArgs;
+  for (auto arg : op.getFuncBody().front().getArguments())
+    if (arg.getType().isa<hir::MemrefType>())
+      memrefArgs.push_back(arg);
+
+  // For each memref-port-bank define new tensor<bus> depending on the number
+  // of uses and portKind.
+  for (auto memref : memrefArgs) {
+    SmallVector<PortToBusMapping> &portsToBusMapping =
+        mapMemrefPortToBuses[memref];
+    SmallVector<SmallVector<ListOfUses>> memrefUses = uses[memref];
+    for (uint64_t port = 0; port < portsToBusMapping.size(); port++) {
+      PortToBusMapping portToBusMapping = portsToBusMapping[port];
+      SmallVector<ListOfUses> portUses = memrefUses[port];
+      if (failed(replacePortUses(portToBusMapping, portUses)))
+        return failure();
+    }
+  }
+}
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
 // MemrefLoweringPass methods.
 //------------------------------------------------------------------------------
 LogicalResult MemrefLoweringPass::visitOp(hir::FuncOp op) {
-  insertBusArguments(op, infoPerMemrefPerPort);
+  insertBusArguments(op, mapMemrefPortToBuses);
 
   if (failed(visitRegion(op.getFuncBody())))
     return failure();
 
   removeMemrefArguments(op);
+  if (failed(replaceMemrefUses(op, mapMemrefPortToBuses, *uses)))
+    return failure();
   return success();
 }
 
@@ -212,8 +305,8 @@ LogicalResult MemrefLoweringPass::visitRegion(Region &region) {
       if (failed(visitOp(op)))
         return failure();
     } else if (auto op = dyn_cast<hir::CallOp>(operation)) {
-      if (failed(visitOp(op)))
-        return failure();
+      return op.emitError("MemrefLoweringPass does not support CallOp. "
+                          "Inline the functions.");
     }
   }
   return success();
@@ -221,6 +314,8 @@ LogicalResult MemrefLoweringPass::visitRegion(Region &region) {
 
 void MemrefLoweringPass::runOnOperation() {
   hir::FuncOp funcOp = getOperation();
+  auto memrefUseInfo = MemrefUseInfo(funcOp);
+  this->uses = &memrefUseInfo.mapMemref2PerPortPerBankUses;
   if (failed(visitOp(funcOp))) {
     signalPassFailure();
     return;

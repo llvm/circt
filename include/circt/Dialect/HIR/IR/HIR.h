@@ -252,8 +252,8 @@ public:
     return count;
   }
 
-  int getNumBanks() {
-    int count = 1;
+  uint64_t getNumBanks() {
+    uint64_t count = 1;
     auto dimKinds = getDimKinds();
     auto shape = getShape();
     for (size_t i = 0; i < shape.size(); i++) {
