@@ -377,3 +377,19 @@ hw.module @UnaryParensIssue755(%a: i8) -> (%b: i1) {
   %1 = comb.icmp ne %0, %c0_i8 : i8
   hw.output %1 : i1
 }
+
+sv.bind @__BindEmissionInstance__ {output_file = {directory = "BindTest", exclude_from_filelist = true, exclude_replicated_ops = true, name = "BindEmissionInstance.sv"}}
+// CHECK-LABL: module BindEmissionInstance()
+hw.module @BindEmissionInstance() {
+  hw.output
+}
+// CHECK-LABEL: module BindEmission()
+hw.module @BindEmission() -> () {
+  // CHECK-NEXT: // This instance is elsewhere emitted as a bind statement
+  // CHECK-NEXT: // BindEmissionInstance BindEmissionInstance ();
+  hw.instance "BindEmissionInstance" sym @__BindEmissionInstance__ @BindEmissionInstance() {doNotPrint = true} : () -> ()
+  hw.output
+}
+
+// CHECK-LABEL: FILE "BindTest/BindEmissionInstance.sv"
+// CHECK: bind BindEmission BindEmissionInstance BindEmissionInstance ();

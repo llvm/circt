@@ -31,6 +31,12 @@ firrtl.circuit "Simple" {
     // CHECK: sv.wire sym @__Simple__dntnode
     %dntnode = firrtl.node %in1 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
 
+    // CHECK: %clockWire = sv.wire  : !hw.inout<i1>
+    // CHECK: sv.connect %clockWire, %false : i1
+    %c0_clock = firrtl.specialconstant 0 : !firrtl.clock
+    %clockWire = firrtl.wire : !firrtl.clock
+    firrtl.connect %clockWire, %c0_clock : !firrtl.clock, !firrtl.clock
+
     // CHECK: sv.connect %out5, %c0_i4 : i4
     %tmp1 = firrtl.invalidvalue : !firrtl.uint<4>
     firrtl.connect %out5, %tmp1 : !firrtl.uint<4>, !firrtl.uint<4>
@@ -390,6 +396,13 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT:  %hits_1_7 = sv.wire sym @__foo__hits_1_7
     // CHECK-NEXT:  sv.connect %hits_1_7, [[IO2]] : i1
     %1455 = firrtl.asPassive %hits_1_7 : !firrtl.uint<1>
+  }
+
+  // CHECK: sv.bind @[[bazSymbol:.+]] {output_file
+  // CHECK-NEXT: hw.module @bindTest()
+  firrtl.module @bindTest() {
+    // CHECK: hw.instance "baz" sym @[[bazSymbol]] @bar
+    %baz = firrtl.instance @bar {lowerToBind = true, name = "baz"} : !firrtl.uint<1>
   }
 
   // https://github.com/llvm/circt/issues/314
@@ -786,5 +799,13 @@ firrtl.circuit "Simple" {
     %5 = firrtl.mux(%reset, %c0_ui42, %4) : (!firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>) -> !firrtl.uint<42>
 
     firrtl.connect %count, %5 : !firrtl.uint<42>, !firrtl.uint<42>
+  }
+
+  // CHECK-LABEL: issue1303
+  firrtl.module @issue1303(out %out: !firrtl.reset) {
+    %c1_ui = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.connect %out, %c1_ui : !firrtl.reset, !firrtl.uint<1>
+    // CHECK-NEXT: %true = hw.constant true
+    // CHECK-NEXT: hw.output %true
   }
 }

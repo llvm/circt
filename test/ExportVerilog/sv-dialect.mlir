@@ -168,6 +168,20 @@ hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
   }
   // CHECK-NEXT:  end // initial
 
+  // CHECK-NEXT: assert property (@(posedge clock) cond);
+  sv.assert.concurrent posedge %clock %cond : i1
+  // CHECK-NEXT: assert_1: assert property (@(posedge clock) cond);
+  sv.assert.concurrent "assert_1" posedge %clock %cond : i1
+
+  // CHECK-NEXT: assume property (@(posedge clock) cond);
+  sv.assume.concurrent posedge %clock %cond : i1
+  // CHECK-NEXT: assume_1: assume property (@(posedge clock) cond);
+  sv.assume.concurrent "assume_1" posedge %clock %cond : i1
+
+  // CHECK-NEXT: cover property (@(posedge clock) cond);
+  sv.cover.concurrent posedge %clock %cond : i1
+  // CHECK-NEXT: cover_1: cover property (@(posedge clock) cond);
+  sv.cover.concurrent "cover_1" posedge %clock %cond : i1
 
   // CHECK-NEXT: initial
   // CHECK-NOT: begin
@@ -757,3 +771,51 @@ hw.module @RegisterOfStructOrArrayOfStruct() {
   // CHECK: struct packed {logic a; logic b; }[3:0][7:0] reg3
   %reg3 = sv.reg : !hw.inout<array<4xarray<8xstruct<a: i1, b: i1>>>>
 }
+
+// CHECK-LABEL: module extInst
+hw.module.extern @extInst(%_h: i1, %_i: i1, %_j: i1, %_k: i1, %_z :i0) -> ()
+
+// CHECK-LABEL: module remoteInstDut
+hw.module @remoteInstDut(%i: i1, %j: i1, %z: i0) -> () {
+  %mywire = sv.wire : !hw.inout<i1>
+  %mywire_rd = sv.read_inout %mywire : !hw.inout<i1>
+  %myreg = sv.reg : !hw.inout<i1>
+  %myreg_rd = sv.read_inout %myreg : !hw.inout<i1>
+  %0 = hw.constant 1 : i1
+  hw.instance "a1" sym @bindInst @extInst(%mywire_rd, %myreg_rd, %j, %0, %z) {doNotPrint=1}: (i1, i1, i1, i1, i0) -> ()
+  hw.instance "a2" sym @bindInst2 @extInst(%mywire_rd, %myreg_rd, %j, %0, %z) {doNotPrint=1}: (i1, i1, i1, i1, i0) -> ()
+// CHECK: wire a2__k
+// CHECK-NEXT: wire a1__k
+// CHECK-NEXT: wire mywire
+// CHECK-NEXT: myreg
+// CHECK: assign a1__k = 1'h1
+// CHECK-NEXT: // This instance is elsewhere emitted as a bind statement
+// CHECK-NEXT: // extInst a1
+// CHECK: assign a2__k = 1'h1
+// CHECK-NEXT: // This instance is elsewhere emitted as a bind statement
+// CHECK-NEXT: // extInst a2
+}
+
+hw.module @bindInMod() -> () {
+  sv.bind @bindInst
+}
+
+// CHECK-LABEL: module bindInMod();
+// CHECK-NEXT:   bind remoteInstDut extInst a1 (
+// CHECK-NEXT:   ._h (mywire),
+// CHECK-NEXT:   ._i (myreg),
+// CHECK-NEXT:   ._j (j),
+// CHECK-NEXT:   ._k (a1__k)
+// CHECK-NEXT: //._z (z)
+// CHECK-NEXT: );
+// CHECK: endmodule
+
+sv.bind @bindInst2
+
+// CHECK-LABEL: bind remoteInstDut extInst a2 (
+// CHECK-NEXT:   ._h (mywire),
+// CHECK-NEXT:   ._i (myreg),
+// CHECK-NEXT:   ._j (j),
+// CHECK-NEXT:   ._k (a2__k)
+// CHECK-NEXT: //._z (z)
+// CHECK-NEXT: );

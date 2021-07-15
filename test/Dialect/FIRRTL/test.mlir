@@ -2,6 +2,20 @@
 
 firrtl.circuit "MyModule" {
 
+// Constant op supports different return types.
+firrtl.module @Constants() {
+  // CHECK: %c4_ui8 = firrtl.constant 4 : !firrtl.uint<8>
+  firrtl.constant 4 : !firrtl.uint<8>
+  // CHECK: %c-4_si16 = firrtl.constant -4 : !firrtl.sint<16>
+  firrtl.constant -4 : !firrtl.sint<16>
+  // CHECK: %c1_clock = firrtl.specialconstant 1 : !firrtl.clock
+  firrtl.specialconstant 1 : !firrtl.clock
+  // CHECK: %c1_reset = firrtl.specialconstant 1 : !firrtl.reset
+  firrtl.specialconstant 1 : !firrtl.reset
+  // CHECK: %c1_asyncreset = firrtl.specialconstant 1 : !firrtl.asyncreset
+  firrtl.specialconstant 1 : !firrtl.asyncreset
+}
+
 //module MyModule :
 //  input in: UInt<8>
 //  output out: UInt<8>
@@ -123,6 +137,13 @@ firrtl.module @VerbatimExpr() {
   %0 = firrtl.verbatim.expr "FOO" : () -> !firrtl.uint<42>
   %1 = firrtl.verbatim.expr "$bits({{0}})"(%0) : (!firrtl.uint<42>) -> !firrtl.uint<32>
   %2 = firrtl.add %0, %1 : (!firrtl.uint<42>, !firrtl.uint<32>) -> !firrtl.uint<43>
+}
+
+// CHECK-LABL: @LowerToBind
+// CHECK: firrtl.instance @InstanceLowerToBind {lowerToBind = true, name = "foo"}
+firrtl.module @InstanceLowerToBind() {}
+firrtl.module @LowerToBind() {
+  firrtl.instance @InstanceLowerToBind {lowerToBind = true, name = "foo"}
 }
 
 }

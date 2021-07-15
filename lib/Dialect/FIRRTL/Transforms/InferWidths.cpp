@@ -60,8 +60,7 @@ inline llvm::hash_code hash_value(const T &e) {
 } // namespace mlir
 
 namespace {
-#define EXPR_NAMES(x)                                                          \
-  Root##x, Nil##x, Var##x, Known##x, Add##x, Pow##x, Max##x, Min##x
+#define EXPR_NAMES(x) Root##x, Var##x, Known##x, Add##x, Pow##x, Max##x, Min##x
 #define EXPR_KINDS EXPR_NAMES()
 #define EXPR_CLASSES EXPR_NAMES(Expr)
 
@@ -105,11 +104,6 @@ struct RootExpr : public ExprBase<RootExpr, Expr::Kind::Root> {
   iterator begin() const { return exprs.data(); }
   iterator end() const { return exprs.data() + exprs.size(); }
   std::vector<Expr *> &exprs;
-};
-
-/// A free variable.
-struct NilExpr : public ExprBase<NilExpr, Expr::Kind::Nil> {
-  void print(llvm::raw_ostream &os) const { os << "nil"; }
 };
 
 /// A free variable.
@@ -338,7 +332,6 @@ class ConstraintSolver {
 public:
   ConstraintSolver() = default;
 
-  NilExpr *nil() { return &singletonNil; }
   VarExpr *var() {
     auto v = vars.alloc();
     exprs.push_back(v);
@@ -369,7 +362,6 @@ public:
 private:
   // Allocator for constraint expressions.
   llvm::BumpPtrAllocator allocator;
-  static NilExpr singletonNil;
   VarAllocator vars = {allocator};
   InternedAllocator<KnownExpr> knowns = {allocator};
   InternedAllocator<UnaryExpr> uns = {allocator};
@@ -404,8 +396,6 @@ private:
 };
 
 } // namespace
-
-NilExpr ConstraintSolver::singletonNil;
 
 /// Print all constraints in the solver to an output stream.
 void ConstraintSolver::dumpConstraints(llvm::raw_ostream &os) {
@@ -660,7 +650,6 @@ static LinIneq checkCycles(VarExpr *var, Expr *expr,
                            unsigned indent = 1) {
   auto ineq =
       TypeSwitch<Expr *, LinIneq>(expr)
-          .Case<NilExpr>([](auto) { return LinIneq(0); })
           .Case<KnownExpr>([&](auto *expr) { return LinIneq(*expr->solution); })
           .Case<VarExpr>([&](auto *expr) {
             if (expr == var)
@@ -767,7 +756,7 @@ computeBinary(ExprSolution lhs, ExprSolution rhs,
 static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
                               unsigned indent = 1) {
   // See if we have a memoized result we can return.
-  bool isTrivial = isa<NilExpr, KnownExpr>(expr);
+  bool isTrivial = isa<KnownExpr>(expr);
   if (expr->solution) {
     LLVM_DEBUG({
       if (!isTrivial)
@@ -784,23 +773,18 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
   });
   auto solution =
       TypeSwitch<Expr *, ExprSolution>(expr)
-          .Case<NilExpr>([](auto) {
-            // TODO: Maybe this can be an assert. Technically no expression for
-            // a variable should contain a `nil`.
-            return ExprSolution{llvm::None, false};
-          })
           .Case<KnownExpr>([&](auto *expr) {
             return ExprSolution{*expr->solution, false};
           })
           .Case<VarExpr>([&](auto *expr) {
-            // Count recursions in variables as 0. This is sane since the cycle
-            // is breakable and therefore the recursion does not modify the
-            // resulting value of the variable.
+            // Unconstrained variables produce no solution.
+            if (!expr->constraint)
+              return ExprSolution{llvm::None, true};
+            // Return no solution for recursions in the variables. This is sane
+            // and will cause the expression to be ignored when computing the
+            // parent, e.g. `a >= max(a, 1)` will become just `a >= 1`.
             if (!seenVars.insert(expr).second)
               return ExprSolution{llvm::None, true};
-            // Set unconstrained variables to 0.
-            if (!expr->constraint)
-              return ExprSolution{0, false};
             auto solution = solveExpr(expr->constraint, seenVars, indent + 1);
             seenVars.erase(expr);
             // Constrain variables >= 0.
@@ -1136,6 +1120,9 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         }
         setExpr(op.getResult(), e);
       })
+      .Case<SpecialConstantOp>([&](auto op) {
+        // Nothing required.
+      })
       .Case<WireOp, InvalidValueOp, RegOp>(
           [&](auto op) { declareVars(op.getResult(), op.getLoc()); })
       .Case<RegResetOp>([&](auto op) {
@@ -1391,11 +1378,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
 /// Declare free variables for the type of a value, and associate the resulting
 /// set of variables with that value.
 void InferenceMapping::declareVars(Value value, Location loc) {
-  auto ftype = value.getType().dyn_cast<FIRRTLType>();
-
-  // Unknown types are set to nil.
-  if (!ftype)
-    setExpr(FieldRef(value, 0), solver.nil());
+  auto ftype = value.getType().cast<FIRRTLType>();
 
   // Declare a variable for every unknown width in the type. If this is a Bundle
   // type or a FVector type, we will have to potentially create many variables.

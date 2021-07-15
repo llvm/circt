@@ -24,6 +24,20 @@ firrtl.module @Casts(in %ui1 : !firrtl.uint<1>, in %si1 : !firrtl.sint<1>,
   // CHECK: firrtl.connect %out_asyncreset, %asyncreset : !firrtl.asyncreset, !firrtl.asyncreset
   %3 = firrtl.asAsyncReset %asyncreset : (!firrtl.asyncreset) -> !firrtl.asyncreset
   firrtl.connect %out_asyncreset, %3 : !firrtl.asyncreset, !firrtl.asyncreset
+
+  /// Constant fold.
+  // CHECK: firrtl.connect %out_ui1, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+  %4 = firrtl.asUInt %c1_si1 : (!firrtl.sint<1>) -> !firrtl.uint<1>
+  firrtl.connect %out_ui1, %4 : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: firrtl.connect %out_si1, %c-1_si1 : !firrtl.sint<1>, !firrtl.sint<1>
+  %5 = firrtl.asSInt %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.sint<1>
+  firrtl.connect %out_si1, %5 : !firrtl.sint<1>, !firrtl.sint<1>
+  // CHECK: firrtl.connect %out_clock, %c1_clock : !firrtl.clock, !firrtl.clock
+  %6 = firrtl.asClock %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.clock
+  firrtl.connect %out_clock, %6 : !firrtl.clock, !firrtl.clock
+  // CHECK: firrtl.connect %out_asyncreset, %c1_asyncreset : !firrtl.asyncreset, !firrtl.asyncreset
+  %7 = firrtl.asAsyncReset %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
+  firrtl.connect %out_asyncreset, %7 : !firrtl.asyncreset, !firrtl.asyncreset
 }
 
 // CHECK-LABEL: firrtl.module @Div

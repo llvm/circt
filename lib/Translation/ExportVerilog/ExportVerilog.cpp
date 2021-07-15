@@ -326,6 +326,25 @@ static StringRef getVerilogDeclWord(Operation *op) {
   bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
   return isProcedural ? "automatic logic" : "wire";
 }
+/// Return the name of a value without using the name map.  This is needed when
+/// looking into an instance from a different module as happens with bind.  It
+/// may return "" when unable to determine a name.  This works in situations
+/// where names are pre-legalized during prepare.
+static StringRef getNameRemotely(Value &value,
+                                 ArrayRef<ModulePortInfo> modulePorts) {
+  if (auto barg = value.dyn_cast<BlockArgument>()) {
+    return modulePorts[barg.getArgNumber()].getName();
+  }
+  if (auto readinout = dyn_cast<ReadInOutOp>(value.getDefiningOp())) {
+    if (auto wire = dyn_cast<WireOp>(readinout.input().getDefiningOp())) {
+      return wire.name();
+    }
+    if (auto reg = dyn_cast<RegOp>(readinout.input().getDefiningOp())) {
+      return reg.name();
+    }
+  }
+  return {};
+}
 
 namespace {
 /// This enum keeps track of the precedence level of various binary operators,
@@ -1718,9 +1737,18 @@ private:
   LogicalResult visitSV(FatalOp op);
   LogicalResult visitSV(FinishOp op);
   LogicalResult visitSV(VerbatimOp op);
+  LogicalResult emitImmediateAssertion(Operation *op, Twine name,
+                                       StringRef label, Value expression);
   LogicalResult visitSV(AssertOp op);
   LogicalResult visitSV(AssumeOp op);
   LogicalResult visitSV(CoverOp op);
+  LogicalResult visitSV(BindOp op);
+  LogicalResult emitConcurrentAssertion(Operation *op, Twine name,
+                                        StringRef label, EventControl event,
+                                        Value clock, Value property);
+  LogicalResult visitSV(AssertConcurrentOp op);
+  LogicalResult visitSV(AssumeConcurrentOp op);
+  LogicalResult visitSV(CoverConcurrentOp op);
   LogicalResult visitSV(InterfaceOp op);
   LogicalResult visitSV(InterfaceSignalOp op);
   LogicalResult visitSV(InterfaceModportOp op);
@@ -2023,46 +2051,64 @@ LogicalResult StmtEmitter::visitSV(FinishOp op) {
   return success();
 }
 
-LogicalResult StmtEmitter::visitSV(AssertOp op) {
+LogicalResult StmtEmitter::emitImmediateAssertion(Operation *op, Twine name,
+                                                  StringRef label,
+                                                  Value expression) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   indent();
-  auto label = op.label();
   if (!label.empty())
     os << label << ": ";
-  os << "assert(";
-  emitExpression(op.predicate(), ops);
+  os << name << "(";
+  emitExpression(expression, ops);
   os << ");";
   emitLocationInfoAndNewLine(ops);
   return success();
+}
+
+LogicalResult StmtEmitter::visitSV(AssertOp op) {
+  return emitImmediateAssertion(op, "assert", op.label(), op.expression());
 }
 
 LogicalResult StmtEmitter::visitSV(AssumeOp op) {
+  return emitImmediateAssertion(op, "assume", op.label(), op.expression());
+}
+
+LogicalResult StmtEmitter::visitSV(CoverOp op) {
+  return emitImmediateAssertion(op, "cover", op.label(), op.expression());
+}
+
+LogicalResult StmtEmitter::emitConcurrentAssertion(Operation *op, Twine name,
+                                                   StringRef label,
+                                                   EventControl event,
+                                                   Value clock,
+                                                   Value property) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  indent();
-  auto label = op.label();
   if (!label.empty())
     os << label << ": ";
-  os << "assume(";
-  emitExpression(op.property(), ops);
+  os << name << " property (@(" << stringifyEventControl(event) << " ";
+  emitExpression(clock, ops);
+  os << ") ";
+  emitExpression(property, ops);
   os << ");";
   emitLocationInfoAndNewLine(ops);
   return success();
 }
 
-LogicalResult StmtEmitter::visitSV(CoverOp op) {
-  SmallPtrSet<Operation *, 8> ops;
-  ops.insert(op);
-  indent();
-  auto label = op.label();
-  if (!label.empty())
-    os << label << ": ";
-  os << "cover(";
-  emitExpression(op.property(), ops);
-  os << ");";
-  emitLocationInfoAndNewLine(ops);
-  return success();
+LogicalResult StmtEmitter::visitSV(AssertConcurrentOp op) {
+  return emitConcurrentAssertion(op, "assert", op.label(), op.event(),
+                                 op.clock(), op.property());
+}
+
+LogicalResult StmtEmitter::visitSV(AssumeConcurrentOp op) {
+  return emitConcurrentAssertion(op, "assume", op.label(), op.event(),
+                                 op.clock(), op.property());
+}
+
+LogicalResult StmtEmitter::visitSV(CoverConcurrentOp op) {
+  return emitConcurrentAssertion(op, "cover", op.label(), op.event(),
+                                 op.clock(), op.property());
 }
 
 LogicalResult StmtEmitter::emitIfDef(Operation *op, StringRef cond) {
@@ -2327,8 +2373,10 @@ LogicalResult StmtEmitter::visitSV(CaseZOp op) {
 
 LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   StringRef prefix = "";
-  if (op->hasAttr("doNotPrint"))
+  if (op->hasAttr("doNotPrint")) {
     prefix = "// ";
+    indent() << "// This instance is elsewhere emitted as a bind statement.\n";
+  }
 
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
@@ -2344,11 +2392,23 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   // Helper that prints a parameter constant value in a Verilog compatible way.
   auto printParmValue = [&](Attribute value) {
     if (auto intAttr = value.dyn_cast<IntegerAttr>()) {
-      IntegerType intTy = intAttr.getType().cast<IntegerType>();
-      // Integer attributes are printed without a designated width.  The width
-      // is inferred from the extmodule they are used with, we don't want to
-      // take some arbitrary width from the APInt storage.
-      intAttr.getValue().print(os, intTy.isSigned());
+      // Sign comes out before any width specifier.
+      APInt value = intAttr.getValue();
+      unsigned signBitWidth = 0;
+      if (value.isNegative()) {
+        os << '-';
+        value = -value;
+        signBitWidth = 1;
+      }
+
+      // The signedness and width of the integer attribute type is arbitrary,
+      // we just look at the active bits of the parameter.  We omit the width
+      // specifier if the value is <= 32-bits in size, which makes this more
+      // compatible with unknown width extmodules.
+      if (value.getActiveBits() >= 32)
+        os << (value.getActiveBits() + signBitWidth) << "'d";
+
+      os << value;
     } else if (auto strAttr = value.dyn_cast<StringAttr>()) {
       os << '"';
       os.write_escaped(strAttr.getValue());
@@ -2475,6 +2535,17 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   }
   os << ");";
   emitLocationInfoAndNewLine(ops);
+  return success();
+}
+
+// This may be called in the top-level, not just in an hw.module.  Thus we can't
+// use the name map to find expression names for arguments to the instance, nor
+// do we need to emit subexpressions.  Prepare pass, which has run for all
+// modules prior to this, has ensured that all arguments are bound to wires,
+// regs, or ports, with legalized names, so we can lookup up the names through
+// the IR.
+LogicalResult StmtEmitter::visitSV(BindOp op) {
+  emitter.emitBind(op);
   return success();
 }
 
@@ -2651,7 +2722,98 @@ void ModuleEmitter::emitHWGeneratedModule(HWModuleGeneratedOp module) {
   os << "// external generated module " << verilogName.getValue() << "\n\n";
 }
 
-void ModuleEmitter::emitBind(BindOp bind) { os << "// bind\n\n"; }
+// This may be called in the top-level, not just in an hw.module.  Thus we can't
+// use the name map to find expression names for arguments to the instance, nor
+// do we need to emit subexpressions.  Prepare pass, which has run for all
+// modules prior to this, has ensured that all arguments are bound to wires,
+// regs, or ports, with legalized names, so we can lookup up the names through
+// the IR.
+void ModuleEmitter::emitBind(BindOp op) {
+  InstanceOp inst = op.getReferencedInstance();
+
+  HWModuleOp parentMod = inst->getParentOfType<hw::HWModuleOp>();
+  auto parentVerilogName = getVerilogModuleNameAttr(parentMod);
+  verifyModuleName(op, parentVerilogName);
+
+  Operation *childMod = inst.getReferencedModule();
+  auto childVerilogName = getVerilogModuleNameAttr(childMod);
+  verifyModuleName(op, childVerilogName);
+
+  indent() << "bind " << parentVerilogName.getValue() << " "
+           << childVerilogName.getValue() << ' ' << inst.getName() << " (";
+
+  SmallVector<ModulePortInfo> parentPortInfo = parentMod.getPorts();
+  SmallVector<ModulePortInfo> childPortInfo = getModulePortInfo(childMod);
+
+  // Get the max port name length so we can align the '('.
+  size_t maxNameLength = 0;
+  for (auto &elt : childPortInfo) {
+    maxNameLength = std::max(maxNameLength, elt.getName().size());
+  }
+
+  // Emit the argument and result ports.
+  auto opArgs = inst.inputs();
+  auto opResults = inst.getResults();
+  bool isFirst = true; // True until we print a port.
+  for (auto &elt : childPortInfo) {
+    // Figure out which value we are emitting.
+    Value portVal = elt.isOutput() ? opResults[elt.argNum] : opArgs[elt.argNum];
+    bool isZeroWidth = isZeroBitType(elt.type);
+
+    // Decide if we should print a comma.  We can't do this if we're the first
+    // port or if all the subsequent ports are zero width.
+    if (!isFirst) {
+      bool shouldPrintComma = true;
+      if (isZeroWidth) {
+        shouldPrintComma = false;
+        for (size_t i = (&elt - childPortInfo.data()) + 1,
+                    e = childPortInfo.size();
+             i != e; ++i)
+          if (!isZeroBitType(childPortInfo[i].type)) {
+            shouldPrintComma = true;
+            break;
+          }
+      }
+
+      if (shouldPrintComma)
+        os << ',';
+    }
+    os << "\n";
+
+    // Emit the port's name.
+    indent();
+    if (!isZeroWidth) {
+      // If this is a real port we're printing, then it isn't the first one. Any
+      // subsequent ones will need a comma.
+      isFirst = false;
+      os << "  ";
+    } else {
+      // We comment out zero width ports, so their presence and initializer
+      // expressions are still emitted textually.
+      os << "//";
+    }
+
+    os << '.' << elt.getName();
+    os.indent(maxNameLength - elt.getName().size()) << " (";
+
+    // Emit the value as an expression.
+    auto name = getNameRemotely(portVal, parentPortInfo);
+    if (name.empty()) {
+      // Non stable names will come from expressions.  Since we are lowering the
+      // instance also, we can ensure that expressions feeding bound instances
+      // will be lowered consistently to verilog-namable entities.
+      os << childVerilogName.getValue() << '_' << inst.getName() << '_'
+         << elt.getName() << ')';
+    } else {
+      os << name << ')';
+    }
+  }
+  if (!isFirst) {
+    os << "\n";
+    indent();
+  }
+  os << ");\n";
+}
 
 // Check if the value is from read of a wire or reg or is a port.
 static bool isSimpleReadOrPort(Value v) {
@@ -2858,9 +3020,7 @@ static Value lowerVariadicCommutativeOp(Operation &op, OperandRange operands) {
   }
 
   OperationState state(op.getLoc(), op.getName());
-  // state.addOperands(ValueRange{lhs, rhs});
-  state.addOperands(lhs);
-  state.addOperands(rhs);
+  state.addOperands(ValueRange{lhs, rhs});
   state.addTypes(op.getResult(0).getType());
   auto *newOp = Operation::create(state);
   op.getBlock()->getOperations().insert(Block::iterator(&op), newOp);
