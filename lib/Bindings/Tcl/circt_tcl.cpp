@@ -9,6 +9,29 @@ static int Hello_Cmd(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Obj *co
   return TCL_OK;
 }
 
+static int createTclFilter(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]) {
+  Tcl_Obj *nodes[objc - 1];
+
+  if (objc == 1) {
+    return TCL_ERROR;
+  }
+
+  for (int i = 1; i < objc; i++) {
+    auto *obj = objv[i];
+    if (Tcl_IsShared(obj)) {
+      obj = Tcl_DuplicateObj(obj);
+    }
+
+    if (Tcl_ConvertToType(interp, obj, Tcl_GetObjType("FilterNode")) != TCL_OK) {
+      return TCL_ERROR;
+    }
+
+    nodes[i - 1] = obj;
+  }
+  Tcl_SetObjResult(interp, nodes[0]);
+  return TCL_OK;
+}
+
 extern "C" {
 
 int DLLEXPORT Circt_Init(Tcl_Interp *interp) {
@@ -28,6 +51,7 @@ int DLLEXPORT Circt_Init(Tcl_Interp *interp) {
     return TCL_ERROR;
  }
  Tcl_CreateObjCommand(interp, "hello", Hello_Cmd, NULL, NULL);
+ Tcl_CreateObjCommand(interp, "filter", createTclFilter, NULL, NULL);
  return TCL_OK;
 }
 

@@ -3,8 +3,10 @@
 
 #include "Query.h"
 
+#include <iostream>
 int filterNodeTypeSetFromAnyProc(Tcl_Interp *interp, Tcl_Obj *obj) {
-  std::string bytes(obj->bytes, obj->length);
+  std::string bytes(obj->bytes);
+
   if (bytes == "*") {
     if (obj->typePtr) {
       obj->typePtr->freeIntRepProc(obj);
@@ -31,7 +33,10 @@ int filterNodeTypeSetFromAnyProc(Tcl_Interp *interp, Tcl_Obj *obj) {
     }
 
     obj->typePtr = Tcl_GetObjType("FilterNode");
-    obj->internalRep.otherValuePtr = CirctQueryNewRegexFilter(obj->bytes);
+    char buffer[obj->length - 1];
+    buffer[obj->length - 2] = '\0';
+    memcpy(buffer, obj->bytes, obj->length - 2);
+    obj->internalRep.otherValuePtr = CirctQueryNewRegexFilter(buffer);
     return TCL_OK;
   }
 

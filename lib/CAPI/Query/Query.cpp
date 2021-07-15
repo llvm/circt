@@ -18,29 +18,33 @@ using namespace circt;
 using namespace query;
 
 CirctQueryFilterNode CirctQueryNewGlobFilter() {
-  CirctQueryFilterNode node = (CirctQueryFilterNode) malloc(sizeof(FilterNode));
+  CirctQueryFilterNode node = new FilterNode;
   *node = FilterNode::newGlob();
   return node;
 }
 
 CirctQueryFilterNode CirctQueryNewRecursiveGlobFilter() {
-  CirctQueryFilterNode node = (CirctQueryFilterNode) malloc(sizeof(FilterNode));
+  CirctQueryFilterNode node = new FilterNode;
   *node = FilterNode::newRecursiveGlob();
   return node;
 }
 
 CirctQueryFilterNode CirctQueryNewLiteralFilter(char *literal) {
-  CirctQueryFilterNode node = (CirctQueryFilterNode) malloc(sizeof(FilterNode));
+  CirctQueryFilterNode node = new FilterNode;
   auto s = std::string(literal);
   *node = FilterNode::newLiteral(s);
   return node;
 }
 
 CirctQueryFilterNode CirctQueryNewRegexFilter(char *regex) {
-  CirctQueryFilterNode node = (CirctQueryFilterNode) malloc(sizeof(FilterNode));
+  CirctQueryFilterNode node = new FilterNode;
   auto s = std::string(regex);
   *node = FilterNode::newRegex(s);
   return node;
+}
+
+void CirctQueryDeleteFilterNode(CirctQueryFilterNode node) {
+  delete node;
 }
 
 CirctQueryFilter CirctQueryNewFilterArray(size_t count, CirctQueryFilterNode *nodes) {

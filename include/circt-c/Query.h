@@ -21,6 +21,7 @@ CirctQueryFilterNode CirctQueryNewGlobFilter();
 CirctQueryFilterNode CirctQueryNewRecursiveGlobFilter();
 CirctQueryFilterNode CirctQueryNewLiteralFilter(char *literal);
 CirctQueryFilterNode CirctQueryNewRegexFilter(char *regex);
+void CirctQueryDeleteFilterNode(CirctQueryFilterNode node);
 
 CirctQueryFilter CirctQueryNewFilterArray(size_t count, CirctQueryFilterNode *nodes);
 CirctQueryFilter CirctQueryNewFilter(size_t count, ...);
