@@ -3422,19 +3422,18 @@ void RootEmitterBase::gatherFiles(bool separateModules) {
           else
             rootFile.ops.push_back(info);
         })
-        .Case<VerbatimOp, IfDefProceduralOp, TypeScopeOp, HWModuleExternOp>(
-            [&](auto &) {
-              // Emit into a separate file using the specified file name or
-              // replicate the operation in each outputfile.
-              if (attr) {
-                if (!hasFileName) {
-                  op.emitError("file name unspecified");
-                  encounteredError = true;
-                } else
-                  separateFile(&op);
-              } else
-                replicatedOps.push_back(&op);
-            })
+        .Case<VerbatimOp, IfDefOp, TypeScopeOp, HWModuleExternOp>([&](auto &) {
+          // Emit into a separate file using the specified file name or
+          // replicate the operation in each outputfile.
+          if (attr) {
+            if (!hasFileName) {
+              op.emitError("file name unspecified");
+              encounteredError = true;
+            } else
+              separateFile(&op);
+          } else
+            replicatedOps.push_back(&op);
+        })
         .Case<HWGeneratorSchemaOp>([&](auto &) {
           // Empty.
         })
@@ -3496,7 +3495,7 @@ void RootEmitterBase::emitOperation(VerilogEmitterState &state, Operation *op) {
           [&](auto op) { ModuleEmitter(state).emitHWGeneratedModule(op); })
       .Case<HWGeneratorSchemaOp>([&](auto op) { /* Empty */ })
       .Case<BindOp>([&](auto op) { ModuleEmitter(state).emitBind(op); })
-      .Case<InterfaceOp, VerbatimOp, IfDefProceduralOp>([&](auto op) {
+      .Case<InterfaceOp, VerbatimOp, IfDefOp>([&](auto op) {
         ModuleNameManager emptyNames;
         ModuleEmitter(state).emitStatement(op, emptyNames);
       })
