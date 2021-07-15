@@ -842,6 +842,14 @@ LogicalResult verifySignalExists(Value ifaceVal, FlatSymbolRefAttr signalName) {
   return success();
 }
 
+Operation *InterfaceInstanceOp::getReferencedInterface() {
+  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
+  if (!topLevelModuleOp)
+    return nullptr;
+
+  return topLevelModuleOp.lookupSymbol(getInterfaceType().getInterface());
+}
+
 //===----------------------------------------------------------------------===//
 // WireOp
 //===----------------------------------------------------------------------===//
