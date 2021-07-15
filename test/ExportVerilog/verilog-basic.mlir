@@ -277,6 +277,18 @@ hw.module @MultiUseExpr(%a: i4) -> (%b: i1, %b2: i2) {
 hw.module.extern @MyExtModule(%in: i8) -> (%out: i1) attributes {verilogName = "FooExtModule"}
 hw.module.extern @MyParameterizedExtModule(%in: i8) -> (%out: i1)
 
+// CHECK-LABEL: module ExternMods
+hw.module @ExternMods(%a_in: i8) {
+  // CHECK: MyParameterizedExtModule #(
+  // CHECK:   .CFG(FOO)
+  // CHECK: ) xyz2
+  hw.instance "xyz2" @MyParameterizedExtModule(%a_in) {parameters = {CFG = #sv.verbatim.parameter<"FOO">}} : (i8) -> i1
+  // CHECK: MyParameterizedExtModule #(
+  // CHECK:   .CFG("STRING")
+  // CHECK: ) xyz3
+  hw.instance "xyz3" @MyParameterizedExtModule(%a_in) {parameters = {CFG = #sv.verbatim.parameter<"\"STRING\"">}} : (i8) -> i1
+}
+
 // CHECK-LABEL: module UseInstances
 hw.module @UseInstances(%a_in: i8) -> (%a_out: i1) {
   // CHECK: wire _T;

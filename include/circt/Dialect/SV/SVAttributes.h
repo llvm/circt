@@ -10,6 +10,7 @@
 #define CIRCT_DIALECT_SV_ATTRIBUTES_H
 
 #include "mlir/IR/Attributes.h"
+#include "mlir/IR/BuiltinAttributes.h"
 
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/SV/SVAttributes.h.inc"
