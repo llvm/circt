@@ -130,8 +130,8 @@ hw.module @signed_arrays(%arg0: si8) -> (%out: !hw.array<2xsi8>) {
   // CHECK-NEXT: %0 = hw.array_create %arg0, %arg0 : si8
   %0 = hw.array_create %arg0, %arg0 : si8
 
-  // CHECK-NEXT: sv.connect %wireArray, %0 : !hw.array<2xsi8>
-  sv.connect %wireArray, %0 : !hw.array<2xsi8>
+  // CHECK-NEXT: sv.assign %wireArray, %0 : !hw.array<2xsi8>
+  sv.assign %wireArray, %0 : !hw.array<2xsi8>
 
   %result = sv.read_inout %wireArray : !hw.inout<!hw.array<2xsi8>>
   hw.output %result : !hw.array<2xsi8>

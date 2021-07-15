@@ -36,7 +36,7 @@ public:
             IfDefOp, IfDefProceduralOp, IfOp, AlwaysOp, AlwaysCombOp,
             AlwaysFFOp, InitialOp, CaseZOp,
             // Other Statements.
-            ConnectOp, BPAssignOp, PAssignOp, ForceOp, ReleaseOp, AliasOp,
+            AssignOp, BPAssignOp, PAssignOp, ForceOp, ReleaseOp, AliasOp,
             FWriteOp, FatalOp, FinishOp, VerbatimOp,
             // Type declarations.
             InterfaceOp, InterfaceSignalOp, InterfaceModportOp,
@@ -94,7 +94,7 @@ public:
   HANDLE(CaseZOp, Unhandled);
 
   // Other Statements.
-  HANDLE(ConnectOp, Unhandled);
+  HANDLE(AssignOp, Unhandled);
   HANDLE(BPAssignOp, Unhandled);
   HANDLE(PAssignOp, Unhandled);
   HANDLE(ForceOp, Unhandled);

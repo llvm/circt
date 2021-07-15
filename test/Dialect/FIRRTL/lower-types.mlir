@@ -1133,5 +1133,12 @@ firrtl.module @vecmem(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
   %vmem_MPORT, %vmem_rdwrPort = firrtl.mem Undefined  {depth = 32 : i64, name = "vmem", portNames = ["MPORT", "rdwrPort"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data flip: vector<uint<17>, 8>>, !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, wmode: uint<1>, rdata flip: vector<uint<17>, 8>, wdata: vector<uint<17>, 8>, wmask: vector<uint<1>, 8>>
 }
 
+// CHECK-LABEL: firrtl.module @bofa
+firrtl.module @bofa(out %auto: !firrtl.bundle<io_out: bundle<foo: bundle<bar: analog<1>>>>) {
+  %0 = firrtl.subfield %auto(0) : (!firrtl.bundle<io_out: bundle<foo: bundle<bar: analog<1>>>>) -> !firrtl.bundle<foo: bundle<bar: analog<1>>>
+  %io = firrtl.wire  : !firrtl.bundle<foo: bundle<bar: analog<1>>>
+  firrtl.partialconnect %0, %io : !firrtl.bundle<foo: bundle<bar: analog<1>>>, !firrtl.bundle<foo: bundle<bar: analog<1>>>
+// CHECK: firrtl.attach %auto_io_out_foo_bar, %io_foo_bar
+}
 
 } // CIRCUIT

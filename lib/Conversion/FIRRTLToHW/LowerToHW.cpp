@@ -501,10 +501,9 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
     std::string define = "`define ";
     if (!defineFalse) {
       assert(defineTrue && "didn't define anything");
-      b.create<sv::IfDefProceduralOp>(
-          guard, [&]() { emitString(define + defineTrue); });
+      b.create<sv::IfDefOp>(guard, [&]() { emitString(define + defineTrue); });
     } else {
-      b.create<sv::IfDefProceduralOp>(
+      b.create<sv::IfDefOp>(
           guard,
           [&]() {
             if (defineTrue)
@@ -569,7 +568,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
     emitGuardedDefine("RANDOMIZE_DELAY", nullptr, "RANDOMIZE_DELAY 0.002");
 
     emitString("\n// Define INIT_RANDOM_PROLOG_ for use in our modules below.");
-    b.create<sv::IfDefProceduralOp>(
+    b.create<sv::IfDefOp>(
         "RANDOMIZE",
         [&]() {
           emitGuardedDefine(
@@ -582,7 +581,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
   if (state.used_RANDOMIZE_GARBAGE_ASSIGN) {
     emitString("\n// RANDOMIZE_GARBAGE_ASSIGN enable range checks for mem "
                "assignments.");
-    b.create<sv::IfDefProceduralOp>(
+    b.create<sv::IfDefOp>(
         "RANDOMIZE_GARBAGE_ASSIGN",
         [&]() {
           emitString(
@@ -1198,7 +1197,7 @@ void FIRRTLLowering::optimizeTemporaryWire(sv::WireOp wire) {
   // Wires have inout type, so they'll have connects and read_inout operations
   // that work on them.  If anything unexpected is found then leave it alone.
   SmallVector<sv::ReadInOutOp> reads;
-  sv::ConnectOp write;
+  sv::AssignOp write;
 
   for (auto *user : wire->getUsers()) {
     if (auto read = dyn_cast<sv::ReadInOutOp>(user)) {
@@ -1207,10 +1206,10 @@ void FIRRTLLowering::optimizeTemporaryWire(sv::WireOp wire) {
     }
 
     // Otherwise must be a connect, and we must not have seen a write yet.
-    auto connect = dyn_cast<sv::ConnectOp>(user);
-    if (!connect || write)
+    auto assign = dyn_cast<sv::AssignOp>(user);
+    if (!assign || write)
       return;
-    write = connect;
+    write = assign;
   }
 
   // Must have found the write!
@@ -1695,7 +1694,7 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
                                          Twine("__") + name.getValue());
 
     auto wire = builder.create<sv::WireOp>(operand.getType(), name, symName);
-    builder.create<sv::ConnectOp>(wire, operand);
+    builder.create<sv::AssignOp>(wire, operand);
   }
 
   return setLowering(op, operand);
@@ -2536,7 +2535,7 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
     return success();
   }
 
-  builder.create<sv::ConnectOp>(destVal, srcVal);
+  builder.create<sv::AssignOp>(destVal, srcVal);
   return success();
 }
 
@@ -2589,7 +2588,7 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
     return success();
   }
 
-  builder.create<sv::ConnectOp>(destVal, srcVal);
+  builder.create<sv::AssignOp>(destVal, srcVal);
   return success();
 }
 
@@ -2753,7 +2752,7 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
         for (size_t i1 = 0, e = inoutValues.size(); i1 != e; ++i1) {
           for (size_t i2 = 0; i2 != e; ++i2)
             if (i1 != i2)
-              builder.create<sv::ConnectOp>(inoutValues[i1], values[i2]);
+              builder.create<sv::AssignOp>(inoutValues[i1], values[i2]);
         }
       },
       // In the non-synthesis case, we emit a SystemVerilog alias statement.

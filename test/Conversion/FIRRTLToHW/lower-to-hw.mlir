@@ -32,12 +32,12 @@ firrtl.circuit "Simple" {
     %dntnode = firrtl.node %in1 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<4>
 
     // CHECK: %clockWire = sv.wire  : !hw.inout<i1>
-    // CHECK: sv.connect %clockWire, %false : i1
+    // CHECK: sv.assign %clockWire, %false : i1
     %c0_clock = firrtl.specialconstant 0 : !firrtl.clock
     %clockWire = firrtl.wire : !firrtl.clock
     firrtl.connect %clockWire, %c0_clock : !firrtl.clock, !firrtl.clock
 
-    // CHECK: sv.connect %out5, %c0_i4 : i4
+    // CHECK: sv.assign %out5, %c0_i4 : i4
     %tmp1 = firrtl.invalidvalue : !firrtl.uint<4>
     firrtl.connect %out5, %tmp1 : !firrtl.uint<4>, !firrtl.uint<4>
 
@@ -76,14 +76,14 @@ firrtl.circuit "Simple" {
     // CHECK: comb.concat %in1, %in2
     %7 = firrtl.cat %in1, %in2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<6>
 
-    // CHECK-NEXT: sv.connect %out5, [[PADRES2]] : i4
+    // CHECK-NEXT: sv.assign %out5, [[PADRES2]] : i4
     firrtl.connect %out5, %4 : !firrtl.uint<4>, !firrtl.uint<4>
 
-    // CHECK-NEXT: sv.connect %out4, [[XOR]] : i4
+    // CHECK-NEXT: sv.assign %out4, [[XOR]] : i4
     firrtl.connect %out4, %5 : !firrtl.uint<4>, !firrtl.uint<4>
 
     // CHECK-NEXT: [[ZEXT:%.+]] = comb.concat %c0_i2, %in2 : (i2, i2) -> i4
-    // CHECK-NEXT: sv.connect %out4, [[ZEXT]] : i4
+    // CHECK-NEXT: sv.assign %out4, [[ZEXT]] : i4
     firrtl.connect %out4, %in2 : !firrtl.uint<4>, !firrtl.uint<2>
 
     // CHECK-NEXT: %test-name = sv.wire sym @"__Simple__test-name" : !hw.inout<i4>
@@ -151,7 +151,7 @@ firrtl.circuit "Simple" {
     %n1 = firrtl.node %in2  {name = "n1"} : !firrtl.uint<2>
 
     // CHECK-NEXT: [[WIRE:%n2]] = sv.wire sym @__Simple__n2 : !hw.inout<i2>
-    // CHECK-NEXT: sv.connect [[WIRE]], %in2 : i2
+    // CHECK-NEXT: sv.assign [[WIRE]], %in2 : i2
     %n2 = firrtl.node %in2  {name = "n2", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<2>
 
     // Nodes with no names are just dropped.
@@ -394,7 +394,7 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT:  [[IO]] = sv.read_inout %io_cpu_flush.wire
     // CHECK-NEXT:  [[IO2:%.+]] = sv.read_inout %io_cpu_flush.wire
     // CHECK-NEXT:  %hits_1_7 = sv.wire sym @__foo__hits_1_7
-    // CHECK-NEXT:  sv.connect %hits_1_7, [[IO2]] : i1
+    // CHECK-NEXT:  sv.assign %hits_1_7, [[IO2]] : i1
     %1455 = firrtl.asPassive %hits_1_7 : !firrtl.uint<1>
   }
 
@@ -416,7 +416,7 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: %1 = comb.divu %0, %inpi : i65
     %0 = firrtl.div %inp_2, %inpi : (!firrtl.uint<27>, !firrtl.uint<65>) -> !firrtl.uint<27>
     // CHECK-NEXT: %2 = comb.extract %1 from 0 : (i65) -> i27
-    // CHECK-NEXT: sv.connect %tmp48, %2 : i27
+    // CHECK-NEXT: sv.assign %tmp48, %2 : i27
     firrtl.connect %tmp48, %0 : !firrtl.uint<27>, !firrtl.uint<27>
   }
 
@@ -436,12 +436,12 @@ firrtl.circuit "Simple" {
   // CHECK-NEXT:     %1 = sv.read_inout %a1 : !hw.inout<i1>
   // CHECK-NEXT:     %2 = sv.read_inout %b1 : !hw.inout<i1>
   // CHECK-NEXT:     %3 = sv.read_inout %c1 : !hw.inout<i1>
-  // CHECK-NEXT:     sv.connect %a1, %2 : i1
-  // CHECK-NEXT:     sv.connect %a1, %3 : i1
-  // CHECK-NEXT:     sv.connect %b1, %1 : i1
-  // CHECK-NEXT:     sv.connect %b1, %3 : i1
-  // CHECK-NEXT:     sv.connect %c1, %1 : i1
-  // CHECK-NEXT:     sv.connect %c1, %2 : i1
+  // CHECK-NEXT:     sv.assign %a1, %2 : i1
+  // CHECK-NEXT:     sv.assign %a1, %3 : i1
+  // CHECK-NEXT:     sv.assign %b1, %1 : i1
+  // CHECK-NEXT:     sv.assign %b1, %3 : i1
+  // CHECK-NEXT:     sv.assign %c1, %1 : i1
+  // CHECK-NEXT:     sv.assign %c1, %2 : i1
   // CHECK-NEXT:    } else {
   // CHECK-NEXT:     sv.ifdef "verilator" {
   // CHECK-NEXT:       sv.verbatim "`error \22Verilator does not support alias and thus cannot arbitrarily connect bidirectional wires and ports\22"
@@ -716,8 +716,8 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
     // CHECK-NEXT:   %0 = sv.read_inout %a : !hw.inout<i1>
     // CHECK-NEXT:   %1 = sv.read_inout %.invalid_analog : !hw.inout<i1>
-    // CHECK-NEXT:   sv.connect %a, %1 : i1
-    // CHECK-NEXT:   sv.connect %.invalid_analog, %0 : i1
+    // CHECK-NEXT:   sv.assign %a, %1 : i1
+    // CHECK-NEXT:   sv.assign %.invalid_analog, %0 : i1
     // CHECK-NEXT: } else {
     // CHECK-NEXT:   sv.ifdef "verilator" {
     // CHECK-NEXT:     sv.verbatim "`error \22Verilator does not support alias and thus cannot arbitrarily connect bidirectional wires and ports\22"

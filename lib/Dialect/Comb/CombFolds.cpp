@@ -136,6 +136,89 @@ OpFoldResult ExtractOp::fold(ArrayRef<Attribute> constants) {
   return {};
 }
 
+// Transforms extract(lo, cat(a, b, c, d, e)) into
+// cat(extract(lo1, b), c, extract(lo2, d)).
+// innerCat must be the argument of the provided ExtractOp.
+static LogicalResult extractConcatToConcatExtract(ExtractOp op,
+                                                  ConcatOp innerCat,
+                                                  PatternRewriter &rewriter) {
+  auto reversedConcatArgs = llvm::reverse(innerCat.inputs());
+  size_t beginOfFirstRelevantElement = 0;
+  auto it = reversedConcatArgs.begin();
+  size_t lowBit = op.lowBit();
+
+  // This loop finds the first concatArg that is covered by the ExtractOp
+  for (; it != reversedConcatArgs.end(); it++) {
+    assert(beginOfFirstRelevantElement <= lowBit &&
+           "incorrectly moved past an element that lowBit has coverage over");
+    auto operand = *it;
+
+    size_t operandWidth = operand.getType().getIntOrFloatBitWidth();
+    if (lowBit < beginOfFirstRelevantElement + operandWidth) {
+      // A bit other than the first bit will be used in this element.
+      // ...... ........ ...
+      //           ^---lowBit
+      //        ^---beginOfFirstRelevantElement
+      //
+      // Edge-case close to the end of the range.
+      // ...... ........ ...
+      //                 ^---(position + operandWidth)
+      //               ^---lowBit
+      //        ^---beginOfFirstRelevantElement
+      //
+      // Edge-case close to the beginning of the rang
+      // ...... ........ ...
+      //        ^---lowBit
+      //        ^---beginOfFirstRelevantElement
+      //
+      break;
+    }
+
+    // extraction discards this element.
+    // ...... ........  ...
+    // |      ^---lowBit
+    // ^---beginOfFirstRelevantElement
+    beginOfFirstRelevantElement += operandWidth;
+  }
+  assert(it != reversedConcatArgs.end() &&
+         "incorrectly failed to find an element which contains coverage of "
+         "lowBit");
+
+  SmallVector<Value> reverseConcatArgs;
+  size_t widthRemaining = op.getType().getWidth();
+  size_t extractLo = lowBit - beginOfFirstRelevantElement;
+
+  // Transform individual arguments of innerCat(..., a, b, c,) into
+  // [ extract(a), b, extract(c) ], skipping an extract operation where
+  // possible.
+  for (; widthRemaining != 0 && it != reversedConcatArgs.end(); it++) {
+    auto concatArg = *it;
+    size_t operandWidth = concatArg.getType().getIntOrFloatBitWidth();
+    size_t widthToConsume = std::min(widthRemaining, operandWidth - extractLo);
+
+    if (widthToConsume == operandWidth && extractLo == 0) {
+      reverseConcatArgs.push_back(concatArg);
+    } else {
+      auto resultType = IntegerType::get(rewriter.getContext(), widthToConsume);
+      reverseConcatArgs.push_back(
+          rewriter.create<ExtractOp>(op.getLoc(), resultType, *it, extractLo));
+    }
+
+    widthRemaining -= widthToConsume;
+
+    // Beyond the first element, all elements are extracted from position 0.
+    extractLo = 0;
+  }
+
+  if (reverseConcatArgs.size() == 1) {
+    rewriter.replaceOp(op, reverseConcatArgs[0]);
+  } else {
+    rewriter.replaceOpWithNewOp<ConcatOp>(
+        op, SmallVector<Value>(llvm::reverse(reverseConcatArgs)));
+  }
+  return success();
+}
+
 LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
   // Narrow Mux
   // extract(mux(c,a,b)) -> mux(c,extract(a),extract(b))
@@ -157,6 +240,11 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
                                            innerExtract.input(),
                                            innerExtract.lowBit() + op.lowBit());
     return success();
+  }
+
+  // extract(lo, cat(a, b, c, d, e)) = cat(extract(lo1, b), c, extract(lo2, d))
+  if (auto innerCat = dyn_cast_or_null<ConcatOp>(op.input().getDefiningOp())) {
+    return extractConcatToConcatExtract(op, innerCat, rewriter);
   }
 
   return failure();

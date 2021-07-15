@@ -488,7 +488,10 @@ void TypeLoweringVisitor::visitStmt(ConnectOp op) {
     Value dest = getSubWhatever(op.dest(), field.index());
     if (field.value().isOutput)
       std::swap(src, dest);
-    builder->create<ConnectOp>(dest, src);
+    if (src.getType().isa<AnalogType>())
+      builder->create<AttachOp>(ArrayRef<Value>{dest, src});
+    else
+      builder->create<ConnectOp>(dest, src);
   }
   opsToRemove.push_back(op);
 }

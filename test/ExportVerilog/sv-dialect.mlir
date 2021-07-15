@@ -301,10 +301,10 @@ hw.module @reg_0(%in4: i4, %in8: i8) -> (%a: i8, %b: i8) {
   %myRegArray1 = sv.reg : !hw.inout<array<42 x i8>>
 
   // CHECK-EMPTY:
-  sv.connect %myReg, %in8 : i8        // CHECK-NEXT: assign myReg = in8;
+  sv.assign %myReg, %in8 : i8        // CHECK-NEXT: assign myReg = in8;
 
   %subscript1 = sv.array_index_inout %myRegArray1[%in4] : !hw.inout<array<42 x i8>>, i4
-  sv.connect %subscript1, %in8 : i8   // CHECK-NEXT: assign myRegArray1[in4] = in8;
+  sv.assign %subscript1, %in8 : i8   // CHECK-NEXT: assign myRegArray1[in4] = in8;
 
   %regout = sv.read_inout %myReg : !hw.inout<i8>
 
@@ -655,7 +655,7 @@ hw.module @oooReg(%in: i1) -> (%result: i1) {
   %0 = sv.read_inout %abc : !hw.inout<i1>
 
   // CHECK: assign abc = in;
-  sv.connect %abc, %in : i1
+  sv.assign %abc, %in : i1
   %abc = sv.wire  : !hw.inout<i1>
 
   // CHECK: assign result = abc;
