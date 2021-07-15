@@ -1583,6 +1583,8 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
 
     // Handle all the primitive ops: primop exp* intLit*  ')'
 #define TOK_LPKEYWORD(SPELLING) case FIRToken::lp_##SPELLING:
+#define TOK_LPKEYWORD_PRIM(SPELLING, CLASS, NUMOPERANDS)                       \
+  case FIRToken::lp_##SPELLING:
 #include "FIRTokenKinds.def"
     if (parsePrimExp(result))
       return failure();
