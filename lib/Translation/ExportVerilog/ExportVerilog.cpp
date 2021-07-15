@@ -2396,7 +2396,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
       // TODO: relying on float printing to be precise is not a good idea.
       os << fpAttr.getValueAsDouble();
     } else if (auto verbatimParam = value.dyn_cast<VerbatimParameterAttr>()) {
-      os << verbatimParam.getValue();
+      os << verbatimParam.getValue().getValue();
     } else {
       os << "<<UNKNOWN MLIRATTR: " << value << ">>";
       emitOpError(op, "unknown extmodule parameter value '")

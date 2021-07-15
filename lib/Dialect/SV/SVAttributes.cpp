@@ -46,8 +46,8 @@ void SVDialect::printAttribute(Attribute attr, DialectAsmPrinter &p) const {
 
 Attribute VerbatimParameterAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
                                        Type type) {
-  StringRef verbatimString;
-  if (p.parseLess() || p.parseOptionalString(&verbatimString) ||
+  StringAttr verbatimString;
+  if (p.parseLess() || p.parseAttribute(verbatimString) ||
       p.parseGreater())
     return Attribute();
 
@@ -55,7 +55,5 @@ Attribute VerbatimParameterAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
 }
 
 void VerbatimParameterAttr::print(DialectAsmPrinter &p) const {
-  p << "verbatim.parameter<\"";
-  p.getStream().write_escaped(getValue());
-  p << "\">";
+  p << "verbatim.parameter<" << getValue() << ">";
 }
