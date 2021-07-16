@@ -312,11 +312,10 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
   }
 
   // Insert the WiresOp and ControlOp.
-  auto ip = builder.saveInsertionPoint();
+  IRRewriter::InsertionGuard guard(builder);
   builder.setInsertionPointToStart(block);
   builder.create<WiresOp>(result.location);
   builder.create<ControlOp>(result.location);
-  builder.restoreInsertionPoint(ip);
 }
 
 //===----------------------------------------------------------------------===//
