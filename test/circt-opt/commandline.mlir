@@ -9,6 +9,7 @@
 // DIALECT-NEXT: comb
 // DIALECT-NEXT: esi
 // DIALECT-NEXT: firrtl
+// DIALECT-NEXT: fsm
 // DIALECT-NEXT: handshake
 // DIALECT-NEXT: hw
 // DIALECT-NEXT: llhd

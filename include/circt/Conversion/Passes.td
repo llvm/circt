@@ -134,4 +134,15 @@ def CreatePipeline : Pass<"create-pipeline", "mlir::FuncOp"> {
   let dependentDialects = ["staticlogic::StaticLogicDialect"];
 }
 
+//===----------------------------------------------------------------------===//
+// FSMToHW
+//===----------------------------------------------------------------------===//
+
+def ConvertFSMToHW : Pass<"convert-fsm-to-hw", "mlir::ModuleOp"> {
+  let summary = "Convert FSM to HW";
+  let constructor = "circt::createConvertFSMToHWPass()";
+  let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect",
+                           "circt::sv::SVDialect"];
+}
+
 #endif // CIRCT_CONVERSION_PASSES_TD
