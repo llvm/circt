@@ -47,7 +47,7 @@ calyx.program {
     calyx.control {}
   }
   calyx.component @main() -> () {
-    // expected-error @+1 {{'calyx.cell' op result type for "%in" must be 'i16', but got 'i1'}}
+    // expected-error @+1 {{'calyx.cell' op result type for "in" must be 'i16', but got 'i1'}}
     %0 = calyx.cell "b0" @B : i1
 
     calyx.wires {}
@@ -119,7 +119,7 @@ calyx.program {
     calyx.wires {
       // expected-error @+1 {{'calyx.group' op with name: Group1 is unused in the control execution schedule}}
       calyx.group @Group1 {
-        %done = calyx.group_done %c1_1 : i1
+        calyx.group_done %c1_1 : i1
       }
     }
     calyx.control {}

@@ -47,7 +47,7 @@ def GoInsertion : Pass<"calyx-go-insertion", "calyx::ComponentOp"> {
     }
     ```
   }];
-  let dependentDialects = ["comb::CombDialect", "hw::HWDialect"];
+  let dependentDialects = ["comb::CombDialect"];
   let constructor = "circt::calyx::createGoInsertionPass()";
 }
 

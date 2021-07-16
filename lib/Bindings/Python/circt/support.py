@@ -49,6 +49,7 @@ def connect(destination, source):
   if destination.backedge_owner and \
      index in destination.backedge_owner.backedges:
     destination.backedge_owner.backedges[index].erase()
+    del destination.backedge_owner.backedges[index]
 
 
 def var_to_attribute(obj, none_on_fail: bool = False) -> ir.Attribute:
@@ -177,6 +178,7 @@ class BackedgeBuilder(AbstractContextManager):
 
   def __init__(self):
     self.edges = set()
+    ir.Context.current.allow_unregistered_dialects = True
 
   @staticmethod
   def current():
