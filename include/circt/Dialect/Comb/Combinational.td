@@ -70,6 +70,8 @@ let hasFolder = true in {
   def ShlOp : UTBinOp<"shl">;
   def ShrUOp : UTBinOp<"shru">;
   def ShrSOp : UTBinOp<"shrs">;
+
+  let hasCanonicalizeMethod = true in
   def SubOp : UTBinOp<"sub">;
 }
 
@@ -151,6 +153,9 @@ def ICmpOp : CombOp<"icmp", [NoSideEffect, SameTypeOperands]> {
     /// lhs and rhs operands should be flipped to match the new predicate.
     static ICmpPredicate getFlippedPredicate(ICmpPredicate predicate);
 
+    /// Returns true if the predicate is signed.
+    static bool isPredicateSigned(ICmpPredicate predicate);
+
     /// Return true if this is an equality test with -1, which is a "reduction
     /// and" operation in Verilog.
     bool isEqualAllOnes();
@@ -227,7 +232,8 @@ def ConcatOp : VariadicOp<"concat"> {
     OpBuilder<(ins "ValueRange":$inputs)>,
     OpBuilder<(ins "Value":$lhs, "Value":$rhs), [{
       return build($_builder, $_state, ValueRange{lhs, rhs});
-    }]>
+    }]>,
+    OpBuilder<(ins "Value":$hd, "ValueRange":$tl)>,
   ];
 }
 

@@ -1581,8 +1581,13 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
                                         bool isLeadingStmt) {
   switch (getToken().getKind()) {
 
-    // Handle all the primitive ops: primop exp* intLit*  ')'
+    // Handle all the primitive ops: primop exp* intLit*  ')'.  There is a
+    // redundant definition of TOK_LPKEYWORD_PRIM which is needed to to get
+    // around a bug in the MSVC preprocessor to properly paste together the
+    // tokens lp_##SPELLING.
 #define TOK_LPKEYWORD(SPELLING) case FIRToken::lp_##SPELLING:
+#define TOK_LPKEYWORD_PRIM(SPELLING, CLASS, NUMOPERANDS)                       \
+  case FIRToken::lp_##SPELLING:
 #include "FIRTokenKinds.def"
     if (parsePrimExp(result))
       return failure();
@@ -2662,8 +2667,9 @@ ParseResult FIRStmtParser::parseInstance() {
                    });
   auto name = dontTouch ? id : filterUselessName(id);
 
-  auto result = builder.create<InstanceOp>(
-      resultTypes, moduleName, name, annotations.first, annotations.second);
+  auto result = builder.create<InstanceOp>(resultTypes, moduleName, name,
+                                           annotations.first.getValue(),
+                                           annotations.second.getValue());
 
   // Since we are implicitly unbundling the instance results, we need to keep
   // track of the mapping from bundle fields to results in the unbundledValues

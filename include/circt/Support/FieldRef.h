@@ -47,6 +47,8 @@ public:
     return value == other.value && id == other.id;
   }
 
+  operator bool() const { return bool(value); }
+
 private:
   /// A pointer to the value which created this.
   Value value;

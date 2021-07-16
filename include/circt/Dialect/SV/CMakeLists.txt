@@ -3,6 +3,8 @@ add_circt_doc(SV -gen-dialect-doc SV Dialects/)
 
 set(LLVM_TARGET_DEFINITIONS SV.td)
 
+mlir_tablegen(SVAttributes.h.inc -gen-attrdef-decls)
+mlir_tablegen(SVAttributes.cpp.inc -gen-attrdef-defs)
 mlir_tablegen(SVEnums.h.inc -gen-enum-decls)
 mlir_tablegen(SVEnums.cpp.inc -gen-enum-defs)
 add_public_tablegen_target(MLIRSVEnumsIncGen)

@@ -27,6 +27,7 @@ def IfDefOp : SVOp<"ifdef", [SingleBlock, NoTerminator, NoRegionArguments,
 
   let description = [{
     This operation is an #ifdef block, which has a "then" and "else" region.
+    This operation is for non-procedural regions and its body is non-procedural.
   }];
 
   let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
@@ -66,11 +67,12 @@ def IfDefOp : SVOp<"ifdef", [SingleBlock, NoTerminator, NoRegionArguments,
 
 def IfDefProceduralOp
   : SVOp<"ifdef.procedural", [SingleBlock, NoTerminator, NoRegionArguments,
-                              ProceduralRegion]> {
+                              ProceduralRegion, ProceduralOp]> {
   let summary = "'ifdef MACRO' block for procedural regions";
 
   let description = [{
     This operation is an #ifdef block, which has a "then" and "else" region.
+    This operation is for procedural regions and its body is procedural.
   }];
 
   let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
@@ -349,8 +351,20 @@ def CaseZOp : SVOp<"casez", [SingleBlock, NoTerminator, NoRegionArguments,
 }
 
 //===----------------------------------------------------------------------===//
-// Other Statements
+// Assignment Related Statements
 //===----------------------------------------------------------------------===//
+
+def AssignOp : SVOp<"assign", [InOutTypeConstraint<"src", "dest">,
+                                 NonProceduralOp]> {
+  let summary = "Continuous assignment";
+  let description = [{
+    A SystemVerilog assignment statement 'x = y;'.
+    These occur in module scope.  See SV Spec 10.3.2.
+  }];
+  let arguments = (ins InOutType:$dest, InOutElementType:$src);
+  let results = (outs);
+  let assemblyFormat = "$dest `,` $src  attr-dict `:` type($src)";
+}
 
 def BPAssignOp : SVOp<"bpassign", [InOutTypeConstraint<"src", "dest">,
                                    ProceduralOp]> {
@@ -378,6 +392,12 @@ def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">,
   let results = (outs);
   let assemblyFormat = "$dest `,` $src  attr-dict `:` type($src)";
 }
+
+
+
+//===----------------------------------------------------------------------===//
+// Other Statements
+//===----------------------------------------------------------------------===//
 
 def ForceOp : SVOp<"force", [InOutTypeConstraint<"src", "dest">,
                                    ProceduralOp]> {
@@ -491,40 +511,79 @@ def VerbatimOp : SVOp<"verbatim"> {
 // Verification Statements
 //===----------------------------------------------------------------------===//
 
-def AssertOp : SVOp<"assert", [ProceduralOp]> {
+class ImmediateAssertionOp<string mnemonic, list<OpTrait> traits = []> :
+    SVOp<mnemonic, traits> {
+  let arguments = (ins I1:$expression, StrAttr:$label);
+  let results = (outs);
+  let assemblyFormat =
+    "custom<OmitEmptyStringAttr>($label) attr-dict $expression `:` type($expression)";
+}
+
+def AssertOp : ImmediateAssertionOp<"assert", [ProceduralOp]> {
   let summary = "immediate assertion statement";
   let description = [{
-    Assert that a specific condition is always true.
+    Specify that a Boolean expression is always true.  This can be used to both
+    document the behavior of the design and to test that the design behaves as
+    expected.  See Section 16.3 of the SystemVerilog 2017 specification.
   }];
-
-  let arguments = (ins AnyType:$predicate, StrAttr:$label);
-  let results = (outs);
-  let assemblyFormat =
-    "custom<OmitEmptyStringAttr>($label) attr-dict $predicate `:` type($predicate)";
 }
 
-def AssumeOp : SVOp<"assume", [ProceduralOp]> {
-  let summary = "assume property statement";
+def AssumeOp : ImmediateAssertionOp<"assume", [ProceduralOp]> {
+  let summary = "immediate assume statement";
   let description = [{
-    Assume that a specific property is always true.
+    Specify that a Boolean expression is assumed to always be true.  This can
+    either be used as an assertion-like check that the expression is, in fact,
+    always true or to bound legal input values during testing.  See Section 16.3
+    of the SystemVerilog 2017 specification.
   }];
-
-  let arguments = (ins AnyType:$property, StrAttr:$label);
-  let results = (outs);
-  let assemblyFormat =
-    "custom<OmitEmptyStringAttr>($label) attr-dict $property `:` type($property)";
 }
 
-def CoverOp : SVOp<"cover", [ProceduralOp]> {
-  let summary = "functional coverage statement";
+def CoverOp : ImmediateAssertionOp<"cover", [ProceduralOp]> {
+  let summary = "immediate cover statement";
   let description = [{
-    Assert that a specific property happens during the course of execution.
+    Specify that a Boolean expression should be monitored for coverage, i.e., a
+    simulator will watch if it occurs and how many times it occurs.  See section
+    16.3 of the SystemVerilog 2017 specification.
   }];
+}
 
-  let arguments = (ins AnyType:$property, StrAttr:$label);
+class ConcurrentAssertionOp<string mnemonic, list<OpTrait> traits = []> :
+    SVOp<mnemonic, traits> {
+  let arguments =
+    (ins EventControlAttr:$event, I1:$clock, I1:$property, StrAttr:$label);
   let results = (outs);
   let assemblyFormat =
-    "custom<OmitEmptyStringAttr>($label) attr-dict $property `:` type($property)";
+    "custom<OmitEmptyStringAttr>($label) $event $clock $property attr-dict `:`"
+    " type($property)";
+}
+
+def AssertConcurrentOp : ConcurrentAssertionOp<"assert.concurrent"> {
+  let summary = "concurrent assertion statement, i.e., assert property";
+  let description = [{
+    Specify that a property of the hardware design is true whenever the property
+    is evaluated.  This can be used to both document the behavior of the design
+    and to test that the design behaves as expected.  See section 16.5 of the
+    SystemVerilog 2017 specification.
+  }];
+}
+
+def AssumeConcurrentOp : ConcurrentAssertionOp<"assume.concurrent"> {
+  let summary = "concurrent assume statement, i.e., assume property";
+  let description = [{
+    Specify that a property is assumed to be true whenever the property is
+    evaluated.  This can be used to both document the behavior of the design and
+    to test that the design behaves as expected.  See section 16.5 of the
+    SystemVerilog 2017 specification.
+  }];
+}
+
+def CoverConcurrentOp : ConcurrentAssertionOp<"cover.concurrent"> {
+  let summary = "concurrent cover statement, i.e., cover property";
+  let description = [{
+    Specify that a specific property should be monitored for coverage, i.e., a
+    simulation will watch if it occurrs and how many times it occurs.  See
+    section 16.5 of the SystemVerilog 2017 specification.
+  }];
 }
 
 def BindOp : SVOp<"bind", []> {

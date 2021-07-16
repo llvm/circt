@@ -201,7 +201,7 @@ hw.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2:
 
   %p = hw.instance "paramd" @EXT_W_PARAMS(%w, %i3) {parameters = {DEFAULT = 14000240888948784983 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i1, i0) -> i1
 
-  %p2 = hw.instance "paramd2" @EXT_W_PARAMS2(%i2) {parameters = {DEFAULT = 1 : i64}} : (i2) -> i1
+  %p2 = hw.instance "paramd2" @EXT_W_PARAMS2(%i2) {parameters = {DEFAULT = 1 : i32}} : (i2) -> i1
 
   hw.output %y, %x, %p, %p2 : i1, i1, i1, i1
 }
@@ -225,7 +225,7 @@ hw.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2:
 // CHECK-NEXT:     .c (y)
 // CHECK-NEXT:   );
 // CHECK-NEXT:   FooModule #(
-// CHECK-NEXT:     .DEFAULT(14000240888948784983),
+// CHECK-NEXT:     .DEFAULT(64'd14000240888948784983),
 // CHECK-NEXT:     .DEPTH(3.242000e+01),
 // CHECK-NEXT:     .FORMAT("xyz_timeout=%d\n"),
 // CHECK-NEXT:     .WIDTH(32)
@@ -327,21 +327,21 @@ hw.module @wires(%in4: i4, %in8: i8) -> (%a: i4, %b: i8, %c: i8) {
   // Wires.
 
   // CHECK-NEXT: assign myWire = in4;
-  sv.connect %myWire, %in4 : i4
+  sv.assign %myWire, %in4 : i4
   %wireout = sv.read_inout %myWire : !hw.inout<i4>
 
   // Packed arrays.
 
   %subscript = sv.array_index_inout %myArray1[%in4] : !hw.inout<array<42 x i8>>, i4
   // CHECK-NEXT: assign myArray1[in4] = in8;
-  sv.connect %subscript, %in8 : i8
+  sv.assign %subscript, %in8 : i8
 
   %memout1 = sv.read_inout %subscript : !hw.inout<i8>
 
     // Unpacked arrays, and unpacked arrays of packed arrays.
   %subscriptu = sv.array_index_inout %myUArray1[%in4] : !hw.inout<uarray<42 x i8>>, i4
   // CHECK-NEXT: assign myUArray1[in4] = in8;
-  sv.connect %subscriptu, %in8 : i8
+  sv.assign %subscriptu, %in8 : i8
 
   %memout2 = sv.read_inout %subscriptu : !hw.inout<i8>
 
@@ -376,7 +376,7 @@ hw.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
   %a1 = comb.divs %in1, %in2: i4
   %a2 = comb.divs %in3, %in4: i4
   %a3 = comb.divu %a1, %a2: i4
-  sv.connect %awire, %a3: i4
+  sv.assign %awire, %a3: i4
 
   // CHECK: wire [3:0] _tmp = $signed(in1) / $signed(in2) + $signed(in1) / $signed(in2);
   // CHECK: wire [3:0] _tmp_0 = $signed(in1) / $signed(in2) * $signed(in1) / $signed(in2);
@@ -388,14 +388,14 @@ hw.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
   %b2 = comb.add %b1a, %b1b: i4
   %b3 = comb.mul %b1c, %b1d: i4
   %b4 = comb.divu %b2, %b3: i4
-  sv.connect %awire, %b4: i4
+  sv.assign %awire, %b4: i4
 
   // https://github.com/llvm/circt/issues/369
   // CHECK: assign awire = 4'sh5 / -4'sh3;
   %c5_i4 = hw.constant 5 : i4
   %c-3_i4 = hw.constant -3 : i4
   %divs = comb.divs %c5_i4, %c-3_i4 : i4
-  sv.connect %awire, %divs: i4
+  sv.assign %awire, %divs: i4
 
   hw.output
 }
@@ -637,12 +637,14 @@ hw.module @ABC(%a: i1, %b: i2) -> (%c: i4) {
 
 // CHECK:   wire [2:0] whatever_c;
 // CHECK-EMPTY:
+// CHECK-NEXT:   // This instance is elsewhere emitted as a bind statement
 // CHECK-NEXT:   // ExternDestMod whatever (
 // CHECK-NEXT:   //   .a (a),
 // CHECK-NEXT:   //   .b (b),
 // CHECK-NEXT:   //   .c (whatever_c),
 // CHECK-NEXT:   //   .d (c)
 // CHECK-NEXT:   // );
+// CHECK-NEXT:   // This instance is elsewhere emitted as a bind statement
 // CHECK-NEXT:   // InternalDestMod yo (
 // CHECK-NEXT:   //   .a (a),
 // CHECK-NEXT:   //   .b (whatever_c)
@@ -710,3 +712,21 @@ hw.module @Chi() -> (%Chi_output : i0) {
   hw.output %0 : i0
   // CHECK: endmodule
 }
+
+// CHECK-LABEL: module Foo1360(
+// Issue #1360: https://github.com/llvm/circt/issues/1360
+
+ hw.module @Foo1360() {
+   // CHECK:      RealBar #(
+   // CHECK-NEXT:   .WIDTH0(64'd0),
+   // CHECK-NEXT:   .WIDTH1(4),
+   // CHECK-NEXT:   .WIDTH2(40'd6812312123),
+   // CHECK-NEXT:   .WIDTH3(-1),
+   // CHECK-NEXT:   .WIDTH4(-68'sd88888888888888888),
+   // CHECK-NEXT:   .Wtricky(40'd4294967295)
+   // CHECK-NEXT: ) bar ();
+   
+   hw.instance "bar" @Bar1360() {parameters = {WIDTH0 = 0 : i64, WIDTH1 = 4 : i4, WIDTH2 = 6812312123 : i40, WIDTH3 = -1 : si4, WIDTH4 = -88888888888888888 : si68, Wtricky = 4294967295 : i40}} : () -> ()
+   hw.output
+ }
+ hw.module.extern @Bar1360() attributes {verilogName = "RealBar"}

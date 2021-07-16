@@ -77,10 +77,16 @@ static void getDeclName(Value value, SmallString<64> &string) {
 }
 
 std::string circt::firrtl::getFieldName(const FieldRef &fieldRef) {
+  bool rootKnown;
+  return getFieldName(fieldRef, rootKnown);
+}
 
+std::string circt::firrtl::getFieldName(const FieldRef &fieldRef,
+                                        bool &rootKnown) {
   SmallString<64> name;
   auto value = fieldRef.getValue();
   getDeclName(value, name);
+  rootKnown = !name.empty();
 
   auto type = value.getType();
   auto localID = fieldRef.getFieldID();
@@ -89,7 +95,8 @@ std::string circt::firrtl::getFieldName(const FieldRef &fieldRef) {
       auto index = bundleType.getIndexForFieldID(localID);
       // Add the current field string, and recurse into a subfield.
       auto &element = bundleType.getElements()[index];
-      name += ".";
+      if (!name.empty())
+        name += ".";
       name += element.name.getValue();
       // Recurse in to the element type.
       type = element.type;
@@ -196,6 +203,22 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
       setNameFn(constant.getResult(), specialName.str());
     }
 
+    if (auto specialConstant = dyn_cast<SpecialConstantOp>(op)) {
+      SmallString<32> specialNameBuffer;
+      llvm::raw_svector_ostream specialName(specialNameBuffer);
+      specialName << 'c';
+      specialName << static_cast<unsigned>(specialConstant.value());
+      auto type = specialConstant.getType();
+      if (type.isa<ClockType>()) {
+        specialName << "_clock";
+      } else if (type.isa<ResetType>()) {
+        specialName << "_reset";
+      } else if (type.isa<AsyncResetType>()) {
+        specialName << "_asyncreset";
+      }
+      setNameFn(specialConstant.getResult(), specialName.str());
+    }
+
     // Set invalid values to have a distinct name.
     if (auto invalid = dyn_cast<InvalidValueOp>(op)) {
       std::string name;
@@ -276,8 +299,28 @@ void FIRRTLDialect::printType(Type type, DialectAsmPrinter &os) const {
 Operation *FIRRTLDialect::materializeConstant(OpBuilder &builder,
                                               Attribute value, Type type,
                                               Location loc) {
+
+  // Boolean constants. Boolean attributes are always a special constant type
+  // like ClockType and ResetType.  Since BoolAttrs are also IntegerAttrs, its
+  // important that this goes first.
+  if (auto attrValue = value.dyn_cast<BoolAttr>()) {
+    assert(
+        type.isa<ClockType>() || type.isa<AsyncResetType>() ||
+        type.isa<ResetType>() &&
+            "BoolAttrs can only be materialized for special constant types.");
+    return builder.create<SpecialConstantOp>(loc, type, attrValue);
+  }
+
   // Integer constants.
   if (auto attrValue = value.dyn_cast<IntegerAttr>()) {
+    // Integer attributes (ui1) might still be special constant types.
+    if (attrValue.getValue().getBitWidth() == 1 &&
+        (type.isa<ClockType>() || type.isa<AsyncResetType>() ||
+         type.isa<ResetType>()))
+      return builder.create<SpecialConstantOp>(
+          loc, type,
+          builder.getBoolAttr(attrValue.getValue().isAllOnesValue()));
+
     auto intType = type.cast<IntType>();
     assert((!intType.hasWidth() || (unsigned)intType.getWidthOrSentinel() ==
                                        attrValue.getValue().getBitWidth()) &&
