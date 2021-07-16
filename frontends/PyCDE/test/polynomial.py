@@ -8,6 +8,7 @@ import pycde
 from pycde import (Input, Output, Parameter, module, externmodule, generator,
                    types, dim)
 from circt.dialects import comb, hw
+from circt.support import connect
 
 
 @module
@@ -81,7 +82,8 @@ class Polynomial(pycde.System):
   def build(self, top):
     i32 = types.i32
     x = hw.ConstantOp.create(i32, 23)
-    poly = PolynomialCompute(Coefficients([62, 42, 6]))("example", x=x)
+    poly = PolynomialCompute(Coefficients([62, 42, 6]))("example")
+    connect(poly.x, x)
     PolynomialCompute(coefficients=Coefficients([62, 42, 6]))("example2",
                                                               x=poly.y)
     PolynomialCompute(Coefficients([1, 2, 3, 4, 5]))("example2", x=poly.y)
