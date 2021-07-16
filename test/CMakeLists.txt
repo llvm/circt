@@ -17,6 +17,7 @@ set(CIRCT_TEST_DEPENDS
   esi-tester
   handshake-runner
   firtool
+  querytool
   llhd-sim
   mlir-opt
   mlir-cpu-runner
