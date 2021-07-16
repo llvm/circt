@@ -415,6 +415,21 @@ hw.module @narrowSubExtractFromNoneZero(%x: i8, %y: i8) -> (%z0: i4) {
   hw.output %1 : i4
 }
 
+// Validates that subtraction narrowing retains the lower bits when not extracting from
+// zero.
+// CHECK-LABEL: hw.module @narrowMulExtractFromNoneZero
+hw.module @narrowMulExtractFromNoneZero(%x: i8, %y: i8) -> (%z0: i4) {
+  // CHECK-NEXT: [[RX:%.+]] = comb.extract %x from 0 : (i8) -> i5
+  // CHECK-NEXT: [[RY:%.+]] = comb.extract %y from 0 : (i8) -> i5
+  // CHECK-NEXT: [[ADD:%.+]] = comb.mul [[RX]], [[RY]] : i5
+  // CHECK-NEXT: [[RET:%.+]] = comb.extract [[ADD]] from 1 : (i5) -> i4
+  // CHECK-NEXT: hw.output [[RET]]
+
+  %0 = comb.mul %x, %y : i8
+  %1 = comb.extract %0 from 1 : (i8) -> i4
+  hw.output %1 : i4
+}
+
 // Validates that bitwise operation does not retain the lower bit when extracting from
 // non-zero.
 // CHECK-LABEL: hw.module @narrowBitwiseOpsExtractFromNoneZero
