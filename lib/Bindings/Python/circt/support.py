@@ -177,6 +177,7 @@ class BackedgeBuilder(AbstractContextManager):
 
   def __init__(self):
     self.edges = set()
+    ir.Context.current.allow_unregistered_dialects = True
 
   @staticmethod
   def current():
