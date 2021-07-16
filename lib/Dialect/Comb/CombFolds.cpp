@@ -1010,6 +1010,7 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
       Value newT = trueCase.trueValue();
       Value newF = op.falseValue();
       rewriter.replaceOpWithNewOp<MuxOp>(op, op.cond(), newT, newF);
+      return success();
     }
   }
 
