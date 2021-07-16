@@ -10,6 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+// TODO(cgyurgyik): It may be worthwhile to unify component and primitive cells,
+// much in the same way that the native compiler does.
 def RegisterOp : CalyxOp<"register", [
     DeclareOpInterfaceMethods<OpAsmOpInterface>,
     HasParent<"ComponentOp">,
