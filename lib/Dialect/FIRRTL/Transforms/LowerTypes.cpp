@@ -101,6 +101,18 @@ static bool peelType(Type type, SmallVectorImpl<FlatBundleFieldEntry> &fields) {
       .Default([](auto op) { return false; });
 }
 
+/// Return if something is a subaccess, special-cased for subaccess taking
+/// constants, which are really subindex.
+static bool isNotSubAccess(Operation *op) {
+  SubaccessOp sao = dyn_cast<SubaccessOp>(op);
+  if (!sao)
+    return true;
+  ConstantOp arg = dyn_cast_or_null<ConstantOp>(sao.index().getDefiningOp());
+  if (arg && sao.input().getType().cast<FVectorType>().getNumElements() != 0)
+    return true;
+  return false;
+}
+
 /// Look through and collect subfields leading to a subaccess.
 static SmallVector<Operation *> getSAWritePath(Operation *op) {
   SmallVector<Operation *> retval;
@@ -110,7 +122,7 @@ static SmallVector<Operation *> getSAWritePath(Operation *op) {
     defOp = defOp->getOperand(0).getDefiningOp();
   }
   // Trim to the subaccess
-  while (!retval.empty() && !isa<SubaccessOp>(retval.back()))
+  while (!retval.empty() && isNotSubAccess(retval.back()))
     retval.pop_back();
   return retval;
 }
@@ -920,16 +932,35 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
 }
 
 void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
-  // Reads.  All writes have been eliminated before now
-
   auto input = op.input();
   auto vType = input.getType().cast<FVectorType>();
+
+  // Check for empty vectors
+  if (vType.getNumElements() == 0) {
+    Value inv = builder->create<InvalidValueOp>(vType.getElementType());
+    op.replaceAllUsesWith(inv);
+    opsToRemove.push_back(op);
+    return;
+  }
+
+  // Check for constant instances
+  if (ConstantOp arg =
+          dyn_cast_or_null<ConstantOp>(op.index().getDefiningOp())) {
+    auto sio =
+        builder->create<SubindexOp>(op.input(), arg.value().getExtValue());
+    op.replaceAllUsesWith(sio.getResult());
+    opsToRemove.push_back(op);
+    return;
+  }
+
+  // Reads.  All writes have been eliminated before now
   auto selectWidth =
       op.index().getType().cast<FIRRTLType>().getBitWidthOrSentinel();
 
-  Value mux = builder->create<InvalidValueOp>(vType.getElementType());
+  // We have at least one element
+  Value mux = builder->create<SubindexOp>(input, 0);
   // Build up the mux
-  for (size_t index = 0, e = vType.getNumElements(); index < e; ++index) {
+  for (size_t index = 1, e = vType.getNumElements(); index < e; ++index) {
     auto cond = builder->create<EQPrimOp>(
         op.index(), builder->createOrFold<ConstantOp>(
                         UIntType::get(op.getContext(), selectWidth),
