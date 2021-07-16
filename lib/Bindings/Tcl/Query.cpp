@@ -86,6 +86,13 @@ void filterUpdateStringProc(Tcl_Obj *obj) {
 }
 
 void filterDupIntRepProc(Tcl_Obj *src, Tcl_Obj *dup) {
+  size_t count = ((CirctQueryFilter) src->internalRep.twoPtrValue.ptr1)->size();
+  dup->internalRep.twoPtrValue.ptr1 = (void*) new circt::query::Filter;
+  *(CirctQueryFilter) dup->internalRep.twoPtrValue.ptr1 = *(CirctQueryFilter) src->internalRep.twoPtrValue.ptr1;
+
+  for (size_t i = 0; i < count; i++) {
+    ((Tcl_Obj**) dup->internalRep.twoPtrValue.ptr2)[i] = Tcl_DuplicateObj(((Tcl_Obj**) src->internalRep.twoPtrValue.ptr2)[i]);
+  }
 }
 
 void filterFreeIntRepProc(Tcl_Obj *obj) {
