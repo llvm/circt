@@ -49,8 +49,8 @@ firrtl.module @Bear() {
 
 firrtl.module @Cat() { }
 
-
-
 firrtl.module @Deer() { }
+
+firrtl.module @Bat() { }
 
 }

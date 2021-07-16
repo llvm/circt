@@ -100,9 +100,8 @@ InstanceGraphNode *InstanceGraph::getLCA(InstanceGraphNode *node1,
   //    2.1.1 And its depth is largest of the common ancestors, then
   //      2.1.1.1 This is a candidate LCA.
 
-  // The default LCA is the top level CircuitOp, if the two nodes donot have any
-  // common ancestor.
-  auto lcaNode = &nodes[0];
+  // Returns nullptr, if the two nodes donot have any common ancestor.
+  InstanceGraphNode *lcaNode = nullptr;
   SmallVector<InstanceGraphNode *, 8> nodesQ;
   SmallPtrSet<InstanceGraphNode *, 16> node1Ancestors;
   nodesQ.push_back(node1);

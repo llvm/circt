@@ -62,15 +62,17 @@ struct PrintInstanceGraphPass
         for (InstanceGraphNode *node2 : instanceGraph) {
           if (node1 == node2)
             continue;
-          os << "\n LCA of ("
-             << llvm::DOTGraphTraits<InstanceGraph *>::getNodeLabel(
-                    node1, &instanceGraph)
-             << ","
-             << llvm::DOTGraphTraits<InstanceGraph *>::getNodeLabel(
-                    node2, &instanceGraph)
-             << ")="
-             << llvm::DOTGraphTraits<InstanceGraph *>::getNodeLabel(
-                    instanceGraph.getLCA(node1, node2), &instanceGraph);
+          auto lcaNode = instanceGraph.getLCA(node1, node2);
+          if (lcaNode != nullptr)
+            os << "\n LCA of ("
+               << llvm::DOTGraphTraits<InstanceGraph *>::getNodeLabel(
+                      node1, &instanceGraph)
+               << ","
+               << llvm::DOTGraphTraits<InstanceGraph *>::getNodeLabel(
+                      node2, &instanceGraph)
+               << ")="
+               << llvm::DOTGraphTraits<InstanceGraph *>::getNodeLabel(
+                      lcaNode, &instanceGraph);
         }
       }
   }
