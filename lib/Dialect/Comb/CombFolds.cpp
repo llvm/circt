@@ -77,10 +77,11 @@ static bool tryFlatteningOperands(Op op, PatternRewriter &rewriter) {
 // Given a range of uses of an operation, find the lowest and highest bits
 // inclusive that are ever referenced. The range of uses must not be empty.
 static std::pair<size_t, size_t>
-getLowestBitAndHighestBitRequired(Operation::use_range uses, bool narrowTrailingBits, size_t originalOpWidth)
-{
-  assert(!uses.empty() &&
-      "getLowestBitAndHighestBitRequired cannot operate on a empty list of uses.");
+getLowestBitAndHighestBitRequired(Operation::use_range uses,
+                                  bool narrowTrailingBits,
+                                  size_t originalOpWidth) {
+  assert(!uses.empty() && "getLowestBitAndHighestBitRequired cannot operate on "
+                          "a empty list of uses.");
 
   // when we don't want to narrowTrailingBits (namely in arithmetic
   // operations), forcing lowestBitRequired = 0
@@ -129,7 +130,8 @@ static bool narrowOperationWidth(Op narrowingCandidate, ValueRange inputs,
   size_t originalOpWidth = narrowingCandidate.getType().getIntOrFloatBitWidth();
 
   std::tie(lowestBitRequired, highestBitRequired) =
-    getLowestBitAndHighestBitRequired(uses, narrowTrailingBits, originalOpWidth);
+      getLowestBitAndHighestBitRequired(uses, narrowTrailingBits,
+                                        originalOpWidth);
 
   // Give up, because we can't make it narrower than it already is.
   if (lowestBitRequired == 0 && highestBitRequired == originalOpWidth - 1) {
