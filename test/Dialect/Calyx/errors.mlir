@@ -46,9 +46,15 @@ calyx.program {
     calyx.wires {}
     calyx.control {}
   }
+<<<<<<< HEAD
   calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     // expected-error @+1 {{'calyx.cell' op result type for "in" must be 'i16', but got 'i1'}}
     %b0.in, %b0.go, %b0.clk, %b0.reset, %b0.done = calyx.cell "b0" @B : i1, i1, i1, i1, i1
+=======
+  calyx.component @main() -> () {
+    // expected-error @+1 {{'calyx.cell' op result type for "in" must be 'i16', but got 'i1'}}
+    %0 = calyx.cell "b0" @B : i1
+>>>>>>> origin/main
 
     calyx.wires {}
     calyx.control {}

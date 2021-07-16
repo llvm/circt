@@ -68,6 +68,9 @@ public:
   forPort(Operation *module, size_t portNo,
           SmallVectorImpl<NamedAttribute> &otherAttributes);
 
+  /// Get an annotation set for the specified value.
+  static AnnotationSet get(Value v);
+
   /// Return all the raw annotations that exist.
   ArrayRef<Attribute> getArray() const { return annotations.getValue(); }
 
@@ -206,13 +209,13 @@ public:
                                 llvm::function_ref<bool(Annotation)> predicate);
   static bool removeAnnotations(Operation *op, StringRef className);
 
-  /// Remove all port annotations from a module for which `predicate` returns
-  /// true. The predicate is guaranteed to be called on every annotation, such
-  /// that this method can be used to partition a module's port annotations by
-  /// extracting and removing annotations at the same time. Returns true if any
-  /// annotations were removed, false otherwise.
+  /// Remove all port annotations from a module or extmodule for which
+  /// `predicate` returns true. The predicate is guaranteed to be called on
+  /// every annotation, such that this method can be used to partition a
+  /// module's port annotations by extracting and removing annotations at the
+  /// same time. Returns true if any annotations were removed, false otherwise.
   static bool removePortAnnotations(
-      FModuleOp module,
+      Operation *module,
       llvm::function_ref<bool(unsigned, Annotation)> predicate);
 
 private:

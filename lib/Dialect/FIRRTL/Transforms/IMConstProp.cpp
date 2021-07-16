@@ -189,6 +189,8 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   /// revisitation.
   void mergeLatticeValue(Value value, LatticeValue &valueEntry,
                          LatticeValue source) {
+    if (!source.isOverdefined() && AnnotationSet::get(value).hasDontTouch())
+      source = LatticeValue::getOverdefined();
     if (valueEntry.mergeIn(source))
       changedLatticeValueWorklist.push_back(value);
   }
@@ -217,6 +219,8 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     if (source.isUnknown())
       return;
 
+    if (!source.isOverdefined() && AnnotationSet::get(value).hasDontTouch())
+      source = LatticeValue::getOverdefined();
     // If we've changed this value then revisit all the users.
     auto &valueEntry = latticeValues[value];
     if (valueEntry != source) {
@@ -240,6 +244,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
 
   void markInvalidValueOp(InvalidValueOp invalid);
   void markConstantOp(ConstantOp constant);
+  void markSpecialConstantOp(SpecialConstantOp specialConstant);
   void markInstanceOp(InstanceOp instance);
 
   void visitConnect(ConnectOp connect);
@@ -338,6 +343,14 @@ LatticeValue IMConstPropPass::getExtendedLatticeValue(Value value,
   if (result.isInvalidValue())
     return InvalidValueAttr::get(destType);
 
+  auto constant = result.getConstant();
+
+  // If this is a BoolAttr then we are dealing with a special constant.
+  if (auto boolAttr = constant.dyn_cast<BoolAttr>()) {
+    // No extOrTrunc necessary for clock or reset types.
+    return LatticeValue(boolAttr);
+  }
+
   // If destType is wider than the source constant type, extend it.
   auto resultConstant = result.getConstant().getAPSInt();
   auto destWidth = destType.getBitWidthOrSentinel();
@@ -368,6 +381,8 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
       markWireOrUnresetableRegOp(&op);
     else if (auto constant = dyn_cast<ConstantOp>(op))
       markConstantOp(constant);
+    else if (auto specialConstant = dyn_cast<SpecialConstantOp>(op))
+      markSpecialConstantOp(specialConstant);
     else if (auto invalid = dyn_cast<InvalidValueOp>(op))
       markInvalidValueOp(invalid);
     else if (auto instance = dyn_cast<InstanceOp>(op))
@@ -416,6 +431,10 @@ void IMConstPropPass::markMemOp(MemOp mem) {
 
 void IMConstPropPass::markConstantOp(ConstantOp constant) {
   mergeLatticeValue(constant, LatticeValue(constant.valueAttr()));
+}
+
+void IMConstPropPass::markSpecialConstantOp(SpecialConstantOp specialConstant) {
+  mergeLatticeValue(specialConstant, LatticeValue(specialConstant.valueAttr()));
 }
 
 void IMConstPropPass::markInvalidValueOp(InvalidValueOp invalid) {
@@ -495,8 +514,9 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
   // Driving result ports propagates the value to each instance using the
   // module.
   if (auto blockArg = connect.dest().dyn_cast<BlockArgument>()) {
-    for (auto userOfResultPort : resultPortToInstanceResultMapping[blockArg])
-      mergeLatticeValue(userOfResultPort, srcValue);
+    if (!AnnotationSet::get(blockArg).hasDontTouch())
+      for (auto userOfResultPort : resultPortToInstanceResultMapping[blockArg])
+        mergeLatticeValue(userOfResultPort, srcValue);
     return;
   }
 
@@ -694,7 +714,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     }
 
     // Don't "refold" constants.  TODO: Unique in the module entry block.
-    if (isa<ConstantOp>(op) || isa<InvalidValueOp>(op))
+    if (isa<ConstantOp, SpecialConstantOp, InvalidValueOp>(op))
       continue;
 
     // If the op had any constants folded, replace them.

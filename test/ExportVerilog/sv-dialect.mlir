@@ -61,7 +61,7 @@ hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
   sv.alwaysff(posedge %clock) {
     sv.fwrite "Yo\n"
   }
-  
+
   // CHECK-NEXT: always_ff @(posedge clock) begin
   // CHECK-NEXT:   if (cond)
   // CHECK-NEXT:     $fwrite(32'h80000002, "Sync Reset Block\n")
@@ -84,7 +84,7 @@ hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
     sv.fwrite "Async Main Block\n"
   } ( asyncreset : negedge %cond) {
     sv.fwrite "Async Reset Block\n"
-  } 
+  }
 
   // CHECK-NEXT:  initial begin
   sv.initial {
@@ -106,7 +106,7 @@ hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
       sv.fwrite "Inlined! %x\n"(%add) : i8
     }
 
-    // begin/end required here to avoid else-confusion.  
+    // begin/end required here to avoid else-confusion.
 
     // CHECK-NEXT:   if (cond) begin
     sv.if %cond {
@@ -133,10 +133,18 @@ hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
 
       // CHECK-NEXT:     assert(cond);
       sv.assert %cond : i1
+      // CHECK-NEXT:     assert_0: assert(cond);
+      sv.assert "assert_0" %cond : i1
+
       // CHECK-NEXT:     assume(cond);
       sv.assume %cond : i1
+      // CHECK-NEXT:     assume_0: assume(cond);
+      sv.assume "assume_0" %cond : i1
+
       // CHECK-NEXT:     cover(cond);
       sv.cover %cond : i1
+      // CHECK-NEXT:     cover_0: cover(cond);
+      sv.cover "cover_0" %cond : i1
 
       // CHECK-NEXT:   $fatal
       sv.fatal
@@ -160,6 +168,20 @@ hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
   }
   // CHECK-NEXT:  end // initial
 
+  // CHECK-NEXT: assert property (@(posedge clock) cond);
+  sv.assert.concurrent posedge %clock %cond : i1
+  // CHECK-NEXT: assert_1: assert property (@(posedge clock) cond);
+  sv.assert.concurrent "assert_1" posedge %clock %cond : i1
+
+  // CHECK-NEXT: assume property (@(posedge clock) cond);
+  sv.assume.concurrent posedge %clock %cond : i1
+  // CHECK-NEXT: assume_1: assume property (@(posedge clock) cond);
+  sv.assume.concurrent "assume_1" posedge %clock %cond : i1
+
+  // CHECK-NEXT: cover property (@(posedge clock) cond);
+  sv.cover.concurrent posedge %clock %cond : i1
+  // CHECK-NEXT: cover_1: cover property (@(posedge clock) cond);
+  sv.cover.concurrent "cover_1" posedge %clock %cond : i1
 
   // CHECK-NEXT: initial
   // CHECK-NOT: begin
@@ -279,10 +301,10 @@ hw.module @reg_0(%in4: i4, %in8: i8) -> (%a: i8, %b: i8) {
   %myRegArray1 = sv.reg : !hw.inout<array<42 x i8>>
 
   // CHECK-EMPTY:
-  sv.connect %myReg, %in8 : i8        // CHECK-NEXT: assign myReg = in8;
+  sv.assign %myReg, %in8 : i8        // CHECK-NEXT: assign myReg = in8;
 
   %subscript1 = sv.array_index_inout %myRegArray1[%in4] : !hw.inout<array<42 x i8>>, i4
-  sv.connect %subscript1, %in8 : i8   // CHECK-NEXT: assign myRegArray1[in4] = in8;
+  sv.assign %subscript1, %in8 : i8   // CHECK-NEXT: assign myRegArray1[in4] = in8;
 
   %regout = sv.read_inout %myReg : !hw.inout<i8>
 
@@ -298,7 +320,7 @@ hw.module @reg_0(%in4: i4, %in8: i8) -> (%a: i8, %b: i8) {
 // https://github.com/llvm/circt/issues/508
 hw.module @issue508(%in1: i1, %in2: i1) {
   // CHECK: wire _T = in1 | in2;
-  %clock = comb.or %in1, %in2 : i1 
+  %clock = comb.or %in1, %in2 : i1
 
   // CHECK-NEXT: always @(posedge _T) begin
   // CHECK-NEXT: end
@@ -560,7 +582,7 @@ attributes { argNames = ["clock", "asdfasdfasdfasdfafa", "gasfdasafwjhijjafija"]
        sv.fwrite "this cond is split"
      }
   }
-  hw.output 
+  hw.output
 }
 
 // CHECK-LABEL: module issue728ifdef(
@@ -633,7 +655,7 @@ hw.module @oooReg(%in: i1) -> (%result: i1) {
   %0 = sv.read_inout %abc : !hw.inout<i1>
 
   // CHECK: assign abc = in;
-  sv.connect %abc, %in : i1
+  sv.assign %abc, %in : i1
   %abc = sv.wire  : !hw.inout<i1>
 
   // CHECK: assign result = abc;
@@ -749,3 +771,51 @@ hw.module @RegisterOfStructOrArrayOfStruct() {
   // CHECK: struct packed {logic a; logic b; }[3:0][7:0] reg3
   %reg3 = sv.reg : !hw.inout<array<4xarray<8xstruct<a: i1, b: i1>>>>
 }
+
+// CHECK-LABEL: module extInst
+hw.module.extern @extInst(%_h: i1, %_i: i1, %_j: i1, %_k: i1, %_z :i0) -> ()
+
+// CHECK-LABEL: module remoteInstDut
+hw.module @remoteInstDut(%i: i1, %j: i1, %z: i0) -> () {
+  %mywire = sv.wire : !hw.inout<i1>
+  %mywire_rd = sv.read_inout %mywire : !hw.inout<i1>
+  %myreg = sv.reg : !hw.inout<i1>
+  %myreg_rd = sv.read_inout %myreg : !hw.inout<i1>
+  %0 = hw.constant 1 : i1
+  hw.instance "a1" sym @bindInst @extInst(%mywire_rd, %myreg_rd, %j, %0, %z) {doNotPrint=1}: (i1, i1, i1, i1, i0) -> ()
+  hw.instance "a2" sym @bindInst2 @extInst(%mywire_rd, %myreg_rd, %j, %0, %z) {doNotPrint=1}: (i1, i1, i1, i1, i0) -> ()
+// CHECK: wire a2__k
+// CHECK-NEXT: wire a1__k
+// CHECK-NEXT: wire mywire
+// CHECK-NEXT: myreg
+// CHECK: assign a1__k = 1'h1
+// CHECK-NEXT: // This instance is elsewhere emitted as a bind statement
+// CHECK-NEXT: // extInst a1
+// CHECK: assign a2__k = 1'h1
+// CHECK-NEXT: // This instance is elsewhere emitted as a bind statement
+// CHECK-NEXT: // extInst a2
+}
+
+hw.module @bindInMod() -> () {
+  sv.bind @bindInst
+}
+
+// CHECK-LABEL: module bindInMod();
+// CHECK-NEXT:   bind remoteInstDut extInst a1 (
+// CHECK-NEXT:   ._h (mywire),
+// CHECK-NEXT:   ._i (myreg),
+// CHECK-NEXT:   ._j (j),
+// CHECK-NEXT:   ._k (a1__k)
+// CHECK-NEXT: //._z (z)
+// CHECK-NEXT: );
+// CHECK: endmodule
+
+sv.bind @bindInst2
+
+// CHECK-LABEL: bind remoteInstDut extInst a2 (
+// CHECK-NEXT:   ._h (mywire),
+// CHECK-NEXT:   ._i (myreg),
+// CHECK-NEXT:   ._j (j),
+// CHECK-NEXT:   ._k (a2__k)
+// CHECK-NEXT: //._z (z)
+// CHECK-NEXT: );

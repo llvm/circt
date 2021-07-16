@@ -84,7 +84,6 @@ def ComponentOp : CalyxOp<"component", [
     ArrayAttr:$outPortNames
   );
   let results = (outs);
-
   let regions = (region SizedRegion<1>: $body);
 
   let builders = [

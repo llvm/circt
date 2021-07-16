@@ -12,4 +12,3 @@ firrtl.circuit "Issue1187"  {
     firrtl.connect %result, %0 : !firrtl.uint<0>, !firrtl.uint<0>
   }
 }
-

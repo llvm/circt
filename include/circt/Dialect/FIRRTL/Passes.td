@@ -18,14 +18,6 @@ include "mlir/Pass/PassBase.td"
 def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
   let summary = "Lower FIRRTL types to ground types";
   let description = [{
-    Lower firrtl.module port types to ground types.
-  }];
-  let constructor = "circt::firrtl::createLowerFIRRTLTypesPass()";
-}
-
-def LowerBundleVector : Pass<"firrtl-lower-bundle-vectors", "firrtl::CircuitOp"> {
-  let summary = "Lower FIRRTL bundle and vector types to ground types";
-  let description = [{
     Lower aggregate FIRRTL types to ground types.  Memories, ports, wires, etc
     are split appart by elements of aggregate types.  The only aggregate types
     which exist after this pass are memory ports, though memory data types are
@@ -34,7 +26,7 @@ def LowerBundleVector : Pass<"firrtl-lower-bundle-vectors", "firrtl::CircuitOp">
     Connect and partial connect expansion and canonicalization happen in this
     pass.
   }];
-  let constructor = "circt::firrtl::createLowerBundleVectorTypesPass()";
+  let constructor = "circt::firrtl::createLowerFIRRTLTypesPass()";
 }
 
 def IMConstProp : Pass<"firrtl-imconstprop", "firrtl::CircuitOp"> {
@@ -108,19 +100,11 @@ def ExpandWhens : Pass<"firrtl-expand-whens", "firrtl::FModuleOp"> {
   let constructor = "circt::firrtl::createExpandWhensPass()";
 }
 
-def CheckWidths : Pass<"firrtl-check-widths", "firrtl::FModuleOp"> {
-  let summary = "Verify that types have a well-known width";
-  let description = [{
-    This pass checks if the widths of all types throughout a FIRRTL module are
-    well-known.
-  }];
-  let constructor = "circt::firrtl::createCheckWidthsPass()";
-}
-
 def InferWidths : Pass<"firrtl-infer-widths", "firrtl::CircuitOp"> {
   let summary = "Infer the width of types";
   let description = [{
-    This pass infers the widths of all types throughout a FIRRTL module.
+    This pass infers the widths of all types throughout a FIRRTL module, and
+    emits diagnostics for types that could not be inferred.
   }];
   let constructor = "circt::firrtl::createInferWidthsPass()";
 }

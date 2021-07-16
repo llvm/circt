@@ -73,9 +73,9 @@ circuit test_mod : %[[{"a": "a"}]]
 ; MLIRLOWER-NEXT :     %1 = comb.concat %c0_i5, %inp_1 : (i5, i1) -> i6
 ; MLIRLOWER-NEXT :     %2 = comb.shl %0, %1 : i6
 ; MLIRLOWER-NEXT :     %3 = comb.extract %2 from 0 : (i6) -> i3
-; MLIRLOWER-NEXT :     sv.connect %.out1.output, %3 : i3
+; MLIRLOWER-NEXT :     sv.assign %.out1.output, %3 : i3
 ; MLIRLOWER-NEXT :     %4 = comb.extract %inp_2 from 0 : (i5) -> i3
-; MLIRLOWER-NEXT :     sv.connect %.out2.output, %4 : i3
+; MLIRLOWER-NEXT :     sv.assign %.out2.output, %4 : i3
 ; MLIRLOWER-NEXT :     %5 = sv.read_inout %.out1.output : !hw.inout<i3>
 ; MLIRLOWER-NEXT :     %6 = sv.read_inout %.out2.output : !hw.inout<i3>
 ; MLIRLOWER-NEXT :     hw.output %5, %6 : i3, i3

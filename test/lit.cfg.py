@@ -57,7 +57,7 @@ tool_dirs = [
 ]
 tools = [
     'firtool', 'handshake-runner', 'circt-opt', 'circt-translate',
-    'circt-capi-ir-test', 'esi-tester', 'llhd-sim'
+    'circt-capi-ir-test', 'esi-tester'
 ]
 
 # Enable Verilator if it has been detected.
@@ -69,5 +69,10 @@ if config.verilator_path != "":
 # Enable ESI's Capnp tests if they're supported.
 if config.esi_capnp != "":
   config.available_features.add('capnp')
+
+# Add llhd-sim if it is built.
+if config.llhd_sim_enabled:
+  config.available_features.add('llhd-sim')
+  tools.append('llhd-sim')
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)

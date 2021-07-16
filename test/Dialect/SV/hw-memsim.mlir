@@ -29,7 +29,7 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0, @FIRRTLMem(%ro_clock_0: i1, %r
 //CHECK-NEXT:  %[[rwtmp:.+]] = sv.wire
 //CHECK-NEXT:  %[[rwres:.+]] = sv.read_inout %[[rwtmp]]
 //CHECK-NEXT:    sv.alwaysff(posedge %rw_clock_0)  {
-//CHECK-NEXT:      %[[rwslot:.+]] = sv.array_index_inout %Memory[%rw_addr_0] 
+//CHECK-NEXT:      %[[rwslot:.+]] = sv.array_index_inout %Memory[%rw_addr_0]
 //CHECK-NEXT:      %false = hw.constant false
 //CHECK-NEXT:      %[[rwrcondpre:.+]] = comb.icmp eq %rw_wmode_0, %false
 //CHECK-NEXT:      %[[rwrcond:.+]] = comb.and %rw_en_0, %[[rwrcondpre]]

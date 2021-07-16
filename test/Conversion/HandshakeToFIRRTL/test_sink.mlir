@@ -2,7 +2,7 @@
 
 // CHECK-LABEL: firrtl.module @handshake_sink_1ins_0outs_ui64(
 // CHECK-SAME:   in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) {
-// CHECK:   %0 = firrtl.subfield %arg0("ready") : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
+// CHECK:   %0 = firrtl.subfield %arg0(1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
 // CHECK:   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 // CHECK:   firrtl.connect %0, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK: }

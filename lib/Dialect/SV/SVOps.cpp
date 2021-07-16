@@ -25,9 +25,8 @@ using namespace sv;
 
 /// Return true if the specified operation is an expression.
 bool sv::isExpression(Operation *op) {
-  return isa<sv::VerbatimExprOp>(op) || isa<sv::GetModportOp>(op) ||
-         isa<sv::ReadInterfaceSignalOp>(op) || isa<sv::ConstantXOp>(op) ||
-         isa<sv::ConstantZOp>(op);
+  return isa<VerbatimExprOp, VerbatimExprSEOp, GetModportOp,
+             ReadInterfaceSignalOp, ConstantXOp, ConstantZOp>(op);
 }
 
 LogicalResult sv::verifyInProceduralRegion(Operation *op) {
@@ -129,19 +128,31 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
 // VerbatimExprOp
 //===----------------------------------------------------------------------===//
 
-void VerbatimExprOp::getAsmResultNames(
-    function_ref<void(Value, StringRef)> setNameFn) {
+/// Get the asm name for sv.verbatim.expr and sv.verbatim.expr.se.
+static void
+getVerbatimExprAsmResultNames(Operation *op,
+                              function_ref<void(Value, StringRef)> setNameFn) {
   // If the string is macro like, then use a pretty name.  We only take the
   // string up to a weird character (like a paren) and currently ignore
   // parenthesized expressions.
   auto isOkCharacter = [](char c) { return llvm::isAlnum(c) || c == '_'; };
-  auto name = string();
+  auto name = op->getAttrOfType<StringAttr>("string").getValue();
   // Ignore a leading ` in macro name.
   if (name.startswith("`"))
     name = name.drop_front();
   name = name.take_while(isOkCharacter);
   if (!name.empty())
-    setNameFn(getResult(), name);
+    setNameFn(op->getResult(0), name);
+}
+
+void VerbatimExprOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  getVerbatimExprAsmResultNames(getOperation(), std::move(setNameFn));
+}
+
+void VerbatimExprSEOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  getVerbatimExprAsmResultNames(getOperation(), std::move(setNameFn));
 }
 
 //===----------------------------------------------------------------------===//
@@ -192,10 +203,10 @@ LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
   // If the reg has a symbol, then we can't delete it.
   if (op.sym_nameAttr())
     return failure();
-  // Check that all operations on the wire are sv.connects. All other wire
+  // Check that all operations on the wire are sv.assigns. All other wire
   // operations will have been handled by other canonicalization.
   for (auto &use : op.getResult().getUses())
-    if (!isa<ConnectOp>(use.getOwner()))
+    if (!isa<AssignOp>(use.getOwner()))
       return failure();
 
   // Remove all uses of the wire.
@@ -831,6 +842,14 @@ LogicalResult verifySignalExists(Value ifaceVal, FlatSymbolRefAttr signalName) {
   return success();
 }
 
+Operation *InterfaceInstanceOp::getReferencedInterface() {
+  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
+  if (!topLevelModuleOp)
+    return nullptr;
+
+  return topLevelModuleOp.lookupSymbol(getInterfaceType().getInterface());
+}
+
 //===----------------------------------------------------------------------===//
 // WireOp
 //===----------------------------------------------------------------------===//
@@ -861,10 +880,10 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
   if (wire.sym_nameAttr())
     return failure();
 
-  // Wires have inout type, so they'll have connects and read_inout operations
+  // Wires have inout type, so they'll have assigns and read_inout operations
   // that work on them.  If anything unexpected is found then leave it alone.
   SmallVector<sv::ReadInOutOp> reads;
-  sv::ConnectOp write;
+  sv::AssignOp write;
 
   for (auto *user : wire->getUsers()) {
     if (auto read = dyn_cast<sv::ReadInOutOp>(user)) {
@@ -872,13 +891,13 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
       continue;
     }
 
-    // Otherwise must be a connect, and we must not have seen a write yet.
-    auto connect = dyn_cast<sv::ConnectOp>(user);
+    // Otherwise must be an assign, and we must not have seen a write yet.
+    auto assign = dyn_cast<sv::AssignOp>(user);
     // Either the wire has more than one write or another kind of Op (other than
-    // ConectOp and ReadInOutOp), then can't optimize.
-    if (!connect || write)
+    // AssignOp and ReadInOutOp), then can't optimize.
+    if (!assign || write)
       return failure();
-    write = connect;
+    write = assign;
   }
 
   Value connected;
@@ -1027,6 +1046,31 @@ static LogicalResult verifyBindOp(BindOp op) {
   if (!inst->getAttr("doNotPrint"))
     return op.emitError("Referenced instance isn't marked as doNotPrint");
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Custom printer/parsers to be used with custom<> ODS assembly formats.
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseOmitEmptyStringAttr(OpAsmParser &p, StringAttr &str) {
+  // TODO: No OpAsmParser::parseOptionalAttribute(StringAttr &a, Type b) API
+  // exists.  OpAsmParser::parseAttribute(StringAttr &a, Type b) does exist, but
+  // produces an opError during parsing.  This should eventually be cleaned up
+  // to avoid the need to use a dummy attribute list.
+  NamedAttrList dummy;
+  p.parseOptionalAttribute(str, p.getBuilder().getType<mlir::NoneType>(),
+                           "label", dummy);
+  if (!str) {
+    str = p.getBuilder().getStringAttr("");
+    return success();
+  }
+  return success();
+}
+
+static void printOmitEmptyStringAttr(OpAsmPrinter &p, Operation *op,
+                                     StringAttr str) {
+  if (str && !str.getValue().empty())
+    p.printAttributeWithoutType(str);
 }
 
 //===----------------------------------------------------------------------===//

@@ -52,15 +52,6 @@ hw.module @A() -> (i1) { }
 
 // -----
 
-hw.module @A () {}
-
-hw.module @B() {
-  // expected-error @+1 {{has unknown extmodule parameter value 'width' = @Foo}}
-  hw.instance "foo" @A() { parameters = { width = @Foo } }: () -> ()
-}
-
-// -----
-
 // expected-error @+1 {{hw.array only supports one dimension}}
 func private @arrayDims(%a: !hw.array<3 x 4 x i5>) { }
 
@@ -195,6 +186,6 @@ hw.module @test(%a: i2) -> () {
 // -----
 
 // expected-error @+1 {{'hw.module' op incorrect number of argument names}}
-hw.module @invalidNames(%clock: i1, %a: i1) 
+hw.module @invalidNames(%clock: i1, %a: i1)
   attributes { argNames = ["x", "y", "z"] } {
 }

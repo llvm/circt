@@ -53,6 +53,60 @@ firrtl.circuit "" {
 // -----
 
 firrtl.circuit "Foo" {
+firrtl.module @Foo() {
+  // expected-error @+1 {{invalid kind of type specified}}
+  firrtl.constant 100 : !firrtl.bundle<>
+}
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+firrtl.module @Foo() {
+  // expected-error @+1 {{constant too large for result type}}
+  firrtl.constant 100 : !firrtl.uint<4>
+}
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+firrtl.module @Foo() {
+  // expected-error @+1 {{constant too large for result type}}
+  firrtl.constant -100 : !firrtl.sint<4>
+}
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+firrtl.module @Foo() {
+  // expected-error @+1 {{special constants can only be 0 or 1}}
+  firrtl.specialconstant 2 : !firrtl.clock
+}
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+firrtl.module @Foo() {
+  // expected-error @+1 {{special constants can only be 0 or 1}}
+  firrtl.specialconstant 2 : !firrtl.reset
+}
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+firrtl.module @Foo() {
+  // expected-error @+1 {{special constants can only be 0 or 1}}
+  firrtl.specialconstant 2 : !firrtl.asyncreset
+}
+}
+
+// -----
+
+firrtl.circuit "Foo" {
   firrtl.module @Foo(in %clk: !firrtl.uint<1>, in %reset: !firrtl.uint<1>) {
     // expected-error @+1 {{'firrtl.reg' op operand #0 must be clock, but got '!firrtl.uint<1>'}}
     %a = firrtl.reg %clk {name = "a"} : (!firrtl.uint<1>) -> !firrtl.uint<1>
@@ -448,5 +502,15 @@ firrtl.circuit "MemoryPortsWithDifferentTypes" {
   firrtl.module @MemoryPortsWithDifferentTypes() {
     // expected-error @+1 {{'firrtl.mem' op port "r1" has a different type than port "r0" (expected '!firrtl.uint<8>', but got '!firrtl.sint<8>')}}
     %memory_r0, %memory_r1 = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r0", "r1"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<8>>
+  }
+}
+
+// -----
+
+firrtl.circuit "SubfieldOpFieldError" {
+  firrtl.module @SubfieldOpFieldError() {
+    %w = firrtl.wire  : !firrtl.bundle<a: uint<2>, b: uint<2>>
+    // expected-error @+1 {{subfield element index is greater than the number of fields}}
+    %w_a = firrtl.subfield %w(2) : (!firrtl.bundle<a : uint<2>, b : uint<2>>) -> !firrtl.uint<2>
   }
 }

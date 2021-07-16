@@ -16,6 +16,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/HWVisitors.h"
+#include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Support/LLVM.h"
@@ -78,8 +79,9 @@ static bool isDuplicatableNullaryExpression(Operation *op) {
     return true;
 
   // If this is a small verbatim expression, keep it inline.
-  if (auto verb = dyn_cast<VerbatimExprOp>(op)) {
-    if (verb->getNumOperands() == 0 && verb.string().size() <= 16)
+  if (isa<VerbatimExprOp, VerbatimExprSEOp>(op)) {
+    if (op->getNumOperands() == 0 &&
+        op->getAttrOfType<StringAttr>("string").getValue().size() <= 16)
       return true;
   }
 
@@ -324,6 +326,25 @@ static StringRef getVerilogDeclWord(Operation *op) {
   // fall through to default.
   bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
   return isProcedural ? "automatic logic" : "wire";
+}
+/// Return the name of a value without using the name map.  This is needed when
+/// looking into an instance from a different module as happens with bind.  It
+/// may return "" when unable to determine a name.  This works in situations
+/// where names are pre-legalized during prepare.
+static StringRef getNameRemotely(Value &value,
+                                 ArrayRef<ModulePortInfo> modulePorts) {
+  if (auto barg = value.dyn_cast<BlockArgument>()) {
+    return modulePorts[barg.getArgNumber()].getName();
+  }
+  if (auto readinout = dyn_cast<ReadInOutOp>(value.getDefiningOp())) {
+    if (auto wire = dyn_cast<WireOp>(readinout.input().getDefiningOp())) {
+      return wire.name();
+    }
+    if (auto reg = dyn_cast<RegOp>(readinout.input().getDefiningOp())) {
+      return reg.name();
+    }
+  }
+  return {};
 }
 
 namespace {
@@ -854,7 +875,9 @@ private:
 
   SubExprInfo visitSV(GetModportOp op);
   SubExprInfo visitSV(ReadInterfaceSignalOp op);
-  SubExprInfo visitSV(VerbatimExprOp op);
+  SubExprInfo visitVerbatimExprOp(Operation *op);
+  SubExprInfo visitSV(VerbatimExprOp op) { return visitVerbatimExprOp(op); }
+  SubExprInfo visitSV(VerbatimExprSEOp op) { return visitVerbatimExprOp(op); }
   SubExprInfo visitSV(ConstantXOp op);
   SubExprInfo visitSV(ConstantZOp op);
 
@@ -1233,10 +1256,11 @@ SubExprInfo ExprEmitter::visitSV(ReadInterfaceSignalOp op) {
   return {Selection, IsUnsigned};
 }
 
-SubExprInfo ExprEmitter::visitSV(VerbatimExprOp op) {
-  emitTextWithSubstitutions(op.string(), op, [&](Value operand) {
-    emitSubExpr(operand, LowestPrecedence, OOLBinary);
-  });
+SubExprInfo ExprEmitter::visitVerbatimExprOp(Operation *op) {
+  emitTextWithSubstitutions(op->getAttrOfType<StringAttr>("string").getValue(),
+                            op, [&](Value operand) {
+                              emitSubExpr(operand, LowestPrecedence, OOLBinary);
+                            });
 
   return {Unary, IsUnsigned};
 }
@@ -1515,8 +1539,7 @@ void NameCollector::collectNames(Block &block) {
     bool isExpr = isVerilogExpression(&op);
 
     // Instances are handled in prepareHWModule
-    auto instance = dyn_cast<InstanceOp>(&op);
-    if (instance)
+    if (isa<InstanceOp>(op))
       continue;
 
     for (auto result : op.getResults()) {
@@ -1532,9 +1555,8 @@ void NameCollector::collectNames(Block &block) {
       }
 
       // Otherwise, it must be an expression or a declaration like a
-      // RegOp/WireOp.  Remember and unique the name for this result.  Instances
-      // are handled separately.
-      if (!instance && !names.hasName(result))
+      // RegOp/WireOp.
+      if (!names.hasName(result))
         names.addName(result, op.getAttrOfType<StringAttr>("name"));
 
       // Don't measure or emit wires that are emitted inline (i.e. the wire
@@ -1690,7 +1712,7 @@ private:
   LogicalResult visitSV(WireOp op) { return emitNoop(); }
   LogicalResult visitSV(RegOp op) { return emitNoop(); }
   LogicalResult visitSV(InterfaceInstanceOp op) { return emitNoop(); }
-  LogicalResult visitSV(ConnectOp op);
+  LogicalResult visitSV(AssignOp op);
   LogicalResult visitSV(BPAssignOp op);
   LogicalResult visitSV(PAssignOp op);
   LogicalResult visitSV(ForceOp op);
@@ -1714,9 +1736,18 @@ private:
   LogicalResult visitSV(FatalOp op);
   LogicalResult visitSV(FinishOp op);
   LogicalResult visitSV(VerbatimOp op);
+  LogicalResult emitImmediateAssertion(Operation *op, Twine name,
+                                       StringRef label, Value expression);
   LogicalResult visitSV(AssertOp op);
   LogicalResult visitSV(AssumeOp op);
   LogicalResult visitSV(CoverOp op);
+  LogicalResult visitSV(BindOp op);
+  LogicalResult emitConcurrentAssertion(Operation *op, Twine name,
+                                        StringRef label, EventControl event,
+                                        Value clock, Value property);
+  LogicalResult visitSV(AssertConcurrentOp op);
+  LogicalResult visitSV(AssumeConcurrentOp op);
+  LogicalResult visitSV(CoverConcurrentOp op);
   LogicalResult visitSV(InterfaceOp op);
   LogicalResult visitSV(InterfaceSignalOp op);
   LogicalResult visitSV(InterfaceModportOp op);
@@ -1831,8 +1862,8 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
   emitLocationInfoAndNewLine(emittedExprs);
 }
 
-LogicalResult StmtEmitter::visitSV(ConnectOp op) {
-  // prepare connects wires to instance outputs, but these are logically handled
+LogicalResult StmtEmitter::visitSV(AssignOp op) {
+  // prepare assigns wires to instance outputs, but these are logically handled
   // in the port binding list when outputing an instance.
   if (dyn_cast_or_null<InstanceOp>(op.src().getDefiningOp()))
     return success();
@@ -2019,34 +2050,64 @@ LogicalResult StmtEmitter::visitSV(FinishOp op) {
   return success();
 }
 
-LogicalResult StmtEmitter::visitSV(AssertOp op) {
+LogicalResult StmtEmitter::emitImmediateAssertion(Operation *op, Twine name,
+                                                  StringRef label,
+                                                  Value expression) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  indent() << "assert(";
-  emitExpression(op.predicate(), ops);
+  indent();
+  if (!label.empty())
+    os << label << ": ";
+  os << name << "(";
+  emitExpression(expression, ops);
   os << ");";
   emitLocationInfoAndNewLine(ops);
   return success();
+}
+
+LogicalResult StmtEmitter::visitSV(AssertOp op) {
+  return emitImmediateAssertion(op, "assert", op.label(), op.expression());
 }
 
 LogicalResult StmtEmitter::visitSV(AssumeOp op) {
+  return emitImmediateAssertion(op, "assume", op.label(), op.expression());
+}
+
+LogicalResult StmtEmitter::visitSV(CoverOp op) {
+  return emitImmediateAssertion(op, "cover", op.label(), op.expression());
+}
+
+LogicalResult StmtEmitter::emitConcurrentAssertion(Operation *op, Twine name,
+                                                   StringRef label,
+                                                   EventControl event,
+                                                   Value clock,
+                                                   Value property) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  indent() << "assume(";
-  emitExpression(op.property(), ops);
+  if (!label.empty())
+    os << label << ": ";
+  os << name << " property (@(" << stringifyEventControl(event) << " ";
+  emitExpression(clock, ops);
+  os << ") ";
+  emitExpression(property, ops);
   os << ");";
   emitLocationInfoAndNewLine(ops);
   return success();
 }
 
-LogicalResult StmtEmitter::visitSV(CoverOp op) {
-  SmallPtrSet<Operation *, 8> ops;
-  ops.insert(op);
-  indent() << "cover(";
-  emitExpression(op.property(), ops);
-  os << ");";
-  emitLocationInfoAndNewLine(ops);
-  return success();
+LogicalResult StmtEmitter::visitSV(AssertConcurrentOp op) {
+  return emitConcurrentAssertion(op, "assert", op.label(), op.event(),
+                                 op.clock(), op.property());
+}
+
+LogicalResult StmtEmitter::visitSV(AssumeConcurrentOp op) {
+  return emitConcurrentAssertion(op, "assume", op.label(), op.event(),
+                                 op.clock(), op.property());
+}
+
+LogicalResult StmtEmitter::visitSV(CoverConcurrentOp op) {
+  return emitConcurrentAssertion(op, "cover", op.label(), op.event(),
+                                 op.clock(), op.property());
 }
 
 LogicalResult StmtEmitter::emitIfDef(Operation *op, StringRef cond) {
@@ -2311,8 +2372,10 @@ LogicalResult StmtEmitter::visitSV(CaseZOp op) {
 
 LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   StringRef prefix = "";
-  if (op->hasAttr("doNotPrint"))
+  if (op->hasAttr("doNotPrint")) {
     prefix = "// ";
+    indent() << "// This instance is elsewhere emitted as a bind statement.\n";
+  }
 
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
@@ -2326,12 +2389,25 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   indent() << prefix << verilogName.getValue();
 
   // Helper that prints a parameter constant value in a Verilog compatible way.
-  auto printParmValue = [&](Attribute value) {
+  auto printParmValue = [&](Identifier paramName, Attribute value) {
     if (auto intAttr = value.dyn_cast<IntegerAttr>()) {
       IntegerType intTy = intAttr.getType().cast<IntegerType>();
-      SmallString<20> numToPrint;
-      intAttr.getValue().toString(numToPrint, 10, intTy.isSigned());
-      os << intTy.getWidth() << "'d" << numToPrint;
+      APInt value = intAttr.getValue();
+
+      // We omit the width specifier if the value is <= 32-bits in size, which
+      // makes this more compatible with unknown width extmodules.
+      if (intTy.getWidth() > 32) {
+        // Sign comes out before any width specifier.
+        if (intTy.isSigned() && value.isNegative()) {
+          os << '-';
+          value = -value;
+        }
+        if (intTy.isSigned())
+          os << intTy.getWidth() << "'sd";
+        else
+          os << intTy.getWidth() << "'d";
+      }
+      value.print(os, intTy.isSigned());
     } else if (auto strAttr = value.dyn_cast<StringAttr>()) {
       os << '"';
       os.write_escaped(strAttr.getValue());
@@ -2339,9 +2415,12 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     } else if (auto fpAttr = value.dyn_cast<FloatAttr>()) {
       // TODO: relying on float printing to be precise is not a good idea.
       os << fpAttr.getValueAsDouble();
+    } else if (auto verbatimParam = value.dyn_cast<VerbatimParameterAttr>()) {
+      os << verbatimParam.getValue().getValue();
     } else {
       os << "<<UNKNOWN MLIRATTR: " << value << ">>";
-      emitOpError(op, "unknown extmodule parameter value");
+      emitOpError(op, "unknown extmodule parameter value '")
+          << paramName << "' = " << value;
     }
   };
 
@@ -2355,7 +2434,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
           [&](NamedAttribute elt) {
             os.indent(state.currentIndent + 2)
                 << prefix << '.' << elt.first << '(';
-            printParmValue(elt.second);
+            printParmValue(elt.first, elt.second);
             os << ')';
           },
           ",\n");
@@ -2439,8 +2518,8 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     if (!elt.isOutput()) {
       emitExpression(portVal, ops);
     } else if (portVal.hasOneUse() &&
-             (output = dyn_cast_or_null<OutputOp>(
-                  portVal.getUses().begin()->getOwner()))) {
+               (output = dyn_cast_or_null<OutputOp>(
+                    portVal.getUses().begin()->getOwner()))) {
       auto module = output->getParentOfType<HWModuleOp>();
       auto name = getModuleResultNameAttr(
           module, portVal.getUses().begin()->getOperandNumber());
@@ -2458,6 +2537,17 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   }
   os << ");";
   emitLocationInfoAndNewLine(ops);
+  return success();
+}
+
+// This may be called in the top-level, not just in an hw.module.  Thus we can't
+// use the name map to find expression names for arguments to the instance, nor
+// do we need to emit subexpressions.  Prepare pass, which has run for all
+// modules prior to this, has ensured that all arguments are bound to wires,
+// regs, or ports, with legalized names, so we can lookup up the names through
+// the IR.
+LogicalResult StmtEmitter::visitSV(BindOp op) {
+  emitter.emitBind(op);
   return success();
 }
 
@@ -2634,7 +2724,98 @@ void ModuleEmitter::emitHWGeneratedModule(HWModuleGeneratedOp module) {
   os << "// external generated module " << verilogName.getValue() << "\n\n";
 }
 
-void ModuleEmitter::emitBind(BindOp bind) { os << "// bind\n\n"; }
+// This may be called in the top-level, not just in an hw.module.  Thus we can't
+// use the name map to find expression names for arguments to the instance, nor
+// do we need to emit subexpressions.  Prepare pass, which has run for all
+// modules prior to this, has ensured that all arguments are bound to wires,
+// regs, or ports, with legalized names, so we can lookup up the names through
+// the IR.
+void ModuleEmitter::emitBind(BindOp op) {
+  InstanceOp inst = op.getReferencedInstance();
+
+  HWModuleOp parentMod = inst->getParentOfType<hw::HWModuleOp>();
+  auto parentVerilogName = getVerilogModuleNameAttr(parentMod);
+  verifyModuleName(op, parentVerilogName);
+
+  Operation *childMod = inst.getReferencedModule();
+  auto childVerilogName = getVerilogModuleNameAttr(childMod);
+  verifyModuleName(op, childVerilogName);
+
+  indent() << "bind " << parentVerilogName.getValue() << " "
+           << childVerilogName.getValue() << ' ' << inst.getName() << " (";
+
+  SmallVector<ModulePortInfo> parentPortInfo = parentMod.getPorts();
+  SmallVector<ModulePortInfo> childPortInfo = getModulePortInfo(childMod);
+
+  // Get the max port name length so we can align the '('.
+  size_t maxNameLength = 0;
+  for (auto &elt : childPortInfo) {
+    maxNameLength = std::max(maxNameLength, elt.getName().size());
+  }
+
+  // Emit the argument and result ports.
+  auto opArgs = inst.inputs();
+  auto opResults = inst.getResults();
+  bool isFirst = true; // True until we print a port.
+  for (auto &elt : childPortInfo) {
+    // Figure out which value we are emitting.
+    Value portVal = elt.isOutput() ? opResults[elt.argNum] : opArgs[elt.argNum];
+    bool isZeroWidth = isZeroBitType(elt.type);
+
+    // Decide if we should print a comma.  We can't do this if we're the first
+    // port or if all the subsequent ports are zero width.
+    if (!isFirst) {
+      bool shouldPrintComma = true;
+      if (isZeroWidth) {
+        shouldPrintComma = false;
+        for (size_t i = (&elt - childPortInfo.data()) + 1,
+                    e = childPortInfo.size();
+             i != e; ++i)
+          if (!isZeroBitType(childPortInfo[i].type)) {
+            shouldPrintComma = true;
+            break;
+          }
+      }
+
+      if (shouldPrintComma)
+        os << ',';
+    }
+    os << "\n";
+
+    // Emit the port's name.
+    indent();
+    if (!isZeroWidth) {
+      // If this is a real port we're printing, then it isn't the first one. Any
+      // subsequent ones will need a comma.
+      isFirst = false;
+      os << "  ";
+    } else {
+      // We comment out zero width ports, so their presence and initializer
+      // expressions are still emitted textually.
+      os << "//";
+    }
+
+    os << '.' << elt.getName();
+    os.indent(maxNameLength - elt.getName().size()) << " (";
+
+    // Emit the value as an expression.
+    auto name = getNameRemotely(portVal, parentPortInfo);
+    if (name.empty()) {
+      // Non stable names will come from expressions.  Since we are lowering the
+      // instance also, we can ensure that expressions feeding bound instances
+      // will be lowered consistently to verilog-namable entities.
+      os << childVerilogName.getValue() << '_' << inst.getName() << '_'
+         << elt.getName() << ')';
+    } else {
+      os << name << ')';
+    }
+  }
+  if (!isFirst) {
+    os << "\n";
+    indent();
+  }
+  os << ");\n";
+}
 
 // Check if the value is from read of a wire or reg or is a port.
 static bool isSimpleReadOrPort(Value v) {
@@ -2681,17 +2862,17 @@ static void lowerBoundInstance(InstanceOp op) {
 
     auto newWire = builder.create<WireOp>(src.getType(), nameTmp);
     auto newWireRead = builder.create<ReadInOutOp>(newWire);
-    auto connect = builder.create<ConnectOp>(newWire, src);
+    auto connect = builder.create<AssignOp>(newWire, src);
     newWireRead->moveBefore(op);
     connect->moveBefore(op);
     op.setOperand(nextOpNo - 1, newWireRead);
   }
 }
 
-static bool onlyUseIsConnect(Value v) {
+static bool onlyUseIsAssign(Value v) {
   if (!v.hasOneUse())
     return false;
-  if (!dyn_cast_or_null<ConnectOp>(v.getDefiningOp()))
+  if (!dyn_cast_or_null<AssignOp>(v.getDefiningOp()))
     return false;
   return true;
 }
@@ -2713,7 +2894,7 @@ static void lowerInstanceResults(InstanceOp op) {
     auto result = op.getResult(nextResultNo);
     ++nextResultNo;
 
-    if (onlyUseIsConnect(result))
+    if (onlyUseIsAssign(result))
       continue;
 
     bool isOneUseOutput = false;
@@ -2737,7 +2918,7 @@ static void lowerInstanceResults(InstanceOp op) {
         newWireRead->moveBefore(use.getOwner());
       }
 
-      auto connect = builder.create<ConnectOp>(newWire, result);
+      auto connect = builder.create<AssignOp>(newWire, result);
       connect->moveAfter(op);
     }
   }
@@ -2797,7 +2978,7 @@ static void lowerAlwaysInlineOperation(Operation *op) {
 }
 
 /// We lower the Merge operation to a wire at the top level along with
-/// connects to it and a ReadInOut.
+/// assigns to it and a ReadInOut.
 static Value lowerMergeOp(MergeOp merge) {
   auto module = merge->getParentOfType<HWModuleOp>();
   assert(module && "merges should only be in a module");
@@ -2806,14 +2987,14 @@ static Value lowerMergeOp(MergeOp merge) {
   ImplicitLocOpBuilder b(merge.getLoc(), &module.getBodyBlock()->front());
   auto wire = b.create<WireOp>(merge.getType());
 
-  // Each of the operands is a connect or passign into the wire.
+  // Each of the operands is an assign or passign into the wire.
   b.setInsertionPoint(merge);
   if (merge->getParentOp()->hasTrait<sv::ProceduralRegion>()) {
     for (auto op : merge.getOperands())
       b.create<PAssignOp>(wire, op);
   } else {
     for (auto op : merge.getOperands())
-      b.create<ConnectOp>(wire, op);
+      b.create<AssignOp>(wire, op);
   }
 
   return b.create<ReadInOutOp>(wire);
@@ -2841,9 +3022,7 @@ static Value lowerVariadicCommutativeOp(Operation &op, OperandRange operands) {
   }
 
   OperationState state(op.getLoc(), op.getName());
-  // state.addOperands(ValueRange{lhs, rhs});
-  state.addOperands(lhs);
-  state.addOperands(rhs);
+  state.addOperands(ValueRange{lhs, rhs});
   state.addTypes(op.getResult(0).getType());
   auto *newOp = Operation::create(state);
   op.getBlock()->getOperations().insert(Block::iterator(&op), newOp);
@@ -2866,7 +3045,7 @@ static void lowerUsersToTemporaryWire(Operation &op) {
       newWireRead->moveBefore(use.getOwner());
     }
 
-    auto connect = builder.create<ConnectOp>(newWire, result);
+    auto connect = builder.create<AssignOp>(newWire, result);
     connect->moveAfter(&op);
   }
 }
@@ -3241,19 +3420,18 @@ void RootEmitterBase::gatherFiles(bool separateModules) {
           else
             rootFile.ops.push_back(info);
         })
-        .Case<VerbatimOp, IfDefProceduralOp, TypeScopeOp, HWModuleExternOp>(
-            [&](auto &) {
-              // Emit into a separate file using the specified file name or
-              // replicate the operation in each outputfile.
-              if (attr) {
-                if (!hasFileName) {
-                  op.emitError("file name unspecified");
-                  encounteredError = true;
-                } else
-                  separateFile(&op);
-              } else
-                replicatedOps.push_back(&op);
-            })
+        .Case<VerbatimOp, IfDefOp, TypeScopeOp, HWModuleExternOp>([&](auto &) {
+          // Emit into a separate file using the specified file name or
+          // replicate the operation in each outputfile.
+          if (attr) {
+            if (!hasFileName) {
+              op.emitError("file name unspecified");
+              encounteredError = true;
+            } else
+              separateFile(&op);
+          } else
+            replicatedOps.push_back(&op);
+        })
         .Case<HWGeneratorSchemaOp>([&](auto &) {
           // Empty.
         })
@@ -3315,7 +3493,7 @@ void RootEmitterBase::emitOperation(VerilogEmitterState &state, Operation *op) {
           [&](auto op) { ModuleEmitter(state).emitHWGeneratedModule(op); })
       .Case<HWGeneratorSchemaOp>([&](auto op) { /* Empty */ })
       .Case<BindOp>([&](auto op) { ModuleEmitter(state).emitBind(op); })
-      .Case<InterfaceOp, VerbatimOp, IfDefProceduralOp>([&](auto op) {
+      .Case<InterfaceOp, VerbatimOp, IfDefOp>([&](auto op) {
         ModuleNameManager emptyNames;
         ModuleEmitter(state).emitStatement(op, emptyNames);
       })

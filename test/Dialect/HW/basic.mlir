@@ -79,7 +79,7 @@ hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (i50) {
 
   // CHECK-NEXT: = comb.mux %arg1, [[RES2]], [[RES2]] : i7
   %mux = comb.mux %arg1, %d, %d : i7
-  
+
   // CHECK-NEXT: [[STR:%[0-9]+]] = hw.struct_create ({{.*}}, {{.*}}) : !hw.struct<foo: i19, bar: i7>
   %s0 = hw.struct_create (%small1, %mux) : !hw.struct<foo: i19, bar: i7>
 
@@ -88,7 +88,7 @@ hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (i50) {
 
   // CHECK-NEXT: = hw.struct_inject [[STR]]["foo"], {{.*}} : !hw.struct<foo: i19, bar: i7>
   %s1 = hw.struct_inject %s0["foo"], %sf1 : !hw.struct<foo: i19, bar: i7>
-  
+
   // CHECK-NEXT: :2 = hw.struct_explode [[STR]] : !hw.struct<foo: i19, bar: i7>
   %se:2 = hw.struct_explode %s0 : !hw.struct<foo: i19, bar: i7>
 
@@ -130,8 +130,8 @@ hw.module @signed_arrays(%arg0: si8) -> (%out: !hw.array<2xsi8>) {
   // CHECK-NEXT: %0 = hw.array_create %arg0, %arg0 : si8
   %0 = hw.array_create %arg0, %arg0 : si8
 
-  // CHECK-NEXT: sv.connect %wireArray, %0 : !hw.array<2xsi8>
-  sv.connect %wireArray, %0 : !hw.array<2xsi8>
+  // CHECK-NEXT: sv.assign %wireArray, %0 : !hw.array<2xsi8>
+  sv.assign %wireArray, %0 : !hw.array<2xsi8>
 
   %result = sv.read_inout %wireArray : !hw.inout<!hw.array<2xsi8>>
   hw.output %result : !hw.array<2xsi8>

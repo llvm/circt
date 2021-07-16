@@ -1,4 +1,4 @@
-//===- TestPasses.cpp - Test passes for scheduling algorithms -===============//
+//===- TestPasses.cpp - Test passes for the scheduling infrastructure -----===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implements test passes for scheduling algorithms.
+// This file implements test passes for scheduling problems and algorithms.
 //
 //===----------------------------------------------------------------------===//
 
@@ -20,22 +20,10 @@ using namespace circt;
 using namespace circt::scheduling;
 
 //===----------------------------------------------------------------------===//
-// ASAPScheduler
+// Construction helper methods
 //===----------------------------------------------------------------------===//
 
-namespace {
-struct TestASAPSchedulerPass
-    : public PassWrapper<TestASAPSchedulerPass, FunctionPass> {
-  void runOnFunction() override;
-};
-} // anonymous namespace
-
-void TestASAPSchedulerPass::runOnFunction() {
-  auto func = getFunction();
-  OpBuilder builder(func.getContext());
-
-  Problem prob(func);
-
+static LogicalResult constructProblem(Problem &prob, FuncOp func) {
   // set up catch-all operator type with unit latency
   auto unitOpr = prob.getOrInsertOperatorType("unit");
   prob.setLatency(unitOpr, 1);
@@ -84,10 +72,67 @@ void TestASAPSchedulerPass::runOnFunction() {
       // finally, we have two integer indices in range of the operations list
       if (failed(prob.insertDependence(
               std::make_pair(ops[fromIdx], ops[toIdx])))) {
-        func->emitError("inserting aux dependence failed");
-        return signalPassFailure();
+        return func->emitError("inserting aux dependence failed");
       }
     }
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// (Basic) Problem
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct TestProblemPass : public PassWrapper<TestProblemPass, FunctionPass> {
+  void runOnFunction() override;
+};
+} // namespace
+
+void TestProblemPass::runOnFunction() {
+  auto func = getFunction();
+
+  Problem prob(func);
+  if (failed(constructProblem(prob, func))) {
+    func->emitError("problem construction failed");
+    return signalPassFailure();
+  }
+
+  if (failed(prob.check())) {
+    func->emitError("problem check failed");
+    return signalPassFailure();
+  }
+
+  // get schedule from the test case
+  for (auto *op : prob.getOperations())
+    if (auto startTimeAttr = op->getAttrOfType<IntegerAttr>("problemStartTime"))
+      prob.setStartTime(op, startTimeAttr.getInt());
+
+  if (failed(prob.verify())) {
+    func->emitError("problem verification failed");
+    return signalPassFailure();
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// ASAPScheduler
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct TestASAPSchedulerPass
+    : public PassWrapper<TestASAPSchedulerPass, FunctionPass> {
+  void runOnFunction() override;
+};
+} // anonymous namespace
+
+void TestASAPSchedulerPass::runOnFunction() {
+  auto func = getFunction();
+
+  Problem prob(func);
+  if (failed(constructProblem(prob, func))) {
+    func->emitError("problem construction failed");
+    return signalPassFailure();
   }
 
   if (failed(prob.check())) {
@@ -105,9 +150,10 @@ void TestASAPSchedulerPass::runOnFunction() {
     return signalPassFailure();
   }
 
+  OpBuilder builder(func.getContext());
   for (auto *op : prob.getOperations()) {
     unsigned startTime = *prob.getStartTime(op);
-    op->emitRemark("start time = " + std::to_string(startTime));
+    op->setAttr("asapStartTime", builder.getI32IntegerAttr(startTime));
   }
 }
 
@@ -118,8 +164,10 @@ void TestASAPSchedulerPass::runOnFunction() {
 namespace circt {
 namespace test {
 void registerSchedulingTestPasses() {
+  PassRegistration<TestProblemPass> problemTester(
+      "test-scheduling-problem", "Import a schedule encoded as attributes");
   PassRegistration<TestASAPSchedulerPass> asapTester(
-      "test-asap-scheduler", "Emit ASAP scheduler's solution as remarks");
+      "test-asap-scheduler", "Emit ASAP scheduler's solution as attributes");
 }
 } // namespace test
 } // namespace circt
