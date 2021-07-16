@@ -206,6 +206,10 @@ def InterfaceInstanceOp : SVOp<"interface.instance", [NoSideEffect]> {
 
   let extraClassDeclaration = [{
     InterfaceType getInterfaceType() { return getType().cast<InterfaceType>(); }
+
+    /// Lookup the interface that this is an instance of.  This returns null on
+    /// invalid IR.
+    Operation *getReferencedInterface();
   }];
 }
 

@@ -1539,8 +1539,7 @@ void NameCollector::collectNames(Block &block) {
     bool isExpr = isVerilogExpression(&op);
 
     // Instances are handled in prepareHWModule
-    auto instance = dyn_cast<InstanceOp>(&op);
-    if (instance)
+    if (isa<InstanceOp>(op))
       continue;
 
     for (auto result : op.getResults()) {
@@ -1556,9 +1555,8 @@ void NameCollector::collectNames(Block &block) {
       }
 
       // Otherwise, it must be an expression or a declaration like a
-      // RegOp/WireOp.  Remember and unique the name for this result.  Instances
-      // are handled separately.
-      if (!instance && !names.hasName(result))
+      // RegOp/WireOp.
+      if (!names.hasName(result))
         names.addName(result, op.getAttrOfType<StringAttr>("name"));
 
       // Don't measure or emit wires that are emitted inline (i.e. the wire
