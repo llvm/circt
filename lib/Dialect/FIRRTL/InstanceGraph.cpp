@@ -113,10 +113,8 @@ InstanceGraphNode *InstanceGraph::getLCA(InstanceGraphNode *node1,
     auto it = node1Ancestors.insert(node);
     if (!it.second)
       continue;
-    for (auto instanceOp : node->uses()) {
-      auto parent = instanceOp->getParent();
-      nodesQ.push_back(parent);
-    }
+    for (auto instanceOp : node->uses())
+      nodesQ.push_back(instanceOp->getParent());
   }
   // Reuse the Queue, to collect all ancestors of node2.
   nodesQ.push_back(node2);
@@ -140,10 +138,8 @@ InstanceGraphNode *InstanceGraph::getLCA(InstanceGraphNode *node1,
       lcaNode = node;
       lcaDepth = node->depth;
     }
-    for (auto instanceOp : node->uses()) {
-      auto parent = instanceOp->getParent();
-      nodesQ.push_back(parent);
-    }
+    for (auto instanceOp : node->uses())
+      nodesQ.push_back(instanceOp->getParent());
   }
 
   return lcaNode;
