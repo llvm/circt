@@ -111,7 +111,7 @@ getLowestBitAndHighestBitRequired(Operation::use_range uses,
 // mutate them to the newly created narrowed version if it's benefitial.
 //
 // narrowTrailingBits determines whether undemanded trailing bits should
-// be aggressively stripped of.
+// be aggressively stripped off.
 //
 // Returns true if IR is mutated. IR is mutated iff narrowing happens.
 template <class Op, class F>
@@ -134,9 +134,8 @@ static bool narrowOperationWidth(Op narrowingCandidate, ValueRange inputs,
                                         originalOpWidth);
 
   // Give up, because we can't make it narrower than it already is.
-  if (lowestBitRequired == 0 && highestBitRequired == originalOpWidth - 1) {
+  if (lowestBitRequired == 0 && highestBitRequired == originalOpWidth - 1)
     return false;
-  }
 
   auto loc = narrowingCandidate.getLoc();
   size_t narrowedWidth = highestBitRequired - lowestBitRequired + 1;
