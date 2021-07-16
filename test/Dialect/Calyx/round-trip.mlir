@@ -49,17 +49,17 @@ calyx.program {
       // CHECK: calyx.group @Group1 {
       calyx.group @Group1 {
         // CHECK: calyx.assign %1#0 = %0#1 : i8
-        // CHECK-NEXT: %3 = calyx.group_done %true : i1
+        // CHECK-NEXT: calyx.group_done %true : i1
         calyx.assign %in2 = %out1 : i8
-        %d0 = calyx.group_done %c1_i1 : i1
+        calyx.group_done %c1_i1 : i1
       }
       calyx.group @Group2 {
         // CHECK:  calyx.assign %1#0 = %0#1, %2 ? : i8
         calyx.assign %in2 = %out1, %out3 ?  : i8
 
-        // CHECK: %4 = calyx.group_done %true, %3 ? : i1
+        // CHECK: calyx.group_done %true, %3 ? : i1
         %guard = comb.and %c1_i1, %out3 : i1
-        %d1 = calyx.group_done %c1_i1, %guard ? : i1
+        calyx.group_done %c1_i1, %guard ? : i1
       }
     }
     calyx.control {
