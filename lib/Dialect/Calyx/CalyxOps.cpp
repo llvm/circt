@@ -281,8 +281,7 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
       // Each of the ports has bit width 1.
       continue;
 
-    // TODO(Calyx): Remove drop_front() when llvm/circt:#1406 is merged.
-    StringRef portName = port.name.getValue().drop_front();
+    StringRef portName = port.name.getValue();
     if (port.direction == PortDirection::OUTPUT) {
       done |= (portName == "done");
     } else {
