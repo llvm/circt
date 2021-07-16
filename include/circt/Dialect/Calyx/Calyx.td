@@ -14,6 +14,7 @@
 #define CALYX_TD
 
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
@@ -35,6 +36,10 @@ def CalyxDialect : Dialect {
   }];
   let cppNamespace = "::circt::calyx";
 }
+
+class SameTypeConstraint<string lhs, string rhs>
+ : TypesMatchWith<"lhs and rhs types should be equivalent",
+                   lhs, rhs, [{ $_self }]>;
 
 /// Base class for the operation in this dialect.
 class CalyxOp<string mnemonic, list<OpTrait> traits = []> :
@@ -70,5 +75,6 @@ class CalyxGroupPort<string mnemonic, list<OpTrait> traits = []> :
 
 include "circt/Dialect/Calyx/CalyxStructure.td"
 include "circt/Dialect/Calyx/CalyxControl.td"
+include "circt/Dialect/Calyx/CalyxPrimitives.td"
 
 #endif // CALYX_TD
