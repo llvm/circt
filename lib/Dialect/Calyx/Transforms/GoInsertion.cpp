@@ -21,36 +21,6 @@ using namespace circt;
 using namespace calyx;
 using namespace mlir;
 
-/// Adds the group's "go" signal to the guards of assignments within `group`,
-/// with the exception of the "done" terminator. If the assignment already
-/// has a guard, then the bitwise 'and' is taken of the current guard and the
-/// "go" signal. For example:
-///    ```mlir
-///      %go = calyx.group_go %undef : i1
-///
-///      // Case 1: No Guard
-///      %in = %out : i8
-///      =>
-///      %in = %out, %go ? : i8
-///
-///      // Case 2: Guard
-///      %in = %out, %guard ? : i8
-///      =>
-///      %and = comb.and %guard, %go : i1
-///      %in = %out, %and ? : i8
-///    ```
-static void updateGroupAssignmentGuards(OpBuilder &builder, GroupOp &group,
-                                        GroupGoOp &goOp) {
-  group.walk([&](AssignOp assign) {
-    if (assign.guard())
-      // Take the bitwise & of the current guard and the group's go signal.
-      assign->setOperand(
-          2, builder.create<comb::AndOp>(group.getLoc(), assign.guard(), goOp));
-    else
-      assign->insertOperands(2, {goOp});
-  });
-}
-
 namespace {
 
 struct GoInsertionPass : public GoInsertionBase<GoInsertionPass> {

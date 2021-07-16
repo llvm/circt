@@ -98,6 +98,30 @@ ControlOp calyx::ComponentOp::getControlOp() {
   return getControlOrWiresFrom<ControlOp>(*this);
 }
 
+OpResult calyx::ComponentOp::getDonePort() {
+  ArrayAttr outPortNames = this->outPortNames();
+
+  size_t i = 0, numArgs = this->getNumFuncResults();
+  for (; i != numArgs; ++i) {
+    StringRef portName = outPortNames[i].cast<StringAttr>().getValue();
+    if (portName == "done")
+      break;
+  }
+  return (*this)->getOpResult(i);
+}
+
+Value calyx::ComponentOp::getGoPort() {
+  ArrayAttr inPortNames = this->inPortNames();
+
+  size_t i = 0, numArgs = this->getNumFuncArguments();
+  for (; i != numArgs; ++i) {
+    StringRef portName = inPortNames[i].cast<StringAttr>().getValue();
+    if (portName == "go")
+      break;
+  }
+  return (*this).getBody()->getArgument(i);
+}
+
 /// Returns the type of the given component as a function type.
 static FunctionType getComponentType(ComponentOp component) {
   return component.getTypeAttr().getValue().cast<FunctionType>();

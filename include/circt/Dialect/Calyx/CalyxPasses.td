@@ -16,6 +16,15 @@
 
 include "mlir/Pass/PassBase.td"
 
+def RemoveGroups : Pass<"calyx-remove-groups", "calyx::ComponentOp"> {
+  let summary = "todo";
+  let description = [{
+    TODO
+  }];
+  let dependentDialects = ["comb::CombDialect"];
+  let constructor = "circt::calyx::createRemoveGroupsPass()";
+}
+
 def CompileControl : Pass<"calyx-compile-control", "calyx::ComponentOp"> {
   let summary = "Generates latency-insensitive finite state machines to realize control.";
   let description = [{
