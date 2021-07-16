@@ -133,7 +133,7 @@ InstanceGraphNode *InstanceGraph::getLCA(InstanceGraphNode *node1,
     // If node2 ancestor is also an ancestor of node1, then it a candidate LCA.
     // A common ancestor with largest depth is the LCA. In case there are
     // multiple LCAs, this slects any one of them.
-    if (node1Ancestors.contains(node) && node->depth > lcaDepth) {
+    if (node1Ancestors.contains(node) && node->depth >= lcaDepth) {
       lcaNode = node;
       lcaDepth = node->depth;
     }
