@@ -881,3 +881,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     parameter TYPE = 'bit'
     parameter FORMAT = 'xyz_timeout=%d\n'
     parameter MIXED_QUOTES = '"\'\"'
+
+  ; CHECK-LABEL: firrtl.module @issue1303
+  module issue1303:
+    output out: Reset
+    out <= UInt(1)
+    ; CHECK: %[[c1:.*]] = firrtl.constant 1 : !firrtl.uint
+    ; CHECK-NEXT: firrtl.connect %out, %[[c1]] : !firrtl.reset, !firrtl.uint
+  

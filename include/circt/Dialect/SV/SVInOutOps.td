@@ -7,23 +7,9 @@
 //===----------------------------------------------------------------------===//
 //
 // This describes the SystemVerilog dialect ops for working with inout types.
-// These are wires, connect statements, etc.
+// These are wires, NoRegionArguments, etc.
 //
 //===----------------------------------------------------------------------===//
-
-def ConnectOp : SVOp<"connect", [InOutTypeConstraint<"src", "dest">]> {
-  let summary = "Connect two signals";
-  let description = [{
-    Connect Operation:
-    ```
-      sv.connect %dest, %src : t1
-    ```
-    }];
-
-  let arguments = (ins InOutType:$dest, HWValueType:$src);
-  let results = (outs);
-  let assemblyFormat = "$dest `,` $src  attr-dict `:` type($src)";
-}
 
 // Note that net declarations like 'wire' should not appear in an always block.
 def WireOp : SVOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>,

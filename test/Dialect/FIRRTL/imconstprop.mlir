@@ -20,13 +20,14 @@ firrtl.circuit "Test" {
   // CHECK-LABEL: @Test
   firrtl.module @Test(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
                       out %result1: !firrtl.uint<1>,
-                      out %result2: !firrtl.uint<1>,
+                      out %result2: !firrtl.clock,
                       out %result3: !firrtl.uint<1>,
-                      out %result4: !firrtl.uint<2>,
+                      out %result4: !firrtl.uint<1>,
                       out %result5: !firrtl.uint<2>,
-                      out %result6: !firrtl.uint<4>,
+                      out %result6: !firrtl.uint<2>,
                       out %result7: !firrtl.uint<4>,
-                      out %result8: !firrtl.uint<4>) {
+                      out %result8: !firrtl.uint<4>,
+                      out %result9: !firrtl.uint<4>) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 
@@ -38,22 +39,31 @@ firrtl.circuit "Test" {
     // CHECK: firrtl.connect %result1, %c0_ui1_0
     firrtl.connect %result1, %someWire : !firrtl.uint<1>, !firrtl.uint<1>
 
+    // Trivial wire special constant propagation.
+    %c0_clock = firrtl.specialconstant 0 : !firrtl.clock
+    %clockWire = firrtl.wire : !firrtl.clock
+    firrtl.connect %clockWire, %c0_clock : !firrtl.clock, !firrtl.clock
+
+    // CHECK-NOT: firrtl.wire
+    // CHECK: firrtl.connect %result2, %c0_clock
+    firrtl.connect %result2, %clockWire : !firrtl.clock, !firrtl.clock
+
     // Not a constant.
     %nonconstWire = firrtl.wire : !firrtl.uint<1>
     firrtl.connect %nonconstWire, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %nonconstWire, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
 
-    // CHECK: firrtl.connect %result2, %nonconstWire
-    firrtl.connect %result2, %nonconstWire : !firrtl.uint<1>, !firrtl.uint<1>
-
+    // CHECK: firrtl.connect %result3, %nonconstWire
+    firrtl.connect %result3, %nonconstWire : !firrtl.uint<1>, !firrtl.uint<1>
 
     // Constant propagation through instance.
     %source, %dest = firrtl.instance @PassThrough {name = "", portNames = ["source", "dest"]} : !firrtl.uint<1>, !firrtl.uint<1>
 
     // CHECK: firrtl.connect %inst_source, %c0_ui1
     firrtl.connect %source, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK: firrtl.connect %result3, %inst_dest
-    firrtl.connect %result3, %dest : !firrtl.uint<1>, !firrtl.uint<1>
+
+    // CHECK: firrtl.connect %result4, %inst_dest
+    firrtl.connect %result4, %dest : !firrtl.uint<1>, !firrtl.uint<1>
 
     // Check connect extensions.
     %extWire = firrtl.wire : !firrtl.uint<2>
@@ -63,8 +73,8 @@ firrtl.circuit "Test" {
     %invalid = firrtl.invalidvalue : !firrtl.uint<2>
     firrtl.connect %extWire, %invalid : !firrtl.uint<2>, !firrtl.uint<2>
 
-    // CHECK: firrtl.connect %result4, %c0_ui2
-    firrtl.connect %result4, %extWire: !firrtl.uint<2>, !firrtl.uint<2>
+    // CHECK: firrtl.connect %result5, %c0_ui2
+    firrtl.connect %result5, %extWire: !firrtl.uint<2>, !firrtl.uint<2>
 
     // regreset
     %c0_ui20 = firrtl.constant 0 : !firrtl.uint<20>
@@ -73,19 +83,19 @@ firrtl.circuit "Test" {
     %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
     firrtl.connect %regreset, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
 
-    // CHECK: firrtl.connect %result5, %c0_ui2
-    firrtl.connect %result5, %regreset: !firrtl.uint<2>, !firrtl.uint<2>
+    // CHECK: firrtl.connect %result6, %c0_ui2
+    firrtl.connect %result6, %regreset: !firrtl.uint<2>, !firrtl.uint<2>
 
     // reg
     %reg = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<4>
     firrtl.connect %reg, %c0_ui2 : !firrtl.uint<4>, !firrtl.uint<2>
-    // CHECK: firrtl.connect %result6, %c0_ui4
-    firrtl.connect %result6, %reg: !firrtl.uint<4>, !firrtl.uint<4>
+    // CHECK: firrtl.connect %result7, %c0_ui4
+    firrtl.connect %result7, %reg: !firrtl.uint<4>, !firrtl.uint<4>
 
     // Wire without connects to it should turn into 'invalid'.
     %unconnectedWire = firrtl.wire : !firrtl.uint<2>
-    // CHECK: firrtl.connect %result7, %invalid_ui2
-    firrtl.connect %result7, %unconnectedWire: !firrtl.uint<4>, !firrtl.uint<2>
+    // CHECK: firrtl.connect %result8, %invalid_ui2
+    firrtl.connect %result8, %unconnectedWire: !firrtl.uint<4>, !firrtl.uint<2>
 
     %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
     %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
@@ -97,8 +107,8 @@ firrtl.circuit "Test" {
     // CHECK-NEXT: firrtl.constant 3
     %c = firrtl.xor %b, %c2_ui2 : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
 
-    // CHECK-NEXT: firrtl.connect %result8, %c3_ui2
-    firrtl.connect %result8, %c: !firrtl.uint<4>, !firrtl.uint<2>
+    // CHECK-NEXT: firrtl.connect %result9, %c3_ui2
+    firrtl.connect %result9, %c: !firrtl.uint<4>, !firrtl.uint<2>
 
 
     // Constant propagation through instance.

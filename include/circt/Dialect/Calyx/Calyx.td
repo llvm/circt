@@ -70,15 +70,6 @@ class CalyxGroupPort<string mnemonic, list<OpTrait> traits = []> :
     I1:$src,
     Optional<I1>:$guard
   );
-  let results = (outs I1);
-  let builders = [
-    OpBuilder<(ins "Value":$src, CArg<"Value", "{}">:$guard), [{
-      $_state.addTypes($_builder.getI1Type());
-      $_state.addOperands(src);
-      if (guard)
-        $_state.addOperands(guard);
-    }]>
-  ];
   let assemblyFormat = "$src (`,` $guard^ `?`)? attr-dict `:` type($src)";
 }
 

@@ -214,6 +214,7 @@ public:
   void visitDecl(RegResetOp op) { handleRef(op); }
   void visitDecl(WireOp op) { handleRef(op); }
   void visitDecl(NodeOp op) { handleRef(op); }
+  void visitDecl(InstanceOp op);
 
   /// Process all other ops.  Error if any of these ops contain annotations that
   /// indicate it as being part of an interface.
@@ -349,6 +350,29 @@ void GrandCentralVisitor::handlePorts(Operation *op) {
   mlir::function_like_impl::setAllArgAttrDicts(op, newArgAttrs);
 }
 
+void GrandCentralVisitor::visitDecl(InstanceOp op) {
+
+  // If this instance's underlying module has a "companion" annotation, then
+  // move this onto the actual instance op.
+  AnnotationSet annotations(op.getReferencedModule());
+  if (auto anno = annotations.getAnnotation(
+          "sifive.enterprise.grandcentral.GrandCentralView$"
+          "SerializedViewAnnotation")) {
+    auto tpe = anno.getAs<StringAttr>("type");
+    if (!tpe) {
+      op.getReferencedModule()->emitOpError(
+          "contains a GrandcCentralView$SerializedViewAnnotation that does not "
+          "contain a \"type\" field");
+      failed = true;
+      return;
+    }
+    if (tpe.getValue() == "companion")
+      op->setAttr("lowerToBind", BoolAttr::get(op.getContext(), true));
+  }
+
+  visitUnhandledDecl(op);
+}
+
 void GrandCentralPass::runOnOperation() {
   CircuitOp circuitOp = getOperation();
 
@@ -412,13 +436,21 @@ void GrandCentralPass::runOnOperation() {
   circuitOp->setAttr("annotations", annotations.getArrayAttr());
 
   // Walk through the circuit to collect additional information.  If this fails,
-  // signal pass failure.
-  for (auto &op : circuitOp.getBody()->getOperations()) {
+  // signal pass failure.  Walk in reverse order so that annotations can be
+  // removed from modules after all referring instances have consumed their
+  // annotations.
+  for (auto &op : llvm::reverse(circuitOp.getBody()->getOperations())) {
     if (isa<FModuleOp, FExtModuleOp>(op)) {
       GrandCentralVisitor visitor(interfaceMap);
       visitor.visitModule(&op);
       if (visitor.hasFailed())
         return signalPassFailure();
+      AnnotationSet annotations(&op);
+      annotations.removeAnnotations([](auto anno) {
+        return anno.isClass("sifive.enterprise.grandcentral.GrandCentralView$"
+                            "SerializedViewAnnotation");
+      });
+      annotations.applyToOperation(&op);
     }
   }
 

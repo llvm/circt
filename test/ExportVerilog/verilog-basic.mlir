@@ -146,17 +146,17 @@ hw.module @Precedence(%a: i4, %b: i4, %c: i4) -> (%out1: i1, %out: i10) {
   %4 = comb.concat %false, %2 : (i1, i5) -> i6
   %5 = comb.add %3, %4 : i6
   %6 = comb.concat %c0_i4, %5 : (i4, i6) -> i10
-  sv.connect %_out_output, %6 : i10
+  sv.assign %_out_output, %6 : i10
   %7 = comb.concat %false, %a : (i1, i4) -> i5
   %8 = comb.add %7, %0 : i5
   %9 = comb.concat %false, %8 : (i1, i5) -> i6
   %10 = comb.concat %c0_i2, %c : (i2, i4) -> i6
   %11 = comb.sub %9, %10 : i6
   %12 = comb.concat %c0_i4, %11 : (i4, i6) -> i10
-  sv.connect %_out_output, %12 : i10
+  sv.assign %_out_output, %12 : i10
   %13 = comb.sub %3, %4 : i6
   %14 = comb.concat %c0_i4, %13 : (i4, i6) -> i10
-  sv.connect %_out_output, %14 : i10
+  sv.assign %_out_output, %14 : i10
   %15 = comb.concat %c0_i4, %b : (i4, i4) -> i8
   %16 = comb.concat %c0_i4, %c : (i4, i4) -> i8
   %17 = comb.mul %15, %16 : i8
@@ -164,45 +164,45 @@ hw.module @Precedence(%a: i4, %b: i4, %c: i4) -> (%out1: i1, %out: i10) {
   %19 = comb.concat %false, %17 : (i1, i8) -> i9
   %20 = comb.add %18, %19 : i9
   %21 = comb.concat %false, %20 : (i1, i9) -> i10
-  sv.connect %_out_output, %21 : i10
+  sv.assign %_out_output, %21 : i10
   %22 = comb.concat %c0_i4, %a : (i4, i4) -> i8
   %23 = comb.mul %22, %15 : i8
   %24 = comb.concat %false, %23 : (i1, i8) -> i9
   %25 = comb.concat %c0_i5, %c : (i5, i4) -> i9
   %26 = comb.add %24, %25 : i9
   %27 = comb.concat %false, %26 : (i1, i9) -> i10
-  sv.connect %_out_output, %27 : i10
+  sv.assign %_out_output, %27 : i10
   %28 = comb.concat %c0_i4, %8 : (i4, i5) -> i9
   %29 = comb.mul %28, %25 : i9
   %30 = comb.concat %false, %29 : (i1, i9) -> i10
-  sv.connect %_out_output, %30 : i10
+  sv.assign %_out_output, %30 : i10
   %31 = comb.concat %c0_i4, %2 : (i4, i5) -> i9
   %32 = comb.mul %18, %31 : i9
   %33 = comb.concat %false, %32 : (i1, i9) -> i10
-  sv.connect %_out_output, %33 : i10
+  sv.assign %_out_output, %33 : i10
   %34 = comb.concat %c0_i5, %8 : (i5, i5) -> i10
   %35 = comb.concat %c0_i5, %2 : (i5, i5) -> i10
   %36 = comb.mul %34, %35 : i10
-  sv.connect %_out_output, %36 : i10
+  sv.assign %_out_output, %36 : i10
   %37 = comb.parity %2 : i5
-  sv.connect %_out1_output, %37 : i1
+  sv.assign %_out1_output, %37 : i1
   %38 = comb.icmp ult %b, %c : i4
   %39 = comb.icmp ugt %b, %c : i4
   %40 = comb.or %38, %39 : i1
-  sv.connect %_out1_output, %40 : i1
+  sv.assign %_out1_output, %40 : i1
   %41 = comb.xor %b, %c : i4
   %42 = sv.read_inout %_out1_output : !hw.inout<i1>
   %43 = comb.concat %c0_i3, %42 : (i3, i1) -> i4
   %44 = comb.and %41, %43 : i4
   %45 = comb.concat %c0_i6, %44 : (i6, i4) -> i10
-  sv.connect %_out_output, %45 : i10
+  sv.assign %_out_output, %45 : i10
   %46 = sv.read_inout %_out_output : !hw.inout<i10>
   %47 = comb.extract %46 from 2 : (i10) -> i8
   %48 = comb.concat %c0_i2, %47 : (i2, i8) -> i10
-  sv.connect %_out_output, %48 : i10
+  sv.assign %_out_output, %48 : i10
   %49 = comb.concat %c0_i6, %a : (i6, i4) -> i10
   %50 = comb.icmp ult %46, %49 : i10
-  sv.connect %_out1_output, %50 : i1
+  sv.assign %_out1_output, %50 : i1
   hw.output %42, %46 : i1, i10
 }
 
@@ -277,6 +277,18 @@ hw.module @MultiUseExpr(%a: i4) -> (%b: i1, %b2: i2) {
 hw.module.extern @MyExtModule(%in: i8) -> (%out: i1) attributes {verilogName = "FooExtModule"}
 hw.module.extern @MyParameterizedExtModule(%in: i8) -> (%out: i1)
 
+// CHECK-LABEL: module ExternMods
+hw.module @ExternMods(%a_in: i8) {
+  // CHECK: MyParameterizedExtModule #(
+  // CHECK:   .CFG(FOO)
+  // CHECK: ) xyz2
+  hw.instance "xyz2" @MyParameterizedExtModule(%a_in) {parameters = {CFG = #sv.verbatim.parameter<"FOO">}} : (i8) -> i1
+  // CHECK: MyParameterizedExtModule #(
+  // CHECK:   .CFG("STRING")
+  // CHECK: ) xyz3
+  hw.instance "xyz3" @MyParameterizedExtModule(%a_in) {parameters = {CFG = #sv.verbatim.parameter<"\"STRING\"">}} : (i8) -> i1
+}
+
 // CHECK-LABEL: module UseInstances
 hw.module @UseInstances(%a_in: i8) -> (%a_out: i1) {
   // CHECK: wire _T;
@@ -290,7 +302,7 @@ hw.module @UseInstances(%a_in: i8) -> (%a_out: i1) {
   // CHECK:   .DEFAULT(64'd0),
   // CHECK:   .DEPTH(3.500000e+00),
   // CHECK:   .FORMAT("xyz_timeout=%d\n"),
-  // CHECK:   .WIDTH(8'd32)
+  // CHECK:   .WIDTH(32)
   // CHECK: ) xyz2 (
   // CHECK:   .in  (a_in),
   // CHECK:   .out (xyz2_out)
@@ -377,3 +389,19 @@ hw.module @UnaryParensIssue755(%a: i8) -> (%b: i1) {
   %1 = comb.icmp ne %0, %c0_i8 : i8
   hw.output %1 : i1
 }
+
+sv.bind @__BindEmissionInstance__ {output_file = {directory = "BindTest", exclude_from_filelist = true, exclude_replicated_ops = true, name = "BindEmissionInstance.sv"}}
+// CHECK-LABL: module BindEmissionInstance()
+hw.module @BindEmissionInstance() {
+  hw.output
+}
+// CHECK-LABEL: module BindEmission()
+hw.module @BindEmission() -> () {
+  // CHECK-NEXT: // This instance is elsewhere emitted as a bind statement
+  // CHECK-NEXT: // BindEmissionInstance BindEmissionInstance ();
+  hw.instance "BindEmissionInstance" sym @__BindEmissionInstance__ @BindEmissionInstance() {doNotPrint = true} : () -> ()
+  hw.output
+}
+
+// CHECK-LABEL: FILE "BindTest/BindEmissionInstance.sv"
+// CHECK: bind BindEmission BindEmissionInstance BindEmissionInstance ();

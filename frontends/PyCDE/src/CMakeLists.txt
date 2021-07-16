@@ -31,7 +31,7 @@ endforeach()
 # it will not be polluted with py_cache runtime artifacts (from testing and
 # such).
 install(
-  DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/src
+  DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/pycde
   DESTINATION python
   COMPONENT PyCDE
   FILES_MATCHING PATTERN "*.py"

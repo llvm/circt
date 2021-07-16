@@ -60,7 +60,7 @@ TODO: Spotlight on module.  Allows arbitrary types for ports.
 TODO: Why is add variadic?  Why consistent operand types instead of allowing
 implicit extensions?
 
-** No "Replication", "ZExt", or "Complement" Operators **
+**No "Replication", "ZExt", or "Complement" Operators**
 
 We choose to omit several operators that you might expect, in order to make the
 IR more regular, easy to transform, and have fewer canonical forms.
@@ -81,7 +81,7 @@ IR more regular, easy to transform, and have fewer canonical forms.
 The absence of these operations doesn't affect the expressive ability of the IR,
 and ExportVerilog will notice these and generate the compact Verilog syntax.
 
-** Zero Bit Integers **
+**Zero Bit Integers**
 
 Combinatorial operations like add and multiply work on values of signless
 standard integer types, e.g. `i42`, but they do not allow zero bit inputs.  This
@@ -272,6 +272,19 @@ signals, and other similar operations are considered free since they generally
 do not synthesize into hardware.  All things being equal it is good to reduce
 the number of instances of these (to reduce IR size and increase canonical form)
 but it is ok to introduce more of these to improve on other metrics above.
+
+**Ordering Concat and Extract**
+
+The`concat(extract(..))` form is preferred over the `extract(concat(..))` form,
+because
+
+- `extract` gets "closer" to underlying `add/sub/xor/op` operations, giving way
+  optimizations like narrowing.
+- the form gives a more accurate view of the values that are being depended on.
+- redundant extract operations can be removed from the concat args lists, eg:
+  `cat(extract(a), b, c, extract(d))`
+
+Both forms perform similarly on hardware, since they are simply bit-copies.
 
 ## The SV Dialect
 
