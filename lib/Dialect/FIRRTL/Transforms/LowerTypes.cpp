@@ -101,8 +101,8 @@ static bool peelType(Type type, SmallVectorImpl<FlatBundleFieldEntry> &fields) {
       .Default([](auto op) { return false; });
 }
 
-/// Return if something is a subaccess, special-cased for subaccess taking
-/// constants, which are really subindex.
+/// Return if something is not a normal subaccess.  Non-normal includes
+/// zero-length vectors and constant indexes (which are really subindexes).
 static bool isNotSubAccess(Operation *op) {
   SubaccessOp sao = dyn_cast<SubaccessOp>(op);
   if (!sao)
