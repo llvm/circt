@@ -129,7 +129,9 @@ def obj_to_value(x, type, result_type=None):
     if len(x) != type.size:
       raise ValueError("List must have same size as array "
                        f"{len(x)} vs {type.size}")
-    return hw.ArrayCreateOp.create(map(lambda x: obj_to_value(x, elemty), x))
+    list_of_vals = list(map(lambda x: obj_to_value(x, elemty), x))
+    # CIRCT's ArrayCreate op takes the array in reverse order.
+    return hw.ArrayCreateOp.create(reversed(list_of_vals))
 
   if isinstance(x, dict):
     if not isinstance(type, hw.StructType):
