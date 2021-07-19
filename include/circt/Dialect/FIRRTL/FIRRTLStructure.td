@@ -93,6 +93,9 @@ def FModuleOp : FIRRTLOp<"module",
       return OpBuilder::atBlockEnd(&bodyBlock);
     }
 
+    /// Inserts the given ports.
+    void insertPorts(ArrayRef<std::pair<unsigned, ModulePortInfo>> ports);
+
     /// Erases the ports listed in `portIndices`.  `portIndices` is expected to
     /// be in order and unique.
     void erasePorts(ArrayRef<unsigned> portIndices);
