@@ -272,8 +272,9 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
   let summary = "Define a new register";
   let description = [{
     Declare a new register:
+
     ```
-      %name = firrtl.reg %clockVal : t1
+    %name = firrtl.reg %clockVal : t1
     ```
     }];
 
