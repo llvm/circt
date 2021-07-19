@@ -23,6 +23,7 @@
 #include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/Threading.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Translation.h"
 #include "llvm/ADT/MapVector.h"
@@ -30,7 +31,6 @@
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/FileSystem.h"
-#include "llvm/Support/Parallel.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/SaveAndRestore.h"
 #include "llvm/Support/ToolOutputFile.h"
@@ -3571,14 +3571,10 @@ void SplitEmitter::emitMLIRModule() {
   // Load any emitter options from the top-level module.
   LoweringOptions options(rootOp);
 
-  // Emit operations to separate files in parallel if enabled.
-  if (rootOp.getContext()->isMultithreadingEnabled())
-    llvm::parallelForEach(files.begin(), files.end(), [&](auto &it) {
-      createFile(options, it.first, it.second);
-    });
-  else
-    for (auto &it : files)
-      createFile(options, it.first, it.second);
+  // Run in parallel if context enables it.
+  mlir::parallelForEach(
+      rootOp->getContext(), files.begin(), files.end(),
+      [&](auto &it) { createFile(options, it.first, it.second); });
 }
 
 void SplitEmitter::createFile(const LoweringOptions &options,
