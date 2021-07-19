@@ -204,6 +204,10 @@ Filter::Filter(std::string &filter) {
         for (; i <= filter.size(); i++) {
           if (i < filter.size()) {
             char c = filter[i];
+            if (c == ':') {
+              break;
+            }
+
             switch (c) {
               // Input
               case 'i':
@@ -280,7 +284,9 @@ Filter::Filter(std::string &filter) {
           port = PortType::NONE;
         }
 
-        n.type = ValueType(type, port, widths);
+        if (n.tag != FilterType::RECURSIVE_GLOB) {
+          n.type = ValueType(type, port, widths);
+        }
       }
 
       nodes.push_back(n);
@@ -443,11 +449,13 @@ std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, Modul
               }
             }
 
-            sv::WireOp wire;
-            for (auto &child : op.getBody().getOps()) {
-              if ((wire = dyn_cast_or_null<sv::WireOp>(&child))) {
-                if (type.getPort() & PortType::NONE) {
-                  // TODO
+            if (type.getPort() & PortType::NONE) {
+              sv::WireOp wire;
+              for (auto &child : op.getBody().getOps()) {
+                if ((wire = dyn_cast_or_null<sv::WireOp>(&child))) {
+                  if (type.getPort() & PortType::NONE) {
+                    // TODO
+                  }
                 }
               }
             }
