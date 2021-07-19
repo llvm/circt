@@ -121,9 +121,8 @@ static bool narrowOperationWidth(Op narrowingCandidate, ValueRange inputs,
   // If the result is never used, no point optimizing this. It will
   // also complicated error handling in getLowestBitAndHigestBitRequired.
   Operation::use_range uses = narrowingCandidate.getOperation()->getUses();
-  if (uses.empty()) {
+  if (uses.empty())
     return false;
-  }
 
   size_t highestBitRequired;
   size_t lowestBitRequired;
@@ -366,8 +365,6 @@ static bool narrowExtractWidth(ExtractOp outerExtractOp,
         assert(type.isa<IntegerType>() &&
                "extract() requires input to be of type IntegerType!");
 
-        // mux(cond, t, f) -> concat(0, mux(cond, t[n-1:0], f[n-1:0])),
-        // where n is the widest demanded width
         auto cond = innerOp.cond();
         auto loc = innerOp.getLoc();
         auto createMuxOp = [&](ArrayRef<Value> values) -> MuxOp {
@@ -382,7 +379,8 @@ static bool narrowExtractWidth(ExtractOp outerExtractOp,
       })
 
       // TODO: Cautiously investigate whether this optimization can be performed
-      // on arrays, memory, or even sequential operations.
+      // on other comb operators (shifts & divs), arrays, memory, or even
+      // sequential operations.
       .Default([](Operation *op) { return false; });
 }
 
