@@ -176,6 +176,7 @@ std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, Modul
   }
 
   FilterNode &node = filter.nodes[0];
+  bool didRecursiveGlobSelfPut = false;
   for (auto op : module.getBody()->getOps<hw::HWModuleOp>()) {
     bool match = false;
     switch (node.tag) {
@@ -189,6 +190,7 @@ std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, Modul
         vec.push_back(op);
         match = true;
         opStack.push_back(std::make_pair(vec, 0));
+        didRecursiveGlobSelfPut = true;
         break;
       }
       case FilterType::LITERAL:
@@ -206,7 +208,6 @@ std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, Modul
     }
   }
 
-  bool didRecursiveGlobSelfPut = false;
   while (!opStack.empty()) {
     std::pair<std::vector<Operation *>, size_t> pair = opStack[opStack.size() - 1];
     std::vector<Operation *> vec = pair.first;
