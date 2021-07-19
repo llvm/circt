@@ -1,4 +1,3 @@
-
 import circt.support as support
 import circt.dialects.hw as hw
 

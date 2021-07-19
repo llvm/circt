@@ -202,8 +202,7 @@ def _module_base(cls, extern: bool, params={}):
       self.backedges: dict[int:BackedgeBuilder.Edge] = {}
       for (idx, (name, type)) in enumerate(mod._input_ports):
         if name in inputs:
-          value = support.get_value(
-            obj_to_value(inputs[name], type))
+          value = support.get_value(obj_to_value(inputs[name], type))
           assert value is not None
           if not extern and support.type_to_pytype(value.type) != type:
             raise TypeError(f"Input '{name}' has type '{value.type}' "
@@ -298,8 +297,8 @@ def _module_base(cls, extern: bool, params={}):
   for (idx, (name, type)) in enumerate(mod._input_ports):
     setattr(
         mod, name,
-        property(lambda self, idx=idx:
-                 OpOperandConnect(self, idx, self.operands[idx], self)))
+        property(lambda self, idx=idx: OpOperandConnect(self, idx, self.
+                                                        operands[idx], self)))
     cls._dont_touch.add(name)
   mod._input_ports_lookup = dict(mod._input_ports)
   for (idx, (name, type)) in enumerate(mod._output_ports):

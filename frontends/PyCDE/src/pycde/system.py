@@ -19,10 +19,8 @@ class System:
 
   mod = None
   passes = [
-    "lower-seq-to-sv",
-    "hw-legalize-names",
-    "hw.module(prettify-verilog)",
-    "hw.module(hw-cleanup)"
+      "lower-seq-to-sv", "hw-legalize-names", "hw.module(prettify-verilog)",
+      "hw.module(hw-cleanup)"
   ]
   passed = False
 
