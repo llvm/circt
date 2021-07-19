@@ -3102,7 +3102,7 @@ private:
 
   ParseResult parseModuleBody(DeferredModuleToParse &deferredModule);
 
-  std::vector<DeferredModuleToParse> deferredModules;
+  SmallVector<DeferredModuleToParse, 0> deferredModules;
   ModuleOp mlirModule;
 
   /// A global identifier that can be used to link multiple annotations
