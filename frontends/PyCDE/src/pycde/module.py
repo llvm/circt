@@ -298,7 +298,7 @@ def _module_base(cls, extern: bool, params={}):
   for (idx, (name, type)) in enumerate(mod._input_ports):
     setattr(
         mod, name,
-        property(lambda self, type=type, idx=idx:
+        property(lambda self, idx=idx:
                  OpOperandConnect(self, idx, self.operands[idx], self)))
     cls._dont_touch.add(name)
   mod._input_ports_lookup = dict(mod._input_ports)
