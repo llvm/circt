@@ -176,7 +176,6 @@ std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, Modul
   }
 
   FilterNode &node = filter.nodes[0];
-  bool didRecursiveGlobSelfPut = false;
   for (auto op : module.getBody()->getOps<hw::HWModuleOp>()) {
     bool match = false;
     switch (node.tag) {
@@ -190,7 +189,6 @@ std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, Modul
         vec.push_back(op);
         match = true;
         opStack.push_back(std::make_pair(vec, 0));
-        didRecursiveGlobSelfPut = true;
         break;
       }
       case FilterType::LITERAL:
@@ -216,7 +214,17 @@ std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, Modul
     opStack.pop_back();
 
     if (i >= filter.nodes.size()) {
-      filtered.push_back(vec);
+      bool contained = false;
+      for (auto v : filtered) {
+        if (v == vec) {
+          contained = true;
+          break;
+        }
+      }
+
+      if (!contained) {
+        filtered.push_back(vec);
+      }
     } else {
       TypeSwitch<Operation *>(op)
         .Case<hw::HWModuleOp>([&](auto &op) {
@@ -257,12 +265,7 @@ std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, Modul
         });
 
       if (filter.nodes[i].tag == FilterType::RECURSIVE_GLOB) {
-        if (!didRecursiveGlobSelfPut) {
-          opStack.push_back(std::make_pair(vec, i + 1));
-          didRecursiveGlobSelfPut = true;
-        }
-      } else {
-        didRecursiveGlobSelfPut = false;
+        opStack.push_back(std::make_pair(vec, i + 1));
       }
     }
   }
