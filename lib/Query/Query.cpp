@@ -21,6 +21,7 @@ PortType operator |(PortType a, PortType b) {
 
 FilterNode::FilterNode(const FilterNode &other) {
   tag = other.tag;
+  type = other.type;
   switch (tag) {
     case FilterType::GLOB:
     case FilterType::RECURSIVE_GLOB:
@@ -39,6 +40,7 @@ FilterNode::FilterNode(const FilterNode &other) {
 
 FilterNode &FilterNode::operator =(const FilterNode &other) {
   tag = other.tag;
+  type = other.type;
   switch (tag) {
     case FilterType::GLOB:
     case FilterType::RECURSIVE_GLOB:
@@ -155,7 +157,7 @@ Filter::Filter(std::string &filter) {
         case FilterType::REGEX:
           if (c == '\\') {
             ++i;
-          } else if (i - 1 != start && filter[i - 1] == '/' && (i - 2 != start || filter[i - 2] != '\\')) {
+          } else if (i - 1 != start && filter[i - 1] == '/' && (i - 2 == start || filter[i - 2] != '\\')) {
             stop = true;
           }
           break;
@@ -189,6 +191,98 @@ Filter::Filter(std::string &filter) {
       }
 
       stop = false;
+
+      if (i + 1 < filter.size() && filter[i] == ':' && filter[i + 1] != ':') {
+        ++i;
+        start = i;
+        bool setType = false;
+        ValueTypeType type;
+        bool setPort = false;
+        PortType port;
+        auto widths = std::vector<Range>();
+        widths.push_back(Range(0, 1000));
+        for (; i <= filter.size(); i++) {
+          if (i < filter.size()) {
+            char c = filter[i];
+            switch (c) {
+              // Input
+              case 'i':
+                if (setPort) {
+                  port = port | PortType::INPUT;
+                } else {
+                  port = PortType::INPUT;
+                  setPort = true;
+                }
+                break;
+
+              // Output
+              case 'o':
+                if (setPort) {
+                  port = port | PortType::OUTPUT;
+                } else {
+                  port = PortType::OUTPUT;
+                  setPort = true;
+                }
+                break;
+
+              // Not input/output
+              case 'n':
+                if (setPort) {
+                  port = port | PortType::NONE;
+                } else {
+                  port = PortType::NONE;
+                  setPort = true;
+                }
+                break;
+
+              // Module
+              case 'm':
+                if (setType) {
+                  type = type | ValueTypeType::MODULE;
+                } else {
+                  type = ValueTypeType::MODULE;
+                  setType = true;
+                }
+                break;
+
+              // Wire
+              case 'w':
+                if (setType) {
+                  type = type | ValueTypeType::WIRE;
+                } else {
+                  type = ValueTypeType::WIRE;
+                  setType = true;
+                }
+                break;
+
+              // Register
+              case 'r':
+                if (setType) {
+                  type = type | ValueTypeType::REGISTER;
+                } else {
+                  type = ValueTypeType::REGISTER;
+                  setType = true;
+                }
+                break;
+
+              default:
+                break;
+            }
+          } else {
+            break;
+          }
+        }
+
+        if (!setType) {
+          type = ValueTypeType::MODULE;
+        }
+        if (!setPort) {
+          port = PortType::NONE;
+        }
+
+        n.type = ValueType(type, port, widths);
+      }
+
       nodes.push_back(n);
       FilterNode n2;
       n = n2;
@@ -201,7 +295,7 @@ Filter::Filter(std::string &filter) {
   }
 }
 
-void matchAndAppend(FilterNode &node, std::vector<Operation *> vec, hw::HWModuleOp &module, std::vector<std::pair<std::vector<Operation *>, size_t>> &opStack, size_t i, std::string &name, bool &match) {
+void matchAndAppend(FilterNode &node, std::vector<Operation *> vec, hw::HWModuleOp &module, std::vector<std::pair<std::vector<Operation *>, size_t>> &opStack, size_t i, std::string &name, bool &match, bool appendSelf) {
   auto copy = std::vector<Operation *>(vec);
   switch (node.tag) {
     case FilterType::UNSET:
@@ -211,7 +305,10 @@ void matchAndAppend(FilterNode &node, std::vector<Operation *> vec, hw::HWModule
       break;
     case FilterType::RECURSIVE_GLOB: {
       auto copy2 = std::vector<Operation *>(vec);
-      copy2.push_back(module);
+      if (appendSelf) {
+        copy2.push_back(module);
+      }
+
       match = true;
       opStack.push_back(std::make_pair(copy2, i));
       break;
@@ -225,7 +322,10 @@ void matchAndAppend(FilterNode &node, std::vector<Operation *> vec, hw::HWModule
   }
 
   if (match) {
-    copy.push_back(module);
+    if (appendSelf) {
+      copy.push_back(module);
+    }
+
     opStack.push_back(std::make_pair(copy, i + 1));
   }
 }
@@ -295,50 +395,66 @@ std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, Modul
       }
     } else {
       TypeSwitch<Operation *>(op)
-        .Case<hw::HWModuleOp>([&](auto &op) {
+        .Case<hw::HWModuleOp>([&](hw::HWModuleOp &op) {
           auto &node = filter.nodes[i];
           auto type = node.type;
           bool match = false;
-          for (auto &child : op.getBody().getOps()) {
-            if (type.getType() & ValueTypeType::MODULE) {
+          if (type.getType() & ValueTypeType::MODULE) {
+            for (auto &child : op.getBody().getOps()) {
               hw::InstanceOp instance;
               if ((instance = dyn_cast_or_null<hw::InstanceOp>(&child))) {
                 auto module = dyn_cast<hw::HWModuleOp>(instance.getReferencedModule());
                 auto name = module.getNameAttr().getValue().str();
-                matchAndAppend(node, vec, module, opStack, i, name, match);
+                matchAndAppend(node, vec, module, opStack, i, name, match, true);
 
                 if (match) {
                   continue;
                 }
               }
             }
+          }
 
-            if (!match && (type.getType() & ValueTypeType::WIRE)) {
-              sv::WireOp wire;
-
-              if ((wire = dyn_cast_or_null<sv::WireOp>(&child))) {
-                if (type.getPort() & PortType::NONE) {
-                  auto name = wire.name().str();
-                  matchAndAppend(node, vec, op, opStack, i, name, match);
-
-                  if (match) {
-                    continue;
-                  }
+          if (!match && (type.getType() & ValueTypeType::WIRE)) {
+            if (type.getPort() & PortType::INPUT) {
+              for (auto &port : op.getPorts()) {
+                if (port.isOutput()) {
+                  continue;
                 }
 
-                if (type.getPort() & PortType::INPUT) {
-                  // TODO
-                }
-
-                if (type.getPort() & PortType::OUTPUT) {
-                  // TODO
+                auto name = port.getName().str();
+                matchAndAppend(node, vec, op, opStack, i, name, match, false);
+                if (match) {
+                  return;
                 }
               }
             }
 
-            if (!match && (node.type.getType() & ValueTypeType::REGISTER)) {
-              // TODO
+            if (type.getPort() & PortType::OUTPUT) {
+              for (auto &port : op.getPorts()) {
+                if (!port.isOutput()) {
+                  continue;
+                }
+
+                auto name = port.getName().str();
+                matchAndAppend(node, vec, op, opStack, i, name, match, false);
+                if (match) {
+                  return;
+                }
+              }
             }
+
+            sv::WireOp wire;
+            for (auto &child : op.getBody().getOps()) {
+              if ((wire = dyn_cast_or_null<sv::WireOp>(&child))) {
+                if (type.getPort() & PortType::NONE) {
+                  // TODO
+                }
+              }
+            }
+          }
+
+          if (!match && (node.type.getType() & ValueTypeType::REGISTER)) {
+            // TODO
           }
         });
 
