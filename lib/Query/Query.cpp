@@ -3,6 +3,22 @@
 namespace circt {
 namespace query {
 
+bool operator &(ValueTypeType a, ValueTypeType b) {
+  return ((size_t) a) & ((size_t) b);
+}
+
+ValueTypeType operator |(ValueTypeType a, ValueTypeType b) {
+  return (ValueTypeType) (((size_t) a) | ((size_t) b));
+}
+
+bool operator &(PortType a, PortType b) {
+  return ((size_t) a) & ((size_t) b);
+}
+
+PortType operator |(PortType a, PortType b) {
+  return (PortType) (((size_t) a) | ((size_t) b));
+}
+
 FilterNode::FilterNode(const FilterNode &other) {
   tag = other.tag;
   switch (tag) {
@@ -47,6 +63,13 @@ FilterNode FilterNode::newGlob() {
   return f;
 }
 
+FilterNode FilterNode::newGlob(ValueType type) {
+  FilterNode f;
+  f.tag = FilterType::GLOB;
+  f.type = type;
+  return f;
+}
+
 FilterNode FilterNode::newRecursiveGlob() {
   FilterNode f;
   f.tag = FilterType::RECURSIVE_GLOB;
@@ -60,9 +83,25 @@ FilterNode FilterNode::newLiteral(std::string &literal) {
   return f;
 }
 
+FilterNode FilterNode::newLiteral(std::string &literal, ValueType type) {
+  FilterNode f;
+  f.tag = FilterType::LITERAL;
+  f.type = type;
+  f.literal = literal;
+  return f;
+}
+
 FilterNode FilterNode::newRegex(std::string &regex) {
   FilterNode f;
   f.tag = FilterType::REGEX;
+  f.regex = regex;
+  return f;
+}
+
+FilterNode FilterNode::newRegex(std::string &regex, ValueType type) {
+  FilterNode f;
+  f.tag = FilterType::REGEX;
+  f.type = type;
   f.regex = regex;
   return f;
 }
@@ -162,6 +201,35 @@ Filter::Filter(std::string &filter) {
   }
 }
 
+void matchAndAppend(FilterNode &node, std::vector<Operation *> vec, hw::HWModuleOp &module, std::vector<std::pair<std::vector<Operation *>, size_t>> &opStack, size_t i, std::string &name, bool &match) {
+  auto copy = std::vector<Operation *>(vec);
+  switch (node.tag) {
+    case FilterType::UNSET:
+      break;
+    case FilterType::GLOB:
+      match = true;
+      break;
+    case FilterType::RECURSIVE_GLOB: {
+      auto copy2 = std::vector<Operation *>(vec);
+      copy2.push_back(module);
+      match = true;
+      opStack.push_back(std::make_pair(copy2, i));
+      break;
+    }
+    case FilterType::LITERAL:
+      match = node.literal == name;
+      break;
+    case FilterType::REGEX:
+      match = std::regex_match(name, node.regex);
+      break;
+  }
+
+  if (match) {
+    copy.push_back(module);
+    opStack.push_back(std::make_pair(copy, i + 1));
+  }
+}
+
 std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, ModuleOp &module) {
   std::vector<std::vector<mlir::Operation *>> filtered;
   std::vector<std::pair<std::vector<mlir::Operation *>, size_t>> opStack;
@@ -228,38 +296,48 @@ std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, Modul
     } else {
       TypeSwitch<Operation *>(op)
         .Case<hw::HWModuleOp>([&](auto &op) {
+          auto &node = filter.nodes[i];
+          auto type = node.type;
+          bool match = false;
           for (auto &child : op.getBody().getOps()) {
-            hw::InstanceOp instance;
-            if ((instance = dyn_cast_or_null<hw::InstanceOp>(&child))) {
-              auto copy = std::vector<Operation *>(vec);
-              auto &node = filter.nodes[i];
-              bool match = false;
-              auto module = dyn_cast<hw::HWModuleOp>(instance.getReferencedModule());
-              switch (node.tag) {
-                case FilterType::UNSET:
-                  break;
-                case FilterType::GLOB:
-                  match = true;
-                  break;
-                case FilterType::RECURSIVE_GLOB: {
-                  auto copy2 = std::vector<Operation *>(vec);
-                  copy2.push_back(module);
-                  match = true;
-                  opStack.push_back(std::make_pair(copy2, i));
-                  break;
-                }
-                case FilterType::LITERAL:
-                  match = node.literal == module.getNameAttr().getValue().str();
-                  break;
-                case FilterType::REGEX:
-                  match = std::regex_match(module.getNameAttr().getValue().str(), node.regex);
-                  break;
-              }
+            if (type.getType() & ValueTypeType::MODULE) {
+              hw::InstanceOp instance;
+              if ((instance = dyn_cast_or_null<hw::InstanceOp>(&child))) {
+                auto module = dyn_cast<hw::HWModuleOp>(instance.getReferencedModule());
+                auto name = module.getNameAttr().getValue().str();
+                matchAndAppend(node, vec, module, opStack, i, name, match);
 
-              if (match) {
-                copy.push_back(module);
-                opStack.push_back(std::make_pair(copy, i + 1));
+                if (match) {
+                  continue;
+                }
               }
+            }
+
+            if (!match && (type.getType() & ValueTypeType::WIRE)) {
+              sv::WireOp wire;
+
+              if ((wire = dyn_cast_or_null<sv::WireOp>(&child))) {
+                if (type.getPort() & PortType::NONE) {
+                  auto name = wire.name().str();
+                  matchAndAppend(node, vec, op, opStack, i, name, match);
+
+                  if (match) {
+                    continue;
+                  }
+                }
+
+                if (type.getPort() & PortType::INPUT) {
+                  // TODO
+                }
+
+                if (type.getPort() & PortType::OUTPUT) {
+                  // TODO
+                }
+              }
+            }
+
+            if (!match && (node.type.getType() & ValueTypeType::REGISTER)) {
+              // TODO
             }
           }
         });
