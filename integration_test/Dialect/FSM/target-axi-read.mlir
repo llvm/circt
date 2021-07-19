@@ -1,6 +1,10 @@
-// RUN: circt-opt -convert-fsm-to-hw -split-input-file %s | FileCheck %s
+// REQUIRES: ieee-sim
+// RUN: circt-opt %s -convert-fsm-to-hw -cse -simple-canonicalizer -prettify-verilog | \
+// RUN: circt-translate -export-verilog > %target-axi-read.sv
+// RUN: circt-rtl-sim.py %target-axi-read.sv %S/driver.sv --sim %ieee-sim --no-default-driver --top driver | FileCheck %s
+// CHECK-NOT: Error: Assertion violation
+// CHECK: Success
 
-// CHECK: module
 fsm.machine @axi_read_target(%arvalid: i1, %arlen: i8, %rready: i1) -> (i1, i1, i1) attributes {stateType = i2} {
   %arready = fsm.variable "arready" : i1
   %rvalid = fsm.variable "rvalid" : i1
