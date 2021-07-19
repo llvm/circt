@@ -1795,4 +1795,19 @@ firrtl.module @dshifts_to_ishifts(in %a_in: !firrtl.sint<58>,
   firrtl.connect %c_out, %2 : !firrtl.sint<58>, !firrtl.sint<58>
 }
 
+// RemoveReset: `firrtl.invalidvalue` reset values should be canonicalized to a
+// reset-less register.
+// CHECK-LABEL: firrtl.module @StripInvalidValueReset
+firrtl.module @StripInvalidValueReset(
+  in %clk: !firrtl.clock,
+  in %rst: !firrtl.uint<1>,
+  in %arst: !firrtl.asyncreset
+) {
+  %invalid_ui42 = firrtl.invalidvalue : !firrtl.uint<42>
+  // CHECK: %0 = firrtl.reg %clk : (!firrtl.clock) -> !firrtl.uint<42>
+  // CHECK: %1 = firrtl.reg %clk : (!firrtl.clock) -> !firrtl.uint<42>
+  %0 = firrtl.regreset %clk, %rst, %invalid_ui42 : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<42>) -> !firrtl.uint<42>
+  %1 = firrtl.regreset %clk, %arst, %invalid_ui42 : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<42>) -> !firrtl.uint<42>
+}
+
 }
