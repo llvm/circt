@@ -4,12 +4,14 @@
 
 from __future__ import annotations
 
-from .support import Value, get_user_loc, var_to_attribute
+from pycde.support import obj_to_value
+
+from .support import Value, get_user_loc, var_to_attribute, OpOperandConnect
 from .types import types
 
 from circt import support
 from circt.dialects import hw
-from circt.support import BackedgeBuilder, OpOperand
+from circt.support import BackedgeBuilder
 import circt
 
 import mlir.ir
@@ -200,7 +202,7 @@ def _module_base(cls, extern: bool, params={}):
       self.backedges: dict[int:BackedgeBuilder.Edge] = {}
       for (idx, (name, type)) in enumerate(mod._input_ports):
         if name in inputs:
-          value = support.get_value(inputs[name])
+          value = support.get_value(obj_to_value(inputs[name], type))
           assert value is not None
           if not extern and support.type_to_pytype(value.type) != type:
             raise TypeError(f"Input '{name}' has type '{value.type}' "
@@ -292,11 +294,11 @@ def _module_base(cls, extern: bool, params={}):
   # subclasses. Add the names to "don't touch" since they can't be touched
   # (since they implictly call an OpView property) when the attributes are being
   # scanned in the `mod` constructor.
-  for (idx, (name, _)) in enumerate(mod._input_ports):
+  for (idx, (name, type)) in enumerate(mod._input_ports):
     setattr(
         mod, name,
-        property(lambda self, idx=idx: OpOperand(self, idx, self.operands[idx],
-                                                 self)))
+        property(lambda self, idx=idx: OpOperandConnect(self, idx, self.
+                                                        operands[idx], self)))
     cls._dont_touch.add(name)
   mod._input_ports_lookup = dict(mod._input_ports)
   for (idx, (name, type)) in enumerate(mod._output_ports):

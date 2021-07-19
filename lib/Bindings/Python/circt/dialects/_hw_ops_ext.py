@@ -440,7 +440,7 @@ class StructCreateOp:
 
     struct_val = hw.StructCreateOp(struct_type,
                                    [value for (_, value) in elem_name_values])
-    if result_type is None:
+    if result_type is None or result_type == struct_type:
       return struct_val
 
     result_type_inner = support.get_self_or_inner(result_type)

@@ -88,3 +88,62 @@ def get_user_loc() -> ir.Location:
       continue
     return ir.Location.file(frame.filename, frame.lineno, 0)
   return ir.Location.unknown()
+
+
+class OpOperandConnect(support.OpOperand):
+  """An OpOperand pycde extension which adds a connect method."""
+
+  def connect(self, obj):
+    val = obj_to_value(obj, self.type)
+    support.connect(self, val)
+
+
+def obj_to_value(x, type, result_type=None):
+  """Convert a python object to a CIRCT value, given the CIRCT type."""
+
+  val = support.get_value(x)
+  # If x is already a valid value, just return it.
+  if val is not None:
+    return x
+
+  type = support.type_to_pytype(type)
+  if isinstance(type, hw.TypeAliasType):
+    return obj_to_value(x, type.inner_type, type)
+
+  if result_type is None:
+    result_type = type
+  else:
+    result_type = support.type_to_pytype(result_type)
+    assert isinstance(result_type, hw.TypeAliasType)
+
+  if isinstance(x, int):
+    if not isinstance(type, ir.IntegerType):
+      raise ValueError(f"Int can only be converted to hw int, not '{type}'")
+    return hw.ConstantOp.create(type, x)
+
+  if isinstance(x, list):
+    if not isinstance(type, hw.ArrayType):
+      raise ValueError(f"List is only convertable to hw array, not '{type}'")
+    elemty = type.element_type
+    if len(x) != type.size:
+      raise ValueError("List must have same size as array "
+                       f"{len(x)} vs {type.size}")
+    list_of_vals = list(map(lambda x: obj_to_value(x, elemty), x))
+    # CIRCT's ArrayCreate op takes the array in reverse order.
+    return hw.ArrayCreateOp.create(reversed(list_of_vals))
+
+  if isinstance(x, dict):
+    if not isinstance(type, hw.StructType):
+      raise ValueError(f"Dict is only convertable to hw struct, not '{type}'")
+    fields = type.get_fields()
+    elem_name_values = []
+    for (fname, ftype) in fields:
+      if fname not in x:
+        raise ValueError(f"Could not find expected field: {fname}")
+      elem_name_values.append((fname, obj_to_value(x[fname], ftype)))
+      x.pop(fname)
+    if len(x) > 0:
+      raise ValueError(f"Extra fields specified: {x}")
+    return hw.StructCreateOp.create(elem_name_values, result_type=result_type)
+
+  raise ValueError(f"Unable to map object '{type(x)}' to MLIR Value")
