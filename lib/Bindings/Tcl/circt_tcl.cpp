@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <tcl.h>
 
+#include "Circt.h"
 #include "Query.h"
 
 static int createTclFilter(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]) {
@@ -44,11 +45,12 @@ static int createTclFilter(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_O
 extern "C" {
 
 int DLLEXPORT Circt_Init(Tcl_Interp *interp) {
- if (Tcl_InitStubs(interp, TCL_VERSION, 0) == NULL) {
+  if (Tcl_InitStubs(interp, TCL_VERSION, 0) == NULL) {
     return TCL_ERROR;
- }
+  }
 
-  Tcl_ObjType *filterNodeType = (Tcl_ObjType *) malloc(sizeof(Tcl_ObjType));
+  // Register types
+  Tcl_ObjType *filterNodeType = new Tcl_ObjType;
   filterNodeType->name = "FilterNode";
   filterNodeType->setFromAnyProc = filterNodeTypeSetFromAnyProc;
   filterNodeType->updateStringProc = filterNodeUpdateStringProc;
@@ -56,7 +58,7 @@ int DLLEXPORT Circt_Init(Tcl_Interp *interp) {
   filterNodeType->freeIntRepProc = filterNodeFreeIntRepProc;
   Tcl_RegisterObjType(filterNodeType);
 
-  Tcl_ObjType *filterType = (Tcl_ObjType *) malloc(sizeof(Tcl_ObjType));
+  Tcl_ObjType *filterType = new Tcl_ObjType;
   filterType->name = "Filter";
   filterType->setFromAnyProc = filterTypeSetFromAnyProc;
   filterType->updateStringProc = filterUpdateStringProc;
@@ -64,12 +66,23 @@ int DLLEXPORT Circt_Init(Tcl_Interp *interp) {
   filterType->freeIntRepProc = filterFreeIntRepProc;
   Tcl_RegisterObjType(filterType);
 
- if (Tcl_PkgProvide(interp, "Circt", "1.0") == TCL_ERROR) {
-    return TCL_ERROR;
- }
+  Tcl_ObjType *contextType = new Tcl_ObjType;
+  contextType->name = "MlirContext";
+  contextType->setFromAnyProc = contextTypeSetFromAnyProc;
+  contextType->updateStringProc = contextTypeUpdateStringProc;
+  contextType->dupIntRepProc = contextTypeDupIntRepProc;
+  contextType->freeIntRepProc = contextTypeFreeIntRepProc;
+  Tcl_RegisterObjType(contextType);
 
- Tcl_CreateObjCommand(interp, "filter", createTclFilter, NULL, NULL);
- return TCL_OK;
+  // Register package
+  if (Tcl_PkgProvide(interp, "Circt", "1.0") == TCL_ERROR) {
+    return TCL_ERROR;
+  }
+
+  // Register commands
+  Tcl_CreateObjCommand(interp, "registerDialects", tclRegisterDialects, NULL, NULL);
+  Tcl_CreateObjCommand(interp, "filter", createTclFilter, NULL, NULL);
+  return TCL_OK;
 }
 
 }

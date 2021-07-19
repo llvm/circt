@@ -49,7 +49,11 @@ int filterNodeTypeSetFromAnyProc(Tcl_Interp *interp, Tcl_Obj *obj) {
   return TCL_ERROR;
 }
 
-void filterNodeUpdateStringProc(Tcl_Obj *obj) { }
+void filterNodeUpdateStringProc(Tcl_Obj *obj) {
+  obj->bytes = Tcl_Alloc(1);
+  obj->bytes[0] = '\0';
+  obj->length = 0;
+}
 
 void filterNodeDupIntRepProc(Tcl_Obj *src, Tcl_Obj *dup) {
   circt::query::FilterNode node = *((CirctQueryFilterNode) src->internalRep.otherValuePtr);
