@@ -1493,6 +1493,14 @@ static bool isExpressionEmittedInline(Operation *op) {
   if (op->getResult(0).hasOneUse())
     return true;
 
+  // ReadInOutOp can always be inlined if its input is a module port or defined
+  // by a RegOp.
+  if (auto readInOutOp = dyn_cast<ReadInOutOp>(op)) {
+    auto definingOp = readInOutOp.input().getDefiningOp();
+    if (!definingOp || isa<RegOp>(definingOp))
+      return true;
+  }
+
   // If it is nullary and duplicable, then we can emit it inline.
   return op->getNumOperands() == 0 && isDuplicatableNullaryExpression(op);
 }
