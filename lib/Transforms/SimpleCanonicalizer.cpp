@@ -18,6 +18,9 @@
 #include "mlir/Transforms/Passes.h"
 using namespace circt;
 
+#define GEN_PASS_CLASSES
+#include "circt/Transforms/Passes.h.inc"
+
 //===----------------------------------------------------------------------===//
 // SimpleCanonicalizer
 //===----------------------------------------------------------------------===//
