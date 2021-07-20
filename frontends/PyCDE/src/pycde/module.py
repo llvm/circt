@@ -337,6 +337,12 @@ class _Generate:
     self.modcls = None
     self.loc = get_user_loc()
 
+  def _generate(self, mod):
+    ret = self.gen_func(mod)
+    if ret is None:
+      return
+    return {name: obj_to_value(obj) for (name, obj) in ret.items()}
+
   def __call__(self, op):
     """Build an HWModuleOp and run the generator as the body builder."""
 
@@ -379,7 +385,7 @@ class _Generate:
                                module_name,
                                input_ports=self.modcls._input_ports,
                                output_ports=self.modcls._output_ports,
-                               body_builder=self.gen_func)
+                               body_builder=self._generate)
     else:
       assert (len(existing_module_names) == 1)
       mod = existing_module_names[0]

@@ -1,6 +1,15 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
-from pycde import types, dim, obj_to_value, System
+from pycde import (Output, module, generator, obj_to_value, types, dim, System)
+
+
+@module
+class Taps:
+  taps = Output(dim(8, 3))
+
+  @generator
+  def build(mod):
+    return {"taps": [203, 100, 23]}
 
 
 class Top(System):
@@ -15,8 +24,11 @@ class Top(System):
 
     Top.BarType.create({"foo": 7})
 
+    Taps()
+
 
 top = Top()
+top.generate(["build"])
 top.print()
 # CHECK-LABEL: hw.module @top()
 # CHECK:  %c7_i12 = hw.constant 7 : i12
@@ -28,3 +40,10 @@ top.print()
 # CHECK:  %c7_i12_0 = hw.constant 7 : i12
 # CHECK:  %2 = hw.struct_create (%c7_i12_0) : !hw.struct<foo: i12>
 # CHECK:  %3 = hw.bitcast %2 : (!hw.struct<foo: i12>) -> !hw.typealias<@pycde::@bar, !hw.struct<foo: i12>>
+
+# CHECK:  hw.module @pycde.Taps() -> (%taps: !hw.array<3xi8>)
+# CHECK:    %c-53_i8 = hw.constant -53 : i8
+# CHECK:    %c100_i8 = hw.constant 100 : i8
+# CHECK:    %c23_i8 = hw.constant 23 : i8
+# CHECK:    [[REG0:%.+]] = hw.array_create %c23_i8, %c100_i8, %c-53_i8 : i8
+# CHECK:    hw.output [[REG0]] : !hw.array<3xi8>

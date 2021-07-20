@@ -99,13 +99,36 @@ class OpOperandConnect(support.OpOperand):
     support.connect(self, val)
 
 
-def obj_to_value(x, type, result_type=None):
+def _infer_type(x):
+  val = support.get_value(x)
+  # If x is already a valid value, just return it.
+  if val is not None:
+    return val.type
+
+  from .types import types
+  if isinstance(x, int):
+    return types.int(x.bit_length())
+
+  if isinstance(x, list):
+    if len(x) == 0:
+      raise ValueError("Cannot infer type of empty list")
+    return types.array(_infer_type(x[0]), len(x))
+
+  if isinstance(x, dict):
+    fields = [(k, _infer_type(v)) for (k, v) in x.items()]
+    return types.struct(fields)
+
+
+def obj_to_value(x, type=None, result_type=None):
   """Convert a python object to a CIRCT value, given the CIRCT type."""
 
   val = support.get_value(x)
   # If x is already a valid value, just return it.
   if val is not None:
     return x
+
+  if type is None:
+    type = _infer_type(x)
 
   type = support.type_to_pytype(type)
   if isinstance(type, hw.TypeAliasType):
