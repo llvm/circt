@@ -218,13 +218,17 @@ void FSMToHWPass::runOnOperation() {
 
     // Generate the reset block of `always_ff`. Reset internal registers and the
     // state register.
+    auto defaultState = machine.getDefaultState();
     b.setInsertionPointToStart(alwaysff.getResetBlock());
-    b.create<sv::PAssignOp>(machineLoc, stateReg,
-                            stateValMap[machine.getDefaultState()]);
+    b.create<sv::PAssignOp>(machineLoc, stateReg, stateValMap[defaultState]);
     for (auto reg : regs) {
       auto constZero =
           b.create<hw::ConstantOp>(reg.getLoc(), reg.getElementType(), 0);
       b.create<sv::PAssignOp>(reg.getLoc(), reg, constZero);
+    }
+    if (!convertActionRegion(defaultState.entry(), b)) {
+      defaultState.emitOpError("failed to convert the entry region");
+      return;
     }
 
     // Begin to generate the body block of `always_ff`. By default, we assign

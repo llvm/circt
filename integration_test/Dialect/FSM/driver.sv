@@ -23,7 +23,7 @@ module driver();
     rst_n = 1;
 
     // arready should be high in IDLE state.
-    // assert(out0);
+    assert(out0);
 
     // Hold valid high for one clk cycle.
     in0 = 1;
