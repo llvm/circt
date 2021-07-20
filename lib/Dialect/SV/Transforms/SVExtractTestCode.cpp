@@ -269,6 +269,7 @@ private:
       return;
     hw::OutputFileAttr outputFileAttr;
     // Check if the assert/assume/cover op has the output_file attribute.
+    // How to handle different path attributes on multiple ops?
     for (auto extractOp : roots)
       if (extractOp->hasAttr("output_file")) {
         outputFileAttr =
