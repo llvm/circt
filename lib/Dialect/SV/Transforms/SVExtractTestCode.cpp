@@ -41,7 +41,7 @@ static void getBackwardSliceSimple(Operation *rootOp,
     Operation *op = worklist.back();
     worklist.pop_back();
 
-    if (!op || op->hasTrait<OpTrait::IsIsolatedFromAbove>())
+    if (!op || op->hasTrait<mlir::OpTrait::IsIsolatedFromAbove>())
       continue;
 
     // Evaluate whether we should keep this def.
@@ -142,9 +142,15 @@ StringRef getNameForPort(Value val, ArrayAttr modulePorts) {
 static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
                                          SetVector<Value> &inputs,
                                          BlockAndValueMapping &cutMap,
-                                         StringRef suffix, StringRef path) {
+                                         StringRef suffix, StringRef path,
+                                         hw::OutputFileAttr outFile) {
   OpBuilder b(op->getParentOfType<mlir::ModuleOp>()->getRegion(0));
 
+  if (!outFile && !path.empty()) {
+    outFile = hw::OutputFileAttr::get(b.getStringAttr(path),
+                                      b.getStringAttr(""), b.getBoolAttr(true),
+                                      b.getBoolAttr(true), op.getContext());
+  }
   // Construct the ports, this is just the input Values
   SmallVector<hw::ModulePortInfo> ports;
   {
@@ -159,8 +165,8 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
       op.getLoc(),
       b.getStringAttr((getVerilogModuleNameAttr(op).getValue() + suffix).str()),
       ports);
-  if (!path.empty())
-    newMod->setAttr("outputPath", b.getStringAttr(path));
+  if (outFile)
+    newMod->setAttr("output_file", outFile);
 
   // Update the mapping from old values to cloned values
   for (auto port : llvm::enumerate(inputs))
@@ -261,6 +267,15 @@ private:
     // No Ops?  No problem.
     if (roots.empty())
       return;
+    hw::OutputFileAttr outputFileAttr;
+    // Check if the assert/assume/cover op has the output_file attribute.
+    for (auto extractOp : roots)
+      if (extractOp->hasAttr("output_file")) {
+        outputFileAttr =
+            extractOp->getAttrOfType<hw::OutputFileAttr>("output_file");
+        break;
+      }
+
     // Find the data-flow and structural ops to clone.  Result includes roots.
     auto opsToClone = computeCloneSet(roots);
     // Find the dataflow into the clone set
@@ -274,7 +289,8 @@ private:
 
     // Make a module to contain the clone set, with arguments being the cut
     BlockAndValueMapping cutMap;
-    auto bmod = createModuleForCut(module, inputs, cutMap, suffix, path);
+    auto bmod = createModuleForCut(module, inputs, cutMap, suffix, path,
+                                   outputFileAttr);
     // do the clone
     migrateOps(module, bmod, opsToClone, cutMap);
     // erase old operations of interest

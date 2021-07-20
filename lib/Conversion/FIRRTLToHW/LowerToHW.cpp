@@ -223,7 +223,7 @@ struct CircuitLoweringState {
   }
 
   // Emit warnings on unprocessed annotations still remaining in the annoSet.
-  void warnOnRemainingAnnotations(Operation *op, const AnnotationSet &annoSet);
+  void processRemainingAnnotations(Operation *op, const AnnotationSet &annoSet);
 
   CircuitOp circuitOp;
 
@@ -233,6 +233,10 @@ struct CircuitLoweringState {
     std::lock_guard<std::mutex> lock(bindsMutex);
     binds.push_back(op);
   }
+
+  StringRef getAssertFilename() { return extractAssertFile; }
+  StringRef getAssumeFilename() { return extractAssumesFile; }
+  StringRef getCoverFilename() { return extractCoverFile; }
 
 private:
   friend struct FIRRTLModuleLowering;
@@ -253,10 +257,41 @@ private:
 
   // Control access to binds.
   std::mutex bindsMutex;
+
+  // Filenames from ExtractTestCode annotation.
+  StringRef extractAssertFile;
+  StringRef extractAssumesFile;
+  StringRef extractCoverFile;
 };
 
-void CircuitLoweringState::warnOnRemainingAnnotations(
+void CircuitLoweringState::processRemainingAnnotations(
     Operation *op, const AnnotationSet &annoSet) {
+  for (auto anno : annoSet) {
+    bool ignoreAnno = false;
+    if (isa<CircuitOp>(op)) {
+      // These annotations have a filename with full path name. So directory has
+      // to be ignored.
+      if (anno.isClass(
+              "sifive.enterprise.firrtl.ExtractAssertionsAnnotation")) {
+        extractAssertFile = anno.getMember<StringAttr>("filename").getValue();
+        ignoreAnno = true;
+      } else if (anno.isClass(
+                     "sifive.enterprise.firrtl.ExtractAssumptionsAnnotation")) {
+        extractAssumesFile = anno.getMember<StringAttr>("filename").getValue();
+        ignoreAnno = true;
+      } else if (anno.isClass(
+                     "sifive.enterprise.firrtl.ExtractCoverageAnnotation")) {
+        extractCoverFile = anno.getMember<StringAttr>("filename").getValue();
+        ignoreAnno = true;
+      }
+    }
+    // Add the processed annotations to alreadyPrinted, instead of deleting.
+    // This avoids printing the warnings on them.
+    if (enableAnnotationWarning && ignoreAnno) {
+      std::lock_guard<std::mutex> lock(annotationPrintingMtx);
+      alreadyPrinted.insert(anno.getClass());
+    }
+  }
   if (!enableAnnotationWarning || annoSet.empty())
     return;
   std::lock_guard<std::mutex> lock(annotationPrintingMtx);
@@ -334,7 +369,7 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   SmallVector<FModuleOp, 32> modulesToProcess;
 
-  state.warnOnRemainingAnnotations(circuit, AnnotationSet(circuit));
+  state.processRemainingAnnotations(circuit, AnnotationSet(circuit));
   // Iterate through each operation in the circuit body, transforming any
   // FModule's we come across.
   for (auto &op : circuitBody->getOperations()) {
@@ -638,7 +673,7 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
       hwPort.argNum = numArgs++;
     }
     ports.push_back(hwPort);
-    loweringState.warnOnRemainingAnnotations(moduleOp, firrtlPort.annotations);
+    loweringState.processRemainingAnnotations(moduleOp, firrtlPort.annotations);
   }
   return success();
 }
@@ -657,7 +692,8 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   if (auto defName = oldModule.defname())
     verilogName = defName.getValue();
 
-  loweringState.warnOnRemainingAnnotations(oldModule, AnnotationSet(oldModule));
+  loweringState.processRemainingAnnotations(oldModule,
+                                            AnnotationSet(oldModule));
   // Build the new hw.module op.
   OpBuilder builder(topLevelModule->getParent()->getContext());
   builder.setInsertionPointToEnd(topLevelModule);
@@ -677,7 +713,8 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   if (failed(lowerPorts(firrtlPorts, ports, oldModule, loweringState)))
     return {};
 
-  loweringState.warnOnRemainingAnnotations(oldModule, AnnotationSet(oldModule));
+  loweringState.processRemainingAnnotations(oldModule,
+                                            AnnotationSet(oldModule));
   // Build the new hw.module op.
   OpBuilder builder(topLevelModule->getParent()->getContext());
   builder.setInsertionPointToEnd(topLevelModule);
@@ -1158,7 +1195,7 @@ void FIRRTLLowering::run() {
     builder.setInsertionPoint(&op);
     builder.setLoc(op.getLoc());
     auto done = succeeded(dispatchVisitor(&op));
-    circuitState.warnOnRemainingAnnotations(&op, AnnotationSet(&op));
+    circuitState.processRemainingAnnotations(&op, AnnotationSet(&op));
     if (done)
       opsToRemove.push_back(&op);
     else {
@@ -2695,7 +2732,22 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op) {
         label = op.nameAttr();
       else
         label = builder.getStringAttr("");
-      builder.create<BOpTy>(predicate, label);
+      auto svOp = builder.create<BOpTy>(predicate, label);
+      // Attach the corresponding filename.
+      StringRef filename;
+      if (isa<AssertOp>(op))
+        filename = circuitState.getAssertFilename();
+      else if (isa<AssumeOp>(op))
+        filename = circuitState.getAssumeFilename();
+      else if (isa<CoverOp>(op))
+        filename = circuitState.getCoverFilename();
+      if (!filename.empty())
+        svOp->setAttr("output_file",
+                      hw::OutputFileAttr::get(builder.getStringAttr(""),
+                                              builder.getStringAttr(filename),
+                                              builder.getBoolAttr(true),
+                                              builder.getBoolAttr(true),
+                                              svOp.getContext()));
     });
   });
 
