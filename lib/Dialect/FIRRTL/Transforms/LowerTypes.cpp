@@ -34,7 +34,8 @@
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
-#include "llvm/Support/Parallel.h"
+#include "mlir/IR/Threading.h"
+#include "llvm/ADT/APSInt.h"
 #include <deque>
 
 using namespace circt;
@@ -979,39 +980,18 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
 namespace {
 struct LowerTypesPass : public LowerFIRRTLTypesBase<LowerTypesPass> {
   void runOnOperation() override;
-
-private:
-  void runParallel();
 };
 } // end anonymous namespace
 
-void LowerTypesPass::runParallel() {
-  // Collect the operations to iterate in a vector. We can't use parallelFor
-  // with the regular op list, since it requires a RandomAccessIterator. This
-  // also lets us use parallelForEachN, which means we don't have to
-  // llvm::enumerate the ops with their index. TODO(mlir): There should really
-  // be a way to do this without collecting the operations first.
+// This is the main entrypoint for the lowering pass.
+void LowerTypesPass::runOnOperation() {
   std::deque<Operation *> ops;
   llvm::for_each(getOperation().getBody()->getOperations(),
                  [&](Operation &op) { ops.push_back(&op); });
 
-  mlir::ParallelDiagnosticHandler diagHandler(&getContext());
-  llvm::parallelForEachN(0, ops.size(), [&](auto index) {
-    // Notify the handler the op index and then perform lowering.
-    diagHandler.setOrderIDForThread(index);
+  mlir::parallelForEachN(&getContext(), 0, ops.size(), [&](auto index) {
     TypeLoweringVisitor(&getContext()).lowerModule(ops[index]);
-    diagHandler.eraseOrderIDForThread();
   });
-}
-
-// This is the main entrypoint for the lowering pass.
-void LowerTypesPass::runOnOperation() {
-  auto *context = &getContext();
-  if (context->isMultithreadingEnabled())
-    runParallel();
-  else
-    for (auto &op : getOperation().getBody()->getOperations())
-      TypeLoweringVisitor(context).lowerModule(&op);
 }
 
 /// This is the pass constructor.

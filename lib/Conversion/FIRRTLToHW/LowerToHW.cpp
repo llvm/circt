@@ -21,6 +21,7 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TinyPtrVector.h"
@@ -359,6 +360,7 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   SmallVector<FirMemory> memories;
   if (getContext().isMultithreadingEnabled()) {
+    // TODO: Update this to use a mlir::parallelTransformReduce once it exists.
     memories = llvm::parallelTransformReduce(
         modulesToProcess.begin(), modulesToProcess.end(),
         SmallVector<FirMemory>(), mergeFIRRTLMemories, collectFIRRTLMemories);
@@ -371,15 +373,9 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   // Now that we've lowered all of the modules, move the bodies over and update
   // any instances that refer to the old modules.
-  if (getContext().isMultithreadingEnabled()) {
-    mlir::ParallelDiagnosticHandler diagHandler(&getContext());
-    llvm::parallelForEachN(0, modulesToProcess.size(), [&](auto index) {
-      lowerModuleBody(modulesToProcess[index], state);
-    });
-  } else {
-    for (auto module : modulesToProcess)
-      lowerModuleBody(module, state);
-  }
+  mlir::parallelForEachN(
+      &getContext(), 0, modulesToProcess.size(),
+      [&](auto index) { lowerModuleBody(modulesToProcess[index], state); });
 
   // Move binds from inside modules to outside modules.
   for (auto bind : state.binds) {

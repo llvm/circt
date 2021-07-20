@@ -20,6 +20,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/Threading.h"
 #include "mlir/IR/Verifier.h"
 #include "mlir/Translation.h"
 #include "llvm/ADT/PointerEmbeddedInt.h"
@@ -28,7 +29,6 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/JSON.h"
-#include "llvm/Support/Parallel.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -3506,25 +3506,12 @@ FIRCircuitParser::parseCircuit(const llvm::MemoryBuffer *annotationsBuf) {
 
 DoneParsing:
 
-  // Now that we've parsed all the prototypes and created all the module ops,
-  // go ahead and parse all their bodies.  This can be done in parallel.
-  if (getContext()->isMultithreadingEnabled()) {
-    mlir::ParallelDiagnosticHandler diagHandler(getContext());
-    std::atomic<bool> anyFailed{false};
-    llvm::parallelForEachN(0, deferredModules.size(), [&](size_t index) {
-      diagHandler.setOrderIDForThread(index);
-      if (parseModuleBody(deferredModules[index]))
-        anyFailed = true;
-    });
-    if (anyFailed)
-      return failure();
-  } else {
-    for (DeferredModuleToParse &deferredModule : deferredModules) {
-      if (parseModuleBody(deferredModule))
-        return failure();
-    }
-  }
-  return success();
+  return mlir::failableParallelForEachN(
+      getContext(), 0, deferredModules.size(), [&](size_t index) {
+        if (parseModuleBody(deferredModules[index]))
+          return failure();
+        return success();
+      });
 }
 
 //===----------------------------------------------------------------------===//
