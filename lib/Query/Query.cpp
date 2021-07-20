@@ -200,7 +200,9 @@ Filter::Filter(std::string &filter) {
         bool setPort = false;
         PortType port;
         auto widths = std::vector<Range>();
-        widths.push_back(Range(0, 1000));
+        bool inRange = false;
+        size_t begin = 0;
+        size_t end = 0;
         for (; i <= filter.size(); i++) {
           if (i < filter.size()) {
             char c = filter[i];
@@ -208,69 +210,94 @@ Filter::Filter(std::string &filter) {
               break;
             }
 
-            switch (c) {
-              // Input
-              case 'i':
-                if (setPort) {
-                  port = port | PortType::INPUT;
-                } else {
-                  port = PortType::INPUT;
-                  setPort = true;
-                }
-                break;
+            if (!inRange && '0' <= c && c <= '9') {
+              start = i;
+              inRange = true;
+              continue;
+            }
 
-              // Output
-              case 'o':
-                if (setPort) {
-                  port = port | PortType::OUTPUT;
-                } else {
-                  port = PortType::OUTPUT;
-                  setPort = true;
+            if (inRange) {
+              if (c == '-') {
+                begin = 0;
+                for (size_t j = 0; j < i - start; ++j) {
+                  begin *= 10;
+                  begin += filter[start + j] - '0';
                 }
-                break;
-
-              // Not input/output
-              case 'n':
-                if (setPort) {
-                  port = port | PortType::NONE;
-                } else {
-                  port = PortType::NONE;
-                  setPort = true;
+                start = i + 1;
+              } else if (c == ',') {
+                end = 0;
+                for (size_t j = 0; j < i - start; ++j) {
+                  end *= 10;
+                  end += filter[start + j] - '0';
                 }
-                break;
+                start = i + 1;
+                widths.push_back(Range(begin, end));
+              }
+            } else {
+              switch (c) {
+                // Input
+                case 'i':
+                  if (setPort) {
+                    port = port | PortType::INPUT;
+                  } else {
+                    port = PortType::INPUT;
+                    setPort = true;
+                  }
+                  break;
 
-              // Module
-              case 'm':
-                if (setType) {
-                  type = type | ValueTypeType::MODULE;
-                } else {
-                  type = ValueTypeType::MODULE;
-                  setType = true;
-                }
-                break;
+                // Output
+                case 'o':
+                  if (setPort) {
+                    port = port | PortType::OUTPUT;
+                  } else {
+                    port = PortType::OUTPUT;
+                    setPort = true;
+                  }
+                  break;
 
-              // Wire
-              case 'w':
-                if (setType) {
-                  type = type | ValueTypeType::WIRE;
-                } else {
-                  type = ValueTypeType::WIRE;
-                  setType = true;
-                }
-                break;
+                // Not input/output
+                case 'n':
+                  if (setPort) {
+                    port = port | PortType::NONE;
+                  } else {
+                    port = PortType::NONE;
+                    setPort = true;
+                  }
+                  break;
 
-              // Register
-              case 'r':
-                if (setType) {
-                  type = type | ValueTypeType::REGISTER;
-                } else {
-                  type = ValueTypeType::REGISTER;
-                  setType = true;
-                }
-                break;
+                // Module
+                case 'm':
+                  if (setType) {
+                    type = type | ValueTypeType::MODULE;
+                  } else {
+                    type = ValueTypeType::MODULE;
+                    setType = true;
+                  }
+                  break;
 
-              default:
-                break;
+                // Wire
+                case 'w':
+                  if (setType) {
+                    type = type | ValueTypeType::WIRE;
+                  } else {
+                    type = ValueTypeType::WIRE;
+                    setType = true;
+                  }
+                  break;
+
+                // Register
+                case 'r':
+                  if (setType) {
+                    type = type | ValueTypeType::REGISTER;
+                  } else {
+                    type = ValueTypeType::REGISTER;
+                    setType = true;
+                  }
+                  break;
+
+                default:
+                  break;
+              }
             }
           } else {
             break;
@@ -423,7 +450,7 @@ std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, Modul
           if (!match && (type.getType() & ValueTypeType::WIRE)) {
             if (type.getPort() & PortType::INPUT) {
               for (auto &port : op.getPorts()) {
-                if (port.isOutput()) {
+                if (port.isOutput() || !node.type.containsWidth(port.type.getIntOrFloatBitWidth())) {
                   continue;
                 }
 
@@ -437,7 +464,7 @@ std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, Modul
 
             if (type.getPort() & PortType::OUTPUT) {
               for (auto &port : op.getPorts()) {
-                if (!port.isOutput()) {
+                if (!port.isOutput() || !node.type.containsWidth(port.type.getIntOrFloatBitWidth())) {
                   continue;
                 }
 

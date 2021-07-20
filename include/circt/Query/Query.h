@@ -1,4 +1,5 @@
 #include <regex>
+#include <iostream>
 #include <string>
 #include <vector>
 
@@ -54,6 +55,10 @@ public:
   Ranges(std::vector<Range> ranges) : ranges (ranges) { }
 
   bool contains(size_t n) {
+    if (ranges.empty()) {
+      return true;
+    }
+
     for (auto range : ranges) {
       if (range.contains(n)) {
         return true;
