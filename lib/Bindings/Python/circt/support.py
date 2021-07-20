@@ -77,8 +77,17 @@ def var_to_attribute(obj, none_on_fail: bool = False) -> ir.Attribute:
 # conversation regarding how to achieve this is ongoing and I expect it to be a
 # long one. This is a way that works for now.
 def type_to_pytype(t):
-  from circt.dialects import hw
   import mlir.ir as ir
+
+  if not isinstance(t, ir.Type):
+    raise TypeError("type_to_pytype only accepts MLIR Type objects")
+
+  # If it's not the root type, assume it's already been downcasted and don't do
+  # the expensive probing below.
+  if t.__class__ != ir.Type:
+    return t
+
+  from circt.dialects import hw
   try:
     return ir.IntegerType(t)
   except ValueError:
@@ -107,6 +116,11 @@ def attribute_to_var(attr):
 
   if not isinstance(attr, ir.Attribute):
     raise TypeError("attribute_to_var only accepts MLIR Attributes")
+
+  # If it's not the root type, assume it's already been downcasted and don't do
+  # the expensive probing below.
+  if attr.__class__ != ir.Attribute:
+    return attr
 
   try:
     return ir.BoolAttr(attr).value
