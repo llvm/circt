@@ -10,30 +10,72 @@ module driver();
 
   axi_read_target dut (.*);
 
-  always #2 clk = ~clk;
+  always #5 clk = ~clk;
 
   initial begin
-    in0 = 0;
-    in1 = 0;
-    in2 = 1;
-
-    // Hold reset high for one clk cycle.
     rst_n = 0;
-    @(posedge clk);
+    in0 = 0; // arvalid
+    in1 = 0; // arlen
+    in2 = 1; // rready
+
+    // arready should be high after reset.
+    @(posedge clk) #1;
     rst_n = 1;
+    assert (out0); // arready
+    assert (~out1); // rvalid
+    assert (~out2); // rlast
 
-    // arready should be high in IDLE state.
-    assert(out0);
+    // Issue a burst read request with a length of 4.
+    @(posedge clk) #1;
+    in0 = 1; // arvalid
+    in1 = 3; // arlen
 
-    // Hold valid high for one clk cycle.
-    in0 = 1;
-    in1 = 7;
-    @(posedge clk);
-    in0 = 0;
-    in1 = 0;
+    // Only rvalid should be high for the first 3 clock cycles.
+    @(posedge clk) #1;
+    in0 = 0; // arvalid
+    in1 = 0; // arlen
+    assert (~out0); // arready
+    assert (out1); // rvalid
+    assert (~out2); // rlast
 
-    // rvalid should be high in MID or END state.
-    assert(out1);
+    @(posedge clk) #1;
+    assert (~out0); // arready
+    assert (out1); // rvalid
+    assert (~out2); // rlast
+
+    @(posedge clk) #1;
+    assert (~out0); // arready
+    assert (out1); // rvalid
+    assert (~out2); // rlast
+
+    // arready, rvalid, and rlast should be high for the last clock cycle.
+    // Issue another read request with a length of 2.
+    @(posedge clk) #1;
+    in0 = 1; // arvalid
+    in1 = 1; // arlen
+    assert (out0); // arready
+    assert (out1); // rvalid
+    assert (out2); // rlast
+
+    // Only rvalid should be high for the first clock cycle.
+    @(posedge clk) #1;
+    in0 = 0; // arvalid
+    in1 = 0; // arlen
+    assert (~out0); // arready
+    assert (out1); // rvalid
+    assert (~out2); // rlast
+
+    // arready, rvalid, and rlast should be high for the last clock cycle.
+    @(posedge clk) #1;
+    assert (out0); // arready
+    assert (out1); // rvalid
+    assert (out2); // rlast
+
+    // Return to IDLE state.
+    @(posedge clk) #1;
+    assert (out0); // arready
+    assert (~out1); // rvalid
+    assert (~out2); // rlast
 
     $display("Success");
     $finish();

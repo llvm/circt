@@ -21,7 +21,7 @@ def MachineOp : FSMOp<"machine",
 
   let arguments = (ins StrAttr:$sym_name, TypeAttr:$stateType,
                        TypeAttr:$type);
-  let regions = (region AnyRegion:$body);
+  let regions = (region SizedRegion<1>:$body);
 
   let builders = [OpBuilder<(ins
     "StringRef":$name, "Type":$stateType, "FunctionType":$type,

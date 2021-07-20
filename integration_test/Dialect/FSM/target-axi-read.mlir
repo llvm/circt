@@ -36,7 +36,8 @@ fsm.machine @axi_read_target(%arvalid: i1, %arlen: i8, %rready: i1) -> (i1, i1, 
       %cond = and %arvalid, %arlen_eq0_n : i1
       fsm.return %cond : i1
     } action  {
-      fsm.update %cnt, %arlen : i8, i8
+      %init_cnt = subi %arlen, %c1_i8 : i8
+      fsm.update %cnt, %init_cnt : i8, i8
     }
     fsm.transition @END guard  {
       %cond = and %arvalid, %arlen_eq0 : i1
@@ -64,25 +65,6 @@ fsm.machine @axi_read_target(%arvalid: i1, %arlen: i8, %rready: i1) -> (i1, i1, 
     }
   }
 
-  fsm.state "HOLD" entry  {
-    fsm.update %rvalid, %true : i1, i1
-    fsm.update %rlast, %true : i1 , i1
-  } exit  {
-    fsm.update %rvalid, %false : i1, i1
-    fsm.update %rlast, %false : i1 , i1
-  } transitions  {
-    fsm.transition @MID guard  {
-      %cond = and %rready, %arlen_eq0_n : i1
-      fsm.return %cond : i1
-    } action  {
-    }
-    fsm.transition @END guard  {
-      %cond = and %rready, %arlen_eq0 : i1
-      fsm.return %cond : i1
-    } action  {
-    }
-  }
-
   fsm.state "END" entry  {
     fsm.update %arready, %true : i1, i1
     fsm.update %rvalid, %true : i1, i1
@@ -102,16 +84,38 @@ fsm.machine @axi_read_target(%arvalid: i1, %arlen: i8, %rready: i1) -> (i1, i1, 
       %cond = and %cond_tmp, %arlen_eq0_n : i1
       fsm.return %cond : i1
     } action  {
-      fsm.update %cnt, %arlen : i8, i8
+      %init_cnt = subi %arlen, %c1_i8 : i8
+      fsm.update %cnt, %init_cnt : i8, i8
+    }
+    fsm.transition @END guard  {
+      %cond_tmp = and %arvalid, %rready : i1
+      %cond = and %cond_tmp, %arlen_eq0 : i1
+      fsm.return %cond : i1
+    } action  {
     }
     fsm.transition @HOLD guard  {
       %cond = and %arvalid, %rready_n : i1
       fsm.return %cond : i1
     } action  {
     }
+  }
+
+  fsm.state "HOLD" entry  {
+    fsm.update %rvalid, %true : i1, i1
+    fsm.update %rlast, %true : i1 , i1
+  } exit  {
+    fsm.update %rvalid, %false : i1, i1
+    fsm.update %rlast, %false : i1 , i1
+  } transitions  {
+    fsm.transition @MID guard  {
+      %cond = and %rready, %arlen_eq0_n : i1
+      fsm.return %cond : i1
+    } action  {
+      %init_cnt = subi %arlen, %c1_i8 : i8
+      fsm.update %cnt, %init_cnt : i8, i8
+    }
     fsm.transition @END guard  {
-      %cond_tmp = and %arvalid, %rready : i1
-      %cond = and %cond_tmp, %arlen_eq0 : i1
+      %cond = and %rready, %arlen_eq0 : i1
       fsm.return %cond : i1
     } action  {
     }
