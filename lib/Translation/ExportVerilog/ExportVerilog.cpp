@@ -3266,7 +3266,10 @@ struct RootEmitterBase {
   /// Legalized names for each module
   llvm::DenseMap<Operation *, ModuleNameManager> legalizedNames;
 
-  explicit RootEmitterBase(ModuleOp rootOp) : rootOp(rootOp) {}
+  // Emitter options extracted from the top-level module.
+  LoweringOptions options;
+
+  explicit RootEmitterBase(ModuleOp rootOp) : rootOp(rootOp), options(rootOp) {}
   void prepareAllModules();
   void gatherFiles(bool separateModules);
   void emitFile(const FileInfo &fileInfo, VerilogEmitterState &state);
@@ -3277,12 +3280,13 @@ struct RootEmitterBase {
 
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
-static void prepareHWModule(Block &block, ModuleNameManager &names) {
+static void prepareHWModule(Block &block, ModuleNameManager &names,
+                            const LoweringOptions &options) {
   for (auto &op : llvm::make_early_inc_range(block)) {
     // If the operations has regions, lower each of the regions.
     for (auto &region : op.getRegions()) {
       if (!region.empty())
-        prepareHWModule(region.front(), names);
+        prepareHWModule(region.front(), names, options);
     }
 
     // Duplicate "always inline" expression for each of their users and move
@@ -3333,6 +3337,36 @@ static void prepareHWModule(Block &block, ModuleNameManager &names) {
       names.addLegalName(op.getResult(0), regOp.name(), &op);
     else if (auto interfaceInstanceOp = dyn_cast<InterfaceInstanceOp>(op))
       names.addLegalName(op.getResult(0), interfaceInstanceOp.name(), &op);
+
+    // Force any expression used in the event control of an always process to be
+    // a trivial wire, if the corresponding option is set.
+    if (!options.allowExprInEventControl) {
+      auto enforceWire = [&](Value expr) {
+        auto definingOp = expr.getDefiningOp();
+        if (!definingOp ||
+            (isa<ReadInOutOp>(definingOp) &&
+             isa_and_nonnull<WireOp>(
+                 cast<ReadInOutOp>(definingOp).input().getDefiningOp())))
+          return;
+        auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), &block);
+        auto newWire = builder.create<WireOp>(expr.getType());
+        builder.setInsertionPoint(&op);
+        builder.create<AssignOp>(newWire, expr);
+        auto newWireRead = builder.create<ReadInOutOp>(newWire);
+        op.replaceUsesOfWith(expr, newWireRead);
+      };
+      if (auto always = dyn_cast<AlwaysOp>(op)) {
+        for (auto clock : always.clocks())
+          enforceWire(clock);
+        continue;
+      }
+      if (auto always = dyn_cast<AlwaysFFOp>(op)) {
+        enforceWire(always.clock());
+        if (auto reset = always.reset())
+          enforceWire(reset);
+        continue;
+      }
+    }
   }
 
   // Now that all the basic ops are settled, check for any use-before def issues
@@ -3390,7 +3424,7 @@ void RootEmitterBase::prepareAllModules() {
   bool hasError = false;
   for (auto op : rootOp.getBody()->getOps<HWModuleOp>()) {
     auto &names = legalizedNames[op];
-    prepareHWModule(*op.getBodyBlock(), names);
+    prepareHWModule(*op.getBodyBlock(), names, options);
     hasError |= names.hadError();
   }
   if (hasError)
@@ -3564,11 +3598,9 @@ struct UnifiedEmitter : public RootEmitterBase {
 } // namespace
 
 void UnifiedEmitter::emitMLIRModule() {
-  VerilogEmitterState state(os);
   gatherFiles(false);
-
-  // Read the emitter options out of the module.
-  state.options.parseFromAttribute(rootOp);
+  VerilogEmitterState state(os);
+  state.options = options;
 
   // Emit the main file. This is a container for anything not explicitly split
   // out into a separate file.
@@ -3597,8 +3629,7 @@ struct SplitEmitter : public RootEmitterBase {
   StringRef dirname;
 
   void emitMLIRModule();
-  void createFile(const LoweringOptions &options, Identifier fileName,
-                  FileInfo &file);
+  void createFile(Identifier fileName, FileInfo &file);
 };
 
 } // namespace
@@ -3606,17 +3637,12 @@ struct SplitEmitter : public RootEmitterBase {
 void SplitEmitter::emitMLIRModule() {
   gatherFiles(true);
 
-  // Load any emitter options from the top-level module.
-  LoweringOptions options(rootOp);
-
   // Run in parallel if context enables it.
-  mlir::parallelForEach(
-      rootOp->getContext(), files.begin(), files.end(),
-      [&](auto &it) { createFile(options, it.first, it.second); });
+  mlir::parallelForEach(rootOp->getContext(), files.begin(), files.end(),
+                        [&](auto &it) { createFile(it.first, it.second); });
 }
 
-void SplitEmitter::createFile(const LoweringOptions &options,
-                              Identifier fileName, FileInfo &file) {
+void SplitEmitter::createFile(Identifier fileName, FileInfo &file) {
   // Determine the output path from the output directory and filename.
   SmallString<128> outputFilename(dirname);
   appendPossiblyAbsolutePath(outputFilename, fileName.strref());
