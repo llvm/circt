@@ -118,7 +118,7 @@ private:
 
   friend class Filter;
   friend std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, ModuleOp &module);
-  friend void matchAndAppend(FilterNode &node, std::vector<Operation *> vec, hw::HWModuleOp &module, std::vector<std::pair<std::vector<Operation *>, size_t>> &opStack, size_t i, std::string &name, bool &match, bool appendSelf);
+  friend void matchAndAppend(FilterNode &node, std::vector<Operation *> vec, Operation *module, std::vector<std::pair<std::vector<Operation *>, size_t>> &opStack, size_t i, std::string &name, bool &match, bool appendSelf);
 };
 
 class Filter {

@@ -282,6 +282,9 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
         .Case<hw::HWModuleOp>([&](auto &op) {
           std::cout << op.getNameAttr().getValue().str();
         })
+        .Case<hw::HWModuleExternOp>([&](hw::HWModuleExternOp &op) {
+          std::cout << op.getNameAttr().getValue().str();
+        })
         .Default([&](auto &op) {
           std::cout << "???";
         });

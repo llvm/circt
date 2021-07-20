@@ -328,7 +328,7 @@ Filter::Filter(std::string &filter) {
   }
 }
 
-void matchAndAppend(FilterNode &node, std::vector<Operation *> vec, hw::HWModuleOp &module, std::vector<std::pair<std::vector<Operation *>, size_t>> &opStack, size_t i, std::string &name, bool &match, bool appendSelf) {
+void matchAndAppend(FilterNode &node, std::vector<Operation *> vec, Operation *module, std::vector<std::pair<std::vector<Operation *>, size_t>> &opStack, size_t i, std::string &name, bool &match, bool appendSelf) {
   auto copy = std::vector<Operation *>(vec);
   switch (node.tag) {
     case FilterType::UNSET:
@@ -376,35 +376,16 @@ std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, Modul
     return filtered;
   }
 
-  FilterNode &node = filter.nodes[0];
   for (auto op : module.getBody()->getOps<hw::HWModuleOp>()) {
-    bool match = false;
-    switch (node.tag) {
-      case FilterType::UNSET:
-        break;
-      case FilterType::GLOB:
-        match = true;
-        break;
-      case FilterType::RECURSIVE_GLOB: {
-        std::vector<Operation *> vec;
-        vec.push_back(op);
-        match = true;
-        opStack.push_back(std::make_pair(vec, 0));
-        break;
-      }
-      case FilterType::LITERAL:
-        match = node.literal == op.getNameAttr().getValue().str();
-        break;
-      case FilterType::REGEX:
-        match = std::regex_match(op.getNameAttr().getValue().str(), node.regex);
-        break;
-    }
+    std::vector<Operation *> vec;
+    vec.push_back(op);
+    opStack.push_back(std::make_pair(vec, 0));
+  }
 
-    if (match) {
-      std::vector<Operation *> vec;
-      vec.push_back(op);
-      opStack.push_back(std::make_pair(vec, 1));
-    }
+  for (auto op : module.getBody()->getOps<hw::HWModuleExternOp>()) {
+    std::vector<Operation *> vec;
+    vec.push_back(op);
+    opStack.push_back(std::make_pair(vec, 0));
   }
 
   while (!opStack.empty()) {
@@ -490,6 +471,41 @@ std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, Modul
 
           if (!match && (node.type.getType() & ValueTypeType::REGISTER)) {
             // TODO
+          }
+        })
+        .Case<hw::HWModuleExternOp>([&](auto &op) {
+          auto &node = filter.nodes[i];
+          auto type = node.type;
+          bool match = false;
+
+          if (type.getType() & ValueTypeType::WIRE) {
+            if (type.getPort() & PortType::INPUT) {
+              for (auto &port : op.getPorts()) {
+                if (port.isOutput() || !node.type.containsWidth(port.type.getIntOrFloatBitWidth())) {
+                  continue;
+                }
+
+                auto name = port.getName().str();
+                matchAndAppend(node, vec, op, opStack, i, name, match, false);
+                if (match) {
+                  return;
+                }
+              }
+            }
+
+            if (type.getPort() & PortType::OUTPUT) {
+              for (auto &port : op.getPorts()) {
+                if (!port.isOutput() || !node.type.containsWidth(port.type.getIntOrFloatBitWidth())) {
+                  continue;
+                }
+
+                auto name = port.getName().str();
+                matchAndAppend(node, vec, op, opStack, i, name, match, false);
+                if (match) {
+                  return;
+                }
+              }
+            }
           }
         });
 
