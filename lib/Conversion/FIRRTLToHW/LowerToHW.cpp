@@ -222,7 +222,8 @@ struct CircuitLoweringState {
     return it != oldToNewModuleMap.end() ? it->second : nullptr;
   }
 
-  // Emit warnings on unprocessed annotations still remaining in the annoSet.
+  // Process remaining annotations and emit warnings on unprocessed annotations
+  // still remaining in the annoSet.
   void processRemainingAnnotations(Operation *op, const AnnotationSet &annoSet);
 
   CircuitOp circuitOp;
