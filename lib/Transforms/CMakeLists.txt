@@ -8,6 +8,6 @@ add_circt_library(CIRCTTransforms
   MLIRIR
   MLIRPass
   MLIRRewrite
-  MLIRTransformUtils
+  MLIRTransforms
 )
 
