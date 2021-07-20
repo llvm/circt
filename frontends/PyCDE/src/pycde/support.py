@@ -9,14 +9,15 @@ import os
 class Value:
 
   def __init__(self, value, type=None):
+    from .types import PyCDEType
     self.value = support.get_value(value)
     if type is None:
-      self.type = support.type_to_pytype(self.value.type)
+      self.type = PyCDEType(self.value.type)
     else:
-      self.type = type
+      self.type = PyCDEType(type)
 
   def __getitem__(self, sub):
-    ty = support.get_self_or_inner(self.type)
+    ty = self.type.inner
     if isinstance(ty, hw.ArrayType):
       idx = int(sub)
       if idx >= self.type.size:
@@ -35,7 +36,7 @@ class Value:
         "Subscripting only supported on hw.array and hw.struct types")
 
   def __getattr__(self, attr):
-    ty = support.get_self_or_inner(self.type)
+    ty = self.type.inner
     if isinstance(ty, hw.StructType):
       fields = ty.get_fields()
       if attr in [name for name, _ in fields]:
@@ -93,8 +94,8 @@ def get_user_loc() -> ir.Location:
 class OpOperandConnect(support.OpOperand):
   """An OpOperand pycde extension which adds a connect method."""
 
-  def connect(self, obj):
-    val = obj_to_value(obj, self.type)
+  def connect(self, obj, result_type=None):
+    val = obj_to_value(obj, self.type, result_type)
     support.connect(self, val)
 
 

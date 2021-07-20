@@ -4,6 +4,7 @@ from pycde import types, dim, obj_to_value, System
 
 
 class Top(System):
+  BarType = types.struct({"foo": types.i12}, "bar")
   inputs = []
   outputs = []
 
@@ -12,7 +13,7 @@ class Top(System):
     obj_to_value([42, 45], dim(types.i8, 2))
     obj_to_value(5, types.i8)
 
-    obj_to_value({"foo": 7}, types.struct({"foo": types.i12}, "bar"))
+    Top.BarType.create({"foo": 7})
 
 
 top = Top()
