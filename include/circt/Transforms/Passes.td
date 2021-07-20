@@ -15,14 +15,4 @@
 
 include "mlir/Pass/PassBase.td"
 
-def SimpleCanonicalizer : Pass<"simple-canonicalizer"> {
-  let summary = "Run operation canonicalization patterns";
-  let description = [{
-      This is a lighter-weight version of the standard MLIR canonicalization
-      pass that doesn't do CFG optimizations and has other differences.
-  }];
-
-  let constructor = "circt::createSimpleCanonicalizerPass()";
-}
-
 #endif // CIRCT_DIALECT_SV_SVPASSES

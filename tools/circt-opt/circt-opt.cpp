@@ -44,6 +44,7 @@ int main(int argc, char **argv) {
   mlir::registerCSEPass();
   mlir::registerSCCPPass();
   mlir::registerInlinerPass();
+  mlir::registerCanonicalizerPass();
 
   // Register test passes
   circt::test::registerSchedulingTestPasses();

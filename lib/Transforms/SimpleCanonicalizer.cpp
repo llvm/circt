@@ -14,48 +14,18 @@
 #include "circt/Transforms/Passes.h"
 
 #include "circt/Support/LLVM.h"
-#include "mlir/Pass/Pass.h"
-#include "mlir/Rewrite/PatternApplicator.h"
-#include "mlir/Transforms/FoldUtils.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "mlir/Transforms/Passes.h"
 using namespace circt;
-
-#define GEN_PASS_CLASSES
-#include "circt/Transforms/Passes.h.inc"
 
 //===----------------------------------------------------------------------===//
 // SimpleCanonicalizer
 //===----------------------------------------------------------------------===//
 
-namespace {
-/// Canonicalize operations in nested regions.
-struct SimpleCanonicalizer
-    : public SimpleCanonicalizerBase<SimpleCanonicalizer> {
-  /// Initialize the canonicalizer by building the set of patterns used during
-  /// execution.
-  LogicalResult initialize(MLIRContext *context) override {
-    RewritePatternSet owningPatterns(context);
-    for (auto *op : context->getRegisteredOperations())
-      op->getCanonicalizationPatterns(owningPatterns, context);
-    patterns = std::move(owningPatterns);
-    return success();
-  }
-  void runOnOperation() override;
-
-  mlir::FrozenRewritePatternSet patterns;
-};
-} // end anonymous namespace
-
-void SimpleCanonicalizer::runOnOperation() {
+/// Create a Canonicalizer pass.
+std::unique_ptr<Pass> circt::createSimpleCanonicalizerPass() {
   mlir::GreedyRewriteConfig config;
   config.useTopDownTraversal = true;
   config.enableRegionSimplification = false;
-  // config.maxIterations = 1;
-  (void)applyPatternsAndFoldGreedily(getOperation()->getRegions(), patterns,
-                                     config);
-}
-
-/// Create a Canonicalizer pass.
-std::unique_ptr<Pass> circt::createSimpleCanonicalizerPass() {
-  return std::make_unique<SimpleCanonicalizer>();
+  return mlir::createCanonicalizerPass(config);
 }
