@@ -17,9 +17,40 @@
 using namespace circt;
 using namespace query;
 
+CirctQueryWidthRange CirctQueryNewWidthRange(size_t start, size_t end) {
+  return Range(start, end);
+}
+
+CirctQueryValueType CirctQueryNewValueType(CirctQueryValueTypeType typeType, CirctQueryPortType port, size_t count, ...) {
+  va_list va;
+  va_start(va, count);
+  auto widths = std::vector<Range>();
+  for (size_t i = 0; i < count; i++) {
+    widths.push_back(*va_arg(va, CirctQueryWidthRange *));
+  }
+  va_end(va);
+
+  return ValueType((ValueTypeType) typeType, (PortType) port, Ranges(widths));
+}
+
+CirctQueryValueType CirctQueryNewValueTypeArray(CirctQueryValueTypeType typeType, CirctQueryPortType port, size_t count, CirctQueryWidthRange ranges[]) {
+  auto widths = std::vector<Range>();
+  for (size_t i = 0; i < count; i++) {
+    widths.push_back(ranges[i]);
+  }
+
+  return ValueType((ValueTypeType) typeType, (PortType) port, Ranges(widths));
+}
+
 CirctQueryFilterNode CirctQueryNewGlobFilter() {
   CirctQueryFilterNode node = new FilterNode;
   *node = FilterNode::newGlob();
+  return node;
+}
+
+CirctQueryFilterNode CirctQueryNewGlobFilterWithType(CirctQueryValueType type) {
+  CirctQueryFilterNode node = new FilterNode;
+  *node = FilterNode::newGlob(type);
   return node;
 }
 
@@ -36,10 +67,24 @@ CirctQueryFilterNode CirctQueryNewLiteralFilter(char *literal) {
   return node;
 }
 
+CirctQueryFilterNode CirctQueryNewLiteralFilterWithType(char *literal, CirctQueryValueType type) {
+  CirctQueryFilterNode node = new FilterNode;
+  auto s = std::string(literal);
+  *node = FilterNode::newLiteral(s, type);
+  return node;
+}
+
 CirctQueryFilterNode CirctQueryNewRegexFilter(char *regex) {
   CirctQueryFilterNode node = new FilterNode;
   auto s = std::string(regex);
   *node = FilterNode::newRegex(s);
+  return node;
+}
+
+CirctQueryFilterNode CirctQueryNewRegexFilterWithType(char *regex, CirctQueryValueType type) {
+  CirctQueryFilterNode node = new FilterNode;
+  auto s = std::string(regex);
+  *node = FilterNode::newRegex(s, type);
   return node;
 }
 
