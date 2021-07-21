@@ -113,6 +113,8 @@ getLowestBitAndHighestBitRequired(Operation::use_range uses,
 // narrowTrailingBits determines whether undemanded trailing bits should
 // be aggressively stripped off.
 //
+// This function requires the narrowingCandidate to have at least 1 use.
+//
 // Returns true if IR is mutated. IR is mutated iff narrowing happens.
 template <class Op, class F>
 static bool narrowOperationWidth(Op narrowingCandidate, ValueRange inputs,
@@ -121,8 +123,7 @@ static bool narrowOperationWidth(Op narrowingCandidate, ValueRange inputs,
   // If the result is never used, no point optimizing this. It will
   // also complicated error handling in getLowestBitAndHigestBitRequired.
   Operation::use_range uses = narrowingCandidate.getOperation()->getUses();
-  if (uses.empty())
-    return false;
+  assert(!uses.empty() && "narrowingCandidate must have at least one use.");
 
   size_t highestBitRequired;
   size_t lowestBitRequired;
@@ -339,6 +340,10 @@ static bool narrowExtractWidth(ExtractOp outerExtractOp,
   if (!innerArg) {
     return false;
   }
+
+  // In calls to narrowOperationWidth below, innerOp is guranteed to have at
+  // least one use (ie: this extract operation). So we don't need to handle
+  // innerOp with no uses.
 
   return llvm::TypeSwitch<Operation *, bool>(innerArg)
       // The unreferenced leading bits of Add, Sub and Mul can be stripped of,
