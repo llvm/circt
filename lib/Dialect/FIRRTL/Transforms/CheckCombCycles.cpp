@@ -130,7 +130,7 @@ struct GraphTraits<CombNode> {
 } // namespace llvm
 
 //===----------------------------------------------------------------------===//
-// Detector class
+// CycleDetector class
 //===----------------------------------------------------------------------===//
 
 /// This is used for storing combinational paths between IOs of a FIRRTL module.
@@ -139,10 +139,11 @@ struct GraphTraits<CombNode> {
 using CombPaths = SmallVector<std::pair<unsigned, unsigned>>;
 
 namespace {
-class Detector : public FIRRTLVisitor<Detector, bool> {
+class CycleDetector : public FIRRTLVisitor<CycleDetector, bool> {
 public:
-  Detector(FModuleOp module, DenseMap<Operation *, CombPaths> &combPathsMap,
-           InstanceGraph &instanceGraph)
+  CycleDetector(FModuleOp module,
+                DenseMap<Operation *, CombPaths> &combPathsMap,
+                InstanceGraph &instanceGraph)
       : module(module), combPathsMap(combPathsMap),
         instanceGraph(instanceGraph) {}
 
@@ -150,9 +151,9 @@ public:
   ///   1. Create a node for each of its results if the result is not a
   ///   sequential value, such as register and memory write port;
   ///   2. Create edges between its arguments and results if applicable.
-  using FIRRTLVisitor<Detector, bool>::visitStmt;
-  using FIRRTLVisitor<Detector, bool>::visitDecl;
-  using FIRRTLVisitor<Detector, bool>::visitExpr;
+  using FIRRTLVisitor<CycleDetector, bool>::visitStmt;
+  using FIRRTLVisitor<CycleDetector, bool>::visitDecl;
+  using FIRRTLVisitor<CycleDetector, bool>::visitExpr;
 
   /// Statement handlers.
   template <typename ConnectOpType>
@@ -207,7 +208,7 @@ private:
 } // namespace
 
 template <typename ConnectOpType>
-bool Detector::handleConnectOp(ConnectOpType op) {
+bool CycleDetector::handleConnectOp(ConnectOpType op) {
   // Create an edge between the `source` value and `destination` value if both
   // exist in the graph.
   auto srcNode = combGraph.getNode(op.src());
@@ -221,7 +222,7 @@ bool Detector::handleConnectOp(ConnectOpType op) {
 }
 
 /// Declaration handlers.
-bool Detector::visitDecl(InstanceOp op) {
+bool CycleDetector::visitDecl(InstanceOp op) {
   SmallVector<CombNode, 8> nodes;
   for (auto result : op.getResults())
     nodes.push_back(combGraph.getOrAddNode(result));
@@ -237,7 +238,7 @@ bool Detector::visitDecl(InstanceOp op) {
   return true;
 }
 
-bool Detector::visitDecl(MemOp op) {
+bool CycleDetector::visitDecl(MemOp op) {
   // Combinational paths only exist when reading latency is zero.
   if (op.readLatency() != 0)
     return true;
@@ -289,7 +290,7 @@ bool Detector::visitDecl(MemOp op) {
 }
 
 /// Expression handlers.
-bool Detector::visitExpr(SubfieldOp op) {
+bool CycleDetector::visitExpr(SubfieldOp op) {
   auto definingOp = op.input().getDefiningOp();
   if (!definingOp || !isa<MemOp>(definingOp)) {
     op->emitOpError("input must be a port of a MemOp, please run "
@@ -314,7 +315,7 @@ bool Detector::visitExpr(SubfieldOp op) {
 }
 
 /// Handle other operations that don't have concrete visitors.
-bool Detector::visitUnhandledOp(Operation *op) {
+bool CycleDetector::visitUnhandledOp(Operation *op) {
   // Create an edge between each exist input node and each output node.
   SmallVector<CombNode, 4> dstNodes;
   for (auto result : op->getResults())
@@ -330,7 +331,7 @@ bool Detector::visitUnhandledOp(Operation *op) {
 }
 
 /// Build combinational graph of the module with the visitor dispatcher.
-void Detector::buildCombGraph() {
+void CycleDetector::buildCombGraph() {
   // Each module port should be a node in the graph.
   for (auto arg : module.getArguments())
     combGraph.getOrAddNode(arg);
@@ -346,7 +347,7 @@ void Detector::buildCombGraph() {
 
 /// Detect combinational cycles in the module. Also detect combinational paths
 /// between IOs of the module and record these paths in the `combPathsMap`.
-void Detector::detect() {
+void CycleDetector::detect() {
   buildCombGraph();
 
   // Add a dummy node in the begining to launch a Tarjan's SCC algorithm.
@@ -362,7 +363,7 @@ void Detector::detect() {
     if (SCC.hasCycle()) {
       auto errorDiag = mlir::emitError(
           module.getLoc(), "detected combinational cycle in a FIRRTL module");
-      for (auto it = SCC->rbegin(); it < SCC->rend(); ++it) {
+      for (auto it = SCC->rbegin(), e = SCC->rend(); it != e; ++it) {
         auto node = *it;
         auto nodeVal = node->getValOrOp().dyn_cast<Value>();
         auto nodeOp = node->getValOrOp().dyn_cast<Operation *>();
@@ -471,7 +472,7 @@ class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
     for (auto node : llvm::post_order<InstanceGraph *>(&instanceGraph)) {
       // TODO: Handle FExtModuleOp with `ExtModulePathAnnotation`s.
       if (auto module = dyn_cast<FModuleOp>(node->getModule()))
-        Detector(module, combPathsMap, instanceGraph).detect();
+        CycleDetector(module, combPathsMap, instanceGraph).detect();
     }
     markAllAnalysesPreserved();
   }
