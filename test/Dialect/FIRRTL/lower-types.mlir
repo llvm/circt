@@ -561,6 +561,150 @@ firrtl.circuit "TopLevel" {
       // CHECK: %bar_0_qux = firrtl.wire  {annotations = [{one}]} : !firrtl.uint<1>
       // CHECK: %bar_1_baz = firrtl.wire  {annotations = [{two}]} : !firrtl.uint<1>
       // CHECK: %bar_1_qux = firrtl.wire  : !firrtl.uint<1>
+
+    // This sequence of tests are walking through a subset of all possible
+    // combinations of fieldIDs to ensure that the behavior of LowerTypes is
+    // defined for vectors.  The following cases are important:
+    //   - [x, x] : match everything below some root with index "x".  This is
+    //              equivalent to [x, x + w - 1] where "w" is the width of one
+    //              element.  Noting that [0, 0] then means "match everything".
+    //   - [x, y] : match everything inclusively from "x" to "y".  If "x" or "y"
+    //              is not a leaf, then match everything in their sub-trees.  If
+    //              the span from "x" to "y" crosses a non-leaf, do not expand
+    //              to include leaves which are not leaves of "x" or "y".  See
+    //              "test8" for a clear example.
+    %vTest0 = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [0, 0], {x}>]} : !firrtl.vector<vector<uint<1>, 2>, 2>
+    // CHECK:      %vTest0_0_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %vTest0_0_1 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %vTest0_1_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %vTest0_1_1 = firrtl.wire {annotations = [{x}]} :
+    %vTest1 = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [0, 1], {x}>]} : !firrtl.vector<vector<uint<1>, 2>, 2>
+    // CHECK:      %vTest1_0_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %vTest1_0_1 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %vTest1_1_0 = firrtl.wire :
+    // CHECK-NEXT: %vTest1_1_1 = firrtl.wire :
+    %vTest2 = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [0, 2], {x}>]} : !firrtl.vector<vector<uint<1>, 2>, 2>
+    // CHECK:      %vTest2_0_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %vTest2_0_1 = firrtl.wire :
+    // CHECK-NEXT: %vTest2_1_0 = firrtl.wire :
+    // CHECK-NEXT: %vTest2_1_1 = firrtl.wire :
+    %vTest3 = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [0, 3], {x}>]} : !firrtl.vector<vector<uint<1>, 2>, 2>
+    // CHECK:      %vTest3_0_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %vTest3_0_1 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %vTest3_1_0 = firrtl.wire :
+    // CHECK-NEXT: %vTest3_1_1 = firrtl.wire :
+    %vTest4 = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [1, 3], {x}>]} : !firrtl.vector<vector<uint<1>, 2>, 2>
+    // CHECK:      %vTest4_0_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %vTest4_0_1 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %vTest4_1_0 = firrtl.wire :
+    // CHECK-NEXT: %vTest4_1_1 = firrtl.wire :
+    %vTest5 = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [2, 3], {x}>]} : !firrtl.vector<vector<uint<1>, 2>, 2>
+    // CHECK:      %vTest5_0_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %vTest5_0_1 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %vTest5_1_0 = firrtl.wire :
+    // CHECK-NEXT: %vTest5_1_1 = firrtl.wire :
+    %vTest6 = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [3, 3], {x}>]} : !firrtl.vector<vector<uint<1>, 2>, 2>
+    // CHECK:      %vTest6_0_0 = firrtl.wire :
+    // CHECK-NEXT: %vTest6_0_1 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %vTest6_1_0 = firrtl.wire :
+    // CHECK-NEXT: %vTest6_1_1 = firrtl.wire :
+    %vTest7 = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [3, 4], {x}>]} : !firrtl.vector<vector<uint<1>, 2>, 2>
+    // CHECK:      %vTest7_0_0 = firrtl.wire :
+    // CHECK-NEXT: %vTest7_0_1 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %vTest7_1_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %vTest7_1_1 = firrtl.wire {annotations = [{x}]} :
+    %vTest8 = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [3, 5], {x}>]} : !firrtl.vector<vector<uint<1>, 2>, 2>
+    // CHECK:      %vTest8_0_0 = firrtl.wire :
+    // CHECK-NEXT: %vTest8_0_1 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %vTest8_1_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %vTest8_1_1 = firrtl.wire :
+    %vTest9 = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [3, 6], {x}>]} : !firrtl.vector<vector<uint<1>, 2>, 2>
+    // CHECK:      %vTest9_0_0 = firrtl.wire :
+    // CHECK-NEXT: %vTest9_0_1 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %vTest9_1_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %vTest9_1_1 = firrtl.wire {annotations = [{x}]} :
+    %vTest10 = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [4, 6], {x}>]} : !firrtl.vector<vector<uint<1>, 2>, 2>
+    // CHECK:      %vTest10_0_0 = firrtl.wire :
+    // CHECK-NEXT: %vTest10_0_1 = firrtl.wire :
+    // CHECK-NEXT: %vTest10_1_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %vTest10_1_1 = firrtl.wire {annotations = [{x}]} :
+    %vTest11 = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [1, 4], {x}>]} : !firrtl.vector<vector<uint<1>, 2>, 2>
+    // CHECK:      %vTest11_0_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %vTest11_0_1 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %vTest11_1_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %vTest11_1_1 = firrtl.wire {annotations = [{x}]} :
+    %vTest12 = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [2, 6], {x}>]} : !firrtl.vector<vector<uint<1>, 2>, 2>
+    // CHECK:      %vTest12_0_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %vTest12_0_1 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %vTest12_1_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %vTest12_1_1 = firrtl.wire {annotations = [{x}]} :
+
+    // Repeat all the tests above, but for bundles.
+    %bTest0 = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [0, 0], {x}>]} : !firrtl.bundle<0: bundle<0: uint<1>, 1: uint<1>>, 1: bundle<0: uint<1>, 1: uint<1>>>
+    // CHECK:      %bTest0_0_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %bTest0_0_1 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %bTest0_1_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %bTest0_1_1 = firrtl.wire {annotations = [{x}]} :
+    %bTest1 = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [0, 1], {x}>]} : !firrtl.bundle<0: bundle<0: uint<1>, 1: uint<1>>, 1: bundle<0: uint<1>, 1: uint<1>>>
+    // CHECK:      %bTest1_0_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %bTest1_0_1 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %bTest1_1_0 = firrtl.wire :
+    // CHECK-NEXT: %bTest1_1_1 = firrtl.wire :
+    %bTest2 = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [0, 2], {x}>]} : !firrtl.bundle<0: bundle<0: uint<1>, 1: uint<1>>, 1: bundle<0: uint<1>, 1: uint<1>>>
+    // CHECK:      %bTest2_0_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %bTest2_0_1 = firrtl.wire :
+    // CHECK-NEXT: %bTest2_1_0 = firrtl.wire :
+    // CHECK-NEXT: %bTest2_1_1 = firrtl.wire :
+    %bTest3 = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [0, 3], {x}>]} : !firrtl.bundle<0: bundle<0: uint<1>, 1: uint<1>>, 1: bundle<0: uint<1>, 1: uint<1>>>
+    // CHECK:      %bTest3_0_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %bTest3_0_1 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %bTest3_1_0 = firrtl.wire :
+    // CHECK-NEXT: %bTest3_1_1 = firrtl.wire :
+    %bTest4 = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [1, 3], {x}>]} : !firrtl.bundle<0: bundle<0: uint<1>, 1: uint<1>>, 1: bundle<0: uint<1>, 1: uint<1>>>
+    // CHECK:      %bTest4_0_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %bTest4_0_1 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %bTest4_1_0 = firrtl.wire :
+    // CHECK-NEXT: %bTest4_1_1 = firrtl.wire :
+    %bTest5 = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [2, 3], {x}>]} : !firrtl.bundle<0: bundle<0: uint<1>, 1: uint<1>>, 1: bundle<0: uint<1>, 1: uint<1>>>
+    // CHECK:      %bTest5_0_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %bTest5_0_1 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %bTest5_1_0 = firrtl.wire :
+    // CHECK-NEXT: %bTest5_1_1 = firrtl.wire :
+    %bTest6 = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [3, 3], {x}>]} : !firrtl.bundle<0: bundle<0: uint<1>, 1: uint<1>>, 1: bundle<0: uint<1>, 1: uint<1>>>
+    // CHECK:      %bTest6_0_0 = firrtl.wire :
+    // CHECK-NEXT: %bTest6_0_1 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %bTest6_1_0 = firrtl.wire :
+    // CHECK-NEXT: %bTest6_1_1 = firrtl.wire :
+    %bTest7 = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [3, 4], {x}>]} : !firrtl.bundle<0: bundle<0: uint<1>, 1: uint<1>>, 1: bundle<0: uint<1>, 1: uint<1>>>
+    // CHECK:      %bTest7_0_0 = firrtl.wire :
+    // CHECK-NEXT: %bTest7_0_1 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %bTest7_1_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %bTest7_1_1 = firrtl.wire {annotations = [{x}]} :
+    %bTest8 = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [3, 5], {x}>]} : !firrtl.bundle<0: bundle<0: uint<1>, 1: uint<1>>, 1: bundle<0: uint<1>, 1: uint<1>>>
+    // CHECK:      %bTest8_0_0 = firrtl.wire :
+    // CHECK-NEXT: %bTest8_0_1 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %bTest8_1_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %bTest8_1_1 = firrtl.wire :
+    %bTest9 = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [3, 6], {x}>]} : !firrtl.bundle<0: bundle<0: uint<1>, 1: uint<1>>, 1: bundle<0: uint<1>, 1: uint<1>>>
+    // CHECK:      %bTest9_0_0 = firrtl.wire :
+    // CHECK-NEXT: %bTest9_0_1 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %bTest9_1_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %bTest9_1_1 = firrtl.wire {annotations = [{x}]} :
+    %bTest10 = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [4, 6], {x}>]} : !firrtl.bundle<0: bundle<0: uint<1>, 1: uint<1>>, 1: bundle<0: uint<1>, 1: uint<1>>>
+    // CHECK:      %bTest10_0_0 = firrtl.wire :
+    // CHECK-NEXT: %bTest10_0_1 = firrtl.wire :
+    // CHECK-NEXT: %bTest10_1_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %bTest10_1_1 = firrtl.wire {annotations = [{x}]} :
+    %bTest11 = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [1, 4], {x}>]} : !firrtl.bundle<0: bundle<0: uint<1>, 1: uint<1>>, 1: bundle<0: uint<1>, 1: uint<1>>>
+    // CHECK:      %bTest11_0_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %bTest11_0_1 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %bTest11_1_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %bTest11_1_1 = firrtl.wire {annotations = [{x}]} :
+    %bTest12 = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [2, 6], {x}>]} : !firrtl.bundle<0: bundle<0: uint<1>, 1: uint<1>>, 1: bundle<0: uint<1>, 1: uint<1>>>
+    // CHECK:      %bTest12_0_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %bTest12_0_1 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %bTest12_1_0 = firrtl.wire {annotations = [{x}]} :
+    // CHECK-NEXT: %bTest12_1_1 = firrtl.wire {annotations = [{x}]} :
   }
 
 // Test that subfield annotations on reg are lowred to appropriate instance based on fieldID.
