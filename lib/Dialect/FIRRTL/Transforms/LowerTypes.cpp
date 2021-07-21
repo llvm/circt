@@ -135,6 +135,12 @@ static ArrayAttr filterAnnotations(MLIRContext *ctxt, ArrayAttr annotations,
     return ArrayAttr::get(ctxt, retval);
   for (auto opAttr : annotations) {
     if (auto subAnno = opAttr.dyn_cast<SubAnnotationAttr>()) {
+      // Apply annotations to all elements if fieldID is equal to zero.
+      if (subAnno.getFieldID() == 0) {
+        retval.push_back(subAnno.getAnnotations());
+        continue;
+      }
+
       // Check whether the annotation falls into the range of the current field.
       if (subAnno.getFieldID() >= field.fieldID &&
           subAnno.getFieldID() <= field.fieldID + field.type.getMaxFieldID()) {
@@ -180,31 +186,37 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
     SmallVector<Attribute> portAnno;
     for (auto attr : newMem.getPortAnnotation(portIdx)) {
       if (auto subAnno = attr.dyn_cast<SubAnnotationAttr>()) {
-        auto index = oldPortType.getIndexForFieldID(subAnno.getFieldID());
-        if (index >= 3) { // data or mask
+        auto targetIndex = oldPortType.getIndexForFieldID(subAnno.getFieldID());
+
+        // Apply annotations to all elements if the target is the whole
+        // sub-field.
+        if (subAnno.getFieldID() == oldPortType.getFieldID(targetIndex)) {
+          portAnno.push_back(SubAnnotationAttr::get(
+              b->getContext(), portType.getFieldID(targetIndex),
+              subAnno.getAnnotations()));
+          continue;
+        }
+
+        // Handle `data` and `mask` sub-fields.
+        if (targetIndex >= 3) {
           // Check whether the annotation falls into the range of the current
           // field. Note that the `field` here is peeled from the `data`
           // sub-field of the memory port, thus we need to add the fieldID of
           // `data` or `mask` sub-field to get the "real" fieldID.
-          auto fieldID = field.fieldID + oldPortType.getFieldID(index);
+          auto fieldID = field.fieldID + oldPortType.getFieldID(targetIndex);
           if (subAnno.getFieldID() >= fieldID &&
               subAnno.getFieldID() <= fieldID + field.type.getMaxFieldID()) {
             // Create a new sub-annotation with a new field ID. Similarly, we
             // need to add the fieldID of `data` or `mask` sub-field in the new
             // memory port type here.
-            auto newFieldID =
-                subAnno.getFieldID() - fieldID + portType.getFieldID(index);
+            auto newFieldID = subAnno.getFieldID() - fieldID +
+                              portType.getFieldID(targetIndex);
             portAnno.push_back(SubAnnotationAttr::get(
                 b->getContext(), newFieldID, subAnno.getAnnotations()));
           }
-        } else { // addr, en, or clk
-          portAnno.push_back(SubAnnotationAttr::get(b->getContext(),
-                                                    portType.getFieldID(index),
-                                                    subAnno.getAnnotations()));
         }
-      } else {
+      } else
         portAnno.push_back(attr);
-      }
     }
     newAnnotations.push_back(b->getArrayAttr(portAnno));
   }

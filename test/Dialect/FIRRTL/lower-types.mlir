@@ -561,6 +561,12 @@ firrtl.circuit "TopLevel" {
       // CHECK: %bar_0_qux = firrtl.wire  {annotations = [{one}]} : !firrtl.uint<1>
       // CHECK: %bar_1_baz = firrtl.wire  {annotations = [{two}]} : !firrtl.uint<1>
       // CHECK: %bar_1_qux = firrtl.wire  : !firrtl.uint<1>
+
+    %quux = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = 0, {zero}>]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+      // CHECK: %quux_0_baz = firrtl.wire  {annotations = [{zero}]} : !firrtl.uint<1>
+      // CHECK: %quux_0_qux = firrtl.wire  {annotations = [{zero}]} : !firrtl.uint<1>
+      // CHECK: %quux_1_baz = firrtl.wire  {annotations = [{zero}]} : !firrtl.uint<1>
+      // CHECK: %quux_1_qux = firrtl.wire  {annotations = [{zero}]} : !firrtl.uint<1>
   }
 
 // Test that subfield annotations on reg are lowred to appropriate instance based on fieldID.
@@ -1061,7 +1067,7 @@ firrtl.circuit "TopLevel" {
 
 // Test MemOp with port annotations.
 // circuit Foo: %[[{"a":null,"target":"~Foo|Foo>bar.r"},
-//                 {"b":null,"target":"~Foo|Foo>bar.r.data.baz"},
+//                 {"b":null,"target":"~Foo|Foo>bar.r.data"},
 //                 {"c":null,"target":"~Foo|Foo>bar.w.en"},
 //                 {"d":null,"target":"~Foo|Foo>bar.w.data.qux"}]]
 
@@ -1074,11 +1080,11 @@ firrtl.circuit "TopLevel" {
 
     // CHECK: firrtl.mem
     // CHECK-SAME: portAnnotations = [
-    // CHECK-SAME: [{a}],
+    // CHECK-SAME: [{a}, #firrtl.subAnno<fieldID = 4, {b}>],
     // CHECK-SAME: [#firrtl.subAnno<fieldID = 2, {c}>, #firrtl.subAnno<fieldID = 4, {d}>]
     %bar_r, %bar_w = firrtl.mem Undefined  {depth = 16 : i64, name = "bar",
         portAnnotations = [
-          [{a}, #firrtl.subAnno<fieldID = 5, {b}>],
+          [{a}, #firrtl.subAnno<fieldID = 4, {b}>],
           [#firrtl.subAnno<fieldID = 2, {c}>, #firrtl.subAnno<fieldID = 6, {d}>]
         ],
         portNames = ["r", "w"], readLatency = 0 : i32, writeLatency = 1 : i32} :
