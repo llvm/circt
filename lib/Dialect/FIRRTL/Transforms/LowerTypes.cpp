@@ -145,13 +145,16 @@ static ArrayAttr filterAnnotations(MLIRContext *ctxt, ArrayAttr annotations,
            field.minFieldID <= subAnno.getMinFieldID())) {
         auto newMin =
             srcType.rootChildFieldID(subAnno.getMinFieldID(), field.index);
+        auto min = newMin.second ? newMin.first : 0;
         auto newMax =
-            srcType.rootChildFieldID(subAnno.getMinFieldID(), field.index);
-        if (newMin.first == 0 && newMax.first == 0)
+            srcType.rootChildFieldID(subAnno.getMaxFieldID(), field.index);
+        auto max =
+            newMax.second ? newMax.first : field.maxFieldID - field.minFieldID;
+        if (min == 0 && max == 0)
           retval.push_back(subAnno.getAnnotations());
         else
-          retval.push_back(SubAnnotationAttr::get(
-              ctxt, newMin.first, newMax.first, subAnno.getAnnotations()));
+          retval.push_back(
+              SubAnnotationAttr::get(ctxt, min, max, subAnno.getAnnotations()));
       }
     } else
       retval.push_back(opAttr);
