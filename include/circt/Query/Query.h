@@ -123,7 +123,7 @@ private:
 class Filter {
 public:
   Filter() : nodes (std::vector<FilterNode>()) { }
-  Filter(std::string &filter);
+  Filter(std::vector<FilterNode> nodes) : nodes (nodes) { }
 
   size_t size() { return nodes.size(); }
 
