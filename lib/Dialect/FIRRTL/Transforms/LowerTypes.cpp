@@ -138,6 +138,14 @@ static ArrayAttr filterAnnotations(MLIRContext *ctxt, ArrayAttr annotations,
     return ArrayAttr::get(ctxt, retval);
   for (auto opAttr : annotations) {
     if (auto subAnno = opAttr.dyn_cast<SubAnnotationAttr>()) {
+
+      // If this is a 'subAnno<fieldID = [0, 0], ...>', this is special and
+      // means that this applies to everything below it.
+      if (subAnno.getMinFieldID() == 0 && subAnno.getMaxFieldID() == 0) {
+        retval.push_back(subAnno.getAnnotations());
+        continue;
+      }
+
       // Check for overlap of the two ranges
       if ((field.minFieldID >= subAnno.getMinFieldID() &&
            field.minFieldID <= subAnno.getMaxFieldID()) ||
