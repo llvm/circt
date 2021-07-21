@@ -134,11 +134,9 @@ private:
 
   friend Filter parseFilter(std::string &filter);
   friend std::vector<mlir::Operation *> filterAsVector(Filter &filter, Operation *root);
-  friend std::vector<mlir::Operation *> filterAsVector(Filter &filter, ModuleOp &module);
 };
 
 // TODO: filterAsIterator()
-std::vector<mlir::Operation *> filterAsVector(Filter &filter, ModuleOp &module);
 std::vector<mlir::Operation *> filterAsVector(Filter &filter, Operation *root);
 
 } /* namespace query */

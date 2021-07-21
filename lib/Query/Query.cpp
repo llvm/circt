@@ -171,6 +171,22 @@ std::vector<mlir::Operation *> filterAsVector(Filter &filter, Operation *root) {
       }
     } else {
       TypeSwitch<Operation *>(op)
+        .Case<ModuleOp>([&](ModuleOp &op) {
+          auto &node = filter.nodes[i];
+          auto type = node.type;
+          bool match = false;
+          if (type.getType() & ValueTypeType::MODULE) {
+            for (auto child : op.getBody()->getOps<hw::HWModuleOp>()) {
+              auto name = child.getNameAttr().getValue().str();
+              matchAndAppend(node, child, opStack, i, name, match);
+            }
+
+            for (auto child : op.getBody()->getOps<hw::HWModuleExternOp>()) {
+              auto name = child.getNameAttr().getValue().str();
+              matchAndAppend(node, child, opStack, i, name, match);
+            }
+          }
+        })
         .Case<hw::HWModuleOp>([&](hw::HWModuleOp &op) {
           auto &node = filter.nodes[i];
           auto type = node.type;
@@ -273,53 +289,6 @@ std::vector<mlir::Operation *> filterAsVector(Filter &filter, Operation *root) {
 
       if (filter.nodes[i].tag == FilterType::RECURSIVE_GLOB) {
         opStack.push_back(std::make_pair(op, i + 1));
-      }
-    }
-  }
-
-  return filtered;
-}
-
-std::vector<mlir::Operation *> filterAsVector(Filter &filter, ModuleOp &module) {
-  std::vector<mlir::Operation *> filtered;
-
-  if (filter.nodes.empty()) {
-    for (auto op : module.getBody()->getOps<hw::HWModuleOp>()) {
-      filtered.push_back(op);
-    }
-    return filtered;
-  }
-
-  for (auto op : module.getBody()->getOps<hw::HWModuleOp>()) {
-    auto vec = filterAsVector(filter, op);
-    for (auto *op : vec) {
-      bool contained = false;
-      for (auto *f : filtered) {
-        if (f == op) {
-          contained = true;
-          break;
-        }
-      }
-
-      if (!contained) {
-        filtered.push_back(op);
-      }
-    }
-  }
-
-  for (auto op : module.getBody()->getOps<hw::HWModuleExternOp>()) {
-    auto vec = filterAsVector(filter, op);
-    for (auto *op : vec) {
-      bool contained = false;
-      for (auto *f : filtered) {
-        if (f == op) {
-          contained = true;
-          break;
-        }
-      }
-
-      if (!contained) {
-        filtered.push_back(op);
       }
     }
   }
