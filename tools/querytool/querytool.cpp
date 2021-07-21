@@ -273,23 +273,16 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   // Create the filter and filter from the module
   query::Filter filter = query::Filter(filterInput);
   auto mod = module.release();
-  auto vec = query::filterAsVector(filter, mod);
+  auto ops = query::filterAsVector(filter, mod);
 
-  for (auto v : vec) {
-    for (auto *op : v) {
-      std::cout << "::";
-      llvm::TypeSwitch<mlir::Operation *>(op)
-        .Case<hw::HWModuleOp>([&](auto &op) {
-          std::cout << op.getNameAttr().getValue().str();
-        })
-        .Case<hw::HWModuleExternOp>([&](hw::HWModuleExternOp &op) {
-          std::cout << op.getNameAttr().getValue().str();
-        })
-        .Default([&](auto &op) {
-          std::cout << "???";
-        });
-    }
-    std::cout << std::endl;
+  for (auto *op : ops) {
+    llvm::TypeSwitch<mlir::Operation *>(op)
+      .Case<hw::HWModuleOp, hw::HWModuleExternOp>([&](auto &op) {
+        std::cout << op.getNameAttr().getValue().str() << std::endl;
+      })
+      .Default([&](auto &op) {
+        std::cout << "???\n";
+      });
   }
 
   return success();

@@ -117,8 +117,8 @@ private:
   std::string literal;
 
   friend class Filter;
-  friend std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, ModuleOp &module);
-  friend void matchAndAppend(FilterNode &node, std::vector<Operation *> vec, Operation *module, std::vector<std::pair<std::vector<Operation *>, size_t>> &opStack, size_t i, std::string &name, bool &match, bool appendSelf);
+  friend std::vector<mlir::Operation *> filterAsVector(Filter &filter, Operation *root);
+  friend void matchAndAppend(FilterNode &node, Operation *module, std::vector<std::pair<Operation *, size_t>> &opStack, size_t i, std::string &name, bool &match);
 };
 
 class Filter {
@@ -134,11 +134,13 @@ private:
   std::vector<FilterNode> nodes;
 
   friend Filter parseFilter(std::string &filter);
-  friend std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, ModuleOp &module);
+  friend std::vector<mlir::Operation *> filterAsVector(Filter &filter, Operation *root);
+  friend std::vector<mlir::Operation *> filterAsVector(Filter &filter, ModuleOp &module);
 };
 
 // TODO: filterAsIterator()
-std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, ModuleOp &module);
+std::vector<mlir::Operation *> filterAsVector(Filter &filter, ModuleOp &module);
+std::vector<mlir::Operation *> filterAsVector(Filter &filter, Operation *root);
 
 } /* namespace query */
 } /* namespace circt */

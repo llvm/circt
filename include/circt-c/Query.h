@@ -4,8 +4,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef Circt_C_QUERY_H
-#define Circt_C_QUERY_H
+#ifndef CIRCT_C_QUERY_H
+#define CIRCT_C_QUERY_H
 
 #include "mlir-c/IR.h"
 #include "circt/Query/Query.h"
@@ -31,4 +31,4 @@ void CirctQueryDeleteFilter(CirctQueryFilter filter);
 }
 #endif
 
-#endif /* Circt_C_QUERY_H */
+#endif /* CIRCT_C_QUERY_H */

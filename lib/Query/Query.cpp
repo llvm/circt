@@ -328,8 +328,7 @@ Filter::Filter(std::string &filter) {
   }
 }
 
-void matchAndAppend(FilterNode &node, std::vector<Operation *> vec, Operation *module, std::vector<std::pair<std::vector<Operation *>, size_t>> &opStack, size_t i, std::string &name, bool &match, bool appendSelf) {
-  auto copy = std::vector<Operation *>(vec);
+void matchAndAppend(FilterNode &node, Operation *module, std::vector<std::pair<Operation *, size_t>> &opStack, size_t i, std::string &name, bool &match) {
   switch (node.tag) {
     case FilterType::UNSET:
       break;
@@ -337,13 +336,8 @@ void matchAndAppend(FilterNode &node, std::vector<Operation *> vec, Operation *m
       match = true;
       break;
     case FilterType::RECURSIVE_GLOB: {
-      auto copy2 = std::vector<Operation *>(vec);
-      if (appendSelf) {
-        copy2.push_back(module);
-      }
-
       match = true;
-      opStack.push_back(std::make_pair(copy2, i));
+      opStack.push_back(std::make_pair(module, i));
       break;
     }
     case FilterType::LITERAL:
@@ -355,57 +349,37 @@ void matchAndAppend(FilterNode &node, std::vector<Operation *> vec, Operation *m
   }
 
   if (match) {
-    if (appendSelf) {
-      copy.push_back(module);
-    }
-
-    opStack.push_back(std::make_pair(copy, i + 1));
+    opStack.push_back(std::make_pair(module, i + 1));
   }
 }
 
-std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, ModuleOp &module) {
-  std::vector<std::vector<mlir::Operation *>> filtered;
-  std::vector<std::pair<std::vector<mlir::Operation *>, size_t>> opStack;
+std::vector<mlir::Operation *> filterAsVector(Filter &filter, Operation *root) {
+  std::vector<mlir::Operation *> filtered;
+  std::vector<std::pair<mlir::Operation *, size_t>> opStack;
 
   if (filter.nodes.empty()) {
-    for (auto op : module.getBody()->getOps<hw::HWModuleOp>()) {
-      std::vector<Operation *> vec;
-      vec.push_back(op);
-      filtered.push_back(vec);
-    }
+    filtered.push_back(root);
     return filtered;
   }
 
-  for (auto op : module.getBody()->getOps<hw::HWModuleOp>()) {
-    std::vector<Operation *> vec;
-    vec.push_back(op);
-    opStack.push_back(std::make_pair(vec, 0));
-  }
-
-  for (auto op : module.getBody()->getOps<hw::HWModuleExternOp>()) {
-    std::vector<Operation *> vec;
-    vec.push_back(op);
-    opStack.push_back(std::make_pair(vec, 0));
-  }
-
+  opStack.push_back(std::make_pair(root, 0));
   while (!opStack.empty()) {
-    std::pair<std::vector<Operation *>, size_t> pair = opStack[opStack.size() - 1];
-    std::vector<Operation *> vec = pair.first;
-    Operation *op = vec[vec.size() - 1];
+    auto pair = opStack[opStack.size() - 1];
+    Operation *op = pair.first;
     size_t i = pair.second;
     opStack.pop_back();
 
     if (i >= filter.nodes.size()) {
       bool contained = false;
-      for (auto v : filtered) {
-        if (v == vec) {
+      for (auto *o : filtered) {
+        if (o == op) {
           contained = true;
           break;
         }
       }
 
       if (!contained) {
-        filtered.push_back(vec);
+        filtered.push_back(op);
       }
     } else {
       TypeSwitch<Operation *>(op)
@@ -419,7 +393,7 @@ std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, Modul
               if ((instance = dyn_cast_or_null<hw::InstanceOp>(&child))) {
                 auto module = dyn_cast<hw::HWModuleOp>(instance.getReferencedModule());
                 auto name = module.getNameAttr().getValue().str();
-                matchAndAppend(node, vec, module, opStack, i, name, match, true);
+                matchAndAppend(node, module, opStack, i, name, match);
 
                 if (match) {
                   continue;
@@ -436,7 +410,7 @@ std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, Modul
                 }
 
                 auto name = port.getName().str();
-                matchAndAppend(node, vec, op, opStack, i, name, match, false);
+                matchAndAppend(node, op, opStack, i, name, match);
                 if (match) {
                   return;
                 }
@@ -450,7 +424,7 @@ std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, Modul
                 }
 
                 auto name = port.getName().str();
-                matchAndAppend(node, vec, op, opStack, i, name, match, false);
+                matchAndAppend(node, op, opStack, i, name, match);
                 if (match) {
                   return;
                 }
@@ -486,7 +460,7 @@ std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, Modul
                 }
 
                 auto name = port.getName().str();
-                matchAndAppend(node, vec, op, opStack, i, name, match, false);
+                matchAndAppend(node, op, opStack, i, name, match);
                 if (match) {
                   return;
                 }
@@ -500,7 +474,7 @@ std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, Modul
                 }
 
                 auto name = port.getName().str();
-                matchAndAppend(node, vec, op, opStack, i, name, match, false);
+                matchAndAppend(node, op, opStack, i, name, match);
                 if (match) {
                   return;
                 }
@@ -510,7 +484,54 @@ std::vector<std::vector<mlir::Operation *>> filterAsVector(Filter &filter, Modul
         });
 
       if (filter.nodes[i].tag == FilterType::RECURSIVE_GLOB) {
-        opStack.push_back(std::make_pair(vec, i + 1));
+        opStack.push_back(std::make_pair(op, i + 1));
+      }
+    }
+  }
+
+  return filtered;
+}
+
+std::vector<mlir::Operation *> filterAsVector(Filter &filter, ModuleOp &module) {
+  std::vector<mlir::Operation *> filtered;
+
+  if (filter.nodes.empty()) {
+    for (auto op : module.getBody()->getOps<hw::HWModuleOp>()) {
+      filtered.push_back(op);
+    }
+    return filtered;
+  }
+
+  for (auto op : module.getBody()->getOps<hw::HWModuleOp>()) {
+    auto vec = filterAsVector(filter, op);
+    for (auto *op : vec) {
+      bool contained = false;
+      for (auto *f : filtered) {
+        if (f == op) {
+          contained = true;
+          break;
+        }
+      }
+
+      if (!contained) {
+        filtered.push_back(op);
+      }
+    }
+  }
+
+  for (auto op : module.getBody()->getOps<hw::HWModuleExternOp>()) {
+    auto vec = filterAsVector(filter, op);
+    for (auto *op : vec) {
+      bool contained = false;
+      for (auto *f : filtered) {
+        if (f == op) {
+          contained = true;
+          break;
+        }
+      }
+
+      if (!contained) {
+        filtered.push_back(op);
       }
     }
   }
