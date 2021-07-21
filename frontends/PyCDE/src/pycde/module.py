@@ -334,14 +334,13 @@ class _Generate:
 
   def __init__(self, gen_func):
     self.gen_func = gen_func
+    self.gen_name = gen_func.__name__
     self.modcls = None
     self.loc = get_user_loc()
 
   def _generate(self, mod):
-    ret = self.gen_func(mod)
-    if ret is None:
-      return
-    return {name: obj_to_value(obj) for (name, obj) in ret.items()}
+    outputs = self.gen_func(mod)
+    self._create_output_op(outputs)
 
   def __call__(self, op):
     """Build an HWModuleOp and run the generator as the body builder."""
@@ -431,6 +430,45 @@ class _Generate:
     for sub in ["<", "x", " "]:
       sanitized_str = sanitized_str.replace(sub, "_")
     return sanitized_str
+
+  def _create_output_op(self, gen_ret):
+    """Create the hw.OutputOp from the generator returns."""
+    assert hasattr(self, "modcls")
+    output_ports = self.modcls._output_ports
+
+    # If generator didn't return anything, this op mustn't have any outputs.
+    if gen_ret is None:
+      if len(output_ports) == 0:
+        hw.OutputOp([])
+        return
+      raise support.ConnectionError(
+          f"In {self.modcls} generator {self.gen_name}, must return dict")
+
+    # Now create the output op depending on the object type returned
+    outputs: list[Value] = list()
+
+    # Only acceptable return is a dict of port, value mappings.
+    if not isinstance(gen_ret, dict):
+      raise support.ConnectionError(
+          f"In {self.modcls}, generators must return a dict of outputs")
+
+    # A dict of `OutputPortName` -> ValueLike or convertable objects must be
+    # converted to a list in port order.
+    unconnected_ports = []
+    for (name, port_type) in output_ports:
+      if name not in gen_ret:
+        unconnected_ports.append(name)
+        outputs.append(None)
+      else:
+        val = obj_to_value(gen_ret[name], port_type)
+        outputs.append(val)
+        gen_ret.pop(name)
+    if len(gen_ret) > 0:
+      raise support.ConnectionError(
+          f"Could not map the following to output ports in {self.modcls}: " +
+          ",".join(gen_ret.keys()))
+
+    hw.OutputOp(outputs)
 
 
 def generator(func):
