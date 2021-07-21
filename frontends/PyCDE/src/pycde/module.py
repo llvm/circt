@@ -202,11 +202,13 @@ def _module_base(cls, extern: bool, params={}):
       self.backedges: dict[int:BackedgeBuilder.Edge] = {}
       for (idx, (name, type)) in enumerate(mod._input_ports):
         if name in inputs:
-          value = support.get_value(obj_to_value(inputs[name], type))
-          assert value is not None
-          if not extern and support.type_to_pytype(value.type) != type:
-            raise TypeError(f"Input '{name}' has type '{value.type}' "
-                            f"but expected '{type}'")
+          value = obj_to_value(inputs[name], type, throw_on_mismatch=False)
+          if value is None:
+            if not extern:
+              raise TypeError(f"Input '{name}' has type '{value.type}' "
+                              f"but expected '{type}'")
+            else:
+              value = support.get_value(inputs[name])
         else:
           backedge = BackedgeBuilder.current().create(type, name, self, loc=loc)
           self.backedges[idx] = backedge
@@ -326,10 +328,6 @@ def _register_generator(class_name, generator_name, generator, parameters):
   circt.msft.register_generator(mlir.ir.Context.current,
                                 OPERATION_NAMESPACE + class_name,
                                 generator_name, generator, parameters)
-
-
-class GeneratorError:
-  pass
 
 
 class _Generate:

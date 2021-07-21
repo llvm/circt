@@ -99,7 +99,7 @@ class OpOperandConnect(support.OpOperand):
     support.connect(self, val)
 
 
-def obj_to_value(x, type=None, result_type=None):
+def obj_to_value(x, type, result_type=None, throw_on_mismatch=True):
   """Convert a python object to a CIRCT value, given the CIRCT type."""
 
   type = support.type_to_pytype(type)
@@ -116,7 +116,10 @@ def obj_to_value(x, type=None, result_type=None):
   # If x is already a valid value, just return it.
   if val is not None:
     if val.type != result_type:
-      raise ValueError(f"Expected {result_type}, got {val.type}")
+      if throw_on_mismatch:
+        raise ValueError(f"Expected {result_type}, got {val.type}")
+      else:
+        return None
     return val
 
   if isinstance(x, int):
