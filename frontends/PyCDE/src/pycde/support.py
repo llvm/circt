@@ -99,7 +99,7 @@ class OpOperandConnect(support.OpOperand):
     support.connect(self, val)
 
 
-def obj_to_value(x, type, result_type=None, throw_on_mismatch=True):
+def obj_to_value(x, type, result_type=None):
   """Convert a python object to a CIRCT value, given the CIRCT type."""
 
   type = support.type_to_pytype(type)
