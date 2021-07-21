@@ -31,6 +31,13 @@ using namespace circt;
 using namespace firrtl;
 using circt::comb::ICmpPredicate;
 
+const StringRef assertAnnoClass =
+    "sifive.enterprise.firrtl.ExtractAssertionsAnnotation";
+const StringRef assumeAnnoClass =
+    "sifive.enterprise.firrtl.ExtractAssumptionsAnnotation";
+const StringRef coverAnnoClass =
+    "sifive.enterprise.firrtl.ExtractCoverageAnnotation";
+
 /// Given a FIRRTL type, return the corresponding type for the HW dialect.
 /// This returns a null type if it cannot be lowered.
 static Type lowerType(Type type) {
@@ -235,10 +242,6 @@ struct CircuitLoweringState {
     binds.push_back(op);
   }
 
-  StringRef getAssertFilename() { return extractAssertFile; }
-  StringRef getAssumeFilename() { return extractAssumesFile; }
-  StringRef getCoverFilename() { return extractCoverFile; }
-
 private:
   friend struct FIRRTLModuleLowering;
   CircuitLoweringState(const CircuitLoweringState &) = delete;
@@ -248,7 +251,7 @@ private:
 
   // Record the set of remaining annotation classes. This is used to warn only
   // once about any annotation class.
-  StringSet<> alreadyPrinted;
+  StringSet<> alreadyProcessed;
   const bool enableAnnotationWarning;
   std::mutex annotationPrintingMtx;
 
@@ -258,47 +261,29 @@ private:
 
   // Control access to binds.
   std::mutex bindsMutex;
-
-  // Filenames from ExtractTestCode annotation.
-  StringRef extractAssertFile;
-  StringRef extractAssumesFile;
-  StringRef extractCoverFile;
 };
+
+const StringSet<> whitelistAnnotations = {assertAnnoClass, assumeAnnoClass,
+                                          coverAnnoClass};
 
 void CircuitLoweringState::processRemainingAnnotations(
     Operation *op, const AnnotationSet &annoSet) {
-  for (auto anno : annoSet) {
-    bool ignoreAnno = false;
-    if (isa<CircuitOp>(op)) {
-      // These annotations have a filename with full path name. So directory has
-      // to be ignored.
-      if (anno.isClass(
-              "sifive.enterprise.firrtl.ExtractAssertionsAnnotation")) {
-        extractAssertFile = anno.getMember<StringAttr>("filename").getValue();
-        ignoreAnno = true;
-      } else if (anno.isClass(
-                     "sifive.enterprise.firrtl.ExtractAssumptionsAnnotation")) {
-        extractAssumesFile = anno.getMember<StringAttr>("filename").getValue();
-        ignoreAnno = true;
-      } else if (anno.isClass(
-                     "sifive.enterprise.firrtl.ExtractCoverageAnnotation")) {
-        extractCoverFile = anno.getMember<StringAttr>("filename").getValue();
-        ignoreAnno = true;
-      }
-    }
-    // Add the processed annotations to alreadyPrinted, instead of deleting.
-    // This avoids printing the warnings on them.
-    if (enableAnnotationWarning && ignoreAnno) {
-      std::lock_guard<std::mutex> lock(annotationPrintingMtx);
-      alreadyPrinted.insert(anno.getClass());
-    }
-  }
   if (!enableAnnotationWarning || annoSet.empty())
     return;
+  for (auto anno : annoSet) {
+    auto anClass = anno.getClass();
+    // Add the processed annotations to alreadyProcessed.
+    // This avoids printing the future warnings on them.
+    if (whitelistAnnotations.contains(anClass)) {
+      std::lock_guard<std::mutex> lock(annotationPrintingMtx);
+      alreadyProcessed.insert(anClass);
+    }
+  }
+
   std::lock_guard<std::mutex> lock(annotationPrintingMtx);
 
   for (auto a : annoSet) {
-    auto inserted = alreadyPrinted.insert(a.getClass());
+    auto inserted = alreadyProcessed.insert(a.getClass());
     if (inserted.second)
       mlir::emitWarning(op->getLoc(), "unprocessed annotation:'" +
                                           a.getClass() +
@@ -1059,7 +1044,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   template <typename SignedOp, typename UnsignedOp>
   LogicalResult lowerDivLikeOp(Operation *op);
   template <typename AOpTy, typename BOpTy>
-  LogicalResult lowerVerificationStatement(AOpTy op);
+  LogicalResult lowerVerificationStatement(AOpTy op, StringRef annoClass);
 
   LogicalResult visitExpr(CatPrimOp op);
 
@@ -2718,7 +2703,8 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
 ///       end
 ///     end
 template <typename AOpTy, typename BOpTy>
-LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op) {
+LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op,
+                                                         StringRef annoClass) {
   auto clock = getLoweredValue(op.clock());
   auto enable = getLoweredValue(op.enable());
   auto predicate = getLoweredValue(op.predicate());
@@ -2734,18 +2720,16 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op) {
       else
         label = builder.getStringAttr("");
       auto svOp = builder.create<BOpTy>(predicate, label);
-      // Attach the corresponding filename.
-      StringRef filename;
-      if (isa<AssertOp>(op))
-        filename = circuitState.getAssertFilename();
-      else if (isa<AssumeOp>(op))
-        filename = circuitState.getAssumeFilename();
-      else if (isa<CoverOp>(op))
-        filename = circuitState.getCoverFilename();
-      if (!filename.empty())
+      auto annoSet = AnnotationSet(circuitState.circuitOp);
+      StringRef fileName, dir;
+      if (auto a = annoSet.getAnnotation(annoClass)) {
+        fileName = a.getAs<StringAttr>("filename").getValue();
+        dir = a.getAs<StringAttr>("directory").getValue();
+      }
+      if (!fileName.empty() || !dir.empty())
         svOp->setAttr("output_file",
-                      hw::OutputFileAttr::get(builder.getStringAttr(""),
-                                              builder.getStringAttr(filename),
+                      hw::OutputFileAttr::get(builder.getStringAttr(dir),
+                                              builder.getStringAttr(fileName),
                                               builder.getBoolAttr(true),
                                               builder.getBoolAttr(true),
                                               svOp.getContext()));
@@ -2757,17 +2741,19 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op) {
 
 // Lower an assert to SystemVerilog.
 LogicalResult FIRRTLLowering::visitStmt(AssertOp op) {
-  return lowerVerificationStatement<AssertOp, sv::AssertOp>(op);
+  return lowerVerificationStatement<AssertOp, sv::AssertOp>(op,
+                                                            assertAnnoClass);
 }
 
 // Lower an assume to SystemVerilog.
 LogicalResult FIRRTLLowering::visitStmt(AssumeOp op) {
-  return lowerVerificationStatement<AssumeOp, sv::AssumeOp>(op);
+  return lowerVerificationStatement<AssumeOp, sv::AssumeOp>(op,
+                                                            assumeAnnoClass);
 }
 
 // Lower a cover to SystemVerilog.
 LogicalResult FIRRTLLowering::visitStmt(CoverOp op) {
-  return lowerVerificationStatement<CoverOp, sv::CoverOp>(op);
+  return lowerVerificationStatement<CoverOp, sv::CoverOp>(op, coverAnnoClass);
 }
 
 LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {

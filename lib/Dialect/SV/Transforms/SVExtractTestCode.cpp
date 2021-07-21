@@ -143,14 +143,9 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
                                          SetVector<Value> &inputs,
                                          BlockAndValueMapping &cutMap,
                                          StringRef suffix, StringRef path,
-                                         hw::OutputFileAttr outFile) {
+                                         StringRef fileName) {
   OpBuilder b(op->getParentOfType<mlir::ModuleOp>()->getRegion(0));
 
-  if (!outFile && !path.empty()) {
-    outFile = hw::OutputFileAttr::get(b.getStringAttr(path),
-                                      b.getStringAttr(""), b.getBoolAttr(true),
-                                      b.getBoolAttr(true), op.getContext());
-  }
   // Construct the ports, this is just the input Values
   SmallVector<hw::ModulePortInfo> ports;
   {
@@ -165,8 +160,11 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
       op.getLoc(),
       b.getStringAttr((getVerilogModuleNameAttr(op).getValue() + suffix).str()),
       ports);
-  if (outFile)
-    newMod->setAttr("output_file", outFile);
+  if (!path.empty())
+    newMod->setAttr("output_file", hw::OutputFileAttr::get(
+                                       b.getStringAttr(path),
+                                       b.getStringAttr(""), b.getBoolAttr(true),
+                                       b.getBoolAttr(true), op.getContext()));
 
   // Update the mapping from old values to cloned values
   for (auto port : llvm::enumerate(inputs))
@@ -183,7 +181,12 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   inst->setAttr("doNotPrint", b.getBoolAttr(true));
   b = OpBuilder::atBlockEnd(
       &op->getParentOfType<mlir::ModuleOp>()->getRegion(0).front());
-  b.create<sv::BindOp>(op.getLoc(), b.getSymbolRefAttr(inst));
+  auto bindOp = b.create<sv::BindOp>(op.getLoc(), b.getSymbolRefAttr(inst));
+  bindOp->setAttr(
+      "output_file",
+      hw::OutputFileAttr::get(b.getStringAttr(""), b.getStringAttr(fileName),
+                              b.getBoolAttr(true), b.getBoolAttr(true),
+                              op.getContext()));
   return newMod;
 }
 
@@ -267,13 +270,17 @@ private:
     // No Ops?  No problem.
     if (roots.empty())
       return;
-    hw::OutputFileAttr outputFileAttr;
+    StringRef fileName;
     // Check if the assert/assume/cover op has the output_file attribute.
     // How to handle different path attributes on multiple ops?
     for (auto extractOp : roots)
       if (extractOp->hasAttr("output_file")) {
-        outputFileAttr =
-            extractOp->getAttrOfType<hw::OutputFileAttr>("output_file");
+        path = extractOp->getAttrOfType<hw::OutputFileAttr>("output_file")
+                   .directory()
+                   .getValue();
+        fileName = extractOp->getAttrOfType<hw::OutputFileAttr>("output_file")
+                       .name()
+                       .getValue();
         break;
       }
 
@@ -290,8 +297,8 @@ private:
 
     // Make a module to contain the clone set, with arguments being the cut
     BlockAndValueMapping cutMap;
-    auto bmod = createModuleForCut(module, inputs, cutMap, suffix, path,
-                                   outputFileAttr);
+    auto bmod =
+        createModuleForCut(module, inputs, cutMap, suffix, path, fileName);
     // do the clone
     migrateOps(module, bmod, opsToClone, cutMap);
     // erase old operations of interest
