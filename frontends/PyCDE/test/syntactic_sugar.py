@@ -1,6 +1,7 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
-from pycde import (Output, module, generator, obj_to_value, types, dim, System)
+from pycde import (Output, Input, module, generator, obj_to_value, types, dim, System, no_connect)
+from pycde.module import externmodule
 
 
 @module
@@ -10,6 +11,11 @@ class Taps:
   @generator
   def build(mod):
     return {"taps": [203, 100, 23]}
+
+
+@externmodule
+class StupidLegacy:
+  ignore = Input(dim(1, 4))
 
 
 class Top(System):
@@ -25,6 +31,7 @@ class Top(System):
     Top.BarType.create({"foo": 7})
 
     Taps()
+    StupidLegacy(ignore=no_connect)
 
 
 top = Top()

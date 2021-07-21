@@ -52,6 +52,11 @@ class Parameter:
     self.name = name
 
 
+# Set an input to no_connect to indicate not to connect it. Only valid for
+# external module inputs.
+no_connect = object()
+
+
 class module:
   """Decorator for module classes or functions which parameterize module
   classes."""
@@ -202,7 +207,15 @@ def _module_base(cls, extern: bool, params={}):
       self.backedges: dict[int:BackedgeBuilder.Edge] = {}
       for (idx, (name, type)) in enumerate(mod._input_ports):
         if name in inputs:
-          value = obj_to_value(inputs[name], type)
+          input = inputs[name]
+          if input == no_connect:
+            if not extern:
+              raise ConnectionError(
+                "`no_connect` is only valid on extern module ports")
+            else:
+              value = hw.ConstantOp.create(types.i1, 0).result
+          else:
+            value = obj_to_value(input, type)
         else:
           backedge = BackedgeBuilder.current().create(type, name, self, loc=loc)
           self.backedges[idx] = backedge
