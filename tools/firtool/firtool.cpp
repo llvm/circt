@@ -157,7 +157,6 @@ static cl::opt<std::string> blackBoxRootResourcePath(
         "Optional path to use as the root of black box resource annotations"),
     cl::value_desc("path"), cl::init(""));
 
-
 /// Create a simple canonicalizer pass.
 static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
   mlir::GreedyRewriteConfig config;
