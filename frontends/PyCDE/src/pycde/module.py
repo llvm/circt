@@ -456,6 +456,8 @@ class _Generate:
         val = obj_to_value(gen_ret[name], port_type)
         outputs.append(val)
         gen_ret.pop(name)
+    if len(unconnected_ports) > 0:
+      raise support.UnconnectedSignalError(unconnected_ports)
     if len(gen_ret) > 0:
       raise support.ConnectionError(
           "Could not map the following to output ports: " +
