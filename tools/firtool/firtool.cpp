@@ -22,7 +22,6 @@
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Support/LoweringOptions.h"
-#include "circt/Transforms/Passes.h"
 #include "circt/Translation/ExportVerilog.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/AsmState.h"
@@ -32,6 +31,7 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Support/Timing.h"
+#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "mlir/Transforms/Passes.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
@@ -156,6 +156,15 @@ static cl::opt<std::string> blackBoxRootResourcePath(
     cl::desc(
         "Optional path to use as the root of black box resource annotations"),
     cl::value_desc("path"), cl::init(""));
+
+
+/// Create a simple canonicalizer pass.
+static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
+  mlir::GreedyRewriteConfig config;
+  config.useTopDownTraversal = true;
+  config.enableRegionSimplification = false;
+  return mlir::createCanonicalizerPass(config);
+}
 
 /// Process a single buffer of the input.
 static LogicalResult
