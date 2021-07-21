@@ -138,7 +138,7 @@ static bool narrowOperationWidth(Op narrowingCandidate, ValueRange inputs,
 
   auto loc = narrowingCandidate.getLoc();
   size_t narrowedWidth = highestBitRequired - lowestBitRequired + 1;
-  auto narrowedType = IntegerType::get(rewriter.getContext(), narrowedWidth);
+  auto narrowedType = rewriter.getIntegerType(narrowedWidth);
   Value narrowedOperation =
       createOp(SmallVector<Value>(llvm::map_range(inputs, [&](auto input) {
         return rewriter.create<ExtractOp>(loc, narrowedType, input,
@@ -148,14 +148,14 @@ static bool narrowOperationWidth(Op narrowingCandidate, ValueRange inputs,
   // Replace all the use-site's extract operation with the newly minted narrowed
   // version.
   for (auto &use : uses) {
-    auto extractUse = dyn_cast<ExtractOp>(use.getOwner());
+    auto extractUse = cast<ExtractOp>(use.getOwner());
     auto oldLowBit = extractUse.lowBit();
 
     assert(oldLowBit >= lowestBitRequired &&
            "incorrectly deduced the lowest bit required in usage arguments.");
 
     if (narrowedWidth == extractUse.getType().getWidth()) {
-      rewriter.replaceOp(use.get().getDefiningOp(), narrowedOperation);
+      rewriter.replaceOp(extractUse, narrowedOperation);
     } else {
       uint32_t newLowBit = oldLowBit - lowestBitRequired;
       rewriter.replaceOpWithNewOp<ExtractOp>(extractUse, extractUse.getType(),
@@ -165,7 +165,7 @@ static bool narrowOperationWidth(Op narrowingCandidate, ValueRange inputs,
 
   // It is not necessary to call rewriter.replaceOp(narrowingCandidate,
   // narrowedOperation) here, since all the use-site now refers to
-  // `narrwedOperation` instead. narrowingCandidate will be eliminated by DCE.
+  // `narrowedOperation` instead. narrowingCandidate will be eliminated by DCE.
 
   return true;
 }
@@ -402,9 +402,8 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
   // extract(f(a, b)) = f(extract(a), extract(b)). This is performed only when
   // the number of bits to operation f can be reduced. See documentation of
   // narrowExtractWidth for more information.
-  if (narrowExtractWidth(op, rewriter)) {
+  if (narrowExtractWidth(op, rewriter))
     return success();
-  }
 
   return failure();
 }
