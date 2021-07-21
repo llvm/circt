@@ -328,13 +328,16 @@ def _register_generator(class_name, generator_name, generator, parameters):
                                 generator_name, generator, parameters)
 
 
+class GeneratorError:
+  pass
+
+
 class _Generate:
   """Represents a generator. Stores the generate function and wraps it with the
   necessary logic to build an HWModule."""
 
   def __init__(self, gen_func):
     self.gen_func = gen_func
-    self.gen_name = gen_func.__name__
     self.modcls = None
     self.loc = get_user_loc()
 
@@ -441,16 +444,14 @@ class _Generate:
       if len(output_ports) == 0:
         hw.OutputOp([])
         return
-      raise support.ConnectionError(
-          f"In {self.modcls} generator {self.gen_name}, must return dict")
+      raise support.ConnectionError("Generator must return dict")
 
     # Now create the output op depending on the object type returned
     outputs: list[Value] = list()
 
     # Only acceptable return is a dict of port, value mappings.
     if not isinstance(gen_ret, dict):
-      raise support.ConnectionError(
-          f"In {self.modcls}, generators must return a dict of outputs")
+      raise support.ConnectionError("Generator must return a dict of outputs")
 
     # A dict of `OutputPortName` -> ValueLike or convertable objects must be
     # converted to a list in port order.
@@ -465,7 +466,7 @@ class _Generate:
         gen_ret.pop(name)
     if len(gen_ret) > 0:
       raise support.ConnectionError(
-          f"Could not map the following to output ports in {self.modcls}: " +
+          "Could not map the following to output ports: " +
           ",".join(gen_ret.keys()))
 
     hw.OutputOp(outputs)
