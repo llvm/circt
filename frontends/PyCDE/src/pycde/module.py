@@ -202,13 +202,7 @@ def _module_base(cls, extern: bool, params={}):
       self.backedges: dict[int:BackedgeBuilder.Edge] = {}
       for (idx, (name, type)) in enumerate(mod._input_ports):
         if name in inputs:
-          value = obj_to_value(inputs[name], type, throw_on_mismatch=False)
-          if value is None:
-            if not extern:
-              raise TypeError(f"Input '{name}' has type '{value.type}' "
-                              f"but expected '{type}'")
-            else:
-              value = support.get_value(inputs[name])
+          value = obj_to_value(inputs[name], type)
         else:
           backedge = BackedgeBuilder.current().create(type, name, self, loc=loc)
           self.backedges[idx] = backedge
