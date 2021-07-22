@@ -267,3 +267,32 @@ firrtl.circuit "InputPortTop"   {
     firrtl.connect %c2_in1, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
+firrtl.circuit "InstanceOut"   {
+  firrtl.extmodule @Ext(in %a: !firrtl.uint<1>)
+  
+  // CHECK-LABEL: firrtl.module @InstanceOut
+  firrtl.module @InstanceOut(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
+    %ext_a = firrtl.instance @Ext  {name = "ext"} : !firrtl.uint<1>
+    firrtl.connect %ext_a, %a : !firrtl.uint<1>, !firrtl.uint<1>
+    %w = firrtl.wire  : !firrtl.uint<1>
+    // CHECK: firrtl.connect %w, %ext_a : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %w, %ext_a : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %b, %w : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %b, %w : !firrtl.uint<1>, !firrtl.uint<1>
+  }  
+}
+firrtl.circuit "InstanceOut2"   {
+  firrtl.module @Ext(in %a: !firrtl.uint<1>) {
+  }
+  
+  // CHECK-LABEL: firrtl.module @InstanceOut2
+  firrtl.module @InstanceOut2(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
+    %ext_a = firrtl.instance @Ext  {name = "ext"} : !firrtl.uint<1>
+    firrtl.connect %ext_a, %a : !firrtl.uint<1>, !firrtl.uint<1>
+    %w = firrtl.wire  : !firrtl.uint<1>
+    // CHECK: firrtl.connect %w, %ext_a : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %w, %ext_a : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.connect %b, %w : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %b, %w : !firrtl.uint<1>, !firrtl.uint<1>
+  }  
+}
