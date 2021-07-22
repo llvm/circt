@@ -41,7 +41,7 @@ static void getBackwardSliceSimple(Operation *rootOp,
     Operation *op = worklist.back();
     worklist.pop_back();
 
-    if (!op || op->hasTrait<OpTrait::IsIsolatedFromAbove>())
+    if (!op || op->hasTrait<mlir::OpTrait::IsIsolatedFromAbove>())
       continue;
 
     // Evaluate whether we should keep this def.
