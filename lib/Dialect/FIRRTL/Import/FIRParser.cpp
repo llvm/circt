@@ -3311,10 +3311,9 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
 
     // Parse the body of this module after all prototypes have been parsed. This
     // allows us to handle forward references correctly.
-    TargetSet targetSet;
-    deferredModules.push_back({moduleOp, portLocs, getLexer().getCursor(),
-                               std::move(moduleTarget), indent,
-                               std::move(targetSet)});
+    deferredModules.emplace_back(
+        DeferredModuleToParse{moduleOp, portLocs, getLexer().getCursor(),
+                              std::move(moduleTarget), indent, TargetSet()});
 
     // We're going to defer parsing this module, so just skip tokens until we
     // get to the next module or the end of the file.
