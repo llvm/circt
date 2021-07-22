@@ -19,7 +19,8 @@ def InstanceOp : FIRRTLOp<"instance"> {
 
   let arguments = (ins FlatSymbolRefAttr:$moduleName, StrAttr:$name,
                        AnnotationArrayAttr:$annotations,
-                       PortAnnotationsAttr:$portAnnotations);
+                       PortAnnotationsAttr:$portAnnotations,
+                       BoolAttr:$lowerToBind);
   let results = (outs Variadic<FIRRTLType>:$results);
 
   let assemblyFormat =
@@ -32,7 +33,8 @@ def InstanceOp : FIRRTLOp<"instance"> {
                    "::mlir::StringRef":$moduleName,
                    CArg<"StringRef", "{}">:$name,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
-                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations)>,
+                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
+                   CArg<"bool","false">:$lowerToBind)>,
 
     /// Constructor that creates a version of the specified instance, but that
     /// erases some number of results from it.
@@ -107,7 +109,7 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
   let builders = [
     OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
                    "uint32_t":$readLatency, "uint32_t":$writeLatency,
-                   "uint64_t":$depth, "RUWAttr":$ruw, 
+                   "uint64_t":$depth, "RUWAttr":$ruw,
                    "ArrayRef<Attribute>":$portNames,
                    CArg<"StringRef", "{}">:$name,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
@@ -129,7 +131,7 @@ def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
 
     /// Return the name and kind of ports supported by this memory.
     SmallVector<NamedPort> getPorts();
-    
+
     /// Return the kind of the specified port.
     PortKind getPortKind(StringRef portName);
 
@@ -175,7 +177,7 @@ def NodeOp : FIRRTLOp<"node",
     ```
     }];
 
-  let arguments = (ins PassiveType:$input, StrAttr:$name, 
+  let arguments = (ins PassiveType:$input, StrAttr:$name,
                        AnnotationArrayAttr:$annotations);
   let results = (outs FIRRTLType:$result);
 
@@ -213,7 +215,7 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
     ```
     }];
 
-  let arguments = 
+  let arguments =
     (ins ClockType:$clockVal, StrAttr:$name, AnnotationArrayAttr:$annotations);
   let results = (outs PassiveType:$result);
 

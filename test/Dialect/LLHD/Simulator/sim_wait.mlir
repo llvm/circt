@@ -1,3 +1,4 @@
+// REQUIRES: llhd-sim
 // RUN: llhd-sim %s -shared-libs=%shlibdir/libcirct-llhd-signals-runtime-wrappers%shlibext | FileCheck %s
 
 // CHECK: 0ps 0d 0e  root/proc/s1  0x00000000
@@ -59,6 +60,6 @@ llhd.proc @proc () -> (%a : !llhd.sig<i32>, %b : !llhd.sig<i32>) {
   %a4 = addi %c0, %p4 : i32
   llhd.wait (%a, %b : !llhd.sig<i32>, !llhd.sig<i32>), ^end(%a4 : i32)
 ^end (%arg : i32):
-  llhd.drv %b, %arg after %t2 : !llhd.sig<i32> 
+  llhd.drv %b, %arg after %t2 : !llhd.sig<i32>
   llhd.halt
 }

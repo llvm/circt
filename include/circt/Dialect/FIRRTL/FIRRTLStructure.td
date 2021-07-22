@@ -50,7 +50,7 @@ def CircuitOp : FIRRTLOp<"circuit",
 }
 
 def FModuleOp : FIRRTLOp<"module",
-      [IsolatedFromAbove, FunctionLike, Symbol, SingleBlock, NoTerminator, 
+      [IsolatedFromAbove, FunctionLike, Symbol, SingleBlock, NoTerminator,
        HasParent<"CircuitOp">]> {
   let summary = "FIRRTL Module";
   let description = [{
@@ -92,6 +92,9 @@ def FModuleOp : FIRRTLOp<"module",
       Block &bodyBlock = body().front();
       return OpBuilder::atBlockEnd(&bodyBlock);
     }
+
+    /// Inserts the given ports.
+    void insertPorts(ArrayRef<std::pair<unsigned, ModulePortInfo>> ports);
 
     /// Erases the ports listed in `portIndices`.  `portIndices` is expected to
     /// be in order and unique.

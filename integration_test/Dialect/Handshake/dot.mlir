@@ -1,5 +1,5 @@
 // REQUIRES: ieee-sim
-// RUN: circt-opt %s --create-dataflow --simple-canonicalizer --handshake-insert-buffer=strategies=all --lower-handshake-to-firrtl | \
+// RUN: circt-opt %s --create-dataflow --canonicalize='top-down=true region-simplify=true' --handshake-insert-buffer=strategies=all --lower-handshake-to-firrtl | \
 // RUN: firtool --format=mlir --lower-to-hw --verilog > %dot-export.sv
 // RUN: circt-rtl-sim.py %dot-export.sv %S/driver.sv --sim %ieee-sim --no-default-driver --top driver | FileCheck %s
 // CHECK: Result={{.*}}3589632

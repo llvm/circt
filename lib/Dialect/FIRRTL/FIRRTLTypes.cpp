@@ -342,12 +342,13 @@ int32_t FIRRTLType::getBitWidthOrSentinel() {
 }
 
 /// Return true if this is a type usable as a reset. This must be
-/// either an abstract reset, a concrete 1-bit UInt, or an
-/// asynchronous reset.
+/// either an abstract reset, a concrete 1-bit UInt, an
+/// asynchronous reset, or an uninfered width UInt.
 bool FIRRTLType::isResetType() {
   return TypeSwitch<FIRRTLType, bool>(*this)
       .Case<ResetType, AsyncResetType>([](Type) { return true; })
-      .Case<UIntType>([](UIntType a) { return a.getWidth() == 1; })
+      .Case<UIntType>(
+          [](UIntType a) { return !a.hasWidth() || a.getWidth() == 1; })
       .Default([](Type) { return false; });
 }
 
@@ -364,7 +365,7 @@ unsigned FIRRTLType::getMaxFieldID() {
 }
 
 std::pair<unsigned, bool> FIRRTLType::rootChildFieldID(unsigned fieldID,
-                                                    unsigned index) {
+                                                       unsigned index) {
   return TypeSwitch<FIRRTLType, std::pair<unsigned, bool>>(*this)
       .Case<AnalogType, ClockType, ResetType, AsyncResetType, SIntType,
             UIntType>([&](Type) { return std::make_pair(0, fieldID == 0); })
@@ -372,7 +373,7 @@ std::pair<unsigned, bool> FIRRTLType::rootChildFieldID(unsigned fieldID,
           [&](auto type) { return type.rootChildFieldID(fieldID, index); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
-        return std::make_pair(0,false);
+        return std::make_pair(0, false);
       });
 }
 
@@ -685,7 +686,13 @@ llvm::Optional<unsigned> BundleType::getElementIndex(StringRef name) {
   return None;
 }
 
-/// Look up an element by name.  This returns a BundleElement with.
+StringRef BundleType::getElementName(size_t index) {
+  assert(index < getNumElements() &&
+         "index must be less than number of fields in bundle");
+  return getElements()[index].name.getValue();
+}
+
+/// Look up an element by name.  This returns a BundleElement.
 auto BundleType::getElement(StringRef name) -> Optional<BundleElement> {
   if (auto maybeIndex = getElementIndex(name))
     return getElements()[*maybeIndex];
@@ -694,6 +701,8 @@ auto BundleType::getElement(StringRef name) -> Optional<BundleElement> {
 
 /// Look up an element by index.
 BundleType::BundleElement BundleType::getElement(size_t index) {
+  assert(index < getNumElements() &&
+         "index must be less than number of fields in bundle");
   return getElements()[index];
 }
 
@@ -716,10 +725,13 @@ unsigned BundleType::getIndexForFieldID(unsigned fieldID) {
 
 unsigned BundleType::getMaxFieldID() { return getImpl()->maxFieldID; }
 
-std::pair<unsigned,bool> BundleType::rootChildFieldID(unsigned fieldID, unsigned index) {
+std::pair<unsigned, bool> BundleType::rootChildFieldID(unsigned fieldID,
+                                                       unsigned index) {
   auto childRoot = getFieldID(index);
-  auto rangeEnd = index + 1 >= getNumElements() ? getMaxFieldID() : (getFieldID(index+1) - 1);
-  return std::make_pair(fieldID - childRoot, fieldID >= childRoot && fieldID <= rangeEnd);
+  auto rangeEnd = index + 1 >= getNumElements() ? getMaxFieldID()
+                                                : (getFieldID(index + 1) - 1);
+  return std::make_pair(fieldID - childRoot,
+                        fieldID >= childRoot && fieldID <= rangeEnd);
 }
 
 //===----------------------------------------------------------------------===//
@@ -807,10 +819,10 @@ unsigned FVectorType::getMaxFieldID() {
 }
 
 std::pair<unsigned, bool> FVectorType::rootChildFieldID(unsigned fieldID,
-                                                    unsigned index) {
+                                                        unsigned index) {
   auto childRoot = getFieldID(index);
-  auto rangeEnd = index >= getNumElements() ? getMaxFieldID()
-                                                : (getFieldID(index + 1) - 1);
+  auto rangeEnd =
+      index >= getNumElements() ? getMaxFieldID() : (getFieldID(index + 1) - 1);
   return std::make_pair(fieldID - childRoot,
                         fieldID >= childRoot && fieldID <= rangeEnd);
 }

@@ -34,7 +34,7 @@ def HWModuleOp : HWOp<"module",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports, 
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
@@ -117,7 +117,7 @@ def HWModuleExternOp : HWOp<"module.extern",
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
-  let extraClassDeclaration = [{   
+  let extraClassDeclaration = [{
     // Decode information about the input and output ports on this module.
     SmallVector<ModulePortInfo> getPorts() {
       return getModulePortInfo(*this);
@@ -172,24 +172,24 @@ def HWModuleExternOp : HWOp<"module.extern",
   let verifier = "return ::verify$cppClass(*this);";
 }
 
-def HWGeneratorSchemaOp : HWOp<"generator.schema", 
+def HWGeneratorSchemaOp : HWOp<"generator.schema",
       [Symbol, HasParent<"mlir::ModuleOp">]> {
   let summary = "HW Generator Schema declaration";
   let description = [{
     The "hw.generator.schema" operation declares a kind of generated module by
-    declaring the schema of meta-data required.  
+    declaring the schema of meta-data required.
     A generated module instance of a schema is independent of the external
     method of producing it.  It is assumed that for well known schema instances,
-    multiple external tools might exist which can process it.  Generator nodes 
+    multiple external tools might exist which can process it.  Generator nodes
     list attributes required by hw.module.generated instances.
 
     For example:
     generator.schema @MEMORY, "Simple-Memory", ["ports", "write_latency", "read_latency"]
-    module.generated @mymem, @MEMORY(ports) 
+    module.generated @mymem, @MEMORY(ports)
       -> (ports) {write_latency=1, read_latency=1, ports=["read","write"]}
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name, StrAttr:$descriptor, 
+  let arguments = (ins SymbolNameAttr:$sym_name, StrAttr:$descriptor,
                        StrArrayAttr:$requiredAttrs);
   let results = (outs);
   let assemblyFormat = [{
@@ -202,13 +202,13 @@ def HWModuleGeneratedOp : HWOp<"module.generated",
   let summary = "HW Generated Module";
   let description = [{
     The "hw.module.generated" operation represents a reference to an external
-    module that will be produced by some external process.  
+    module that will be produced by some external process.
     This represents the name and list of ports to be generated.
-    
+
     The 'verilogName' attribute (when present) specifies the spelling of the
     module name in Verilog we can use.  See hw.module for an explanation.
   }];
-  let arguments = (ins FlatSymbolRefAttr:$generatorKind, 
+  let arguments = (ins FlatSymbolRefAttr:$generatorKind,
                        OptionalAttr<StrAttr>:$verilogName,
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames);
   let results = (outs);
@@ -223,7 +223,7 @@ def HWModuleGeneratedOp : HWOp<"module.generated",
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
-  let extraClassDeclaration = [{   
+  let extraClassDeclaration = [{
     // Decode information about the input and output ports on this module.
     SmallVector<ModulePortInfo> getPorts() {
       return getModulePortInfo(*this);
@@ -282,7 +282,7 @@ def InstanceOp : HWOp<"instance",
                         HasParent<"HWModuleOp">, Symbol]> {
   let summary = "Create an instance of a module";
   let description = [{
-    This represents an instance of a module. The inputs and results are 
+    This represents an instance of a module. The inputs and results are
     the referenced module's inputs and outputs.  Any parameters are stored in
     the "parameters" dictionary.
   }];

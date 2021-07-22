@@ -32,8 +32,8 @@ def StaticLogic_Dialect : Dialect {
 def PipelineOp : Op<StaticLogic_Dialect, "pipeline", [NoSideEffect]> {
   let summary = "pipeline operation";
   let description = [{
-    The "staticlogic.pipeline" operation represents a statically scheduled 
-    pipeline stucture which contains several MLIR blocks. Each MLIR block is 
+    The "staticlogic.pipeline" operation represents a statically scheduled
+    pipeline stucture which contains several MLIR blocks. Each MLIR block is
     corresponding to a pipeline stage.
   }];
 
@@ -65,7 +65,7 @@ def PipelineOp : Op<StaticLogic_Dialect, "pipeline", [NoSideEffect]> {
 def ReturnOp : Op<StaticLogic_Dialect, "return", [Terminator]> {
   let summary = "StaticLogic dialect return.";
   let description = [{
-    The "staticlogic.return" operation represents a terminator of a statically 
+    The "staticlogic.return" operation represents a terminator of a statically
     scheduled module, which is similar to a standard return operation.
   }];
 

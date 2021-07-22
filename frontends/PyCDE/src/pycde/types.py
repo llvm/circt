@@ -6,6 +6,7 @@ from collections import OrderedDict
 
 import mlir.ir
 from circt.dialects import hw
+import circt.support
 
 
 class _Types:
@@ -20,39 +21,40 @@ class _Types:
     return mlir.ir.Type.parse(name)
 
   def int(self, width: int, name: str = None):
-    return self.maybe_create_alias(mlir.ir.IntegerType.get_signless(width),
-                                   name)
+    return self.wrap(mlir.ir.IntegerType.get_signless(width), name)
 
   def array(self,
             inner: mlir.ir.Type,
             size: int,
             name: str = None) -> hw.ArrayType:
-    return self.maybe_create_alias(hw.ArrayType.get(inner, size), name)
+    return self.wrap(hw.ArrayType.get(inner, size), name)
 
   def struct(self, members, name: str = None) -> hw.StructType:
+    members = OrderedDict(members)
     if isinstance(members, dict):
-      return self.maybe_create_alias(hw.StructType.get(list(members.items())),
-                                     name)
+      return self.wrap(hw.StructType.get(list(members.items())), name)
     if isinstance(members, list):
-      return self.maybe_create_alias(hw.StructType.get(members), name)
+      return self.wrap(hw.StructType.get(members), name)
     raise TypeError("Expected either list or dict.")
 
-  def maybe_create_alias(self, inner_type, name):
+  def wrap(self, type, name=None):
     if name is not None:
-      alias = hw.TypeAliasType.get(_Types.TYPE_SCOPE, name, inner_type)
+      type = self._create_alias(type, name)
+    return PyCDEType(type)
 
-      if name in self.registered_aliases:
-        if alias != self.registered_aliases[name]:
-          raise RuntimeError(
-              f"Re-defining type alias for {name}! "
-              f"Given: {inner_type}, "
-              f"existing: {self.registered_aliases[name].inner_type}")
-        return self.registered_aliases[name]
+  def _create_alias(self, inner_type, name):
+    alias = hw.TypeAliasType.get(_Types.TYPE_SCOPE, name, inner_type)
 
-      self.registered_aliases[name] = alias
-      return alias
+    if name in self.registered_aliases:
+      if alias != self.registered_aliases[name]:
+        raise RuntimeError(
+            f"Re-defining type alias for {name}! "
+            f"Given: {inner_type}, "
+            f"existing: {self.registered_aliases[name].inner_type}")
+      return self.registered_aliases[name]
 
-    return inner_type
+    self.registered_aliases[name] = alias
+    return alias
 
   def declare_types(self, mod):
     if not self.registered_aliases:
@@ -89,4 +91,35 @@ def dim(inner_type_or_bitwidth, *size: int, name: str = None) -> hw.ArrayType:
     ret = inner_type_or_bitwidth
   for s in size:
     ret = hw.ArrayType.get(ret, s)
-  return types.maybe_create_alias(ret, name)
+  return types.wrap(ret, name)
+
+
+# Parameterized class to subclass 'type'.
+def PyCDEType(type):
+  if type.__class__.__name__ == "_PyCDEType":
+    return type
+  type = circt.support.type_to_pytype(type)
+
+  class _PyCDEType(type.__class__):
+    """Add methods to an MLIR type class."""
+
+    # If we're subclassing a type alias, use a different 'inner' implementation.
+    if isinstance(type, hw.TypeAliasType):
+
+      @property
+      def inner(self):
+        """Return self or inner type."""
+        return PyCDEType(self.inner_type)
+    else:
+
+      @property
+      def inner(self):
+        """Return self or inner type."""
+        return self
+
+    def create(self, obj):
+      """Create a Value of this type from a python object."""
+      from .support import obj_to_value
+      return obj_to_value(obj, self, self)
+
+  return _PyCDEType(type)

@@ -81,6 +81,16 @@ AnnotationSet::forPort(Operation *module, size_t portNo,
   return AnnotationSet(annotations, module->getContext());
 }
 
+/// Get an annotation set for the specified value.
+AnnotationSet AnnotationSet::get(Value v) {
+  if (auto op = v.getDefiningOp())
+    return AnnotationSet(op);
+  // If its not an Operation, then must be a block argument.
+  auto arg = v.dyn_cast<BlockArgument>();
+  auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
+  return forPort(module, arg.getArgNumber());
+}
+
 /// Return this annotation set as an argument attribute dictionary for a port.
 DictionaryAttr AnnotationSet::getArgumentAttrDict(
     ArrayRef<NamedAttribute> otherPortAttrs) const {
@@ -352,19 +362,20 @@ bool AnnotationSet::removeAnnotations(Operation *op, StringRef className) {
       op, [&](Annotation a) { return (a.getClass() == className); });
 }
 
-/// Remove all port annotations from a module for which `predicate` returns
-/// true.
+/// Remove all port annotations from a module or extmodule for which `predicate`
+/// returns true.
 bool AnnotationSet::removePortAnnotations(
-    FModuleOp module,
+    Operation *module,
     llvm::function_ref<bool(unsigned, Annotation)> predicate) {
   // We need to reserve some space to gather the remaining attributes, without
   // the removed ones.
   SmallVector<DictionaryAttr, 8> filteredArgAttrs;
-  filteredArgAttrs.reserve(module.getNumArguments());
+  FunctionType moduleF = mlir::function_like_impl::getFunctionType(module);
+  filteredArgAttrs.reserve(moduleF.getNumInputs());
 
   // Filter the annotations on each argument.
   bool changed = false;
-  for (unsigned argNum = 0, argNumEnd = module.getNumArguments();
+  for (unsigned argNum = 0, argNumEnd = moduleF.getNumInputs();
        argNum < argNumEnd; ++argNum) {
     auto annos = AnnotationSet::forPort(module, argNum);
 

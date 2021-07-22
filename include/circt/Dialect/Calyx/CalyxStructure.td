@@ -84,7 +84,6 @@ def ComponentOp : CalyxOp<"component", [
     ArrayAttr:$outPortNames
   );
   let results = (outs);
-
   let regions = (region SizedRegion<1>: $body);
 
   let builders = [
@@ -285,6 +284,7 @@ def GroupGoOp : CalyxGroupPort<"group_go", [
       %group_name2.go = calyx.group_go %3, %guard ? : i1
     ```
   }];
+  let results = (outs I1);
   let builders = [
     OpBuilder<(ins "Value":$src, CArg<"Value", "{}">:$guard), [{
       $_state.addTypes($_builder.getI1Type());
@@ -293,5 +293,4 @@ def GroupGoOp : CalyxGroupPort<"group_go", [
         $_state.addOperands(guard);
     }]>
   ];
-  let results = (outs I1);
 }

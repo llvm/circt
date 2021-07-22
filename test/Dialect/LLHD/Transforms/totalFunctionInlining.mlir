@@ -3,14 +3,14 @@
 // This test checks the presence of inlining into entities and processes
 // and their general structure after inlining. It also checks that the functions
 // are deleted by the elimination pass.
-// Note: Only functions which can be reduced to one basic block can be inlined 
+// Note: Only functions which can be reduced to one basic block can be inlined
 // into entities.
 
 // CHECK-NOT: func
 func @simple() -> i32 {
   %0 = llhd.const 5 : i32
   return %0 : i32
-} 
+}
 
 // CHECK-NOT: func
 func @complex(%flag : i1) -> i32 {

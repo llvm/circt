@@ -730,22 +730,6 @@ static LogicalResult verifyInstanceOp(InstanceOp op) {
     return op.emitError("Cannot find module definition '")
            << op.moduleName() << "'";
 
-  if (auto paramDictOpt = op.parameters()) {
-    DictionaryAttr paramDict = paramDictOpt.getValue();
-    auto checkParmValue = [&](NamedAttribute elt) -> bool {
-      auto value = elt.second;
-      if (value.isa<IntegerAttr>() || value.isa<StringAttr>() ||
-          value.isa<FloatAttr>())
-        return true;
-      op.emitError() << "has unknown extmodule parameter value '" << elt.first
-                     << "' = " << value;
-      return false;
-    };
-
-    if (!llvm::all_of(paramDict, checkParmValue))
-      return failure();
-  }
-
   // If the referenced module is internal, check that input and result types are
   // consistent with the referenced module.
   if (!isa<HWModuleOp>(referencedModule))

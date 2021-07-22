@@ -31,12 +31,12 @@ struct GoInsertionPass : public GoInsertionBase<GoInsertionPass> {
 
 void GoInsertionPass::runOnOperation() {
   ComponentOp component = getOperation();
-  OpBuilder builder(component->getRegion(0));
-
-  auto undefinedOp =
-      builder.create<UndefinedOp>(component->getLoc(), builder.getI1Type());
-
   auto wiresOp = component.getWiresOp();
+
+  OpBuilder builder(wiresOp->getRegion(0));
+  auto undefinedOp =
+      builder.create<UndefinedOp>(wiresOp->getLoc(), builder.getI1Type());
+
   wiresOp.walk([&](GroupOp group) {
     OpBuilder builder(group->getRegion(0));
     // Since the source of a GroupOp's go signal isn't set until the

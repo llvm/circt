@@ -70,26 +70,29 @@ def MuxSameCondHigh : Pat<
     (EqualTypes $x, $y), (EqualTypes $x, $z), (KnownWidth $x)
   ]>;
 
-// node(x, name, {}) -> x
+// node(x) -> x
 def EmptyNode : Pat<
   (NodeOp $x, $name, $annotations),
   (replaceWithValue $x),
   [(EmptyAttrDict $annotations)]>;
 
-// regreset(clock, invalidvalue, resetValue, name, {}) -> reg(clock, name, {})
+// regreset(clock, invalidvalue, resetValue) -> reg(clock)
 def RegresetWithInvalidReset : Pat<
   (RegResetOp $clock, (InvalidValueOp), $resetValue, $name, $annotations),
   (RegOp $clock, $name, $annotations),
   []>;
 
-// Constraint that has a constant zero value.
-def ZeroValueAttr : Constraint<CPred<"$0.getAPSInt().getExtValue() == 0">>;
-
-// regreset(clock, constant_zero, resetValue, name, {}) -> reg(clock, name, {})
-def RegresetWithZeroReset : Pat<
-  (RegResetOp $clock, (AsAsyncResetPrimOp (ConstantOp $value)), $resetValue,
-   $name, $annotations),
+// regreset(clock, reset, invalidvalue) -> reg(clock)
+// This is handled by the `RemoveReset` pass in the original Scala code.
+def RegresetWithInvalidResetValue : Pat<
+  (RegResetOp $clock, $reset, (InvalidValueOp), $name, $annotations),
   (RegOp $clock, $name, $annotations),
-  [(ZeroValueAttr $value)]>;
+  []>;
+
+// regreset(clock, constant_zero, resetValue) -> reg(clock)
+def RegresetWithZeroReset : Pat<
+  (RegResetOp $clock, (SpecialConstantOp ConstBoolAttrFalse), $resetValue,
+   $name, $annotations),
+  (RegOp $clock, $name, $annotations)>;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD

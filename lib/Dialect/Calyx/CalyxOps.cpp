@@ -291,20 +291,21 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
     else if (isa<ControlOp>(bodyOp))
       ++numControl;
   }
-  if (!(numWires == 1 && numControl == 1))
+  if (!(numWires == 1) || !(numControl == 1))
     return op.emitOpError() << "requires exactly one of each: "
                                "'calyx.wires', 'calyx.control'.";
 
   // Verify the component has the following ports.
+  // TODO(Calyx): Eventually, we want to use either types for these,
+  //  e.g. `calyx.clk_type` or attributes for passes.
   bool go = false, clk = false, reset = false, done = false;
   SmallVector<ComponentPortInfo> componentPorts = getComponentPortInfo(op);
-  for (auto port : componentPorts) {
+  for (auto &&port : componentPorts) {
     if (!port.type.isInteger(1))
       // Each of the ports has bit width 1.
       continue;
 
     StringRef portName = port.name.getValue();
-
     if (port.direction == PortDirection::OUTPUT) {
       done |= (portName == "done");
     } else {
@@ -360,11 +361,10 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
   }
 
   // Insert the WiresOp and ControlOp.
-  auto ip = builder.saveInsertionPoint();
+  IRRewriter::InsertionGuard guard(builder);
   builder.setInsertionPointToStart(block);
   builder.create<WiresOp>(result.location);
   builder.create<ControlOp>(result.location);
-  builder.restoreInsertionPoint(ip);
 }
 
 //===----------------------------------------------------------------------===//

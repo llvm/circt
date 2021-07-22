@@ -21,6 +21,7 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TinyPtrVector.h"
@@ -227,6 +228,13 @@ struct CircuitLoweringState {
 
   CircuitOp circuitOp;
 
+  // Safely add a BindOp to global mutable state.  This will acquire a lock to
+  // do this safely.
+  void addBind(sv::BindOp op) {
+    std::lock_guard<std::mutex> lock(bindsMutex);
+    binds.push_back(op);
+  }
+
 private:
   friend struct FIRRTLModuleLowering;
   CircuitLoweringState(const CircuitLoweringState &) = delete;
@@ -239,6 +247,13 @@ private:
   StringSet<> alreadyPrinted;
   const bool enableAnnotationWarning;
   std::mutex annotationPrintingMtx;
+
+  // Records any sv::BindOps that are found during the course of execution.
+  // This is unsafe to access directly and should only be used through addBind.
+  SmallVector<sv::BindOp> binds;
+
+  // Control access to binds.
+  std::mutex bindsMutex;
 };
 
 void CircuitLoweringState::warnOnRemainingAnnotations(
@@ -320,6 +335,7 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   SmallVector<FModuleOp, 32> modulesToProcess;
 
+  state.warnOnRemainingAnnotations(circuit, AnnotationSet(circuit));
   // Iterate through each operation in the circuit body, transforming any
   // FModule's we come across.
   for (auto &op : circuitBody->getOperations()) {
@@ -344,6 +360,7 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   SmallVector<FirMemory> memories;
   if (getContext().isMultithreadingEnabled()) {
+    // TODO: Update this to use a mlir::parallelTransformReduce once it exists.
     memories = llvm::parallelTransformReduce(
         modulesToProcess.begin(), modulesToProcess.end(),
         SmallVector<FirMemory>(), mergeFIRRTLMemories, collectFIRRTLMemories);
@@ -356,14 +373,13 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   // Now that we've lowered all of the modules, move the bodies over and update
   // any instances that refer to the old modules.
-  if (getContext().isMultithreadingEnabled()) {
-    mlir::ParallelDiagnosticHandler diagHandler(&getContext());
-    llvm::parallelForEachN(0, modulesToProcess.size(), [&](auto index) {
-      lowerModuleBody(modulesToProcess[index], state);
-    });
-  } else {
-    for (auto module : modulesToProcess)
-      lowerModuleBody(module, state);
+  mlir::parallelForEachN(
+      &getContext(), 0, modulesToProcess.size(),
+      [&](auto index) { lowerModuleBody(modulesToProcess[index], state); });
+
+  // Move binds from inside modules to outside modules.
+  for (auto bind : state.binds) {
+    bind->moveBefore(bind->getParentOfType<hw::HWModuleOp>());
   }
 
   // Finally delete all the old modules.
@@ -481,10 +497,9 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
     std::string define = "`define ";
     if (!defineFalse) {
       assert(defineTrue && "didn't define anything");
-      b.create<sv::IfDefProceduralOp>(
-          guard, [&]() { emitString(define + defineTrue); });
+      b.create<sv::IfDefOp>(guard, [&]() { emitString(define + defineTrue); });
     } else {
-      b.create<sv::IfDefProceduralOp>(
+      b.create<sv::IfDefOp>(
           guard,
           [&]() {
             if (defineTrue)
@@ -549,7 +564,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
     emitGuardedDefine("RANDOMIZE_DELAY", nullptr, "RANDOMIZE_DELAY 0.002");
 
     emitString("\n// Define INIT_RANDOM_PROLOG_ for use in our modules below.");
-    b.create<sv::IfDefProceduralOp>(
+    b.create<sv::IfDefOp>(
         "RANDOMIZE",
         [&]() {
           emitGuardedDefine(
@@ -562,7 +577,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
   if (state.used_RANDOMIZE_GARBAGE_ASSIGN) {
     emitString("\n// RANDOMIZE_GARBAGE_ASSIGN enable range checks for mem "
                "assignments.");
-    b.create<sv::IfDefProceduralOp>(
+    b.create<sv::IfDefOp>(
         "RANDOMIZE_GARBAGE_ASSIGN",
         [&]() {
           emitString(
@@ -747,8 +762,9 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
     // We know it must be the destination operand due to the types, but the
     // source may not match the destination width.
     auto destTy = flipValue.getType().cast<FIRRTLType>().getPassiveType();
-    if (destTy != connectSrc.getType()) {
-      // The only type mismatch we can have is due to integer width
+    if (destTy.getBitWidthOrSentinel() !=
+        connectSrc.getType().cast<FIRRTLType>().getBitWidthOrSentinel()) {
+      // The only type mismatchs we care about is due to integer width
       // differences.
       auto destWidth = destTy.getBitWidthOrSentinel();
       assert(destWidth != -1 && "must know integer widths");
@@ -775,7 +791,10 @@ static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
   for (auto op : structValue.getUsers()) {
     assert(isa<SubfieldOp>(op));
     auto fieldAccess = cast<SubfieldOp>(op);
-    if (fieldAccess.fieldname() == field) {
+    auto elemIndex =
+        fieldAccess.input().getType().cast<BundleType>().getElementIndex(field);
+    if (elemIndex.hasValue() &&
+        fieldAccess.fieldIndex() == elemIndex.getValue()) {
       accesses.push_back(fieldAccess);
     }
   }
@@ -954,6 +973,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   enum UnloweredOpResult { AlreadyLowered, NowLowered, LoweringFailure };
   UnloweredOpResult handleUnloweredOp(Operation *op);
   LogicalResult visitExpr(ConstantOp op);
+  LogicalResult visitExpr(SpecialConstantOp op);
   LogicalResult visitExpr(SubfieldOp op);
   LogicalResult visitUnhandledOp(Operation *op) { return failure(); }
   LogicalResult visitInvalidOp(Operation *op) { return failure(); }
@@ -1173,7 +1193,7 @@ void FIRRTLLowering::optimizeTemporaryWire(sv::WireOp wire) {
   // Wires have inout type, so they'll have connects and read_inout operations
   // that work on them.  If anything unexpected is found then leave it alone.
   SmallVector<sv::ReadInOutOp> reads;
-  sv::ConnectOp write;
+  sv::AssignOp write;
 
   for (auto *user : wire->getUsers()) {
     if (auto read = dyn_cast<sv::ReadInOutOp>(user)) {
@@ -1182,10 +1202,10 @@ void FIRRTLLowering::optimizeTemporaryWire(sv::WireOp wire) {
     }
 
     // Otherwise must be a connect, and we must not have seen a write yet.
-    auto connect = dyn_cast<sv::ConnectOp>(user);
-    if (!connect || write)
+    auto assign = dyn_cast<sv::AssignOp>(user);
+    if (!assign || write)
       return;
-    write = connect;
+    write = assign;
   }
 
   // Must have found the write!
@@ -1592,6 +1612,11 @@ LogicalResult FIRRTLLowering::visitExpr(ConstantOp op) {
   return setLowering(op, getOrCreateIntConstant(op.value()));
 }
 
+LogicalResult FIRRTLLowering::visitExpr(SpecialConstantOp op) {
+  return setLowering(op,
+                     getOrCreateIntConstant(APInt(/*bitWidth*/ 1, op.value())));
+}
+
 LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
   // firrtl.mem lowering lowers some SubfieldOps.  Zero-width can leave invalid
   // subfield accesses
@@ -1607,8 +1632,9 @@ LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
   Value value = getLoweredValue(op.input());
   assert(resultType && value && "subfield type lowering failed");
 
-  return setLoweringTo<hw::StructExtractOp>(op, resultType, value,
-                                            op.fieldname());
+  return setLoweringTo<hw::StructExtractOp>(
+      op, resultType, value,
+      op.input().getType().cast<BundleType>().getElementName(op.fieldIndex()));
 }
 
 //===----------------------------------------------------------------------===//
@@ -1664,7 +1690,7 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
                                          Twine("__") + name.getValue());
 
     auto wire = builder.create<sv::WireOp>(operand.getType(), name, symName);
-    builder.create<sv::ConnectOp>(wire, operand);
+    builder.create<sv::AssignOp>(wire, operand);
   }
 
   return setLowering(op, operand);
@@ -1682,10 +1708,11 @@ void FIRRTLLowering::emitRandomizePrologIfNeeded() {
 
 void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
   // Construct and return a new reference to `RANDOM.  It is always a 32-bit
-  // unsigned expression.  We don't want these CSE'd.
+  // unsigned expression.  Calls to $random have side effects, so we use
+  // VerbatimExprSEOp.
   auto getRandom32Val = [&]() -> Value {
-    return builder.create<sv::VerbatimExprOp>(builder.getIntegerType(32),
-                                              "`RANDOM");
+    return builder.create<sv::VerbatimExprSEOp>(builder.getIntegerType(32),
+                                                "`RANDOM");
   };
 
   // Return an expression containing random bits of the specified width.
@@ -1990,10 +2017,34 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   // Use the symbol from the module we are referencing.
   FlatSymbolRefAttr symbolAttr = builder.getSymbolRefAttr(newModule);
 
+  // If this instance is destined to be lowered to a bind, generate a symbol for
+  // it and generate a bind op.  Enter the bind into global CircuitLoweringState
+  // so that this can be moved outside of module once we're guaranteed to not be
+  // a parallel context.
+  StringAttr symbol({});
+  if (oldInstance->getAttrOfType<BoolAttr>("lowerToBind").getValue()) {
+    symbol = builder.getStringAttr("__" + oldInstance.name() + "__");
+    auto bindOp =
+        builder.create<sv::BindOp>(builder.getSymbolRefAttr(symbol.getValue()));
+    bindOp->setAttr("output_file",
+                    hw::OutputFileAttr::get(
+                        builder.getStringAttr(""),
+                        builder.getStringAttr("bindings.sv"),
+                        /*exclude_from_filelist=*/builder.getBoolAttr(true),
+                        /*exclude_replicated_ops=*/builder.getBoolAttr(true),
+                        bindOp.getContext()));
+    // Add the bind to the circuit state.  This will be moved outside of the
+    // encapsulating module after all modules have been processed in parallel.
+    circuitState.addBind(bindOp);
+  }
+
   // Create the new hw.instance operation.
-  auto newInstance = builder.create<hw::InstanceOp>(
-      resultTypes, oldInstance.nameAttr(), symbolAttr, operands, parameters,
-      StringAttr());
+  auto newInstance =
+      builder.create<hw::InstanceOp>(resultTypes, oldInstance.nameAttr(),
+                                     symbolAttr, operands, parameters, symbol);
+
+  if (symbol)
+    newInstance->setAttr("doNotPrint", builder.getBoolAttr(true));
 
   // Now that we have the new hw.instance, we need to remap all of the users
   // of the outputs/results to the values returned by the instance.
@@ -2480,7 +2531,7 @@ LogicalResult FIRRTLLowering::visitStmt(ConnectOp op) {
     return success();
   }
 
-  builder.create<sv::ConnectOp>(destVal, srcVal);
+  builder.create<sv::AssignOp>(destVal, srcVal);
   return success();
 }
 
@@ -2533,7 +2584,7 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
     return success();
   }
 
-  builder.create<sv::ConnectOp>(destVal, srcVal);
+  builder.create<sv::AssignOp>(destVal, srcVal);
   return success();
 }
 
@@ -2635,7 +2686,12 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op) {
   addToAlwaysBlock(clock, [&]() {
     addIfProceduralBlock(enable, [&]() {
       // Create BOpTy inside the always/if.
-      builder.create<BOpTy>(predicate);
+      StringAttr label;
+      if (op.nameAttr())
+        label = op.nameAttr();
+      else
+        label = builder.getStringAttr("");
+      builder.create<BOpTy>(predicate, label);
     });
   });
 
@@ -2692,7 +2748,7 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
         for (size_t i1 = 0, e = inoutValues.size(); i1 != e; ++i1) {
           for (size_t i2 = 0; i2 != e; ++i2)
             if (i1 != i2)
-              builder.create<sv::ConnectOp>(inoutValues[i1], values[i2]);
+              builder.create<sv::AssignOp>(inoutValues[i1], values[i2]);
         }
       },
       // In the non-synthesis case, we emit a SystemVerilog alias statement.

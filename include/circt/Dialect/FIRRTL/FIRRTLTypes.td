@@ -131,11 +131,10 @@ def SubAnnotationAttr
   let summary = "An Annotation that targets part of what it's attached to";
   let description = [{
     An Annotation that is only applicable to part of what it is attached to.
-    This uses a range of field IDs to indicate to which fields it is applicable.
+    This uses a field ID to indicate to which field it is applicable.
   }];
   let mnemonic = "subAnno";
-  let parameters = (ins "int64_t":$minFieldID, "int64_t":$maxFieldID,
-                        "DictionaryAttr":$annotations);
+  let parameters = (ins "int64_t":$fieldID, "DictionaryAttr":$annotations);
 }
 
 def PortAnnotationsAttr : TypedArrayAttrBase<AnnotationArrayAttr,
@@ -156,4 +155,3 @@ def InvalidValueAttr
                                    "return $_get(type.getContext(), type);">
   ];
 }
-

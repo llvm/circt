@@ -1,4 +1,4 @@
-// RUN: circt-opt -simple-canonicalizer %s | FileCheck %s
+// RUN: circt-opt -canonicalize='top-down=true region-simplify=true' %s | FileCheck %s
 
 // CHECK-LABEL: hw.module @extract_noop(%arg0: i3) -> (i3) {
 // CHECK-NEXT:    hw.output %arg0
@@ -825,7 +825,7 @@ hw.module @mux_canonicalize4(%a: i1, %b: i1, %c: i4) -> (i1, i1, i4, i4) {
 // CHECK-NEXT:   %0 = comb.xor %arg, %true : i1
 // CHECK-NEXT:   %1 = comb.xor %arg, %true : i1
 // CHECK-NEXT:   hw.output %0, %arg, %arg, %1 : i1, i1, i1, i1
-// CHECK-NEXT:   }  
+// CHECK-NEXT:   }
 hw.module @icmp_fold_1bit_eq1(%arg: i1) -> (i1, i1, i1, i1) {
   %zero = hw.constant 0 : i1
   %one = hw.constant 1 : i1
@@ -877,7 +877,7 @@ hw.module @issue955() -> (i100, i100) {
   %1 = comb.and %0, %0 : i100
 
   // CHECK-DAG: = hw.constant 18446744073709551616 : i100
-  
+
   // (1 << 64) + 1
   %2 = hw.constant 18446744073709551617 : i100
   %3 = comb.and %2, %2 : i100
@@ -926,7 +926,7 @@ hw.module @wire1() {
 hw.module @wire2() {
   %c = hw.constant 1 : i1
   %0 = sv.wire : !hw.inout<i1>
-  sv.connect %0, %c : i1
+  sv.assign %0, %c : i1
   hw.output
 }
 
@@ -936,7 +936,7 @@ hw.module @wire3() {
   %c = hw.constant 1 : i1
   %0 = sv.wire : !hw.inout<i1>
   %1 = sv.read_inout %0 : !hw.inout<i1>
-  sv.connect %0, %c :i1
+  sv.assign %0, %c :i1
   hw.output
 }
 
@@ -944,13 +944,13 @@ hw.module @wire3() {
 // CHECK-NEXT:   %true = hw.constant true
 // CHECK-NEXT:   %0 = sv.wire sym @symName : !hw.inout<i1>
 // CHECK-NEXT:   %1 = sv.read_inout %0 : !hw.inout<i1>
-// CHECK-NEXT:   sv.connect %0, %true : i1
+// CHECK-NEXT:   sv.assign %0, %true : i1
 // CHECK-NEXT:   hw.output %1 : i1
 hw.module @wire4() -> (i1) {
   %true = hw.constant true
   %0 = sv.wire sym @symName : !hw.inout<i1>
   %1 = sv.read_inout %0 : !hw.inout<i1>
-  sv.connect %0, %true : i1
+  sv.assign %0, %true : i1
   hw.output %1 : i1
 }
 
@@ -961,7 +961,7 @@ hw.module @wire4_1() -> (i1) {
   %true = hw.constant true
   %0 = sv.wire : !hw.inout<i1>
   %1 = sv.read_inout %0 : !hw.inout<i1>
-  sv.connect %0, %true : i1
+  sv.assign %0, %true : i1
   hw.output %1 : i1
 }
 
@@ -983,7 +983,7 @@ hw.module @wire5() -> () {
 // CHECK-NEXT:    %2 = comb.add %0, %1 : i3
 // CHECK-NEXT:    %3 = comb.icmp eq %2, %arg2 : i3
 // CHECK-NEXT:    hw.output %myext.out : i8
-  
+
 hw.module @instance_ooo(%arg0: i2, %arg1: i2, %arg2: i3) -> (%out0: i8) {
   %false = hw.constant false
     %.in.wire = sv.wire  : !hw.inout<i1>
@@ -993,7 +993,7 @@ hw.module @instance_ooo(%arg0: i2, %arg1: i2, %arg2: i3) -> (%out0: i8) {
     %2 = comb.concat %false, %arg0 : (i1, i2) -> i3
     %3 = comb.add %1, %2 : i3
     %4 = comb.icmp eq %3, %arg2 : i3
-    sv.connect %.in.wire, %4 : i1
+    sv.assign %.in.wire, %4 : i1
     hw.output %myext.out : i8
 }
 
@@ -1015,18 +1015,18 @@ hw.module @TestInstance(%u2: i2, %s8: i8, %clock: i1, %reset: i1) {
   %2 = sv.read_inout %.in3.wire : !hw.inout<i8>
   %xyz.out4 = hw.instance "xyz" @Simple(%0, %1, %2) : (i4, i2, i8) -> i4
   %3 = comb.concat %c0_i2, %u2 : (i2, i2) -> i4
-  sv.connect %.in1.wire, %3 : i4
-  sv.connect %.in2.wire, %u2 : i2
-  sv.connect %.in3.wire, %s8 : i8
+  sv.assign %.in1.wire, %3 : i4
+  sv.assign %.in2.wire, %u2 : i2
+  sv.assign %.in3.wire, %s8 : i8
   %.in.wire = sv.wire  : !hw.inout<i1>
   %4 = sv.read_inout %.in.wire : !hw.inout<i1>
   %myext.out = hw.instance "myext" @MyParameterizedExtModule(%4) {parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i1) -> i8
-  sv.connect %.in.wire, %reset : i1
+  sv.assign %.in.wire, %reset : i1
   hw.output
 }
 
 // CHECK-LABEL:  hw.module @instance_cyclic(%arg0: i2, %arg1: i2) {
-// CHECK-NEXT:    %myext.out = hw.instance "myext" @MyParameterizedExtModule(%0) 
+// CHECK-NEXT:    %myext.out = hw.instance "myext" @MyParameterizedExtModule(%0)
 // CHECK-NEXT:    %0 = comb.extract %myext.out from 2 : (i8) -> i1
 // CHECK-NEXT:    hw.output
 // CHECK-NEXT:  }
@@ -1035,11 +1035,11 @@ hw.module @instance_cyclic(%arg0: i2, %arg1: i2) {
   %0 = sv.read_inout %.in.wire : !hw.inout<i1>
   %myext.out = hw.instance "myext" @MyParameterizedExtModule(%0) {parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i1) -> i8
   %1 = comb.extract %myext.out from 2 : (i8) -> i1
-  sv.connect %.in.wire, %1 : i1
+  sv.assign %.in.wire, %1 : i1
   hw.output
 }
 
-  hw.module.extern @ZeroWidthPorts(%inA: i4) -> (%outa: i4) 
+  hw.module.extern @ZeroWidthPorts(%inA: i4) -> (%outa: i4)
 // CHECK-LABEL:  hw.module @ZeroWidthInstance(%iA: i4) -> (%oA: i4) {
 // CHECK-NEXT:    %myinst.outa = hw.instance "myinst" @ZeroWidthPorts(%iA) : (i4) -> i4
 // CHECK-NEXT:    hw.output %myinst.outa : i4
@@ -1048,7 +1048,7 @@ hw.module @ZeroWidthInstance(%iA: i4) -> (%oA: i4) {
   %.inA.wire = sv.wire  : !hw.inout<i4>
   %0 = sv.read_inout %.inA.wire : !hw.inout<i4>
   %myinst.outa = hw.instance "myinst" @ZeroWidthPorts(%0) : (i4) -> i4
-  sv.connect %.inA.wire, %iA : i4
+  sv.assign %.inA.wire, %iA : i4
   hw.output %myinst.outa : i4
 }
 
@@ -1095,33 +1095,33 @@ hw.module @unintializedWire(%clock1: i1, %clock2: i1, %inpred: i1, %indata: i42)
   %_M.ro_data_0, %_M.rw_rdata_0 = hw.instance "_M" @FIRRTLMem_1_1_1_42_12_0_1_0(%0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13) : (i1, i1, i4, i1, i1, i4, i1, i1, i42, i1, i1, i4, i1, i42) -> (i42, i42)
   %14 = sv.read_inout %.read.addr.wire : !hw.inout<i4>
   %c0_i4 = hw.constant 0 : i4
-  sv.connect %.read.addr.wire, %c0_i4 : i4
+  sv.assign %.read.addr.wire, %c0_i4 : i4
   %15 = sv.read_inout %.read.en.wire : !hw.inout<i1>
-  sv.connect %.read.en.wire, %true : i1
+  sv.assign %.read.en.wire, %true : i1
   %16 = sv.read_inout %.read.clk.wire : !hw.inout<i1>
-  sv.connect %.read.clk.wire, %clock1 : i1
+  sv.assign %.read.clk.wire, %clock1 : i1
   %17 = sv.read_inout %.rw.addr.wire : !hw.inout<i4>
   %c0_i4_0 = hw.constant 0 : i4
-  sv.connect %.rw.addr.wire, %c0_i4_0 : i4
+  sv.assign %.rw.addr.wire, %c0_i4_0 : i4
   %18 = sv.read_inout %.rw.en.wire : !hw.inout<i1>
-  sv.connect %.rw.en.wire, %true : i1
+  sv.assign %.rw.en.wire, %true : i1
   %19 = sv.read_inout %.rw.clk.wire : !hw.inout<i1>
-  sv.connect %.rw.clk.wire, %clock1 : i1
+  sv.assign %.rw.clk.wire, %clock1 : i1
   %20 = sv.read_inout %.rw.wmask.wire : !hw.inout<i1>
-  sv.connect %.rw.wmask.wire, %true : i1
+  sv.assign %.rw.wmask.wire, %true : i1
   %21 = sv.read_inout %.rw.wmode.wire : !hw.inout<i1>
-  sv.connect %.rw.wmode.wire, %true : i1
+  sv.assign %.rw.wmode.wire, %true : i1
   %22 = sv.read_inout %.write.addr.wire : !hw.inout<i4>
   %c0_i4_1 = hw.constant 0 : i4
-  sv.connect %.write.addr.wire, %c0_i4_1 : i4
+  sv.assign %.write.addr.wire, %c0_i4_1 : i4
   %23 = sv.read_inout %.write.en.wire : !hw.inout<i1>
-  sv.connect %.write.en.wire, %inpred : i1
+  sv.assign %.write.en.wire, %inpred : i1
   %24 = sv.read_inout %.write.clk.wire : !hw.inout<i1>
-  sv.connect %.write.clk.wire, %clock2 : i1
+  sv.assign %.write.clk.wire, %clock2 : i1
   %25 = sv.read_inout %.write.data.wire : !hw.inout<i42>
-  sv.connect %.write.data.wire, %indata : i42
+  sv.assign %.write.data.wire, %indata : i42
   %26 = sv.read_inout %.write.mask.wire : !hw.inout<i1>
-  sv.connect %.write.mask.wire, %true : i1
+  sv.assign %.write.mask.wire, %true : i1
   hw.output %_M.ro_data_0, %_M.rw_rdata_0 : i42, i42
 }
 
@@ -1145,11 +1145,11 @@ hw.module @IncompleteRead(%clock1: i1) {
   %_M.ro_data_0 = hw.instance "_M" @FIRRTLMem_1_0_0_42_12_0_1_0(%0, %1, %2) : (i1, i1, i4) -> i42
   %3 = sv.read_inout %.read.addr.wire : !hw.inout<i4>
   %c0_i4 = hw.constant 0 : i4
-  sv.connect %.read.addr.wire, %c0_i4 : i4
+  sv.assign %.read.addr.wire, %c0_i4 : i4
   %4 = sv.read_inout %.read.en.wire : !hw.inout<i1>
-  sv.connect %.read.en.wire, %true : i1
+  sv.assign %.read.en.wire, %true : i1
   %5 = sv.read_inout %.read.clk.wire : !hw.inout<i1>
-  sv.connect %.read.clk.wire, %clock1 : i1
+  sv.assign %.read.clk.wire, %clock1 : i1
   hw.output
 }
 
@@ -1165,10 +1165,10 @@ hw.module @foo() {
   %0 = sv.read_inout %.io_cpu_flush.wire : !hw.inout<i1>
   hw.instance "fetch" @bar(%0) : (i1) -> ()
   %1 = sv.read_inout %io_cpu_flush.wire : !hw.inout<i1>
-  sv.connect %.io_cpu_flush.wire, %1 : i1
+  sv.assign %.io_cpu_flush.wire, %1 : i1
   %2 = sv.read_inout %io_cpu_flush.wire : !hw.inout<i1>
   %hits_1_7 = sv.wire  : !hw.inout<i1>
-  sv.connect %hits_1_7, %2 : i1
+  sv.assign %hits_1_7, %2 : i1
   hw.output
 }
 
@@ -1186,11 +1186,11 @@ hw.module @MemDepth1(%clock: i1, %en: i1, %addr: i1) -> (%data: i32) {
   %2 = sv.read_inout %.load0.addr.wire : !hw.inout<i1>
   %mem0.ro_data_0 = hw.instance "mem0" @FIRRTLMem_1_0_0_32_1_0_1_1(%0, %1, %2) : (i1, i1, i1) -> i32
   %3 = sv.read_inout %.load0.clk.wire : !hw.inout<i1>
-  sv.connect %.load0.clk.wire, %clock : i1
+  sv.assign %.load0.clk.wire, %clock : i1
   %4 = sv.read_inout %.load0.addr.wire : !hw.inout<i1>
-  sv.connect %.load0.addr.wire, %addr : i1
+  sv.assign %.load0.addr.wire, %addr : i1
   %5 = sv.read_inout %.load0.en.wire : !hw.inout<i1>
-  sv.connect %.load0.en.wire, %en : i1
+  sv.assign %.load0.en.wire, %en : i1
   hw.output %mem0.ro_data_0 : i32
 }
 

@@ -188,7 +188,7 @@ def ModportType : SVType<"Modport"> {
 // Other operations
 //===----------------------------------------------------------------------===//
 
-def InterfaceInstanceOp : SVOp<"interface.instance", [NoSideEffect]> {
+def InterfaceInstanceOp : SVOp<"interface.instance", []> {
   let summary = "Instantiate an interface";
   let description = [{
     Use this to declare an instance of an interface:
@@ -197,15 +197,27 @@ def InterfaceInstanceOp : SVOp<"interface.instance", [NoSideEffect]> {
     ```
   }];
 
-  let arguments = (ins);
+  let arguments = (ins StrAttr:$name,
+                       OptionalAttr<SymbolNameAttr>:$sym_name);
   let results = (outs InterfaceType : $result);
 
-  let assemblyFormat = "attr-dict `:` type($result)";
+  let assemblyFormat =
+    "(`sym` $sym_name^)? custom<ImplicitSSAName>(attr-dict) `:` type($result)";
+
+  let builders = [
+    OpBuilder<(ins "::mlir::Type":$result), [{
+      return build($_builder, $_state, result, None);
+    }]>
+  ];
 
   let verifier = "return ::verifyInterfaceInstanceOp(*this);";
 
   let extraClassDeclaration = [{
     InterfaceType getInterfaceType() { return getType().cast<InterfaceType>(); }
+
+    /// Lookup the interface that this is an instance of.  This returns null on
+    /// invalid IR.
+    Operation *getReferencedInterface();
   }];
 }
 
