@@ -270,6 +270,7 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
   if (!(numWires == 1) || !(numControl == 1))
     return op.emitOpError() << "requires exactly one of each: "
                                "'calyx.wires', 'calyx.control'.";
+
   // Verify the component has the following ports.
   // TODO(Calyx): Eventually, we want to use either types for these,
   //  e.g. `calyx.clk_type` or attributes for passes.
