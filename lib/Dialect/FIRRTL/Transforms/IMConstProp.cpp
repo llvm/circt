@@ -525,6 +525,8 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
   // Driving an instance argument port drives the corresponding argument of the
   // referenced module.
   if (auto instance = dest.getDefiningOp<InstanceOp>()) {
+    // Update the dest, when its an instance op.
+    mergeLatticeValue(connect.dest(), srcValue);
     auto module =
         dyn_cast<FModuleOp>(instanceGraph->getReferencedModule(instance));
     if (!module)
