@@ -26,14 +26,16 @@ typedef enum {
   CIRCT_QUERY_PORT_TYPE_OUTPUT  = 4,
 } CirctQueryPortType;
 
-typedef circt::query::Range        CirctQueryWidthRange;
-typedef circt::query::ValueType    CirctQueryValueType;
+typedef circt::query::Range       *CirctQueryWidthRange;
+typedef circt::query::ValueType   *CirctQueryValueType;
 typedef circt::query::FilterNode  *CirctQueryFilterNode;
 typedef circt::query::Filter      *CirctQueryFilter;
 
 CirctQueryWidthRange CirctQueryNewWidthRange(size_t start, size_t end);
 CirctQueryValueType CirctQueryNewValueType(CirctQueryValueTypeType typeType, CirctQueryPortType port, size_t count, ...);
 CirctQueryValueType CirctQueryNewValueTypeArray(CirctQueryValueTypeType typeType, CirctQueryPortType port, size_t count, CirctQueryWidthRange ranges[]);
+void CirctQueryDeleteValueType(CirctQueryValueType type);
+void CirctQueryDeleteWidthRange(CirctQueryWidthRange range);
 
 CirctQueryFilterNode CirctQueryNewGlobFilter();
 CirctQueryFilterNode CirctQueryNewGlobFilterWithType(CirctQueryValueType type);

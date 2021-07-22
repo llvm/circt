@@ -127,8 +127,6 @@ public:
 
   size_t size() { return nodes.size(); }
 
-  static Filter newFilter(size_t count, FilterNode nodes[]);
-
 private:
   std::vector<FilterNode> nodes;
 
@@ -137,7 +135,7 @@ private:
 };
 
 // TODO: filterAsIterator()
-std::vector<mlir::Operation *> filterAsVector(Filter &filter, Operation *root);
+std::vector<Operation *> filterAsVector(Filter &filter, Operation *root);
 
 } /* namespace query */
 } /* namespace circt */

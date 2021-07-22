@@ -18,7 +18,7 @@ using namespace circt;
 using namespace query;
 
 CirctQueryWidthRange CirctQueryNewWidthRange(size_t start, size_t end) {
-  return Range(start, end);
+  return new Range(start, end);
 }
 
 CirctQueryValueType CirctQueryNewValueType(CirctQueryValueTypeType typeType, CirctQueryPortType port, size_t count, ...) {
@@ -26,20 +26,28 @@ CirctQueryValueType CirctQueryNewValueType(CirctQueryValueTypeType typeType, Cir
   va_start(va, count);
   auto widths = std::vector<Range>();
   for (size_t i = 0; i < count; i++) {
-    widths.push_back(*va_arg(va, CirctQueryWidthRange *));
+    widths.push_back(*va_arg(va, CirctQueryWidthRange));
   }
   va_end(va);
 
-  return ValueType((ValueTypeType) typeType, (PortType) port, Ranges(widths));
+  return new ValueType((ValueTypeType) typeType, (PortType) port, Ranges(widths));
 }
 
 CirctQueryValueType CirctQueryNewValueTypeArray(CirctQueryValueTypeType typeType, CirctQueryPortType port, size_t count, CirctQueryWidthRange ranges[]) {
   auto widths = std::vector<Range>();
   for (size_t i = 0; i < count; i++) {
-    widths.push_back(ranges[i]);
+    widths.push_back(*ranges[i]);
   }
 
-  return ValueType((ValueTypeType) typeType, (PortType) port, Ranges(widths));
+  return new ValueType((ValueTypeType) typeType, (PortType) port, Ranges(widths));
+}
+
+void CirctQueryDeleteValueType(CirctQueryValueType type) {
+  delete type;
+}
+
+void CirctQueryDeleteWidthRange(CirctQueryWidthRange range) {
+  delete range;
 }
 
 CirctQueryFilterNode CirctQueryNewGlobFilter() {
@@ -50,7 +58,7 @@ CirctQueryFilterNode CirctQueryNewGlobFilter() {
 
 CirctQueryFilterNode CirctQueryNewGlobFilterWithType(CirctQueryValueType type) {
   CirctQueryFilterNode node = new FilterNode;
-  *node = FilterNode::newGlob(type);
+  *node = FilterNode::newGlob(*type);
   return node;
 }
 
@@ -70,7 +78,7 @@ CirctQueryFilterNode CirctQueryNewLiteralFilter(char *literal) {
 CirctQueryFilterNode CirctQueryNewLiteralFilterWithType(char *literal, CirctQueryValueType type) {
   CirctQueryFilterNode node = new FilterNode;
   auto s = std::string(literal);
-  *node = FilterNode::newLiteral(s, type);
+  *node = FilterNode::newLiteral(s, *type);
   return node;
 }
 
@@ -84,7 +92,7 @@ CirctQueryFilterNode CirctQueryNewRegexFilter(char *regex) {
 CirctQueryFilterNode CirctQueryNewRegexFilterWithType(char *regex, CirctQueryValueType type) {
   CirctQueryFilterNode node = new FilterNode;
   auto s = std::string(regex);
-  *node = FilterNode::newRegex(s, type);
+  *node = FilterNode::newRegex(s, *type);
   return node;
 }
 
@@ -93,29 +101,25 @@ void CirctQueryDeleteFilterNode(CirctQueryFilterNode node) {
 }
 
 CirctQueryFilter CirctQueryNewFilterArray(size_t count, CirctQueryFilterNode *nodes) {
-  FilterNode rawNodes[count];
-
+  auto ns = std::vector<FilterNode>();
   for (size_t i = 0; i < count; i++) {
-    rawNodes[i] = *nodes[i];
+    ns.push_back(*nodes[i]);
   }
-
-  CirctQueryFilter filter = new Filter;
-  *filter = Filter::newFilter(count, rawNodes);
+  CirctQueryFilter filter = new Filter(ns);
   return filter;
 }
 
 CirctQueryFilter CirctQueryNewFilter(size_t count, ...) {
   va_list va;
   va_start(va, count);
-  FilterNode nodes[count];
 
+  auto ns = std::vector<FilterNode>();
   for (size_t i = 0; i < count; i++) {
     auto *node = va_arg(va, CirctQueryFilterNode);
-    nodes[i] = *node;
+    ns.push_back(*node);
   }
 
-  CirctQueryFilter filter = new Filter;
-  *filter = Filter::newFilter(count, nodes);
+  CirctQueryFilter filter = new Filter(ns);
   va_end(va);
   return filter;
 }

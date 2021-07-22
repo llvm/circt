@@ -108,14 +108,6 @@ FilterNode FilterNode::newRegex(std::string &regex, ValueType type) {
   return f;
 }
 
-Filter Filter::newFilter(size_t count, FilterNode nodes[]) {
-  Filter f;
-  for (size_t i = 0; i < count; i++) {
-    f.nodes.push_back(nodes[i]);
-  }
-  return f;
-}
-
 void matchAndAppend(FilterNode &node, Operation *module, std::vector<std::pair<Operation *, size_t>> &opStack, size_t i, std::string &name, bool &match) {
   switch (node.tag) {
     case FilterType::UNSET:
@@ -141,7 +133,7 @@ void matchAndAppend(FilterNode &node, Operation *module, std::vector<std::pair<O
   }
 }
 
-std::vector<mlir::Operation *> filterAsVector(Filter &filter, Operation *root) {
+std::vector<Operation *> filterAsVector(Filter &filter, Operation *root) {
   std::vector<mlir::Operation *> filtered;
   std::vector<std::pair<mlir::Operation *, size_t>> opStack;
 
