@@ -267,7 +267,7 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
     else if (isa<ControlOp>(bodyOp))
       ++numControl;
   }
-  if (!(numWires == 1 && numControl == 1))
+  if (!(numWires == 1) || !(numControl == 1))
     return op.emitOpError() << "requires exactly one of each: "
                                "'calyx.wires', 'calyx.control'.";
 
@@ -276,7 +276,7 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
   //  e.g. `calyx.clk_type` or attributes for passes.
   bool go = false, clk = false, reset = false, done = false;
   SmallVector<ComponentPortInfo> componentPorts = getComponentPortInfo(op);
-  for (auto port : componentPorts) {
+  for (auto&& port : componentPorts) {
     if (!port.type.isInteger(1))
       // Each of the ports has bit width 1.
       continue;
