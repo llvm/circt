@@ -4,6 +4,8 @@
 
 include(AddMLIRPython)
 add_custom_target(CIRCTBindingsPython)
+add_dependencies(CIRCTBindingsPython MLIRBindingsPythonExtension)
+add_dependencies(CIRCTBindingsPython MLIRBindingsPythonSources)
 
 ################################################################################
 # Build native Python extension
@@ -25,6 +27,7 @@ add_mlir_python_extension(CIRCTBindingsPythonExtension _circt
     CIRCTCAPISeq
     CIRCTCAPISV
     CIRCTCAPIExportVerilog
+    MLIRPythonCAPI
 )
 add_dependencies(CIRCTBindingsPython CIRCTBindingsPythonExtension)
 

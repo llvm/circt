@@ -22,6 +22,7 @@
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BlockAndValueMapping.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -2772,7 +2773,7 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
 
   LLVMConversionTarget target(getContext());
   target.addIllegalOp<InstOp>();
-  target.addLegalOp<LLVM::DialectCastOp>();
+  target.addLegalOp<UnrealizedConversionCastOp>();
 
   // Apply the partial conversion.
   if (failed(
@@ -2787,7 +2788,7 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
 
   target.addLegalDialect<LLVM::LLVMDialect>();
   target.addLegalOp<ModuleOp>();
-  target.addIllegalOp<LLVM::DialectCastOp>();
+  target.addIllegalOp<UnrealizedConversionCastOp>();
 
   // Apply the full conversion.
   if (failed(applyFullConversion(getOperation(), target, std::move(patterns))))
