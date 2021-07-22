@@ -89,7 +89,6 @@ static bool peelType(Type type, SmallVectorImpl<FlatBundleFieldEntry> &fields) {
       })
       .Case<FVectorType>([&](auto vector) {
         // Increment the field ID to point to the first element.
-        auto width = vector.getElementType().getMaxFieldID() + 1;
         for (size_t i = 0, e = vector.getNumElements(); i != e; ++i) {
           fields.emplace_back(vector.getElementType(), i, vector.getFieldID(i),
                               "_" + std::to_string(i), false);
