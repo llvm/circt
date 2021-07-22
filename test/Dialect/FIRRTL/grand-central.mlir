@@ -173,7 +173,7 @@ firrtl.circuit "BindInterfaceTest"  attributes {
   firrtl.module @BindInterfaceTest(
     in %a: !firrtl.uint<8> {
       firrtl.annotations = [
-        #firrtl.subAnno<fieldID = [0, 0], {
+        #firrtl.subAnno<fieldID = 0, {
           class = "sifive.enterprise.grandcentral.AugmentedGroundType",
           defName = "InterfaceName",
           name = "_a"}>
