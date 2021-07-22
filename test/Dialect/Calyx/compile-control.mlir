@@ -10,8 +10,6 @@ calyx.program {
   // CHECK-NEXT:  %fsm.in, %fsm.write_en, %fsm.clk, %fsm.reset, %fsm.out, %fsm.done = calyx.register "fsm" : i2
   calyx.component @main(%go : i1, %reset : i1, %clk : i1) -> (%done: i1) {
     %z.go, %z.reset, %z.clk, %z.flag, %z.done = calyx.cell "z" @Z : i1, i1, i1, i1, i1
-
-    // CHECK-LABEL: calyx.wires
     calyx.wires {
       %undef = calyx.undef : i1
 
