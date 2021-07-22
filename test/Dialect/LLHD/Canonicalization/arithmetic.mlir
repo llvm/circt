@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -simple-canonicalizer | FileCheck %s
+// RUN: circt-opt %s -canonicalize='top-down=true region-simplify=true' | FileCheck %s
 
 // CHECK-LABEL: @check_neg_folding
 func @check_neg_folding() -> (i16) {
