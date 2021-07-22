@@ -267,20 +267,20 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
     else if (isa<ControlOp>(bodyOp))
       ++numControl;
   }
-  if (!(numWires == 1 && numControl == 1))
+  if (!(numWires == 1) || !(numControl == 1))
     return op.emitOpError() << "requires exactly one of each: "
                                "'calyx.wires', 'calyx.control'.";
 
-  // Verify the component has the following ports.
+  // TODO(Calyx): Eventually, we want to use either types for these,
+  //  e.g. `calyx.clk_type` or attributes for passes.
   bool go = false, clk = false, reset = false, done = false;
   SmallVector<ComponentPortInfo> componentPorts = getComponentPortInfo(op);
-  for (auto port : componentPorts) {
+  for (auto&& port : componentPorts) {
     if (!port.type.isInteger(1))
       // Each of the ports has bit width 1.
       continue;
 
     StringRef portName = port.name.getValue();
-
     if (port.direction == PortDirection::OUTPUT) {
       done |= (portName == "done");
     } else {
@@ -293,54 +293,6 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
   }
   return op->emitOpError() << "does not have required 1-bit input ports `go`, "
                               "`clk`, `reset`, and output port `done`";
-}
-
-void ComponentOp::build(OpBuilder &builder, OperationState &result,
-                        StringAttr name, ArrayRef<ComponentPortInfo> ports) {
-  using namespace mlir::function_like_impl;
-
-  result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
-
-  SmallVector<Type, 4> inPortTypes, outPortTypes;
-  SmallVector<Attribute, 4> inPortNames, outPortNames;
-
-  for (auto &&port : ports) {
-    if (port.direction == PortDirection::INPUT) {
-      inPortTypes.push_back(port.type);
-      inPortNames.push_back(port.name);
-    } else {
-      outPortTypes.push_back(port.type);
-      outPortNames.push_back(port.name);
-    }
-  }
-
-  // Build the function type of the component.
-  auto functionType = builder.getFunctionType(inPortTypes, outPortTypes);
-  result.addAttribute(getTypeAttrName(), TypeAttr::get(functionType));
-
-  // Record the port names of the component.
-  result.addAttribute("inPortNames", builder.getArrayAttr(inPortNames));
-  result.addAttribute("outPortNames", builder.getArrayAttr(outPortNames));
-
-  // Create a single-blocked region.
-  result.addRegion();
-  Region *regionBody = result.regions[0].get();
-  Block *block = new Block();
-  regionBody->push_back(block);
-
-  // Add input ports to the body block.
-  for (auto port : ports) {
-    if (port.direction == PortDirection::OUTPUT)
-      continue;
-    block->addArgument(port.type);
-  }
-
-  // Insert the WiresOp and ControlOp.
-  auto ip = builder.saveInsertionPoint();
-  builder.setInsertionPointToStart(block);
-  builder.create<WiresOp>(result.location);
-  builder.create<ControlOp>(result.location);
-  builder.restoreInsertionPoint(ip);
 }
 
 void ComponentOp::build(OpBuilder &builder, OperationState &result,

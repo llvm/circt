@@ -30,6 +30,10 @@ using mlir::RegionRange;
 using namespace circt;
 using namespace firrtl;
 
+//===----------------------------------------------------------------------===//
+// Utilities
+//===----------------------------------------------------------------------===//
+
 /// Remove elements at the specified indices from the input array, returning the
 /// elements not mentioned.  The indices array is expected to be sorted and
 /// unique.
@@ -373,6 +377,66 @@ Direction firrtl::getModulePortDirection(Operation *op, size_t portIndex) {
 // Return the port with the specified name.
 BlockArgument FModuleOp::getPortArgument(size_t portNumber) {
   return getBodyBlock()->getArgument(portNumber);
+}
+
+/// Inserts the given ports. The insertion indices are expected to be in order.
+/// Insertion occurs in-order, such that ports with the same insertion index
+/// appear in the module in the same order they appeared in the list.
+void FModuleOp::insertPorts(
+    ArrayRef<std::pair<unsigned, ModulePortInfo>> ports) {
+  if (ports.empty())
+    return;
+  unsigned oldNumArgs = getNumArguments();
+  unsigned newNumArgs = oldNumArgs + ports.size();
+
+  // Add direction markers and names for new ports.
+  SmallVector<Direction> existingDirections = direction::unpackAttribute(*this);
+  ArrayRef<Attribute> existingNames = this->portNames().getValue();
+  assert(existingDirections.size() == oldNumArgs);
+  assert(existingNames.size() == oldNumArgs);
+
+  SmallVector<Direction> newDirections;
+  SmallVector<Attribute> newNames;
+  newDirections.reserve(newNumArgs);
+  newNames.reserve(newNumArgs);
+
+  unsigned oldIdx = 0;
+  auto migrateOldPorts = [&](unsigned untilOldIdx) {
+    while (oldIdx < oldNumArgs && oldIdx < untilOldIdx) {
+      newDirections.push_back(existingDirections[oldIdx]);
+      newNames.push_back(existingNames[oldIdx]);
+      ++oldIdx;
+    }
+  };
+  for (auto &port : ports) {
+    migrateOldPorts(port.first);
+    newDirections.push_back(port.second.direction);
+    newNames.push_back(port.second.name);
+  }
+  migrateOldPorts(oldNumArgs);
+
+  // Apply these changed markers.
+  (*this)->setAttr(direction::attrKey,
+                   direction::packAttribute(newDirections, getContext()));
+  (*this)->setAttr("portNames", ArrayAttr::get(getContext(), newNames));
+
+  // Insert the common function-like stuff, including the block arguments, and
+  // argument attributes.
+  SmallVector<unsigned> argIndices;
+  SmallVector<Type> argTypes;
+  SmallVector<DictionaryAttr> argAttrs;
+  SmallVector<Optional<Location>> argLocs;
+  argIndices.reserve(ports.size());
+  argTypes.reserve(ports.size());
+  argAttrs.reserve(ports.size());
+  argLocs.reserve(ports.size());
+  for (auto &port : ports) {
+    argIndices.push_back(port.first);
+    argTypes.push_back(port.second.type);
+    argAttrs.push_back(port.second.annotations.getArgumentAttrDict());
+    argLocs.push_back(port.second.loc);
+  }
+  insertArguments(argIndices, argTypes, argAttrs, argLocs);
 }
 
 /// Erases the ports listed in `portIndices`.  `portIndices` is expected to

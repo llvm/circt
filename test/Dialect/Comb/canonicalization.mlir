@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -simple-canonicalizer | FileCheck %s
+// RUN: circt-opt %s -canonicalize='top-down=true region-simplify=true' | FileCheck %s
 
 // CHECK-LABEL: @narrowMux
 hw.module @narrowMux(%a: i8, %b: i8, %c: i1) -> (%o: i4) {

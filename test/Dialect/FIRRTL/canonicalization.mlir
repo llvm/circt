@@ -1,4 +1,4 @@
-// RUN: circt-opt -simple-canonicalizer %s | FileCheck %s
+// RUN: circt-opt -canonicalize='top-down=true region-simplify=true' %s | FileCheck %s
 
 firrtl.circuit "Casts" {
 
@@ -1793,6 +1793,21 @@ firrtl.module @dshifts_to_ishifts(in %a_in: !firrtl.sint<58>,
   %c438_ui10 = firrtl.constant 438 : !firrtl.uint<10>
   %2 = firrtl.dshr %c_in, %c438_ui10 : (!firrtl.sint<58>, !firrtl.uint<10>) -> !firrtl.sint<58>
   firrtl.connect %c_out, %2 : !firrtl.sint<58>, !firrtl.sint<58>
+}
+
+// RemoveReset: `firrtl.invalidvalue` reset values should be canonicalized to a
+// reset-less register.
+// CHECK-LABEL: firrtl.module @StripInvalidValueReset
+firrtl.module @StripInvalidValueReset(
+  in %clk: !firrtl.clock,
+  in %rst: !firrtl.uint<1>,
+  in %arst: !firrtl.asyncreset
+) {
+  %invalid_ui42 = firrtl.invalidvalue : !firrtl.uint<42>
+  // CHECK: %0 = firrtl.reg %clk : (!firrtl.clock) -> !firrtl.uint<42>
+  // CHECK: %1 = firrtl.reg %clk : (!firrtl.clock) -> !firrtl.uint<42>
+  %0 = firrtl.regreset %clk, %rst, %invalid_ui42 : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<42>) -> !firrtl.uint<42>
+  %1 = firrtl.regreset %clk, %arst, %invalid_ui42 : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<42>) -> !firrtl.uint<42>
 }
 
 }

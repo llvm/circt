@@ -1469,7 +1469,8 @@ void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
 void RegResetOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
   results.insert<patterns::RegresetWithZeroReset,
-                 patterns::RegresetWithInvalidReset>(context);
+                 patterns::RegresetWithInvalidReset,
+                 patterns::RegresetWithInvalidResetValue>(context);
 }
 
 LogicalResult MemOp::canonicalize(MemOp op, PatternRewriter &rewriter) {
