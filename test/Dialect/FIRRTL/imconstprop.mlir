@@ -296,3 +296,25 @@ firrtl.circuit "InstanceOut2"   {
     firrtl.connect %b, %w : !firrtl.uint<1>, !firrtl.uint<1>
   }  
 }
+firrtl.circuit "invalidReg1"   {
+  // CHECK_LABEL: @invalidReg1
+  firrtl.module @invalidReg1(in %clock: !firrtl.clock, out %a: !firrtl.uint<1>) {
+    %foobar = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+      //CHECK: %0 = firrtl.not %foobar : (!firrtl.uint<1>) -> !firrtl.uint<1>
+      %0 = firrtl.not %foobar : (!firrtl.uint<1>) -> !firrtl.uint<1>
+      //CHECK: firrtl.connect %foobar, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+      firrtl.connect %foobar, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+      //CHECK: firrtl.connect %a, %foobar : !firrtl.uint<1>, !firrtl.uint<1>
+      firrtl.connect %a, %foobar : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+firrtl.circuit "invalidReg2"   {
+  // CHECK_LABEL: @invalidReg2
+  firrtl.module @invalidReg2(in %clock: !firrtl.clock, out %a: !firrtl.uint<1>) {
+    %foobar = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+    firrtl.connect %foobar, %foobar : !firrtl.uint<1>, !firrtl.uint<1>
+    //CHECK: %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
+    //CHECK: firrtl.connect %a, %invalid_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %a, %foobar : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
