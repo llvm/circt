@@ -197,8 +197,10 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
           continue;
         }
 
-        // Handle `data` and `mask` sub-fields.
-        if (targetIndex >= 3) {
+        // Handle `data`, `rdata`, `wdata`, and `mask` sub-fields.
+        auto portKind = newMem.getPortKind(portIdx);
+        if ((portKind == MemOp::PortKind::ReadWrite && targetIndex > 3) ||
+            (portKind != MemOp::PortKind::ReadWrite && targetIndex > 2)) {
           // Check whether the annotation falls into the range of the current
           // field. Note that the `field` here is peeled from the `data`
           // sub-field of the memory port, thus we need to add the fieldID of

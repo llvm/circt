@@ -1069,7 +1069,9 @@ firrtl.circuit "TopLevel" {
 // circuit Foo: %[[{"a":null,"target":"~Foo|Foo>bar.r"},
 //                 {"b":null,"target":"~Foo|Foo>bar.r.data"},
 //                 {"c":null,"target":"~Foo|Foo>bar.w.en"},
-//                 {"d":null,"target":"~Foo|Foo>bar.w.data.qux"}]]
+//                 {"d":null,"target":"~Foo|Foo>bar.w.data.qux"},
+//                 {"e":null,"target":"~Foo|Foo>bar.rw.wmode"}
+//                 {"f":null,"target":"~Foo|Foo>bar.rw.wmask.baz"}]]
 
 // CHECK-LABEL: firrtl.module @Foo4
   firrtl.module @Foo4() {
@@ -1077,19 +1079,23 @@ firrtl.circuit "TopLevel" {
     // CHECK-SAME: portAnnotations = [
     // CHECK-SAME: [{a}, #firrtl.subAnno<fieldID = 4, {b}>],
     // CHECK-SAME: [#firrtl.subAnno<fieldID = 2, {c}>]
+    // CHECK-SAME: [#firrtl.subAnno<fieldID = 4, {e}>, #firrtl.subAnno<fieldID = 7, {f}>]
 
     // CHECK: firrtl.mem
     // CHECK-SAME: portAnnotations = [
     // CHECK-SAME: [{a}, #firrtl.subAnno<fieldID = 4, {b}>],
     // CHECK-SAME: [#firrtl.subAnno<fieldID = 2, {c}>, #firrtl.subAnno<fieldID = 4, {d}>]
-    %bar_r, %bar_w = firrtl.mem Undefined  {depth = 16 : i64, name = "bar",
+    // CHECK-SAME: [#firrtl.subAnno<fieldID = 4, {e}>]
+    %bar_r, %bar_w, %bar_rw = firrtl.mem Undefined  {depth = 16 : i64, name = "bar",
         portAnnotations = [
           [{a}, #firrtl.subAnno<fieldID = 4, {b}>],
-          [#firrtl.subAnno<fieldID = 2, {c}>, #firrtl.subAnno<fieldID = 6, {d}>]
+          [#firrtl.subAnno<fieldID = 2, {c}>, #firrtl.subAnno<fieldID = 6, {d}>],
+          [#firrtl.subAnno<fieldID = 4, {e}>, #firrtl.subAnno<fieldID = 12, {f}>]
         ],
-        portNames = ["r", "w"], readLatency = 0 : i32, writeLatency = 1 : i32} :
+        portNames = ["r", "w", "rw"], readLatency = 0 : i32, writeLatency = 1 : i32} :
         !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<baz: uint<8>, qux: uint<8>>>,
-        !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<baz: uint<8>, qux: uint<8>>, mask: bundle<baz: uint<1>, qux: uint<1>>>
+        !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<baz: uint<8>, qux: uint<8>>, mask: bundle<baz: uint<1>, qux: uint<1>>>,
+        !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata flip: bundle<baz: uint<8>, qux: uint<8>>, wdata: bundle<baz: uint<8>, qux: uint<8>>, wmask: bundle<baz: uint<1>, qux: uint<1>>>
   }
 
 // Test that partial connects can extend
