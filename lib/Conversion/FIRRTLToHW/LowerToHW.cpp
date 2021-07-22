@@ -355,7 +355,7 @@ void FIRRTLModuleLowering::runOnOperation() {
       continue;
     }
 
-    // Anything which is _not_ a module or an extmoulde is treated carefully.
+    // Anything which is _not_ a module or an extmodule is treated carefully.
     // By default, this produces an error.
     TypeSwitch<Operation *>(&op)
         // GrandCentral can generate interfaces.  These need to be let through.
