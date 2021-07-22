@@ -10,10 +10,11 @@ calyx.program {
   // CHECK-NEXT:  %fsm.in, %fsm.write_en, %fsm.clk, %fsm.reset, %fsm.out, %fsm.done = calyx.register "fsm" : i2
   calyx.component @main(%go : i1, %reset : i1, %clk : i1) -> (%done: i1) {
     %z.go, %z.reset, %z.clk, %z.flag, %z.done = calyx.cell "z" @Z : i1, i1, i1, i1, i1
+
     calyx.wires {
       %undef = calyx.undef : i1
 
-      // CHECK-NEXT:  %true = hw.constant true
+      // CHECK:       %true = hw.constant true
       // CHECK-NEXT:  %c0_i2 = hw.constant 0 : i2
       // CHECK-NEXT:  %0 = comb.icmp eq %fsm.out, %c0_i2 : i2
       // CHECK-NEXT:  %1 = comb.xor %z.done, %true : i1
