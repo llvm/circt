@@ -124,6 +124,23 @@ CirctQueryFilter CirctQueryNewFilter(size_t count, ...) {
   return filter;
 }
 
+CirctQueryFilterResult CirctQueryFilterFromRoot(CirctQueryFilter filter, MlirOperation root) {
+  auto *result = new std::vector<Operation *>(filterAsVector(*filter, (Operation *) root.ptr));
+  return result;
+}
+
+size_t CirctQueryFilterResultSize(CirctQueryFilterResult result) {
+  return result->size();
+}
+
+MlirOperation CirctQueryGetFromFilterResult(CirctQueryFilterResult result, size_t i) {
+  return { (*result)[i] };
+}
+
+void CirctQueryDeleteFilterResult(CirctQueryFilterResult result) {
+  delete result;
+}
+
 void CirctQueryDeleteFilter(CirctQueryFilter filter) {
   delete filter;
 }
