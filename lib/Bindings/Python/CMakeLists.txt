@@ -5,12 +5,6 @@
 include(AddMLIRPython)
 add_custom_target(CIRCTBindingsPython)
 
-include_directories(
-  "${MLIR_SOURCE_DIR}/lib/Bindings/Python"
-  "${MLIR_SOURCE_DIR}/python")
-add_dependencies(CIRCTBindingsPython MLIRBindingsPythonExtension)
-add_dependencies(CIRCTBindingsPython MLIRBindingsPythonSources)
-
 ################################################################################
 # Build native Python extension
 ################################################################################
