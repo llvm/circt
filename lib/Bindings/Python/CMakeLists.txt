@@ -25,6 +25,7 @@ add_mlir_python_extension(CIRCTBindingsPythonExtension _circt
     CIRCTCAPISeq
     CIRCTCAPISV
     CIRCTCAPIExportVerilog
+    MLIRPythonCAPI
 )
 add_dependencies(CIRCTBindingsPython CIRCTBindingsPythonExtension)
 
