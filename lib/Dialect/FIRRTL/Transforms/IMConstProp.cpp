@@ -367,9 +367,6 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
     return; // Already executable.
 
   for (auto &op : *block) {
-    // Filter out primitives etc quickly.
-    if (op.getNumOperands() != 0 || isa<RegResetOp>(&op))
-      continue;
 
     // Handle each of the special operations in the firrtl dialect.
     if (isa<WireOp>(op) || isa<RegOp>(op))
@@ -386,10 +383,6 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
       markRegResetOp(regReset);
     else if (auto mem = dyn_cast<MemOp>(op))
       markMemOp(mem);
-    else {
-      for (auto result : op.getResults())
-        markOverdefined(result);
-    }
   }
 }
 
@@ -525,6 +518,8 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
   // Driving an instance argument port drives the corresponding argument of the
   // referenced module.
   if (auto instance = dest.getDefiningOp<InstanceOp>()) {
+    // Update the dest, when its an instance op.
+    mergeLatticeValue(connect.dest(), srcValue);
     auto module =
         dyn_cast<FModuleOp>(instanceGraph->getReferencedModule(instance));
     if (!module)

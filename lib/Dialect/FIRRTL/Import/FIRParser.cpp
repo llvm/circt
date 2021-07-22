@@ -284,8 +284,8 @@ struct FIRParser {
   /// to [4, 6]. The generated field ID range will then be attached to the
   /// firrtl::subAnnotationAttr in order to indicate the applicable fields of an
   /// annotation.
-  Optional<std::pair<unsigned, unsigned>>
-  getFieldIDFromTokens(ArrayAttr tokens, SMLoc loc, Type type);
+  Optional<unsigned> getFieldIDFromTokens(ArrayAttr tokens, SMLoc loc,
+                                          Type type);
 
   /// In the input "annotations", an annotation will have a "target" entry when
   /// it is only applicable to part of what it is attached to. In this method,
@@ -909,15 +909,15 @@ ParseResult FIRParser::parseOptionalRUW(RUWAttr &result) {
 /// [4, 6]. The generated field ID range will then be attached to the
 /// firrtl::subAnnotationAttr in order to indicate the applicable fields of an
 /// annotation.
-Optional<std::pair<unsigned, unsigned>>
-FIRParser::getFieldIDFromTokens(ArrayAttr tokens, SMLoc loc, Type type) {
+Optional<unsigned> FIRParser::getFieldIDFromTokens(ArrayAttr tokens, SMLoc loc,
+                                                   Type type) {
   if (!type)
     return None;
   if (tokens.empty())
-    return {{0, 0}};
+    return 0;
 
   auto currentType = type.cast<FIRRTLType>();
-  unsigned id = 0, idRange = 0;
+  unsigned id = 0;
 
   auto getMessage = [&](unsigned tokenIdx) {
     // Construct a string for error emission.
@@ -956,7 +956,6 @@ FIRParser::getFieldIDFromTokens(ArrayAttr tokens, SMLoc loc, Type type) {
 
       id += bundleType.getFieldID(index.getValue());
       currentType = bundleType.getElementType(subField);
-      idRange = currentType.getMaxFieldID();
       continue;
     }
 
@@ -976,7 +975,6 @@ FIRParser::getFieldIDFromTokens(ArrayAttr tokens, SMLoc loc, Type type) {
 
       id += vectorType.getFieldID(subIndex);
       currentType = vectorType.getElementType();
-      idRange = currentType.getMaxFieldID();
       continue;
     }
 
@@ -984,7 +982,7 @@ FIRParser::getFieldIDFromTokens(ArrayAttr tokens, SMLoc loc, Type type) {
     return None;
   }
 
-  return {{id, id + idRange}};
+  return id;
 }
 
 /// In the input "annotations", an annotation will have a "target" entry when it
@@ -1024,9 +1022,9 @@ ArrayAttr FIRParser::convertSubAnnotations(ArrayRef<Attribute> annotations,
     }
 
     // Construct the SubAnnotationAttr for the annotation.
-    auto subAnnotation = SubAnnotationAttr::get(
-        constants.context, fieldID.getValue().first, fieldID.getValue().second,
-        DictionaryAttr::get(constants.context, modAttr));
+    auto subAnnotation =
+        SubAnnotationAttr::get(constants.context, fieldID.getValue(),
+                               DictionaryAttr::get(constants.context, modAttr));
 
     annotationVec.push_back(subAnnotation);
   }
@@ -3311,10 +3309,9 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
 
     // Parse the body of this module after all prototypes have been parsed. This
     // allows us to handle forward references correctly.
-    TargetSet targetSet;
-    deferredModules.push_back({moduleOp, portLocs, getLexer().getCursor(),
-                               std::move(moduleTarget), indent,
-                               std::move(targetSet)});
+    deferredModules.emplace_back(
+        DeferredModuleToParse{moduleOp, portLocs, getLexer().getCursor(),
+                              std::move(moduleTarget), indent, TargetSet()});
 
     // We're going to defer parsing this module, so just skip tokens until we
     // get to the next module or the end of the file.
