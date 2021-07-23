@@ -67,7 +67,8 @@ static void inlineGroupAssignments(ComponentOp &component) {
     groupDone->erase();
 
     // Inline the group.
-     wires->getRegion(0).takeBody(groupRegion);
+    // TODO: Causing an error :-(
+    // wires->getRegion(0).takeBody(groupRegion);
   });
 }
 
