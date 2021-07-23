@@ -668,7 +668,7 @@ circuit GCTMemTap : %[
 
 ; // -----
 
-; Test sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation
+; Test sifive.enterprise.grandcentral.ViewAnnotation
 circuit GCTInterface : %[
 [
   {
@@ -726,7 +726,7 @@ circuit GCTInterface : %[
     ; The companion should be marked.
     ; CHECK: firrtl.module @view_companion
     ; CHECK-SAME: annotations
-    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation",
+    ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.ViewAnnotation",
     ; CHECK-SAME:  id = [[ID:.+]] : i64,
     ; CHECK-SAME:  type = "companion"}
 
@@ -740,7 +740,7 @@ circuit GCTInterface : %[
     ; CHECK-SAME:     defName = "ViewName",
     ; CHECK-SAME:     name = "port"}>]}
     ; CHECK-SAME: annotations = [
-    ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation",
+    ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.ViewAnnotation",
     ; CHECK-SAME:    defName = "ViewName",
     ; CHECK-SAME:    id = [[ID]] : i64,
     ; CHECK-SAME:    name = "view",

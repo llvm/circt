@@ -356,13 +356,11 @@ void GrandCentralVisitor::visitDecl(InstanceOp op) {
   // move this onto the actual instance op.
   AnnotationSet annotations(op.getReferencedModule());
   if (auto anno = annotations.getAnnotation(
-          "sifive.enterprise.grandcentral.GrandCentralView$"
-          "SerializedViewAnnotation")) {
+          "sifive.enterprise.grandcentral.ViewAnnotation")) {
     auto tpe = anno.getAs<StringAttr>("type");
     if (!tpe) {
       op.getReferencedModule()->emitOpError(
-          "contains a GrandcCentralView$SerializedViewAnnotation that does not "
-          "contain a \"type\" field");
+          "contains a ViewAnnotation that does not contain a \"type\" field");
       failed = true;
       return;
     }
@@ -457,8 +455,8 @@ void GrandCentralPass::runOnOperation() {
     annotations.removeAnnotations([&](auto anno) {
       // Insert an instantiated interface.
       if (auto viewAnnotation = annotations.getAnnotation(
-              "sifive.enterprise.grandcentral.GrandCentralView$"
-              "SerializedViewAnnotation")) {
+              "sifive.enterprise.grandcentral.ViewAnnotation")) {
+
         auto tpe = viewAnnotation.getAs<StringAttr>("type");
         if (tpe && tpe.getValue() == "parent") {
           auto name = viewAnnotation.getAs<StringAttr>("name");

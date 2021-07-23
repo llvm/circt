@@ -141,7 +141,7 @@ firrtl.circuit "UnsupportedTypes" attributes {annotations = [{a}, {class = "sifi
 // -----
 
 firrtl.circuit "BindTest" attributes {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "Foo", elements = []}]} {
-  firrtl.module @Companion() attributes {annotations = [{class = "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation", id = 42 : i64, type = "companion"}]} {}
+  firrtl.module @Companion() attributes {annotations = [{class = "sifive.enterprise.grandcentral.ViewAnnotation", id = 42 : i64, type = "companion"}]} {}
   firrtl.module @BindTest() {
     firrtl.instance @Companion { name = "companion1" }
     firrtl.instance @Companion { name = "companion2" }
@@ -180,7 +180,7 @@ firrtl.circuit "BindInterfaceTest"  attributes {
       ]},
     out %b: !firrtl.uint<8>) attributes {
       annotations = [{
-        class = "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation",
+        class = "sifive.enterprise.grandcentral.ViewAnnotation",
         defName = "InterfaceName",
         id = 0 : i64,
         name = "instanceName",
