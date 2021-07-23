@@ -13,9 +13,9 @@ calyx.program {
       %undef = calyx.undef : i1
       // CHECK: %[[SIGNAL_ON:.+]] = hw.constant true
       // CHECK: %[[GROUP_A_FSM_BEGIN:.+]] = hw.constant 0 : i2
-      // CHECK: %[[GROUP_A_REACHED_STATE:.+]] = comb.icmp eq %fsm.out, %[[GROUP_A_FSM_BEGIN]] : i2
+      // CHECK: %[[FSM_IS_GROUP_A_BEGIN_STATE:.+]] = comb.icmp eq %fsm.out, %[[GROUP_A_FSM_BEGIN]] : i2
       // CHECK: %[[GROUP_A_NOT_DONE:.+]] = comb.xor %z.done, {{.+}} : i1
-      // CHECK: %[[GROUP_A_GO_GUARD:.+]] = comb.and %[[GROUP_A_REACHED_STATE]], %[[GROUP_A_NOT_DONE]] : i1
+      // CHECK: %[[GROUP_A_GO_GUARD:.+]] = comb.and %[[FSM_IS_GROUP_A_BEGIN_STATE]], %[[GROUP_A_NOT_DONE]] : i1
       calyx.group @A {
         // CHECK:  %A.go = calyx.group_go %[[SIGNAL_ON]], %[[GROUP_A_GO_GUARD]] ? : i1
         // CHECK:  calyx.assign %z.go = %arg0, %A.go ? : i1
@@ -26,18 +26,18 @@ calyx.program {
 
       // CHECK: %[[GROUP_B_FSM_BEGIN:.+]] = hw.constant 1 : i2
       // CHECK: %[[GROUP_B_DONE:.+]] = comb.and %z.flag, %z.done : i1
-      // CHECK: %[[GROUP_B_REACHED_STATE:.+]] = comb.icmp eq %fsm.out, %[[GROUP_B_FSM_BEGIN]] : i2
+      // CHECK: %[[FSM_IS_GROUP_B_BEGIN_STATE:.+]] = comb.icmp eq %fsm.out, %[[GROUP_B_FSM_BEGIN]] : i2
       // CHECK: %[[GROUP_B_NOT_DONE:.+]] = comb.xor %[[GROUP_B_DONE]], {{.+}} : i1
-      // CHECK: %[[GROUP_B_GO_GUARD:.+]] = comb.and %[[GROUP_B_REACHED_STATE]], %[[GROUP_B_NOT_DONE]] : i1
+      // CHECK: %[[GROUP_B_GO_GUARD:.+]] = comb.and %[[FSM_IS_GROUP_B_BEGIN_STATE]], %[[GROUP_B_NOT_DONE]] : i1
       calyx.group @B {
         // CHECK: %B.go = calyx.group_go %[[SIGNAL_ON]], %[[GROUP_B_GO_GUARD]] ? : i1
         %B.go = calyx.group_go %undef : i1
         calyx.group_done %z.done, %z.flag ? : i1
       }
 
-      // CHECK: %[[GROUP_A_ASSIGN_GUARD:.+]] = comb.and %[[GROUP_A_REACHED_STATE]], %z.done : i1
+      // CHECK: %[[GROUP_A_ASSIGN_GUARD:.+]] = comb.and %[[FSM_IS_GROUP_A_BEGIN_STATE]], %z.done : i1
       // CHECK: %[[FSM_STEP_1:.+]] = hw.constant 1 : i2
-      // CHECK: %[[GROUP_B_ASSIGN_GUARD:.+]] = comb.and %[[GROUP_B_REACHED_STATE]], %[[GROUP_B_DONE]] : i1
+      // CHECK: %[[GROUP_B_ASSIGN_GUARD:.+]] = comb.and %[[FSM_IS_GROUP_B_BEGIN_STATE]], %[[GROUP_B_DONE]] : i1
       // CHECK: %[[FSM_STEP_2:.+]] = hw.constant -2 : i2
       // CHECK: %[[SEQ_GROUP_DONE_GUARD:.+]] = comb.icmp eq %fsm.out, %[[FSM_STEP_2]] : i2
 
