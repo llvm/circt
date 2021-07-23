@@ -62,7 +62,7 @@ calyx.program {
     }
 
     // CHECK-LABEL: calyx.control {
-    // CHECK-NEXT:    calyx.enable @seq {groups = [@A, @B]}
+    // CHECK-NEXT:    calyx.enable @seq {compiledGroups = [@A, @B]}
     // CHECK-NEXT:  }
     calyx.control {
       calyx.seq {

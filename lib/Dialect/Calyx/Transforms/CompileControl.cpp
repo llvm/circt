@@ -87,11 +87,12 @@ static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
   symTable.insert(seqGroup);
 
   size_t fsmIndex = 0;
-  SmallVector<Attribute, 8> groupNames;
+  SmallVector<Attribute, 8> compiledGroups;
   Value fsmNextState;
   seq.walk([&](EnableOp enable) {
     StringRef groupName = enable.groupName();
-    groupNames.push_back(SymbolRefAttr::get(builder.getContext(), groupName));
+    compiledGroups.push_back(
+        SymbolRefAttr::get(builder.getContext(), groupName));
     auto groupOp = symTable.lookup<GroupOp>(groupName);
 
     builder.setInsertionPoint(groupOp);
@@ -160,13 +161,11 @@ static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
 
   // Replace the SeqOp with an EnableOp.
   builder.setInsertionPoint(seq);
-  auto newEnableOp =
-      builder.create<EnableOp>(seq->getLoc(), seqGroup.sym_name());
-  seq->erase();
+  builder.create<EnableOp>(
+      seq->getLoc(), seqGroup.sym_name(),
+      ArrayAttr::get(builder.getContext(), compiledGroups));
 
-  // Keep a list of compiled groups associated with the new EnableOp.
-  newEnableOp->setAttr("groups",
-                       ArrayAttr::get(builder.getContext(), groupNames));
+  seq->erase();
 }
 
 namespace {
