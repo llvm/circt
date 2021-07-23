@@ -1,8 +1,7 @@
 ; RUN: circt-translate -import-firrtl -split-input-file %s | FileCheck %s
 
-; COM: An Annotation without a target is promoted to a CircuitTarget
-; COM: Annotation. This represents a Scala FIRRTL Compiler
-; COM: `firrtl.annotations.NoTargetAnnotation`.
+; An Annotation without a target is promoted to a CircuitTarget Annotation. This
+; represents a Scala FIRRTL Compiler `firrtl.annotations.NoTargetAnnotation`.
 circuit Foo: %[[{"a":"a"}]]
   module Foo:
     skip
@@ -12,8 +11,8 @@ circuit Foo: %[[{"a":"a"}]]
 
 ; // -----
 
-; COM: A legacy `firrtl.annotations.CircuitName` annotation becomes a
-; COM: CircuitTarget Annotation.
+; A legacy `firrtl.annotations.CircuitName` annotation becomes a CircuitTarget
+; Annotation.
 circuit Foo: %[[{"a":"a","target":"Foo"}]]
   module Foo:
     skip
@@ -23,7 +22,7 @@ circuit Foo: %[[{"a":"a","target":"Foo"}]]
 
 ; // -----
 
-; COM: A CircuitTarget Annotation is attached to the circuit.
+; A CircuitTarget Annotation is attached to the circuit.
 circuit Foo: %[[{"a":"a","target":"~Foo"}]]
   module Foo:
     skip
@@ -33,8 +32,8 @@ circuit Foo: %[[{"a":"a","target":"~Foo"}]]
 
 ; // -----
 
-; COM: A legacy `firrtl.annotations.ModuleName` annotation becomes a
-; COM: ModuleTarget Annotation
+; A legacy `firrtl.annotations.ModuleName` annotation becomes a ModuleTarget
+; Annotation
 circuit Foo: %[[{"a":"a","target":"Foo.Foo"}]]
   module Foo:
     skip
@@ -44,7 +43,7 @@ circuit Foo: %[[{"a":"a","target":"Foo.Foo"}]]
 
 ; // -----
 
-; COM: A ModuleTarget Annotation is attached to the correct module.
+; A ModuleTarget Annotation is attached to the correct module.
 circuit Foo: %[[{"a":"a","target":"~Foo|Foo"}]]
   module Foo:
     skip
@@ -54,7 +53,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo"}]]
 
 ; // -----
 
-; COM: A ModuleTarget Annotation can be attached to an ExtModule.
+; A ModuleTarget Annotation can be attached to an ExtModule.
 circuit Foo: %[[{"a":"a","target":"~Foo|Bar"}]]
   extmodule Bar:
     input a: UInt<1>
@@ -69,8 +68,8 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Bar"}]]
 
 ; // -----
 
-; COM: A ReferenceTarget, ComponentName, or InstanceTarget pointing at an
-; COM: Instance should work.
+; A ReferenceTarget, ComponentName, or InstanceTarget pointing at an Instance
+; should work.
 circuit Foo: %[[
 {"a":"a","target":"~Foo|Foo>bar"},
 {"b":"b","target":"Foo.Foo.bar"},
@@ -87,7 +86,7 @@ circuit Foo: %[[
 
 ; // -----
 
-; COM: Test result annotations of InstanceOp.
+; Test result annotations of InstanceOp.
 circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},
                 {"two":null,"target":"~Foo|Foo>bar.b.baz"},
                 {"three":null,"target":"~Foo|Foo/bar:Bar>b.qux"},
@@ -108,7 +107,7 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},
 
 ; // -----
 
-; COM: A ReferenceTarget/ComponentName pointing at a CMem should work.
+; A ReferenceTarget/ComponentName pointing at a CMem should work.
 circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar"}]]
   module Foo:
     cmem bar: UInt<1>[8]
@@ -119,7 +118,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar
 
 ; // -----
 
-; COM: A ReferenceTarget/ComponentName pointing at a memory should work.
+; A ReferenceTarget/ComponentName pointing at a memory should work.
 circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar"}]]
   module Foo:
     mem bar:
@@ -137,7 +136,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar
 
 ; // -----
 
-; COM: Test result annotations of MemOp.
+; Test result annotations of MemOp.
 circuit Foo: %[[{"a":null,"target":"~Foo|Foo>bar.r"},
                 {"b":null,"target":"~Foo|Foo>bar.r.data.baz"},
                 {"c":null,"target":"~Foo|Foo>bar.w.en"},
@@ -160,8 +159,8 @@ circuit Foo: %[[{"a":null,"target":"~Foo|Foo>bar.r"},
 
 ; // -----
 
-; COM: A ReferenceTarget/ComponentName pointing at a node should work.
-; COM: This shouldn't crash if the node is in a nested block.
+; A ReferenceTarget/ComponentName pointing at a node should work.  This
+; shouldn't crash if the node is in a nested block.
 circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.baz"}]]
   module Foo:
     input cond: UInt<1>[2]
@@ -178,7 +177,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.baz
 
 ; // -----
 
-; COM: A ReferenceTarget/ComponentName pointing at a wire should work.
+; A ReferenceTarget/ComponentName pointing at a wire should work.
 circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar"}]]
   module Foo:
     wire bar: UInt<1>
@@ -189,7 +188,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar
 
 ; // -----
 
-; COM: A ReferenceTarget/ComponentName pointing at a register should work.
+; A ReferenceTarget/ComponentName pointing at a register should work.
 circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.baz"}]]
   module Foo:
     input clock: Clock
@@ -205,7 +204,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.baz
 
 ; // -----
 
-; COM: A ReferenceTarget/ComponentName pointing at an SMem should work.
+; A ReferenceTarget/ComponentName pointing at an SMem should work.
 circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar"}]]
   module Foo:
     smem bar: UInt<1>[8]
@@ -216,7 +215,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar
 
 ; // -----
 
-; COM: A ReferenceTarget/ComponentName pointing at a module/extmodule port should work.
+; A ReferenceTarget/ComponentName pointing at a module/extmodule port should work.
 circuit Foo: %[[{"a":"a","target":"~Foo|Bar>bar"},{"b":"b","target":"Foo.Foo.foo"}]]
   extmodule Bar:
     input bar: UInt<1>
@@ -233,7 +232,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Bar>bar"},{"b":"b","target":"Foo.Foo.foo
 
 ; // -----
 
-; COM: All types of JSON values should work
+; All types of JSON values should work
 circuit Foo: %[[
   {
     "string": "a",
@@ -261,7 +260,7 @@ circuit Foo: %[[
 
 ; // -----
 
-; COM: JSON escapes should work.
+; JSON escapes should work.
 circuit Foo: %[[{"\"":"}]]"}]]
   module Foo:
     skip
@@ -270,7 +269,7 @@ circuit Foo: %[[{"\"":"}]]"}]]
     ; CHECK: firrtl.circuit "Foo" attributes {annotations =
 
 ; // -----
-; COM: JSON with a JSON-quoted string should be expanded.
+; JSON with a JSON-quoted string should be expanded.
 circuit Foo: %[[{"a":"{\"b\":null}"}]]
   module Foo:
     skip
@@ -280,7 +279,7 @@ circuit Foo: %[[{"a":"{\"b\":null}"}]]
 
 ; // -----
 
-; COM: Subfield/Subindex annotations should be parsed correctly on wires
+; Subfield/Subindex annotations should be parsed correctly on wires
 circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0]"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
   module Foo:
     wire bar: {baz: UInt<1>, qux: UInt<1>}[2]
@@ -293,7 +292,7 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0]"},{"two":null,"target":"~F
 
 ; // -----
 
-; COM: Subfield/Subindex annotations should be parsed correctly on registers
+; Subfield/Subindex annotations should be parsed correctly on registers
 circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0]"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
   module Foo:
     input clock: Clock
@@ -306,7 +305,7 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0]"},{"two":null,"target":"~F
 
 ; // -----
 
-; COM: Annotations should apply even when the target's name is dropped.
+; Annotations should apply even when the target's name is dropped.
 circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "a": "a"},
                 {"target": "~Foo|Foo>_T_1", "a": "a"},
                 {"target": "~Foo|Foo>_T_2", "a": "a"},
@@ -350,7 +349,7 @@ circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "a": "a"},
 
 ; // -----
 
-; COM: DontTouch annotation preserves temporary names
+; DontTouch annotation preserves temporary names
 circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "class": "firrtl.transforms.DontTouchAnnotation"},
                 {"target": "~Foo|Foo>_T_1", "class": "firrtl.transforms.DontTouchAnnotation"},
                 {"target": "~Foo|Foo>_T_2", "class": "firrtl.transforms.DontTouchAnnotation"},

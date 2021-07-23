@@ -5,7 +5,7 @@ circuit test :
 
     ; expected-error @+1 {{unterminated string}}
     parameter FORMAT = "tilelink_timeou
-    : COM: "
+    : " ; End the string above for syntax highlighters...
 
 ;// -----
 
