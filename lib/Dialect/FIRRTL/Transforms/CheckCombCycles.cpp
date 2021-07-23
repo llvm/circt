@@ -455,6 +455,271 @@ struct DenseMapInfo<CombNode> {
 } // namespace llvm
 
 //===----------------------------------------------------------------------===//
+// Fast implementation
+//===----------------------------------------------------------------------===//
+
+using CombPathsType = SmallVector<SmallVector<unsigned, 2>>;
+using CombPathsMapType = DenseMap<Operation *, CombPathsType>;
+
+namespace {
+struct Node {
+  Value impl;
+  CombPathsMapType *map;
+  InstanceGraph *graph;
+
+  explicit Node(Value impl = nullptr, CombPathsMapType *map = nullptr,
+                InstanceGraph *graph = nullptr)
+      : impl(impl), map(map), graph(graph) {}
+
+  bool operator==(const Node &rhs) const { return impl == rhs.impl; }
+  bool operator!=(const Node &rhs) const { return !(*this == rhs); }
+};
+} // namespace
+
+namespace {
+class ChildIterator
+    : public llvm::iterator_facade_base<ChildIterator,
+                                        std::forward_iterator_tag, Node> {
+public:
+  explicit ChildIterator(Node node, bool end = false);
+
+  using llvm::iterator_facade_base<ChildIterator, std::forward_iterator_tag,
+                                   Node>::operator++;
+  ChildIterator &operator++();
+  Node operator*() { return Node(*child, node.map, node.graph); }
+
+  bool operator==(const ChildIterator &rhs) const { return child == rhs.child; }
+  bool operator!=(const ChildIterator &rhs) const { return !(*this == rhs); }
+
+private:
+  Node node;
+
+  static bool isChild(OpOperand &operand) {
+    if (auto connect = dyn_cast<ConnectOp>(operand.getOwner()))
+      return operand.get() == connect.src();
+    return operand.getOwner()->getNumResults() == 1;
+  }
+  static Value getChildValue(OpOperand &operand) {
+    if (auto connect = dyn_cast<ConnectOp>(operand.getOwner()))
+      return connect.dest();
+    return operand.getOwner()->getResult(0);
+  }
+  using filter_use_iterator =
+      llvm::filter_iterator<Value::use_iterator, decltype(&isChild)>;
+  using child_iterator =
+      llvm::mapped_iterator<filter_use_iterator, decltype(&getChildValue)>;
+
+  child_iterator child_begin(Value target) {
+    return child_iterator(
+        filter_use_iterator(target.use_begin(), target.use_end(), &isChild),
+        &getChildValue);
+  }
+  child_iterator child_end(Value target) {
+    return child_iterator(
+        filter_use_iterator(target.use_end(), target.use_end(), &isChild),
+        &getChildValue);
+  }
+  child_iterator getNullChildIterator() {
+    return child_iterator(filter_use_iterator(nullptr, nullptr, &isChild),
+                          &getChildValue);
+  }
+  bool child_empty(Value target) {
+    return child_begin(target) == child_end(target);
+  }
+
+  using child_range = llvm::iterator_range<child_iterator>;
+  child_range getChilds(Value target) {
+    return {child_begin(target), child_end(target)};
+  }
+
+  unsigned counter = 0;
+  child_iterator child;
+
+  void getInstOutputIndices(InstanceOp instance,
+                            SmallVectorImpl<unsigned> &indices);
+  void skipInstOutputsWithNoChild(InstanceOp instance,
+                                  SmallVectorImpl<unsigned> &outputIndices);
+
+  bool isMemReadAddr(SubfieldOp subfield);
+  void skipToMemReadData(SubfieldOp subfield);
+};
+} // namespace
+
+void ChildIterator::getInstOutputIndices(InstanceOp instance,
+                                         SmallVectorImpl<unsigned> &indices) {
+  auto &map = *node.map;
+  auto &graph = *node.graph;
+  auto inputIndex = node.impl.cast<OpResult>().getResultNumber();
+  indices = map[graph.getReferencedModule(instance)][inputIndex];
+}
+
+void ChildIterator::skipInstOutputsWithNoChild(
+    InstanceOp instance, SmallVectorImpl<unsigned> &indices) {
+  while (counter < indices.size() &&
+         child_empty(instance.getResult(indices[counter])))
+    ++counter;
+
+  if (counter == indices.size())
+    child = getNullChildIterator();
+  else
+    child = child_begin(instance.getResult(indices[counter]));
+}
+
+bool ChildIterator::isMemReadAddr(SubfieldOp subfield) {
+  auto inputDefOp = subfield.input().getDefiningOp();
+  if (!inputDefOp || !isa<MemOp>(inputDefOp)) {
+    subfield->emitOpError("input must be a port of a MemOp, please run "
+                          "-firrtl-lower-types first");
+    return false;
+  }
+
+  auto mem = dyn_cast<MemOp>(inputDefOp);
+  auto portKind =
+      mem.getPortKind(subfield.input().cast<OpResult>().getResultNumber());
+
+  if (mem.readLatency() != 0 || portKind == MemOp::PortKind::Write)
+    return false;
+
+  auto portType = subfield.input().getType().cast<BundleType>();
+  if (portType.getElementName(subfield.fieldIndex()) != "addr")
+    return false;
+
+  return true;
+}
+
+void ChildIterator::skipToMemReadData(SubfieldOp subfield) {
+  for (auto user : subfield.input().getUsers()) {
+    auto output = dyn_cast<SubfieldOp>(user);
+    if (!output) {
+      user->emitOpError("MemOp must be used by SubfieldOp, please run "
+                        "-firrtl-lower-types first");
+      return;
+    }
+
+    auto portType = subfield.input().getType().cast<BundleType>();
+    auto outputName = portType.getElementName(output.fieldIndex());
+    if (outputName == "data" || outputName == "rdata") {
+      child = child_begin(output.result());
+      return;
+    }
+    ++counter;
+  }
+
+  child = getNullChildIterator();
+}
+
+ChildIterator::ChildIterator(Node node, bool end)
+    : node(node), child(getNullChildIterator()) {
+  if (auto defOp = node.impl.getDefiningOp()) {
+    if (auto instance = dyn_cast<InstanceOp>(defOp)) {
+      if (end)
+        return;
+      SmallVector<unsigned> indices;
+      getInstOutputIndices(instance, indices);
+      skipInstOutputsWithNoChild(instance, indices);
+      return;
+    }
+    if (auto subfield = dyn_cast<SubfieldOp>(defOp)) {
+      if (end || !isMemReadAddr(subfield))
+        return;
+      skipToMemReadData(subfield);
+      return;
+    }
+    if (isa<RegOp, RegResetOp>(defOp))
+      return;
+  }
+  child = end ? child_end(node.impl) : child_begin(node.impl);
+}
+
+ChildIterator &ChildIterator::operator++() {
+  if (auto defOp = node.impl.getDefiningOp()) {
+    if (auto instance = dyn_cast<InstanceOp>(defOp)) {
+      SmallVector<unsigned> indices;
+      getInstOutputIndices(instance, indices);
+
+      auto childEnd = child_end(instance.getResult(indices[counter]));
+      if (child != childEnd)
+        ++child;
+      if (child == childEnd) {
+        ++counter;
+        skipInstOutputsWithNoChild(instance, indices);
+      }
+      return *this;
+    }
+    if (auto subfield = dyn_cast<SubfieldOp>(defOp)) {
+      assert(isMemReadAddr(subfield) &&
+             "must be addr subfield of a read port of MemOp");
+
+      auto memReadData = dyn_cast<SubfieldOp>(
+          *std::next(subfield.input().getUsers().begin(), counter));
+      auto childEnd = child_end(memReadData.result());
+      if (child != childEnd)
+        ++child;
+      if (child == childEnd)
+        child = getNullChildIterator();
+      return *this;
+    }
+  }
+  ++child;
+  return *this;
+}
+
+//===----------------------------------------------------------------------===//
+// GraphTraits on Node
+//===----------------------------------------------------------------------===//
+
+namespace llvm {
+template <>
+struct DenseMapInfo<Node> {
+  static Node getEmptyKey() {
+    auto pointer = llvm::DenseMapInfo<void *>::getEmptyKey();
+    return Node(Value::getFromOpaquePointer(pointer));
+  }
+  static Node getTombstoneKey() {
+    auto pointer = llvm::DenseMapInfo<void *>::getTombstoneKey();
+    return Node(Value::getFromOpaquePointer(pointer));
+  }
+
+  static unsigned getHashValue(const Node &node) {
+    return mlir::hash_value(node.impl);
+  }
+  static bool isEqual(const Node &lhs, const Node &rhs) { return lhs == rhs; }
+};
+} // namespace llvm
+
+namespace llvm {
+template <>
+struct GraphTraits<Node> {
+  using NodeRef = Node;
+  using ChildIteratorType = ChildIterator;
+
+  static NodeRef getEntryNode(NodeRef node) { return node; }
+
+  static inline ChildIteratorType child_begin(NodeRef node) {
+    return ChildIterator(node);
+  }
+  static inline ChildIteratorType child_end(NodeRef node) {
+    return ChildIterator(node, /*end=*/true);
+  }
+};
+} // namespace llvm
+
+namespace {
+struct NodeDenseSet : public DenseSet<Node> {
+  using BaseSet = DenseSet<Node>;
+  using iterator = typename BaseSet::iterator;
+
+  std::pair<iterator, bool> insert(Node N) { return BaseSet::insert(N); }
+  template <typename IterT>
+  void insert(IterT Begin, IterT End) {
+    BaseSet::insert(Begin, End);
+  }
+
+  void completed(Node) {}
+};
+} // namespace
+
+//===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
 
@@ -471,8 +736,53 @@ class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
     // before we handle its parent modules.
     for (auto node : llvm::post_order<InstanceGraph *>(&instanceGraph)) {
       // TODO: Handle FExtModuleOp with `ExtModulePathAnnotation`s.
-      if (auto module = dyn_cast<FModuleOp>(node->getModule()))
-        CycleDetector(module, combPathsMap, instanceGraph).detect();
+      if (auto module = dyn_cast<FModuleOp>(node->getModule())) {
+        DenseSet<Value> visited;
+        for (auto connect : module.getOps<ConnectOp>()) {
+          if (visited.count(connect.dest()))
+            continue;
+          Node destNode(connect.dest(), &map, &instanceGraph);
+          using SCCIterator = llvm::scc_iterator<Node>;
+          for (auto SCC = SCCIterator::begin(destNode); !SCC.isAtEnd(); ++SCC) {
+            auto hasCycle = SCC.hasCycle();
+            for (auto it = SCC->begin(), e = SCC->end(); it != e; ++it) {
+              visited.insert((*it).impl);
+              if (hasCycle)
+                mlir::emitError((*it).impl.getLoc(), "detected cycle!");
+            }
+          }
+        }
+
+        SmallVector<bool, 8> directionList;
+        for (auto &port : module.getPorts())
+          directionList.push_back(port.isOutput());
+
+        auto &combPaths = map[module];
+        NodeDenseSet nodeSet;
+        SmallVector<unsigned, 2> outputVec;
+        unsigned index = 0;
+        for (auto &port : module.getPorts()) {
+          nodeSet.clear();
+          outputVec.clear();
+          auto arg = module.getPortArgument(index++);
+          if (port.isOutput()) {
+            combPaths.push_back(outputVec);
+            continue;
+          }
+          Node inputNode(arg, &map, &instanceGraph);
+          for (auto node : llvm::depth_first_ext<Node>(inputNode, nodeSet)) {
+            if (auto output = node.impl.dyn_cast<BlockArgument>())
+              if (directionList[output.getArgNumber()])
+                outputVec.push_back(output.getArgNumber());
+          }
+          combPaths.push_back(outputVec);
+        }
+        // CycleDetector(module, combPathsMap, instanceGraph).detect();
+
+      } else if (auto extModule = dyn_cast<FExtModuleOp>(node->getModule())) {
+        auto &combPaths = map[extModule];
+        combPaths.resize(extModule.getNumArguments());
+      }
     }
     markAllAnalysesPreserved();
   }
@@ -480,6 +790,7 @@ class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
 private:
   /// A global map from FIRRTL modules to their combinational paths between IOs.
   DenseMap<Operation *, CombPaths> combPathsMap;
+  CombPathsMapType map;
 };
 } // namespace
 
