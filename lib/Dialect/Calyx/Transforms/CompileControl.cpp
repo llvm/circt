@@ -16,6 +16,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OperationSupport.h"
+#include "mlir/IR/PatternMatch.h"
 
 using namespace circt;
 using namespace calyx;
@@ -40,8 +41,9 @@ static size_t getNecessaryBitWidth(size_t numStates) {
 /// `width`.
 static RegisterOp createRegister(OpBuilder &builder, ComponentOp &component,
                                  size_t width, StringRef name) {
-  auto *context = builder.getContext();
+  IRRewriter::InsertionGuard guard(builder);
   builder.setInsertionPointToStart(component.getBody());
+  auto *context = builder.getContext();
   return builder.create<RegisterOp>(component->getLoc(),
                                     StringAttr::get(context, name), width);
 }
@@ -58,14 +60,18 @@ static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
   Block *wiresBody = wires.getBody();
 
   auto &seqOps = seq.getBody()->getOperations();
-  assert(llvm::all_of(seqOps, [](auto &&op) { return isa<EnableOp>(op); }) &&
-         "The SeqOp should only contain EnableOps in this pass.");
+  if (!llvm::all_of(seqOps, [](auto &&op) { return isa<EnableOp>(op); })) {
+    seq.emitOpError("should only contain EnableOps in this pass.");
+    return;
+  }
+
   // This should be the number of enable statements + 1 since this is the
   // maximum value the FSM register will reach.
   size_t fsmBitWidth = getNecessaryBitWidth(seqOps.size() + 1);
 
   OpBuilder builder(component->getRegion(0));
   auto fsmRegister = createRegister(builder, component, fsmBitWidth, "fsm");
+  // TODO(Calyx): Add methods to RegisterOp to access ports.
   auto fsmIn = fsmRegister.getResult(0);
   auto fsmWriteEn = fsmRegister.getResult(1);
   auto fsmOut = fsmRegister.getResult(4);
@@ -85,12 +91,13 @@ static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
   symTable.insert(seqGroup);
 
   size_t fsmIndex = 0;
-  SmallVector<Attribute, 8> groupNames;
+  SmallVector<Attribute, 8> compiledGroups;
   Value fsmNextState;
   seq.walk([&](EnableOp enable) {
     StringRef groupName = enable.groupName();
-    groupNames.push_back(SymbolRefAttr::get(builder.getContext(), groupName));
-    auto groupOp = cast<GroupOp>(symTable.lookup(groupName));
+    compiledGroups.push_back(
+        SymbolRefAttr::get(builder.getContext(), groupName));
+    auto groupOp = symTable.lookup<GroupOp>(groupName);
 
     builder.setInsertionPoint(groupOp);
     auto fsmCurrentState =
@@ -124,8 +131,7 @@ static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
     // Directly update the GroupGoOp of the current group being walked.
     auto goOp = groupOp.getGoOp();
     assert(goOp && "The Go Insertion pass should be run before this.");
-    goOp->setOperand(0, oneConstant);
-    goOp->insertOperands(1, {groupGoGuard});
+    goOp->setOperands({oneConstant, groupGoGuard});
 
     // Add guarded assignments to the fsm register `in` and `write_en` ports.
     fsmNextState =
@@ -159,13 +165,11 @@ static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
 
   // Replace the SeqOp with an EnableOp.
   builder.setInsertionPoint(seq);
-  auto newEnableOp =
-      builder.create<EnableOp>(seq->getLoc(), seqGroup.sym_name());
-  seq->erase();
+  builder.create<EnableOp>(
+      seq->getLoc(), seqGroup.sym_name(),
+      ArrayAttr::get(builder.getContext(), compiledGroups));
 
-  // Keep a list of compiled groups associated with the new EnableOp.
-  newEnableOp->setAttr("groups",
-                       ArrayAttr::get(builder.getContext(), groupNames));
+  seq->erase();
 }
 
 namespace {
