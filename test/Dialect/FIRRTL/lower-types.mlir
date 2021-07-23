@@ -554,19 +554,25 @@ firrtl.circuit "TopLevel" {
 // Test that subfield annotations on wire are lowred to appropriate instance based on fieldID.
   // CHECK-LABEL: firrtl.module @AnnotationsBundle
   firrtl.module @AnnotationsBundle() {
-    %bar = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = [3, 3], {one}>, #firrtl.subAnno<fieldID = [5, 5], {two}>]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+    %bar = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = 3, {one}>, #firrtl.subAnno<fieldID = 5, {two}>]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
 
       // TODO: Enable this
       // CHECK: %bar_0_baz = firrtl.wire  : !firrtl.uint<1>
       // CHECK: %bar_0_qux = firrtl.wire  {annotations = [{one}]} : !firrtl.uint<1>
       // CHECK: %bar_1_baz = firrtl.wire  {annotations = [{two}]} : !firrtl.uint<1>
       // CHECK: %bar_1_qux = firrtl.wire  : !firrtl.uint<1>
+
+    %quux = firrtl.wire  {annotations = [#firrtl.subAnno<fieldID = 0, {zero}>]} : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+      // CHECK: %quux_0_baz = firrtl.wire  {annotations = [{zero}]} : !firrtl.uint<1>
+      // CHECK: %quux_0_qux = firrtl.wire  {annotations = [{zero}]} : !firrtl.uint<1>
+      // CHECK: %quux_1_baz = firrtl.wire  {annotations = [{zero}]} : !firrtl.uint<1>
+      // CHECK: %quux_1_qux = firrtl.wire  {annotations = [{zero}]} : !firrtl.uint<1>
   }
 
 // Test that subfield annotations on reg are lowred to appropriate instance based on fieldID.
  // CHECK-LABEL: firrtl.module @AnnotationsBundle2
   firrtl.module @AnnotationsBundle2(in %clock: !firrtl.clock) {
-    %bar = firrtl.reg %clock  {annotations = [#firrtl.subAnno<fieldID = [3, 3], {one}>, #firrtl.subAnno<fieldID = [5, 5], {two}>]} : (!firrtl.clock) -> !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+    %bar = firrtl.reg %clock  {annotations = [#firrtl.subAnno<fieldID = 3, {one}>, #firrtl.subAnno<fieldID = 5, {two}>]} : (!firrtl.clock) -> !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
 
     // TODO: Enable this
     // CHECK: %bar_0_baz = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
@@ -580,7 +586,7 @@ firrtl.circuit "TopLevel" {
 
  // CHECK-LABEL: firrtl.module @AnnotationsBundle3
   firrtl.module @AnnotationsBundle3(in %clock: !firrtl.clock) {
-    %bar = firrtl.reg %clock  {annotations = [#firrtl.subAnno<fieldID = [6, 6], {one}>, #firrtl.subAnno<fieldID = [12, 14], {two}>, #firrtl.subAnno<fieldID = [8, 10], {three}>]} : (!firrtl.clock) -> !firrtl.vector<bundle<baz: vector<uint<1>, 2>, qux: vector<uint<1>, 2>, yes: bundle<a: uint<1>, b: uint<1>>>, 2>
+    %bar = firrtl.reg %clock  {annotations = [#firrtl.subAnno<fieldID = 6, {one}>, #firrtl.subAnno<fieldID = 12, {two}>, #firrtl.subAnno<fieldID = 8, {three}>]} : (!firrtl.clock) -> !firrtl.vector<bundle<baz: vector<uint<1>, 2>, qux: vector<uint<1>, 2>, yes: bundle<a: uint<1>, b: uint<1>>>, 2>
 
     // TODO: Enable this
     // CHECK: %bar_0_baz_0 = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
@@ -825,7 +831,7 @@ firrtl.circuit "TopLevel" {
 // matching fieldIDs.  Any other arg attributes should be copied.
     // The annotation should be copied to just a.a.  The firrtl.hello arg
     // attribute should be copied to each new port.
-    firrtl.module @PortBundle(in %a: !firrtl.bundle<a: uint<1>, b flip: uint<1>> {firrtl.annotations = [#firrtl.subAnno<fieldID = [1, 1], {a}>], firrtl.hello}) {}
+    firrtl.module @PortBundle(in %a: !firrtl.bundle<a: uint<1>, b flip: uint<1>> {firrtl.annotations = [#firrtl.subAnno<fieldID = 1, {a}>], firrtl.hello}) {}
     // CHECK-LABEL: firrtl.module @PortBundle
     // CHECK-COUNT-1: firrtl.annotations = [{a}]
     // CHECK-COUNT-2: firrtl.hello
@@ -834,7 +840,7 @@ firrtl.circuit "TopLevel" {
 
     // The annotation should be copied to just a[0].  The firrtl.world arg
     // attribute should be copied to each port.
-    firrtl.extmodule @PortVector(in %a: !firrtl.vector<uint<1>, 2> {firrtl.annotations = [#firrtl.subAnno<fieldID = [1, 1], {b}>], firrtl.world})
+    firrtl.extmodule @PortVector(in %a: !firrtl.vector<uint<1>, 2> {firrtl.annotations = [#firrtl.subAnno<fieldID = 1, {b}>], firrtl.world})
     // CHECK-LABEL: firrtl.extmodule @PortVector
     // CHECK-COUNT-1: firrtl.annotations = [{b}]
     // CHECK-COUNT-2: firrtl.world
@@ -1055,35 +1061,41 @@ firrtl.circuit "TopLevel" {
   // CHECK-LABEL firrtl.module @Foo3
   firrtl.module @Foo3() {
     // CHECK: [{one}], [{two}], []
-    %bar_a, %bar_b = firrtl.instance @Bar3  {name = "bar", portAnnotations = [[{one}], [#firrtl.subAnno<fieldID = [1, 1], {two}>]]} : !firrtl.uint<1>, !firrtl.bundle<baz: uint<1>, qux: uint<1>>
+    %bar_a, %bar_b = firrtl.instance @Bar3  {name = "bar", portAnnotations = [[{one}], [#firrtl.subAnno<fieldID = 1, {two}>]]} : !firrtl.uint<1>, !firrtl.bundle<baz: uint<1>, qux: uint<1>>
   }
 
 
 // Test MemOp with port annotations.
 // circuit Foo: %[[{"a":null,"target":"~Foo|Foo>bar.r"},
-//                 {"b":null,"target":"~Foo|Foo>bar.r.data.baz"},
+//                 {"b":null,"target":"~Foo|Foo>bar.r.data"},
 //                 {"c":null,"target":"~Foo|Foo>bar.w.en"},
-//                 {"d":null,"target":"~Foo|Foo>bar.w.data.qux"}]]
+//                 {"d":null,"target":"~Foo|Foo>bar.w.data.qux"},
+//                 {"e":null,"target":"~Foo|Foo>bar.rw.wmode"}
+//                 {"f":null,"target":"~Foo|Foo>bar.rw.wmask.baz"}]]
 
 // CHECK-LABEL: firrtl.module @Foo4
   firrtl.module @Foo4() {
     // CHECK: firrtl.mem
     // CHECK-SAME: portAnnotations = [
-    // CHECK-SAME: [{a}, #firrtl.subAnno<fieldID = [4, 4], {b}>],
-    // CHECK-SAME: [#firrtl.subAnno<fieldID = [2, 2], {c}>]
+    // CHECK-SAME: [{a}, #firrtl.subAnno<fieldID = 4, {b}>],
+    // CHECK-SAME: [#firrtl.subAnno<fieldID = 2, {c}>]
+    // CHECK-SAME: [#firrtl.subAnno<fieldID = 4, {e}>, #firrtl.subAnno<fieldID = 7, {f}>]
 
     // CHECK: firrtl.mem
     // CHECK-SAME: portAnnotations = [
-    // CHECK-SAME: [{a}],
-    // CHECK-SAME: [#firrtl.subAnno<fieldID = [2, 2], {c}>, #firrtl.subAnno<fieldID = [4, 4], {d}>]
-    %bar_r, %bar_w = firrtl.mem Undefined  {depth = 16 : i64, name = "bar",
+    // CHECK-SAME: [{a}, #firrtl.subAnno<fieldID = 4, {b}>],
+    // CHECK-SAME: [#firrtl.subAnno<fieldID = 2, {c}>, #firrtl.subAnno<fieldID = 4, {d}>]
+    // CHECK-SAME: [#firrtl.subAnno<fieldID = 4, {e}>]
+    %bar_r, %bar_w, %bar_rw = firrtl.mem Undefined  {depth = 16 : i64, name = "bar",
         portAnnotations = [
-          [{a}, #firrtl.subAnno<fieldID = [5, 5], {b}>],
-          [#firrtl.subAnno<fieldID = [2, 2], {c}>, #firrtl.subAnno<fieldID = [6, 6], {d}>]
+          [{a}, #firrtl.subAnno<fieldID = 4, {b}>],
+          [#firrtl.subAnno<fieldID = 2, {c}>, #firrtl.subAnno<fieldID = 6, {d}>],
+          [#firrtl.subAnno<fieldID = 4, {e}>, #firrtl.subAnno<fieldID = 12, {f}>]
         ],
-        portNames = ["r", "w"], readLatency = 0 : i32, writeLatency = 1 : i32} :
+        portNames = ["r", "w", "rw"], readLatency = 0 : i32, writeLatency = 1 : i32} :
         !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<baz: uint<8>, qux: uint<8>>>,
-        !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<baz: uint<8>, qux: uint<8>>, mask: bundle<baz: uint<1>, qux: uint<1>>>
+        !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<baz: uint<8>, qux: uint<8>>, mask: bundle<baz: uint<1>, qux: uint<1>>>,
+        !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata flip: bundle<baz: uint<8>, qux: uint<8>>, wdata: bundle<baz: uint<8>, qux: uint<8>>, wmask: bundle<baz: uint<1>, qux: uint<1>>>
   }
 
 // Test that partial connects can extend

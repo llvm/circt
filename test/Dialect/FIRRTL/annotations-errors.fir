@@ -134,3 +134,32 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[1].baz[0]"}]]
     input clock: Clock
 ; expected-error @+1 {{the 3-th token of [1].baz[0] expects an aggregate type}}
     reg bar: {baz: UInt<1>, qux: UInt<1>}[2], clock
+
+; // -----
+
+; COM: A target pointing at a non-existent module should error.
+
+; expected-error @+1 {{unapplied annotations with target '~Foo|Bar' and payload '[{a}]'}}
+circuit Foo: %[[{"a":null,"target":"~Foo|Bar"}]]
+  module Foo:
+    skip
+
+; // -----
+
+; COM: A target pointing at a non-existent component should error.
+
+; expected-error @+1 {{unapplied annotations with target '~Foo|Foo>x' and payload '[{a}]'}}
+circuit Foo: %[[{"a":null,"target":"~Foo|Foo>x"}]]
+  module Foo:
+    skip
+
+; // -----
+
+; COM: A target pointing at a non-existent instance should error.
+
+; expected-error @+1 {{unapplied annotations with target '~Foo|Foo/baz:Bar' and payload '[{a}]'}}
+circuit Foo: %[[{"a":null,"target":"~Foo|Foo/baz:Bar"}]]
+  module Bar:
+    skip
+  module Foo:
+    inst bar of Bar

@@ -21,6 +21,7 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TinyPtrVector.h"
@@ -249,6 +250,10 @@ private:
 
   DenseMap<Operation *, Operation *> oldToNewModuleMap;
 
+  /// These are ops that are just copied as they go through.  This is intended
+  /// to be used for ops that are from other dialects and are expected.
+  SmallVector<Operation *> passThroughOps;
+
   // Record the set of remaining annotation classes. This is used to warn only
   // once about any annotation class.
   StringSet<> alreadyProcessed;
@@ -371,15 +376,24 @@ void FIRRTLModuleLowering::runOnOperation() {
       continue;
     }
 
-    // Otherwise we don't know what this is.  We are just going to drop it,
-    // but emit an error so the client has some chance to know that this is
-    // going to happen.
-    op.emitError("unexpected operation '")
-        << op.getName() << "' in a firrtl.circuit";
+    // Anything which is _not_ a module or an extmodule is treated carefully.
+    // By default, this produces an error.
+    TypeSwitch<Operation *>(&op)
+        // GrandCentral can generate interfaces.  These need to be let through.
+        .Case<sv::InterfaceOp>(
+            [&](auto op) { state.passThroughOps.push_back(op); })
+        .Default([](auto op) {
+          // Otherwise we don't know what this is.  We are just going to drop
+          // it, but emit an error so the client has some chance to know that
+          // this is going to happen.
+          op->emitError("unexpected operation '")
+              << op->getName() << "' in a firrtl.circuit";
+        });
   }
 
   SmallVector<FirMemory> memories;
   if (getContext().isMultithreadingEnabled()) {
+    // TODO: Update this to use a mlir::parallelTransformReduce once it exists.
     memories = llvm::parallelTransformReduce(
         modulesToProcess.begin(), modulesToProcess.end(),
         SmallVector<FirMemory>(), mergeFIRRTLMemories, collectFIRRTLMemories);
@@ -392,20 +406,18 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   // Now that we've lowered all of the modules, move the bodies over and update
   // any instances that refer to the old modules.
-  if (getContext().isMultithreadingEnabled()) {
-    mlir::ParallelDiagnosticHandler diagHandler(&getContext());
-    llvm::parallelForEachN(0, modulesToProcess.size(), [&](auto index) {
-      lowerModuleBody(modulesToProcess[index], state);
-    });
-  } else {
-    for (auto module : modulesToProcess)
-      lowerModuleBody(module, state);
-  }
+  mlir::parallelForEachN(
+      &getContext(), 0, modulesToProcess.size(),
+      [&](auto index) { lowerModuleBody(modulesToProcess[index], state); });
 
   // Move binds from inside modules to outside modules.
   for (auto bind : state.binds) {
     bind->moveBefore(bind->getParentOfType<hw::HWModuleOp>());
   }
+
+  // Move any pass through ops into the top of the new module.
+  for (auto *passThrough : state.passThroughOps)
+    passThrough->moveAfter(topLevelModule, topLevelModule->begin());
 
   // Finally delete all the old modules.
   for (auto oldNew : state.oldToNewModuleMap)

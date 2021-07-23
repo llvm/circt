@@ -11,9 +11,9 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "mlir/IR/Threading.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/TinyPtrVector.h"
-#include "llvm/Support/Parallel.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -308,14 +308,9 @@ void IMConstPropPass::runOnOperation() {
   }
 
   // Rewrite any constants in the modules.
-  if (circuit.getContext()->isMultithreadingEnabled()) {
-    SmallVector<FModuleOp> ops(circuit.getBody()->getOps<FModuleOp>());
-    llvm::parallelForEach(ops, [&](auto op) { rewriteModuleBody(op); });
-  } else {
-    for (auto &circuitBodyOp : *circuit.getBody())
-      if (auto module = dyn_cast<FModuleOp>(circuitBodyOp))
-        rewriteModuleBody(module);
-  }
+  mlir::parallelForEach(circuit.getContext(),
+                        circuit.getBody()->getOps<FModuleOp>(),
+                        [&](auto op) { rewriteModuleBody(op); });
 
   // Clean up our state for next time.
   instanceGraph = nullptr;
@@ -372,9 +367,6 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
     return; // Already executable.
 
   for (auto &op : *block) {
-    // Filter out primitives etc quickly.
-    if (op.getNumOperands() != 0 || isa<RegResetOp>(&op))
-      continue;
 
     // Handle each of the special operations in the firrtl dialect.
     if (isa<WireOp>(op) || isa<RegOp>(op))
@@ -391,10 +383,6 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
       markRegResetOp(regReset);
     else if (auto mem = dyn_cast<MemOp>(op))
       markMemOp(mem);
-    else {
-      for (auto result : op.getResults())
-        markOverdefined(result);
-    }
   }
 }
 
@@ -530,6 +518,8 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
   // Driving an instance argument port drives the corresponding argument of the
   // referenced module.
   if (auto instance = dest.getDefiningOp<InstanceOp>()) {
+    // Update the dest, when its an instance op.
+    mergeLatticeValue(connect.dest(), srcValue);
     auto module =
         dyn_cast<FModuleOp>(instanceGraph->getReferencedModule(instance));
     if (!module)

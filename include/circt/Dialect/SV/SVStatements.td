@@ -607,3 +607,19 @@ def BindOp : SVOp<"bind", []> {
     hw::InstanceOp getReferencedInstance();
   }];
 }
+
+def BindInterfaceOp : SVOp<"bind.interface", []> {
+  let summary = "indirectly instantiate an interface";
+  let description = [{
+    Indirectly instantiate an interface in the context of another module. This
+    operation must pair with a `sv.interface.instance`.
+  }];
+  let arguments = (ins FlatSymbolRefAttr:$interface);
+  let results = (outs);
+  let verifier = "return ::verify$cppClass(*this);";
+  let assemblyFormat = [{ $interface attr-dict }];
+  let extraClassDeclaration = [{
+    sv::InterfaceInstanceOp getReferencedInstance();
+  }];
+
+}

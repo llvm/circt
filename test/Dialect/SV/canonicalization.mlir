@@ -1,4 +1,4 @@
-// RUN: circt-opt -simple-canonicalizer %s | FileCheck %s
+// RUN: circt-opt -canonicalize='top-down=true region-simplify=true' %s | FileCheck %s
 
 // CHECK-LABEL: func @if_dead_condition(%arg0: i1) {
 // CHECK-NEXT:    sv.always posedge %arg0  {

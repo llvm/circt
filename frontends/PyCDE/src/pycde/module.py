@@ -52,6 +52,11 @@ class Parameter:
     self.name = name
 
 
+# Set an input to no_connect to indicate not to connect it. Only valid for
+# external module inputs.
+no_connect = object()
+
+
 class module:
   """Decorator for module classes or functions which parameterize module
   classes."""
@@ -202,11 +207,15 @@ def _module_base(cls, extern: bool, params={}):
       self.backedges: dict[int:BackedgeBuilder.Edge] = {}
       for (idx, (name, type)) in enumerate(mod._input_ports):
         if name in inputs:
-          value = support.get_value(obj_to_value(inputs[name], type))
-          assert value is not None
-          if not extern and support.type_to_pytype(value.type) != type:
-            raise TypeError(f"Input '{name}' has type '{value.type}' "
-                            f"but expected '{type}'")
+          input = inputs[name]
+          if input == no_connect:
+            if not extern:
+              raise ConnectionError(
+                "`no_connect` is only valid on extern module ports")
+            else:
+              value = hw.ConstantOp.create(types.i1, 0).result
+          else:
+            value = obj_to_value(input, type)
         else:
           backedge = BackedgeBuilder.current().create(type, name, self, loc=loc)
           self.backedges[idx] = backedge
@@ -337,6 +346,10 @@ class _Generate:
     self.modcls = None
     self.loc = get_user_loc()
 
+  def _generate(self, mod):
+    outputs = self.gen_func(mod)
+    self._create_output_op(outputs)
+
   def __call__(self, op):
     """Build an HWModuleOp and run the generator as the body builder."""
 
@@ -379,7 +392,7 @@ class _Generate:
                                module_name,
                                input_ports=self.modcls._input_ports,
                                output_ports=self.modcls._output_ports,
-                               body_builder=self.gen_func)
+                               body_builder=self._generate)
     else:
       assert (len(existing_module_names) == 1)
       mod = existing_module_names[0]
@@ -425,6 +438,45 @@ class _Generate:
     for sub in ["<", "x", " "]:
       sanitized_str = sanitized_str.replace(sub, "_")
     return sanitized_str
+
+  def _create_output_op(self, gen_ret):
+    """Create the hw.OutputOp from the generator returns."""
+    assert hasattr(self, "modcls")
+    output_ports = self.modcls._output_ports
+
+    # If generator didn't return anything, this op mustn't have any outputs.
+    if gen_ret is None:
+      if len(output_ports) == 0:
+        hw.OutputOp([])
+        return
+      raise support.ConnectionError("Generator must return dict")
+
+    # Now create the output op depending on the object type returned
+    outputs: list[Value] = list()
+
+    # Only acceptable return is a dict of port, value mappings.
+    if not isinstance(gen_ret, dict):
+      raise support.ConnectionError("Generator must return a dict of outputs")
+
+    # A dict of `OutputPortName` -> ValueLike or convertable objects must be
+    # converted to a list in port order.
+    unconnected_ports = []
+    for (name, port_type) in output_ports:
+      if name not in gen_ret:
+        unconnected_ports.append(name)
+        outputs.append(None)
+      else:
+        val = obj_to_value(gen_ret[name], port_type)
+        outputs.append(val)
+        gen_ret.pop(name)
+    if len(unconnected_ports) > 0:
+      raise support.UnconnectedSignalError(unconnected_ports)
+    if len(gen_ret) > 0:
+      raise support.ConnectionError(
+          "Could not map the following to output ports: " +
+          ",".join(gen_ret.keys()))
+
+    hw.OutputOp(outputs)
 
 
 def generator(func):

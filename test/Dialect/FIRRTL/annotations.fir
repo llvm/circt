@@ -102,8 +102,8 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},
     ; CHECK-LABEL: module {
     ; CHECK: %bar_a, %bar_b, %bar_c = firrtl.instance @Bar
     ; CHECK-SAME: [{one}],
-    ; CHECK-SAME: [#firrtl.subAnno<fieldID = [1, 1], {two}>,
-    ; CHECK-SAME:  #firrtl.subAnno<fieldID = [2, 2], {three}>],
+    ; CHECK-SAME: [#firrtl.subAnno<fieldID = 1, {two}>,
+    ; CHECK-SAME:  #firrtl.subAnno<fieldID = 2, {three}>],
     ; CHECK-SAME: [{four}]
 
 ; // -----
@@ -155,8 +155,8 @@ circuit Foo: %[[{"a":null,"target":"~Foo|Foo>bar.r"},
     ; CHECK-LABEL: module {
     ; CHECK: firrtl.mem
     ; CHECK-SAME: portAnnotations = [
-    ; CHECK-SAME: [{a}, #firrtl.subAnno<fieldID = [5, 5], {b}>],
-    ; CHECK-SAME: [#firrtl.subAnno<fieldID = [2, 2], {c}>, #firrtl.subAnno<fieldID = [6, 6], {d}>]
+    ; CHECK-SAME: [{a}, #firrtl.subAnno<fieldID = 5, {b}>],
+    ; CHECK-SAME: [#firrtl.subAnno<fieldID = 2, {c}>, #firrtl.subAnno<fieldID = 6, {d}>]
 
 ; // -----
 
@@ -287,8 +287,8 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0]"},{"two":null,"target":"~F
 
     ; CHECK-LABEL: module {
     ; CHECK: %bar = firrtl.wire  {annotations =
-    ; CHECK-SAME: #firrtl.subAnno<fieldID = [1, 3], {one}>
-    ; CHECK-SAME: #firrtl.subAnno<fieldID = [5, 5], {two}>
+    ; CHECK-SAME: #firrtl.subAnno<fieldID = 1, {one}>
+    ; CHECK-SAME: #firrtl.subAnno<fieldID = 5, {two}>
 
 
 ; // -----
@@ -301,8 +301,8 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0]"},{"two":null,"target":"~F
 
     ; CHECK-LABEL: module {
     ; CHECK: %bar = firrtl.reg %clock  {annotations =
-    ; CHECK-SAME: #firrtl.subAnno<fieldID = [1, 3], {one}>
-    ; CHECK-SAME: #firrtl.subAnno<fieldID = [5, 5], {two}>
+    ; CHECK-SAME: #firrtl.subAnno<fieldID = 1, {one}>
+    ; CHECK-SAME: #firrtl.subAnno<fieldID = 5, {two}>
 
 ; // -----
 
@@ -525,9 +525,9 @@ circuit GCTDataTap : %[
     ; CHECK-SAME:    portID = [[PORT_ID_0:[0-9]+]] : i64,
     ; CHECK-SAME:    type = "portName"}
     ; CHECK-SAME: %_1: !firrtl.vector<uint<1>, 1> {firrtl.annotations
-    ; CHECK-SAME:   #firrtl.subAnno<fieldID = [1, 1],
+    ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
     ; CHECK-SAME:     {class = "firrtl.transforms.DontTouchAnnotation"}>
-    ; CHECK-SAME:   #firrtl.subAnno<fieldID = [1, 1],
+    ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
     ; CHECK-SAME:      id = [[ID]] : i64,
     ; CHECK-SAME:      portID = [[PORT_ID_1:[0-9]+]] : i64,
@@ -539,9 +539,9 @@ circuit GCTDataTap : %[
     ; CHECK-SAME:    portID = [[PORT_ID_2:[0-9]+]] : i64,
     ; CHECK-SAME:    type = "portName"}
     ; CHECK-SAME: %_3: !firrtl.vector<uint<1>, 1> {firrtl.annotations =
-    ; CHECK-SAME:   #firrtl.subAnno<fieldID = [1, 1],
+    ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
     ; CHECK-SAME:     {class = "firrtl.transforms.DontTouchAnnotation"}>
-    ; CHECK-SAME:   #firrtl.subAnno<fieldID = [1, 1],
+    ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
     ; CHECK-SAME:      id = [[ID]] : i64,
     ; CHECK-SAME:      portID = [[PORT_ID_3:[0-9]+]] : i64,
@@ -552,9 +552,9 @@ circuit GCTDataTap : %[
     ; CHECK-SAME:    id = [[ID]] : i64,
     ; CHECK-SAME:    portID = [[PORT_ID_4:[0-9]+]] : i64}
     ; CHECK-SAME: %_5: !firrtl.vector<uint<1>, 1> {firrtl.annotations =
-    ; CHECK-SAME:   #firrtl.subAnno<fieldID = [1, 1],
+    ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
     ; CHECK-SAME:     {class = "firrtl.transforms.DontTouchAnnotation"}>
-    ; CHECK-SAME:   #firrtl.subAnno<fieldID = [1, 1],
+    ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey",
     ; CHECK-SAME:      id = [[ID]] : i64,
     ; CHECK-SAME:      portID = [[PORT_ID_5:[0-9]+]] : i64}>
@@ -563,9 +563,9 @@ circuit GCTDataTap : %[
     ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.DeletedDataTapKey",
     ; CHECK-SAME:    id = [[ID]] : i64}
     ; CHECK-SAME: %_7: !firrtl.vector<uint<1>, 1> {firrtl.annotations =
-    ; CHECK-SAME:   #firrtl.subAnno<fieldID = [1, 1],
+    ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
     ; CHECK-SAME:     {class = "firrtl.transforms.DontTouchAnnotation"}>
-    ; CHECK-SAME:   #firrtl.subAnno<fieldID = [1, 1],
+    ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.DeletedDataTapKey",
     ; CHECK-SAME:      id = [[ID]] : i64}>
     ; CHECK-SAME: %_8: !firrtl.uint<1> {firrtl.annotations = [
@@ -573,7 +573,7 @@ circuit GCTDataTap : %[
     ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.LiteralDataTapKey",
     ; CHECK-SAME:    literal = "UInt<16>(\22h2a\22)"}
     ; CHECK-SAME: %_9: !firrtl.vector<uint<1>, 1> {firrtl.annotations =
-    ; CHECK-SAME:   #firrtl.subAnno<fieldID = [1, 1],
+    ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
     ; CHECK-SAME:     {class = "firrtl.transforms.DontTouchAnnotation"}>
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.LiteralDataTapKey",
     ; CHECK-SAME:      literal = "UInt<16>(\22h2a\22)"}
@@ -604,14 +604,14 @@ circuit GCTDataTap : %[
 
     ; CHECK: firrtl.wire
     ; CHECK-SAME: annotations =
-    ; CHECK-SAME:   #firrtl.subAnno<fieldID = [1, 1],
+    ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
     ; CHECK-SAME:      id = [[ID]] : i64,
     ; CHECK-SAME:      portID = [[PORT_ID_2]] : i64,
     ; CHECK-SAME:      type = "source"}>
-    ; CHECK-SAME:   #firrtl.subAnno<fieldID = [1, 1],
+    ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
     ; CHECK-SAME:     {class = "firrtl.transforms.DontTouchAnnotation"}>
-    ; CHECK-SAME:   #firrtl.subAnno<fieldID = [1, 1],
+    ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
     ; CHECK-SAME:      id = [[ID]] : i64,
     ; CHECK-SAME:      portID = [[PORT_ID_3]] : i64,
@@ -654,10 +654,10 @@ circuit GCTMemTap : %[
     ; CHECK-SAME: annotations = [{unrelatedAnnotation}]
     ; CHECK: firrtl.extmodule @MemTap
     ; CHECK-SAME: %mem: [[A:.+]] {firrtl.annotations =
-    ; CHECK-SAME:   #firrtl.subAnno<fieldID = [1, 1],
+    ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.MemTapAnnotation",
     ; CHECK-SAME:      id = [[ID:[0-9]+]] : i64}>
-    ; CHECK-SAME:   #firrtl.subAnno<fieldID = [2, 2],
+    ; CHECK-SAME:   #firrtl.subAnno<fieldID = 2,
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.MemTapAnnotation",
     ; CHECK-SAME:      id = [[ID]] : i64}>
     ; CHECK: firrtl.module @GCTMemTap
@@ -735,29 +735,31 @@ circuit GCTInterface : %[
     ; "r" should be annotated.
     ; CHECK: firrtl.module @GCTInterface
     ; CHECK-SAME: %a: [[TYPE:.+]] {firrtl.annotations = [
-    ; CHECK-SAME:   #firrtl.subAnno<fieldID = [0, 0], {
+    ; CHECK-SAME:   #firrtl.subAnno<fieldID = 0, {
     ; CHECK-SAME:     class = "sifive.enterprise.grandcentral.AugmentedGroundType",
     ; CHECK-SAME:     defName = "ViewName",
     ; CHECK-SAME:     name = "port"}>]}
     ; CHECK-SAME: annotations = [
     ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation",
+    ; CHECK-SAME:    defName = "ViewName",
     ; CHECK-SAME:    id = [[ID]] : i64,
+    ; CHECK-SAME:    name = "view",
     ; CHECK-SAME:    type = "parent"}]
     ; CHECK: firrtl.reg
     ; CHECK-SAME: annotations
-    ; CHECK-SAME: #firrtl.subAnno<fieldID = [5, 5],
+    ; CHECK-SAME: #firrtl.subAnno<fieldID = 5,
     ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
     ; CHECK-SAME:    defName = "register",
     ; CHECK-SAME:    name = "_2"}>
-    ; CHECK-SAME: #firrtl.subAnno<fieldID = [6, 6],
+    ; CHECK-SAME: #firrtl.subAnno<fieldID = 6,
     ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
     ; CHECK-SAME:    defName = "register",
     ; CHECK-SAME:    name = "_2"}>
-    ; CHECK-SAME: #firrtl.subAnno<fieldID = [3, 3],
+    ; CHECK-SAME: #firrtl.subAnno<fieldID = 3,
     ; CHECK-SAME:    {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
     ; CHECK-SAME:     defName = "_0",
     ; CHECK-SAME:     name = "_1"}>
-    ; CHECK-SAME: #firrtl.subAnno<fieldID = [2, 2],
+    ; CHECK-SAME: #firrtl.subAnno<fieldID = 2,
     ; CHECK-SAME:    {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
     ; CHECK-SAME:     defName = "_0",
     ; CHECK-SAME:     name = "_0"}>

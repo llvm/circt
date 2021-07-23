@@ -34,7 +34,8 @@
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
-#include "llvm/Support/Parallel.h"
+#include "mlir/IR/Threading.h"
+#include "llvm/ADT/APSInt.h"
 #include <deque>
 
 using namespace circt;
@@ -48,23 +49,22 @@ struct FlatBundleFieldEntry {
   FIRRTLType type;
   /// The index in the parent type
   size_t index;
-  /// The FieldID range of self and children in the parent type
-  unsigned minFieldID, maxFieldID;
+  /// The fieldID
+  unsigned fieldID;
   /// This is a suffix to add to the field name to make it unique.
   SmallString<16> suffix;
   /// This indicates whether the field was flipped to be an output.
   bool isOutput;
 
-  FlatBundleFieldEntry(const FIRRTLType &type, size_t index,
-                       unsigned minFieldID, unsigned maxFieldID,
+  FlatBundleFieldEntry(const FIRRTLType &type, size_t index, unsigned fieldID,
                        StringRef suffix, bool isOutput)
-      : type(type), index(index), minFieldID(minFieldID),
-        maxFieldID(maxFieldID), suffix(suffix), isOutput(isOutput) {}
+      : type(type), index(index), fieldID(fieldID), suffix(suffix),
+        isOutput(isOutput) {}
 
   void dump() const {
     llvm::errs() << "FBFE{" << type << " index<" << index << "> fieldID<"
-                 << minFieldID << "," << maxFieldID << "> suffix<" << suffix
-                 << "> isOutput<" << isOutput << ">}\n";
+                 << fieldID << "> suffix<" << suffix << "> isOutput<"
+                 << isOutput << ">}\n";
   }
 };
 } // end anonymous namespace
@@ -82,18 +82,15 @@ static bool peelType(Type type, SmallVectorImpl<FlatBundleFieldEntry> &fields) {
           tmpSuffix.resize(0);
           tmpSuffix.push_back('_');
           tmpSuffix.append(elt.name.getValue());
-          fields.emplace_back(elt.type, i, bundle.getFieldID(i),
-                              bundle.getFieldID(i) + elt.type.getMaxFieldID(),
-                              tmpSuffix, elt.isFlip);
+          fields.emplace_back(elt.type, i, bundle.getFieldID(i), tmpSuffix,
+                              elt.isFlip);
         }
         return true;
       })
       .Case<FVectorType>([&](auto vector) {
         // Increment the field ID to point to the first element.
-        auto width = vector.getElementType().getMaxFieldID() + 1;
         for (size_t i = 0, e = vector.getNumElements(); i != e; ++i) {
           fields.emplace_back(vector.getElementType(), i, vector.getFieldID(i),
-                              vector.getFieldID(i) + width,
                               "_" + std::to_string(i), false);
         }
         return true;
@@ -137,20 +134,25 @@ static ArrayAttr filterAnnotations(MLIRContext *ctxt, ArrayAttr annotations,
     return ArrayAttr::get(ctxt, retval);
   for (auto opAttr : annotations) {
     if (auto subAnno = opAttr.dyn_cast<SubAnnotationAttr>()) {
-      // Check for overlap of the two ranges
-      if ((field.minFieldID >= subAnno.getMinFieldID() &&
-           field.minFieldID <= subAnno.getMaxFieldID()) ||
-          (field.maxFieldID >= subAnno.getMinFieldID() &&
-           field.minFieldID <= subAnno.getMinFieldID())) {
-        auto newMin =
-            srcType.rootChildFieldID(subAnno.getMinFieldID(), field.index);
-        auto newMax =
-            srcType.rootChildFieldID(subAnno.getMinFieldID(), field.index);
-        if (newMin.first == 0 && newMax.first == 0)
+      // Apply annotations to all elements if fieldID is equal to zero.
+      if (subAnno.getFieldID() == 0) {
+        retval.push_back(subAnno.getAnnotations());
+        continue;
+      }
+
+      // Check whether the annotation falls into the range of the current field.
+      if (subAnno.getFieldID() >= field.fieldID &&
+          subAnno.getFieldID() <= field.fieldID + field.type.getMaxFieldID()) {
+        if (auto newFieldID = subAnno.getFieldID() - field.fieldID) {
+          // If the target is a subfield/subindex of the current field, create a
+          // new sub-annotation with a new field ID.
+          retval.push_back(SubAnnotationAttr::get(ctxt, newFieldID,
+                                                  subAnno.getAnnotations()));
+        } else {
+          // Otherwise, if the current field is exactly the target, degenerate
+          // the sub-annotation to a normal annotation.
           retval.push_back(subAnno.getAnnotations());
-        else
-          retval.push_back(SubAnnotationAttr::get(
-              ctxt, newMin.first, newMax.first, subAnno.getAnnotations()));
+        }
       }
     } else
       retval.push_back(opAttr);
@@ -183,34 +185,39 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
     SmallVector<Attribute> portAnno;
     for (auto attr : newMem.getPortAnnotation(portIdx)) {
       if (auto subAnno = attr.dyn_cast<SubAnnotationAttr>()) {
-        auto minIdx = oldPortType.getIndexForFieldID(subAnno.getMinFieldID());
-        auto maxIdx = oldPortType.getIndexForFieldID(subAnno.getMaxFieldID());
-        if (minIdx != maxIdx) {
-          op.emitError("Cannot handle annotation ranges spanning fields");
+        auto targetIndex = oldPortType.getIndexForFieldID(subAnno.getFieldID());
+
+        // Apply annotations to all elements if the target is the whole
+        // sub-field.
+        if (subAnno.getFieldID() == oldPortType.getFieldID(targetIndex)) {
+          portAnno.push_back(SubAnnotationAttr::get(
+              b->getContext(), portType.getFieldID(targetIndex),
+              subAnno.getAnnotations()));
           continue;
         }
-        if (minIdx >= 3) { // data or mask
-          // is the annotation in the filtered field?
-          // FieldID of the annotation in the data field.
-          auto minID =
-              oldPortType.rootChildFieldID(subAnno.getMinFieldID(), minIdx);
-          // FieldID of the annotation in filtered data type.
-          minID = op.getDataType().rootChildFieldID(minID.first, field.index);
-          if (minID.second) { // contained!
-            portAnno.push_back(SubAnnotationAttr::get(
-                b->getContext(), portType.getFieldID(minIdx) + minID.first,
-                portType.getFieldID(maxIdx) + minID.first,
-                subAnno.getAnnotations()));
-          }
 
-        } else {
-          portAnno.push_back(SubAnnotationAttr::get(
-              b->getContext(), portType.getFieldID(minIdx),
-              portType.getFieldID(maxIdx), subAnno.getAnnotations()));
+        // Handle `data`, `rdata`, `wdata`, and `mask` sub-fields.
+        auto portKind = newMem.getPortKind(portIdx);
+        if ((portKind == MemOp::PortKind::ReadWrite && targetIndex > 3) ||
+            (portKind != MemOp::PortKind::ReadWrite && targetIndex > 2)) {
+          // Check whether the annotation falls into the range of the current
+          // field. Note that the `field` here is peeled from the `data`
+          // sub-field of the memory port, thus we need to add the fieldID of
+          // `data` or `mask` sub-field to get the "real" fieldID.
+          auto fieldID = field.fieldID + oldPortType.getFieldID(targetIndex);
+          if (subAnno.getFieldID() >= fieldID &&
+              subAnno.getFieldID() <= fieldID + field.type.getMaxFieldID()) {
+            // Create a new sub-annotation with a new field ID. Similarly, we
+            // need to add the fieldID of `data` or `mask` sub-field in the new
+            // memory port type here.
+            auto newFieldID = subAnno.getFieldID() - fieldID +
+                              portType.getFieldID(targetIndex);
+            portAnno.push_back(SubAnnotationAttr::get(
+                b->getContext(), newFieldID, subAnno.getAnnotations()));
+          }
         }
-      } else {
+      } else
         portAnno.push_back(attr);
-      }
     }
     newAnnotations.push_back(b->getArrayAttr(portAnno));
   }
@@ -979,39 +986,18 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
 namespace {
 struct LowerTypesPass : public LowerFIRRTLTypesBase<LowerTypesPass> {
   void runOnOperation() override;
-
-private:
-  void runParallel();
 };
 } // end anonymous namespace
 
-void LowerTypesPass::runParallel() {
-  // Collect the operations to iterate in a vector. We can't use parallelFor
-  // with the regular op list, since it requires a RandomAccessIterator. This
-  // also lets us use parallelForEachN, which means we don't have to
-  // llvm::enumerate the ops with their index. TODO(mlir): There should really
-  // be a way to do this without collecting the operations first.
+// This is the main entrypoint for the lowering pass.
+void LowerTypesPass::runOnOperation() {
   std::deque<Operation *> ops;
   llvm::for_each(getOperation().getBody()->getOperations(),
                  [&](Operation &op) { ops.push_back(&op); });
 
-  mlir::ParallelDiagnosticHandler diagHandler(&getContext());
-  llvm::parallelForEachN(0, ops.size(), [&](auto index) {
-    // Notify the handler the op index and then perform lowering.
-    diagHandler.setOrderIDForThread(index);
+  mlir::parallelForEachN(&getContext(), 0, ops.size(), [&](auto index) {
     TypeLoweringVisitor(&getContext()).lowerModule(ops[index]);
-    diagHandler.eraseOrderIDForThread();
   });
-}
-
-// This is the main entrypoint for the lowering pass.
-void LowerTypesPass::runOnOperation() {
-  auto *context = &getContext();
-  if (context->isMultithreadingEnabled())
-    runParallel();
-  else
-    for (auto &op : getOperation().getBody()->getOperations())
-      TypeLoweringVisitor(context).lowerModule(&op);
 }
 
 /// This is the pass constructor.
