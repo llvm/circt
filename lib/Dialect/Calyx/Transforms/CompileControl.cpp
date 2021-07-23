@@ -16,6 +16,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OperationSupport.h"
+#include "mlir/IR/PatternMatch.h"
 
 using namespace circt;
 using namespace calyx;
@@ -40,8 +41,9 @@ static size_t getNecessaryBitWidth(size_t numStates) {
 /// `width`.
 static RegisterOp createRegister(OpBuilder &builder, ComponentOp &component,
                                  size_t width, StringRef name) {
-  auto *context = builder.getContext();
+  IRRewriter::InsertionGuard guard(builder);
   builder.setInsertionPointToStart(component.getBody());
+  auto *context = builder.getContext();
   return builder.create<RegisterOp>(component->getLoc(),
                                     StringAttr::get(context, name), width);
 }
