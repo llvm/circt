@@ -60,8 +60,10 @@ static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
   Block *wiresBody = wires.getBody();
 
   auto &seqOps = seq.getBody()->getOperations();
-  if (!llvm::all_of(seqOps, [](auto &&op) { return isa<EnableOp>(op); }))
+  if (!llvm::all_of(seqOps, [](auto &&op) { return isa<EnableOp>(op); })) {
     seq.emitOpError("should only contain EnableOps in this pass.");
+    return;
+  }
 
   // This should be the number of enable statements + 1 since this is the
   // maximum value the FSM register will reach.
