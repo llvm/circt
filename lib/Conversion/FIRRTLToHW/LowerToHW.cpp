@@ -32,6 +32,7 @@ using namespace circt;
 using namespace firrtl;
 using circt::comb::ICmpPredicate;
 
+const StringRef DontTouchClass = "firrtl.transforms.DontTouchAnnotation";
 /// Given a FIRRTL type, return the corresponding type for the HW dialect.
 /// This returns a null type if it cannot be lowered.
 static Type lowerType(Type type) {
@@ -223,8 +224,9 @@ struct CircuitLoweringState {
     return it != oldToNewModuleMap.end() ? it->second : nullptr;
   }
 
-  // Emit warnings on unprocessed annotations still remaining in the annoSet.
-  void warnOnRemainingAnnotations(Operation *op, const AnnotationSet &annoSet);
+  // Process remaining annotations and emit warnings on unprocessed annotations
+  // still remaining in the annoSet.
+  void processRemainingAnnotations(Operation *op, const AnnotationSet &annoSet);
 
   CircuitOp circuitOp;
 
@@ -248,7 +250,7 @@ private:
 
   // Record the set of remaining annotation classes. This is used to warn only
   // once about any annotation class.
-  StringSet<> alreadyPrinted;
+  StringSet<> alreadyProcessed;
   const bool enableAnnotationWarning;
   std::mutex annotationPrintingMtx;
 
@@ -260,14 +262,26 @@ private:
   std::mutex bindsMutex;
 };
 
-void CircuitLoweringState::warnOnRemainingAnnotations(
+const StringSet<> whitelistAnnotations = {DontTouchClass};
+
+void CircuitLoweringState::processRemainingAnnotations(
     Operation *op, const AnnotationSet &annoSet) {
   if (!enableAnnotationWarning || annoSet.empty())
     return;
+  for (auto anno : annoSet) {
+    auto anClass = anno.getClass();
+    // Add the processed annotations to alreadyProcessed.
+    // This avoids printing the future warnings on them.
+    if (whitelistAnnotations.contains(anClass)) {
+      std::lock_guard<std::mutex> lock(annotationPrintingMtx);
+      alreadyProcessed.insert(anClass);
+    }
+  }
+
   std::lock_guard<std::mutex> lock(annotationPrintingMtx);
 
   for (auto a : annoSet) {
-    auto inserted = alreadyPrinted.insert(a.getClass());
+    auto inserted = alreadyProcessed.insert(a.getClass());
     if (inserted.second)
       mlir::emitWarning(op->getLoc(), "unprocessed annotation:'" +
                                           a.getClass() +
@@ -339,7 +353,7 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   SmallVector<FModuleOp, 32> modulesToProcess;
 
-  state.warnOnRemainingAnnotations(circuit, AnnotationSet(circuit));
+  state.processRemainingAnnotations(circuit, AnnotationSet(circuit));
   // Iterate through each operation in the circuit body, transforming any
   // FModule's we come across.
   for (auto &op : circuitBody->getOperations()) {
@@ -650,7 +664,7 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
       hwPort.argNum = numArgs++;
     }
     ports.push_back(hwPort);
-    loweringState.warnOnRemainingAnnotations(moduleOp, firrtlPort.annotations);
+    loweringState.processRemainingAnnotations(moduleOp, firrtlPort.annotations);
   }
   return success();
 }
@@ -669,7 +683,8 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   if (auto defName = oldModule.defname())
     verilogName = defName.getValue();
 
-  loweringState.warnOnRemainingAnnotations(oldModule, AnnotationSet(oldModule));
+  loweringState.processRemainingAnnotations(oldModule,
+                                            AnnotationSet(oldModule));
   // Build the new hw.module op.
   OpBuilder builder(topLevelModule->getParent()->getContext());
   builder.setInsertionPointToEnd(topLevelModule);
@@ -689,7 +704,8 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   if (failed(lowerPorts(firrtlPorts, ports, oldModule, loweringState)))
     return {};
 
-  loweringState.warnOnRemainingAnnotations(oldModule, AnnotationSet(oldModule));
+  loweringState.processRemainingAnnotations(oldModule,
+                                            AnnotationSet(oldModule));
   // Build the new hw.module op.
   OpBuilder builder(topLevelModule->getParent()->getContext());
   builder.setInsertionPointToEnd(topLevelModule);
@@ -1170,7 +1186,7 @@ void FIRRTLLowering::run() {
     builder.setInsertionPoint(&op);
     builder.setLoc(op.getLoc());
     auto done = succeeded(dispatchVisitor(&op));
-    circuitState.warnOnRemainingAnnotations(&op, AnnotationSet(&op));
+    circuitState.processRemainingAnnotations(&op, AnnotationSet(&op));
     if (done)
       opsToRemove.push_back(&op);
     else {
@@ -1668,8 +1684,7 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   // Name attr is required on sv.wire but optional on firrtl.wire.
   auto nameAttr = op.nameAttr() ? op.nameAttr() : builder.getStringAttr("");
 
-  if (!AnnotationSet::removeAnnotations(
-          op, "firrtl.transforms.DontTouchAnnotation"))
+  if (!AnnotationSet::removeAnnotations(op, DontTouchClass))
     return setLoweringTo<sv::WireOp>(op, resultType, nameAttr);
   auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
   auto symName = op.nameAttr();
@@ -1697,8 +1712,7 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
 
   // Node operations are logical noops, but may carry annotations.  Don't touch
   // indicates we should keep it as a wire.
-  if (AnnotationSet::removeAnnotations(
-          op, "firrtl.transforms.DontTouchAnnotation")) {
+  if (AnnotationSet::removeAnnotations(op, DontTouchClass)) {
     // name may be empty
     auto name = op->getAttrOfType<StringAttr>("name");
     auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
@@ -1797,8 +1811,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
 
   // Add symbol if DontTouch annotation present.
   auto regResult =
-      AnnotationSet::removeAnnotations(op,
-                                       "firrtl.transforms.DontTouchAnnotation")
+      AnnotationSet::removeAnnotations(op, DontTouchClass)
           ? builder.create<sv::RegOp>(resultType, op.nameAttr(), op.nameAttr())
           : builder.create<sv::RegOp>(resultType, op.nameAttr());
   (void)setLowering(op, regResult);
