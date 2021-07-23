@@ -463,14 +463,15 @@ void GrandCentralPass::runOnOperation() {
           auto instance = builder.create<sv::InterfaceInstanceOp>(
               circuitOp->getLoc(),
               interfaces.lookup(defName.getValue()).getInterfaceType(), name,
-              builder.getStringAttr("__" + defName.getValue() + "__"));
+              builder.getStringAttr(
+                  "__" + op.getAttrOfType<StringAttr>("sym_name").getValue() +
+                  "_" + defName.getValue() + "__"));
           instance->setAttr("doNotPrint", builder.getBoolAttr(true));
           builder.setInsertionPointToStart(
               op.getParentOfType<ModuleOp>().getBody());
           auto bind = builder.create<sv::BindInterfaceOp>(
               circuitOp->getLoc(),
-              builder.getSymbolRefAttr(
-                  ("__" + defName.getValue() + "__").str()));
+              builder.getSymbolRefAttr(instance.sym_name().getValue()));
           bind->setAttr(
               "output_file",
               hw::OutputFileAttr::get(
