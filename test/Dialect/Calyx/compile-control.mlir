@@ -53,8 +53,10 @@ calyx.program {
       // CHECK: calyx.assign %fsm.write_en = %[[SIGNAL_ON]], %[[SEQ_GROUP_DONE_GUARD]] ? : i1
     }
 
+    // CHECK-LABEL: calyx.control {
+    // CHECK-NEXT:    calyx.enable @seq {compiledGroups = [@A, @B]}
+    // CHECK-NEXT:  }
     calyx.control {
-      // CHECK: calyx.enable @seq {compiledGroups = [@A, @B]}
       calyx.seq {
         calyx.enable @A
         calyx.enable @B
