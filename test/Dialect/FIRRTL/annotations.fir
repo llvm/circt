@@ -741,7 +741,9 @@ circuit GCTInterface : %[
     ; CHECK-SAME:     name = "port"}>]}
     ; CHECK-SAME: annotations = [
     ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation",
+    ; CHECK-SAME:    defName = "ViewName",
     ; CHECK-SAME:    id = [[ID]] : i64,
+    ; CHECK-SAME:    name = "view",
     ; CHECK-SAME:    type = "parent"}]
     ; CHECK: firrtl.reg
     ; CHECK-SAME: annotations
