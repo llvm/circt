@@ -65,3 +65,16 @@ firrtl.circuit "moduleAnno" attributes {annotations = [{class = "circuitOpAnnota
     attributes { annotations = [{class = "b"}] } {}
   firrtl.extmodule @extModPorts2(in %io_cpu_flush: !firrtl.uint<1> {firrtl.annotations = [{class="c"}]} )
 }
+
+// -----
+
+// The following annotations should be whitelisted and not trigger a warning
+// when lowering to HW.
+firrtl.circuit "Foo" {
+    firrtl.module @Foo() attributes {annotations = [
+        {class = "firrtl.transforms.NoDedupAnnotation"},
+        {class = "sifive.enterprise.firrtl.DontObfuscateModuleAnnotation"},
+        {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"},
+        {class = "sifive.enterprise.firrtl.ScalaClassAnnotation"}
+    ]} {}
+}
