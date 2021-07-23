@@ -168,7 +168,8 @@ static void printComponentOp(OpAsmPrinter &p, ComponentOp &op) {
   auto outputPortNames = op->getAttrOfType<ArrayAttr>("outPortNames");
   printPortDefList(p, outputPortTypes, outputPortNames);
 
-  p.printRegion(op.body(), /*printBlockTerminators=*/false,
+  p.printRegion(op.body(), /*printEntryBlockArgs=*/false,
+                /*printBlockTerminators=*/false,
                 /*printEmptyBlock=*/false);
 }
 
@@ -272,8 +273,7 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
                                "'calyx.wires', 'calyx.control'.";
 
   // Verify the component has the following ports.
-  // TODO(Calyx): Eventually, we want to use either types for these,
-  //  e.g. `calyx.clk_type` or attributes for passes.
+  // TODO(Calyx): Eventually, we want to attach attributes to these arguments.
   bool go = false, clk = false, reset = false, done = false;
   SmallVector<ComponentPortInfo> componentPorts = getComponentPortInfo(op);
   for (auto &&port : componentPorts) {
