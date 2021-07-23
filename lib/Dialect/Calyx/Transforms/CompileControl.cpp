@@ -58,14 +58,16 @@ static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
   Block *wiresBody = wires.getBody();
 
   auto &seqOps = seq.getBody()->getOperations();
-  assert(llvm::all_of(seqOps, [](auto &&op) { return isa<EnableOp>(op); }) &&
-         "The SeqOp should only contain EnableOps in this pass.");
+  if (!llvm::all_of(seqOps, [](auto &&op) { return isa<EnableOp>(op); }))
+    seq.emitOpError("should only contain EnableOps in this pass.");
+
   // This should be the number of enable statements + 1 since this is the
   // maximum value the FSM register will reach.
   size_t fsmBitWidth = getNecessaryBitWidth(seqOps.size() + 1);
 
   OpBuilder builder(component->getRegion(0));
   auto fsmRegister = createRegister(builder, component, fsmBitWidth, "fsm");
+  // TODO(Calyx): Add methods to RegisterOp to access ports.
   auto fsmIn = fsmRegister.getResult(0);
   auto fsmWriteEn = fsmRegister.getResult(1);
   auto fsmOut = fsmRegister.getResult(4);
@@ -90,7 +92,7 @@ static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
   seq.walk([&](EnableOp enable) {
     StringRef groupName = enable.groupName();
     groupNames.push_back(SymbolRefAttr::get(builder.getContext(), groupName));
-    auto groupOp = cast<GroupOp>(symTable.lookup(groupName));
+    auto groupOp = symTable.lookup<GroupOp>(groupName);
 
     builder.setInsertionPoint(groupOp);
     auto fsmCurrentState =
@@ -124,8 +126,7 @@ static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
     // Directly update the GroupGoOp of the current group being walked.
     auto goOp = groupOp.getGoOp();
     assert(goOp && "The Go Insertion pass should be run before this.");
-    goOp->setOperand(0, oneConstant);
-    goOp->insertOperands(1, {groupGoGuard});
+    goOp->setOperands({oneConstant, groupGoGuard});
 
     // Add guarded assignments to the fsm register `in` and `write_en` ports.
     fsmNextState =
