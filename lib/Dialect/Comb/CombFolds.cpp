@@ -80,8 +80,9 @@ static std::pair<size_t, size_t>
 getLowestBitAndHighestBitRequired(Operation *op, bool narrowTrailingBits,
                                   size_t originalOpWidth) {
   auto users = op->getUsers();
-  assert(!users.empty() && "getLowestBitAndHighestBitRequired cannot operate on "
-                           "a empty list of uses.");
+  assert(!users.empty() &&
+         "getLowestBitAndHighestBitRequired cannot operate on "
+         "a empty list of uses.");
 
   // when we don't want to narrowTrailingBits (namely in arithmetic
   // operations), forcing lowestBitRequired = 0
