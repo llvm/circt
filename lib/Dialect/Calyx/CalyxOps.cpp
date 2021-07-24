@@ -98,13 +98,13 @@ ControlOp calyx::ComponentOp::getControlOp() {
   return getControlOrWiresFrom<ControlOp>(*this);
 }
 
-OpResult calyx::ComponentOp::getDonePort() {
+Value calyx::ComponentOp::getDonePort() {
   ArrayAttr outPortNames = this->outPortNames();
 
   size_t i = 0, numArgs = this->getNumFuncResults();
   for (; i != numArgs; ++i) {
-    StringRef portName = outPortNames[i].cast<StringAttr>().getValue();
-    if (portName == "done")
+    StringAttr portName = outPortNames[i].cast<StringAttr>();
+    if (portName.getValue() == "done")
       break;
   }
   return (*this)->getOpResult(i);
@@ -115,8 +115,8 @@ Value calyx::ComponentOp::getGoPort() {
 
   size_t i = 0, numArgs = this->getNumFuncArguments();
   for (; i != numArgs; ++i) {
-    StringRef portName = inPortNames[i].cast<StringAttr>().getValue();
-    if (portName == "go")
+    StringAttr portName = inPortNames[i].cast<StringAttr>();
+    if (portName.getValue() == "go")
       break;
   }
   return (*this).getBody()->getArgument(i);

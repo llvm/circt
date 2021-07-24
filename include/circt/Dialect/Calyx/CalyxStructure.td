@@ -112,7 +112,7 @@ def ComponentOp : CalyxOp<"component", [
       ControlOp getControlOp();
 
       /// Gets the Done port of a Calyx component.
-      OpResult getDonePort();
+      Value getDonePort();
 
       /// Gets the Go port of a Calyx component.
       Value getGoPort();

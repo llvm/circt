@@ -39,7 +39,7 @@ static void inlineGroupAssignments(ComponentOp &component) {
     // Walk the assignments. Add `& %go` to each guard (see: GoInsertion).
     updateGroupAssignmentGuards(builder, group, componentGoPort);
 
-    auto groupDone = group.getDoneOp().clone();
+    auto groupDone = group.getDoneOp();
     if (topLevel.groupName() == group.sym_name()) {
       // 1. Replace `calyx.group_done %0, %1 ? : i1`
       //    with
@@ -47,24 +47,25 @@ static void inlineGroupAssignments(ComponentOp &component) {
       builder.create<AssignOp>(group->getLoc(), componentDonePort,
                                groupDone.src(), groupDone.guard());
     } else {
-      // 1. Remove calyx.group_done, these values were inserted in the last
-      // pass.
-      // 2. Replace calyx.group_go's uses with its guard:
-      //    e.g.
-      //    %A_go = calyx.group_go %true, %3 ? : i1
-      //    ...
-      //    %0 = comb.and %1, %A_go : i1
-      //    with
-      //    %0 = comb.and %1, %3 : i1
-      // 3. Remove calyx.group_go operations.
-      auto groupGo = group.getGoOp();
-      auto guard = groupGo.guard();
-
-      groupGo.replaceAllUsesWith(guard);
-      groupGo->erase();
+//      // 1. Remove calyx.group_done, these values were inserted in the last
+//      // pass.
+//      // 2. Replace calyx.group_go's uses with its guard:
+//      //    e.g.
+//      //    %A_go = calyx.group_go %true, %3 ? : i1
+//      //    ...
+//      //    %0 = comb.and %1, %A_go : i1
+//      //    with
+//      //    %0 = comb.and %1, %3 : i1
+//      // 3. Remove calyx.group_go operations.
+//      auto groupGo = group.getGoOp();
+//      auto guard = groupGo.guard();
+//
+//      groupGo.replaceAllUsesWith(guard);
+//      // groupGo->erase();
     }
     // In either case, remove the group's done value.
-    groupDone->erase();
+    // TODO: Instead of erase(), removeAllUses?
+    // group.getDoneOp()->remove();
 
     // Inline the group.
     // TODO: Causing an error :-(
@@ -85,13 +86,13 @@ void RemoveGroupsPass::runOnOperation() {
   inlineGroupAssignments(component);
 
   // Remove the groups.
-  component.getWiresOp().walk([](GroupOp group) { group->erase(); });
+  // component.getWiresOp().walk([](GroupOp group) { group->erase(); });
 
   // Remove the last EnableOp from the control.
   auto control = component.getControlOp();
-  control.walk([&](EnableOp enable) { enable->erase(); });
-  assert(control.getBody()->empty() &&
-         "The calyx.control should be compiled after this pass.");
+  // control.walk([&](EnableOp enable) { enable->erase(); });
+  //  assert(control.getBody()->empty() &&
+  //         "The calyx.control should be compiled after this pass.");
 }
 
 std::unique_ptr<mlir::Pass> circt::calyx::createRemoveGroupsPass() {

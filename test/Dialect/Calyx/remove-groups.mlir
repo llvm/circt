@@ -19,7 +19,7 @@ calyx.program {
       %fsm_is_group_A_begin_state = comb.icmp eq %fsm.out, %group_A_fsm_begin : i2
       %group_A_not_done = comb.xor %z.done, %signal_on : i1
       %group_A_go_guard = comb.and %fsm_is_group_A_begin_state, %group_A_not_done : i1
-      // CHECK: calyx.assign %z.go = %go, A.go
+
       calyx.group @A {
         %A.go = calyx.group_go %signal_on, %group_A_go_guard ? : i1
         calyx.assign %z.go = %z.flag : i1
@@ -53,6 +53,7 @@ calyx.program {
       calyx.assign %fsm.write_en = %signal_on, %seq_group_done_guard ? : i1
     }
 
+    // CHECK-LABEL: calyx.control
     calyx.control {
       calyx.enable @seq {compiledGroups = [@A, @B]}
     }
