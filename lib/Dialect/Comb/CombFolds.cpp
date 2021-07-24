@@ -77,19 +77,19 @@ static bool tryFlatteningOperands(Op op, PatternRewriter &rewriter) {
 // Given a range of uses of an operation, find the lowest and highest bits
 // inclusive that are ever referenced. The range of uses must not be empty.
 static std::pair<size_t, size_t>
-getLowestBitAndHighestBitRequired(Operation::use_range uses,
-                                  bool narrowTrailingBits,
+getLowestBitAndHighestBitRequired(Operation *op, bool narrowTrailingBits,
                                   size_t originalOpWidth) {
-  assert(!uses.empty() && "getLowestBitAndHighestBitRequired cannot operate on "
-                          "a empty list of uses.");
+  auto users = op->getUsers();
+  assert(!users.empty() && "getLowestBitAndHighestBitRequired cannot operate on "
+                           "a empty list of uses.");
 
   // when we don't want to narrowTrailingBits (namely in arithmetic
   // operations), forcing lowestBitRequired = 0
   size_t lowestBitRequired = narrowTrailingBits ? originalOpWidth - 1 : 0;
   size_t highestBitRequired = 0;
 
-  for (auto &use : uses) {
-    if (auto extractOp = dyn_cast<ExtractOp>(use.getOwner())) {
+  for (auto *user : users) {
+    if (auto extractOp = dyn_cast<ExtractOp>(user)) {
       size_t lowBit = extractOp.lowBit();
       size_t highBit = extractOp.getType().getWidth() + lowBit - 1;
       highestBitRequired = std::max(highestBitRequired, highBit);
@@ -122,15 +122,16 @@ static bool narrowOperationWidth(Op narrowingCandidate, ValueRange inputs,
                                  PatternRewriter &rewriter, F createOp) {
   // If the result is never used, no point optimizing this. It will
   // also complicated error handling in getLowestBitAndHigestBitRequired.
-  Operation::use_range uses = narrowingCandidate.getOperation()->getUses();
-  assert(!uses.empty() && "narrowingCandidate must have at least one use.");
+  auto usersIterator = narrowingCandidate.getOperation()->getUsers();
+  assert(!usersIterator.empty() &&
+         "narrowingCandidate must have at least one use.");
 
   size_t highestBitRequired;
   size_t lowestBitRequired;
   size_t originalOpWidth = narrowingCandidate.getType().getIntOrFloatBitWidth();
 
   std::tie(lowestBitRequired, highestBitRequired) =
-      getLowestBitAndHighestBitRequired(uses, narrowTrailingBits,
+      getLowestBitAndHighestBitRequired(narrowingCandidate, narrowTrailingBits,
                                         originalOpWidth);
 
   // Give up, because we can't make it narrower than it already is.
@@ -148,19 +149,27 @@ static bool narrowOperationWidth(Op narrowingCandidate, ValueRange inputs,
 
   // Replace all the use-site's extract operation with the newly minted narrowed
   // version.
-  for (auto &use : uses) {
-    auto extractUse = cast<ExtractOp>(use.getOwner());
+  SmallVector<Operation *, 16> users(usersIterator.begin(),
+                                     usersIterator.end());
+  for (auto *user : users) {
+    auto extractUse = cast<ExtractOp>(user);
     auto oldLowBit = extractUse.lowBit();
 
     assert(oldLowBit >= lowestBitRequired &&
            "incorrectly deduced the lowest bit required in usage arguments.");
 
+    auto loc = extractUse.getLoc();
+
+    // rewriter.replaceOp or replaceOpWithNewOp is potentially memory unsafe, as
+    // it requires the rewriting driver to ensure that dangling references in
+    // any internal data structures are properly cleared out.
     if (narrowedWidth == extractUse.getType().getWidth()) {
-      rewriter.replaceOp(extractUse, narrowedOperation);
+      extractUse.replaceAllUsesWith(narrowedOperation);
     } else {
       uint32_t newLowBit = oldLowBit - lowestBitRequired;
-      rewriter.replaceOpWithNewOp<ExtractOp>(extractUse, extractUse.getType(),
-                                             narrowedOperation, newLowBit);
+      auto narrowedExtract = rewriter.create<ExtractOp>(
+          loc, extractUse.getType(), narrowedOperation, newLowBit);
+      extractUse.replaceAllUsesWith(narrowedExtract.getOperation());
     }
   }
 
