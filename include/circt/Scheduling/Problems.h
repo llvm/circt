@@ -130,7 +130,7 @@ private:
   OperationProperty<OperatorType> linkedOperatorType;
   OperationProperty<unsigned> startTime;
 
-  // Pperator type properties
+  // Operator type properties
   OperatorTypeProperty<unsigned> latency;
 
   //===--------------------------------------------------------------------===//
