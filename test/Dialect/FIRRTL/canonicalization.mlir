@@ -56,27 +56,27 @@ firrtl.module @Div(in %a: !firrtl.uint<4>,
   // CHECK-DAG: [[ONE_i2:%.+]] = firrtl.constant 1 : !firrtl.uint
   // CHECK-DAG: [[ONE_s2:%.+]] = firrtl.constant 1 : !firrtl.sint
 
-  // COM: Check that 'div(a, a) -> 1' works for known UInt widths
+  // Check that 'div(a, a) -> 1' works for known UInt widths.
   // CHECK: firrtl.connect %b, [[ONE_i4]]
   %0 = firrtl.div %a, %a : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %b, %0 : !firrtl.uint<4>, !firrtl.uint<4>
 
-  // COM: Check that 'div(c, c) -> 1' works for known SInt widths
+  // Check that 'div(c, c) -> 1' works for known SInt widths.
   // CHECK: firrtl.connect %d, [[ONE_s5]] : !firrtl.sint<5>, !firrtl.sint<5>
   %1 = firrtl.div %c, %c : (!firrtl.sint<4>, !firrtl.sint<4>) -> !firrtl.sint<5>
   firrtl.connect %d, %1 : !firrtl.sint<5>, !firrtl.sint<5>
 
-  // COM: Check that 'div(e, e) -> 1' works for unknown UInt widths
+  // Check that 'div(e, e) -> 1' works for unknown UInt widths.
   // CHECK: firrtl.connect %f, [[ONE_i2]]
   %2 = firrtl.div %e, %e : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
   firrtl.connect %f, %2 : !firrtl.uint, !firrtl.uint
 
-  // COM: Check that 'div(g, g) -> 1' works for unknown SInt widths
+  // Check that 'div(g, g) -> 1' works for unknown SInt widths.
   // CHECK: firrtl.connect %h, [[ONE_s2]]
   %3 = firrtl.div %g, %g : (!firrtl.sint, !firrtl.sint) -> !firrtl.sint
   firrtl.connect %h, %3 : !firrtl.sint, !firrtl.sint
 
-  // COM: Check that 'div(a, 1) -> a' for known UInt widths
+  // Check that 'div(a, 1) -> a' for known UInt widths.
   // CHECK: firrtl.connect %b, %a
   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
   %4 = firrtl.div %a, %c1_ui2 : (!firrtl.uint<4>, !firrtl.uint<2>) -> !firrtl.uint<4>
@@ -1591,7 +1591,7 @@ firrtl.module @RegresetToReg(in %clock: !firrtl.clock, out %foo1: !firrtl.uint<1
   firrtl.connect %foo2, %bar2 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
-// COM: https://github.com/llvm/circt/issues/929
+// https://github.com/llvm/circt/issues/929
 // CHECK-LABEL: firrtl.module @MuxInvalidTypeOpt
 firrtl.module @MuxInvalidTypeOpt(in %in : !firrtl.uint<1>, out %out : !firrtl.uint<4>) {
   %c7_ui4 = firrtl.constant 7 : !firrtl.uint<4>

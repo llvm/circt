@@ -870,9 +870,11 @@ bool circt::firrtl::scatterCustomAnnotations(
 
     if (clazz == "sifive.enterprise.grandcentral.GrandCentralView$"
                  "SerializedViewAnnotation") {
+      auto viewAnnotationClass = StringAttr::get(
+          context, "sifive.enterprise.grandcentral.ViewAnnotation");
       auto id = newID();
       NamedAttrList companionAttrs, parentAttrs;
-      companionAttrs.append("class", dict.get("class"));
+      companionAttrs.append("class", viewAnnotationClass);
       companionAttrs.append("id", id);
       companionAttrs.append("type", StringAttr::get(context, "companion"));
       auto companionAttr =
@@ -885,7 +887,7 @@ bool circt::firrtl::scatterCustomAnnotations(
       auto parentAttr = tryGetAs<StringAttr>(dict, dict, "parent", loc, clazz);
       if (!parentAttr)
         return false;
-      parentAttrs.append("class", dict.get("class"));
+      parentAttrs.append("class", viewAnnotationClass);
       auto viewAttr = tryGetAs<DictionaryAttr>(dict, dict, "view", loc, clazz);
       if (!viewAttr)
         return false;
