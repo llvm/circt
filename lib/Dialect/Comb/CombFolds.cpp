@@ -116,19 +116,23 @@ getLowestBitAndHighestBitRequired(Operation *op, bool narrowTrailingBits,
 // This function requires the narrowingCandidate to have at least 1 use.
 //
 // Returns true if IR is mutated. IR is mutated iff narrowing happens.
-template <class Op, class F>
-static bool narrowOperationWidth(Op narrowingCandidate, ValueRange inputs,
-                                 bool narrowTrailingBits,
-                                 PatternRewriter &rewriter, F createOp) {
+static bool
+narrowOperationWidth(Operation *narrowingCandidate, ValueRange inputs,
+                     bool narrowTrailingBits, PatternRewriter &rewriter,
+                     std::function<Value(ArrayRef<Value>)> createOp) {
   // If the result is never used, no point optimizing this. It will
   // also complicated error handling in getLowestBitAndHigestBitRequired.
-  auto usersIterator = narrowingCandidate.getOperation()->getUsers();
+  auto usersIterator = narrowingCandidate->getUsers();
   assert(!usersIterator.empty() &&
          "narrowingCandidate must have at least one use.");
+  assert(narrowingCandidate->getNumResults() == 1 &&
+         "narrowingCandidate must have exactly one result");
+  IntegerType narrowingCandidateType =
+      narrowingCandidate->getResultTypes().front().cast<IntegerType>();
 
   size_t highestBitRequired;
   size_t lowestBitRequired;
-  size_t originalOpWidth = narrowingCandidate.getType().getIntOrFloatBitWidth();
+  size_t originalOpWidth = narrowingCandidateType.getIntOrFloatBitWidth();
 
   std::tie(lowestBitRequired, highestBitRequired) =
       getLowestBitAndHighestBitRequired(narrowingCandidate, narrowTrailingBits,
@@ -138,7 +142,7 @@ static bool narrowOperationWidth(Op narrowingCandidate, ValueRange inputs,
   if (lowestBitRequired == 0 && highestBitRequired == originalOpWidth - 1)
     return false;
 
-  auto loc = narrowingCandidate.getLoc();
+  auto loc = narrowingCandidate->getLoc();
   size_t narrowedWidth = highestBitRequired - lowestBitRequired + 1;
   auto narrowedType = rewriter.getIntegerType(narrowedWidth);
   Value narrowedOperation =
@@ -184,11 +188,11 @@ template <class Op>
 static bool narrowOperationWidth(Op op, ValueRange inputs,
                                  bool narrowTrailingBits,
                                  PatternRewriter &rewriter) {
-  auto createOp = [&](ArrayRef<Value> args) -> Op {
+  auto createOp = [&](ArrayRef<Value> args) -> Value {
     return rewriter.create<Op>(op.getLoc(), args);
   };
-  return narrowOperationWidth(op, inputs, narrowTrailingBits, rewriter,
-                              createOp);
+  return narrowOperationWidth(op.getOperation(), inputs, narrowTrailingBits,
+                              rewriter, createOp);
 }
 
 //===----------------------------------------------------------------------===//
