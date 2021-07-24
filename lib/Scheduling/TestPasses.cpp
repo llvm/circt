@@ -23,6 +23,16 @@ using namespace circt::scheduling;
 // Construction helper methods
 //===----------------------------------------------------------------------===//
 
+static SmallVector<SmallVector<unsigned>> parseArrayOfArrays(ArrayAttr attr) {
+  SmallVector<SmallVector<unsigned>> result;
+  for (auto elemArr : attr.getAsRange<ArrayAttr>()) {
+    result.emplace_back();
+    for (auto elem : elemArr.getAsRange<IntegerAttr>())
+      result.back().push_back(elem.getInt());
+  }
+  return result;
+}
+
 static LogicalResult constructProblem(Problem &prob, FuncOp func) {
   // set up catch-all operator type with unit latency
   auto unitOpr = prob.getOrInsertOperatorType("unit");
@@ -53,26 +63,39 @@ static LogicalResult constructProblem(Problem &prob, FuncOp func) {
     }
   }
 
-  // parse auxiliary dependences in the testcase, encoded as an array of
-  // 2-element arrays of integer attributes (see `test_asap.mlir`)
+  // parse auxiliary dependences in the testcase, encoded as an array of arrays
+  // of integer attributes
   if (auto attr = func->getAttrOfType<ArrayAttr>("auxdeps")) {
     auto &ops = prob.getOperations();
-    for (auto auxDepAttr : attr.getAsRange<ArrayAttr>()) {
-      if (auxDepAttr.size() != 2)
-        continue;
-      auto fromIdxAttr = auxDepAttr[0].dyn_cast<IntegerAttr>();
-      auto toIdxAttr = auxDepAttr[1].dyn_cast<IntegerAttr>();
-      if (!fromIdxAttr || !toIdxAttr)
-        continue;
-      unsigned fromIdx = fromIdxAttr.getInt();
-      unsigned toIdx = toIdxAttr.getInt();
-      if (fromIdx >= ops.size() || toIdx >= ops.size())
-        continue;
+    unsigned nOps = ops.size();
+    for (auto &elemArr : parseArrayOfArrays(attr)) {
+      if (elemArr.size() < 2 || elemArr[0] >= nOps || elemArr[1] >= nOps)
+        continue; // malformed testcase
 
-      // finally, we have two integer indices in range of the operations list
-      if (failed(prob.insertDependence(
-              std::make_pair(ops[fromIdx], ops[toIdx])))) {
+      Operation *from = ops[elemArr[0]];
+      Operation *to = ops[elemArr[1]];
+      if (failed(prob.insertDependence(std::make_pair(from, to))))
         return func->emitError("inserting aux dependence failed");
+    }
+  }
+
+  return success();
+}
+
+static LogicalResult constructCyclicProblem(CyclicProblem &prob, FuncOp func) {
+  if (failed(constructProblem(prob, func)))
+    return failure();
+
+  // parse auxiliary dependences in the testcase (again), in order to set the
+  // optional distance in the cyclic problem
+  if (auto attr = func->getAttrOfType<ArrayAttr>("auxdeps")) {
+    auto &ops = prob.getOperations();
+    for (auto &elemArr : parseArrayOfArrays(attr)) {
+      if (elemArr.size() == 3) {
+        Operation *from = ops[elemArr[0]];
+        Operation *to = ops[elemArr[1]];
+        unsigned dist = elemArr[2];
+        prob.setDistance(std::make_pair(from, to), dist);
       }
     }
   }
@@ -103,6 +126,46 @@ void TestProblemPass::runOnFunction() {
     func->emitError("problem check failed");
     return signalPassFailure();
   }
+
+  // get schedule from the test case
+  for (auto *op : prob.getOperations())
+    if (auto startTimeAttr = op->getAttrOfType<IntegerAttr>("problemStartTime"))
+      prob.setStartTime(op, startTimeAttr.getInt());
+
+  if (failed(prob.verify())) {
+    func->emitError("problem verification failed");
+    return signalPassFailure();
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// CyclicProblem
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct TestCyclicProblemPass
+    : public PassWrapper<TestCyclicProblemPass, FunctionPass> {
+  void runOnFunction() override;
+};
+} // namespace
+
+void TestCyclicProblemPass::runOnFunction() {
+  auto func = getFunction();
+
+  CyclicProblem prob(func);
+  if (failed(constructCyclicProblem(prob, func))) {
+    func->emitError("problem construction failed");
+    return signalPassFailure();
+  }
+
+  if (failed(prob.check())) {
+    func->emitError("problem check failed");
+    return signalPassFailure();
+  }
+
+  // get II from the test case
+  if (auto attr = func->getAttrOfType<IntegerAttr>("problemInitiationInterval"))
+    prob.setInitiationInterval(attr.getInt());
 
   // get schedule from the test case
   for (auto *op : prob.getOperations())
@@ -166,6 +229,9 @@ namespace test {
 void registerSchedulingTestPasses() {
   PassRegistration<TestProblemPass> problemTester(
       "test-scheduling-problem", "Import a schedule encoded as attributes");
+  PassRegistration<TestCyclicProblemPass> cyclicProblemTester(
+      "test-cyclic-problem",
+      "Import a solution for the cyclic problem encoded as attributes");
   PassRegistration<TestASAPSchedulerPass> asapTester(
       "test-asap-scheduler", "Emit ASAP scheduler's solution as attributes");
 }

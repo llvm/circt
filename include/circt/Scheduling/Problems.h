@@ -231,6 +231,40 @@ public:
   LogicalResult verify();
 };
 
+/// This class models a cyclic scheduling problem. Its solution solution can be
+/// used to construct a pipelined datapath with a fixed, integer initiation
+/// interval, in which the execution of multiple iterations/samples/etc. may
+/// overlap.
+class CyclicProblem : public virtual Problem {
+private:
+  DependenceProperty<unsigned> distance;
+  ProblemProperty<unsigned> initiationInterval;
+
+public:
+  using Problem::Problem;
+
+  /// The distance determines whether a dependence has to be satisfied in the
+  /// same iteration (distance=0 or not set), or distance-many iterations later.
+  Optional<unsigned> getDistance(Dependence dep) {
+    return distance.lookup(dep);
+  }
+  void setDistance(Dependence dep, unsigned val) { distance[dep] = val; }
+
+  /// The initiation interval (II) is the number of time steps between
+  /// subsequent iterations, i.e. a new iteration is started every II time
+  /// steps. The best possible value is 1, meaning that a corresponding pipeline
+  /// accepts new data every cycle. This property is part of the cyclic
+  /// problem's solution.
+  Optional<unsigned> getInitiationInterval() { return initiationInterval; }
+  void setInitiationInterval(unsigned val) { initiationInterval = val; }
+
+  virtual void clearSolution() override { initiationInterval.reset(); }
+
+protected:
+  virtual LogicalResult verifyDependence(Dependence dep) override;
+  virtual LogicalResult verifyProblem() override;
+};
+
 } // namespace scheduling
 } // namespace circt
 

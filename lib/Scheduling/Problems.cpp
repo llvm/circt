@@ -142,6 +142,41 @@ LogicalResult Problem::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// CyclicProblem
+//===----------------------------------------------------------------------===//
+
+LogicalResult CyclicProblem::verifyDependence(Dependence dep) {
+  // fail early if II is not set or invalid
+  if (!getInitiationInterval() || *getInitiationInterval() == 0)
+    return getContainingOp()->emitError("Invalid initiation interval");
+
+  Operation *i = dep.getSource();
+  Operation *j = dep.getDestination();
+
+  unsigned stI = *getStartTime(i);
+  unsigned latI = *getLatency(*getLinkedOperatorType(i));
+  unsigned stJ = *getStartTime(j);
+  unsigned dist = getDistance(dep).getValueOr(0); // optional property
+  unsigned ii = *getInitiationInterval();
+
+  // check if i's result is available before j starts (dist iterations later)
+  if (!(stI + latI <= stJ + dist * ii))
+    return getContainingOp()->emitError()
+           << "Precedence violated for dependence."
+           << "\n  from: " << *i << ", result available in t=" << (stI + latI)
+           << "\n  to:   " << *j << ", starts in t=" << stJ
+           << "\n  dist: " << dist << ", II=" << ii;
+
+  return success();
+}
+
+LogicalResult CyclicProblem::verifyProblem() {
+  if (!getInitiationInterval() || *getInitiationInterval() == 0)
+    return getContainingOp()->emitError("Invalid initiation interval");
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Dependence
 //===----------------------------------------------------------------------===//
 
