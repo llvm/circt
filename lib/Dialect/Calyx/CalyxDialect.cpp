@@ -52,9 +52,8 @@ void CalyxOpAsmDialectInterface::getAsmBlockArgumentNames(
     return;
 
   auto ports = getComponentPortInfo(component);
-  for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
+  for (size_t i = 0, e = block->getNumArguments(); i != e; ++i)
     setNameFn(block->getArgument(i), ports[i].name.getValue());
-  }
 }
 
 void CalyxDialect::initialize() {
