@@ -13,6 +13,7 @@
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
+#include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
@@ -60,6 +61,9 @@ struct ElementInfo {
   bool found = false;
   /// Trakcs location information about what was used to build this element.
   SmallVector<Location> locations = {};
+  /// The FIRRTL operation that this is supposed to be connected to.  This is
+  /// null if no operation was found or has yet been found.
+  Operation *op = {};
   /// True if this is a ground or vector type and it was not (statefully) found.
   /// This indicates that an interface element, which is composed of ground and
   /// vector types, found no matching, annotated components in the circuit.
@@ -83,6 +87,18 @@ struct AugmentedBundleType {
   StringRef defName;
   /// The elements that make up the body of the interface.
   SmallVector<AugmentedField> elements;
+};
+
+/// Stores the information content of an ExtractGrandCentralAnnotation.
+struct ExtractionInfo {
+  /// The directority where Grand Central generated collateral (modules,
+  /// interfaces, etc.) will be written.
+  StringRef directory;
+
+  /// The name of the file where any binds will be written.  This will be placed
+  /// in the same output area as normal compilation output, e.g., output
+  /// Verilog.  This has no relation to the `directory` member.
+  StringRef bindFilename;
 };
 
 /// Convert an arbitrary attributes into an optional AugmentedField.  Returns
@@ -177,17 +193,29 @@ private:
 
   // Track the order that interfaces should be emitted in.
   SmallVector<std::pair<StringRef, StringRef>> interfaceKeys;
+
+  llvm::StringMap<std::pair<StringRef, Operation *>> companionMap;
+
+  llvm::StringMap<FModuleOp> mappingMap;
+
+  llvm::StringMap<StringAttr> interfaceInstanceMap;
 };
 
 class GrandCentralVisitor : public FIRRTLVisitor<GrandCentralVisitor> {
 public:
-  GrandCentralVisitor(GrandCentralPass::InterfaceMap &interfaceMap)
-      : interfaceMap(interfaceMap) {}
+  GrandCentralVisitor(
+      GrandCentralPass::InterfaceMap &interfaceMap,
+      llvm::StringMap<std::pair<StringRef, Operation *>> &companionMap,
+      ExtractionInfo extractionInfo)
+      : interfaceMap(interfaceMap), companionMap(companionMap),
+        extractionInfo(extractionInfo) {}
 
 private:
   /// Mutable store tracking each element in an interface.  This is indexed by a
   /// "defName" -> "name" tuple.
   GrandCentralPass::InterfaceMap &interfaceMap;
+
+  llvm::StringMap<std::pair<StringRef, Operation *>> &companionMap;
 
   /// Helper to handle wires, registers, and nodes.
   void handleRef(Operation *op);
@@ -202,6 +230,9 @@ private:
   // If true, then some error occurred while the visitor was running.  This
   // indicates that pass failure should occur.
   bool failed = false;
+
+  // Information about how Grand Central collateral should be extracted.
+  ExtractionInfo extractionInfo;
 
 public:
   using FIRRTLVisitor<GrandCentralVisitor>::visitDecl;
@@ -229,9 +260,28 @@ public:
 void GrandCentralVisitor::visitModule(Operation *op) {
   handlePorts(op);
 
-  if (isa<FModuleOp>(op))
+  if (auto mod = dyn_cast_or_null<FModuleOp>(op)) {
+    AnnotationSet annotations(op);
+    if (auto anno = annotations.getAnnotation(
+            "sifive.enterprise.grandcentral.ViewAnnotation")) {
+      auto tpe = anno.getAs<StringAttr>("type");
+      if (tpe && tpe.getValue() == "companion") {
+        auto defName = anno.getAs<StringAttr>("defName");
+        auto name = anno.getAs<StringAttr>("name");
+        companionMap.insert_or_assign(defName.getValue(),
+                                      std::make_pair(name.getValue(), op));
+        auto *ctx = op->getContext();
+        op->setAttr("output_file",
+                    hw::OutputFileAttr::get(
+                        StringAttr::get(ctx, extractionInfo.directory),
+                        StringAttr::get(ctx, mod.getName() + ".sv"),
+                        BoolAttr::get(ctx, true), BoolAttr::get(ctx, true),
+                        ctx));
+      }
+    }
     for (auto &stmt : op->getRegion(0).front())
       dispatchVisitor(&stmt);
+  }
 }
 
 /// Process all other operations.  This will throw an error if the operation
@@ -298,6 +348,7 @@ void GrandCentralVisitor::handleRefLike(mlir::Operation *op,
 
     auto &component = interfaceMap[{defName.getValue(), name.getValue()}];
     component.found = true;
+    component.op = op;
 
     switch (component.tpe) {
     case ElementInfo::Vector:
@@ -360,8 +411,17 @@ void GrandCentralVisitor::visitDecl(InstanceOp op) {
       failed = true;
       return;
     }
-    if (tpe.getValue() == "companion")
+    if (tpe.getValue() == "companion" && !extractionInfo.bindFilename.empty()) {
       op->setAttr("lowerToBind", BoolAttr::get(op.getContext(), true));
+      op->setAttr(
+          "output_file",
+          hw::OutputFileAttr::get(
+              StringAttr::get(op.getContext(), ""),
+              StringAttr::get(op.getContext(), extractionInfo.bindFilename),
+              /*exclude_from_filelist=*/BoolAttr::get(op.getContext(), true),
+              /*exclude_replicated_ops=*/BoolAttr::get(op.getContext(), true),
+              op.getContext()));
+    }
   }
 
   visitUnhandledDecl(op);
@@ -392,7 +452,22 @@ void GrandCentralPass::runOnOperation() {
   // Annotations.  Ignore any unprocesssed annotations and rewrite the Circuit's
   // Annotations with these when done.
   bool removalError = false;
-  annotations.removeAnnotations([&](auto anno) {
+  llvm::Optional<ExtractionInfo> maybeExtractInfo;
+  annotations.removeAnnotations([&](Annotation anno) {
+    if (anno.isClass(
+            "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation")) {
+      if (maybeExtractInfo.hasValue()) {
+        emitCircuitError("more than one 'ExtractGrandCentralAnnotation' was "
+                         "found, but exactly one must be provided");
+        removalError = true;
+        return false;
+      }
+
+      maybeExtractInfo = {anno.getMember<StringAttr>("directory").getValue(),
+                          anno.getMember<StringAttr>("filename").getValue()};
+      return false;
+    }
+
     if (!anno.isClass("sifive.enterprise.grandcentral.AugmentedBundleType"))
       return false;
 
@@ -427,8 +502,39 @@ void GrandCentralPass::runOnOperation() {
     return true;
   });
 
+  // Signal pass failure if any errors were found while examining circuit
+  // annotations.
   if (removalError)
     return signalPassFailure();
+
+  // If no interfaces were found (no AugmentedBundleType annotations were found
+  // on the circuit) and there was no ExtractGrandCentralAnnotations, then this
+  // pass is a no-op.  Just exit.
+  if (interfaces.empty() && !maybeExtractInfo)
+    return;
+
+  // Error if zero ExtractGrandCentralAnnotations were found.
+  if (!maybeExtractInfo) {
+    emitCircuitError(
+        "an 'ExtractGrandCentralAnnotation' must be provided to the Grand "
+        "Central pass, but no such annotation was found");
+    return signalPassFailure();
+  }
+
+  auto getOutputDirectory = [&]() -> StringRef {
+    return maybeExtractInfo ? maybeExtractInfo.getValue().directory : ".";
+  };
+
+  for (auto &ifaceKey : interfaces) {
+    auto iface = ifaceKey.getValue();
+    auto *ctx = iface.getContext();
+    iface->setAttr(
+        "output_file",
+        hw::OutputFileAttr::get(StringAttr::get(ctx, getOutputDirectory()),
+                                StringAttr::get(ctx, ifaceKey.getKey() + ".sv"),
+                                BoolAttr::get(ctx, true),
+                                BoolAttr::get(ctx, true), ctx));
+  }
 
   // Remove the processed annotations.
   circuitOp->setAttr("annotations", annotations.getArrayAttr());
@@ -442,21 +548,23 @@ void GrandCentralPass::runOnOperation() {
     if (!isa<FModuleOp, FExtModuleOp>(op))
       continue;
 
-    GrandCentralVisitor visitor(interfaceMap);
+    GrandCentralVisitor visitor(
+        interfaceMap, companionMap,
+        maybeExtractInfo.getValueOr(ExtractionInfo({".", ""})));
     visitor.visitModule(&op);
     if (visitor.hasFailed())
       return signalPassFailure();
     AnnotationSet annotations(&op);
 
-    annotations.removeAnnotations([&](auto anno) {
+    annotations.removeAnnotations([&](Annotation anno) {
       // Insert an instantiated interface.
-      if (auto viewAnnotation = annotations.getAnnotation(
-              "sifive.enterprise.grandcentral.ViewAnnotation")) {
+      if (anno.getClass() == "sifive.enterprise.grandcentral.ViewAnnotation") {
 
-        auto tpe = viewAnnotation.getAs<StringAttr>("type");
+        auto tpe = anno.getMember<StringAttr>("type");
         if (tpe && tpe.getValue() == "parent") {
-          auto name = viewAnnotation.getAs<StringAttr>("name");
-          auto defName = viewAnnotation.getAs<StringAttr>("defName");
+          auto name = anno.getMember<StringAttr>("name");
+          auto defName = anno.getMember<StringAttr>("defName");
+          interfaceInstanceMap.insert({defName.getValue(), name});
           auto guard = OpBuilder::InsertionGuard(builder);
           builder.setInsertionPointToEnd(cast<FModuleOp>(op).getBodyBlock());
           auto instance = builder.create<sv::InterfaceInstanceOp>(
@@ -465,6 +573,12 @@ void GrandCentralPass::runOnOperation() {
               builder.getStringAttr(
                   "__" + op.getAttrOfType<StringAttr>("sym_name").getValue() +
                   "_" + defName.getValue() + "__"));
+
+          // If there was no bind file passed in, then we're not supposed to
+          // extract this.  Delete the annotation and continue.
+          if (!maybeExtractInfo)
+            return true;
+
           instance->setAttr("doNotPrint", builder.getBoolAttr(true));
           builder.setInsertionPointToStart(
               op.getParentOfType<ModuleOp>().getBody());
@@ -474,7 +588,8 @@ void GrandCentralPass::runOnOperation() {
               "output_file",
               hw::OutputFileAttr::get(
                   builder.getStringAttr(""),
-                  builder.getStringAttr("bindings.sv"),
+                  builder.getStringAttr(
+                      maybeExtractInfo.getValue().bindFilename),
                   /*exclude_from_filelist=*/builder.getBoolAttr(true),
                   /*exclude_replicated_ops=*/builder.getBoolAttr(true),
                   bind.getContext()));
@@ -487,6 +602,8 @@ void GrandCentralPass::runOnOperation() {
 
     annotations.applyToOperation(&op);
   }
+
+  InstancePaths instancePaths(getAnalysis<InstanceGraph>());
 
   // Populate interfaces.
   for (auto &a : interfaceKeys) {
@@ -510,6 +627,7 @@ void GrandCentralPass::runOnOperation() {
     if (!description.empty())
       builder.create<sv::VerbatimOp>(loc, "\n// " + description);
 
+    Type type;
     switch (info.tpe) {
     case ElementInfo::Bundle:
       // TODO: Change this to actually use an interface type.  This currently
@@ -518,38 +636,78 @@ void GrandCentralPass::runOnOperation() {
       // verify internal ops, but this requires looking arbitrarily far upwards
       // to find other symbols.
       builder.create<sv::VerbatimOp>(loc, name + " " + name + "();");
-      break;
+      continue;
     case ElementInfo::Vector: {
-      auto type = hw::UnpackedArrayType::get(builder.getIntegerType(info.width),
-                                             info.depth);
+      type = hw::UnpackedArrayType::get(builder.getIntegerType(info.width),
+                                        info.depth);
       builder.create<sv::InterfaceSignalOp>(loc, name, type);
       break;
     }
     case ElementInfo::Ground: {
-      auto type = builder.getIntegerType(info.width);
+      type = builder.getIntegerType(info.width);
       builder.create<sv::InterfaceSignalOp>(loc, name, type);
       break;
     }
     case ElementInfo::String:
       builder.create<sv::VerbatimOp>(loc, "// " + name +
                                               " = <unsupported string type>;");
-      break;
+      continue;
     case ElementInfo::Boolean:
       builder.create<sv::VerbatimOp>(loc, "// " + name +
                                               " = <unsupported boolean type>;");
-      break;
+      continue;
     case ElementInfo::Integer:
       builder.create<sv::VerbatimOp>(loc, "// " + name +
                                               " = <unsupported integer type>;");
-      break;
+      continue;
     case ElementInfo::Double:
       builder.create<sv::VerbatimOp>(loc, "// " + name +
                                               " = <unsupported double type>;");
-      break;
+      continue;
     case ElementInfo::Error:
       llvm_unreachable("Shouldn't be here");
       break;
     }
+
+    // Add XMRs into the companion module to connect the interface.
+    if (!companionMap.count(defName)) {
+      llvm::errs() << "No companion found for interface '" << defName << "'\n";
+      continue;
+    }
+    auto companion = companionMap.lookup(defName);
+
+    auto &mapping = mappingMap[defName];
+    if (!mapping) {
+      auto companionName = (companion.first + "_mapping").str();
+      builder.setInsertionPoint(companion.second);
+      mapping =
+          builder.create<FModuleOp>(loc, builder.getStringAttr(companionName),
+                                    SmallVector<ModulePortInfo>({}));
+      if (maybeExtractInfo) {
+        auto *ctx = builder.getContext();
+        mapping->setAttr(
+            "output_file",
+            hw::OutputFileAttr::get(
+                StringAttr::get(ctx, maybeExtractInfo.getValue().directory),
+                StringAttr::get(ctx, mapping.getName() + ".sv"),
+                BoolAttr::get(ctx, true), BoolAttr::get(ctx, true), ctx));
+      }
+      builder.setInsertionPointToEnd(
+          cast<FModuleOp>(companion.second).getBodyBlock());
+      builder.create<InstanceOp>(loc, SmallVector<Type>({}), companionName,
+                                 companionName);
+    }
+    builder.setInsertionPointToEnd(mapping.getBodyBlock());
+    auto srcPaths =
+        instancePaths.getAbsolutePaths(info.op->getParentOfType<FModuleOp>());
+    assert(srcPaths.size() == 1 &&
+           "Unable to handle multiply instantiated companions");
+    SmallString<0> srcRef, destRef;
+    for (auto path : srcPaths[0])
+      srcRef.append((path.name() + ".").str());
+    srcRef.append(info.op->getAttrOfType<StringAttr>("name").getValue());
+    builder.create<sv::VerbatimOp>(loc, "assign " + companion.first + "." +
+                                            name + " = " + srcRef + ";");
   }
 
   interfaces.clear();

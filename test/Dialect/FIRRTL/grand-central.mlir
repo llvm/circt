@@ -9,7 +9,10 @@ firrtl.circuit "InterfaceGroundType" attributes {
         name = "foo",
         tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"},
        {name = "bar",
-        tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]}]} {
+        tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]},
+    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "gct-dir/bindings.sv"}]} {
   firrtl.module @InterfaceGroundType() {
     %a = firrtl.wire {annotations = [
       {a},
@@ -26,9 +29,10 @@ firrtl.circuit "InterfaceGroundType" attributes {
   }
 }
 
-// This block is checking that all annotations were removed.
-// CHECK-LABEL: firrtl.circuit "InterfaceGroundType"
-// CHECK-NOT: annotations
+// AugmentedBundleType is removed, ExtractGrandCentral remains.
+// CHECK-LABEL: firrtl.circuit "InterfaceGroundType" {{.+}} {annotations =
+// CHECK-SAME: class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation"
+// CHECK-NOT: class = "sifive.enterprise.grandcentral.AugmentedBundleType"
 // CHECK-SAME: {
 
 // All Grand Central annotations are removed from the wires.
@@ -38,7 +42,10 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK: %b = firrtl.wire
 // CHECK-SAME: annotations = [{a}]
 
-// CHECK: sv.interface @Foo
+// CHECK: sv.interface
+// CHECK-SAME: output_file = {directory = "gct-dir"
+// CHECK-SAME: name = "Foo.sv"
+// CHECK-SAME: @Foo
 // CHECK-NEXT: sv.verbatim "\0A// description of foo"
 // CHECK-NEXT: sv.interface.signal @foo : i2
 // CHECK-NEXT: sv.interface.signal @bar : i4
@@ -52,7 +59,10 @@ firrtl.circuit "InterfaceVectorType" attributes {
      elements = [
        {description = "description of foo",
         name = "foo",
-        tpe = "sifive.enterprise.grandcentral.AugmentedVectorType"}]}]} {
+        tpe = "sifive.enterprise.grandcentral.AugmentedVectorType"}]},
+    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "gct-dir/bindings.sv"}]} {
   firrtl.module @InterfaceVectorType(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
     %a_0 = firrtl.reg %clock {
       annotations = [
@@ -70,9 +80,10 @@ firrtl.circuit "InterfaceVectorType" attributes {
   }
 }
 
-// All annotations are removed from the circuit.
-// CHECK-LABEL: firrtl.circuit "InterfaceVectorType"
-// CHECK-NOT: annotations
+// AugmentedBundleType is removed, ExtractGrandCentral remains.
+// CHECK-LABEL: firrtl.circuit "InterfaceVectorType" {{.+}} {annotations =
+// CHECK-SAME: class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation"
+// CHECK-NOT: class = "sifive.enterprise.grandcentral.AugmentedBundleType"
 // CHECK-SAME: {
 
 // All Grand Central annotations are removed from the registers.
@@ -82,7 +93,10 @@ firrtl.circuit "InterfaceVectorType" attributes {
 // CHECK: %a_1 = firrtl.regreset
 // CHECK-SAME: annotations = [{a}]
 
-// CHECK: sv.interface @Foo
+// CHECK: sv.interface
+// CHECK-SAME: output_file = {directory = "gct-dir"
+// CHECK-SAME: name = "Foo.sv"
+// CHECK-SAME: @Foo
 // CHECK-NEXT: sv.verbatim "\0A// description of foo"
 // CHECK-NEXT: sv.interface.signal @foo : !hw.uarray<2xi1>
 
@@ -102,7 +116,10 @@ firrtl.circuit "InterfaceBundleType" attributes {
      elements = [
        {description = "descripton of Bar",
         name = "Bar",
-        tpe = "sifive.enterprise.grandcentral.AugmentedBundleType"}]}]}  {
+        tpe = "sifive.enterprise.grandcentral.AugmentedBundleType"}]},
+    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "gct-dir/bindings.sv"}]}  {
   firrtl.module @InterfaceBundleType() {
     %x = firrtl.wire {
       annotations = [
@@ -119,9 +136,10 @@ firrtl.circuit "InterfaceBundleType" attributes {
   }
 }
 
-// All annotations are removed from the circuit.
+// AugmentedBundleType is removed, ExtractGrandCentral remains.
 // CHECK-LABEL: firrtl.circuit "InterfaceBundleType"
-// CHECK-NOT: annotations
+// CHECK-SAME: class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation"
+// CHECK-NOT: class = "sifive.enterprise.grandcentral.AugmentedBundleType"
 // CHECK-SAME: {
 
 // All Grand Central annotations are removed from the wires.
@@ -131,11 +149,17 @@ firrtl.circuit "InterfaceBundleType" attributes {
 // CHECK: %y = firrtl.wire
 // CHECK-SAME: annotations = [{a}]
 
-// CHECK: sv.interface @Bar
+// CHECK: sv.interface
+// CHECK-SAME: output_file = {directory = "gct-dir"
+// CHECK-SAME: name = "Bar.sv"
+// CHECK-SAME: @Bar
 // CHECK-NEXT: sv.interface.signal @b : i2
 // CHECK-NEXT: sv.interface.signal @a : i1
 
-// CHECK: sv.interface @Foo
+// CHECK: sv.interface
+// CHECK-SAME: output_file = {directory = "gct-dir"
+// CHECK-SAME: name = "Foo.sv"
+// CHECK-SAME: @Foo
 // CHECK-NEXT: sv.verbatim "\0A// descripton of Bar"
 // CHECK-NEXT: Bar Bar();
 
@@ -148,7 +172,10 @@ firrtl.circuit "InterfaceNode" attributes {
      elements = [
        {description = "some expression",
         name = "foo",
-        tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]}]} {
+        tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]},
+    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "gct-dir/bindings.sv"}]} {
   firrtl.module @InterfaceNode() {
     %a = firrtl.wire : !firrtl.uint<2>
     %notA = firrtl.not %a : (!firrtl.uint<2>) -> !firrtl.uint<2>
@@ -162,16 +189,20 @@ firrtl.circuit "InterfaceNode" attributes {
   }
 }
 
-// All annotations are removed from the circuit.
-// CHECK-LABEL: firrtl.circuit "InterfaceNode"
-// CHECK-NOT: annotations
+// AugmentedBundleType is removed, ExtractGrandCentral remains.
+// CHECK-LABEL: firrtl.circuit "InterfaceNode" {{.+}} {annotations =
+// CHECK-SAME: class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation"
+// CHECK-NOT: class = "sifive.enterprise.grandcentral.AugmentedBundleType"
 // CHECK-SAME: {
 
 // The Grand Central annotation is removed from the node.
 // CHECK: firrtl.node
 // CHECK-SAME: annotations = [{a}]
 
-// CHECK: sv.interface @Foo
+// CHECK: sv.interface
+// CHECK-SAME: output_file = {directory = "gct-dir"
+// CHECK-SAME: name = "Foo.sv"
+// CHECK-SAME: @Foo
 // CHECK-NEXT: sv.verbatim "\0A// some expression"
 // CHECK-NEXT: sv.interface.signal @foo : i2
 
@@ -184,7 +215,10 @@ firrtl.circuit "InterfacePort" attributes {
      elements = [
        {description = "description of foo",
         name = "foo",
-        tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]}]} {
+        tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]},
+    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "gct-dir/bindings.sv"}]} {
   firrtl.module @InterfacePort(in %a : !firrtl.uint<4>) attributes {
     portAnnotations = [[
       {a},
@@ -195,16 +229,20 @@ firrtl.circuit "InterfacePort" attributes {
   }
 }
 
-// All annotations are removed from the circuit.
-// CHECK-LABEL: firrtl.circuit "InterfacePort"
-// CHECK-NOT: annotations
+// AugmentedBundleType is removed, ExtractGrandCentral remains.
+// CHECK-LABEL: firrtl.circuit "InterfacePort" {{.+}} {annotations =
+// CHECK-SAME: class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation"
+// CHECK-NOT: class = "sifive.enterprise.grandcentral.AugmentedBundleType"
 // CHECK-SAME: {
 
 // The Grand Central annotations are removed.
 // CHECK: firrtl.module @InterfacePort
 // CHECK-SAME: firrtl.annotations = [{a}]
 
-// CHECK: sv.interface @Foo
+// CHECK: sv.interface
+// CHECK-SAME: output_file = {directory = "gct-dir"
+// CHECK-SAME: name = "Foo.sv"
+// CHECK-SAME: @Foo
 // CHECK-NEXT: sv.verbatim "\0A// description of foo"
 // CHECK-NEXT: sv.interface.signal @foo : i4
 
@@ -223,15 +261,24 @@ firrtl.circuit "UnsupportedTypes" attributes {
        {name = "integer",
         tpe = "sifive.enterprise.grandcentral.AugmentedIntegerType"},
        {name = "double",
-        tpe = "sifive.enterprise.grandcentral.AugmentedDoubleType"}]}]} {
+        tpe = "sifive.enterprise.grandcentral.AugmentedDoubleType"}]},
+    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "gct-dir/bindings.sv"}]} {
   firrtl.module @UnsupportedTypes() {}
 }
 
-// All Grand Central annotations are removed from the circuit.
-// CHECK-LABEL: firrtl.circuit "UnsupportedTypes"
-// CHECK-SAME: annotations = [{a}]
+// AugmentedBundleType is removed, ExtractGrandCentral and {a} remain.
+// CHECK-LABEL: firrtl.circuit "UnsupportedTypes" {{.+}} {annotations =
+// CHECK-SAME: {a}
+// CHECK-SAME: class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation"
+// CHECK-NOT: class = "sifive.enterprise.grandcentral.AugmentedBundleType"
+// CHECK-SAME: {
 
-// CHECK: sv.interface @Foo
+// CHECK: sv.interface
+// CHECK-SAME: output_file = {directory = "gct-dir"
+// CHECK-SAME: name = "Foo.sv"
+// CHECK-SAME: @Foo
 // CHECK-NEXT: sv.verbatim "// string = <unsupported string type>;"
 // CHECK-NEXT: sv.verbatim "// boolean = <unsupported boolean type>;"
 // CHECK-NEXT: sv.verbatim "// integer = <unsupported integer type>;"
@@ -243,12 +290,16 @@ firrtl.circuit "BindTest" attributes {
   annotations = [
     {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
      defName = "Foo",
-     elements = []}]} {
+     elements = []},
+    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "gct-dir/bindings.sv"}]} {
   firrtl.module @Companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        defName = "Foo",
        id = 42 : i64,
+       name = "Bar",
        type = "companion"}]} {}
   firrtl.module @BindTest() {
     firrtl.instance @Companion { name = "companion1" }
@@ -256,7 +307,10 @@ firrtl.circuit "BindTest" attributes {
   }
 }
 
-// CHECK-LABEL: firrtl.circuit "BindTest"
+// CHECK-LABEL: firrtl.circuit "BindTest" {{.+}} {annotations =
+// CHECK-SAME: class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation"
+// CHECK-NOT: class = "sifive.enterprise.grandcentral.AugmentedBundleType"
+// CHECK-SAME: {
 
 // Annotations are remove from the companion module declaration.
 // CHECK: firrtl.module @Companion()
@@ -277,7 +331,10 @@ firrtl.circuit "BindInterfaceTest"  attributes {
       name = "_a",
       tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"
     }]
-  }]} {
+  },
+  {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "gct-dir/bindings.sv"}]} {
   firrtl.module @BindInterfaceTest(
     in %a: !firrtl.uint<8>, out %b: !firrtl.uint<8>) attributes {
       annotations = [{
@@ -320,5 +377,8 @@ firrtl.circuit "BindInterfaceTest"  attributes {
 // CHECK-SAME: doNotPrint = true
 
 // The interface is added.
-// CHECK: sv.interface @InterfaceName {
+// CHECK: sv.interface {
+// CHECK-SAME: output_file = {directory = "gct-dir"
+// CHECK-SAME: name = "InterfaceName.sv"
+// CHECK-SAME: @InterfaceName
 // CHECK-NEXT: sv.interface.signal @_a : i8

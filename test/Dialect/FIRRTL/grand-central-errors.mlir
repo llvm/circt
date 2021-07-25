@@ -1,12 +1,47 @@
 // RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-grand-central)' -split-input-file -verify-diagnostics %s
 
+// expected-error @+1 {{an 'ExtractGrandCentralAnnotation' must be provided to the Grand Central pass, but no such annotation was found}}
+firrtl.circuit "NoExtractGrandCentralAnnotation" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Foo",
+     elements = [
+       {name = "foo",
+        tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]}] } {
+  firrtl.module @NoExtractGrandCentralAnnotation() {}
+}
+
+// -----
+
+// expected-error @+1 {{more than one 'ExtractGrandCentralAnnotation' was found, but exactly one must be provided}}
+firrtl.circuit "MoreThanOneExtractGrandCentralAnnotation" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Foo",
+     elements = [
+       {name = "foo",
+        tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]},
+    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "gct-dir/bindings.sv"},
+    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "gct-dir/bindings.sv"}] } {
+  firrtl.module @MoreThanOneExtractGrandCentralAnnotation() {}
+}
+
+// -----
+
 firrtl.circuit "NonGroundType" attributes {
   annotations = [
     {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
      defName = "Foo",
      elements = [
        {name = "foo",
-        tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]}]} {
+        tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]},
+    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "gct-dir/bindings.sv"}]} {
   firrtl.module @NonGroundType() {
     // expected-error @+2 {{'firrtl.wire' op cannot be added to interface 'Foo', component 'foo' because it is not a ground type.}}
     // expected-note @+1 {{"sifive.enterprise.grandcentral.AugmentedGroundType"}}
@@ -26,7 +61,10 @@ firrtl.circuit "NonGroundType" attributes {
 // expected-note @+1 {{the problematic 'AugmentedBundleType' is:}}
 firrtl.circuit "NonGroundType" attributes {
   annotations = [
-    {class = "sifive.enterprise.grandcentral.AugmentedBundleType"}]} {
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType"},
+    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "gct-dir/bindings.sv"}]} {
   firrtl.module @NonGroundType() {}
 }
 
@@ -38,7 +76,10 @@ firrtl.circuit "Foo" attributes {
      defName = "View",
      elements = [
        {name = "sub_port",
-        tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]}]}  {
+        tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]},
+    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "gct-dir/bindings.sv"}]}  {
   firrtl.module @Bar(in %a: !firrtl.uint<1>) {}
   firrtl.module @Foo(in %a: !firrtl.uint<1>) attributes {
     annotations = [
@@ -67,7 +108,10 @@ firrtl.circuit "Foo" attributes {
      defName = "View",
      elements = [
        {name = "sub_port",
-        tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]}]}  {
+        tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]},
+    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "gct-dir/bindings.sv"}]}  {
   firrtl.module @Foo(in %a: !firrtl.uint<1>) attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation",
@@ -99,6 +143,9 @@ firrtl.circuit "Foo" attributes {
      defName = "Bar",
      elements = [
        {name = "baz",
-        tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]}]}  {
+        tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]},
+    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "gct-dir/bindings.sv"}]}  {
   firrtl.module @Foo() {}
 }
