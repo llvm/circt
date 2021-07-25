@@ -18,7 +18,7 @@ calyx.program {
       // CHECK: %[[GROUP_A_GO_GUARD:.+]] = comb.and %[[FSM_IS_GROUP_A_BEGIN_STATE]], %[[GROUP_A_NOT_DONE]] : i1
       calyx.group @A {
         // CHECK:  %A.go = calyx.group_go %[[SIGNAL_ON]], %[[GROUP_A_GO_GUARD]] ? : i1
-        // CHECK:  calyx.assign %z.go = %arg0, %A.go ? : i1
+        // CHECK:  calyx.assign %z.go = %go, %A.go ? : i1
         %A.go = calyx.group_go %undef : i1
         calyx.assign %z.go = %go, %A.go ? : i1
         calyx.group_done %z.done : i1

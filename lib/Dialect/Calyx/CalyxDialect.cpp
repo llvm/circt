@@ -23,12 +23,48 @@ using namespace circt::calyx;
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
+namespace {
+
+// We implement the OpAsmDialectInterface so that Calyx dialect operations
+// automatically interpret the name attribute on operations as their SSA name.
+struct CalyxOpAsmDialectInterface : public OpAsmDialectInterface {
+  using OpAsmDialectInterface::OpAsmDialectInterface;
+
+  /// Get a special name to use when printing the given operation. See
+  /// OpAsmInterface.td#getAsmResultNames for usage details and documentation.
+  void getAsmResultNames(Operation *op,
+                         OpAsmSetValueNameFn setNameFn) const override {}
+
+  /// Get a special name to use when printing the entry block arguments of the
+  /// region contained by an operation in this dialect.
+  void getAsmBlockArgumentNames(Block *block,
+                                OpAsmSetValueNameFn setNameFn) const override;
+};
+
+} // end anonymous namespace
+
+void CalyxOpAsmDialectInterface::getAsmBlockArgumentNames(
+    Block *block, OpAsmSetValueNameFn setNameFn) const {
+  auto *parentOp = block->getParentOp();
+  auto component = dyn_cast<ComponentOp>(parentOp);
+  // Currently only support named block arguments for components.
+  if (component == nullptr)
+    return;
+
+  auto ports = getComponentPortInfo(component);
+  for (size_t i = 0, e = block->getNumArguments(); i != e; ++i)
+    setNameFn(block->getArgument(i), ports[i].name.getValue());
+}
+
 void CalyxDialect::initialize() {
   // Register operations.
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/Calyx/Calyx.cpp.inc"
-      >();
+  >();
+
+  // Register interface implementations.
+  addInterfaces<CalyxOpAsmDialectInterface>();
 }
 
 // Provide implementations for the enums and attributes we use.

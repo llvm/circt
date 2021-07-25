@@ -30,8 +30,8 @@ static void inlineGroupAssignments(ComponentOp &component) {
   control.walk([&](EnableOp e) { topLevel = e; });
 
   auto wires = component.getWiresOp();
-  auto componentGoPort = component.getGoPort();
-  auto componentDonePort = component.getDonePort();
+  Value componentGoPort = component.getGoPort();
+  Value componentDonePort = component.getDonePort();
 
   wires.walk([&](GroupOp group) {
     auto &groupRegion = group->getRegion(0);
