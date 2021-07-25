@@ -103,35 +103,19 @@ static FunctionType getComponentType(ComponentOp component) {
   return component.getTypeAttr().getValue().cast<FunctionType>();
 }
 
-/// Returns the component port names in the given direction.
-static ArrayAttr getComponentPortNames(ComponentOp component,
-                                       PortDirection direction) {
-
-  if (direction == PortDirection::INPUT)
-    return component.inPortNames();
-  return component.outPortNames();
-}
-
 /// Returns the port information for the given component.
 SmallVector<ComponentPortInfo> calyx::getComponentPortInfo(Operation *op) {
   assert(isa<ComponentOp>(op) &&
          "Can only get port information from a component.");
   auto component = dyn_cast<ComponentOp>(op);
   auto portTypes = getComponentType(component).getInputs();
-  auto inPortNamesAttr = getComponentPortNames(component, PortDirection::INPUT);
-  auto outPortNamesAttr =
-      getComponentPortNames(component, PortDirection::OUTPUT);
+  auto portNamesAttr = component.portNames();
+  uint64_t numInPorts = component.numInPorts();
 
   SmallVector<ComponentPortInfo> results;
-  uint64_t portIdx = 0;
-  uint64_t numInPorts = op->getAttrOfType<IntegerAttr>("numInPorts").getInt();
-  for (uint64_t i = 0; portIdx != numInPorts; ++i, ++portIdx) {
-    results.push_back({inPortNamesAttr[i].cast<StringAttr>(),
-                       portTypes[portIdx], PortDirection::INPUT});
-  }
-  for (uint64_t i = 0, e = portTypes.size(); portIdx != e; ++i, ++portIdx) {
-    results.push_back({outPortNamesAttr[i].cast<StringAttr>(),
-                       portTypes[portIdx], PortDirection::OUTPUT});
+  for (uint64_t i = 0, e = portNamesAttr.size(); i != e; ++i) {
+    auto dir = i < numInPorts ? PortDirection::INPUT : PortDirection::OUTPUT;
+    results.push_back({portNamesAttr[i].cast<StringAttr>(), portTypes[i], dir});
   }
   return results;
 }
@@ -171,10 +155,9 @@ static void printComponentOp(OpAsmPrinter &p, ComponentOp &op) {
 /// Parses the ports of a Calyx component signature, and adds the corresponding
 /// port names to `attrName`.
 static ParseResult
-parsePortDefList(OpAsmParser &parser, MLIRContext *context,
-                 OperationState &result,
+parsePortDefList(OpAsmParser &parser, OperationState &result,
                  SmallVectorImpl<OpAsmParser::OperandType> &ports,
-                 SmallVectorImpl<Type> &portTypes, StringRef attrName) {
+                 SmallVectorImpl<Type> &portTypes) {
   if (parser.parseLParen())
     return failure();
 
@@ -189,8 +172,26 @@ parsePortDefList(OpAsmParser &parser, MLIRContext *context,
     portTypes.push_back(portType);
   } while (succeeded(parser.parseOptionalComma()));
 
+  return parser.parseRParen();
+}
+
+/// Parses the signature of a Calyx component.
+static ParseResult
+parseComponentSignature(OpAsmParser &parser, OperationState &result,
+                        SmallVectorImpl<OpAsmParser::OperandType> &ports,
+                        SmallVectorImpl<Type> &portTypes) {
+  if (parsePortDefList(parser, result, ports, portTypes))
+    return failure();
+
+  // Record the number of input ports.
+  size_t numInPorts = ports.size();
+
+  if (parser.parseArrow() || parsePortDefList(parser, result, ports, portTypes))
+    return failure();
+
+  auto *context = parser.getBuilder().getContext();
   // Add attribute for port names; these are currently
-  // just inferred from the arguments of the component.
+  // just inferred from the SSA names of the component.
   SmallVector<Attribute> portNames(ports.size());
   llvm::transform(ports, portNames.begin(), [&](auto port) -> StringAttr {
     StringRef name = port.name;
@@ -198,25 +199,11 @@ parsePortDefList(OpAsmParser &parser, MLIRContext *context,
       name = name.drop_front();
     return StringAttr::get(context, name);
   });
-  result.addAttribute(attrName, ArrayAttr::get(context, portNames));
+  result.addAttribute("portNames", ArrayAttr::get(context, portNames));
 
-  return parser.parseRParen();
-}
-
-/// Parses the signature of a Calyx component.
-static ParseResult
-parseComponentSignature(OpAsmParser &parser, OperationState &result,
-                        SmallVectorImpl<OpAsmParser::OperandType> &inPorts,
-                        SmallVectorImpl<Type> &inPortTypes,
-                        SmallVectorImpl<OpAsmParser::OperandType> &outPorts,
-                        SmallVectorImpl<Type> &outPortTypes) {
-  auto *context = parser.getBuilder().getContext();
-  if (parsePortDefList(parser, context, result, inPorts, inPortTypes,
-                       "inPortNames") ||
-      parser.parseArrow() ||
-      parsePortDefList(parser, context, result, outPorts, outPortTypes,
-                       "outPortNames"))
-    return failure();
+  // Record the number of input ports.
+  result.addAttribute("numInPorts",
+                      parser.getBuilder().getI64IntegerAttr(numInPorts));
 
   return success();
 }
@@ -232,14 +219,10 @@ static ParseResult parseComponentOp(OpAsmParser &parser,
 
   SmallVector<OpAsmParser::OperandType> ports, outPorts;
   SmallVector<Type> portTypes, outPortTypes;
-  if (parseComponentSignature(parser, result, ports, portTypes, outPorts,
-                              outPortTypes))
+  if (parseComponentSignature(parser, result, ports, portTypes))
     return failure();
 
-  // Record the number of input ports.
   auto &builder = parser.getBuilder();
-  result.addAttribute("numInPorts", builder.getI64IntegerAttr(ports.size()));
-
   // Build the component's type for FunctionLike trait. All ports are listed as
   // arguments so they may be accessed within the component.
   portTypes.insert(portTypes.end(), outPortTypes.begin(), outPortTypes.end());
@@ -312,15 +295,12 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
 
   SmallVector<Type, 8> portTypes;
-  SmallVector<Attribute, 4> inPortNames, outPortNames;
+  SmallVector<Attribute, 8> portNames;
   uint64_t numInPorts = 0;
   for (auto &&port : ports) {
-    if (port.direction == PortDirection::INPUT) {
-      inPortNames.push_back(port.name);
+    if (port.direction == PortDirection::INPUT)
       ++numInPorts;
-    } else {
-      outPortNames.push_back(port.name);
-    }
+    portNames.push_back(port.name);
     portTypes.push_back(port.type);
   }
 
@@ -328,11 +308,8 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
   auto functionType = builder.getFunctionType(portTypes, {});
   result.addAttribute(getTypeAttrName(), TypeAttr::get(functionType));
 
-  // Record the port names of the component.
-  result.addAttribute("inPortNames", builder.getArrayAttr(inPortNames));
-  result.addAttribute("outPortNames", builder.getArrayAttr(outPortNames));
-  // Record the number of input ports.
-  result.addAttribute("numInPorts", builder.getI64IntegerAttr(numInPorts));
+  // Record the port names and number of input ports of the component.
+  result.addAttribute("portNames", builder.getArrayAttr(portNames));
 
   // Create a single-blocked region.
   result.addRegion();
@@ -420,17 +397,13 @@ ComponentOp CellOp::getReferencedComponent() {
 /// Provide meaningful names to the result values of a CellOp.
 void CellOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   auto component = getReferencedComponent();
+  auto portNames = component.portNames();
 
   std::string prefix = instanceName().str() + ".";
-  size_t resultIndex = 0;
-  auto renameResults = [&](ArrayAttr portNames) {
-    for (size_t i = 0, e = portNames.size(); i != e; ++i, ++resultIndex) {
-      StringRef portName = portNames[i].cast<StringAttr>().getValue();
-      setNameFn(getResult(resultIndex), prefix + portName.str());
-    }
-  };
-  renameResults(component.inPortNames());
-  renameResults(component.outPortNames());
+  for (size_t i = 0, e = portNames.size(); i != e; ++i) {
+    StringRef portName = portNames[i].cast<StringAttr>().getValue();
+    setNameFn(getResult(i), prefix + portName.str());
+  }
 }
 
 static LogicalResult verifyCellOp(CellOp cell) {
