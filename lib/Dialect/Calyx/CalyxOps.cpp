@@ -117,8 +117,7 @@ SmallVector<ComponentPortInfo> calyx::getComponentPortInfo(Operation *op) {
   assert(isa<ComponentOp>(op) &&
          "Can only get port information from a component.");
   auto component = dyn_cast<ComponentOp>(op);
-  auto functionType = getComponentType(component);
-  auto portTypes = functionType.getInputs();
+  auto portTypes = getComponentType(component).getInputs();
   auto inPortNamesAttr = getComponentPortNames(component, PortDirection::INPUT);
   auto outPortNamesAttr =
       getComponentPortNames(component, PortDirection::OUTPUT);
@@ -201,7 +200,7 @@ parsePortDefList(OpAsmParser &parser, MLIRContext *context,
   });
   result.addAttribute(attrName, ArrayAttr::get(context, portNames));
 
-  return (parser.parseRParen());
+  return parser.parseRParen();
 }
 
 /// Parses the signature of a Calyx component.
@@ -245,7 +244,7 @@ static ParseResult parseComponentOp(OpAsmParser &parser,
   // arguments so they may be accessed within the component.
   portTypes.insert(portTypes.end(), outPortTypes.begin(), outPortTypes.end());
   ports.insert(ports.end(), outPorts.begin(), outPorts.end());
-  auto type = builder.getFunctionType(portTypes, {});
+  auto type = builder.getFunctionType(portTypes, /*resultTypes=*/{});
   result.addAttribute(ComponentOp::getTypeAttrName(), TypeAttr::get(type));
 
   auto *body = result.addRegion();
