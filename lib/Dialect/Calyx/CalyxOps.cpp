@@ -217,17 +217,15 @@ static ParseResult parseComponentOp(OpAsmParser &parser,
                              result.attributes))
     return failure();
 
-  SmallVector<OpAsmParser::OperandType> ports, outPorts;
-  SmallVector<Type> portTypes, outPortTypes;
+  SmallVector<OpAsmParser::OperandType> ports;
+  SmallVector<Type> portTypes;
   if (parseComponentSignature(parser, result, ports, portTypes))
     return failure();
 
-  auto &builder = parser.getBuilder();
   // Build the component's type for FunctionLike trait. All ports are listed as
   // arguments so they may be accessed within the component.
-  portTypes.insert(portTypes.end(), outPortTypes.begin(), outPortTypes.end());
-  ports.insert(ports.end(), outPorts.begin(), outPorts.end());
-  auto type = builder.getFunctionType(portTypes, /*resultTypes=*/{});
+  auto type =
+      parser.getBuilder().getFunctionType(portTypes, /*resultTypes=*/{});
   result.addAttribute(ComponentOp::getTypeAttrName(), TypeAttr::get(type));
 
   auto *body = result.addRegion();
@@ -310,6 +308,7 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
 
   // Record the port names and number of input ports of the component.
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
+  result.addAttribute("numInPorts", builder.getI64IntegerAttr(numInPorts));
 
   // Create a single-blocked region.
   result.addRegion();

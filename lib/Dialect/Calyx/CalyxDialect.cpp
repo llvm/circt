@@ -25,7 +25,7 @@ using namespace circt::calyx;
 
 namespace {
 
-// We implement the OpAsmDialectInterface so that HW dialect operations
+// We implement the OpAsmDialectInterface so that Calyx dialect operations
 // automatically interpret the name attribute on operations as their SSA name.
 struct CalyxOpAsmDialectInterface : public OpAsmDialectInterface {
   using OpAsmDialectInterface::OpAsmDialectInterface;
