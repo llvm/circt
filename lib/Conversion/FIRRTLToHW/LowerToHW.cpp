@@ -268,31 +268,37 @@ private:
   std::mutex bindsMutex;
 };
 
-const StringSet<> whitelistAnnotations = {assertAnnoClass, assumeAnnoClass,
-                                          coverAnnoClass};
-
 void CircuitLoweringState::processRemainingAnnotations(
     Operation *op, const AnnotationSet &annoSet) {
   if (!enableAnnotationWarning || annoSet.empty())
     return;
-  for (auto anno : annoSet) {
-    auto anClass = anno.getClass();
-    // Add the processed annotations to alreadyProcessed.
-    // This avoids printing the future warnings on them.
-    if (whitelistAnnotations.contains(anClass)) {
-      std::lock_guard<std::mutex> lock(annotationPrintingMtx);
-      alreadyProcessed.insert(anClass);
-    }
-  }
-
   std::lock_guard<std::mutex> lock(annotationPrintingMtx);
 
   for (auto a : annoSet) {
     auto inserted = alreadyProcessed.insert(a.getClass());
-    if (inserted.second)
-      mlir::emitWarning(op->getLoc(), "unprocessed annotation:'" +
-                                          a.getClass() +
-                                          "' still remaining after LowerToHW");
+    if (!inserted.second)
+      continue;
+
+    // The following annotations are okay to be silently dropped at this point.
+    // This can occur for example if an annotation marks something in the IR as
+    // not to be processed by a pass, but that pass hasn't run anyway.
+    if (a.isClass(
+            // The following are either consumed by a pass running before
+            // LowerToHW, or they have no effect if the pass doesn't run at all.
+            // If the accompanying pass runs on the HW dialect, then LowerToHW
+            // should have consumed and processed these into an attribute on the
+            // output.
+            "sifive.enterprise.firrtl.DontObfuscateModuleAnnotation",
+            "firrtl.transforms.NoDedupAnnotation",
+            // The following are inspected (but not consumed) by FIRRTL/GCT
+            // passes that have all run by now. Since no one is responsible for
+            // consuming these, they will linger around and can be ignored.
+            "sifive.enterprise.firrtl.ScalaClassAnnotation",
+            "sifive.enterprise.firrtl.MarkDUTAnnotation", assertAnnoClass, assumeAnnoClass,      coverAnnoClass))
+      continue;
+
+    mlir::emitWarning(op->getLoc(), "unprocessed annotation:'" + a.getClass() +
+                                        "' still remaining after LowerToHW");
   }
 }
 } // end anonymous namespace

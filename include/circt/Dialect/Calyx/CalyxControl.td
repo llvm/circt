@@ -60,11 +60,18 @@ def EnableOp : CalyxOp<"enable", [
     The "calyx.enable" operation represents the execution of
     a group defined explicitly in the "calyx.wires" section.
 
+    The 'compiledGroups' attribute is used in the Compile
+    Control pass to track which groups are compiled within
+    the new compilation group.
+
     ```mlir
       calyx.enable @SomeGroup
     ```
   }];
-  let arguments = (ins FlatSymbolRefAttr:$groupName);
+  let arguments = (ins
+    FlatSymbolRefAttr:$groupName,
+    OptionalAttr<ArrayAttr>:$compiledGroups
+  );
   let assemblyFormat = "$groupName attr-dict";
   let verifier = "return ::verify$cppClass(*this);";
 }

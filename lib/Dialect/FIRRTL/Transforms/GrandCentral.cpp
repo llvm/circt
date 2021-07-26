@@ -356,13 +356,11 @@ void GrandCentralVisitor::visitDecl(InstanceOp op) {
   // move this onto the actual instance op.
   AnnotationSet annotations(op.getReferencedModule());
   if (auto anno = annotations.getAnnotation(
-          "sifive.enterprise.grandcentral.GrandCentralView$"
-          "SerializedViewAnnotation")) {
+          "sifive.enterprise.grandcentral.ViewAnnotation")) {
     auto tpe = anno.getAs<StringAttr>("type");
     if (!tpe) {
       op.getReferencedModule()->emitOpError(
-          "contains a GrandcCentralView$SerializedViewAnnotation that does not "
-          "contain a \"type\" field");
+          "contains a ViewAnnotation that does not contain a \"type\" field");
       failed = true;
       return;
     }
@@ -444,16 +442,21 @@ void GrandCentralPass::runOnOperation() {
   // removed from modules after all referring instances have consumed their
   // annotations.
   for (auto &op : llvm::reverse(circuitOp.getBody()->getOperations())) {
-    if (isa<FModuleOp, FExtModuleOp>(op)) {
-      GrandCentralVisitor visitor(interfaceMap);
-      visitor.visitModule(&op);
-      if (visitor.hasFailed())
-        return signalPassFailure();
-      AnnotationSet annotations(&op);
-      // Insert an instantiated interface
+    // Only process modules or external modules.
+    if (!isa<FModuleOp, FExtModuleOp>(op))
+      continue;
+
+    GrandCentralVisitor visitor(interfaceMap);
+    visitor.visitModule(&op);
+    if (visitor.hasFailed())
+      return signalPassFailure();
+    AnnotationSet annotations(&op);
+
+    annotations.removeAnnotations([&](auto anno) {
+      // Insert an instantiated interface.
       if (auto viewAnnotation = annotations.getAnnotation(
-              "sifive.enterprise.grandcentral.GrandCentralView$"
-              "SerializedViewAnnotation")) {
+              "sifive.enterprise.grandcentral.ViewAnnotation")) {
+
         auto tpe = viewAnnotation.getAs<StringAttr>("type");
         if (tpe && tpe.getValue() == "parent") {
           auto name = viewAnnotation.getAs<StringAttr>("name");
@@ -481,13 +484,13 @@ void GrandCentralPass::runOnOperation() {
                   /*exclude_replicated_ops=*/builder.getBoolAttr(true),
                   bind.getContext()));
         }
+        return true;
       }
-      annotations.removeAnnotations([](auto anno) {
-        return anno.isClass("sifive.enterprise.grandcentral.GrandCentralView$"
-                            "SerializedViewAnnotation");
-      });
-      annotations.applyToOperation(&op);
-    }
+      // All other annotations pass through unmodified.
+      return false;
+    });
+
+    annotations.applyToOperation(&op);
   }
 
   // Populate interfaces.

@@ -67,7 +67,7 @@ LogicalResult Problem::checkDependence(Dependence dep) { return success(); }
 
 LogicalResult Problem::checkOperatorType(OperatorType opr) {
   if (!getLatency(opr))
-    return containingOp->emitError()
+    return getContainingOp()->emitError()
            << "Operator type '" << opr << "' has no latency";
 
   return success();
@@ -109,7 +109,7 @@ LogicalResult Problem::verifyDependence(Dependence dep) {
 
   // check if i's result is available before j starts
   if (!(stI + latI <= stJ))
-    return containingOp->emitError()
+    return getContainingOp()->emitError()
            << "Precedence violated for dependence."
            << "\n  from: " << *i << ", result available in t=" << (stI + latI)
            << "\n  to:   " << *j << ", starts in t=" << stJ;
