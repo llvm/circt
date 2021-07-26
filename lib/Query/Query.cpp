@@ -96,7 +96,7 @@ FilterNode FilterNode::newLiteral(std::string &literal, ValueType type) {
 FilterNode FilterNode::newRegex(std::string &regex) {
   FilterNode f;
   f.tag = FilterType::REGEX;
-  f.regex = regex;
+  f.regex = std::regex(regex);
   return f;
 }
 
@@ -104,7 +104,7 @@ FilterNode FilterNode::newRegex(std::string &regex, ValueType type) {
   FilterNode f;
   f.tag = FilterType::REGEX;
   f.type = type;
-  f.regex = regex;
+  f.regex = std::regex(regex);
   return f;
 }
 

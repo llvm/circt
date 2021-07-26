@@ -2,9 +2,12 @@
 #include <tcl.h>
 
 #include "Circt.h"
+#include "mlir/Parser.h"
+#include "mlir/Support/FileUtilities.h"
 #include "Query.h"
+#include "llvm/Support/SourceMgr.h"
 
-static int createTclFilter(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]) {
+int createTclFilter(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]) {
   auto **nodeObjs = new Tcl_Obj*[objc - 1];
   CirctQueryFilterNode nodes[objc - 1];
   auto *filterNodeType = Tcl_GetObjType("FilterNode");
@@ -42,6 +45,51 @@ static int createTclFilter(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_O
   return TCL_OK;
 }
 
+int loadFirMlirFile(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]) {
+  if (objc != 4) {
+    return TCL_ERROR;
+  }
+
+  auto *context = (mlir::MLIRContext *) objv[2]->internalRep.otherValuePtr;
+
+  std::string errorMessage;
+  auto input = mlir::openInputFile(llvm::StringRef(objv[3]->bytes), &errorMessage);
+
+  if (!input) {
+    llvm::errs() << errorMessage << '\n';
+    return TCL_ERROR;
+  }
+
+  llvm::SourceMgr sourceMgr;
+  sourceMgr.AddNewSourceBuffer(std::move(input), llvm::SMLoc());
+  mlir::SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, context);
+
+  mlir::OwningModuleRef module;
+  if (!strcmp(objv[1]->bytes, "MLIR")) {
+    module = mlir::parseSourceFile(sourceMgr, context);
+  } else if (!strcmp(objv[1]->bytes, "FIR")) {
+    // TODO
+    return TCL_ERROR;
+  } else {
+    return TCL_ERROR;
+  }
+
+  if (!module) {
+    return TCL_ERROR;
+  }
+
+  auto *m = new circt::ModuleOp(module.release());
+
+  auto *obj = Tcl_NewObj();
+  obj->bytes = nullptr;
+  obj->length = 0;
+  obj->typePtr = Tcl_GetObjType("MlirOperation");
+  obj->internalRep.otherValuePtr = m;
+  Tcl_SetObjResult(interp, obj);
+
+  return TCL_OK;
+}
+
 extern "C" {
 
 int DLLEXPORT Circt_Init(Tcl_Interp *interp) {
@@ -74,6 +122,14 @@ int DLLEXPORT Circt_Init(Tcl_Interp *interp) {
   contextType->freeIntRepProc = contextTypeFreeIntRepProc;
   Tcl_RegisterObjType(contextType);
 
+  Tcl_ObjType *operationType = new Tcl_ObjType;
+  operationType->name = "MlirOperation";
+  operationType->setFromAnyProc = operationTypeSetFromAnyProc;
+  operationType->updateStringProc = operationTypeUpdateStringProc;
+  operationType->dupIntRepProc = operationTypeDupIntRepProc;
+  operationType->freeIntRepProc = operationTypeFreeIntRepProc;
+  Tcl_RegisterObjType(operationType);
+
   // Register package
   if (Tcl_PkgProvide(interp, "Circt", "1.0") == TCL_ERROR) {
     return TCL_ERROR;
@@ -82,6 +138,7 @@ int DLLEXPORT Circt_Init(Tcl_Interp *interp) {
   // Register commands
   Tcl_CreateObjCommand(interp, "registerDialects", tclRegisterDialects, NULL, NULL);
   Tcl_CreateObjCommand(interp, "filter", createTclFilter, NULL, NULL);
+  Tcl_CreateObjCommand(interp, "loadCirctFile", loadFirMlirFile, NULL, NULL);
   return TCL_OK;
 }
 
