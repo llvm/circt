@@ -294,8 +294,9 @@ void CircuitLoweringState::processRemainingAnnotations(
             // passes that have all run by now. Since no one is responsible for
             // consuming these, they will linger around and can be ignored.
             "sifive.enterprise.firrtl.ScalaClassAnnotation",
-            "sifive.enterprise.firrtl.MarkDUTAnnotation", 
-            // The following will be handled while lowering the verification ops.
+            "sifive.enterprise.firrtl.MarkDUTAnnotation",
+            // The following will be handled while lowering the verification
+            // ops.
             assertAnnoClass, assumeAnnoClass, coverAnnoClass))
       continue;
 
