@@ -182,11 +182,12 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   b = OpBuilder::atBlockEnd(
       &op->getParentOfType<mlir::ModuleOp>()->getRegion(0).front());
   auto bindOp = b.create<sv::BindOp>(op.getLoc(), b.getSymbolRefAttr(inst));
-  bindOp->setAttr(
-      "output_file",
-      hw::OutputFileAttr::get(b.getStringAttr(""), b.getStringAttr(fileName),
-                              b.getBoolAttr(true), b.getBoolAttr(true),
-                              op.getContext()));
+  if (!fileName.empty())
+    bindOp->setAttr(
+        "output_file",
+        hw::OutputFileAttr::get(b.getStringAttr(""), b.getStringAttr(fileName),
+                                b.getBoolAttr(true), b.getBoolAttr(true),
+                                op.getContext()));
   return newMod;
 }
 
@@ -260,7 +261,7 @@ struct SVExtractTestCodeImplPass
 
 private:
   void doModule(hw::HWModuleOp module, std::function<bool(Operation *)> fn,
-                StringRef suffix, StringRef path) {
+                StringRef suffix) {
     // Find Operations of interest.
     SmallPtrSet<Operation *, 8> roots;
     module->walk([&fn, &roots](Operation *op) {
@@ -270,7 +271,7 @@ private:
     // No Ops?  No problem.
     if (roots.empty())
       return;
-    StringRef fileName;
+    StringRef fileName, path;
     // Check if the assert/assume/cover op has the output_file attribute.
     // How to handle different path attributes on multiple ops?
     for (auto extractOp : roots)
@@ -320,8 +321,8 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       };
       auto isCover = [](Operation *op) -> bool { return isa<CoverOp>(op); };
 
-      doModule(rtlmod, isAssert, "_assert", "generated/asserts");
-      doModule(rtlmod, isCover, "_cover", "generated/covers");
+      doModule(rtlmod, isAssert, "_assert");
+      doModule(rtlmod, isCover, "_cover");
     }
 }
 
