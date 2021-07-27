@@ -318,3 +318,92 @@ firrtl.circuit "invalidReg2"   {
     firrtl.connect %a, %foobar : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
+
+// This test is checking the behavior of a RegOp, "r", and a RegResetOp, "s",
+// that are combinationally connected to themselves through simple and weird
+// formulations.  In all cases it should NOT be optimized away.  For more discussion, see:
+//   - https://github.com/llvm/circt/issues/1465
+//   - https://github.com/llvm/circt/issues/1466
+//   - https://github.com/llvm/circt/issues/1478
+//
+// CHECK-LABEL: "Oscillators"
+firrtl.circuit "Oscillators"   {
+  // CHECK: firrtl.module @Foo
+  firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.uint<1>) {
+    // CHECK: firrtl.reg
+    %r = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK: firrtl.regreset
+    %s = firrtl.regreset %clock, %reset, %c0_ui1  : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %0 = firrtl.not %r : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %r, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    %1 = firrtl.not %s : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %s, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+    %2 = firrtl.or %r, %s : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %a, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  // CHECK: firrtl.module @Bar
+  firrtl.module @Bar(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.uint<1>) {
+    // CHECK: firrtl.reg
+    %r = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK: firrtl.regreset
+    %s = firrtl.regreset %clock, %reset, %c0_ui1  : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %0 = firrtl.xor %a, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %r, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    %1 = firrtl.xor %a, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %s, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+    %2 = firrtl.or %r, %s : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %a, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  // CHECK: firrtl.module @Baz
+  firrtl.module @Baz(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.uint<1>) {
+    // CHECK: firrtl.reg
+    %r = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK: firrtl.regreset
+    %s = firrtl.regreset %clock, %reset, %c0_ui1  : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %0 = firrtl.not %a : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %r, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    %1 = firrtl.not %a : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %s, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+    %2 = firrtl.or %r, %s : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %a, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  firrtl.extmodule @Ext(in %a: !firrtl.uint<1>)
+  // CHECK: firrtl.module @Qux
+  firrtl.module @Qux(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.uint<1>) {
+    %ext_a = firrtl.instance @Ext  {name = "ext"} : !firrtl.uint<1>
+    // CHECK: firrtl.reg
+    %r = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK: firrtl.regreset
+    %s = firrtl.regreset %clock, %reset, %c0_ui1  : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %0 = firrtl.not %ext_a : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %r, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    %1 = firrtl.not %ext_a : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %s, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+    %2 = firrtl.or %r, %s : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %ext_a, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %a, %ext_a : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  firrtl.module @Oscillators(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %foo_a: !firrtl.uint<1>, out %bar_a: !firrtl.uint<1>, out %baz_a: !firrtl.uint<1>, out %qux_a: !firrtl.uint<1>) {
+    %foo_clock, %foo_reset, %foo_a_0 = firrtl.instance @Foo  {name = "foo"} : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>
+    firrtl.connect %foo_clock, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %foo_reset, %reset : !firrtl.asyncreset, !firrtl.asyncreset
+    firrtl.connect %foo_a, %foo_a_0 : !firrtl.uint<1>, !firrtl.uint<1>
+    %bar_clock, %bar_reset, %bar_a_1 = firrtl.instance @Bar  {name = "bar"} : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>
+    firrtl.connect %bar_clock, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %bar_reset, %reset : !firrtl.asyncreset, !firrtl.asyncreset
+    firrtl.connect %bar_a, %bar_a_1 : !firrtl.uint<1>, !firrtl.uint<1>
+    %baz_clock, %baz_reset, %baz_a_2 = firrtl.instance @Baz  {name = "baz"} : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>
+    firrtl.connect %baz_clock, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %baz_reset, %reset : !firrtl.asyncreset, !firrtl.asyncreset
+    firrtl.connect %baz_a, %baz_a_2 : !firrtl.uint<1>, !firrtl.uint<1>
+    %qux_clock, %qux_reset, %qux_a_3 = firrtl.instance @Qux  {name = "qux"} : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>
+    firrtl.connect %qux_clock, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %qux_reset, %reset : !firrtl.asyncreset, !firrtl.asyncreset
+    firrtl.connect %qux_a, %qux_a_3 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
