@@ -9,14 +9,8 @@
 set(PyCDE_TEST_DEPENDS
   FileCheck count not
   PyCDE
-  CIRCTBindingsPython
-  CIRCTBindingsPythonCombOps
-  CIRCTBindingsPythonESIOps
-  CIRCTBindingsPythonHWOps
-  CIRCTBindingsPythonSVOps
-  CIRCTBindingsPythonSeqOps
-  CIRCTBindingsPythonSources
-  CIRCTBindingsPythonExtension
+  CIRCTMLIRPythonModules
+  CIRCTPythonModules
   )
 
 configure_lit_site_cfg(

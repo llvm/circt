@@ -5,7 +5,7 @@
 from mlir.passmanager import PassManager
 import mlir.ir
 
-from _circt._esi import *
+from mlir._mlir_libs._circt._esi import *
 import circt
 from circt.dialects import hw
 from circt.dialects.esi import *

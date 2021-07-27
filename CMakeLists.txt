@@ -4,7 +4,7 @@
 ##
 ##===----------------------------------------------------------------------===//
 
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.13.4)
 
 if(POLICY CMP0068)
   cmake_policy(SET CMP0068 NEW)
@@ -19,9 +19,19 @@ if(POLICY CMP0077)
   cmake_policy(SET CMP0077 NEW)
 endif()
 
+# CMake library generation settings.
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "We are actually building a static mondo-lib")
+set(CMAKE_PLATFORM_NO_VERSIONED_SONAME ON CACHE BOOL "Python soname linked libraries are bad")
+set(CMAKE_VISIBILITY_INLINES_HIDDEN ON CACHE BOOL "Hide inlines")
+set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+
 # If we are not building as a part of LLVM, build Circt as an
 # standalone project, using LLVM as an external library:
 if( CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR )
+  if (CIRCT_BINDINGS_PYTHON_ENABLED)
+    message(FATAL_ERROR "CIRCT Python bindings require a unified build. \
+                         See docs/PythonBindings.md.")
+  endif()
 
 #-------------------------------------------------------------------------------
 # Project setup and globals
@@ -97,6 +107,7 @@ set(CIRCT_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(CIRCT_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
 set(CIRCT_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/include )
 set(CIRCT_TOOLS_DIR ${CMAKE_BINARY_DIR}/bin)
+set(CIRCT_PYTHON_PACKAGES_DIR ${CIRCT_BINARY_DIR}/python_packages)
 
 list(APPEND CMAKE_MODULE_PATH "${MLIR_MAIN_SRC_DIR}/cmake/modules")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
