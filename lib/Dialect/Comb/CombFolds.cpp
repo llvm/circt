@@ -121,7 +121,7 @@ static bool
 narrowOperationWidth(ExtractOp outerExtractOp, Operation *narrowingCandidate,
                      ValueRange inputs, bool narrowTrailingBits,
                      PatternRewriter &rewriter,
-                     std::function<Value(ArrayRef<Value>)> createOp) {
+                     function_ref<Value(ArrayRef<Value>)> createOp) {
   // If the result is never used, no point optimizing this. It will
   // also complicated error handling in getLowestBitAndHigestBitRequired.
   assert(!narrowingCandidate->getUsers().empty() &&
@@ -155,7 +155,7 @@ narrowOperationWidth(ExtractOp outerExtractOp, Operation *narrowingCandidate,
                                           lowestBitRequired);
       })));
 
-  auto getNarrowedExtractReplacement = [&](ExtractOp extractUse) {
+  auto getNarrowedExtractReplacement = [&](ExtractOp extractUse) -> Value {
     auto oldLowBit = extractUse.lowBit();
 
     assert(oldLowBit >= lowestBitRequired &&
@@ -164,7 +164,7 @@ narrowOperationWidth(ExtractOp outerExtractOp, Operation *narrowingCandidate,
     auto loc = extractUse.getLoc();
 
     if (narrowedWidth == extractUse.getType().getWidth()) {
-      return Value(narrowedOperation);
+      return narrowedOperation;
     }
 
     uint32_t newLowBit = oldLowBit - lowestBitRequired;
@@ -380,7 +380,7 @@ static bool narrowExtractWidth(ExtractOp outerExtractOp,
         return narrowOperationWidth(outerExtractOp, innerOp, innerOp.inputs(),
                                     /* narrowTrailingBits= */ false, rewriter);
       })
-      .Case<SubOp>([&](auto innerOp) {
+      .Case<SubOp>([&](SubOp innerOp) {
         return narrowOperationWidth(outerExtractOp, innerOp,
                                     {innerOp.lhs(), innerOp.rhs()},
                                     /* narrowTrailingBits= */ false, rewriter);
@@ -392,7 +392,7 @@ static bool narrowExtractWidth(ExtractOp outerExtractOp,
         return narrowOperationWidth(outerExtractOp, innerOp, innerOp.inputs(),
                                     /* narrowTrailingBits= */ true, rewriter);
       })
-      .Case<MuxOp>([&](auto innerOp) {
+      .Case<MuxOp>([&](MuxOp innerOp) {
         Type type = innerOp.getType();
 
         assert(type.isa<IntegerType>() &&
