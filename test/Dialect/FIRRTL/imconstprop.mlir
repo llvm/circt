@@ -83,13 +83,13 @@ firrtl.circuit "Test" {
     %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
     firrtl.connect %regreset, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
 
-    // CHECK: firrtl.connect %result6, %c0_ui2
+    // CHECK: firrtl.connect %result6, %regreset
     firrtl.connect %result6, %regreset: !firrtl.uint<2>, !firrtl.uint<2>
 
     // reg
     %reg = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<4>
     firrtl.connect %reg, %c0_ui2 : !firrtl.uint<4>, !firrtl.uint<2>
-    // CHECK: firrtl.connect %result7, %c0_ui4
+    // CHECK: firrtl.connect %reg, %c0_ui2
     firrtl.connect %result7, %reg: !firrtl.uint<4>, !firrtl.uint<4>
 
     // Wire without connects to it should turn into 'invalid'.
@@ -178,12 +178,17 @@ firrtl.circuit "testDontTouch"  {
     firrtl.connect %c, %a : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %b, %c : !firrtl.uint<1>, !firrtl.uint<1>
   }
+  // Any optimization of uninitialized registers is temporarily disabled while
+  // we figure out how to handle this.
+  //
   // CHECK-LABEL: firrtl.module @allowProp
   firrtl.module @allowProp(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
-    // CHECK: [[CONST:%.+]] = firrtl.constant 1 : !firrtl.uint<1>
+    // CHECK-NEXT: %[[CONST:.+]] = firrtl.constant 1 : !firrtl.uint<1>
+    // CHECK-NEXT: %c = firrtl.reg %clock
     %c = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.connect %c, %[[CONST]]
     firrtl.connect %c, %a : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK: firrtl.connect %b, [[CONST]]
+    // CHECK-NEXT: firrtl.connect %b, %c
     firrtl.connect %b, %c : !firrtl.uint<1>, !firrtl.uint<1>
   }
   // CHECK-LABEL: firrtl.module @blockProp3
@@ -207,7 +212,7 @@ firrtl.circuit "testDontTouch"  {
     firrtl.connect %blockProp3_a, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: firrtl.connect %a, %blockProp1_b
     firrtl.connect %a, %blockProp1_b : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK: firrtl.connect %a1, %c
+    // CHECK: firrtl.connect %a1, %allowProp_b
     firrtl.connect %a1, %allowProp_b : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: firrtl.connect %a2, %blockProp3_b
     firrtl.connect %a2, %blockProp3_b : !firrtl.uint<1>, !firrtl.uint<1>
@@ -311,10 +316,11 @@ firrtl.circuit "invalidReg1"   {
 firrtl.circuit "invalidReg2"   {
   // CHECK_LABEL: @invalidReg2
   firrtl.module @invalidReg2(in %clock: !firrtl.clock, out %a: !firrtl.uint<1>) {
+    // CHECK: %foobar = firrtl.reg
     %foobar = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.connect %foobar, %foobar
     firrtl.connect %foobar, %foobar : !firrtl.uint<1>, !firrtl.uint<1>
-    //CHECK: %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
-    //CHECK: firrtl.connect %a, %invalid_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    //CHECK-NEXT: firrtl.connect %a, %foobar
     firrtl.connect %a, %foobar : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
