@@ -281,12 +281,34 @@ void IMConstPropPass::runOnOperation() {
 
   instanceGraph = &getAnalysis<InstanceGraph>();
 
-  // If the top level module is an external module, mark the input ports
-  // overdefined.
+  // If the top-level module is a Module (not an ExtModule), mark all of its
+  // ports as overdefined.  (The top module must not delete its ports.)  For all
+  // other modules, mark aggregate ports as overdefined and non-aggregate output
+  // ports as invalid.  This sets up non-aggregate output ports for possible
+  // deletion, but also blocks removal of registers that use output ports as
+  // self-resets.
+  //
+  // Otherwise, if the top-level module is an ExtModule, mark all ports of all
+  // modules as overdefined.
+  // TODO: Is this the behavior that we actually want here?
   if (auto module = dyn_cast<FModuleOp>(circuit.getMainModule())) {
     markBlockExecutable(module.getBodyBlock());
     for (auto port : module.getBodyBlock()->getArguments())
       markOverdefined(port);
+    for (auto &circuitBodyOp : circuit.getBody()->getOperations()) {
+      if (auto submodule = dyn_cast<FModuleOp>(circuitBodyOp)) {
+        if (submodule == module)
+          continue;
+        auto ports = submodule.getPorts();
+        for (size_t i = 0, e = submodule.getNumArguments(); i != e; ++i) {
+          if (!ports[i].type.isGround())
+            markOverdefined(submodule.getArgument(i));
+          else if (ports[i].isOutput())
+            setLatticeValue(submodule.getArgument(i),
+                            InvalidValueAttr::get(ports[i].type));
+        }
+      }
+    }
   } else {
     // Otherwise, mark all module ports as being overdefined.
     for (auto &circuitBodyOp : circuit.getBody()->getOperations()) {
