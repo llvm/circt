@@ -13,7 +13,7 @@ jobs:
     name: Build and Test
     runs-on: ubuntu-18.04
     container:
-      image: ghcr.io/circt/images/circt-integration-test:v5
+      image: ghcr.io/circt/images/circt-integration-test:v6-beta3
     strategy:
       matrix:
         build-assert: [ON, OFF]
