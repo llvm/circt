@@ -33,7 +33,7 @@ static SmallVector<SmallVector<unsigned>> parseArrayOfArrays(ArrayAttr attr) {
   return result;
 }
 
-static LogicalResult constructProblem(Problem &prob, FuncOp func) {
+static void constructProblem(Problem &prob, FuncOp func) {
   // set up catch-all operator type with unit latency
   auto unitOpr = prob.getOrInsertOperatorType("unit");
   prob.setLatency(unitOpr, 1);
@@ -69,38 +69,31 @@ static LogicalResult constructProblem(Problem &prob, FuncOp func) {
     auto &ops = prob.getOperations();
     unsigned nOps = ops.size();
     for (auto &elemArr : parseArrayOfArrays(attr)) {
-      if (elemArr.size() < 2 || elemArr[0] >= nOps || elemArr[1] >= nOps)
-        continue; // malformed testcase
-
+      assert(elemArr.size() >= 2 && elemArr[0] < nOps && elemArr[1] < nOps);
       Operation *from = ops[elemArr[0]];
       Operation *to = ops[elemArr[1]];
-      if (failed(prob.insertDependence(std::make_pair(from, to))))
-        return func->emitError("inserting aux dependence failed");
+      auto res = prob.insertDependence(std::make_pair(from, to));
+      assert(succeeded(res));
     }
   }
-
-  return success();
 }
 
-static LogicalResult constructCyclicProblem(CyclicProblem &prob, FuncOp func) {
-  if (failed(constructProblem(prob, func)))
-    return failure();
+static void constructCyclicProblem(CyclicProblem &prob, FuncOp func) {
+  constructProblem(prob, func);
 
   // parse auxiliary dependences in the testcase (again), in order to set the
   // optional distance in the cyclic problem
   if (auto attr = func->getAttrOfType<ArrayAttr>("auxdeps")) {
     auto &ops = prob.getOperations();
     for (auto &elemArr : parseArrayOfArrays(attr)) {
-      if (elemArr.size() == 3) {
-        Operation *from = ops[elemArr[0]];
-        Operation *to = ops[elemArr[1]];
-        unsigned dist = elemArr[2];
-        prob.setDistance(std::make_pair(from, to), dist);
-      }
+      if (elemArr.size() < 3)
+        continue; // skip this dependence, rather than setting the default value
+      Operation *from = ops[elemArr[0]];
+      Operation *to = ops[elemArr[1]];
+      unsigned dist = elemArr[2];
+      prob.setDistance(std::make_pair(from, to), dist);
     }
   }
-
-  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -117,10 +110,7 @@ void TestProblemPass::runOnFunction() {
   auto func = getFunction();
 
   Problem prob(func);
-  if (failed(constructProblem(prob, func))) {
-    func->emitError("problem construction failed");
-    return signalPassFailure();
-  }
+  constructProblem(prob, func);
 
   if (failed(prob.check())) {
     func->emitError("problem check failed");
@@ -153,10 +143,7 @@ void TestCyclicProblemPass::runOnFunction() {
   auto func = getFunction();
 
   CyclicProblem prob(func);
-  if (failed(constructCyclicProblem(prob, func))) {
-    func->emitError("problem construction failed");
-    return signalPassFailure();
-  }
+  constructCyclicProblem(prob, func);
 
   if (failed(prob.check())) {
     func->emitError("problem check failed");
@@ -193,10 +180,7 @@ void TestASAPSchedulerPass::runOnFunction() {
   auto func = getFunction();
 
   Problem prob(func);
-  if (failed(constructProblem(prob, func))) {
-    func->emitError("problem construction failed");
-    return signalPassFailure();
-  }
+  constructProblem(prob, func);
 
   if (failed(prob.check())) {
     func->emitError("problem check failed");
