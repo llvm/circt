@@ -7,7 +7,7 @@ from __future__ import annotations
 from pycde.support import obj_to_value
 
 from .support import Value, get_user_loc, var_to_attribute, OpOperandConnect
-from .types import types
+from .pycde_types import types
 
 from circt import support
 from circt.dialects import hw
@@ -211,7 +211,7 @@ def _module_base(cls, extern: bool, params={}):
           if input == no_connect:
             if not extern:
               raise ConnectionError(
-                "`no_connect` is only valid on extern module ports")
+                  "`no_connect` is only valid on extern module ports")
             else:
               value = hw.ConstantOp.create(types.i1, 0).result
           else:
