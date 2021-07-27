@@ -63,8 +63,7 @@ namespace scheduling {
 ///   problem's solution, i.e. the schedule.
 ///
 /// Subclasses, i.e. corresponding to more complex scheduling problems, can
-/// declare additional properties as needed. The `clearSolution` method must be
-/// overridden if the new properties are part of the solution.
+/// declare additional properties as needed.
 //
 /// The `check...` methods perform validity checks before scheduling, e.g. that
 /// all operations have an associated operator type, etc.
@@ -207,9 +206,6 @@ public:
   }
   void setStartTime(Operation *op, unsigned val) { startTime[op] = val; }
 
-  /// Clear all properties that are part of the solution.
-  virtual void clearSolution() { startTime.clear(); }
-
   //===--------------------------------------------------------------------===//
   // Hooks to check/verify the different problem components
   //===--------------------------------------------------------------------===//
@@ -257,8 +253,6 @@ public:
   /// problem's solution.
   Optional<unsigned> getInitiationInterval() { return initiationInterval; }
   void setInitiationInterval(unsigned val) { initiationInterval = val; }
-
-  virtual void clearSolution() override { initiationInterval.reset(); }
 
 protected:
   virtual LogicalResult verifyDependence(Dependence dep) override;
