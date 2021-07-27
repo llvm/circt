@@ -32,29 +32,6 @@ using namespace circt;
 using namespace circt::esi;
 
 //===----------------------------------------------------------------------===//
-// Functions that translate from something Pybind11 understands to MLIR C++.
-//===----------------------------------------------------------------------===//
-
-static MlirOperation pyWrapModule(MlirOperation cModOp,
-                                  std::vector<std::string> portNames) {
-  mlir::Operation *modOp = unwrap(cModOp);
-  SmallVector<StringRef, 8> portNamesRefs;
-  for (auto name : portNames)
-    portNamesRefs.push_back(name);
-  SmallVector<ESIPortValidReadyMapping, 8> portTriples;
-  resolvePortNames(modOp, portNamesRefs, portTriples);
-  OpBuilder b(modOp);
-  Operation *wrapper = buildESIWrapper(b, modOp, portTriples);
-  return wrap(wrapper);
-}
-
-static MlirType channelType(MlirType cElem) {
-  Type elemTy = unwrap(cElem);
-  auto chanTy = ChannelPort::get(elemTy.getContext(), elemTy);
-  return wrap(chanTy);
-}
-
-//===----------------------------------------------------------------------===//
 // The main entry point into the ESI Assembly API.
 //===----------------------------------------------------------------------===//
 
@@ -105,12 +82,17 @@ void circt::python::populateDialectESISubmodule(py::module &m) {
   m.doc() = "ESI Python Native Extension";
   ::registerESIPasses();
 
-  m.def("buildWrapper", &pyWrapModule,
-        "Construct an ESI wrapper around HW module 'op' given a list of "
-        "latency-insensitive ports.",
-        py::arg("op"), py::arg("name_list"));
-  m.def("channel_type", &channelType,
-        "Create an ESI channel type which wraps the argument type");
+  m.def(
+      "buildWrapper",
+      [](MlirOperation cModOp, std::vector<std::string> cPortNames) {
+        llvm::SmallVector<MlirStringRef, 8> portNames;
+        for (auto portName : cPortNames)
+          portNames.push_back({portName.c_str(), portName.length()});
+        return circtESIWrapModule(cModOp, portNames.size(), portNames.data());
+      },
+      "Construct an ESI wrapper around HW module 'op' given a list of "
+      "latency-insensitive ports.",
+      py::arg("op"), py::arg("name_list"));
 
   py::class_<System>(m, "CppSystem")
       .def(py::init<MlirModule>())
