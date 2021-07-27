@@ -237,7 +237,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
 
   /// Mark the given block as executable.
   void markBlockExecutable(Block *block);
-  void markWireOrUnresetableRegOp(Operation *wireOrReg);
+  void markWireOp(Operation *wireOrReg);
   void markRegResetOp(RegResetOp regReset);
   void markRegOp(RegOp reg);
   void markMemOp(MemOp mem);
@@ -369,8 +369,16 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
   for (auto &op : *block) {
 
     // Handle each of the special operations in the firrtl dialect.
-    if (isa<WireOp>(op) || isa<RegOp>(op))
-      markWireOrUnresetableRegOp(&op);
+    if (isa<WireOp>(op))
+      markWireOp(&op);
+    // TODO: RegOp and RegResetOp are conservatively marked overdefined to avoid
+    // issues related to improper removal of registers that are uninitialized,
+    // but should not be removed.  For more discussion on this see:
+    //   - https://github.com/llvm/circt/issues/1465
+    //   - https://github.com/llvm/circt/issues/1466
+    //   - https://github.com/llvm/circt/issues/1478
+    else if (isa<RegOp>(op) || isa<RegResetOp>(op))
+      markOverdefined(op.getResult(0));
     else if (auto constant = dyn_cast<ConstantOp>(op))
       markConstantOp(constant);
     else if (auto specialConstant = dyn_cast<SpecialConstantOp>(op))
@@ -379,16 +387,14 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
       markInvalidValueOp(invalid);
     else if (auto instance = dyn_cast<InstanceOp>(op))
       markInstanceOp(instance);
-    else if (auto regReset = dyn_cast<RegResetOp>(op))
-      markRegResetOp(regReset);
     else if (auto mem = dyn_cast<MemOp>(op))
       markMemOp(mem);
   }
 }
 
-void IMConstPropPass::markWireOrUnresetableRegOp(Operation *wireOrReg) {
-  // If the wire/reg has a non-ground type, then it is too complex for us to
-  // handle, mark it as overdefined.
+void IMConstPropPass::markWireOp(Operation *wireOrReg) {
+  // If the wire has a non-ground type, then it is too complex for us to handle,
+  // mark it as overdefined.
   // TODO: Eventually add a field-sensitive model.
   auto resultValue = wireOrReg->getResult(0);
   if (!resultValue.getType().cast<FIRRTLType>().getPassiveType().isGround())
@@ -398,6 +404,9 @@ void IMConstPropPass::markWireOrUnresetableRegOp(Operation *wireOrReg) {
   mergeLatticeValue(resultValue, InvalidValueAttr::get(resultValue.getType()));
 }
 
+// TODO: This is currently unused due to different behavior for RegOp and
+// RegResetOp where these are always marked overdefined.  Revisit a way to turn
+// this back on.
 void IMConstPropPass::markRegResetOp(RegResetOp regReset) {
   // If the reg has a non-ground type, then it is too complex for us to handle,
   // mark it as overdefined.
