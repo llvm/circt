@@ -136,6 +136,7 @@ private:
 
 // TODO: filterAsIterator()
 std::vector<Operation *> filterAsVector(Filter &filter, Operation *root);
+std::vector<Operation *> filterAsVector(Filter &filter, std::vector<Operation *> results);
 
 } /* namespace query */
 } /* namespace circt */

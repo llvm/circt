@@ -288,5 +288,15 @@ std::vector<Operation *> filterAsVector(Filter &filter, Operation *root) {
   return filtered;
 }
 
+std::vector<Operation *> filterAsVector(Filter &filter, std::vector<Operation *> results) {
+  std::vector<Operation *> result;
+  for (auto *op : results) {
+    auto vec = filterAsVector(filter, op);
+    result.insert(result.end(), vec.begin(), vec.end());
+  }
+
+  return result;
+}
+
 } /* namespace query */
 } /* namespace circt */
