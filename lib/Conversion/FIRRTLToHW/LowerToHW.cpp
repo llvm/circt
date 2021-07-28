@@ -32,11 +32,11 @@ using namespace circt;
 using namespace firrtl;
 using circt::comb::ICmpPredicate;
 
-const StringRef assertAnnoClass =
+static const StringRef assertAnnoClass =
     "sifive.enterprise.firrtl.ExtractAssertionsAnnotation";
-const StringRef assumeAnnoClass =
+static const StringRef assumeAnnoClass =
     "sifive.enterprise.firrtl.ExtractAssumptionsAnnotation";
-const StringRef coverAnnoClass =
+static const StringRef coverAnnoClass =
     "sifive.enterprise.firrtl.ExtractCoverageAnnotation";
 
 /// Given a FIRRTL type, return the corresponding type for the HW dialect.
@@ -256,7 +256,7 @@ private:
 
   // Record the set of remaining annotation classes. This is used to warn only
   // once about any annotation class.
-  StringSet<> alreadyProcessed;
+  StringSet<> pendingAnnotations;
   const bool enableAnnotationWarning;
   std::mutex annotationPrintingMtx;
 
@@ -275,7 +275,7 @@ void CircuitLoweringState::processRemainingAnnotations(
   std::lock_guard<std::mutex> lock(annotationPrintingMtx);
 
   for (auto a : annoSet) {
-    auto inserted = alreadyProcessed.insert(a.getClass());
+    auto inserted = pendingAnnotations.insert(a.getClass());
     if (!inserted.second)
       continue;
 
