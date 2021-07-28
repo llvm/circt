@@ -407,3 +407,28 @@ firrtl.circuit "Oscillators"   {
     firrtl.connect %qux_a, %qux_a_3 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
+
+// This test checks that an output port sink, used as a RHS of a connect, is not
+// optimized away.  This is similar to the oscillator tests above, but more
+// reduced. See:
+//   - https://github.com/llvm/circt/issues/1488
+//
+// CHECK-LABK: firrtl.circuit "rhs_sink_output_used_as_wire"
+firrtl.circuit "rhs_sink_output_used_as_wire" {
+  // CHECK: firrtl.module @Bar
+  firrtl.module @Bar(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
+    firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
+    %_c = firrtl.wire  : !firrtl.uint<1>
+    // CHECK: firrtl.xor %a, %c
+    %0 = firrtl.xor %a, %c : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %_c, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %d, %_c : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  firrtl.module @rhs_sink_output_used_as_wire(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
+    %bar_a, %bar_b, %bar_c, %bar_d = firrtl.instance @Bar  {name = "bar"} : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %bar_a, %a : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %bar_b, %b : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %c, %bar_c : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %d, %bar_d : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
