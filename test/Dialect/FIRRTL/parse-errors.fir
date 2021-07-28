@@ -48,6 +48,15 @@ circuit invalid_name :
 
 ;// -----
 
+circuit subfield_of_ground_type :
+  module subfield_of_ground_type :
+    input a: UInt<1>
+    output b: UInt<1>
+    ; expected-error @+1 {{subfield requires bundle operand}}
+    b <= a.a
+
+;// -----
+
 circuit invalid_name :
   module invalid_name :
    input out_0 : { member : { 0 : { clock : Clock, reset : UInt<1>}}}
