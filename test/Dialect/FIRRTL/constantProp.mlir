@@ -16,6 +16,7 @@ firrtl.circuit "ConstInput"   {
     firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
+
 //propagate constant inputs ONLY if ALL instance inputs get the same value
 firrtl.circuit "InstanceInput"   {
   // CHECK-LABEL: firrtl.module @Bottom1
@@ -48,6 +49,8 @@ firrtl.circuit "InstanceInput"   {
     firrtl.connect %z, %1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
+
+//propagate constant inputs ONLY if ALL instance inputs get the same value
 firrtl.circuit "InstanceInput2"   {
   // CHECK-LABEL: firrtl.module @Bottom2
   firrtl.module @Bottom2(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
@@ -62,7 +65,7 @@ firrtl.circuit "InstanceInput2"   {
     // CHECK: firrtl.connect %out, %b0_out
     firrtl.connect %out, %b0_out : !firrtl.uint<1>, !firrtl.uint<1>
   }
- // CHECK-LABEL:  firrtl.module @InstanceInput2(in %x: !firrtl.uint<1>, out %z: !firrtl.uint<1>) {
+ // CHECK-LABEL:  firrtl.module @InstanceInput2
   firrtl.module @InstanceInput2(in %x: !firrtl.uint<1>, out %z: !firrtl.uint<1>) {
     %c1_ui = firrtl.constant 1 : !firrtl.uint
     %c_out = firrtl.instance @Child2  {name = "c"} : !firrtl.uint<1>
@@ -91,7 +94,7 @@ firrtl.circuit "acrossWire"   {
   }
 }
 
-//"ConstProp" should "propagate constant outputs" in {
+//"ConstProp" should "propagate constant outputs"
 firrtl.circuit "constOutput"   {
   firrtl.module @constOutChild(out %out: !firrtl.uint<1>) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
@@ -133,7 +136,7 @@ firrtl.circuit "divFold"   {
   }
 }
 
-//it should "pad constant connections to wires when propagating"
+//"pad constant connections to wires when propagating"
 firrtl.circuit "padConstWire"   {
   // CHECK-LABEL: firrtl.module @padConstWire
   firrtl.module @padConstWire(out %z: !firrtl.uint<16>) {
@@ -149,7 +152,7 @@ firrtl.circuit "padConstWire"   {
   }
 }
 
-//it should "pad constant connections to registers when propagating"
+// "pad constant connections to registers when propagating"
 firrtl.circuit "padConstReg"   {
   // CHECK-LABEL: firrtl.module @padConstReg
   firrtl.module @padConstReg(in %clock: !firrtl.clock, out %z: !firrtl.uint<16>) {
@@ -165,7 +168,7 @@ firrtl.circuit "padConstReg"   {
   }
 }
 
-//it should "pad zero when constant propping a register replaced with zero"
+// "pad zero when constant propping a register replaced with zero"
 firrtl.circuit "padZeroReg"   {
   // CHECK-LABEL: firrtl.module @padZeroReg
   firrtl.module @padZeroReg(in %clock: !firrtl.clock, out %z: !firrtl.uint<16>) {
@@ -199,7 +202,7 @@ firrtl.circuit "padConstOut"   {
   }
 }
 
-//it should "pad constant connections to submodule inputs when propagating"
+// "pad constant connections to submodule inputs when propagating"
 firrtl.circuit "padConstIn"   {
   // CHECK-LABEL: firrtl.module @padConstInChild
   firrtl.module @padConstInChild(in %x: !firrtl.uint<8>, out %y: !firrtl.uint<16>) {
@@ -220,7 +223,7 @@ firrtl.circuit "padConstIn"   {
   }
 }
 
-// it should "remove pads if the width is <= the width of the argument"
+//  "remove pads if the width is <= the width of the argument"
 firrtl.circuit "removePad"   {
   // CHECK-LABEL: firrtl.module @removePad
   firrtl.module @removePad(in %x: !firrtl.uint<8>, out %z: !firrtl.uint<8>) {
@@ -259,16 +262,16 @@ firrtl.circuit "constResetReg"   {
 firrtl.circuit "asyncReset"   {
   // CHECK-LABEL: firrtl.module @asyncReset
   firrtl.module @asyncReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %en: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
-      %c11_ui4 = firrtl.constant 11 : !firrtl.uint<4>
-      %r = firrtl.regreset %clock, %reset, %c11_ui4  : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<4>) -> !firrtl.uint<8>
-      %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
-      %0 = firrtl.mux(%en, %c0_ui4, %r) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<8>) -> !firrtl.uint<8>
-      firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
-      firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
-      // CHECK: firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
-      // CHECK: firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
-    }
+    %c11_ui4 = firrtl.constant 11 : !firrtl.uint<4>
+    %r = firrtl.regreset %clock, %reset, %c11_ui4  : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<4>) -> !firrtl.uint<8>
+    %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
+    %0 = firrtl.mux(%en, %c0_ui4, %r) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<8>) -> !firrtl.uint<8>
+    firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
+    // CHECK: firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
+    // CHECK: firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
   }
+}
 
 //"Registers with ONLY constant connection" should "be replaced with that constant"
 firrtl.circuit "constReg2"   {
