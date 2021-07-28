@@ -1720,7 +1720,7 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
     return failure();
   auto indexV = result.getType().cast<BundleType>().getElementIndex(fieldName);
   if (!indexV)
-    return emitError("unknown field '" + fieldName + "' in bundle type ")
+    return emitError(loc, "unknown field '" + fieldName + "' in bundle type ")
                << result.getType(),
            failure();
   auto index = indexV.getValue();
