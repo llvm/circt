@@ -505,6 +505,8 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
     if (!AnnotationSet::get(blockArg).hasDontTouch())
       for (auto userOfResultPort : resultPortToInstanceResultMapping[blockArg])
         mergeLatticeValue(userOfResultPort, srcValue);
+    // Output ports are wire-like and may have users.
+    mergeLatticeValue(connect.dest(), srcValue);
     return;
   }
 
