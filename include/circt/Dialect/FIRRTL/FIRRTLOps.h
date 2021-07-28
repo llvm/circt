@@ -98,8 +98,14 @@ SmallVector<ModulePortInfo> getModulePortInfo(Operation *op);
 /// name for each port.
 ArrayAttr getModulePortNames(Operation *module);
 
+/// Return the name for the specified module or extmodule
+StringAttr getModuleName(Operation *module);
+
 /// Given an FModule or ExtModule, return the name of the specified port number.
 StringAttr getModulePortName(Operation *op, size_t portIndex);
+
+/// Given an FModule or ExtModule, return the type of the specified port number.
+Type getModulePortType(Operation *op, size_t portIndex);
 
 /// Return the portDirections attribute for the specified module, which contains
 /// the direction for each port.

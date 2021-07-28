@@ -329,6 +329,11 @@ FunctionType firrtl::getModuleType(Operation *op) {
   return typeAttr.getValue().cast<FunctionType>();
 }
 
+/// Return the name for the specified module or extmodule
+StringAttr firrtl::getModuleName(Operation *op) {
+return op->getAttrOfType<StringAttr>(::mlir::SymbolTable::getSymbolAttrName());
+}
+
 /// This function can extract information about ports from a module and an
 /// extmodule.
 SmallVector<ModulePortInfo> firrtl::getModulePortInfo(Operation *op) {
@@ -367,6 +372,12 @@ SmallVector<ModulePortInfo> firrtl::getModulePortInfo(Operation *op) {
 StringAttr firrtl::getModulePortName(Operation *op, size_t portIndex) {
   assert(isa<FModuleOp>(op) || isa<FExtModuleOp>(op));
   return getModulePortNames(op)[portIndex].cast<StringAttr>();
+}
+
+/// Given an FModule or ExtModule, return the type of the specified port number.
+Type firrtl::getModulePortType(Operation *op, size_t portIndex) {
+  assert(isa<FModuleOp>(op) || isa<FExtModuleOp>(op));
+  return getModuleType(op).getInputs()[portIndex];
 }
 
 Direction firrtl::getModulePortDirection(Operation *op, size_t portIndex) {

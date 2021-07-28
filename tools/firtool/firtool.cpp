@@ -202,6 +202,8 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   pm.enableTiming(ts);
   applyPassManagerCLOptions(pm);
 
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotationsPass());
+
   if (!disableOptimization) {
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createCSEPass());
