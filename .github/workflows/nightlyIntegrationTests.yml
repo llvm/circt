@@ -54,7 +54,7 @@ jobs:
         run: |
           export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
           mkdir build && cd build
-          cmake ../llvm/llvm \
+          cmake -GNinja ../llvm/llvm \
             -DBUILD_SHARED_LIBS=$BUILD_SHARED \
             -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
             -DCMAKE_C_COMPILER=$CC \
@@ -69,9 +69,7 @@ jobs:
             -DCIRCT_BINDINGS_PYTHON_ENABLED=ON
       - name: Test CIRCT
         run: |
-          cd build
-          make check-circt -j$(nproc)
+          ninja -C build check-circt -j$(nproc)
       - name: Integration Test CIRCT
         run: |
-          cd build
-          make check-circt-integration -j$(nproc)
+          ninja -C build check-circt-integration -j$(nproc)
