@@ -59,12 +59,12 @@ jobs:
             -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
             -DCMAKE_C_COMPILER=$CC \
             -DCMAKE_CXX_COMPILER=$CXX \
-            -DCMAKE_LINKER=lld \
             -DLLVM_CCACHE_BUILD=ON \
             -DLLVM_ENABLE_ASSERTIONS=$BUILD_ASSERT \
             -DLLVM_ENABLE_PROJECTS=mlir \
             -DLLVM_EXTERNAL_PROJECTS=circt \
             -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=.. \
+            -DLLVM_USE_LINKER=lld \
             -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
             -DCIRCT_BINDINGS_PYTHON_ENABLED=ON
       - name: Build CIRCT

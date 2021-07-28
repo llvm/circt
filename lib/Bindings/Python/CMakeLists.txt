@@ -26,6 +26,11 @@ declare_mlir_python_extension(CIRCTBindingsPythonExtension.Core
     CIRCTCAPISeq
     CIRCTCAPISV
     CIRCTCAPIExportVerilog
+  PRIVATE_LINK_LIBS
+    LLVMSupport
+    # TODO: remove these when ESIModule only uses C-APIs.
+    MLIRIR
+    MLIRParser
 )
 
 ################################################################################

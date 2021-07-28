@@ -20,10 +20,20 @@ if(POLICY CMP0077)
 endif()
 
 # CMake library generation settings.
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "We are actually building a static mondo-lib")
-set(CMAKE_PLATFORM_NO_VERSIONED_SONAME ON CACHE BOOL "Python soname linked libraries are bad")
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Default to building a static mondo-lib")
+set(CMAKE_PLATFORM_NO_VERSIONED_SONAME ON CACHE BOOL
+  "Python soname linked libraries are bad")
 set(CMAKE_VISIBILITY_INLINES_HIDDEN ON CACHE BOOL "Hide inlines")
-set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+
+# The -fvisibility=hidden option only works for static builds.
+if (NOT BUILD_SHARED_LIBS)
+  set(CMAKE_CXX_VISIBILITY_PRESET hidden CACHE STRING "Set -fvisibility=XXX.")
+else()
+  if (CMAKE_CXX_VISIBILITY_PRESET STREQUAL "hidden")
+    message(FATAL_ERROR "CMAKE_CXX_VISIBILITY_PRESET=hidden is incompatible \
+                         with BUILD_SHARED_LIBS.")
+  endif()
+endif()
 
 # If we are not building as a part of LLVM, build Circt as an
 # standalone project, using LLVM as an external library:
