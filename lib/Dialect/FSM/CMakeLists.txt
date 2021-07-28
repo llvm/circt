@@ -1,8 +1,10 @@
 file(GLOB globbed *.cpp)
 
-add_mlir_dialect_library(CIRCTFSM
+add_circt_dialect_library(CIRCTFSM
   ${globbed}
 
   DEPENDS
   MLIRFSMIncGen
   )
+
+add_subdirectory(Transforms)

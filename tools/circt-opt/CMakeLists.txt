@@ -31,6 +31,7 @@ target_link_libraries(circt-opt
   CIRCTStaticLogicOps
   CIRCTFSM
   CIRCTFSMToHW
+  CIRCTFSMTransforms
   CIRCTSV
   CIRCTSVTransforms
 
