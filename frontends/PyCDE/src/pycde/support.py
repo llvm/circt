@@ -9,7 +9,7 @@ import os
 class Value:
 
   def __init__(self, value, type=None):
-    from .types import PyCDEType
+    from .pycde_types import PyCDEType
     self.value = support.get_value(value)
     if type is None:
       self.type = PyCDEType(self.value.type)

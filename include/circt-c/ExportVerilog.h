@@ -16,8 +16,9 @@ extern "C" {
 
 /// Emits verilog for the specified module using the provided callback and user
 /// data
-MlirLogicalResult mlirExportVerilog(MlirModule, MlirStringCallback,
-                                    void *userData);
+MLIR_CAPI_EXPORTED MlirLogicalResult mlirExportVerilog(MlirModule,
+                                                       MlirStringCallback,
+                                                       void *userData);
 
 #ifdef __cplusplus
 }

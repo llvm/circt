@@ -4,7 +4,7 @@
 
 from .module import *
 from .system import *
-from .types import *
+from .pycde_types import *
 from .support import obj_to_value
 from circt.support import connect
 
