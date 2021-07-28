@@ -10,6 +10,14 @@ include(AddMLIRPython)
 
 declare_mlir_python_sources(CIRCTBindingsPythonExtension)
 
+set(_depends LLVMSupport)
+
+# TODO: remove these when ESIModule only uses C-APIs.
+if (BUILD_SHARED_LIBS)
+  list(APPEND _depends MLIRIR)
+  list(APPEND _depends MLIRParser)
+endif()
+
 declare_mlir_python_extension(CIRCTBindingsPythonExtension.Core
   MODULE_NAME _circt
   ADD_TO_PARENT CIRCTBindingsPythonExtension
@@ -27,10 +35,7 @@ declare_mlir_python_extension(CIRCTBindingsPythonExtension.Core
     CIRCTCAPISV
     CIRCTCAPIExportVerilog
   PRIVATE_LINK_LIBS
-    LLVMSupport
-    # TODO: remove these when ESIModule only uses C-APIs.
-    MLIRIR
-    MLIRParser
+    ${_depends}
 )
 
 ################################################################################

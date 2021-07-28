@@ -27,7 +27,7 @@ set(CMAKE_VISIBILITY_INLINES_HIDDEN ON CACHE BOOL "Hide inlines")
 
 # The -fvisibility=hidden option only works for static builds.
 if (NOT BUILD_SHARED_LIBS)
-  set(CMAKE_CXX_VISIBILITY_PRESET hidden CACHE STRING "Set -fvisibility=XXX.")
+  set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 else()
   if (CMAKE_CXX_VISIBILITY_PRESET STREQUAL "hidden")
     message(FATAL_ERROR "CMAKE_CXX_VISIBILITY_PRESET=hidden is incompatible \

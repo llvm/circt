@@ -67,10 +67,6 @@ jobs:
             -DLLVM_USE_LINKER=lld \
             -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
             -DCIRCT_BINDINGS_PYTHON_ENABLED=ON
-      - name: Build CIRCT
-        run: |
-          cd build
-          make -j$(nproc)
       - name: Test CIRCT
         run: |
           cd build
@@ -78,4 +74,4 @@ jobs:
       - name: Integration Test CIRCT
         run: |
           cd build
-          make check-circt-integration
+          make check-circt-integration -j$(nproc)
