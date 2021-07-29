@@ -35,6 +35,7 @@ using namespace circt::esi;
 // The main entry point into the ESI Assembly API.
 //===----------------------------------------------------------------------===//
 
+/// TODO: move this to only use C-APIs.
 class System {
 public:
   /// Construct an ESI system. The Python bindings really want to own the MLIR
