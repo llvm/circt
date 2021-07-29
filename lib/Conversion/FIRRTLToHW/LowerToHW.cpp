@@ -2480,13 +2480,8 @@ LogicalResult FIRRTLLowering::visitExpr(MuxPrimOp op) {
   auto cond = getLoweredValue(op.sel());
   auto ifTrue = getLoweredAndExtendedValue(op.high(), op.getType());
   auto ifFalse = getLoweredAndExtendedValue(op.low(), op.getType());
-  if (!ifTrue || !ifFalse)
+  if (!cond || !ifTrue || !ifFalse)
     return failure();
-
-  // Lower mux(0-bit, x, y) -> y
-  if (!cond) {
-    return handleZeroBit(op.sel(), [&]() { return setLowering(op, ifFalse); });
-  }
 
   return setLoweringTo<comb::MuxOp>(op, ifTrue.getType(), cond, ifTrue,
                                     ifFalse);
