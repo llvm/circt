@@ -53,6 +53,11 @@ declare_mlir_python_sources(CIRCTBindingsPythonSources
 ################################################################################
 # Declare dialect-specific bindings.
 ################################################################################
+
+# Ensure the build directory for generated Python files exists. Ninja is able to
+# generate this, but make does not and the build fails.
+file(MAKE_DIRECTORY ${CIRCT_BINARY_DIR}/lib/Bindings/Python/circt/dialects)
+
 declare_mlir_python_sources(CIRCTBindingsPythonSources.Dialects
   ADD_TO_PARENT CIRCTBindingsPythonSources)
 
