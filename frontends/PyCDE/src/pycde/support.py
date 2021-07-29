@@ -151,3 +151,12 @@ def obj_to_value(x, type, result_type=None):
                                     result_type=result_type).result
 
   raise ValueError(f"Unable to map object '{type(x)}' to MLIR Value")
+
+
+def create_type_string(ty):
+  ty = support.type_to_pytype(ty)
+  if isinstance(ty, hw.TypeAliasType):
+    return ty.name
+  if isinstance(ty, hw.ArrayType):
+    return f"{ty.size}x" + create_type_string(ty.element_type)
+  return str(ty)

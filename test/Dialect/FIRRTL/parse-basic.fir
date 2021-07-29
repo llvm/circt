@@ -860,19 +860,15 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     infer mport w = a[wAddr], clock
     w <= wData
 
-  ; Test that a mux with unknown width or 0-bit width select line parses.  This
-  ; is a check of the predicate enforced on UInt1Type.
-  ; CHECK-LABEL: firrtl.module @MuxUnknownWidthOrZeroWidthSelect_Issue1108
-  module MuxUnknownWidthOrZeroWidthSelect_Issue1108:
+  ; Test that a mux with an unknown width select line parses.  This is a check
+  ; of the predicate enforced on UInt1Type.
+  ; CHECK-LABEL: firrtl.module @MuxUnknownWidthSelect_Issue1108
+  module MuxUnknownWidthSelect_Issue1108:
     input a: UInt<1>
     input b: UInt<1>
-    input selUnknown: UInt
-    input selZero: UInt<0>
-    output c: UInt<8>[2]
-    ; CHECK: firrtl.mux([[_:.+]]) : (!firrtl.uint, [[_:.+]]) -> !firrtl.uint<1>
-    c[0] <= mux(selUnknown, a, b)
-    ; CHECK: firrtl.mux([[_:.+]]) : (!firrtl.uint<0>, [[_:.+]]) -> !firrtl.uint<1>
-    c[1] <= mux(selZero, a, b)
+    input sel: UInt
+    output c: UInt<8>
+    c <= mux(sel, a, b)
 
   ; CHECK-LABEL: firrtl.extmodule @RawStringParam
   ; CHECK: parameters = {FORMAT = "xyz_timeout=%d\\n",

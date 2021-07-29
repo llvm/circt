@@ -176,9 +176,6 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: comb.mux {{.*}}, [[CVT4]], [[SUB]] : i4
     %26 = firrtl.mux(%17, %23, %25) : (!firrtl.uint<1>, !firrtl.sint<3>, !firrtl.sint<4>) -> !firrtl.sint<4>
 
-    // CHECK-NEXT: [[CVT4:%.+]] = comb.sext [[CVT]] : (i3) -> i4
-    %27 = firrtl.mux(%in4, %23, %25) : (!firrtl.uint<0>, !firrtl.sint<3>, !firrtl.sint<4>) -> !firrtl.sint<4>
-
     // CHECK-NEXT: = comb.icmp eq  {{.*}}, %c-1_i14 : i14
     %28 = firrtl.andr %18 : (!firrtl.uint<14>) -> !firrtl.uint<1>
 
