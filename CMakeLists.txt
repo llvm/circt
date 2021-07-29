@@ -19,6 +19,9 @@ if(POLICY CMP0077)
   cmake_policy(SET CMP0077 NEW)
 endif()
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED YES)
+
 # CMake library generation settings.
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Default to building a static mondo-lib")
 set(CMAKE_PLATFORM_NO_VERSIONED_SONAME ON CACHE BOOL
@@ -47,9 +50,6 @@ if( CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR )
 # Project setup and globals
 #-------------------------------------------------------------------------------
   project(circt LANGUAGES CXX C)
-  
-  set(CMAKE_CXX_STANDARD 17)
-  set(CMAKE_CXX_STANDARD_REQUIRED YES)
   
 #-------------------------------------------------------------------------------
 # Options and settings
