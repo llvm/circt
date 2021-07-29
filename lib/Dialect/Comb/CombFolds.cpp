@@ -118,9 +118,8 @@ getLowestBitAndHighestBitRequired(Operation *op, bool narrowTrailingBits,
 //
 // Returns true if IR is mutated. IR is mutated iff narrowing happens.
 static bool
-narrowOperationWidth(ExtractOp outerExtractOp, Operation *narrowingCandidate,
-                     ValueRange inputs, bool narrowTrailingBits,
-                     PatternRewriter &rewriter,
+narrowOperationWidth(Operation *narrowingCandidate, ValueRange inputs,
+                     bool narrowTrailingBits, PatternRewriter &rewriter,
                      function_ref<Value(ArrayRef<Value>)> createOp) {
   // If the result is never used, no point optimizing this. It will
   // also complicated error handling in getLowestBitAndHigestBitRequired.
@@ -128,9 +127,6 @@ narrowOperationWidth(ExtractOp outerExtractOp, Operation *narrowingCandidate,
          "narrowingCandidate must have at least one use.");
   assert(narrowingCandidate->getNumResults() == 1 &&
          "narrowingCandidate must have exactly one result");
-  assert(outerExtractOp &&
-         "narrowOperationWidth must be called from canonicalizing an "
-         "outerExtractOp, which serves as the root op.");
   IntegerType narrowingCandidateType =
       narrowingCandidate->getResultTypes().front().cast<IntegerType>();
 
@@ -173,40 +169,27 @@ narrowOperationWidth(ExtractOp outerExtractOp, Operation *narrowingCandidate,
     return narrowedExtract;
   };
 
-  // Pattern rewriter requires that that the root operation (ie: outerExtractOp)
-  // in question to be updated in place, replaced or erased, so this is
-  // necessary.
-  rewriter.replaceOp(outerExtractOp,
-                     getNarrowedExtractReplacement(outerExtractOp));
-
-  // However, for other use sites, calling rewriter.replaceOp or
-  // replaceOpWithNewOp is potentially memory unsafe, as it requires the
-  // rewriting driver to ensure that dangling references in any internal data
-  // structures are properly cleared out.
-  //
-  // Calling narrowingCandidate->getUsers will not include outerExtractOp, since
-  // rewriter.replaceOp will have removed it from the iterator.
+  // Replaces all existing use sites with the newly created narrowed operation.
+  // This loop captures both the root and non-root use sites.  Note that
+  // PatternRewriter allows calling rewriter.replaceOp on non-root users.
   for (Operation *user :
        llvm::make_early_inc_range(narrowingCandidate->getUsers())) {
     auto extractUser = cast<ExtractOp>(user);
-    rewriter.updateRootInPlace(extractUser, [&]() {
-      extractUser.replaceAllUsesWith(
-          getNarrowedExtractReplacement(extractUser));
-    });
+    rewriter.replaceOp(extractUser, getNarrowedExtractReplacement(extractUser));
   }
 
   return true;
 }
 
 template <class Op>
-static bool narrowOperationWidth(ExtractOp outerExtractOp, Op op,
-                                 ValueRange inputs, bool narrowTrailingBits,
+static bool narrowOperationWidth(Op op, ValueRange inputs,
+                                 bool narrowTrailingBits,
                                  PatternRewriter &rewriter) {
   auto createOp = [&](ArrayRef<Value> args) -> Value {
     return rewriter.create<Op>(op.getLoc(), args);
   };
-  return narrowOperationWidth(outerExtractOp, op, inputs, narrowTrailingBits,
-                              rewriter, createOp);
+  return narrowOperationWidth(op, inputs, narrowTrailingBits, rewriter,
+                              createOp);
 }
 
 //===----------------------------------------------------------------------===//
@@ -361,7 +344,7 @@ static LogicalResult extractConcatToConcatExtract(ExtractOp op,
 // usage sites of outerExtractOp to reference the newly created narrowed
 // operation.
 static bool narrowExtractWidth(ExtractOp outerExtractOp,
-                               PatternRewriter rewriter) {
+                               PatternRewriter &rewriter) {
   auto *innerArg = outerExtractOp.input().getDefiningOp();
 
   if (!innerArg) {
@@ -377,19 +360,18 @@ static bool narrowExtractWidth(ExtractOp outerExtractOp,
       // but not the trailing bits. The trailing bits is used to compute the
       // results of arithmetic operations.
       .Case<AddOp, MulOp>([&](auto innerOp) {
-        return narrowOperationWidth(outerExtractOp, innerOp, innerOp.inputs(),
+        return narrowOperationWidth(innerOp, innerOp.inputs(),
                                     /* narrowTrailingBits= */ false, rewriter);
       })
       .Case<SubOp>([&](SubOp innerOp) {
-        return narrowOperationWidth(outerExtractOp, innerOp,
-                                    {innerOp.lhs(), innerOp.rhs()},
+        return narrowOperationWidth(innerOp, {innerOp.lhs(), innerOp.rhs()},
                                     /* narrowTrailingBits= */ false, rewriter);
       })
       // Bit-wise operations and muxes can be narrowed more aggressively.
       // Trailing bits that are not referenced in the use-sits can all be
       // removed.
       .Case<AndOp, OrOp, XorOp>([&](auto innerOp) {
-        return narrowOperationWidth(outerExtractOp, innerOp, innerOp.inputs(),
+        return narrowOperationWidth(innerOp, innerOp.inputs(),
                                     /* narrowTrailingBits= */ true, rewriter);
       })
       .Case<MuxOp>([&](MuxOp innerOp) {
@@ -406,10 +388,9 @@ static bool narrowExtractWidth(ExtractOp outerExtractOp,
           return rewriter.create<MuxOp>(loc, cond, values[0], values[1]);
         };
 
-        return narrowOperationWidth(outerExtractOp, innerOp,
-                                    {innerOp.trueValue(), innerOp.falseValue()},
-                                    /* narrowTrailingBits= */ true, rewriter,
-                                    createMuxOp);
+        return narrowOperationWidth(
+            innerOp, {innerOp.trueValue(), innerOp.falseValue()},
+            /* narrowTrailingBits= */ true, rewriter, createMuxOp);
       })
 
       // TODO: Cautiously investigate whether this optimization can be performed
