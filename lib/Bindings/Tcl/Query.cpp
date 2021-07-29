@@ -1,4 +1,5 @@
 #include "Query.h"
+#include "mlir/CAPI/IR.h"
 
 int filterNodeTypeSetFromAnyProc(Tcl_Interp *interp, Tcl_Obj *obj) {
   std::string bytes(obj->bytes);
@@ -110,3 +111,15 @@ void filterFreeIntRepProc(Tcl_Obj *obj) {
   delete[] (Tcl_Obj*) obj->internalRep.twoPtrValue.ptr2;
 }
 
+int tclFilter(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]) {
+  if (objc != 3) {
+    return TCL_ERROR;
+  }
+
+  auto *filter = (circt::query::Filter *) objv[1]->internalRep.otherValuePtr;
+  auto op = (MlirOperation) { objv[2]->internalRep.otherValuePtr };
+
+  auto *result = CirctQueryFilterFromRoot(filter, op);
+
+  return TCL_OK;
+}

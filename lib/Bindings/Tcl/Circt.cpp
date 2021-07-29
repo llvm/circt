@@ -11,6 +11,7 @@
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "mlir-c/Registration.h"
+#include "mlir/CAPI/IR.h"
 #include "mlir/IR/Operation.h"
 
 int operationTypeSetFromAnyProc(Tcl_Interp *interp, Tcl_Obj *obj) {
@@ -18,19 +19,47 @@ int operationTypeSetFromAnyProc(Tcl_Interp *interp, Tcl_Obj *obj) {
 }
 
 void operationTypeUpdateStringProc(Tcl_Obj *obj) {
-  obj->bytes = Tcl_Alloc(1);
-  obj->bytes[0] = '\0';
-  obj->length = 0;
+  std::string str;
+  auto *op = unwrap((MlirOperation) { obj->internalRep.otherValuePtr });
+  llvm::raw_string_ostream stream(str);
+  op->print(stream);
+  obj->length = str.length();
+  obj->bytes = Tcl_Alloc(obj->length);
+  memcpy(obj->bytes, str.c_str(), obj->length);
+  obj->bytes[obj->length] = '\0';
 }
 
 void operationTypeDupIntRepProc(Tcl_Obj *src, Tcl_Obj *dup) {
-  auto *op = ((mlir::Operation *) src->internalRep.otherValuePtr)->clone();
-  dup->internalRep.otherValuePtr = op;
+  auto *op = unwrap((MlirOperation) { src->internalRep.otherValuePtr })->clone();
+  dup->internalRep.otherValuePtr = wrap(op).ptr;
 }
 
 void operationTypeFreeIntRepProc(Tcl_Obj *obj) {
-  // TODO: make this not leak memory without segfaulting
-  //auto *op = (mlir::Operation *) obj->internalRep.otherValuePtr;
-  //op->erase();
+  auto *op = unwrap((MlirOperation) { obj->internalRep.otherValuePtr });
+  op->erase();
 }
 
+int moduleTypeSetFromAnyProc(Tcl_Interp *interp, Tcl_Obj *obj) {
+  return TCL_ERROR;
+}
+
+void moduleTypeUpdateStringProc(Tcl_Obj *obj) {
+  std::string str;
+  auto op = unwrap((MlirModule) { obj->internalRep.otherValuePtr });
+  llvm::raw_string_ostream stream(str);
+  op.print(stream);
+  obj->length = str.length();
+  obj->bytes = Tcl_Alloc(obj->length);
+  memcpy(obj->bytes, str.c_str(), obj->length);
+  obj->bytes[obj->length] = '\0';
+}
+
+void moduleTypeDupIntRepProc(Tcl_Obj *src, Tcl_Obj *dup) {
+  auto *op = unwrap((MlirModule) { src->internalRep.otherValuePtr })->clone();
+  dup->internalRep.otherValuePtr = wrap(op).ptr;
+}
+
+void moduleTypeFreeIntRepProc(Tcl_Obj *obj) {
+  auto op = unwrap((MlirModule) { obj->internalRep.otherValuePtr });
+  op.erase();
+}

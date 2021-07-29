@@ -4,6 +4,7 @@
 #include "Circt.h"
 #include "Query.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "mlir/CAPI/IR.h"
 #include "mlir/Parser.h"
 #include "mlir/Support/FileUtilities.h"
 #include "llvm/Support/SourceMgr.h"
@@ -64,8 +65,6 @@ int loadFirMlirFile(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Obj *con
     return TCL_ERROR;
   }
 
-  auto str = input->getBuffer().str();
-
   llvm::SourceMgr sourceMgr;
   sourceMgr.AddNewSourceBuffer(std::move(input), llvm::SMLoc());
   mlir::SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, &context);
@@ -84,15 +83,13 @@ int loadFirMlirFile(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Obj *con
     return TCL_ERROR;
   }
 
-  auto *m = new circt::ModuleOp(module.release());
+  auto *m = wrap(module.release()).ptr;
 
   auto *obj = Tcl_NewObj();
-  obj->length = str.length();
-  obj->bytes = Tcl_Alloc(obj->length + 1);
-  obj->bytes[obj->length] = '\0';
-  memcpy(obj->bytes, str.c_str(), obj->length);
-  obj->typePtr = Tcl_GetObjType("MlirOperation");
-  obj->internalRep.otherValuePtr = m;
+  obj->typePtr = Tcl_GetObjType("MlirModule");
+  obj->internalRep.otherValuePtr = (void *) m;
+  obj->length = 0;
+  obj->bytes = nullptr;
   Tcl_SetObjResult(interp, obj);
 
   return TCL_OK;
@@ -130,14 +127,23 @@ int DLLEXPORT Circt_Init(Tcl_Interp *interp) {
   operationType->freeIntRepProc = operationTypeFreeIntRepProc;
   Tcl_RegisterObjType(operationType);
 
+  Tcl_ObjType *moduleType = new Tcl_ObjType;
+  moduleType->name = "MlirModule";
+  moduleType->setFromAnyProc = moduleTypeSetFromAnyProc;
+  moduleType->updateStringProc = moduleTypeUpdateStringProc;
+  moduleType->dupIntRepProc = moduleTypeDupIntRepProc;
+  moduleType->freeIntRepProc = moduleTypeFreeIntRepProc;
+  Tcl_RegisterObjType(moduleType);
+
   // Register package
   if (Tcl_PkgProvide(interp, "Circt", "1.0") == TCL_ERROR) {
     return TCL_ERROR;
   }
 
   // Register commands
-  Tcl_CreateObjCommand(interp, "filter", createTclFilter, NULL, NULL);
   Tcl_CreateObjCommand(interp, "loadCirctFile", loadFirMlirFile, NULL, NULL);
+  Tcl_CreateObjCommand(interp, "createFilter", createTclFilter, NULL, NULL);
+  Tcl_CreateObjCommand(interp, "filter", tclFilter, NULL, NULL);
   return TCL_OK;
 }
 
