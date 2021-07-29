@@ -326,6 +326,10 @@ firrtl.circuit "Foo" {
     %1 = firrtl.wire : !firrtl.uint
     %2 = firrtl.wire : !firrtl.uint
     %3 = firrtl.mux(%2, %0, %1) : (!firrtl.uint, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
+    // CHECK: %4 = firrtl.wire : !firrtl.uint<1>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %4 = firrtl.wire : !firrtl.uint
+    %5 = firrtl.mux(%4, %c1_ui1, %c1_ui1) : (!firrtl.uint, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
     %c2_ui3 = firrtl.constant 2 : !firrtl.uint<3>
     firrtl.connect %0, %c1_ui2 : !firrtl.uint, !firrtl.uint<2>

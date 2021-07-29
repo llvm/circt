@@ -1209,6 +1209,9 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
   // case.
   bool allWidthsKnown = true;
   for (auto result : op->getResults()) {
+    if (auto mux = dyn_cast<MuxPrimOp>(op))
+      if (hasUninferredWidth(mux.sel().getType()))
+        allWidthsKnown = false;
     if (!hasUninferredWidth(result.getType()))
       declareVars(result, op->getLoc());
     else
