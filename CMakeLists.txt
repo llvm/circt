@@ -22,22 +22,6 @@ endif()
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 
-# CMake library generation settings.
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "Default to building a static mondo-lib")
-set(CMAKE_PLATFORM_NO_VERSIONED_SONAME ON CACHE BOOL
-  "Python soname linked libraries are bad")
-set(CMAKE_VISIBILITY_INLINES_HIDDEN ON CACHE BOOL "Hide inlines")
-
-# The -fvisibility=hidden option only works for static builds.
-if (NOT BUILD_SHARED_LIBS)
-  set(CMAKE_CXX_VISIBILITY_PRESET hidden)
-else()
-  if (CMAKE_CXX_VISIBILITY_PRESET STREQUAL "hidden")
-    message(FATAL_ERROR "CMAKE_CXX_VISIBILITY_PRESET=hidden is incompatible \
-                         with BUILD_SHARED_LIBS.")
-  endif()
-endif()
-
 # If we are not building as a part of LLVM, build Circt as an
 # standalone project, using LLVM as an external library:
 if( CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR )
@@ -87,6 +71,22 @@ endif ()
   set(CIRCT_BUILT_STANDALONE 1)
   set(BACKEND_PACKAGE_STRING "LLVM ${LLVM_PACKAGE_VERSION}")
 else()
+  # CMake library generation settings.
+  set(BUILD_SHARED_LIBS OFF CACHE BOOL "Default to building a static mondo-lib")
+  set(CMAKE_PLATFORM_NO_VERSIONED_SONAME ON CACHE BOOL
+    "Python soname linked libraries are bad")
+  set(CMAKE_VISIBILITY_INLINES_HIDDEN ON CACHE BOOL "Hide inlines")
+
+  # The -fvisibility=hidden option only works for static builds.
+  if (NOT BUILD_SHARED_LIBS)
+    set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+  else()
+    if (CMAKE_CXX_VISIBILITY_PRESET STREQUAL "hidden")
+      message(FATAL_ERROR "CMAKE_CXX_VISIBILITY_PRESET=hidden is incompatible \
+                           with BUILD_SHARED_LIBS.")
+    endif()
+  endif()
+
   set(MLIR_MAIN_SRC_DIR ${LLVM_MAIN_SRC_DIR}/../mlir ) # --src-root
   set(MLIR_INCLUDE_DIR ${MLIR_MAIN_SRC_DIR}/include ) # --includedir
   set(MLIR_TABLEGEN_OUTPUT_DIR ${CMAKE_BINARY_DIR}/tools/mlir/include)
