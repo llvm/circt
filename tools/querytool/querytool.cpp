@@ -44,6 +44,7 @@
 using namespace llvm;
 using namespace mlir;
 using namespace circt;
+using namespace query;
 
 /// Allow the user to specify the input file format.  This can be used to
 /// override the input, and can be used to specify ambiguous cases like standard
@@ -146,237 +147,8 @@ static cl::opt<std::string> blackBoxRootResourcePath(
 #include <iostream>
 
 // TODO: Parsing errors.
-query::Filter parseFilter(std::string &filter) {
-  if (filter.empty()) {
-    return query::Filter();
-  }
-
-  query::FilterType tag = query::FilterType::UNSET;
-  std::vector<query::FilterNode> nodes;
-  bool stop = false;
-  size_t start = 0;
-  std::string data;
-  query::ValueType type;
-
-  for (size_t i = 0; i <= filter.size(); i++) {
-    if (i < filter.size()) {
-      char c = filter[i];
-      switch (tag) {
-        case query::FilterType::UNSET:
-          if (c == '*') {
-            tag = query::FilterType::GLOB;
-          } else if (c == '/') {
-            tag = query::FilterType::REGEX;
-          } else if (c != ':') {
-            tag = query::FilterType::LITERAL;
-          } else {
-            stop = true;
-          }
-          break;
-
-        case query::FilterType::GLOB:
-          if (c == '*') {
-            tag = query::FilterType::RECURSIVE_GLOB;
-          } else {
-            stop = true;
-          }
-          break;
-
-        case query::FilterType::RECURSIVE_GLOB:
-          stop = true;
-          break;
-
-        case query::FilterType::REGEX:
-          if (c == '\\') {
-            ++i;
-          } else if (i - 1 != start && filter[i - 1] == '/' && (i - 2 == start || filter[i - 2] != '\\')) {
-            stop = true;
-          }
-          break;
-
-        case query::FilterType::LITERAL:
-          if (c == ':') {
-            stop = true;
-          }
-          break;
-      }
-    } else {
-      stop = true;
-    }
-
-    if (stop) {
-      switch (tag) {
-        case query::FilterType::LITERAL:
-          data = filter.substr(start, i - start);
-          break;
-
-        case query::FilterType::REGEX: {
-          data = filter.substr(start + 1, i - start - 2);
-          break;
-        }
-
-        case query::FilterType::GLOB:
-        case query::FilterType::RECURSIVE_GLOB:
-        case query::FilterType::UNSET:
-          break;
-      }
-
-      stop = false;
-
-      if (i + 1 < filter.size() && filter[i] == ':' && filter[i + 1] != ':' && tag != query::FilterType::RECURSIVE_GLOB) {
-        ++i;
-        start = i;
-        bool setType = false;
-        bool setPort = false;
-        query::PortType port;
-        auto widths = std::vector<query::Range>();
-        bool inRange = false;
-        size_t begin = 0;
-        size_t end = 0;
-        for (; i <= filter.size(); i++) {
-          if (i < filter.size()) {
-            char c = filter[i];
-            if (c == ':') {
-              break;
-            }
-
-            if (!inRange && '0' <= c && c <= '9') {
-              start = i;
-              inRange = true;
-              continue;
-            }
-
-            /*
-            if (inRange) {
-              if (c == '-') {
-                begin = 0;
-                for (size_t j = 0; j < i - start; ++j) {
-                  begin *= 10;
-                  begin += filter[start + j] - '0';
-                }
-                start = i + 1;
-              } else if (c == ',') {
-                end = 0;
-                for (size_t j = 0; j < i - start; ++j) {
-                  end *= 10;
-                  end += filter[start + j] - '0';
-                }
-                start = i + 1;
-                widths.push_back(query::Range(begin, end));
-              }
-            } else {
-              switch (c) {
-                // Input
-                case 'i':
-                  if (setPort) {
-                    port = port | query::PortType::INPUT;
-                  } else {
-                    port = query::PortType::INPUT;
-                    setPort = true;
-                  }
-                  break;
-
-                // Output
-                case 'o':
-                  if (setPort) {
-                    port = port | query::PortType::OUTPUT;
-                  } else {
-                    port = query::PortType::OUTPUT;
-                    setPort = true;
-                  }
-                  break;
-
-                // Not input/output
-                case 'n':
-                  if (setPort) {
-                    port = port | query::PortType::NONE;
-                  } else {
-                    port = query::PortType::NONE;
-                    setPort = true;
-                  }
-                  break;
-
-                // Module
-                case 'm':
-                  if (setType) {
-                    typeType = typeType | query::ValueTypeType::MODULE;
-                  } else {
-                    typeType = query::ValueTypeType::MODULE;
-                    setType = true;
-                  }
-                  break;
-
-                // Wire
-                case 'w':
-                  if (setType) {
-                    typeType = typeType | query::ValueTypeType::WIRE;
-                  } else {
-                    typeType = query::ValueTypeType::WIRE;
-                    setType = true;
-                  }
-                  break;
-
-                // Register
-                case 'r':
-                  if (setType) {
-                    typeType = typeType | query::ValueTypeType::REGISTER;
-                  } else {
-                    typeType = query::ValueTypeType::REGISTER;
-                    setType = true;
-                  }
-                  break;
-
-                default:
-                  break;
-              }
-            }
-        */
-          } else {
-            break;
-          }
-        }
-
-        /*
-        if (!setType) {
-          typeType = query::ValueTypeType::MODULE;
-        }
-        if (!setPort) {
-          port = query::PortType::NONE;
-        }
-        */
-
-        //type = query::ValueType(typeType, port, widths);
-      }
-
-      query::FilterNode node;
-      switch (tag) {
-        case query::FilterType::GLOB:
-          node = query::FilterNode::newGlob(type);
-          break;
-        case query::FilterType::RECURSIVE_GLOB:
-          node = query::FilterNode::newRecursiveGlob();
-          break;
-        case query::FilterType::LITERAL:
-          node = query::FilterNode::newLiteral(data, type);
-          break;
-        case query::FilterType::REGEX:
-          node = query::FilterNode::newRegex(data, type);
-          break;
-        case query::FilterType::UNSET:
-          break;
-      };
-      nodes.push_back(node);
-      type = query::ValueType();
-      tag = query::FilterType::UNSET;
-
-      if (i + 1 < filter.size() && filter[i] == ':' && filter[i + 1] == ':') {
-        ++i;
-        start = i + 1;
-      }
-    }
-  }
-
-  return query::Filter(nodes);
+Filter parseFilter(std::string &filter) {
+  return Filter();
 }
 
 /// Process a single buffer of the input.
@@ -505,19 +277,13 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   auto outputTimer = ts.nest("Output");
 
   // Create the filter and filter from the module
-  query::Filter filter = parseFilter(filterInput);
+  Filter filter = parseFilter(filterInput);
   auto mod = module.release();
-  auto ops = query::filterAsVector(filter, mod);
+  auto ops = filter.filter(mod);
 
   for (auto *op : ops) {
-    llvm::TypeSwitch<mlir::Operation *>(op)
-      .Case<hw::HWModuleOp, hw::HWModuleExternOp>([&](auto &op) {
-        std::cout << op.getNameAttr().getValue().str() << std::endl;
-      })
-      .Case<ModuleOp>([&](auto &op) {})
-      .Default([&](auto &op) {
-        std::cout << "???\n";
-      });
+    op->dump();
+    std::cout << std::endl;
   }
 
   return success();

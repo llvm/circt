@@ -3,101 +3,68 @@
 namespace circt {
 namespace query {
 
-bool operator &(PortType a, PortType b) {
-  return ((size_t) a) & ((size_t) b);
+Operation *getNextOpFromOp(Operation *op) {
+  return TypeSwitch<Operation *, Operation *>(op)
+    .Case<hw::InstanceOp>([&](auto &op) {
+        return op.getReferencedModule();
+    })
+    .Default([&](auto *op) {
+      return op;
+    });
 }
 
-PortType operator |(PortType a, PortType b) {
-  return (PortType) (((size_t) a) | ((size_t) b));
-}
+std::vector<Operation *> Filter::filter(Operation *root) {
+  std::vector<mlir::Operation *> filtered;
+  std::vector<std::pair<Operation *, Filter *>> opStack;
 
-FilterNode::FilterNode(const FilterNode &other) {
-  tag = other.tag;
-  type = other.type;
-  switch (tag) {
-    case FilterType::GLOB:
-    case FilterType::RECURSIVE_GLOB:
-    case FilterType::UNSET:
-      break;
+  opStack.push_back(std::make_pair(root, this));
+  while (!opStack.empty()) {
+    auto pair = opStack[opStack.size() - 1];
+    Operation *op = pair.first;
+    Filter *filter = pair.second;
+    opStack.pop_back();
 
-    case FilterType::REGEX:
-      regex = other.regex;
-      break;
+    if (filter == nullptr) {
+      bool contained = false;
+      for (auto *o : filtered) {
+        if (o == op) {
+          contained = true;
+          break;
+        }
+      }
 
-    case FilterType::LITERAL:
-      literal = other.literal;
-      break;
+      if (!contained) {
+        filtered.push_back(op);
+      }
+    } else {
+      for (auto &region : op->getRegions()) {
+        for (auto &op : region.getOps()) {
+          auto *next = getNextOpFromOp(&op);
+
+          if (filter->matches(next)) {
+            if (filter->type.addSelf()) {
+              opStack.push_back(std::make_pair(next, filter));
+            }
+
+            opStack.push_back(std::make_pair(next, filter->nextFilter()));
+            break;
+          }
+        }
+      }
+    }
   }
+
+  return filtered;
 }
 
-FilterNode &FilterNode::operator =(const FilterNode &other) {
-  tag = other.tag;
-  type = other.type;
-  switch (tag) {
-    case FilterType::GLOB:
-    case FilterType::RECURSIVE_GLOB:
-    case FilterType::UNSET:
-      break;
-
-    case FilterType::REGEX:
-      regex = other.regex;
-      break;
-
-    case FilterType::LITERAL:
-      literal = other.literal;
-      break;
+std::vector<Operation *> Filter::filter(std::vector<Operation *> results) {
+  std::vector<Operation *> result;
+  for (auto *op : results) {
+    auto vec = filter(op);
+    result.insert(result.end(), vec.begin(), vec.end());
   }
 
-  return *this;
-}
-
-FilterNode FilterNode::newGlob() {
-  FilterNode f;
-  f.tag = FilterType::GLOB;
-  return f;
-}
-
-FilterNode FilterNode::newGlob(ValueType type) {
-  FilterNode f;
-  f.tag = FilterType::GLOB;
-  f.type = type;
-  return f;
-}
-
-FilterNode FilterNode::newRecursiveGlob() {
-  FilterNode f;
-  f.tag = FilterType::RECURSIVE_GLOB;
-  return f;
-}
-
-FilterNode FilterNode::newLiteral(std::string &literal) {
-  FilterNode f;
-  f.tag = FilterType::LITERAL;
-  f.literal = literal;
-  return f;
-}
-
-FilterNode FilterNode::newLiteral(std::string &literal, ValueType type) {
-  FilterNode f;
-  f.tag = FilterType::LITERAL;
-  f.type = type;
-  f.literal = literal;
-  return f;
-}
-
-FilterNode FilterNode::newRegex(std::string &regex) {
-  FilterNode f;
-  f.tag = FilterType::REGEX;
-  f.regex = std::regex(regex);
-  return f;
-}
-
-FilterNode FilterNode::newRegex(std::string &regex, ValueType type) {
-  FilterNode f;
-  f.tag = FilterType::REGEX;
-  f.type = type;
-  f.regex = std::regex(regex);
-  return f;
+  return result;
 }
 
 std::string getNameFromOp(Operation *op, size_t nameIndex) {
@@ -119,232 +86,66 @@ std::string getNameFromOp(Operation *op, size_t nameIndex) {
     });
 }
 
-Operation *getNextOpFromOp(Operation *op) {
-  return TypeSwitch<Operation *, Operation *>(op)
-    .Case<hw::InstanceOp>([&](auto &op) {
-        return op.getReferencedModule();
-    })
-    .Default([&](auto *op) {
-      return op;
-    });
-}
-
-std::vector<Operation *> filterAsVector(Filter &filter, Operation *root) {
-  std::vector<mlir::Operation *> filtered;
-  std::vector<std::pair<mlir::Operation *, size_t>> opStack;
-
-  if (filter.nodes.empty()) {
-    filtered.push_back(root);
-    return filtered;
+bool AttributeFilter::matches(Operation *op) {
+  if (!op->hasAttr(StringRef(key))) {
+    return false;
   }
 
-  opStack.push_back(std::make_pair(root, 0));
-  while (!opStack.empty()) {
-    auto pair = opStack[opStack.size() - 1];
-    Operation *op = pair.first;
-    size_t i = pair.second;
-    opStack.pop_back();
+  std::string value;
+  llvm::raw_string_ostream stream(value);
+  op->getAttr(StringRef(key)).print(stream);
+  return type.valueMatches(value);
+}
 
-    if (i >= filter.nodes.size()) {
-      bool contained = false;
-      for (auto *o : filtered) {
-        if (o == op) {
-          contained = true;
-          break;
-        }
-      }
-
-      if (!contained) {
-        filtered.push_back(op);
-      }
-    } else {
-      auto &node = filter.nodes[i];
-      for (auto &region : op->getRegions()) {
-        for (auto &op : region.getOps()) {
-          bool match = false;
-          auto *next = getNextOpFromOp(&op);
-
-          if (!node.type.operationIsOfType(next)) {
-            continue;
-          }
-
-          std::string name;
-          for (size_t nameIndex = 0; !(name = getNameFromOp(next, nameIndex)).empty(); nameIndex++) {
-            switch (node.tag) {
-              case FilterType::UNSET:
-                break;
-              case FilterType::GLOB:
-                match = true;
-                break;
-              case FilterType::RECURSIVE_GLOB: {
-                match = true;
-                opStack.push_back(std::make_pair(next, i));
-                break;
-              }
-              case FilterType::LITERAL:
-                match = node.literal == name;
-                break;
-              case FilterType::REGEX:
-                match = std::regex_match(name, node.regex);
-                break;
-            }
-
-            if (match) {
-              opStack.push_back(std::make_pair(next, i + 1));
-              break;
-            }
-          }
-
-          /*
-          if (auto mod = dyn_cast_or_null<hw::HWModuleOp>(&op)) {
-            for (auto &op : mod.getOps()) {
-
-              op.dump();
-              for (auto &attr : op.getAttrs()) {
-                attr.first.dump();
-                attr.second.dump();
-              }
-            }
-          }
-          */
-        }
-      }
-
-      /*
-      TypeSwitch<Operation *>(op)
-        .Case<ModuleOp>([&](ModuleOp &op) {
-          auto &node = filter.nodes[i];
-          auto type = node.type;
-          bool match = false;
-          if (type.getType() & ValueTypeType::MODULE) {
-            for (auto child : op.getBody()->getOps<hw::HWModuleOp>()) {
-              auto name = child.getNameAttr().getValue().str();
-              matchAndAppend(node, child, opStack, i, name, match);
-            }
-
-            for (auto child : op.getBody()->getOps<hw::HWModuleExternOp>()) {
-              auto name = child.getNameAttr().getValue().str();
-              matchAndAppend(node, child, opStack, i, name, match);
-            }
-          }
-        })
-        .Case<hw::HWModuleOp>([&](hw::HWModuleOp &op) {
-          auto &node = filter.nodes[i];
-          auto type = node.type;
-          bool match = false;
-          if (type.getType() & ValueTypeType::MODULE) {
-            for (auto &child : op.getBody().getOps()) {
-              hw::InstanceOp instance;
-              if ((instance = dyn_cast_or_null<hw::InstanceOp>(&child))) {
-                auto module = dyn_cast<hw::HWModuleOp>(instance.getReferencedModule());
-                auto name = module.getNameAttr().getValue().str();
-                matchAndAppend(node, module, opStack, i, name, match);
-
-                if (match) {
-                  continue;
-                }
-              }
-            }
-          }
-
-          if (!match && (type.getType() & ValueTypeType::WIRE)) {
-            if (type.getPort() & PortType::INPUT) {
-              for (auto &port : op.getPorts()) {
-                if (port.isOutput() || !node.type.containsWidth(port.type.getIntOrFloatBitWidth())) {
-                  continue;
-                }
-
-                auto name = port.getName().str();
-                matchAndAppend(node, op, opStack, i, name, match);
-                if (match) {
-                  return;
-                }
-              }
-            }
-
-            if (type.getPort() & PortType::OUTPUT) {
-              for (auto &port : op.getPorts()) {
-                if (!port.isOutput() || !node.type.containsWidth(port.type.getIntOrFloatBitWidth())) {
-                  continue;
-                }
-
-                auto name = port.getName().str();
-                matchAndAppend(node, op, opStack, i, name, match);
-                if (match) {
-                  return;
-                }
-              }
-            }
-
-            if (type.getPort() & PortType::NONE) {
-              sv::WireOp wire;
-              for (auto &child : op.getBody().getOps()) {
-                if ((wire = dyn_cast_or_null<sv::WireOp>(&child))) {
-                  if (type.getPort() & PortType::NONE) {
-                    // TODO
-                  }
-                }
-              }
-            }
-          }
-
-          if (!match && (node.type.getType() & ValueTypeType::REGISTER)) {
-            // TODO
-          }
-        })
-        .Case<hw::HWModuleExternOp>([&](auto &op) {
-          auto &node = filter.nodes[i];
-          auto type = node.type;
-          bool match = false;
-
-          if (type.getType() & ValueTypeType::WIRE) {
-            if (type.getPort() & PortType::INPUT) {
-              for (auto &port : op.getPorts()) {
-                if (port.isOutput() || !node.type.containsWidth(port.type.getIntOrFloatBitWidth())) {
-                  continue;
-                }
-
-                auto name = port.getName().str();
-                matchAndAppend(node, op, opStack, i, name, match);
-                if (match) {
-                  return;
-                }
-              }
-            }
-
-            if (type.getPort() & PortType::OUTPUT) {
-              for (auto &port : op.getPorts()) {
-                if (!port.isOutput() || !node.type.containsWidth(port.type.getIntOrFloatBitWidth())) {
-                  continue;
-                }
-
-                auto name = port.getName().str();
-                matchAndAppend(node, op, opStack, i, name, match);
-                if (match) {
-                  return;
-                }
-              }
-            }
-          }
-        });
-
-      if (filter.nodes[i].tag == FilterType::RECURSIVE_GLOB) {
-        opStack.push_back(std::make_pair(op, i + 1));
-      }*/
+bool NameFilter::matches(Operation *op) {
+  std::string name;
+  for (size_t nameIndex = 0; !(name = getNameFromOp(op, nameIndex)).empty(); nameIndex++) {
+    if (type.valueMatches(name)) {
+      return true;
     }
   }
-
-  return filtered;
+  return false;
 }
 
-std::vector<Operation *> filterAsVector(Filter &filter, std::vector<Operation *> results) {
-  std::vector<Operation *> result;
-  for (auto *op : results) {
-    auto vec = filterAsVector(filter, op);
-    result.insert(result.end(), vec.begin(), vec.end());
-  }
+bool OpFilter::matches(Operation *op) {
+  std::string s(op->getName().stripDialect().str());
+  return type.valueMatches(s);
+}
 
-  return result;
+bool AndFilter::matches(Operation *op) {
+  for (auto &filter : filters) {
+    if (!filter.matches(op)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool OrFilter::matches(Operation *op) {
+  for (auto &filter : filters) {
+    if (filter.matches(op)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+InstanceFilter::InstanceFilter(Filter &filter, Filter &child) {
+  this->filter = new Filter(filter);
+  this->child = new Filter(child);
+}
+
+InstanceFilter::~InstanceFilter() {
+  delete filter;
+  delete child;
+}
+
+bool InstanceFilter::matches(Operation *op) {
+  return filter->matches(op);
+}
+
+Filter *InstanceFilter::nextFilter() {
+  return child;
 }
 
 } /* namespace query */

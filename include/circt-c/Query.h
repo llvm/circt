@@ -20,10 +20,10 @@ typedef enum {
   CIRCT_QUERY_PORT_TYPE_OUTPUT  = 4,
 } CirctQueryPortType;
 
-typedef circt::query::Range             *CirctQueryWidthRange;
-typedef circt::query::ValueType         *CirctQueryValueType;
-typedef circt::query::FilterNode        *CirctQueryFilterNode;
-typedef circt::query::Filter            *CirctQueryFilter;
+typedef void                            *CirctQueryWidthRange;
+typedef void                            *CirctQueryValueType;
+typedef void                            *CirctQueryFilterNode;
+typedef void                            *CirctQueryFilter;
 typedef std::vector<mlir::Operation *>  *CirctQueryFilterResult;
 
 CirctQueryWidthRange CirctQueryNewWidthRange(size_t start, size_t end);

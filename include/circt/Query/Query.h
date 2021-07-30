@@ -13,154 +13,126 @@
 namespace circt {
 namespace query {
 
-enum class FilterType {
-  UNSET,
-  REGEX,
-  LITERAL,
-  GLOB,
-  RECURSIVE_GLOB
-};
-
-enum class PortType {
-  NONE    = 1,
-  INPUT   = 2,
-  OUTPUT  = 4,
-};
-
-bool operator &(PortType a, PortType b);
-PortType operator |(PortType a, PortType b);
-
-class Range {
+class FilterType {
 public:
-  Range(size_t start, size_t end) : start (start), end (end) { }
-  bool contains(size_t n) { return start <= n && n <= end; }
+  virtual ~FilterType() { }
 
-  size_t start;
-  size_t end;
+  virtual bool valueMatches(std::string &value) { return false; }
+
+  virtual bool addSelf() { return false; }
 };
 
-class Ranges {
+class GlobFilterType : public FilterType {
 public:
-  Ranges() : ranges (std::vector<Range>()) { }
-  Ranges(std::vector<Range> ranges) : ranges (ranges) { }
+  GlobFilterType() { }
 
-  bool contains(size_t n) {
-    if (ranges.empty()) {
-      return true;
-    }
-
-    for (auto range : ranges) {
-      if (range.contains(n)) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-private:
-  std::vector<Range> ranges;
+  bool valueMatches(std::string &value) override { return true; }
 };
 
-class ValueTypeType {
+class RecursiveGlobFilterType : FilterType {
 public:
-  ValueTypeType(StringRef dialect, StringRef opName) : dialect (dialect), opName (opName) { }
+  RecursiveGlobFilterType() { }
 
-  bool operationIsOfType(Operation *op) {
-    bool nameMatches = true, dialectMatches = true;
-    if (!dialect.empty()) {
-      auto name = op->getDialect()->getNamespace();
-      dialectMatches = name == dialect;
-    }
+  bool valueMatches(std::string &value) override { return true; }
 
-    if (!opName.empty()) {
-      auto name = op->getName().stripDialect();
-      nameMatches = name == opName;
-    }
+  bool addSelf() override { return true; }
+};
 
-    return nameMatches && dialectMatches;
-  }
+class LiteralFilterType : public FilterType {
+public:
+  LiteralFilterType(std::string &literal) : literal (literal) { }
+
+  bool valueMatches(std::string &value) override { return value == literal; }
 
 private:
-  StringRef dialect;
-  StringRef opName;
-};
-
-class ValueType {
-public:
-  ValueType() : types (std::vector<ValueTypeType>()), port (PortType::NONE), widths (Ranges()) {
-    types.push_back(ValueTypeType(StringRef("hw"), StringRef("module")));
-    types.push_back(ValueTypeType(StringRef("hw"), StringRef("instance")));
-  }
-
-  ValueType(std::vector<ValueTypeType> types, PortType port, Ranges widths) : types (types), port (port), widths (widths) { }
-
-  bool operationIsOfType(Operation *op) {
-    for (auto &type : types) {
-      if (type.operationIsOfType(op)) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  PortType getPort() {
-    return port;
-  }
-
-  bool containsWidth(size_t width) {
-    return widths.contains(width);
-  }
-
-private:
-  std::vector<ValueTypeType> types;
-  PortType port;
-  Ranges widths;
-};
-
-class Filter;
-
-class FilterNode {
-public:
-  FilterNode() : tag (FilterType::UNSET), type (ValueType()), regex (std::regex()), literal (std::string()) { }
-  FilterNode(const FilterNode &other);
-  FilterNode &operator =(const FilterNode &other);
-
-  static FilterNode newGlob();
-  static FilterNode newGlob(ValueType type);
-  static FilterNode newRecursiveGlob();
-  static FilterNode newLiteral(std::string &literal);
-  static FilterNode newLiteral(std::string &literal, ValueType type);
-  static FilterNode newRegex(std::string &regex);
-  static FilterNode newRegex(std::string &regex, ValueType type);
-
-private:
-  FilterType tag;
-  ValueType type;
-  std::regex regex;
   std::string literal;
+};
 
-  friend class Filter;
-  friend std::vector<mlir::Operation *> filterAsVector(Filter &filter, Operation *root);
+class RegexFilterType : public FilterType {
+public:
+  RegexFilterType(std::string &regex) : regex (std::regex(regex)) { }
+
+  bool valueMatches(std::string &value) override { return std::regex_match(value, regex); }
+
+private:
+  std::regex regex;
 };
 
 class Filter {
 public:
-  Filter() : nodes (std::vector<FilterNode>()) { }
-  Filter(std::vector<FilterNode> nodes) : nodes (nodes) { }
+  Filter() = default;
+  Filter(FilterType type) : type (type) { }
+  virtual ~Filter() { }
 
-  size_t size() { return nodes.size(); }
+  virtual bool matches(Operation *op) { return false; }
 
-private:
-  std::vector<FilterNode> nodes;
+  std::vector<Operation *> filter(Operation *root);
+  std::vector<Operation *> filter(std::vector<Operation *> results);
 
-  friend Filter parseFilter(std::string &filter);
-  friend std::vector<mlir::Operation *> filterAsVector(Filter &filter, Operation *root);
+protected:
+  FilterType type;
+
+  virtual Filter *nextFilter() { return nullptr; };
 };
 
-// TODO: filterAsIterator()
-std::vector<Operation *> filterAsVector(Filter &filter, Operation *root);
-std::vector<Operation *> filterAsVector(Filter &filter, std::vector<Operation *> results);
+class AttributeFilter : public Filter {
+public:
+  AttributeFilter(std::string &key, FilterType type) : Filter(type), key (key) { }
+
+  bool matches(Operation *op) override;
+
+private:
+  std::string key;
+};
+
+class NameFilter : public Filter {
+public:
+  NameFilter(FilterType type) : Filter(type) { }
+
+  bool matches(Operation *op) override;
+};
+
+class OpFilter : public Filter {
+public:
+  OpFilter(FilterType type) : Filter(type) { }
+
+  bool matches(Operation *op) override;
+};
+
+class AndFilter : public Filter {
+public:
+  AndFilter(std::vector<Filter> &filters) : filters (filters) { }
+
+  bool matches(Operation *op) override;
+
+private:
+  std::vector<Filter> filters;
+};
+
+class OrFilter : public Filter {
+public:
+  OrFilter(std::vector<Filter> &filters) : filters (filters) { }
+
+  bool matches(Operation *op) override;
+
+private:
+  std::vector<Filter> filters;
+};
+
+class InstanceFilter : public Filter {
+public:
+  InstanceFilter(Filter &filter, Filter &child);
+  ~InstanceFilter();
+
+  bool matches(Operation *op) override;
+
+protected:
+  Filter *nextFilter() override;
+
+private:
+  Filter *filter;
+  Filter *child;
+};
 
 } /* namespace query */
 } /* namespace circt */
