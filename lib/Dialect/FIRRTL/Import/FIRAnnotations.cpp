@@ -564,14 +564,21 @@ static bool parseAugmentedType(
       return false;
     }
     auto target = maybeTarget.getValue();
-    NamedAttrList attr;
+    NamedAttrList attr, dontTouchAnn;
     attr.append("class", classAttr);
     attr.append("defName", defName);
     attr.append("name", name);
-    if (target.second)
+    dontTouchAnn.append(
+        "class",
+        StringAttr::get(context, "firrtl.transforms.DontTouchAnnotation"));
+    if (target.second) {
       attr.append("target", target.second);
+      dontTouchAnn.append("target", target.second);
+    }
     newAnnotations[target.first].push_back(
         DictionaryAttr::getWithSorted(context, attr));
+    newAnnotations[target.first].push_back(
+        DictionaryAttr::getWithSorted(context, dontTouchAnn));
     return true;
   }
 
