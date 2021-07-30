@@ -105,7 +105,7 @@ StringAttr getModuleName(Operation *module);
 StringAttr getModulePortName(Operation *op, size_t portIndex);
 
 /// Given an FModule or ExtModule, return the type of the specified port number.
-Type getModulePortType(Operation *op, size_t portIndex);
+FIRRTLType getModulePortType(Operation *op, size_t portIndex);
 
 /// Return the portDirections attribute for the specified module, which contains
 /// the direction for each port.

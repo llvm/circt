@@ -375,9 +375,9 @@ StringAttr firrtl::getModulePortName(Operation *op, size_t portIndex) {
 }
 
 /// Given an FModule or ExtModule, return the type of the specified port number.
-Type firrtl::getModulePortType(Operation *op, size_t portIndex) {
+FIRRTLType firrtl::getModulePortType(Operation *op, size_t portIndex) {
   assert(isa<FModuleOp>(op) || isa<FExtModuleOp>(op));
-  return getModuleType(op).getInputs()[portIndex];
+  return getModuleType(op).getInputs()[portIndex].cast<FIRRTLType>();
 }
 
 Direction firrtl::getModulePortDirection(Operation *op, size_t portIndex) {

@@ -304,6 +304,9 @@ public:
   /// Look up an element type by name.
   FIRRTLType getElementType(StringRef name);
 
+  /// Look up an element type by index.
+  FIRRTLType getElementType(size_t index);
+
   /// Return the recursive properties of the type.
   RecursiveTypeProperties getRecursiveTypeProperties();
 

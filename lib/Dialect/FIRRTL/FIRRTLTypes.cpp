@@ -711,6 +711,12 @@ FIRRTLType BundleType::getElementType(StringRef name) {
   return element.hasValue() ? element.getValue().type : FIRRTLType();
 }
 
+FIRRTLType BundleType::getElementType(size_t index) {
+  assert(index < getNumElements() &&
+         "index must be less than number of fields in bundle");
+  return getElements()[index].type;
+}
+
 unsigned BundleType::getFieldID(unsigned index) {
   return getImpl()->fieldIDs[index];
 }
