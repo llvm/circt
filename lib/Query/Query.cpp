@@ -3,14 +3,6 @@
 namespace circt {
 namespace query {
 
-bool operator &(ValueTypeType a, ValueTypeType b) {
-  return ((size_t) a) & ((size_t) b);
-}
-
-ValueTypeType operator |(ValueTypeType a, ValueTypeType b) {
-  return (ValueTypeType) (((size_t) a) | ((size_t) b));
-}
-
 bool operator &(PortType a, PortType b) {
   return ((size_t) a) & ((size_t) b);
 }
@@ -108,29 +100,36 @@ FilterNode FilterNode::newRegex(std::string &regex, ValueType type) {
   return f;
 }
 
-void matchAndAppend(FilterNode &node, Operation *module, std::vector<std::pair<Operation *, size_t>> &opStack, size_t i, std::string &name, bool &match) {
-  switch (node.tag) {
-    case FilterType::UNSET:
-      break;
-    case FilterType::GLOB:
-      match = true;
-      break;
-    case FilterType::RECURSIVE_GLOB: {
-      match = true;
-      opStack.push_back(std::make_pair(module, i));
-      break;
-    }
-    case FilterType::LITERAL:
-      match = node.literal == name;
-      break;
-    case FilterType::REGEX:
-      match = std::regex_match(name, node.regex);
-      break;
-  }
+void matchAndAppend(FilterNode &node, Operation *module, std::vector<std::pair<Operation *, size_t>> &opStack, size_t i, StringRef &name, bool &match) {
+}
 
-  if (match) {
-    opStack.push_back(std::make_pair(module, i + 1));
-  }
+StringRef getNameFromOp(Operation *op) {
+  return TypeSwitch<Operation *, StringRef>(op)
+    .Case<hw::HWModuleOp, hw::HWModuleExternOp>([&](auto &op) {
+      return op.getNameAttr().getValue();
+    })
+    .Case<hw::InstanceOp>([&](auto &op) {
+      return TypeSwitch<Operation *, StringRef>(op.getReferencedModule())
+        .Case<hw::HWModuleOp, hw::HWModuleExternOp>([&](auto &op) {
+          return op.getNameAttr().getValue();
+        })
+        .Default([&](auto &_) {
+          return StringRef("");
+        });
+    })
+    .Default([&](auto &_) {
+      return StringRef("");
+    });
+}
+
+Operation *getNextOpFromOp(Operation *op) {
+  return TypeSwitch<Operation *, Operation *>(op)
+    .Case<hw::InstanceOp>([&](auto &op) {
+        return op.getReferencedModule();
+    })
+    .Default([&](auto *op) {
+      return op;
+    });
 }
 
 std::vector<Operation *> filterAsVector(Filter &filter, Operation *root) {
@@ -162,6 +161,56 @@ std::vector<Operation *> filterAsVector(Filter &filter, Operation *root) {
         filtered.push_back(op);
       }
     } else {
+      auto &node = filter.nodes[i];
+      for (auto &region : op->getRegions()) {
+        for (auto &op : region.getOps()) {
+          bool match = false;
+          auto name = getNameFromOp(&op);
+          auto *next = getNextOpFromOp(&op);
+
+          if (!node.type.operationIsOfType(next)) {
+            continue;
+          }
+
+          switch (node.tag) {
+            case FilterType::UNSET:
+              break;
+            case FilterType::GLOB:
+              match = true;
+              break;
+            case FilterType::RECURSIVE_GLOB: {
+              match = true;
+              opStack.push_back(std::make_pair(next, i));
+              break;
+            }
+            case FilterType::LITERAL:
+              match = node.literal == name;
+              break;
+            case FilterType::REGEX:
+              match = std::regex_match(name.str(), node.regex);
+              break;
+          }
+
+          if (match) {
+            opStack.push_back(std::make_pair(next, i + 1));
+          }
+
+          /*
+          if (auto mod = dyn_cast_or_null<hw::HWModuleOp>(&op)) {
+            for (auto &op : mod.getOps()) {
+
+              op.dump();
+              for (auto &attr : op.getAttrs()) {
+                attr.first.dump();
+                attr.second.dump();
+              }
+            }
+          }
+          */
+        }
+      }
+
+      /*
       TypeSwitch<Operation *>(op)
         .Case<ModuleOp>([&](ModuleOp &op) {
           auto &node = filter.nodes[i];
@@ -281,7 +330,7 @@ std::vector<Operation *> filterAsVector(Filter &filter, Operation *root) {
 
       if (filter.nodes[i].tag == FilterType::RECURSIVE_GLOB) {
         opStack.push_back(std::make_pair(op, i + 1));
-      }
+      }*/
     }
   }
 

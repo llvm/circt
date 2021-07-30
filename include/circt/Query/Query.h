@@ -21,15 +21,6 @@ enum class FilterType {
   RECURSIVE_GLOB
 };
 
-enum class ValueTypeType {
-  MODULE    = 1,
-  WIRE      = 2,
-  REGISTER  = 4,
-};
-
-bool operator &(ValueTypeType a, ValueTypeType b);
-ValueTypeType operator |(ValueTypeType a, ValueTypeType b);
-
 enum class PortType {
   NONE    = 1,
   INPUT   = 2,
@@ -70,13 +61,47 @@ private:
   std::vector<Range> ranges;
 };
 
+class ValueTypeType {
+public:
+  ValueTypeType(StringRef dialect, StringRef opName) : dialect (dialect), opName (opName) { }
+
+  bool operationIsOfType(Operation *op) {
+    bool nameMatches = true, dialectMatches = true;
+    if (!dialect.empty()) {
+      auto name = op->getDialect()->getNamespace();
+      dialectMatches = name == dialect;
+    }
+
+    if (!opName.empty()) {
+      auto name = op->getName().stripDialect();
+      nameMatches = name == opName;
+    }
+
+    return nameMatches && dialectMatches;
+  }
+
+private:
+  StringRef dialect;
+  StringRef opName;
+};
+
 class ValueType {
 public:
-  ValueType() : type (ValueTypeType::MODULE), port (PortType::NONE), widths (Ranges()) { }
-  ValueType(ValueTypeType type, PortType port, Ranges widths) : type (type), port (port), widths (widths) { }
+  ValueType() : types (std::vector<ValueTypeType>()), port (PortType::NONE), widths (Ranges()) {
+    types.push_back(ValueTypeType(StringRef("hw"), StringRef("module")));
+    types.push_back(ValueTypeType(StringRef("hw"), StringRef("instance")));
+  }
 
-  ValueTypeType getType() {
-    return type;
+  ValueType(std::vector<ValueTypeType> types, PortType port, Ranges widths) : types (types), port (port), widths (widths) { }
+
+  bool operationIsOfType(Operation *op) {
+    for (auto &type : types) {
+      if (type.operationIsOfType(op)) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   PortType getPort() {
@@ -88,7 +113,7 @@ public:
   }
 
 private:
-  ValueTypeType type;
+  std::vector<ValueTypeType> types;
   PortType port;
   Ranges widths;
 };
@@ -117,7 +142,7 @@ private:
 
   friend class Filter;
   friend std::vector<mlir::Operation *> filterAsVector(Filter &filter, Operation *root);
-  friend void matchAndAppend(FilterNode &node, Operation *module, std::vector<std::pair<Operation *, size_t>> &opStack, size_t i, std::string &name, bool &match);
+  friend void matchAndAppend(FilterNode &node, Operation *module, std::vector<std::pair<Operation *, size_t>> &opStack, size_t i, StringRef &name, bool &match);
 };
 
 class Filter {

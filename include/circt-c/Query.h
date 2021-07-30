@@ -15,12 +15,6 @@ extern "C" {
 #endif
 
 typedef enum {
-  CIRCT_QUERY_VALUE_TYPE_TYPE_MODULE    = 1,
-  CIRCT_QUERY_VALUE_TYPE_TYPE_WIRE      = 2,
-  CIRCT_QUERY_VALUE_TYPE_TYPE_REGISTER  = 4,
-} CirctQueryValueTypeType;
-
-typedef enum {
   CIRCT_QUERY_PORT_TYPE_NONE    = 1,
   CIRCT_QUERY_PORT_TYPE_INPUT   = 2,
   CIRCT_QUERY_PORT_TYPE_OUTPUT  = 4,
@@ -33,8 +27,6 @@ typedef circt::query::Filter            *CirctQueryFilter;
 typedef std::vector<mlir::Operation *>  *CirctQueryFilterResult;
 
 CirctQueryWidthRange CirctQueryNewWidthRange(size_t start, size_t end);
-CirctQueryValueType CirctQueryNewValueType(CirctQueryValueTypeType typeType, CirctQueryPortType port, size_t count, ...);
-CirctQueryValueType CirctQueryNewValueTypeArray(CirctQueryValueTypeType typeType, CirctQueryPortType port, size_t count, CirctQueryWidthRange ranges[]);
 void CirctQueryDeleteValueType(CirctQueryValueType type);
 void CirctQueryDeleteWidthRange(CirctQueryWidthRange range);
 

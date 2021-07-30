@@ -227,7 +227,6 @@ query::Filter parseFilter(std::string &filter) {
         ++i;
         start = i;
         bool setType = false;
-        query::ValueTypeType typeType;
         bool setPort = false;
         query::PortType port;
         auto widths = std::vector<query::Range>();
@@ -247,6 +246,7 @@ query::Filter parseFilter(std::string &filter) {
               continue;
             }
 
+            /*
             if (inRange) {
               if (c == '-') {
                 begin = 0;
@@ -330,19 +330,22 @@ query::Filter parseFilter(std::string &filter) {
                   break;
               }
             }
+        */
           } else {
             break;
           }
         }
 
+        /*
         if (!setType) {
           typeType = query::ValueTypeType::MODULE;
         }
         if (!setPort) {
           port = query::PortType::NONE;
         }
+        */
 
-        type = query::ValueType(typeType, port, widths);
+        //type = query::ValueType(typeType, port, widths);
       }
 
       query::FilterNode node;

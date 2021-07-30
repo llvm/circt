@@ -21,27 +21,6 @@ CirctQueryWidthRange CirctQueryNewWidthRange(size_t start, size_t end) {
   return new Range(start, end);
 }
 
-CirctQueryValueType CirctQueryNewValueType(CirctQueryValueTypeType typeType, CirctQueryPortType port, size_t count, ...) {
-  va_list va;
-  va_start(va, count);
-  auto widths = std::vector<Range>();
-  for (size_t i = 0; i < count; i++) {
-    widths.push_back(*va_arg(va, CirctQueryWidthRange));
-  }
-  va_end(va);
-
-  return new ValueType((ValueTypeType) typeType, (PortType) port, Ranges(widths));
-}
-
-CirctQueryValueType CirctQueryNewValueTypeArray(CirctQueryValueTypeType typeType, CirctQueryPortType port, size_t count, CirctQueryWidthRange ranges[]) {
-  auto widths = std::vector<Range>();
-  for (size_t i = 0; i < count; i++) {
-    widths.push_back(*ranges[i]);
-  }
-
-  return new ValueType((ValueTypeType) typeType, (PortType) port, Ranges(widths));
-}
-
 void CirctQueryDeleteValueType(CirctQueryValueType type) {
   delete type;
 }
