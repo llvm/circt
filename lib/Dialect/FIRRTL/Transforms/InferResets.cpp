@@ -42,7 +42,7 @@ using namespace firrtl;
 
 /// An absolute instance path.
 using InstancePathRef = ArrayRef<InstanceOp>;
-using InstancePath = SmallVector<InstanceOp>;
+using InstancePathVec = SmallVector<InstanceOp>;
 
 template <typename T>
 static T &operator<<(T &os, InstancePathRef path) {
@@ -428,7 +428,7 @@ struct InferResetsPass : public InferResetsBase<InferResetsPass> {
   LogicalResult collectAnnos(FModuleOp module);
 
   LogicalResult buildDomains(CircuitOp circuit);
-  void buildDomains(FModuleOp module, const InstancePath &instPath,
+  void buildDomains(FModuleOp module, const InstancePathVec &instPath,
                     Value parentReset, InstanceGraph &instGraph,
                     unsigned indent = 0);
 
@@ -476,7 +476,7 @@ struct InferResetsPass : public InferResetsBase<InferResetsPass> {
 
   /// The reset domain for a module. In case of conflicting domain membership,
   /// the vector for a module contains multiple elements.
-  MapVector<FModuleOp, SmallVector<std::pair<ResetDomain, InstancePath>, 1>>
+  MapVector<FModuleOp, SmallVector<std::pair<ResetDomain, InstancePathVec>, 1>>
       domains;
 
   /// Cache of modules symbols
@@ -1151,7 +1151,7 @@ LogicalResult InferResetsPass::buildDomains(CircuitOp circuit) {
                << "Skipping circuit because main module is no `firrtl.module`");
     return success();
   }
-  buildDomains(module, InstancePath{}, Value{}, instGraph);
+  buildDomains(module, InstancePathVec{}, Value{}, instGraph);
 
   // Report any domain conflicts among the modules.
   bool anyFailed = false;
@@ -1206,7 +1206,7 @@ LogicalResult InferResetsPass::buildDomains(CircuitOp circuit) {
 }
 
 void InferResetsPass::buildDomains(FModuleOp module,
-                                   const InstancePath &instPath,
+                                   const InstancePathVec &instPath,
                                    Value parentReset, InstanceGraph &instGraph,
                                    unsigned indent) {
   LLVM_DEBUG(llvm::dbgs().indent(indent * 2)
@@ -1230,7 +1230,7 @@ void InferResetsPass::buildDomains(FModuleOp module,
     entries.push_back({domain, instPath});
 
   // Traverse the child instances.
-  InstancePath childPath = instPath;
+  InstancePathVec childPath = instPath;
   for (auto record : instGraph[module]->instances()) {
     auto submodule = dyn_cast<FModuleOp>(record->getTarget()->getModule());
     if (!submodule)
