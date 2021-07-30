@@ -115,8 +115,7 @@ add_mlir_python_common_capi_library(CIRCTBindingsPythonCAPI
   OUTPUT_DIRECTORY "${CIRCT_PYTHON_PACKAGES_DIR}/circt_core/mlir/_mlir_libs"
   RELATIVE_INSTALL_ROOT "../../../.."
   DECLARED_SOURCES
-    # TODO: This can be chopped down significantly for size.
-    MLIRPythonSources
+    MLIRPythonSources.Core
     MLIRPythonExtension.AllPassesRegistration
     CIRCTBindingsPythonSources
     CIRCTBindingsPythonExtension
@@ -130,7 +129,7 @@ add_mlir_python_modules(CIRCTMLIRPythonModules
   ROOT_PREFIX "${CIRCT_PYTHON_PACKAGES_DIR}/circt_core/mlir"
   INSTALL_PREFIX "python_packages/circt_core/mlir"
   DECLARED_SOURCES
-    MLIRPythonSources
+    MLIRPythonSources.Core
     MLIRPythonExtension.AllPassesRegistration
     # We need the circt extensions co-located with the MLIR extensions. When
     # the namespace is unified, this moves to the below.
