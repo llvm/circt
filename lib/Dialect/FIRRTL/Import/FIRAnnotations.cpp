@@ -884,6 +884,14 @@ bool circt::firrtl::scatterCustomAnnotations(
       companionAttrs.append("class", viewAnnotationClass);
       companionAttrs.append("id", id);
       companionAttrs.append("type", StringAttr::get(context, "companion"));
+      auto viewAttr = tryGetAs<DictionaryAttr>(dict, dict, "view", loc, clazz);
+      if (!viewAttr)
+        return false;
+      auto defName =
+          tryGetAs<StringAttr>(viewAttr, viewAttr, "defName", loc, clazz);
+      if (!defName)
+        return false;
+      companionAttrs.append("defName", defName);
       auto companionAttr =
           tryGetAs<StringAttr>(dict, dict, "companion", loc, clazz);
       if (!companionAttr)
@@ -895,13 +903,6 @@ bool circt::firrtl::scatterCustomAnnotations(
       if (!parentAttr)
         return false;
       parentAttrs.append("class", viewAnnotationClass);
-      auto viewAttr = tryGetAs<DictionaryAttr>(dict, dict, "view", loc, clazz);
-      if (!viewAttr)
-        return false;
-      auto defName =
-          tryGetAs<StringAttr>(viewAttr, viewAttr, "defName", loc, clazz);
-      if (!defName)
-        return false;
       parentAttrs.append("id", id);
       auto name = tryGetAs<StringAttr>(dict, dict, "name", loc, clazz);
       if (!name)
