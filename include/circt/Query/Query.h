@@ -142,7 +142,6 @@ private:
 
   friend class Filter;
   friend std::vector<mlir::Operation *> filterAsVector(Filter &filter, Operation *root);
-  friend void matchAndAppend(FilterNode &node, Operation *module, std::vector<std::pair<Operation *, size_t>> &opStack, size_t i, StringRef &name, bool &match);
 };
 
 class Filter {

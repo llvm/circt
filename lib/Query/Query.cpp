@@ -100,25 +100,22 @@ FilterNode FilterNode::newRegex(std::string &regex, ValueType type) {
   return f;
 }
 
-void matchAndAppend(FilterNode &node, Operation *module, std::vector<std::pair<Operation *, size_t>> &opStack, size_t i, StringRef &name, bool &match) {
-}
-
-StringRef getNameFromOp(Operation *op) {
-  return TypeSwitch<Operation *, StringRef>(op)
+std::string getNameFromOp(Operation *op, size_t nameIndex) {
+  return TypeSwitch<Operation *, std::string>(op)
     .Case<hw::HWModuleOp, hw::HWModuleExternOp>([&](auto &op) {
-      return op.getNameAttr().getValue();
+      if (nameIndex == 0) {
+        return op.getNameAttr().getValue().str();
+      }
+      return std::string();
     })
-    .Case<hw::InstanceOp>([&](auto &op) {
-      return TypeSwitch<Operation *, StringRef>(op.getReferencedModule())
-        .Case<hw::HWModuleOp, hw::HWModuleExternOp>([&](auto &op) {
-          return op.getNameAttr().getValue();
-        })
-        .Default([&](auto &_) {
-          return StringRef("");
-        });
-    })
-    .Default([&](auto &_) {
-      return StringRef("");
+    .Default([&](auto *op) {
+      if (nameIndex < op->getNumResults()) {
+        std::string str;
+        llvm::raw_string_ostream stream(str);
+        op->getResult(nameIndex).print(stream);
+        return str;
+      }
+      return std::string();
     });
 }
 
@@ -165,34 +162,37 @@ std::vector<Operation *> filterAsVector(Filter &filter, Operation *root) {
       for (auto &region : op->getRegions()) {
         for (auto &op : region.getOps()) {
           bool match = false;
-          auto name = getNameFromOp(&op);
           auto *next = getNextOpFromOp(&op);
 
           if (!node.type.operationIsOfType(next)) {
             continue;
           }
 
-          switch (node.tag) {
-            case FilterType::UNSET:
-              break;
-            case FilterType::GLOB:
-              match = true;
-              break;
-            case FilterType::RECURSIVE_GLOB: {
-              match = true;
-              opStack.push_back(std::make_pair(next, i));
+          std::string name;
+          for (size_t nameIndex = 0; !(name = getNameFromOp(next, nameIndex)).empty(); nameIndex++) {
+            switch (node.tag) {
+              case FilterType::UNSET:
+                break;
+              case FilterType::GLOB:
+                match = true;
+                break;
+              case FilterType::RECURSIVE_GLOB: {
+                match = true;
+                opStack.push_back(std::make_pair(next, i));
+                break;
+              }
+              case FilterType::LITERAL:
+                match = node.literal == name;
+                break;
+              case FilterType::REGEX:
+                match = std::regex_match(name, node.regex);
+                break;
+            }
+
+            if (match) {
+              opStack.push_back(std::make_pair(next, i + 1));
               break;
             }
-            case FilterType::LITERAL:
-              match = node.literal == name;
-              break;
-            case FilterType::REGEX:
-              match = std::regex_match(name.str(), node.regex);
-              break;
-          }
-
-          if (match) {
-            opStack.push_back(std::make_pair(next, i + 1));
           }
 
           /*
