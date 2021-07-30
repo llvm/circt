@@ -8,7 +8,6 @@ from circt.esi import types
 from circt.dialects import hw
 
 from mlir.ir import *
-from mlir.dialects import builtin
 
 from os import path
 import sys
