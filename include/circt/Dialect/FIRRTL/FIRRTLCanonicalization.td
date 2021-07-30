@@ -32,6 +32,14 @@ def KnownWidth : Constraint<CPred<[{
     $0.getType().cast<FIRRTLType>().getBitWidthOrSentinel() >= 0
   }]>>;
 
+/// Constraint that matches a zero ConstantOp or SpecialConstantOp.
+def ZeroConstantOp : Constraint<Or<[
+  CPred<"$0.getDefiningOp<ConstantOp>() &&"
+        "$0.getDefiningOp<ConstantOp>().value().isNullValue()">,
+  CPred<"$0.getDefiningOp<SpecialConstantOp>() &&"
+        "$0.getDefiningOp<SpecialConstantOp>().value() == false">
+]>>;
+
 // leq(const, x) -> geq(x, const)
 def LEQWithConstLHS : Pat<
   (LEQPrimOp (ConstantOp:$lhs $_), $rhs),
@@ -91,8 +99,7 @@ def RegresetWithInvalidResetValue : Pat<
 
 // regreset(clock, constant_zero, resetValue) -> reg(clock)
 def RegresetWithZeroReset : Pat<
-  (RegResetOp $clock, (SpecialConstantOp ConstBoolAttrFalse), $resetValue,
-   $name, $annotations),
-  (RegOp $clock, $name, $annotations)>;
+  (RegResetOp $clock, $reset, $resetValue, $name, $annotations),
+  (RegOp $clock, $name, $annotations), [(ZeroConstantOp $reset)]>;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD
