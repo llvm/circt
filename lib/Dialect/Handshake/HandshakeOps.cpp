@@ -869,7 +869,7 @@ static ParseResult parseReturnOp(OpAsmParser &parser, OperationState &result) {
                  parser.resolveOperands(opInfo, types, loc, result.operands));
 }
 
-static void print(OpAsmPrinter &p, handshake::ReturnOp op) {
+static void printReturnOp(OpAsmPrinter &p, handshake::ReturnOp op) {
   p << "handshake.return";
   if (op.getNumOperands() != 0) {
     p << ' ';

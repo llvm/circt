@@ -183,7 +183,7 @@ static ParseResult parseConstOp(OpAsmParser &parser, OperationState &result) {
   return parser.addTypeToList(val.getType(), result.types);
 }
 
-static void print(OpAsmPrinter &printer, llhd::ConstOp op) {
+static void printConstOp(OpAsmPrinter &printer, llhd::ConstOp op) {
   printer << op.getOperationName() << " ";
   // The custom time attribute is not printing the attribute type by default for
   // some reason. Work around by printing the attribute without type, explicitly
@@ -631,7 +631,7 @@ static ParseResult parseEntityOp(OpAsmParser &parser, OperationState &result) {
                       TypeAttr::get(type));
 
   auto *body = result.addRegion();
-  if(parser.parseRegion(*body, args, argTypes))
+  if (parser.parseRegion(*body, args, argTypes))
     return failure();
 
   llhd::EntityOp::ensureTerminator(*body, parser.getBuilder(), result.location);
@@ -647,7 +647,7 @@ static void printArgumentList(OpAsmPrinter &printer,
   printer << ")";
 }
 
-static void print(OpAsmPrinter &printer, llhd::EntityOp op) {
+static void printEntityOp(OpAsmPrinter &printer, llhd::EntityOp op) {
   std::vector<BlockArgument> ins, outs;
   uint64_t n_ins = op.insAttr().getInt();
   for (uint64_t i = 0; i < op.body().front().getArguments().size(); ++i) {
@@ -901,7 +901,7 @@ static void printProcArguments(OpAsmPrinter &p, Operation *op,
   p << ')';
 }
 
-static void print(OpAsmPrinter &printer, llhd::ProcOp op) {
+static void printProcOp(OpAsmPrinter &printer, llhd::ProcOp op) {
   FunctionType type = op.getType();
   printer << op.getOperationName() << ' ';
   printer.printSymbolName(op.getName());
@@ -1083,7 +1083,7 @@ static ParseResult parseRegOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-static void print(OpAsmPrinter &printer, llhd::RegOp op) {
+static void printRegOp(OpAsmPrinter &printer, llhd::RegOp op) {
   printer << op.getOperationName() << " " << op.signal();
   for (size_t i = 0, e = op.values().size(); i < e; ++i) {
     Optional<llhd::RegMode> mode = llhd::symbolizeRegMode(
