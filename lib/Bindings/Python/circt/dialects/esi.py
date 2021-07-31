@@ -2,5 +2,4 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-# Generated tablegen dialects end up in the mlir.dialects package for now.
-from mlir.dialects._esi_ops_gen import *
+from ._esi_ops_gen import *

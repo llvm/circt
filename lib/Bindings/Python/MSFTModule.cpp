@@ -25,23 +25,6 @@ namespace py = pybind11;
 using namespace circt;
 using namespace circt::msft;
 
-//===----------------------------------------------------------------------===//
-// Functions that translate from something Pybind11 understands to MLIR C++.
-//===----------------------------------------------------------------------===//
-
-static void addPhysLocationAttr(MlirOperation cOp, std::string entityName,
-                                DeviceType type, uint64_t x, uint64_t y,
-                                uint64_t num) {
-
-  Operation *op = unwrap(cOp);
-  MLIRContext *ctxt = op->getContext();
-  PhysLocationAttr loc =
-      PhysLocationAttr::get(ctxt, DeviceTypeAttr::get(ctxt, type), x, y, num);
-  SmallString<64> entity("loc:");
-  entity.append(entityName);
-  op->setAttr(entity, loc);
-}
-
 static MlirOperation callPyFunc(MlirOperation op, void *userData) {
   py::gil_scoped_acquire gil;
   auto replacement = (*(py::function *)userData)(op);
@@ -60,13 +43,15 @@ static void registerGenerator(MlirContext ctxt, std::string opName,
 
 /// Populate the msft python module.
 void circt::python::populateDialectMSFTSubmodule(py::module &m) {
-  ::registerMSFTPasses();
+  mlirMSFTRegisterPasses();
 
   m.doc() = "MSFT dialect Python native extension";
-  m.def("locate", &addPhysLocationAttr,
+
+  m.def("locate", &mlirMSFTAddPhysLocationAttr,
         "Attach a physical location to an op's entity.",
         py::arg("op_to_locate"), py::arg("entity_within"), py::arg("devtype"),
         py::arg("x"), py::arg("y"), py::arg("num"));
+
   py::enum_<DeviceType>(m, "DeviceType")
       .value("M20K", DeviceType::M20K)
       .value("DSP", DeviceType::DSP)

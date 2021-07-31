@@ -414,8 +414,8 @@ hw.module @BindInterface() -> () {
   hw.output
 }
 
-// CHECK-LABEL: FILE "BindTest/BindEmissionInstance.sv"
+// CHECK-LABEL: FILE "BindTest{{.}}BindEmissionInstance.sv"
 // CHECK: bind BindEmission BindEmissionInstance BindEmissionInstance ();
 
-// CHECK-LABEL: FILE "BindTest/BindInterface.sv"
+// CHECK-LABEL: FILE "BindTest{{.}}BindInterface.sv"
 // CHECK: bind BindInterface Interface bar (.*);

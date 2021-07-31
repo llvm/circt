@@ -336,10 +336,8 @@ firrtl.module @Head(in %in4u: !firrtl.uint<4>,
 // CHECK-LABEL: firrtl.module @Mux
 firrtl.module @Mux(in %in: !firrtl.uint<4>,
                    in %cond: !firrtl.uint<1>,
-                   in %condZeroWidth: !firrtl.uint<0>,
                    out %out: !firrtl.uint<4>,
-                   out %out1: !firrtl.uint<1>,
-                   out %out2: !firrtl.uint<4>) {
+                   out %out1: !firrtl.uint<1>) {
   // CHECK: firrtl.connect %out, %in
   %0 = firrtl.mux (%cond, %in, %in) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %0 : !firrtl.uint<4>, !firrtl.uint<4>
@@ -354,10 +352,6 @@ firrtl.module @Mux(in %in: !firrtl.uint<4>,
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   %3 = firrtl.mux (%cond, %c1_ui1, %c1_ui0) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.connect %out1, %3 : !firrtl.uint<1>, !firrtl.uint<1>
-
-  // CHECK: firrtl.connect %out2, %c7_ui4
-  %4 = firrtl.mux (%condZeroWidth, %in, %c7_ui4) : (!firrtl.uint<0>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
-  firrtl.connect %out2, %4 : !firrtl.uint<4>, !firrtl.uint<4>
 }
 
 // CHECK-LABEL: firrtl.module @Pad
@@ -1793,21 +1787,6 @@ firrtl.module @dshifts_to_ishifts(in %a_in: !firrtl.sint<58>,
   %c438_ui10 = firrtl.constant 438 : !firrtl.uint<10>
   %2 = firrtl.dshr %c_in, %c438_ui10 : (!firrtl.sint<58>, !firrtl.uint<10>) -> !firrtl.sint<58>
   firrtl.connect %c_out, %2 : !firrtl.sint<58>, !firrtl.sint<58>
-}
-
-// RemoveReset: `firrtl.invalidvalue` reset values should be canonicalized to a
-// reset-less register.
-// CHECK-LABEL: firrtl.module @StripInvalidValueReset
-firrtl.module @StripInvalidValueReset(
-  in %clk: !firrtl.clock,
-  in %rst: !firrtl.uint<1>,
-  in %arst: !firrtl.asyncreset
-) {
-  %invalid_ui42 = firrtl.invalidvalue : !firrtl.uint<42>
-  // CHECK: %0 = firrtl.reg %clk : (!firrtl.clock) -> !firrtl.uint<42>
-  // CHECK: %1 = firrtl.reg %clk : (!firrtl.clock) -> !firrtl.uint<42>
-  %0 = firrtl.regreset %clk, %rst, %invalid_ui42 : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<42>) -> !firrtl.uint<42>
-  %1 = firrtl.regreset %clk, %arst, %invalid_ui42 : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<42>) -> !firrtl.uint<42>
 }
 
 }

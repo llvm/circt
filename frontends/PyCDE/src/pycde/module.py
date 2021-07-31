@@ -6,8 +6,9 @@ from __future__ import annotations
 
 from pycde.support import obj_to_value
 
-from .support import Value, get_user_loc, var_to_attribute, OpOperandConnect
-from .types import types
+from .pycde_types import types
+from .support import (Value, get_user_loc, var_to_attribute, OpOperandConnect,
+                      create_type_string)
 
 from circt import support
 from circt.dialects import hw
@@ -211,7 +212,7 @@ def _module_base(cls, extern: bool, params={}):
           if input == no_connect:
             if not extern:
               raise ConnectionError(
-                "`no_connect` is only valid on extern module ports")
+                  "`no_connect` is only valid on extern module ports")
             else:
               value = hw.ConstantOp.create(types.i1, 0).result
           else:
@@ -408,20 +409,11 @@ class _Generate:
         inst.attributes[name] = attr
       return inst
 
-  @staticmethod
-  def create_type_string(ty):
-    ty = support.type_to_pytype(ty)
-    if isinstance(ty, hw.TypeAliasType):
-      return ty.name
-    if isinstance(ty, hw.ArrayType):
-      return f"{ty.size}x" + _Generate.create_type_string(ty.element_type)
-    return str(ty)
-
   def create_module_name(self, op):
 
     def val_str(val):
       if isinstance(val, mlir.ir.Type):
-        return self.create_type_string(val)
+        return create_type_string(val)
       return str(val)
 
     name = op.name

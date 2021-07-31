@@ -34,8 +34,8 @@ calyx.program {
         calyx.group_done %c1.done : i1
       }
       calyx.group @Group2 {
-        // CHECK: calyx.assign %c1.in = %c0.out, %c2.out ? : i8
-        calyx.assign %c1.in = %c0.out, %c2.out ? : i8
+        // CHECK: calyx.assign %c1.in = %c0.out, %done ? : i8
+        calyx.assign %c1.in = %c0.out, %done ? : i8
 
         // CHECK: calyx.group_done %c1.done, %0 ? : i1
         %guard = comb.and %c1_i1, %c2.out : i1

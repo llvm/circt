@@ -22,6 +22,8 @@ add_circt_library(circt-llhd-signals-runtime-wrappers SHARED
     LINK_LIBS PUBLIC
     CIRCTLLHDSimState
 )
+set_target_properties(circt-llhd-signals-runtime-wrappers
+  PROPERTIES CXX_VISIBILITY_PRESET "default")
 
 add_circt_library(CIRCTLLHDSimEngine
     Engine.cpp

@@ -170,6 +170,12 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
   let firrtlExtraClassDeclaration = [{
     /// Return true if the specified field is flipped.
     bool isFieldFlipped();
+
+    /// Return a `FieldRef` to the accessed field.
+    FieldRef getAccessedField() {
+      return FieldRef(input(), input().getType().cast<BundleType>()
+                                      .getFieldID(fieldIndex()));
+    }
   }];
 
   let verifier = "return ::verifySubfieldOp(*this);";
@@ -200,6 +206,14 @@ def SubindexOp : FIRRTLExprOp<"subindex", [
   // TODO: Could drop the result type, inferring it from the source.
   let assemblyFormat =
      "$input `[` $index `]` attr-dict `:` type($input)";
+
+  let firrtlExtraClassDeclaration = [{
+    /// Return a `FieldRef` to the accessed field.
+    FieldRef getAccessedField() {
+      return FieldRef(input(), input().getType().cast<FVectorType>()
+                                      .getFieldID(index()));
+    }
+  }];
 }
 
 def SubaccessOp : FIRRTLExprOp<"subaccess", [
@@ -436,7 +450,7 @@ def HeadPrimOp : PrimOp<"head"> {
 }
 
 def MuxPrimOp : PrimOp<"mux"> {
-  let arguments = (ins UInt01Type:$sel, PassiveType:$high, PassiveType:$low);
+  let arguments = (ins UInt1Type:$sel, PassiveType:$high, PassiveType:$low);
   let results = (outs PassiveType:$result);
 
   let assemblyFormat =
