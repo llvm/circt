@@ -22,7 +22,7 @@ include "mlir/Pass/PassBase.td"
 def CalyxToSV : Pass<"lower-calyx-to-sv", "mlir::ModuleOp"> {
   let summary = "Lower Calyx to SV";
   let description = [{
-    Lower Calyx to SV.
+    This pass lowers Calyx to SV.
   }];
   let constructor = "circt::createCalyxToSVPass()";
   let dependentDialects = ["sv::SVDialect"];

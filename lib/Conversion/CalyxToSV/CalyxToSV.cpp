@@ -16,7 +16,6 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Utils.h"
-#include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
 using namespace circt;
@@ -31,7 +30,7 @@ public:
 } // end anonymous namespace
 
 void CalyxToSVPass::runOnOperation() {
-  auto op = getOperation();
+  // auto op = getOperation();
   ConversionTarget target(getContext());
   target.addLegalDialect<CalyxDialect>();
   target.addIllegalDialect<SVDialect>();
