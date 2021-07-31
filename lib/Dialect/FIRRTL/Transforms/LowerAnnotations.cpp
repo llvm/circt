@@ -255,7 +255,8 @@ static Optional<AnnoPathValue> stdResolve(AnnoPathStr path, CircuitOp circuit,
   AnnoPathValue retval;
   if (path.circuit != circuit.name()) {
     circuit.emitError("circuit name '")
-        << circuit.name() << "'mismatch in annotation '" << path.circuit << "'";
+        << circuit.name() << "' mismatch in annotation '" << path.circuit
+        << "'";
     return {};
   }
   if (path.module.empty()) {
@@ -313,63 +314,6 @@ static Optional<AnnoPathValue> stdResolve(AnnoPathStr path, CircuitOp circuit,
 ////////////////////////////////////////////////////////////////////////////////
 // Specific Appliers
 ////////////////////////////////////////////////////////////////////////////////
-
-LogicalResult applyExtractAssertions(AnnoPathValue target,
-                                     DictionaryAttr anno) {
-  if (!target.isOpOfType<CircuitOp>())
-    return failure();
-  if (auto file = anno.getNamed("filename"))
-    addNamedAttr(target.ref.op, "firrtl.ExtractAssertions.filename",
-                 file->second.cast<StringAttr>());
-  if (auto dir = anno.getNamed("directory"))
-    addNamedAttr(target.ref.op, "firrtl.ExtractAssertions.directory",
-                 dir->second.cast<StringAttr>());
-  return success();
-}
-
-LogicalResult applyExtractCoverage(AnnoPathValue target, DictionaryAttr anno) {
-  if (!target.isOpOfType<CircuitOp>())
-    return failure();
-  if (auto file = anno.getNamed("filename"))
-    addNamedAttr(target.ref.op, "firrtl.ExtractCoverageAnnotation.filename",
-                 file->second.cast<StringAttr>());
-  if (auto dir = anno.getNamed("directory"))
-    addNamedAttr(target.ref.op, "firrtl.ExtractCoverageAnnotation.directory",
-                 dir->second.cast<StringAttr>());
-  return success();
-}
-
-LogicalResult applyExtractAssumptions(AnnoPathValue target,
-                                      DictionaryAttr anno) {
-  if (!target.isOpOfType<CircuitOp>())
-    return failure();
-  if (auto file = anno.getNamed("filename"))
-    addNamedAttr(target.ref.op, "firrtl.ExtractAssumptionsAnnotation.filename",
-                 file->second.cast<StringAttr>());
-  if (auto dir = anno.getNamed("directory"))
-    addNamedAttr(target.ref.op, "firrtl.ExtractAssumptionsAnnotation.directory",
-                 dir->second.cast<StringAttr>());
-  return success();
-}
-
-LogicalResult applyTestBenchDir(AnnoPathValue target, DictionaryAttr anno) {
-  if (!target.isOpOfType<CircuitOp>())
-    return failure();
-  if (auto dir = anno.getNamed("dirname"))
-    addNamedAttr(target.ref.op, "firrtl.TestBench.directory",
-                 dir->second.cast<StringAttr>());
-  return success();
-}
-
-LogicalResult applyBlackBoxTargetDir(AnnoPathValue target,
-                                     DictionaryAttr anno) {
-  if (!target.isOpOfType<CircuitOp>())
-    return failure();
-  if (auto dir = anno.getNamed("targetDir"))
-    addNamedAttr(target.ref.op, "firrtl.BlackBoxTarget.directory",
-                 dir->second.cast<StringAttr>());
-  return success();
-}
 
 LogicalResult applyDirFileNormalizeToCircuit(AnnoPathValue target,
                                              DictionaryAttr anno) {
@@ -454,28 +398,37 @@ LogicalResult applyDontTouch(AnnoPathValue target, DictionaryAttr anno) {
   return success();
 }
 
+LogicalResult applyGrandCentralDataTaps(AnnoPathValue target,
+                                        DictionaryAttr anno) {
+  addNamedAttr(target.ref.op, "firrtl.DoNotTouch");
+  // TODO: port scatter logic in FIRAnnotations.cpp
+  return applyWithoutTargetToCircuit(target, anno);
+}
+
+LogicalResult applyGrandCentralMemTaps(AnnoPathValue target,
+                                       DictionaryAttr anno) {
+  addNamedAttr(target.ref.op, "firrtl.DoNotTouch");
+  // TODO: port scatter logic in FIRAnnotations.cpp
+  return applyWithoutTargetToCircuit(target, anno);
+}
+
+LogicalResult applyGrandCentralView(AnnoPathValue target, DictionaryAttr anno) {
+  addNamedAttr(target.ref.op, "firrtl.DoNotTouch");
+  // TODO: port scatter logic in FIRAnnotations.cpp
+  return applyWithoutTargetToCircuit(target, anno);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Driving table
 ////////////////////////////////////////////////////////////////////////////////
 
 static const AnnoRecord annotationRecords[] = {
     /*
-      {"sifive.enterprise.grandcentral.PrefixInterfacesAnnotation", noParse,
-       noResolve, ignoreAnno},
       {"chisel3.aop.injecting.InjectStatement", noParse, noResolve, ignoreAnno},
-      {"sifive.enterprise.grandcentral.DataTapsAnnotation", noParse, noResolve,
-       ignoreAnno},
-      {"firrtl.transforms.DontTouchAnnotation", noParse, noResolve, ignoreAnno},
-      {"sifive.enterprise.firrtl.NestedPrefixModulesAnnotation", noParse,
-       noResolve, ignoreAnno},
       {"chisel3.util.experimental.ForceNameAnnotation", noParse, noResolve,
        ignoreAnno},
       {"sifive.enterprise.firrtl.DFTTestModeEnableAnnotation", noParse,
       noResolve, ignoreAnno},
-      {"sifive.enterprise.grandcentral.ViewAnnotation", noParse, noResolve,
-       ignoreAnno},
-      {"sifive.enterprise.grandcentral.MemTapAnnotation", noParse, noResolve,
-       ignoreAnno},
       {"firrtl.passes.memlib.ReplSeqMemAnnotation", noParse, noResolve,
        ignoreAnno},
   */
@@ -497,12 +450,14 @@ static const AnnoRecord annotationRecords[] = {
      noResolve, applyDirFileNormalizeToCircuit},
     {"sifive.enterprise.firrtl.SitestBlackBoxAnnotation", noParse, noResolve,
      applyDirFileNormalizeToCircuit},
+    {"firrtl.passes.memlib.InferReadWriteAnnotation$", noParse, noResolve,
+     applyWithoutTargetToCircuit<>},
 
     // Simple Annotations
-    {"sifive.enterprise.firrtl.TestHarnessPathAnnotation", stdParse, stdResolve,
+    {"sifive.enterprise.firrtl.TestHarnessPathAnnotation", noParse, noResolve,
      applyWithoutTargetToCircuit<>},
     {"sifive.enterprise.grandcentral.phases.SimulationConfigPathPrefix",
-     stdParse, stdResolve, applyWithoutTargetToCircuit<>},
+     noParse, noResolve, applyWithoutTargetToCircuit<>},
     {"sifive.enterprise.firrtl.ScalaClassAnnotation", stdParse, stdResolve,
      applyWithoutTargetToModule<>},
     {"firrtl.transforms.NoDedupAnnotation", stdParse, stdResolve,
@@ -521,19 +476,21 @@ static const AnnoRecord annotationRecords[] = {
      applyWithoutTargetToModule<>},
     {"sifive.enterprise.firrtl.FileListAnnotation", stdParse, stdResolve,
      applyWithoutTargetToModule<>},
-    {"firrtl.passes.memlib.InferReadWriteAnnotation$", stdParse, stdResolve,
-     applyWithoutTargetToModule<>},
+    {"sifive.enterprise.grandcentral.PrefixInterfacesAnnotation", noParse,
+     noResolve, applyWithoutTargetToCircuit<>},
+    {"sifive.enterprise.firrtl.NestedPrefixModulesAnnotation", stdParse,
+     stdResolve, applyWithoutTargetToModule<>},
 
     // Directory or Filename Annotations
-    {"sifive.enterprise.firrtl.ExtractCoverageAnnotation", stdParse, stdResolve,
+    {"sifive.enterprise.firrtl.ExtractCoverageAnnotation", noParse, noResolve,
      applyDirFileNormalizeToCircuit},
-    {"sifive.enterprise.firrtl.ExtractAssertionsAnnotation", stdParse,
-     stdResolve, applyDirFileNormalizeToCircuit},
-    {"sifive.enterprise.firrtl.ExtractAssumptionsAnnotation", stdParse,
-     stdResolve, applyDirFileNormalizeToCircuit},
-    {"sifive.enterprise.firrtl.TestBenchDirAnnotation", stdParse, stdResolve,
+    {"sifive.enterprise.firrtl.ExtractAssertionsAnnotation", noParse, noResolve,
      applyDirFileNormalizeToCircuit},
-    {"firrtl.transforms.BlackBoxTargetDirAnno", stdParse, stdResolve,
+    {"sifive.enterprise.firrtl.ExtractAssumptionsAnnotation", noParse,
+     noResolve, applyDirFileNormalizeToCircuit},
+    {"sifive.enterprise.firrtl.TestBenchDirAnnotation", noParse, noResolve,
+     applyDirFileNormalizeToCircuit},
+    {"firrtl.transforms.BlackBoxTargetDirAnno", noParse, noResolve,
      applyDirFileNormalizeToCircuit},
     {"sifive.enterprise.firrtl.RetimeModulesAnnotation", noParse, noResolve,
      applyDirFileNormalizeToCircuit},
@@ -553,6 +510,12 @@ static const AnnoRecord annotationRecords[] = {
      seqMemInstanceResolve, applyWithoutTargetToMem<>},
     {"firrtl.transforms.DontTouchAnnotation", stdParse, stdResolve,
      applyDontTouch},
+    {"sifive.enterprise.grandcentral.DataTapsAnnotation", noParse, noResolve,
+     applyGrandCentralDataTaps},
+    {"sifive.enterprise.grandcentral.MemTapAnnotation", noParse, noResolve,
+     applyGrandCentralMemTaps},
+    {"sifive.enterprise.grandcentral.ViewAnnotation", noParse, noResolve,
+     applyGrandCentralView},
 
 };
 
@@ -582,8 +545,10 @@ void LowerAnnotationsPass::runOnOperation() {
   SymbolTable modules(circuit);
   ArrayAttr attrs = circuit.annotations();
   circuit.annotationsAttr(ArrayAttr::get(circuit.getContext(), {}));
+  size_t numFailures = 0;
   for (auto attr : attrs)
-    applyAnnotation(attr.cast<DictionaryAttr>(), circuit, modules);
+    if (applyAnnotation(attr.cast<DictionaryAttr>(), circuit, modules).failed())
+      ++numFailures;
 }
 
 LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
