@@ -13,6 +13,7 @@
 
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/FIRRTL/FIRParser.h"
+#include "circt/Dialect/Calyx/CalyxEmitter.h"
 #include "circt/Dialect/LLHD/Translation/TranslateToVerilog.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Translation/ExportVerilog.h"
@@ -30,6 +31,7 @@ inline void registerAllTranslations() {
     registerToVerilogTranslation();
     esi::registerESITranslations();
     firrtl::registerFromFIRRTLTranslation();
+    calyx::registerToCalyxTranslation();
     llhd::registerToVerilogTranslation();
     msft::registerMSFTTclTranslation();
     return true;
