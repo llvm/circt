@@ -195,7 +195,7 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     auto parserTimer = ts.nest("FIR Parser");
     firrtl::FIRParserOptions options;
     options.ignoreInfoLocators = ignoreFIRLocations;
-    module = importFIRRTL(sourceMgr, &context, options);
+    module = importFIRFile(sourceMgr, &context, options);
   } else {
     auto parserTimer = ts.nest("MLIR Parser");
     assert(inputFormat == InputMLIRFile);
