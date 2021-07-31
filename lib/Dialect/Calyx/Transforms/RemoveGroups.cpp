@@ -29,26 +29,25 @@ using namespace mlir;
 ///    GroupGoOp.
 /// 4. Remove the GroupDoneOp.
 static void modifyGroupOperations(ComponentOp component) {
-  // Get the only enable in the control.
   auto control = component.getControlOp();
+  // Get the only EnableOp in the control.
   auto topLevel = *control.getRegion().getOps<EnableOp>().begin();
+  auto topLevelName = topLevel.groupName();
 
   auto wires = component.getWiresOp();
   Value componentGoPort = component.getGoPort();
-  Value componentDonePort = component.getDonePort();
-
   wires.walk([&](GroupOp group) {
     auto &groupRegion = group->getRegion(0);
     OpBuilder builder(groupRegion);
-    // Walk the assignments. Append component's `%go` signal to each guard.
+    // Walk the assignments and append component's 'go' signal to each guard.
     updateGroupAssignmentGuards(builder, group, componentGoPort);
 
     auto groupDone = group.getDoneOp();
-    if (topLevel.groupName() == group.sym_name()) {
+    if (topLevelName == group.sym_name()) {
       // Replace `calyx.group_done %0, %1 ? : i1`
       //    with `calyx.assign %done, %0, %1 ? : i1`
       auto assignOp =
-          builder.create<AssignOp>(group->getLoc(), componentDonePort,
+          builder.create<AssignOp>(group->getLoc(), component.getDonePort(),
                                    groupDone.src(), groupDone.guard());
       groupDone->replaceAllUsesWith(assignOp);
     } else {
