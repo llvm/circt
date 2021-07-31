@@ -32,8 +32,8 @@ public:
 void CalyxToSVPass::runOnOperation() {
   // auto op = getOperation();
   ConversionTarget target(getContext());
-  target.addLegalDialect<CalyxDialect>();
-  target.addIllegalDialect<SVDialect>();
+  target.addIllegalDialect<CalyxDialect>();
+  target.addLegalDialect<SVDialect>();
 }
 
 std::unique_ptr<mlir::Pass> circt::createCalyxToSVPass() {
