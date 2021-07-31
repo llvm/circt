@@ -32,6 +32,13 @@ using namespace circt;
 using namespace firrtl;
 using circt::comb::ICmpPredicate;
 
+static const StringRef assertAnnoClass =
+    "sifive.enterprise.firrtl.ExtractAssertionsAnnotation";
+static const StringRef assumeAnnoClass =
+    "sifive.enterprise.firrtl.ExtractAssumptionsAnnotation";
+static const StringRef coverAnnoClass =
+    "sifive.enterprise.firrtl.ExtractCoverageAnnotation";
+
 /// Given a FIRRTL type, return the corresponding type for the HW dialect.
 /// This returns a null type if it cannot be lowered.
 static Type lowerType(Type type) {
@@ -223,8 +230,9 @@ struct CircuitLoweringState {
     return it != oldToNewModuleMap.end() ? it->second : nullptr;
   }
 
-  // Emit warnings on unprocessed annotations still remaining in the annoSet.
-  void warnOnRemainingAnnotations(Operation *op, const AnnotationSet &annoSet);
+  // Process remaining annotations and emit warnings on unprocessed annotations
+  // still remaining in the annoSet.
+  void processRemainingAnnotations(Operation *op, const AnnotationSet &annoSet);
 
   CircuitOp circuitOp;
 
@@ -248,7 +256,7 @@ private:
 
   // Record the set of remaining annotation classes. This is used to warn only
   // once about any annotation class.
-  StringSet<> alreadyPrinted;
+  StringSet<> pendingAnnotations;
   const bool enableAnnotationWarning;
   std::mutex annotationPrintingMtx;
 
@@ -260,14 +268,14 @@ private:
   std::mutex bindsMutex;
 };
 
-void CircuitLoweringState::warnOnRemainingAnnotations(
+void CircuitLoweringState::processRemainingAnnotations(
     Operation *op, const AnnotationSet &annoSet) {
   if (!enableAnnotationWarning || annoSet.empty())
     return;
   std::lock_guard<std::mutex> lock(annotationPrintingMtx);
 
   for (auto a : annoSet) {
-    auto inserted = alreadyPrinted.insert(a.getClass());
+    auto inserted = pendingAnnotations.insert(a.getClass());
     if (!inserted.second)
       continue;
 
@@ -286,7 +294,10 @@ void CircuitLoweringState::warnOnRemainingAnnotations(
             // passes that have all run by now. Since no one is responsible for
             // consuming these, they will linger around and can be ignored.
             "sifive.enterprise.firrtl.ScalaClassAnnotation",
-            "sifive.enterprise.firrtl.MarkDUTAnnotation"))
+            "sifive.enterprise.firrtl.MarkDUTAnnotation",
+            // The following will be handled while lowering the verification
+            // ops.
+            assertAnnoClass, assumeAnnoClass, coverAnnoClass))
       continue;
 
     mlir::emitWarning(op->getLoc(), "unprocessed annotation:'" + a.getClass() +
@@ -358,7 +369,7 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   SmallVector<FModuleOp, 32> modulesToProcess;
 
-  state.warnOnRemainingAnnotations(circuit, AnnotationSet(circuit));
+  state.processRemainingAnnotations(circuit, AnnotationSet(circuit));
   // Iterate through each operation in the circuit body, transforming any
   // FModule's we come across.
   for (auto &op : circuitBody->getOperations()) {
@@ -669,7 +680,7 @@ FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
       hwPort.argNum = numArgs++;
     }
     ports.push_back(hwPort);
-    loweringState.warnOnRemainingAnnotations(moduleOp, firrtlPort.annotations);
+    loweringState.processRemainingAnnotations(moduleOp, firrtlPort.annotations);
   }
   return success();
 }
@@ -688,7 +699,8 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   if (auto defName = oldModule.defname())
     verilogName = defName.getValue();
 
-  loweringState.warnOnRemainingAnnotations(oldModule, AnnotationSet(oldModule));
+  loweringState.processRemainingAnnotations(oldModule,
+                                            AnnotationSet(oldModule));
   // Build the new hw.module op.
   OpBuilder builder(topLevelModule->getParent()->getContext());
   builder.setInsertionPointToEnd(topLevelModule);
@@ -708,7 +720,8 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   if (failed(lowerPorts(firrtlPorts, ports, oldModule, loweringState)))
     return {};
 
-  loweringState.warnOnRemainingAnnotations(oldModule, AnnotationSet(oldModule));
+  loweringState.processRemainingAnnotations(oldModule,
+                                            AnnotationSet(oldModule));
   // Build the new hw.module op.
   OpBuilder builder(topLevelModule->getParent()->getContext());
   builder.setInsertionPointToEnd(topLevelModule);
@@ -1052,7 +1065,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   template <typename SignedOp, typename UnsignedOp>
   LogicalResult lowerDivLikeOp(Operation *op);
   template <typename AOpTy, typename BOpTy>
-  LogicalResult lowerVerificationStatement(AOpTy op);
+  LogicalResult lowerVerificationStatement(AOpTy op, StringRef annoClass);
 
   LogicalResult visitExpr(CatPrimOp op);
 
@@ -1189,7 +1202,7 @@ void FIRRTLLowering::run() {
     builder.setInsertionPoint(&op);
     builder.setLoc(op.getLoc());
     auto done = succeeded(dispatchVisitor(&op));
-    circuitState.warnOnRemainingAnnotations(&op, AnnotationSet(&op));
+    circuitState.processRemainingAnnotations(&op, AnnotationSet(&op));
     if (done)
       opsToRemove.push_back(&op);
     else {
@@ -2706,7 +2719,8 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
 ///       end
 ///     end
 template <typename AOpTy, typename BOpTy>
-LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op) {
+LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op,
+                                                         StringRef annoClass) {
   auto clock = getLoweredValue(op.clock());
   auto enable = getLoweredValue(op.enable());
   auto predicate = getLoweredValue(op.predicate());
@@ -2721,7 +2735,20 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op) {
         label = op.nameAttr();
       else
         label = builder.getStringAttr("");
-      builder.create<BOpTy>(predicate, label);
+      auto svOp = builder.create<BOpTy>(predicate, label);
+      auto annoSet = AnnotationSet(circuitState.circuitOp);
+      StringRef fileName, dir;
+      if (auto a = annoSet.getAnnotation(annoClass)) {
+        fileName = a.getAs<StringAttr>("filename").getValue();
+        dir = a.getAs<StringAttr>("directory").getValue();
+      }
+      if (!fileName.empty() || !dir.empty())
+        svOp->setAttr("output_file",
+                      hw::OutputFileAttr::get(builder.getStringAttr(dir),
+                                              builder.getStringAttr(fileName),
+                                              builder.getBoolAttr(true),
+                                              builder.getBoolAttr(true),
+                                              svOp.getContext()));
     });
   });
 
@@ -2730,17 +2757,19 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op) {
 
 // Lower an assert to SystemVerilog.
 LogicalResult FIRRTLLowering::visitStmt(AssertOp op) {
-  return lowerVerificationStatement<AssertOp, sv::AssertOp>(op);
+  return lowerVerificationStatement<AssertOp, sv::AssertOp>(op,
+                                                            assertAnnoClass);
 }
 
 // Lower an assume to SystemVerilog.
 LogicalResult FIRRTLLowering::visitStmt(AssumeOp op) {
-  return lowerVerificationStatement<AssumeOp, sv::AssumeOp>(op);
+  return lowerVerificationStatement<AssumeOp, sv::AssumeOp>(op,
+                                                            assumeAnnoClass);
 }
 
 // Lower a cover to SystemVerilog.
 LogicalResult FIRRTLLowering::visitStmt(CoverOp op) {
-  return lowerVerificationStatement<CoverOp, sv::CoverOp>(op);
+  return lowerVerificationStatement<CoverOp, sv::CoverOp>(op, coverAnnoClass);
 }
 
 LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {

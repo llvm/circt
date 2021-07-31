@@ -3454,10 +3454,11 @@ void RootEmitterBase::gatherFiles(bool separateModules) {
       if (auto directory = attr.directory())
         appendPossiblyAbsolutePath(outputPath, directory.getValue());
 
-      if (auto name = attr.name()) {
-        appendPossiblyAbsolutePath(outputPath, name.getValue());
-        hasFileName = true;
-      }
+      if (auto name = attr.name())
+        if (!name.getValue().empty()) {
+          appendPossiblyAbsolutePath(outputPath, name.getValue());
+          hasFileName = true;
+        }
 
       emitReplicatedOps = !attr.exclude_replicated_ops().getValue();
       addToFilelist = !attr.exclude_from_filelist().getValue();
