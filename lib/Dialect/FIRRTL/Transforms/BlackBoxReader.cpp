@@ -105,7 +105,7 @@ void BlackBoxReaderPass::runOnOperation() {
   for (auto annot : AnnotationSet(circuitOp)) {
     // Handle target dir annotation.
     if (annot.isClass(targetDirAnnoClass)) {
-      if (auto target = annot.getMember<StringAttr>("targetDir")) {
+      if (auto target = annot.getMember<StringAttr>("directory")) {
         targetDir = target.getValue();
         continue;
       }

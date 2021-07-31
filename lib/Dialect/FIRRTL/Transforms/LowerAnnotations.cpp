@@ -429,8 +429,6 @@ static const AnnoRecord annotationRecords[] = {
        ignoreAnno},
       {"sifive.enterprise.firrtl.DFTTestModeEnableAnnotation", noParse,
       noResolve, ignoreAnno},
-      {"firrtl.passes.memlib.ReplSeqMemAnnotation", noParse, noResolve,
-       ignoreAnno},
   */
     // Dropped annotations.
     {"firrtl.EmitCircuitAnnotation", noParse, noResolve, ignoreAnno},
@@ -480,6 +478,8 @@ static const AnnoRecord annotationRecords[] = {
      noResolve, applyWithoutTargetToCircuit<>},
     {"sifive.enterprise.firrtl.NestedPrefixModulesAnnotation", stdParse,
      stdResolve, applyWithoutTargetToModule<>},
+    {"firrtl.passes.memlib.ReplSeqMemAnnotation", noParse, noResolve,
+     applyWithoutTargetToCircuit<>},
 
     // Directory or Filename Annotations
     {"sifive.enterprise.firrtl.ExtractCoverageAnnotation", noParse, noResolve,
