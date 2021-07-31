@@ -95,11 +95,6 @@ class Polynomial(pycde.System):
 
 poly = Polynomial()
 
-poly.graph()
-# CHECK-LABEL: digraph "top"
-# CHECK: label="top";
-# CHECK: [shape=record,label="{hw.constant\ni32\n\nvalue: 23 : i32}"];
-
 print("Printing...")
 poly.print()
 # CHECK-LABEL:  hw.module @top() -> (%y: i32)
