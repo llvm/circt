@@ -50,9 +50,9 @@ static void modifyGroups(ComponentOp &component) {
     } else {
       // Replace calyx.group_go's uses with its guard, e.g.
       //    %A.go = calyx.group_go %true, %3 ? : i1
-      //    %guard = comb.and %1, %A.go : i1
+      //    %x = comb.and %1, %A.go : i1
       //    ->
-      //    %guard = comb.and %1, %3 : i1
+      //    %x = comb.and %1, %3 : i1
       auto groupGo = group.getGoOp();
       auto groupGoGuard = groupGo.guard();
       groupGo.replaceAllUsesWith(groupGoGuard);
@@ -62,6 +62,18 @@ static void modifyGroups(ComponentOp &component) {
     groupDone->erase();
   });
 }
+
+/// ???
+// static void inlineGroups(ComponentOp &component) {
+//
+//  auto wires = component.getWiresOp();
+//  wires.walk([&](GroupOp group) {
+//    for (auto &&op : group) {
+//    }
+//    auto &groupRegion = group->getRegion(0);
+//    OpBuilder builder(groupRegion);
+//  });
+//}
 
 namespace {
 
@@ -76,15 +88,16 @@ void RemoveGroupsPass::runOnOperation() {
   modifyGroups(component);
 
   // Inline the body of each group.
-  // TODO: Fix
-  //  auto &wiresRegion = component.getWiresOp()->getRegion(0);
-  //    component.getWiresOp().walk([&](GroupOp group) {
-  //      auto &groupRegion = group->getRegion(0);
-  //      wiresRegion.takeBody(groupRegion);
-  //    });
+  auto wiresBody = component.getWiresOp().getBody();
+  wiresBody->walk([&](GroupOp group) {
+    auto body = group.getBody();
+    body->print(llvm::errs());
+    for (auto &&op : *body) {
+      wiresBody->push_back(op.clone());
+    }
+  });
 
-  // Remove the GroupOps.
-  component.getWiresOp().walk([](GroupOp group) { group->erase(); });
+  wiresBody->walk([&](GroupOp group) { group->dropAllDefinedValueUses(); group->erase(); });
 
   // Remove the last EnableOp from the control.
   auto control = component.getControlOp();

@@ -51,9 +51,9 @@ void CalyxOpAsmDialectInterface::getAsmBlockArgumentNames(
   if (component == nullptr)
     return;
 
-  auto ports = getComponentPortInfo(component);
+  auto ports = component.portNames();
   for (size_t i = 0, e = block->getNumArguments(); i != e; ++i)
-    setNameFn(block->getArgument(i), ports[i].name.getValue());
+    setNameFn(block->getArgument(i), ports[i].cast<StringAttr>().getValue());
 }
 
 void CalyxDialect::initialize() {
@@ -61,7 +61,7 @@ void CalyxDialect::initialize() {
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/Calyx/Calyx.cpp.inc"
-  >();
+      >();
 
   // Register interface implementations.
   addInterfaces<CalyxOpAsmDialectInterface>();
