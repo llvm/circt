@@ -17,9 +17,16 @@
 include "mlir/Pass/PassBase.td"
 
 def RemoveGroups : Pass<"calyx-remove-groups", "calyx::ComponentOp"> {
-  let summary = "todo";
+  let summary = "Inlines the groups in a Calyx component.";
   let description = [{
-    TODO
+    This pass removes the Group interface from the Calyx program, and inlines all
+    assignments. This is done in the following manner:
+    1. Assign values to the 'done' signal of the component, corresponding with the
+       top-level control group's DoneOp. Add the 'go' signal of the component to all
+       assignments.
+    2. TODO(Calyx): If there are multiple writes to a signal, replace the reads with
+       the disjunction.
+    3. Remove all groups.
   }];
   let dependentDialects = ["comb::CombDialect"];
   let constructor = "circt::calyx::createRemoveGroupsPass()";

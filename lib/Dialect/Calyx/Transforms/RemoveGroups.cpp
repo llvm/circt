@@ -21,13 +21,17 @@ using namespace circt;
 using namespace calyx;
 using namespace mlir;
 
-/// ???
-static void modifyGroups(ComponentOp &component) {
-  // Get the only group in the control.
+/// Makes several modifications to the operations of a GroupOp:
+/// 1. Assign the 'done' signal of the component with the done_op of the top
+///    level control group.
+/// 2. Append the 'go' signal of the component to guard of each assignment.
+/// 3. Replace all uses of GroupGoOp with the respective guard, and delete the
+///    GroupGoOp.
+/// 4. Remove the GroupDoneOp.
+static void modifyGroupOperations(ComponentOp component) {
+  // Get the only enable in the control.
   auto control = component.getControlOp();
-  EnableOp topLevel;
-  // TODO: Fix. Emit op error if there is more than a single Enable.
-  control.walk([&](EnableOp e) { topLevel = e; });
+  auto topLevel = *control.getRegion().getOps<EnableOp>().begin();
 
   auto wires = component.getWiresOp();
   Value componentGoPort = component.getGoPort();
@@ -50,9 +54,9 @@ static void modifyGroups(ComponentOp &component) {
     } else {
       // Replace calyx.group_go's uses with its guard, e.g.
       //    %A.go = calyx.group_go %true, %3 ? : i1
-      //    %x = comb.and %1, %A.go : i1
+      //    %0 = comb.and %1, %A.go : i1
       //    ->
-      //    %x = comb.and %1, %3 : i1
+      //    %0 = comb.and %1, %3 : i1
       auto groupGo = group.getGoOp();
       auto groupGoGuard = groupGo.guard();
       groupGo.replaceAllUsesWith(groupGoGuard);
@@ -63,17 +67,30 @@ static void modifyGroups(ComponentOp &component) {
   });
 }
 
-/// ???
-// static void inlineGroups(ComponentOp &component) {
-//
-//  auto wires = component.getWiresOp();
-//  wires.walk([&](GroupOp group) {
-//    for (auto &&op : group) {
-//    }
-//    auto &groupRegion = group->getRegion(0);
-//    OpBuilder builder(groupRegion);
-//  });
-//}
+/// Inlines each group in the WiresOp.
+void inlineGroups(ComponentOp component) {
+  auto &wiresRegion = component.getWiresOp().getRegion();
+  auto &wireBlocks = wiresRegion.getBlocks();
+  auto lastBlock = wiresRegion.end();
+
+  // Inline the body of each group as a Block into the WiresOp.
+  wiresRegion.walk([&](GroupOp group) {
+    wireBlocks.splice(lastBlock, group.getRegion().getBlocks());
+    group->erase();
+  });
+
+  // Merge the operations of each Block into the first block of the WiresOp.
+  auto firstBlock = wireBlocks.begin();
+  for (auto it = firstBlock, e = lastBlock; it != e; ++it) {
+    if (it == firstBlock)
+      continue;
+    firstBlock->getOperations().splice(firstBlock->end(), it->getOperations());
+  }
+
+  // Erase the (now) empty blocks.
+  while (&wiresRegion.front() != &wiresRegion.back())
+    wiresRegion.back().erase();
+}
 
 namespace {
 
@@ -85,25 +102,20 @@ struct RemoveGroupsPass : public RemoveGroupsBase<RemoveGroupsPass> {
 
 void RemoveGroupsPass::runOnOperation() {
   ComponentOp component = getOperation();
-  modifyGroups(component);
+
+  // Early exit if there is no control to compile.
+  if (component.getControlOp().getOps().empty())
+    return;
+
+  // Make the necessary modifications to each group's operations.
+  modifyGroupOperations(component);
 
   // Inline the body of each group.
-  auto wiresBody = component.getWiresOp().getBody();
-  wiresBody->walk([&](GroupOp group) {
-    auto body = group.getBody();
-    body->print(llvm::errs());
-    for (auto &&op : *body) {
-      wiresBody->push_back(op.clone());
-    }
-  });
-
-  wiresBody->walk([&](GroupOp group) { group->dropAllDefinedValueUses(); group->erase(); });
+  inlineGroups(component);
 
   // Remove the last EnableOp from the control.
   auto control = component.getControlOp();
   control.walk([&](EnableOp enable) { enable->erase(); });
-  assert(control.getBody()->empty() &&
-         "The calyx.control should be compiled after this pass.");
 }
 
 std::unique_ptr<mlir::Pass> circt::calyx::createRemoveGroupsPass() {
