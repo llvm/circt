@@ -123,7 +123,7 @@ def FModuleOp : FIRRTLOp<"module",
   public:
   }];
 
-  let printer = "return ::print(p, *this);";
+  let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
   let verifier = "return ::verifyFModuleOp(*this);";
 }
@@ -180,7 +180,7 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   public:
   }];
 
-  let printer = "return ::print(p, *this);";
+  let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
   let verifier = "return ::verifyFExtModuleOp(*this);";
 }
