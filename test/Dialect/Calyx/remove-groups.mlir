@@ -30,8 +30,6 @@ calyx.program {
 
       // Verify that assignments are guarded by the group's GoOp and the component's go signal.
       // CHECK: calyx.assign %z.go = %z.flag, %[[A_GO_AND_COMPONENT_GO]] ? : i1
-      // CHECK: %[[UPDATED_A_ASSIGN_GUARD:.+]] = comb.and %[[GROUP_A_ASSIGN_GUARD]], %go : i1
-
       calyx.group @A {
         %A.go = calyx.group_go %signal_on, %group_A_go_guard ? : i1
         calyx.assign %z.go = %z.flag, %A.go ? : i1
@@ -42,6 +40,7 @@ calyx.program {
       %fsm_step_1 = hw.constant 1 : i2
       %seq_group_done_guard = comb.icmp eq %fsm.out, %fsm_step_1 : i2
 
+      // CHECK: %[[UPDATED_A_ASSIGN_GUARD:.+]] = comb.and %[[GROUP_A_ASSIGN_GUARD]], %go : i1
       // Verify that the component's done signal is assigned the top-level group's DoneOp.
       // CHECK: calyx.assign %done = {{.+}}, %[[SEQ_GROUP_DONE_GUARD]] ? : i1
 
