@@ -141,7 +141,6 @@ void Emitter::emitComponent(ComponentOp op) {
 
   emitWires(wires);
   emitControl(control);
-
   reduceIndent();
 }
 
@@ -183,6 +182,7 @@ void Emitter::emitWires(WiresOp op) {
     for (auto &&bodyOp : *op.getBody()) {
       TypeSwitch<Operation *>(&bodyOp)
           .Case<GroupOp>([&](auto op) { emitGroup(op); })
+          // TODO(Calyx): Assignments
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside wires section");
           });
@@ -192,10 +192,12 @@ void Emitter::emitWires(WiresOp op) {
 
 void Emitter::emitGroup(GroupOp op) {
   emitCalyxSection(
+      // TODO(Calyx): Assignments, GoOp, DoneOp, combinational guards.
       "group", [&]() {}, op.sym_name());
 }
 
 void Emitter::emitControl(ControlOp op) {
+  // TODO(Calyx): SeqOp, EnableOp.
   emitCalyxSection("control", [&]() {});
 }
 
