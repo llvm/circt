@@ -51,15 +51,6 @@ static IntegerAttr getIntZerosAttr(Type type) {
   return getIntAttr(type, APInt(width, 0));
 }
 
-/// Return an IntegerAttr filled with ones for the specified FIRRTL integer
-/// type.  This handles both the known width and unknown width case.
-[[maybe_unused]] static IntegerAttr getIntOnesAttr(Type type) {
-  int32_t width = abs(type.cast<IntType>().getWidthOrSentinel());
-  if (width == 0)
-    return {};
-  return getIntAttr(type, APInt(width, -1ULL, /*isSigned*/ true));
-}
-
 /// Return true if this operation's operands and results all have known width,
 /// or if the result has zero width result (which we cannot constant fold).
 /// This only works for integer types.
