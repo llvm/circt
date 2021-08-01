@@ -14,6 +14,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/Support/FormatVariadic.h"
 
 using namespace circt;
 using namespace comb;
@@ -155,6 +156,18 @@ static unsigned getTotalWidth(ValueRange inputs) {
     resultWidth += input.getType().cast<IntegerType>().getWidth();
   }
   return resultWidth;
+}
+
+static LogicalResult verifyConcatOp(ConcatOp concatOp) {
+  unsigned tyWidth = concatOp.getType().getWidth();
+  unsigned operandsTotalWidth = getTotalWidth(concatOp.inputs());
+  if (tyWidth != operandsTotalWidth)
+    return concatOp.emitOpError(llvm::formatv(
+        "ConcatOp requires operands total width to match type width. operands "
+        "totalWidth is {0}, but concatOp type width is {1}",
+        operandsTotalWidth, tyWidth));
+
+  return success();
 }
 
 void ConcatOp::build(OpBuilder &builder, OperationState &result,

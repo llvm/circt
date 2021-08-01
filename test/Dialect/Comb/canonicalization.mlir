@@ -135,9 +135,9 @@ hw.module @subCst(%a: i4) -> (%o1: i4) {
 // CHECK-NEXT:    [[RES:%[0-9]+]] = comb.icmp uge %arg0, %arg1 : i9
 // CHECK-NEXT:    hw.output [[RES]] : i1
 hw.module @compareStrengthReductionRemoveSuffixAndPrefix(%arg0: i9, %arg1: i9) -> (%o : i1) {
-  %0 = comb.concat %arg0, %arg0, %arg1: (i9, i9, i9) -> i18
-  %1 = comb.concat %arg0, %arg1, %arg1: (i9, i9, i9) -> i18
-  %2 = comb.icmp uge %0, %1 : i18
+  %0 = comb.concat %arg0, %arg0, %arg1: (i9, i9, i9) -> i27
+  %1 = comb.concat %arg0, %arg1, %arg1: (i9, i9, i9) -> i27
+  %2 = comb.icmp uge %0, %1 : i27
   hw.output %2 : i1
 }
 
