@@ -8,17 +8,59 @@
 #include "circt/Dialect/HIR/Analysis/FanoutAnalysis.h"
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Dialect/HIR/IR/helper.h"
+#include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include <iostream>
 using namespace circt;
 using namespace hir;
 namespace {
 enum MemrefPortKind { RD = 0, WR = 1, RW = 2 };
-struct PortToBusMapping {
-  MemrefPortKind portKind;
+struct MemrefPortInterface {
   Value addrBus;
+  Value addrValidBus;
   Value rdEnableBus;
+  uint64_t rdLatency;
   Value rdDataBus;
   Value wrEnableBus;
   Value wrDataBus;
+};
+class MultiDimCounter {
+public:
+  MultiDimCounter(ArrayRef<int64_t> shape) : shape(shape) {
+    indices = SmallVector<uint64_t>(shape.size(), 0);
+  }
+  ArrayRef<uint64_t> getIndices() { return indices; }
+  LogicalResult inc() { return inc(indices.size() - 1); }
+  uint64_t getLinearIdx() {
+    uint64_t linearIdx = indices[indices.size() - 1];
+    for (int i = indices.size() - 2; i >= 0; i--) {
+      linearIdx += indices[i] * (uint64_t)shape[i + 1];
+    }
+    uint64_t size = 1;
+    for (auto s : shape) {
+      size *= s;
+    }
+    if (linearIdx == 12)
+      assert(linearIdx < size);
+    return linearIdx;
+  }
+
+private:
+  LogicalResult inc(uint64_t dim) {
+    assert(dim < indices.size());
+    assert(shape[dim] > 0);
+    if (indices[dim] < (uint64_t)shape[dim] - 1) {
+      indices[dim]++;
+      return success();
+    }
+
+    if (dim == 0)
+      return failure();
+    indices[dim] = 0;
+    return inc(dim - 1);
+  }
+
+  ArrayRef<int64_t> shape;
+  SmallVector<uint64_t> indices;
 };
 /// This pass lowers a hir::MemrefType to hir::BusType.
 /// RD port becomes three separate tensors of (send
@@ -35,19 +77,32 @@ private:
   LogicalResult dispatch(Operation *);
   LogicalResult visitOp(hir::FuncOp);
   LogicalResult visitOp(hir::AllocaOp);
-  LogicalResult visitOp(hir::LoadOp);
-  LogicalResult visitOp(hir::StoreOp);
-  LogicalResult visitOp(hir::CallOp);
+  LogicalResult visitOp(hir::ForOp);
 
 private:
-  DenseMap<Value, SmallVector<PortToBusMapping>> mapMemrefPortToBuses;
+  DenseMap<Value, SmallVector<MemrefPortInterface>> mapMemrefPortToBuses;
   llvm::DenseMap<Value, SmallVector<SmallVector<ListOfUses>>> *uses;
+  Value tstartRegion;
 };
 } // end anonymous namespace
 
 //------------------------------------------------------------------------------
 // Helper functions.
 //------------------------------------------------------------------------------
+Type getTensorElementType(Value tensor) {
+  auto ty = tensor.getType().dyn_cast<mlir::TensorType>();
+  assert(ty);
+  return ty.getElementType();
+}
+LogicalResult convertOp(hir::LoadOp, MemrefPortInterface portInterface,
+                        uint64_t useNum) {
+  return success();
+}
+LogicalResult convertOp(hir::StoreOp, MemrefPortInterface portInterface,
+                        uint64_t useNum) {
+  return success();
+}
+
 mlir::TensorType buildBusTensor(MLIRContext *context, ArrayRef<int64_t> shape,
                                 SmallVector<Type> busElementTypes) {
   SmallVector<BusDirection> busDirections;
@@ -58,66 +113,65 @@ mlir::TensorType buildBusTensor(MLIRContext *context, ArrayRef<int64_t> shape,
       shape, hir::BusType::get(context, busElementTypes, busDirections));
 }
 
-bool isRead(Attribute port) {
-  auto portDict = port.dyn_cast<DictionaryAttr>();
-  auto rdLatencyAttr = portDict.getNamed("rd_latency");
-  auto wrLatencyAttr = portDict.getNamed("wr_latency");
-  assert(rdLatencyAttr || wrLatencyAttr);
-  if (rdLatencyAttr)
-    return true;
-  return false;
-}
-
 bool isWrite(Attribute port) {
   auto portDict = port.dyn_cast<DictionaryAttr>();
-  auto rdLatencyAttr = portDict.getNamed("rd_latency");
   auto wrLatencyAttr = portDict.getNamed("wr_latency");
-  assert(rdLatencyAttr || wrLatencyAttr);
   if (wrLatencyAttr)
     return true;
   return false;
 }
 
-void insertBusTypesPerPort(size_t i, Block &bb,
-                           SmallVectorImpl<Type> &inputTypes,
-                           hir::MemrefType memrefTy, DictionaryAttr port,
-                           PortToBusMapping &info) {
+SmallVector<Value> filterMemrefArgs(Block::BlockArgListType args) {
+  SmallVector<Value> memrefArgs;
+  for (auto arg : args)
+    if (arg.getType().isa<hir::MemrefType>())
+      memrefArgs.push_back(arg);
+  return memrefArgs;
+}
+
+void insertBusTypesAndAttrsForMemrefPort(
+    size_t i, Block &bb, SmallVectorImpl<DictionaryAttr> &inputAttrs,
+    hir::MemrefType memrefTy, DictionaryAttr port,
+    MemrefPortInterface &portInterface) {
   auto *context = memrefTy.getContext();
-  Type validTy = buildBusTensor(context, memrefTy.filterShape(BANK),
-                                {IntegerType::get(context, 1)});
+  Type enableTy = buildBusTensor(context, memrefTy.filterShape(BANK),
+                                 {IntegerType::get(context, 1)});
   Type addrTy = buildBusTensor(
       context, memrefTy.filterShape(BANK),
       {IntegerType::get(context,
                         helper::clog2(memrefTy.getNumElementsPerBank()))});
   Type dataTy = buildBusTensor(context, memrefTy.filterShape(BANK),
                                {memrefTy.getElementType()});
+  DictionaryAttr sendAttr = helper::getDictionaryAttr(
+      context, "hir.bus.ports",
+      ArrayAttr::get(context, StringAttr::get(context, "send")));
+  DictionaryAttr recvAttr = helper::getDictionaryAttr(
+      context, "hir.bus.ports",
+      ArrayAttr::get(context, StringAttr::get(context, "recv")));
+
   if (memrefTy.getNumElementsPerBank() > 1) {
-    info.addrBus = bb.insertArgument(i, addrTy);
-    inputTypes.push_back(addrTy);
-  }
-  if (isRead(port)) {
-    // Enable bus will come first in the list, then data bus.
-    info.rdDataBus = bb.insertArgument(i, validTy);
-    info.rdEnableBus = bb.insertArgument(i, dataTy);
-    inputTypes.push_back(validTy);
-    inputTypes.push_back(dataTy);
-  }
-  if (isWrite(port)) {
-    // Enable bus will come first in the list, then data bus.
-    info.wrDataBus = bb.insertArgument(i, validTy);
-    info.wrEnableBus = bb.insertArgument(i, dataTy);
-    inputTypes.push_back(validTy);
-    inputTypes.push_back(dataTy);
+    portInterface.addrValidBus = bb.insertArgument(i, enableTy);
+    inputAttrs.insert(inputAttrs.begin() + i++, sendAttr);
+    portInterface.addrBus = bb.insertArgument(i, addrTy);
+    inputAttrs.insert(inputAttrs.begin() + i++, sendAttr);
   }
 
-  if (isRead(port) && isWrite(port))
-    info.portKind = RW;
-  else if (isRead(port))
-    info.portKind = RD;
-  else if (isWrite(port))
-    info.portKind = WR;
-  else
-    assert(false);
+  if (auto rdLatency = helper::getRdLatency(port)) {
+    // Enable bus will come first in the list, then data bus.
+    portInterface.rdEnableBus = bb.insertArgument(i, enableTy);
+    inputAttrs.insert(inputAttrs.begin() + i++, sendAttr);
+    portInterface.rdDataBus = bb.insertArgument(i, dataTy);
+    inputAttrs.insert(inputAttrs.begin() + i++, recvAttr);
+    portInterface.rdLatency = rdLatency.getValue();
+  }
+
+  if (isWrite(port)) {
+    // Enable bus will come first in the list, then data bus.
+    portInterface.wrEnableBus = bb.insertArgument(i, enableTy);
+    inputAttrs.insert(inputAttrs.begin() + i++, sendAttr);
+    portInterface.wrDataBus = bb.insertArgument(i, dataTy);
+    inputAttrs.insert(inputAttrs.begin() + i++, sendAttr);
+  }
 }
 
 void addBusAttrsPerPort(size_t i, SmallVectorImpl<DictionaryAttr> &attrs,
@@ -128,7 +182,7 @@ void addBusAttrsPerPort(size_t i, SmallVectorImpl<DictionaryAttr> &attrs,
         context, "hir.bus.ports",
         ArrayAttr::get(context, StringAttr::get(context, "send"))));
   }
-  if (isRead(port)) {
+  if (helper::getRdLatency(port)) {
     attrs.push_back(helper::getDictionaryAttr(
         context, "hir.bus.ports",
         ArrayAttr::get(context, StringAttr::get(context, "send"))));
@@ -148,130 +202,319 @@ void addBusAttrsPerPort(size_t i, SmallVectorImpl<DictionaryAttr> &attrs,
 
 void insertBusArguments(
     hir::FuncOp op,
-    DenseMap<Value, SmallVector<PortToBusMapping>> &mapMemrefPortToBuses) {
-  SmallVector<Type> inputTypes;
-  SmallVector<DictionaryAttr> inputAttrs;
+    DenseMap<Value, SmallVector<MemrefPortInterface>> &mapMemrefPortToBuses) {
   auto funcTy = op.funcTy().dyn_cast<hir::FuncType>();
   auto &bb = op.getFuncBody().front();
-  for (int i = bb.getNumArguments() - 1; i >= 0; i--) {
+  SmallVector<DictionaryAttr> inputAttrs;
+
+  // initialize with old attrs.
+  for (auto attr : funcTy.getInputAttrs())
+    inputAttrs.push_back(attr);
+
+  // insert new types to bb args and new attrs to inputAttrs.
+  for (int i = bb.getNumArguments() - 2 /*last arg is timetype*/; i >= 0; i--) {
     Value arg = bb.getArgument(i);
     if (auto memrefTy = arg.getType().dyn_cast<hir::MemrefType>()) {
-      auto ports = helper::extractMemrefPortsFromDict(inputAttrs[i]);
-      for (auto port : ports) {
+      auto ports =
+          helper::extractMemrefPortsFromDict(funcTy.getInputAttrs()[i]);
+      SmallVector<MemrefPortInterface> memrefPortInterfaces;
+      for (auto port : ports.getValue()) {
         auto portDict = port.dyn_cast<DictionaryAttr>();
         assert(portDict);
-        PortToBusMapping info;
-        insertBusTypesPerPort(i, bb, inputTypes, memrefTy, portDict, info);
-        addBusAttrsPerPort(i, inputAttrs, memrefTy, portDict);
+        MemrefPortInterface portInterface;
+        insertBusTypesAndAttrsForMemrefPort(i, bb, inputAttrs, memrefTy,
+                                            portDict, portInterface);
+        memrefPortInterfaces.push_back(portInterface);
       }
+      mapMemrefPortToBuses[arg] = memrefPortInterfaces;
     }
-    inputTypes.push_back(funcTy.getInputTypes()[i]);
-    inputAttrs.push_back(funcTy.getInputAttrs()[i]);
   }
-  auto newFuncTy =
-      hir::FuncType::get(op.getContext(), inputTypes, inputAttrs,
-                         funcTy.getResultTypes(), funcTy.getResultAttrs());
-  op.funcTyAttr(TypeAttr::get(newFuncTy));
+  op.updateArguments(inputAttrs);
 }
 
 void removeMemrefArguments(hir::FuncOp op) {
-  auto *context = op.getContext();
   auto funcTy = op.funcTy().dyn_cast<hir::FuncType>();
   SmallVector<Type> inputTypes;
   SmallVector<DictionaryAttr> inputAttrs;
   auto &bb = op.getFuncBody().front();
-  for (int i = bb.getNumArguments() - 1; i >= 0; i--) {
+
+  // initialize with old attrs.
+  for (auto attr : funcTy.getInputAttrs())
+    inputAttrs.push_back(attr);
+
+  for (int i = bb.getNumArguments() - 2 /*last arg is timetype*/; i >= 0; i--) {
     if (bb.getArgument(i).getType().isa<hir::MemrefType>()) {
       bb.eraseArgument(i);
+      inputAttrs.erase(inputAttrs.begin() + i);
     } else {
-      inputTypes.push_back(funcTy.getInputTypes()[i]);
-      inputAttrs.push_back(funcTy.getInputAttrs()[i]);
     }
   }
-  auto newFuncTy =
-      hir::FuncType::get(context, inputTypes, inputAttrs,
-                         funcTy.getResultTypes(), funcTy.getResultAttrs());
-  op.funcTyAttr(TypeAttr::get(newFuncTy));
+  op.updateArguments(inputAttrs);
 }
 
-void initBusesForNoMemrefUse(uint64_t bank, PortToBusMapping portToBusMapping) {
-  // TODO
-}
-PortToBusMapping defineRdBuses(uint64_t bank, uint64_t numUses,
-                               PortToBusMapping portToBusMapping) {
-  PortToBusMapping buses;
-  // TODO
-  return buses;
-}
-
-void connectRdBuses(uint64_t bank, PortToBusMapping rdBusesPerBank,
-                    PortToBusMapping buses) {
-  // TODO
-}
-
-llvm::Optional<PortToBusMapping>
-defineBusesForMemrefUse(uint64_t bank, ListOfUses uses,
-                        PortToBusMapping portToBusMapping) {
-  auto portKind = portToBusMapping.portKind;
-  if (uses.size() == 0) {
-    initBusesForNoMemrefUse(bank, portToBusMapping);
-    return llvm::None;
+Value extractBusFromTensor(OpBuilder &builder, Value busTensor,
+                           ArrayRef<uint64_t> indices, ArrayAttr ports) {
+  auto tensorTy = busTensor.getType().dyn_cast<mlir::TensorType>();
+  assert(tensorTy);
+  auto busTy = tensorTy.getElementType().dyn_cast<hir::BusType>();
+  assert(busTy);
+  SmallVector<Value> cIndices;
+  for (auto idx : indices) {
+    cIndices.push_back(builder.create<mlir::ConstantOp>(
+        builder.getUnknownLoc(), builder.getIndexType(),
+        builder.getIndexAttr(idx)));
   }
-  if (portKind == RD) {
-    auto rdBuses = defineRdBuses(bank, uses.size(), portToBusMapping);
-    connectRdBuses(bank, rdBuses, portToBusMapping);
-    return rdBuses;
-  }
-  if (portKind == WR) {
-    auto wrBuses = defineWrBuses(bank, uses.size(), portToBusMapping);
-    connectWrBuses(bank, wrBuses, portToBusMapping);
-    return wrBuses;
-  }
-  auto rwBuses = defineRWBuses(bank, uses.size(), portToBusMapping);
-  connectRWBuses(bank, rwBuses, portToBusMapping);
-  return rwBuses;
+  return builder.create<hir::TensorExtract>(builder.getUnknownLoc(), busTy,
+                                            busTensor, cIndices, ports);
+}
+void initUnconnectedValidBus(OpBuilder &builder, Value busTensor,
+                             ArrayRef<uint64_t> indices) {
+  if (!busTensor)
+    return;
+
+  assert(busTensor.getType()
+             .dyn_cast<mlir::TensorType>()
+             .getElementType()
+             .dyn_cast<hir::BusType>()
+             .getElementTypes()
+             .size() == 1);
+
+  Value validBus = extractBusFromTensor(builder, busTensor, indices,
+                                        builder.getStrArrayAttr({"send"}));
+  builder.create<hir::AssignOp>(builder.getUnknownLoc(),
+                                builder.getI64IntegerAttr(0), validBus);
 }
 
-LogicalResult replacePortUses(PortToBusMapping portToBusMapping,
-                              SmallVector<ListOfUses> portUses) {
-  uint64_t numBanks = portUses.size();
-  for (uint64_t bank = 0; bank < numBanks; bank++) {
-    auto buses =
-        defineBusesForMemrefUse(bank, portUses[bank], portToBusMapping);
-    for (uint64_t use = 0; use < portUses[bank].size(); use++) {
-      if (failed(convertLoadOp(portUses[bank][use], buses, use)))
+/// Connect the valid buses of unused banks to zero and the other buses to 'X'.
+// FIXME: For now we are going to drive only the valid buses. Later use SendOp
+// with NoneType $value to mean that it is connected with 'X' or 'Z'.
+void initBusesForNoMemrefUse(OpBuilder &builder, ArrayRef<uint64_t> bankIndices,
+                             MemrefPortInterface portInterface) {
+
+  initUnconnectedValidBus(builder, portInterface.rdEnableBus, bankIndices);
+  initUnconnectedValidBus(builder, portInterface.wrEnableBus, bankIndices);
+}
+
+MemrefPortInterface defineBusTensors(OpBuilder &builder,
+                                     MemrefPortInterface portInterface,
+                                     uint64_t numUses) {
+  MemrefPortInterface busTensor;
+  auto shape = SmallVector<int64_t>({(int64_t)numUses});
+
+  if (portInterface.addrValidBus)
+    busTensor.addrValidBus = builder.create<hir::BusInstantiateOp>(
+        builder.getUnknownLoc(),
+        mlir::RankedTensorType::get(
+            shape, getTensorElementType(portInterface.addrValidBus)));
+
+  if (portInterface.addrBus)
+    busTensor.addrBus = builder.create<hir::BusInstantiateOp>(
+        builder.getUnknownLoc(),
+        mlir::RankedTensorType::get(
+            shape, getTensorElementType(portInterface.addrBus)));
+
+  if (portInterface.rdEnableBus)
+    busTensor.rdEnableBus = builder.create<hir::BusInstantiateOp>(
+        builder.getUnknownLoc(),
+        mlir::RankedTensorType::get(
+            shape, getTensorElementType(portInterface.rdEnableBus)));
+  if (portInterface.rdDataBus)
+    busTensor.rdDataBus = builder.create<hir::BusInstantiateOp>(
+        builder.getUnknownLoc(),
+        mlir::RankedTensorType::get(
+            shape, getTensorElementType(portInterface.rdDataBus)));
+  if (portInterface.wrEnableBus)
+    busTensor.wrEnableBus = builder.create<hir::BusInstantiateOp>(
+        builder.getUnknownLoc(),
+        mlir::RankedTensorType::get(
+            shape, getTensorElementType(portInterface.wrEnableBus)));
+  if (portInterface.wrDataBus)
+    busTensor.wrDataBus = builder.create<hir::BusInstantiateOp>(
+        builder.getUnknownLoc(),
+        mlir::RankedTensorType::get(
+            shape, getTensorElementType(portInterface.wrDataBus)));
+  return busTensor;
+}
+
+void createValidCombineCallOp(OpBuilder &builder, Value destBusTensor,
+                              ArrayRef<uint64_t> bankIndices, Value busTensor,
+                              Value tstartRegion) {
+
+  Value bus = extractBusFromTensor(builder, destBusTensor, bankIndices,
+                                   builder.getStrArrayAttr({"send"}));
+  auto sendAttr = helper::getDictionaryAttr(builder, "hir.bus.ports",
+                                            builder.getStrArrayAttr({"send"}));
+  auto recvAttr = helper::getDictionaryAttr(builder, "hir.bus.ports",
+                                            builder.getStrArrayAttr({"recv"}));
+
+  Type funcTy = hir::FuncType::get(builder.getContext(),
+                                   {bus.getType(), busTensor.getType()},
+                                   {sendAttr, recvAttr}, {}, {});
+
+  builder.create<hir::CallOp>(
+      builder.getUnknownLoc(), SmallVector<Type>(),
+      FlatSymbolRefAttr::get(builder.getContext(), "hir_valid_combine"),
+      TypeAttr::get(funcTy), SmallVector<Value>({bus, busTensor}), tstartRegion,
+      IntegerAttr());
+}
+void createBusBroadcastCallOp(OpBuilder &builder, Value sourceBusTensor,
+                              ArrayRef<uint64_t> bankIndices,
+                              Value destBusValidTensor, Value destBusTensor,
+                              Value tstartRegion) {
+
+  Value sourceBus = extractBusFromTensor(builder, sourceBusTensor, bankIndices,
+                                         builder.getStrArrayAttr({"recv"}));
+  auto sendAttr = helper::getDictionaryAttr(builder, "hir.bus.ports",
+                                            builder.getStrArrayAttr({"send"}));
+  auto recvAttr = helper::getDictionaryAttr(builder, "hir.bus.ports",
+                                            builder.getStrArrayAttr({"recv"}));
+
+  Type funcTy =
+      hir::FuncType::get(builder.getContext(),
+                         {destBusTensor.getType(), destBusValidTensor.getType(),
+                          sourceBus.getType()},
+                         {sendAttr, recvAttr, recvAttr}, {}, {});
+
+  builder.create<hir::CallOp>(
+      builder.getUnknownLoc(), SmallVector<Type>(),
+      FlatSymbolRefAttr::get(builder.getContext(), "hir_bus_broadcast"),
+      TypeAttr::get(funcTy),
+      SmallVector<Value>({destBusTensor, destBusValidTensor, sourceBus}),
+      tstartRegion, IntegerAttr());
+}
+
+void createBusMuxCallOp(OpBuilder &builder, Value destBusTensor,
+                        ArrayRef<uint64_t> bankIndices, Value busValidTensor,
+                        Value busTensor, Value tstartRegion) {
+
+  Value bus = extractBusFromTensor(builder, destBusTensor, bankIndices,
+                                   builder.getStrArrayAttr({"send"}));
+  auto sendAttr = helper::getDictionaryAttr(builder, "hir.bus.ports",
+                                            builder.getStrArrayAttr({"send"}));
+  auto recvAttr = helper::getDictionaryAttr(builder, "hir.bus.ports",
+                                            builder.getStrArrayAttr({"recv"}));
+
+  Type funcTy = hir::FuncType::get(
+      builder.getContext(),
+      {bus.getType(), busValidTensor.getType(), busTensor.getType()},
+      {sendAttr, recvAttr, recvAttr}, {}, {});
+
+  builder.create<hir::CallOp>(
+      builder.getUnknownLoc(), SmallVector<Type>(),
+      FlatSymbolRefAttr::get(builder.getContext(), "hir_bus_mux"),
+      TypeAttr::get(funcTy),
+      SmallVector<Value>({bus, busValidTensor, busTensor}), tstartRegion,
+      IntegerAttr());
+}
+
+void connectUseAndPortInterfaces(OpBuilder &builder,
+                                 ArrayRef<uint64_t> bankIndices,
+                                 MemrefPortInterface useInterface,
+                                 MemrefPortInterface portInterface,
+                                 Value tstartRegion) {
+  // TODO
+  // extract-tensor from port interface.
+  // call memref_mux on addr, data-out and valid buses.
+  // call memref_broadcast on data-in bus.
+  if (portInterface.addrValidBus)
+    createValidCombineCallOp(builder, portInterface.addrValidBus, bankIndices,
+                             useInterface.addrValidBus, tstartRegion);
+  if (portInterface.addrBus)
+    createBusMuxCallOp(builder, portInterface.addrBus, bankIndices,
+                       useInterface.addrValidBus, useInterface.addrBus,
+                       tstartRegion);
+  if (portInterface.rdEnableBus)
+    createValidCombineCallOp(builder, portInterface.rdEnableBus, bankIndices,
+                             useInterface.rdEnableBus, tstartRegion);
+  if (portInterface.rdDataBus) {
+    Value delayedRdEnableBus = builder.create<hir::DelayOp>(
+        builder.getUnknownLoc(), useInterface.rdEnableBus.getType(),
+        useInterface.rdEnableBus,
+        builder.getI64IntegerAttr(portInterface.rdLatency), tstartRegion,
+        IntegerAttr());
+    createBusBroadcastCallOp(builder, portInterface.rdDataBus, bankIndices,
+                             delayedRdEnableBus, useInterface.rdDataBus,
+                             tstartRegion);
+  }
+
+  if (portInterface.wrEnableBus)
+    createValidCombineCallOp(builder, portInterface.wrEnableBus, bankIndices,
+                             useInterface.wrEnableBus, tstartRegion);
+  if (portInterface.wrDataBus)
+    createBusMuxCallOp(builder, portInterface.wrDataBus, bankIndices,
+                       useInterface.wrEnableBus, useInterface.wrDataBus,
+                       tstartRegion);
+}
+
+MemrefPortInterface createBusInterfaceForBankUse(
+    OpBuilder &builder, MemrefPortInterface portInterface,
+    ArrayRef<uint64_t> bankIndices, uint64_t numUses, Value tstartRegion) {
+  if (numUses == 0) {
+    initBusesForNoMemrefUse(builder, bankIndices, portInterface);
+    return MemrefPortInterface();
+  }
+  auto useInterface = defineBusTensors(builder, portInterface, numUses);
+  connectUseAndPortInterfaces(builder, bankIndices, useInterface, portInterface,
+                              tstartRegion);
+  return useInterface;
+}
+
+LogicalResult replacePortUses(OpBuilder &builder, Location loc,
+                              ArrayRef<int64_t> bankShape,
+                              MemrefPortInterface portInterface,
+                              SmallVector<ListOfUses> uses,
+                              Value tstartRegion) {
+  MultiDimCounter bank(bankShape);
+  do {
+    if (!(uses.size() > bank.getLinearIdx())) {
+      mlir::emitError(loc) << "uses.size()= " << uses.size()
+                           << "bank.getLinearIdx()=" << bank.getLinearIdx();
+      assert(uses.size() > bank.getLinearIdx());
+    }
+    uint64_t numUses = uses[bank.getLinearIdx()].size();
+    auto busInterfaceForLoadStoreOps = createBusInterfaceForBankUse(
+        builder, portInterface, bank.getIndices(), numUses, tstartRegion);
+    for (uint64_t use = 0; use < numUses; use++) {
+      if (auto op = dyn_cast<hir::LoadOp>(uses[bank.getLinearIdx()][use])) {
+        if (failed(convertOp(op, busInterfaceForLoadStoreOps, use)))
+          return failure();
+      } else if (auto op =
+                     dyn_cast<hir::StoreOp>(uses[bank.getLinearIdx()][use])) {
+        if (failed(convertOp(op, busInterfaceForLoadStoreOps, use)))
+          return failure();
+      }
+    }
+  } while (succeeded(bank.inc()));
+  return success();
+}
+
+LogicalResult replaceMemrefArgUses(
+    hir::FuncOp op,
+    DenseMap<Value, SmallVector<MemrefPortInterface>> mapMemrefPortToBuses,
+    DenseMap<Value, SmallVector<SmallVector<ListOfUses>>> &uses,
+    Value tstartRegion) {
+  OpBuilder builder(op);
+  auto &entryBlock = op.getFuncBody().front();
+  builder.setInsertionPointToStart(&entryBlock);
+
+  // For each memref-port-bank define new tensor<bus> for its uses.
+  for (auto memref : filterMemrefArgs(entryBlock.getArguments())) {
+    SmallVector<MemrefPortInterface> &memrefPortInterface =
+        mapMemrefPortToBuses[memref];
+    SmallVector<SmallVector<ListOfUses>> memrefUses = uses[memref];
+    auto memrefTy = memref.getType().dyn_cast<hir::MemrefType>();
+    for (uint64_t port = 0; port < memrefPortInterface.size(); port++) {
+      MemrefPortInterface portInterface = memrefPortInterface[port];
+      SmallVector<ListOfUses> portUses = memrefUses[port];
+      if (failed(replacePortUses(builder, op.getLoc(),
+                                 memrefTy.filterShape(BANK), portInterface,
+                                 portUses, tstartRegion)))
         return failure();
     }
   }
   return success();
 }
 
-LogicalResult replaceMemrefUses(
-    hir::FuncOp op,
-    DenseMap<Value, SmallVector<PortToBusMapping>> mapMemrefPortToBuses,
-    DenseMap<Value, SmallVector<SmallVector<ListOfUses>>> &uses) {
-  OpBuilder builder(op);
-  builder.setInsertionPointToStart(&op.getFuncBody().front());
-  // Create a list of memref input args.
-  SmallVector<Value> memrefArgs;
-  for (auto arg : op.getFuncBody().front().getArguments())
-    if (arg.getType().isa<hir::MemrefType>())
-      memrefArgs.push_back(arg);
-
-  // For each memref-port-bank define new tensor<bus> depending on the number
-  // of uses and portKind.
-  for (auto memref : memrefArgs) {
-    SmallVector<PortToBusMapping> &portsToBusMapping =
-        mapMemrefPortToBuses[memref];
-    SmallVector<SmallVector<ListOfUses>> memrefUses = uses[memref];
-    for (uint64_t port = 0; port < portsToBusMapping.size(); port++) {
-      PortToBusMapping portToBusMapping = portsToBusMapping[port];
-      SmallVector<ListOfUses> portUses = memrefUses[port];
-      if (failed(replacePortUses(portToBusMapping, portUses)))
-        return failure();
-    }
-  }
-}
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
@@ -279,13 +522,28 @@ LogicalResult replaceMemrefUses(
 //------------------------------------------------------------------------------
 LogicalResult MemrefLoweringPass::visitOp(hir::FuncOp op) {
   insertBusArguments(op, mapMemrefPortToBuses);
+  tstartRegion = op.getTimeVar();
+  // if (failed(visitRegion(op.getFuncBody())))
+  //  return failure();
 
-  if (failed(visitRegion(op.getFuncBody())))
+  if (failed(
+          replaceMemrefArgUses(op, mapMemrefPortToBuses, *uses, tstartRegion)))
     return failure();
 
-  removeMemrefArguments(op);
-  if (failed(replaceMemrefUses(op, mapMemrefPortToBuses, *uses)))
+  // removeMemrefArguments(op);
+
+  return success();
+}
+
+LogicalResult MemrefLoweringPass::visitOp(hir::ForOp op) {
+  tstartRegion = op.getIterTimeVar();
+  if (failed(visitRegion(op.getLoopBody())))
     return failure();
+  return success();
+}
+
+LogicalResult MemrefLoweringPass::visitOp(hir::AllocaOp op) {
+  op.emitWarning("MemrefLoweringPass : AllocaOp not implemented yet.");
   return success();
 }
 
@@ -295,18 +553,12 @@ LogicalResult MemrefLoweringPass::visitRegion(Region &region) {
     if (auto op = dyn_cast<hir::FuncOp>(operation)) {
       if (failed(visitOp(op)))
         return failure();
+    } else if (auto op = dyn_cast<hir::ForOp>(operation)) {
+      if (failed(visitOp(op)))
+        return failure();
     } else if (auto op = dyn_cast<hir::AllocaOp>(operation)) {
       if (failed(visitOp(op)))
         return failure();
-    } else if (auto op = dyn_cast<hir::LoadOp>(operation)) {
-      if (failed(visitOp(op)))
-        return failure();
-    } else if (auto op = dyn_cast<hir::StoreOp>(operation)) {
-      if (failed(visitOp(op)))
-        return failure();
-    } else if (auto op = dyn_cast<hir::CallOp>(operation)) {
-      return op.emitError("MemrefLoweringPass does not support CallOp. "
-                          "Inline the functions.");
     }
   }
   return success();

@@ -87,6 +87,11 @@ LogicalResult CallOp::canonicalize(CallOp op, PatternRewriter &rewriter) {
   return splitOffsetIntoSeparateOp(op, rewriter);
 }
 
+LogicalResult CallInstanceOp::canonicalize(CallInstanceOp op,
+                                           PatternRewriter &rewriter) {
+  return splitOffsetIntoSeparateOp(op, rewriter);
+}
+
 LogicalResult YieldOp::canonicalize(YieldOp op,
                                     ::mlir::PatternRewriter &rewriter) {
   return splitOffsetIntoSeparateOp(op, rewriter);

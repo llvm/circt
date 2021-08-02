@@ -1,6 +1,7 @@
 #ifndef DIALECT_HIR_TRANSFORMS_PASSDETAILS_H
 #define DIALECT_HIR_TRANSFORMS_PASSDETAILS_H
 #include "circt/Dialect/HIR/IR/HIR.h"
+#include "circt/Dialect/HIR/IR/HIRDialect.h"
 #include "circt/Dialect/HIR/Transforms/Passes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"

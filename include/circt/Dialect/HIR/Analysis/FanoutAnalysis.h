@@ -14,6 +14,8 @@ private:
   void visitOp(hir::LoadOp);
   void visitOp(hir::StoreOp);
   void visitOp(hir::CallOp);
+  void visitOp(hir::FuncOp);
+  void visitOp(hir::AllocaOp);
 
 public:
   llvm::DenseMap<Value, SmallVector<SmallVector<ListOfUses>>>

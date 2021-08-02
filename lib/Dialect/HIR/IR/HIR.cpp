@@ -6,6 +6,7 @@
 
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Dialect/HIR/IR/HIRDialect.h"
+#include "circt/Dialect/HIR/IR/HIROpSyntax.h"
 #include "circt/Dialect/HIR/IR/helper.h"
 #include "mlir/Dialect/CommonFolders.h"
 #include "mlir/IR/Attributes.h"
@@ -99,6 +100,7 @@ ParseResult parseBusPortsAttr(OpAsmParser &parser,
                          parser.getBuilder().getContext(), busPort)}))));
   return success();
 }
+
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
@@ -155,21 +157,25 @@ LogicalResult FuncType::verify(function_ref<InFlightDiagnostic()> emitError,
   for (size_t i = 0; i < inputTypes.size(); i++) {
     if (helper::isBuiltinSizedType(inputTypes[i])) {
       if (failed(verifyDelayAttribute(emitError, inputAttrs[i])))
-        return emitError() << "Expected hir.delay attribute to be an "
-                              "IntegerAttr for input arg"
+        return emitError() << "Expected hir.delay IntegerAttr for input arg"
                            << std::to_string(i) << ".";
     } else if (inputTypes[i].dyn_cast<hir::MemrefType>()) {
       if (failed(verifyMemrefPortsAttribute(emitError, inputAttrs[i])))
-        return emitError() << "Expected hir.memref.ports attribute to be an "
-                              "ArrayAttr for input arg"
-                           << std::to_string(i) << ".";
+        return emitError()
+               << "Expected hir.memref.ports ArrayAttr for input arg"
+               << std::to_string(i) << ".";
     } else if (inputTypes[i].dyn_cast<hir::BusType>()) {
       if (failed(verifyBusPortsAttribute(emitError, inputAttrs[i])))
-        return emitError() << "Expected hir.bus.ports attribute to be an "
-                              "ArrayAttr for input arg"
+        return emitError() << "Expected hir.bus.ports ArrayAttr for input arg"
+                           << std::to_string(i) << ".";
+    } else if (auto ty = inputTypes[i].dyn_cast<mlir::TensorType>()) {
+      if (!ty.getElementType().isa<hir::BusType>())
+        return emitError() << "Expected a tensor of sized type or hir.bus.";
+      if (failed(verifyBusPortsAttribute(emitError, inputAttrs[i])))
+        return emitError() << "Expected hir.bus.ports ArrayAttr for input arg"
                            << std::to_string(i) << ".";
     } else if (inputTypes[i].dyn_cast<hir::TimeType>()) {
-      return success();
+      continue;
     } else {
       return emitError()
              << "Expected MLIR-builtin-type or hir::MemrefType or "
@@ -224,22 +230,14 @@ LogicalResult FuncType::verify(function_ref<InFlightDiagnostic()> emitError,
 ///   `:` ($operand (delay $delay^)?) `->` ($results)
 
 static ParseResult parseCallOp(OpAsmParser &parser, OperationState &result) {
-  OpAsmParser::OperandType calleeVar;
+  mlir::FlatSymbolRefAttr calleeAttr;
   Type calleeTy;
   SmallVector<OpAsmParser::OperandType, 4> operands;
-  OpAsmParser::OperandType tstart;
-  OpAsmParser::OperandType offset;
-  FlatSymbolRefAttr calleeAttr;
-  bool calleeIsSymbol = false;
+  llvm::Optional<OpAsmParser::OperandType> tstart;
+  IntegerAttr offsetAttr;
 
-  mlir::OptionalParseResult res = parser.parseOptionalOperand(calleeVar);
-  if ((!res.hasValue()) || res.getValue()) {
-    if (parser.parseAttribute(calleeAttr,
-                              parser.getBuilder().getType<::mlir::NoneType>(),
-                              "callee", result.attributes))
-      return failure();
-    calleeIsSymbol = true;
-  }
+  if (parser.parseAttribute(calleeAttr))
+    return failure();
 
   if (parser.parseLParen())
     return failure();
@@ -251,16 +249,7 @@ static ParseResult parseCallOp(OpAsmParser &parser, OperationState &result) {
     return failure();
   if (parser.parseKeyword("at"))
     return failure();
-
-  if (parser.parseOperand(tstart))
-    return failure();
-
-  bool isOffsetPresent = false;
-  if (succeeded(parser.parseOptionalPlus())) {
-    isOffsetPresent = true;
-    if (parser.parseOperand(offset))
-      return failure();
-  }
+  parseTimeAndOffset(parser, tstart, offsetAttr);
 
   // parse arg types and delays.
   if (parser.parseColon())
@@ -276,37 +265,108 @@ static ParseResult parseCallOp(OpAsmParser &parser, OperationState &result) {
   if (!funcTy)
     return parser.emitError(locCalleeTy, "expected !hir.func type!");
 
-  if (!calleeIsSymbol)
-    parser.resolveOperand(calleeVar, calleeTy, result.operands);
-  parser.resolveOperands(operands, funcTy.getFunctionType().getInputs(), argLoc,
-                         result.operands);
-  parser.resolveOperand(tstart, helper::getTimeType(context), result.operands);
-  if (isOffsetPresent)
-    parser.resolveOperand(offset, IndexType::get(context), result.operands);
+  if (parser.resolveOperands(operands, funcTy.getFunctionType().getInputs(),
+                             argLoc, result.operands))
+    return failure();
+  if (tstart.hasValue())
+    if (parser.resolveOperand(tstart.getValue(), helper::getTimeType(context),
+                              result.operands))
+      return failure();
 
   // add attributes.
   result.addAttribute("operand_segment_sizes",
                       parser.getBuilder().getI32VectorAttr(
-                          {static_cast<int32_t>(calleeIsSymbol ? 0 : 1),
-                           static_cast<int32_t>(operands.size()), 1,
-                           static_cast<int32_t>(isOffsetPresent ? 1 : 0)}));
+                          {static_cast<int32_t>(operands.size()),
+                           static_cast<int32_t>(tstart.hasValue() ? 1 : 0)}));
 
+  result.addAttribute("callee", calleeAttr);
   result.addAttribute("funcTy", TypeAttr::get(calleeTy));
+  result.addAttribute("offset", offsetAttr);
   result.addTypes(funcTy.getFunctionType().getResults());
 
   return success();
 }
 
 static void printCallOp(OpAsmPrinter &printer, CallOp op) {
-  if (op.callee().hasValue())
-    printer << "hir.call @" << op.callee();
-  else
-    printer << "hir.call " << op.callee_var();
-  printer << "(" << op.operands() << ") at " << op.tstart();
-  if (op.offset())
-    printer << " + " << op.offset();
+  printer << "hir.call @" << op.callee();
+  printer << "(" << op.operands() << ") at ";
+  printTimeAndOffset(printer, op, op.tstart(), op.offsetAttr());
   printer << " : ";
   printer << op.funcTy();
+}
+
+/// CallInstanceOp
+/// Syntax:
+/// $callee `(` $operands `)` `at` $tstart (`offset` $offset^ )?
+///   `:` ($operand (delay $delay^)?) `->` ($results)
+
+static ParseResult parseCallInstanceOp(OpAsmParser &parser,
+                                       OperationState &result) {
+  OpAsmParser::OperandType callee;
+  Type calleeTy;
+  SmallVector<OpAsmParser::OperandType, 4> operands;
+  llvm::Optional<OpAsmParser::OperandType> tstart;
+  IntegerAttr offsetAttr;
+
+  if (parser.parseOperand(callee))
+    return failure();
+
+  if (parser.parseLParen())
+    return failure();
+
+  llvm::SMLoc argLoc = parser.getCurrentLocation();
+  if (parser.parseOperandList(operands))
+    return failure();
+  if (parser.parseRParen())
+    return failure();
+  if (parser.parseKeyword("at"))
+    return failure();
+  parseTimeAndOffset(parser, tstart, offsetAttr);
+
+  // parse arg types and delays.
+  if (parser.parseColon())
+    return failure();
+
+  auto locCalleeTy = parser.getCurrentLocation();
+  if (parser.parseType(calleeTy))
+    return failure();
+
+  auto *context = parser.getBuilder().getContext();
+  // resolve operands.
+  hir::FuncType funcTy = calleeTy.dyn_cast<hir::FuncType>();
+  if (!funcTy)
+    return parser.emitError(locCalleeTy, "expected !hir.func type!");
+
+  if (parser.resolveOperand(callee, funcTy, result.operands) ||
+      parser.resolveOperands(operands, funcTy.getFunctionType().getInputs(),
+                             argLoc, result.operands))
+    return failure();
+  if (tstart.hasValue())
+    if (parser.resolveOperand(tstart.getValue(), helper::getTimeType(context),
+                              result.operands))
+      return failure();
+
+  // add attributes.
+  result.addAttribute(
+      "operand_segment_sizes",
+      parser.getBuilder().getI32VectorAttr({
+          1,                                              // callee
+          static_cast<int32_t>(operands.size()),          // operands
+          static_cast<int32_t>(tstart.hasValue() ? 1 : 0) // tstart
+      }));
+
+  result.addAttribute("offset", offsetAttr);
+  result.addTypes(funcTy.getFunctionType().getResults());
+
+  return success();
+}
+
+static void printCallInstanceOp(OpAsmPrinter &printer, CallInstanceOp op) {
+  printer << "hir.call.instance " << op.callee();
+  printer << "(" << op.operands() << ") at ";
+  printTimeAndOffset(printer, op, op.tstart(), op.offsetAttr());
+  printer << " : ";
+  printer << op.callee().getType();
 }
 
 /// IfOp
@@ -637,6 +697,7 @@ parseFuncSignature(OpAsmParser &parser, hir::FuncType &funcTy,
   if (failed(parser.parseOptionalRParen())) {
     while (1) {
       // Parse operand and type
+      auto typeLoc = parser.getCurrentLocation();
       if (parseOperandColonType(parser, entryArgs, inputTypes))
         return failure();
 
@@ -651,6 +712,16 @@ parseFuncSignature(OpAsmParser &parser, hir::FuncType &funcTy,
         if (parseMemrefPortsAttr(parser, inputAttrs))
           return failure();
       } else if (inputTypes.back().dyn_cast<hir::BusType>()) {
+        if (parseBusPortsAttr(parser, inputAttrs))
+          return failure();
+      } else if (inputTypes.back().dyn_cast<mlir::TensorType>()) {
+        if (!inputTypes.back()
+                 .dyn_cast<mlir::TensorType>()
+                 .getElementType()
+                 .isa<hir::BusType>())
+          return parser.emitError(typeLoc,
+                                  "Unsupported function argument type ")
+                 << inputTypes.back();
         if (parseBusPortsAttr(parser, inputAttrs))
           return failure();
       } else {
@@ -763,7 +834,8 @@ static void printFuncSignature(OpAsmPrinter &printer, hir::FuncOp op) {
     } else if (inputTypes[i].dyn_cast<hir::MemrefType>()) {
       auto ports = helper::extractMemrefPortsFromDict(inputAttrs[i]);
       printer << " ports " << ports;
-    } else if (inputTypes[i].dyn_cast<hir::BusType>()) {
+    } else if (inputTypes[i].dyn_cast<hir::BusType>() ||
+               inputTypes[i].dyn_cast<mlir::TensorType>()) {
       auto busPortStr = helper::extractBusPortFromDict(inputAttrs[i]);
       printer << " ports [" << busPortStr << "]";
     }
@@ -821,7 +893,6 @@ LogicalResult hir::FuncOp::verifyType() {
 /// required for functionlike trait
 LogicalResult hir::FuncOp::verifyBody() { return success(); }
 
-#include "HIROpSyntax.h"
 #include "HIROpVerifier.h"
 
 namespace circt {

@@ -270,7 +270,7 @@ public:
     SmallVector<int64_t, 4> bankShape;
     for (size_t i = 0; i < getShape().size(); i++) {
       if (dimKinds[i] == dimKind)
-        bankShape.push_back(shape[shape.size() - 1 - i]);
+        bankShape.push_back(shape[i]);
     }
     return bankShape;
   }

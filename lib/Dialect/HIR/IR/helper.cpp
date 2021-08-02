@@ -1,6 +1,8 @@
 #include "circt/Dialect/HIR/IR/HIR.h"
+#include "circt/Dialect/HIR/IR/HIRDialect.h"
 #include "circt/Dialect/HIR/IR/helper.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include <string>
@@ -87,7 +89,38 @@ bool isBuiltinSizedType(Type ty) {
   return false;
 }
 
+bool isBusType(mlir::Type ty) {
+  if (ty.isa<hir::BusType>())
+    return true;
+  if (auto tensorTy = ty.dyn_cast<mlir::TensorType>())
+    if (tensorTy.getElementType().isa<hir::BusType>())
+      return true;
+  return false;
+}
+
 TimeType getTimeType(MLIRContext *context) { return TimeType::get(context); }
+
+mlir::ParseResult parseMemrefPortsArray(mlir::DialectAsmParser &parser,
+                                        mlir::ArrayAttr &ports) {
+  SmallVector<StringRef> portsArray;
+  if (parser.parseLParen())
+    return failure();
+
+  do {
+    StringRef keyword;
+    if (succeeded(parser.parseKeyword("send")))
+      keyword = "send";
+    else if (succeeded(parser.parseKeyword("recv")))
+      keyword = "recv";
+    else
+      return parser.emitError(parser.getCurrentLocation())
+             << "Expected 'send' or 'recv' keyword";
+    portsArray.push_back(keyword);
+  } while (succeeded(parser.parseOptionalComma()));
+
+  ports = parser.getBuilder().getStrArrayAttr(portsArray);
+  return success();
+}
 
 ParseResult parseIntegerAttr(IntegerAttr &value, StringRef attrName,
                              OpAsmParser &parser, OperationState &result) {
@@ -132,10 +165,21 @@ int64_t extractDelayFromDict(mlir::DictionaryAttr dict) {
       .getInt();
 }
 
-ArrayAttr extractMemrefPortsFromDict(mlir::DictionaryAttr dict) {
+llvm::Optional<ArrayAttr>
+extractMemrefPortsFromDict(mlir::DictionaryAttr dict) {
+  if (!dict.getNamed("hir.memref.ports").hasValue())
+    return llvm::None;
   return dict.getNamed("hir.memref.ports")
       .getValue()
       .second.dyn_cast<ArrayAttr>();
+}
+
+llvm::Optional<uint64_t> getRdLatency(Attribute port) {
+  auto portDict = port.dyn_cast<DictionaryAttr>();
+  auto rdLatencyAttr = portDict.getNamed("rd_latency");
+  if (rdLatencyAttr)
+    return rdLatencyAttr.getValue().second.dyn_cast<IntegerAttr>().getInt();
+  return llvm::None;
 }
 
 StringRef extractBusPortFromDict(mlir::DictionaryAttr dict) {

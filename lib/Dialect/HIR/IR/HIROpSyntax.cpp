@@ -1,4 +1,4 @@
-#include "HIROpSyntax.h"
+#include "circt/Dialect/HIR/IR/HIROpSyntax.h"
 #include "circt/Dialect/HIR/IR/helper.h"
 
 // parser and printer for Time and offset.

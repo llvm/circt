@@ -62,7 +62,7 @@ ParseResult parseDelayAttr(DialectAsmParser &parser,
     delayAttr = helper::getIntegerAttr(context, 0);
   }
   attrsList.push_back(
-      helper::getDictionaryAttr(parser.getBuilder(), "delay", delayAttr));
+      helper::getDictionaryAttr(parser.getBuilder(), "hir.delay", delayAttr));
 
   return success();
 }
@@ -71,8 +71,8 @@ ParseResult parseMemrefPortsAttr(DialectAsmParser &parser,
   ArrayAttr memrefPortsAttr;
   if (parser.parseKeyword("ports") || parser.parseAttribute(memrefPortsAttr))
     return failure();
-  attrsList.push_back(
-      helper::getDictionaryAttr(parser.getBuilder(), "ports", memrefPortsAttr));
+  attrsList.push_back(helper::getDictionaryAttr(
+      parser.getBuilder(), "hir.memref.ports", memrefPortsAttr));
 
   return success();
 }
@@ -80,18 +80,29 @@ ParseResult parseMemrefPortsAttr(DialectAsmParser &parser,
 ParseResult parseBusPortsAttr(DialectAsmParser &parser,
                               SmallVectorImpl<DictionaryAttr> &attrsList) {
 
-  std::string busPort;
   auto *context = parser.getBuilder().getContext();
-  if (parser.parseKeyword("ports") || parser.parseLSquare() ||
-      parser.parseKeyword(busPort) || parser.parseRSquare())
+  if (parser.parseKeyword("ports") || parser.parseLSquare())
     return failure();
+  StringRef keyword;
+  if (succeeded(parser.parseOptionalKeyword("send")))
+    keyword = "send";
+  else if (succeeded(parser.parseOptionalKeyword("recv")))
+    keyword = "recv";
+  else
+    return parser.emitError(parser.getCurrentLocation())
+           << "Expected 'send' or 'recv' keyword.";
+
+  if (parser.parseRSquare())
+    return failure();
+
   attrsList.push_back(helper::getDictionaryAttr(
-      parser.getBuilder(), "ports",
+      parser.getBuilder(), "hir.bus.ports",
       ArrayAttr::get(context,
                      SmallVector<Attribute>({StringAttr::get(
-                         parser.getBuilder().getContext(), busPort)}))));
+                         parser.getBuilder().getContext(), keyword)}))));
   return success();
 }
+
 } // namespace
 
 //------------------------------------------------------------------------------
@@ -213,6 +224,7 @@ static Type parseInnerFuncType(DialectAsmParser &parser, MLIRContext *context) {
   if (failed(parser.parseOptionalRParen())) {
     while (1) {
       Type type;
+      auto typeLoc = parser.getCurrentLocation();
       if (parser.parseType(type))
         return Type();
       inputTypes.push_back(type);
@@ -223,10 +235,14 @@ static Type parseInnerFuncType(DialectAsmParser &parser, MLIRContext *context) {
       } else if (type.dyn_cast<hir::MemrefType>()) {
         if (parseMemrefPortsAttr(parser, inputAttrs))
           return Type();
-      } else if (type.dyn_cast<hir::BusType>()) {
+      } else if (helper::isBusType(type)) {
         if (parseBusPortsAttr(parser, inputAttrs))
           return Type();
-      }
+      } else
+        return parser.emitError(typeLoc)
+                   << "hir.func type does not support input arguments of type "
+                   << type,
+               Type();
       if (parser.parseOptionalComma())
         break;
     }
@@ -426,7 +442,7 @@ static void printFuncType(FuncType moduleTy, DialectAsmPrinter &printer) {
     } else if (inputTypes[i].dyn_cast<hir::MemrefType>()) {
       auto ports = helper::extractMemrefPortsFromDict(inputAttrs[i]);
       printer << " ports " << ports;
-    } else if (inputTypes[i].dyn_cast<hir::BusType>()) {
+    } else if (helper::isBusType(inputTypes[i])) {
       auto busPortStr = helper::extractBusPortFromDict(inputAttrs[i]);
       printer << " ports [" << busPortStr << "]";
     }

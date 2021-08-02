@@ -133,6 +133,8 @@ def FuncOp : HIR_Op<"func", [Symbol, SingleBlockImplicitTerminator<"ReturnOp">, 
       Value getTimeVar(){
         return getFuncBody().getArguments().back();
       }
+      void updateArguments(ArrayRef<DictionaryAttr>);
+      hir::FuncType getFuncType(){return funcTy().dyn_cast<hir::FuncType>();}
   }];
   let verifier =[{return verify$cppClass(*this);}];
 }
@@ -282,14 +284,14 @@ def LoadOp : HIR_Op<"load", [NoSideEffect, AttrSizedOperandSegments]> {
   }];
 
   let arguments = (ins MemrefType:$mem, 
-      Variadic<AnyType>:$indices, OptionalAttr<I64Attr>:$port, OptionalAttr<I64Attr>:$delay, Optional<TimeType> : $tstart,
+      Variadic<AnyType>:$indices, OptionalAttr<I64Attr>:$port, OptionalAttr<I64Attr>: $delay, Optional<TimeType> : $tstart,
       OptionalAttr<I64Attr>: $offset);
   let results = (outs AnyType: $res);
   let assemblyFormat = [{
-    $mem `[`  $indices `]` (`[` `port` $port^ `]`)? `at` custom<TimeAndOffset>($tstart ,$offset) 
+    $mem (`[` `port` $port^ `]`)? `[`  $indices `]` `at` custom<TimeAndOffset>($tstart ,$offset) 
       attr-dict
       `:`custom<MemrefAndElementType>
-      (type($mem),type($indices),type($res)) (`delay` $delay^ )?
+      (type($mem),type($indices),type($res)) (`delay` $delay^)?
   }];
 
   let hasCanonicalizeMethod = true;
@@ -313,13 +315,13 @@ def StoreOp : HIR_Op<"store", [AttrSizedOperandSegments]> {
   }];
 
   let arguments = (ins AnyType:$value, MemrefType:$mem,
-      Variadic<AnyType>:$indices, OptionalAttr<I64Attr>:$port,
+      Variadic<AnyType>:$indices, OptionalAttr<I64Attr>:$port, 
       OptionalAttr<I64Attr>:$delay, Optional<TimeType> :$tstart, OptionalAttr<I64Attr>: $offset);
   let results = (outs );
   let assemblyFormat = [{
-    $value `to` $mem  `[` $indices `]` (`port` $port^)? `at` custom<TimeAndOffset>($tstart, $offset) attr-dict `:` 
+    $value `to` $mem  (`[` `port` $port^ `]`)? `[` $indices `]` `at` custom<TimeAndOffset>($tstart, $offset) attr-dict `:` 
       custom<MemrefAndElementType>
-      (type($mem),type($indices), type($value)) (`delay` $delay^ )?
+      (type($mem),type($indices), type($value)) (`delay` $delay^)?
   }];
 
   let hasCanonicalizeMethod = true;
@@ -378,9 +380,38 @@ def CallOp : HIR_Op<"call",[AttrSizedOperandSegments] > {
       ```
   }];
 
-  let arguments = (ins OptionalAttr<FlatSymbolRefAttr>:$callee, 
+  let arguments = (ins FlatSymbolRefAttr:$callee, 
       TypeAttr : $funcTy,
-      Optional<AnyType>:$callee_var, 
+      Variadic<AnyType>:$operands, 
+      Optional<TimeType>:$tstart,
+      OptionalAttr<I64Attr>: $offset
+      );
+  let results = (outs Variadic<AnyType> : $res);
+
+  let parser = [{return parse$cppClass(parser,result);}];
+  let printer = [{return print$cppClass(p,*this);}];
+  let hasCanonicalizeMethod = true;
+  let verifier =[{return verify$cppClass(*this);}];
+  let extraClassDeclaration=[{
+    public:
+      ///Get the function arguments (excluding tstart).
+      SmallVector<Value,4> getOperands();
+      hir::FuncType getFuncType(){return funcTy().dyn_cast<hir::FuncType>();}
+  }];
+}
+
+def CallInstanceOp : HIR_Op<"call.instance",[AttrSizedOperandSegments] > {
+  let summary = "Call a previously instantiated function.";
+  let description = [{
+    This Op calls a previously instantiated function. It is used to fuse multiple instances of same function. 
+      Example:
+
+      ```mlir 
+      %a,%b = hir.call.instance %foo (%x,%A) at %ti : hir.func<(!hir.val,!hir.memref) -> (!hir.val,!hir.val)>
+      ```
+  }];
+
+  let arguments = (ins FuncType:$callee, 
       Variadic<AnyType>:$operands, 
       Optional<TimeType>:$tstart, 
       OptionalAttr<I64Attr>: $offset
@@ -396,7 +427,6 @@ def CallOp : HIR_Op<"call",[AttrSizedOperandSegments] > {
       SmallVector<Value,4> getOperands();
   }];
 }
-
 def DelayOp: HIR_Op<"delay",[NoSideEffect]>{
   let summary = "Delay operation";
   let description = [{
@@ -445,6 +475,19 @@ def LatchOp: HIR_Op<"latch",[NoSideEffect]>{
       attr-dict `:` type($res) custom<CopyType>(type($input),ref(type($res)))
   }];
   let hasFolder = true;
+}
+
+def AssignOp: HIR_Op<"assign",[]>{
+  let summary = "Assign a constant value to a bus.";
+  let description = [{
+    This op delays the input value by a fixed amount of time.
+      Example:
+      ```mlir %yy = hir.delay %xx by %1 at %tj```
+  }];
+
+  let arguments = (ins AnyAttr:$value, BusType : $bus);
+  let results = (outs);
+  let assemblyFormat = [{$value `to` $bus attr-dict `:` type($bus)}];
 }
 
 def AddIOp: HIR_Op<"addi",[NoSideEffect]>{
@@ -557,11 +600,11 @@ def TensorExtract :HIR_Op<"tensor.extract",[NoSideEffect]>{
       ```mlir %1 = hir.bus.extract %x[%0] : tensor<4x!hir.bus<...>>```
   }];
 
-  let arguments = (ins AnyType: $tensor, Variadic<Index>: $indices);
+  let arguments = (ins AnyType: $tensor, Variadic<Index>: $indices, ArrayAttr: $ports);
   let results = (outs BusType: $res);
 
   let assemblyFormat = [{ $tensor `[`$indices`]` attr-dict `:`
-    type($tensor) `->` type($res) }];
+    type($tensor) `->` type($res) `ports` $ports}];
 }
 
 def CreateTupleOp:HIR_Op<"create_tuple",[NoSideEffect]>{

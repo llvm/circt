@@ -62,11 +62,26 @@ LogicalResult verifyFuncOp(hir::FuncOp op) {
   return success();
 }
 
-LogicalResult verifyDelayOp(hir::DelayOp op) {
-  if (!helper::isBuiltinSizedType(op.input().getType()))
-    return op.emitError("hir.delay op only supports signless-integer, float "
-                        "and tuple/tensor of these types.");
+LogicalResult verifyCallOp(hir::CallOp op) {
+  auto inputTypes = op.getFuncType().getInputTypes();
+  auto operands = op.getOperands();
+  for (uint64_t i = 0; i < operands.size(); i++) {
+    if (operands[i].getType() != inputTypes[i]) {
+      op.emitError() << "input arg " << i
+                     << " expects different type than prior uses: '"
+                     << inputTypes[i] << "' vs '" << operands[i].getType();
+      return failure();
+    }
+  }
   return success();
+}
+
+LogicalResult verifyDelayOp(hir::DelayOp op) {
+  Type inputTy = op.input().getType();
+  if (helper::isBuiltinSizedType(inputTy) || helper::isBusType(inputTy))
+    return success();
+  return op.emitError("hir.delay op only supports signless-integer, float "
+                      "and tuple/tensor of these types.");
 }
 
 LogicalResult verifyLatchOp(hir::LatchOp op) {

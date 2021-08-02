@@ -55,3 +55,23 @@ SmallVector<Value, 4> hir::CallOp::getOperands() {
     operands.push_back(arg);
   return operands;
 }
+
+void hir::FuncOp::updateArguments(ArrayRef<DictionaryAttr> inputAttrs) {
+  auto &entryBlock = this->getFuncBody().front();
+  SmallVector<Type> inputTypes;
+  for (uint64_t i = 0; i < entryBlock.getNumArguments() - 1; i++) {
+    auto ty = entryBlock.getArgumentTypes()[i];
+    inputTypes.push_back(ty);
+  }
+  assert(inputTypes.size() == inputAttrs.size() ||
+         succeeded(this->emitError("Mismatch in number of types and attrs")));
+
+  auto newFuncTy =
+      hir::FuncType::get(this->getContext(), inputTypes, inputAttrs,
+                         this->getFuncType().getResultTypes(),
+                         this->getFuncType().getResultAttrs());
+
+  this->typeAttr(TypeAttr::get(newFuncTy.getFunctionType()));
+  this->funcTyAttr(TypeAttr::get(newFuncTy));
+  this->setAllArgAttrs(inputAttrs);
+}
