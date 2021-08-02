@@ -162,10 +162,10 @@ static LogicalResult verifyConcatOp(ConcatOp concatOp) {
   unsigned tyWidth = concatOp.getType().getWidth();
   unsigned operandsTotalWidth = getTotalWidth(concatOp.inputs());
   if (tyWidth != operandsTotalWidth)
-    return concatOp.emitOpError(llvm::formatv(
-        "ConcatOp requires operands total width to match type width. operands "
-        "totalWidth is {0}, but concatOp type width is {1}",
-        operandsTotalWidth, tyWidth));
+    return concatOp.emitOpError("ConcatOp requires operands total width to "
+                                "match type width. operands "
+                                "totalWidth is")
+           << operandsTotalWidth << ", but concatOp type width is " << tyWidth;
 
   return success();
 }
