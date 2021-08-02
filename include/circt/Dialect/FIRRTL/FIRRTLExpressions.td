@@ -292,9 +292,12 @@ class IntBinaryPrimOp<string mnemonic, Type resultType,
                 traits # [SameOperandsIntTypeKind]>;
 
 let inferType = "impl::inferAddSubResult" in {
-  def AddPrimOp : IntBinaryPrimOp<"add", IntType, [Commutative]>;
-  def SubPrimOp : IntBinaryPrimOp<"sub", IntType>;
+  let hasCanonicalizer = true in {
+    def AddPrimOp : IntBinaryPrimOp<"add", IntType, [Commutative]>;
+    def SubPrimOp : IntBinaryPrimOp<"sub", IntType>;
+  }
 }
+
 def MulPrimOp : IntBinaryPrimOp<"mul", IntType, [Commutative]>;
 def DivPrimOp : IntBinaryPrimOp<"div", IntType> {
   let description = [{
