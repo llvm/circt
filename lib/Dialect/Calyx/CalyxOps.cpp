@@ -88,6 +88,19 @@ static Op getControlOrWiresFrom(ComponentOp op) {
   return *opIt;
 }
 
+/// Returns the Block argument with the given name from a ComponentOp.
+/// If the name doesn't exist, returns an empty Value.
+static Value getBlockArgumentWithName(StringRef name, ComponentOp op) {
+  ArrayAttr portNames = op.portNames();
+
+  for (size_t i = 0, e = portNames.size(); i != e; ++i) {
+    auto portName = portNames[i].cast<StringAttr>();
+    if (portName.getValue() == name)
+      return op.getBody()->getArgument(i);
+  }
+  return Value{};
+}
+
 } // namespace
 
 WiresOp calyx::ComponentOp::getWiresOp() {
@@ -96,6 +109,14 @@ WiresOp calyx::ComponentOp::getWiresOp() {
 
 ControlOp calyx::ComponentOp::getControlOp() {
   return getControlOrWiresFrom<ControlOp>(*this);
+}
+
+Value calyx::ComponentOp::getGoPort() {
+  return getBlockArgumentWithName("go", *this);
+}
+
+Value calyx::ComponentOp::getDonePort() {
+  return getBlockArgumentWithName("done", *this);
 }
 
 /// Returns the type of the given component as a function type.

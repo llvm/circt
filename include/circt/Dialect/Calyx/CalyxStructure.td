@@ -110,6 +110,12 @@ def ComponentOp : CalyxOp<"component", [
 
       /// Returns the ControlOp of a Calyx Component.
       ControlOp getControlOp();
+
+      /// Gets the Done port of a Calyx component.
+      Value getDonePort();
+
+      /// Gets the Go port of a Calyx component.
+      Value getGoPort();
   }];
 
   let verifier = "return ::verify$cppClass(*this);";
