@@ -56,7 +56,7 @@ static ParseResult parseChannelBuffer(OpAsmParser &parser,
   return success();
 }
 
-static void print(OpAsmPrinter &p, ChannelBuffer &op) {
+static void printChannelBuffer(OpAsmPrinter &p, ChannelBuffer &op) {
   p << "esi.buffer " << op.clk() << ", " << op.rstn() << ", " << op.input()
     << " ";
   p.printAttributeWithoutType(op.options());
@@ -89,7 +89,7 @@ static ParseResult parsePipelineStage(OpAsmParser &parser,
   return success();
 }
 
-static void print(OpAsmPrinter &p, PipelineStage &op) {
+static void printPipelineStage(OpAsmPrinter &p, PipelineStage &op) {
   p << "esi.stage " << op.clk() << ", " << op.rstn() << ", " << op.input()
     << " ";
   p.printOptionalAttrDict(op->getAttrs());
@@ -121,7 +121,7 @@ static ParseResult parseWrapValidReady(OpAsmParser &parser,
   return success();
 }
 
-void print(OpAsmPrinter &p, WrapValidReady &op) {
+void printWrapValidReady(OpAsmPrinter &p, WrapValidReady &op) {
   p << "esi.wrap.vr " << op.rawInput() << ", " << op.valid();
   p.printOptionalAttrDict(op->getAttrs());
   p << " : " << op.chanOutput().getType().cast<ChannelPort>().getInner();
@@ -156,7 +156,7 @@ static ParseResult parseUnwrapValidReady(OpAsmParser &parser,
   return success();
 }
 
-static void print(OpAsmPrinter &p, UnwrapValidReady &op) {
+static void printUnwrapValidReady(OpAsmPrinter &p, UnwrapValidReady &op) {
   p << "esi.unwrap.vr " << op.chanInput() << ", " << op.ready();
   p.printOptionalAttrDict(op->getAttrs());
   p << " : " << op.rawOutput().getType();

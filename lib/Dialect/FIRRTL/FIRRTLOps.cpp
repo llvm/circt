@@ -726,11 +726,11 @@ static void printModuleLikeOp(OpAsmPrinter &p, Operation *op) {
                           omittedAttrs);
 }
 
-static void print(OpAsmPrinter &p, FExtModuleOp op) {
+static void printFExtModuleOp(OpAsmPrinter &p, FExtModuleOp op) {
   printModuleLikeOp(p, op);
 }
 
-static void print(OpAsmPrinter &p, FModuleOp op) {
+static void printFModuleOp(OpAsmPrinter &p, FModuleOp op) {
   printModuleLikeOp(p, op);
 
   // Print the body if this is not an external function. Since this block does

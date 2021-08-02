@@ -30,8 +30,8 @@ inline void registerAllTranslations() {
   static bool initOnce = []() {
     registerToVerilogTranslation();
     esi::registerESITranslations();
-    firrtl::registerFromFIRRTLTranslation();
     calyx::registerToCalyxTranslation();
+    firrtl::registerFromFIRFileTranslation();
     llhd::registerToVerilogTranslation();
     msft::registerMSFTTclTranslation();
     return true;

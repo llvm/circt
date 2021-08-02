@@ -18,26 +18,29 @@ class StupidLegacy:
   ignore = Input(dim(1, 4))
 
 
-class Top(System):
-  BarType = types.struct({"foo": types.i12}, "bar")
-  inputs = []
-  outputs = []
+BarType = types.struct({"foo": types.i12}, "bar")
 
-  def build(self, top):
+
+@module
+class Top:
+
+  @generator
+  def build(_):
     obj_to_value({"foo": 7}, types.struct({"foo": types.i12}))
     obj_to_value([42, 45], dim(types.i8, 2))
     obj_to_value(5, types.i8)
 
-    Top.BarType.create({"foo": 7})
+    BarType.create({"foo": 7})
 
     Taps()
     StupidLegacy(ignore=no_connect)
 
 
-top = Top()
+top = System([Top])
+top.generate()
 top.generate(["build"])
 top.print()
-# CHECK-LABEL: hw.module @top()
+# CHECK-LABEL: hw.module @pycde.Top()
 # CHECK:  %c7_i12 = hw.constant 7 : i12
 # CHECK:  %0 = hw.struct_create (%c7_i12) : !hw.struct<foo: i12>
 # CHECK:  %c42_i8 = hw.constant 42 : i8

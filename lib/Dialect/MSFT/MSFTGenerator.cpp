@@ -42,7 +42,8 @@ LogicalResult OpGenerator::runOnOperation(mlir::Operation *op,
   if (generators.size() == 0)
     return failure();
   if (generators.size() > 1 && generatorSet.size() < 1)
-    return op->emitError("at least one generator must be selected");
+    return op->emitError(op->getName().getStringRef())
+           << " at least one generator must be selected";
 
   // Check if any of the generators were selected in the generator set. If more
   // than one candidate is present in the generator set, raise an error.

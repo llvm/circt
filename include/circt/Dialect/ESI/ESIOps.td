@@ -47,7 +47,7 @@ def ChannelBuffer : ESI_Abstract_Op<"buffer", [NoSideEffect]> {
     ChannelBufferOptions:$options);
   let results = (outs ChannelType:$output);
 
-  let printer = [{ return ::print(p, *this); }];
+  let printer = [{ return ::print$cppClass(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
 }
 
@@ -63,7 +63,7 @@ def PipelineStage : ESI_Physical_Op<"stage", [NoSideEffect]> {
   let arguments = (ins I1:$clk, I1:$rstn, ChannelType:$input);
   let results = (outs ChannelType:$output);
 
-  let printer = [{ return ::print(p, *this); }];
+  let printer = [{ return ::print$cppClass(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
 }
 

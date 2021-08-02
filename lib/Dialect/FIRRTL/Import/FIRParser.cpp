@@ -3581,9 +3581,9 @@ DoneParsing:
 //===----------------------------------------------------------------------===//
 
 // Parse the specified .fir file into the specified MLIR context.
-OwningModuleRef circt::firrtl::importFIRRTL(SourceMgr &sourceMgr,
-                                            MLIRContext *context,
-                                            FIRParserOptions options) {
+OwningModuleRef circt::firrtl::importFIRFile(SourceMgr &sourceMgr,
+                                             MLIRContext *context,
+                                             FIRParserOptions options) {
   auto sourceBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
   const llvm::MemoryBuffer *annotationsBuf = nullptr;
   if (sourceMgr.getNumBuffers() > 1)
@@ -3608,9 +3608,9 @@ OwningModuleRef circt::firrtl::importFIRRTL(SourceMgr &sourceMgr,
   return module;
 }
 
-void circt::firrtl::registerFromFIRRTLTranslation() {
+void circt::firrtl::registerFromFIRFileTranslation() {
   static mlir::TranslateToMLIRRegistration fromFIR(
       "import-firrtl", [](llvm::SourceMgr &sourceMgr, MLIRContext *context) {
-        return importFIRRTL(sourceMgr, context);
+        return importFIRFile(sourceMgr, context);
       });
 }
