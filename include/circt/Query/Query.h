@@ -29,7 +29,7 @@ public:
   bool valueMatches(std::string &value) override { return true; }
 };
 
-class RecursiveGlobFilterType : FilterType {
+class RecursiveGlobFilterType : public FilterType {
 public:
   RecursiveGlobFilterType() { }
 

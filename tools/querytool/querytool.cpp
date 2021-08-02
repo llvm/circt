@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/Passes.h"
+#include "Parser.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
@@ -21,7 +22,6 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
-#include "circt/Query/Query.h"
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Transforms/Passes.h"
 #include "circt/Translation/ExportVerilog.h"
@@ -45,6 +45,7 @@ using namespace llvm;
 using namespace mlir;
 using namespace circt;
 using namespace query;
+using namespace querytool::parser;
 
 /// Allow the user to specify the input file format.  This can be used to
 /// override the input, and can be used to specify ambiguous cases like standard
@@ -145,11 +146,6 @@ static cl::opt<std::string> blackBoxRootResourcePath(
     cl::value_desc("path"), cl::init(""));
 
 #include <iostream>
-
-// TODO: Parsing errors.
-Filter parseFilter(std::string &filter) {
-  return Filter();
-}
 
 /// Process a single buffer of the input.
 static LogicalResult
@@ -277,7 +273,13 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   auto outputTimer = ts.nest("Output");
 
   // Create the filter and filter from the module
-  Filter filter = parseFilter(filterInput);
+  bool errored;
+  Filter filter = parse(filterInput, errored);
+  if (errored) {
+    std::cerr << "Invalid filter!\n";
+    return failure();
+  }
+
   auto mod = module.release();
   auto ops = filter.filter(mod);
 

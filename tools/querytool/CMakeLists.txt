@@ -4,6 +4,8 @@ set(LLVM_LINK_COMPONENTS
 
 add_llvm_tool(querytool
  querytool.cpp
+ Lexer.cpp
+ Parser.cpp
 )
 llvm_update_compile_flags(querytool)
 target_link_libraries(querytool PRIVATE
