@@ -279,7 +279,7 @@ public:
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// The default node iterator.
+/// A dummy source node iterator on the `dest`s of all connect ops.
 class DummySourceNodeIterator
     : public llvm::iterator_facade_base<DummySourceNodeIterator,
                                         std::forward_iterator_tag, Node> {
@@ -474,7 +474,10 @@ class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
         NodeContext context(&map, &instanceGraph, module.getOps<ConnectOp>());
         auto dummyNode = Node(nullptr, &context);
 
-        // Traversing SCCs in the combinational graph to detect cycles.
+        // Traversing SCCs in the combinational graph to detect cycles. As
+        // FIRRTL module is an SSA region, all cycles must contain at least one
+        // connect op on its path. Thus we introduce a dummy source node to
+        // iterate on the `dest`s of all connect ops in the module.
         using SCCIterator = llvm::scc_iterator<Node>;
         for (auto SCC = SCCIterator::begin(dummyNode); !SCC.isAtEnd(); ++SCC) {
           if (SCC.hasCycle()) {
