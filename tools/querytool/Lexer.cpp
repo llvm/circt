@@ -5,7 +5,9 @@ namespace lexer {
 
 Token Lexer::next() {
   if (state.vecPos < previousTokens.size()) {
-    return previousTokens[state.vecPos++];
+    auto token = previousTokens[state.vecPos++];
+    state.strPos = token.end;
+    return token;
   }
 
   size_t start = state.strPos;

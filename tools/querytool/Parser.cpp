@@ -21,20 +21,20 @@ std::vector<T> infix(T (*fn)(Lexer &, bool &), TokenType op, Lexer &lexer, bool 
     auto state = lexer.pushState();
     if ((token = lexer.next()).getType() != op) {
       lexer.popState(state);
-      break;
+      return values;
     }
 
     auto next = fn(lexer, errored);
     if (errored) {
+      lexer.popState(state);
       return values;
     }
 
     values.push_back(next);
   }
-
-  return values;
 }
 
+Filter *parseOr(Lexer &lexer, bool &errored);
 
 Filter *parseValue(Lexer &lexer, bool &errored) {
   auto state = lexer.pushState();
@@ -55,6 +55,17 @@ Filter *parseValue(Lexer &lexer, bool &errored) {
     case TokenType::REGEX_TOKEN: {
       auto regex = token.getStringFromSpan(lexer.getSource()).str();
       return new NameFilter(new RegexFilterType(regex));
+    }
+
+    case TokenType::LPAREN_TOKEN: {
+      auto *value = parseOr(lexer, errored);
+      if (errored || (token = lexer.next()).getType() != TokenType::RPAREN_TOKEN) {
+        errored = true;
+        lexer.popState(state);
+        return nullptr;
+      }
+
+      return value;
     }
 
     default:
