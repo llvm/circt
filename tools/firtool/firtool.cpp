@@ -235,6 +235,9 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     }
   }
 
+  if (checkCombCycles)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombCyclesPass());
+
   // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
   if (!disableOptimization) {
     auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
@@ -258,9 +261,6 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
       blackBoxRoot, blackBoxRootResourcePath.empty()
                         ? blackBoxRoot
                         : blackBoxRootResourcePath));
-
-  if (checkCombCycles)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombCyclesPass());
 
   if (grandCentral) {
     auto &circuitPM = pm.nest<firrtl::CircuitOp>();
