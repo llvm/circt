@@ -87,12 +87,7 @@ std::string getNameFromOp(Operation *op, size_t nameIndex) {
     });
 }
 
-bool AttributeFilter::matches(Operation *op) {
-  if (!op->hasAttr(StringRef(key))) {
-    return false;
-  }
-
-  auto attr = op->getAttr(StringRef(key));
+bool filterAttribute(Attribute &attr, FilterType *type) {
   return TypeSwitch<Attribute, bool>(attr)
     .Case<mlir::BoolAttr>([&](auto &attr) {
         std::string value(attr.getValue() ? "true" : "false");
@@ -109,8 +104,12 @@ bool AttributeFilter::matches(Operation *op) {
         auto s = attr.getValue().str();
         return type->valueMatches(s);
     })
-    .Case<mlir::ArrayAttr>([&](auto &attr) {
-        std::cout << "warning: unknown attribute type\n";
+    .Case<mlir::ArrayAttr>([&](ArrayAttr &attr) {
+        for (auto v : attr) {
+          if (filterAttribute(v, type)) {
+            return true;
+          }
+        }
         return false;
     })
     .Case<mlir::DictionaryAttr>([&](auto &attr) {
@@ -121,6 +120,15 @@ bool AttributeFilter::matches(Operation *op) {
         std::cout << "warning: unknown attribute type\n";
         return false;
     });
+}
+
+bool AttributeFilter::matches(Operation *op) {
+  if (!op->hasAttr(StringRef(key))) {
+    return false;
+  }
+
+  auto attr = op->getAttr(StringRef(key));
+  return filterAttribute(attr, type);
 }
 
 bool NameFilter::matches(Operation *op) {
